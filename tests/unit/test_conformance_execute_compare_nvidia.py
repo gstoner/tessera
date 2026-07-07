@@ -159,6 +159,16 @@ int main(int argc, char** argv) {
     if (tsrLaunchKernel(s,gk,gargs,1)!=TSR_STATUS_SUCCESS) return 20;
     float gmax=0.0f; for (int i=0;i<M2*N2;i++){ float d=std::fabs(gD[i]-gref[i]); if(d>gmax)gmax=d; }
     if (gmax > 1e-2f) { std::fprintf(stderr,"general GEMM maxerr=%g\n",gmax); return 21; }
+
+    // Oversized aligned shape (M*K = 32784*65536 > 2^31): the emitted kernel's
+    // 32-bit index math would wrap, so the bridge must reject BEFORE allocating,
+    // honestly (INVALID_ARGUMENT), not silently corrupt (PR #291 review). Reuses
+    // the small gbufs — the guard fires before any pointer is dereferenced.
+    int64_t odims[3]={32784, 8, 65536};
+    tsrGpuLaunchParams op2{}; op2.buffers=gbufs; op2.num_buffers=3; op2.dims=odims; op2.num_dims=3;
+    void* oargs[1]={&op2};
+    if (tsrLaunchKernel(s,gk,oargs,1) != TSR_STATUS_INVALID_ARGUMENT) return 22;
+
     tsrDestroyKernel(gk); tsrDestroyArtifact(ga);
   }
 

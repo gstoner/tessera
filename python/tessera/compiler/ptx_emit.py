@@ -337,11 +337,25 @@ def validate_mma_sync_ptx_structure(ptx: str, *, arch: str = "sm_120a") -> list[
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+#: The first linear index that overflows the emitted kernel's 32-bit signed index
+#: math (``row*K``/``col*K``/``row*N`` computed in ``.s32`` before byte-widening).
+_MMA_GEMM_I32_LIMIT = 1 << 31
+
+
 def is_valid_mma_sync_gemm_shape(m: int, n: int, k: int) -> bool:
-    """The aligned tiling constraint for :func:`emit_mma_sync_gemm_ptx`:
-    ``M%16 == N%8 == K%16 == 0`` and all positive. One warp per 16x8 tile with a
-    K-loop; unaligned (ragged) M/N/K need boundary predication (a follow-on)."""
-    return m > 0 and n > 0 and k > 0 and m % 16 == 0 and n % 8 == 0 and k % 16 == 0
+    """The shape constraint for :func:`emit_mma_sync_gemm_ptx`: aligned tiles
+    (``M%16 == N%8 == K%16 == 0``, all positive) **and** linear indices that fit
+    in signed 32 bits. The emitted kernel computes ``row*K``/``col*K``/``row*N`` in
+    ``.s32`` before widening to byte offsets, so any of ``M*K`` / ``K*N`` / ``M*N``
+    reaching ``2**31`` would wrap and address the wrong memory — the launch bridge
+    rejects those too (Decision #21). Unaligned (ragged) M/N/K need boundary
+    predication, and 64-bit index math lifts the size cap — both follow-ons."""
+    if not (m > 0 and n > 0 and k > 0):
+        return False
+    if m % 16 or n % 8 or k % 16:
+        return False
+    lim = _MMA_GEMM_I32_LIMIT
+    return m * k < lim and k * n < lim and m * n < lim
 
 
 def emit_mma_sync_gemm_ptx(
@@ -361,7 +375,12 @@ def emit_mma_sync_gemm_ptx(
     the MMA mnemonic differs. Per-tile fragment math is byte-for-byte the proven
     single-tile kernel's, plus the ``mt = ctaid.x*16`` / ``nt = ctaid.y*8`` tile
     origin, runtime K/N strides, and the K accumulation loop. ASCII-only (the
-    driver JIT ``ptxas`` rejects non-ASCII)."""
+    driver JIT ``ptxas`` rejects non-ASCII).
+
+    Index math is ``.s32`` (widened only for byte offsets), so callers must keep
+    ``M*K``/``K*N``/``M*N`` under ``2**31`` — :func:`is_valid_mma_sync_gemm_shape`
+    and the launch bridge enforce this (64-bit indexing is the cap-lifting
+    follow-on)."""
     if dtype not in ("bf16", "f16"):
         raise ValueError(
             f"emit_mma_sync_gemm_ptx supports bf16/f16 (16-bit m16n8k16), "

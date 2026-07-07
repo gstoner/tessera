@@ -152,6 +152,16 @@ def test_mma_sync_gemm_shape_predicate_requires_aligned_tiles():
     assert not P.is_valid_mma_sync_gemm_shape(0, 8, 16)
 
 
+def test_mma_sync_gemm_shape_predicate_rejects_i32_index_overflow():
+    # The emitted kernel indexes in .s32, so a linear index >= 2**31 would wrap.
+    # Aligned but oversized shapes must be refused, not silently corrupt (PR #291
+    # review). M*K = 32784*65536 = 2**31 + ~1M > 2**31.
+    assert not P.is_valid_mma_sync_gemm_shape(32784, 8, 65536)   # M*K overflows
+    assert not P.is_valid_mma_sync_gemm_shape(65536, 32768, 16)  # M*N = 2**31 exactly
+    # Just under the cap stays valid (aligned, M*K = 32768*65520 < 2**31).
+    assert P.is_valid_mma_sync_gemm_shape(32768, 8, 65520)
+
+
 def test_mma_sync_gemm_validator_catches_missing_loop():
     ptx = P.emit_mma_sync_gemm_ptx(dtype="bf16").replace("setp.lt.s32", "setp.eq.s32")
     assert any("K-accumulation loop" in p

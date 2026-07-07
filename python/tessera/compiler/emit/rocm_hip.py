@@ -319,7 +319,9 @@ class RocmGenericHipCandidate(Candidate):
     op = OP_FUSED_REGION
 
     def run(self, region: Any, A: Any, B: Any, bias: Any = None,
-            *a: Any, residual: Any = None, **k: Any) -> tuple[Any, str]:
+            residual: Any = None, *a: Any, **k: Any) -> tuple[Any, str]:
+        # residual positional-or-keyword so the arbiter's positional inputs
+        # thread it (matches the A,B,bias,residual reference ABI; PR #290 review).
         return _SHARED_RUNNER.run_fused_region(region, A, B, bias,
                                                residual=residual)
 

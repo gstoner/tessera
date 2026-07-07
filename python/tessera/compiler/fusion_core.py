@@ -919,11 +919,16 @@ def verify_synthesized_region(region: FusedRegion, *, seed: int = 0,
     B = rng.standard_normal((12, 16)).astype(np.float32)
     bias = (rng.standard_normal((16,)).astype(np.float32)
             if region.has_bias else None)
-    out, execution = r.run_fused_region(region, A, B, bias)
+    # A residual region needs its (M,N) residual probe too, else the runner's
+    # required-buffer guard raises instead of exercising the synthesized kernel
+    # (which supports residuals). None for a non-residual region — unchanged.
+    residual = (rng.standard_normal((8, 16)).astype(np.float32)
+                if region.has_residual else None)
+    out, execution = r.run_fused_region(region, A, B, bias, residual=residual)
     if execution in REFERENCE_EXECUTIONS:
         verdict = True                         # no synthesized kernel to distrust
     else:
-        verdict = bool(np.allclose(out, region.reference(A, B, bias),
+        verdict = bool(np.allclose(out, region.reference(A, B, bias, residual),
                                    atol=_effective_atol(r, atol)))
     _VERIFY_CACHE[key] = verdict
     return verdict

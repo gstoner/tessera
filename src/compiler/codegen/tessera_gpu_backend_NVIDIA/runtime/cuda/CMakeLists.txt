@@ -42,4 +42,23 @@ if(TESSERA_ENABLE_CUDA)
     target_include_directories(tessera_nvidia_gemm PUBLIC "${_tessera_cuda_prefix}/include")
     message(STATUS "tessera_nvidia_gemm: using CUDA include ${_tessera_cuda_prefix}/include (CUDAToolkit not found)")
   endif()
+
+  # C2-tail PTX launch bridge (COMPILER_REFACTOR_PLAN) — the emit-path launcher,
+  # counterpart to apple_gpu_runtime.mm. Driver API only (JITs the emitted PTX;
+  # no NVRTC device pass). References the core-runtime tsrRegisterGpuLauncher seam
+  # (resolved by the hosting binary — the shipped .so keeps it undefined, exactly
+  # like a plugin, so the direct register/invoke path dlopens standalone).
+  add_library(tessera_nvidia_ptx_launch SHARED tessera_nvidia_ptx_launch.cpp)
+  target_include_directories(tessera_nvidia_ptx_launch PUBLIC
+    "${CMAKE_SOURCE_DIR}/src/runtime/include")
+  if(TARGET CUDA::cuda_driver)
+    target_link_libraries(tessera_nvidia_ptx_launch PUBLIC CUDA::cuda_driver)
+  else()
+    target_link_libraries(tessera_nvidia_ptx_launch PUBLIC cuda)
+  endif()
+  if(CUDAToolkit_FOUND)
+    target_include_directories(tessera_nvidia_ptx_launch PUBLIC ${CUDAToolkit_INCLUDE_DIRS})
+  else()
+    target_include_directories(tessera_nvidia_ptx_launch PUBLIC "${_tessera_cuda_prefix}/include")
+  endif()
 endif()

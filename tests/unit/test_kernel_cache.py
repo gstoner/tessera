@@ -121,8 +121,9 @@ def test_ahead_of_time_compiler_records_artifact():
 # ---- diagnostics -------------------------------------------------------------
 
 def test_unknown_compiler_target_raises():
+    # A target that no plugin registers (nvidia/rocm/x86/apple are all real now).
     with pytest.raises(CompileError, match="no compiler registered"):
-        get_compiler("nvidia")
+        get_compiler("no_such_backend")
 
 
 def test_get_compiler_bootstraps_apple_without_prior_import():

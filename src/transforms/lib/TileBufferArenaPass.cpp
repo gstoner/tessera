@@ -59,6 +59,17 @@ static int64_t staticByteSize(Value v) {
   return elems * ((bits + 7) / 8);
 }
 
+// Natural alignment (bytes) of a memref's element — a backend casts
+// `arena + offset` to `T*`, so each group's offset must be a multiple of this or
+// the typed access is misaligned. Scalar alignment = element byte width.
+static int64_t elementAlign(Value v) {
+  auto mr = dyn_cast<MemRefType>(v.getType());
+  if (!mr)
+    return 1;
+  int64_t bits = mr.getElementType().getIntOrFloatBitWidth();
+  return bits > 0 ? (bits + 7) / 8 : 1;
+}
+
 struct TileBufferArena
     : public PassWrapper<TileBufferArena, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TileBufferArena)
@@ -84,20 +95,25 @@ struct TileBufferArena
   // static size are placed (an unknown-size group is skipped — no false offset).
   int64_t layoutSpace(const SmallVector<Operation *> &allocs,
                       StringRef offsetAttr, OpBuilder &b) {
-    // group id -> max static byte size (-1 if any member is unknown).
-    llvm::DenseMap<int64_t, int64_t> groupBytes;
+    // group id -> max static byte size (-1 if any member is unknown) + max
+    // element alignment (so a mixed-dtype arena keeps each group typed-aligned).
+    llvm::DenseMap<int64_t, int64_t> groupBytes, groupAlign;
     SmallVector<int64_t> order;                 // ascending unique group ids
     for (Operation *op : allocs) {
       int64_t g = op->getAttrOfType<IntegerAttr>(kGroupAttr).getInt();
       int64_t sz = staticByteSize(op->getOperand(0));
+      int64_t al = elementAlign(op->getOperand(0));
       auto it = groupBytes.find(g);
       if (it == groupBytes.end()) {
         groupBytes[g] = sz;
+        groupAlign[g] = al;
         order.push_back(g);
-      } else if (sz < 0 || it->second < 0) {
-        it->second = -1;                        // group poisoned by an unknown dim
       } else {
-        it->second = std::max(it->second, sz);
+        groupAlign[g] = std::max(groupAlign[g], al);
+        if (sz < 0 || it->second < 0)
+          it->second = -1;                      // group poisoned by an unknown dim
+        else
+          it->second = std::max(it->second, sz);
       }
     }
     llvm::sort(order);
@@ -106,6 +122,8 @@ struct TileBufferArena
     for (int64_t g : order) {
       if (groupBytes[g] < 0)
         continue;                               // unplaceable — leave unstamped
+      int64_t a = std::max<int64_t>(groupAlign[g], 1);
+      cursor = ((cursor + a - 1) / a) * a;      // pad up to the group's alignment
       offset[g] = cursor;
       cursor += groupBytes[g];
     }

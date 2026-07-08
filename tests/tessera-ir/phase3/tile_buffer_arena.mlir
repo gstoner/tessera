@@ -61,3 +61,19 @@ func.func @arena_chain_collapses(%arg0: memref<16x16xf16>,
   "tile.alloc_shared"(%arg2) : (memref<16x16xf16>) -> ()
   return
 }
+
+// -----
+
+// ── Offsets are padded up to each group's element alignment. ─────────────────
+// An i8 group (1 B) then an f32 group (4 B): the f32 must land at a 4-aligned
+// offset (4, NOT the raw cumulative 1) so `arena + offset` cast to f32* is legal;
+// the arena size (8) includes the padding.
+// CHECK-LABEL: func.func @arena_alignment_padding
+// CHECK-SAME: tile.smem_arena_bytes = 8
+// CHECK: "tile.alloc_shared"(%arg0) {tile.buffer_group = 0 : i64, tile.smem_offset = 0 : i64}
+// CHECK: "tile.alloc_shared"(%arg1) {tile.buffer_group = 1 : i64, tile.smem_offset = 4 : i64}
+func.func @arena_alignment_padding(%arg0: memref<1xi8>, %arg1: memref<1xf32>) {
+  "tile.alloc_shared"(%arg0) : (memref<1xi8>) -> ()
+  "tile.alloc_shared"(%arg1) : (memref<1xf32>) -> ()
+  return
+}

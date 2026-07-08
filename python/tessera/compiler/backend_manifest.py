@@ -3757,6 +3757,26 @@ _EBM_DEVICE_COMPILED: dict[str, tuple[str, str]] = {
 }
 
 
+# EBM primitives with NO native kernel on ANY backend — host-orchestrated samplers
+# over a user ``energy_fn`` (an importance-sampling / annealed-IS loop whose inner
+# energy is user code). Apple GPU — the most-developed GPU backend — is itself
+# ``reference`` for these (it found no kernel to fuse), which is the tell that no
+# kernel exists or is plannable: the Python reference is the *terminal* execution
+# path, not a gap awaiting one. Marking them ``planned`` on ROCm/NVIDIA overstated
+# the open backend-kernel work in the automated Backend-Proof tally; they are
+# honestly ``reference`` on every target, exactly like x86/apple_cpu/apple_gpu.
+#
+# Deliberately NOT here (a kernel IS achievable → ``planned`` stays honest, and
+# Apple proves it with a ``fused`` slot): ebm_energy / ebm_partition_exact (Apple
+# fuses the quadratic / from-energies forms), decode_init, ebt_tiny, and the
+# `_sample` chain wrappers (Apple is ``planned`` — a fused on-device chain kernel
+# is a plausible future).
+_EBM_USER_FUNCTION_OPS: frozenset[str] = frozenset({
+    "ebm_partition_monte_carlo",  # importance-sampled Z over a user energy_fn
+    "ebm_partition_ais",          # annealed IS over a user energy_fn + host schedule
+})
+
+
 def ebm_manifest_for(op_name: str) -> list[BackendKernelEntry]:
     """Return the backend manifest entries for an ``ebm_*`` primitive.
 
@@ -3778,6 +3798,13 @@ def ebm_manifest_for(op_name: str) -> list[BackendKernelEntry]:
         return []
     entries: list[BackendKernelEntry] = []
     device = _EBM_DEVICE_COMPILED.get(op_name)
+    # A user-function op has no possible native kernel on ANY backend — the GPU
+    # slots are honestly `reference` (the numpy path is terminal), not `planned`.
+    user_fn = op_name in _EBM_USER_FUNCTION_OPS
+    _user_fn_note = ("host-orchestrated sampler over a user energy_fn — no native "
+                     "kernel on any backend (Apple GPU is reference too); the "
+                     "Python reference is the terminal execution path, not a gap "
+                     "awaiting a kernel")
 
     # CPU targets — Python reference path on every host; the P7 device-lane ops
     # carry a native AVX-512 x86 kernel (fused) instead.
@@ -3821,6 +3848,14 @@ def ebm_manifest_for(op_name: str) -> list[BackendKernelEntry]:
                 f"— ABI {fused_spec['abi']}. {fused_spec['notes']}"
             ),
         ))
+    elif user_fn:
+        entries.append(BackendKernelEntry(
+            target="apple_gpu",
+            status=_REFERENCE_STATUS,
+            dtypes=_EBM_CPU_DTYPES,
+            feature_flags=("ebm_namespace", "numpy_reference"),
+            notes=_user_fn_note,
+        ))
     else:
         entries.append(BackendKernelEntry(
             target="apple_gpu",
@@ -3833,15 +3868,18 @@ def ebm_manifest_for(op_name: str) -> list[BackendKernelEntry]:
             ),
         ))
 
-    # NVIDIA — planned, gated on Phase G.
+    # NVIDIA — a user-function op is `reference` (no kernel possible); else planned
+    # (gated on Phase G).
     entries.append(BackendKernelEntry(
         target="nvidia_sm90",
-        status=_PLANNED_STATUS,
-        dtypes=_EBM_PLANNED_GPU_DTYPES,
-        feature_flags=("ebm_namespace",),
-        notes="Gated on Phase G",
+        status=_REFERENCE_STATUS if user_fn else _PLANNED_STATUS,
+        dtypes=_EBM_CPU_DTYPES if user_fn else _EBM_PLANNED_GPU_DTYPES,
+        feature_flags=(("ebm_namespace", "numpy_reference") if user_fn
+                       else ("ebm_namespace",)),
+        notes=_user_fn_note if user_fn else "Gated on Phase G",
     ))
-    # ROCm — compiled device lane for the P7 ops, else planned (Phase H).
+    # ROCm — compiled device lane for the P7 ops; `reference` for the user-function
+    # ops (no kernel possible); else planned (Phase H).
     if device is not None:
         entries.append(BackendKernelEntry(
             target="rocm",
@@ -3854,6 +3892,14 @@ def ebm_manifest_for(op_name: str) -> list[BackendKernelEntry]:
                   "rocm_ebm_langevin_compiled)",
             execute_compare_fixture=device[1],
             hipcc_version_min="7.2.4",
+        ))
+    elif user_fn:
+        entries.append(BackendKernelEntry(
+            target="rocm",
+            status=_REFERENCE_STATUS,
+            dtypes=_EBM_CPU_DTYPES,
+            feature_flags=("ebm_namespace", "numpy_reference"),
+            notes=_user_fn_note,
         ))
     else:
         entries.append(BackendKernelEntry(

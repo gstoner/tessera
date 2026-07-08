@@ -6956,6 +6956,29 @@ def _x86_ebm_langevin(y: Any, grad: Any, eta: float, noise_scale: float,
     return out.reshape(np.asarray(y).shape)
 
 
+def _x86_ebm_affine_langevin(y: Any, grad: Any, noise: Any, eta: float,
+                             noise_scale: float, np: Any) -> Any:
+    """Affine Langevin step with HOST-drawn noise (the manifold samplers'
+    lane): ``out = y - eta*grad + noise_scale*noise`` on the AVX-512 kernel.
+    Noise is an input (not device Philox) so this matches the numpy reference of
+    ``tessera.ebm.{bivector,sphere}_langevin_step`` exactly."""
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    fn = getattr(lib, "tessera_x86_ebm_affine_langevin_f32", None)
+    if fn is None:
+        raise _RocmCompiledUnavailable("tessera_x86_ebm_affine_langevin_f32 missing")
+    yc = np.ascontiguousarray(y, np.float32).reshape(-1)
+    gc = np.ascontiguousarray(grad, np.float32).reshape(-1)
+    nz = np.ascontiguousarray(noise, np.float32).reshape(-1)
+    out = np.zeros(yc.size, np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    fn(yc.ctypes.data_as(cf), gc.ctypes.data_as(cf), nz.ctypes.data_as(cf),
+       ctypes.c_int64(yc.size), ctypes.c_float(eta), ctypes.c_float(noise_scale),
+       out.ctypes.data_as(cf))
+    return out.reshape(np.asarray(y).shape)
+
+
 def _ebm_langevin_compute(operands: list, kwargs: dict, langevin_fn: Any,
                           np: Any) -> Any:
     if len(operands) < 2:
@@ -7068,6 +7091,75 @@ def _execute_rocm_compiled_ebm_langevin(artifact: RuntimeArtifact,
     """The ``target="rocm"`` EBM Langevin sampling lane (device Philox noise)."""
     return _execute_ebm_langevin(artifact, args, _rocm_ebm_langevin,
                                  "rocm_ebm_langevin_compiled")
+
+
+_rocm_ebm_affine_langevin_hsaco_cache: dict[tuple[str], bytes] = {}
+
+
+def _build_compiled_ebm_affine_langevin_hsaco() -> bytes:
+    chip = _rocm_chip()
+    directive = ('module {\n  "tessera_rocm.ebm_affine_langevin"() '
+                 '{name = "lva"} : () -> ()\n}\n')
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-ebm-affine-langevin-kernel", directive,
+        _rocm_ebm_affine_langevin_hsaco_cache, (chip,))
+
+
+def _rocm_ebm_affine_langevin(y: Any, grad: Any, noise: Any, eta: float,
+                              noise_scale: float, np: Any) -> Any:
+    """Affine Langevin step with HOST-drawn noise (manifold samplers) on gfx1151:
+    ``out = y - eta*grad + noise_scale*noise``. Noise is an input operand (not
+    device Philox), matching the numpy reference exactly (compiler-generated)."""
+    yc = np.ascontiguousarray(y, np.float32).reshape(-1)
+    gc = np.ascontiguousarray(grad, np.float32).reshape(-1)
+    nz = np.ascontiguousarray(noise, np.float32).reshape(-1)
+    n = int(yc.size)
+    hsaco = _build_compiled_ebm_affine_langevin_hsaco()
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm ebm_affine_langevin: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm ebm_affine_langevin: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"lva") != 0:
+        raise RuntimeError("rocm ebm_affine_langevin: kernel symbol 'lva' not found")
+    cv = ctypes.c_void_p
+    d_y, d_g, d_z, d_o = cv(), cv(), cv(), cv()
+    if (hip.hipMalloc(ctypes.byref(d_y), max(4 * n, 4)) != 0
+            or hip.hipMalloc(ctypes.byref(d_g), max(4 * n, 4)) != 0
+            or hip.hipMalloc(ctypes.byref(d_z), max(4 * n, 4)) != 0
+            or hip.hipMalloc(ctypes.byref(d_o), max(4 * n, 4)) != 0):
+        raise RuntimeError("rocm ebm_affine_langevin: hipMalloc failed")
+    hip.hipMemcpy(d_y, yc.ctypes.data_as(cv), 4 * n, 1)
+    hip.hipMemcpy(d_g, gc.ctypes.data_as(cv), 4 * n, 1)
+    hip.hipMemcpy(d_z, nz.ctypes.data_as(cv), 4 * n, 1)
+
+    def _mr(p, size):
+        return [cv(p.value), cv(p.value), ctypes.c_int64(0),
+                ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    launch_args = (_mr(d_y, n) + _mr(d_g, n) + _mr(d_z, n) + [ctypes.c_int64(n)]
+                   + [ctypes.c_float(eta), ctypes.c_float(noise_scale)]
+                   + _mr(d_o, n))
+    arr = (cv * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), cv)
+    gx = (n + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+    rc = hip.hipModuleLaunchKernel(fn, max(gx, 1), 1, 1, _GRID_BLOCKDIM, 1, 1,
+                                   0, None, arr, None)
+    if rc != 0:
+        for d in (d_y, d_g, d_z, d_o):
+            hip.hipFree(d)
+        raise RuntimeError(f"rocm ebm_affine_langevin: launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    out = np.zeros(n, np.float32)
+    hip.hipMemcpy(out.ctypes.data_as(cv), d_o, 4 * n, 2)
+    for d in (d_y, d_g, d_z, d_o):
+        hip.hipFree(d)
+    return out.reshape(np.asarray(y).shape)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

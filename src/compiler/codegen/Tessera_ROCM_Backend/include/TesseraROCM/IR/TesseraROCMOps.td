@@ -953,6 +953,24 @@ def ROCM_EbmLangevinKernelOp : TesseraROCM_Op<"ebm_langevin"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_EbmAffineLangevinKernelOp : TesseraROCM_Op<"ebm_affine_langevin"> {
+  let summary = "EBM Langevin step taking host-drawn Gaussian noise as an input";
+  let description = [{
+    The directive `generate-rocm-ebm-affine-langevin-kernel` expands into a
+    Langevin-step gpu kernel that takes its noise AS AN INPUT rather than drawing
+    its own Philox noise — the manifold half of the P7 EBM follow-up. One thread
+    per element `i` computes `out[i] = y[i] - eta·grad[i] + noise_scale·noise[i]`.
+    `tessera.ebm.{bivector,sphere}_langevin_step` project the gradient and a
+    host-drawn, grade-projected Gaussian onto a manifold subspace, then take this
+    affine combination. Mirrors the Apple `_try_apple_gpu_langevin_step_f32`
+    bridge; CPU analog: tessera_x86_ebm_affine_langevin_f32. Args:
+    `(y : memref<?xf32>, grad : memref<?xf32>, noise : memref<?xf32>, n : index,
+    eta f32, noise_scale f32, out : memref<?xf32>)`.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_ScatterKernelOp : TesseraROCM_Op<"scatter"> {
   let summary = "Indexed-store / scatter kernel with atomic reduce (0-reduce)";
   let description = [{

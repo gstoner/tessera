@@ -3741,6 +3741,13 @@ _EBM_DEVICE_COMPILED: dict[str, tuple[str, str]] = {
                         "tests/unit/test_rocm_ebm_compute_compiled.py"),
     "ebm_langevin_step": ("tests/unit/test_x86_ebm_langevin_compiled.py",
                           "tests/unit/test_rocm_ebm_langevin_compiled.py"),
+    # Manifold Langevin STEP — reuses the native affine-Langevin kernel (host-drawn,
+    # grade-projected noise as an input). x86 = AVX-512 affine kernel, ROCm =
+    # generate-rocm-ebm-affine-langevin-kernel. The `_sample` chain wrappers stay
+    # reference (host loop of per-step device calls — no on-device chain kernel).
+    "ebm_bivector_langevin_step": (
+        "tests/unit/test_x86_ebm_geo_langevin_compiled.py",
+        "tests/unit/test_rocm_ebm_geo_langevin_compiled.py"),
 }
 
 

@@ -69,14 +69,15 @@ table is the single skim surface. `✅` done · `🟡` partial · `⬜` not star
 | **2** | B2a–c `KernelEmitter`/`Runner`/`SpecPolicy` | ✅ | — | — |
 | **2** | B3 F4 oracle universal (backend-agnostic, C0) | ✅ | — | — |
 | **2** | B4a `kernel_cache` synth→compile→cache loop | ✅ | — | — |
-| **2** | B4 real AOT `compile_fn`s (`clang`/`ptxas`/`hipcc`) | ⬜ (per-arch, → C) | ⬜ | ⬜ |
+| **2** | B4 real AOT `compile_fn`s (per-arch, landed via C1/C2/C3) | ✅ registered host-free | ✅ Zen5 `clang` + gfx1151 `hipcc` | ✅ sm_120 `nvcc`+`ptxas` |
 | **3** | C0 backend-plugin handoff + non-Apple F4 gate | ✅ (PR #285) | — | — |
 | **3** | C1 x86 plugin (`emit/x86_llvm.py`: emitter + `cc` compile + ctypes runner) | ✅ emit host-free | ✅ execute on Zen 5 | — |
 | **3** | Oracle accuracy budget (`KernelRunner.accuracy_atol`, D2 seed) | ✅ | — | — |
 | **3** | C1b x86 AOCL-DLP Tier-3 candidate (opt-in) | 🟡 candidate wired host-free | 🟡 generic Tier-1 proven on Zen; AOCL lane library-gated | — |
 | **4** | C2 NVIDIA generic synth → CUDA (`emit/nvidia_cuda.py`: emitter + `nvcc` + runner) | ✅ emit host-free | — | ✅ sm_120 FusedRegion (RTX 5070 Ti) |
 | **4** | C2 tail — mma.sync PTX → shipped launch bridge (`tessera_nvidia_ptx_launch`) | ✅ host-free (g++/nvcc) | — | ✅ sm_120 m16n8k16 (RTX 5070 Ti) |
-| **4** | C2 tail — broaden shapes/dtypes + `wgmma` sm_90a + arbiter Tier-2 wiring | ⬜ | — | ⬜ |
+| **4** | C2 tail — broaden shapes/dtypes (general `mma.sync` bf16/f16 GEMM + NVFP4 emit) + arbiter Tier-2 wiring | ✅ | — | ✅ sm_120 |
+| **4** | C2 tail — `wgmma` sm_90a emit | ⬜ | — | ⬜ (needs Hopper sm_90a) |
 | **5** | C3 ROCm generic synth → HIP (`emit/rocm_hip.py`: emitter + `hipcc` + runner) | ✅ emit host-free | ✅ gfx1151 FusedRegion | — |
 | **5** | C3 tail — drive WMMA/MFMA `Generate*` passes through the loop | ✅ WMMA host-free | ✅ gfx1151 fused WMMA F4-gated (MFMA=CDNA-gated) | — |
 | **3.5** | ROCm shipped-kernel → F4 gate (flash-attn, f16 budget) + shared scalar body | ✅ | ✅ gfx1151 attn | — |
@@ -214,8 +215,10 @@ backends).
   emit → key → cache-or-compile. Apple registers a **deferred** compiler
   (compile-on-launch — Metal compiles inside `run_*`, cached in the runtime), so
   the loop dedups and keys without duplicating work. **Launch** stays the B3
-  `KernelRunner`; the real ahead-of-time `compile_fn`s (`ptxas`/`hipcc`/`clang`)
-  are Workstream C.
+  `KernelRunner`. **The real ahead-of-time `compile_fn`s landed in Workstream C**
+  (2026-07): `emit/x86_llvm.py` (`clang`/`cc`), `emit/nvidia_cuda.py` (`nvcc`, +
+  `ptxas` for the mma.sync PTX bridge), and `emit/rocm_hip.py` (`hipcc`) each
+  `register_compiler` their toolchain into the B4a loop.
 
 **Lead safety:** B targets the *fusable-DAG middle ground* (epilogues, pointwise
 chains, small attention). Crown-jewel GEMM stays Tier 2/3.

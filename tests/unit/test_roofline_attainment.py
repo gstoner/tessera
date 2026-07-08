@@ -8,7 +8,6 @@ TFLOP/s ÷ the device's grounded peak = ``pct_peak``, and a regression below an
 from __future__ import annotations
 
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -102,6 +101,35 @@ def test_attainment_gate_ignores_rows_without_floor():
 
 
 # ── the committed gfx1151 baseline is self-consistent ─────────────────────────
+
+def test_attainment_gate_reads_latency_ms_from_measured_rows():
+    # Measured ratchet-report rows carry `latency_ms` (not `median_ms`) — the gate
+    # must read it, else pct_peak is None and the row false-fails on coverage.
+    base = {"rows": [_row(10.0, floor=0.02)]}
+    measured = [{"op": "matmul", "shape": "2048x2048x2048", "dtype": "f16",
+                 "mode": "wmma", "latency_ms": 10.0}]     # no median_ms
+    assert R.evaluate_attainment(measured, base, _DEV) == []
+    slow = [{"op": "matmul", "shape": "2048x2048x2048", "dtype": "f16",
+             "mode": "wmma", "latency_ms": 100.0}]         # 10x slower → below floor
+    fails = R.evaluate_attainment(slow, base, _DEV)
+    assert len(fails) == 1 and "below floor" in fails[0]
+
+
+def test_perf_gate_attainment_via_package_import(tmp_path):
+    # P2: perf_gate must import roofline under package usage (from benchmarks import
+    # perf_gate) — not only as a script. P1: the report rows carry latency_ms.
+    from benchmarks import perf_gate
+    base_path = _BENCH / "baselines" / "rocm_gfx1151_hot_paths.json"
+    base = json.loads(base_path.read_text())
+    rows = [{"op": r["op"], "shape": r["shape"], "dtype": r["dtype"],
+             "mode": r["mode"], "latency_ms": r["median_ms"]}
+            for r in base["rows"]]
+    report = tmp_path / "report.json"
+    report.write_text(json.dumps(rows))
+    rc = perf_gate.main([str(report), "--baseline", str(base_path),
+                         "--attainment", "--device", "rocm:gfx1151"])
+    assert rc == 0
+
 
 def test_committed_baseline_has_attainment_and_self_passes():
     p = _BENCH / "baselines" / "rocm_gfx1151_hot_paths.json"

@@ -132,9 +132,11 @@ def evaluate_attainment(rows: list[Mapping[str, Any]],
         if floor is None:
             continue
         seen.add(k)
+        # Measured ratchet-report rows carry `latency_ms` (like evaluate_ratchet
+        # reads); baseline/self-check rows carry `median_ms`. Accept either.
+        t = row.get("latency_ms", row.get("median_ms", 0.0))
         pk = pct_peak(row.get("op", ""), row.get("shape", ""),
-                      row.get("dtype", ""), float(row.get("median_ms", 0.0)),
-                      device)
+                      row.get("dtype", ""), float(t), device)
         if pk is None:
             failures.append(f"{k[0]} {k[1]} {k[2]} {k[3]}: no attainment "
                             f"(missing FLOP model or device peak for {device!r})")

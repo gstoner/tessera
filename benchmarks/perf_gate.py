@@ -104,7 +104,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.attainment:
-        from roofline import evaluate_attainment
+        try:                                    # package context (-m / import)
+            from benchmarks.roofline import evaluate_attainment
+        except ModuleNotFoundError:             # script run (benchmarks/ on path[0])
+            from roofline import evaluate_attainment
         rows = json.loads(Path(args.report).read_text(encoding="utf-8"))
         if isinstance(rows, Mapping):
             rows = list(rows.get("rows", []))

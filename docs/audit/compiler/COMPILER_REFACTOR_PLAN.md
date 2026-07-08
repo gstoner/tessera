@@ -666,8 +666,17 @@ priority (highest DL leverage first):
   Host-free-gated (`test_roofline_attainment.py`, 12). **Still open:** kernel-
   isolated attainment (strip host overhead), `[NV]` sm_120 + Apple peak rows,
   attainment floors that ratchet *upward* as the lanes optimize.
-- **K · Long-tail op codegen (W8)** — generic elementwise/reduction/scatter/gather
-  synthesis to close the ~125 numpy-only ops the residency planner only *routes*.
+- **K · Long-tail op codegen (W8) — reassessed 2026-07-08: effectively closed.**
+  The generated `e2e_op_coverage.md` = 280 complete / 6 runnable_reference / 0
+  artifact_only; the elementwise/reduction/scatter/gather/sort families are all
+  `fused`/`compiled`/`hardware_verified` (ROCm 327 native · 0 reference, x86 317
+  native) after the warp-shuffle lanes (#152–#157 + follow-ons). The stale "~125
+  numpy-only" figure was registry-conservative prose (Decision #26 — trust the
+  generated dashboards, not counts in prose). The only non-native tail is the **6
+  collective/MoE-transport** ops at `reference` (`all_reduce`/`all_gather`/
+  `all_to_all`/`reduce_scatter`/`moe_dispatch`/`moe_combine` — need real NCCL/RCCL,
+  Workstream I / W6), not generic op synthesis; the `partial` remainder is
+  structural/view/host ops (`tile_ir: not_applicable` — no compute kernel).
 
 These are the road to world-class; A–E are the foundation they stand on.
 

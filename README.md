@@ -28,12 +28,14 @@ AMD ROCm. Backend maturity varies by target: x86 CPU now has both the executed
 `tessera_jit` lane and AVX-512 `runtime.launch()` lanes; Apple CPU/GPU execute
 on capable Darwin hosts; AMD **gfx1151** (Strix Halo, RDNA 3.5) has a broad
 compiler-generated HIP runtime family; and NVIDIA **sm_120** (RTX 5070 Ti,
-consumer Blackwell) runs a hardware-verified `mma.sync` matmul. Remaining
-backend breadth and unproven architectures stay hardware-gated; see
+consumer Blackwell) runs a compiler-generated CUDA lane plus hand-emitted
+tensor-core `mma.sync` GEMM / flash-attention lanes selected by a measured,
+accuracy-budgeted arbiter. Remaining backend breadth and unproven architectures
+stay hardware-gated; see
 [`docs/audit/backend/BACKEND_AUDIT.md`](docs/audit/backend/BACKEND_AUDIT.md)
 and [`docs/README.md`](docs/README.md) for status labels.
 
-The fast Python unit suite currently collects ~13,360 fast tests under
+The fast Python unit suite collects ~13,500 fast tests under
 `pytest tests/unit -m "not slow"`; generated audits remain the source of truth
 for exact status counts.
 
@@ -95,7 +97,7 @@ Use these status words consistently:
 | scaffolded | Directory, API shape, or design skeleton exists, but behavior is incomplete or artifact-only. |
 | planned | Design direction only. |
 
-Current status snapshot (as of June 29, 2026). Generated dashboards are the
+Current status snapshot (reviewed 2026-07-08). Generated dashboards are the
 source of truth for exact counts and executable lanes:
 [`runtime_execution_matrix.md`](docs/audit/generated/runtime_execution_matrix.md),
 [`runtime_abi.md`](docs/audit/generated/runtime_abi.md), and
@@ -109,24 +111,25 @@ source of truth for exact counts and executable lanes:
 | Production CPU JIT | implemented / hardware-runtime | `@tessera.jit(target="cpu")` runs a real `tessera_jit` MLIR -> LLVM ORC-JIT path before the numpy reference fallback. Covered ops include matmul, arith, activations, softmax, norm, transpose, and multi-op graph functions. |
 | Autodiff | implemented / lit-testable | Python tape and Graph IR adjoint pass are present; VJP/JVP coverage includes core tensor ops, recurrent/state-space ops, collectives, losses, and model-family surfaces. |
 | Distributed and training APIs | implemented / mock-runtime | DDP/FSDP, collectives, sharding, MoE/MegaMoE, optimizers, losses, and RL policy losses are usable through Python/reference and mock collectives; real NCCL/RCCL execution remains backend-gated. |
-| Standalone S-series contracts | implemented / planned | 474 primitive entries are tracked. `lowering_rule` is closed project-wide, while 467 `backend_kernel` rows remain open by design until backend-specific proof lands. |
+| Standalone S-series contracts | implemented / planned | The S-series primitive-contract registry is tracked across 12 axes. `lowering_rule` is closed project-wide; the aggregate `backend_kernel` axis stays largely open by design until per-target native proof lands (per-target completion grows as backends land — see the dashboard's Backend-Proof-By-Target table). Counts: [`s_series_status.md`](docs/audit/generated/s_series_status.md). |
 | Mathematical and model IR surfaces | implemented / lit-testable | GA/EBM, reasoning-attention families, DFlash, DiffusionGemma, and frontier MoE model-class contracts are compiler-visible. Native execution is claimed only where a backend row below or a generated audit proves it. |
 | Runtime ABI and audits | implemented | Runtime C ABI surfaces and generated audit dashboards are drift-gated; exact counts are listed in the support snapshot below. |
 
-The ~13,360-test fast unit suite passes under `-m "not slow"`; the full Python
-suite collects ~13,360 tests plus slow/heavy benchmark contracts.
+The ~13,500-test fast unit suite passes under `-m "not slow"`; the full Python
+suite collects ~14,400 tests including slow/heavy benchmark contracts.
 
 ### Current Support Snapshot
 
 Generated audits and executable tests are the status authority when they
-disagree with prose. As of the June 29, 2026 review:
+disagree with prose. These dashboards are drift-gated and carry the exact,
+always-current counts — read them rather than trusting a number copied here:
 
-| Source | Current facts |
-|--------|---------------|
-| [`docs/audit/generated/e2e_op_coverage.md`](docs/audit/generated/e2e_op_coverage.md) | 309 ops tracked: 214 native end-to-end, 95 runnable reference, 0 artifact-only/partial/planned. |
-| [`docs/audit/generated/runtime_abi.md`](docs/audit/generated/runtime_abi.md) | 381 unique `extern "C" tessera_*` C ABI symbols: 304 Apple, 63 x86, 10 ROCm, 4 NVIDIA; 134 Apple GPU kernel families. |
-| [`docs/audit/generated/s_series_status.md`](docs/audit/generated/s_series_status.md) | 474 S-series primitive-contract entries. `lowering_rule` is closed; aggregate `backend_kernel` remains open for 467 entries because backend proof is target-specific. |
-| [`docs/audit/generated/docs_freshness.md`](docs/audit/generated/docs_freshness.md) | 92 docs catalogued; 91 dated; 54 updated within 30 days; 0 older than 90 days; 1 undated. |
+| Source | What it tracks |
+|--------|----------------|
+| [`docs/audit/generated/e2e_op_coverage.md`](docs/audit/generated/e2e_op_coverage.md) | End-to-end op-execution status by tier — native `complete`, `runnable_reference`, `partial` (pipeline has gaps), `artifact_only`, and `planned`. See the dashboard for the current per-tier split. |
+| [`docs/audit/generated/runtime_abi.md`](docs/audit/generated/runtime_abi.md) | The full `extern "C" tessera_*` C ABI surface by backend (Apple / x86 / ROCm / NVIDIA) plus the Apple GPU kernel-family × dtype matrix. |
+| [`docs/audit/generated/s_series_status.md`](docs/audit/generated/s_series_status.md) | S-series primitive contracts across 12 axes: `lowering_rule` closed project-wide; the aggregate `backend_kernel` axis stays largely open by design, with per-target native proof growing as backends land. |
+| [`docs/audit/generated/docs_freshness.md`](docs/audit/generated/docs_freshness.md) | Doc-freshness catalog — nearly every doc carries a `last_updated:` marker and none are older than 90 days. |
 
 | Lane | Supported now | Still gated |
 |------|---------------|-------------|
@@ -180,19 +183,20 @@ For compiler-readiness audits, keep three lanes separate:
   hardware proof.
 
 Primary named pipelines and target paths are tracked in
-[`docs/spec/COMPILER_REFERENCE.md`](docs/spec/COMPILER_REFERENCE.md). The
-canonical pipelines registered in `tessera-opt` today:
+[`docs/spec/COMPILER_REFERENCE.md`](docs/spec/COMPILER_REFERENCE.md) (the
+authoritative status source). The canonical lowering pipelines registered in
+`tessera-opt` (the last two rows are separate opt-style driver binaries):
 
 | Pipeline | Status |
 |------|--------|
-| `tessera-lower-to-x86` | implemented / hardware-runtime through CPU JIT, native CPU ABI, AMX, and AVX-512 compiled lanes |
-| `tessera-lower-to-gpu` (NVIDIA SM_90 default) | implemented / lit-testable |
-| `tessera-nvidia-pipeline-{sm90,sm100,sm120}` (per-SM aliases) | implemented / lit-testable |
-| `tessera-lower-to-rocm` | implemented / lit-testable / hardware-runtime on capable gfx1151 hosts |
-| `tessera-lower-to-apple_cpu` (artifact) / `tessera-lower-to-apple_cpu-runtime` (Accelerate) | implemented / hardware-runtime |
-| `tessera-lower-to-apple_gpu` (artifact) / `tessera-lower-to-apple_gpu-runtime` (MPS + custom MSL) | implemented / hardware-runtime |
-| `tpp-space-time` (Tensor Parallel Primitives) | implemented / lit-testable |
-| `ts-spectral-pipeline` (Spectral / FFT) | implemented / lit-testable |
+| `tessera-lower-to-x86` | implemented / lit-testable; hardware-runtime via the CPU JIT + native CPU ABI + AVX-512 compiled lanes (the AMX lane emits but is artifact-only — no AMX hardware in the fleet) |
+| `tessera-lower-to-gpu` (NVIDIA SM90 WGMMA/TMA) | implemented / lit-testable (SM90 WGMMA has no hardware-execution proof yet) |
+| `tessera-nvidia-pipeline-{sm90,sm100,sm120}` (per-SM aliases) | implemented / lit-testable; the sm_120 `mma.sync` GEMM additionally **executes** on consumer Blackwell hardware via a separate emit/runtime lane (`ptx_emit.py` + `libtessera_nvidia_gemm.so`), not through this IR pipeline |
+| `tessera-lower-to-rocm` | implemented / lit-testable / hardware-runtime on capable gfx1151 (RDNA3.5) hosts via HIP (WMMA matmul + attention family) |
+| `tessera-lower-to-apple_cpu` (artifact) / `tessera-lower-to-apple_cpu-runtime` (Accelerate) | implemented / lit-testable / hardware-runtime |
+| `tessera-lower-to-apple_gpu` (artifact) / `tessera-lower-to-apple_gpu-runtime` (MPS + custom MSL) | implemented / lit-testable / hardware-runtime |
+| `tpp-space-time` (Tensor Parallel Primitives — separate driver) | implemented / lit-testable |
+| `ts-spectral-opt` (Spectral / FFT — separate driver) | implemented / lit-testable |
 
 ### Front-to-Back Optimizing-Compiler Closure
 
@@ -223,12 +227,17 @@ the keystone phases have landed:
 
 ### General Fusion Middle-End & Kernel Synthesis
 
-The Apple GPU backend is the proving ground for a **general fusion middle-end**:
-instead of a growing catalog of hand-written fused kernels, one *synthesizer*
-emits the kernel source for an entire family of fused regions, gated by an
-execution-derived oracle. The implementation lives in
-[`python/tessera/compiler/fusion.py`](python/tessera/compiler/fusion.py); the
-phased design is in
+The Apple GPU backend proved a **general fusion middle-end** — instead of a
+growing catalog of hand-written fused kernels, one *synthesizer* emits the kernel
+source for an entire family of fused regions, gated by an execution-derived
+oracle. That middle-end is now **generalized across all four backends** behind a
+plugin protocol (see "Where the compiler is going" below); Apple MSL is the
+reference implementation. The arch-agnostic half (region model, discovery, cost,
+the F4 oracle) lives in
+[`python/tessera/compiler/fusion_core.py`](python/tessera/compiler/fusion_core.py),
+with per-backend emitters/runners under
+[`python/tessera/compiler/emit/`](python/tessera/compiler/emit/); the phased
+design is in
 [`docs/audit/compiler/OPTIMIZING_COMPILER_PLAN.md`](docs/audit/compiler/OPTIMIZING_COMPILER_PLAN.md).
 
 - **Region IR** — `FusedRegion` (a matmul root + a pointwise-epilogue chain + an
@@ -356,8 +365,8 @@ consolidated into one generated dashboard:
 
 - [`docs/audit/generated/surface_status.md`](docs/audit/generated/surface_status.md) (human) + [`surface_status.csv`](docs/audit/generated/surface_status.csv) (canonical, machine-readable) — examples / benchmarks / research / tools / tests + operator-benchmark coverage.
 
-Plus 13 op-level / compiler-level audit registries covering primitive
-coverage (`primitive_coverage.py` / S-series status: 474 entries), backend
+Plus op-level / compiler-level audit registries covering primitive
+coverage (`primitive_coverage.py` / S-series status), backend
 kernel manifests, MLIR verifier coverage, dialect registration, named-pipeline
 registry, diagnostic codes, docs freshness, effect lattice, runtime C ABI
 surface, test coverage by op family, TSOL canonical-op coverage, and
@@ -389,7 +398,7 @@ in ~80 lines.  Runs on CPU, no accelerator required.
 | [`docs/spec/PYTHON_API_SPEC.md`](docs/spec/PYTHON_API_SPEC.md) | Public Python symbols and signatures |
 | [`docs/spec/COMPILER_REFERENCE.md`](docs/spec/COMPILER_REFERENCE.md) | IR stack, pass registry, pipelines, compiler source map |
 | [`docs/spec/AUTODIFF_SPEC.md`](docs/spec/AUTODIFF_SPEC.md) | Tape-based reverse-mode autodiff (Tier 2) + Phase F4 Graph IR adjoint pass (`AdjointInterface` op trait, multi-output rewrite, `tessera-autodiff` MLIR pass) + Phase F5 adjoint collective insertion |
-| [`docs/audit/backend/nvidia/archive/nvidia_execution_audit.md`](docs/audit/backend/nvidia/archive/nvidia_execution_audit.md) | Phase G1 — concrete punch list (G1-1 through G1-8) for first SM_90 BF16 GEMM on H100 |
+| [`docs/audit/backend/nvidia/NVIDIA_AUDIT.md`](docs/audit/backend/nvidia/NVIDIA_AUDIT.md) | NVIDIA backend status — the sm_120 CUDA + tensor-core lanes, the PTX launch bridge, and the hardware-gated frontier (Hopper sm_90 / datacenter sm_100). The archived `archive/nvidia_execution_audit.md` holds the historical SM_90 bring-up punch list. |
 | [`docs/spec/CLIFFORD_SPEC.md`](docs/spec/CLIFFORD_SPEC.md) | Clifford / geometric algebra primitive surface |
 | [`docs/spec/EBM_SPEC.md`](docs/spec/EBM_SPEC.md) | Energy-based model primitive surface |
 | [`docs/spec/GA_EBM_EXECUTION_STATUS.md`](docs/spec/GA_EBM_EXECUTION_STATUS.md) | GA + EBM execution status by implementation layer |
@@ -414,10 +423,10 @@ in ~80 lines.  Runs on CPU, no accelerator required.
 # Python development install
 pip install -e ".[dev]"
 
-# Daily edit-loop sanity check (~13,360 fast tests, < 512 MB RAM)
+# Daily edit-loop sanity check (~13,500 fast tests, < 512 MB RAM)
 pytest tests/unit/ -m "not slow" -q
 
-# Full Python suite including heavy benchmarks (~13,866 collected)
+# Full Python suite including heavy benchmarks (~14,400 collected)
 pytest tests/unit/ -q
 
 # GA + EBM native Apple GPU health check; skip-recording on non-Darwin

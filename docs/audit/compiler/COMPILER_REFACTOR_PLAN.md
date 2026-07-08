@@ -666,8 +666,23 @@ priority (highest DL leverage first):
   Host-free-gated (`test_roofline_attainment.py`, 12). **Still open:** kernel-
   isolated attainment (strip host overhead), `[NV]` sm_120 + Apple peak rows,
   attainment floors that ratchet *upward* as the lanes optimize.
-- **K · Long-tail op codegen (W8)** — generic elementwise/reduction/scatter/gather
-  synthesis to close the ~125 numpy-only ops the residency planner only *routes*.
+- **K · Long-tail op codegen (W8) — reassessed 2026-07-08.** W8's *specific*
+  premise — a ~125-op numpy-only tail needing generic elementwise/reduction/
+  scatter/gather synthesis — is stale: those families are native
+  (`generated/e2e_op_coverage.md` = 280 complete / 6 runnable_reference / 0
+  artifact_only; gather/scatter*/argmax/cumsum/sort/where/softmax are `fused`/
+  `compiled`/`hardware_verified`) after the warp-shuffle lanes (#152–#157 +
+  follow-ons). **But per-target native coverage is NOT complete** — the E2E rollup
+  is cross-target and collapses per-target detail; the status truth is
+  `s_series_status.md` **Backend Proof By Target** (Decision #26 — read the
+  dashboard, not this prose). Open native-codegen work there: the **EBM domain
+  family** (`ebm_energy` / `ebm_{sphere,bivector}_langevin_{sample,step}` /
+  `ebm_partition_{ais,exact,monte_carlo}` / `ebm_decode_init` — x86 `reference`,
+  ROCm `planned`), ROCm `gemm` (`artifact_only`), and the gated NVIDIA/Apple sets.
+  Separately, the **6 collective/MoE-transport** ops at `reference` need real
+  NCCL/RCCL (Workstream I / W6), not op synthesis. So: no *generic-synthesis* gap
+  remains, but real per-target + domain codegen does — do not read this as "op
+  coverage done."
 
 These are the road to world-class; A–E are the foundation they stand on.
 

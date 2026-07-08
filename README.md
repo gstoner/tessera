@@ -126,7 +126,7 @@ always-current counts — read them rather than trusting a number copied here:
 
 | Source | What it tracks |
 |--------|----------------|
-| [`docs/audit/generated/e2e_op_coverage.md`](docs/audit/generated/e2e_op_coverage.md) | End-to-end op-execution status: the large majority run native end-to-end (`complete`), the small remainder via the numpy reference path, none artifact-only. |
+| [`docs/audit/generated/e2e_op_coverage.md`](docs/audit/generated/e2e_op_coverage.md) | End-to-end op-execution status by tier — native `complete`, `runnable_reference`, `partial` (pipeline has gaps), `artifact_only`, and `planned`. See the dashboard for the current per-tier split. |
 | [`docs/audit/generated/runtime_abi.md`](docs/audit/generated/runtime_abi.md) | The full `extern "C" tessera_*` C ABI surface by backend (Apple / x86 / ROCm / NVIDIA) plus the Apple GPU kernel-family × dtype matrix. |
 | [`docs/audit/generated/s_series_status.md`](docs/audit/generated/s_series_status.md) | S-series primitive contracts across 12 axes: `lowering_rule` closed project-wide; the aggregate `backend_kernel` axis stays largely open by design, with per-target native proof growing as backends land. |
 | [`docs/audit/generated/docs_freshness.md`](docs/audit/generated/docs_freshness.md) | Doc-freshness catalog — nearly every doc carries a `last_updated:` marker and none are older than 90 days. |

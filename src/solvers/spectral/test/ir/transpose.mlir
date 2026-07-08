@@ -6,9 +6,12 @@
 
 module {
   // 2D FFT — needs a transpose between axis-0 and axis-1.
-  func.func @fft2d(%plan : !tessera_spectral.plan,
-                   %src : memref<128x128xcomplex<f32>>,
+  func.func @fft2d(%src : memref<128x128xcomplex<f32>>,
                    %dst : memref<128x128xcomplex<f32>>) {
+    %plan = "tessera_spectral.plan"() {
+      axes = [0, 1], elem_precision = "fp16", acc_precision = "f32",
+      scaling = "none", inplace = false, is_real_input = false,
+      norm_policy = "backward"} : () -> !tessera_spectral.plan
     "tessera_spectral.fft"(%plan, %src, %dst)
       : (!tessera_spectral.plan,
          memref<128x128xcomplex<f32>>,

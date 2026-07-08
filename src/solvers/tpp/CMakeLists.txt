@@ -27,6 +27,8 @@ set(CMAKE_CXX_STANDARD 17)
 
 add_subdirectory(include)
 add_subdirectory(lib)
+add_subdirectory(tools)
+add_subdirectory(benchmarks)
 add_subdirectory(test)
 add_subdirectory(docs)
 add_subdirectory(ci)

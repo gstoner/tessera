@@ -5,6 +5,7 @@
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/Interfaces/InferTypeOpInterface.h" // SameOperandsAndResultType
 #include "llvm/ADT/TypeSwitch.h"
 
 #include "TPPDialect.h.inc"

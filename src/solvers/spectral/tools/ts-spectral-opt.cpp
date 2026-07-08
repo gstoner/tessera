@@ -21,6 +21,7 @@
 
 #include "tessera/Spectral/SpectralDialect.h"
 #include "tessera/Spectral/SpectralPasses.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/DialectRegistry.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Pass/PassRegistry.h"
@@ -31,14 +32,17 @@ using namespace mlir;
 int main(int argc, char **argv) {
   DialectRegistry registry;
   registry.insert<tessera::spectral::SpectralDialect>();
+  registry.insert<func::FuncDialect>(); // test IR wraps ops in func.func
 
-  // Individual passes.
-  PassRegistration<>(tessera::createLegalizeSpectralPass);
-  PassRegistration<>(tessera::createSpectralMXPPass);
-  PassRegistration<>(tessera::createSpectralTransposePlanPass);
-  PassRegistration<>(tessera::createSpectralAutotunePass);
-  PassRegistration<>(tessera::createSpectralDistributedPass);
-  PassRegistration<>(tessera::createLowerSpectralToTargetIRPass);
+  // Individual passes.  registerPass() takes a factory returning
+  // unique_ptr<Pass>; PassRegistration<> now requires a concrete pass type,
+  // which these opaque factories intentionally do not expose.
+  registerPass(tessera::createLegalizeSpectralPass);
+  registerPass(tessera::createSpectralMXPPass);
+  registerPass(tessera::createSpectralTransposePlanPass);
+  registerPass(tessera::createSpectralAutotunePass);
+  registerPass(tessera::createSpectralDistributedPass);
+  registerPass(tessera::createLowerSpectralToTargetIRPass);
 
   // Canonical end-to-end pipeline alias.
   PassPipelineRegistration<> pipeline(

@@ -5,9 +5,12 @@
 // SQLite at first invocation.
 
 module attributes {tessera.target = "nvidia"} {
-  func.func @fft_auto(%plan : !tessera_spectral.plan,
-                      %src : memref<1024xcomplex<f32>>,
+  func.func @fft_auto(%src : memref<1024xcomplex<f32>>,
                       %dst : memref<1024xcomplex<f32>>) {
+    %plan = "tessera_spectral.plan"() {
+      axes = [0], elem_precision = "fp16", acc_precision = "f32",
+      scaling = "none", inplace = false, is_real_input = false,
+      norm_policy = "backward"} : () -> !tessera_spectral.plan
     "tessera_spectral.fft"(%plan, %src, %dst)
       : (!tessera_spectral.plan,
          memref<1024xcomplex<f32>>,

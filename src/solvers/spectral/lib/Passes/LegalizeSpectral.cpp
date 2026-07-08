@@ -42,14 +42,17 @@ namespace tessera {
 namespace {
 
 /// Factor N into a sequence of radices preferring 4 > 2 > 3 > 5 > 7.  When
-/// N is unknown (dynamic) we still emit a placeholder radix-4 stage; later
-/// passes can rewrite based on runtime shape inference.
+/// N is unknown (dynamic) we return an EMPTY sequence: the radix
+/// decomposition cannot be chosen at compile time, so we must NOT fabricate
+/// a stage.  Callers mark the axis dynamic instead, and LowerToTargetIR
+/// routes it to the runtime Stockham driver (which factors the runtime N and
+/// launches the matching per-stage kernels).  Fabricating a single radix-4
+/// stage here — the old behavior — was silently wrong for every dynamic N
+/// that is not exactly 4.
 static SmallVector<int64_t, 8> pickRadixSequence(int64_t N) {
   SmallVector<int64_t, 8> stages;
-  if (N <= 0) {
-    stages.push_back(4); // unknown: assume radix-4 stage as a placeholder
-    return stages;
-  }
+  if (N <= 0)
+    return stages; // dynamic: defer radix selection to runtime
   static const int64_t kRadices[] = {7, 5, 3, 4, 2};
   int64_t n = N;
   // Prefer 4 first (better register reuse for Stockham), then 2, then 3/5/7.
@@ -69,9 +72,12 @@ static SmallVector<int64_t, 8> pickRadixSequence(int64_t N) {
     // residual prime > 7: keep as a Bluestein-style single stage marker
     stages.push_back(n);
   }
-  // Stockham ordering wants smallest stages last so the final pass writes
-  // into the natural-order output buffer.
-  std::reverse(stages.begin(), stages.end());
+  // Stages are returned in application order — radix-4 stages first (L grows
+  // 1,4,16,…), then the radix-2 tail last, so the final stage writes the
+  // natural-order output buffer.  This matches the proven Stockham driver in
+  // lib/TargetHooks/*/StockhamRadix4.* (which drains factors of 4 then does a
+  // radix-2 tail); the previous std::reverse put the tail first, contradicting
+  // both that driver and the comment above it.
   return stages;
 }
 
@@ -130,8 +136,15 @@ struct LegalizeSpectralPass
 
       // Per-axis radix sequence.  Concatenate stage lists separated by a
       // marker (-1) so a single ArrayAttr can describe a multi-axis FFT.
+      // Axes whose length is unknown at compile time (dynamic memref dim)
+      // contribute *zero* stages between their separators — the radix
+      // decomposition is deferred to the runtime driver — and are recorded
+      // in `perAxisDynamic` so LowerToTargetIR can route them correctly
+      // instead of trusting a fabricated stage list.
       SmallVector<Attribute, 16> stagesFlat;
       SmallVector<int64_t, 4> perAxisLen;
+      SmallVector<bool, 4> perAxisDynamic;
+      bool anyDynamic = false;
       for (Attribute a : axesAttr) {
         auto ia = dyn_cast<IntegerAttr>(a);
         if (!ia)
@@ -139,7 +152,10 @@ struct LegalizeSpectralPass
         int64_t axis = ia.getInt();
         int64_t N = axisLength(src, axis);
         perAxisLen.push_back(N);
-        auto radices = pickRadixSequence(N);
+        bool dyn = (N <= 0);
+        perAxisDynamic.push_back(dyn);
+        anyDynamic |= dyn;
+        auto radices = pickRadixSequence(N); // empty when dynamic
         for (int64_t r : radices)
           stagesFlat.push_back(builder.getI64IntegerAttr(r));
         stagesFlat.push_back(builder.getI64IntegerAttr(-1)); // axis separator
@@ -149,6 +165,16 @@ struct LegalizeSpectralPass
                   ArrayAttr::get(ctx, stagesFlat));
       op->setAttr("tessera.spectral.per_axis_len",
                   builder.getI64ArrayAttr(perAxisLen));
+      // Flag dynamic axes explicitly so no downstream pass reads the (now
+      // empty) stage list for such an axis as "a single radix-4 transform".
+      if (anyDynamic) {
+        SmallVector<Attribute, 4> dynAttrs;
+        for (bool d : perAxisDynamic)
+          dynAttrs.push_back(builder.getBoolAttr(d));
+        op->setAttr("tessera.spectral.dynamic_axes",
+                    ArrayAttr::get(ctx, dynAttrs));
+        op->setAttr("tessera.spectral.dynamic_shape", builder.getUnitAttr());
+      }
 
       // Mirror norm policy + real-input flag onto the exec op so downstream
       // passes don't have to chase the plan.

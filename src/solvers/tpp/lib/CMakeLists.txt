@@ -11,6 +11,7 @@ target_link_libraries(TesseraTPPInit PUBLIC
 target_include_directories(TesseraTPPInit PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/../include
   ${CMAKE_BINARY_DIR}/src/solvers/tpp/include/tpp/Dialect/TPP
+  ${CMAKE_BINARY_DIR}/include/tpp/Dialect/TPP
 )
 
 # Glass-jaw #2 (2026-06-01) — in-process C ABI shared library so the
@@ -37,4 +38,5 @@ target_link_libraries(tessera_tpp_capi PRIVATE
 target_include_directories(tessera_tpp_capi PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/../include
   ${CMAKE_BINARY_DIR}/src/solvers/tpp/include/tpp/Dialect/TPP
+  ${CMAKE_BINARY_DIR}/include/tpp/Dialect/TPP
 )

@@ -328,10 +328,35 @@ class MatmulRegion:
     ``mma.sync`` and shipped GEMM kernels."""
 
     dtype: str = "bfloat16"
+    # Orientation of the *raw* operands as the matmul consumes them, read from its
+    # transposeA/transposeB flags (the `TransposeIntoMatmul` Graph-IR fold produces
+    # these). The GEMM works on natural A(M,K)/B(K,N); these say whether a raw
+    # operand is already transposed and must be flipped first. Default False = the
+    # operand is natural, so direct `MatmulRegion()` construction is unchanged.
+    # This is the backend consumer of the transpose contract (COMPILER_REFACTOR_PLAN
+    # H): it closes the OPTIMIZING_COMPILER_PLAN §6 orientation note for plain GEMM
+    # the same way `q_transposed`/`k_transposed` did for attention (M2) — resolving
+    # orientation from the layout flag, NOT from value shapes (ambiguous at M==K==N).
+    transpose_a: bool = False
+    transpose_b: bool = False
+
+    def _natural(self, A: np.ndarray, B: np.ndarray, cast: bool = True):
+        """Flip raw operands to natural A(M,K)/B(K,N) per the transpose flags.
+        ``cast`` (default) coerces to f32 for the numpy reference; ``cast=False``
+        preserves the storage dtype for the half-precision GPU path."""
+        A = np.asarray(A, np.float32) if cast else np.asarray(A)
+        B = np.asarray(B, np.float32) if cast else np.asarray(B)
+        if self.transpose_a:
+            A = np.ascontiguousarray(A.T)
+        if self.transpose_b:
+            B = np.ascontiguousarray(B.T)
+        return A, B
 
     def reference(self, A: np.ndarray, B: np.ndarray) -> np.ndarray:
-        """The f32 result of ``A @ B`` with both operands rounded to ``dtype``
-        first — the horizontal-oracle ground truth the GEMM candidate matches."""
+        """The f32 result of ``A @ B`` with both operands oriented per the transpose
+        flags then rounded to ``dtype`` — the horizontal-oracle ground truth the
+        GEMM candidate matches."""
+        A, B = self._natural(A, B)
         Aq = _round_to_storage(A, self.dtype)
         Bq = _round_to_storage(B, self.dtype)
         return (Aq @ Bq).astype(np.float32)

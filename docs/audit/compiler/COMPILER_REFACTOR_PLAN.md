@@ -604,6 +604,22 @@ priority (highest DL leverage first):
 - **H · Memory planning + layout (W3+W4)** — global buffer assignment/reuse +
   wire `LayoutAssignmentPass` to a backend consumer + transpose elimination.
   Unblocks the deferred attention-dispatch orientation bug. Mostly `[MAC]`.
+  **Recon + first slices (2026-07-08):** transpose elimination is already
+  substantially done — `transpose(transpose(x)) → x` (`TransposeOp::getCanonicalizationPatterns`,
+  TesseraOps.cpp) + transpose-into-matmul flag folding (`TransposeIntoMatmul`,
+  CanonicalizeTesseraIR.cpp) both land + are lit-gated, and attention orientation
+  was closed by M2 (`AttentionRegion.q_transposed/k_transposed`). **The
+  backend-consumer slice for plain GEMM landed:** `MatmulRegion` now carries
+  `transpose_a/transpose_b` + `_natural` and its `reference` orients per the flags
+  (mirroring `AttentionRegion`), so the arbiter's GEMM candidates resolve operand
+  orientation from the transpose contract — **not value shapes** — closing the
+  `OPTIMIZING_COMPILER_PLAN` §6 "ambiguous when M==K==N" note for GEMM; the NVIDIA
+  `mma.sync`/PTX matmul candidates orient via `_natural` before launch.
+  Host-free-gated (`test_fusion_matmul_orientation.py`, incl. the square-ambiguity
+  centerpiece); live GEMM proof is NV-gated. **Still open:** global buffer
+  assignment/reuse (greenfield — no Graph-IR buffer-reuse pass yet), a
+  layout-sensitive backend that reads the `LayoutAssignmentPass` `tessera.layout`
+  attrs (still unconsumed), and transpose-through-pointwise.
 - **I · Training-graph + distributed optimization (W5+W6)** — apply the middle-end
   to backward graphs; promote comm/compute overlap from runtime machinery to a
   scheduled pass. Needs multi-rank (mock-collective today).

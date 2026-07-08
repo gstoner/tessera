@@ -1007,7 +1007,11 @@ class NvidiaMmaGemmShippedCandidate(Candidate):
     def run(self, region: Any, A: Any, B: Any, *a: Any, **k: Any) -> tuple[Any, str]:
         try:
             from tessera import runtime as rt
-            return rt._nvidia_mma_gemm_2d(A, B, region.dtype), "nvidia_mma_shipped"
+            # Orient raw operands per the region's transpose flags before the kernel
+            # (the GEMM consumes natural A(M,K)/B(K,N)) — the transpose contract, as
+            # the attention lane already does via AttentionRegion._natural.
+            An, Bn = region._natural(A, B, cast=False)
+            return rt._nvidia_mma_gemm_2d(An, Bn, region.dtype), "nvidia_mma_shipped"
         except Exception:
             return region.reference(A, B), "reference"
 
@@ -1036,11 +1040,15 @@ class NvidiaMmaGemmEmittedCandidate(Candidate):
         return isinstance(region, MatmulRegion) and region.dtype in _GEMM_DTYPES
 
     def run(self, region: Any, A: Any, B: Any, *a: Any, **k: Any) -> tuple[Any, str]:
-        if not _aligned_2d(A, B):              # emitter is aligned-only (for now)
+        # Orient per the transpose flags first — alignment + the kernel both consume
+        # the natural A(M,K)/B(K,N) operands, so a transposed raw operand is flipped
+        # before the aligned-only check (the transpose contract).
+        An, Bn = region._natural(A, B, cast=False)
+        if not _aligned_2d(An, Bn):            # emitter is aligned-only (for now)
             return region.reference(A, B), "reference"
         try:
             from tessera import runtime as rt
-            return rt._nvidia_ptx_gemm_2d(A, B, region.dtype), "nvidia_ptx_gemm"
+            return rt._nvidia_ptx_gemm_2d(An, Bn, region.dtype), "nvidia_ptx_gemm"
         except Exception:
             return region.reference(A, B), "reference"
 

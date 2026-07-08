@@ -68,3 +68,41 @@ func.func @tmem_chain_collapses(%arg0: memref<16x16xf16>,
   "tile.tmem.alloc"(%arg2) : (memref<16x16xf16>) -> ()
   return
 }
+
+// -----
+
+// ── SMEM (alloc_shared) and TMEM (tmem.alloc) never share a group. ───────────
+// Disjoint live ranges + identical memref type, but distinct physical spaces —
+// a backend cannot realize one group as both LDS and TMEM, so they stay separate.
+// CHECK-LABEL: func.func @smem_tmem_never_alias
+// CHECK-SAME: tile.buffer_reuse.groups = 2
+// CHECK: "tile.alloc_shared"(%arg0) {tile.buffer_group = 0
+// CHECK: "tile.tmem.alloc"(%arg1) {tile.buffer_group = 1
+func.func @smem_tmem_never_alias(%arg0: memref<16x16xf16>,
+                                 %arg1: memref<16x16xf16>) {
+  "tile.alloc_shared"(%arg0) : (memref<16x16xf16>) -> ()
+  "tile.tmem.alloc"(%arg1) : (memref<16x16xf16>) -> ()
+  return
+}
+
+// -----
+
+// ── An async_copy's buffer stays live until its matching wait_async. ─────────
+// %arg0 is staged via async_copy(stage 0); its live range extends to the
+// wait_async(stage 0), so the %arg1 alloc issued BEFORE that wait overlaps it and
+// must NOT reuse %arg0's group. (Without the wait extension the ranges would look
+// disjoint and %arg1 would clobber the in-flight copy — 1 group, the bug.)
+// CHECK-LABEL: func.func @async_copy_lifetime_through_wait
+// CHECK-SAME: tile.buffer_reuse.groups = 2
+// CHECK: "tile.alloc_shared"(%arg0) {tile.buffer_group = 0
+// CHECK: "tile.alloc_shared"(%arg1) {tile.buffer_group = 1
+func.func @async_copy_lifetime_through_wait(%arg0: memref<16x16xf16>,
+                                            %arg1: memref<16x16xf16>) {
+  "tile.alloc_shared"(%arg0) : (memref<16x16xf16>) -> ()
+  "tile.async_copy"(%arg0) {stage = 0 : i32} : (memref<16x16xf16>) -> ()
+  "tile.alloc_shared"(%arg1) : (memref<16x16xf16>) -> ()
+  "tile.wait_async"() {stage = 0 : i32} : () -> ()
+  "tile.async_copy"(%arg1) {stage = 0 : i32} : (memref<16x16xf16>) -> ()
+  "tile.wait_async"() {stage = 0 : i32} : () -> ()
+  return
+}

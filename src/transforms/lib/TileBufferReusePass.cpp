@@ -65,6 +65,7 @@ static int64_t staticByteSize(Value v) {
 struct Buffer {
   Operation *alloc;   // the alloc op to stamp
   Value memref;       // the buffer's SSA value
+  StringRef kind;     // the alloc op name — SMEM (alloc_shared) vs TMEM never mix
   int64_t start;      // first program index that references it (the alloc)
   int64_t end;        // last program index that references it
   int64_t bytes;      // static size, or -1 if unknown
@@ -97,6 +98,35 @@ struct TileBufferReuse
     int64_t next = 0;
     fn->walk([&](Operation *op) { index[op] = next++; });
 
+    // Collect wait_async ops as (index, stage) — stage = -1 when the wait names
+    // no stage (waits for everything). A tile.async_copy keeps its shared buffer
+    // in flight until the matching wait, but the wait carries only the stage, not
+    // the memref — so the buffer's live range must be stretched to that wait, or a
+    // later same-typed alloc could reuse the group and clobber the in-flight copy.
+    SmallVector<std::pair<int64_t, int64_t>> waits;
+    fn->walk([&](Operation *op) {
+      if (op->getName().getStringRef() != "tile.wait_async")
+        return;
+      int64_t stage = -1;
+      if (auto s = op->getAttrOfType<IntegerAttr>("stage"))
+        stage = s.getInt();
+      waits.push_back({index[op], stage});
+    });
+    llvm::sort(waits, [](auto &a, auto &b) { return a.first < b.first; });
+
+    // The earliest wait after `copyIdx` whose stage matches (a stageless copy or
+    // stageless wait matches anything — the conservative, lifetime-extending
+    // choice). -1 if none: leave the range at its direct users.
+    auto waitFor = [&](int64_t copyIdx, int64_t copyStage) -> int64_t {
+      for (const auto &w : waits) {
+        if (w.first <= copyIdx)
+          continue;
+        if (copyStage < 0 || w.second < 0 || w.second == copyStage)
+          return w.first;
+      }
+      return -1;
+    };
+
     SmallVector<Buffer> buffers;
     fn->walk([&](Operation *op) {
       if (!isAllocOp(op) || op->getNumOperands() == 0)
@@ -105,9 +135,21 @@ struct TileBufferReuse
       if (!isa<MemRefType>(buf.getType()))
         return;
       int64_t start = index[op], end = index[op];
-      for (Operation *user : buf.getUsers())
-        end = std::max(end, index.lookup(user));
-      buffers.push_back({op, buf, start, end, staticByteSize(buf), -1});
+      for (Operation *user : buf.getUsers()) {
+        int64_t ui = index.lookup(user);
+        end = std::max(end, ui);
+        // Stretch an async_copy's lifetime to its matching wait_async.
+        if (user->getName().getStringRef() == "tile.async_copy") {
+          int64_t stage = -1;
+          if (auto s = user->getAttrOfType<IntegerAttr>("stage"))
+            stage = s.getInt();
+          int64_t w = waitFor(ui, stage);
+          if (w >= 0)
+            end = std::max(end, w);
+        }
+      }
+      buffers.push_back({op, buf, op->getName().getStringRef(), start, end,
+                         staticByteSize(buf), -1});
     });
     if (buffers.empty())
       return;
@@ -126,16 +168,22 @@ struct TileBufferReuse
     struct Group {
       int64_t lastEnd;
       Type type;
+      StringRef kind;
       int64_t bytes;
     };
     SmallVector<Group> groups;
     for (unsigned i : order) {
       Buffer &b = buffers[i];
       int chosen = -1;
-      // A buffer of unknown static size is never aliased (own group).
+      // A buffer of unknown static size is never aliased (own group). Two buffers
+      // share a group only if their live ranges are disjoint AND they are the same
+      // alloc kind (SMEM `alloc_shared` vs TMEM `tmem.alloc` are distinct physical
+      // spaces — a backend cannot realize one group as both) AND the same memref
+      // type (identical backing size + element type + layout + memory space).
       if (b.bytes >= 0) {
         for (unsigned g = 0; g < groups.size(); ++g) {
-          if (groups[g].lastEnd < b.start && groups[g].type == b.memref.getType()) {
+          if (groups[g].lastEnd < b.start && groups[g].kind == b.kind &&
+              groups[g].type == b.memref.getType()) {
             chosen = g;
             break;
           }
@@ -143,7 +191,7 @@ struct TileBufferReuse
       }
       if (chosen < 0) {
         chosen = groups.size();
-        groups.push_back({b.end, b.memref.getType(), b.bytes});
+        groups.push_back({b.end, b.memref.getType(), b.kind, b.bytes});
       } else {
         groups[chosen].lastEnd = b.end;
       }

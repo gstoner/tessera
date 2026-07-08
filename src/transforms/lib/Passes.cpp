@@ -224,6 +224,11 @@ void registerTesseraPasses() {
   // verified by LayoutLegalityPass. Standalone for now (no backend consumes the
   // assignments yet); registered as --tessera-layout-assignment.
   ::mlir::registerPass([]() { return createLayoutAssignmentPass(); });
+  // 2026-07-08: Tile IR global buffer assignment/reuse (Workstream H / W3) —
+  // disjoint-live-range shared buffers share a reuse group (tile.buffer_group).
+  // Assignment half of shared-memory planning; verified by
+  // TileBarrierReuseLegalityPass. Registered as --tessera-tile-buffer-reuse.
+  ::mlir::registerPass([]() { return createTileBufferReusePass(); });
   // 2026-06-19: dtype / aliasing / buffer-binding contracts (Decision #15a).
   // LayoutLegalityPass's sibling for the remaining contract families;
   // registered standalone as --tessera-ir-contracts.

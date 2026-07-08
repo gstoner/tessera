@@ -645,6 +645,21 @@ priority (highest DL leverage first):
   scheduled pass. Needs multi-rank (mock-collective today).
 - **J · Absolute roofline attainment (W7)** — make `% of peak` (not "beats
   per-op") the hot-path success bar; add attainment targets to the E2 ratchets.
+  **First slice landed (2026-07-08):** `benchmarks/roofline.py` — a grounded
+  per-device peak table (`rocm:gfx1151` = 29.7 TF fp32 / 59.4 TF fp16 / 256 GB/s,
+  each with a `source` string deriving it from `rocminfo` CU/SIMD/clock, Decision
+  #27), FLOP/byte models (matmul 2·MNK, flash_attn 4·B·H·S²·D), and
+  `achieved_tflops`/`pct_peak`/`evaluate_attainment`. The committed gfx1151 ratchet
+  rows now carry `pct_peak` + `achieved_tflops` + an `attainment_floor` (=
+  `pct_peak / margin`, symmetric with the latency cap), computed from the existing
+  medians (no re-timing); `perf_gate --attainment` gates a row that regresses below
+  its floor. **Honest scope:** the ratchet median is end-to-end wall-clock
+  (H2D/launch/D2H + compile), so `pct_peak` is an end-to-end attainment (a lower
+  bound on kernel efficiency) — the current gfx1151 lanes sit at ~0.3–2.9%, so the
+  metric's immediate value is exposing the headroom and giving it a ratchet.
+  Host-free-gated (`test_roofline_attainment.py`, 12). **Still open:** kernel-
+  isolated attainment (strip host overhead), `[NV]` sm_120 + Apple peak rows,
+  attainment floors that ratchet *upward* as the lanes optimize.
 - **K · Long-tail op codegen (W8)** — generic elementwise/reduction/scatter/gather
   synthesis to close the ~125 numpy-only ops the residency planner only *routes*.
 

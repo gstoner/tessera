@@ -96,9 +96,24 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--baseline", required=True, help="Baseline JSON")
     parser.add_argument("--ratchet", action="store_true",
                         help="treat report rows + baseline as the per-op latency ratchet")
+    parser.add_argument("--attainment", action="store_true",
+                        help="gate rows against their attainment_floor (%% of peak, "
+                             "Workstream J roofline) instead of the latency cap")
+    parser.add_argument("--device", default="rocm:gfx1151",
+                        help="device tag for the roofline peak (with --attainment)")
     args = parser.parse_args(argv)
 
-    if args.ratchet:
+    if args.attainment:
+        try:                                    # package context (-m / import)
+            from benchmarks.roofline import evaluate_attainment
+        except ModuleNotFoundError:             # script run (benchmarks/ on path[0])
+            from roofline import evaluate_attainment
+        rows = json.loads(Path(args.report).read_text(encoding="utf-8"))
+        if isinstance(rows, Mapping):
+            rows = list(rows.get("rows", []))
+        failures = evaluate_attainment(rows, load_baseline(args.baseline),
+                                       args.device)
+    elif args.ratchet:
         rows = json.loads(Path(args.report).read_text(encoding="utf-8"))
         if isinstance(rows, Mapping):
             rows = list(rows.get("rows", []))

@@ -8,7 +8,10 @@
       "dtype": "f16",
       "mode": "wmma",
       "median_ms": 0.6494,
-      "max_latency_ms": 1.2989
+      "max_latency_ms": 1.2989,
+      "achieved_tflops": 0.4134,
+      "pct_peak": 0.00696,
+      "attainment_floor": 0.00348
     },
     {
       "op": "matmul",
@@ -16,7 +19,10 @@
       "dtype": "f16",
       "mode": "wmma",
       "median_ms": 5.548,
-      "max_latency_ms": 11.096
+      "max_latency_ms": 11.096,
+      "achieved_tflops": 0.3871,
+      "pct_peak": 0.00652,
+      "attainment_floor": 0.00326
     },
     {
       "op": "matmul",
@@ -24,7 +30,10 @@
       "dtype": "f16",
       "mode": "wmma",
       "median_ms": 10.0927,
-      "max_latency_ms": 20.1853
+      "max_latency_ms": 20.1853,
+      "achieved_tflops": 1.7022,
+      "pct_peak": 0.02866,
+      "attainment_floor": 0.01433
     },
     {
       "op": "flash_attn",
@@ -32,7 +41,10 @@
       "dtype": "f16",
       "mode": "flash_attn",
       "median_ms": 2.8986,
-      "max_latency_ms": 5.7972
+      "max_latency_ms": 5.7972,
+      "achieved_tflops": 0.1852,
+      "pct_peak": 0.00312,
+      "attainment_floor": 0.00156
     },
     {
       "op": "flash_attn",
@@ -40,7 +52,10 @@
       "dtype": "f16",
       "mode": "flash_attn",
       "median_ms": 4.7631,
-      "max_latency_ms": 9.5263
+      "max_latency_ms": 9.5263,
+      "achieved_tflops": 0.4509,
+      "pct_peak": 0.00759,
+      "attainment_floor": 0.0038
     },
     {
       "op": "flash_attn",
@@ -48,7 +63,10 @@
       "dtype": "f16",
       "mode": "flash_attn",
       "median_ms": 11.4093,
-      "max_latency_ms": 22.8186
+      "max_latency_ms": 22.8186,
+      "achieved_tflops": 0.7529,
+      "pct_peak": 0.01267,
+      "attainment_floor": 0.00634
     }
   ]
 }

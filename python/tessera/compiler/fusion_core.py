@@ -1014,6 +1014,14 @@ def verify_synthesized_matmul(region: "MatmulRegion", *, seed: int = 0,
     M, N, K = 32, 16, 32                        # aligned probe (M%16, N%8, K%16)
     A = (rng.standard_normal((M, K)) * 0.4).astype(np.float32)
     B = (rng.standard_normal((K, N)) * 0.4).astype(np.float32)
+    # Feed the probe in the region's RAW orientation: a transposed region's
+    # candidate flips its operands back to natural via `_natural`, so a natural
+    # (K,N) probe would be double-flipped into a shape mismatch. Transpose here so
+    # run() + reference() both re-derive the same natural (M,K)@(K,N) product.
+    if region.transpose_a:
+        A = np.ascontiguousarray(A.T)           # raw (K, M)
+    if region.transpose_b:
+        B = np.ascontiguousarray(B.T)           # raw (N, K)
     out, execution = run(region, A, B)
     if execution in REFERENCE_EXECUTIONS:
         verdict = True

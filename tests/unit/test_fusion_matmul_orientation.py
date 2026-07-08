@@ -116,3 +116,41 @@ def test_candidate_must_orient_to_match_reference():
     raw = kernel(A, B)                          # ignores the flag
     np.testing.assert_allclose(oriented, ref, rtol=1e-2, atol=1e-2)
     assert not np.allclose(raw, ref, rtol=1e-2, atol=1e-2)
+
+
+# ── the F4 verifier probe is generated in RAW orientation (PR #310 review) ────
+
+def test_verifier_probe_is_raw_orientation_for_transposed_region():
+    # verify_synthesized_matmul must feed the candidate the region's RAW operands:
+    # a transposed region's candidate flips them back via _natural, so a natural
+    # (K,N) probe would be double-flipped into a shape mismatch and crash before
+    # selection. Prove the probe respects the flags (raw shapes) and does not crash.
+    from tessera.compiler import fusion_core as FC
+
+    seen: dict[str, tuple] = {}
+
+    class _Runner:
+        target = "fake_tp"
+        accuracy_atol = None
+
+        def run_matmul(self, region, A, B):
+            seen["A"], seen["B"] = A.shape, B.shape
+            # A real kernel consuming the oriented operands — matches the reference.
+            return region.reference(A, B), "fake_real"
+
+    # transpose_b: raw B is (N,K)=(16,32), not the natural (K,N)=(32,16).
+    assert FC.verify_synthesized_matmul(
+        FC.MatmulRegion(transpose_b=True), runner=_Runner(), force=True) is True
+    assert seen["B"] == (16, 32)
+
+    # transpose_a: raw A is (K,M)=(32,32).
+    seen.clear()
+    assert FC.verify_synthesized_matmul(
+        FC.MatmulRegion(transpose_a=True), runner=_Runner(), force=True) is True
+    assert seen["A"] == (32, 32)
+
+    # natural: probe stays (M,K)@(K,N).
+    seen.clear()
+    assert FC.verify_synthesized_matmul(
+        FC.MatmulRegion(), runner=_Runner(), force=True) is True
+    assert seen["A"] == (32, 32) and seen["B"] == (32, 16)

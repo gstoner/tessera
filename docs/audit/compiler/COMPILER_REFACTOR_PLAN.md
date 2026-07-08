@@ -598,9 +598,19 @@ priority (highest DL leverage first):
   deferred: the `KernelEmitter`/`TargetPlugin` API carries symbolic dims + a
   `static | bucket | dynamic` specialization policy, the arbiter keys on
   shape-bucket, and first impls emit `bucket` (covers LLM serving's variable
-  seq-len / KV-len via bucketing). **What remains as G** is only the full
-  `dynamic` emitter (runtime-arg dims + bounds guards) for shapes that don't
-  bucket well — it drops into the day-one API without a break. Mostly `[MAC]`.
+  seq-len / KV-len via bucketing). **The `dynamic` emitter landed for the generic
+  lanes (2026-07-08).** The generic scalar kernels (x86 C / ROCm HIP / NVIDIA CUDA)
+  already take M/N/K as runtime args with in-kernel bounds guards, so their source
+  is dims-invariant — `SpecPolicy.DYNAMIC` now emits (the `EmitError` stubs are
+  gone) with a symbolic-identity `shape_key`, collapsing the arbiter/AOT cache to
+  **one entry across all shapes** (no per-bucket recompile for variable-shape
+  serving) vs BUCKET's one-compile-per-bucket. Proven: host-free (DYNAMIC source ==
+  BUCKET source, cache key shape-independent, across all three lanes) + live
+  gfx1151 (one DYNAMIC compile serves 64³/256×128×96/512³, all F4-correct, one
+  cache entry — `test_dynamic_shape_emit.py`). The bucket-specialized tensor-core
+  lanes (WMMA / `mma.sync`) legitimately stay BUCKET. **Still open:** a `dynamic`
+  path for the *shape-specialized* lanes (Apple MSL materialized-score kernels,
+  tiled tensor-core) that bake dims into codegen. Mostly `[MAC]`.
 - **H · Memory planning + layout (W3+W4)** — global buffer assignment/reuse +
   wire `LayoutAssignmentPass` to a backend consumer + transpose elimination.
   Unblocks the deferred attention-dispatch orientation bug. Mostly `[MAC]`.

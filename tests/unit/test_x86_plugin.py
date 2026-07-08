@@ -58,9 +58,15 @@ def test_emit_rejects_non_fused_region():
         get_emitter("x86").emit(F.AttentionRegion())
 
 
-def test_emit_rejects_dynamic_spec():
-    with pytest.raises(EmitError, match="DYNAMIC"):
-        get_emitter("x86").emit(F.FusedRegion(epilogue=("relu",)), spec=SpecPolicy.DYNAMIC)
+def test_emit_accepts_dynamic_spec():
+    # DYNAMIC is supported (Workstream G / W2): the runtime-arg kernel is
+    # dims-invariant, so DYNAMIC emits the same source as BUCKET — one compiled
+    # kernel serves every shape (see test_dynamic_shape_emit.py for the full proof).
+    e = get_emitter("x86")
+    region = F.FusedRegion(epilogue=("relu",))
+    dyn = e.emit(region, spec=SpecPolicy.DYNAMIC)
+    assert dyn.spec is SpecPolicy.DYNAMIC
+    assert dyn.source == e.emit(region, spec=SpecPolicy.BUCKET).source
 
 
 def test_emit_rejects_non_f32_dtype():

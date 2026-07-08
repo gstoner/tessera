@@ -72,10 +72,12 @@ def test_rocm_emitter_rejects_unsupported():
     e = get_emitter("rocm")
     with pytest.raises(EmitError, match="cannot emit"):
         e.emit(F.AttentionRegion())
-    with pytest.raises(EmitError, match="DYNAMIC"):
-        e.emit(F.FusedRegion(epilogue=("relu",)), spec=SpecPolicy.DYNAMIC)
     with pytest.raises(EmitError, match="f32"):
         e.emit(F.FusedRegion(epilogue=("relu",)), dtype="f16")
+    # DYNAMIC is now supported (W2): the runtime-arg kernel is dims-invariant, so
+    # it emits the same source as BUCKET (one kernel serves every shape).
+    dyn = e.emit(F.FusedRegion(epilogue=("relu",)), spec=SpecPolicy.DYNAMIC)
+    assert dyn.spec is SpecPolicy.DYNAMIC
 
 
 def test_rocm_declines_gated_and_pointwise():

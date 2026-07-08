@@ -93,9 +93,10 @@ class X86CEmitter(KernelEmitter):
             raise EmitError(
                 f"X86CEmitter cannot emit a region of type {type(region).__name__} "
                 "(only FusedRegion so far)")
-        if spec is SpecPolicy.DYNAMIC:
-            raise EmitError("X86CEmitter does not yet support SpecPolicy.DYNAMIC "
-                            "(bucket/static only)")
+        # DYNAMIC is supported: the generic C kernel already takes M/N/K as runtime
+        # args (dims-invariant source), so one compiled kernel serves every shape
+        # (Workstream G / W2). DYNAMIC only changes the shape_key below to the
+        # symbolic identity, collapsing the cache to one entry across all shapes.
         if dtype != "f32":
             raise EmitError(f"X86CEmitter only supports f32 so far, got {dtype!r}")
         source = _synthesize_fused_c(region)

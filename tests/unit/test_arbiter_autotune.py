@@ -77,8 +77,8 @@ def test_measured_arbitrate_picks_fastest_and_caches():
                                 cache=cache, reps=5, warmup=1, device="fakedev")
     assert win is not None and win.name == "fake_fast"       # measured, not tiered
     assert cache.misses == 1 and cache.size == 1
-    rec = next(iter(cache.to_dict().values()))
-    assert set(rec.candidates) == {"fake_fast", "fake_slow"}  # both were timed
+    rec = cache.to_dict()["records"][0]
+    assert set(rec["candidates"]) == {"fake_fast", "fake_slow"}  # both were timed
     runs_after_first = fast.runs + slow.runs
     # Second call, same bucket → cache hit, no re-timing.
     win2 = AT.measured_arbitrate(region, OP_MATMUL, _TGT, A, B,

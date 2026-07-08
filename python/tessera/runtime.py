@@ -2101,6 +2101,30 @@ def _rocm_chip() -> str:
     return os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
 
 
+_rocm_device_name_probe: Any = False          # False = unprobed; None/str after
+
+
+def _rocm_device_name() -> Optional[str]:
+    """Stable per-device tag (the gfx arch, e.g. ``"gfx1151"``) for autotune-cache
+    keying — the counterpart to :func:`_nvidia_device_name`. It returns the arch the
+    ROCm kernels are actually *compiled and measured for* (:func:`_rocm_chip`, which
+    is env-pinnable via ``TESSERA_ROCM_CHIP``), so a cached measured verdict can
+    never mismatch the binary that produced it. Gated behind the live-execution
+    probe: returns ``None`` (never raises) when no ROCm device can run here, so a
+    config measured on gfx1151 is never reused on a CDNA box and a GPU-less host
+    never pollutes the cache with a gfx key. Cached."""
+    global _rocm_device_name_probe
+    if _rocm_device_name_probe is not False:
+        return _rocm_device_name_probe
+    _rocm_device_name_probe = None
+    try:
+        if _rocm_wmma_runtime_available():
+            _rocm_device_name_probe = _rocm_chip()
+    except Exception:
+        _rocm_device_name_probe = None
+    return _rocm_device_name_probe
+
+
 def _rocm_prod_tile(m: int, n: int, k: int) -> tuple[int, int]:
     """Mirror the hand-written oracle's size-adaptive macro-tile (prodTile in
     tessera_rocm_gemm.cpp): 3x4 once min(M,N,K) >= 1024, else 2x4."""

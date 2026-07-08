@@ -1354,7 +1354,11 @@ def _lower_nvidia_op(op: TileOp, *, target_kind: str) -> list[TargetOp]:
             "execution": op.attrs.get("execution", "projected_embeddings"),
         })]
     if source in JEPA_SOURCES:
-        preserved = {
+        # Annotated dict[str, Any] so mypy 2.2.0 keeps the keys as `str`; without
+        # it the comprehension over string-literal keys narrows to
+        # dict[Literal[...], Any], which then rejects `**preserved` into the
+        # dict[str, Any] TargetOp attrs.
+        preserved: dict[str, Any] = {
             key: op.attrs[key]
             for key in (
                 "decay",

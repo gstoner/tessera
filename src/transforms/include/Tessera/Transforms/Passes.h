@@ -266,6 +266,14 @@ std::unique_ptr<mlir::Pass> createLayoutAssignmentPass();
 // `--tessera-tile-buffer-reuse`.
 std::unique_ptr<mlir::Pass> createTileBufferReusePass();
 
+// ── 2026-07-08 — TileBufferArenaPass (Workstream H / W3 follow-on) ────────
+// The first consumer of TileBufferReusePass's `tile.buffer_group`: realize the
+// reuse plan into a concrete per-space arena — stamp `tile.smem_offset` /
+// `tile.tmem_offset` on each alloc (same-group buffers share an offset) + the
+// arena byte size on the func. The form a shared-memory backend emits directly.
+// Registered as `--tessera-tile-buffer-arena`; runs after tile-buffer-reuse.
+std::unique_ptr<mlir::Pass> createTileBufferArenaPass();
+
 // ── 2026-06-19 — IRContractLegalityPass (dtype / aliasing / buffer-binding) ──
 // LayoutLegalityPass's sibling for the three remaining contract families in
 // COMPILER_AUDIT's "Layout and binding contracts are uneven" item: dtype

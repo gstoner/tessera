@@ -60,6 +60,8 @@ add_library(TesseraPasses
   LayoutAssignmentPass.cpp
   # 2026-07-08 — Tile IR global buffer assignment/reuse (Workstream H / W3).
   TileBufferReusePass.cpp
+  # 2026-07-08 — realize the reuse plan into a concrete SMEM/TMEM arena (consumer).
+  TileBufferArenaPass.cpp
   # 2026-06-19 — dtype / aliasing / buffer-binding contracts (Decision #15a).
   IRContractLegalityPass.cpp
   # 2026-06-23 — C2: barriers as a layout-reuse correctness property (TIRx review).

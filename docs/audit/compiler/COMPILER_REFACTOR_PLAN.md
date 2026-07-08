@@ -636,10 +636,16 @@ priority (highest DL leverage first):
   shared-memory planning, paired with `TileBarrierReuseLegalityPass` as verifier —
   the same two-sided pattern as `LayoutAssignmentPass`↔`LayoutLegalityPass`. v1
   output is IR metadata a shared-memory-aware backend consumes; lit-gated
-  (`tests/tessera-ir/phase3/tile_buffer_reuse.mlir`). **Still open:** a
-  layout-sensitive backend that reads the `LayoutAssignmentPass` `tessera.layout`
-  attrs (still unconsumed) + the `tile.buffer_group` reuse decisions;
-  transpose-through-pointwise.
+  (`tests/tessera-ir/phase3/tile_buffer_reuse.mlir`). **`tile.buffer_group` now has
+  a consumer (2026-07-08):** `TileBufferArenaPass` (`--tessera-tile-buffer-arena`)
+  realizes the reuse plan into a concrete per-space arena — `tile.smem_offset` /
+  `tile.tmem_offset` on each alloc (same-group buffers share an offset = the
+  promised aliasing) + `tile.{smem,tmem}_arena_bytes` on the func, the exact form a
+  shared-memory backend emits (`__shared__ char arena[N]; buf = arena + offset`).
+  SMEM/TMEM get separate arenas. lit-gated
+  (`tests/tessera-ir/phase3/tile_buffer_arena.mlir`). **Still open:** the
+  `LayoutAssignmentPass` `tessera.layout` attrs are still unconsumed; a HIP/PTX
+  emitter that actually allocates from the arena offsets; transpose-through-pointwise.
 - **I · Training-graph + distributed optimization (W5+W6)** — apply the middle-end
   to backward graphs; promote comm/compute overlap from runtime machinery to a
   scheduled pass. Needs multi-rank (mock-collective today).

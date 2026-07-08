@@ -1018,9 +1018,9 @@ def verify_synthesized_matmul(region: "MatmulRegion", *, seed: int = 0,
     # candidate flips its operands back to natural via `_natural`, so a natural
     # (K,N) probe would be double-flipped into a shape mismatch. Transpose here so
     # run() + reference() both re-derive the same natural (M,K)@(K,N) product.
-    if region.transpose_a:
+    if getattr(region, "transpose_a", False):
         A = np.ascontiguousarray(A.T)           # raw (K, M)
-    if region.transpose_b:
+    if getattr(region, "transpose_b", False):
         B = np.ascontiguousarray(B.T)           # raw (N, K)
     out, execution = run(region, A, B)
     if execution in REFERENCE_EXECUTIONS:

@@ -2101,25 +2101,50 @@ def _rocm_chip() -> str:
     return os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
 
 
+def _rocm_live_arch() -> Optional[str]:
+    """The *actual* live GPU gfx arch (``"gfx1151"`` / ``"gfx1100"`` / ``"gfx942"``)
+    read from ``rocm_agent_enumerator`` / ``amdgpu-arch`` — the real device, not a
+    compile default. Returns the first real GPU agent (``gfx000`` is the CPU agent),
+    or ``None`` if no tool/agent is present. Never raises."""
+    for exe in ("rocm_agent_enumerator", "/opt/rocm/bin/rocm_agent_enumerator",
+                "amdgpu-arch", "/opt/rocm/llvm/bin/amdgpu-arch"):
+        try:
+            res = subprocess.run([exe], capture_output=True, text=True, timeout=10)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        for tok in res.stdout.split():
+            tok = tok.strip()
+            if tok.startswith("gfx") and tok != "gfx000":
+                return tok
+    return None
+
+
 _rocm_device_name_probe: Any = False          # False = unprobed; None/str after
 
 
 def _rocm_device_name() -> Optional[str]:
     """Stable per-device tag (the gfx arch, e.g. ``"gfx1151"``) for autotune-cache
-    keying — the counterpart to :func:`_nvidia_device_name`. It returns the arch the
-    ROCm kernels are actually *compiled and measured for* (:func:`_rocm_chip`, which
-    is env-pinnable via ``TESSERA_ROCM_CHIP``), so a cached measured verdict can
-    never mismatch the binary that produced it. Gated behind the live-execution
-    probe: returns ``None`` (never raises) when no ROCm device can run here, so a
-    config measured on gfx1151 is never reused on a CDNA box and a GPU-less host
-    never pollutes the cache with a gfx key. Cached."""
+    keying — the counterpart to :func:`_nvidia_device_name`. It identifies the
+    **actual device the measurement ran on** so the fleet corpus's per-device
+    isolation holds on a mixed ROCm fleet (a gfx1100/CDNA run must never consume or
+    publish gfx1151 verdicts). Resolution, in order:
+
+    1. Gate on the live-execution probe — ``None`` if no ROCm device can run here
+       (a GPU-less host never pollutes the corpus with a gfx key).
+    2. An explicit ``TESSERA_ROCM_CHIP`` pin is authoritative — it *is* the
+       ``--offload-arch`` the kernels were built for, so it can't mismatch them.
+    3. Otherwise read the **live device arch** (:func:`_rocm_live_arch`). We never
+       fall back to the compile *default* (``_rocm_chip`` → ``gfx1151`` when unset):
+       guessing would mislabel a gfx1100 host as gfx1151 and cross-contaminate the
+       shared corpus (PR #308 review). Unknown arch → ``None``. Cached."""
     global _rocm_device_name_probe
     if _rocm_device_name_probe is not False:
         return _rocm_device_name_probe
     _rocm_device_name_probe = None
     try:
         if _rocm_wmma_runtime_available():
-            _rocm_device_name_probe = _rocm_chip()
+            env = os.environ.get("TESSERA_ROCM_CHIP")
+            _rocm_device_name_probe = env if env else _rocm_live_arch()
     except Exception:
         _rocm_device_name_probe = None
     return _rocm_device_name_probe

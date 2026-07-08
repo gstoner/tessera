@@ -346,8 +346,9 @@ def test_live_nvidia_matmul_measured_autotune():
     assert win is not None and win.name in (
         "nvidia_mma_gemm_shipped", "nvidia_mma_gemm_emitted")
     assert cache.misses == 1 and cache.size == 1
-    rec = next(iter(cache.to_dict().values()))
-    assert set(rec.candidates) == {"nvidia_mma_gemm_shipped", "nvidia_mma_gemm_emitted"}
+    rec = cache.to_dict()["records"][0]
+    assert set(rec["candidates"]) == {"nvidia_mma_gemm_shipped",
+                                      "nvidia_mma_gemm_emitted"}
     AT.measured_arbitrate(region, OP_MATMUL, "nvidia", A, B, dims=(64, 64, 64),
                           dtype="bfloat16", cache=cache, reps=6, warmup=2)
     assert cache.hits == 1                                   # re-query hits the cache

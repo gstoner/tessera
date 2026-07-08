@@ -63,17 +63,35 @@ def test_device_id_probe_exception_is_swallowed(monkeypatch):
     assert AT._device_id("rocm") == "rocm"
 
 
-def test_rocm_device_name_is_gated(monkeypatch):
-    # The tag is the *compiled-for* arch, gated behind the live-execution probe:
-    # unavailable → None (a GPU-less host never pollutes the corpus with a gfx key).
+def test_rocm_device_name_resolution(monkeypatch):
+    # The tag identifies the ACTUAL device the measurement ran on — never a compile
+    # default — so the corpus's per-device isolation holds on a mixed ROCm fleet.
     from tessera import runtime as rt
-    rt._rocm_device_name_probe = False  # reset the cache for a clean probe
+
+    # (1) no executable ROCm device here → None (no gfx key on a GPU-less host).
+    rt._rocm_device_name_probe = False
     monkeypatch.setattr(rt, "_rocm_wmma_runtime_available", lambda: False)
     assert rt._rocm_device_name() is None
+
+    # (2) available + an explicit TESSERA_ROCM_CHIP pin is authoritative (it IS the
+    #     offload-arch), overriding the live probe.
     rt._rocm_device_name_probe = False
     monkeypatch.setattr(rt, "_rocm_wmma_runtime_available", lambda: True)
-    monkeypatch.setattr(rt, "_rocm_chip", lambda: "gfx1151")
-    assert rt._rocm_device_name() == "gfx1151"
+    monkeypatch.setenv("TESSERA_ROCM_CHIP", "gfx942")
+    monkeypatch.setattr(rt, "_rocm_live_arch", lambda: "gfx1151")   # ignored
+    assert rt._rocm_device_name() == "gfx942"
+
+    # (3) available, no pin → the LIVE device arch (a gfx1100 host tags gfx1100,
+    #     NOT the gfx1151 compile default — the PR #308 review fix).
+    rt._rocm_device_name_probe = False
+    monkeypatch.delenv("TESSERA_ROCM_CHIP", raising=False)
+    monkeypatch.setattr(rt, "_rocm_live_arch", lambda: "gfx1100")
+    assert rt._rocm_device_name() == "gfx1100"
+
+    # (4) available, no pin, arch unknowable → None (never guess a default arch).
+    rt._rocm_device_name_probe = False
+    monkeypatch.setattr(rt, "_rocm_live_arch", lambda: None)
+    assert rt._rocm_device_name() is None
     rt._rocm_device_name_probe = False  # leave the module cache clean
 
 
@@ -171,8 +189,9 @@ def test_missing_corpus_loads_nothing(tmp_path):
                     reason="needs a live gfx1151 + hipcc")
 def test_live_rocm_device_tag():
     from tessera import runtime as rt
-    assert rt._rocm_device_name() == rt._rocm_chip()
-    assert AT._device_id("rocm") == f"rocm:{rt._rocm_chip()}"
+    tag = rt._rocm_device_name()
+    assert tag is not None and tag.startswith("gfx")   # the real live arch
+    assert AT._device_id("rocm") == f"rocm:{tag}"
 
 
 @pytest.mark.skipif(not _rocm_hip_live(),

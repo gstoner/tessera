@@ -64,7 +64,8 @@ table is the single skim surface. `✅` done · `🟡` partial · `⬜` not star
 | **0** | E3 escape-hatch test | ✅ (landed in D1 `force` + PR #298 test) | ✅ gfx1151 | ✅ sm_120 |
 | **1** | A1 shared `extractPtr`/`ensureExternalDecl` | ✅ | — | — |
 | **1** | A2a–c shared fusion helpers (emit/chain-walk/epilogue trio) | ✅ | — | — |
-| **1** | A2 single declarative `FusionPattern` · A3 verifiers · A4 MMA selector | ⬜ | — | — |
+| **1** | A2 single declarative `FusionPattern` · A3 verifiers | ⬜ | — | — |
+| **1** | A4 shared cost-aware MMA selector (`mma_selector.py`) | ✅ | — | — |
 | **2** | B1 split `fusion.py` | ✅ | — | — |
 | **2** | B2a–c `KernelEmitter`/`Runner`/`SpecPolicy` | ✅ | — | — |
 | **2** | B3 F4 oracle universal (backend-agnostic, C0) | ✅ | — | — |
@@ -140,8 +141,23 @@ Pure mechanical dedup; zero behavior change; golden-IR-gated.
 - **A4 · Promote ROCm's `MmaDescriptor` + `M×N//lanes` footprint model** `[MAC]`
   to the shared MMA selector, parameterized by per-arch lane count + shape table.
   The one place a *lead* abstraction lifts upward: Apple/x86/NVIDIA gain a
-  cost-aware MMA selector they lack. ⬜ **open** — `MmaDescriptor` lives in
-  `python/tessera/compiler/rocm_mma.py`; not yet promoted to a shared selector.
+  cost-aware MMA selector they lack. **Landed 2026-07-08** —
+  `compiler/mma_selector.py`: an arch-neutral `MmaIsa` record (`lane_count` +
+  shape table + dtype→K) + the promoted footprint (`accumulator_regs_per_lane` =
+  `M*N // lane_count`, delegating to `rocm_target.mfma_accumulator_regs` so the
+  arithmetic stays single-sourced) + `rank_shapes_by_footprint` cost model +
+  `select_mma → MmaSelection`. **Lead-safe by construction:** the ROCm ISA is
+  *built from* the live `rocm_target`/`rocm_mma` tables (feature gates — no FP8
+  WMMA on gfx1151, no fp32 WMMA on RDNA — inherited via the reference selector,
+  never re-encoded), and `test_mma_selector.py` gates that `rank_shapes_by_footprint`
+  on a ROCm ISA is byte-identical to ROCm's own `rank_mfma_shapes_by_footprint`.
+  The lift: grounded ISA records for NVIDIA (`mma.sync` m16n8k{8,16,32,64} warp-32),
+  Apple (`simdgroup_matrix<8,8>` simdgroup-32), x86 AMX (tile-register — honestly
+  `cooperative=False`/`lane_count=None`, per-lane footprint N/A). No emit path
+  changed (hardware-free selector, Decision #19). **Follow-on (own PR — touches
+  drift-gated dashboards):** wire `get_isa`/`select_mma` as `backend_manifest`'s
+  cross-target MMA-metadata source (today ROCm-only via `_rocm_mma_descriptor_for`)
+  and as the D1 arbiter's `cost_model`.
 
 **Lead safety:** A1–A3 are Apple/x86-facing; ROCm adopts only the match/verifier
 shell with byte-identical emit (golden-IR gated). No NVIDIA emit change.

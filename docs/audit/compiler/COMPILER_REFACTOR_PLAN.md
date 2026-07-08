@@ -684,11 +684,13 @@ priority (highest DL leverage first):
   kernel on **both** x86 (AVX-512 `tessera_x86_ebm_affine_langevin_f32`) and ROCm
   (`generate-rocm-ebm-affine-langevin-kernel`, gfx1151) — the manifold step is the
   affine combo `y − η·grad + s·noise` on grade-projected coeffs with host-drawn
-  noise as an input (mirrors the Apple bridge). x86 9→8 `reference`, ROCm 10→9
-  open. The affine kernel is reusable infra for the rest; **still per-target open:**
-  `sphere_langevin_step` (needs a fused tangent-project + retract kernel), the
-  `_sample` chains (host loops — no on-device chain kernel), `ebm_energy` /
-  `ebm_partition_*` / `ebm_decode_init`, and ROCm `gemm`.
+  noise as an input (mirrors the Apple bridge). both `ebm_bivector_langevin_step`
+  **and** `ebm_sphere_langevin_step` now run native on both backends (x86 9→7
+  `reference`, ROCm 10→8 open). Sphere reuses the *same* affine kernel — host
+  tangent-projection + affine core + host normalize (retract), no dedicated kernel
+  (like bivector's host grade-projection). The affine kernel is reusable infra;
+  **still per-target open:** the `_sample` chains (host loops — no on-device chain
+  kernel), `ebm_energy` / `ebm_partition_*` / `ebm_decode_init`, and ROCm `gemm`.
   Separately, the **6 collective/MoE-transport** ops at `reference` need real
   NCCL/RCCL (Workstream I / W6), not op synthesis. So: no *generic-synthesis* gap
   remains, but real per-target + domain codegen does — do not read this as "op

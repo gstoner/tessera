@@ -72,9 +72,22 @@ config.test_format = lit.formats.ShTest(execute_external=True)
 config.suffixes = ['.mlir']
 config.environment['PATH'] = os.environ.get('PATH', '')
 
-_TESSERA_OPT = _resolve(
-    "TESSERA_OPT", "build/tools/tessera-opt/tessera-opt", "tessera-opt",
-)
+# Resolution order for the opt driver:
+#   1. explicit $TESSERA_OPT override (verbatim / repo-relative),
+#   2. the dedicated standalone TPP driver `tessera-tpp-opt` ($TESSERA_TPP_OPT
+#      or on PATH) — preferred because it always has the TPP passes,
+#   3. the monorepo `tessera-opt` (only carries TPP when built with
+#      TESSERA_HAVE_TPP).
+# `tessera-tpp-opt` wins over a generic `tessera-opt` because the latter may be
+# a monorepo build without the TPP dialect/passes registered.
+if "TESSERA_OPT" in os.environ:
+    _TESSERA_OPT = _resolve("TESSERA_OPT", "", "tessera-opt")
+else:
+    _TESSERA_OPT = os.environ.get("TESSERA_TPP_OPT") or shutil.which(
+        "tessera-tpp-opt")
+    if not (_TESSERA_OPT and os.path.isfile(_TESSERA_OPT)):
+        _TESSERA_OPT = _resolve(
+            "TESSERA_OPT", "build/tools/tessera-opt/tessera-opt", "tessera-opt")
 _FILECHECK = _resolve("FILECHECK", "", "FileCheck")
 
 # `-allow-unregistered-dialect` matches the parent suite's

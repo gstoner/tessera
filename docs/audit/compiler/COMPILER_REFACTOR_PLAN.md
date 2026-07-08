@@ -616,10 +616,20 @@ priority (highest DL leverage first):
   `OPTIMIZING_COMPILER_PLAN` §6 "ambiguous when M==K==N" note for GEMM; the NVIDIA
   `mma.sync`/PTX matmul candidates orient via `_natural` before launch.
   Host-free-gated (`test_fusion_matmul_orientation.py`, incl. the square-ambiguity
-  centerpiece); live GEMM proof is NV-gated. **Still open:** global buffer
-  assignment/reuse (greenfield — no Graph-IR buffer-reuse pass yet), a
+  centerpiece); live GEMM proof is NV-gated. **Global buffer assignment/reuse
+  landed (2026-07-08):** `TileBufferReusePass` (`--tessera-tile-buffer-reuse`)
+  assigns disjoint-live-range `tile.alloc_shared`/`tile.tmem.alloc` buffers of
+  identical memref type to shared reuse groups (`tile.buffer_group`) via a
+  left-edge interval coloring over per-buffer live ranges, and records the static
+  footprint saved (`tile.buffer_reuse.bytes_before/after/groups`). Correct by
+  construction (only non-overlapping ranges alias); the assignment half of
+  shared-memory planning, paired with `TileBarrierReuseLegalityPass` as verifier —
+  the same two-sided pattern as `LayoutAssignmentPass`↔`LayoutLegalityPass`. v1
+  output is IR metadata a shared-memory-aware backend consumes; lit-gated
+  (`tests/tessera-ir/phase3/tile_buffer_reuse.mlir`). **Still open:** a
   layout-sensitive backend that reads the `LayoutAssignmentPass` `tessera.layout`
-  attrs (still unconsumed), and transpose-through-pointwise.
+  attrs (still unconsumed) + the `tile.buffer_group` reuse decisions;
+  transpose-through-pointwise.
 - **I · Training-graph + distributed optimization (W5+W6)** — apply the middle-end
   to backward graphs; promote comm/compute overlap from runtime machinery to a
   scheduled pass. Needs multi-rank (mock-collective today).

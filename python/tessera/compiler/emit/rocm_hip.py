@@ -132,8 +132,12 @@ class RocmHipEmitter(KernelEmitter):
                 f"RocmHipEmitter cannot emit a region of type "
                 f"{type(region).__name__} (only FusedRegion; attention uses the "
                 "shipped flash lane)")
-        if spec is SpecPolicy.DYNAMIC:
-            raise EmitError("RocmHipEmitter does not yet support SpecPolicy.DYNAMIC")
+        # DYNAMIC is supported: the generic HIP kernel already takes M/N/K as
+        # runtime args with an in-kernel bounds guard, so the source is
+        # dims-invariant — one compiled kernel serves every shape (Workstream G /
+        # W2). The only difference from BUCKET is the shape_key below, which under
+        # DYNAMIC is the symbolic identity, so the cache holds ONE entry across all
+        # shapes instead of one per bucket.
         if dtype != "f32":
             raise EmitError(f"RocmHipEmitter only supports f32 so far, got {dtype!r}")
         source = _synthesize_fused_hip(region)

@@ -69,10 +69,12 @@ def test_nvidia_emitter_rejects_unsupported():
     e = get_emitter("nvidia")
     with pytest.raises(EmitError, match="cannot emit"):
         e.emit(F.MatmulRegion())                   # bare GEMM → the GEMM candidates
-    with pytest.raises(EmitError, match="DYNAMIC"):
-        e.emit(F.FusedRegion(epilogue=("relu",)), spec=SpecPolicy.DYNAMIC)
     with pytest.raises(EmitError, match="f32"):
         e.emit(F.FusedRegion(epilogue=("relu",)), dtype="f16")
+    # DYNAMIC is now supported (W2): the runtime-arg lane is dims-invariant, so it
+    # emits the same source as BUCKET (one kernel serves every shape).
+    dyn = e.emit(F.FusedRegion(epilogue=("relu",)), spec=SpecPolicy.DYNAMIC)
+    assert dyn.spec is SpecPolicy.DYNAMIC
 
 
 def test_nvidia_c5_candidates_registered_and_emit():

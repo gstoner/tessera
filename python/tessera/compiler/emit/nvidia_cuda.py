@@ -321,9 +321,11 @@ class NvidiaCudaEmitter(KernelEmitter):
                 f"{type(region).__name__} (FusedRegion / AttentionRegion / "
                 "GatedMatmulRegion / PointwiseGraphRegion; the shipped mma.sync "
                 "GEMM lane serves single matmuls via the jit nvidia_mma executor)")
-        if spec is SpecPolicy.DYNAMIC:
-            raise EmitError("NvidiaCudaEmitter does not yet support SpecPolicy.DYNAMIC "
-                            "(bucket/static only)")
+        # DYNAMIC is supported: every generic CUDA lane takes M/N/K as runtime args
+        # with in-kernel bounds guards (dims-invariant source), so one compiled
+        # kernel serves every shape (Workstream G / W2). DYNAMIC only changes the
+        # shape_key below to the symbolic identity, collapsing the cache to one
+        # entry across all shapes.
         if dtype != "f32":
             raise EmitError(f"NvidiaCudaEmitter only supports f32 so far, got {dtype!r}")
         if isinstance(region, AttentionRegion):

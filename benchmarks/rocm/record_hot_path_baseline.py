@@ -138,6 +138,15 @@ def main() -> int:
         })
         print(f"{op:12s} {shape:16s} median {med:8.3f} ms  "
               f"cap {med * args.margin:8.3f} ms")
+    # Workstream J: annotate each FLOP-modeled row with roofline attainment
+    # (achieved TFLOP/s + pct_peak) + an attainment_floor = pct_peak / margin,
+    # symmetric with the latency cap so `perf_gate --attainment` can ratchet it.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    import roofline as _rl
+    _rl.annotate_rows(rows, f"rocm:{rt._rocm_chip()}")
+    for r in rows:
+        if "pct_peak" in r:
+            r["attainment_floor"] = round(r["pct_peak"] / args.margin, 5)
     OUT.write_text(json.dumps({
         "schema": "tessera.benchmark.ratchet.v1",
         "margin": args.margin,

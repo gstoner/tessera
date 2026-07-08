@@ -183,19 +183,20 @@ For compiler-readiness audits, keep three lanes separate:
   hardware proof.
 
 Primary named pipelines and target paths are tracked in
-[`docs/spec/COMPILER_REFERENCE.md`](docs/spec/COMPILER_REFERENCE.md). The
-canonical pipelines registered in `tessera-opt` today:
+[`docs/spec/COMPILER_REFERENCE.md`](docs/spec/COMPILER_REFERENCE.md) (the
+authoritative status source). The canonical lowering pipelines registered in
+`tessera-opt` (the last two rows are separate opt-style driver binaries):
 
 | Pipeline | Status |
 |------|--------|
-| `tessera-lower-to-x86` | implemented / hardware-runtime through CPU JIT, native CPU ABI, AMX, and AVX-512 compiled lanes |
-| `tessera-lower-to-gpu` (NVIDIA SM_90 default) | implemented / lit-testable |
-| `tessera-nvidia-pipeline-{sm90,sm100,sm120}` (per-SM aliases) | implemented / lit-testable |
-| `tessera-lower-to-rocm` | implemented / lit-testable / hardware-runtime on capable gfx1151 hosts |
-| `tessera-lower-to-apple_cpu` (artifact) / `tessera-lower-to-apple_cpu-runtime` (Accelerate) | implemented / hardware-runtime |
-| `tessera-lower-to-apple_gpu` (artifact) / `tessera-lower-to-apple_gpu-runtime` (MPS + custom MSL) | implemented / hardware-runtime |
-| `tpp-space-time` (Tensor Parallel Primitives) | implemented / lit-testable |
-| `ts-spectral-pipeline` (Spectral / FFT) | implemented / lit-testable |
+| `tessera-lower-to-x86` | implemented / lit-testable; hardware-runtime via the CPU JIT + native CPU ABI + AVX-512 compiled lanes (the AMX lane emits but is artifact-only — no AMX hardware in the fleet) |
+| `tessera-lower-to-gpu` (NVIDIA SM90 WGMMA/TMA) | implemented / lit-testable (SM90 WGMMA has no hardware-execution proof yet) |
+| `tessera-nvidia-pipeline-{sm90,sm100,sm120}` (per-SM aliases) | implemented / lit-testable; the sm_120 `mma.sync` GEMM additionally **executes** on consumer Blackwell hardware via a separate emit/runtime lane (`ptx_emit.py` + `libtessera_nvidia_gemm.so`), not through this IR pipeline |
+| `tessera-lower-to-rocm` | implemented / lit-testable / hardware-runtime on capable gfx1151 (RDNA3.5) hosts via HIP (WMMA matmul + attention family) |
+| `tessera-lower-to-apple_cpu` (artifact) / `tessera-lower-to-apple_cpu-runtime` (Accelerate) | implemented / lit-testable / hardware-runtime |
+| `tessera-lower-to-apple_gpu` (artifact) / `tessera-lower-to-apple_gpu-runtime` (MPS + custom MSL) | implemented / lit-testable / hardware-runtime |
+| `tpp-space-time` (Tensor Parallel Primitives — separate driver) | implemented / lit-testable |
+| `ts-spectral-opt` (Spectral / FFT — separate driver) | implemented / lit-testable |
 
 ### Front-to-Back Optimizing-Compiler Closure
 

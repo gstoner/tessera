@@ -60,6 +60,20 @@ TESSERA_TARGET_MACOS_FOR_MTL4: str = "26.0"
 #   "ready"        — supported by Metal 4 on this arch
 #   "tba"          — present in the arch but not yet exposed by Tessera
 #   "not_supported"— architecturally unavailable
+#
+# NB on the ``metal4`` key: it gates the **MTL4 cooperative-tensor-op
+# runtime** (the MTL4 command model: command queue / allocator / compiler /
+# cooperative ``tensor`` ops + packaged ML — see apple_target_descriptor.py's
+# ``mtl4_runtime`` lane and the ``apple-metal4-ml-apis`` memory), which is
+# gated to Apple10 / M5. It is NOT "Metal 4 the API / MSL 4.0", which is
+# available on Apple7+ (the MTL4* headers ship in the macOS 26 SDK on this
+# M1/Apple7 box). The Metal-4 ML *compute* surface Apple7 does have —
+# ``simdgroup_matrix``, ``bfloat``, MTLTensor-as-a-shader-datatype — lives in
+# the separate keys below (already "ready"). The FP8/FP4/MX MTLTensor *dtypes*
+# are a third thing, macOS-27.0-SDK-gated (see microscaling.py). Whether M1
+# hardware-accelerates MTL4 cooperative tensor ops (vs needing M5's neural
+# accelerators) is an open runtime-capability question (task_fbb4d13b); do not
+# flip this value without a real device probe (Decision #27).
 # ---------------------------------------------------------------------
 _APPLE_FEATURES: dict[AppleGPUArch, dict[str, str]] = {
     AppleGPUArch.APPLE7: {
@@ -67,8 +81,10 @@ _APPLE_FEATURES: dict[AppleGPUArch, dict[str, str]] = {
         # and SIMD-scoped matrix multiply / ``simdgroup_matrix``
         # (Apple7+) are BOTH present — the in-repo MSL emitters
         # (fusion.py, runtime.py, msl_gemm_emit.py) already target
-        # ``simdgroup_matrix<...,8,8>`` here. No Metal 4 and no GPU
-        # neural accelerators (those arrive with Apple10 / M5).
+        # ``simdgroup_matrix<...,8,8>`` here. No MTL4 cooperative-tensor-op
+        # runtime / packaged ML and no GPU neural accelerators (those arrive
+        # with Apple10 / M5) — see the ``metal4``-key note above; Metal 4 the
+        # API / MSL 4.0 itself IS available on Apple7.
         "metal3":                "ready",
         "metal4":                "not_supported",
         "mpsgraph":              "ready",

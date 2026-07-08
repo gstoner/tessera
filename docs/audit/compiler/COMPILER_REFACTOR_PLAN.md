@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-07
+last_updated: 2026-07-08
 audit_role: plan
 plan_state: landing
 ---
@@ -82,7 +82,7 @@ table is the single skim surface. `✅` done · `🟡` partial · `⬜` not star
 | **5** | C3 tail — drive WMMA/MFMA `Generate*` passes through the loop | ✅ WMMA host-free | ✅ gfx1151 fused WMMA F4-gated (MFMA=CDNA-gated) | — |
 | **3.5** | ROCm shipped-kernel → F4 gate (flash-attn, f16 budget) + shared scalar body | ✅ | ✅ gfx1151 attn | — |
 | **6** | D1 candidate registry + F4-gate + tier-priority arbiter + `force` (E3) | ✅ (`emit/candidate.py`) | ✅ gfx1151 enumerate+select | — |
-| **6** | D2 measured autotune loop · D3 fallback log | ✅ (`emit/autotune.py` + arbiter log) | ⬜ | ✅ sm_120 (matmul measure+cache) |
+| **6** | D2 measured autotune loop · D3 fallback log | ✅ (`emit/autotune.py` + arbiter log) | ✅ gfx1151 (fused_region measure+cache+corpus) | ✅ sm_120 (matmul measure+cache) |
 
 **Gate reality (softens §4/§9.2):** "Phase 0 gates everything" holds only for the
 *lead-execution* proofs. The Mac-side E1 gate is green and gfx1151 E2 is recorded,
@@ -388,9 +388,11 @@ chains, small attention). Crown-jewel GEMM stays Tier 2/3.
   `verify_synthesized_*`), then selects by **tier priority** (crown-jewel first —
   lead-safe, Decision #28) with a pluggable `measure` hook (the D2 seam) and a
   `force` escape hatch (E3). Wired for ROCm (generic HIP / WMMA / flash) and x86
-  (generic C / AOCL-DLP). **Still open:** the shape-bucket key on selection (today
-  keyed per `(target, op)`; `bucket_key` exists and threads in when D2 lands) and
-  generalizing Apple's `select_variant` + `best_record` into it.
+  (generic C / AOCL-DLP). **Shape-bucket key landed via D2 (2026-07-08):**
+  `measured_arbitrate` threads `bucket_key(dims, BUCKET)` + dtype + device tag into
+  the cache key, so nearby shapes share a measured verdict while distinct buckets
+  re-measure (D1's `arbitrate` stays a pure per-region selection — the cache is
+  D2's). **Still open:** generalizing Apple's `select_variant` + `best_record` into it.
 - **D2 · Measured autotune loop** — **core landed 2026-07-07** (`emit/autotune.py`).
   `measured_arbitrate()` layers on the D1 arbiter's `measure` seam: it F4-gates the
   candidates, times each survivor on-device (`measure_latency`, median of N after
@@ -400,9 +402,19 @@ chains, small attention). Crown-jewel GEMM stays Tier 2/3.
   faster-but-wrong kernel can't win. **Live on sm_120** (RTX 5070 Ti): times the
   shipped vs emitted GEMM lanes and caches the winner per bucket
   (`test_nvidia_plugin.py`); `_nvidia_device_name()` supplies the `sm_<cc>` device
-  tag. **Still open:** persisting the cache as the committed *fleet-shared autotune
-  corpus* (Theory §7.5 — hangs off `MeasureCache.to_dict`); `[AMD]` gfx1151 wiring;
-  CDNA/sm_90/sm_100 analytical-roofline + `MmaDescriptor` fallback until silicon.
+  tag. **`[AMD]` gfx1151 wiring + the fleet corpus landed 2026-07-08:**
+  `_device_id` is a probe table (`_nvidia_device_name` / new `_rocm_device_name` →
+  `gfx1151`, gated behind the live-execution probe so a GPU-less host never keys a
+  gfx verdict); `measured_arbitrate` times the ROCm `fused_region` lanes (generic
+  HIP vs WMMA) on-device and caches per shape-bucket. **`MeasureCache.to_dict` is
+  now the committed fleet corpus** — JSON-safe, self-describing keys, `save_corpus`/
+  `load_corpus` + once-only lazy warm-start of the default cache
+  (`benchmarks/baselines/autotune_corpus.json`, keyed by device so a gfx1151 row is
+  inert on a CDNA/NVIDIA box). Proven live on gfx1151 (`test_rocm_measured_autotune.py`):
+  the measured loop overrides tier-priority *both ways* — the Tier-1 generic lane
+  wins the 64³ bucket (WMMA launch overhead dominates) while WMMA wins from 256³ up
+  (~19× at 1024³). **Still open:** CDNA/sm_90/sm_100 analytical-roofline +
+  `MmaDescriptor` fallback until silicon.
 - **D3 · Fallback log everywhere** — **landed 2026-07-07.** The arbiter records every
   dispatch as `(target, op, selected, tag)` (`candidate._note_arbiter_dispatch`, wired
   into `run_arbitrated` + `run_measured_arbitrated`); `arbiter_dispatch_histogram()`
@@ -544,7 +556,10 @@ Three silicon systems are a capability, not only a logistics problem:
   (`device+shape-bucket → best candidate + accuracy margin`) is a committed, shared
   artifact, so a config proven on one box warm-starts the others and survives
   across runs (extends Decision #11's SQLite warm-start to the §7.3 sync
-  contract). Wire into D1/D2.
+  contract). **Wired into D2 (2026-07-08):** `MeasureCache.to_dict`/`save_corpus`/
+  `load_corpus` + once-only lazy warm-start of the default cache, keyed by device
+  tag (`benchmarks/baselines/autotune_corpus.json`; gfx1151 rows committed). The
+  cross-backend differential half stays folded into the F4 oracle (C3-precursor).
 
 ---
 

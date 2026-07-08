@@ -1,0 +1,69 @@
+{
+  "records": [
+    {
+      "bucket": [
+        64,
+        64
+      ],
+      "candidates": {
+        "rocm_generic_hip": 0.7648844998584536,
+        "rocm_wmma_gemm": 1.8077209997500177
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f16",
+      "latency_ms": 0.7648844998584536,
+      "op": "fused_region",
+      "target": "rocm",
+      "winner": "rocm_generic_hip"
+    },
+    {
+      "bucket": [
+        256,
+        256
+      ],
+      "candidates": {
+        "rocm_generic_hip": 4.946317500071018,
+        "rocm_wmma_gemm": 2.0263615001567814
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f16",
+      "latency_ms": 2.0263615001567814,
+      "op": "fused_region",
+      "target": "rocm",
+      "winner": "rocm_wmma_gemm"
+    },
+    {
+      "bucket": [
+        512,
+        512
+      ],
+      "candidates": {
+        "rocm_generic_hip": 28.146600000127364,
+        "rocm_wmma_gemm": 3.305532000013045
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f16",
+      "latency_ms": 3.305532000013045,
+      "op": "fused_region",
+      "target": "rocm",
+      "winner": "rocm_wmma_gemm"
+    },
+    {
+      "bucket": [
+        1024,
+        1024
+      ],
+      "candidates": {
+        "rocm_generic_hip": 194.6889825001108,
+        "rocm_wmma_gemm": 10.273367999843686
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f16",
+      "latency_ms": 10.273367999843686,
+      "op": "fused_region",
+      "target": "rocm",
+      "winner": "rocm_wmma_gemm"
+    }
+  ],
+  "version": 1
+}

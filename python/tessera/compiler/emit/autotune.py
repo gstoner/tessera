@@ -16,9 +16,12 @@ one box warm-starts the others) is the follow-on that hangs off :meth:`MeasureCa
 """
 from __future__ import annotations
 
+import json
+import os
 import statistics
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from tessera.compiler.emit.candidate import (
@@ -39,6 +42,38 @@ class MeasureRecord:
     winner: str
     latency_ms: float
     candidates: dict[str, float] = field(default_factory=dict)
+
+    def as_json(self) -> dict[str, Any]:
+        return {"winner": self.winner, "latency_ms": self.latency_ms,
+                "candidates": dict(self.candidates)}
+
+    @classmethod
+    def from_json(cls, d: dict[str, Any]) -> "MeasureRecord":
+        return cls(winner=str(d["winner"]),
+                   latency_ms=float(d["latency_ms"]),
+                   candidates={str(k): float(v)
+                               for k, v in dict(d.get("candidates", {})).items()})
+
+
+#: Corpus JSON schema version — bump if the record/key shape changes so a stale
+#: committed corpus is skipped rather than mis-read.
+CORPUS_VERSION = 1
+
+
+def _key_to_json(key: tuple[Any, ...]) -> dict[str, Any]:
+    """A ``(device, target, op, bucket, dtype)`` cache key → JSON dict. ``bucket``
+    is a tuple of strings (from :func:`bucket_key`) or ``None``; kept as a list so
+    the record is human-diffable in the committed corpus."""
+    dev, target, op, bucket, dtype = key
+    return {"device": dev, "target": target, "op": op,
+            "bucket": list(bucket) if bucket is not None else None,
+            "dtype": dtype}
+
+
+def _key_from_json(d: dict[str, Any]) -> tuple[Any, ...]:
+    b = d.get("bucket")
+    return (d["device"], d["target"], d["op"],
+            tuple(b) if b is not None else None, d["dtype"])
 
 
 class MeasureCache:
@@ -71,10 +106,33 @@ class MeasureCache:
     def size(self) -> int:
         return len(self._store)
 
-    def to_dict(self) -> dict[str, MeasureRecord]:
-        """A JSON-friendly view (string keys) — the seam the fleet-shared corpus
-        persists. Follow-on; not wired to disk here."""
-        return {repr(k): v for k, v in self._store.items()}
+    def to_dict(self) -> dict[str, Any]:
+        """A fully JSON-serializable view of the cache — the fleet-shared corpus
+        (Theory §7.5): ``{"version", "records": [{**key, **record}, …]}``. Each
+        record carries its own ``(device, target, op, bucket, dtype)`` key so the
+        corpus is self-describing and human-diffable. Round-trips through
+        :meth:`load_dict`."""
+        return {
+            "version": CORPUS_VERSION,
+            "records": [{**_key_to_json(k), **rec.as_json()}
+                        for k, rec in self._store.items()],
+        }
+
+    def load_dict(self, payload: dict[str, Any], *, overwrite: bool = False) -> int:
+        """Merge a :meth:`to_dict` payload into the cache (warm-start). Returns the
+        number of records loaded. A record whose key is already present is kept
+        (measure-on-this-box wins) unless ``overwrite``. A version mismatch loads
+        nothing (a stale corpus is skipped, not mis-read)."""
+        if int(payload.get("version", -1)) != CORPUS_VERSION:
+            return 0
+        loaded = 0
+        for r in payload.get("records", ()):
+            key = _key_from_json(r)
+            if not overwrite and key in self._store:
+                continue
+            self._store[key] = MeasureRecord.from_json(r)
+            loaded += 1
+        return loaded
 
 
 #: Process-wide default cache (the arbiter/runtime share one).
@@ -83,6 +141,67 @@ _DEFAULT_CACHE = MeasureCache()
 
 def default_cache() -> MeasureCache:
     return _DEFAULT_CACHE
+
+
+# --- the committed fleet-shared corpus (Theory §7.5) -------------------------
+#
+# The measured verdicts persist to a committed JSON file so a config proven on one
+# box warm-starts the others and survives across runs (extends Decision #11's
+# SQLite warm-start to the §7.3 sync contract). Because every key carries its
+# device tag (``rocm:gfx1151`` / ``nvidia:sm_120``), a record only ever warm-starts
+# a *matching* device — a gfx1151 verdict is inert on a CDNA/NVIDIA box.
+
+#: Default committed corpus path (alongside the E2 ``*_hot_paths.json`` ratchets).
+_CORPUS_PATH = (Path(__file__).resolve().parents[4]
+                / "benchmarks/baselines/autotune_corpus.json")
+
+
+def corpus_path() -> Path:
+    """The corpus file location (``$TESSERA_AUTOTUNE_CORPUS`` overrides the committed
+    default) — the seam the §7.3 fleet-sync contract commits back."""
+    env = os.environ.get("TESSERA_AUTOTUNE_CORPUS")
+    return Path(env) if env else _CORPUS_PATH
+
+
+def save_corpus(path: Path | str | None = None,
+                cache: MeasureCache | None = None) -> Path:
+    """Write ``cache`` (default: the process cache) to ``path`` (default:
+    :func:`corpus_path`) as the committed fleet corpus. Returns the path written."""
+    cache = cache if cache is not None else _DEFAULT_CACHE
+    p = Path(path) if path is not None else corpus_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(cache.to_dict(), indent=2, sort_keys=True) + "\n")
+    return p
+
+
+def load_corpus(path: Path | str | None = None,
+                cache: MeasureCache | None = None, *,
+                overwrite: bool = False) -> int:
+    """Merge the committed corpus at ``path`` into ``cache`` (warm-start). Returns
+    the count loaded; a missing/unreadable/version-mismatched corpus loads nothing
+    (never raises) so a fresh checkout or stale file degrades to measure-on-miss."""
+    cache = cache if cache is not None else _DEFAULT_CACHE
+    p = Path(path) if path is not None else corpus_path()
+    try:
+        payload = json.loads(p.read_text())
+    except (OSError, ValueError):
+        return 0
+    return cache.load_dict(payload, overwrite=overwrite)
+
+
+_warm_started = False
+
+
+def _maybe_warm_start(cache: MeasureCache) -> None:
+    """Warm-start the *default* process cache from the committed corpus, once. Any
+    explicit cache the caller passes is left untouched (they own its lifecycle)."""
+    global _warm_started
+    if _warm_started or cache is not _DEFAULT_CACHE:
+        return
+    _warm_started = True
+    if os.environ.get("TESSERA_AUTOTUNE_NO_WARMSTART"):
+        return
+    load_corpus(cache=cache)
 
 
 def measure_latency(run_fn: Any, *, reps: int = 20, warmup: int = 3) -> float:
@@ -99,16 +218,26 @@ def measure_latency(run_fn: Any, *, reps: int = 20, warmup: int = 3) -> float:
     return statistics.median(samples)
 
 
+#: target → the ``runtime`` probe returning its live device tag (``"sm_120"`` /
+#: ``"gfx1151"``). A probe returns ``None`` off its silicon; then we fall back to
+#: the bare target id, so nothing measured on a device is ever keyed as another.
+_DEVICE_PROBES: dict[str, str] = {
+    "nvidia": "_nvidia_device_name",
+    "rocm": "_rocm_device_name",
+}
+
+
 def _device_id(target: str) -> str:
     """A stable per-device tag for the cache key. Probes the live device name where
-    cheap (NVIDIA), else falls back to the target id — so a config measured on one
-    device is never reused on another."""
-    if target == "nvidia":
+    cheap (NVIDIA ``sm_<cc>`` / ROCm ``gfx<arch>``), else falls back to the target
+    id — so a config measured on one device is never reused on another."""
+    probe = _DEVICE_PROBES.get(target)
+    if probe is not None:
         try:
             from tessera import runtime as rt
-            name = rt._nvidia_device_name()
+            name = getattr(rt, probe)()
             if name:
-                return f"nvidia:{name}"
+                return f"{target}:{name}"
         except Exception:
             pass
     return target
@@ -126,6 +255,7 @@ def measured_arbitrate(region: Any, op: str, target: str, *inputs: Any,
     miss, the arbiter F4-gates the candidates and times the survivors on ``inputs``
     (median of ``reps`` after ``warmup``); the fastest is cached and returned."""
     cache = cache if cache is not None else _DEFAULT_CACHE
+    _maybe_warm_start(cache)
     dev = device or _device_id(target)
     bucket = bucket_key(dims, SpecPolicy.BUCKET) if dims is not None else None
     key = (dev, target, op, bucket, dtype)

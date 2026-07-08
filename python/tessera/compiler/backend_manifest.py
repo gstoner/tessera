@@ -3748,6 +3748,12 @@ _EBM_DEVICE_COMPILED: dict[str, tuple[str, str]] = {
     "ebm_bivector_langevin_step": (
         "tests/unit/test_x86_ebm_geo_langevin_compiled.py",
         "tests/unit/test_rocm_ebm_geo_langevin_compiled.py"),
+    # Sphere step reuses the SAME affine kernel: host tangent-projection + affine
+    # core + host normalize (retract). No dedicated kernel — the affine core is
+    # native, the projection/retract are host (like bivector's grade projection).
+    "ebm_sphere_langevin_step": (
+        "tests/unit/test_x86_ebm_geo_langevin_compiled.py",
+        "tests/unit/test_rocm_ebm_geo_langevin_compiled.py"),
 }
 
 

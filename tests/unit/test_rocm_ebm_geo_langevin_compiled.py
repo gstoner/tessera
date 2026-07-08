@@ -15,7 +15,7 @@ import pytest
 
 from tessera.ga import Cl, Multivector
 from tessera.rng import RNGKey
-from tessera.ebm.geo_sampling import bivector_langevin_step
+from tessera.ebm.geo_sampling import bivector_langevin_step, sphere_langevin_step
 
 
 def _rocm_or_skip():
@@ -57,3 +57,20 @@ def test_rocm_bivector_step_f32_native_and_in_grade():
     for blade in a.blades():
         if blade.grade != 2:
             assert abs(float(out.coefficients[blade.mask])) < 1e-6
+
+
+def test_rocm_sphere_step_f32_native_stays_on_sphere():
+    _rocm_or_skip()
+    d = 16
+    rng = np.random.default_rng(1)
+    x = rng.standard_normal(d).astype(np.float32)
+    x = (x / np.linalg.norm(x)).astype(np.float32)
+
+    def grad_fn(v):
+        return np.asarray(v, np.float32)
+
+    out, _ = sphere_langevin_step(
+        x, lambda v: 0.5 * float((np.asarray(v) ** 2).sum()),
+        eta=0.02, temperature=1.0, rng_key=RNGKey.from_seed(0), grad_fn=grad_fn)
+    assert out.dtype == np.float32
+    assert abs(float(np.linalg.norm(out)) - 1.0) < 1e-4

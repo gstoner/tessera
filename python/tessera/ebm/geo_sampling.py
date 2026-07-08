@@ -283,6 +283,27 @@ def sphere_langevin_step(
         )
         if gpu_out is not None:
             return gpu_out, next_key
+        # Native x86 (AVX-512) / ROCm (gfx1151) lane. Apple fuses the whole step;
+        # here the tangent projection + retract (normalize) run on the host and the
+        # affine core `x - eta*grad_tan + noise_scale*noise_tan` runs on the shared
+        # affine-Langevin kernel — the same decomposition as the numpy path below,
+        # matching it to f32 epsilon. Each helper returns None off its silicon.
+        from tessera.ebm.energy import (
+            _try_rocm_ebm_affine_langevin_step_f32,
+            _try_x86_ebm_affine_langevin_step_f32,
+        )
+        x32 = x_arr.astype(np.float32, copy=False)
+        grad_tan = _project_to_tangent_plane(grad_f32, x32).astype(np.float32)
+        noise_tan = _project_to_tangent_plane(noise, x32).astype(np.float32)
+        for _dev in (_try_x86_ebm_affine_langevin_step_f32,
+                     _try_rocm_ebm_affine_langevin_step_f32):
+            yv = _dev(x32, grad_tan, noise_tan, float(eta), float(noise_scale))
+            if yv is not None:
+                yv = np.asarray(yv, np.float32)
+                ynorm = float(np.linalg.norm(yv))
+                if ynorm < 1e-12:                # degenerate — keep the state
+                    return x32, next_key
+                return (yv / ynorm).astype(np.float32), next_key
 
     if grad_fn is None:
         # Numerical gradient via central differences.

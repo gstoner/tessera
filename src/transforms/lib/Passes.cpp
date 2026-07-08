@@ -229,6 +229,10 @@ void registerTesseraPasses() {
   // Assignment half of shared-memory planning; verified by
   // TileBarrierReuseLegalityPass. Registered as --tessera-tile-buffer-reuse.
   ::mlir::registerPass([]() { return createTileBufferReusePass(); });
+  // 2026-07-08: realize the reuse plan into a concrete SMEM/TMEM arena
+  // (tile.smem_offset / tile.tmem_offset + arena bytes) — the first consumer of
+  // tile.buffer_group. Registered as --tessera-tile-buffer-arena.
+  ::mlir::registerPass([]() { return createTileBufferArenaPass(); });
   // 2026-06-19: dtype / aliasing / buffer-binding contracts (Decision #15a).
   // LayoutLegalityPass's sibling for the remaining contract families;
   // registered standalone as --tessera-ir-contracts.

@@ -4,9 +4,12 @@
 // decision (block_size = 32 for fp8, 64 for fp16/bf16) plus a guard epsilon.
 
 module {
-  func.func @fft_fp16(%plan : !tessera_spectral.plan,
-                      %src : memref<512xcomplex<f32>>,
+  func.func @fft_fp16(%src : memref<512xcomplex<f32>>,
                       %dst : memref<512xcomplex<f32>>) {
+    %plan = "tessera_spectral.plan"() {
+      axes = [0], elem_precision = "fp16", acc_precision = "f32",
+      scaling = "blockfp_per_stage", inplace = false, is_real_input = false,
+      norm_policy = "backward"} : () -> !tessera_spectral.plan
     "tessera_spectral.fft"(%plan, %src, %dst)
       : (!tessera_spectral.plan,
          memref<512xcomplex<f32>>,

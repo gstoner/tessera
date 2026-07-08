@@ -5,9 +5,12 @@
 // overlap_token annotations land.
 
 module attributes {tessera.mesh.axes = ["dp", "tp"]} {
-  func.func @fft2d_dist(%plan : !tessera_spectral.plan,
-                        %src : memref<256x256xcomplex<f32>>,
+  func.func @fft2d_dist(%src : memref<256x256xcomplex<f32>>,
                         %dst : memref<256x256xcomplex<f32>>) {
+    %plan = "tessera_spectral.plan"() {
+      axes = [0, 1], elem_precision = "fp16", acc_precision = "f32",
+      scaling = "none", inplace = false, is_real_input = false,
+      norm_policy = "backward"} : () -> !tessera_spectral.plan
     "tessera_spectral.fft"(%plan, %src, %dst)
       : (!tessera_spectral.plan,
          memref<256x256xcomplex<f32>>,

@@ -12,11 +12,15 @@
 //                                     (one entry per radix stage)
 //
 // Symbol naming convention is locked to the StockhamRadix4 target hook files
-// shipped under lib/TargetHooks/{CPU,NVIDIA,AMD}/:
+// shipped under lib/TargetHooks/{CPU,NVIDIA,AMD}/.  Each backend exposes a
+// radix-4 and a radix-2 stage kernel (mixed-radix Stockham autosort):
 //
-//   CPU    → @ts_stockham_radix4_scalar     (extern "C", reference scalar)
-//   NVIDIA → @ts_stockham_radix4_sm90       (CUDA kernel, SM90+)
-//   AMD    → @ts_stockham_radix4_gfx94x     (HIP kernel)
+//   CPU    → @ts_stockham_r4_cpu     / @ts_stockham_r2_cpu     (extern "C")
+//   NVIDIA → @ts_stockham_r4_nvidia  / @ts_stockham_r2_nvidia  (CUDA)
+//   AMD    → @ts_stockham_r4_amd     / @ts_stockham_r2_amd     (HIP)
+//
+// Symbols are arch-agnostic C ABI entry points; the ISA (gfx1151, sm_90/
+// sm_120, …) is chosen at kernel compile/launch time, not encoded here.
 //
 // Conv-FFT collapses to plan→pad→fft→cmul→ifft→crop; we attach the same
 // stage_calls but mark the op with `tessera.target_ir.composite = "conv_fft"`
@@ -36,15 +40,29 @@ namespace tessera {
 namespace {
 
 static StringRef stageSymbolFor(StringRef backend, int64_t radix) {
-  // Today every radix routes through the radix-4 Stockham kernel; future
-  // work adds radix-2/3/5/7 specializations.  Returning the same symbol
-  // is intentional — codegen branches on radix at the call site.
-  (void)radix;
+  // Route each stage to the matching mixed-radix Stockham kernel shipped
+  // under lib/TargetHooks/{CPU,NVIDIA,AMD}/StockhamRadix4.*.  Radix-4 stages
+  // drain factors of 4; a radix-2 tail handles the residual factor of 2.
+  // Radices other than 4 (the radix-2 tail, plus composite/prime residues
+  // the legalizer may emit) route through the radix-2 stage symbol for now
+  // — a scalar mixed-radix stage — until radix-3/5/7 specializations land.
+  const bool r4 = (radix == 4);
   if (backend == "nvidia")
-    return "ts_stockham_radix4_sm90";
+    return r4 ? "ts_stockham_r4_nvidia" : "ts_stockham_r2_nvidia";
   if (backend == "amd")
-    return "ts_stockham_radix4_gfx94x";
-  return "ts_stockham_radix4_scalar";
+    return r4 ? "ts_stockham_r4_amd" : "ts_stockham_r2_amd";
+  return r4 ? "ts_stockham_r4_cpu" : "ts_stockham_r2_cpu";
+}
+
+/// Runtime driver symbol: factors the runtime N and launches the matching
+/// per-stage kernels.  Used for dynamic-shape FFTs, where the radix sequence
+/// is unknown at compile time and must not be fabricated.
+static StringRef driverSymbolFor(StringRef backend) {
+  if (backend == "nvidia")
+    return "ts_fft_stockham_nvidia";
+  if (backend == "amd")
+    return "ts_fft_stockham_amd";
+  return "ts_fft_stockham_cpu";
 }
 
 struct LowerToTargetIRPass
@@ -77,9 +95,33 @@ struct LowerToTargetIRPass
         return WalkResult::advance();
 
       op->setAttr("tessera.target_ir.backend", StringAttr::get(ctx, backend));
+      // Name the D1 arbiter op-kind so the runtime dispatches this op through
+      // the shared candidate arbiter (emit/spectral_candidates.py) instead of a
+      // hard-wired symbol: the arbiter enumerates the Stockham lanes for
+      // (op="spectral_fft", target) and picks the fastest in-budget one.
+      op->setAttr("tessera.target_ir.arbiter_op",
+                  StringAttr::get(ctx, "spectral_fft"));
 
-      // Default top-level symbol = first stage.  Composite ops mark
-      // themselves so codegen knows to wrap with pad/cmul/crop.
+      // Dynamic-shape FFTs cannot have a compile-time stage list (the
+      // legalizer left it empty and set `dynamic_shape`).  Route the whole
+      // op to the runtime driver symbol, which factors the runtime N and
+      // launches the matching per-stage kernels.  Do NOT fall through to a
+      // fabricated radix-4 stage — that was the old silent-miscompile.
+      if (op->hasAttr("tessera.spectral.dynamic_shape")) {
+        StringAttr drv = StringAttr::get(ctx, driverSymbolFor(backend));
+        op->setAttr("tessera.target_ir.call", drv);
+        op->setAttr("tessera.target_ir.stage_calls",
+                    ArrayAttr::get(ctx, {drv}));
+        op->setAttr("tessera.target_ir.dynamic", builder.getUnitAttr());
+        if (isConv)
+          op->setAttr("tessera.target_ir.composite",
+                      StringAttr::get(ctx, "conv_fft"));
+        op->setAttr("tessera.target_ir.lowered", builder.getUnitAttr());
+        return WalkResult::advance();
+      }
+
+      // Static shape: one C ABI symbol per resolved radix stage.  Composite
+      // ops mark themselves so codegen knows to wrap with pad/cmul/crop.
       SmallVector<Attribute, 8> stageCalls;
       if (auto stages =
               op->getAttrOfType<ArrayAttr>("tessera.spectral.stages")) {
@@ -94,9 +136,12 @@ struct LowerToTargetIRPass
               StringAttr::get(ctx, stageSymbolFor(backend, r)));
         }
       }
+      // A static, legalized FFT always has at least one stage.  If we somehow
+      // reach here with none (e.g. an unlegalized op), route to the runtime
+      // driver rather than inventing a radix-4 stage.
       if (stageCalls.empty())
         stageCalls.push_back(
-            StringAttr::get(ctx, stageSymbolFor(backend, 4)));
+            StringAttr::get(ctx, driverSymbolFor(backend)));
 
       op->setAttr("tessera.target_ir.call", stageCalls.front());
       op->setAttr("tessera.target_ir.stage_calls",

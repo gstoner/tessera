@@ -32,21 +32,29 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+# TableGen writes the generated *.inc into the binary dir; the dialect/pass
+# headers include them by bare name, so it must be on the include path.
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 # ------------------------------------------------------------------
 # Dialect + Ops tablegen
 # ------------------------------------------------------------------
-set(SPECTRAL_TD ${CMAKE_CURRENT_SOURCE_DIR}/lib/Dialect/Spectral/SpectralOps.td)
-
-mlir_tablegen(SpectralOps.h.inc       -gen-op-decls      -dialect=tessera_spectral DEPENDS ${SPECTRAL_TD})
-mlir_tablegen(SpectralOps.cpp.inc     -gen-op-defs       -dialect=tessera_spectral DEPENDS ${SPECTRAL_TD})
-mlir_tablegen(SpectralDialect.h.inc   -gen-dialect-decls                           DEPENDS ${SPECTRAL_TD})
-mlir_tablegen(SpectralDialect.cpp.inc -gen-dialect-defs                            DEPENDS ${SPECTRAL_TD})
+# mlir_tablegen() reads the input .td from the LLVM_TARGET_DEFINITIONS
+# variable — it must be set before each group, otherwise mlir-tblgen is
+# handed the include directory as its input file and fails with
+# "Is a directory".
+set(LLVM_TARGET_DEFINITIONS ${CMAKE_CURRENT_SOURCE_DIR}/lib/Dialect/Spectral/SpectralOps.td)
+mlir_tablegen(SpectralOps.h.inc       -gen-op-decls      -dialect=tessera_spectral)
+mlir_tablegen(SpectralOps.cpp.inc     -gen-op-defs       -dialect=tessera_spectral)
+mlir_tablegen(SpectralTypes.h.inc     -gen-typedef-decls -typedefs-dialect=tessera_spectral)
+mlir_tablegen(SpectralTypes.cpp.inc   -gen-typedef-defs  -typedefs-dialect=tessera_spectral)
+mlir_tablegen(SpectralDialect.h.inc   -gen-dialect-decls -dialect=tessera_spectral)
+mlir_tablegen(SpectralDialect.cpp.inc -gen-dialect-defs  -dialect=tessera_spectral)
 add_public_tablegen_target(TesseraSpectralTableGen)
 
 # Passes tablegen (stubs for registration)
-mlir_tablegen(SpectralPasses.h.inc -gen-pass-decls
-    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/include/tessera/Spectral/SpectralPasses.td)
+set(LLVM_TARGET_DEFINITIONS ${CMAKE_CURRENT_SOURCE_DIR}/include/tessera/Spectral/SpectralPasses.td)
+mlir_tablegen(SpectralPasses.h.inc -gen-pass-decls)
 add_public_tablegen_target(TesseraSpectralPassesIncGen)
 
 # ------------------------------------------------------------------
@@ -90,7 +98,11 @@ endif()
 # Tool: ts-spectral-opt
 # ------------------------------------------------------------------
 add_executable(ts-spectral-opt tools/ts-spectral-opt.cpp)
-target_link_libraries(ts-spectral-opt PRIVATE TesseraSpectral MLIRIR MLIRPass MLIRSupport)
+# MLIROptLib provides MlirOptMain; MLIRFuncDialect is needed so the test IR's
+# func.func parses in the driver.
+target_link_libraries(ts-spectral-opt PRIVATE
+    TesseraSpectral
+    MLIRIR MLIRPass MLIRSupport MLIROptLib MLIRFuncDialect)
 
 # Benchmarks
 add_executable(ts-spectral-correctness benchmarks/correctness_microbench.cpp)

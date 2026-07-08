@@ -63,7 +63,8 @@ table is the single skim surface. `✅` done · `🟡` partial · `⬜` not star
 | **0** | E2 real-hardware perf ratchet | ✅ (shape gate) | ✅ gfx1151 (matmul+flash, PR #284) | ✅ sm_120 (RTX 5070 Ti mma.sync ladder, live-gated) |
 | **0** | E3 escape-hatch test | ✅ (landed in D1 `force` + PR #298 test) | ✅ gfx1151 | ✅ sm_120 |
 | **1** | A1 shared `extractPtr`/`ensureExternalDecl` | ✅ | — | — |
-| **1** | A2–A4 fusion matcher / verifiers / MMA selector | ⬜ | — | — |
+| **1** | A2a–c shared fusion helpers (emit/chain-walk/epilogue trio) | ✅ | — | — |
+| **1** | A2 single declarative `FusionPattern` · A3 verifiers · A4 MMA selector | ⬜ | — | — |
 | **2** | B1 split `fusion.py` | ✅ | — | — |
 | **2** | B2a–c `KernelEmitter`/`Runner`/`SpecPolicy` | ✅ | — | — |
 | **2** | B3 F4 oracle universal (backend-agnostic, C0) | ✅ | — | — |
@@ -123,12 +124,23 @@ Pure mechanical dedup; zero behavior change; golden-IR-gated.
   `RewritePattern`, replacing the 12+ `*FusionToAppleGPU.cpp` per-chain passes and
   the ROCm dispatch-match shell. **ROCm `Generate*Kernel` bodies stay** — only the
   match/dispatch shell is shared.
-- **A3 · Declarative shape/constraint verifiers** `[MAC]` — replace the 6
-  hand-written `verify*()` in the 57 KB `TileToApple.cpp`.
+  **Shared-helper half landed 2026-07-04 (A2a–c, PRs #275–#277):** the byte-identical
+  logic across all 7 `*FusionToAppleGPU.cpp` passes is now hoisted into shared
+  headers — `emitFusionCall` (`Tessera/Common/Lowering.h`), the chain-walk +
+  Decision-#21 descriptor hook (`FusionChainUtils.h`: `fusionDescriptorDriven`,
+  `walkChainProducer`), and the data-driven epilogue body collapsing the
+  Softmax/Gelu/RMSNorm trio (`EpilogueFusion.h`: `lowerMatmulEpilogueFusion`), all
+  lit byte-identical. **Still open:** the *single* declarative `FusionPattern` table +
+  one generic `RewritePattern` that would retire the 7 separate pass files entirely
+  (the passes still exist, they just share bodies now).
+- **A3 · Declarative shape/constraint verifiers** `[MAC]` — ⬜ **open.** Replace the
+  hand-written `verify*()` (7 today) in the 1219-line `TileToApple.cpp` with a
+  declarative spec.
 - **A4 · Promote ROCm's `MmaDescriptor` + `M×N//lanes` footprint model** `[MAC]`
   to the shared MMA selector, parameterized by per-arch lane count + shape table.
   The one place a *lead* abstraction lifts upward: Apple/x86/NVIDIA gain a
-  cost-aware MMA selector they lack.
+  cost-aware MMA selector they lack. ⬜ **open** — `MmaDescriptor` lives in
+  `python/tessera/compiler/rocm_mma.py`; not yet promoted to a shared selector.
 
 **Lead safety:** A1–A3 are Apple/x86-facing; ROCm adopts only the match/verifier
 shell with byte-identical emit (golden-IR gated). No NVIDIA emit change.

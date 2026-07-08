@@ -68,6 +68,39 @@ _OP_VERIFY = {
     OP_MATMUL: ("verify_synthesized_matmul", "run_matmul"),
 }
 
+#: Extensible op-kinds registered by solver backends (spectral FFT, TPP stencil,
+#: …).  These do not route through a ``fusion_core`` region oracle — a solver op
+#: has its own numpy reference — so each supplies its own reference-diff verifier
+#: ``verify_fn(candidate, region, *, atol, seed) -> bool``.  The arbiter treats
+#: them exactly like the built-ins (same enumerate → F4-gate → select pipeline);
+#: this is the additive seam the ``lower-*-to-target-ir`` retarget plugs into
+#: without touching ``fusion_core``/``kernel_emitter``.
+_OP_KIND_VERIFY: dict[str, "Callable[..., bool]"] = {}
+
+
+def register_op_kind(op: str, verify_fn: "Callable[..., bool]") -> None:
+    """Register a solver op-kind + its reference-diff verifier so candidates for
+    ``op`` can be registered and arbitrated.  ``verify_fn(candidate, region, *,
+    atol, seed)`` returns ``True`` iff the candidate ran a real kernel matching its
+    numpy reference within budget.  Re-registering an ``op`` replaces its
+    verifier (idempotent under module re-import)."""
+    _OP_KIND_VERIFY[op] = verify_fn
+
+
+def verify_by_reference(candidate: "Candidate", region: Any, inputs: "tuple",
+                        reference: Any, *, atol: float) -> bool:
+    """Helper for solver ``verify_fn``s: run ``candidate`` on ``inputs`` and
+    compare to ``reference`` within ``atol``.  A candidate that declined to the
+    numpy reference (tag in ``REFERENCE_EXECUTIONS``) does not count as a viable
+    winner — same "ran a real kernel" rule the built-in gate applies (P2)."""
+    import numpy as np
+    from tessera.compiler.emit.kernel_emitter import REFERENCE_EXECUTIONS
+
+    out, tag = candidate.run(region, *inputs)
+    if tag in REFERENCE_EXECUTIONS:
+        return False
+    return bool(np.allclose(np.asarray(out), np.asarray(reference), atol=atol))
+
 
 class ArbiterError(RuntimeError):
     """A forced candidate does not exist / is unavailable — names the gap so the
@@ -130,7 +163,7 @@ def register_candidate(candidate: Candidate) -> None:
     each backend uses to plug its lanes in alongside the others)."""
     if not candidate.target or not candidate.name:
         raise ValueError("Candidate.target and Candidate.name must be non-empty")
-    if candidate.op not in _OP_VERIFY:
+    if candidate.op not in _OP_VERIFY and candidate.op not in _OP_KIND_VERIFY:
         raise ValueError(f"unknown Candidate.op {candidate.op!r}")
     bucket = _CANDIDATES.setdefault((candidate.target, candidate.op), [])
     for i, existing in enumerate(bucket):
@@ -214,6 +247,13 @@ def verify_candidate(candidate: Candidate, region: Any, *, atol: float = 1e-3,
     construction path, but a decliner provides no kernel for this region; if it
     counted as verified it would win by tier and then hand back only the numpy
     reference, starving a lower tier that actually executes (PR #289 review, P2)."""
+    # Solver op-kinds (spectral FFT, TPP stencil, …) supply their own
+    # reference-diff verifier via register_op_kind() — they have a numpy
+    # reference of their own rather than a fusion_core region oracle.
+    if candidate.op in _OP_KIND_VERIFY:
+        return bool(_OP_KIND_VERIFY[candidate.op](
+            candidate, region, atol=atol, seed=seed))
+
     from tessera.compiler import fusion_core
     from tessera.compiler.emit.kernel_emitter import REFERENCE_EXECUTIONS
 

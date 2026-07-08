@@ -56,3 +56,26 @@ extern "C" void tessera_x86_ebm_langevin_philox_f32(
                                     + static_cast<double>(noise_scale) * z);
     }
 }
+
+// Affine Langevin step with the noise supplied FROM THE HOST (f32) — the
+// manifold half of the P7 EBM follow-up. `tessera.ebm.{bivector,sphere}_langevin_step`
+// project the gradient (and a host-drawn, grade-projected Gaussian) onto a
+// manifold subspace, then take the SAME affine combination as the Philox lane —
+// but the noise is already computed on the host, so this kernel takes it as an
+// input instead of drawing its own:
+//
+//   out[i] = y[i] - eta * grad[i] + noise_scale * noise[i]
+//
+// Mirrors the Apple-GPU `_try_apple_gpu_langevin_step_f32` bridge (noise as an
+// operand) so the manifold samplers get a native x86 lane matching their numpy
+// reference exactly (host noise, not device Philox). Accumulation in double keeps
+// the result within f32 epsilon. ROCm analog: generate-rocm-ebm-affine-langevin-kernel.
+extern "C" void tessera_x86_ebm_affine_langevin_f32(
+        const float* y, const float* grad, const float* noise, int64_t n,
+        float eta, float noise_scale, float* out) {
+    for (int64_t i = 0; i < n; ++i) {
+        out[i] = static_cast<float>(static_cast<double>(y[i])
+                                    - static_cast<double>(eta) * grad[i]
+                                    + static_cast<double>(noise_scale) * noise[i]);
+    }
+}

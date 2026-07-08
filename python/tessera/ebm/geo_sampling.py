@@ -139,14 +139,29 @@ def bivector_langevin_step(
                                           dtype=np.float32)
                     if noise_mv is not None
                     else np.zeros_like(state.coefficients, dtype=np.float32))
+        state_c = np.ascontiguousarray(state.coefficients, dtype=np.float32)
+        grad_c = np.ascontiguousarray(grad_proj.coefficients, dtype=np.float32)
         gpu_out = _try_apple_gpu_langevin_step_f32(
-            np.ascontiguousarray(state.coefficients, dtype=np.float32),
-            np.ascontiguousarray(grad_proj.coefficients, dtype=np.float32),
-            noise_c, float(eta), float(noise_scale),
+            state_c, grad_c, noise_c, float(eta), float(noise_scale),
             bridge_op_name="ebm_bivector_langevin",
         )
         if gpu_out is not None:
             return Multivector(gpu_out, algebra, grades=frozenset({grade})), next_key
+        # Native x86 (AVX-512) / ROCm (gfx1151) affine-Langevin lanes — the same
+        # affine combination on the grade-projected coefficient vectors, with the
+        # host-drawn noise as an input (matches this numpy path exactly). Each
+        # returns None off its silicon → the numpy fallback below.
+        from tessera.ebm.energy import (
+            _try_rocm_ebm_affine_langevin_step_f32,
+            _try_x86_ebm_affine_langevin_step_f32,
+        )
+        for _dev in (_try_x86_ebm_affine_langevin_step_f32,
+                     _try_rocm_ebm_affine_langevin_step_f32):
+            dev_out = _dev(state_c, grad_c, noise_c,
+                           float(eta), float(noise_scale))
+            if dev_out is not None:
+                mv = Multivector(dev_out, algebra, grades=frozenset({grade}))
+                return mv, next_key
 
     # State + (-eta) * grad + noise_scale * noise.
     new_state = state + (-float(eta)) * grad_proj

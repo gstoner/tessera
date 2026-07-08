@@ -663,6 +663,46 @@ def _try_apple_gpu_langevin_step_f32(
     return out
 
 
+def _try_x86_ebm_affine_langevin_step_f32(
+    y: np.ndarray, grad: np.ndarray, noise: np.ndarray,
+    eta: float, noise_scale: float,
+) -> Optional[np.ndarray]:
+    """``out = y - eta*grad + noise_scale*noise`` on the native x86 AVX-512
+    affine-Langevin kernel (host-drawn noise) — the manifold samplers' CPU lane.
+    Returns ``None`` (→ numpy fallback) if the kernel/lib is unavailable or the
+    dtypes/shapes don't match."""
+    if (y.dtype != np.float32 or grad.dtype != np.float32
+            or noise.dtype != np.float32):
+        return None
+    if y.shape != grad.shape or y.shape != noise.shape:
+        return None
+    try:
+        from tessera import runtime as rt
+        return rt._x86_ebm_affine_langevin(
+            y, grad, noise, float(eta), float(noise_scale), np)
+    except Exception:
+        return None
+
+
+def _try_rocm_ebm_affine_langevin_step_f32(
+    y: np.ndarray, grad: np.ndarray, noise: np.ndarray,
+    eta: float, noise_scale: float,
+) -> Optional[np.ndarray]:
+    """``out = y - eta*grad + noise_scale*noise`` on the gfx1151 affine-Langevin
+    kernel (compiler-generated, host-drawn noise). ``None`` → numpy fallback."""
+    if (y.dtype != np.float32 or grad.dtype != np.float32
+            or noise.dtype != np.float32):
+        return None
+    if y.shape != grad.shape or y.shape != noise.shape:
+        return None
+    try:
+        from tessera import runtime as rt
+        return rt._rocm_ebm_affine_langevin(
+            y, grad, noise, float(eta), float(noise_scale), np)
+    except Exception:
+        return None
+
+
 def _try_apple_gpu_langevin_step_philox_f32(
     y: np.ndarray, grad: np.ndarray,
     eta: float, noise_scale: float,

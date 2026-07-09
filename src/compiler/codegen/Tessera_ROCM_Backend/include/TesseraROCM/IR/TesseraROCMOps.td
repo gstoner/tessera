@@ -450,6 +450,22 @@ def ROCM_SelectiveSsmKernelOp : TesseraROCM_Op<"selective_ssm"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_SelectiveSsmBwdKernelOp : TesseraROCM_Op<"selective_ssm_bwd"> {
+  let summary = "Mamba2 selective_ssm reverse-mode adjoint gpu kernel";
+  let description = [{
+    `generate-rocm-selective-ssm-bwd-kernel` expands into the reverse-mode adjoint
+    of the selective scan (matches autodiff.vjp.vjp_selective_ssm). One thread per
+    (b,d) channel: first fills the forward trajectory h_traj (h_traj[0] = the
+    caller's initial state), then walks t = S-1 → 0 accumulating (dx, dA2d, dB,
+    dC, ddelta). The scan adjoint dh[b,d,:] is a global scratch slice. dx/ddelta
+    are unique per (b,t,d); dC/dB (reduce over channels d) and dA2d (reduce over
+    b,t) use `memref.atomic_rmw addf`. All f32. CPU analog:
+    tessera_x86_selective_ssm_bwd_f32.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_CholeskyKernelOp : TesseraROCM_Op<"cholesky"> {
   let summary = "Batched Cholesky factorization gpu kernel";
   let description = [{

@@ -13455,6 +13455,65 @@ def _rocm_selective_ssm(x: Any, A: Any, B: Any, C: Any, delta: Any,
     return out
 
 
+_rocm_ssm_bwd_hsaco_cache: dict[tuple[str], bytes] = {}
+
+
+def _rocm_selective_ssm_bwd(x, A, B, C, delta, dout, gate, state, np):
+    """Reverse-mode adjoint of selective_ssm on the gfx1151 backward kernel
+    (one thread per (b,d), atomic cross-channel reductions). Returns
+    (dx, dA, dB, dC, ddelta) — matches autodiff.vjp.vjp_selective_ssm. f32."""
+    (xa, a2d, Bc, Cc, dl, dy, bsz, s, d, n, a1d, h_traj,
+     dx, dA2d, dBg, dCg, dd) = _ssm_bwd_prepare(
+        x, A, B, C, delta, dout, gate, state, np)
+    chip = _rocm_chip()
+    directive = ('module {\n  "tessera_rocm.selective_ssm_bwd"() {name = "ssb"} '
+                 ': () -> ()\n}\n')
+    hsaco = _build_rocm_elementwise_hsaco(
+        "generate-rocm-selective-ssm-bwd-kernel", directive,
+        _rocm_ssm_bwd_hsaco_cache, (chip,))
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm ssm_bwd: hipInit failed")
+    dh = np.zeros((bsz, d, n), np.float32)
+    # dx/dA2d/dB/dC/ddelta must be zero on device — the kernel accumulates into
+    # them (atomics for the cross-channel reductions). _rocm_dev_in copies the
+    # zeroed host arrays up.
+    d_x = _rocm_dev_in(hip, xa.reshape(-1), 4 * xa.size)
+    d_a = _rocm_dev_in(hip, a2d.reshape(-1), 4 * a2d.size)
+    d_b = _rocm_dev_in(hip, Bc.reshape(-1), 4 * Bc.size)
+    d_c = _rocm_dev_in(hip, Cc.reshape(-1), 4 * Cc.size)
+    d_dl = _rocm_dev_in(hip, dl.reshape(-1), 4 * dl.size)
+    d_dy = _rocm_dev_in(hip, dy.reshape(-1), 4 * dy.size)
+    d_ht = _rocm_dev_in(hip, h_traj.reshape(-1), 4 * h_traj.size)
+    d_dh = _rocm_dev_in(hip, dh.reshape(-1), 4 * dh.size)
+    d_dx = _rocm_dev_in(hip, dx.reshape(-1), 4 * dx.size)
+    d_dA = _rocm_dev_in(hip, dA2d.reshape(-1), 4 * dA2d.size)
+    d_dB = _rocm_dev_in(hip, dBg.reshape(-1), 4 * dBg.size)
+    d_dC = _rocm_dev_in(hip, dCg.reshape(-1), 4 * dCg.size)
+    d_dd = _rocm_dev_in(hip, dd.reshape(-1), 4 * dd.size)
+    devs = (d_x, d_a, d_b, d_c, d_dl, d_dy, d_ht, d_dh,
+            d_dx, d_dA, d_dB, d_dC, d_dd)
+    try:
+        _rocm_sparse_launch(
+            hsaco, b"ssb",
+            [(d_x, xa.size), (d_a, a2d.size), (d_b, Bc.size), (d_c, Cc.size),
+             (d_dl, dl.size), (d_dy, dy.size), (d_ht, h_traj.size),
+             (d_dh, dh.size), (d_dx, dx.size), (d_dA, dA2d.size),
+             (d_dB, dBg.size), (d_dC, dCg.size), (d_dd, dd.size)],
+            [bsz, s, d, n], bsz * d)
+        cv = ctypes.c_void_p
+        for host, dev in ((dx, d_dx), (dA2d, d_dA), (dBg, d_dB),
+                          (dCg, d_dC), (dd, d_dd)):
+            hip.hipMemcpy(host.ctypes.data_as(cv), dev, 4 * host.size, 2)
+    finally:
+        for dev in devs:
+            hip.hipFree(dev)
+    dA = dA2d.sum(axis=1) if a1d else dA2d
+    return dx, dA, dBg, dCg, dd
+
+
 _rocm_moe_hsaco_cache: dict[tuple[str], bytes] = {}
 
 

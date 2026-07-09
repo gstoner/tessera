@@ -724,6 +724,63 @@ def _try_rocm_ebm_affine_langevin_step_f32(
         return None
 
 
+def _try_x86_langevin_step_philox_f32(
+    y: np.ndarray, grad: np.ndarray,
+    eta: float, noise_scale: float,
+    key: np.ndarray, counter: np.ndarray,
+) -> Optional[np.ndarray]:
+    """On-device-Philox Langevin step on the native x86 AVX-512 kernel
+    (``tessera_x86_ebm_langevin_philox_f32``): noise is drawn in-kernel from
+    ``(key, counter)`` via Philox-4x32-10 + Box-Muller, per-thread counter
+    ``(counter[0]+i, counter[1..3])`` — byte-matching the numpy reference.
+    ``None`` off-silicon (no lib / non-f32) so the caller falls through."""
+    if y.dtype != np.float32 or grad.dtype != np.float32:
+        return None
+    if y.shape != grad.shape:
+        return None
+    if key.dtype != np.uint32 or key.shape != (2,):
+        return None
+    if counter.dtype != np.uint32 or counter.shape != (4,):
+        return None
+    try:
+        from tessera import runtime as rt
+        return rt._x86_ebm_langevin(
+            y, grad, float(eta), float(noise_scale),
+            int(key[0]), int(key[1]),
+            int(counter[0]), int(counter[1]), int(counter[2]), int(counter[3]),
+            np)
+    except Exception:
+        return None
+
+
+def _try_rocm_langevin_step_philox_f32(
+    y: np.ndarray, grad: np.ndarray,
+    eta: float, noise_scale: float,
+    key: np.ndarray, counter: np.ndarray,
+) -> Optional[np.ndarray]:
+    """On-device-Philox Langevin step on the compiler-generated gfx1151 kernel
+    (``generate-rocm-ebm-langevin-kernel``): one thread per element, in-kernel
+    Philox-4x32-10 + Box-Muller from ``(key, counter)``. ``None`` off-silicon so
+    the caller falls through."""
+    if y.dtype != np.float32 or grad.dtype != np.float32:
+        return None
+    if y.shape != grad.shape:
+        return None
+    if key.dtype != np.uint32 or key.shape != (2,):
+        return None
+    if counter.dtype != np.uint32 or counter.shape != (4,):
+        return None
+    try:
+        from tessera import runtime as rt
+        return rt._rocm_ebm_langevin(
+            y, grad, float(eta), float(noise_scale),
+            int(key[0]), int(key[1]),
+            int(counter[0]), int(counter[1]), int(counter[2]), int(counter[3]),
+            np)
+    except Exception:
+        return None
+
+
 def _try_apple_gpu_langevin_step_philox_f32(
     y: np.ndarray, grad: np.ndarray,
     eta: float, noise_scale: float,
@@ -810,15 +867,17 @@ def langevin_step_philox(
             f"langevin_step_philox requires matching shapes; got "
             f"y={y_arr.shape}, grad={grad_arr.shape}"
         )
-    # Try Apple GPU.
+    # Native lanes, best-first: x86 AVX-512 → ROCm gfx1151 → Apple GPU. Each
+    # draws the noise on-device from (key, counter) — no host noise buffer — and
+    # matches the numpy reference below; all fall through off-silicon.
     if y_arr.dtype == np.float32:
-        gpu = _try_apple_gpu_langevin_step_philox_f32(
-            y_arr, grad_arr,
-            float(eta), float(noise_scale),
-            key_arr, ctr_arr,
-        )
-        if gpu is not None:
-            return gpu
+        for _dev in (_try_x86_langevin_step_philox_f32,
+                     _try_rocm_langevin_step_philox_f32,
+                     _try_apple_gpu_langevin_step_philox_f32):
+            dev = _dev(y_arr, grad_arr, float(eta), float(noise_scale),
+                       key_arr, ctr_arr)
+            if dev is not None:
+                return np.asarray(dev, np.float32).reshape(y_arr.shape)
     # Numpy reference: mirror the MSL kernel byte-for-byte.
     flat_y = y_arr.reshape(-1)
     flat_g = grad_arr.reshape(-1)

@@ -16,9 +16,16 @@ import shutil
 import numpy as np
 import pytest
 
+import importlib
+
 from tessera.ga import Cl, Multivector
 from tessera.rng import RNGKey
-from tessera.ebm.geo_sampling import bivector_langevin_step, sphere_langevin_step
+from tessera.ebm.geo_sampling import (
+    bivector_langevin_sample,
+    bivector_langevin_step,
+    sphere_langevin_sample,
+    sphere_langevin_step,
+)
 
 
 def _x86_lib_or_skip():
@@ -87,3 +94,79 @@ def test_x86_sphere_step_f32_native_stays_on_sphere():
         eta=0.02, temperature=1.0, rng_key=RNGKey.from_seed(0), grad_fn=grad_fn)
     assert out.dtype == np.float32
     assert abs(float(np.linalg.norm(out)) - 1.0) < 1e-4
+
+
+# ── the `_sample` chains compose the native per-step kernel in a host Markov ───
+# loop (like the spectral dct/stft composites over the device FFT executor). Each
+# test SPIES on the x86 affine helper to prove the native lane fired on every step
+# (a float64 chain would silently fall to numpy — the bug this guards), then
+# forces both device lanes off for the pure-numpy reference chain. `thin=1` so the
+# chain runs exactly `burn_in + n_samples` steps.
+
+def _spy_affine(monkeypatch, energy, attr):
+    """Wrap a `_try_*_ebm_affine_langevin_step_f32` helper, counting the steps
+    where it genuinely returned a device result. Returns the hit-count list."""
+    orig = getattr(energy, attr)
+    hits: list[int] = []
+
+    def spy(*a, **k):
+        r = orig(*a, **k)
+        if r is not None:
+            hits.append(1)
+        return r
+
+    monkeypatch.setattr(energy, attr, spy)
+    return hits
+
+
+def test_x86_bivector_sample_chain_native_matches_numpy(monkeypatch):
+    _x86_lib_or_skip()
+    energy = importlib.import_module("tessera.ebm.energy")
+    hits = _spy_affine(monkeypatch, energy,
+                       "_try_x86_ebm_affine_langevin_step_f32")
+    a = Cl(3, 0)
+    coeffs = np.zeros(a.dim, dtype=np.float32)
+    coeffs[a.blade("e12").mask] = 0.7
+    coeffs[a.blade("e13").mask] = -1.3
+    coeffs[a.blade("e23").mask] = 0.4
+    init = Multivector(coeffs, a, grades={2})
+    kw = dict(init=init, energy_fn=_quadratic, eta=0.02, temperature=1.0,
+              n_samples=6, burn_in=2, grade=2)
+    key = RNGKey.from_seed(1)
+    native, _, _ = bivector_langevin_sample(key, **kw)      # x86 native chain
+    assert sum(hits) == 8, "native x86 affine lane must fire every chain step"
+    monkeypatch.setattr(energy, "_try_x86_ebm_affine_langevin_step_f32",
+                        lambda *a, **k: None)
+    monkeypatch.setattr(energy, "_try_rocm_ebm_affine_langevin_step_f32",
+                        lambda *a, **k: None)
+    ref, _, _ = bivector_langevin_sample(key, **kw)         # pure-numpy chain
+    np.testing.assert_allclose(native, ref, rtol=1e-4, atol=1e-4)
+    nong = [b.mask for b in a.blades() if b.grade != 2]
+    assert float(np.abs(native[:, nong]).max()) < 1e-6     # in-grade through chain
+
+
+def test_x86_sphere_sample_chain_native_matches_numpy(monkeypatch):
+    _x86_lib_or_skip()
+    energy = importlib.import_module("tessera.ebm.energy")
+    hits = _spy_affine(monkeypatch, energy,
+                       "_try_x86_ebm_affine_langevin_step_f32")
+    rng = np.random.default_rng(2)
+    x0 = rng.standard_normal(16).astype(np.float32)          # f32 init → native
+
+    def grad_fn(v):
+        return np.asarray(v, np.float32)
+
+    kw = dict(init=x0, energy_fn=lambda v: 0.5 * float((np.asarray(v) ** 2).sum()),
+              eta=0.02, temperature=1.0, n_samples=6, burn_in=2, grad_fn=grad_fn)
+    key = RNGKey.from_seed(1)
+    native, _, _ = sphere_langevin_sample(key, **kw)        # x86 native chain
+    assert native.dtype == np.float32
+    assert sum(hits) == 8, "native x86 affine lane must fire every chain step"
+    monkeypatch.setattr(energy, "_try_x86_ebm_affine_langevin_step_f32",
+                        lambda *a, **k: None)
+    monkeypatch.setattr(energy, "_try_rocm_ebm_affine_langevin_step_f32",
+                        lambda *a, **k: None)
+    ref, _, _ = sphere_langevin_sample(key, **kw)           # pure-numpy chain
+    np.testing.assert_allclose(native, ref, rtol=1e-4, atol=1e-4)
+    norms = np.linalg.norm(native, axis=1)
+    np.testing.assert_allclose(norms, 1.0, atol=1e-4)       # on-sphere through chain

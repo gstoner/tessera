@@ -3176,6 +3176,33 @@ def _execute_x86_compiled_flash_attn(artifact: RuntimeArtifact,
     return _x86_flash_attn_kernel(q, k, v, scale, causal, np)
 
 
+def _x86_flash_attn(q: Any, k: Any, v: Any, *, scale: Any = None,
+                    causal: bool = True, attn_bias: Any = None) -> Any:
+    """Run the native AVX-512 flash_attn forward on Q/K/V via the x86 flash
+    executor (constructs a minimal sub-artifact) — the CPU analog of
+    :func:`_rocm_flash_attn`. Returns the f32 attention output shaped like Q. An
+    optional ``attn_bias`` (additive, broadcastable to Q.lead+(Sq,Sk)) routes
+    through the extended kernel: ``O = softmax(scale·Q@K^T + attn_bias)·V``."""
+    kw: dict[str, Any] = {"causal": bool(causal)}
+    if scale is not None:
+        kw["scale"] = float(scale)
+    arg_names = ["q", "k", "v"]
+    operands = ["q", "k", "v"]
+    call_args: tuple[Any, ...] = (q, k, v)
+    if attn_bias is not None:
+        arg_names = ["q", "k", "v", "attn_bias"]
+        operands = ["q", "k", "v", "attn_bias"]
+        call_args = (q, k, v, attn_bias)
+    sub = RuntimeArtifact(metadata={
+        "target": "x86", "compiler_path": "x86_flash_attn_compiled",
+        "executable": True, "execution_kind": "native_cpu",
+        "arg_names": arg_names, "output_name": "o",
+        "ops": [{"op_name": "tessera.flash_attn", "result": "o",
+                 "operands": operands, "kwargs": kw}],
+    })
+    return _execute_x86_compiled_flash_attn(sub, call_args)
+
+
 def _x86_flash_attn_run(q: Any, k: Any, v: Any, scale: float, causal: bool,
                         window: int, softcap: float, bias: Any, np: Any) -> Any:
     """The extended AVX-512 FA forward (sliding window / logit-softcap / additive

@@ -799,6 +799,31 @@ def rocm_attention_fn(q, k, v, *, scale=None, causal=False, attn_bias=None):
                            attn_bias=attn_bias)
 
 
+# ---------------------------------------------------------------------------
+# x86 (AVX-512) attention core
+# ---------------------------------------------------------------------------
+
+def x86_attention_fn(q, k, v, *, scale=None, causal=False, attn_bias=None):
+    """``attention_fn`` for :func:`tessera.nn.functional.block_diffusion_attention`
+    that runs the rank-3 attention core on the native x86 AVX-512 flash lane
+    (``O = softmax(scale·Q@K^T + attn_bias)·V``, online softmax + additive bias).
+
+    The AVX-512 kernel is **f32-native** with no head-dim constraint, so — unlike
+    the ROCm/Apple GPU seams — there is no dtype cast or head-dim gate: the seam
+    matches the numpy reference to f32 epsilon. Falls back to the numpy reference
+    (``ops.flash_attn``) when ``libtessera_x86_elementwise.so`` isn't built. Pass
+    as ``block_diffusion_attention(..., attention_fn=x86_attention_fn)``.
+    """
+    from . import ops as _ops
+    from . import runtime as _rt
+    try:
+        return _rt._x86_flash_attn(q, k, v, scale=scale, causal=bool(causal),
+                                   attn_bias=attn_bias)
+    except _rt._RocmCompiledUnavailable:
+        return _ops.flash_attn(q, k, v, scale=scale, causal=causal,
+                               attn_bias=attn_bias)
+
+
 def dflash_generate_cached(prompt, draft_w: DFlashWeights, cfg: DFlashConfig,
                            target, *, max_new_tokens: int,
                            block_size: Optional[int] = None, rope_fn=None,
@@ -898,6 +923,7 @@ __all__ = [
     "capture_target_hidden",
     "apple_gpu_attention_fn",
     "rocm_attention_fn",
+    "x86_attention_fn",
     "dflash_decoder_layer",
     "dflash_decoder_layer_cached",
     "dflash_draft_forward",

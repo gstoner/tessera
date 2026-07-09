@@ -123,8 +123,10 @@ accept the bias operand first.
   (f32 softmax/accumulate); falls back to the numpy reference off-silicon or when
   `head_dim` isn't a multiple of 16. Proven on real gfx1151: block-attention
   parity to f16 and the whole-draft greedy tokens identical to the numpy path.
-- **x86** — flash+bias already exists; the `x86_attention_fn` seam is the next
-  fast win.
+- **x86** — ✅ **`tessera.dflash.x86_attention_fn`** runs the draft attention on
+  the AVX-512 flash lane. f32-native, no head-dim constraint, so it matches the
+  numpy reference to f32 epsilon (block-attention parity + whole-draft greedy
+  tokens identical); falls back when the x86 elementwise lib isn't built.
 - **CUDA** — pending the emit/ FA bias operand (Phase 1 CUDA).
 
 ## 6. External gates (not yet closed)

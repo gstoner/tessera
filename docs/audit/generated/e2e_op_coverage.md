@@ -193,7 +193,7 @@ each row into a single E2E tier.
 | ``dequant_grouped_gemm`` | loop_nest | public | public | registered | fused | compiled | ready | none |
 | ``dequant_matmul`` | loop_nest | public | public | registered | fused | fused | ready | benchmarked |
 | ``factorized_matmul`` | loop_nest | public | public | registered | fused | compiled | ready | none |
-| ``gemm`` | loop_nest | public | public | registered | fused | fused | ready | benchmarked |
+| ``gemm`` | loop_nest | public | public | registered | fused | hardware_verified | ready | benchmarked |
 | ``grouped_gemm`` | loop_nest | public | public | registered | fused | fused | ready | benchmarked |
 | ``latent_kv_compress`` | loop_nest | public | public | registered | fused | compiled | ready | none |
 | ``latent_kv_expand_k`` | loop_nest | public | public | registered | fused | compiled | ready | none |

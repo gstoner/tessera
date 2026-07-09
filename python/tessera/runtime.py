@@ -13433,33 +13433,18 @@ def _execute_rocm_compiled_sparse(artifact: RuntimeArtifact, args: Any) -> Any:
 _rocm_ssm_hsaco_cache: dict[tuple[str, str], bytes] = {}
 
 
-def _rocm_selective_ssm_chunked(x, A, B, C, delta, gate, state, np,
-                                chunk_size: int = 128):
-    """Chunked-parallel (SSD) selective_ssm for scalar-state A on gfx1151 — the
-    three batched contractions run on the WMMA GEMM (f16 storage, f32 accumulate),
-    the per-chunk state recurrence on host. The standard Mamba-2 algorithm;
-    matches the sequential scan to ~1e-4 (WMMA f16 bmm). Scalar-A ``(D,)`` only."""
-    from . import _mamba_ssd as _ssd
-
-    def bmm(a, b):
-        return np.asarray(_rocm_batched_gemm(
-            np.asarray(a, np.float16), np.asarray(b, np.float16)), np.float32)
-
-    return _ssd.selective_ssm_parallel(
-        x, A, B, C, delta, gate=gate, state=state,
-        chunk_size=int(chunk_size), matmul3d=bmm)
-
-
 def _rocm_selective_ssm(x: Any, A: Any, B: Any, C: Any, delta: Any,
                         gate: Any, state: Any, np: Any) -> Any:
     """y[B,S,D] = Mamba2 selective scan on the gfx1151 kernel. x/A/B/C/delta + y
-    storage is f32/f16/bf16 (the state + exp + accumulate stay f32 in-kernel)."""
+    storage is f32/f16/bf16 (the state + exp + accumulate stay f32 in-kernel).
+
+    All dtypes run the exact sequential per-(b,d) scan here — the chunked-parallel
+    SSD form is x86-only: ROCm's only batched GEMM is WMMA (f16/bf16 inputs), so a
+    chunked f32 path would have to cast the C·B / state-update contractions to
+    f16, overflowing (→inf/NaN) on valid f32 inputs whose magnitude exceeds the
+    fp16 range. Keeping f32 (and low-precision) on this scan stays finite + exact.
+    """
     store = _ssm_store_dtype(x, np)
-    # Scalar-state A (D,) in f32 → the chunked-parallel SSD form on the WMMA GEMM
-    # (the standard Mamba-2 decomposition), matching the sequential scan to ~1e-4
-    # (f16 bmm). (D, N) A + f16/bf16 keep the sequential per-(b,d) kernel below.
-    if store == np.float32 and np.asarray(A).ndim == 1:
-        return _rocm_selective_ssm_chunked(x, A, B, C, delta, gate, state, np)
     esz = 4 if store == np.float32 else 2                       # bytes/element
     dtag = ("f16" if store == np.float16
             else "f32" if store == np.float32 else "bf16")

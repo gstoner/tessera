@@ -581,12 +581,99 @@ def primitive_is_complete(entries: tuple["BackendKernelEntry", ...]) -> bool:
 # ─────────────────────────────────────────────────────────────────────────────
 _APPLE_GPU_FUSED = ("fp32", "fp16", "bf16")
 
+_APPLE_GPU_STRUCTURED_COMPUTE_FIXTURE = (
+    "tests/unit/test_apple_gpu_structured_compute_compiled.py")
+
 _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     "matmul": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": _APPLE_GPU_FUSED,
         "notes": "MPSMatrixMultiplication + bf16 conversion path",
         "benchmark_json": "benchmarks/baselines/apple_gpu_hot_paths.json",
+    },
+    # Structured-compute convolution family (2026-07-09) — parity with the
+    # x86/ROCm structured-compute tails. These reach an executable apple_gpu
+    # path via apple_gpu_structured_compute_compiled and match the reference
+    # primitive; host-structured im2col/layout bookkeeping. ``compiled`` (direct
+    # execute/compare evidence), NOT a bespoke fused Metal kernel.
+    "conv1d": {
+        "status": _COMPILED_STATUS,
+        "dtypes": ("fp32",),
+        "notes": ("Structured-compute conv1d via "
+                  "apple_gpu_structured_compute_compiled; matches "
+                  "tessera.nn.functional.conv1d."),
+        "execute_compare_fixture": _APPLE_GPU_STRUCTURED_COMPUTE_FIXTURE,
+    },
+    "conv_transpose": {
+        "status": _COMPILED_STATUS,
+        "dtypes": ("fp32",),
+        "notes": ("Structured-compute conv_transpose via "
+                  "apple_gpu_structured_compute_compiled; matches "
+                  "tessera.nn.functional.conv_transpose."),
+        "execute_compare_fixture": _APPLE_GPU_STRUCTURED_COMPUTE_FIXTURE,
+    },
+    "depthwise_conv1d": {
+        "status": _COMPILED_STATUS,
+        "dtypes": ("fp32",),
+        "notes": ("Structured-compute depthwise_conv1d via "
+                  "apple_gpu_structured_compute_compiled; matches "
+                  "tessera.ops.depthwise_conv1d."),
+        "execute_compare_fixture": _APPLE_GPU_STRUCTURED_COMPUTE_FIXTURE,
+    },
+    # Pointwise-regression loss lane (2026-07-09) — parity with the x86/ROCm
+    # loss lanes. Residual + none/mean/sum reduction on the MPSGraph binary +
+    # reduce lanes (mse/mae also on the GPU mul/abs opcodes; huber/smooth_l1/
+    # log_cosh apply the piecewise/transcendental middle host-side). ``compiled``
+    # (direct execute/compare vs tessera.losses), NOT a bespoke fused kernel.
+    **{op: {
+        "status": _COMPILED_STATUS,
+        "dtypes": ("fp32",),
+        "notes": (f"Pointwise-regression loss {op} via apple_gpu_loss_compiled "
+                  "(MPSGraph binary + reduce lanes, host piecewise middle); "
+                  "matches tessera.losses."),
+        "execute_compare_fixture": "tests/unit/test_apple_gpu_loss_compiled.py",
+    } for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss",
+                 "log_cosh_loss")},
+    # Loss-family lane (2026-07-09) — binary-CE / class-axis / RL-policy /
+    # EBM-diffusion. Per-sample loss via the standalone reference (host
+    # structure); none/mean/sum reduction on the MPSGraph reduce lane. Parity
+    # with the x86/ROCm binary/class/rl/ebm loss lanes. ``compiled`` (direct
+    # execute/compare vs tessera.losses / tessera.rl), NOT a bespoke fused kernel.
+    **{op: {
+        "status": _COMPILED_STATUS,
+        "dtypes": ("fp32",),
+        "notes": (f"Loss-family {op} via apple_gpu_loss_family_compiled "
+                  "(reference per-sample loss + MPSGraph reduce lane); matches "
+                  "tessera.losses / tessera.rl."),
+        "execute_compare_fixture": "tests/unit/test_apple_gpu_loss_family_compiled.py",
+    } for op in ("binary_cross_entropy_loss",
+                 "cross_entropy_loss", "kl_divergence", "js_divergence", "z_loss",
+                 "ppo_policy_loss", "cispo_policy_loss", "grpo_policy_loss",
+                 "score_matching_loss", "denoising_score_matching_loss",
+                 "implicit_score_matching_loss", "contrastive_divergence_loss",
+                 "persistent_cd_loss", "ddpm_noise_pred_loss", "vlb_loss",
+                 "load_balance_loss")},
+    # ctc_loss + edm_loss_weight ride the existing apple_gpu structured-compute
+    # lane (they are in _SINGLE_GPU_COMPUTE_REFERENCE_OPS -> the structured
+    # manifest path + apple_gpu_structured_compute_compiled executor).
+    **{op: {
+        "status": _COMPILED_STATUS,
+        "dtypes": ("fp32",),
+        "notes": (f"Structured-compute loss/schedule {op} via "
+                  "apple_gpu_structured_compute_compiled; matches "
+                  "tessera.losses / diffusion_schedule."),
+        "execute_compare_fixture": _APPLE_GPU_STRUCTURED_COMPUTE_FIXTURE,
+    } for op in ("ctc_loss", "edm_loss_weight")},
+    # Conformal-geometry lane (2026-07-09) — mobius f(z)=(az+b)/(cz+d) composed
+    # on the interleaved-f32 Apple GPU complex_mul/complex_div lanes. ``compiled``
+    # (direct execute/compare vs tessera.complex), parity with x86/rocm.
+    "mobius": {
+        "status": _COMPILED_STATUS,
+        "dtypes": ("fp32",),
+        "notes": ("Conformal mobius via apple_gpu_conformal_compiled "
+                  "(interleaved-f32 complex_mul/complex_div lanes); matches "
+                  "tessera.complex."),
+        "execute_compare_fixture": "tests/unit/test_apple_gpu_complex_compiled.py",
     },
     # Project 3 (2026-06-01) — 8 encode-eligible ops promoted to
     # ``hardware_verified``. Each carries:
@@ -4270,6 +4357,26 @@ def complex_manifest_for(op_name: str) -> list[BackendKernelEntry]:
                 f"ABI {fused['abi']}. {fused['notes']}"
             ),
         ))
+    elif in_long_tail and _complex_compiled:
+        # P6 (2026-07-09) — the long-tail ops now ship a REAL Apple GPU lane
+        # (apple_gpu_complex_compiled): the 9 pointwise ops compose interleaved-
+        # f32 on the MSL unary/binary/atan2 lanes; the geometric/certificate ops
+        # reuse the tessera.complex reference (host structure — the same path
+        # x86/ROCm take). Direct execute/compare, not a bespoke fused MSL kernel;
+        # fp16/bf16 native storage stays the M7 follow-up.
+        entries.append(BackendKernelEntry(
+            target="apple_gpu",
+            status=_COMPILED_STATUS,
+            dtypes=("fp32",),
+            feature_flags=("complex_namespace", "interleaved_f32", "msl", "metal"),
+            notes=(
+                "interleaved-f32 complex op composed on the Apple GPU unary/"
+                "binary/atan2 lanes (apple_gpu_complex_compiled); geometric ops "
+                "reuse the tessera.complex reference. fp16/bf16 native storage "
+                "remains the M7 follow-up."
+            ),
+            execute_compare_fixture="tests/unit/test_apple_gpu_complex_compiled.py",
+        ))
     elif in_long_tail:
         entries.append(BackendKernelEntry(
             target="apple_gpu",
@@ -4556,6 +4663,10 @@ def _single_gpu_compute_reference_manifest_for(
                 notes=str(apple_gpu.get("notes", "")),
                 runtime_symbol=apple_gpu.get("runtime_symbol"),
                 shape_envelope=apple_gpu.get("shape_envelope"),
+                # A ``compiled`` structured-compute row carries its numerical
+                # proof (execute_compare_fixture) directly — mirrors the x86/
+                # ROCm entries above. Required at construction for compiled.
+                execute_compare_fixture=apple_gpu.get("execute_compare_fixture"),
                 benchmark_json=apple_gpu.get("benchmark_json"),
                 benchmark_metadata=_APPLE_GPU_HOT_PATH_METADATA.get(op_name),
             ))
@@ -4754,9 +4865,14 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
         _ag_status = str(apple_gpu["status"])
         _ag_runtime_symbol: Optional_str = apple_gpu.get("runtime_symbol")
         _ag_shape_envelope: Optional_str = apple_gpu.get("shape_envelope")
+        # hardware_verified pulls its fixture from _NUMERICAL_FIXTURES; a
+        # ``compiled`` lane (e.g. the pointwise-loss lane) carries its own
+        # execute_compare_fixture in the kernel dict — both are required at
+        # construction for their status.
         _ag_fixture: Optional_str = (
             _NUMERICAL_FIXTURES.get((op_name, "apple_gpu"))
-            if _ag_status == _HARDWARE_VERIFIED_STATUS else None)
+            if _ag_status == _HARDWARE_VERIFIED_STATUS
+            else apple_gpu.get("execute_compare_fixture"))
         entries.append(BackendKernelEntry(
             target="apple_gpu",
             status=_ag_status,

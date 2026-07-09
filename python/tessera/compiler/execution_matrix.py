@@ -209,6 +209,11 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "x86_nsa_compiled": "x86 CPU NSA lane — deepseek_sparse_attention: sliding "
                         "+ compressed-block + top-k-block branches on the "
                         "AVX-512 flash_attn kernels, gate blend on host. f32",
+    "x86_msa_compiled": "x86 CPU MSA lane — msa_sparse_attention: exp-free "
+                        "index-score + per-GQA-group top-k block select on host, "
+                        "exact attend on the AVX-512 flash_attn kernel as dense "
+                        "attention with a non-selected/causal additive -inf mask. "
+                        "f32; dense-equivalence (top_k==num_blocks) → dense GQA",
     "x86_linear_attn_compiled": "x86 CPU linear-attention backbone — "
                                 "linear_attn/power_attn/retention via the "
                                 "quadratic-parallel form (φQ·φKᵀ ⊙ causal ⊙ "
@@ -1303,6 +1308,19 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "dense flash_attn) — through the learned gate. The attention "
                "FLOPs run on the device kernels; compression / selection / "
                "blend on the host. f32, matches the dense-masked reference.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_msa_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_msa_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_msa_compiled", runtime_status="success",
+        reason="x86 MSA (msa_sparse_attention) — the exp-free index scoring + "
+               "per-GQA-group top-k block selection run on the host (bit-"
+               "identical to the reference ops); the exact attend over the "
+               "selected blocks runs on the AVX-512 flash_attn kernel as dense "
+               "attention with the non-selected / causal-invalid keys folded "
+               "into an additive -inf bias. The attention FLOPs run on the "
+               "device kernel; selection on host. f32, matches the reference; "
+               "dense-equivalence (top_k==num_blocks) reduces to dense GQA.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_linear_attn_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_linear_attn_compiled",

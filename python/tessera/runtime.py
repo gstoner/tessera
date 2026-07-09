@@ -3445,6 +3445,105 @@ def _execute_x86_compiled_nsa(artifact: RuntimeArtifact, args: Any) -> Any:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# MSA (MiniMax Sparse Attention) main-branch lane — the AVX-512 partner to the
+# ROCm block-sparse WMMA lane and Apple's host-select MSL lane. MSA is exact
+# attention over a per-GQA-group Top-k of KV blocks: the exp-free index scoring +
+# block selection are data-dependent host code (reuse the reference ops so the
+# selection is bit-identical), and the exact attend runs on the AVX-512
+# flash_attn kernel as DENSE attention with the non-selected / causal-invalid keys
+# folded into an additive -inf bias (the same host-select + device-attend shape
+# Apple/ROCm use; the fused exp-free-Top-k + KV-outer kernel is future). Exact
+# match to the reference; dense-equivalence (top_k == num_blocks) reduces the mask
+# to causal-only → dense GQA. compiler_path="x86_msa_compiled".
+# ─────────────────────────────────────────────────────────────────────────────
+_X86_MSA_OPS = ("tessera.msa_sparse_attention",)
+
+
+def _x86_msa_compute(operands: list, kwargs: dict, np: Any) -> Any:
+    from tessera.stdlib import attention as _attn
+    Q = np.ascontiguousarray(operands[0], np.float32)
+    K = np.ascontiguousarray(operands[1], np.float32)
+    V = np.ascontiguousarray(operands[2], np.float32)
+    if Q.ndim != 4 or K.ndim != 4 or V.ndim != 4:
+        raise ValueError("msa_sparse_attention expects rank-4 (B, H, S, D)")
+    B, Hq, Sq, D = Q.shape
+    Hkv, Sk = int(K.shape[1]), int(K.shape[2])
+    if Hkv == 0 or Hq % Hkv:
+        raise ValueError(f"MSA GQA requires Hq % Hkv == 0; got Hq={Hq}, Hkv={Hkv}")
+    block_size = int(kwargs["block_size"])
+    top_k = int(kwargs["top_k"])
+    if block_size <= 0:
+        raise ValueError("MSA block_size must be > 0")
+    causal = bool(kwargs.get("causal", True))
+    force_local = bool(kwargs.get("force_local_block", True))
+    scale_kw = kwargs.get("scale")
+    scale = float(scale_kw) if scale_kw is not None else 1.0 / float(np.sqrt(D))
+    qpos = kwargs.get("q_positions")
+    qpos = np.arange(Sq) if qpos is None else np.asarray(qpos).reshape(-1)
+    if qpos.shape[0] != Sq:
+        raise ValueError(f"q_positions length {qpos.shape[0]} must equal Sq={Sq}")
+    num_blocks = (Sk + block_size - 1) // block_size
+    if not (1 <= top_k <= num_blocks):
+        raise ValueError(
+            f"MSA top_k={top_k} must be in [1, num_blocks={num_blocks}]")
+    # Selection — host, bit-identical to the reference (accept an explicit
+    # selected_block_ids worklist, else score + top-k select).
+    sel = kwargs.get("selected_block_ids")
+    if sel is None:
+        scores = _attn.msa_index_scores(Q, K, block_size=block_size,
+                                        scale=scale_kw)
+        sel = _attn.msa_select_blocks(
+            scores, top_k=top_k, block_size=block_size,
+            force_local_block=force_local, causal=causal, q_positions=qpos)
+    sel = np.asarray(sel, np.int64)
+    if sel.shape != (B, Hkv, Sq, top_k):
+        raise ValueError(
+            f"selected_block_ids must be {(B, Hkv, Sq, top_k)}; got {sel.shape}")
+    # Additive mask [B, Hkv, Sq, Sk]: a key is allowed iff its block is selected
+    # AND (non-causal or key <= qpos). Non-allowed keys get -inf → 0 weight, so
+    # the dense flash_attn over all keys equals exact attention over the selected
+    # blocks. (padded keys past Sk never appear — Sk is the real key length.)
+    onehot = np.zeros((B, Hkv, Sq, num_blocks), dtype=bool)
+    np.put_along_axis(onehot, np.clip(sel, 0, num_blocks - 1), True, axis=-1)
+    kb = np.arange(Sk) // block_size                       # block id per key
+    key_sel = onehot[..., kb]                              # [B,Hkv,Sq,Sk]
+    if causal:
+        key_sel = key_sel & (np.arange(Sk)[None, None, None, :]
+                             <= qpos[None, None, :, None])
+    g = Hq // Hkv
+    mask = np.where(key_sel, np.float32(0.0), np.float32(-1e30))
+    mask_hq = np.repeat(mask, g, axis=1)                   # [B,Hq,Sq,Sk]
+    out = np.asarray(_x86_flash_attn(Q, K, V, scale=scale, causal=False,
+                                     attn_bias=mask_hq), np.float32)
+    # Rows with no allowed key (only reachable when force_local_block=False and
+    # every selected block is in the future) are 0 in the reference; the dense
+    # softmax over an all-(-inf) row would instead be uniform, so zero them.
+    row_has_key = np.repeat(key_sel.any(axis=-1), g, axis=1)   # [B,Hq,Sq]
+    return np.ascontiguousarray(np.where(row_has_key[..., None], out, 0.0),
+                                np.float32)
+
+
+def _execute_x86_compiled_msa(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` MSA (msa_sparse_attention) lane: host index-select +
+    AVX-512 dense-over-selected-blocks attend (additive -inf mask)."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _X86_MSA_OPS:
+        raise ValueError(
+            f"x86_msa_compiled executor handles one of {_X86_MSA_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    if len(operand_names) < 3:
+        raise ValueError("msa_sparse_attention requires Q, K, V operands")
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[n]) for n in operand_names]
+    return _x86_msa_compute(operands, ops[0].get("kwargs") or {}, np)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Linear-attention backbone (P10 scan-family x86 partners) — the AVX-512 partner
 # to the ROCm linear_attn lane. linear_attn / power_attn / retention all share
 # the `_linear_attn_impl` recurrence, which is mathematically the
@@ -14470,6 +14569,7 @@ def _executor_table():
         "x86_mla_compiled": _execute_x86_compiled_mla,
         "x86_conv_compiled": _execute_x86_compiled_conv,
         "x86_nsa_compiled": _execute_x86_compiled_nsa,
+        "x86_msa_compiled": _execute_x86_compiled_msa,
         "x86_linear_attn_compiled": _execute_x86_compiled_linear_attn,
         "x86_normcompose_compiled": _execute_x86_compiled_normcompose,
         "x86_lamb_compiled": _execute_x86_compiled_lamb,

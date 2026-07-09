@@ -2818,23 +2818,26 @@ def _execute_rocm_compiled_matmul_family(artifact: RuntimeArtifact,
 # f16/bf16 storage, f32 softmax + accumulate. ONE hsaco per (head_dim, chip,
 # dtype) — the kernel is (B,H,Sq,Sk)-generic — cached.
 # ─────────────────────────────────────────────────────────────────────────────
-#: hsaco bytes keyed by (head_dim, chip, dtype).
-_rocm_fa_hsaco_cache: dict[tuple[int, str, str, bool, bool, bool], bytes] = {}
+#: hsaco bytes keyed by (head_dim, chip, dtype, gqa, window, softcap, bias).
+_rocm_fa_hsaco_cache: dict[tuple[int, str, str, bool, bool, bool, bool], bytes] = {}
 
 
 def _build_compiled_flash_attn_hsaco(head_dim: int, dtype: str = "f16",
                                      gqa: bool = False,
                                      sliding_window: bool = False,
-                                     logit_softcap: bool = False) -> bytes:
+                                     logit_softcap: bool = False,
+                                     attn_bias: bool = False) -> bytes:
     """Generate + serialize the compiler's WMMA FA-2 forward kernel to hsaco,
     fully in-process via tessera-opt. Cached per (head_dim, chip, dtype, gqa,
-    sliding_window, logit_softcap). gqa=True emits the grouped-query variant
-    (kernel gains heads + kv_ratio runtime args, reads K/V from the grouped
-    head); sliding_window=True emits the windowed variant (trailing W arg, a
-    causal band of width W); logit_softcap=True emits the Gemma-2 soft-cap
-    variant (trailing f32 `cap` arg, scores → cap·tanh(S/cap) before softmax)."""
+    sliding_window, logit_softcap, attn_bias). gqa=True emits the grouped-query
+    variant (kernel gains heads + kv_ratio runtime args, reads K/V from the
+    grouped head); sliding_window=True emits the windowed variant (trailing W
+    arg, a causal band of width W); logit_softcap=True emits the Gemma-2 soft-cap
+    variant (trailing f32 `cap` arg, scores → cap·tanh(S/cap) before softmax);
+    attn_bias=True emits the additive-bias variant (a trailing f32 `[bh,Sq,Sk]`
+    memref arg, `softmax(scale·Q@K^T + bias)·V`)."""
     chip = _rocm_chip()
-    key = (head_dim, chip, dtype, gqa, sliding_window, logit_softcap)
+    key = (head_dim, chip, dtype, gqa, sliding_window, logit_softcap, attn_bias)
     cached = _rocm_fa_hsaco_cache.get(key)
     if cached is not None:
         return cached
@@ -2845,11 +2848,12 @@ def _build_compiled_flash_attn_hsaco(head_dim: int, dtype: str = "f16",
     gqa_attr = ", gqa = true" if gqa else ""
     win_attr = ", sliding_window = true" if sliding_window else ""
     cap_attr = ", logit_softcap = true" if logit_softcap else ""
+    bias_attr = ", attn_bias = true" if attn_bias else ""
     directive = (
         'module {\n'
         '  "tessera_rocm.flash_attn"() {name = "fa", '
         f'head_dim = {head_dim} : i64, dtype = "{dtype}"'
-        f'{gqa_attr}{win_attr}{cap_attr}}} '
+        f'{gqa_attr}{win_attr}{cap_attr}{bias_attr}}} '
         ': () -> ()\n'
         '}\n'
     )
@@ -2909,6 +2913,11 @@ def _execute_rocm_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> A
     q = _as_numpy(values[operand_names[0]])
     k = _as_numpy(values[operand_names[1]])
     v = _as_numpy(values[operand_names[2]])
+    # Additive attention bias: Graph IR / the Apple + x86 paths normalize
+    # flash_attn(..., attn_bias=…) into a 4th operand (matches runtime.py:3095).
+    # O = softmax(scale·Q@K^T + attn_bias)·V; None → the plain kernel.
+    bias_arr = (_as_numpy(values[operand_names[3]])
+                if len(operand_names) >= 4 else None)
     if q.ndim < 2 or k.ndim < 2 or v.ndim < 2:
         raise ValueError("flash_attn Q/K/V must be at least rank 2 ([..., S, D])")
     head_dim = int(q.shape[-1])
@@ -2977,9 +2986,26 @@ def _execute_rocm_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> A
             f"rocm flash_attn logit_softcap must be non-negative; got {softcap}")
     has_softcap = softcap > 0
 
+    # Additive bias → host-broadcast to the folded-batch leading dim + (Sq,Sk),
+    # i.e. Q.lead + (Sq,Sk), flattened to [bh,Sq,Sk] f32 (the kernel indexes
+    # bias[(bh*Sq+qpos)*Sk+gk]). Mirrors the x86 ext lane's broadcast.
+    has_bias = bias_arr is not None
+    bias_c = None
+    if has_bias:
+        try:
+            bias_b = np.broadcast_to(
+                np.asarray(bias_arr, dtype=np.float32),
+                tuple(q.shape[:-2]) + (sq, sk))
+        except ValueError as exc:
+            raise ValueError(
+                f"rocm flash_attn attn_bias {np.asarray(bias_arr).shape} is not "
+                f"broadcastable to Q.lead+(Sq,Sk) = {tuple(q.shape[:-2]) + (sq, sk)}"
+            ) from exc
+        bias_c = np.ascontiguousarray(bias_b, dtype=np.float32).reshape(-1)
+
     hsaco = _build_compiled_flash_attn_hsaco(
         head_dim, dtype_tag, gqa, sliding_window=sliding,
-        logit_softcap=has_softcap)
+        logit_softcap=has_softcap, attn_bias=has_bias)
     hip = _load_hip_for_launch()
     if hip is None:
         raise _RocmCompiledUnavailable(
@@ -3008,6 +3034,15 @@ def _execute_rocm_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> A
     hip.hipMemcpy(dq, qc.ctypes.data_as(ctypes.c_void_p), 2 * nq, 1)
     hip.hipMemcpy(dk, kc.ctypes.data_as(ctypes.c_void_p), 2 * nkv, 1)
     hip.hipMemcpy(dv, vc.ctypes.data_as(ctypes.c_void_p), 2 * nkv, 1)
+    dbias = ctypes.c_void_p()
+    if has_bias:  # [bh,Sq,Sk] f32 broadcast bias — the kernel's last runtime arg
+        assert bias_c is not None  # set above whenever has_bias
+        nb = bh * sq * sk
+        if hip.hipMalloc(ctypes.byref(dbias), 4 * nb) != 0:
+            for dev in (dq, dk, dv, do):
+                hip.hipFree(dev)
+            raise RuntimeError("rocm flash_attn: hipMalloc (attn_bias) failed")
+        hip.hipMemcpy(dbias, bias_c.ctypes.data_as(ctypes.c_void_p), 4 * nb, 1)
 
     def _mr(p, size):
         return [ctypes.c_void_p(p.value), ctypes.c_void_p(p.value),
@@ -3020,20 +3055,23 @@ def _execute_rocm_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> A
         launch_args += [ctypes.c_int64(n_qh), ctypes.c_int64(kv_ratio)]
     if sliding:  # windowed kernel's trailing W arg (after the gqa args)
         launch_args += [ctypes.c_int64(window)]
-    if has_softcap:  # soft-cap kernel's trailing f32 cap arg (last)
+    if has_softcap:  # soft-cap kernel's trailing f32 cap arg
         launch_args += [ctypes.c_float(softcap)]
+    if has_bias:  # additive-bias kernel's trailing [bh,Sq,Sk] f32 memref (last)
+        launch_args += _mr(dbias, bh * sq * sk)
+    dev_bufs = (dq, dk, dv, do, dbias) if has_bias else (dq, dk, dv, do)
     arr = (ctypes.c_void_p * len(launch_args))()
     for i, val in enumerate(launch_args):
         arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
     gx, gy = (sq + 15) // 16, bh
     rc = hip.hipModuleLaunchKernel(fn, gx, gy, 1, 32, 1, 1, 0, None, arr, None)
     if rc != 0:
-        for dev in (dq, dk, dv, do):
+        for dev in dev_bufs:
             hip.hipFree(dev)
         raise RuntimeError(f"rocm flash_attn: kernel launch failed rc={rc}")
     hip.hipDeviceSynchronize()
     hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, 4 * nq, 2)
-    for dev in (dq, dk, dv, do):
+    for dev in dev_bufs:
         hip.hipFree(dev)
     return o.reshape(q.shape)
 
@@ -13834,21 +13872,30 @@ def _execute_rocm_compiled_rope(artifact: RuntimeArtifact, args: Any) -> Any:
 # the DK2 rocm_sparse_attn_compiled lane.
 # ─────────────────────────────────────────────────────────────────────────────
 def _rocm_flash_attn(q: Any, k: Any, v: Any, *, scale: Any = None,
-                     causal: bool = True) -> Any:
+                     causal: bool = True, attn_bias: Any = None) -> Any:
     """Run the COMPILER-GENERATED WMMA flash_attn forward on Q/K/V via the
     flash_attn executor (constructs a minimal sub-artifact). Returns the f32
-    attention output shaped like Q."""
+    attention output shaped like Q. An optional ``attn_bias`` (additive, shape
+    broadcastable to Q.lead+(Sq,Sk)) routes through the bias kernel variant:
+    ``O = softmax(scale·Q@K^T + attn_bias)·V``."""
     kw: dict[str, Any] = {"causal": bool(causal)}
     if scale is not None:
         kw["scale"] = float(scale)
+    arg_names = ["q", "k", "v"]
+    operands = ["q", "k", "v"]
+    call_args: tuple[Any, ...] = (q, k, v)
+    if attn_bias is not None:
+        arg_names = ["q", "k", "v", "attn_bias"]
+        operands = ["q", "k", "v", "attn_bias"]
+        call_args = (q, k, v, attn_bias)
     sub = RuntimeArtifact(metadata={
         "target": "rocm", "compiler_path": "rocm_flash_attn_compiled",
         "executable": True, "execution_kind": "native_gpu",
-        "arg_names": ["q", "k", "v"], "output_name": "o",
+        "arg_names": arg_names, "output_name": "o",
         "ops": [{"op_name": "tessera.flash_attn", "result": "o",
-                 "operands": ["q", "k", "v"], "kwargs": kw}],
+                 "operands": operands, "kwargs": kw}],
     })
-    return _execute_rocm_compiled_flash_attn(sub, (q, k, v))
+    return _execute_rocm_compiled_flash_attn(sub, call_args)
 
 
 def _rocm_project_last(x: Any, w: Any, store: Any) -> Any:

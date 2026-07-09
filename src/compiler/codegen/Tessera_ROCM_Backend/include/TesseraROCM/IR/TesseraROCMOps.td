@@ -125,12 +125,22 @@ def ROCM_FlashAttnOp : TesseraROCM_Op<"flash_attn"> {
     soft-capping: each scaled score is passed through `cap * tanh(S / cap)`
     before masking + softmax, bounding the logits to `(-cap, cap)`. `cap` is the
     trailing runtime arg (after the gqa and window args when those are set).
+
+    `attn_bias` (default false) selects an additive attention bias:
+    `O = softmax(scale * Q @ K^T + attn_bias) * V`. The bias is a trailing f32
+    memref runtime arg (LAST, after the gqa/window/softcap args) shaped
+    `[bh, Sq, Sk]` row-major — the host broadcasts the caller's `(B,Sq,Sk)` /
+    `(1,Sq,Sk)` bias to the folded batch·head leading dim so the kernel indexes
+    `bias[(bh*Sq + qpos)*Sk + gk]`. Added to the scaled score after soft-cap and
+    before masking (the additive-mask position). This is the DFlash substrate;
+    CPU analog: `tessera_x86_flash_attn_ext_f32`.
   }];
   let arguments = (ins StrAttr:$name, I64Attr:$head_dim,
                        DefaultValuedAttr<StrAttr, "\"f16\"">:$dtype,
                        DefaultValuedAttr<BoolAttr, "false">:$gqa,
                        DefaultValuedAttr<BoolAttr, "false">:$sliding_window,
-                       DefaultValuedAttr<BoolAttr, "false">:$logit_softcap);
+                       DefaultValuedAttr<BoolAttr, "false">:$logit_softcap,
+                       DefaultValuedAttr<BoolAttr, "false">:$attn_bias);
   let assemblyFormat = "attr-dict";
 }
 

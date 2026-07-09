@@ -4308,6 +4308,9 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
             [c_f32, c_f32, c_f32, i64, i64, i64, c_f32],
         "tessera_x86_avx512_selective_ssm_f32":
             [c_f32, c_f32, c_f32, c_f32, c_f32, i64, i64, i64, i64, c_f32, c_f32],
+        # backward: (x,A2d,B,C,delta,dy, Bsz,S,D,N, h_traj, dx,dA2d,dB,dC,ddelta)
+        "tessera_x86_selective_ssm_bwd_f32":
+            [c_f32] * 6 + [i64, i64, i64, i64] + [c_f32] * 6,
         # Half-I/O SSM: x/A/B/C/delta + y are u16 (f16/bf16 storage); h is f32.
         "tessera_x86_avx512_selective_ssm_f16":
             [ctypes.POINTER(ctypes.c_uint16)] * 5 + [i64, i64, i64, i64, c_f32,
@@ -6544,6 +6547,54 @@ def _x86_selective_ssm(x: Any, A: Any, B: Any, C: Any, delta: Any,
     if gate is not None:
         y = y * np.ascontiguousarray(gate, store)
     return y
+
+
+def _ssm_bwd_prepare(x, A, B, C, delta, dout, gate, state, np):
+    """Common host prep for the selective_ssm backward: contiguous f32, A→(D,N),
+    dy = dout·gate, zeroed outputs, and h_traj scratch with h_traj[0]=state.
+    Returns (x,a2d,B,C,delta,dy, bsz,s,d,n, a_was_1d, h_traj, dx,dA2d,dB,dC,dd)."""
+    x = np.ascontiguousarray(x, np.float32)
+    Bc = np.ascontiguousarray(B, np.float32)
+    Cc = np.ascontiguousarray(C, np.float32)
+    dl = np.ascontiguousarray(delta, np.float32)
+    bsz, s, d = (int(v) for v in x.shape)
+    n = int(Bc.shape[2])
+    A = np.asarray(A, np.float32)
+    a_was_1d = A.ndim == 1
+    a2d = np.ascontiguousarray(
+        np.broadcast_to(A[:, None], (d, n)) if a_was_1d else A, np.float32)
+    dy = np.ascontiguousarray(dout, np.float32)
+    if gate is not None:
+        dy = np.ascontiguousarray(dy * np.asarray(gate, np.float32), np.float32)
+    h_traj = np.zeros((s + 1, bsz, d, n), np.float32)
+    if state is not None:
+        h_traj[0] = np.ascontiguousarray(state, np.float32)
+    dx = np.zeros((bsz, s, d), np.float32)
+    dA2d = np.zeros((d, n), np.float32)
+    dBg = np.zeros((bsz, s, n), np.float32)
+    dCg = np.zeros((bsz, s, n), np.float32)
+    dd = np.zeros((bsz, s, d), np.float32)
+    return (x, a2d, Bc, Cc, dl, dy, bsz, s, d, n, a_was_1d, h_traj,
+            dx, dA2d, dBg, dCg, dd)
+
+
+def _x86_selective_ssm_bwd(x, A, B, C, delta, dout, gate, state, np):
+    """Reverse-mode adjoint of selective_ssm on the AVX-512 backward kernel.
+    Returns (dx, dA, dB, dC, ddelta) — matches autodiff.vjp.vjp_selective_ssm."""
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    (xa, a2d, Bc, Cc, dl, dy, bsz, s, d, n, a1d, h_traj,
+     dx, dA2d, dBg, dCg, dd) = _ssm_bwd_prepare(
+        x, A, B, C, delta, dout, gate, state, np)
+    cf = ctypes.POINTER(ctypes.c_float)
+    P = lambda a: a.ctypes.data_as(cf)
+    lib.tessera_x86_selective_ssm_bwd_f32(
+        P(xa), P(a2d), P(Bc), P(Cc), P(dl), P(dy),
+        ctypes.c_int64(bsz), ctypes.c_int64(s), ctypes.c_int64(d),
+        ctypes.c_int64(n), P(h_traj), P(dx), P(dA2d), P(dBg), P(dCg), P(dd))
+    dA = dA2d.sum(axis=1) if a1d else dA2d
+    return dx, dA, dBg, dCg, dd
 
 
 def _ssm_bind_operands(op: dict, values: dict) -> tuple:

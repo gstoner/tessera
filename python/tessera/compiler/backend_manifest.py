@@ -3138,7 +3138,10 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "(single pass over S, vectorized over the state dim N, exp via "
                  "the Cephes core; x86_selective_ssm_compiled lane; matches the "
                  "numpy reference). f16/bf16 storage (vcvtph2ps / vcvtpbh_ps "
-                 "load-convert, y truncated back; state+exp+accumulate f32)",
+                 "load-convert, y truncated back; state+exp+accumulate f32). "
+                 "Reverse-mode adjoint tessera_x86_selective_ssm_bwd_f32 "
+                 "(sequential reverse scan vectorized over N) matches the "
+                 "numpy VJP",
     },
     # Linalg PR-A — Cholesky + triangular solve (SPD/triangular family). Genuine
     # AVX-512 factorization/substitution kernels (x86_linalg_compiled).

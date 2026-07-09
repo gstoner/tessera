@@ -52,11 +52,12 @@ Legend: ✅ native & executing · ⚠️ executes but unproven/unrecorded · �
 
 | Feature | ROCm gfx1151 | CUDA sm_120 | x86 AVX-512 | Apple GPU (ref) |
 |---|---|---|---|---|
-| `flash_attn` + GQA/MQA/sliding/softcap | ✅ compiled (WMMA) | ⚠️ `emit/` arbiter FA lane¹ | ✅ native | ✅ native |
-| **`attn_bias`** | ❌ **absent** | ❌ **absent** | ✅ native (pre-softmax add) | ✅ native |
+| `flash_attn` core (MHA, scale+causal) | ✅ compiled (WMMA) | ⚠️ `emit/` arbiter FA lane¹ | ✅ native | ✅ native |
+| `flash_attn` variants (GQA/MQA/sliding/softcap) | ✅ compiled (WMMA) | ❌ **not in the emit/ FA lane²** | ✅ native | ✅ native |
+| **`attn_bias`** | ✅ compiled (WMMA, #328) | ❌ absent | ✅ native (pre-softmax add) | ✅ native |
 | MSA sparse core (`msa_sparse_attention`) | ✅ compiled (block-sparse WMMA + GPU top-k) | ❌ artifact_only contract | ❌ **reference-only** | ✅ fused (scalar/tiled f32/f16) |
 | MSA IR-artifact mirror (`kv_outer_sparse`) | ❌ (execution exists, no IR mirror) | ✅ the contract (no kernel body) | ❌ | n/a |
-| DFlash `attention_fn` seam | ❌ (blocked on bias) | ❌ (blocked on bias) | ❌ (flash+bias exists) | ✅ `apple_gpu_attention_fn` |
+| DFlash `attention_fn` seam | ❌ (unblocked by #328; not yet built) | ❌ (blocked on bias) | ❌ (flash+bias exists) | ✅ `apple_gpu_attention_fn` |
 | `selective_ssm` (Mamba2) | ✅ compiled (naive f32 fwd) | ❌ planned | ✅ native (f32 fwd) | ✅ (Mamba SSD) |
 
 **¹ NVIDIA flash-attention — honest status.** A real `mma.sync` tensor-core FA
@@ -73,6 +74,14 @@ bridge (that's GEMM-only), and has *no* `attn_bias`. The MASTER_AUDIT "~2.7×
 flash-attention / ~6× GEMM-epilogue" figures are prose estimates, **not** committed
 measured results. **Matmul (`mma.sync` GEMM) is the only committed-proven NVIDIA
 execution.** Recording this FA lane honestly is a Phase 0 deliverable below.
+
+**² NVIDIA FA variants (GQA/MQA/sliding/softcap) — absent.** The `emit/` FA
+candidates implement only the plain attention ABI
+(`Q,K,V,O,M,Nk,D,Dv,scale,causal` — `emit/nvidia_cuda.py:140` scalar, `:815` mma):
+there are **no GQA/MQA head-group arguments, no sliding-window bounds, and no
+logit-softcap transform**. So even the ⚠️ core-FA lane does not cover the
+variants; they are new design/kernel work on CUDA (Phase 1/§FA-variants below),
+not "already present." (ROCm and x86 carry all four variants today.)
 
 ### Key source anchors
 
@@ -142,12 +151,15 @@ worked example to mirror.
 | Target | Work | Gated on |
 |---|---|---|
 | **x86** | ✅ **done** — `tessera_x86_flash_attn_ext_f32` adds bias pre-softmax (`avx512_flash_attn_f32.cpp:120`); runtime normalizes the 4th operand (`runtime.py:3095`). Reference shape for the others. | — |
-| **ROCm** | Add `Optional<TensorType>:$attn_bias` + `AttrSizedOperandSegments` to `ROCM_FlashAttnOp`; thread `+bias` into the WMMA score stage in `GenerateWMMAFlashAttnKernel.cpp` (post-scale, pre-mask, matching the formula); read/forward `operand[3]` in `_execute_rocm_compiled_flash_attn` (today it reads only `[0:3]` and silently drops a 4th). Validate vs numpy (≈3e-7 fp32) on gfx1151. | **Buildable now** (this box) |
+| **ROCm** | ✅ **done (#328)** — `attn_bias` BoolAttr on `ROCM_FlashAttnOp`; a trailing f32 `[bh,Sq,Sk]` memref arg (LAST, so gqa/window/softcap indices stay stable) with `bias[(bh*Sq+qpos)*Sk+gk]` added to the scaled score after soft-cap and before masking; the executor detects operand[3] and host-broadcasts to `Q.lead+(Sq,Sk)`. Validated on gfx1151 (~2e-4, f16) + a GPU-free codegen gate. | — |
 | **CUDA** | Design the bias operand into the `emit/` FA kernels (`_synthesize_mma_attn_cuda` + `_synthesize_attention_cuda`) and their C ABI + region signature (currently `(region, Q, K, V)`). Add to the F4 accuracy budget. | **sm_120-gated** |
 
-**Recipe (ROCm):** the established compiled-lane pattern — ODS operand change →
-codegen score-stage add → executor forward → `test_rocm_flash_attn_bias_compiled.py`
-vs numpy. Follow the block-sparse pair as the HSACO-launch template.
+**Recipe (ROCm, as landed in #328):** ODS BoolAttr → codegen trailing-memref arg
++ score-stage add → executor operand[3] detect + host-broadcast →
+`test_rocm_flash_attn_bias_compiled.py` (gfx1151) + `test_rocm_attn_bias_codegen.py`
+(GPU-free gate). The directive op carries attributes only (Q/K/V/O are gpu.func
+args the pass builds), so bias is a flag + trailing arg — not an IR operand — and
+follows the `logit_softcap` variant precedent (no dedicated manifest row).
 
 ---
 
@@ -161,7 +173,7 @@ through an `attention_fn` seam (heads folded into batch → rank-3 `flash_attn`,
 | Target | Work | Gated on |
 |---|---|---|
 | **x86** | `x86_attention_fn` — **buildable now, no Phase 1 dependency** (x86 flash+bias already exists; only the DFlash seam is missing). Fastest win: mirror `apple_gpu_attention_fn` (`dflash.py:746`) to build `[q,k,v,attn_bias]` and call the x86 flash executor. Add a DFlash manifest row. | **Buildable now** |
-| **ROCm** | `rocm_attention_fn` — after Phase 1 ROCm bias. Same mirror, ROCm flash dispatcher. | Phase 1 (ROCm) |
+| **ROCm** | `rocm_attention_fn` — **now buildable (Phase 1 ROCm bias landed in #328)**. Mirror `apple_gpu_attention_fn`: build `[q,k,v,attn_bias]` and call `_rocm_flash_attn(..., attn_bias=…)`. | **Buildable now** |
 | **CUDA** | `nvidia_attention_fn` onto the emit/ FA lane — after Phase 1 CUDA bias. | Phase 1 (CUDA), sm_120 |
 
 **Invariant:** greedy spec-decode == greedy AR must hold on each seam (already the
@@ -206,12 +218,12 @@ tolerance.
 
 **Buildable + verifiable now on this box (gfx1151 + AVX-512):**
 
-1. **Phase 2 / x86 DFlash seam** — no dependency; fastest win.
-2. **Phase 1 / ROCm `attn_bias`** — the keystone; unblocks ROCm DFlash.
-3. **Phase 2 / ROCm DFlash seam** — immediately after (2).
-4. **Phase 3 / x86 MSA lane** — closes the last x86 gap in the family.
-5. **Phase 4 / ROCm + x86 chunked SSM** — optimization pass.
-6. **Phase 3 / ROCm MSA IR mirror** — optional IR parity, no execution gap.
+- ✅ **Phase 1 / ROCm `attn_bias`** — the keystone; **landed (#328)**, unblocking the ROCm DFlash seam.
+1. **Phase 2 / ROCm DFlash seam** — now unblocked; `rocm_attention_fn` over the bias lane.
+2. **Phase 2 / x86 DFlash seam** — no dependency; also fast (x86 flash+bias already exists).
+3. **Phase 3 / x86 MSA lane** — closes the last x86 gap in the family.
+4. **Phase 4 / ROCm + x86 chunked SSM** — optimization pass.
+5. **Phase 3 / ROCm MSA IR mirror** — optional IR parity, no execution gap.
 
 **Hardware-gated on the RTX 5070 Ti (sm_120) box:**
 

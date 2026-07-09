@@ -4308,6 +4308,13 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
             [c_f32, c_f32, c_f32, i64, i64, i64, c_f32],
         "tessera_x86_avx512_selective_ssm_f32":
             [c_f32, c_f32, c_f32, c_f32, c_f32, i64, i64, i64, i64, c_f32, c_f32],
+        # Half-I/O SSM: x/A/B/C/delta + y are u16 (f16/bf16 storage); h is f32.
+        "tessera_x86_avx512_selective_ssm_f16":
+            [ctypes.POINTER(ctypes.c_uint16)] * 5 + [i64, i64, i64, i64, c_f32,
+                                                     ctypes.POINTER(ctypes.c_uint16)],
+        "tessera_x86_avx512_selective_ssm_bf16":
+            [ctypes.POINTER(ctypes.c_uint16)] * 5 + [i64, i64, i64, i64, c_f32,
+                                                     ctypes.POINTER(ctypes.c_uint16)],
         "tessera_x86_cholesky_f32":
             [c_f32, i64, i64, c_f32],
         "tessera_x86_tri_solve_f32":
@@ -6474,23 +6481,36 @@ def _execute_x86_compiled_muon(artifact: RuntimeArtifact, args: Any) -> Any:
 # (B,D,N) state in place. compiler_path="x86_selective_ssm_compiled" /
 # "rocm_selective_ssm_compiled". f32.
 # ─────────────────────────────────────────────────────────────────────────────
+def _ssm_store_dtype(x: Any, np: Any) -> Any:
+    """The SSM I/O storage dtype from the input: f16 / bf16 stay half; everything
+    else runs f32. (The state + exp + accumulate are always f32 in-kernel.)"""
+    dt = np.asarray(x).dtype
+    bf16 = _bfloat16_dtype()
+    if dt == np.float16 or (bf16 is not None and dt == bf16):
+        return dt
+    return np.float32
+
+
 def _ssm_prepare(x: Any, A: Any, B: Any, C: Any, delta: Any, state: Any,
-                 np: Any) -> tuple:
-    """Validate shapes + broadcast A→(D,N) + init working state h→(B,D,N). Returns
-    (x, A2d, B, C, delta, h, Bsz, S, D, N) all contiguous f32."""
-    x = np.ascontiguousarray(x, np.float32)
-    Bc = np.ascontiguousarray(B, np.float32)
-    Cc = np.ascontiguousarray(C, np.float32)
-    delta = np.ascontiguousarray(delta, np.float32)
+                 np: Any, store: Any = None) -> tuple:
+    """Validate shapes + broadcast A→(D,N) + init working state h→(B,D,N).
+    Returns (x, A2d, B, C, delta, h, Bsz, S, D, N): x/A2d/B/C/delta in the
+    ``store`` dtype (default f32), the working state ``h`` ALWAYS f32."""
+    if store is None:
+        store = np.float32
+    x = np.ascontiguousarray(x, store)
+    Bc = np.ascontiguousarray(B, store)
+    Cc = np.ascontiguousarray(C, store)
+    delta = np.ascontiguousarray(delta, store)
     if x.ndim != 3:
         raise ValueError(f"selective_ssm: x must be (B,S,D); got {x.shape}")
     bsz, s, d = (int(v) for v in x.shape)
     n = int(Bc.shape[2])
-    A = np.asarray(A, np.float32)
+    A = np.asarray(A)
     if A.ndim == 1:
-        a2d = np.ascontiguousarray(np.broadcast_to(A[:, None], (d, n)), np.float32)
+        a2d = np.ascontiguousarray(np.broadcast_to(A[:, None], (d, n)), store)
     else:
-        a2d = np.ascontiguousarray(A, np.float32)
+        a2d = np.ascontiguousarray(A, store)
     if state is not None:
         h = np.ascontiguousarray(state, np.float32).copy()
     else:
@@ -6503,16 +6523,26 @@ def _x86_selective_ssm(x: Any, A: Any, B: Any, C: Any, delta: Any,
     lib = _load_x86_elementwise()
     if lib is None:
         raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
-    x, a2d, Bc, Cc, dl, h, bsz, s, d, n = _ssm_prepare(x, A, B, C, delta, state, np)
-    y = np.zeros((bsz, s, d), np.float32)
+    store = _ssm_store_dtype(x, np)
+    iptr: Any
+    if store == np.float16:
+        sym, iptr = "tessera_x86_avx512_selective_ssm_f16", ctypes.c_uint16
+    elif store == np.float32:
+        sym, iptr = "tessera_x86_avx512_selective_ssm_f32", ctypes.c_float
+    else:  # bf16
+        sym, iptr = "tessera_x86_avx512_selective_ssm_bf16", ctypes.c_uint16
+    x, a2d, Bc, Cc, dl, h, bsz, s, d, n = _ssm_prepare(
+        x, A, B, C, delta, state, np, store=store)
+    y = np.zeros((bsz, s, d), store)
+    ip = ctypes.POINTER(iptr)
     cf = ctypes.POINTER(ctypes.c_float)
-    lib.tessera_x86_avx512_selective_ssm_f32(
-        x.ctypes.data_as(cf), a2d.ctypes.data_as(cf), Bc.ctypes.data_as(cf),
-        Cc.ctypes.data_as(cf), dl.ctypes.data_as(cf),
+    getattr(lib, sym)(
+        x.ctypes.data_as(ip), a2d.ctypes.data_as(ip), Bc.ctypes.data_as(ip),
+        Cc.ctypes.data_as(ip), dl.ctypes.data_as(ip),
         ctypes.c_int64(bsz), ctypes.c_int64(s), ctypes.c_int64(d),
-        ctypes.c_int64(n), h.ctypes.data_as(cf), y.ctypes.data_as(cf))
+        ctypes.c_int64(n), h.ctypes.data_as(cf), y.ctypes.data_as(ip))
     if gate is not None:
-        y = y * np.ascontiguousarray(gate, np.float32)
+        y = y * np.ascontiguousarray(gate, store)
     return y
 
 
@@ -13325,45 +13355,52 @@ def _execute_rocm_compiled_sparse(artifact: RuntimeArtifact, args: Any) -> Any:
 # ROCm COMPILED state-space lane — Mamba2 selective scan (one thread per (b,d)).
 # compiler_path="rocm_selective_ssm_compiled".
 # ─────────────────────────────────────────────────────────────────────────────
-_rocm_ssm_hsaco_cache: dict[tuple[str], bytes] = {}
+_rocm_ssm_hsaco_cache: dict[tuple[str, str], bytes] = {}
 
 
 def _rocm_selective_ssm(x: Any, A: Any, B: Any, C: Any, delta: Any,
                         gate: Any, state: Any, np: Any) -> Any:
-    """y[B,S,D] = Mamba2 selective scan on the gfx1151 kernel. f32."""
+    """y[B,S,D] = Mamba2 selective scan on the gfx1151 kernel. x/A/B/C/delta + y
+    storage is f32/f16/bf16 (the state + exp + accumulate stay f32 in-kernel)."""
+    store = _ssm_store_dtype(x, np)
+    esz = 4 if store == np.float32 else 2                       # bytes/element
+    dtag = ("f16" if store == np.float16
+            else "f32" if store == np.float32 else "bf16")
     chip = _rocm_chip()
-    directive = ('module {\n  "tessera_rocm.selective_ssm"() {name = "ss"} '
-                 ': () -> ()\n}\n')
+    dattr = "" if dtag == "f32" else f', dtype = "{dtag}"'
+    directive = ('module {\n  "tessera_rocm.selective_ssm"() {name = "ss"'
+                 f'{dattr}}} : () -> ()\n}}\n')
     hsaco = _build_rocm_elementwise_hsaco(
         "generate-rocm-selective-ssm-kernel", directive, _rocm_ssm_hsaco_cache,
-        (chip,))
+        (chip, dtag))
     hip = _load_hip_for_launch()
     if hip is None:
         raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
     if hip.hipInit(0) != 0:
         raise _RocmCompiledUnavailable("rocm ssm: hipInit failed")
-    x, a2d, Bc, Cc, dl, h, bsz, s, d, n = _ssm_prepare(x, A, B, C, delta, state, np)
-    y = np.zeros(bsz * s * d, np.float32)
-    d_x = _rocm_dev_in(hip, x.reshape(-1), 4 * x.size)
-    d_a = _rocm_dev_in(hip, a2d.reshape(-1), 4 * a2d.size)
-    d_b = _rocm_dev_in(hip, Bc.reshape(-1), 4 * Bc.size)
-    d_c = _rocm_dev_in(hip, Cc.reshape(-1), 4 * Cc.size)
-    d_dl = _rocm_dev_in(hip, dl.reshape(-1), 4 * dl.size)
-    d_h = _rocm_dev_in(hip, h.reshape(-1), 4 * h.size)
-    d_y = _rocm_dev_in(hip, y, 4 * y.size)
+    x, a2d, Bc, Cc, dl, h, bsz, s, d, n = _ssm_prepare(
+        x, A, B, C, delta, state, np, store=store)
+    y = np.zeros(bsz * s * d, store)
+    d_x = _rocm_dev_in(hip, x.reshape(-1), esz * x.size)
+    d_a = _rocm_dev_in(hip, a2d.reshape(-1), esz * a2d.size)
+    d_b = _rocm_dev_in(hip, Bc.reshape(-1), esz * Bc.size)
+    d_c = _rocm_dev_in(hip, Cc.reshape(-1), esz * Cc.size)
+    d_dl = _rocm_dev_in(hip, dl.reshape(-1), esz * dl.size)
+    d_h = _rocm_dev_in(hip, h.reshape(-1), 4 * h.size)         # h is f32 scratch
+    d_y = _rocm_dev_in(hip, y, esz * y.size)
     try:
         _rocm_sparse_launch(
             hsaco, b"ss",
             [(d_x, x.size), (d_a, a2d.size), (d_b, Bc.size), (d_c, Cc.size),
              (d_dl, dl.size), (d_h, h.size), (d_y, y.size)],
             [bsz, s, d, n], bsz * d)
-        hip.hipMemcpy(y.ctypes.data_as(ctypes.c_void_p), d_y, 4 * y.size, 2)
+        hip.hipMemcpy(y.ctypes.data_as(ctypes.c_void_p), d_y, esz * y.size, 2)
     finally:
         for dev in (d_x, d_a, d_b, d_c, d_dl, d_h, d_y):
             hip.hipFree(dev)
     out = y.reshape(bsz, s, d)
     if gate is not None:
-        out = out * np.ascontiguousarray(gate, np.float32)
+        out = out * np.ascontiguousarray(gate, store)
     return out
 
 

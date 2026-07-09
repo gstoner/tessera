@@ -54,6 +54,30 @@ def test_selective_ssm(n):
     np.testing.assert_allclose(np.asarray(res["output"]), ref, atol=1e-3)
 
 
+@pytest.mark.parametrize("dtype_tag,atol", [("f16", 3e-2), ("bf16", 1e-1)])
+@pytest.mark.parametrize("n", [16, 10])
+def test_selective_ssm_lowp(dtype_tag, atol, n):
+    # Half-I/O storage (f16/bf16 memrefs, loads extf->f32, y truncf) with f32
+    # state + exp + accumulate: matches the f32 reference to storage rounding.
+    rt = _rocm_or_skip()
+    if dtype_tag == "bf16":
+        store = rt._bfloat16_dtype()
+        if store is None:
+            pytest.skip("no bf16 dtype (ml_dtypes)")
+    else:
+        store = np.float16
+    rng = np.random.default_rng(30 + n)
+    x, a, b, c, delta = (v.astype(store) for v in _inputs(rng, 2, 7, 4, n))
+    res = rt.launch(_art(rt, [x, a, b, c, delta], []), (x, a, b, c, delta))
+    assert res["ok"] is True, res.get("reason")
+    out = np.asarray(res["output"])
+    assert out.dtype == store, f"expected {store} output, got {out.dtype}"
+    ref = np.asarray(tessera.ops.selective_ssm(
+        x.astype(np.float32), a.astype(np.float32), b.astype(np.float32),
+        c.astype(np.float32), delta.astype(np.float32)))
+    np.testing.assert_allclose(out.astype(np.float32), ref, atol=atol)
+
+
 def test_selective_ssm_gate_state():
     rt = _rocm_or_skip()
     rng = np.random.default_rng(9)

@@ -3754,6 +3754,14 @@ _EBM_DEVICE_COMPILED: dict[str, tuple[str, str]] = {
     "ebm_sphere_langevin_step": (
         "tests/unit/test_x86_ebm_geo_langevin_compiled.py",
         "tests/unit/test_rocm_ebm_geo_langevin_compiled.py"),
+    # Exact-partition (from_energies f32 fast path): a dedicated log-sum-exp
+    # reduction kernel — AVX-512 (double-accumulated) + a gfx1151 warp-shuffle
+    # reduction (generate-rocm-ebm-partition-kernel). Matches Apple's fused f32
+    # partition lane. The EXACT f64 partition_function_exact stays host (it must
+    # represent Z that overflows f32 and carries a 1e-10 contract).
+    "ebm_partition_exact": (
+        "tests/unit/test_x86_ebm_partition_compiled.py",
+        "tests/unit/test_rocm_ebm_partition_compiled.py"),
 }
 
 
@@ -3766,11 +3774,12 @@ _EBM_DEVICE_COMPILED: dict[str, tuple[str, str]] = {
 # the open backend-kernel work in the automated Backend-Proof tally; they are
 # honestly ``reference`` on every target, exactly like x86/apple_cpu/apple_gpu.
 #
-# Deliberately NOT here (a kernel IS achievable → ``planned`` stays honest, and
-# Apple proves it with a ``fused`` slot): ebm_energy / ebm_partition_exact (Apple
-# fuses the quadratic / from-energies forms), decode_init, ebt_tiny, and the
-# `_sample` chain wrappers (Apple is ``planned`` — a fused on-device chain kernel
-# is a plausible future).
+# Deliberately NOT here (a kernel IS achievable → ``planned``/native is honest, and
+# Apple proves it with a ``fused`` slot): ebm_energy (Apple fuses the quadratic
+# form), decode_init, ebt_tiny, and the `_sample` chain wrappers (Apple is
+# ``planned`` — a fused on-device chain kernel is a plausible future).
+# ``ebm_partition_exact`` graduated OUT of "planned" — its f32 log-sum-exp reduction
+# is now a real native kernel on x86 + ROCm (see _EBM_DEVICE_COMPILED above).
 _EBM_USER_FUNCTION_OPS: frozenset[str] = frozenset({
     "ebm_partition_monte_carlo",  # importance-sampled Z over a user energy_fn
     "ebm_partition_ais",          # annealed IS over a user energy_fn + host schedule

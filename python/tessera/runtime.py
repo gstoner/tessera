@@ -6979,6 +6979,23 @@ def _x86_ebm_affine_langevin(y: Any, grad: Any, noise: Any, eta: float,
     return out.reshape(np.asarray(y).shape)
 
 
+def _x86_ebm_partition_exact(energies: Any, temperature: float, np: Any) -> float:
+    """Stable log-sum-exp partition ``Z = Σ_i exp(-E_i/T)`` on the AVX-512 kernel
+    (double-accumulated). The EBM3 exact-partition CPU lane."""
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    fn = getattr(lib, "tessera_x86_ebm_partition_exact_f32", None)
+    if fn is None:
+        raise _RocmCompiledUnavailable("tessera_x86_ebm_partition_exact_f32 missing")
+    E = np.ascontiguousarray(energies, np.float32).reshape(-1)
+    out = np.zeros(1, np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    fn(E.ctypes.data_as(cf), ctypes.c_int64(E.size),
+       ctypes.c_float(temperature), out.ctypes.data_as(cf))
+    return float(out[0])
+
+
 def _ebm_langevin_compute(operands: list, kwargs: dict, langevin_fn: Any,
                           np: Any) -> Any:
     if len(operands) < 2:
@@ -7160,6 +7177,69 @@ def _rocm_ebm_affine_langevin(y: Any, grad: Any, noise: Any, eta: float,
     for d in (d_y, d_g, d_z, d_o):
         hip.hipFree(d)
     return out.reshape(np.asarray(y).shape)
+
+
+_rocm_ebm_partition_hsaco_cache: dict[tuple[str], bytes] = {}
+
+
+def _build_compiled_ebm_partition_hsaco() -> bytes:
+    chip = _rocm_chip()
+    directive = ('module {\n  "tessera_rocm.ebm_partition"() {name = "part"} '
+                 ': () -> ()\n}\n')
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-ebm-partition-kernel", directive,
+        _rocm_ebm_partition_hsaco_cache, (chip,))
+
+
+def _rocm_ebm_partition(energies: Any, temperature: float, np: Any) -> float:
+    """Stable log-sum-exp partition ``Z = Σ_i exp(-E_i/T)`` on gfx1151 — a single
+    workgroup warp-shuffle reduction (compiler-generated). Matches the numpy
+    reference to f32 epsilon."""
+    E = np.ascontiguousarray(energies, np.float32).reshape(-1)
+    n = int(E.size)
+    if n == 0:
+        return 0.0
+    hsaco = _build_compiled_ebm_partition_hsaco()
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm ebm_partition: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm ebm_partition: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"part") != 0:
+        raise RuntimeError("rocm ebm_partition: kernel symbol 'part' not found")
+    cv = ctypes.c_void_p
+    d_e, d_o = cv(), cv()
+    if (hip.hipMalloc(ctypes.byref(d_e), max(4 * n, 4)) != 0
+            or hip.hipMalloc(ctypes.byref(d_o), 4) != 0):
+        raise RuntimeError("rocm ebm_partition: hipMalloc failed")
+    hip.hipMemcpy(d_e, E.ctypes.data_as(cv), 4 * n, 1)
+
+    def _mr(p, size):
+        return [cv(p.value), cv(p.value), ctypes.c_int64(0),
+                ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    # (E memref, n index, T f32, out memref) — ONE workgroup (grid=1), BD threads.
+    launch_args = (_mr(d_e, n) + [ctypes.c_int64(n)]
+                   + [ctypes.c_float(temperature)] + _mr(d_o, 1))
+    arr = (cv * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), cv)
+    rc = hip.hipModuleLaunchKernel(fn, 1, 1, 1, _GRID_BLOCKDIM, 1, 1,
+                                   0, None, arr, None)
+    if rc != 0:
+        for d in (d_e, d_o):
+            hip.hipFree(d)
+        raise RuntimeError(f"rocm ebm_partition: launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    out = np.zeros(1, np.float32)
+    hip.hipMemcpy(out.ctypes.data_as(cv), d_o, 4, 2)
+    for d in (d_e, d_o):
+        hip.hipFree(d)
+    return float(out[0])
 
 
 # ─────────────────────────────────────────────────────────────────────────────

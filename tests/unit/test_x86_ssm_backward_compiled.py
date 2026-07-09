@@ -44,9 +44,45 @@ def test_x86_ssm_backward_matches_vjp(n, a_1d, gate_on, state_on):
     gate = rng.standard_normal((b, s, d)).astype(np.float32) if gate_on else None
     state = rng.standard_normal((b, d, n)).astype(np.float32) if state_on else None
 
-    ref = vjp_selective_ssm(dout, x, A, B, C, delta, gate=gate, state=state)
+    # Compare against the pure-numpy adjoint (force the numpy body by using f64
+    # inputs, which the device fast path skips) at f32 tolerance.
+    ref = vjp_selective_ssm(
+        dout.astype(np.float64), x.astype(np.float64), A.astype(np.float64),
+        B.astype(np.float64), C.astype(np.float64), delta.astype(np.float64),
+        gate=None if gate is None else gate.astype(np.float64),
+        state=None if state is None else state.astype(np.float64))
     got = rt._x86_selective_ssm_bwd(x, A, B, C, delta, dout, gate, state, np)
     names = ("dx", "dA", "dB", "dC", "ddelta")
     for name, g, r in zip(names, got, ref):
         np.testing.assert_allclose(g, r, rtol=0, atol=2e-3,
                                    err_msg=f"{name} mismatch")
+
+
+def test_ssm_device_backward_reached_via_autodiff(monkeypatch):
+    # The registered VJP must route an f32 selective_ssm adjoint to the compiled
+    # kernel (not just be callable directly) — spy the device helper across a
+    # real tape().backward and assert it fired.
+    rt = _rt_or_skip()
+    import tessera as ts
+    calls = []
+    orig = rt._x86_selective_ssm_bwd
+
+    def spy(*a, **k):
+        calls.append(1)
+        return orig(*a, **k)
+
+    monkeypatch.setattr(rt, "_x86_selective_ssm_bwd", spy)
+    rng = np.random.default_rng(3)
+    b, s, d, n = 2, 5, 4, 16
+    x = rng.standard_normal((b, s, d)).astype(np.float32)
+    A = (-np.abs(rng.standard_normal((d, n)))).astype(np.float32)
+    B = rng.standard_normal((b, s, n)).astype(np.float32)
+    C = rng.standard_normal((b, s, n)).astype(np.float32)
+    delta = np.abs(rng.standard_normal((b, s, d)) * 0.1).astype(np.float32)
+    xp, Ap, Bp, Cp, dp = (ts.nn.Parameter(v) for v in (x, A, B, C, delta))
+    with ts.autodiff.tape() as t:
+        y = ts.ops.selective_ssm(xp, Ap, Bp, Cp, dp)
+        loss = ts.ops.reduce(ts.ops.mul(y, y), op="sum")
+        t.backward(loss)
+    assert sum(calls) >= 1, "f32 selective_ssm VJP did not reach the device kernel"
+    assert xp.grad is not None and np.isfinite(xp.grad.numpy()).all()

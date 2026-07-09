@@ -7306,12 +7306,15 @@ def _rocm_ebm_decode_init(base: Any, noise: Any, std: float, np: Any) -> Any:
     n = int(nz.size)
     if n == 0:
         return nz.reshape(np.asarray(noise).shape)
-    hsaco = _build_compiled_ebm_decode_init_hsaco()
+    # Confirm a usable HIP runtime BEFORE shelling out to tessera-opt — build
+    # failures aren't cached, so on a box with tessera-opt but no ROCm we must
+    # not compile on every off-silicon call before falling back to numpy.
     hip = _load_hip_for_launch()
     if hip is None:
         raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
     if hip.hipInit(0) != 0:
         raise _RocmCompiledUnavailable("rocm ebm_decode_init: hipInit failed")
+    hsaco = _build_compiled_ebm_decode_init_hsaco()
     mod = ctypes.c_void_p()
     if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
         raise _RocmCompiledUnavailable("rocm ebm_decode_init: no usable AMD GPU")

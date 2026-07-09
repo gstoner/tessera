@@ -2186,6 +2186,18 @@ def _build_compiled_gemm_hsaco(mt: int, nt: int, dtype: str = "f16",
     set, the kernel adds a per-column bias and/or applies relu/gelu/silu on the
     f32 accumulator before the store (float dtypes only)."""
     chip = _rocm_chip()
+    # The compiled GEMM emits the RDNA WMMA 16x16x16 f16/bf16 fragment layout,
+    # which the backend selects only on the gfx11 family (RDNA3/RDNA3.5 —
+    # hardware-verified on gfx1151). RDNA4 gfx12xx uses a 16x16x32 WMMA layout
+    # and CDNA uses MFMA (32x32x8); neither selects this intrinsic, so raise a
+    # stable diagnostic naming the arch gap (Decision #21) rather than letting
+    # the ROCDL backend emit a raw "Cannot select" crash downstream.
+    if not chip.startswith("gfx11"):
+        raise _RocmCompiledUnavailable(
+            f"compiled WMMA GEMM: the 16x16x16 f16/bf16 WMMA fragment layout is "
+            f"a gfx11 (RDNA3/RDNA3.5) contract, hardware-verified on gfx1151; "
+            f"target '{chip}' needs its own layout (RDNA4 gfx12xx: 16x16x32 WMMA; "
+            f"CDNA: MFMA 32x32x8) which is arch-gated on that fragment ISA + silicon")
     key = (mt, nt, chip, dtype, bias, activation)
     cached = _rocm_compiled_hsaco_cache.get(key)
     if cached is not None:

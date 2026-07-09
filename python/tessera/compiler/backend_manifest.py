@@ -948,6 +948,35 @@ _ROCM_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
             "oracle by tests/unit/test_rocm_compiled_launch_execute.py."
         ),
     },
+    # `gemm` is the BLAS-vocabulary matmul (same tessera.matmul op + the same
+    # tessera_rocm_wmma_gemm_f16 symbol matmul uses; rt._execute_rocm_compiled_gemm
+    # executes it). It is the matrix-core GEMM across BOTH AMD families — so unlike
+    # `matmul` (kept a pure RDNA-WMMA row) it ALSO carries the CDNA MFMA artifact
+    # shape as metadata. Status = hardware_verified for the RDNA WMMA execution
+    # proven on gfx1151; RDNA4 (gfx1200) / gfx12.5 (gfx1250) WMMA + CDNA MFMA are
+    # the arch targets, gated on their fragment-layout ISA + silicon (the RDNA3
+    # V_WMMA_16x16x16 intrinsic does not select on gfx12 — RDNA4 uses 16x16x32).
+    "gemm": {
+        "runtime_symbol": "tessera_rocm_wmma_gemm_f16",
+        "dtypes": ("fp16", "bf16"),
+        "feature_flags": ("wmma", "mfma"),
+        "mfma_shape": (32, 32, 8, 1),
+        "shape_envelope": (
+            "matrix-core GEMM, f32<-{f16,bf16}. RDNA WMMA 16x16x16 "
+            "hardware-verified on gfx1151 (RDNA3.5); RDNA4 gfx1200 (WMMA "
+            "16x16x32) + gfx12.5 gfx1250 (large-K WMMA) + CDNA MFMA (32x32x8) "
+            "are arch targets gated on their fragment-layout ISA + silicon"
+        ),
+        # No manifest `benchmark_json` — gemm's dedicated perf harness is
+        # benchmarks/benchmark_gemm.py (more specific than the shared matmul
+        # hot-paths baseline), which the benchmark-source router prefers.
+        "notes": (
+            "GEMM = the matrix-core matmul (alias of tessera.matmul, same WMMA "
+            "symbol). RDNA WMMA execution hardware-verified on gfx1151; carries "
+            "the CDNA MFMA artifact shape (32x32x8) for the datacenter target. "
+            "RDNA4/gfx12.5 WMMA + CDNA execution are hardware-gated."
+        ),
+    },
     "flash_attn": {
         "runtime_symbol": "tessera_rocm_wmma_flash_attn_f16",
         "dtypes": ("fp16", "bf16"),
@@ -1812,6 +1841,9 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     # reference (maxerr < 1e-2). Skip-clean when no AMD GPU / HIPRTC. This is
     # the numerical-proof half of the rocm matmul `hardware_verified` row.
     ("matmul", "rocm"): "tests/unit/test_rocm_wmma_runtime_symbol.py",
+    # gemm shares matmul's WMMA symbol (same tessera_rocm_wmma_gemm_f16) — the same
+    # numerical proof covers it.
+    ("gemm", "rocm"): "tests/unit/test_rocm_wmma_runtime_symbol.py",
     # rocm flash_attn — the shipped `tessera_rocm_wmma_flash_attn_{f16,bf16}`
     # C-ABI symbols (libtessera_rocm_flash_attn.so) are dlopened and the FA-2
     # forward (both QK^T and P@V on 16x16x16 WMMA, online softmax, causal +
@@ -4763,6 +4795,10 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
             shape_envelope=rocm_hv.get("shape_envelope"),
             hipcc_version_min="7.2.4",
             expected_mfu=_ROCM_KERNEL_MFU.get((op_name, "rocm_gfx942")),
+            # A hardware_verified matrix-core op may ALSO carry a CDNA MFMA artifact
+            # shape (gemm does; matmul stays pure-RDNA-WMMA with None) — the CDNA
+            # datacenter target alongside the proven RDNA WMMA row.
+            mfma_shape=rocm_hv.get("mfma_shape"),
             # E2 — hot-path rows carry their ratchet baseline (Apple-style
             # layer-1 linkage); None for ops with no recorded gfx1151 baseline.
             benchmark_json=rocm_hv.get("benchmark_json"),

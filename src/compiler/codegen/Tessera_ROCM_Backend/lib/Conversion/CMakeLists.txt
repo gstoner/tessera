@@ -64,6 +64,9 @@ add_mlir_library(TesseraROCMConversion
   GenerateROCMEbmLangevinKernel.cpp
   GenerateROCMEbmAffineLangevinKernel.cpp
   GenerateROCMEbmPartitionKernel.cpp
+  GenerateROCMEbmDecodeInitKernel.cpp
+  GenerateROCMEbmEnergyQuadraticKernel.cpp
+  GenerateROCMEbmEbtTinyKernel.cpp
   GenerateROCMCliffordKernel.cpp
   LowerROCMAsyncCopyToLoop.cpp
   Passes.cpp

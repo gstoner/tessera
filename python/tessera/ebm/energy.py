@@ -375,6 +375,13 @@ def decode_init(
         if mean_arr.shape != full_shape:
             mean_arr = np.broadcast_to(mean_arr, full_shape).astype(
                 _np_dtype(dtype), copy=False)
+        # Native lanes, best-first: x86 AVX-512 → ROCm gfx1151 → Apple GPU. Each
+        # computes out = base + std*noise; all fall through to numpy off-silicon.
+        for _dev in (_try_x86_decode_init_noise_apply_f32,
+                     _try_rocm_decode_init_noise_apply_f32):
+            dev_out = _dev(mean_arr, noise, float(std))
+            if dev_out is not None:
+                return dev_out.reshape(full_shape)
         gpu_out = _try_apple_gpu_decode_init_noise_apply_f32(
             mean_arr, noise, float(std))
         if gpu_out is not None:
@@ -488,11 +495,16 @@ def ebt_tiny(
             f"{(B*K, D)}; got {y_arr.shape}.")
     _set_ebt_tiny_last_route("python_fallback")
     if y_arr.dtype == np.float32 and K <= 256 and T > 0:
-        gpu_out = _try_apple_gpu_ebt_tiny_f32(
-            y_arr, grad_arr, float(eta), int(T), int(B), int(K), int(D))
-        if gpu_out is not None:
-            _set_ebt_tiny_last_route("apple_gpu")
-            return gpu_out
+        # Native lanes, best-first: x86 AVX-512 → ROCm gfx1151 → Apple GPU.
+        # Each fuses refine→energy→argmin→gather; all fall through off-silicon.
+        for _route, _dev in (("x86", _try_x86_ebt_tiny_f32),
+                             ("rocm", _try_rocm_ebt_tiny_f32),
+                             ("apple_gpu", _try_apple_gpu_ebt_tiny_f32)):
+            dev_out = _dev(
+                y_arr, grad_arr, float(eta), int(T), int(B), int(K), int(D))
+            if dev_out is not None:
+                _set_ebt_tiny_last_route(_route)
+                return dev_out
     # numpy fallback — same arithmetic structure.
     y_T = y_arr - (T * eta) * grad_arr
     energies = np.sum(y_T * y_T, axis=1).reshape(B, K)
@@ -519,14 +531,15 @@ def _set_ebt_tiny_last_route(route: str) -> None:
 
 def ebt_tiny_dispatched_on_gpu() -> bool:
     """``True`` iff the most-recent :func:`ebt_tiny` call on this
-    thread ran on the GPU.  ``False`` after a fallback or when no
-    call has happened yet."""
-    return _EBT_TINY_LAST_ROUTE.value == "apple_gpu"
+    thread ran on a GPU (Apple Metal or ROCm gfx1151).  ``False``
+    after a numpy fallback, the CPU (x86) lane, or when no call has
+    happened yet."""
+    return _EBT_TINY_LAST_ROUTE.value in ("apple_gpu", "rocm")
 
 
 def ebt_tiny_last_route() -> str:
-    """Diagnostic string: ``"apple_gpu"``, ``"python_fallback"``, or
-    ``"unset"``."""
+    """Diagnostic string: ``"x86"``, ``"rocm"``, ``"apple_gpu"``,
+    ``"python_fallback"``, or ``"unset"``."""
     return _EBT_TINY_LAST_ROUTE.value
 
 
@@ -553,6 +566,14 @@ def energy_quadratic(x: Any, y: Any) -> np.ndarray:
             f"energy_quadratic requires matching shapes; "
             f"got x={x_arr.shape}, y={y_arr.shape}."
         )
+    # Native lanes, best-first: x86 AVX-512 → ROCm gfx1151 → Apple GPU. Each
+    # computes the per-row 0.5*||x-y||^2; all fall through to numpy off-silicon.
+    # (rank-0 has no batch dim — numpy handles it directly below.)
+    if x_arr.ndim >= 1:
+        for _dev in (_try_x86_energy_quadratic_f32, _try_rocm_energy_quadratic_f32):
+            dev_out = _dev(x_arr, y_arr)
+            if dev_out is not None:
+                return dev_out
     gpu_out = _try_apple_gpu_energy_quadratic_f32(x_arr, y_arr)
     if gpu_out is not None:
         return gpu_out
@@ -938,6 +959,76 @@ def _try_apple_gpu_self_verify_hard_argmin_f32(
     return out
 
 
+def _try_x86_energy_quadratic_f32(
+    x: np.ndarray, y: np.ndarray,
+) -> Optional[np.ndarray]:
+    """Per-row ``0.5*||x-y||^2`` on the native x86 AVX-512 kernel. ``None``
+    off-silicon (no lib / non-f32) so the caller falls through."""
+    if x.dtype != np.float32 or y.dtype != np.float32:
+        return None
+    if x.shape != y.shape:
+        return None
+    try:
+        from tessera import runtime as rt
+        return rt._x86_ebm_energy_quadratic(x, y, np)
+    except Exception:
+        return None
+
+
+def _try_rocm_energy_quadratic_f32(
+    x: np.ndarray, y: np.ndarray,
+) -> Optional[np.ndarray]:
+    """Per-row ``0.5*||x-y||^2`` on the compiler-generated gfx1151 kernel
+    (one workgroup per row). ``None`` off-silicon so the caller falls through."""
+    if x.dtype != np.float32 or y.dtype != np.float32:
+        return None
+    if x.shape != y.shape:
+        return None
+    try:
+        from tessera import runtime as rt
+        return rt._rocm_ebm_energy_quadratic(x, y, np)
+    except Exception:
+        return None
+
+
+def _try_x86_ebt_tiny_f32(
+    y0: np.ndarray, grad: np.ndarray, eta: float, T: int,
+    B: int, K: int, D: int,
+) -> Optional[np.ndarray]:
+    """Fused EBT-tiny (refine→energy→argmin→gather) on the native x86 AVX-512
+    kernel, returning ``(B, D)`` best candidates. ``None`` off-silicon (no lib /
+    non-f32) so the caller falls through."""
+    if y0.dtype != np.float32 or grad.dtype != np.float32:
+        return None
+    if y0.shape != grad.shape or y0.size != B * K * D:
+        return None
+    try:
+        from tessera import runtime as rt
+        return rt._x86_ebm_ebt_tiny(
+            y0, grad, float(eta), int(T), int(B), int(K), int(D), np)
+    except Exception:
+        return None
+
+
+def _try_rocm_ebt_tiny_f32(
+    y0: np.ndarray, grad: np.ndarray, eta: float, T: int,
+    B: int, K: int, D: int,
+) -> Optional[np.ndarray]:
+    """Fused EBT-tiny on the compiler-generated gfx1151 kernel (one workgroup
+    per batch, shared-memory tree argmin), returning ``(B, D)`` best
+    candidates. ``None`` off-silicon so the caller falls through."""
+    if y0.dtype != np.float32 or grad.dtype != np.float32:
+        return None
+    if y0.shape != grad.shape or y0.size != B * K * D:
+        return None
+    try:
+        from tessera import runtime as rt
+        return rt._rocm_ebm_ebt_tiny(
+            y0, grad, float(eta), int(T), int(B), int(K), int(D), np)
+    except Exception:
+        return None
+
+
 def _try_apple_gpu_energy_quadratic_f32(
     x: np.ndarray, y: np.ndarray,
 ) -> Optional[np.ndarray]:
@@ -972,6 +1063,38 @@ def _try_apple_gpu_energy_quadratic_f32(
     if not ok:
         return None
     return out
+
+
+def _try_x86_decode_init_noise_apply_f32(
+    base: np.ndarray, noise: np.ndarray, std: float,
+) -> Optional[np.ndarray]:
+    """``out = base + std * noise`` on the native x86 AVX-512 kernel. ``None``
+    off-silicon (no lib / non-f32) so the caller falls through."""
+    if base.dtype != np.float32 or noise.dtype != np.float32:
+        return None
+    if base.shape != noise.shape:
+        return None
+    try:
+        from tessera import runtime as rt
+        return rt._x86_ebm_decode_init(base, noise, std, np)
+    except Exception:
+        return None
+
+
+def _try_rocm_decode_init_noise_apply_f32(
+    base: np.ndarray, noise: np.ndarray, std: float,
+) -> Optional[np.ndarray]:
+    """``out = base + std * noise`` on the compiler-generated gfx1151 kernel.
+    ``None`` off-silicon so the caller falls through."""
+    if base.dtype != np.float32 or noise.dtype != np.float32:
+        return None
+    if base.shape != noise.shape:
+        return None
+    try:
+        from tessera import runtime as rt
+        return rt._rocm_ebm_decode_init(base, noise, std, np)
+    except Exception:
+        return None
 
 
 def _try_apple_gpu_decode_init_noise_apply_f32(

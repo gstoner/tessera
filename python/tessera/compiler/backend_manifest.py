@@ -3763,8 +3763,26 @@ _EBM_PRIMITIVES: tuple[str, ...] = (
 # Routed through ebm_manifest_for (NOT the generic _X86_KERNELS / _ROCM_COMPILED
 # tables, which manifest_for never reaches for ebm_* names).
 _EBM_DEVICE_COMPILED: dict[str, tuple[str, str]] = {
-    "ebm_energy_quadratic": ("tests/unit/test_x86_ebm_compute_compiled.py",
-                             "tests/unit/test_rocm_ebm_compute_compiled.py"),
+    # Quadratic energy 0.5*||x-y||^2 (the dominant EBT / diffusion energy). Both
+    # the generic `ebm_energy` op (Apple opts its quadratic form into the same
+    # kernel) and the tensor-clean `ebm_energy_quadratic` share ONE dedicated
+    # fused per-row reduction: AVX-512 (double-accumulated) + a gfx1151
+    # one-workgroup-per-row warp-shuffle sum-of-squares
+    # (generate-rocm-ebm-energy-quadratic-kernel). tessera.ebm.energy_quadratic
+    # routes x86 → ROCm → Apple → numpy.
+    "ebm_energy": ("tests/unit/test_x86_ebm_energy_quadratic_compiled.py",
+                   "tests/unit/test_rocm_ebm_energy_quadratic_compiled.py"),
+    "ebm_energy_quadratic": (
+        "tests/unit/test_x86_ebm_energy_quadratic_compiled.py",
+        "tests/unit/test_rocm_ebm_energy_quadratic_compiled.py"),
+    # EBT-tiny fused inference step (refine→energy→hard-argmin→gather) over B
+    # batches of K≤256 candidates: AVX-512 (double-accumulated energy, first-min
+    # tie-break) + a gfx1151 one-workgroup-per-batch kernel with a shared-memory
+    # tree argmin (generate-rocm-ebm-ebt-tiny-kernel). Matches Apple's fused f32
+    # ebt_tiny dispatch. tessera.ebm.ebt_tiny routes x86 → ROCm → Apple → numpy.
+    "ebm_ebt_tiny": (
+        "tests/unit/test_x86_ebm_ebt_tiny_compiled.py",
+        "tests/unit/test_rocm_ebm_ebt_tiny_compiled.py"),
     "ebm_inner_step": ("tests/unit/test_x86_ebm_compute_compiled.py",
                        "tests/unit/test_rocm_ebm_compute_compiled.py"),
     "ebm_refinement": ("tests/unit/test_x86_ebm_compute_compiled.py",
@@ -3794,6 +3812,15 @@ _EBM_DEVICE_COMPILED: dict[str, tuple[str, str]] = {
     "ebm_partition_exact": (
         "tests/unit/test_x86_ebm_partition_compiled.py",
         "tests/unit/test_rocm_ebm_partition_compiled.py"),
+    # Decode-init noise-apply (DFlash / EBM speculative-decode seeding): a
+    # dedicated elementwise `out = base + std*noise` kernel — AVX-512
+    # (double-accumulated) + a gfx1151 one-thread-per-element kernel
+    # (generate-rocm-ebm-decode-init-kernel). Matches Apple's fused f32
+    # decode-init lane. Host draws the unit-variance Gaussian so the fast path
+    # shares the numpy reference's samples exactly.
+    "ebm_decode_init": (
+        "tests/unit/test_x86_ebm_decode_init_compiled.py",
+        "tests/unit/test_rocm_ebm_decode_init_compiled.py"),
 }
 
 
@@ -3807,11 +3834,13 @@ _EBM_DEVICE_COMPILED: dict[str, tuple[str, str]] = {
 # honestly ``reference`` on every target, exactly like x86/apple_cpu/apple_gpu.
 #
 # Deliberately NOT here (a kernel IS achievable → ``planned``/native is honest, and
-# Apple proves it with a ``fused`` slot): ebm_energy (Apple fuses the quadratic
-# form), decode_init, ebt_tiny, and the `_sample` chain wrappers (Apple is
+# Apple proves it with a ``fused`` slot): the `_sample` chain wrappers (Apple is
 # ``planned`` — a fused on-device chain kernel is a plausible future).
-# ``ebm_partition_exact`` graduated OUT of "planned" — its f32 log-sum-exp reduction
-# is now a real native kernel on x86 + ROCm (see _EBM_DEVICE_COMPILED above).
+# ``ebm_partition_exact``, ``ebm_decode_init``, ``ebm_energy``, and ``ebm_ebt_tiny``
+# graduated OUT of "planned" — the f32 log-sum-exp reduction, the base+std*noise
+# decode-init combine, the per-row 0.5*||x-y||^2 quadratic energy, and the fused
+# EBT-tiny refine→energy→argmin→gather pipeline are now real native kernels on
+# x86 + ROCm (see _EBM_DEVICE_COMPILED above).
 _EBM_USER_FUNCTION_OPS: frozenset[str] = frozenset({
     "ebm_partition_monte_carlo",  # importance-sampled Z over a user energy_fn
     "ebm_partition_ais",          # annealed IS over a user energy_fn + host schedule
@@ -3855,9 +3884,11 @@ def ebm_manifest_for(op_name: str) -> list[BackendKernelEntry]:
             status=_FUSED_KERNEL_STATUS,
             dtypes=("fp32",),
             feature_flags=("ebm_namespace", "avx512"),
-            notes="AVX-512 EBM device lane — diff/square/reduce (compute) or "
-                  "Philox Box-Muller (langevin) on the runtime-loaded kernels "
-                  "(x86_ebm_compute_compiled / x86_ebm_langevin_compiled)",
+            notes="AVX-512 EBM device lane — diff/square/reduce (compute), "
+                  "Philox Box-Muller (langevin), stable log-sum-exp "
+                  "(partition), base+std*noise (decode-init), or the fused "
+                  "refine→energy→argmin→gather EBT-tiny pipeline on the "
+                  "runtime-loaded kernels; see the execute-compare fixture",
             execute_compare_fixture=device[0],
         ))
     else:
@@ -3928,9 +3959,12 @@ def ebm_manifest_for(op_name: str) -> list[BackendKernelEntry]:
             dtypes=("fp32",),
             feature_flags=("ebm_namespace", "hip_runtime"),
             notes="COMPILER-GENERATED gfx1151 EBM device lane — diff/square/"
-                  "reduce (compute) or Philox Box-Muller (langevin); executes "
-                  "via runtime.launch() (rocm_ebm_compute_compiled / "
-                  "rocm_ebm_langevin_compiled)",
+                  "reduce (compute), Philox Box-Muller (langevin), warp-shuffle "
+                  "log-sum-exp (partition), base+std*noise (decode-init), or the "
+                  "fused refine→energy→argmin→gather EBT-tiny pipeline "
+                  "(one-workgroup-per-batch, shared-memory tree argmin); "
+                  "executes via runtime.launch(); see the execute-compare "
+                  "fixture",
             execute_compare_fixture=device[1],
             hipcc_version_min="7.2.4",
         ))

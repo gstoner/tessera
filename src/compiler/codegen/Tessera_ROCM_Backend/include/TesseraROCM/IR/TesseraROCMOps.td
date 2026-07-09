@@ -987,6 +987,65 @@ def ROCM_EbmPartitionKernelOp : TesseraROCM_Op<"ebm_partition"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_EbmEbtTinyKernelOp : TesseraROCM_Op<"ebm_ebt_tiny"> {
+  let summary = "EBM EBT-tiny fused pipeline — refine → energy → argmin → gather";
+  let description = [{
+    The directive `generate-rocm-ebm-ebt-tiny-kernel` expands into a fused
+    energy-based-transformer inference kernel. For B batches of K candidate
+    trajectories (y0, grad row-major [B*K, D], K ≤ 256) it fuses, per batch,
+    the closed-form refinement `y_T = y0 - (T·eta)·grad`, the squared-norm
+    energy `e[k] = Σ_d y_T[k,d]^2`, a shared-memory hard-argmin `k* =
+    argmin_k e[k]` (first-min tie-break), and the gather `out[b,:] = y_T[k*,:]`.
+    ONE workgroup per batch (grid = B), blockDim 256: thread k computes
+    candidate k's energy, a tree argmin over the 256 lanes (padded +inf) picks
+    k*, then the lanes stride over D to write the winner. Matches
+    `tessera.ebm.ebt_tiny`. CPU analog: tessera_x86_ebm_ebt_tiny_f32; Apple
+    analog: the fused ebt_tiny Metal dispatch. Args:
+    `(y0 : memref<?xf32>, grad : memref<?xf32>, eta : f32, T : i32, B : index,
+    K : index, D : index, out : memref<?xf32>)`.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "attr-dict";
+}
+
+def ROCM_EbmEnergyQuadraticKernelOp : TesseraROCM_Op<"ebm_energy_quadratic"> {
+  let summary = "EBM quadratic energy — per-row 0.5*||x-y||^2 reduction";
+  let description = [{
+    The directive `generate-rocm-ebm-energy-quadratic-kernel` expands into a
+    per-row reduction gpu kernel computing the dominant EBT / diffusion energy
+    form `out[b] = 0.5 * Σ_d (x[b,d] - y[b,d])^2` over B rows of D elements
+    (x, y row-major [B, D]). ONE workgroup per row (grid = B), blockDim 256,
+    threads stride over D and warp-shuffle sum-reduce the squared differences
+    (same reduction as the softmax / partition kernels); thread 0 writes
+    0.5·s. Matches `tessera.ebm.energy_quadratic` — the concrete energy shared
+    by `ebm_energy` / `ebm_energy_quadratic`. CPU analog:
+    tessera_x86_ebm_energy_quadratic_f32; Apple analog:
+    tessera_apple_gpu_ebm_energy_quadratic_f32. Args:
+    `(x : memref<?xf32>, y : memref<?xf32>, B : index, D : index,
+    out : memref<?xf32>)`.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "attr-dict";
+}
+
+def ROCM_EbmDecodeInitKernelOp : TesseraROCM_Op<"ebm_decode_init"> {
+  let summary = "EBM decode-init noise-apply combine (base + std·noise)";
+  let description = [{
+    The directive `generate-rocm-ebm-decode-init-kernel` expands into an
+    elementwise gpu kernel that seeds K candidate trajectories for the DFlash /
+    EBM speculative-decode lane. One thread per element `i` computes
+    `out[i] = base[i] + std·noise[i]`, where `base` (the per-element mean) and
+    `noise` (host-drawn unit-variance Gaussian) are already broadcast to the full
+    trajectory shape. Matches `tessera.ebm.decode_init(init_strategy="noise")`;
+    CPU analog: tessera_x86_ebm_decode_init_noise_apply_f32; Apple analog: the
+    ebm_decode_init bridge. Args:
+    `(base : memref<?xf32>, noise : memref<?xf32>, n : index, std f32,
+    out : memref<?xf32>)`.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_ScatterKernelOp : TesseraROCM_Op<"scatter"> {
   let summary = "Indexed-store / scatter kernel with atomic reduce (0-reduce)";
   let description = [{

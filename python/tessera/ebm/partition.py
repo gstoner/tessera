@@ -53,6 +53,11 @@ def partition_function_exact(
     integration weights in ``energy_fn`` (i.e., return
     ``E(y) - log(w(y))``).
     """
+    # EXACT partition — kept in float64 on the host: it carries a rel=1e-10
+    # contract and must represent Z values that overflow f32 (e.g. energies of
+    # -500/-502 give Z ~ 1.6e218). The f32 native reduction kernel is the
+    # `partition_exact_from_energies` fast path (bounded-range f32 energies), not
+    # this exact one — same as Apple, whose fused lane is also the f32 variant.
     log_terms = []
     for s in states:
         log_terms.append(-float(energy_fn(s)))
@@ -94,11 +99,16 @@ def partition_exact_from_energies(
     E = np.ascontiguousarray(np.asarray(energies)).reshape(-1)
     if E.size == 0:
         return 0.0
-    # Apple GPU fast path — f32 inputs only.
+    # Apple GPU → native x86 (AVX-512) → native ROCm (gfx1151 warp-shuffle
+    # reduction) fast paths — f32 inputs only; each returns None off its silicon.
     if E.dtype == np.float32:
         z = _try_apple_gpu_partition_exact_f32(E, float(temperature))
         if z is not None:
             return float(z)
+        for _dev in (_try_x86_partition_exact_f32, _try_rocm_partition_exact_f32):
+            z = _dev(E, float(temperature))
+            if z is not None:
+                return float(z)
     # Stable host fallback.
     inv_t = 1.0 / float(temperature)
     neg = -E.astype(np.float64, copy=False) * inv_t
@@ -138,6 +148,32 @@ def _try_apple_gpu_partition_exact_f32(
     if not ok:
         return None
     return float(out[0])
+
+
+def _try_x86_partition_exact_f32(
+    energies: np.ndarray, temperature: float,
+) -> Optional[float]:
+    """Native x86 AVX-512 log-sum-exp partition. ``None`` off-silicon."""
+    if energies.dtype != np.float32:
+        return None
+    try:
+        from tessera import runtime as rt
+        return rt._x86_ebm_partition_exact(energies, float(temperature), np)
+    except Exception:
+        return None
+
+
+def _try_rocm_partition_exact_f32(
+    energies: np.ndarray, temperature: float,
+) -> Optional[float]:
+    """Native gfx1151 warp-shuffle log-sum-exp reduction. ``None`` off-silicon."""
+    if energies.dtype != np.float32:
+        return None
+    try:
+        from tessera import runtime as rt
+        return rt._rocm_ebm_partition(energies, float(temperature), np)
+    except Exception:
+        return None
 
 
 # ---------------------------------------------------------------------------

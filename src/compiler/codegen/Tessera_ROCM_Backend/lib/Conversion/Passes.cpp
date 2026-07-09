@@ -93,6 +93,7 @@ void registerTesseraROCMPasses() {
   registerPass([]() { return createGenerateROCMScatterKernelPass(); });
   registerPass([]() { return createGenerateROCMEbmLangevinKernelPass(); });
   registerPass([]() { return createGenerateROCMEbmAffineLangevinKernelPass(); });
+  registerPass([]() { return createGenerateROCMEbmPartitionKernelPass(); });
   registerPass([]() { return createGenerateROCMCliffordKernelPass(); });
   registerPass([]() { return createLowerROCMAsyncCopyToLoopPass(); });
   PassPipelineRegistration<> pipeline(

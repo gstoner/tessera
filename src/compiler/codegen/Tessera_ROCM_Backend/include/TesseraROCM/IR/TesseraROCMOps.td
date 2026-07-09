@@ -971,6 +971,22 @@ def ROCM_EbmAffineLangevinKernelOp : TesseraROCM_Op<"ebm_affine_langevin"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_EbmPartitionKernelOp : TesseraROCM_Op<"ebm_partition"> {
+  let summary = "EBM exact-partition stable log-sum-exp reduction kernel";
+  let description = [{
+    The directive `generate-rocm-ebm-partition-kernel` expands into a full-array
+    reduction gpu kernel computing the stable partition value
+    `Z = Σ_i exp(-E_i/T)` over per-state energies E (n elements) at temperature T:
+    one workgroup, blockDim 256, warp-shuffle max-reduce then sum-exp-reduce
+    (same reduction as the softmax kernel). Matches
+    `tessera.ebm.partition_exact_from_energies`; CPU analog:
+    tessera_x86_ebm_partition_exact_f32. Args:
+    `(E : memref<?xf32>, n : index, T f32, out : memref<?xf32>)`.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_ScatterKernelOp : TesseraROCM_Op<"scatter"> {
   let summary = "Indexed-store / scatter kernel with atomic reduce (0-reduce)";
   let description = [{

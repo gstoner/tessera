@@ -822,6 +822,9 @@ class TargetIRVerifier:
             self._require(op, diagnostics, "ordinal")
         elif op.op_name == "tessera_rocm.elementwise":
             self._require(op, diagnostics, "arch")
+        elif op.op_name == "tessera_rocm.msa_block_sparse":
+            self._require(op, diagnostics, "arch", "kernel", "status",
+                          "block_ids_layout", "kv_traversal")
 
     def _verify_nvidia_op(self, op: TargetOp, diagnostics: list[TargetIRDiagnostic]) -> None:
         if op.op_name == "tessera_nvidia.profiler_probe":
@@ -1225,6 +1228,26 @@ def _lower_rocm_op(op: TileOp) -> list[TargetOp]:
             TargetOp("tessera_rocm.async_copy", {**base, "src_space": "global", "dst_space": "lds", "bytes": 16}),
             TargetOp("tessera_rocm.wait", {"ordinal": base["ordinal"]}),
         ]
+    if op.op_name == "tessera.attn.msa_kv_outer_sparse" or source == "tessera.msa_sparse_attention":
+        # MSA KV-outer sparse — the ROCm IR-visible mirror of the CUDA
+        # `msa_kv_outer_sparse` contract. Unlike NVIDIA's `artifact_only`
+        # cuda_kernel, ROCm has a REAL executing lane: `rocm_sparse_attn_compiled`
+        # (block-sparse WMMA + GPU top-k) realizes this contract at
+        # runtime.launch() time — so `status = compiled`. Carries the schedule's
+        # selected-block KV-outer contract for IR-level parity with CUDA.
+        return [TargetOp("tessera_rocm.msa_block_sparse", {
+            **base,
+            "arch": "gfx90a",
+            "kernel": "msa_kv_outer_sparse",
+            "status": "compiled",
+            "runtime_lane": "rocm_sparse_attn_compiled",
+            "mode": op.attrs.get("mode", "prefill"),
+            "block_ids_layout": op.attrs.get("selected_block_layout", "B,Hkv,Sq,top_k"),
+            "gqa_group_size": int(op.attrs.get("gqa_group_size", 1)),
+            "tile_q": int(op.attrs.get("tile_q", 64)),
+            "tile_kv": int(op.attrs.get("tile_kv", 128)),
+            "kv_traversal": "kv_outer",
+        })]
     if source == "tessera.flash_attn" or op.op_name.startswith("tessera.attn."):
         return [TargetOp("tessera.target.diagnostic", {
             **base,

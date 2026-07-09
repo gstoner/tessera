@@ -88,3 +88,33 @@ def test_msa_kv_outer_sparse_reaches_tile_and_nvidia_target_ir():
     assert 'block_ids_layout = "B,Hkv,Sq,top_k"' in target_text
     assert 'kv_traversal = "kv_outer"' in target_text
     assert "gqa_group_size = 16" in target_text
+
+
+def test_msa_kv_outer_sparse_reaches_rocm_target_ir():
+    # ROCm IR-visible mirror of the CUDA kv_outer_sparse contract. Same
+    # schedule/tile lowering; the ROCm target op carries the selected-block
+    # KV-outer contract. Unlike NVIDIA's artifact_only cuda_kernel, ROCm reports
+    # status=compiled (a real executing lane, rocm_sparse_attn_compiled), and the
+    # old "unsupported" tessera.attn diagnostic is gone.
+    schedule = lower_graph_to_schedule_ir(
+        _msa_graph(
+            block_size=64, top_k_blocks=8, num_attention_heads=8,
+            num_kv_heads=2, head_dim=128, mode="decode", tile_q=1, tile_kv=128,
+        ),
+        target_kind="rocm",
+    )
+    tile = lower_schedule_to_tile_ir(schedule, target_kind="rocm")
+    assert tile.verify().ok
+    assert "tessera.attn.msa_kv_outer_sparse" in tile.to_mlir()
+
+    target = lower_tile_to_target_ir(tile, target_kind="rocm")
+    assert target.verify().ok
+    text = target.to_mlir()
+    assert "tessera_rocm.msa_block_sparse" in text
+    assert 'kernel = "msa_kv_outer_sparse"' in text
+    assert 'status = "compiled"' in text
+    assert 'runtime_lane = "rocm_sparse_attn_compiled"' in text
+    assert 'block_ids_layout = "B,Hkv,Sq,top_k"' in text
+    assert 'kv_traversal = "kv_outer"' in text
+    assert "gqa_group_size = 4" in text
+    assert "not implemented for ROCm" not in text     # no unsupported diagnostic

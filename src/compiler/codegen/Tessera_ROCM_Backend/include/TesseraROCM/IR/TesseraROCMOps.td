@@ -439,10 +439,14 @@ def ROCM_SelectiveSsmKernelOp : TesseraROCM_Op<"selective_ssm"> {
     one thread per (b,d) channel (sequential over time, parallel over channels):
     A_bar=exp(delta[b,t,d]·A[d,n]); h[b,d,n]=A_bar·h+delta·B[b,t,n]·x[b,t,d];
     y[b,t,d]=Σ_n C[b,t,n]·h[b,d,n]. The N-length state slice h[b,d,:] is a global
-    scratch buffer (init to the caller's state or zeros). exp via math→ROCDL. All
-    f32. CPU analog: avx512_ssm_f32.
+    scratch buffer (init to the caller's state or zeros). exp via math→ROCDL.
+
+    `dtype` is the f32/f16/bf16 STORAGE of x/A/B/C/delta and y — the state `h`,
+    the exp, and the accumulate are always f32 (loads extf→f32, y truncf→storage;
+    half the resident IO for f16/bf16). CPU analog: avx512_ssm_{f32,f16,bf16}.
   }];
-  let arguments = (ins StrAttr:$name);
+  let arguments = (ins StrAttr:$name,
+                       DefaultValuedAttr<StrAttr, "\"f32\"">:$dtype);
   let assemblyFormat = "attr-dict";
 }
 

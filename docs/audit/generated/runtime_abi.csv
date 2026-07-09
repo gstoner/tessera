@@ -598,6 +598,8 @@ x86,tessera_x86_avx512_rmsnorm_f32,avx512_rmsnorm,f32,src/compiler/codegen/tesse
 x86,tessera_x86_avx512_rope_f32,avx512_rope,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_posenc_f32.cpp
 x86,tessera_x86_avx512_scan_f32,avx512_scan,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_scan_f32.cpp
 x86,tessera_x86_avx512_sddmm_f32,avx512_sddmm,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_sparse_f32.cpp
+x86,tessera_x86_avx512_selective_ssm_bf16,avx512_selective_ssm,bf16,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_ssm_f32.cpp
+x86,tessera_x86_avx512_selective_ssm_f16,avx512_selective_ssm,f16,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_ssm_f32.cpp
 x86,tessera_x86_avx512_selective_ssm_f32,avx512_selective_ssm,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_ssm_f32.cpp
 x86,tessera_x86_avx512_silu_mul_f32,avx512_silu_mul,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_transcendental_f32.cpp
 x86,tessera_x86_avx512_softmax_f32,avx512_softmax,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_norm_f32.cpp

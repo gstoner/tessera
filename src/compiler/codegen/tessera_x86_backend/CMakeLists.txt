@@ -26,6 +26,7 @@ if (TESSERA_ENABLE_AVX512)
   try_add_flag("-mavx512vnni" HAS_AVX512VNNI)
   try_add_flag("-mavx512bf16" HAS_AVX512BF16)
   try_add_flag("-mavx512vpopcntdq" HAS_AVX512VPOPCNTDQ)  # popcount lane
+  try_add_flag("-mf16c" HAS_F16C)  # scalar f16<->f32 (_cvtsh_ss) for the SSM tail
 endif()
 
 if (TESSERA_ENABLE_AMX)

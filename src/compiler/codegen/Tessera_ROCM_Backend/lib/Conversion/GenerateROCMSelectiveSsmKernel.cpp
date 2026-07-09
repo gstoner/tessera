@@ -30,8 +30,14 @@ namespace {
 
 static constexpr int64_t BD = 256;
 
-void emitSsmBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f) {
+void emitSsmBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy) {
   Type f32 = b.getF32Type();
+  bool half = storeTy != f32;
+  // load an element of a storage-typed memref, extended to f32 for compute.
+  auto loadF32 = [&](Value mem, ValueRange idx) -> Value {
+    Value v = b.create<memref::LoadOp>(loc, mem, idx);
+    return half ? b.create<arith::ExtFOp>(loc, f32, v).getResult() : v;
+  };
   auto slt = arith::CmpIPredicate::slt;
   b.setInsertionPointToStart(&f.getBody().front());
   Value X = f.getArgument(0), A = f.getArgument(1), B = f.getArgument(2);
@@ -70,8 +76,8 @@ void emitSsmBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f) {
                                         t);
     Value xoff = b.create<arith::AddIOp>(loc, b.create<arith::MulIOp>(loc, row, D),
                                          dd);            // (b*S+t)*D + d
-    Value dt = b.create<memref::LoadOp>(loc, DELTA, ValueRange{xoff});
-    Value xt = b.create<memref::LoadOp>(loc, X, ValueRange{xoff});
+    Value dt = loadF32(DELTA, ValueRange{xoff});
+    Value xt = loadF32(X, ValueRange{xoff});
     Value bcbase = b.create<arith::MulIOp>(loc, row, N);  // (b*S+t)*N
 
     auto nloop = b.create<scf::ForOp>(loc, c0, N, c1, ValueRange{zero});
@@ -83,9 +89,9 @@ void emitSsmBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f) {
       Value hoff = b.create<arith::AddIOp>(loc, hbase, n);
       Value aoff = b.create<arith::AddIOp>(loc, abase, n);
       Value bcoff = b.create<arith::AddIOp>(loc, bcbase, n);
-      Value av = b.create<memref::LoadOp>(loc, A, ValueRange{aoff});
-      Value bv = b.create<memref::LoadOp>(loc, B, ValueRange{bcoff});
-      Value cv = b.create<memref::LoadOp>(loc, C, ValueRange{bcoff});
+      Value av = loadF32(A, ValueRange{aoff});
+      Value bv = loadF32(B, ValueRange{bcoff});
+      Value cv = loadF32(C, ValueRange{bcoff});
       Value hprev = b.create<memref::LoadOp>(loc, H, ValueRange{hoff});
       Value ab = b.create<math::ExpOp>(loc, b.create<arith::MulFOp>(loc, dt, av));
       Value bbar = b.create<arith::MulFOp>(loc, dt, bv);
@@ -97,7 +103,10 @@ void emitSsmBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f) {
                                            b.create<arith::MulFOp>(loc, cv, hv));
       b.create<scf::YieldOp>(loc, ValueRange{nacc});
     }
-    b.create<memref::StoreOp>(loc, nloop.getResult(0), Y, ValueRange{xoff});
+    Value yv = nloop.getResult(0);
+    if (half)
+      yv = b.create<arith::TruncFOp>(loc, storeTy, yv);
+    b.create<memref::StoreOp>(loc, yv, Y, ValueRange{xoff});
   }
   b.setInsertionPointToEnd(&f.getBody().front());
   b.create<gpu::ReturnOp>(loc);
@@ -138,16 +147,32 @@ struct GenerateROCMSelectiveSsmKernelPass
       std::string kname = nameAttr.getValue().str();
       Type f32 = b.getF32Type();
       Type idxTy = b.getIndexType();
+      // Storage dtype for x/A/B/C/delta + y; h + compute stay f32.
+      Type storeTy = f32;
+      if (auto a = op->getAttrOfType<StringAttr>("dtype")) {
+        StringRef dt = a.getValue();
+        if (dt == "f16" || dt == "float16")
+          storeTy = b.getF16Type();
+        else if (dt == "bf16" || dt == "bfloat16")
+          storeTy = b.getBF16Type();
+        else if (dt != "f32" && dt != "float32") {
+          op->emitError("generate-rocm-selective-ssm-kernel: dtype must be "
+                        "f32/f16/bf16 (got '") << dt << "')";
+          return signalPassFailure();
+        }
+      }
       auto memF32 = MemRefType::get({ShapedType::kDynamic}, f32);
+      auto memSt = MemRefType::get({ShapedType::kDynamic}, storeTy);
+      // (x, A, B, C, delta : store), (h : f32 scratch), (y : store), 4 index.
       auto fnTy = b.getFunctionType(
-          {memF32, memF32, memF32, memF32, memF32, memF32, memF32,
+          {memSt, memSt, memSt, memSt, memSt, memF32, memSt,
            idxTy, idxTy, idxTy, idxTy}, {});
       auto gpuMod = b.create<gpu::GPUModuleOp>(loc, kname + "_mod");
       b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
       gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(), b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
-      emitSsmBody(body, loc, gpuFunc);
+      emitSsmBody(body, loc, gpuFunc, storeTy);
       op->erase();
     }
   }

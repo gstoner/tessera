@@ -1399,12 +1399,13 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
     # State-space (PR) — Mamba2 selective scan, one thread per (b,d) channel on
     # gfx1151 (rocm_selective_ssm_compiled).
     "selective_ssm": {
-        "dtypes": ("fp32",),
+        "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("state_space",),
         "notes": "Mamba2 selective_ssm — direct selective-scan kernel "
                  "(generate-rocm-selective-ssm-kernel, one thread per (b,d) "
                  "channel, exp via math->rocdl) on gfx1151. Executes via "
-                 "runtime.launch() (rocm_selective_ssm_compiled).",
+                 "runtime.launch() (rocm_selective_ssm_compiled). f16/bf16 "
+                 "storage (loads extf->f32, y truncf; state+exp+accumulate f32).",
     },
     # Linalg PR-A — Cholesky + triangular solve on gfx1151 (one thread per matrix
     # / per matrix-RHS-column) (rocm_linalg_compiled).
@@ -3132,11 +3133,12 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
     # vectorized over the state dim N (x86_selective_ssm_compiled).
     "selective_ssm": {
         "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
+        "dtypes": ("fp32", "fp16", "bf16"),
         "notes": "Mamba2 selective_ssm — AVX-512 fused selective-scan kernel "
                  "(single pass over S, vectorized over the state dim N, exp via "
-                 "the Cephes core; x86_selective_ssm_compiled lane; f32, matches "
-                 "the numpy reference)",
+                 "the Cephes core; x86_selective_ssm_compiled lane; matches the "
+                 "numpy reference). f16/bf16 storage (vcvtph2ps / vcvtpbh_ps "
+                 "load-convert, y truncated back; state+exp+accumulate f32)",
     },
     # Linalg PR-A — Cholesky + triangular solve (SPD/triangular family). Genuine
     # AVX-512 factorization/substitution kernels (x86_linalg_compiled).

@@ -7408,12 +7408,15 @@ def _rocm_ebm_energy_quadratic(x: Any, y: Any, np: Any) -> Any:
     n = int(xf.size)
     if B == 0:
         return np.zeros(0, np.float32)
-    hsaco = _build_compiled_ebm_energy_quadratic_hsaco()
+    # Confirm a usable HIP runtime BEFORE shelling out to tessera-opt — build
+    # failures aren't cached, so on a box with tessera-opt but no ROCm we must
+    # not compile on every off-silicon call before falling back to numpy.
     hip = _load_hip_for_launch()
     if hip is None:
         raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
     if hip.hipInit(0) != 0:
         raise _RocmCompiledUnavailable("rocm ebm_energy_quadratic: hipInit failed")
+    hsaco = _build_compiled_ebm_energy_quadratic_hsaco()
     mod = ctypes.c_void_p()
     if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
         raise _RocmCompiledUnavailable("rocm ebm_energy_quadratic: no usable AMD GPU")

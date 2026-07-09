@@ -3791,17 +3791,42 @@ _EBM_DEVICE_COMPILED: dict[str, tuple[str, str]] = {
                         "tests/unit/test_rocm_ebm_compute_compiled.py"),
     "ebm_langevin_step": ("tests/unit/test_x86_ebm_langevin_compiled.py",
                           "tests/unit/test_rocm_ebm_langevin_compiled.py"),
+    # On-device-Philox Langevin step — SAME affine math as ebm_langevin_step but
+    # the noise is drawn IN-KERNEL from (key, counter) via Philox-4x32-10 +
+    # Box-Muller (no host noise buffer). The x86 `tessera_x86_ebm_langevin_philox_f32`
+    # and ROCm `generate-rocm-ebm-langevin-kernel` already implement this exact
+    # math (verified byte-tight vs the numpy Philox reference); tessera.ebm.
+    # langevin_step_philox routes x86 → ROCm → Apple → numpy.
+    "ebm_langevin_step_philox": (
+        "tests/unit/test_x86_ebm_langevin_philox_compiled.py",
+        "tests/unit/test_rocm_ebm_langevin_philox_compiled.py"),
     # Manifold Langevin STEP — reuses the native affine-Langevin kernel (host-drawn,
     # grade-projected noise as an input). x86 = AVX-512 affine kernel, ROCm =
-    # generate-rocm-ebm-affine-langevin-kernel. The `_sample` chain wrappers stay
-    # reference (host loop of per-step device calls — no on-device chain kernel).
+    # generate-rocm-ebm-affine-langevin-kernel. Both the `_step` ops and their
+    # legacy no-`_step` registry aliases (ebm_bivector_langevin / ebm_sphere_langevin)
+    # resolve to the same native core. The `_sample` chain wrappers compose that
+    # native per-step kernel in a host Markov loop (burn-in/thin/RNG on host) — like
+    # the spectral dct/stft composites over the device FFT executor — so they are
+    # native (compiled) too, proven by an on-device chain fixture in the geo tests.
     "ebm_bivector_langevin_step": (
+        "tests/unit/test_x86_ebm_geo_langevin_compiled.py",
+        "tests/unit/test_rocm_ebm_geo_langevin_compiled.py"),
+    "ebm_bivector_langevin": (
+        "tests/unit/test_x86_ebm_geo_langevin_compiled.py",
+        "tests/unit/test_rocm_ebm_geo_langevin_compiled.py"),
+    "ebm_bivector_langevin_sample": (
         "tests/unit/test_x86_ebm_geo_langevin_compiled.py",
         "tests/unit/test_rocm_ebm_geo_langevin_compiled.py"),
     # Sphere step reuses the SAME affine kernel: host tangent-projection + affine
     # core + host normalize (retract). No dedicated kernel — the affine core is
     # native, the projection/retract are host (like bivector's grade projection).
     "ebm_sphere_langevin_step": (
+        "tests/unit/test_x86_ebm_geo_langevin_compiled.py",
+        "tests/unit/test_rocm_ebm_geo_langevin_compiled.py"),
+    "ebm_sphere_langevin": (
+        "tests/unit/test_x86_ebm_geo_langevin_compiled.py",
+        "tests/unit/test_rocm_ebm_geo_langevin_compiled.py"),
+    "ebm_sphere_langevin_sample": (
         "tests/unit/test_x86_ebm_geo_langevin_compiled.py",
         "tests/unit/test_rocm_ebm_geo_langevin_compiled.py"),
     # Exact-partition (from_energies f32 fast path): a dedicated log-sum-exp
@@ -3833,14 +3858,17 @@ _EBM_DEVICE_COMPILED: dict[str, tuple[str, str]] = {
 # the open backend-kernel work in the automated Backend-Proof tally; they are
 # honestly ``reference`` on every target, exactly like x86/apple_cpu/apple_gpu.
 #
-# Deliberately NOT here (a kernel IS achievable → ``planned``/native is honest, and
-# Apple proves it with a ``fused`` slot): the `_sample` chain wrappers (Apple is
-# ``planned`` — a fused on-device chain kernel is a plausible future).
-# ``ebm_partition_exact``, ``ebm_decode_init``, ``ebm_energy``, and ``ebm_ebt_tiny``
-# graduated OUT of "planned" — the f32 log-sum-exp reduction, the base+std*noise
-# decode-init combine, the per-row 0.5*||x-y||^2 quadratic energy, and the fused
-# EBT-tiny refine→energy→argmin→gather pipeline are now real native kernels on
-# x86 + ROCm (see _EBM_DEVICE_COMPILED above).
+# The ONLY EBM ops honestly `reference` on every target (this frozenset) are the
+# two user-energy_fn samplers above — everything else in the family now has a real
+# x86+ROCm lane. Graduated OUT of "planned" and into _EBM_DEVICE_COMPILED: the
+# f32 log-sum-exp reduction (`ebm_partition_exact`), base+std*noise decode-init
+# (`ebm_decode_init`), per-row 0.5*||x-y||^2 quadratic energy (`ebm_energy`),
+# fused EBT-tiny (`ebm_ebt_tiny`), the on-device-Philox Langevin step
+# (`ebm_langevin_step_philox`), the manifold Langevin steps + their no-`_step`
+# aliases (`ebm_{bivector,sphere}_langevin{,_step}`), and — following the spectral
+# composite precedent (host loop over a native device executor) — the manifold
+# `_sample` chains (`ebm_{bivector,sphere}_langevin_sample`), each proven by an
+# on-device chain fixture (see _EBM_DEVICE_COMPILED above).
 _EBM_USER_FUNCTION_OPS: frozenset[str] = frozenset({
     "ebm_partition_monte_carlo",  # importance-sampled Z over a user energy_fn
     "ebm_partition_ais",          # annealed IS over a user energy_fn + host schedule

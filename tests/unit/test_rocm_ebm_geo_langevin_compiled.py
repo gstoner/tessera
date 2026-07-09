@@ -13,9 +13,16 @@ import shutil
 import numpy as np
 import pytest
 
+import importlib
+
 from tessera.ga import Cl, Multivector
 from tessera.rng import RNGKey
-from tessera.ebm.geo_sampling import bivector_langevin_step, sphere_langevin_step
+from tessera.ebm.geo_sampling import (
+    bivector_langevin_sample,
+    bivector_langevin_step,
+    sphere_langevin_sample,
+    sphere_langevin_step,
+)
 
 
 def _rocm_or_skip():
@@ -74,3 +81,54 @@ def test_rocm_sphere_step_f32_native_stays_on_sphere():
         eta=0.02, temperature=1.0, rng_key=RNGKey.from_seed(0), grad_fn=grad_fn)
     assert out.dtype == np.float32
     assert abs(float(np.linalg.norm(out)) - 1.0) < 1e-4
+
+
+# ── the `_sample` chains compose the native per-step kernel in a host Markov ───
+# loop. On this box the step's x86 lane wins first, so force it off to route the
+# chain through the ROCm affine kernel; then force ROCm off too for the pure-numpy
+# reference chain and require step-for-step agreement.
+
+def test_rocm_bivector_sample_chain_matches_numpy(monkeypatch):
+    _rocm_or_skip()
+    energy = importlib.import_module("tessera.ebm.energy")
+    monkeypatch.setattr(energy, "_try_x86_ebm_affine_langevin_step_f32",
+                        lambda *a, **k: None)
+    a = Cl(3, 0)
+    coeffs = np.zeros(a.dim, dtype=np.float32)
+    coeffs[a.blade("e12").mask] = 0.7
+    coeffs[a.blade("e13").mask] = -1.3
+    coeffs[a.blade("e23").mask] = 0.4
+    init = Multivector(coeffs, a, grades={2})
+    kw = dict(init=init, energy_fn=_quadratic, eta=0.02, temperature=1.0,
+              n_samples=6, burn_in=2, grade=2)
+    key = RNGKey.from_seed(1)
+    native, _, _ = bivector_langevin_sample(key, **kw)      # ROCm native chain
+    monkeypatch.setattr(energy, "_try_rocm_ebm_affine_langevin_step_f32",
+                        lambda *a, **k: None)
+    ref, _, _ = bivector_langevin_sample(key, **kw)         # pure-numpy chain
+    np.testing.assert_allclose(native, ref, rtol=1e-4, atol=1e-4)
+    nong = [b.mask for b in a.blades() if b.grade != 2]
+    assert float(np.abs(native[:, nong]).max()) < 1e-6
+
+
+def test_rocm_sphere_sample_chain_matches_numpy(monkeypatch):
+    _rocm_or_skip()
+    energy = importlib.import_module("tessera.ebm.energy")
+    monkeypatch.setattr(energy, "_try_x86_ebm_affine_langevin_step_f32",
+                        lambda *a, **k: None)
+    rng = np.random.default_rng(2)
+    x0 = rng.standard_normal(16).astype(np.float32)
+
+    def grad_fn(v):
+        return np.asarray(v, np.float32)
+
+    kw = dict(init=x0, energy_fn=lambda v: 0.5 * float((np.asarray(v) ** 2).sum()),
+              eta=0.02, temperature=1.0, n_samples=6, burn_in=2, grad_fn=grad_fn)
+    key = RNGKey.from_seed(1)
+    native, _, _ = sphere_langevin_sample(key, **kw)        # ROCm native chain
+    monkeypatch.setattr(energy, "_try_rocm_ebm_affine_langevin_step_f32",
+                        lambda *a, **k: None)
+    ref, _, _ = sphere_langevin_sample(key, **kw)           # pure-numpy chain
+    np.testing.assert_allclose(native, ref, rtol=1e-4, atol=1e-4)
+    norms = np.linalg.norm(native, axis=1)
+    np.testing.assert_allclose(norms, 1.0, atol=1e-4)

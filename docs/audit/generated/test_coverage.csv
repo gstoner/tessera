@@ -300,7 +300,7 @@ mqa_attention,6,0,2,6,0,,directly_tested,6 direct test references
 mrope_2d,12,0,1,12,0,fp16,directly_tested,12 direct test references
 msa_index_scores,12,4,1,16,0,,directly_tested,16 direct test references
 msa_select_blocks,8,6,1,14,0,,directly_tested,14 direct test references
-msa_sparse_attention,46,11,1,57,0,,directly_tested,57 direct test references
+msa_sparse_attention,47,11,1,58,0,,directly_tested,58 direct test references
 mse_loss,16,0,5,16,0,f32,directly_tested,16 direct test references
 mul,88,5,7,93,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,93 direct test references
 multi_head_attention,9,0,1,9,0,,directly_tested,9 direct test references

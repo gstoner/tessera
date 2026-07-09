@@ -59,15 +59,34 @@ def test_x86_chunked_gate_state():
     np.testing.assert_allclose(got, ref, rtol=0, atol=1e-4)
 
 
-@pytest.mark.parametrize("s", [40, 64])
-def test_rocm_chunked_matches_sequential(s):
+def test_rocm_f32_scalar_a_stays_finite_and_sequential():
+    # ROCm has no safe f32 batched GEMM (WMMA is f16/bf16) — so f32 scalar-A must
+    # NOT take a chunked f16 bmm (which would overflow large-magnitude inputs to
+    # inf/NaN). It stays on the exact sequential scan and matches the reference,
+    # even when B/C/x are scaled beyond the fp16 range.
     _rocm_or_skip()
-    rng = np.random.default_rng(100 + s)
-    x, A, B, C, delta = _inputs(rng, 2, s, 4, 8)
-    ref = np.asarray(ts.ops.selective_ssm(x, A, B, C, delta))
+    fp16_max = 65504.0
+    rng = np.random.default_rng(101)
+    b, s, d, n = 2, 40, 4, 64
+    x = rng.standard_normal((b, s, d)).astype(np.float32)
+    A = (-np.abs(rng.standard_normal(d))).astype(np.float32)          # scalar-A
+    B = rng.standard_normal((b, s, n)).astype(np.float32)
+    C = rng.standard_normal((b, s, n)).astype(np.float32)
+    delta = np.abs(rng.standard_normal((b, s, d)) * 0.001).astype(np.float32)
+    # Deterministically push operands PAST the fp16 max (65504) — a chunked f16
+    # WMMA bmm would cast these to inf. (The earlier *100 inputs peaked at ~400
+    # and never exercised the overflow the #336 fix guards against.)
+    x[0, 0, 0] = 2.0 * fp16_max
+    B[0, 0, 0] = 3.0 * fp16_max
+    C[0, 0, 0] = 1.5 * fp16_max
+    assert x.max() > fp16_max and B.max() > fp16_max and C.max() > fp16_max
+
     got = np.asarray(rt._rocm_selective_ssm(x, A, B, C, delta, None, None, np))
-    # WMMA f16 bmm — matches the f32 sequential reference to ~1e-4.
-    np.testing.assert_allclose(got, ref, rtol=0, atol=3e-3)
+    # A chunked f16 path would return inf/NaN here; the sequential f32 scan stays
+    # finite and matches the reference to f32 relative precision.
+    assert np.isfinite(got).all(), "f32 scalar-A must stay finite (no f16 bmm)"
+    ref = np.asarray(ts.ops.selective_ssm(x, A, B, C, delta))
+    np.testing.assert_allclose(got, ref, rtol=1e-3, atol=1e-4)
 
 
 def test_chunked_only_for_scalar_a(monkeypatch):

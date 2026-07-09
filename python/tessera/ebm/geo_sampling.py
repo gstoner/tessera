@@ -356,12 +356,18 @@ def sphere_langevin_sample(
     ``(n_samples, d)``; every sample lies on the unit sphere (to
     numerical precision).
     """
-    init_arr = np.asarray(init, dtype=np.float64)
-    # Normalize the starting point so the user can pass any non-zero vector.
+    init_raw = np.asarray(init)
+    # Normalize in float64 for precision, but restore a float32 start when the
+    # caller gave one so the per-step native (x86/ROCm) affine-Langevin fast path
+    # can fire — sphere_langevin_step's device branch is gated on x.dtype==float32,
+    # so a float64 chain would silently run the numpy reference every step.
+    init_arr = init_raw.astype(np.float64)
     init_norm = float(np.linalg.norm(init_arr))
     if init_norm < 1e-12:
         raise ValueError("sphere_langevin_sample: init must be a non-zero vector.")
     init_arr = init_arr / init_norm
+    if init_raw.dtype == np.float32:
+        init_arr = init_arr.astype(np.float32)
 
     def step_fn(x: np.ndarray, k: RNGKey):
         new_x, k_next = sphere_langevin_step(

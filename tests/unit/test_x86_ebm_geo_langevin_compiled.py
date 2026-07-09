@@ -97,13 +97,33 @@ def test_x86_sphere_step_f32_native_stays_on_sphere():
 
 
 # ── the `_sample` chains compose the native per-step kernel in a host Markov ───
-# loop (like the spectral dct/stft composites over the device FFT executor). A
-# native chain must reproduce the pure-numpy chain step-for-step (same host RNG
-# draws + host projection; only the affine combine differs, and that's the kernel
-# proven above). Forcing both device lanes off yields the numpy reference.
+# loop (like the spectral dct/stft composites over the device FFT executor). Each
+# test SPIES on the x86 affine helper to prove the native lane fired on every step
+# (a float64 chain would silently fall to numpy — the bug this guards), then
+# forces both device lanes off for the pure-numpy reference chain. `thin=1` so the
+# chain runs exactly `burn_in + n_samples` steps.
 
-def test_x86_bivector_sample_chain_matches_numpy(monkeypatch):
+def _spy_affine(monkeypatch, energy, attr):
+    """Wrap a `_try_*_ebm_affine_langevin_step_f32` helper, counting the steps
+    where it genuinely returned a device result. Returns the hit-count list."""
+    orig = getattr(energy, attr)
+    hits: list[int] = []
+
+    def spy(*a, **k):
+        r = orig(*a, **k)
+        if r is not None:
+            hits.append(1)
+        return r
+
+    monkeypatch.setattr(energy, attr, spy)
+    return hits
+
+
+def test_x86_bivector_sample_chain_native_matches_numpy(monkeypatch):
     _x86_lib_or_skip()
+    energy = importlib.import_module("tessera.ebm.energy")
+    hits = _spy_affine(monkeypatch, energy,
+                       "_try_x86_ebm_affine_langevin_step_f32")
     a = Cl(3, 0)
     coeffs = np.zeros(a.dim, dtype=np.float32)
     coeffs[a.blade("e12").mask] = 0.7
@@ -114,7 +134,7 @@ def test_x86_bivector_sample_chain_matches_numpy(monkeypatch):
               n_samples=6, burn_in=2, grade=2)
     key = RNGKey.from_seed(1)
     native, _, _ = bivector_langevin_sample(key, **kw)      # x86 native chain
-    energy = importlib.import_module("tessera.ebm.energy")
+    assert sum(hits) == 8, "native x86 affine lane must fire every chain step"
     monkeypatch.setattr(energy, "_try_x86_ebm_affine_langevin_step_f32",
                         lambda *a, **k: None)
     monkeypatch.setattr(energy, "_try_rocm_ebm_affine_langevin_step_f32",
@@ -125,10 +145,13 @@ def test_x86_bivector_sample_chain_matches_numpy(monkeypatch):
     assert float(np.abs(native[:, nong]).max()) < 1e-6     # in-grade through chain
 
 
-def test_x86_sphere_sample_chain_matches_numpy(monkeypatch):
+def test_x86_sphere_sample_chain_native_matches_numpy(monkeypatch):
     _x86_lib_or_skip()
+    energy = importlib.import_module("tessera.ebm.energy")
+    hits = _spy_affine(monkeypatch, energy,
+                       "_try_x86_ebm_affine_langevin_step_f32")
     rng = np.random.default_rng(2)
-    x0 = rng.standard_normal(16).astype(np.float32)
+    x0 = rng.standard_normal(16).astype(np.float32)          # f32 init → native
 
     def grad_fn(v):
         return np.asarray(v, np.float32)
@@ -137,7 +160,8 @@ def test_x86_sphere_sample_chain_matches_numpy(monkeypatch):
               eta=0.02, temperature=1.0, n_samples=6, burn_in=2, grad_fn=grad_fn)
     key = RNGKey.from_seed(1)
     native, _, _ = sphere_langevin_sample(key, **kw)        # x86 native chain
-    energy = importlib.import_module("tessera.ebm.energy")
+    assert native.dtype == np.float32
+    assert sum(hits) == 8, "native x86 affine lane must fire every chain step"
     monkeypatch.setattr(energy, "_try_x86_ebm_affine_langevin_step_f32",
                         lambda *a, **k: None)
     monkeypatch.setattr(energy, "_try_rocm_ebm_affine_langevin_step_f32",

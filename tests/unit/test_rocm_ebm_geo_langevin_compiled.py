@@ -85,14 +85,33 @@ def test_rocm_sphere_step_f32_native_stays_on_sphere():
 
 # ── the `_sample` chains compose the native per-step kernel in a host Markov ───
 # loop. On this box the step's x86 lane wins first, so force it off to route the
-# chain through the ROCm affine kernel; then force ROCm off too for the pure-numpy
-# reference chain and require step-for-step agreement.
+# chain through the ROCm affine kernel and SPY on that kernel to prove it fired on
+# every step (a float64 chain would silently fall to numpy — the bug this guards);
+# then force ROCm off too for the pure-numpy reference chain. `thin=1` so the
+# chain runs exactly `burn_in + n_samples` steps.
 
-def test_rocm_bivector_sample_chain_matches_numpy(monkeypatch):
-    _rocm_or_skip()
-    energy = importlib.import_module("tessera.ebm.energy")
+def _rocm_only_spy(monkeypatch, energy):
+    """Force the x86 lane off (so ROCm wins) and count the steps where the ROCm
+    affine helper genuinely returned a device result. Returns the hit-count list."""
     monkeypatch.setattr(energy, "_try_x86_ebm_affine_langevin_step_f32",
                         lambda *a, **k: None)
+    orig = energy._try_rocm_ebm_affine_langevin_step_f32
+    hits: list[int] = []
+
+    def spy(*a, **k):
+        r = orig(*a, **k)
+        if r is not None:
+            hits.append(1)
+        return r
+
+    monkeypatch.setattr(energy, "_try_rocm_ebm_affine_langevin_step_f32", spy)
+    return hits
+
+
+def test_rocm_bivector_sample_chain_native_matches_numpy(monkeypatch):
+    _rocm_or_skip()
+    energy = importlib.import_module("tessera.ebm.energy")
+    hits = _rocm_only_spy(monkeypatch, energy)
     a = Cl(3, 0)
     coeffs = np.zeros(a.dim, dtype=np.float32)
     coeffs[a.blade("e12").mask] = 0.7
@@ -103,6 +122,7 @@ def test_rocm_bivector_sample_chain_matches_numpy(monkeypatch):
               n_samples=6, burn_in=2, grade=2)
     key = RNGKey.from_seed(1)
     native, _, _ = bivector_langevin_sample(key, **kw)      # ROCm native chain
+    assert sum(hits) == 8, "native ROCm affine lane must fire every chain step"
     monkeypatch.setattr(energy, "_try_rocm_ebm_affine_langevin_step_f32",
                         lambda *a, **k: None)
     ref, _, _ = bivector_langevin_sample(key, **kw)         # pure-numpy chain
@@ -111,13 +131,12 @@ def test_rocm_bivector_sample_chain_matches_numpy(monkeypatch):
     assert float(np.abs(native[:, nong]).max()) < 1e-6
 
 
-def test_rocm_sphere_sample_chain_matches_numpy(monkeypatch):
+def test_rocm_sphere_sample_chain_native_matches_numpy(monkeypatch):
     _rocm_or_skip()
     energy = importlib.import_module("tessera.ebm.energy")
-    monkeypatch.setattr(energy, "_try_x86_ebm_affine_langevin_step_f32",
-                        lambda *a, **k: None)
+    hits = _rocm_only_spy(monkeypatch, energy)
     rng = np.random.default_rng(2)
-    x0 = rng.standard_normal(16).astype(np.float32)
+    x0 = rng.standard_normal(16).astype(np.float32)          # f32 init → native
 
     def grad_fn(v):
         return np.asarray(v, np.float32)
@@ -126,6 +145,8 @@ def test_rocm_sphere_sample_chain_matches_numpy(monkeypatch):
               eta=0.02, temperature=1.0, n_samples=6, burn_in=2, grad_fn=grad_fn)
     key = RNGKey.from_seed(1)
     native, _, _ = sphere_langevin_sample(key, **kw)        # ROCm native chain
+    assert native.dtype == np.float32
+    assert sum(hits) == 8, "native ROCm affine lane must fire every chain step"
     monkeypatch.setattr(energy, "_try_rocm_ebm_affine_langevin_step_f32",
                         lambda *a, **k: None)
     ref, _, _ = sphere_langevin_sample(key, **kw)           # pure-numpy chain

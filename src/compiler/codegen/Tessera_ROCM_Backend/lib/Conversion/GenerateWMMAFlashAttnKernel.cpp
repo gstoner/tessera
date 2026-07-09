@@ -46,7 +46,8 @@ namespace {
 
 void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
                        Type storeTy, bool viaTile = false, bool gqa = false,
-                       bool window = false, bool softcap = false) {
+                       bool window = false, bool softcap = false,
+                       bool bias = false) {
   MLIRContext *ctx = b.getContext();
   int64_t DC = D / 16;
   Type f32 = b.getF32Type();
@@ -160,6 +161,15 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   if (softcap)
     cap = f.getArgument(8 + (gqa ? 2 : 0) + (window ? 1 : 0));
 
+  // Additive attention bias: O = softmax(scale*Q@K^T + attn_bias)*V. The bias
+  // memref is the LAST runtime arg (after gqa/window/softcap), f32, host-
+  // broadcast to [bh, Sq, Sk] so the kernel indexes bias[(bh*Sq + qpos)*Sk + gk]
+  // and adds it to the scaled score after soft-cap and before masking.
+  Value biasBuf;
+  if (bias)
+    biasBuf = f.getArgument(8 + (gqa ? 2 : 0) + (window ? 1 : 0) +
+                            (softcap ? 1 : 0));
+
   // nKV = (Sk+15)/16 ; lastKt = min(causal ? (q0+15)/16 : nKV-1, nKV-1)
   Value nKV = b.create<arith::DivUIOp>(loc, add(Sk, c15), c16);
   Value nKVm1 = b.create<arith::SubIOp>(loc, nKV, c1);
@@ -249,6 +259,18 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
       }
       Value gkOOB = b.create<arith::CmpIOp>(loc, sge, gk, Sk);
       Value qpos = add(q0, qi);
+      // Additive bias: bias[(bh*Sq + qpos)*Sk + gk] on the scaled score (after
+      // soft-cap, before masking). Guarded on the query bound so masked lanes
+      // never read past the [bh,Sq,Sk] buffer; the value is discarded by the
+      // -inf select below anyway.
+      if (bias) {
+        Value qInb = b.create<arith::CmpIOp>(loc, slt, qpos, Sq);
+        Value qSafe = b.create<arith::SelectOp>(loc, qInb, qpos, c0);
+        Value kSafe = b.create<arith::SelectOp>(loc, gkOOB, c0, gk);
+        Value bidx = add(mul(add(mul(bh, Sq), qSafe), Sk), kSafe);
+        Value bval = b.create<memref::LoadOp>(loc, biasBuf, ValueRange{bidx});
+        v0 = b.create<arith::AddFOp>(loc, v0, bval);
+      }
       // Causal (future-key) mask — active when causal or windowed.
       Value cmask = b.create<arith::AndIOp>(
           loc, useCausal, b.create<arith::CmpIOp>(loc, slt, qpos, gk));
@@ -452,6 +474,11 @@ struct GenerateWMMAFlashAttnKernelPass
       bool softcap = false;
       if (auto a = op->getAttrOfType<BoolAttr>("logit_softcap"))
         softcap = a.getValue();
+      // Additive attention bias: a trailing f32 `[bh,Sq,Sk]` memref runtime arg
+      // (LAST). O = softmax(scale*Q@K^T + attn_bias)*V.
+      bool bias = false;
+      if (auto a = op->getAttrOfType<BoolAttr>("attn_bias"))
+        bias = a.getValue();
 
       auto gpuMod = b.create<gpu::GPUModuleOp>(loc, kname + "_mod");
       b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
@@ -471,13 +498,15 @@ struct GenerateWMMAFlashAttnKernelPass
         argTys.push_back(idxTy);  // W (sliding-window width)
       if (softcap)
         argTys.push_back(f32);    // cap (Gemma-2 logit soft-cap)
+      if (bias)
+        argTys.push_back(of);     // attn_bias [bh,Sq,Sk] f32 (LAST)
       auto fnTy = b.getFunctionType(argTys, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
       gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
                        b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
       emitFlashAttnBody(body, loc, gpuFunc, D, storeTy, viaTile, gqa, window,
-                        softcap);
+                        softcap, bias);
       op->erase();
     }
   }

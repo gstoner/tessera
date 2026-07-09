@@ -7255,6 +7255,104 @@ def _rocm_ebm_partition(energies: Any, temperature: float, np: Any) -> float:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# EBM decode-init noise-apply lane — seeds K candidate trajectories for the
+# DFlash / EBM speculative-decode path: out[i] = base[i] + std*noise[i], with the
+# per-element base (mean) and host-drawn unit-variance Gaussian already broadcast
+# to the full trajectory shape. Pure elementwise (no reduction, no device RNG —
+# the host draws the noise so the fast path shares the numpy reference's samples).
+# ─────────────────────────────────────────────────────────────────────────────
+def _x86_ebm_decode_init(base: Any, noise: Any, std: float, np: Any) -> Any:
+    """``out = base + std*noise`` on the AVX-512 kernel — the decode-init
+    noise-apply combine. Matches the numpy reference (mean_arr + std*noise) of
+    ``tessera.ebm.decode_init(init_strategy="noise")`` to f32 epsilon."""
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    fn = getattr(lib, "tessera_x86_ebm_decode_init_noise_apply_f32", None)
+    if fn is None:
+        raise _RocmCompiledUnavailable(
+            "tessera_x86_ebm_decode_init_noise_apply_f32 missing")
+    bc = np.ascontiguousarray(base, np.float32).reshape(-1)
+    nz = np.ascontiguousarray(noise, np.float32).reshape(-1)
+    if bc.size != nz.size:
+        raise ValueError("decode_init: base and noise must share length")
+    out = np.zeros(bc.size, np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    fn(bc.ctypes.data_as(cf), nz.ctypes.data_as(cf), ctypes.c_int64(bc.size),
+       ctypes.c_float(std), out.ctypes.data_as(cf))
+    return out.reshape(np.asarray(noise).shape)
+
+
+_rocm_ebm_decode_init_hsaco_cache: dict[tuple[str], bytes] = {}
+
+
+def _build_compiled_ebm_decode_init_hsaco() -> bytes:
+    chip = _rocm_chip()
+    directive = ('module {\n  "tessera_rocm.ebm_decode_init"() {name = "dinit"} '
+                 ': () -> ()\n}\n')
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-ebm-decode-init-kernel", directive,
+        _rocm_ebm_decode_init_hsaco_cache, (chip,))
+
+
+def _rocm_ebm_decode_init(base: Any, noise: Any, std: float, np: Any) -> Any:
+    """``out = base + std*noise`` on gfx1151 — the decode-init noise-apply combine
+    (one thread per element, compiler-generated). Matches the numpy reference
+    exactly (host-drawn noise, not device Philox)."""
+    bc = np.ascontiguousarray(base, np.float32).reshape(-1)
+    nz = np.ascontiguousarray(noise, np.float32).reshape(-1)
+    if bc.size != nz.size:
+        raise ValueError("decode_init: base and noise must share length")
+    n = int(nz.size)
+    if n == 0:
+        return nz.reshape(np.asarray(noise).shape)
+    hsaco = _build_compiled_ebm_decode_init_hsaco()
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm ebm_decode_init: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm ebm_decode_init: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"dinit") != 0:
+        raise RuntimeError("rocm ebm_decode_init: kernel symbol 'dinit' not found")
+    cv = ctypes.c_void_p
+    d_b, d_z, d_o = cv(), cv(), cv()
+    if (hip.hipMalloc(ctypes.byref(d_b), max(4 * n, 4)) != 0
+            or hip.hipMalloc(ctypes.byref(d_z), max(4 * n, 4)) != 0
+            or hip.hipMalloc(ctypes.byref(d_o), max(4 * n, 4)) != 0):
+        raise RuntimeError("rocm ebm_decode_init: hipMalloc failed")
+    hip.hipMemcpy(d_b, bc.ctypes.data_as(cv), 4 * n, 1)
+    hip.hipMemcpy(d_z, nz.ctypes.data_as(cv), 4 * n, 1)
+
+    def _mr(p, size):
+        return [cv(p.value), cv(p.value), ctypes.c_int64(0),
+                ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    # (base memref, noise memref, n index, std f32, out memref)
+    launch_args = (_mr(d_b, n) + _mr(d_z, n) + [ctypes.c_int64(n)]
+                   + [ctypes.c_float(std)] + _mr(d_o, n))
+    arr = (cv * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), cv)
+    gx = (n + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+    rc = hip.hipModuleLaunchKernel(fn, max(gx, 1), 1, 1, _GRID_BLOCKDIM, 1, 1,
+                                   0, None, arr, None)
+    if rc != 0:
+        for d in (d_b, d_z, d_o):
+            hip.hipFree(d)
+        raise RuntimeError(f"rocm ebm_decode_init: launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    out = np.zeros(n, np.float32)
+    hip.hipMemcpy(out.ctypes.data_as(cv), d_o, 4 * n, 2)
+    for d in (d_b, d_z, d_o):
+        hip.hipFree(d)
+    return out.reshape(np.asarray(noise).shape)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # x86 low-precision float quantization lane — quantize/dequantize fp8 / fp6 /
 # fp4. Per-tensor symmetric: scale = amax/max_normal (floored), grid-snap on the
 # AVX-512 fpquant kernel, rescale. dequantize is the fp32 passthrough (the

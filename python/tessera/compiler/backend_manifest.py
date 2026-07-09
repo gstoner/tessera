@@ -3794,6 +3794,15 @@ _EBM_DEVICE_COMPILED: dict[str, tuple[str, str]] = {
     "ebm_partition_exact": (
         "tests/unit/test_x86_ebm_partition_compiled.py",
         "tests/unit/test_rocm_ebm_partition_compiled.py"),
+    # Decode-init noise-apply (DFlash / EBM speculative-decode seeding): a
+    # dedicated elementwise `out = base + std*noise` kernel — AVX-512
+    # (double-accumulated) + a gfx1151 one-thread-per-element kernel
+    # (generate-rocm-ebm-decode-init-kernel). Matches Apple's fused f32
+    # decode-init lane. Host draws the unit-variance Gaussian so the fast path
+    # shares the numpy reference's samples exactly.
+    "ebm_decode_init": (
+        "tests/unit/test_x86_ebm_decode_init_compiled.py",
+        "tests/unit/test_rocm_ebm_decode_init_compiled.py"),
 }
 
 
@@ -3808,10 +3817,11 @@ _EBM_DEVICE_COMPILED: dict[str, tuple[str, str]] = {
 #
 # Deliberately NOT here (a kernel IS achievable → ``planned``/native is honest, and
 # Apple proves it with a ``fused`` slot): ebm_energy (Apple fuses the quadratic
-# form), decode_init, ebt_tiny, and the `_sample` chain wrappers (Apple is
-# ``planned`` — a fused on-device chain kernel is a plausible future).
-# ``ebm_partition_exact`` graduated OUT of "planned" — its f32 log-sum-exp reduction
-# is now a real native kernel on x86 + ROCm (see _EBM_DEVICE_COMPILED above).
+# form), ebt_tiny, and the `_sample` chain wrappers (Apple is ``planned`` — a
+# fused on-device chain kernel is a plausible future).
+# ``ebm_partition_exact`` and ``ebm_decode_init`` graduated OUT of "planned" —
+# the f32 log-sum-exp reduction and the base+std*noise decode-init combine are
+# now real native kernels on x86 + ROCm (see _EBM_DEVICE_COMPILED above).
 _EBM_USER_FUNCTION_OPS: frozenset[str] = frozenset({
     "ebm_partition_monte_carlo",  # importance-sampled Z over a user energy_fn
     "ebm_partition_ais",          # annealed IS over a user energy_fn + host schedule
@@ -3855,9 +3865,10 @@ def ebm_manifest_for(op_name: str) -> list[BackendKernelEntry]:
             status=_FUSED_KERNEL_STATUS,
             dtypes=("fp32",),
             feature_flags=("ebm_namespace", "avx512"),
-            notes="AVX-512 EBM device lane — diff/square/reduce (compute) or "
-                  "Philox Box-Muller (langevin) on the runtime-loaded kernels "
-                  "(x86_ebm_compute_compiled / x86_ebm_langevin_compiled)",
+            notes="AVX-512 EBM device lane — diff/square/reduce (compute), "
+                  "Philox Box-Muller (langevin), stable log-sum-exp "
+                  "(partition), or base+std*noise (decode-init) on the "
+                  "runtime-loaded kernels; see the execute-compare fixture",
             execute_compare_fixture=device[0],
         ))
     else:
@@ -3928,9 +3939,10 @@ def ebm_manifest_for(op_name: str) -> list[BackendKernelEntry]:
             dtypes=("fp32",),
             feature_flags=("ebm_namespace", "hip_runtime"),
             notes="COMPILER-GENERATED gfx1151 EBM device lane — diff/square/"
-                  "reduce (compute) or Philox Box-Muller (langevin); executes "
-                  "via runtime.launch() (rocm_ebm_compute_compiled / "
-                  "rocm_ebm_langevin_compiled)",
+                  "reduce (compute), Philox Box-Muller (langevin), warp-shuffle "
+                  "log-sum-exp (partition), or base+std*noise (decode-init); "
+                  "executes via runtime.launch(); see the execute-compare "
+                  "fixture",
             execute_compare_fixture=device[1],
             hipcc_version_min="7.2.4",
         ))

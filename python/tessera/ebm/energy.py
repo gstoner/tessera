@@ -375,6 +375,13 @@ def decode_init(
         if mean_arr.shape != full_shape:
             mean_arr = np.broadcast_to(mean_arr, full_shape).astype(
                 _np_dtype(dtype), copy=False)
+        # Native lanes, best-first: x86 AVX-512 → ROCm gfx1151 → Apple GPU. Each
+        # computes out = base + std*noise; all fall through to numpy off-silicon.
+        for _dev in (_try_x86_decode_init_noise_apply_f32,
+                     _try_rocm_decode_init_noise_apply_f32):
+            dev_out = _dev(mean_arr, noise, float(std))
+            if dev_out is not None:
+                return dev_out.reshape(full_shape)
         gpu_out = _try_apple_gpu_decode_init_noise_apply_f32(
             mean_arr, noise, float(std))
         if gpu_out is not None:
@@ -972,6 +979,38 @@ def _try_apple_gpu_energy_quadratic_f32(
     if not ok:
         return None
     return out
+
+
+def _try_x86_decode_init_noise_apply_f32(
+    base: np.ndarray, noise: np.ndarray, std: float,
+) -> Optional[np.ndarray]:
+    """``out = base + std * noise`` on the native x86 AVX-512 kernel. ``None``
+    off-silicon (no lib / non-f32) so the caller falls through."""
+    if base.dtype != np.float32 or noise.dtype != np.float32:
+        return None
+    if base.shape != noise.shape:
+        return None
+    try:
+        from tessera import runtime as rt
+        return rt._x86_ebm_decode_init(base, noise, std, np)
+    except Exception:
+        return None
+
+
+def _try_rocm_decode_init_noise_apply_f32(
+    base: np.ndarray, noise: np.ndarray, std: float,
+) -> Optional[np.ndarray]:
+    """``out = base + std * noise`` on the compiler-generated gfx1151 kernel.
+    ``None`` off-silicon so the caller falls through."""
+    if base.dtype != np.float32 or noise.dtype != np.float32:
+        return None
+    if base.shape != noise.shape:
+        return None
+    try:
+        from tessera import runtime as rt
+        return rt._rocm_ebm_decode_init(base, noise, std, np)
+    except Exception:
+        return None
 
 
 def _try_apple_gpu_decode_init_noise_apply_f32(

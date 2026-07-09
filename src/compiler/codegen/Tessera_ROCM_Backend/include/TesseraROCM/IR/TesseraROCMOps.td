@@ -987,6 +987,24 @@ def ROCM_EbmPartitionKernelOp : TesseraROCM_Op<"ebm_partition"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_EbmDecodeInitKernelOp : TesseraROCM_Op<"ebm_decode_init"> {
+  let summary = "EBM decode-init noise-apply combine (base + std·noise)";
+  let description = [{
+    The directive `generate-rocm-ebm-decode-init-kernel` expands into an
+    elementwise gpu kernel that seeds K candidate trajectories for the DFlash /
+    EBM speculative-decode lane. One thread per element `i` computes
+    `out[i] = base[i] + std·noise[i]`, where `base` (the per-element mean) and
+    `noise` (host-drawn unit-variance Gaussian) are already broadcast to the full
+    trajectory shape. Matches `tessera.ebm.decode_init(init_strategy="noise")`;
+    CPU analog: tessera_x86_ebm_decode_init_noise_apply_f32; Apple analog: the
+    ebm_decode_init bridge. Args:
+    `(base : memref<?xf32>, noise : memref<?xf32>, n : index, std f32,
+    out : memref<?xf32>)`.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_ScatterKernelOp : TesseraROCM_Op<"scatter"> {
   let summary = "Indexed-store / scatter kernel with atomic reduce (0-reduce)";
   let description = [{

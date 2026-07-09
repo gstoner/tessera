@@ -302,7 +302,7 @@ msa_index_scores,12,4,1,16,0,,directly_tested,16 direct test references
 msa_select_blocks,8,6,1,14,0,,directly_tested,14 direct test references
 msa_sparse_attention,46,11,1,57,0,,directly_tested,57 direct test references
 mse_loss,16,0,5,16,0,f32,directly_tested,16 direct test references
-mul,87,5,7,92,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,92 direct test references
+mul,88,5,7,93,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,93 direct test references
 multi_head_attention,9,0,1,9,0,,directly_tested,9 direct test references
 muon,13,0,0,13,0,,directly_tested,13 direct test references
 named_sharding,0,0,0,0,1,,structural_only,category default for 'sharding'
@@ -348,7 +348,7 @@ quantize_nvfp4,18,0,3,18,0,f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int
 quantized_matmul,5,0,0,5,0,f16,directly_tested,5 direct test references
 rearrange,6,0,0,6,0,fp16,directly_tested,6 direct test references
 reciprocal,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
-reduce,87,2,7,89,0,f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,89 direct test references
+reduce,88,2,7,90,0,f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,90 direct test references
 reduce_scatter,0,4,0,4,0,,directly_tested,4 direct test references
 relu,106,28,9,134,0,bf16 f16 f32 f64 fp32 fp8_e4m3 int8,directly_tested,134 direct test references
 remat,0,0,0,0,1,,structural_only,category default for 'transform'
@@ -396,7 +396,7 @@ score_matching_loss,3,0,0,3,0,,directly_tested,3 direct test references
 sddmm,4,0,0,4,0,,directly_tested,4 direct test references
 segment_reduce,4,0,0,4,0,fp32,directly_tested,4 direct test references
 select,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-selective_ssm,62,10,2,72,0,bf16 f16 fp16 fp32,directly_tested,72 direct test references
+selective_ssm,63,10,2,73,0,bf16 f16 fp16 fp32,directly_tested,73 direct test references
 seq2seq_loss,7,0,0,7,0,,directly_tested,7 direct test references
 sgd,10,0,0,10,0,,directly_tested,10 direct test references
 shard_map,0,0,0,0,1,,structural_only,category default for 'sharding'

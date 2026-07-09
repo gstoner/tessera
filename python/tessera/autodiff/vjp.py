@@ -1760,6 +1760,36 @@ def vjp_irfft(dout, x, *, axis=-1, axes=None, n=None, **_):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def _selective_ssm_device_bwd(dout, x, A, B, C, delta, gate, state):
+    """Route the selective_ssm adjoint to a compiled device backward kernel when
+    every array is f32 and a lane is available, else return None so the caller
+    runs the numpy body. Keeps f64 (numerical-jacobian) callers on the exact
+    numpy accumulation. Returns (dx, dA, dB, dC, ddelta) or None."""
+    arrs = [x, A, B, C, delta, dout]
+    if gate is not None:
+        arrs.append(gate)
+    if state is not None:
+        arrs.append(state)
+    if any(np.asarray(v).dtype != np.float32 for v in arrs):
+        return None
+    try:
+        from tessera import runtime as rt
+    except Exception:
+        return None
+    # x86 CPU backward first (the eager-tape context); the ROCm lane joins here
+    # when its backward kernel lands.
+    for fn in (getattr(rt, "_x86_selective_ssm_bwd", None),):
+        if fn is None:
+            continue
+        try:
+            return fn(x, A, B, C, delta, dout, gate, state, np)
+        except getattr(rt, "_RocmCompiledUnavailable", Exception):
+            continue
+        except Exception:
+            return None
+    return None
+
+
 @_vjp("selective_ssm")
 def vjp_selective_ssm(
     dout, x, A, B, C, delta, *, gate=None, state=None, chunk_size=128, **_
@@ -1780,6 +1810,14 @@ def vjp_selective_ssm(
     keyword-only — they have no cotangent slot in v1; users wanting their
     gradients should pass them as positional inputs in a future revision.
     """
+    # Compiled device fast path — the AVX-512 / (future) ROCm backward kernel,
+    # which matches this numpy adjoint. Gated to f32 (the kernel is f32; f64
+    # callers — e.g. the numerical-jacobian check — must keep the fp64 numpy
+    # accumulation). Any failure / off-silicon falls through to the numpy body.
+    dev = _selective_ssm_device_bwd(dout, x, A, B, C, delta, gate, state)
+    if dev is not None:
+        return dev
+
     Bsz, S, D = x.shape
     N = B.shape[2]
 

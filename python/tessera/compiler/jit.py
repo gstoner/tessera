@@ -1025,6 +1025,22 @@ class JitFn:
             and _rocm_compiled_lane_available()
         )
 
+    def _uses_rocm_sparse_attn_default(self) -> bool:
+        """True iff this is a rocm single ``msa_sparse_attention`` AND the
+        compiler-generated block-sparse lane can run on THIS host (tessera-opt +
+        a usable AMD GPU). Host-gated exactly like the matmul lane above, so
+        off-device it is False and the artifact stays ``artifact_only``. Makes
+        ``@jit(target="rocm")`` MSA execute through ``rocm_sparse_attn_compiled``
+        (block-sparse WMMA + GPU top-k), matching the Target-IR ``status`` the
+        ROCm ``msa_block_sparse`` op reports."""
+        return (
+            self.cpu_plan is not None
+            and str(self.cpu_plan.target_kind).startswith("rocm")
+            and len(self.cpu_plan.ops) == 1
+            and self.cpu_plan.ops[0].op_name == "tessera.msa_sparse_attention"
+            and _rocm_compiled_lane_available()
+        )
+
     def _uses_nvidia_mma_default(self) -> bool:
         """sm_120 bring-up — True iff this is an ``nvidia_sm120`` single
         matmul/gemm AND the shipped mma.sync lane can run on THIS host
@@ -1043,6 +1059,8 @@ class JitFn:
     @property
     def execution_kind(self) -> str:
         if self._uses_rocm_compiled_default():
+            return "native_gpu"
+        if self._uses_rocm_sparse_attn_default():
             return "native_gpu"
         if self._uses_nvidia_mma_default():
             return "native_gpu"
@@ -1315,6 +1333,33 @@ class JitFn:
                 "ops": ops_payload,
                 "cpu_tile": list(self.cpu_plan.tile),
                 "rocm_fallback_lane": "rocm_wmma",
+            })
+        elif self._uses_rocm_sparse_attn_default():
+            # @jit(target="rocm") msa_sparse_attention → the compiler-generated
+            # block-sparse WMMA + GPU-top-k lane (rocm_sparse_attn_compiled),
+            # reached through runtime.launch(). Off-device this branch is skipped
+            # and the artifact stays artifact_only — no behavior change.
+            assert self.cpu_plan is not None  # narrowed by the guard above
+            ops_payload = [
+                {
+                    "op_name": op.op_name,
+                    "result": op.result,
+                    "operands": [o[1:] if o.startswith("%") else o
+                                 for o in op.operands],
+                    "kwargs": dict(op.kwargs),
+                }
+                for op in self.cpu_plan.ops
+            ]
+            metadata.update({
+                "executable": True,
+                "compiler_path": "rocm_sparse_attn_compiled",
+                "execution_kind": "native_gpu",
+                "runtime_status": "ready",
+                "execution_mode": "hip_runtime",
+                "arg_names": list(self.arg_names),
+                "output_name": self.cpu_plan.output_name,
+                "ops": ops_payload,
+                "cpu_tile": list(self.cpu_plan.tile),
             })
         elif self._uses_nvidia_mma_default():
             # sm_120 bring-up — @jit(target="nvidia_sm120") matmul dispatches to

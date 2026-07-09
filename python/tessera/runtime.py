@@ -7143,12 +7143,15 @@ def _rocm_ebm_affine_langevin(y: Any, grad: Any, noise: Any, eta: float,
     gc = np.ascontiguousarray(grad, np.float32).reshape(-1)
     nz = np.ascontiguousarray(noise, np.float32).reshape(-1)
     n = int(yc.size)
-    hsaco = _build_compiled_ebm_affine_langevin_hsaco()
+    # Confirm a usable HIP runtime BEFORE shelling out to tessera-opt — build
+    # failures aren't cached, so on a box with tessera-opt but no ROCm we must
+    # not compile on every off-silicon call before falling back to numpy.
     hip = _load_hip_for_launch()
     if hip is None:
         raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
     if hip.hipInit(0) != 0:
         raise _RocmCompiledUnavailable("rocm ebm_affine_langevin: hipInit failed")
+    hsaco = _build_compiled_ebm_affine_langevin_hsaco()
     mod = ctypes.c_void_p()
     if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
         raise _RocmCompiledUnavailable("rocm ebm_affine_langevin: no usable AMD GPU")
@@ -7211,12 +7214,15 @@ def _rocm_ebm_partition(energies: Any, temperature: float, np: Any) -> float:
     n = int(E.size)
     if n == 0:
         return 0.0
-    hsaco = _build_compiled_ebm_partition_hsaco()
+    # Confirm a usable HIP runtime BEFORE shelling out to tessera-opt — build
+    # failures aren't cached, so on a box with tessera-opt but no ROCm we must
+    # not compile on every off-silicon call before falling back to numpy.
     hip = _load_hip_for_launch()
     if hip is None:
         raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
     if hip.hipInit(0) != 0:
         raise _RocmCompiledUnavailable("rocm ebm_partition: hipInit failed")
+    hsaco = _build_compiled_ebm_partition_hsaco()
     mod = ctypes.c_void_p()
     if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
         raise _RocmCompiledUnavailable("rocm ebm_partition: no usable AMD GPU")

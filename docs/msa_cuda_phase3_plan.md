@@ -1,5 +1,12 @@
 # MSA Phase 3 — CUDA/NVIDIA KV-Outer Sparse Attention Plan
 
+> **Widened 2026-07-09:** this NVIDIA-only plan is now the CUDA column of the
+> consolidated tri-backend plan
+> [`attention_family_backend_plan.md`](attention_family_backend_plan.md), which
+> covers the whole DFlash / MSA / Mamba2 family across ROCm, CUDA, and x86. Start
+> there for the cross-backend status matrix and sequencing; this doc remains the
+> detailed CUDA KV-outer contract.
+
 This is the compiler-payoff step for MiniMax Sparse Attention after the Phase
 0-2 API/Graph IR contract and selected-block layout verifier. The Python
 Graph→Schedule→Tile→Target artifact path now emits the KV-outer sparse

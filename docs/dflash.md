@@ -110,7 +110,16 @@ verification corrects every divergence.
 
 ---
 
-## 5. External gates (not yet closed)
+## 5. Backend plan (ROCm / CUDA / x86)
+
+DFlash rides `flash_attn` + `attn_bias`, so its non-Apple backend seams are
+sequenced with the rest of the attention family in
+[`attention_family_backend_plan.md`](attention_family_backend_plan.md). Key point:
+DFlash *always* passes an `attn_bias`, so a `rocm_attention_fn` / `nvidia_attention_fn`
+is **blocked until each flash lane accepts the bias operand** (Phase 1 there) —
+x86 already has flash+bias, so an `x86_attention_fn` is the fastest seam to land.
+
+## 6. External gates (not yet closed)
 
 - **Real-checkpoint numerical parity** — the safetensors loader is built and
   round-trip-proven; comparing against a downloaded `z-lab/*-DFlash` checkpoint

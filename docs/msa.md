@@ -330,6 +330,10 @@ end-to-end, small-shape gating).
 
 ## 11. Open frontier
 
+> The cross-backend work (ROCm already executes MSA; x86 MSA is the one CPU gap;
+> the CUDA kernel + `attn_bias`/DFlash seams) is sequenced in the consolidated
+> [`attention_family_backend_plan.md`](attention_family_backend_plan.md).
+
 The remaining item is the **native** CUDA KV-outer kernel plus a real
 H800/Blackwell speedup proof — **hardware-gated on NVIDIA**. The compiler
 artifact path now carries the selected-block KV-outer schedule to NVIDIA Target

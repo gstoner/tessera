@@ -967,7 +967,9 @@ _ROCM_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
             "16x16x32) + gfx12.5 gfx1250 (large-K WMMA) + CDNA MFMA (32x32x8) "
             "are arch targets gated on their fragment-layout ISA + silicon"
         ),
-        "benchmark_json": "benchmarks/baselines/rocm_gfx1151_hot_paths.json",
+        # No manifest `benchmark_json` — gemm's dedicated perf harness is
+        # benchmarks/benchmark_gemm.py (more specific than the shared matmul
+        # hot-paths baseline), which the benchmark-source router prefers.
         "notes": (
             "GEMM = the matrix-core matmul (alias of tessera.matmul, same WMMA "
             "symbol). RDNA WMMA execution hardware-verified on gfx1151; carries "

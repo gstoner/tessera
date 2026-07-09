@@ -195,7 +195,11 @@ _APPLE_GPU_HARDWARE_VERIFIED_OPS = frozenset({
 #   - matmul  (2026-06-22): libtessera_rocm_gemm.so WMMA GEMM.
 #   - flash_attn (2026-06-23): libtessera_rocm_flash_attn.so FA-2 forward — the
 #     second op after matmul to execute natively on a non-Apple backend.
-_ROCM_HARDWARE_VERIFIED_OPS = frozenset({"matmul", "flash_attn"})
+#   - gemm — the BLAS-vocabulary matmul: the SAME tessera.matmul op + the SAME
+#     tessera_rocm_wmma_gemm_f16 symbol + the same execute_compare_fixture as
+#     matmul, so its hardware_verified claim rests on the identical gfx1151 WMMA
+#     proof (it additionally carries the CDNA MFMA artifact shape as metadata).
+_ROCM_HARDWARE_VERIFIED_OPS = frozenset({"matmul", "gemm", "flash_attn"})
 
 # NVIDIA sm_120 bring-up — the consumer-Blackwell ops whose ``hardware_verified``
 # claim is honestly earned, mirroring the ROCm block: each ships a real C-ABI

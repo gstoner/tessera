@@ -1408,7 +1408,8 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "storage (loads extf->f32, y truncf; state+exp+accumulate f32). "
                  "Reverse-mode adjoint: generate-rocm-selective-ssm-bwd-kernel "
                  "(reverse scan, atomic_rmw cross-channel reductions), matches "
-                 "the numpy VJP.",
+                 "the numpy VJP. Scalar-state A (D,) f32 routes through the "
+                 "chunked-parallel SSD form (WMMA GEMM bmms, ~1e-4).",
     },
     # Linalg PR-A — Cholesky + triangular solve on gfx1151 (one thread per matrix
     # / per matrix-RHS-column) (rocm_linalg_compiled).
@@ -3144,7 +3145,8 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "load-convert, y truncated back; state+exp+accumulate f32). "
                  "Reverse-mode adjoint tessera_x86_selective_ssm_bwd_f32 "
                  "(sequential reverse scan vectorized over N) matches the "
-                 "numpy VJP",
+                 "numpy VJP. Scalar-state A (D,) f32 routes through the "
+                 "chunked-parallel SSD form (AVX-512 GEMM bmms)",
     },
     # Linalg PR-A — Cholesky + triangular solve (SPD/triangular family). Genuine
     # AVX-512 factorization/substitution kernels (x86_linalg_compiled).

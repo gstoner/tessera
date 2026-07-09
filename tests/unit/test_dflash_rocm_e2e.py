@@ -24,8 +24,14 @@ def _rocm_or_skip():
     from tessera import runtime as rt
     if not (shutil.which("hipcc") or os.path.exists("/opt/rocm/bin/hipcc")):
         pytest.skip("no hipcc")
-    if not rt._rocm_wmma_runtime_available():
-        pytest.skip("no live gfx1151")
+    # Gate on the COMPILED flash lane, not just the shipped WMMA GEMM probe:
+    # rocm_attention_fn catches _RocmCompiledUnavailable and falls back to numpy,
+    # so without this a box where tessera-opt / the compiled flash lane is absent
+    # would "pass" these parity tests entirely on the numpy path — never proving
+    # the flash+bias seam actually ran on the GPU.
+    if not rt._rocm_compiled_flash_attn_available():
+        pytest.skip("compiled ROCm flash lane unavailable (no live gfx1151 / "
+                    "tessera-opt)")
 
 
 def _weights(rng, d, hq, hkv, dh):

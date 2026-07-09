@@ -784,11 +784,15 @@ def rocm_attention_fn(q, k, v, *, scale=None, causal=False, attn_bias=None):
     qa = F._asarray(q)
     if qa.shape[-1] % 16 == 0:
         try:
+            # Storage from the input dtype: the WMMA lane runs both f16 and bf16.
+            # Keep bf16 inputs in bf16 (its ~f32 range) — force-casting to f16
+            # would clamp activations >65504 to inf. Only f32 casts down to f16.
+            bf16 = _rt._bfloat16_dtype()
+            store = bf16 if (bf16 is not None and qa.dtype == bf16) else np.float16
             ka, va = F._asarray(k), F._asarray(v)
             return _rt._rocm_flash_attn(
-                qa.astype(np.float16), ka.astype(np.float16),
-                va.astype(np.float16), scale=scale, causal=bool(causal),
-                attn_bias=attn_bias)
+                qa.astype(store), ka.astype(store), va.astype(store),
+                scale=scale, causal=bool(causal), attn_bias=attn_bias)
         except _rt._RocmCompiledUnavailable:
             pass  # off-silicon → the numpy reference below
     return _ops.flash_attn(q, k, v, scale=scale, causal=causal,

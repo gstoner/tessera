@@ -27,10 +27,10 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | Target | Declared | Native proven | Reference | Open artifact/planned | Missing target row |
 |---|---:|---:|---:|---:|---:|
 | `cpu` | 329 | 0 | 329 | 0 | 151 |
-| `x86` | 326 | 321 | 5 | 0 | 154 |
+| `x86` | 326 | 322 | 4 | 0 | 154 |
 | `apple_cpu` | 361 | 2 | 359 | 0 | 119 |
 | `apple_gpu` | 87 | 61 | 3 | 23 | 393 |
-| `rocm` | 337 | 332 | 2 | 3 | 143 |
+| `rocm` | 337 | 333 | 2 | 2 | 143 |
 | `nvidia_sm80` | 66 | 0 | 0 | 66 | 414 |
 | `nvidia_sm90` | 98 | 0 | 2 | 96 | 382 |
 | `nvidia_sm100` | 66 | 0 | 0 | 66 | 414 |

@@ -3763,8 +3763,18 @@ _EBM_PRIMITIVES: tuple[str, ...] = (
 # Routed through ebm_manifest_for (NOT the generic _X86_KERNELS / _ROCM_COMPILED
 # tables, which manifest_for never reaches for ebm_* names).
 _EBM_DEVICE_COMPILED: dict[str, tuple[str, str]] = {
-    "ebm_energy_quadratic": ("tests/unit/test_x86_ebm_compute_compiled.py",
-                             "tests/unit/test_rocm_ebm_compute_compiled.py"),
+    # Quadratic energy 0.5*||x-y||^2 (the dominant EBT / diffusion energy). Both
+    # the generic `ebm_energy` op (Apple opts its quadratic form into the same
+    # kernel) and the tensor-clean `ebm_energy_quadratic` share ONE dedicated
+    # fused per-row reduction: AVX-512 (double-accumulated) + a gfx1151
+    # one-workgroup-per-row warp-shuffle sum-of-squares
+    # (generate-rocm-ebm-energy-quadratic-kernel). tessera.ebm.energy_quadratic
+    # routes x86 → ROCm → Apple → numpy.
+    "ebm_energy": ("tests/unit/test_x86_ebm_energy_quadratic_compiled.py",
+                   "tests/unit/test_rocm_ebm_energy_quadratic_compiled.py"),
+    "ebm_energy_quadratic": (
+        "tests/unit/test_x86_ebm_energy_quadratic_compiled.py",
+        "tests/unit/test_rocm_ebm_energy_quadratic_compiled.py"),
     "ebm_inner_step": ("tests/unit/test_x86_ebm_compute_compiled.py",
                        "tests/unit/test_rocm_ebm_compute_compiled.py"),
     "ebm_refinement": ("tests/unit/test_x86_ebm_compute_compiled.py",
@@ -3816,12 +3826,13 @@ _EBM_DEVICE_COMPILED: dict[str, tuple[str, str]] = {
 # honestly ``reference`` on every target, exactly like x86/apple_cpu/apple_gpu.
 #
 # Deliberately NOT here (a kernel IS achievable → ``planned``/native is honest, and
-# Apple proves it with a ``fused`` slot): ebm_energy (Apple fuses the quadratic
-# form), ebt_tiny, and the `_sample` chain wrappers (Apple is ``planned`` — a
-# fused on-device chain kernel is a plausible future).
-# ``ebm_partition_exact`` and ``ebm_decode_init`` graduated OUT of "planned" —
-# the f32 log-sum-exp reduction and the base+std*noise decode-init combine are
-# now real native kernels on x86 + ROCm (see _EBM_DEVICE_COMPILED above).
+# Apple proves it with a ``fused`` slot): ebt_tiny and the `_sample` chain
+# wrappers (Apple is ``planned`` — a fused on-device chain kernel is a plausible
+# future).
+# ``ebm_partition_exact``, ``ebm_decode_init``, and ``ebm_energy`` graduated OUT
+# of "planned" — the f32 log-sum-exp reduction, the base+std*noise decode-init
+# combine, and the per-row 0.5*||x-y||^2 quadratic energy are now real native
+# kernels on x86 + ROCm (see _EBM_DEVICE_COMPILED above).
 _EBM_USER_FUNCTION_OPS: frozenset[str] = frozenset({
     "ebm_partition_monte_carlo",  # importance-sampled Z over a user energy_fn
     "ebm_partition_ais",          # annealed IS over a user energy_fn + host schedule

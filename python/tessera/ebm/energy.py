@@ -560,6 +560,14 @@ def energy_quadratic(x: Any, y: Any) -> np.ndarray:
             f"energy_quadratic requires matching shapes; "
             f"got x={x_arr.shape}, y={y_arr.shape}."
         )
+    # Native lanes, best-first: x86 AVX-512 → ROCm gfx1151 → Apple GPU. Each
+    # computes the per-row 0.5*||x-y||^2; all fall through to numpy off-silicon.
+    # (rank-0 has no batch dim — numpy handles it directly below.)
+    if x_arr.ndim >= 1:
+        for _dev in (_try_x86_energy_quadratic_f32, _try_rocm_energy_quadratic_f32):
+            dev_out = _dev(x_arr, y_arr)
+            if dev_out is not None:
+                return dev_out
     gpu_out = _try_apple_gpu_energy_quadratic_f32(x_arr, y_arr)
     if gpu_out is not None:
         return gpu_out
@@ -943,6 +951,38 @@ def _try_apple_gpu_self_verify_hard_argmin_f32(
     if not ok:
         return None
     return out
+
+
+def _try_x86_energy_quadratic_f32(
+    x: np.ndarray, y: np.ndarray,
+) -> Optional[np.ndarray]:
+    """Per-row ``0.5*||x-y||^2`` on the native x86 AVX-512 kernel. ``None``
+    off-silicon (no lib / non-f32) so the caller falls through."""
+    if x.dtype != np.float32 or y.dtype != np.float32:
+        return None
+    if x.shape != y.shape:
+        return None
+    try:
+        from tessera import runtime as rt
+        return rt._x86_ebm_energy_quadratic(x, y, np)
+    except Exception:
+        return None
+
+
+def _try_rocm_energy_quadratic_f32(
+    x: np.ndarray, y: np.ndarray,
+) -> Optional[np.ndarray]:
+    """Per-row ``0.5*||x-y||^2`` on the compiler-generated gfx1151 kernel
+    (one workgroup per row). ``None`` off-silicon so the caller falls through."""
+    if x.dtype != np.float32 or y.dtype != np.float32:
+        return None
+    if x.shape != y.shape:
+        return None
+    try:
+        from tessera import runtime as rt
+        return rt._rocm_ebm_energy_quadratic(x, y, np)
+    except Exception:
+        return None
 
 
 def _try_apple_gpu_energy_quadratic_f32(

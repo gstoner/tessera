@@ -7353,6 +7353,107 @@ def _rocm_ebm_decode_init(base: Any, noise: Any, std: float, np: Any) -> Any:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# EBM quadratic-energy lane — the dominant EBT / diffusion energy form
+# out[b] = 0.5*||x_b - y_b||^2 over B rows of D elements. A dedicated fused
+# per-row reduction: AVX-512 (double-accumulated) + a gfx1151 one-workgroup-per-
+# row warp-shuffle sum-of-squares (generate-rocm-ebm-energy-quadratic-kernel).
+# The concrete energy shared by tessera.ebm.energy_quadratic / ebm_energy.
+# ─────────────────────────────────────────────────────────────────────────────
+def _x86_ebm_energy_quadratic(x: Any, y: Any, np: Any) -> Any:
+    """``out[b] = 0.5*||x_b - y_b||^2`` on the AVX-512 kernel (per-row, double-
+    accumulated). x/y are [B, D] (higher rank flattens trailing dims into D).
+    Matches the numpy reference of tessera.ebm.energy_quadratic to f32 epsilon."""
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    fn = getattr(lib, "tessera_x86_ebm_energy_quadratic_f32", None)
+    if fn is None:
+        raise _RocmCompiledUnavailable("tessera_x86_ebm_energy_quadratic_f32 missing")
+    xa = np.ascontiguousarray(x, np.float32)
+    ya = np.ascontiguousarray(y, np.float32)
+    if xa.shape != ya.shape:
+        raise ValueError("energy_quadratic: x and y must share shape")
+    B = int(xa.shape[0]) if xa.ndim >= 1 else 1
+    D = int(xa.size // B) if B else 0
+    out = np.zeros(B, np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    fn(xa.reshape(-1).ctypes.data_as(cf), ya.reshape(-1).ctypes.data_as(cf),
+       ctypes.c_int64(B), ctypes.c_int64(D), out.ctypes.data_as(cf))
+    return out
+
+
+_rocm_ebm_energy_quadratic_hsaco_cache: dict[tuple[str], bytes] = {}
+
+
+def _build_compiled_ebm_energy_quadratic_hsaco() -> bytes:
+    chip = _rocm_chip()
+    directive = ('module {\n  "tessera_rocm.ebm_energy_quadratic"() '
+                 '{name = "eq"} : () -> ()\n}\n')
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-ebm-energy-quadratic-kernel", directive,
+        _rocm_ebm_energy_quadratic_hsaco_cache, (chip,))
+
+
+def _rocm_ebm_energy_quadratic(x: Any, y: Any, np: Any) -> Any:
+    """``out[b] = 0.5*||x_b - y_b||^2`` on gfx1151 — one workgroup per row,
+    warp-shuffle sum-of-squares (compiler-generated). x/y are [B, D]."""
+    xa = np.ascontiguousarray(x, np.float32)
+    ya = np.ascontiguousarray(y, np.float32)
+    if xa.shape != ya.shape:
+        raise ValueError("energy_quadratic: x and y must share shape")
+    B = int(xa.shape[0]) if xa.ndim >= 1 else 1
+    D = int(xa.size // B) if B else 0
+    xf = xa.reshape(-1)
+    yf = ya.reshape(-1)
+    n = int(xf.size)
+    if B == 0:
+        return np.zeros(0, np.float32)
+    hsaco = _build_compiled_ebm_energy_quadratic_hsaco()
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm ebm_energy_quadratic: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm ebm_energy_quadratic: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"eq") != 0:
+        raise RuntimeError("rocm ebm_energy_quadratic: kernel symbol 'eq' not found")
+    cv = ctypes.c_void_p
+    d_x, d_y, d_o = cv(), cv(), cv()
+    if (hip.hipMalloc(ctypes.byref(d_x), max(4 * n, 4)) != 0
+            or hip.hipMalloc(ctypes.byref(d_y), max(4 * n, 4)) != 0
+            or hip.hipMalloc(ctypes.byref(d_o), max(4 * B, 4)) != 0):
+        raise RuntimeError("rocm ebm_energy_quadratic: hipMalloc failed")
+    hip.hipMemcpy(d_x, xf.ctypes.data_as(cv), 4 * n, 1)
+    hip.hipMemcpy(d_y, yf.ctypes.data_as(cv), 4 * n, 1)
+
+    def _mr(p, size):
+        return [cv(p.value), cv(p.value), ctypes.c_int64(0),
+                ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    # (x memref, y memref, B index, D index, out memref) — grid = B blocks.
+    launch_args = (_mr(d_x, n) + _mr(d_y, n)
+                   + [ctypes.c_int64(B), ctypes.c_int64(D)] + _mr(d_o, B))
+    arr = (cv * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), cv)
+    rc = hip.hipModuleLaunchKernel(fn, max(B, 1), 1, 1, _GRID_BLOCKDIM, 1, 1,
+                                   0, None, arr, None)
+    if rc != 0:
+        for d in (d_x, d_y, d_o):
+            hip.hipFree(d)
+        raise RuntimeError(f"rocm ebm_energy_quadratic: launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    out = np.zeros(B, np.float32)
+    hip.hipMemcpy(out.ctypes.data_as(cv), d_o, 4 * B, 2)
+    for d in (d_x, d_y, d_o):
+        hip.hipFree(d)
+    return out
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # x86 low-precision float quantization lane — quantize/dequantize fp8 / fp6 /
 # fp4. Per-tensor symmetric: scale = amax/max_normal (floored), grid-snap on the
 # AVX-512 fpquant kernel, rescale. dequantize is the fp32 passthrough (the

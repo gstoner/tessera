@@ -987,6 +987,26 @@ def ROCM_EbmPartitionKernelOp : TesseraROCM_Op<"ebm_partition"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_EbmEnergyQuadraticKernelOp : TesseraROCM_Op<"ebm_energy_quadratic"> {
+  let summary = "EBM quadratic energy — per-row 0.5*||x-y||^2 reduction";
+  let description = [{
+    The directive `generate-rocm-ebm-energy-quadratic-kernel` expands into a
+    per-row reduction gpu kernel computing the dominant EBT / diffusion energy
+    form `out[b] = 0.5 * Σ_d (x[b,d] - y[b,d])^2` over B rows of D elements
+    (x, y row-major [B, D]). ONE workgroup per row (grid = B), blockDim 256,
+    threads stride over D and warp-shuffle sum-reduce the squared differences
+    (same reduction as the softmax / partition kernels); thread 0 writes
+    0.5·s. Matches `tessera.ebm.energy_quadratic` — the concrete energy shared
+    by `ebm_energy` / `ebm_energy_quadratic`. CPU analog:
+    tessera_x86_ebm_energy_quadratic_f32; Apple analog:
+    tessera_apple_gpu_ebm_energy_quadratic_f32. Args:
+    `(x : memref<?xf32>, y : memref<?xf32>, B : index, D : index,
+    out : memref<?xf32>)`.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_EbmDecodeInitKernelOp : TesseraROCM_Op<"ebm_decode_init"> {
   let summary = "EBM decode-init noise-apply combine (base + std·noise)";
   let description = [{

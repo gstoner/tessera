@@ -55,7 +55,7 @@ Legend: ✅ native & executing · ⚠️ executes but unproven/unrecorded · �
 | `flash_attn` core (MHA, scale+causal) | ✅ compiled (WMMA) | ⚠️ `emit/` arbiter FA lane¹ | ✅ native | ✅ native |
 | `flash_attn` variants (GQA/MQA/sliding/softcap) | ✅ compiled (WMMA) | ❌ **not in the emit/ FA lane²** | ✅ native | ✅ native |
 | **`attn_bias`** | ✅ compiled (WMMA, #328) | ❌ absent | ✅ native (pre-softmax add) | ✅ native |
-| MSA sparse core (`msa_sparse_attention`) | ✅ compiled (block-sparse WMMA + GPU top-k) | ❌ artifact_only contract | ❌ **reference-only** | ✅ fused (scalar/tiled f32/f16) |
+| MSA sparse core (`msa_sparse_attention`) | ✅ compiled (block-sparse WMMA + GPU top-k) | ❌ artifact_only contract | ✅ compiled (host-select + AVX-512 dense-attend) | ✅ fused (scalar/tiled f32/f16) |
 | MSA IR-artifact mirror (`kv_outer_sparse`) | ❌ (execution exists, no IR mirror) | ✅ the contract (no kernel body) | ❌ | n/a |
 | DFlash `attention_fn` seam | ✅ `rocm_attention_fn` (#330) | ❌ (blocked on bias) | ✅ `x86_attention_fn` | ✅ `apple_gpu_attention_fn` |
 | `selective_ssm` (Mamba2) | ✅ compiled (naive f32 fwd) | ❌ planned | ✅ native (f32 fwd) | ✅ (Mamba SSD) |
@@ -183,12 +183,14 @@ DFlash test bar).
 
 ## Phase 3 — MSA completion
 
-MSA status is uneven: ROCm executes it, CUDA has an artifact-only contract, x86 is
-reference-only, Apple is fully native.
+MSA status is now: ROCm + x86 execute it, CUDA has an artifact-only contract,
+Apple is fully native.
 
 | Target | Work | Gated on |
 |---|---|---|
-| **x86** | **The one x86 gap.** Build the `msa_sparse_attention` AVX-512 lane by **reusing `tessera_x86_flash_attn_ext_f32`** (dense FA over the selected blocks + additive block/causal mask) plus a host/AVX-512 Top-k select — exactly how NSA (`x86_nsa_compiled`, `runtime.py:3363`) is already assembled. Keep `msa_index_scores` (composite helper) and `msa_select_blocks` (low-FLOP top-k) as reference. | **Buildable now** |
+| **x86** | ✅ **done** — `x86_msa_compiled` lane: host exp-free index-score + per-GQA-group top-k select (reference ops, bit-identical), exact attend on `tessera_x86_flash_attn_ext_f32` as dense attention with a non-selected/causal additive -inf mask. Matches the reference to f32 epsilon; dense-equivalence verified. | — |
+| **CUDA** | Replace the `artifact_only` `msa_kv_outer_sparse` contract (`target_ir.py:1339`) with a **real emit/ mma.sync block-sparse kernel** — mirror the emit/ FA lane, KV-outer over selected blocks, online softmax, dense-equivalence oracle. Promote `target_ir.py` off the hardcoded `artifact_only` + add the manifest/fixture rows. | **sm_120-gated** |
+| **ROCm** | *Optional* — the sparse core already **executes** via `rocm_sparse_attn_compiled`; only the IR-visible `kv_outer_sparse` mirror of the CUDA lowering is missing. Add a `schedule/tile/target` ROCm branch (`tessera_rocm.*` target op) if IR parity with CUDA is wanted. Lower priority (no execution gap). | Buildable now (low pri) |
 | **CUDA** | Replace the `artifact_only` `msa_kv_outer_sparse` contract (`target_ir.py:1339`) with a **real emit/ mma.sync block-sparse kernel** — mirror the emit/ FA lane, KV-outer over selected blocks, online softmax, dense-equivalence oracle. Promote `target_ir.py` off the hardcoded `artifact_only` + add the manifest/fixture rows. | **sm_120-gated** |
 | **ROCm** | *Optional* — the sparse core already **executes** via `rocm_sparse_attn_compiled`; only the IR-visible `kv_outer_sparse` mirror of the CUDA lowering is missing. Add a `schedule/tile/target` ROCm branch (`tessera_rocm.*` target op) if IR parity with CUDA is wanted. Lower priority (no execution gap). | Buildable now (low pri) |
 
@@ -221,9 +223,9 @@ tolerance.
 - ✅ **Phase 1 / ROCm `attn_bias`** — the keystone; **landed (#328)**.
 - ✅ **Phase 2 / ROCm DFlash seam** — **landed (#330)**, `rocm_attention_fn` over the bias lane.
 - ✅ **Phase 2 / x86 DFlash seam** — **landed**, `x86_attention_fn` over the f32-native flash lane.
-1. **Phase 3 / x86 MSA lane** — closes the last x86 gap in the family.
-2. **Phase 4 / ROCm + x86 chunked SSM** — optimization pass.
-3. **Phase 3 / ROCm MSA IR mirror** — optional IR parity, no execution gap.
+- ✅ **Phase 3 / x86 MSA lane** — **landed**, `x86_msa_compiled`; closes the last x86 execution gap in the family (x86 now has flash/NSA/MLA/SSM/MSA all native).
+1. **Phase 4 / ROCm + x86 chunked SSM** — optimization pass.
+2. **Phase 3 / ROCm MSA IR mirror** — optional IR parity, no execution gap.
 
 **Hardware-gated on the RTX 5070 Ti (sm_120) box:**
 

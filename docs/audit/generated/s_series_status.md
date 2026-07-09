@@ -27,7 +27,7 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | Target | Declared | Native proven | Reference | Open artifact/planned | Missing target row |
 |---|---:|---:|---:|---:|---:|
 | `cpu` | 329 | 0 | 329 | 0 | 151 |
-| `x86` | 326 | 324 | 2 | 0 | 154 |
+| `x86` | 327 | 325 | 2 | 0 | 153 |
 | `apple_cpu` | 361 | 2 | 359 | 0 | 119 |
 | `apple_gpu` | 87 | 61 | 3 | 23 | 393 |
 | `rocm` | 337 | 335 | 2 | 0 | 143 |

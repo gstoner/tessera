@@ -1858,6 +1858,7 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     # P10 — x86 AVX-512 flash_attn partner (online-softmax FA forward), compared
     # to the dense attention reference on the AVX-512 box. Skip-clean w/o the .so.
     ("flash_attn", "x86"): "tests/unit/test_x86_flash_attn_compiled.py",
+    ("msa_sparse_attention", "x86"): "tests/unit/test_x86_msa_compiled.py",
     # P13 — conv2d/conv3d via im2col + the device GEMM, compared to the conv
     # reference on x86 (f32) + gfx1151 (WMMA f16). Skip-clean w/o the .so / GPU.
     ("conv2d", "x86"): "tests/unit/test_x86_conv_compiled.py",
@@ -2910,6 +2911,16 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "FA over mean summaries) + top-k-block (host select/gather + "
                  "dense FA) branches blended by the gate; x86_nsa_compiled lane; "
                  "f32, matches the dense-masked reference",
+    },
+    "msa_sparse_attention": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "AVX-512 MSA — exp-free index scoring + per-GQA-group top-k "
+                 "block selection on host (bit-identical to the reference ops); "
+                 "exact attend on the flash_attn kernel as dense attention with "
+                 "a non-selected/causal additive -inf mask; x86_msa_compiled "
+                 "lane; f32, matches the reference; dense-equivalence "
+                 "(top_k==num_blocks) → dense GQA",
     },
     # Pointwise regression losses — per-element loss on the AVX-512 loss kernel
     # + none/mean/sum on the reduce kernel (x86_loss_compiled).

@@ -1405,7 +1405,10 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "(generate-rocm-selective-ssm-kernel, one thread per (b,d) "
                  "channel, exp via math->rocdl) on gfx1151. Executes via "
                  "runtime.launch() (rocm_selective_ssm_compiled). f16/bf16 "
-                 "storage (loads extf->f32, y truncf; state+exp+accumulate f32).",
+                 "storage (loads extf->f32, y truncf; state+exp+accumulate f32). "
+                 "Reverse-mode adjoint: generate-rocm-selective-ssm-bwd-kernel "
+                 "(reverse scan, atomic_rmw cross-channel reductions), matches "
+                 "the numpy VJP.",
     },
     # Linalg PR-A — Cholesky + triangular solve on gfx1151 (one thread per matrix
     # / per matrix-RHS-column) (rocm_linalg_compiled).

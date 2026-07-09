@@ -1776,9 +1776,10 @@ def _selective_ssm_device_bwd(dout, x, A, B, C, delta, gate, state):
         from tessera import runtime as rt
     except Exception:
         return None
-    # x86 CPU backward first (the eager-tape context); the ROCm lane joins here
-    # when its backward kernel lands.
-    for fn in (getattr(rt, "_x86_selective_ssm_bwd", None),):
+    # x86 CPU backward first (the eager-tape context); the ROCm gfx1151 lane is
+    # the fallback (used on a ROCm-only box where the x86 lib isn't built).
+    for fn in (getattr(rt, "_x86_selective_ssm_bwd", None),
+               getattr(rt, "_rocm_selective_ssm_bwd", None)):
         if fn is None:
             continue
         try:

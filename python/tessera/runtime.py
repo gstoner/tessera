@@ -7457,6 +7457,117 @@ def _rocm_ebm_energy_quadratic(x: Any, y: Any, np: Any) -> Any:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# EBM EBT-tiny fused pipeline — the energy-based-transformer inference step.
+# For B batches of K candidate trajectories (y0, grad [B*K, D], K <= 256) it
+# fuses the closed-form refinement (y_T = y0 - T*eta*grad), the squared-norm
+# energy, a hard-argmin over K, and the gather of the winning candidate into
+# out[B, D]. AVX-512 host loop + a gfx1151 one-workgroup-per-batch kernel with a
+# shared-memory tree argmin (generate-rocm-ebm-ebt-tiny-kernel).
+# ─────────────────────────────────────────────────────────────────────────────
+def _ebt_tiny_dims(y0, grad, np):
+    ya = np.ascontiguousarray(y0, np.float32)
+    ga = np.ascontiguousarray(grad, np.float32)
+    if ya.shape != ga.shape:
+        raise ValueError("ebt_tiny: y0 and grad must share shape")
+    return ya, ga
+
+
+def _x86_ebm_ebt_tiny(y0: Any, grad: Any, eta: float, T: int,
+                      B: int, K: int, D: int, np: Any) -> Any:
+    """Fused EBT-tiny (refine→energy→argmin→gather) on the AVX-512 kernel,
+    returning the [B, D] best candidates. Matches the numpy reference exactly
+    (energies double-accumulated; first-min tie-break)."""
+    ya, ga = _ebt_tiny_dims(y0, grad, np)
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    fn = getattr(lib, "tessera_x86_ebm_ebt_tiny_f32", None)
+    if fn is None:
+        raise _RocmCompiledUnavailable("tessera_x86_ebm_ebt_tiny_f32 missing")
+    out = np.zeros(B * D, np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    fn(ya.reshape(-1).ctypes.data_as(cf), ga.reshape(-1).ctypes.data_as(cf),
+       ctypes.c_float(eta), ctypes.c_int32(int(T)),
+       ctypes.c_int64(B), ctypes.c_int64(K), ctypes.c_int64(D),
+       out.ctypes.data_as(cf))
+    return out.reshape(B, D)
+
+
+_rocm_ebm_ebt_tiny_hsaco_cache: dict[tuple[str], bytes] = {}
+
+
+def _build_compiled_ebm_ebt_tiny_hsaco() -> bytes:
+    chip = _rocm_chip()
+    directive = ('module {\n  "tessera_rocm.ebm_ebt_tiny"() {name = "ebt"} '
+                 ': () -> ()\n}\n')
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-ebm-ebt-tiny-kernel", directive,
+        _rocm_ebm_ebt_tiny_hsaco_cache, (chip,))
+
+
+def _rocm_ebm_ebt_tiny(y0: Any, grad: Any, eta: float, T: int,
+                       B: int, K: int, D: int, np: Any) -> Any:
+    """Fused EBT-tiny on gfx1151 — one workgroup per batch, shared-memory tree
+    argmin (compiler-generated). Returns the [B, D] best candidates. K <= 256
+    (one lane per candidate)."""
+    ya, ga = _ebt_tiny_dims(y0, grad, np)
+    if K > _GRID_BLOCKDIM:
+        raise _RocmCompiledUnavailable(
+            f"rocm ebm_ebt_tiny: K={K} exceeds the {_GRID_BLOCKDIM}-lane budget")
+    yf = ya.reshape(-1)
+    gf = ga.reshape(-1)
+    n = int(yf.size)
+    # Confirm a usable HIP runtime BEFORE shelling out to tessera-opt — build
+    # failures aren't cached, so on a box with tessera-opt but no ROCm we must
+    # not compile on every off-silicon call before falling back to numpy.
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm ebm_ebt_tiny: hipInit failed")
+    hsaco = _build_compiled_ebm_ebt_tiny_hsaco()
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm ebm_ebt_tiny: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"ebt") != 0:
+        raise RuntimeError("rocm ebm_ebt_tiny: kernel symbol 'ebt' not found")
+    cv = ctypes.c_void_p
+    d_y, d_g, d_o = cv(), cv(), cv()
+    if (hip.hipMalloc(ctypes.byref(d_y), max(4 * n, 4)) != 0
+            or hip.hipMalloc(ctypes.byref(d_g), max(4 * n, 4)) != 0
+            or hip.hipMalloc(ctypes.byref(d_o), max(4 * B * D, 4)) != 0):
+        raise RuntimeError("rocm ebm_ebt_tiny: hipMalloc failed")
+    hip.hipMemcpy(d_y, yf.ctypes.data_as(cv), 4 * n, 1)
+    hip.hipMemcpy(d_g, gf.ctypes.data_as(cv), 4 * n, 1)
+
+    def _mr(p, size):
+        return [cv(p.value), cv(p.value), ctypes.c_int64(0),
+                ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    # (y0, grad memref, eta f32, T i32, B index, K index, D index, out memref)
+    launch_args = (_mr(d_y, n) + _mr(d_g, n)
+                   + [ctypes.c_float(eta), ctypes.c_int32(int(T)),
+                      ctypes.c_int64(B), ctypes.c_int64(K), ctypes.c_int64(D)]
+                   + _mr(d_o, B * D))
+    arr = (cv * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), cv)
+    rc = hip.hipModuleLaunchKernel(fn, max(B, 1), 1, 1, _GRID_BLOCKDIM, 1, 1,
+                                   0, None, arr, None)
+    if rc != 0:
+        for d in (d_y, d_g, d_o):
+            hip.hipFree(d)
+        raise RuntimeError(f"rocm ebm_ebt_tiny: launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    out = np.zeros(B * D, np.float32)
+    hip.hipMemcpy(out.ctypes.data_as(cv), d_o, 4 * B * D, 2)
+    for d in (d_y, d_g, d_o):
+        hip.hipFree(d)
+    return out.reshape(B, D)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # x86 low-precision float quantization lane — quantize/dequantize fp8 / fp6 /
 # fp4. Per-tensor symmetric: scale = amax/max_normal (floored), grid-snap on the
 # AVX-512 fpquant kernel, rescale. dequantize is the fp32 passthrough (the

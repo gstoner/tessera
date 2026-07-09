@@ -987,6 +987,27 @@ def ROCM_EbmPartitionKernelOp : TesseraROCM_Op<"ebm_partition"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_EbmEbtTinyKernelOp : TesseraROCM_Op<"ebm_ebt_tiny"> {
+  let summary = "EBM EBT-tiny fused pipeline — refine → energy → argmin → gather";
+  let description = [{
+    The directive `generate-rocm-ebm-ebt-tiny-kernel` expands into a fused
+    energy-based-transformer inference kernel. For B batches of K candidate
+    trajectories (y0, grad row-major [B*K, D], K ≤ 256) it fuses, per batch,
+    the closed-form refinement `y_T = y0 - (T·eta)·grad`, the squared-norm
+    energy `e[k] = Σ_d y_T[k,d]^2`, a shared-memory hard-argmin `k* =
+    argmin_k e[k]` (first-min tie-break), and the gather `out[b,:] = y_T[k*,:]`.
+    ONE workgroup per batch (grid = B), blockDim 256: thread k computes
+    candidate k's energy, a tree argmin over the 256 lanes (padded +inf) picks
+    k*, then the lanes stride over D to write the winner. Matches
+    `tessera.ebm.ebt_tiny`. CPU analog: tessera_x86_ebm_ebt_tiny_f32; Apple
+    analog: the fused ebt_tiny Metal dispatch. Args:
+    `(y0 : memref<?xf32>, grad : memref<?xf32>, eta : f32, T : i32, B : index,
+    K : index, D : index, out : memref<?xf32>)`.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_EbmEnergyQuadraticKernelOp : TesseraROCM_Op<"ebm_energy_quadratic"> {
   let summary = "EBM quadratic energy — per-row 0.5*||x-y||^2 reduction";
   let description = [{

@@ -6521,12 +6521,36 @@ def _ssm_prepare(x: Any, A: Any, B: Any, C: Any, delta: Any, state: Any,
     return x, a2d, Bc, Cc, delta, h, bsz, s, d, n
 
 
+def _x86_selective_ssm_chunked(x, A, B, C, delta, gate, state, np,
+                               chunk_size: int = 128):
+    """Chunked-parallel (SSD) selective_ssm for scalar-state A — the three batched
+    contractions run on the AVX-512 GEMM (f32), the per-chunk state recurrence on
+    host. The standard Mamba-2 algorithm; matches the sequential scan. Scalar-A
+    ``(D,)`` only (the caller routes ``(D, N)`` A to the sequential lane)."""
+    from . import _mamba_ssd as _ssd
+    if _load_x86_elementwise() is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+
+    def bmm(a, b):
+        return _x86_batched_gemm(np.ascontiguousarray(a, np.float32),
+                                 np.ascontiguousarray(b, np.float32))
+
+    return _ssd.selective_ssm_parallel(
+        x, A, B, C, delta, gate=gate, state=state,
+        chunk_size=int(chunk_size), matmul3d=bmm)
+
+
 def _x86_selective_ssm(x: Any, A: Any, B: Any, C: Any, delta: Any,
                        gate: Any, state: Any, np: Any) -> Any:
     lib = _load_x86_elementwise()
     if lib is None:
         raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
     store = _ssm_store_dtype(x, np)
+    # Scalar-state A (D,) in f32 → the chunked-parallel SSD form (AVX-512 GEMM
+    # bmms). Same result as the sequential scan (~1e-8), the standard Mamba-2
+    # decomposition; (D, N) A + f16/bf16 keep the sequential kernel below.
+    if store == np.float32 and np.asarray(A).ndim == 1:
+        return _x86_selective_ssm_chunked(x, A, B, C, delta, gate, state, np)
     iptr: Any
     if store == np.float16:
         sym, iptr = "tessera_x86_avx512_selective_ssm_f16", ctypes.c_uint16
@@ -13409,11 +13433,33 @@ def _execute_rocm_compiled_sparse(artifact: RuntimeArtifact, args: Any) -> Any:
 _rocm_ssm_hsaco_cache: dict[tuple[str, str], bytes] = {}
 
 
+def _rocm_selective_ssm_chunked(x, A, B, C, delta, gate, state, np,
+                                chunk_size: int = 128):
+    """Chunked-parallel (SSD) selective_ssm for scalar-state A on gfx1151 — the
+    three batched contractions run on the WMMA GEMM (f16 storage, f32 accumulate),
+    the per-chunk state recurrence on host. The standard Mamba-2 algorithm;
+    matches the sequential scan to ~1e-4 (WMMA f16 bmm). Scalar-A ``(D,)`` only."""
+    from . import _mamba_ssd as _ssd
+
+    def bmm(a, b):
+        return np.asarray(_rocm_batched_gemm(
+            np.asarray(a, np.float16), np.asarray(b, np.float16)), np.float32)
+
+    return _ssd.selective_ssm_parallel(
+        x, A, B, C, delta, gate=gate, state=state,
+        chunk_size=int(chunk_size), matmul3d=bmm)
+
+
 def _rocm_selective_ssm(x: Any, A: Any, B: Any, C: Any, delta: Any,
                         gate: Any, state: Any, np: Any) -> Any:
     """y[B,S,D] = Mamba2 selective scan on the gfx1151 kernel. x/A/B/C/delta + y
     storage is f32/f16/bf16 (the state + exp + accumulate stay f32 in-kernel)."""
     store = _ssm_store_dtype(x, np)
+    # Scalar-state A (D,) in f32 → the chunked-parallel SSD form on the WMMA GEMM
+    # (the standard Mamba-2 decomposition), matching the sequential scan to ~1e-4
+    # (f16 bmm). (D, N) A + f16/bf16 keep the sequential per-(b,d) kernel below.
+    if store == np.float32 and np.asarray(A).ndim == 1:
+        return _rocm_selective_ssm_chunked(x, A, B, C, delta, gate, state, np)
     esz = 4 if store == np.float32 else 2                       # bytes/element
     dtag = ("f16" if store == np.float16
             else "f32" if store == np.float32 else "bf16")

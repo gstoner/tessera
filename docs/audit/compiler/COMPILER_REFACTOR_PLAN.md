@@ -688,9 +688,17 @@ priority (highest DL leverage first):
   **and** `ebm_sphere_langevin_step` now run native on both backends (x86 9→7
   `reference`, ROCm 10→8 open). Sphere reuses the *same* affine kernel — host
   tangent-projection + affine core + host normalize (retract), no dedicated kernel
-  (like bivector's host grade-projection). The affine kernel is reusable infra;
-  **still per-target open:** the `_sample` chains (host loops — no on-device chain
-  kernel), `ebm_energy` / `ebm_partition_*` / `ebm_decode_init`, and ROCm `gemm`.
+  (like bivector's host grade-projection). The affine kernel is reusable infra.
+  **Honest-count corrections (same day):** `ebm_partition_{monte_carlo,ais}` are
+  host-orchestrated samplers over a *user* `energy_fn` with no kernel on any backend
+  (Apple GPU is `reference` too) — reclassified `planned`→`reference` so the
+  Backend-Proof tally stops counting them open (ROCm open 8→6). And `gemm` — an
+  arity-2 alias of `matmul` emitting the same `tessera_rocm_wmma_gemm_f16` symbol —
+  now resolves to `matmul`'s manifest on every target (`hardware_verified` on ROCm/
+  sm_120, `fused` on x86/Apple), a reporting-gap fix, not a kernel (ROCm open 6→5).
+  **Still per-target open:** the `_sample` chains (host loops — no on-device chain
+  kernel), `ebm_energy` / `ebm_partition_exact` / `ebm_decode_init` / `ebm_ebt_tiny`
+  (Apple has `fused` kernels → a ROCm kernel is genuinely achievable — real work).
   Separately, the **6 collective/MoE-transport** ops at `reference` need real
   NCCL/RCCL (Workstream I / W6), not op synthesis. So: no *generic-synthesis* gap
   remains, but real per-target + domain codegen does — do not read this as "op

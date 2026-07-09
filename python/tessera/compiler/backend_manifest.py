@@ -4554,6 +4554,16 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
     the tensor `OP_SPECS` catalog.
     M7 follow-up (2026-05-18): same pattern for `complex_*`.
     """
+    # `gemm` is a BLAS-vocabulary ALIAS of `matmul` — identical OpSpec
+    # (`tessera.matmul`, arity 2, loop_nest) emitting the same kernel/runtime
+    # symbol (ROCm `tessera_rocm_wmma_gemm_f16`; "both op_kinds emit this one
+    # symbol"). It was left out of the per-target native tables, so its manifest
+    # defaulted to `artifact_only` while `matmul` is `hardware_verified`/`fused` —
+    # a reporting gap, not a kernel gap (`rt._execute_rocm_compiled_gemm` executes
+    # it today). Resolve to matmul so gemm inherits matmul's proven per-target
+    # status on EVERY backend (no lingering per-target inconsistency).
+    if op_name == "gemm":
+        op_name = "matmul"
     # Domain manifests (clifford / ebm / complex) are built by parallel
     # tables outside OP_SPECS. They must still honor _NUMERICAL_FIXTURES —
     # audit 2026-06-10 found these early returns bypassed the attach on the

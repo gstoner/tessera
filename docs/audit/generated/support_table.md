@@ -192,7 +192,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `dequant_grouped_gemm` | loop_nest | public | public | registered | complete | fused | compiled | ready | none |
 | `dequant_matmul` | loop_nest | public | public | registered | complete | fused | fused | ready | benchmarked |
 | `factorized_matmul` | loop_nest | public | public | registered | complete | fused | compiled | ready | none |
-| `gemm` | loop_nest | public | public | registered | complete | fused | fused | ready | benchmarked |
+| `gemm` | loop_nest | public | public | registered | complete | fused | hardware_verified | ready | benchmarked |
 | `grouped_gemm` | loop_nest | public | public | registered | complete | fused | fused | ready | benchmarked |
 | `latent_kv_compress` | loop_nest | public | public | registered | complete | fused | compiled | ready | none |
 | `latent_kv_expand_k` | loop_nest | public | public | registered | complete | fused | compiled | ready | none |
@@ -350,7 +350,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | linalg_decomposition | 4 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | linalg_solver | 2 | PPGCFCN· PPGCFCN· |
 | logical | 8 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
-| loop_nest | 12 | PPGCFCN· PPGCFCN· PPGCFFNB PPGCFCN· PPGCFFNB PPGCFFNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFHNB PPGCFFNB PPGCFHN· |
+| loop_nest | 12 | PPGCFCN· PPGCFCN· PPGCFFNB PPGCFCN· PPGCFHNB PPGCFFNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFHNB PPGCFFNB PPGCFHN· |
 | loss | 19 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | model_layer | 1 | PPGCFCN· |
 | moe | 1 | PPGCFCN· |

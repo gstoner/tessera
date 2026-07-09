@@ -1896,6 +1896,8 @@ extern "C" void tessera_apple_gpu_mpsgraph_unary_f32(int32_t op, const float* x,
       case 9: out[i] = 1.0f / std::sqrt(v); break;
       case 10: out[i] = -v; break;
       case 11: out[i] = std::fabs(v); break;
+      case 12: out[i] = std::sin(v); break;
+      case 13: out[i] = std::cos(v); break;
       default: out[i] = v; break;
     }
   }
@@ -1917,6 +1919,8 @@ extern "C" void tessera_apple_gpu_mpsgraph_binary_f32(int32_t op, const float* a
       case 4: out[i] = x > y ? x : y; break;
       case 5: out[i] = x < y ? x : y; break;
       case 6: out[i] = x * (y / (1.0f + std::exp(-y))); break;
+      case 7: out[i] = std::pow(x, y); break;
+      case 8: out[i] = std::atan2(x, y); break;
       default: out[i] = x; break;
     }
   }

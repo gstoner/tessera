@@ -182,7 +182,7 @@ factorized_matmul,5,0,1,5,0,,directly_tested,5 direct test references
 factorized_pos_emb,10,0,1,10,0,fp16,directly_tested,10 direct test references
 fake_quantize,6,0,1,6,0,,directly_tested,6 direct test references
 fft,17,2,0,19,0,f32 fp32,directly_tested,19 direct test references
-flash_attn,105,57,7,162,0,bf16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,162 direct test references
+flash_attn,106,57,7,163,0,bf16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,163 direct test references
 flatten,5,5,0,10,0,,directly_tested,10 direct test references
 flip,3,0,0,3,0,,directly_tested,3 direct test references
 floor,5,0,1,5,0,bf16 f32 fp32,directly_tested,5 direct test references

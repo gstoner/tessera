@@ -49,7 +49,7 @@ structured additive mask now flows through `flash_attn`, not just DFlash.
 | Module | Surface |
 |---|---|
 | `tessera.nn.functional.block_diffusion_attention` | One DFlash attention layer: QK-norm, KV injection (`concat([context_KV, proposal_KV])`), GQA, rope offsets, full (bidirectional) or sliding-window-via-`attn_bias`. Heads fold into batch → the rank-3 `flash_attn` lane. `attention_fn=` routes the core onto a backend. |
-| `tessera.dflash` | The draft: config + weights, `target_feature_projection` (multi-layer tap `fc`), decoder layer, `dflash_draft_forward`(`_cached`), `DraftKVCache` / `RotatingDraftKVCache`, samplers, verification (`dflash_linear_verify`, `dflash_speculative_verify`), `dflash_step` / `dflash_generate` / `dflash_generate_cached`, the position-weighted training loss, `HiddenStateTap`, `DFlashDraft` (`nn.Module`), and `apple_gpu_attention_fn`. |
+| `tessera.dflash` | The draft: config + weights, `target_feature_projection` (multi-layer tap `fc`), decoder layer, `dflash_draft_forward`(`_cached`), `DraftKVCache` / `RotatingDraftKVCache`, samplers, verification (`dflash_linear_verify`, `dflash_speculative_verify`), `dflash_step` / `dflash_generate` / `dflash_generate_cached`, the position-weighted training loss, `HiddenStateTap`, `DFlashDraft` (`nn.Module`), and the `{apple_gpu,rocm}_attention_fn` backend seams. |
 | `tessera.dflash_reference` | `ReferenceDecoderLM` — a numpy causal target (MHA + SwiGLU, rope, multi-layer hidden tap) with a stateless `forward` (greedy-AR ground truth) and a stateful KV cache with `step` / `rollback`. |
 | `tessera.dflash_io` | Dependency-free safetensors reader/writer + HF state-dict ↔ `DFlashWeights` mapping; `load_dflash_weights` reads a `z-lab/*-DFlash` draft checkpoint. |
 | `tessera.dflash_serve` | `dflash_generate_text` (string-in/out via any tokenizer) and `DFlashScheduler`. |
@@ -114,10 +114,18 @@ verification corrects every divergence.
 
 DFlash rides `flash_attn` + `attn_bias`, so its non-Apple backend seams are
 sequenced with the rest of the attention family in
-[`attention_family_backend_plan.md`](attention_family_backend_plan.md). Key point:
-DFlash *always* passes an `attn_bias`, so a `rocm_attention_fn` / `nvidia_attention_fn`
-is **blocked until each flash lane accepts the bias operand** (Phase 1 there) —
-x86 already has flash+bias, so an `x86_attention_fn` is the fastest seam to land.
+[`attention_family_backend_plan.md`](attention_family_backend_plan.md). DFlash
+*always* passes an `attn_bias`, so each backend seam needs its flash lane to
+accept the bias operand first.
+
+- **ROCm** — ✅ **`tessera.dflash.rocm_attention_fn`** runs the draft attention on
+  the gfx1151 WMMA flash lane (after the #328 additive-bias landing). f16 storage
+  (f32 softmax/accumulate); falls back to the numpy reference off-silicon or when
+  `head_dim` isn't a multiple of 16. Proven on real gfx1151: block-attention
+  parity to f16 and the whole-draft greedy tokens identical to the numpy path.
+- **x86** — flash+bias already exists; the `x86_attention_fn` seam is the next
+  fast win.
+- **CUDA** — pending the emit/ FA bias operand (Phase 1 CUDA).
 
 ## 6. External gates (not yet closed)
 

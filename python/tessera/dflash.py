@@ -759,6 +759,42 @@ def apple_gpu_attention_fn(q, k, v, *, scale=None, causal=False, attn_bias=None)
         "tessera.flash_attn", operands, {"scale": scale, "causal": causal}, np)
 
 
+# ---------------------------------------------------------------------------
+# ROCm (gfx1151) attention core
+# ---------------------------------------------------------------------------
+
+def rocm_attention_fn(q, k, v, *, scale=None, causal=False, attn_bias=None):
+    """``attention_fn`` for :func:`tessera.nn.functional.block_diffusion_attention`
+    that runs the rank-3 attention core on the ROCm gfx1151 WMMA flash lane
+    (``O = softmax(scale·Q@K^T + attn_bias)·V`` — the #328 additive-bias variant).
+
+    The WMMA kernel is f16/bf16 storage (f32 softmax + accumulate) with
+    ``head_dim`` a multiple of 16, so f32 inputs are cast to f16 for the device
+    lane. Falls back to the numpy reference (``ops.flash_attn``) off-silicon (no
+    live gfx1151 / no tessera-opt) or when ``head_dim`` is not a multiple of 16 —
+    so the opt-in seam is safe to pass on any box and only accelerates when the
+    lane can. Pass as
+    ``block_diffusion_attention(..., attention_fn=rocm_attention_fn)`` (or via
+    :func:`dflash_decoder_layer`'s composition) to run DFlash draft attention on
+    the AMD GPU. The DFlash greedy-invariant tolerates the f16 draft precision —
+    the target verifies every divergence.
+    """
+    from . import ops as _ops
+    from . import runtime as _rt
+    qa = F._asarray(q)
+    if qa.shape[-1] % 16 == 0:
+        try:
+            ka, va = F._asarray(k), F._asarray(v)
+            return _rt._rocm_flash_attn(
+                qa.astype(np.float16), ka.astype(np.float16),
+                va.astype(np.float16), scale=scale, causal=bool(causal),
+                attn_bias=attn_bias)
+        except _rt._RocmCompiledUnavailable:
+            pass  # off-silicon → the numpy reference below
+    return _ops.flash_attn(q, k, v, scale=scale, causal=causal,
+                           attn_bias=attn_bias)
+
+
 def dflash_generate_cached(prompt, draft_w: DFlashWeights, cfg: DFlashConfig,
                            target, *, max_new_tokens: int,
                            block_size: Optional[int] = None, rope_fn=None,
@@ -857,6 +893,7 @@ __all__ = [
     "target_feature_projection",
     "capture_target_hidden",
     "apple_gpu_attention_fn",
+    "rocm_attention_fn",
     "dflash_decoder_layer",
     "dflash_decoder_layer_cached",
     "dflash_draft_forward",

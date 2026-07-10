@@ -9114,6 +9114,58 @@ def _execute_apple_gpu_compiled_reduce(artifact: RuntimeArtifact,
         np.float32)
 
 
+#: op_name -> (module, callable) for the heterogeneous Apple GPU tail lane —
+#: MLA latent-KV (batched matmul), alibi bias, lgamma/digamma, fused_epilogue,
+#: asymmetric_bce, and the speculative-decode accept ops. Apple ships no device
+#: kernel for these, so the lane reuses the public tessera reference the x86/ROCm
+#: device kernels are matched against (no Metal dispatch -> reference_cpu).
+_APPLE_GPU_TAIL_REFS = {
+    "tessera.latent_kv_compress": ("ops", "latent_kv_compress"),
+    "tessera.latent_kv_expand_k": ("ops", "latent_kv_expand_k"),
+    "tessera.latent_kv_expand_v": ("ops", "latent_kv_expand_v"),
+    "tessera.alibi": ("ops", "alibi"),
+    "tessera.lgamma": ("ops", "lgamma"),
+    "tessera.digamma": ("ops", "digamma"),
+    "tessera.fused_epilogue": ("ops", "fused_epilogue"),
+    "tessera.asymmetric_bce": ("losses", "asymmetric_bce"),
+    "tessera.normalize_group_advantages": ("rl", "normalize_group_advantages"),
+    "tessera.spec_accept": ("ops", "spec_accept"),
+    "tessera.spec_accept_sample": ("ops", "spec_accept_sample"),
+    "tessera.spec_accept_tree_sample": ("ops", "spec_accept_tree_sample"),
+}
+
+
+def _execute_apple_gpu_compiled_tail(artifact: RuntimeArtifact,
+                                     args: Any) -> Any:
+    """The ``target="apple_gpu"`` reference tail lane — the heterogeneous
+    remainder (MLA latent-KV, alibi, lgamma/digamma, fused_epilogue,
+    asymmetric_bce, normalize_group_advantages, speculative-decode accept). Apple
+    ships no device kernel for these, so each reuses its public tessera reference
+    (no Metal dispatch -> execution_kind=reference_cpu). Matches tessera.ops /
+    tessera.losses / tessera.rl — parity with the x86/ROCm lanes."""
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _APPLE_GPU_TAIL_REFS:
+        raise ValueError(
+            "apple_gpu_tail_compiled executor handles one of "
+            f"{tuple(_APPLE_GPU_TAIL_REFS)}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    names = [str(n) for n in op.get("operands", [])]
+    kwargs = dict(op.get("kwargs") or {})
+    values = _bind_launch_args(args, arg_names)
+    operands = [values[n] for n in names]
+    from tessera import losses as _losses
+    from tessera import ops as _ops
+    from tessera import rl as _rl
+    mod = {"ops": _ops, "losses": _losses,
+           "rl": _rl}[_APPLE_GPU_TAIL_REFS[op_name][0]]
+    ref_fn = getattr(mod, _APPLE_GPU_TAIL_REFS[op_name][1])
+    return ref_fn(*operands, **kwargs)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Scatter lane (P8) — the 0-reduce / indexed-store companion to the P4 gather
 # lane. scatter (set) / scatter_add (sum) / scatter_reduce (min/max) along an
@@ -15275,6 +15327,7 @@ def _executor_table():
         "apple_gpu_reduce_compiled": _execute_apple_gpu_compiled_reduce,
         "apple_gpu_scatter_compiled": _execute_apple_gpu_compiled_scatter,
         "apple_gpu_sparse_compiled": _execute_apple_gpu_compiled_sparse,
+        "apple_gpu_tail_compiled": _execute_apple_gpu_compiled_tail,
         "apple_gpu_optimizer_compiled": _execute_apple_gpu_compiled_optimizer,
         "apple_gpu_rng_compiled": _execute_apple_gpu_compiled_rng,
         "apple_gpu_linalg_compiled": _execute_apple_gpu_compiled_linalg,

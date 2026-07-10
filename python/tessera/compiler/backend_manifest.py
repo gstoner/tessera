@@ -750,6 +750,32 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
                   "reference); matches numpy / tessera."),
         "execute_compare_fixture": "tests/unit/test_apple_gpu_sparse_compiled.py",
     } for op in ("spmm_csr", "spmm_coo", "sddmm", "bsmm", "moe")},
+    # Reference tail lane (2026-07-10) — the heterogeneous remainder (MLA
+    # latent-KV, alibi, lgamma/digamma, fused_epilogue, asymmetric_bce,
+    # normalize_group_advantages, speculative-decode accept) via
+    # apple_gpu_tail_compiled (public tessera reference; Apple ships no device
+    # kernel). ``compiled`` (direct execute/compare).
+    **{op: {
+        "status": _COMPILED_STATUS,
+        "dtypes": ("fp32",),
+        "notes": (f"Reference tail {op} via apple_gpu_tail_compiled (public "
+                  "tessera reference); matches tessera.ops / losses / rl."),
+        "execute_compare_fixture": "tests/unit/test_apple_gpu_tail_compiled.py",
+    } for op in ("latent_kv_compress", "latent_kv_expand_k", "latent_kv_expand_v",
+                 "alibi", "lgamma", "digamma", "fused_epilogue", "asymmetric_bce",
+                 "normalize_group_advantages", "spec_accept",
+                 "spec_accept_sample", "spec_accept_tree_sample")},
+    # stereographic rides the existing apple_gpu_conformal_compiled lane
+    # (_conformal_compute handles mobius + stereographic; genuine composition on
+    # the interleaved-f32 complex/binary-div lanes -> native_gpu).
+    "stereographic": {
+        "status": _COMPILED_STATUS,
+        "dtypes": ("fp32",),
+        "notes": ("Conformal stereographic via apple_gpu_conformal_compiled "
+                  "(sphere 3-vector -> C on the binary-div lane); matches "
+                  "tessera.complex."),
+        "execute_compare_fixture": "tests/unit/test_apple_gpu_complex_compiled.py",
+    },
     # Philox RNG base lane (2026-07-10) — rng_uniform / rng_normal / dropout via
     # apple_gpu_rng_compiled. Apple ships no device Philox kernel; the lane draws
     # from the counter-based Philox-4x32-10 reference (tessera.rng_device) the

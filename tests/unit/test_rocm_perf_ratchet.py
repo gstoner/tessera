@@ -92,9 +92,27 @@ def test_baseline_well_formed_when_present():
         for (m, n, k) in recorder.GEMM_F32_SIZES:
             assert ("gemm_f32", f"{m}x{n}x{k}") in ops, \
                 f"baseline missing gemm_f32 {m}x{n}x{k}"
+    # memory-bound movement lanes (bandwidth-modeled, recorded on a GPU box).
+    if any(r["mode"] == "kv_cache_append" for r in rows):
+        for n in recorder.KV_APPEND_ROWS:
+            assert ("kv_cache_append", f"{n}x{recorder.KV_ROW_WIDTH}") in ops, \
+                f"baseline missing kv_cache_append {n}"
+    if any(r["mode"] == "moe_dispatch" for r in rows):
+        # moe shapes are plan-derived (packed slot count), so just assert each
+        # recorded dispatch row has a paired combine row at the same shape.
+        disp = {r["shape"] for r in rows if r["mode"] == "moe_dispatch"}
+        comb = {r["shape"] for r in rows if r["mode"] == "moe_combine"}
+        assert disp == comb, "moe dispatch/combine shapes must pair"
+    _MOVEMENT = {"kv_cache_append", "kv_cache_read", "moe_dispatch", "moe_combine"}
     for r in rows:
-        assert r["mode"] in {"wmma", "flash_attn", "flash_attn_bwd", "gemm_f32"}
+        assert r["mode"] in {"wmma", "flash_attn", "flash_attn_bwd",
+                             "gemm_f32"} | _MOVEMENT
         assert r["max_latency_ms"] > r["median_ms"] > 0
+        # Movement rows carry bandwidth attainment; compute rows carry FLOP
+        # attainment — never both, and each carries the matching floor.
+        if r["mode"] in _MOVEMENT:
+            assert "pct_peak_bw" in r and "bw_attainment_floor" in r
+            assert "pct_peak" not in r
 
 
 def test_hot_path_manifest_rows_carry_benchmark_json():
@@ -255,4 +273,74 @@ def test_live_gemm_f32_within_ratchet():
     if not any(r["mode"] == "gemm_f32" for r in baseline["rows"]):
         pytest.skip("baseline has no gemm_f32 rows (recorded pre-f32-gemm lane)")
     failures = _live_ratchet_failures(rt, {"gemm_f32"})
+    assert not failures, "\n".join(failures)
+
+
+def _rocm_movement_live():
+    # The kv/moe movement lanes build + launch a gather/scatter hsaco — same gate
+    # the moe-transport test uses (tessera-opt + a usable GPU).
+    try:
+        from tessera import runtime as rt
+        return (rt._tessera_opt_path() is not None
+                and rt._rocm_wmma_runtime_available())
+    except Exception:
+        return False
+
+
+_MOVEMENT_MODES = {"kv_cache_append", "kv_cache_read",
+                   "moe_dispatch", "moe_combine"}
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not _rocm_movement_live(),
+                    reason="live ROCm gather/scatter movement lanes required")
+def test_live_movement_lanes_within_ratchet():
+    # The bandwidth-bound kv/moe gather/scatter lanes: re-time them live so a
+    # movement regression fails against the committed baseline (latency ratchet;
+    # the absolute bandwidth floor is gated separately by roofline.evaluate_
+    # attainment in test_roofline_attainment).
+    if not BASELINE.is_file():
+        pytest.skip("rocm baseline not recorded yet — run the recorder first")
+    from tessera import runtime as rt
+
+    baseline = json.loads(BASELINE.read_text())
+    present = {r["mode"] for r in baseline["rows"]} & _MOVEMENT_MODES
+    if not present:
+        pytest.skip("baseline has no movement rows (recorded pre-movement lanes)")
+    failures = _live_ratchet_failures(rt, present)
+    assert not failures, "\n".join(failures)
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not _rocm_movement_live(),
+                    reason="live ROCm gather/scatter movement lanes required")
+def test_live_movement_lanes_within_bandwidth_attainment():
+    # The ABSOLUTE bar for the movement lanes: re-time and gate achieved GB/s ÷
+    # peak BW against each row's bw_attainment_floor, so a bandwidth regression
+    # (not just a latency one) fails against the committed baseline.
+    if not BASELINE.is_file():
+        pytest.skip("rocm baseline not recorded yet — run the recorder first")
+    import importlib.util as _ilu
+
+    from tessera import runtime as rt
+    spec = _ilu.spec_from_file_location("roofline", REPO_ROOT / "benchmarks"
+                                        / "roofline.py")
+    roofline = _ilu.module_from_spec(spec)
+    spec.loader.exec_module(roofline)
+
+    baseline = json.loads(BASELINE.read_text())
+    present = {r["mode"] for r in baseline["rows"]} & _MOVEMENT_MODES
+    if not present:
+        pytest.skip("baseline has no movement rows (recorded pre-movement lanes)")
+    rows = []
+    for op, shape, dtype, mode, thunk in recorder.hot_path_cases(rt):
+        if mode not in present:
+            continue
+        rows.append({"op": op, "shape": shape, "dtype": dtype, "mode": mode,
+                     "latency_ms": recorder._median_ms(thunk, reps=10)})
+    # Gate ONLY the movement floors — filtering the baseline keeps the
+    # un-measured compute floors from registering as coverage holes.
+    gated = {"schema": baseline["schema"],
+             "rows": [r for r in baseline["rows"] if r["mode"] in present]}
+    failures = roofline.evaluate_attainment(rows, gated, "rocm:gfx1151")
     assert not failures, "\n".join(failures)

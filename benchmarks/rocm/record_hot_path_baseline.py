@@ -63,6 +63,27 @@ FLASH_ATTN_BWD_SHAPES = [(1, 8, 512, 64), (1, 16, 1024, 128)]
 # attainment floor alongside the latency cap.
 GEMM_F32_SIZES = [(256, 256, 256), (512, 512, 512), (1024, 1024, 1024)]
 
+# Memory-bound movement lanes — the gfx1151 gather/scatter kernels underneath the
+# KV-cache and MoE-transport paths. These are BANDWIDTH-bound (near-zero FLOPs),
+# so roofline gates them on achieved GB/s ÷ the 256 GB/s peak, not FLOP %. The
+# ratchet shape is `RxW` (rows moved × row width in elements); op_bytes models
+# read-rows + write-rows (2·R·W·4). Recorded only when the compiled lane is live.
+#
+# KV-cache append/read: (n_rows_moved, row_width). append writes N new rows into a
+# (max_seq, row_width) buffer; read gathers M rows. `KV_ROW_WIDTH` = heads·head_dim.
+KV_ROW_WIDTH = 8 * 64
+KV_APPEND_ROWS = [128, 256]
+KV_READ_ROWS = [256, 512]
+KV_MAX_SEQ = 1024
+# MoE dispatch/combine: (packed_slots, hidden). The plan routes `tokens` tokens
+# top_k ways into `experts` experts at `capacity` each; the packed row count S is
+# derived from the plan, so these shapes drive the plan, not the byte model.
+MOE_HIDDEN = 512
+MOE_CASES = [  # (tokens, experts, top_k, capacity)
+    (512, 8, 2, 160),
+    (1024, 8, 2, 320),
+]
+
 
 def _median_ms(fn, reps: int = 20, warmup: int = 3) -> float:
     for _ in range(warmup):
@@ -147,6 +168,68 @@ def hot_path_cases(rt):
             rt._rocm_f32_gemm(a, bb, np)
         return _run
 
+    # ── memory-bound movement thunks (gather/scatter) ────────────────────────
+    def _kv_art(op_name, arg_names, kwargs):
+        return rt.RuntimeArtifact(metadata={
+            "target": "rocm", "compiler_path": "rocm_kv_cache_compiled",
+            "executable": True, "arg_names": list(arg_names),
+            "ops": [{"op_name": op_name, "operands": list(arg_names),
+                     "kwargs": kwargs}]})
+
+    def _make_kv_append(n_rows):
+        buf = rng.standard_normal((KV_MAX_SEQ, KV_ROW_WIDTH)).astype(np.float32)
+        new = rng.standard_normal((n_rows, KV_ROW_WIDTH)).astype(np.float32)
+        art = _kv_art("tessera.kv_cache.append", ["buf", "new"], {"start": 0})
+
+        def _run():
+            res = rt.launch(art, (buf, new))
+            if not res["ok"]:
+                raise RuntimeError(res.get("reason"))
+        return _run
+
+    def _make_kv_read(m_rows):
+        buf = rng.standard_normal((KV_MAX_SEQ, KV_ROW_WIDTH)).astype(np.float32)
+        art = _kv_art("tessera.kv_cache.read", ["buf"], {"start": 0, "end": m_rows})
+
+        def _run():
+            res = rt.launch(art, (buf,))
+            if not res["ok"]:
+                raise RuntimeError(res.get("reason"))
+        return _run
+
+    def _moe_art(op_name, arg_names):
+        return rt.RuntimeArtifact(metadata={
+            "target": "rocm", "compiler_path": "rocm_moe_transport_compiled",
+            "executable": True, "arg_names": list(arg_names),
+            "ops": [{"op_name": op_name}]})
+
+    def _moe_plan(tokens, experts, top_k, capacity):
+        from tessera.stdlib import moe
+        eids = rng.integers(0, experts, size=(tokens, top_k), dtype=np.int64)
+        w = rng.random((tokens, top_k), dtype=np.float32)
+        w /= w.sum(axis=1, keepdims=True)
+        return moe.plan_dispatch(eids, w, experts, capacity=capacity)
+
+    def _make_moe_dispatch(plan, packed_rows):
+        x = rng.standard_normal((int(plan.num_tokens), MOE_HIDDEN)).astype(np.float32)
+        art = _moe_art("tessera.moe_dispatch", ["x", "plan"])
+
+        def _run():
+            res = rt.launch(art, {"x": x, "plan": plan})
+            if not res["ok"]:
+                raise RuntimeError(res.get("reason"))
+        return _run
+
+    def _make_moe_combine(plan, packed_rows):
+        partials = rng.standard_normal((packed_rows, MOE_HIDDEN)).astype(np.float32)
+        art = _moe_art("tessera.moe_combine", ["partials", "plan"])
+
+        def _run():
+            res = rt.launch(art, {"partials": partials, "plan": plan})
+            if not res["ok"]:
+                raise RuntimeError(res.get("reason"))
+        return _run
+
     cases = []
     for (m, n, k) in HOT_PATH_SIZES:
         cases.append(("matmul", f"{m}x{n}x{k}", "f16", "wmma", _make(m, n, k)))
@@ -164,6 +247,28 @@ def hot_path_cases(rt):
         for (m, n, k) in GEMM_F32_SIZES:
             cases.append(("gemm_f32", f"{m}x{n}x{k}", "f32", "gemm_f32",
                           _make_gemm_f32(m, n, k)))
+    # Movement lanes (gather/scatter). Gate on tessera-opt + a usable GPU (the
+    # kv/moe executors build a scatter/gather hsaco and launch it) — same probe
+    # the moe-transport test uses. Bandwidth-modeled: shape `RxW` = rows × width.
+    if rt._tessera_opt_path() is not None and rt._rocm_wmma_runtime_available():
+        from tessera.stdlib import moe
+        for n in KV_APPEND_ROWS:
+            cases.append(("kv_cache_append", f"{n}x{KV_ROW_WIDTH}", "f32",
+                          "kv_cache_append", _make_kv_append(n)))
+        for m in KV_READ_ROWS:
+            cases.append(("kv_cache_read", f"{m}x{KV_ROW_WIDTH}", "f32",
+                          "kv_cache_read", _make_kv_read(m)))
+        for (tokens, experts, top_k, capacity) in MOE_CASES:
+            plan = _moe_plan(tokens, experts, top_k, capacity)
+            # S = packed slot count (kept, expert-sorted) — derive from the plan's
+            # oracle dispatch so the ratchet shape matches the bytes actually moved.
+            x0 = rng.standard_normal((tokens, MOE_HIDDEN)).astype(np.float32)
+            packed_rows = int(moe.dispatch(x0, plan).shape[0])
+            shape = f"{packed_rows}x{MOE_HIDDEN}"
+            cases.append(("moe_dispatch", shape, "f32", "moe_dispatch",
+                          _make_moe_dispatch(plan, packed_rows)))
+            cases.append(("moe_combine", shape, "f32", "moe_combine",
+                          _make_moe_combine(plan, packed_rows)))
     return cases
 
 
@@ -200,13 +305,18 @@ def main() -> int:
     import roofline as _rl
     _rl.annotate_rows(rows, f"rocm:{rt._rocm_chip()}")
     for r in rows:
+        # Round every floor DOWN (not to-nearest): a floor rounded *up* can
+        # exceed attainment/margin, so a run inside the latency cap (margin×
+        # median) would still trip the attainment gate. Flooring keeps the
+        # absolute gate no stricter than the relative latency margin. Compute
+        # rows carry pct_peak → attainment_floor; movement rows carry pct_peak_bw
+        # → bw_attainment_floor (one or the other, never both).
         if "pct_peak" in r:
-            # Round the floor DOWN (not to-nearest): a floor rounded *up* can
-            # exceed pct_peak/margin, so a run inside the latency cap (margin×
-            # median) would still trip the attainment gate. Flooring keeps the
-            # absolute gate no stricter than the relative latency margin.
             r["attainment_floor"] = math.floor(
                 r["pct_peak"] / args.margin * 1e5) / 1e5
+        elif "pct_peak_bw" in r:
+            r["bw_attainment_floor"] = math.floor(
+                r["pct_peak_bw"] / args.margin * 1e5) / 1e5
     OUT.write_text(json.dumps({
         "schema": "tessera.benchmark.ratchet.v1",
         "margin": args.margin,

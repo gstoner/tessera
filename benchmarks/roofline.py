@@ -93,7 +93,23 @@ def op_bytes(op: str, shape: str, dtype: str) -> Optional[int]:
     if op == "flash_attn_bwd" and len(dims) == 4:
         b, h, s, d = dims
         return 7 * b * h * s * d * w          # Q, K, V, dO in; dQ, dK, dV out
+    # Pure-movement lanes (no FLOP model → bandwidth-bound, see pct_peak_bw). Each
+    # moves rows of data with no reuse: read the touched rows + write them once.
+    # Shape ``RxW`` = rows moved × row width (elements). `_MOVEMENT_OPS` gates the
+    # bandwidth branch in annotate_rows so these never enter the compute path.
+    if op in _MOVEMENT_OPS and len(dims) == 2:
+        rows_moved, width = dims
+        return 2 * rows_moved * width * w      # read rows + write rows
     return None
+
+
+#: Ops characterized by bandwidth attainment (achieved GB/s ÷ peak BW), not
+#: compute attainment — the gfx1151 gather/scatter movement kernels. They have an
+#: op_bytes model but deliberately NO op_flops (near-zero arithmetic), so
+#: annotate_rows routes them to the bandwidth branch.
+_MOVEMENT_OPS: frozenset[str] = frozenset({
+    "kv_cache_append", "kv_cache_read", "moe_dispatch", "moe_combine",
+})
 
 
 def achieved_tflops(op: str, shape: str, median_ms: float,
@@ -121,57 +137,107 @@ def pct_peak(op: str, shape: str, dtype: str, median_ms: float,
     return ach / peak
 
 
+def achieved_gbps(op: str, shape: str, dtype: str,
+                  median_ms: float) -> Optional[float]:
+    """Achieved DRAM bandwidth (GB/s) for a movement op — its min-traffic bytes
+    ÷ wall-clock. ``None`` when the op has no byte model."""
+    nbytes = op_bytes(op, shape, dtype)
+    if nbytes is None or median_ms <= 0:
+        return None
+    return nbytes / (median_ms * 1e-3) / 1e9
+
+
+def pct_peak_bw(op: str, shape: str, dtype: str, median_ms: float,
+                device: str) -> Optional[float]:
+    """End-to-end bandwidth attainment: achieved GB/s ÷ the device's peak DRAM
+    bandwidth. The right absolute bar for the memory-bound movement lanes
+    (gather/scatter), where FLOP % is meaningless (near-zero arithmetic). ``None``
+    when the op has no byte model or the device's peak BW is unknown."""
+    ach = achieved_gbps(op, shape, dtype, median_ms)
+    dev = DEVICE_PEAK.get(device)
+    if ach is None or dev is None:
+        return None
+    peak = dev.get("peak_bw_gb_s")
+    if not peak:
+        return None
+    return ach / peak
+
+
 def annotate_rows(rows: list[dict[str, Any]], device: str) -> list[dict[str, Any]]:
-    """Add ``achieved_tflops`` + ``pct_peak`` to each row that has a FLOP model
-    (computed from the row's existing ``median_ms`` — no re-timing). Rows without
-    a model are returned unchanged."""
+    """Annotate each row with its attainment, computed from the row's existing
+    ``median_ms`` (no re-timing). A FLOP-modeled row gets ``achieved_tflops`` +
+    ``pct_peak`` (compute attainment); a pure-movement row (``_MOVEMENT_OPS``,
+    byte model but no FLOP model) gets ``achieved_gbps`` + ``pct_peak_bw``
+    (bandwidth attainment). Rows with neither model are returned unchanged."""
     for r in rows:
         ach = achieved_tflops(r["op"], r["shape"], float(r["median_ms"]))
-        if ach is None:
+        if ach is not None:                    # compute-bound lane
+            pk = pct_peak(r["op"], r["shape"], r["dtype"],
+                          float(r["median_ms"]), device)
+            r["achieved_tflops"] = round(ach, 4)
+            if pk is not None:
+                r["pct_peak"] = round(pk, 5)
             continue
-        pk = pct_peak(r["op"], r["shape"], r["dtype"],
-                      float(r["median_ms"]), device)
-        r["achieved_tflops"] = round(ach, 4)
-        if pk is not None:
-            r["pct_peak"] = round(pk, 5)
+        gbps = achieved_gbps(r["op"], r["shape"], r["dtype"],
+                             float(r["median_ms"]))
+        if gbps is not None:                   # memory-bound movement lane
+            pkb = pct_peak_bw(r["op"], r["shape"], r["dtype"],
+                              float(r["median_ms"]), device)
+            r["achieved_gbps"] = round(gbps, 4)
+            if pkb is not None:
+                r["pct_peak_bw"] = round(pkb, 5)
     return rows
 
 
 def evaluate_attainment(rows: list[Mapping[str, Any]],
                         baseline: Mapping[str, Any],
                         device: str) -> list[str]:
-    """Gate measured rows against each baseline row's ``attainment_floor`` (% of
-    peak). A row whose measured ``pct_peak`` falls below its floor fails — the
-    absolute-attainment analog of the latency ratchet. Rows with no floor are not
-    gated (opt-in). A baseline row with a floor but no matching measurement fails
-    on coverage."""
+    """Gate measured rows against each baseline row's attainment floor — the
+    absolute-attainment analog of the latency ratchet. A compute row carries
+    ``attainment_floor`` (gated on ``pct_peak``); a memory-bound movement row
+    carries ``bw_attainment_floor`` (gated on ``pct_peak_bw``). A row whose
+    measured attainment falls below its floor fails; rows with no floor are not
+    gated (opt-in); a floor with no matching measurement fails on coverage."""
     failures: list[str] = []
 
     def key(r: Mapping[str, Any]) -> tuple:
         return (r.get("op"), r.get("shape"), r.get("dtype"), r.get("mode"))
 
-    floors = {key(r): float(r["attainment_floor"])
-              for r in baseline.get("rows", []) if "attainment_floor" in r}
+    # Two floor kinds, keyed the same way. `compute` reads pct_peak; `bw` reads
+    # pct_peak_bw. A baseline row has at most one (an op is compute XOR movement).
+    compute_floors = {key(r): float(r["attainment_floor"])
+                      for r in baseline.get("rows", []) if "attainment_floor" in r}
+    bw_floors = {key(r): float(r["bw_attainment_floor"])
+                 for r in baseline.get("rows", []) if "bw_attainment_floor" in r}
     seen: set[tuple] = set()
     for row in rows:
         k = key(row)
-        floor = floors.get(k)
-        if floor is None:
-            continue
-        seen.add(k)
         # Measured ratchet-report rows carry `latency_ms` (like evaluate_ratchet
         # reads); baseline/self-check rows carry `median_ms`. Accept either.
-        t = row.get("latency_ms", row.get("median_ms", 0.0))
-        pk = pct_peak(row.get("op", ""), row.get("shape", ""),
-                      row.get("dtype", ""), float(t), device)
-        if pk is None:
-            failures.append(f"{k[0]} {k[1]} {k[2]} {k[3]}: no attainment "
-                            f"(missing FLOP model or device peak for {device!r})")
-        elif pk < floor:
-            failures.append(
-                f"{k[0]} {k[1]} {k[2]} {k[3]}: pct_peak={pk:.4f} below floor "
-                f"{floor:.4f}")
-    for k in sorted(floors.keys() - seen, key=str):
+        t = float(row.get("latency_ms", row.get("median_ms", 0.0)))
+        if k in compute_floors:
+            seen.add(k)
+            pk = pct_peak(row.get("op", ""), row.get("shape", ""),
+                          row.get("dtype", ""), t, device)
+            if pk is None:
+                failures.append(f"{k[0]} {k[1]} {k[2]} {k[3]}: no attainment "
+                                f"(missing FLOP model or peak for {device!r})")
+            elif pk < compute_floors[k]:
+                failures.append(
+                    f"{k[0]} {k[1]} {k[2]} {k[3]}: pct_peak={pk:.4f} below floor "
+                    f"{compute_floors[k]:.4f}")
+        if k in bw_floors:
+            seen.add(k)
+            pkb = pct_peak_bw(row.get("op", ""), row.get("shape", ""),
+                              row.get("dtype", ""), t, device)
+            if pkb is None:
+                failures.append(f"{k[0]} {k[1]} {k[2]} {k[3]}: no bw attainment "
+                                f"(missing byte model or peak BW for {device!r})")
+            elif pkb < bw_floors[k]:
+                failures.append(
+                    f"{k[0]} {k[1]} {k[2]} {k[3]}: pct_peak_bw={pkb:.5f} below "
+                    f"floor {bw_floors[k]:.5f}")
+    for k in sorted((compute_floors.keys() | bw_floors.keys()) - seen, key=str):
         failures.append(f"{k[0]} {k[1]} {k[2]} {k[3]}: no measurement "
                         f"(attainment coverage)")
     return failures

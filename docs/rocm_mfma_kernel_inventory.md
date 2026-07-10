@@ -492,10 +492,15 @@ promotes them to `compileable`. See §9 for the concrete done / open / blocked s
 - (flash_attn backward is now the **full forward variant surface** — MHA +
   GQA/MQA + attn_bias + sliding-window + logit-softcap — all runtime-wired)
 - (`grad_clip_norm` now executes via `rocm_grad_clip_compiled`, x86 parity)
-- **Perf tuning** (LDS/blocked kernels) — the compiled lanes now carry *measured*
-  ratchet baselines (matmul + flash_attn fwd/bwd in `rocm_gfx1151_hot_paths.json`)
-  but stay correctness-first; a real MFU ladder (register/LDS blocking) is future
-  and is where ROCm's lead-performance-target status (Decision #28) gets earned
+- **Perf tuning** — the WMMA GEMM ladder is done (rung-1 register blocking is
+  production; LDS/pipelining are wash-to-regression on this unified-memory APU —
+  `STRIX_HALO_EXECUTION_PLAN.md` Stage F/H). The **f32 GEMM** (`gemm_f32`, grouped-
+  SwiGLU's kernel) is now **register-blocked** (TM×TN=4×4 output tile per thread,
+  ~1.6× over one-thread-per-output at 1024³) — applying the same proven lever;
+  measured `gemm_f32` ratchet rows are in `rocm_gfx1151_hot_paths.json`. The lanes
+  still stay correctness-first overall; the deeper WMMA occupancy/dual-issue lever
+  (Stage F "next lever") is where ROCm's lead-performance status (Decision #28)
+  gets fully earned, and remains future
 - **Fused paged-attention** — the §5.6 movement core (`kv_cache_append/read/prune`)
   now executes via `rocm_kv_cache_compiled` (scatter/gather compose,
   execute-compare vs `KVCacheHandle`); a single fused gather→attention paged

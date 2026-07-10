@@ -27,6 +27,13 @@ using namespace mlir;
 namespace {
 
 static constexpr int64_t BD = 256;
+// Output-tile register blocking: each thread computes a TM×TN tile of C. Per
+// k-step it loads TM A-values + TN B-values from global and reuses them across
+// TM*TN FMAs (each A elt reused TN times, each B elt TM times) — the arithmetic-
+// intensity / register-budget lever that wins on Strix Halo's unified memory
+// (STRIX_HALO_EXECUTION_PLAN Stage F: "register-budget tiling is the lever").
+static constexpr int64_t TM = 4;
+static constexpr int64_t TN = 4;
 
 void emitGemmF32Body(OpBuilder &b, Location loc, gpu::GPUFuncOp f) {
   Type f32 = b.getF32Type();
@@ -35,38 +42,85 @@ void emitGemmF32Body(OpBuilder &b, Location loc, gpu::GPUFuncOp f) {
   Value A = f.getArgument(0), B = f.getArgument(1), C = f.getArgument(2);
   Value M = f.getArgument(3), N = f.getArgument(4), K = f.getArgument(5);
 
+  auto ci = [&](int64_t v) { return b.create<arith::ConstantIndexOp>(loc, v); };
+  Value c0 = ci(0), c1 = ci(1);
   Value bid = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
   Value tid = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
-  Value cBD = b.create<arith::ConstantIndexOp>(loc, BD);
   Value gid = b.create<arith::AddIOp>(
-      loc, b.create<arith::MulIOp>(loc, bid, cBD), tid);
-  Value total = b.create<arith::MulIOp>(loc, M, N);
+      loc, b.create<arith::MulIOp>(loc, bid, ci(BD)), tid);
+  // One thread per TM×TN output tile: nTilesN = ceil(N/TN), total = ceil(M/TM)*.
+  Value nTilesN = b.create<arith::DivUIOp>(
+      loc, b.create<arith::AddIOp>(loc, N, ci(TN - 1)), ci(TN));
+  Value nTilesM = b.create<arith::DivUIOp>(
+      loc, b.create<arith::AddIOp>(loc, M, ci(TM - 1)), ci(TM));
+  Value total = b.create<arith::MulIOp>(loc, nTilesM, nTilesN);
   Value inb = b.create<arith::CmpIOp>(loc, slt, gid, total);
   auto guard = b.create<scf::IfOp>(loc, inb, /*withElse=*/false);
   b.setInsertionPointToStart(guard.thenBlock());
 
-  Value c0 = b.create<arith::ConstantIndexOp>(loc, 0);
-  Value c1 = b.create<arith::ConstantIndexOp>(loc, 1);
   Value zero = b.create<arith::ConstantOp>(loc, f32, b.getF32FloatAttr(0.0f));
-  Value m = b.create<arith::DivUIOp>(loc, gid, N);   // row
-  Value n = b.create<arith::RemUIOp>(loc, gid, N);   // col
-  Value abase = b.create<arith::MulIOp>(loc, m, K);  // m*K
-  // acc = Σ_k A[m*K + k] · B[k*N + n]
-  auto kl = b.create<scf::ForOp>(loc, c0, K, c1, ValueRange{zero});
+  Value tr = b.create<arith::DivUIOp>(loc, gid, nTilesN);   // tile row
+  Value tc = b.create<arith::RemUIOp>(loc, gid, nTilesN);   // tile col
+  Value m0 = b.create<arith::MulIOp>(loc, tr, ci(TM));
+  Value n0 = b.create<arith::MulIOp>(loc, tc, ci(TN));
+
+  // Per-row (i) and per-col (j) bounds + safe (clamped) indices, hoisted out of
+  // the k-loop. OOB rows/cols contribute 0 (masked load) and are not stored.
+  SmallVector<Value> mi(TM), inbM(TM), aRowBase(TM);
+  for (int64_t i = 0; i < TM; ++i) {
+    mi[i] = b.create<arith::AddIOp>(loc, m0, ci(i));
+    inbM[i] = b.create<arith::CmpIOp>(loc, slt, mi[i], M);
+    Value miSafe = b.create<arith::SelectOp>(loc, inbM[i], mi[i], c0);
+    aRowBase[i] = b.create<arith::MulIOp>(loc, miSafe, K);
+  }
+  SmallVector<Value> nj(TN), inbN(TN), njSafe(TN);
+  for (int64_t j = 0; j < TN; ++j) {
+    nj[j] = b.create<arith::AddIOp>(loc, n0, ci(j));
+    inbN[j] = b.create<arith::CmpIOp>(loc, slt, nj[j], N);
+    njSafe[j] = b.create<arith::SelectOp>(loc, inbN[j], nj[j], c0);
+  }
+
+  // k-loop with TM*TN register accumulators.
+  SmallVector<Value> initAcc(TM * TN, zero);
+  auto kl = b.create<scf::ForOp>(loc, c0, K, c1, initAcc);
   {
     OpBuilder::InsertionGuard g(b);
     b.setInsertionPointToStart(kl.getBody());
     Value k = kl.getInductionVar();
-    Value av = b.create<memref::LoadOp>(
-        loc, A, ValueRange{b.create<arith::AddIOp>(loc, abase, k)});
-    Value boff = b.create<arith::AddIOp>(
-        loc, b.create<arith::MulIOp>(loc, k, N), n);   // k*N + n
-    Value bv = b.create<memref::LoadOp>(loc, B, ValueRange{boff});
-    Value acc = b.create<arith::AddFOp>(loc, kl.getRegionIterArgs()[0],
-                                        b.create<arith::MulFOp>(loc, av, bv));
-    b.create<scf::YieldOp>(loc, ValueRange{acc});
+    SmallVector<Value> acc(kl.getRegionIterArgs().begin(),
+                           kl.getRegionIterArgs().end());
+    SmallVector<Value> a(TM), bcol(TN);
+    for (int64_t i = 0; i < TM; ++i) {
+      Value v = b.create<memref::LoadOp>(
+          loc, A, ValueRange{b.create<arith::AddIOp>(loc, aRowBase[i], k)});
+      a[i] = b.create<arith::SelectOp>(loc, inbM[i], v, zero);
+    }
+    Value kN = b.create<arith::MulIOp>(loc, k, N);
+    for (int64_t j = 0; j < TN; ++j) {
+      Value v = b.create<memref::LoadOp>(
+          loc, B, ValueRange{b.create<arith::AddIOp>(loc, kN, njSafe[j])});
+      bcol[j] = b.create<arith::SelectOp>(loc, inbN[j], v, zero);
+    }
+    SmallVector<Value> newAcc(TM * TN);
+    for (int64_t i = 0; i < TM; ++i)
+      for (int64_t j = 0; j < TN; ++j)
+        newAcc[i * TN + j] = b.create<arith::AddFOp>(
+            loc, acc[i * TN + j],
+            b.create<arith::MulFOp>(loc, a[i], bcol[j]));
+    b.create<scf::YieldOp>(loc, newAcc);
   }
-  b.create<memref::StoreOp>(loc, kl.getResult(0), C, ValueRange{gid});
+  // Store the tile, guarded on both bounds.
+  auto res = kl.getResults();
+  for (int64_t i = 0; i < TM; ++i)
+    for (int64_t j = 0; j < TN; ++j) {
+      Value inBoth = b.create<arith::AndIOp>(loc, inbM[i], inbN[j]);
+      auto st = b.create<scf::IfOp>(loc, inBoth, /*withElse=*/false);
+      OpBuilder::InsertionGuard g(b);
+      b.setInsertionPointToStart(st.thenBlock());
+      Value cidx = b.create<arith::AddIOp>(
+          loc, b.create<arith::MulIOp>(loc, mi[i], N), nj[j]);
+      b.create<memref::StoreOp>(loc, res[i * TN + j], C, ValueRange{cidx});
+    }
   b.setInsertionPointToEnd(&f.getBody().front());
   b.create<gpu::ReturnOp>(loc);
 }
@@ -77,8 +131,8 @@ struct GenerateROCMGemmF32KernelPass
 
   StringRef getArgument() const final { return "generate-rocm-gemm-f32-kernel"; }
   StringRef getDescription() const final {
-    return "Expand a tessera_rocm.gemm_f32 directive into a plain f32 GEMM "
-           "kernel (C=A@B, one thread per output element, scalar f32 k-loop)";
+    return "Expand a tessera_rocm.gemm_f32 directive into an f32 GEMM kernel "
+           "(C=A@B, register-blocked TMxTN output tile per thread, f32 k-loop)";
   }
   void getDependentDialects(DialectRegistry &registry) const final {
     registry.insert<gpu::GPUDialect, scf::SCFDialect, arith::ArithDialect,

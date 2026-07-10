@@ -54,6 +54,13 @@ FLASH_ATTN_SHAPES = [(1, 8, 512, 64), (1, 8, 1024, 64), (1, 16, 1024, 128)]
 # floor, not an MFU claim (pct_peak is expectedly tiny — repo Decision #26).
 FLASH_ATTN_BWD_SHAPES = [(1, 8, 512, 64), (1, 16, 1024, 128)]
 
+# Register-blocked f32 GEMM ladder (M, N, K) — the plain-VALU f32 kernel
+# (generate-rocm-gemm-f32-kernel) grouped-SwiGLU rides. TM×TN=4×4 output-tile
+# register blocking is a ~1.6x win over one-thread-per-output at 1024³
+# (STRIX_HALO Stage F: register-budget tiling is the lever). Correctness-first
+# still — the ratchet rows are a regression floor, not an MFU claim.
+GEMM_F32_SIZES = [(256, 256, 256), (512, 512, 512), (1024, 1024, 1024)]
+
 
 def _median_ms(fn, reps: int = 20, warmup: int = 3) -> float:
     for _ in range(warmup):
@@ -130,6 +137,14 @@ def hot_path_cases(rt):
                 raise RuntimeError(res.get("reason"))
         return _run
 
+    def _make_gemm_f32(m, n, k):
+        a = rng.standard_normal((m, k)).astype(np.float32)
+        bb = rng.standard_normal((k, n)).astype(np.float32)
+
+        def _run():
+            rt._rocm_f32_gemm(a, bb, np)
+        return _run
+
     cases = []
     for (m, n, k) in HOT_PATH_SIZES:
         cases.append(("matmul", f"{m}x{n}x{k}", "f16", "wmma", _make(m, n, k)))
@@ -140,6 +155,13 @@ def hot_path_cases(rt):
         for (b, h, s, d) in FLASH_ATTN_BWD_SHAPES:
             cases.append(("flash_attn_bwd", f"{b}x{h}x{s}x{d}", "f16",
                           "flash_attn_bwd", _make_fa_bwd(b, h, s, d)))
+    # f32 GEMM gates on its OWN probe (generate-rocm-gemm-f32-kernel is a
+    # DIFFERENT pass from the flash lane), so a host where the f32 GEMM works but
+    # the flash lane is missing/broken still records its gemm_f32 ratchet rows.
+    if rt._rocm_compiled_gemm_f32_available():
+        for (m, n, k) in GEMM_F32_SIZES:
+            cases.append(("gemm_f32", f"{m}x{n}x{k}", "f32", "gemm_f32",
+                          _make_gemm_f32(m, n, k)))
     return cases
 
 

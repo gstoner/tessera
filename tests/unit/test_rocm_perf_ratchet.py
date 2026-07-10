@@ -87,8 +87,13 @@ def test_baseline_well_formed_when_present():
         for (b, h, s, d) in recorder.FLASH_ATTN_BWD_SHAPES:
             assert ("flash_attn_bwd", f"{b}x{h}x{s}x{d}") in ops, \
                 f"baseline missing flash_attn_bwd {b}x{h}x{s}x{d}"
+    # register-blocked f32 GEMM — same tessera-opt gate; full ladder if present.
+    if any(r["mode"] == "gemm_f32" for r in rows):
+        for (m, n, k) in recorder.GEMM_F32_SIZES:
+            assert ("gemm_f32", f"{m}x{n}x{k}") in ops, \
+                f"baseline missing gemm_f32 {m}x{n}x{k}"
     for r in rows:
-        assert r["mode"] in {"wmma", "flash_attn", "flash_attn_bwd"}
+        assert r["mode"] in {"wmma", "flash_attn", "flash_attn_bwd", "gemm_f32"}
         assert r["max_latency_ms"] > r["median_ms"] > 0
 
 
@@ -163,6 +168,16 @@ def _rocm_flash_live():
         return False
 
 
+def _rocm_gemm_f32_live():
+    # Own probe: the f32 GEMM pass is separate from the flash lane, so a broken
+    # flash lane must not skip the gemm_f32 re-timing.
+    try:
+        from tessera import runtime as rt
+        return rt._rocm_compiled_gemm_f32_available()
+    except Exception:
+        return False
+
+
 def _live_ratchet_failures(rt, modes):
     """Re-time only the hot paths in ``modes`` and gate them against the matching
     baseline rows. Filtering the baseline to ``modes`` keeps an unavailable lane
@@ -222,4 +237,22 @@ def test_live_flash_attn_bwd_within_ratchet():
     if not any(r["mode"] == "flash_attn_bwd" for r in baseline["rows"]):
         pytest.skip("baseline has no flash_attn_bwd rows (recorded pre-bwd lane)")
     failures = _live_ratchet_failures(rt, {"flash_attn_bwd"})
+    assert not failures, "\n".join(failures)
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not _rocm_gemm_f32_live(),
+                    reason="live compiled ROCm f32 GEMM lane required")
+def test_live_gemm_f32_within_ratchet():
+    # Gated on the f32 GEMM's OWN probe (not the flash lane): re-time the blocked
+    # kernel live so a regression (e.g. a lost register-blocking win) fails
+    # against the committed baseline even if the flash lane is unavailable.
+    if not BASELINE.is_file():
+        pytest.skip("rocm baseline not recorded yet — run the recorder first")
+    from tessera import runtime as rt
+
+    baseline = json.loads(BASELINE.read_text())
+    if not any(r["mode"] == "gemm_f32" for r in baseline["rows"]):
+        pytest.skip("baseline has no gemm_f32 rows (recorded pre-f32-gemm lane)")
+    failures = _live_ratchet_failures(rt, {"gemm_f32"})
     assert not failures, "\n".join(failures)

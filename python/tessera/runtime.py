@@ -9127,8 +9127,14 @@ _APPLE_GPU_TAIL_REFS = {
     "tessera.lgamma": ("ops", "lgamma"),
     "tessera.digamma": ("ops", "digamma"),
     "tessera.fused_epilogue": ("ops", "fused_epilogue"),
+    # asymmetric_bce / normalize_group_advantages carry a namespaced canonical
+    # Graph IR name (op_catalog: tessera.loss.* / tessera.rl.*); accept both the
+    # canonical name emitted by the frontend/tracer and the flat spelling the
+    # hand-written artifacts use, so the lane is reachable from real graphs.
     "tessera.asymmetric_bce": ("losses", "asymmetric_bce"),
+    "tessera.loss.asymmetric_bce": ("losses", "asymmetric_bce"),
     "tessera.normalize_group_advantages": ("rl", "normalize_group_advantages"),
+    "tessera.rl.normalize_group_advantages": ("rl", "normalize_group_advantages"),
     "tessera.spec_accept": ("ops", "spec_accept"),
     "tessera.spec_accept_sample": ("ops", "spec_accept_sample"),
     "tessera.spec_accept_tree_sample": ("ops", "spec_accept_tree_sample"),
@@ -9163,6 +9169,11 @@ def _execute_apple_gpu_compiled_tail(artifact: RuntimeArtifact,
     mod = {"ops": _ops, "losses": _losses,
            "rl": _rl}[_APPLE_GPU_TAIL_REFS[op_name][0]]
     ref_fn = getattr(mod, _APPLE_GPU_TAIL_REFS[op_name][1])
+    # alibi's optional slopes is an operand but a keyword-only reference arg
+    # (num_heads / seq_len come in as kwargs) — pass it as slopes= so it does not
+    # collide positionally with num_heads (matches the x86/ROCm alibi lanes).
+    if op_name == "tessera.alibi" and operands:
+        return ref_fn(slopes=operands[0], **kwargs)
     return ref_fn(*operands, **kwargs)
 
 

@@ -493,8 +493,10 @@ promotes them to `compileable`. See §9 for the concrete done / open / blocked s
   execute-compare vs `KVCacheHandle`); a single fused gather→attention paged
   kernel is the remaining step
 - `grad_clip_norm` (§5.5) — global-norm + scale; single-node
-- `rocm_moe_transport_compiled` — the one lane still `reference_cpu`; needs native
-  HIP gather/scatter transport kernels for `moe_dispatch`/`moe_combine`
+- `grouped_swiglu` native f32 expert GEMM — `moe_dispatch` (device gather) and
+  `moe_combine` (device scatter-add) now execute natively (`rocm_moe_transport_compiled`
+  reports `native_gpu`); the expert GEMM stays on the oracle pending an f32-exact
+  device GEMM (WMMA is f16)
 - Plain recurrent cells `lstm_cell` / `gru_cell` / `simple_rnn_cell` (§5.9) — no
   dedicated lane (selective-SSM + deltanet are done)
 - **Perf ladders / MFU sign-off** beyond `matmul` — every `compiled` lane is

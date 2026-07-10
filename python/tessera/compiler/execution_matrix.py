@@ -2157,14 +2157,19 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         execution_mode="hip_runtime"),
     ("rocm", "rocm_moe_transport_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_moe_transport_compiled",
-        execution_kind="reference_cpu", executable=True,
+        execution_kind="native_gpu", executable=True,
         executor_id="rocm_moe_transport_compiled", runtime_status="success",
-        reason="ROCm DK3 MoE transport artifact executes moe_dispatch, "
-               "moe_combine, and grouped_swiglu against the stdlib DispatchPlan "
-               "oracle through the runtime ABI. This pins token permutation, "
-               "group sizes, capacity drops, and combine weights; promotion to "
-               "native_gpu requires HIP gather/scatter transport kernels.",
-        execution_mode="reference_oracle"),
+        reason="ROCm DK3 MoE transport: moe_dispatch runs NATIVELY on the "
+               "gfx1151 device gather kernel (token_of_slot = sort_perm//top_k "
+               "row gather) and moe_combine on the device scatter (add) kernel "
+               "(host pre-scales each packed row by its route weight, then "
+               "atomic scatter-add to token order) — both report native_gpu vs "
+               "the stdlib DispatchPlan oracle. grouped_swiglu (the expert GEMM) "
+               "stays on the oracle and reports reference_cpu via the per-op "
+               "execution_kind override — a native f32-exact grouped GEMM is a "
+               "separate follow-up (WMMA is f16). Off-box the transport ops "
+               "fall back to the oracle + reference_cpu.",
+        execution_mode="hip_runtime"),
     ("rocm", "rocm_normcompose_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_normcompose_compiled",
         execution_kind="native_gpu", executable=True,

@@ -1451,12 +1451,49 @@ def _rocm_dequant_grouped_gemm_native(x: Any, packed_experts: Any,
     return out
 
 
-def _execute_rocm_moe_transport_reference(artifact: RuntimeArtifact, args: Any) -> Any:
-    """DK3 transition executor for ``rocm_moe_transport_compiled``.
+def _moe_dispatch_native(x: Any, plan: Any, np: Any) -> Any:
+    """DK3 dispatch = gather the token row for each kept, expert-sorted slot
+    (token_of_slot = sort_perm // top_k) on the gfx1151 device gather kernel.
+    Exact vs the numpy gather (pure row movement, f32)."""
+    xa = np.ascontiguousarray(_as_numpy(x), np.float32)
+    if xa.ndim != 2:
+        raise ValueError(f"moe_dispatch x must be 2-D (T,H); got {xa.shape}")
+    tof = (np.asarray(plan.sort_perm, np.int64) // int(plan.top_k))
+    if tof.shape[0] == 0:
+        return np.zeros((0, int(xa.shape[1])), np.float32)
+    return _rocm_gather_rows(xa, tof, np)
 
-    This pins the MoE transport/runtime ABI against the stdlib oracle while the
-    native ROCm gather/scatter and grouped-GEMM transport kernels are promoted.
-    """
+
+def _moe_combine_native(y_packed: Any, plan: Any, np: Any) -> Any:
+    """DK3 combine = weighted scatter-add of the packed expert rows back to token
+    order: out[t] += w[slot]*yp[i], t = slot // top_k. Host pre-scales each row
+    by its route weight (exact f32), then the gfx1151 device scatter kernel
+    (mode add) accumulates into the token rows. f32 accumulate."""
+    yp = np.ascontiguousarray(_as_numpy(y_packed), np.float32)
+    if yp.ndim != 2:
+        raise ValueError(f"moe_combine partials must be 2-D (S,H); got {yp.shape}")
+    S, H = int(yp.shape[0]), int(yp.shape[1])
+    T = int(plan.num_tokens)
+    out = np.zeros((T, H), np.float32)
+    if S == 0:
+        return out
+    slots = np.asarray(plan.sort_perm, np.int64)
+    w = np.asarray(plan.weights, np.float32).reshape(-1)[slots].reshape(S, 1)
+    scaled = np.ascontiguousarray(yp * w, np.float32)
+    tof = (slots // int(plan.top_k)).astype(np.int64)
+    _rocm_scatter(out, scaled, tof, T, H, 1, np)   # mode 1 = atomic add
+    return out
+
+
+def _execute_rocm_moe_transport(artifact: RuntimeArtifact, args: Any) -> Any:
+    """``rocm_moe_transport_compiled`` executor. The transport ops run natively
+    on gfx1151 — ``moe_dispatch`` on the device gather kernel, ``moe_combine`` on
+    the device scatter (add) kernel — and report ``native_gpu`` (falling back to
+    the stdlib oracle + ``reference_cpu`` when tessera-opt / a GPU is absent).
+    ``grouped_swiglu`` (the expert GEMM) stays on the stdlib oracle and reports
+    ``reference_cpu`` — a native f32-exact grouped GEMM is a separate follow-up.
+    Per-op ``execution_kind`` via the ``(output, kind)`` launch override."""
+    import numpy as np
     from .stdlib import moe
 
     metadata = artifact.metadata or {}
@@ -1467,25 +1504,31 @@ def _execute_rocm_moe_transport_reference(artifact: RuntimeArtifact, args: Any) 
 
     if op_name == "tessera.moe_dispatch":
         try:
-            return moe.dispatch(values["x"], values["plan"])
+            x, plan = values["x"], values["plan"]
         except KeyError as exc:
             raise ValueError(f"missing moe_dispatch argument {exc.args[0]!r}") from exc
+        try:
+            return (_moe_dispatch_native(x, plan, np), "native_gpu")
+        except _RocmCompiledUnavailable:
+            return (moe.dispatch(x, plan), "reference_cpu")
     if op_name == "tessera.moe_combine":
         try:
-            return moe.combine(values["partials"], values["plan"])
+            partials, plan = values["partials"], values["plan"]
         except KeyError as exc:
             raise ValueError(f"missing moe_combine argument {exc.args[0]!r}") from exc
+        try:
+            return (_moe_combine_native(partials, plan, np), "native_gpu")
+        except _RocmCompiledUnavailable:
+            return (moe.combine(partials, plan), "reference_cpu")
     if op_name == "tessera.grouped_swiglu":
         try:
-            return moe.grouped_swiglu(
-                values["x_packed"],
-                values["w_gate"],
-                values["w_up"],
-                values["w_down"],
-                values["group_sizes"],
-            )
+            out = moe.grouped_swiglu(
+                values["x_packed"], values["w_gate"], values["w_up"],
+                values["w_down"], values["group_sizes"])
         except KeyError as exc:
             raise ValueError(f"missing grouped_swiglu argument {exc.args[0]!r}") from exc
+        # Expert GEMM: no f32-exact device GEMM yet (WMMA is f16) — stays oracle.
+        return (out, "reference_cpu")
     raise ValueError(
         "rocm_moe_transport_compiled executor handles tessera.moe_dispatch, "
         "tessera.moe_combine, or tessera.grouped_swiglu; "
@@ -15882,7 +15925,7 @@ def _executor_table():
         "rocm_sparse_compiled": _execute_rocm_compiled_sparse,
         "rocm_sparse_attn_compiled": _execute_rocm_compiled_sparse_attention,
         "rocm_moe_compiled": _execute_rocm_compiled_moe,
-        "rocm_moe_transport_compiled": _execute_rocm_moe_transport_reference,
+        "rocm_moe_transport_compiled": _execute_rocm_moe_transport,
         "rocm_optimizer_compiled": _execute_rocm_compiled_optimizer,
         "rocm_complex_compiled": _execute_rocm_compiled_complex,
         "rocm_conformal_compiled": _execute_rocm_compiled_conformal,

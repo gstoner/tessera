@@ -836,23 +836,24 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "sparse attention, PPO policy-loss, and EBM value envelopes.",
         execution_mode="metal_runtime"),
     # Apple GPU structured-compute lane (2026-07-09) — parity with the x86/ROCm
-    # structured-compute tails for the convolution family. conv1d /
-    # conv_transpose / depthwise_conv1d reach an executable apple_gpu path via
-    # runtime.launch() and match the reference primitive; shape/control
-    # bookkeeping stays host-structured. Direct single-GPU executable evidence,
-    # not a bespoke fused Metal kernel.
+    # structured-compute tails (conv family, vision/layout, recurrent, MoR, VLM,
+    # RoPE, …). These reuse the tessera reference primitives (ops.* / F.* /
+    # memory.*) with no Metal dispatch, so the lane runs entirely on the CPU
+    # reference: an executable apple_gpu artifact path with a compare fixture,
+    # but it does NOT run on the GPU — execution_kind=reference_cpu so
+    # telemetry/audit never miscount it as Apple GPU execution.
     ("apple_gpu", "apple_gpu_structured_compute_compiled"): ExecutionRow(
         target="apple_gpu", compiler_path="apple_gpu_structured_compute_compiled",
-        execution_kind="native_gpu", executable=True,
+        execution_kind="reference_cpu", executable=True,
         executor_id="apple_gpu_structured_compute_compiled",
         runtime_status="success",
         reason="Apple GPU structured-compute artifact covers the conv family "
-               "(conv1d / conv_transpose / depthwise_conv1d) through "
-               "runtime.launch(). Shape/control bookkeeping remains "
-               "host-structured; the row is direct single-GPU executable "
-               "evidence, not a bespoke fused Metal kernel — parity with the "
-               "x86/ROCm structured-compute lanes.",
-        execution_mode="metal_runtime"),
+               "(conv1d / conv_transpose / depthwise_conv1d) + the structured "
+               "tail through runtime.launch(). It reuses the tessera reference "
+               "primitives with no Metal dispatch, so it runs on the CPU "
+               "reference path — execution_kind=reference_cpu; direct "
+               "execute/compare evidence, not a bespoke fused Metal kernel — "
+               "parity with the x86/ROCm structured-compute lanes."),
     # Apple GPU pointwise-regression loss lane (2026-07-09) — parity with the
     # x86/ROCm loss lanes. mse / mae / huber / smooth_l1 / log_cosh compose the
     # residual + none/mean/sum reduction on the MPSGraph binary + reduce lanes

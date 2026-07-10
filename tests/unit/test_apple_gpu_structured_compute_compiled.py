@@ -38,7 +38,8 @@ def _launch(op_name, names, args, kwargs=None):
     res = rt.launch(_artifact(op_name, names, kwargs), args)
     assert res["ok"] is True, res.get("reason")
     assert res["compiler_path"] == "apple_gpu_structured_compute_compiled"
-    assert res["execution_kind"] == "native_gpu"
+    # Reuses the tessera reference primitives (no Metal dispatch) — CPU path.
+    assert res["execution_kind"] == "reference_cpu"
     return res["output"]
 
 

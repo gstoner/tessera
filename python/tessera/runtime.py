@@ -9230,6 +9230,88 @@ def _execute_x86_compiled_scatter(artifact: RuntimeArtifact, args: Any) -> Any:
     return _execute_scatter(artifact, args, _x86_scatter, "x86_scatter_compiled")
 
 
+# ── Apple GPU scatter + sparse/MoE lanes (2026-07-10) — Apple ships no device
+#    scatter/spmm/sddmm/moe kernel, so these run the numpy reference the x86/ROCm
+#    device kernels are matched against (host-structured index/sparse work; no
+#    Metal dispatch -> execution_kind=reference_cpu).
+def _apple_scatter(out: Any, src: Any, idx: Any, out_rows: int, row_len: int,
+                   mode: int, np: Any) -> None:
+    """Numpy indexed store into ``out`` (pre-loaded with the base) combined by
+    ``mode`` (0 set / 1 add / 2 min / 3 max) — matches tessera_x86_scatter_f32."""
+    ix = np.asarray(idx).astype(np.intp).ravel()
+    o = out.reshape(out_rows, row_len)
+    s = np.ascontiguousarray(src, np.float32).reshape(ix.shape[0], row_len)
+    if mode == 0:
+        o[ix] = s
+    elif mode == 1:
+        np.add.at(o, ix, s)
+    elif mode == 2:
+        np.minimum.at(o, ix, s)
+    else:
+        np.maximum.at(o, ix, s)
+
+
+def _execute_apple_gpu_compiled_scatter(artifact: RuntimeArtifact,
+                                        args: Any) -> Any:
+    """The ``target="apple_gpu"`` scatter lane (scatter / scatter_add /
+    scatter_reduce) via the numpy reference — no Metal dispatch,
+    execution_kind=reference_cpu. Matches numpy scatter / np.add.at /
+    np.minimum.at / np.maximum.at — parity with x86/rocm_scatter_compiled."""
+    return _execute_scatter(artifact, args, _apple_scatter,
+                            "apple_gpu_scatter_compiled")
+
+
+def _apple_spmm_csr(indptr: Any, indices: Any, vals: Any, b: Any,
+                    m: int, n: int) -> Any:
+    """Numpy CSR SpMM — out[i] = Σ_{k∈row i} vals[k]·b[indices[k]]. Matches the
+    dense product of the sparse matrix with ``b``."""
+    import numpy as np
+    indptr = np.asarray(indptr).astype(np.int64)
+    indices = np.asarray(indices).astype(np.int64)
+    vals = np.ascontiguousarray(vals, np.float32)
+    b = np.ascontiguousarray(b, np.float32)
+    out = np.zeros((m, n), np.float32)
+    for i in range(m):
+        for k in range(int(indptr[i]), int(indptr[i + 1])):
+            out[i] += vals[k] * b[indices[k]]
+    return out
+
+
+def _execute_apple_gpu_compiled_sparse(artifact: RuntimeArtifact,
+                                       args: Any) -> Any:
+    """The ``target="apple_gpu"`` sparse + MoE lane: spmm_csr / spmm_coo / sddmm
+    / bsmm (via _sparse_compute with numpy spmm / (a@b)*mask / a@b) and moe
+    (routed per-token expert GEMVs, top-1). Apple ships no device sparse/moe
+    kernel — runs on the CPU reference (no Metal dispatch),
+    execution_kind=reference_cpu. Matches numpy / tessera — parity with
+    x86/rocm sparse + moe lanes."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if op_name == "tessera.moe":
+        values = _bind_launch_args(args, arg_names)
+        x, experts, route, scores = _moe_bind(ops[0], values)
+        tk, ex, r, lead, in_dim, out_dim = _moe_prepare(
+            x, experts, route, scores, np)
+        t = int(tk.shape[0])
+        out = np.zeros((t, out_dim), np.float32)
+        for i in range(t):
+            out[i] = np.ascontiguousarray(tk[i], np.float32) @ ex[int(r[i])]
+        return out.reshape(lead + (out_dim,))
+    if op_name not in _SPARSE_OPS:
+        raise ValueError(
+            "apple_gpu_sparse_compiled executor handles one of "
+            f"{_SPARSE_OPS + ('tessera.moe',)}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    values = _bind_launch_args(args, arg_names)
+    operands = [values[str(n)] for n in ops[0].get("operands", [])]
+    return _sparse_compute(
+        op_name, operands, _apple_spmm_csr,
+        lambda a, b, mk: (a @ b) * mk, np.matmul, np)
+
+
 _rocm_gather_hsaco_cache: dict[tuple[str], bytes] = {}
 
 
@@ -15191,6 +15273,8 @@ def _executor_table():
         "apple_gpu_conformal_compiled": _execute_apple_gpu_compiled_conformal,
         "apple_gpu_shape_compiled": _execute_apple_gpu_compiled_shape,
         "apple_gpu_reduce_compiled": _execute_apple_gpu_compiled_reduce,
+        "apple_gpu_scatter_compiled": _execute_apple_gpu_compiled_scatter,
+        "apple_gpu_sparse_compiled": _execute_apple_gpu_compiled_sparse,
         "apple_gpu_optimizer_compiled": _execute_apple_gpu_compiled_optimizer,
         "apple_gpu_rng_compiled": _execute_apple_gpu_compiled_rng,
         "apple_gpu_linalg_compiled": _execute_apple_gpu_compiled_linalg,

@@ -43,7 +43,7 @@ bitwise_or,5,0,2,5,0,,directly_tested,5 direct test references
 bitwise_xor,3,0,0,3,0,,directly_tested,3 direct test references
 broadcast,4,4,0,8,0,,directly_tested,8 direct test references
 broadcast_to_axis,3,0,0,3,0,,directly_tested,3 direct test references
-bsmm,4,0,0,4,0,,directly_tested,4 direct test references
+bsmm,5,0,0,5,0,,directly_tested,5 direct test references
 cache_commit,2,0,1,2,0,,directly_tested,2 direct test references
 cache_rollback,3,0,1,3,0,,directly_tested,3 direct test references
 calibration_observer,0,0,0,0,1,,structural_only,stateful observer; tested via fake_quantize loop
@@ -288,7 +288,7 @@ mobius_from_three_points,3,0,0,3,0,,directly_tested,3 direct test references
 mod,4,0,0,4,0,f32,directly_tested,4 direct test references
 modified_delta_attention,8,0,0,8,0,f32 fp64,directly_tested,8 direct test references
 module_state_tree,0,0,0,0,1,,structural_only,category default for 'state_tree'
-moe,21,0,0,21,0,fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,21 direct test references
+moe,24,0,0,24,0,fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,24 direct test references
 moe_combine,5,0,0,5,0,,directly_tested,5 direct test references
 moe_dispatch,3,3,0,6,0,,directly_tested,6 direct test references
 moe_swiglu_block,14,19,1,33,0,fp8_e4m3 nvfp4,directly_tested,33 direct test references
@@ -388,12 +388,12 @@ safetensors_export,1,0,0,1,1,,structural_only,category default for 'aot'
 save_sharded,1,0,1,1,1,,structural_only,category default for 'serialization'
 save_state,6,0,2,6,0,,directly_tested,6 direct test references
 scan,12,0,2,12,0,fp16,directly_tested,12 direct test references
-scatter,7,0,0,7,0,,directly_tested,7 direct test references
-scatter_add,10,0,0,10,0,,directly_tested,10 direct test references
-scatter_reduce,9,0,0,9,0,,directly_tested,9 direct test references
+scatter,8,0,0,8,0,,directly_tested,8 direct test references
+scatter_add,11,0,0,11,0,,directly_tested,11 direct test references
+scatter_reduce,10,0,0,10,0,,directly_tested,10 direct test references
 score_combine,8,6,1,14,0,,directly_tested,14 direct test references
 score_matching_loss,5,0,0,5,0,,directly_tested,5 direct test references
-sddmm,4,0,0,4,0,,directly_tested,4 direct test references
+sddmm,5,0,0,5,0,,directly_tested,5 direct test references
 segment_reduce,4,0,0,4,0,fp32,directly_tested,4 direct test references
 select,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 selective_ssm,67,10,2,77,0,bf16 f16 fp16 fp32,directly_tested,77 direct test references
@@ -423,8 +423,8 @@ spectral_conv,7,0,0,7,0,fp32,directly_tested,7 direct test references
 spectral_filter,5,0,0,5,0,fp32,directly_tested,5 direct test references
 spectral_norm,5,0,0,5,0,fp16,directly_tested,5 direct test references
 split,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-spmm_coo,5,0,0,5,0,,directly_tested,5 direct test references
-spmm_csr,4,0,0,4,0,,directly_tested,4 direct test references
+spmm_coo,6,0,0,6,0,,directly_tested,6 direct test references
+spmm_csr,5,0,0,5,0,,directly_tested,5 direct test references
 sqrt,7,0,1,7,0,bf16 f32,directly_tested,7 direct test references
 squeeze,7,6,1,13,0,,directly_tested,13 direct test references
 stablehlo_export,2,0,0,2,0,,directly_tested,2 direct test references

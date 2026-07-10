@@ -152,6 +152,20 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                              "reduce lane (numpy fallback when Metal is "
                              "unavailable). Matches numpy.sum — parity with "
                              "x86/rocm_reduce_compiled.",
+    "apple_gpu_scatter_compiled": "Apple GPU scatter lane — scatter (set) / "
+                             "scatter_add (sum) / scatter_reduce (min/max), "
+                             "row-wise along an axis. Apple ships no device "
+                             "scatter kernel, so the indexed store runs on the "
+                             "numpy reference (np.add.at / np.minimum.at / "
+                             "np.maximum.at). Matches numpy — parity with "
+                             "x86/rocm_scatter_compiled.",
+    "apple_gpu_sparse_compiled": "Apple GPU sparse + MoE lane — spmm_csr / "
+                             "spmm_coo / sddmm / bsmm (numpy CSR SpMM / (a@b)*mask "
+                             "/ a@b) and moe (routed per-token expert GEMVs, "
+                             "top-1). Apple ships no device sparse/moe kernel, so "
+                             "these run on the numpy reference. Matches numpy / "
+                             "tessera — parity with the x86/ROCm sparse + moe "
+                             "lanes.",
     "native_cpu":           "x86 AMX / native CPU runtime via the C runtime ABI",
     "jit_cpu_numpy":        "JIT CPU fallback via the numpy reference path",
     "rocm_wmma":            "AMD GPU RDNA WMMA matrix-core GEMM via the shipped "
@@ -1020,6 +1034,29 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "Metal is unavailable). f32, matches numpy.sum — parity with "
                "x86/rocm_reduce_compiled.",
         execution_mode="metal_runtime"),
+    # Apple GPU scatter + sparse/MoE lanes (2026-07-10) — Apple ships no device
+    # scatter/spmm/sddmm/moe kernel, so these run the numpy reference (no Metal
+    # dispatch) — execution_kind=reference_cpu.
+    ("apple_gpu", "apple_gpu_scatter_compiled"): ExecutionRow(
+        target="apple_gpu", compiler_path="apple_gpu_scatter_compiled",
+        execution_kind="reference_cpu", executable=True,
+        executor_id="apple_gpu_scatter_compiled", runtime_status="success",
+        reason="Apple GPU scatter artifact runs scatter / scatter_add / "
+               "scatter_reduce (row-wise indexed store, set/add/min/max) via the "
+               "numpy reference (np.add.at / np.minimum.at / np.maximum.at). Runs "
+               "on the CPU reference path (no Metal dispatch) — "
+               "execution_kind=reference_cpu; matches numpy, parity with "
+               "x86/rocm_scatter_compiled."),
+    ("apple_gpu", "apple_gpu_sparse_compiled"): ExecutionRow(
+        target="apple_gpu", compiler_path="apple_gpu_sparse_compiled",
+        execution_kind="reference_cpu", executable=True,
+        executor_id="apple_gpu_sparse_compiled", runtime_status="success",
+        reason="Apple GPU sparse/MoE artifact runs spmm_csr / spmm_coo / sddmm / "
+               "bsmm (numpy CSR SpMM / (a@b)*mask / a@b) and moe (routed "
+               "per-token expert GEMVs, top-1) via the numpy reference. Runs on "
+               "the CPU reference path (no Metal dispatch) — "
+               "execution_kind=reference_cpu; matches numpy / tessera, parity "
+               "with the x86/ROCm sparse + moe lanes."),
     # --- x86 / native CPU (AMX path) ---
     ("cpu", "native_cpu"): ExecutionRow(
         target="cpu", compiler_path="native_cpu",

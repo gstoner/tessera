@@ -141,7 +141,7 @@ static Value groupedKvBase(Emit &e, OpBuilder &b, Location loc, Value bh,
 // cheap O(D) per-row elementwise rowsum (not on the hot path).
 //===----------------------------------------------------------------------===//
 void emitPre(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
-             Type storeTy, bool gqa = false) {
+             Type storeTy, bool gqa = false, bool bias = false) {
   MLIRContext *ctx = b.getContext();
   Type f32 = b.getF32Type();
   Value sQ = f.addWorkgroupAttribution(ldsT(ctx, 16 * D, storeTy), loc);
@@ -172,6 +172,10 @@ void emitPre(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
                     : e.mul(e.mul(bh, Sk), cD);
   Value isCausal = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ne,
                                            causal, c0);
+  // Additive bias memref (LAST arg, after the optional gqa pair): f32 [bh,Sq,Sk].
+  Value biasBuf;
+  if (bias)
+    biasBuf = f.getArgument(gqa ? 12 : 10);
 
   // Stage Q into sQ (all 32 lanes cooperatively): for i = tid; i < 16*D; i+=32.
   {
@@ -253,6 +257,15 @@ void emitPre(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
     for (int64_t el = 0; el < 8; ++el) {
       Value qi = e.add(e.ci(2 * el), half);
       Value v0 = e.mulf(e.ext(cs, el), scale);
+      // Additive bias — same S = scale*Q@K^T + bias the recompute uses, so L
+      // (logsumexp) matches P/dS. Bounds-guarded against the [bh,Sq,Sk] buffer.
+      if (bias) {
+        Value gqe = e.add(q0, qi);
+        Value gqSafe = e.sel(e.lt(gqe, Sq), gqe, c0);
+        Value gkSafe = e.sel(e.ge(gk, Sk), c0, gk);
+        Value bidx = e.add(e.mul(e.add(e.mul(bh, Sq), gqSafe), Sk), gkSafe);
+        v0 = e.addf(v0, e.f32load(biasBuf, bidx));
+      }
       Value cmask = b.create<arith::AndIOp>(loc, isCausal,
                                             e.lt(e.add(q0, qi), gk));
       Value masked = b.create<arith::OrIOp>(loc, e.ge(gk, Sk), cmask);
@@ -320,6 +333,10 @@ struct ScoreCtx {
   Value Sq, Sk, scale, isCausal;
   Value qbase, kbase, q0, k0, bh;
   Value l15, half;
+  // Additive attention bias: f32 [bh, Sq, Sk] (broadcast, LAST kernel arg), or
+  // a null Value when the kernel has no bias. When set, the recompute forms
+  // S = scale*Q@K^T + bias before the softmax, so P/L/dS all see the bias.
+  Value biasBuf;
 };
 
 void recomputeScoreTile(Emit &e, OpBuilder &b, Location loc, const ScoreCtx &x,
@@ -368,6 +385,15 @@ void recomputeScoreTile(Emit &e, OpBuilder &b, Location loc, const ScoreCtx &x,
     Value Lq = e.f32load(x.L, Lidx);
     Value Dq = e.f32load(x.Dd, Lidx);
     Value s = e.mulf(e.ext(cs, el), x.scale);
+    // Additive bias: S = scale*Q@K^T + bias[(bh*Sq + q)*Sk + k]. Guarded on the
+    // query/key bounds so masked lanes never read past the [bh,Sq,Sk] buffer
+    // (their P is zeroed by `masked` below anyway).
+    if (x.biasBuf) {
+      Value gkSafe = e.sel(e.ge(gk, x.Sk), c0, gk);
+      Value bidx = e.add(
+          e.mul(e.add(e.mul(x.bh, x.Sq), gqSafe), x.Sk), gkSafe);
+      s = e.addf(s, e.f32load(x.biasBuf, bidx));
+    }
     Value P = b.create<math::ExpOp>(loc, e.subf(s, Lq));
     // mask: query OOB, key OOB, or causal (key > query) -> P = 0
     Value m1 = e.ge(gqi, x.Sq);
@@ -391,7 +417,7 @@ void recomputeScoreTile(Emit &e, OpBuilder &b, Location loc, const ScoreCtx &x,
 //          Sq, Sk : index, scale : f32, causal : index)
 //===----------------------------------------------------------------------===//
 void emitDkDv(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
-              Type storeTy, bool gqa = false) {
+              Type storeTy, bool gqa = false, bool bias = false) {
   MLIRContext *ctx = b.getContext();
   Value sP = f.addWorkgroupAttribution(ldsT(ctx, 16 * 16, storeTy), loc);
   Value sDS = f.addWorkgroupAttribution(ldsT(ctx, 16 * 16, storeTy), loc);
@@ -423,6 +449,9 @@ void emitDkDv(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
                     : e.mul(e.mul(bh, Sk), cD);
   Value isCausal = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ne,
                                            causal, c0);
+  Value biasBuf;  // f32 [bh,Sq,Sk], LAST arg (after the optional gqa pair)
+  if (bias)
+    biasBuf = f.getArgument(gqa ? 14 : 12);
 
   // zero dK/dV accumulators.
   {
@@ -451,6 +480,7 @@ void emitDkDv(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
 
     ScoreCtx x{Q, Kk, V, dO, L, Dd, Sq, Sk, scale, isCausal,
                qbase, kbase, q0, k0, bh, l15, half};
+    x.biasBuf = biasBuf;
     recomputeScoreTile(e, b, loc, x, sP, sDS, /*wantP=*/true);
     b.create<gpu::BarrierOp>(loc);
 
@@ -540,7 +570,7 @@ void emitDkDv(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
 //          Sq, Sk : index, scale : f32, causal : index)
 //===----------------------------------------------------------------------===//
 void emitDq(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
-            Type storeTy, bool gqa = false) {
+            Type storeTy, bool gqa = false, bool bias = false) {
   MLIRContext *ctx = b.getContext();
   Value sDS = f.addWorkgroupAttribution(ldsT(ctx, 16 * 16, storeTy), loc);
   Value dQacc = f.addWorkgroupAttribution(ldsT(ctx, 16 * D, b.getF32Type()), loc);
@@ -568,6 +598,9 @@ void emitDq(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
                     : e.mul(e.mul(bh, Sk), cD);
   Value isCausal = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ne,
                                            causal, c0);
+  Value biasBuf;  // f32 [bh,Sq,Sk], LAST arg (after the optional gqa pair)
+  if (bias)
+    biasBuf = f.getArgument(gqa ? 13 : 11);
 
   {
     auto lp = b.create<scf::ForOp>(loc, tid, c16D, c32);
@@ -596,6 +629,7 @@ void emitDq(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
 
     ScoreCtx x{Q, Kk, V, dO, L, Dd, Sq, Sk, scale, isCausal,
                qbase, kbase, q0, k0, bh, l15, half};
+    x.biasBuf = biasBuf;
     recomputeScoreTile(e, b, loc, x, /*sP=*/Value(), sDS, /*wantP=*/false);
     b.create<gpu::BarrierOp>(loc);
 
@@ -723,6 +757,13 @@ struct GenerateWMMAFlashAttnBwdKernelPass
       SmallVector<Type> gqaExtra;
       if (gqa) gqaExtra = {idxTy, idxTy};
 
+      // Additive attention bias: a trailing f32 [bh,Sq,Sk] memref (LAST arg,
+      // after the optional gqa pair). S = scale*Q@K^T + bias before the softmax,
+      // so P/L/dS all see it; dbias is not emitted (constant-bias VJP path).
+      bool bias = false;
+      if (auto a = op->getAttrOfType<BoolAttr>("attn_bias"))
+        bias = a.getValue();
+
       auto mk = [&](StringRef suffix, ArrayRef<Type> args,
                     function_ref<void(OpBuilder &, Location, gpu::GPUFuncOp)> body) {
         auto fnTy = b.getFunctionType(args, {});
@@ -734,23 +775,24 @@ struct GenerateWMMAFlashAttnBwdKernelPass
       auto withGqa = [&](ArrayRef<Type> base) {
         SmallVector<Type> a(base.begin(), base.end());
         a.append(gqaExtra.begin(), gqaExtra.end());
+        if (bias) a.push_back(fv);   // bias [bh,Sq,Sk] f32, LAST
         return a;
       };
 
-      // _pre : (Q,K,dO:store, O,L,Dd:f32, Sq,Sk:idx, scale:f32, causal:idx [+gqa])
+      // _pre : (Q,K,dO:store, O,L,Dd:f32, Sq,Sk:idx, scale:f32, causal:idx [+gqa][+bias])
       mk("_pre", withGqa({sv, sv, sv, fv, fv, fv, idxTy, idxTy, f32, idxTy}),
          [&](OpBuilder &bb, Location l, gpu::GPUFuncOp fn) {
-           emitPre(bb, l, fn, D, storeTy, gqa);
+           emitPre(bb, l, fn, D, storeTy, gqa, bias);
          });
-      // _dkdv : (Q,K,V,dO:store, L,Dd:f32, dK,dV:f32, Sq,Sk:idx, scale, causal [+gqa])
+      // _dkdv : (Q,K,V,dO:store, L,Dd:f32, dK,dV:f32, Sq,Sk:idx, scale, causal [+gqa][+bias])
       mk("_dkdv", withGqa({sv, sv, sv, sv, fv, fv, fv, fv, idxTy, idxTy, f32, idxTy}),
          [&](OpBuilder &bb, Location l, gpu::GPUFuncOp fn) {
-           emitDkDv(bb, l, fn, D, storeTy, gqa);
+           emitDkDv(bb, l, fn, D, storeTy, gqa, bias);
          });
-      // _dq : (Q,K,V,dO:store, L,Dd:f32, dQ:f32, Sq,Sk:idx, scale, causal [+gqa])
+      // _dq : (Q,K,V,dO:store, L,Dd:f32, dQ:f32, Sq,Sk:idx, scale, causal [+gqa][+bias])
       mk("_dq", withGqa({sv, sv, sv, sv, fv, fv, fv, idxTy, idxTy, f32, idxTy}),
          [&](OpBuilder &bb, Location l, gpu::GPUFuncOp fn) {
-           emitDq(bb, l, fn, D, storeTy, gqa);
+           emitDq(bb, l, fn, D, storeTy, gqa, bias);
          });
       op->erase();
     }

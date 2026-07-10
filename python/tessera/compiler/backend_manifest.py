@@ -680,7 +680,7 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
         "execute_compare_fixture": _APPLE_GPU_STRUCTURED_COMPUTE_FIXTURE,
     } for op in (
         "arange", "bidirectional_scan", "center_crop", "cross_attention",
-        "edm_precondition", "factorized_pos_emb", "gru_cell", "image_resize",
+        "edm_precondition", "factorized_pos_emb", "gru_cell", "lstm_cell", "image_resize",
         "interpolate", "lora_linear", "masked_fill", "masked_scatter",
         "memory_read", "mor_partition", "mor_router", "mor_scatter", "mrope_2d",
         "online_softmax_state", "pack", "patchify", "perceiver_resampler",
@@ -1220,7 +1220,12 @@ _ROCM_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
             "(tessera_rocm_wmma_flash_attn_{f16,bf16}, HIPRTC-compiled for the "
             "device arch at load); ROCm 7.2.4. The second op after matmul to run "
             "natively on a non-Apple backend. Numerically validated vs a numpy "
-            "attention reference by the execute_compare_fixture."
+            "attention reference by the execute_compare_fixture. The FA-2 "
+            "BACKWARD (dQ/dK/dV) also executes on gfx1151 via the "
+            "compiler-generated rocm_flash_attn_bwd_compiled lane "
+            "(generate-wmma-flash-attn-bwd-kernel -> fa_pre/fa_dkdv/fa_dq; MHA + "
+            "GQA/MQA + additive attn_bias, scale+causal), validated vs autodiff "
+            "vjp_flash_attn — see the runtime_execution_matrix."
         ),
     },
 }
@@ -1324,6 +1329,24 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "tree-reduce, f32 reduce). Executes via runtime.launch() "
                  "(rocm_softmax_compiled).",
     },
+    # KV-cache paged-movement core (§5.6). The append/read/prune tensor movement
+    # over a resident cache buffer executes on gfx1151 by COMPOSING the existing
+    # device scatter (append row write) + masked-gather (read/prune) kernels with
+    # host page-index math — no bespoke kernel. Mirrors KVCacheHandle.{append,
+    # read,prune} on the non-quantized fp path; quantize_kv rides the intquant
+    # lane. Executes via runtime.launch() (rocm_kv_cache_compiled). f32.
+    **{op: {
+        "dtypes": ("fp32",),
+        "feature_flags": ("kv_cache", "paged"),
+        "notes": f"KV-cache {op.split('_')[-1]} paged-movement core over a "
+                 "resident cache buffer (max_seq, H, D): append = row scatter-"
+                 "write at [start, start+n) (generate-rocm-scatter-kernel, set "
+                 "mode); read = row gather of [start, end); prune = trailing-"
+                 "window gather + zero-fill (generate-rocm-gather-kernel). Host "
+                 "owns the page-index math; quantize_kv rides the intquant lane. "
+                 "Executes via runtime.launch() (rocm_kv_cache_compiled). f32, "
+                 "matches the KVCacheHandle reference.",
+    } for op in ("kv_cache_append", "kv_cache_read", "kv_cache_prune")},
     **{op: {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("reduction",),
@@ -2100,6 +2123,10 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("scatter", "scatter_add", "scatter_reduce")},
     **{(op, "rocm"): "tests/unit/test_rocm_scatter_compiled.py"
        for op in ("scatter", "scatter_add", "scatter_reduce")},
+    # §5.6 KV-cache paged-movement core — append/read/prune executed on the
+    # gfx1151 scatter+gather kernels, compared to the KVCacheHandle reference.
+    **{(op, "rocm"): "tests/unit/test_rocm_kv_cache_compiled.py"
+       for op in ("kv_cache_append", "kv_cache_read", "kv_cache_prune")},
     # P11 — x86 MLA latent-KV lane (compress/expand/decode composed on the GEMM +
     # flash_attn lanes), compared to the numpy MLA reference. Skip-clean w/o .so.
     **{(op, "x86"): "tests/unit/test_x86_mla_compiled.py"
@@ -4612,7 +4639,7 @@ _SINGLE_GPU_COMPUTE_REFERENCE_OPS: frozenset[str] = frozenset({
     # vision / pooling
     "center_crop", "image_resize", "interpolate",
     # recurrent / model / layout
-    "bidirectional_scan", "conv1d", "conv_transpose", "gru_cell",
+    "bidirectional_scan", "conv1d", "conv_transpose", "gru_cell", "lstm_cell",
     "lora_linear", "patchify", "pixel_shuffle", "pixel_unshuffle",
     "simple_rnn_cell",
     "arange", "cast", "masked_fill", "mor_partition", "mor_router",
@@ -4644,7 +4671,7 @@ _STRUCTURED_COMPUTE_COMPILED_OPS: frozenset[str] = frozenset({
     "center_crop", "image_resize", "interpolate",
     "patchify", "pixel_shuffle", "pixel_unshuffle",
     "conv1d", "conv_transpose", "lora_linear",
-    "gru_cell", "simple_rnn_cell",
+    "gru_cell", "lstm_cell", "simple_rnn_cell",
     "depthwise_conv1d",
     "cross_attention", "perceiver_resampler",
     "bidirectional_scan",

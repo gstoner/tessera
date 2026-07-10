@@ -2,7 +2,7 @@
 status: Informative
 classification: Reference / Kernel Inventory
 authority: Companion to Phase H ROCm backend pre-work
-last_updated: 2026-06-23
+last_updated: 2026-07-10
 ---
 
 # ROCm 7.2.4 MFMA / WMMA Kernel Inventory
@@ -12,14 +12,25 @@ last_updated: 2026-06-23
 > HIP 7.2.4. Companion to `docs/nvidia_cuda13_kernel_inventory.md` (parallel
 > coverage tracking) and `docs/apple_gpu_kernel_inventory.md`.
 >
-> **Execution status (2026-06-23):** no longer fully hardware-free. On the
+> **Execution status (2026-07-10):** far past hardware-free. On the
 > **RDNA 3.5 `gfx1151`** (Strix Halo APU — Ryzen AI Max+ 395 / Radeon 8060S)
-> **two ops now execute on real silicon** and are `hardware_verified` in
-> `backend_manifest`: **`matmul`/`gemm`** (WMMA GEMM — `libtessera_rocm_gemm.so`,
-> runtime `launch()` lane, measured perf ladder) and **`flash_attn`** (WMMA FA-2
-> forward — `libtessera_rocm_flash_attn.so`, online softmax, causal, ragged).
-> Both have execute-compare fixtures. Everything else on every arch remains
-> `artifact_only`. See §7 and
+> **dozens of compiler-generated HIP kernels now execute on real silicon**
+> through `runtime.launch()` (`execution_mode="hip_runtime"`), spanning nearly
+> every §5 family: matmul/GEMM + the GEMM family, flash-attention + the exotic /
+> sparse / linear / delta attention lanes, norm / activation / RoPE / ALiBi,
+> optimizers (adam/adamw/lion/muon/lamb), RNG, FFT/spectral, selective-SSM
+> (Mamba2, incl. device backward), quantization, the loss families, the
+> reduction / scan / sort / scatter / elementwise lanes, and the M7 complex /
+> Clifford / EBM families. **`matmul`/`gemm`** and **`flash_attn`** were the
+> first two (`hardware_verified` in `backend_manifest`, with shipped C-ABI
+> symbols + measured perf ladder for GEMM); the rest execute as correctness-first
+> **`compiled`** lanes (execute-vs-reference verified, no perf ladder yet).
+>
+> **Status truth is the generated matrix, not this prose (Decision #26):**
+> [`docs/audit/generated/runtime_execution_matrix.md`](audit/generated/runtime_execution_matrix.md)
+> is the drift-gated source for which `(op, target)` rows execute and by which
+> lane. This inventory is the *kernel contract* (shapes, dtypes, MFU targets);
+> read it against that matrix for live execution status. See §7, §9, and
 > `docs/audit/backend/rocm/{ROCM_AUDIT,STRIX_HALO_EXECUTION_PLAN}.md`.
 
 This document is the **authoritative kernel inventory** for the
@@ -157,10 +168,35 @@ as accelerated matrix dtypes.
 
 ---
 
-## 5. Planned fused kernel inventory
+## 5. Fused kernel inventory
 
 Per-kernel MFMA shapes live in `_ROCM_KERNEL_MFMA_SHAPES`
 (`backend_manifest.py`). MFU targets in `_ROCM_KERNEL_MFU`.
+
+> **Execution note (2026-07-10).** The tables below are the kernel *contract*
+> (MFMA/WMMA shape, dtype variants, MFU target). They are **no longer "planned"**
+> on `gfx1151`: as of 2026-07-10 the majority of these families execute on real
+> RDNA 3.5 silicon as compiler-generated HIP `compiled` lanes (correctness-first,
+> execute-vs-reference verified). The stable lane ids per family:
+>
+> | §5 family | Executing gfx1151 lane(s) |
+> |---|---|
+> | 5.1 Matmul / contraction | `rocm_compiled` (WMMA GEMM), `rocm_matmul_family_compiled`, `rocm_dequant_gemm_compiled`, `rocm_conv_compiled` |
+> | 5.2 Attention | `rocm_flash_attn_compiled`, `rocm_exotic_attn_compiled`, `rocm_sparse_attn_compiled`, `rocm_linear_attn_compiled`, `rocm_deltanet_compiled` |
+> | 5.3 Fused chains | `rocm_silu_mul_compiled`, `rocm_softmax_compiled` (+ SwiGLU via matmul-family) |
+> | 5.4 Norm / activation / position | `rocm_norm_compiled`, `rocm_normcompose_compiled`, `rocm_activation_compiled`, `rocm_rope_compiled`, `rocm_alibi_compiled`, `rocm_softcap_compiled` |
+> | 5.5 Optimizer | `rocm_optimizer_compiled`, `rocm_muon_compiled`, `rocm_lamb_compiled` |
+> | 5.6 KV-cache / paged | `rocm_kv_cache_compiled` (append/read/prune paged-movement core on the scatter+gather kernels); `quantize_kv` via `rocm_intquant_compiled` |
+> | 5.7 RNG / sampling | `rocm_rng_compiled` |
+> | 5.8 Spectral | `rocm_fft_compiled`, `rocm_spectral_compiled` |
+> | 5.9 Recurrent / SSM | `rocm_selective_ssm_compiled` (incl. device backward), `rocm_deltanet_compiled`; single-step `lstm`/`gru`/`simple_rnn` cells via `rocm_structured_compute_compiled` (host-structured) |
+>
+> Quantization (`rocm_intquant`/`fpquant`/`nvfp4`), the loss families
+> (`rocm_loss`/`class_loss`/`binary_loss`/`rl_loss`/`metric_loss`/`ebm_loss`), the
+> reduction/scan/sort/scatter/elementwise lanes, and the §10 M7 complex/Clifford/EBM
+> families also execute. **`docs/audit/generated/runtime_execution_matrix.md` is the
+> authoritative live list; the mapping above is a dated snapshot, not maintained
+> truth.**
 
 ### 5.1 Matmul / contraction family
 
@@ -345,47 +381,50 @@ GFX12 scalar prefetch / load notes tracked for future scheduler work:
 
 | Gate | What it means | Status |
 |---|---|---|
-| `artifact_only` | Target IR + AMDGCN intrinsic text are well-formed; lit fixtures pass FileCheck; no execution | **all entries except the one below** |
+| `artifact_only` | Target IR + AMDGCN intrinsic text are well-formed; lit fixtures pass FileCheck; no execution | CDNA (gfx90a/94x/950) MFMA entries; a few RDNA rows with no execute-compare fixture yet (e.g. KV-cache) |
 | `compileable` | `hipcc -S --offload-arch=…` (or `llc -mcpu=…`) accepts the kernel; produces a valid object; **without execution** | reachable now on the box (`rocdl_emit.py` + `llc` proven for gfx1100/gfx1151) |
-| `executable` | The kernel loads on a real GPU and produces correct output vs CPU reference | ✅ **`matmul`/`gemm` + `flash_attn` WMMA on `gfx1151`** (below) |
-| `fused` | Performance characterized against the MFU targets in §5 | not yet — gfx1151 has a *measured perf ladder* but no MFU-target sign-off; CDNA MFU targets need MI300X/MI325X |
+| `executable` | The kernel loads on a real GPU and produces correct output vs a CPU/numpy reference | ✅ **the majority of §5 on `gfx1151`** — see the generated matrix |
+| `fused` | Performance characterized against the MFU targets in §5 | only `matmul`/`gemm` has a *measured perf ladder*; **no MFU-target sign-off anywhere**; CDNA MFU targets need MI300X/MI325X |
 
-**The exception — `gfx1151` (RDNA 3.5) WMMA matmul executes today.** As of
-2026-06-23 the `matmul`/`gemm` WMMA path on the Strix Halo box is
-`hardware_verified` in `backend_manifest`:
+**Status truth is the generated matrix, not this table (Decision #26).**
+[`docs/audit/generated/runtime_execution_matrix.md`](audit/generated/runtime_execution_matrix.md)
+is the drift-gated source for which `(op, target)` rows execute. As of 2026-07-10
+the ROCm backend runs **dozens of compiler-generated HIP kernels natively on
+`gfx1151`** through `runtime.launch()` (`execution_mode="hip_runtime"`) — see the
+§5 lane-id table. These are **`compiled`** lanes: `tessera-opt` generates the
+kernel + serializes to `hsaco` in-process, then HIP loads and launches it, with an
+execute-vs-reference fixture per family. They are correctness-first (no perf
+ladder) and a rung below the two `hardware_verified` rows below.
 
-- shipped `libtessera_rocm_gemm.so` exporting `tessera_rocm_wmma_gemm_{f16,bf16}`
-  (HIPRTC-compiles the RDNA WMMA kernel for the device arch at load — no
-  hipcc-as-compiler);
-- wired into `runtime.launch()` as the executable `("rocm", "rocm_wmma")` row
-  (`hip_runtime`) in the generated `runtime_execution_matrix`;
-- execute-compare fixture `tests/unit/test_rocm_wmma_runtime_symbol.py` (f16/bf16,
-  ragged + K-looped shapes) vs a numpy reference;
-- a measured GEMM perf ladder (register blocking / LDS staging / software
-  pipelining / APU zero-copy) — see `STRIX_HALO_EXECUTION_PLAN.md` Stage F.
+**The first two — `matmul`/`gemm` + `flash_attn` are `hardware_verified`.** These
+were the first ops to run natively on a non-Apple backend and carry shipped C-ABI
+symbols (not just an in-process compiled lane):
 
-**The second exception — `flash_attn` (RDNA WMMA FA-2 forward).** As of
-2026-06-23 `flash_attn` also executes on `gfx1151`, the second op after matmul to
-run natively on a non-Apple backend:
+- `matmul`/`gemm`: shipped `libtessera_rocm_gemm.so` exporting
+  `tessera_rocm_wmma_gemm_{f16,bf16}` (HIPRTC-compiled for the device arch at
+  load); wired into `runtime.launch()` as the `("rocm", "rocm_wmma")` oracle row;
+  execute-compare fixture `tests/unit/test_rocm_wmma_runtime_symbol.py`
+  (f16/bf16, ragged + K-looped) vs numpy; **measured GEMM perf ladder** (register
+  blocking / LDS staging / software pipelining / APU zero-copy) —
+  `STRIX_HALO_EXECUTION_PLAN.md` Stage F. The default `matmul` path is now the
+  compiler-generated `rocm_compiled` lane, which degrades to this `rocm_wmma`
+  symbol as its oracle.
+- `flash_attn`: shipped `libtessera_rocm_flash_attn.so` exporting
+  `tessera_rocm_wmma_flash_attn_{f16,bf16}` — FA-2 **forward**, both QK^T and P@V
+  on 16×16×16 WMMA, online softmax, LDS-staged scores/accumulator, causal + ragged
+  Sq/Sk; execute-compare fixture `tests/unit/test_rocm_flash_attn_runtime_symbol.py`
+  (maxerr ~1e-4 f16). The FA-2 **backward** (dQ/dK/dV) also executes on gfx1151
+  via the compiler-generated `rocm_flash_attn_bwd_compiled` lane
+  (`generate-wmma-flash-attn-bwd-kernel` → `fa_pre`/`fa_dkdv`/`fa_dq`; O
+  recomputed via the forward lane, nothing saved from forward), **MHA + GQA/MQA**
+  (scale + causal), validated vs autodiff `vjp_flash_attn`. No perf ladder.
 
-- shipped `libtessera_rocm_flash_attn.so` exporting
-  `tessera_rocm_wmma_flash_attn_{f16,bf16}` (HIPRTC-compiled per head_dim at load);
-- FA-2 forward, single wave per (query-tile-of-16, b·h): **both QK^T and P@V on
-  16×16×16 WMMA**, online (running max/sum) softmax, scores + output accumulator
-  staged in LDS, causal masking + ragged Sq/Sk; head_dim a multiple of 16;
-- execute-compare fixture `tests/unit/test_rocm_flash_attn_runtime_symbol.py`
-  vs a numpy attention reference (f16/bf16, head_dim 16/32/64/128, multi
-  batch/head, ragged, causal). Measured maxerr ~1e-4 (f16) on gfx1151.
-
-Honest scope (Decision #25): both exceptions are **one arch × {fp16, bf16}**;
-flash_attn is **forward only, no perf ladder** (the correctness-first "rung 0" of
-attention) and has no `runtime.launch()` lane yet. They do **not** flip the
-per-primitive `backend_kernel` axis (that needs *all* targets `hardware_verified`),
-and every other kernel in §5 (the rest of the attention family, fused chains,
-optimizer/KV/RNG/spectral) stays `artifact_only` on every ROCm arch. CDNA MFMA
-entries remain hardware-free pending MI300-class silicon; Sprint H-4 lit fixtures
-validate their IR + MFMA patterns; `hipcc`/`llc` compile-only validation promotes
-them to `compileable`.
+Honest scope (Decision #25): everything above is **one arch (RDNA 3.5 `gfx1151`) ×
+{fp16, bf16}**, correctness-first. None of it flips the per-primitive
+`backend_kernel` axis (that needs *all* targets `hardware_verified`). **CDNA MFMA
+entries remain hardware-free** pending MI300-class silicon; Sprint H-4 lit fixtures
+validate their IR + MFMA patterns, and `hipcc`/`llc` compile-only validation
+promotes them to `compileable`. See §9 for the concrete done / open / blocked split.
 
 ---
 
@@ -411,14 +450,26 @@ them to `compileable`.
 ## 9. Roadmap — what's done / hardware-free / blocked
 
 ### Done on real silicon (gfx1151 / Strix Halo APU)
-- ✅ WMMA `matmul`/`gemm` executes + matches numpy (`{fp16, bf16}`, f32 accum)
-- ✅ `hardware_verified` `backend_manifest` row + runtime `launch()` lane
-- ✅ Measured GEMM perf ladder (register blocking is the winning lever on this
-  unified-memory APU; LDS staging / software pipelining / zero-copy give at-most
-  narrow wins — `STRIX_HALO_EXECUTION_PLAN.md` Stage F)
-- ✅ WMMA `flash_attn` FA-2 forward executes + matches a numpy attention
-  reference (`{fp16, bf16}`, f32 accum; online softmax, causal, ragged; both
-  QK^T and P@V on WMMA). Forward only, correctness-first (no perf ladder yet).
+- ✅ WMMA `matmul`/`gemm` executes + matches numpy (`{fp16, bf16}`, f32 accum);
+  `hardware_verified` row + shipped C-ABI symbol + measured GEMM perf ladder
+  (register blocking is the winning lever on this unified-memory APU —
+  `STRIX_HALO_EXECUTION_PLAN.md` Stage F)
+- ✅ WMMA `flash_attn` FA-2 **forward** executes + matches a numpy attention
+  reference (`{fp16, bf16}`, online softmax, causal, ragged); `hardware_verified`,
+  no perf ladder
+- ✅ WMMA `flash_attn` FA-2 **backward** (dQ/dK/dV) executes via the
+  `rocm_flash_attn_bwd_compiled` lane (`generate-wmma-flash-attn-bwd-kernel` →
+  `fa_pre`/`fa_dkdv`/`fa_dq`, launched through `runtime.launch()`), matches
+  autodiff `vjp_flash_attn` on `{fp16, bf16}`; **MHA + GQA/MQA** (grouped `fa_dkdv`
+  atomic-accumulates dK/dV across the group) **+ additive attn_bias**
+  (`S = scale*Q@K^T + bias` in the recompute), scale + causal. No perf ladder;
+  windowed/softcap backward is the remaining follow-up
+- ✅ **Dozens of additional compiler-generated HIP `compiled` lanes execute** and
+  match a CPU/numpy reference — nearly all of §5 plus §10: the GEMM/attention
+  families, norm / activation / RoPE / ALiBi, optimizers, RNG, FFT/spectral,
+  selective-SSM (Mamba2, **incl. device backward**), quantization, the loss
+  families, and the reduction / scan / sort / scatter / elementwise lanes. The
+  drift-gated live list is `docs/audit/generated/runtime_execution_matrix.md`.
 
 ### Hardware-free (lit-validated, no GPU needed)
 - ✅ Capability matrix incl. gfx1151 + provisional gfx1250/1251 (`rocm_target.py`)
@@ -433,24 +484,47 @@ them to `compileable`.
 - 🔜 Register `tessera-to-linalg` so the MLIR `--tessera-emit-rocdl` route works
   (the emitter currently rides the direct LLVM-IR path)
 
-### Still blocked on hardware
-- The rest of §5 on RDNA (gfx1151 proves matmul + flash_attn-forward so far)
-- flash_attn backward; a flash_attn perf ladder; its `runtime.launch()` lane
-- CDNA execution on MI300A / MI300X / MI325X (all MFMA entries)
-- MFU sign-off against the §5 targets (gfx1151 has a perf ladder, not MFU proof)
-- RCCL all-reduce numerical verification across 8× ranks
-- Profiler timeline capture (rocprof) + multi-rank scaling
+### Open on this box (gfx1151 — workable now, no CDNA needed)
+- `flash_attn` **backward** for the sliding-window / logit-softcap variants
+  (MHA + GQA/MQA + additive **attn_bias** backward is done and runtime-wired;
+  window/softcap still need the masked/capped backward math in the C++ kernel)
+- **Fused paged-attention** — the §5.6 movement core (`kv_cache_append/read/prune`)
+  now executes via `rocm_kv_cache_compiled` (scatter/gather compose,
+  execute-compare vs `KVCacheHandle`); a single fused gather→attention paged
+  kernel is the remaining step
+- `grad_clip_norm` (§5.5) — global-norm + scale; single-node
+- `rocm_moe_transport_compiled` — the one lane still `reference_cpu`; needs native
+  HIP gather/scatter transport kernels for `moe_dispatch`/`moe_combine`
+- Plain recurrent cells `lstm_cell` / `gru_cell` / `simple_rnn_cell` (§5.9) — no
+  dedicated lane (selective-SSM + deltanet are done)
+- **Perf ladders / MFU sign-off** beyond `matmul` — every `compiled` lane is
+  correctness-first with no perf characterization
+
+### Still blocked on hardware NOT on this box
+- **CDNA execution** on MI300A / MI300X / MI325X (all MFMA entries)
+- **FP8 / FP6 / FP4** matrix paths (gfx942/gfx950 MFMA; RDNA 3.5 has no FP8 WMMA)
+- MFU sign-off against CDNA §5 targets
+- RCCL all-reduce numerical verification across 8× ranks; multi-rank scaling
+- Profiler timeline capture (rocprof) at datacenter scale
 
 ---
 
 ## 10. M7 Visual Complex Analysis (E3 follow-up)
 
 Parallel to the NVIDIA M7 plan (see
-`docs/nvidia_cuda13_kernel_inventory.md` §9). The backend manifest
-reserves `status="planned"` slots for every M7 op on the ROCm target
-with the matrix below; all 20 M7 ops run today **only** via the
-Python reference path on CPU (`status="reference"`,
-`dtypes=("fp32",)`).
+`docs/nvidia_cuda13_kernel_inventory.md` §9).
+
+> **Update (2026-07-10).** This family is **no longer reference-only on ROCm.**
+> The M7 pointwise complex ops execute on `gfx1151` via `rocm_complex_compiled`
+> (9 pointwise ops over interleaved-f32) and `rocm_conformal_compiled`
+> (Möbius / stereographic on the complex mul/div lanes); the Clifford / GA
+> products run via `rocm_clifford_compiled`, and the EBM family via
+> `rocm_ebm_compute_compiled` / `rocm_ebm_langevin_compiled`. See the generated
+> `runtime_execution_matrix`. The geometric/certificate ops (`cross_ratio`,
+> `dz`/`dbar`, `laplacian_2d`, `conformal_*`, `is_concyclic`,
+> `check_cauchy_riemann`) still ride the host-structured reference path. The
+> planned dtype matrix below remains the fp16/bf16 *target* contract for a future
+> fused MFMA kernel; the runnable dtype today is f32.
 
 | Op family | Lowering target | Planned dtype matrix |
 |---|---|---|

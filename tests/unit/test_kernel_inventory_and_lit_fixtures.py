@@ -299,7 +299,7 @@ class TestH3RocmInventoryDoc:
             "Per-arch feature matrix",
             "MFMA instruction shape table",
             "Per-arch dtype matrix",
-            "Planned fused kernel inventory",
+            "Fused kernel inventory",
             "AMDGCN intrinsic patterns",
             "Execution gates",
             "ROCm 7.2.4",
@@ -334,6 +334,53 @@ class TestH3RocmInventoryDoc:
             "fp4_e2m1",
         ):
             assert fp4 in doc, f"{fp4} missing (CDNA 4 FP4 coverage)"
+
+
+# ──────────────────────────────────────────────────────────────────────────
+#     H-3 anti-drift: inventory execution-status must track the generated
+#     runtime execution matrix.  Added 2026-07-10 after the doc silently
+#     drifted for weeks — the structural guards above never checked *what
+#     executes*, so §7/§9 kept claiming only matmul+flash_attn ran on gfx1151
+#     while dozens of compiled HIP lanes had already landed.  This ties the
+#     inventory's execution claims to the drift-gated matrix (Decision #26).
+# ──────────────────────────────────────────────────────────────────────────
+
+class TestH3RocmInventoryExecutionStatus:
+    INVENTORY = REPO / "docs" / "rocm_mfma_kernel_inventory.md"
+    MATRIX = REPO / "docs" / "audit" / "generated" / "runtime_execution_matrix.md"
+
+    def test_doc_points_at_generated_truth_surface(self):
+        doc = self.INVENTORY.read_text()
+        assert "runtime_execution_matrix" in doc, (
+            "the inventory must point at the generated runtime execution matrix "
+            "as status truth (Decision #26) so execution status is not "
+            "hand-maintained here"
+        )
+
+    def test_doc_acknowledges_native_rocm_execution(self):
+        # A revert to the stale 'only matmul + flash_attn execute' framing would
+        # drop these markers of the native HIP compiled-lane program.
+        doc = self.INVENTORY.read_text()
+        assert "hip_runtime" in doc
+        assert "compiled" in doc
+
+    def test_every_compiled_lane_named_in_doc_exists_in_matrix(self):
+        # The inventory must not name an executing rocm_*_compiled lane that the
+        # drift-gated matrix does not carry.  This is the concrete anti-drift
+        # tie: doc execution claims are verifiable against generated truth.
+        import re
+
+        doc = self.INVENTORY.read_text()
+        matrix = self.MATRIX.read_text()
+        lane_re = re.compile(r"rocm_[a-z0-9]+(?:_[a-z0-9]+)*_compiled")
+        doc_lanes = set(lane_re.findall(doc))
+        matrix_lanes = set(lane_re.findall(matrix))
+        assert doc_lanes, "inventory should name the executing rocm compiled lanes"
+        missing = sorted(doc_lanes - matrix_lanes)
+        assert not missing, (
+            f"inventory names compiled lanes absent from the generated matrix: "
+            f"{missing}"
+        )
 
 
 # ──────────────────────────────────────────────────────────────────────────

@@ -86,6 +86,22 @@ def test_grad_clip_inf_norm():
                                rtol=1e-5, atol=1e-5)
 
 
+@pytest.mark.parametrize("bad", [1.0, 3.0, 0.5])
+def test_grad_clip_rejects_unsupported_finite_pnorm(bad):
+    # Only L2 (2.0) and inf are implemented; a finite p-norm != 2 must be
+    # rejected, not silently clipped by the L2 norm (Decision #21).
+    rt = _rocm_or_skip()
+    g = _RNG.standard_normal((32,)).astype(np.float32)
+    art = rt.RuntimeArtifact(metadata={
+        "target": "rocm", "compiler_path": "rocm_grad_clip_compiled",
+        "executable": True, "execution_kind": "native_gpu",
+        "arg_names": ["g"], "output_name": "o",
+        "ops": [{"op_name": "tessera.grad_clip_norm", "result": "o",
+                 "operands": ["g"],
+                 "kwargs": {"max_norm": 1.0, "norm_type": bad}}]})
+    assert rt.launch(art, (g,))["ok"] is False
+
+
 def test_grad_clip_rejects_missing_max_norm():
     rt = _rocm_or_skip()
     g = np.ones((8,), np.float32)

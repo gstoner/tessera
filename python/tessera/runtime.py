@@ -5339,6 +5339,15 @@ def _execute_grad_clip(artifact: RuntimeArtifact, args: Any, target: str,
         raise ValueError("grad_clip_norm requires a max_norm kwarg")
     max_norm = float(kwargs["max_norm"])
     norm_type = float(kwargs.get("norm_type", 2.0))
+    # Only L2 (norm_type == 2) and inf are implemented — the same norms
+    # optim.clip_grad_norm actually distinguishes (it computes tree_l2_norm for
+    # every finite norm_type). Reject other finite p-norms rather than silently
+    # clipping by the L2 norm the caller did not ask for (Decision #21).
+    if norm_type != float("inf") and norm_type != 2.0:
+        raise ValueError(
+            f"grad_clip_norm supports norm_type 2.0 (L2) or inf; got "
+            f"{norm_type}. Other finite p-norms are not implemented — pass "
+            f"2.0/inf, or clip that norm on the host.")
     values = _bind_launch_args(args, arg_names)
     g = np.ascontiguousarray(_as_numpy(values[operand_names[0]]), np.float32)
     if g.size == 0:

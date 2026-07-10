@@ -166,6 +166,16 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                              "these run on the numpy reference. Matches numpy / "
                              "tessera — parity with the x86/ROCm sparse + moe "
                              "lanes.",
+    "apple_gpu_tail_compiled": "Apple GPU reference tail lane — the heterogeneous "
+                             "remainder: MLA latent-KV (compress / expand_k / "
+                             "expand_v), alibi bias, lgamma / digamma, "
+                             "fused_epilogue, asymmetric_bce, "
+                             "normalize_group_advantages, and the "
+                             "speculative-decode accept ops. Apple ships no "
+                             "device kernel for these, so each reuses its public "
+                             "tessera reference (tessera.ops / losses / rl). "
+                             "Matches the reference — parity with the x86/ROCm "
+                             "lanes.",
     "native_cpu":           "x86 AMX / native CPU runtime via the C runtime ABI",
     "jit_cpu_numpy":        "JIT CPU fallback via the numpy reference path",
     "rocm_wmma":            "AMD GPU RDNA WMMA matrix-core GEMM via the shipped "
@@ -1057,6 +1067,23 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "the CPU reference path (no Metal dispatch) — "
                "execution_kind=reference_cpu; matches numpy / tessera, parity "
                "with the x86/ROCm sparse + moe lanes."),
+    # Apple GPU reference tail lane (2026-07-10) — the heterogeneous remainder
+    # (MLA latent-KV, alibi, lgamma/digamma, fused_epilogue, asymmetric_bce,
+    # normalize_group_advantages, speculative-decode accept). Apple ships no
+    # device kernel, so each reuses its public tessera reference (no Metal
+    # dispatch) — execution_kind=reference_cpu.
+    ("apple_gpu", "apple_gpu_tail_compiled"): ExecutionRow(
+        target="apple_gpu", compiler_path="apple_gpu_tail_compiled",
+        execution_kind="reference_cpu", executable=True,
+        executor_id="apple_gpu_tail_compiled", runtime_status="success",
+        reason="Apple GPU reference tail artifact runs the heterogeneous "
+               "remainder — MLA latent-KV (compress / expand_k / expand_v), "
+               "alibi, lgamma / digamma, fused_epilogue, asymmetric_bce, "
+               "normalize_group_advantages, and speculative-decode accept — each "
+               "via its public tessera reference (tessera.ops / losses / rl). "
+               "Runs on the CPU reference path (no Metal dispatch) — "
+               "execution_kind=reference_cpu; matches the reference, parity with "
+               "the x86/ROCm lanes."),
     # --- x86 / native CPU (AMX path) ---
     ("cpu", "native_cpu"): ExecutionRow(
         target="cpu", compiler_path="native_cpu",

@@ -395,6 +395,6 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 - **`graph_ir`** (source: `primitive_coverage.metadata.graph_ir_lowering`)
 - **`schedule_ir`** (source: `primitive_coverage.contract_status.lowering_rule`)
 - **`tile_ir`** (source: `backend_manifest native/compiled entry`)
-- **`target_ir`** (source: `backend_manifest[rocm]`)
+- **`target_ir`** (source: `backend_manifest[apple_gpu]`)
 - **`runtime`** (source: `capabilities[cpu]`)
 - **`bench`** (source: `no benchmark row`)

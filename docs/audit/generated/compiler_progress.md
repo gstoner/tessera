@@ -42,7 +42,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 |---|---|---:|---:|---:|---|---|
 | `Verifier coverage` | mixed | 163 | 174 | 11 | no_verifier=11, real=163 | Add real verifier implementations for no_verifier ops, prioritizing native codegen lanes. |
 | `Direct test evidence` | mixed | 363 | 480 | 117 | covered_by_family=26, directly_tested=363, hardware_gated=4, structural_only=87 | Convert structural_only and needs_direct_test rows into direct compare fixtures; keep hardware_gated tied to backend proof. |
-| `Runtime execution matrix` | closed | 146 | 146 | 0 | apple_cpu=2, apple_gpu=15, cpu=2, nvidia_sm120=1, rocm=65, x86=61 | Add rows only when a launch path actually executes. |
+| `Runtime execution matrix` | closed | 147 | 147 | 0 | apple_cpu=2, apple_gpu=16, cpu=2, nvidia_sm120=1, rocm=65, x86=61 | Add rows only when a launch path actually executes. |
 | `Runtime ABI symbols` | mixed | 397 | 650 | 253 | apple=557, nvidia=7, rocm=10, x86=76 | Reduce stub-only ABI rows where a backend claims native execution. |
 | `Audited repo surfaces` | mixed | 31 | 58 | 27 | archived=4, compile_only=12, runnable=31, runnable_optional=1, scaffold=10 | Graduate compile_only/scaffold entries that exercise compiler pathways; archive dead surfaces. |
 
@@ -50,8 +50,8 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 
 | Item | Status | Ready | Total | Open | Detail | Next |
 |---|---|---:|---:|---:|---|---|
-| `Apple CPU` | closed | 160 | 160 | 0 | runtime: apple_cpu=2; target_map: fused=2, reference=156 | Keep as regression baseline for CPU value-call/runtime ABI. |
-| `Apple GPU` | mixed | 172 | 173 | 1 | runtime: apple_gpu=15; target_map: absent=1, compiled=88, fused=58, hardware_verified=11 | Close the remaining absent target-map lane or document why it is host-only. |
+| `Apple CPU` | closed | 173 | 173 | 0 | runtime: apple_cpu=2; target_map: fused=2, reference=169 | Keep as regression baseline for CPU value-call/runtime ABI. |
+| `Apple GPU` | mixed | 186 | 187 | 1 | runtime: apple_gpu=16; target_map: absent=1, compiled=101, fused=58, hardware_verified=11 | Close the remaining absent target-map lane or document why it is host-only. |
 | `x86 / CPU` | closed | 2 | 2 | 0 | runtime: cpu=2 | Keep native CPU and numpy reference lanes separate in runtime proofs. |
 | `ROCm / HIP` | closed | 101 | 101 | 0 | runtime: rocm=65; target_map: compiled=34, hardware_verified=2 | Close the artifact-only target-map tail and preserve CDNA as hardware-gated. |
 | `CUDA / NVIDIA` | mixed | 1 | 40 | 39 | runtime: nvidia_sm120=1; target_map: artifact_only=39 | Promote artifact-only rows with execute-and-compare, starting from sm_120 matmul adjacency and attention. |

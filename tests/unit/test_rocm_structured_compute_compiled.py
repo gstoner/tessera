@@ -100,16 +100,17 @@ def test_rocm_structured_model_recurrent_and_stencil_match_reference_on_gpu():
         atol=1e-6,
     )
 
-    # LSTM cell (gate order i,f,g,o): W_ih/W_hh are (in,4H)/(H,4H); returns
-    # (h_new, c_new). Runs through the same structured-compute lane.
+    # LSTM cell — canonical tessera.ops.lstm_cell contract: (4H,In)/(4H,H)
+    # weights (applied via W.T), returns the packed concat([h_t, c_t]) (B, 2H).
     cprev = rng.standard_normal((2, 5)).astype(np.float32)
-    Wih4 = rng.standard_normal((3, 20)).astype(np.float32)
-    Whh4 = rng.standard_normal((5, 20)).astype(np.float32)
-    lh, lc = _launch(rt, "tessera.lstm_cell", ("x", "h", "c", "Wih", "Whh"),
-                     (xt, h, cprev, Wih4, Whh4))
-    rh, rc = F.lstm_cell(xt, h, cprev, Wih4, Whh4)
-    np.testing.assert_allclose(lh, rh, atol=1e-6)
-    np.testing.assert_allclose(lc, rc, atol=1e-6)
+    Wih4 = rng.standard_normal((20, 3)).astype(np.float32)
+    Whh4 = rng.standard_normal((20, 5)).astype(np.float32)
+    np.testing.assert_allclose(
+        _launch(rt, "tessera.lstm_cell", ("x", "h", "c", "Wih", "Whh"),
+                (xt, h, cprev, Wih4, Whh4)),
+        ops.lstm_cell(xt, h, cprev, Wih4, Whh4),
+        atol=1e-6,
+    )
 
     a = rng.standard_normal((2, 4)).astype(np.float32)
     weight = rng.standard_normal((4, 6)).astype(np.float32)

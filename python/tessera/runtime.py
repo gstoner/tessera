@@ -3372,6 +3372,7 @@ def _execute_rocm_compiled_flash_attn_bwd(artifact: RuntimeArtifact,
     hip.hipMemcpy(bufs["O"], o_f32.ctypes.data_as(cv), 4 * nq, 1)
     n_bias = bh * sq * sk
     if has_bias:
+        assert bias_c is not None  # set above whenever has_bias
         d = cv()
         if hip.hipMalloc(ctypes.byref(d), max(4 * n_bias, 4)) != 0:
             for dd in bufs.values():
@@ -13339,7 +13340,10 @@ def _execute_structured_compute_composite(
     if op_name == "tessera.gru_cell":
         return F.gru_cell(*operands, **kwargs)
     if op_name == "tessera.lstm_cell":
-        return F.lstm_cell(*operands, **kwargs)
+        # Canonical op contract (tessera.ops.lstm_cell): (4H,In)/(4H,H) weights
+        # via W_ih.T/W_hh.T, packed concat([h_t, c_t]) output — NOT F.lstm_cell
+        # (which takes transposed weights and returns a tuple).
+        return ops.lstm_cell(*operands, **kwargs)
     if op_name == "tessera.cross_attention":
         return ops.cross_attention(*operands, **kwargs)
     if op_name == "tessera.perceiver_resampler":

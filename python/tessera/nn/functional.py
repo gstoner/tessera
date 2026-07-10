@@ -309,28 +309,6 @@ def gru_cell(x, h, W_ih, W_hh, b_ih=None, b_hh=None):
     return (1.0 - z) * n + z * h_arr
 
 
-def lstm_cell(x, h, c, W_ih, W_hh, b_ih=None, b_hh=None):
-    """LSTM cell with gate order i, f, g, o (PyTorch/cuDNN convention).
-
-    ``x`` (…, in), ``h``/``c`` (…, hidden); ``W_ih`` (in, 4*hidden), ``W_hh``
-    (hidden, 4*hidden). Returns ``(h_new, c_new)``.
-    """
-    x_arr, h_arr, c_arr = _asarray(x), _asarray(h), _asarray(c)
-    gates = x_arr @ _asarray(W_ih) + h_arr @ _asarray(W_hh)
-    if b_ih is not None:
-        gates = gates + _asarray(b_ih)
-    if b_hh is not None:
-        gates = gates + _asarray(b_hh)
-    i, f, g, o = np.split(gates, 4, axis=-1)
-    i = 1.0 / (1.0 + np.exp(-i))
-    f = 1.0 / (1.0 + np.exp(-f))
-    g = np.tanh(g)
-    o = 1.0 / (1.0 + np.exp(-o))
-    c_new = f * c_arr + i * g
-    h_new = o * np.tanh(c_new)
-    return h_new, c_new
-
-
 def bidirectional_scan(fn, init_fwd, init_bwd, xs):
     xs_arr = _asarray(xs)
     fwd_states = []
@@ -748,7 +726,6 @@ __all__ = [
     "group_norm",
     "gqa_attention",
     "gru_cell",
-    "lstm_cell",
     "instance_norm",
     "mask_token_block",
     "max_pool",

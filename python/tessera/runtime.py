@@ -6821,6 +6821,136 @@ def _execute_x86_compiled_linalg(artifact: RuntimeArtifact, args: Any) -> Any:
                            lambda a: _x86_svd_mn(a, np), np)
 
 
+# ── Apple GPU linalg lane (2026-07-10) — Apple ships no MPS lu/qr/svd primitive,
+#    so the decomposition ops resolve on the numpy reference the x86/ROCm device
+#    kernels match (qr/svd/cholesky via np.linalg; a standalone partial-pivot LU;
+#    triangular solves via the extracted triangle). Direct execute/compare, not a
+#    bespoke fused Metal kernel — parity with x86/rocm_linalg_compiled.
+def _apple_cholesky(A: Any, np: Any) -> Any:
+    return np.linalg.cholesky(np.ascontiguousarray(A, np.float32)).astype(np.float32)
+
+
+def _apple_tri_solve_raw(A: Any, B: Any, lower: bool, np: Any) -> Any:
+    """Solve A·X=B using the triangular part of A (batched). f32."""
+    a = np.ascontiguousarray(A, np.float32)
+    tri = np.tril(a) if lower else np.triu(a)
+    return np.linalg.solve(tri, np.ascontiguousarray(B, np.float32)).astype(np.float32)
+
+
+def _apple_lu(A: Any, np: Any) -> tuple:
+    """Batched partial-pivot LU — A[..,n,n] → (packed LU[..,n,n], piv[..,n] int32)
+    with the row-permutation convention ``A[piv] = L·U`` (L unit-lower below the
+    diagonal, U on/above). Standalone numpy (no scipy)."""
+    a = np.array(A, np.float32)
+    batch = a.shape[:-2]
+    n = int(a.shape[-1])
+    flat = a.reshape(-1, n, n).copy()
+    piv = np.zeros((flat.shape[0], n), np.int32)
+    for bi in range(flat.shape[0]):
+        M = flat[bi]
+        perm = np.arange(n)
+        for col in range(n):
+            p = col + int(np.argmax(np.abs(M[col:, col])))
+            if p != col:
+                M[[col, p]] = M[[p, col]]
+                perm[[col, p]] = perm[[p, col]]
+            d = M[col, col]
+            if d != 0.0:
+                M[col + 1:, col] /= d
+                M[col + 1:, col + 1:] -= np.outer(M[col + 1:, col], M[col, col + 1:])
+        piv[bi] = perm
+    return flat.reshape(*batch, n, n).astype(np.float32), piv.reshape(*batch, n)
+
+
+def _apple_qr(A: Any, np: Any) -> tuple:
+    """Reduced QR — A[..,m,n] → (Q[..,m,k], R[..,k,n]), k=min(m,n)."""
+    q, r = np.linalg.qr(np.ascontiguousarray(A, np.float32), mode="reduced")
+    return (np.ascontiguousarray(q, np.float32), np.ascontiguousarray(r, np.float32))
+
+
+def _apple_svd_mn(A: Any, np: Any) -> tuple:
+    """Reduced SVD (m≥n) — A[..,m,n] → (U[..,m,n], S[..,n], Vh[..,n,n])."""
+    u, s, vh = np.linalg.svd(np.ascontiguousarray(A, np.float32),
+                             full_matrices=False)
+    return (np.ascontiguousarray(u, np.float32), np.ascontiguousarray(s, np.float32),
+            np.ascontiguousarray(vh, np.float32))
+
+
+def _execute_apple_gpu_compiled_linalg(artifact: RuntimeArtifact,
+                                       args: Any) -> Any:
+    """The ``target="apple_gpu"`` linalg lane: cholesky / tri_solve /
+    cholesky_solve / lu / qr / svd via the numpy reference (Apple has no MPS
+    lu/qr/svd primitive). f32; matches np.linalg — parity with
+    x86/rocm_linalg_compiled."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _LINALG_OPS:
+        raise ValueError(
+            f"apple_gpu_linalg_compiled executor handles one of {_LINALG_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    values = _bind_launch_args(args, arg_names)
+    operands: list = [values[str(n)] for n in op.get("operands", [])]
+    if op_name == "tessera.tri_solve":
+        operands = operands[:2] + [op.get("kwargs") or {}]
+    return _linalg_compute(op_name, operands,
+                           lambda a: _apple_cholesky(a, np),
+                           lambda a, b, lo: _apple_tri_solve_raw(a, b, lo, np),
+                           lambda a: _apple_lu(a, np),
+                           lambda a: _apple_qr(a, np),
+                           lambda a: _apple_svd_mn(a, np), np)
+
+
+# ── Apple GPU matmul-family lane (2026-07-10) — einsum (single-contraction) and
+#    factorized_matmul via the numpy reference the x86/ROCm GEMM lanes match.
+_APPLE_MATMUL_FAMILY_OPS = ("tessera.einsum", "tessera.factorized_matmul")
+
+
+def _execute_apple_gpu_compiled_matmul_family(artifact: RuntimeArtifact,
+                                              args: Any) -> Any:
+    """The ``target="apple_gpu"`` matmul-family lane: einsum (single-contraction
+    spec) and factorized_matmul (GEMM + rank-r SVD truncation) via the numpy
+    reference. f32; matches numpy — parity with x86/rocm_matmul_family_compiled."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _APPLE_MATMUL_FAMILY_OPS:
+        raise ValueError(
+            f"apple_gpu_matmul_family_compiled executor handles one of "
+            f"{_APPLE_MATMUL_FAMILY_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    kwargs = op.get("kwargs") or {}
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[str(n)]) for n in op.get("operands", [])]
+    if op_name == "tessera.einsum":
+        spec = kwargs.get("spec") or kwargs.get("equation")
+        if spec is None or len(operands) != 2:
+            raise ValueError(
+                "apple einsum lane needs a 'spec' kwarg and exactly two tensors")
+        return np.einsum(str(spec),
+                         np.ascontiguousarray(operands[0], np.float32),
+                         np.ascontiguousarray(operands[1], np.float32)).astype(
+            np.float32)
+    # tessera.factorized_matmul — (A·B) truncated to rank r via SVD (rank-2).
+    if len(operands) != 2:
+        raise ValueError("factorized_matmul takes two operands (A, B)")
+    a = np.ascontiguousarray(operands[0], np.float32)
+    b = np.ascontiguousarray(operands[1], np.float32)
+    if a.ndim != 2 or b.ndim != 2:
+        raise ValueError("apple factorized_matmul handles rank-2 A, B")
+    rank = int(kwargs.get("rank", min(a.shape[0], b.shape[1])))
+    out = (a @ b).astype(np.float32)
+    u, s, vh = np.linalg.svd(out, full_matrices=False)
+    r = max(1, min(rank, s.shape[-1]))
+    return ((u[..., :r] * s[..., :r]) @ vh[..., :r, :]).astype(np.float32)
+
+
 _X86_CLASS_LOSS_OPS = (
     "tessera.cross_entropy_loss", "tessera.kl_divergence",
     "tessera.js_divergence", "tessera.focal_loss",
@@ -14938,6 +15068,9 @@ def _executor_table():
         "apple_gpu_complex_compiled": _execute_apple_gpu_compiled_complex,
         "apple_gpu_conformal_compiled": _execute_apple_gpu_compiled_conformal,
         "apple_gpu_rng_compiled": _execute_apple_gpu_compiled_rng,
+        "apple_gpu_linalg_compiled": _execute_apple_gpu_compiled_linalg,
+        "apple_gpu_matmul_family_compiled":
+            _execute_apple_gpu_compiled_matmul_family,
         "native_cpu":           _execute_cpu_native_or_jit,
         "jit_cpu_numpy":        _execute_jit_cpu_artifact,
         "rocm_wmma":            _execute_rocm_wmma_artifact,

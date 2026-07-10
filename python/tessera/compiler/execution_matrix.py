@@ -120,6 +120,19 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                              "tessera.rng RNGKey contract (the same path x86/ROCm "
                              "take for the distributions). Matches tessera.rng / "
                              "tessera.rng_device — parity with x86/rocm_rng_compiled.",
+    "apple_gpu_linalg_compiled": "Apple GPU linalg lane — cholesky / tri_solve / "
+                             "cholesky_solve / lu / qr / svd. Apple ships no MPS "
+                             "lu/qr/svd primitive, so the decompositions resolve "
+                             "on the numpy reference the x86/ROCm device kernels "
+                             "match (qr/svd/cholesky via np.linalg; a standalone "
+                             "partial-pivot LU; triangular solves via the "
+                             "extracted triangle). Matches np.linalg — parity with "
+                             "x86/rocm_linalg_compiled.",
+    "apple_gpu_matmul_family_compiled": "Apple GPU matmul-family lane — einsum "
+                             "(single-contraction spec) and factorized_matmul "
+                             "(GEMM + rank-r SVD truncation) via the numpy "
+                             "reference the x86/ROCm GEMM lanes match. Matches "
+                             "numpy — parity with x86/rocm_matmul_family_compiled.",
     "native_cpu":           "x86 AMX / native CPU runtime via the C runtime ABI",
     "jit_cpu_numpy":        "JIT CPU fallback via the numpy reference path",
     "rocm_wmma":            "AMD GPU RDNA WMMA matrix-core GEMM via the shipped "
@@ -922,6 +935,33 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "tessera.rng RNGKey contract. Runs on the CPU reference path (no "
                "Metal dispatch) — execution_kind=reference_cpu; matches "
                "tessera.rng / tessera.rng_device, parity with x86/rocm_rng_compiled."),
+    # Apple GPU linalg + matmul-family lanes (2026-07-10) — parity with the
+    # x86/ROCm linalg / matmul-family lanes. Apple has no MPS lu/qr/svd primitive,
+    # so these lanes run entirely on the CPU numpy reference (no Metal dispatch):
+    # executable apple_gpu artifact paths with compare fixtures, but they do NOT
+    # run on the GPU, so execution_kind is reference_cpu (telemetry/audit must not
+    # miscount them as Apple GPU execution).
+    ("apple_gpu", "apple_gpu_linalg_compiled"): ExecutionRow(
+        target="apple_gpu", compiler_path="apple_gpu_linalg_compiled",
+        execution_kind="reference_cpu", executable=True,
+        executor_id="apple_gpu_linalg_compiled", runtime_status="success",
+        reason="Apple GPU linalg artifact runs cholesky / tri_solve / "
+               "cholesky_solve / lu / qr / svd via the numpy reference (Apple "
+               "ships no MPS lu/qr/svd primitive): qr/svd/cholesky on np.linalg, "
+               "a standalone partial-pivot LU, triangular solves via the "
+               "extracted triangle. Runs on the CPU reference path (no Metal "
+               "dispatch) — execution_kind=reference_cpu; matches np.linalg, "
+               "parity with x86/rocm_linalg_compiled."),
+    ("apple_gpu", "apple_gpu_matmul_family_compiled"): ExecutionRow(
+        target="apple_gpu", compiler_path="apple_gpu_matmul_family_compiled",
+        execution_kind="reference_cpu", executable=True,
+        executor_id="apple_gpu_matmul_family_compiled", runtime_status="success",
+        reason="Apple GPU matmul-family artifact runs einsum (single-contraction "
+               "spec) and factorized_matmul (GEMM + rank-r SVD truncation) via "
+               "the numpy reference the x86/ROCm GEMM lanes match. Runs on the "
+               "CPU reference path (no Metal dispatch) — "
+               "execution_kind=reference_cpu; matches numpy, parity with "
+               "x86/rocm_matmul_family_compiled."),
     # --- x86 / native CPU (AMX path) ---
     ("cpu", "native_cpu"): ExecutionRow(
         target="cpu", compiler_path="native_cpu",

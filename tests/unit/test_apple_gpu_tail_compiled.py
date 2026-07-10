@@ -48,22 +48,35 @@ def test_lgamma_digamma():
 def test_asymmetric_bce_and_group_norm():
     lg = _RNG.standard_normal((4, 5)).astype(np.float32)
     tg = _RNG.integers(0, 2, (4, 5)).astype(np.float32)
-    np.testing.assert_allclose(
-        _run("tessera.asymmetric_bce", [lg, tg],
-             {"pos_weight": 2.0, "neg_weight": 0.5}),
-        np.asarray(losses.asymmetric_bce(lg, tg, pos_weight=2.0, neg_weight=0.5)),
-        atol=1e-4, rtol=1e-4)
     rew = _RNG.standard_normal((2, 4)).astype(np.float32)
-    np.testing.assert_allclose(
-        _run("tessera.normalize_group_advantages", [rew], {"group_axis": 1}),
-        np.asarray(rl.normalize_group_advantages(rew, group_axis=1)),
-        atol=1e-4, rtol=1e-4)
+    # Both the flat and the canonical Graph IR op names (op_catalog:
+    # tessera.loss.* / tessera.rl.*) must reach the lane — the frontend/tracer
+    # emits the canonical spelling.
+    for op in ("tessera.asymmetric_bce", "tessera.loss.asymmetric_bce"):
+        np.testing.assert_allclose(
+            _run(op, [lg, tg], {"pos_weight": 2.0, "neg_weight": 0.5}),
+            np.asarray(losses.asymmetric_bce(lg, tg, pos_weight=2.0,
+                                             neg_weight=0.5)),
+            atol=1e-4, rtol=1e-4)
+    for op in ("tessera.normalize_group_advantages",
+               "tessera.rl.normalize_group_advantages"):
+        np.testing.assert_allclose(
+            _run(op, [rew], {"group_axis": 1}),
+            np.asarray(rl.normalize_group_advantages(rew, group_axis=1)),
+            atol=1e-4, rtol=1e-4)
 
 
 def test_alibi():
     np.testing.assert_allclose(
         _run("tessera.alibi", [], {"num_heads": 4, "seq_len": 6}),
         np.asarray(O.alibi(num_heads=4, seq_len=6)), atol=1e-4, rtol=1e-4)
+    # optional slopes operand — must be passed as slopes= (keyword-only in the
+    # reference), not positionally against num_heads/seq_len.
+    slopes = np.array([1.0, 0.5, 0.25, 0.125], np.float32)
+    np.testing.assert_allclose(
+        _run("tessera.alibi", [slopes], {"num_heads": 4, "seq_len": 6}),
+        np.asarray(O.alibi(slopes=slopes, num_heads=4, seq_len=6)),
+        atol=1e-4, rtol=1e-4)
 
 
 def test_mla_latent_kv():

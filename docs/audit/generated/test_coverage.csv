@@ -8,7 +8,7 @@ adamw,12,2,0,14,0,fp32 fp64,directly_tested,14 direct test references
 adaptive_pool,6,0,0,6,0,,directly_tested,6 direct test references
 add,112,29,10,141,0,bf16 f16 f32 f64 fp16 fp32,directly_tested,141 direct test references
 add_decoupled_weight_decay,2,0,0,2,0,,directly_tested,2 direct test references
-alibi,4,0,0,4,0,bf16 f16 f32,directly_tested,4 direct test references
+alibi,5,0,0,5,0,bf16 f16 f32,directly_tested,5 direct test references
 all_gather,1,2,0,3,0,fp32,directly_tested,3 direct test references
 all_reduce,7,2,1,9,0,f32 fp32 fp8_e4m3 int8,directly_tested,9 direct test references
 all_to_all,3,0,0,3,0,fp32,directly_tested,3 direct test references
@@ -309,7 +309,7 @@ named_sharding,0,0,0,0,1,,structural_only,category default for 'sharding'
 ne,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
 nesterov,10,0,0,10,0,,directly_tested,10 direct test references
 nonzero,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-normalize_group_advantages,8,0,0,8,0,,directly_tested,8 direct test references
+normalize_group_advantages,9,0,0,9,0,,directly_tested,9 direct test references
 nt_xent_loss,8,0,0,8,0,,directly_tested,8 direct test references
 ntk_rope,2,0,0,2,0,,directly_tested,2 direct test references
 online_softmax,5,2,0,7,0,,directly_tested,7 direct test references

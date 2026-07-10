@@ -6,5 +6,6 @@
 > GPU linear-algebra state, R-series verdicts, the ThunderMittens / SIMD-rowop
 > reviews, and the SDK verification).
 >
-> The forward-looking Metal 4 *ladder* (what to build next) remains separate
-> in [apple_gpu_metal4_adoption.md](apple_gpu_metal4_adoption.md).
+> The forward-looking Metal 4 *ladder* has since been consolidated and
+> archived — see the **Archived documents** section of
+> [apple_backend.md](apple_backend.md#archived-documents).

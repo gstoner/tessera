@@ -7,7 +7,7 @@ Batched / rank-3+ matmul via the MetalPerformanceShadersGraph bmm lane:
   * f32 / f16 native (fp32 compute), bf16 host-upcast.
 
 This unblocks the Tier-2 attention family (per-head attention = batched matmul)
-and the projection ops. See docs/apple_gpu_tier2_tier3_plan.md.
+and the projection ops. See docs/audit/backend/apple/archive/apple_gpu_tier2_tier3_plan.md.
 """
 
 from __future__ import annotations

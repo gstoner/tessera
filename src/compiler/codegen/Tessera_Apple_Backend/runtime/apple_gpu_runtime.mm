@@ -221,7 +221,7 @@ struct MetalDeviceContext {
   std::mutex                 buffer_pool_mu;
 
   // P5 — allocator byte accounting (MLX-style introspection; see
-  // ``apple_backend_capability_roadmap.md`` P5). ``active`` = bytes of live
+  // ``docs/audit/backend/apple/archive/apple_backend_capability_roadmap.md`` P5). ``active`` = bytes of live
   // resident DeviceTensors checked out via ts_dev_alloc; ``cache`` = bytes
   // parked in ``buffer_pool`` for reuse (mutated under ``buffer_pool_mu``);
   // ``peak`` = high-water of ``active`` since process start / last reset;
@@ -397,7 +397,7 @@ extern "C" int32_t tessera_apple_gpu_simd_caps(void) {
 //===----------------------------------------------------------------------===//
 // P5 — memory-budget introspection (MLX-style allocator accounting). Mirrors
 // the non-Darwin stub's surface so the Python ctypes layer is platform-agnostic
-// (see ``apple_backend_capability_roadmap.md`` P5). Counters live on the device
+// (see ``docs/audit/backend/apple/archive/apple_backend_capability_roadmap.md`` P5). Counters live on the device
 // context: ``active`` (live resident DeviceTensor bytes), ``cache`` (bytes
 // parked in the buffer pool), ``peak`` (high-water of active), ``mem_limit``
 // (advisory ceiling; queryable, not enforced).
@@ -15796,7 +15796,7 @@ extern "C" int32_t tessera_apple_gpu_run_graph_cond_f32(
       // and build ONLY the taken branch as a straight-line graph. This avoids
       // MPSGraph's `ifWithPredicateTensor` entirely: its control-flow region
       // runtime (GPU::WhileOpHandler) SIGSEGVs under bulk executable churn
-      // (docs/apple_gpu_control_flow_lowering.md). Straight-line graphs are
+      // (docs/audit/backend/apple/archive/apple_gpu_control_flow_lowering.md). Straight-line graphs are
       // safe; only the region ops crash. Semantically identical — exactly one
       // branch is taken, selected by the same flag>0 test.
       const bool take_then =
@@ -15841,7 +15841,7 @@ extern "C" int32_t tessera_apple_gpu_run_graph_cond_f32(
 
 // PK8f — run a BOUNDED `while` as ONE MPSGraph `forLoop` with select-masking
 // (Phase-G G-A.3). MPSGraph's native `while` SIGSEGVs under churn (see
-// docs/apple_gpu_control_flow_lowering.md), so a max-iter-capped while lowers to
+// docs/audit/backend/apple/archive/apple_gpu_control_flow_lowering.md), so a max-iter-capped while lowers to
 // a forLoop where each step freezes the carry once the predicate goes false:
 //   for i in 0..max_iters:
 //     next = body(carry, args);  pred = cond(carry, args) > 0
@@ -16836,7 +16836,7 @@ extern "C" void tessera_apple_gpu_mpsgraph_binary_f16(int32_t op,
 // scattering each iteration's carry into an [T,d] accumulator at row `index`.
 // This is the reusable machinery (index gather + carry threading + per-step
 // scatter-accumulate) every higher control-flow rung reuses. See
-// docs/apple_gpu_control_flow_lowering.md.
+// docs/audit/backend/apple/archive/apple_gpu_control_flow_lowering.md.
 //===----------------------------------------------------------------------===//
 extern "C" int32_t tessera_apple_gpu_cf_scan_f32(const float *Wh, const float *Wx,
                                                  const float *xseq,
@@ -16939,7 +16939,7 @@ extern "C" int32_t tessera_apple_gpu_cf_scan_f32(const float *Wh, const float *W
 //   scatter token' -> tokens[i];  scatter s -> hidden[i]
 // All weights are fed as placeholders; per-layer weights are static-sliced from
 // the [L, ...] inputs inside the (C++-unrolled) layer loop. See
-// docs/apple_gpu_control_flow_lowering.md.
+// docs/audit/backend/apple/archive/apple_gpu_control_flow_lowering.md.
 //===----------------------------------------------------------------------===//
 namespace {
 // rmsnorm(x,gamma) = x / sqrt(mean(x^2)+eps) * gamma, all in-graph.
@@ -17108,7 +17108,7 @@ extern "C" int32_t tessera_apple_gpu_cf_serial_draft_f32(
 // streams over the vocabulary (no V-sized stack array; V is unbounded). The
 // hidden state lives in a `[256]` thread-local array, matching the
 // documented d ≤ 256 control-flow envelope. See
-// docs/apple_gpu_control_flow_lowering.md.
+// docs/audit/backend/apple/archive/apple_gpu_control_flow_lowering.md.
 //===----------------------------------------------------------------------===//
 extern "C" int32_t tessera_apple_gpu_cf_while_generate_f32(
     const float *W, const float *lm, const float *h_init, int32_t start_token,
@@ -17205,7 +17205,7 @@ kernel void cf_while_generate(device const float *W      [[buffer(0)]],
 // runs on the classic command model). Caps bitmask:
 //   1  MTL4CommandQueue   2  MTL4CommandAllocator   4  MTL4Compiler
 //   8  MTLTensor          16 MSL 4.0 library compile
-// See docs/apple_gpu_metal4_adoption.md.
+// See docs/audit/backend/apple/archive/apple_gpu_metal4_adoption.md.
 //===----------------------------------------------------------------------===//
 extern "C" int32_t tessera_apple_gpu_metal4_probe(int32_t *caps_out) {
   if (caps_out) *caps_out = 0;
@@ -17296,8 +17296,8 @@ extern "C" int32_t tessera_apple_gpu_metal4_tensor_roundtrip(const void *in,
 // express the loop as an MPSGraph forLoop, here the loop is ordinary MSL
 // control flow inside one kernel — one thread runs the whole sequential scan.
 // This is both the first real MTL4 dispatch and the concrete demonstration that
-// Phase-G control flow maps onto MSL 4.0. See docs/apple_gpu_metal4_adoption.md
-// and docs/apple_gpu_control_flow_lowering.md.
+// Phase-G control flow maps onto MSL 4.0. See docs/audit/backend/apple/archive/apple_gpu_metal4_adoption.md
+// and docs/audit/backend/apple/archive/apple_gpu_control_flow_lowering.md.
 //===----------------------------------------------------------------------===//
 static NSString *kMTL4ScanMSL = @R"MSL(
 #include <metal_stdlib>
@@ -17424,7 +17424,7 @@ extern "C" int32_t tessera_apple_gpu_mtl4_scan_f32(const float *Wh,
 // M/N multiple of 8 and any K work (the dispatch keeps the 8-multiple envelope).
 // (MSL 4.0 also adds a more general `tensor` cooperative-op type; simdgroup_matrix
 // is the established cooperative path used here.) See
-// docs/apple_gpu_metal4_adoption.md.
+// docs/audit/backend/apple/archive/apple_gpu_metal4_adoption.md.
 //===----------------------------------------------------------------------===//
 static NSString *kMTL4MatmulMSL = @R"MSL(
 #include <metal_stdlib>
@@ -17518,7 +17518,7 @@ kernel void mtl4_matmul_sg(device const float *A    [[buffer(0)]],
 // (Apple's MSL 4.0 MetalPerformancePrimitives `matmul2d` cooperative tensor op
 // has no f32 path under execution_simdgroups — only fp16/bf16 — so the matrix
 // units don't help f32; this register-blocked simdgroup_matrix kernel is the
-// f32 ceiling. See docs/apple_gpu_metal4_adoption.md (M5).)
+// f32 ceiling. See docs/audit/backend/apple/archive/apple_gpu_metal4_adoption.md (M5).)
 constant constexpr int FBM = 64, FBN = 64, FBK = 16;   // tile + K-slab
 constant constexpr int FSGC = 4;                        // SIMD-group cols (2 rows x 4 cols)
 constant constexpr int FNR = 4, FNC = 2;                // 8x8 accumulators per SIMD group
@@ -17676,7 +17676,7 @@ extern "C" int32_t tessera_apple_gpu_mtl4_matmul_sg_f32(const float *A,
 // `get_multidimensional_index(i)` (local tile coord; index[0] is the N/column
 // axis, so bias is per output column). act codes: 0 none, 1 relu, 2 gelu(tanh),
 // 3 silu. Arbitrary M/N/K (matmul2d slice() edge-checks partial tiles).
-// See docs/apple_gpu_metal4_adoption.md (M6/M7).
+// See docs/audit/backend/apple/archive/apple_gpu_metal4_adoption.md (M6/M7).
 //===----------------------------------------------------------------------===//
 static NSString *kMTL4Matmul2dMSL = @R"MSL(
 #include <metal_stdlib>
@@ -18259,7 +18259,7 @@ extern "C" int32_t tessera_apple_gpu_mtl4_conv2d_bf16(
 // This amortizes exactly the per-call MTL4 overhead that keeps routing OFF at
 // decode (small-M) sizes — re-uploading W (which dominates when W >> X) and
 // re-committing residency every call. The handle is an opaque C++ struct holding
-// ARC-managed Metal objects. See docs/apple_gpu_metal4_adoption.md (M8).
+// ARC-managed Metal objects. See docs/audit/backend/apple/archive/apple_gpu_metal4_adoption.md (M8).
 //===----------------------------------------------------------------------===//
 struct TesseraMlpSession {
   id pso;      // id<MTLComputePipelineState>
@@ -18418,7 +18418,7 @@ extern "C" void tessera_apple_gpu_mtl4_mlp_session_destroy(void *handle) {
 // All of this — variable-trip loops, early break, data-dependent indexing — is
 // ordinary MSL control flow; only the I/O buffer capacities are fixed. This is
 // the Rung-3 frontier the MPSGraph route declared out of scope, made tractable
-// by the MSL route (see docs/apple_gpu_control_flow_lowering.md "Mapping to
+// by the MSL route (see docs/audit/backend/apple/archive/apple_gpu_control_flow_lowering.md "Mapping to
 // MSL 4.0"). Dispatched via the cached classic MSL path (works macOS 12+).
 //===----------------------------------------------------------------------===//
 extern "C" int32_t tessera_apple_gpu_msl_spec_accept(const int32_t *draft_paths,

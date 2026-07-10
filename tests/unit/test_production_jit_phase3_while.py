@@ -1,5 +1,5 @@
 """Phase 3 G-A.3 — GraphFn bounded while on the Apple GPU
-(docs/spec/PRODUCTION_COMPILER_PLAN.md, docs/apple_gpu_control_flow_lowering.md).
+(docs/spec/PRODUCTION_COMPILER_PLAN.md, docs/audit/backend/apple/archive/apple_gpu_control_flow_lowering.md).
 
 `GraphFn(target="apple_gpu").while_loop(max_iters, cond, body, init)` authors a
 max-iter-capped while as ONE MPSGraph `forLoop` with select-masking — once the

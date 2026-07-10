@@ -2,7 +2,7 @@
 
 Locks the buffer-pool + device-tensor byte accounting and the public budget
 symbols added in ``apple_gpu_runtime.mm`` / ``apple_gpu_runtime_stub.cpp`` (see
-``docs/apple_backend_capability_roadmap.md`` P5). The accounting mirrors MLX's
+``docs/audit/backend/apple/archive/apple_backend_capability_roadmap.md`` P5). The accounting mirrors MLX's
 allocator introspection (active / cache / peak / limit / clear_cache).
 
 Counters are process-global, so other tests in the same process perturb the

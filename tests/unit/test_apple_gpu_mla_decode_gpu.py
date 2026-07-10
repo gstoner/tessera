@@ -6,7 +6,7 @@ on-GPU path: one cached MPSGraph fuses the latent down-projection
 attention `O = softmax((Q @ Kᵀ)·scale) @ V` (B·S_q query rows folded to a
 single matmul dim; K/V shared across batch). This test exercises the batched
 (B>1) broadcast path and the graph-cache reuse, validating against a numpy
-reference. See docs/apple_gpu_tier2_tier3_plan.md.
+reference. See docs/audit/backend/apple/archive/apple_gpu_tier2_tier3_plan.md.
 """
 
 from __future__ import annotations

@@ -15,7 +15,7 @@ heads) — per-head K/V are never materialized, and the KV cache stores only
 This is mathematically identical to the explicit-K decoupled-RoPE kernel
 (`_apple_gpu_mla_decode_rope`), which is the primary cross-check here. The
 incremental-decode test demonstrates KV-cache integration: the cache is just a
-growing ``c_kv`` + ``k_rope``. See docs/apple_gpu_tier2_tier3_plan.md.
+growing ``c_kv`` + ``k_rope``. See docs/audit/backend/apple/archive/apple_gpu_tier2_tier3_plan.md.
 """
 
 from __future__ import annotations

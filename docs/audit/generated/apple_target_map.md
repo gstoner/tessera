@@ -37,7 +37,7 @@ The ``framework`` column reflects each op's **default** apple_gpu lane
 (macOS 26+, MSL 4.0) runs the MetalPerformancePrimitives cooperative
 ``matmul2d`` on the GPU matrix units and is *not* shown per-row here
 (it lives in ``runtime.py``'s router, not ``capabilities``/``manifest``/
-``driver``). Summary — see ``docs/apple_gpu_metal4_adoption.md`` (ladder)
+``driver``). Summary — see ``docs/audit/backend/apple/archive/apple_gpu_metal4_adoption.md`` (ladder)
 and ``docs/apple_backend.md`` (Metal 4 implementation-state review):
 
 * **matmul** — bf16 routes to ``tessera_apple_gpu_mtl4_matmul2d_bf16`` by

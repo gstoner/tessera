@@ -1,5 +1,5 @@
 """Phase 3 G-A.2 — GraphFn cond (if/else) on the Apple GPU
-(docs/spec/PRODUCTION_COMPILER_PLAN.md, docs/apple_gpu_control_flow_lowering.md).
+(docs/spec/PRODUCTION_COMPILER_PLAN.md, docs/audit/backend/apple/archive/apple_gpu_control_flow_lowering.md).
 
 `GraphFn(target="apple_gpu").cond(flag, then_fn, else_fn)` authors the divergent
 branch as ONE MPSGraph `if` (predicate = flag[0] > 0) and runs it in a single

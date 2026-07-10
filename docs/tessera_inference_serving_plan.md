@@ -2,8 +2,8 @@
 
 > Status: **planning (2026-06-19).** The serving-tier and embeddable-app track,
 > separated from the Apple *engine* roadmap
-> ([`apple_backend_capability_roadmap.md`](apple_backend_capability_roadmap.md)).
-> Source material: the [MLX ecosystem survey](apple_gpu_mlx_ecosystem_survey.md)
+> ([`docs/audit/backend/apple/archive/apple_backend_capability_roadmap.md`](audit/backend/apple/archive/apple_backend_capability_roadmap.md)).
+> Source material: the [MLX ecosystem survey](audit/backend/apple/archive/apple_gpu_mlx_ecosystem_survey.md)
 > §3 (mlx-lm), §6 (dflash-mlx + omlx).
 >
 > **Thesis (validated by omlx).** The app is *thin*; the **engine + server is the
@@ -207,7 +207,7 @@ Thin and last. Once Layer A serves OpenAI/Anthropic over localhost:
    runtime + Apple `.dylib` (264 C ABI symbols) so the shell needs no managed env;
    Homebrew tap (`tessera serve`) as the CLI surface.
 4. **C ABI for native embedding** (alternative to HTTP): the
-   [survey §2](apple_gpu_mlx_ecosystem_survey.md) borrows — closure triple,
+   [survey §2](audit/backend/apple/archive/apple_gpu_mlx_ecosystem_survey.md) borrows — closure triple,
    typed handles, `_new_data_managed`, settable error handler — let a Swift/Rust
    host drive the engine in-process without the HTTP hop. Decide HTTP-only vs
    HTTP+C-ABI embedding once Layer A is real.
@@ -249,4 +249,4 @@ the whole dflash envelope, and are Med-effort with no new engine dependency.
 - File-format compat only for weights (safetensors / GGUF / HF state dicts via
   existing importers); the consuming runtime is Tessera's own.
 - Engine capability (scheduler internals, kernels, fusion, quant execution) lives
-  in the [Apple backend roadmap](apple_backend_capability_roadmap.md), not here.
+  in the [Apple backend roadmap](audit/backend/apple/archive/apple_backend_capability_roadmap.md), not here.

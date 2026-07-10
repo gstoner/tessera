@@ -1,7 +1,7 @@
 """P3 — Apple GPU packed-int4 quantized matmul.
 
 Locks the packed-weight quantized-matmul lane (see
-``docs/apple_backend_capability_roadmap.md`` P3). Unlike the existing
+``docs/audit/backend/apple/archive/apple_backend_capability_roadmap.md`` P3). Unlike the existing
 ``dequant_matmul_f32`` (full-width f32 codes — 4 bytes/weight, no bandwidth win),
 this lane stores weights as packed 4-bit codes (0.5 bytes/weight) and dequants
 ``w = scale·code + bias`` in-register.

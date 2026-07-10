@@ -38,7 +38,7 @@ _APPLE_GPU_MSL_OPS = frozenset({
 
 # P3 — packed-weight int4 quantized matmul (custom MSL kernels;
 # quantized_matmul_i4_{f32,f16,tiled_f32}). Operands (x, w_packed, scales,
-# biases); group_size attr. See apple_backend_capability_roadmap.md P3.
+# biases); group_size attr. See docs/audit/backend/apple/archive/apple_backend_capability_roadmap.md P3.
 _APPLE_GPU_QUANT_OPS = frozenset({"tessera.quantized_matmul"})
 
 # 2026-05-29 — MetalPerformanceShadersGraph-backed Tier-1 / long-tail lane.

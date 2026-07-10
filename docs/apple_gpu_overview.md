@@ -8,8 +8,6 @@
 > live there (alongside the CPU backend, the kernel inventory, the datatype
 > matrix, and the Metal 4 implementation review).
 >
-> Forward-looking design/ladder docs remain separate:
-> [apple_gpu_metal4_adoption.md](apple_gpu_metal4_adoption.md),
-> [apple_gpu_control_flow_lowering.md](apple_gpu_control_flow_lowering.md),
-> [apple_gpu_resident_activations_plan.md](apple_gpu_resident_activations_plan.md),
-> [apple_gpu_tier2_tier3_plan.md](apple_gpu_tier2_tier3_plan.md).
+> The forward-looking design/ladder docs have since been consolidated and
+> archived — see the **Archived documents** section of
+> [apple_backend.md](apple_backend.md#archived-documents).

@@ -7,8 +7,9 @@
 > plans and surveys that fed it (Metal 4 adoption ladder, control-flow
 > lowering, resident-activations plan, Tier-2/3 plan, capability roadmap, MLX
 > ecosystem survey) have all landed and are archived under
-> [`docs/audit/backend/apple/archive/`](audit/backend/apple/archive/) — their
-> old `docs/*.md` paths keep a one-line redirect here.
+> [`docs/audit/backend/apple/archive/`](audit/backend/apple/archive/); the old
+> `docs/*.md` stub paths have been removed. See the **Archived documents**
+> section at the bottom for the full index + links.
 >
 > **The kernel + lane inventory is its own doc:**
 > [apple_gpu_kernel_inventory.md](apple_gpu_kernel_inventory.md) — the native
@@ -541,3 +542,27 @@ an artifact-only module must not claim a runtime contract; a classic lane must n
 smuggle MTL4 command-model caps; an `mtl4_runtime` descriptor's required caps are
 checked against observed caps when a probe ran. Tests:
 `tests/unit/test_apple_target_descriptor.py`.
+
+---
+
+## Archived documents
+
+The plans, surveys, and reviews that used to sit alongside this file have been
+folded into this reference (and the [kernel + lane
+inventory](apple_gpu_kernel_inventory.md)). Their full historical text is
+preserved for provenance under
+[`docs/audit/backend/apple/archive/`](audit/backend/apple/archive/) — there are
+no redirect stubs at the old `docs/` paths; link directly to the archive:
+
+| Archived document | What it covered |
+|---|---|
+| [docs/audit/backend/apple/archive/apple_backend_capability_roadmap.md](audit/backend/apple/archive/apple_backend_capability_roadmap.md) | P1–P8 capability / performance ladder (packaged kernels, memory accounting, quant). |
+| [docs/audit/backend/apple/archive/apple_gpu_metal4_adoption.md](audit/backend/apple/archive/apple_gpu_metal4_adoption.md) | The M0–M8 / R0 Metal 4 adoption ladder. |
+| [docs/audit/backend/apple/archive/apple_gpu_control_flow_lowering.md](audit/backend/apple/archive/apple_gpu_control_flow_lowering.md) | Phase-G `if` / `while` → MSL control-flow mapping. |
+| [docs/audit/backend/apple/archive/apple_gpu_resident_activations_plan.md](audit/backend/apple/archive/apple_gpu_resident_activations_plan.md) | Device-resident activation strategy. |
+| [docs/audit/backend/apple/archive/apple_gpu_tier2_tier3_plan.md](audit/backend/apple/archive/apple_gpu_tier2_tier3_plan.md) | Tier-2 / Tier-3 packaged-kernel (`.mtlpackage`) roadmap. |
+| [docs/audit/backend/apple/archive/apple_gpu_mlx_ecosystem_survey.md](audit/backend/apple/archive/apple_gpu_mlx_ecosystem_survey.md) | MLX reference-vocabulary survey (Decision #23 — reference only). |
+| [docs/audit/backend/apple/archive/ldt_primitives_metal4_mapping.md](audit/backend/apple/archive/ldt_primitives_metal4_mapping.md) | Functional → perf path for `count_nonzero` / `popcount` / `asymmetric_bce` / `masked_categorical`. |
+
+Older Apple provenance (chain audits, GA/EBM execution-gap notes, single-command-
+buffer decode plan) also lives in that archive directory.

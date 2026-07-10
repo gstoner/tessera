@@ -4,7 +4,7 @@
 (x @ W_qkv then split-3) now route through the GPU matmul / bmm lane on
 `@jit(target="apple_gpu")`. The batched (rank-3) projection uses the bmm
 broadcast path (shared weight across the batch). See
-docs/apple_gpu_tier2_tier3_plan.md.
+docs/audit/backend/apple/archive/apple_gpu_tier2_tier3_plan.md.
 """
 
 from __future__ import annotations

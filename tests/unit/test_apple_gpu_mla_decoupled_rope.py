@@ -5,7 +5,7 @@ DeepSeek-style MLA splits each head's query/key into a no-position-encoding part
 across heads. `tessera_apple_gpu_mla_decode_rope_f32` applies RoPE to the rope
 parts (switchable interleaved/half convention), concatenates ``[nope ; rope]``
 per head, and runs the resulting standard MHA on-GPU via the fused ``bsmm``
-kernel. Validated against a numpy reference. See docs/apple_gpu_tier2_tier3_plan.md.
+kernel. Validated against a numpy reference. See docs/audit/backend/apple/archive/apple_gpu_tier2_tier3_plan.md.
 """
 
 from __future__ import annotations

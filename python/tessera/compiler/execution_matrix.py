@@ -140,6 +140,18 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                              "device kernels are matched against (state m/v in/"
                              "out). Matches tessera.optim — parity with "
                              "x86/rocm_optimizer_compiled.",
+    "apple_gpu_shape_compiled": "Apple GPU 0-move + sort lane — pad / roll / flip "
+                             "/ tile / repeat / stack (host index-map + numpy "
+                             "gather) and sort / argsort (numpy stable sort). "
+                             "Apple ships no device gather/sort kernel, so this "
+                             "runs on the CPU reference path. Matches "
+                             "tessera.ops / numpy — parity with the x86/ROCm "
+                             "strided + sort lanes.",
+    "apple_gpu_reduce_compiled": "Apple GPU reduce lane — sum over an axis "
+                             "(default: all) with keepdims, on the MPSGraph "
+                             "reduce lane (numpy fallback when Metal is "
+                             "unavailable). Matches numpy.sum — parity with "
+                             "x86/rocm_reduce_compiled.",
     "native_cpu":           "x86 AMX / native CPU runtime via the C runtime ABI",
     "jit_cpu_numpy":        "JIT CPU fallback via the numpy reference path",
     "rocm_wmma":            "AMD GPU RDNA WMMA matrix-core GEMM via the shipped "
@@ -983,6 +995,31 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "on the CPU reference path (no Metal dispatch) — "
                "execution_kind=reference_cpu; matches tessera.optim, parity with "
                "x86/rocm_optimizer_compiled."),
+    # Apple GPU 0-move + sort lane (2026-07-10) — pad/roll/flip/tile/repeat/stack
+    # (host index-map + numpy gather) + sort/argsort (numpy stable sort). Apple
+    # ships no device gather/sort kernel, so this runs on the CPU reference path
+    # (no Metal dispatch) — execution_kind=reference_cpu.
+    ("apple_gpu", "apple_gpu_shape_compiled"): ExecutionRow(
+        target="apple_gpu", compiler_path="apple_gpu_shape_compiled",
+        execution_kind="reference_cpu", executable=True,
+        executor_id="apple_gpu_shape_compiled", runtime_status="success",
+        reason="Apple GPU 0-move/sort artifact runs pad / roll / flip / tile / "
+               "repeat / stack (host index-map + numpy gather) and sort / "
+               "argsort (numpy stable sort). Apple ships no device gather/sort "
+               "kernel, so it runs on the CPU reference path (no Metal dispatch) "
+               "— execution_kind=reference_cpu; matches tessera.ops / numpy, "
+               "parity with the x86/ROCm strided + sort lanes."),
+    # Apple GPU reduce lane (2026-07-10) — sum genuinely on the MPSGraph reduce
+    # lane (numpy fallback when Metal is unavailable) -> native_gpu.
+    ("apple_gpu", "apple_gpu_reduce_compiled"): ExecutionRow(
+        target="apple_gpu", compiler_path="apple_gpu_reduce_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="apple_gpu_reduce_compiled", runtime_status="success",
+        reason="Apple GPU reduce artifact runs sum over an axis (default: all) "
+               "with keepdims on the MPSGraph reduce lane (numpy fallback when "
+               "Metal is unavailable). f32, matches numpy.sum — parity with "
+               "x86/rocm_reduce_compiled.",
+        execution_mode="metal_runtime"),
     # --- x86 / native CPU (AMX path) ---
     ("cpu", "native_cpu"): ExecutionRow(
         target="cpu", compiler_path="native_cpu",

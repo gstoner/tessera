@@ -9052,6 +9052,68 @@ def _execute_x86_compiled_strided(artifact: RuntimeArtifact, args: Any) -> Any:
     return _execute_strided(artifact, args, _x86_gather, "x86_strided_compiled")
 
 
+def _apple_gather(src: Any, idx: Any, out: Any) -> None:
+    """Numpy gather out[i]=src[idx[i]] (idx<0 leaves out[i]) — Apple ships no
+    device gather kernel, so the 0-move / sort lanes run the host reference the
+    x86/ROCm device kernels are matched against."""
+    import numpy as np
+    src = np.ascontiguousarray(src, np.float32)
+    idx = np.ascontiguousarray(idx, np.int64)
+    valid = idx >= 0
+    out[valid] = src[idx[valid]]
+
+
+def _apple_sort_kv(keys: Any, idx: Any, rows: int, pn: int) -> None:
+    """Per-row in-place stable ascending sort of (keys, idx) — numpy reference
+    matching the x86/ROCm device bitonic key+index sort."""
+    import numpy as np
+    order = np.argsort(keys, axis=1, kind="stable")
+    keys[:] = np.take_along_axis(keys, order, axis=1)
+    idx[:] = np.take_along_axis(idx, order, axis=1)
+
+
+def _execute_apple_gpu_compiled_shape(artifact: RuntimeArtifact,
+                                      args: Any) -> Any:
+    """The ``target="apple_gpu"`` 0-move + sort lane: pad / roll / flip / tile /
+    repeat / stack (host index-map + numpy gather) and sort / argsort (numpy
+    stable sort). Apple ships no device gather/sort kernel, so this runs on the
+    CPU reference path (no Metal dispatch) — execution_kind=reference_cpu.
+    Matches tessera.ops / numpy — parity with x86/rocm strided + sort lanes."""
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if op_name in _SORT_OPS:
+        return _execute_sort(artifact, args, "apple_gpu", "apple_gpu_shape_compiled")
+    return _execute_strided(artifact, args, _apple_gather, "apple_gpu_shape_compiled")
+
+
+def _execute_apple_gpu_compiled_reduce(artifact: RuntimeArtifact,
+                                       args: Any) -> Any:
+    """The ``target="apple_gpu"`` reduce lane: sum over an axis (default: all)
+    with keepdims, genuinely on the MPSGraph reduce lane
+    (_apple_gpu_dispatch_reduce; numpy fallback when Metal is unavailable).
+    f32; matches numpy.sum — parity with x86/rocm_reduce_compiled."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name != "tessera.sum":
+        raise ValueError(
+            "apple_gpu_reduce_compiled executor handles tessera.sum; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    kwargs = op.get("kwargs") or {}
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    red_kwargs = {"axis": kwargs.get("axis", None),
+                  "keepdims": bool(kwargs.get("keepdims", False))}
+    return np.asarray(
+        _apple_gpu_dispatch_reduce("tessera.reduce", [x], red_kwargs, np),
+        np.float32)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Scatter lane (P8) — the 0-reduce / indexed-store companion to the P4 gather
 # lane. scatter (set) / scatter_add (sum) / scatter_reduce (min/max) along an
@@ -9363,7 +9425,9 @@ def _sort_compute(op_name: str, operands: list, kwargs: dict, target: str,
     shp = moved.shape
     L = int(shp[-1])
     flat = moved.reshape(-1, L)
-    sort_kv_fn = _x86_sort_kv if target == "x86" else _rocm_sort
+    sort_kv_fn = (_x86_sort_kv if target == "x86"
+                  else _apple_sort_kv if target == "apple_gpu"
+                  else _rocm_sort)
     keys, idx = _sort_rows_kv(flat, sort_kv_fn, np)   # ascending
 
     if op_name == "tessera.top_k":
@@ -15125,6 +15189,8 @@ def _executor_table():
         "apple_gpu_loss_family_compiled": _execute_apple_gpu_compiled_loss_family,
         "apple_gpu_complex_compiled": _execute_apple_gpu_compiled_complex,
         "apple_gpu_conformal_compiled": _execute_apple_gpu_compiled_conformal,
+        "apple_gpu_shape_compiled": _execute_apple_gpu_compiled_shape,
+        "apple_gpu_reduce_compiled": _execute_apple_gpu_compiled_reduce,
         "apple_gpu_optimizer_compiled": _execute_apple_gpu_compiled_optimizer,
         "apple_gpu_rng_compiled": _execute_apple_gpu_compiled_rng,
         "apple_gpu_linalg_compiled": _execute_apple_gpu_compiled_linalg,

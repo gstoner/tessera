@@ -19,7 +19,7 @@ aot_load,0,0,0,0,1,,structural_only,category default for 'aot'
 arange,10,0,0,10,0,fp16 fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,10 direct test references
 argmax,6,0,2,6,0,bf16 f32,directly_tested,6 direct test references
 argmin,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
-argsort,5,0,0,5,0,,directly_tested,5 direct test references
+argsort,7,0,0,7,0,,directly_tested,7 direct test references
 asin,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 associative_scan,0,0,0,0,1,,structural_only,category default for 'control_flow'
 asymmetric_bce,8,0,0,8,0,f32,directly_tested,8 direct test references
@@ -184,7 +184,7 @@ fake_quantize,6,0,1,6,0,,directly_tested,6 direct test references
 fft,17,2,0,19,0,f32 fp32,directly_tested,19 direct test references
 flash_attn,106,57,7,163,0,bf16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,163 direct test references
 flatten,5,5,0,10,0,,directly_tested,10 direct test references
-flip,3,0,0,3,0,,directly_tested,3 direct test references
+flip,5,0,0,5,0,,directly_tested,5 direct test references
 floor,5,0,1,5,0,bf16 f32 fp32,directly_tested,5 direct test references
 floor_div,3,0,0,3,0,f32,directly_tested,3 direct test references
 focal_loss,8,0,0,8,0,,directly_tested,8 direct test references
@@ -316,7 +316,7 @@ online_softmax,5,2,0,7,0,,directly_tested,7 direct test references
 online_softmax_state,10,0,0,10,0,fp16,directly_tested,10 direct test references
 optax_style_chain,0,0,0,0,1,,structural_only,category default for 'grad_transform'
 pack,7,0,0,7,0,fp16,directly_tested,7 direct test references
-pad,6,0,0,6,0,,directly_tested,6 direct test references
+pad,8,0,0,8,0,,directly_tested,8 direct test references
 partial_state_load,0,0,0,0,1,,structural_only,category default for 'serialization'
 partition_spec,0,0,0,0,1,,structural_only,category default for 'sharding'
 patchify,10,0,1,10,0,fp16,directly_tested,10 direct test references
@@ -352,7 +352,7 @@ reduce,88,2,7,90,0,f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_teste
 reduce_scatter,0,4,0,4,0,,directly_tested,4 direct test references
 relu,106,28,9,134,0,bf16 f16 f32 f64 fp32 fp8_e4m3 int8,directly_tested,134 direct test references
 remat,0,0,0,0,1,,structural_only,category default for 'transform'
-repeat,3,0,0,3,0,,directly_tested,3 direct test references
+repeat,4,0,0,4,0,,directly_tested,4 direct test references
 reshape,11,15,1,26,0,,directly_tested,26 direct test references
 retention,12,0,2,12,0,,directly_tested,12 direct test references
 rfft,6,0,1,6,0,fp32,directly_tested,6 direct test references
@@ -378,7 +378,7 @@ rng_randint,3,0,0,3,0,,directly_tested,3 direct test references
 rng_split,3,0,0,3,0,,directly_tested,3 direct test references
 rng_truncated_normal,3,0,0,3,0,,directly_tested,3 direct test references
 rng_uniform,16,0,0,16,0,fp32,directly_tested,16 direct test references
-roll,4,0,0,4,0,,directly_tested,4 direct test references
+roll,6,0,0,6,0,,directly_tested,6 direct test references
 rope,20,10,0,30,0,bf16,directly_tested,30 direct test references
 rope_merge,8,0,1,8,0,fp16 fp32,directly_tested,8 direct test references
 rope_split,14,0,1,14,0,fp16 fp32,directly_tested,14 direct test references
@@ -415,7 +415,7 @@ softcap,9,0,1,9,0,,directly_tested,9 direct test references
 softmax,120,38,30,158,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,158 direct test references
 softmax_safe,6,4,1,10,0,bf16,directly_tested,10 direct test references
 softplus,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
-sort,10,0,0,10,0,,directly_tested,10 direct test references
+sort,13,0,0,13,0,,directly_tested,13 direct test references
 spec_accept,1,10,0,11,0,,directly_tested,11 direct test references
 spec_accept_sample,2,7,1,9,0,,directly_tested,9 direct test references
 spec_accept_tree_sample,1,6,0,7,0,,directly_tested,7 direct test references
@@ -428,7 +428,7 @@ spmm_csr,4,0,0,4,0,,directly_tested,4 direct test references
 sqrt,7,0,1,7,0,bf16 f32,directly_tested,7 direct test references
 squeeze,7,6,1,13,0,,directly_tested,13 direct test references
 stablehlo_export,2,0,0,2,0,,directly_tested,2 direct test references
-stack,4,0,0,4,0,,directly_tested,4 direct test references
+stack,6,0,0,6,0,,directly_tested,6 direct test references
 state_collection_spec,0,0,0,0,1,,structural_only,category default for 'state_tree'
 state_filter,0,0,0,0,1,,structural_only,category default for 'state_tree'
 state_migration,1,0,1,1,1,,structural_only,category default for 'serialization'
@@ -437,14 +437,14 @@ std,4,0,0,4,0,,directly_tested,4 direct test references
 stereographic,4,0,0,4,0,,directly_tested,4 direct test references
 stft,7,0,0,7,0,,directly_tested,7 direct test references
 sub,13,4,2,17,0,bf16 f16 f32,directly_tested,17 direct test references
-sum,9,0,2,9,0,bf16 f32,directly_tested,9 direct test references
+sum,10,0,2,10,0,bf16 f32,directly_tested,10 direct test references
 svd,11,5,0,16,0,bf16 f16 f32 fp16 fp32,directly_tested,16 direct test references
 switch,0,0,0,0,1,,structural_only,category default for 'control_flow'
 take,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 tan,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 tanh,8,1,1,9,0,bf16 f16 f32,directly_tested,9 direct test references
 target_verify,3,5,1,8,0,,directly_tested,8 direct test references
-tile,3,0,0,3,0,,directly_tested,3 direct test references
+tile,4,0,0,4,0,,directly_tested,4 direct test references
 tile_view,6,0,0,6,0,fp16,directly_tested,6 direct test references
 tiny_attention_conformance,0,0,0,0,1,,structural_only,category default for 'conformance'
 tiny_diffusion_conformance,0,0,0,0,1,,structural_only,category default for 'conformance'

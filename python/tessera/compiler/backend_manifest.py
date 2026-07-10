@@ -709,6 +709,27 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
                   "reference update rules); matches tessera.optim."),
         "execute_compare_fixture": "tests/unit/test_apple_gpu_optimizer_compiled.py",
     } for op in ("sgd", "momentum", "adam", "adamw", "lion")},
+    # 0-move + sort lane (2026-07-10) — pad/roll/flip/tile/repeat/stack +
+    # sort/argsort via apple_gpu_shape_compiled (host index-map + numpy gather /
+    # numpy stable sort; Apple ships no device gather/sort kernel). ``compiled``
+    # (direct execute/compare), NOT a bespoke fused Metal kernel.
+    **{op: {
+        "status": _COMPILED_STATUS,
+        "dtypes": ("fp32",),
+        "notes": (f"0-move/sort {op} via apple_gpu_shape_compiled (numpy gather / "
+                  "stable sort reference); matches tessera.ops / numpy."),
+        "execute_compare_fixture": "tests/unit/test_apple_gpu_shape_compiled.py",
+    } for op in ("pad", "roll", "flip", "tile", "repeat", "stack",
+                 "sort", "argsort")},
+    # Reduce lane (2026-07-10) — sum genuinely on the MPSGraph reduce lane
+    # (apple_gpu_reduce_compiled; numpy fallback when Metal is unavailable).
+    "sum": {
+        "status": _COMPILED_STATUS,
+        "dtypes": ("fp32",),
+        "notes": ("Reduce sum via apple_gpu_reduce_compiled (MPSGraph reduce "
+                  "lane); matches numpy.sum."),
+        "execute_compare_fixture": "tests/unit/test_apple_gpu_reduce_compiled.py",
+    },
     # Philox RNG base lane (2026-07-10) — rng_uniform / rng_normal / dropout via
     # apple_gpu_rng_compiled. Apple ships no device Philox kernel; the lane draws
     # from the counter-based Philox-4x32-10 reference (tessera.rng_device) the

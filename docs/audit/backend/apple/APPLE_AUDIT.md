@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-06-17
+last_updated: 2026-07-10
 audit_role: sub_audit
 ---
 
@@ -9,6 +9,24 @@ This document consolidates Apple backend audit material across Metal runtime,
 Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
 
 ## Finished
+
+- **Op-family parity with x86/ROCm via `runtime.launch()` (2026-07-09 wave, PRs
+  #340–#350 + cf067fe).** Apple GPU closed the tail-lane gaps that had left it
+  behind the x86/ROCm op surface: conv, losses, complex/geometric + conformal
+  (#340), the structured-compute tail (#342), the Philox RNG lane (#344), linalg
+  (lu/qr/svd/cholesky-solve) + einsum/factorized (#345), optimizers (#347), the
+  shape/reduce tail incl. 0-move/sort (#348), scatter + sparse/MoE (#349), and the
+  final tail clusters (#350), plus canonical op-name acceptance + ALiBi slopes
+  (cf067fe). **Reported honestly per lane** (the standing rule for this backend):
+  `native_gpu` where the op genuinely dispatches to MPS/MSL (with a numpy fallback
+  off-Metal), `reference_cpu` where Apple ships no device kernel and the lane runs
+  the *same standalone reference* the x86/ROCm device kernels are matched against —
+  e.g. the structured-compute lane is labeled `reference_cpu` (#346), not dressed
+  up as a device kernel. Use `apple_gpu_envelope.runtime_ops` (not the backend
+  manifest, which overcounts) for the true per-op parity picture. **The only op
+  family not yet covered is `quantize`/`dequantize` fp4/fp6/fp8/nvfp4**, gated on
+  the macOS-27 / Metal 4.1 tensor toolchain — toolchain, not hardware (see the
+  hardware-capability reference below).
 
 - **Apple CPU runtime:** Apple CPU artifacts execute through Accelerate.
 - **Apple GPU runtime:** Apple GPU artifacts execute through MPS, MPSGraph, and
@@ -214,13 +232,23 @@ Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
 
 ## Open Work
 
-_No open Apple-compiler items._ The 2026-06-02 PK8–PK8h arc closed
-packaged-kernel authoring end to end, and the 2026-06-09 sprint closed the four
-remaining themes (descriptor-driven dispatch, feature-table-driven selection,
-perf ratchets, auto_batch polish). Everything previously tracked under "Still
-Open" / "Next Work" has landed and is summarized under **Finished** above. The
-only remaining frontier is cross-backend **real-hardware** proof for NVIDIA /
-ROCm — tracked in the per-platform audits, not here.
+_No open Apple-compiler items on the correctness track._ The 2026-06-02 PK8–PK8h
+arc closed packaged-kernel authoring end to end, the 2026-06-09 sprint closed the
+four remaining themes (descriptor-driven dispatch, feature-table-driven selection,
+perf ratchets, auto_batch polish), and the 2026-07-09 wave closed the op-family
+parity gap vs x86/ROCm (see **Finished** above). Everything previously tracked
+under "Still Open" / "Next Work" has landed.
+
+The remaining frontier is **performance + precision, not backend correctness**:
+
+- **`quantize`/`dequantize` fp4/fp6/fp8/nvfp4 — the one uncovered op family.**
+  Gated on the macOS-27 / Metal 4.1 tensor toolchain (`MTLTensor` FP8/FP4/MX
+  dtypes), not hardware. The hardware-free bridge is
+  `python/tessera/compiler/microscaling.py`.
+- **Native `simdgroup_matrix` "steel-like" GEMM/attention lane** — the clear-MPS
+  direction (see the MLX mining pass below).
+- Cross-backend **real-hardware** proof for NVIDIA / ROCm — tracked in the
+  per-platform audits, not here.
 
 ## Hardware capability reference (grounded 2026-06-17)
 

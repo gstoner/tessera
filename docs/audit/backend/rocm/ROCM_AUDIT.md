@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-06-25
+last_updated: 2026-07-10
 audit_role: sub_audit
 ---
 
@@ -521,6 +521,49 @@ become the on-silicon **oracle** the compiled path validates against.
   `rocm_deltanet_compiled`; status `compiled`. Validated on gfx1151 vs the f64
   numpy reference across all three ops × f32/f16/bf16 × flag combos
   (`test_rocm_deltanet_compiled.py`) + a GPU-free codegen gate.
+
+## Landed — SSM / MSA / EBM / attn_bias family wave (2026-07-08 → 07-09)
+
+The 07-08/09 wave grew the gfx1151 op surface well past the matmul + attention +
+elementwise families above, and hardened two manifest rows. All execute on the
+live box with numpy/finite-difference execute-compare fixtures + GPU-free codegen
+gates (counts stay in `../../generated/rocm_target_map.md` /
+`runtime_execution_matrix.md`).
+
+- **`gemm` row → `hardware_verified` + arch-aware guard (#321, 2026-07-08).** The
+  compiled ROCm `gemm` row was still `artifact_only`, understating a proven lane —
+  it *is* the `tessera_rocm_wmma_gemm_f16` matrix-core matmul (`matmul` had been
+  `hardware_verified` since the 06-22 flip). Promoted while **preserving the
+  CDNA-MFMA artifact metadata** (`mfma_shape=(32,32,8,1)`) so the CDNA descriptor
+  stays intact. `_build_compiled_gemm_hsaco` now raises a **stable arch-naming
+  diagnostic** (Decision #21) for non-gfx11 targets (RDNA4 gfx12xx 16×16×32 WMMA
+  and CDNA MFMA need their own fragment layout) instead of a raw ROCDL "Cannot
+  select" crash — `test_rocm_wmma_gemm_arch_guard`.
+- **Additive `attn_bias` on the WMMA flash-attention lane (#328, 2026-07-09) — the
+  DFlash keystone.** The `flash_attn` compiled lane takes an optional additive bias
+  operand (the substrate DFlash block-diffusion speculative decoding rides), the
+  ROCm mirror of the Apple `FlashAttnOp` `attn_bias` operand. Also the DFlash
+  `rocm_attention_fn` seam (#330) — the DFlash draft attention now runs on gfx1151.
+- **`selective_ssm` (Mamba2) — device forward + backward (#333–#338).** A real
+  gfx1151 device backward matching the VJP (#335) on top of the forward; **fp16/bf16
+  storage** (#333, f32 accumulate) and a **chunked-parallel (SSD) path for scalar-A**
+  (#336) alongside the exact sequential scan. Guard: f32 stays on the exact
+  sequential scan to avoid the fp16 chunked-parallel overflow (#338). The x86
+  AVX-512 half landed in lockstep (see the x86 backend).
+- **`msa_sparse_attention` actually executes (#337/#339).** `@jit(target="rocm")`
+  MSA now runs (fix #337 → #339), with an IR-visible `kv_outer_sparse` target
+  mirror (#337) so the sparse-KV structure is represented in the Target IR, not
+  only in the runtime.
+- **EBM native lanes (#316–#326).** The Langevin family (Philox step + manifold
+  samplers — sphere/bivector/affine, #316/#317/#326), a real **exact-partition
+  log-sum-exp reduction kernel** (#320), and a real **fused EBT-tiny inference
+  kernel** (#325) all execute natively on gfx1151 (with the x86 AVX-512 half in
+  lockstep). This also stopped the Backend-Proof tally from calling
+  host-orchestrated samplers "planned" (#318).
+
+**No audit inflation:** these are per-target ROCm rows. The per-primitive
+`backend_kernel` axis stays open until *all* targets (x86/apple/nvidia/cpu) are
+`hardware_verified` for each op — the generated dashboards remain count truth.
 
 ## Still Open
 

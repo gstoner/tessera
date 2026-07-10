@@ -5,7 +5,7 @@ classic command model). These tests lock the live capability probe — which
 actually creates the Metal 4 objects on-device — and the native ``MTLTensor``
 typed-resource round-trip. Everything degrades cleanly to ``available=False`` /
 a numpy copy off Tahoe / non-Darwin, so the contract is checked everywhere. See
-docs/apple_gpu_metal4_adoption.md.
+docs/audit/backend/apple/archive/apple_gpu_metal4_adoption.md.
 """
 
 from __future__ import annotations

@@ -5,7 +5,7 @@ Locks the first rung of the control-flow-lowering ladder: a bounded scan
 control-flow executable (``-forLoopWithLowerBound:upperBound:step:``), with the
 per-step carries recovered via an index-scatter accumulator. Validated against a
 numpy scan; off Metal the runtime falls back to a numpy scan so the contract is
-checked everywhere. See docs/apple_gpu_control_flow_lowering.md.
+checked everywhere. See docs/audit/backend/apple/archive/apple_gpu_control_flow_lowering.md.
 """
 
 from __future__ import annotations

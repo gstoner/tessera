@@ -13,7 +13,7 @@ loops over heads calling the rank-2 matmul_softmax_matmul kernel):
 The per-head dimension is the batch axis of bmm, so all heads run in a single
 dispatch per stage and there is no flash_attn head_dim<=256 envelope limit.
 Validated against a float64 numpy reference; the heavy ops report
-metal_runtime on Darwin. See docs/apple_gpu_tier2_tier3_plan.md.
+metal_runtime on Darwin. See docs/audit/backend/apple/archive/apple_gpu_tier2_tier3_plan.md.
 """
 
 from __future__ import annotations

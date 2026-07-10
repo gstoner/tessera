@@ -4,7 +4,7 @@
 convolution (full stride / padding / dilation / groups) through MPSGraph's
 `convolution2DWithSourceTensor:weightsTensor:descriptor:`, with a portable
 fp32 reference fallback when Metal is unavailable. Validated against a numpy
-reference. See docs/apple_gpu_tier2_tier3_plan.md.
+reference. See docs/audit/backend/apple/archive/apple_gpu_tier2_tier3_plan.md.
 """
 
 from __future__ import annotations

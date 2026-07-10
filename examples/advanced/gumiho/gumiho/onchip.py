@@ -17,7 +17,7 @@ each together:
 
 So the static draft/verify (MPSGraph) feed the dynamic accept (MSL) — the whole
 on-device speculative-step accept, validated against a host reference. See
-docs/apple_gpu_control_flow_lowering.md.
+docs/audit/backend/apple/archive/apple_gpu_control_flow_lowering.md.
 """
 
 from __future__ import annotations

@@ -48,7 +48,7 @@ the ROCm and NVIDIA hardware lanes.
 
 - [`docs/apple_backend.md`](../../../../docs/apple_backend.md) — the canonical
   Apple CPU+GPU reference.
-- [`docs/apple_gpu_metal4_adoption.md`](../../../../docs/apple_gpu_metal4_adoption.md)
+- [`docs/audit/backend/apple/archive/apple_gpu_metal4_adoption.md`](../../../../docs/audit/backend/apple/archive/apple_gpu_metal4_adoption.md)
   — the forward-looking Metal 4 adoption ladder.
 - [`docs/audit/backend/apple/`](../../../../docs/audit/backend/apple/) — the Apple
   theme audit (what's proven vs. open).

@@ -8,7 +8,7 @@ Reductions / scans via the MetalPerformanceShadersGraph reduce lane:
 Arbitrary `axis` (None / int / tuple) + `keepdims` + `ddof` are normalized in
 `runtime.py` by transposing the reduced axes to the end and folding to
 [rows, cols]; f16/bf16 upcast to f32 (fp32 reduction numerics). See
-docs/apple_gpu_tier2_tier3_plan.md.
+docs/audit/backend/apple/archive/apple_gpu_tier2_tier3_plan.md.
 """
 
 from __future__ import annotations

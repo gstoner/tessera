@@ -20074,7 +20074,7 @@ def _apple_gpu_conv2d_f16() -> Any:
 # activation` block collapses to one fused matmul2d dispatch on the cooperative
 # tensor units (f16/bf16). This is the robust arbitrary-size conv lane; the native
 # MPP `convolution2d` cooperative op is verified single-tile but its multi-tile
-# grid convention is undocumented (see docs/apple_backend_integration_review.md P8).
+# grid convention is undocumented (see docs/apple_backend.md P8).
 # OPT-IN, OFF by default. The unfold now runs ON the GPU (an MSL im2col kernel —
 # `apple_gpu_conv2d` prefers the on-device `tessera_apple_gpu_mtl4_conv2d_*`
 # symbol, host im2col only as a fallback), and the matmul runs on the matrix
@@ -20274,7 +20274,7 @@ def apple_gpu_conv2d(X: Any, W: Any, np: Any, *, bias: Any = None, act: str = "n
     Prefers the on-device path (GPU im2col, ``col`` never leaves the GPU); falls
     back to a host im2col + the epilogue when the on-device symbol didn't run.
     Returns ``(Y[N,OH,OW,Cout] float32, ran_on_mtl4)``; numpy fallback off Metal 4.
-    See docs/apple_backend_integration_review.md (P8)."""
+    See docs/apple_backend.md (P8)."""
     def _pair(v):
         return (int(v[0]), int(v[1])) if isinstance(v, (tuple, list)) else (int(v), int(v))
     sH, sW = _pair(stride); pH, pW = _pair(padding); dH, dW = _pair(dilation)
@@ -20324,7 +20324,7 @@ def apple_gpu_conv2d(X: Any, W: Any, np: Any, *, bias: Any = None, act: str = "n
 # single GPU dispatch; batched (ndim>2) f32 loops the rank-2 kernel per matrix
 # (MPS decomposition/solve are single-matrix per encode — no native batch);
 # non-f32 / off-Metal inputs fall back to the numpy reference. Each returns
-# (result, ran_on_gpu). See docs/apple_backend_integration_review.md (linalg).
+# (result, ran_on_gpu). See docs/apple_backend.md (linalg).
 
 def _apple_gpu_linalg_sym(name: str, argtypes: list) -> Any:
     runtime = _load_apple_gpu_runtime()
@@ -23627,7 +23627,7 @@ def apple_gpu_cf_while_generate(W, lm, h_init, start_token, eos_token, max_steps
 def apple_gpu_metal4_caps() -> dict:
     """Live Metal 4 capability probe (M0). Actually creates the Metal 4 objects
     on-device and reports which are usable on this machine. All ``False`` off
-    Tahoe / non-Darwin. See docs/apple_gpu_metal4_adoption.md."""
+    Tahoe / non-Darwin. See docs/audit/backend/apple/archive/apple_gpu_metal4_adoption.md."""
     keys = ("command_queue", "command_allocator", "compiler", "tensor", "msl4")
     runtime = _load_apple_gpu_runtime()
     sym = getattr(runtime, "tessera_apple_gpu_metal4_probe", None)
@@ -23775,7 +23775,7 @@ def apple_gpu_mtl4_scan(Wh: Any, Wx: Any, xseq: Any, init: Any, np: Any):
     hand-written MSL kernel (native in-kernel for-loop) dispatched through the
     full Metal 4 command model. Returns ``(ys[T, d], ran_on_mtl4)``; falls back
     to a numpy scan when Metal 4 is unavailable. See
-    docs/apple_gpu_metal4_adoption.md."""
+    docs/audit/backend/apple/archive/apple_gpu_metal4_adoption.md."""
     Wh = np.ascontiguousarray(Wh, np.float32)
     Wx = np.ascontiguousarray(Wx, np.float32)
     xseq = np.ascontiguousarray(xseq, np.float32)
@@ -23817,7 +23817,7 @@ def apple_gpu_mtl4_matmul_sg(A: Any, B: Any, np: Any):
     the GPU matrix-unit path) dispatched through the Metal 4 command model.
     ``M``, ``N``, ``K`` must be multiples of 8. Returns ``(C[M, N], ran_on_mtl4)``;
     falls back to numpy when Metal 4 / the 8-tile envelope doesn't apply. See
-    docs/apple_gpu_metal4_adoption.md."""
+    docs/audit/backend/apple/archive/apple_gpu_metal4_adoption.md."""
     A = np.ascontiguousarray(A, np.float32)
     B = np.ascontiguousarray(B, np.float32)
     M, K = A.shape
@@ -23857,7 +23857,7 @@ def apple_gpu_mtl4_matmul2d_f16(A: Any, B: Any, np: Any):
     *beats* MPS fp16 (~1.1-1.18x at N=1024-2048). Any ``M``/``N``/``K`` (matmul2d
     edge-checks partial tiles). Returns ``(C[M, N] float32, ran_on_mtl4)``; falls
     back to a numpy fp16 reference when Metal 4 is unavailable. See
-    docs/apple_gpu_metal4_adoption.md (M6)."""
+    docs/audit/backend/apple/archive/apple_gpu_metal4_adoption.md (M6)."""
     A = np.ascontiguousarray(A, np.float16)
     B = np.ascontiguousarray(B, np.float16)
     M, K = A.shape
@@ -23903,7 +23903,7 @@ def apple_gpu_mtl4_matmul2d_bf16(A: Any, B: Any, np: Any):
     (MetalPerformancePrimitives ``matmul2d``) on the GPU matrix units — the bf16
     sibling of :func:`apple_gpu_mtl4_matmul2d_f16`, same MTLTensor-bound MTL4 path
     and 64x64/4-SIMD-group kernel. Returns ``(C[M, N] float32, ran_on_mtl4)``;
-    numpy fallback off Metal 4. See docs/apple_gpu_metal4_adoption.md (M6)."""
+    numpy fallback off Metal 4. See docs/audit/backend/apple/archive/apple_gpu_metal4_adoption.md (M6)."""
     bf16 = _bfloat16_dtype()
     if bf16 is None:
         raise RuntimeError("bf16 matmul2d requires the optional ml_dtypes package")
@@ -23939,7 +23939,7 @@ def apple_gpu_mtl4_matmul2d_epilogue(A: Any, B: Any, np: Any, *, bias: Any = Non
     extra device round-trip. ``dtype`` selects the f16/bf16 input kernel; ``act``
     is one of ``none``/``relu``/``gelu``/``silu``. Returns ``(C[M, N] float32,
     ran_on_mtl4)``; numpy fallback off Metal 4. See
-    docs/apple_gpu_metal4_adoption.md (M7)."""
+    docs/audit/backend/apple/archive/apple_gpu_metal4_adoption.md (M7)."""
     if act not in _MTL4_EPILOGUE_ACT:
         raise ValueError(f"act must be one of {sorted(_MTL4_EPILOGUE_ACT)}; got {act!r}")
     act_code = _MTL4_EPILOGUE_ACT[act]
@@ -24006,7 +24006,7 @@ class AppleGPUMLPSession:
     sizes. ``act`` ∈ {none, relu, gelu, silu}; ``dtype`` ∈ {f16, bf16}. Falls
     back to a numpy reference when Metal 4 is unavailable. Use as a context
     manager or call :meth:`close` to release the resident weights. See
-    docs/apple_gpu_metal4_adoption.md (M8)."""
+    docs/audit/backend/apple/archive/apple_gpu_metal4_adoption.md (M8)."""
 
     def __init__(self, W: Any, np: Any, *, bias: Any = None, act: str = "none",
                  dtype: str = "f16"):
@@ -24078,7 +24078,7 @@ class AppleGPUMLPSession:
         round-trip** — X is not uploaded and Y is not downloaded, so a decode loop
         keeps the activation resident across steps. Allocates ``Y`` if not given.
         Falls back to a host compute (writing into ``Y``'s shared storage) when
-        Metal 4 is unavailable. See docs/apple_gpu_metal4_adoption.md (M8/R0)."""
+        Metal 4 is unavailable. See docs/audit/backend/apple/archive/apple_gpu_metal4_adoption.md (M8/R0)."""
         np = self._np
         if not isinstance(X, DeviceTensor):
             raise TypeError("run_dev expects a DeviceTensor X (use DeviceTensor.from_numpy)")
@@ -24131,7 +24131,7 @@ def apple_gpu_mtl4_archive_enable(path: str) -> bool:
     ``path`` (if present) so matching MTL4 pipelines skip the MSL recompile on
     process start, and captures subsequently-built pipelines for a later
     :func:`apple_gpu_mtl4_archive_flush`. No effect on the default path; returns
-    True if enabled (Metal 4 available). See docs/apple_backend_integration_review.md
+    True if enabled (Metal 4 available). See docs/apple_backend.md
     (P4)."""
     runtime = _load_apple_gpu_runtime()
     sym = getattr(runtime, "tessera_apple_gpu_mtl4_archive_enable", None)
@@ -24206,7 +24206,7 @@ def _apple_gpu_mtl4_mlp_session_destroy_sym() -> Any:
 # MPS. The MSL 4.0 `tensor` cooperative op (MPP matmul2d) has no f32 path under
 # execution_simdgroups (fp16/bf16 only) so it is not the f32 answer. The
 # mechanism is here so flipping it on is a one-liner if a future kernel clears
-# MPS. See docs/apple_gpu_metal4_adoption.md (M5).
+# MPS. See docs/audit/backend/apple/archive/apple_gpu_metal4_adoption.md (M5).
 _MTL4_ROUTING_ENABLED = os.environ.get("TESSERA_APPLE_GPU_MTL4_ROUTE", "0") in ("1", "true", "True")
 _MTL4_CAPS_CACHE: dict | None = None
 
@@ -24223,7 +24223,7 @@ def _mtl4_caps_cached() -> dict:
 def set_apple_gpu_mtl4_routing(enabled: bool) -> None:
     """Enable/disable routing eligible ops (today: rank-2 f32 matmul with
     8-multiple M/N/K) onto the Metal 4 lane. Also settable at import via
-    ``TESSERA_APPLE_GPU_MTL4_ROUTE=1``. See docs/apple_gpu_metal4_adoption.md."""
+    ``TESSERA_APPLE_GPU_MTL4_ROUTE=1``. See docs/audit/backend/apple/archive/apple_gpu_metal4_adoption.md."""
     global _MTL4_ROUTING_ENABLED
     _MTL4_ROUTING_ENABLED = bool(enabled)
 
@@ -24255,7 +24255,7 @@ def _mtl4_route_matmul_f32(a: Any, b: Any, np: Any) -> Any:
 # fp32 on the host; the MPP `matmul2d` tensor-op is ~10x faster, so it is the
 # better default whenever Metal 4 is available. Toggle with
 # TESSERA_APPLE_GPU_MTL4_BF16=0 / set_apple_gpu_mtl4_bf16_default(False) (e.g. to
-# force the legacy path for comparison). See docs/apple_gpu_metal4_adoption.md (P5).
+# force the legacy path for comparison). See docs/audit/backend/apple/archive/apple_gpu_metal4_adoption.md (P5).
 _MTL4_BF16_DEFAULT = os.environ.get("TESSERA_APPLE_GPU_MTL4_BF16", "1") not in ("0", "false", "False")
 
 
@@ -25588,7 +25588,7 @@ def _apple_gpu_memory_api() -> Any:
     """Configure + return the P5 memory-budget C ABI. None when unavailable.
 
     Exposes the buffer-pool + device-tensor byte accounting added in
-    ``apple_gpu_runtime.mm`` (see ``apple_backend_capability_roadmap.md`` P5).
+    ``apple_gpu_runtime.mm`` (see ``docs/audit/backend/apple/archive/apple_backend_capability_roadmap.md`` P5).
     """
     runtime = _load_apple_gpu_runtime()
     if getattr(runtime, "tessera_apple_gpu_get_active_memory", None) is None:

@@ -5,7 +5,7 @@ lower conv3d to the classic im2col + GEMM decomposition: spatial patches are
 gathered into a per-group column matrix and the dominant GEMM runs on-GPU as a
 single MPSGraph batched matmul (batch = groups, fp32 accumulation). Bias +
 scatter run on the host. Validated against a numpy reference. NDHWC source,
-DHWIO weights. See docs/apple_gpu_tier2_tier3_plan.md.
+DHWIO weights. See docs/audit/backend/apple/archive/apple_gpu_tier2_tier3_plan.md.
 """
 
 from __future__ import annotations

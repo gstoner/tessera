@@ -187,7 +187,7 @@ void registerTesseraPasses() {
   // Matches the 3-op SwiGLU chain at the Graph IR layer and emits
   // `tessera.swiglu_fused`. Runs ahead of backend-specific lowering so
   // each backend gets the fused op as input (longest-fusion-first matches
-  // Apple GPU pipeline ordering — see `apple_gpu_overview.md`).
+  // Apple GPU pipeline ordering — see `apple_backend.md`).
   ::mlir::registerPass([]() { return createSwigluFusionPass(); });
 
   // ── attention_variants_plan, MLA-1 — DeepSeek MLA decode fusion ────────

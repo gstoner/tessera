@@ -3,7 +3,7 @@
 `O = softmax((Q @ Kᵀ) * scale) @ V` per batch in a single dispatch — the
 batched attention block fused into one MPSGraph (vs the bmm + softmax + bmm
 3-call compose used by test_apple_gpu_batched_mha.py). Validated vs numpy.
-See docs/apple_gpu_tier2_tier3_plan.md.
+See docs/audit/backend/apple/archive/apple_gpu_tier2_tier3_plan.md.
 """
 
 from __future__ import annotations

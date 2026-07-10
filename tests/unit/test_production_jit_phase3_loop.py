@@ -1,5 +1,5 @@
 """Phase 3 G-A — GraphFn bounded for-loop on the Apple GPU
-(docs/spec/PRODUCTION_COMPILER_PLAN.md, docs/apple_gpu_control_flow_lowering.md).
+(docs/spec/PRODUCTION_COMPILER_PLAN.md, docs/audit/backend/apple/archive/apple_gpu_control_flow_lowering.md).
 
 `GraphFn(target="apple_gpu").for_loop(count, init, body)` authors the bounded
 loop as ONE MPSGraph `forLoop` and runs it in a single dispatch (vs the host

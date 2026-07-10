@@ -37,7 +37,7 @@ _SPECS = [
     # operands: (x, w_codes, [w_scales]); grouped form adds group_sizes.
     OpSpec("dequant_matmul", "tessera.dequant_matmul", 2, 3, lowering="loop_nest"),
     OpSpec("dequant_grouped_gemm", "tessera.dequant_grouped_gemm", 3, 4, lowering="loop_nest"),
-    # P3 (apple_backend_capability_roadmap.md): PACKED int4 quantized matmul —
+    # P3 (docs/audit/backend/apple/archive/apple_backend_capability_roadmap.md): PACKED int4 quantized matmul —
     # O = X @ dequant(W[N,K])^T with W stored as packed 4-bit codes (0.5 B/weight,
     # ~8× less weight traffic than dequant_matmul's f32 codes) + per-group affine
     # scale/bias. operands: (x, w_packed_codes, scales, biases); group_size attr.

@@ -3,7 +3,7 @@
 `flash_attn_gqa_f32` lets query head `h` read KV group `h // (H/G)` directly,
 so grouped/multi-query attention runs **without materializing the repeated KV**
 (the Phase-2 bandwidth win). Validated against the repeat-KV + standard
-attention reference. See docs/apple_gpu_tier2_tier3_plan.md.
+attention reference. See docs/audit/backend/apple/archive/apple_gpu_tier2_tier3_plan.md.
 """
 
 from __future__ import annotations

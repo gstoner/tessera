@@ -41,7 +41,7 @@ Out of scope for the first CUDA/ROCm closure:
 - `python/tessera/control.py` owns reference `scan`, `fori_loop`, `while_loop`,
   and `cond`. These can interact with tracing, but they are not first-class
   executable Graph IR control-flow ops.
-- `docs/apple_gpu_control_flow_lowering.md` documents the Apple Phase-G ladder:
+- `docs/audit/backend/apple/archive/apple_gpu_control_flow_lowering.md` documents the Apple Phase-G ladder:
   bounded scan, serial draft, while-generate, and speculative accept slices.
 - `python/tessera/speculative.py`, `python/tessera/stdlib/hybrid.py`, and the
   Gumiho tests already provide speculative-decode reference semantics.

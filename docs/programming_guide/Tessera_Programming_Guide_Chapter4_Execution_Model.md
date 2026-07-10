@@ -174,7 +174,7 @@ the runtime dispatches through a Metal command-buffer model:
 A full multi-head-attention block composes from these without a per-head loop,
 and a single-layer LLaMA-style decoder (RMSNorm + attention + SwiGLU) has been
 validated end-to-end against a numpy reference. See
-[`docs/apple_gpu_overview.md`](../apple_gpu_overview.md). The Apple **CPU**
+[`docs/apple_backend.md`](../apple_backend.md). The Apple **CPU**
 path (`target="apple_cpu"`, Accelerate) and a production CPU MLIR→LLVM **JIT**
 lane are likewise executable today.
 

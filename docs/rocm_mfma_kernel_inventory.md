@@ -515,8 +515,15 @@ promotes them to `compileable`. See §9 for the concrete done / open / blocked s
 - (moe transport is fully native now — `moe_dispatch` device gather, `moe_combine`
   device scatter-add, `grouped_swiglu` on the new `generate-rocm-gemm-f32-kernel`
   f32 GEMM; `rocm_moe_transport_compiled` reports `native_gpu`)
-- Plain recurrent cells `lstm_cell` / `gru_cell` / `simple_rnn_cell` (§5.9) — no
-  dedicated lane (selective-SSM + deltanet are done)
+- Plain recurrent cells (§5.9): `simple_rnn_cell` + `gru_cell` now have a
+  **dedicated native gfx1151 device kernel** (`generate-rocm-recurrent-cell-kernel`)
+  — the two gate GEMMs + elementwise gate math fused into one hsaco, f16/bf16/f32
+  storage with f32 accumulate, so the `native_gpu` provenance is genuine (they
+  previously ran host numpy under the structured-compute lane). Validated on
+  gfx1151 (`test_rocm_recurrent_cell_compiled.py`: dtype × activation × bias sweep
+  + host-fallback provenance gate; lit `phase8/rocm_recurrent_cell_kernel.mlir`).
+  `lstm_cell` stays on the host-reference structured-compute lane (its 4-gate
+  packed-[h,c] kernel is a follow-up)
 - **Perf ladders / MFU sign-off** beyond `matmul` — PARTIALLY DONE. The hot-path
   ratchet + roofline attainment (`benchmarks/rocm/record_hot_path_baseline.py` +
   `benchmarks/roofline.py`, Workstream J) now FLOP-models and characterizes

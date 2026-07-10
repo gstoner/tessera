@@ -10106,6 +10106,126 @@ def _rocm_f32_gemm(a: Any, b: Any, np: Any) -> Any:
     return out
 
 
+_rocm_recurrent_hsaco_cache: dict[tuple, bytes] = {}
+
+
+def _build_compiled_recurrent_cell_hsaco(cell: str, dtype: str,
+                                         act: str) -> bytes:
+    chip = _rocm_chip()
+    directive = ('module {\n  "tessera_rocm.recurrent_cell"() '
+                 f'{{name = "rc", cell = "{cell}", dtype = "{dtype}", '
+                 f'act = "{act}"}} : () -> ()\n}}\n')
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-recurrent-cell-kernel", directive,
+        _rocm_recurrent_hsaco_cache, (chip, cell, dtype, act))
+
+
+def _rocm_recurrent_cell(cell: str, operands: list, kwargs: dict, np: Any) -> Any:
+    """Single-step simple_rnn / gru cell on gfx1151 via the compiler-generated
+    fused kernel (one thread per output element; the two gate GEMMs + gate math
+    fused). f16/bf16/f32 storage, f32 accumulate. Matches nn.functional
+    {simple_rnn_cell,gru_cell}. Raises ``_RocmCompiledUnavailable`` when the lane
+    can't run (no tessera-opt / GPU) or the shapes/dtype fall outside the native
+    contract — the caller then falls back to the host reference."""
+    bf16 = _bfloat16_dtype()
+    x0 = _as_numpy(operands[0])
+    if x0.dtype == np.float16:
+        dtype, store, esz = "f16", np.float16, 2
+    elif bf16 is not None and x0.dtype == bf16:
+        dtype, store, esz = "bf16", bf16, 2
+    elif x0.dtype in (np.float32, np.float64):
+        dtype, store, esz = "f32", np.float32, 4
+    else:
+        raise _RocmCompiledUnavailable(
+            f"rocm recurrent_cell: unsupported dtype {x0.dtype}")
+
+    def C(a):
+        return np.ascontiguousarray(_as_numpy(a), store)
+
+    x, h = C(operands[0]), C(operands[1])
+    Wih, Whh = C(operands[2]), C(operands[3])
+    if x.ndim != 2 or h.ndim != 2 or x.shape[0] != h.shape[0]:
+        raise _RocmCompiledUnavailable("rocm recurrent_cell: need x(B,In), h(B,H)")
+    B, In = int(x.shape[0]), int(x.shape[1])
+    H = int(h.shape[1])
+    gate = 3 if cell == "gru" else 1
+    if Wih.shape != (In, gate * H) or Whh.shape != (H, gate * H):
+        raise _RocmCompiledUnavailable(
+            f"rocm recurrent_cell {cell}: weight shapes "
+            f"{Wih.shape}/{Whh.shape} != ({In},{gate * H})/({H},{gate * H})")
+
+    if cell == "gru":
+        act = "tanh"
+        bih = operands[4] if len(operands) > 4 and operands[4] is not None else None
+        bhh = operands[5] if len(operands) > 5 and operands[5] is not None else None
+        mems = [x, h, Wih, Whh,
+                C(bih) if bih is not None else np.zeros((3 * H,), store),
+                C(bhh) if bhh is not None else np.zeros((3 * H,), store)]
+    else:
+        act = str(kwargs.get("activation", "tanh"))
+        if act not in ("tanh", "relu"):
+            raise _RocmCompiledUnavailable(
+                f"rocm simple_rnn: activation {act!r} not native (tanh/relu)")
+        bias = operands[4] if len(operands) > 4 and operands[4] is not None else None
+        mems = [x, h, Wih, Whh,
+                C(bias) if bias is not None else np.zeros((H,), store)]
+
+    out = np.zeros((B, H), store)
+    n_out = B * H
+    if n_out == 0:
+        return out
+
+    hsaco = _build_compiled_recurrent_cell_hsaco(cell, dtype, act)
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm recurrent_cell: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm recurrent_cell: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"rc") != 0:
+        raise RuntimeError("rocm recurrent_cell: kernel symbol 'rc' not found")
+    cv = ctypes.c_void_p
+    dptrs: list = []
+    try:
+        for arr in mems:
+            d = cv()
+            nel = int(arr.size)
+            if hip.hipMalloc(ctypes.byref(d), max(esz * nel, esz)) != 0:
+                raise RuntimeError("rocm recurrent_cell: hipMalloc failed")
+            hip.hipMemcpy(d, arr.ctypes.data_as(cv), esz * nel, 1)
+            dptrs.append((d, nel))
+        d_out = cv()
+        if hip.hipMalloc(ctypes.byref(d_out), esz * n_out) != 0:
+            raise RuntimeError("rocm recurrent_cell: hipMalloc(out) failed")
+        dptrs.append((d_out, n_out))
+
+        def _mr(p, size):
+            return [cv(p.value), cv(p.value), ctypes.c_int64(0),
+                    ctypes.c_int64(size), ctypes.c_int64(1)]
+
+        launch_args = []
+        for d, nel in dptrs:
+            launch_args += _mr(d, nel)
+        launch_args += [ctypes.c_int64(B), ctypes.c_int64(In), ctypes.c_int64(H)]
+        arr_c = (cv * len(launch_args))()
+        for i, val in enumerate(launch_args):
+            arr_c[i] = ctypes.cast(ctypes.byref(val), cv)
+        gx = (n_out + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+        rc = hip.hipModuleLaunchKernel(fn, max(gx, 1), 1, 1, _GRID_BLOCKDIM, 1, 1,
+                                       0, None, arr_c, None)
+        if rc != 0:
+            raise RuntimeError(f"rocm recurrent_cell: launch failed rc={rc}")
+        hip.hipDeviceSynchronize()
+        hip.hipMemcpy(out.ctypes.data_as(cv), d_out, esz * n_out, 2)
+    finally:
+        for d, _ in dptrs:
+            hip.hipFree(d)
+    return out
+
+
 def _moe_grouped_swiglu_native(x_packed: Any, w_gate: Any, w_up: Any,
                                w_down: Any, group_sizes: Any, np: Any) -> Any:
     """Grouped SwiGLU over contiguous per-expert token groups, run on the f32
@@ -13479,8 +13599,24 @@ def _execute_structured_compute_composite(
     if op_name == "tessera.lora_linear":
         return F.lora_linear(*operands, **kwargs)
     if op_name == "tessera.simple_rnn_cell":
+        # ROCm has a native fused device kernel (genuine native_gpu); other
+        # targets — and a rocm fallback — use the host reference (reference_cpu).
+        if target == "rocm":
+            import numpy as _np
+            try:
+                return (_rocm_recurrent_cell("simple_rnn", operands, kwargs, _np),
+                        "native_gpu")
+            except _RocmCompiledUnavailable:
+                return (F.simple_rnn_cell(*operands, **kwargs), "reference_cpu")
         return F.simple_rnn_cell(*operands, **kwargs)
     if op_name == "tessera.gru_cell":
+        if target == "rocm":
+            import numpy as _np
+            try:
+                return (_rocm_recurrent_cell("gru", operands, kwargs, _np),
+                        "native_gpu")
+            except _RocmCompiledUnavailable:
+                return (F.gru_cell(*operands, **kwargs), "reference_cpu")
         return F.gru_cell(*operands, **kwargs)
     if op_name == "tessera.lstm_cell":
         # Canonical op contract (tessera.ops.lstm_cell): (4H,In)/(4H,H) weights

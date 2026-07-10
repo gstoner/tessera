@@ -556,6 +556,22 @@ def ROCM_GemmF32KernelOp : TesseraROCM_Op<"gemm_f32"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_RecurrentCellKernelOp : TesseraROCM_Op<"recurrent_cell"> {
+  let summary = "Fused single-step simple_rnn / gru cell gpu kernel";
+  let description = [{
+    `generate-rocm-recurrent-cell-kernel` expands into a fused single-step
+    recurrent cell, one thread per output element (over B*H). `cell` selects
+    simple_rnn (h' = act(x·W_ih + h·W_hh + bias), act = tanh|relu) or gru (gate
+    order z,r,n: z = σ(x_z+h_z), r = σ(x_r+h_r), n = tanh(x_n + r·h_n),
+    h' = (1−z)·n + z·h). The two gate GEMMs + elementwise gate math are fused
+    into one kernel (genuine native_gpu). f16/bf16/f32 storage, f32 accumulate;
+    bias buffers are always present (runtime passes zeros when absent).
+    B/In/H are runtime index args.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_PredicateKernelOp : TesseraROCM_Op<"predicate"> {
   let summary = "Unary predicate (isnan/isinf/isfinite) gpu kernel";
   let description = [{

@@ -67,6 +67,67 @@ def test_unmodeled_op_is_none():
     assert R.op_bytes("layer_norm", "4x8", "f16") is None
 
 
+# ── bandwidth (movement-lane) attainment ──────────────────────────────────────
+
+def test_movement_ops_have_bytes_but_no_flops():
+    # kv/moe movement lanes are bandwidth-bound: a byte model, deliberately NO
+    # FLOP model (near-zero arithmetic) → they route to the bandwidth branch.
+    for op in ("kv_cache_append", "kv_cache_read", "moe_dispatch", "moe_combine"):
+        assert R.op_flops(op, "128x512") is None
+        # 2·rows·width·dtype_bytes (read rows + write rows), f32.
+        assert R.op_bytes(op, "128x512", "f32") == 2 * 128 * 512 * 4
+
+
+def test_achieved_gbps_and_pct_peak_bw():
+    # 256 rows × 512 f32 moved (2× traffic) in 1ms.
+    nbytes = 2 * 256 * 512 * 4
+    gb = R.achieved_gbps("kv_cache_read", "256x512", "f32", 1.0)
+    assert gb == pytest.approx(nbytes / 1e-3 / 1e9, rel=1e-6)
+    pkb = R.pct_peak_bw("kv_cache_read", "256x512", "f32", 1.0, _DEV)
+    assert pkb == pytest.approx(gb / 256.0, rel=1e-6)   # ÷ peak_bw_gb_s
+    # A compute op has no bandwidth attainment path here (it uses pct_peak).
+    assert R.pct_peak_bw("kv_cache_read", "256x512", "f32", 1.0,
+                         "rocm:gfxZZZ") is None
+
+
+def test_annotate_routes_movement_to_bandwidth_not_compute():
+    rows = [{"op": "moe_dispatch", "shape": "1024x512", "dtype": "f32",
+             "mode": "moe_dispatch", "median_ms": 5.0},
+            {"op": "matmul", "shape": "512x512x512", "dtype": "f16",
+             "mode": "wmma", "median_ms": 1.0}]
+    R.annotate_rows(rows, _DEV)
+    # movement row → bandwidth fields, NOT compute fields.
+    assert "pct_peak_bw" in rows[0] and "achieved_gbps" in rows[0]
+    assert "pct_peak" not in rows[0] and "achieved_tflops" not in rows[0]
+    # compute row → compute fields, NOT bandwidth fields.
+    assert "pct_peak" in rows[1] and "pct_peak_bw" not in rows[1]
+
+
+def _bw_row(median_ms, floor=None):
+    r = {"op": "moe_dispatch", "shape": "1024x512", "dtype": "f32",
+         "mode": "moe_dispatch", "median_ms": median_ms}
+    if floor is not None:
+        r["bw_attainment_floor"] = floor
+    return r
+
+
+def test_bandwidth_attainment_gate_passes_and_fails():
+    # pct_peak_bw at 5ms:
+    gb = R.achieved_gbps("moe_dispatch", "1024x512", "f32", 5.0)
+    pkb = gb / 256.0
+    base = {"rows": [_bw_row(5.0, floor=round(pkb * 0.9, 6))]}
+    assert R.evaluate_attainment([_bw_row(5.0)], base, _DEV) == []      # above floor
+    # A 3× slower run drops pct_peak_bw below the floor → fails.
+    fails = R.evaluate_attainment([_bw_row(15.0)], base, _DEV)
+    assert len(fails) == 1 and "below floor" in fails[0]
+
+
+def test_bandwidth_floor_flags_missing_measurement():
+    base = {"rows": [_bw_row(5.0, floor=0.001)]}
+    fails = R.evaluate_attainment([], base, _DEV)
+    assert len(fails) == 1 and "coverage" in fails[0]
+
+
 def test_achieved_and_pct_peak():
     # 2048³ f16 at 10ms: 2·2048³ / 10ms = 1.717e10/0.01/1e12 ≈ 1.717 TF.
     ach = R.achieved_tflops("matmul", "2048x2048x2048", 10.0)
@@ -167,5 +228,13 @@ def test_committed_baseline_has_attainment_and_self_passes():
     for r in modeled:
         assert "pct_peak" in r and "attainment_floor" in r
         assert r["attainment_floor"] <= r["pct_peak"]     # floor is below current
-    # Re-evaluating the baseline's own medians against itself must pass.
+    # Movement rows (kv/moe) are bandwidth-modeled, not FLOP-modeled — if any were
+    # recorded (GPU-present box), they carry pct_peak_bw + a bw floor below it.
+    movement = [r for r in base["rows"] if r["op"] in R._MOVEMENT_OPS]
+    for r in movement:
+        assert "pct_peak_bw" in r and "bw_attainment_floor" in r
+        assert "pct_peak" not in r                        # never both
+        assert r["bw_attainment_floor"] <= r["pct_peak_bw"]
+    # Re-evaluating the baseline's own medians against itself must pass — both the
+    # compute floors (pct_peak) and the bandwidth floors (pct_peak_bw).
     assert R.evaluate_attainment(base["rows"], base, _DEV) == []

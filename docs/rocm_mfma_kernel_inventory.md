@@ -525,9 +525,15 @@ promotes them to `compileable`. See §9 for the concrete done / open / blocked s
   carries `achieved_tflops` + `pct_peak` + an `attainment_floor` (end-to-end
   wall-clock, an honest lower bound, gated by `test_roofline_attainment.py` +
   `test_rocm_perf_ratchet.py`). The re-recorded gfx1151 baseline also captures
-  #358's launch-cache win (`flash_attn_bwd` 1x8x512x64: 43.6→8.5 ms). Still
-  uncharacterized: `moe_transport`, `kv_cache`, and the fused `paged_attention`
-  lane (no FLOP model / ratchet rows yet)
+  #358's launch-cache win (`flash_attn_bwd` 1x8x512x64: 43.6→8.5 ms). The
+  memory-bound movement lanes — `kv_cache` (append/read) and `moe_transport`
+  (dispatch/combine) — are now characterized too, but by **bandwidth** attainment
+  (achieved GB/s ÷ the 256 GB/s peak), the right absolute bar for gather/scatter
+  where FLOP % is meaningless: roofline gained `achieved_gbps`/`pct_peak_bw` and a
+  `bw_attainment_floor`, and each movement baseline row carries them (live-gated on
+  gfx1151 by two slow ratchet tests — latency + absolute bandwidth). Still
+  uncharacterized: the fused `paged_attention` lane (would reuse the flash FLOP
+  model — a trivial follow-up)
 
 ### Still blocked on hardware NOT on this box
 - **CDNA execution** on MI300A / MI300X / MI325X (all MFMA entries)

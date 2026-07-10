@@ -100,6 +100,75 @@ extern "C" __global__ void %NAME%(
 }
 )HIPSRC";
 
+// Rung-1 variant with K-UNROLLING: process KU 16-wide K-panels per outer step.
+// Loads KU panels of A/B (16*KU contiguous k → better memory-level parallelism /
+// coalescing) then issues KU*MT*NT WMMAs. The KU WMMAs per accumulator form a
+// short dependency chain, but the MT*NT independent chains give the scheduler
+// ILP to hide WMMA latency across a bigger loop body — vs. the extra a/b temp
+// registers (KU×) that cost occupancy on this VGPR-bound APU. Which wins is
+// EMPIRICAL (STRIX Stage H+; measured via tessera_rocm_wmma_gemm_f16_bench_ku).
+// A tail loop handles K % (16*KU). KU=1 is exactly the production kernel.
+const char* kKernelTemplateKU = R"HIPSRC(
+typedef %TYPE% wtype16 __attribute__((ext_vector_type(16)));
+typedef float  float8  __attribute__((ext_vector_type(8)));
+extern "C" __global__ void %NAME%(
+    const %TYPE%* A, const %TYPE%* B, float* D, int M, int N, int K) {
+  const int MT = %MT%, NT = %NT%, KU = %KU%;
+  int l = threadIdx.x, lane = l & 15;
+  int baseRow = blockIdx.y * 16 * MT;
+  int baseCol = blockIdx.x * 16 * NT;
+  float8 c[MT][NT];
+  for (int mi = 0; mi < MT; ++mi)
+    for (int ni = 0; ni < NT; ++ni) c[mi][ni] = (float8){0,0,0,0,0,0,0,0};
+  int k0 = 0;
+  for (; k0 + 16 * KU <= K; k0 += 16 * KU) {        // KU panels are all in-range
+    wtype16 a[MT][KU], b[NT][KU];
+    for (int u = 0; u < KU; ++u) {
+      int kb = k0 + u * 16;
+      for (int mi = 0; mi < MT; ++mi) {
+        int ar = baseRow + mi * 16 + lane;
+        bool inr = ar < M;
+        for (int i = 0; i < 16; ++i)
+          a[mi][u][i] = inr ? A[ar * K + kb + i] : (%TYPE%)0;
+      }
+      for (int ni = 0; ni < NT; ++ni) {
+        int bc = baseCol + ni * 16 + lane;
+        bool inc = bc < N;
+        for (int i = 0; i < 16; ++i)
+          b[ni][u][i] = inc ? B[(kb + i) * N + bc] : (%TYPE%)0;
+      }
+    }
+    for (int u = 0; u < KU; ++u)
+      for (int mi = 0; mi < MT; ++mi)
+        for (int ni = 0; ni < NT; ++ni)
+          c[mi][ni] = %WMMA%(a[mi][u], b[ni][u], c[mi][ni]);
+  }
+  for (; k0 < K; k0 += 16) {                         // tail: K % (16*KU)
+    wtype16 a[MT], b[NT];
+    for (int mi = 0; mi < MT; ++mi)
+      for (int i = 0; i < 16; ++i) {
+        int ar = baseRow + mi * 16 + lane, ak = k0 + i;
+        a[mi][i] = (ar < M && ak < K) ? A[ar * K + ak] : (%TYPE%)0;
+      }
+    for (int ni = 0; ni < NT; ++ni)
+      for (int i = 0; i < 16; ++i) {
+        int bk = k0 + i, bc = baseCol + ni * 16 + lane;
+        b[ni][i] = (bk < K && bc < N) ? B[bk * N + bc] : (%TYPE%)0;
+      }
+    for (int mi = 0; mi < MT; ++mi)
+      for (int ni = 0; ni < NT; ++ni)
+        c[mi][ni] = %WMMA%(a[mi], b[ni], c[mi][ni]);
+  }
+  for (int mi = 0; mi < MT; ++mi)
+    for (int ni = 0; ni < NT; ++ni)
+      for (int e = 0; e < 8; ++e) {
+        int r = baseRow + mi * 16 + e * 2 + (l >> 4);
+        int col = baseCol + ni * 16 + lane;
+        if (r < M && col < N) D[r * N + col] = c[mi][ni][e];
+      }
+}
+)HIPSRC";
+
 // Rung 2 — LDS-staged, multi-wave workgroup. A workgroup of WM×WN waves
 // cooperatively stages the A and B K-panels (16-wide) for its
 // (WM*MT*16)×(WN*NT*16) macro-tile into LDS once per K-step, then every wave
@@ -280,6 +349,19 @@ bool compileVariant(const char* type, const char* wmma, int mt, int nt,
   src = substitute(src, "%NAME%", name);
   src = substitute(src, "%MT%", std::to_string(mt));
   src = substitute(src, "%NT%", std::to_string(nt));
+  return compileSrc(src, name, outMod, outFn);
+}
+
+// Compile a K-unrolled rung-1 variant for (type, wmma, MT, NT, KU).
+bool compileVariantKU(const char* type, const char* wmma, int mt, int nt, int ku,
+                      const std::string& name, hipModule_t* outMod,
+                      hipFunction_t* outFn) {
+  std::string src = substitute(kKernelTemplateKU, "%TYPE%", type);
+  src = substitute(src, "%WMMA%", wmma);
+  src = substitute(src, "%NAME%", name);
+  src = substitute(src, "%MT%", std::to_string(mt));
+  src = substitute(src, "%NT%", std::to_string(nt));
+  src = substitute(src, "%KU%", std::to_string(ku));
   return compileSrc(src, name, outMod, outFn);
 }
 
@@ -524,6 +606,23 @@ int benchVariant(const char* type, const char* wmma, int M, int N, int K,
   return rc;
 }
 
+// K-unrolled rung-1 benchmark. 0/1/2/3 as above.
+int benchVariantKU(const char* type, const char* wmma, int M, int N, int K,
+                   int iters, int mt, int nt, int ku, double* avg_ms) {
+  if (M <= 0 || N <= 0 || K <= 0 || iters <= 0 || mt <= 0 || nt <= 0 || ku <= 0)
+    return 1;
+  hipModule_t mod = nullptr;
+  hipFunction_t fn = nullptr;
+  std::string name = std::string("benchku") + type + "_" + std::to_string(mt)
+                     + "x" + std::to_string(nt) + "_k" + std::to_string(ku);
+  if (!compileVariantKU(type, wmma, mt, nt, ku, name, &mod, &fn)) return 2;
+  unsigned gx, gy;
+  gridFor(M, N, mt, nt, &gx, &gy);
+  int rc = timedKernelLaunches(fn, gx, gy, 32, M, N, K, iters, avg_ms);
+  if (mod) hipModuleUnload(mod);
+  return rc;
+}
+
 // rung-2 (LDS-staged, WM×WN waves) benchmark. 0/1/2/3 as above.
 int benchVariantLDS(const char* type, const char* wmma, int M, int N, int K,
                     int iters, int wm, int wn, int mt, int nt, double* avg_ms) {
@@ -594,6 +693,22 @@ int runGemmPipe(const char* type, const char* wmma, const void* A,
   unsigned gx = (unsigned)((N + wgN - 1) / wgN);
   unsigned gy = (unsigned)((M + wgM - 1) / wgM);
   int rc = runDeviceGemm(fn, gx, gy, wm * wn * 32, A, B, D, M, N, K, elemBytes);
+  if (mod) hipModuleUnload(mod);
+  return rc;
+}
+
+// Run a K-unrolled GEMM end-to-end (correctness path for the KU reference rung).
+int runGemmKU(const char* type, const char* wmma, const void* A, const void* B,
+              void* D, int M, int N, int K, int mt, int nt, int ku,
+              size_t elemBytes) {
+  if (M <= 0 || N <= 0 || K <= 0) return 1;
+  hipModule_t mod = nullptr;
+  hipFunction_t fn = nullptr;
+  std::string name = std::string("runku") + type;
+  if (!compileVariantKU(type, wmma, mt, nt, ku, name, &mod, &fn)) return 2;
+  unsigned gx, gy;
+  gridFor(M, N, mt, nt, &gx, &gy);
+  int rc = runDeviceGemm(fn, gx, gy, 32, A, B, D, M, N, K, elemBytes);
   if (mod) hipModuleUnload(mod);
   return rc;
 }
@@ -670,6 +785,15 @@ extern "C" int tessera_rocm_wmma_gemm_f16_bench(int M, int N, int K, int iters,
                       M, N, K, iters, mt, nt, avg_ms);
 }
 
+// Device-timed benchmark for the K-unrolled rung-1 kernel (f16): MT×NT register
+// tiles/wave, KU 16-wide K-panels per step. avg_ms <- mean per-launch ms.
+extern "C" int tessera_rocm_wmma_gemm_f16_bench_ku(int M, int N, int K, int iters,
+                                                   int mt, int nt, int ku,
+                                                   double* avg_ms) {
+  return benchVariantKU("__fp16", "__builtin_amdgcn_wmma_f32_16x16x16_f16_w32",
+                        M, N, K, iters, mt, nt, ku, avg_ms);
+}
+
 // Device-timed benchmark for the rung-2 LDS-staged kernel (f16): WM×WN waves per
 // workgroup, MT×NT register tiles per wave. avg_ms <- mean per-launch ms.
 extern "C" int tessera_rocm_wmma_gemm_f16_bench_lds(int M, int N, int K,
@@ -706,6 +830,14 @@ extern "C" int tessera_rocm_wmma_gemm_f16_pipe(const void* A, const void* B,
                                                int wm, int wn, int mt, int nt) {
   return runGemmPipe("__fp16", "__builtin_amdgcn_wmma_f32_16x16x16_f16_w32",
                      A, B, D, M, N, K, wm, wn, mt, nt, sizeof(unsigned short));
+}
+
+// Real-data K-unrolled GEMM (correctness path for the KU reference rung).
+extern "C" int tessera_rocm_wmma_gemm_f16_ku(const void* A, const void* B,
+                                             void* D, int M, int N, int K,
+                                             int mt, int nt, int ku) {
+  return runGemmKU("__fp16", "__builtin_amdgcn_wmma_f32_16x16x16_f16_w32",
+                   A, B, D, M, N, K, mt, nt, ku, sizeof(unsigned short));
 }
 
 // End-to-end CPU-timed benchmark of the full launch path. zerocopy: 0 = copy

@@ -1561,6 +1561,9 @@ _rocm_gemm_probe_ok: bool | None = None
 #: Cached probe for the compiler-generated ROCm WMMA flash_attn forward lane
 #: (separate from the GEMM lane — it shells to ``tessera-opt`` + a live GPU).
 _rocm_compiled_flash_attn_probe_ok: bool | None = None
+#: Cached probe for the compiler-generated f32 GEMM lane
+#: (generate-rocm-gemm-f32-kernel — a DIFFERENT pass from the flash lane).
+_rocm_compiled_gemm_f32_probe_ok: bool | None = None
 
 #: C-ABI GEMM symbols shipped by libtessera_rocm_gemm.so, keyed by storage dtype.
 _ROCM_GEMM_SYMBOLS = {
@@ -1677,6 +1680,27 @@ def _rocm_compiled_flash_attn_available() -> bool:
     except Exception:
         _rocm_compiled_flash_attn_probe_ok = False
     return _rocm_compiled_flash_attn_probe_ok
+
+
+def _rocm_compiled_gemm_f32_available() -> bool:
+    """Cached host probe: True iff the compiler-generated f32 GEMM lane can run —
+    i.e. ``tessera-opt`` is built AND a live gfx1151 executes a tiny
+    ``_rocm_f32_gemm`` without raising. Its own probe (NOT the flash-attn one):
+    ``generate-rocm-gemm-f32-kernel`` is a DIFFERENT compiler pass, so a host
+    where the f32 GEMM works but the flash lane is missing/broken still records
+    (and re-times) its gemm_f32 ratchet rows. Never fabricates (Decision #26)."""
+    global _rocm_compiled_gemm_f32_probe_ok
+    if _rocm_compiled_gemm_f32_probe_ok is not None:
+        return _rocm_compiled_gemm_f32_probe_ok
+    _rocm_compiled_gemm_f32_probe_ok = False
+    try:
+        import numpy as np
+        a = np.zeros((1, 1), np.float32)
+        _rocm_f32_gemm(a, a, np)
+        _rocm_compiled_gemm_f32_probe_ok = True
+    except Exception:
+        _rocm_compiled_gemm_f32_probe_ok = False
+    return _rocm_compiled_gemm_f32_probe_ok
 
 
 def _execute_rocm_wmma_artifact(artifact: RuntimeArtifact, args: Any) -> Any:

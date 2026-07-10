@@ -155,8 +155,10 @@ def hot_path_cases(rt):
         for (b, h, s, d) in FLASH_ATTN_BWD_SHAPES:
             cases.append(("flash_attn_bwd", f"{b}x{h}x{s}x{d}", "f16",
                           "flash_attn_bwd", _make_fa_bwd(b, h, s, d)))
-        # f32 GEMM rides tessera-opt too (same availability as the compiled
-        # flash lane): the register-blocked plain-VALU kernel grouped-SwiGLU uses.
+    # f32 GEMM gates on its OWN probe (generate-rocm-gemm-f32-kernel is a
+    # DIFFERENT pass from the flash lane), so a host where the f32 GEMM works but
+    # the flash lane is missing/broken still records its gemm_f32 ratchet rows.
+    if rt._rocm_compiled_gemm_f32_available():
         for (m, n, k) in GEMM_F32_SIZES:
             cases.append(("gemm_f32", f"{m}x{n}x{k}", "f32", "gemm_f32",
                           _make_gemm_f32(m, n, k)))

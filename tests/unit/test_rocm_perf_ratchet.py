@@ -168,6 +168,16 @@ def _rocm_flash_live():
         return False
 
 
+def _rocm_gemm_f32_live():
+    # Own probe: the f32 GEMM pass is separate from the flash lane, so a broken
+    # flash lane must not skip the gemm_f32 re-timing.
+    try:
+        from tessera import runtime as rt
+        return rt._rocm_compiled_gemm_f32_available()
+    except Exception:
+        return False
+
+
 def _live_ratchet_failures(rt, modes):
     """Re-time only the hot paths in ``modes`` and gate them against the matching
     baseline rows. Filtering the baseline to ``modes`` keeps an unavailable lane
@@ -231,12 +241,12 @@ def test_live_flash_attn_bwd_within_ratchet():
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(not _rocm_flash_live(),
-                    reason="live compiled ROCm lane (tessera-opt + GPU) required")
+@pytest.mark.skipif(not _rocm_gemm_f32_live(),
+                    reason="live compiled ROCm f32 GEMM lane required")
 def test_live_gemm_f32_within_ratchet():
-    # The register-blocked f32 GEMM rides tessera-opt like the compiled flash
-    # lane. Re-time it live so a regression in the blocked kernel (e.g. a lost
-    # register-blocking win) fails against the committed baseline.
+    # Gated on the f32 GEMM's OWN probe (not the flash lane): re-time the blocked
+    # kernel live so a regression (e.g. a lost register-blocking win) fails
+    # against the committed baseline even if the flash lane is unavailable.
     if not BASELINE.is_file():
         pytest.skip("rocm baseline not recorded yet — run the recorder first")
     from tessera import runtime as rt

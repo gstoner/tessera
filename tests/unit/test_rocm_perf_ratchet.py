@@ -81,8 +81,14 @@ def test_baseline_well_formed_when_present():
         for (b, h, s, d) in recorder.FLASH_ATTN_SHAPES:
             assert ("flash_attn", f"{b}x{h}x{s}x{d}") in ops, \
                 f"baseline missing flash_attn {b}x{h}x{s}x{d}"
+    # flash_attn backward — same gate (recorded only when the compiled FA lane is
+    # live); the full recorded ladder must be present if any bwd row is.
+    if any(r["mode"] == "flash_attn_bwd" for r in rows):
+        for (b, h, s, d) in recorder.FLASH_ATTN_BWD_SHAPES:
+            assert ("flash_attn_bwd", f"{b}x{h}x{s}x{d}") in ops, \
+                f"baseline missing flash_attn_bwd {b}x{h}x{s}x{d}"
     for r in rows:
-        assert r["mode"] in {"wmma", "flash_attn"}
+        assert r["mode"] in {"wmma", "flash_attn", "flash_attn_bwd"}
         assert r["max_latency_ms"] > r["median_ms"] > 0
 
 
@@ -198,4 +204,22 @@ def test_live_flash_attn_within_ratchet():
     if not any(r["mode"] == "flash_attn" for r in baseline["rows"]):
         pytest.skip("baseline has no flash_attn rows (recorded pre-flash lane)")
     failures = _live_ratchet_failures(rt, {"flash_attn"})
+    assert not failures, "\n".join(failures)
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not _rocm_flash_live(),
+                    reason="live compiled ROCm flash-attn lane required")
+def test_live_flash_attn_bwd_within_ratchet():
+    # The backward lane (rocm_flash_attn_bwd_compiled) rides the same compiled
+    # FA pass as the forward, so it shares the flash gate. Re-time it live so a
+    # backward perf regression actually fails against the committed baseline.
+    if not BASELINE.is_file():
+        pytest.skip("rocm baseline not recorded yet — run the recorder first")
+    from tessera import runtime as rt
+
+    baseline = json.loads(BASELINE.read_text())
+    if not any(r["mode"] == "flash_attn_bwd" for r in baseline["rows"]):
+        pytest.skip("baseline has no flash_attn_bwd rows (recorded pre-bwd lane)")
+    failures = _live_ratchet_failures(rt, {"flash_attn_bwd"})
     assert not failures, "\n".join(failures)

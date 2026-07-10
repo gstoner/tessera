@@ -1406,6 +1406,15 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "kernels (no new kernel; host reshape/affine). Executes via "
                  "runtime.launch() (rocm_normcompose_compiled).",
     } for op in ("group_norm", "instance_norm", "weight_norm")},
+    "grad_clip_norm": {
+        "dtypes": ("fp32",),
+        "feature_flags": ("reduction", "grad_transform"),
+        "notes": "Global gradient-norm clipping g*min(1, max_norm/||g||) — the "
+                 "L2 norm's global sum-of-squares runs on the gfx1151 reduce "
+                 "kernel (FLOP-heavy O(n) part); host does sqrt + the clip "
+                 "scale; norm_type=inf uses max|g|. Executes via runtime.launch() "
+                 "(rocm_grad_clip_compiled).",
+    },
     "gelu": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("elementwise",),
@@ -2361,6 +2370,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("group_norm", "instance_norm", "weight_norm")},
     **{(op, "rocm"): "tests/unit/test_rocm_normcompose_compiled.py"
        for op in ("group_norm", "instance_norm", "weight_norm")},
+    ("grad_clip_norm", "x86"): "tests/unit/test_x86_grad_clip_compiled.py",
+    ("grad_clip_norm", "rocm"): "tests/unit/test_rocm_grad_clip_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
     ("silu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
     ("silu_mul", "rocm"): "tests/unit/test_rocm_silu_mul_compiled.py",
@@ -3090,6 +3101,14 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "(no new kernel; host reshape/affine; x86_normcompose_compiled "
                  "lane; f32, matches nn.functional)",
     } for op in ("group_norm", "instance_norm", "weight_norm")},
+    "grad_clip_norm": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "Global gradient-norm clipping g*min(1, max_norm/||g||) — the "
+                 "L2 sum-of-squares runs on the AVX-512 reduce kernel; host "
+                 "sqrt + scale; x86_grad_clip_compiled lane; f32, matches "
+                 "optim.clip_grad_norm",
+    },
     "softmax": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),

@@ -47,6 +47,13 @@ HOT_PATH_SIZES = [(512, 512, 512), (1024, 1024, 1024), (2048, 2048, 2048)]
 # compiled lane is live (else the row skip-cleans — never fabricated).
 FLASH_ATTN_SHAPES = [(1, 8, 512, 64), (1, 8, 1024, 64), (1, 16, 1024, 128)]
 
+# Compiled FA-2 BACKWARD ladder (dQ/dK/dV), (batch, heads, seq, head_dim), f16
+# storage / f32 accumulate — the reverse-mode hot path
+# (rocm_flash_attn_bwd_compiled: fa_pre/fa_dkdv/fa_dq + the forward-O recompute).
+# Correctness-first (no LDS/perf tuning), so these ratchet rows are a regression
+# floor, not an MFU claim (pct_peak is expectedly tiny — repo Decision #26).
+FLASH_ATTN_BWD_SHAPES = [(1, 8, 512, 64), (1, 16, 1024, 128)]
+
 
 def _median_ms(fn, reps: int = 20, warmup: int = 3) -> float:
     for _ in range(warmup):
@@ -104,6 +111,25 @@ def hot_path_cases(rt):
             rt._rocm_flash_attn(q, k, v, causal=True)
         return _run
 
+    def _make_fa_bwd(b, h, s, d):
+        q = rng.standard_normal((b, h, s, d)).astype(np.float16)
+        k = rng.standard_normal((b, h, s, d)).astype(np.float16)
+        v = rng.standard_normal((b, h, s, d)).astype(np.float16)
+        do = rng.standard_normal((b, h, s, d)).astype(np.float16)
+        art = rt.RuntimeArtifact(metadata={
+            "target": "rocm", "compiler_path": "rocm_flash_attn_bwd_compiled",
+            "executable": True, "execution_kind": "native_gpu",
+            "arg_names": ["do", "q", "k", "v"], "output_name": "g",
+            "ops": [{"op_name": "tessera.flash_attn_bwd", "result": "g",
+                     "operands": ["do", "q", "k", "v"],
+                     "kwargs": {"causal": True}}]})
+
+        def _run():
+            res = rt.launch(art, (do, q, k, v))
+            if not res["ok"]:
+                raise RuntimeError(res.get("reason"))
+        return _run
+
     cases = []
     for (m, n, k) in HOT_PATH_SIZES:
         cases.append(("matmul", f"{m}x{n}x{k}", "f16", "wmma", _make(m, n, k)))
@@ -111,6 +137,9 @@ def hot_path_cases(rt):
         for (b, h, s, d) in FLASH_ATTN_SHAPES:
             cases.append(("flash_attn", f"{b}x{h}x{s}x{d}", "f16",
                           "flash_attn", _make_fa(b, h, s, d)))
+        for (b, h, s, d) in FLASH_ATTN_BWD_SHAPES:
+            cases.append(("flash_attn_bwd", f"{b}x{h}x{s}x{d}", "f16",
+                          "flash_attn_bwd", _make_fa_bwd(b, h, s, d)))
     return cases
 
 

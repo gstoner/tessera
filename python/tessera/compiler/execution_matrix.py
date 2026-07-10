@@ -565,6 +565,12 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "x86_normcompose_compiled": "x86 CPU group/instance/weight norm — composed "
                             "on the AVX-512 layer_norm + reduce kernels (host "
                             "reshape/divide). f32",
+    "x86_grad_clip_compiled": "x86 CPU grad_clip_norm — g*min(1,max_norm/||g||); "
+                            "the global L2 sum-of-squares runs on the AVX-512 "
+                            "reduce kernel, host sqrt + scale. f32",
+    "rocm_grad_clip_compiled": "AMD GPU RDNA grad_clip_norm — g*min(1,max_norm/"
+                            "||g||); the global L2 sum-of-squares runs on the "
+                            "gfx1151 reduce kernel, host sqrt + scale. f32",
     "x86_lamb_compiled": "x86 CPU LAMB — AVX-512 adam kernel (lr=1/wd=0) + host "
                             "per-tensor trust ratio ‖p‖/‖update‖. f32",
     "x86_muon_compiled": "x86 CPU Muon — AVX-512 SVD U·Vh orthogonalization of "
@@ -1331,6 +1337,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "layer_norm (row mean/var) + reduce (sum-of-squares) kernels; "
                "host does the reshape / per-axis divide. f32, matches "
                "nn.functional.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_grad_clip_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_grad_clip_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_grad_clip_compiled", runtime_status="success",
+        reason="x86 grad_clip_norm lane — global gradient-norm clipping "
+               "g*min(1, max_norm/||g||): the L2 norm's global sum-of-squares "
+               "runs on the AVX-512 reduce kernel, host does sqrt + the clip "
+               "scale + the elementwise scale; norm_type=inf uses max|g|. f32, "
+               "matches optim.clip_grad_norm within f32 tolerance.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_lamb_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_lamb_compiled",
@@ -2180,6 +2196,17 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "layer_norm (row mean/var) + reduce (sum-of-squares) kernels; "
                "host does the reshape / per-axis divide. f32, matches "
                "nn.functional.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_grad_clip_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_grad_clip_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_grad_clip_compiled", runtime_status="success",
+        reason="ROCm grad_clip_norm lane — global gradient-norm clipping "
+               "g*min(1, max_norm/||g||): the L2 norm's global sum-of-squares "
+               "runs on the gfx1151 reduce kernel (the FLOP-heavy O(n) part), "
+               "host does sqrt + the clip scale + the elementwise scale; "
+               "norm_type=inf uses max|g|. f32, matches optim.clip_grad_norm "
+               "within f32 tolerance (the reference accumulates in f64).",
         execution_mode="hip_runtime"),
     ("rocm", "rocm_selective_ssm_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_selective_ssm_compiled",

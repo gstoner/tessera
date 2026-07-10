@@ -711,6 +711,27 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
         "execute_compare_fixture": "tests/unit/test_apple_gpu_rng_compiled.py",
     } for op, dts in (("rng_uniform", ("fp32",)), ("rng_normal", ("fp32",)),
                       ("dropout", ("fp32",)))},
+    # Linalg decomposition lane (2026-07-10) — cholesky_solve/lu/qr/svd via
+    # apple_gpu_linalg_compiled. Apple ships no MPS lu/qr/svd primitive; the
+    # decompositions resolve on the numpy reference (np.linalg + a standalone
+    # partial-pivot LU) the x86/ROCm device kernels match. ``compiled`` (direct
+    # execute/compare), NOT a bespoke fused Metal kernel.
+    **{op: {
+        "status": _COMPILED_STATUS,
+        "dtypes": ("fp32",),
+        "notes": (f"Linalg {op} via apple_gpu_linalg_compiled (numpy reference; "
+                  "no MPS lu/qr/svd primitive); matches np.linalg."),
+        "execute_compare_fixture": "tests/unit/test_apple_gpu_linalg_compiled.py",
+    } for op in ("cholesky_solve", "lu", "qr", "svd")},
+    # Matmul-family lane (2026-07-10) — einsum / factorized_matmul via
+    # apple_gpu_matmul_family_compiled (numpy reference the GEMM lanes match).
+    **{op: {
+        "status": _COMPILED_STATUS,
+        "dtypes": ("fp32",),
+        "notes": (f"Matmul-family {op} via apple_gpu_matmul_family_compiled "
+                  "(numpy reference); matches numpy."),
+        "execute_compare_fixture": "tests/unit/test_apple_gpu_matmul_family_compiled.py",
+    } for op in ("einsum", "factorized_matmul")},
     # Project 3 (2026-06-01) — 8 encode-eligible ops promoted to
     # ``hardware_verified``. Each carries:
     #   * runtime_symbol = the per-op encode-session C ABI symbol

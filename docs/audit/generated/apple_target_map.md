@@ -54,12 +54,12 @@ and ``docs/apple_backend.md`` (Metal 4 implementation-state review):
 
 | Family | Rows | apple_gpu fused | apple_cpu accelerate_native |
 |---|---:|---:|---:|
-| tensor | 93 | 21 | 2 |
+| tensor | 99 | 21 | 2 |
 | ga | 19 | 19 | 0 |
 | ebm | 14 | 14 | 0 |
 | m7 | 4 | 4 | 0 |
 
-## tensor (93)
+## tensor (99)
 
 | Op | apple_cpu status | cpu framework | cpu dtypes | cpu symbol | execution_kind | apple_gpu status | gpu framework | gpu dtypes | gpu symbol | gpu_dispatch | proof |
 |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -72,6 +72,7 @@ and ``docs/apple_backend.md`` (Metal 4 implementation-state review):
 | bmm | reference | numpy_reference | fp32 | - | numpy_reference | hardware_verified | - | fp32,fp16,bf16 | tessera_apple_gpu_bmm_dev_{f32,f16,bf16}_enc | driver | tests/unit/test_apple_*.py |
 | cast | reference | numpy_reference | fp32 | - | numpy_reference | fused | - | fp32,fp16,bf16 | - | manifest | tests/unit/test_apple_gpu_resident_mlp.py |
 | center_crop | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
+| cholesky_solve | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | cispo_policy_loss | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | contrastive_divergence_loss | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | conv1d | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
@@ -87,6 +88,8 @@ and ``docs/apple_backend.md`` (Metal 4 implementation-state review):
 | dropout | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | edm_loss_weight | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | edm_precondition | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
+| einsum | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
+| factorized_matmul | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | factorized_pos_emb | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | flash_attn | reference | numpy_reference | fp32 | - | numpy_reference | hardware_verified | Metal (MSL) | fp32,fp16,bf16 | tessera_apple_gpu_flash_attn_f32 | driver | tests/unit/test_apple_backend_roadmap.py |
 | gather | reference | numpy_reference | fp32 | - | numpy_reference | fused | - | fp32,fp16,bf16 | tessera_apple_gpu_mpsgraph_gather_{f32,f16} | driver | tests/unit/test_apple_gpu_gather.py |
@@ -108,6 +111,7 @@ and ``docs/apple_backend.md`` (Metal 4 implementation-state review):
 | log_cosh_loss | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | lookahead_sparse_attention | reference | numpy_reference | fp32 | - | numpy_reference | fused | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | lora_linear | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
+| lu | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | mae_loss | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | masked_categorical | reference | numpy_reference | fp32 | - | numpy_reference | fused | - | fp32,int32 | tessera_apple_gpu_masked_categorical_f32 | driver | tests/unit/test_apple_gpu_ldt_loss_ops.py |
 | masked_fill | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
@@ -132,6 +136,7 @@ and ``docs/apple_backend.md`` (Metal 4 implementation-state review):
 | pixel_shuffle | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | pixel_unshuffle | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | ppo_policy_loss | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
+| qr | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | quantized_matmul | reference | numpy_reference | fp32 | - | numpy_reference | hardware_verified | - | fp32,fp16 | tessera_apple_gpu_quantized_matmul_i4_f32 | driver | tests/unit/test_apple_gpu_quantized_matmul.py |
 | rearrange | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | relu | reference | numpy_reference | fp32 | - | numpy_reference | fused | - | fp32,fp16,bf16 | tessera_apple_gpu_mpsgraph_unary_f32 | driver | tests/unit/test_apple_*.py |
@@ -150,6 +155,7 @@ and ``docs/apple_backend.md`` (Metal 4 implementation-state review):
 | softmax | reference | numpy_reference | fp32 | - | numpy_reference | hardware_verified | Metal (MSL) | fp32,fp16,bf16 | tessera_apple_gpu_softmax_f32 | driver | tests/unit/test_apple_backend_roadmap.py |
 | softmax_safe | reference | numpy_reference | fp32 | - | numpy_reference | hardware_verified | Metal (MSL) | fp32,fp16,bf16 | tessera_apple_gpu_softmax_f32 | driver | tests/unit/test_apple_backend_roadmap.py |
 | spectral_norm | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
+| svd | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | tile_view | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | transpose | reference | numpy_reference | fp32 | - | numpy_reference | fused | - | fp32,fp16,bf16 | tessera_apple_gpu_mpsgraph_transpose_{f32,f16} | driver | tests/unit/test_apple_gpu_transpose.py |
 | unpack | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |

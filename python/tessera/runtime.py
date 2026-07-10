@@ -8669,6 +8669,25 @@ def _execute_x86_compiled_rng(artifact: RuntimeArtifact, args: Any) -> Any:
     return _execute_rng(artifact, args, _x86_philox_uniform, "x86_rng_compiled")
 
 
+def _apple_rng_uniform(seed: int, counter_base: int, n: int) -> Any:
+    """Apple GPU Philox uniform — Apple ships no device Philox kernel, so the
+    lane draws from the same counter-based Philox-4x32-10 reference
+    (tessera.rng_device.philox_uniform) the x86/ROCm device kernels are
+    bit-matched against. Exercises the RNGKey/Philox contract with an executable
+    apple_gpu artifact + compare fixture; not a bespoke fused Metal kernel."""
+    from tessera import rng_device
+    return rng_device.philox_uniform(int(seed), int(counter_base), int(n))
+
+
+def _execute_apple_gpu_compiled_rng(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="apple_gpu"`` Philox RNG lane — rng_uniform/rng_normal/
+    dropout via the Philox reference core, and the higher-level distribution
+    samplers via the public tessera.rng RNGKey contract (host structure — the
+    same path x86/ROCm take for the distribution ops). Matches tessera.rng /
+    tessera.rng_device — parity with x86/rocm_rng_compiled."""
+    return _execute_rng(artifact, args, _apple_rng_uniform, "apple_gpu_rng_compiled")
+
+
 _rocm_philox_hsaco_cache: dict[tuple[str], bytes] = {}
 
 
@@ -14918,6 +14937,7 @@ def _executor_table():
         "apple_gpu_loss_family_compiled": _execute_apple_gpu_compiled_loss_family,
         "apple_gpu_complex_compiled": _execute_apple_gpu_compiled_complex,
         "apple_gpu_conformal_compiled": _execute_apple_gpu_compiled_conformal,
+        "apple_gpu_rng_compiled": _execute_apple_gpu_compiled_rng,
         "native_cpu":           _execute_cpu_native_or_jit,
         "jit_cpu_numpy":        _execute_jit_cpu_artifact,
         "rocm_wmma":            _execute_rocm_wmma_artifact,

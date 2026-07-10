@@ -195,11 +195,18 @@ def main() -> int:
     # (achieved TFLOP/s + pct_peak) + an attainment_floor = pct_peak / margin,
     # symmetric with the latency cap so `perf_gate --attainment` can ratchet it.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    import math
+
     import roofline as _rl
     _rl.annotate_rows(rows, f"rocm:{rt._rocm_chip()}")
     for r in rows:
         if "pct_peak" in r:
-            r["attainment_floor"] = round(r["pct_peak"] / args.margin, 5)
+            # Round the floor DOWN (not to-nearest): a floor rounded *up* can
+            # exceed pct_peak/margin, so a run inside the latency cap (margin×
+            # median) would still trip the attainment gate. Flooring keeps the
+            # absolute gate no stricter than the relative latency margin.
+            r["attainment_floor"] = math.floor(
+                r["pct_peak"] / args.margin * 1e5) / 1e5
     OUT.write_text(json.dumps({
         "schema": "tessera.benchmark.ratchet.v1",
         "margin": args.margin,

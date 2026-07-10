@@ -54,23 +54,29 @@ def _bytes_of(dtype: str) -> int:
 _FLASH_BWD_FWD_RATIO = 2.5
 
 
-def op_flops(op: str, shape: str) -> Optional[int]:
+def op_flops(op: str, shape: str, causal: bool = True) -> Optional[int]:
     """FLOPs for one invocation of ``op`` at ``shape`` (the ratchet shape string),
     or ``None`` for an op with no FLOP model. matmul / gemm_f32 ``MxNxK`` = 2·M·N·K;
-    flash_attn ``BxHxSxD`` = 4·B·H·S²·D (QKᵀ + PV, softmax negligible);
-    flash_attn_bwd = 2.5× the forward (``_FLASH_BWD_FWD_RATIO``)."""
+    flash_attn ``BxHxSxD`` = 4·B·H·P·D and flash_attn_bwd = 2.5× that
+    (``_FLASH_BWD_FWD_RATIO``), where P is the number of query·key score pairs.
+
+    ``causal`` (default True — the recorded ROCm flash hot paths run causal) makes
+    P the **triangular** count S·(S+1)/2 rather than the dense S², because the
+    generated causal kernels skip the masked upper tiles in *both* the forward and
+    the dK/dV + dQ backward loops (GenerateWMMAFlashAttnBwdKernel.cpp). Charging
+    the full dense S² for a causal row would ~2× the achieved TFLOP/s and inflate
+    the MFU sign-off; the model must match the work actually timed."""
     dims = [int(x) for x in shape.split("x")]
     # gemm_f32 is a plain GEMM (the register-blocked f32 VALU kernel) — same
     # 2·M·N·K work as the WMMA matmul, just f32 storage (gated vs the 29.7 TF peak).
     if op in ("matmul", "gemm_f32") and len(dims) == 3:
         m, n, k = dims
         return 2 * m * n * k
-    if op == "flash_attn" and len(dims) == 4:
+    if op in ("flash_attn", "flash_attn_bwd") and len(dims) == 4:
         b, h, s, d = dims
-        return 4 * b * h * s * s * d
-    if op == "flash_attn_bwd" and len(dims) == 4:
-        b, h, s, d = dims
-        return int(_FLASH_BWD_FWD_RATIO * 4 * b * h * s * s * d)
+        pairs = s * (s + 1) // 2 if causal else s * s   # triangular vs dense
+        fwd = 4 * b * h * pairs * d
+        return fwd if op == "flash_attn" else int(_FLASH_BWD_FWD_RATIO * fwd)
     return None
 
 
@@ -90,19 +96,22 @@ def op_bytes(op: str, shape: str, dtype: str) -> Optional[int]:
     return None
 
 
-def achieved_tflops(op: str, shape: str, median_ms: float) -> Optional[float]:
-    flops = op_flops(op, shape)
+def achieved_tflops(op: str, shape: str, median_ms: float,
+                    causal: bool = True) -> Optional[float]:
+    flops = op_flops(op, shape, causal=causal)
     if flops is None or median_ms <= 0:
         return None
     return flops / (median_ms * 1e-3) / 1e12
 
 
 def pct_peak(op: str, shape: str, dtype: str, median_ms: float,
-             device: str) -> Optional[float]:
+             device: str, causal: bool = True) -> Optional[float]:
     """End-to-end compute attainment: achieved TFLOP/s ÷ the device's peak for
     ``dtype``. ``None`` when the op has no FLOP model or the device/dtype peak is
-    unknown (never guessed)."""
-    ach = achieved_tflops(op, shape, median_ms)
+    unknown (never guessed). ``causal`` flows to :func:`op_flops` (the recorded
+    flash rows are causal), so a row's floor and its live re-time use the same
+    triangular FLOP basis — keep the default so the gate stays self-consistent."""
+    ach = achieved_tflops(op, shape, median_ms, causal=causal)
     dev = DEVICE_PEAK.get(device)
     if ach is None or dev is None:
         return None

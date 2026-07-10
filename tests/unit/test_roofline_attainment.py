@@ -30,8 +30,16 @@ def test_matmul_flops_and_bytes():
 
 
 def test_flash_attn_flops():
-    # 4·B·H·S²·D
-    assert R.op_flops("flash_attn", "1x8x512x64") == 4 * 1 * 8 * 512 * 512 * 64
+    s = 512
+    # Default causal → triangular score pairs S·(S+1)/2 (the recorded hot path).
+    assert R.op_flops("flash_attn", "1x8x512x64") == \
+        4 * 1 * 8 * (s * (s + 1) // 2) * 64
+    # Dense S² only when causal=False is requested explicitly.
+    assert R.op_flops("flash_attn", "1x8x512x64", causal=False) == \
+        4 * 1 * 8 * s * s * 64
+    # Causal is ~half the dense work (never charges the masked upper tiles).
+    assert R.op_flops("flash_attn", "1x8x512x64") < \
+        R.op_flops("flash_attn", "1x8x512x64", causal=False)
 
 
 def test_gemm_f32_flops_and_bytes_match_matmul():

@@ -50,15 +50,17 @@ FLASH_ATTN_SHAPES = [(1, 8, 512, 64), (1, 8, 1024, 64), (1, 16, 1024, 128)]
 # Compiled FA-2 BACKWARD ladder (dQ/dK/dV), (batch, heads, seq, head_dim), f16
 # storage / f32 accumulate — the reverse-mode hot path
 # (rocm_flash_attn_bwd_compiled: fa_pre/fa_dkdv/fa_dq + the forward-O recompute).
-# Correctness-first (no LDS/perf tuning), so these ratchet rows are a regression
-# floor, not an MFU claim (pct_peak is expectedly tiny — repo Decision #26).
+# Correctness-first (no LDS/perf tuning), so pct_peak is expectedly small; it is
+# now FLOP-modeled (roofline: 2.5× the forward — the FA-2 ratio), so these rows
+# carry a real attainment floor, not just a latency cap (repo Decision #26).
 FLASH_ATTN_BWD_SHAPES = [(1, 8, 512, 64), (1, 16, 1024, 128)]
 
 # Register-blocked f32 GEMM ladder (M, N, K) — the plain-VALU f32 kernel
 # (generate-rocm-gemm-f32-kernel) grouped-SwiGLU rides. TM×TN=4×4 output-tile
 # register blocking is a ~1.6x win over one-thread-per-output at 1024³
-# (STRIX_HALO Stage F: register-budget tiling is the lever). Correctness-first
-# still — the ratchet rows are a regression floor, not an MFU claim.
+# (STRIX_HALO Stage F: register-budget tiling is the lever). FLOP-modeled
+# (roofline: 2·M·N·K, gated vs the 29.7 TF f32 peak), so its rows now carry an
+# attainment floor alongside the latency cap.
 GEMM_F32_SIZES = [(256, 256, 256), (512, 512, 512), (1024, 1024, 1024)]
 
 
@@ -193,11 +195,18 @@ def main() -> int:
     # (achieved TFLOP/s + pct_peak) + an attainment_floor = pct_peak / margin,
     # symmetric with the latency cap so `perf_gate --attainment` can ratchet it.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    import math
+
     import roofline as _rl
     _rl.annotate_rows(rows, f"rocm:{rt._rocm_chip()}")
     for r in rows:
         if "pct_peak" in r:
-            r["attainment_floor"] = round(r["pct_peak"] / args.margin, 5)
+            # Round the floor DOWN (not to-nearest): a floor rounded *up* can
+            # exceed pct_peak/margin, so a run inside the latency cap (margin×
+            # median) would still trip the attainment gate. Flooring keeps the
+            # absolute gate no stricter than the relative latency margin.
+            r["attainment_floor"] = math.floor(
+                r["pct_peak"] / args.margin * 1e5) / 1e5
     OUT.write_text(json.dumps({
         "schema": "tessera.benchmark.ratchet.v1",
         "margin": args.margin,

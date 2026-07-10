@@ -517,8 +517,17 @@ promotes them to `compileable`. See §9 for the concrete done / open / blocked s
   f32 GEMM; `rocm_moe_transport_compiled` reports `native_gpu`)
 - Plain recurrent cells `lstm_cell` / `gru_cell` / `simple_rnn_cell` (§5.9) — no
   dedicated lane (selective-SSM + deltanet are done)
-- **Perf ladders / MFU sign-off** beyond `matmul` — every `compiled` lane is
-  correctness-first with no perf characterization
+- **Perf ladders / MFU sign-off** beyond `matmul` — PARTIALLY DONE. The hot-path
+  ratchet + roofline attainment (`benchmarks/rocm/record_hot_path_baseline.py` +
+  `benchmarks/roofline.py`, Workstream J) now FLOP-models and characterizes
+  `matmul` (WMMA), `flash_attn` (fwd), `flash_attn_bwd` (2.5× fwd, the FA-2 ratio)
+  and `gemm_f32` (2·M·N·K vs the 29.7 TF f32 peak) — each committed baseline row
+  carries `achieved_tflops` + `pct_peak` + an `attainment_floor` (end-to-end
+  wall-clock, an honest lower bound, gated by `test_roofline_attainment.py` +
+  `test_rocm_perf_ratchet.py`). The re-recorded gfx1151 baseline also captures
+  #358's launch-cache win (`flash_attn_bwd` 1x8x512x64: 43.6→8.5 ms). Still
+  uncharacterized: `moe_transport`, `kv_cache`, and the fused `paged_attention`
+  lane (no FLOP model / ratchet rows yet)
 
 ### Still blocked on hardware NOT on this box
 - **CDNA execution** on MI300A / MI300X / MI325X (all MFMA entries)

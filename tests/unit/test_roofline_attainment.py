@@ -30,8 +30,36 @@ def test_matmul_flops_and_bytes():
 
 
 def test_flash_attn_flops():
-    # 4·B·H·S²·D
-    assert R.op_flops("flash_attn", "1x8x512x64") == 4 * 1 * 8 * 512 * 512 * 64
+    s = 512
+    # Default causal → triangular score pairs S·(S+1)/2 (the recorded hot path).
+    assert R.op_flops("flash_attn", "1x8x512x64") == \
+        4 * 1 * 8 * (s * (s + 1) // 2) * 64
+    # Dense S² only when causal=False is requested explicitly.
+    assert R.op_flops("flash_attn", "1x8x512x64", causal=False) == \
+        4 * 1 * 8 * s * s * 64
+    # Causal is ~half the dense work (never charges the masked upper tiles).
+    assert R.op_flops("flash_attn", "1x8x512x64") < \
+        R.op_flops("flash_attn", "1x8x512x64", causal=False)
+
+
+def test_gemm_f32_flops_and_bytes_match_matmul():
+    # The register-blocked f32 kernel is a plain GEMM — same 2·M·N·K work as WMMA
+    # matmul, gated against the f32 peak (not f16). Bytes are f32-wide.
+    assert R.op_flops("gemm_f32", "512x512x512") == 2 * 512**3
+    assert R.op_bytes("gemm_f32", "8x16x32", "f32") == (8*32 + 32*16 + 8*16) * 4
+    # pct_peak divides by the f32 peak (29.7), not the f16 peak (59.4).
+    pk = R.pct_peak("gemm_f32", "1024x1024x1024", "f32", 5.0, _DEV)
+    ach = R.achieved_tflops("gemm_f32", "1024x1024x1024", 5.0)
+    assert pk == pytest.approx(ach / 29.7, rel=1e-6)
+
+
+def test_flash_attn_bwd_flops_is_2p5x_forward():
+    fwd = R.op_flops("flash_attn", "1x16x1024x128")
+    bwd = R.op_flops("flash_attn_bwd", "1x16x1024x128")
+    assert bwd == int(2.5 * fwd)
+    # 7 tensors of DRAM traffic (Q,K,V,dO in; dQ,dK,dV out), f16-wide.
+    assert R.op_bytes("flash_attn_bwd", "1x8x512x64", "f16") == \
+        7 * 1 * 8 * 512 * 64 * 2
 
 
 def test_unmodeled_op_is_none():

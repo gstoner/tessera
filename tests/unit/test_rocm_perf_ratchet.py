@@ -81,8 +81,14 @@ def test_baseline_well_formed_when_present():
         for (b, h, s, d) in recorder.FLASH_ATTN_SHAPES:
             assert ("flash_attn", f"{b}x{h}x{s}x{d}") in ops, \
                 f"baseline missing flash_attn {b}x{h}x{s}x{d}"
+    # flash_attn backward — same gate (recorded only when the compiled FA lane is
+    # live); the full recorded ladder must be present if any bwd row is.
+    if any(r["mode"] == "flash_attn_bwd" for r in rows):
+        for (b, h, s, d) in recorder.FLASH_ATTN_BWD_SHAPES:
+            assert ("flash_attn_bwd", f"{b}x{h}x{s}x{d}") in ops, \
+                f"baseline missing flash_attn_bwd {b}x{h}x{s}x{d}"
     for r in rows:
-        assert r["mode"] in {"wmma", "flash_attn"}
+        assert r["mode"] in {"wmma", "flash_attn", "flash_attn_bwd"}
         assert r["max_latency_ms"] > r["median_ms"] > 0
 
 

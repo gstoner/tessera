@@ -271,7 +271,7 @@ No MFMA — LDS-based cooperative reductions.
 | `lion_step` | bf16/fp16 param, fp32 accum | sign-based |
 | `muon_step` | bf16/fp16 param, fp32 accum | Newton-Schulz |
 | `lamb_step` | bf16/fp16 param, fp32 accum + m + v | layerwise adaptive |
-| `grad_clip_norm` | fp32 | global norm + scale; RCCL all-reduce |
+| `grad_clip_norm` | fp32 | global norm + scale — **executes** via `rocm_grad_clip_compiled` (L2 sum-of-squares on the device reduce kernel + host sqrt/scale; x86 parity); single-node (RCCL all-reduce for multi-rank is future) |
 
 ### 5.6 KV-cache / paged-attention kernels
 
@@ -465,7 +465,9 @@ promotes them to `compileable`. See §9 for the concrete done / open / blocked s
   atomic-accumulates dK/dV) **+ additive attn_bias + sliding-window** (implicitly
   causal, masks keys older than W) **+ logit-softcap** (`S = cap·tanh(scale·QK/cap)`;
   backward scales dS by `1−tanh²`), scale + causal — the full forward variant
-  surface. No perf ladder
+  surface. Measured perf ratchet baseline recorded (`flash_attn_bwd` rows in
+  `benchmarks/baselines/rocm_gfx1151_hot_paths.json`, ~15× the forward —
+  correctness-first, not an MFU claim)
 - ✅ **Dozens of additional compiler-generated HIP `compiled` lanes execute** and
   match a CPU/numpy reference — nearly all of §5 plus §10: the GEMM/attention
   families, norm / activation / RoPE / ALiBi, optimizers, RNG, FFT/spectral,
@@ -489,7 +491,11 @@ promotes them to `compileable`. See §9 for the concrete done / open / blocked s
 ### Open on this box (gfx1151 — workable now, no CDNA needed)
 - (flash_attn backward is now the **full forward variant surface** — MHA +
   GQA/MQA + attn_bias + sliding-window + logit-softcap — all runtime-wired)
-- Perf ladders / MFU sign-off for the compiled lanes (still correctness-first)
+- (`grad_clip_norm` now executes via `rocm_grad_clip_compiled`, x86 parity)
+- **Perf tuning** (LDS/blocked kernels) — the compiled lanes now carry *measured*
+  ratchet baselines (matmul + flash_attn fwd/bwd in `rocm_gfx1151_hot_paths.json`)
+  but stay correctness-first; a real MFU ladder (register/LDS blocking) is future
+  and is where ROCm's lead-performance-target status (Decision #28) gets earned
 - **Fused paged-attention** — the §5.6 movement core (`kv_cache_append/read/prune`)
   now executes via `rocm_kv_cache_compiled` (scatter/gather compose,
   execute-compare vs `KVCacheHandle`); a single fused gather→attention paged

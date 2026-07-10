@@ -79,7 +79,7 @@ clifford_rotor_sandwich,2,0,0,2,0,,directly_tested,2 direct test references
 clifford_vec_deriv,0,0,0,0,1,,covered_by_family,category default for 'geometric_algebra'
 clifford_wedge,1,0,0,1,1,,covered_by_family,category default for 'geometric_algebra'
 clip,15,0,1,15,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,15 direct test references
-clip_grad_norm,3,0,0,3,0,,directly_tested,3 direct test references
+clip_grad_norm,10,0,0,10,0,,directly_tested,10 direct test references
 clip_grad_value,2,0,0,2,0,,directly_tested,2 direct test references
 collective_permute,2,0,0,2,0,,directly_tested,2 direct test references
 compilation_cache,2,0,0,2,0,,directly_tested,2 direct test references

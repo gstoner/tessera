@@ -5310,6 +5310,61 @@ def _execute_rocm_compiled_normcompose(artifact: RuntimeArtifact,
                                  "rocm_normcompose_compiled")
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# grad_clip_norm lane (§5.5) — global gradient-norm clipping g*min(1,max_norm/‖g‖)
+# composed on the device reduce kernel: the L2 norm's global sum-of-squares runs
+# on the row-reduction kernel (the FLOP-heavy O(n) part), host does sqrt + the
+# clip scale + the elementwise scale. Single-tensor form (the atomic unit of the
+# pytree clip_grad_norm; total = ‖g‖). norm_type=inf uses max|g| (host). Matches
+# optim.clip_grad_norm within f32 tolerance (the reference accumulates in f64).
+# compiler_path="{x86,rocm}_grad_clip_compiled".
+# ─────────────────────────────────────────────────────────────────────────────
+def _execute_grad_clip(artifact: RuntimeArtifact, args: Any, target: str,
+                       path: str) -> Any:
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name != "tessera.grad_clip_norm":
+        raise ValueError(
+            f"{path} executor handles tessera.grad_clip_norm; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 1:
+        raise ValueError("grad_clip_norm requires one operand (the gradient)")
+    kwargs = op.get("kwargs") or {}
+    if kwargs.get("max_norm") is None:
+        raise ValueError("grad_clip_norm requires a max_norm kwarg")
+    max_norm = float(kwargs["max_norm"])
+    norm_type = float(kwargs.get("norm_type", 2.0))
+    values = _bind_launch_args(args, arg_names)
+    g = np.ascontiguousarray(_as_numpy(values[operand_names[0]]), np.float32)
+    if g.size == 0:
+        return g
+    if norm_type == float("inf"):
+        total = float(np.max(np.abs(g)))
+    else:
+        # L2 global norm: sum-of-squares on the device reduce kernel (row sum of
+        # the flattened g², one row), host sqrt. Matches optim.tree_l2_norm.
+        sumsq = float(_device_reduce_sum_rows(
+            (g * g).reshape(1, -1), target, np).reshape(-1)[0])
+        total = float(np.sqrt(sumsq))
+    scale = min(1.0, max_norm / (total + 1e-12))
+    return np.ascontiguousarray(g * np.float32(scale), np.float32)
+
+
+def _execute_x86_compiled_grad_clip(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` grad_clip_norm lane (composed)."""
+    return _execute_grad_clip(artifact, args, "x86", "x86_grad_clip_compiled")
+
+
+def _execute_rocm_compiled_grad_clip(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` grad_clip_norm lane (composed)."""
+    return _execute_grad_clip(artifact, args, "rocm", "rocm_grad_clip_compiled")
+
+
 def _execute_x86_compiled_softmax(artifact: RuntimeArtifact, args: Any) -> Any:
     """The ``target="x86"`` softmax lane: run the hand-written AVX-512 row-
     reduction kernel — numerically-stable softmax over the last axis, from
@@ -16017,6 +16072,7 @@ def _executor_table():
         "x86_msa_compiled": _execute_x86_compiled_msa,
         "x86_linear_attn_compiled": _execute_x86_compiled_linear_attn,
         "x86_normcompose_compiled": _execute_x86_compiled_normcompose,
+        "x86_grad_clip_compiled": _execute_x86_compiled_grad_clip,
         "x86_lamb_compiled": _execute_x86_compiled_lamb,
         "x86_muon_compiled": _execute_x86_compiled_muon,
         "x86_selective_ssm_compiled": _execute_x86_compiled_state_space,
@@ -16078,6 +16134,7 @@ def _executor_table():
         "rocm_sort_compiled": _execute_rocm_compiled_sort,
         "rocm_clifford_compiled": _execute_rocm_compiled_clifford,
         "rocm_normcompose_compiled": _execute_rocm_compiled_normcompose,
+        "rocm_grad_clip_compiled": _execute_rocm_compiled_grad_clip,
         "rocm_lamb_compiled": _execute_rocm_compiled_lamb,
         "rocm_muon_compiled": _execute_rocm_compiled_muon,
         "rocm_selective_ssm_compiled": _execute_rocm_compiled_state_space,

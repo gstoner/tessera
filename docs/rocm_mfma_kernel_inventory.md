@@ -501,10 +501,16 @@ promotes them to `compileable`. See §9 for the concrete done / open / blocked s
   still stay correctness-first overall; the deeper WMMA occupancy/dual-issue lever
   (Stage F "next lever") is where ROCm's lead-performance status (Decision #28)
   gets fully earned, and remains future
-- **Fused paged-attention** — the §5.6 movement core (`kv_cache_append/read/prune`)
-  now executes via `rocm_kv_cache_compiled` (scatter/gather compose,
-  execute-compare vs `KVCacheHandle`); a single fused gather→attention paged
-  kernel is the remaining step
+- **Fused paged-attention** — DONE. The §5.6 movement core
+  (`kv_cache_append/read/prune`) executes via `rocm_kv_cache_compiled`
+  (scatter/gather compose, execute-compare vs `KVCacheHandle`), and
+  `paged_attention(Q, kv_state, backend="rocm")` now fuses the gather (staging)
+  with the compiled FA-2 forward WMMA lane in a single launch — the folded
+  `(num_heads, S, head_dim)` batch is exactly the flash lane's `[..., S, D]`
+  contract, so all heads attend in one kernel. Reports `native_gpu` provenance
+  only on a genuine launch; `evaluator.paged_kv_native_equivalence(..., backend=
+  "rocm")` is the cross-substrate rung (`tests/unit/test_paged_kv_rocm_native.py`,
+  native-verified on gfx1151: f16 WMMA vs f32 reference max-abs-err ~3.7e-4)
 - `grad_clip_norm` (§5.5) — global-norm + scale; single-node
 - (moe transport is fully native now — `moe_dispatch` device gather, `moe_combine`
   device scatter-add, `grouped_swiglu` on the new `generate-rocm-gemm-f32-kernel`

@@ -1,5 +1,5 @@
 workstream,item,contract,status,contract_site,consumer,oracle,notes
-A,#1/#6,PagedKVState,live,tessera.cache.paged_kv.PagedKVState,tessera.ops.paged_attention / flash_attn(kv_state=),evaluator.paged_kv_equivalence + paged_kv_native_equivalence (Metal rung),Unifies contiguous/tiered/latent/quantized-tail KV; runs native on Metal.
+A,#1/#6,PagedKVState,live,tessera.cache.paged_kv.PagedKVState,tessera.ops.paged_attention / flash_attn(kv_state=),evaluator.paged_kv_equivalence + paged_kv_native_equivalence (Metal + ROCm rungs),Unifies contiguous/tiered/latent/quantized-tail KV; runs native on Metal and the compiled ROCm FA-2 lane.
 B,#2,SchedulePolicy / CacheHandoff,live,tessera.compiler.phase_specialization,phase_specialization.specialize / PhaseSpecializedProgram,verify_phase_split (prefill ▸ decode ≡ forward),"@jit(phase=,slo=) attaches the policy."
 C,#3,FusionCost / bytes_moved,live,tessera.compiler.fusion.FusionCost,fusion.select_attention_lowering (byte-scored selector),cost-monotonicity + feasibility invariant,Today FusionCost gates; the selector ranks variants by total bytes.
 D,#4,NumericPolicy.scale / quant_axis,live,tessera.compiler.primitive_coverage.NumericPolicy,smoothquant.migrate_activation_scale (producer pass),W8A8 parity vs fp16 + anti-fallback (direct-consume kernel fired),Backend already direct-consumes W8A8/int4; the producer pass is the gap.

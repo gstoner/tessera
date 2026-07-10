@@ -64,9 +64,11 @@ _CONSUMERS: tuple[ContractConsumer, ...] = (
         "A", "PagedKVState", "#1/#6",
         "tessera.cache.paged_kv.PagedKVState",
         "tessera.ops.paged_attention / flash_attn(kv_state=)",
-        "evaluator.paged_kv_equivalence + paged_kv_native_equivalence (Metal rung)",
+        "evaluator.paged_kv_equivalence + paged_kv_native_equivalence "
+        "(Metal + ROCm rungs)",
         _has("tessera", "ops"),  # refined below to check the op itself
-        "Unifies contiguous/tiered/latent/quantized-tail KV; runs native on Metal.",
+        "Unifies contiguous/tiered/latent/quantized-tail KV; runs native on "
+        "Metal and the compiled ROCm FA-2 lane.",
     ),
     ContractConsumer(
         "B", "SchedulePolicy / CacheHandoff", "#2",

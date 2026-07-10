@@ -664,6 +664,28 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
                   "tessera.losses / diffusion_schedule."),
         "execute_compare_fixture": _APPLE_GPU_STRUCTURED_COMPUTE_FIXTURE,
     } for op in ("ctc_loss", "edm_loss_weight")},
+    # Structured-compute tail (2026-07-09) — vision/layout transforms, recurrent
+    # cells, MoR routing, VLM resamplers, RoPE split/merge, and other
+    # host-structured primitives. All reach an executable apple_gpu path via
+    # apple_gpu_structured_compute_compiled and match the reference (ops.* /
+    # nn.functional.* / memory.*). ``compiled`` (direct execute/compare), NOT a
+    # bespoke fused Metal kernel — parity with the x86/ROCm structured-compute
+    # lanes.
+    **{op: {
+        "status": _COMPILED_STATUS,
+        "dtypes": ("fp32",),
+        "notes": (f"Structured-compute {op} via "
+                  "apple_gpu_structured_compute_compiled; matches the "
+                  "tessera reference primitive."),
+        "execute_compare_fixture": _APPLE_GPU_STRUCTURED_COMPUTE_FIXTURE,
+    } for op in (
+        "arange", "bidirectional_scan", "center_crop", "cross_attention",
+        "edm_precondition", "factorized_pos_emb", "gru_cell", "image_resize",
+        "interpolate", "lora_linear", "masked_fill", "masked_scatter",
+        "memory_read", "mor_partition", "mor_router", "mor_scatter", "mrope_2d",
+        "online_softmax_state", "pack", "patchify", "perceiver_resampler",
+        "pixel_shuffle", "pixel_unshuffle", "rearrange", "rope_merge",
+        "rope_split", "simple_rnn_cell", "spectral_norm", "tile_view", "unpack")},
     # Conformal-geometry lane (2026-07-09) — mobius f(z)=(az+b)/(cz+d) composed
     # on the interleaved-f32 Apple GPU complex_mul/complex_div lanes. ``compiled``
     # (direct execute/compare vs tessera.complex), parity with x86/rocm.

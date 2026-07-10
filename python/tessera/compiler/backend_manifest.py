@@ -697,6 +697,20 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
                   "tessera.complex."),
         "execute_compare_fixture": "tests/unit/test_apple_gpu_complex_compiled.py",
     },
+    # Philox RNG base lane (2026-07-10) — rng_uniform / rng_normal / dropout via
+    # apple_gpu_rng_compiled. Apple ships no device Philox kernel; the lane draws
+    # from the counter-based Philox-4x32-10 reference (tessera.rng_device) the
+    # x86/ROCm device kernels are bit-matched against. ``compiled`` (direct
+    # execute/compare), NOT a bespoke fused Metal kernel.
+    **{op: {
+        "status": _COMPILED_STATUS,
+        "dtypes": dts,
+        "notes": (f"Philox RNG {op} via apple_gpu_rng_compiled "
+                  "(Philox-4x32-10 reference core); matches "
+                  "tessera.rng_device."),
+        "execute_compare_fixture": "tests/unit/test_apple_gpu_rng_compiled.py",
+    } for op, dts in (("rng_uniform", ("fp32",)), ("rng_normal", ("fp32",)),
+                      ("dropout", ("fp32",)))},
     # Project 3 (2026-06-01) — 8 encode-eligible ops promoted to
     # ``hardware_verified``. Each carries:
     #   * runtime_symbol = the per-op encode-session C ABI symbol
@@ -4632,6 +4646,16 @@ def _single_gpu_compute_reference_manifest_for(
                 dtypes=dtypes,
                 feature_flags=("numpy", "philox", "reference_execution"),
                 notes="RNGKey Philox reference path",
+            ),
+            BackendKernelEntry(
+                target="apple_gpu",
+                status=_COMPILED_STATUS,
+                dtypes=dtypes,
+                feature_flags=("metal", "philox", "rng_distribution"),
+                notes=notes + " Executes via apple_gpu_rng_compiled "
+                              "(Philox reference core; Apple ships no device "
+                              "Philox kernel).",
+                execute_compare_fixture="tests/unit/test_apple_gpu_rng_compiled.py",
             ),
             BackendKernelEntry(
                 target="rocm",

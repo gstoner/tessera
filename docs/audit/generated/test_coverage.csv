@@ -148,7 +148,7 @@ dequantize_int8,4,0,1,4,0,,directly_tested,4 direct test references
 dequantize_nvfp4,9,0,2,9,0,fp32 fp4_e2m1 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,9 direct test references
 digamma,8,0,0,8,0,,directly_tested,8 direct test references
 div,7,2,0,9,0,bf16 f16 f32,directly_tested,9 direct test references
-dropout,23,8,3,31,0,f32 fp32 fp64,directly_tested,31 direct test references
+dropout,25,8,3,33,0,f32 fp32 fp64,directly_tested,33 direct test references
 dynamic_slice,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 dynamic_update_slice,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 dz,0,0,0,0,1,,covered_by_family,exercised by complex differential tests
@@ -358,26 +358,26 @@ retention,12,0,2,12,0,,directly_tested,12 direct test references
 rfft,6,0,1,6,0,fp32,directly_tested,6 direct test references
 rmsnorm,75,13,3,88,0,bf16 f16 f32 f64 fp32,directly_tested,88 direct test references
 rmsnorm_safe,6,5,0,11,0,bf16 f16 f32,directly_tested,11 direct test references
-rng_bernoulli,2,0,0,2,0,,directly_tested,2 direct test references
-rng_beta,2,0,0,2,0,,directly_tested,2 direct test references
-rng_categorical,2,0,0,2,0,,directly_tested,2 direct test references
+rng_bernoulli,3,0,0,3,0,,directly_tested,3 direct test references
+rng_beta,3,0,0,3,0,,directly_tested,3 direct test references
+rng_categorical,3,0,0,3,0,,directly_tested,3 direct test references
 rng_clone,0,0,0,0,1,,covered_by_family,category default for 'rng'
-rng_dirichlet,2,0,0,2,0,,directly_tested,2 direct test references
-rng_fold_in,2,0,0,2,0,,directly_tested,2 direct test references
-rng_gamma,2,0,0,2,0,,directly_tested,2 direct test references
+rng_dirichlet,3,0,0,3,0,,directly_tested,3 direct test references
+rng_fold_in,3,0,0,3,0,,directly_tested,3 direct test references
+rng_gamma,3,0,0,3,0,,directly_tested,3 direct test references
 rng_gibbs_sample,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_hmc_sample,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_key,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_langevin_sample,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_mala_sample,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_multinomial,0,0,0,0,1,,covered_by_family,category default for 'rng'
-rng_normal,7,0,0,7,0,fp32,directly_tested,7 direct test references
+rng_normal,9,0,0,9,0,fp32,directly_tested,9 direct test references
 rng_permutation,0,0,0,0,1,,covered_by_family,category default for 'rng'
-rng_poisson,2,0,0,2,0,,directly_tested,2 direct test references
-rng_randint,2,0,0,2,0,,directly_tested,2 direct test references
-rng_split,2,0,0,2,0,,directly_tested,2 direct test references
-rng_truncated_normal,2,0,0,2,0,,directly_tested,2 direct test references
-rng_uniform,12,0,0,12,0,fp32,directly_tested,12 direct test references
+rng_poisson,3,0,0,3,0,,directly_tested,3 direct test references
+rng_randint,3,0,0,3,0,,directly_tested,3 direct test references
+rng_split,3,0,0,3,0,,directly_tested,3 direct test references
+rng_truncated_normal,3,0,0,3,0,,directly_tested,3 direct test references
+rng_uniform,16,0,0,16,0,fp32,directly_tested,16 direct test references
 roll,4,0,0,4,0,,directly_tested,4 direct test references
 rope,20,10,0,30,0,bf16,directly_tested,30 direct test references
 rope_merge,8,0,1,8,0,fp16 fp32,directly_tested,8 direct test references

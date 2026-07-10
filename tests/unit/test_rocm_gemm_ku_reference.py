@@ -57,6 +57,19 @@ def test_ku_reference_matches_numpy(M, N, K, mt, nt, ku):
     np.testing.assert_allclose(d, ref, rtol=5e-3, atol=5e-3)
 
 
+@pytest.mark.parametrize("mt,nt,ku", [(0, 4, 2), (2, 0, 2), (2, 4, 0),
+                                       (-1, 4, 2), (2, 4, -1)])
+def test_ku_rejects_nonpositive_tiling(mt, nt, ku):
+    # mt/nt==0 would div-by-zero in gridFor; ku==0 makes the K-loop increment by
+    # 0 (GPU hang). The entry must reject (rc != 0) before launch.
+    fn = _ku_or_skip()
+    a = np.zeros((16, 16), np.float16)
+    d = np.zeros((16, 16), np.float32)
+    rc = fn(a.ctypes.data_as(ctypes.c_void_p), a.ctypes.data_as(ctypes.c_void_p),
+            d.ctypes.data_as(ctypes.c_void_p), 16, 16, 16, mt, nt, ku)
+    assert rc != 0
+
+
 def test_ku1_equals_production_semantics():
     # KU=1 is exactly the production register-blocked kernel — must be correct.
     fn = _ku_or_skip()

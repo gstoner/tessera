@@ -701,7 +701,9 @@ int runGemmPipe(const char* type, const char* wmma, const void* A,
 int runGemmKU(const char* type, const char* wmma, const void* A, const void* B,
               void* D, int M, int N, int K, int mt, int nt, int ku,
               size_t elemBytes) {
-  if (M <= 0 || N <= 0 || K <= 0) return 1;
+  // Reject nonpositive tiling before gridFor (mt/nt==0 → div-by-zero) or the
+  // kernel (ku==0 → K-loop increments by 0 → GPU hang) — mirrors benchVariantKU.
+  if (M <= 0 || N <= 0 || K <= 0 || mt <= 0 || nt <= 0 || ku <= 0) return 1;
   hipModule_t mod = nullptr;
   hipFunction_t fn = nullptr;
   std::string name = std::string("runku") + type;

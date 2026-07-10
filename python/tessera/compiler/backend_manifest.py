@@ -730,6 +730,26 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
                   "lane); matches numpy.sum."),
         "execute_compare_fixture": "tests/unit/test_apple_gpu_reduce_compiled.py",
     },
+    # Scatter lane (2026-07-10) — scatter/scatter_add/scatter_reduce via
+    # apple_gpu_scatter_compiled (numpy indexed store; Apple ships no device
+    # scatter kernel). ``compiled`` (direct execute/compare).
+    **{op: {
+        "status": _COMPILED_STATUS,
+        "dtypes": ("fp32",),
+        "notes": (f"Scatter {op} via apple_gpu_scatter_compiled (numpy indexed "
+                  "store reference); matches numpy scatter."),
+        "execute_compare_fixture": "tests/unit/test_apple_gpu_scatter_compiled.py",
+    } for op in ("scatter", "scatter_add", "scatter_reduce")},
+    # Sparse + MoE lane (2026-07-10) — spmm_csr/spmm_coo/sddmm/bsmm/moe via
+    # apple_gpu_sparse_compiled (numpy CSR SpMM / (a@b)*mask / a@b / routed
+    # per-token expert GEMVs; Apple ships no device sparse/moe kernel).
+    **{op: {
+        "status": _COMPILED_STATUS,
+        "dtypes": ("fp32",),
+        "notes": (f"Sparse/MoE {op} via apple_gpu_sparse_compiled (numpy "
+                  "reference); matches numpy / tessera."),
+        "execute_compare_fixture": "tests/unit/test_apple_gpu_sparse_compiled.py",
+    } for op in ("spmm_csr", "spmm_coo", "sddmm", "bsmm", "moe")},
     # Philox RNG base lane (2026-07-10) — rng_uniform / rng_normal / dropout via
     # apple_gpu_rng_compiled. Apple ships no device Philox kernel; the lane draws
     # from the counter-based Philox-4x32-10 reference (tessera.rng_device) the

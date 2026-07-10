@@ -10045,7 +10045,9 @@ def _rocm_f32_gemm(a: Any, b: Any, np: Any) -> Any:
     arr = (cv * len(launch_args))()
     for i, val in enumerate(launch_args):
         arr[i] = ctypes.cast(ctypes.byref(val), cv)
-    gx = (n_c + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+    # The kernel is register-blocked: one thread per TM×TN=4×4 output tile.
+    n_tiles = ((M + 3) // 4) * ((N + 3) // 4)
+    gx = (n_tiles + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
     rc = hip.hipModuleLaunchKernel(fn, max(gx, 1), 1, 1, _GRID_BLOCKDIM, 1, 1,
                                    0, None, arr, None)
     if rc != 0:

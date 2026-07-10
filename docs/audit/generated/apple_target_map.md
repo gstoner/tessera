@@ -54,12 +54,12 @@ and ``docs/apple_backend.md`` (Metal 4 implementation-state review):
 
 | Family | Rows | apple_gpu fused | apple_cpu accelerate_native |
 |---|---:|---:|---:|
-| tensor | 90 | 21 | 2 |
+| tensor | 93 | 21 | 2 |
 | ga | 19 | 19 | 0 |
 | ebm | 14 | 14 | 0 |
 | m7 | 4 | 4 | 0 |
 
-## tensor (90)
+## tensor (93)
 
 | Op | apple_cpu status | cpu framework | cpu dtypes | cpu symbol | execution_kind | apple_gpu status | gpu framework | gpu dtypes | gpu symbol | gpu_dispatch | proof |
 |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -84,6 +84,7 @@ and ``docs/apple_backend.md`` (Metal 4 implementation-state review):
 | denoising_score_matching_loss | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | depthwise_conv1d | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | dequant_matmul | reference | numpy_reference | fp32 | - | numpy_reference | fused | - | fp32 | tessera_apple_gpu_dequant_matmul_f32 | driver | tests/unit/test_apple_*.py |
+| dropout | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | edm_loss_weight | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | edm_precondition | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | factorized_pos_emb | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
@@ -135,6 +136,8 @@ and ``docs/apple_backend.md`` (Metal 4 implementation-state review):
 | rearrange | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | relu | reference | numpy_reference | fp32 | - | numpy_reference | fused | - | fp32,fp16,bf16 | tessera_apple_gpu_mpsgraph_unary_f32 | driver | tests/unit/test_apple_*.py |
 | rmsnorm | reference | numpy_reference | fp32 | - | numpy_reference | hardware_verified | Metal (MSL) | fp32,fp16,bf16 | tessera_apple_gpu_rmsnorm_f32 | driver | tests/unit/test_apple_backend_roadmap.py |
+| rng_normal | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
+| rng_uniform | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | rope | reference | numpy_reference | fp32 | - | numpy_reference | hardware_verified | Metal (MSL) | fp32,fp16,bf16 | tessera_apple_gpu_rope_f32 | driver | tests/unit/test_apple_backend_roadmap.py |
 | rope_merge | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | rope_split | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |

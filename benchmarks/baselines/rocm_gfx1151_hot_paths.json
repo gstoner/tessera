@@ -7,106 +7,121 @@
       "shape": "512x512x512",
       "dtype": "f16",
       "mode": "wmma",
-      "median_ms": 0.6391,
-      "max_latency_ms": 1.2781,
-      "achieved_tflops": 0.42,
-      "pct_peak": 0.00707,
-      "attainment_floor": 0.00353
+      "median_ms": 0.6501,
+      "max_latency_ms": 1.3002,
+      "achieved_tflops": 0.4129,
+      "pct_peak": 0.00695,
+      "attainment_floor": 0.00347
     },
     {
       "op": "matmul",
       "shape": "1024x1024x1024",
       "dtype": "f16",
       "mode": "wmma",
-      "median_ms": 5.6278,
-      "max_latency_ms": 11.2557,
-      "achieved_tflops": 0.3816,
-      "pct_peak": 0.00642,
-      "attainment_floor": 0.00321
+      "median_ms": 5.057,
+      "max_latency_ms": 10.1139,
+      "achieved_tflops": 0.4247,
+      "pct_peak": 0.00715,
+      "attainment_floor": 0.00358
     },
     {
       "op": "matmul",
       "shape": "2048x2048x2048",
       "dtype": "f16",
       "mode": "wmma",
-      "median_ms": 10.8858,
-      "max_latency_ms": 21.7717,
-      "achieved_tflops": 1.5782,
-      "pct_peak": 0.02657,
-      "attainment_floor": 0.01328
+      "median_ms": 10.4393,
+      "max_latency_ms": 20.8786,
+      "achieved_tflops": 1.6457,
+      "pct_peak": 0.02771,
+      "attainment_floor": 0.01385
     },
     {
       "op": "flash_attn",
       "shape": "1x8x512x64",
       "dtype": "f16",
       "mode": "flash_attn",
-      "median_ms": 2.9053,
-      "max_latency_ms": 5.8106,
-      "achieved_tflops": 0.1848,
-      "pct_peak": 0.00311,
-      "attainment_floor": 0.00155
+      "median_ms": 2.8948,
+      "max_latency_ms": 5.7897,
+      "achieved_tflops": 0.1855,
+      "pct_peak": 0.00312,
+      "attainment_floor": 0.00156
     },
     {
       "op": "flash_attn",
       "shape": "1x8x1024x64",
       "dtype": "f16",
       "mode": "flash_attn",
-      "median_ms": 4.6324,
-      "max_latency_ms": 9.2649,
-      "achieved_tflops": 0.4636,
-      "pct_peak": 0.0078,
-      "attainment_floor": 0.0039
+      "median_ms": 4.735,
+      "max_latency_ms": 9.47,
+      "achieved_tflops": 0.4535,
+      "pct_peak": 0.00764,
+      "attainment_floor": 0.00382
     },
     {
       "op": "flash_attn",
       "shape": "1x16x1024x128",
       "dtype": "f16",
       "mode": "flash_attn",
-      "median_ms": 11.7242,
-      "max_latency_ms": 23.4484,
-      "achieved_tflops": 0.7327,
-      "pct_peak": 0.01233,
-      "attainment_floor": 0.00617
+      "median_ms": 11.9214,
+      "max_latency_ms": 23.8427,
+      "achieved_tflops": 0.7205,
+      "pct_peak": 0.01213,
+      "attainment_floor": 0.00607
     },
     {
       "op": "flash_attn_bwd",
       "shape": "1x8x512x64",
       "dtype": "f16",
       "mode": "flash_attn_bwd",
-      "median_ms": 43.5883,
-      "max_latency_ms": 87.1767
+      "median_ms": 8.4768,
+      "max_latency_ms": 16.9536,
+      "achieved_tflops": 0.1583,
+      "pct_peak": 0.00267,
+      "attainment_floor": 0.00134
     },
     {
       "op": "flash_attn_bwd",
       "shape": "1x16x1024x128",
       "dtype": "f16",
       "mode": "flash_attn_bwd",
-      "median_ms": 88.1148,
-      "max_latency_ms": 176.2297
+      "median_ms": 54.0107,
+      "max_latency_ms": 108.0213,
+      "achieved_tflops": 0.3976,
+      "pct_peak": 0.00669,
+      "attainment_floor": 0.00334
     },
     {
       "op": "gemm_f32",
       "shape": "256x256x256",
       "dtype": "f32",
       "mode": "gemm_f32",
-      "median_ms": 1.9705,
-      "max_latency_ms": 3.941
+      "median_ms": 1.9131,
+      "max_latency_ms": 3.8261,
+      "achieved_tflops": 0.0175,
+      "pct_peak": 0.00059,
+      "attainment_floor": 0.0003
     },
     {
       "op": "gemm_f32",
       "shape": "512x512x512",
       "dtype": "f32",
       "mode": "gemm_f32",
-      "median_ms": 2.8024,
-      "max_latency_ms": 5.6048
+      "median_ms": 2.8079,
+      "max_latency_ms": 5.6159,
+      "achieved_tflops": 0.0956,
+      "pct_peak": 0.00322,
+      "attainment_floor": 0.00161
     },
     {
       "op": "gemm_f32",
       "shape": "1024x1024x1024",
       "dtype": "f32",
       "mode": "gemm_f32",
-      "median_ms": 7.5255,
-      "max_latency_ms": 15.051
+      "median_ms": 7.9324,
+      "max_latency_ms": 15.8648,
+      "achieved_tflops": 0.2707,
+      "pct_peak": 0.00912,
+      "attainment_floor": 0.00456
     }
   ]
 }

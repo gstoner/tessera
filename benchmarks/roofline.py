@@ -45,17 +45,32 @@ def _bytes_of(dtype: str) -> int:
             "float32": 4}.get(dtype, 2)
 
 
+#: flash_attn backward ÷ forward FLOP ratio. FlashAttention-2 (Dao 2023, §2.2)
+#: states the backward pass is ~2.5× the forward's matmul FLOPs (dQ = dP·K,
+#: dK = dPᵀ·Q, dV = Pᵀ·dO, dP = dO·Vᵀ, plus the dS scaling and the on-chip
+#: S = Q·Kᵀ recompute). Tessera's kernel ADDITIONALLY recomputes the forward O
+#: (the fa_pre pass), so its achieved attainment against this algorithmic model
+#: is a lower bound — consistent with the end-to-end honesty note above.
+_FLASH_BWD_FWD_RATIO = 2.5
+
+
 def op_flops(op: str, shape: str) -> Optional[int]:
     """FLOPs for one invocation of ``op`` at ``shape`` (the ratchet shape string),
-    or ``None`` for an op with no FLOP model. matmul ``MxNxK`` = 2·M·N·K;
-    flash_attn ``BxHxSxD`` = 4·B·H·S²·D (QKᵀ + PV, softmax negligible)."""
+    or ``None`` for an op with no FLOP model. matmul / gemm_f32 ``MxNxK`` = 2·M·N·K;
+    flash_attn ``BxHxSxD`` = 4·B·H·S²·D (QKᵀ + PV, softmax negligible);
+    flash_attn_bwd = 2.5× the forward (``_FLASH_BWD_FWD_RATIO``)."""
     dims = [int(x) for x in shape.split("x")]
-    if op == "matmul" and len(dims) == 3:
+    # gemm_f32 is a plain GEMM (the register-blocked f32 VALU kernel) — same
+    # 2·M·N·K work as the WMMA matmul, just f32 storage (gated vs the 29.7 TF peak).
+    if op in ("matmul", "gemm_f32") and len(dims) == 3:
         m, n, k = dims
         return 2 * m * n * k
     if op == "flash_attn" and len(dims) == 4:
         b, h, s, d = dims
         return 4 * b * h * s * s * d
+    if op == "flash_attn_bwd" and len(dims) == 4:
+        b, h, s, d = dims
+        return int(_FLASH_BWD_FWD_RATIO * 4 * b * h * s * s * d)
     return None
 
 
@@ -63,12 +78,15 @@ def op_bytes(op: str, shape: str, dtype: str) -> Optional[int]:
     """Minimum DRAM traffic (bytes) for ``op`` — operands + result, no reuse."""
     w = _bytes_of(dtype)
     dims = [int(x) for x in shape.split("x")]
-    if op == "matmul" and len(dims) == 3:
+    if op in ("matmul", "gemm_f32") and len(dims) == 3:
         m, n, k = dims
         return (m * k + k * n + m * n) * w
     if op == "flash_attn" and len(dims) == 4:
         b, h, s, d = dims
         return 4 * b * h * s * d * w          # Q, K, V, O
+    if op == "flash_attn_bwd" and len(dims) == 4:
+        b, h, s, d = dims
+        return 7 * b * h * s * d * w          # Q, K, V, dO in; dQ, dK, dV out
     return None
 
 

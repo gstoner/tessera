@@ -50,15 +50,17 @@ FLASH_ATTN_SHAPES = [(1, 8, 512, 64), (1, 8, 1024, 64), (1, 16, 1024, 128)]
 # Compiled FA-2 BACKWARD ladder (dQ/dK/dV), (batch, heads, seq, head_dim), f16
 # storage / f32 accumulate — the reverse-mode hot path
 # (rocm_flash_attn_bwd_compiled: fa_pre/fa_dkdv/fa_dq + the forward-O recompute).
-# Correctness-first (no LDS/perf tuning), so these ratchet rows are a regression
-# floor, not an MFU claim (pct_peak is expectedly tiny — repo Decision #26).
+# Correctness-first (no LDS/perf tuning), so pct_peak is expectedly small; it is
+# now FLOP-modeled (roofline: 2.5× the forward — the FA-2 ratio), so these rows
+# carry a real attainment floor, not just a latency cap (repo Decision #26).
 FLASH_ATTN_BWD_SHAPES = [(1, 8, 512, 64), (1, 16, 1024, 128)]
 
 # Register-blocked f32 GEMM ladder (M, N, K) — the plain-VALU f32 kernel
 # (generate-rocm-gemm-f32-kernel) grouped-SwiGLU rides. TM×TN=4×4 output-tile
 # register blocking is a ~1.6x win over one-thread-per-output at 1024³
-# (STRIX_HALO Stage F: register-budget tiling is the lever). Correctness-first
-# still — the ratchet rows are a regression floor, not an MFU claim.
+# (STRIX_HALO Stage F: register-budget tiling is the lever). FLOP-modeled
+# (roofline: 2·M·N·K, gated vs the 29.7 TF f32 peak), so its rows now carry an
+# attainment floor alongside the latency cap.
 GEMM_F32_SIZES = [(256, 256, 256), (512, 512, 512), (1024, 1024, 1024)]
 
 

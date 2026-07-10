@@ -315,6 +315,23 @@ fundamentally lower-register-footprint design (or a datacenter arch where global
 bandwidth is the bottleneck and the kept LDS/pipe/KU rungs pay off). The KU rung
 is retained as a correctness-verified reference for those targets.
 
+**Stage H addendum 2 — chunked-parallel SSD selective_ssm on ROCm (2026-07-10,
+negative).** #338 kept ROCm `selective_ssm` on the sequential scan because "ROCm's
+only batched GEMM is WMMA (f16) → chunked f32 would overflow." #356's native f32
+GEMM device kernel removed that blocker, so the chunked-parallel SSD form (the
+standard Mamba-2 decomposition, already the x86 default for scalar-A) was brought
+to ROCm f32 (`_rocm_selective_ssm_chunked` on `_rocm_batched_gemm_f32`).
+**Regresses 4–100×** vs the single-launch sequential scan (B2S64: 0.25×; B4S256:
+0.04×; B4S512D64: 0.01×) — measured on gfx1151. Root cause: `_rocm_batched_gemm_f32`
+loops `_rocm_f32_gemm`, which does a full hipMalloc/H2D/launch/D2H round-trip per
+call, and the SSD issues many small bmms (per chunk × batch × 3 contractions); the
+per-launch overhead dwarfs the one-launch sequential kernel. x86 wins with the same
+decomposition only because its batched GEMM is a host-side BLAS loop with no device
+round-trip. Kept as a **correctness-verified reference rung** (matches the scan
+~1e-6, verified past the fp16 range), NOT the default — like the K-unroll rung. The
+prerequisite for a ROCm win is a **single-launch batched f32 GEMM** (one H2D, grid
+over batch, one D2H) + resident buffers across the SSD's chunk bmms — a follow-up.
+
 ### Stage G — flash_attn executes on gfx1151 (2026-06-23): second op after matmul
 
 `flash_attn` now executes natively on the AMD GPU — the **second op after

@@ -10106,6 +10106,27 @@ def _rocm_f32_gemm(a: Any, b: Any, np: Any) -> Any:
     return out
 
 
+def _rocm_batched_gemm_f32(a: Any, b: Any, np: Any) -> Any:
+    """np.matmul semantics over leading batch dims, each [M,K]@[K,N] on the native
+    gfx1151 f32 GEMM device kernel (mirrors ``_x86_batched_gemm``). Batch dims of
+    ``a``/``b`` broadcast (NumPy rules). Used by the chunked-parallel SSD scan."""
+    a = np.asarray(a, np.float32)
+    b = np.asarray(b, np.float32)
+    if a.ndim < 2 or b.ndim < 2:
+        raise ValueError("batched_gemm needs rank>=2 operands")
+    m, k = int(a.shape[-2]), int(a.shape[-1])
+    if int(b.shape[-2]) != k:
+        raise ValueError(
+            f"batched_gemm inner dims must match; got {a.shape} @ {b.shape}")
+    n = int(b.shape[-1])
+    batch = np.broadcast_shapes(a.shape[:-2], b.shape[:-2])
+    a_b = np.broadcast_to(a, batch + (m, k)).reshape(-1, m, k)
+    b_b = np.broadcast_to(b, batch + (k, n)).reshape(-1, k, n)
+    nb = int(a_b.shape[0])
+    out = np.stack([_rocm_f32_gemm(a_b[i], b_b[i], np) for i in range(nb)], axis=0)
+    return out.reshape(*batch, m, n)
+
+
 def _moe_grouped_swiglu_native(x_packed: Any, w_gate: Any, w_up: Any,
                                w_down: Any, group_sizes: Any, np: Any) -> Any:
     """Grouped SwiGLU over contiguous per-expert token groups, run on the f32
@@ -14794,16 +14815,50 @@ def _execute_rocm_compiled_sparse(artifact: RuntimeArtifact, args: Any) -> Any:
 _rocm_ssm_hsaco_cache: dict[tuple[str, str], bytes] = {}
 
 
+def _rocm_selective_ssm_chunked(x, A, B, C, delta, gate, state, np,
+                                chunk_size: int = 128):
+    """Chunked-parallel (SSD) selective_ssm for scalar-state A on gfx1151 — the
+    three batched contractions run on the native f32 GEMM device kernel (#356),
+    the per-chunk state recurrence on host. The standard Mamba-2 decomposition;
+    matches the sequential scan (~1e-6), scalar-A ``(D,)`` f32 only.
+
+    CORRECTNESS-VERIFIED REFERENCE RUNG, NOT the production path. Measured on
+    gfx1151 it is a 4–100× REGRESSION vs the sequential scan (B2S64: 0.25×;
+    B4S512D64: 0.01×): ``_rocm_batched_gemm_f32`` loops ``_rocm_f32_gemm``, which
+    does a full hipMalloc/H2D/launch/D2H round-trip PER call, and the SSD issues
+    many small bmms (per chunk × batch × 3 contractions) — launch overhead dwarfs
+    the single-launch sequential kernel. Unlike x86 (whose batched GEMM is a
+    host-side BLAS loop with no device round-trip), ROCm needs a single-launch
+    BATCHED f32 GEMM + resident buffers before this can win. Kept for correctness
+    parity + as the substrate for that follow-up (cf. the K-unroll GEMM reference
+    rung, STRIX_HALO_EXECUTION_PLAN). Raises ``_RocmCompiledUnavailable`` if the
+    f32 GEMM lane can't run."""
+    from . import _mamba_ssd as _ssd
+    if not _rocm_compiled_gemm_f32_available():
+        raise _RocmCompiledUnavailable(
+            "rocm f32 GEMM lane unavailable — no chunked SSD")
+
+    def bmm(a, b):
+        return _rocm_batched_gemm_f32(a, b, np)
+
+    return _ssd.selective_ssm_parallel(
+        x, A, B, C, delta, gate=gate, state=state,
+        chunk_size=int(chunk_size), matmul3d=bmm)
+
+
 def _rocm_selective_ssm(x: Any, A: Any, B: Any, C: Any, delta: Any,
                         gate: Any, state: Any, np: Any) -> Any:
     """y[B,S,D] = Mamba2 selective scan on the gfx1151 kernel. x/A/B/C/delta + y
     storage is f32/f16/bf16 (the state + exp + accumulate stay f32 in-kernel).
 
-    All dtypes run the exact sequential per-(b,d) scan here — the chunked-parallel
-    SSD form is x86-only: ROCm's only batched GEMM is WMMA (f16/bf16 inputs), so a
-    chunked f32 path would have to cast the C·B / state-update contractions to
-    f16, overflowing (→inf/NaN) on valid f32 inputs whose magnitude exceeds the
-    fp16 range. Keeping f32 (and low-precision) on this scan stays finite + exact.
+    ALL dtypes run the exact sequential per-(b,d) scan — a single kernel launch,
+    the production path. The chunked-parallel SSD form now HAS a numerically-safe
+    f32 substrate on ROCm (``_rocm_selective_ssm_chunked``, on the #356 f32 GEMM,
+    which #338's f16-overflow blocker no longer applies to), but it is a measured
+    4–100× regression here (per-call GEMM H2D/D2H overhead — see that helper) and
+    stays a correctness reference rung, NOT the default, until a single-launch
+    batched f32 GEMM lands. x86 routes scalar-A f32 to chunked because its batched
+    GEMM has no device round-trip; ROCm does not.
     """
     store = _ssm_store_dtype(x, np)
     esz = 4 if store == np.float32 else 2                       # bytes/element

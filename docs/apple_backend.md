@@ -2,17 +2,18 @@
 
 > **This is the canonical state + implementation reference for Tessera's
 > Apple M-series backend** — CPU (Phase 8.2, Accelerate/BNNS) and GPU
-> (Phases 8.3 → 8.4.8 + the Metal 4 lane). It consolidates what used to be
-> four separate documents (overview, kernel inventory, deep-learning
-> datatypes, and the Metal 4 integration review); those paths now redirect
-> here.
+> (Phases 8.3 → 8.4.8, the Metal 4 lane, and the `runtime.launch()` op-parity
+> lanes). It is the single narrative doc for the Apple backend; the design
+> plans and surveys that fed it (Metal 4 adoption ladder, control-flow
+> lowering, resident-activations plan, Tier-2/3 plan, capability roadmap, MLX
+> ecosystem survey) have all landed and are archived under
+> [`docs/audit/backend/apple/archive/`](audit/backend/apple/archive/) — their
+> old `docs/*.md` paths keep a one-line redirect here.
 >
-> **Forward-looking design/ladder docs are kept separate** (they are plans,
-> not state):
-> - [apple_gpu_metal4_adoption.md](apple_gpu_metal4_adoption.md) — Metal 4 / MSL 4.0 adoption ladder (M0–M8 + P-series)
-> - [apple_gpu_control_flow_lowering.md](apple_gpu_control_flow_lowering.md) — control-flow lowering design (Phase G)
-> - [apple_gpu_resident_activations_plan.md](apple_gpu_resident_activations_plan.md) — GPU-resident activation / device-handle scoping
-> - [apple_gpu_tier2_tier3_plan.md](apple_gpu_tier2_tier3_plan.md) — Tier 2 / Tier 3 implementation plan
+> **The kernel + lane inventory is its own doc:**
+> [apple_gpu_kernel_inventory.md](apple_gpu_kernel_inventory.md) — the native
+> MSL/MPS/MPSGraph/linalg/RNG symbol tables **plus** the `runtime.launch()`
+> reference/compute lanes that reach op-family parity with x86/ROCm.
 >
 > Related: GA/EBM milestone — [docs/status/ga_ebm_milestone.md](status/ga_ebm_milestone.md).
 
@@ -41,6 +42,17 @@
 - **GPU linear algebra** — dense f32 Cholesky / LU / triangular-solve / QR /
   SVD via `MPSMatrix*` + custom MSL Jacobi kernels (the one lane MPSGraph
   cannot supply).
+- **Op-family parity (2026-07-10)** — beyond the perf kernels above, Apple GPU
+  has `runtime.launch()` lanes for the same op families the x86/ROCm device
+  lanes cover: conv, losses, complex/geometric + conformal, Philox RNG, linalg
+  (lu/qr/svd/cholesky-solve) + einsum/factorized, optimizers, reductions +
+  0-move/sort, scatter, sparse/MoE, MLA latent-KV, and speculative-decode. Each
+  is F4-gated against the standalone reference and reported honestly per lane —
+  `native_gpu` where it genuinely dispatches to MPS/MSL (loss/complex/reduce,
+  numpy fallback off-Metal), `reference_cpu` where Apple ships no device kernel.
+  The only remaining gap is `quantize`/`dequantize` fp4/fp6/fp8/nvfp4, gated on
+  the macOS 27 / FP8 (Metal 4.1) tensor toolchain. Full table:
+  [apple_gpu_kernel_inventory.md](apple_gpu_kernel_inventory.md) §2.
 
 f32 is fully wired. f16/bf16 are wired for matmul, rope, softmax, gelu,
 flash_attn, and the fusion chains.
@@ -185,182 +197,17 @@ ordering.
 
 ## GPU kernel inventory
 
-The runtime dispatches one of these C ABI symbols per Graph IR op or
-recognized fusion chain. All symbols live in
-`src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm`
-(Darwin) and `apple_gpu_runtime_stub.cpp` (non-Darwin).
+> The full kernel + lane inventory now lives in its own doc:
+> **[apple_gpu_kernel_inventory.md](apple_gpu_kernel_inventory.md)** — the native
+> MSL / MPS / MPSGraph / linear-algebra / RNG symbol tables (single-op, fused
+> 2-op/3-op, the MPSGraph long tail, the `MPSMatrix*` factorizations,
+> capability/diagnostic symbols, the ABI summary, and the core-9 coverage
+> matrix) **plus** the `runtime.launch()` reference/compute lanes that reach
+> op-family parity with x86/ROCm (§2). Machine-readable truth:
+> [`runtime_abi.csv`](audit/generated/runtime_abi.csv).
 
-> The **machine-readable** truth for the full exported symbol surface is the
-> generated `docs/audit/generated/runtime_abi.csv` (drift-gated). The tables
-> below are the curated human reference.
-
-### Single-op kernels
-
-| Symbol | Graph IR op | Backend | Phase | Constraints |
-|--------|-------------|---------|-------|-------------|
-| `tessera_apple_gpu_mps_matmul_f32` | `tessera.matmul` (f32) | MPSMatrixMultiplication | 8.3 | rank-2, static |
-| `tessera_apple_gpu_mps_matmul_f16` | `tessera.matmul` (f16) | MPSMatrixMultiplication | 8.4.4 | rank-2, static |
-| `tessera_apple_gpu_mps_matmul_bf16` | `tessera.matmul` (bf16) | fp32-conversion + MPS | 8.4.4 | rank-2, static (no native MPS bf16) |
-| `tessera_apple_gpu_rope_f32` | `tessera.rope` (f32) | MSL | 8.4.0 | rank-2, K%2==0, X.shape == Theta.shape |
-| `tessera_apple_gpu_rope_f16` | `tessera.rope` (f16) | MSL `half` | 8.4.4.1 | rank-2, mixed-precision (fp32 internal) |
-| `tessera_apple_gpu_rope_bf16` | `tessera.rope` (bf16) | fp32-conversion | 8.4.4.1 | rank-2 |
-| `tessera_apple_gpu_softmax_f32` | `tessera.softmax` (f32) | MSL | 8.4.2 | rank-2, axis=-1 |
-| `tessera_apple_gpu_softmax_f16` | `tessera.softmax` (f16) | MSL `half` | 8.4.4.1 | rank-2, axis=-1 |
-| `tessera_apple_gpu_softmax_bf16` | `tessera.softmax` (bf16) | fp32-conversion | 8.4.4.1 | rank-2, axis=-1 |
-| `tessera_apple_gpu_gelu_f32` | `tessera.gelu` (f32) | MSL | 8.4.2 | rank-2, tanh-approx |
-| `tessera_apple_gpu_gelu_f16` | `tessera.gelu` (f16) | MSL `half` | 8.4.4.1 | rank-2 |
-| `tessera_apple_gpu_gelu_bf16` | `tessera.gelu` (bf16) | fp32-conversion | 8.4.4.1 | rank-2 |
-| `tessera_apple_gpu_flash_attn_f32` | `tessera.flash_attn` (f32) | MSL (online softmax) | 8.4.1 | rank-3, head_dim ≤ 256, optional causal mask |
-| `tessera_apple_gpu_flash_attn_f16` | `tessera.flash_attn` (f16) | MSL (mixed precision) | 8.4.4.2 | rank-3, head_dim ≤ 256 |
-| `tessera_apple_gpu_flash_attn_bf16` | `tessera.flash_attn` (bf16) | fp32-conversion | 8.4.4.2 | rank-3, head_dim ≤ 256 |
-
-### Fused 2-op kernels
-
-| Symbol | Graph IR chain | Backend | Phase | Constraints |
-|--------|----------------|---------|-------|-------------|
-| `tessera_apple_gpu_matmul_softmax_f32` | `matmul → softmax` (f32) | MSL fused | 8.4.3 | rank-2, axis=-1, N ≤ 256, single-use intermediate |
-| `tessera_apple_gpu_matmul_softmax_f16` | `matmul → softmax` (f16) | MSL fused (mixed precision) | 8.4.4.2 | rank-2, N ≤ 256 |
-| `tessera_apple_gpu_matmul_softmax_bf16` | `matmul → softmax` (bf16) | fp32-conversion + MSL | 8.4.4.2 | rank-2, N ≤ 256 |
-| `tessera_apple_gpu_matmul_softmax_tiled_f32` | `matmul → softmax` (f32, large N) | MSL + threadgroup memory | 8.4.6 | rank-2, axis=-1, N ≤ 8192 |
-| `tessera_apple_gpu_matmul_gelu_f32` | `matmul → gelu` (f32) | MSL fused | 8.4.7 | rank-2, N ≤ 256 |
-| `tessera_apple_gpu_matmul_rmsnorm_f32` | `matmul → rmsnorm[_safe]` (f32) | MSL fused | 8.4.7 | rank-2, N ≤ 256, eps from dispatcher (1e-5 / 1e-6) |
-
-The `matmul_softmax_f32` symbol is a **router** (Phase 8.4.6): per-thread
-variant for N ≤ 256, threadgroup-tiled for N > 256, reference fallback for
-N > 8192.
-
-### Fused 3-op kernels
-
-| Symbol | Graph IR chain | Backend | Phase | Constraints |
-|--------|----------------|---------|-------|-------------|
-| `tessera_apple_gpu_matmul_softmax_matmul_f32` | `matmul → softmax → matmul` (f32) | MSL fused (full attention block) | 8.4.5 | rank-2, N ≤ 256, P ≤ 256, single-use intermediates |
-| `tessera_apple_gpu_matmul_softmax_matmul_f16` | `matmul → softmax → matmul` (f16) | MSL fused (mixed precision) | 8.4.5 | rank-2, N ≤ 256, P ≤ 256 |
-| `tessera_apple_gpu_matmul_softmax_matmul_bf16` | `matmul → softmax → matmul` (bf16) | fp32-conversion + MSL | 8.4.5 | rank-2, N ≤ 256, P ≤ 256 |
-
-### MetalPerformanceShadersGraph (MPSGraph) lane — Tier-1 + long tail (2026-05-29)
-
-Rather than hand-writing one MSL kernel per pointwise/normalization op, these
-symbols route through Apple's **MPSGraph** optimizing graph compiler. One
-parametrized runner per shape class covers the Tier-1 activation/normalization
-surface (and a long tail), and — by composing with the MPS matmul — completes
-the f16/bf16 (and large-N) fused MLP/attention chains. Compute is fp32
-internally (inputs cast up, outputs cast down); bf16 upcasts host-side. None
-of these carry the per-thread `N ≤ 256` limit.
-
-| Symbol | Graph IR op(s) | Shape class | dtypes |
-|--------|----------------|-------------|--------|
-| `tessera_apple_gpu_mpsgraph_unary_f32` / `_f16` | `relu`/`sigmoid`(`_safe`)/`tanh`/`softplus`/`silu`/`exp`/`log`/`sqrt`/`rsqrt`/`neg`/`abs` (op-coded) | elementwise, any shape | f32, f16 (bf16 host-upcast) |
-| `tessera_apple_gpu_mpsgraph_binary_f32` / `_f16` | `silu_mul` (+ add/sub/mul/div/max/min reserved) | elementwise, any shape | f32, f16 (bf16 host-upcast) |
-| `tessera_apple_gpu_layer_norm_f32` / `_f16` | `tessera.layer_norm` | row op over last axis | f32, f16 |
-| `tessera_apple_gpu_rmsnorm_gpu_f32` / `_f16` | `tessera.rmsnorm` / `tessera.rmsnorm_safe` | row op over last axis | f32, f16 |
-| `tessera_apple_gpu_log_softmax_f32` / `_f16` | `tessera.log_softmax` | row op over last axis | f32, f16 |
-| `tessera_apple_gpu_mpsgraph_softmax_f32` / `_f16` | `tessera.softmax` (no N limit) | row op over last axis | f32, f16 |
-| `tessera_apple_gpu_bmm_f32` / `_f16` | `tessera.matmul` (rank-3+) / `tessera.batched_gemm` | batched matmul `[batch,M,K]@[batch,K,N]` with `b_broadcast` for shared `[1,K,N]` B | f32, f16 (bf16 host-upcast) |
-
-**Batched matmul (`bmm`) — Tier-2 keystone:** MPSGraph `matrixMultiplication`
-handles leading batch dims + broadcasting. `runtime.py` folds rank-4+ leading
-dims into a single batch and routes a shared `[K,N]` B operand through the
-`b_broadcast` path (projections + GQA KV-sharing). Op codes (unary/binary) are
-defined in `apple_gpu_runtime.mm` and mirrored in
-`runtime.py::_APPLE_GPU_UNARY_OPCODES`; `silu_mul(a, b) = silu(a) * b` (binary
-opcode 6 computes `first * silu(second)`, so the dispatcher passes `(b, a)`).
-
-**Fused-chain dtype completion:** `matmul_gelu` / `matmul_rmsnorm` /
-`matmul_softmax` keep their single-kernel f32 fast paths (N ≤ 256, plus the
-tiled f32 `matmul_softmax`); outside that envelope (f16/bf16 or large N) the
-dispatchers compose the GPU matmul with an MPSGraph epilogue instead of
-falling back to host numpy. The gelu epilogue uses the MPSGraph `gelu` node;
-the hand-written MSL gelu kernels were also fixed (2026-05-29) to clamp the
-tanh argument to `[-30, 30]` so they no longer overflow to NaN for large
-activations (|x| ≳ 16).
-
-**Graph caching:** each compiled graph is cached by
-`(shape-class, opcode, dtype, shape[, eps, weighted])`;
-`tessera_apple_gpu_mpsgraph_cache_size()` reports the live count.
-
-**Compile-time / MLIR path:** the Tier-1 ops are first-class `tessera` dialect
-ops; three lowering passes — `tessera-unary-to-apple_gpu`,
-`tessera-silu-mul-to-apple_gpu`, `tessera-rowop-to-apple_gpu` — lower them
-inside `tessera-lower-to-apple_gpu-runtime`. Lit:
-[tests/tessera-ir/phase8/apple_gpu_tier1_lowering.mlir](../tests/tessera-ir/phase8/apple_gpu_tier1_lowering.mlir).
-Tests: `tests/unit/test_apple_gpu_mpsgraph_lane.py` + the full decoder-layer
-proof `tests/unit/test_apple_gpu_llama_decoder_layer.py`.
-
-### Linear-algebra kernels (MPSMatrix + custom MSL — the lane MPSGraph can't supply)
-
-Dense f32 factorizations/solves via the MetalPerformanceShaders `MPSMatrix*`
-fixed-function kernels. MPSGraph has no matrix-decomposition ops, so this is
-the only GPU path for these. Each returns `0` (ran on GPU) / `2` (singular or
-non-PD) / `-1` (no Metal); the Python wrapper falls back to numpy otherwise.
-Row-major (no transpose at the boundary). Rank-2 f32 native; batched/non-f32
-handled as noted.
-
-| Symbol | Graph IR op | Backend | Constraints |
-|--------|-------------|---------|-------------|
-| `tessera_apple_gpu_cholesky_f32` | `tessera.cholesky` | MPSMatrixDecompositionCholesky | rank-2 SPD f32; strict-upper zeroed (numpy parity) |
-| `tessera_apple_gpu_solve_cholesky_f32` | `tessera.cholesky_solve` | Cholesky + MPSMatrixSolveCholesky | rank-2 SPD f32, `[n,nrhs]` RHS |
-| `tessera_apple_gpu_solve_lu_f32` | `tessera.solve` | LU + MPSMatrixSolveLU (partial pivot) | rank-2 f32, `[n,nrhs]` RHS |
-| `tessera_apple_gpu_tri_solve_f32` | `tessera.tri_solve` | MPSMatrixSolveTriangular | rank-2 f32; `lower`/`trans`/`unit` flags |
-
-Python: `runtime.apple_gpu_{cholesky, solve, cholesky_solve, tri_solve}(...)`
-→ `(result, ran_on_gpu)`. See the **GPU linear-algebra implementation state**
-section below for batched/QR/SVD details, perf, and `@jit` wiring.
-
-### Capability + diagnostic symbols
-
-| Symbol | Purpose |
-|--------|---------|
-| `tessera_apple_gpu_runtime_has_metal` | 1 on Darwin with a Metal device, else 0 |
-| `tessera_apple_gpu_runtime_msl_cache_size` | count of cached `MTLComputePipelineState` (tests verify cache hits) |
-| `tessera_apple_gpu_simd_caps` | SIMD-feature bitmask (reduction/shuffle/shuffle-and-fill/simdgroup-barrier); `0xF` on M-series |
-| `tessera_apple_gpu_device_handle` | raw `id<MTLDevice>` as `void*` (interop escape hatch; Tessera owns lifetime) |
-| `tessera_apple_gpu_command_queue_handle` | raw `id<MTLCommandQueue>` as `void*` |
-| `ts_dev_mtl_buffer` | a `DeviceTensor`'s `id<MTLBuffer>` as `void*` (`DeviceTensor.mtl_buffer()`) |
-| `tessera_apple_gpu_mpsgraph_cache_size` | live MPSGraph cache count |
-
-### GPU-native RNG lane (opt-in)
-
-Philox-family fills via `MPSMatrixRandomPhilox` — a separate opt-in stream,
-**not** bit-identical to `tessera.rng` (Decision #18), so never wired into the
-deterministic samplers. Deterministic by `seed`.
-
-| Symbol | Distribution | Python |
-|--------|-------------|--------|
-| `tessera_apple_gpu_random_uniform_f32` | uniform `[lo, hi)` | `apple_gpu_random_uniform(shape, seed=, low=, high=)` |
-| `tessera_apple_gpu_random_normal_f32` | normal `(mean, std)` | `apple_gpu_random_normal(shape, seed=, mean=, std=)` |
-
-### ABI summary
-
-- **Tensor pointers** are `i64` raw pointers at the `func.call` boundary
-  (extracted via `memref.extract_aligned_pointer_as_index` + `arith.index_cast`).
-- **Dimension scalars** are `i32`; **scale / eps** are `f32`; **boolean flags**
-  (causal) are `i32` (0/1).
-- For f16/bf16, pointers are `uint16_t*` carrying the bit pattern;
-  `numpy.float16` and `ml_dtypes.bfloat16` are byte-compatible via
-  `.view(np.uint16)`.
-- The element type is encoded in the **symbol name only**, not the signature.
-
-### Coverage matrix (core 9 concepts)
-
-|  | f32 | f16 | bf16 |
-|---|---|---|---|
-| **mps_matmul** | ✅ 8.3 | ✅ 8.4.4 | ✅ 8.4.4 |
-| **rope** | ✅ 8.4.0 | ✅ 8.4.4.1 | ✅ 8.4.4.1 |
-| **softmax** | ✅ 8.4.2 | ✅ 8.4.4.1 | ✅ 8.4.4.1 |
-| **gelu** | ✅ 8.4.2 | ✅ 8.4.4.1 | ✅ 8.4.4.1 |
-| **flash_attn** | ✅ 8.4.1 | ✅ 8.4.4.2 | ✅ 8.4.4.2 |
-| **matmul_softmax** | ✅ 8.4.3 | ✅ 8.4.4.2 | ✅ 8.4.4.2 |
-| **matmul_softmax (tiled, large N)** | ✅ 8.4.6 | — | — |
-| **matmul_gelu** | ✅ 8.4.7 | — | — |
-| **matmul_rmsnorm** | ✅ 8.4.7 | — | — |
-| **matmul_softmax_matmul** | ✅ 8.4.5 | ✅ 8.4.5 | ✅ 8.4.5 |
-
-**9 kernel concepts × dtypes = 26 core runtime symbols** sharing one
-`MetalDeviceContext` and MSL kernel cache. (The MPSGraph, linalg, RNG, MTL4,
-and GA/EBM lanes add further symbols — see `runtime_abi.csv`.)
-
----
-
+The **GPU linear-algebra implementation state** (batched / QR / SVD details,
+perf, and `@jit` wiring) is documented in the Metal 4 section below.
 ## Apple Silicon deep-learning datatypes
 
 > Reference note. Apple does not publish a raw per-chip Neural Engine datatype
@@ -402,11 +249,13 @@ data-types docs, and Apple Newsroom M1–M5 announcements.
 
 ## Metal 4 lane — implementation state
 
-> The Metal 4 *ladder* (what to build, in what order) lives in
-> [apple_gpu_metal4_adoption.md](apple_gpu_metal4_adoption.md). This section is
-> the *review of what has actually landed*, cross-checked against the macOS
-> 26.5 (Tahoe) SDK headers (`MTLTensor.h`, `MTL4*.h`, `MTLResidencySet.h`, the
-> MPP `matmul2d` headers) and the runtime in `apple_gpu_runtime.mm`.
+> The Metal 4 *ladder* (M0–M8 + P-series — what to build, in what order) has all
+> landed; it is archived at
+> [`docs/audit/backend/apple/archive/apple_gpu_metal4_adoption.md`](audit/backend/apple/archive/apple_gpu_metal4_adoption.md).
+> This section is the *review of what has actually landed*, cross-checked against
+> the macOS 26.5 (Tahoe) SDK headers (`MTLTensor.h`, `MTL4*.h`,
+> `MTLResidencySet.h`, the MPP `matmul2d` headers) and the runtime in
+> `apple_gpu_runtime.mm`.
 
 ### What is already optimal (keep)
 

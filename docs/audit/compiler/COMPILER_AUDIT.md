@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-06-24
+last_updated: 2026-07-10
 audit_role: theme
 ---
 
@@ -7,6 +7,18 @@ audit_role: theme
 
 This document consolidates the compiler audit material that previously lived in
 multiple root audit documents and compiler archive files.
+
+> **Reconciliation note (2026-07-10).** The per-IR scorecard and phased plan below
+> are a 2026-06-15 point-in-time snapshot; several of their "dispatcher / stub"
+> cells have since moved. Two in particular are now stale and are superseded by the
+> **Finished — middle-end / arbiter wave (2026-07-08)** subsection and the backend
+> audits: the **Autotuner** row (measured autotune + fleet corpus is now wired onto
+> ROCm gfx1151, #308 — no longer `_mock_latency`-only) and the **Target IR /
+> runtime** row (the "~87% of ops execute via the numpy reference interpreter"
+> figure predates the ROCm/x86 native-lane wave and the 2026-07-09 Apple GPU
+> op-family parity closure — read the generated `runtime_execution_matrix.md` for
+> the live split, never the prose figure). The scorecard is kept for its strategic
+> framing; treat the generated dashboards as status truth (Decision #26).
 
 > **Latest deep pass:** [DEEP_COMPILER_AUDIT_2026_06_10.md](archive/DEEP_COMPILER_AUDIT_2026_06_10.md)
 > — source-backed audit of frontend/IR/manifest/runtime-ABI/Apple-envelope/
@@ -573,6 +585,30 @@ part). Exposed as `TracedHardMoELM.logits(ids, dispatch="sparse")`. Guards in
 `tests/unit/test_train_hard_moe.py` (parity, grad-flow, end-to-end training).
 
 ## Finished
+
+### Middle-end / arbiter wave (2026-07-08, PRs #307–#314)
+
+Landed against the COMPILER_REFACTOR_PLAN world-class dimensions (W-series) and
+the A–E kernel spine — each PR test-gated:
+
+- **A4 — shared cost-aware MMA selector (#309).** ROCm's MMA-shape cost model was
+  lifted to a target-shared selector so all backends pick MMA shapes from one
+  cost-aware model instead of per-backend heuristics.
+- **G — dynamic-shape emitter for the generic lanes (#312).** One compiled kernel
+  now serves all shapes (the `static | bucket | dynamic` policy from Decision #28),
+  so dynamic shapes no longer force a per-shape recompile or an API break.
+- **H — Tile-buffer reuse + arena (W3, #311 + #314).** `TileBufferReusePass` does
+  global shared-memory buffer assignment/reuse; `TileBufferArenaPass` realizes the
+  reuse plan into a concrete SMEM/TMEM arena. Plus the **MatmulRegion transpose
+  contract** (#310) — the backend now consumes the orientation flags.
+- **J — roofline attainment (W7, #313).** % of peak is now the hot-path bar (the
+  attainment metric the perf ratchet gates against), not raw latency alone.
+- **D2 — measured autotune on real silicon (#308).** The measured-autotune lane +
+  fleet corpus is wired onto ROCm gfx1151, so autotuning scores off measured device
+  latency, not only the `_mock_latency` roofline model (this supersedes the
+  Autotuner scorecard cell — see the reconciliation note at the top).
+- **Solvers on the arbiter (#307).** The spectral FFT and TPP space-time passes are
+  now real and retargeted onto the D1 measured arbiter.
 
 - **Canonical driver:** `canonical_compile` and `CompileResult` are the common
   contract for compilation results.

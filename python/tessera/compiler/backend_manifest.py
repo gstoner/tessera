@@ -697,6 +697,18 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
                   "tessera.complex."),
         "execute_compare_fixture": "tests/unit/test_apple_gpu_complex_compiled.py",
     },
+    # Optimizer lane (2026-07-10) — sgd/momentum/adam/adamw/lion per-parameter
+    # update via apple_gpu_optimizer_compiled. Apple ships no device optimizer
+    # kernel; the elementwise update rules run on the numpy reference the x86/ROCm
+    # device kernels are matched against. ``compiled`` (direct execute/compare),
+    # NOT a bespoke fused Metal kernel.
+    **{op: {
+        "status": _COMPILED_STATUS,
+        "dtypes": ("fp32",),
+        "notes": (f"Optimizer {op} via apple_gpu_optimizer_compiled (numpy "
+                  "reference update rules); matches tessera.optim."),
+        "execute_compare_fixture": "tests/unit/test_apple_gpu_optimizer_compiled.py",
+    } for op in ("sgd", "momentum", "adam", "adamw", "lion")},
     # Philox RNG base lane (2026-07-10) — rng_uniform / rng_normal / dropout via
     # apple_gpu_rng_compiled. Apple ships no device Philox kernel; the lane draws
     # from the counter-based Philox-4x32-10 reference (tessera.rng_device) the

@@ -133,6 +133,13 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                              "(GEMM + rank-r SVD truncation) via the numpy "
                              "reference the x86/ROCm GEMM lanes match. Matches "
                              "numpy — parity with x86/rocm_matmul_family_compiled.",
+    "apple_gpu_optimizer_compiled": "Apple GPU optimizer lane — sgd / momentum / "
+                             "adam / adamw / lion per-parameter update. Apple "
+                             "ships no device optimizer kernel, so the elementwise "
+                             "update rules run on the numpy reference the x86/ROCm "
+                             "device kernels are matched against (state m/v in/"
+                             "out). Matches tessera.optim — parity with "
+                             "x86/rocm_optimizer_compiled.",
     "native_cpu":           "x86 AMX / native CPU runtime via the C runtime ABI",
     "jit_cpu_numpy":        "JIT CPU fallback via the numpy reference path",
     "rocm_wmma":            "AMD GPU RDNA WMMA matrix-core GEMM via the shipped "
@@ -963,6 +970,19 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "CPU reference path (no Metal dispatch) — "
                "execution_kind=reference_cpu; matches numpy, parity with "
                "x86/rocm_matmul_family_compiled."),
+    # Apple GPU optimizer lane (2026-07-10) — sgd/momentum/adam/adamw/lion. Apple
+    # ships no device optimizer kernel, so the elementwise update rules run on
+    # the numpy reference (no Metal dispatch) — execution_kind=reference_cpu.
+    ("apple_gpu", "apple_gpu_optimizer_compiled"): ExecutionRow(
+        target="apple_gpu", compiler_path="apple_gpu_optimizer_compiled",
+        execution_kind="reference_cpu", executable=True,
+        executor_id="apple_gpu_optimizer_compiled", runtime_status="success",
+        reason="Apple GPU optimizer artifact runs sgd / momentum / adam / adamw "
+               "/ lion per-parameter updates (state m/v in/out) via the numpy "
+               "reference the x86/ROCm device kernels are matched against. Runs "
+               "on the CPU reference path (no Metal dispatch) — "
+               "execution_kind=reference_cpu; matches tessera.optim, parity with "
+               "x86/rocm_optimizer_compiled."),
     # --- x86 / native CPU (AMX path) ---
     ("cpu", "native_cpu"): ExecutionRow(
         target="cpu", compiler_path="native_cpu",

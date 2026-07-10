@@ -6353,6 +6353,64 @@ def _execute_x86_compiled_optimizer(artifact: RuntimeArtifact, args: Any) -> Any
                               _x86_optimizer_kernel, np)
 
 
+def _apple_optimizer_kernel(kind: int, p: Any, g: Any, m: Any, v: Any, n: int,
+                            lr: float, b1: float, b2: float, eps: float,
+                            wd: float, b1c: float, b2c: float) -> tuple:
+    """Numpy per-parameter optimizer update — Apple ships no device optimizer
+    kernel, so the lane runs the same elementwise rules the x86/ROCm device
+    kernels are matched against (scalar reference in avx512_optimizer_f32.cpp;
+    matches tessera.optim). f32. (kind: 0 sgd, 1 momentum, 2 adam, 3 adamw,
+    4 lion, 5 nesterov.)"""
+    import numpy as np
+    p = np.asarray(p, np.float32)
+    g = np.asarray(g, np.float32)
+    m = np.asarray(m, np.float32)
+    v = np.asarray(v, np.float32)
+    m_out, v_out = m, v
+    if kind == 0:                                   # sgd
+        p_out = p - lr * g
+    elif kind == 1:                                 # momentum
+        v_out = b1 * v + g
+        p_out = p - lr * v_out
+    elif kind == 5:                                 # nesterov (look-ahead)
+        v_out = b1 * v + g
+        p_out = p - lr * (g + b1 * v_out)
+    elif kind == 4:                                 # lion
+        u = b1 * m + (1.0 - b1) * g
+        m_out = b2 * m + (1.0 - b2) * g
+        pp = p * np.float32(1.0 - lr * wd) if wd != 0.0 else p
+        p_out = pp - lr * np.sign(u).astype(np.float32)
+    else:                                           # adam (2) / adamw (3)
+        m_out = b1 * m + (1.0 - b1) * g
+        v_out = b2 * v + (1.0 - b2) * g * g
+        pp = p * np.float32(1.0 - lr * wd) if (kind == 3 and wd != 0.0) else p
+        upd = (m_out / b1c) / (np.sqrt(v_out / b2c) + eps)
+        p_out = pp - lr * upd
+    return (p_out.astype(np.float32), np.asarray(m_out, np.float32),
+            np.asarray(v_out, np.float32))
+
+
+def _execute_apple_gpu_compiled_optimizer(artifact: RuntimeArtifact,
+                                          args: Any) -> Any:
+    """The ``target="apple_gpu"`` optimizer lane: sgd / momentum / adam / adamw /
+    lion per-parameter update via the numpy reference (Apple ships no device
+    optimizer kernel — runs on the CPU reference path). f32; matches
+    tessera.optim — parity with x86/rocm_optimizer_compiled."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _OPTIMIZER_OPS:
+        raise ValueError(
+            f"apple_gpu_optimizer_compiled executor handles one of "
+            f"{tuple(_OPTIMIZER_OPS)}; got {[o.get('op_name') for o in ops]!r}")
+    values = _bind_launch_args(args, arg_names)
+    p, g, m, v = _optimizer_bind(ops[0], values)
+    return _optimizer_compute(op_name, p, g, m, v, ops[0].get("kwargs") or {},
+                              _apple_optimizer_kernel, np)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # LAMB — layer-wise adaptive moments (P3 optimizer tail). LAMB is the device
 # adam update (the FLOP-heavy elementwise m/v step, run with lr=1 / wd=0 on the
@@ -15067,6 +15125,7 @@ def _executor_table():
         "apple_gpu_loss_family_compiled": _execute_apple_gpu_compiled_loss_family,
         "apple_gpu_complex_compiled": _execute_apple_gpu_compiled_complex,
         "apple_gpu_conformal_compiled": _execute_apple_gpu_compiled_conformal,
+        "apple_gpu_optimizer_compiled": _execute_apple_gpu_compiled_optimizer,
         "apple_gpu_rng_compiled": _execute_apple_gpu_compiled_rng,
         "apple_gpu_linalg_compiled": _execute_apple_gpu_compiled_linalg,
         "apple_gpu_matmul_family_compiled":

@@ -1522,13 +1522,16 @@ def _execute_rocm_moe_transport(artifact: RuntimeArtifact, args: Any) -> Any:
             return (moe.combine(partials, plan), "reference_cpu")
     if op_name == "tessera.grouped_swiglu":
         try:
-            out = moe.grouped_swiglu(
-                values["x_packed"], values["w_gate"], values["w_up"],
-                values["w_down"], values["group_sizes"])
+            gvals = (values["x_packed"], values["w_gate"], values["w_up"],
+                     values["w_down"], values["group_sizes"])
         except KeyError as exc:
             raise ValueError(f"missing grouped_swiglu argument {exc.args[0]!r}") from exc
-        # Expert GEMM: no f32-exact device GEMM yet (WMMA is f16) — stays oracle.
-        return (out, "reference_cpu")
+        # Expert GEMM runs natively on the f32 GEMM device kernel (three GEMMs +
+        # host silu*mul per group); falls back to the f64 oracle off-box.
+        try:
+            return (_moe_grouped_swiglu_native(*gvals, np), "native_gpu")
+        except _RocmCompiledUnavailable:
+            return (moe.grouped_swiglu(*gvals), "reference_cpu")
     raise ValueError(
         "rocm_moe_transport_compiled executor handles tessera.moe_dispatch, "
         "tessera.moe_combine, or tessera.grouped_swiglu; "
@@ -9882,6 +9885,109 @@ def _rocm_scatter(out: Any, src: Any, idx: Any, out_rows: int, row_len: int,
 def _execute_rocm_compiled_scatter(artifact: RuntimeArtifact, args: Any) -> Any:
     """The ``target="rocm"`` scatter lane (scatter/scatter_add/scatter_reduce)."""
     return _execute_scatter(artifact, args, _rocm_scatter, "rocm_scatter_compiled")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# f32 GEMM device kernel (generate-rocm-gemm-f32-kernel) — the f32-exact matmul
+# RDNA WMMA (f16/bf16 only) can't provide. One thread per output element, scalar
+# f32 k-loop (correctness-first, no LDS tiling). Backs the native grouped-SwiGLU
+# expert GEMM (MoE). f32; matches the numpy f32 matmul within f32 tolerance.
+# ─────────────────────────────────────────────────────────────────────────────
+_rocm_gemm_f32_hsaco_cache: dict[tuple[str], bytes] = {}
+
+
+def _build_compiled_gemm_f32_hsaco() -> bytes:
+    chip = _rocm_chip()
+    directive = ('module {\n  "tessera_rocm.gemm_f32"() {name = "g"} '
+                 ': () -> ()\n}\n')
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-gemm-f32-kernel", directive, _rocm_gemm_f32_hsaco_cache,
+        (chip,))
+
+
+def _rocm_f32_gemm(a: Any, b: Any, np: Any) -> Any:
+    """C = A @ B on gfx1151 via the compiler-generated f32 GEMM kernel (one
+    thread per output element). A (M,K), B (K,N) f32 -> C (M,N) f32."""
+    a = np.ascontiguousarray(a, np.float32)
+    b = np.ascontiguousarray(b, np.float32)
+    if a.ndim != 2 or b.ndim != 2 or int(a.shape[1]) != int(b.shape[0]):
+        raise ValueError(f"f32 gemm needs (M,K)@(K,N); got {a.shape} @ {b.shape}")
+    M, K = int(a.shape[0]), int(a.shape[1])
+    N = int(b.shape[1])
+    out = np.zeros((M, N), np.float32)
+    if M == 0 or N == 0 or K == 0:
+        return out
+    hsaco = _build_compiled_gemm_f32_hsaco()
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm gemm_f32: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm gemm_f32: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"g") != 0:
+        raise RuntimeError("rocm gemm_f32: kernel symbol 'g' not found")
+    cv = ctypes.c_void_p
+    n_a, n_b, n_c = M * K, K * N, M * N
+    d_a, d_b, d_c = cv(), cv(), cv()
+    if (hip.hipMalloc(ctypes.byref(d_a), 4 * n_a) != 0
+            or hip.hipMalloc(ctypes.byref(d_b), 4 * n_b) != 0
+            or hip.hipMalloc(ctypes.byref(d_c), 4 * n_c) != 0):
+        raise RuntimeError("rocm gemm_f32: hipMalloc failed")
+    hip.hipMemcpy(d_a, a.ctypes.data_as(cv), 4 * n_a, 1)
+    hip.hipMemcpy(d_b, b.ctypes.data_as(cv), 4 * n_b, 1)
+
+    def _mr(p, size):
+        return [cv(p.value), cv(p.value), ctypes.c_int64(0),
+                ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    launch_args = (_mr(d_a, n_a) + _mr(d_b, n_b) + _mr(d_c, n_c)
+                   + [ctypes.c_int64(M), ctypes.c_int64(N), ctypes.c_int64(K)])
+    arr = (cv * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), cv)
+    gx = (n_c + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+    rc = hip.hipModuleLaunchKernel(fn, max(gx, 1), 1, 1, _GRID_BLOCKDIM, 1, 1,
+                                   0, None, arr, None)
+    if rc != 0:
+        for d in (d_a, d_b, d_c):
+            hip.hipFree(d)
+        raise RuntimeError(f"rocm gemm_f32: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    hip.hipMemcpy(out.ctypes.data_as(cv), d_c, 4 * n_c, 2)
+    for d in (d_a, d_b, d_c):
+        hip.hipFree(d)
+    return out
+
+
+def _moe_grouped_swiglu_native(x_packed: Any, w_gate: Any, w_up: Any,
+                               w_down: Any, group_sizes: Any, np: Any) -> Any:
+    """Grouped SwiGLU over contiguous per-expert token groups, run on the f32
+    GEMM device kernel: for each group e, g = x@Wg[e], u = x@Wu[e],
+    h = silu(g)*u, out = h@Wd[e]. The three FLOP-heavy GEMMs run on gfx1151; the
+    silu*mul elementwise middle is host-side. f32; matches stdlib.moe.grouped_swiglu
+    within f32 tolerance (the reference accumulates in f64)."""
+    xp = np.ascontiguousarray(_as_numpy(x_packed), np.float32)
+    wg = np.ascontiguousarray(_as_numpy(w_gate), np.float32)   # (E, H, F)
+    wu = np.ascontiguousarray(_as_numpy(w_up), np.float32)     # (E, H, F)
+    wd = np.ascontiguousarray(_as_numpy(w_down), np.float32)   # (E, F, H)
+    gs = np.asarray(_as_numpy(group_sizes), np.int64).reshape(-1)
+    S = int(xp.shape[0])
+    h_out = int(wd.shape[2])
+    out = np.zeros((S, h_out), np.float32)
+    off = 0
+    for e in range(int(wg.shape[0])):
+        n = int(gs[e])
+        if n:
+            xe = xp[off:off + n]                               # (n, H)
+            g = _rocm_f32_gemm(xe, wg[e], np)                  # (n, F)
+            u = _rocm_f32_gemm(xe, wu[e], np)                  # (n, F)
+            h = (g * (1.0 / (1.0 + np.exp(-g))) * u).astype(np.float32)
+            out[off:off + n] = _rocm_f32_gemm(h, wd[e], np)    # (n, h_out)
+        off += n
+    return out
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -107,12 +107,15 @@ def test_rocm_grouped_swiglu_runtime_matches_grouped_gemm_oracle():
     )
 
     assert res["ok"]
-    assert res["execution_kind"] == "reference_cpu"
+    # grouped_swiglu now runs the three expert GEMMs on the f32 device GEMM
+    # kernel (native on-box), silu*mul host-side; f32 vs the f64 oracle.
+    assert res["execution_kind"] == ("native_gpu" if _expect_native()
+                                     else "reference_cpu")
     np.testing.assert_allclose(
         res["output"],
         moe.grouped_swiglu(x_packed, w_gate, w_up, w_down, group_sizes),
-        rtol=0,
-        atol=0,
+        rtol=1e-4,
+        atol=1e-5,
     )
 
 

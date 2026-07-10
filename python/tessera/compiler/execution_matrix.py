@@ -2159,16 +2159,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         target="rocm", compiler_path="rocm_moe_transport_compiled",
         execution_kind="native_gpu", executable=True,
         executor_id="rocm_moe_transport_compiled", runtime_status="success",
-        reason="ROCm DK3 MoE transport: moe_dispatch runs NATIVELY on the "
-               "gfx1151 device gather kernel (token_of_slot = sort_perm//top_k "
-               "row gather) and moe_combine on the device scatter (add) kernel "
-               "(host pre-scales each packed row by its route weight, then "
-               "atomic scatter-add to token order) — both report native_gpu vs "
-               "the stdlib DispatchPlan oracle. grouped_swiglu (the expert GEMM) "
-               "stays on the oracle and reports reference_cpu via the per-op "
-               "execution_kind override — a native f32-exact grouped GEMM is a "
-               "separate follow-up (WMMA is f16). Off-box the transport ops "
-               "fall back to the oracle + reference_cpu.",
+        reason="ROCm DK3 MoE transport + expert GEMM run NATIVELY on gfx1151: "
+               "moe_dispatch on the device gather kernel (token_of_slot = "
+               "sort_perm//top_k row gather), moe_combine on the device scatter "
+               "(add) kernel (host pre-scales each packed row by its route "
+               "weight, then atomic scatter-add to token order), and "
+               "grouped_swiglu's three expert GEMMs on the f32 GEMM device "
+               "kernel (generate-rocm-gemm-f32-kernel; silu*mul host-side). All "
+               "three report native_gpu vs the stdlib DispatchPlan oracle (f32 "
+               "vs the f64 oracle for combine/swiglu). Off-box they fall back to "
+               "the oracle + reference_cpu.",
         execution_mode="hip_runtime"),
     ("rocm", "rocm_normcompose_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_normcompose_compiled",

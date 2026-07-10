@@ -137,6 +137,41 @@ def test_native_kernel_rejects_bad_shape_for_host_fallback():
                                         np.zeros((5, 15), np.float32)], {}, np)
 
 
+def test_native_kernel_rejects_f64_for_host_fallback():
+    # f64 must NOT be silently downcast to the f32 kernel (the numpy reference
+    # computes in f64 → a different result); demote to host instead.
+    from tessera import runtime as rt
+
+    x = np.zeros((2, 6), np.float64)
+    h = np.zeros((2, 5), np.float64)
+    Wih = np.zeros((6, 5), np.float64)
+    Whh = np.zeros((5, 5), np.float64)
+    with pytest.raises(rt._RocmCompiledUnavailable):
+        rt._rocm_recurrent_cell("simple_rnn", [x, h, Wih, Whh], {}, np)
+
+
+def test_native_kernel_rejects_mixed_dtype_for_host_fallback():
+    # f16 input + f32 weights promotes to f32 in the numpy reference; casting the
+    # weights down to f16 here would report native_gpu for a different result.
+    # Must demote to host (GPU-free — raises before any hsaco/launch).
+    from tessera import runtime as rt
+
+    x = np.zeros((2, 6), np.float16)
+    h = np.zeros((2, 5), np.float16)
+    Wih = np.zeros((6, 5), np.float32)      # different dtype than x
+    Whh = np.zeros((5, 5), np.float16)
+    with pytest.raises(rt._RocmCompiledUnavailable):
+        rt._rocm_recurrent_cell("simple_rnn", [x, h, Wih, Whh], {}, np)
+    # gru: a mismatched bias also demotes.
+    x = np.zeros((2, 6), np.float32)
+    h = np.zeros((2, 5), np.float32)
+    Wih = np.zeros((6, 15), np.float32)
+    Whh = np.zeros((5, 15), np.float32)
+    bih = np.zeros((15,), np.float16)       # bias dtype mismatch
+    with pytest.raises(rt._RocmCompiledUnavailable):
+        rt._rocm_recurrent_cell("gru", [x, h, Wih, Whh, bih], {}, np)
+
+
 def test_simple_rnn_unsupported_activation_falls_back():
     # sigmoid isn't in the native kernel's {tanh, relu}; must demote (host handles
     # it) rather than silently produce tanh output.

@@ -519,11 +519,12 @@ promotes them to `compileable`. See §9 for the concrete done / open / blocked s
   **dedicated native gfx1151 device kernel** (`generate-rocm-recurrent-cell-kernel`)
   — the two gate GEMMs + elementwise gate math fused into one hsaco, f16/bf16/f32
   storage with f32 accumulate, so the `native_gpu` provenance is genuine (they
-  previously ran host numpy under the structured-compute lane). Validated on
-  gfx1151 (`test_rocm_recurrent_cell_compiled.py`: dtype × activation × bias sweep
-  + host-fallback provenance gate; lit `phase8/rocm_recurrent_cell_kernel.mlir`).
-  `lstm_cell` stays on the host-reference structured-compute lane (its 4-gate
-  packed-[h,c] kernel is a follow-up)
+  previously ran host numpy under the `rocm_structured_compute_compiled` lane,
+  which still routes them — now to the device kernel). Validated on gfx1151 (the
+  recurrent-cell exec test: dtype × activation × bias sweep + host-fallback
+  provenance gate; lit `phase8/rocm_recurrent_cell_kernel.mlir`). `lstm_cell`
+  stays on the host-reference structured-compute lane (its 4-gate packed-[h,c]
+  kernel is a follow-up)
 - **Perf ladders / MFU sign-off** beyond `matmul` — PARTIALLY DONE. The hot-path
   ratchet + roofline attainment (`benchmarks/rocm/record_hot_path_baseline.py` +
   `benchmarks/roofline.py`, Workstream J) now FLOP-models and characterizes

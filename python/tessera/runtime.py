@@ -10133,11 +10133,27 @@ def _rocm_recurrent_cell(cell: str, operands: list, kwargs: dict, np: Any) -> An
         dtype, store, esz = "f16", np.float16, 2
     elif bf16 is not None and x0.dtype == bf16:
         dtype, store, esz = "bf16", bf16, 2
-    elif x0.dtype in (np.float32, np.float64):
+    elif x0.dtype == np.float32:
         dtype, store, esz = "f32", np.float32, 4
     else:
+        # f64 (and anything else) is NOT downcast: the numpy reference computes in
+        # (at least) f64, so a native f16/bf16/f32 kernel would return a different
+        # result. Demote to the host reference instead of silently downcasting.
         raise _RocmCompiledUnavailable(
-            f"rocm recurrent_cell: unsupported dtype {x0.dtype}")
+            f"rocm recurrent_cell: storage dtype {x0.dtype} not native "
+            "(f16/bf16/f32 only — host handles the rest)")
+
+    # Every operand must share x's storage dtype. A mixed call (e.g. f16 input +
+    # f32 weights) promotes in the numpy reference, so casting the others down to
+    # `store` here would report native_gpu for a numerically different result —
+    # reject it so the dispatch demotes to the host reference. Bias operands are
+    # optional; only the ones actually passed are checked.
+    for op in operands:
+        if op is not None and _as_numpy(op).dtype != x0.dtype:
+            raise _RocmCompiledUnavailable(
+                f"rocm recurrent_cell: mixed operand dtypes "
+                f"({_as_numpy(op).dtype} vs {x0.dtype}) — the reference promotes; "
+                "demote to host")
 
     def C(a):
         return np.ascontiguousarray(_as_numpy(a), store)

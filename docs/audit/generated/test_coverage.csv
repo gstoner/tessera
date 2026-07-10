@@ -3,8 +3,8 @@ abs,6,0,1,6,0,bf16 f32,directly_tested,6 direct test references
 absolute,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 acos,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 adafactor,4,0,0,4,0,fp32 fp64,directly_tested,4 direct test references
-adam,11,5,0,16,0,fp32 fp64,directly_tested,16 direct test references
-adamw,10,2,0,12,0,fp32 fp64,directly_tested,12 direct test references
+adam,13,5,0,18,0,fp32 fp64,directly_tested,18 direct test references
+adamw,12,2,0,14,0,fp32 fp64,directly_tested,14 direct test references
 adaptive_pool,6,0,0,6,0,,directly_tested,6 direct test references
 add,112,29,10,141,0,bf16 f16 f32 f64 fp16 fp32,directly_tested,141 direct test references
 add_decoupled_weight_decay,2,0,0,2,0,,directly_tested,2 direct test references
@@ -245,7 +245,7 @@ linear_attn,44,8,2,52,0,,directly_tested,52 direct test references
 linear_attn_state,7,0,1,7,0,fp16,directly_tested,7 direct test references
 linear_general,15,0,0,15,0,,directly_tested,15 direct test references
 linear_warmup_lr,1,0,0,1,1,,structural_only,category default for 'schedule'
-lion,8,0,0,8,0,fp32 fp64,directly_tested,8 direct test references
+lion,10,0,0,10,0,fp32 fp64,directly_tested,10 direct test references
 load_balance_loss,6,0,0,6,0,,directly_tested,6 direct test references
 load_sharded,3,0,1,3,0,,directly_tested,3 direct test references
 load_state,14,0,2,14,0,,directly_tested,14 direct test references
@@ -292,7 +292,7 @@ moe,21,0,0,21,0,fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,21 direct 
 moe_combine,5,0,0,5,0,,directly_tested,5 direct test references
 moe_dispatch,3,3,0,6,0,,directly_tested,6 direct test references
 moe_swiglu_block,14,19,1,33,0,fp8_e4m3 nvfp4,directly_tested,33 direct test references
-momentum,7,0,0,7,0,,directly_tested,7 direct test references
+momentum,9,0,0,9,0,,directly_tested,9 direct test references
 mor_partition,8,2,1,10,0,fp16,directly_tested,10 direct test references
 mor_router,10,3,1,13,0,fp16,directly_tested,13 direct test references
 mor_scatter,9,2,1,11,0,fp16,directly_tested,11 direct test references
@@ -398,7 +398,7 @@ segment_reduce,4,0,0,4,0,fp32,directly_tested,4 direct test references
 select,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 selective_ssm,67,10,2,77,0,bf16 f16 fp16 fp32,directly_tested,77 direct test references
 seq2seq_loss,7,0,0,7,0,,directly_tested,7 direct test references
-sgd,10,0,0,10,0,,directly_tested,10 direct test references
+sgd,12,0,0,12,0,,directly_tested,12 direct test references
 shard_map,0,0,0,0,1,,structural_only,category default for 'sharding'
 sharded_dataset,2,0,0,2,0,,directly_tested,2 direct test references
 sigmoid,6,1,0,7,0,bf16 f16 f32 fp32,directly_tested,7 direct test references

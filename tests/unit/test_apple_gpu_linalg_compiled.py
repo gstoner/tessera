@@ -26,7 +26,8 @@ def _launch(op, operands, kwargs=None):
     res = rt.launch(art, tuple(operands))
     assert res["ok"] is True, res.get("reason")
     assert res["compiler_path"] == "apple_gpu_linalg_compiled"
-    assert res["execution_kind"] == "native_gpu"
+    # Apple has no MPS lu/qr/svd; the lane runs on the CPU numpy reference.
+    assert res["execution_kind"] == "reference_cpu"
     return res["output"]
 
 

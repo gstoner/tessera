@@ -24,7 +24,8 @@ def _launch(op, operands, kwargs=None):
     res = rt.launch(art, tuple(operands))
     assert res["ok"] is True, res.get("reason")
     assert res["compiler_path"] == "apple_gpu_matmul_family_compiled"
-    assert res["execution_kind"] == "native_gpu"
+    # Runs on the CPU numpy reference (no Metal dispatch).
+    assert res["execution_kind"] == "reference_cpu"
     return np.asarray(res["output"])
 
 

@@ -65,7 +65,7 @@ it is the primary path:
 - f32 / f16 native; bf16 via host upcast on the GPU lane.  
 
 A single-layer LLaMA-style decoder runs end-to-end on the GPU lane validated
-against numpy. See [`docs/apple_gpu_overview.md`](../apple_gpu_overview.md).
+against numpy. See [`docs/apple_backend.md`](../apple_backend.md).
 
 ---
 

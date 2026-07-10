@@ -20074,7 +20074,7 @@ def _apple_gpu_conv2d_f16() -> Any:
 # activation` block collapses to one fused matmul2d dispatch on the cooperative
 # tensor units (f16/bf16). This is the robust arbitrary-size conv lane; the native
 # MPP `convolution2d` cooperative op is verified single-tile but its multi-tile
-# grid convention is undocumented (see docs/apple_backend_integration_review.md P8).
+# grid convention is undocumented (see docs/apple_backend.md P8).
 # OPT-IN, OFF by default. The unfold now runs ON the GPU (an MSL im2col kernel —
 # `apple_gpu_conv2d` prefers the on-device `tessera_apple_gpu_mtl4_conv2d_*`
 # symbol, host im2col only as a fallback), and the matmul runs on the matrix
@@ -20274,7 +20274,7 @@ def apple_gpu_conv2d(X: Any, W: Any, np: Any, *, bias: Any = None, act: str = "n
     Prefers the on-device path (GPU im2col, ``col`` never leaves the GPU); falls
     back to a host im2col + the epilogue when the on-device symbol didn't run.
     Returns ``(Y[N,OH,OW,Cout] float32, ran_on_mtl4)``; numpy fallback off Metal 4.
-    See docs/apple_backend_integration_review.md (P8)."""
+    See docs/apple_backend.md (P8)."""
     def _pair(v):
         return (int(v[0]), int(v[1])) if isinstance(v, (tuple, list)) else (int(v), int(v))
     sH, sW = _pair(stride); pH, pW = _pair(padding); dH, dW = _pair(dilation)
@@ -20324,7 +20324,7 @@ def apple_gpu_conv2d(X: Any, W: Any, np: Any, *, bias: Any = None, act: str = "n
 # single GPU dispatch; batched (ndim>2) f32 loops the rank-2 kernel per matrix
 # (MPS decomposition/solve are single-matrix per encode — no native batch);
 # non-f32 / off-Metal inputs fall back to the numpy reference. Each returns
-# (result, ran_on_gpu). See docs/apple_backend_integration_review.md (linalg).
+# (result, ran_on_gpu). See docs/apple_backend.md (linalg).
 
 def _apple_gpu_linalg_sym(name: str, argtypes: list) -> Any:
     runtime = _load_apple_gpu_runtime()
@@ -24131,7 +24131,7 @@ def apple_gpu_mtl4_archive_enable(path: str) -> bool:
     ``path`` (if present) so matching MTL4 pipelines skip the MSL recompile on
     process start, and captures subsequently-built pipelines for a later
     :func:`apple_gpu_mtl4_archive_flush`. No effect on the default path; returns
-    True if enabled (Metal 4 available). See docs/apple_backend_integration_review.md
+    True if enabled (Metal 4 available). See docs/apple_backend.md
     (P4)."""
     runtime = _load_apple_gpu_runtime()
     sym = getattr(runtime, "tessera_apple_gpu_mtl4_archive_enable", None)

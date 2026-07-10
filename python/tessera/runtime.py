@@ -8199,6 +8199,18 @@ def _creal(op: str, target: str, np: Any, *arrs: Any) -> Any:
     atan2 (2-ary), add/sub/mul/div (binary). x86 splits transcendental vs unary;
     rocm's unary lane covers exp/log/sin/cos/sqrt."""
     aa = tuple(np.ascontiguousarray(a, np.float32) for a in arrs)
+    if target == "apple_gpu":
+        # Apple GPU real elementwise lanes: exp/log/sin/cos/sqrt on the MSL unary
+        # opcode kernel, add/sub/mul/div + atan2 on the MPSGraph binary lane. The
+        # dispatchers fall back to numpy when Metal is unavailable.
+        if op == "atan2":
+            return np.asarray(_apple_gpu_dispatch_mpsgraph_binary(
+                "tessera.atan2", [aa[0], aa[1]], {}, np), np.float32)
+        if op in ("add", "sub", "mul", "div"):
+            return np.asarray(_apple_gpu_dispatch_mpsgraph_binary(
+                f"tessera.{op}", [aa[0], aa[1]], {}, np), np.float32)
+        return np.asarray(_apple_gpu_dispatch_unary(
+            f"tessera.{op}", [aa[0]], np), np.float32)
     if op == "atan2":
         fn = (_execute_x86_compiled_atan2 if target == "x86"
               else _execute_rocm_compiled_atan2)
@@ -8338,6 +8350,18 @@ def _execute_rocm_compiled_complex(artifact: RuntimeArtifact, args: Any) -> Any:
     return _execute_complex(artifact, args, "rocm", "rocm_complex_compiled")
 
 
+def _execute_apple_gpu_compiled_complex(artifact: RuntimeArtifact,
+                                        args: Any) -> Any:
+    """The ``target="apple_gpu"`` complex-arithmetic lane. The 9 pointwise ops
+    (mul/div/conjugate/abs/arg/exp/log/sqrt/pow) compose interleaved-f32 on the
+    Apple GPU unary/binary/atan2 lanes; the geometric/certificate ops
+    (cross_ratio / dz / dbar / laplacian_2d / conformal_* / is_concyclic /
+    check_cauchy_riemann / mobius_from_three_points) reuse the tessera.complex
+    reference (host structure — the same path x86/ROCm take). f32; matches
+    tessera.complex — parity with x86/rocm_complex_compiled."""
+    return _execute_complex(artifact, args, "apple_gpu", "apple_gpu_complex_compiled")
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Conformal geometry (P5) — mobius / stereographic, composed on the device
 # complex + binary lanes (no new kernel). mobius f(z)=(az+b)/(cz+d) rides the
@@ -8350,8 +8374,12 @@ _CONFORMAL_OPS = ("tessera.mobius", "tessera.stereographic")
 
 def _complex_dev(op_name: str, arrs: list, target: str, np: Any) -> Any:
     """Run one complex-lane op on the device (interleaved-f32 in/out)."""
-    fn = (_execute_x86_compiled_complex if target == "x86"
-          else _execute_rocm_compiled_complex)
+    if target == "apple_gpu":
+        fn = _execute_apple_gpu_compiled_complex
+    elif target == "x86":
+        fn = _execute_x86_compiled_complex
+    else:
+        fn = _execute_rocm_compiled_complex
     names = [f"a{i}" for i in range(len(arrs))]
     art = RuntimeArtifact(metadata={
         "target": target, "compiler_path": f"{target}_complex_compiled",
@@ -8413,6 +8441,16 @@ def _execute_x86_compiled_conformal(artifact: RuntimeArtifact, args: Any) -> Any
 def _execute_rocm_compiled_conformal(artifact: RuntimeArtifact, args: Any) -> Any:
     """The ``target="rocm"`` conformal lane (mobius / stereographic)."""
     return _execute_conformal(artifact, args, "rocm", "rocm_conformal_compiled")
+
+
+def _execute_apple_gpu_compiled_conformal(artifact: RuntimeArtifact,
+                                          args: Any) -> Any:
+    """The ``target="apple_gpu"`` conformal lane (mobius / stereographic) —
+    composed on the interleaved-f32 Apple GPU complex_mul / complex_div and
+    binary div lanes (no new kernel). f32; matches tessera.complex — parity with
+    x86/rocm_conformal_compiled."""
+    return _execute_conformal(artifact, args, "apple_gpu",
+                              "apple_gpu_conformal_compiled")
 
 
 
@@ -12391,6 +12429,188 @@ def _execute_rocm_structured_compute_compiled(
     return _execute_structured_compute_composite(artifact, args, "rocm")
 
 
+def _execute_apple_gpu_structured_compute_compiled(
+    artifact: RuntimeArtifact,
+    args: Any,
+) -> Any:
+    """Apple GPU structured-compute lane — the conv family (conv1d /
+    conv_transpose / depthwise_conv1d) reach an executable apple_gpu path via
+    runtime.launch() and match the reference primitive. Parity with the x86 /
+    ROCm structured-compute lanes: host-structured shape/control bookkeeping,
+    direct execute/compare evidence, not a bespoke fused Metal kernel."""
+    return _execute_structured_compute_composite(artifact, args, "apple_gpu")
+
+
+#: op_name -> (loss kind, param kwarg or None). Mirrors _X86_LOSS_OPS: the ROCm
+#: mirror is rocm_loss_compiled. The Apple GPU lane composes the per-element loss
+#: on the GPU binary/unary opcode lanes where a clean opcode exists (mse = r·r,
+#: mae = |r|) and host-side for the piecewise/transcendental middle (huber /
+#: smooth_l1 / log_cosh); the none/mean/sum reduction runs on the MPSGraph reduce
+#: lane. All GPU dispatchers fall back to numpy when Metal is unavailable.
+_APPLE_GPU_LOSS_OPS = {
+    "tessera.mse_loss": (0, None),
+    "tessera.mae_loss": (1, None),
+    "tessera.huber_loss": (2, "delta"),
+    "tessera.smooth_l1_loss": (3, "beta"),
+    "tessera.log_cosh_loss": (4, None),
+}
+
+
+def _execute_apple_gpu_compiled_loss(artifact: RuntimeArtifact,
+                                     args: Any) -> Any:
+    """The ``target="apple_gpu"`` pointwise-regression loss lane: mse / mae /
+    huber / smooth_l1 / log_cosh over (pred, target). Residual ``r = pred -
+    target`` on the GPU binary lane; mse (``r·r``) and mae (``|r|``) compose on
+    the GPU mul/abs opcodes; huber / smooth_l1 / log_cosh apply their piecewise/
+    transcendental transform host-side (matches tessera.losses exactly in f32);
+    the none/mean/sum reduction runs on the MPSGraph reduce lane. Parity with
+    x86_loss_compiled / rocm_loss_compiled. f32."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _APPLE_GPU_LOSS_OPS:
+        raise ValueError(
+            "apple_gpu_loss_compiled executor handles exactly one of "
+            f"{tuple(_APPLE_GPU_LOSS_OPS)}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    kind, param_kw = _APPLE_GPU_LOSS_OPS[op_name]
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 2:
+        raise ValueError("loss requires two operands (pred, target)")
+    kwargs = op.get("kwargs") or {}
+    reduction = str(kwargs.get("reduction", "mean"))
+    if reduction not in ("none", "mean", "sum"):
+        raise ValueError(f"loss reduction must be none/mean/sum; got {reduction}")
+    param = float(kwargs.get(param_kw, 1.0)) if param_kw else 0.0
+    values = _bind_launch_args(args, arg_names)
+    pred = _as_numpy(values[operand_names[0]])
+    target = _as_numpy(values[operand_names[1]])
+    if pred.dtype != np.float32:
+        raise ValueError(f"apple_gpu loss lane handles f32 only; got {pred.dtype}")
+    try:
+        bshape = np.broadcast_shapes(pred.shape, target.shape)
+    except ValueError as exc:
+        raise ValueError(
+            f"loss pred{pred.shape} and target{target.shape} do not "
+            f"broadcast") from exc
+    pred = np.ascontiguousarray(np.broadcast_to(pred, bshape), np.float32)
+    target = np.ascontiguousarray(np.broadcast_to(target, bshape), np.float32)
+
+    # Residual on the GPU binary lane (pred - target).
+    r = np.asarray(
+        _apple_gpu_dispatch_mpsgraph_binary("tessera.sub", [pred, target], {}, np),
+        np.float32)
+    if kind == 0:      # mse: r·r on the GPU mul lane
+        per = np.asarray(
+            _apple_gpu_dispatch_mpsgraph_binary("tessera.mul", [r, r], {}, np),
+            np.float32)
+    elif kind == 1:    # mae: |r| on the GPU unary abs lane
+        per = np.asarray(_apple_gpu_dispatch_unary("tessera.abs", [r], np),
+                         np.float32)
+    elif kind == 2:    # huber (host piecewise; matches tessera.losses.huber_loss)
+        ar = np.abs(r)
+        d = param
+        per = np.where(ar <= d, 0.5 * r * r, d * (ar - 0.5 * d)).astype(np.float32)
+    elif kind == 3:    # smooth_l1 (host piecewise)
+        ar = np.abs(r)
+        b = param
+        per = np.where(ar < b, 0.5 * r * r / b, ar - 0.5 * b).astype(np.float32)
+    else:              # log_cosh: r + log1p(exp(-2r)) - log2 (host, stable)
+        per = (r + np.log1p(np.exp(-2.0 * r)) - np.float32(np.log(2.0))).astype(
+            np.float32)
+
+    if reduction == "none":
+        return per.reshape(bshape)
+    # none/mean/sum reduction on the MPSGraph reduce lane (op 0 = sum, 1 = mean).
+    key = "tessera.mean" if reduction == "mean" else "tessera.reduce"
+    return np.asarray(
+        _apple_gpu_dispatch_reduce(key, [per], {"axis": None}, np), np.float32)
+
+
+#: op_name -> (reference module, callable name). The Apple GPU loss-family lane
+#: (binary-CE / class-axis / RL-policy / EBM-diffusion). Mirrors the x86
+#: binary_loss / class_loss / rl_loss / ebm_loss lanes and the ROCm equivalents:
+#: the per-sample loss composes through the standalone reference (host structure
+#: — gather/one-hot/clip/softplus, some in f64), and the none/mean/sum reduction
+#: runs on the MPSGraph reduce lane. Direct execute/compare vs tessera.losses /
+#: tessera.rl, not a bespoke fused Metal kernel.
+_APPLE_GPU_LOSS_FAMILY_REFS = {
+    # binary-cross-entropy
+    "tessera.binary_cross_entropy_loss": ("losses", "binary_cross_entropy_loss"),
+    # class-axis
+    "tessera.cross_entropy_loss": ("losses", "cross_entropy_loss"),
+    "tessera.kl_divergence": ("losses", "kl_divergence"),
+    "tessera.js_divergence": ("losses", "js_divergence"),
+    "tessera.z_loss": ("losses", "z_loss"),
+    # RL policy
+    "tessera.ppo_policy_loss": ("rl", "ppo_policy_loss"),
+    "tessera.cispo_policy_loss": ("rl", "cispo_policy_loss"),
+    "tessera.grpo_policy_loss": ("rl", "grpo_policy_loss"),
+    # EBM / diffusion
+    "tessera.score_matching_loss": ("losses", "score_matching_loss"),
+    "tessera.denoising_score_matching_loss":
+        ("losses", "denoising_score_matching_loss"),
+    "tessera.implicit_score_matching_loss":
+        ("losses", "implicit_score_matching_loss"),
+    "tessera.contrastive_divergence_loss": ("losses", "contrastive_divergence_loss"),
+    "tessera.persistent_cd_loss": ("losses", "persistent_cd_loss"),
+    "tessera.ddpm_noise_pred_loss": ("losses", "ddpm_noise_pred_loss"),
+    "tessera.vlb_loss": ("losses", "vlb_loss"),
+    "tessera.load_balance_loss": ("losses", "load_balance_loss"),
+}
+
+
+def _execute_apple_gpu_compiled_loss_family(artifact: RuntimeArtifact,
+                                            args: Any) -> Any:
+    """The ``target="apple_gpu"`` loss-family lane: binary-CE / class-axis (ce /
+    kl / js / z_loss) / RL policy (ppo / cispo / grpo) / EBM-diffusion. The
+    per-sample loss composes through the standalone reference (host structure);
+    the none/mean/sum reduction runs on the MPSGraph reduce lane — the same
+    "host structure + GPU reduction" model as rocm_*_loss_compiled. A masked
+    mean/sum is a weighted reduction the reference owns. f32; matches
+    tessera.losses / tessera.rl."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _APPLE_GPU_LOSS_FAMILY_REFS:
+        raise ValueError(
+            "apple_gpu_loss_family_compiled executor handles one of "
+            f"{tuple(_APPLE_GPU_LOSS_FAMILY_REFS)}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    names = [str(n) for n in op.get("operands", [])]
+    kwargs = dict(op.get("kwargs") or {})
+    values = _bind_launch_args(args, arg_names)
+    operands = [values[n] for n in names]
+
+    from tessera import losses, rl
+    mod_name, fn_name = _APPLE_GPU_LOSS_FAMILY_REFS[op_name]
+    ref_fn = getattr({"losses": losses, "rl": rl}[mod_name], fn_name)
+
+    reduction = str(kwargs.get("reduction", "mean"))
+    if reduction not in ("none", "mean", "sum"):
+        raise ValueError(f"loss reduction must be none/mean/sum; got {reduction}")
+    # A masked mean/sum is a weighted reduction (not a plain GPU reduce); the
+    # reference owns it end-to-end (Decision #21: never silently wrong).
+    if kwargs.get("mask") is not None and reduction != "none":
+        return ref_fn(*operands, **kwargs)
+
+    per = np.ascontiguousarray(
+        np.asarray(ref_fn(*operands, **{**kwargs, "reduction": "none"}), np.float32))
+    if reduction == "none":
+        return per
+    key = "tessera.mean" if reduction == "mean" else "tessera.reduce"
+    return np.asarray(
+        _apple_gpu_dispatch_reduce(key, [per], {"axis": None}, np), np.float32)
+
+
 def _execute_rocm_compiled_nvfp4(artifact: RuntimeArtifact, args: Any) -> Any:
     """The ``target="rocm"`` nvfp4 lane: block-scaled fp4 (E2M1 codes + per-block
     fp8-E4M3 scale) on the fpquant kernel + host block structure. quantize
@@ -14692,6 +14912,12 @@ def _executor_table():
         "apple_gpu_mps":        _execute_apple_gpu_mps_artifact,
         "apple_value_target_ir": _execute_apple_value_target_ir_artifact,
         "apple_gpu_value_target_ir": _execute_apple_value_target_ir_gpu_artifact,
+        "apple_gpu_structured_compute_compiled":
+            _execute_apple_gpu_structured_compute_compiled,
+        "apple_gpu_loss_compiled": _execute_apple_gpu_compiled_loss,
+        "apple_gpu_loss_family_compiled": _execute_apple_gpu_compiled_loss_family,
+        "apple_gpu_complex_compiled": _execute_apple_gpu_compiled_complex,
+        "apple_gpu_conformal_compiled": _execute_apple_gpu_compiled_conformal,
         "native_cpu":           _execute_cpu_native_or_jit,
         "jit_cpu_numpy":        _execute_jit_cpu_artifact,
         "rocm_wmma":            _execute_rocm_wmma_artifact,

@@ -152,12 +152,17 @@ def test_covered_by_family_bucket_has_substantial_size() -> None:
 
     2026-07-02: lowered 30 -> 27 after the X86/ROCm primitive-tail closure
     promoted M7 projective/domain ops from family coverage into direct
-    device-lane tests while ``needs_direct_test`` stayed at zero."""
+    device-lane tests while ``needs_direct_test`` stayed at zero.
+
+    2026-07-09: lowered 27 -> 26 after the apple_gpu complex/geometric lane
+    (apple_gpu_complex_compiled + test_apple_gpu_complex_compiled.py) earned a
+    direct device test for an M7 op, moving it out of family coverage while
+    ``needs_direct_test`` stayed at zero — the same expected drift."""
     summary = classification_summary()
     family = summary[COVERED_BY_FAMILY]
-    assert family >= 27, (
+    assert family >= 26, (
         f"`covered_by_family` bucket shrank to {family} (baseline ~99, "
-        f"floor 27).  Did a category default get accidentally reclassified? "
+        f"floor 26).  Did a category default get accidentally reclassified? "
         f"(Check that `needs_direct_test` stayed small — a shrink driven by "
         f"ops gaining direct device tests is expected.)"
     )

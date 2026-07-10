@@ -124,19 +124,17 @@ class TestM7BackendAlias:
         kernel today, but they're not overclaimed as ``fused`` either.
         For the single-GPU closeout they read as
         ``target_ir=not_applicable`` — an intentional reference/domain
-        composition, while apple_gpu / nvidia_sm90+ keep ``planned`` manifest
-        slots reserved for the M7 kernel follow-up. ROCm rows may promote to
-        compiled as composed runtime lanes gain direct device evidence.
+        composition, while nvidia_sm90+ keeps a ``planned`` manifest slot
+        reserved for the M7 kernel follow-up. ROCm and (2026-07-09) apple_gpu
+        rows promote to ``compiled`` as composed runtime lanes gain direct
+        device evidence — apple_gpu via apple_gpu_complex_compiled (the 9
+        pointwise ops on the MSL unary/binary/atan2 lanes; the geometric ops
+        reuse the tessera.complex reference).
         """
 
         from tessera.compiler.audit import support_row_for
         from tessera.compiler.backend_manifest import manifest_for
 
-        expected_rocm = {
-            "cross_ratio": "compiled",
-            "dz": "compiled",
-            "laplacian_2d": "compiled",
-        }
         for op_name in ("cross_ratio", "dz", "laplacian_2d"):
             row = support_row_for(op_name)
             assert row.cells["tile_ir"].status == "not_applicable", (
@@ -152,15 +150,16 @@ class TestM7BackendAlias:
                 f"reference/domain composition; native-kernel slots are "
                 f"reserved as planned on the GPU targets)."
             )
-            # The manifest must carry planned slots for GPU targets that still
-            # need native kernels. ROCm can promote specific long-tail ops once
-            # the composed runtime lane has direct execute/compare evidence.
+            # nvidia_sm90 must still carry a planned native-kernel slot; ROCm
+            # and apple_gpu promote to compiled once the composed runtime lane
+            # has direct execute/compare evidence (apple_gpu via
+            # apple_gpu_complex_compiled, 2026-07-09).
             entries = {e.target: e.status for e in manifest_for(op_name)}
             for gpu in ("apple_gpu", "nvidia_sm90", "rocm"):
-                expected = expected_rocm[op_name] if gpu == "rocm" else "planned"
+                expected = "planned" if gpu == "nvidia_sm90" else "compiled"
                 assert entries.get(gpu) == expected, (
                     f"{op_name}: expected {gpu}={expected}, got "
-                    f"{entries.get(gpu)!r} — every M7 long-tail op "
-                    f"should reserve a native-kernel slot for that "
-                    f"target."
+                    f"{entries.get(gpu)!r} — nvidia_sm90 reserves a planned "
+                    f"native-kernel slot; apple_gpu/rocm promote on direct "
+                    f"device evidence."
                 )

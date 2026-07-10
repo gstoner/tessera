@@ -288,6 +288,33 @@ lever has a cliff. Correctness of both tiles is guarded by
 `test_rocm_wmma_runtime_symbol.py` (small → 2×4, the 1024³ ragged case → 3×4).
 This supersedes the staging rungs (2/3) as the production perf story on this APU.
 
+**Stage H addendum — asymmetric-tile + K-unroll sweep (2026-07-10, negative).**
+Two remaining occupancy levers, swept on-device (best-of-N, kernel-only):
+
+- *Every untested asymmetric macro-tile* (2×3, 3×3, 4×2, 2×5, 5×2, 5×3, 3×5, 2×6,
+  6×2, 2×7, 2×8, 3×6) at 1024–4096³. **No untested tile beats the 2×4/3×4
+  adaptive** — 3×4 is the confirmed sweet spot 1024–3072³; 4×3 edges 3×4 by ~3%
+  at 4096³ only (a wash at 3072³). The register-budget sweet spot is genuinely 12
+  tiles.
+- *K-unrolling* — a new reference rung (`kKernelTemplateKU`, `..._bench_ku` /
+  `..._ku` C-ABI, verified correct by `test_rocm_gemm_ku_reference.py`): process
+  KU 16-wide K-panels per step (16·KU contiguous loads → more MLP) then KU·MT·NT
+  WMMAs. **Regresses.** KU2 loses −54…−66% on 3×4 and −43…−49% on 4×3; KU4
+  collapses −60…−71% everywhere; the only positive is 2×4-KU2 at 4096³ (+2%, still
+  far below 3×4-KU1). Root cause is the same VGPR/occupancy limit — the KU× a/b
+  load buffers blow the register budget and collapse waves/CU.
+
+**Synthesis:** every lever that adds register pressure — bigger tiles (4×4),
+K-unroll, register prefetch — hits the same occupancy cliff, and every
+memory-hierarchy lever (LDS, pipelined LDS) is a wash on unified LPDDR5x. The
+production register kernel is at the practical ceiling for this design on Strix
+Halo (~13 TFLOP/s ≈ 22% of the ~59 f16 WMMA peak). The named **dual-issue** lever
+does not apply: the inner loop is WMMA-issue-bound (12 back-to-back WMMAs/step),
+and RDNA3 dual-issue (VOPD) pairs *VALU* ops, not WMMA. Past here needs a
+fundamentally lower-register-footprint design (or a datacenter arch where global
+bandwidth is the bottleneck and the kept LDS/pipe/KU rungs pay off). The KU rung
+is retained as a correctness-verified reference for those targets.
+
 ### Stage G — flash_attn executes on gfx1151 (2026-06-23): second op after matmul
 
 `flash_attn` now executes natively on the AMD GPU — the **second op after

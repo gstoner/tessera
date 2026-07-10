@@ -405,11 +405,16 @@ def paged_attention(
         shipped fused matmul→softmax→matmul Metal kernel **per head**
         (``run_fused_attention``). This is #8's native execution path: gather is
         the staging stage; the contraction runs on ``metal_runtime``.
+      * ``"rocm"`` — the same gathered dense K/V feeds the compiler-generated FA-2
+        WMMA forward kernel on gfx1151 (the folded ``(num_heads, S, head_dim)``
+        batch is exactly the lane's ``[..., S, D]`` contract). Gather is the
+        staging stage; the fused attention runs on ``native_gpu``.
 
     With ``return_execution=True`` returns ``(out, execution_kind)`` where
-    ``execution_kind`` is ``"metal_runtime"`` only if **every** head genuinely ran
-    the Metal kernel (no silent fallback), else ``"reference"`` — the provenance
-    signal A's native oracle gates on.
+    ``execution_kind`` is the native provenance token (``"metal_runtime"`` for
+    apple_gpu, ``"native_gpu"`` for rocm) only if the native kernel genuinely ran
+    — else ``"reference"`` (a silent fallback can never overclaim the native rung,
+    the signal the cross-substrate oracle gates on).
     """
     state = as_paged_kv_state(kv_state)
     Q = np.asarray(Q._data if hasattr(Q, "_data") else Q, dtype=np.float32)
@@ -431,10 +436,13 @@ def paged_attention(
 
     if backend == "apple_gpu":
         out, exe = _paged_attention_apple_gpu(Q, K, V, float(scale), causal)
+    elif backend == "rocm":
+        out, exe = _paged_attention_rocm(Q, K, V, float(scale), causal)
     elif backend == "reference":
         out, exe = _reference_attention(Q, K, V, float(scale), causal), "reference"
     else:
-        raise ValueError(f"unknown backend {backend!r}; use 'reference' or 'apple_gpu'")
+        raise ValueError(
+            f"unknown backend {backend!r}; use 'reference', 'apple_gpu', or 'rocm'")
 
     return (out, exe) if return_execution else out
 
@@ -461,6 +469,45 @@ def _paged_attention_apple_gpu(Q: np.ndarray, K: np.ndarray, V: np.ndarray,
         if exe_h != "metal_runtime":
             all_native = False
     return out, ("metal_runtime" if all_native else "reference")
+
+
+def _paged_attention_rocm(Q: np.ndarray, K: np.ndarray, V: np.ndarray,
+                          scale: float, causal: bool) -> tuple[np.ndarray, str]:
+    """Run the gathered per-head attention on the compiled ROCm FA-2 WMMA kernel.
+
+    The gathered ``(num_heads, S, head_dim)`` tensors fold directly onto the
+    forward flash lane's ``[..., S, D]`` contract (leading dims = batch·heads), so
+    a single launch attends all heads — no per-head Python loop like the Apple
+    path. RDNA WMMA is f16/bf16-only (f32 softmax + accumulate internally), so the
+    dense f32 gather is cast to f16 for storage; the returned O is f32.
+
+    Reports ``native_gpu`` only when the kernel genuinely fired. A host without a
+    usable lane (no GPU / tessera-opt) or a shape the WMMA kernel cannot take
+    (head_dim not a multiple of 16) demotes the whole call to ``reference`` — the
+    provenance token can never overclaim.
+    """
+    from .. import runtime as rt
+
+    head_dim = int(Q.shape[-1])
+    # The WMMA kernel needs head_dim a positive multiple of 16 and a usable lane;
+    # anything else is a clean demotion to the numpy reference, not an error (the
+    # reference is still correct, we just didn't earn the native rung).
+    if (head_dim <= 0 or head_dim % 16 != 0
+            or not rt._rocm_compiled_flash_attn_available()):
+        return _reference_attention(Q, K, V, scale, causal), "reference"
+
+    q16 = Q.astype(np.float16)
+    k16 = K.astype(np.float16)
+    v16 = V.astype(np.float16)
+    try:
+        o = rt._rocm_flash_attn_forward_o(q16, k16, v16, float(scale),
+                                          1 if causal else 0)
+    except rt._RocmCompiledUnavailable:
+        # Lane probed available but couldn't launch here (serialization / driver);
+        # fall back rather than fail the paged-attention call.
+        return _reference_attention(Q, K, V, scale, causal), "reference"
+    out = np.asarray(o, dtype=np.float32).reshape(Q.shape[0], Q.shape[1], V.shape[-1])
+    return out, "native_gpu"
 
 
 def as_paged_kv_state(cache: Any, *, kind: KVKind | None = None) -> PagedKVState:

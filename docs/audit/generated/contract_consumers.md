@@ -9,7 +9,7 @@ The contract-pass plan's meta-gap tracker: each typed contract paired with the c
 
 | WS | Item | Contract | Status | Consumer (pass) | Oracle |
 |----|------|----------|--------|-----------------|--------|
-| A | #1/#6 | `PagedKVState` | **live** | tessera.ops.paged_attention / flash_attn(kv_state=) | evaluator.paged_kv_equivalence + paged_kv_native_equivalence (Metal rung) |
+| A | #1/#6 | `PagedKVState` | **live** | tessera.ops.paged_attention / flash_attn(kv_state=) | evaluator.paged_kv_equivalence + paged_kv_native_equivalence (Metal + ROCm rungs) |
 | B | #2 | `SchedulePolicy / CacheHandoff` | **live** | phase_specialization.specialize / PhaseSpecializedProgram | verify_phase_split (prefill ▸ decode ≡ forward) |
 | C | #3 | `FusionCost / bytes_moved` | **live** | fusion.select_attention_lowering (byte-scored selector) | cost-monotonicity + feasibility invariant |
 | D | #4 | `NumericPolicy.scale / quant_axis` | **live** | smoothquant.migrate_activation_scale (producer pass) | W8A8 parity vs fp16 + anti-fallback (direct-consume kernel fired) |
@@ -23,8 +23,8 @@ The contract-pass plan's meta-gap tracker: each typed contract paired with the c
 - **Item:** #1/#6
 - **Contract site:** `tessera.cache.paged_kv.PagedKVState`
 - **Consumer:** tessera.ops.paged_attention / flash_attn(kv_state=)
-- **Oracle:** evaluator.paged_kv_equivalence + paged_kv_native_equivalence (Metal rung)
-- **Notes:** Unifies contiguous/tiered/latent/quantized-tail KV; runs native on Metal.
+- **Oracle:** evaluator.paged_kv_equivalence + paged_kv_native_equivalence (Metal + ROCm rungs)
+- **Notes:** Unifies contiguous/tiered/latent/quantized-tail KV; runs native on Metal and the compiled ROCm FA-2 lane.
 
 ### B — SchedulePolicy / CacheHandoff (live)
 

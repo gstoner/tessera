@@ -517,43 +517,56 @@ def paged_kv_equivalence(
     return CrossPathVerdict(relation, tuple(n for n, _ in outs), max_abs_err, detail)
 
 
+# Native provenance token each paged-attention GPU backend reports when its
+# kernel genuinely fires — the string the provenance gate below checks for.
+_PAGED_NATIVE_TOKEN = {"apple_gpu": "metal_runtime", "rocm": "native_gpu"}
+
+
 def paged_kv_native_equivalence(
     kv_state: Any,
     Q: Any,
     *,
     causal: bool = False,
+    backend: str = "apple_gpu",
     rtol: float = 1e-3,
     atol: float = 1e-4,
 ) -> CrossPathVerdict:
-    """Native rung for the PagedKVState ABI (#8): the Apple-GPU paged-attention
-    path must run on ``metal_runtime`` **and** agree with the numpy reference.
+    """Native rung for the PagedKVState ABI (#8): the ``backend`` paged-attention
+    path must run on its native runtime **and** agree with the numpy reference.
 
-    Two genuinely-independent lowering paths over the same staged KV — the Metal
-    fused matmul→softmax→matmul kernel vs numpy — cross-check each other (DESIL).
-    The verdict is ``inconclusive`` unless the GPU path actually fired (provenance
-    gate: a silent fallback cannot earn the native rung), and ``divergent`` if the
-    two paths disagree (a Metal miscompile).
+    Two genuinely-independent lowering paths over the same staged KV — the fused
+    GPU attention kernel (Apple Metal ``metal_runtime`` or the compiled ROCm FA-2
+    ``native_gpu`` lane) vs numpy — cross-check each other (DESIL). The verdict is
+    ``inconclusive`` unless the GPU path actually fired (provenance gate: a silent
+    fallback cannot earn the native rung), and ``divergent`` if the two paths
+    disagree (a GPU miscompile).
     """
     import numpy as np
 
     from ..cache.paged_kv import paged_attention
 
+    token = _PAGED_NATIVE_TOKEN.get(backend)
+    if token is None:
+        raise ValueError(
+            f"paged_kv_native_equivalence backend must be one of "
+            f"{sorted(_PAGED_NATIVE_TOKEN)}; got {backend!r}")
+
     ref = np.asarray(paged_attention(Q, kv_state, causal=causal,
                                      backend="reference"), dtype=np.float64)
     gpu_out, exe = paged_attention(Q, kv_state, causal=causal,
-                                   backend="apple_gpu", return_execution=True)
-    native_ran = (exe == "metal_runtime")
+                                   backend=backend, return_execution=True)
+    native_ran = (exe == token)
     gpu = np.asarray(gpu_out, dtype=np.float64)
 
     if not native_ran:
         return CrossPathVerdict(
             "inconclusive", ("reference",), None,
-            f"apple_gpu paged attention fell back ({exe!r}) — native rung unearned")
+            f"{backend} paged attention fell back ({exe!r}) — native rung unearned")
     max_abs_err = float(np.max(np.abs(gpu - ref))) if gpu.shape == ref.shape else None
     ref_scale = float(np.max(np.abs(ref))) or 1.0
     tol = atol + rtol * ref_scale
     relation, detail = _cross_path_relation(2, max_abs_err, tol=tol)
-    return CrossPathVerdict(relation, ("apple_gpu:metal_runtime", "reference"),
+    return CrossPathVerdict(relation, (f"{backend}:{token}", "reference"),
                             max_abs_err, detail)
 
 

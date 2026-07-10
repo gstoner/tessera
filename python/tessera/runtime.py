@@ -983,8 +983,22 @@ def _runtime_snapshot() -> tuple[TesseraRuntime | None, list[DeviceProps]]:
             rt.shutdown()
 
 
+#: Cached backend-name enumeration. _runtime_snapshot() constructs + init()s a
+#: TesseraRuntime and probes every device (~30ms), and the device set is stable
+#: within a process. available_backends() is on the launch() hot path (via
+#: backend_capabilities), so re-probing per call added ~32ms to EVERY compiled-
+#: lane launch — dwarfing the kernels. Reset with _reset_backend_probe_cache()
+#: (tests that swap the runtime/mock).
+_available_backends_cache: Optional[list[str]] = None
+
+
 def available_backends() -> list[str]:
-    """Return runtime backends discoverable through the current C ABI/mock."""
+    """Return runtime backends discoverable through the current C ABI/mock.
+    Cached per process (device enumeration is stable and ~30ms) — see the cache
+    note above."""
+    global _available_backends_cache
+    if _available_backends_cache is not None:
+        return _available_backends_cache
     _, devices = _runtime_snapshot()
     names = []
     for props in devices:
@@ -994,7 +1008,14 @@ def available_backends() -> list[str]:
             names.append("cuda")
         elif props.kind == DeviceKind.HIP:
             names.append("rocm")
-    return names or ["cpu"]
+    _available_backends_cache = names or ["cpu"]
+    return _available_backends_cache
+
+
+def _reset_backend_probe_cache() -> None:
+    """Clear the cached backend enumeration (for tests that swap the runtime)."""
+    global _available_backends_cache
+    _available_backends_cache = None
 
 
 def backend_capabilities(target: str = "cpu") -> BackendCapability:

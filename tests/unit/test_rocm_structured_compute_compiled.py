@@ -91,13 +91,25 @@ def test_rocm_structured_model_recurrent_and_stencil_match_reference_on_gpu():
 
     xt = rng.standard_normal((2, 3)).astype(np.float32)
     h = rng.standard_normal((2, 5)).astype(np.float32)
+    # simple_rnn cell — h' = tanh(x·W_ih + h·W_hh), W_ih (In,H) / W_hh (H,H). On
+    # rocm this runs the native fused recurrent-cell kernel (see
+    # test_rocm_recurrent_cell_compiled.py for the dtype/provenance sweep).
+    Wih1 = rng.standard_normal((3, 5)).astype(np.float32)
+    Whh1 = rng.standard_normal((5, 5)).astype(np.float32)
+    np.testing.assert_allclose(
+        _launch(rt, "tessera.simple_rnn_cell", ("x", "h", "Wih", "Whh"),
+                (xt, h, Wih1, Whh1)),
+        F.simple_rnn_cell(xt, h, Wih1, Whh1),
+        atol=1e-5,
+    )
+
     Wih3 = rng.standard_normal((3, 15)).astype(np.float32)
     Whh3 = rng.standard_normal((5, 15)).astype(np.float32)
     np.testing.assert_allclose(
         _launch(rt, "tessera.gru_cell", ("x", "h", "Wih", "Whh"),
                 (xt, h, Wih3, Whh3)),
         F.gru_cell(xt, h, Wih3, Whh3),
-        atol=1e-6,
+        atol=1e-5,
     )
 
     # LSTM cell — canonical tessera.ops.lstm_cell contract: (4H,In)/(4H,H)

@@ -416,8 +416,9 @@ symbols (not just an in-process compiled lane):
   (maxerr ~1e-4 f16). The FA-2 **backward** (dQ/dK/dV) also executes on gfx1151
   via the compiler-generated `rocm_flash_attn_bwd_compiled` lane
   (`generate-wmma-flash-attn-bwd-kernel` → `fa_pre`/`fa_dkdv`/`fa_dq`; O
-  recomputed via the forward lane, nothing saved from forward), **MHA + GQA/MQA**
-  (scale + causal), validated vs autodiff `vjp_flash_attn`. No perf ladder.
+  recomputed via the forward lane, nothing saved from forward), **MHA + GQA/MQA
+  + additive attn_bias + sliding-window + logit-softcap** (scale + causal),
+  validated vs autodiff `vjp_flash_attn`. No perf ladder.
 
 Honest scope (Decision #25): everything above is **one arch (RDNA 3.5 `gfx1151`) ×
 {fp16, bf16}**, correctness-first. None of it flips the per-primitive
@@ -461,9 +462,10 @@ promotes them to `compileable`. See §9 for the concrete done / open / blocked s
   `rocm_flash_attn_bwd_compiled` lane (`generate-wmma-flash-attn-bwd-kernel` →
   `fa_pre`/`fa_dkdv`/`fa_dq`, launched through `runtime.launch()`), matches
   autodiff `vjp_flash_attn` on `{fp16, bf16}`; **MHA + GQA/MQA** (grouped `fa_dkdv`
-  atomic-accumulates dK/dV across the group) **+ additive attn_bias**
-  (`S = scale*Q@K^T + bias` in the recompute), scale + causal. No perf ladder;
-  windowed/softcap backward is the remaining follow-up
+  atomic-accumulates dK/dV) **+ additive attn_bias + sliding-window** (implicitly
+  causal, masks keys older than W) **+ logit-softcap** (`S = cap·tanh(scale·QK/cap)`;
+  backward scales dS by `1−tanh²`), scale + causal — the full forward variant
+  surface. No perf ladder
 - ✅ **Dozens of additional compiler-generated HIP `compiled` lanes execute** and
   match a CPU/numpy reference — nearly all of §5 plus §10: the GEMM/attention
   families, norm / activation / RoPE / ALiBi, optimizers, RNG, FFT/spectral,
@@ -485,9 +487,9 @@ promotes them to `compileable`. See §9 for the concrete done / open / blocked s
   (the emitter currently rides the direct LLVM-IR path)
 
 ### Open on this box (gfx1151 — workable now, no CDNA needed)
-- `flash_attn` **backward** for the sliding-window / logit-softcap variants
-  (MHA + GQA/MQA + additive **attn_bias** backward is done and runtime-wired;
-  window/softcap still need the masked/capped backward math in the C++ kernel)
+- (flash_attn backward is now the **full forward variant surface** — MHA +
+  GQA/MQA + attn_bias + sliding-window + logit-softcap — all runtime-wired)
+- Perf ladders / MFU sign-off for the compiled lanes (still correctness-first)
 - **Fused paged-attention** — the §5.6 movement core (`kv_cache_append/read/prune`)
   now executes via `rocm_kv_cache_compiled` (scatter/gather compose,
   execute-compare vs `KVCacheHandle`); a single fused gather→attention paged

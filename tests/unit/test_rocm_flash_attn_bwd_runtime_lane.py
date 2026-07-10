@@ -27,54 +27,71 @@ def _rocm_or_skip():
     return rt
 
 
-def _ref_bwd(Q, K, V, dO, scale, causal, bias=None):
+def _ref_bwd(Q, K, V, dO, scale, causal, bias=None, window=0, softcap=0.0):
     """numpy FA backward (f32 math from the f16/bf16 storage inputs). Handles
-    GQA/MQA: query head h reads KV head g = h // (H//G); dK/dV accumulate over the
-    group. Q/dO are [B,H,Sq,D]; K/V are [B,G,Sk,D]. Optional additive bias
-    [B,H,Sq,Sk] enters S before the softmax."""
+    GQA/MQA (query head h reads KV head g = h // (H//G); dK/dV accumulate over the
+    group), optional additive bias [B,H,Sq,Sk], sliding window W (q attends keys
+    in (q-W, q], implicitly causal), and Gemma-2 soft-cap (S=cap*tanh(S_raw/cap),
+    backward scales dS by 1-tanh^2). Q/dO are [B,H,Sq,D]; K/V are [B,G,Sk,D]."""
     B, H, Sq, D = Q.shape
     G, Sk = K.shape[1], K.shape[2]
     ratio = H // G
     Qf, Kf, Vf, dOf = (a.astype(np.float32) for a in (Q, K, V, dO))
     biasf = None if bias is None else np.asarray(bias, np.float32)
+    i = np.arange(Sq)[:, None]; j = np.arange(Sk)[None, :]
     dQ = np.zeros((B, H, Sq, D), np.float32)
     dK = np.zeros((B, G, Sk, D), np.float32)
     dV = np.zeros((B, G, Sk, D), np.float32)
     for b in range(B):
         for h in range(H):
             g = h // ratio
-            s = scale * (Qf[b, h] @ Kf[b, g].T)
+            s_raw = scale * (Qf[b, h] @ Kf[b, g].T)
+            if softcap:
+                t = np.tanh(s_raw / softcap)
+                s = softcap * t
+                capderiv = 1.0 - t * t
+            else:
+                s = s_raw
+                capderiv = 1.0
             if biasf is not None:
                 s = s + biasf[b, h]
-            if causal:
-                i = np.arange(Sq)[:, None]; j = np.arange(Sk)[None, :]
-                s = np.where(j > i, -1e30, s)
+            mask = np.zeros((Sq, Sk), bool)
+            if causal or window:
+                mask |= (j > i)                 # causal upper (future keys)
+            if window:
+                mask |= ((i - j) >= window)     # too-old keys
+            s = np.where(mask, -1e30, s)
             s = s - s.max(-1, keepdims=True)
             p = np.exp(s); p = p / p.sum(-1, keepdims=True)
             O = p @ Vf[b, g]
             dp = dOf[b, h] @ Vf[b, g].T
             dq_row = np.sum(O * dOf[b, h], axis=-1, keepdims=True)
-            ds = p * (dp - dq_row)
+            ds = p * (dp - dq_row) * capderiv   # dS_raw = dS_capped * cap'
             dQ[b, h] = scale * (ds @ Kf[b, g])
             dK[b, g] += scale * (ds.T @ Qf[b, h])
             dV[b, g] += p.T @ dOf[b, h]
     return dQ, dK, dV
 
 
-def _art(rt, causal, scale, bias=False):
+def _art(rt, causal, scale, bias=False, window=0, softcap=0.0):
     names = ["do", "q", "k", "v"] + (["bias"] if bias else [])
+    kw = {"scale": scale, "causal": causal}
+    if window:
+        kw["window"] = int(window)
+    if softcap:
+        kw["logit_softcap"] = float(softcap)
     return rt.RuntimeArtifact(metadata={
         "target": "rocm", "compiler_path": "rocm_flash_attn_bwd_compiled",
         "executable": True, "execution_kind": "native_gpu",
         "arg_names": names, "output_name": "g",
         "ops": [{"op_name": "tessera.flash_attn_bwd", "result": "g",
-                 "operands": names,
-                 "kwargs": {"scale": scale, "causal": causal}}]})
+                 "operands": names, "kwargs": kw}]})
 
 
-def _run(rt, dO, Q, K, V, *, causal, scale, bias=None):
+def _run(rt, dO, Q, K, V, *, causal, scale, bias=None, window=0, softcap=0.0):
     call = (dO, Q, K, V) if bias is None else (dO, Q, K, V, bias)
-    res = rt.launch(_art(rt, causal, scale, bias is not None), call)
+    res = rt.launch(
+        _art(rt, causal, scale, bias is not None, window, softcap), call)
     assert res["ok"] is True, res.get("reason")
     assert res["compiler_path"] == "rocm_flash_attn_bwd_compiled"
     dQ, dK, dV = res["output"]
@@ -192,6 +209,72 @@ def test_bwd_runtime_lane_bias_broadcast_per_head():
     dQ_ref, dK_ref, dV_ref = _ref_bwd(Q, K, V, dO, scale, False, bias=full)
     dQ, dK, dV = _run(rt, dO, Q, K, V, causal=False, scale=scale, bias=bias_h)
     tol = 5e-3
+    assert (_relerr(dQ, dQ_ref) < tol and _relerr(dK, dK_ref) < tol
+            and _relerr(dV, dV_ref) < tol)
+
+
+@pytest.mark.parametrize("D,B,H,Sq,Sk,W", [
+    (16, 1, 2, 32, 32, 8),
+    (16, 1, 2, 40, 40, 16),
+    (64, 1, 2, 48, 48, 24),
+])
+def test_bwd_runtime_lane_sliding_window_matches_numpy(D, B, H, Sq, Sk, W):
+    rt = _rocm_or_skip()
+    rng = np.random.default_rng(51 + D + Sq + W)
+    Q = (rng.standard_normal((B, H, Sq, D)) * 0.3).astype(np.float16)
+    K = (rng.standard_normal((B, H, Sk, D)) * 0.3).astype(np.float16)
+    V = (rng.standard_normal((B, H, Sk, D)) * 0.3).astype(np.float16)
+    dO = (rng.standard_normal((B, H, Sq, D)) * 0.3).astype(np.float16)
+    scale = 1.0 / float(np.sqrt(D))
+    # window is implicitly causal → reference uses causal=False + window=W.
+    dQ_ref, dK_ref, dV_ref = _ref_bwd(Q, K, V, dO, scale, False, window=W)
+    dQ, dK, dV = _run(rt, dO, Q, K, V, causal=False, scale=scale, window=W)
+    tol = 5e-3
+    eQ, eK, eV = _relerr(dQ, dQ_ref), _relerr(dK, dK_ref), _relerr(dV, dV_ref)
+    assert eQ < tol and eK < tol and eV < tol, (
+        f"window rel-err dQ={eQ:.2e} dK={eK:.2e} dV={eV:.2e} "
+        f"@ D={D} {B}x{H}x{Sq}x{Sk} W={W}")
+
+
+@pytest.mark.parametrize("D,B,H,Sq,Sk,cap,causal", [
+    (16, 1, 2, 32, 32, 30.0, False),
+    (16, 1, 2, 24, 40, 50.0, False),
+    (64, 1, 2, 32, 32, 20.0, True),
+])
+def test_bwd_runtime_lane_softcap_matches_numpy(D, B, H, Sq, Sk, cap, causal):
+    rt = _rocm_or_skip()
+    rng = np.random.default_rng(61 + D + Sq + int(cap))
+    # larger magnitude so the tanh soft-cap is actually exercised.
+    Q = (rng.standard_normal((B, H, Sq, D)) * 1.0).astype(np.float16)
+    K = (rng.standard_normal((B, H, Sk, D)) * 1.0).astype(np.float16)
+    V = (rng.standard_normal((B, H, Sk, D)) * 0.5).astype(np.float16)
+    dO = (rng.standard_normal((B, H, Sq, D)) * 0.5).astype(np.float16)
+    scale = 1.0 / float(np.sqrt(D))
+    dQ_ref, dK_ref, dV_ref = _ref_bwd(Q, K, V, dO, scale, causal, softcap=cap)
+    dQ, dK, dV = _run(rt, dO, Q, K, V, causal=causal, scale=scale, softcap=cap)
+    tol = 8e-3
+    eQ, eK, eV = _relerr(dQ, dQ_ref), _relerr(dK, dK_ref), _relerr(dV, dV_ref)
+    assert eQ < tol and eK < tol and eV < tol, (
+        f"softcap rel-err dQ={eQ:.2e} dK={eK:.2e} dV={eV:.2e} "
+        f"@ D={D} {B}x{H}x{Sq}x{Sk} cap={cap} causal={causal}")
+
+
+def test_bwd_runtime_lane_window_softcap_bias_compose():
+    # window + softcap + bias together (also exercises the arg-order plumbing).
+    rt = _rocm_or_skip()
+    rng = np.random.default_rng(77)
+    B, H, Sq, Sk, D, W, cap = 1, 2, 32, 32, 16, 12, 30.0
+    Q = (rng.standard_normal((B, H, Sq, D)) * 0.6).astype(np.float16)
+    K = (rng.standard_normal((B, H, Sk, D)) * 0.6).astype(np.float16)
+    V = (rng.standard_normal((B, H, Sk, D)) * 0.5).astype(np.float16)
+    dO = (rng.standard_normal((B, H, Sq, D)) * 0.5).astype(np.float16)
+    bias = (rng.standard_normal((B, H, Sq, Sk)) * 0.3).astype(np.float32)
+    scale = 1.0 / float(np.sqrt(D))
+    dQ_ref, dK_ref, dV_ref = _ref_bwd(Q, K, V, dO, scale, False, bias=bias,
+                                      window=W, softcap=cap)
+    dQ, dK, dV = _run(rt, dO, Q, K, V, causal=False, scale=scale, bias=bias,
+                      window=W, softcap=cap)
+    tol = 8e-3
     assert (_relerr(dQ, dQ_ref) < tol and _relerr(dK, dK_ref) < tol
             and _relerr(dV, dV_ref) < tol)
 

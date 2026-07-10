@@ -199,8 +199,9 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "hsaco), launched in sequence to produce dQ/dK/dV; O "
                             "is recomputed via the forward lane (nothing saved "
                             "from forward). MHA + GQA/MQA (grouped dkdv atomic-"
-                            "accumulates dK/dV) + additive attn_bias; f16/bf16 "
-                            "storage, f32 accumulate; the reverse-mode analog of "
+                            "accumulates dK/dV) + additive attn_bias + sliding-"
+                            "window + logit-softcap; f16/bf16 storage, f32 "
+                            "accumulate; the reverse-mode analog of "
                             "rocm_flash_attn_compiled",
     "rocm_linear_attn_compiled": "AMD GPU RDNA WMMA linear-attention forward the "
                             "Tessera compiler GENERATES "
@@ -1782,8 +1783,9 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "via the forward lane (nothing saved from forward). The "
                "reverse-mode analog of rocm_flash_attn_compiled; MHA + GQA/MQA "
                "(gqa dkdv atomic-accumulates dK/dV across the group) + additive "
-               "attn_bias (S=scale*QK+bias in the recompute), scale + causal, "
-               "f16/bf16 storage, f32 accumulate.",
+               "attn_bias + sliding-window (implicitly causal, masks keys older "
+               "than W) + Gemma-2 logit-softcap (dS scaled by 1-tanh^2), scale + "
+               "causal, f16/bf16 storage, f32 accumulate.",
         execution_mode="hip_runtime"),
     # Linear-attention family (quadratic-parallel form, no softmax; a distinct
     # algorithm from flash_attn): tessera.linear_attn + the decay-masked siblings

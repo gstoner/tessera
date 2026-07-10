@@ -3138,23 +3138,27 @@ def _execute_rocm_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> A
 # carries the GQA variant; the runtime lane forwards only the core here).
 # ─────────────────────────────────────────────────────────────────────────────
 #: hsaco bytes keyed by (head_dim, chip, dtype, gqa, bias).
-_rocm_fa_bwd_hsaco_cache: dict[tuple[int, str, str, bool, bool], bytes] = {}
+_rocm_fa_bwd_hsaco_cache: dict[
+    tuple[int, str, str, bool, bool, bool, bool], bytes] = {}
 
 
 def _build_compiled_flash_attn_bwd_hsaco(head_dim: int,
                                          dtype: str = "f16",
                                          gqa: bool = False,
-                                         bias: bool = False) -> bytes:
+                                         bias: bool = False,
+                                         window: bool = False,
+                                         softcap: bool = False) -> bytes:
     """Generate + serialize the compiler's WMMA FA-2 backward kernels to hsaco
     (fa_pre / fa_dkdv / fa_dq in one module), fully in-process via tessera-opt.
-    Cached per (head_dim, chip, dtype, gqa, bias). gqa=True emits the grouped-
-    query variant: all three kernels gain (heads, kv_ratio) runtime args and
-    fa_dkdv atomically accumulates dK/dV across the kv_ratio query heads sharing
-    each KV head (host pre-zeros dK/dV). bias=True emits the additive-bias
-    variant: the recompute forms S = scale*Q@K^T + bias (a trailing f32
-    [bh,Sq,Sk] memref arg, LAST) before the softmax."""
+    Cached per (head_dim, chip, dtype, gqa, bias, window, softcap). Trailing
+    runtime args appended in a FIXED order — gqa(heads,kv_ratio) | window(W) |
+    softcap(cap) | bias([bh,Sq,Sk], LAST): gqa=True adds the grouped-query
+    variant (fa_dkdv atomically accumulates dK/dV, host pre-zeros); window=True
+    the sliding-window variant (implicitly causal, masks keys older than W);
+    softcap=True the Gemma-2 soft-cap (S=cap*tanh(scale*QK/cap), backward scales
+    dS by 1-tanh^2); bias=True the additive-bias variant."""
     chip = _rocm_chip()
-    key = (head_dim, chip, dtype, gqa, bias)
+    key = (head_dim, chip, dtype, gqa, bias, window, softcap)
     cached = _rocm_fa_bwd_hsaco_cache.get(key)
     if cached is not None:
         return cached
@@ -3162,12 +3166,16 @@ def _build_compiled_flash_attn_bwd_hsaco(head_dim: int,
     if opt is None:
         raise _RocmCompiledUnavailable(
             "tessera-opt not built — no compiled ROCm flash_attn backward lane")
-    gqa_attr = ", gqa = true" if gqa else ""
-    bias_attr = ", attn_bias = true" if bias else ""
+    attrs = "".join([
+        ", gqa = true" if gqa else "",
+        ", sliding_window = true" if window else "",
+        ", logit_softcap = true" if softcap else "",
+        ", attn_bias = true" if bias else "",
+    ])
     directive = (
         'module {\n'
         '  "tessera_rocm.flash_attn_bwd"() {name = "fa", '
-        f'head_dim = {head_dim} : i64, dtype = "{dtype}"{gqa_attr}{bias_attr}}} '
+        f'head_dim = {head_dim} : i64, dtype = "{dtype}"{attrs}}} '
         ': () -> ()\n'
         '}\n'
     )
@@ -3197,19 +3205,25 @@ def _build_compiled_flash_attn_bwd_hsaco(head_dim: int,
 
 
 def _rocm_flash_attn_forward_o(q: Any, k: Any, v: Any, scale: float,
-                               causal: int, bias: Any = None) -> Any:
+                               causal: int, bias: Any = None,
+                               window: int = 0,
+                               logit_softcap: float = 0.0) -> Any:
     """Recompute the forward output O (f32, shape [bh, sq, D]) by REUSING the
-    forward compiled lane — the backward saves nothing from forward. When
-    ``bias`` is given, O = softmax(scale*Q@K^T + bias)*V (the forward lane takes
-    attn_bias as a 4th operand), so O matches the biased backward recompute."""
+    forward compiled lane — the backward saves nothing from forward. The forward
+    lane takes attn_bias as a 4th operand and window / logit_softcap as kwargs,
+    so O matches the backward's windowed / soft-capped / biased score recompute."""
     names = ["q", "k", "v"] + (["bias"] if bias is not None else [])
+    kw: dict[str, Any] = {"scale": scale, "causal": bool(causal)}
+    if window:
+        kw["window"] = int(window)
+    if logit_softcap:
+        kw["logit_softcap"] = float(logit_softcap)
     fwd_art = RuntimeArtifact(metadata={
         "target": "rocm", "compiler_path": "rocm_flash_attn_compiled",
         "executable": True, "execution_kind": "native_gpu",
         "arg_names": names, "output_name": "o",
         "ops": [{"op_name": "tessera.flash_attn", "result": "o",
-                 "operands": names,
-                 "kwargs": {"scale": scale, "causal": bool(causal)}}]})
+                 "operands": names, "kwargs": kw}]})
     call = (q, k, v) if bias is None else (q, k, v, bias)
     return _execute_rocm_compiled_flash_attn(fwd_art, call)
 
@@ -3297,11 +3311,22 @@ def _execute_rocm_compiled_flash_attn_bwd(artifact: RuntimeArtifact,
     causal = 1 if bool(kwargs.get("causal", False)) else 0
     scale = kwargs.get("scale")
     scale = float(scale) if scale is not None else 1.0 / float(np.sqrt(head_dim))
-    for bad, why in (("window", "sliding-window"), ("logit_softcap", "softcap")):
-        if kwargs.get(bad):
-            raise ValueError(
-                f"rocm flash_attn backward does not yet support {why}; the core "
-                "MHA (scale + causal) + additive attn_bias backward is wired.")
+    # Sliding-window: a positive `window` selects a causal band of width W
+    # (query q attends to keys in (q-W, q]); the windowed kernel is implicitly
+    # causal. Gemma-2 soft-cap: a positive `logit_softcap` caps the pre-softmax
+    # score to cap*tanh(S/cap); the backward scales dS by 1-tanh^2(S_raw/cap).
+    window = int(kwargs.get("window") or 0)
+    if window < 0:
+        raise ValueError(
+            f"rocm flash_attn backward window must be non-negative; got {window}")
+    sliding = window > 0
+    softcap = kwargs.get("logit_softcap")
+    softcap = float(softcap) if softcap else 0.0
+    if softcap < 0:
+        raise ValueError(
+            f"rocm flash_attn backward logit_softcap must be non-negative; got "
+            f"{softcap}")
+    has_softcap = softcap > 0
 
     # Additive bias: S = softmax(scale*Q@K^T + bias). Host-broadcast to
     # Q.lead+(Sq,Sk) → [bh,Sq,Sk] f32 (kernel indexes bias[(bh*Sq+q)*Sk+k]),
@@ -3322,15 +3347,17 @@ def _execute_rocm_compiled_flash_attn_bwd(artifact: RuntimeArtifact,
                 f"{tuple(q.shape[:-2]) + (sq, sk)}") from exc
         bias_c = np.ascontiguousarray(bias_b, dtype=np.float32).reshape(-1)
 
-    # O the pre-pass needs — recompute on-device via the forward lane (with the
-    # same bias, so O = softmax(scale*QK + bias)*V matches the recompute).
+    # O the pre-pass needs — recompute on-device via the forward lane with the
+    # SAME window/softcap/bias, so O matches the backward's score recompute.
     o_f32 = np.ascontiguousarray(
         _rocm_flash_attn_forward_o(q, k, v, scale, causal,
-                                   bias=bias_arr if has_bias else None),
+                                   bias=bias_arr if has_bias else None,
+                                   window=window, logit_softcap=softcap),
         dtype=np.float32).reshape(bh, sq, head_dim)
 
-    hsaco = _build_compiled_flash_attn_bwd_hsaco(head_dim, dtype_tag, gqa=gqa,
-                                                 bias=has_bias)
+    hsaco = _build_compiled_flash_attn_bwd_hsaco(
+        head_dim, dtype_tag, gqa=gqa, bias=has_bias, window=sliding,
+        softcap=has_softcap)
     hip = _load_hip_for_launch()
     if hip is None:
         raise _RocmCompiledUnavailable(
@@ -3395,9 +3422,14 @@ def _execute_rocm_compiled_flash_attn_bwd(artifact: RuntimeArtifact,
     # Grouped kernels take (heads, kv_ratio) as two trailing runtime args after
     # (Sq, Sk, scale, causal); the plain kernels have neither. Grid.y is always
     # the query-head count B*H (fa_dkdv accumulates into KV heads atomically).
-    tail = [ctypes.c_int64(n_qh), ctypes.c_int64(kv_ratio)] if gqa else []
-    # Additive bias memref is the LAST kernel arg on all three kernels (after the
-    # optional gqa pair) — matches the C++ withGqa(... + bias) arg order.
+    tail: list[Any] = (
+        [ctypes.c_int64(n_qh), ctypes.c_int64(kv_ratio)] if gqa else [])
+    # Trailing args in the C++ withGqa order: gqa pair | window W | softcap cap |
+    # bias memref (LAST). Each present only when its flag is set.
+    if sliding:
+        tail.append(ctypes.c_int64(window))
+    if has_softcap:
+        tail.append(ctypes.c_float(softcap))
     bias_tail = _mr(bufs["bias"], n_bias) if has_bias else []
     gqt, gkt, gyt = (sq + 15) // 16, (sk + 15) // 16, bh
 

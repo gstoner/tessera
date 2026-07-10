@@ -1224,8 +1224,9 @@ _ROCM_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
             "BACKWARD (dQ/dK/dV) also executes on gfx1151 via the "
             "compiler-generated rocm_flash_attn_bwd_compiled lane "
             "(generate-wmma-flash-attn-bwd-kernel -> fa_pre/fa_dkdv/fa_dq; MHA + "
-            "GQA/MQA + additive attn_bias, scale+causal), validated vs autodiff "
-            "vjp_flash_attn — see the runtime_execution_matrix."
+            "GQA/MQA + additive attn_bias + sliding-window + logit-softcap, "
+            "scale+causal), validated vs autodiff vjp_flash_attn — see the "
+            "runtime_execution_matrix."
         ),
     },
 }

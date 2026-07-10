@@ -33,7 +33,8 @@ def _launch(op, kwargs, operands=()):
     res = rt.launch(_art(op, kwargs, operands), operands)
     assert res["ok"] is True, res.get("reason")
     assert res["compiler_path"] == "apple_gpu_rng_compiled"
-    assert res["execution_kind"] == "native_gpu"
+    # Apple ships no device Philox; the lane runs on the CPU reference path.
+    assert res["execution_kind"] == "reference_cpu"
     return res["output"]
 
 

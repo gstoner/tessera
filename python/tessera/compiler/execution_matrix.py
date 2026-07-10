@@ -904,11 +904,14 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "x86/rocm_conformal_compiled.",
         execution_mode="metal_runtime"),
     # Apple GPU Philox RNG lane (2026-07-10) — parity with the x86/ROCm rng
-    # lanes. rng_uniform/rng_normal/dropout via the Philox-4x32-10 reference core;
-    # the distribution samplers + RNGKey ops via the public tessera.rng contract.
+    # lanes. Apple ships no device Philox kernel, so this lane runs entirely on
+    # the CPU reference (tessera.rng_device Philox core + tessera.rng RNGKey
+    # contract) — no Metal dispatch. It is an executable apple_gpu artifact path
+    # with a compare fixture, but it does NOT run on the GPU: execution_kind is
+    # reference_cpu so telemetry/audit never miscount it as Apple GPU execution.
     ("apple_gpu", "apple_gpu_rng_compiled"): ExecutionRow(
         target="apple_gpu", compiler_path="apple_gpu_rng_compiled",
-        execution_kind="native_gpu", executable=True,
+        execution_kind="reference_cpu", executable=True,
         executor_id="apple_gpu_rng_compiled", runtime_status="success",
         reason="Apple GPU RNG artifact runs rng_uniform / rng_normal / dropout "
                "from the counter-based Philox-4x32-10 reference "
@@ -916,9 +919,9 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "distribution samplers (bernoulli/beta/categorical/dirichlet/"
                "gamma/poisson/randint/truncated_normal/permutation/multinomial, "
                "RNGKey key/split/fold_in/clone, MCMC samplers) via the public "
-               "tessera.rng RNGKey contract. Matches tessera.rng / "
-               "tessera.rng_device — parity with x86/rocm_rng_compiled.",
-        execution_mode="metal_runtime"),
+               "tessera.rng RNGKey contract. Runs on the CPU reference path (no "
+               "Metal dispatch) — execution_kind=reference_cpu; matches "
+               "tessera.rng / tessera.rng_device, parity with x86/rocm_rng_compiled."),
     # --- x86 / native CPU (AMX path) ---
     ("cpu", "native_cpu"): ExecutionRow(
         target="cpu", compiler_path="native_cpu",

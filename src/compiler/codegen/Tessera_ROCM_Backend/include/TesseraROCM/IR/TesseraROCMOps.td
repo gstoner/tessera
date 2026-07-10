@@ -543,6 +543,19 @@ def ROCM_MoeKernelOp : TesseraROCM_Op<"moe"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_GemmF32KernelOp : TesseraROCM_Op<"gemm_f32"> {
+  let summary = "Plain single-precision GEMM gpu kernel";
+  let description = [{
+    `generate-rocm-gemm-f32-kernel` expands into a plain f32 GEMM
+    C[m,n] = Σ_k A[m,k]·B[k,n] (A [M,K], B [K,N], C [M,N]), one thread per output
+    element, scalar f32 k-loop (f32 accumulate). RDNA WMMA is f16/bf16 only, so
+    this is the f32-exact VALU/FMA fallback for the expert GEMM (grouped SwiGLU);
+    correctness-first, no LDS tiling. M/N/K are runtime index args.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_PredicateKernelOp : TesseraROCM_Op<"predicate"> {
   let summary = "Unary predicate (isnan/isinf/isfinite) gpu kernel";
   let description = [{

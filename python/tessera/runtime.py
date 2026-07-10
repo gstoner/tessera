@@ -1451,12 +1451,49 @@ def _rocm_dequant_grouped_gemm_native(x: Any, packed_experts: Any,
     return out
 
 
-def _execute_rocm_moe_transport_reference(artifact: RuntimeArtifact, args: Any) -> Any:
-    """DK3 transition executor for ``rocm_moe_transport_compiled``.
+def _moe_dispatch_native(x: Any, plan: Any, np: Any) -> Any:
+    """DK3 dispatch = gather the token row for each kept, expert-sorted slot
+    (token_of_slot = sort_perm // top_k) on the gfx1151 device gather kernel.
+    Exact vs the numpy gather (pure row movement, f32)."""
+    xa = np.ascontiguousarray(_as_numpy(x), np.float32)
+    if xa.ndim != 2:
+        raise ValueError(f"moe_dispatch x must be 2-D (T,H); got {xa.shape}")
+    tof = (np.asarray(plan.sort_perm, np.int64) // int(plan.top_k))
+    if tof.shape[0] == 0:
+        return np.zeros((0, int(xa.shape[1])), np.float32)
+    return _rocm_gather_rows(xa, tof, np)
 
-    This pins the MoE transport/runtime ABI against the stdlib oracle while the
-    native ROCm gather/scatter and grouped-GEMM transport kernels are promoted.
-    """
+
+def _moe_combine_native(y_packed: Any, plan: Any, np: Any) -> Any:
+    """DK3 combine = weighted scatter-add of the packed expert rows back to token
+    order: out[t] += w[slot]*yp[i], t = slot // top_k. Host pre-scales each row
+    by its route weight (exact f32), then the gfx1151 device scatter kernel
+    (mode add) accumulates into the token rows. f32 accumulate."""
+    yp = np.ascontiguousarray(_as_numpy(y_packed), np.float32)
+    if yp.ndim != 2:
+        raise ValueError(f"moe_combine partials must be 2-D (S,H); got {yp.shape}")
+    S, H = int(yp.shape[0]), int(yp.shape[1])
+    T = int(plan.num_tokens)
+    out = np.zeros((T, H), np.float32)
+    if S == 0:
+        return out
+    slots = np.asarray(plan.sort_perm, np.int64)
+    w = np.asarray(plan.weights, np.float32).reshape(-1)[slots].reshape(S, 1)
+    scaled = np.ascontiguousarray(yp * w, np.float32)
+    tof = (slots // int(plan.top_k)).astype(np.int64)
+    _rocm_scatter(out, scaled, tof, T, H, 1, np)   # mode 1 = atomic add
+    return out
+
+
+def _execute_rocm_moe_transport(artifact: RuntimeArtifact, args: Any) -> Any:
+    """``rocm_moe_transport_compiled`` executor. The transport ops run natively
+    on gfx1151 — ``moe_dispatch`` on the device gather kernel, ``moe_combine`` on
+    the device scatter (add) kernel — and report ``native_gpu`` (falling back to
+    the stdlib oracle + ``reference_cpu`` when tessera-opt / a GPU is absent).
+    ``grouped_swiglu`` (the expert GEMM) stays on the stdlib oracle and reports
+    ``reference_cpu`` — a native f32-exact grouped GEMM is a separate follow-up.
+    Per-op ``execution_kind`` via the ``(output, kind)`` launch override."""
+    import numpy as np
     from .stdlib import moe
 
     metadata = artifact.metadata or {}
@@ -1467,25 +1504,34 @@ def _execute_rocm_moe_transport_reference(artifact: RuntimeArtifact, args: Any) 
 
     if op_name == "tessera.moe_dispatch":
         try:
-            return moe.dispatch(values["x"], values["plan"])
+            x, plan = values["x"], values["plan"]
         except KeyError as exc:
             raise ValueError(f"missing moe_dispatch argument {exc.args[0]!r}") from exc
+        try:
+            return (_moe_dispatch_native(x, plan, np), "native_gpu")
+        except _RocmCompiledUnavailable:
+            return (moe.dispatch(x, plan), "reference_cpu")
     if op_name == "tessera.moe_combine":
         try:
-            return moe.combine(values["partials"], values["plan"])
+            partials, plan = values["partials"], values["plan"]
         except KeyError as exc:
             raise ValueError(f"missing moe_combine argument {exc.args[0]!r}") from exc
+        try:
+            return (_moe_combine_native(partials, plan, np), "native_gpu")
+        except _RocmCompiledUnavailable:
+            return (moe.combine(partials, plan), "reference_cpu")
     if op_name == "tessera.grouped_swiglu":
         try:
-            return moe.grouped_swiglu(
-                values["x_packed"],
-                values["w_gate"],
-                values["w_up"],
-                values["w_down"],
-                values["group_sizes"],
-            )
+            gvals = (values["x_packed"], values["w_gate"], values["w_up"],
+                     values["w_down"], values["group_sizes"])
         except KeyError as exc:
             raise ValueError(f"missing grouped_swiglu argument {exc.args[0]!r}") from exc
+        # Expert GEMM runs natively on the f32 GEMM device kernel (three GEMMs +
+        # host silu*mul per group); falls back to the f64 oracle off-box.
+        try:
+            return (_moe_grouped_swiglu_native(*gvals, np), "native_gpu")
+        except _RocmCompiledUnavailable:
+            return (moe.grouped_swiglu(*gvals), "reference_cpu")
     raise ValueError(
         "rocm_moe_transport_compiled executor handles tessera.moe_dispatch, "
         "tessera.moe_combine, or tessera.grouped_swiglu; "
@@ -3074,6 +3120,358 @@ def _execute_rocm_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> A
     for dev in dev_bufs:
         hip.hipFree(dev)
     return o.reshape(q.shape)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ROCm COMPILED flash_attn BACKWARD lane (2026-07-10) — the reverse-mode analog
+# of the forward lane above. ``runtime.launch()`` of an artifact stamped
+# ``compiler_path = "rocm_flash_attn_bwd_compiled"`` builds the COMPILER-
+# GENERATED FA-2 backward via ``generate-wmma-flash-attn-bwd-kernel`` (one
+# tessera_rocm.flash_attn_bwd directive → THREE fragment-materialized WMMA
+# kernels fa_pre / fa_dkdv / fa_dq → hsaco) and launches them in sequence to
+# produce (dQ, dK, dV). The forward output O the pre-pass needs is recomputed
+# on-device by REUSING the forward lane above (no state saved from forward), so
+# the backward is a self-contained VJP over (dO, Q, K, V). f16/bf16 storage, f32
+# accumulate. Matches the numpy attention-backward reference / autodiff
+# ``vjp_flash_attn``. Core MHA (scale + causal) — GQA / sliding-window /
+# logit-softcap / attn_bias backward are a follow-up (the C++ kernel already
+# carries the GQA variant; the runtime lane forwards only the core here).
+# ─────────────────────────────────────────────────────────────────────────────
+#: hsaco bytes keyed by (head_dim, chip, dtype, gqa, bias).
+_rocm_fa_bwd_hsaco_cache: dict[
+    tuple[int, str, str, bool, bool, bool, bool], bytes] = {}
+
+
+def _build_compiled_flash_attn_bwd_hsaco(head_dim: int,
+                                         dtype: str = "f16",
+                                         gqa: bool = False,
+                                         bias: bool = False,
+                                         window: bool = False,
+                                         softcap: bool = False) -> bytes:
+    """Generate + serialize the compiler's WMMA FA-2 backward kernels to hsaco
+    (fa_pre / fa_dkdv / fa_dq in one module), fully in-process via tessera-opt.
+    Cached per (head_dim, chip, dtype, gqa, bias, window, softcap). Trailing
+    runtime args appended in a FIXED order — gqa(heads,kv_ratio) | window(W) |
+    softcap(cap) | bias([bh,Sq,Sk], LAST): gqa=True adds the grouped-query
+    variant (fa_dkdv atomically accumulates dK/dV, host pre-zeros); window=True
+    the sliding-window variant (implicitly causal, masks keys older than W);
+    softcap=True the Gemma-2 soft-cap (S=cap*tanh(scale*QK/cap), backward scales
+    dS by 1-tanh^2); bias=True the additive-bias variant."""
+    chip = _rocm_chip()
+    key = (head_dim, chip, dtype, gqa, bias, window, softcap)
+    cached = _rocm_fa_bwd_hsaco_cache.get(key)
+    if cached is not None:
+        return cached
+    opt = _tessera_opt_path()
+    if opt is None:
+        raise _RocmCompiledUnavailable(
+            "tessera-opt not built — no compiled ROCm flash_attn backward lane")
+    attrs = "".join([
+        ", gqa = true" if gqa else "",
+        ", sliding_window = true" if window else "",
+        ", logit_softcap = true" if softcap else "",
+        ", attn_bias = true" if bias else "",
+    ])
+    directive = (
+        'module {\n'
+        '  "tessera_rocm.flash_attn_bwd"() {name = "fa", '
+        f'head_dim = {head_dim} : i64, dtype = "{dtype}"{attrs}}} '
+        ': () -> ()\n'
+        '}\n'
+    )
+    pipeline = (
+        "builtin.module("
+        "generate-wmma-flash-attn-bwd-kernel,"
+        "lower-tessera-target-to-rocdl,"
+        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+        "reconcile-unrealized-casts),"
+        f"rocdl-attach-target{{chip={chip}}},"
+        "gpu-module-to-binary)"
+    )
+    import subprocess
+    r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"],
+                       input=directive, capture_output=True, text=True)
+    if r.returncode != 0 or "gpu.binary" not in r.stdout:
+        raise _RocmCompiledUnavailable(
+            "tessera-opt did not serialize the compiled flash_attn backward "
+            f"in-process (rc={r.returncode}): {r.stderr[:400]}")
+    hsaco = _extract_hsaco_blob(r.stdout)
+    if hsaco[:4] != b"\x7fELF":
+        raise _RocmCompiledUnavailable(
+            "compiled ROCm flash_attn backward lane: gpu.binary was not an ELF "
+            "hsaco")
+    _rocm_fa_bwd_hsaco_cache[key] = hsaco
+    return hsaco
+
+
+def _rocm_flash_attn_forward_o(q: Any, k: Any, v: Any, scale: float,
+                               causal: int, bias: Any = None,
+                               window: int = 0,
+                               logit_softcap: float = 0.0) -> Any:
+    """Recompute the forward output O (f32, shape [bh, sq, D]) by REUSING the
+    forward compiled lane — the backward saves nothing from forward. The forward
+    lane takes attn_bias as a 4th operand and window / logit_softcap as kwargs,
+    so O matches the backward's windowed / soft-capped / biased score recompute."""
+    names = ["q", "k", "v"] + (["bias"] if bias is not None else [])
+    kw: dict[str, Any] = {"scale": scale, "causal": bool(causal)}
+    if window:
+        kw["window"] = int(window)
+    if logit_softcap:
+        kw["logit_softcap"] = float(logit_softcap)
+    fwd_art = RuntimeArtifact(metadata={
+        "target": "rocm", "compiler_path": "rocm_flash_attn_compiled",
+        "executable": True, "execution_kind": "native_gpu",
+        "arg_names": names, "output_name": "o",
+        "ops": [{"op_name": "tessera.flash_attn", "result": "o",
+                 "operands": names, "kwargs": kw}]})
+    call = (q, k, v) if bias is None else (q, k, v, bias)
+    return _execute_rocm_compiled_flash_attn(fwd_art, call)
+
+
+_FA_BWD_OPS = ("tessera.flash_attn_bwd", "tessera.flash_attn_vjp")
+
+
+def _execute_rocm_compiled_flash_attn_bwd(artifact: RuntimeArtifact,
+                                          args: Any) -> Any:
+    """The ``target="rocm"`` flash_attn BACKWARD lane. Operands are
+    ``(dO, Q, K, V)`` — ``Q``/``dO`` are ``[..., H, Sq, D]`` and ``K``/``V`` are
+    ``[..., G, Sk, D]`` (``G <= H``; ``G == H`` is plain MHA, ``G < H`` selects
+    the grouped-query backward). Returns the tuple ``(dQ, dK, dV)`` shaped like
+    ``(Q, K, V)``. Raises ``_RocmCompiledUnavailable`` when the lane can't run
+    (no tessera-opt / serialization / GPU); ``ValueError`` on a bad op / dtype /
+    shape / unsupported variant; ``RuntimeError`` on a real kernel failure."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _FA_BWD_OPS:
+        raise ValueError(
+            "rocm_flash_attn_bwd_compiled executor handles exactly one of "
+            f"{_FA_BWD_OPS}; got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) not in (4, 5):
+        raise ValueError(
+            "flash_attn backward requires (dO, Q, K, V) operands, optionally "
+            "plus a 5th additive attn_bias")
+    values = _bind_launch_args(args, arg_names)
+    do = _as_numpy(values[operand_names[0]])
+    q = _as_numpy(values[operand_names[1]])
+    k = _as_numpy(values[operand_names[2]])
+    v = _as_numpy(values[operand_names[3]])
+    bias_arr = (_as_numpy(values[operand_names[4]])
+                if len(operand_names) == 5 else None)
+    for name, arr in (("dO", do), ("Q", q), ("K", k), ("V", v)):
+        if arr.ndim < 2:
+            raise ValueError(
+                f"flash_attn backward {name} must be rank >= 2 ([..., S, D]); "
+                f"got {arr.shape}")
+    head_dim = int(q.shape[-1])
+    if head_dim <= 0 or head_dim % 16 != 0:
+        raise ValueError(
+            f"rocm flash_attn backward needs head_dim a positive multiple of "
+            f"16; got {head_dim}")
+    sq, sk = int(q.shape[-2]), int(k.shape[-2])
+    bh = int(np.prod(q.shape[:-2])) if q.ndim > 2 else 1
+    bh_kv = int(np.prod(k.shape[:-2])) if k.ndim > 2 else 1
+    # GQA/MQA: H query heads vs G<=H key/value heads (head axis -3). The grouped
+    # backward variant atomically accumulates dK/dV across the kv_ratio query
+    # heads sharing each KV head. V must match K, dO must match Q, the batch dims
+    # (everything before the head axis) must agree, and head_dim is shared.
+    n_qh = int(q.shape[-3]) if q.ndim >= 3 else 1
+    n_kvh = int(k.shape[-3]) if k.ndim >= 3 else 1
+    gqa = n_kvh != n_qh
+    if gqa and (n_kvh <= 0 or n_qh % n_kvh != 0):
+        raise ValueError(
+            f"rocm flash_attn backward GQA needs query-heads ({n_qh}) divisible "
+            f"by kv-heads ({n_kvh})")
+    kv_ratio = n_qh // n_kvh if gqa else 1
+    if (v.shape != k.shape or do.shape != q.shape
+            or int(v.shape[-1]) != head_dim
+            or q.shape[:-3] != k.shape[:-3]):
+        raise ValueError(
+            "rocm flash_attn backward requires V==K, dO==Q, matching batch dims "
+            f"and a shared head_dim; got Q{q.shape} K{k.shape} V{v.shape} "
+            f"dO{do.shape}.")
+
+    if q.dtype == np.float16:
+        dtype_tag, store = "f16", np.float16
+    else:
+        bf16 = _bfloat16_dtype()
+        if bf16 is not None and q.dtype == bf16:
+            dtype_tag, store = "bf16", bf16
+        else:
+            raise ValueError(
+                "rocm flash_attn backward handles f16/bf16 storage (f32 "
+                f"accumulate); got {q.dtype}")
+
+    kwargs = op.get("kwargs") or {}
+    causal = 1 if bool(kwargs.get("causal", False)) else 0
+    scale = kwargs.get("scale")
+    scale = float(scale) if scale is not None else 1.0 / float(np.sqrt(head_dim))
+    # Sliding-window: a positive `window` selects a causal band of width W
+    # (query q attends to keys in (q-W, q]); the windowed kernel is implicitly
+    # causal. Gemma-2 soft-cap: a positive `logit_softcap` caps the pre-softmax
+    # score to cap*tanh(S/cap); the backward scales dS by 1-tanh^2(S_raw/cap).
+    window = int(kwargs.get("window") or 0)
+    if window < 0:
+        raise ValueError(
+            f"rocm flash_attn backward window must be non-negative; got {window}")
+    sliding = window > 0
+    softcap = kwargs.get("logit_softcap")
+    softcap = float(softcap) if softcap else 0.0
+    if softcap < 0:
+        raise ValueError(
+            f"rocm flash_attn backward logit_softcap must be non-negative; got "
+            f"{softcap}")
+    has_softcap = softcap > 0
+
+    # Additive bias: S = softmax(scale*Q@K^T + bias). Host-broadcast to
+    # Q.lead+(Sq,Sk) → [bh,Sq,Sk] f32 (kernel indexes bias[(bh*Sq+q)*Sk+k]),
+    # matching the forward attn_bias lane. bias enters both O (via the forward
+    # recompute) and the backward P/L/dS — dbias is not produced (constant-bias
+    # VJP: dbias is only needed when bias is a positional differentiable input).
+    has_bias = bias_arr is not None
+    bias_c = None
+    if has_bias:
+        try:
+            bias_b = np.broadcast_to(
+                np.asarray(bias_arr, dtype=np.float32),
+                tuple(q.shape[:-2]) + (sq, sk))
+        except ValueError as exc:
+            raise ValueError(
+                f"rocm flash_attn backward attn_bias {np.asarray(bias_arr).shape}"
+                f" is not broadcastable to Q.lead+(Sq,Sk) = "
+                f"{tuple(q.shape[:-2]) + (sq, sk)}") from exc
+        bias_c = np.ascontiguousarray(bias_b, dtype=np.float32).reshape(-1)
+
+    # O the pre-pass needs — recompute on-device via the forward lane with the
+    # SAME window/softcap/bias, so O matches the backward's score recompute.
+    o_f32 = np.ascontiguousarray(
+        _rocm_flash_attn_forward_o(q, k, v, scale, causal,
+                                   bias=bias_arr if has_bias else None,
+                                   window=window, logit_softcap=softcap),
+        dtype=np.float32).reshape(bh, sq, head_dim)
+
+    hsaco = _build_compiled_flash_attn_bwd_hsaco(
+        head_dim, dtype_tag, gqa=gqa, bias=has_bias, window=sliding,
+        softcap=has_softcap)
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable(
+            "libamdhip64.so not loadable — no ROCm execution lane on this host")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm flash_attn bwd: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable(
+            "rocm flash_attn bwd: no usable AMD GPU (module load failed)")
+    fns = {}
+    for nm in (b"fa_pre", b"fa_dkdv", b"fa_dq"):
+        fn = ctypes.c_void_p()
+        if hip.hipModuleGetFunction(ctypes.byref(fn), mod, nm) != 0:
+            raise RuntimeError(
+                f"rocm flash_attn bwd: kernel symbol {nm!r} not found")
+        fns[nm] = fn
+
+    qc = np.ascontiguousarray(q, dtype=store)
+    kc = np.ascontiguousarray(k, dtype=store)
+    vc = np.ascontiguousarray(v, dtype=store)
+    doc = np.ascontiguousarray(do, dtype=store)
+    nq, nkv, nl = bh * sq * head_dim, bh_kv * sk * head_dim, bh * sq
+    cv = ctypes.c_void_p
+    bufs: dict[str, Any] = {}
+    for name, nb in (("Q", 2 * nq), ("K", 2 * nkv), ("V", 2 * nkv),
+                     ("dO", 2 * nq), ("O", 4 * nq), ("L", 4 * nl), ("Dd", 4 * nl),
+                     ("dQ", 4 * nq), ("dK", 4 * nkv), ("dV", 4 * nkv)):
+        d = cv()
+        if hip.hipMalloc(ctypes.byref(d), max(nb, 4)) != 0:
+            for dd in bufs.values():
+                hip.hipFree(dd)
+            raise RuntimeError("rocm flash_attn bwd: hipMalloc failed")
+        bufs[name] = d
+    hip.hipMemcpy(bufs["Q"], qc.ctypes.data_as(cv), 2 * nq, 1)
+    hip.hipMemcpy(bufs["K"], kc.ctypes.data_as(cv), 2 * nkv, 1)
+    hip.hipMemcpy(bufs["V"], vc.ctypes.data_as(cv), 2 * nkv, 1)
+    hip.hipMemcpy(bufs["dO"], doc.ctypes.data_as(cv), 2 * nq, 1)
+    hip.hipMemcpy(bufs["O"], o_f32.ctypes.data_as(cv), 4 * nq, 1)
+    n_bias = bh * sq * sk
+    if has_bias:
+        assert bias_c is not None  # set above whenever has_bias
+        d = cv()
+        if hip.hipMalloc(ctypes.byref(d), max(4 * n_bias, 4)) != 0:
+            for dd in bufs.values():
+                hip.hipFree(dd)
+            raise RuntimeError("rocm flash_attn bwd: hipMalloc (attn_bias) failed")
+        bufs["bias"] = d
+        hip.hipMemcpy(d, bias_c.ctypes.data_as(cv), 4 * n_bias, 1)
+    if gqa:
+        # kv_ratio query heads atomic-accumulate into each KV head's dK/dV rows
+        # (the sharing blocks add into the same rows) — pre-zero before fa_dkdv.
+        hip.hipMemset(bufs["dK"], 0, 4 * nkv)
+        hip.hipMemset(bufs["dV"], 0, 4 * nkv)
+
+    def _mr(p, size):
+        return [cv(p.value), cv(p.value), ctypes.c_int64(0),
+                ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    sqc, skc = ctypes.c_int64(sq), ctypes.c_int64(sk)
+    sc, cau = ctypes.c_float(scale), ctypes.c_int64(causal)
+    # Grouped kernels take (heads, kv_ratio) as two trailing runtime args after
+    # (Sq, Sk, scale, causal); the plain kernels have neither. Grid.y is always
+    # the query-head count B*H (fa_dkdv accumulates into KV heads atomically).
+    tail: list[Any] = (
+        [ctypes.c_int64(n_qh), ctypes.c_int64(kv_ratio)] if gqa else [])
+    # Trailing args in the C++ withGqa order: gqa pair | window W | softcap cap |
+    # bias memref (LAST). Each present only when its flag is set.
+    if sliding:
+        tail.append(ctypes.c_int64(window))
+    if has_softcap:
+        tail.append(ctypes.c_float(softcap))
+    bias_tail = _mr(bufs["bias"], n_bias) if has_bias else []
+    gqt, gkt, gyt = (sq + 15) // 16, (sk + 15) // 16, bh
+
+    def _launch(fn, gx, argv):
+        arr = (cv * len(argv))()
+        for i, val in enumerate(argv):
+            arr[i] = ctypes.cast(ctypes.byref(val), cv)
+        rc = hip.hipModuleLaunchKernel(fn, gx, gyt, 1, 32, 1, 1, 0, None,
+                                       arr, None)
+        if rc != 0:
+            for dd in bufs.values():
+                hip.hipFree(dd)
+            raise RuntimeError(
+                f"rocm flash_attn bwd: kernel launch failed rc={rc}")
+
+    # fa_pre : (Q,K,dO, O,L,Dd, Sq,Sk, scale, causal[, heads, kv_ratio][, bias])
+    _launch(fns[b"fa_pre"], gqt,
+            _mr(bufs["Q"], nq) + _mr(bufs["K"], nkv) + _mr(bufs["dO"], nq)
+            + _mr(bufs["O"], nq) + _mr(bufs["L"], nl) + _mr(bufs["Dd"], nl)
+            + [sqc, skc, sc, cau] + tail + bias_tail)
+    # fa_dkdv : (Q,K,V,dO, L,Dd, dK,dV, Sq,Sk, scale, causal[,heads,kv_ratio][,bias])
+    _launch(fns[b"fa_dkdv"], gkt,
+            _mr(bufs["Q"], nq) + _mr(bufs["K"], nkv) + _mr(bufs["V"], nkv)
+            + _mr(bufs["dO"], nq) + _mr(bufs["L"], nl) + _mr(bufs["Dd"], nl)
+            + _mr(bufs["dK"], nkv) + _mr(bufs["dV"], nkv)
+            + [sqc, skc, sc, cau] + tail + bias_tail)
+    # fa_dq : (Q,K,V,dO, L,Dd, dQ, Sq,Sk, scale, causal[, heads, kv_ratio][, bias])
+    _launch(fns[b"fa_dq"], gqt,
+            _mr(bufs["Q"], nq) + _mr(bufs["K"], nkv) + _mr(bufs["V"], nkv)
+            + _mr(bufs["dO"], nq) + _mr(bufs["L"], nl) + _mr(bufs["Dd"], nl)
+            + _mr(bufs["dQ"], nq) + [sqc, skc, sc, cau] + tail + bias_tail)
+    hip.hipDeviceSynchronize()
+
+    dq = np.zeros((bh, sq, head_dim), np.float32)
+    dk = np.zeros((bh_kv, sk, head_dim), np.float32)
+    dv = np.zeros((bh_kv, sk, head_dim), np.float32)
+    hip.hipMemcpy(dq.ctypes.data_as(cv), bufs["dQ"], 4 * nq, 2)
+    hip.hipMemcpy(dk.ctypes.data_as(cv), bufs["dK"], 4 * nkv, 2)
+    hip.hipMemcpy(dv.ctypes.data_as(cv), bufs["dV"], 4 * nkv, 2)
+    for dd in bufs.values():
+        hip.hipFree(dd)
+    return (dq.reshape(q.shape), dk.reshape(k.shape), dv.reshape(v.shape))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -9523,6 +9921,216 @@ def _execute_rocm_compiled_scatter(artifact: RuntimeArtifact, args: Any) -> Any:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# f32 GEMM device kernel (generate-rocm-gemm-f32-kernel) — the f32-exact matmul
+# RDNA WMMA (f16/bf16 only) can't provide. One thread per output element, scalar
+# f32 k-loop (correctness-first, no LDS tiling). Backs the native grouped-SwiGLU
+# expert GEMM (MoE). f32; matches the numpy f32 matmul within f32 tolerance.
+# ─────────────────────────────────────────────────────────────────────────────
+_rocm_gemm_f32_hsaco_cache: dict[tuple[str], bytes] = {}
+
+
+def _build_compiled_gemm_f32_hsaco() -> bytes:
+    chip = _rocm_chip()
+    directive = ('module {\n  "tessera_rocm.gemm_f32"() {name = "g"} '
+                 ': () -> ()\n}\n')
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-gemm-f32-kernel", directive, _rocm_gemm_f32_hsaco_cache,
+        (chip,))
+
+
+def _rocm_f32_gemm(a: Any, b: Any, np: Any) -> Any:
+    """C = A @ B on gfx1151 via the compiler-generated f32 GEMM kernel (one
+    thread per output element). A (M,K), B (K,N) f32 -> C (M,N) f32."""
+    a = np.ascontiguousarray(a, np.float32)
+    b = np.ascontiguousarray(b, np.float32)
+    if a.ndim != 2 or b.ndim != 2 or int(a.shape[1]) != int(b.shape[0]):
+        raise ValueError(f"f32 gemm needs (M,K)@(K,N); got {a.shape} @ {b.shape}")
+    M, K = int(a.shape[0]), int(a.shape[1])
+    N = int(b.shape[1])
+    out = np.zeros((M, N), np.float32)
+    if M == 0 or N == 0 or K == 0:
+        return out
+    hsaco = _build_compiled_gemm_f32_hsaco()
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm gemm_f32: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm gemm_f32: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"g") != 0:
+        raise RuntimeError("rocm gemm_f32: kernel symbol 'g' not found")
+    cv = ctypes.c_void_p
+    n_a, n_b, n_c = M * K, K * N, M * N
+    d_a, d_b, d_c = cv(), cv(), cv()
+    if (hip.hipMalloc(ctypes.byref(d_a), 4 * n_a) != 0
+            or hip.hipMalloc(ctypes.byref(d_b), 4 * n_b) != 0
+            or hip.hipMalloc(ctypes.byref(d_c), 4 * n_c) != 0):
+        raise RuntimeError("rocm gemm_f32: hipMalloc failed")
+    hip.hipMemcpy(d_a, a.ctypes.data_as(cv), 4 * n_a, 1)
+    hip.hipMemcpy(d_b, b.ctypes.data_as(cv), 4 * n_b, 1)
+
+    def _mr(p, size):
+        return [cv(p.value), cv(p.value), ctypes.c_int64(0),
+                ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    launch_args = (_mr(d_a, n_a) + _mr(d_b, n_b) + _mr(d_c, n_c)
+                   + [ctypes.c_int64(M), ctypes.c_int64(N), ctypes.c_int64(K)])
+    arr = (cv * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), cv)
+    gx = (n_c + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+    rc = hip.hipModuleLaunchKernel(fn, max(gx, 1), 1, 1, _GRID_BLOCKDIM, 1, 1,
+                                   0, None, arr, None)
+    if rc != 0:
+        for d in (d_a, d_b, d_c):
+            hip.hipFree(d)
+        raise RuntimeError(f"rocm gemm_f32: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    hip.hipMemcpy(out.ctypes.data_as(cv), d_c, 4 * n_c, 2)
+    for d in (d_a, d_b, d_c):
+        hip.hipFree(d)
+    return out
+
+
+def _moe_grouped_swiglu_native(x_packed: Any, w_gate: Any, w_up: Any,
+                               w_down: Any, group_sizes: Any, np: Any) -> Any:
+    """Grouped SwiGLU over contiguous per-expert token groups, run on the f32
+    GEMM device kernel: for each group e, g = x@Wg[e], u = x@Wu[e],
+    h = silu(g)*u, out = h@Wd[e]. The three FLOP-heavy GEMMs run on gfx1151; the
+    silu*mul elementwise middle is host-side. f32; matches stdlib.moe.grouped_swiglu
+    within f32 tolerance (the reference accumulates in f64)."""
+    xp = np.ascontiguousarray(_as_numpy(x_packed), np.float32)
+    wg = np.ascontiguousarray(_as_numpy(w_gate), np.float32)   # (E, H, F)
+    wu = np.ascontiguousarray(_as_numpy(w_up), np.float32)     # (E, H, F)
+    wd = np.ascontiguousarray(_as_numpy(w_down), np.float32)   # (E, F, H)
+    gs = np.asarray(_as_numpy(group_sizes), np.int64).reshape(-1)
+    S = int(xp.shape[0])
+    h_out = int(wd.shape[2])
+    out = np.zeros((S, h_out), np.float32)
+    off = 0
+    for e in range(int(wg.shape[0])):
+        n = int(gs[e])
+        if n:
+            xe = xp[off:off + n]                               # (n, H)
+            g = _rocm_f32_gemm(xe, wg[e], np)                  # (n, F)
+            u = _rocm_f32_gemm(xe, wu[e], np)                  # (n, F)
+            h = (g * (1.0 / (1.0 + np.exp(-g))) * u).astype(np.float32)
+            out[off:off + n] = _rocm_f32_gemm(h, wd[e], np)    # (n, h_out)
+        off += n
+    return out
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# KV-cache paged-movement lane (§5.6) — the append/read/prune core executes on
+# gfx1151 by COMPOSING the existing device gather/scatter kernels + host page-
+# index math (the clamp/normcompose "compose on existing kernels" pattern). The
+# three kv_cache_* ops are stateful over a KVCacheHandle; this lane executes
+# their tensor MOVEMENT core over a resident cache buffer `(max_seq, H, D)`:
+#   * append  → row scatter-write of the new tokens at [start, start+n)
+#               (generate-rocm-scatter-kernel, set mode);
+#   * read    → row gather of [start, end) (generate-rocm-gather-kernel);
+#   * prune   → keep the trailing `limit` tokens, shifted to the front (a gather
+#               into a zeroed leading window), zeroing the vacated slots.
+# Semantics mirror KVCacheHandle.{append,read,prune} on the non-quantized fp
+# path (quantize_kv rides the intquant lane). K and V are independent buffers —
+# the caller drives the op once per buffer. Executes via runtime.launch()
+# (rocm_kv_cache_compiled); f32, matches the KVCacheHandle reference.
+# compiler_path="rocm_kv_cache_compiled".
+# ─────────────────────────────────────────────────────────────────────────────
+_KV_CACHE_OPS = ("tessera.kv_cache.append", "tessera.kv_cache.read",
+                 "tessera.kv_cache.prune")
+
+
+def _rocm_gather_rows(buf2d: Any, row_ids: Any, np: Any) -> Any:
+    """Gather rows ``row_ids`` from ``buf2d`` (rows, row_len) on the gfx1151
+    masked-gather kernel. Returns (len(row_ids), row_len) f32."""
+    row_len = int(buf2d.shape[1])
+    row_ids = np.ascontiguousarray(row_ids, np.int64)
+    m = int(row_ids.shape[0])
+    # Expand row indices to element indices: out[r, j] = src[row_ids[r]*row_len+j].
+    elem_idx = (row_ids[:, None] * row_len
+                + np.arange(row_len, dtype=np.int64)[None, :]).reshape(-1)
+    out = np.zeros(m * row_len, np.float32)
+    _rocm_gather(np.ascontiguousarray(buf2d, np.float32).reshape(-1), elem_idx, out)
+    return out.reshape(m, row_len)
+
+
+def _kv_cache_compute(op_name: str, operands: list, kwargs: dict, np: Any) -> Any:
+    buf = np.ascontiguousarray(operands[0], np.float32)
+    if buf.ndim < 2:
+        raise ValueError(
+            f"kv_cache lane: buffer must be (max_seq, ...); got {buf.shape}")
+    max_seq = int(buf.shape[0])
+    row_len = int(buf[0].size)
+    tail_shape = buf.shape[1:]
+    flat = buf.reshape(max_seq, row_len)
+
+    if op_name == "tessera.kv_cache.append":
+        new = np.ascontiguousarray(operands[1], np.float32)
+        n = int(new.shape[0])
+        start = int(kwargs.get("start", 0))
+        if start < 0 or start + n > max_seq:
+            raise ValueError(
+                f"kv_cache append: [{start}, {start + n}) out of buffer "
+                f"max_seq={max_seq}")
+        out = flat.copy()                          # preload base (untouched rows)
+        if n:
+            _rocm_scatter(out, new.reshape(n, row_len),
+                          np.arange(start, start + n, dtype=np.int64),
+                          max_seq, row_len, 0, np)  # mode 0 = set
+        return out.reshape((max_seq,) + tail_shape)
+
+    if op_name == "tessera.kv_cache.read":
+        start = int(kwargs.get("start", 0))
+        end = kwargs.get("end", None)
+        end = start + 1 if end is None else int(end)
+        if not (0 <= start <= end <= max_seq):
+            raise ValueError(
+                f"kv_cache read: [{start}, {end}) out of buffer "
+                f"max_seq={max_seq}")
+        m = end - start
+        if m == 0:
+            return np.zeros((0,) + tail_shape, np.float32)
+        rows = _rocm_gather_rows(flat, np.arange(start, end, dtype=np.int64), np)
+        return rows.reshape((m,) + tail_shape)
+
+    # tessera.kv_cache.prune — keep the trailing `limit` of the first
+    # `current_seq` rows, shifted to the front; zero the vacated slots.
+    limit = int(kwargs["limit"])
+    current_seq = int(kwargs.get("current_seq", max_seq))
+    if limit < 0:
+        raise ValueError(f"kv_cache prune: limit must be >= 0; got {limit}")
+    if limit >= current_seq:                        # nothing to drop (handle no-op)
+        return buf.copy()
+    start = current_seq - limit
+    out = flat.copy()
+    out[:limit] = _rocm_gather_rows(
+        flat, np.arange(start, current_seq, dtype=np.int64), np)
+    out[limit:current_seq] = 0.0
+    return out.reshape((max_seq,) + tail_shape)
+
+
+def _execute_rocm_compiled_kv_cache(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` KV-cache paged-movement lane (append/read/prune)."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _KV_CACHE_OPS:
+        raise ValueError(
+            f"rocm_kv_cache_compiled handles one of {_KV_CACHE_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[n]) for n in operand_names]
+    return _kv_cache_compute(op_name, operands, ops[0].get("kwargs") or {}, np)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Sort lane (P9) — sort / argsort / top_k via a data-independent BITONIC sort
 # network (the GPU-friendly choice; identical schedule on x86 + ROCm). The host
 # moves the sort axis last, pads each row to a power of two with +INF sentinels,
@@ -12673,6 +13281,7 @@ _STRUCTURED_COMPUTE_OPS = (
     "tessera.lora_linear",
     "tessera.simple_rnn_cell",
     "tessera.gru_cell",
+    "tessera.lstm_cell",
     "tessera.depthwise_conv1d",
     "tessera.cross_attention",
     "tessera.perceiver_resampler",
@@ -12762,6 +13371,11 @@ def _execute_structured_compute_composite(
         return F.simple_rnn_cell(*operands, **kwargs)
     if op_name == "tessera.gru_cell":
         return F.gru_cell(*operands, **kwargs)
+    if op_name == "tessera.lstm_cell":
+        # Canonical op contract (tessera.ops.lstm_cell): (4H,In)/(4H,H) weights
+        # via W_ih.T/W_hh.T, packed concat([h_t, c_t]) output — NOT F.lstm_cell
+        # (which takes transposed weights and returns a tuple).
+        return ops.lstm_cell(*operands, **kwargs)
     if op_name == "tessera.cross_attention":
         return ops.cross_attention(*operands, **kwargs)
     if op_name == "tessera.perceiver_resampler":
@@ -15349,6 +15963,7 @@ def _executor_table():
         "rocm_wmma":            _execute_rocm_wmma_artifact,
         "rocm_compiled":        _execute_rocm_compiled_gemm,
         "rocm_flash_attn_compiled": _execute_rocm_compiled_flash_attn,
+        "rocm_flash_attn_bwd_compiled": _execute_rocm_compiled_flash_attn_bwd,
         "rocm_linear_attn_compiled": _execute_rocm_compiled_linear_attn,
         "rocm_dspark_draft_block_compiled": _execute_rocm_dspark_draft_block_reference,
         "rocm_softmax_compiled": _execute_rocm_compiled_softmax,
@@ -15452,13 +16067,14 @@ def _executor_table():
         "rocm_sparse_compiled": _execute_rocm_compiled_sparse,
         "rocm_sparse_attn_compiled": _execute_rocm_compiled_sparse_attention,
         "rocm_moe_compiled": _execute_rocm_compiled_moe,
-        "rocm_moe_transport_compiled": _execute_rocm_moe_transport_reference,
+        "rocm_moe_transport_compiled": _execute_rocm_moe_transport,
         "rocm_optimizer_compiled": _execute_rocm_compiled_optimizer,
         "rocm_complex_compiled": _execute_rocm_compiled_complex,
         "rocm_conformal_compiled": _execute_rocm_compiled_conformal,
         "rocm_rng_compiled": _execute_rocm_compiled_rng,
         "rocm_strided_compiled": _execute_rocm_compiled_strided,
         "rocm_scatter_compiled": _execute_rocm_compiled_scatter,
+        "rocm_kv_cache_compiled": _execute_rocm_compiled_kv_cache,
         "rocm_sort_compiled": _execute_rocm_compiled_sort,
         "rocm_clifford_compiled": _execute_rocm_compiled_clifford,
         "rocm_normcompose_compiled": _execute_rocm_compiled_normcompose,

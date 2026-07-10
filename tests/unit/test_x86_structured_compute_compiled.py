@@ -97,6 +97,17 @@ def test_x86_structured_model_recurrent_and_stencil_match_reference():
         atol=1e-6,
     )
 
+    # Canonical tessera.ops.lstm_cell: (4H,In)/(4H,H) weights, packed output.
+    cprev = rng.standard_normal((2, 5)).astype(np.float32)
+    Wih4 = rng.standard_normal((20, 3)).astype(np.float32)
+    Whh4 = rng.standard_normal((20, 5)).astype(np.float32)
+    np.testing.assert_allclose(
+        _launch("tessera.lstm_cell", ("x", "h", "c", "Wih", "Whh"),
+                (xt, h, cprev, Wih4, Whh4)),
+        ops.lstm_cell(xt, h, cprev, Wih4, Whh4),
+        atol=1e-6,
+    )
+
     a = rng.standard_normal((2, 4)).astype(np.float32)
     weight = rng.standard_normal((4, 6)).astype(np.float32)
     la = rng.standard_normal((4, 2)).astype(np.float32)

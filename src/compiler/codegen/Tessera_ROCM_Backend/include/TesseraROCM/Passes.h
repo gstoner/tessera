@@ -36,6 +36,7 @@ std::unique_ptr<mlir::Pass> createGenerateROCMSvdKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMOptimizerKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMPredicateKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMMoeKernelPass();
+std::unique_ptr<mlir::Pass> createGenerateROCMGemmF32KernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMAlibiKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMDeltaNetKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMRopeKernelPass();

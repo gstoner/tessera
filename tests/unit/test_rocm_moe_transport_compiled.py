@@ -33,6 +33,13 @@ def _plan(seed=41, tokens=12, experts=4, top_k=2, capacity=5):
     return moe.plan_dispatch(eids, weights, experts, capacity=capacity)
 
 
+def _expect_native():
+    """The transport ops run natively iff tessera-opt is built AND a usable AMD
+    GPU is present (else the executor falls back to the stdlib oracle)."""
+    return (rt._tessera_opt_path() is not None
+            and rt._rocm_wmma_runtime_available())
+
+
 def test_rocm_moe_dispatch_runtime_matches_dispatch_plan_oracle():
     rng = np.random.default_rng(42)
     x = rng.standard_normal((12, 8)).astype(np.float32)
@@ -45,7 +52,10 @@ def test_rocm_moe_dispatch_runtime_matches_dispatch_plan_oracle():
 
     assert res["ok"]
     assert res["compiler_path"] == "rocm_moe_transport_compiled"
-    assert res["execution_kind"] == "reference_cpu"
+    # dispatch is a pure row gather — native on-box, oracle off-box; exact either
+    # way (device gather copies rows bit-for-bit).
+    assert res["execution_kind"] == ("native_gpu" if _expect_native()
+                                     else "reference_cpu")
     np.testing.assert_allclose(res["output"], moe.dispatch(x, plan), rtol=0, atol=0)
 
 
@@ -62,8 +72,13 @@ def test_rocm_moe_combine_runtime_matches_weighted_combine_oracle():
     )
 
     assert res["ok"]
-    assert res["execution_kind"] == "reference_cpu"
-    np.testing.assert_allclose(res["output"], moe.combine(partials, plan), rtol=0, atol=0)
+    assert res["execution_kind"] == ("native_gpu" if _expect_native()
+                                     else "reference_cpu")
+    # native combine accumulates in f32 (device scatter-add) vs the f64 oracle —
+    # matches within f32 tolerance; the tiny tolerance still pins the plan
+    # permutation / route weights / capacity drops.
+    np.testing.assert_allclose(res["output"], moe.combine(partials, plan),
+                               rtol=1e-5, atol=1e-6)
 
 
 def test_rocm_grouped_swiglu_runtime_matches_grouped_gemm_oracle():
@@ -92,12 +107,15 @@ def test_rocm_grouped_swiglu_runtime_matches_grouped_gemm_oracle():
     )
 
     assert res["ok"]
-    assert res["execution_kind"] == "reference_cpu"
+    # grouped_swiglu now runs the three expert GEMMs on the f32 device GEMM
+    # kernel (native on-box), silu*mul host-side; f32 vs the f64 oracle.
+    assert res["execution_kind"] == ("native_gpu" if _expect_native()
+                                     else "reference_cpu")
     np.testing.assert_allclose(
         res["output"],
         moe.grouped_swiglu(x_packed, w_gate, w_up, w_down, group_sizes),
-        rtol=0,
-        atol=0,
+        rtol=1e-4,
+        atol=1e-5,
     )
 
 

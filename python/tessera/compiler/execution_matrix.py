@@ -193,6 +193,16 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "HIP loads + launches it. f16/bf16 storage, f32 "
                             "softmax + accumulate; the attention analog of "
                             "rocm_compiled",
+    "rocm_flash_attn_bwd_compiled": "AMD GPU RDNA WMMA FA-2 BACKWARD the Tessera "
+                            "compiler GENERATES (generate-wmma-flash-attn-bwd-"
+                            "kernel -> three fa_pre/fa_dkdv/fa_dq WMMA kernels -> "
+                            "hsaco), launched in sequence to produce dQ/dK/dV; O "
+                            "is recomputed via the forward lane (nothing saved "
+                            "from forward). MHA + GQA/MQA (grouped dkdv atomic-"
+                            "accumulates dK/dV) + additive attn_bias + sliding-"
+                            "window + logit-softcap; f16/bf16 storage, f32 "
+                            "accumulate; the reverse-mode analog of "
+                            "rocm_flash_attn_compiled",
     "rocm_linear_attn_compiled": "AMD GPU RDNA WMMA linear-attention forward the "
                             "Tessera compiler GENERATES "
                             "(generate-wmma-linear-attn-kernel -> ROCDL -> hsaco, "
@@ -339,6 +349,11 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "rocm_scatter_compiled": "AMD GPU RDNA scatter lane — scatter/scatter_add/"
                              "scatter_reduce via the COMPILER-GENERATED gfx1151 "
                              "kernel (one thread per element; atomic_rmw). f32",
+    "rocm_kv_cache_compiled": "AMD GPU RDNA KV-cache paged-movement lane — "
+                             "kv_cache append/read/prune over a resident cache "
+                             "buffer by composing the gfx1151 scatter (write) + "
+                             "gather (read/prune) kernels; host page-index math. "
+                             "f32, matches the KVCacheHandle reference",
     "x86_rng_compiled": "x86 CPU device RNG — counter-based Philox-4x32-10 "
                             "uniform kernel + host transform (uniform/normal/"
                             "dropout). f32",
@@ -1751,6 +1766,27 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "hsaco in-process, then HIP loads + launches it. The attention "
                "analog of the compiled GEMM lane (rocm_compiled).",
         execution_mode="hip_runtime"),
+    # The compiler-GENERATED FA-2 backward (generate-wmma-flash-attn-bwd-kernel
+    # -> three fa_pre/fa_dkdv/fa_dq WMMA kernels -> hsaco) launched in sequence.
+    # Self-contained VJP over (dO, Q, K, V): O is recomputed via the forward
+    # lane, so nothing is saved from forward. Validated vs the numpy attention
+    # backward / autodiff vjp_flash_attn. Core MHA (scale + causal).
+    ("rocm", "rocm_flash_attn_bwd_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_flash_attn_bwd_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_flash_attn_bwd_compiled", runtime_status="success",
+        reason="ROCm flash_attn backward artifact runs the COMPILER-GENERATED "
+               "RDNA WMMA FA-2 backward: tessera-opt expands one "
+               "tessera_rocm.flash_attn_bwd directive into three fa_pre/fa_dkdv/"
+               "fa_dq WMMA kernels serialized to hsaco in-process, then HIP "
+               "launches them in sequence to produce dQ/dK/dV. O is recomputed "
+               "via the forward lane (nothing saved from forward). The "
+               "reverse-mode analog of rocm_flash_attn_compiled; MHA + GQA/MQA "
+               "(gqa dkdv atomic-accumulates dK/dV across the group) + additive "
+               "attn_bias + sliding-window (implicitly causal, masks keys older "
+               "than W) + Gemma-2 logit-softcap (dS scaled by 1-tanh^2), scale + "
+               "causal, f16/bf16 storage, f32 accumulate.",
+        execution_mode="hip_runtime"),
     # Linear-attention family (quadratic-parallel form, no softmax; a distinct
     # algorithm from flash_attn): tessera.linear_attn + the decay-masked siblings
     # tessera.lightning_attention / tessera.retention, dispatched by op name.
@@ -1930,6 +1966,17 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "kernel (generate-rocm-scatter-kernel; one thread per element; "
                "atomic_rmw for add/min/max). f32, matches the numpy scatter "
                "reference.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_kv_cache_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_kv_cache_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_kv_cache_compiled", runtime_status="success",
+        reason="ROCm KV-cache paged-movement lane realizes kv_cache "
+               "append/read/prune over a resident cache buffer (max_seq, H, D) "
+               "by COMPOSING the COMPILER-GENERATED gfx1151 scatter (append row "
+               "write) + masked-gather (read/prune) kernels with host page-index "
+               "math. quantize_kv rides the intquant lane. f32, matches the "
+               "KVCacheHandle append/read/prune reference.",
         execution_mode="hip_runtime"),
     ("rocm", "rocm_conformal_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_conformal_compiled",
@@ -2112,14 +2159,19 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         execution_mode="hip_runtime"),
     ("rocm", "rocm_moe_transport_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_moe_transport_compiled",
-        execution_kind="reference_cpu", executable=True,
+        execution_kind="native_gpu", executable=True,
         executor_id="rocm_moe_transport_compiled", runtime_status="success",
-        reason="ROCm DK3 MoE transport artifact executes moe_dispatch, "
-               "moe_combine, and grouped_swiglu against the stdlib DispatchPlan "
-               "oracle through the runtime ABI. This pins token permutation, "
-               "group sizes, capacity drops, and combine weights; promotion to "
-               "native_gpu requires HIP gather/scatter transport kernels.",
-        execution_mode="reference_oracle"),
+        reason="ROCm DK3 MoE transport + expert GEMM run NATIVELY on gfx1151: "
+               "moe_dispatch on the device gather kernel (token_of_slot = "
+               "sort_perm//top_k row gather), moe_combine on the device scatter "
+               "(add) kernel (host pre-scales each packed row by its route "
+               "weight, then atomic scatter-add to token order), and "
+               "grouped_swiglu's three expert GEMMs on the f32 GEMM device "
+               "kernel (generate-rocm-gemm-f32-kernel; silu*mul host-side). All "
+               "three report native_gpu vs the stdlib DispatchPlan oracle (f32 "
+               "vs the f64 oracle for combine/swiglu). Off-box they fall back to "
+               "the oracle + reference_cpu.",
+        execution_mode="hip_runtime"),
     ("rocm", "rocm_normcompose_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_normcompose_compiled",
         execution_kind="native_gpu", executable=True,

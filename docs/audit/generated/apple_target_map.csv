@@ -98,6 +98,7 @@ load_balance_loss,tensor,reference,numpy_reference,fp32,,numpy_reference,compile
 log_cosh_loss,tensor,reference,numpy_reference,fp32,,numpy_reference,compiled,,fp32,,manifest,tests/unit/test_apple_*.py,
 lookahead_sparse_attention,tensor,reference,numpy_reference,fp32,,numpy_reference,fused,,fp32,,manifest,tests/unit/test_apple_*.py,
 lora_linear,tensor,reference,numpy_reference,fp32,,numpy_reference,compiled,,fp32,,manifest,tests/unit/test_apple_*.py,
+lstm_cell,tensor,reference,numpy_reference,fp32,,numpy_reference,compiled,,fp32,,manifest,tests/unit/test_apple_*.py,
 lu,tensor,reference,numpy_reference,fp32,,numpy_reference,compiled,,fp32,,manifest,tests/unit/test_apple_*.py,
 mae_loss,tensor,reference,numpy_reference,fp32,,numpy_reference,compiled,,fp32,,manifest,tests/unit/test_apple_*.py,
 masked_categorical,tensor,reference,numpy_reference,fp32,,numpy_reference,fused,,"fp32,int32",tessera_apple_gpu_masked_categorical_f32,driver,tests/unit/test_apple_gpu_ldt_loss_ops.py,

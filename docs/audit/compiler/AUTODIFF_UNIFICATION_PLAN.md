@@ -70,9 +70,9 @@ source?* Today it cannot. Every phase moves one concrete step toward "yes."
 
 The repo reports autodiff status two incompatible ways:
 
-- The non-goals table at [`AUTODIFF_SPEC.md:30`](../../spec/AUTODIFF_SPEC.md:30)
+- The non-goals table (§ near line 30) of [`AUTODIFF_SPEC.md`](../../spec/AUTODIFF_SPEC.md)
   says **"✅ Phase F4 landed — verified end-to-end on MLIR 22."**
-- The §F4 prose at [`AUTODIFF_SPEC.md:278`](../../spec/AUTODIFF_SPEC.md:278) still
+- The §F4 prose (near line 278) of [`AUTODIFF_SPEC.md`](../../spec/AUTODIFF_SPEC.md) still
   says **"design landed, build follow-up,"** the pass **"registers as a no-op,"**
   and the smoke test is **XFAIL**.
 

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-08
+last_updated: 2026-07-11
 audit_role: plan
 plan_state: landing
 ---
@@ -663,9 +663,23 @@ priority (highest DL leverage first):
   (H2D/launch/D2H + compile), so `pct_peak` is an end-to-end attainment (a lower
   bound on kernel efficiency) — the current gfx1151 lanes sit at ~0.3–2.9%, so the
   metric's immediate value is exposing the headroom and giving it a ratchet.
-  Host-free-gated (`test_roofline_attainment.py`, 12). **Still open:** kernel-
-  isolated attainment (strip host overhead), `[NV]` sm_120 + Apple peak rows,
-  attainment floors that ratchet *upward* as the lanes optimize.
+  Host-free-gated (`test_roofline_attainment.py`, 12). **Extended 2026-07-10
+  (#360/#361):** (a) FLOP models now cover `gemm_f32` (= 2·M·N·K, gated vs the f32
+  peak) and `flash_attn_bwd` (= 2.5× fwd, the FA-2 ratio), so those committed
+  gfx1151 ratchet rows carry attainment too — with a **causal-triangular fix**
+  (`op_flops(..., causal=True)` uses the `S·(S+1)/2` score-pair count, since the
+  recorded flash rows run causal and the kernels skip the masked tiles; charging
+  dense S² had ~2×-inflated the flash attainment); attainment floors now round
+  *down* so the absolute gate is never stricter than the latency margin. (b) A
+  first-class **bandwidth-attainment** path (`achieved_gbps` / `pct_peak_bw` ÷ the
+  256 GB/s peak, `_MOVEMENT_OPS`, a `bw_attainment_floor` in `evaluate_attainment`)
+  — the right absolute bar for the memory-bound gather/scatter lanes (`kv_cache`
+  append/read, `moe_transport` dispatch/combine) where FLOP % is meaningless; 8
+  movement rows recorded on gfx1151 (0.04–0.48% peak BW), live-gated by two slow
+  ratchet tests. **Still open:** kernel-isolated attainment (strip host overhead),
+  `[NV]` sm_120 + Apple peak rows, attainment floors that ratchet *upward* as the
+  lanes optimize; `paged_attention` compute attainment (a trivial flash-model
+  reuse).
 - **K · Long-tail op codegen (W8) — reassessed 2026-07-08.** W8's *specific*
   premise — a ~125-op numpy-only tail needing generic elementwise/reduction/
   scatter/gather synthesis — is stale: those families are native

@@ -191,7 +191,7 @@ focal_loss,8,0,0,8,0,,directly_tested,8 direct test references
 fori_loop,24,0,3,24,0,fp16,directly_tested,24 direct test references
 fused_epilogue,4,6,1,10,0,,directly_tested,10 direct test references
 gated_attention,8,0,1,8,0,,directly_tested,8 direct test references
-gated_deltanet,25,4,1,29,0,f32 fp64,directly_tested,29 direct test references
+gated_deltanet,28,4,2,32,0,f32 fp64,directly_tested,32 direct test references
 gather,16,1,0,17,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,17 direct test references
 ge,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 gelu,46,19,0,65,0,bf16 f16 f32 f64 fp16 fp32,directly_tested,65 direct test references
@@ -226,7 +226,7 @@ iterable_dataset,1,0,0,1,1,,structural_only,category default for 'data'
 js_divergence,12,0,1,12,0,,directly_tested,12 direct test references
 jvp,0,0,0,0,1,,structural_only,category default for 'transform'
 karras_sigma_schedule,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
-kimi_delta_attention,9,4,0,13,0,f32 fp64,directly_tested,13 direct test references
+kimi_delta_attention,10,4,0,14,0,f32 fp64,directly_tested,14 direct test references
 kl_divergence,11,0,0,11,0,,directly_tested,11 direct test references
 kv_cache_append,5,0,1,5,0,f32 fp16 fp32 fp8_e4m3,directly_tested,5 direct test references
 kv_cache_prune,4,0,1,4,0,fp16 fp32,directly_tested,4 direct test references
@@ -286,7 +286,7 @@ mla_decode_fused,11,9,0,20,0,,directly_tested,20 direct test references
 mobius,4,0,0,4,0,,directly_tested,4 direct test references
 mobius_from_three_points,3,0,0,3,0,,directly_tested,3 direct test references
 mod,4,0,0,4,0,f32,directly_tested,4 direct test references
-modified_delta_attention,8,0,0,8,0,f32 fp64,directly_tested,8 direct test references
+modified_delta_attention,9,0,0,9,0,f32 fp64,directly_tested,9 direct test references
 module_state_tree,0,0,0,0,1,,structural_only,category default for 'state_tree'
 moe,24,0,0,24,0,fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,24 direct test references
 moe_combine,5,0,0,5,0,,directly_tested,5 direct test references

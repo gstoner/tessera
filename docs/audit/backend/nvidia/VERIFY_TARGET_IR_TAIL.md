@@ -1,6 +1,6 @@
 ---
 last_updated: 2026-07-11
-audit_role: sub_audit
+audit_role: reference
 ---
 
 # Verify: NVIDIA Target IR tail + emit cleanups (branch `nvidia-target-ir-typed-ops`)

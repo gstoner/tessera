@@ -595,6 +595,14 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "selective-scan kernel (single pass over S, "
                             "vectorized over the state dim N, exp via the Cephes "
                             "core; in-place (B,D,N) state). f32",
+    "x86_selective_ssm_bwd_compiled": "x86 CPU Mamba2 selective_ssm BACKWARD — "
+                            "AVX-512 fused backward kernel "
+                            "(tessera_x86_selective_ssm_bwd_f32: forward-fill "
+                            "h_traj then reverse scan accumulating dx/dA/dB/dC/"
+                            "ddelta) behind the runtime.launch() ABI, operands "
+                            "(dout, x, A, B, C, delta[, gate[, state]]); the "
+                            "reverse-mode analog of x86_selective_ssm_compiled. "
+                            "f32, matches autodiff.vjp.vjp_selective_ssm",
     "x86_linalg_compiled": "x86 CPU dense linear algebra (cholesky / tri_solve / "
                             "cholesky_solve / lu / qr / svd) — AVX-512 Cholesky–"
                             "Banachiewicz factorization, forward/back triangular "
@@ -1391,6 +1399,22 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "over the state dim N, exp via the Cephes core, (B,D,N) state "
                "updated in place. f32, matches the numpy reference.",
         execution_mode="cpu_avx512"),
+    # Mamba2 selective_ssm BACKWARD on x86 (tessera_x86_selective_ssm_bwd_f32):
+    # operands (dout, x, A, B, C, delta[, gate[, state]]) -> (dx, dA, dB, dC,
+    # ddelta). The second native backward TARGET after ROCm (AUTODIFF §9a) — same
+    # paired contract, AVX-512 kernel instead of the gfx1151 one.
+    ("x86", "x86_selective_ssm_bwd_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_selective_ssm_bwd_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_selective_ssm_bwd_compiled", runtime_status="success",
+        reason="x86 selective_ssm (Mamba2) backward runs the AVX-512 fused "
+               "backward kernel (tessera_x86_selective_ssm_bwd_f32: forward-fill "
+               "h_traj then reverse scan accumulating dx/dA/dB/dC/ddelta) behind "
+               "the runtime.launch() ABI, from operands (dout, x, A, B, C, delta"
+               "[, gate[, state]]). f32, matches autodiff.vjp.vjp_selective_ssm; "
+               "the reverse-mode analog of x86_selective_ssm_compiled.",
+        execution_mode="cpu_avx512",
+        direction="backward", op_family="selective_ssm"),
     ("x86", "x86_linalg_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_linalg_compiled",
         execution_kind="native_cpu", executable=True,

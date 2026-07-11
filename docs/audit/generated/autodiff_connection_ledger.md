@@ -22,7 +22,7 @@ One row per differentiable **op family**, over the six rungs of [`AUTODIFF_UNIFI
 - backward `oracle_proven` (native) on any target: **0**
 - backward `hardware_proven` on any target: **2**
 
-> **Headline:** the Python reference/oracle is broad, a handful of ops have a native IR adjoint, several more only *look* differentiable in IR but actually call back into Python. The `matmul`/`tanh`/`sigmoid` backward **IR is oracle-verified on CPU** (Phase 3). **Phase 4 (A2) has landed the first native backward**: the families below whose `bwd hardware_proven` column is non-empty execute their backward on real hardware — sourced from the runtime execution matrix's backward rows, not asserted. ROCm gfx1151 `flash_attn` (covering MHA + GQA/MQA) and `selective_ssm` (Mamba2) are the first two native backward launch lanes. Remaining families are still Phase 4/5 work.
+> **Headline:** the Python reference/oracle is broad, a handful of ops have a native IR adjoint, several more only *look* differentiable in IR but actually call back into Python. The `matmul`/`tanh`/`sigmoid` backward **IR is oracle-verified on CPU** (Phase 3). **Phase 4 (A2) has landed the first native backward**: the families below whose `bwd hardware_proven` column is non-empty execute their backward on real hardware — sourced from the runtime execution matrix's backward rows, not asserted. The native backward families are `flash_attn` (MHA + GQA/MQA, ROCm gfx1151) and `selective_ssm` (Mamba2), which executes on **both** ROCm gfx1151 and x86 AVX-512 — the first two native backward targets. Remaining families are still Phase 4/5 work.
 
 ## Ledger
 
@@ -269,7 +269,7 @@ One row per differentiable **op family**, over the six rungs of [`AUTODIFF_UNIFI
 | `sddmm` | sparse | yes | none | — | — | — | — |  |
 | `segment_reduce` | segment_reduce | yes | none | — | — | — | — |  |
 | `select` | tensor_algebra | yes | none | — | — | — | — |  |
-| `selective_ssm` | state_space | yes | none | — | rocm | — | rocm | native backward executes on rocm (Phase 4) |
+| `selective_ssm` | state_space | yes | none | — | rocm,x86 | — | rocm,x86 | native backward executes on rocm, x86 (Phase 4) |
 | `seq2seq_loss` | loss | yes | none | — | — | — | — |  |
 | `sgd` | functional_optimizer_step | yes | none | — | — | — | — |  |
 | `sigmoid` | elementwise | yes | native | cpu | — | — | — | native static-shape adjoint (W5); dynamic → placeholder |

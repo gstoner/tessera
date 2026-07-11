@@ -118,3 +118,32 @@ def test_msa_kv_outer_sparse_reaches_rocm_target_ir():
     assert 'kv_traversal = "kv_outer"' in text
     assert "gqa_group_size = 4" in text
     assert "not implemented for ROCm" not in text     # no unsupported diagnostic
+
+
+def test_msa_kv_outer_sparse_reaches_x86_target_ir():
+    # x86 IR-visible mirror of the CUDA kv_outer_sparse contract — parity with the
+    # ROCm mirror. Same schedule/tile lowering; the CPU target op carries the
+    # selected-block KV-outer contract. Like ROCm and unlike NVIDIA's
+    # artifact_only cuda_kernel, x86 reports status=compiled (a real executing
+    # lane, x86_msa_compiled: host block-select + AVX-512 dense-attend).
+    schedule = lower_graph_to_schedule_ir(
+        _msa_graph(
+            block_size=64, top_k_blocks=8, num_attention_heads=8,
+            num_kv_heads=2, head_dim=128, mode="decode", tile_q=1, tile_kv=128,
+        ),
+        target_kind="cpu",
+    )
+    tile = lower_schedule_to_tile_ir(schedule, target_kind="cpu")
+    assert tile.verify().ok
+    assert "tessera.attn.msa_kv_outer_sparse" in tile.to_mlir()
+
+    target = lower_tile_to_target_ir(tile, target_kind="cpu")
+    assert target.verify().ok
+    text = target.to_mlir()
+    assert "tessera.cpu.msa_block_sparse" in text
+    assert 'kernel = "msa_kv_outer_sparse"' in text
+    assert 'status = "compiled"' in text
+    assert 'runtime_lane = "x86_msa_compiled"' in text
+    assert 'block_ids_layout = "B,Hkv,Sq,top_k"' in text
+    assert 'kv_traversal = "kv_outer"' in text
+    assert "gqa_group_size = 4" in text

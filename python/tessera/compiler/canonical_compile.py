@@ -111,6 +111,13 @@ class CompileResult:
     # A focused "what does this program emit" view distinct from the verbose
     # per-value shape_envelope.
     outputs: dict[str, Any] = field(default_factory=dict)
+    # Phase 1 (autodiff unification, 2026-07-11) — the backward provenance facet.
+    # ``None`` when no differentiation was requested; otherwise a
+    # ``autodiff_request.BackwardProvenance`` distinguishing IR-transformed /
+    # artifact-only / native-executable for gradients, mirroring the forward
+    # ``executable`` answer. Typed as ``Any`` to avoid an import cycle
+    # (autodiff_request imports the autodiff package, which is heavier).
+    backward: Optional[Any] = None
 
     @property
     def is_single_op(self) -> bool:

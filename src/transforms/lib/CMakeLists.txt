@@ -35,6 +35,7 @@ add_library(TesseraPasses
   # Phase F4 autodiff (reverse-mode via AdjointInterface).
   # ODS scaffold lives at src/compiler/ir/include/Tessera/AdjointInterface.td.
   AutodiffPass.cpp
+  AutodiffPairedPass.cpp
 
   # Phase F5 — adjoint collective insertion (runs after AutodiffPass).
   AdjointCollectiveInsertionPass.cpp

@@ -182,6 +182,8 @@ void registerTesseraPasses() {
   // the .td runs, the pass body is a registered no-op (Python-tape autodiff
   // remains the production path). See docs/spec/AUTODIFF_SPEC.md §Phase F4.
   ::mlir::registerPass([]() { return createAutodiffPass(); });
+  // Phase 2 — paired forward/backward autodiff (separate @f__bwd function).
+  ::mlir::registerPass([]() { return createAutodiffPairedPass(); });
 
   // ── Phase 8.4.8 SwiGLU fusion (Stage 2b of SwiGLU Performance Plan) ───────
   // Matches the 3-op SwiGLU chain at the Graph IR layer and emits

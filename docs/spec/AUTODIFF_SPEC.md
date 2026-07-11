@@ -2,7 +2,7 @@
 status: Normative (Tier 2 first-slice)
 classification: Spec
 authority: Programming Guide Ch.7 supersedes; this doc specifies the v1 implementation
-last_updated: 2026-05-09
+last_updated: 2026-07-11
 ---
 
 # Tessera Autodiff — v1 Spec
@@ -27,7 +27,7 @@ last_updated: 2026-05-09
 
 | Item | Status |
 |------|--------|
-| Graph/Tile IR adjoint ops | **✅ Phase F4 landed** — `AdjointInterface` ODS + `AutodiffPass.cpp` verified end-to-end on MLIR 22. |
+| Graph/Tile IR adjoint ops | **✅ Phase F4 landed at the IR level** — `AdjointInterface` ODS + `AutodiffPass.cpp` produce valid backward IR, lit-verified on MLIR 22. *Not* an execution claim: no target executes backward natively yet — see [`autodiff_connection_ledger.md`](../audit/generated/autodiff_connection_ledger.md) + [`AUTODIFF_UNIFICATION_PLAN.md`](../audit/compiler/AUTODIFF_UNIFICATION_PLAN.md). |
 | Effect-aware adjoint collective insertion | **✅ Phase F5 landed** — `tessera.distributed.DDP` / `FSDP` validate against `mock_collective`. |
 | Activation checkpointing / rematerialization | **✅ Phase F2 landed** — `tessera.autodiff.rematerialize` (alias `checkpoint`). |
 | Mixed-precision autocast + loss scaling | **✅ Phase F1 landed** — `tessera.autodiff.autocast(dtype)` + `GradScaler`. fp8 backend lowering still pending Phase G. |
@@ -275,12 +275,23 @@ python/tessera/autodiff/
 Estimated v1 LOC: ~600 (code) + ~350 (tests) = **~950 LOC**. Well under the
 audit's 1,200–1,800 estimate because we explicitly defer Graph/Tile IR work.
 
-## Phase F4 — Graph IR adjoint via `AdjointInterface` (design landed, build follow-up)
+## Phase F4 — Graph IR adjoint via `AdjointInterface` (landed at the IR level)
 
 The numpy-tape implementation in this spec is the v1 surface that user code
 binds to. The Phase F4 follow-up replaces the *internals* of that surface
 with Graph-IR-level adjoints, while keeping `tape() / reverse(fn) /
 custom_rule(name)` unchanged at the Python boundary.
+
+> **Scope of "landed" (reconciled 2026-07-11).** F4 is landed at the **IR
+> level**: the tablegen is wired, `AutodiffPass` runs, and the lit smoke test
+> passes on MLIR 22 — the pass produces valid *backward IR*. It is **not** an
+> end-to-end *execution* claim: no op family binds a compiled backward entry
+> point or is oracle-proven for gradients on any target yet. The per-op-family ×
+> per-target truth (which ops have a native vs. placeholder IR adjoint, and
+> which — none, today — execute backward natively) lives in the generated
+> [`autodiff_connection_ledger.md`](../audit/generated/autodiff_connection_ledger.md);
+> the promotion path from "IR adjoint" to "native backward execution" is
+> [`AUTODIFF_UNIFICATION_PLAN.md`](../audit/compiler/AUTODIFF_UNIFICATION_PLAN.md).
 
 Key pieces (landed 2026-05-09):
 
@@ -293,9 +304,10 @@ Key pieces (landed 2026-05-09):
   the full four-step reverse walk (collect forward ops, identify scalar
   return as the loss seed, build cotangent map keyed by forward `Value`,
   reverse-walk dispatching `buildAdjoint` per op, accumulate via
-  `arith.addf`). The interface-dispatch section is gated behind tablegen
-  on the ODS file landing in the build — until then the pass registers as
-  a no-op so opting into `--tessera-autodiff` doesn't break pipelines.
+  `arith.addf`). The tablegen for `AdjointInterface` is wired
+  ([`src/compiler/ir/CMakeLists.txt`](../../src/compiler/ir/CMakeLists.txt)
+  emits `AdjointInterface.{h,cpp}.inc`), so the interface dispatch is live —
+  the pass is no longer a no-op.
 
 * **Build wiring** — `AutodiffPass.cpp` is in
   `src/transforms/lib/CMakeLists.txt`'s `TesseraPasses` library, registered
@@ -304,22 +316,41 @@ Key pieces (landed 2026-05-09):
   `tessera-opt` via `Passes.cpp`'s `registerTesseraPasses()`.
 
 * **Lit smoke test** — `tests/tessera-ir/phase_f4/autodiff_pass_smoke.mlir`
-  is currently `XFAIL` and flips to passing when the tablegen step
-  produces `AdjointInterface.h.inc` and the per-op interface impls land.
+  **passes** (no longer `XFAIL`): it runs `tessera-opt --tessera-autodiff` and
+  FileCheck-verifies the reverse walk rewrites `@train_step` to expose argument
+  cotangents and emits the transposed `tessera.matmul` adjoints.
 
 * **Custom-rule bridge** — `tessera.autodiff.custom_rule(name)` continues to
   register Python VJPs at runtime. Ops that opt into a custom rule report the
   registry key via `customAdjointName()`; the AutodiffPass consults the
-  bridge during its reverse walk via a `tessera.custom_adjoint_call`
-  placeholder op (to be added once tablegen runs).
+  bridge during its reverse walk via the `tessera.custom_adjoint_call`
+  placeholder op (now present).
 
-* **Remaining work to flip XFAIL** — (a) add the AdjointInterface ODS file
-  to a tablegen target so `AdjointInterface.h.inc` is generated; (b) declare
-  `Tessera_AdjointInterface` on each differentiable op in
-  `src/compiler/ir/TesseraOps.td`; (c) implement `buildAdjoint` for
-  `MatmulOp`, `AddOp`, `MulOp`, etc. (mirror the Python VJPs in
-  `python/tessera/autodiff/vjp.py`); (d) flesh out the custom-rule
-  placeholder op for ops carrying `customAdjointName()`.
+* **What has an IR adjoint today** — `matmul`, `layernorm`, `softmax`, `tanh`,
+  and `sigmoid` have **native** `buildAdjoint` bodies (real backward Graph IR;
+  the pointwise W5 ops fall back to the placeholder only for dynamic shapes).
+  `gelu`, `relu`, `sin`, `silu`, `softplus`, `rmsnorm`, `log_softmax` carry a
+  **placeholder** `buildAdjoint` that emits `tessera.custom_adjoint_call` and
+  round-trips to the Python VJP — i.e. an IR adjoint that is *not* native. The
+  live native-vs-placeholder split, the `bwd_cpu_ir_oracle` column (backward IR
+  interpreted on CPU and oracle-matched), and the fact that **no** family
+  executes its backward *natively* on any target yet are the generated
+  [`autodiff_connection_ledger.md`](../audit/generated/autodiff_connection_ledger.md)
+  (the count authority — don't trust this enumeration if it drifts).
+
+* **Paired forward/backward ABI (Phase 2, landed first cut)** — the in-place
+  return expansion above is the bootstrap; `--tessera-autodiff-paired`
+  ([`AutodiffPairedPass.cpp`](../../src/transforms/lib/AutodiffPairedPass.cpp))
+  emits a **separate** backward function
+  `@f__bwd(inputs, out_cotangents) -> input_cotangents` (recompute-all residual
+  policy), the deterministic ABI runtime binding + hand-emitted backward kernels
+  (e.g. ROCm WMMA) both target. See
+  [`AUTODIFF_UNIFICATION_PLAN.md`](../audit/compiler/AUTODIFF_UNIFICATION_PLAN.md).
+
+* **Remaining work** — promote IR adjoints to native backward *execution*
+  (runtime binding, per-target oracle proof); broaden native `buildAdjoint`
+  coverage beyond `matmul`/`tanh`/`sigmoid` so fewer ops depend on the
+  `custom_adjoint_call` Python round-trip; add the SAVE residual policy.
 
 Out of scope for the F4 first cut:
 

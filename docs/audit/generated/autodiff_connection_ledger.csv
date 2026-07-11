@@ -240,7 +240,7 @@ score_matching_loss,loss,yes,none,,,,,,
 sddmm,sparse,yes,none,,,,,,
 segment_reduce,segment_reduce,yes,none,,,,,,
 select,tensor_algebra,yes,none,,,,,,
-selective_ssm,state_space,yes,none,,,rocm,,rocm,native backward executes on rocm (Phase 4)
+selective_ssm,state_space,yes,none,,,"rocm,x86",,"rocm,x86","native backward executes on rocm, x86 (Phase 4)"
 seq2seq_loss,loss,yes,none,,,,,,
 sgd,functional_optimizer_step,yes,none,,,,,,
 sigmoid,elementwise,yes,native,cpu,,,,,native static-shape adjoint (W5); dynamic → placeholder

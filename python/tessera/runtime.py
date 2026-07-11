@@ -15187,20 +15187,18 @@ def _rocm_selective_ssm_bwd(x, A, B, C, delta, dout, gate, state, np):
 _SSM_BWD_OPS = ("tessera.selective_ssm_bwd", "tessera.selective_ssm_vjp")
 
 
-def _execute_rocm_compiled_selective_ssm_bwd(artifact: "RuntimeArtifact",
-                                             args: Any) -> Any:
-    """The ``target="rocm"`` selective_ssm (Mamba2) BACKWARD launch lane.
+def _run_selective_ssm_bwd(artifact: "RuntimeArtifact", args: Any,
+                           kernel: Any, lane: str) -> Any:
+    """Shared body for the selective_ssm (Mamba2) BACKWARD launch lanes.
 
     Operands are ``(dout, x, A, B, C, delta[, gate[, state]])`` — the output
     cotangent first (mirroring the flash_attn backward convention), then the
     forward inputs. Returns ``(dx, dA, dB, dC, ddelta)`` — matches
-    ``autodiff.vjp.vjp_selective_ssm`` and the reverse-mode adjoint. This wraps
-    the compiler-generated ``generate-rocm-selective-ssm-bwd-kernel`` lane
-    (:func:`_rocm_selective_ssm_bwd`) behind the ``runtime.launch()`` ABI, so the
-    backward is reachable through the matrix like the flash_attn backward, not
-    only the eager ``vjp`` helper. Raises ``_RocmCompiledUnavailable`` when the
-    lane can't run (no tessera-opt / serialization / GPU); ``ValueError`` on a
-    bad op / operand arity."""
+    ``autodiff.vjp.vjp_selective_ssm``. ``kernel`` is the per-target device
+    backward (``_rocm_selective_ssm_bwd`` / ``_x86_selective_ssm_bwd``); this
+    factors the ``runtime.launch()`` operand binding both share. Raises
+    ``_RocmCompiledUnavailable`` when the lane can't run; ``ValueError`` on a bad
+    op / operand arity."""
     import numpy as np
 
     metadata = artifact.metadata or {}
@@ -15209,7 +15207,7 @@ def _execute_rocm_compiled_selective_ssm_bwd(artifact: "RuntimeArtifact",
     op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
     if len(ops) != 1 or op_name not in _SSM_BWD_OPS:
         raise ValueError(
-            "rocm_selective_ssm_bwd_compiled executor handles exactly one of "
+            f"{lane} executor handles exactly one of "
             f"{_SSM_BWD_OPS}; got {[o.get('op_name') for o in ops]!r}")
     operand_names = [str(n) for n in ops[0].get("operands", [])]
     if len(operand_names) not in (6, 7, 8):
@@ -15224,10 +15222,28 @@ def _execute_rocm_compiled_selective_ssm_bwd(artifact: "RuntimeArtifact",
     dout, x, a, b, c, delta = (_op(0), _op(1), _op(2), _op(3), _op(4), _op(5))
     gate = _op(6) if len(operand_names) >= 7 else None
     state = _op(7) if len(operand_names) >= 8 else None
-    # The helper takes forward inputs first, cotangent (dout) after.
-    dx, da, db, dc, dd = _rocm_selective_ssm_bwd(
-        x, a, b, c, delta, dout, gate, state, np)
+    # The kernel takes forward inputs first, cotangent (dout) after.
+    dx, da, db, dc, dd = kernel(x, a, b, c, delta, dout, gate, state, np)
     return dx, da, db, dc, dd
+
+
+def _execute_rocm_compiled_selective_ssm_bwd(artifact: "RuntimeArtifact",
+                                             args: Any) -> Any:
+    """``target="rocm"`` selective_ssm backward lane — the compiler-generated
+    ``generate-rocm-selective-ssm-bwd-kernel`` (gfx1151 WMMA/atomics) behind the
+    ``runtime.launch()`` ABI, reachable through the matrix like the flash_attn
+    backward, not only the eager ``vjp`` helper."""
+    return _run_selective_ssm_bwd(
+        artifact, args, _rocm_selective_ssm_bwd, "rocm_selective_ssm_bwd_compiled")
+
+
+def _execute_x86_selective_ssm_bwd(artifact: "RuntimeArtifact",
+                                   args: Any) -> Any:
+    """``target="x86"`` selective_ssm backward lane — the AVX-512 fused backward
+    kernel (:func:`_x86_selective_ssm_bwd`) behind the ``runtime.launch()`` ABI.
+    The second native backward *target* after ROCm (AUTODIFF_UNIFICATION §9a)."""
+    return _run_selective_ssm_bwd(
+        artifact, args, _x86_selective_ssm_bwd, "x86_selective_ssm_bwd_compiled")
 
 
 _rocm_moe_hsaco_cache: dict[tuple[str], bytes] = {}
@@ -16400,6 +16416,7 @@ def _executor_table():
         "rocm_flash_attn_compiled": _execute_rocm_compiled_flash_attn,
         "rocm_flash_attn_bwd_compiled": _execute_rocm_compiled_flash_attn_bwd,
         "rocm_selective_ssm_bwd_compiled": _execute_rocm_compiled_selective_ssm_bwd,
+        "x86_selective_ssm_bwd_compiled": _execute_x86_selective_ssm_bwd,
         "rocm_linear_attn_compiled": _execute_rocm_compiled_linear_attn,
         "rocm_dspark_draft_block_compiled": _execute_rocm_dspark_draft_block_reference,
         "rocm_softmax_compiled": _execute_rocm_compiled_softmax,

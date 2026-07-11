@@ -311,9 +311,10 @@ def render_markdown() -> str:
         "landed the first native backward**: the families below whose "
         "`bwd hardware_proven` column is non-empty execute their backward on "
         "real hardware — sourced from the runtime execution matrix's backward "
-        "rows, not asserted. ROCm gfx1151 `flash_attn` (covering MHA + GQA/MQA) "
-        "and `selective_ssm` (Mamba2) are the first two native backward launch "
-        "lanes. Remaining families are still Phase 4/5 work.",
+        "rows, not asserted. The native backward families are `flash_attn` "
+        "(MHA + GQA/MQA, ROCm gfx1151) and `selective_ssm` (Mamba2), which "
+        "executes on **both** ROCm gfx1151 and x86 AVX-512 — the first two "
+        "native backward targets. Remaining families are still Phase 4/5 work.",
         "",
         "## Ledger",
         "",

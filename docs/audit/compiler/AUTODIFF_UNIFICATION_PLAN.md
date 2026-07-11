@@ -479,7 +479,7 @@ once Phase 0 lands.
 | 1 | `@jit(autodiff=…)` request + backward provenance | ✅ landed 2026-07-11 |
 | 2 | Paired fwd/bwd/residual contract (`--tessera-autodiff-paired`, recompute-all) | ✅ first cut landed 2026-07-11 |
 | 3 | matmul→tanh/sigmoid→loss — backward IR oracle-proven on CPU (interpreted) | 🟡 IR-oracle cut landed 2026-07-11 (native execution → Phase 4; `@jit` static-shape emission remains) |
-| 4 | Compiled backward bound to runtime ABI (ROCm first) | ⬜ |
+| 4 | Compiled backward bound to runtime ABI (ROCm first) | ✅ **exit met** 2026-07-11 via A2+A3 (matrix backward column → ledger `hardware_proven`; `CompileResult.backward` truthful + `native_required` honored for ROCm `flash_attn`; gfx1151-verified). A1 arbiter dispatch deferred to Phase 5 (one executing backward candidate — see §9a finding) |
 
 Per-family × per-target rung truth is now the **generated ledger**, not a hand
 table — read [`generated/autodiff_connection_ledger.md`](../generated/autodiff_connection_ledger.md)
@@ -546,3 +546,131 @@ Net: on AMD the plan is **connect, don't build** — the hardware backward is
 already there; Phases 4–6 attach it to the paired ABI, the ledger, and
 `native_required`, so `@jit(autodiff="reverse", target="rocm")` becomes the first
 end-to-end native-backward training path in the compiler.
+
+---
+
+## 9a. Phase 4 ROCm — implementation plan (design decided 2026-07-11)
+
+Grounded in a read of the current surfaces. **Not yet implemented** — this is the
+build sheet so the work lands in verifiable increments without churning the
+drift-gated dashboards.
+
+### Current state (what exists vs. what's missing)
+
+| Surface | State today | file:line |
+|---|---|---|
+| Execution matrix | **One** backward row exists: `("rocm", "rocm_flash_attn_bwd_compiled")` (`execution_kind="native_gpu"`, `executable=True`). `ExecutionRow` has **no `direction`/`op_family`** field and no `hardware_verified` concept. `matmul`/`GQA`/`selective_ssm` backward have **no matrix rows** (they execute on gfx1151 but are reached via other `compiler_path`s / the fwd lane + autodiff). | `python/tessera/compiler/execution_matrix.py:35` (`ExecutionRow`), `:1790` (flash_attn_bwd row) |
+| Ledger | `bwd_target_lowered` / `bwd_runtime_bound` / `bwd_oracle_proven` / `bwd_hardware_proven` are **hardcoded `()`** ("empty by construction"). | `python/tessera/compiler/autodiff_ledger.py:144-147` |
+| Request | `has_native_backward` is an **unwired bool param**; every `native_required=True` → `UNSUPPORTED`. | `python/tessera/compiler/autodiff_request.py:175-214` |
+| Backward-ABI candidate | ROCm backward reached only via the standalone `rocm_flash_attn_bwd_compiled` path, **not** `@jit(autodiff="reverse", target="rocm")`. | `python/tessera/runtime.py` `_execute_rocm_compiled_flash_attn_bwd` |
+
+### Design decision (decided): backward rides on `ExecutionRow`
+
+Extend `ExecutionRow` with two fields — `direction: str = "forward"` and
+`op_family: str = ""` — rather than a parallel backward-lane table. Rationale:
+the matrix is already the single source of truth for "what `runtime.launch()`
+does per `(target, compiler_path)`" and is drift-gated by
+`test_runtime_execution_matrix`; a second registry would need its own sync
+contract with the matrix (the exact "new source of truth" the ledger design
+(§3, Decision #24) forbids). One row per `(target, compiler_path)` stays true;
+`direction`/`op_family` are additive with forward-safe defaults, so every
+existing row and the drift test are unaffected until rows are tagged.
+
+### Increment 1 — A2: matrix backward column → ledger (foundation)
+
+1. `execution_matrix.py`: add `direction` + `op_family` to `ExecutionRow`
+   (defaults `"forward"` / `""`). Tag the existing flash_attn_bwd row
+   `direction="backward", op_family="flash_attn"`. Add backward rows for the
+   families that genuinely execute on gfx1151 — `matmul`, `gqa`,
+   `selective_ssm` — each pointing at its real executor/`compiler_path` (confirm
+   each on-hardware first; do **not** add a row for a family that does not
+   actually launch a backward — Decision #21).
+2. `autodiff_ledger.py`: replace the hardcoded `()` for `bwd_runtime_bound` /
+   `bwd_hardware_proven` with a read of the matrix — group `executable`,
+   `direction=="backward"` rows by `op_family`, collect their `target`.
+   `bwd_hardware_proven` = the subset whose row is device-proven (see the open
+   question on the `hardware_verified` source below); `bwd_runtime_bound` = all
+   executable backward rows.
+3. Regenerate `docs/audit/generated/autodiff_connection_ledger.{md,csv}` via
+   `scripts/check_generated_docs.sh --write`; the ROCm `flash_attn`/`matmul`/
+   `gqa`/`selective_ssm` rows light up. Update `test_runtime_execution_matrix`
+   expectations + the ledger reconciliation test.
+
+**Exit:** the ledger's "0 families hardware_proven" blind spot (§8) closes for
+ROCm; counts come from the matrix, never assertion.
+
+### Increment 2 — A3: `has_native_backward` sourced + wired
+
+1. Add `execution_matrix.has_native_backward(op_family, target) -> bool` (a
+   backward row exists, is `executable`, and is device-proven).
+2. Wire it into the `@jit` path that builds `BackwardProvenance`
+   (`resolve_backward_provenance`, `autodiff_request.py:175`) so a
+   `(matmul|flash_attn|gqa|selective_ssm, rocm)` request with
+   `native_required=True` resolves to `NATIVE_EXECUTABLE` instead of
+   `UNSUPPORTED` — the first place enforcement is not rejected.
+
+**Exit:** `@jit(autodiff="reverse", target="rocm", native_required=True)` on a
+covered family returns a truthful `NATIVE_EXECUTABLE` backward facet; every other
+`(family, target)` still resolves honestly (`UNSUPPORTED`/`IR_TRANSFORMED`).
+
+### Increment 3 — A1: register the ROCm backward kernels as paired-ABI candidates *(deferred to Phase 5 — see finding)*
+
+**Finding (2026-07-11): A1 is premature and correctly deferred.** Two facts,
+found while landing A2/A3:
+
+1. **The backward already dispatches natively** — the gfx1151 flash-attn / ssm
+   backward is reached through the `autodiff.vjp` rules (`vjp_flash_attn` /
+   `vjp_selective_ssm` call `runtime._rocm_*_bwd` directly), not only the
+   standalone `compiler_path`. So the reverse-mode path *does* reach the native
+   kernel today; A2/A3 make that reality honest in the ledger + `CompileResult`.
+2. **There is only one executing backward candidate.** The accuracy-budgeted
+   arbiter's job is to *choose* among candidates; the Tier-1 synthesized backward
+   (`--tessera-autodiff-paired`) is **IR-only** (oracle-verified on CPU by
+   interpretation, not executed — Phase 3). Until it executes (Phase 5), the
+   WMMA backward is the sole candidate, so routing backward through the emit
+   arbiter would add a duplicative dispatch path with nothing to arbitrate.
+
+Whether the executed Tier-1 backward should flow through the `emit/candidate`
+arbiter (a parallel path) or the existing `autodiff.vjp` seam is a real
+Decision-#28 architecture choice, **taken when a second executing backward
+candidate exists (Phase 5)** — not a mechanical wiring. Registering a
+one-candidate arbiter lane now would not be clean.
+
+**Exit (Phase 5):** with the Tier-1 synthesized backward executing, register the
+WMMA backward as a **Tier-3** candidate on the paired `@f__bwd(inputs,
+out_cotangents) -> input_cotangents` contract (residual policy `recompute`), and
+let the accuracy-budgeted arbiter pick per `(op, shape-bucket, dtype, "rocm")`
+(Decision #28 — the hand-tuned WMMA stays first-class, displaced only by a faster
+in-budget compiled backward).
+
+### Phase 4 status: **exit criteria met by A2 + A3**
+
+The Phase 4 exit (§4) — *"`CompileResult` truthfully exposes native-launch /
+fallback / unsupported / numerical-proof states for forward and backward
+**independently**, and the ledger's `runtime_bound` rung is sourced from the
+matrix, not asserted"* — is satisfied: A2 sources the ledger's
+`runtime_bound`/`hardware_proven` backward rungs from the matrix; A3 makes
+`CompileResult.backward` resolve `NATIVE_EXECUTABLE` / `UNSUPPORTED` /
+`IR_TRANSFORMED` honestly and honors `native_required`. Both are hardware-verified
+on gfx1151 (`test_rocm_flash_attn_launch_execute.py`, 13 passed, full CORE+HIP
+build). A1 arbiter dispatch moves to Phase 5 per the finding above.
+
+### Verification (all on the gfx1151 box)
+
+- Per increment: `python3 -m pytest tests/unit/test_autodiff_ledger.py
+  tests/unit/test_autodiff_request.py` + the execution-matrix drift test +
+  `scripts/check_generated_docs.sh` (drift gate).
+- Inc 3: an execute-and-compare fixture on real gfx1151 (the flash-attn/matmul
+  backward gradients vs. an independent NumPy VJP), mirroring the forward
+  `test_rocm_*_runtime_symbol.py` lanes.
+
+### Open questions to resolve during Inc 1
+
+- **`hardware_verified` source.** `execution_matrix` has no `hardware_verified`
+  field; forward "hardware_verified" lives in `backend_manifest` /
+  `rocm_target_map`. Decide whether `bwd_hardware_proven` reads a device-proven
+  signal from there, or whether a device-proof flag is added to the backward
+  `ExecutionRow`. Prefer sourcing from the existing manifest to avoid a new truth.
+- **matmul/GQA/ssm backward reachability.** Confirm on-hardware which of these
+  actually launch a *distinct* backward today vs. compose forward lanes; only
+  tag rows for real backward launches.

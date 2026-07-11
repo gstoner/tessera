@@ -100,6 +100,46 @@ def test_provenance_native_when_backend_wired():
     assert prov.native
 
 
+def test_provenance_native_sourced_from_matrix_rocm_flash_attn():
+    """Phase 4 (A3): with op_families + target, the native hook is sourced from
+    the execution matrix — ROCm flash_attn has a device-proven backward, so the
+    facet resolves NATIVE_EXECUTABLE without an explicit bool."""
+    req = ad.build_request(_fn, autodiff="reverse", wrt=None)
+    prov = ad.resolve_backward_provenance(
+        req, target="rocm", op_families=("flash_attn",))
+    assert prov.status is BackwardStatus.NATIVE_EXECUTABLE
+    assert prov.native
+
+
+def test_provenance_native_required_honored_on_rocm_flash_attn():
+    """native_required=True is honored (not UNSUPPORTED) where the matrix proves
+    a native backward — the first place enforcement pays off (Phase 4 A3)."""
+    req = ad.build_request(
+        _fn, autodiff="reverse", wrt=None, native_required=True)
+    prov = ad.resolve_backward_provenance(
+        req, target="rocm", op_families=("flash_attn",))
+    assert prov.status is BackwardStatus.NATIVE_EXECUTABLE
+
+
+def test_provenance_mixed_program_not_native():
+    """A program is native only if EVERY component op has a native backward.
+    flash_attn+softmax on rocm: softmax has no backward launch → not native."""
+    req = ad.build_request(_fn, autodiff="reverse", wrt=None)
+    prov = ad.resolve_backward_provenance(
+        req, target="rocm", op_families=("flash_attn", "softmax"))
+    assert prov.status is BackwardStatus.IR_TRANSFORMED
+    assert not prov.native
+
+
+def test_provenance_native_sourced_false_off_target():
+    """Same flash_attn family on cpu (no native backward row) stays honest."""
+    req = ad.build_request(_fn, autodiff="reverse", wrt=None)
+    prov = ad.resolve_backward_provenance(
+        req, target="cpu", op_families=("flash_attn",))
+    assert prov.status is BackwardStatus.IR_TRANSFORMED
+    assert not prov.native
+
+
 # ── @jit integration ───────────────────────────────────────────────────────
 
 @tessera.jit(autodiff="reverse", wrt=("x", "w"))
@@ -133,6 +173,22 @@ def test_jit_mirrors_backward_facet_onto_compile_result():
     if cr is not None:  # eager path may not build a full CompileResult
         assert cr.backward is not None
         assert cr.backward.status is BackwardStatus.IR_TRANSFORMED
+
+
+@tessera.jit(autodiff="reverse", wrt=("q", "k", "v"), target="rocm")
+def _fa_rocm(q, k, v):
+    return tessera.ops.flash_attn(q, k, v)
+
+
+def test_jit_rocm_flash_attn_backward_is_native_executable():
+    """Phase 4 (A3) end-to-end: @jit(autodiff="reverse", target="rocm") over
+    flash_attn resolves its backward facet to NATIVE_EXECUTABLE via the
+    matrix-sourced hook (component_ops → execution_matrix.has_native_backward) —
+    the first native-backward training path in the compiler."""
+    assert _fa_rocm.compile_result is not None
+    assert _fa_rocm.compile_result.component_ops == ("flash_attn",)
+    assert _fa_rocm.backward_provenance.status is BackwardStatus.NATIVE_EXECUTABLE
+    assert _fa_rocm.backward_provenance.native
 
 
 def test_jit_without_autodiff_has_no_request():

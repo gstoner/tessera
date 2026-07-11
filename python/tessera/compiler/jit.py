@@ -1979,8 +1979,15 @@ def jit(
 
         diff_request = _ad.build_request(
             fn, autodiff=autodiff, wrt=wrt, native_required=native_required)
+        # Phase 4 (A3): source the native-backward hook from the execution
+        # matrix via the program's component ops — the backward is native only if
+        # every differentiable op has a device-proven backward on this target.
+        _bwd_families = (
+            tuple(compile_result.component_ops)
+            if compile_result is not None else ()
+        )
         backward_prov = _ad.resolve_backward_provenance(
-            diff_request, target=target_kind)
+            diff_request, target=target_kind, op_families=_bwd_families)
         if diff_request is not None and module is not None:
             intent = diff_request.module_intent_attrs()
             # The C++ --tessera-autodiff pass reads the `tessera.autodiff` marker

@@ -102,7 +102,7 @@ factorized_matmul,loop_nest,yes,none,,,,,,
 factorized_pos_emb,position_encoding,yes,none,,,,,,
 fake_quantize,quantization,yes,none,,,,,,
 fft,spectral,yes,none,,,,,,
-flash_attn,attention,yes,none,,,,,,
+flash_attn,attention,yes,none,,,rocm,,rocm,native backward executes on rocm (Phase 4)
 flatten,tensor_algebra,yes,none,,,,,,
 flip,tensor_algebra,yes,none,,,,,,
 floor_div,elementwise,yes,none,,,,,,

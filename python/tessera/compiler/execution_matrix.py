@@ -52,6 +52,13 @@ class ExecutionRow:
                               # "unimplemented" / "missing_backend" / etc.
     reason: str = ""          # human-readable explanation for telemetry / errors
     execution_mode: str = ""  # telemetry-only: "metal_runtime" / "cpu_accelerate" / ""
+    # Autodiff facet (AUTODIFF_UNIFICATION_PLAN §9a — Phase 4). `direction`
+    # distinguishes a forward lane from a backward (VJP) launch; `op_family` names
+    # the op whose backward this row launches (e.g. "flash_attn"), so the autodiff
+    # ledger can source its native backward rungs from the matrix instead of
+    # asserting them. Forward rows leave both at their defaults.
+    direction: str = "forward"   # "forward" | "backward"
+    op_family: str = ""          # backward rows: the op family this VJP launches
 
 
 # Catalog of every executor name → docstring describing what it runs. The actual
@@ -1802,7 +1809,8 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "attn_bias + sliding-window (implicitly causal, masks keys older "
                "than W) + Gemma-2 logit-softcap (dS scaled by 1-tanh^2), scale + "
                "causal, f16/bf16 storage, f32 accumulate.",
-        execution_mode="hip_runtime"),
+        execution_mode="hip_runtime",
+        direction="backward", op_family="flash_attn"),
     # Linear-attention family (quadratic-parallel form, no softmax; a distinct
     # algorithm from flash_attn): tessera.linear_attn + the decay-masked siblings
     # tessera.lightning_attention / tessera.retention, dispatched by op name.
@@ -2542,6 +2550,55 @@ def unimplemented_targets() -> tuple[str, ...]:
     """The targets the capability registry knows about but for which no
     executable row exists; `launch()` reports unimplemented / missing_backend."""
     return _UNIMPLEMENTED_TARGETS
+
+
+# --- autodiff facet: native backward launches (AUTODIFF_UNIFICATION_PLAN §9a) ---
+
+#: Execution kinds that mean a row runs on a real device, not a CPU reference —
+#: the bar a *backward* row must clear to count as hardware-proven.
+_DEVICE_EXECUTION_KINDS: frozenset[str] = frozenset(
+    {"native_gpu", "native_cpu", "cpu_accelerate"}
+)
+
+
+def backward_rows() -> list[ExecutionRow]:
+    """Every backward (VJP) launch row in the matrix (``direction == "backward"``)."""
+    return [r for r in all_rows() if r.direction == "backward"]
+
+
+def native_backward_targets() -> dict[str, dict[str, tuple[str, ...]]]:
+    """Per op-family, the targets whose **backward** has a native launch.
+
+    Returns ``{op_family: {"runtime_bound": (...), "hardware_proven": (...)}}``:
+    ``runtime_bound`` = an executable backward row exists (a launch ABI is
+    reachable); ``hardware_proven`` = that row runs on a real device (its
+    ``execution_kind`` is a device kind), not a CPU reference. The autodiff
+    ledger reads this so its native backward rungs are **sourced from the
+    matrix, never asserted** (Phase 4 A2)."""
+    bound: dict[str, set[str]] = {}
+    proven: dict[str, set[str]] = {}
+    for r in backward_rows():
+        if not r.executable or not r.op_family:
+            continue
+        bound.setdefault(r.op_family, set()).add(r.target)
+        if r.execution_kind in _DEVICE_EXECUTION_KINDS:
+            proven.setdefault(r.op_family, set()).add(r.target)
+    return {
+        fam: {
+            "runtime_bound": tuple(sorted(bound.get(fam, ()))),
+            "hardware_proven": tuple(sorted(proven.get(fam, ()))),
+        }
+        for fam in (set(bound) | set(proven))
+    }
+
+
+def has_native_backward(op_family: str, target: str) -> bool:
+    """True iff ``target`` runs a native, device-executable **backward** launch
+    for ``op_family``. The hook Phase 4 (A3) flips so a
+    ``@jit(autodiff="reverse", native_required=True)`` request is honored instead
+    of rejected. Sourced from the matrix — never a hand-maintained table."""
+    info = native_backward_targets().get(op_family)
+    return bool(info and target in info["hardware_proven"])
 
 
 #: Stable CSV column order for the execution matrix — append-only.

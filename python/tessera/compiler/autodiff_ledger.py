@@ -312,7 +312,8 @@ def render_markdown() -> str:
         "`bwd hardware_proven` column is non-empty execute their backward on "
         "real hardware — sourced from the runtime execution matrix's backward "
         "rows, not asserted. ROCm gfx1151 `flash_attn` (covering MHA + GQA/MQA) "
-        "is the first. Remaining families are still Phase 4/5 work.",
+        "and `selective_ssm` (Mamba2) are the first two native backward launch "
+        "lanes. Remaining families are still Phase 4/5 work.",
         "",
         "## Ledger",
         "",

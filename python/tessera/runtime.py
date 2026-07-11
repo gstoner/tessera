@@ -15183,6 +15183,53 @@ def _rocm_selective_ssm_bwd(x, A, B, C, delta, dout, gate, state, np):
     return dx, dA, dBg, dCg, dd
 
 
+#: Graph-IR op names the ROCm selective_ssm backward launch lane accepts.
+_SSM_BWD_OPS = ("tessera.selective_ssm_bwd", "tessera.selective_ssm_vjp")
+
+
+def _execute_rocm_compiled_selective_ssm_bwd(artifact: "RuntimeArtifact",
+                                             args: Any) -> Any:
+    """The ``target="rocm"`` selective_ssm (Mamba2) BACKWARD launch lane.
+
+    Operands are ``(dout, x, A, B, C, delta[, gate[, state]])`` — the output
+    cotangent first (mirroring the flash_attn backward convention), then the
+    forward inputs. Returns ``(dx, dA, dB, dC, ddelta)`` — matches
+    ``autodiff.vjp.vjp_selective_ssm`` and the reverse-mode adjoint. This wraps
+    the compiler-generated ``generate-rocm-selective-ssm-bwd-kernel`` lane
+    (:func:`_rocm_selective_ssm_bwd`) behind the ``runtime.launch()`` ABI, so the
+    backward is reachable through the matrix like the flash_attn backward, not
+    only the eager ``vjp`` helper. Raises ``_RocmCompiledUnavailable`` when the
+    lane can't run (no tessera-opt / serialization / GPU); ``ValueError`` on a
+    bad op / operand arity."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _SSM_BWD_OPS:
+        raise ValueError(
+            "rocm_selective_ssm_bwd_compiled executor handles exactly one of "
+            f"{_SSM_BWD_OPS}; got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    if len(operand_names) not in (6, 7, 8):
+        raise ValueError(
+            "selective_ssm backward requires (dout, x, A, B, C, delta) operands, "
+            f"optionally plus gate and state; got {len(operand_names)}")
+    values = _bind_launch_args(args, arg_names)
+
+    def _op(i: int) -> Any:
+        return _as_numpy(values[operand_names[i]])
+
+    dout, x, a, b, c, delta = (_op(0), _op(1), _op(2), _op(3), _op(4), _op(5))
+    gate = _op(6) if len(operand_names) >= 7 else None
+    state = _op(7) if len(operand_names) >= 8 else None
+    # The helper takes forward inputs first, cotangent (dout) after.
+    dx, da, db, dc, dd = _rocm_selective_ssm_bwd(
+        x, a, b, c, delta, dout, gate, state, np)
+    return dx, da, db, dc, dd
+
+
 _rocm_moe_hsaco_cache: dict[tuple[str], bytes] = {}
 
 
@@ -16352,6 +16399,7 @@ def _executor_table():
         "rocm_compiled":        _execute_rocm_compiled_gemm,
         "rocm_flash_attn_compiled": _execute_rocm_compiled_flash_attn,
         "rocm_flash_attn_bwd_compiled": _execute_rocm_compiled_flash_attn_bwd,
+        "rocm_selective_ssm_bwd_compiled": _execute_rocm_compiled_selective_ssm_bwd,
         "rocm_linear_attn_compiled": _execute_rocm_compiled_linear_attn,
         "rocm_dspark_draft_block_compiled": _execute_rocm_dspark_draft_block_reference,
         "rocm_softmax_compiled": _execute_rocm_compiled_softmax,

@@ -39,6 +39,8 @@ env:
     numpy>=1.21.0,<2.0.0
     pytest>=7.0.0
     pytest-cov>=4.0.0
+    pytest-xdist>=3.0.0
+    pytest-timeout>=2.1.0
     pyyaml>=6.0.0
     click>=8.0.0
     rich>=12.0.0
@@ -83,8 +85,12 @@ jobs:
         run: bash scripts/mypy_ratchet.sh
 
   # ────────────────────────────────────────────────────────────────────
-  # Lane 2 — unit  (pytest -m "not slow")   ~2min
-  # Required check.
+  # Lane 2 — unit  (pytest -m "not slow")
+  # Required check. Runs xdist-parallel (`-n auto`) across the runner's
+  # cores; the pathologically-slow tests (20–300s each — fixture-verify CLI,
+  # mypy/ruff baselines, generated-doc drift gates) are marked `slow` so they
+  # don't straggle this lane — their coverage lives in the `lint` + `audit`
+  # lanes that run the same checks (see each test's skip rationale).
   # ────────────────────────────────────────────────────────────────────
   unit:
     name: unit (pytest -m "not slow")
@@ -109,7 +115,11 @@ jobs:
       - name: pytest (CPU lane, not slow)
         env:
           PYTHONPATH: python
-        run: python -m pytest tests/unit -q -m "not slow"
+        # -n auto: parallelize across the runner's cores (xdist). --timeout: a
+        # hung test fails loudly instead of eating the 20-min budget (also
+        # silences the "Unknown config option: timeout" warning — the config
+        # expected pytest-timeout, now installed).
+        run: python -m pytest tests/unit -q -m "not slow" -n auto --timeout=180
 
   # ────────────────────────────────────────────────────────────────────
   # Lane 3 — audit  (support_table drift + claim_lint + examples)   ~10s

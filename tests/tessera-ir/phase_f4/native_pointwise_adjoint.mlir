@@ -12,6 +12,7 @@
 //
 // RUN: tessera-opt --tessera-autodiff %s | FileCheck %s --check-prefix=NATIVE
 // RUN: tessera-opt --tessera-autodiff --cse %s | FileCheck %s --check-prefix=CSE
+// RUN: tessera-opt --tessera-autodiff %s | FileCheck %s --check-prefix=DYN
 
 module {
   // tanh backward: dx = dy · (1 − tanh(x)²) — native ops, no placeholder.
@@ -46,5 +47,18 @@ module {
       attributes {tessera.autodiff = "reverse"} {
     %y = "tessera.sigmoid"(%x) : (tensor<2x3xf32>) -> tensor<2x3xf32>
     return %y : tensor<2x3xf32>
+  }
+
+  // Dynamic (or unranked) activation type: the native form would need a dense
+  // splat `1` sized to the result, which MLIR forbids for a non-static shape.
+  // So the adjoint safely FALLS BACK to the opaque custom_adjoint_call placeholder
+  // (the pre-W5 path) rather than asserting — native is a static-shape fast path.
+  // DYN-LABEL: func.func @tanh_bwd_dynamic
+  // DYN:         tessera.custom_adjoint_call "tanh"
+  // DYN-NOT:     tessera.mul
+  func.func @tanh_bwd_dynamic(%x: tensor<?x?xf32>) -> tensor<?x?xf32>
+      attributes {tessera.autodiff = "reverse"} {
+    %y = "tessera.tanh"(%x) : (tensor<?x?xf32>) -> tensor<?x?xf32>
+    return %y : tensor<?x?xf32>
   }
 }

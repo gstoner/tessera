@@ -150,13 +150,33 @@ POINTWISE_BUILD_ADJOINT(LogSoftmaxOp, "log_softmax")
 // docstring convention): downstream CSE collapses it back to the forward value.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// A dense splat constant of `value` matching a shape-preserving tensor type.
+// The native form materializes a dense splat `1` sized to the result type, which
+// MLIR only allows for a statically-shaped ranked tensor. A dynamic activation
+// type (e.g. before a later shape refinement) has no such constant, so the native
+// path is gated on a static shape and falls back to the placeholder otherwise.
+static bool isStaticShaped(mlir::Type ty) {
+  auto rt = mlir::dyn_cast<mlir::RankedTensorType>(ty);
+  return rt && rt.hasStaticShape();
+}
+
+// A dense splat constant of `value` matching a static shape-preserving tensor.
 static mlir::Value splatConst(mlir::OpBuilder &builder, mlir::Location loc,
                               mlir::Type ty, double value) {
   auto shaped = mlir::cast<mlir::ShapedType>(ty);
   auto attr = mlir::DenseElementsAttr::get(
       shaped, builder.getFloatAttr(shaped.getElementType(), value));
   return builder.create<mlir::arith::ConstantOp>(loc, attr).getResult();
+}
+
+// Dynamic-shape (or unranked) fallback: the opaque placeholder the runtime VJP
+// registry resolves — the pre-W5 behavior for these ops, kept shape-safe.
+static llvm::SmallVector<mlir::Value>
+placeholderAdjoint(mlir::OpBuilder &builder, mlir::Location loc, mlir::Type ty,
+                   llvm::StringRef key, mlir::Value dy, mlir::Value x) {
+  auto callOp = builder.create<CustomAdjointCallOp>(
+      loc, llvm::SmallVector<mlir::Type>{ty}, builder.getStringAttr(key),
+      mlir::ValueRange{dy, x});
+  return {callOp.getResult(0)};
 }
 
 // tanh:  dx = dy · (1 − tanh(x)²)
@@ -167,6 +187,8 @@ llvm::SmallVector<mlir::Value> TanhOp::buildAdjoint(
   auto loc = getLoc();
   mlir::Type ty = getResult().getType();
   mlir::Value dy = outputCotangents[0];
+  if (!isStaticShaped(ty))
+    return placeholderAdjoint(builder, loc, ty, "tanh", dy, getX());
   mlir::Value t = builder.create<TanhOp>(loc, ty, getX()).getResult();
   mlir::Value t2 = builder.create<MulOp>(loc, ty, t, t).getResult();
   mlir::Value one = splatConst(builder, loc, ty, 1.0);
@@ -183,6 +205,8 @@ llvm::SmallVector<mlir::Value> SigmoidOp::buildAdjoint(
   auto loc = getLoc();
   mlir::Type ty = getResult().getType();
   mlir::Value dy = outputCotangents[0];
+  if (!isStaticShaped(ty))
+    return placeholderAdjoint(builder, loc, ty, "sigmoid", dy, getX());
   mlir::Value s = builder.create<SigmoidOp>(loc, ty, getX()).getResult();
   mlir::Value one = splatConst(builder, loc, ty, 1.0);
   mlir::Value oneMinusS = builder.create<SubOp>(loc, ty, one, s).getResult();

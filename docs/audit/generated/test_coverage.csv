@@ -312,7 +312,7 @@ nonzero,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 normalize_group_advantages,9,0,0,9,0,,directly_tested,9 direct test references
 nt_xent_loss,8,0,0,8,0,,directly_tested,8 direct test references
 ntk_rope,2,0,0,2,0,,directly_tested,2 direct test references
-online_softmax,5,2,0,7,0,,directly_tested,7 direct test references
+online_softmax,8,2,1,10,0,,directly_tested,10 direct test references
 online_softmax_state,10,0,0,10,0,fp16,directly_tested,10 direct test references
 optax_style_chain,0,0,0,0,1,,structural_only,category default for 'grad_transform'
 pack,7,0,0,7,0,fp16,directly_tested,7 direct test references
@@ -357,7 +357,7 @@ reshape,11,15,1,26,0,,directly_tested,26 direct test references
 retention,12,0,2,12,0,,directly_tested,12 direct test references
 rfft,6,0,1,6,0,fp32,directly_tested,6 direct test references
 rmsnorm,75,13,3,88,0,bf16 f16 f32 f64 fp32,directly_tested,88 direct test references
-rmsnorm_safe,6,5,0,11,0,bf16 f16 f32,directly_tested,11 direct test references
+rmsnorm_safe,8,5,1,13,0,bf16 f16 f32,directly_tested,13 direct test references
 rng_bernoulli,3,0,0,3,0,,directly_tested,3 direct test references
 rng_beta,3,0,0,3,0,,directly_tested,3 direct test references
 rng_categorical,3,0,0,3,0,,directly_tested,3 direct test references
@@ -412,7 +412,7 @@ sinh,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 slice,11,0,0,11,0,,directly_tested,11 direct test references
 smooth_l1_loss,7,0,0,7,0,f32,directly_tested,7 direct test references
 softcap,9,0,1,9,0,,directly_tested,9 direct test references
-softmax,120,38,30,158,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,158 direct test references
+softmax,122,38,30,160,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,160 direct test references
 softmax_safe,6,4,1,10,0,bf16,directly_tested,10 direct test references
 softplus,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
 sort,13,0,0,13,0,,directly_tested,13 direct test references

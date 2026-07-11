@@ -2,6 +2,8 @@ set(LLVM_TARGET_DEFINITIONS
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include/tessera/gpu/IR/TesseraNVIDIADialect.td)
 mlir_tablegen(TesseraNVIDIADialect.h.inc -gen-dialect-decls -dialect=tessera_nvidia)
 mlir_tablegen(TesseraNVIDIADialect.cpp.inc -gen-dialect-defs -dialect=tessera_nvidia)
+mlir_tablegen(TesseraNVIDIAOps.h.inc -gen-op-decls)
+mlir_tablegen(TesseraNVIDIAOps.cpp.inc -gen-op-defs)
 add_public_tablegen_target(TesseraNVIDIATableGen)
 
 add_mlir_library(TesseraNVIDIAIR

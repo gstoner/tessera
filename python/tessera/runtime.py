@@ -4408,8 +4408,12 @@ def _execute_rocm_compiled_softmax(artifact: RuntimeArtifact, args: Any) -> Any:
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
     ops = list(metadata.get("ops") or [])
-    _SM_OPS = ("tessera.softmax", "tessera.softmax_safe")
-    if len(ops) != 1 or str(ops[0].get("op_name", "")) not in _SM_OPS:
+    # online_softmax(x) with no streaming state is exactly softmax over the last
+    # axis, so it rides this kernel; the streaming (state) form is a different
+    # computation and is declined (Decision #21 — never a silent wrong answer).
+    _SM_OPS = ("tessera.softmax", "tessera.softmax_safe", "tessera.online_softmax")
+    op_name = str(ops[0].get("op_name", ""))
+    if len(ops) != 1 or op_name not in _SM_OPS:
         raise ValueError(
             "rocm_softmax_compiled executor handles exactly one of "
             f"{_SM_OPS}; got {[o.get('op_name') for o in ops]!r}")
@@ -4418,6 +4422,10 @@ def _execute_rocm_compiled_softmax(artifact: RuntimeArtifact, args: Any) -> Any:
     if len(operand_names) < 1:
         raise ValueError("softmax requires one operand")
     kwargs = op.get("kwargs") or {}
+    if op_name == "tessera.online_softmax" and kwargs.get("state") is not None:
+        raise ValueError(
+            "rocm softmax lane runs stateless online_softmax (== softmax); the "
+            "streaming-state form is not on this lane")
     axis = int(kwargs.get("axis", -1))
     if axis not in (-1,):
         raise ValueError(
@@ -5428,7 +5436,9 @@ def _execute_x86_compiled_softmax(artifact: RuntimeArtifact, args: Any) -> Any:
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
     ops = list(metadata.get("ops") or [])
-    _SM_OPS = ("tessera.softmax", "tessera.softmax_safe")
+    # online_softmax(x) with no streaming state == softmax over the last axis;
+    # the streaming (state) form is declined (Decision #21).
+    _SM_OPS = ("tessera.softmax", "tessera.softmax_safe", "tessera.online_softmax")
     op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
     if len(ops) != 1 or op_name not in _SM_OPS:
         raise ValueError(
@@ -5439,6 +5449,10 @@ def _execute_x86_compiled_softmax(artifact: RuntimeArtifact, args: Any) -> Any:
     if len(operand_names) < 1:
         raise ValueError("softmax requires one operand")
     kwargs = op.get("kwargs") or {}
+    if op_name == "tessera.online_softmax" and kwargs.get("state") is not None:
+        raise ValueError(
+            "x86 softmax lane runs stateless online_softmax (== softmax); the "
+            "streaming-state form is not on this lane")
     axis = int(kwargs.get("axis", -1))
     if axis not in (-1,):
         raise ValueError(

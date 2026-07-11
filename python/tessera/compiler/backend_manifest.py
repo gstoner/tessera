@@ -1330,6 +1330,14 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "tree-reduce, f32 reduce). Executes via runtime.launch() "
                  "(rocm_softmax_compiled).",
     },
+    "online_softmax": {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("reduction",),
+        "notes": "Stateless online_softmax (== softmax over the last axis) rides "
+                 "the compiled softmax kernel (generate-rocm-softmax-kernel) via "
+                 "runtime.launch() (rocm_softmax_compiled); the streaming-state "
+                 "form is declined (Decision #21).",
+    },
     # KV-cache paged-movement core (§5.6). The append/read/prune tensor movement
     # over a resident cache buffer executes on gfx1151 by COMPOSING the existing
     # device scatter (append row write) + masked-gather (read/prune) kernels with
@@ -2244,6 +2252,14 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("pow", "silu_mul")},
     **{(op, "x86"): "tests/unit/test_x86_norm_softmax_compiled.py"
        for op in ("rmsnorm", "layer_norm", "softmax")},
+    # Normalization tail closed on the existing kernels (dispatch only, no new
+    # codegen): online_softmax(no-state) == softmax; rmsnorm_safe == rmsnorm.
+    ("online_softmax", "rocm"):
+        "tests/unit/test_online_softmax_rmsnorm_safe_compiled.py",
+    ("online_softmax", "x86"):
+        "tests/unit/test_online_softmax_rmsnorm_safe_compiled.py",
+    ("rmsnorm_safe", "x86"):
+        "tests/unit/test_online_softmax_rmsnorm_safe_compiled.py",
     **{(op, "x86"): "tests/unit/test_x86_matmul_family_compiled.py"
        for op in ("batched_gemm", "linear_general", "qkv_projection",
                   "factorized_matmul", "einsum")},
@@ -3085,6 +3101,13 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "(tessera_x86_avx512_rmsnorm_f32, runtime-loaded; "
                  "x86_norm_compiled lane; f32, matches numpy 2e-5)",
     },
+    "rmsnorm_safe": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "rmsnorm_safe (== rmsnorm, tighter eps default) rides the "
+                 "AVX-512 rmsnorm row-reduction (tessera_x86_avx512_rmsnorm_f32; "
+                 "x86_norm_compiled lane; f32, matches nn.functional)",
+    },
     "layer_norm": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
@@ -3115,6 +3138,14 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "notes": "AVX-512 stable softmax row-reduction "
                  "(tessera_x86_avx512_softmax_f32, runtime-loaded; "
                  "x86_softmax_compiled lane; f32, matches numpy 2e-5)",
+    },
+    "online_softmax": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "Stateless online_softmax (== softmax) rides the AVX-512 stable "
+                 "softmax row-reduction (tessera_x86_avx512_softmax_f32; "
+                 "x86_softmax_compiled lane); the streaming-state form is declined "
+                 "(Decision #21). f32, matches numpy",
     },
     # GEMM family — batched_gemm / linear_general / qkv_projection /
     # factorized_matmul / einsum, all on the AVX-512 f32 GEMM microkernel

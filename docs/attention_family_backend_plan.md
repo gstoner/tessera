@@ -2,7 +2,7 @@
 status: Planning
 classification: Plan
 authority: Consolidated backend plan for the DFlash / MSA / Mamba2 attention family
-last_updated: 2026-07-09
+last_updated: 2026-07-11
 ---
 
 # Attention Family — ROCm / CUDA / x86 Backend Plan
@@ -45,7 +45,7 @@ Five features span the family:
 
 ---
 
-## Status today (verified 2026-07-09)
+## Status today (verified 2026-07-11)
 
 Legend: ✅ native & executing · ⚠️ executes but unproven/unrecorded · 🟡 partial ·
 ❌ absent (numpy-reference or planned).
@@ -56,9 +56,9 @@ Legend: ✅ native & executing · ⚠️ executes but unproven/unrecorded · �
 | `flash_attn` variants (GQA/MQA/sliding/softcap) | ✅ compiled (WMMA) | ❌ **not in the emit/ FA lane²** | ✅ native | ✅ native |
 | **`attn_bias`** | ✅ compiled (WMMA, #328) | ❌ absent | ✅ native (pre-softmax add) | ✅ native |
 | MSA sparse core (`msa_sparse_attention`) | ✅ compiled (block-sparse WMMA + GPU top-k) | ❌ artifact_only contract | ✅ compiled (host-select + AVX-512 dense-attend) | ✅ fused (scalar/tiled f32/f16) |
-| MSA IR-artifact mirror (`kv_outer_sparse`) | ✅ `tessera_rocm.msa_block_sparse` (#337, `status=compiled` — executes, not just a contract) | ✅ the contract (no kernel body) | ❌ | n/a |
+| MSA IR-artifact mirror (`kv_outer_sparse`) | ✅ `tessera_rocm.msa_block_sparse` (#337, `status=compiled` — executes) | ✅ the contract (no kernel body) | ✅ `tessera.cpu.msa_block_sparse` (`status=compiled` — executes via `x86_msa_compiled`) | n/a |
 | DFlash `attention_fn` seam | ✅ `rocm_attention_fn` (#330) | ❌ (blocked on bias) | ✅ `x86_attention_fn` | ✅ `apple_gpu_attention_fn` |
-| `selective_ssm` (Mamba2) | ✅ compiled (naive f32 fwd) | ❌ planned | ✅ native (f32 fwd) | ✅ (Mamba SSD) |
+| `selective_ssm` (Mamba2) | ✅ compiled (seq scan; f32 device bwd #335; chunked-SSD f32 reference rung #363) | ❌ planned | ✅ native (seq + chunked-parallel SSD scalar-A #336; f32 bwd) | ✅ (Mamba SSD) |
 
 **¹ NVIDIA flash-attention — honest status.** A real `mma.sync` tensor-core FA
 kernel exists in the `emit/` plugin framework
@@ -89,7 +89,7 @@ not "already present." (ROCm and x86 carry all four variants today.)
 |---|---|
 | ROCm flash lane (needs bias) | `ROCM_FlashAttnOp` `TesseraROCMOps.td:88-95`; `GenerateWMMAFlashAttnKernel.cpp`; executor `runtime.py:_execute_rocm_compiled_flash_attn` (~2880, reads operands[0:3] only) |
 | ROCm MSA core (already executes) | `_execute_rocm_compiled_sparse_attention` `runtime.py:12924`; block-sparse WMMA + `_rocm_block_sparse_topk_select_native` `:12695` |
-| ROCm selective_ssm | `ROCM_SelectiveSsmKernelOp` `TesseraROCMOps.td:425`; `_rocm_selective_ssm` `runtime.py:13167` (naive one-thread-per-(b,d), f32 fwd) |
+| ROCm selective_ssm | `ROCM_SelectiveSsmKernelOp` `TesseraROCMOps.td`; `_rocm_selective_ssm` (sequential per-(b,d) scan, f32/f16/bf16) + `_rocm_selective_ssm_bwd` (#335 device backward) + `_rocm_selective_ssm_chunked` (#363 SSD reference rung) |
 | CUDA MSA lowering (mirror target) | `schedule_ir.py:416` → `tile_ir.py:248` → `target_ir.py:1334` (`cuda_kernel` `status="artifact_only"`, hardcoded `:1339`) |
 | CUDA emit/ FA kernel | `emit/nvidia_cuda.py:815` (mma) / `:140` (scalar); arbiter `emit/candidate.py`, `emit/autotune.py` |
 | x86 flash + bias (reference shape) | `avx512_flash_attn_f32.cpp:71` (`tessera_x86_flash_attn_f32`) / `:120` (`_ext_f32`, bias/window/softcap); executor `runtime.py:_execute_x86_compiled_flash_attn:3060` |
@@ -183,16 +183,15 @@ DFlash test bar).
 
 ## Phase 3 — MSA completion
 
-MSA status is now: ROCm + x86 execute it, CUDA has an artifact-only contract,
-Apple is fully native.
+MSA status is now: **ROCm + x86 execute it AND carry the IR-visible
+`kv_outer_sparse` mirror**, CUDA has an artifact-only contract, Apple is fully
+native.
 
 | Target | Work | Gated on |
 |---|---|---|
-| **x86** | ✅ **done** — `x86_msa_compiled` lane: host exp-free index-score + per-GQA-group top-k select (reference ops, bit-identical), exact attend on `tessera_x86_flash_attn_ext_f32` as dense attention with a non-selected/causal additive -inf mask. Matches the reference to f32 epsilon; dense-equivalence verified. | — |
-| **CUDA** | Replace the `artifact_only` `msa_kv_outer_sparse` contract (`target_ir.py:1339`) with a **real emit/ mma.sync block-sparse kernel** — mirror the emit/ FA lane, KV-outer over selected blocks, online softmax, dense-equivalence oracle. Promote `target_ir.py` off the hardcoded `artifact_only` + add the manifest/fixture rows. | **sm_120-gated** |
-| **ROCm** | *Optional* — the sparse core already **executes** via `rocm_sparse_attn_compiled`; only the IR-visible `kv_outer_sparse` mirror of the CUDA lowering is missing. Add a `schedule/tile/target` ROCm branch (`tessera_rocm.*` target op) if IR parity with CUDA is wanted. Lower priority (no execution gap). | Buildable now (low pri) |
-| **CUDA** | Replace the `artifact_only` `msa_kv_outer_sparse` contract (`target_ir.py:1339`) with a **real emit/ mma.sync block-sparse kernel** — mirror the emit/ FA lane, KV-outer over selected blocks, online softmax, dense-equivalence oracle. Promote `target_ir.py` off the hardcoded `artifact_only` + add the manifest/fixture rows. | **sm_120-gated** |
-| **ROCm** | *Optional* — the sparse core already **executes** via `rocm_sparse_attn_compiled`; only the IR-visible `kv_outer_sparse` mirror of the CUDA lowering is missing. Add a `schedule/tile/target` ROCm branch (`tessera_rocm.*` target op) if IR parity with CUDA is wanted. Lower priority (no execution gap). | Buildable now (low pri) |
+| **x86** | ✅ **done** — `x86_msa_compiled` lane (host exp-free index-score + per-GQA-group top-k select, exact attend on `tessera_x86_flash_attn_ext_f32` with a non-selected/causal additive -inf mask; dense-equivalence verified) **and** the IR mirror `tessera.cpu.msa_block_sparse` (`status=compiled`, `runtime_lane=x86_msa_compiled`). | — |
+| **ROCm** | ✅ **done (#337 → #339)** — executes via `rocm_sparse_attn_compiled` **and** carries the IR mirror `tessera_rocm.msa_block_sparse` (`status=compiled`), the full `schedule→tile→target` chain. IR parity with the CUDA contract. | — |
+| **CUDA** | Replace the `artifact_only` `msa_kv_outer_sparse` contract (`target_ir.py`) with a **real emit/ mma.sync block-sparse kernel** — mirror the emit/ FA lane, KV-outer over selected blocks, online softmax, dense-equivalence oracle. Promote off `artifact_only` + add the manifest/fixture rows. | **sm_120-gated** |
 
 **Invariant:** dense-equivalence (`top_k == num_blocks` == dense GQA) is the first
 oracle on every MSA kernel, including the x86 build.
@@ -201,14 +200,14 @@ oracle on every MSA kernel, including the x86 build.
 
 ## Phase 4 — Mamba2 chunked-scan / dtype / backward
 
-`selective_ssm` is native f32-forward on ROCm + x86 (naive scans) and native on
-Apple; NVIDIA is planned. The Phase-G "chunked-scan target kernels" are the
-optimized variant + dtype coverage + backward.
+`selective_ssm` is native on ROCm + x86 + Apple; NVIDIA is planned. The
+Phase-4 chunked-scan / dtype / backward work has **largely landed** on both this
+box's lanes.
 
 | Target | Work | Gated on |
 |---|---|---|
-| **x86** | Upgrade `avx512_ssm_f32.cpp` from the sequential scan to a **chunked scan**; add bf16/fp16 I/O and the backward pass. | Buildable now |
-| **ROCm** | Upgrade `_rocm_selective_ssm` from naive one-thread-per-(b,d) to a **chunked/tiled scan**; add fp16/bf16 + backward. | Buildable now |
+| **x86** | ✅ **done (#336)** — scalar-A f32 routes through the **chunked-parallel SSD** form on the AVX-512 batched GEMM (matches the sequential scan); f16/bf16 I/O on the sequential kernel; backward via `tessera_x86_selective_ssm_bwd_f32`. `(D,N)` diagonal-A stays sequential. | — |
+| **ROCm** | ✅ f16/bf16 sequential scan + **f32 device backward (#335)** landed; the **chunked-parallel SSD** form is built on the #356 f32 GEMM (#363) but is a measured 4–100× regression (per-call GEMM overhead) so it stays a correctness reference rung, NOT the default. A **single-launch batched f32 GEMM** is the prerequisite for the chunked path to win on ROCm (STRIX Stage H addendum 2). | reference rung landed; batched-GEMM follow-up |
 | **CUDA** | Build the NVIDIA `selective_ssm` kernel (currently planned/absent) via the emit/ framework — mma-friendly chunked scan. | sm_120-gated |
 
 **Invariant:** chunked output matches the sequential scan; dtype variants within
@@ -225,6 +224,7 @@ tolerance.
 - ✅ **Phase 2 / x86 DFlash seam** — **landed**, `x86_attention_fn` over the f32-native flash lane.
 - ✅ **Phase 3 / x86 MSA lane** — **landed**, `x86_msa_compiled`; closes the last x86 execution gap in the family (x86 now has flash/NSA/MLA/SSM/MSA all native).
 - ✅ **Phase 3 / ROCm MSA IR mirror** — **landed (#337 → #339)**: `target_ir.py` emits `tessera_rocm.msa_block_sparse` (`status=compiled`, `runtime_lane=rocm_sparse_attn_compiled`) via the full schedule→tile→target chain — IR parity with the CUDA `msa_kv_outer_sparse` contract, and it executes (not `artifact_only` like NVIDIA). ROCM_AUDIT §554.
+- ✅ **Phase 3 / x86 MSA IR mirror** — **landed**: `_lower_cpu_op` emits `tessera.cpu.msa_block_sparse` (`status=compiled`, `runtime_lane=x86_msa_compiled`), the same selected-block KV-outer contract as the ROCm mirror — completing IR parity across x86/ROCm/CUDA. Executes via the `x86_msa_compiled` lane (host block-select + AVX-512 dense-attend). Test: `test_msa_kv_outer_sparse_reaches_x86_target_ir`. **This closes the last x86 gap in the attention family — x86 now has flash (+bias/variants), NSA, MLA, SSM (seq + chunked), MSA (execution + IR mirror), and the DFlash seam all native.**
 - ✅ **Phase 4 / x86 chunked SSM** — **landed (#336)**, scalar-A SSD on the AVX-512 batched GEMM. ✅ **ROCm chunked SSM** — built on the #356 f32 GEMM (#363) but a measured 4–100× regression (per-call GEMM overhead), so kept as a correctness reference rung, NOT the default; a single-launch batched f32 GEMM is the prerequisite for a ROCm win (STRIX Stage H addendum 2).
 
 **Hardware-gated on the RTX 5070 Ti (sm_120) box:**

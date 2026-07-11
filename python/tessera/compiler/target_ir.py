@@ -1283,6 +1283,28 @@ def _lower_cpu_op(op: TileOp) -> list[TargetOp]:
         return []
     source = str(op.attrs.get("source", _source_from_tile_op(op)))
     base = _base_attrs(op)
+    if op.op_name == "tessera.attn.msa_kv_outer_sparse" or source == "tessera.msa_sparse_attention":
+        # MSA KV-outer sparse — the x86 IR-visible mirror of the CUDA
+        # `msa_kv_outer_sparse` contract, parity with the ROCm
+        # (`tessera_rocm.msa_block_sparse`) and NVIDIA (`cuda_kernel`) mirrors.
+        # Like ROCm and unlike NVIDIA's `artifact_only`, x86 has a REAL executing
+        # lane: `x86_msa_compiled` (host block-select + AVX-512 dense-attend)
+        # realizes this contract at runtime.launch() time — so `status = compiled`.
+        # Carries the schedule's selected-block KV-outer contract for IR parity.
+        return [TargetOp("tessera.cpu.msa_block_sparse", {
+            **base,
+            "abi": "numpy",
+            "arch": "x86_64",
+            "kernel": "msa_kv_outer_sparse",
+            "status": "compiled",
+            "runtime_lane": "x86_msa_compiled",
+            "mode": op.attrs.get("mode", "prefill"),
+            "block_ids_layout": op.attrs.get("selected_block_layout", "B,Hkv,Sq,top_k"),
+            "gqa_group_size": int(op.attrs.get("gqa_group_size", 1)),
+            "tile_q": int(op.attrs.get("tile_q", 64)),
+            "tile_kv": int(op.attrs.get("tile_kv", 128)),
+            "kv_traversal": "kv_outer",
+        })]
     return [TargetOp(_cpu_target_op_name(source), {**base, "abi": "numpy"})]
 
 

@@ -210,6 +210,15 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "window + logit-softcap; f16/bf16 storage, f32 "
                             "accumulate; the reverse-mode analog of "
                             "rocm_flash_attn_compiled",
+    "rocm_selective_ssm_bwd_compiled": "AMD GPU RDNA Mamba2 selective_ssm "
+                            "BACKWARD the Tessera compiler GENERATES "
+                            "(generate-rocm-selective-ssm-bwd-kernel: one thread "
+                            "per (b,d), atomic cross-channel reductions -> hsaco, "
+                            "in-process via tessera-opt), HIP-launched to produce "
+                            "(dx, dA, dB, dC, ddelta) from operands "
+                            "(dout, x, A, B, C, delta[, gate[, state]]); the "
+                            "reverse-mode analog of rocm_selective_ssm_compiled. "
+                            "f32, matches autodiff.vjp.vjp_selective_ssm",
     "rocm_linear_attn_compiled": "AMD GPU RDNA WMMA linear-attention forward the "
                             "Tessera compiler GENERATES "
                             "(generate-wmma-linear-attn-kernel -> ROCDL -> hsaco, "
@@ -1811,6 +1820,23 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "causal, f16/bf16 storage, f32 accumulate.",
         execution_mode="hip_runtime",
         direction="backward", op_family="flash_attn"),
+    # Mamba2 selective_ssm BACKWARD (generate-rocm-selective-ssm-bwd-kernel):
+    # operands (dout, x, A, B, C, delta[, gate[, state]]) -> (dx, dA, dB, dC,
+    # ddelta). The reverse-mode analog of rocm_selective_ssm_compiled; the second
+    # native backward launch lane after flash_attn (AUTODIFF_UNIFICATION §9a).
+    ("rocm", "rocm_selective_ssm_bwd_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_selective_ssm_bwd_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_selective_ssm_bwd_compiled", runtime_status="success",
+        reason="ROCm selective_ssm (Mamba2) backward artifact runs the "
+               "COMPILER-GENERATED gfx1151 backward kernel "
+               "(generate-rocm-selective-ssm-bwd-kernel: one thread per (b,d), "
+               "atomic cross-channel reductions) HIP-launched to produce "
+               "(dx, dA, dB, dC, ddelta) from operands (dout, x, A, B, C, delta"
+               "[, gate[, state]]). f32, matches autodiff.vjp.vjp_selective_ssm; "
+               "the reverse-mode analog of rocm_selective_ssm_compiled.",
+        execution_mode="hip_runtime",
+        direction="backward", op_family="selective_ssm"),
     # Linear-attention family (quadratic-parallel form, no softmax; a distinct
     # algorithm from flash_attn): tessera.linear_attn + the decay-masked siblings
     # tessera.lightning_attention / tessera.retention, dispatched by op name.

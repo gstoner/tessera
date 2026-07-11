@@ -6,6 +6,7 @@
 #include "mlir/Dialect/LLVMIR/NVVMDialect.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/ExtensibleDialect.h"
 #include "mlir/IR/PatternMatch.h"
@@ -282,6 +283,59 @@ static StringRef markerForTargetOp(StringRef opName) {
   return "llvm.nvvm.tessera.nvidia.diagnostic.contract";
 }
 
+// Increment 2 of the Tile IR / native Target IR tail: emit a *real*
+// `nvvm.mma.sync` for the canonical m16n8k16 f16 fragment contract instead of a
+// void marker. This is the codegen-contract end of the NVIDIA Target IR path —
+// the emitted op is validated by the NVVM verifier (fragment counts / types /
+// result struct), a real structural correctness signal even without a device.
+//
+// It fires only when `mma_sync` already carries the fragment operands (A:4, B:2,
+// C:2 of `vector<2xf16>`, a `!llvm.struct<(vector<2xf16>, vector<2xf16>)>`
+// result, shape="m16n8k16", dtype_ab="f16"). The abstract tile->target form
+// (scalar operands, dtype_ab="bf16") does NOT match and falls through to the
+// honest marker (Decision #21: never silently emit a different / wrong kernel).
+// bf16 / tf32 / int fragment shapes and the tile->fragment decomposition that
+// would feed this from `tile.mma` remain follow-on (hardware-gated) work.
+static bool tryLowerMmaSyncToNVVM(Operation *op, OpBuilder &builder) {
+  if (op->getName().getStringRef() != "tessera_nvidia.mma_sync")
+    return false;
+  auto shape = op->getAttrOfType<StringAttr>("shape");
+  auto dtypeAB = op->getAttrOfType<StringAttr>("dtype_ab");
+  if (!shape || shape.getValue() != "m16n8k16")
+    return false;
+  if (!dtypeAB || dtypeAB.getValue() != "f16")
+    return false;
+  if (op->getNumResults() != 1)
+    return false;
+  auto structTy = dyn_cast<LLVM::LLVMStructType>(op->getResult(0).getType());
+  if (!structTy)
+    return false;
+  // m16n8k16 f16: A=4, B=2, C=2 fragments, each `vector<2xf16>` (NVVM table).
+  ValueRange operands = op->getOperands();
+  if (operands.size() != 8)
+    return false;
+  auto fragTy = VectorType::get({2}, Float16Type::get(op->getContext()));
+  for (Value v : operands)
+    if (v.getType() != fragTy)
+      return false;
+
+  SmallVector<Value> a(operands.begin(), operands.begin() + 4);
+  SmallVector<Value> b(operands.begin() + 4, operands.begin() + 6);
+  SmallVector<Value> c(operands.begin() + 6, operands.begin() + 8);
+  builder.setInsertionPoint(op);
+  auto mma = builder.create<NVVM::MmaOp>(
+      op->getLoc(), structTy, ValueRange(a), ValueRange(b), ValueRange(c),
+      ArrayRef<int64_t>{16, 8, 16}, /*b1Op=*/std::nullopt,
+      /*intOverflow=*/std::nullopt,
+      /*multiplicandPtxTypes=*/
+      std::array<NVVM::MMATypes, 2>{NVVM::MMATypes::f16, NVVM::MMATypes::f16},
+      /*multiplicandLayouts=*/
+      std::array<NVVM::MMALayout, 2>{NVVM::MMALayout::row, NVVM::MMALayout::col});
+  op->replaceAllUsesWith(mma.getOperation()->getResults());
+  op->erase();
+  return true;
+}
+
 struct LowerNVIDIAToNVVMPass
     : PassWrapper<LowerNVIDIAToNVVMPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LowerNVIDIAToNVVMPass)
@@ -307,6 +361,10 @@ struct LowerNVIDIAToNVVMPass
 
     for (Operation *op : targetOps) {
       OpBuilder builder(op);
+      // Real NVVM emission for the fragment-typed mma_sync contract; the abstract
+      // marker form falls through to the void-marker path below.
+      if (tryLowerMmaSyncToNVVM(op, builder))
+        continue;
       auto marker = declareVoidMarker(module, markerForTargetOp(op->getName().getStringRef()));
       builder.create<LLVM::CallOp>(op->getLoc(), TypeRange{},
                                    SymbolRefAttr::get(marker), ValueRange{});

@@ -205,9 +205,19 @@ def _maybe_warm_start(cache: MeasureCache) -> None:
 
 
 def measure_latency(run_fn: Any, *, reps: int = 20, warmup: int = 3) -> float:
-    """Median wall-clock latency (ms) of ``run_fn`` over ``reps`` calls after
-    ``warmup`` untimed calls. ``run_fn`` runs the candidate end-to-end (H2D /
-    launch / D2H) so the comparison reflects what a caller actually pays."""
+    """Median **wall-clock** latency (ms) of ``run_fn`` over ``reps`` calls after
+    ``warmup`` untimed calls, via ``time.perf_counter``.
+
+    This times the candidate **end-to-end** (H2D / launch / D2H), so the arbiter
+    compares what a caller actually pays — the right metric for candidate
+    selection. It is deliberately *not* device-event kernel-only timing: that
+    would be lower-noise for isolating GPU kernel cost but would hide transfer /
+    launch overhead that differs across tiers (a fused kernel that avoids a
+    round-trip should win on the metric the caller feels). A device-event timer
+    (CUDA events / HIP events / Metal command-buffer timestamps) is the follow-on
+    for kernel-only A/B microbenchmarks; it drops in behind this same callback
+    seam (``arbitrate(measure=…)``) without an API change. Keep ``reps`` high
+    enough that the median is stable under wall-clock jitter."""
     for _ in range(warmup):
         run_fn()
     samples = []

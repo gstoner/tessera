@@ -87,6 +87,26 @@ sm_120 (RTX 5070 Ti, PRs #290–#297):
 - **Other NVIDIA SMs stay `artifact_only`** — sm_80/90/100 are proven only on
   sm_120 silicon; promoting them needs their own hardware (Hopper box for
   sm_90a WGMMA; datacenter Blackwell for sm_100 `tcgen05`/TMEM).
+- **MLIR Target IR dialect — typed (Decision #19), NVVM lowering still marker-only.**
+  The hardware-proven sm_120 lanes above run through the **Python** emit path
+  (`emit/nvidia_cuda.py` / `ptx_emit.py`), *not* the MLIR `tessera_nvidia` Target
+  IR. The `tessera_nvidia` dialect was `isExtensible` with **zero registered ops**
+  (generic ops, no verifier, `--allow-unregistered-dialect` to print) — a
+  Decision #19 violation vs. the typed ROCm/Apple dialects. **Increment 1 (landed):**
+  `TesseraNVIDIADialect.td` now defines typed ops: the inner contract ops
+  (`mma_sync`, `wgmma`, `tcgen05_mma`, `wmma`, `tma_async_copy`, `mbarrier`,
+  `tmem_{alloc,load,store}`, `cuda_kernel`) the C++ lowering emits, plus the
+  Python-emitter wrapper/probe ops (`func` region wrapper, `kernel_call`,
+  `profiler_probe`) so the *whole* emitted `tessera_nvidia` surface parses under
+  the now-non-extensible dialect (Codex review, PR #371);
+  `LowerTileToNVIDIA` populates them via the unchanged generic
+  builders (`usePropertiesForAttributes=0`), they round-trip/verify without
+  `--allow-unregistered-dialect`, and `allowUnknownOperations()` is dropped so a
+  malformed `tessera_nvidia.*` op is an error. Proof:
+  `test/nvidia/nvidia_target_ir_typed.mlir` + all existing NVIDIA fixtures
+  unregressed. **Still marker-only:** `LowerNVIDIAToNVVM` rewrites every typed op
+  to a void `llvm.nvvm.*.contract` marker — no real `NVVM::MmaOp`/`WgmmaOp`/
+  `tcgen05` intrinsic (see Next Work #6).
 - **`flash_attn` on `nvidia_sm120`** — **proven on hardware 2026-07-07** (C4): the
   synthesized flash-attention CUDA lane (`emit/nvidia_cuda.py`
   `NvidiaFlashAttnCandidate` / `run_fused_attention`) computes
@@ -120,6 +140,20 @@ flash-attention execute-compare (C4), and the sm_120 kernel-inventory doc
    Hopper WGMMA kernel (assemble-only until a Hopper box) — and **sm_100 tcgen05**.
 5. Promote sm_80/90/100 manifest rows only when their own silicon is available
    and the generated dashboards agree.
+6. **Native NVVM lowering for the typed Target IR (Tile IR / Target IR tail).**
+   Increment 1 typed the `tessera_nvidia` dialect. **Increment 2 (landed):**
+   `LowerNVIDIAToNVVM` now emits a **real `nvvm.mma.sync`** (not a void marker) for
+   the canonical **m16n8k16 f16** fragment contract — A:4 / B:2 / C:2 `vector<2xf16>`
+   fragments, `!llvm.struct<(vector<2xf16>, vector<2xf16>)>` result — built via the
+   dedicated `NVVM::MmaOp` builder (row/col layout, f16 ptx types) and **validated by
+   the NVVM verifier** (a real structural correctness signal without a device). It is
+   gated on the fragment types: the abstract tile→target form (scalar operands,
+   `dtype_ab="bf16"`) carries no fragments and falls through to the honest marker
+   (Decision #21). Proof: `test/nvidia/nvidia_mma_sync_to_nvvm.mlir`. **Still open:**
+   the tile→fragment decomposition that would feed this from `tile.mma`, on-device
+   execution (sm_120 RTX 5070 Ti), and the bf16 / tf32 / int fragment shapes +
+   `wgmma`/`tcgen05`/TMEM as their silicon lands. This converges the MLIR Target IR
+   path with the Python emit path that currently carries execution.
 
 ## Source Material Consolidated
 

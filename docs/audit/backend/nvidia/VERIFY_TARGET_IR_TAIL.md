@@ -74,7 +74,26 @@ python3 -m pytest -q tests/unit/test_rocm_wmma_runtime_symbol.py \
 
 ---
 
-## 🍎 Apple system (macOS, Apple Silicon) — TODO (Claude Code to run)
+## 🍎 Apple system (macOS, Apple Silicon) — VERIFIED 2026-07-11
+
+Ran on macOS / Apple Silicon (Homebrew LLVM/MLIR 22.1.6, Python 3.14.6, no GPU
+needed for the Target IR path). Results:
+
+- **Build:** `tessera-opt` configured + built clean with
+  `-DTESSERA_BUILD_NVIDIA_BACKEND=ON -DTESSERA_BUILD_APPLE_BACKEND=ON`
+  (`CUDA support: OFF`, hardware-free NVIDIA Target IR tools only). Only
+  deprecation warnings (`OpTy::create`), no errors.
+- **NVIDIA Target IR lit fixtures: 7/7 PASS** — the two NEW ones
+  (`nvidia_target_ir_typed` typed round-trip, `nvidia_mma_sync_to_nvvm` real
+  `nvvm.mma.sync` lowering) plus the 5 pre-existing (sm120/hopper/blackwell
+  tile→nvidia + hopper/blackwell →NVVM contract pipelines).
+- **Python target_ir + emit + conformance: 109 PASS** (`test_target_ir`,
+  `test_target_ir_contract`, `test_kernel_emitter`, `test_kernel_cache`,
+  `test_candidate_arbiter`, `test_arbiter_autotune`, `test_conformance_evaluator`,
+  `test_conformance_complete_cells_proven`) — **0 failures**.
+- **Darwin-only corroboration: PASS** —
+  `test_complete_cells_are_evaluator_corroborated_on_darwin` ran (not skipped):
+  Apple CPU/GPU complete cells re-derived to HARDWARE_VERIFIED.
 
 The NVIDIA Target IR dialect builds on macOS (Homebrew LLVM/MLIR 22, no GPU needed).
 Run from repo root:

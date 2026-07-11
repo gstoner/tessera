@@ -479,7 +479,7 @@ once Phase 0 lands.
 | 1 | `@jit(autodiff=…)` request + backward provenance | ✅ landed 2026-07-11 |
 | 2 | Paired fwd/bwd/residual contract (`--tessera-autodiff-paired`, recompute-all) | ✅ first cut landed 2026-07-11 |
 | 3 | matmul→tanh/sigmoid→loss — backward IR oracle-proven on CPU (interpreted) | 🟡 IR-oracle cut landed 2026-07-11 (native execution → Phase 4; `@jit` static-shape emission remains) |
-| 4 | Compiled backward bound to runtime ABI (ROCm first) | 🟡 A2 landed 2026-07-11 (matrix backward column → ledger; ROCm `flash_attn` first `hardware_proven`, gfx1151-verified); A3/A1 next |
+| 4 | Compiled backward bound to runtime ABI (ROCm first) | 🟡 A2+A3 landed 2026-07-11 (matrix backward column → ledger `hardware_proven`; `has_native_backward` sourced from the matrix + wired into `@jit` so `native_required` is honored for ROCm `flash_attn`; gfx1151-verified). A1 (paired-ABI arbiter dispatch) next |
 
 Per-family × per-target rung truth is now the **generated ledger**, not a hand
 table — read [`generated/autodiff_connection_ledger.md`](../generated/autodiff_connection_ledger.md)

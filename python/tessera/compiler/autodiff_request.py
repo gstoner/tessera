@@ -177,17 +177,32 @@ def resolve_backward_provenance(
     *,
     has_native_backward: bool = False,
     target: Optional[str] = None,
+    op_families: Sequence[str] = (),
 ) -> BackwardProvenance:
     """Resolve the backward facet for a request against today's reality.
 
     ``has_native_backward`` is the hook Phase 4 flips per (op-family, target)
-    once a real backward launch ABI exists. Until then it is ``False`` for every
-    target, so a request resolves to ``IR_TRANSFORMED`` — and a
-    ``native_required`` request resolves to ``UNSUPPORTED`` with a stable reason
-    rather than a false ``NATIVE_EXECUTABLE`` claim.
+    once a real backward launch ABI exists.
+
+    Phase 4 (A3): when ``op_families`` + ``target`` are given, the hook is
+    **sourced from the runtime execution matrix** — a program's backward is
+    native iff *every* differentiable component op has a native (device-proven)
+    backward launch on ``target`` (``execution_matrix.has_native_backward``). So
+    ``@jit(autodiff="reverse", target="rocm")`` over a covered family (e.g.
+    ``flash_attn`` on gfx1151) resolves to ``NATIVE_EXECUTABLE`` and a
+    ``native_required`` request is honored; everything else still resolves
+    honestly (``IR_TRANSFORMED`` / ``UNSUPPORTED``), never a false native claim.
+    An explicit ``has_native_backward=True`` still forces native (test hook).
     """
     if request is None:
         return NOT_REQUESTED
+
+    if not has_native_backward and op_families and target is not None:
+        # Lazy import — execution_matrix is light and does not import this module.
+        from tessera.compiler import execution_matrix as _em
+        has_native_backward = all(
+            _em.has_native_backward(fam, target) for fam in op_families
+        )
 
     def _prov(status: BackwardStatus, reason: str = "") -> BackwardProvenance:
         return BackwardProvenance(

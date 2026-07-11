@@ -10,6 +10,11 @@
 
 Both are skipped cleanly when the tool isn't installed in the
 host Python — tooling-aware CI lanes still pass elsewhere.
+
+Marked ``slow`` at module scope: running ruff + mypy over the whole package
+(~40s+) exactly duplicates the dedicated ``lint (ruff + mypy ratchet)`` CI lane,
+so it is kept out of the parallel unit lane rather than re-run there. The lint
+lane is the coverage of record.
 """
 
 from __future__ import annotations
@@ -22,6 +27,7 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.slow
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RUFF = shutil.which("ruff") or os.path.join(os.path.dirname(sys.executable), "ruff")

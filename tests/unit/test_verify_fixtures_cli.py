@@ -78,10 +78,21 @@ def real_verify_result():
     return rc, buf.getvalue()
 
 
+@pytest.mark.slow
 def test_verify_fixtures_returns_zero_when_all_pass(real_verify_result):
     """The dashboard ships 11 declared fixtures, all numerically
     correct on this Mac as of audit-followup ship time. Run the
-    real verifier and assert exit code 0."""
+    real verifier and assert exit code 0.
+
+    Marked ``slow``: the ``real_verify_result`` fixture invokes a NESTED pytest
+    over every declared execute-compare fixture (~300s in this suite) — but each
+    of those fixtures already runs as a first-class test in the same sweep, so
+    this only re-verifies the CLI *plumbing* returns 0. The failure path (CLI
+    returns non-zero) is covered fast by
+    ``test_verify_fixtures_returns_nonzero_when_any_fixture_fails`` (mocked), and
+    the fixture-proof discipline itself by ``test_conformance_complete_cells_
+    proven.py``. Keeping it out of the parallel unit lane removes the single
+    biggest straggler (it capped even a 32-core `-n auto` run)."""
     rc, output = real_verify_result
     assert rc == 0, f"verify-fixtures returned {rc}; output was:\n{output}"
     assert "FAIL" not in output.split("summary:")[0], (

@@ -78,10 +78,18 @@ def test_every_check_in_script_supports_check_flag():
             f"the drift script references a stale CLI")
 
 
+@pytest.mark.slow
 def test_drift_script_passes_today():
     """All generated docs are currently in sync. This is the actual
     drift gate — runs the script and asserts exit 0. If a manifest
-    edit drifted a dashboard, this fails with the regen hint."""
+    edit drifted a dashboard, this fails with the regen hint.
+
+    Marked ``slow``: this shells out to ``scripts/check_generated_docs.sh``
+    (~145s), which is exactly what the dedicated ``audit (drift + claim_lint +
+    examples)`` CI lane already runs as its first step — so the drift coverage
+    lives there, and re-running the whole script inside the parallel unit lane is
+    pure duplication. The other tests in this file (script exists/executable,
+    pre-commit wiring) stay fast + in-lane."""
     proc = subprocess.run(
         ["bash", str(_SCRIPT)], capture_output=True, text=True,
         cwd=str(_REPO), env={**os.environ, "PYTHON": sys.executable},

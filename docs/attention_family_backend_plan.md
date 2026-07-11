@@ -56,7 +56,7 @@ Legend: ✅ native & executing · ⚠️ executes but unproven/unrecorded · �
 | `flash_attn` variants (GQA/MQA/sliding/softcap) | ✅ compiled (WMMA) | ❌ **not in the emit/ FA lane²** | ✅ native | ✅ native |
 | **`attn_bias`** | ✅ compiled (WMMA, #328) | ❌ absent | ✅ native (pre-softmax add) | ✅ native |
 | MSA sparse core (`msa_sparse_attention`) | ✅ compiled (block-sparse WMMA + GPU top-k) | ❌ artifact_only contract | ✅ compiled (host-select + AVX-512 dense-attend) | ✅ fused (scalar/tiled f32/f16) |
-| MSA IR-artifact mirror (`kv_outer_sparse`) | ❌ (execution exists, no IR mirror) | ✅ the contract (no kernel body) | ❌ | n/a |
+| MSA IR-artifact mirror (`kv_outer_sparse`) | ✅ `tessera_rocm.msa_block_sparse` (#337, `status=compiled` — executes, not just a contract) | ✅ the contract (no kernel body) | ❌ | n/a |
 | DFlash `attention_fn` seam | ✅ `rocm_attention_fn` (#330) | ❌ (blocked on bias) | ✅ `x86_attention_fn` | ✅ `apple_gpu_attention_fn` |
 | `selective_ssm` (Mamba2) | ✅ compiled (naive f32 fwd) | ❌ planned | ✅ native (f32 fwd) | ✅ (Mamba SSD) |
 
@@ -224,8 +224,8 @@ tolerance.
 - ✅ **Phase 2 / ROCm DFlash seam** — **landed (#330)**, `rocm_attention_fn` over the bias lane.
 - ✅ **Phase 2 / x86 DFlash seam** — **landed**, `x86_attention_fn` over the f32-native flash lane.
 - ✅ **Phase 3 / x86 MSA lane** — **landed**, `x86_msa_compiled`; closes the last x86 execution gap in the family (x86 now has flash/NSA/MLA/SSM/MSA all native).
-1. **Phase 4 / ROCm + x86 chunked SSM** — optimization pass.
-2. **Phase 3 / ROCm MSA IR mirror** — optional IR parity, no execution gap.
+- ✅ **Phase 3 / ROCm MSA IR mirror** — **landed (#337 → #339)**: `target_ir.py` emits `tessera_rocm.msa_block_sparse` (`status=compiled`, `runtime_lane=rocm_sparse_attn_compiled`) via the full schedule→tile→target chain — IR parity with the CUDA `msa_kv_outer_sparse` contract, and it executes (not `artifact_only` like NVIDIA). ROCM_AUDIT §554.
+- ✅ **Phase 4 / x86 chunked SSM** — **landed (#336)**, scalar-A SSD on the AVX-512 batched GEMM. ✅ **ROCm chunked SSM** — built on the #356 f32 GEMM (#363) but a measured 4–100× regression (per-call GEMM overhead), so kept as a correctness reference rung, NOT the default; a single-launch batched f32 GEMM is the prerequisite for a ROCm win (STRIX Stage H addendum 2).
 
 **Hardware-gated on the RTX 5070 Ti (sm_120) box:**
 

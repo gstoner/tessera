@@ -302,7 +302,7 @@ msa_index_scores,12,4,1,16,0,,directly_tested,16 direct test references
 msa_select_blocks,8,6,1,14,0,,directly_tested,14 direct test references
 msa_sparse_attention,47,11,1,58,0,,directly_tested,58 direct test references
 mse_loss,20,0,5,20,0,f32,directly_tested,20 direct test references
-mul,88,5,7,93,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,93 direct test references
+mul,88,9,7,97,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,97 direct test references
 multi_head_attention,9,0,1,9,0,,directly_tested,9 direct test references
 muon,13,0,0,13,0,,directly_tested,13 direct test references
 named_sharding,0,0,0,0,1,,structural_only,category default for 'sharding'
@@ -401,7 +401,7 @@ seq2seq_loss,7,0,0,7,0,,directly_tested,7 direct test references
 sgd,12,0,0,12,0,,directly_tested,12 direct test references
 shard_map,0,0,0,0,1,,structural_only,category default for 'sharding'
 sharded_dataset,2,0,0,2,0,,directly_tested,2 direct test references
-sigmoid,6,1,0,7,0,bf16 f16 f32 fp32,directly_tested,7 direct test references
+sigmoid,6,5,0,11,0,bf16 f16 f32 fp32,directly_tested,11 direct test references
 sigmoid_safe,6,0,0,6,0,,directly_tested,6 direct test references
 sign,5,0,1,5,0,bf16 f32,directly_tested,5 direct test references
 silu,85,6,5,91,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,91 direct test references
@@ -436,13 +436,13 @@ state_partition,0,0,0,0,1,,structural_only,category default for 'state_tree'
 std,4,0,0,4,0,,directly_tested,4 direct test references
 stereographic,6,0,0,6,0,,directly_tested,6 direct test references
 stft,7,0,0,7,0,,directly_tested,7 direct test references
-sub,13,4,2,17,0,bf16 f16 f32,directly_tested,17 direct test references
+sub,13,6,2,19,0,bf16 f16 f32,directly_tested,19 direct test references
 sum,10,0,2,10,0,bf16 f32,directly_tested,10 direct test references
 svd,11,5,0,16,0,bf16 f16 f32 fp16 fp32,directly_tested,16 direct test references
 switch,0,0,0,0,1,,structural_only,category default for 'control_flow'
 take,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 tan,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
-tanh,8,1,1,9,0,bf16 f16 f32,directly_tested,9 direct test references
+tanh,8,6,1,14,0,bf16 f16 f32,directly_tested,14 direct test references
 target_verify,3,5,1,8,0,,directly_tested,8 direct test references
 tile,4,0,0,4,0,,directly_tested,4 direct test references
 tile_view,6,0,0,6,0,fp16,directly_tested,6 direct test references

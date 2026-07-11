@@ -22,6 +22,7 @@
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "llvm/ADT/SmallVector.h"
 
 // The interface impl mixin — generated from AdjointInterface.td.
@@ -126,16 +127,92 @@ llvm::SmallVector<mlir::Value> SoftmaxOp::buildAdjoint(
 
 POINTWISE_BUILD_ADJOINT(GeluOp, "gelu")
 POINTWISE_BUILD_ADJOINT(ReluOp, "relu")
-POINTWISE_BUILD_ADJOINT(SigmoidOp, "sigmoid")
 POINTWISE_BUILD_ADJOINT(SinOp, "sin")
 // Tier-1 MPSGraph-lane ops (2026-05-29). Each has a Python VJP the runtime
 // resolves via the custom_adjoint_call placeholder keyed by name.
 POINTWISE_BUILD_ADJOINT(SiluOp, "silu")
-POINTWISE_BUILD_ADJOINT(TanhOp, "tanh")
 POINTWISE_BUILD_ADJOINT(SoftplusOp, "softplus")
 POINTWISE_BUILD_ADJOINT(RmsNormOp, "rmsnorm")
 POINTWISE_BUILD_ADJOINT(LogSoftmaxOp, "log_softmax")
 
 #undef POINTWISE_BUILD_ADJOINT
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Native (compiler-visible) pointwise adjoints (W5).
+//
+// tanh and sigmoid have compare-free closed-form derivatives expressible in
+// pure Tessera Graph IR (their own forward op + mul/sub + a constant), so their
+// backward is emitted NATIVELY instead of a `tessera.custom_adjoint_call`
+// placeholder that round-trips to the Python VJP. This makes the backward graph
+// first-class compiler IR — it can be canonicalized, CSE'd (the recomputed
+// forward intermediate dedups with the forward), and fused, and it drops the
+// host VJP call. The recompute of the forward activation is intentional (the
+// docstring convention): downstream CSE collapses it back to the forward value.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// The native form materializes a dense splat `1` sized to the result type, which
+// MLIR only allows for a statically-shaped ranked tensor. A dynamic activation
+// type (e.g. before a later shape refinement) has no such constant, so the native
+// path is gated on a static shape and falls back to the placeholder otherwise.
+static bool isStaticShaped(mlir::Type ty) {
+  auto rt = mlir::dyn_cast<mlir::RankedTensorType>(ty);
+  return rt && rt.hasStaticShape();
+}
+
+// A dense splat constant of `value` matching a static shape-preserving tensor.
+static mlir::Value splatConst(mlir::OpBuilder &builder, mlir::Location loc,
+                              mlir::Type ty, double value) {
+  auto shaped = mlir::cast<mlir::ShapedType>(ty);
+  auto attr = mlir::DenseElementsAttr::get(
+      shaped, builder.getFloatAttr(shaped.getElementType(), value));
+  return builder.create<mlir::arith::ConstantOp>(loc, attr).getResult();
+}
+
+// Dynamic-shape (or unranked) fallback: the opaque placeholder the runtime VJP
+// registry resolves — the pre-W5 behavior for these ops, kept shape-safe.
+static llvm::SmallVector<mlir::Value>
+placeholderAdjoint(mlir::OpBuilder &builder, mlir::Location loc, mlir::Type ty,
+                   llvm::StringRef key, mlir::Value dy, mlir::Value x) {
+  auto callOp = builder.create<CustomAdjointCallOp>(
+      loc, llvm::SmallVector<mlir::Type>{ty}, builder.getStringAttr(key),
+      mlir::ValueRange{dy, x});
+  return {callOp.getResult(0)};
+}
+
+// tanh:  dx = dy · (1 − tanh(x)²)
+llvm::SmallVector<mlir::Value> TanhOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  if (outputCotangents.size() != 1 || !outputCotangents[0])
+    return {mlir::Value()};
+  auto loc = getLoc();
+  mlir::Type ty = getResult().getType();
+  mlir::Value dy = outputCotangents[0];
+  if (!isStaticShaped(ty))
+    return placeholderAdjoint(builder, loc, ty, "tanh", dy, getX());
+  mlir::Value t = builder.create<TanhOp>(loc, ty, getX()).getResult();
+  mlir::Value t2 = builder.create<MulOp>(loc, ty, t, t).getResult();
+  mlir::Value one = splatConst(builder, loc, ty, 1.0);
+  mlir::Value d = builder.create<SubOp>(loc, ty, one, t2).getResult();
+  mlir::Value dx = builder.create<MulOp>(loc, ty, dy, d).getResult();
+  return {dx};
+}
+
+// sigmoid:  dx = dy · s · (1 − s),  s = sigmoid(x)
+llvm::SmallVector<mlir::Value> SigmoidOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  if (outputCotangents.size() != 1 || !outputCotangents[0])
+    return {mlir::Value()};
+  auto loc = getLoc();
+  mlir::Type ty = getResult().getType();
+  mlir::Value dy = outputCotangents[0];
+  if (!isStaticShaped(ty))
+    return placeholderAdjoint(builder, loc, ty, "sigmoid", dy, getX());
+  mlir::Value s = builder.create<SigmoidOp>(loc, ty, getX()).getResult();
+  mlir::Value one = splatConst(builder, loc, ty, 1.0);
+  mlir::Value oneMinusS = builder.create<SubOp>(loc, ty, one, s).getResult();
+  mlir::Value sPrime = builder.create<MulOp>(loc, ty, s, oneMinusS).getResult();
+  mlir::Value dx = builder.create<MulOp>(loc, ty, dy, sPrime).getResult();
+  return {dx};
+}
 
 }  // namespace tessera

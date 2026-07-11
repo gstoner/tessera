@@ -137,12 +137,19 @@ flash-attention execute-compare (C4), and the sm_120 kernel-inventory doc
 5. Promote sm_80/90/100 manifest rows only when their own silicon is available
    and the generated dashboards agree.
 6. **Native NVVM lowering for the typed Target IR (Tile IR / Target IR tail).**
-   Increment 1 typed the `tessera_nvidia` dialect; increment 2 replaces the
-   `LowerNVIDIAToNVVM` void-marker path with real NVVM emission, starting with
-   `tessera_nvidia.mma_sync` → `NVVM::MmaOp` (the one op already hardware-proven on
-   sm_120, so it is validatable on the RTX 5070 Ti), then `wgmma`/`tcgen05`/TMEM as
-   their silicon lands. This converges the MLIR Target IR path with the Python emit
-   path that currently carries execution.
+   Increment 1 typed the `tessera_nvidia` dialect. **Increment 2 (landed):**
+   `LowerNVIDIAToNVVM` now emits a **real `nvvm.mma.sync`** (not a void marker) for
+   the canonical **m16n8k16 f16** fragment contract — A:4 / B:2 / C:2 `vector<2xf16>`
+   fragments, `!llvm.struct<(vector<2xf16>, vector<2xf16>)>` result — built via the
+   dedicated `NVVM::MmaOp` builder (row/col layout, f16 ptx types) and **validated by
+   the NVVM verifier** (a real structural correctness signal without a device). It is
+   gated on the fragment types: the abstract tile→target form (scalar operands,
+   `dtype_ab="bf16"`) carries no fragments and falls through to the honest marker
+   (Decision #21). Proof: `test/nvidia/nvidia_mma_sync_to_nvvm.mlir`. **Still open:**
+   the tile→fragment decomposition that would feed this from `tile.mma`, on-device
+   execution (sm_120 RTX 5070 Ti), and the bf16 / tf32 / int fragment shapes +
+   `wgmma`/`tcgen05`/TMEM as their silicon lands. This converges the MLIR Target IR
+   path with the Python emit path that currently carries execution.
 
 ## Source Material Consolidated
 

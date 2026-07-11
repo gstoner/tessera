@@ -572,6 +572,20 @@ def ROCM_RecurrentCellKernelOp : TesseraROCM_Op<"recurrent_cell"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_BatchedGemmF32KernelOp : TesseraROCM_Op<"batched_gemm_f32"> {
+  let summary = "Single-launch batched f32 GEMM gpu kernel";
+  let description = [{
+    `generate-rocm-batched-gemm-f32-kernel` expands into a single-launch batched
+    f32 GEMM C[b,m,n] = Σ_k A[b,m,k]·B[b,k,n] (A [Batch,M,K], B [Batch,K,N],
+    C [Batch,M,N]), the batch folded into the 1-D grid, register-blocked TMxTN
+    output tile per thread, scalar f32 k-loop. One launch for the whole batch —
+    the caller does one H2D + one D2H instead of a per-batch round-trip.
+    Batch/M/N/K are runtime index args.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_PredicateKernelOp : TesseraROCM_Op<"predicate"> {
   let summary = "Unary predicate (isnan/isinf/isfinite) gpu kernel";
   let description = [{

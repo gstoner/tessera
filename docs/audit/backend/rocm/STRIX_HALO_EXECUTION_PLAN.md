@@ -328,9 +328,23 @@ call, and the SSD issues many small bmms (per chunk × batch × 3 contractions);
 per-launch overhead dwarfs the one-launch sequential kernel. x86 wins with the same
 decomposition only because its batched GEMM is a host-side BLAS loop with no device
 round-trip. Kept as a **correctness-verified reference rung** (matches the scan
-~1e-6, verified past the fp16 range), NOT the default — like the K-unroll rung. The
-prerequisite for a ROCm win is a **single-launch batched f32 GEMM** (one H2D, grid
-over batch, one D2H) + resident buffers across the SSD's chunk bmms — a follow-up.
+~1e-6, verified past the fp16 range), NOT the default — like the K-unroll rung.
+
+**Update (2026-07-11) — single-launch batched f32 GEMM built; necessary but NOT
+sufficient.** #363 flagged a single-launch batched f32 GEMM as the prerequisite;
+it's now built (`generate-rocm-batched-gemm-f32-kernel` +
+`_rocm_batched_gemm_f32`: the batch folds into the grid, one H2D/launch/D2H for
+the whole stack; verified vs numpy incl. broadcast, `test_rocm_batched_gemm_f32.py`).
+It **helps ~2×** (B2S64 0.25→0.42×) but the chunked SSD is **still a regression**
+(0.42× / 0.09× / 0.02× at B2S64 / B4S256 / B4S512D64 — measured). Root cause moved
+one level out: the single-launch GEMM removed the *within-bmm* per-batch looping,
+but the SSD still issues **~3·n_chunks separate bmm CALLS**, each its own device
+round-trip, with host decay/gate work between them — the sequential scan is ONE
+launch and these SSM GEMMs are too small to amortize the multi-launch orchestration.
+So the batched GEMM is a genuine reusable primitive + a 2×-better rung, but a ROCm
+chunked-SSD *win* needs a **fully-fused on-device SSD kernel** (state resident
+across chunks, no host round-trips) — a substantially larger follow-up. The
+batched GEMM is the right building block for it.
 
 ### Stage G — flash_attn executes on gfx1151 (2026-06-23): second op after matmul
 

@@ -479,7 +479,7 @@ once Phase 0 lands.
 | 1 | `@jit(autodiff=…)` request + backward provenance | ✅ landed 2026-07-11 |
 | 2 | Paired fwd/bwd/residual contract (`--tessera-autodiff-paired`, recompute-all) | ✅ first cut landed 2026-07-11 |
 | 3 | matmul→tanh/sigmoid→loss — backward IR oracle-proven on CPU (interpreted) | 🟡 IR-oracle cut landed 2026-07-11 (native execution → Phase 4; `@jit` static-shape emission remains) |
-| 4 | Compiled backward bound to runtime ABI (ROCm first) | 🟡 A2+A3 landed 2026-07-11 (matrix backward column → ledger `hardware_proven`; `has_native_backward` sourced from the matrix + wired into `@jit` so `native_required` is honored for ROCm `flash_attn`; gfx1151-verified). A1 (paired-ABI arbiter dispatch) next |
+| 4 | Compiled backward bound to runtime ABI (ROCm first) | ✅ **exit met** 2026-07-11 via A2+A3 (matrix backward column → ledger `hardware_proven`; `CompileResult.backward` truthful + `native_required` honored for ROCm `flash_attn`; gfx1151-verified). A1 arbiter dispatch deferred to Phase 5 (one executing backward candidate — see §9a finding) |
 
 Per-family × per-target rung truth is now the **generated ledger**, not a hand
 table — read [`generated/autodiff_connection_ledger.md`](../generated/autodiff_connection_ledger.md)
@@ -613,20 +613,47 @@ ROCm; counts come from the matrix, never assertion.
 covered family returns a truthful `NATIVE_EXECUTABLE` backward facet; every other
 `(family, target)` still resolves honestly (`UNSUPPORTED`/`IR_TRANSFORMED`).
 
-### Increment 3 — A1: register the ROCm backward kernels as paired-ABI candidates
+### Increment 3 — A1: register the ROCm backward kernels as paired-ABI candidates *(deferred to Phase 5 — see finding)*
 
-Register the gfx1151 flash-attn/matmul/GQA/ssm backward kernels as **Tier-3**
-backward candidates on the paired `@f__bwd(inputs, out_cotangents) ->
-input_cotangents` contract (Phase 2), keyed `(op, shape-bucket, dtype, "rocm")`,
-so `@jit(autodiff="reverse", target="rocm")` dispatches to them through the same
-accuracy-budgeted arbiter as forward (Decision #28; the hand-tuned WMMA backward
-stays first-class and is only displaced by a faster in-budget compiled backward).
-Residual policy `recompute` (matches the shipped flash-attn bwd + the
-`--tessera-autodiff-paired` recompute-all output — §9.2).
+**Finding (2026-07-11): A1 is premature and correctly deferred.** Two facts,
+found while landing A2/A3:
 
-**Exit:** an end-to-end `@jit(autodiff="reverse", target="rocm")` forward+backward
-runs on gfx1151 and its gradients match the NumPy VJP oracle — the first
-native-backward training path.
+1. **The backward already dispatches natively** — the gfx1151 flash-attn / ssm
+   backward is reached through the `autodiff.vjp` rules (`vjp_flash_attn` /
+   `vjp_selective_ssm` call `runtime._rocm_*_bwd` directly), not only the
+   standalone `compiler_path`. So the reverse-mode path *does* reach the native
+   kernel today; A2/A3 make that reality honest in the ledger + `CompileResult`.
+2. **There is only one executing backward candidate.** The accuracy-budgeted
+   arbiter's job is to *choose* among candidates; the Tier-1 synthesized backward
+   (`--tessera-autodiff-paired`) is **IR-only** (oracle-verified on CPU by
+   interpretation, not executed — Phase 3). Until it executes (Phase 5), the
+   WMMA backward is the sole candidate, so routing backward through the emit
+   arbiter would add a duplicative dispatch path with nothing to arbitrate.
+
+Whether the executed Tier-1 backward should flow through the `emit/candidate`
+arbiter (a parallel path) or the existing `autodiff.vjp` seam is a real
+Decision-#28 architecture choice, **taken when a second executing backward
+candidate exists (Phase 5)** — not a mechanical wiring. Registering a
+one-candidate arbiter lane now would not be clean.
+
+**Exit (Phase 5):** with the Tier-1 synthesized backward executing, register the
+WMMA backward as a **Tier-3** candidate on the paired `@f__bwd(inputs,
+out_cotangents) -> input_cotangents` contract (residual policy `recompute`), and
+let the accuracy-budgeted arbiter pick per `(op, shape-bucket, dtype, "rocm")`
+(Decision #28 — the hand-tuned WMMA stays first-class, displaced only by a faster
+in-budget compiled backward).
+
+### Phase 4 status: **exit criteria met by A2 + A3**
+
+The Phase 4 exit (§4) — *"`CompileResult` truthfully exposes native-launch /
+fallback / unsupported / numerical-proof states for forward and backward
+**independently**, and the ledger's `runtime_bound` rung is sourced from the
+matrix, not asserted"* — is satisfied: A2 sources the ledger's
+`runtime_bound`/`hardware_proven` backward rungs from the matrix; A3 makes
+`CompileResult.backward` resolve `NATIVE_EXECUTABLE` / `UNSUPPORTED` /
+`IR_TRANSFORMED` honestly and honors `native_required`. Both are hardware-verified
+on gfx1151 (`test_rocm_flash_attn_launch_execute.py`, 13 passed, full CORE+HIP
+build). A1 arbiter dispatch moves to Phase 5 per the finding above.
 
 ### Verification (all on the gfx1151 box)
 

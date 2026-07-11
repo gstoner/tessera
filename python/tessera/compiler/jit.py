@@ -20,7 +20,7 @@ import functools
 import inspect
 from pathlib import Path
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 if TYPE_CHECKING:
     from ..runtime import RuntimeArtifact
@@ -368,6 +368,8 @@ class JitFn:
         native_required: bool = False,
         recognized_package: Optional[Any] = None,
         dispatch_via_package: "bool | str" = False,
+        differentiation_request: Optional[Any] = None,
+        backward_provenance: Optional[Any] = None,
     ) -> None:
         self._fn = fn
         self.graph_ir = graph_ir
@@ -406,6 +408,12 @@ class JitFn:
         self.source_origin = source_origin
         self.lowering_diagnostics = tuple(lowering_diagnostics or [])
         self.native_required = bool(native_required)
+        # Phase 1 (autodiff unification) — the validated differentiation request
+        # (or None) and its resolved backward provenance facet. The request is
+        # also mirrored onto ``compile_result.backward`` for the typed compile
+        # surface; these attributes are the ergonomic accessors on the JitFn.
+        self.differentiation_request = differentiation_request
+        self.backward_provenance = backward_provenance
         # PK8a (2026-06-02) — shape-free RecognizedOp when this module's
         # compute region is an authorable Apple-GPU packaged kernel, else
         # None. ``emit_package`` turns it into a real `.mtlpackage` given
@@ -1806,6 +1814,8 @@ def jit(
     source: Optional[str] = None,
     source_path: Optional[str] = None,
     native_required: bool = False,
+    autodiff: Optional[str] = None,
+    wrt: Optional[Sequence[str]] = None,
     auto_batch: "bool | None" = None,
     max_ops_per_cb: Optional[int] = None,
     emit_package: "bool | str" = False,
@@ -1959,6 +1969,35 @@ def jit(
             except Exception:
                 recognized_package = None
 
+        # ── Step 6b: differentiation request (Phase 1 autodiff unification) ──
+        # Validate @jit(autodiff=..., wrt=...) at decoration time, emit the
+        # `tessera.autodiff` intent into the Graph IR module (the attribute the
+        # C++ --tessera-autodiff pass keys on), and resolve the backward
+        # provenance facet. Python owns validation + diagnostics; it does NOT
+        # execute backward here (Phase 3/4).
+        from . import autodiff_request as _ad
+
+        diff_request = _ad.build_request(
+            fn, autodiff=autodiff, wrt=wrt, native_required=native_required)
+        backward_prov = _ad.resolve_backward_provenance(
+            diff_request, target=target_kind)
+        if diff_request is not None and module is not None:
+            intent = diff_request.module_intent_attrs()
+            # The C++ --tessera-autodiff pass reads the `tessera.autodiff` marker
+            # off the `func.func` (AutodiffPass.cpp: func->getAttrOfType), so the
+            # actionable home is the function's fn_attrs. Attach it to the
+            # differentiated function (matched by name; all functions if the
+            # single-function module has no name match). A module-level marker is
+            # also set as a program-level breadcrumb.
+            module.module_attrs.update(intent)
+            fns = getattr(module, "functions", []) or []
+            named = [gf for gf in fns if getattr(gf, "name", None) == fn.__name__]
+            for gf in (named or fns):
+                gf.fn_attrs.update(intent)
+        if diff_request is not None and compile_result is not None:
+            import dataclasses as _dc
+            compile_result = _dc.replace(compile_result, backward=backward_prov)
+
         # ── Step 7: wrap and return ──────────────────────────────────────────
         jitfn = JitFn(
             fn=fn,
@@ -1979,6 +2018,8 @@ def jit(
             recognized_package=recognized_package,
             dispatch_via_package=_resolve_dispatch_via_package(
                 dispatch_via_package, target_kind),
+            differentiation_request=diff_request,
+            backward_provenance=backward_prov,
         )
         if _trace_deferred:
             # AST emission failed → the tracer is the only execution path. Force

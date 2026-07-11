@@ -244,6 +244,16 @@ def _r_docs_freshness() -> str:
     return docs_manifest.render_dashboard()
 
 
+def _r_autodiff_ledger() -> str:
+    from . import autodiff_ledger
+    return autodiff_ledger.render_markdown()
+
+
+def _r_autodiff_ledger_csv() -> str:
+    from . import autodiff_ledger
+    return autodiff_ledger.render_csv()
+
+
 #: The five SurfaceEntry-based surfaces, in display order.
 _SURFACES: tuple[str, ...] = ("examples", "benchmarks", "research", "tools", "tests")
 
@@ -432,6 +442,13 @@ REGISTRY: tuple[GeneratedDoc, ...] = (
     GeneratedDoc(
         "s_series_accelerator_proof", "op_coverage",
         _GEN / "s_series_accelerator_proof.md", _r_accel_proof,
+    ),
+    # ── Compiler-autodiff connection ledger (AUTODIFF_UNIFICATION_PLAN §3) ──
+    GeneratedDoc(
+        "autodiff_connection_ledger", "op_coverage",
+        _GEN / "autodiff_connection_ledger.md", _r_autodiff_ledger,
+        csv_path=_GEN / "autodiff_connection_ledger.csv",
+        render_csv=_r_autodiff_ledger_csv,
     ),
     # ── Runtime / ABI ──
     GeneratedDoc(

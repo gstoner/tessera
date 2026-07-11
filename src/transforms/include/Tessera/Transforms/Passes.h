@@ -153,6 +153,14 @@ std::unique_ptr<mlir::Pass> createPipelineStageInsertionPass();
 // (`python/tessera/autodiff/`) remains the production path until then.
 std::unique_ptr<mlir::Pass> createAutodiffPass();
 
+// AutodiffPairedPass — Phase 2 of AUTODIFF_UNIFICATION_PLAN.md. Emits the
+// paired-program model as a SEPARATE backward function:
+//   @f__bwd(inputs, out_cotangents...) -> input_cotangents...
+// (recompute-all residual policy) instead of the in-place return expansion.
+// Additive: the in-place `--tessera-autodiff` stays as the bootstrap.
+// Body: src/transforms/lib/AutodiffPairedPass.cpp
+std::unique_ptr<mlir::Pass> createAutodiffPairedPass();
+
 // AdjointCollectiveInsertionPass — Phase F5. Runs **after** AutodiffPass.
 // For each function argument with both a recorded cotangent (set by
 // AutodiffPass via `tessera.autodiff.arg_cotangents`) and a sharding

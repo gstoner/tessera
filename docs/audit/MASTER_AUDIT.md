@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-10
+last_updated: 2026-07-11
 audit_role: root
 ---
 
@@ -331,6 +331,17 @@ Primary detail: [domain/DOMAIN_AUDIT.md](domain/DOMAIN_AUDIT.md).
 
 ### P1
 
+- **Front-end / IR / autodiff unification — make differentiation a compiler
+  request with a native fwd+bwd path.** Today the Python VJP/JVP tape is the
+  reference/oracle, but `@jit` emits no differentiation intent and no runtime
+  binds a compiled backward — so "forward native" and "gradients native" are
+  conflated and unproven per target. Plan +
+  status-ledger design (six rungs: `python_reference` → `hardware_proven`) in
+  [compiler/AUTODIFF_UNIFICATION_PLAN.md](compiler/AUTODIFF_UNIFICATION_PLAN.md).
+  Immediate queue: Phase 0 status ledger + `AUTODIFF_SPEC` §F4 correction →
+  Phase 1 `@jit(autodiff=…)` request → Phase 2 paired fwd/bwd/residual contract →
+  Phase 3 static CPU `matmul→tanh/sigmoid→loss` oracle proof → Phase 4 runtime
+  ABI binding + `native_required` enforcement.
 - ✅ Multi-op compiler metadata and component-aware gates (landed 2026-06-07;
   `component_ops` / `program_executable` / `component_blockers` +
   `effects` / `shape_envelope` / `layout_contracts` / `fusion_groups` /
@@ -442,6 +453,7 @@ gate is P0 above —
 | Current all-up status | This document |
 | Folder map | [README.md](README.md) |
 | Compiler/IR open work | [compiler/COMPILER_AUDIT.md](compiler/COMPILER_AUDIT.md) |
+| Front-end / IR / autodiff unification (native fwd+bwd) | [compiler/AUTODIFF_UNIFICATION_PLAN.md](compiler/AUTODIFF_UNIFICATION_PLAN.md) |
 | Shared backend proof | [backend/BACKEND_AUDIT.md](backend/BACKEND_AUDIT.md) |
 | Apple backend performance/runtime | [backend/apple/APPLE_AUDIT.md](backend/apple/APPLE_AUDIT.md) |
 | NVIDIA | [backend/nvidia/NVIDIA_AUDIT.md](backend/nvidia/NVIDIA_AUDIT.md) |

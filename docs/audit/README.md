@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-10
+last_updated: 2026-07-11
 audit_role: index
 ---
 
@@ -92,6 +92,7 @@ middle-end work; they supersede the pre-2026-07 "op-library" framing.
 | [compiler/OPTIMIZING_COMPILER_PLAN.md](compiler/OPTIMIZING_COMPILER_PLAN.md) | Middle-end synthesis (F0–F5 landed on Apple); **F6 = the backend-build seam** (reassessed 2026-07-02). |
 | [compiler/EVALUATOR_PLAN.md](compiler/EVALUATOR_PLAN.md) | The scoring engine that gates every promotion in the plans above. |
 | [compiler/STAGE_A_EMIT_PLAN.md](compiler/STAGE_A_EMIT_PLAN.md) | Cross-vendor emit-ladder grounding. |
+| [compiler/AUTODIFF_UNIFICATION_PLAN.md](compiler/AUTODIFF_UNIFICATION_PLAN.md) | Front-end / IR / autodiff unification — make differentiation a compiler request with a native fwd+bwd execution path and a per-family × per-target proof ledger, replacing implicit-tape-reported-as-compiled. |
 
 Governing rule across all of them: **ROCm/CUDA are the lead performance targets;
 the generic framework raises the floor and must never cap their ceiling** (Theory

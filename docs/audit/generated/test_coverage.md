@@ -7,7 +7,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **480** ops in `primitive_coverage` registry.
-- **4120** total Python-test references, **973** total lit-fixture references.
+- **4120** total Python-test references, **987** total lit-fixture references.
 - **81** ops have **zero** references in either test surface.
 - **117** ops have ≤1 reference ("thinly tested").
 - **131** ops have ≥10 references ("well tested").
@@ -21,7 +21,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 | `flash_attn` |  106 |   57 |  163 |   7 | `bf16`, `f32`, `fp16`, `fp32` … |
 | `softmax` |  120 |   38 |  158 |  30 | `bf16`, `f16`, `f32`, `fp16` … |
 | `add` |  112 |   29 |  141 |  10 | `bf16`, `f16`, `f32`, `f64` … |
-| `relu` |  106 |   28 |  134 |   9 | `bf16`, `f16`, `f32`, `f64` … |
+| `relu` |  106 |   34 |  140 |   9 | `bf16`, `f16`, `f32`, `f64` … |
 | `mul` |   88 |    8 |   96 |   7 | `bf16`, `f16`, `f32`, `f64` … |
 | `silu` |   85 |    6 |   91 |   5 | `bf16`, `f16`, `f32`, `f64` … |
 | `reduce` |   88 |    2 |   90 |   7 | `f32`, `fp16`, `fp32`, `fp4_e2m1` … |
@@ -29,10 +29,10 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 | `gemm` |   78 |    2 |   80 |   7 | `bf16`, `f16`, `f32`, `fp16` … |
 | `selective_ssm` |   68 |   10 |   78 |   2 | `bf16`, `f16`, `fp16`, `fp32` |
 | `gelu` |   46 |   19 |   65 |   0 | `bf16`, `f16`, `f32`, `f64` … |
+| `transpose` |   27 |   35 |   62 |   0 | `bf16`, `f16`, `fp16`, `fp32` |
 | `attn_local_window_2d` |   36 |   25 |   61 |   1 | `fp16`, `fp32` |
 | `msa_sparse_attention` |   47 |   11 |   58 |   1 |  |
 | `cast` |   16 |   40 |   56 |   1 | `fp16`, `fp32` |
-| `transpose` |   27 |   27 |   54 |   0 | `bf16`, `f16`, `fp16`, `fp32` |
 | `grouped_gemm` |   28 |   24 |   52 |   2 | `fp32`, `fp4_e2m1`, `fp8_e4m3`, `fp8_e5m2` … |
 | `linear_attn` |   44 |    8 |   52 |   2 |  |
 | `cholesky` |   20 |   30 |   50 |   0 | `bf16`, `f16`, `f32`, `fp16` … |

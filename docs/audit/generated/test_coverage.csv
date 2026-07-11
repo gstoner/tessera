@@ -350,7 +350,7 @@ rearrange,8,0,0,8,0,fp16,directly_tested,8 direct test references
 reciprocal,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 reduce,88,2,7,90,0,f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,90 direct test references
 reduce_scatter,0,4,0,4,0,,directly_tested,4 direct test references
-relu,106,28,9,134,0,bf16 f16 f32 f64 fp32 fp8_e4m3 int8,directly_tested,134 direct test references
+relu,106,34,9,140,0,bf16 f16 f32 f64 fp32 fp8_e4m3 int8,directly_tested,140 direct test references
 remat,0,0,0,0,1,,structural_only,category default for 'transform'
 repeat,4,0,0,4,0,,directly_tested,4 direct test references
 reshape,11,15,1,26,0,,directly_tested,26 direct test references
@@ -456,7 +456,7 @@ tokenizer_sentencepiece_compat,1,0,0,1,1,,structural_only,category default for '
 tokenizer_unigram,1,0,0,1,1,,structural_only,category default for 'tokenizer'
 tokenizer_wordpiece,1,0,0,1,1,,structural_only,category default for 'tokenizer'
 top_k,16,0,0,16,0,,directly_tested,16 direct test references
-transpose,27,27,0,54,0,bf16 f16 fp16 fp32,directly_tested,54 direct test references
+transpose,27,35,0,62,0,bf16 f16 fp16 fp32,directly_tested,62 direct test references
 tree_flatten,2,0,0,2,0,,directly_tested,2 direct test references
 tree_map,0,0,0,0,1,,structural_only,category default for 'state_tree'
 tree_reduce,0,0,0,0,1,,structural_only,category default for 'state_tree'

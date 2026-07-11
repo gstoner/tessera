@@ -3,12 +3,29 @@
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "llvm/ADT/StringSet.h"
 
 using namespace mlir;
 
 namespace {
 static inline bool isOp(Operation *op, StringRef name) {
   return op && op->getName().getStringRef() == name;
+}
+
+// Elementwise unary ops that commute with ANY permutation of their tensor
+// (per-element, shape-preserving) — so a transpose can move freely across them.
+static bool isUnaryPointwise(Operation *op) {
+  static const llvm::StringSet<> kPointwise = {
+      "tessera.relu",       "tessera.gelu",   "tessera.silu",
+      "tessera.sigmoid",    "tessera.tanh",   "tessera.exp",
+      "tessera.log",        "tessera.neg",    "tessera.abs",
+      "tessera.sqrt",       "tessera.rsqrt",  "tessera.sin",
+      "tessera.cos",        "tessera.erf",    "tessera.reciprocal",
+  };
+  return op && op->getNumOperands() == 1 && op->getNumResults() == 1 &&
+         // shape-preserving (elementwise) — operand and result carry one type.
+         op->getOperand(0).getType() == op->getResult(0).getType() &&
+         kPointwise.contains(op->getName().getStringRef());
 }
 struct FuseMatmulBiasGELU : public RewritePattern {
   FuseMatmulBiasGELU(MLIRContext *ctx) : RewritePattern("tessera.gelu", 2, ctx) {}
@@ -104,6 +121,48 @@ struct TransposeIntoMatmul : public RewritePattern {
     return success();
   }
 };
+// transpose(pointwise(x)) → pointwise(transpose(x)).  An elementwise unary op
+// commutes with any permutation, so sinking the transpose UNDER it is always
+// valid.  Moving the transpose toward the input is the transpose-elimination
+// lever the layout / data-movement pass (W4) wants: once adjacent to its
+// producer the transpose can cancel a producer transpose
+// (transpose(transpose(x))→x) or fold into a matmul (TransposeIntoMatmul) —
+// removing a real data-movement pass over the tensor rather than materializing
+// a permuted copy around every activation.
+struct TransposeThroughPointwise : public RewritePattern {
+  TransposeThroughPointwise(MLIRContext *ctx)
+      : RewritePattern("tessera.transpose", 1, ctx) {}
+  LogicalResult matchAndRewrite(Operation *t,
+                                PatternRewriter &rewriter) const override {
+    if (t->getNumOperands() != 1 || t->getNumResults() != 1) return failure();
+    Operation *pw = t->getOperand(0).getDefiningOp();
+    if (!isUnaryPointwise(pw)) return failure();
+    // If the pointwise result feeds another consumer, sinking the transpose
+    // would keep the pointwise alive AND add a transpose — no net reduction, and
+    // possible growth. Only rewrite when this transpose is its sole consumer.
+    if (!pw->getResult(0).hasOneUse()) return failure();
+
+    // New transpose over the pointwise's INPUT: same permutation/attrs, and the
+    // result type is this transpose's result type (the pointwise is
+    // shape-preserving, so input and output shapes coincide before the perm).
+    OperationState tst(t->getLoc(), "tessera.transpose");
+    tst.addOperands({pw->getOperand(0)});
+    tst.addTypes(t->getResult(0).getType());
+    for (auto &na : t->getAttrs())
+      tst.addAttribute(na.getName(), na.getValue());
+    Operation *newT = rewriter.create(tst);
+
+    // The pointwise now runs on the transposed tensor (same result type).
+    OperationState pst(pw->getLoc(), pw->getName().getStringRef());
+    pst.addOperands({newT->getResult(0)});
+    pst.addTypes(t->getResult(0).getType());
+    for (auto &na : pw->getAttrs())
+      pst.addAttribute(na.getName(), na.getValue());
+    Operation *newPw = rewriter.create(pst);
+    rewriter.replaceOp(t, newPw->getResults());
+    return success();
+  }
+};
 // Erase an identity tessera.cast (input type == output type) by forwarding its
 // operand to all users.  A no-op cast carries no numeric conversion, so it is
 // pure dead weight after migration/promotion.
@@ -132,7 +191,7 @@ struct Canon : public PassWrapper<Canon, OperationPass<ModuleOp>> {
   void runOnOperation() override {
     RewritePatternSet patterns(&getContext());
     patterns.add<FuseMatmulBiasGELU, FuseConvRelu, DropoutZeroSimplify, TransposeIntoMatmul,
-                 EraseIdentityCast>(&getContext());
+                 TransposeThroughPointwise, EraseIdentityCast>(&getContext());
     if (failed(applyPatternsAndFoldGreedily(getOperation(), std::move(patterns))))
       getOperation()->emitWarning()
           << "tessera-canonicalize: greedy pattern application did not "

@@ -134,7 +134,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `backend/rocm/ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md` | - | 2026-06-18 | 22 | ✓ |
 | `backend/rocm/STRIX_HALO_EXECUTION_PLAN.md` | - | 2026-06-23 | 17 | ✓ |
 | `compiler/COMPILER_AUDIT.md` | - | 2026-07-10 | 0 | ✓ |
-| `compiler/COMPILER_REFACTOR_PLAN.md` | - | 2026-07-08 | 2 | ✓ |
+| `compiler/COMPILER_REFACTOR_PLAN.md` | - | 2026-07-11 | -1 | ✓ |
 | `compiler/COMPILER_THEORY_OF_OPERATION.md` | - | 2026-07-02 | 8 | ✓ |
 | `compiler/EVALUATOR_PLAN.md` | - | 2026-06-12 | 28 | ✓ |
 | `compiler/OPTIMIZING_COMPILER_PLAN.md` | - | 2026-07-02 | 8 | ✓ |

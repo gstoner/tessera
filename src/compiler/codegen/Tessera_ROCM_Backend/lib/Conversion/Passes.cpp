@@ -58,6 +58,7 @@ void registerTesseraROCMPasses() {
   registerPass([]() { return createGenerateROCMMoeKernelPass(); });
   registerPass([]() { return createGenerateROCMGemmF32KernelPass(); });
   registerPass([]() { return createGenerateROCMRecurrentCellKernelPass(); });
+  registerPass([]() { return createGenerateROCMBatchedGemmF32KernelPass(); });
   registerPass([]() { return createGenerateROCMAlibiKernelPass(); });
   registerPass([]() { return createGenerateROCMDeltaNetKernelPass(); });
   registerPass([]() { return createGenerateROCMRopeKernelPass(); });

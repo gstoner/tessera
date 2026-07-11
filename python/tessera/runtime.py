@@ -10047,6 +10047,18 @@ def _build_compiled_gemm_f32_hsaco() -> bytes:
         (chip,))
 
 
+_rocm_batched_gemm_f32_hsaco_cache: dict[tuple[str], bytes] = {}
+
+
+def _build_compiled_batched_gemm_f32_hsaco() -> bytes:
+    chip = _rocm_chip()
+    directive = ('module {\n  "tessera_rocm.batched_gemm_f32"() {name = "bg"} '
+                 ': () -> ()\n}\n')
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-batched-gemm-f32-kernel", directive,
+        _rocm_batched_gemm_f32_hsaco_cache, (chip,))
+
+
 def _rocm_f32_gemm(a: Any, b: Any, np: Any) -> Any:
     """C = A @ B on gfx1151 via the compiler-generated f32 GEMM kernel (one
     thread per output element). A (M,K), B (K,N) f32 -> C (M,N) f32."""
@@ -10108,10 +10120,13 @@ def _rocm_f32_gemm(a: Any, b: Any, np: Any) -> Any:
 
 def _rocm_batched_gemm_f32(a: Any, b: Any, np: Any) -> Any:
     """np.matmul semantics over leading batch dims, each [M,K]@[K,N] on the native
-    gfx1151 f32 GEMM device kernel (mirrors ``_x86_batched_gemm``). Batch dims of
-    ``a``/``b`` broadcast (NumPy rules). Used by the chunked-parallel SSD scan."""
-    a = np.asarray(a, np.float32)
-    b = np.asarray(b, np.float32)
+    gfx1151 batched f32 GEMM device kernel (mirrors ``_x86_batched_gemm``). Batch
+    dims of ``a``/``b`` broadcast (NumPy rules). SINGLE LAUNCH — the batch is
+    folded into the grid, so the whole stack of GEMMs takes ONE hipMalloc/H2D/
+    launch/D2H (vs the per-batch round-trip of looping ``_rocm_f32_gemm``, which
+    made the chunked SSD scan a 4–100× regression). Used by that scan."""
+    a = np.ascontiguousarray(a, np.float32)
+    b = np.ascontiguousarray(b, np.float32)
     if a.ndim < 2 or b.ndim < 2:
         raise ValueError("batched_gemm needs rank>=2 operands")
     m, k = int(a.shape[-2]), int(a.shape[-1])
@@ -10120,10 +10135,60 @@ def _rocm_batched_gemm_f32(a: Any, b: Any, np: Any) -> Any:
             f"batched_gemm inner dims must match; got {a.shape} @ {b.shape}")
     n = int(b.shape[-1])
     batch = np.broadcast_shapes(a.shape[:-2], b.shape[:-2])
-    a_b = np.broadcast_to(a, batch + (m, k)).reshape(-1, m, k)
-    b_b = np.broadcast_to(b, batch + (k, n)).reshape(-1, k, n)
+    a_b = np.ascontiguousarray(np.broadcast_to(a, batch + (m, k)).reshape(-1, m, k),
+                               np.float32)
+    b_b = np.ascontiguousarray(np.broadcast_to(b, batch + (k, n)).reshape(-1, k, n),
+                               np.float32)
     nb = int(a_b.shape[0])
-    out = np.stack([_rocm_f32_gemm(a_b[i], b_b[i], np) for i in range(nb)], axis=0)
+    out = np.zeros((nb, m, n), np.float32)
+    if nb == 0 or m == 0 or n == 0 or k == 0:
+        return out.reshape(*batch, m, n)
+
+    hsaco = _build_compiled_batched_gemm_f32_hsaco()
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm batched_gemm: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm batched_gemm: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"bg") != 0:
+        raise RuntimeError("rocm batched_gemm: kernel symbol 'bg' not found")
+    cv = ctypes.c_void_p
+    n_a, n_b, n_c = nb * m * k, nb * k * n, nb * m * n
+    d_a, d_b, d_c = cv(), cv(), cv()
+    if (hip.hipMalloc(ctypes.byref(d_a), 4 * n_a) != 0
+            or hip.hipMalloc(ctypes.byref(d_b), 4 * n_b) != 0
+            or hip.hipMalloc(ctypes.byref(d_c), 4 * n_c) != 0):
+        raise RuntimeError("rocm batched_gemm: hipMalloc failed")
+    hip.hipMemcpy(d_a, a_b.ctypes.data_as(cv), 4 * n_a, 1)
+    hip.hipMemcpy(d_b, b_b.ctypes.data_as(cv), 4 * n_b, 1)
+
+    def _mr(p, size):
+        return [cv(p.value), cv(p.value), ctypes.c_int64(0),
+                ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    launch_args = (_mr(d_a, n_a) + _mr(d_b, n_b) + _mr(d_c, n_c)
+                   + [ctypes.c_int64(nb), ctypes.c_int64(m), ctypes.c_int64(n),
+                      ctypes.c_int64(k)])
+    arr = (cv * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), cv)
+    # One thread per TM×TN=4×4 output tile, across all batches.
+    n_tiles = nb * ((m + 3) // 4) * ((n + 3) // 4)
+    gx = (n_tiles + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+    rc = hip.hipModuleLaunchKernel(fn, max(gx, 1), 1, 1, _GRID_BLOCKDIM, 1, 1,
+                                   0, None, arr, None)
+    if rc != 0:
+        for d in (d_a, d_b, d_c):
+            hip.hipFree(d)
+        raise RuntimeError(f"rocm batched_gemm: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    hip.hipMemcpy(out.ctypes.data_as(cv), d_c, 4 * n_c, 2)
+    for d in (d_a, d_b, d_c):
+        hip.hipFree(d)
     return out.reshape(*batch, m, n)
 
 
@@ -14974,17 +15039,22 @@ def _rocm_selective_ssm_chunked(x, A, B, C, delta, gate, state, np,
     the per-chunk state recurrence on host. The standard Mamba-2 decomposition;
     matches the sequential scan (~1e-6), scalar-A ``(D,)`` f32 only.
 
-    CORRECTNESS-VERIFIED REFERENCE RUNG, NOT the production path. Measured on
-    gfx1151 it is a 4–100× REGRESSION vs the sequential scan (B2S64: 0.25×;
-    B4S512D64: 0.01×): ``_rocm_batched_gemm_f32`` loops ``_rocm_f32_gemm``, which
-    does a full hipMalloc/H2D/launch/D2H round-trip PER call, and the SSD issues
-    many small bmms (per chunk × batch × 3 contractions) — launch overhead dwarfs
-    the single-launch sequential kernel. Unlike x86 (whose batched GEMM is a
-    host-side BLAS loop with no device round-trip), ROCm needs a single-launch
-    BATCHED f32 GEMM + resident buffers before this can win. Kept for correctness
-    parity + as the substrate for that follow-up (cf. the K-unroll GEMM reference
-    rung, STRIX_HALO_EXECUTION_PLAN). Raises ``_RocmCompiledUnavailable`` if the
-    f32 GEMM lane can't run."""
+    CORRECTNESS-VERIFIED REFERENCE RUNG, NOT the production path. ``bmm`` now runs
+    the SINGLE-LAUNCH batched f32 GEMM (``_rocm_batched_gemm_f32`` on
+    generate-rocm-batched-gemm-f32-kernel — one H2D/launch/D2H for the whole
+    batch), which #363 flagged as the prerequisite. It helps (~2× vs the
+    per-batch-looping rung: B2S64 0.25→0.42×) but is STILL a REGRESSION vs the
+    sequential scan (B2S64 0.42×, B4S256 0.09×, B4S512D64 0.02× — measured
+    gfx1151): the single-launch batched GEMM removed the *within-bmm* per-batch
+    looping, but the SSD still issues ~3·n_chunks separate bmm CALLS, each its own
+    device round-trip, with host decay/gate work between them — the sequential
+    scan is ONE launch, and these SSM GEMMs are too small for compute to amortize
+    the multi-launch host orchestration. The real path to a ROCm win is a fully
+    FUSED on-device SSD kernel (state resident across chunks) — a larger follow-up;
+    x86 wins with the same decomposition only because its batched GEMM is a
+    host-side BLAS loop with no device round-trip. Kept for correctness parity (cf.
+    the K-unroll GEMM rung, STRIX_HALO_EXECUTION_PLAN). Raises
+    ``_RocmCompiledUnavailable`` if the f32 GEMM lane can't run."""
     from . import _mamba_ssd as _ssd
     if not _rocm_compiled_gemm_f32_available():
         raise _RocmCompiledUnavailable(

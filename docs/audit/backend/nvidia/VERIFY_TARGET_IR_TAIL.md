@@ -1,3 +1,8 @@
+---
+last_updated: 2026-07-11
+audit_role: sub_audit
+---
+
 # Verify: NVIDIA Target IR tail + emit cleanups (branch `nvidia-target-ir-typed-ops`)
 
 Cross-platform verification checklist for the three commits on this branch:

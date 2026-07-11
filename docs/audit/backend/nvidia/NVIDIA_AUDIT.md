@@ -93,9 +93,13 @@ sm_120 (RTX 5070 Ti, PRs #290–#297):
   IR. The `tessera_nvidia` dialect was `isExtensible` with **zero registered ops**
   (generic ops, no verifier, `--allow-unregistered-dialect` to print) — a
   Decision #19 violation vs. the typed ROCm/Apple dialects. **Increment 1 (landed):**
-  `TesseraNVIDIADialect.td` now defines 10 typed ops (`mma_sync`, `wgmma`,
-  `tcgen05_mma`, `wmma`, `tma_async_copy`, `mbarrier`, `tmem_{alloc,load,store}`,
-  `cuda_kernel`); `LowerTileToNVIDIA` populates them via the unchanged generic
+  `TesseraNVIDIADialect.td` now defines typed ops: the inner contract ops
+  (`mma_sync`, `wgmma`, `tcgen05_mma`, `wmma`, `tma_async_copy`, `mbarrier`,
+  `tmem_{alloc,load,store}`, `cuda_kernel`) the C++ lowering emits, plus the
+  Python-emitter wrapper/probe ops (`func` region wrapper, `kernel_call`,
+  `profiler_probe`) so the *whole* emitted `tessera_nvidia` surface parses under
+  the now-non-extensible dialect (Codex review, PR #371);
+  `LowerTileToNVIDIA` populates them via the unchanged generic
   builders (`usePropertiesForAttributes=0`), they round-trip/verify without
   `--allow-unregistered-dialect`, and `allowUnknownOperations()` is dropped so a
   malformed `tessera_nvidia.*` op is an error. Proof:

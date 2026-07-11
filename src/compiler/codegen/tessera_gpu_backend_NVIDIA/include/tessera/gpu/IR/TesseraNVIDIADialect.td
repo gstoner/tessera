@@ -97,4 +97,25 @@ def NVIDIA_CudaKernelOp : TesseraNVIDIA_Op<"cuda_kernel"> {
   let summary = "Generic CUDA kernel artifact contract";
 }
 
+// Wrapper / probe ops. The **Python** Target IR emitters (``target_ir.py`` /
+// ``value_target_contract.py``) wrap the contract body in ``tessera_nvidia.func``
+// and may add ``tessera_nvidia.kernel_call`` / ``tessera_nvidia.profiler_probe``.
+// The C++ ``LowerTileToNVIDIA`` never emits these — but registering them keeps the
+// *whole* emitted ``tessera_nvidia`` surface typed and parseable now that the
+// dialect is no longer ``isExtensible`` (otherwise a Python-emitted module would
+// fail to parse through the registered dialect).
+def NVIDIA_FuncOp : Op<TesseraNVIDIADialect, "func", [NoTerminator]> {
+  let summary = "NVIDIA Target IR function wrapper holding the kernel-contract body";
+  let arguments = (ins OptionalAttr<StrAttr>:$sym_name);
+  let regions = (region AnyRegion:$body);
+  // No assemblyFormat: the emitter writes the generic form, which every
+  // registered op parses; keeping it generic avoids constraining the emitter.
+}
+def NVIDIA_KernelCallOp : TesseraNVIDIA_Op<"kernel_call"> {
+  let summary = "Named CUDA kernel / value-target C-ABI call contract";
+}
+def NVIDIA_ProfilerProbeOp : TesseraNVIDIA_Op<"profiler_probe"> {
+  let summary = "Profiler probe marker (device-timer instrumentation point)";
+}
+
 #endif // TESSERA_NVIDIA_DIALECT

@@ -157,6 +157,9 @@ def collect_rows() -> list[LedgerRow]:
     """
     native, placeholder = _ir_adjoint_classes()
     covs = primitive_coverage.all_primitive_coverages()
+    # Phase 4 (A2): the native backward-execution rungs are sourced from the
+    # runtime execution matrix's backward rows, never asserted here.
+    bwd = _native_backward_by_family()
 
     rows: list[LedgerRow] = []
     for name in sorted(covs):
@@ -174,14 +177,33 @@ def collect_rows() -> list[LedgerRow]:
         differentiable = _is_differentiable(cov)
         if not differentiable and ir_adjoint == "none":
             continue
-        rows.append(LedgerRow(
+        row = LedgerRow(
             family=name,
             category=cov.category,
             python_reference="yes" if differentiable else "no",
             ir_adjoint=ir_adjoint,
             notes=notes,
-        ))
+        )
+        # Fill the native backward rungs from the matrix, matching on the
+        # primitive's name or graph_name against the row's op_family.
+        info = next((bwd[k] for k in keys if k in bwd), None)
+        if info is not None:
+            row.bwd_runtime_bound = info["runtime_bound"]
+            row.bwd_hardware_proven = info["hardware_proven"]
+            if info["hardware_proven"] and "native backward" not in row.notes:
+                targets = ", ".join(info["hardware_proven"])
+                row.notes = (row.notes + "; " if row.notes else "") + \
+                    f"native backward executes on {targets} (Phase 4)"
+        rows.append(row)
     return rows
+
+
+def _native_backward_by_family() -> dict[str, dict[str, tuple[str, ...]]]:
+    """The execution matrix's native backward launches, per op-family (A2). Lazy
+    import to keep the module import-cycle-free (execution_matrix does not import
+    this ledger)."""
+    from . import execution_matrix
+    return execution_matrix.native_backward_targets()
 
 
 def python_reference_families() -> frozenset[str]:
@@ -285,10 +307,12 @@ def render_markdown() -> str:
         "> **Headline:** the Python reference/oracle is broad, a handful of ops "
         "have a native IR adjoint, several more only *look* differentiable in "
         "IR but actually call back into Python. The `matmul`/`tanh`/`sigmoid` "
-        "backward **IR is now oracle-verified on CPU** (Phase 3) — but **no op "
-        "family executes its backward *natively* on any target yet** (Phase 4 "
-        "wires the runtime; ROCm gfx1151 is the first candidate). That gap is "
-        "the plan.",
+        "backward **IR is oracle-verified on CPU** (Phase 3). **Phase 4 (A2) has "
+        "landed the first native backward**: the families below whose "
+        "`bwd hardware_proven` column is non-empty execute their backward on "
+        "real hardware — sourced from the runtime execution matrix's backward "
+        "rows, not asserted. ROCm gfx1151 `flash_attn` (covering MHA + GQA/MQA) "
+        "is the first. Remaining families are still Phase 4/5 work.",
         "",
         "## Ledger",
         "",

@@ -48,12 +48,27 @@ def test_rows_are_consistent() -> None:
         assert r.ir_adjoint in {"native", "placeholder", "none"}
         # A row exists only if differentiable OR carrying an IR adjoint.
         assert r.python_reference == "yes" or r.ir_adjoint != "none"
-        # Backward-execution rungs are empty until Phases 3-4 wire them; a
-        # non-empty one here means a real source appeared — update the ledger
-        # provenance (and this guard) deliberately, don't let it slip in.
-        assert not r.bwd_runtime_bound
+        # Phase 4 (A2): the native backward rungs are now SOURCED from the
+        # runtime execution matrix. Invariants: hardware_proven ⊆ runtime_bound
+        # (a device-proven backward is necessarily runtime-bound), and every
+        # target is a tracked backend. (oracle_proven stays empty until a native
+        # backward oracle fixture is wired — Phase 4 Inc 3.)
+        assert set(r.bwd_hardware_proven) <= set(r.bwd_runtime_bound)
+        for t in (*r.bwd_runtime_bound, *r.bwd_hardware_proven):
+            assert t in autodiff_ledger._TARGETS
         assert not r.bwd_oracle_proven
-        assert not r.bwd_hardware_proven
+
+
+def test_flash_attn_backward_is_hardware_proven_on_rocm() -> None:
+    """Phase 4 (A2): the gfx1151 flash_attn backward (matrix row
+    `rocm_flash_attn_bwd_compiled`, covering MHA + GQA/MQA) lights up the native
+    backward rungs, sourced from the execution matrix — the ledger's first
+    `hardware_proven` backward."""
+    rows = {r.family: r for r in autodiff_ledger.collect_rows()}
+    fa = rows.get("flash_attn")
+    assert fa is not None, "no flash_attn ledger row"
+    assert "rocm" in fa.bwd_runtime_bound
+    assert "rocm" in fa.bwd_hardware_proven
 
 
 def test_missing_source_raises_not_silent(monkeypatch: pytest.MonkeyPatch) -> None:

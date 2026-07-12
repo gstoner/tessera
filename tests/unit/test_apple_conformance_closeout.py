@@ -8,6 +8,7 @@ reference fallback remains a valid conformance executor on non-Darwin CI.
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 import tessera as ts
 from tessera.cache import KVCacheHandle
@@ -99,6 +100,9 @@ def test_apple_gpu_kv_cache_read_matches_source() -> None:
     keys = np.arange(8 * 2 * 4, dtype=np.float32).reshape(8, 2, 4)
     values = keys + 50.0
     cache.append(keys, values)
-    read_keys, read_values, _ = apple_gpu_kv_cache_read(cache, 1, 6)
+    read_keys, read_values, mode = apple_gpu_kv_cache_read(cache, 1, 6)
+    if mode != "metal_runtime":
+        pytest.skip("requires the Apple Metal DeviceTensor KV-cache path")
+    assert mode == "metal_runtime"
     np.testing.assert_allclose(read_keys, keys[1:6])
     np.testing.assert_allclose(read_values, values[1:6])

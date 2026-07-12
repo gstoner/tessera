@@ -324,15 +324,15 @@ def test_compiled_rocm_lanes_beat_reference_target_ir() -> None:
         assert row.cells["tile_ir"].status == "fused", name
 
 
-def test_backend_kernel_not_applicable_rows_do_not_need_target_ir() -> None:
+def test_backend_kernel_free_rows_do_not_need_target_ir() -> None:
     """Pure metadata/view ops should not look like Target IR reference debt."""
     for name in (
         "reshape", "view", "squeeze", "unsqueeze",
         "flatten", "expand", "broadcast",
     ):
         row = audit.support_row_for(name)
-        assert row.cells["tile_ir"].status == "not_applicable", name
-        assert row.cells["target_ir"].status == "not_applicable", name
+        assert row.cells["tile_ir"].status == "no_kernel_required", name
+        assert row.cells["target_ir"].status == "no_kernel_required", name
 
 
 def test_apple_gpu_structural_data_movers_close_tile_and_target_ir() -> None:

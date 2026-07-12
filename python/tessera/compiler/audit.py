@@ -115,6 +115,7 @@ AXIS_VALUE_GLYPHS: Mapping[str, str] = {
     "reference":        "R",
     "compileable":      "c",
     "artifact_only":    "A",
+    "no_kernel_required": "n",
     # ─ runtime ─
     "ready":            "N",   # native
     "unsupported":      "X",
@@ -418,7 +419,10 @@ def _axis_target_ir(op_name: str) -> AxisCell:
         return AxisCell("not_applicable", "primitive_coverage.category.acceptance_verification")
     if (cov is not None
             and cov.contract_status.get("backend_kernel") == "no_kernel_required"):
-        return AxisCell("not_applicable", "primitive_coverage.contract_status.backend_kernel.no_kernel_required")
+        return AxisCell(
+            "no_kernel_required",
+            "primitive_coverage.contract_status.backend_kernel.no_kernel_required",
+        )
     # M7 ops (mobius, stereographic) live under prefixed names in
     # backend_manifest; translate before lookup so the audit reflects
     # the fused-kernel coverage that actually ships.

@@ -145,12 +145,12 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `slice` | indexing | public | public | registered | complete | fused | fused | ready | benchmarked |
 | `take` | indexing | public | public | registered | complete | fused | fused | ready | benchmarked |
 | `arange` | layout_transform | public | public | registered | complete | not_applicable | not_applicable | ready | none |
-| `broadcast` | layout_transform | public | public | registered | complete | no_kernel_required | not_applicable | ready | none |
+| `broadcast` | layout_transform | public | public | registered | complete | no_kernel_required | no_kernel_required | ready | none |
 | `cast` | layout_transform | public | public | registered | complete | fused | fused | ready | benchmarked |
 | `cat` | layout_transform | public | public | registered | complete | fused | compiled | ready | none |
 | `chunk` | layout_transform | public | public | registered | complete | fused | fused | ready | benchmarked |
-| `expand` | layout_transform | public | public | registered | complete | no_kernel_required | not_applicable | ready | none |
-| `flatten` | layout_transform | public | public | registered | complete | no_kernel_required | not_applicable | ready | none |
+| `expand` | layout_transform | public | public | registered | complete | no_kernel_required | no_kernel_required | ready | none |
+| `flatten` | layout_transform | public | public | registered | complete | no_kernel_required | no_kernel_required | ready | none |
 | `flip` | layout_transform | public | public | registered | complete | fused | compiled | ready | none |
 | `masked_fill` | layout_transform | public | public | registered | complete | fused | compiled | ready | none |
 | `mor_partition` | layout_transform | public | public | registered | complete | not_applicable | not_applicable | ready | none |
@@ -161,19 +161,19 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `permute` | layout_transform | public | public | registered | complete | fused | fused | ready | benchmarked |
 | `rearrange` | layout_transform | public | public | registered | complete | fused | fused | ready | benchmarked |
 | `repeat` | layout_transform | public | public | registered | complete | fused | compiled | ready | none |
-| `reshape` | layout_transform | public | public | registered | complete | no_kernel_required | not_applicable | ready | none |
+| `reshape` | layout_transform | public | public | registered | complete | no_kernel_required | no_kernel_required | ready | none |
 | `roll` | layout_transform | public | public | registered | complete | fused | compiled | ready | none |
 | `rope_merge` | layout_transform | public | public | registered | complete | fused | compiled | ready | none |
 | `rope_split` | layout_transform | public | public | registered | complete | fused | fused | ready | benchmarked |
 | `split` | layout_transform | public | public | registered | complete | fused | fused | ready | benchmarked |
-| `squeeze` | layout_transform | public | public | registered | complete | no_kernel_required | not_applicable | ready | none |
+| `squeeze` | layout_transform | public | public | registered | complete | no_kernel_required | no_kernel_required | ready | none |
 | `stack` | layout_transform | public | public | registered | complete | fused | compiled | ready | none |
 | `tile` | layout_transform | public | public | registered | complete | fused | compiled | ready | none |
-| `tile_view` | layout_transform | public | public | registered | complete | fused | not_applicable | ready | none |
+| `tile_view` | layout_transform | public | public | registered | complete | fused | no_kernel_required | ready | none |
 | `transpose` | layout_transform | public | public | registered | complete | fused | fused | ready | benchmarked |
 | `unpack` | layout_transform | public | public | registered | complete | fused | fused | ready | benchmarked |
-| `unsqueeze` | layout_transform | public | public | registered | complete | no_kernel_required | not_applicable | ready | none |
-| `view` | layout_transform | public | public | registered | complete | no_kernel_required | not_applicable | ready | none |
+| `unsqueeze` | layout_transform | public | public | registered | complete | no_kernel_required | no_kernel_required | ready | none |
+| `view` | layout_transform | public | public | registered | complete | no_kernel_required | no_kernel_required | ready | none |
 | `cholesky` | linalg_decomposition | public | public | registered | complete | fused | compiled | ready | none |
 | `lu` | linalg_decomposition | public | public | registered | complete | fused | compiled | ready | none |
 | `qr` | linalg_decomposition | public | public | registered | complete | fused | compiled | ready | none |
@@ -346,7 +346,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | fused_epilogue | 1 | PPGCFCN· |
 | geometric_algebra | 18 | PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB |
 | indexing | 16 | PPGCFFNB PPGCFCN· PPGCFFNB PPGCFFNB PPGCFCN· PPGCFFNB PPGCFFNB PPGCFFNB PPGCFFNB PPGCnnN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB |
-| layout_transform | 30 | PPGCnnN· PPGC?nN· PPGCFFNB PPGCFCN· PPGCFFNB PPGC?nN· PPGC?nN· PPGCFCN· PPGCFCN· PPGCnnN· PPGCnnN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB PPGCFCN· PPGC?nN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB PPGC?nN· PPGCFCN· PPGCFCN· PPGCFnN· PPGCFFNB PPGCFFNB PPGC?nN· PPGC?nN· |
+| layout_transform | 30 | PPGCnnN· PPGCnnN· PPGCFFNB PPGCFCN· PPGCFFNB PPGCnnN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCnnN· PPGCnnN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB PPGCFCN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB PPGCnnN· PPGCFCN· PPGCFCN· PPGCFnN· PPGCFFNB PPGCFFNB PPGCnnN· PPGCnnN· |
 | linalg_decomposition | 4 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | linalg_solver | 2 | PPGCFCN· PPGCFCN· |
 | logical | 8 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |

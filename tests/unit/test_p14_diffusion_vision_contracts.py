@@ -9,7 +9,8 @@ coverage scan). P14 formalizes them:
                        complete on all three axes (the elementwise rule).
   * diffusion_schedule (karras_sigma_schedule, equiprob_band_partition) —
                        deterministic schedule generators from scalar config, no
-                       batchable / shardable data axis → not_applicable.
+                       batchable / shardable data axis → explicit
+                       axis-specific terminal statuses.
   * vision             (resize / crop / normalize / interpolate) — batch-
                        parallel per-image → the previously-missing sharding rule
                        is complete (batching / transpose were already complete).
@@ -41,10 +42,13 @@ def test_diffusion_ops_complete_on_all_three_axes():
         assert _axes(op) == ("complete", "complete", "complete"), op
 
 
-def test_diffusion_schedule_generators_are_not_applicable():
+def test_diffusion_schedule_generators_have_explicit_terminal_contracts():
     for op in ("karras_sigma_schedule", "equiprob_band_partition"):
-        assert _axes(op) == ("not_applicable", "not_applicable",
-                             "not_applicable"), op
+        assert _axes(op) == (
+            "no_batch_axis",
+            "replicated_or_non_tensor",
+            "no_linear_transpose",
+        ), op
 
 
 def test_vision_ops_sharding_now_complete():

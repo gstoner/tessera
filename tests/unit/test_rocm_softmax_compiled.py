@@ -1,5 +1,5 @@
 """Compiler-generated row-wise softmax on gfx1151 — the first non-matmul /
-non-WMMA compiled ROCm kernel.
+non-WMMA device_verified_jit ROCm kernel.
 
 The `tessera_rocm.softmax` directive expands (via `generate-rocm-softmax-kernel`)
 into a row-reduction kernel: one workgroup per row, the lanes stride over the

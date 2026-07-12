@@ -72,7 +72,7 @@ the highest honest rung reached.
 | 5 `codegen_stable` | two optimization levels produce structurally-equivalent code | A program-level evaluator check, not a backend-wide status. |
 | 6 `numerical_symbolic` | microkernel is symbolically equivalent to its specification | Optional, hardware-free work. |
 | 7 `executes` | the demanded backend ran on real silicon | The execution matrix has executable Apple, x86, ROCm, and `nvidia_sm120` pathways. |
-| 8 `hardware_verified` | the demanded backend ran and matched the oracle | Earned only by `evaluate()` for the particular program and input/oracle pair. |
+| 8 `device_verified_abi` | the demanded backend ran and matched the oracle | Earned only by `evaluate()` for the particular program and input/oracle pair. |
 
 The enum names and ordering are implemented in
 [`evaluator.py`](../../../python/tessera/compiler/evaluator.py); current runtime
@@ -388,7 +388,7 @@ anti-cheat (§8) baked in.
   *consumer* of Evaluator verdicts, not a hand-declared registry.
 - `benchmarks/common/artifact_schema.py::BenchmarkRow` (already has
   `compiler_path` / `execution_kind` / `Correctness` / `ArtifactLevels`) →
-  add `hardware_verified`, `component_ops`, `fallback_reason`, `rung`.
+  add `device_verified_abi`, `component_ops`, `fallback_reason`, `rung`.
 - `tests/unit/_diff_lane.py` + the differential generators → the Evaluator's
   generation + oracle core.
 - `scripts/validate_nvcc_compile.py` / `validate_hipcc_compile.py` → grow into

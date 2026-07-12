@@ -79,6 +79,7 @@ add_library(tessera_x86_backend
   src/kernels/avx512_moe_f32.cpp
   src/kernels/avx512_optimizer_f32.cpp
   src/kernels/avx512_predicate_f32.cpp
+  src/kernels/kv_cache_f32.cpp
   src/kernels/epilogue.cpp
   src/runtime/amx_runtime.cpp
 )
@@ -194,4 +195,5 @@ add_library(tessera_x86_elementwise SHARED
   src/kernels/avx512_moe_f32.cpp
   src/kernels/avx512_optimizer_f32.cpp
   src/kernels/avx512_predicate_f32.cpp
+  src/kernels/kv_cache_f32.cpp
 )

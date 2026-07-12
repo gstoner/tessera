@@ -3836,10 +3836,10 @@ def all_primitive_coverages() -> dict[str, PrimitiveCoverage]:
     # invariant so the universal Phase G gate test is unaffected.
     # ────────────────────────────────────────────────────────────────────
     _REAL_IMPLEMENTATION_STATUSES = {
-        "compiled",
+        "device_verified_jit",
         "compileable",
         "fused",
-        "hardware_verified",
+        "device_verified_abi",
         "packaged",
         "reference",
     }

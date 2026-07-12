@@ -1,6 +1,6 @@
 """Execute-compare fixture for the shipped NVIDIA mma.sync GEMM runtime symbols.
 
-This is the numerical proof behind the `backend_manifest` `hardware_verified`
+This is the numerical proof behind the `backend_manifest` `device_verified_abi`
 row for `tessera.matmul` on `nvidia_sm120`: it dlopens the **shipped**
 `libtessera_nvidia_gemm.so`, calls the C-ABI symbols
 `tessera_nvidia_mma_gemm_{bf16,f16,tf32,e4m3,e5m2}` (each NVRTC-compiles the
@@ -9,7 +9,7 @@ GPU result to a numpy reference GEMM at the matching dtype.
 
 Unlike test_conformance_execute_compare_nvidia.py (launcher in the test, emitted
 PTX), this validates the *production* symbols built by the CMake
-`tessera_nvidia_gemm` target — the shipped half of `hardware_verified`.
+`tessera_nvidia_gemm` target — the shipped half of `device_verified_abi`.
 
 Skip-clean: lib not built / no usable GPU / no NVRTC (the symbol returns rc=2).
 """

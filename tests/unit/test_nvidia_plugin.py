@@ -508,7 +508,7 @@ def test_live_nvidia_pointwise_gelu_and_nan_sign():
     a = rng.standard_normal((5, 6)).astype(np.float32)
     b = rng.standard_normal((5, 6)).astype(np.float32)
     out, tag = r.run_pointwise_graph(gelu, [a, b])
-    assert tag == "nvidia_cuda"                       # compiled + ran (not declined)
+    assert tag == "nvidia_cuda"                       # device_verified_jit + ran (not declined)
     np.testing.assert_allclose(out, gelu.reference(a, b), atol=1e-4)
 
     sign = F.PointwiseGraphRegion(ops=(("abs", ("a",), "aa"), ("sign", ("aa",), "o")),

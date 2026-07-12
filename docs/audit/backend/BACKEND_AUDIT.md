@@ -106,7 +106,7 @@ Apple, NVIDIA, and ROCm details live in sibling platform folders.
 
 - **NVIDIA runtime execution:** ✅ first executable row landed (2026-06-25,
   RTX 5070 Ti / sm_120) — `(nvidia_sm120, nvidia_mma)` matmul is
-  `hardware_verified` with an execute-compare fixture and the shipped
+  `device_verified_abi` with an execute-compare fixture and the shipped
   `libtessera_nvidia_gemm.so` symbol; a CUDA launcher is registered into the G7
   `tsrRegisterGpuLauncher` bridge. Remaining NVIDIA breadth: a
   compiler-generated lane (the `rocm_compiled` analog), NVFP4 block-scale,

@@ -1,6 +1,6 @@
 """The COMPILER-GENERATED ROCm flash_attn forward through ``runtime.launch()``.
 
-The attention analog of the compiled-GEMM launch lane (test_rocm_compiled_launch_
+The attention analog of the device_verified_jit-GEMM launch lane (test_rocm_compiled_launch_
 execute.py): an artifact stamped ``compiler_path = "rocm_flash_attn_compiled"``
 routes through ``runtime.launch()`` → the matrix → the
 ``rocm_flash_attn_compiled`` executor, which generates + serializes the FA-2
@@ -71,9 +71,9 @@ def _artifact(rt, q, k, v, causal, scale, op_name="tessera.flash_attn",
     })
 
 
-# ── op-name acceptance (the `compiled` rocm_target_map rows must launch) ───────
+# ── op-name acceptance (the `device_verified_jit` rocm_target_map rows must launch) ───────
 # The flash-attn WMMA kernel realizes the whole multi-head family; the executor
-# must accept the registry op names marked `compiled` in rocm_target_map, else
+# must accept the registry op names marked `device_verified_jit` in rocm_target_map, else
 # the dashboard overstates runtime.launch() support. These are GPU-free: they
 # assert the op-name gate is passed (a downstream validation fires), not the
 # "handles exactly one" rejection.
@@ -123,6 +123,15 @@ def _ref(q, k, v, scale, causal):
     return np.einsum("bhqk,bhkd->bhqd", p, vf).astype(np.float32)
 
 
+def _grouped_ref(q, k, v, scale, causal):
+    """Reference for H query heads sharing G key/value heads."""
+    groups = k.shape[1]
+    ratio = q.shape[1] // groups
+    expanded_k = np.repeat(k, ratio, axis=1)
+    expanded_v = np.repeat(v, ratio, axis=1)
+    return _ref(q, expanded_k, expanded_v, scale, causal)
+
+
 @pytest.mark.parametrize("D,B,H,Sq,Sk,causal", [
     (16, 1, 2, 32, 48, 0),
     (64, 2, 2, 48, 48, 1),     # causal
@@ -152,7 +161,7 @@ def test_launch_rocm_flash_attn_matches_numpy(D, B, H, Sq, Sk, causal):
 
 def test_launch_multi_head_attention_op_name_on_gpu():
     """End-to-end on gfx1151: the `multi_head_attention` op name launches via the
-    flash_attn kernel (proves the `compiled` row, not just op-name acceptance)."""
+    flash_attn kernel (proves the `device_verified_jit` row, not just op-name acceptance)."""
     rt = _fa_or_skip()
     D, B, H, S = 16, 1, 2, 32
     rng = np.random.default_rng(123)
@@ -166,3 +175,26 @@ def test_launch_multi_head_attention_op_name_on_gpu():
     out = res["output"]
     maxerr = float(np.max(np.abs(out - _ref(q, k, v, scale, False))))
     assert maxerr < 2e-2, f"multi_head_attention op-name launch maxerr={maxerr}"
+
+
+@pytest.mark.parametrize("op_name,kv_heads", [
+    ("tessera.gqa_attention", 2),
+    ("tessera.mqa_attention", 1),
+])
+def test_launch_grouped_attention_op_names_on_gpu(op_name, kv_heads):
+    """Exact runtime-matrix path and numerical proof for GQA/MQA on gfx1151."""
+    rt = _fa_or_skip()
+    D, B, H, S = 16, 1, 8, 32
+    rng = np.random.default_rng(321 + kv_heads)
+    q = (rng.standard_normal((B, H, S, D)) * 0.3).astype(np.float16)
+    k = (rng.standard_normal((B, kv_heads, S, D)) * 0.3).astype(np.float16)
+    v = (rng.standard_normal((B, kv_heads, S, D)) * 0.3).astype(np.float16)
+    scale = 1.0 / float(np.sqrt(D))
+    res = rt.launch(
+        _artifact(rt, q, k, v, False, scale, op_name=op_name), (q, k, v))
+    assert res["ok"] is True, res.get("reason")
+    assert res["compiler_path"] == "rocm_flash_attn_compiled"
+    assert res["execution_kind"] == "native_gpu"
+    out = np.asarray(res["output"], np.float32)
+    ref = _grouped_ref(q, k, v, scale, False)
+    np.testing.assert_allclose(out, ref, rtol=0, atol=2e-2)

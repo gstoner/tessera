@@ -4,7 +4,7 @@ The Phase-2 DoD: a *stateful decode step runs end-to-end on CPU through the
 production lane*. Built from:
   * tessera.write_row  — functional KV-cache update (tensor.insert_slice),
   * multi-result functions — a decode step returns out + updated caches as ONE
-    compiled function (DPS out-params per result).
+    device_verified_jit function (DPS out-params per result).
 
 The capstone threads the KV cache across decode steps and matches a numpy
 incremental-decoding reference. Skips when libtessera_jit is not built.
@@ -72,7 +72,7 @@ def test_graph_multi_result_one_compiled_function():
 
 
 def _decode_step_graph(T, D, t):
-    """One incremental-decode step at position `t`, as ONE compiled function.
+    """One incremental-decode step at position `t`, as ONE device_verified_jit function.
 
     Inputs: cache_k, cache_v (T,D), new_k, new_v (1,D), q (1,D), mask (1,T).
     Writes new_k/new_v into row t, attends q over the (now-updated) cache with

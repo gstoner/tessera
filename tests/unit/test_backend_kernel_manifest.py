@@ -102,11 +102,11 @@ class TestBackendKernelEntry:
 class TestMatmulManifest:
     """matmul is the highest-coverage op; touches every backend."""
 
-    def test_x86_ships_fused_amx_bf16(self):
+    def test_x86_matmul_is_device_verified_with_amx_and_avx512(self):
         entries = {e.target: e for e in manifest_for("matmul")}
         assert "x86" in entries
         x = entries["x86"]
-        assert x.status == "fused"
+        assert x.status == "device_verified_jit"
         assert "bf16" in x.dtypes
         assert "amx" in x.feature_flags
 
@@ -144,7 +144,7 @@ class TestAppleGPUMSLKernels:
     specific list; sprint E records every one.
 
     Project 3 (2026-06-01) — the 8 encode-eligible ops were promoted
-    from ``fused`` to ``hardware_verified`` once each carried a real
+    from ``fused`` to ``device_verified_abi`` once each carried a real
     runtime entry symbol AND a checked-in execute-and-compare fixture
     (the contract enforced by ``BackendKernelEntry.__post_init__``).
     ``matmul`` stays ``fused`` because its runtime path is MPS not an
@@ -152,7 +152,7 @@ class TestAppleGPUMSLKernels:
     the buffer-pool test which is broader than a focused matmul
     comparison."""
 
-    # Project 3 — 8 encode-eligible ops at hardware_verified.
+    # Project 3 — 8 encode-eligible ops at device_verified_abi.
     # Project 5 (2026-06-01) added conv2d.
     HARDWARE_VERIFIED_OPS = (
         "softmax", "softmax_safe", "gelu", "rope", "flash_attn",
@@ -166,16 +166,16 @@ class TestAppleGPUMSLKernels:
         entries = {e.target: e for e in manifest_for(name)}
         assert "apple_gpu" in entries, f"{name} missing from apple_gpu manifest"
         ag = entries["apple_gpu"]
-        assert ag.status == "hardware_verified", (
-            f"{name}: expected 'hardware_verified', got {ag.status!r}")
-        # The hardware_verified contract requires both symbol +
+        assert ag.status == "device_verified_abi", (
+            f"{name}: expected 'device_verified_abi', got {ag.status!r}")
+        # The device_verified_abi contract requires both symbol +
         # fixture. The constructor would have raised otherwise — these
         # assertions are belt-and-suspenders so a future refactor
         # can't silently regress the surface.
         assert ag.runtime_symbol, (
-            f"{name}: hardware_verified entry missing runtime_symbol")
+            f"{name}: device_verified_abi entry missing runtime_symbol")
         assert ag.execute_compare_fixture, (
-            f"{name}: hardware_verified entry missing fixture")
+            f"{name}: device_verified_abi entry missing fixture")
 
     @pytest.mark.parametrize("name", FUSED_OPS)
     def test_apple_gpu_kernel_is_fused(self, name):
@@ -186,7 +186,7 @@ class TestAppleGPUMSLKernels:
     def test_quantized_matmul_is_hardware_verified(self):
         entries = {e.target: e for e in manifest_for("quantized_matmul")}
         ag = entries["apple_gpu"]
-        assert ag.status == "hardware_verified"
+        assert ag.status == "device_verified_abi"
         assert ag.runtime_symbol == "tessera_apple_gpu_quantized_matmul_i4_f32"
         assert ag.execute_compare_fixture == (
             "tests/unit/test_apple_gpu_quantized_matmul.py")
@@ -212,17 +212,17 @@ class TestFlashAttnManifest:
     def test_apple_gpu_supports_three_dtypes(self):
         entries = {e.target: e for e in manifest_for("flash_attn")}
         ag = entries["apple_gpu"]
-        # Project 3 promotion — flash_attn is hardware_verified now.
-        assert ag.status == "hardware_verified"
+        # Project 3 promotion — flash_attn is device_verified_abi now.
+        assert ag.status == "device_verified_abi"
         assert set(ag.dtypes) >= {"fp32", "fp16", "bf16"}
 
     def test_x86_ships_compiled_flash_attn_partner(self):
         """P10 — x86 now ships an AVX-512 online-softmax flash_attn forward
-        (the partner to the ROCm WMMA flash_attn), so the x86 slot is compiled."""
+        (the partner to the ROCm WMMA flash_attn), so the x86 slot is device_verified_jit."""
         entries = {e.target: e for e in manifest_for("flash_attn")}
         assert "x86" in entries
         x86 = entries["x86"]
-        assert x86.status == "compiled"
+        assert x86.status == "device_verified_jit"
         assert x86.dtypes == ("fp32",)
         assert x86.feature_flags == ("avx512",)
         assert x86.execute_compare_fixture == (
@@ -239,20 +239,20 @@ class TestX86AVX512Manifest:
     def test_fixture_backed_avx512_rows_are_compiled(self, name):
         entries = {e.target: e for e in manifest_for(name)}
         x86 = entries["x86"]
-        assert x86.status == "compiled", name
+        assert x86.status == "device_verified_jit", name
         assert x86.execute_compare_fixture, name
         assert x86.feature_flags == ("avx512",)
 
     def test_every_compiled_x86_row_has_a_fixture(self):
         for op_name, entries in all_manifests().items():
             for entry in entries:
-                if entry.target == "x86" and entry.status == "compiled":
+                if entry.target == "x86" and entry.status == "device_verified_jit":
                     assert entry.execute_compare_fixture, op_name
-                    assert entry.feature_flags == ("avx512",), op_name
+                    assert "avx512" in entry.feature_flags, op_name
 
-    def test_amx_matmul_remains_fused_not_compiled(self):
+    def test_amx_matmul_is_device_verified_jit(self):
         x86 = {e.target: e for e in manifest_for("matmul")}["x86"]
-        assert x86.status == "fused"
+        assert x86.status == "device_verified_jit"
         assert x86.feature_flags == ("amx", "avx512")
 
 
@@ -261,7 +261,7 @@ class TestROCmCompiledManifest:
     def test_dequant_gemm_rows_are_compiled(self, name):
         entries = {e.target: e for e in manifest_for(name)}
         rocm = entries["rocm"]
-        assert rocm.status == "compiled"
+        assert rocm.status == "device_verified_jit"
         assert rocm.execute_compare_fixture == (
             "tests/unit/test_rocm_dequant_gemm_compiled.py")
         assert "quantization" in rocm.feature_flags
@@ -269,7 +269,7 @@ class TestROCmCompiledManifest:
     def test_msa_sparse_attention_row_is_compiled(self):
         entries = {e.target: e for e in manifest_for("msa_sparse_attention")}
         rocm = entries["rocm"]
-        assert rocm.status == "compiled"
+        assert rocm.status == "device_verified_jit"
         assert rocm.execute_compare_fixture == (
             "tests/unit/test_rocm_sparse_attn_compiled.py")
         assert "sparse_attention" in rocm.feature_flags

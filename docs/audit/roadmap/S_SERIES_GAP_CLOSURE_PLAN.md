@@ -33,7 +33,7 @@ The registry's `backend_kernel = complete` axis is a **universal multi-target
 gate** — it only flips when *every* documented target ships (x86 **and** ROCm
 **and** NVIDIA **and** Apple), so `s_series_status` reads `0/474 complete` **by
 design**. That is not the per-device picture. Measured per device (a target
-"executes" iff its manifest status ∈ {`fused`, `compiled`, `hardware_verified`}):
+"executes" iff its manifest status ∈ {`fused`, `device_verified_jit`, `device_verified_abi`}):
 
 | Bucket | ≈count | Meaning |
 |---|---:|---|
@@ -152,12 +152,12 @@ the GEMM tile).
 
 | Kernel | x86 approach | gfx1151 approach | ROCm status today | Validation |
 |---|---|---|---|---|
-| **matmul / gemm** | AMX BF16 + AVX-512 GEMM (shipped) | WMMA `16×16×16` (shipped, `hardware_verified`) | ✅ executes | vs numpy |
-| **flash_attn** (FA-style) | AVX-512 tiled QKᵀ→softmax→·V (online softmax) | WMMA flash kernel (shipped `hardware_verified`) | ✅ ROCm; **x86 = gap** | vs reference attn |
-| **multi_head_attention** | x86 `fused` (shipped) | WMMA `compiled` (shipped) | ✅ both | vs reference |
-| **mla_decode_fused** (DeepSeek MLA) | tiled latent-KV decode | WMMA `compiled` (shipped); native decode kernel | ✅ ROCm; x86 = gap | vs reference |
+| **matmul / gemm** | AMX BF16 + AVX-512 GEMM (shipped) | WMMA `16×16×16` (shipped, `device_verified_abi`) | ✅ executes | vs numpy |
+| **flash_attn** (FA-style) | AVX-512 tiled QKᵀ→softmax→·V (online softmax) | WMMA flash kernel (shipped `device_verified_abi`) | ✅ ROCm; **x86 = gap** | vs reference attn |
+| **multi_head_attention** | x86 `fused` (shipped) | WMMA `device_verified_jit` (shipped) | ✅ both | vs reference |
+| **mla_decode_fused** (DeepSeek MLA) | tiled latent-KV decode | WMMA `device_verified_jit` (shipped); native decode kernel | ✅ ROCm; x86 = gap | vs reference |
 | **deepseek_sparse_attention** (NSA) | top-k block gather → tiled attn over selected blocks | `rocm_sparse_attn_compiled` DK2 lane: GPU-resident top-k selector + selected-block sparse-attention kernel with exact reference fallback | ✅ ROCm; x86 = gap | vs public NSA reference |
-| **lightning_attention** (MiniMax) | linear-attn state recurrence (cumulative) | WMMA `compiled` (shipped); native state scan | ✅ ROCm; x86 = gap | vs reference |
+| **lightning_attention** (MiniMax) | linear-attn state recurrence (cumulative) | WMMA `device_verified_jit` (shipped); native state scan | ✅ ROCm; x86 = gap | vs reference |
 | **kimi_delta_attention** | delta-rule state update + readout | WMMA + state scan (compose on deltanet lane) | gap both | vs reference |
 | **gated_deltanet / retention / power_attn / linear_attn** | state-recurrence scans (reuse the SSM scan substrate) | one-thread-per-channel scan (the selective_ssm pattern) | gap both | vs reference |
 | **swiglu_mlp** | fused gate·up GEMM → SiLU → down GEMM (reuse AMX GEMM + silu_mul lane) | WMMA GEMM + the shipped `rocm_silu_mul` lane | gap both (compose) | vs reference |
@@ -407,7 +407,7 @@ the **kernel** approach (if any), **dependencies**, **validation**, and the hone
 - **Contracts:** `sharding_rule` is the *defining* axis here and is exercised by
   the mock mesh; `GPUCollectiveInsertionPass` runs after `EffectAnnotationPass`.
 
-**The gap is ONLY real-hardware execution.** A `fused`/`hardware_verified`
+**The gap is ONLY real-hardware execution.** A `fused`/`device_verified_abi`
 `backend_kernel` requires a **real multi-accelerator mesh** (≥2 GPUs + NCCL/RCCL,
 or multi-node). The current gfx1151 machine is real ROCm hardware and proves the
 single-GPU Navi/Wave32 lane; it does not prove multi-accelerator collectives.
@@ -424,7 +424,7 @@ transport.
 
 **Disposition:** **stays gated** (Phase H). Ungate when a multi-GPU host (or the
 ROCm dev box gains a second card / a CI mesh) lands; then the existing IR + planner
-+ RCCL adapter execute and flip to `hardware_verified`. **No kernel to write here.**
++ RCCL adapter execute and flip to `device_verified_abi`. **No kernel to write here.**
 
 ### 7.2 Tier 2 — Easy elementwise / predicate (~21)
 
@@ -511,7 +511,7 @@ the RNG-free losses first (1 PR), the sampling losses after Philox.
 The 10 ROCm-only ops are almost all attention: flash_attn, mla_decode_fused,
 lightning_attention, kimi_delta_attention, gated_attention, gated_deltanet,
 linear_attn, modified_delta_attention, attn_sliding_window (+ fused_epilogue).
-**They already execute on ROCm (WMMA/sparse `compiled` or `hardware_verified`)** —
+**They already execute on ROCm (WMMA/sparse `device_verified_jit` or `device_verified_abi`)** —
 the gap is the **x86 AVX-512 counterpart**, plus the both-device exotic variants
 (retention, power_attn, the attn_*_blocks family).
 - **flash_attn (x86):** AVX-512 tiled QKᵀ → online-softmax → ·V (FA-style, the
@@ -528,7 +528,7 @@ partners; NSA after top_k). Validation vs the dense-masked reference.
 
 **4b. Convolution (conv2d, conv3d).** im2col + the AMX/AVX-512 GEMM (x86) / WMMA
 GEMM (ROCm), or a direct kernel for small filters. `sliding_window_view` im2col
-already exists in the runtime. apple_gpu has conv `hardware_verified` as a
+already exists in the runtime. apple_gpu has conv `device_verified_abi` as a
 reference for the lowering shape. 1 PR.
 
 **4c. Sort / top_k / argsort.** Bitonic sort network (data-independent, GPU-

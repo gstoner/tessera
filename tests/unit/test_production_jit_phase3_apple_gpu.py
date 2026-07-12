@@ -3,7 +3,7 @@
 
 Apple GPU has no upstream MLIR backend, so it's a bespoke Metal back-half. This
 sprint establishes the foundation: the production lane reaches the Apple GPU via
-hand-tuned kernels, and the **compiled CPU lane is the cross-target oracle** —
+hand-tuned kernels, and the **device_verified_jit CPU lane is the cross-target oracle** —
 the GPU result must match the CPU `_jit_boundary` result, which matches numpy.
 
 Skips on non-Darwin / when the Apple GPU runtime can't load.

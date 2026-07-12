@@ -2,7 +2,7 @@
 
 A.2 renamed the diagnostic from ``JIT_EAGER_FALLBACK_UNSUPPORTED_OP``
 to ``JIT_EAGER_FALLBACK_CONTROL_FLOW`` but didn't actually make
-``tessera.scf.if.*`` executable through a compiled path. This follow-up
+``tessera.scf.if.*`` executable through a device_verified_jit path. This follow-up
 ships the smallest **real** backend pass: the CPU plan executor
 (``CPUPlan.execute``) now walks ``tessera.scf.if.{begin,else,end}``
 markers with bracket-matching, evaluates the SSA-operand condition

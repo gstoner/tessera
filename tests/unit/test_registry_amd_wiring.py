@@ -97,7 +97,7 @@ def test_nvidia_map_has_no_fp8_section():
 def test_backend_manifest_rocm_gemm_carries_mma_descriptor():
     # batched_gemm rides the generic CDNA MFMA artifact path and carries the
     # unified MMA descriptor. (matmul was promoted to the RDNA WMMA
-    # hardware_verified row on 2026-06-22 and intentionally drops the CDNA
+    # device_verified_abi row on 2026-06-22 and intentionally drops the CDNA
     # descriptor — see test_rocm_matmul_is_wmma_hardware_verified.)
     rocm = [e for e in bm.manifest_for("batched_gemm") if e.target == "rocm"]
     assert rocm and rocm[0].mma_descriptor is not None

@@ -2401,7 +2401,7 @@ def _rocm_compiled_gemm_impl(artifact: RuntimeArtifact, args: Any) -> Any:
     ops = list(metadata.get("ops") or [])
     # `fused_epilogue` is matmul + a fused bias/activation epilogue — the same
     # rocm_compiled GEMM kernel with the bias operand / activation kwarg — so
-    # accept that op name too (it's a `compiled` row in rocm_target_map).
+    # accept that op name too (it is a `device_verified_jit` target-map row).
     if len(ops) != 1 or str(ops[0].get("op_name", "")) not in (
             "tessera.matmul", "tessera.gemm", "tessera.fused_epilogue"):
         raise ValueError(
@@ -2985,7 +2985,7 @@ def _execute_rocm_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> A
     ops = list(metadata.get("ops") or [])
     # The flash-attn WMMA kernel realizes the whole multi-head family; accept the
     # registry op names that map onto it (so a caller stamping e.g.
-    # tessera.gqa_attention actually launches, matching the `compiled` rows in
+    # tessera.gqa_attention actually launches, matching the `device_verified_jit` rows in
     # rocm_target_map). GQA/MQA come from the operand shapes; the window/softcap
     # come from kwargs. `attn_sliding_window` additionally requires a window.
     _FA_OPS = ("tessera.flash_attn", "tessera.multi_head_attention",
@@ -4786,12 +4786,24 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
              ctypes.c_float, ctypes.c_float, ctypes.c_float, ctypes.c_float,
              ctypes.c_float, ctypes.c_float, ctypes.c_float,
              c_f32, c_f32, c_f32],
+        "tessera_x86_kv_cache_append_f32":
+            [c_f32, i64, i64, i64, c_f32, i64],
+        "tessera_x86_kv_cache_read_f32":
+            [c_f32, i64, i64, i64, i64, c_f32],
+        "tessera_x86_kv_cache_prune_f32":
+            [c_f32, i64, i64, i64, i64],
     }
     for sym, argtypes in sigs.items():
         fn = getattr(lib, sym, None)
         if fn is not None:
             fn.argtypes = argtypes
             fn.restype = None
+    for sym in ("tessera_x86_kv_cache_append_f32",
+                "tessera_x86_kv_cache_read_f32",
+                "tessera_x86_kv_cache_prune_f32"):
+        fn = getattr(lib, sym, None)
+        if fn is not None:
+            fn.restype = ctypes.c_int
     _x86_elementwise_runtime = lib
     return lib
 
@@ -5584,8 +5596,8 @@ def _x86_einsum_via_gemm(spec: str, lhs: Any, rhs: Any) -> Any:
 
 def _execute_x86_compiled_matmul_family(artifact: RuntimeArtifact,
                                         args: Any) -> Any:
-    """The ``target="x86"`` matmul-family lane: batched_gemm / linear_general /
-    qkv_projection / factorized_matmul / einsum, all on the AVX-512 f32 GEMM
+    """The ``target="x86"`` matmul-family lane: matmul / gemm / batched_gemm /
+    linear_general / qkv_projection / factorized_matmul / einsum, on AVX-512 GEMM
     microkernel. Each op reshapes/batches/splits around the gemm; einsum maps
     single-contraction specs to a (batched) matmul. Matches numpy to a
     K-scaled f32 tolerance."""
@@ -5594,7 +5606,8 @@ def _execute_x86_compiled_matmul_family(artifact: RuntimeArtifact,
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
     ops = list(metadata.get("ops") or [])
-    handled = ("tessera.batched_gemm", "tessera.linear_general",
+    handled = ("tessera.matmul", "tessera.gemm",
+               "tessera.batched_gemm", "tessera.linear_general",
                "tessera.qkv_projection", "tessera.factorized_matmul",
                "tessera.einsum")
     op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
@@ -5607,6 +5620,13 @@ def _execute_x86_compiled_matmul_family(artifact: RuntimeArtifact,
     kwargs = op.get("kwargs") or {}
     values = _bind_launch_args(args, arg_names)
     operands = [_as_numpy(values[n]) for n in operand_names]
+
+    if op_name in {"tessera.matmul", "tessera.gemm"}:
+        if len(operands) != 2:
+            raise ValueError("matmul takes two operands (A, B)")
+        if operands[0].ndim != 2 or operands[1].ndim != 2:
+            raise ValueError("x86 matmul conformance lane requires rank-2 operands")
+        return _x86_gemm_2d(operands[0], operands[1])
 
     if op_name == "tessera.einsum":
         spec = kwargs.get("spec") or kwargs.get("equation")
@@ -10389,6 +10409,61 @@ def _moe_grouped_swiglu_native(x_packed: Any, w_gate: Any, w_up: Any,
 # ─────────────────────────────────────────────────────────────────────────────
 _KV_CACHE_OPS = ("tessera.kv_cache.append", "tessera.kv_cache.read",
                  "tessera.kv_cache.prune")
+
+
+def _execute_x86_compiled_kv_cache(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Execute KV-cache movement through the native x86 f32 C ABI."""
+    import numpy as np
+
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _KV_CACHE_OPS:
+        raise ValueError(
+            f"x86_kv_cache_compiled handles one of {_KV_CACHE_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    values = _bind_launch_args(args, arg_names)
+    operands = [np.ascontiguousarray(_as_numpy(values[n]), np.float32)
+                for n in operand_names]
+    if not operands or operands[0].ndim < 2:
+        raise ValueError("x86 KV-cache buffer must have shape (max_seq, ...)")
+    cache = operands[0]
+    max_seq = int(cache.shape[0])
+    row_len = int(np.prod(cache.shape[1:]))
+    kwargs = ops[0].get("kwargs") or {}
+    c_f32 = ctypes.POINTER(ctypes.c_float)
+    ptr = lambda a: a.ctypes.data_as(c_f32)
+
+    if op_name == "tessera.kv_cache.read":
+        start = int(kwargs.get("start", 0))
+        end_value = kwargs.get("end", None)
+        end = start + 1 if end_value is None else int(end_value)
+        if not (0 <= start <= end <= max_seq):
+            raise ValueError(f"x86 KV-cache read [{start}, {end}) is out of bounds")
+        out = np.empty((end - start,) + cache.shape[1:], np.float32)
+        rc = lib.tessera_x86_kv_cache_read_f32(
+            ptr(cache), max_seq, row_len, start, end, ptr(out))
+    elif op_name == "tessera.kv_cache.append":
+        if len(operands) != 2:
+            raise ValueError("x86 KV-cache append requires cache and rows")
+        rows = operands[1]
+        start = int(kwargs.get("start", 0))
+        out = cache.copy()
+        rc = lib.tessera_x86_kv_cache_append_f32(
+            ptr(out), max_seq, row_len, start, ptr(rows), int(rows.shape[0]))
+    else:
+        out = cache.copy()
+        rc = lib.tessera_x86_kv_cache_prune_f32(
+            ptr(out), max_seq, row_len,
+            int(kwargs.get("current_seq", max_seq)), int(kwargs["limit"]))
+    if rc != 0:
+        raise ValueError(f"native x86 KV-cache ABI rejected {op_name} arguments")
+    return out
 
 
 def _rocm_gather_rows(buf2d: Any, row_ids: Any, np: Any) -> Any:
@@ -16635,6 +16710,7 @@ def _executor_table():
         "rocm_strided_compiled": _execute_rocm_compiled_strided,
         "rocm_scatter_compiled": _execute_rocm_compiled_scatter,
         "rocm_kv_cache_compiled": _execute_rocm_compiled_kv_cache,
+        "x86_kv_cache_compiled": _execute_x86_compiled_kv_cache,
         "rocm_sort_compiled": _execute_rocm_compiled_sort,
         "rocm_clifford_compiled": _execute_rocm_compiled_clifford,
         "rocm_normcompose_compiled": _execute_rocm_compiled_normcompose,

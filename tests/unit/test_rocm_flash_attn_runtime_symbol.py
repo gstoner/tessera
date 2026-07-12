@@ -1,6 +1,6 @@
 """Execute-compare fixture for the shipped ROCm WMMA flash-attention symbol.
 
-This is the numerical proof behind the `backend_manifest` `hardware_verified`
+This is the numerical proof behind the `backend_manifest` `device_verified_abi`
 row for `tessera.flash_attn` on `rocm` (gfx1151 / RDNA 3.5): it dlopens the
 **shipped** `libtessera_rocm_flash_attn.so`, calls the C-ABI symbols
 `tessera_rocm_wmma_flash_attn_{f16,bf16}` (which HIPRTC-compile the RDNA WMMA

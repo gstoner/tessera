@@ -80,14 +80,14 @@ class CompileReport:
     proof_routes: tuple[_bridge.JitBridgeRoute, ...] = ()
     timing_ms: Optional[Mapping[str, float]] = None
     correctness: Optional[Mapping[str, float]] = None
-    # Reviewer fix (2026-05-18): explicit compiled-artifact identity
+    # Reviewer fix (2026-05-18): explicit device_verified_jit-artifact identity
     # for drivers that have one but don't (or can't) carry bridge
     # routes — e.g., a `@clifford_jit` callable run outside the
     # bridge tracing scope.  Used by the M1 no-silent-native gate
     # in test_compile_report_stability_gate.py as a stricter
     # alternative to leaning on `ir_hashes` (which every driver
     # populates with a synthetic Graph-IR digest).  Empty string
-    # / None ⇒ no compiled artifact attached.
+    # / None ⇒ no device_verified_jit artifact attached.
     plan_hash: Optional[str] = None
 
     def __post_init__(self) -> None:
@@ -210,7 +210,7 @@ def routes_from_thread_trace() -> tuple[_bridge.JitBridgeRoute, ...]:
 # ─────────────────────────────────────────────────────────────────────────────
 # Auto-emission sink — step 4 of the 2026-05-18 post-reassessment plan.
 #
-# Each frontend's compiled-callable can call :func:`emit_compile_report`
+# Each frontend's device_verified_jit-callable can call :func:`emit_compile_report`
 # at the end of its ``__call__``.  The sink is a contextvar so emission
 # is thread-/task-safe and is a no-op unless a caller has opened a
 # :func:`capture_compile_reports` scope.  This means every frontend

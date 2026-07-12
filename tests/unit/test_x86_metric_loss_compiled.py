@@ -1,4 +1,4 @@
-"""x86 compiled-composite metric/contrastive losses."""
+"""x86 device_verified_jit-composite metric/contrastive losses."""
 
 from __future__ import annotations
 

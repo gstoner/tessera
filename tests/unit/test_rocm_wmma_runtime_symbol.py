@@ -1,6 +1,6 @@
 """Execute-compare fixture for the shipped ROCm WMMA GEMM runtime symbol.
 
-This is the numerical proof behind the `backend_manifest` `hardware_verified`
+This is the numerical proof behind the `backend_manifest` `device_verified_abi`
 row for `tessera.matmul` on `rocm_gfx1151`: it dlopens the **shipped**
 `libtessera_rocm_gemm.so`, calls the C-ABI symbol `tessera_rocm_wmma_gemm_f16`
 (which HIPRTC-compiles the RDNA WMMA kernel for the device arch and launches it),
@@ -8,7 +8,7 @@ and compares the GPU result to a numpy reference GEMM.
 
 Unlike the Stage C/D harness tests (launcher in the test), this validates the
 *production* symbol built by the CMake `tessera_rocm_gemm` target — the shipped
-half of `hardware_verified`.
+half of `device_verified_abi`.
 
 Skip-clean: lib not built / no usable GPU (the symbol returns rc=2).
 """

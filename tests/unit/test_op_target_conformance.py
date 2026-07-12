@@ -188,9 +188,13 @@ def test_ir_columns_are_derived_from_emitted_verified_ir():
         cm.PROOF_COMPLETE,
     )
     stateful = cm._ir_proof("kv_cache_read", "apple_gpu")
-    assert stateful.graph_emitted == cm.PROOF_COMPLETE
-    assert stateful.schedule_legal == cm.PROOF_MISSING
-    assert "no Schedule IR" in stateful.detail
+    assert (stateful.graph_emitted, stateful.schedule_legal,
+            stateful.tile_legal, stateful.target_legal) == (
+        cm.PROOF_COMPLETE,
+        cm.PROOF_COMPLETE,
+        cm.PROOF_COMPLETE,
+        cm.PROOF_COMPLETE,
+    )
 
 
 def test_backend_compile_keeps_reference_and_compileable_distinct():

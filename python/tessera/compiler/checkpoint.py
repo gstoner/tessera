@@ -5,7 +5,7 @@ Provides ``@checkpoint_jit`` decorator and ``CollectiveCheckpointConfig``
 for selective activation recomputation.  When applied to a function the
 decorator attaches metadata so that the Tessera JIT can emit
 ``tessera_sr.checkpoint`` / ``tessera_sr.recompute_hint`` markers in the
-compiled IR.
+device_verified_jit IR.
 
 Usage::
 

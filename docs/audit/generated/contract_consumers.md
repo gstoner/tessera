@@ -24,7 +24,7 @@ The contract-pass plan's meta-gap tracker: each typed contract paired with the c
 - **Contract site:** `tessera.cache.paged_kv.PagedKVState`
 - **Consumer:** tessera.ops.paged_attention / flash_attn(kv_state=)
 - **Oracle:** evaluator.paged_kv_equivalence + paged_kv_native_equivalence (Metal + ROCm rungs)
-- **Notes:** Unifies contiguous/tiered/latent/quantized-tail KV; runs native on Metal and the compiled ROCm FA-2 lane.
+- **Notes:** Unifies contiguous/tiered/latent/quantized-tail KV; runs native on Metal and the device_verified_jit ROCm FA-2 lane.
 
 ### B — SchedulePolicy / CacheHandoff (live)
 

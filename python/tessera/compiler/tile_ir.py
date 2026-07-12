@@ -169,6 +169,10 @@ class TileIRVerifier:
                 self._require_attrs(op, diagnostics, "source", "result", "ordinal")
             elif op.op_name == "tile.reduce":
                 self._require_attrs(op, diagnostics, "op", "order")
+            elif op.op_name == "tile.kv_cache.read":
+                self._require_attrs(
+                    op, diagnostics, "source", "result", "ordinal",
+                    "effect", "access", "storage")
             elif op.op_name == "tessera.attn.online_softmax":
                 if not op.attrs.get("policy"):
                     diagnostics.append(TileIRDiagnostic("error", "online_softmax requires policy", "TILE_IR_ATTN_POLICY"))
@@ -278,6 +282,25 @@ def _lower_schedule_ops(ops: list[ScheduleOp]) -> list[TileOp]:
             continue
         if op.op_name == "schedule.elementwise":
             lowered.append(_elementwise_op(op))
+            continue
+        if op.op_name == "schedule.state.read":
+            lowered.append(TileOp(
+                "tile.kv_cache.read",
+                {
+                    **dict(op.attrs),
+                    "storage": "paged",
+                    "lowering": "state_read",
+                    "resource": {
+                        "shared_memory_bytes": 0,
+                        "register_estimate": 16,
+                        "async_copy_bytes": 0,
+                        "queue_depth": 0,
+                        "barrier_count": 0,
+                    },
+                },
+                operands=list(op.operands),
+                result=op.result,
+            ))
             continue
         if op.op_name == "schedule.prefetch":
             lowered.append(TileOp("tile.async_copy", _copy_attrs(op)))

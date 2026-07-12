@@ -91,6 +91,36 @@ def test_lower_tile_to_cpu_target_ir_maps_mma_and_elementwise_to_x86_numpy_contr
     assert 'abi = "numpy"' in text
 
 
+def test_lower_tile_to_exact_x86_target_uses_native_contracts():
+    tile = TileIRModule(functions=[
+        TileFunction(
+            "main",
+            target="x86",
+            body=[
+                TileOp("tile.mma", {
+                    "source": "tessera.matmul", "result": "C", "ordinal": 0,
+                }),
+                TileOp("tile.kv_cache.read", {
+                    "source": "tessera.kv_cache.read", "result": "slice",
+                    "ordinal": 1, "effect": "read", "access": "paged_slice",
+                    "storage": "paged",
+                }),
+            ],
+        )
+    ])
+    target = lower_tile_to_target_ir(tile, target_kind="x86")
+    assert target.verify().ok
+    text = target.to_mlir()
+    assert 'target = "x86"' in text
+    assert 'execution_mode = "native_cpu"' in text
+    assert "tessera_x86.kernel" in text
+    assert "tessera_x86.kv_cache_read" in text
+    assert 'abi = "libtessera_x86_elementwise"' in text
+    assert 'abi = "tessera_x86_kv_cache_read_f32"' in text
+    assert 'runtime_lane = "x86_kv_cache_compiled"' in text
+    assert 'access = "paged_slice"' in text
+
+
 def test_lower_tile_to_nvidia_hopper_target_ir_maps_mma_to_wgmma_tma_mbarrier():
     tile = TileIRModule(functions=[
         TileFunction(

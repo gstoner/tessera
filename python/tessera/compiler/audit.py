@@ -27,8 +27,8 @@ The taxonomy is eight axes — one column per row of the rendered table:
                    dedicated axis exists)
   ``tile_ir``    : ``contract_status['backend_kernel']`` (proxy)
   ``target_ir``  : best backend manifest status across all targets
-                   (``fused`` / ``hardware_verified`` / ``packaged`` /
-                   ``compiled`` / ``reference`` / ``compileable`` /
+                   (``fused`` / ``device_verified_abi`` / ``packaged`` /
+                   ``device_verified_jit`` / ``reference`` / ``compileable`` /
                    ``artifact_only`` / ``planned``)
   ``runtime``    : best capability runtime status across all targets
                    (``ready`` / ``reference`` / ``artifact_only`` /
@@ -109,9 +109,9 @@ AXIS_VALUE_GLYPHS: Mapping[str, str] = {
     "partial":          "p",
     "planned":          "·",
     "fused":            "F",
-    "hardware_verified": "H",
+    "device_verified_abi": "H",
     "packaged":         "K",
-    "compiled":         "C",
+    "device_verified_jit":         "C",
     "reference":        "R",
     "compileable":      "c",
     "artifact_only":    "A",
@@ -396,8 +396,8 @@ def _axis_tile_ir(op_name: str) -> AxisCell:
     # `partial` until Phase G/H lights up distributed runtime.
     backend_name = _backend_lookup_name(op_name)
     manifest_entries = bm.manifest_for(backend_name)
-    if any(e.status in {"fused", "hardware_verified", "packaged", "compiled"} for e in manifest_entries):
-        return AxisCell("fused", "backend_manifest native/compiled entry")
+    if any(e.status in {"fused", "device_verified_abi", "packaged", "device_verified_jit"} for e in manifest_entries):
+        return AxisCell("fused", "backend_manifest native/device_verified_jit entry")
     cov = _coverage_for(op_name)
     if cov is not None and cov.category == "acceptance_verification":
         return AxisCell("not_applicable", "primitive_coverage.category.acceptance_verification")
@@ -431,10 +431,10 @@ def _axis_target_ir(op_name: str) -> AxisCell:
         return AxisCell("planned", "backend_manifest")
     # Best status across targets — rank ordering chooses the most concrete.
     rank = {
-        "hardware_verified": 0,
+        "device_verified_abi": 0,
         "packaged": 1,
         "fused": 2,
-        "compiled": 3,
+        "device_verified_jit": 3,
         "reference": 4,
         "compileable": 5,
         "artifact_only": 6,

@@ -42,7 +42,7 @@ def test_existing_statuses_unchanged():
     """Adding a new status must not break the existing ones. Regression
     guard against a future enum-refactor that drops a status."""
     for s in ("fused", "reference", "artifact_only",
-              "compileable", "planned", "hardware_verified"):
+              "compileable", "planned", "device_verified_abi"):
         assert s in _VALID_STATUSES, f"existing status {s!r} disappeared"
 
 

@@ -137,7 +137,7 @@ def _native_proof_strength(report) -> dict[str, bool]:
     Valid proofs:
 
       * ``proof_routes`` non-empty — the bridge actually fired.
-      * ``plan_hash`` populated — a compiled artifact exists
+      * ``plan_hash`` populated — a device_verified_jit artifact exists
         (e.g., ``@clifford_jit.artifact.plan_hash``).
       * A literal ``tessera_*`` C ABI symbol in
         ``target_decision`` values — names what the kernel will be.
@@ -159,7 +159,7 @@ def test_shipped_canonical_no_silent_native(program) -> None:
     ``fallback_reason is None`` — it MUST carry at least one of:
 
       * a non-empty ``proof_routes`` tuple (bridge dispatch trace),
-      * a populated ``plan_hash`` (compiled artifact attached),
+      * a populated ``plan_hash`` (device_verified_jit artifact attached),
       * a literal ``tessera_*`` C ABI symbol mentioned in
         ``target_decision`` (the manifest fast path the report
         intends to dispatch — coupled with the test that the
@@ -182,7 +182,7 @@ def test_shipped_canonical_no_silent_native(program) -> None:
         f"NO valid proof: {proof}.  Either set "
         f"FallbackReason.REFERENCE_FORCED honestly, wire bridge "
         f"routes via dispatch_via_manifest, attach a plan_hash from "
-        f"the compiled artifact, or name the tessera_* symbol in "
+        f"the device_verified_jit artifact, or name the tessera_* symbol in "
         f"target_decision."
     )
 
@@ -213,7 +213,7 @@ def test_no_silent_native_rejects_a_synthetic_ir_only_report() -> None:
 
 def test_no_silent_native_accepts_plan_hash_only_report() -> None:
     """Conversely, a driver with a real ``plan_hash`` (e.g., from
-    a @clifford_jit compiled artifact) is valid proof even if no
+    a @clifford_jit device_verified_jit artifact) is valid proof even if no
     routes were captured."""
     from tessera.compiler.compile_report import CompileReport
     good = CompileReport(
@@ -224,7 +224,7 @@ def test_no_silent_native_accepts_plan_hash_only_report() -> None:
         target="apple_gpu",
         fallback_reason=None,
         plan_hash="real_plan_hash_from_a_compiled_artifact",
-        target_decision={"apple_gpu": "compiled artifact bound"},
+        target_decision={"apple_gpu": "device_verified_jit artifact bound"},
     )
     proof = _native_proof_strength(good)
     assert proof["has_plan_hash"] and any(proof.values())

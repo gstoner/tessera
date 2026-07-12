@@ -187,7 +187,7 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "jit_cpu_numpy":        "JIT CPU fallback via the numpy reference path",
     "rocm_wmma":            "AMD GPU RDNA WMMA matrix-core GEMM via the shipped "
                             "libtessera_rocm_gemm.so tessera_rocm_wmma_gemm_{f16,"
-                            "bf16} C ABI symbol (HIPRTC-compiled for the device "
+                            "bf16} C ABI symbol (HIPRTC-device_verified_jit for the device "
                             "arch; f16/bf16 storage, f32 accumulate)",
     "rocm_compiled":        "AMD GPU RDNA WMMA GEMM the Tessera compiler GENERATES "
                             "(Stage L): tessera-opt generates + serializes the "
@@ -239,7 +239,7 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "ROCDL -> hsaco, in-process via tessera-opt), then HIP "
                             "loads + launches it. Stable softmax over the last "
                             "axis (one workgroup per row, LDS tree-reduce); the "
-                            "first non-matmul/non-WMMA compiled ROCm kernel. "
+                            "first non-matmul/non-WMMA device_verified_jit ROCm kernel. "
                             "f32/f16/bf16 storage, f32 reduce",
     "rocm_norm_compiled":   "AMD GPU RDNA row-reduction rmsnorm / layer_norm the "
                             "Tessera compiler GENERATES (generate-rocm-norm-kernel "
@@ -370,6 +370,10 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                              "buffer by composing the gfx1151 scatter (write) + "
                              "gather (read/prune) kernels; host page-index math. "
                              "f32, matches the KVCacheHandle reference",
+    "x86_kv_cache_compiled": "x86 native KV-cache movement ABI — append/read/"
+                             "prune over a contiguous resident f32 cache through "
+                             "libtessera_x86_elementwise.so; matches the "
+                             "KVCacheHandle reference",
     "x86_rng_compiled": "x86 CPU device RNG — counter-based Philox-4x32-10 "
                             "uniform kernel + host transform (uniform/normal/"
                             "dropout). f32",
@@ -644,8 +648,8 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "libtessera_x86_elementwise.so; default slope ramp "
                             "2^(-8k/H), optional slopes operand. The CPU analog "
                             "of the ROCm alibi lane. f32",
-    "x86_matmul_family_compiled": "x86 CPU matmul-family kernel — batched_gemm "
-                            "/ linear_general / qkv_projection / "
+    "x86_matmul_family_compiled": "x86 CPU matmul-family kernel — matmul / gemm "
+                            "/ batched_gemm / linear_general / qkv_projection / "
                             "factorized_matmul / einsum, all built on the "
                             "AVX-512 f32 GEMM microkernel "
                             "(tessera_x86_avx512_gemm_f32) with the "
@@ -857,7 +861,7 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "Tessera compiler GENERATES as a causal "
                             "SEQUENTIAL-SCAN kernel (generate-rocm-deltanet-"
                             "kernel -> ROCDL -> hsaco) — the first RECURRENT "
-                            "compiled ROCm kernel: one workgroup per (b,h), one "
+                            "device_verified_jit ROCm kernel: one workgroup per (b,h), one "
                             "thread per value-column, LDS state. Handles "
                             "gated_deltanet / kimi_delta_attention / "
                             "modified_delta_attention (erase/modified/gate/beta/"
@@ -878,7 +882,7 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "nvidia_mma":           "NVIDIA GPU (consumer Blackwell sm_120) warp-level "
                             "mma.sync GEMM via the shipped libtessera_nvidia_gemm.so "
                             "tessera_nvidia_mma_gemm_{f16,bf16,tf32} C ABI symbol "
-                            "(NVRTC-compiled for the device arch; f16/bf16/"
+                            "(NVRTC-device_verified_jit for the device arch; f16/bf16/"
                             "fp32(tf32-math) storage, f32 accumulate)",
     # Note: pure-numpy `reference_cpu` is reached only as an internal *fallback*
     # inside `launch()`'s native_cpu branch (when `_execute_native_cpu_artifact`
@@ -1143,7 +1147,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         execution_kind="native_cpu", executable=True,
         executor_id="native_cpu", runtime_status="success",
         reason="CPU artifact runs through the x86 AMX / native CPU runtime."),
-    # --- x86 AVX-512 elementwise compiled lane (runtime-loaded C-ABI kernels) ---
+    # --- x86 AVX-512 elementwise device_verified_jit lane (runtime-loaded C-ABI kernels) ---
     ("x86", "x86_reduce_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_reduce_compiled",
         execution_kind="native_cpu", executable=True,
@@ -1497,11 +1501,21 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         target="x86", compiler_path="x86_matmul_family_compiled",
         execution_kind="native_cpu", executable=True,
         executor_id="x86_matmul_family_compiled", runtime_status="success",
-        reason="x86 matmul-family artifact runs batched_gemm / linear_general / "
-               "qkv_projection / factorized_matmul / einsum on the AVX-512 f32 "
+        reason="x86 matmul-family artifact runs matmul / gemm / batched_gemm / "
+               "linear_general / qkv_projection / factorized_matmul / einsum "
+               "on the AVX-512 f32 "
                "GEMM microkernel (tessera_x86_avx512_gemm_f32), with the "
                "reshape/batch/single-contraction-einsum logic in Python. The CPU "
                "analog of the ROCm WMMA matmul-family lane. f32, K-scaled tol.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_kv_cache_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_kv_cache_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_kv_cache_compiled", runtime_status="success",
+        reason="x86 KV-cache artifact invokes the native f32 append/read/prune "
+               "C ABI in libtessera_x86_elementwise.so. The read proof copies "
+               "the exact [start,end) cache rows and compares them with the "
+               "KVCacheHandle reference.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_norm_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_norm_compiled",
@@ -1792,9 +1806,9 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         execution_kind="native_gpu", executable=True,
         executor_id="rocm_wmma", runtime_status="success",
         reason="ROCm matmul via the hand-written RDNA WMMA GEMM "
-               "(tessera_rocm_wmma_gemm_{f16,bf16} C ABI symbol, HIPRTC-compiled "
+               "(tessera_rocm_wmma_gemm_{f16,bf16} C ABI symbol, HIPRTC-device_verified_jit "
                "for the device arch). Now the reference ORACLE + availability "
-               "fallback for the compiled lane (rocm_compiled) — still directly "
+               "fallback for the device_verified_jit lane (rocm_compiled) — still directly "
                "selectable by stamping compiler_path=\"rocm_wmma\".",
         execution_mode="hip_runtime"),
     # --- AMD ROCm GPU (COMPILED lane — Stage L, the DEFAULT rocm matmul lane) ---
@@ -1814,12 +1828,12 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "(Stage L): tessera-opt generates + serializes the kernel to hsaco "
                "in-process (no mlir-opt), then HIP loads + launches it. The "
                "DEFAULT rocm matmul lane; degrades to the hand-written rocm_wmma "
-               "oracle when the compiled lane is unavailable on the host.",
+               "oracle when the device_verified_jit lane is unavailable on the host.",
         execution_mode="hip_runtime"),
     # --- AMD ROCm GPU (COMPILED flash_attn lane — the matmul-L4 analog) ---
     # The compiler-GENERATED FA-2 forward (generate-wmma-flash-attn-kernel ->
     # ROCDL -> hsaco, in-process via tessera-opt) loaded + launched through HIP.
-    # Reaches runtime.launch() exactly like the compiled GEMM; f16/bf16 storage,
+    # Reaches runtime.launch() exactly like the device_verified_jit GEMM; f16/bf16 storage,
     # f32 softmax + accumulate; validated vs a numpy attention reference.
     ("rocm", "rocm_flash_attn_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_flash_attn_compiled",
@@ -1828,7 +1842,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         reason="ROCm flash_attn artifact runs the COMPILER-GENERATED RDNA WMMA "
                "FA-2 forward: tessera-opt generates + serializes the kernel to "
                "hsaco in-process, then HIP loads + launches it. The attention "
-               "analog of the compiled GEMM lane (rocm_compiled).",
+               "analog of the device_verified_jit GEMM lane (rocm_compiled).",
         execution_mode="hip_runtime"),
     # The compiler-GENERATED FA-2 backward (generate-wmma-flash-attn-bwd-kernel
     # -> three fa_pre/fa_dkdv/fa_dq WMMA kernels -> hsaco) launched in sequence.
@@ -1898,7 +1912,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "executor falls back to the DS1 oracle only when ROCm hardware "
                "or tessera-opt is unavailable.",
         execution_mode="hip_runtime"),
-    # Row-reduction softmax — the first non-matmul/non-WMMA compiled ROCm kernel.
+    # Row-reduction softmax — the first non-matmul/non-WMMA device_verified_jit ROCm kernel.
     # Stable softmax over the last axis; f32/f16/bf16; validated vs numpy.
     ("rocm", "rocm_softmax_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_softmax_compiled",
@@ -1908,7 +1922,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "reduction kernel (stable softmax over the last axis, one "
                "workgroup per row, LDS tree-reduce): tessera-opt generates + "
                "serializes the kernel to hsaco in-process, then HIP loads + "
-               "launches it. The first non-matmul/non-WMMA compiled ROCm kernel.",
+               "launches it. The first non-matmul/non-WMMA device_verified_jit ROCm kernel.",
         execution_mode="hip_runtime"),
     # Row-reduction rmsnorm / layer_norm — siblings of the softmax kernel.
     # Unweighted row normalize over the last axis; f32/f16/bf16; vs numpy.
@@ -2562,7 +2576,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         executor_id="nvidia_mma", runtime_status="success",
         reason="NVIDIA sm_120 matmul via the shipped warp-level mma.sync GEMM "
                "(tessera_nvidia_mma_gemm_{f16,bf16,tf32} C ABI symbol in "
-               "libtessera_nvidia_gemm.so, NVRTC-compiled for the device arch; "
+               "libtessera_nvidia_gemm.so, NVRTC-device_verified_jit for the device arch; "
                "f16/bf16/fp32(tf32-math) storage, f32 accumulate). Directly "
                "selectable by stamping compiler_path=\"nvidia_mma\".",
         execution_mode="cuda_runtime"),

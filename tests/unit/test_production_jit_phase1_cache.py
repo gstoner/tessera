@@ -1,7 +1,7 @@
 """Phase 1 Sprint 1.10 — compilation cache (docs/spec/PRODUCTION_COMPILER_PLAN.md;
 S14 direction).
 
-Parse→lower→JIT is expensive and deterministic in the MLIR text, so compiled
+Parse→lower→JIT is expensive and deterministic in the MLIR text, so device_verified_jit
 handles are cached. The decisive proof is the C++ compile-counter: a repeated
 same-shape call does NOT advance it (cache hit), while each invoke still runs and
 advances the invocation-counter. Correctness is unchanged.

@@ -234,5 +234,5 @@ def test_compiled_flash_attn_bwd_matches_numpy(D, B, H, Sq, Sk, causal):
     # 5e-3 bound is regression-sensitive while robust across RNG seeds.
     tol = 5e-3
     assert eQ < tol and eK < tol and eV < tol, (
-        f"compiled flash_attn_bwd rel-err dQ={eQ:.3e} dK={eK:.3e} dV={eV:.3e} "
+        f"device_verified_jit flash_attn_bwd rel-err dQ={eQ:.3e} dK={eK:.3e} dV={eV:.3e} "
         f"at D={D} {B}x{H}x{Sq}x{Sk} causal={causal}")

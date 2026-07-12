@@ -57,17 +57,13 @@ _REFERENCE_STATUS = "reference"
 _ARTIFACT_STATUS = "artifact_only"
 _COMPILEABLE_STATUS = "compileable"   # Sprint G/H follow-up: passes ptxas/hipcc
 _PLANNED_STATUS = "planned"
-# 2026-06-25 — a rung BELOW ``hardware_verified`` for kernels that EXECUTE on
-# real hardware via ``runtime.launch()`` but ship as a COMPILER-GENERATED hsaco
-# (tessera-opt → ROCDL → hsaco, loaded + launched in-process), NOT as a standalone
-# C-ABI ``runtime_symbol`` in a shipped ``.so``. It still requires a checked-in
-# ``execute_compare_fixture`` (the numerical proof) — only the C-symbol half of
-# the ``hardware_verified`` contract is absent. This is the honest status for the
-# ROCm compiled-lane attention/epilogue family (rocm_*_compiled executors): the
-# kernel is real and verified on gfx1151, but there is no shipped C entry point.
-_COMPILED_STATUS = "compiled"
+# Architecture-neutral execution proof for a compiler-generated target binary
+# (for example HSACO, cubin/PTX-derived binary, Metal library, or native object).
+# The binary must be launched on the exact target and compared numerically by a
+# checked-in fixture. A stable public C ABI is not required.
+_DEVICE_VERIFIED_JIT_STATUS = "device_verified_jit"
 # PK5 (2026-05-31) — Apple Metal `.mtlpackage` packaged kernel. The
-# kernel ships as a pre-compiled Metal package (output of Core ML
+# kernel ships as a precompiled Metal package (output of Core ML
 # Tools / Xcode); Tessera loads it at runtime via PK1's
 # `tessera_apple_gpu_mlpkg_compile`, reflects + dispatches per PK2-PK4.
 # Distinct from `fused` (in-tree MSL source) and `artifact_only` (IR
@@ -76,16 +72,25 @@ _COMPILED_STATUS = "compiled"
 # `.mtlpackage` directory.
 _PACKAGED_STATUS = "packaged"
 
-# Arch-3 (2026-05-22) — top rung of the readiness ladder.  An entry
-# only qualifies for ``hardware_verified`` when it carries BOTH a
-# ``runtime_symbol`` AND an ``execute_compare_fixture`` checked into
-# the test tree.  This is the missing definition that makes the
-# registry's per-primitive ``backend_kernel = "complete"`` axis a
-# computable property (a primitive is complete iff every declared
-# target row is ``hardware_verified``).  Today (2026-05-22) zero
-# entries claim this status — flipping the first one requires real
-# NVIDIA / ROCm hardware proof.
-_HARDWARE_VERIFIED_STATUS = "hardware_verified"
+# Architecture-neutral stable-ABI execution proof. The shipped runtime symbol
+# must be launched on the exact target and numerically checked by a fixture.
+# This is stronger packaging/API evidence than device_verified_jit, not a claim
+# that device_verified_jit lacks real hardware execution.
+_DEVICE_VERIFIED_ABI_STATUS = "device_verified_abi"
+
+# Public, architecture-neutral proof vocabulary used by dashboards and tests.
+DEVICE_VERIFIED_JIT_STATUS = _DEVICE_VERIFIED_JIT_STATUS
+DEVICE_VERIFIED_ABI_STATUS = _DEVICE_VERIFIED_ABI_STATUS
+DEVICE_EXECUTION_PROOF_DEFINITIONS = {
+    DEVICE_VERIFIED_JIT_STATUS: (
+        "compiler-generated target binary, launched on the exact target and "
+        "numerically verified; no stable public C ABI required"
+    ),
+    DEVICE_VERIFIED_ABI_STATUS: (
+        "shipped stable C ABI runtime symbol, launched on the exact target and "
+        "numerically verified"
+    ),
+}
 
 _VALID_STATUSES = frozenset({
     _FUSED_KERNEL_STATUS,
@@ -93,8 +98,8 @@ _VALID_STATUSES = frozenset({
     _ARTIFACT_STATUS,
     _COMPILEABLE_STATUS,
     _PLANNED_STATUS,
-    _COMPILED_STATUS,
-    _HARDWARE_VERIFIED_STATUS,
+    _DEVICE_VERIFIED_JIT_STATUS,
+    _DEVICE_VERIFIED_ABI_STATUS,
     _PACKAGED_STATUS,
 })
 
@@ -265,7 +270,7 @@ class BackendKernelEntry:
     targets only).  ``None`` for non-GEMM / non-ROCm entries."""
     # Arch-3 (2026-05-22) — execute-and-compare hooks.  All optional so
     # existing constructors continue to work.  When ``status ==
-    # "hardware_verified"`` the validator below requires
+    # "device_verified_abi"`` the validator below requires
     # ``runtime_symbol`` AND ``execute_compare_fixture`` to be set.
     shape_envelope: Optional_str = None
     """Free-form envelope description (e.g., ``"M*N*K <= 2^30"``,
@@ -286,12 +291,12 @@ class BackendKernelEntry:
     """Path (relative to repo root) to the Python test that runs the
     kernel and compares against a numpy / reference oracle.  This is
     the binary proof of hardware execution.  ``None`` until the
-    proof lands.  Required for ``status == "hardware_verified"``."""
+    proof lands.  Required for ``status == "device_verified_abi"``."""
     benchmark_json: Optional_str = None
     """Path to a benchmark JSON file in the canonical
     ``benchmarks/...`` tree that records latency / MFU for this
     kernel.  ``None`` until benchmarked.  Recommended for
-    ``hardware_verified`` entries but not strictly required."""
+    ``device_verified_abi`` entries but not strictly required."""
     benchmark_metadata: Optional[object] = None
     """P1 (2026-06-10) — structured :class:`BenchmarkMetadata` for the row
     (hot-path group / harness / ratchet status). Erased to ``object`` to keep
@@ -397,37 +402,34 @@ class BackendKernelEntry:
                     f"mma_descriptor only applies to ROCm targets, got "
                     f"target={self.target!r}")
 
-        # Arch-3 (2026-05-22) — hardware_verified contract.  This is
+        # Arch-3 (2026-05-22) — device_verified_abi contract.  This is
         # the top rung of the readiness ladder; an entry only qualifies
         # when it carries both an executable runtime entry point AND a
         # checked-in numerical-proof test.  Without the test fixture
         # there's no evidence the kernel actually produces correct
         # output on real hardware — so we refuse to let the status
         # claim more than ``fused`` / ``reference``.
-        if self.status == _HARDWARE_VERIFIED_STATUS:
+        if self.status == _DEVICE_VERIFIED_ABI_STATUS:
             if not self.runtime_symbol:
                 raise ValueError(
-                    f"status='hardware_verified' requires runtime_symbol "
+                    f"status='device_verified_abi' requires runtime_symbol "
                     f"to be set; got target={self.target!r}"
                 )
             if not self.execute_compare_fixture:
                 raise ValueError(
-                    f"status='hardware_verified' requires "
+                    f"status='device_verified_abi' requires "
                     f"execute_compare_fixture to point at a Python "
                     f"test that numerically validates the kernel; got "
                     f"target={self.target!r}, runtime_symbol="
                     f"{self.runtime_symbol!r}"
                 )
 
-        # 2026-06-25 — ``compiled`` contract. The kernel executes on hardware via
-        # runtime.launch() as a compiler-generated hsaco (no shipped C-ABI
-        # symbol), so unlike ``hardware_verified`` it does NOT require a
-        # ``runtime_symbol`` — but it MUST still carry the numerical-proof
-        # ``execute_compare_fixture`` (the kernel really runs + matches a
-        # reference), else it's no better than ``compileable``.
-        if self.status == _COMPILED_STATUS and not self.execute_compare_fixture:
+        # ``device_verified_jit`` contract: a generated target binary is launched
+        # on the exact target and matches an oracle. Unlike device_verified_abi,
+        # it does not require a shipped stable runtime symbol.
+        if self.status == _DEVICE_VERIFIED_JIT_STATUS and not self.execute_compare_fixture:
             raise ValueError(
-                f"status='compiled' requires execute_compare_fixture to point "
+                f"status='device_verified_jit' requires execute_compare_fixture to point "
                 f"at a Python test that numerically validates the "
                 f"compiler-generated kernel on hardware; got "
                 f"target={self.target!r}"
@@ -550,7 +552,7 @@ class BackendKernelEntry:
     @property
     def is_hardware_verified(self) -> bool:
         """Arch-3 (2026-05-22) — convenience predicate for status checks."""
-        return self.status == _HARDWARE_VERIFIED_STATUS
+        return self.status == _DEVICE_VERIFIED_ABI_STATUS
 
 
 def primitive_is_complete(entries: tuple["BackendKernelEntry", ...]) -> bool:
@@ -559,18 +561,18 @@ def primitive_is_complete(entries: tuple["BackendKernelEntry", ...]) -> bool:
     row set.
 
     A primitive's backend_kernel axis flips to ``"complete"`` iff
-    EVERY declared target is ``hardware_verified``.  This makes
+    EVERY declared target is ``device_verified_abi``.  This makes
     ``backend_kernel`` a *computed* property of the manifest rather
     than a hand-flipped status field — closing the definition gap
     that the V8 Phase G/H audit doc surfaced.
 
     Returns False (the registry stays ``partial``) if any target row
-    is below ``hardware_verified``.  An empty tuple returns False
+    is below ``device_verified_abi``.  An empty tuple returns False
     (no declared targets ⇒ nothing to verify ⇒ not complete).
     """
     if not entries:
         return False
-    return all(e.status == _HARDWARE_VERIFIED_STATUS for e in entries)
+    return all(e.status == _DEVICE_VERIFIED_ABI_STATUS for e in entries)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -594,10 +596,10 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     # Structured-compute convolution family (2026-07-09) — parity with the
     # x86/ROCm structured-compute tails. These reach an executable apple_gpu
     # path via apple_gpu_structured_compute_compiled and match the reference
-    # primitive; host-structured im2col/layout bookkeeping. ``compiled`` (direct
+    # primitive; host-structured im2col/layout bookkeeping. ``device_verified_jit`` (direct
     # execute/compare evidence), NOT a bespoke fused Metal kernel.
     "conv1d": {
-        "status": _COMPILED_STATUS,
+        "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32",),
         "notes": ("Structured-compute conv1d via "
                   "apple_gpu_structured_compute_compiled; matches "
@@ -605,7 +607,7 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
         "execute_compare_fixture": _APPLE_GPU_STRUCTURED_COMPUTE_FIXTURE,
     },
     "conv_transpose": {
-        "status": _COMPILED_STATUS,
+        "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32",),
         "notes": ("Structured-compute conv_transpose via "
                   "apple_gpu_structured_compute_compiled; matches "
@@ -613,7 +615,7 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
         "execute_compare_fixture": _APPLE_GPU_STRUCTURED_COMPUTE_FIXTURE,
     },
     "depthwise_conv1d": {
-        "status": _COMPILED_STATUS,
+        "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32",),
         "notes": ("Structured-compute depthwise_conv1d via "
                   "apple_gpu_structured_compute_compiled; matches "
@@ -623,10 +625,10 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     # Pointwise-regression loss lane (2026-07-09) — parity with the x86/ROCm
     # loss lanes. Residual + none/mean/sum reduction on the MPSGraph binary +
     # reduce lanes (mse/mae also on the GPU mul/abs opcodes; huber/smooth_l1/
-    # log_cosh apply the piecewise/transcendental middle host-side). ``compiled``
+    # log_cosh apply the piecewise/transcendental middle host-side). ``device_verified_jit``
     # (direct execute/compare vs tessera.losses), NOT a bespoke fused kernel.
     **{op: {
-        "status": _COMPILED_STATUS,
+        "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32",),
         "notes": (f"Pointwise-regression loss {op} via apple_gpu_loss_compiled "
                   "(MPSGraph binary + reduce lanes, host piecewise middle); "
@@ -637,10 +639,10 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     # Loss-family lane (2026-07-09) — binary-CE / class-axis / RL-policy /
     # EBM-diffusion. Per-sample loss via the standalone reference (host
     # structure); none/mean/sum reduction on the MPSGraph reduce lane. Parity
-    # with the x86/ROCm binary/class/rl/ebm loss lanes. ``compiled`` (direct
+    # with the x86/ROCm binary/class/rl/ebm loss lanes. ``device_verified_jit`` (direct
     # execute/compare vs tessera.losses / tessera.rl), NOT a bespoke fused kernel.
     **{op: {
-        "status": _COMPILED_STATUS,
+        "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32",),
         "notes": (f"Loss-family {op} via apple_gpu_loss_family_compiled "
                   "(reference per-sample loss + MPSGraph reduce lane); matches "
@@ -657,7 +659,7 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     # lane (they are in _SINGLE_GPU_COMPUTE_REFERENCE_OPS -> the structured
     # manifest path + apple_gpu_structured_compute_compiled executor).
     **{op: {
-        "status": _COMPILED_STATUS,
+        "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32",),
         "notes": (f"Structured-compute loss/schedule {op} via "
                   "apple_gpu_structured_compute_compiled; matches "
@@ -668,11 +670,11 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     # cells, MoR routing, VLM resamplers, RoPE split/merge, and other
     # host-structured primitives. All reach an executable apple_gpu path via
     # apple_gpu_structured_compute_compiled and match the reference (ops.* /
-    # nn.functional.* / memory.*). ``compiled`` (direct execute/compare), NOT a
+    # nn.functional.* / memory.*). ``device_verified_jit`` (direct execute/compare), NOT a
     # bespoke fused Metal kernel — parity with the x86/ROCm structured-compute
     # lanes.
     **{op: {
-        "status": _COMPILED_STATUS,
+        "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32",),
         "notes": (f"Structured-compute {op} via "
                   "apple_gpu_structured_compute_compiled; matches the "
@@ -687,10 +689,10 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
         "pixel_shuffle", "pixel_unshuffle", "rearrange", "rope_merge",
         "rope_split", "simple_rnn_cell", "spectral_norm", "tile_view", "unpack")},
     # Conformal-geometry lane (2026-07-09) — mobius f(z)=(az+b)/(cz+d) composed
-    # on the interleaved-f32 Apple GPU complex_mul/complex_div lanes. ``compiled``
+    # on the interleaved-f32 Apple GPU complex_mul/complex_div lanes. ``device_verified_jit``
     # (direct execute/compare vs tessera.complex), parity with x86/rocm.
     "mobius": {
-        "status": _COMPILED_STATUS,
+        "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32",),
         "notes": ("Conformal mobius via apple_gpu_conformal_compiled "
                   "(interleaved-f32 complex_mul/complex_div lanes); matches "
@@ -700,10 +702,10 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     # Optimizer lane (2026-07-10) — sgd/momentum/adam/adamw/lion per-parameter
     # update via apple_gpu_optimizer_compiled. Apple ships no device optimizer
     # kernel; the elementwise update rules run on the numpy reference the x86/ROCm
-    # device kernels are matched against. ``compiled`` (direct execute/compare),
+    # device kernels are matched against. ``device_verified_jit`` (direct execute/compare),
     # NOT a bespoke fused Metal kernel.
     **{op: {
-        "status": _COMPILED_STATUS,
+        "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32",),
         "notes": (f"Optimizer {op} via apple_gpu_optimizer_compiled (numpy "
                   "reference update rules); matches tessera.optim."),
@@ -711,10 +713,10 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     } for op in ("sgd", "momentum", "adam", "adamw", "lion")},
     # 0-move + sort lane (2026-07-10) — pad/roll/flip/tile/repeat/stack +
     # sort/argsort via apple_gpu_shape_compiled (host index-map + numpy gather /
-    # numpy stable sort; Apple ships no device gather/sort kernel). ``compiled``
+    # numpy stable sort; Apple ships no device gather/sort kernel). ``device_verified_jit``
     # (direct execute/compare), NOT a bespoke fused Metal kernel.
     **{op: {
-        "status": _COMPILED_STATUS,
+        "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32",),
         "notes": (f"0-move/sort {op} via apple_gpu_shape_compiled (numpy gather / "
                   "stable sort reference); matches tessera.ops / numpy."),
@@ -724,7 +726,7 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     # Reduce lane (2026-07-10) — sum genuinely on the MPSGraph reduce lane
     # (apple_gpu_reduce_compiled; numpy fallback when Metal is unavailable).
     "sum": {
-        "status": _COMPILED_STATUS,
+        "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32",),
         "notes": ("Reduce sum via apple_gpu_reduce_compiled (MPSGraph reduce "
                   "lane); matches numpy.sum."),
@@ -732,9 +734,9 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     },
     # Scatter lane (2026-07-10) — scatter/scatter_add/scatter_reduce via
     # apple_gpu_scatter_compiled (numpy indexed store; Apple ships no device
-    # scatter kernel). ``compiled`` (direct execute/compare).
+    # scatter kernel). ``device_verified_jit`` (direct execute/compare).
     **{op: {
-        "status": _COMPILED_STATUS,
+        "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32",),
         "notes": (f"Scatter {op} via apple_gpu_scatter_compiled (numpy indexed "
                   "store reference); matches numpy scatter."),
@@ -744,7 +746,7 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     # apple_gpu_sparse_compiled (numpy CSR SpMM / (a@b)*mask / a@b / routed
     # per-token expert GEMVs; Apple ships no device sparse/moe kernel).
     **{op: {
-        "status": _COMPILED_STATUS,
+        "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32",),
         "notes": (f"Sparse/MoE {op} via apple_gpu_sparse_compiled (numpy "
                   "reference); matches numpy / tessera."),
@@ -754,9 +756,9 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     # latent-KV, alibi, lgamma/digamma, fused_epilogue, asymmetric_bce,
     # normalize_group_advantages, speculative-decode accept) via
     # apple_gpu_tail_compiled (public tessera reference; Apple ships no device
-    # kernel). ``compiled`` (direct execute/compare).
+    # kernel). ``device_verified_jit`` (direct execute/compare).
     **{op: {
-        "status": _COMPILED_STATUS,
+        "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32",),
         "notes": (f"Reference tail {op} via apple_gpu_tail_compiled (public "
                   "tessera reference); matches tessera.ops / losses / rl."),
@@ -769,7 +771,7 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     # (_conformal_compute handles mobius + stereographic; genuine composition on
     # the interleaved-f32 complex/binary-div lanes -> native_gpu).
     "stereographic": {
-        "status": _COMPILED_STATUS,
+        "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32",),
         "notes": ("Conformal stereographic via apple_gpu_conformal_compiled "
                   "(sphere 3-vector -> C on the binary-div lane); matches "
@@ -779,10 +781,10 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     # Philox RNG base lane (2026-07-10) — rng_uniform / rng_normal / dropout via
     # apple_gpu_rng_compiled. Apple ships no device Philox kernel; the lane draws
     # from the counter-based Philox-4x32-10 reference (tessera.rng_device) the
-    # x86/ROCm device kernels are bit-matched against. ``compiled`` (direct
+    # x86/ROCm device kernels are bit-matched against. ``device_verified_jit`` (direct
     # execute/compare), NOT a bespoke fused Metal kernel.
     **{op: {
-        "status": _COMPILED_STATUS,
+        "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": dts,
         "notes": (f"Philox RNG {op} via apple_gpu_rng_compiled "
                   "(Philox-4x32-10 reference core); matches "
@@ -793,10 +795,10 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     # Linalg decomposition lane (2026-07-10) — cholesky_solve/lu/qr/svd via
     # apple_gpu_linalg_compiled. Apple ships no MPS lu/qr/svd primitive; the
     # decompositions resolve on the numpy reference (np.linalg + a standalone
-    # partial-pivot LU) the x86/ROCm device kernels match. ``compiled`` (direct
+    # partial-pivot LU) the x86/ROCm device kernels match. ``device_verified_jit`` (direct
     # execute/compare), NOT a bespoke fused Metal kernel.
     **{op: {
-        "status": _COMPILED_STATUS,
+        "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32",),
         "notes": (f"Linalg {op} via apple_gpu_linalg_compiled (numpy reference; "
                   "no MPS lu/qr/svd primitive); matches np.linalg."),
@@ -805,14 +807,14 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     # Matmul-family lane (2026-07-10) — einsum / factorized_matmul via
     # apple_gpu_matmul_family_compiled (numpy reference the GEMM lanes match).
     **{op: {
-        "status": _COMPILED_STATUS,
+        "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32",),
         "notes": (f"Matmul-family {op} via apple_gpu_matmul_family_compiled "
                   "(numpy reference); matches numpy."),
         "execute_compare_fixture": "tests/unit/test_apple_gpu_matmul_family_compiled.py",
     } for op in ("einsum", "factorized_matmul")},
     # Project 3 (2026-06-01) — 8 encode-eligible ops promoted to
-    # ``hardware_verified``. Each carries:
+    # ``device_verified_abi``. Each carries:
     #   * runtime_symbol = the per-op encode-session C ABI symbol
     #     (the actual dispatch entry point, not the legacy MPS one)
     #   * shape_envelope = free-form documentation of the validated
@@ -821,7 +823,7 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     # from ``_NUMERICAL_FIXTURES`` BEFORE the BackendKernelEntry
     # validator runs (see ``manifest_for`` Apple GPU branch).
     "softmax": {
-        "status": _HARDWARE_VERIFIED_STATUS,
+        "status": _DEVICE_VERIFIED_ABI_STATUS,
         "dtypes": _APPLE_GPU_FUSED,
         "notes": "Custom MSL softmax kernel (Phase 8.4.2)",
         "runtime_symbol": "tessera_apple_gpu_softmax_dev_f32_enc",
@@ -829,14 +831,14 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
         "shape_envelope": "rows*cols, no per-row limit (MPSGraph rowop)",
     },
     "softmax_safe": {
-        "status": _HARDWARE_VERIFIED_STATUS,
+        "status": _DEVICE_VERIFIED_ABI_STATUS,
         "dtypes": _APPLE_GPU_FUSED,
         "notes": "Aliases softmax MSL kernel",
         "runtime_symbol": "tessera_apple_gpu_softmax_dev_f32_enc",
         "shape_envelope": "rows*cols, no per-row limit (MPSGraph rowop)",
     },
     "gelu": {
-        "status": _HARDWARE_VERIFIED_STATUS,
+        "status": _DEVICE_VERIFIED_ABI_STATUS,
         "dtypes": _APPLE_GPU_FUSED,
         "notes": (
             "Custom MSL gelu (Phase 8.4.2); the encode-session path "
@@ -847,14 +849,14 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
         "shape_envelope": "n elements, no limit (elementwise unary)",
     },
     "rope": {
-        "status": _HARDWARE_VERIFIED_STATUS,
+        "status": _DEVICE_VERIFIED_ABI_STATUS,
         "dtypes": _APPLE_GPU_FUSED,
         "notes": "Custom MSL rope (Phase 8.4.0)",
         "runtime_symbol": "tessera_apple_gpu_rope_dev_f32_enc",
         "shape_envelope": "M*K, K must be even (rope dim-pair structure)",
     },
     "rmsnorm": {
-        "status": _HARDWARE_VERIFIED_STATUS,
+        "status": _DEVICE_VERIFIED_ABI_STATUS,
         "dtypes": _APPLE_GPU_FUSED,
         "notes": (
             "MSL rmsnorm + Phase 8.4.7 matmul→rmsnorm fusion. Phase 3b "
@@ -865,7 +867,7 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
         "shape_envelope": "rows*cols, no per-row limit (MPSGraph rowop)",
     },
     "flash_attn": {
-        "status": _HARDWARE_VERIFIED_STATUS,
+        "status": _DEVICE_VERIFIED_ABI_STATUS,
         "dtypes": _APPLE_GPU_FUSED,
         "notes": "Online-softmax MSL kernel; head_dim ≤ 256 (Phase 8.4.1)",
         "runtime_symbol": "tessera_apple_gpu_flash_attn_dev_f32_enc",
@@ -948,7 +950,7 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     # coverage. layer_norm/silu/bmm landed as part of the single-cb
     # decode-chain work; all 8 encode-eligible ops cover {f32, f16, bf16}.
     "layer_norm": {
-        "status": _HARDWARE_VERIFIED_STATUS,
+        "status": _DEVICE_VERIFIED_ABI_STATUS,
         "dtypes": _APPLE_GPU_FUSED,
         "notes": (
             "MPSGraph rowop encode-session (encode_rowop_dev kind=0). "
@@ -958,7 +960,7 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
         "shape_envelope": "rows*cols, no per-row limit (MPSGraph rowop)",
     },
     "silu": {
-        "status": _HARDWARE_VERIFIED_STATUS,
+        "status": _DEVICE_VERIFIED_ABI_STATUS,
         "dtypes": _APPLE_GPU_FUSED,
         "notes": (
             "MPSGraph unary node op=4 (silu = x * sigmoid(x)). "
@@ -968,7 +970,7 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
         "shape_envelope": "n elements, no limit (elementwise unary)",
     },
     "bmm": {
-        "status": _HARDWARE_VERIFIED_STATUS,
+        "status": _DEVICE_VERIFIED_ABI_STATUS,
         "dtypes": _APPLE_GPU_FUSED,
         "notes": (
             "MPSGraph batched matmul (encode_bmm_dev). Honors batch > 1 "
@@ -988,7 +990,7 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
         "notes": "MPSGraph relu node (apple_gpu_runtime.mm MPSGraph lane)",
     },
     "conv2d": {
-        "status": _HARDWARE_VERIFIED_STATUS,
+        "status": _DEVICE_VERIFIED_ABI_STATUS,
         "dtypes": _APPLE_GPU_FUSED,  # Sprint A (2026-06-01): full {f32,f16,bf16}.
         "notes": (
             "Native multi-tile MSL convolution2d via MPP cooperative op "
@@ -1100,7 +1102,7 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
         "shape_envelope": "x (M,K) + codes/scales packed (K%GS==0); O (M,N) fp32",
     },
     "quantized_matmul": {
-        "status": _HARDWARE_VERIFIED_STATUS,
+        "status": _DEVICE_VERIFIED_ABI_STATUS,
         "dtypes": ("fp32", "fp16"),
         "notes": (
             "Packed INT4 quantized matmul Apple GPU lane: i4 weights + "
@@ -1125,15 +1127,15 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Strix Halo bring-up (2026-06-22) — ROCm ops promoted to ``hardware_verified``.
+# Strix Halo bring-up (2026-06-22) — ROCm ops promoted to ``device_verified_abi``.
 #
 # An op lands here only once it ships BOTH a real C-ABI ``runtime_symbol`` (an
 # auto-built backend lib that actually runs the kernel on an AMD GPU) AND a
 # checked-in ``execute_compare_fixture`` (see ``_NUMERICAL_FIXTURES``). This is
-# the ROCm analog of the per-op ``_APPLE_GPU_KERNELS`` hardware_verified rows.
+# the ROCm analog of the per-op ``_APPLE_GPU_KERNELS`` device_verified_abi rows.
 #
 # When an op is in this table the generic ROCm artifact_only row is REPLACED by
-# the hardware_verified row below — there is exactly one ``rocm`` entry per op.
+# the device_verified_abi row below — there is exactly one ``rocm`` entry per op.
 #
 # Honesty (Decision #25): ``dtypes``/``shape_envelope`` describe ONLY what the
 # shipped symbol actually proves. matmul is a general tiled/K-looped RDNA
@@ -1164,10 +1166,10 @@ _ROCM_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
             "vs the hand-written kernel across aligned/ragged/f16/bf16. The "
             "shipped hand-written libtessera_rocm_gemm.so symbol "
             "(tessera_rocm_wmma_gemm_f16, the runtime_symbol above) is the "
-            "reference ORACLE the compiled kernel is checked bit-identical "
-            "against AND the availability fallback when the compiled lane can't "
+            "reference ORACLE the device_verified_jit kernel is checked bit-identical "
+            "against AND the availability fallback when the device_verified_jit lane can't "
             "run on a host. Numerically validated vs numpy by the "
-            "execute_compare_fixture; the compiled lane is validated vs the "
+            "execute_compare_fixture; the device_verified_jit lane is validated vs the "
             "oracle by tests/unit/test_rocm_compiled_launch_execute.py."
         ),
     },
@@ -1175,7 +1177,7 @@ _ROCM_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
     # tessera_rocm_wmma_gemm_f16 symbol matmul uses; rt._execute_rocm_compiled_gemm
     # executes it). It is the matrix-core GEMM across BOTH AMD families — so unlike
     # `matmul` (kept a pure RDNA-WMMA row) it ALSO carries the CDNA MFMA artifact
-    # shape as metadata. Status = hardware_verified for the RDNA WMMA execution
+    # shape as metadata. Status = device_verified_abi for the RDNA WMMA execution
     # proven on gfx1151; RDNA4 (gfx1200) / gfx12.5 (gfx1250) WMMA + CDNA MFMA are
     # the arch targets, gated on their fragment-layout ISA + silicon (the RDNA3
     # V_WMMA_16x16x16 intrinsic does not select on gfx12 — RDNA4 uses 16x16x32).
@@ -1211,13 +1213,13 @@ _ROCM_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
             "16x16x16 WMMA, online softmax, one wave per (query-tile, b*h). "
             "Correctness-first (no perf ladder yet)"
         ),
-        # E2 (2026-07-06) — compiled FA-2 flash_attn ladder ratchet baseline
+        # E2 (2026-07-06) — device_verified_jit FA-2 flash_attn ladder ratchet baseline
         # (rt._rocm_flash_attn), recorded on the gfx1151 box alongside matmul.
         "benchmark_json": "benchmarks/baselines/rocm_gfx1151_hot_paths.json",
         "notes": (
             "RDNA 3.5 WMMA flash-attention forward executes on the AMD GPU "
             "through the shipped libtessera_rocm_flash_attn.so symbols "
-            "(tessera_rocm_wmma_flash_attn_{f16,bf16}, HIPRTC-compiled for the "
+            "(tessera_rocm_wmma_flash_attn_{f16,bf16}, HIPRTC-device_verified_jit for the "
             "device arch at load); ROCm 7.2.4. The second op after matmul to run "
             "natively on a non-Apple backend. Numerically validated vs a numpy "
             "attention reference by the execute_compare_fixture. The FA-2 "
@@ -1234,13 +1236,13 @@ _ROCM_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Compiler-generated executing lane (2026-06-25) — ROCm ops promoted to
-# ``compiled``. These execute on gfx1151 via ``runtime.launch()`` as a
+# ``device_verified_jit``. These execute on gfx1151 via ``runtime.launch()`` as a
 # COMPILER-GENERATED hsaco (tessera-opt → ROCDL → hsaco, loaded + launched
 # in-process), each with a checked-in ``execute_compare_fixture`` — but NO
-# shipped C-ABI ``runtime_symbol``, so they are a rung below ``hardware_verified``
+# shipped C-ABI ``runtime_symbol``, so they are a rung below ``device_verified_abi``
 # (which matmul/flash_attn earn via their shipped libtessera_rocm_*.so symbols).
 #
-# Honesty (Decision #25): these are the compiled-lane CAPABILITIES proven on the
+# Honesty (Decision #25): these are the device_verified_jit-lane CAPABILITIES proven on the
 # box. The flash_attn-family rows (gqa/mqa/mha/sliding-window) are realized by the
 # flash_attn kernel with directive attrs (+ the runtime detects/forwards them);
 # fused_epilogue is the matmul kernel + a fused bias/activation epilogue; the
@@ -1276,7 +1278,7 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
         "notes": "GQA/MQA via the flash_attn WMMA kernel (gqa directive attr; "
                  "fwd+bwd, grouped K/V; runtime detects from operand shapes). "
                  "Executes on gfx1151 via runtime.launch() (rocm_flash_attn_"
-                 "compiled); no shipped C-ABI symbol.",
+                 "device_verified_jit); no shipped C-ABI symbol.",
     },
     "mqa_attention": {
         "dtypes": ("fp16", "bf16"),
@@ -1325,7 +1327,7 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("reduction",),
         "notes": "Row-wise stable softmax over the last axis — the first "
-                 "non-matmul/non-WMMA compiled ROCm kernel "
+                 "non-matmul/non-WMMA device_verified_jit ROCm kernel "
                  "(generate-rocm-softmax-kernel: one workgroup per row, LDS "
                  "tree-reduce, f32 reduce). Executes via runtime.launch() "
                  "(rocm_softmax_compiled).",
@@ -1334,7 +1336,7 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("reduction",),
         "notes": "Stateless online_softmax (== softmax over the last axis) rides "
-                 "the compiled softmax kernel (generate-rocm-softmax-kernel) via "
+                 "the device_verified_jit softmax kernel (generate-rocm-softmax-kernel) via "
                  "runtime.launch() (rocm_softmax_compiled); the streaming-state "
                  "form is declined (Decision #21).",
     },
@@ -1521,7 +1523,7 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "persistent_cd_loss", "ddpm_noise_pred_loss", "vlb_loss",
                  "load_balance_loss")},
     # (EBM energy/step-compute + Langevin ops route through ebm_manifest_for() —
-    # their compiled ROCm status is emitted there, not in this generic table,
+    # their device_verified_jit ROCm status is emitted there, not in this generic table,
     # since manifest_for() returns via ebm_manifest_for for every ebm_* name.)
     # S9 low-precision float quantization (generate-rocm-fpquant-kernel) — ROCm
     # mirror of x86_fpquant. Executes via rocm_fpquant_compiled / rocm_nvfp4.
@@ -1786,7 +1788,7 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "rocm_binary_compiled max/min kernel (either bound optional). "
                  "Executes via runtime.launch() (rocm_clamp_compiled).",
     } for op in ("clamp", "clip")},
-    # (complex_* ops route through complex_manifest_for() — their compiled
+    # (complex_* ops route through complex_manifest_for() — their device_verified_jit
     # device-lane status is emitted there, not in this generic _ROCM table.)
     # P2e — softcap composed on the gfx1151 unary tanh lane (no new kernel;
     # scalar cap broadcast on host). Executes via rocm_softcap_compiled.
@@ -2023,7 +2025,7 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
         "notes": "Gated/delta linear-attention recurrence as a causal "
                  "SEQUENTIAL-SCAN kernel (generate-rocm-deltanet-kernel: one "
                  "workgroup per (b,h), one thread per value-column, LDS state) — "
-                 "the first recurrent compiled ROCm kernel. erase/gate/beta/decay "
+                 "the first recurrent device_verified_jit ROCm kernel. erase/gate/beta/decay "
                  "flags. Executes via runtime.launch() (rocm_deltanet_compiled).",
     },
     "kimi_delta_attention": {
@@ -2046,14 +2048,14 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Consumer-Blackwell bring-up (2026-06-25) — NVIDIA ops promoted to
-# ``hardware_verified`` on sm_120 (RTX 5070 Ti, CC 12.0, CUDA 13.3).
+# ``device_verified_abi`` on sm_120 (RTX 5070 Ti, CC 12.0, CUDA 13.3).
 #
 # Mirror of ``_ROCM_HARDWARE_VERIFIED``: an op lands here once it ships BOTH a
 # real C-ABI ``runtime_symbol`` (the auto-built ``libtessera_nvidia_gemm.so``,
 # CMake target ``tessera_nvidia_gemm``, which NVRTC-compiles the warp-level
 # mma.sync kernel for the device arch and runs it on the GPU) AND a checked-in
 # ``execute_compare_fixture`` (see ``_NUMERICAL_FIXTURES``). When present, the
-# generic nvidia_sm120 artifact_only row is REPLACED by this hardware_verified
+# generic nvidia_sm120 artifact_only row is REPLACED by this device_verified_abi
 # row (the other sm_80/90/100 rows stay artifact_only — proven only on sm_120).
 #
 # Honesty (Decision #25): the shape_envelope/dtypes describe ONLY what the shipped
@@ -2078,7 +2080,7 @@ _NVIDIA_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
             "Warp-level mma.sync GEMM on consumer Blackwell (sm_120, CC 12.0), "
             "CUDA 13.3. Ships five C-ABI symbols in libtessera_nvidia_gemm.so "
             "(CMake target tessera_nvidia_gemm): tessera_nvidia_mma_gemm_"
-            "{bf16,f16,tf32,e4m3,e5m2}, each NVRTC-compiled (compute_XX from "
+            "{bf16,f16,tf32,e4m3,e5m2}, each NVRTC-device_verified_jit (compute_XX from "
             "cuDeviceGetAttribute) at first call and launched via the CUDA driver "
             "API. fp32 storage runs tf32-math (mma.sync m16n8k8.tf32). Numerically "
             "validated vs numpy/ml_dtypes references by the execute_compare_fixture "
@@ -2120,6 +2122,16 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
         "tests/unit/test_cpu_conformance_compositions.py",
     ("matmul_softmax", "cpu"):
         "tests/unit/test_cpu_conformance_compositions.py",
+    # Native x86 conformance proof: AVX-512 GEMM plus device_verified_jit AVX-512
+    # maximum/softmax composition, each compared to the same-shape numpy oracle.
+    ("matmul", "x86"): "tests/unit/test_x86_conformance_compositions.py",
+    ("relu", "x86"): "tests/unit/test_x86_conformance_compositions.py",
+    ("matmul_relu", "x86"):
+        "tests/unit/test_x86_conformance_compositions.py",
+    ("matmul_softmax", "x86"):
+        "tests/unit/test_x86_conformance_compositions.py",
+    ("kv_cache_read", "x86"):
+        "tests/unit/test_x86_kv_cache_compiled.py",
     ("matmul_relu", "rocm"):
         "tests/unit/test_rocm_fused_epilogue_launch_execute.py",
     ("matmul_softmax", "rocm"):
@@ -2128,7 +2140,7 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     # `tessera_rocm_wmma_gemm_f16` C-ABI symbol (libtessera_rocm_gemm.so) is
     # dlopened and its f32<-f16 16x16x16 WMMA GEMM compared to a numpy
     # reference (maxerr < 1e-2). Skip-clean when no AMD GPU / HIPRTC. This is
-    # the numerical-proof half of the rocm matmul `hardware_verified` row.
+    # the numerical-proof half of the rocm matmul `device_verified_abi` row.
     ("matmul", "rocm"): "tests/unit/test_rocm_wmma_runtime_symbol.py",
     # gemm shares matmul's WMMA symbol (same tessera_rocm_wmma_gemm_f16) — the same
     # numerical proof covers it.
@@ -2138,7 +2150,7 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     # forward (both QK^T and P@V on 16x16x16 WMMA, online softmax, causal +
     # ragged) is compared to a numpy attention reference. Skip-clean when no AMD
     # GPU / HIPRTC. The numerical-proof half of the rocm flash_attn
-    # `hardware_verified` row — the second op after matmul to execute on ROCm.
+    # `device_verified_abi` row — the second op after matmul to execute on ROCm.
     ("flash_attn", "rocm"): "tests/unit/test_rocm_flash_attn_runtime_symbol.py",
     ("spec_accept", "rocm"): "tests/unit/test_rocm_spec_accept_exec.py",
     ("spec_accept_sample", "rocm"): "tests/unit/test_rocm_spec_accept_sample_exec.py",
@@ -2169,12 +2181,15 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     **{(op, "x86"): "tests/unit/test_x86_mla_compiled.py"
        for op in ("latent_kv_compress", "latent_kv_expand_k",
                   "latent_kv_expand_v", "mla_decode_fused")},
-    # rocm compiled-lane family (2026-06-25) — compiler-generated hsaco executing
+    # rocm device_verified_jit-lane family (2026-06-25) — compiler-generated hsaco executing
     # via runtime.launch(), each compared to a numpy reference on gfx1151. These
-    # back the ``compiled`` status (no shipped C-ABI symbol). Skip-clean w/o GPU.
-    ("gqa_attention", "rocm"): "tests/unit/test_rocm_gqa_compiled.py",
-    ("mqa_attention", "rocm"): "tests/unit/test_rocm_gqa_compiled.py",
-    ("multi_head_attention", "rocm"): "tests/unit/test_rocm_flash_attn_compiled.py",
+    # back the ``device_verified_jit`` status (no shipped C-ABI symbol). Skip-clean w/o GPU.
+    ("gqa_attention", "rocm"):
+        "tests/unit/test_rocm_flash_attn_launch_execute.py",
+    ("mqa_attention", "rocm"):
+        "tests/unit/test_rocm_flash_attn_launch_execute.py",
+    ("multi_head_attention", "rocm"):
+        "tests/unit/test_rocm_flash_attn_launch_execute.py",
     ("attn_sliding_window", "rocm"):
         "tests/unit/test_rocm_sliding_window_compiled.py",
     ("linear_attn", "rocm"): "tests/unit/test_rocm_linear_attn_compiled.py",
@@ -2182,7 +2197,7 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
         "tests/unit/test_rocm_linear_attn_compiled.py",
     ("retention", "rocm"): "tests/unit/test_rocm_linear_attn_compiled.py",
     ("fused_epilogue", "rocm"):
-        "tests/unit/test_rocm_fused_epilogue_compiled.py",
+        "tests/unit/test_rocm_fused_epilogue_launch_execute.py",
     ("softmax", "rocm"): "tests/unit/test_rocm_softmax_compiled.py",
     **{(op, "rocm"): "tests/unit/test_rocm_reduce_compiled.py"
        for op in ("sum", "mean", "max", "min", "amax", "amin")},
@@ -2495,7 +2510,7 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     # shipped `tessera_nvidia_mma_gemm_{bf16,f16,tf32,e4m3,e5m2}` C-ABI symbols
     # (libtessera_nvidia_gemm.so) are dlopened and each dtype's GEMM compared to a
     # numpy/ml_dtypes reference. Skip-clean when no NVIDIA GPU / NVRTC. The
-    # numerical-proof half of the nvidia_sm120 matmul `hardware_verified` row.
+    # numerical-proof half of the nvidia_sm120 matmul `device_verified_abi` row.
     ("matmul", "nvidia_sm120"): "tests/unit/test_nvidia_mma_runtime_symbol.py",
     # conv2d on the CPU reference path: @jit conv2d_nhwc executes and is
     # assert_allclose'd against a hand-computed expected output (audit
@@ -2859,21 +2874,43 @@ _ROCM_KERNEL_MFU: dict[tuple[str, str], float] = {
 # x86 backend — two honest readiness tiers:
 #
 #   * matmul/gemm: AMX BF16 fused backend row.
-#   * AVX-512 f32/i32/bool lanes: runtime-loaded compiled kernels from
+#   * AVX-512 f32/i32/bool lanes: runtime-loaded device_verified_jit kernels from
 #     libtessera_x86_elementwise.so, each backed by an execute-compare fixture.
-#     These are ``compiled`` rather than ``hardware_verified`` because the
+#     These are ``device_verified_jit`` rather than ``device_verified_abi`` because the
 #     manifest does not claim per-op C ABI runtime_symbol contracts.
 # ─────────────────────────────────────────────────────────────────────────────
 _X86_KERNELS: dict[str, dict[str, Any]] = {
     "matmul": {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("bf16",),
-        "notes": "AMX BF16 GEMM (Phase 2; the only fully-wired exec path)",
+        "status": _DEVICE_VERIFIED_JIT_STATUS,
+        "dtypes": ("bf16", "fp32"),
+        "notes": (
+            "AMX BF16 GEMM plus the runtime-loaded AVX-512 f32 GEMM "
+            "microkernel used by the exact-target conformance lane"
+        ),
     },
     "gemm": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("bf16",),
         "notes": "AMX BF16 GEMM",
+    },
+    "relu": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": (
+            "AVX-512 relu composed as maximum(x, 0) on "
+            "tessera_x86_avx512_binary_f32; runtime-loaded through the "
+            "x86_binary_compiled lane"
+        ),
+    },
+    "kv_cache_read": {
+        "status": _DEVICE_VERIFIED_JIT_STATUS,
+        "dtypes": ("fp32",),
+        "feature_flags": ("kv_cache", "paged", "native_abi"),
+        "notes": (
+            "Native contiguous cache-slice movement through "
+            "tessera_x86_kv_cache_read_f32 in libtessera_x86_elementwise.so; "
+            "runtime-loaded by x86_kv_cache_compiled"
+        ),
     },
     # P10 — flash_attn x86 AVX-512 partner to the ROCm WMMA flash_attn. FA-style
     # streaming/online-softmax forward (tessera_x86_flash_attn_f32, runtime-
@@ -3239,7 +3276,7 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
     # P10 scan-family — linear-attention backbone (linear_attn / power_attn /
     # retention) via the quadratic-parallel form (φQ·φKᵀ ⊙ causal ⊙ decay)@V on
     # the AVX-512 GEMM; feature map / mask / decay on host (x86_linear_attn_
-    # compiled lane). The AVX-512 partner to the ROCm linear_attn lane.
+    # device_verified_jit lane). The AVX-512 partner to the ROCm linear_attn lane.
     **{op: {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
@@ -3840,12 +3877,12 @@ def clifford_manifest_for(op_name: str) -> list[BackendKernelEntry]:
         notes="Gated on Phase G; canonical bf16 Cl(3,0) bivector kernel is the first target",
     ))
 
-    # ROCm — native compiled bilinear lane (P12) for the table-driven products;
+    # ROCm — native device_verified_jit bilinear lane (P12) for the table-driven products;
     # planned (Phase H) for the rest.
     if _device:
         entries.append(BackendKernelEntry(
             target="rocm",
-            status=_COMPILED_STATUS,
+            status=_DEVICE_VERIFIED_JIT_STATUS,
             dtypes=("fp32",),
             feature_flags=("clifford_dialect", "cayley_table", "hip_runtime"),
             notes="Cl(3,0) bilinear product on the COMPILER-GENERATED gfx1151 "
@@ -4147,7 +4184,7 @@ _EBM_PRIMITIVES: tuple[str, ...] = (
 # P7 follow-up — EBM ops with a native x86 + ROCm device lane: the energy /
 # step-compute ops (composed on the device binary + reduce lanes) and the
 # Langevin sampling step (on-device Philox noise). For these, x86 = fused and
-# ROCm = compiled (with the numerical fixture) instead of reference / Phase-H.
+# ROCm = device_verified_jit (with the numerical fixture) instead of reference / Phase-H.
 # Routed through ebm_manifest_for (NOT the generic _X86_KERNELS / _ROCM_COMPILED
 # tables, which manifest_for never reaches for ebm_* names).
 _EBM_DEVICE_COMPILED: dict[str, tuple[str, str]] = {
@@ -4195,7 +4232,7 @@ _EBM_DEVICE_COMPILED: dict[str, tuple[str, str]] = {
     # resolve to the same native core. The `_sample` chain wrappers compose that
     # native per-step kernel in a host Markov loop (burn-in/thin/RNG on host) — like
     # the spectral dct/stft composites over the device FFT executor — so they are
-    # native (compiled) too, proven by an on-device chain fixture in the geo tests.
+    # native (device_verified_jit) too, proven by an on-device chain fixture in the geo tests.
     "ebm_bivector_langevin_step": (
         "tests/unit/test_x86_ebm_geo_langevin_compiled.py",
         "tests/unit/test_rocm_ebm_geo_langevin_compiled.py"),
@@ -4273,7 +4310,7 @@ def ebm_manifest_for(op_name: str) -> list[BackendKernelEntry]:
         ``fused`` (native AVX-512 compute / Langevin kernels).
       - ``apple_gpu``: ``fused`` for primitives in
         ``_EBM_APPLE_GPU_FUSED``; ``planned`` for everything else.
-      - ``nvidia_sm90``: ``planned`` (Phase G).  ``rocm``: ``compiled``
+      - ``nvidia_sm90``: ``planned`` (Phase G).  ``rocm``: ``device_verified_jit``
         for the P7 device-lane ops, else ``planned`` (Phase H).
 
     The benchmark driver uses this to label each EBM row's backend
@@ -4366,12 +4403,12 @@ def ebm_manifest_for(op_name: str) -> list[BackendKernelEntry]:
                        else ("ebm_namespace",)),
         notes=_user_fn_note if user_fn else "Gated on Phase G",
     ))
-    # ROCm — compiled device lane for the P7 ops; `reference` for the user-function
+    # ROCm — device_verified_jit device lane for the P7 ops; `reference` for the user-function
     # ops (no kernel possible); else planned (Phase H).
     if device is not None:
         entries.append(BackendKernelEntry(
             target="rocm",
-            status=_COMPILED_STATUS,
+            status=_DEVICE_VERIFIED_JIT_STATUS,
             dtypes=("fp32",),
             feature_flags=("ebm_namespace", "hip_runtime"),
             notes="COMPILER-GENERATED gfx1151 EBM device lane — diff/square/"
@@ -4488,7 +4525,7 @@ _COMPLEX_PRIMITIVES: tuple[str, ...] = (
 # P5 (2026-06-28) — the 9 pointwise complex ops that now ship a REAL device lane
 # (interleaved-f32 composed on the AVX-512 / gfx1151 transcendental / unary /
 # binary / atan2 kernels; runtime x86_complex_compiled / rocm_complex_compiled).
-# complex_manifest_for() emits these as fused (x86) / compiled (rocm).
+# complex_manifest_for() emits these as fused (x86) / device_verified_jit (rocm).
 _COMPLEX_DEVICE_COMPILED: frozenset[str] = frozenset({
     "complex_mul", "complex_div", "complex_conjugate", "complex_abs",
     "complex_arg", "complex_exp", "complex_log", "complex_sqrt", "complex_pow",
@@ -4582,9 +4619,9 @@ def complex_manifest_for(op_name: str) -> list[BackendKernelEntry]:
     # P5 (2026-06-28): the 9 pointwise complex ops now ship REAL device lanes —
     # interleaved-f32 composed on the AVX-512 / gfx1151 transcendental / unary /
     # binary / atan2 kernels (runtime x86_complex_compiled / rocm_complex_compiled).
-    # Emit them as fused (x86) / compiled (rocm) HERE — manifest_for() routes all
+    # Emit them as fused (x86) / device_verified_jit (rocm) HERE — manifest_for() routes all
     # complex_* ops through this function before the generic _X86_KERNELS /
-    # _ROCM_COMPILED tables, so the compiled status must live here to be seen by
+    # _ROCM_COMPILED tables, so the device_verified_jit status must live here to be seen by
     # support / conformance / gating.
     _complex_compiled = op_name in _COMPLEX_DEVICE_COMPILED
     entries: list[BackendKernelEntry] = []
@@ -4645,7 +4682,7 @@ def complex_manifest_for(op_name: str) -> list[BackendKernelEntry]:
         # fp16/bf16 native storage stays the M7 follow-up.
         entries.append(BackendKernelEntry(
             target="apple_gpu",
-            status=_COMPILED_STATUS,
+            status=_DEVICE_VERIFIED_JIT_STATUS,
             dtypes=("fp32",),
             feature_flags=("complex_namespace", "interleaved_f32", "msl", "metal"),
             notes=(
@@ -4695,13 +4732,13 @@ def complex_manifest_for(op_name: str) -> list[BackendKernelEntry]:
             cuda_arch_min=arch_min,
             nvcc_version_min="13.3",
         ))
-    # ROCm — the 9 pointwise ops ship a compiled device lane (interleaved-f32
+    # ROCm — the 9 pointwise ops ship a device_verified_jit device lane (interleaved-f32
     # composed on the gfx1151 unary/binary/atan2 kernels, rocm_complex_compiled);
     # the long-tail stays planned (Phase H).
     if _complex_compiled:
         entries.append(BackendKernelEntry(
             target="rocm",
-            status=_COMPILED_STATUS,
+            status=_DEVICE_VERIFIED_JIT_STATUS,
             dtypes=("fp32",),
             feature_flags=("complex_namespace", "interleaved_f32", "hip_runtime"),
             notes=(
@@ -4836,7 +4873,7 @@ def _overlay_structured_compute_entries(
     out = [e for e in entries if e.target not in {"x86", "rocm"}]
     out.append(BackendKernelEntry(
         target="x86",
-        status=_COMPILED_STATUS,
+        status=_DEVICE_VERIFIED_JIT_STATUS,
         dtypes=dtypes,
         feature_flags=("avx512",),
         notes=notes + " Executes via x86_structured_compute_compiled.",
@@ -4844,7 +4881,7 @@ def _overlay_structured_compute_entries(
     ))
     out.append(BackendKernelEntry(
         target="rocm",
-        status=_COMPILED_STATUS,
+        status=_DEVICE_VERIFIED_JIT_STATUS,
         dtypes=dtypes,
         feature_flags=("hip_runtime", "structured_compute"),
         notes=notes + " Executes via rocm_structured_compute_compiled.",
@@ -4877,7 +4914,7 @@ def _single_gpu_compute_reference_manifest_for(
             ),
             BackendKernelEntry(
                 target="x86",
-                status=_COMPILED_STATUS,
+                status=_DEVICE_VERIFIED_JIT_STATUS,
                 dtypes=dtypes,
                 feature_flags=("avx512",),
                 notes=notes + " Executes via x86_rng_compiled.",
@@ -4892,7 +4929,7 @@ def _single_gpu_compute_reference_manifest_for(
             ),
             BackendKernelEntry(
                 target="apple_gpu",
-                status=_COMPILED_STATUS,
+                status=_DEVICE_VERIFIED_JIT_STATUS,
                 dtypes=dtypes,
                 feature_flags=("metal", "philox", "rng_distribution"),
                 notes=notes + " Executes via apple_gpu_rng_compiled "
@@ -4902,7 +4939,7 @@ def _single_gpu_compute_reference_manifest_for(
             ),
             BackendKernelEntry(
                 target="rocm",
-                status=_COMPILED_STATUS,
+                status=_DEVICE_VERIFIED_JIT_STATUS,
                 dtypes=dtypes,
                 feature_flags=("hip_runtime", "philox", "rng_distribution"),
                 notes=notes + " Executes via rocm_rng_compiled.",
@@ -4928,7 +4965,7 @@ def _single_gpu_compute_reference_manifest_for(
             ),
             BackendKernelEntry(
                 target="x86",
-                status=_COMPILED_STATUS,
+                status=_DEVICE_VERIFIED_JIT_STATUS,
                 dtypes=dtypes,
                 feature_flags=("avx512",),
                 notes=notes + " Executes via x86_structured_compute_compiled.",
@@ -4952,9 +4989,9 @@ def _single_gpu_compute_reference_manifest_for(
                 notes=str(apple_gpu.get("notes", "")),
                 runtime_symbol=apple_gpu.get("runtime_symbol"),
                 shape_envelope=apple_gpu.get("shape_envelope"),
-                # A ``compiled`` structured-compute row carries its numerical
+                # A ``device_verified_jit`` structured-compute row carries its numerical
                 # proof (execute_compare_fixture) directly — mirrors the x86/
-                # ROCm entries above. Required at construction for compiled.
+                # ROCm entries above. Required at construction for device_verified_jit.
                 execute_compare_fixture=apple_gpu.get("execute_compare_fixture"),
                 benchmark_json=apple_gpu.get("benchmark_json"),
                 benchmark_metadata=_APPLE_GPU_HOT_PATH_METADATA.get(op_name),
@@ -4962,7 +4999,7 @@ def _single_gpu_compute_reference_manifest_for(
         entries.extend([
             BackendKernelEntry(
                 target="rocm",
-                status=_COMPILED_STATUS,
+                status=_DEVICE_VERIFIED_JIT_STATUS,
                 dtypes=dtypes,
                 feature_flags=("hip_runtime", "structured_compute"),
                 notes=notes + " Executes via rocm_structured_compute_compiled.",
@@ -4984,7 +5021,7 @@ def _single_gpu_compute_reference_manifest_for(
                     feature_flags=flags,
                     notes=(
                         "Single-GPU closeout compute-tail CUDA owner: planned "
-                        "kernel lane. X86/ROCm have compiled structured-compute "
+                        "kernel lane. X86/ROCm have device_verified_jit structured-compute "
                         "proof; CUDA remains explicitly open."
                     ),
                     cuda_arch_min=arch_min,
@@ -5024,7 +5061,7 @@ def _single_gpu_compute_reference_manifest_for(
             feature_flags=("hip", "rocm", "planned_kernel"),
             notes=(
                 "Single-GPU closeout compute-tail ROCm owner: HIP backend "
-                "planned lane. No compiled hsaco/runtime proof claimed yet."
+                "planned lane. No device_verified_jit hsaco/runtime proof claimed yet."
             ),
         ),
     ]
@@ -5108,7 +5145,7 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
         x86_status = str(x86["status"])
         is_amx_gemm = op_name in {"matmul", "gemm"}
         if x86_fixture is not None and not is_amx_gemm:
-            x86_status = _COMPILED_STATUS
+            x86_status = _DEVICE_VERIFIED_JIT_STATUS
         entries.append(BackendKernelEntry(
             target="x86",
             status=x86_status,
@@ -5149,20 +5186,20 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
     apple_gpu = _APPLE_GPU_KERNELS.get(op_name)
     if apple_gpu is not None:
         # Project 3 (2026-06-01) — when an op is promoted to
-        # ``hardware_verified``, both ``runtime_symbol`` and
+        # ``device_verified_abi``, both ``runtime_symbol`` and
         # ``execute_compare_fixture`` are required at construction.
         # Pull both from the source-of-truth tables BEFORE building
         # the entry so the validator sees a complete contract.
         _ag_status = str(apple_gpu["status"])
         _ag_runtime_symbol: Optional_str = apple_gpu.get("runtime_symbol")
         _ag_shape_envelope: Optional_str = apple_gpu.get("shape_envelope")
-        # hardware_verified pulls its fixture from _NUMERICAL_FIXTURES; a
-        # ``compiled`` lane (e.g. the pointwise-loss lane) carries its own
+        # device_verified_abi pulls its fixture from _NUMERICAL_FIXTURES; a
+        # ``device_verified_jit`` lane (e.g. the pointwise-loss lane) carries its own
         # execute_compare_fixture in the kernel dict — both are required at
         # construction for their status.
         _ag_fixture: Optional_str = (
             _NUMERICAL_FIXTURES.get((op_name, "apple_gpu"))
-            if _ag_status == _HARDWARE_VERIFIED_STATUS
+            if _ag_status == _DEVICE_VERIFIED_ABI_STATUS
             else apple_gpu.get("execute_compare_fixture"))
         entries.append(BackendKernelEntry(
             target="apple_gpu",
@@ -5207,14 +5244,14 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
         ("nvidia_sm120", ("tcgen05", "tmem"),        "sm_120a"),
     ):
         # Consumer-Blackwell bring-up (2026-06-25): a shipped runtime symbol +
-        # execute-compare fixture promotes the sm_120 row to hardware_verified
+        # execute-compare fixture promotes the sm_120 row to device_verified_abi
         # (warp-level mma.sync). Replaces the artifact_only row for this arch
         # only; sm_80/90/100 stay artifact_only (proven only on sm_120).
         nv_hv = _NVIDIA_HARDWARE_VERIFIED.get(op_name) if target_name == "nvidia_sm120" else None
         if nv_hv is not None:
             entries.append(BackendKernelEntry(
                 target="nvidia_sm120",
-                status=_HARDWARE_VERIFIED_STATUS,
+                status=_DEVICE_VERIFIED_ABI_STATUS,
                 dtypes=tuple(nv_hv["dtypes"]),
                 feature_flags=tuple(nv_hv.get("feature_flags", ("mma_sync",))),
                 notes=str(nv_hv.get("notes", "")),
@@ -5268,16 +5305,16 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
             ))
 
     # ROCm — Strix Halo bring-up (2026-06-22): ops with a shipped runtime
-    # symbol + execute-compare fixture are ``hardware_verified`` (RDNA WMMA);
+    # symbol + execute-compare fixture are ``device_verified_abi`` (RDNA WMMA);
     # all others ride the generic MFMA artifact row (Sprint H-3, 2026-05-11:
     # MFMA shape + hipcc version pin per kernel, HIP execution gated on Phase H).
     rocm_hv = _ROCM_HARDWARE_VERIFIED.get(op_name)
     if rocm_hv is not None:
-        # Both halves of the hardware_verified contract are pulled in BEFORE
+        # Both halves of the device_verified_abi contract are pulled in BEFORE
         # construction so the validator sees a complete (symbol + fixture) row.
         entries.append(BackendKernelEntry(
             target="rocm",
-            status=_HARDWARE_VERIFIED_STATUS,
+            status=_DEVICE_VERIFIED_ABI_STATUS,
             dtypes=tuple(rocm_hv["dtypes"]),
             feature_flags=tuple(rocm_hv.get("feature_flags", ("wmma",))),
             notes=str(rocm_hv.get("notes", "")),
@@ -5286,7 +5323,7 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
             shape_envelope=rocm_hv.get("shape_envelope"),
             hipcc_version_min="7.2.4",
             expected_mfu=_ROCM_KERNEL_MFU.get((op_name, "rocm_gfx942")),
-            # A hardware_verified matrix-core op may ALSO carry a CDNA MFMA artifact
+            # A device_verified_abi matrix-core op may ALSO carry a CDNA MFMA artifact
             # shape (gemm does; matmul stays pure-RDNA-WMMA with None) — the CDNA
             # datacenter target alongside the proven RDNA WMMA row.
             mfma_shape=rocm_hv.get("mfma_shape"),
@@ -5297,10 +5334,10 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
     elif (rocm_c := _ROCM_COMPILED.get(op_name)) is not None:
         # Compiler-generated executing lane: runs on gfx1151 via runtime.launch()
         # as an hsaco (no C-ABI symbol), with a checked-in execute_compare_fixture
-        # — status ``compiled`` (a rung below the C-symbol hardware_verified).
+        # — status ``device_verified_jit`` (a rung below the C-symbol device_verified_abi).
         entries.append(BackendKernelEntry(
             target="rocm",
-            status=_COMPILED_STATUS,
+            status=_DEVICE_VERIFIED_JIT_STATUS,
             dtypes=tuple(rocm_c["dtypes"]),
             feature_flags=tuple(rocm_c.get("feature_flags", ("wmma",))),
             notes=str(rocm_c.get("notes", "")),
@@ -5308,9 +5345,9 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
             shape_envelope=rocm_c.get("shape_envelope"),
             hipcc_version_min="7.2.4",
             expected_mfu=_ROCM_KERNEL_MFU.get((op_name, "rocm_gfx942")),
-            # GEMM-family compiled ops keep the unified MMA descriptor the old
+            # GEMM-family device_verified_jit ops keep the unified MMA descriptor the old
             # artifact entry carried (None for non-GEMM ops like softmax/norm/
-            # activation/rope) — promoting batched_gemm etc. to `compiled` must
+            # activation/rope) — promoting batched_gemm etc. to `device_verified_jit` must
             # not drop it (test_backend_manifest_rocm_gemm_carries_mma_descriptor).
             mma_descriptor=_rocm_mma_descriptor_for(
                 op_name, tuple(rocm_c["dtypes"])),
@@ -5452,6 +5489,9 @@ __all__ = [
     "BackendKernelEntry",
     "BenchmarkMetadata",
     "BENCHMARK_HOT_PATH_GROUPS",
+    "DEVICE_VERIFIED_JIT_STATUS",
+    "DEVICE_VERIFIED_ABI_STATUS",
+    "DEVICE_EXECUTION_PROOF_DEFINITIONS",
     "manifest_for",
     "clifford_manifest_for",
     "ebm_manifest_for",

@@ -747,7 +747,7 @@ the A–E kernel spine — each PR test-gated:
   closed**; further folders land opportunistically as new algebraic identities
   surface.
 - **Complete claims need fixtures.** A completed backend claim should resolve to
-  an explicit compare fixture, `hardware_verified` row, or packaged validation.
+  an explicit compare fixture, `device_verified_abi` row, or packaged validation.
 - **Compiler specs can still drift.** Generated dashboards must remain the
   source of counts; prose docs should link, not duplicate snapshots.
 - **Generated-doc regeneration + drift gating — registry landed (2026-06-04),

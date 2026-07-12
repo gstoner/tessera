@@ -1,14 +1,14 @@
-"""Project 3 (2026-06-01) — lock the hardware_verified promotion.
+"""Project 3 (2026-06-01) — lock the device_verified_abi promotion.
 
 The 8 encode-eligible ops (softmax, softmax_safe, gelu, rope,
 flash_attn, rmsnorm, layer_norm, silu, bmm) carry a real per-op
 ``_dev_f32_enc`` C ABI symbol AND a numerical-comparison fixture, so
 their Apple GPU manifest entries qualify for the top rung of the
-readiness ladder: ``status == "hardware_verified"``.
+readiness ladder: ``status == "device_verified_abi"``.
 
 This file is the single drift gate for the promotion. It locks:
 
-* **Every promoted op carries the contract**: status=hardware_verified
+* **Every promoted op carries the contract**: status=device_verified_abi
   AND runtime_symbol points at a real C ABI export AND
   execute_compare_fixture points at a real Python file.
 * **runtime_symbol is actually exported by the runtime**: the symbol
@@ -16,7 +16,7 @@ This file is the single drift gate for the promotion. It locks:
   ``src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm``.
 * **execute_compare_fixture file exists** on disk.
 * **shape_envelope is documented** (free-form, just-must-not-be-empty).
-* **The conformance matrix accepts hardware_verified** as a real
+* **The conformance matrix accepts device_verified_abi** as a real
   compile/link path: rendering uses the new status seamlessly.
 """
 
@@ -58,8 +58,8 @@ def test_apple_gpu_entry_is_hardware_verified(op: str) -> None:
     entries = {e.target: e for e in bm.manifest_for(op)}
     assert "apple_gpu" in entries, f"{op}: no apple_gpu manifest entry"
     ag = entries["apple_gpu"]
-    assert ag.status == "hardware_verified", (
-        f"{op}: expected status='hardware_verified', got {ag.status!r}")
+    assert ag.status == "device_verified_abi", (
+        f"{op}: expected status='device_verified_abi', got {ag.status!r}")
     assert ag.is_hardware_verified, (
         f"{op}: is_hardware_verified must be True")
 
@@ -69,7 +69,7 @@ def test_runtime_symbol_is_real_c_abi_export(
         op: str, runtime_src: str) -> None:
     entries = {e.target: e for e in bm.manifest_for(op)}
     sym = entries["apple_gpu"].runtime_symbol
-    assert sym, f"{op}: runtime_symbol must be set on hardware_verified"
+    assert sym, f"{op}: runtime_symbol must be set on device_verified_abi"
     # The symbol must be a real C ABI export — `extern "C" ... <sym>(`
     # somewhere in the runtime source. We look for the signature
     # pattern instead of plain text to avoid matching comments.
@@ -85,7 +85,7 @@ def test_execute_compare_fixture_exists(op: str) -> None:
     entries = {e.target: e for e in bm.manifest_for(op)}
     fixture = entries["apple_gpu"].execute_compare_fixture
     assert fixture, (
-        f"{op}: execute_compare_fixture must be set on hardware_verified")
+        f"{op}: execute_compare_fixture must be set on device_verified_abi")
     assert (_REPO / fixture).is_file(), (
         f"{op}: fixture {fixture!r} does not exist on disk")
 
@@ -95,7 +95,7 @@ def test_shape_envelope_documented(op: str) -> None:
     entries = {e.target: e for e in bm.manifest_for(op)}
     env = entries["apple_gpu"].shape_envelope
     assert env, (
-        f"{op}: shape_envelope must be documented on hardware_verified")
+        f"{op}: shape_envelope must be documented on device_verified_abi")
     assert len(env) >= 8, (
         f"{op}: shape_envelope={env!r} looks too short to be meaningful")
 
@@ -105,12 +105,12 @@ def test_promoted_count_is_eight():
     surface it here so the promotion stays explicit."""
     promoted = []
     for op_name, payload in bm._APPLE_GPU_KERNELS.items():
-        if payload.get("status") == "hardware_verified":
+        if payload.get("status") == "device_verified_abi":
             promoted.append(op_name)
     promoted.sort()
     expected = sorted(HARDWARE_VERIFIED_OPS)
     assert promoted == expected, (
-        f"Expected exactly these apple_gpu hardware_verified ops:\n"
+        f"Expected exactly these apple_gpu device_verified_abi ops:\n"
         f"  {expected}\n"
         f"Got:\n"
         f"  {promoted}")
@@ -118,27 +118,27 @@ def test_promoted_count_is_eight():
 
 def test_conformance_matrix_treats_hardware_verified_as_complete():
     """The conformance matrix backend_compile column must accept
-    hardware_verified as a complete compile path. Pin via a direct
+    device_verified_abi as a complete compile path. Pin via a direct
     function call on the row aggregator."""
-    # All-hardware_verified case → complete.
+    # All-device_verified_abi case → complete.
     s = cm._proof_status_from_backend_compile(
-        ["hardware_verified"], "softmax", "apple_gpu"
+        ["device_verified_abi"], "softmax", "apple_gpu"
     )
     assert s == cm.PROOF_COMPLETE
-    # Mixed hardware_verified + fused → still complete.
+    # Mixed device_verified_abi + fused → still complete.
     s = cm._proof_status_from_backend_compile(
-        ["hardware_verified", "fused"], "softmax", "apple_gpu"
+        ["device_verified_abi", "fused"], "softmax", "apple_gpu"
     )
     assert s == cm.PROOF_COMPLETE
-    # hardware_verified + planned → planned (weakest wins).
+    # device_verified_abi + planned → planned (weakest wins).
     s = cm._proof_status_from_backend_compile(
-        ["hardware_verified", "planned"], "softmax", "apple_gpu"
+        ["device_verified_abi", "planned"], "softmax", "apple_gpu"
     )
     assert s == cm.PROOF_PLANNED
 
 
 def test_pipeline_link_gate_treats_hardware_verified_as_pass():
-    """The pipeline_gates link gate must accept hardware_verified as
+    """The pipeline_gates link gate must accept device_verified_abi as
     linkable — otherwise the conformance dashboard's link column would
     regress to FAIL after the promotion."""
     r = pg._eval_link("apple_gpu", "softmax")

@@ -2,7 +2,7 @@
 
 The cache backing the MPSGraph encode-session path was unbounded
 before this sprint — a 5,000-step training run with 10 distinct
-shapes per step would accumulate 50,000 compiled graphs. Task B
+shapes per step would accumulate 50,000 device_verified_jit graphs. Task B
 adds an LRU eviction policy keyed by an MRU-order tracker alongside
 the existing lookup dict.
 

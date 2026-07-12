@@ -107,7 +107,7 @@ def _cptr(a: np.ndarray) -> ctypes.c_void_p:
 
 # --- candidate ---------------------------------------------------------------
 class CpuStencilGradCandidate(Candidate):
-    """Tier-1: the shipped CPU central-difference stencil kernel, compiled +
+    """Tier-1: the shipped CPU central-difference stencil kernel, device_verified_jit +
     dlopened.  Runs the real ``ts_stencil_grad_cpu`` the Target-IR lowering names."""
 
     name = "cpu_stencil_grad"

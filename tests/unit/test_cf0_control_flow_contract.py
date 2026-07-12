@@ -3,7 +3,7 @@ docs/spec/CONTROL_FLOW_CONTRACT.md §6).
 
 Every form *outside* the device-lowerable envelope (§2) must be rejected at
 trace time with a TesseraTraceError — never silently unrolled into a host loop
-inside a compiled-backend claim. The positive trace-emission cases live in
+inside a device_verified_jit-backend claim. The positive trace-emission cases live in
 test_trace_*.py; this file pins the rejections so the envelope cannot quietly
 widen. Pure trace-shape checks — no GPU runtime needed.
 """

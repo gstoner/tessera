@@ -129,7 +129,7 @@ def _t_matmul_rung7(rng: Any) -> list[CheckResult]:
     a, b = _f32(rng, (64, 64)), _f32(rng, (64, 64))
     v = evaluate("apple_gpu", _MM_GPU, (a, b), a @ b, rtol=2e-3, atol=1e-4)
     return [
-        CheckResult("rung==hardware_verified", v.rung is Rung.HARDWARE_VERIFIED, v.detail),
+        CheckResult("rung==device_verified_abi", v.rung is Rung.HARDWARE_VERIFIED, v.detail),
         CheckResult("provenance_ok", v.provenance_ok, "native execution, not a fallback"),
     ]
 

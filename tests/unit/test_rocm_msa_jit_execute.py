@@ -1,6 +1,6 @@
 """@jit(target="rocm") msa_sparse_attention executes on gfx1151.
 
-Proves the Target-IR `status = "compiled"` on `tessera_rocm.msa_block_sparse` is
+Proves the Target-IR `status = "device_verified_jit"` on `tessera_rocm.msa_block_sparse` is
 honest end-to-end: the @jit ROCm path stamps the artifact executable
 (compiler_path="rocm_sparse_attn_compiled"), and runtime.launch() runs the
 compiler-generated block-sparse WMMA + GPU-top-k lane, matching the numpy MSA
@@ -46,7 +46,7 @@ def test_jit_rocm_msa_executes_via_launch():
 
     # JitFn.__call__ fast-dispatches only CPU/Apple targets and otherwise falls
     # through to the eager Python body — so calling _msa_jit(...) would NOT run
-    # the compiled lane. Exercise it the way it is actually reached: launch the
+    # the device_verified_jit lane. Exercise it the way it is actually reached: launch the
     # stamped artifact and assert THAT result (the block-sparse WMMA + GPU top-k
     # lane) matches the reference. A broken rocm_sparse_attn_compiled artifact
     # now fails here instead of hiding behind the eager fallback.

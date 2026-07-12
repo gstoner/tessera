@@ -30,23 +30,23 @@ Audit response to [docs/audit/compiler/COMPILER_AUDIT.md](compiler/COMPILER_AUDI
 
 | Family | Exact-target cells | Status counts |
 |---|---:|---|
-| `host_reference` | 7 | reference=6, missing=1 |
-| `x86` | 7 | complete=3, missing=4 |
-| `apple` | 14 | complete=7, reference=5, missing=2 |
-| `rocm` | 7 | complete=6, missing=1 |
+| `host_reference` | 7 | reference=7 |
+| `x86` | 7 | complete=7 |
+| `apple` | 14 | complete=8, reference=6 |
+| `rocm` | 7 | complete=7 |
 | `nvidia` | 28 | complete=1, missing=27 |
 
 ## Overall counts
 
 | Overall (weakest column wins) | Count |
 |---|---:|
-| ✅ `complete` | 17 |
-| 🧪 `reference` | 11 |
+| ✅ `complete` | 23 |
+| 🧪 `reference` | 13 |
 | 🔧 `compileable` | 0 |
 | ⚙️ `partial` | 0 |
 | ⚠️ `artifact_only` | 0 |
 | 📋 `planned` | 0 |
-| ❌ `missing` | 35 |
+| ❌ `missing` | 27 |
 | **total cells** | **63** |
 
 ## `matmul`
@@ -54,7 +54,7 @@ Audit response to [docs/audit/compiler/COMPILER_AUDIT.md](compiler/COMPILER_AUDI
 | target | overall | graph | schedule | tile | target_legal | backend_compile | runtime | numerical | first failing gate (B) | notes |
 |--------|---------|-------|----------|------|--------------|-----------------|---------|-----------|------------------------|-------|
 | `cpu` | 🧪 | ✅ | ✅ | ✅ | ✅ | 🧪 | 🧪 | ✅ | `backend_compile` — backend_compile=reference; components=matmul |  |
-| `x86` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ❌ | ❌ | `backend_compile` — backend_compile=partial; components=matmul |  |
+| `x86` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |  |
 | `apple_cpu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |  |
 | `apple_gpu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |  |
 | `rocm` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |  |
@@ -72,7 +72,7 @@ _composes from primitives; no fused single-kernel today_
 | target | overall | graph | schedule | tile | target_legal | backend_compile | runtime | numerical | first failing gate (B) | notes |
 |--------|---------|-------|----------|------|--------------|-----------------|---------|-----------|------------------------|-------|
 | `cpu` | 🧪 | ✅ | ✅ | ✅ | ✅ | 🧪 | 🧪 | ✅ | `backend_compile` — backend_compile=reference; components=matmul,relu | composes from per-op kernels (no fusion pass on this target) |
-| `x86` | ❌ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | `backend_compile` — backend_compile=missing; components=matmul,relu | composes from per-op kernels (no fusion pass on this target) |
+| `x86` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | composes from per-op kernels (no fusion pass on this target) |
 | `apple_cpu` | 🧪 | ✅ | ✅ | ✅ | ✅ | 🧪 | 🧪 | ✅ | `backend_compile` — backend_compile=reference; components=matmul,relu | composes from per-op kernels (no fusion pass on this target) |
 | `apple_gpu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | composes from per-op kernels (no fusion pass on this target) |
 | `rocm` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | composes from per-op kernels (no fusion pass on this target) |
@@ -104,7 +104,7 @@ _fused MSL kernel on apple_gpu (single-kernel scores); compose elsewhere_
 | target | overall | graph | schedule | tile | target_legal | backend_compile | runtime | numerical | first failing gate (B) | notes |
 |--------|---------|-------|----------|------|--------------|-----------------|---------|-----------|------------------------|-------|
 | `cpu` | 🧪 | ✅ | ✅ | ✅ | ✅ | 🧪 | 🧪 | ✅ | `backend_compile` — backend_compile=reference; components=matmul,softmax | composes from per-op kernels (no fusion pass on this target) |
-| `x86` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ❌ | ❌ | `backend_compile` — backend_compile=partial; components=matmul,softmax | composes from per-op kernels (no fusion pass on this target) |
+| `x86` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | composes from per-op kernels (no fusion pass on this target) |
 | `apple_cpu` | 🧪 | ✅ | ✅ | ✅ | ✅ | 🧪 | 🧪 | ✅ | `backend_compile` — backend_compile=reference; components=matmul,softmax | composes from per-op kernels (no fusion pass on this target) |
 | `apple_gpu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | fused single-kernel on this target |
 | `rocm` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | composes from per-op kernels (no fusion pass on this target) |
@@ -145,13 +145,13 @@ _fused MSL kernel on apple_gpu (single-kernel scores); compose elsewhere_
 
 | target | overall | graph | schedule | tile | target_legal | backend_compile | runtime | numerical | first failing gate (B) | notes |
 |--------|---------|-------|----------|------|--------------|-----------------|---------|-----------|------------------------|-------|
-| `cpu` | ❌ | ✅ | ❌ | ❌ | ❌ | 🧪 | 🧪 | ✅ | `schedule_legal` — schedule_legal=missing; components=kv_cache_read | compiler emitted no Schedule IR |
-| `x86` | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | `schedule_legal` — schedule_legal=missing; components=kv_cache_read | compiler emitted no Schedule IR |
-| `apple_cpu` | ❌ | ✅ | ❌ | ❌ | ❌ | 🧪 | 🧪 | ✅ | `schedule_legal` — schedule_legal=missing; components=kv_cache_read | compiler emitted no Schedule IR |
-| `apple_gpu` | ❌ | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ | `schedule_legal` — schedule_legal=missing; components=kv_cache_read | compiler emitted no Schedule IR |
-| `rocm` | ❌ | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ | `schedule_legal` — schedule_legal=missing; components=kv_cache_read | compiler emitted no Schedule IR |
-| `nvidia_sm80` | ❌ | ✅ | ❌ | ❌ | ❌ | ⚠️ | ❌ | ❌ | `schedule_legal` — schedule_legal=missing; components=kv_cache_read | compiler emitted no Schedule IR |
-| `nvidia_sm90` | ❌ | ✅ | ❌ | ❌ | ❌ | ⚠️ | ❌ | ❌ | `schedule_legal` — schedule_legal=missing; components=kv_cache_read | compiler emitted no Schedule IR |
-| `nvidia_sm100` | ❌ | ✅ | ❌ | ❌ | ❌ | ⚠️ | ❌ | ❌ | `schedule_legal` — schedule_legal=missing; components=kv_cache_read | compiler emitted no Schedule IR |
-| `nvidia_sm120` | ❌ | ✅ | ❌ | ❌ | ❌ | ⚠️ | ❌ | ❌ | `schedule_legal` — schedule_legal=missing; components=kv_cache_read | compiler emitted no Schedule IR |
+| `cpu` | 🧪 | ✅ | ✅ | ✅ | ✅ | 🧪 | 🧪 | ✅ | `backend_compile` — backend_compile=reference; components=kv_cache_read |  |
+| `x86` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |  |
+| `apple_cpu` | 🧪 | ✅ | ✅ | ✅ | ✅ | 🧪 | 🧪 | ✅ | `backend_compile` — backend_compile=reference; components=kv_cache_read |  |
+| `apple_gpu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |  |
+| `rocm` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |  |
+| `nvidia_sm80` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ❌ | `backend_compile` — backend_compile=artifact_only; components=kv_cache_read |  |
+| `nvidia_sm90` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ❌ | `backend_compile` — backend_compile=artifact_only; components=kv_cache_read |  |
+| `nvidia_sm100` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ❌ | `backend_compile` — backend_compile=artifact_only; components=kv_cache_read |  |
+| `nvidia_sm120` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ❌ | `backend_compile` — backend_compile=artifact_only; components=kv_cache_read |  |
 

@@ -1,5 +1,5 @@
 """Hand-written AVX-512 logical kernel on x86 — the CPU analog of the ROCm
-compiled logical lane.
+device_verified_jit logical lane.
 
 `tessera_x86_avx512_logical_i8` is exported by libtessera_x86_elementwise.so; the
 Python runtime ctypes-loads it and calls it from `runtime.launch()` via

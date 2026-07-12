@@ -103,8 +103,8 @@ _AXIS_REAL_GRAPH_IR = frozenset({
 _AXIS_NATIVE_LOWERING = frozenset({
     "complete",
     "fused",
-    "compiled",
-    "hardware_verified",
+    "device_verified_jit",
+    "device_verified_abi",
     "packaged",
 })
 _AXIS_REFERENCE_LOWERING = frozenset({"reference", "compileable"})

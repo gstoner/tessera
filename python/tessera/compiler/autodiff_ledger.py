@@ -22,7 +22,7 @@ rung                    source (existing, read-only here)
 ``target_lowered``      backward lowering probe (Phase 3) — none wired yet
 ``runtime_bound``       ``runtime_execution_matrix`` backward column (Phase 4)
 ``oracle_proven``       ``op_target_conformance`` backward fixture (Phase 3)
-``hardware_proven``     ``runtime_execution_matrix`` ``hardware_verified``
+``hardware_proven``     ``runtime_execution_matrix`` ``device_verified_abi``
                         backward rows (Phase 4/6)
 ======================  ==================================================
 
@@ -323,7 +323,7 @@ def render_markdown() -> str:
         "(`--tessera-autodiff-paired`) is numerically **interpreted on CPU and "
         "matches an independent NumPy VJP oracle** (Phase 3). Strictly weaker "
         "than native `oracle_proven`: it proves the *IR is correct*, not that a "
-        "compiled/native backward executes. Proven by "
+        "device_verified_jit/native backward executes. Proven by "
         "`tests/unit/test_autodiff_paired_cpu_oracle.py`.",
         "- **bwd_target_lowered / bwd_runtime_bound / bwd_oracle_proven / "
         "bwd_hardware_proven** — targets at which *backward* lowers / has a "

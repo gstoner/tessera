@@ -2506,6 +2506,18 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("kv_cache_read", "cpu"): "tests/unit/test_kv_cache_handle.py",
     # apple_cpu
     ("matmul", "apple_cpu"): "tests/unit/test_apple_backend_roadmap.py",
+    ("softmax", "apple_cpu"):
+        "tests/unit/test_apple_conformance_closeout.py",
+    ("flash_attn", "apple_cpu"):
+        "tests/unit/test_apple_conformance_closeout.py",
+    ("conv2d", "apple_cpu"):
+        "tests/unit/test_apple_conformance_closeout.py",
+    ("kv_cache_read", "apple_cpu"):
+        "tests/unit/test_apple_conformance_closeout.py",
+    ("matmul_relu", "apple_cpu"):
+        "tests/unit/test_apple_conformance_closeout.py",
+    ("matmul_softmax", "apple_cpu"):
+        "tests/unit/test_apple_conformance_closeout.py",
     # apple_gpu — landed runtime paths
     # GPU matmul vs both the CPU lane and numpy (gpu == a @ b). The
     # buffer-pool test executes matmul but asserts RAII invariants, not
@@ -2532,7 +2544,11 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     # CPU-lane composition and the numpy reference ``softmax(a @ b)``.
     ("matmul_softmax", "apple_gpu"):
         "tests/unit/test_production_jit_phase3_apple_gpu.py",
+    ("matmul_relu", "apple_gpu"):
+        "tests/unit/test_apple_conformance_closeout.py",
     ("conv2d", "apple_gpu"): "tests/unit/test_apple_gpu_conv2d.py",
+    ("kv_cache_read", "apple_gpu"):
+        "tests/unit/test_apple_conformance_closeout.py",
     # Mamba-2 selective scan: chunked-parallel SSD with Metal bmm contractions,
     # validated bit-exact against the sequential numpy reference.
     ("selective_ssm", "apple_gpu"): "tests/unit/test_mamba_ssd_gpu.py",

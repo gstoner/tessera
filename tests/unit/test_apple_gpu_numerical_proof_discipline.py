@@ -29,9 +29,6 @@ _FUSED_WITHOUT_NUMERICAL_FIXTURE = {
     # dedicated GPU numerical compare. The sharding-mock test is not an
     # execute-compare.
     "ebm_langevin_step",
-    # Conformance op; the apple_gpu path executes but has no numerical
-    # execute-compare fixture yet (tracked in MASTER_AUDIT as a software gap).
-    "kv_cache_read",
     # Composed resident cast path used by f16/bf16 bridges; proof today lives in
     # resident-chain tests rather than a standalone op execute-compare fixture.
     "cast",

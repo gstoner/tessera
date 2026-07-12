@@ -48,10 +48,15 @@ _AUDIT = _REPO_ROOT / "docs" / "audit"
 #   plan      — a work plan; carries plan_state.
 #   reference — supporting reference/survey material (not a status surface).
 #   snapshot  — a dated point-in-time audit; archive once superseded.
+#   historical_design — a design/plan doc superseded by active-execution work,
+#                       kept for provenance; carries a superseded plan_state.
 _ROLES = frozenset(
-    {"root", "index", "theme", "sub_audit", "plan", "reference", "snapshot"}
+    {"root", "index", "theme", "sub_audit", "plan", "reference", "snapshot",
+     "historical_design"}
 )
 _PLAN_STATES = frozenset({"open", "landing", "closed"})
+# A historical_design doc records *why* it is historical via its plan_state.
+_HISTORICAL_STATES = frozenset({"superseded_for_active_execution_work"})
 
 # Root-level docs under docs/audit/ that are generated / drift-gated
 # dashboards, NOT authored prose.  Owned by their own generators + gates.
@@ -196,10 +201,16 @@ def test_plan_docs_declare_a_valid_plan_state() -> None:
                     f"{rel}: plan must declare plan_state in "
                     f"{sorted(_PLAN_STATES)}, got {state!r}"
                 )
+        elif role == "historical_design":
+            if state not in _HISTORICAL_STATES:
+                offenders.append(
+                    f"{rel}: historical_design must declare plan_state in "
+                    f"{sorted(_HISTORICAL_STATES)}, got {state!r}"
+                )
         elif state is not None:
             offenders.append(
                 f"{rel}: plan_state={state!r} is only meaningful for "
-                f"audit_role: plan (this doc is {role!r})"
+                f"audit_role: plan / historical_design (this doc is {role!r})"
             )
     assert not offenders, "\n  ".join(["plan_state violations:"] + offenders)
 

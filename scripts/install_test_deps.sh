@@ -41,7 +41,7 @@ die()  { printf '\033[1;31m[install-test-deps] ERROR:\033[0m %s\n' "$*" >&2; exi
 RUNTIME=( "numpy>=2.0,<2.2" scipy ml_dtypes pyyaml click rich tqdm )
 # Test + lint + type tooling — mirrors pyproject [project.optional-dependencies]
 # dev, plus `lit` (the LLVM test runner) for the MLIR fixtures under tests/.
-TOOLING=( pytest pytest-cov pytest-timeout pytest-xdist mypy ruff black isort flake8 lit )
+TOOLING=( pytest pytest-cov pytest-timeout pytest-xdist hypothesis mypy ruff black isort flake8 lit )
 
 # ---------------------------------------------------------------------------
 if [[ $USE_VENV -eq 1 ]]; then

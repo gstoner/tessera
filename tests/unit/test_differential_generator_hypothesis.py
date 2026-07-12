@@ -7,15 +7,14 @@ but driven by **hypothesis** instead of stdlib fixed seeds. The payoff is
 hypothesis reduces it to the *minimal* failing program — typically the 1–2 ops
 that actually diverge — instead of a 5-op chain you'd have to bisect by hand.
 
-CI without hypothesis installed skips this whole module (``importorskip``); the
-stdlib harness still provides dependency-free coverage everywhere. The shared
-grammar + oracle live in ``_diff_lane`` so the two harnesses can't drift.
+Hypothesis is a required test dependency (declared in the dev extra, CI, and
+the local test installer), so a missing installation fails collection instead
+of silently dropping this coverage. The shared grammar + oracle live in
+``_diff_lane`` so the two harnesses can't drift.
 """
 
 import numpy as np
-import pytest
 
-hypothesis = pytest.importorskip("hypothesis")
 from hypothesis import HealthCheck, given, settings  # noqa: E402
 from hypothesis import strategies as st  # noqa: E402
 

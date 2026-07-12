@@ -47,6 +47,7 @@ dev = [
     "pytest-cov>=4.0.0",
     "pytest-timeout>=2.1.0",   # global per-test hang ceiling (see [tool.pytest.ini_options] timeout)
     "pytest-xdist>=3.0.0",     # sharded runs via scripts/run_unit_tests.py (-n sized to RAM/cores)
+    "hypothesis>=6.0.0",       # property-based differential generation + shrinking
     "black>=22.0.0",
     "isort>=5.10.0",
     "flake8>=4.0.0",

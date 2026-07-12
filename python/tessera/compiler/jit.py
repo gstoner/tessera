@@ -901,6 +901,37 @@ class JitFn:
         graph_ops = [op for fn in self.graph_ir.functions for op in fn.body]
         ops = {op.op_name.removeprefix("tessera.") for op in graph_ops}
 
+        if ops == {"matmul"} and len(inputs) == 2 and len(cotangents) == 1:
+            # Matmul has no standalone backward kernel. Its paired ABI is the
+            # honest composition dA=dO@B.T, dB=A.T@dO through two generated
+            # forward-GEMM launches.
+            a, b = inputs
+            dout = cotangents[0]
+
+            def launch_gemm(lhs: Any, rhs: Any) -> Any:
+                artifact = RuntimeArtifact(metadata={
+                    "target": "rocm", "compiler_path": "rocm_compiled",
+                    "executable": True, "execution_kind": "native_gpu",
+                    "execution_mode": "hip_runtime", "arg_names": ["a", "b"],
+                    "output_name": "c", "ops": [{"op_name": "tessera.matmul",
+                        "result": "c", "operands": ["a", "b"], "kwargs": {}}],
+                })
+                launched = launch(artifact, (np.ascontiguousarray(lhs),
+                                             np.ascontiguousarray(rhs)))
+                if (not launched.get("ok")
+                        or launched.get("execution_mode") != "hip_runtime"):
+                    raise TesseraJitError("ROCm composed matmul backward failed: "
+                                          + str(launched.get("reason")))
+                return launched["output"]
+
+            output = (launch_gemm(dout, b.T), launch_gemm(a.T, dout))
+            path = "rocm_compiled+rocm_compiled"
+            self.last_backward_execution = {
+                "compiler_path": path, "execution_kind": "native_gpu",
+                "execution_mode": "hip_runtime", "evidence_target": "rocm_gfx1151",
+                "implementation": "composition", "residual_policy": "save_inputs",
+            }
+            return output
         if ops & {"flash_attn", "multi_head_attention", "gqa_attention", "mqa_attention"}:
             path = "rocm_flash_attn_bwd_compiled"
             op_name = "tessera.flash_attn_bwd"
@@ -935,6 +966,8 @@ class JitFn:
             "execution_kind": "native_gpu",
             "execution_mode": "hip_runtime",
             "evidence_target": "rocm_gfx1151",
+            "implementation": "dedicated",
+            "residual_policy": "recompute_all",
         }
         output = result["output"]
         return tuple(output) if isinstance(output, (tuple, list)) else (output,)

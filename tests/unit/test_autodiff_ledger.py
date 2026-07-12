@@ -91,6 +91,26 @@ def test_flash_attn_backward_is_jit_verified_on_exact_rocm_target() -> None:
     assert "rocm_gfx1151" in fa.bwd_device_verified_jit
 
 
+def test_rocm_aliases_composition_and_residual_policy_are_structured() -> None:
+    from tessera.compiler import execution_matrix as em
+
+    for alias in ("multi_head_attention", "gqa_attention", "mqa_attention"):
+        assert em.has_native_backward(alias, "rocm")
+        policy = em.backward_residual_policy(alias, "rocm")
+        assert policy is not None
+        assert policy["policy"] == "recompute_all"
+        assert policy["implementation"] == "dedicated"
+
+    assert em.has_native_backward("matmul", "rocm")
+    matmul = em.backward_residual_policy("matmul", "rocm_gfx1151")
+    assert matmul is not None
+    assert matmul["policy"] == "save_inputs"
+    assert matmul["implementation"] == "composition"
+    compositions = em.backward_compositions()
+    assert len(compositions) == 1
+    assert compositions[0].component_paths == ("rocm_compiled", "rocm_compiled")
+
+
 def test_device_verified_leaders_are_derived_from_rows() -> None:
     rendered = autodiff_ledger.render_markdown()
     rows = autodiff_ledger.collect_rows()

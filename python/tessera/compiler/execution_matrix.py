@@ -69,6 +69,32 @@ class ExecutionRow:
     evidence_target: str = ""    # e.g. "rocm_gfx1151" / "x86_avx512"
     numerical_fixture: str = ""  # repo-relative execute-and-compare fixture
     proof_build: str = ""        # stable build configuration that ran fixture
+    # Paired-backward contract metadata. Aliases share this exact implementation
+    # (they are not extra kernels). residual_policy is selected by the backward
+    # arbiter per (op, exact target), rather than inferred from prose.
+    backward_aliases: tuple[str, ...] = ()
+    residual_policy: str = ""
+    residual_tradeoff: str = ""
+
+
+@dataclass(frozen=True)
+class BackwardComposition:
+    """A native VJP assembled from existing executable forward lanes.
+
+    This is deliberately distinct from an ExecutionRow: a composition is not a
+    fictitious standalone kernel or compiler path. ``component_paths`` names
+    the real launches used by the paired ABI.
+    """
+
+    op_family: str
+    target: str
+    evidence_target: str
+    component_paths: tuple[str, ...]
+    formula: str
+    residual_policy: str
+    residual_tradeoff: str
+    numerical_fixture: str
+    proof_build: str
 
 
 # Catalog of every executor name → docstring describing what it runs. The actual
@@ -1912,6 +1938,9 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "causal, f16/bf16 storage, f32 accumulate.",
         execution_mode="hip_runtime",
         direction="backward", op_family="flash_attn",
+        backward_aliases=("multi_head_attention", "gqa_attention", "mqa_attention"),
+        residual_policy="recompute_all",
+        residual_tradeoff="save no forward tensors; recompute softmax statistics",
         device_proof="device_verified_jit", evidence_target="rocm_gfx1151",
         numerical_fixture="tests/unit/test_rocm_flash_attn_bwd_compiled.py",
         proof_build="llvm22-core+rocm-gfx1151"),
@@ -1932,6 +1961,8 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "the reverse-mode analog of rocm_selective_ssm_compiled.",
         execution_mode="hip_runtime",
         direction="backward", op_family="selective_ssm",
+        residual_policy="recompute_all",
+        residual_tradeoff="save no forward intermediates; recompute recurrence state",
         device_proof="device_verified_jit", evidence_target="rocm_gfx1151",
         numerical_fixture="tests/unit/test_rocm_ssm_bwd_launch_execute.py",
         proof_build="llvm22-core+rocm-gfx1151"),
@@ -2698,9 +2729,34 @@ _DEVICE_PROOFS: frozenset[str] = frozenset(
 )
 
 
+# Matmul's VJP has no distinct backward kernel. The paired ABI launches the
+# already device-verified generated GEMM twice with transposed operands. Keeping
+# this as a composition prevents the audit from double-counting a fake kernel.
+_BACKWARD_COMPOSITIONS: tuple[BackwardComposition, ...] = (
+    BackwardComposition(
+        op_family="matmul", target="rocm", evidence_target="rocm_gfx1151",
+        component_paths=("rocm_compiled", "rocm_compiled"),
+        formula="dA=dO@B.T; dB=A.T@dO",
+        residual_policy="save_inputs",
+        residual_tradeoff="retain A and B; launch two generated forward GEMMs",
+        numerical_fixture="tests/unit/test_autodiff_rocm_matmul_composed.py",
+        proof_build="llvm22-core+rocm-gfx1151",
+    ),
+)
+
+
 def backward_rows() -> list[ExecutionRow]:
     """Every backward (VJP) launch row in the matrix (``direction == "backward"``)."""
     return [r for r in all_rows() if r.direction == "backward"]
+
+
+def backward_compositions() -> tuple[BackwardComposition, ...]:
+    """Native paired-ABI compositions; these never count as kernel rows."""
+    return _BACKWARD_COMPOSITIONS
+
+
+def _families_for_row(row: ExecutionRow) -> tuple[str, ...]:
+    return (row.op_family, *row.backward_aliases) if row.op_family else ()
 
 
 def native_backward_targets() -> dict[str, dict[str, tuple[str, ...]]]:
@@ -2715,11 +2771,15 @@ def native_backward_targets() -> dict[str, dict[str, tuple[str, ...]]]:
     jit: dict[str, set[str]] = {}
     abi: dict[str, set[str]] = {}
     builds: dict[str, dict[str, str]] = {}
+    policies: dict[str, dict[str, str]] = {}
+    implementations: dict[str, dict[str, str]] = {}
     for r in backward_rows():
         if not r.executable or not r.op_family:
             continue
         target = r.evidence_target or r.target
-        bound.setdefault(r.op_family, set()).add(target)
+        families = _families_for_row(r)
+        for family in families:
+            bound.setdefault(family, set()).add(target)
         if r.device_proof:
             if r.device_proof not in _DEVICE_PROOFS:
                 raise ValueError(f"unknown backward device proof {r.device_proof!r}")
@@ -2729,10 +2789,30 @@ def native_backward_targets() -> dict[str, dict[str, tuple[str, ...]]]:
                 raise ValueError(
                     f"{r.compiler_path} claims {r.device_proof} without exact "
                     "evidence_target, checked-in numerical_fixture, and proof_build")
-            oracle.setdefault(r.op_family, set()).add(target)
-            (jit if r.device_proof == "device_verified_jit" else abi).setdefault(
-                r.op_family, set()).add(target)
-            builds.setdefault(r.op_family, {})[target] = r.proof_build
+            for family in families:
+                oracle.setdefault(family, set()).add(target)
+                (jit if r.device_proof == "device_verified_jit" else abi).setdefault(
+                    family, set()).add(target)
+                builds.setdefault(family, {})[target] = r.proof_build
+                if r.residual_policy:
+                    policies.setdefault(family, {})[target] = r.residual_policy
+                    implementations.setdefault(family, {})[target] = "dedicated"
+    for composition in backward_compositions():
+        fixture = _REPO_ROOT / composition.numerical_fixture
+        if not fixture.is_file() or not composition.proof_build:
+            raise ValueError(
+                f"{composition.op_family} composition lacks numerical fixture/build")
+        components = [lookup(composition.target, path)
+                      for path in composition.component_paths]
+        if not all(row is not None and row.executable for row in components):
+            continue
+        family, target = composition.op_family, composition.evidence_target
+        bound.setdefault(family, set()).add(target)
+        oracle.setdefault(family, set()).add(target)
+        jit.setdefault(family, set()).add(target)
+        builds.setdefault(family, {})[target] = composition.proof_build
+        policies.setdefault(family, {})[target] = composition.residual_policy
+        implementations.setdefault(family, {})[target] = "composition"
     return {
         fam: {
             "runtime_bound": tuple(sorted(bound.get(fam, ()))),
@@ -2742,6 +2822,14 @@ def native_backward_targets() -> dict[str, dict[str, tuple[str, ...]]]:
             "proof_builds": tuple(
                 f"{target}={build}"
                 for target, build in sorted(builds.get(fam, {}).items())
+            ),
+            "residual_policies": tuple(
+                f"{target}={policy}"
+                for target, policy in sorted(policies.get(fam, {}).items())
+            ),
+            "implementations": tuple(
+                f"{target}={kind}"
+                for target, kind in sorted(implementations.get(fam, {}).items())
             ),
         }
         for fam in (set(bound) | set(oracle) | set(jit) | set(abi))
@@ -2768,6 +2856,29 @@ def has_native_backward(op_family: str, target: str) -> bool:
         (target == "rocm" and any(t.startswith("rocm_") for t in verified))
         or (target == "x86" and any(t.startswith("x86_") for t in verified))
     )
+
+
+def backward_residual_policy(op_family: str, target: str) -> dict[str, str] | None:
+    """Arbiter input for the selected native backward on ``(op, target)``.
+
+    Returns structured provenance for dedicated kernels and compositions. A
+    generic family target may select an exact architecture underneath it.
+    """
+    for row in backward_rows():
+        if op_family not in _families_for_row(row) or not row.residual_policy:
+            continue
+        exact = row.evidence_target or row.target
+        if target in {row.target, exact}:
+            return {"policy": row.residual_policy, "tradeoff": row.residual_tradeoff,
+                    "implementation": "dedicated", "evidence_target": exact}
+    for composition in backward_compositions():
+        if composition.op_family == op_family and target in {
+                composition.target, composition.evidence_target}:
+            return {"policy": composition.residual_policy,
+                    "tradeoff": composition.residual_tradeoff,
+                    "implementation": "composition",
+                    "evidence_target": composition.evidence_target}
+    return None
 
 
 #: Stable CSV column order for the execution matrix — append-only.

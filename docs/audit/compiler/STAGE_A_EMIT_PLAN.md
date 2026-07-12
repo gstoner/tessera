@@ -1,10 +1,20 @@
 ---
-last_updated: 2026-06-18
-audit_role: plan
-plan_state: open
+last_updated: 2026-07-11
+audit_role: historical_design
+plan_state: superseded_for_active_execution_work
 ---
 
-# Cross-Vendor Grounding Summary + Stage-A Emit Plan
+# Cross-Vendor Grounding Summary + Stage-A Emit Design Record
+
+> **Historical design scope (updated 2026-07-11).** This document records the
+> Stage-A, host-free emitter/validator work and the ISA findings that shaped it.
+> It is not the active backend-execution plan. For the active shared-lowering,
+> codegen-plugin, arbitration, and proof work, use
+> [`COMPILER_REFACTOR_PLAN.md`](COMPILER_REFACTOR_PLAN.md); for the concrete
+> per-backend implementation handoff, use
+> [`WORKSTREAM_C_HANDOFF.md`](WORKSTREAM_C_HANDOFF.md). Current executable
+> pathways live in
+> [`runtime_execution_matrix.md`](../generated/runtime_execution_matrix.md).
 
 > Consolidates the 2026-06-17 spec-grounding pass (CUDA 13.3 Programming Guide + Tile IR/Tile C++ +
 > RDNA 3.5 & RDNA 4 ISAs + Metal Feature Set Tables + MSL Spec + MPP guide + MLX source) and lays out
@@ -119,7 +129,10 @@ naive; no async-copy DMA). The Apple rung-3 toolchain (`metal`) is **absent on t
 the AMD `llc` lane, these are **not compile-verified here**; B3 is the verification. API grounded from
 MLX `steel/gemm/mma.h` + MSL spec ch.6.
 
-## 4. Next steps (in dependency order)
+## 4. Historical follow-ons and boundaries
+
+The items below are the remaining Stage-A follow-ons as of this design record,
+not a replacement for the active Workstream C execution plan.
 
 1. **CUDA pin bump 13.2.1 → 13.3** — *landed 2026-06-18.* Coordinated edit across `gpu_target.py`
    (toolkit 13.3 / driver 610.43.02 / PTX ISA 9.3; NCCL floor kept at 2.22 — it's a minimum, 13.3

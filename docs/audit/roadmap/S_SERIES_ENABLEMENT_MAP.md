@@ -7,10 +7,14 @@ authority: Companion enablement map for `docs/audit/roadmap/ROADMAP_AUDIT.md`
 
 # S-Series Primitive Enablement Map
 
-> Generated from `primitive_coverage.py` (lowering + effect + manifest)
-+ test-presence scan of `tests/`. 474 primitives. Each op is mapped to
-its enablement path; "tested" = real device fixture OR the op name
-appears in a test file.
+> This is a **taxonomy and prioritization guide**, not a status dashboard.
+> The generated sources of truth are
+> [`s_series_status.md`](../generated/s_series_status.md) (contract-axis and
+> per-target proof),
+> [`runtime_execution_matrix.md`](../generated/runtime_execution_matrix.md)
+> (what `runtime.launch()` executes), and
+> [`test_coverage.md`](../generated/test_coverage.md) (test evidence). They are
+> regenerated and drift-gated; do not copy their counts into this document.
 
 
 ## Enablement paths (taxonomy)
@@ -21,9 +25,15 @@ appears in a test file.
 | **IR-Transform** | a Graph/Schedule/Tile IR pass (sharding, collective insertion, layout, scheduling, structural transform) | `tessera-opt` lit/FileCheck fixtures |
 | **AST-Frontend** | Python trace/transform (control flow, autodiff/grad transforms, optimizer steps, state-tree ops) | Python unit tests on the traced/transformed program |
 | **Host-Library** | host-side runtime library (data/tokenizers, serialization, AOT, RNG/MCMC samplers, EBM partition) | Python unit tests (no device kernel) |
-| **TSOL** (cross-cut) | the 47 canonical Tessera Standard Operations — composed from the above | spec catalog + per-axis dashboard |
+| **TSOL** (cross-cut) | canonical Tessera Standard Operations — composed from the above | spec catalog + per-axis dashboard |
 
-## Summary by path
+## Historical June 27 snapshot
+
+> The following tables capture the classification used to build this roadmap.
+> Their count, test, and execution columns are historical; consult the generated
+> dashboards above for live values.
+
+### Summary by path
 
 | Path | ops | tested | untested | x86 exec | rocm exec | uses device-lib |
 |------|----:|-------:|---------:|---------:|----------:|----------------:|
@@ -33,7 +43,7 @@ appears in a test file.
 | Host-Library | 61 | 61 | 0 | 1 | 0 | 3 |
 | **TSOL (subset)** | 47 | 45 | 2 | 2 | 12 | 47 |
 
-## Category -> path map
+### Category -> path map
 
 | Category | path | ops | tested | rocm | x86 |
 |----------|------|----:|-------:|-----:|----:|
@@ -100,7 +110,7 @@ appears in a test file.
 | segment_reduce | Kernel | 1 | 1 | 0 | 0 |
 | state_space | Kernel | 1 | 1 | 0 | 0 |
 
-## Untested ops (no fixture, name not found in tests/)
+### Historical test-name scan
 
 
 ### Kernel (5)
@@ -115,7 +125,7 @@ appears in a test file.
 
 `cond`, `lamb`, `lion`, `map`, `muon`, `optax_style_chain`, `scan`
 
-## Test-coverage reality
+### Interpretation
 
 - **Name-in-test heuristic:** 448/474 ops appear in a test or carry a device
   fixture. The 26 flagged "untested" are mostly **false negatives** on short op
@@ -133,7 +143,7 @@ appears in a test file.
 
 ## Rebuilt enablement plan
 
-### 1. Kernel path — 283 ops (108 real / **175 reference-only**) — main thrust
+### 1. Kernel path — main thrust
 Two sub-mechanisms, both proven this session:
 - **Compiler codegen** — `generate-rocm-<fam>-kernel` MLIR pass → ROCDL → hsaco
   (ROCm), and hand-written AVX-512 C-ABI kernels loaded via the
@@ -173,11 +183,11 @@ device kernel needed; all carry Python unit tests. **Done — no action.**
 The standard-op surface; mostly Kernel-path. Drives backend_kernel partial→more-
 targets as the Kernel-path queue lands. Track via `tsol_coverage.py`.
 
-**Bottom line:** enablement is no longer "what path?" (this map answers that) — it
-is **driving the 175 reference-only Kernel-path ops to real device kernels** on
-ROCm + x86 (the proven dual-device lane), in the model-value order above. The
-IR-Transform / AST-Frontend / Host-Library paths are already structurally enabled
-and need only test-presence confirmation for a handful of thin ops.
+**Bottom line:** enablement is no longer "what path?" (this map answers that) —
+it is promoting the Kernel-path backlog to native device kernels, using the live
+generated evidence to select the next family. Keep IR-Transform, AST-Frontend,
+and Host-Library claims tied to their corresponding dashboard axes and direct
+fixtures.
 
 ## Kernel-technique reference: CUB (CCCL) / rocPRIM — study, reimplement, don't wrap
 
@@ -224,7 +234,11 @@ C-ABI kernels, the NVIDIA Target IR). They expose the same three tiers — **dev
   `sort` (radix), `histogram` — all reimplemented in Tessera codegen, inspired by
   CUB/rocPRIM but owned by us.
 
-## Appendix — full per-op table
+## Appendix — historical per-op classification
+
+> This table is a June 27 classification snapshot. Its status/test/target
+> columns are not current evidence; consult the generated dashboards above
+> before using them for planning.
 
 | op | category | path | lowering | effect | status | TSOL | tested | exec targets |
 |----|----------|------|----------|--------|--------|------|--------|--------------|

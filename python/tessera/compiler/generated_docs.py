@@ -254,6 +254,11 @@ def _r_autodiff_ledger_csv() -> str:
     return autodiff_ledger.render_csv()
 
 
+def _r_manifest_reconciliation() -> str:
+    from . import manifest_runtime_reconciliation
+    return manifest_runtime_reconciliation.render_markdown()
+
+
 #: The five SurfaceEntry-based surfaces, in display order.
 _SURFACES: tuple[str, ...] = ("examples", "benchmarks", "research", "tools", "tests")
 
@@ -449,6 +454,11 @@ REGISTRY: tuple[GeneratedDoc, ...] = (
         _GEN / "autodiff_connection_ledger.md", _r_autodiff_ledger,
         csv_path=_GEN / "autodiff_connection_ledger.csv",
         render_csv=_r_autodiff_ledger_csv,
+    ),
+    # ── Manifest-vs-runtime reconciliation (does the manifest lag the runtime?) ──
+    GeneratedDoc(
+        "manifest_runtime_reconciliation", "op_coverage",
+        _GEN / "manifest_runtime_reconciliation.md", _r_manifest_reconciliation,
     ),
     # ── Runtime / ABI ──
     GeneratedDoc(

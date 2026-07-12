@@ -1437,6 +1437,14 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "(generate-rocm-activation-kernel). Executes via runtime.launch()"
                  " (rocm_activation_compiled).",
     },
+    "relu": {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("elementwise",),
+        "notes": "Standalone elementwise relu (max(0,x)) — flat per-element kernel "
+                 "(generate-rocm-activation-kernel). Executes via runtime.launch() "
+                 "(rocm_activation_compiled). (Reconciliation close: was runtime-"
+                 "native but manifest-undeclared — manifest_runtime_reconciliation.)",
+    },
     "silu_mul": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("elementwise",),
@@ -2393,6 +2401,7 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("grad_clip_norm", "rocm"): "tests/unit/test_rocm_grad_clip_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
     ("silu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
+    ("relu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
     ("silu_mul", "rocm"): "tests/unit/test_rocm_silu_mul_compiled.py",
     **{(op, "rocm"): "tests/unit/test_rocm_loss_compiled.py"
        for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss",

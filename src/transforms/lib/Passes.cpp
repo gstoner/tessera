@@ -272,12 +272,24 @@ void registerTesseraPasses() {
   // `tessera.adjoint_collective_plan`.
   ::mlir::registerPass([]() { return createAdjointCollectiveInsertionPass(); });
 
-  // Full reverse-mode autodiff pipeline: forward → autodiff → collective insertion.
+  // ── Phase F2 (IR form) activation rematerialization ─────────────────────────
+  // Clones `tessera.recompute`-tagged pure activations to their backward
+  // consumers (activation checkpointing at the IR level). The Graph-IR
+  // counterpart of the tessera.autodiff.rematerialize Python surface.
+  ::mlir::registerPass(
+      []() { return createActivationRematerializationPass(); });
+
+  // Full reverse-mode autodiff pipeline: forward → autodiff → rematerialize →
+  // collective insertion. Remat runs before collective insertion so the
+  // recomputed activations live inside the backward region the collectives
+  // then synchronise.
   ::mlir::PassPipelineRegistration<>
     autodiffPipeline("tessera-autodiff-pipeline",
-                     "Phase F4+F5 — reverse-mode autodiff with adjoint collective insertion",
+                     "Phase F4+F2+F5 — reverse-mode autodiff with rematerialization "
+                     "and adjoint collective insertion",
       [](OpPassManager &pm) {
         pm.addPass(createAutodiffPass());
+        pm.addPass(createActivationRematerializationPass());
         pm.addPass(createAdjointCollectiveInsertionPass());
       });
 

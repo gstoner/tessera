@@ -28,8 +28,8 @@ last_updated: 2026-07-11
 | Item | Status |
 |------|--------|
 | Graph/Tile IR adjoint ops | **✅ Phase F4 landed at the IR level** — `AdjointInterface` ODS + `AutodiffPass.cpp` produce valid backward IR, lit-verified on MLIR 22. *Not* an execution claim: no target executes backward natively yet — see [`autodiff_connection_ledger.md`](../audit/generated/autodiff_connection_ledger.md) + [`AUTODIFF_UNIFICATION_PLAN.md`](../audit/compiler/AUTODIFF_UNIFICATION_PLAN.md). |
-| Effect-aware adjoint collective insertion | **✅ Phase F5 landed** — `tessera.distributed.DDP` / `FSDP` validate against `mock_collective`. |
-| Activation checkpointing / rematerialization | **✅ Phase F2 landed** — `tessera.autodiff.rematerialize` (alias `checkpoint`). |
+| Effect-aware adjoint collective insertion | **✅ Phase F5 landed** — Python: `tessera.distributed.DDP` / `FSDP` validate against `mock_collective`. IR: `AdjointCollectiveInsertionPass` (`--tessera-adjoint-collective-insertion`) gates on per-arg `tessera.effect` (memory-class) and inserts `reduce_scatter`/`all_gather`/`all_reduce` by sharding kind; lit `tests/tessera-ir/phase_f5/`. |
+| Activation checkpointing / rematerialization | **✅ Phase F2 landed** — Python: `tessera.autodiff.rematerialize` (alias `checkpoint`). IR: `ActivationRematerializationPass` (`--tessera-activation-rematerialization`) clones `tessera.recompute`-tagged pure ops to their backward consumers; lit `tests/tessera-ir/phase_f2/`. |
 | Mixed-precision autocast + loss scaling | **✅ Phase F1 landed** — `tessera.autodiff.autocast(dtype)` + `GradScaler`. fp8 backend lowering still pending Phase G. |
 | Higher-order derivatives (HVP, jacrev, jacfwd) | **✅ Phase F7 landed** — `tessera.autodiff.{grad, hvp, jacrev, jacfwd, elementwise_grad}`. |
 | `jax.vmap`-style batched transforms | **✅ Phase F6 landed** — `tessera.autodiff.vmap` + `tessera.control.{vmap, pmap}`. |
@@ -326,17 +326,23 @@ Key pieces (landed 2026-05-09):
   bridge during its reverse walk via the `tessera.custom_adjoint_call`
   placeholder op (now present).
 
-* **What has an IR adjoint today** — `matmul`, `layernorm`, `softmax`, `tanh`,
-  and `sigmoid` have **native** `buildAdjoint` bodies (real backward Graph IR;
-  the pointwise W5 ops fall back to the placeholder only for dynamic shapes).
+* **What has an IR adjoint today** — `matmul`, `tanh`, and `sigmoid` have
+  **native** `buildAdjoint` bodies (real backward Graph IR; the pointwise W5 ops
+  fall back to the placeholder only for dynamic shapes). `layernorm`, `softmax`,
   `gelu`, `relu`, `sin`, `silu`, `softplus`, `rmsnorm`, `log_softmax` carry a
   **placeholder** `buildAdjoint` that emits `tessera.custom_adjoint_call` and
-  round-trips to the Python VJP — i.e. an IR adjoint that is *not* native. The
-  live native-vs-placeholder split, the `bwd_cpu_ir_oracle` column (backward IR
-  interpreted on CPU and oracle-matched), and the fact that **no** family
-  executes its backward *natively* on any target yet are the generated
+  round-trips to the Python VJP — i.e. an IR adjoint that is *not* native
+  (`layernorm`/`softmax` have hand-written bodies but they still construct the
+  placeholder, so they are round-trips, not native — the ledger classifies by
+  what the body emits). The live native-vs-placeholder split and the
+  `bwd_cpu_ir_oracle` column (backward IR interpreted on CPU and oracle-matched)
+  are the generated
   [`autodiff_connection_ledger.md`](../audit/generated/autodiff_connection_ledger.md)
-  (the count authority — don't trust this enumeration if it drifts).
+  (the count authority — don't trust this enumeration if it drifts). Native
+  *backward execution* is no longer empty: Phase 4 (A2) sources the backward
+  rungs from the runtime execution matrix, so `flash_attn` (ROCm) and
+  `selective_ssm` (ROCm + x86) now register `bwd_hardware_proven` — read the
+  ledger for the live set.
 
 * **Paired forward/backward ABI (Phase 2, landed first cut)** — the in-place
   return expansion above is the bootstrap; `--tessera-autodiff-paired`
@@ -352,17 +358,37 @@ Key pieces (landed 2026-05-09):
   coverage beyond `matmul`/`tanh`/`sigmoid` so fewer ops depend on the
   `custom_adjoint_call` Python round-trip; add the SAVE residual policy.
 
-Out of scope for the F4 first cut:
+Landed alongside F4 (previously out of scope for the F4 first cut):
+
+* **Effect-aware adjoint collective insertion (Phase F5).**
+  `AdjointCollectiveInsertionPass` (`--tessera-adjoint-collective-insertion`)
+  runs after AutodiffPass and, when the function is effect-annotated
+  (per-arg `tessera.effect` from EffectAnnotationPass), synchronises only the
+  cotangents whose argument carries a **memory-class** effect
+  (`write` / `reduce_*` / `memory`) — a pure read-only input never gets a
+  gradient collective. The sharding *kind* (`tessera.weight_sharding`) then
+  selects the op: `dp` → `reduce_scatter`, `tp` → `all_gather`, `replicated`
+  → `all_reduce`. When no effect annotation is present the pass falls back to a
+  weight_sharding-only plan (recorded distinctly as `[sharding-only]` vs
+  `[effect-gated]` in `tessera.adjoint_collective_plan`). Composed pipeline:
+  `--tessera-autodiff-pipeline` (F4 → F2 → F5). Lit: `tests/tessera-ir/phase_f5/`.
+* **Activation rematerialization — IR-pass form (Phase F2).**
+  `ActivationRematerializationPass` (`--tessera-activation-rematerialization`)
+  is the Graph-IR counterpart of the `tessera.autodiff.rematerialize` /
+  `checkpoint` Python surface: it clones each `tessera.recompute`-tagged pure
+  op to its backward consumers, shrinking the forward activation's live range at
+  the cost of recompute (Decision #10 — budget-guided, pure region-free ops
+  only; a tagged op with regions is a hard `[REMAT_NON_CLONABLE]` error). Lit:
+  `tests/tessera-ir/phase_f2/`.
+
+Still out of scope for the F4 first cut:
 
 * Higher-order derivatives in Graph IR (run AutodiffPass twice +
   canonicalize). The Python reference F7 surface is shipped; this bullet only
   tracks lower-level IR support.
-* Effect-aware adjoint collective insertion. That's Phase F5 — runs after
-  AutodiffPass and reads `Effect` attributes on adjoint values to insert
-  `reduce_scatter` / `all_gather`.
-* Activation rematerialization. The `tessera.autodiff.rematerialize` Python
-  surface (Phase F2) is shipping today; the IR-pass form will arrive
-  alongside F4.
+* Budget-guided *automatic* remat selection (greedy live-set scan). The IR pass
+  honours explicit `tessera.recompute` markers today and records
+  `--memory-budget-mb` as advisory; auto-selection under a budget is future.
 
 ## Cross-references
 
@@ -375,3 +401,7 @@ Out of scope for the F4 first cut:
 - `python/tessera/autodiff/rematerialize.py` — Phase F2 activation checkpointing.
 - `src/compiler/ir/include/Tessera/AdjointInterface.td` — Phase F4 ODS.
 - `src/transforms/lib/AutodiffPass.cpp` — Phase F4 pass scaffold.
+- `src/transforms/lib/AdjointCollectiveInsertionPass.cpp` — Phase F5 effect-aware
+  adjoint collective insertion (`--tessera-adjoint-collective-insertion`).
+- `src/transforms/lib/ActivationRematerializationPass.cpp` — Phase F2 IR-form
+  activation rematerialization (`--tessera-activation-rematerialization`).

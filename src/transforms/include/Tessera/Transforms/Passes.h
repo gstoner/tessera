@@ -178,6 +178,18 @@ std::unique_ptr<mlir::Pass> createAutodiffPairedPass();
 //   --tp-axis  (default "tp")
 std::unique_ptr<mlir::Pass> createAdjointCollectiveInsertionPass();
 
+// ActivationRematerializationPass — Phase F2 (IR-pass form). The Graph-IR
+// counterpart of the `tessera.autodiff.rematerialize` / `checkpoint` Python
+// surface. Clones each `tessera.recompute`-tagged pure op to its backward
+// consumers, shrinking the forward activation's live range at the cost of
+// recompute (Decision #10: budget-guided, only pure region-free ops qualify).
+// Records the count as `tessera.rematerialized` on the function.
+//
+// Options:
+//   --memory-budget-mb  (advisory; recorded as tessera.remat_budget_mb)
+// Body: src/transforms/lib/ActivationRematerializationPass.cpp
+std::unique_ptr<mlir::Pass> createActivationRematerializationPass();
+
 // ── Phase 8.4.8 SwiGLU fusion (Stage 2b of SwiGLU Performance Plan) ───────
 //
 // Recognizes the 3-op SwiGLU chain

@@ -46,6 +46,24 @@ def test_numpy_aliases_are_dispatched_but_not_gaps():
         assert (alias, "rocm") not in gaps and (alias, "x86") not in gaps
 
 
+def test_frozenset_constructor_gate_is_parsed():
+    """Regression: op gates written as ``frozenset({...})`` (a constructor call,
+    not a bare literal) must be parsed, or the audit false-negatives a real lag.
+    ``_APPLE_CPU_ACCELERATE_OPS = frozenset({"tessera.matmul", …})`` is the live
+    example that previously slipped through."""
+    import ast
+    node = ast.parse('frozenset({"tessera.matmul", "tessera.batched_gemm"})',
+                     mode="eval").body
+    assert isinstance(node, ast.Call)
+    assert set(R._ops_in_value(node)) == {"matmul", "batched_gemm"}
+    # set([...]) and a set-union expression are handled too.
+    u = ast.parse('_BASE | {"tessera.gemm"}', mode="eval").body
+    assert R._ops_in_value(u) == ["gemm"]
+    # End-to-end: the Accelerate frozenset gate reaches the dispatch map.
+    d = R.runtime_dispatch_map()
+    assert {"matmul", "gemm", "batched_gemm"} <= d["apple_cpu"]
+
+
 def test_missing_runtime_raises_not_silent(monkeypatch):
     """Decision #26: a missing runtime source raises, never reports zero lanes."""
     import pytest

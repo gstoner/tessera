@@ -28,7 +28,7 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 |---|---:|---:|---:|---:|---:|
 | `cpu` | 329 | 0 | 329 | 0 | 151 |
 | `x86` | 332 | 330 | 2 | 0 | 148 |
-| `apple_cpu` | 361 | 2 | 359 | 0 | 119 |
+| `apple_cpu` | 361 | 3 | 358 | 0 | 119 |
 | `apple_gpu` | 203 | 196 | 3 | 4 | 277 |
 | `rocm` | 342 | 340 | 2 | 0 | 138 |
 | `nvidia_sm80` | 68 | 0 | 0 | 68 | 412 |

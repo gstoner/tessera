@@ -138,9 +138,9 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/COMPILER_AUDIT.md` | - | 2026-07-10 | 2 | ✓ |
 | `compiler/COMPILER_REFACTOR_PLAN.md` | - | 2026-07-11 | 1 | ✓ |
 | `compiler/COMPILER_THEORY_OF_OPERATION.md` | - | 2026-07-02 | 10 | ✓ |
-| `compiler/EVALUATOR_PLAN.md` | - | 2026-06-12 | 30 | ✓ |
+| `compiler/EVALUATOR_PLAN.md` | - | 2026-07-11 | 1 | ✓ |
 | `compiler/OPTIMIZING_COMPILER_PLAN.md` | - | 2026-07-02 | 10 | ✓ |
-| `compiler/STAGE_A_EMIT_PLAN.md` | - | 2026-06-18 | 24 | ✓ |
+| `compiler/STAGE_A_EMIT_PLAN.md` | - | 2026-07-11 | 1 | ✓ |
 | `compiler/WORKSTREAM_C_HANDOFF.md` | - | 2026-07-06 | 6 | ✓ |
 | `coverage/COVERAGE_AUDIT.md` | - | 2026-06-21 | 21 | ✓ |
 | `domain/DOMAIN_AUDIT.md` | - | 2026-06-11 | 31 | ✓ |
@@ -149,7 +149,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `roadmap/CONTROL_FLOW_AND_DEEPSEEK_ACCELERATION_PLAN.md` | - | 2026-06-30 | 12 | ✓ |
 | `roadmap/MODEL_CLASS_ROADMAP.md` | - | 2026-06-26 | 16 | ✓ |
 | `roadmap/REPLAYSSM_PLAN.md` | - | 2026-06-15 | 27 | ✓ |
-| `roadmap/ROADMAP_AUDIT.md` | - | 2026-06-26 | 16 | ✓ |
+| `roadmap/ROADMAP_AUDIT.md` | - | 2026-07-11 | 1 | ✓ |
 | `roadmap/SINGLE_GPU_CLOSEOUT_PLAN.md` | - | 2026-06-30 | 12 | ✓ |
 | `roadmap/S_SERIES_ENABLEMENT_MAP.md` | - | 2026-06-27 | 15 | ✓ |
 | `roadmap/S_SERIES_GAP_CLOSURE_PLAN.md` | - | 2026-06-28 | 14 | ✓ |

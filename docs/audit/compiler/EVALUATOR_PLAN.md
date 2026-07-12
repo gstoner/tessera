@@ -2,7 +2,7 @@
 status: Ratified (direction locked 2026-06-11); implementation phased below
 classification: Design / Roadmap
 authority: Compiler evaluator architecture — supersedes ad-hoc benchmark/conformance framing
-last_updated: 2026-06-12
+last_updated: 2026-07-11
 audit_role: plan
 plan_state: landing
 ---
@@ -63,40 +63,32 @@ The central correction to prior framing: backends are **not binary**
 hardware-free**. The Evaluator records, per generated program **per backend**,
 the highest honest rung reached.
 
-| Rung | Claim | Hardware? | Apple | NVIDIA | ROCm |
-|---|---|---|---|---|---|
-| 1 `artifact_only` | IR emitted | no | ✅ | ✅ **(here today)** | ✅ **(here today)** |
-| 2 `lowers_clean` | backend pipeline lowers the *generated* program and the Target IR **passes the MLIR verifier** with no unsupported-diagnostic; WGMMA/TMA/MFMA descriptors valid per the CUDA-13.2 / ROCm-7.2.4 inventories | no (needs `tessera-opt`) | ✅ | gap² | gap² |
-| 2.5 `emits_asm_text` | the backend emits **actual PTX / AMDGCN assembler text** (today it stops at Target IR MLIR — `tessera_nvidia.*` / `tessera_rocm.mfma` / `tessera.tile.wgmma`) | no | n/a¹ | **MISSING — prerequisite for rung 3** | **MISSING** |
-| 3 `assembles` | emitted PTX/AMDGCN **actually assembles** (`ptxas -arch=sm_90a` / `hipcc`+`llvm-mc`) — catches register/shared-mem overflow, illegal wgmma/tma encodings, arch mismatch | **no** (toolchain only) | n/a¹ | blocked on 2.5 | blocked on 2.5 |
-| 4 `codegen_stable` | same IR at two opt levels → structurally-equivalent SASS/AMDGCN (kernel count, descriptor count, no dropped fusion) | **no** | ✅ (also runtime checksum) | blocked on 2.5 | blocked on 2.5 |
-| 5 `numerical_symbolic` | microkernel ≡ reference via finite-field / SMT equivalence (the only hardware-free path to codegen faithfulness) | **no** (heavy) | optional | aspirational | aspirational |
-| 6 `executes` | runs on real silicon (via the G7 launch bridge) | **yes** | ✅ | — | — |
-| 7 `hardware_verified` | oracle-matches reference on real silicon | **yes** | ✅ | — | — |
+| Rung | Claim | Current evidence |
+|---|---|---|
+| 1 `artifact_only` | IR emitted, with no stronger evidence | The floor for an unsupported or fallback pathway. |
+| 2 `lowers_clean` | Target IR passes the verifier with no unsupported diagnostic | Program-specific lowering evidence; do not infer it from a capability row. |
+| 3 `emits_asm_text` | backend emits structurally-valid PTX / AMDGCN text | NVIDIA WGMMA PTX and ROCm AMDGCN/LLVM-IR emission are evaluator-visible. |
+| 4 `assembles` | emitted text assembles in a real toolchain | ROCm WMMA can reach this rung through host `llc`; NVIDIA assembly remains toolchain/CI-gated. |
+| 5 `codegen_stable` | two optimization levels produce structurally-equivalent code | A program-level evaluator check, not a backend-wide status. |
+| 6 `numerical_symbolic` | microkernel is symbolically equivalent to its specification | Optional, hardware-free work. |
+| 7 `executes` | the demanded backend ran on real silicon | The execution matrix has executable Apple, x86, ROCm, and `nvidia_sm120` pathways. |
+| 8 `hardware_verified` | the demanded backend ran and matched the oracle | Earned only by `evaluate()` for the particular program and input/oracle pair. |
 
-¹ Apple's "assembles" is subsumed by its runtime path; rungs 2.5/3 are the
-NVIDIA/ROCm-specific levers.
+The enum names and ordering are implemented in
+[`evaluator.py`](../../../python/tessera/compiler/evaluator.py); current runtime
+pathways are generated from
+[`execution_matrix.py`](../../../python/tessera/compiler/execution_matrix.py)
+into [`runtime_execution_matrix.md`](../generated/runtime_execution_matrix.md).
+The matrix proves dispatch availability, **not** a universal rung-8 claim: a
+fallback row remains artifact/reference evidence, and every hardware-verified
+claim needs the evaluator's provenance and oracle gates.
 
-² **Correction (2026-06-11, grounded in source).** An earlier draft of this
-plan called the rung-3 assembly lever "buildable now / the biggest
-underexploited lever." That was wrong: `@jit(target="rocm")` (and the NVIDIA
-pipeline) emit **Target IR MLIR, not assembler text** — verified by probing the
-runtime (`execution_mode=artifact_only`, `compiler_path=target_ir_artifact`,
-diagnostic `JIT_TARGET_IR_ARTIFACT_ONLY`) and by reading
-`matmul_pipeline._render_{rocm,nvidia}_target_ir` (they render `tessera_rocm.mfma`
-/ `tessera.tile.wgmma` ops). `scripts/validate_nvcc_compile.py` assembles its
-**own hand-written CUDA stubs**, not Tessera output. So **NVIDIA/ROCm are at
-rung 1 today**; the real next work item is **rung 2.5 — an assembler-text
-emission path** (lower `tessera.tile.wgmma` → real `wgmma.mma` PTX). Only after
-2.5 does `ptxas`/`hipcc` (rung 3) have anything to assemble, and rung-3 still
-runs in Linux CI (the CUDA/ROCm toolchains don't install on the arm64 dev Mac).
-
-**The strategic point:** NVIDIA/ROCm sit at **rung 1** with **0 at rung 7**. The
-honest forward path is to (a) make the Evaluator report that rung truthfully
-(never overstate), then (b) build the rung-2.5 emission path one narrow kernel
-at a time, then (c) the rung-3 assembly gate in Linux CI, then (d) the hardware
-batch. The Evaluator makes each step **visible and monotonic** — and refuses to
-let an `artifact_only` backend claim a higher rung it hasn't earned.
+**Current strategic point:** ROCm and x86 now have broad executable lanes; Apple
+has its established runtime lanes; `nvidia_sm120` has a native MMA pathway.
+Generic NVIDIA code generation and broader per-program hardware proof remain
+separate work. Advance each pathway with an emitted/assembled artifact, then a
+native execution record, then an evaluator oracle result—never by promoting a
+registry row alone.
 
 ---
 

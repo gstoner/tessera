@@ -18,6 +18,15 @@
 // trailing results, looks up the associated arg's sharding declaration,
 // and inserts the matching `tessera.collective.*` op on each.
 //
+// Effect-aware gating: when the function is effect-annotated (per-arg
+// `tessera.effect`, produced by EffectAnnotationPass), a cotangent is
+// synchronised ONLY if its argument carries a memory-class effect
+// (write / reduce_* / memory) — a "pure" read-only input never needs a
+// gradient collective. This mirrors GPUCollectiveInsertionPass, which gates
+// the forward DP reduce_scatter on `tessera.effect = "memory"`. When no
+// effect annotation is present the pass falls back to a weight_sharding-only
+// plan (recorded distinctly in `tessera.adjoint_collective_plan`).
+//
 // Cross-references:
 //   * GPUCollectiveInsertionPass.cpp — forward-pass collective insertion.
 //   * AutodiffPass.cpp — must run before this pass; provides the
@@ -40,8 +49,22 @@ namespace {
 constexpr const char *kAutodiffMarker = "tessera.autodiff";
 constexpr const char *kArgCotangentsAttr = "tessera.autodiff.arg_cotangents";
 constexpr const char *kWeightShardingAttr = "tessera.weight_sharding";
+constexpr const char *kEffectAttr = "tessera.effect";
 constexpr const char *kCollectivePlanAttr = "tessera.adjoint_collective_plan";
 constexpr const char *kCollectiveInsertedAttr = "tessera.adjoint_collective_inserted";
+
+/// A cotangent needs a distributed-gradient collective only when its argument
+/// carries a *memory-class* effect — i.e. it is a written / reduced parameter
+/// whose per-rank partial gradients must be synchronised. Read-only inputs
+/// (activations, "pure" args) never need one. This mirrors the forward-pass
+/// contract in GPUCollectiveInsertionPass, which gates DP reduce_scatter on
+/// `tessera.effect = "memory"` (see EffectAnnotationPass for the lattice:
+/// write / reduce_* → memory).
+bool isMemoryClassEffect(llvm::StringRef effect) {
+  return effect == "memory" || effect == "write" ||
+         effect == "reduce_sum" || effect == "reduce_max" ||
+         effect == "reduce_min" || effect == "io" || effect == "top";
+}
 
 class AdjointCollectiveInsertionPass
     : public mlir::PassWrapper<AdjointCollectiveInsertionPass,
@@ -88,6 +111,23 @@ public:
     auto weightShardingAttr =
         func->getAttrOfType<mlir::DictionaryAttr>(kWeightShardingAttr);
     if (!weightShardingAttr) return;
+
+    // Does this function carry *per-argument* effect annotations? Effect-aware
+    // gating is a per-arg decision, so it must key off per-arg `tessera.effect`
+    // attributes — NOT the function-level `tessera.effect` summary, which
+    // EffectAnnotationPass always sets (even when no arg has a per-arg effect).
+    // Keying off the summary would flip on effect-gating for a function that has
+    // only the summary, then treat every arg's missing per-arg effect as "pure"
+    // and skip it — silently dropping the gradient collectives that the
+    // weight_sharding-only fallback would otherwise insert. So we look only at
+    // per-arg attrs; absent them, we take the sharding-only fallback.
+    bool funcEffectAnnotated = false;
+    for (unsigned i = 0, e = func.getNumArguments(); i < e; ++i) {
+      if (func.getArgAttrOfType<mlir::StringAttr>(i, kEffectAttr)) {
+        funcEffectAnnotated = true;
+        break;
+      }
+    }
 
     // Locate the function's terminator and the cotangent SSA values it
     // returns (appended by AutodiffPass after the original results).
@@ -143,6 +183,25 @@ public:
       }
       llvm::StringRef kind = kindAttr.getValue();
 
+      // Effect-aware gating (Phase F5 core contract): when the function is
+      // effect-annotated, only synchronise cotangents whose argument carries a
+      // memory-class effect. A "pure" / read-only arg that happens to have a
+      // sharding declaration does not need a gradient collective — inserting
+      // one would be wrong (double-counting) as well as wasteful. Record the
+      // skip so downstream tooling can see the decision was deliberate.
+      if (funcEffectAnnotated) {
+        auto effectAttr =
+            func.getArgAttrOfType<mlir::StringAttr>(arg.getArgNumber(), kEffectAttr);
+        llvm::StringRef effect = effectAttr ? effectAttr.getValue() : "pure";
+        if (!isMemoryClassEffect(effect)) {
+          func.setArgAttr(
+              arg.getArgNumber(), kCollectivePlanAttr,
+              builder.getStringAttr(("none:non-memory-effect=" + effect).str()));
+          cotanIndex++;
+          continue;
+        }
+      }
+
       // Pull the cotangent SSA value out of the (now-rewritten) return.
       mlir::Value cotanValue = returnOp.getOperand(cotanIndex);
 
@@ -182,12 +241,15 @@ public:
       // record the choice as a per-arg attribute for downstream tools.
       returnOp.setOperand(cotanIndex, reduced);
 
-      auto plan = builder.getStringAttr(
+      std::string planStr =
           kind == "dp" ? "reduce_scatter:" + dpAxis.getValue()
           : kind == "tp" ? "all_gather:" + tpAxis.getValue()
-                          : "all_reduce");
-      func.setArgAttr(arg.getArgNumber(),
-                       kCollectivePlanAttr, plan);
+                          : std::string("all_reduce");
+      // Provenance suffix: whether the memory-effect gate or the
+      // weight_sharding-only fallback drove the insertion.
+      planStr += funcEffectAnnotated ? " [effect-gated]" : " [sharding-only]";
+      func.setArgAttr(arg.getArgNumber(), kCollectivePlanAttr,
+                      builder.getStringAttr(planStr));
       changed = true;
       cotanIndex++;
     }

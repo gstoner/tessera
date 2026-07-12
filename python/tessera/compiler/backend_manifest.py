@@ -3530,6 +3530,20 @@ _APPLE_CPU_KERNELS: dict[str, dict[str, Any]] = {
         "dtypes": ("fp32", "fp16", "bf16"),
         "notes": "Accelerate cblas_sgemm + BNNS",
     },
+    # Rank-3 batched matmul runs natively through Accelerate cblas_sgemm looped
+    # over the batch dim (Phase 8.2 Item #3, _apple_cpu_dispatch_matmul's
+    # rank3_batched_path). Native for f32 only — fp16/bf16 or non-rank-3 fall to
+    # the numpy reference — and cblas-only (no BNNS batched path), hence the
+    # narrowed dtypes + feature_flags. Previously mislabeled `reference` even
+    # though the runtime dispatches it via the Accelerate gate; the
+    # manifest-vs-runtime reconciliation audit surfaced the lag.
+    "batched_gemm": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "feature_flags": ("accelerate",),
+        "notes": "Accelerate cblas_sgemm looped over the batch dim (f32 rank-3); "
+                 "fp16/bf16 or non-f32 batched fall to the numpy reference",
+    },
 }
 
 
@@ -5095,7 +5109,9 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
             target="apple_cpu",
             status=str(apple_cpu["status"]),
             dtypes=tuple(apple_cpu["dtypes"]),
-            feature_flags=("accelerate", "bnns"),
+            # Default cblas + BNNS; an op may override (e.g. batched_gemm is
+            # cblas-only — no BNNS batched path).
+            feature_flags=tuple(apple_cpu.get("feature_flags", ("accelerate", "bnns"))),
             notes=str(apple_cpu.get("notes", "")),
         ))
     else:

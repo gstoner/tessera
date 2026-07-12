@@ -14,6 +14,7 @@ test, ABI, and surface dashboards.
 | Area | Rows | Buckets | Owners |
 |---|---:|---|---|
 | `backend_kernel` | 381 | backend_pathway_owned=366, multi_gpu_deferred=15 | backend_codegen=366, distributed_validation=15 |
+| `benchmark_evidence` | 1 | benchmark_required=1 | benchmarks=1 |
 | `sharding_rule` | 43 | local_layout_transform=1, multi_gpu_deferred=2, needs_mesh_or_domain_proof=40 | compiler_middle_end=1, distributed_validation=2, primitive_registry=40 |
 | `target_ir` | 6 | multi_gpu_deferred=6 | distributed_validation=6 |
 | `tile_ir` | 6 | multi_gpu_deferred=6 | distributed_validation=6 |
@@ -403,6 +404,7 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `image_normalize` | vision | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `image_resize` | vision | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `interpolate` | vision | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `benchmark_evidence` | `batched_gemm` | loop_nest | none | `benchmark_required` | benchmarks | Add smoke benchmark evidence for the fused/native single-GPU lane. |
 | `sharding_rule` | `cross_attention` | attention | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `deepseek_sparse_attention` | attention | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `gated_attention` | attention | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |

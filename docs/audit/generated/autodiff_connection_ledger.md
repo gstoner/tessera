@@ -9,14 +9,14 @@ One row per differentiable **op family**, over the six rungs of [`AUTODIFF_UNIFI
 - **python_reference** — a numerically-checked Python VJP/JVP exists (the semantic oracle; *never* evidence of native compiler support).
 - **ir_adjoint** — `native`: `AutodiffPass` emits real backward Graph IR (static-shape W5 path); `placeholder`: `buildAdjoint` emits a `custom_adjoint_call` that round-trips to the Python VJP at runtime (**not** native); `none`: no IR adjoint.
 - **bwd_cpu_ir_oracle** — the compiler-emitted paired backward IR (`--tessera-autodiff-paired`) is numerically **interpreted on CPU and matches an independent NumPy VJP oracle** (Phase 3). Strictly weaker than native `oracle_proven`: it proves the *IR is correct*, not that a compiled/native backward executes. Proven by `tests/unit/test_autodiff_paired_cpu_oracle.py`.
-- **bwd_target_lowered / bwd_runtime_bound / bwd_oracle_proven / bwd_hardware_proven** — targets at which *backward* lowers / has a launch ABI / matches the oracle via **native** execution / is device-proven. **Empty today by construction** — the backward launch ABI, matrix column, and native oracle fixtures land in Phase 4; the ledger will fill from those sources, never by assertion.
+- **bwd_target_lowered / bwd_runtime_bound / bwd_oracle_proven / bwd_hardware_proven** — targets at which *backward* lowers / has a launch ABI / matches the oracle via **native** execution / is device-proven. **Sourced from the runtime execution matrix's backward rows, never asserted (Phase 4 A2).** `bwd_runtime_bound` / `bwd_hardware_proven` are populated for the families that genuinely launch a backward on device (see counts below); `bwd_target_lowered` / `bwd_oracle_proven` remain empty until a lowering-only backward row or a native backward execute-and-compare fixture lands.
 
 ## Summary
 
 - Differentiable families tracked: **287**
 - `python_reference` (Python VJP/JVP): **287**
-- `ir_adjoint = native`: **4** (layernorm, matmul, sigmoid, softmax, tanh)
-- `ir_adjoint = placeholder` (Python round-trip, not native): **7** (gelu, log_softmax, relu, rmsnorm, silu, sin, softplus)
+- `ir_adjoint = native`: **3** (matmul, sigmoid, tanh)
+- `ir_adjoint = placeholder` (Python round-trip, not native): **9** (gelu, layer_norm, log_softmax, relu, rmsnorm, silu, sin, softmax, softplus)
 - backward IR **oracle-verified on CPU** (interpreted): **3** (matmul, sigmoid, tanh)
 - backward `runtime_bound` (native) on any target: **2**
 - backward `oracle_proven` (native) on any target: **0**
@@ -169,7 +169,7 @@ One row per differentiable **op family**, over the six rungs of [`AUTODIFF_UNIFI
 | `latent_kv_compress` | loop_nest | yes | none | — | — | — | — |  |
 | `latent_kv_expand_k` | loop_nest | yes | none | — | — | — | — |  |
 | `latent_kv_expand_v` | loop_nest | yes | none | — | — | — | — |  |
-| `layer_norm` | normalization | yes | none | — | — | — | — |  |
+| `layer_norm` | normalization | yes | placeholder | — | — | — | — | custom_adjoint_call → Python VJP (not native IR) |
 | `lgamma` | elementwise | yes | none | — | — | — | — |  |
 | `lightning_attention` | attention | yes | none | — | — | — | — |  |
 | `linear_attn` | attention | yes | none | — | — | — | — |  |
@@ -283,7 +283,7 @@ One row per differentiable **op family**, over the six rungs of [`AUTODIFF_UNIFI
 | `slice` | tensor_algebra | yes | none | — | — | — | — |  |
 | `smooth_l1_loss` | loss | yes | none | — | — | — | — |  |
 | `softcap` | elementwise | yes | none | — | — | — | — |  |
-| `softmax` | stable_reduction | yes | native | — | — | — | — | native static-shape adjoint (W5); dynamic → placeholder |
+| `softmax` | stable_reduction | yes | placeholder | — | — | — | — | custom_adjoint_call → Python VJP (not native IR) |
 | `softmax_safe` | stable_reduction | yes | none | — | — | — | — |  |
 | `softplus` | elementwise | yes | placeholder | — | — | — | — | custom_adjoint_call → Python VJP (not native IR) |
 | `spectral_conv` | spectral | yes | none | — | — | — | — |  |

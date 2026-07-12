@@ -40,6 +40,9 @@ add_library(TesseraPasses
   # Phase F5 — adjoint collective insertion (runs after AutodiffPass).
   AdjointCollectiveInsertionPass.cpp
 
+  # Phase F2 (IR form) — activation rematerialization (runs after AutodiffPass).
+  ActivationRematerializationPass.cpp
+
   # Phase 8.4.8 — SwiGLU fusion (Stage 2b of SwiGLU Performance Plan).
   SwigluFusionPass.cpp
 

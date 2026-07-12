@@ -55,12 +55,22 @@ _TARGETS: tuple[str, ...] = ("cpu", "x86", "apple_gpu", "rocm", "nvidia")
 # NOT native Graph-IR adjoints — they are the compiler saying "ask Python".
 _PLACEHOLDER_MACRO_RE = re.compile(r'POINTWISE_BUILD_ADJOINT\(\s*\w+\s*,\s*"([^"]+)"\s*\)')
 
-# Ops with a hand-written, explicit `<OpName>Op::buildAdjoint` definition emit
-# real backward Graph IR (matmul's transposed matmuls; tanh/sigmoid's W5
-# closed forms). These are the NATIVE adjoints. The macro-generated ops above
-# are placeholder round-trips, not native. The macro *body* also textually
-# contains `OPNAME::buildAdjoint`, so the literal token "OPNAME" is filtered.
+# Every hand-written `<OpName>Op::buildAdjoint` definition. Whether it is a
+# NATIVE adjoint (emits real backward Graph IR — matmul's transposed matmuls,
+# tanh/sigmoid's W5 closed forms) or a PLACEHOLDER round-trip is decided by the
+# body, NOT by the mere existence of the def: a hand-written body that itself
+# constructs a `CustomAdjointCallOp` (LayerNormOp, SoftmaxOp) is a Python
+# round-trip, exactly like the macro-generated ops — it only *looks* native
+# because it has an explicit definition. (The macro body also textually contains
+# `OPNAME::buildAdjoint`, but "OPNAME" carries no "Op::" so it never matches; the
+# filter below is belt-and-suspenders.)
 _EXPLICIT_BUILDADJOINT_RE = re.compile(r'(\w+)Op::buildAdjoint\b')
+
+# The runtime VJP key a placeholder body carries (e.g. getStringAttr("layer_norm")).
+# This — not the lowercased OpName — is the family key that matches the primitive
+# (LayerNormOp emits key "layer_norm", not "layernorm"), so the ledger row lands
+# on the right primitive instead of falling through to `none`.
+_GETSTRINGATTR_RE = re.compile(r'getStringAttr\(\s*"([^"]+)"\s*\)')
 
 # Phase 3 (2026-07-11) — families whose compiler-emitted backward IR is
 # **oracle-verified on CPU by interpretation**: the actual
@@ -86,31 +96,63 @@ def _read_adjoint_source() -> str:
     return _ADJOINT_CPP.read_text(encoding="utf-8")
 
 
+def _buildadjoint_body(text: str, sig_start: int) -> str:
+    """The brace-balanced body of the `buildAdjoint` definition starting at
+    ``sig_start``. Bounding to the real function body (not a coarse span to the
+    next def) keeps a native op that happens to precede the placeholder macro /
+    the `placeholderAdjoint` helper from inheriting their `CustomAdjointCallOp`
+    text and being misread as a round-trip."""
+    open_brace = text.find("{", sig_start)
+    if open_brace < 0:
+        return ""
+    depth = 0
+    for i in range(open_brace, len(text)):
+        c = text[i]
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return text[open_brace:i + 1]
+    return text[open_brace:]  # unbalanced — return the tail, caller still safe
+
+
 def _ir_adjoint_classes() -> tuple[frozenset[str], frozenset[str]]:
     """Return ``(native_keys, placeholder_keys)`` parsed from the C++ source.
 
-    ``native`` = emits real backward Graph IR (static-shape path).
-    ``placeholder`` = ``custom_adjoint_call`` → Python VJP round-trip.
+    ``native`` = the ``buildAdjoint`` body emits real backward Graph IR
+    (static-shape path). ``placeholder`` = the body constructs a
+    ``CustomAdjointCallOp`` → Python VJP round-trip. A hand-written body is
+    classified by what it *emits*, not by the mere existence of the definition —
+    so ``LayerNormOp`` / ``SoftmaxOp`` (explicit defs that emit placeholders)
+    count as placeholder, matching their runtime behavior.
     """
     text = _read_adjoint_source()
-    placeholder = frozenset(_PLACEHOLDER_MACRO_RE.findall(text))
-    # Explicit `<OpName>Op::buildAdjoint` defs → native. Map OpName → family key
-    # by lowercasing (the regex already dropped the trailing "Op"); filter the
-    # macro's literal "OPNAME" template token.
-    native = frozenset(
-        name.lower()
-        for name in _EXPLICIT_BUILDADJOINT_RE.findall(text)
-        if name != "OPNAME"
-    )
-    # A native-capable op must never also be counted as placeholder-only.
-    placeholder = placeholder - native
+    # Macro-generated placeholder ops: the 2nd macro arg is the family key.
+    placeholder: set[str] = set(_PLACEHOLDER_MACRO_RE.findall(text))
+    native: set[str] = set()
+    for m in _EXPLICIT_BUILDADJOINT_RE.finditer(text):
+        name = m.group(1)
+        if name == "OPNAME":  # macro template token, not a real op
+            continue
+        body = _buildadjoint_body(text, m.start())
+        if "CustomAdjointCallOp" in body:
+            # Hand-written placeholder round-trip — key it by the runtime VJP
+            # string it constructs (getStringAttr("...")) so it matches the
+            # primitive; fall back to the OpName only if none is present.
+            keym = _GETSTRINGATTR_RE.search(body)
+            placeholder.add(keym.group(1) if keym else name.lower())
+        else:
+            native.add(name.lower())
+    # A native op must never also be counted as placeholder.
+    placeholder -= native
     if not native and not placeholder:
         raise LedgerError(
             f"parsed no adjoint keys from {_ADJOINT_CPP}; the macro/fallback "
             "conventions changed — update the ledger regexes rather than "
             "silently reporting zero IR adjoints."
         )
-    return native, placeholder
+    return frozenset(native), frozenset(placeholder)
 
 
 def _is_differentiable(cov: "primitive_coverage.PrimitiveCoverage") -> bool:
@@ -286,9 +328,12 @@ def render_markdown() -> str:
         "- **bwd_target_lowered / bwd_runtime_bound / bwd_oracle_proven / "
         "bwd_hardware_proven** — targets at which *backward* lowers / has a "
         "launch ABI / matches the oracle via **native** execution / is "
-        "device-proven. **Empty today by construction** — the backward launch "
-        "ABI, matrix column, and native oracle fixtures land in Phase 4; the "
-        "ledger will fill from those sources, never by assertion.",
+        "device-proven. **Sourced from the runtime execution matrix's backward "
+        "rows, never asserted (Phase 4 A2).** `bwd_runtime_bound` / "
+        "`bwd_hardware_proven` are populated for the families that genuinely "
+        "launch a backward on device (see counts below); `bwd_target_lowered` / "
+        "`bwd_oracle_proven` remain empty until a lowering-only backward row or "
+        "a native backward execute-and-compare fixture lands.",
         "",
         "## Summary",
         "",

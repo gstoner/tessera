@@ -64,6 +64,10 @@ def _p_conv2d(x, w):
     return ts.ops.conv2d(x, w, stride=1, padding=0, layout="nhwc")
 
 
+def _p_kv_cache_read(cache, start, end):
+    return ts.ops.kv_cache_read(cache, start, end)
+
+
 _BASE_FN: dict[str, Callable[..., Any]] = {
     "matmul": _p_matmul,
     "softmax": _p_softmax,
@@ -71,6 +75,7 @@ _BASE_FN: dict[str, Callable[..., Any]] = {
     "matmul_relu": _p_matmul_relu,
     "flash_attn": _p_flash_attn,
     "conv2d": _p_conv2d,
+    "kv_cache_read": _p_kv_cache_read,
 }
 
 # (jitted-fn cache keyed by (op, target) so we compile each once.)
@@ -147,7 +152,7 @@ def _build(op: str, rng: Any) -> tuple[tuple[Any, ...], Any, bool, dict[str, flo
 
 
 def has_builder(op: str) -> bool:
-    return op in _BASE_FN or op == "kv_cache_read"
+    return op in _BASE_FN
 
 
 def _corroborate_kv_cache_read(target: str, rng: Any) -> BackendVerdict:

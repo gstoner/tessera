@@ -121,13 +121,19 @@ def test_conformance_matrix_treats_hardware_verified_as_complete():
     hardware_verified as a complete compile path. Pin via a direct
     function call on the row aggregator."""
     # All-hardware_verified case → complete.
-    s = cm._proof_status_from_backend_compile(["hardware_verified"])
+    s = cm._proof_status_from_backend_compile(
+        ["hardware_verified"], "softmax", "apple_gpu"
+    )
     assert s == cm.PROOF_COMPLETE
     # Mixed hardware_verified + fused → still complete.
-    s = cm._proof_status_from_backend_compile(["hardware_verified", "fused"])
+    s = cm._proof_status_from_backend_compile(
+        ["hardware_verified", "fused"], "softmax", "apple_gpu"
+    )
     assert s == cm.PROOF_COMPLETE
     # hardware_verified + planned → planned (weakest wins).
-    s = cm._proof_status_from_backend_compile(["hardware_verified", "planned"])
+    s = cm._proof_status_from_backend_compile(
+        ["hardware_verified", "planned"], "softmax", "apple_gpu"
+    )
     assert s == cm.PROOF_PLANNED
 
 

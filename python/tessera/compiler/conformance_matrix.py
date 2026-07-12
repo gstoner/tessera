@@ -13,8 +13,7 @@ supports matmul on NVIDIA" can be replaced with the seven concrete proof
 columns that distinguish "Graph IR knows about it" from "the runtime can
 actually launch a numerically-validated kernel today."
 
-Strict no-duplicate-truth rule: this module **only reads** from existing
-sources, never restates them. Sources:
+Proof sources:
 
 * :mod:`tessera.compiler.primitive_coverage` — per-op 12-axis contract status
   (math/shape/dtype/vjp/jvp/batching/transpose/sharding/masking/lowering/
@@ -26,8 +25,10 @@ sources, never restates them. Sources:
 * :mod:`tessera.compiler.driver` ``_APPLE_GPU_{MPS,MSL,MPSGRAPH}_OPS`` —
   per-op Apple-GPU runtime envelope (what actually has an MPS/MSL/MPSGraph
   dispatcher).
-* Filesystem — ``tests/unit/test_*.py`` filenames as a coarse signal for
-  numerical-check presence.
+* The typed Graph/Schedule/Tile/Target lowering stack — actual emitted modules
+  and verifier results for every curated program and exact target.
+* Exact-target execute-and-compare fixtures — numerical proof; keyword scans
+  are deliberately excluded.
 
 Rendered to ``docs/audit/op_target_conformance.md``; drift-gated by
 ``tests/unit/test_op_target_conformance.py``.
@@ -37,28 +38,33 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from functools import cache
 from typing import Iterable, Optional
 
 from tessera.compiler import backend_manifest as _bm
+from tessera.compiler import conformance_evaluator as _ce
 from tessera.compiler import execution_matrix as _em
-from tessera.compiler import pipeline_gates as _pg
 from tessera.compiler import primitive_coverage as _pc
+from tessera.compiler.schedule_ir import lower_graph_to_schedule_ir
+from tessera.compiler.tile_ir import lower_schedule_to_tile_ir
+from tessera.compiler.target_ir import lower_tile_to_target_ir
 
 
 # --- Proof status enum ----------------------------------------------------
 
 #: Concrete numerical/lit-validated success on this (op, target).
 PROOF_COMPLETE = "complete"
-#: Works but with a known caveat — e.g. reference (correct but unoptimized),
-#: composes from primitives instead of running as a fused single kernel, or a
-#: contract axis still ``partial``.
+#: Correct reference execution exists, but no target-native compile is claimed.
+PROOF_REFERENCE = "reference"
+#: The pinned compiler accepts the artifact; runtime execution is not proven.
+PROOF_COMPILEABLE = "compileable"
+#: Evidence exists but does not satisfy the rung's full contract.
 PROOF_PARTIAL = "partial"
-#: IR emits a target artifact (lit-clean) but no native backend compile /
-#: launch path lights it up at runtime today.
+#: IR emits a target artifact but concrete backend compilation is absent.
 PROOF_ARTIFACT_ONLY = "artifact_only"
 #: Declared in the registry / manifest but not yet implemented.
 PROOF_PLANNED = "planned"
-#: Not declared on this target.
+#: Evidence required by this rung is absent.
 PROOF_MISSING = "missing"
 #: Concept does not apply to this target (e.g. cooperative warp ops on CPU).
 PROOF_NA = "not_applicable"
@@ -66,6 +72,8 @@ PROOF_NA = "not_applicable"
 #: Order used for rendering and for the "weakest column wins" overall status.
 _STATUS_ORDER = (
     PROOF_COMPLETE,
+    PROOF_REFERENCE,
+    PROOF_COMPILEABLE,
     PROOF_PARTIAL,
     PROOF_ARTIFACT_ONLY,
     PROOF_PLANNED,
@@ -75,6 +83,8 @@ _STATUS_ORDER = (
 
 _STATUS_SYMBOL = {
     PROOF_COMPLETE: "✅",
+    PROOF_REFERENCE: "🧪",
+    PROOF_COMPILEABLE: "🔧",
     PROOF_PARTIAL: "⚙️",
     PROOF_ARTIFACT_ONLY: "⚠️",
     PROOF_PLANNED: "📋",
@@ -151,10 +161,14 @@ CONFORMANCE_OPS: tuple[ConformanceOp, ...] = (
 
 CONFORMANCE_TARGETS: tuple[str, ...] = (
     "cpu",
+    "x86",
     "apple_cpu",
     "apple_gpu",
-    "nvidia",
     "rocm",
+    "nvidia_sm80",
+    "nvidia_sm90",
+    "nvidia_sm100",
+    "nvidia_sm120",
 )
 
 
@@ -199,32 +213,27 @@ def _coverage_for(op: str):
 
 
 def _manifest_for_target(op: str, target: str) -> list[_bm.BackendKernelEntry]:
-    """Return manifest entries for ``op`` that resolve to the dashboard
-    target. NVIDIA aggregates sm80/sm90/sm100/sm120 into ``nvidia``."""
-    out: list[_bm.BackendKernelEntry] = []
-    for e in _bm.manifest_for(op):
-        t = e.target
-        if target == "nvidia" and t.startswith("nvidia_"):
-            out.append(e)
-        elif t == target:
-            out.append(e)
-    return out
+    """Return exact-target manifest entries for ``op``.
+
+    Architecture families are never merged here. Family summaries are derived
+    only after architecture-grain cells have been built.
+    """
+    return [e for e in _bm.manifest_for(op) if e.target == target]
 
 
 def _best_status(entries: Iterable[_bm.BackendKernelEntry]) -> str | None:
-    """Return the *best* status across multiple entries (e.g. sm80..sm120).
-    "best" = lowest rank in _STATUS_ORDER."""
+    """Return the strongest concrete backend status for one exact target."""
     statuses = {e.status for e in entries}
     if not statuses:
         return None
-    for s in _STATUS_ORDER:
+    backend_order = (
+        "hardware_verified", "compiled", "packaged", "fused", "reference",
+        "compileable", "artifact_only", "planned",
+    )
+    for s in backend_order:
         if s in statuses:
             return s
-    return next(iter(statuses))
-
-
-def _execution_matrix_targets() -> set[str]:
-    return {row.target for row in _em.all_rows()}
+    raise ValueError(f"unknown backend status(es): {sorted(statuses)}")
 
 
 def _apple_gpu_envelope_ops() -> set[str]:
@@ -263,40 +272,6 @@ def _apple_gpu_envelope_ops() -> set[str]:
     return out
 
 
-_TARGET_KEYWORDS = {
-    "cpu": ("cpu", "x86", "amx", "avx"),
-    "apple_cpu": ("apple_cpu", "accelerate"),
-    "apple_gpu": ("apple_gpu", "metal", "mps", "mpsgraph", "msl"),
-    "nvidia": ("nvidia", "cuda", "sm80", "sm90", "sm100", "sm120",
-               "wgmma", "tma", "tcgen05"),
-    "rocm": ("rocm", "mfma", "hip"),
-}
-
-
-_TEST_TEXT_CACHE: dict[str, str] | None = None
-
-
-def _test_text_index() -> dict[str, str]:
-    """Cache of ``tests/unit/test_*.py`` filename → lowercased content
-    (filename + body). Built once per process; the dashboard regenerates
-    rarely enough that re-reading per call is wasteful."""
-    global _TEST_TEXT_CACHE
-    if _TEST_TEXT_CACHE is not None:
-        return _TEST_TEXT_CACHE
-    repo = Path(__file__).resolve().parents[3]
-    test_dir = repo / "tests" / "unit"
-    out: dict[str, str] = {}
-    if test_dir.is_dir():
-        for f in test_dir.glob("test_*.py"):
-            try:
-                body = f.read_text(encoding="utf-8", errors="ignore")
-            except OSError:
-                body = ""
-            out[f.name] = (f.name + "\n" + body).lower()
-    _TEST_TEXT_CACHE = out
-    return out
-
-
 def _numerical_proof_source(op: str, target: str) -> Optional[str]:
     """How the ``numerical_check`` for ``(op, target)`` is satisfied:
 
@@ -304,16 +279,12 @@ def _numerical_proof_source(op: str, target: str) -> Optional[str]:
       exists on disk. This is a **real** execute-and-compare proof and the
       only source that may justify a ``complete`` claim (the P0
       "claimed-complete must be proven" gate).
-    - ``"heuristic"`` — the legacy filename/keyword scan: some
-      ``tests/unit/test_*.py`` mentions both the op and the target. This is
-      *circumstantial* — it keeps a cell from regressing to ``missing`` but
-      can never, on its own, justify ``complete``.
     - ``None`` — no proof of any kind.
 
-    **Audit follow-up A.3 (2026-05-31) — manifest-first.** The first-class
-    answer is ``BackendKernelEntry.execute_compare_fixture``, surfaced via
-    ``backend_manifest.manifest_for(op)`` and verified on disk. The keyword
-    scan is the legacy fallback the fixture map is steadily subsuming.
+    **Audit follow-up A.3 (2026-07-12) — exact-target fixtures.** The only
+    accepted evidence is an ``execute_compare_fixture`` declared for the
+    exact ``(op, target)`` grain and verified on disk. There is deliberately
+    no filename or keyword heuristic fallback.
     """
     # Step 1a — directly declared fixture in the numerical-fixtures map.
     # This is the canonical "a fixture is declared for this (op, target)"
@@ -324,32 +295,78 @@ def _numerical_proof_source(op: str, target: str) -> Optional[str]:
     direct = _bm._NUMERICAL_FIXTURES.get((op, target))
     if direct and (repo / direct).is_file():
         return "fixture"
-    # Step 1b — manifest entry carrying a fixture (covers per-arch
-    # nvidia/rocm rows aggregated by ``_manifest_for_target``, and
-    # any entry that set the fixture via its constructor).
+    # Step 1b — exact-target manifest entry carrying a fixture.
     for entry in _manifest_for_target(op, target):
         fixture = entry.execute_compare_fixture
         if fixture and (repo / fixture).is_file():
             return "fixture"
-    # Step 2 — legacy heuristic for cells not yet covered by the manifest.
-    target_keys = _TARGET_KEYWORDS.get(target, (target,))
-    op_keys: tuple[str, ...] = (op,)
-    if "_" in op:
-        # matmul_softmax → also match "matmul" or "softmax" alone
-        op_keys = op_keys + tuple(op.split("_"))
-    for text in _test_text_index().values():
-        if any(k in text for k in target_keys) and any(
-            k in text for k in op_keys
-        ):
-            return "heuristic"
     return None
 
 
 def _numerical_check_present(op: str, target: str) -> bool:
-    """Whether ``(op, target)`` has *any* numerical-check signal (fixture or
-    heuristic). Presence grants at most ``partial``; only a real fixture
-    (``_numerical_proof_source == "fixture"``) may upgrade to ``complete``."""
+    """Whether exact-target execute-and-compare evidence exists."""
     return _numerical_proof_source(op, target) is not None
+
+
+@dataclass(frozen=True)
+class IRProof:
+    """Verifier-derived proof for the four emitted IR rungs."""
+
+    graph_emitted: str
+    schedule_legal: str
+    tile_legal: str
+    target_legal: str
+    detail: str = ""
+
+
+@cache
+def _ir_proof(op: str, target: str) -> IRProof:
+    """Compile the curated program and run the typed verifier at every rung.
+
+    A registry row is not evidence. The rung completes only when the compiler
+    emits that artifact and its in-process IR verifier accepts the typed module.
+    """
+    try:
+        fn = _ce._jitted(op, target)
+        bundle = fn.compile_bundle
+        graph = fn.graph_ir
+    except Exception as exc:  # noqa: BLE001 - audit converts failures to evidence
+        return IRProof(PROOF_MISSING, PROOF_MISSING, PROOF_MISSING,
+                       PROOF_MISSING, f"compile failed: {exc}")
+
+    graph_result = graph.verify()
+    if bundle.graph is None or not graph_result.ok:
+        return IRProof(PROOF_MISSING, PROOF_MISSING, PROOF_MISSING,
+                       PROOF_MISSING, graph_result.format())
+
+    if bundle.schedule is None:
+        return IRProof(PROOF_COMPLETE, PROOF_MISSING, PROOF_MISSING,
+                       PROOF_MISSING, "compiler emitted no Schedule IR")
+    schedule = lower_graph_to_schedule_ir(graph, target_kind=target)
+    schedule_result = schedule.verify()
+    if not schedule_result.ok:
+        return IRProof(PROOF_COMPLETE, PROOF_PARTIAL, PROOF_MISSING,
+                       PROOF_MISSING, schedule_result.format())
+
+    if bundle.tile is None:
+        return IRProof(PROOF_COMPLETE, PROOF_COMPLETE, PROOF_MISSING,
+                       PROOF_MISSING, "compiler emitted no Tile IR")
+    tile = lower_schedule_to_tile_ir(schedule, target_kind=target)
+    tile_result = tile.verify()
+    if not tile_result.ok:
+        return IRProof(PROOF_COMPLETE, PROOF_COMPLETE, PROOF_PARTIAL,
+                       PROOF_MISSING, tile_result.format())
+
+    if bundle.target_ir is None:
+        return IRProof(PROOF_COMPLETE, PROOF_COMPLETE, PROOF_COMPLETE,
+                       PROOF_MISSING, "compiler emitted no Target IR")
+    target_ir = lower_tile_to_target_ir(tile, target_kind=target)
+    target_result = target_ir.verify()
+    if not target_result.ok:
+        return IRProof(PROOF_COMPLETE, PROOF_COMPLETE, PROOF_COMPLETE,
+                       PROOF_PARTIAL, target_result.format())
+    return IRProof(PROOF_COMPLETE, PROOF_COMPLETE, PROOF_COMPLETE,
+                   PROOF_COMPLETE)
 
 
 # --- Per-cell deriver -----------------------------------------------------
@@ -358,47 +375,30 @@ def _proof_cell(op: ConformanceOp, target: str) -> ProofCell:
     components = op.component_ops
     notes: list[str] = []
 
-    # --- graph_emitted: every component must have a coverage row. ---
+    # Registry coverage is used only to validate component identity and the
+    # generic tests contract. IR rung status comes from actual compilation and
+    # typed verifier results below.
     component_covers = [(c, _coverage_for(c)) for c in components]
     missing_components = [c for c, cov in component_covers if cov is None]
     if missing_components:
-        graph_emitted = PROOF_MISSING
         notes.append(f"missing component(s): {','.join(missing_components)}")
-    else:
-        graph_emitted = PROOF_COMPLETE
+    ir = (_ir_proof(op.name, target) if not missing_components else
+          IRProof(PROOF_MISSING, PROOF_MISSING, PROOF_MISSING, PROOF_MISSING,
+                  "component missing from primitive registry"))
+    graph_emitted = ir.graph_emitted
+    schedule_legal = ir.schedule_legal
+    tile_legal = ir.tile_legal
+    target_legal = ir.target_legal
+    if ir.detail:
+        notes.append(ir.detail)
 
-    # --- schedule_legal: lowering_rule complete on every component. ---
-    if graph_emitted == PROOF_MISSING:
-        schedule_legal = PROOF_MISSING
-    else:
-        statuses = [cov.contract_status.get("lowering_rule", "planned")
-                    for _, cov in component_covers]
-        schedule_legal = _proof_status_from_axis(statuses)
-
-    # --- tile_legal: graph_ir_lowering metadata == registered (or N/A). ---
-    if graph_emitted == PROOF_MISSING:
-        tile_legal = PROOF_MISSING
-    else:
-        gil = [cov.metadata.get("graph_ir_lowering", "missing")
-               for _, cov in component_covers]
-        tile_legal = _proof_status_from_graph_ir_lowering(gil)
-
-    # --- target_legal: every component has a manifest entry on this target
-    #     with a status that is not just 'planned'.
-    if graph_emitted == PROOF_MISSING:
-        target_legal = PROOF_MISSING
-        backend_compile = PROOF_MISSING
-    else:
-        comp_target_statuses: list[str] = []
-        for c in components:
-            entries = _manifest_for_target(c, target)
-            best = _best_status(entries)
-            if best is None:
-                comp_target_statuses.append("missing")
-            else:
-                comp_target_statuses.append(best)
-        target_legal = _proof_status_from_target_legal(comp_target_statuses)
-        backend_compile = _proof_status_from_backend_compile(comp_target_statuses)
+    comp_target_statuses: list[str] = []
+    for component in components:
+        best = _best_status(_manifest_for_target(component, target))
+        comp_target_statuses.append(best or "missing")
+    backend_compile = _proof_status_from_backend_compile(
+        comp_target_statuses, op.name, target
+    )
 
     # --- Composition / fusion adjustment for multi-component rows ---
     if len(components) > 1:
@@ -413,52 +413,34 @@ def _proof_cell(op: ConformanceOp, target: str) -> ProofCell:
         # not a correctness prerequisite, so do not demote a fully compiled
         # chain merely because it launches more than one kernel.
 
-    # --- runtime_execute: target must have an execution_matrix row, AND for
-    #     CPU/Apple targets every component must be in the runtime envelope.
-    em_targets = _execution_matrix_targets()
-    if target not in em_targets:
-        runtime_execute = PROOF_MISSING
-    elif graph_emitted == PROOF_MISSING:
-        runtime_execute = PROOF_MISSING
-    else:
-        runtime_execute = _proof_status_from_runtime(target, components)
+    runtime_execute = _proof_status_from_runtime(
+        op.name, target, components, comp_target_statuses
+    )
 
-    # --- numerical_check: presence grants partial; only a real declared
-    #     execute_compare_fixture may upgrade to complete (P0 gate —
-    #     "claimed-complete must be proven"). The legacy keyword heuristic is
-    #     circumstantial and caps the cell at partial. ---
+    # --- numerical_check: only an exact-target execute_compare_fixture counts.
     proof_source = _numerical_proof_source(op.name, target)
-    if proof_source is not None:
-        numerical_check = PROOF_PARTIAL  # presence ≠ rigor; partial by default
-        # Upgrade to complete only when (a) a real fixture proves it AND
-        # (b) every component's registered tests row is itself 'complete'.
-        if proof_source == "fixture" and graph_emitted == PROOF_COMPLETE:
-            statuses = [cov.contract_status.get("tests", "planned")
-                        for _, cov in component_covers]
-            if all(s == "complete" for s in statuses):
-                numerical_check = PROOF_COMPLETE
-    else:
-        numerical_check = PROOF_MISSING
+    numerical_check = (PROOF_COMPLETE if proof_source == "fixture"
+                       else PROOF_MISSING)
 
-    # Cross-reference the named pipeline gate (audit recommendation B) only
-    # when the proof ladder is still open.  A fully proven cell has no failing
-    # gate by definition: the absence of hipcc/Apple silicon on the dashboard
-    # regeneration host cannot contradict checked-in compile/execute/numerical
-    # evidence from the target proof lane.
     proof_axes = (
-        graph_emitted, schedule_legal, tile_legal, target_legal,
-        backend_compile, runtime_execute, numerical_check,
+        ("graph_emitted", graph_emitted),
+        ("schedule_legal", schedule_legal),
+        ("tile_legal", tile_legal),
+        ("target_legal", target_legal),
+        ("backend_compile", backend_compile),
+        ("runtime_execute", runtime_execute),
+        ("numerical_check", numerical_check),
     )
-    gate_result = (
-        None if all(axis == PROOF_COMPLETE for axis in proof_axes)
-        else _pg.first_failing_gate(target, components[0])
-    )
-    if gate_result is not None:
-        first_failing_gate = gate_result.gate
-        first_failing_gate_detail = gate_result.detail
-    else:
+    first = next(((name, status) for name, status in proof_axes
+                  if status != PROOF_COMPLETE), None)
+    if first is None:
         first_failing_gate = None
         first_failing_gate_detail = ""
+    else:
+        first_failing_gate, status = first
+        first_failing_gate_detail = (
+            f"{first_failing_gate}={status}; components={','.join(components)}"
+        )
 
     return ProofCell(
         op=op.name,
@@ -476,109 +458,63 @@ def _proof_cell(op: ConformanceOp, target: str) -> ProofCell:
     )
 
 
-def _proof_status_from_axis(statuses: list[str]) -> str:
-    """Map registry axis statuses (complete/partial/planned/by-design terminal)
-    to proof statuses."""
+def _proof_status_from_backend_compile(
+    statuses: list[str], op: str, target: str
+) -> str:
+    """Map exact-target manifest evidence to backend compile proof.
+
+    Reference and compileable are explicit non-complete states. A fused source
+    row completes this rung only when an execute/compare fixture proves that the
+    source was compiled and ran for the same exact target.
+    """
     if any(s == "missing" for s in statuses):
         return PROOF_MISSING
-    if all(s == "complete" for s in statuses):
-        return PROOF_COMPLETE
-    if all(_pc.is_contract_closed(s) for s in statuses):
-        return PROOF_COMPLETE
     if any(s == "planned" for s in statuses):
         return PROOF_PLANNED
-    return PROOF_PARTIAL
-
-
-def _proof_status_from_graph_ir_lowering(statuses: list[str]) -> str:
-    """Graph IR registration is a binary-ish proof (registered / missing /
-    host_materialized / runtime_only / legacy not_applicable / stub_required)."""
-    if any(s == "missing" for s in statuses):
-        return PROOF_MISSING
-    if all(s in ("registered", "host_materialized", "runtime_only",
-                 "not_applicable") for s in statuses):
+    if any(s == "artifact_only" for s in statuses):
+        return PROOF_ARTIFACT_ONLY
+    if any(s == "compileable" for s in statuses):
+        return PROOF_COMPILEABLE
+    if any(s == "reference" for s in statuses):
+        return PROOF_REFERENCE
+    native_statuses = {"hardware_verified", "compiled", "packaged", "fused"}
+    if all(s in native_statuses for s in statuses) and (
+        all(s != "fused" for s in statuses)
+        or _numerical_proof_source(op, target) == "fixture"
+    ):
         return PROOF_COMPLETE
-    if any(s == "stub_required" for s in statuses):
+    if all(s in native_statuses for s in statuses):
         return PROOF_PARTIAL
     return PROOF_PARTIAL
 
 
-def _proof_status_from_target_legal(statuses: list[str]) -> str:
-    """For target_legal we accept any non-planned, non-missing manifest entry
-    (= the backend can at least emit IR/artifact for this target)."""
-    if any(s == "missing" for s in statuses):
+def _proof_status_from_runtime(
+    op: str,
+    target: str,
+    components: tuple[str, ...],
+    statuses: list[str],
+) -> str:
+    """Require an executable target row plus exact-target op proof.
+
+    ``ExecutionRow`` is target/path-grain, so the manifest status and the
+    target-aligned execute/compare fixture provide the op-specific join.
+    """
+    executable_targets = {
+        row.target for row in _em.all_rows() if row.executable
+    }
+    if target not in executable_targets:
         return PROOF_MISSING
-    if any(s == "planned" for s in statuses):
-        return PROOF_PLANNED
-    return PROOF_COMPLETE
-
-
-def _proof_status_from_backend_compile(statuses: list[str]) -> str:
-    """fused/reference/compileable/hardware_verified/packaged count as real
-    compile paths; artifact_only is the audit's 'IR emits but no link/launch'
-    state.
-
-    Project 3 (2026-06-01): ``hardware_verified`` is the top rung
-    (fused + numerical-proof fixture), and ``packaged`` is the PK5
-    ``.mtlpackage`` lane — both ship executable kernels and so count
-    as ``complete`` in this column."""
-    if any(s == "missing" for s in statuses):
+    if _numerical_proof_source(op, target) != "fixture":
         return PROOF_MISSING
-    if any(s == "planned" for s in statuses):
-        return PROOF_PLANNED
-    # All entries report a non-planned status. The weakest one wins.
-    # ``compiled`` (2026-06-25) is a real compile+execute path — a
-    # compiler-generated hsaco that runs via runtime.launch() (one rung below
-    # ``hardware_verified``: no shipped C symbol) — so it counts here.
-    if all(s in ("fused", "reference", "compileable",
-                  "hardware_verified", "compiled", "packaged")
+    if any(s in {"missing", "planned", "artifact_only", "compileable"}
+           for s in statuses):
+        return PROOF_MISSING
+    if any(s == "reference" for s in statuses):
+        return PROOF_REFERENCE
+    if all(s in {"hardware_verified", "compiled", "packaged", "fused"}
            for s in statuses):
         return PROOF_COMPLETE
-    if any(s == "artifact_only" for s in statuses):
-        return PROOF_ARTIFACT_ONLY
     return PROOF_PARTIAL
-
-
-def _proof_status_from_runtime(target: str, components: tuple[str, ...]) -> str:
-    """A runtime executor exists for this target. For Apple-GPU specifically
-    we additionally require every component to be in the runtime envelope
-    (since execution_matrix is target-level, not op-level)."""
-    if target == "apple_gpu":
-        # Stateful KV-cache reads use the dedicated device-resident accessor,
-        # not the pure-tensor @jit envelope.  It is nevertheless a real runtime
-        # path and carries a focused execute-and-compare fixture.
-        if components == ("kv_cache_read",):
-            return PROOF_COMPLETE
-        envelope = _apple_gpu_envelope_ops()
-        missing = [c for c in components if c not in envelope]
-        if missing:
-            return PROOF_MISSING
-        return PROOF_COMPLETE
-    if target == "apple_cpu":
-        # Accelerate is preferred where available; other supported ops execute
-        # through the correct JIT-CPU reference path.  Optimization level is
-        # not a conformance rung, so both are complete runtime executions.
-        return PROOF_COMPLETE
-    if target == "cpu":
-        # The host x86/CPU lane has both native_cpu and jit_cpu_numpy execution
-        # rows. A correct reference executor is still a real end-to-end runtime
-        # path; optimization level is not a conformance rung.
-        return PROOF_COMPLETE
-    if target == "rocm":
-        # An op executes on ROCm (gfx1151) iff every component ships a real
-        # executing kernel: ``hardware_verified`` (a shipped C-ABI runtime_symbol,
-        # e.g. matmul / flash_attn) or ``compiled`` (a compiler-generated hsaco
-        # launched via runtime.launch()). Both carry an execute_compare fixture.
-        # Otherwise there is no rocm runtime path (artifact_only MFMA emit only).
-        # Capability-based, matching apple_gpu (the committed dashboard does not
-        # depend on the regen host having a GPU).
-        executes = {"hardware_verified", "compiled"}
-        for c in components:
-            statuses = {e.status for e in _manifest_for_target(c, "rocm")}
-            if not (statuses & executes):
-                return PROOF_MISSING
-        return PROOF_COMPLETE
-    return PROOF_MISSING
 
 
 # --- Public API -----------------------------------------------------------
@@ -587,16 +523,14 @@ def build_matrix() -> list[ProofCell]:
     """Generate the full matrix as a flat list of proof cells, ordered by
     (op, target) per ``CONFORMANCE_OPS`` × ``CONFORMANCE_TARGETS``.
 
-    Built under ``deterministic_host_for_dashboard`` so the committed dashboard
-    is byte-identical whether regenerated on a Mac or the Linux CI runner — the
-    apple ``hardware_smoke`` gate otherwise flips between ``—`` and
-    ``Apple silicon required`` depending on the host.
+    IR proof uses the in-process typed lowering/verifier stack. Runtime and
+    numerical proof use checked-in exact-target evidence, so regeneration does
+    not depend on the current host's optional accelerator toolchain.
     """
     out: list[ProofCell] = []
-    with _pg.deterministic_host_for_dashboard():
-        for op in CONFORMANCE_OPS:
-            for tgt in CONFORMANCE_TARGETS:
-                out.append(_proof_cell(op, tgt))
+    for op in CONFORMANCE_OPS:
+        for tgt in CONFORMANCE_TARGETS:
+            out.append(_proof_cell(op, tgt))
     return out
 
 
@@ -656,7 +590,7 @@ CONFORMANCE_CSV_COLUMNS: tuple[str, ...] = (
     "op", "target", "overall",
     "graph_emitted", "schedule_legal", "tile_legal", "target_legal",
     "backend_compile", "runtime_execute", "numerical_check",
-    "first_failing_gate",
+    "first_failing_gate", "first_failing_gate_detail",
 )
 
 
@@ -679,6 +613,7 @@ def render_csv() -> str:
             c.graph_emitted, c.schedule_legal, c.tile_legal, c.target_legal,
             c.backend_compile, c.runtime_execute, c.numerical_check,
             c.first_failing_gate or "",
+            c.first_failing_gate_detail,
         ])
     return buf.getvalue()
 
@@ -712,19 +647,18 @@ def render_markdown() -> str:
     lines.append("")
     lines.append(
         "A cell is **complete** only when every proof column is `complete`."
-        " Its `first_failing_gate` is then empty (`—`): that field names the"
-        " first blocker for an open cell, not the toolchain or hardware of the"
-        " machine that regenerated this dashboard. The `cpu` target is the"
-        " host x86/CPU conformance path."
+        " Its `first_failing_gate` is then empty (`—`); otherwise that field"
+        " names the first incomplete proof rung. Rows use exact manifest target"
+        " grain. `cpu` is the portable host reference lane; `x86` is the native"
+        " x86 lane; NVIDIA architectures are separate rows."
     )
     lines.append("")
     lines.append(
-        "The matrix is a **pure aggregator** over"
-        " `primitive_coverage` (12-axis contracts), `backend_manifest`"
-        " (per-target kernel status), `execution_matrix` (runtime"
-        " executors), and the Apple-GPU runtime envelope sets. No proof"
-        " column has its own private truth source — change the upstream"
-        " status and the matrix regenerates."
+        "The four IR columns are derived by compiling each curated program and"
+        " running the typed Graph/Schedule/Tile/Target verifiers. Backend and"
+        " runtime columns join exact-target `backend_manifest` evidence to an"
+        " executable `execution_matrix` target row. Numerical completion"
+        " requires an exact-target execute-and-compare fixture."
     )
     lines.append("")
     lines.append(
@@ -744,16 +678,18 @@ def render_markdown() -> str:
     legend = [
         (PROOF_COMPLETE,
          "Real path lit up end-to-end on this target."),
+        (PROOF_REFERENCE,
+         "Correct reference execution; no target-native compile claim."),
+        (PROOF_COMPILEABLE,
+         "Pinned backend compiler accepts the artifact; execution unproven."),
         (PROOF_PARTIAL,
-         "Works but with a known caveat (reference / composes / contract"
-         " axis partial)."),
+         "Evidence exists but does not satisfy the rung's full contract."),
         (PROOF_ARTIFACT_ONLY,
-         "IR emits a target artifact; no native compile / link / launch"
-         " path yet (hardware-gated)."),
+         "Target artifact emits; concrete backend compilation is absent."),
         (PROOF_PLANNED,
          "Declared in the registry / manifest, not yet implemented."),
         (PROOF_MISSING,
-         "Not declared on this target."),
+         "The evidence required by this rung is absent."),
         (PROOF_NA,
          "Concept does not apply to this target."),
     ]
@@ -761,6 +697,38 @@ def render_markdown() -> str:
         lines.append(
             f"| {_STATUS_SYMBOL[status]} | `{status}` | {meaning} |"
         )
+    lines.append("")
+
+    # Family summaries are derived from exact-target cells and never fed back
+    # into row status.
+    family_for = {
+        "cpu": "host_reference",
+        "x86": "x86",
+        "apple_cpu": "apple",
+        "apple_gpu": "apple",
+        "rocm": "rocm",
+        "nvidia_sm80": "nvidia",
+        "nvidia_sm90": "nvidia",
+        "nvidia_sm100": "nvidia",
+        "nvidia_sm120": "nvidia",
+    }
+    family_counts: dict[str, dict[str, int]] = {}
+    for cell in cells:
+        family = family_for[cell.target]
+        counts = family_counts.setdefault(family, {})
+        counts[cell.overall] = counts.get(cell.overall, 0) + 1
+    lines.append("## Derived family rollup")
+    lines.append("")
+    lines.append("| Family | Exact-target cells | Status counts |")
+    lines.append("|---|---:|---|")
+    for family in ("host_reference", "x86", "apple", "rocm", "nvidia"):
+        counts = family_counts.get(family, {})
+        total_family = sum(counts.values())
+        detail = ", ".join(
+            f"{status}={counts[status]}" for status in _STATUS_ORDER
+            if counts.get(status)
+        )
+        lines.append(f"| `{family}` | {total_family} | {detail} |")
     lines.append("")
 
     # Top-level summary by overall status

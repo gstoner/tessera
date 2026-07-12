@@ -25,9 +25,24 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 GEN = ROOT / "docs" / "audit" / "generated"
 AUDIT = ROOT / "docs" / "audit"
 
-# op×target proof-ladder gates that are *software*-actionable vs hardware-gated.
-_SOFTWARE_GATES = {"graph_ir", "schedule", "tile", "codegen", "numerical"}
-_HARDWARE_GATES = {"hardware_smoke", "toolchain", "link"}
+# Exact proof-rung names emitted by op_target_conformance.csv.
+_PROOF_GATES = {
+    "graph_emitted", "schedule_legal", "tile_legal", "target_legal",
+    "backend_compile", "runtime_execute", "numerical_check",
+}
+
+
+def _is_target_environment_gap(row: dict) -> bool:
+    """NVIDIA backend/runtime/numerical proof needs its target lane.
+
+    IR-rung failures remain software-actionable even on NVIDIA.
+    """
+    return (
+        str(row.get("target", "")).startswith("nvidia_")
+        and row.get("first_failing_gate") in {
+            "backend_compile", "runtime_execute", "numerical_check",
+        }
+    )
 
 
 def _read(path: pathlib.Path) -> list[dict]:
@@ -83,24 +98,28 @@ def build_report() -> str:
         overall = collections.Counter(r["overall"] for r in cf)
         gate = collections.Counter(r.get("first_failing_gate", "") for r in cf
                                    if r.get("first_failing_gate"))
-        sw = [r for r in cf
-              if r.get("first_failing_gate") in _SOFTWARE_GATES]
-        hw = [r for r in cf
-              if r.get("first_failing_gate") in _HARDWARE_GATES]
+        # Reference rows intentionally stop short of native compilation; they
+        # are a distinct proof state, not implementation gaps for this list.
+        open_rows = [
+            r for r in cf
+            if r.get("overall") == "missing" and r.get("first_failing_gate")
+        ]
+        hw = [r for r in open_rows if _is_target_environment_gap(r)]
+        sw = [r for r in open_rows if not _is_target_environment_gap(r)]
         w(f"{len(cf)} op×target cells: {dict(overall)}.")
         w("")
         w(f"First-failing gate: {dict(gate)}.")
         w("")
-        w(f"**Software-actionable ({len(sw)}** stop at "
-          f"{sorted(_SOFTWARE_GATES & set(gate))}**) — real lowering/codegen "
-          "gaps to fix:**")
+        w(f"**Software-actionable: {len(sw)}** "
+          f"(stops at {sorted(set(r['first_failing_gate'] for r in sw))}) — real "
+          "lowering/codegen gaps to fix:")
         for r in sw:
             w(f"  - `{r['op']}` → `{r['target']}` (stops @ "
               f"{r['first_failing_gate']})")
         w("")
-        w(f"_Hardware-gated ({len(hw)} stop at "
-          f"{sorted(_HARDWARE_GATES & set(gate))}) — expected; need real "
-          "silicon, not code._")
+        w(f"_Target-environment-gated: {len(hw)} "
+          f"(stops at {sorted(set(r['first_failing_gate'] for r in hw))}) — expected; "
+          "requires the target toolchain and/or silicon proof lane._")
     else:
         w("_(op_target_conformance.csv not found)_")
     w("")
@@ -128,13 +147,18 @@ def build_report() -> str:
     # ── Summary ──────────────────────────────────────────────────────────────
     w("## Takeaway")
     w("")
-    w("- The compiler is **not stub-riddled**: the actionable surface is the "
-      "trivial-stub verifiers + a handful of software conformance cells; "
-      "everything else is hardware-gated (honest) or thin-test (generative).")
+    if stub or (cf and sw):
+        w("- The compiler is **not stub-riddled**: remaining definite verifier "
+          "stubs or software conformance cells are listed above; other gaps are "
+          "target-environment-gated or thin-test work.")
+    else:
+        w("- **No definite verifier stubs or software-actionable curated "
+          "conformance gaps remain.** The open surface is no-verifier triage, "
+          "target-environment proof, and thin-test hardening.")
     w("- **#4 (IR round-trip + fuzz)** hardens the parser/printer/verifier "
       "across all ops cheaply, no oracle needed.")
     w("- **#2 (differential generator)** is the right tool for the "
-      f"~{len([r for r in tc if r['bucket']=='needs_direct_test']) if tc else '?'} "
+      f"{len([r for r in tc if r['bucket']=='needs_direct_test']) if tc else '?'} "
       "needs-direct-test ops + miscompile detection.")
     w("")
     return "\n".join(out) + "\n"

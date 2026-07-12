@@ -1,36 +1,64 @@
-op,target,overall,graph_emitted,schedule_legal,tile_legal,target_legal,backend_compile,runtime_execute,numerical_check,first_failing_gate
-conv2d,apple_cpu,complete,complete,complete,complete,complete,complete,complete,complete,
-conv2d,apple_gpu,complete,complete,complete,complete,complete,complete,complete,complete,
-conv2d,cpu,complete,complete,complete,complete,complete,complete,complete,complete,
-conv2d,nvidia,missing,complete,complete,complete,complete,artifact_only,missing,partial,toolchain
-conv2d,rocm,complete,complete,complete,complete,complete,complete,complete,complete,
-flash_attn,apple_cpu,complete,complete,complete,complete,complete,complete,complete,complete,
-flash_attn,apple_gpu,complete,complete,complete,complete,complete,complete,complete,complete,
-flash_attn,cpu,complete,complete,complete,complete,complete,complete,complete,complete,
-flash_attn,nvidia,missing,complete,complete,complete,complete,artifact_only,missing,partial,toolchain
-flash_attn,rocm,complete,complete,complete,complete,complete,complete,complete,complete,
-kv_cache_read,apple_cpu,complete,complete,complete,complete,complete,complete,complete,complete,
-kv_cache_read,apple_gpu,complete,complete,complete,complete,complete,complete,complete,complete,
-kv_cache_read,cpu,complete,complete,complete,complete,complete,complete,complete,complete,
-kv_cache_read,nvidia,missing,complete,complete,complete,complete,artifact_only,missing,partial,toolchain
-kv_cache_read,rocm,complete,complete,complete,complete,complete,complete,complete,complete,
-matmul,apple_cpu,complete,complete,complete,complete,complete,complete,complete,complete,
-matmul,apple_gpu,complete,complete,complete,complete,complete,complete,complete,complete,
-matmul,cpu,complete,complete,complete,complete,complete,complete,complete,complete,
-matmul,nvidia,missing,complete,complete,complete,complete,artifact_only,missing,complete,toolchain
-matmul,rocm,complete,complete,complete,complete,complete,complete,complete,complete,
-matmul_relu,apple_cpu,complete,complete,complete,complete,complete,complete,complete,complete,
-matmul_relu,apple_gpu,complete,complete,complete,complete,complete,complete,complete,complete,
-matmul_relu,cpu,complete,complete,complete,complete,complete,complete,complete,complete,
-matmul_relu,nvidia,missing,complete,complete,complete,missing,missing,missing,partial,toolchain
-matmul_relu,rocm,complete,complete,complete,complete,complete,complete,complete,complete,
-matmul_softmax,apple_cpu,complete,complete,complete,complete,complete,complete,complete,complete,
-matmul_softmax,apple_gpu,complete,complete,complete,complete,complete,complete,complete,complete,
-matmul_softmax,cpu,complete,complete,complete,complete,complete,complete,complete,complete,
-matmul_softmax,nvidia,missing,complete,complete,complete,complete,artifact_only,missing,partial,toolchain
-matmul_softmax,rocm,complete,complete,complete,complete,complete,complete,complete,complete,
-softmax,apple_cpu,complete,complete,complete,complete,complete,complete,complete,complete,
-softmax,apple_gpu,complete,complete,complete,complete,complete,complete,complete,complete,
-softmax,cpu,complete,complete,complete,complete,complete,complete,complete,complete,
-softmax,nvidia,missing,complete,complete,complete,complete,artifact_only,missing,partial,toolchain
-softmax,rocm,complete,complete,complete,complete,complete,complete,complete,complete,
+op,target,overall,graph_emitted,schedule_legal,tile_legal,target_legal,backend_compile,runtime_execute,numerical_check,first_failing_gate,first_failing_gate_detail
+conv2d,apple_cpu,reference,complete,complete,complete,complete,reference,reference,complete,backend_compile,backend_compile=reference; components=conv2d
+conv2d,apple_gpu,complete,complete,complete,complete,complete,complete,complete,complete,,
+conv2d,cpu,reference,complete,complete,complete,complete,reference,reference,complete,backend_compile,backend_compile=reference; components=conv2d
+conv2d,nvidia_sm100,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,backend_compile=artifact_only; components=conv2d
+conv2d,nvidia_sm120,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,backend_compile=artifact_only; components=conv2d
+conv2d,nvidia_sm80,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,backend_compile=artifact_only; components=conv2d
+conv2d,nvidia_sm90,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,backend_compile=artifact_only; components=conv2d
+conv2d,rocm,complete,complete,complete,complete,complete,complete,complete,complete,,
+conv2d,x86,complete,complete,complete,complete,complete,complete,complete,complete,,
+flash_attn,apple_cpu,reference,complete,complete,complete,complete,reference,reference,complete,backend_compile,backend_compile=reference; components=flash_attn
+flash_attn,apple_gpu,complete,complete,complete,complete,complete,complete,complete,complete,,
+flash_attn,cpu,reference,complete,complete,complete,complete,reference,reference,complete,backend_compile,backend_compile=reference; components=flash_attn
+flash_attn,nvidia_sm100,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,backend_compile=artifact_only; components=flash_attn
+flash_attn,nvidia_sm120,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,backend_compile=artifact_only; components=flash_attn
+flash_attn,nvidia_sm80,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,backend_compile=artifact_only; components=flash_attn
+flash_attn,nvidia_sm90,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,backend_compile=artifact_only; components=flash_attn
+flash_attn,rocm,complete,complete,complete,complete,complete,complete,complete,complete,,
+flash_attn,x86,complete,complete,complete,complete,complete,complete,complete,complete,,
+kv_cache_read,apple_cpu,missing,complete,missing,missing,missing,reference,reference,complete,schedule_legal,schedule_legal=missing; components=kv_cache_read
+kv_cache_read,apple_gpu,missing,complete,missing,missing,missing,complete,complete,complete,schedule_legal,schedule_legal=missing; components=kv_cache_read
+kv_cache_read,cpu,missing,complete,missing,missing,missing,reference,reference,complete,schedule_legal,schedule_legal=missing; components=kv_cache_read
+kv_cache_read,nvidia_sm100,missing,complete,missing,missing,missing,artifact_only,missing,missing,schedule_legal,schedule_legal=missing; components=kv_cache_read
+kv_cache_read,nvidia_sm120,missing,complete,missing,missing,missing,artifact_only,missing,missing,schedule_legal,schedule_legal=missing; components=kv_cache_read
+kv_cache_read,nvidia_sm80,missing,complete,missing,missing,missing,artifact_only,missing,missing,schedule_legal,schedule_legal=missing; components=kv_cache_read
+kv_cache_read,nvidia_sm90,missing,complete,missing,missing,missing,artifact_only,missing,missing,schedule_legal,schedule_legal=missing; components=kv_cache_read
+kv_cache_read,rocm,missing,complete,missing,missing,missing,complete,complete,complete,schedule_legal,schedule_legal=missing; components=kv_cache_read
+kv_cache_read,x86,missing,complete,missing,missing,missing,missing,missing,missing,schedule_legal,schedule_legal=missing; components=kv_cache_read
+matmul,apple_cpu,complete,complete,complete,complete,complete,complete,complete,complete,,
+matmul,apple_gpu,complete,complete,complete,complete,complete,complete,complete,complete,,
+matmul,cpu,reference,complete,complete,complete,complete,reference,reference,complete,backend_compile,backend_compile=reference; components=matmul
+matmul,nvidia_sm100,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,backend_compile=artifact_only; components=matmul
+matmul,nvidia_sm120,complete,complete,complete,complete,complete,complete,complete,complete,,
+matmul,nvidia_sm80,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,backend_compile=artifact_only; components=matmul
+matmul,nvidia_sm90,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,backend_compile=artifact_only; components=matmul
+matmul,rocm,complete,complete,complete,complete,complete,complete,complete,complete,,
+matmul,x86,missing,complete,complete,complete,complete,partial,missing,missing,backend_compile,backend_compile=partial; components=matmul
+matmul_relu,apple_cpu,reference,complete,complete,complete,complete,reference,reference,complete,backend_compile,"backend_compile=reference; components=matmul,relu"
+matmul_relu,apple_gpu,complete,complete,complete,complete,complete,complete,complete,complete,,
+matmul_relu,cpu,reference,complete,complete,complete,complete,reference,reference,complete,backend_compile,"backend_compile=reference; components=matmul,relu"
+matmul_relu,nvidia_sm100,missing,complete,complete,complete,complete,missing,missing,missing,backend_compile,"backend_compile=missing; components=matmul,relu"
+matmul_relu,nvidia_sm120,missing,complete,complete,complete,complete,missing,missing,missing,backend_compile,"backend_compile=missing; components=matmul,relu"
+matmul_relu,nvidia_sm80,missing,complete,complete,complete,complete,missing,missing,missing,backend_compile,"backend_compile=missing; components=matmul,relu"
+matmul_relu,nvidia_sm90,missing,complete,complete,complete,complete,missing,missing,missing,backend_compile,"backend_compile=missing; components=matmul,relu"
+matmul_relu,rocm,complete,complete,complete,complete,complete,complete,complete,complete,,
+matmul_relu,x86,missing,complete,complete,complete,complete,missing,missing,missing,backend_compile,"backend_compile=missing; components=matmul,relu"
+matmul_softmax,apple_cpu,reference,complete,complete,complete,complete,reference,reference,complete,backend_compile,"backend_compile=reference; components=matmul,softmax"
+matmul_softmax,apple_gpu,complete,complete,complete,complete,complete,complete,complete,complete,,
+matmul_softmax,cpu,reference,complete,complete,complete,complete,reference,reference,complete,backend_compile,"backend_compile=reference; components=matmul,softmax"
+matmul_softmax,nvidia_sm100,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,"backend_compile=artifact_only; components=matmul,softmax"
+matmul_softmax,nvidia_sm120,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,"backend_compile=artifact_only; components=matmul,softmax"
+matmul_softmax,nvidia_sm80,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,"backend_compile=artifact_only; components=matmul,softmax"
+matmul_softmax,nvidia_sm90,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,"backend_compile=artifact_only; components=matmul,softmax"
+matmul_softmax,rocm,complete,complete,complete,complete,complete,complete,complete,complete,,
+matmul_softmax,x86,missing,complete,complete,complete,complete,partial,missing,missing,backend_compile,"backend_compile=partial; components=matmul,softmax"
+softmax,apple_cpu,reference,complete,complete,complete,complete,reference,reference,complete,backend_compile,backend_compile=reference; components=softmax
+softmax,apple_gpu,complete,complete,complete,complete,complete,complete,complete,complete,,
+softmax,cpu,reference,complete,complete,complete,complete,reference,reference,complete,backend_compile,backend_compile=reference; components=softmax
+softmax,nvidia_sm100,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,backend_compile=artifact_only; components=softmax
+softmax,nvidia_sm120,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,backend_compile=artifact_only; components=softmax
+softmax,nvidia_sm80,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,backend_compile=artifact_only; components=softmax
+softmax,nvidia_sm90,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,backend_compile=artifact_only; components=softmax
+softmax,rocm,complete,complete,complete,complete,complete,complete,complete,complete,,
+softmax,x86,complete,complete,complete,complete,complete,complete,complete,complete,,

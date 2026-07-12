@@ -121,7 +121,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 
 | Path | status | last_updated | days stale | frontmatter |
 |------|--------|--------------|-----------:|--|
-| `MASTER_AUDIT.md` | - | 2026-07-11 | 1 | ✓ |
+| `MASTER_AUDIT.md` | - | 2026-07-12 | 0 | ✓ |
 | `README.md` | - | 2026-07-11 | 1 | ✓ |
 | `backend/BACKEND_AUDIT.md` | - | 2026-06-26 | 16 | ✓ |
 | `backend/apple/APPLE_AUDIT.md` | - | 2026-07-10 | 2 | ✓ |

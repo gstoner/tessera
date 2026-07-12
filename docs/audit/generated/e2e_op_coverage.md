@@ -189,7 +189,7 @@ each row into a single E2E tier.
 | ``logical_not`` | logical | public | public | registered | fused | compiled | ready | none |
 | ``logical_or`` | logical | public | public | registered | fused | compiled | ready | none |
 | ``logical_xor`` | logical | public | public | registered | fused | compiled | ready | none |
-| ``batched_gemm`` | loop_nest | public | public | registered | fused | compiled | ready | none |
+| ``batched_gemm`` | loop_nest | public | public | registered | fused | fused | ready | none |
 | ``dequant_grouped_gemm`` | loop_nest | public | public | registered | fused | compiled | ready | none |
 | ``dequant_matmul`` | loop_nest | public | public | registered | fused | fused | ready | benchmarked |
 | ``factorized_matmul`` | loop_nest | public | public | registered | fused | compiled | ready | none |

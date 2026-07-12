@@ -34,7 +34,7 @@ avg_pool,4,0,0,4,0,,directly_tested,4 direct test references
 axis_index,0,0,0,0,1,,structural_only,category default for 'transform'
 axis_name,0,0,0,0,1,,structural_only,category default for 'transform'
 axis_size,0,0,0,0,1,,structural_only,category default for 'transform'
-batched_gemm,18,4,0,22,0,bf16 f16 f32 fp16 fp32,directly_tested,22 direct test references
+batched_gemm,19,4,1,23,0,bf16 f16 f32 fp16 fp32,directly_tested,23 direct test references
 bidirectional_scan,5,0,0,5,0,fp16,directly_tested,5 direct test references
 binary_cross_entropy_loss,11,0,1,11,0,f32,directly_tested,11 direct test references
 bitwise_and,3,0,0,3,0,,directly_tested,3 direct test references
@@ -195,7 +195,7 @@ gated_deltanet,28,4,2,32,0,f32 fp64,directly_tested,32 direct test references
 gather,16,1,0,17,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,17 direct test references
 ge,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 gelu,46,19,0,65,0,bf16 f16 f32 f64 fp16 fp32,directly_tested,65 direct test references
-gemm,78,2,7,80,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,80 direct test references
+gemm,79,2,8,81,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,81 direct test references
 gguf_export,1,0,0,1,1,,structural_only,category default for 'aot'
 gqa_attention,9,0,2,9,0,,directly_tested,9 direct test references
 grad_scaler_step,3,0,0,3,0,,directly_tested,3 direct test references
@@ -267,7 +267,7 @@ map,0,0,0,0,1,,structural_only,category default for 'control_flow'
 masked_categorical,10,0,0,10,0,,directly_tested,10 direct test references
 masked_fill,10,0,0,10,0,fp16 fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,10 direct test references
 masked_scatter,14,0,1,14,0,fp16,directly_tested,14 direct test references
-matmul,406,228,17,634,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,634 direct test references
+matmul,408,228,18,636,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,636 direct test references
 max,6,0,2,6,0,bf16 f32,directly_tested,6 direct test references
 max_pool,6,0,0,6,0,,directly_tested,6 direct test references
 maximum,8,0,2,8,0,bf16 f32,directly_tested,8 direct test references

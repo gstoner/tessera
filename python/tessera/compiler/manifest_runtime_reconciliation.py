@@ -72,8 +72,28 @@ def _target_from_func(func_name: str | None) -> str | None:
 
 
 def _ops_in_value(node: ast.AST) -> list[str]:
-    """The ``tessera.<op>`` op names inside a tuple/list/set/dict literal — for a
-    dict the *keys* are the op names (value = kernel config)."""
+    """The ``tessera.<op>`` op names inside an op-gate value.
+
+    Handles the literal container forms (tuple/list/set — a dict uses its *keys*)
+    **and** the constructor-call form ``frozenset({...})`` / ``set([...])`` /
+    ``tuple(...)`` / ``list(...)``: the call is unwrapped to its container
+    argument first. Without this, a gate written as
+    ``_APPLE_CPU_ACCELERATE_OPS = frozenset({"tessera.matmul", …})`` parses as an
+    ``ast.Call`` that matches none of the literal branches and is silently
+    dropped — a false-negative that hides real manifest lag. Set unions
+    (``A | {"tessera.x"}``) are walked on both sides so composed gates count too.
+    """
+    # Unwrap ``frozenset(...)`` / ``set(...)`` / ``tuple(...)`` / ``list(...)``.
+    if isinstance(node, ast.Call):
+        if (isinstance(node.func, ast.Name)
+                and node.func.id in {"frozenset", "set", "tuple", "list"}
+                and node.args):
+            return _ops_in_value(node.args[0])
+        return []
+    # Composed gates: ``_BASE_OPS | {"tessera.x"}`` (Name sides contribute none).
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+        return _ops_in_value(node.left) + _ops_in_value(node.right)
+
     ops: list[str] = []
     consts: list[ast.expr] = []
     if isinstance(node, (ast.Tuple, ast.List, ast.Set)):

@@ -862,6 +862,14 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "gated_deltanet / kimi_delta_attention / "
                             "modified_delta_attention (erase/modified/gate/beta/"
                             "decay flags); f16/bf16/f32 storage, f32 compute",
+    "x86_deltanet_compiled": "x86 CPU gated/delta linear-attention — the "
+                            "hand-written AVX-512 causal delta-rule sequential "
+                            "scan (avx512_deltanet_f32, runtime-loaded): per (b,h) "
+                            "a Dqk x Dv state scanned over S with erase/decay/beta/"
+                            "modified/gate variants. Handles gated_deltanet / "
+                            "kimi_delta_attention / modified_delta_attention. f32, "
+                            "matches numpy _delta_attention_impl. The x86 analog "
+                            "of rocm_deltanet_compiled",
     "rocm_rope_compiled":   "AMD GPU RDNA rotary-position-embedding the Tessera "
                             "compiler GENERATES (generate-rocm-rope-kernel -> "
                             "ROCDL -> hsaco, in-process via tessera-opt), then HIP "
@@ -2514,6 +2522,21 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "recurrence for gated_deltanet / kimi_delta_attention / "
                "modified_delta_attention. f16/bf16/f32 storage, f32 compute.",
         execution_mode="hip_runtime"),
+    # x86 analog of the ROCm deltanet lane — the AVX-512 causal delta-rule scan
+    # (avx512_deltanet_f32) for gated_deltanet / kimi_delta_attention /
+    # modified_delta_attention. f32; matches numpy _delta_attention_impl.
+    ("x86", "x86_deltanet_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_deltanet_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_deltanet_compiled", runtime_status="success",
+        reason="x86 deltanet artifact runs the hand-written AVX-512 causal "
+               "delta-rule sequential scan (avx512_deltanet_f32, runtime-loaded "
+               "from libtessera_x86_elementwise.so): per (b,h) a Dqk x Dv state "
+               "scanned over S with erase/decay/beta/modified/gate variants — the "
+               "gated/delta linear-attention recurrence for gated_deltanet / "
+               "kimi_delta_attention / modified_delta_attention. f32, matches "
+               "numpy _delta_attention_impl.",
+        execution_mode="cpu_avx512"),
     # Rotary position embedding — interleaved-pair RoPE over [M, D]. vs numpy.
     ("rocm", "rocm_rope_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_rope_compiled",

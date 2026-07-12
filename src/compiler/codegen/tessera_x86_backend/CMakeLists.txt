@@ -72,6 +72,7 @@ add_library(tessera_x86_backend
   src/kernels/avx512_sparse_f32.cpp
   src/kernels/avx512_ssm_f32.cpp
   src/kernels/avx512_ssm_bwd_f32.cpp
+  src/kernels/avx512_deltanet_f32.cpp
   src/kernels/avx512_linalg_f32.cpp
   src/kernels/avx512_lu_qr_f32.cpp
   src/kernels/avx512_svd_f32.cpp
@@ -186,6 +187,7 @@ add_library(tessera_x86_elementwise SHARED
   src/kernels/avx512_sparse_f32.cpp
   src/kernels/avx512_ssm_f32.cpp
   src/kernels/avx512_ssm_bwd_f32.cpp
+  src/kernels/avx512_deltanet_f32.cpp
   src/kernels/avx512_linalg_f32.cpp
   src/kernels/avx512_lu_qr_f32.cpp
   src/kernels/avx512_svd_f32.cpp

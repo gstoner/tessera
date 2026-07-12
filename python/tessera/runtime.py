@@ -16400,6 +16400,98 @@ def _execute_rocm_compiled_deltanet(artifact: RuntimeArtifact, args: Any) -> Any
     return o.reshape(B, H, S, d_v)
 
 
+#: op_name -> modified flag (mirrors _ROCM_DELTANET_OPS).
+_X86_DELTANET_OPS = {
+    "tessera.gated_deltanet": False,
+    "tessera.kimi_delta_attention": False,
+    "tessera.modified_delta_attention": True,
+}
+
+
+def _execute_x86_compiled_deltanet(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` DeltaNet lane: the AVX-512 causal delta-rule scan
+    (avx512_deltanet_f32), the x86 analog of rocm_deltanet_compiled. Operands
+    [Q, K, V, gate?, beta?, decay?] (presence via has_gate/has_beta/has_decay
+    kwargs); ``erase`` kwarg; ``modified`` from the op name. Q/K [B,H,S,Dqk],
+    V [B,H,S,Dv]; f32, causal-only. Matches numpy _delta_attention_impl."""
+    import numpy as np
+
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _X86_DELTANET_OPS:
+        raise ValueError(
+            "x86_deltanet_compiled executor handles exactly one of "
+            f"{tuple(_X86_DELTANET_OPS)}; got {[o.get('op_name') for o in ops]!r}")
+    modified = _X86_DELTANET_OPS[op_name]
+    op = ops[0]
+    kwargs = op.get("kwargs") or {}
+    if not bool(kwargs.get("causal", True)):
+        raise ValueError("x86 deltanet lane is causal-only")
+    erase = bool(kwargs.get("erase", False))
+    has_gate = bool(kwargs.get("has_gate", False))
+    has_beta = bool(kwargs.get("has_beta", False))
+    has_decay = bool(kwargs.get("has_decay", False))
+    operand_names = [str(n) for n in op.get("operands", [])]
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[n]) for n in operand_names]
+    need = 3 + has_gate + has_beta + has_decay
+    if len(operands) != need:
+        raise ValueError(
+            f"deltanet expects {need} operands (Q,K,V + present optionals); "
+            f"got {len(operands)}")
+    q, k, v = operands[0], operands[1], operands[2]
+    if q.ndim != 4 or k.ndim != 4 or v.ndim != 4:
+        raise ValueError("deltanet expects rank-4 (B,H,S,D) Q/K/V")
+    ptr = 3
+    gate = operands[ptr] if has_gate else None
+    ptr += 1 if has_gate else 0
+    beta = operands[ptr] if has_beta else None
+    ptr += 1 if has_beta else 0
+    decay = operands[ptr] if has_decay else None
+    B, H, S, d_qk = (int(x) for x in q.shape)
+    d_v = int(v.shape[-1])
+    if k.shape != q.shape or v.shape[:3] != q.shape[:3]:
+        raise ValueError(
+            f"deltanet K must match Q and V must share B,H,S; got Q{q.shape} "
+            f"K{k.shape} V{v.shape}")
+
+    f32 = lambda a: np.ascontiguousarray(a, dtype=np.float32)
+    qc, kc, vc = f32(q), f32(k), f32(v)
+    gate_c = beta_c = decay_c = None
+    if has_gate:
+        gm = np.asarray(gate)
+        if gm.shape == (B, H, S):
+            gm = gm[..., None]
+        gate_c = f32(np.broadcast_to(gm, (B, H, S, d_v)))
+    if has_beta:
+        beta_c = f32(np.broadcast_to(np.asarray(beta).reshape(B, H, S), (B, H, S)))
+    if has_decay:
+        decay_c = f32(np.broadcast_to(np.asarray(decay).reshape(B, H, S), (B, H, S)))
+    out = np.zeros((B, H, S, d_v), dtype=np.float32)
+
+    cf = ctypes.POINTER(ctypes.c_float)
+    P = lambda a: (a.ctypes.data_as(cf) if a is not None else None)
+    fn = lib.tessera_x86_deltanet_f32
+    fn.restype = None
+    fn.argtypes = [cf, cf, cf, cf, cf, cf, cf,
+                   ctypes.c_int64, ctypes.c_int64, ctypes.c_int64,
+                   ctypes.c_int64, ctypes.c_int64,
+                   ctypes.c_int32, ctypes.c_int32,
+                   ctypes.c_int32, ctypes.c_int32, ctypes.c_int32]
+    fn(P(qc), P(kc), P(vc), P(gate_c), P(beta_c), P(decay_c), P(out),
+       ctypes.c_int64(B), ctypes.c_int64(H), ctypes.c_int64(S),
+       ctypes.c_int64(d_qk), ctypes.c_int64(d_v),
+       ctypes.c_int32(1 if erase else 0), ctypes.c_int32(1 if modified else 0),
+       ctypes.c_int32(1 if has_gate else 0), ctypes.c_int32(1 if has_beta else 0),
+       ctypes.c_int32(1 if has_decay else 0))
+    return out.astype(np.result_type(q, k, v), copy=False)
+
+
 def _executor_table():
     # Lazily resolved: these symbols are defined later in this file.
     return {
@@ -16556,6 +16648,7 @@ def _executor_table():
         "rocm_conv_compiled": _execute_rocm_compiled_conv,
         "rocm_exotic_attn_compiled": _execute_rocm_compiled_exotic_attention,
         "rocm_deltanet_compiled": _execute_rocm_compiled_deltanet,
+        "x86_deltanet_compiled": _execute_x86_compiled_deltanet,
         "rocm_rope_compiled":   _execute_rocm_compiled_rope,
         "nvidia_mma":           _execute_nvidia_mma_artifact,
     }

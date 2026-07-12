@@ -2274,6 +2274,9 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
         "tests/unit/test_x86_nsa_compiled.py",
     **{(op, "x86"): "tests/unit/test_x86_linear_attn_compiled.py"
        for op in ("linear_attn", "power_attn", "retention")},
+    **{(op, "x86"): "tests/unit/test_x86_deltanet_compiled.py"
+       for op in ("gated_deltanet", "kimi_delta_attention",
+                  "modified_delta_attention")},
     **{(op, "x86"): "tests/unit/test_x86_rng_compiled.py"
        for op in ("rng_uniform", "rng_normal", "rng_bernoulli", "rng_beta",
                   "rng_categorical", "rng_dirichlet", "rng_gamma",
@@ -3208,6 +3211,18 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "(φ(Q)·φ(K)ᵀ ⊙ causal ⊙ decay)@V on two batched GEMMs; feature "
                  "map / mask / decay on host; x86_linear_attn_compiled lane; f32",
     } for op in ("linear_attn", "power_attn", "retention")},
+    # DeltaNet / gated-delta linear attention — the hand-written AVX-512 causal
+    # delta-rule sequential scan (avx512_deltanet_f32; x86_deltanet_compiled
+    # lane), the x86 partner to the ROCm rocm_deltanet_compiled recurrence.
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"AVX-512 {op} — causal delta-rule sequential scan "
+                 "(avx512_deltanet_f32: per (b,h) a Dqk x Dv state over S with "
+                 "erase/decay/beta/modified/gate); x86_deltanet_compiled lane; "
+                 "f32, matches numpy _delta_attention_impl",
+    } for op in ("gated_deltanet", "kimi_delta_attention",
+                 "modified_delta_attention")},
     # P11 — NSA (DeepSeek native sparse attention): the sliding / compressed /
     # top-k branches all run their attention on the AVX-512 flash_attn kernels;
     # block compression / top-k selection / gather / gate blend on the host.

@@ -21,7 +21,10 @@ humans; a drift test fails if anything diverges.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, Mapping, Optional
+
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 
 from .capabilities import TARGET_CAPABILITIES, normalize_target
 
@@ -59,6 +62,12 @@ class ExecutionRow:
     # asserting them. Forward rows leave both at their defaults.
     direction: str = "forward"   # "forward" | "backward"
     op_family: str = ""          # backward rows: the op family this VJP launches
+    # Exact-target backward proof.  An executable row alone is only
+    # runtime-bound; device verification additionally requires one of the two
+    # canonical proof statuses plus an architecture-aligned numerical fixture.
+    device_proof: str = ""       # "device_verified_jit" | "device_verified_abi"
+    evidence_target: str = ""    # e.g. "rocm_gfx1151" / "x86_avx512"
+    numerical_fixture: str = ""  # repo-relative execute-and-compare fixture
 
 
 # Catalog of every executor name → docstring describing what it runs. The actual
@@ -1426,7 +1435,9 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "[, gate[, state]]). f32, matches autodiff.vjp.vjp_selective_ssm; "
                "the reverse-mode analog of x86_selective_ssm_compiled.",
         execution_mode="cpu_avx512",
-        direction="backward", op_family="selective_ssm"),
+        direction="backward", op_family="selective_ssm",
+        device_proof="device_verified_abi", evidence_target="x86_avx512",
+        numerical_fixture="tests/unit/test_x86_ssm_bwd_launch_execute.py"),
     ("x86", "x86_linalg_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_linalg_compiled",
         execution_kind="native_cpu", executable=True,
@@ -1865,7 +1876,9 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "than W) + Gemma-2 logit-softcap (dS scaled by 1-tanh^2), scale + "
                "causal, f16/bf16 storage, f32 accumulate.",
         execution_mode="hip_runtime",
-        direction="backward", op_family="flash_attn"),
+        direction="backward", op_family="flash_attn",
+        device_proof="device_verified_jit", evidence_target="rocm_gfx1151",
+        numerical_fixture="tests/unit/test_rocm_flash_attn_bwd_compiled.py"),
     # Mamba2 selective_ssm BACKWARD (generate-rocm-selective-ssm-bwd-kernel):
     # operands (dout, x, A, B, C, delta[, gate[, state]]) -> (dx, dA, dB, dC,
     # ddelta). The reverse-mode analog of rocm_selective_ssm_compiled; the second
@@ -1882,7 +1895,9 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "[, gate[, state]]). f32, matches autodiff.vjp.vjp_selective_ssm; "
                "the reverse-mode analog of rocm_selective_ssm_compiled.",
         execution_mode="hip_runtime",
-        direction="backward", op_family="selective_ssm"),
+        direction="backward", op_family="selective_ssm",
+        device_proof="device_verified_jit", evidence_target="rocm_gfx1151",
+        numerical_fixture="tests/unit/test_rocm_ssm_bwd_launch_execute.py"),
     # Linear-attention family (quadratic-parallel form, no softmax; a distinct
     # algorithm from flash_attn): tessera.linear_attn + the decay-masked siblings
     # tessera.lightning_attention / tessera.retention, dispatched by op name.
@@ -2641,10 +2656,8 @@ def unimplemented_targets() -> tuple[str, ...]:
 
 # --- autodiff facet: native backward launches (AUTODIFF_UNIFICATION_PLAN §9a) ---
 
-#: Execution kinds that mean a row runs on a real device, not a CPU reference —
-#: the bar a *backward* row must clear to count as hardware-proven.
-_DEVICE_EXECUTION_KINDS: frozenset[str] = frozenset(
-    {"native_gpu", "native_cpu", "cpu_accelerate"}
+_DEVICE_PROOFS: frozenset[str] = frozenset(
+    {"device_verified_jit", "device_verified_abi"}
 )
 
 
@@ -2656,26 +2669,38 @@ def backward_rows() -> list[ExecutionRow]:
 def native_backward_targets() -> dict[str, dict[str, tuple[str, ...]]]:
     """Per op-family, the targets whose **backward** has a native launch.
 
-    Returns ``{op_family: {"runtime_bound": (...), "hardware_proven": (...)}}``:
-    ``runtime_bound`` = an executable backward row exists (a launch ABI is
-    reachable); ``hardware_proven`` = that row runs on a real device (its
-    ``execution_kind`` is a device kind), not a CPU reference. The autodiff
-    ledger reads this so its native backward rungs are **sourced from the
-    matrix, never asserted** (Phase 4 A2)."""
+    Runtime binding and device proof are deliberately separate.  A verified
+    row must name an exact evidence target and a checked-in numerical fixture;
+    ``execution_kind`` alone is never device-verification evidence.
+    """
     bound: dict[str, set[str]] = {}
-    proven: dict[str, set[str]] = {}
+    oracle: dict[str, set[str]] = {}
+    jit: dict[str, set[str]] = {}
+    abi: dict[str, set[str]] = {}
     for r in backward_rows():
         if not r.executable or not r.op_family:
             continue
-        bound.setdefault(r.op_family, set()).add(r.target)
-        if r.execution_kind in _DEVICE_EXECUTION_KINDS:
-            proven.setdefault(r.op_family, set()).add(r.target)
+        target = r.evidence_target or r.target
+        bound.setdefault(r.op_family, set()).add(target)
+        if r.device_proof:
+            if r.device_proof not in _DEVICE_PROOFS:
+                raise ValueError(f"unknown backward device proof {r.device_proof!r}")
+            fixture = _REPO_ROOT / r.numerical_fixture if r.numerical_fixture else None
+            if not r.evidence_target or fixture is None or not fixture.is_file():
+                raise ValueError(
+                    f"{r.compiler_path} claims {r.device_proof} without exact "
+                    "evidence_target and checked-in numerical_fixture")
+            oracle.setdefault(r.op_family, set()).add(target)
+            (jit if r.device_proof == "device_verified_jit" else abi).setdefault(
+                r.op_family, set()).add(target)
     return {
         fam: {
             "runtime_bound": tuple(sorted(bound.get(fam, ()))),
-            "hardware_proven": tuple(sorted(proven.get(fam, ()))),
+            "oracle_proven": tuple(sorted(oracle.get(fam, ()))),
+            "device_verified_jit": tuple(sorted(jit.get(fam, ()))),
+            "device_verified_abi": tuple(sorted(abi.get(fam, ()))),
         }
-        for fam in (set(bound) | set(proven))
+        for fam in (set(bound) | set(oracle) | set(jit) | set(abi))
     }
 
 
@@ -2685,7 +2710,12 @@ def has_native_backward(op_family: str, target: str) -> bool:
     ``@jit(autodiff="reverse", native_required=True)`` request is honored instead
     of rejected. Sourced from the matrix — never a hand-maintained table."""
     info = native_backward_targets().get(op_family)
-    return bool(info and target in info["hardware_proven"])
+    if not info:
+        return False
+    verified = set(info["device_verified_jit"]) | set(info["device_verified_abi"])
+    # Public requests still use family targets; exact proof labels are retained
+    # in the ledger while this compatibility match resolves the runtime route.
+    return target in verified or any(t.startswith(f"{target}_") for t in verified)
 
 
 #: Stable CSV column order for the execution matrix — append-only.

@@ -27,7 +27,8 @@ def test_execution_matrix_has_x86_ssm_bwd_row():
 def test_x86_is_a_native_backward_target():
     assert em.has_native_backward("selective_ssm", "x86")
     info = em.native_backward_targets()["selective_ssm"]
-    assert "x86" in info["hardware_proven"] and "rocm" in info["hardware_proven"]
+    assert "x86_avx512" in info["device_verified_abi"]
+    assert "rocm_gfx1151" in info["device_verified_jit"]
 
 
 def test_x86_ssm_bwd_executor_rejects_bad_arity():

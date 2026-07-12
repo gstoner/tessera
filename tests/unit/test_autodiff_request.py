@@ -85,11 +85,12 @@ def test_provenance_ir_transformed_by_default_today():
     assert not prov.native  # never over-claims native execution today
 
 
-def test_provenance_native_required_is_unsupported_today():
+def test_provenance_native_required_needs_exact_target_proof():
     req = ad.build_request(_fn, autodiff="reverse", wrt=None, native_required=True)
     prov = ad.resolve_backward_provenance(req, target="cpu")
     assert prov.status is BackwardStatus.UNSUPPORTED
-    assert "native_required" in prov.reason and "Phase 4" in prov.reason
+    assert "native_required" in prov.reason
+    assert "exact-target device verification" in prov.reason
 
 
 def test_provenance_native_when_backend_wired():

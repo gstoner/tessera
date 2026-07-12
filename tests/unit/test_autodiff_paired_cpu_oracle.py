@@ -9,7 +9,7 @@ interpret the pass's *emitted backward IR* and assert its gradients match an
 
 This executes the compiler's output (not a Python reimplementation of it), so a
 pass bug produces a mismatch. It is the CPU IR-execution rung — distinct from
-native LLVM/runtime execution (Phase 4) and from ``hardware_proven``. The tiny
+native LLVM/runtime execution (Phase 4) and from device verification. The tiny
 interpreter below understands only the op subset these adjoints emit; an
 unknown op raises rather than silently skipping (Decision #21 / no silent
 no-op).

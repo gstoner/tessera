@@ -51,7 +51,7 @@ target_link_libraries(tessera-translate-mlir PRIVATE
 )
 
 # Tessera core dialects (Graph IR / Tile IR / Schedule IR).
-if(NOT ((TESSERA_BUILD_ROCM_BACKEND AND NOT TESSERA_ENABLE_CUDA) OR
+if(NOT ((TESSERA_BUILD_ROCM_BACKEND AND NOT TESSERA_ENABLE_CUDA AND NOT TESSERA_ENABLE_HIP) OR
         (TESSERA_BUILD_NVIDIA_BACKEND AND NOT TESSERA_ENABLE_CUDA)))
   target_compile_definitions(tessera-translate-mlir PRIVATE
     TESSERA_HAVE_CORE_TESSERA_IR)

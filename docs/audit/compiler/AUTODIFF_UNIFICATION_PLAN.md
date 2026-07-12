@@ -160,7 +160,11 @@ Python-JIT differentiation selection, and the backend backward-launch ABI.
 
 **Build-claim standardization.** Core MLIR fixtures are validated by
 `build-llvm22-ninja` (LLVM/MLIR 22.1.6); lean/artifact-only builds must not claim
-core-pass coverage. The ledger records *which build proved each rung*.
+core-pass coverage. The ledger records *which build proved each axis* using
+stable configuration identifiers rather than host-local build directories:
+`python-unit-registry`, `llvm22-core`, `llvm22-core+rocm-gfx1151`, and
+`x86-runtime-avx512`. Exact-target device claims source their build identifier
+from the same execution-matrix row as their fixture and proof status.
 
 > **The rungs supersede the coarse "F4 landed / not landed" language.** A family
 > can be `ir_adjoint` and still be nowhere near `oracle_proven` — that is the
@@ -205,8 +209,10 @@ as its per-family template; P6 additionally needs real silicon.
   the ledger's `python_reference` set may not diverge from `primitive_coverage`;
   native/placeholder classes stay grounded in the C++ source; a missing source
   raises (no silent zero).
-- ⬜ *Residual:* wire the build-validates-which-claim mapping into the ledger
-  rows (record which build proved each rung) — lands with the P4 backward column.
+- ✅ Build-validates-claim mapping landed 2026-07-12: every populated ledger row
+  carries `build_evidence`; verified device rows are rejected unless their
+  execution-matrix source names `proof_build`, exact target, and numerical
+  fixture.
 
 **Exit (met):** the generated ledger answers "which ops have a native vs.
 placeholder IR adjoint, and does any execute backward natively on this target?"
@@ -369,6 +375,13 @@ gradients for both inputs.
   emission so `@jit(autodiff="reverse")` round-trips is the remaining Phase 3
   front-end task.
 
+**2026-07-12 reconciliation:** both residuals remain open, with one important
+qualification. Static `Tensor[...]` annotations already emit shaped Graph IR;
+what is missing is specialization from first-call/example argument shapes for an
+otherwise unannotated `@jit` function. Native x86 backward evidence currently
+covers the hand-written `selective_ssm` stable ABI, not compiler-generated
+`@f__bwd`; it therefore does not close this CPU vertical slice.
+
 Original scope notes (retained):
 
 Path: Python AST → canonical Graph IR → `AutodiffPass` → canonicalize/CSE → CPU
@@ -406,6 +419,11 @@ unsupported / numerical-proof states for forward and backward **independently**,
 and the ledger's `runtime_bound` rung is sourced from the matrix, not asserted.
 
 ### Phase 5 — Expand by closed operation families  *(Task #6)*
+**Start gate:** do not promote broad families until the compiler-generated CPU
+`@f__bwd` path is runtime-bound and directly oracle-proven. Existing hand-written
+ROCm/x86 backward kernels remain valid independent Tier-3 proofs, but they do not
+prove that the Tier-1 paired-pass output executes.
+
 Promotion order: (1) core tensor algebra (add/mul/broadcast/reductions/GEMM);
 (2) pointwise + normalization (tanh/sigmoid/GELU/SiLU/RMSNorm/layernorm);
 (3) losses + optimizer primitives; (4) fused matmul epilogues (explicit

@@ -22,6 +22,9 @@ def test_execution_matrix_has_x86_ssm_bwd_row():
     assert row is not None
     assert row.executable and row.execution_kind == "native_cpu"
     assert row.direction == "backward" and row.op_family == "selective_ssm"
+    assert row.device_proof == "device_verified_abi"
+    assert row.evidence_target == "x86_avx512"
+    assert row.proof_build == "x86-runtime-avx512"
 
 
 def test_x86_is_a_native_backward_target():

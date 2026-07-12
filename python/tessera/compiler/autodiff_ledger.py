@@ -86,6 +86,12 @@ _GETSTRINGATTR_RE = re.compile(r'getStringAttr\(\s*"([^"]+)"\s*\)')
 # execution, Phase 4) and device verification; it does NOT set those columns.
 _BWD_IR_ORACLE_CPU: frozenset[str] = frozenset({"matmul", "tanh", "sigmoid"})
 
+# Stable build identifiers used in the ledger. They describe the configuration
+# that validates a claim, not the host directory in which somebody happened to
+# build it.
+_PYTHON_REFERENCE_BUILD = "python-unit-registry"
+_CORE_ADJOINT_BUILD = "llvm22-core"
+
 
 class LedgerError(RuntimeError):
     """Raised when the ledger cannot read a source it must join."""
@@ -177,7 +183,7 @@ class LedgerRow:
     __slots__ = ("family", "category", "python_reference", "ir_adjoint",
                  "bwd_cpu_ir_oracle", "bwd_target_lowered", "bwd_runtime_bound",
                  "bwd_oracle_proven", "bwd_device_verified_jit",
-                 "bwd_device_verified_abi", "notes")
+                 "bwd_device_verified_abi", "build_evidence", "notes")
 
     def __init__(self, family, category, python_reference, ir_adjoint, notes):
         self.family = family
@@ -194,6 +200,7 @@ class LedgerRow:
         self.bwd_oracle_proven: tuple[str, ...] = ()
         self.bwd_device_verified_jit: tuple[str, ...] = ()
         self.bwd_device_verified_abi: tuple[str, ...] = ()
+        self.build_evidence: tuple[str, ...] = ()
         self.notes = notes
 
 
@@ -233,6 +240,13 @@ def collect_rows() -> list[LedgerRow]:
             ir_adjoint=ir_adjoint,
             notes=notes,
         )
+        builds: list[str] = []
+        if differentiable:
+            builds.append(f"python_reference={_PYTHON_REFERENCE_BUILD}")
+        if ir_adjoint != "none":
+            builds.append(f"ir_adjoint={_CORE_ADJOINT_BUILD}")
+        if row.bwd_cpu_ir_oracle:
+            builds.append(f"bwd_cpu_ir_oracle={_CORE_ADJOINT_BUILD}")
         # Fill the native backward rungs from the matrix, matching on the
         # primitive's name or graph_name against the row's op_family.
         info = next((bwd[k] for k in keys if k in bwd), None)
@@ -250,6 +264,9 @@ def collect_rows() -> list[LedgerRow]:
                 targets = ", ".join(verified)
                 row.notes = (row.notes + "; " if row.notes else "") + \
                     f"native backward executes on {targets} (Phase 4)"
+            builds.extend(
+                f"device[{item}]" for item in info["proof_builds"])
+        row.build_evidence = tuple(builds)
         rows.append(row)
     return rows
 
@@ -295,7 +312,7 @@ def render_csv() -> str:
         "family", "category", "python_reference", "ir_adjoint",
         "bwd_cpu_ir_oracle", "bwd_target_lowered", "bwd_runtime_bound",
         "bwd_oracle_proven", "bwd_device_verified_jit",
-        "bwd_device_verified_abi", "notes",
+        "bwd_device_verified_abi", "build_evidence", "notes",
     )
     buf = _io.StringIO()
     writer = _csv.writer(buf, lineterminator="\n")
@@ -308,7 +325,7 @@ def render_csv() -> str:
             _fmt_targets(r.bwd_oracle_proven),
             _fmt_targets(r.bwd_device_verified_jit),
             _fmt_targets(r.bwd_device_verified_abi),
-            r.notes,
+            ";".join(r.build_evidence), r.notes,
         ])
     return buf.getvalue()
 
@@ -334,8 +351,9 @@ def render_markdown() -> str:
         "",
         "## What the columns mean",
         "",
-        "- **python_reference** — a numerically-checked Python VJP/JVP exists "
-        "(the semantic oracle; *never* evidence of native compiler support).",
+        "- **python_reference** — a Python VJP/JVP semantic reference is "
+        "registered; this axis alone does not claim a numerical derivative "
+        "test or native compiler support.",
         "- **ir_adjoint** — `native`: `AutodiffPass` emits real backward Graph "
         "IR (static-shape W5 path); `placeholder`: `buildAdjoint` emits a "
         "`custom_adjoint_call` that round-trips to the Python VJP at runtime "
@@ -353,6 +371,9 @@ def render_markdown() -> str:
         "ABI. `execution_kind` alone proves none of the device axes. Every "
         "device-verified row must name an exact evidence target and checked-in "
         "execute-and-compare fixture in the runtime execution matrix.",
+        "- **build_evidence** — the stable build configuration that validates "
+        "each populated claim. `llvm22-core` owns compiler adjoint/paired-IR "
+        "claims; exact device rows carry their build from the execution matrix.",
         "",
         "## Summary",
         "",
@@ -397,8 +418,8 @@ def render_markdown() -> str:
         "",
         "## Ledger",
         "",
-        "| Family | Category | python_reference | ir_adjoint | bwd cpu_ir_oracle | bwd target_lowered | bwd runtime_bound | bwd oracle_proven | bwd device_verified_jit | bwd device_verified_abi | Notes |",
-        "|---|---|:--:|:--:|:--:|---|---|---|---|---|---|",
+        "| Family | Category | python_reference | ir_adjoint | bwd cpu_ir_oracle | bwd target_lowered | bwd runtime_bound | bwd oracle_proven | bwd device_verified_jit | bwd device_verified_abi | Build evidence | Notes |",
+        "|---|---|:--:|:--:|:--:|---|---|---|---|---|---|---|",
     ]
     for r in rows:
         lines.append(
@@ -408,7 +429,8 @@ def render_markdown() -> str:
             f"{_fmt_targets(r.bwd_runtime_bound) or '—'} | "
             f"{_fmt_targets(r.bwd_oracle_proven) or '—'} | "
             f"{_fmt_targets(r.bwd_device_verified_jit) or '—'} | "
-            f"{_fmt_targets(r.bwd_device_verified_abi) or '—'} | {r.notes} |"
+            f"{_fmt_targets(r.bwd_device_verified_abi) or '—'} | "
+            f"{'; '.join(r.build_evidence) or '—'} | {r.notes} |"
         )
     lines.append("")
     lines.append(

@@ -68,6 +68,7 @@ class ExecutionRow:
     device_proof: str = ""       # "device_verified_jit" | "device_verified_abi"
     evidence_target: str = ""    # e.g. "rocm_gfx1151" / "x86_avx512"
     numerical_fixture: str = ""  # repo-relative execute-and-compare fixture
+    proof_build: str = ""        # stable build configuration that ran fixture
 
 
 # Catalog of every executor name → docstring describing what it runs. The actual
@@ -1437,7 +1438,8 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         execution_mode="cpu_avx512",
         direction="backward", op_family="selective_ssm",
         device_proof="device_verified_abi", evidence_target="x86_avx512",
-        numerical_fixture="tests/unit/test_x86_ssm_bwd_launch_execute.py"),
+        numerical_fixture="tests/unit/test_x86_ssm_bwd_launch_execute.py",
+        proof_build="x86-runtime-avx512"),
     ("x86", "x86_linalg_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_linalg_compiled",
         execution_kind="native_cpu", executable=True,
@@ -1878,7 +1880,8 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         execution_mode="hip_runtime",
         direction="backward", op_family="flash_attn",
         device_proof="device_verified_jit", evidence_target="rocm_gfx1151",
-        numerical_fixture="tests/unit/test_rocm_flash_attn_bwd_compiled.py"),
+        numerical_fixture="tests/unit/test_rocm_flash_attn_bwd_compiled.py",
+        proof_build="llvm22-core+rocm-gfx1151"),
     # Mamba2 selective_ssm BACKWARD (generate-rocm-selective-ssm-bwd-kernel):
     # operands (dout, x, A, B, C, delta[, gate[, state]]) -> (dx, dA, dB, dC,
     # ddelta). The reverse-mode analog of rocm_selective_ssm_compiled; the second
@@ -1897,7 +1900,8 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         execution_mode="hip_runtime",
         direction="backward", op_family="selective_ssm",
         device_proof="device_verified_jit", evidence_target="rocm_gfx1151",
-        numerical_fixture="tests/unit/test_rocm_ssm_bwd_launch_execute.py"),
+        numerical_fixture="tests/unit/test_rocm_ssm_bwd_launch_execute.py",
+        proof_build="llvm22-core+rocm-gfx1151"),
     # Linear-attention family (quadratic-parallel form, no softmax; a distinct
     # algorithm from flash_attn): tessera.linear_attn + the decay-masked siblings
     # tessera.lightning_attention / tessera.retention, dispatched by op name.
@@ -2677,6 +2681,7 @@ def native_backward_targets() -> dict[str, dict[str, tuple[str, ...]]]:
     oracle: dict[str, set[str]] = {}
     jit: dict[str, set[str]] = {}
     abi: dict[str, set[str]] = {}
+    builds: dict[str, dict[str, str]] = {}
     for r in backward_rows():
         if not r.executable or not r.op_family:
             continue
@@ -2686,19 +2691,25 @@ def native_backward_targets() -> dict[str, dict[str, tuple[str, ...]]]:
             if r.device_proof not in _DEVICE_PROOFS:
                 raise ValueError(f"unknown backward device proof {r.device_proof!r}")
             fixture = _REPO_ROOT / r.numerical_fixture if r.numerical_fixture else None
-            if not r.evidence_target or fixture is None or not fixture.is_file():
+            if (not r.evidence_target or fixture is None or not fixture.is_file()
+                    or not r.proof_build):
                 raise ValueError(
                     f"{r.compiler_path} claims {r.device_proof} without exact "
-                    "evidence_target and checked-in numerical_fixture")
+                    "evidence_target, checked-in numerical_fixture, and proof_build")
             oracle.setdefault(r.op_family, set()).add(target)
             (jit if r.device_proof == "device_verified_jit" else abi).setdefault(
                 r.op_family, set()).add(target)
+            builds.setdefault(r.op_family, {})[target] = r.proof_build
     return {
         fam: {
             "runtime_bound": tuple(sorted(bound.get(fam, ()))),
             "oracle_proven": tuple(sorted(oracle.get(fam, ()))),
             "device_verified_jit": tuple(sorted(jit.get(fam, ()))),
             "device_verified_abi": tuple(sorted(abi.get(fam, ()))),
+            "proof_builds": tuple(
+                f"{target}={build}"
+                for target, build in sorted(builds.get(fam, {}).items())
+            ),
         }
         for fam in (set(bound) | set(oracle) | set(jit) | set(abi))
     }

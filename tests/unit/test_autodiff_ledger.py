@@ -63,6 +63,15 @@ def test_rows_are_consistent() -> None:
         assert not (set(r.bwd_device_verified_jit) & set(r.bwd_device_verified_abi))
         for t in (*r.bwd_runtime_bound, *verified):
             assert t in autodiff_ledger._TARGETS
+        evidence = set(r.build_evidence)
+        if r.python_reference == "yes":
+            assert "python_reference=python-unit-registry" in evidence
+        if r.ir_adjoint != "none":
+            assert "ir_adjoint=llvm22-core" in evidence
+        if r.bwd_cpu_ir_oracle:
+            assert "bwd_cpu_ir_oracle=llvm22-core" in evidence
+        for target in verified:
+            assert any(item.startswith(f"device[{target}=") for item in evidence)
 
 
 def test_flash_attn_backward_is_jit_verified_on_exact_rocm_target() -> None:
@@ -90,6 +99,17 @@ def test_device_verified_leaders_are_derived_from_rows() -> None:
     assert leaders
     for family in leaders:
         assert f"`{family}`" in section
+
+
+def test_verified_backward_rows_name_build_and_fixture() -> None:
+    from tessera.compiler import execution_matrix
+
+    for row in execution_matrix.backward_rows():
+        if not row.device_proof:
+            continue
+        assert row.evidence_target
+        assert row.numerical_fixture
+        assert row.proof_build
 
 
 def test_missing_source_raises_not_silent(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -20,7 +20,12 @@ DASHBOARD = ROOT / "docs" / "audit" / "standalone_primitive_coverage.md"
 def test_standalone_compiler_sprints_are_documented():
     text = ROADMAP.read_text(encoding="utf-8")
 
-    assert "Standalone compiler milestone sprints (S-series)" in text
+    # The S-series must be documented, but match on whitespace-collapsed text so
+    # a prose line-wrap ("milestone\nsprints") doesn't red the gate — the doc
+    # content is what matters, not its column width.
+    collapsed = " ".join(text.split())
+    assert "Standalone compiler milestone sprints (S-series)" in collapsed
+    assert "S-series checkpoints:" in collapsed
     expected_sprints = [
         "S0", "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8",
         "S9", "S10", "S11", "S12", "S13", "S14", "S15",

@@ -54,12 +54,12 @@ and ``docs/apple_backend.md`` (Metal 4 implementation-state review):
 
 | Family | Rows | apple_gpu fused | apple_cpu accelerate_native |
 |---|---:|---:|---:|
-| tensor | 135 | 21 | 2 |
+| tensor | 136 | 21 | 2 |
 | ga | 19 | 19 | 0 |
 | ebm | 14 | 14 | 0 |
 | m7 | 4 | 4 | 0 |
 
-## tensor (135)
+## tensor (136)
 
 | Op | apple_cpu status | cpu framework | cpu dtypes | cpu symbol | execution_kind | apple_gpu status | gpu framework | gpu dtypes | gpu symbol | gpu_dispatch | proof |
 |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -72,6 +72,7 @@ and ``docs/apple_backend.md`` (Metal 4 implementation-state review):
 | attn_compressed_blocks | reference | numpy_reference | fp32 | - | numpy_reference | fused | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | attn_local_window_2d | reference | numpy_reference | fp32 | - | numpy_reference | fused | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | attn_top_k_blocks | reference | numpy_reference | fp32 | - | numpy_reference | fused | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
+| batched_gemm | fused | numpy_reference | fp32 | - | numpy_reference | absent | - | - | - | absent | tests/unit/test_apple_*.py |
 | bidirectional_scan | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | binary_cross_entropy_loss | reference | numpy_reference | fp32 | - | numpy_reference | compiled | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | bmm | reference | numpy_reference | fp32 | - | numpy_reference | hardware_verified | - | fp32,fp16,bf16 | tessera_apple_gpu_bmm_dev_{f32,f16,bf16}_enc | driver | tests/unit/test_apple_*.py |

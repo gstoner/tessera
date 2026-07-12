@@ -172,7 +172,7 @@ logical_and,logical,public,public,registered,complete,fused,compiled,ready,none
 logical_not,logical,public,public,registered,complete,fused,compiled,ready,none
 logical_or,logical,public,public,registered,complete,fused,compiled,ready,none
 logical_xor,logical,public,public,registered,complete,fused,compiled,ready,none
-batched_gemm,loop_nest,public,public,registered,complete,fused,compiled,ready,none
+batched_gemm,loop_nest,public,public,registered,complete,fused,fused,ready,none
 dequant_grouped_gemm,loop_nest,public,public,registered,complete,fused,compiled,ready,none
 dequant_matmul,loop_nest,public,public,registered,complete,fused,fused,ready,benchmarked
 factorized_matmul,loop_nest,public,public,registered,complete,fused,compiled,ready,none

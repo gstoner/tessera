@@ -39,10 +39,8 @@ def test_there_are_corroboratable_complete_cells():
     # The known executable complete surface on this tree.
     assert ("matmul", "apple_gpu") in cells
     assert ("flash_attn", "apple_gpu") in cells
-    assert ("matmul_relu", "apple_cpu") in cells
     assert ("matmul_relu", "apple_gpu") in cells
-    assert ("kv_cache_read", "apple_cpu") in cells
-    assert ("kv_cache_read", "apple_gpu") in cells
+    assert ("matmul", "apple_cpu") in cells
 
 
 def test_apple_cpu_stateful_kv_builder_is_numerically_corroborated():

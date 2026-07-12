@@ -16,13 +16,25 @@ _11 no-verifier ops need manual triage_ (many — pure elementwise — legitimat
 
 ## P1 — software conformance gaps (op×target proof ladder)
 
-35 op×target cells: {'partial': 7, 'complete': 20, 'missing': 8}.
+63 op×target cells: {'reference': 11, 'complete': 17, 'missing': 35}.
 
-First-failing gate: {'hardware_smoke': 14, 'toolchain': 14}.
+First-failing gate: {'backend_compile': 37, 'schedule_legal': 9}.
 
-**Software-actionable (0** stop at []**) — real lowering/codegen gaps to fix:**
+**Software-actionable: 12** (stops at ['backend_compile', 'schedule_legal']) — real lowering/codegen gaps to fix:
+  - `kv_cache_read` → `apple_cpu` (stops @ schedule_legal)
+  - `kv_cache_read` → `apple_gpu` (stops @ schedule_legal)
+  - `kv_cache_read` → `cpu` (stops @ schedule_legal)
+  - `kv_cache_read` → `nvidia_sm100` (stops @ schedule_legal)
+  - `kv_cache_read` → `nvidia_sm120` (stops @ schedule_legal)
+  - `kv_cache_read` → `nvidia_sm80` (stops @ schedule_legal)
+  - `kv_cache_read` → `nvidia_sm90` (stops @ schedule_legal)
+  - `kv_cache_read` → `rocm` (stops @ schedule_legal)
+  - `kv_cache_read` → `x86` (stops @ schedule_legal)
+  - `matmul` → `x86` (stops @ backend_compile)
+  - `matmul_relu` → `x86` (stops @ backend_compile)
+  - `matmul_softmax` → `x86` (stops @ backend_compile)
 
-_Hardware-gated (28 stop at ['hardware_smoke', 'toolchain']) — expected; need real silicon, not code._
+_Target-environment-gated: 23 (stops at ['backend_compile']) — expected; requires the target toolchain and/or silicon proof lane._
 
 ## P2 — thin-test tail (the differential-generator target, item #2)
 
@@ -34,7 +46,7 @@ Zero-ref sample: `aot_export`, `aot_load`, `associative_scan`, `autocast`, `axis
 
 ## Takeaway
 
-- The compiler is **not stub-riddled**: the actionable surface is the trivial-stub verifiers + a handful of software conformance cells; everything else is hardware-gated (honest) or thin-test (generative).
+- The compiler is **not stub-riddled**: remaining definite verifier stubs or software conformance cells are listed above; other gaps are target-environment-gated or thin-test work.
 - **#4 (IR round-trip + fuzz)** hardens the parser/printer/verifier across all ops cheaply, no oracle needed.
-- **#2 (differential generator)** is the right tool for the ~0 needs-direct-test ops + miscompile detection.
+- **#2 (differential generator)** is the right tool for the 0 needs-direct-test ops + miscompile detection.
 

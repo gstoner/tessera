@@ -10,9 +10,8 @@ them) and ad-hoc. A.3 replaces that with first-class manifest data:
   repo-relative test file path.
 * ``manifest_for(op)`` post-processes entries to attach
   ``execute_compare_fixture`` from this map.
-* ``conformance_matrix._numerical_check_present`` consults the manifest
-  first; falls back to the legacy scan only for cells without
-  manifest-declared fixtures.
+* ``conformance_matrix._numerical_check_present`` accepts only exact-target
+  manifest evidence; the legacy keyword scan is not proof.
 
 These tests pin the contract:
 
@@ -20,11 +19,9 @@ These tests pin the contract:
    (drift gate — a stale fixture path is worse than no fixture).
 2. ``manifest_for(op)`` attaches the right fixture to the right
    target — not all rows.
-3. ``conformance_matrix._numerical_check_present`` resolves to True
-   when the manifest declares a fixture, even for hypothetical (op,
-   target) cells the legacy filename heuristic wouldn't have caught.
-4. The manifest-first path doesn't regress any existing cell that the
-   legacy heuristic was already covering.
+3. ``conformance_matrix._numerical_check_present`` resolves to True only when
+   the manifest declares a fixture for that exact architecture.
+4. Evidence from one architecture cannot leak into a sibling target row.
 """
 
 from __future__ import annotations
@@ -105,8 +102,7 @@ def test_apple_gpu_relu_has_manifest_fixture_after_a1():
 def test_numerical_check_returns_true_when_manifest_declares_fixture():
     """``conformance_matrix._numerical_check_present`` must consult the
     manifest FIRST. Verify by checking a cell that has a manifest
-    fixture: the result is True even if we artificially break the
-    heuristic fallback."""
+    fixture: the result is True without any keyword fallback."""
     # matmul + cpu has a manifest fixture.
     assert cm._numerical_check_present("matmul", "cpu") is True
 
@@ -121,16 +117,10 @@ def test_numerical_check_returns_true_for_apple_gpu_cells_with_fixtures():
             f"numerical_check must report True")
 
 
-def test_numerical_check_falls_back_to_heuristic_for_uncovered_cells():
-    """A cell without a manifest-declared fixture should still find one
-    via the legacy filename+content scan, so A.3 is purely additive
-    until the fixture map subsumes the heuristic."""
-    # matmul + nvidia is in the heuristic scan but not in the fixture map.
-    assert (("matmul", "nvidia") not in bm._NUMERICAL_FIXTURES), (
-        "test assumption violated — re-pick a cell")
-    # The heuristic should still find something for matmul × nvidia
-    # because many tests import both "matmul" and "nvidia"/"cuda".
-    assert cm._numerical_check_present("matmul", "nvidia") is True
+def test_numerical_check_is_architecture_aligned_without_heuristics():
+    """sm_120 proof must not leak into other NVIDIA architecture rows."""
+    assert cm._numerical_check_present("matmul", "nvidia_sm120") is True
+    assert cm._numerical_check_present("matmul", "nvidia_sm90") is False
 
 
 # ---- the dashboard counts stay sensible after A.1 + A.3 ----

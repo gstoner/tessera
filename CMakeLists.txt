@@ -139,6 +139,10 @@ if(TESSERA_ENABLE_CUDA)
 endif()
 
 if(TESSERA_ENABLE_HIP)
+    # HIP source files (for example the spectral target hooks) need CMake's
+    # HIP language enabled; find_package(hip) alone only supplies package
+    # targets and leaves CMake unable to select a linker language.
+    enable_language(HIP)
     find_package(hip REQUIRED CONFIG)
 endif()
 
@@ -199,7 +203,7 @@ endif()
 # Examples
 # --------------------------------------------------------------------------
 if(TESSERA_BUILD_EXAMPLES AND
-   ((TESSERA_BUILD_ROCM_BACKEND AND NOT TESSERA_ENABLE_CUDA) OR
+   ((TESSERA_BUILD_ROCM_BACKEND AND NOT TESSERA_ENABLE_CUDA AND NOT TESSERA_ENABLE_HIP) OR
     (TESSERA_BUILD_NVIDIA_BACKEND AND NOT TESSERA_ENABLE_CUDA)))
     message(STATUS "Skipping examples for hardware-free target build because CUDA is disabled")
 elseif(TESSERA_BUILD_EXAMPLES)

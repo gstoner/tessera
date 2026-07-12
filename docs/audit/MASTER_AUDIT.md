@@ -1,469 +1,288 @@
 ---
-last_updated: 2026-07-11
+last_updated: 2026-07-12
 audit_role: root
 ---
 
 # Tessera Audit Master
 
-**Last updated:** 2026-07-10
+This document is the current, reader-facing audit summary. Generated dashboards
+own counts and row-level status; this page explains what those results mean,
+separates closed work from open work, and routes each action to its evidence.
 
-> **Reconciled 2026-07-10 (x86 / ROCm / Apple op-family parity wave, PRs #316–#350
-> + cf067fe):** three backends closed large op-family gaps against each other.
-> **Apple GPU** now reaches op-family parity with x86/ROCm through
-> `runtime.launch()` — conv, losses, complex/geometric + conformal, Philox RNG,
-> linalg (lu/qr/svd/cholesky-solve) + einsum/factorized, optimizers, reductions +
-> 0-move/sort, scatter, sparse/MoE, and the final tail clusters all landed and are
-> reported **honestly per lane**: `native_gpu` where the op genuinely dispatches to
-> MPS/MSL (with a numpy fallback off-Metal), `reference_cpu` where Apple ships no
-> device kernel and the lane runs the same standalone reference the x86/ROCm device
-> kernels are matched against (#340–#350; structured-compute honestly labeled
-> `reference_cpu` in #346; canonical op names + ALiBi slopes in cf067fe). The only
-> Apple op family not yet covered is `quantize`/`dequantize` fp4/fp6/fp8/nvfp4,
-> gated on the macOS-27 / Metal 4.1 tensor toolchain — not hardware. **ROCm
-> gfx1151** promoted the `gemm` manifest row to **hardware_verified** and added an
-> arch-aware guard (`matmul` was already hardware_verified since #90; gfx11 clears
-> the guard, gfx12xx/CDNA get a stable gated diagnostic — #321), added
-> additive `attn_bias` on the WMMA flash-attention lane (DFlash keystone, #328),
-> gained a `selective_ssm` (Mamba2) device forward+backward with fp16/bf16 storage
-> and a chunked-parallel (SSD) scalar-A path (#333–#338), made
-> `msa_sparse_attention` genuinely execute (#337/#339), and closed the EBM Langevin
-> family + EBT-tiny + exact-partition log-sum-exp natively (#316–#326). **x86
-> AVX-512** matched the same SSM/MSA/EBM lanes — native MSA closed the last x86 gap
-> (#332), plus the DFlash `x86_attention_fn` seam (#331). Counts stay in the
-> generated dashboards (Decision #26); `stub_surface.md` was regenerated against
-> this wave (verifier `trivial_stub` 0, `needs_direct_test` 0).
+## Technical Summary
 
-> **Reconciled 2026-07-07 (compiler A–E spine wave, PRs #274–#302):** Workstreams
-> **A** (shared lowering dedup), **B** (the synthesizer generalized behind the
-> `KernelEmitter`/`KernelRunner`/`compile_fn` plugin protocol + the universal F4
-> oracle + `kernel_cache` synth→compile→cache loop), **C** (per-arch plugins:
-> `emit/nvidia_cuda.py`, `emit/rocm_hip.py`, `emit/x86_llvm.py` +
-> `emit/x86_aocl_dlp.py`), **D** (the accuracy-budgeted measured arbiter
-> `emit/candidate.py` + autotune `emit/autotune.py` + fallback log), and **E2/E3**
-> (perf ratchet + escape-hatch) **landed** — most of it hardware-proven. NVIDIA
-> sm_120 now runs a generic CUDA lane over all four fusable region kinds **plus**
-> hand-emitted tensor-core Tier-2 lanes (fused `mma.sync` GEMM+epilogue ~6×,
-> flash-attention ~2.7×) the arbiter selects, through a shipped PTX launch bridge —
-> no longer "one op × one arch." The snapshot rows below were refreshed; the
-> plan's landed annotations + generated dashboards carry the detail/counts.
+- **The curated matrix now uses exact target grain and real IR verification.**
+  Its 63 cells separate portable CPU reference, native x86, Apple CPU/GPU,
+  ROCm, and four NVIDIA architectures. Current results are 17 complete,
+  11 reference, and 35 missing.
+- **The redesign exposed real gaps hidden by the former proxies.** Stateful
+  `kv_cache_read` emits Graph IR but no Schedule IR; several native x86 rows lack
+  exact-target fixtures; only `nvidia_sm120/matmul` completes the NVIDIA ladder.
+- **Curated conformance closure is not whole-compiler closure.** The broader
+  primitive registry still has backend-kernel promotion work, 43 open sharding
+  contracts, a small Tile/Target IR tail, verifier triage, and structural-only
+  test evidence.
+- **Most compiler foundations are closed.** Public API capture, Graph IR,
+  Schedule IR, runtime dispatch readiness, batching, transpose, and lowering
+  contracts are closed in the generated rollups.
+- **The next software priority is NVIDIA execution breadth.** Hardware-specific
+  expansion for Hopper, datacenter Blackwell, and CDNA remains a separate proof
+  program and must not be represented as ordinary software stubs.
 
-> **Reconciled 2026-06-24 (hardware bring-up):** the Runtime/backend + NVIDIA +
-> ROCm rows were refreshed against merged reality — they had drifted badly behind
-> the bring-up. ROCm gfx1151 now executes a compiler-generated matmul + flash-attn
-> family (fwd+bwd matmul/flash_attn/GQA, fused epilogue) via `runtime.launch()`,
-> not "two ops / forward-only"; NVIDIA sm_120 has its first hardware-verified
-> `mma.sync` matmul on a real RTX 5070 Ti (#106), so Phase G is no longer "no
-> execution." Phase H is split RDNA-live / CDNA-gated. Counts stay in the
-> generated dashboards (Decision #26).
+Evidence snapshot: 2026-07-12, sourced from
+[`op_target_conformance.csv`](op_target_conformance.csv),
+[`generated/compiler_progress.md`](generated/compiler_progress.md), and
+[`generated/s_series_status.md`](generated/s_series_status.md).
 
-> **Reconciled 2026-06-22:** the multi-op compiler-metadata P1 is **closed** —
-> component-aware metadata (`component_ops`, `program_executable`,
-> `component_blockers`, `effects`, `shape_envelope`, `layout_contracts`,
-> `fusion_groups`, `outputs`) is derived per-component and carried to
-> `fn.runtime_artifact().metadata` (verified by direct inspection + 57 locking
-> tests), and fusion dispatch is authoritative (Phase 0 seam closed). The
-> follow-on Phase 1 has begun landing too (Graph-IR folders/canonicalizers on 7
-> ops; `LayoutAssignmentPass`). The `batching/sharding` long-tail counts below
-> were refreshed against
-> [`generated/s_series_status.md`](generated/s_series_status.md).
+## Status Definitions
 
-This is the root audit document. It consolidates the current state, finished
-work, and remaining work across the compiler, runtime/backend, platform
-backends, coverage, and domain tracks. Generated dashboards remain the source of
-truth for counts; theme audit documents carry the reasoning and work plan.
+### Curated op×target conformance
 
-> **North star for forward development (2026-07-02).** The go-forward compiler
-> direction is the paired plan + theory set under `compiler/`:
-> [`COMPILER_THEORY_OF_OPERATION.md`](compiler/COMPILER_THEORY_OF_OPERATION.md)
-> (read first — the three-tier kernel model, the **accuracy-budgeted measured
-> arbiter**, the Mac/Strix-Halo/NR2-Pro fleet, and the W1–W8 world-class scope
-> register), [`COMPILER_REFACTOR_PLAN.md`](compiler/COMPILER_REFACTOR_PLAN.md)
-> (Workstreams A–E spine + F–K world-class), and the reassessed
-> [`OPTIMIZING_COMPILER_PLAN.md`](compiler/OPTIMIZING_COMPILER_PLAN.md) (F6 = the
-> backend-build seam). Governing rule: **ROCm/CUDA are the lead performance
-> targets; the generic framework raises the floor and must never cap their
-> ceiling.** These docs are *direction*; this page + the generated dashboards
-> stay *status truth* (Decision #26). Full map in
-> [`README.md`](README.md#forward-plans--the-compiler-north-star).
->
-> **On the Strix Halo / NR2 Pro box picking up a backend?** Workstream B (the
-> target-agnostic synthesizer framework: emitter + runner + compile-cache loop +
-> universal F4 oracle) is **merged**; the build recipe for your per-arch plugin
-> (Workstream C: x86 / NVIDIA / ROCm) is
-> [`compiler/WORKSTREAM_C_HANDOFF.md`](compiler/WORKSTREAM_C_HANDOFF.md).
+The conformance ladder is:
+
+`graph_emitted` → `schedule_legal` → `tile_legal` → `target_legal` →
+`backend_compile` → `runtime_execute` → `numerical_check`
+
+A cell is `complete` only when every column is complete. Its
+`first_failing_gate` must then be empty. For an open cell,
+`first_failing_gate` names the earliest blocking capability; it is not a record
+of the machine that regenerated the dashboard.
+
+The matrix's `cpu` target is the host x86/CPU reference conformance path. The
+separate x86 native-kernel inventory is tracked in the execution matrix and
+primitive target evidence.
+
+### Broader compiler completion
+
+The compiler-progress rollup measures a larger surface than the curated matrix:
+315 compiler ops, 480 primitive-contract rows, runtime/ABI integration,
+benchmark evidence, and repository proof surfaces. A green curated conformance
+matrix therefore does not close primitive-wide `backend_kernel`, sharding,
+benchmark, or ABI work.
+
+### Proof vocabulary
+
+| Term | Meaning |
+|---|---|
+| `complete` | The required proof exists for every rung in the measured scope. |
+| `reference` | Correct execution exists without a native target kernel. |
+| `compiled` / `fused` / `hardware_verified` | Increasingly concrete native target evidence; exact semantics are dashboard-defined. |
+| `artifact_only` | Target text or an artifact emits, but link/launch proof is absent. |
+| `partial` | A path exists with an explicit unresolved qualification. |
+| `missing` | Required evidence or target support is absent. |
+| explicit terminal status | The axis is closed by design, with a reason such as `no_kernel_required`; generic N/A is not used as an action bucket. |
 
 ## Current Truth Snapshot
 
-| Area | Current state | Still open |
+| Area | Current result | Remaining frontier | Authority |
+|---|---|---|---|
+| Curated conformance | 63 exact-target cells: 17 complete, 11 reference, 35 missing | Stateful Schedule IR, x86 fixture gaps, and NVIDIA architecture breadth | [`op_target_conformance.md`](op_target_conformance.md) |
+| Compiler phases | API, frontend, Graph IR, Schedule IR, and runtime readiness closed | 13 Tile IR rows and 14 Target IR rows remain mixed | [`generated/compiler_progress.md`](generated/compiler_progress.md) |
+| Primitive contracts | Batching, transpose, and lowering closed across 480 primitives | Sharding has 43 open rows; registry-level backend promotion remains broad | [`generated/s_series_status.md`](generated/s_series_status.md) |
+| Runtime execution | Checked-in executable rows are explicit and drift-gated | Add rows only after a real launch path exists | [`generated/runtime_execution_matrix.md`](generated/runtime_execution_matrix.md) |
+| Verifiers | No trivial verifier stubs | Manually triage 11 no-verifier ops; add verifiers only where invariants exist | [`generated/verifier_coverage.md`](generated/verifier_coverage.md) |
+| Test evidence | No `needs_direct_test` debt | Convert high-value structural-only evidence to direct or differential proof | [`generated/test_coverage.md`](generated/test_coverage.md) |
+| Apple | Curated CPU/GPU conformance closed; Apple GPU proof is provenance-gated | Performance, precision, and the small target-map tail | [`backend/apple/APPLE_AUDIT.md`](backend/apple/APPLE_AUDIT.md) |
+| ROCm | Curated conformance and current target-map promotion closed on the proven RDNA lane | CDNA and additional architecture breadth require real hardware | [`backend/rocm/ROCM_AUDIT.md`](backend/rocm/ROCM_AUDIT.md) |
+| NVIDIA | One sm_120 runtime row exists; target artifacts cover a wider surface | Promote CUDA artifacts into compile/link/launch/numerical proof | [`backend/nvidia/NVIDIA_AUDIT.md`](backend/nvidia/NVIDIA_AUDIT.md) |
+| Distributed | Single-device and mock-collective development paths exist | Real multi-rank NCCL/RCCL or equivalent execution | [`backend/BACKEND_AUDIT.md`](backend/BACKEND_AUDIT.md) |
+
+## Conformance Result After The 2026-07-12 Evidence Redesign
+
+The conformance cleanup established one consistent completion rule across the
+CSV and Markdown outputs:
+
+| Target family | Exact-target cells | Result |
+|---|---:|---|
+| Portable CPU reference | 7 | 6 reference, 1 missing |
+| Native x86 | 7 | 3 complete, 4 missing |
+| Apple CPU + GPU | 14 | 7 complete, 5 reference, 2 missing |
+| ROCm | 7 | 6 complete, 1 missing |
+| NVIDIA sm80/sm90/sm100/sm120 | 28 | 1 complete, 27 missing |
+
+The closeout also hardened proof quality:
+
+- `backend_compile`, `runtime_execute`, and `numerical_check` must all complete
+  before the overall cell completes.
+- Complete cells require a declared execute-and-compare fixture.
+- The independent conformance Evaluator must have a program builder for every
+  complete executable cell.
+- Stateful `kv_cache_read` uses a state-aware Evaluator path rather than being
+  forced through a pure-tensor JIT builder.
+- The Apple GPU KV-cache fixture requires `metal_runtime` provenance and skips
+  when the Metal DeviceTensor ABI is unavailable; a reference fallback cannot
+  earn GPU proof.
+
+## Closed Work Ledger
+
+This section records durable outcomes only. Detailed chronology belongs in the
+linked platform audits and [`roadmap/ROADMAP_AUDIT.md`](roadmap/ROADMAP_AUDIT.md).
+
+### Compiler and IR foundations
+
+- Canonical compilation and `CompileResult` metadata are the shared compiler
+  contract for `@jit` and `runtime.launch()`.
+- Multi-op artifacts carry component ops, blockers, effects, shape envelopes,
+  layout contracts, fusion groups, and outputs.
+- Named pipeline gates report precise blockers.
+- Public API, frontend capture, Graph IR registration, and Schedule IR are
+  closed in the generated progress dashboard.
+- Effect-aware compiler interfaces and opt-in layout assignment are wired.
+- IR parser/printer round-trip fuzzing and differential program generation are
+  established regression tools.
+- Generated audit documents use one registry and one drift-gated regeneration
+  workflow.
+
+### Runtime and backend foundations
+
+- Runtime execution and ABI surfaces are generated and drift-gated.
+- Host CPU, Apple CPU/GPU, x86 native lanes, ROCm, and the proven NVIDIA sm_120
+  lane have explicit execution evidence.
+- The backend-neutral C-ABI GPU launcher hook is implemented.
+- Artifact-only, reference, compiled, executable, numerical, and
+  hardware-verified states remain distinct.
+- Execute-and-compare fixtures are the promotion requirement for complete
+  curated cells.
+
+### Apple
+
+- Apple CPU execution through Accelerate/BNNS and correct reference composition
+  is established.
+- Apple GPU execution spans MPS, MPSGraph, custom MSL, synthesized kernels,
+  packaged kernels, encode sessions, and command-buffer chains.
+- Descriptor-driven dispatch, feature-limit selection, `auto_batch`, benchmark
+  ratchets, and packaged-kernel lifecycle proofs are in place.
+- Apple native and reference rows are now distinguished; complete executable
+  rows retain independent Evaluator coverage.
+
+### x86 and ROCm
+
+- Portable CPU correctness is labeled `reference`; native x86 is a separate
+  target with three currently complete curated rows.
+- Native x86 compiled lanes cover a broad primitive surface; their inventory is
+  tracked separately from the host reference target.
+- ROCm gfx1151 has real compiler-generated and hardware-verified execution,
+  including matrix, attention, recurrent/state-space, sparse, and EBM families.
+- Six ROCm curated programs complete; stateful KV-cache lowering stops honestly
+  at the missing Schedule IR rung.
+
+### Coverage and audit discipline
+
+- Trivial verifier stubs are zero.
+- `needs_direct_test` debt is zero; remaining thin-test work is structural,
+  family-covered, or hardware-gated.
+- Batching, transpose, and lowering primitive contracts are closed.
+- Generic `not_applicable` output was replaced on contract axes by explicit
+  terminal reasons such as `non_differentiable`, `pure_no_effect`, and
+  `no_kernel_required`.
+- Generated dashboards, not historical roadmap prose, own live counts.
+
+## Open Action Register
+
+### P0 — Close the newly surfaced software proof gaps
+
+Close gaps in ladder order:
+
+1. Lower stateful `kv_cache_read` beyond Graph IR into verified Schedule, Tile,
+   and Target IR.
+2. Add exact-target execute-and-compare evidence for the native x86 matrix and
+   composition rows that currently lack it.
+3. Provide concrete compile/link paths for the open NVIDIA programs.
+4. Register executable target paths and attach architecture-aligned numerical
+   fixtures with honest provenance.
+5. Clear `first_failing_gate` only after every proof rung is complete.
+
+This is primarily an sm_120 adjacency/breadth program today. Hopper sm_90 and
+datacenter sm_100 require architecture-specific proof; they are not aliases for
+consumer Blackwell.
+
+### P1 — Promote the broader compiler surface
+
+| Workstream | Current open signal | Required closure evidence |
 |---|---|---|
-| Compiler and IR | Canonical compile, IR bundle, named gates, and conformance matrix exist; a single generated-doc registry (`tessera.compiler.generated_docs`) now drives both the CI gate and one `--write` sprint regen, the compiler-progress rollup is CSV-canonical, and the surface (6->1) + test-coverage (2->1) dashboards were consolidated. | Multi-op metadata, fusion groups, and layout contracts are now carried through the compile artifact and authoritative for dispatch (2026-06-22). Remaining: fixture-driven numerical proof for complete cells, Tile IR/native Target IR long tail, and per-backend promotion. (COMPILER_AUDIT Phase 1 closed 2026-06-22: effect interfaces, opt-in `LayoutAssignmentPass` wiring, and `reshape` folder coverage all landed.) |
-| Runtime/backend | Runtime execution matrix and C ABI dashboards are generated and drift-gated; the distributed MegaMoE stack (expert-parallel 2× all-to-all, FP8×FP4, async comm/compute overlap) runs with the expert FFN on Apple GPU; ROCm gfx1151 executes a compiler-generated matmul + flash-attention family on real hardware via `runtime.launch()` (see ROCm row below); NVIDIA sm_120 adds (via the arbiter/emit subsystem, test-gate-proven) a generic CUDA lane over all four fusable region kinds **plus** hand-emitted tensor-core GEMM/flash-attn lanes (see NVIDIA row); x86 executes a `clang`-compiled generic lane on Zen 5 (`emit/x86_llvm.py`) plus native AVX-512 device lanes that now match the ROCm op surface — `selective_ssm` (Mamba2) forward+backward + fp16/bf16 + chunked-parallel SSD (#333–#336), native MSA (`msa_sparse_attention`, #332, "closes the last x86 gap"), the DFlash `x86_attention_fn` seam (#331), and the EBM Langevin/EBT-tiny/partition lanes. | The NVIDIA arbiter/emit lanes execute + are test-gated but are **not yet in the execution matrix** (which records only `nvidia_mma`); NVIDIA/x86/ROCm generic lanes are sm_120 / Zen 5 / gfx1151-only respectively (Hopper sm_90, datacenter sm_100, CDNA/MI300 unproven); MegaMoE multi-rank is mock-collective until a real NCCL/RCCL (or Apple multi-GPU) lane exists. Row authority: `generated/runtime_execution_matrix.md`. |
-| Apple backend | Apple CPU (Accelerate/BNNS) + GPU (MPS/MPSGraph/MSL + the 5-region synthesizer + Metal 4 lanes) execute natively; descriptor-driven dispatch, feature-table-driven selection, perf ratchets, packaged-kernel lifecycle, and `auto_batch` all landed (the `APPLE_AUDIT.md` "Open Work" section is empty). Since Workstream B, Apple is the **reference implementation** of the shared `KernelEmitter`/`KernelRunner`/F4-oracle framework. **Apple GPU now reaches op-family parity with x86/ROCm via `runtime.launch()`** (conv, losses, complex/geometric + conformal, Philox RNG, linalg + einsum/factorized, optimizers, reductions + 0-move/sort, scatter, sparse/MoE, MLA latent-KV, spec-decode — #340–#350 + cf067fe), reported **honestly per lane**: `native_gpu` where the op dispatches to MPS/MSL (numpy fallback off-Metal), `reference_cpu` where Apple ships no device kernel and the lane runs the same standalone reference the x86/ROCm device kernels match against (#346). | The open frontier is performance + precision, not backend correctness: a native `simdgroup_matrix` "steel-like" GEMM/attention lane (the clear-MPS direction); `quantize`/`dequantize` fp4/fp6/fp8/nvfp4 — the only op family not yet covered — plus FP8/FP4/MX execution (macOS-27.0 / Metal 4.1-SDK-gated, not hardware — bridge in `microscaling.py`); and the world-class dims (memory planning/layout, W1 low-precision numerics). Detail: `backend/apple/APPLE_AUDIT.md` + `APPLE_GPU_CODEGEN_PLAN.md`. |
-| NVIDIA (Phase G) | CUDA 13.3 pinned. The execution matrix (`generated/runtime_execution_matrix.md`) records sm_120's shipped `mma.sync` GEMM (`nvidia_mma`, `libtessera_nvidia_gemm.so`, RTX 5070 Ti consumer Blackwell). **On top of that**, the arbiter/emit subsystem adds a **generic CUDA lane** (`emit/nvidia_cuda.py`, all four fusable region kinds compiled in-process via `nvcc`) **plus hand-emitted tensor-core Tier-2 lanes** the accuracy-budgeted arbiter selects — fused `mma.sync` GEMM + bias/activation epilogue (~6×) and flash-attention (~2.7×, f16-sharpness safety gate) — with emitted `mma.sync` PTX run through a shipped launch bridge (`runtime/cuda/tessera_nvidia_ptx_launch.cpp`). These are F4-oracle-gated and **hardware-proven by the plugin/perf/conformance test gates** (`test_nvidia_plugin.py`, `test_nvidia_perf_ratchet.py`, `test_conformance_execute_compare_nvidia.py`), #290–#302 — but run through the arbiter, **not yet promoted into the execution-matrix executor registry**. | **Promote the arbiter/emit lanes into the execution matrix** (they execute + are test-gated but the matrix still records only `nvidia_mma`); broaden shapes/dtypes + `wgmma` sm_90a + `tcgen05` sm_100; NVFP4 block-scale is emit+ptxas-assemble-landed, execution gated on the PTX-ISA scale spec; Hopper sm_90 / datacenter sm_100 unproven. Detail: `backend/nvidia/NVIDIA_AUDIT.md`. |
-| ROCm (Phase H) | **RDNA gfx1151 (Strix Halo)**: a compiler-generated matmul + flash-attention family executes on real hardware via `runtime.launch()` — `matmul` **hardware_verified** (real WMMA; perf ladder + fused bias/relu/gelu/silu epilogue), the `gemm` row also promoted to hardware_verified + arch-aware guard (#321), `flash_attn` **forward + backward** with additive `attn_bias` (DFlash keystone, #328), and `GQA/MQA` **forward + backward**. The op surface grew well past matmul+attention: `selective_ssm` (Mamba2) device forward+backward with fp16/bf16 storage + chunked-parallel (SSD) scalar-A path (#333–#338), `msa_sparse_attention` executing (#337/#339), and the EBM Langevin family + EBT-tiny + exact-partition log-sum-exp natively (#316–#326). Also a **generic synth → HIP plugin lane** (`emit/rocm_hip.py`, `hipcc`, FusedRegion) + a hand-tuned WMMA GEMM Tier-3 candidate — all F4-oracle-gated through the arbiter (#288/#289). | **CDNA (MI300X/MI325X)** unproven — distinct MFMA shape table + FP4/FP6, hardware-gated. Remaining RDNA op surface beyond the closed families stays artifact_only; the per-primitive `backend_kernel` axis still needs all targets. Row/count authority: `generated/runtime_execution_matrix.md`, `generated/rocm_target_map.md`. |
-| Coverage | Partial-op uplift is closed; direct-test debt is not ordinary missing tests. | Backend-kernel axis is still open across all S-series primitives; batching/transpose/sharding have smaller long-tail gaps. |
-| Domain tracks | GA/EBM, attention, CorrDiff/SciML, sharding, and autodiff plans have been reduced to clearer scope locks and implementation history. | Domain claims must stay tied to generated coverage and backend proof, not old roadmap prose. |
+| Primitive backend kernels | Registry-level `backend_kernel` remains the largest open axis | Per-target compiled/fused/hardware evidence; do not require every target for all-up compiler readiness |
+| Sharding | 43 primitive rows remain open | Mock-mesh equivalence or real distributed execution for the specific rule |
+| Tile IR | 13 rows remain mixed | Real lowering or an explicit by-design terminal classification |
+| Target IR | 14 rows remain mixed | Native/fused promotion or an intentional reference-only classification |
+| Verifiers | 11 ops have no verifier | Add a verifier only where the op has structural or semantic invariants |
+| Direct proof | Structural-only and family-covered rows remain | Prioritize high-use/native rows for direct compare; use differential generation for the long tail |
+| Benchmarks | Evidence is intentionally sparse | Attach benchmarks first to native and hardware-promoted hot paths |
 
-Generated dashboards are the **count authority** — this page links them and
-never copies their numbers (a copied count silently goes stale; per Decision
-#25/#26 the generated docs under `generated/` are the source of truth, drift-
-gated by `scripts/check_generated_docs.sh`). For live figures, read:
+Live counts and row lists belong to
+[`generated/compiler_progress.md`](generated/compiler_progress.md), not this
+action table.
 
-- [`generated/compiler_progress.md`](generated/compiler_progress.md) — all-up compiler progress, phase/IR state, primitive contract state, integration evidence, codegen pathways, and open-work summary.
-- [`generated/runtime_abi.md`](generated/runtime_abi.md) — C ABI symbol totals + Apple symbol/family counts.
-- [`generated/runtime_execution_matrix.md`](generated/runtime_execution_matrix.md) — executable rows per target (Apple CPU/GPU, native CPU, JIT CPU numpy).
-- [`op_target_conformance.md`](op_target_conformance.md) — complete/partial/missing op×target cells.
-- [`generated/e2e_op_coverage.md`](generated/e2e_op_coverage.md) — native-complete / runnable-reference split (no partial/planned tail).
-- [`generated/s_series_status.md`](generated/s_series_status.md) — per-axis open/complete (lowering closed; backend-kernel universally open).
-- [`generated/test_coverage.md`](generated/test_coverage.md) — direct-test-debt classification (actionable / hardware-gated).
+### P2 — Hardware and distributed breadth
 
-## Finished Work
+- Prove Hopper sm_90 and datacenter sm_100 paths on their actual toolchains and
+  silicon.
+- Prove ROCm CDNA/MI300-class MFMA and low-precision paths independently from
+  the RDNA gfx1151 lane.
+- Replace mock multi-rank collectives with real NCCL/RCCL or equivalent target
+  execution before promoting distributed claims.
+- Expand Apple low-precision and Metal-specific performance lanes when the
+  required SDK/toolchain is available.
 
-### Compiler And IR
+These items are expected hardware/toolchain gates, not evidence that the
+compiler is stub-riddled.
 
-Finished:
+## Deferred Or By-Design Work
 
-- Canonical compiler driver and `CompileResult` are in place.
-- `@jit` and `runtime.launch()` carry canonical compile metadata.
-- Pipeline gates name first failing axes instead of returning vague unsupported status.
-- Op-target conformance matrix is generated and drift-gated.
-- Schedule-to-Tile metadata preservation landed.
-- C++ `LowerScheduleToTargetPass` now fails honestly instead of silently succeeding as a no-op.
-- Tile-to-Apple C++ status aligns with the Python/runtime Apple envelope.
-- Dynamic control-flow lowering has explicit diagnostics and fallback behavior.
-- Frontend lowering bugs found by audit are fixed, including AugAssign sub/div and ROCm/platform gate issues.
-- Compiler correctness tests include pass-order matrices and oracle lanes for several high-risk paths.
-- `runtime_abi` and `verifier_coverage` dashboards are CSV-canonical (machine-readable, byte-diffable) with a non-byte-gated Markdown companion, wired into `check_generated_docs.sh --write` for one-command sprint regeneration.
+- A reference execution path may remain intentional when a native kernel has no
+  product or performance justification.
+- Scalar/configuration primitives may close an axis with a specific terminal
+  reason; they do not need meaningless VJP, batching, sharding, or kernel rows.
+- Fusion is a performance property. A correct sequential composition can be
+  conformance-complete when every component compiles, executes, and matches its
+  oracle.
+- Platform target maps remain separate because they answer architecture-specific
+  questions; merging them solely to reduce document count is deferred.
+- Domain roadmaps are planning/history inputs. They are not status authorities.
 
-Still needs work:
+## Method And Limitations
 
-- ✅ Make compile metadata component-aware for real multi-op programs (2026-06-07; derived per-component and carried to `fn.runtime_artifact().metadata`, locked by 57 tests — see COMPILER_AUDIT Next Work #1).
-- Carry fusion groups, layout contracts, shape envelopes, effects, and backend strategy through the compiler artifact.
-- Stop rediscovering fusion/program identity separately in Target IR and runtime dispatch. *(Runtime half closed 2026-06-10 — the apple_gpu executor consumes `fusion_groups` known_chain metadata; Target IR C++ fusion passes still re-match. See [compiler/CODE_AUDIT_2026_06_10.md](compiler/archive/CODE_AUDIT_2026_06_10.md).)*
-- Tie complete compiler claims to direct compare fixtures or hardware/package validation.
-- Generated-doc registry landed (`tessera.compiler.generated_docs`): one source of truth consumed by both `check_generated_docs.sh` and `release_gate.py`, a fleet-wide `--write`/`--check`, an orphan-guard test, and 9 CSV-canonical dashboards. Remaining: optional further consolidation (target maps 3→1, fold e2e/s_series rollups into their primaries).
+This audit is a synthesis over checked-in generated dashboards and their source
+registries. It does not infer hardware execution from API presence, Target IR
+text, or a keyword-only test. Hardware-specific claims remain limited to the
+architectures and fixtures recorded in the backend manifests and execution
+matrix.
 
-Primary detail: [compiler/COMPILER_AUDIT.md](compiler/COMPILER_AUDIT.md).
+Important interpretation limits:
 
-### Runtime And Backend
+- The curated matrix contains seven representative programs, not every
+  primitive.
+- `backend_kernel` is deliberately conservative and is not an all-up compiler
+  veto.
+- `reference` proves correctness, not target-native performance.
+- A skipped hardware fixture preserves honesty but does not replace execution on
+  the corresponding hardware lane.
+- Numbers copied into this snapshot can age; the linked generated dashboard is
+  always authoritative.
 
-Finished:
+## Dashboard And Audit Map
 
-- Runtime execution matrix is the launch source of truth.
-- Runtime ABI surface is generated and drift-gated.
-- CPU native, CPU JIT numpy, Apple CPU, and Apple GPU executable rows are explicit.
-- Non-Apple hardware targets are recognized but honestly non-executable in `runtime.launch()`.
-- **C-ABI GPU launch bridge (G7, 2026-06-10):** `tsrLaunchKernel` gained a pluggable launcher hook (`tsrRegisterGpuLauncher` + `tsrGpuLaunchParams`) — the core runtime stays backend-agnostic and a backend registers a name→symbol launcher. Proven end-to-end on Metal (a C-ABI GEMM launch runs through the Apple runtime and equals `A@B`; unregistered kernels still report `UNIMPLEMENTED`). NVIDIA/ROCm plug into the same hook once hardware exists. See [backend/BACKEND_AUDIT.md](backend/BACKEND_AUDIT.md).
-- Toolchain pins for CUDA, NCCL, and ROCm agree in generated ABI/toolchain dashboards.
-- Distributed **MegaMoE** stack landed: single-device MoE layer, fused expert-FFN kernel, expert-parallel 2× all-to-all forward, FP8×FP4 mixed precision, and a real async comm/compute overlap engine (GPU command buffer ∥ CPU comm) with demonstrated wall-clock overlap on Apple. Multi-rank runs over in-process mock collectives (Decision #6); see [`../distributed_megamoe.md`](../distributed_megamoe.md).
-
-Still needs work:
-
-- Add runtime execution rows for NVIDIA/ROCm only after actual launch paths exist.
-- Keep artifact-only, compileable, executable, numerical, and hardware-verified statuses separate.
-- Use `execute_compare_fixture` consistently for promoted backend claims.
-
-Primary detail: [backend/BACKEND_AUDIT.md](backend/BACKEND_AUDIT.md).
-
-### Apple Backend
-
-Finished:
-
-- Apple CPU executes through Accelerate.
-- Apple GPU executes through the MPS / MPSGraph / custom MSL runtime envelope.
-- Metal 4 lanes and runtime probes exist.
-- Encode-session and one-command-buffer chain substrate exist.
-- Apple chain planner and auto-batch substrate exist.
-- Conv2d encode-session lanes exist across f32/f16/bf16 wrapper surfaces.
-- Packaged-kernel lifecycle PK1-PK7 is proven with a real Apple fixture.
-- Apple GA/EBM specialized runtime kernels and benchmarks exist.
-
-Still needs work:
-
-- Nothing open on the Apple compiler track. The "pipeline-reachability design
-  fork" (prepass-as-live-path vs `target_ir_artifact`) is **decided** — the
-  prepass is the canonical live path; the `per_op_metal` general residency gate
-  (2026-06-17) routes any multi-op program whose ops all have an Apple GPU lane
-  to `metal_runtime`. The only residual is enumerable, not architectural: a
-  multi-op program demotes to artifact iff it contains an op with no Apple GPU
-  lane, a set frozen by `tests/unit/test_apple_gpu_no_lane_residual.py` (each
-  entry a reviewable "add a lane" vs "intentionally host-only" call). (Real-
-  hardware NVIDIA/ROCm execution proof remains the cross-backend gate — see those
-  tracks.)
-
-Closed 2026-06-02 → 2026-06-09: binding specs/descriptors for all kernel
-families; descriptor-driven dispatch (single-source envelope in
-`apple_gpu_envelope.py`, runtime lane-table dispatch, generated C++
-`kRuntimeOps`); feature-limit-driven selection (tiled softmax N-cap, bf16
-gate, fused-chain/head_dim caps, threads-per-row); canonical one-command-
-buffer decode; production packaged-kernel rows; manifest-attached benchmarks
-+ perf ratchet (`perf_gate --ratchet` + recorded `apple_gpu_hot_paths.json`);
-auto_batch auto-detection + Graph-IR-emission skip.
-
-Primary detail: [backend/apple/APPLE_AUDIT.md](backend/apple/APPLE_AUDIT.md).
-
-### NVIDIA And ROCm
-
-Finished:
-
-- Target maps exist for NVIDIA SM90 and ROCm.
-- CUDA/ROCm toolchain plans and execute-and-compare backlog are documented.
-- The repo distinguishes artifact generation from hardware execution.
-- **ROCm gfx1151 (RDNA 3.5 / Strix Halo) executes a compiler-generated op family
-  on real hardware**, all reachable through `runtime.launch()`: `matmul`
-  **hardware_verified** (real WMMA; perf ladder + fused bias/relu/gelu/silu
-  epilogue), the `gemm` row promoted to hardware_verified + arch-aware guard
-  (#321), `flash_attn` **forward and backward** with additive `attn_bias`
-  (#328), `GQA/MQA` **forward and backward**, `selective_ssm` (Mamba2)
-  **forward and backward** + fp16/bf16 + chunked-parallel SSD (#333–#338),
-  `msa_sparse_attention` (#337/#339), and the EBM Langevin family + EBT-tiny +
-  exact-partition log-sum-exp (#316–#326). Sliding-window and Gemma-2 logit-softcap
-  forward land via #109/#110. All with execute-compare fixtures on the box; first
-  non-Apple backend kernels through the C-ABI launch bridge. (Counts: see
-  `generated/runtime_execution_matrix.md`, `generated/rocm_target_map.md` — never
-  copied here.)
-- **NVIDIA sm_120 (consumer Blackwell, RTX 5070 Ti) executes its first kernel**:
-  `mma.sync` bf16 matmul, hardware-verified end-to-end (emit → assemble → CUDA
-  launch bridge → execute-and-compare, #106), under CUDA 13.3.
-
-Still needs work:
-
-- **NVIDIA**: broaden sm_120 beyond matmul (add the flash-attn family); prove
-  Hopper sm_90 + datacenter sm_100 (separate emit paths — WGMMA ≠ `mma.sync`).
-- **ROCm CDNA (MI300X/MI325X)**: hardware-gated execute-and-compare (distinct
-  MFMA table + FP4/FP6); no device yet.
-- Extend the RDNA op surface beyond matmul + the attention family (the rest stay
-  artifact_only).
-- Promote backend manifest rows with toolchain, runtime ABI, smoke, and numerical proof.
-
-Primary detail:
-
-- [backend/nvidia/NVIDIA_AUDIT.md](backend/nvidia/NVIDIA_AUDIT.md)
-- [backend/rocm/ROCM_AUDIT.md](backend/rocm/ROCM_AUDIT.md)
-
-### Coverage And Primitive Contracts
-
-Finished:
-
-- Partial-op uplift closed the legacy partial bucket; the E2E dashboard now
-  shows no partial/planned rows ([`generated/e2e_op_coverage.md`](generated/e2e_op_coverage.md)).
-- `lowering_rule` is closed project-wide (0 open) ([`generated/s_series_status.md`](generated/s_series_status.md)).
-- No actionable direct-test-debt (`needs_direct_test = 0`) ([`generated/test_coverage.md`](generated/test_coverage.md)).
-- KV-cache has named diagnostics and explicit target coverage history.
-- Advanced examples mostly shifted from missing Python APIs to backend/hardware proof.
-
-Still needs work:
-
-- Close backend-kernel proof across hardware targets.
-- Close remaining batching, transpose, and sharding long-tail counts.
-- Keep generated dashboards as count truth and avoid copying stale numerical snapshots into prose.
-
-Primary detail: [coverage/COVERAGE_AUDIT.md](coverage/COVERAGE_AUDIT.md).
-
-### Domain Tracks
-
-Finished:
-
-- GA and EBM scope locks are established.
-- GA/EBM Python surfaces and Apple-specialized runtime paths are substantially built.
-- Attention/MLA/KV-cache planning has shifted from API invention to backend proof.
-- CorrDiff analysis clarified what belongs in compiler primitives vs library/runtime code.
-- Sharding audit classified long-tail buckets.
-- **DFlash block-diffusion speculative-decoding draft landed (2026-06-12, PR #67).**
-  P0 added an additive `attn_bias` operand to `FlashAttnOp` end-to-end — Graph IR
-  ODS + verifier, Tile→Apple lowering, MPSGraph `flash_attn_bias_{f32,f16,bf16}`
-  runtime symbols (+ stub), eager/CPU/GPU dispatch, VJP (`dbias = dS`), `op_catalog`
-  arity, and the `runtime_abi` audit — validated on Metal at 3.3e-7. P1 built the
-  DFlash draft on that substrate: `nn.functional.block_diffusion_attention`
-  (QK-norm, KV injection, GQA, sliding-window-via-bias), `tessera.dflash` (draft
-  model, multi-layer `HiddenStateTap`, `dflash_step`/`dflash_generate`), the
-  `apple_gpu_attention_fn` seam, and a `@jit(target="apple_gpu")` flash_attn(bias)
-  proof reporting `metal_runtime`. The gold-standard invariant — greedy spec-decode
-  output == greedy autoregressive decode — is proven against an independent numpy
-  port of the `z-lab/dflash` MLX reference.
-  **Integration items 1–9 landed (2026-06-12):** (1) per-layer draft KV cache
-  (`DraftKVCache`, cached==non-cached); (2) non-greedy sampling + distribution-
-  preserving rejection acceptance (`make_sampler`/`dflash_speculative_verify`,
-  marginal==target by Monte Carlo); (3) stateful target KV cache + rollback and
-  (4) a real reference target (`dflash_reference.ReferenceDecoderLM`; stateful==
-  stateless; full cached+stateful loop == greedy AR); (5) whole-draft attention on
-  Metal via the `attention_fn` seam; (6) `DFlashDraft(nn.Module)`; (7) safetensors
-  checkpoint I/O + HF state-dict mapping (`dflash_io`); (8) GQA via exact repeat
-  (the native kernel doesn't fit the concat-KV+bias layout); (9) position-weighted
-  training loss, `RotatingDraftKVCache`, tokenizer-wired `dflash_generate_text`, and
-  `DFlashScheduler` (`dflash_serve`). Remaining gates are external: numerical parity
-  vs a downloaded `z-lab/*-DFlash` checkpoint (network), and a single fully-jitted
-  GPU draft artifact (GPU gather/embedding). Detail: [domain/DOMAIN_AUDIT.md](domain/DOMAIN_AUDIT.md).
-
-Still needs work:
-
-- Keep domain claims tied to coverage/backend proof.
-- Avoid treating old domain roadmaps as current status.
-- Close domain-specific backend proof through the same generated dashboards and runtime gates.
-
-Primary detail: [domain/DOMAIN_AUDIT.md](domain/DOMAIN_AUDIT.md).
-
-## Priority Work List
-
-### P0
-
-- ✅ **Fixture-driven proof claims for complete conformance cells (2026-06-07).**
-  A conformance cell can now only reach `numerical_check = complete` when a
-  **manifest-declared `execute_compare_fixture`** exists on disk (the
-  legacy filename/keyword heuristic is capped at `partial`). The generator
-  enforces it (`conformance_matrix._numerical_proof_source` →
-  `"fixture"`/`"heuristic"`/`None`); the gate is locked by
-  [`test_conformance_complete_cells_proven.py`](../../tests/unit/test_conformance_complete_cells_proven.py)
-  (every complete cell is fixture-proven, the fixture exists and genuinely
-  `assert_allclose`-compares a component op, and heuristic-only cells never
-  reach complete). Tightening demoted 35 keyword-only `numerical_check` sub-cells
-  to `partial` (e.g. `softmax/nvidia`, which has no execution path) with **zero
-  `overall` flips**; the 5 published complete cells (Apple matmul/softmax/
-  matmul_softmax/flash_attn) are each backed by a real execute-compare and all
-  15 declared fixtures pass `conformance_matrix --verify-fixtures`. Two
-  mis-declared fixtures (`matmul`/`rope` on apple_gpu pointed at the buffer-pool
-  RAII test) were corrected to genuine numerical compares.
-- Backend-kernel hardware proof on real NVIDIA/ROCm hardware — **first NVIDIA
-  proof landed** (sm_120 matmul, RTX 5070 Ti, 2026-06-25; ROCm gfx1151 matmul +
-  flash_attn already proven). Open: CDNA (MI300-class), and NVIDIA breadth
-  (compiler-generated lane, NVFP4, flash_attn, sm_80/90/100).
-- Runtime execution rows only for genuinely executable backends.
-
-### P1
-
-- **Front-end / IR / autodiff unification — make differentiation a compiler
-  request with a native fwd+bwd path.** The Python VJP/JVP tape stays the
-  reference/oracle; `@jit(autodiff=…)` now carries differentiation intent and a
-  per-target **backward** `CompileResult` facet, and the ledger's native
-  backward rungs are **sourced from the runtime execution matrix, not asserted** —
-  so "forward native" and "gradients native" are no longer conflated. Plan +
-  status-ledger design (six rungs: `python_reference` → `hardware_proven`) in
-  [compiler/AUTODIFF_UNIFICATION_PLAN.md](compiler/AUTODIFF_UNIFICATION_PLAN.md).
-  **Phases 0–4 landed** (Phase 3 IR-oracle cut; `@jit` static-shape emission is
-  the residual Phase 3 item): Phase 4's A2+A3 wire the backward matrix column
-  into the ledger and honor `native_required`, so `flash_attn` (ROCm) and
-  `selective_ssm` (ROCm + x86) light up `bwd_hardware_proven` from the matrix.
-  **Next: Phase 5** (expand by closed op families; the first executing Tier-1
-  synthesized backward unblocks A1 — register the WMMA backward as a Tier-3
-  arbiter candidate) → Phase 6 (distributed + accelerator promotion; wire the
-  landed F5 collectives into the paired backward ABI). Read the generated ledger
-  for live per-family rungs (Decision #26).
-- ✅ Multi-op compiler metadata and component-aware gates (landed 2026-06-07;
-  `component_ops` / `program_executable` / `component_blockers` +
-  `effects` / `shape_envelope` / `layout_contracts` / `fusion_groups` /
-  `outputs` carried to the `@jit` artifact, fusion dispatch authoritative).
-  Forward work moved to COMPILER_AUDIT **Phase 1**: ✅ per-op effect interfaces
-  on the 23 non-pure Graph-IR ops (landed 2026-06-22 — `[Pure]` vs
-  `MemWrite`/`MemRead`, so generic CSE/DCE is sound); ✅ `LayoutAssignmentPass`
-  wired into the named x86/GPU/CUDA-13 pipelines behind the opt-in
-  `assign-layouts` option (2026-06-22, default off); ✅ Graph-IR folder coverage
-  broadened to `reshape` (identity fold + `reshape(reshape(x))` chain-collapse,
-  2026-06-22). **COMPILER_AUDIT Phase 1 is closed** — further folders land
-  opportunistically.
-- ✅ Apple binding/kernel descriptor unification (2026-06-09 — descriptor-driven dispatch + generated C++ runtime-ops table).
-- ✅ Apple feature-limit-guided lowering (2026-06-09 — bf16 gate, fused-chain caps, threads-per-row).
-- ✅ Canonical Apple one-command-buffer decode through `tessera.ops` / `@jit` (2026-06-02).
-- ✅ Production packaged-kernel rows with reflection, dispatch, and numerical proof (2026-06-02; 7 rows).
-
-### P2
-
-- **Batching/transpose/sharding long-tail — assessed closed for everything
-  provable (2026-06-17).** `transpose_rule` and `lowering_rule` are fully closed
-  (0 partial); `batching_rule` and `sharding_rule` carry the only residual
-  partials — live counts are dashboard-owned in
-  [`generated/s_series_status.md`](generated/s_series_status.md) (6 + 47 = 53 as
-  of 2026-06-22, up from 4 + 39 = 43 on 2026-06-17 as the EDM/DiffusionBlocks
-  primitives in `427f595`/`25111fe` added mesh-gated rows). **All residual
-  partials sit in genuinely distributed-mesh-gated categories** — `attention`
-  (the reasoning-model fused family: sparse/delta/gated/lightning variants, where
-  head-split equivalence isn't trivially true — the *standard* family was already
-  proven complete in `test_attention_sharding_mock_mesh.py`), `spectral`
-  (distributed FFT = all-to-all transpose), `linalg_decomposition`/`linalg_solver`
-  (distributed cholesky/qr/svd), `moe`/`moe_transport` (all-to-all dispatch/
-  combine), `ebm`, `state_space`/`state_update`, `sparse`, `loop_nest`. These are
-  **Phase-G-gated by design, not bookkeeping debt** — the `_SHARDING_RULE_BY_CATEGORY`
-  classifier marks each partial with a documented "known but mesh-aware" reason.
-  Flipping them without real mock-mesh proofs would be the audit-inflation
-  Decision #25 forbids; closing any further requires a genuine per-variant proof
-  (the established `test_*_sharding_mock_mesh.py` pattern) or real Phase-G mesh
-  hardware. So the closable closure is **done**; the rest is correctly gated.
-- Domain roadmap hygiene and stale-claim cleanup — **standing discipline, no discrete backlog.** The legacy roadmap prose is consolidated into [domain/DOMAIN_AUDIT.md](domain/DOMAIN_AUDIT.md) (9 archived plans folded in); the generated dashboards (`s_series_status`, `standalone_primitive_coverage`) are the count authority, and `DOMAIN_AUDIT` carries the right "roadmaps are not status authorities" discipline. Action is per-sprint: when a domain feature lands, point its claim at the dashboards — not a one-time cleanup task.
-- ✅ Benchmark/performance gates tied to backend manifest rows — done for Apple GPU (2026-06-09: `benchmark_json` on hot-path + packaged rows; `perf_gate --ratchet`); other backends follow with Phase G/H hardware.
-- ✅ Unify generated-doc regeneration + drift into one registry/`--write` contract — **landed** (`generated_docs.py` registry 2026-06-04; `check_generated_docs.sh` + `release_gate.py` both delegate to one fleet-wide `generated_docs_drift`; unified `--write`; orphan-guard test). CSV-canonical data-shaped tail closed 2026-06-11 (12 dashboards incl. the 3 target maps). The only residual — aggressive content consolidation (collapse the 3 target maps → 1; fold the rollups) — was reassessed as **low-value churn** and deliberately deferred (per-platform maps are cross-referenced by per-platform audits; rollups are distinct truth views). Detail: [compiler/COMPILER_AUDIT.md](compiler/COMPILER_AUDIT.md) Next Work #6.
-
-## Compiler-Completeness & Testing Program
-
-Started 2026-06-07. Reframe: the compiler is **not stub-riddled** — the
-software-actionable gap surface is small and specific; most incompleteness is
-hardware-gated (expected) or thin-test (better closed by generative differential
-testing than hand-written tests). Run
-[`scripts/stub_surface_report.py`](../../scripts/stub_surface_report.py) for the
-live ranked rollup → [`stub_surface.md`](stub_surface.md).
-Stubs are an **oracle/conformance problem, not a fuzz problem** (a stub that
-returns a plausible artifact never crashes); fuzzing is layered on top of the
-differential oracle to catch the long tail.
-
-The actionable surface, ranked (numbers live in `stub_surface.md`):
-- **Verifier stubs — closed (2026-06-10): `trivial_stub` is now 0.** Three
-  verifier sprints (V8 norm/softmax, V9 control-flow + stubs + MoR/quant/FFT)
-  took `verifier_coverage` from 73 → **100+ `real`**, and the **final trivial
-  stub `ArchSTEOneHotOp` was removed 2026-06-10**: `arch.ste_one_hot` maps an
-  opaque parameterless `ArchParam → ArchGate`, so the ODS type constraints
-  fully constrain it and a `verify(){return success();}` was a false claim —
-  dropping `hasVerifier=1` reclassifies it honestly to `no_verifier`
-  (`trivial_stub` 1 → **0**). The `no_verifier` tail is mostly pure elementwise
-  (legitimately need none); a few structural collective/reshape ops could still
-  get one.
-- **Software conformance gaps — CPU numerical cells closed (2026-06-10).**
-  `conv2d → cpu` and `kv_cache_read → cpu` ("executes but unverified") now carry
-  manifest-declared `execute_compare_fixture`s (the existing
-  `test_jit_cpu_executes_conv2d_nhwc_reference` and `test_kv_cache_handle`
-  read-compares), flipping `numerical_check` `partial → complete`. A
-  pipeline-gate fix made `_eval_numerical` honor a declared fixture, so the
-  worklist's software-actionable count dropped **6 → 4**. The remaining 4
-  (`conv2d`/`kv_cache_read` → nvidia/rocm, stop @ `codegen`) emit no code AND
-  have no silicon — effectively hardware-gated.
-- **Thin-test tail — differential generator extended (2026-06-10).**
-  `_diff_lane.numeric_cases` adds 12 elementwise/reduction ops
-  (`exp`/`log`/`sqrt`/`rsqrt`/`abs`/`softplus`/`maximum`/`minimum`/`sum`/`mean`/
-  `amax`/`amin`) run on `@jit(apple_gpu)` vs an **independent numpy oracle** (a
-  true impl-vs-reference check across the dispatch envelope, beyond the 13-op
-  straight-line tracer lane), wired into both the stdlib and hypothesis
-  harnesses.
-
-Workstream (chosen 2026-06-07): **(#1) quantify** — `stub_surface_report.py`
-(✅ done); **(#4) IR round-trip property + fuzz** (✅ done —
-[`test_ir_roundtrip_fuzz.py`](../../tests/unit/test_ir_roundtrip_fuzz.py):
-generate→render→parse→compare op-names + malformed-input crash-safety; found &
-fixed a real parser EOF crash where `parse_module` asserted instead of raising a
-named `FrontendSyntaxError`); **(#2) differential generator** (✅ done —
-[`test_differential_generator.py`](../../tests/unit/test_differential_generator.py):
-synthesizes random programs over the executable lane (`tessera.ops` +
-`tessera.control.fori_loop`/`cond`) and diffs the **eager numpy oracle** against
-the real **trace → GraphFn / `execute_traced` Metal path** — a miscompile
-detector for straight-line, fused `run_graph_loop`, and fused `run_graph_cond`;
-51 cases green on Apple GPU, runtime-free trace/op-name properties run
-everywhere. A **hypothesis-backed sibling**
-[`test_differential_generator_hypothesis.py`](../../tests/unit/test_differential_generator_hypothesis.py)
-drives the same shared grammar/oracle [`_diff_lane.py`](../../tests/unit/_diff_lane.py)
-via `@given` for **automatic shrinking** — a Metal miscompile reduces to the
-minimal failing program — guarded by `importorskip("hypothesis")` so CI without
-it still passes on the stdlib harness). (The "claimed-complete must be proven"
-gate is P0 above —
-*Fixture-driven proof claims for complete conformance cells*.)
-
-## Where To Go Next
-
-| Need | Read |
+| Question | Read |
 |---|---|
-| Current all-up status | This document |
-| Folder map | [README.md](README.md) |
-| Compiler/IR open work | [compiler/COMPILER_AUDIT.md](compiler/COMPILER_AUDIT.md) |
-| Front-end / IR / autodiff unification (native fwd+bwd) | [compiler/AUTODIFF_UNIFICATION_PLAN.md](compiler/AUTODIFF_UNIFICATION_PLAN.md) |
-| Shared backend proof | [backend/BACKEND_AUDIT.md](backend/BACKEND_AUDIT.md) |
-| Apple backend performance/runtime | [backend/apple/APPLE_AUDIT.md](backend/apple/APPLE_AUDIT.md) |
-| NVIDIA | [backend/nvidia/NVIDIA_AUDIT.md](backend/nvidia/NVIDIA_AUDIT.md) |
-| ROCm | [backend/rocm/ROCM_AUDIT.md](backend/rocm/ROCM_AUDIT.md) |
-| Primitive/op coverage | [coverage/COVERAGE_AUDIT.md](coverage/COVERAGE_AUDIT.md) |
-| GA/EBM/attention/CorrDiff/sharding | [domain/DOMAIN_AUDIT.md](domain/DOMAIN_AUDIT.md) |
-| Planning history | [roadmap/ROADMAP_AUDIT.md](roadmap/ROADMAP_AUDIT.md) |
+| What is the all-up compiler status? | [`generated/compiler_progress.md`](generated/compiler_progress.md) |
+| Which curated op×target cells are complete? | [`op_target_conformance.md`](op_target_conformance.md) and [`op_target_conformance.csv`](op_target_conformance.csv) |
+| Which compiler phase is open for an op? | [`generated/support_table.md`](generated/support_table.md) |
+| Which primitive contract axes remain open? | [`generated/s_series_status.md`](generated/s_series_status.md) |
+| Which target paths actually execute? | [`generated/runtime_execution_matrix.md`](generated/runtime_execution_matrix.md) |
+| Which backend rows are native, reference, or artifact-only? | [`generated/apple_target_map.md`](generated/apple_target_map.md), [`generated/rocm_target_map.md`](generated/rocm_target_map.md), [`generated/nvidia_sm90_target_map.md`](generated/nvidia_sm90_target_map.md) |
+| Which verifiers are real or absent? | [`generated/verifier_coverage.md`](generated/verifier_coverage.md) |
+| Which ops have direct test evidence? | [`generated/test_coverage.md`](generated/test_coverage.md) |
+| Which ABI symbols are implemented or stubbed? | [`generated/runtime_abi.md`](generated/runtime_abi.md) |
+| What is the software-actionable stub surface? | [`stub_surface.md`](stub_surface.md) |
+| What are the platform-specific conclusions? | [`backend/BACKEND_AUDIT.md`](backend/BACKEND_AUDIT.md), [`backend/apple/APPLE_AUDIT.md`](backend/apple/APPLE_AUDIT.md), [`backend/nvidia/NVIDIA_AUDIT.md`](backend/nvidia/NVIDIA_AUDIT.md), [`backend/rocm/ROCM_AUDIT.md`](backend/rocm/ROCM_AUDIT.md) |
+| What is the planning history? | [`roadmap/ROADMAP_AUDIT.md`](roadmap/ROADMAP_AUDIT.md) |
+
+## Further Questions
+
+- Which NVIDIA curated program should be the next complete end-to-end path after
+  the existing sm_120 matrix lane?
+- Which of the 43 sharding rows has the highest model-facing value and a
+  tractable mock-mesh oracle?
+- Which Tile/Target IR mixed rows are real lowering debt versus candidates for
+  explicit by-design terminal classification?
+- Which structural-only tests cover native hot paths and should be promoted to
+  direct execute-and-compare fixtures first?

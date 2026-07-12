@@ -2,6 +2,17 @@ if(NOT LLVM_EXTERNAL_LIT)
   find_program(LLVM_EXTERNAL_LIT llvm-lit lit.py lit)
 endif()
 
+if(NOT TESSERA_LLVM_TOOLS_DIR)
+  if(LLVM_TOOLS_BINARY_DIR)
+    set(TESSERA_LLVM_TOOLS_DIR "${LLVM_TOOLS_BINARY_DIR}")
+  else()
+    find_program(TESSERA_FILECHECK NAMES FileCheck)
+    if(TESSERA_FILECHECK)
+      get_filename_component(TESSERA_LLVM_TOOLS_DIR "${TESSERA_FILECHECK}" DIRECTORY)
+    endif()
+  endif()
+endif()
+
 set(TESSERA_NVIDIA_OPT_EXECUTABLE
     ${CMAKE_BINARY_DIR}/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt)
 configure_file(lit.site.cfg.py.in lit.site.cfg.py @ONLY)

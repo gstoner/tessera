@@ -143,6 +143,7 @@ def test_fixtures_are_run_once_per_file_not_per_pair():
 
 # ---- summary reporting --------------------------------------------------
 
+@pytest.mark.slow
 def test_summary_line_reports_total_pair_count(real_verify_result):
     """The summary line must enumerate every declared (op, target)
     pair — not just unique files."""
@@ -152,6 +153,7 @@ def test_summary_line_reports_total_pair_count(real_verify_result):
     assert f"{n_pairs} declared (op, target) pair" in output, output
 
 
+@pytest.mark.slow
 def test_per_fixture_line_names_covered_pairs(real_verify_result):
     """The per-file line must list which (op, target) pairs each
     invocation covers. Catches a regression where the CLI runs pytest

@@ -7,10 +7,8 @@ properties so the dashboard stays a real audit surface:
 1. **Drift gate** — the on-disk dashboard must match the freshly-rendered one.
    If you change the matrix logic or any upstream truth source, regenerate via
    ``python -m tessera.cli.conformance_matrix --render``.
-2. **Pure aggregator** — the matrix module must not import from anything
-   beyond ``tessera.compiler.{primitive_coverage, backend_manifest,
-   execution_matrix, driver}`` and the stdlib. New truth sources should
-   first land in those upstream modules, then be aggregated here.
+2. **Evidence sources** — IR rungs come from actual typed lowering/verifiers;
+   backend/runtime/numerical rungs come from their canonical registries.
 3. **Coverage shape** — every (op, target) pair has a cell; cell statuses are
    from the documented enum; the "weakest column wins" overall is consistent.
 4. **Honest signal** — at least one cell is ``complete`` (proves the matrix
@@ -36,8 +34,8 @@ def test_dashboard_in_sync_with_generator():
     """The on-disk dashboard must match the freshly-rendered output."""
     expected = cm.render_markdown()
     assert _DASHBOARD.is_file(), (
-        f"dashboard missing — regenerate via "
-        f"`python -m tessera.cli.conformance_matrix --render`")
+        "dashboard missing — regenerate via "
+        "`python -m tessera.cli.conformance_matrix --render`")
     actual = _DASHBOARD.read_text()
     if actual != expected:
         # Print a focused diff so the failure is actionable.
@@ -52,11 +50,8 @@ def test_dashboard_in_sync_with_generator():
         )
 
 
-def test_matrix_is_pure_aggregator():
-    """The module must not import from arbitrary parts of the codebase —
-    it can only aggregate from the four declared truth sources + stdlib.
-    Catches a regression where the matrix grows its own private knowledge.
-    """
+def test_matrix_uses_only_declared_evidence_sources():
+    """Keep every proof rung tied to an inspectable compiler authority."""
     src = Path(cm.__file__).read_text()
     # Strip docstrings / comments so the regex match is on real imports only.
     src_no_strings = re.sub(r'"""[\s\S]*?"""', '', src)
@@ -82,11 +77,11 @@ def test_matrix_is_pure_aggregator():
         "tessera.compiler.backend_manifest",
         "tessera.compiler.execution_matrix",
         "tessera.compiler.driver",
-        # Audit recommendation B — named pipeline capability gates.
-        # The conformance matrix consumes the gate evaluator to surface the
-        # *first failing gate* per cell, but the gates module is itself a
-        # pure aggregator (its own allowlist test enforces that).
-        "tessera.compiler.pipeline_gates",
+        "tessera.compiler.conformance_evaluator",
+        "tessera.compiler.schedule_ir",
+        "tessera.compiler.tile_ir",
+        "tessera.compiler.target_ir",
+        "functools",
         # stdlib + typing
         "__future__",
         "dataclasses",
@@ -112,7 +107,8 @@ def test_every_pair_has_a_cell():
 
 def test_cell_statuses_are_in_enum():
     enum = {
-        cm.PROOF_COMPLETE, cm.PROOF_PARTIAL, cm.PROOF_ARTIFACT_ONLY,
+        cm.PROOF_COMPLETE, cm.PROOF_REFERENCE, cm.PROOF_COMPILEABLE,
+        cm.PROOF_PARTIAL, cm.PROOF_ARTIFACT_ONLY,
         cm.PROOF_PLANNED, cm.PROOF_MISSING, cm.PROOF_NA,
     }
     for cell in cm.build_matrix():
@@ -175,30 +171,60 @@ def test_compose_only_chain_is_marked_compose():
         )
 
 
-def test_host_x86_cpu_and_rocm_rows_are_closed():
-    """Every in-scope host CPU and ROCm program has full proof.
-
-    Multi-op rows may be sequential compositions; fusion is a performance
-    property and must not demote end-to-end conformance when every component
-    compiles, executes, and has a declared numerical fixture.
-    """
-    open_cells = [
-        cell for cell in cm.build_matrix()
-        if cell.target in {"cpu", "rocm"} and cell.overall != cm.PROOF_COMPLETE
-    ]
-    assert open_cells == []
+def test_rows_use_exact_target_grain():
+    assert "nvidia" not in cm.CONFORMANCE_TARGETS
+    assert {"nvidia_sm80", "nvidia_sm90", "nvidia_sm100", "nvidia_sm120"} \
+        <= set(cm.CONFORMANCE_TARGETS)
+    assert {"cpu", "x86"} <= set(cm.CONFORMANCE_TARGETS)
 
 
-def test_host_and_apple_rows_are_closed_without_a_failing_gate():
-    """Completed target proofs cannot retain a host-environment failure."""
-    in_scope = {"cpu", "apple_cpu", "apple_gpu", "rocm"}
-    open_cells = [
-        cell for cell in cm.build_matrix()
-        if cell.target in in_scope and cell.overall != cm.PROOF_COMPLETE
-    ]
-    contradictory = [
-        cell for cell in cm.build_matrix()
-        if cell.target in in_scope and cell.first_failing_gate is not None
-    ]
-    assert open_cells == []
-    assert contradictory == []
+def test_ir_columns_are_derived_from_emitted_verified_ir():
+    matmul = cm._ir_proof("matmul", "cpu")
+    assert (matmul.graph_emitted, matmul.schedule_legal,
+            matmul.tile_legal, matmul.target_legal) == (
+        cm.PROOF_COMPLETE,
+        cm.PROOF_COMPLETE,
+        cm.PROOF_COMPLETE,
+        cm.PROOF_COMPLETE,
+    )
+    stateful = cm._ir_proof("kv_cache_read", "apple_gpu")
+    assert stateful.graph_emitted == cm.PROOF_COMPLETE
+    assert stateful.schedule_legal == cm.PROOF_MISSING
+    assert "no Schedule IR" in stateful.detail
+
+
+def test_backend_compile_keeps_reference_and_compileable_distinct():
+    assert cm._proof_status_from_backend_compile(
+        ["reference"], "softmax", "apple_cpu"
+    ) == cm.PROOF_REFERENCE
+    assert cm._proof_status_from_backend_compile(
+        ["compileable"], "softmax", "nvidia_sm90"
+    ) == cm.PROOF_COMPILEABLE
+
+
+def test_runtime_and_numerical_proof_are_exact_target_specific():
+    rows = {(c.op, c.target): c for c in cm.build_matrix()}
+    assert rows[("matmul", "nvidia_sm120")].runtime_execute == cm.PROOF_COMPLETE
+    assert rows[("matmul", "nvidia_sm120")].numerical_check == cm.PROOF_COMPLETE
+    assert rows[("matmul", "nvidia_sm90")].runtime_execute == cm.PROOF_MISSING
+    assert rows[("matmul", "nvidia_sm90")].numerical_check == cm.PROOF_MISSING
+
+
+def test_composite_first_failure_checks_every_component():
+    cell = next(c for c in cm.build_matrix()
+                if c.op == "matmul_relu" and c.target == "nvidia_sm120")
+    assert cell.first_failing_gate == "backend_compile"
+    assert cell.backend_compile == cm.PROOF_MISSING
+    assert "matmul,relu" in cell.first_failing_gate_detail
+
+
+def test_complete_cells_have_no_failure_and_open_cells_name_first_rung():
+    for cell in cm.build_matrix():
+        if cell.overall == cm.PROOF_COMPLETE:
+            assert cell.first_failing_gate is None
+        else:
+            assert cell.first_failing_gate in {
+                "graph_emitted", "schedule_legal", "tile_legal",
+                "target_legal", "backend_compile", "runtime_execute",
+                "numerical_check",
+            }

@@ -1,3 +1,10 @@
+import os
+
 config.test_source_root = "@CMAKE_CURRENT_SOURCE_DIR@"
 config.test_exec_root = "@CMAKE_CURRENT_BINARY_DIR@"
+config.llvm_tools_dir = "@TESSERA_LLVM_TOOLS_DIR@"
 config.substitutions.append(("%tnv", "@TESSERA_NVIDIA_OPT_EXECUTABLE@"))
+
+# Load the test format, suffixes, and source-tree configuration. Without this,
+# the site config is accepted but the check target discovers zero tests.
+lit_config.load_config(config, os.path.join(config.test_source_root, "lit.cfg.py"))

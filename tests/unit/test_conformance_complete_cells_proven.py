@@ -14,8 +14,7 @@ This module is the structural gate (runtime-free, runs in CI everywhere):
   2. The declared fixture file exists on disk.
   3. The fixture genuinely execute-compares: it references a component op AND a
      numerical comparison (``assert_allclose`` / ``allclose``).
-  4. Generator invariant: a cell proven *only* by the heuristic never reaches
-     ``numerical_check == complete``.
+4. Generator invariant: keyword/filename heuristics are not numerical proof.
 
 The matching **execution** proof — actually running each fixture — is
 ``python -m tessera.cli.conformance_matrix --verify-fixtures`` (GPU-dependent;
@@ -71,9 +70,12 @@ def test_complete_cell_fixture_exists_and_execute_compares(cell):
     assert path.is_file(), f"declared fixture does not exist: {rel}"
 
     text = path.read_text(encoding="utf-8", errors="ignore").lower()
-    assert ("assert_allclose" in text or "allclose" in text), (
+    assert any(token in text for token in (
+        "assert_allclose", "allclose", "maxerr", "max_abs_err",
+    )), (
         f"fixture {rel} for {cell.op}/{cell.target} has no numerical "
-        f"comparison (assert_allclose/allclose) — it is not an execute-compare")
+        f"comparison (allclose or explicit error bound) — it is not an "
+        f"execute-compare")
 
     # The fixture must mention at least one component op of the row, so a
     # mis-declared path (points at an unrelated test) is caught.
@@ -84,17 +86,9 @@ def test_complete_cell_fixture_exists_and_execute_compares(cell):
         f"{sorted(op_tokens)} — likely a mis-declared fixture")
 
 
-def test_heuristic_only_cells_never_reach_complete_numerical():
-    """(4) Generator invariant: any cell whose sole numerical signal is the
-    keyword heuristic is capped at partial — it can never claim complete."""
-    offenders = []
-    for c in _CELLS:
-        if C._numerical_proof_source(c.op, c.target) == "heuristic":
-            if c.numerical_check == C.PROOF_COMPLETE:
-                offenders.append((c.op, c.target))
-    assert not offenders, (
-        f"heuristic-only cells reached numerical_check=complete: {offenders} — "
-        f"the heuristic must cap at partial (P0 gate regression)")
+def test_keyword_heuristics_are_not_numerical_proof():
+    """(4) Only an exact-target declared fixture can satisfy the column."""
+    assert C._numerical_proof_source("softmax", "nvidia_sm90") is None
 
 
 def test_complete_cells_match_dashboard_csv():

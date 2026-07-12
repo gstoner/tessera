@@ -187,3 +187,18 @@ def test_host_x86_cpu_and_rocm_rows_are_closed():
         if cell.target in {"cpu", "rocm"} and cell.overall != cm.PROOF_COMPLETE
     ]
     assert open_cells == []
+
+
+def test_host_and_apple_rows_are_closed_without_a_failing_gate():
+    """Completed target proofs cannot retain a host-environment failure."""
+    in_scope = {"cpu", "apple_cpu", "apple_gpu", "rocm"}
+    open_cells = [
+        cell for cell in cm.build_matrix()
+        if cell.target in in_scope and cell.overall != cm.PROOF_COMPLETE
+    ]
+    contradictory = [
+        cell for cell in cm.build_matrix()
+        if cell.target in in_scope and cell.first_failing_gate is not None
+    ]
+    assert open_cells == []
+    assert contradictory == []

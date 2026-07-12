@@ -25,7 +25,13 @@ from typing import Any
 
 import tessera as ts
 
-from tessera.compiler.evaluator import BackendVerdict, Rung, evaluate
+from tessera.compiler.evaluator import (
+    BackendVerdict,
+    Rung,
+    evaluate,
+    kv_cache_read_native_equivalence,
+    verdict_for,
+)
 
 # Backends that genuinely execute here (Apple Silicon). NVIDIA/ROCm corroborate
 # through the same path once a launcher registers (G7) — no change needed here.
@@ -46,6 +52,10 @@ def _p_matmul_softmax(a, b):
     return ts.ops.softmax(ts.ops.matmul(a, b), axis=-1)
 
 
+def _p_matmul_relu(a, b):
+    return ts.ops.relu(ts.ops.matmul(a, b))
+
+
 def _p_flash_attn(q, k, v):
     return ts.ops.flash_attn(q, k, v)
 
@@ -58,6 +68,7 @@ _BASE_FN: dict[str, Callable[..., Any]] = {
     "matmul": _p_matmul,
     "softmax": _p_softmax,
     "matmul_softmax": _p_matmul_softmax,
+    "matmul_relu": _p_matmul_relu,
     "flash_attn": _p_flash_attn,
     "conv2d": _p_conv2d,
 }
@@ -105,6 +116,13 @@ def _build(op: str, rng: Any) -> tuple[tuple[Any, ...], Any, bool, dict[str, flo
         a = rng.standard_normal((16, 16)).astype(np.float32)
         b = rng.standard_normal((16, 16)).astype(np.float32)
         return (a, b), _np_softmax(a @ b, -1), False, {"rtol": 3e-3, "atol": 1e-4}
+    if op == "matmul_relu":
+        a = rng.standard_normal((16, 16)).astype(np.float32)
+        b = rng.standard_normal((16, 16)).astype(np.float32)
+        return (a, b), np.maximum(a @ b, 0.0), False, {
+            "rtol": 3e-3,
+            "atol": 1e-4,
+        }
     if op == "flash_attn":
         q = rng.standard_normal((1, 2, 8, 16)).astype(np.float32)
         k = rng.standard_normal((1, 2, 8, 16)).astype(np.float32)
@@ -129,11 +147,45 @@ def _build(op: str, rng: Any) -> tuple[tuple[Any, ...], Any, bool, dict[str, flo
 
 
 def has_builder(op: str) -> bool:
-    return op in _BASE_FN
+    return op in _BASE_FN or op == "kv_cache_read"
+
+
+def _corroborate_kv_cache_read(target: str, rng: Any) -> BackendVerdict:
+    """Corroborate the stateful cache accessor without forcing it through the
+    pure-tensor JIT builder registry."""
+    import numpy as np
+
+    from tessera.cache import KVCacheHandle
+
+    cache = KVCacheHandle(num_heads=2, head_dim=4, max_seq=16, page_size=4)
+    keys = rng.standard_normal((8, 2, 4)).astype(np.float32)
+    values = rng.standard_normal((8, 2, 4)).astype(np.float32)
+    cache.append(keys, values)
+
+    if target == "apple_gpu":
+        cross = kv_cache_read_native_equivalence(cache, 2, 7)
+        return verdict_for(
+            target,
+            "metal_runtime" if cross.relation == "equivalent" else "reference",
+            "success",
+            True if cross.relation == "equivalent" else None,
+        )
+
+    if target == "apple_cpu":
+        read_keys, read_values = ts.ops.kv_cache_read(cache, 2, 7)
+        matches = bool(
+            np.allclose(read_keys, keys[2:7], rtol=1e-5, atol=1e-6)
+            and np.allclose(read_values, values[2:7], rtol=1e-5, atol=1e-6)
+        )
+        return verdict_for(target, "native_cpu", "success", matches)
+
+    raise ValueError(f"kv_cache_read corroboration unsupported on {target!r}")
 
 
 def corroborate(op: str, target: str, rng: Any) -> BackendVerdict:
     """Run ``op`` on ``target`` through the Evaluator and return its verdict."""
+    if op == "kv_cache_read":
+        return _corroborate_kv_cache_read(target, rng)
     args, oracle, exact, tol = _build(op, rng)
     return evaluate(target, _jitted(op, target), args, oracle, exact=exact, **tol)
 

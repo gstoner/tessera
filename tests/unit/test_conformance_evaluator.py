@@ -39,6 +39,18 @@ def test_there_are_corroboratable_complete_cells():
     # The known executable complete surface on this tree.
     assert ("matmul", "apple_gpu") in cells
     assert ("flash_attn", "apple_gpu") in cells
+    assert ("matmul_relu", "apple_cpu") in cells
+    assert ("matmul_relu", "apple_gpu") in cells
+    assert ("kv_cache_read", "apple_cpu") in cells
+    assert ("kv_cache_read", "apple_gpu") in cells
+
+
+def test_apple_cpu_stateful_kv_builder_is_numerically_corroborated():
+    verdict = CE.corroborate(
+        "kv_cache_read", "apple_cpu", np.random.default_rng(20260712)
+    )
+    assert verdict.rung is Rung.HARDWARE_VERIFIED
+    assert verdict.provenance_ok and verdict.correctness == "pass"
 
 
 # ── Darwin: independently reproduce each complete cell on real hardware ───────

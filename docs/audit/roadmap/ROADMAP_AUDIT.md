@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-06-26
+last_updated: 2026-07-11
 audit_role: theme
 ---
 
@@ -8,11 +8,13 @@ audit_role: theme
 This document consolidates execution-roadmap, deferred-item, and sprint/crosscut
 planning material.
 
-> **Count authority.** Roadmap docs are sequencing + rationale, never status
+> **Status authority.** Roadmap docs are sequencing + rationale, never status
 > truth (see *Still Open* below). Live status traces to the generated
 > dashboards (Decision #26): cross-surface state in
 > [../generated/surface_status.md](../generated/surface_status.md), per-axis
 > S-series state in [../generated/s_series_status.md](../generated/s_series_status.md),
+> executable runtime pathways in
+> [../generated/runtime_execution_matrix.md](../generated/runtime_execution_matrix.md),
 > and the all-up open-work queue in [../MASTER_AUDIT.md](../MASTER_AUDIT.md).
 
 ## Finished
@@ -37,11 +39,12 @@ planning material.
   execution and training-loop integration are still open. See
   the *Decoupled-stage pipeline* design note appended below.
 
-## Standalone Compiler Roadmap Contract
+## Standalone Compiler Roadmap Baseline
 
-The archived execution roadmap established the **Standalone compiler milestone sprints (S-series)**.
-The active contract is preserved here so tests and readers do not need a root
-redirect to the historical file.
+The archived execution roadmap established the **Standalone compiler milestone
+sprints (S-series)**. The list below is the retained scope baseline, not the
+active status or ownership contract; use the routing table in *Active ownership*
+for current work.
 
 S-series checkpoints:
 
@@ -75,30 +78,20 @@ Scope decisions from S0 remain active:
 The roadmap explicitly covers broad model families including diffusion, xLSTM,
 Mamba, Hyena, Linformer, cosFormer, Griffin, Megalodon, JEPA, and Titans/Atlas.
 
-## Next Work
+## Active ownership
 
-1. Keep roadmap material as planning provenance.
-2. Move active work into compiler/backend/coverage/domain audit docs.
-3. Delete or archive roadmap fragments once their decisions are represented in
-   the owning theme audit.
+| Need | Owner | Live evidence |
+|---|---|---|
+| S-series native execution and structural gaps | [`S_SERIES_GAP_CLOSURE_PLAN.md`](S_SERIES_GAP_CLOSURE_PLAN.md) | [`s_series_status.md`](../generated/s_series_status.md) and [`runtime_execution_matrix.md`](../generated/runtime_execution_matrix.md) |
+| One-device compiler closeout, promotion evidence, and audited surfaces | [`SINGLE_GPU_CLOSEOUT_PLAN.md`](SINGLE_GPU_CLOSEOUT_PLAN.md) | its generated single-GPU queue plus the generated dashboards it names |
+| Shared lowering, backend plugins, arbitration, and measured promotion | [`../compiler/COMPILER_REFACTOR_PLAN.md`](../compiler/COMPILER_REFACTOR_PLAN.md) and [`../compiler/WORKSTREAM_C_HANDOFF.md`](../compiler/WORKSTREAM_C_HANDOFF.md) | [`runtime_execution_matrix.md`](../generated/runtime_execution_matrix.md) and evaluator verdicts |
+| Cross-surface counts and current open work | generated dashboards and [`../MASTER_AUDIT.md`](../MASTER_AUDIT.md) | generated files only |
 
-**Active plan — closing the S-series device-execution gap on x86 + ROCm gfx1151:**
-see [`S_SERIES_GAP_CLOSURE_PLAN.md`](S_SERIES_GAP_CLOSURE_PLAN.md). Triages the
-~171 both-device gap into not-applicable / mesh-gated / closeable-compute tiers,
-sequences phased PRs (A: bookkeeping honesty → G: marquee fused kernels), and
-records the **native** (AVX-512 + RDNA WMMA) planned fused-kernel inventory
-(flash_attn, MLA, NSA, lightning/kimi, swiglu, fused AdamW, conv, sort, RNG) —
-the executable-now companion to the hardware-gated WGMMA/MFMA inventories.
+Keep this document as a routing and decision-provenance hub. Archive a roadmap
+fragment only when its decision is captured by an owner above; do not duplicate
+status counts or runtime claims here.
 
-**Active plan — closing all single-GPU-closeable compiler gaps:**
-see [`SINGLE_GPU_CLOSEOUT_PLAN.md`](SINGLE_GPU_CLOSEOUT_PLAN.md). This plan owns
-the strict one-device closeout queue for Tile IR partial rows, Target IR
-reference rows, backend-kernel pathway ownership, verifier/direct-test/benchmark
-evidence, runtime ABI stubs, audited surfaces, and mesh/sharding identity rules.
-Generated dashboards remain the count authority; the plan owns sequencing and
-acceptance gates.
-
-## Deferred — sequenced to the NVIDIA/AMD backend timeline
+## Deferred — tiled SSD schedule design
 
 - **Tiled fused SSD (Mamba-2) as a Tile-IR schedule** — decided 2026-06-07,
   deferred. SSD is matmul-dominant by construction, so its fusion belongs at
@@ -107,8 +100,11 @@ acceptance gates.
   The current Apple `selective_ssm` (chunked-parallel, 3 MPS-`bmm` + host) stays
   as the functional reference; the naive per-channel Apple fused kernel is an
   explicit anti-pattern (loses the cross-channel gram sharing → slower than the
-  3-`bmm` path). Apple is the *executable validation backend* for the schedule;
-  NVIDIA/AMD lowerings inherit it. Full design + sequencing + acceptance criteria:
+  3-`bmm` path). The **tiled SSD schedule itself is not implemented on any
+  target**: existing x86/ROCm `selective_ssm` execution is evidence for those
+  existing lanes, not proof for this new schedule. Each eventual Apple, ROCm,
+  and NVIDIA lowering needs its own artifact, native-execution, and oracle proof.
+  Full design + sequencing + acceptance criteria:
   [`docs/architecture/proposals/tiled_ssd_tile_ir_schedule.md`](../../architecture/proposals/tiled_ssd_tile_ir_schedule.md).
 
 ## Source Material Consolidated

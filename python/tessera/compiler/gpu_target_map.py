@@ -146,7 +146,9 @@ def _runtime_proof_for_fixture(fixture: str | None) -> tuple[str, str]:
     return "", ""
 
 
-def _runtime_proof_for_entry(op_name: str, entry: object) -> tuple[str, str]:
+def _runtime_proof_for_entry(
+    op_name: str, entry: _bm.BackendKernelEntry,
+) -> tuple[str, str]:
     from . import execution_matrix as _em
 
     proof = _runtime_proof_for_fixture(entry.execute_compare_fixture)
@@ -207,9 +209,12 @@ def all_rocm_exact_rows() -> list[ROCmExactRow]:
     generic_ops = tuple(sorted(_cap.TARGET_CAPABILITIES["rocm"].supported_ops))
     rows: list[ROCmExactRow] = []
     for target in _ROCM_EXACT_TARGETS:
-        ops = generic_ops if target.target == "rocm_gfx1151" else tuple(sorted(
-            _cap.TARGET_CAPABILITIES.get(target.target).supported_ops
-            if target.target in _cap.TARGET_CAPABILITIES else ()))
+        capability = _cap.TARGET_CAPABILITIES.get(target.target)
+        ops = (
+            generic_ops
+            if target.target == "rocm_gfx1151"
+            else tuple(sorted(capability.supported_ops if capability is not None else ()))
+        )
         for op in ops:
             row = _rocm_exact_row(op, target)
             if row is not None:

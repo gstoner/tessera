@@ -905,17 +905,17 @@ def _execute_op(op_name: str, operands: Sequence[np.ndarray], kwargs: Mapping[st
         max_entries = kwargs.get("max_entries", kwargs.get("max_seq", None))
         return cache.prune(None if max_entries is None else int(max_entries))
     if op_name == "tessera.kv_cache.read":
-        cache = operands[0]
+        read_cache = operands[0]
         start = int(np.asarray(operands[1]).item())
         end = (
             int(np.asarray(operands[2]).item())
             if len(operands) > 2 else start + 1
         )
-        if hasattr(cache, "read"):
-            return cache.read(start, end)
-        if isinstance(cache, ReferenceKVCache):
-            keys = np.asarray(cache.keys[start:end])
-            values = np.asarray(cache.values[start:end])
+        if hasattr(read_cache, "read"):
+            return read_cache.read(start, end)
+        if isinstance(read_cache, ReferenceKVCache):
+            keys = np.asarray(read_cache.keys[start:end])
+            values = np.asarray(read_cache.values[start:end])
             return keys, values
         raise TypeError("kv_cache.read requires a cache object with read(start, end)")
     if op_name == "tessera.adam":

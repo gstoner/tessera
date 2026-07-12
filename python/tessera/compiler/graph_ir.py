@@ -22,12 +22,13 @@ Reference: CLAUDE.md §Four-Layer IR Stack — Graph IR
 
 from __future__ import annotations
 import ast
+import copy
 import inspect
 import json
 import re
 import textwrap
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from ..diagnostics import DiagnosticLevel, DiagnosticWhere, SourceLocation, TesseraDiagnostic, TesseraErrorCode
 from .legality import TensorContract, check_op_legality
@@ -2009,3 +2010,60 @@ def _shape_from_annotation(shape: Any) -> Tuple[Any, ...]:
     if any(item is Ellipsis for item in shape):
         return ("*",)
     return tuple("?" if item is None else item for item in shape)
+
+
+def specialize_module_from_values(
+    module: GraphIRModule,
+    values: Mapping[str, Any],
+) -> GraphIRModule:
+    """Return a copy of ``module`` specialized to concrete call values.
+
+    This is the first-call specialization seam for unannotated ``@jit``
+    functions. Argument tensor types come from concrete shapes/dtypes, then
+    result types are re-inferred in SSA order. The decoration-time symbolic
+    module is never mutated, so different shape signatures can coexist.
+    """
+    import numpy as np
+
+    out = copy.deepcopy(module)
+    for fn in out.functions:
+        env: Dict[str, IRType] = {}
+        for arg in fn.args:
+            value = values.get(arg.name)
+            if value is None:
+                env[f"%{arg.name}"] = arg.ir_type
+                continue
+            arr = np.asarray(value)
+            dtype = {
+                np.dtype(np.float16): "f16",
+                np.dtype(np.float32): "f32",
+                np.dtype(np.float64): "f64",
+                np.dtype(np.int32): "i32",
+                np.dtype(np.int64): "i64",
+                np.dtype(np.bool_): "i1",
+            }.get(arr.dtype)
+            if dtype is None:
+                raise TypeError(f"unsupported specialization dtype {arr.dtype}")
+            arg.ir_type = tensor_ir_type(tuple(int(d) for d in arr.shape), dtype)
+            arg.dim_names = tuple(str(int(d)) for d in arr.shape)
+            env[f"%{arg.name}"] = arg.ir_type
+
+        for op in fn.body:
+            operands = [
+                name if str(name).startswith("%") else f"%{name}"
+                for name in op.operands
+            ]
+            inferred = _infer_result_type(
+                op.op_name, [env.get(name, TENSOR_OPAQUE) for name in operands])
+            op.operand_types = [str(env.get(name, TENSOR_OPAQUE)) for name in operands]
+            op.inferred_type = inferred
+            op.result_type = str(inferred)
+            if op.result is not None:
+                result = op.result if op.result.startswith("%") else f"%{op.result}"
+                env[result] = inferred
+
+        fn.result_types = [
+            env.get(v if str(v).startswith("%") else f"%{v}", typ)
+            for v, typ in zip(fn.return_values, fn.result_types)
+        ]
+    return out

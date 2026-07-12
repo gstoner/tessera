@@ -86,6 +86,8 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                              "native sparse attention and PPO policy-loss variants "
                              "plus EBM quadratic energy/Langevin value kernels "
                              "when their Metal/MPSGraph executor probes are active)",
+    "cpu_autodiff_paired_llvm_jit": "Compiler-generated paired backward compiled "
+                             "through MLIR/LLVM and invoked through libtessera_jit",
     "apple_gpu_structured_compute_compiled": "Apple GPU structured-compute tail — "
                              "the conv family (conv1d / conv_transpose / "
                              "depthwise_conv1d) reaches an executable apple_gpu "
@@ -907,6 +909,37 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
 # to KNOWN_EXECUTORS, (3) adding an ExecutionRow here. `launch()` picks it up
 # automatically; the dashboard regenerates; the drift test enforces it.
 _MATRIX: dict[tuple[str, str], ExecutionRow] = {
+    ("cpu", "cpu_autodiff_matmul_llvm_jit"): ExecutionRow(
+        target="cpu", compiler_path="cpu_autodiff_matmul_llvm_jit",
+        execution_kind="native_cpu", executable=True,
+        executor_id="cpu_autodiff_paired_llvm_jit", runtime_status="success",
+        reason="First-call-specialized @jit paired matmul backward compiles "
+               "through tessera-opt and MLIR/LLVM, then launches through the "
+               "libtessera_jit packed C interface.",
+        execution_mode="mlir_llvm_jit", direction="backward", op_family="matmul",
+        device_proof="device_verified_jit", evidence_target="cpu_x86_64",
+        numerical_fixture="tests/unit/test_autodiff_native_cpu_vertical.py",
+        proof_build="llvm22-core+x86_64-jit"),
+    ("cpu", "cpu_autodiff_tanh_llvm_jit"): ExecutionRow(
+        target="cpu", compiler_path="cpu_autodiff_tanh_llvm_jit",
+        execution_kind="native_cpu", executable=True,
+        executor_id="cpu_autodiff_paired_llvm_jit", runtime_status="success",
+        reason="Compiler-generated tanh adjoint in the paired matmul activation "
+               "slice launches through MLIR/LLVM JIT and matches NumPy.",
+        execution_mode="mlir_llvm_jit", direction="backward", op_family="tanh",
+        device_proof="device_verified_jit", evidence_target="cpu_x86_64",
+        numerical_fixture="tests/unit/test_autodiff_native_cpu_vertical.py",
+        proof_build="llvm22-core+x86_64-jit"),
+    ("cpu", "cpu_autodiff_sigmoid_llvm_jit"): ExecutionRow(
+        target="cpu", compiler_path="cpu_autodiff_sigmoid_llvm_jit",
+        execution_kind="native_cpu", executable=True,
+        executor_id="cpu_autodiff_paired_llvm_jit", runtime_status="success",
+        reason="Compiler-generated sigmoid adjoint in the paired matmul activation "
+               "slice launches through MLIR/LLVM JIT and matches NumPy.",
+        execution_mode="mlir_llvm_jit", direction="backward", op_family="sigmoid",
+        device_proof="device_verified_jit", evidence_target="cpu_x86_64",
+        numerical_fixture="tests/unit/test_autodiff_native_cpu_vertical.py",
+        proof_build="llvm22-core+x86_64-jit"),
     # --- Apple Silicon CPU (Accelerate) ---
     ("apple_cpu", "apple_cpu_accelerate"): ExecutionRow(
         target="apple_cpu", compiler_path="apple_cpu_accelerate",
@@ -2726,7 +2759,15 @@ def has_native_backward(op_family: str, target: str) -> bool:
     verified = set(info["device_verified_jit"]) | set(info["device_verified_abi"])
     # Public requests still use family targets; exact proof labels are retained
     # in the ledger while this compatibility match resolves the runtime route.
-    return target in verified or any(t.startswith(f"{target}_") for t in verified)
+    if target in verified:
+        return True
+    # The ROCm public target currently resolves its device architecture at
+    # runtime; retain that established route. Generic CPU must not inherit an
+    # x86_64 proof at decoration time — it becomes proven only after launch.
+    return (
+        (target == "rocm" and any(t.startswith("rocm_") for t in verified))
+        or (target == "x86" and any(t.startswith("x86_") for t in verified))
+    )
 
 
 #: Stable CSV column order for the execution matrix — append-only.

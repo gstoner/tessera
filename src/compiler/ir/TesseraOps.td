@@ -1876,7 +1876,8 @@ def Tessera_DropoutOp : Op<Tessera_Dialect, "dropout", [MemoryEffects<[MemWrite]
 
 class Tessera_CollectiveOp<string mnemonic, string summaryText> : Op<
   Tessera_Dialect, mnemonic,
-  [MemoryEffects<[MemWrite]>]
+  [MemoryEffects<[MemWrite]>,
+   DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
 > {
   let summary = summaryText;
   let arguments = (ins TensorType:$x,

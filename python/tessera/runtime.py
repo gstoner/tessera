@@ -16591,6 +16591,7 @@ def _executor_table():
         "apple_gpu_matmul_family_compiled":
             _execute_apple_gpu_compiled_matmul_family,
         "native_cpu":           _execute_cpu_native_or_jit,
+        "cpu_autodiff_paired_llvm_jit": _execute_cpu_autodiff_paired,
         "jit_cpu_numpy":        _execute_jit_cpu_artifact,
         "rocm_wmma":            _execute_rocm_wmma_artifact,
         "rocm_compiled":        _execute_rocm_compiled_gemm,
@@ -17036,6 +17037,36 @@ def _execute_native_cpu_metadata(metadata: Mapping[str, Any], args: Any) -> Any:
 
 def _execute_native_cpu_artifact(artifact: RuntimeArtifact, args: Any) -> Any:
     return _execute_native_cpu_metadata(artifact.metadata or {}, args)
+
+
+def _execute_cpu_autodiff_paired(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Launch a compiler-generated paired backward via libtessera_jit.
+
+    Metadata owns the transformed MLIR, backward symbol, and output shapes.
+    No reference fallback is permitted on this executor.
+    """
+    import numpy as np
+    from . import _jit_boundary as jb
+
+    metadata = artifact.metadata or {}
+    mlir = metadata.get("paired_mlir")
+    symbol = metadata.get("backward_symbol")
+    shapes = metadata.get("output_shapes") or []
+    if not isinstance(mlir, str) or not mlir or not isinstance(symbol, str):
+        raise ValueError("paired autodiff artifact requires paired_mlir/backward_symbol")
+    inputs = [np.ascontiguousarray(np.asarray(value)) for value in args]
+    if not inputs or not shapes:
+        raise ValueError("paired autodiff artifact requires inputs and output_shapes")
+    outputs = [
+        np.empty(tuple(int(d) for d in shape), dtype=inputs[0].dtype)
+        for shape in shapes
+    ]
+    handle = jb.compile_module(mlir)
+    try:
+        jb.invoke(handle, symbol, inputs, outputs)
+    finally:
+        jb.destroy(handle)
+    return tuple(outputs)
 
 
 def _execute_jit_cpu_artifact(artifact: RuntimeArtifact, args: Any) -> Any:

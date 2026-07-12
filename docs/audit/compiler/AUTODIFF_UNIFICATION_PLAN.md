@@ -337,7 +337,7 @@ ABI lowering. The recompute-all cut recomputes forward intermediates the gradien
 doesn't need (e.g. the forward matmul in `@loss__bwd` is dead) — a follow-on
 canonicalize/DCE pass collapses them; correctness is unaffected.
 
-### Phase 3 — One complete CPU vertical slice  *(Task #4 — ✅ IR-oracle cut landed 2026-07-11)*
+### Phase 3 — One complete CPU vertical slice  *(Task #4 — ✅ native slice landed 2026-07-12)*
 **Goal:** prove the architecture before broadening coverage. Scope **only**:
 static tensors → `matmul` → `tanh`/`sigmoid` → reduction-to-scalar-loss →
 gradients for both inputs.
@@ -365,22 +365,14 @@ gradients for both inputs.
   tanh, sigmoid — with layernorm/softmax as placeholder round-trips. Read the
   generated ledger for live counts, Decision #26.)
 
-**Residual (not in this cut, honestly):**
-- **Native CPU execution** (LLVM lowering + runtime launch of `@f__bwd`) — that
-  is the runtime ABI binding, which is **Phase 4**; only then does the ledger's
-  `oracle_proven`/`runtime_bound` flip.
-- **Python `@jit` static-shape emission** — the front-end still emits shape-free
-  `tensor<*x?>` that `tessera-opt` won't parse (found in Phase 1). This slice
-  used hand-shaped forward MLIR; wiring example-arg shapes through Graph IR
-  emission so `@jit(autodiff="reverse")` round-trips is the remaining Phase 3
-  front-end task.
-
-**2026-07-12 reconciliation:** both residuals remain open, with one important
-qualification. Static `Tensor[...]` annotations already emit shaped Graph IR;
-what is missing is specialization from first-call/example argument shapes for an
-otherwise unannotated `@jit` function. Native x86 backward evidence currently
-covers the hand-written `selective_ssm` stable ABI, not compiler-generated
-`@f__bwd`; it therefore does not close this CPU vertical slice.
+**Residual closure (2026-07-12):** unannotated autodiff JIT functions now cache a
+concrete Graph-IR specialization per first-call dtype/shape signature. The actual
+`--tessera-autodiff-paired` output is compiled through MLIR/LLVM and launched as
+a multi-result function through `runtime.launch()` + `libtessera_jit`, with no
+NumPy fallback. `tests/unit/test_autodiff_native_cpu_vertical.py` proves tanh and
+sigmoid matmul gradients against independent formulas and asserts the native JIT
+invocation counter advances. The execution matrix and ledger credit only
+`cpu_x86_64`, with build `llvm22-core+x86_64-jit`.
 
 Original scope notes (retained):
 
@@ -419,10 +411,10 @@ unsupported / numerical-proof states for forward and backward **independently**,
 and the ledger's `runtime_bound` rung is sourced from the matrix, not asserted.
 
 ### Phase 5 — Expand by closed operation families  *(Task #6)*
-**Start gate:** do not promote broad families until the compiler-generated CPU
-`@f__bwd` path is runtime-bound and directly oracle-proven. Existing hand-written
-ROCm/x86 backward kernels remain valid independent Tier-3 proofs, but they do not
-prove that the Tier-1 paired-pass output executes.
+**Start gate met for the narrow matmul/tanh/sigmoid slice (2026-07-12):** the
+compiler-generated CPU `@f__bwd` path is runtime-bound and directly
+oracle-proven. Broader families still repeat this template independently;
+existing hand-written ROCm/x86 backward kernels remain separate Tier-3 proofs.
 
 Promotion order: (1) core tensor algebra (add/mul/broadcast/reductions/GEMM);
 (2) pointwise + normalization (tanh/sigmoid/GELU/SiLU/RMSNorm/layernorm);
@@ -445,6 +437,26 @@ execute-and-compare; add mixed precision / loss scaling only after accum +
 residual dtypes are explicit; add checkpointing / fused backward kernels only
 when benchmark evidence names the real bottleneck. The ledger's fwd/bwd split
 must prevent "forward native" from being reported as "training supported."
+
+**Foundation landed 2026-07-12:** the F5 collective ops now implement the
+compiler `AdjointInterface`: `all_reduce(sum)` is self-dual and
+`all_gather ↔ reduce_scatter` are transposes in the paired backward. This wires
+the existing DDP/FSDP semantics; it does not add new placement logic.
+`autodiff_promotion.py` makes the promotion boundary executable policy:
+
+- `mock_collective` is `reference_only`, never device-training proof;
+- NCCL/RCCL remain `hardware_gated` without an exact multi-device target and
+  numerical fixture;
+- a forward row always returns `forward_only`;
+- Apple GPU requires `execution_mode="metal_runtime"` from a fresh process;
+- ROCm requires `hip_runtime`; NVIDIA requires a CUDA execution mode;
+- every promoted row still requires canonical device proof, exact target,
+  fixture, and proof build.
+
+The remaining Phase-6 work is hardware execution, not policy ambiguity: land
+fresh-process Apple backward fixtures, exact NVIDIA backward rows family by
+family, and real multi-rank NCCL/RCCL collective fixtures. Mixed precision,
+checkpoint tuning, and fused backward promotion remain gated as ordered above.
 
 > **ROCm is the special case — its backward already runs (see §9).** gfx1151
 > executes native matmul/flash-attn/GQA/selective-ssm backward *today*, so the
@@ -495,7 +507,7 @@ must prevent "forward native" from being reported as "training supported."
 | 1 | 0 | Ledger projection + `AUTODIFF_SPEC` §F4 correction | Task #1 | ✅ |
 | 2 | 1 | Python differentiation request + diagnostics (backward `CompileResult` facet) | Task #2 | ✅ |
 | 3 | 2 | Paired forward/backward/residual IR contract | Task #3 | ✅ first cut |
-| 4 | 3 | Static CPU `matmul → tanh/sigmoid → loss` oracle proof | Task #4 | 🟡 IR-oracle cut (native exec → P4; `@jit` static-shape emission remains) |
+| 4 | 3 | Static CPU `matmul → tanh/sigmoid → loss` oracle proof | Task #4 | ✅ first-call specialization + paired MLIR/LLVM runtime launch + direct oracle proof |
 | 5 | 4 | Runtime ABI binding + backward matrix column + `native_required` enforcement | Task #5 | ✅ A2+A3 (A1 → Phase 5) |
 
 **Next up: Phase 5 (Task #6)** — expand by closed operation families; the first
@@ -516,7 +528,7 @@ once Phase 0 lands.
 | 0 | Ledger projection + spec correction (F4 smoke build-verified) | ✅ landed 2026-07-11 |
 | 1 | `@jit(autodiff=…)` request + backward provenance | ✅ landed 2026-07-11 |
 | 2 | Paired fwd/bwd/residual contract (`--tessera-autodiff-paired`, recompute-all) | ✅ first cut landed 2026-07-11 |
-| 3 | matmul→tanh/sigmoid→loss — backward IR oracle-proven on CPU (interpreted) | 🟡 IR-oracle cut landed 2026-07-11 (native execution → Phase 4; `@jit` static-shape emission remains) |
+| 3 | matmul→tanh/sigmoid→loss — backward native on CPU | ✅ paired-pass output launches through MLIR/LLVM JIT on `cpu_x86_64`; direct gradient oracle proof landed 2026-07-12 |
 | 4 | Compiled backward bound to runtime ABI (ROCm first) | ✅ **exit met** 2026-07-11 via A2+A3; evidence model hardened 2026-07-12 (matrix backward rows now distinguish `runtime_bound`, exact-target `device_verified_jit`, and `device_verified_abi`; `CompileResult.backward` truthful + `native_required` honored for verified paths). A1 arbiter dispatch deferred to Phase 5 |
 
 Per-family × per-target rung truth is now the **generated ledger**, not a hand

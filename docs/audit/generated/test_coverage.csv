@@ -9,8 +9,8 @@ adaptive_pool,6,0,0,6,0,,directly_tested,6 direct test references
 add,113,29,10,142,0,bf16 f16 f32 f64 fp16 fp32,directly_tested,142 direct test references
 add_decoupled_weight_decay,2,0,0,2,0,,directly_tested,2 direct test references
 alibi,5,0,0,5,0,bf16 f16 f32,directly_tested,5 direct test references
-all_gather,1,5,0,6,0,fp32,directly_tested,6 direct test references
-all_reduce,7,3,1,10,0,f32 fp32 fp8_e4m3 int8,directly_tested,10 direct test references
+all_gather,2,5,0,7,0,fp32,directly_tested,7 direct test references
+all_reduce,8,3,1,11,0,f32 fp32 fp8_e4m3 int8,directly_tested,11 direct test references
 all_to_all,3,0,0,3,0,fp32,directly_tested,3 direct test references
 amax,5,0,0,5,0,bf16 f32,directly_tested,5 direct test references
 amin,5,0,0,5,0,bf16 f32,directly_tested,5 direct test references
@@ -182,7 +182,7 @@ factorized_matmul,6,0,1,6,0,,directly_tested,6 direct test references
 factorized_pos_emb,12,0,1,12,0,fp16,directly_tested,12 direct test references
 fake_quantize,6,0,1,6,0,,directly_tested,6 direct test references
 fft,17,2,0,19,0,f32 fp32,directly_tested,19 direct test references
-flash_attn,108,57,7,165,0,bf16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,165 direct test references
+flash_attn,109,57,7,166,0,bf16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,166 direct test references
 flatten,5,5,0,10,0,,directly_tested,10 direct test references
 flip,5,0,0,5,0,,directly_tested,5 direct test references
 floor,5,0,1,5,0,bf16 f32 fp32,directly_tested,5 direct test references
@@ -267,7 +267,7 @@ map,0,0,0,0,1,,structural_only,category default for 'control_flow'
 masked_categorical,10,0,0,10,0,,directly_tested,10 direct test references
 masked_fill,10,0,0,10,0,fp16 fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,10 direct test references
 masked_scatter,14,0,1,14,0,fp16,directly_tested,14 direct test references
-matmul,416,230,18,646,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,646 direct test references
+matmul,418,230,18,648,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,648 direct test references
 max,6,0,2,6,0,bf16 f32,directly_tested,6 direct test references
 max_pool,6,0,0,6,0,,directly_tested,6 direct test references
 maximum,9,0,2,9,0,bf16 f32,directly_tested,9 direct test references
@@ -349,7 +349,7 @@ quantized_matmul,5,0,0,5,0,f16,directly_tested,5 direct test references
 rearrange,8,0,0,8,0,fp16,directly_tested,8 direct test references
 reciprocal,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 reduce,88,2,7,90,0,f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,90 direct test references
-reduce_scatter,0,10,0,10,0,,directly_tested,10 direct test references
+reduce_scatter,1,10,0,11,0,,directly_tested,11 direct test references
 relu,109,34,9,143,0,bf16 f16 f32 f64 fp32 fp8_e4m3 int8,directly_tested,143 direct test references
 remat,0,0,0,0,1,,structural_only,category default for 'transform'
 repeat,4,0,0,4,0,,directly_tested,4 direct test references
@@ -401,7 +401,7 @@ seq2seq_loss,7,0,0,7,0,,directly_tested,7 direct test references
 sgd,12,0,0,12,0,,directly_tested,12 direct test references
 shard_map,0,0,0,0,1,,structural_only,category default for 'sharding'
 sharded_dataset,2,0,0,2,0,,directly_tested,2 direct test references
-sigmoid,7,5,0,12,0,bf16 f16 f32 fp32,directly_tested,12 direct test references
+sigmoid,8,5,0,13,0,bf16 f16 f32 fp32,directly_tested,13 direct test references
 sigmoid_safe,6,0,0,6,0,,directly_tested,6 direct test references
 sign,5,0,1,5,0,bf16 f32,directly_tested,5 direct test references
 silu,85,6,5,91,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,91 direct test references
@@ -442,7 +442,7 @@ svd,11,5,0,16,0,bf16 f16 f32 fp16 fp32,directly_tested,16 direct test references
 switch,0,0,0,0,1,,structural_only,category default for 'control_flow'
 take,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 tan,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
-tanh,9,6,1,15,0,bf16 f16 f32,directly_tested,15 direct test references
+tanh,10,6,1,16,0,bf16 f16 f32,directly_tested,16 direct test references
 target_verify,3,5,1,8,0,,directly_tested,8 direct test references
 tile,4,0,0,4,0,,directly_tested,4 direct test references
 tile_view,6,0,0,6,0,fp16,directly_tested,6 direct test references

@@ -37,7 +37,10 @@ def test_native_and_placeholder_adjoints_are_disjoint_and_grounded() -> None:
     # This pins the classifier against the regression where LayerNormOp /
     # SoftmaxOp (hand-written defs that emit a `CustomAdjointCallOp` placeholder)
     # were miscounted as native merely because they had explicit definitions.
-    assert native == {"matmul", "tanh", "sigmoid"}, (
+    assert native == {
+        "matmul", "tanh", "sigmoid",
+        "all_reduce", "all_gather", "reduce_scatter",
+    }, (
         f"native adjoint set drifted: {sorted(native)} — a buildAdjoint that "
         "emits a CustomAdjointCallOp is a Python round-trip, not native"
     )
@@ -45,6 +48,7 @@ def test_native_and_placeholder_adjoints_are_disjoint_and_grounded() -> None:
     # runtime VJP string ("layer_norm"/"softmax") so they land on the primitive.
     assert {"layer_norm", "softmax", "gelu", "relu"} <= placeholder
     assert not ({"layer_norm", "softmax", "gelu", "relu"} & native)
+    assert {"all_reduce", "all_gather", "reduce_scatter"} <= native
 
 
 def test_rows_are_consistent() -> None:

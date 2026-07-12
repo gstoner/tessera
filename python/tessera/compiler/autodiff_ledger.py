@@ -51,7 +51,7 @@ _ADJOINT_CPP = _REPO_ROOT / "src" / "compiler" / "ir" / "AdjointInterface.cpp"
 # sync with the runtime execution matrix's target set; the ledger reports which
 # of these may reach each backward proof axis.
 _TARGETS: tuple[str, ...] = (
-    "cpu", "x86_avx512", "apple_cpu", "apple_gpu", "rocm_gfx1151",
+    "cpu", "cpu_x86_64", "x86_avx512", "apple_cpu", "apple_gpu", "rocm_gfx1151",
     "nvidia_sm80", "nvidia_sm90", "nvidia_sm100", "nvidia_sm120",
 )
 
@@ -128,6 +128,11 @@ def _buildadjoint_body(text: str, sig_start: int) -> str:
     return text[open_brace:]  # unbalanced — return the tail, caller still safe
 
 
+def _cpp_op_family(name: str) -> str:
+    """Convert an ODS C++ op stem (``AllReduce``) to ``all_reduce``."""
+    return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
+
+
 def _ir_adjoint_classes() -> tuple[frozenset[str], frozenset[str]]:
     """Return ``(native_keys, placeholder_keys)`` parsed from the C++ source.
 
@@ -154,7 +159,7 @@ def _ir_adjoint_classes() -> tuple[frozenset[str], frozenset[str]]:
             keym = _GETSTRINGATTR_RE.search(body)
             placeholder.add(keym.group(1) if keym else name.lower())
         else:
-            native.add(name.lower())
+            native.add(_cpp_op_family(name))
     # A native op must never also be counted as placeholder.
     placeholder -= native
     if not native and not placeholder:
@@ -223,7 +228,11 @@ def collect_rows() -> list[LedgerRow]:
         keys = _match_keys(cov)
         if keys & native:
             ir_adjoint = "native"
-            notes = "native static-shape adjoint (W5); dynamic → placeholder"
+            notes = (
+                "native static-shape adjoint (W5); dynamic → placeholder"
+                if name in {"matmul", "tanh", "sigmoid"}
+                else "native compiler adjoint"
+            )
         elif keys & placeholder:
             ir_adjoint = "placeholder"
             notes = "custom_adjoint_call → Python VJP (not native IR)"

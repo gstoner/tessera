@@ -33,6 +33,41 @@ namespace tessera {
 namespace tessera {
 
 // ─────────────────────────────────────────────────────────────────────────────
+// F5 collectives. These are the IR counterparts of the existing DDP/FSDP VJPs:
+// all-reduce(sum) is self-dual; all-gather and reduce-scatter are transposes.
+// The paired pass only wires the existing collective semantics — it does not
+// invent placement or communication insertion policy.
+// ─────────────────────────────────────────────────────────────────────────────
+
+llvm::SmallVector<mlir::Value> AllReduceOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  if (outputCotangents.size() != 1 || !outputCotangents[0])
+    return {mlir::Value()};
+  auto grad = builder.create<AllReduceOp>(
+      getLoc(), getX().getType(), outputCotangents[0], getAxisAttr(), getOpAttr());
+  return {grad.getY()};
+}
+
+llvm::SmallVector<mlir::Value> AllGatherOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  if (outputCotangents.size() != 1 || !outputCotangents[0])
+    return {mlir::Value()};
+  auto grad = builder.create<ReduceScatterOp>(
+      getLoc(), getX().getType(), outputCotangents[0], getAxisAttr(),
+      builder.getStringAttr("sum"));
+  return {grad.getY()};
+}
+
+llvm::SmallVector<mlir::Value> ReduceScatterOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  if (outputCotangents.size() != 1 || !outputCotangents[0])
+    return {mlir::Value()};
+  auto grad = builder.create<AllGatherOp>(
+      getLoc(), getX().getType(), outputCotangents[0], getAxisAttr(), getOpAttr());
+  return {grad.getY()};
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // MatmulOp
 //
 // Forward:  C = A @ B

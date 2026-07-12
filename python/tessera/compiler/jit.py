@@ -441,6 +441,8 @@ class JitFn:
         # GEMM hot-path is dominated by metadata dict construction + the
         # SHA-256 over the artifact JSON inside `RuntimeArtifact.artifact_hash`.
         self._cached_artifact: Optional["RuntimeArtifact"] = None
+        self._autodiff_specializations: Dict[Any, GraphIRModule] = {}
+        self.last_backward_execution: Optional[Dict[str, Any]] = None
         functools.update_wrapper(self, fn)
 
     # PK8a (2026-06-02) — Graph IR → `.mtlpackage` AOT emission.
@@ -640,6 +642,8 @@ class JitFn:
         the active sink (no-op when no sink is active).
         """
         self._enforce_call_time_constraints(args, kwargs)
+        if self.differentiation_request is not None:
+            self._specialized_autodiff_module(args, kwargs)
         try:
             # Phase-F F5 — surgical tracer dispatch (supersedes the AST bridge).
             # ONLY control-flow apple_gpu functions route through the tracer; pure
@@ -764,6 +768,176 @@ class JitFn:
         # ConstraintSolver.check raises TesseraConstraintError on violation.
         self.constraints.check(resolved)
         cache.add(cache_key)
+
+    def _specialized_autodiff_module(
+        self, args: Tuple[Any, ...], kwargs: Dict[str, Any]
+    ) -> GraphIRModule:
+        """Specialize an autodiff Graph IR module from concrete call values.
+
+        The decoration-time module remains symbolic. One immutable specialized
+        copy is cached per dtype/shape signature and is the input to the paired
+        compiler path.
+        """
+        import numpy as np
+        from .graph_ir import specialize_module_from_values
+
+        ordered = self._ordered_inputs(args, kwargs)
+        if ordered is None or len(ordered) != len(self.arg_names):
+            raise TesseraJitError("autodiff specialization requires every argument")
+        signature = tuple(
+            (str(np.asarray(value).dtype), tuple(int(d) for d in np.asarray(value).shape))
+            for value in ordered
+        )
+        cached = self._autodiff_specializations.get(signature)
+        if cached is not None:
+            return cached
+        values = dict(zip(self.arg_names, ordered))
+        specialized = specialize_module_from_values(self.graph_ir, values)
+        self._autodiff_specializations[signature] = specialized
+        return specialized
+
+    def specialized_autodiff_ir(self, *args: Any, **kwargs: Any) -> str:
+        """Concrete Graph IR used for this autodiff call signature."""
+        if self.differentiation_request is None:
+            raise TesseraJitError("specialized_autodiff_ir requires autodiff=...")
+        return self._specialized_autodiff_module(args, kwargs).to_mlir()
+
+    def native_backward(
+        self, *args: Any, out_cotangents: Any, **kwargs: Any
+    ) -> tuple[Any, ...]:
+        """Compile and launch the paired-pass backward through LLVM JIT on CPU.
+
+        There is no NumPy fallback: missing tools, unsupported lowering, or ABI
+        failure raises. Successful execution records the exact compiler path
+        and invocation delta in ``last_backward_execution``.
+        """
+        if self.differentiation_request is None:
+            raise TesseraJitError("native_backward requires @jit(autodiff=...)")
+        target_kind = normalize_target_kind(self.target)
+        if target_kind == "rocm":
+            return self._native_rocm_backward(
+                args, kwargs, out_cotangents=out_cotangents)
+        if target_kind != "cpu":
+            raise TesseraJitError(
+                "native_backward currently supports target='cpu' or verified ROCm lanes")
+
+        import numpy as np
+        import re
+        import subprocess
+        from .. import _jit_boundary as _jb
+
+        ordered = self._ordered_inputs(args, kwargs)
+        if ordered is None:
+            raise TesseraJitError("native_backward requires every forward argument")
+        inputs = [np.ascontiguousarray(np.asarray(value)) for value in ordered]
+        cots = out_cotangents if isinstance(out_cotangents, (tuple, list)) \
+            else (out_cotangents,)
+        cotangents = [np.ascontiguousarray(np.asarray(value)) for value in cots]
+        module = self._specialized_autodiff_module(args, kwargs)
+        opt = _jb._find_tessera_opt()
+        if opt is None:
+            raise TesseraJitError("tessera-opt not built; cannot emit paired backward")
+        # GraphIR's human-facing printer uses ``tessera.op(%args)`` while the
+        # native MLIR parser accepts either registered custom syntax or generic
+        # quoted operations. Use generic form here so every Graph op takes the
+        # same parse-stable front door into tessera-opt.
+        graph_text = re.sub(
+            r"=\s+(tessera\.[A-Za-z0-9_.]+)\(", r'= "\1"(', module.to_mlir())
+        transformed = subprocess.run(
+            [str(opt), "--tessera-autodiff-paired", "/dev/stdin"],
+            input=graph_text, capture_output=True, text=True, timeout=60,
+        )
+        if transformed.returncode != 0:
+            raise TesseraJitError(
+                "paired autodiff transform failed: " + transformed.stderr.strip())
+
+        from tessera.runtime import RuntimeArtifact, launch
+
+        compiler_path = "cpu_autodiff_matmul_llvm_jit"
+        artifact = RuntimeArtifact(metadata={
+            "target": "cpu",
+            "compiler_path": compiler_path,
+            "executable": True,
+            "execution_kind": "native_cpu",
+            "execution_mode": "mlir_llvm_jit",
+            "paired_mlir": transformed.stdout,
+            "backward_symbol": self.graph_ir.functions[0].name + "__bwd",
+            "output_shapes": [list(value.shape) for value in inputs],
+        })
+        before = _jb.invocation_count()
+        result = launch(artifact, tuple([*inputs, *cotangents]))
+        if not result.get("ok"):
+            raise TesseraJitError(
+                "native backward runtime launch failed: " + str(result.get("reason")))
+        after = _jb.invocation_count()
+        if after <= before:
+            raise TesseraJitError("native backward invocation counter did not advance")
+        self.last_backward_execution = {
+            "compiler_path": compiler_path,
+            "execution_kind": "native_cpu",
+            "execution_mode": "mlir_llvm_jit",
+            "invocation_delta": after - before,
+        }
+        return tuple(result["output"])
+
+    def _native_rocm_backward(
+        self,
+        args: Tuple[Any, ...],
+        kwargs: Dict[str, Any],
+        *,
+        out_cotangents: Any,
+    ) -> tuple[Any, ...]:
+        """Bind the paired backward contract to existing verified ROCm lanes."""
+        import numpy as np
+        from tessera.runtime import RuntimeArtifact, launch
+
+        ordered = self._ordered_inputs(args, kwargs)
+        if ordered is None:
+            raise TesseraJitError("ROCm native backward requires every forward argument")
+        inputs = [np.ascontiguousarray(np.asarray(value)) for value in ordered]
+        cots = out_cotangents if isinstance(out_cotangents, (tuple, list)) \
+            else (out_cotangents,)
+        cotangents = [np.ascontiguousarray(np.asarray(value)) for value in cots]
+        graph_ops = [op for fn in self.graph_ir.functions for op in fn.body]
+        ops = {op.op_name.removeprefix("tessera.") for op in graph_ops}
+
+        if ops & {"flash_attn", "multi_head_attention", "gqa_attention", "mqa_attention"}:
+            path = "rocm_flash_attn_bwd_compiled"
+            op_name = "tessera.flash_attn_bwd"
+            launch_args = [*cotangents, *inputs]
+            source_op = next(op for op in graph_ops if op.op_name.removeprefix("tessera.") in
+                             {"flash_attn", "multi_head_attention", "gqa_attention", "mqa_attention"})
+            op_kwargs = dict(source_op.kwargs)
+        elif "selective_ssm" in ops:
+            path = "rocm_selective_ssm_bwd_compiled"
+            op_name = "tessera.selective_ssm_bwd"
+            launch_args = [*cotangents, *inputs]
+            op_kwargs = {}
+        else:
+            raise TesseraJitError(
+                f"no verified ROCm paired backward candidate for ops {sorted(ops)}")
+
+        names = [f"arg{i}" for i in range(len(launch_args))]
+        artifact = RuntimeArtifact(metadata={
+            "target": "rocm", "compiler_path": path,
+            "executable": True, "execution_kind": "native_gpu",
+            "execution_mode": "hip_runtime", "arg_names": names,
+            "output_name": "grads",
+            "ops": [{"op_name": op_name, "result": "grads",
+                     "operands": names, "kwargs": op_kwargs}],
+        })
+        result = launch(artifact, tuple(launch_args))
+        if not result.get("ok") or result.get("execution_mode") != "hip_runtime":
+            raise TesseraJitError(
+                "verified ROCm backward launch failed: " + str(result.get("reason")))
+        self.last_backward_execution = {
+            "compiler_path": path,
+            "execution_kind": "native_gpu",
+            "execution_mode": "hip_runtime",
+            "evidence_target": "rocm_gfx1151",
+        }
+        output = result["output"]
+        return tuple(output) if isinstance(output, (tuple, list)) else (output,)
 
     def _try_tessera_jit_call(self, args: Tuple[Any, ...],
                               kwargs: Dict[str, Any]) -> Any:

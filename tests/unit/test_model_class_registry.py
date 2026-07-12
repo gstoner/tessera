@@ -57,7 +57,7 @@ def test_dequant_grouped_gemm_grouped_layout_attached():
     e = pc.all_primitive_coverages()["dequant_grouped_gemm"]
     assert e.metadata["grouped_layout"]["kind"] == "contiguous"
     # structural grouped op — VJP/JVP are not a single-array rule
-    assert e.contract_status["vjp"] == "not_applicable"
+    assert e.contract_status["vjp"] == "non_differentiable"
 
 
 def test_ops_callable_matches_stdlib():

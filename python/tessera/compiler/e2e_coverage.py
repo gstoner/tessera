@@ -97,7 +97,9 @@ class E2ECoverageRow:
 # the logic reads top-to-bottom without magic strings.
 
 _AXIS_REAL_API_FRONTEND = frozenset({"public"})
-_AXIS_REAL_GRAPH_IR = frozenset({"registered", "not_applicable"})
+_AXIS_REAL_GRAPH_IR = frozenset({
+    "registered", "host_materialized", "runtime_only", "not_applicable",
+})
 _AXIS_NATIVE_LOWERING = frozenset({
     "complete",
     "fused",

@@ -248,8 +248,8 @@ def test_coverage_contract_axes():
     assert sa.contract_status["backend_kernel"] == "partial"
 
     sel = coverage_for("msa_select_blocks")
-    assert sel.contract_status["vjp"] == "not_applicable"
-    assert sel.contract_status["jvp"] == "not_applicable"
+    assert sel.contract_status["vjp"] == "non_differentiable"
+    assert sel.contract_status["jvp"] == "non_differentiable"
 
     idx = coverage_for("msa_index_scores")
     assert idx.contract_status["vjp"] == "complete"

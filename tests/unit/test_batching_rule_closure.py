@@ -105,6 +105,6 @@ def test_nonlinear_primitives_have_transpose_not_applicable():
         "moe",
         "max_pool", "min_pool", "adaptive_pool",
     ):
-        assert _tr(name) == "not_applicable", (
-            f"{name} transpose_rule should be not_applicable (nonlinear)"
+        assert _tr(name) == "no_linear_transpose", (
+            f"{name} transpose_rule should be no_linear_transpose (nonlinear)"
         )

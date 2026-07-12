@@ -237,6 +237,9 @@ _NVIDIA_ARTIFACT = (
     "tessera.gated_deltanet", "tessera.kimi_delta_attention",
     "tessera.modified_delta_attention", "tessera.gated_attention",
     "tessera.hybrid_attention",
+    # Structured CUDA-kernel Target IR contracts. These are artifact-only:
+    # lowering/verification is hardware-free; execution remains gated.
+    "tessera.conv2d_nhwc", "tessera.kv_cache.read",
     # Normalization / activation / position encoding
     "tessera.layer_norm", "tessera.rmsnorm", "tessera.rmsnorm_safe",
     "tessera.softmax", "tessera.softmax_safe", "tessera.online_softmax",

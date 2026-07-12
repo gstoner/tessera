@@ -105,9 +105,9 @@ def test_wrapper_ops_are_catalogued_and_public():
 def test_kv_cache_mutations_are_not_differentiable_contracts():
     for name in ["kv_cache_append", "kv_cache_prune"]:
         entry = coverage_for(name)
-        assert entry.contract_status["vjp"] == "not_applicable"
-        assert entry.contract_status["jvp"] == "not_applicable"
-        assert entry.contract_status["transpose_rule"] == "not_applicable"
+        assert entry.contract_status["vjp"] == "non_differentiable"
+        assert entry.contract_status["jvp"] == "non_differentiable"
+        assert entry.contract_status["transpose_rule"] == "no_linear_transpose"
 
 
 def test_normal_lowering_pipelines_run_attention_fusions_before_backend_lowering():

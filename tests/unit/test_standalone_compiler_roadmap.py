@@ -163,16 +163,51 @@ def test_primitive_coverage_promotes_memory_primitives_from_planned():
     assert memory_write.status == "partial"
     assert "Titans/Atlas" in memory_write.model_families
     # Sprint B (2026-05-11): memory primitives are Python-runtime by
-    # design (tessera.memory.memory_read/write/evict have explicit
-    # semantics but no dedicated Graph IR op).  graph_ir_lowering
-    # flipped stub_required → not_applicable.
-    assert memory_write.metadata["graph_ir_lowering"] == "not_applicable"
+    # design (tessera.memory.memory_read/write/evict have explicit semantics
+    # but no dedicated Graph IR op). The precise disposition is runtime_only.
+    assert memory_write.metadata["graph_ir_lowering"] == "runtime_only"
     assert memory_write.metadata["backend_kernel"] == "reference_only"
 
 
 def test_primitive_coverage_contract_fields_are_complete_for_every_entry():
     for entry in all_primitive_coverages().values():
         assert set(entry.contract_status) == set(CONTRACT_FIELDS)
+
+
+def test_contract_axes_use_explicit_by_design_descriptors_not_generic_na():
+    for entry in all_primitive_coverages().values():
+        assert "not_applicable" not in entry.contract_status.values(), entry.name
+
+
+def test_graph_ir_classifier_has_no_false_missing_or_stub_rows():
+    entries = all_primitive_coverages()
+    states = {name: entry.metadata.get("graph_ir_lowering")
+              for name, entry in entries.items()}
+    assert "missing" not in states.values()
+    assert "stub_required" not in states.values()
+    for name in ("clifford_geometric_product", "ebm_energy_quadratic",
+                 "image_resize", "interpolate", "edm_precondition"):
+        assert states[name] == "registered"
+    for name in ("karras_sigma_schedule", "equiprob_band_partition"):
+        assert states[name] == "host_materialized"
+
+
+def test_graph_ir_dispositions_do_not_use_ambiguous_not_applicable():
+    entries = all_primitive_coverages()
+    states = {entry.metadata.get("graph_ir_lowering")
+              for entry in entries.values()}
+    assert "not_applicable" not in states
+    assert states <= {"registered", "host_materialized", "runtime_only"}
+
+
+def test_speculative_and_varlen_contracts_are_semantically_hardened():
+    entries = all_primitive_coverages()
+    for name in ("spec_accept", "spec_accept_sample",
+                 "spec_accept_tree_sample", "target_verify", "varlen_sdpa"):
+        contract = entries[name].contract_status
+        for axis in ("math_semantics", "shape_rule", "dtype_layout_rule",
+                     "tests"):
+            assert contract[axis] == "complete", (name, axis, contract[axis])
 
 
 def test_primitive_coverage_family_queries_and_summary():
@@ -351,8 +386,8 @@ def test_primitive_coverage_includes_s15_data_pipeline_and_tokenizers():
                  "tokenizer_unigram", "tokenizer_sentencepiece_compat"):
         assert name in entries, f"S15 tokenizer missing: {name}"
         assert entries[name].existing_op
-        assert entries[name].contract_status["vjp"] == "not_applicable"
-        assert entries[name].contract_status["jvp"] == "not_applicable"
+        assert entries[name].contract_status["vjp"] == "non_differentiable"
+        assert entries[name].contract_status["jvp"] == "non_differentiable"
 
 
 def test_remaining_data_pipeline_gaps_stay_planned():

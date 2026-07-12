@@ -2,7 +2,7 @@
 status: Informative
 classification: Audit Dashboard
 authority: Companion dashboard for `docs/audit/roadmap/ROADMAP_AUDIT.md` S1
-last_updated: 2026-05-18 (status language refreshed)
+last_updated: 2026-07-12 (registry actions reconciled)
 ---
 
 # Standalone Primitive Coverage
@@ -140,10 +140,10 @@ the high-risk S1 entries and milestone sentinels. Tests compare these rows to
 | `matmul` | loop_nest | partial | yes | registered | partial | backend_kernel | - |
 | `permute` | tensor_algebra | partial | yes | registered | partial | backend_kernel | - |
 | `collective_permute` | collective | partial | yes | registered | reference_only | backend_kernel | all |
-| `scan` | control_flow | partial | yes | not_applicable | reference_only | - | all |
+| `scan` | control_flow | partial | yes | registered | reference_only | - | all |
 | `selective_ssm` | state_space | partial | yes | registered | partial | sharding_rule, backend_kernel | Mamba/SSM |
-| `dataset_map` | data | partial | yes | not_applicable | reference_only | - | all |
-| `tokenizer_bpe` | tokenizer | partial | yes | not_applicable | reference_only | - | all |
+| `dataset_map` | data | partial | yes | runtime_only | reference_only | - | all |
+| `tokenizer_bpe` | tokenizer | partial | yes | runtime_only | reference_only | - | all |
 <!-- END GENERATED PRIMITIVE COVERAGE SNAPSHOT -->
 
 Regenerate/check the full table programmatically with:
@@ -156,28 +156,36 @@ print(render_markdown())
 
 ## Open Gap Plan
 
-The next work is contract hardening, not broad name collection:
+The broad contract/lowering pass is closed. Current registry truth across 480
+primitives is:
 
-- **Contract hardening:** promote math semantics, shape rules, and dtype/layout
-  rules for high-use S2, S5, S7, S10, and S11 primitives. The first focused
-  semantic pass now covers `conv1d`, `linear_general`, `sgd`, data/tokenizer
-  declarations, reduction aliases, memory primitives, core S11 losses,
-  minimum optimizers, and modern attention-family wrappers.
-- **Transform coverage:** close VJP/JVP, batching, transpose, and sharding gaps
-  starting with reductions, model layers, losses, `memory_read`, scans, and
-  collectives. Focused passes now cover `linear_general`, `sgd`, core
-  differentiable S11 losses, `memory_read`, `cummax`/`cummin`, RoPE/MLA/NSA,
-  quantization STE, MoE dispatch/combine, optimizers, and reasoning RL losses.
-- **Lowering gates:** convert `stub_required` S5-S15 Python-reference
-  primitives into real Graph IR lowering paths. The first focused pass now
-  registers Graph IR names for `linear_general`, `sgd`, core S11 losses,
-  optimizer ops, attention-family wrappers, quantization, MoE transport, and
-  RL helpers.
-- **Backend gates:** distinguish CPU-reference behavior, Graph IR-lowered
-  behavior, and backend-kernel-ready behavior for each primitive group. The
-  major remaining reasoning-model gap is fused backend kernels for MLA, Native
-  Sparse Attention, Lightning, Delta/Kimi recurrence, and optimizer steps.
-- **Memory architecture:** extend `memory_read`, `memory_write`, and
-  `memory_evict` with sharded layout rules, batching-axis overrides, and a
-  persistent memory state ABI; differentiable `memory_read` VJP/JVP is now
-  present, while mutation-style writes/evictions remain state effects.
+- **Semantics and basic transforms:** math, shape, dtype/layout, batching,
+  transpose, lowering, effect/masking, and tests have zero open rows. The five
+  late speculative/packed-attention entries (`spec_accept`, sampled/tree
+  variants, `target_verify`, and `varlen_sdpa`) now carry explicit semantics,
+  ODS verifier coverage, and focused tests.
+- **Graph IR lowering metadata:** **425 registered / 10 host-materialized / 45
+  runtime-only / 0 stub-required / 0 missing**. Clifford and EBM dialect/decomposition rows are
+  registered; image preprocessing and EDM conditioning lower compositionally;
+  scalar diffusion schedule constructors are explicitly `host_materialized`.
+- **Autodiff frontier:** 29 VJP and 30 JVP rows remain planned. These are
+  concentrated in visual-complex/conformal maps, solver helpers, EDM scalars,
+  cache transactions, `moe_swiglu_block`, `score_combine`, and `varlen_sdpa`.
+  Add rules only with numerical derivative tests; discrete verification ops
+  are explicitly non-differentiable rather than left planned.
+- **Sharding frontier:** 43 rows remain partial. Priority groups are
+  reasoning/sparse attention and MoE transport, state-space recurrence,
+  spectral transforms, sparse COO, and linear-algebra solver/decomposition
+  operations. Promotion requires mock-mesh execute/compare evidence or real
+  multi-device proof; backend availability alone is insufficient.
+- **Backend frontier:** the legacy aggregate axis remains 372 partial, 9
+  planned, and 99 `no_kernel_required`. Readiness decisions must use per-target
+  `backend_manifest` entries and the op×target proof ladder in
+  `op_target_conformance.md`; the aggregate axis is not permission to claim a
+  universal kernel. Reasoning-model fused kernels and optimizer steps remain
+  important performance work, but several already have executing CPU/x86 or
+  ROCm lanes and must be reported per target.
+- **Memory architecture:** closed for the current contract. `memory_read`,
+  `memory_write`, and `memory_evict` have batching and sharding rules plus the
+  persistent state ABI. `memory_read` is differentiable; writes and evictions
+  remain intentionally stateful/non-differentiable.

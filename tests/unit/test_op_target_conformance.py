@@ -173,3 +173,17 @@ def test_compose_only_chain_is_marked_compose():
             f"{cell.target}: matmul_relu should be marked compose-only, "
             f"got notes={cell.notes}"
         )
+
+
+def test_host_x86_cpu_and_rocm_rows_are_closed():
+    """Every in-scope host CPU and ROCm program has full proof.
+
+    Multi-op rows may be sequential compositions; fusion is a performance
+    property and must not demote end-to-end conformance when every component
+    compiles, executes, and has a declared numerical fixture.
+    """
+    open_cells = [
+        cell for cell in cm.build_matrix()
+        if cell.target in {"cpu", "rocm"} and cell.overall != cm.PROOF_COMPLETE
+    ]
+    assert open_cells == []

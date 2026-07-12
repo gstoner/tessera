@@ -65,8 +65,8 @@ def test_registry_contract_status():
     # non-differentiable trio
     for n in ("count_nonzero", "popcount", "masked_categorical"):
         cs = reg[n].contract_status
-        assert cs.get("vjp") == "not_applicable", (n, cs.get("vjp"))
-        assert cs.get("jvp") == "not_applicable", (n, cs.get("jvp"))
+        assert cs.get("vjp") == "non_differentiable", (n, cs.get("vjp"))
+        assert cs.get("jvp") == "non_differentiable", (n, cs.get("jvp"))
     # differentiable loss
     cs = reg["asymmetric_bce"].contract_status
     assert cs.get("vjp") == "complete"

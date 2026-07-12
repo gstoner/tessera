@@ -400,7 +400,7 @@ def _proof_cell(op: ConformanceOp, target: str) -> ProofCell:
         target_legal = _proof_status_from_target_legal(comp_target_statuses)
         backend_compile = _proof_status_from_backend_compile(comp_target_statuses)
 
-    # --- Fusion adjustment for multi-component rows ---
+    # --- Composition / fusion adjustment for multi-component rows ---
     if len(components) > 1:
         if target in op.fusion_targets:
             notes.append("fused single-kernel on this target")
@@ -408,10 +408,10 @@ def _proof_cell(op: ConformanceOp, target: str) -> ProofCell:
             notes.append(
                 "composes from per-op kernels (no fusion pass on this target)"
             )
-            # Composition is a real proof: if every component runs, the chain
-            # runs. Demote backend_compile no harder than PARTIAL.
-            if backend_compile == PROOF_COMPLETE:
-                backend_compile = PROOF_PARTIAL
+        # Composition is a real end-to-end proof when every component has a
+        # declared execute/compare fixture. Fusion is a performance property,
+        # not a correctness prerequisite, so do not demote a fully compiled
+        # chain merely because it launches more than one kernel.
 
     # --- runtime_execute: target must have an execution_matrix row, AND for
     #     CPU/Apple targets every component must be in the runtime envelope.
@@ -469,13 +469,13 @@ def _proof_cell(op: ConformanceOp, target: str) -> ProofCell:
 
 
 def _proof_status_from_axis(statuses: list[str]) -> str:
-    """Map registry axis statuses (complete/partial/planned/not_applicable)
+    """Map registry axis statuses (complete/partial/planned/by-design terminal)
     to proof statuses."""
     if any(s == "missing" for s in statuses):
         return PROOF_MISSING
     if all(s == "complete" for s in statuses):
         return PROOF_COMPLETE
-    if all(s in ("complete", "not_applicable") for s in statuses):
+    if all(_pc.is_contract_closed(s) for s in statuses):
         return PROOF_COMPLETE
     if any(s == "planned" for s in statuses):
         return PROOF_PLANNED
@@ -484,10 +484,11 @@ def _proof_status_from_axis(statuses: list[str]) -> str:
 
 def _proof_status_from_graph_ir_lowering(statuses: list[str]) -> str:
     """Graph IR registration is a binary-ish proof (registered / missing /
-    not_applicable / stub_required)."""
+    host_materialized / runtime_only / legacy not_applicable / stub_required)."""
     if any(s == "missing" for s in statuses):
         return PROOF_MISSING
-    if all(s in ("registered", "not_applicable") for s in statuses):
+    if all(s in ("registered", "host_materialized", "runtime_only",
+                 "not_applicable") for s in statuses):
         return PROOF_COMPLETE
     if any(s == "stub_required" for s in statuses):
         return PROOF_PARTIAL
@@ -548,9 +549,10 @@ def _proof_status_from_runtime(target: str, components: tuple[str, ...]) -> str:
             return PROOF_COMPLETE
         return PROOF_PARTIAL  # composes via JIT-CPU fallback
     if target == "cpu":
-        # CPU has native + jit_cpu_numpy in execution_matrix; for the
-        # in-scope op set, every component has a reference path.
-        return PROOF_PARTIAL
+        # The host x86/CPU lane has both native_cpu and jit_cpu_numpy execution
+        # rows. A correct reference executor is still a real end-to-end runtime
+        # path; optimization level is not a conformance rung.
+        return PROOF_COMPLETE
     if target == "rocm":
         # An op executes on ROCm (gfx1151) iff every component ships a real
         # executing kernel: ``hardware_verified`` (a shipped C-ABI runtime_symbol,

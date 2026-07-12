@@ -102,6 +102,8 @@ AXIS_VALUE_GLYPHS: Mapping[str, str] = {
     "registered":       "G",
     "stub_required":    "s",
     "not_applicable":   "n",
+    "host_materialized": "h",
+    "runtime_only":      "r",
     # ─ schedule_ir / tile_ir / target_ir (contract / manifest statuses) ─
     "complete":         "C",
     "partial":          "p",
@@ -113,6 +115,7 @@ AXIS_VALUE_GLYPHS: Mapping[str, str] = {
     "reference":        "R",
     "compileable":      "c",
     "artifact_only":    "A",
+    "no_kernel_required": "n",
     # ─ runtime ─
     "ready":            "N",   # native
     "unsupported":      "X",
@@ -415,8 +418,11 @@ def _axis_target_ir(op_name: str) -> AxisCell:
     if cov is not None and op_name == "target_verify" and cov.category == "acceptance_verification":
         return AxisCell("not_applicable", "primitive_coverage.category.acceptance_verification")
     if (cov is not None
-            and cov.contract_status.get("backend_kernel") == "not_applicable"):
-        return AxisCell("not_applicable", "primitive_coverage.contract_status.backend_kernel")
+            and cov.contract_status.get("backend_kernel") == "no_kernel_required"):
+        return AxisCell(
+            "no_kernel_required",
+            "primitive_coverage.contract_status.backend_kernel.no_kernel_required",
+        )
     # M7 ops (mobius, stereographic) live under prefixed names in
     # backend_manifest; translate before lookup so the audit reflects
     # the fused-kernel coverage that actually ships.

@@ -46,7 +46,7 @@ def test_in_catalog_and_coverage():
     assert score["vjp"] == "complete" and score["jvp"] == "complete"
     ste = coverage_for("memory_index_select_ste").contract_status
     # STE: straight-through VJP exists; forward-mode JVP is not_applicable.
-    assert ste["vjp"] == "complete" and ste["jvp"] == "not_applicable"
+    assert ste["vjp"] == "complete" and ste["jvp"] == "non_differentiable"
 
 
 def test_score_is_sigmoid_of_scaled_qk():

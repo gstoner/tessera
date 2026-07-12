@@ -101,8 +101,8 @@ def test_field_op_default_spacing_unit():
 def test_integral_marked_not_applicable():
     from tessera.compiler import primitive_coverage as pc
     entry = pc.all_primitive_coverages()["clifford_integral"]
-    assert entry.contract_status.get("vjp") == "not_applicable"
-    assert entry.contract_status.get("jvp") == "not_applicable"
+    assert entry.contract_status.get("vjp") == "non_differentiable"
+    assert entry.contract_status.get("jvp") == "non_differentiable"
 
 
 # ── whole GA autodiff surface is closed ──────────────────────────────────────

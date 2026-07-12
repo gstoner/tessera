@@ -2113,6 +2113,17 @@ _NVIDIA_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
 _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     # cpu
     ("matmul", "cpu"): "tests/unit/test_end_to_end_matmul_cpu_path.py",
+    ("relu", "cpu"): "tests/unit/test_end_to_end_matmul_cpu_path.py",
+    ("softmax", "cpu"): "tests/unit/test_end_to_end_matmul_cpu_path.py",
+    ("flash_attn", "cpu"): "tests/unit/test_operator_registry_foundation.py",
+    ("matmul_relu", "cpu"):
+        "tests/unit/test_cpu_conformance_compositions.py",
+    ("matmul_softmax", "cpu"):
+        "tests/unit/test_cpu_conformance_compositions.py",
+    ("matmul_relu", "rocm"):
+        "tests/unit/test_rocm_fused_epilogue_launch_execute.py",
+    ("matmul_softmax", "rocm"):
+        "tests/unit/test_rocm_conformance_compositions.py",
     # rocm — Strix Halo (gfx1151 / gfx1100 WSL) RDNA WMMA. The shipped
     # `tessera_rocm_wmma_gemm_f16` C-ABI symbol (libtessera_rocm_gemm.so) is
     # dlopened and its f32<-f16 16x16x16 WMMA GEMM compared to a numpy

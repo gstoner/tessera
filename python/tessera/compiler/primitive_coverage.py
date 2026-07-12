@@ -743,6 +743,32 @@ _EXISTING_CONTRACT_OVERRIDES["msa_index_scores"] = _MSA_INDEX_SCORES_HARDENED
 _EXISTING_CONTRACT_OVERRIDES["msa_select_blocks"] = _MSA_SELECT_BLOCKS_HARDENED
 _EXISTING_CONTRACT_OVERRIDES["msa_sparse_attention"] = _MSA_SPARSE_ATTENTION_HARDENED
 
+# SD1 speculative acceptance + packed varlen attention have ODS verifiers and
+# focused reference/execute tests. Acceptance outputs are discrete verification
+# decisions, so their autodiff/transpose contracts are not applicable.
+for _name in (
+    "spec_accept", "spec_accept_sample", "spec_accept_tree_sample",
+    "target_verify",
+):
+    _EXISTING_CONTRACT_OVERRIDES[_name] = {
+        **_EXISTING_CONTRACT_OVERRIDES.get(_name, {}),
+        "math_semantics": "complete",
+        "shape_rule": "complete",
+        "dtype_layout_rule": "complete",
+        "vjp": "not_applicable",
+        "jvp": "not_applicable",
+        "transpose_rule": "not_applicable",
+        "masking_effect_rule": "complete",
+        "tests": "complete",
+    }
+_EXISTING_CONTRACT_OVERRIDES["varlen_sdpa"] = {
+    **_EXISTING_CONTRACT_OVERRIDES.get("varlen_sdpa", {}),
+    "math_semantics": "complete",
+    "shape_rule": "complete",
+    "dtype_layout_rule": "complete",
+    "tests": "complete",
+}
+
 # LSA indexer-training surface. memory_index_score is the differentiable scoring
 # head (closed-form VJP+JVP registered → those axes auto-complete). The STE
 # selector has a VJP (straight-through) but no JVP (hard-step forward mode is
@@ -782,6 +808,27 @@ for _name in (
     | _EBM_SAMPLING_SHARDING_NAMES
 ):
     _EXISTING_CONTRACT_OVERRIDES[_name] = _SHARDING_COMPLETE
+del _name
+
+# Domain effect contracts. Clifford maps are deterministic and pure; EBM/RNG
+# samplers explicitly consume randomness or update sampler state.
+for _name in _GA_POINTWISE_SHARDING_NAMES | _GA_DIFFERENTIAL_SHARDING_NAMES:
+    _EXISTING_CONTRACT_OVERRIDES[_name] = {
+        **_EXISTING_CONTRACT_OVERRIDES.get(_name, {}),
+        "masking_effect_rule": "not_applicable",
+    }
+for _name in _EBM_POINTWISE_SHARDING_NAMES | _EBM_SAMPLING_SHARDING_NAMES | {
+    "ebm_bivector_langevin_sample", "ebm_bivector_langevin_step",
+    "ebm_decode_init", "ebm_energy_quadratic",
+    "ebm_sphere_langevin_sample", "ebm_sphere_langevin_step",
+    "ebm_partition_ais", "ebm_partition_exact",
+    "ebm_partition_monte_carlo", "rng_gibbs_sample", "rng_hmc_sample",
+    "rng_langevin_sample", "rng_mala_sample",
+}:
+    _EXISTING_CONTRACT_OVERRIDES[_name] = {
+        **_EXISTING_CONTRACT_OVERRIDES.get(_name, {}),
+        "masking_effect_rule": "complete",
+    }
 del _name
 
 # Model-class roadmap M5.1 — fused dequantize-into-GEMM (M1 keystone) promoted
@@ -1692,30 +1739,30 @@ _LOWERING_RULE_BY_CATEGORY: dict[str, str] = {
 #                      (or it decomposes through OP_SPECS catalog ops)
 #   "stub_required"  : a Graph IR op is needed but not yet defined
 #   "missing"        : no Graph IR coverage at all (a hard gap)
-#   "not_applicable" : the primitive is inherently Python-runtime
-#                      (pytree manipulation, autodiff transforms, control
-#                      flow that drives body lowering, etc.) and would not
-#                      have a Graph IR op even in a "complete" compiler.
+#   "host_materialized": evaluated at compile time and embedded as constants
+#   "runtime_only"   : intentionally owned by a host/runtime subsystem
 #
 # Maps each S2-S15 python-primitive category to the appropriate state.
 # The default (when category not listed) remains `"stub_required"`.
 # ─────────────────────────────────────────────────────────────────────────────
 _GRAPH_IR_LOWERING_BY_CATEGORY: dict[str, str] = {
     # Python-runtime structures — no Graph IR op possible, by design.
-    "state_tree":          "not_applicable",  # pytree primitives
-    "transform":           "not_applicable",  # vjp/jvp/vmap drive body lowering
-    "grad_transform":      "not_applicable",  # clip_grad_norm/ema_update decompose
-    "schedule":            "not_applicable",  # LR schedules are scalar Python fns
-    "control_flow":        "not_applicable",  # scan/cond/while drive body lowering
-    "extension":           "not_applicable",  # custom_primitive escape hatches
-    "sharding":            "not_applicable",  # shard_map IS the lowering primitive
-    "memory":              "not_applicable",  # Python-runtime memory primitives
-    "numerics":            "not_applicable",  # grad_scaler_step is Python control flow
-    "aot":                 "not_applicable",
-    "serialization":       "not_applicable",
-    "conformance":         "not_applicable",
-    "data":                "not_applicable",
-    "tokenizer":           "not_applicable",
+    "state_tree":          "runtime_only",
+    "schedule":            "host_materialized",
+    "memory":              "runtime_only",
+    "aot":                 "runtime_only",
+    "serialization":       "runtime_only",
+    "conformance":         "runtime_only",
+    "data":                "runtime_only",
+    "tokenizer":           "runtime_only",
+    # These constructs actively drive or decompose Graph IR even though they
+    # do not each require a dedicated tensor op.
+    "transform":           "registered",
+    "grad_transform":      "registered",
+    "control_flow":        "registered",
+    "extension":           "registered",
+    "sharding":            "registered",
+    "numerics":            "registered",
     # Compositional families — decompose through existing OP_SPECS catalog
     # ops, so the Graph IR path exists transitively.
     "rng":                 "registered",  # OP_SPECS rng_uniform / rng_normal / etc.
@@ -1760,6 +1807,18 @@ _GRAPH_IR_LOWERING_BY_CATEGORY: dict[str, str] = {
     "linalg_solver":       "registered",
     "linalg_decomposition":"registered",
     "sparse":              "registered",
+
+    # Domain dialects/decompositions were omitted from this classifier even
+    # though their lowering rules and OP_SPECS/dialects already ship.
+    "geometric_algebra":   "registered",
+    "ebm":                 "registered",
+
+    # VLM preprocessing decomposes through resample/gather/layout ops and EDM
+    # conditioning through scalar elementwise math. Schedule constructors are
+    # host-side scalar-to-constant builders, so tensor Graph IR is N/A.
+    "vision":              "registered",
+    "diffusion":           "registered",
+    "diffusion_schedule":  "host_materialized",
 
     # — M7 Visual Complex Analysis (E3, 2026-05-20): each M7 op has a
     #   dedicated OP_SPECS entry (tessera.complex_log / .complex_sqrt /

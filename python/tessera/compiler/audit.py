@@ -102,6 +102,8 @@ AXIS_VALUE_GLYPHS: Mapping[str, str] = {
     "registered":       "G",
     "stub_required":    "s",
     "not_applicable":   "n",
+    "host_materialized": "h",
+    "runtime_only":      "r",
     # ─ schedule_ir / tile_ir / target_ir (contract / manifest statuses) ─
     "complete":         "C",
     "partial":          "p",

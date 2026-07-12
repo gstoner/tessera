@@ -31,10 +31,10 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | `apple_cpu` | 361 | 2 | 359 | 0 | 119 |
 | `apple_gpu` | 203 | 196 | 3 | 4 | 277 |
 | `rocm` | 342 | 340 | 2 | 0 | 138 |
-| `nvidia_sm80` | 66 | 0 | 0 | 66 | 414 |
-| `nvidia_sm90` | 98 | 0 | 2 | 96 | 382 |
-| `nvidia_sm100` | 66 | 0 | 0 | 66 | 414 |
-| `nvidia_sm120` | 66 | 1 | 0 | 65 | 414 |
+| `nvidia_sm80` | 68 | 0 | 0 | 68 | 412 |
+| `nvidia_sm90` | 100 | 0 | 2 | 98 | 380 |
+| `nvidia_sm100` | 68 | 0 | 0 | 68 | 412 |
+| `nvidia_sm120` | 68 | 1 | 0 | 67 | 412 |
 
 ## Per-category breakdown
 

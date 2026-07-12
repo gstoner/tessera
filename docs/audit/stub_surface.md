@@ -16,16 +16,13 @@ _11 no-verifier ops need manual triage_ (many — pure elementwise — legitimat
 
 ## P1 — software conformance gaps (op×target proof ladder)
 
-35 op×target cells: {'partial': 15, 'complete': 10, 'missing': 10}.
+35 op×target cells: {'partial': 7, 'complete': 20, 'missing': 8}.
 
-First-failing gate: {'hardware_smoke': 14, 'codegen': 3, 'toolchain': 11}.
+First-failing gate: {'hardware_smoke': 14, 'toolchain': 14}.
 
-**Software-actionable (3** stop at ['codegen']**) — real lowering/codegen gaps to fix:**
-  - `conv2d` → `nvidia` (stops @ codegen)
-  - `kv_cache_read` → `nvidia` (stops @ codegen)
-  - `kv_cache_read` → `rocm` (stops @ codegen)
+**Software-actionable (0** stop at []**) — real lowering/codegen gaps to fix:**
 
-_Hardware-gated (25 stop at ['hardware_smoke', 'toolchain']) — expected; need real silicon, not code._
+_Hardware-gated (28 stop at ['hardware_smoke', 'toolchain']) — expected; need real silicon, not code._
 
 ## P2 — thin-test tail (the differential-generator target, item #2)
 
@@ -40,5 +37,4 @@ Zero-ref sample: `aot_export`, `aot_load`, `associative_scan`, `autocast`, `axis
 - The compiler is **not stub-riddled**: the actionable surface is the trivial-stub verifiers + a handful of software conformance cells; everything else is hardware-gated (honest) or thin-test (generative).
 - **#4 (IR round-trip + fuzz)** hardens the parser/printer/verifier across all ops cheaply, no oracle needed.
 - **#2 (differential generator)** is the right tool for the ~0 needs-direct-test ops + miscompile detection.
-
 

@@ -26,8 +26,8 @@ Audit response to [docs/audit/compiler/COMPILER_AUDIT.md](compiler/COMPILER_AUDI
 
 | Overall (weakest column wins) | Count |
 |---|---:|
-| ✅ `complete` | 11 |
-| ⚙️ `partial` | 16 |
+| ✅ `complete` | 20 |
+| ⚙️ `partial` | 7 |
 | ⚠️ `artifact_only` | 0 |
 | 📋 `planned` | 0 |
 | ❌ `missing` | 8 |
@@ -37,7 +37,7 @@ Audit response to [docs/audit/compiler/COMPILER_AUDIT.md](compiler/COMPILER_AUDI
 
 | target | overall | graph | schedule | tile | target_legal | backend_compile | runtime | numerical | first failing gate (B) | notes |
 |--------|---------|-------|----------|------|--------------|-----------------|---------|-----------|------------------------|-------|
-| `cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ✅ | — |  |
+| `cpu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |  |
 | `apple_cpu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `hardware_smoke` — Apple silicon required for native execution |  |
 | `apple_gpu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `hardware_smoke` — Apple silicon required for native execution |  |
 | `nvidia` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ✅ | `toolchain` — nvcc not on PATH (CUDA Toolkit 13.3 not installed) |  |
@@ -51,17 +51,17 @@ _composes from primitives; no fused single-kernel today_
 
 | target | overall | graph | schedule | tile | target_legal | backend_compile | runtime | numerical | first failing gate (B) | notes |
 |--------|---------|-------|----------|------|--------------|-----------------|---------|-----------|------------------------|-------|
-| `cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ⚙️ | ⚙️ | — | composes from per-op kernels (no fusion pass on this target) |
-| `apple_cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ⚙️ | ⚙️ | `hardware_smoke` — Apple silicon required for native execution | composes from per-op kernels (no fusion pass on this target) |
-| `apple_gpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ✅ | ⚙️ | `hardware_smoke` — Apple silicon required for native execution | composes from per-op kernels (no fusion pass on this target) |
+| `cpu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | composes from per-op kernels (no fusion pass on this target) |
+| `apple_cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ⚙️ | `hardware_smoke` — Apple silicon required for native execution | composes from per-op kernels (no fusion pass on this target) |
+| `apple_gpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚙️ | `hardware_smoke` — Apple silicon required for native execution | composes from per-op kernels (no fusion pass on this target) |
 | `nvidia` | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ⚙️ | `toolchain` — nvcc not on PATH (CUDA Toolkit 13.3 not installed) | composes from per-op kernels (no fusion pass on this target) |
-| `rocm` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ✅ | ⚙️ | `toolchain` — hipcc not on PATH (ROCm 7.2.4 not installed) | composes from per-op kernels (no fusion pass on this target) |
+| `rocm` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `toolchain` — hipcc not on PATH (ROCm 7.2.4 not installed) | composes from per-op kernels (no fusion pass on this target) |
 
 ## `softmax`
 
 | target | overall | graph | schedule | tile | target_legal | backend_compile | runtime | numerical | first failing gate (B) | notes |
 |--------|---------|-------|----------|------|--------------|-----------------|---------|-----------|------------------------|-------|
-| `cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ⚙️ | — |  |
+| `cpu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |  |
 | `apple_cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ⚙️ | `hardware_smoke` — Apple silicon required for native execution |  |
 | `apple_gpu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `hardware_smoke` — Apple silicon required for native execution |  |
 | `nvidia` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ⚙️ | `toolchain` — nvcc not on PATH (CUDA Toolkit 13.3 not installed) |  |
@@ -75,27 +75,27 @@ _fused MSL kernel on apple_gpu (single-kernel scores); compose elsewhere_
 
 | target | overall | graph | schedule | tile | target_legal | backend_compile | runtime | numerical | first failing gate (B) | notes |
 |--------|---------|-------|----------|------|--------------|-----------------|---------|-----------|------------------------|-------|
-| `cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ⚙️ | ⚙️ | — | composes from per-op kernels (no fusion pass on this target) |
-| `apple_cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ⚙️ | ⚙️ | `hardware_smoke` — Apple silicon required for native execution | composes from per-op kernels (no fusion pass on this target) |
+| `cpu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | composes from per-op kernels (no fusion pass on this target) |
+| `apple_cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ⚙️ | `hardware_smoke` — Apple silicon required for native execution | composes from per-op kernels (no fusion pass on this target) |
 | `apple_gpu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `hardware_smoke` — Apple silicon required for native execution | fused single-kernel on this target |
 | `nvidia` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ⚙️ | `toolchain` — nvcc not on PATH (CUDA Toolkit 13.3 not installed) | composes from per-op kernels (no fusion pass on this target) |
-| `rocm` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ✅ | ⚙️ | `toolchain` — hipcc not on PATH (ROCm 7.2.4 not installed) | composes from per-op kernels (no fusion pass on this target) |
+| `rocm` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `toolchain` — hipcc not on PATH (ROCm 7.2.4 not installed) | composes from per-op kernels (no fusion pass on this target) |
 
 ## `conv2d`
 
 | target | overall | graph | schedule | tile | target_legal | backend_compile | runtime | numerical | first failing gate (B) | notes |
 |--------|---------|-------|----------|------|--------------|-----------------|---------|-----------|------------------------|-------|
-| `cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ✅ | — |  |
+| `cpu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |  |
 | `apple_cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ⚙️ | `hardware_smoke` — Apple silicon required for native execution |  |
 | `apple_gpu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `hardware_smoke` — Apple silicon required for native execution |  |
-| `nvidia` | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ⚙️ | `codegen` — no backend_manifest entry for 'conv2d' on 'nvidia' |  |
+| `nvidia` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ⚙️ | `toolchain` — nvcc not on PATH (CUDA Toolkit 13.3 not installed) |  |
 | `rocm` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `toolchain` — hipcc not on PATH (ROCm 7.2.4 not installed) |  |
 
 ## `flash_attn`
 
 | target | overall | graph | schedule | tile | target_legal | backend_compile | runtime | numerical | first failing gate (B) | notes |
 |--------|---------|-------|----------|------|--------------|-----------------|---------|-----------|------------------------|-------|
-| `cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ⚙️ | — |  |
+| `cpu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |  |
 | `apple_cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ⚙️ | `hardware_smoke` — Apple silicon required for native execution |  |
 | `apple_gpu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `hardware_smoke` — Apple silicon required for native execution |  |
 | `nvidia` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ⚙️ | `toolchain` — nvcc not on PATH (CUDA Toolkit 13.3 not installed) |  |
@@ -105,9 +105,9 @@ _fused MSL kernel on apple_gpu (single-kernel scores); compose elsewhere_
 
 | target | overall | graph | schedule | tile | target_legal | backend_compile | runtime | numerical | first failing gate (B) | notes |
 |--------|---------|-------|----------|------|--------------|-----------------|---------|-----------|------------------------|-------|
-| `cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ✅ | — |  |
+| `cpu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |  |
 | `apple_cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ⚙️ | `hardware_smoke` — Apple silicon required for native execution |  |
 | `apple_gpu` | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ⚙️ | `hardware_smoke` — Apple silicon required for native execution |  |
-| `nvidia` | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ⚙️ | `codegen` — no backend_manifest entry for 'kv_cache_read' on 'nvidia' |  |
+| `nvidia` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ⚙️ | `toolchain` — nvcc not on PATH (CUDA Toolkit 13.3 not installed) |  |
 | `rocm` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `toolchain` — hipcc not on PATH (ROCm 7.2.4 not installed) |  |
 

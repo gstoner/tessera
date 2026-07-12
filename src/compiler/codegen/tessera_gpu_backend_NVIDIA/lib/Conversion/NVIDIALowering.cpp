@@ -91,7 +91,8 @@ struct LowerTileToNVIDIAPass
     module.walk([&](Operation *op) {
       StringRef name = op->getName().getStringRef();
       if (name == "tile.mma" || name == "tile.async_copy" ||
-          name == "tile.wait_async" || name.starts_with("tile.tmem."))
+          name == "tile.wait_async" || name == "tile.conv2d" ||
+          name == "tile.kv_cache" || name.starts_with("tile.tmem."))
         worklist.push_back(op);
     });
 
@@ -231,6 +232,29 @@ struct LowerTileToNVIDIAPass
         else
           createContractOp(builder, loc, "tessera_nvidia.mbarrier",
                            ValueRange{}, TypeRange{}, attrs);
+        op->erase();
+        continue;
+      }
+
+      // Structured kernels that do not map to a single NVIDIA matrix or
+      // movement instruction still need a typed Target-IR contract.  Keep
+      // their SSA signature intact and identify the canonical source op so a
+      // later executable CUDA lowering can select the kernel implementation.
+      // This is deliberately hardware-free Target-IR codegen evidence, not an
+      // execution or linked-PTX claim.
+      if (isTileOp(op, "tile.conv2d") || isTileOp(op, "tile.kv_cache")) {
+        StringRef source = "tessera.conv2d_nhwc";
+        if (isTileOp(op, "tile.kv_cache")) {
+          source = "tessera.kv_cache.read";
+          if (auto sourceAttr = op->getAttrOfType<StringAttr>("source"))
+            source = sourceAttr.getValue();
+        }
+        attrs.push_back(builder.getNamedAttr("source",
+                                             builder.getStringAttr(source)));
+        Operation *target = createContractOp(
+            builder, loc, "tessera_nvidia.cuda_kernel", op->getOperands(),
+            op->getResultTypes(), attrs);
+        op->replaceAllUsesWith(target->getResults());
         op->erase();
         continue;
       }

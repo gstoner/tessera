@@ -97,6 +97,7 @@ def test_launch_fused_epilogue_matches_numpy(activation, with_bias, m, n, k):
         ref = ref + bias[None, :]
     ref = _act_ref(ref, activation)
     maxerr = float(np.max(np.abs(out - ref)))
+    np.testing.assert_allclose(out, ref, rtol=0, atol=5e-2)
     assert maxerr < 5e-2, (
         f"launch epilogue act={activation} bias={with_bias} "
         f"{m}x{n}x{k} maxerr={maxerr}")

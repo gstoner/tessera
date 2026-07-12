@@ -27,6 +27,7 @@ from pathlib import Path
 from .primitive_coverage import (
     PrimitiveCoverage,
     all_primitive_coverages,
+    is_contract_closed,
 )
 from . import backend_manifest as _backend_manifest
 
@@ -117,7 +118,7 @@ def tally_by_category(
       priority       : int — lower = more urgent (for sorting)
       total          : int — primitives in this category
       <axis>_open    : int — count of {partial, planned} on this axis
-      <axis>_complete: int — count of {complete, not_applicable}
+      <axis>_complete: int — count of complete plus explicit by-design terminals
     Sort order: priority ascending, then category alphabetically.
     """
     if cov is None:
@@ -138,7 +139,7 @@ def tally_by_category(
             status = entry.contract_status.get(axis, "unknown")
             if status in OPEN_STATUSES:
                 per_cat_axis_open[cat][axis] += 1
-            elif status in ("complete", "not_applicable"):
+            elif is_contract_closed(status):
                 per_cat_axis_complete[cat][axis] += 1
             # ``unknown`` is silently dropped — it surfaces in the
             # support_table audit, not here.
@@ -241,7 +242,7 @@ def render_markdown(
     lines.append(">")
     lines.append("> One row per primitive category.  Counts are the number of")
     lines.append("> entries in that category whose contract axis is in `{partial,")
-    lines.append("> planned}` (open) vs `{complete, not_applicable}`.  Sprint")
+    lines.append("> planned}` (open) vs `complete`/explicit by-design terminals. Sprint")
     lines.append("> labels (S2/S5/S7/S10/S11/M6/M7/S15) anchor each category to")
     lines.append("> the milestone that owns it; priority sorts user-visible")
     lines.append("> impact (smaller = more urgent).")

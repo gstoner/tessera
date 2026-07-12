@@ -4,7 +4,7 @@ phase,Public Python API,closed,315,315,0,public=315,docs/audit/generated/support
 phase,Frontend capture,closed,315,315,0,public=315,docs/audit/generated/support_table.csv,Keep this layer drift-gated through support_table.csv.
 phase,Graph IR registration,closed,315,315,0,"not_applicable=32, registered=283",docs/audit/generated/support_table.csv,Keep this layer drift-gated through support_table.csv.
 phase,Schedule IR,closed,315,315,0,"complete=313, not_applicable=2",docs/audit/generated/support_table.csv,Keep this layer drift-gated through support_table.csv.
-phase,Tile IR,mixed,309,315,6,"fused=281, not_applicable=28, partial=6",docs/audit/generated/support_table.csv,Close partial Tile IR rows or explicitly classify them as fused/not-applicable.
+phase,Tile IR,mixed,302,315,13,"fused=281, no_kernel_required=7, not_applicable=21, partial=6",docs/audit/generated/support_table.csv,Close partial Tile IR rows or explicitly classify them as fused/not-applicable.
 phase,Target IR native/fused codegen,mixed,309,315,6,"compiled=196, fused=71, hardware_verified=13, not_applicable=29, reference=6",docs/audit/generated/support_table.csv,Promote high-use reference rows into native/fused Target IR or mark intentional reference-only lanes.
 phase,Runtime dispatch readiness,closed,315,315,0,"fused=6, ready=309",docs/audit/generated/support_table.csv,Keep this layer drift-gated through support_table.csv.
 phase,Benchmark evidence,mixed,89,315,226,"benchmarked=89, none=226",docs/audit/generated/support_table.csv,Attach benchmarks to native/hardware-promoted rows first.

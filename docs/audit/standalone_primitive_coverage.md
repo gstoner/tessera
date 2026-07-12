@@ -167,7 +167,7 @@ primitives is:
 - **Graph IR lowering metadata:** **425 registered / 10 host-materialized / 45
   runtime-only / 0 stub-required / 0 missing**. Clifford and EBM dialect/decomposition rows are
   registered; image preprocessing and EDM conditioning lower compositionally;
-  scalar diffusion schedule constructors are intentionally host-side/N/A.
+  scalar diffusion schedule constructors are explicitly `host_materialized`.
 - **Autodiff frontier:** 29 VJP and 30 JVP rows remain planned. These are
   concentrated in visual-complex/conformal maps, solver helpers, EDM scalars,
   cache transactions, `moe_swiglu_block`, `score_combine`, and `varlen_sdpa`.
@@ -179,7 +179,7 @@ primitives is:
   operations. Promotion requires mock-mesh execute/compare evidence or real
   multi-device proof; backend availability alone is insufficient.
 - **Backend frontier:** the legacy aggregate axis remains 372 partial, 9
-  planned, and 99 not applicable. Readiness decisions must use per-target
+  planned, and 99 `no_kernel_required`. Readiness decisions must use per-target
   `backend_manifest` entries and the op×target proof ladder in
   `op_target_conformance.md`; the aggregate axis is not permission to claim a
   universal kernel. Reasoning-model fused kernels and optimizer steps remain

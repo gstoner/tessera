@@ -182,7 +182,7 @@ def test_gather_along_axis():
 def test_index_returning_op_has_no_vjp(name):
     """Integer-output reductions / sort family should not register a VJP."""
     entry = coverage_for(name)
-    assert entry.contract_status["vjp"] in ("not_applicable", "planned"), (
+    assert entry.contract_status["vjp"] in ("non_differentiable", "planned"), (
         f"{name} returns integer indices; VJP must be not_applicable or planned"
     )
 

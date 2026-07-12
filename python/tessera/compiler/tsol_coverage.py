@@ -32,6 +32,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from .primitive_coverage import TERMINAL_CONTRACT_STATUSES
+
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _DASHBOARD_PATH = (
@@ -319,7 +321,7 @@ def render_dashboard() -> str:
         "`docs/audit/standalone_primitive_coverage.md`."
     )
     lines.append("")
-    lines.append("| Axis | complete | partial | planned | N/A | other |")
+    lines.append("| Axis | complete | partial | planned | by-design | other |")
     lines.append("|------|----------|---------|---------|-----|-------|")
     axis_order = (
         "math_semantics", "shape_rule", "dtype_layout_rule",
@@ -332,10 +334,11 @@ def render_dashboard() -> str:
         n_complete = counts.get("complete", 0)
         n_partial = counts.get("partial", 0)
         n_planned = counts.get("planned", 0)
-        n_na = counts.get("not_applicable", 0)
+        n_na = sum(counts.get(s, 0) for s in TERMINAL_CONTRACT_STATUSES)
         n_other = sum(
             v for k, v in counts.items()
-            if k not in ("complete", "partial", "planned", "not_applicable")
+            if k not in ({"complete", "partial", "planned"}
+                         | set(TERMINAL_CONTRACT_STATUSES))
         )
         lines.append(
             f"| `{axis}` | {n_complete:>3} | {n_partial:>3} | "
@@ -348,17 +351,21 @@ def render_dashboard() -> str:
     lines.append("")
     lines.append(
         "Status legend: ✅ `complete`  • ◐ `partial`  • ◯ `planned`  "
-        "• – `not_applicable`  • ? `unknown` / missing registry entry."
+        "• — explicit by-design disposition  • ? `unknown` / missing registry entry."
     )
     lines.append("")
 
     def _glyph(status: str) -> str:
-        return {
+        basic = {
             "complete": "✅",
             "partial": "◐",
             "planned": "◯",
-            "not_applicable": "–",
-        }.get(status, "?")
+        }.get(status)
+        if basic is not None:
+            return basic
+        if status in TERMINAL_CONTRACT_STATUSES:
+            return f"— `{status}`"
+        return "?"
 
     seen_categories: set[str] = set()
     for cat, _names in _TSOL_CATEGORIES:
@@ -404,7 +411,8 @@ def render_dashboard() -> str:
     if not notable:
         lines.append(
             "_None today — every TSOL canonical op has a registry "
-            "entry, a VJP (or N/A), and a JVP (or N/A)._"
+            "entry and an explicit VJP/JVP implementation or by-design "
+            "disposition._"
         )
     else:
         for r in notable:

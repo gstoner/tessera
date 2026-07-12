@@ -276,5 +276,5 @@ def test_band_partition_is_non_differentiable_config():
     from tessera.compiler.primitive_coverage import coverage_for
 
     entry = coverage_for("equiprob_band_partition")
-    assert entry.contract_status["vjp"] == "not_applicable"
-    assert entry.contract_status["jvp"] == "not_applicable"
+    assert entry.contract_status["vjp"] == "non_differentiable"
+    assert entry.contract_status["jvp"] == "non_differentiable"

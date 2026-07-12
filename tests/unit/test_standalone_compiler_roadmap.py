@@ -169,6 +169,11 @@ def test_primitive_coverage_contract_fields_are_complete_for_every_entry():
         assert set(entry.contract_status) == set(CONTRACT_FIELDS)
 
 
+def test_contract_axes_use_explicit_by_design_descriptors_not_generic_na():
+    for entry in all_primitive_coverages().values():
+        assert "not_applicable" not in entry.contract_status.values(), entry.name
+
+
 def test_graph_ir_classifier_has_no_false_missing_or_stub_rows():
     entries = all_primitive_coverages()
     states = {name: entry.metadata.get("graph_ir_lowering")
@@ -376,8 +381,8 @@ def test_primitive_coverage_includes_s15_data_pipeline_and_tokenizers():
                  "tokenizer_unigram", "tokenizer_sentencepiece_compat"):
         assert name in entries, f"S15 tokenizer missing: {name}"
         assert entries[name].existing_op
-        assert entries[name].contract_status["vjp"] == "not_applicable"
-        assert entries[name].contract_status["jvp"] == "not_applicable"
+        assert entries[name].contract_status["vjp"] == "non_differentiable"
+        assert entries[name].contract_status["jvp"] == "non_differentiable"
 
 
 def test_remaining_data_pipeline_gaps_stay_planned():

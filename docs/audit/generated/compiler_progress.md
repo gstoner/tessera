@@ -21,7 +21,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 | `Frontend capture` | closed | 315 | 315 | 0 | public=315 | Keep this layer drift-gated through support_table.csv. |
 | `Graph IR registration` | closed | 315 | 315 | 0 | not_applicable=32, registered=283 | Keep this layer drift-gated through support_table.csv. |
 | `Schedule IR` | closed | 315 | 315 | 0 | complete=313, not_applicable=2 | Keep this layer drift-gated through support_table.csv. |
-| `Tile IR` | mixed | 309 | 315 | 6 | fused=281, not_applicable=28, partial=6 | Close partial Tile IR rows or explicitly classify them as fused/not-applicable. |
+| `Tile IR` | mixed | 302 | 315 | 13 | fused=281, no_kernel_required=7, not_applicable=21, partial=6 | Close partial Tile IR rows or explicitly classify them as fused/not-applicable. |
 | `Target IR native/fused codegen` | mixed | 309 | 315 | 6 | compiled=196, fused=71, hardware_verified=13, not_applicable=29, reference=6 | Promote high-use reference rows into native/fused Target IR or mark intentional reference-only lanes. |
 | `Runtime dispatch readiness` | closed | 315 | 315 | 0 | fused=6, ready=309 | Keep this layer drift-gated through support_table.csv. |
 | `Benchmark evidence` | mixed | 89 | 315 | 226 | benchmarked=89, none=226 | Attach benchmarks to native/hardware-promoted rows first. |

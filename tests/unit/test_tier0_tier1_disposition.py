@@ -43,7 +43,7 @@ TIER1_TRANSPORT = (
 @pytest.mark.parametrize("op", TIER0_PURE_VIEW)
 def test_tier0_pure_view_backend_kernel_is_not_applicable(op):
     e = coverage_for(op)
-    assert e.contract_status["backend_kernel"] == "not_applicable", (
+    assert e.contract_status["backend_kernel"] == "no_kernel_required", (
         f"{op} is a pure-view metadata op (zero FLOP, zero data movement) — its "
         f"backend_kernel must be not_applicable, not "
         f"{e.contract_status['backend_kernel']!r}"
@@ -60,12 +60,12 @@ def test_host_control_surfaces_have_no_backend_kernel_contract():
         "clip_grad_norm", "ema_update", "grad_scaler_step",
         "memory_write", "memory_evict",
     ):
-        assert coverage_for(op).contract_status["backend_kernel"] == "not_applicable", op
+        assert coverage_for(op).contract_status["backend_kernel"] == "no_kernel_required", op
 
 
 def test_rng_key_bookkeeping_is_not_a_backend_kernel_contract():
     for op in ("rng_key", "rng_split", "rng_fold_in", "rng_clone"):
-        assert coverage_for(op).contract_status["backend_kernel"] == "not_applicable", op
+        assert coverage_for(op).contract_status["backend_kernel"] == "no_kernel_required", op
 
 
 def test_tensor_rng_and_quantization_tails_stay_backend_owned_work():
@@ -74,7 +74,7 @@ def test_tensor_rng_and_quantization_tails_stay_backend_owned_work():
         "quantize_int8", "dequantize_int8", "quantize_int4", "dequantize_int4",
         "fake_quantize", "contrastive_loss", "ctc_loss",
     ):
-        assert coverage_for(op).contract_status["backend_kernel"] != "not_applicable", op
+        assert coverage_for(op).contract_status["backend_kernel"] != "no_kernel_required", op
 
 
 @pytest.mark.parametrize("op", TIER0_MOVEMENT_STAYS_OPEN)

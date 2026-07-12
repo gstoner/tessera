@@ -35,8 +35,8 @@ def test_coverage_is_non_differentiable_selector():
     cov = coverage_for("memory_index_select")
     cs = cov.contract_status
     # Boolean-mask output ⇒ gradient is undefined on the primary output.
-    assert cs["vjp"] == "not_applicable"
-    assert cs["jvp"] == "not_applicable"
+    assert cs["vjp"] == "non_differentiable"
+    assert cs["jvp"] == "non_differentiable"
     # The closed-form selector has determinate math/shape/dtype + shipped tests.
     assert cs["math_semantics"] == "complete"
     assert cs["shape_rule"] == "complete"

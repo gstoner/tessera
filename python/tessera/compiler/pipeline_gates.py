@@ -227,7 +227,7 @@ def _eval_legality(target: str, op_name: Optional[str]) -> GateResult:
         return GateResult(GATE_LEGALITY, STATUS_FAIL,
                           f"op {op_name!r} not in primitive_coverage registry")
     lowering = cov.contract_status.get("lowering_rule", "planned")
-    if lowering in ("complete", "not_applicable"):
+    if _pc.is_contract_closed(lowering):
         return GateResult(GATE_LEGALITY, STATUS_PASS)
     return GateResult(GATE_LEGALITY, STATUS_FAIL,
                       f"lowering_rule = {lowering}")

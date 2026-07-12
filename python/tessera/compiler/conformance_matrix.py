@@ -469,13 +469,13 @@ def _proof_cell(op: ConformanceOp, target: str) -> ProofCell:
 
 
 def _proof_status_from_axis(statuses: list[str]) -> str:
-    """Map registry axis statuses (complete/partial/planned/not_applicable)
+    """Map registry axis statuses (complete/partial/planned/by-design terminal)
     to proof statuses."""
     if any(s == "missing" for s in statuses):
         return PROOF_MISSING
     if all(s == "complete" for s in statuses):
         return PROOF_COMPLETE
-    if all(s in ("complete", "not_applicable") for s in statuses):
+    if all(_pc.is_contract_closed(s) for s in statuses):
         return PROOF_COMPLETE
     if any(s == "planned" for s in statuses):
         return PROOF_PLANNED

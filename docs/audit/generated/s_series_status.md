@@ -5,7 +5,7 @@
 >
 > One row per primitive category.  Counts are the number of
 > entries in that category whose contract axis is in `{partial,
-> planned}` (open) vs `{complete, not_applicable}`.  Sprint
+> planned}` (open) vs `complete`/explicit by-design terminals. Sprint
 > labels (S2/S5/S7/S10/S11/M6/M7/S15) anchor each category to
 > the milestone that owns it; priority sorts user-visible
 > impact (smaller = more urgent).

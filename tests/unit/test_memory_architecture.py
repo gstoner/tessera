@@ -24,7 +24,7 @@ import numpy as np
 import pytest
 
 from tessera.cache import MemoryStateHandle
-from tessera.compiler.primitive_coverage import coverage_for
+from tessera.compiler.primitive_coverage import coverage_for, is_contract_closed
 from tessera.memory import (
     register_vmap_axis,
     vmap_axis_for,
@@ -336,7 +336,7 @@ class TestRegistryMemoryComplete:
     @pytest.mark.parametrize("name", ["memory_write", "memory_evict"])
     def test_mutating_memory_transpose_is_not_applicable(self, name):
         # write/evict mutate state — no transpose rule applies.
-        assert coverage_for(name).contract_status["transpose_rule"] == "not_applicable"
+        assert coverage_for(name).contract_status["transpose_rule"] == "no_linear_transpose"
 
     def test_memory_read_only_backend_kernel_remains(self):
         e = coverage_for("memory_read")
@@ -345,4 +345,4 @@ class TestRegistryMemoryComplete:
             if axis == "backend_kernel":
                 assert status in ("partial", "planned")
             else:
-                assert status in ("complete", "not_applicable"), (axis, status)
+                assert is_contract_closed(status), (axis, status)

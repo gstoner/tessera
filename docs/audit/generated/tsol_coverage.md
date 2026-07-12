@@ -13,7 +13,7 @@ Spec: `docs/operations/Tessera_Standard_Operations.md`.  Full primitive registry
 
 Counts below are restricted to the TSOL canonical names.  The full 432-primitive registry is summarised in `docs/audit/standalone_primitive_coverage.md`.
 
-| Axis | complete | partial | planned | N/A | other |
+| Axis | complete | partial | planned | by-design | other |
 |------|----------|---------|---------|-----|-------|
 | `math_semantics` |  47 |   0 |   0 |   0 |   0 |
 | `shape_rule` |  47 |   0 |   0 |   0 |   0 |
@@ -26,7 +26,7 @@ Counts below are restricted to the TSOL canonical names.  The full 432-primitive
 
 ## Per-op coverage
 
-Status legend: ✅ `complete`  • ◐ `partial`  • ◯ `planned`  • – `not_applicable`  • ? `unknown` / missing registry entry.
+Status legend: ✅ `complete`  • ◐ `partial`  • ◯ `planned`  • — explicit by-design disposition  • ? `unknown` / missing registry entry.
 
 ### Linear Algebra
 
@@ -54,7 +54,7 @@ Status legend: ✅ `complete`  • ◐ `partial`  • ◯ `planned`  • – `no
 | `gelu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
 | `relu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
 | `silu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
-| `dropout` | ✅ | ✅ | ✅ | ✅ | – | ✅ | ✅ | ◐ |
+| `dropout` | ✅ | ✅ | ✅ | ✅ | — `non_differentiable` | ✅ | ✅ | ◐ |
 | `qkv_projection` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
 | `flash_attn` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
 | `rope` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
@@ -88,8 +88,8 @@ Status legend: ✅ `complete`  • ◐ `partial`  • ◯ `planned`  • – `no
 
 | Op | math | shape | dtype | vjp | jvp | lowering | sharding | backend |
 |----|------|-------|-------|-----|-----|----------|----------|---------|
-| `rng_uniform` | ✅ | ✅ | ✅ | – | – | ✅ | ✅ | ◐ |
-| `rng_normal` | ✅ | ✅ | ✅ | – | – | ✅ | ✅ | ◐ |
+| `rng_uniform` | ✅ | ✅ | ✅ | — `non_differentiable` | — `non_differentiable` | ✅ | ✅ | ◐ |
+| `rng_normal` | ✅ | ✅ | ✅ | — `non_differentiable` | — `non_differentiable` | ✅ | ✅ | ◐ |
 
 ### Collectives
 
@@ -105,14 +105,14 @@ Status legend: ✅ `complete`  • ◐ `partial`  • ◯ `planned`  • – `no
 | Op | math | shape | dtype | vjp | jvp | lowering | sharding | backend |
 |----|------|-------|-------|-----|-----|----------|----------|---------|
 | `transpose` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
-| `rearrange` | ✅ | ✅ | ✅ | – | – | ✅ | ✅ | ◐ |
-| `pack` | ✅ | ✅ | ✅ | – | – | ✅ | ✅ | ◐ |
-| `unpack` | ✅ | ✅ | ✅ | – | – | ✅ | ✅ | ◐ |
-| `tile_view` | ✅ | ✅ | ✅ | – | – | ✅ | ✅ | – |
+| `rearrange` | ✅ | ✅ | ✅ | — `non_differentiable` | — `non_differentiable` | ✅ | ✅ | ◐ |
+| `pack` | ✅ | ✅ | ✅ | — `non_differentiable` | — `non_differentiable` | ✅ | ✅ | ◐ |
+| `unpack` | ✅ | ✅ | ✅ | — `non_differentiable` | — `non_differentiable` | ✅ | ✅ | ◐ |
+| `tile_view` | ✅ | ✅ | ✅ | — `non_differentiable` | — `non_differentiable` | ✅ | ✅ | — `no_kernel_required` |
 
 ## Notable gaps
 
-_None today — every TSOL canonical op has a registry entry, a VJP (or N/A), and a JVP (or N/A)._
+_None today — every TSOL canonical op has a registry entry and an explicit VJP/JVP implementation or by-design disposition._
 
 ## Backend kernel honest baseline
 

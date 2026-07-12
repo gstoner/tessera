@@ -79,7 +79,32 @@ CONTRACT_FIELDS: tuple[str, ...] = (
     "tests",
 )
 
-VALID_CONTRACT_STATUSES: frozenset[str] = frozenset({"complete", "partial", "planned", "not_applicable"})
+TERMINAL_CONTRACT_STATUS_BY_AXIS: Mapping[str, str] = {
+    "math_semantics": "host_api_contract",
+    "shape_rule": "host_api_contract",
+    "dtype_layout_rule": "host_api_contract",
+    "vjp": "non_differentiable",
+    "jvp": "non_differentiable",
+    "batching_rule": "no_batch_axis",
+    "transpose_rule": "no_linear_transpose",
+    "sharding_rule": "replicated_or_non_tensor",
+    "masking_effect_rule": "pure_no_effect",
+    "lowering_rule": "host_runtime",
+    "backend_kernel": "no_kernel_required",
+    "tests": "host_api_contract",
+}
+TERMINAL_CONTRACT_STATUSES: frozenset[str] = frozenset(
+    TERMINAL_CONTRACT_STATUS_BY_AXIS.values()
+)
+VALID_CONTRACT_STATUSES: frozenset[str] = frozenset({
+    "complete", "partial", "planned", "not_applicable",
+    *TERMINAL_CONTRACT_STATUSES,
+})
+
+
+def is_contract_closed(status: str) -> bool:
+    """Whether a contract status is implemented or closed by explicit design."""
+    return status == "complete" or status in TERMINAL_CONTRACT_STATUSES
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -247,7 +272,7 @@ class PrimitiveCoverage:
         return tuple(
             field
             for field in CONTRACT_FIELDS
-            if self.contract_status.get(field, "planned") not in {"complete", "not_applicable"}
+            if not is_contract_closed(self.contract_status.get(field, "planned"))
         )
 
 
@@ -308,7 +333,7 @@ def _merge_contract_status(
 
     merged = dict(base)
     for field, value in promoted.items():
-        if value in {"complete", "not_applicable"}:
+        if value == "complete" or value in TERMINAL_CONTRACT_STATUSES or value == "not_applicable":
             merged[field] = value
         elif merged.get(field) == "planned":
             merged[field] = value
@@ -3847,6 +3872,24 @@ def all_primitive_coverages() -> dict[str, PrimitiveCoverage]:
             lowering=entry.lowering,
             metadata=entry.metadata,
         )
+    # Replace the legacy catch-all N/A with an axis-specific terminal reason.
+    # Internal classifiers may continue using ``not_applicable`` as a concise
+    # construction token; it must never escape the public registry.
+    for name, entry in list(entries.items()):
+        if "not_applicable" not in entry.contract_status.values():
+            continue
+        contract = {
+            axis: (TERMINAL_CONTRACT_STATUS_BY_AXIS[axis]
+                   if status == "not_applicable" else status)
+            for axis, status in entry.contract_status.items()
+        }
+        entries[name] = PrimitiveCoverage(
+            name=entry.name, category=entry.category, status=entry.status,
+            contract_status=contract, model_families=entry.model_families,
+            references=entry.references, notes=entry.notes,
+            existing_op=entry.existing_op, graph_name=entry.graph_name,
+            effect=entry.effect, lowering=entry.lowering, metadata=entry.metadata,
+        )
     return dict(sorted(entries.items()))
 
 
@@ -4037,6 +4080,9 @@ def render_markdown(entries: Iterable[PrimitiveCoverage] | None = None) -> str:
 
 __all__ = [
     "CONTRACT_FIELDS",
+    "TERMINAL_CONTRACT_STATUS_BY_AXIS",
+    "TERMINAL_CONTRACT_STATUSES",
+    "is_contract_closed",
     "PrimitiveCoverage",
     "all_primitive_coverages",
     "coverage_for",

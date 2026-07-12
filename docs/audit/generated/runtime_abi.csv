@@ -626,6 +626,9 @@ x86,tessera_x86_fft_c2c_f32,fft_c2c,f32,src/compiler/codegen/tessera_x86_backend
 x86,tessera_x86_flash_attn_ext_f32,flash_attn_ext,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_flash_attn_f32.cpp
 x86,tessera_x86_flash_attn_f32,flash_attn,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_flash_attn_f32.cpp
 x86,tessera_x86_gather_f32,gather,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_gather_f32.cpp
+x86,tessera_x86_kv_cache_append_f32,kv_cache_append,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/kv_cache_f32.cpp
+x86,tessera_x86_kv_cache_prune_f32,kv_cache_prune,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/kv_cache_f32.cpp
+x86,tessera_x86_kv_cache_read_f32,kv_cache_read,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/kv_cache_f32.cpp
 x86,tessera_x86_lu_f32,lu,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_lu_qr_f32.cpp
 x86,tessera_x86_moe_f32,moe,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_moe_f32.cpp
 x86,tessera_x86_optimizer_f32,optimizer,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_optimizer_f32.cpp

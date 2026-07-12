@@ -164,6 +164,8 @@ class ScheduleIRVerifier:
                 self._verify_stage(op, diagnostics, meshes, region_stack)
             elif op.op_name == "schedule.prefetch":
                 self._verify_prefetch(op, diagnostics)
+            elif op.op_name == "schedule.state.read":
+                self._verify_state_read(op, diagnostics)
             elif op.op_name == "schedule.yield":
                 if not region_stack:
                     diagnostics.append(GraphIRDiagnostic(
@@ -253,6 +255,18 @@ class ScheduleIRVerifier:
             diagnostics.append(GraphIRDiagnostic("error", "prefetch has invalid memory space", code="SCHEDULE_IR_MEMORY_SPACE"))
         if op.attrs.get("overlap") not in SCHEDULE_OVERLAPS:
             diagnostics.append(GraphIRDiagnostic("error", "prefetch has invalid overlap policy", code="SCHEDULE_IR_OVERLAP"))
+
+    def _verify_state_read(self, op: ScheduleOp, diagnostics: list[GraphIRDiagnostic]) -> None:
+        missing = [key for key in ("source", "result", "ordinal", "effect", "access")
+                   if key not in op.attrs]
+        if missing:
+            diagnostics.append(GraphIRDiagnostic(
+                "error", f"state.read missing attrs: {', '.join(missing)}",
+                code="SCHEDULE_IR_STATE_READ_ATTR"))
+        if op.attrs.get("effect") != "read":
+            diagnostics.append(GraphIRDiagnostic(
+                "error", "state.read must declare effect=read",
+                code="SCHEDULE_IR_STATE_READ_EFFECT"))
 
 
 def lower_graph_to_schedule_ir(
@@ -357,6 +371,19 @@ def _lower_graph_ops(ops: list[IROp], *, tile: tuple[int, int, int]) -> list[Sch
             scheduled.append(_media_op(op, idx))
         elif op_name in JEPA_OPS:
             scheduled.append(_jepa_op(op, idx))
+        elif op_name == "tessera.kv_cache.read":
+            scheduled.append(ScheduleOp(
+                "schedule.state.read",
+                {
+                    **_base_attrs(op, idx),
+                    "effect": "read",
+                    "access": "paged_slice",
+                    "bounds": "start_end",
+                },
+                operands=list(op.operands),
+                result=op.result,
+                source_op=op,
+            ))
         elif op_name in ROPE_OPS:
             scheduled.append(ScheduleOp("schedule.elementwise", {**_base_attrs(op, idx), "vectorize": True, "pattern": "rotary_pairs"}))
         elif op_name.startswith("tessera.scf.") or op_name in {"tessera.barrier", "tessera.assert"}:

@@ -269,27 +269,25 @@ private:
 // ─────────────────────────────────────────────────────────────────────────────
 // kv_cache_coverage_matrix.md (2026-05-10) — KV-cache lowering on x86.
 //
-// The x86 backend has no native KV-cache kernel. We lower
+// The runtime now ships native contiguous-f32 append/read/prune symbols in
+// libtessera_x86_elementwise.so. This legacy opaque-handle rewrite lowers
 // `tessera.kv_cache.{create,append,prune,read}` to a single host-shaped
 // runtime call:
 //
 //   tessera_x86_kv_cache_op(kind: i32, args...)
 //
-// The runtime symbol delegates to the existing `KVCacheHandle`
-// reference path (the same one backing `tessera.ops.kv_cache_*` from
-// Python). Until x86 grows a real in-cache score-matrix kernel, this
-// keeps the IR-level lowering Decision-#21-compliant (a real op, not
-// a silent drop) while the Python runtime path continues to drive
-// execution.
+// This artifact call remains the bridge for opaque `!tessera.kv_cache` values;
+// bufferized f32 execution uses `tessera_x86_kv_cache_{append,read,prune}_f32`
+// through the registered `x86_kv_cache_compiled` runtime lane.
 //
 // `kind` enum (matches the same handle-style discrimination the Apple
 // path uses):
 //   0 = create, 1 = append, 2 = prune, 3 = read
 //
-// We emit attribute-only artifact ops here (no buffer pointers); the
-// Python frontend separately drives execution via the `ReferenceKVCache`
-// path. This pattern matches how the Apple TileToApple lowering ships
-// kv_cache_op artifacts that the Python runtime consumes.
+// We emit attribute-only artifact ops here because this pass has no buffer
+// pointers for the opaque handle. It must not be used as native-execution
+// evidence; the buffer ABI, execution-matrix row, and numerical fixture own
+// that proof.
 // ─────────────────────────────────────────────────────────────────────────────
 
 struct LowerKVCacheToX86 : public RewritePattern {

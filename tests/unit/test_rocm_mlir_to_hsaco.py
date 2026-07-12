@@ -205,8 +205,8 @@ def test_tessera_kernel_compiles_through_mlir_and_executes(op):
     maxerr = _launch_and_compare(hip, hsaco, a, b, ref)
     if maxerr < 0:
         pytest.skip("no usable AMD GPU (hipModuleLoadData / launch unavailable)")
-    # Exact: f32 add/mul through the compiled kernel must match numpy bit-for-bit.
-    assert maxerr == 0.0, f"{op} via MLIR-compiled hsaco: maxerr={maxerr}"
+    # Exact: f32 add/mul through the device_verified_jit kernel must match numpy bit-for-bit.
+    assert maxerr == 0.0, f"{op} via MLIR-device_verified_jit hsaco: maxerr={maxerr}"
 
 
 def test_emit_rocdl_serializes_to_a_real_hsaco_elf():

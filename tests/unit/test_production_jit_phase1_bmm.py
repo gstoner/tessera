@@ -74,7 +74,7 @@ def test_jit_bmm_rejects_out_of_envelope(a, b):
 
 
 def test_bmm_batched_attention_in_one_graph():
-    """Batched (per-head, K pre-transposed) attention via bmm, ONE compiled fn.
+    """Batched (per-head, K pre-transposed) attention via bmm, ONE device_verified_jit fn.
 
     H heads laid out as the batch dim: scores[h] = Q[h] @ Kt[h], softmax, @ V[h].
     K is pre-transposed by the caller (batched transpose is a later slice); the
@@ -96,7 +96,7 @@ def test_bmm_batched_attention_in_one_graph():
 
     before = jb.invocation_count()
     out = g.run(q, kt, v)
-    assert jb.invocation_count() == before + 1  # one compiled function
+    assert jb.invocation_count() == before + 1  # one device_verified_jit function
 
     s = q @ kt
     p = np.exp(s - s.max(-1, keepdims=True))

@@ -10,7 +10,7 @@ the same 5-step ritual:
      dialect class and (for dotted-name dialects) adds a
      :class:`DialectExtension` anchored on the parent ``tessera``
      dialect so the longest-prefix op-name parser routes correctly.
-  4. CMake target compiled into a static library + linked into
+  4. CMake target device_verified_jit into a static library + linked into
      ``tessera-opt`` under a per-dialect ``TESSERA_HAVE_FA4_<NAME>``
      define.
   5. Call to the ``register<Name>Dialect(registry)`` function from

@@ -76,9 +76,9 @@ handled the WSL `hipGetDeviceCount==0` quirk (probe-based skip).
 16×16×16 `f32←f16` GEMM, routed through the C-ABI bridge — maxerr ≈ 3e-8
 standalone / < 1e-2 through the bridge. Test
 `tests/unit/test_rocm_wmma_execute_compare.py`. This clears the *numerical-proof*
-half of the `hardware_verified` contract.
+half of the `device_verified_abi` contract.
 
-## Manifest flip landed (2026-06-22) — rocm matmul row is `hardware_verified`
+## Manifest flip landed (2026-06-22) — rocm matmul row is `device_verified_abi`
 
 The shipped runtime symbol now exists, so the `backend_manifest` matmul row was
 promoted `artifact_only → hardware_verified`:
@@ -97,7 +97,7 @@ promoted `artifact_only → hardware_verified`:
 
 **No audit inflation:** the per-primitive `backend_kernel` axis stays **474 open
 / 0 complete** — `primitive_is_complete(matmul)` is still `False` because x86 /
-apple / nvidia / cpu rows are not `hardware_verified`. Only the **rocm target
+apple / nvidia / cpu rows are not `device_verified_abi`. Only the **rocm target
 row** is hardware-verified ("complete for this target", not the universal flip).
 
 ## runtime.launch() lane wired + kernel generalized (2026-06-22)
@@ -132,7 +132,7 @@ row** is hardware-verified ("complete for this target", not the universal flip).
 `flash_attn` now executes natively on the AMD GPU — the **second op after
 matmul** to run on a non-Apple backend, taking ROCm from "one op executes" to
 "the two ops that matter execute." The `backend_manifest` flash_attn rocm row is
-`hardware_verified`:
+`device_verified_abi`:
 - **`runtime_symbol`** = `tessera_rocm_wmma_flash_attn_f16` (+ `_bf16`) in the
   shipped `libtessera_rocm_flash_attn.so`; HIPRTC-compiles the RDNA WMMA kernel
   per head_dim at load.
@@ -168,7 +168,7 @@ producer would be over-claiming).
 
 **No audit inflation:** the per-primitive `backend_kernel` axis stays open —
 `primitive_is_complete(flash_attn)` is still `False` (x86/apple/nvidia/cpu rows
-are not all `hardware_verified`). Only the **rocm target row** flipped.
+are not all `device_verified_abi`). Only the **rocm target row** flipped.
 
 ## MLIR→hsaco→execute loop closed on gfx1151 (2026-06-23) — Stage I
 
@@ -330,7 +330,7 @@ become the on-silicon **oracle** the compiled path validates against.
   axis=-1, f32/f16/bf16. Validated on gfx1151 vs the numpy softmax reference
   (`_apple_gpu_dispatch_softmax` math) across f32/f16/bf16 × varied M/K incl.
   K>256, ragged, and rank-3 (`test_rocm_softmax_compiled.py`) + a GPU-free
-  codegen gate (`test_rocm_softmax_codegen.py`). Status `compiled`; it also
+  codegen gate (`test_rocm_softmax_codegen.py`). Status `device_verified_jit`; it also
   flips the curated `softmax`×`rocm` cell to ✅ in `op_target_conformance.md`.
 - **Row reduction** (`sum`/`mean`/`max`/`min`, 2026-06-25): the ROCm analog of
   the x86 AVX-512 reduction lane — a `tessera_rocm.reduce` directive +
@@ -345,7 +345,7 @@ become the on-silicon **oracle** the compiled path validates against.
   axis incl. rank-3 + reduce-all + keepdims (`test_rocm_reduce_compiled.py`) + a
   GPU-free codegen gate. The CPU half (AVX-512) landed in the x86 backend
   (`avx512_reduce_f32.cpp`) — so the reduction family now has a real optimized
-  kernel on both devices we have hardware for. Status `compiled`.
+  kernel on both devices we have hardware for. Status `device_verified_jit`.
 - **Elementwise unary math** (S2 scalar-math / stability family, 2026-06-25):
   a `tessera_rocm.unary` directive + `generate-rocm-unary-kernel` pass emitting
   a flat per-element kernel (one thread per element), the unary sibling of the
@@ -360,7 +360,7 @@ become the on-silicon **oracle** the compiled path validates against.
   subset** (`sqrt`/`rsqrt`/`reciprocal`/`abs`/`neg`/`sign`, direct intrinsics,
   no polynomial approx — `avx512_unary_f32.cpp`, validated standalone); the
   transcendentals stay numpy-reference on CPU (no fused x86 claim). Status
-  `compiled`.
+  `device_verified_jit`.
   - **Tail extension (2026-06-26):** added `cos`/`tan`/`sinh`/`cosh`/`asin`/
     `acos`/`atan`/`erfc` (trig + special, via `math.{Cos,Tan,Sinh,Cosh,Asin,
     Acos,Atan,Erfc}` → ocml) and `floor`/`ceil`/`round`/`trunc` (rounding;
@@ -383,7 +383,7 @@ become the on-silicon **oracle** the compiled path validates against.
   subset** (`sub`/`div`/`maximum`/`minimum`, with NaN-propagation handled via an
   unordered-compare blend — `avx512_binary_f32.cpp`, validated standalone); `pow`
   is transcendental and stays numpy-reference on CPU (no fused x86 claim). Status
-  `compiled`.
+  `device_verified_jit`.
 - **Elementwise comparison** (S2 comparison family, 2026-06-26): a
   `tessera_rocm.compare` directive + `generate-rocm-compare-kernel` pass emitting
   a flat 2-operand per-element kernel with **boolean (`i8` 0/1) output** — the
@@ -397,7 +397,7 @@ become the on-silicon **oracle** the compiled path validates against.
   a GPU-free codegen gate. The CPU half landed in the x86 backend as an AVX-512
   kernel (`_mm512_cmp_ps_mask` + `_mm_maskz_set1_epi8` mask→0/1 bytes;
   `avx512_compare_f32.cpp`, validated standalone — C's native float operators
-  already match numpy's NaN rule). Status `compiled`.
+  already match numpy's NaN rule). Status `device_verified_jit`.
 - **Elementwise logical** (S2 logical family, 2026-06-26): a
   `tessera_rocm.logical` directive + `generate-rocm-logical-kernel` pass emitting
   a flat elementwise kernel over **i8 booleans** — the mask-composition sibling
@@ -412,7 +412,7 @@ become the on-silicon **oracle** the compiled path validates against.
   gate. The CPU half landed in the x86 backend as an AVX-512 kernel
   (`_mm512_cmpneq_epi8_mask` + `_mm512_maskz_set1_epi8` to normalize, then
   `_mm512_{and,or,xor}_si512`; `avx512_logical_i8.cpp`, validated standalone).
-  Status `compiled`.
+  Status `device_verified_jit`.
 - **Elementwise bitwise** (S2 bitwise family, 2026-06-26): a
   `tessera_rocm.bitwise` directive + `generate-rocm-bitwise-kernel` pass emitting
   a flat elementwise kernel over **i32 integers** — the integer sibling of the
@@ -425,7 +425,7 @@ become the on-silicon **oracle** the compiled path validates against.
   (`test_rocm_bitwise_compiled.py`) + a GPU-free codegen gate. The CPU half
   landed in the x86 backend as an AVX-512 kernel (`_mm512_{and,or,xor}_si512`,
   16 i32/vector; `not` = xor all-ones; `avx512_bitwise_i32.cpp`, validated
-  standalone). Status `compiled`.
+  standalone). Status `device_verified_jit`.
 - **rmsnorm / layer_norm** (2026-06-25): the row-reduction siblings of the
   softmax kernel — a `tessera_rocm.norm` directive + `generate-rocm-norm-kernel`
   pass (one workgroup per row). rmsnorm tree-reduces Σx² in one pass; layer_norm
@@ -436,7 +436,7 @@ become the on-silicon **oracle** the compiled path validates against.
   f32 regardless of storage; `eps` is a trailing f32 runtime arg. New
   `runtime.launch()` lane `rocm_norm_compiled` (own executor + matrix row);
   accepts `tessera.rmsnorm`, `tessera.rmsnorm_safe` (tighter default eps),
-  `tessera.layer_norm` by op name; f32/f16/bf16. Status `compiled`. Validated on
+  `tessera.layer_norm` by op name; f32/f16/bf16. Status `device_verified_jit`. Validated on
   gfx1151 vs the unweighted numpy reference across all three ops × f32/f16/bf16 ×
   varied M/K incl. K>256, ragged, rank-3, and a large-offset/small-variance
   layer_norm row (`test_rocm_norm_compiled.py`) + a GPU-free codegen gate
@@ -451,7 +451,7 @@ become the on-silicon **oracle** the compiled path validates against.
   `generate-rocm-rope-kernel` — interleaved-pair rotary position embedding over
   `[M,D]` (`O[2p]=e·cos−o·sin`, `O[2p+1]=e·sin+o·cos`, angle from the even-indexed
   `theta`), one workgroup per row, f32 cos/sin. Lane `rocm_rope_compiled`. Both
-  f32/f16/bf16, status `compiled`; a half-precision `x` may carry an **fp32 angle
+  f32/f16/bf16, status `device_verified_jit`; a half-precision `x` may carry an **fp32 angle
   table** (the common `nn.RotaryEmbedding` default) — theta is cast to `x`'s
   storage on the device copy, so mixed float storage is accepted (only a
   non-floating theta is rejected). Validated on gfx1151 vs the numpy references
@@ -466,7 +466,7 @@ become the on-silicon **oracle** the compiled path validates against.
   one thread per element). The **standalone** analog of the gate-multiply the
   fused SwiGLU MLP applies in-register. f32 compute regardless of storage. New
   `runtime.launch()` lane `rocm_silu_mul_compiled` (own executor + matrix row);
-  op name `tessera.silu_mul`; f32/f16/bf16, status `compiled`. Validated on
+  op name `tessera.silu_mul`; f32/f16/bf16, status `device_verified_jit`. Validated on
   gfx1151 vs the numpy reference across dtype × shape incl. >1 block, multi-D
   (`test_rocm_silu_mul_compiled.py`) + a GPU-free codegen gate (in
   `test_rocm_activation_rope_codegen.py`). **Closes the norms/activations group.**
@@ -478,7 +478,7 @@ become the on-silicon **oracle** the compiled path validates against.
   default `2^(-8(k+1)/H)` ramp when the caller passes none (an explicit `slopes`
   operand overrides it). f32 compute, f16/bf16/f32 output. New `runtime.launch()`
   lane `rocm_alibi_compiled` (own executor + matrix row); op name `tessera.alibi`
-  with `num_heads`/`seq_len` kwargs; status `compiled`. Validated on gfx1151 vs
+  with `num_heads`/`seq_len` kwargs; status `device_verified_jit`. Validated on gfx1151 vs
   the `nn.functional.alibi` numpy reference across H×S incl. >1 block, default +
   explicit slopes (`test_rocm_alibi_compiled.py`) + a GPU-free codegen gate (in
   `test_rocm_activation_rope_codegen.py`). **Closes the positional group.**
@@ -493,7 +493,7 @@ become the on-silicon **oracle** the compiled path validates against.
   rank-r SVD-truncate epilogue; `einsum` maps single-contraction two-operand
   specs to a (batched) gemm (canonicalize + transpose) and emits a stable
   *unsupported* diagnostic otherwise. Shared lane `rocm_matmul_family_compiled`
-  (one executor + matrix row); f16/bf16, f32 accumulate; status `compiled`.
+  (one executor + matrix row); f16/bf16, f32 accumulate; status `device_verified_jit`.
   Validated on gfx1151 vs numpy across dtype × shape incl. multi-batch
   (`test_rocm_matmul_family_compiled.py`). **Closes the matmul-family group.**
 - **exotic-attention compositions** (`gated_attention`, `mla_decode`,
@@ -503,7 +503,7 @@ become the on-silicon **oracle** the compiled path validates against.
   `mla_decode` = latent K/V projections (WMMA GEMM) + flash_attn; `mla_decode_fused`
   = down/up projections (`c=x@w_dkv; K=c@w_uk; V=c@w_uv` on the WMMA GEMM) +
   flash_attn. Shared lane `rocm_exotic_attn_compiled` (one executor + matrix row);
-  f16/bf16, f32 softmax+accumulate; status `compiled`. Validated on gfx1151 vs the
+  f16/bf16, f32 softmax+accumulate; status `device_verified_jit`. Validated on gfx1151 vs the
   numpy attention reference (`test_rocm_exotic_attn_compiled.py`).
 - **recurrent DeltaNet scan** (`gated_deltanet`, `kimi_delta_attention`,
   `modified_delta_attention`, 2026-06-25): the **first RECURRENT compiled ROCm
@@ -518,7 +518,7 @@ become the on-silicon **oracle** the compiled path validates against.
   `/(1+‖k‖·‖target‖)` bound; `O = Q@Ŝ`; sigmoid-gate). `erase`/`modified`/gate/
   beta/decay are compile-time flags (`modified` from the op name); `d_qk`/`d_v`
   compile-time; f16/bf16/f32 storage, f32 compute; causal-only, state=None. Lane
-  `rocm_deltanet_compiled`; status `compiled`. Validated on gfx1151 vs the f64
+  `rocm_deltanet_compiled`; status `device_verified_jit`. Validated on gfx1151 vs the f64
   numpy reference across all three ops × f32/f16/bf16 × flag combos
   (`test_rocm_deltanet_compiled.py`) + a GPU-free codegen gate.
 
@@ -530,10 +530,10 @@ live box with numpy/finite-difference execute-compare fixtures + GPU-free codege
 gates (counts stay in `../../generated/rocm_target_map.md` /
 `runtime_execution_matrix.md`).
 
-- **`gemm` row → `hardware_verified` + arch-aware guard (#321, 2026-07-08).** The
+- **`gemm` row → `device_verified_abi` + arch-aware guard (#321, 2026-07-08).** The
   compiled ROCm `gemm` row was still `artifact_only`, understating a proven lane —
   it *is* the `tessera_rocm_wmma_gemm_f16` matrix-core matmul (`matmul` had been
-  `hardware_verified` since the 06-22 flip). Promoted while **preserving the
+  `device_verified_abi` since the 06-22 flip). Promoted while **preserving the
   CDNA-MFMA artifact metadata** (`mfma_shape=(32,32,8,1)`) so the CDNA descriptor
   stays intact. `_build_compiled_gemm_hsaco` now raises a **stable arch-naming
   diagnostic** (Decision #21) for non-gfx11 targets (RDNA4 gfx12xx 16×16×32 WMMA
@@ -563,13 +563,13 @@ gates (counts stay in `../../generated/rocm_target_map.md` /
 
 **No audit inflation:** these are per-target ROCm rows. The per-primitive
 `backend_kernel` axis stays open until *all* targets (x86/apple/nvidia/cpu) are
-`hardware_verified` for each op — the generated dashboards remain count truth.
+`device_verified_abi` for each op — the generated dashboards remain count truth.
 
 ## Still Open
 
 - **No generic-`rocm` target-map rows remain `artifact_only`.** The live source
   of truth is `../../generated/rocm_target_map.md`; entries there are now
-  `hardware_verified` or `compiled` for the generic ROCm lane. Remaining work is
+  `device_verified_abi` or `device_verified_jit` for the generic ROCm lane. Remaining work is
   performance promotion and sub-arch/hardware expansion, not a missing
   artifact-only classification.
   - **norms / activations:** *(group closed)* — `softmax`/`softmax_safe`,
@@ -683,7 +683,7 @@ data.
 4. ✅ **Ship the ROCm WMMA GEMM runtime symbol (2026-06-22):**
    `libtessera_rocm_gemm.so` exports `tessera_rocm_wmma_gemm_{f16,bf16}` (HIPRTC
    at load), with the `test_rocm_wmma_runtime_symbol.py` execute-compare fixture.
-   The matmul manifest row is `hardware_verified` (rocm target).
+   The matmul manifest row is `device_verified_abi` (rocm target).
 5. ✅ **Wire the executor into `runtime.launch()` + generalize the kernel
    (2026-06-22):** the executable `("rocm", "rocm_wmma")` row is earned in the
    generated `runtime_execution_matrix` (`hip_runtime`); kernel extended to
@@ -701,7 +701,7 @@ data.
 7. ✅ **Extend hardware execution beyond matmul — `flash_attn` (2026-06-23):**
    `libtessera_rocm_flash_attn.so` exports `tessera_rocm_wmma_flash_attn_{f16,
    bf16}` (FA-2 forward, both matmuls on WMMA, online softmax, causal + ragged),
-   `hardware_verified` with `test_rocm_flash_attn_runtime_symbol.py`. Second op
+   `device_verified_abi` with `test_rocm_flash_attn_runtime_symbol.py`. Second op
    after matmul to execute on ROCm. (Forward only; no perf ladder; no launch lane
    — see the flash_attn section above.)
 8. ✅ **`--tessera-emit-rocdl` MLIR-graph route reachable on the box (2026-06-23):**
@@ -770,7 +770,7 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
     on-silicon oracle until the compiled path is multi-tile + perf-laddered.
 - **Stage K — a real GEMM through the full stack vs. the oracle.** Graph → Tile →
   `tessera_rocm` Target IR (real WMMA) → ROCDL → hsaco → launch, execute-compare
-  against **both numpy and the `hardware_verified` hand-written kernel** (the
+  against **both numpy and the `device_verified_abi` hand-written kernel** (the
   on-silicon oracle). Milestone: "the compiler, not a hand-written kernel,
   produced the executing GEMM."
 - **Stage L — converge the compiled path to production.** Not a single change —

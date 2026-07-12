@@ -1,4 +1,4 @@
-"""Workstream B — prefill/decode as different compiled programs.
+"""Workstream B — prefill/decode as different device_verified_jit programs.
 
 A tiny single-layer causal-attention LM exercises the phase contract end to end:
 ``prefill`` fills a KVCacheHandle, ``decode`` advances one token by consuming that

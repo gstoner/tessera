@@ -1,7 +1,7 @@
 """P1 frontend emission (S_SERIES_GAP_CLOSURE_PLAN §6.B) — a ``@jit`` body that
 uses the 6 structural view ops (squeeze / unsqueeze / expand / broadcast /
 permute / flatten) must EMIT the corresponding Graph IR op so it enters the
-compiled pipeline, instead of dropping the call to a bogus ``%?`` operand.
+device_verified_jit pipeline, instead of dropping the call to a bogus ``%?`` operand.
 
 Before this fix the structural ops resolved through the generic call mapper but
 their positional axes/perm/shape argument was dropped to a ``%?`` operand —

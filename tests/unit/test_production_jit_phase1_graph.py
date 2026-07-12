@@ -3,7 +3,7 @@
 
 The leap from op-at-a-time to compiling a whole multi-op `tessera` function as
 ONE JIT'd unit. The decisive proof is the invocation counter: an N-op graph
-advances it by exactly 1 (one compiled function), not N. Intermediates never
+advances it by exactly 1 (one device_verified_jit function), not N. Intermediates never
 cross the boundary.
 
 Skips when libtessera_jit is not built.
@@ -43,7 +43,7 @@ def test_attention_block_as_one_compiled_function():
     """softmax(Q Kᵀ) V composed in ONE function (scale folded into Q externally).
 
     Contrast with test_single_head_attention_composes (Sprint 1.7), which ran 4
-    separate compile+invoke cycles. Here the whole block is one compiled function
+    separate compile+invoke cycles. Here the whole block is one device_verified_jit function
     — one counter increment — with Q Kᵀ scores and softmax probs never crossing
     the boundary.
     """
@@ -64,7 +64,7 @@ def test_attention_block_as_one_compiled_function():
     before = jb.invocation_count()
     out = g.run(q, k, v)
     after = jb.invocation_count()
-    assert after - before == 1  # 3 ops, ONE compiled function
+    assert after - before == 1  # 3 ops, ONE device_verified_jit function
 
     ref_scores = q @ k.T
     ref_probs = np.exp(ref_scores - ref_scores.max(-1, keepdims=True))
@@ -74,13 +74,13 @@ def test_attention_block_as_one_compiled_function():
 
 
 def test_llama_style_transformer_block_as_one_function():
-    """A bias-free, single-head, pre-norm transformer block — compiled ONCE.
+    """A bias-free, single-head, pre-norm transformer block — device_verified_jit ONCE.
 
     x -> rmsnorm -> attn(QKᵀ→softmax→·V→Wo) -> +residual
       -> rmsnorm -> MLP(silu(x W1) ⊙ (x W3)) W2 -> +residual
 
     This is the Phase-1 "model layer end-to-end" milestone: a real (LLaMA-shaped)
-    decoder layer runs through tessera→linalg→LLVM as a single compiled function.
+    decoder layer runs through tessera→linalg→LLVM as a single device_verified_jit function.
     """
     rng = np.random.default_rng(11)
     T, D, F = 4, 8, 16

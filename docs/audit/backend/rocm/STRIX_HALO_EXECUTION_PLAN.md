@@ -138,8 +138,8 @@ row = 2·e + lane>>4). A 16×16×16 `f32 ← f16` tile vs a host reference: **ma
 
 **What this clears, and what it does NOT.** This is a genuine on-hardware
 execute-and-compare of the WMMA op — the *numerical-proof* half of the
-`backend_manifest` `hardware_verified` contract (`execute_compare_fixture`). It
-is **deliberately NOT promoted to `hardware_verified` / `backend_kernel`
+`backend_manifest` `device_verified_abi` contract (`execute_compare_fixture`). It
+is **deliberately NOT promoted to `device_verified_abi` / `backend_kernel`
 complete**, because that status also requires a **shipped `runtime_symbol`** — a
 C-ABI kernel symbol that runs at dispatch from an auto-registered ROCm runtime
 lib (cf. Apple's `tessera_apple_gpu_mps_matmul_f32` in the shipped runtime).
@@ -159,7 +159,7 @@ The WMMA kernel is now a **shipped, auto-built symbol** wired into the runtime:
 compiled for the device arch at load), `runtime.launch()` dispatches
 `target="rocm"` matmul to it via the `rocm_wmma` execution-matrix lane, and the
 kernel is a **general tiled/K-looped GEMM** (any positive M/N/K, ragged edges
-zero-padded). The `backend_manifest` matmul row is `hardware_verified` for
+zero-padded). The `backend_manifest` matmul row is `device_verified_abi` for
 `{fp16, bf16}`. Closes the Stage D "ship an auto-registered launcher" gate.
 
 ### Stage F — GEMM perf ladder (2026-06-22, in progress)
@@ -368,7 +368,7 @@ row = 2·e+(lane>>4)).
 output to a numpy attention reference across f16/bf16, head_dim 16/32/64/128,
 multi batch/head, ragged shapes, and causal. Measured on gfx1151: **maxerr ~1e-4
 (f16)**, ~1e-3 (bf16). The `backend_manifest` flash_attn rocm row is
-`hardware_verified`.
+`device_verified_abi`.
 
 **Honest scope.** Forward only — no backward. **Correctness-first "rung 0"** (the
 attention analog of the naive GEMM tile before its perf ladder): single wave per

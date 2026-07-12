@@ -223,7 +223,7 @@ def test_matmul_is_public_and_native_at_target_ir() -> None:
     assert row.cells["graph_ir"].status == "registered"
     assert row.cells["tile_ir"].status == "fused"
     assert row.cells["target_ir"].status in {
-        "fused", "compiled", "hardware_verified", "packaged",
+        "fused", "device_verified_jit", "device_verified_abi", "packaged",
     }
 
 
@@ -232,9 +232,9 @@ def test_native_target_ir_rows_are_not_left_tile_partial(support_rows) -> None:
 
     The primitive registry's backend-kernel axis is intentionally conservative,
     so the support table must not leave a row as `tile_ir=partial` once the
-    backend manifest proves a native/compiled Target IR lane.
+    backend manifest proves a native/device_verified_jit Target IR lane.
     """
-    native_statuses = {"fused", "compiled", "hardware_verified", "packaged"}
+    native_statuses = {"fused", "device_verified_jit", "device_verified_abi", "packaged"}
     offenders = [
         row.op_name
         for row in support_rows
@@ -249,22 +249,22 @@ def test_structural_aliases_reuse_existing_tile_target_evidence() -> None:
 
     expected = {
         "dynamic_slice": ("fused", {"fused"}),
-        "dynamic_update_slice": ("fused", {"compiled"}),
+        "dynamic_update_slice": ("fused", {"device_verified_jit"}),
         "chunk": ("fused", {"fused"}),
-        "cast": ("fused", {"compiled", "fused"}),
+        "cast": ("fused", {"device_verified_jit", "fused"}),
         "index_select": ("fused", {"fused"}),
-        "index_update": ("fused", {"compiled"}),
-        "masked_fill": ("fused", {"compiled"}),
+        "index_update": ("fused", {"device_verified_jit"}),
+        "masked_fill": ("fused", {"device_verified_jit"}),
         "memory_index_select": ("fused", {"fused"}),
         "memory_index_select_ste": ("fused", {"fused"}),
         "msa_select_blocks": ("fused", {"fused"}),
-        "pack": ("fused", {"compiled"}),
+        "pack": ("fused", {"device_verified_jit"}),
         "permute": ("fused", {"fused"}),
         "rearrange": ("fused", {"fused"}),
-        "reduce": ("fused", {"compiled"}),
-        "rope_merge": ("fused", {"compiled"}),
+        "reduce": ("fused", {"device_verified_jit"}),
+        "rope_merge": ("fused", {"device_verified_jit"}),
         "rope_split": ("fused", {"fused"}),
-        "select": ("fused", {"compiled"}),
+        "select": ("fused", {"device_verified_jit"}),
         "split": ("fused", {"fused"}),
         "take": ("fused", {"fused"}),
         "unpack": ("fused", {"fused"}),
@@ -281,8 +281,8 @@ def test_domain_variants_reuse_existing_tile_target_evidence() -> None:
     row = audit.support_row_for("ntk_rope")
     assert row.cells["tile_ir"].status == "fused"
     assert row.cells["target_ir"].status in {
-        "compiled",
-        "hardware_verified",
+        "device_verified_jit",
+        "device_verified_abi",
     }
 
 
@@ -290,7 +290,7 @@ def test_x86_and_rocm_native_manifest_rows_close_tile_ir(support_rows) -> None:
     """x86/ROCm native lanes must not drift back to Tile IR partial."""
     from tessera.compiler import backend_manifest as bm
 
-    native_statuses = {"fused", "compiled", "hardware_verified", "packaged"}
+    native_statuses = {"fused", "device_verified_jit", "device_verified_abi", "packaged"}
     native_x86_rocm = {
         op_name
         for op_name, entries in bm.all_manifests().items()
@@ -320,7 +320,7 @@ def test_compiled_rocm_lanes_beat_reference_target_ir() -> None:
         "spec_accept_tree_sample",
     ):
         row = audit.support_row_for(name)
-        assert row.cells["target_ir"].status == "compiled", name
+        assert row.cells["target_ir"].status == "device_verified_jit", name
         assert row.cells["tile_ir"].status == "fused", name
 
 

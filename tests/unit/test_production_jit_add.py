@@ -44,7 +44,7 @@ def test_jit_add_actually_executed_the_compiled_function():
     out = jb.jit_add(a, b)
     after = jb.invocation_count()
 
-    assert after == before + 1, "compiled function did not execute (silent fallback?)"
+    assert after == before + 1, "device_verified_jit function did not execute (silent fallback?)"
     np.testing.assert_array_equal(out, np.full((3, 5), 3.0, dtype=np.float32))
 
 
@@ -72,7 +72,7 @@ def test_jit_add_rejects_out_of_envelope_instead_of_falling_back(a, b):
     """Out-of-envelope inputs must RAISE, never silently compute via numpy.
 
     A silent numpy fallback here would be a correctness-masking bug: it would
-    return the right number while bypassing the compiled lane entirely.
+    return the right number while bypassing the device_verified_jit lane entirely.
 
     Note: Phase 1 generalized the elementwise lowering, so rank-3+ adds now
     legitimately execute through the lane (previously a Phase 0 envelope guard);

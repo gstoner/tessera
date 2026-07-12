@@ -227,7 +227,7 @@ def _best_status(entries: Iterable[_bm.BackendKernelEntry]) -> str | None:
     if not statuses:
         return None
     backend_order = (
-        "hardware_verified", "compiled", "packaged", "fused", "reference",
+        "device_verified_abi", "device_verified_jit", "packaged", "fused", "reference",
         "compileable", "artifact_only", "planned",
     )
     for s in backend_order:
@@ -410,7 +410,7 @@ def _proof_cell(op: ConformanceOp, target: str) -> ProofCell:
             )
         # Composition is a real end-to-end proof when every component has a
         # declared execute/compare fixture. Fusion is a performance property,
-        # not a correctness prerequisite, so do not demote a fully compiled
+        # not a correctness prerequisite, so do not demote a fully device_verified_jit
         # chain merely because it launches more than one kernel.
 
     runtime_execute = _proof_status_from_runtime(
@@ -465,7 +465,7 @@ def _proof_status_from_backend_compile(
 
     Reference and compileable are explicit non-complete states. A fused source
     row completes this rung only when an execute/compare fixture proves that the
-    source was compiled and ran for the same exact target.
+    source was device_verified_jit and ran for the same exact target.
     """
     if any(s == "missing" for s in statuses):
         return PROOF_MISSING
@@ -477,7 +477,7 @@ def _proof_status_from_backend_compile(
         return PROOF_COMPILEABLE
     if any(s == "reference" for s in statuses):
         return PROOF_REFERENCE
-    native_statuses = {"hardware_verified", "compiled", "packaged", "fused"}
+    native_statuses = {"device_verified_abi", "device_verified_jit", "packaged", "fused"}
     if all(s in native_statuses for s in statuses) and (
         all(s != "fused" for s in statuses)
         or _numerical_proof_source(op, target) == "fixture"
@@ -511,7 +511,7 @@ def _proof_status_from_runtime(
         return PROOF_MISSING
     if any(s == "reference" for s in statuses):
         return PROOF_REFERENCE
-    if all(s in {"hardware_verified", "compiled", "packaged", "fused"}
+    if all(s in {"device_verified_abi", "device_verified_jit", "packaged", "fused"}
            for s in statuses):
         return PROOF_COMPLETE
     return PROOF_PARTIAL

@@ -62,7 +62,7 @@ HEADLINE_OPS = {"clifford_geometric_product", "clifford_rotor_sandwich"}
 
 # P12 (S_SERIES_GAP_CLOSURE_PLAN) — the GA ops that now ship a native x86 +
 # ROCm device lane (table-driven Cl(3,0) bilinear products). For these, x86 is
-# `fused` and ROCm is `compiled` rather than reference / Phase-H-planned.
+# `fused` and ROCm is `device_verified_jit` rather than reference / Phase-H-planned.
 DEVICE_COMPILED_OPS = set(bm._CLIFFORD_DEVICE_COMPILED)
 # The ops still on the reference / planned path (exp/log, grade/norm, diff-geo).
 REFERENCE_ONLY_OPS = EXPECTED_CLIFFORD_OPS - DEVICE_COMPILED_OPS
@@ -99,13 +99,13 @@ def test_cpu_targets_carry_reference_status(op_name: str) -> None:
 @pytest.mark.parametrize("op_name", sorted(DEVICE_COMPILED_OPS))
 def test_device_compiled_ops_carry_native_lane(op_name: str) -> None:
     """P12 — the table-driven Cl(3,0) bilinear products ship a native x86
-    (fused, AVX-512) + ROCm (compiled, generated) lane; apple_cpu stays on
-    the Python reference. ROCm `compiled` carries the numerical fixture."""
+    (fused, AVX-512) + ROCm (device_verified_jit, generated) lane; apple_cpu stays on
+    the Python reference. ROCm `device_verified_jit` carries the numerical fixture."""
     manifest = bm.clifford_manifest_for(op_name)
     by_target = {e.target: e for e in manifest}
     assert by_target["x86"].status == "fused"
     assert by_target["apple_cpu"].status == "reference"
-    assert by_target["rocm"].status == "compiled"
+    assert by_target["rocm"].status == "device_verified_jit"
     assert by_target["rocm"].execute_compare_fixture == (
         "tests/unit/test_rocm_clifford_compiled.py")
     assert by_target["x86"].execute_compare_fixture == (
@@ -145,11 +145,11 @@ def test_fused_apple_gpu_status_for_all_seventeen_ops(op_name: str) -> None:
 @pytest.mark.parametrize("op_name", sorted(EXPECTED_CLIFFORD_OPS))
 def test_nvidia_and_rocm_remain_planned(op_name: str) -> None:
     """NVIDIA gated on Phase G for all GA ops; ROCm gated on Phase H except the
-    P12 device-lane ops (which ship a `compiled` ROCm kernel)."""
+    P12 device-lane ops (which ship a `device_verified_jit` ROCm kernel)."""
     manifest = bm.clifford_manifest_for(op_name)
     by_target = {e.target: e for e in manifest}
     assert by_target["nvidia_sm90"].status == "planned"
-    expected_rocm = "compiled" if op_name in DEVICE_COMPILED_OPS else "planned"
+    expected_rocm = "device_verified_jit" if op_name in DEVICE_COMPILED_OPS else "planned"
     assert by_target["rocm"].status == expected_rocm
 
 
@@ -362,7 +362,7 @@ def test_nvidia_entry_documents_phase_g_gating() -> None:
 def test_rocm_entry_documents_compiled_clifford_path() -> None:
     manifest = bm.clifford_manifest_for("clifford_integral")
     rocm = next(e for e in manifest if e.target == "rocm")
-    assert rocm.status == "compiled"
+    assert rocm.status == "device_verified_jit"
     assert rocm.execute_compare_fixture == "tests/unit/test_rocm_clifford_compiled.py"
     assert "rocm_clifford_compiled lane" in rocm.notes
 

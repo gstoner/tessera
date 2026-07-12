@@ -94,7 +94,7 @@ def test_msa_kv_outer_sparse_reaches_rocm_target_ir():
     # ROCm IR-visible mirror of the CUDA kv_outer_sparse contract. Same
     # schedule/tile lowering; the ROCm target op carries the selected-block
     # KV-outer contract. Unlike NVIDIA's artifact_only cuda_kernel, ROCm reports
-    # status=compiled (a real executing lane, rocm_sparse_attn_compiled), and the
+    # status=device_verified_jit (a real executing lane, rocm_sparse_attn_compiled), and the
     # old "unsupported" tessera.attn diagnostic is gone.
     schedule = lower_graph_to_schedule_ir(
         _msa_graph(
@@ -112,7 +112,7 @@ def test_msa_kv_outer_sparse_reaches_rocm_target_ir():
     text = target.to_mlir()
     assert "tessera_rocm.msa_block_sparse" in text
     assert 'kernel = "msa_kv_outer_sparse"' in text
-    assert 'status = "compiled"' in text
+    assert 'status = "device_verified_jit"' in text
     assert 'runtime_lane = "rocm_sparse_attn_compiled"' in text
     assert 'block_ids_layout = "B,Hkv,Sq,top_k"' in text
     assert 'kv_traversal = "kv_outer"' in text
@@ -124,7 +124,7 @@ def test_msa_kv_outer_sparse_reaches_x86_target_ir():
     # x86 IR-visible mirror of the CUDA kv_outer_sparse contract — parity with the
     # ROCm mirror. Same schedule/tile lowering; the CPU target op carries the
     # selected-block KV-outer contract. Like ROCm and unlike NVIDIA's
-    # artifact_only cuda_kernel, x86 reports status=compiled (a real executing
+    # artifact_only cuda_kernel, x86 reports status=device_verified_jit (a real executing
     # lane, x86_msa_compiled: host block-select + AVX-512 dense-attend).
     schedule = lower_graph_to_schedule_ir(
         _msa_graph(
@@ -142,7 +142,7 @@ def test_msa_kv_outer_sparse_reaches_x86_target_ir():
     text = target.to_mlir()
     assert "tessera.cpu.msa_block_sparse" in text
     assert 'kernel = "msa_kv_outer_sparse"' in text
-    assert 'status = "compiled"' in text
+    assert 'status = "device_verified_jit"' in text
     assert 'runtime_lane = "x86_msa_compiled"' in text
     assert 'block_ids_layout = "B,Hkv,Sq,top_k"' in text
     assert 'kv_traversal = "kv_outer"' in text

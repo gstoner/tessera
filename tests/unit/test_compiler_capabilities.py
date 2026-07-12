@@ -15,8 +15,15 @@ from tessera.compiler.matmul_pipeline import normalize_target_kind
 def test_capability_registry_normalizes_existing_target_aliases():
     assert normalize_target("cuda") == "nvidia_sm90"
     assert normalize_target("x86_64") == "cpu"
+    assert normalize_target("x86") == "x86"
     assert normalize_target("m-series-gpu") == "apple_gpu"
     assert normalize_target_kind("sm100") == "nvidia_sm100"
+    assert normalize_target_kind("x86") == "x86"
+    assert normalize_target("r9700") == "rocm_gfx1201"
+    assert normalize_target("mi350p") == "rocm_gfx950"
+    assert normalize_target("mi355x") == "rocm_gfx950"
+    assert normalize_target("mi455x") == "rocm_gfx1250"
+    assert normalize_target("mi325x") == "rocm_gfx942"
 
     with pytest.raises(ValueError):
         normalize_target("quantum_waffle")

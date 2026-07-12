@@ -14,7 +14,7 @@ emitted by the pass, not authored), which then lowers through Stage J (real
          rocdl-attach-target{gfx1151}, gpu-module-to-binary  [Stage I])--> hsaco
       --(hipModuleLoadData + launch)--> executes
 
-The result is compared to BOTH numpy AND the shipped `hardware_verified`
+The result is compared to BOTH numpy AND the shipped `device_verified_abi`
 hand-written kernel (`tessera_rocm_wmma_gemm_f16`), the on-silicon oracle. On
 gfx1151: vs numpy ~2e-7, **vs the oracle 0.0 (bit-identical)** — same instruction,
 layout, and accumulation order, but compiler-generated.

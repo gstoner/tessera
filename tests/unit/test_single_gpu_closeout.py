@@ -98,7 +98,7 @@ def test_backend_kernel_rows_are_not_unowned() -> None:
 
 
 def test_x86_and_rocm_native_backend_rows_are_pathway_owned() -> None:
-    native_statuses = {"fused", "compiled", "hardware_verified", "packaged"}
+    native_statuses = {"fused", "device_verified_jit", "device_verified_abi", "packaged"}
     native_x86_rocm = {
         op_name
         for op_name, entries in bm.all_manifests().items()
@@ -156,11 +156,11 @@ def test_compute_tail_compiled_manifests_cover_representative_ops() -> None:
     ):
         entries = {entry.target: entry for entry in bm.manifest_for(op)}
         assert entries["cpu"].status == "reference"
-        assert entries["x86"].status == "compiled"
+        assert entries["x86"].status == "device_verified_jit"
         assert entries["x86"].execute_compare_fixture == (
             "tests/unit/test_x86_structured_compute_compiled.py")
         assert entries["apple_cpu"].status == "reference"
-        assert entries["rocm"].status == "compiled"
+        assert entries["rocm"].status == "device_verified_jit"
         assert entries["rocm"].execute_compare_fixture == (
             "tests/unit/test_rocm_structured_compute_compiled.py")
         assert "structured_compute" in entries["rocm"].feature_flags
@@ -179,12 +179,12 @@ def test_compute_tail_compiled_manifests_cover_representative_ops() -> None:
 def test_rng_tail_manifest_carries_x86_rocm_compiled_lanes() -> None:
     entries = {entry.target: entry for entry in bm.manifest_for("rng_beta")}
     assert entries["cpu"].status == "reference"
-    assert entries["x86"].status == "compiled"
+    assert entries["x86"].status == "device_verified_jit"
     assert entries["x86"].execute_compare_fixture == (
         "tests/unit/test_x86_rng_compiled.py"
     )
     assert entries["apple_cpu"].status == "reference"
-    assert entries["rocm"].status == "compiled"
+    assert entries["rocm"].status == "device_verified_jit"
     assert entries["rocm"].execute_compare_fixture == (
         "tests/unit/test_rocm_rng_compiled.py"
     )
@@ -202,11 +202,11 @@ def test_compute_tail_structured_manifests_cover_promoted_ops() -> None:
         entries = {entry.target: entry for entry in bm.manifest_for(op)}
         assert entries["cpu"].status == "reference"
         assert entries["apple_cpu"].status == "reference"
-        assert entries["x86"].status == "compiled"
+        assert entries["x86"].status == "device_verified_jit"
         assert entries["x86"].execute_compare_fixture == (
             "tests/unit/test_x86_structured_compute_compiled.py"
         )
-        assert entries["rocm"].status == "compiled"
+        assert entries["rocm"].status == "device_verified_jit"
         assert entries["rocm"].execute_compare_fixture == (
             "tests/unit/test_rocm_structured_compute_compiled.py"
         )

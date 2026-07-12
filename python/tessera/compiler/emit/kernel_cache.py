@@ -15,7 +15,7 @@ NVIDIA `ptxas` / ROCm `hipcc` / x86 `clang`). This module owns only the
 arch-neutral parts: the content-addressed :func:`cache_key`, the
 :class:`KernelCache`, and the :func:`build` loop. It reuses the exact key
 discipline the Apple runtime already uses — ``apple_gpu_runtime.mm`` caches
-compiled pipelines by ``source + '\\x1f' + entry_point`` — extended with the
+device_verified_jit pipelines by ``source + '\\x1f' + entry_point`` — extended with the
 specialization metadata (``spec`` / ``shape_key`` / ``dtype`` / ``target``) and
 hashed, so bucketed and dtype variants get distinct entries (the D1 arbiter keys
 on this).
@@ -44,7 +44,7 @@ _SEP = "\x1f"  # unit separator — matches apple_gpu_runtime.mm's cache-key joi
 
 
 def cache_key(source: KernelSource, *, dtype: str, target: str) -> str:
-    """Content-addressed key for a compiled kernel: sha256 over the source text +
+    """Content-addressed key for a device_verified_jit kernel: sha256 over the source text +
     entry point + the specialization metadata that makes two *sources-equal*
     kernels genuinely distinct (dtype, shape bucket, target, policy).
 
@@ -70,9 +70,9 @@ def cache_key(source: KernelSource, *, dtype: str, target: str) -> str:
 class CompiledKernel:
     """A kernel that has been through the compile step (or deferred to launch).
 
-    ``artifact`` is the backend's opaque compiled handle (a metallib blob, a
+    ``artifact`` is the backend's opaque device_verified_jit handle (a metallib blob, a
     CUBIN, a ``.so`` path, …) — ``None`` for a *compile-on-launch* backend (Apple)
-    whose kernel is compiled by the runtime at first ``run_*``. ``key`` is the
+    whose kernel is device_verified_jit by the runtime at first ``run_*``. ``key`` is the
     :func:`cache_key`; ``deferred`` records the compile-on-launch case explicitly
     so a caller/arbiter never mistakes ``artifact is None`` for a failure."""
 
@@ -89,7 +89,7 @@ class CompileError(RuntimeError):
     (Decision #21: name the gap, never silently no-op)."""
 
 
-#: A compile function turns a KernelSource into an opaque compiled artifact for
+#: A compile function turns a KernelSource into an opaque device_verified_jit artifact for
 #: its target. Return ``None`` to signal compile-on-launch (deferred).
 CompileFn = Callable[[KernelSource], Any]
 
@@ -128,7 +128,7 @@ def get_compiler(target: str) -> CompileFn:
 class KernelCache:
     """A content-addressed cache of :class:`CompiledKernel` keyed by
     :func:`cache_key`. Records hit/miss counts so a test (or the arbiter) can
-    assert a repeated build reuses a compiled kernel instead of recompiling."""
+    assert a repeated build reuses a device_verified_jit kernel instead of recompiling."""
 
     _store: dict[str, CompiledKernel] = field(default_factory=dict)
     hits: int = 0
@@ -173,7 +173,7 @@ def build(
     cache: KernelCache | None = None,
 ) -> CompiledKernel:
     """The synth→compile→cache loop: emit ``region`` for ``target``, key it, and
-    return a compiled kernel from the cache (compiling on a miss via the
+    return a device_verified_jit kernel from the cache (compiling on a miss via the
     registered per-arch ``compile_fn``).
 
     ``compile_fn`` returning ``None`` records a *deferred* (compile-on-launch)
@@ -197,8 +197,8 @@ def build(
         raise CompileError(
             f"compile step for target {target!r} failed: {exc}") from exc
 
-    compiled = CompiledKernel(
+    device_verified_jit = CompiledKernel(
         key=key, source=source, target=target, entry=source.entry,
         artifact=artifact, deferred=artifact is None)
-    cache.put(compiled)
-    return compiled
+    cache.put(device_verified_jit)
+    return device_verified_jit

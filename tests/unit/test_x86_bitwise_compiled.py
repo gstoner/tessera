@@ -1,5 +1,5 @@
 """Hand-written AVX-512 bitwise kernel on x86 — the CPU analog of the ROCm
-compiled bitwise lane.
+device_verified_jit bitwise lane.
 
 `tessera_x86_avx512_bitwise_i32` is exported by libtessera_x86_elementwise.so;
 the Python runtime ctypes-loads it and calls it from `runtime.launch()` via

@@ -293,7 +293,7 @@ def test_synthesized_epilogue_symbols_are_exported():
 def test_runtime_reports_metal_available():
     rt = R._load_apple_gpu_runtime()
     assert rt.tessera_apple_gpu_runtime_has_metal() == 1
-    # The new MPSGraph symbols must be present in the compiled runtime.
+    # The new MPSGraph symbols must be present in the device_verified_jit runtime.
     for sym in ("tessera_apple_gpu_mpsgraph_unary_f32",
                 "tessera_apple_gpu_layer_norm_f32",
                 "tessera_apple_gpu_rmsnorm_gpu_f32",

@@ -5,7 +5,7 @@ the hand-written oracle. L1 generalizes the emitted kernel: the `tessera_rocm.
 wmma_gemm` directive still carries the WMMA *instruction* tile (16x16x16), but
 `generate-wmma-gemm-kernel` now emits a kernel that takes the runtime `(M,N,K)`
 as `index` arguments, runs a 2-D grid of one wave per 16x16 output tile, an
-`scf.for` K-loop, and ragged-edge masking — so ONE compiled kernel computes any
+`scf.for` K-loop, and ragged-edge masking — so ONE device_verified_jit kernel computes any
 shape:
 
     "tessera_rocm.wmma_gemm"{m=n=k=16}
@@ -15,7 +15,7 @@ shape:
       --(mlir-opt finish-lower + attach{gfx1151} + gpu-module-to-binary)--> hsaco
       --(launch grid=(ceilN/16, ceilM/16))--> executes for arbitrary (M,N,K)
 
-Each shape is compared to BOTH numpy and the shipped `hardware_verified`
+Each shape is compared to BOTH numpy and the shipped `device_verified_abi`
 hand-written kernel (`tessera_rocm_wmma_gemm_f16`, the on-silicon oracle, itself
 general-shape). The compiler kernel uses the identical instruction, fragment
 layout, accumulation order, and masking, so it matches the oracle bit-for-bit

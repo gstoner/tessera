@@ -13,11 +13,12 @@ separates closed work from open work, and routes each action to its evidence.
 
 - **The curated matrix now uses exact target grain and real IR verification.**
   Its 63 cells separate portable CPU reference, native x86, Apple CPU/GPU,
-  ROCm, and four NVIDIA architectures. Current results are 17 complete,
-  11 reference, and 35 missing.
-- **The redesign exposed real gaps hidden by the former proxies.** Stateful
-  `kv_cache_read` emits Graph IR but no Schedule IR; several native x86 rows lack
-  exact-target fixtures; only `nvidia_sm120/matmul` completes the NVIDIA ladder.
+  ROCm, and four NVIDIA architectures. Current results are 23 complete,
+  13 reference, and 27 missing.
+- **The stateful and native-x86 software gaps are closed.** `kv_cache_read` now
+  emits verified Schedule, Tile, and architecture-specific Target IR. Native
+  x86 matmul and composition rows have exact-target AVX-512 execute-and-compare
+  fixtures; only `nvidia_sm120/matmul` completes the NVIDIA ladder.
 - **Curated conformance closure is not whole-compiler closure.** The broader
   primitive registry still has backend-kernel promotion work, 43 open sharding
   contracts, a small Tile/Target IR tail, verifier triage, and structural-only
@@ -48,9 +49,9 @@ A cell is `complete` only when every column is complete. Its
 `first_failing_gate` names the earliest blocking capability; it is not a record
 of the machine that regenerated the dashboard.
 
-The matrix's `cpu` target is the host x86/CPU reference conformance path. The
-separate x86 native-kernel inventory is tracked in the execution matrix and
-primitive target evidence.
+The matrix's `cpu` target is the portable host reference path. The separate
+`x86` target is the native AVX-512/AMX path; its executable lanes and provenance
+are tracked in the runtime execution matrix.
 
 ### Broader compiler completion
 
@@ -66,7 +67,9 @@ benchmark, or ABI work.
 |---|---|
 | `complete` | The required proof exists for every rung in the measured scope. |
 | `reference` | Correct execution exists without a native target kernel. |
-| `compiled` / `fused` / `hardware_verified` | Increasingly concrete native target evidence; exact semantics are dashboard-defined. |
+| `device_verified_jit` | A compiler-generated target binary was launched on the exact target and numerically verified; no stable public C ABI is required. |
+| `device_verified_abi` | A shipped stable C ABI symbol was launched on the exact target and numerically verified. |
+| `fused` | A fused native implementation exists, but this label alone is not an execution-proof rung. |
 | `artifact_only` | Target text or an artifact emits, but link/launch proof is absent. |
 | `partial` | A path exists with an explicit unresolved qualification. |
 | `missing` | Required evidence or target support is absent. |
@@ -76,14 +79,14 @@ benchmark, or ABI work.
 
 | Area | Current result | Remaining frontier | Authority |
 |---|---|---|---|
-| Curated conformance | 63 exact-target cells: 17 complete, 11 reference, 35 missing | Stateful Schedule IR, x86 fixture gaps, and NVIDIA architecture breadth | [`op_target_conformance.md`](op_target_conformance.md) |
+| Curated conformance | 63 exact-target cells: 23 complete, 13 reference, 27 missing | NVIDIA architecture-specific compile and execution breadth | [`op_target_conformance.md`](op_target_conformance.md) |
 | Compiler phases | API, frontend, Graph IR, Schedule IR, and runtime readiness closed | 13 Tile IR rows and 14 Target IR rows remain mixed | [`generated/compiler_progress.md`](generated/compiler_progress.md) |
 | Primitive contracts | Batching, transpose, and lowering closed across 480 primitives | Sharding has 43 open rows; registry-level backend promotion remains broad | [`generated/s_series_status.md`](generated/s_series_status.md) |
 | Runtime execution | Checked-in executable rows are explicit and drift-gated | Add rows only after a real launch path exists | [`generated/runtime_execution_matrix.md`](generated/runtime_execution_matrix.md) |
 | Verifiers | No trivial verifier stubs | Manually triage 11 no-verifier ops; add verifiers only where invariants exist | [`generated/verifier_coverage.md`](generated/verifier_coverage.md) |
 | Test evidence | No `needs_direct_test` debt | Convert high-value structural-only evidence to direct or differential proof | [`generated/test_coverage.md`](generated/test_coverage.md) |
 | Apple | Curated CPU/GPU conformance closed; Apple GPU proof is provenance-gated | Performance, precision, and the small target-map tail | [`backend/apple/APPLE_AUDIT.md`](backend/apple/APPLE_AUDIT.md) |
-| ROCm | Curated conformance and current target-map promotion closed on the proven RDNA lane | CDNA and additional architecture breadth require real hardware | [`backend/rocm/ROCM_AUDIT.md`](backend/rocm/ROCM_AUDIT.md) |
+| ROCm | Curated conformance closed on the exact gfx1151 RDNA lane | Prioritize gfx950 MI350-series, gfx1201 Radeon AI PRO R9700, and gfx1250 MI455X exact-target proof; retain gfx942 as compatibility | [`generated/rocm_target_map.md`](generated/rocm_target_map.md) |
 | NVIDIA | One sm_120 runtime row exists; target artifacts cover a wider surface | Promote CUDA artifacts into compile/link/launch/numerical proof | [`backend/nvidia/NVIDIA_AUDIT.md`](backend/nvidia/NVIDIA_AUDIT.md) |
 | Distributed | Single-device and mock-collective development paths exist | Real multi-rank NCCL/RCCL or equivalent execution | [`backend/BACKEND_AUDIT.md`](backend/BACKEND_AUDIT.md) |
 
@@ -94,10 +97,10 @@ CSV and Markdown outputs:
 
 | Target family | Exact-target cells | Result |
 |---|---:|---|
-| Portable CPU reference | 7 | 6 reference, 1 missing |
-| Native x86 | 7 | 3 complete, 4 missing |
-| Apple CPU + GPU | 14 | 7 complete, 5 reference, 2 missing |
-| ROCm | 7 | 6 complete, 1 missing |
+| Portable CPU reference | 7 | 7 reference |
+| Native x86 | 7 | 7 complete |
+| Apple CPU + GPU | 14 | 8 complete, 6 reference |
+| ROCm | 7 | 7 complete |
 | NVIDIA sm80/sm90/sm100/sm120 | 28 | 1 complete, 27 missing |
 
 The closeout also hardened proof quality:
@@ -139,7 +142,7 @@ linked platform audits and [`roadmap/ROADMAP_AUDIT.md`](roadmap/ROADMAP_AUDIT.md
 - Host CPU, Apple CPU/GPU, x86 native lanes, ROCm, and the proven NVIDIA sm_120
   lane have explicit execution evidence.
 - The backend-neutral C-ABI GPU launcher hook is implemented.
-- Artifact-only, reference, compiled, executable, numerical, and
+- Artifact-only, reference, device_verified_jit, executable, numerical, and
   hardware-verified states remain distinct.
 - Execute-and-compare fixtures are the promotion requirement for complete
   curated cells.
@@ -158,13 +161,13 @@ linked platform audits and [`roadmap/ROADMAP_AUDIT.md`](roadmap/ROADMAP_AUDIT.md
 ### x86 and ROCm
 
 - Portable CPU correctness is labeled `reference`; native x86 is a separate
-  target with three currently complete curated rows.
-- Native x86 compiled lanes cover a broad primitive surface; their inventory is
+  target with all seven curated rows complete.
+- Native x86 device_verified_jit lanes cover a broad primitive surface; their inventory is
   tracked separately from the host reference target.
 - ROCm gfx1151 has real compiler-generated and hardware-verified execution,
   including matrix, attention, recurrent/state-space, sparse, and EBM families.
-- Six ROCm curated programs complete; stateful KV-cache lowering stops honestly
-  at the missing Schedule IR rung.
+- All seven ROCm curated programs complete, including stateful KV-cache read
+  through verified Schedule, Tile, Target, native execution, and numerical proof.
 
 ### Coverage and audit discipline
 
@@ -179,18 +182,14 @@ linked platform audits and [`roadmap/ROADMAP_AUDIT.md`](roadmap/ROADMAP_AUDIT.md
 
 ## Open Action Register
 
-### P0 — Close the newly surfaced software proof gaps
+### P0 — Close the remaining exact-target proof gaps
 
 Close gaps in ladder order:
 
-1. Lower stateful `kv_cache_read` beyond Graph IR into verified Schedule, Tile,
-   and Target IR.
-2. Add exact-target execute-and-compare evidence for the native x86 matrix and
-   composition rows that currently lack it.
-3. Provide concrete compile/link paths for the open NVIDIA programs.
-4. Register executable target paths and attach architecture-aligned numerical
+1. Provide concrete compile/link paths for the open NVIDIA programs.
+2. Register executable NVIDIA target paths and attach architecture-aligned numerical
    fixtures with honest provenance.
-5. Clear `first_failing_gate` only after every proof rung is complete.
+3. Clear `first_failing_gate` only after every proof rung is complete.
 
 This is primarily an sm_120 adjacency/breadth program today. Hopper sm_90 and
 datacenter sm_100 require architecture-specific proof; they are not aliases for
@@ -200,7 +199,7 @@ consumer Blackwell.
 
 | Workstream | Current open signal | Required closure evidence |
 |---|---|---|
-| Primitive backend kernels | Registry-level `backend_kernel` remains the largest open axis | Per-target compiled/fused/hardware evidence; do not require every target for all-up compiler readiness |
+| Primitive backend kernels | Registry-level `backend_kernel` remains the largest open axis | Per-target `device_verified_jit` or `device_verified_abi` evidence; do not require every target for all-up compiler readiness |
 | Sharding | 43 primitive rows remain open | Mock-mesh equivalence or real distributed execution for the specific rule |
 | Tile IR | 13 rows remain mixed | Real lowering or an explicit by-design terminal classification |
 | Target IR | 14 rows remain mixed | Native/fused promotion or an intentional reference-only classification |
@@ -216,8 +215,10 @@ action table.
 
 - Prove Hopper sm_90 and datacenter sm_100 paths on their actual toolchains and
   silicon.
-- Prove ROCm CDNA/MI300-class MFMA and low-precision paths independently from
-  the RDNA gfx1151 lane.
+- Prove ROCm gfx950 MI350X/MI355X/MI350P CDNA 4 MFMA and low-precision paths,
+  gfx1201 Radeon AI PRO R9700 RDNA 4, and gfx1250 MI455X Wave32 paths
+  independently from the proven gfx1151 lane. Keep gfx942 MI300X/MI325X as a
+  compatibility target rather than the default roadmap priority.
 - Replace mock multi-rank collectives with real NCCL/RCCL or equivalent target
   execution before promoting distributed claims.
 - Expand Apple low-precision and Metal-specific performance lanes when the

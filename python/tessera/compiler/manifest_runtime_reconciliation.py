@@ -31,7 +31,7 @@ from . import backend_manifest
 _RUNTIME = Path(__file__).resolve().parent.parent / "runtime.py"
 
 #: manifest statuses that count as a genuine native kernel for a target.
-_NATIVE_STATUSES = frozenset({"fused", "compiled", "hardware_verified", "packaged"})
+_NATIVE_STATUSES = frozenset({"fused", "device_verified_jit", "device_verified_abi", "packaged"})
 
 #: canonical targets this audit reconciles (the ones with runtime op-name lanes).
 _TARGETS = ("rocm", "x86", "apple_gpu", "apple_cpu")

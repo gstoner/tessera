@@ -3,7 +3,7 @@
 The ROCm analog of ``test_runtime_abi_gpu_launch_bridge.py`` (the Apple G7
 proof). A backend registers a ``tsrGpuLauncherFn`` mapping a kernel NAME on a
 ``rocm`` target to a native HIP launch; ``tsrLaunchKernel`` routes the GPU
-artifact kernel to it. Here a hipcc-compiled harness:
+artifact kernel to it. Here a hipcc-device_verified_jit harness:
 
   * registers a launcher that runs a real ``__global__`` GEMM on the AMD GPU
     (hipMalloc / H2D / launch / sync / D2H) over the params' buffers + dims,

@@ -1,4 +1,4 @@
-"""ROCm compiled-composite metric/contrastive losses."""
+"""ROCm device_verified_jit-composite metric/contrastive losses."""
 
 from __future__ import annotations
 

@@ -182,12 +182,12 @@ class TestG3ManifestWiring:
 
     def test_rocm_matmul_is_wmma_hardware_verified(self):
         # Strix Halo bring-up (2026-06-22): the rocm matmul row was promoted to
-        # the RDNA WMMA hardware_verified path, so it no longer carries the CDNA
+        # the RDNA WMMA device_verified_abi path, so it no longer carries the CDNA
         # MFMA (32,32,8,1) shape. The MFMA artifact contract still holds for the
         # other GEMM-family ops (see test_rocm_gemm_carries_mfma_shape).
         from tessera.compiler.backend_manifest import manifest_for
         rocm = {e.target: e for e in manifest_for("matmul")}["rocm"]
-        assert rocm.status == "hardware_verified"
+        assert rocm.status == "device_verified_abi"
         assert rocm.mfma_shape is None
         assert "wmma" in rocm.feature_flags
         assert rocm.runtime_symbol == "tessera_rocm_wmma_gemm_f16"
@@ -204,28 +204,28 @@ class TestG3ManifestWiring:
     def test_rocm_flash_attn_is_wmma_hardware_verified(self):
         # flash_attn on rocm executes natively on gfx1151 (RDNA 3.5) via the
         # shipped libtessera_rocm_flash_attn.so WMMA kernel — the second op after
-        # matmul to do so. The hardware_verified WMMA row carries the wmma flag,
+        # matmul to do so. The device_verified_abi WMMA row carries the wmma flag,
         # not the CDNA MFMA shape (WMMA != MFMA). The 16x16x16 attention MFMA
         # shape is still asserted below on the artifact-path attention family.
         from tessera.compiler.backend_manifest import manifest_for
         entries = {e.target: e for e in manifest_for("flash_attn")}
         rocm = entries["rocm"]
-        assert rocm.status == "hardware_verified"
+        assert rocm.status == "device_verified_abi"
         assert "wmma" in rocm.feature_flags
         assert rocm.runtime_symbol == "tessera_rocm_wmma_flash_attn_f16"
 
     def test_rocm_attention_family_promotions_are_not_mfma_artifacts(self):
         # The executing members moved off the CDNA MFMA artifact path:
-        # flash_attn → WMMA hardware_verified, multi_head_attention → WMMA
-        # `compiled`, and DeepSeek/NSA → the DK2 sparse-attention compiled lane.
+        # flash_attn → WMMA device_verified_abi, multi_head_attention → WMMA
+        # `device_verified_jit`, and DeepSeek/NSA → the DK2 sparse-attention device_verified_jit lane.
         from tessera.compiler.backend_manifest import manifest_for
         nsa = {e.target: e for e in manifest_for("deepseek_sparse_attention")}
-        assert nsa["rocm"].status == "compiled"
+        assert nsa["rocm"].status == "device_verified_jit"
         assert "sparse_attention" in nsa["rocm"].feature_flags
         assert nsa["rocm"].mfma_shape is None
 
         mha = {e.target: e for e in manifest_for("multi_head_attention")}
-        assert mha["rocm"].status == "compiled"
+        assert mha["rocm"].status == "device_verified_jit"
         assert "wmma" in mha["rocm"].feature_flags
         assert mha["rocm"].mfma_shape is None
 
@@ -341,7 +341,7 @@ class TestH3RocmInventoryDoc:
 #     runtime execution matrix.  Added 2026-07-10 after the doc silently
 #     drifted for weeks — the structural guards above never checked *what
 #     executes*, so §7/§9 kept claiming only matmul+flash_attn ran on gfx1151
-#     while dozens of compiled HIP lanes had already landed.  This ties the
+#     while dozens of device_verified_jit HIP lanes had already landed.  This ties the
 #     inventory's execution claims to the drift-gated matrix (Decision #26).
 # ──────────────────────────────────────────────────────────────────────────
 
@@ -359,10 +359,10 @@ class TestH3RocmInventoryExecutionStatus:
 
     def test_doc_acknowledges_native_rocm_execution(self):
         # A revert to the stale 'only matmul + flash_attn execute' framing would
-        # drop these markers of the native HIP compiled-lane program.
+        # drop these markers of the native HIP device_verified_jit-lane program.
         doc = self.INVENTORY.read_text()
         assert "hip_runtime" in doc
-        assert "compiled" in doc
+        assert "device_verified_jit" in doc
 
     def test_every_compiled_lane_named_in_doc_exists_in_matrix(self):
         # The inventory must not name an executing rocm_*_compiled lane that the
@@ -375,10 +375,10 @@ class TestH3RocmInventoryExecutionStatus:
         lane_re = re.compile(r"rocm_[a-z0-9]+(?:_[a-z0-9]+)*_compiled")
         doc_lanes = set(lane_re.findall(doc))
         matrix_lanes = set(lane_re.findall(matrix))
-        assert doc_lanes, "inventory should name the executing rocm compiled lanes"
+        assert doc_lanes, "inventory should name the executing rocm device_verified_jit lanes"
         missing = sorted(doc_lanes - matrix_lanes)
         assert not missing, (
-            f"inventory names compiled lanes absent from the generated matrix: "
+            f"inventory names device_verified_jit lanes absent from the generated matrix: "
             f"{missing}"
         )
 

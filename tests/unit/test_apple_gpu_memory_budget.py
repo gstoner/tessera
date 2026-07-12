@@ -34,7 +34,7 @@ _SYMBOLS = (
 
 
 def test_budget_symbols_present_in_runtime():
-    """All 7 budget symbols must exist in the compiled runtime (Darwin .mm or
+    """All 7 budget symbols must exist in the device_verified_jit runtime (Darwin .mm or
     non-Darwin stub) so the ctypes layer is platform-agnostic."""
     rt = R._load_apple_gpu_runtime()
     for sym in _SYMBOLS:

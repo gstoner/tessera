@@ -88,12 +88,12 @@ def test_encode_eligible_matches_chain_registry():
 
 
 def test_hardware_verified_descriptors_are_runtime_executable():
-    """Every hardware_verified Apple kernel must name a real dispatch
+    """Every device_verified_abi Apple kernel must name a real dispatch
     entry point (the descriptor's executability predicate)."""
     for op, desc in all_apple_kernel_descriptors().items():
-        if desc.status == "hardware_verified":
+        if desc.status == "device_verified_abi":
             assert desc.is_runtime_executable, (
-                f"{op}: hardware_verified but no runtime_symbol/binding")
+                f"{op}: device_verified_abi but no runtime_symbol/binding")
 
 
 def test_packaged_descriptor_carries_binding_spec_when_present():

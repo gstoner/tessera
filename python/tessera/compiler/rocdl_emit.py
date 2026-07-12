@@ -16,7 +16,7 @@ absent on the arm64 dev Mac — the **LLVM AMDGPU backend ships with Homebrew LL
 **Grounded** in the RDNA3.5 ISA §7.9 + Table 33: WMMA is VOP3P, tile **16×16×16**,
 combos F16/BF16/IU8/IU4 (**no FP8** — that is gfx1200/RDNA 4); A=SRC0, B=SRC1,
 C=SRC2, D=VDST; A/B lanes 0-15 are replicated into 16-31 (wave32); RNE rounding;
-inline constants are C-matrix only. Verified intrinsic signature (compiled here):
+inline constants are C-matrix only. Verified intrinsic signature (device_verified_jit here):
 ``<8 x float> @llvm.amdgcn.wmma.f32.16x16x16.f16(<16 x half>, <16 x half>,
 <8 x float>)`` → ``v_wmma_f32_16x16x16_f16``.
 

@@ -48,7 +48,7 @@ def test_masked_fill_executed():
 
 
 def test_causal_attention_with_mask_in_one_graph():
-    """softmax(masked_fill(Q Kᵀ, causal_mask, -inf)) V — ONE compiled function.
+    """softmax(masked_fill(Q Kᵀ, causal_mask, -inf)) V — ONE device_verified_jit function.
 
     The causal mask zeroes attention to future positions. This is the first
     Phase-2 capability composed into a real model pattern.
@@ -70,7 +70,7 @@ def test_causal_attention_with_mask_in_one_graph():
 
     before = jb.invocation_count()
     out = g.run(q, k, v, causal)
-    assert jb.invocation_count() == before + 1  # one compiled function
+    assert jb.invocation_count() == before + 1  # one device_verified_jit function
 
     # numpy causal-attention oracle
     s = q @ k.T

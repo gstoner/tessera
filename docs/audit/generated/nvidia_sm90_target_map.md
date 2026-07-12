@@ -5,7 +5,7 @@
 
 Per-op view of NVIDIA coverage today (2026-05-20).  Same row schema as the Apple target map (``docs/audit/generated/apple_target_map.md``); pulled from ``capabilities['nvidia_sm90']`` + ``backend_manifest._NVIDIA_ARTIFACT``.
 
-**Status story today:** most NVIDIA rows are at ``artifact_only`` or ``planned`` — IR/PTX artifact emission is in tree, but hardware execution is gated on the bring-up sprint (Phase G for NVIDIA, Phase H for ROCm).  The rows that have been proven on real hardware carry an execution rung: ``hardware_verified`` (a shipped C-ABI ``runtime_symbol`` + a numerical fixture) or ``compiled`` (a compiler-generated hsaco that executes via ``runtime.launch()`` + a numerical fixture, but no shipped C symbol).  ``release_gate.py --target=nvidia_sm90`` gains the target-specific gates (canonical native dispatch, per-target benchmarks, hardware-marked tests) for those rows the same way ``--target=apple_gpu`` does today.
+**Status story today:** most NVIDIA rows are at ``artifact_only`` or ``planned`` — IR/PTX artifact emission is in tree, but hardware execution is gated on the bring-up sprint (Phase G for NVIDIA, Phase H for ROCm).  The rows that have been proven on real hardware carry an execution rung: ``device_verified_abi`` (a shipped stable C-ABI ``runtime_symbol`` + a numerical fixture) or ``device_verified_jit`` (a compiler-generated target binary that is launched + numerically verified without requiring a stable public C symbol).  ``release_gate.py --target=nvidia_sm90`` gains the target-specific gates (canonical native dispatch, per-target benchmarks, hardware-marked tests) for those rows the same way ``--target=apple_gpu`` does today.
 
 ## Status counts
 
@@ -87,7 +87,7 @@ Per-op view of NVIDIA coverage today (2026-05-20).  Same row schema as the Apple
 
 ## How to read this
 
-* **status** uses the same vocabulary as ``apple_target_map.md`` (``fused`` / ``compileable`` / ``executable`` / ``artifact_only`` / ``planned``), plus two execution rungs: ``hardware_verified`` (executes on real hardware via a shipped C-ABI ``runtime_symbol`` + numerical fixture) and ``compiled`` (executes via ``runtime.launch()`` as a compiler-generated hsaco + numerical fixture, but NO shipped C symbol — one rung below ``hardware_verified``).
+* **status** uses the same vocabulary as ``apple_target_map.md`` (``fused`` / ``compileable`` / ``executable`` / ``artifact_only`` / ``planned``), plus two execution rungs: ``device_verified_abi`` (executes on real hardware via a shipped C-ABI ``runtime_symbol`` + numerical fixture) and ``device_verified_jit`` (a compiler-generated target binary launched on the exact target + numerical fixture, with no stable C ABI requirement).
 * **dtypes** is the per-op kernel dtype matrix — same interpretation rule as ``BackendKernelEntry.dtypes``: on a ``planned`` row, the dtype tuple is the target kernel dtype matrix, not what runs today.
 * **tile shape** is the WGMMA `(M, N, K)` for NVIDIA Hopper+ or the MFMA `(M, N, K, K_blocks)` for ROCm CDNA.
 * **arch_min** is the minimum target arch the kernel compiles for (``sm_90a`` for Hopper WGMMA, ``hipcc≥7.2.4`` for ROCm).

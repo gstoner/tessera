@@ -4,13 +4,13 @@ Audit 2026-06-10 follow-on. The conformance matrix already enforces "no
 complete cell without a verified execute_compare_fixture" for its 7 curated
 ops (test_conformance_complete_cells_proven.py). This gate extends the same
 discipline to the *broader* Apple GPU manifest: an `apple_gpu` row that claims
-a real kernel (`status in {fused, hardware_verified}`) must either declare an
+a real kernel (`status in {fused, device_verified_abi}`) must either declare an
 `execute_compare_fixture` (numerical proof on disk) OR appear on an explicit,
 reasoned allowlist of ops that genuinely have no dedicated GPU execute-compare
 yet. This freezes the gap — a newly-added fused Apple op without proof fails
 here, forcing either a fixture or a conscious allowlist entry.
 
-`hardware_verified` is separately required (at BackendKernelEntry construction)
+`device_verified_abi` is separately required (at BackendKernelEntry construction)
 to carry a fixture; this gate also locks that invariant at the suite level.
 """
 
@@ -40,14 +40,14 @@ def _apple_promotable_rows():
     for op, entries in bm.all_manifests().items():
         for e in entries:
             if getattr(e, "target", "") == "apple_gpu" and e.status in (
-                "fused", "hardware_verified"
+                "fused", "device_verified_abi"
             ):
                 out.append((op, e))
     return out
 
 
 def test_apple_gpu_fused_rows_have_proof_or_are_allowlisted():
-    """Every Apple GPU fused/hardware_verified row has a numerical fixture, or
+    """Every Apple GPU fused/device_verified_abi row has a numerical fixture, or
     is on the explicit no-execute-compare allowlist."""
     missing = sorted(
         op for op, e in _apple_promotable_rows()
@@ -55,7 +55,7 @@ def test_apple_gpu_fused_rows_have_proof_or_are_allowlisted():
         and op not in _FUSED_WITHOUT_NUMERICAL_FIXTURE
     )
     assert not missing, (
-        "Apple GPU rows claim a real kernel (fused/hardware_verified) but have "
+        "Apple GPU rows claim a real kernel (fused/device_verified_abi) but have "
         f"no execute_compare_fixture and are not allowlisted: {missing}. Wire a "
         "verified fixture into backend_manifest._NUMERICAL_FIXTURES, or add an "
         "explicit reason to _FUSED_WITHOUT_NUMERICAL_FIXTURE in this test.")
@@ -77,6 +77,6 @@ def test_hardware_verified_rows_carry_a_fixture():
     Apple GPU claim tier always has numerical proof on disk."""
     bad = sorted(
         op for op, e in _apple_promotable_rows()
-        if e.status == "hardware_verified" and not e.execute_compare_fixture
+        if e.status == "device_verified_abi" and not e.execute_compare_fixture
     )
-    assert not bad, f"hardware_verified rows missing a fixture: {bad}"
+    assert not bad, f"device_verified_abi rows missing a fixture: {bad}"

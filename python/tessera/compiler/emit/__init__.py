@@ -14,7 +14,7 @@ particular backend's registration. Import a plugin module explicitly (or call a
 ``get_*`` that bootstraps it) to register its lanes.
 
 The two ``default_cache`` accessors are re-exported under distinct names —
-:func:`kernel_cache_default` (compiled-kernel cache, B4) and
+:func:`kernel_cache_default` (device_verified_jit-kernel cache, B4) and
 :func:`measure_cache_default` (autotune measure cache, D2) — since the subsystem
 has one of each.
 """

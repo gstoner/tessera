@@ -7,7 +7,7 @@ lock:
 
 * ``cache_key`` is content-addressed and separates *source-equal* kernels that
   differ only in dtype / shape-bucket / target / policy;
-* ``build`` dedups — a repeated build reuses the compiled kernel (one compile);
+* ``build`` dedups — a repeated build reuses the device_verified_jit kernel (one compile);
 * Apple's registered compiler is *deferred* (compile-on-launch, ``artifact is
   None``); a Workstream-C-style ahead-of-time compiler is exercised via a fake;
 * the unknown-target diagnostics (Decision #21: name the gap, no silent no-op).

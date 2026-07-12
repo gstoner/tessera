@@ -165,7 +165,7 @@ def test_conformal_mobius_matches_reference():
 
 def test_conformal_stereographic_matches_reference():
     # stereographic: sphere 3-vector [...,3] -> C on the apple_gpu_conformal_
-    # compiled lane (binary-div lane); matches tessera.complex.stereographic.
+    # device_verified_jit lane (binary-div lane); matches tessera.complex.stereographic.
     p = np.array([[0.0, 0.0, 0.9], [0.2, 0.1, 0.5], [0.3, -0.4, -0.2]], np.float32)
     art = rt.RuntimeArtifact(metadata={
         "target": "apple_gpu", "compiler_path": "apple_gpu_conformal_compiled",

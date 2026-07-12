@@ -279,7 +279,7 @@ _ROCM_ARTIFACT = (
 TARGET_CAPABILITIES: dict[str, TargetCapability] = {
     "cpu": TargetCapability(
         name="cpu",
-        aliases=("cpu", "x86", "x86_64"),
+        aliases=("cpu", "x86_64"),
         family="cpu",
         runtime_backend="numpy",
         default_runtime_status="ready",
@@ -308,6 +308,21 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         },
         supported_dtypes=("fp32", "f32", "fp16", "bf16"),
         features=("reference_execution", "host_runtime"),
+    ),
+    # Native host lane. Keep this distinct from ``cpu`` so exact-target audit
+    # rows cannot inherit reference execution or a numpy Target IR by alias.
+    "x86": TargetCapability(
+        name="x86",
+        aliases=("x86",),
+        family="x86",
+        runtime_backend="native_cpu",
+        default_runtime_status="ready",
+        supported_ops=_ops(
+            "ready", _CPU_OPS,
+            reason="x86 target contract is available; per-op native proof is manifest-gated",
+        ),
+        supported_dtypes=("fp32", "f32", "bf16"),
+        features=("avx512", "amx", "native_cpu"),
     ),
     # Sprint G-1 (2026-05-11): NVIDIA capability matrix pinned to
     # CUDA 13.3.  Each entry's `features` tuple records the
@@ -386,8 +401,9 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         ),
     ),
     # Sprint H-1 (2026-05-11): ROCm 7.2.4 capability matrix.  Per-arch
-    # entries replace the single "rocm" alias; the legacy "rocm" name
-    # routes to gfx942 (MI300X) as the canonical default.  Each entry's
+    # entries replace the single proof-bearing "rocm" alias. The legacy
+    # "rocm" name is a family-level compilation selector only; generated audit
+    # maps derive exact gfx* proof rows separately. Each entry's
     # `features` reflects `rocm_feature_set(arch)` from `rocm_target.py`.
     "rocm": TargetCapability(
         name="rocm",
@@ -431,7 +447,7 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
     ),
     "rocm_gfx942": TargetCapability(
         name="rocm_gfx942",
-        aliases=("gfx942", "mi300x"),
+        aliases=("gfx942", "mi300x", "mi325x"),
         family="rocm",
         runtime_backend="hip",
         default_runtime_status="artifact_only",
@@ -445,11 +461,11 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
     ),
     "rocm_gfx950": TargetCapability(
         name="rocm_gfx950",
-        aliases=("gfx950", "mi325x"),
+        aliases=("gfx950", "mi350x", "mi355x", "mi350p"),
         family="rocm",
         runtime_backend="hip",
         default_runtime_status="artifact_only",
-        supported_ops=_ops("artifact_only", ("tessera.matmul", "tessera.gelu", "tessera.softmax", "tessera.flash_attn"), reason="ROCm 7.2.4 CDNA 4 MI325X MFMA artifact (with FP4/FP6 lanes); HIP execution gated"),
+        supported_ops=_ops("artifact_only", ("tessera.matmul", "tessera.gelu", "tessera.softmax", "tessera.flash_attn"), reason="ROCm 7.2.4 CDNA 4 MI350-series MFMA artifact (with FP4/FP6 lanes); exact-device execution gated"),
         supported_dtypes=(
             "bf16", "fp16", "fp32", "fp64",
             "fp8_e4m3", "fp8_e5m2",
@@ -509,6 +525,41 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
             "int8", "int32", "int4",
         ),
         features=("wmma_f16", "wmma_bf16", "wmma_f8", "buffer_load_lds", "rocm_7_2_3"),
+    ),
+    "rocm_gfx1201": TargetCapability(
+        name="rocm_gfx1201",
+        aliases=("gfx1201", "radeon_ai_pro_r9700", "r9700"),
+        family="rocm",
+        runtime_backend="hip",
+        default_runtime_status="artifact_only",
+        supported_ops=_ops(
+            "artifact_only", ("tessera.matmul",),
+            reason=(
+                "ROCm RDNA 4 gfx1201 / Radeon AI PRO R9700 WMMA artifact; "
+                "exact-device compile and execution proof remains gated"
+            ),
+        ),
+        supported_dtypes=(
+            "bf16", "fp16", "fp32", "fp8_e4m3", "fp8_e5m2",
+            "int8", "int32", "int4",
+        ),
+        features=("wmma_f16", "wmma_bf16", "wmma_f8", "buffer_load_lds", "rocm_7_2_3"),
+    ),
+    "rocm_gfx1250": TargetCapability(
+        name="rocm_gfx1250",
+        aliases=("gfx1250", "mi455x"),
+        family="rocm",
+        runtime_backend="hip",
+        default_runtime_status="artifact_only",
+        supported_ops=_ops(
+            "artifact_only", ("tessera.matmul",),
+            reason=(
+                "AMD Instinct MI455X / gfx1250 Wave32 WMMA-v2 artifact target; "
+                "exact-device execution proof remains gated"
+            ),
+        ),
+        supported_dtypes=("bf16", "fp16", "fp32", "int8"),
+        features=("wmma_v2", "wave32", "buffer_load_lds", "rocm_7_2_3"),
     ),
     "apple_cpu": TargetCapability(
         name="apple_cpu",

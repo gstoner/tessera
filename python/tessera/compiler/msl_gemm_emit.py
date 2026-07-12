@@ -53,7 +53,7 @@ _MSL_SCALAR: dict[str, str] = {
     "fp32": "float",
 }
 
-# Input dtype → minimum -std=metal language version the kernel must be compiled at.
+# Input dtype → minimum -std=metal language version the kernel must be device_verified_jit at.
 _MIN_METAL_STD: dict[str, str] = {
     "half": "metal3.0",
     "bfloat": "metal3.1",   # bfloat is an MSL 3.1 type
@@ -446,7 +446,7 @@ def validate_steel_gemm_structure(
 
 
 def min_metal_std(dtype: str) -> str:
-    """The minimum ``-std=metal*`` the emitted kernel must be compiled at for
+    """The minimum ``-std=metal*`` the emitted kernel must be device_verified_jit at for
     ``dtype`` (bf16 → metal3.1, since ``bfloat`` is an MSL 3.1 type)."""
     return _MIN_METAL_STD[_scalar(dtype)]
 
@@ -489,7 +489,7 @@ def metal_compile(msl: str, *, dtype: str = "bf16") -> MetalCompileResult:
         except (OSError, subprocess.SubprocessError) as e:
             return MetalCompileResult("failed", f"metal invocation error: {e}")
         if proc.returncode == 0 and out.exists():
-            return MetalCompileResult("ok", f"compiled to AIR with -std={std}")
+            return MetalCompileResult("ok", f"device_verified_jit to AIR with -std={std}")
         return MetalCompileResult("failed", proc.stderr.strip() or "metal returned nonzero")
 
 

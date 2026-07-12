@@ -8,7 +8,7 @@ warp-level ``mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32`` that computes
 
 C2 tail (COMPILER_REFACTOR_PLAN): the launcher is no longer an inline throwaway —
 it is the **shipped** ``tessera_nvidia_ptx_launch.cpp`` (the counterpart to Apple's
-``apple_gpu_runtime.mm``), compiled straight from source here. The harness registers
+``apple_gpu_runtime.mm``), device_verified_jit straight from source here. The harness registers
 the emitted PTX (``tessera_nvidia_ptx_register``), registers the shipped launcher on
 the ``tsrRegisterGpuLauncher`` seam (``tessera_nvidia_register_ptx_launcher``), then
 drives it through ``tsrLaunchKernel`` and execute-and-compares against a host
@@ -36,7 +36,7 @@ from tessera.compiler import ptx_emit as P
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RUNTIME_LIB = REPO_ROOT / "build" / "src" / "runtime" / "libtessera_runtime.a"
 RUNTIME_INCLUDE = REPO_ROOT / "src" / "runtime" / "include"
-# The shipped C2-tail launch bridge (compiled from source into the harness).
+# The shipped C2-tail launch bridge (device_verified_jit from source into the harness).
 BRIDGE_DIR = (REPO_ROOT / "src" / "compiler" / "codegen"
               / "tessera_gpu_backend_NVIDIA" / "runtime" / "cuda")
 BRIDGE_SRC = BRIDGE_DIR / "tessera_nvidia_ptx_launch.cpp"
@@ -54,7 +54,7 @@ def _nvcc() -> str | None:
 # bridge, registers the shipped launcher on the tsrRegisterGpuLauncher seam, then
 # runs it through tsrLaunchKernel. buffers = {A(bf16), B(bf16), D(f32)};
 # dims = {M,N,K} (this kernel: 16,8,16). The launcher body lives in the shipped
-# tessera_nvidia_ptx_launch.cpp (compiled alongside this harness) — NOT inline.
+# tessera_nvidia_ptx_launch.cpp (device_verified_jit alongside this harness) — NOT inline.
 _HARNESS = r"""
 #include "tessera/tessera_runtime.h"
 #include "tessera_nvidia_ptx_launch.h"

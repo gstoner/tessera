@@ -39,7 +39,7 @@ def _artifact(rt, with_bias, activation, op_name="tessera.matmul"):
 
 
 def test_fused_epilogue_op_name_accepted():
-    """The `fused_epilogue` op name (a `compiled` rocm_target_map row) must be
+    """The `fused_epilogue` op name (a `device_verified_jit` rocm_target_map row) must be
     accepted by the rocm_compiled executor — else the dashboard overstates
     runtime.launch() support. GPU-free: rank-1 operands trip the rank-2 check,
     which is AFTER the op-name gate, so reaching it proves acceptance."""

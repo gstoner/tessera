@@ -2,7 +2,7 @@
 seam pointed at the D1 candidate arbiter.
 
 Verifies the shipped ``ts_stencil_grad_cpu`` kernel is registered as an F4-gated
-candidate for the ``tpp_stencil`` op-kind: the real compiled kernel matches a
+candidate for the ``tpp_stencil`` op-kind: the real device_verified_jit kernel matches a
 numpy central-difference reference through the arbiter, a wrong candidate is
 refused, and the arbiter falls back honestly to the reference.
 """

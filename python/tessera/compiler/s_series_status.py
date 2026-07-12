@@ -89,8 +89,8 @@ OPEN_STATUSES: frozenset[str] = frozenset({"partial", "planned"})
 # Per-target native proof statuses.  These mean "this architecture has a real
 # backend path", not "every declared backend for the primitive is complete".
 NATIVE_BACKEND_STATUSES: frozenset[str] = frozenset({
-    "hardware_verified",
-    "compiled",
+    "device_verified_abi",
+    "device_verified_jit",
     "fused",
     "packaged",
 })
@@ -270,7 +270,7 @@ def render_markdown(
     lines.append(
         "The registry-level `backend_kernel` axis is deliberately conservative "
         "and should not be read as an all-up veto.  Per-architecture completion "
-        "comes from `BackendKernelEntry` rows: `hardware_verified`, `compiled`, "
+        "comes from `BackendKernelEntry` rows: `device_verified_abi`, `device_verified_jit`, "
         "`fused`, and `packaged` count as native proof for that target; "
         "`reference` is correct execution without a native kernel; "
         "`artifact_only` / `compileable` / `planned` remain open for that target."

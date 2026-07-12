@@ -7,7 +7,7 @@ transformer (a norm feeding a projection). The GraphFn GPU lane recognizes a
 ``rmsnorm(x) → matmul`` pattern (single-use, plain matmul) and collapses the two
 ops into this fused kernel.
 
-Oracle (D4): the compiled CPU lane ``matmul(rmsnorm(x), W)``, which matches numpy.
+Oracle (D4): the device_verified_jit CPU lane ``matmul(rmsnorm(x), W)``, which matches numpy.
 
 Skips on non-Darwin / when the Apple GPU runtime or libtessera_jit can't load.
 """

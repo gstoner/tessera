@@ -2,7 +2,7 @@
 
 The NVIDIA counterpart to ``emit/rocm_hip.py`` / ``emit/x86_llvm.py`` — the three
 registered seams the target-agnostic synthesizer (``fusion_core``) calls into, so
-NVIDIA gains the generic **compiled** middle-ground lane it lacks today (the
+NVIDIA gains the generic **device_verified_jit** middle-ground lane it lacks today (the
 shipped ``libtessera_nvidia_gemm.so`` is a *pure* mma.sync GEMM with no fused
 epilogue, dispatched by the jit ``nvidia_mma`` executor — it cannot serve a
 ``FusedRegion``, which always carries at least one fused feature):
@@ -322,7 +322,7 @@ class NvidiaCudaEmitter(KernelEmitter):
                 "GatedMatmulRegion / PointwiseGraphRegion; the shipped mma.sync "
                 "GEMM lane serves single matmuls via the jit nvidia_mma executor)")
         # DYNAMIC is supported: every generic CUDA lane takes M/N/K as runtime args
-        # with in-kernel bounds guards (dims-invariant source), so one compiled
+        # with in-kernel bounds guards (dims-invariant source), so one device_verified_jit
         # kernel serves every shape (Workstream G / W2). DYNAMIC only changes the
         # shape_key below to the symbolic identity, collapsing the cache to one
         # entry across all shapes.
@@ -439,8 +439,8 @@ class NvidiaCudaRunner(KernelRunner):
             Bf = np.ascontiguousarray(B, np.float32)
             M, K = Af.shape
             _, N = Bf.shape
-            compiled = build(region, _TARGET, dtype="f32", dims=None)
-            fn = _load_entry(compiled.artifact)
+            device_verified_jit = build(region, _TARGET, dtype="f32", dims=None)
+            fn = _load_entry(device_verified_jit.artifact)
             bias_arr = (np.ascontiguousarray(bias, np.float32)
                         if bias is not None else None)
             res_arr = (np.ascontiguousarray(residual, np.float32)
@@ -471,8 +471,8 @@ class NvidiaCudaRunner(KernelRunner):
             Nkv, Dv = Vn.shape
             if Dk != D or Nkv != Nk or Dv > _ATTN_DV_CAP:
                 return region.reference(Q, K, V), "reference"
-            compiled = build(region, _TARGET, dtype="f32", dims=None)
-            fn = _load_attn_entry(compiled.artifact)
+            device_verified_jit = build(region, _TARGET, dtype="f32", dims=None)
+            fn = _load_attn_entry(device_verified_jit.artifact)
             out = np.zeros((M, Dv), np.float32)
             rc = fn(_ptr(Qn), _ptr(Kn), _ptr(Vn), _ptr(out),
                     M, Nk, D, Dv, ctypes.c_float(float(region.scale)),
@@ -495,8 +495,8 @@ class NvidiaCudaRunner(KernelRunner):
             Kg, H = Wgf.shape
             if Kg != K or Wuf.shape != (K, H):
                 return region.reference(A, Wg, Wu), "reference"
-            compiled = build(region, _TARGET, dtype="f32", dims=None)
-            fn = getattr(_load_lib(compiled.artifact), _GATED_ENTRY)
+            device_verified_jit = build(region, _TARGET, dtype="f32", dims=None)
+            fn = getattr(_load_lib(device_verified_jit.artifact), _GATED_ENTRY)
             fn.restype = ctypes.c_int
             fn.argtypes = [ctypes.c_void_p] * 4 + [ctypes.c_int] * 3
             out = np.zeros((M, H), np.float32)
@@ -519,8 +519,8 @@ class NvidiaCudaRunner(KernelRunner):
             if any(x.shape != shape for x in ins):
                 return region.reference(*arrays), "reference"
             numel = int(np.prod(shape)) if shape else 1
-            compiled = build(region, _TARGET, dtype="f32", dims=None)
-            fn = getattr(_load_lib(compiled.artifact), _PW_ENTRY)
+            device_verified_jit = build(region, _TARGET, dtype="f32", dims=None)
+            fn = getattr(_load_lib(device_verified_jit.artifact), _PW_ENTRY)
             fn.restype = ctypes.c_int
             fn.argtypes = [ctypes.c_void_p] * len(ins) + [ctypes.c_void_p, ctypes.c_long]
             out = np.zeros(shape, np.float32)

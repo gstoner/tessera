@@ -4,7 +4,7 @@
 Before this slice: users had to manually call
 ``make_gradient_program(E)`` after decorating with ``@energy_jit``.
 After this slice: ``E.grad_y(env)``, ``E.refine(y0, T, eta)``, and
-``E.fused_report()`` are first-class methods on the compiled callable.
+``E.fused_report()`` are first-class methods on the device_verified_jit callable.
 
 This file pins:
 
@@ -46,7 +46,7 @@ class TestGradientProgramLifecycle:
         def E(y, W):
             return energy.quadratic(y, W)
 
-        # The compiled callable exists; the cached attr does not yet.
+        # The device_verified_jit callable exists; the cached attr does not yet.
         assert isinstance(E, EnergyCompiledCallable)
         assert not hasattr(E, "_gradient_program") or \
             E._gradient_program is None

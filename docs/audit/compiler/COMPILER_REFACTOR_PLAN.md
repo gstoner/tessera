@@ -685,7 +685,7 @@ priority (highest DL leverage first):
   scatter/gather synthesis — is stale: those families are native
   (`generated/e2e_op_coverage.md` = 280 complete / 6 runnable_reference / 0
   artifact_only; gather/scatter*/argmax/cumsum/sort/where/softmax are `fused`/
-  `compiled`/`hardware_verified`) after the warp-shuffle lanes (#152–#157 +
+  `device_verified_jit`/`device_verified_abi`) after the warp-shuffle lanes (#152–#157 +
   follow-ons). **But per-target native coverage is NOT complete** — the E2E rollup
   is cross-target and collapses per-target detail; the status truth is
   `s_series_status.md` **Backend Proof By Target** (Decision #26 — read the

@@ -29,7 +29,7 @@ def test_grouped_layout_kinds_and_axes():
     assert gl.contiguous_layout().group_axis == "M"
     assert gl.masked_layout().group_axis == "M"
     assert gl.k_grouped_layout().group_axis == "K"
-    # compiled vs dynamic dims (DeepGEMM compiles N/K, leaves M+groups dynamic)
+    # device_verified_jit vs dynamic dims (DeepGEMM compiles N/K, leaves M+groups dynamic)
     cg = gl.contiguous_layout()
     assert cg.compiled_dims == ("N", "K")
     assert cg.dynamic_dims == ("M", "num_groups")

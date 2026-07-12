@@ -94,7 +94,7 @@ class JitDiagnosticCode(str, Enum):
     #: this op" miss. Audit follow-up A.2 (2026-05-31).
     EAGER_FALLBACK_CONTROL_FLOW = "JIT_EAGER_FALLBACK_CONTROL_FLOW"
 
-    #: Info-level: the JIT successfully compiled through Graph IR →
+    #: Info-level: the JIT successfully device_verified_jit through Graph IR →
     #: Schedule IR → Tile IR → CPU Target IR and dispatched on the
     #: CPU path.
     COMPILED_CPU = "JIT_COMPILED_CPU"

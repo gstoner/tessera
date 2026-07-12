@@ -133,7 +133,7 @@ today: **forward vs. backward, per target.**
 | `target_lowered` | forward **and** backward lower for the target? | `primitive_coverage` `lowering_rule` (fwd) **+** a new backward-lowering probe |
 | `runtime_bound` | backward launch ABI + entry point exist? | `runtime_execution_matrix` — **new backward column** (P4) |
 | `oracle_proven` | native primal **and** grads == Python reference? | `op_target_conformance` `execute_compare_fixture` — **backward fixture** (P3) |
-| `hardware_proven` | native proof completed on the device? | `runtime_execution_matrix` `hardware_verified` rows |
+| `hardware_proven` | native proof completed on the device? | `runtime_execution_matrix` `device_verified_abi` rows |
 
 So the only genuinely *new* machinery Phase 0 needs is the **join + render** step
 plus the two forward-only registries gaining a backward lane (a matrix column and
@@ -575,7 +575,7 @@ provenance record of how the work was sequenced.
 
 | Surface | State today | file:line |
 |---|---|---|
-| Execution matrix | **One** backward row exists: `("rocm", "rocm_flash_attn_bwd_compiled")` (`execution_kind="native_gpu"`, `executable=True`). `ExecutionRow` has **no `direction`/`op_family`** field and no `hardware_verified` concept. `matmul`/`GQA`/`selective_ssm` backward have **no matrix rows** (they execute on gfx1151 but are reached via other `compiler_path`s / the fwd lane + autodiff). | `python/tessera/compiler/execution_matrix.py:35` (`ExecutionRow`), `:1790` (flash_attn_bwd row) |
+| Execution matrix | **One** backward row exists: `("rocm", "rocm_flash_attn_bwd_compiled")` (`execution_kind="native_gpu"`, `executable=True`). `ExecutionRow` has **no `direction`/`op_family`** field and no `device_verified_abi` concept. `matmul`/`GQA`/`selective_ssm` backward have **no matrix rows** (they execute on gfx1151 but are reached via other `compiler_path`s / the fwd lane + autodiff). | `python/tessera/compiler/execution_matrix.py:35` (`ExecutionRow`), `:1790` (flash_attn_bwd row) |
 | Ledger | `bwd_target_lowered` / `bwd_runtime_bound` / `bwd_oracle_proven` / `bwd_hardware_proven` are **hardcoded `()`** ("empty by construction"). | `python/tessera/compiler/autodiff_ledger.py:144-147` |
 | Request | `has_native_backward` is an **unwired bool param**; every `native_required=True` → `UNSUPPORTED`. | `python/tessera/compiler/autodiff_request.py:175-214` |
 | Backward-ABI candidate | ROCm backward reached only via the standalone `rocm_flash_attn_bwd_compiled` path, **not** `@jit(autodiff="reverse", target="rocm")`. | `python/tessera/runtime.py` `_execute_rocm_compiled_flash_attn_bwd` |
@@ -605,7 +605,7 @@ existing row and the drift test are unaffected until rows are tagged.
    `bwd_hardware_proven` with a read of the matrix — group `executable`,
    `direction=="backward"` rows by `op_family`, collect their `target`.
    `bwd_hardware_proven` = the subset whose row is device-proven (see the open
-   question on the `hardware_verified` source below); `bwd_runtime_bound` = all
+   question on the `device_verified_abi` source below); `bwd_runtime_bound` = all
    executable backward rows.
 3. Regenerate `docs/audit/generated/autodiff_connection_ledger.{md,csv}` via
    `scripts/check_generated_docs.sh --write`; the ROCm `flash_attn`/`matmul`/
@@ -682,7 +682,7 @@ build). A1 arbiter dispatch moves to Phase 5 per the finding above.
 
 ### Open questions — resolved during Inc 1
 
-- **`hardware_verified` source. → Resolved.** Rather than reach into
+- **`device_verified_abi` source. → Resolved.** Rather than reach into
   `backend_manifest` / `rocm_target_map`, `bwd_hardware_proven` reads the
   backward row's own `execution_kind`: a row counts as device-proven iff its
   kind is in `_DEVICE_EXECUTION_KINDS` (`native_gpu` / `native_cpu` /

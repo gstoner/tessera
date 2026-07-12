@@ -22,12 +22,12 @@
 
 ## Backend Proof By Target
 
-The registry-level `backend_kernel` axis is deliberately conservative and should not be read as an all-up veto.  Per-architecture completion comes from `BackendKernelEntry` rows: `hardware_verified`, `compiled`, `fused`, and `packaged` count as native proof for that target; `reference` is correct execution without a native kernel; `artifact_only` / `compileable` / `planned` remain open for that target.
+The registry-level `backend_kernel` axis is deliberately conservative and should not be read as an all-up veto.  Per-architecture completion comes from `BackendKernelEntry` rows: `device_verified_abi`, `device_verified_jit`, `fused`, and `packaged` count as native proof for that target; `reference` is correct execution without a native kernel; `artifact_only` / `compileable` / `planned` remain open for that target.
 
 | Target | Declared | Native proven | Reference | Open artifact/planned | Missing target row |
 |---|---:|---:|---:|---:|---:|
 | `cpu` | 329 | 0 | 329 | 0 | 151 |
-| `x86` | 332 | 330 | 2 | 0 | 148 |
+| `x86` | 334 | 332 | 2 | 0 | 146 |
 | `apple_cpu` | 361 | 3 | 358 | 0 | 119 |
 | `apple_gpu` | 203 | 196 | 3 | 4 | 277 |
 | `rocm` | 342 | 340 | 2 | 0 | 138 |

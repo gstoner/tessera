@@ -1,5 +1,5 @@
 """Hand-written AVX-512 row-reduction kernel on x86 — the CPU analog of the ROCm
-compiled reduce lane.
+device_verified_jit reduce lane.
 
 `tessera_x86_avx512_reduce_f32` (sum/mean/max/min) is exported by
 libtessera_x86_elementwise.so; the Python runtime ctypes-loads it and calls it

@@ -64,7 +64,7 @@ def _phase_rows(support_rows: list[dict[str, str]]) -> list[ProgressRow]:
          {"registered", "host_materialized", "runtime_only", "not_applicable"}),
         ("Schedule IR", "schedule_ir", {"complete", "not_applicable"}),
         ("Tile IR", "tile_ir", {"complete", "fused", "not_applicable"}),
-        ("Target IR native/fused codegen", "target_ir", {"fused", "compiled", "hardware_verified", "packaged", "not_applicable"}),
+        ("Target IR native/fused codegen", "target_ir", {"fused", "device_verified_jit", "device_verified_abi", "packaged", "not_applicable"}),
         ("Runtime dispatch readiness", "runtime", {"ready", "fused"}),
         ("Benchmark evidence", "bench", {"benchmarked"}),
     )
@@ -327,7 +327,7 @@ def _target_map_open_rows(
         ),
     ):
         total = len(rows)
-        ready = sum(1 for r in rows if r.get("status") in {"compiled", "hardware_verified"})
+        ready = sum(1 for r in rows if r.get("status") in {"device_verified_jit", "device_verified_abi"})
         out.append(
             ProgressRow(
                 scope="open_work",

@@ -288,7 +288,7 @@ _APPLE_GPU_KERNELS_SYMBOL_MAP: dict[str, str] = {
     "conv2d":       "tessera_apple_gpu_conv2d_dev_{f32,f16,bf16}_enc",
     "kv_cache_read": "tessera_apple_gpu_mps_matmul_{f32,f16,bf16}",  # cache pages dispatch via MPS
     # Project 2.1c / 3 (2026-06-01) — encode-session ops that gained
-    # manifest entries (and hardware_verified promotion). They dispatch
+    # manifest entries (and device_verified_abi promotion). They dispatch
     # through the driver's encode-session lane; name the per-op encode
     # C ABI symbol the driver routes to.
     "bmm":          "tessera_apple_gpu_bmm_dev_{f32,f16,bf16}_enc",

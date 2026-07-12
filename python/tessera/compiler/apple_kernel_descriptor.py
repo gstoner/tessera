@@ -65,7 +65,7 @@ class AppleKernelDescriptor:
     * ``op_name`` — bare op name (manifest key, e.g. ``"matmul"``).
     * ``family`` — one of :data:`APPLE_KERNEL_FAMILIES`.
     * ``status`` — manifest status (``fused`` / ``reference`` /
-      ``hardware_verified`` / ``packaged`` / ``artifact_only`` / ``planned``).
+      ``device_verified_abi`` / ``packaged`` / ``artifact_only`` / ``planned``).
     * ``dtypes`` — canonical dtype names the kernel covers.
     * ``runtime_symbol`` — the C ABI dispatch entry point (or ``None``
       for artifact-only / capability-registered rows).

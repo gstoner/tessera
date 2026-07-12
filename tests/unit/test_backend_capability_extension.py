@@ -1,15 +1,15 @@
 """Arch-3 (2026-05-22) — backend capability matrix extension drift gate.
 
-Pins the new schema fields + hardware_verified contract:
+Pins the new schema fields + device_verified_abi contract:
 
   * BackendKernelEntry accepts shape_envelope / runtime_symbol /
     lit_fixture / execute_compare_fixture / benchmark_json (all
     optional, all None by default — preserves backward compatibility).
-  * status="hardware_verified" requires runtime_symbol AND
+  * status="device_verified_abi" requires runtime_symbol AND
     execute_compare_fixture (validator catches under-evidenced claims).
   * primitive_is_complete() computes registry's backend_kernel="complete"
     from the full target row set.
-  * hardware_verified is earned per (op, target) once a real on-silicon
+  * device_verified_abi is earned per (op, target) once a real on-silicon
     kernel + checked-in numerical fixture land: Apple GPU encode-session
     ops (Project 3 / Sprint A, 2026-06-01), Strix Halo ROCm WMMA ops
     (2026-06-22), and sm_120 NVIDIA mma.sync ops on the RTX 5070 Ti
@@ -89,7 +89,7 @@ def test_as_dict_omits_new_fields_when_unset() -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# hardware_verified status: the new top rung of the ladder
+# device_verified_abi status: the new top rung of the ladder
 # ─────────────────────────────────────────────────────────────────────────
 
 
@@ -98,12 +98,12 @@ def test_hardware_verified_status_accepted() -> None:
     contract can use it."""
     entry = BackendKernelEntry(
         target="apple_gpu",
-        status="hardware_verified",
+        status="device_verified_abi",
         dtypes=("fp32",),
         runtime_symbol="tessera_apple_gpu_matmul_softmax_matmul_f32",
         execute_compare_fixture="tests/unit/test_apple_gpu_mla_e2e.py",
     )
-    assert entry.status == "hardware_verified"
+    assert entry.status == "device_verified_abi"
     assert entry.is_hardware_verified is True
 
 
@@ -112,7 +112,7 @@ def test_hardware_verified_requires_runtime_symbol() -> None:
     with pytest.raises(ValueError, match="requires runtime_symbol"):
         BackendKernelEntry(
             target="apple_gpu",
-            status="hardware_verified",
+            status="device_verified_abi",
             execute_compare_fixture="tests/unit/test_x.py",
         )
 
@@ -122,13 +122,13 @@ def test_hardware_verified_requires_execute_compare_fixture() -> None:
     with pytest.raises(ValueError, match="requires.*execute_compare_fixture"):
         BackendKernelEntry(
             target="apple_gpu",
-            status="hardware_verified",
+            status="device_verified_abi",
             runtime_symbol="tessera_apple_gpu_matmul_f32",
         )
 
 
 def test_unknown_status_still_rejected() -> None:
-    """Adding hardware_verified didn't accidentally loosen status validation."""
+    """Adding device_verified_abi didn't accidentally loosen status validation."""
     with pytest.raises(ValueError, match="status must be one of"):
         BackendKernelEntry(target="apple_gpu", status="totally_fake_status")
 
@@ -139,11 +139,11 @@ def test_unknown_status_still_rejected() -> None:
 
 
 def test_primitive_is_complete_requires_every_target_verified() -> None:
-    """All declared targets must be hardware_verified for a primitive
+    """All declared targets must be device_verified_abi for a primitive
     to qualify as backend_kernel = complete."""
     apple = BackendKernelEntry(
         target="apple_gpu",
-        status="hardware_verified",
+        status="device_verified_abi",
         runtime_symbol="sym_a",
         execute_compare_fixture="tests/unit/test_a.py",
     )
@@ -167,12 +167,12 @@ def test_primitive_is_complete_rejects_fused_only() -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# Honest baseline: nothing claims hardware_verified yet
+# Honest baseline: nothing claims device_verified_abi yet
 # ─────────────────────────────────────────────────────────────────────────
 
 
 # Project 3 / Sprint A (2026-06-01) — the Apple GPU encode-session ops
-# that are legitimately ``hardware_verified``: each runs a real Metal /
+# that are legitimately ``device_verified_abi``: each runs a real Metal /
 # MPSGraph kernel on this Mac's GPU AND ships a checked-in
 # ``execute_compare_fixture`` that numerically validates it against
 # numpy. Apple Silicon GPU IS real hardware (unlike the discrete
@@ -186,7 +186,7 @@ _APPLE_GPU_HARDWARE_VERIFIED_OPS = frozenset({
     "quantized_matmul",
 })
 
-# Strix Halo bring-up — the ROCm ops whose ``hardware_verified`` claim is
+# Strix Halo bring-up — the ROCm ops whose ``device_verified_abi`` claim is
 # honestly earned: each ships a real C-ABI ``runtime_symbol`` that runs an RDNA
 # WMMA kernel on the AMD GPU AND a checked-in ``execute_compare_fixture`` that
 # numerically validates it (and skips clean — no false pass — on a host without
@@ -197,11 +197,11 @@ _APPLE_GPU_HARDWARE_VERIFIED_OPS = frozenset({
 #     second op after matmul to execute natively on a non-Apple backend.
 #   - gemm — the BLAS-vocabulary matmul: the SAME tessera.matmul op + the SAME
 #     tessera_rocm_wmma_gemm_f16 symbol + the same execute_compare_fixture as
-#     matmul, so its hardware_verified claim rests on the identical gfx1151 WMMA
+#     matmul, so its device_verified_abi claim rests on the identical gfx1151 WMMA
 #     proof (it additionally carries the CDNA MFMA artifact shape as metadata).
 _ROCM_HARDWARE_VERIFIED_OPS = frozenset({"matmul", "gemm", "flash_attn"})
 
-# NVIDIA sm_120 bring-up — the consumer-Blackwell ops whose ``hardware_verified``
+# NVIDIA sm_120 bring-up — the consumer-Blackwell ops whose ``device_verified_abi``
 # claim is honestly earned, mirroring the ROCm block: each ships a real C-ABI
 # ``runtime_symbol`` that NVRTC-compiles a warp-level mma.sync kernel and runs it
 # on the RTX 5070 Ti (sm_120, CC 12.0, CUDA 13.3) AND a checked-in
@@ -215,7 +215,7 @@ _NVIDIA_HARDWARE_VERIFIED_OPS = frozenset({"matmul"})
 
 
 def _hardware_verified_claim_is_allowed(op: str, e: BackendKernelEntry) -> bool:
-    """A hardware_verified row is honest only with both evidence fields AND on a
+    """A device_verified_abi row is honest only with both evidence fields AND on a
     target whose proof has actually landed: Apple GPU encode-session ops, the
     Strix Halo ROCm WMMA ops, or the sm_120 NVIDIA mma.sync ops. Anything else
     (other targets, unexpected ops) is under-evidenced and must fail the guard."""
@@ -231,7 +231,7 @@ def _hardware_verified_claim_is_allowed(op: str, e: BackendKernelEntry) -> bool:
 
 
 def test_only_apple_gpu_claims_hardware_verified_today() -> None:
-    """Every ``hardware_verified`` manifest entry must be a target whose proof
+    """Every ``device_verified_abi`` manifest entry must be a target whose proof
     has actually landed AND carry both evidence fields:
 
     * Apple GPU encode-session ops — real Metal/MPSGraph kernel on this Mac's
@@ -249,14 +249,14 @@ def test_only_apple_gpu_claims_hardware_verified_today() -> None:
         (op, entry)
         for op, entries in by_op.items()
         for entry in entries
-        if entry.status == "hardware_verified"
+        if entry.status == "device_verified_abi"
     ]
     offenders = [
         (op, e) for op, e in hw_verified
         if not _hardware_verified_claim_is_allowed(op, e)
     ]
     assert not offenders, (
-        "Unexpected hardware_verified claim — only Apple GPU encode-session/"
+        "Unexpected device_verified_abi claim — only Apple GPU encode-session/"
         "packed-quant ops (real Metal kernel), Strix Halo ROCm WMMA ops "
         "(real AMD-GPU kernel), and "
         "sm_120 NVIDIA mma.sync ops (real RTX 5070 Ti kernel), each with a "
@@ -268,7 +268,7 @@ def test_only_apple_gpu_claims_hardware_verified_today() -> None:
     )
     # And the Apple GPU promotion must be complete — every expected op
     # that ``all_manifests()`` actually surfaces must be
-    # hardware_verified (catches an accidental partial revert). Ops not
+    # device_verified_abi (catches an accidental partial revert). Ops not
     # in ``OP_SPECS`` (e.g. ``bmm``, an Apple-GPU-only encode op) don't
     # appear in ``all_manifests()``; they're covered by the dedicated
     # ``test_apple_gpu_hardware_verified_promotion`` lock instead.
@@ -277,5 +277,5 @@ def test_only_apple_gpu_claims_hardware_verified_today() -> None:
     coverable = _APPLE_GPU_HARDWARE_VERIFIED_OPS & set(by_op)
     missing = coverable - apple_hw_ops
     assert not missing, (
-        f"Expected Apple GPU hardware_verified ops missing from the "
+        f"Expected Apple GPU device_verified_abi ops missing from the "
         f"manifest: {sorted(missing)}")

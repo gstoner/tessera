@@ -12,7 +12,7 @@ them on a real **16×16×16 WMMA GEMM** kernel expressed at the Target-IR level
          rocdl-attach-target{gfx1151}, gpu-module-to-binary  [Stage I])--> hsaco
       --(hipModuleLoadData + launch)--> executes
 
-and the result is compared to BOTH numpy AND the shipped `hardware_verified`
+and the result is compared to BOTH numpy AND the shipped `device_verified_abi`
 hand-written kernel (`tessera_rocm_wmma_gemm_f16`), which serves as the on-silicon
 oracle. Measured on gfx1151: vs numpy ~2e-7, **vs the oracle 0.0 (bit-identical)**.
 
@@ -160,7 +160,7 @@ def _compile_gemm_hsaco(mlir_opt: str) -> bytes:
 
 
 def _launch_gemm(hip, hsaco: bytes, A, B):
-    """Load + launch the compiled 16×16×16 GEMM (1 block × 32 threads). Returns
+    """Load + launch the device_verified_jit 16×16×16 GEMM (1 block × 32 threads). Returns
     the f32 result, or None if the device is unusable (skip signal)."""
     if hip.hipInit(0) != 0:
         return None
@@ -202,7 +202,7 @@ def _launch_gemm(hip, hsaco: bytes, A, B):
 
 
 def _oracle(hip, A, B):
-    """The hardware_verified hand-written kernel — the on-silicon oracle."""
+    """The device_verified_abi hand-written kernel — the on-silicon oracle."""
     lib = ctypes.CDLL(str(ORACLE_LIB), mode=ctypes.RTLD_GLOBAL)
     fn = lib.tessera_rocm_wmma_gemm_f16
     fn.argtypes = [ctypes.c_void_p] * 3 + [ctypes.c_int] * 3
@@ -234,7 +234,7 @@ def test_target_ir_wmma_gemm_matches_numpy_and_oracle():
         pytest.skip("no usable AMD GPU (load/launch unavailable)")
 
     ref = A.astype(np.float32) @ B.astype(np.float32)
-    assert float(np.max(np.abs(D - ref))) < 1e-2, "compiled GEMM != numpy"
+    assert float(np.max(np.abs(D - ref))) < 1e-2, "device_verified_jit GEMM != numpy"
 
     if not ORACLE_LIB.is_file():
         pytest.skip("oracle lib not built: ninja -C build tessera_rocm_gemm")

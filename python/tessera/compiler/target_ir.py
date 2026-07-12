@@ -22,9 +22,10 @@ from .tile_ir import TILE_METADATA_OPS, TileIRModule, TileIRVerificationError, T
 APPLE_CPU_TARGET = "apple_cpu"
 APPLE_GPU_TARGET = "apple_gpu"
 CPU_TARGET = "cpu"
+X86_TARGET = "x86"
 ROCM_TARGET = "rocm"
 NVIDIA_TARGETS = {"nvidia_sm80", "nvidia_sm90", "nvidia_sm100", "nvidia_sm120"}
-SUPPORTED_TARGETS = {APPLE_CPU_TARGET, APPLE_GPU_TARGET, CPU_TARGET, ROCM_TARGET, *NVIDIA_TARGETS}
+SUPPORTED_TARGETS = {APPLE_CPU_TARGET, APPLE_GPU_TARGET, CPU_TARGET, X86_TARGET, ROCM_TARGET, *NVIDIA_TARGETS}
 MEDIA_SOURCES = {
     "tessera.image_preprocess",
     "tessera.video_frame_sample",
@@ -708,6 +709,7 @@ class TargetFunction:
             APPLE_CPU_TARGET: "tessera_apple.cpu.func",
             APPLE_GPU_TARGET: "tessera_apple.gpu.func",
             CPU_TARGET: "tessera.cpu.func",
+            X86_TARGET: "tessera_x86.func",
             ROCM_TARGET: "tessera_rocm.func",
         }.get(self.target, "tessera_nvidia.func" if self.target in NVIDIA_TARGETS else "tessera.target.func")
         lines = [f"{indent}\"{func_op}\"() ({{"]
@@ -756,6 +758,8 @@ class TargetIRVerifier:
                 self._verify_apple_gpu_op(op, diagnostics)
             elif target == CPU_TARGET:
                 self._verify_cpu_op(op, diagnostics)
+            elif target == X86_TARGET:
+                self._verify_x86_op(op, diagnostics)
             elif target == ROCM_TARGET:
                 self._verify_rocm_op(op, diagnostics)
             elif target in NVIDIA_TARGETS:
@@ -770,6 +774,18 @@ class TargetIRVerifier:
             diagnostics.append(TargetIRDiagnostic("error", f"invalid CPU op {op.op_name!r}", "TARGET_IR_CPU_OP"))
             return
         self._require(op, diagnostics, "source", "result", "ordinal", "abi")
+
+    def _verify_x86_op(self, op: TargetOp, diagnostics: list[TargetIRDiagnostic]) -> None:
+        if op.op_name == "tessera_x86.profiler_probe":
+            self._require(op, diagnostics, "kernel", "phase", "metric", "aggregation", "payload_fields")
+            return
+        if not op.op_name.startswith("tessera_x86."):
+            diagnostics.append(TargetIRDiagnostic(
+                "error", f"invalid x86 op {op.op_name!r}", "TARGET_IR_X86_OP"))
+            return
+        self._require(op, diagnostics, "source", "result", "ordinal", "abi", "status")
+        if op.op_name == "tessera_x86.kv_cache_read":
+            self._require(op, diagnostics, "runtime_lane", "access")
 
     def _verify_apple_cpu_op(self, op: TargetOp, diagnostics: list[TargetIRDiagnostic]) -> None:
         if op.op_name == "tessera_apple.cpu.profiler_probe":
@@ -825,6 +841,9 @@ class TargetIRVerifier:
         elif op.op_name == "tessera_rocm.msa_block_sparse":
             self._require(op, diagnostics, "arch", "kernel", "status",
                           "block_ids_layout", "kv_traversal")
+        elif op.op_name == "tessera_rocm.kv_cache_read":
+            self._require(op, diagnostics, "arch", "kernel", "status",
+                          "runtime_lane", "access")
 
     def _verify_nvidia_op(self, op: TargetOp, diagnostics: list[TargetIRDiagnostic]) -> None:
         if op.op_name == "tessera_nvidia.profiler_probe":
@@ -868,6 +887,15 @@ def lower_tile_to_target_ir(tile_module: TileIRModule, *, target_kind: str) -> T
     attrs: dict[str, Any] = {"tessera.ir.level": "target", "target": target_kind}
     if target_kind == CPU_TARGET:
         attrs.update({"arch": "x86_64", "execution_mode": "numpy", "target_features": {"family": "cpu", "wall_clock": True, "device_timers": False}})
+    elif target_kind == X86_TARGET:
+        attrs.update({
+            "arch": "x86_64",
+            "execution_mode": "native_cpu",
+            "target_features": {
+                "family": "x86", "avx512": True, "amx": True,
+                "wall_clock": True, "device_timers": False,
+            },
+        })
     elif target_kind in NVIDIA_TARGETS:
         attrs.update({"arch": _nvidia_arch(target_kind), "target_features": {"family": "nvidia", "tensor_cores": True, "device_timers": False}})
     elif target_kind == ROCM_TARGET:
@@ -1108,6 +1136,7 @@ def _apple_gpu_module_is_mps_runtime(tile_module: TileIRModule) -> bool:
         "tessera.softmax",
         "tessera.softmax_safe",
         "tessera.gelu",
+        "tessera.kv_cache.read",
     }
 
     sources = {str(op.attrs.get("source", "")) for op in compute_ops}
@@ -1186,6 +1215,8 @@ def _lower_tile_ops(
                 lowered.extend(_lower_apple_gpu_op(tile_op, mps_runtime=apple_gpu_mps_runtime))
         elif target_kind == CPU_TARGET:
             lowered.extend(_lower_cpu_op(tile_op))
+        elif target_kind == X86_TARGET:
+            lowered.extend(_lower_x86_op(tile_op))
         elif target_kind in NVIDIA_TARGETS:
             lowered.extend(_lower_nvidia_op(tile_op, target_kind=target_kind))
     return lowered
@@ -1233,13 +1264,13 @@ def _lower_rocm_op(op: TileOp) -> list[TargetOp]:
         # `msa_kv_outer_sparse` contract. Unlike NVIDIA's `artifact_only`
         # cuda_kernel, ROCm has a REAL executing lane: `rocm_sparse_attn_compiled`
         # (block-sparse WMMA + GPU top-k) realizes this contract at
-        # runtime.launch() time — so `status = compiled`. Carries the schedule's
+        # runtime.launch() time — so `status = device_verified_jit`. Carries the schedule's
         # selected-block KV-outer contract for IR-level parity with CUDA.
         return [TargetOp("tessera_rocm.msa_block_sparse", {
             **base,
             "arch": "gfx90a",
             "kernel": "msa_kv_outer_sparse",
-            "status": "compiled",
+            "status": "device_verified_jit",
             "runtime_lane": "rocm_sparse_attn_compiled",
             "mode": op.attrs.get("mode", "prefill"),
             "block_ids_layout": op.attrs.get("selected_block_layout", "B,Hkv,Sq,top_k"),
@@ -1255,12 +1286,21 @@ def _lower_rocm_op(op: TileOp) -> list[TargetOp]:
             "severity": "unsupported",
             "reason": "flash_attn target kernel contract is not implemented for ROCm in this phase",
         })]
+    if source == "tessera.kv_cache.read" or op.op_name == "tile.kv_cache.read":
+        return [TargetOp("tessera_rocm.kv_cache_read", {
+            **base,
+            "arch": "gfx1151",
+            "kernel": "kv_cache_read",
+            "status": "device_verified_jit",
+            "runtime_lane": "rocm_kv_cache_compiled",
+            "access": "paged_slice",
+        })]
     if source.startswith("tessera.kv_cache.") or op.op_name == "tile.kv_cache":
         return [TargetOp("tessera.target.diagnostic", {
             **base,
             "target": "rocm",
             "severity": "unsupported",
-            "reason": "KV-cache target lowering is not implemented for ROCm in this phase",
+            "reason": "KV-cache target lowering is not implemented for ROCm mutation ops",
         })]
     if op.op_name == "tile.async_copy":
         return [
@@ -1289,14 +1329,14 @@ def _lower_cpu_op(op: TileOp) -> list[TargetOp]:
         # (`tessera_rocm.msa_block_sparse`) and NVIDIA (`cuda_kernel`) mirrors.
         # Like ROCm and unlike NVIDIA's `artifact_only`, x86 has a REAL executing
         # lane: `x86_msa_compiled` (host block-select + AVX-512 dense-attend)
-        # realizes this contract at runtime.launch() time — so `status = compiled`.
+        # realizes this contract at runtime.launch() time — so `status = device_verified_jit`.
         # Carries the schedule's selected-block KV-outer contract for IR parity.
         return [TargetOp("tessera.cpu.msa_block_sparse", {
             **base,
             "abi": "numpy",
             "arch": "x86_64",
             "kernel": "msa_kv_outer_sparse",
-            "status": "compiled",
+            "status": "device_verified_jit",
             "runtime_lane": "x86_msa_compiled",
             "mode": op.attrs.get("mode", "prefill"),
             "block_ids_layout": op.attrs.get("selected_block_layout", "B,Hkv,Sq,top_k"),
@@ -1306,6 +1346,39 @@ def _lower_cpu_op(op: TileOp) -> list[TargetOp]:
             "kv_traversal": "kv_outer",
         })]
     return [TargetOp(_cpu_target_op_name(source), {**base, "abi": "numpy"})]
+
+
+def _lower_x86_op(op: TileOp) -> list[TargetOp]:
+    if op.op_name in {"tile.debug_artifact", "tile.debug_barrier"}:
+        return []
+    if op.op_name.startswith("tessera.queue.") or op.op_name in {"tile.async_copy", "tile.wait_async"}:
+        return []
+    source = str(op.attrs.get("source", _source_from_tile_op(op)))
+    base = _base_attrs(op)
+    if source == "tessera.kv_cache.read" or op.op_name == "tile.kv_cache.read":
+        return [TargetOp("tessera_x86.kv_cache_read", {
+            **base,
+            "abi": "tessera_x86_kv_cache_read_f32",
+            "status": "device_verified_jit",
+            "runtime_lane": "x86_kv_cache_compiled",
+            "access": "paged_slice",
+        })]
+    if source.startswith("tessera.kv_cache.") or op.op_name == "tile.kv_cache":
+        return [TargetOp("tessera_x86.unsupported", {
+            **base,
+            "abi": "none",
+            "status": "unsupported",
+            "reason": "KV-cache mutation has no native x86 target contract",
+        })]
+    runtime_lane = _x86_runtime_lane(source)
+    attrs = {
+        **base,
+        "abi": "libtessera_x86_elementwise" if runtime_lane else "unresolved",
+        "status": "device_verified_jit" if runtime_lane else "lowered",
+    }
+    if runtime_lane:
+        attrs["runtime_lane"] = runtime_lane
+    return [TargetOp("tessera_x86.kernel", attrs)]
 
 
 def _lower_nvidia_op(op: TileOp, *, target_kind: str) -> list[TargetOp]:
@@ -1389,6 +1462,14 @@ def _lower_nvidia_op(op: TileOp, *, target_kind: str) -> list[TargetOp]:
             "tile_kv": int(op.attrs.get("tile_kv", 128)),
             "kv_traversal": "kv_outer",
         })]
+    if source == "tessera.kv_cache.read" or op.op_name == "tile.kv_cache.read":
+        return [TargetOp("tessera_nvidia.cuda_kernel", {
+            **base,
+            "arch": arch,
+            "kernel": "kv_cache_read",
+            "status": "artifact_only",
+            "access": "paged_slice",
+        })]
     if source in MEDIA_SOURCES:
         return [TargetOp("tessera_nvidia.cuda_kernel", {
             **base,
@@ -1436,11 +1517,19 @@ def _lower_apple_cpu_op(op: TileOp) -> list[TargetOp]:
         return []
     source = str(op.attrs.get("source", _source_from_tile_op(op)))
     base = _base_attrs(op)
+    if source == "tessera.kv_cache.read" or op.op_name == "tile.kv_cache.read":
+        return [TargetOp("tessera_apple.cpu.kv_cache_read", {
+            **base,
+            "framework": "KVCacheHandle",
+            "abi": "read(start,end)",
+            "dtype": str(op.attrs.get("dtype", "f32")),
+            "access": "paged_slice",
+        })]
     if source.startswith("tessera.kv_cache.") or op.op_name == "tile.kv_cache":
         return [TargetOp("tessera_apple.diagnostic", {
             **base,
             "severity": "unsupported",
-            "reason": "KV-cache target lowering is not implemented for Apple CPU in this phase",
+            "reason": "KV-cache mutation target lowering is not implemented for Apple CPU",
         })]
     if op.op_name == "tile.mma":
         return [TargetOp("tessera_apple.cpu.accelerate_gemm", {**base, "framework": "Accelerate", "abi": "cblas_sgemm", "dtype": "f32"})]
@@ -1476,11 +1565,20 @@ def _lower_apple_gpu_op(op: TileOp, *, mps_runtime: bool = False) -> list[Target
         return []
     source = str(op.attrs.get("source", _source_from_tile_op(op)))
     base = _base_attrs(op)
+    if source == "tessera.kv_cache.read" or op.op_name == "tile.kv_cache.read":
+        return [TargetOp("tessera_apple.gpu.mps_dispatch", {
+            **base,
+            "queue": "MTLCommandQueue",
+            "framework": "MetalPerformanceShaders",
+            "execution_mode": "metal_runtime",
+            "access": "paged_slice",
+            "provenance": "DeviceTensor cache view",
+        })]
     if source.startswith("tessera.kv_cache.") or op.op_name == "tile.kv_cache":
         return [TargetOp("tessera_apple.diagnostic", {
             **base,
             "severity": "unsupported",
-            "reason": "KV-cache target lowering is not implemented for Apple GPU in this phase",
+            "reason": "KV-cache mutation target lowering is not implemented for Apple GPU",
         })]
     if op.op_name.startswith("tessera.queue.") or op.op_name in {"tile.async_copy", "tile.wait_async"}:
         return []
@@ -1731,6 +1829,8 @@ def _probe_target_op(target: str, probe: IntraKernelProbe) -> TargetOp:
 def _probe_op_name_for_target(target: str) -> str:
     if target == CPU_TARGET:
         return "tessera.cpu.profiler_probe"
+    if target == X86_TARGET:
+        return "tessera_x86.profiler_probe"
     if target == APPLE_CPU_TARGET:
         return "tessera_apple.cpu.profiler_probe"
     if target == APPLE_GPU_TARGET:
@@ -1770,6 +1870,19 @@ def _cpu_target_op_name(source: str) -> str:
     elif source in {"tessera.conv2d", "tessera.conv2d_nhwc"}:
         bare = "conv2d_nhwc"
     return f"tessera.cpu.{bare}"
+
+
+def _x86_runtime_lane(source: str) -> str | None:
+    return {
+        "tessera.matmul": "x86_matmul_family_compiled",
+        "tessera.gemm": "x86_matmul_family_compiled",
+        "tessera.softmax": "x86_softmax_compiled",
+        "tessera.softmax_safe": "x86_softmax_compiled",
+        "tessera.flash_attn": "x86_flash_attn_compiled",
+        "tessera.conv2d": "x86_conv_compiled",
+        "tessera.conv2d_nhwc": "x86_conv_compiled",
+        "tessera.relu": "x86_binary_compiled",
+    }.get(source)
 
 
 def _nvidia_arch(target_kind: str) -> str:

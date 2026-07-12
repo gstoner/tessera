@@ -50,7 +50,7 @@ material.
   but it is no longer the completion signal for ROCm/x86/Apple/NVIDIA. Read the
   **Backend Proof By Target** table in
   [`generated/s_series_status.md`](../generated/s_series_status.md): native proof
-  comes from `hardware_verified`, `compiled`, `fused`, or `packaged`
+  comes from `device_verified_abi`, `device_verified_jit`, `fused`, or `packaged`
   `BackendKernelEntry` rows on that target.
 - **Long-tail transform axes** — `lowering_rule` is closed; `batching_rule` and
   `transpose_rule` have only a small reopened tail, while `sharding_rule` is the
@@ -79,7 +79,7 @@ the last surfaced by HF's *Train Your Own Encoder-Free VLM in $100*). Headline:
 **the heavy vision compute already ships; the VLM-specific connector /
 preprocessing / fusion layer was entirely untracked.** A VLM forward pass is
 already expressible through existing ops — `conv2d`/`conv3d` (ViT/SigLIP patch
-stem, apple_gpu `hardware_verified`), `flash_attn` / `multi_head_attention` /
+stem, apple_gpu `device_verified_abi`), `flash_attn` / `multi_head_attention` /
 `gqa_attention`, `varlen_sdpa` (the knapsack / `cu_seqlens` sequence packing the
 encoder-free post relies on), `attn_local_window_2d` (Qwen2-VL window attn),
 `gated_attention` (Flamingo-style gated x-attn), `layer_norm` / `rmsnorm`,

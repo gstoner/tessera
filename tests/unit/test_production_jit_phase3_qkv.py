@@ -8,7 +8,7 @@ host-side weight concat + existing gpu_matmul + column split). If X is a single-
 pre-norm of the group, the rmsnorm folds in too (one gpu_rmsnorm_matmul on the
 concat weight) — so a full `rmsnorm → QKV` collapses to ONE kernel.
 
-Oracle (D4): the same graph built target="cpu" (compiled linalg→LLVM→ORC).
+Oracle (D4): the same graph built target="cpu" (device_verified_jit linalg→LLVM→ORC).
 
 Skips on non-Darwin / when the Apple GPU runtime or libtessera_jit can't load.
 """

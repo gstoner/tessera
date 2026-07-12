@@ -4,7 +4,7 @@
 `jit_fori_loop` / `build_fori_loop` trace a natural bounded loop body into the
 `tessera.control_for` Graph-IR op and execute it: on apple_gpu through the
 Target-IR path (control_for -> tessera-opt -> tessera_apple.gpu.control_loop ->
-run_graph_loop_f32); on cpu the scf.for is compiled natively. This is the
+run_graph_loop_f32); on cpu the scf.for is device_verified_jit natively. This is the
 front-end half of "@jit -> tessera.control_for".
 
 Apple GPU cases need the runtime + a built tessera-opt; CPU cases need only the
@@ -141,7 +141,7 @@ def test_frontend_via_target_ir_matches_direct_dispatch():
     np.testing.assert_allclose(via, direct, rtol=1e-6, atol=1e-6)
 
 
-# --- cpu lane: same front-end, scf.for compiled natively -------------------- #
+# --- cpu lane: same front-end, scf.for device_verified_jit natively -------------------- #
 @cpu
 def test_frontend_cpu_lane_matches_numpy():
     rng = np.random.default_rng(7)

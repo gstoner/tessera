@@ -56,7 +56,7 @@ def test_recorder_exposes_shared_surface():
 def test_runtime_availability_guard_is_honest():
     # The recorder skip-cleans on these guards; each must exist and answer a
     # bool WITHOUT raising on a GPU-less host (False here, True on the box).
-    # Two independent lanes: the shipped WMMA GEMM symbol, and the compiled
+    # Two independent lanes: the shipped WMMA GEMM symbol, and the device_verified_jit
     # FA-2 flash_attn forward (the second hot path gates on the latter).
     from tessera import runtime as rt
 
@@ -81,7 +81,7 @@ def test_baseline_well_formed_when_present():
         for (b, h, s, d) in recorder.FLASH_ATTN_SHAPES:
             assert ("flash_attn", f"{b}x{h}x{s}x{d}") in ops, \
                 f"baseline missing flash_attn {b}x{h}x{s}x{d}"
-    # flash_attn backward — same gate (recorded only when the compiled FA lane is
+    # flash_attn backward — same gate (recorded only when the device_verified_jit FA lane is
     # live); the full recorded ladder must be present if any bwd row is.
     if any(r["mode"] == "flash_attn_bwd" for r in rows):
         for (b, h, s, d) in recorder.FLASH_ATTN_BWD_SHAPES:
@@ -165,8 +165,8 @@ def test_ratchet_rejects_unknown_schema():
 # ── 3. Live ratchet (needs a live AMD GPU; slow) ──────────────────────
 #
 # Gated PER LANE, not by one blanket probe: the two ROCm hot paths have
-# independent availability (the shipped WMMA GEMM symbol vs the compiled FA-2
-# lane that shells to tessera-opt). A host with the GEMM lane but no compiled
+# independent availability (the shipped WMMA GEMM symbol vs the device_verified_jit FA-2
+# lane that shells to tessera-opt). A host with the GEMM lane but no device_verified_jit
 # flash lane records matmul only — so the flash live check must skip there, not
 # fail on the baseline's flash rows it legitimately can't re-time.
 
@@ -227,7 +227,7 @@ def test_live_matmul_within_ratchet():
 
 @pytest.mark.slow
 @pytest.mark.skipif(not _rocm_flash_live(),
-                    reason="live compiled ROCm flash-attn lane required")
+                    reason="live device_verified_jit ROCm flash-attn lane required")
 def test_live_flash_attn_within_ratchet():
     if not BASELINE.is_file():
         pytest.skip("rocm baseline not recorded yet — run the recorder first")
@@ -242,9 +242,9 @@ def test_live_flash_attn_within_ratchet():
 
 @pytest.mark.slow
 @pytest.mark.skipif(not _rocm_flash_live(),
-                    reason="live compiled ROCm flash-attn lane required")
+                    reason="live device_verified_jit ROCm flash-attn lane required")
 def test_live_flash_attn_bwd_within_ratchet():
-    # The backward lane (rocm_flash_attn_bwd_compiled) rides the same compiled
+    # The backward lane (rocm_flash_attn_bwd_compiled) rides the same device_verified_jit
     # FA pass as the forward, so it shares the flash gate. Re-time it live so a
     # backward perf regression actually fails against the committed baseline.
     if not BASELINE.is_file():
@@ -260,7 +260,7 @@ def test_live_flash_attn_bwd_within_ratchet():
 
 @pytest.mark.slow
 @pytest.mark.skipif(not _rocm_gemm_f32_live(),
-                    reason="live compiled ROCm f32 GEMM lane required")
+                    reason="live device_verified_jit ROCm f32 GEMM lane required")
 def test_live_gemm_f32_within_ratchet():
     # Gated on the f32 GEMM's OWN probe (not the flash lane): re-time the blocked
     # kernel live so a regression (e.g. a lost register-blocking win) fails

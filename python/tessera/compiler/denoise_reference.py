@@ -17,7 +17,7 @@ recipe — it exercises, end to end:
 The "network" here is the *ideal* denoiser for a mixture-of-point-masses prior
 over the class embeddings — the Bayes-optimal ``D*(z, σ) = E[y | z]`` — which is
 closed-form, exact, and needs no training.  That makes it an oracle: a backend
-or compiled denoiser can be graded against it, and it admits crisp metamorphic
+or device_verified_jit denoiser can be graded against it, and it admits crisp metamorphic
 invariants (denoise→renoise→denoise self-consistency; the probability-flow ODE
 contracts toward the data).
 

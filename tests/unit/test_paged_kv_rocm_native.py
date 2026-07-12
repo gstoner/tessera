@@ -1,6 +1,6 @@
 """ROCm gfx1151 native paged attention (#8 follow-on, ROCm lane).
 
-Proves the KV-cache → attention fusion on the compiled ROCm FA-2 lane: the paged
+Proves the KV-cache → attention fusion on the device_verified_jit ROCm FA-2 lane: the paged
 KV state is *gathered* (the staging stage), then the dense per-head K/V feeds the
 compiler-generated WMMA flash-attn forward kernel in a single launch (the folded
 ``(num_heads, S, head_dim)`` batch is exactly the lane's ``[..., S, D]`` contract).
@@ -37,7 +37,7 @@ def _fill(num_heads, head_dim, n, *, seed=0, page_size=8):
 
 
 def _rocm_available() -> bool:
-    """True iff the compiled ROCm FA-2 forward lane can launch here."""
+    """True iff the device_verified_jit ROCm FA-2 forward lane can launch here."""
     from tessera import runtime as rt
     return rt._rocm_compiled_flash_attn_available()
 
@@ -79,7 +79,7 @@ def test_rocm_native_equivalence_oracle():
     if not _rocm_available():
         # Honest: no ROCm lane → inconclusive, never a false pass.
         assert verdict.relation == "inconclusive"
-        pytest.skip("compiled ROCm FA lane not available — rung not earnable here")
+        pytest.skip("device_verified_jit ROCm FA lane not available — rung not earnable here")
     assert verdict.relation == "equivalent", verdict.detail
     assert "rocm:native_gpu" in verdict.paths
 

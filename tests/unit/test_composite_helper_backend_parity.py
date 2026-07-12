@@ -93,10 +93,10 @@ def test_execution_matrix_has_composite_helper_rows():
 def test_composite_helper_manifest_backend_parity(op_name):
     entries = {e.target: e for e in manifest_for(op_name)}
     assert entries["apple_gpu"].status == "fused"
-    assert entries["x86"].status == "compiled"
+    assert entries["x86"].status == "device_verified_jit"
     assert entries["x86"].execute_compare_fixture == (
         "tests/unit/test_composite_helper_backend_parity.py")
-    assert entries["rocm"].status == "compiled"
+    assert entries["rocm"].status == "device_verified_jit"
     assert entries["rocm"].execute_compare_fixture == (
         "tests/unit/test_composite_helper_backend_parity.py")
     assert entries["nvidia_sm90"].status == "artifact_only"

@@ -482,13 +482,13 @@ def explain_cpu_plan(module: GraphIRModule, *, target: str = "cpu") -> JitDiagno
         return JitDiagnostic(
             "info",
             _Code.COMPILED_CPU.value,
-            f"compiled {fn.name} through Graph IR -> Schedule IR -> Tile IR -> Target IR -> CPU",
+            f"device_verified_jit {fn.name} through Graph IR -> Schedule IR -> Tile IR -> Target IR -> CPU",
         )
     return JitDiagnostic(
         "info",
         _Code.TARGET_IR_ARTIFACT_ONLY.value,
         (
-            f"compiled {fn.name} through Graph IR -> Schedule IR -> Tile IR -> "
+            f"device_verified_jit {fn.name} through Graph IR -> Schedule IR -> Tile IR -> "
             f"{target} Target IR artifact; native execution is not wired"
         ),
     )
@@ -525,7 +525,7 @@ def _render_target_ir(
     tile: tuple[int, int, int],
     target_kind: str,
 ) -> str:
-    if target_kind in {"cpu", "rocm", "apple_cpu", "apple_gpu"} or target_kind.startswith("nvidia"):
+    if target_kind in {"cpu", "x86", "rocm", "apple_cpu", "apple_gpu"} or target_kind.startswith("nvidia"):
         return _render_object_target_ir(module, tile=tile, target_kind=target_kind)
     lines = [
         'module attributes {tessera.ir.level = "target", target = "cpu"} {',
@@ -904,6 +904,20 @@ def _execute_op(op_name: str, operands: Sequence[np.ndarray], kwargs: Mapping[st
         cache = operands[0] if isinstance(operands[0], ReferenceKVCache) else ReferenceKVCache()
         max_entries = kwargs.get("max_entries", kwargs.get("max_seq", None))
         return cache.prune(None if max_entries is None else int(max_entries))
+    if op_name == "tessera.kv_cache.read":
+        read_cache = operands[0]
+        start = int(np.asarray(operands[1]).item())
+        end = (
+            int(np.asarray(operands[2]).item())
+            if len(operands) > 2 else start + 1
+        )
+        if hasattr(read_cache, "read"):
+            return read_cache.read(start, end)
+        if isinstance(read_cache, ReferenceKVCache):
+            keys = np.asarray(read_cache.keys[start:end])
+            values = np.asarray(read_cache.values[start:end])
+            return keys, values
+        raise TypeError("kv_cache.read requires a cache object with read(start, end)")
     if op_name == "tessera.adam":
         param, grad, moment1, moment2 = operands
         beta1 = float(kwargs.get("beta1", 0.9))

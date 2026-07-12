@@ -332,16 +332,22 @@ Primary detail: [domain/DOMAIN_AUDIT.md](domain/DOMAIN_AUDIT.md).
 ### P1
 
 - **Front-end / IR / autodiff unification — make differentiation a compiler
-  request with a native fwd+bwd path.** Today the Python VJP/JVP tape is the
-  reference/oracle, but `@jit` emits no differentiation intent and no runtime
-  binds a compiled backward — so "forward native" and "gradients native" are
-  conflated and unproven per target. Plan +
+  request with a native fwd+bwd path.** The Python VJP/JVP tape stays the
+  reference/oracle; `@jit(autodiff=…)` now carries differentiation intent and a
+  per-target **backward** `CompileResult` facet, and the ledger's native
+  backward rungs are **sourced from the runtime execution matrix, not asserted** —
+  so "forward native" and "gradients native" are no longer conflated. Plan +
   status-ledger design (six rungs: `python_reference` → `hardware_proven`) in
   [compiler/AUTODIFF_UNIFICATION_PLAN.md](compiler/AUTODIFF_UNIFICATION_PLAN.md).
-  Immediate queue: Phase 0 status ledger + `AUTODIFF_SPEC` §F4 correction →
-  Phase 1 `@jit(autodiff=…)` request → Phase 2 paired fwd/bwd/residual contract →
-  Phase 3 static CPU `matmul→tanh/sigmoid→loss` oracle proof → Phase 4 runtime
-  ABI binding + `native_required` enforcement.
+  **Phases 0–4 landed** (Phase 3 IR-oracle cut; `@jit` static-shape emission is
+  the residual Phase 3 item): Phase 4's A2+A3 wire the backward matrix column
+  into the ledger and honor `native_required`, so `flash_attn` (ROCm) and
+  `selective_ssm` (ROCm + x86) light up `bwd_hardware_proven` from the matrix.
+  **Next: Phase 5** (expand by closed op families; the first executing Tier-1
+  synthesized backward unblocks A1 — register the WMMA backward as a Tier-3
+  arbiter candidate) → Phase 6 (distributed + accelerator promotion; wire the
+  landed F5 collectives into the paired backward ABI). Read the generated ledger
+  for live per-family rungs (Decision #26).
 - ✅ Multi-op compiler metadata and component-aware gates (landed 2026-06-07;
   `component_ops` / `program_executable` / `component_blockers` +
   `effects` / `shape_envelope` / `layout_contracts` / `fusion_groups` /

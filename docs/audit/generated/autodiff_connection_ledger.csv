@@ -140,7 +140,7 @@ lamb,optimizer,yes,none,,,,,,
 latent_kv_compress,loop_nest,yes,none,,,,,,
 latent_kv_expand_k,loop_nest,yes,none,,,,,,
 latent_kv_expand_v,loop_nest,yes,none,,,,,,
-layer_norm,normalization,yes,none,,,,,,
+layer_norm,normalization,yes,placeholder,,,,,,custom_adjoint_call → Python VJP (not native IR)
 lgamma,elementwise,yes,none,,,,,,
 lightning_attention,attention,yes,none,,,,,,
 linear_attn,attention,yes,none,,,,,,
@@ -254,7 +254,7 @@ sinh,elementwise,yes,none,,,,,,
 slice,tensor_algebra,yes,none,,,,,,
 smooth_l1_loss,loss,yes,none,,,,,,
 softcap,elementwise,yes,none,,,,,,
-softmax,stable_reduction,yes,native,,,,,,native static-shape adjoint (W5); dynamic → placeholder
+softmax,stable_reduction,yes,placeholder,,,,,,custom_adjoint_call → Python VJP (not native IR)
 softmax_safe,stable_reduction,yes,none,,,,,,
 softplus,elementwise,yes,placeholder,,,,,,custom_adjoint_call → Python VJP (not native IR)
 spectral_conv,spectral,yes,none,,,,,,

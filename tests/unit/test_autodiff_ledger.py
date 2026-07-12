@@ -31,13 +31,20 @@ def test_python_reference_reconciles_with_primitive_coverage() -> None:
 
 def test_native_and_placeholder_adjoints_are_disjoint_and_grounded() -> None:
     native, placeholder = autodiff_ledger._ir_adjoint_classes()
-    # tanh/sigmoid are the W5 native static-shape adjoints; they must never be
-    # miscounted as placeholder round-trips.
-    assert {"tanh", "sigmoid"} <= native
     assert not (native & placeholder), "an op cannot be both native and placeholder"
-    # The known Python-round-trip ops are placeholder, not native.
-    assert {"gelu", "relu"} <= placeholder
-    assert not ({"gelu", "relu"} & native)
+    # The native set is EXACTLY the buildAdjoint bodies that emit real Graph IR:
+    # matmul's transposed matmuls + tanh/sigmoid's W5 closed forms. Nothing else.
+    # This pins the classifier against the regression where LayerNormOp /
+    # SoftmaxOp (hand-written defs that emit a `CustomAdjointCallOp` placeholder)
+    # were miscounted as native merely because they had explicit definitions.
+    assert native == {"matmul", "tanh", "sigmoid"}, (
+        f"native adjoint set drifted: {sorted(native)} — a buildAdjoint that "
+        "emits a CustomAdjointCallOp is a Python round-trip, not native"
+    )
+    # LayerNorm/Softmax emit CustomAdjointCallOp → placeholder, keyed by the
+    # runtime VJP string ("layer_norm"/"softmax") so they land on the primitive.
+    assert {"layer_norm", "softmax", "gelu", "relu"} <= placeholder
+    assert not ({"layer_norm", "softmax", "gelu", "relu"} & native)
 
 
 def test_rows_are_consistent() -> None:

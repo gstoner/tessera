@@ -338,8 +338,14 @@ gradients for both inputs.
 - **Fixed a real Phase-0 ledger bug the proof surfaced:** native-adjoint
   detection only caught ops with a `placeholderAdjoint` fallback (tanh/sigmoid),
   so `matmul` — a fully-native `buildAdjoint` — was misreported `ir_adjoint =
-  none`. Now detects explicit `<Op>Op::buildAdjoint` defs; the ledger correctly
-  shows **5** native adjoints (matmul, layernorm, softmax, tanh, sigmoid).
+  none`. (Corrected in two stages: the first fix keyed off explicit
+  `<Op>Op::buildAdjoint` defs, but that over-counted `LayerNormOp` / `SoftmaxOp`
+  — hand-written defs that *emit a `CustomAdjointCallOp` placeholder* — as
+  native. The classifier is now **body-aware**: a `buildAdjoint` whose body
+  constructs a `CustomAdjointCallOp` is placeholder, keyed by the runtime VJP
+  string it carries. The ledger shows the true **3** native adjoints — matmul,
+  tanh, sigmoid — with layernorm/softmax as placeholder round-trips. Read the
+  generated ledger for live counts, Decision #26.)
 
 **Residual (not in this cut, honestly):**
 - **Native CPU execution** (LLVM lowering + runtime launch of `@f__bwd`) — that
@@ -373,7 +379,7 @@ VJP reference. Concrete artifacts:
 backward CPU code and passes numerical comparison — and the ledger shows that
 family/CPU at `oracle_proven`.
 
-### Phase 4 — Connect compiler output to the runtime ABI  *(Task #5)*
+### Phase 4 — Connect compiler output to the runtime ABI  *(Task #5 — ✅ exit met 2026-07-11 via A2+A3; §9a)*
 **Goal:** make the slice a product path, not a test-only pipeline. Define an
 explicit compiled fwd/bwd artifact bundle; bind input/output/residual/cotangent/
 gradient buffers; add runtime ABI entries for backward entry points; add the
@@ -454,15 +460,17 @@ must prevent "forward native" from being reported as "training supported."
 
 ## 7. Immediate work queue
 
-| # | Phase | Deliverable | Session task |
-|---|---|---|---|
-| 1 | 0 | Ledger projection + `AUTODIFF_SPEC` §F4 correction | Task #1 |
-| 2 | 1 | Python differentiation request + diagnostics (backward `CompileResult` facet) | Task #2 |
-| 3 | 2 | Paired forward/backward/residual IR contract | Task #3 |
-| 4 | 3 | Static CPU `matmul → tanh/sigmoid → loss` oracle proof | Task #4 |
-| 5 | 4 | Runtime ABI binding + backward matrix column + `native_required` enforcement | Task #5 |
+| # | Phase | Deliverable | Session task | Status |
+|---|---|---|---|---|
+| 1 | 0 | Ledger projection + `AUTODIFF_SPEC` §F4 correction | Task #1 | ✅ |
+| 2 | 1 | Python differentiation request + diagnostics (backward `CompileResult` facet) | Task #2 | ✅ |
+| 3 | 2 | Paired forward/backward/residual IR contract | Task #3 | ✅ first cut |
+| 4 | 3 | Static CPU `matmul → tanh/sigmoid → loss` oracle proof | Task #4 | 🟡 IR-oracle cut (native exec → P4; `@jit` static-shape emission remains) |
+| 5 | 4 | Runtime ABI binding + backward matrix column + `native_required` enforcement | Task #5 | ✅ A2+A3 (A1 → Phase 5) |
 
-Later: Phase 5 (Task #6), Phase 6 (Task #7).
+**Next up: Phase 5 (Task #6)** — expand by closed operation families; the first
+executing Tier-1 synthesized backward unblocks A1 (register the WMMA backward as
+a Tier-3 arbiter candidate, §9a Inc 3). Then Phase 6 (Task #7).
 
 ---
 
@@ -483,15 +491,18 @@ once Phase 0 lands.
 
 Per-family × per-target rung truth is now the **generated ledger**, not a hand
 table — read [`generated/autodiff_connection_ledger.md`](../generated/autodiff_connection_ledger.md)
-for live counts (Decision #26 — don't trust enumerations copied into prose). As
-of 2026-07-11 it records: `python_reference` broad; **5** native `ir_adjoint`
-(matmul, layernorm, softmax, tanh, sigmoid); 7 placeholder round-trips;
-`bwd_cpu_ir_oracle` = matmul/tanh/sigmoid (backward IR interpreted on CPU,
-oracle-matched); **zero** families `runtime_bound` / `oracle_proven` /
-`hardware_proven` via **native** backward execution on any target. **That last
-line is the ledger's current blind spot — see §9: ROCm gfx1151 *does* execute
-several backward families on hardware; Phase 4 wires that reality into the native
-backward rungs.**
+for live counts (Decision #26 — don't trust enumerations copied into prose). The
+shape it records: `python_reference` broad; the native `ir_adjoint` set is
+exactly matmul, tanh, sigmoid (buildAdjoint bodies that emit real Graph IR),
+with layernorm/softmax and the pointwise macro ops as `placeholder` round-trips;
+`bwd_cpu_ir_oracle` on the matmul/tanh/sigmoid slice (backward IR
+interpreted on CPU, oracle-matched). **Phase 4's A2 closed the former "zero
+hardware_proven" blind spot:** the native backward rungs are now sourced from the
+runtime execution matrix, so the families that genuinely launch a backward on a
+real device light up `bwd_runtime_bound` / `bwd_hardware_proven` — today
+`flash_attn` (ROCm gfx1151) and `selective_ssm` (ROCm gfx1151 **and** x86
+AVX-512), sourced from the matrix, never asserted. Read the generated ledger for
+the live set; do not re-copy these into prose (Decision #26).
 
 ---
 
@@ -549,11 +560,16 @@ end-to-end native-backward training path in the compiler.
 
 ---
 
-## 9a. Phase 4 ROCm — implementation plan (design decided 2026-07-11)
+## 9a. Phase 4 ROCm — implementation plan (design decided + landed 2026-07-11)
 
-Grounded in a read of the current surfaces. **Not yet implemented** — this is the
-build sheet so the work lands in verifiable increments without churning the
-drift-gated dashboards.
+Grounded in a read of the current surfaces. **A2 + A3 landed** (increments below
+marked accordingly); A1 deferred to Phase 5. The `ExecutionRow.direction` /
+`op_family` fields, the `native_backward_targets()` / `has_native_backward()`
+matrix accessors, the ledger sourcing its `bwd_*` rungs from the matrix, and the
+`resolve_backward_provenance` wiring at `jit.py` are all in tree and covered by
+`test_autodiff_ledger.py` / `test_autodiff_request.py` /
+`test_runtime_execution_matrix.py` (45 passed). This section is retained as the
+provenance record of how the work was sequenced.
 
 ### Current state (what exists vs. what's missing)
 
@@ -576,7 +592,7 @@ contract with the matrix (the exact "new source of truth" the ledger design
 `direction`/`op_family` are additive with forward-safe defaults, so every
 existing row and the drift test are unaffected until rows are tagged.
 
-### Increment 1 — A2: matrix backward column → ledger (foundation)
+### Increment 1 — A2: matrix backward column → ledger (foundation) *(✅ landed)*
 
 1. `execution_matrix.py`: add `direction` + `op_family` to `ExecutionRow`
    (defaults `"forward"` / `""`). Tag the existing flash_attn_bwd row
@@ -599,7 +615,7 @@ existing row and the drift test are unaffected until rows are tagged.
 **Exit:** the ledger's "0 families hardware_proven" blind spot (§8) closes for
 ROCm; counts come from the matrix, never assertion.
 
-### Increment 2 — A3: `has_native_backward` sourced + wired
+### Increment 2 — A3: `has_native_backward` sourced + wired *(✅ landed)*
 
 1. Add `execution_matrix.has_native_backward(op_family, target) -> bool` (a
    backward row exists, is `executable`, and is device-proven).
@@ -664,13 +680,19 @@ build). A1 arbiter dispatch moves to Phase 5 per the finding above.
   backward gradients vs. an independent NumPy VJP), mirroring the forward
   `test_rocm_*_runtime_symbol.py` lanes.
 
-### Open questions to resolve during Inc 1
+### Open questions — resolved during Inc 1
 
-- **`hardware_verified` source.** `execution_matrix` has no `hardware_verified`
-  field; forward "hardware_verified" lives in `backend_manifest` /
-  `rocm_target_map`. Decide whether `bwd_hardware_proven` reads a device-proven
-  signal from there, or whether a device-proof flag is added to the backward
-  `ExecutionRow`. Prefer sourcing from the existing manifest to avoid a new truth.
-- **matmul/GQA/ssm backward reachability.** Confirm on-hardware which of these
-  actually launch a *distinct* backward today vs. compose forward lanes; only
-  tag rows for real backward launches.
+- **`hardware_verified` source. → Resolved.** Rather than reach into
+  `backend_manifest` / `rocm_target_map`, `bwd_hardware_proven` reads the
+  backward row's own `execution_kind`: a row counts as device-proven iff its
+  kind is in `_DEVICE_EXECUTION_KINDS` (`native_gpu` / `native_cpu` /
+  `cpu_accelerate`). This keeps the matrix the single truth — no new
+  device-proof field, no second registry (`native_backward_targets()` in
+  `execution_matrix.py`).
+- **matmul/GQA/ssm backward reachability. → Resolved.** Only families that launch
+  a *distinct* backward get a row: `flash_attn` (which subsumes `GQA`/`MQA`) and
+  `selective_ssm`. `matmul` backward composes the **forward** matmul lane (two
+  transposed matmuls), so it is not tagged with a separate backward row — adding
+  one would double-count a launch the matrix already records forward (Decision
+  #21). If an on-hardware pass later shows a *distinct* matmul-backward launch
+  worth crediting, tag it then, not by assertion.

@@ -209,4 +209,6 @@ def test_s8_compiler_artifacts_for_foundation_targets():
             if target in {"cuda", "rocm"}:
                 assert artifact.metadata["runtime_status"] == "artifact_only"
             elif target == "x86":
-                assert artifact.metadata["runtime_status"] == "ready"
+                # Native op fixtures do not prove an arbitrary model graph has
+                # an exact-target executable composition path.
+                assert artifact.metadata["runtime_status"] == "artifact_only"

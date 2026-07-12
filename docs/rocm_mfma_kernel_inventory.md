@@ -22,9 +22,10 @@ last_updated: 2026-07-10
 > (Mamba2, incl. device backward), quantization, the loss families, the
 > reduction / scan / sort / scatter / elementwise lanes, and the M7 complex /
 > Clifford / EBM families. **`matmul`/`gemm`** and **`flash_attn`** were the
-> first two (`hardware_verified` in `backend_manifest`, with shipped C-ABI
+> first two (`device_verified_abi` in `backend_manifest`, with shipped C-ABI
 > symbols + measured perf ladder for GEMM); the rest execute as correctness-first
-> **`compiled`** lanes (execute-vs-reference verified, no perf ladder yet).
+> **`device_verified_jit`** lanes (generated binary launched and
+> execute-vs-reference verified, no perf ladder yet).
 >
 > **Status truth is the generated matrix, not this prose (Decision #26):**
 > [`docs/audit/generated/runtime_execution_matrix.md`](audit/generated/runtime_execution_matrix.md)
@@ -176,7 +177,7 @@ Per-kernel MFMA shapes live in `_ROCM_KERNEL_MFMA_SHAPES`
 > **Execution note (2026-07-10).** The tables below are the kernel *contract*
 > (MFMA/WMMA shape, dtype variants, MFU target). They are **no longer "planned"**
 > on `gfx1151`: as of 2026-07-10 the majority of these families execute on real
-> RDNA 3.5 silicon as compiler-generated HIP `compiled` lanes (correctness-first,
+> RDNA 3.5 silicon as compiler-generated HIP `device_verified_jit` lanes (correctness-first,
 > execute-vs-reference verified). The stable lane ids per family:
 >
 > | §5 family | Executing gfx1151 lane(s) |
@@ -391,12 +392,12 @@ GFX12 scalar prefetch / load notes tracked for future scheduler work:
 is the drift-gated source for which `(op, target)` rows execute. As of 2026-07-10
 the ROCm backend runs **dozens of compiler-generated HIP kernels natively on
 `gfx1151`** through `runtime.launch()` (`execution_mode="hip_runtime"`) — see the
-§5 lane-id table. These are **`compiled`** lanes: `tessera-opt` generates the
+§5 lane-id table. These are **`device_verified_jit`** lanes: `tessera-opt` generates the
 kernel + serializes to `hsaco` in-process, then HIP loads and launches it, with an
 execute-vs-reference fixture per family. They are correctness-first (no perf
-ladder) and a rung below the two `hardware_verified` rows below.
+ladder) and a rung below the two `device_verified_abi` rows below.
 
-**The first two — `matmul`/`gemm` + `flash_attn` are `hardware_verified`.** These
+**The first two — `matmul`/`gemm` + `flash_attn` are `device_verified_abi`.** These
 were the first ops to run natively on a non-Apple backend and carry shipped C-ABI
 symbols (not just an in-process compiled lane):
 
@@ -422,7 +423,7 @@ symbols (not just an in-process compiled lane):
 
 Honest scope (Decision #25): everything above is **one arch (RDNA 3.5 `gfx1151`) ×
 {fp16, bf16}**, correctness-first. None of it flips the per-primitive
-`backend_kernel` axis (that needs *all* targets `hardware_verified`). **CDNA MFMA
+`backend_kernel` axis (that needs exact-target device verification). **CDNA MFMA
 entries remain hardware-free** pending MI300-class silicon; Sprint H-4 lit fixtures
 validate their IR + MFMA patterns, and `hipcc`/`llc` compile-only validation
 promotes them to `compileable`. See §9 for the concrete done / open / blocked split.
@@ -441,7 +442,7 @@ promotes them to `compileable`. See §9 for the concrete done / open / blocked s
 | MFMA shape lookup table (C++) | `src/compiler/codegen/Tessera_ROCM_Backend/.../mfma_table.inc` |
 | WMMA LLVM-IR emitter (AMD analog of `ptx_emit.py`) | `python/tessera/compiler/rocdl_emit.py` |
 | Shipped runtime GEMM symbol (HIPRTC at load) | `src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/tessera_rocm_gemm.cpp` |
-| `hardware_verified` row + runtime lane | `python/tessera/compiler/{backend_manifest,execution_matrix}.py`, `python/tessera/runtime.py` |
+| `device_verified_abi` row + runtime lane | `python/tessera/compiler/{backend_manifest,execution_matrix}.py`, `python/tessera/runtime.py` |
 | Lit fixtures (Sprint H-4) | `tests/tessera-ir/phase8/rocm_7_2/` |
 | gfx1151 execute-compare + perf ladder | `tests/unit/test_rocm_wmma_runtime_symbol.py`, `benchmarks/rocm/benchmark_rocm_wmma_gemm.py` |
 | Capability tests | `tests/unit/test_target_toolchain_pins.py` |
@@ -452,11 +453,11 @@ promotes them to `compileable`. See §9 for the concrete done / open / blocked s
 
 ### Done on real silicon (gfx1151 / Strix Halo APU)
 - ✅ WMMA `matmul`/`gemm` executes + matches numpy (`{fp16, bf16}`, f32 accum);
-  `hardware_verified` row + shipped C-ABI symbol + measured GEMM perf ladder
+  `device_verified_abi` row + shipped C-ABI symbol + measured GEMM perf ladder
   (register blocking is the winning lever on this unified-memory APU —
   `STRIX_HALO_EXECUTION_PLAN.md` Stage F)
 - ✅ WMMA `flash_attn` FA-2 **forward** executes + matches a numpy attention
-  reference (`{fp16, bf16}`, online softmax, causal, ragged); `hardware_verified`,
+  reference (`{fp16, bf16}`, online softmax, causal, ragged); `device_verified_abi`,
   no perf ladder
 - ✅ WMMA `flash_attn` FA-2 **backward** (dQ/dK/dV) executes via the
   `rocm_flash_attn_bwd_compiled` lane (`generate-wmma-flash-attn-bwd-kernel` →
@@ -468,7 +469,7 @@ promotes them to `compileable`. See §9 for the concrete done / open / blocked s
   surface. Measured perf ratchet baseline recorded (`flash_attn_bwd` rows in
   `benchmarks/baselines/rocm_gfx1151_hot_paths.json`, ~15× the forward —
   correctness-first, not an MFU claim)
-- ✅ **Dozens of additional compiler-generated HIP `compiled` lanes execute** and
+- ✅ **Dozens of additional compiler-generated HIP `device_verified_jit` lanes execute** and
   match a CPU/numpy reference — nearly all of §5 plus §10: the GEMM/attention
   families, norm / activation / RoPE / ALiBi, optimizers, RNG, FFT/spectral,
   selective-SSM (Mamba2, **incl. device backward**), quantization, the loss

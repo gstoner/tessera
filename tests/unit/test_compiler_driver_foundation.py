@@ -11,7 +11,7 @@ from tessera.compiler.matmul_pipeline import normalize_target_kind
 from tessera.testing.compiler_examples import COMPILER_EXAMPLE_MANIFEST, FOUNDATION_TARGETS, qualify_compiler_example
 
 
-def test_compile_request_normalizes_x86_and_selects_pipeline():
+def test_compile_request_preserves_exact_x86_and_selects_pipeline():
     request = CompileRequest(
         source_origin="unit",
         function_name="mm",
@@ -19,7 +19,8 @@ def test_compile_request_normalizes_x86_and_selects_pipeline():
         target="x86",
     )
 
-    assert request.target == "cpu"
+    # Exact x86 is a native target, not an alias for the CPU reference lane.
+    assert request.target == "x86"
     assert request.pipeline_name == "tessera-lower-to-x86"
     assert request.graph_hash
     assert request.to_dict()["graph_ir_hash"] == request.graph_hash
@@ -115,12 +116,9 @@ def test_compiler_example_manifest_qualifies_each_foundation_target():
     for example in COMPILER_EXAMPLE_MANIFEST:
         assert set(example.stages_by_target) == set(FOUNDATION_TARGETS)
         for target in FOUNDATION_TARGETS:
-            # x86 has the AMX runtime; apple_cpu is the second executable
-            # path (Phase 8.2 — Accelerate cblas + numpy reference for multi-op
-            # programs). apple_gpu joined the runtime path in Phase 8.3 (MPS
-            # matmul) and Phase 8.4 (custom MSL kernels: rope, flash_attn).
-            # Whether a given example actually runs is driven by the manifest
-            # entry's per-target stages, so the test reads it from there.
+            # Runtime execution is claimed only when this compiler artifact is
+            # joined to an executable path for the same exact target. Native
+            # x86 kernel fixtures do not make every generic program executable.
             claimed = set(example.stages_by_target[target])
             should_run = "runtime-executable" in claimed
             result = qualify_compiler_example(example, target, run=should_run)
@@ -141,5 +139,5 @@ def test_compiler_example_manifest_qualifies_each_foundation_target():
                 if target in {"cuda", "rocm"}:
                     assert result.artifact.metadata["runtime_status"] == "artifact_only"
 
-    assert ("mlp_matmul_relu", "cpu") in seen
+    assert ("mlp_matmul_relu", "x86") in seen
     assert ("flash_attn_contract", "nvidia_sm90") in seen

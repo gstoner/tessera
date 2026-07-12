@@ -29,6 +29,7 @@ COMPILER_TRACE_SCHEMA_VERSION = "tessera.compiler.trace.v1"
 
 PIPELINE_BY_TARGET = {
     "cpu": "tessera-lower-to-x86",
+    "x86": "tessera-lower-to-x86",
     "nvidia_sm80": "tessera-lower-to-gpu",
     "nvidia_sm90": "tessera-lower-to-gpu",
     "nvidia_sm100": "tessera-lower-to-gpu",

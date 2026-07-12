@@ -107,7 +107,7 @@ def _build_manifest() -> tuple[CompilerExample, ...]:
     CompilerExample(
         "mlp_matmul_relu",
         mlp_path,
-        {target: _common_artifact_stages(runtime=target == "x86") for target in FOUNDATION_TARGETS},
+        {target: _common_artifact_stages(runtime=False) for target in FOUNDATION_TARGETS},
         runtime_args=(
             np.arange(6, dtype=np.float32).reshape(2, 3),
             np.arange(12, dtype=np.float32).reshape(3, 4),
@@ -116,10 +116,10 @@ def _build_manifest() -> tuple[CompilerExample, ...]:
     CompilerExample(
         "attention_matmul_softmax",
         attention_like_path,
-        # Phase 8.4.3: apple_gpu matmul -> softmax chains fuse into a single
-        # MSL kernel and become runtime-executable. x86 has the AMX runtime
-        # path; the remaining targets stay artifact-only.
-        {target: _common_artifact_stages(runtime=target in {"x86", "apple_gpu"}) for target in FOUNDATION_TARGETS},
+        # Exact Apple GPU and x86 kernel proofs are tracked by architecture-
+        # aligned fixtures; this generic artifact manifest carries no device
+        # execution provenance and therefore makes no runtime claim.
+        {target: _common_artifact_stages(runtime=False) for target in FOUNDATION_TARGETS},
         runtime_args=(
             np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32),
             np.array([[0.5, -1.0], [1.5, 0.25]], dtype=np.float32),
@@ -128,7 +128,7 @@ def _build_manifest() -> tuple[CompilerExample, ...]:
     CompilerExample(
         "conv2d_reference",
         conv2d_path,
-        {target: _common_artifact_stages(runtime=target == "x86") for target in FOUNDATION_TARGETS},
+        {target: _common_artifact_stages(runtime=False) for target in FOUNDATION_TARGETS},
         runtime_args=(
             np.arange(1 * 4 * 4 * 1, dtype=np.float32).reshape(1, 4, 4, 1),
             np.ones((3, 3, 1, 2), dtype=np.float32),
@@ -137,19 +137,15 @@ def _build_manifest() -> tuple[CompilerExample, ...]:
     CompilerExample(
         "rmsnorm_safe",
         rmsnorm_path,
-        # 2026-05-29: apple_gpu single rmsnorm/rmsnorm_safe programs are now
-        # runtime-executable through the MetalPerformanceShadersGraph lane
-        # (no N<=256 limit). x86 keeps the AMX runtime path.
-        {target: _common_artifact_stages(runtime=target in {"x86", "apple_gpu"}) for target in FOUNDATION_TARGETS},
+        # Exact Apple GPU and x86 proofs remain op- and architecture-specific.
+        {target: _common_artifact_stages(runtime=False) for target in FOUNDATION_TARGETS},
         runtime_args=(np.array([[1.0, 2.0, 4.0]], dtype=np.float32),),
     ),
     CompilerExample(
         "flash_attn_contract",
         flash_attn_path,
-        # Phase 8.4.1: apple_gpu single-flash_attn programs are now executable
-        # via the custom MSL kernel. x86 has the AMX runtime path; the
-        # remaining targets stay artifact-only.
-        {target: _common_artifact_stages(runtime=target in {"x86", "apple_gpu"}) for target in FOUNDATION_TARGETS},
+        # Exact Apple GPU and x86 proofs remain op- and architecture-specific.
+        {target: _common_artifact_stages(runtime=False) for target in FOUNDATION_TARGETS},
         runtime_args=(
             np.ones((1, 2, 4), dtype=np.float32),
             np.ones((1, 2, 4), dtype=np.float32),
@@ -159,7 +155,7 @@ def _build_manifest() -> tuple[CompilerExample, ...]:
     CompilerExample(
         "s8_tiny_diffusion_compile_slice",
         s8_compile_mlp_slice,
-        {target: _common_artifact_stages(runtime=target == "x86") for target in FOUNDATION_TARGETS},
+        {target: _common_artifact_stages(runtime=False) for target in FOUNDATION_TARGETS},
         runtime_args=(
             np.arange(6, dtype=np.float32).reshape(2, 3) / 10.0,
             np.ones((3, 4), dtype=np.float32) * 0.25,
@@ -168,7 +164,7 @@ def _build_manifest() -> tuple[CompilerExample, ...]:
     CompilerExample(
         "s8_tiny_attention_compile_slice",
         s8_compile_attention_slice,
-        {target: _common_artifact_stages(runtime=target in {"x86", "apple_gpu"}) for target in FOUNDATION_TARGETS},
+        {target: _common_artifact_stages(runtime=False) for target in FOUNDATION_TARGETS},
         runtime_args=(
             np.arange(6, dtype=np.float32).reshape(2, 3) / 10.0,
             np.ones((3, 3), dtype=np.float32) * 0.25,

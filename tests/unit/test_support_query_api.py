@@ -129,12 +129,9 @@ class TestTierResolution:
         assert tier("mobius", target="apple_gpu") is Tier.NATIVE_READY
         assert tier("stereographic", target="apple_gpu") is Tier.NATIVE_READY
 
-    def test_m7_non_fused_op_is_planned(self) -> None:
-        # `cross_ratio` is an M7 primitive with no fused kernel —
-        # should report PLANNED at best.  Treat as floor invariant:
-        # if a fused kernel lands, this test moves up rather than
-        # disappearing.
-        assert tier("cross_ratio") in (Tier.PLANNED, Tier.REFERENCE_ONLY)
+    def test_m7_cross_ratio_has_exact_x86_native_path(self) -> None:
+        assert tier("cross_ratio", target="x86") is Tier.NATIVE_READY
+        assert tier("cross_ratio") is Tier.NATIVE_READY
 
 
 class TestIsNativeSupported:
@@ -149,11 +146,9 @@ class TestIsNativeSupported:
         with pytest.raises(KeyError):
             is_native_supported("matmul", target="not_a_real_target")
 
-    def test_planned_op_is_never_native(self) -> None:
-        # cross_ratio has no fused kernel anywhere; should be False
-        # on every known target.
+    def test_cross_ratio_is_native_only_on_exact_x86(self) -> None:
         for target in known_targets():
-            assert is_native_supported("cross_ratio", target=target) is False, target
+            assert is_native_supported("cross_ratio", target=target) is (target == "x86"), target
 
 
 class TestIsCompilerSupported:

@@ -112,19 +112,20 @@ public:
         func->getAttrOfType<mlir::DictionaryAttr>(kWeightShardingAttr);
     if (!weightShardingAttr) return;
 
-    // Is this function effect-annotated at all? EffectAnnotationPass tags each
-    // gradient-bearing argument with `tessera.effect`. When present we run
-    // *effect-aware*: a cotangent gets a collective only if its arg is
-    // memory-class. When absent (a pipeline that skipped EffectAnnotationPass)
-    // we fall back to the weight_sharding-only plan so the pass still does
-    // something useful — recorded distinctly in the plan attribute.
-    bool funcEffectAnnotated = func->hasAttr(kEffectAttr);
-    if (!funcEffectAnnotated) {
-      for (unsigned i = 0, e = func.getNumArguments(); i < e; ++i) {
-        if (func.getArgAttrOfType<mlir::StringAttr>(i, kEffectAttr)) {
-          funcEffectAnnotated = true;
-          break;
-        }
+    // Does this function carry *per-argument* effect annotations? Effect-aware
+    // gating is a per-arg decision, so it must key off per-arg `tessera.effect`
+    // attributes — NOT the function-level `tessera.effect` summary, which
+    // EffectAnnotationPass always sets (even when no arg has a per-arg effect).
+    // Keying off the summary would flip on effect-gating for a function that has
+    // only the summary, then treat every arg's missing per-arg effect as "pure"
+    // and skip it — silently dropping the gradient collectives that the
+    // weight_sharding-only fallback would otherwise insert. So we look only at
+    // per-arg attrs; absent them, we take the sharding-only fallback.
+    bool funcEffectAnnotated = false;
+    for (unsigned i = 0, e = func.getNumArguments(); i < e; ++i) {
+      if (func.getArgAttrOfType<mlir::StringAttr>(i, kEffectAttr)) {
+        funcEffectAnnotated = true;
+        break;
       }
     }
 

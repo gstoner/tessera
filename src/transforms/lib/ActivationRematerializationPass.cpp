@@ -21,14 +21,24 @@
 //
 // Safety (Decision #10 / #21)
 // ---------------------------
-//   * Only pure, region-free ops qualify. An op tagged `tessera.recompute`
-//     that carries nested regions (control flow) or is otherwise not safely
-//     clonable is a hard error — silently skipping it would leave a stale
-//     `tessera.recompute` marker and a wrong memory model.
-//   * A clone is only emitted at a use whose op is dominated by all of the
-//     recompute op's operands (they must still be in scope at the clone site).
-//     In the flat single-block autodiff model this is always true; the check
-//     keeps the pass correct if a later structured-CFG model feeds it.
+//   * Only pure, region-free ops qualify. Two hard gates, each a loud error
+//     rather than a silent skip (which would leave a stale `tessera.recompute`
+//     marker and a wrong memory model):
+//       - nested regions (control flow) → `[REMAT_NON_CLONABLE]`.
+//       - not provably side-effect-free (`mlir::isMemoryEffectFree`) →
+//         `[REMAT_EFFECTFUL]`. Re-executing an effectful op (RNG like dropout,
+//         a collective, a store/copy) on the backward path would change program
+//         semantics, not merely trade memory for compute. Tessera Graph IR ops
+//         are `[Pure]`, so this admits the real activation ops and rejects the
+//         effectful ones; an op that does not model its effects is treated as
+//         effectful (conservative — we never recompute what we can't prove pure).
+//   * Clone placement is always valid without a dominance query: a user `U`
+//     uses the recompute op `P`, so `P` dominates `U`; `P`'s operands dominate
+//     `P` (SSA); by transitivity they dominate `U`, hence the clone inserted
+//     right before `U`. Producer chains are handled by walking recompute ops in
+//     reverse program order (consumers before producers), so a whole tagged
+//     chain rematerializes together at the final consumer instead of leaving
+//     the earlier producer's clone live from the forward block.
 //   * `--memory-budget-mb` is accepted for parity with the InsertRecompute
 //     spelling; in the explicit-marker path it is recorded on the function as
 //     `tessera.remat_budget_mb` for downstream planners but does not itself
@@ -45,7 +55,7 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
-#include "mlir/IR/Dominance.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
@@ -105,19 +115,39 @@ public:
     if (recomputeOps.empty())
       return;
 
-    mlir::DominanceInfo dom(func);
     mlir::OpBuilder builder(&getContext());
     int64_t rematCount = 0;
     bool failed = false;
 
-    for (mlir::Operation *op : recomputeOps) {
-      // Safety gate: only pure, region-free ops are rematerializable.
+    // Walk in REVERSE program order — consumers before producers. For a tagged
+    // producer chain (%a feeds %b feeds a backward user, both tagged), handling
+    // the consumer %b first sinks its clone to the backward user; %a is then
+    // seen with %b's clone as its user, so %a's clone lands next to it — the
+    // whole chain rematerializes together at the consumer. Forward order would
+    // instead leave %a's clone stranded next to %b in the forward block, still
+    // live across to the backward, defeating the checkpoint.
+    for (mlir::Operation *op : llvm::reverse(recomputeOps)) {
+      // Gate 1: region-free. Cloning a control-flow op is out of scope.
       if (op->getNumRegions() != 0) {
         op->emitError()
             << "[REMAT_NON_CLONABLE] op '" << op->getName().getStringRef()
             << "' is tagged " << kRecomputeAttr
             << " but carries nested regions; only pure region-free ops can be "
                "rematerialized";
+        failed = true;
+        continue;
+      }
+      // Gate 2: provably side-effect-free. Re-executing an effectful op (RNG,
+      // collective, store/copy) on the backward path would change program
+      // semantics — recompute trades memory for *compute*, nothing else. An op
+      // that doesn't model its effects is conservatively treated as effectful.
+      if (!mlir::isMemoryEffectFree(op)) {
+        op->emitError()
+            << "[REMAT_EFFECTFUL] op '" << op->getName().getStringRef()
+            << "' is tagged " << kRecomputeAttr
+            << " but is not provably side-effect-free; rematerializing it would "
+               "re-execute its effects and change program semantics — only pure "
+               "ops qualify (Decision #10)";
         failed = true;
         continue;
       }
@@ -137,18 +167,11 @@ public:
       }
 
       for (mlir::Operation *user : uniqueUsers) {
-        // All operands of the recompute op must dominate the clone site so the
-        // recomputation is valid at the consumer. (Always true in the flat
-        // autodiff block; guards a future structured-CFG feeder.)
-        bool operandsInScope = llvm::all_of(
-            op->getOperands(), [&](mlir::Value v) {
-              if (auto *defOp = v.getDefiningOp())
-                return dom.dominates(defOp, user);
-              return true;  // block argument — dominates everything in-block.
-            });
-        if (!operandsInScope)
-          continue;
-
+        // Clone placement is always valid: `user` uses `op`, so `op` dominates
+        // `user`; `op`'s operands dominate `op` (SSA); by transitivity they
+        // dominate `user`, so the clone inserted right before `user` sees them.
+        // No dominance query needed (and none would be stable across the
+        // clones we insert into freshly-relocated chain users).
         builder.setInsertionPoint(user);
         mlir::Operation *clone = builder.clone(*op);
         clone->removeAttr(kRecomputeAttr);  // the clone is the materialized use

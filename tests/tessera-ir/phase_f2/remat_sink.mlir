@@ -8,20 +8,21 @@
 // clone must NOT retain the tessera.recompute marker (it is the materialized
 // value, not another checkpoint boundary), and the function records the count.
 //
-// Placeholder ops use the unregistered `test` dialect.
+// Uses `arith` ops — they are `[Pure]`, so they clear the side-effect-free gate
+// (an unregistered/effect-unmodeled op would be rejected as not-provably-pure).
 
 module {
   // The function records how many activations were rematerialized (1).
   // CHECK: func.func @remat_single_use
   // CHECK-SAME: tessera.rematerialized = 1
   func.func @remat_single_use(%x: tensor<4xf32>) -> tensor<4xf32> {
-    %a = "test.relu"(%x) {tessera.recompute} : (tensor<4xf32>) -> tensor<4xf32>
-    %far = "test.barrier"() : () -> tensor<4xf32>
-    // The recomputed relu is cloned right before its only consumer.
-    // CHECK: %[[CLONE:.*]] = "test.relu"(%{{.*}}) : (tensor<4xf32>) -> tensor<4xf32>
-    // CHECK-NEXT: "test.mul"(%[[CLONE]],
-    %b = "test.mul"(%a, %far) : (tensor<4xf32>, tensor<4xf32>) -> tensor<4xf32>
-    func.return %b : tensor<4xf32>
+    %a = arith.mulf %x, %x {tessera.recompute} : tensor<4xf32>
+    %far = arith.negf %x : tensor<4xf32>
+    // The recomputed mulf is cloned right before its only consumer.
+    // CHECK: %[[CLONE:.*]] = arith.mulf %{{.*}}, %{{.*}} : tensor<4xf32>
+    // CHECK-NEXT: arith.addf %[[CLONE]],
+    %b = arith.addf %a, %far : tensor<4xf32>
+    return %b : tensor<4xf32>
   }
 
   // The recompute marker is fully consumed — no occurrence survives anywhere.

@@ -56,26 +56,40 @@ def test_rows_are_consistent() -> None:
         # A row exists only if differentiable OR carrying an IR adjoint.
         assert r.python_reference == "yes" or r.ir_adjoint != "none"
         # Phase 4 (A2): the native backward rungs are now SOURCED from the
-        # runtime execution matrix. Invariants: hardware_proven ⊆ runtime_bound
-        # (a device-proven backward is necessarily runtime-bound), and every
-        # target is a tracked backend. (oracle_proven stays empty until a native
-        # backward oracle fixture is wired — Phase 4 Inc 3.)
-        assert set(r.bwd_hardware_proven) <= set(r.bwd_runtime_bound)
-        for t in (*r.bwd_runtime_bound, *r.bwd_hardware_proven):
+        # Device verification requires both an oracle proof and runtime binding.
+        verified = set(r.bwd_device_verified_jit) | set(r.bwd_device_verified_abi)
+        assert verified <= set(r.bwd_runtime_bound)
+        assert verified <= set(r.bwd_oracle_proven)
+        assert not (set(r.bwd_device_verified_jit) & set(r.bwd_device_verified_abi))
+        for t in (*r.bwd_runtime_bound, *verified):
             assert t in autodiff_ledger._TARGETS
-        assert not r.bwd_oracle_proven
 
 
-def test_flash_attn_backward_is_hardware_proven_on_rocm() -> None:
+def test_flash_attn_backward_is_jit_verified_on_exact_rocm_target() -> None:
     """Phase 4 (A2): the gfx1151 flash_attn backward (matrix row
     `rocm_flash_attn_bwd_compiled`, covering MHA + GQA/MQA) lights up the native
     backward rungs, sourced from the execution matrix — the ledger's first
-    `hardware_proven` backward."""
+    exact-target device-verified backward."""
     rows = {r.family: r for r in autodiff_ledger.collect_rows()}
     fa = rows.get("flash_attn")
     assert fa is not None, "no flash_attn ledger row"
-    assert "rocm" in fa.bwd_runtime_bound
-    assert "rocm" in fa.bwd_hardware_proven
+    assert "rocm_gfx1151" in fa.bwd_runtime_bound
+    assert "rocm_gfx1151" in fa.bwd_oracle_proven
+    assert "rocm_gfx1151" in fa.bwd_device_verified_jit
+
+
+def test_device_verified_leaders_are_derived_from_rows() -> None:
+    rendered = autodiff_ledger.render_markdown()
+    rows = autodiff_ledger.collect_rows()
+    leaders = {
+        r.family for r in rows
+        if r.bwd_device_verified_jit or r.bwd_device_verified_abi
+    }
+    section = rendered.split("### Device-verified leaders", 1)[1].split(
+        "## Ledger", 1)[0]
+    assert leaders
+    for family in leaders:
+        assert f"`{family}`" in section
 
 
 def test_missing_source_raises_not_silent(monkeypatch: pytest.MonkeyPatch) -> None:

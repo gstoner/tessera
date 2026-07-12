@@ -2,14 +2,14 @@
 
 # Compiler-Autodiff Connection Ledger (generated)
 
-One row per differentiable **op family**, over the six rungs of [`AUTODIFF_UNIFICATION_PLAN.md`](../compiler/AUTODIFF_UNIFICATION_PLAN.md) §3. This is a **projection** that joins `primitive_coverage` (`vjp`/`jvp` axes — Decision #24 truth), the native/placeholder adjoint classes parsed from `src/compiler/ir/AdjointInterface.cpp`, and (when they exist) the backward lanes of the runtime execution matrix and conformance fixtures. It is **not** a new source of truth. Regenerate via `scripts/check_generated_docs.sh --write`.
+One row per differentiable **op family**, over the independent proof axes of [`AUTODIFF_UNIFICATION_PLAN.md`](../compiler/AUTODIFF_UNIFICATION_PLAN.md) §3. This is a **projection** that joins `primitive_coverage` (`vjp`/`jvp` axes — Decision #24 truth), the native/placeholder adjoint classes parsed from `src/compiler/ir/AdjointInterface.cpp`, and (when they exist) the backward lanes of the runtime execution matrix and conformance fixtures. It is **not** a new source of truth. Regenerate via `scripts/check_generated_docs.sh --write`.
 
 ## What the columns mean
 
 - **python_reference** — a numerically-checked Python VJP/JVP exists (the semantic oracle; *never* evidence of native compiler support).
 - **ir_adjoint** — `native`: `AutodiffPass` emits real backward Graph IR (static-shape W5 path); `placeholder`: `buildAdjoint` emits a `custom_adjoint_call` that round-trips to the Python VJP at runtime (**not** native); `none`: no IR adjoint.
 - **bwd_cpu_ir_oracle** — the compiler-emitted paired backward IR (`--tessera-autodiff-paired`) is numerically **interpreted on CPU and matches an independent NumPy VJP oracle** (Phase 3). Strictly weaker than native `oracle_proven`: it proves the *IR is correct*, not that a device_verified_jit/native backward executes. Proven by `tests/unit/test_autodiff_paired_cpu_oracle.py`.
-- **bwd_target_lowered / bwd_runtime_bound / bwd_oracle_proven / bwd_hardware_proven** — targets at which *backward* lowers / has a launch ABI / matches the oracle via **native** execution / is device-proven. **Sourced from the runtime execution matrix's backward rows, never asserted (Phase 4 A2).** `bwd_runtime_bound` / `bwd_hardware_proven` are populated for the families that genuinely launch a backward on device (see counts below); `bwd_target_lowered` / `bwd_oracle_proven` remain empty until a lowering-only backward row or a native backward execute-and-compare fixture lands.
+- **bwd_target_lowered / bwd_runtime_bound / bwd_oracle_proven / bwd_device_verified_jit / bwd_device_verified_abi** — exact targets at which backward lowers / has a launch ABI / matches an independent oracle / is verified through a generated binary or shipped stable C ABI. `execution_kind` alone proves none of the device axes. Every device-verified row must name an exact evidence target and checked-in execute-and-compare fixture in the runtime execution matrix.
 
 ## Summary
 
@@ -18,302 +18,309 @@ One row per differentiable **op family**, over the six rungs of [`AUTODIFF_UNIFI
 - `ir_adjoint = native`: **3** (matmul, sigmoid, tanh)
 - `ir_adjoint = placeholder` (Python round-trip, not native): **9** (gelu, layer_norm, log_softmax, relu, rmsnorm, silu, sin, softmax, softplus)
 - backward IR **oracle-verified on CPU** (interpreted): **3** (matmul, sigmoid, tanh)
+- backward `target_lowered` on any exact target: **2**
 - backward `runtime_bound` (native) on any target: **2**
-- backward `oracle_proven` (native) on any target: **0**
-- backward `hardware_proven` on any target: **2**
+- backward `oracle_proven` (native) on any target: **2**
+- backward `device_verified_jit` on any exact target: **2**
+- backward `device_verified_abi` on any exact target: **1**
 
-> **Headline:** the Python reference/oracle is broad, a handful of ops have a native IR adjoint, several more only *look* differentiable in IR but actually call back into Python. The `matmul`/`tanh`/`sigmoid` backward **IR is oracle-verified on CPU** (Phase 3). **Phase 4 (A2) has landed the first native backward**: the families below whose `bwd hardware_proven` column is non-empty execute their backward on real hardware — sourced from the runtime execution matrix's backward rows, not asserted. The native backward families are `flash_attn` (MHA + GQA/MQA, ROCm gfx1151) and `selective_ssm` (Mamba2), which executes on **both** ROCm gfx1151 and x86 AVX-512 — the first two native backward targets. Remaining families are still Phase 4/5 work.
+> **Headline:** the Python reference/oracle is broad, a handful of ops have a native IR adjoint, several more only *look* differentiable in IR but actually call back into Python. The `matmul`/`tanh`/`sigmoid` backward **IR is oracle-verified on CPU** (Phase 3). **Phase 4 (A2) has landed native backward proof**. The leaders listed below are derived from the exact-target proof columns; no family or architecture is hard-coded into this headline. Remaining families are Phase 4/5 work.
+
+### Device-verified leaders
+
+- `flash_attn` — device_verified_jit: rocm_gfx1151
+- `selective_ssm` — device_verified_jit: rocm_gfx1151; device_verified_abi: x86_avx512
 
 ## Ledger
 
-| Family | Category | python_reference | ir_adjoint | bwd cpu_ir_oracle | bwd runtime_bound | bwd oracle_proven | bwd hardware_proven | Notes |
-|---|---|:--:|:--:|:--:|---|---|---|---|
-| `abs` | numeric_helper | yes | none | — | — | — | — |  |
-| `absolute` | numeric_helper | yes | none | — | — | — | — |  |
-| `acos` | elementwise | yes | none | — | — | — | — |  |
-| `adafactor` | functional_optimizer_step | yes | none | — | — | — | — |  |
-| `adam` | functional_optimizer_step | yes | none | — | — | — | — |  |
-| `adamw` | functional_optimizer_step | yes | none | — | — | — | — |  |
-| `adaptive_pool` | pooling | yes | none | — | — | — | — |  |
-| `add` | elementwise | yes | none | — | — | — | — |  |
-| `alibi` | position_encoding | yes | none | — | — | — | — |  |
-| `all_gather` | collective | yes | none | — | — | — | — |  |
-| `all_reduce` | collective | yes | none | — | — | — | — |  |
-| `all_to_all` | collective | yes | none | — | — | — | — |  |
-| `amax` | reduction | yes | none | — | — | — | — |  |
-| `amin` | reduction | yes | none | — | — | — | — |  |
-| `asin` | elementwise | yes | none | — | — | — | — |  |
-| `asymmetric_bce` | loss | yes | none | — | — | — | — |  |
-| `atan` | elementwise | yes | none | — | — | — | — |  |
-| `atan2` | elementwise | yes | none | — | — | — | — |  |
-| `attn_compressed_blocks` | attention | yes | none | — | — | — | — |  |
-| `attn_local_window_2d` | attention | yes | none | — | — | — | — |  |
-| `attn_sliding_window` | attention | yes | none | — | — | — | — |  |
-| `attn_top_k_blocks` | attention | yes | none | — | — | — | — |  |
-| `avg_pool` | pooling | yes | none | — | — | — | — |  |
-| `batched_gemm` | loop_nest | yes | none | — | — | — | — |  |
-| `bidirectional_scan` | recurrent | yes | none | — | — | — | — |  |
-| `binary_cross_entropy_loss` | loss | yes | none | — | — | — | — |  |
-| `broadcast` | tensor_algebra | yes | none | — | — | — | — |  |
-| `broadcast_to_axis` | collective | yes | none | — | — | — | — |  |
-| `bsmm` | sparse | yes | none | — | — | — | — |  |
-| `calibration_observer` | quantization | yes | none | — | — | — | — |  |
-| `cast` | layout_transform | yes | none | — | — | — | — |  |
-| `cat` | tensor_algebra | yes | none | — | — | — | — |  |
-| `center_crop` | vision | yes | none | — | — | — | — |  |
-| `cholesky` | linalg_decomposition | yes | none | — | — | — | — |  |
-| `chunk` | tensor_algebra | yes | none | — | — | — | — |  |
-| `cispo_policy_loss` | rl_loss | yes | none | — | — | — | — |  |
-| `clamp` | numeric_helper | yes | none | — | — | — | — |  |
-| `clifford_codiff` | geometric_algebra | yes | none | — | — | — | — |  |
-| `clifford_conjugate` | geometric_algebra | yes | none | — | — | — | — |  |
-| `clifford_exp` | geometric_algebra | yes | none | — | — | — | — |  |
-| `clifford_ext_deriv` | geometric_algebra | yes | none | — | — | — | — |  |
-| `clifford_geometric_product` | geometric_algebra | yes | none | — | — | — | — |  |
-| `clifford_grade_involution` | geometric_algebra | yes | none | — | — | — | — |  |
-| `clifford_grade_projection` | geometric_algebra | yes | none | — | — | — | — |  |
-| `clifford_hodge_star` | geometric_algebra | yes | none | — | — | — | — |  |
-| `clifford_inner` | geometric_algebra | yes | none | — | — | — | — |  |
-| `clifford_left_contraction` | geometric_algebra | yes | none | — | — | — | — |  |
-| `clifford_log` | geometric_algebra | yes | none | — | — | — | — |  |
-| `clifford_norm` | geometric_algebra | yes | none | — | — | — | — |  |
-| `clifford_norm_squared` | reduction | yes | none | — | — | — | — |  |
-| `clifford_reverse` | geometric_algebra | yes | none | — | — | — | — |  |
-| `clifford_rotor_sandwich` | geometric_algebra | yes | none | — | — | — | — |  |
-| `clifford_vec_deriv` | geometric_algebra | yes | none | — | — | — | — |  |
-| `clifford_wedge` | geometric_algebra | yes | none | — | — | — | — |  |
-| `clip` | elementwise | yes | none | — | — | — | — |  |
-| `collective_permute` | collective | yes | none | — | — | — | — |  |
-| `contrastive_divergence_loss` | loss | yes | none | — | — | — | — |  |
-| `contrastive_loss` | loss | yes | none | — | — | — | — |  |
-| `conv1d` | model_layer | yes | none | — | — | — | — |  |
-| `conv2d` | stencil | yes | none | — | — | — | — |  |
-| `conv3d` | stencil | yes | none | — | — | — | — |  |
-| `conv_transpose` | model_layer | yes | none | — | — | — | — |  |
-| `cos` | elementwise | yes | none | — | — | — | — |  |
-| `cosh` | elementwise | yes | none | — | — | — | — |  |
-| `cosine_embedding_loss` | loss | yes | none | — | — | — | — |  |
-| `cross_attention` | attention | yes | none | — | — | — | — |  |
-| `cross_entropy_loss` | loss | yes | none | — | — | — | — |  |
-| `ctc_loss` | loss | yes | none | — | — | — | — |  |
-| `cummax` | reduction | yes | none | — | — | — | — |  |
-| `cummin` | reduction | yes | none | — | — | — | — |  |
-| `cumprod` | reduction | yes | none | — | — | — | — |  |
-| `cumsum` | reduction | yes | none | — | — | — | — |  |
-| `dct` | spectral | yes | none | — | — | — | — |  |
-| `ddpm_noise_pred_loss` | loss | yes | none | — | — | — | — |  |
-| `deepseek_sparse_attention` | attention | yes | none | — | — | — | — |  |
-| `denoising_score_matching_loss` | loss | yes | none | — | — | — | — |  |
-| `depthwise_conv1d` | stencil | yes | none | — | — | — | — |  |
-| `dequant_matmul` | quantization | yes | none | — | — | — | — |  |
-| `dequantize_fp4` | quantize | yes | none | — | — | — | — |  |
-| `dequantize_fp6` | quantize | yes | none | — | — | — | — |  |
-| `dequantize_fp8` | quantize | yes | none | — | — | — | — |  |
-| `dequantize_int4` | quantization | yes | none | — | — | — | — |  |
-| `dequantize_int8` | quantization | yes | none | — | — | — | — |  |
-| `dequantize_nvfp4` | quantize | yes | none | — | — | — | — |  |
-| `digamma` | elementwise | yes | none | — | — | — | — |  |
-| `div` | elementwise | yes | none | — | — | — | — |  |
-| `dropout` | random_mask | yes | none | — | — | — | — |  |
-| `dynamic_slice` | indexing | yes | none | — | — | — | — |  |
-| `dynamic_update_slice` | indexing | yes | none | — | — | — | — |  |
-| `ebm_energy_quadratic` | ebm | yes | none | — | — | — | — |  |
-| `ebm_inner_step` | ebm | yes | none | — | — | — | — |  |
-| `ebm_refinement` | ebm | yes | none | — | — | — | — |  |
-| `ebm_self_verify` | ebm | yes | none | — | — | — | — |  |
-| `einsum` | contraction | yes | none | — | — | — | — |  |
-| `erf` | elementwise | yes | none | — | — | — | — |  |
-| `erfc` | elementwise | yes | none | — | — | — | — |  |
-| `exp` | elementwise | yes | none | — | — | — | — |  |
-| `expand` | tensor_algebra | yes | none | — | — | — | — |  |
-| `expm1` | elementwise | yes | none | — | — | — | — |  |
-| `factorized_matmul` | loop_nest | yes | none | — | — | — | — |  |
-| `factorized_pos_emb` | position_encoding | yes | none | — | — | — | — |  |
-| `fake_quantize` | quantization | yes | none | — | — | — | — |  |
-| `fft` | spectral | yes | none | — | — | — | — |  |
-| `flash_attn` | attention | yes | none | — | rocm | — | rocm | native backward executes on rocm (Phase 4) |
-| `flatten` | tensor_algebra | yes | none | — | — | — | — |  |
-| `flip` | tensor_algebra | yes | none | — | — | — | — |  |
-| `floor_div` | elementwise | yes | none | — | — | — | — |  |
-| `focal_loss` | loss | yes | none | — | — | — | — |  |
-| `fused_epilogue` | fused_epilogue | yes | none | — | — | — | — |  |
-| `gated_attention` | attention | yes | none | — | — | — | — |  |
-| `gated_deltanet` | attention | yes | none | — | — | — | — |  |
-| `gather` | indexing | yes | none | — | — | — | — |  |
-| `gelu` | elementwise | yes | placeholder | — | — | — | — | custom_adjoint_call → Python VJP (not native IR) |
-| `gemm` | loop_nest | yes | none | — | — | — | — |  |
-| `gqa_attention` | attention | yes | none | — | — | — | — |  |
-| `grad_scaler_step` | numerics | yes | none | — | — | — | — |  |
-| `group_norm` | normalization | yes | none | — | — | — | — |  |
-| `grouped_gemm` | loop_nest | yes | none | — | — | — | — |  |
-| `grpo_policy_loss` | rl_loss | yes | none | — | — | — | — |  |
-| `gru_cell` | recurrent | yes | none | — | — | — | — |  |
-| `huber_loss` | loss | yes | none | — | — | — | — |  |
-| `hybrid_attention` | attention | yes | none | — | — | — | — |  |
-| `ifft` | spectral | yes | none | — | — | — | — |  |
-| `image_normalize` | vision | yes | none | — | — | — | — |  |
-| `image_resize` | vision | yes | none | — | — | — | — |  |
-| `implicit_score_matching_loss` | loss | yes | none | — | — | — | — |  |
-| `index_select` | indexing | yes | none | — | — | — | — |  |
-| `index_update` | indexing | yes | none | — | — | — | — |  |
-| `info_nce_loss` | loss | yes | none | — | — | — | — |  |
-| `instance_norm` | normalization | yes | none | — | — | — | — |  |
-| `interpolate` | vision | yes | none | — | — | — | — |  |
-| `irfft` | spectral | yes | none | — | — | — | — |  |
-| `istft` | spectral | yes | none | — | — | — | — |  |
-| `js_divergence` | loss | yes | none | — | — | — | — |  |
-| `kimi_delta_attention` | attention | yes | none | — | — | — | — |  |
-| `kl_divergence` | loss | yes | none | — | — | — | — |  |
-| `label_smoothed_cross_entropy` | loss | yes | none | — | — | — | — |  |
-| `lamb` | optimizer | yes | none | — | — | — | — |  |
-| `latent_kv_compress` | loop_nest | yes | none | — | — | — | — |  |
-| `latent_kv_expand_k` | loop_nest | yes | none | — | — | — | — |  |
-| `latent_kv_expand_v` | loop_nest | yes | none | — | — | — | — |  |
-| `layer_norm` | normalization | yes | placeholder | — | — | — | — | custom_adjoint_call → Python VJP (not native IR) |
-| `lgamma` | elementwise | yes | none | — | — | — | — |  |
-| `lightning_attention` | attention | yes | none | — | — | — | — |  |
-| `linear_attn` | attention | yes | none | — | — | — | — |  |
-| `linear_attn_state` | attention | yes | none | — | — | — | — |  |
-| `linear_general` | model_layer | yes | none | — | — | — | — |  |
-| `lion` | functional_optimizer_step | yes | none | — | — | — | — |  |
-| `load_balance_loss` | loss | yes | none | — | — | — | — |  |
-| `log` | elementwise | yes | none | — | — | — | — |  |
-| `log1p` | elementwise | yes | none | — | — | — | — |  |
-| `log_cosh_loss` | loss | yes | none | — | — | — | — |  |
-| `log_softmax` | stable_reduction | yes | placeholder | — | — | — | — | custom_adjoint_call → Python VJP (not native IR) |
-| `logsumexp` | stable_reduction | yes | none | — | — | — | — |  |
-| `lookahead_sparse_attention` | attention | yes | none | — | — | — | — |  |
-| `lora_linear` | model_layer | yes | none | — | — | — | — |  |
-| `mae_loss` | loss | yes | none | — | — | — | — |  |
-| `masked_fill` | layout_transform | yes | none | — | — | — | — |  |
-| `masked_scatter` | indexing | yes | none | — | — | — | — |  |
-| `matmul` | loop_nest | yes | native | cpu | — | — | — | native static-shape adjoint (W5); dynamic → placeholder |
-| `max` | reduction | yes | none | — | — | — | — |  |
-| `max_pool` | pooling | yes | none | — | — | — | — |  |
-| `maximum` | numeric_helper | yes | none | — | — | — | — |  |
-| `mean` | reduction | yes | none | — | — | — | — |  |
-| `memory_index_score` | attention | yes | none | — | — | — | — |  |
-| `memory_index_select_ste` | indexing | yes | none | — | — | — | — |  |
-| `memory_read` | memory | yes | none | — | — | — | — |  |
-| `min` | reduction | yes | none | — | — | — | — |  |
-| `min_pool` | pooling | yes | none | — | — | — | — |  |
-| `minimum` | numeric_helper | yes | none | — | — | — | — |  |
-| `mla_decode` | attention | yes | none | — | — | — | — |  |
-| `mla_decode_fused` | attention | yes | none | — | — | — | — |  |
-| `mod` | elementwise | yes | none | — | — | — | — |  |
-| `modified_delta_attention` | attention | yes | none | — | — | — | — |  |
-| `moe` | moe | yes | none | — | — | — | — |  |
-| `moe_combine` | moe_transport | yes | none | — | — | — | — |  |
-| `moe_dispatch` | moe_transport | yes | none | — | — | — | — |  |
-| `momentum` | functional_optimizer_step | yes | none | — | — | — | — |  |
-| `mor_partition` | layout_transform | yes | none | — | — | — | — |  |
-| `mor_router` | layout_transform | yes | none | — | — | — | — |  |
-| `mor_scatter` | layout_transform | yes | none | — | — | — | — |  |
-| `mqa_attention` | attention | yes | none | — | — | — | — |  |
-| `mrope_2d` | rotary_embedding | yes | none | — | — | — | — |  |
-| `msa_index_scores` | attention | yes | none | — | — | — | — |  |
-| `msa_sparse_attention` | attention | yes | none | — | — | — | — |  |
-| `mse_loss` | loss | yes | none | — | — | — | — |  |
-| `mul` | elementwise | yes | none | — | — | — | — |  |
-| `multi_head_attention` | attention | yes | none | — | — | — | — |  |
-| `muon` | optimizer | yes | none | — | — | — | — |  |
-| `nesterov` | optimizer | yes | none | — | — | — | — |  |
-| `normalize_group_advantages` | rl_loss | yes | none | — | — | — | — |  |
-| `nt_xent_loss` | loss | yes | none | — | — | — | — |  |
-| `ntk_rope` | position_encoding | yes | none | — | — | — | — |  |
-| `online_softmax` | stable_reduction | yes | none | — | — | — | — |  |
-| `online_softmax_state` | state_update | yes | none | — | — | — | — |  |
-| `pad` | tensor_algebra | yes | none | — | — | — | — |  |
-| `patchify` | layout_transform | yes | none | — | — | — | — |  |
-| `perceiver_resampler` | attention | yes | none | — | — | — | — |  |
-| `permute` | tensor_algebra | yes | none | — | — | — | — |  |
-| `persistent_cd_loss` | loss | yes | none | — | — | — | — |  |
-| `pixel_shuffle` | layout_transform | yes | none | — | — | — | — |  |
-| `pixel_unshuffle` | layout_transform | yes | none | — | — | — | — |  |
-| `pmax` | collective | yes | none | — | — | — | — |  |
-| `pmean` | collective | yes | none | — | — | — | — |  |
-| `pmin` | collective | yes | none | — | — | — | — |  |
-| `pow` | elementwise | yes | none | — | — | — | — |  |
-| `power_attn` | attention | yes | none | — | — | — | — |  |
-| `ppo_policy_loss` | rl_loss | yes | none | — | — | — | — |  |
-| `prod` | reduction | yes | none | — | — | — | — |  |
-| `psum` | collective | yes | none | — | — | — | — |  |
-| `qkv_projection` | projection | yes | none | — | — | — | — |  |
-| `qr` | linalg_decomposition | yes | none | — | — | — | — |  |
-| `quantize_fp4` | quantize | yes | none | — | — | — | — |  |
-| `quantize_fp6` | quantize | yes | none | — | — | — | — |  |
-| `quantize_fp8` | quantize | yes | none | — | — | — | — |  |
-| `quantize_int4` | quantization | yes | none | — | — | — | — |  |
-| `quantize_int8` | quantization | yes | none | — | — | — | — |  |
-| `quantize_nvfp4` | quantize | yes | none | — | — | — | — |  |
-| `quantized_matmul` | loop_nest | yes | none | — | — | — | — |  |
-| `reciprocal` | numeric_helper | yes | none | — | — | — | — |  |
-| `reduce` | stable_reduction | yes | none | — | — | — | — |  |
-| `reduce_scatter` | collective | yes | none | — | — | — | — |  |
-| `relu` | elementwise | yes | placeholder | — | — | — | — | custom_adjoint_call → Python VJP (not native IR) |
-| `repeat` | tensor_algebra | yes | none | — | — | — | — |  |
-| `reshape` | tensor_algebra | yes | none | — | — | — | — |  |
-| `retention` | attention | yes | none | — | — | — | — |  |
-| `rfft` | spectral | yes | none | — | — | — | — |  |
-| `rmsnorm` | normalization | yes | placeholder | — | — | — | — | custom_adjoint_call → Python VJP (not native IR) |
-| `rmsnorm_safe` | normalization | yes | none | — | — | — | — |  |
-| `roll` | tensor_algebra | yes | none | — | — | — | — |  |
-| `rope` | rotary_embedding | yes | none | — | — | — | — |  |
-| `rope_merge` | layout_transform | yes | none | — | — | — | — |  |
-| `rope_split` | layout_transform | yes | none | — | — | — | — |  |
-| `rsqrt` | elementwise | yes | none | — | — | — | — |  |
-| `scatter` | indexing | yes | none | — | — | — | — |  |
-| `scatter_add` | indexing | yes | none | — | — | — | — |  |
-| `scatter_reduce` | indexing | yes | none | — | — | — | — |  |
-| `score_matching_loss` | loss | yes | none | — | — | — | — |  |
-| `sddmm` | sparse | yes | none | — | — | — | — |  |
-| `segment_reduce` | segment_reduce | yes | none | — | — | — | — |  |
-| `select` | tensor_algebra | yes | none | — | — | — | — |  |
-| `selective_ssm` | state_space | yes | none | — | rocm,x86 | — | rocm,x86 | native backward executes on rocm, x86 (Phase 4) |
-| `seq2seq_loss` | loss | yes | none | — | — | — | — |  |
-| `sgd` | functional_optimizer_step | yes | none | — | — | — | — |  |
-| `sigmoid` | elementwise | yes | native | cpu | — | — | — | native static-shape adjoint (W5); dynamic → placeholder |
-| `sigmoid_safe` | stable_reduction | yes | none | — | — | — | — |  |
-| `sign` | numeric_helper | yes | none | — | — | — | — |  |
-| `silu` | elementwise | yes | placeholder | — | — | — | — | custom_adjoint_call → Python VJP (not native IR) |
-| `silu_mul` | elementwise | yes | none | — | — | — | — |  |
-| `simple_rnn_cell` | recurrent | yes | none | — | — | — | — |  |
-| `sin` | elementwise | yes | placeholder | — | — | — | — | custom_adjoint_call → Python VJP (not native IR) |
-| `sinh` | elementwise | yes | none | — | — | — | — |  |
-| `slice` | tensor_algebra | yes | none | — | — | — | — |  |
-| `smooth_l1_loss` | loss | yes | none | — | — | — | — |  |
-| `softcap` | elementwise | yes | none | — | — | — | — |  |
-| `softmax` | stable_reduction | yes | placeholder | — | — | — | — | custom_adjoint_call → Python VJP (not native IR) |
-| `softmax_safe` | stable_reduction | yes | none | — | — | — | — |  |
-| `softplus` | elementwise | yes | placeholder | — | — | — | — | custom_adjoint_call → Python VJP (not native IR) |
-| `spectral_conv` | spectral | yes | none | — | — | — | — |  |
-| `spectral_filter` | spectral | yes | none | — | — | — | — |  |
-| `spectral_norm` | normalization | yes | none | — | — | — | — |  |
-| `split` | tensor_algebra | yes | none | — | — | — | — |  |
-| `spmm_coo` | sparse | yes | none | — | — | — | — |  |
-| `spmm_csr` | sparse | yes | none | — | — | — | — |  |
-| `sqrt` | elementwise | yes | none | — | — | — | — |  |
-| `squeeze` | tensor_algebra | yes | none | — | — | — | — |  |
-| `stack` | tensor_algebra | yes | none | — | — | — | — |  |
-| `std` | reduction | yes | none | — | — | — | — |  |
-| `stft` | spectral | yes | none | — | — | — | — |  |
-| `sub` | elementwise | yes | none | — | — | — | — |  |
-| `sum` | stable_reduction | yes | none | — | — | — | — |  |
-| `svd` | linalg_decomposition | yes | none | — | — | — | — |  |
-| `take` | indexing | yes | none | — | — | — | — |  |
-| `tan` | elementwise | yes | none | — | — | — | — |  |
-| `tanh` | elementwise | yes | native | cpu | — | — | — | native static-shape adjoint (W5); dynamic → placeholder |
-| `tile` | tensor_algebra | yes | none | — | — | — | — |  |
-| `transpose` | layout_transform | yes | none | — | — | — | — |  |
-| `tri_solve` | linalg_solver | yes | none | — | — | — | — |  |
-| `triplet_loss` | loss | yes | none | — | — | — | — |  |
-| `unsqueeze` | tensor_algebra | yes | none | — | — | — | — |  |
-| `var` | reduction | yes | none | — | — | — | — |  |
-| `view` | tensor_algebra | yes | none | — | — | — | — |  |
-| `vlb_loss` | loss | yes | none | — | — | — | — |  |
-| `wasserstein_distance` | loss | yes | none | — | — | — | — |  |
-| `weight_norm` | normalization | yes | none | — | — | — | — |  |
-| `where` | numeric_helper | yes | none | — | — | — | — |  |
-| `z_loss` | loss | yes | none | — | — | — | — |  |
+| Family | Category | python_reference | ir_adjoint | bwd cpu_ir_oracle | bwd target_lowered | bwd runtime_bound | bwd oracle_proven | bwd device_verified_jit | bwd device_verified_abi | Notes |
+|---|---|:--:|:--:|:--:|---|---|---|---|---|---|
+| `abs` | numeric_helper | yes | none | — | — | — | — | — | — |  |
+| `absolute` | numeric_helper | yes | none | — | — | — | — | — | — |  |
+| `acos` | elementwise | yes | none | — | — | — | — | — | — |  |
+| `adafactor` | functional_optimizer_step | yes | none | — | — | — | — | — | — |  |
+| `adam` | functional_optimizer_step | yes | none | — | — | — | — | — | — |  |
+| `adamw` | functional_optimizer_step | yes | none | — | — | — | — | — | — |  |
+| `adaptive_pool` | pooling | yes | none | — | — | — | — | — | — |  |
+| `add` | elementwise | yes | none | — | — | — | — | — | — |  |
+| `alibi` | position_encoding | yes | none | — | — | — | — | — | — |  |
+| `all_gather` | collective | yes | none | — | — | — | — | — | — |  |
+| `all_reduce` | collective | yes | none | — | — | — | — | — | — |  |
+| `all_to_all` | collective | yes | none | — | — | — | — | — | — |  |
+| `amax` | reduction | yes | none | — | — | — | — | — | — |  |
+| `amin` | reduction | yes | none | — | — | — | — | — | — |  |
+| `asin` | elementwise | yes | none | — | — | — | — | — | — |  |
+| `asymmetric_bce` | loss | yes | none | — | — | — | — | — | — |  |
+| `atan` | elementwise | yes | none | — | — | — | — | — | — |  |
+| `atan2` | elementwise | yes | none | — | — | — | — | — | — |  |
+| `attn_compressed_blocks` | attention | yes | none | — | — | — | — | — | — |  |
+| `attn_local_window_2d` | attention | yes | none | — | — | — | — | — | — |  |
+| `attn_sliding_window` | attention | yes | none | — | — | — | — | — | — |  |
+| `attn_top_k_blocks` | attention | yes | none | — | — | — | — | — | — |  |
+| `avg_pool` | pooling | yes | none | — | — | — | — | — | — |  |
+| `batched_gemm` | loop_nest | yes | none | — | — | — | — | — | — |  |
+| `bidirectional_scan` | recurrent | yes | none | — | — | — | — | — | — |  |
+| `binary_cross_entropy_loss` | loss | yes | none | — | — | — | — | — | — |  |
+| `broadcast` | tensor_algebra | yes | none | — | — | — | — | — | — |  |
+| `broadcast_to_axis` | collective | yes | none | — | — | — | — | — | — |  |
+| `bsmm` | sparse | yes | none | — | — | — | — | — | — |  |
+| `calibration_observer` | quantization | yes | none | — | — | — | — | — | — |  |
+| `cast` | layout_transform | yes | none | — | — | — | — | — | — |  |
+| `cat` | tensor_algebra | yes | none | — | — | — | — | — | — |  |
+| `center_crop` | vision | yes | none | — | — | — | — | — | — |  |
+| `cholesky` | linalg_decomposition | yes | none | — | — | — | — | — | — |  |
+| `chunk` | tensor_algebra | yes | none | — | — | — | — | — | — |  |
+| `cispo_policy_loss` | rl_loss | yes | none | — | — | — | — | — | — |  |
+| `clamp` | numeric_helper | yes | none | — | — | — | — | — | — |  |
+| `clifford_codiff` | geometric_algebra | yes | none | — | — | — | — | — | — |  |
+| `clifford_conjugate` | geometric_algebra | yes | none | — | — | — | — | — | — |  |
+| `clifford_exp` | geometric_algebra | yes | none | — | — | — | — | — | — |  |
+| `clifford_ext_deriv` | geometric_algebra | yes | none | — | — | — | — | — | — |  |
+| `clifford_geometric_product` | geometric_algebra | yes | none | — | — | — | — | — | — |  |
+| `clifford_grade_involution` | geometric_algebra | yes | none | — | — | — | — | — | — |  |
+| `clifford_grade_projection` | geometric_algebra | yes | none | — | — | — | — | — | — |  |
+| `clifford_hodge_star` | geometric_algebra | yes | none | — | — | — | — | — | — |  |
+| `clifford_inner` | geometric_algebra | yes | none | — | — | — | — | — | — |  |
+| `clifford_left_contraction` | geometric_algebra | yes | none | — | — | — | — | — | — |  |
+| `clifford_log` | geometric_algebra | yes | none | — | — | — | — | — | — |  |
+| `clifford_norm` | geometric_algebra | yes | none | — | — | — | — | — | — |  |
+| `clifford_norm_squared` | reduction | yes | none | — | — | — | — | — | — |  |
+| `clifford_reverse` | geometric_algebra | yes | none | — | — | — | — | — | — |  |
+| `clifford_rotor_sandwich` | geometric_algebra | yes | none | — | — | — | — | — | — |  |
+| `clifford_vec_deriv` | geometric_algebra | yes | none | — | — | — | — | — | — |  |
+| `clifford_wedge` | geometric_algebra | yes | none | — | — | — | — | — | — |  |
+| `clip` | elementwise | yes | none | — | — | — | — | — | — |  |
+| `collective_permute` | collective | yes | none | — | — | — | — | — | — |  |
+| `contrastive_divergence_loss` | loss | yes | none | — | — | — | — | — | — |  |
+| `contrastive_loss` | loss | yes | none | — | — | — | — | — | — |  |
+| `conv1d` | model_layer | yes | none | — | — | — | — | — | — |  |
+| `conv2d` | stencil | yes | none | — | — | — | — | — | — |  |
+| `conv3d` | stencil | yes | none | — | — | — | — | — | — |  |
+| `conv_transpose` | model_layer | yes | none | — | — | — | — | — | — |  |
+| `cos` | elementwise | yes | none | — | — | — | — | — | — |  |
+| `cosh` | elementwise | yes | none | — | — | — | — | — | — |  |
+| `cosine_embedding_loss` | loss | yes | none | — | — | — | — | — | — |  |
+| `cross_attention` | attention | yes | none | — | — | — | — | — | — |  |
+| `cross_entropy_loss` | loss | yes | none | — | — | — | — | — | — |  |
+| `ctc_loss` | loss | yes | none | — | — | — | — | — | — |  |
+| `cummax` | reduction | yes | none | — | — | — | — | — | — |  |
+| `cummin` | reduction | yes | none | — | — | — | — | — | — |  |
+| `cumprod` | reduction | yes | none | — | — | — | — | — | — |  |
+| `cumsum` | reduction | yes | none | — | — | — | — | — | — |  |
+| `dct` | spectral | yes | none | — | — | — | — | — | — |  |
+| `ddpm_noise_pred_loss` | loss | yes | none | — | — | — | — | — | — |  |
+| `deepseek_sparse_attention` | attention | yes | none | — | — | — | — | — | — |  |
+| `denoising_score_matching_loss` | loss | yes | none | — | — | — | — | — | — |  |
+| `depthwise_conv1d` | stencil | yes | none | — | — | — | — | — | — |  |
+| `dequant_matmul` | quantization | yes | none | — | — | — | — | — | — |  |
+| `dequantize_fp4` | quantize | yes | none | — | — | — | — | — | — |  |
+| `dequantize_fp6` | quantize | yes | none | — | — | — | — | — | — |  |
+| `dequantize_fp8` | quantize | yes | none | — | — | — | — | — | — |  |
+| `dequantize_int4` | quantization | yes | none | — | — | — | — | — | — |  |
+| `dequantize_int8` | quantization | yes | none | — | — | — | — | — | — |  |
+| `dequantize_nvfp4` | quantize | yes | none | — | — | — | — | — | — |  |
+| `digamma` | elementwise | yes | none | — | — | — | — | — | — |  |
+| `div` | elementwise | yes | none | — | — | — | — | — | — |  |
+| `dropout` | random_mask | yes | none | — | — | — | — | — | — |  |
+| `dynamic_slice` | indexing | yes | none | — | — | — | — | — | — |  |
+| `dynamic_update_slice` | indexing | yes | none | — | — | — | — | — | — |  |
+| `ebm_energy_quadratic` | ebm | yes | none | — | — | — | — | — | — |  |
+| `ebm_inner_step` | ebm | yes | none | — | — | — | — | — | — |  |
+| `ebm_refinement` | ebm | yes | none | — | — | — | — | — | — |  |
+| `ebm_self_verify` | ebm | yes | none | — | — | — | — | — | — |  |
+| `einsum` | contraction | yes | none | — | — | — | — | — | — |  |
+| `erf` | elementwise | yes | none | — | — | — | — | — | — |  |
+| `erfc` | elementwise | yes | none | — | — | — | — | — | — |  |
+| `exp` | elementwise | yes | none | — | — | — | — | — | — |  |
+| `expand` | tensor_algebra | yes | none | — | — | — | — | — | — |  |
+| `expm1` | elementwise | yes | none | — | — | — | — | — | — |  |
+| `factorized_matmul` | loop_nest | yes | none | — | — | — | — | — | — |  |
+| `factorized_pos_emb` | position_encoding | yes | none | — | — | — | — | — | — |  |
+| `fake_quantize` | quantization | yes | none | — | — | — | — | — | — |  |
+| `fft` | spectral | yes | none | — | — | — | — | — | — |  |
+| `flash_attn` | attention | yes | none | — | rocm_gfx1151 | rocm_gfx1151 | rocm_gfx1151 | rocm_gfx1151 | — | native backward executes on rocm_gfx1151 (Phase 4) |
+| `flatten` | tensor_algebra | yes | none | — | — | — | — | — | — |  |
+| `flip` | tensor_algebra | yes | none | — | — | — | — | — | — |  |
+| `floor_div` | elementwise | yes | none | — | — | — | — | — | — |  |
+| `focal_loss` | loss | yes | none | — | — | — | — | — | — |  |
+| `fused_epilogue` | fused_epilogue | yes | none | — | — | — | — | — | — |  |
+| `gated_attention` | attention | yes | none | — | — | — | — | — | — |  |
+| `gated_deltanet` | attention | yes | none | — | — | — | — | — | — |  |
+| `gather` | indexing | yes | none | — | — | — | — | — | — |  |
+| `gelu` | elementwise | yes | placeholder | — | — | — | — | — | — | custom_adjoint_call → Python VJP (not native IR) |
+| `gemm` | loop_nest | yes | none | — | — | — | — | — | — |  |
+| `gqa_attention` | attention | yes | none | — | — | — | — | — | — |  |
+| `grad_scaler_step` | numerics | yes | none | — | — | — | — | — | — |  |
+| `group_norm` | normalization | yes | none | — | — | — | — | — | — |  |
+| `grouped_gemm` | loop_nest | yes | none | — | — | — | — | — | — |  |
+| `grpo_policy_loss` | rl_loss | yes | none | — | — | — | — | — | — |  |
+| `gru_cell` | recurrent | yes | none | — | — | — | — | — | — |  |
+| `huber_loss` | loss | yes | none | — | — | — | — | — | — |  |
+| `hybrid_attention` | attention | yes | none | — | — | — | — | — | — |  |
+| `ifft` | spectral | yes | none | — | — | — | — | — | — |  |
+| `image_normalize` | vision | yes | none | — | — | — | — | — | — |  |
+| `image_resize` | vision | yes | none | — | — | — | — | — | — |  |
+| `implicit_score_matching_loss` | loss | yes | none | — | — | — | — | — | — |  |
+| `index_select` | indexing | yes | none | — | — | — | — | — | — |  |
+| `index_update` | indexing | yes | none | — | — | — | — | — | — |  |
+| `info_nce_loss` | loss | yes | none | — | — | — | — | — | — |  |
+| `instance_norm` | normalization | yes | none | — | — | — | — | — | — |  |
+| `interpolate` | vision | yes | none | — | — | — | — | — | — |  |
+| `irfft` | spectral | yes | none | — | — | — | — | — | — |  |
+| `istft` | spectral | yes | none | — | — | — | — | — | — |  |
+| `js_divergence` | loss | yes | none | — | — | — | — | — | — |  |
+| `kimi_delta_attention` | attention | yes | none | — | — | — | — | — | — |  |
+| `kl_divergence` | loss | yes | none | — | — | — | — | — | — |  |
+| `label_smoothed_cross_entropy` | loss | yes | none | — | — | — | — | — | — |  |
+| `lamb` | optimizer | yes | none | — | — | — | — | — | — |  |
+| `latent_kv_compress` | loop_nest | yes | none | — | — | — | — | — | — |  |
+| `latent_kv_expand_k` | loop_nest | yes | none | — | — | — | — | — | — |  |
+| `latent_kv_expand_v` | loop_nest | yes | none | — | — | — | — | — | — |  |
+| `layer_norm` | normalization | yes | placeholder | — | — | — | — | — | — | custom_adjoint_call → Python VJP (not native IR) |
+| `lgamma` | elementwise | yes | none | — | — | — | — | — | — |  |
+| `lightning_attention` | attention | yes | none | — | — | — | — | — | — |  |
+| `linear_attn` | attention | yes | none | — | — | — | — | — | — |  |
+| `linear_attn_state` | attention | yes | none | — | — | — | — | — | — |  |
+| `linear_general` | model_layer | yes | none | — | — | — | — | — | — |  |
+| `lion` | functional_optimizer_step | yes | none | — | — | — | — | — | — |  |
+| `load_balance_loss` | loss | yes | none | — | — | — | — | — | — |  |
+| `log` | elementwise | yes | none | — | — | — | — | — | — |  |
+| `log1p` | elementwise | yes | none | — | — | — | — | — | — |  |
+| `log_cosh_loss` | loss | yes | none | — | — | — | — | — | — |  |
+| `log_softmax` | stable_reduction | yes | placeholder | — | — | — | — | — | — | custom_adjoint_call → Python VJP (not native IR) |
+| `logsumexp` | stable_reduction | yes | none | — | — | — | — | — | — |  |
+| `lookahead_sparse_attention` | attention | yes | none | — | — | — | — | — | — |  |
+| `lora_linear` | model_layer | yes | none | — | — | — | — | — | — |  |
+| `mae_loss` | loss | yes | none | — | — | — | — | — | — |  |
+| `masked_fill` | layout_transform | yes | none | — | — | — | — | — | — |  |
+| `masked_scatter` | indexing | yes | none | — | — | — | — | — | — |  |
+| `matmul` | loop_nest | yes | native | cpu | — | — | — | — | — | native static-shape adjoint (W5); dynamic → placeholder |
+| `max` | reduction | yes | none | — | — | — | — | — | — |  |
+| `max_pool` | pooling | yes | none | — | — | — | — | — | — |  |
+| `maximum` | numeric_helper | yes | none | — | — | — | — | — | — |  |
+| `mean` | reduction | yes | none | — | — | — | — | — | — |  |
+| `memory_index_score` | attention | yes | none | — | — | — | — | — | — |  |
+| `memory_index_select_ste` | indexing | yes | none | — | — | — | — | — | — |  |
+| `memory_read` | memory | yes | none | — | — | — | — | — | — |  |
+| `min` | reduction | yes | none | — | — | — | — | — | — |  |
+| `min_pool` | pooling | yes | none | — | — | — | — | — | — |  |
+| `minimum` | numeric_helper | yes | none | — | — | — | — | — | — |  |
+| `mla_decode` | attention | yes | none | — | — | — | — | — | — |  |
+| `mla_decode_fused` | attention | yes | none | — | — | — | — | — | — |  |
+| `mod` | elementwise | yes | none | — | — | — | — | — | — |  |
+| `modified_delta_attention` | attention | yes | none | — | — | — | — | — | — |  |
+| `moe` | moe | yes | none | — | — | — | — | — | — |  |
+| `moe_combine` | moe_transport | yes | none | — | — | — | — | — | — |  |
+| `moe_dispatch` | moe_transport | yes | none | — | — | — | — | — | — |  |
+| `momentum` | functional_optimizer_step | yes | none | — | — | — | — | — | — |  |
+| `mor_partition` | layout_transform | yes | none | — | — | — | — | — | — |  |
+| `mor_router` | layout_transform | yes | none | — | — | — | — | — | — |  |
+| `mor_scatter` | layout_transform | yes | none | — | — | — | — | — | — |  |
+| `mqa_attention` | attention | yes | none | — | — | — | — | — | — |  |
+| `mrope_2d` | rotary_embedding | yes | none | — | — | — | — | — | — |  |
+| `msa_index_scores` | attention | yes | none | — | — | — | — | — | — |  |
+| `msa_sparse_attention` | attention | yes | none | — | — | — | — | — | — |  |
+| `mse_loss` | loss | yes | none | — | — | — | — | — | — |  |
+| `mul` | elementwise | yes | none | — | — | — | — | — | — |  |
+| `multi_head_attention` | attention | yes | none | — | — | — | — | — | — |  |
+| `muon` | optimizer | yes | none | — | — | — | — | — | — |  |
+| `nesterov` | optimizer | yes | none | — | — | — | — | — | — |  |
+| `normalize_group_advantages` | rl_loss | yes | none | — | — | — | — | — | — |  |
+| `nt_xent_loss` | loss | yes | none | — | — | — | — | — | — |  |
+| `ntk_rope` | position_encoding | yes | none | — | — | — | — | — | — |  |
+| `online_softmax` | stable_reduction | yes | none | — | — | — | — | — | — |  |
+| `online_softmax_state` | state_update | yes | none | — | — | — | — | — | — |  |
+| `pad` | tensor_algebra | yes | none | — | — | — | — | — | — |  |
+| `patchify` | layout_transform | yes | none | — | — | — | — | — | — |  |
+| `perceiver_resampler` | attention | yes | none | — | — | — | — | — | — |  |
+| `permute` | tensor_algebra | yes | none | — | — | — | — | — | — |  |
+| `persistent_cd_loss` | loss | yes | none | — | — | — | — | — | — |  |
+| `pixel_shuffle` | layout_transform | yes | none | — | — | — | — | — | — |  |
+| `pixel_unshuffle` | layout_transform | yes | none | — | — | — | — | — | — |  |
+| `pmax` | collective | yes | none | — | — | — | — | — | — |  |
+| `pmean` | collective | yes | none | — | — | — | — | — | — |  |
+| `pmin` | collective | yes | none | — | — | — | — | — | — |  |
+| `pow` | elementwise | yes | none | — | — | — | — | — | — |  |
+| `power_attn` | attention | yes | none | — | — | — | — | — | — |  |
+| `ppo_policy_loss` | rl_loss | yes | none | — | — | — | — | — | — |  |
+| `prod` | reduction | yes | none | — | — | — | — | — | — |  |
+| `psum` | collective | yes | none | — | — | — | — | — | — |  |
+| `qkv_projection` | projection | yes | none | — | — | — | — | — | — |  |
+| `qr` | linalg_decomposition | yes | none | — | — | — | — | — | — |  |
+| `quantize_fp4` | quantize | yes | none | — | — | — | — | — | — |  |
+| `quantize_fp6` | quantize | yes | none | — | — | — | — | — | — |  |
+| `quantize_fp8` | quantize | yes | none | — | — | — | — | — | — |  |
+| `quantize_int4` | quantization | yes | none | — | — | — | — | — | — |  |
+| `quantize_int8` | quantization | yes | none | — | — | — | — | — | — |  |
+| `quantize_nvfp4` | quantize | yes | none | — | — | — | — | — | — |  |
+| `quantized_matmul` | loop_nest | yes | none | — | — | — | — | — | — |  |
+| `reciprocal` | numeric_helper | yes | none | — | — | — | — | — | — |  |
+| `reduce` | stable_reduction | yes | none | — | — | — | — | — | — |  |
+| `reduce_scatter` | collective | yes | none | — | — | — | — | — | — |  |
+| `relu` | elementwise | yes | placeholder | — | — | — | — | — | — | custom_adjoint_call → Python VJP (not native IR) |
+| `repeat` | tensor_algebra | yes | none | — | — | — | — | — | — |  |
+| `reshape` | tensor_algebra | yes | none | — | — | — | — | — | — |  |
+| `retention` | attention | yes | none | — | — | — | — | — | — |  |
+| `rfft` | spectral | yes | none | — | — | — | — | — | — |  |
+| `rmsnorm` | normalization | yes | placeholder | — | — | — | — | — | — | custom_adjoint_call → Python VJP (not native IR) |
+| `rmsnorm_safe` | normalization | yes | none | — | — | — | — | — | — |  |
+| `roll` | tensor_algebra | yes | none | — | — | — | — | — | — |  |
+| `rope` | rotary_embedding | yes | none | — | — | — | — | — | — |  |
+| `rope_merge` | layout_transform | yes | none | — | — | — | — | — | — |  |
+| `rope_split` | layout_transform | yes | none | — | — | — | — | — | — |  |
+| `rsqrt` | elementwise | yes | none | — | — | — | — | — | — |  |
+| `scatter` | indexing | yes | none | — | — | — | — | — | — |  |
+| `scatter_add` | indexing | yes | none | — | — | — | — | — | — |  |
+| `scatter_reduce` | indexing | yes | none | — | — | — | — | — | — |  |
+| `score_matching_loss` | loss | yes | none | — | — | — | — | — | — |  |
+| `sddmm` | sparse | yes | none | — | — | — | — | — | — |  |
+| `segment_reduce` | segment_reduce | yes | none | — | — | — | — | — | — |  |
+| `select` | tensor_algebra | yes | none | — | — | — | — | — | — |  |
+| `selective_ssm` | state_space | yes | none | — | rocm_gfx1151 | rocm_gfx1151,x86_avx512 | rocm_gfx1151,x86_avx512 | rocm_gfx1151 | x86_avx512 | native backward executes on rocm_gfx1151, x86_avx512 (Phase 4) |
+| `seq2seq_loss` | loss | yes | none | — | — | — | — | — | — |  |
+| `sgd` | functional_optimizer_step | yes | none | — | — | — | — | — | — |  |
+| `sigmoid` | elementwise | yes | native | cpu | — | — | — | — | — | native static-shape adjoint (W5); dynamic → placeholder |
+| `sigmoid_safe` | stable_reduction | yes | none | — | — | — | — | — | — |  |
+| `sign` | numeric_helper | yes | none | — | — | — | — | — | — |  |
+| `silu` | elementwise | yes | placeholder | — | — | — | — | — | — | custom_adjoint_call → Python VJP (not native IR) |
+| `silu_mul` | elementwise | yes | none | — | — | — | — | — | — |  |
+| `simple_rnn_cell` | recurrent | yes | none | — | — | — | — | — | — |  |
+| `sin` | elementwise | yes | placeholder | — | — | — | — | — | — | custom_adjoint_call → Python VJP (not native IR) |
+| `sinh` | elementwise | yes | none | — | — | — | — | — | — |  |
+| `slice` | tensor_algebra | yes | none | — | — | — | — | — | — |  |
+| `smooth_l1_loss` | loss | yes | none | — | — | — | — | — | — |  |
+| `softcap` | elementwise | yes | none | — | — | — | — | — | — |  |
+| `softmax` | stable_reduction | yes | placeholder | — | — | — | — | — | — | custom_adjoint_call → Python VJP (not native IR) |
+| `softmax_safe` | stable_reduction | yes | none | — | — | — | — | — | — |  |
+| `softplus` | elementwise | yes | placeholder | — | — | — | — | — | — | custom_adjoint_call → Python VJP (not native IR) |
+| `spectral_conv` | spectral | yes | none | — | — | — | — | — | — |  |
+| `spectral_filter` | spectral | yes | none | — | — | — | — | — | — |  |
+| `spectral_norm` | normalization | yes | none | — | — | — | — | — | — |  |
+| `split` | tensor_algebra | yes | none | — | — | — | — | — | — |  |
+| `spmm_coo` | sparse | yes | none | — | — | — | — | — | — |  |
+| `spmm_csr` | sparse | yes | none | — | — | — | — | — | — |  |
+| `sqrt` | elementwise | yes | none | — | — | — | — | — | — |  |
+| `squeeze` | tensor_algebra | yes | none | — | — | — | — | — | — |  |
+| `stack` | tensor_algebra | yes | none | — | — | — | — | — | — |  |
+| `std` | reduction | yes | none | — | — | — | — | — | — |  |
+| `stft` | spectral | yes | none | — | — | — | — | — | — |  |
+| `sub` | elementwise | yes | none | — | — | — | — | — | — |  |
+| `sum` | stable_reduction | yes | none | — | — | — | — | — | — |  |
+| `svd` | linalg_decomposition | yes | none | — | — | — | — | — | — |  |
+| `take` | indexing | yes | none | — | — | — | — | — | — |  |
+| `tan` | elementwise | yes | none | — | — | — | — | — | — |  |
+| `tanh` | elementwise | yes | native | cpu | — | — | — | — | — | native static-shape adjoint (W5); dynamic → placeholder |
+| `tile` | tensor_algebra | yes | none | — | — | — | — | — | — |  |
+| `transpose` | layout_transform | yes | none | — | — | — | — | — | — |  |
+| `tri_solve` | linalg_solver | yes | none | — | — | — | — | — | — |  |
+| `triplet_loss` | loss | yes | none | — | — | — | — | — | — |  |
+| `unsqueeze` | tensor_algebra | yes | none | — | — | — | — | — | — |  |
+| `var` | reduction | yes | none | — | — | — | — | — | — |  |
+| `view` | tensor_algebra | yes | none | — | — | — | — | — | — |  |
+| `vlb_loss` | loss | yes | none | — | — | — | — | — | — |  |
+| `wasserstein_distance` | loss | yes | none | — | — | — | — | — | — |  |
+| `weight_norm` | normalization | yes | none | — | — | — | — | — | — |  |
+| `where` | numeric_helper | yes | none | — | — | — | — | — | — |  |
+| `z_loss` | loss | yes | none | — | — | — | — | — | — |  |
 
-Backward-execution rungs are tracked against targets: cpu, x86, apple_gpu, rocm, nvidia.
+Backward-execution rungs are tracked against targets: cpu, x86_avx512, apple_cpu, apple_gpu, rocm_gfx1151, nvidia_sm80, nvidia_sm90, nvidia_sm100, nvidia_sm120.

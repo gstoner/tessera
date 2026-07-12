@@ -12,11 +12,10 @@ reimplement backward execution here.
 
 The *backward provenance facet* mirrors the forward compile answer: it
 distinguishes IR-transformed / artifact-only / native-executable, so a caller can
-tell whether gradients merely have IR, or actually execute natively. Today no
-target executes backward natively (see
-``docs/audit/generated/autodiff_connection_ledger.md``), so the honest resolved
-status is at best ``IR_TRANSFORMED`` — never ``NATIVE_EXECUTABLE``. The runtime
-binding + native-required *enforcement* land in Phase 4.
+tell whether gradients merely have IR, or actually execute natively. Native
+resolution is sourced from exact-target device proof in the runtime execution
+matrix; an executable row alone is insufficient. The generated autodiff ledger
+shows the live per-family evidence.
 """
 
 from __future__ import annotations
@@ -222,8 +221,8 @@ def resolve_backward_provenance(
             BackwardStatus.UNSUPPORTED,
             reason=(
                 f"native_required=True but no native backward execution path "
-                f"exists{where} yet — the backward launch ABI lands in Phase 4 "
-                f"(autodiff_connection_ledger.md shows 0 families runtime_bound). "
+                f"exists{where} with exact-target device verification. "
+                f"See autodiff_connection_ledger.md for the live proof axes. "
                 f"Drop native_required to accept the IR-transformed path."
             ),
         )

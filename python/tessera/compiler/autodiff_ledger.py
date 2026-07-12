@@ -9,7 +9,7 @@ dimension none of them makes explicit today: **forward vs. backward, per
 target.**  Decision #24 is preserved — ``primitive_coverage`` stays the audit
 truth for the ``vjp``/``jvp`` axes; this ledger only *reads* them.
 
-The six rungs (see plan §3) and where each is sourced from:
+The independent proof axes (see plan §3) and where each is sourced from:
 
 ======================  ==================================================
 rung                    source (existing, read-only here)
@@ -22,8 +22,10 @@ rung                    source (existing, read-only here)
 ``target_lowered``      backward lowering probe (Phase 3) — none wired yet
 ``runtime_bound``       ``runtime_execution_matrix`` backward column (Phase 4)
 ``oracle_proven``       ``op_target_conformance`` backward fixture (Phase 3)
-``hardware_proven``     ``runtime_execution_matrix`` ``device_verified_abi``
-                        backward rows (Phase 4/6)
+``device_verified_jit`` generated target binary launched on the exact target
+                        and numerically verified
+``device_verified_abi`` shipped stable C ABI launched on the exact target and
+                        numerically verified
 ======================  ==================================================
 
 The four backward-execution rungs are **empty today by construction**: no
@@ -47,8 +49,11 @@ _ADJOINT_CPP = _REPO_ROOT / "src" / "compiler" / "ir" / "AdjointInterface.cpp"
 
 # The backend targets the backward-execution rungs are tracked against.  Kept in
 # sync with the runtime execution matrix's target set; the ledger reports which
-# of these reach each backward rung (none, today).
-_TARGETS: tuple[str, ...] = ("cpu", "x86", "apple_gpu", "rocm", "nvidia")
+# of these may reach each backward proof axis.
+_TARGETS: tuple[str, ...] = (
+    "cpu", "x86_avx512", "apple_cpu", "apple_gpu", "rocm_gfx1151",
+    "nvidia_sm80", "nvidia_sm90", "nvidia_sm100", "nvidia_sm120",
+)
 
 # Ops whose `buildAdjoint` emits a native `tessera.custom_adjoint_call`
 # placeholder that round-trips to the Python VJP registry at runtime.  These are
@@ -78,7 +83,7 @@ _GETSTRINGATTR_RE = re.compile(r'getStringAttr\(\s*"([^"]+)"\s*\)')
 # match an independent NumPy VJP.  Proven by
 # tests/unit/test_autodiff_paired_cpu_oracle.py.  This is the CPU IR-execution
 # rung — strictly weaker than native `oracle_proven` (native LLVM/runtime
-# execution, Phase 4) and `hardware_proven`; it does NOT set those columns.
+# execution, Phase 4) and device verification; it does NOT set those columns.
 _BWD_IR_ORACLE_CPU: frozenset[str] = frozenset({"matmul", "tanh", "sigmoid"})
 
 
@@ -171,7 +176,8 @@ def _match_keys(cov: "primitive_coverage.PrimitiveCoverage") -> set[str]:
 class LedgerRow:
     __slots__ = ("family", "category", "python_reference", "ir_adjoint",
                  "bwd_cpu_ir_oracle", "bwd_target_lowered", "bwd_runtime_bound",
-                 "bwd_oracle_proven", "bwd_hardware_proven", "notes")
+                 "bwd_oracle_proven", "bwd_device_verified_jit",
+                 "bwd_device_verified_abi", "notes")
 
     def __init__(self, family, category, python_reference, ir_adjoint, notes):
         self.family = family
@@ -186,7 +192,8 @@ class LedgerRow:
         self.bwd_target_lowered: tuple[str, ...] = ()
         self.bwd_runtime_bound: tuple[str, ...] = ()
         self.bwd_oracle_proven: tuple[str, ...] = ()
-        self.bwd_hardware_proven: tuple[str, ...] = ()
+        self.bwd_device_verified_jit: tuple[str, ...] = ()
+        self.bwd_device_verified_abi: tuple[str, ...] = ()
         self.notes = notes
 
 
@@ -231,9 +238,16 @@ def collect_rows() -> list[LedgerRow]:
         info = next((bwd[k] for k in keys if k in bwd), None)
         if info is not None:
             row.bwd_runtime_bound = info["runtime_bound"]
-            row.bwd_hardware_proven = info["hardware_proven"]
-            if info["hardware_proven"] and "native backward" not in row.notes:
-                targets = ", ".join(info["hardware_proven"])
+            row.bwd_oracle_proven = info["oracle_proven"]
+            row.bwd_device_verified_jit = info["device_verified_jit"]
+            row.bwd_device_verified_abi = info["device_verified_abi"]
+            # A generated target binary necessarily crossed target lowering.
+            # A shipped ABI kernel does not, by itself, prove compiler lowering.
+            row.bwd_target_lowered = row.bwd_device_verified_jit
+            verified = tuple(sorted(
+                set(row.bwd_device_verified_jit) | set(row.bwd_device_verified_abi)))
+            if verified and "native backward" not in row.notes:
+                targets = ", ".join(verified)
                 row.notes = (row.notes + "; " if row.notes else "") + \
                     f"native backward executes on {targets} (Phase 4)"
         rows.append(row)
@@ -261,9 +275,13 @@ def _summary(rows: list[LedgerRow]) -> dict[str, int]:
         "ir_adjoint_native": sum(1 for r in rows if r.ir_adjoint == "native"),
         "ir_adjoint_placeholder": sum(1 for r in rows if r.ir_adjoint == "placeholder"),
         "backward_cpu_ir_oracle": sum(1 for r in rows if r.bwd_cpu_ir_oracle),
+        "backward_target_lowered": sum(1 for r in rows if r.bwd_target_lowered),
         "backward_runtime_bound": sum(1 for r in rows if r.bwd_runtime_bound),
         "backward_oracle_proven": sum(1 for r in rows if r.bwd_oracle_proven),
-        "backward_hardware_proven": sum(1 for r in rows if r.bwd_hardware_proven),
+        "backward_device_verified_jit": sum(
+            1 for r in rows if r.bwd_device_verified_jit),
+        "backward_device_verified_abi": sum(
+            1 for r in rows if r.bwd_device_verified_abi),
     }
 
 
@@ -276,7 +294,8 @@ def render_csv() -> str:
     cols = (
         "family", "category", "python_reference", "ir_adjoint",
         "bwd_cpu_ir_oracle", "bwd_target_lowered", "bwd_runtime_bound",
-        "bwd_oracle_proven", "bwd_hardware_proven", "notes",
+        "bwd_oracle_proven", "bwd_device_verified_jit",
+        "bwd_device_verified_abi", "notes",
     )
     buf = _io.StringIO()
     writer = _csv.writer(buf, lineterminator="\n")
@@ -286,7 +305,9 @@ def render_csv() -> str:
             r.family, r.category, r.python_reference, r.ir_adjoint,
             "cpu" if r.bwd_cpu_ir_oracle else "",
             _fmt_targets(r.bwd_target_lowered), _fmt_targets(r.bwd_runtime_bound),
-            _fmt_targets(r.bwd_oracle_proven), _fmt_targets(r.bwd_hardware_proven),
+            _fmt_targets(r.bwd_oracle_proven),
+            _fmt_targets(r.bwd_device_verified_jit),
+            _fmt_targets(r.bwd_device_verified_abi),
             r.notes,
         ])
     return buf.getvalue()
@@ -302,7 +323,7 @@ def render_markdown() -> str:
         "",
         "# Compiler-Autodiff Connection Ledger (generated)",
         "",
-        "One row per differentiable **op family**, over the six rungs of "
+        "One row per differentiable **op family**, over the independent proof axes of "
         "[`AUTODIFF_UNIFICATION_PLAN.md`](../compiler/AUTODIFF_UNIFICATION_PLAN.md) "
         "§3. This is a **projection** that joins `primitive_coverage` "
         "(`vjp`/`jvp` axes — Decision #24 truth), the native/placeholder "
@@ -326,14 +347,12 @@ def render_markdown() -> str:
         "device_verified_jit/native backward executes. Proven by "
         "`tests/unit/test_autodiff_paired_cpu_oracle.py`.",
         "- **bwd_target_lowered / bwd_runtime_bound / bwd_oracle_proven / "
-        "bwd_hardware_proven** — targets at which *backward* lowers / has a "
-        "launch ABI / matches the oracle via **native** execution / is "
-        "device-proven. **Sourced from the runtime execution matrix's backward "
-        "rows, never asserted (Phase 4 A2).** `bwd_runtime_bound` / "
-        "`bwd_hardware_proven` are populated for the families that genuinely "
-        "launch a backward on device (see counts below); `bwd_target_lowered` / "
-        "`bwd_oracle_proven` remain empty until a lowering-only backward row or "
-        "a native backward execute-and-compare fixture lands.",
+        "bwd_device_verified_jit / bwd_device_verified_abi** — exact targets at "
+        "which backward lowers / has a launch ABI / matches an independent "
+        "oracle / is verified through a generated binary or shipped stable C "
+        "ABI. `execution_kind` alone proves none of the device axes. Every "
+        "device-verified row must name an exact evidence target and checked-in "
+        "execute-and-compare fixture in the runtime execution matrix.",
         "",
         "## Summary",
         "",
@@ -345,34 +364,51 @@ def render_markdown() -> str:
         f"**{s['ir_adjoint_placeholder']}** ({', '.join(sorted(placeholder)) or '—'})",
         f"- backward IR **oracle-verified on CPU** (interpreted): "
         f"**{s['backward_cpu_ir_oracle']}** ({', '.join(sorted(_BWD_IR_ORACLE_CPU)) or '—'})",
+        f"- backward `target_lowered` on any exact target: "
+        f"**{s['backward_target_lowered']}**",
         f"- backward `runtime_bound` (native) on any target: **{s['backward_runtime_bound']}**",
         f"- backward `oracle_proven` (native) on any target: **{s['backward_oracle_proven']}**",
-        f"- backward `hardware_proven` on any target: **{s['backward_hardware_proven']}**",
+        f"- backward `device_verified_jit` on any exact target: "
+        f"**{s['backward_device_verified_jit']}**",
+        f"- backward `device_verified_abi` on any exact target: "
+        f"**{s['backward_device_verified_abi']}**",
         "",
         "> **Headline:** the Python reference/oracle is broad, a handful of ops "
         "have a native IR adjoint, several more only *look* differentiable in "
         "IR but actually call back into Python. The `matmul`/`tanh`/`sigmoid` "
         "backward **IR is oracle-verified on CPU** (Phase 3). **Phase 4 (A2) has "
-        "landed the first native backward**: the families below whose "
-        "`bwd hardware_proven` column is non-empty execute their backward on "
-        "real hardware — sourced from the runtime execution matrix's backward "
-        "rows, not asserted. The native backward families are `flash_attn` "
-        "(MHA + GQA/MQA, ROCm gfx1151) and `selective_ssm` (Mamba2), which "
-        "executes on **both** ROCm gfx1151 and x86 AVX-512 — the first two "
-        "native backward targets. Remaining families are still Phase 4/5 work.",
+        "landed native backward proof**. The leaders listed below are derived "
+        "from the exact-target proof columns; no family or architecture is "
+        "hard-coded into this headline. Remaining families are Phase 4/5 work.",
+        "",
+        "### Device-verified leaders",
+        "",
+        *[
+            f"- `{r.family}` — "
+            + "; ".join(filter(None, (
+                ("device_verified_jit: " + _fmt_targets(r.bwd_device_verified_jit))
+                if r.bwd_device_verified_jit else "",
+                ("device_verified_abi: " + _fmt_targets(r.bwd_device_verified_abi))
+                if r.bwd_device_verified_abi else "",
+            )))
+            for r in rows
+            if r.bwd_device_verified_jit or r.bwd_device_verified_abi
+        ],
         "",
         "## Ledger",
         "",
-        "| Family | Category | python_reference | ir_adjoint | bwd cpu_ir_oracle | bwd runtime_bound | bwd oracle_proven | bwd hardware_proven | Notes |",
-        "|---|---|:--:|:--:|:--:|---|---|---|---|",
+        "| Family | Category | python_reference | ir_adjoint | bwd cpu_ir_oracle | bwd target_lowered | bwd runtime_bound | bwd oracle_proven | bwd device_verified_jit | bwd device_verified_abi | Notes |",
+        "|---|---|:--:|:--:|:--:|---|---|---|---|---|---|",
     ]
     for r in rows:
         lines.append(
             f"| `{r.family}` | {r.category} | {r.python_reference} | "
             f"{r.ir_adjoint} | {'cpu' if r.bwd_cpu_ir_oracle else '—'} | "
+            f"{_fmt_targets(r.bwd_target_lowered) or '—'} | "
             f"{_fmt_targets(r.bwd_runtime_bound) or '—'} | "
             f"{_fmt_targets(r.bwd_oracle_proven) or '—'} | "
-            f"{_fmt_targets(r.bwd_hardware_proven) or '—'} | {r.notes} |"
+            f"{_fmt_targets(r.bwd_device_verified_jit) or '—'} | "
+            f"{_fmt_targets(r.bwd_device_verified_abi) or '—'} | {r.notes} |"
         )
     lines.append("")
     lines.append(

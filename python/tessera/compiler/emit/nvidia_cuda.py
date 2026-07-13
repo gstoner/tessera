@@ -312,7 +312,7 @@ def run_flash_attention_forward(q: Any, k: Any, v: Any, *, scale: float,
         artifact = _nvidia_cuda_compile_fn(KernelSource(
             source=(_synthesize_flash_fwd_cuda() if storage == "f32" else _synthesize_flash_fwd_f16_cuda()),
             entry=_FLASH_FWD_ENTRY, lang=_LANG, spec=SpecPolicy.DYNAMIC,
-            shape_key=f"flash-fwd-contract-{storage}"))
+            shape_key=(f"flash-fwd-contract-{storage}",)))
         _flash_fwd_artifact[storage] = artifact
     fn = getattr(_load_lib(artifact), _FLASH_FWD_ENTRY)
     fn.restype = ctypes.c_int
@@ -371,7 +371,7 @@ def run_mla_decode_fused(x: Any, w_dkv: Any, w_uk: Any, w_uv: Any, q: Any,
     if _mla_fused_artifact is None:
         _mla_fused_artifact = _nvidia_cuda_compile_fn(KernelSource(
             source=_synthesize_mla_fused_cuda(), entry=_MLA_FUSED_ENTRY,
-            lang=_LANG, spec=SpecPolicy.DYNAMIC, shape_key="mla-decode-fused-f32"))
+            lang=_LANG, spec=SpecPolicy.DYNAMIC, shape_key=("mla-decode-fused-f32",)))
     fn = getattr(_load_lib(_mla_fused_artifact), _MLA_FUSED_ENTRY)
     fn.restype = ctypes.c_int
     fn.argtypes = [ctypes.c_void_p] * 6 + [ctypes.c_long, ctypes.c_int, ctypes.c_int,
@@ -454,7 +454,7 @@ def run_flash_attention_backward(go: Any, q: Any, k: Any, v: Any, *, scale: floa
         artifact = _nvidia_cuda_compile_fn(KernelSource(
             source=(_synthesize_flash_bwd_cuda() if storage == "f32" else _synthesize_flash_bwd_f16_cuda()),
             entry=_FLASH_BWD_ENTRY, lang=_LANG, spec=SpecPolicy.DYNAMIC,
-            shape_key=f"flash-bwd-contract-{storage}"))
+            shape_key=(f"flash-bwd-contract-{storage}",)))
         _flash_bwd_artifact[storage] = artifact
     fn = getattr(_load_lib(artifact), _FLASH_BWD_ENTRY)
     fn.restype = ctypes.c_int
@@ -498,7 +498,7 @@ def run_linear_attention(q: Any, k: Any, v: Any) -> Any:
     if _linear_attn_artifact is None:
         _linear_attn_artifact = _nvidia_cuda_compile_fn(KernelSource(
             source=_synthesize_linear_attn_cuda(), entry=_LINEAR_ATTN_ENTRY,
-            lang=_LANG, spec=SpecPolicy.DYNAMIC, shape_key="linear-attn-f32"))
+            lang=_LANG, spec=SpecPolicy.DYNAMIC, shape_key=("linear-attn-f32",)))
     fn = getattr(_load_lib(_linear_attn_artifact), _LINEAR_ATTN_ENTRY)
     fn.restype = ctypes.c_int
     fn.argtypes = [ctypes.c_void_p] * 4 + [ctypes.c_long, ctypes.c_int,
@@ -528,7 +528,7 @@ def run_linear_attention_backward(go: Any, q: Any, k: Any, v: Any) -> tuple[Any,
         raise ValueError("NVIDIA linear_attn VJP requires matching f32 [B,H,S,D] tensors")
     B, H, S, D = q.shape
     if _linear_attn_bwd_artifact is None:
-        _linear_attn_bwd_artifact = _nvidia_cuda_compile_fn(KernelSource(source=_synthesize_linear_attn_bwd_cuda(), entry=_LINEAR_ATTN_BWD_ENTRY, lang=_LANG, spec=SpecPolicy.DYNAMIC, shape_key="linear-attn-bwd-f32"))
+        _linear_attn_bwd_artifact = _nvidia_cuda_compile_fn(KernelSource(source=_synthesize_linear_attn_bwd_cuda(), entry=_LINEAR_ATTN_BWD_ENTRY, lang=_LANG, spec=SpecPolicy.DYNAMIC, shape_key=("linear-attn-bwd-f32",)))
     fn = getattr(_load_lib(_linear_attn_bwd_artifact), _LINEAR_ATTN_BWD_ENTRY)
     fn.restype = ctypes.c_int; fn.argtypes = [ctypes.c_void_p] * 7 + [ctypes.c_long, ctypes.c_int, ctypes.c_long, ctypes.c_int]
     dq, dk, dv = np.empty_like(q), np.empty_like(k), np.empty_like(v)
@@ -559,7 +559,7 @@ def run_linear_attention_variant(q: Any, k: Any, v: Any, *, feature_map: str,
     dec = None if decay is None else np.ascontiguousarray(decay, np.float32)
     if dec is not None and dec.shape != q.shape[:3]: raise ValueError("decay must have shape [B,H,S]")
     if _linear_attn_variant_artifact is None:
-        _linear_attn_variant_artifact = _nvidia_cuda_compile_fn(KernelSource(source=_synthesize_linear_attn_variant_cuda(), entry="tessera_nvidia_linear_attn_variant", lang=_LANG, spec=SpecPolicy.DYNAMIC, shape_key="linear-attn-variant-f32"))
+        _linear_attn_variant_artifact = _nvidia_cuda_compile_fn(KernelSource(source=_synthesize_linear_attn_variant_cuda(), entry="tessera_nvidia_linear_attn_variant", lang=_LANG, spec=SpecPolicy.DYNAMIC, shape_key=("linear-attn-variant-f32",)))
     fn = getattr(_load_lib(_linear_attn_variant_artifact), "tessera_nvidia_linear_attn_variant")
     fn.restype = ctypes.c_int; fn.argtypes = [ctypes.c_void_p] * 5 + [ctypes.c_long, ctypes.c_int, ctypes.c_long, ctypes.c_int, ctypes.c_int, ctypes.c_int]
     out = np.empty_like(v)
@@ -581,7 +581,7 @@ def run_linear_attention_variant_backward(go: Any,q: Any,k: Any,v: Any,*,feature
     if code is None or q.ndim!=4 or k.shape!=q.shape or go.shape!=v.shape or v.shape[:3]!=q.shape[:3]: raise ValueError("invalid NVIDIA linear-attention variant VJP contract")
     de=None if decay is None else np.ascontiguousarray(decay,np.float32)
     if de is not None and de.shape!=q.shape[:3]: raise ValueError("decay must be [B,H,S]")
-    if _linear_attn_variant_bwd_artifact is None: _linear_attn_variant_bwd_artifact=_nvidia_cuda_compile_fn(KernelSource(source=_synthesize_linear_attn_variant_bwd_cuda(),entry="tessera_nvidia_linear_attn_variant_bwd",lang=_LANG,spec=SpecPolicy.DYNAMIC,shape_key="linear-attn-variant-bwd"))
+    if _linear_attn_variant_bwd_artifact is None: _linear_attn_variant_bwd_artifact=_nvidia_cuda_compile_fn(KernelSource(source=_synthesize_linear_attn_variant_bwd_cuda(),entry="tessera_nvidia_linear_attn_variant_bwd",lang=_LANG,spec=SpecPolicy.DYNAMIC,shape_key=("linear-attn-variant-bwd",)))
     fn=getattr(_load_lib(_linear_attn_variant_bwd_artifact),"tessera_nvidia_linear_attn_variant_bwd");fn.restype=ctypes.c_int;fn.argtypes=[ctypes.c_void_p]*8+[ctypes.c_long,ctypes.c_int,ctypes.c_long,ctypes.c_int,ctypes.c_int,ctypes.c_int]
     dq,dk,dv=np.empty_like(q),np.empty_like(k),np.empty_like(v)
     if fn(_ptr(go),_ptr(q),_ptr(k),_ptr(v),_ptr(de),_ptr(dq),_ptr(dk),_ptr(dv),q.shape[0],q.shape[1],q.shape[2],q.shape[3],v.shape[3],code)!=1: raise RuntimeError("NVIDIA variant VJP failed")
@@ -860,7 +860,7 @@ def run_row_softmax(x: Any) -> Any:
     if artifact is None:
         artifact = _nvidia_cuda_compile_fn(KernelSource(
             source=source, entry=_SOFTMAX_ENTRY, lang=_LANG,
-            spec=SpecPolicy.DYNAMIC, shape_key=f"row-softmax-{dtype}"))
+            spec=SpecPolicy.DYNAMIC, shape_key=(f"row-softmax-{dtype}",)))
         _softmax_artifact[dtype] = artifact
     fn = getattr(_load_lib(artifact), _SOFTMAX_ENTRY)
     fn.restype = ctypes.c_int
@@ -938,7 +938,7 @@ def run_row_norm(x: Any, kind: str, eps: float) -> Any:
     if artifact is None:
         artifact = _nvidia_cuda_compile_fn(KernelSource(
             source=_synthesize_norm_cuda(dtype), entry="tessera_nvidia_norm",
-            lang=_LANG, spec=SpecPolicy.DYNAMIC, shape_key=f"row-norm-{dtype}"))
+            lang=_LANG, spec=SpecPolicy.DYNAMIC, shape_key=(f"row-norm-{dtype}",)))
         _norm_artifact[dtype] = artifact
     fn = getattr(_load_lib(artifact), "tessera_nvidia_norm")
     fn.restype = ctypes.c_int
@@ -1002,7 +1002,7 @@ def run_row_reduce(x2d: Any, kind: str) -> Any:
     if artifact is None:
         artifact = _nvidia_cuda_compile_fn(KernelSource(
             source=_synthesize_reduce_cuda(dtype), entry="tessera_nvidia_reduce",
-            lang=_LANG, spec=SpecPolicy.DYNAMIC, shape_key=f"row-reduce-{dtype}"))
+            lang=_LANG, spec=SpecPolicy.DYNAMIC, shape_key=(f"row-reduce-{dtype}",)))
         _reduce_artifact[dtype] = artifact
     fn = getattr(_load_lib(artifact), "tessera_nvidia_reduce")
     fn.restype = ctypes.c_int

@@ -4387,6 +4387,329 @@ def _execute_rocm_compiled_linear_attn(artifact: RuntimeArtifact,
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# NVIDIA COMPILED softmax lane (CUDA parity P1) — stable f32 row softmax.
+#
+# The kernel itself is emitted by ``emit/nvidia_cuda.py`` and nvcc-compiles to a
+# cached shared object.  Keep this artifact validation intentionally parallel to
+# the ROCm executor below: an unsupported op/axis is a clear error, never an
+# accidental launch of a different computation.
+# ─────────────────────────────────────────────────────────────────────────────
+def _execute_nvidia_compiled_softmax(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Run the generated CUDA stable softmax over the final axis (f32)."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    valid = ("tessera.softmax", "tessera.softmax_safe", "tessera.online_softmax")
+    if len(ops) != 1 or str(ops[0].get("op_name", "")) not in valid:
+        raise ValueError(
+            "nvidia_softmax_compiled executor handles exactly one of "
+            f"{valid}; got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    kwargs = op.get("kwargs") or {}
+    if int(kwargs.get("axis", -1)) != -1:
+        raise ValueError("nvidia softmax lane only supports axis=-1 (last)")
+    if str(op.get("op_name")) == "tessera.online_softmax" and kwargs.get("state") is not None:
+        raise ValueError("nvidia softmax lane does not support streaming state")
+    names = [str(n) for n in op.get("operands", [])]
+    if not names:
+        raise ValueError("softmax requires one operand")
+    values = _bind_launch_args(args, list(metadata.get("arg_names") or []))
+    x = _as_numpy(values[names[0]])
+    if x.dtype not in (np.float32, np.float16):
+        raise ValueError("nvidia softmax lane handles f32/f16 storage; got "
+                         f"{x.dtype}")
+    from .compiler.emit.nvidia_cuda import run_row_softmax
+    return run_row_softmax(x)
+
+
+_NVIDIA_NORM_OPS: dict[str, tuple[str, float]] = {
+    "tessera.rmsnorm": ("rmsnorm", 1e-5),
+    "tessera.rmsnorm_safe": ("rmsnorm", 1e-6),
+    "tessera.layer_norm": ("layer_norm", 1e-5),
+}
+
+
+def _execute_nvidia_compiled_norm(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Run generated CUDA RMSNorm / LayerNorm over the final axis.
+
+    f16 is a storage type: accumulation remains f32 and the normalized result is
+    returned in the original storage dtype.
+    """
+    import numpy as np
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _NVIDIA_NORM_OPS:
+        raise ValueError(
+            "nvidia_norm_compiled executor handles exactly one of "
+            f"{tuple(_NVIDIA_NORM_OPS)}; got {[o.get('op_name') for o in ops]!r}")
+    kind, default_eps = _NVIDIA_NORM_OPS[op_name]
+    op = ops[0]
+    names = [str(n) for n in op.get("operands", [])]
+    if not names:
+        raise ValueError("norm requires one operand")
+    values = _bind_launch_args(args, list(metadata.get("arg_names") or []))
+    x = _as_numpy(values[names[0]])
+    if x.dtype not in (np.float32, np.float16):
+        raise ValueError("nvidia norm lane handles f32/f16 storage; got "
+                         f"{x.dtype}")
+    eps = float((op.get("kwargs") or {}).get("eps", default_eps))
+    if eps < 0:
+        raise ValueError("norm eps must be non-negative")
+    from .compiler.emit.nvidia_cuda import run_row_norm
+    return run_row_norm(x, kind, eps)
+
+
+_NVIDIA_REDUCE_OPS = {
+    "tessera.sum": "sum", "tessera.mean": "mean", "tessera.max": "max",
+    "tessera.min": "min", "tessera.amax": "max", "tessera.amin": "min",
+}
+
+
+def _execute_nvidia_compiled_reduce(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Run generated CUDA f32-accumulating reductions, folding axis to rows."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or name not in _NVIDIA_REDUCE_OPS:
+        raise ValueError("nvidia_reduce_compiled executor handles exactly one of "
+                         f"{tuple(_NVIDIA_REDUCE_OPS)}; got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    names = [str(n) for n in op.get("operands", [])]
+    if not names:
+        raise ValueError("reduction requires one operand")
+    x = _as_numpy(_bind_launch_args(args, list(metadata.get("arg_names") or []))[names[0]])
+    if x.dtype not in (np.float32, np.float16):
+        raise ValueError("nvidia reduction lane handles f32/f16 storage; got "
+                         f"{x.dtype}")
+    if x.ndim < 1:
+        raise ValueError("reduction operand must have rank >= 1")
+    kw = op.get("kwargs") or {}
+    axis = kw.get("axis", None)
+    keepdims = bool(kw.get("keepdims", False))
+    if axis is None:
+        moved = np.ascontiguousarray(x.reshape(1, -1))
+        out_shape: tuple[int, ...] = ()
+        axis_i = None
+    else:
+        axis_i = int(axis)
+        if axis_i < -x.ndim or axis_i >= x.ndim:
+            raise ValueError(f"reduction axis {axis_i} out of bounds for rank {x.ndim}")
+        axis_i %= x.ndim
+        moved = np.ascontiguousarray(np.moveaxis(x, axis_i, -1).reshape(-1, x.shape[axis_i]))
+        out_shape = tuple(d for i, d in enumerate(x.shape) if i != axis_i)
+    from .compiler.emit.nvidia_cuda import run_row_reduce
+    out = run_row_reduce(moved, _NVIDIA_REDUCE_OPS[name]).reshape(out_shape)
+    if keepdims:
+        if axis_i is None:
+            out = out.reshape((1,) * x.ndim)
+        else:
+            out = np.expand_dims(out, axis_i)
+    return out
+
+
+def _execute_nvidia_flash_attn_compiled(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Run CUDA Flash Attention forward with f32 accumulation and MHA/GQA/MQA fields.
+
+    The artifact carries Q/K/V and an optional dense additive bias operand.
+    Causal, sliding-window and logit-soft-cap semantics remain explicit launch
+    attributes, so this executor never preprocesses scores on the host.
+    """
+    import numpy as np
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in ("tessera.flash_attn", "flash_attn"):
+        raise ValueError("nvidia_flash_attn_compiled executor handles exactly "
+                         "one tessera.flash_attn op")
+    op = ops[0]
+    names = [str(n) for n in op.get("operands", [])]
+    if len(names) not in (3, 4):
+        raise ValueError("nvidia flash attention requires Q, K, V and optional bias")
+    values = _bind_launch_args(args, list(metadata.get("arg_names") or []))
+    q, k, v = (_as_numpy(values[n]) for n in names[:3])
+    if any(x.dtype not in (np.float32, np.float16) for x in (q, k, v)) or len({x.dtype for x in (q, k, v)}) != 1:
+        raise ValueError("nvidia flash attention requires matching f32 or f16 Q/K/V storage")
+    bias = _as_numpy(values[names[3]]) if len(names) == 4 else None
+    if bias is not None and bias.dtype != np.float32:
+        raise ValueError("nvidia flash attention bias must use f32 storage")
+    kw = op.get("kwargs") or {}
+    scale = float(kw.get("scale", 1.0 / np.sqrt(float(q.shape[-1]))))
+    window = kw.get("window", None)
+    if window is None:
+        wl, wr = kw.get("window_left"), kw.get("window_right")
+    elif isinstance(window, (tuple, list)) and len(window) == 2:
+        wl, wr = window
+    else:
+        wl = wr = int(window)
+    from .compiler.emit.nvidia_cuda import run_flash_attention_forward
+    return run_flash_attention_forward(
+        q, k, v, scale=scale, causal=bool(kw.get("causal", False)),
+        window_left=None if wl is None else int(wl),
+        window_right=None if wr is None else int(wr), bias=bias,
+        softcap=kw.get("softcap", kw.get("logit_softcap", None)))
+
+
+def _execute_nvidia_flash_attn_bwd_compiled(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Run the generated f32 CUDA Flash-Attention VJP.
+
+    Operand order is ``(dO, Q, K, V[, bias])`` and the result is the gradient
+    tuple ``(dQ, dK, dV)``.  GQA/MQA accumulation is performed on device.
+    """
+    import numpy as np
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in ("tessera.flash_attn", "flash_attn",
+                                         "tessera.flash_attn_bwd", "tessera.flash_attn_vjp"):
+        raise ValueError("nvidia_flash_attn_bwd_compiled executor handles exactly "
+                         "one flash_attn_bwd or flash_attn_vjp op")
+    op = ops[0]
+    names = [str(n) for n in op.get("operands", [])]
+    if len(names) not in (4, 5):
+        raise ValueError("nvidia flash backward requires dO, Q, K, V and optional bias")
+    values = _bind_launch_args(args, list(metadata.get("arg_names") or []))
+    do, q, k, v = (_as_numpy(values[n]) for n in names[:4])
+    if any(x.dtype not in (np.float32, np.float16) for x in (do, q, k, v)) or len({x.dtype for x in (do, q, k, v)}) != 1:
+        raise ValueError("nvidia flash backward requires matching f32 or f16 dO/Q/K/V storage")
+    bias = _as_numpy(values[names[4]]) if len(names) == 5 else None
+    if bias is not None and bias.dtype != np.float32:
+        raise ValueError("nvidia flash backward bias must use f32 storage")
+    kw = op.get("kwargs") or {}
+    scale = float(kw.get("scale", 1.0 / np.sqrt(float(q.shape[-1]))))
+    window = kw.get("window", None)
+    if window is None:
+        wl, wr = kw.get("window_left"), kw.get("window_right")
+    elif isinstance(window, (tuple, list)) and len(window) == 2:
+        wl, wr = window
+    else:
+        wl = wr = int(window)
+    from .compiler.emit.nvidia_cuda import run_flash_attention_backward
+    return run_flash_attention_backward(
+        do, q, k, v, scale=scale, causal=bool(kw.get("causal", False)),
+        window_left=None if wl is None else int(wl),
+        window_right=None if wr is None else int(wr), bias=bias,
+        softcap=kw.get("softcap", kw.get("logit_softcap", None)))
+
+
+def _execute_nvidia_linear_attn_compiled(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Native CUDA base contract for causal identity linear attention."""
+    import numpy as np
+    metadata = artifact.metadata or {}; ops = list(metadata.get("ops") or [])
+    op = ops[0] if len(ops) == 1 else {}
+    name = op.get("op_name")
+    if name not in ("tessera.linear_attn", "linear_attn", "tessera.lightning_attention", "tessera.retention"):
+        raise ValueError("nvidia_linear_attn_compiled handles linear_attn, lightning_attention, or retention")
+    kw = op.get("kwargs") or {}
+    if bool(kw.get("causal", True)) is not True:
+        raise ValueError("NVIDIA linear-attention lane currently requires causal=True")
+    names = [str(n) for n in op.get("operands", [])]
+    if len(names) != 3: raise ValueError("NVIDIA linear_attn requires Q, K, V")
+    values = _bind_launch_args(args, list(metadata.get("arg_names") or []))
+    q, k, v = (_as_numpy(values[n]) for n in names)
+    if any(x.dtype != np.float32 for x in (q, k, v)):
+        raise ValueError("NVIDIA linear_attn base lane requires f32 storage")
+    if name == "tessera.lightning_attention": fmap = "identity"
+    elif name == "tessera.retention":
+        if int(kw.get("deg", 2)) != 2: raise ValueError("NVIDIA retention supports degree 2 only")
+        fmap = "polynomial_2"
+    else: fmap = str(kw.get("feature_map", "identity"))
+    decay = kw.get("decay", kw.get("log_g", None))
+    if decay is not None:
+        decay = np.asarray(decay, np.float32)
+        if kw.get("log_g") is not None: decay = np.exp(decay, dtype=np.float32)
+        decay = np.broadcast_to(decay, q.shape[:3]).copy()
+    if fmap == "identity" and decay is None and v.shape[-1] == q.shape[-1]:
+        from .compiler.emit.nvidia_cuda import run_linear_attention
+        return run_linear_attention(q, k, v)
+    from .compiler.emit.nvidia_cuda import run_linear_attention_variant
+    return run_linear_attention_variant(q, k, v, feature_map=fmap, decay=decay)
+
+
+def _execute_nvidia_linear_attn_bwd_compiled(artifact: RuntimeArtifact, args: Any) -> Any:
+    import numpy as np
+    metadata = artifact.metadata or {}; ops = list(metadata.get("ops") or []); op = ops[0] if len(ops) == 1 else {}
+    name = op.get("op_name")
+    if name not in ("tessera.linear_attn", "tessera.linear_attn_bwd", "tessera.lightning_attention", "tessera.retention"):
+        raise ValueError("nvidia_linear_attn_bwd_compiled handles a linear-attention VJP")
+    names = [str(n) for n in op.get("operands", [])]
+    if len(names) != 4: raise ValueError("NVIDIA linear_attn VJP requires dO, Q, K, V")
+    values = _bind_launch_args(args, list(metadata.get("arg_names") or [])); go, q, k, v = (_as_numpy(values[n]) for n in names)
+    if any(x.dtype != np.float32 for x in (go, q, k, v)): raise ValueError("NVIDIA linear_attn VJP requires f32 storage")
+    kw = op.get("kwargs") or {}
+    if name == "tessera.lightning_attention": fmap = "identity"
+    elif name == "tessera.retention": fmap = "polynomial_2"
+    else: fmap = str(kw.get("feature_map", "identity"))
+    decay = kw.get("decay")
+    if decay is not None: decay = np.broadcast_to(np.asarray(decay, np.float32), q.shape[:3]).copy()
+    if fmap == "identity" and decay is None and q.shape[-1] == v.shape[-1]:
+        from .compiler.emit.nvidia_cuda import run_linear_attention_backward
+        return run_linear_attention_backward(go, q, k, v)
+    from .compiler.emit.nvidia_cuda import run_linear_attention_variant_backward
+    return run_linear_attention_variant_backward(go, q, k, v, feature_map=fmap, decay=decay)
+
+
+def _execute_nvidia_sparse_attn_compiled(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Exact DSA selected-block attention: host selection, CUDA Flash attend."""
+    import numpy as np
+    from .stdlib import attention as attn
+    md=artifact.metadata or {}; ops=list(md.get("ops") or []); op=ops[0] if len(ops)==1 else {}
+    if op.get("op_name") != "tessera.dsa_block_sparse_attention": raise ValueError("NVIDIA sparse lane handles DSA block sparse attention")
+    names=[str(n) for n in op.get("operands",[])]; values=_bind_launch_args(args,list(md.get("arg_names") or [])); q,k,v=(_as_numpy(values[n]) for n in names[:3]); kw=op.get("kwargs") or {}; bs=int(kw["block_size"]); top=int(kw["top_k_blocks"]); causal=bool(kw.get("causal",True)); scale=float(kw.get("scale",1/np.sqrt(q.shape[-1])))
+    sk_real = k.shape[2]; pad = (-sk_real) % bs
+    if pad:
+        k = np.concatenate((k, np.zeros((*k.shape[:2], pad, k.shape[-1]), np.float32)), axis=2)
+        v = np.concatenate((v, np.zeros((*v.shape[:2], pad, v.shape[-1]), np.float32)), axis=2)
+    selected=attn.dsa_select_blocks(attn.dsa_block_index(q,k,block_size=bs,scale=kw.get("index_scale")),top_k=min(top,k.shape[2]//bs),block_size=bs,causal=causal,q_positions=kw.get("q_positions"))
+    keep=np.repeat(selected,bs,axis=-1); keep[..., sk_real:] = False
+    B,Hq,Sq,_=q.shape; Hkv=k.shape[1]; bias=np.where(keep[:,np.arange(Hq)//(Hq//Hkv)],0.,-np.inf).astype(np.float32)
+    from .compiler.emit.nvidia_cuda import run_flash_attention_forward
+    return run_flash_attention_forward(q,k,v,scale=scale,causal=causal,bias=bias)
+
+
+def _execute_nvidia_mla_decode_compiled(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Composed MLA decode: latent projections then native CUDA Flash."""
+    import numpy as np
+    md=artifact.metadata or {}; ops=list(md.get("ops") or []); op=ops[0] if len(ops)==1 else {}
+    if op.get("op_name") != "tessera.mla_decode": raise ValueError("NVIDIA MLA lane handles mla_decode")
+    names=[str(n) for n in op.get("operands",[])]; values=_bind_launch_args(args,list(md.get("arg_names") or [])); xs=[_as_numpy(values[n]) for n in names]
+    if len(xs) not in (3,5): raise ValueError("mla_decode takes Q,K_latent,V_latent[,W_k,W_v]")
+    q,k,v=xs[:3]
+    if len(xs)==5: k=np.matmul(k,xs[3]).astype(np.float32); v=np.matmul(v,xs[4]).astype(np.float32)
+    if any(x.dtype!=np.float32 for x in (q,k,v)): raise ValueError("NVIDIA MLA composed lane requires f32")
+    kw=op.get("kwargs") or {}; from .compiler.emit.nvidia_cuda import run_flash_attention_forward
+    return run_flash_attention_forward(q,k,v,scale=float(kw.get("scale",1/np.sqrt(q.shape[-1]))),causal=bool(kw.get("causal",True)))
+
+
+def _execute_nvidia_mla_decode_fused_compiled(artifact: RuntimeArtifact,
+                                              args: Any) -> Any:
+    """Dedicated CUDA fused MLA decode: projection + attention in one kernel."""
+    import numpy as np
+    md = artifact.metadata or {}
+    ops = list(md.get("ops") or [])
+    op = ops[0] if len(ops) == 1 else {}
+    if op.get("op_name") != "tessera.mla_decode_fused":
+        raise ValueError("NVIDIA fused MLA lane handles tessera.mla_decode_fused")
+    names = [str(n) for n in op.get("operands", [])]
+    if len(names) != 5:
+        raise ValueError("mla_decode_fused takes x, w_dkv, w_uk, w_uv, q")
+    values = _bind_launch_args(args, list(md.get("arg_names") or []))
+    x, w_dkv, w_uk, w_uv, q = (_as_numpy(values[n]) for n in names)
+    if any(a.dtype != np.float32 for a in (x, w_dkv, w_uk, w_uv, q)):
+        raise ValueError("NVIDIA fused MLA currently requires f32 storage")
+    squeeze = False
+    if x.ndim == 3 and q.ndim == 3:
+        x, q, squeeze = x[:, None, :, :], q[:, None, :, :], True
+    kw = op.get("kwargs") or {}
+    from .compiler.emit.nvidia_cuda import run_mla_decode_fused
+    out = run_mla_decode_fused(
+        x, w_dkv, w_uk, w_uv, q,
+        scale=float(kw.get("scale", 1.0 / np.sqrt(float(q.shape[-1])))),
+        causal=bool(kw.get("causal", False)))
+    return out[:, 0] if squeeze else out
+
+
 # ROCm COMPILED softmax lane (2026-06-25) — the first non-matmul/non-WMMA
 # compiler-generated ROCm kernel. ``runtime.launch()`` of an artifact stamped
 # ``compiler_path = "rocm_softmax_compiled"`` builds the COMPILER-GENERATED
@@ -16722,6 +17045,16 @@ def _executor_table():
         "x86_selective_ssm_bwd_compiled": _execute_x86_selective_ssm_bwd,
         "rocm_linear_attn_compiled": _execute_rocm_compiled_linear_attn,
         "rocm_dspark_draft_block_compiled": _execute_rocm_dspark_draft_block_reference,
+        "nvidia_softmax_compiled": _execute_nvidia_compiled_softmax,
+        "nvidia_norm_compiled": _execute_nvidia_compiled_norm,
+        "nvidia_reduce_compiled": _execute_nvidia_compiled_reduce,
+        "nvidia_flash_attn_compiled": _execute_nvidia_flash_attn_compiled,
+        "nvidia_flash_attn_bwd_compiled": _execute_nvidia_flash_attn_bwd_compiled,
+        "nvidia_linear_attn_compiled": _execute_nvidia_linear_attn_compiled,
+        "nvidia_linear_attn_bwd_compiled": _execute_nvidia_linear_attn_bwd_compiled,
+        "nvidia_sparse_attn_compiled": _execute_nvidia_sparse_attn_compiled,
+        "nvidia_mla_decode_compiled": _execute_nvidia_mla_decode_compiled,
+        "nvidia_mla_decode_fused_compiled": _execute_nvidia_mla_decode_fused_compiled,
         "rocm_softmax_compiled": _execute_rocm_compiled_softmax,
         "rocm_norm_compiled":    _execute_rocm_compiled_norm,
         "rocm_reduce_compiled":  _execute_rocm_compiled_reduce,

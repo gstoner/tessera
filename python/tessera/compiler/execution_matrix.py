@@ -922,6 +922,37 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "tessera_nvidia_mma_gemm_{f16,bf16,tf32} C ABI symbol "
                             "(NVRTC-device_verified_jit for the device arch; f16/bf16/"
                             "fp32(tf32-math) storage, f32 accumulate)",
+    "nvidia_flash_attn_compiled": "NVIDIA GPU (consumer Blackwell sm_120) "
+                            "compiler-emitted Flash Attention forward; f32/fp16 storage, "
+                            "f32 accumulation, MHA/GQA/MQA "
+                            "with online softmax, causal/sliding-window masks, dense "
+                            "additive bias and logit soft-cap, launched through runtime.launch()",
+    "nvidia_flash_attn_bwd_compiled": "NVIDIA GPU (consumer Blackwell sm_120) "
+                            "compiler-emitted Flash Attention VJP; f32/fp16 storage and "
+                            "f32 dQ/dK/dV accumulation with "
+                            "GQA/MQA accumulation, mask/bias/soft-cap derivatives, "
+                            "launched through runtime.launch()",
+    "nvidia_linear_attn_compiled": "NVIDIA GPU (consumer Blackwell sm_120) "
+                            "compiler-emitted causal identity linear attention; f32 "
+                            "storage and accumulation, launched through runtime.launch()",
+    "nvidia_linear_attn_bwd_compiled": "NVIDIA GPU (consumer Blackwell sm_120) "
+                            "compiler-emitted causal identity linear-attention VJP; f32 "
+                            "dQ/dK/dV accumulation, launched through runtime.launch()",
+    "nvidia_sparse_attn_compiled": "NVIDIA GPU (consumer Blackwell sm_120) exact "
+                            "DSA selected-block attention via canonical selection plus CUDA Flash",
+    "nvidia_mla_decode_compiled": "NVIDIA GPU (consumer Blackwell sm_120) composed MLA decode: latent projections plus CUDA Flash",
+    "nvidia_mla_decode_fused_compiled": "NVIDIA GPU (consumer Blackwell sm_120) "
+                            "dedicated fused MLA decode: latent projections and online-softmax attention in one CUDA kernel",
+    "nvidia_softmax_compiled": "NVIDIA GPU (consumer Blackwell sm_120) stable "
+                            "row-softmax emitted as CUDA, nvcc-compiled and launched "
+                            "through runtime.launch(); f32 storage and f32 reduction",
+    "nvidia_norm_compiled": "NVIDIA GPU (consumer Blackwell sm_120) RMSNorm "
+                            "and LayerNorm emitted as CUDA row-reduction kernels; "
+                            "f32/f16 storage with f32 accumulation, launched through "
+                            "runtime.launch()",
+    "nvidia_reduce_compiled": "NVIDIA GPU (consumer Blackwell sm_120) "
+                            "sum/mean/max/min row reductions emitted as CUDA; f32/f16 "
+                            "storage with f32 accumulation, launched through runtime.launch()",
     # Note: pure-numpy `reference_cpu` is reached only as an internal *fallback*
     # inside `launch()`'s native_cpu branch (when `_execute_native_cpu_artifact`
     # raises and `_execute_jit_cpu_artifact` succeeds). It's not a directly
@@ -2663,6 +2694,116 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "f16/bf16/fp32(tf32-math) storage, f32 accumulate). Directly "
                "selectable by stamping compiler_path=\"nvidia_mma\".",
         execution_mode="cuda_runtime"),
+    ("nvidia_sm120", "nvidia_softmax_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_softmax_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_softmax_compiled", runtime_status="success",
+        reason="NVIDIA sm_120 stable row-softmax emitted as CUDA (f32/f16 storage, "
+               "f32 max/sum reduction; one block per flattened row), nvcc-compiled and launched "
+               "through runtime.launch().",
+        execution_mode="cuda_runtime", direction="forward", op_family="softmax",
+        device_proof="device_verified_jit", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/unit/test_nvidia_softmax_compiled.py",
+        proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_flash_attn_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_flash_attn_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_flash_attn_compiled", runtime_status="success",
+        reason="NVIDIA sm_120 compiler-emitted Flash Attention forward: f32/fp16 storage, "
+               "f32 accumulation, MHA/GQA/MQA "
+               "KV-head mapping, online softmax, causal/window masks, dense additive bias "
+               "and logit soft-cap; one CUDA launch over all B*Hq*Sq query rows.",
+        execution_mode="cuda_runtime", direction="forward", op_family="attention",
+        device_proof="device_verified_jit", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/unit/test_nvidia_flash_attn_compiled.py",
+        proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_flash_attn_bwd_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_flash_attn_bwd_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_flash_attn_bwd_compiled", runtime_status="success",
+        reason="NVIDIA sm_120 compiler-emitted Flash Attention backward: f32/fp16 storage, "
+               "f32 dQ/dK/dV accumulation "
+               "recomputes online-softmax statistics, atomically accumulates shared GQA/MQA "
+               "dK/dV, and differentiates causal/window masks, dense additive bias, and "
+               "logit soft-cap.",
+        execution_mode="cuda_runtime", direction="backward", op_family="flash_attn",
+        backward_aliases=("multi_head_attention", "gqa_attention", "mqa_attention"),
+        residual_policy="recompute_all",
+        residual_tradeoff="save no forward tensors; recompute softmax statistics",
+        device_proof="device_verified_jit", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/unit/test_nvidia_flash_attn_bwd_compiled.py",
+        proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_linear_attn_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_linear_attn_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_linear_attn_compiled", runtime_status="success",
+        reason="NVIDIA sm_120 compiler-emitted base linear attention: causal, identity "
+               "feature map, f32 Q/K/V/O, with each output element streaming legal keys.",
+        execution_mode="cuda_runtime", direction="forward", op_family="linear_attn",
+        device_proof="device_verified_jit", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/unit/test_nvidia_linear_attn_compiled.py",
+        proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_linear_attn_bwd_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_linear_attn_bwd_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_linear_attn_bwd_compiled", runtime_status="success",
+        reason="NVIDIA sm_120 compiler-emitted causal identity linear-attention VJP "
+               "with dQ per query row and atomic dK/dV accumulation.",
+        execution_mode="cuda_runtime", direction="backward", op_family="linear_attn",
+        backward_aliases=("lightning_attention", "retention"),
+        residual_policy="recompute_all", residual_tradeoff="save no forward tensors",
+        device_proof="device_verified_jit", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/unit/test_nvidia_linear_attn_compiled.py",
+        proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_sparse_attn_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_sparse_attn_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_sparse_attn_compiled", runtime_status="success",
+        reason="NVIDIA sm_120 exact DSA block selection with selected-token additive mask "
+               "fed to the compiler-emitted CUDA Flash Attention lane.",
+        execution_mode="cuda_runtime", direction="forward", op_family="sparse_attention",
+        device_proof="device_verified_jit", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/unit/test_nvidia_sparse_attn_compiled.py",
+        proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_mla_decode_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_mla_decode_compiled", execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_mla_decode_compiled", runtime_status="success",
+        reason="NVIDIA sm_120 composed MLA decode: f32 latent K/V projections followed by compiler-emitted CUDA Flash Attention.",
+        execution_mode="cuda_runtime", direction="forward", op_family="mla_decode", device_proof="device_verified_jit", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/unit/test_nvidia_mla_decode_compiled.py", proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_mla_decode_fused_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_mla_decode_fused_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_mla_decode_fused_compiled", runtime_status="success",
+        reason="NVIDIA sm_120 dedicated fused MLA decode: x@W_dkv and latent K/V "
+               "up-projections are evaluated transiently inside the streamed online-softmax "
+               "CUDA kernel; no expanded K/V buffers cross the host ABI.",
+        execution_mode="cuda_runtime", direction="forward", op_family="mla_decode_fused",
+        device_proof="device_verified_jit", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/unit/test_nvidia_mla_decode_compiled.py",
+        proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_norm_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_norm_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_norm_compiled", runtime_status="success",
+        reason="NVIDIA sm_120 RMSNorm/LayerNorm emitted as CUDA (f32/f16 storage, "
+               "f32 accumulation; one block per flattened row; stable two-pass variance for LayerNorm), "
+               "nvcc-compiled and launched through runtime.launch().",
+        execution_mode="cuda_runtime", direction="forward", op_family="norm",
+        device_proof="device_verified_jit", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/unit/test_nvidia_norm_compiled.py",
+        proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_reduce_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_reduce_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_reduce_compiled", runtime_status="success",
+        reason="NVIDIA sm_120 f32/f16-storage, f32-accumulating sum/mean/max/min "
+               "reduction emitted as CUDA (one block per folded row), nvcc-compiled and launched through "
+               "runtime.launch().",
+        execution_mode="cuda_runtime", direction="forward", op_family="reduction",
+        device_proof="device_verified_jit", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/unit/test_nvidia_reduce_compiled.py",
+        proof_build="cuda13.3+sm120"),
 }
 
 

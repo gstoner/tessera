@@ -314,6 +314,7 @@ int main(int argc, char **argv) {
   // registered, avoiding a dependency on every upstream MLIR component.
 #ifdef TESSERA_HAVE_NVIDIA_BACKEND
   tessera::registerTesseraNVIDIABackendPasses();
+  tessera::registerTesseraNVIDIALegacyBackendPasses();
 #endif
 #ifdef TESSERA_HAVE_ROCM_BACKEND
   mlir::tessera_rocm::registerTesseraROCMBackendPasses();
@@ -398,6 +399,7 @@ int main(int argc, char **argv) {
 #endif
 #ifdef TESSERA_HAVE_NVIDIA_BACKEND
   tessera::registerTesseraNVIDIABackendPasses();
+  tessera::registerTesseraNVIDIALegacyBackendPasses();
 #endif
 
   // Phase 4 GPU emission (2026-06-17): register the upstream passes that compose

@@ -12,7 +12,7 @@ flash_attn,apple_cpu,reference,complete,complete,complete,complete,reference,ref
 flash_attn,apple_gpu,complete,complete,complete,complete,complete,complete,complete,complete,,
 flash_attn,cpu,reference,complete,complete,complete,complete,reference,reference,complete,backend_compile,backend_compile=reference; components=flash_attn
 flash_attn,nvidia_sm100,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,backend_compile=artifact_only; components=flash_attn
-flash_attn,nvidia_sm120,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,backend_compile=artifact_only; components=flash_attn
+flash_attn,nvidia_sm120,complete,complete,complete,complete,complete,complete,complete,complete,,
 flash_attn,nvidia_sm80,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,backend_compile=artifact_only; components=flash_attn
 flash_attn,nvidia_sm90,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,backend_compile=artifact_only; components=flash_attn
 flash_attn,rocm,complete,complete,complete,complete,complete,complete,complete,complete,,
@@ -48,7 +48,7 @@ matmul_softmax,apple_cpu,reference,complete,complete,complete,complete,reference
 matmul_softmax,apple_gpu,complete,complete,complete,complete,complete,complete,complete,complete,,
 matmul_softmax,cpu,reference,complete,complete,complete,complete,reference,reference,complete,backend_compile,"backend_compile=reference; components=matmul,softmax"
 matmul_softmax,nvidia_sm100,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,"backend_compile=artifact_only; components=matmul,softmax"
-matmul_softmax,nvidia_sm120,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,"backend_compile=artifact_only; components=matmul,softmax"
+matmul_softmax,nvidia_sm120,missing,complete,complete,complete,complete,complete,missing,missing,runtime_execute,"runtime_execute=missing; components=matmul,softmax"
 matmul_softmax,nvidia_sm80,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,"backend_compile=artifact_only; components=matmul,softmax"
 matmul_softmax,nvidia_sm90,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,"backend_compile=artifact_only; components=matmul,softmax"
 matmul_softmax,rocm,complete,complete,complete,complete,complete,complete,complete,complete,,
@@ -57,7 +57,7 @@ softmax,apple_cpu,reference,complete,complete,complete,complete,reference,refere
 softmax,apple_gpu,complete,complete,complete,complete,complete,complete,complete,complete,,
 softmax,cpu,reference,complete,complete,complete,complete,reference,reference,complete,backend_compile,backend_compile=reference; components=softmax
 softmax,nvidia_sm100,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,backend_compile=artifact_only; components=softmax
-softmax,nvidia_sm120,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,backend_compile=artifact_only; components=softmax
+softmax,nvidia_sm120,complete,complete,complete,complete,complete,complete,complete,complete,,
 softmax,nvidia_sm80,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,backend_compile=artifact_only; components=softmax
 softmax,nvidia_sm90,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,backend_compile=artifact_only; components=softmax
 softmax,rocm,complete,complete,complete,complete,complete,complete,complete,complete,,

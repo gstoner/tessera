@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-11
+last_updated: 2026-07-13
 audit_role: reference
 ---
 
@@ -138,10 +138,23 @@ cells re-derived to HARDWARE_VERIFIED). Record pass/fail counts back here.
 
 ---
 
-## 🟩 NVIDIA box (RTX 5070 Ti, sm_120 / consumer Blackwell) — TODO (later today)
+## ✅ NVIDIA box (RTX 5070 Ti, sm_120 / consumer Blackwell) — VERIFIED 2026-07-13
 
 Build with CUDA + the NVIDIA backend. The lit fixtures verify the same as above;
 additionally the pre-existing emit-path tests **execute on sm_120**.
+
+Results on the local WSL CUDA environment:
+
+- **Build: PASS** — CUDA 13.3.33; NVIDIA backend enabled; `tessera-opt` built.
+- **Target IR fixtures: 2/2 PASS** — typed Target IR round-trip and real
+  `nvvm.mma.sync` lowering checked by FileCheck/NVVM structural verification.
+- **On-device emit path: 68 PASS, 1 skipped** in 18.16s — RTX 5070 Ti
+  (sm_120), driver 610.62. The skipped case was skip-clean.
+
+During this verification, `tessera-opt` exposed a duplicate legacy registration
+symbol that hid the typed `tessera_nvidia` dialect and the NVVM lowering pass. The
+legacy pipeline now has distinct registration symbols; `tessera-opt` registers both
+the typed Target IR and legacy pipeline without collision.
 
 ```bash
 cmake -S . -B build -DTESSERA_ENABLE_CUDA=ON \
@@ -165,9 +178,9 @@ python3 -m pytest -q tests/unit/test_nvidia_plugin.py \
   tests/unit/test_nvidia_perf_ratchet.py
 ```
 
-**Expected:** lit fixtures PASS everywhere. `test_nvidia_plugin.py` etc. execute the
-`mma.sync` GEMM / flash-attention lanes on sm_120 and compare to the numpy reference
-(skip-clean if `nvcc`/GPU absent). Record results here.
+**Actual:** both lit fixtures PASS. `test_nvidia_plugin.py` etc. execute the
+`mma.sync` GEMM / flash-attention lanes on sm_120 and compare to the numpy reference;
+the selected suite produced **68 PASS, 1 skipped**.
 
 > **Increment-2 scope reminder:** the real `nvvm.mma.sync` lowering is validated by
 > the NVVM verifier (structural), and is fed by a hand-written fragment-typed fixture.

@@ -454,8 +454,9 @@ the existing DDP/FSDP semantics; it does not add new placement logic.
   fixture, and proof build.
 
 The remaining Phase-6 work is hardware execution, not policy ambiguity: land
-fresh-process Apple backward fixtures, exact NVIDIA backward rows family by
-family, and real multi-rank NCCL/RCCL collective fixtures. Mixed precision,
+fresh-process Apple backward fixtures, extend NVIDIA beyond its first exact
+sm_120 Flash-Attention backward row family by family, and add real multi-rank
+NCCL/RCCL collective fixtures. Mixed precision,
 checkpoint tuning, and fused backward promotion remain gated as ordered above.
 
 > **ROCm is the special case — its backward already runs (see §9).** gfx1151
@@ -530,6 +531,7 @@ once Phase 0 lands.
 | 2 | Paired fwd/bwd/residual contract (`--tessera-autodiff-paired`, recompute-all) | ✅ first cut landed 2026-07-11 |
 | 3 | matmul→tanh/sigmoid→loss — backward native on CPU | ✅ paired-pass output launches through MLIR/LLVM JIT on `cpu_x86_64`; direct gradient oracle proof landed 2026-07-12 |
 | 4 | Compiled backward bound to runtime ABI (ROCm first) | ✅ **complete** 2026-07-12 via A1–A4; aliases share their dedicated implementation, matmul is an explicit two-GEMM composition, and residual policy is structured per target. |
+| 6 | NVIDIA sm_120 Flash Attention backward promotion | ✅ first CUDA family: f32/fp16 storage, f32 VJP accumulation, MHA/GQA/MQA aliases, mask/bias/soft-cap derivatives; exact `nvidia_sm120` `device_verified_jit` proof with recompute-all residual policy. |
 
 Per-family × per-target rung truth is now the **generated ledger**, not a hand
 table — read [`generated/autodiff_connection_ledger.md`](../generated/autodiff_connection_ledger.md)

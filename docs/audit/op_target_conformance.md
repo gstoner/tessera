@@ -34,19 +34,19 @@ Audit response to [docs/audit/compiler/COMPILER_AUDIT.md](compiler/COMPILER_AUDI
 | `x86` | 7 | complete=7 |
 | `apple` | 14 | complete=8, reference=6 |
 | `rocm` | 7 | complete=7 |
-| `nvidia` | 28 | complete=1, missing=27 |
+| `nvidia` | 28 | complete=3, missing=25 |
 
 ## Overall counts
 
 | Overall (weakest column wins) | Count |
 |---|---:|
-| ✅ `complete` | 23 |
+| ✅ `complete` | 25 |
 | 🧪 `reference` | 13 |
 | 🔧 `compileable` | 0 |
 | ⚙️ `partial` | 0 |
 | ⚠️ `artifact_only` | 0 |
 | 📋 `planned` | 0 |
-| ❌ `missing` | 27 |
+| ❌ `missing` | 25 |
 | **total cells** | **63** |
 
 ## `matmul`
@@ -93,7 +93,7 @@ _composes from primitives; no fused single-kernel today_
 | `nvidia_sm80` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ❌ | `backend_compile` — backend_compile=artifact_only; components=softmax |  |
 | `nvidia_sm90` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ❌ | `backend_compile` — backend_compile=artifact_only; components=softmax |  |
 | `nvidia_sm100` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ❌ | `backend_compile` — backend_compile=artifact_only; components=softmax |  |
-| `nvidia_sm120` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ❌ | `backend_compile` — backend_compile=artifact_only; components=softmax |  |
+| `nvidia_sm120` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |  |
 
 ## `matmul_softmax`
 
@@ -111,7 +111,7 @@ _fused MSL kernel on apple_gpu (single-kernel scores); compose elsewhere_
 | `nvidia_sm80` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ❌ | `backend_compile` — backend_compile=artifact_only; components=matmul,softmax | composes from per-op kernels (no fusion pass on this target) |
 | `nvidia_sm90` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ❌ | `backend_compile` — backend_compile=artifact_only; components=matmul,softmax | composes from per-op kernels (no fusion pass on this target) |
 | `nvidia_sm100` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ❌ | `backend_compile` — backend_compile=artifact_only; components=matmul,softmax | composes from per-op kernels (no fusion pass on this target) |
-| `nvidia_sm120` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ❌ | `backend_compile` — backend_compile=artifact_only; components=matmul,softmax | composes from per-op kernels (no fusion pass on this target) |
+| `nvidia_sm120` | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | `runtime_execute` — runtime_execute=missing; components=matmul,softmax | composes from per-op kernels (no fusion pass on this target) |
 
 ## `conv2d`
 
@@ -139,7 +139,7 @@ _fused MSL kernel on apple_gpu (single-kernel scores); compose elsewhere_
 | `nvidia_sm80` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ❌ | `backend_compile` — backend_compile=artifact_only; components=flash_attn |  |
 | `nvidia_sm90` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ❌ | `backend_compile` — backend_compile=artifact_only; components=flash_attn |  |
 | `nvidia_sm100` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ❌ | `backend_compile` — backend_compile=artifact_only; components=flash_attn |  |
-| `nvidia_sm120` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ❌ | `backend_compile` — backend_compile=artifact_only; components=flash_attn |  |
+| `nvidia_sm120` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |  |
 
 ## `kv_cache_read`
 

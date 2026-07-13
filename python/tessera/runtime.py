@@ -9875,8 +9875,10 @@ def _execute_apple_gpu_compiled_rng(artifact: RuntimeArtifact, args: Any) -> Any
     if op_name == "tessera.rng_uniform":
         shape = tuple(int(d) for d in kwargs.get("shape", ()))
         n = int(np.prod(shape)) if shape else 1
-        lo = float(kwargs.get("lo", kwargs.get("low", 0.0)))
-        hi = float(kwargs.get("hi", kwargs.get("high", 1.0)))
+        lo_value = kwargs.get("lo", kwargs.get("low", 0.0))
+        hi_value = kwargs.get("hi", kwargs.get("high", 1.0))
+        lo = float(0.0 if lo_value is None else lo_value)
+        hi = float(1.0 if hi_value is None else hi_value)
         out = _try_apple_rng_uniform(seed, counter_base, n, lo, hi)
         if out is not None:
             return out.reshape(shape).astype(np.float32), "native_gpu"

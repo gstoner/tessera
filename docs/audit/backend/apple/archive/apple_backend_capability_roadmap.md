@@ -5,7 +5,7 @@
 > derived from the [MLX ecosystem survey](apple_gpu_mlx_ecosystem_survey.md) and
 > reconciled against what is *already in-tree*. The serving / app / dflash
 > production track is a **separate plan** —
-> [`tessera_inference_serving_plan.md`](tessera_inference_serving_plan.md).
+> [`docs/architecture/inference/serving.md`](../../../../architecture/inference/serving.md).
 >
 > **Scope boundary.** This doc covers compiler/runtime/kernel capability for the
 > Apple backend. It does NOT cover the OpenAI/Anthropic server, EnginePool,
@@ -391,7 +391,7 @@ low-risk. Then the P4 generator in parallel.
 
 - The OpenAI/Anthropic server, EnginePool, tiered prefix cache, continuous
   batching scheduler, model download/registry, Swift app, dflash production
-  envelope → [`tessera_inference_serving_plan.md`](tessera_inference_serving_plan.md).
+  envelope → [`docs/architecture/inference/serving.md`](../../../../architecture/inference/serving.md).
 - AIR bitcode codegen (Apple ships no public path — MLX confirms; revisit only on
   a perf wall).
 - Training-side on-GPU RNG / dropout (would break Decision #18 bit-exactness;

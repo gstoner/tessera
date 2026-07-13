@@ -73,6 +73,10 @@ explain shape and intent; the dashboards say what is proven today.
 | `docs/architecture/Compiler/Tessera_Compiler_TileIR_Design.md` | Tile IR design, memory movement, MMA, and barriers |
 | `docs/architecture/Compiler/Tessera_Compiler_TargetIR_Design.md` | Target IR design and backend mapping concepts |
 | `docs/architecture/tessera_target_ir_usage_guide.md` | Informative target-lowering examples; defer API claims to canonical specs |
+| `docs/architecture/workloads/` | Cross-target workload architecture: attention family, DFlash, and MSA |
+| `docs/architecture/distributed/megamoe.md` | Distributed MegaMoE architecture |
+| `docs/architecture/inference/serving.md` | Inference-serving orchestration plan |
+| `docs/backends/` | Per-target architecture, implementation guides, and links to evidence |
 | `docs/architecture/proposals/cute_tessera_enhancement.md` | Proposal material for CuTe-inspired enhancements |
 
 ## Historical Material

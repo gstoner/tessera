@@ -1593,7 +1593,7 @@ def Tessera_DeepSeekSparseAttentionOp : Op<
 }
 
 // MiniMax Sparse Attention (MSA, arXiv:2606.13392). Three Graph IR ops mirror
-// the reference Python surface (see docs/msa.md): an exp-free per-GQA-group
+// the reference Python surface (see docs/architecture/workloads/msa.md): an exp-free per-GQA-group
 // Index Branch scorer, a deterministic forced-local Top-k block selector, and
 // an exact block-sparse Main Branch. Unlike deepseek_sparse_attention (which
 // blends sliding/compressed/top-k branches per head), MSA is a single exact

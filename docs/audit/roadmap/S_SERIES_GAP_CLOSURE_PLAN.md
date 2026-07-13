@@ -18,8 +18,8 @@ plan_state: open
 > `apple_target_map`). Regenerate, never hand-edit.
 >
 > Companion docs: the **hardware-gated** WGMMA/MFMA fused-kernel inventories live
-> in [`docs/nvidia_cuda13_kernel_inventory.md`](../../nvidia_cuda13_kernel_inventory.md)
-> and [`docs/rocm_mfma_kernel_inventory.md`](../../rocm_mfma_kernel_inventory.md),
+> in [`docs/backends/nvidia/kernel-inventory.md`](../../backends/nvidia/kernel-inventory.md)
+> and [`docs/backends/rocm/kernel-inventory.md`](../../backends/rocm/kernel-inventory.md),
 > with their schema + lit fixtures guarded by
 > `tests/unit/test_kernel_inventory_and_lit_fixtures.py`. **This doc is the
 > *native-execution* companion** — the kernels we can build and numerically prove

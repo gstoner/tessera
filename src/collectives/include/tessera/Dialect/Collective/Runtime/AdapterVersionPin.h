@@ -24,8 +24,8 @@
 #define TESSERA_RCCL_MIN_MAJOR 2
 #define TESSERA_RCCL_MIN_MINOR 22
 
-// Toolchain pins matching docs/nvidia_cuda13_kernel_inventory.md +
-// docs/rocm_mfma_kernel_inventory.md.
+// Toolchain pins matching docs/backends/nvidia/kernel-inventory.md +
+// docs/backends/rocm/kernel-inventory.md.
 #define TESSERA_TARGET_CUDA_TOOLKIT "13.3"
 #define TESSERA_TARGET_PTX_ISA      "9.3"
 #define TESSERA_TARGET_ROCM         "7.2.4"

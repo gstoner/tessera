@@ -287,4 +287,4 @@ across all vendors.
 - `../rocm/STRIX_HALO_EXECUTION_PLAN.md` — the parallel AMD plan.
 - `python/tessera/compiler/gpu_target.py`, `capabilities.py` — the corrected sm_120 (Blackwell consumer) model.
 - `compiler/ptx_emit.py`, `EVALUATOR_PLAN.md` §9.5 — the rung ladder this mirrors (note: existing emitter is sm_90a wgmma).
-- `docs/nvidia_cuda13_kernel_inventory.md` — NVIDIA kernel inventory (an sm_120 mma.sync inventory is a sibling TODO).
+- `docs/backends/nvidia/kernel-inventory.md` — NVIDIA kernel inventory (the sm_120 guide is its sibling).

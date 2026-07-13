@@ -51,6 +51,24 @@ These documents remain normative only where they do not conflict with the normat
 
 Architecture, programming guide, reference, and tutorial documents are explanatory. They should link back to the normative root for API names, phase status, and implementation claims.
 
+## Backend Documentation
+
+For a hardware target, start at [`docs/backends/README.md`](backends/README.md),
+then choose Apple, x86, ROCm, or NVIDIA. These reader-facing backend pages own
+architecture, compiler-route, runtime-model, and implementation explanations.
+They link to generated evidence rather than copying mutable status counts.
+
+| Question | Authority |
+|---|---|
+| How does a target work? | [`docs/backends/`](backends/) |
+| What executes, where, and with what proof? | [`docs/audit/generated/`](audit/generated/) |
+| Why was a backend decision made; what remains open? | [`docs/audit/backend/`](audit/backend/) |
+| How does a workload span targets? | [`docs/architecture/`](architecture/) |
+
+Use the same taxonomy everywhere: **target**, **execution unit**, **compiler
+form**, **runtime executor**, **placement**, and **proof**. Artifact emission,
+reference execution, native execution, and hardware proof are separate claims.
+
 Architecture readers should start with `docs/architecture/README.md`.
 
 Compiler planning readers should use

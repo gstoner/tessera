@@ -510,7 +510,7 @@ Two viable emit paths for Stage A (pick after a spike):
 - `../BACKEND_AUDIT.md` — the hardware-gated frontier (0 `backend_kernel=complete`) + `tsrRegisterGpuLauncher`.
 - `ROCM_AUDIT.md` — ROCm theme audit (Next Work aligns with Stages C/D here).
 - `python/tessera/compiler/rocm_target.py`, `capabilities.py` — the grounded gfx1151 target model.
-- `docs/rocm_mfma_kernel_inventory.md` — CDNA MFMA inventory (RDNA WMMA inventory is a sibling TODO).
+- `docs/backends/rocm/kernel-inventory.md` — ROCm MFMA / WMMA inventory.
 - `compiler/ptx_emit.py`, `EVALUATOR_PLAN.md` §9.5 — the NVIDIA rung ladder this mirrors.
 - `python/tessera/compiler/rocdl_emit.py` + `tests/unit/test_rocdl_emit.py` — Stage B emitter (rung 2.5 + rung 3 `llc`), AMD analog of `ptx_emit.py`.
 - **RDNA 3.5 ISA Reference Guide** (AMD doc 70649, 23-Jul-2024) — authoritative WMMA spec (§7.9 / Table 33): <https://docs.amd.com/v/u/en-US/rdna35_instruction_set_architecture>. Note: docs.amd.com is a JS-rendered SPA — fetch the linked PDF, not the HTML.

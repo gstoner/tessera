@@ -3,7 +3,7 @@
 // MiniMax Sparse Attention (MSA, arXiv:2606.13392) Graph IR verifiers.
 // The MSA-specific contract on top of the shared verifyAttentionQKV shape
 // checks: GQA divisibility (Hq % Hkv == 0), KV-block divisibility
-// (Sk % block_size == 0), and top_k <= num_blocks. See docs/msa.md.
+// (Sk % block_size == 0), and top_k <= num_blocks. See docs/architecture/workloads/msa.md.
 //
 // One positive case + three negative cases.
 

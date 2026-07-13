@@ -2,7 +2,7 @@
 
 Synthesizes the per-op × per-target × per-dtype backend kernel matrix
 from ``capabilities.TARGET_CAPABILITIES`` + the Apple GPU kernel inventory
-(``docs/apple_backend.md``)
+(``docs/backends/apple/``)
 + explicit registrations.  Lets the primitive coverage registry promote
 the ``backend_kernel`` axis from a binary partial/planned status to a
 per-target tracking with explicit kernel availability per dtype.
@@ -576,7 +576,7 @@ def primitive_is_complete(entries: tuple["BackendKernelEntry", ...]) -> bool:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Apple GPU shipped MSL kernels — per `docs/apple_backend.md` (GPU kernel inventory)
+# Apple GPU shipped MSL kernels — per `docs/backends/apple/` (GPU kernel inventory)
 # (Phase 8.3 → 8.4.7).  Each entry below corresponds to one ABI symbol
 # (or fusion).  Status="fused" when the MSL kernel is a fused chain;
 # "reference" when the kernel is a single-op MPS dispatch.
@@ -1075,7 +1075,7 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
             "(tessera_apple_gpu_moe_swiglu_f32 — gate/up/silu_mul/down in one "
             "dispatch, the grouped analog of swiglu_f32); H,Kout<=256 fast path, "
             "else the composed grouped-GEMM + silu_mul lanes. The local MegaMoE "
-            "expert-FFN core (see docs/distributed_megamoe.md)."
+            "expert-FFN core (see docs/architecture/distributed/megamoe.md)."
         ),
         "runtime_symbol": "tessera_apple_gpu_moe_swiglu_f32",
         "benchmark_json": "benchmarks/apple_gpu/benchmark_megamoe_overlap.py",

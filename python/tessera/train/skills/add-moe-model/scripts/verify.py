@@ -17,7 +17,7 @@ from __future__ import annotations
 import importlib
 import inspect
 import sys
-from typing import NoReturn
+from typing import Any, NoReturn
 
 import numpy as np
 
@@ -33,10 +33,14 @@ def main(name: str) -> None:
     except Exception as e:  # noqa: BLE001
         _fail(f"import tessera.train.models.{name}: {e!r}")
 
-    cfg_cls = next((o for n, o in vars(mod).items()
-                    if n.endswith("Config") and inspect.isclass(o)), None)
-    model_cls = next((o for n, o in vars(mod).items()
-                      if n.endswith("Model") and inspect.isclass(o)), None)
+    cfg_cls: type[Any] | None = next(
+        (o for n, o in vars(mod).items() if n.endswith("Config") and inspect.isclass(o)),
+        None,
+    )
+    model_cls: type[Any] | None = next(
+        (o for n, o in vars(mod).items() if n.endswith("Model") and inspect.isclass(o)),
+        None,
+    )
     if cfg_cls is None or model_cls is None:
         _fail(f"module must export a *Config and a *Model (found {cfg_cls}, {model_cls})")
 

@@ -290,7 +290,7 @@ M==1 numerics).
 A Metal-4-grounded audit of how the whole Apple GPU backend uses the device
 (singletons, buffer pool, graph/pipeline caches, the per-call MTL4 overhead, and
 the unused `MTLArchive`/ML-encoder surfaces) lives in the **Metal 4 lane —
-implementation state** section of [apple_backend.md](apple_backend.md). Headline:
+implementation state** section of [the Apple backend guide](../../../../backends/apple/). Headline:
 the kernels are competitive; the remaining gap to "most optimal" is per-call
 host-side overhead amortization (P1 buffer-pool — partially done; P2/P3 reuse the
 command allocator/buffer/argument-table/shared-event), which the M8 session

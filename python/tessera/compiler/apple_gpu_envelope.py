@@ -171,7 +171,7 @@ _APPLE_GPU_SPARSE_ATTN_OPS = frozenset({
     # MiniMax Sparse Attention (MSA, arXiv:2606.13392) — host-select + GPU exact
     # attention (Phase 3): the Index Branch top-k block selection runs on the
     # host (data-dependent, like attn_top_k_blocks); the exact Main Branch
-    # attention over the gathered selected blocks runs on the GPU. See docs/msa.md.
+    # attention over the gathered selected blocks runs on the GPU. See docs/architecture/workloads/msa.md.
     "tessera.msa_sparse_attention",
 })
 _APPLE_GPU_MPSGRAPH_OPS = (

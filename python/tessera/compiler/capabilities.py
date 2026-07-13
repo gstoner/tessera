@@ -218,7 +218,7 @@ def _apple_gpu_fused_caps() -> dict[str, OpCapability]:
     return out
 
 # Sprint G-2 (2026-05-11): expanded to match the planned NVIDIA kernel
-# inventory in `docs/nvidia_cuda13_kernel_inventory.md`.  Each entry
+# inventory in `docs/backends/nvidia/kernel-inventory.md`.  Each entry
 # here ships a Target IR artifact under CUDA 13.3.
 _NVIDIA_ARTIFACT = (
     # Matmul / contraction family
@@ -252,7 +252,7 @@ _NVIDIA_ARTIFACT = (
 )
 
 # Sprint H-3 (2026-05-11): expanded to match the planned ROCm kernel
-# inventory in `docs/rocm_mfma_kernel_inventory.md`.
+# inventory in `docs/backends/rocm/kernel-inventory.md`.
 _ROCM_ARTIFACT = (
     "tessera.matmul", "tessera.batched_gemm", "tessera.einsum",
     "tessera.linear_general", "tessera.qkv_projection",
@@ -412,7 +412,7 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         runtime_backend="hip",
         default_runtime_status="artifact_only",
         # Sprint H-3 (2026-05-11): full planned kernel set from
-        # `docs/rocm_mfma_kernel_inventory.md`.
+        # `docs/backends/rocm/kernel-inventory.md`.
         supported_ops=_ops("artifact_only", _ROCM_ARTIFACT, reason="ROCm 7.2.4 MFMA artifact exists; HIP execution remains gated"),
         supported_dtypes=("bf16", "fp16", "fp32", "fp64", "fp8_e4m3", "fp8_e5m2", "int8"),
         features=(

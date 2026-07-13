@@ -166,7 +166,7 @@ struct MetalDeviceContext {
   // instead, which is safe because `mtl4_dispatch_mu` serializes the
   // encode→commit→wait sequence (and the single shared queue serializes GPU work
   // regardless, so no overlap is lost). The shared event advances a monotonic
-  // value per dispatch. See docs/apple_backend.md (P2/P3).
+  // value per dispatch. See docs/backends/apple/ (P2/P3).
   id        mtl4_allocator;   // id<MTL4CommandAllocator>
   id        mtl4_cmdbuf;      // id<MTL4CommandBuffer>
   id        mtl4_argtable;    // id<MTL4ArgumentTable> (maxBufferBindCount = 8)
@@ -197,7 +197,7 @@ struct MetalDeviceContext {
   // builds is captured; a previously-flushed archive is loaded as a lookup
   // archive so matching pipelines skip the MSL recompile (~ms each) on process
   // start. Off by default — no effect on the default path. See
-  // docs/apple_backend.md (P4).
+  // docs/backends/apple/ (P4).
   id          mtl4_serializer;       // id<MTL4PipelineDataSetSerializer>
   id          mtl4_lookup_archive;   // id<MTL4Archive> (nil if none/incompatible)
   std::string mtl4_archive_path;
@@ -1820,7 +1820,7 @@ extern "C" int32_t tessera_apple_gpu_svd_bl_batched_f32(const float *A, float *U
 // grid of `batch`). MPS's Cholesky/solve are single-matrix per encode, so the
 // Python batched path used to loop them per matrix; these grid-batched kernels
 // keep the whole GPU busy across the batch (same pattern + win as batched SVD).
-// f32, single threadgroup per matrix. See docs/apple_backend.md.
+// f32, single threadgroup per matrix. See docs/backends/apple/.
 //===----------------------------------------------------------------------===//
 namespace {
 constexpr int kBatchLinalgThreads = 128;
@@ -5421,7 +5421,7 @@ extern "C" void tessera_apple_gpu_msa_block_sparse_tiled_f16(
 //===---------------------------------------------------------------------===//
 // MSA Index-Branch Top-k *selection* on the GPU (huge-batch regime). At the
 // shapes this implementation targets, host selection (numpy argpartition) is
-// cheap and GPU-resident selection is an anti-optimization (see docs/msa.md
+// cheap and GPU-resident selection is an anti-optimization (see docs/architecture/workloads/msa.md
 // §10). But at very large `B·Hkv·Sq·num_blocks` the host index *scoring* matmul
 // dominates; routing it through the GPU bmm + this select kernel keeps the whole
 // Index Branch GPU-resident. Input: precomputed block scores
@@ -6702,7 +6702,7 @@ kernel void matmul_softmax_tiled_f32(
     // (A simd_max(local_max) variant was benchmarked and measured 0.72-0.93x —
     // slower — because these kernels are matmul/write-bound, not reduction-bound,
     // and simd_max/simd_sum cost more than the 32-lane on-chip tree here. See
-    // docs/apple_backend.md, SIMD-reduction section.)
+    // docs/backends/apple/, SIMD-reduction section.)
     float local_max = -INFINITY;
     for (int n = lid_i; n < N; n += T) local_max = max(local_max, tg_scores[n]);
     tg_max[lid_i] = local_max;
@@ -18133,7 +18133,7 @@ extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_dev(TsDeviceTensor *A,
 // Stage 1: an MSL gather writes col[M=N*OH*OW, Kk=kH*kW*Cin] from NHWC X
 // (zero-padded, strided, dilated). Stage 2: the existing matmul2d epilogue
 // kernel computes Y(f32) = act(col @ Wr + bias) on the matrix units, reading
-// col as a device MTLTensor. f16/bf16. See docs/apple_backend.md (P8).
+// col as a device MTLTensor. f16/bf16. See docs/backends/apple/ (P8).
 //===----------------------------------------------------------------------===//
 static NSString *kIm2colMSL = @R"MSL(
 #include <metal_stdlib>

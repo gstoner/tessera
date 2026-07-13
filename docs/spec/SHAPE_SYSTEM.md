@@ -565,7 +565,7 @@ items:**
    **Sprint V3 closure (2026-05-22):** `FlashAttnOp::verify()` extended
    to walk the parent op chain for a `tessera.target_sm` attribute and
    enforce the per-SM `head_dim` ceiling from
-   `docs/nvidia_cuda13_kernel_inventory.md` (sm_70/75/80/86/89 ≤ 128;
+   `docs/backends/nvidia/kernel-inventory.md` (sm_70/75/80/86/89 ≤ 128;
    sm_90/100/120 ≤ 256; no SM tag ⇒ no limit applied — CPU path
    unaffected).  Diagnostic phrase `head_dim=N exceeds the SM <sm> ...`
    exercised by `tests/tessera-ir/phase3/sprint_v3_flash_attn_target_aware.mlir`

@@ -119,7 +119,7 @@ sm_120 (RTX 5070 Ti, PRs #290–#297):
 
 Done (2026-07-07): the compiler-generated lane (#290–#297), the sm_120 `mma.sync`
 flash-attention execute-compare (C4), and the sm_120 kernel-inventory doc
-(`docs/nvidia_sm120_mma_sync_kernel_inventory.md`). Remaining:
+(`docs/backends/nvidia/sm120-kernel-guide.md`). Remaining:
 
 1. **NVFP4 block-scale execution + numerics** — bind the fp4 fragment packing and
    flip the manifest row once execute-and-compare passes on `sm_120a` and the
@@ -159,4 +159,3 @@ flash-attention execute-compare (C4), and the sm_120 kernel-inventory doc
 
 - `archive/nvidia_execution_audit.md`
 - `../archive/nvidia_rocm_execute_and_compare_plan.md`
-

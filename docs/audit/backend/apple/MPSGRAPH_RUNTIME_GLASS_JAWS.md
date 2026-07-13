@@ -1,11 +1,14 @@
 ---
-last_updated: 2026-06-04
+last_updated: 2026-07-13
 audit_role: reference
 ---
 
-# Apple MPSGraph Runtime Glass Jaws
+# Apple MPSGraph runtime risk register
 
-Stages 13-15 audit note for Apple GPU value execution. This is a current-truth guardrail, not a control-flow segfault investigation.
+Stages 13-15 audit note for Apple GPU Value Target-IR execution. This is a
+guardrail/risk register, not a current support table. Status belongs in the
+generated Apple execution inventory and runtime execution matrix; this document
+only preserves failure modes and proof requirements for the MPSGraph value lane.
 
 ## Current Proof Lane
 

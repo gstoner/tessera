@@ -17,6 +17,7 @@ import ctypes
 import shutil
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -24,6 +25,22 @@ import pytest
 
 _STUB = (Path(__file__).resolve().parents[2] / "src" / "compiler" / "codegen"
          / "Tessera_Apple_Backend" / "runtime" / "apple_gpu_runtime_stub.cpp")
+_ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_shared_runtime_build_is_safe_under_parallel_cache_misses(tmp_path, monkeypatch):
+    """A worker must never load another worker's partially linked runtime."""
+    if shutil.which("c++") is None and shutil.which("clang++") is None and shutil.which("g++") is None:
+        pytest.skip("no C++ compiler available")
+    monkeypatch.setenv("TESSERA_CACHE_DIR", str(tmp_path / "cache"))
+    from tessera.runtime import _build_apple_gpu_runtime_shared
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        built = list(pool.map(lambda _: _build_apple_gpu_runtime_shared(_ROOT), range(4)))
+
+    assert len({path.resolve() for path in built}) == 1
+    assert built[0].is_file()
+    ctypes.CDLL(str(built[0]))
 
 
 @pytest.fixture(scope="module")

@@ -119,7 +119,7 @@ _SPECS = [
     # group exp-free block scoring) + exact block-sparse Main Branch. The index
     # scorer is a smooth (differentiable) matmul; the block selector is a hard,
     # deterministic top-k (non-differentiable); the sparse attention is the
-    # exact main branch. See docs/msa.md.
+    # exact main branch. See docs/architecture/workloads/msa.md.
     OpSpec("msa_index_scores", "tessera.msa_index_scores", 2, 2, lowering="attention"),
     OpSpec("msa_select_blocks", "tessera.msa_select_blocks", 1, 1, lowering="indexing"),
     OpSpec("msa_sparse_attention", "tessera.msa_sparse_attention", 3, 3, effect="state", lowering="attention"),

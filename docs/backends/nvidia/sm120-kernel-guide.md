@@ -1,14 +1,14 @@
 ---
 status: Informative
 classification: Reference / Kernel Inventory
-authority: Companion to docs/nvidia_cuda13_kernel_inventory.md
+authority: Companion to docs/backends/nvidia/kernel-inventory.md
 last_updated: 2026-07-07
 ---
 
 # NVIDIA sm_120 (consumer Blackwell) mma.sync Kernel Inventory
 
 > Hardware-verified companion to
-> [`docs/nvidia_cuda13_kernel_inventory.md`](nvidia_cuda13_kernel_inventory.md)
+> [`kernel-inventory.md`](kernel-inventory.md)
 > (which is the SM_90+ WGMMA *planning* inventory). This doc enumerates the
 > kernels Tessera actually **synthesizes, compiles, and runs on sm_120** — proven
 > on an RTX 5070 Ti (compute cap 12.0, CUDA 13.3, driver ≥610.43.02). Statuses
@@ -99,4 +99,4 @@ time; the compiler-emitted CUDA lane needs `nvcc`.
 NVFP4 execution + non-unit-scale numerics; mma.sync tensor-core versions of the
 attention + fused lanes (perf); dtypes beyond f32 for the fused/attention/gated
 lanes; the Hopper `wgmma` completion (sm_90a) and sm_100 `tcgen05` (their own
-silicon). See [`docs/audit/backend/nvidia/NVIDIA_AUDIT.md`](audit/backend/nvidia/NVIDIA_AUDIT.md).
+silicon). See [`docs/audit/backend/nvidia/NVIDIA_AUDIT.md`](../../audit/backend/nvidia/NVIDIA_AUDIT.md).

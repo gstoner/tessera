@@ -1456,7 +1456,7 @@ LogicalResult Conv2DNHWCOp::verify() {
 // Sprint V3 (2026-05-22) — target-aware head_dim limits.
 //
 // Per-SM max head_dim for the fused flash-attention kernel.  Numbers
-// come from `docs/apple_gpu_kernel_inventory.md` (Apple GPU MSL
+// come from `docs/backends/apple/kernel-guide.md` (Apple GPU MSL
 // kernel ships head_dim ≤ 256) + Sprint G-2 NVIDIA kernel inventory.
 // SM_80 / SM_86 / SM_89: 128 (legacy FA-2/3 limit).
 // SM_90 / SM_100 / SM_120 + Apple Hopper-class: 256.

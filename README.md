@@ -394,11 +394,12 @@ in ~80 lines.  Runs on CPU, no accelerator required.
 | Document | What it covers |
 |----------|----------------|
 | [`docs/README.md`](docs/README.md) | Documentation authority tree and status labels |
+| [`docs/backends/README.md`](docs/backends/README.md) | **Backend guides** — uniform Apple, x86, ROCm, and NVIDIA architecture and implementation entry points; generated audits remain execution-status truth |
 | [`docs/CANONICAL_API.md`](docs/CANONICAL_API.md) | Public API names and syntax |
 | [`docs/spec/PYTHON_API_SPEC.md`](docs/spec/PYTHON_API_SPEC.md) | Public Python symbols and signatures |
 | [`docs/spec/COMPILER_REFERENCE.md`](docs/spec/COMPILER_REFERENCE.md) | IR stack, pass registry, pipelines, compiler source map |
 | [`docs/spec/AUTODIFF_SPEC.md`](docs/spec/AUTODIFF_SPEC.md) | Tape-based reverse-mode autodiff (Tier 2) + Phase F4 Graph IR adjoint pass (`AdjointInterface` op trait, multi-output rewrite, `tessera-autodiff` MLIR pass) + Phase F5 adjoint collective insertion |
-| [`docs/audit/backend/nvidia/NVIDIA_AUDIT.md`](docs/audit/backend/nvidia/NVIDIA_AUDIT.md) | NVIDIA backend status — the sm_120 CUDA + tensor-core lanes, the PTX launch bridge, and the hardware-gated frontier (Hopper sm_90 / datacenter sm_100). The archived `archive/nvidia_execution_audit.md` holds the historical SM_90 bring-up punch list. |
+| [`docs/backends/nvidia/`](docs/backends/nvidia/) | NVIDIA/CUDA architecture and kernel-guide entry point; the linked audit owns current decisions and evidence |
 | [`docs/spec/CLIFFORD_SPEC.md`](docs/spec/CLIFFORD_SPEC.md) | Clifford / geometric algebra primitive surface |
 | [`docs/spec/EBM_SPEC.md`](docs/spec/EBM_SPEC.md) | Energy-based model primitive surface |
 | [`docs/spec/GA_EBM_EXECUTION_STATUS.md`](docs/spec/GA_EBM_EXECUTION_STATUS.md) | GA + EBM execution status by implementation layer |
@@ -410,10 +411,9 @@ in ~80 lines.  Runs on CPU, no accelerator required.
 | [`docs/audit/backend/BACKEND_AUDIT.md`](docs/audit/backend/BACKEND_AUDIT.md) | Hardware-gated frontier — what's blocked on real NVIDIA / ROCm |
 | [`docs/architecture/README.md`](docs/architecture/README.md) | Architecture guide index |
 | [`docs/guides/Tessera_Developer_Frontend_End_To_End.md`](docs/guides/Tessera_Developer_Frontend_End_To_End.md) | First executable frontend path and IR inspection |
-| [`docs/distributed_megamoe.md`](docs/distributed_megamoe.md) | **Distributed MegaMoE** — single-device MoE layer, fused expert-FFN kernel, expert-parallel 2× all-to-all forward, FP8×FP4 mixed precision, and real comm/compute overlap |
-| [`docs/apple_backend.md`](docs/apple_backend.md) | **Canonical Apple CPU + GPU reference** — architecture, execution gates, datatypes, Metal 4 implementation state, and op-family parity. Consolidates the former overview / datatypes / integration-review / Metal-4-ladder / control-flow / resident-activations / Tier-2/3 / capability-roadmap / MLX-survey docs (now redirect stubs; full history under `docs/audit/backend/apple/archive/`) |
-| [`docs/apple_gpu_kernel_inventory.md`](docs/apple_gpu_kernel_inventory.md) | **Apple GPU kernel + lane inventory** — the native MSL/MPS/MPSGraph/linalg/RNG symbol tables plus the `runtime.launch()` reference/compute lanes at op-family parity with x86/ROCm |
-| [`docs/dflash.md`](docs/dflash.md) | **DFlash speculative decoding** — the `attn_bias` substrate and the block-diffusion draft (`tessera.dflash` / `dflash_reference` / `dflash_io` / `dflash_serve`): architecture, API, what's proven, and the external gates |
+| [`docs/architecture/distributed/megamoe.md`](docs/architecture/distributed/megamoe.md) | **Distributed MegaMoE** — single-device MoE layer, fused expert-FFN kernel, expert-parallel 2× all-to-all forward, FP8×FP4 mixed precision, and real comm/compute overlap |
+| [`docs/backends/apple/`](docs/backends/apple/) | **Apple CPU + GPU backend** — architecture, execution taxonomy, Metal implementation, and kernel guide; generated dashboards provide current execution truth |
+| [`docs/architecture/workloads/dflash.md`](docs/architecture/workloads/dflash.md) | **DFlash speculative decoding** — the `attn_bias` substrate and the block-diffusion draft (`tessera.dflash` / `dflash_reference` / `dflash_io` / `dflash_serve`) |
 
 ---
 

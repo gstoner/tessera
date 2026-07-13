@@ -1,5 +1,6 @@
 ---
 title: Distributed MegaMoE — expert-parallel Mixture-of-Experts
+classification: Architecture / Distributed Workload
 last_updated: 2026-06-09
 status: implemented (single-device hardware-runtime on Apple GPU; multi-rank via in-process mock collectives)
 ---
@@ -81,7 +82,7 @@ replicated.
 all-to-all is uniform (the only kind the mock thread group expresses): each
 expert reserves `capacity_factor × (global token-slots / num_experts)` slots —
 overflow is dropped (reported as `MegaMoEResult.n_dropped`), underflow
-zero-padded. Per [Decision #6](../CLAUDE.md), multi-rank tests run in-process
+zero-padded. Per [Decision #6](../../../CLAUDE.md), multi-rank tests run in-process
 via `MockRankGroup` (threads), so this is the production-shaped forward **and**
 its own test harness.
 

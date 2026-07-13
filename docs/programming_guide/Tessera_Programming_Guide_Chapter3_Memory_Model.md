@@ -47,7 +47,7 @@ distributed tensors across GPUs.
 > `global` maps to Metal device memory (unified with the CPU on Apple Silicon
 > — no discrete HBM), and there is no `tmem` (a Blackwell-only tier). Buffers
 > are pooled `MTLBuffer`s acquired through RAII-hardened `TS_METAL_BUF_ACQUIRE`
-> macros. See [`docs/apple_backend.md`](../apple_backend.md).
+> macros. See [`docs/backends/apple/`](../backends/apple/).
 
 ---
 

@@ -1,3 +1,9 @@
+---
+classification: Architecture / Workload
+authority: MSA workload design and implementation guide
+last_updated: 2026-07-13
+---
+
 # MSA — MiniMax Sparse Attention
 
 MiniMax Sparse Attention ([MiniMax-AI/MSA](https://github.com/MiniMax-AI/MSA),
@@ -11,7 +17,7 @@ prefill / 7.6× decode wall-clock speedups.
 
 This page documents Tessera's implementation status, the shape contract, the
 public API, and how MSA differs from the existing
-[`deepseek_sparse_attention`](CANONICAL_API.md) (NSA) path.
+[`deepseek_sparse_attention`](../../CANONICAL_API.md) (NSA) path.
 
 > **Status (2026-06-13).** Phase 0 (contract) + Phase 1 (reference numpy API) +
 > Phase 2 (Graph IR op contract) + Phase 3 (Apple GPU host-select lane) landed.
@@ -202,8 +208,8 @@ Target IR kernel contract named `msa_kv_outer_sparse`. The contract carries
 Dense-equivalence remains the first oracle: when `top_k == num_blocks`, the
 sparse target must match dense GQA.
 
-See [msa_cuda_phase3_plan.md](msa_cuda_phase3_plan.md) and
-[`msa_kv_outer_sparse_attention.mlir`](../tests/tessera-ir/phase3/cuda13/msa_kv_outer_sparse_attention.mlir).
+See [MSA CUDA detail](msa-cuda-phase3.md) and
+[`msa_kv_outer_sparse_attention.mlir`](../../../tests/tessera-ir/phase3/cuda13/msa_kv_outer_sparse_attention.mlir).
 Guard: `tests/unit/test_msa_kv_outer_schedule.py`.
 
 **Execution-mode reality.** The program reports `execution_mode = "metal_runtime"`
@@ -332,7 +338,7 @@ end-to-end, small-shape gating).
 
 > The cross-backend work (ROCm already executes MSA; x86 MSA is the one CPU gap;
 > the CUDA kernel + `attn_bias`/DFlash seams) is sequenced in the consolidated
-> [`attention_family_backend_plan.md`](attention_family_backend_plan.md).
+> [`attention-family.md`](attention-family.md).
 
 The remaining item is the **native** CUDA KV-outer kernel plus a real
 H800/Blackwell speedup proof — **hardware-gated on NVIDIA**. The compiler

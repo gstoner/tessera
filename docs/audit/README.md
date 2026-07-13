@@ -21,6 +21,9 @@ with [MASTER_AUDIT.md](MASTER_AUDIT.md).
 - Treat generated dashboards as count/status truth.
 - Treat `archive/` content as provenance and historical context, not as the
   current status surface.
+- Reader-facing backend documentation lives in [`docs/backends/`](../backends/).
+  Audit subtrees own evidence, decisions, and history rather than the primary
+  architecture walkthrough.
 - Root-level hand-written redirect stubs are not used. Old source docs live in
   theme-local archives and are summarized by the theme audit.
 - Each theme folder's single entry point is its `*_AUDIT.md` — there are no
@@ -106,9 +109,10 @@ the generic framework raises the floor and must never cap their ceiling** (Theor
 |---|---|---|
 | Compiler | [compiler/COMPILER_AUDIT.md](compiler/COMPILER_AUDIT.md) | Compiler architecture, IR handoffs, lowering, correctness, and spec gaps. |
 | Shared backend | [backend/BACKEND_AUDIT.md](backend/BACKEND_AUDIT.md) | Cross-target runtime, ABI, proof rules, dtype policy, and hardware frontier. |
-| Apple | [backend/apple/APPLE_AUDIT.md](backend/apple/APPLE_AUDIT.md) | Apple CPU/GPU, Metal 4, packaged kernels, command-buffer discipline, and Apple performance. |
-| NVIDIA | [backend/nvidia/NVIDIA_AUDIT.md](backend/nvidia/NVIDIA_AUDIT.md) | CUDA/NVIDIA execution, target map, and execute-and-compare work. |
-| ROCm | [backend/rocm/ROCM_AUDIT.md](backend/rocm/ROCM_AUDIT.md) | HIP/ROCm execution, target map, and MFMA proof work. |
+| Apple | [backend/apple/APPLE_AUDIT.md](backend/apple/APPLE_AUDIT.md) | Evidence and decisions; reader guide: [docs/backends/apple/](../backends/apple/). |
+| NVIDIA | [backend/nvidia/NVIDIA_AUDIT.md](backend/nvidia/NVIDIA_AUDIT.md) | Evidence and decisions; reader guide: [docs/backends/nvidia/](../backends/nvidia/). |
+| ROCm | [backend/rocm/ROCM_AUDIT.md](backend/rocm/ROCM_AUDIT.md) | Evidence and decisions; reader guide: [docs/backends/rocm/](../backends/rocm/). |
+| x86 | [backend/BACKEND_AUDIT.md](backend/BACKEND_AUDIT.md) | Shared evidence; reader guide: [docs/backends/x86/](../backends/x86/). |
 | Coverage | [coverage/COVERAGE_AUDIT.md](coverage/COVERAGE_AUDIT.md) | Primitive, op, examples, KV-cache, and support coverage. |
 | Domain roadmaps | [domain/DOMAIN_AUDIT.md](domain/DOMAIN_AUDIT.md) | GA/EBM, attention variants, CorrDiff/SciML, sharding, and autodiff crosscuts. |
 | Roadmap | [roadmap/ROADMAP_AUDIT.md](roadmap/ROADMAP_AUDIT.md) | Execution roadmap, deferred items, and sprint plans. |

@@ -1,31 +1,42 @@
 # Apple backend — CPU + GPU compiler support (reference)
 
-> **This is the canonical state + implementation reference for Tessera's
-> Apple M-series backend** — CPU (Phase 8.2, Accelerate/BNNS) and GPU
+> **This is the canonical architecture and implementation reference for Tessera's
+> Apple M-series backend** — CPU (Phase 8.2, Accelerate/BNNS/LAPACK) and GPU
 > (Phases 8.3 → 8.4.8, the Metal 4 lane, and the `runtime.launch()` op-parity
 > lanes). It is the single narrative doc for the Apple backend; the design
 > plans and surveys that fed it (Metal 4 adoption ladder, control-flow
 > lowering, resident-activations plan, Tier-2/3 plan, capability roadmap, MLX
 > ecosystem survey) have all landed and are archived under
-> [`docs/audit/backend/apple/archive/`](audit/backend/apple/archive/); the old
+> [`docs/audit/backend/apple/archive/`](../../audit/backend/apple/archive/); the old
 > `docs/*.md` stub paths have been removed. See the **Archived documents**
 > section at the bottom for the full index + links.
 >
 > **The kernel + lane inventory is its own doc:**
-> [apple_gpu_kernel_inventory.md](apple_gpu_kernel_inventory.md) — the native
+> [kernel-guide.md](kernel-guide.md) — the native
 > MSL/MPS/MPSGraph/linalg/RNG symbol tables **plus** the `runtime.launch()`
 > reference/compute lanes that reach op-family parity with x86/ROCm.
 >
-> Related: GA/EBM milestone — [docs/status/ga_ebm_milestone.md](status/ga_ebm_milestone.md).
+> Related: GA/EBM milestone — [docs/status/ga_ebm_milestone.md](../../status/ga_ebm_milestone.md).
+>
+> **Execution status is generated, not maintained here.** Read
+> [`apple_execution_inventory.md`](../../audit/generated/apple_execution_inventory.md)
+> for the execution-unit taxonomy; [`apple_target_map.md`](../../audit/generated/apple_target_map.md)
+> for generic per-op dispatch; and
+> [`runtime_execution_matrix.md`](../../audit/generated/runtime_execution_matrix.md)
+> for observed executor placement. These distinguish generic JIT dispatch,
+> strict Value Target-IR calls, package-authored subgraphs, and CPU-reference
+> fallback.
 
 ---
 
 ## Status at a glance
 
-- **Apple CPU (Phase 8.2)** — `@jit(target="apple_cpu")` via Accelerate
-  (`cblas_sgemm` rank-2/rank-3) + BNNS (f16/bf16). Operational; single GEMM
-  bitwise-matches numpy, multi-op chains fall through to the numpy reference
-  for non-GEMM ops.
+- **Apple CPU** — the **generic** `@jit(target="apple_cpu")` route is
+  Accelerate/BNNS GEMM (rank-2 f32/f16/bf16; rank-3 f32 batched) plus explicit
+  NumPy fallback for other ops. Separately, the strict Value Target-IR lane has
+  native single-call LAPACK execution for Cholesky, triangular/Cholesky solve,
+  LU, QR, and SVD. Do not conflate that narrow executable allowlist with
+  generic multi-op CPU codegen.
 - **Apple GPU (Phases 8.3 → 8.4.8)** — `@jit(target="apple_gpu")` via MPS +
   custom MSL kernels: 9 kernel concepts × {f32, f16, bf16} = 26 core runtime
   symbols, 4 fused chains, threadgroup-tiled large-N `matmul_softmax`.
@@ -53,10 +64,11 @@
   numpy fallback off-Metal), `reference_cpu` where Apple ships no device kernel.
   The only remaining gap is `quantize`/`dequantize` fp4/fp6/fp8/nvfp4, gated on
   the macOS 27 / FP8 (Metal 4.1) tensor toolchain. Full table:
-  [apple_gpu_kernel_inventory.md](apple_gpu_kernel_inventory.md) §2.
+  [kernel-guide.md](kernel-guide.md) §2.
 
-f32 is fully wired. f16/bf16 are wired for matmul, rope, softmax, gelu,
-flash_attn, and the fusion chains.
+f32 is fully wired for the named native lanes. f16/bf16 are wired for matmul,
+rope, softmax, gelu, flash_attn, and the fusion chains; individual execution
+rows remain the authoritative dtype and placement record.
 
 ---
 
@@ -73,10 +85,10 @@ Graph IR  ──►  Schedule IR  ──►  Tile IR  ──►  Target IR (appl
                                                   │
                           ┌───────────────────────┴───────────────────────┐
                           ▼                                                 ▼
-            CPU: Accelerate / BNNS shim                  GPU: MetalDeviceContext + MSL kernel cache
+            CPU: generic GEMM or value-call ABI          GPU: MPS/MSL/MTL4 or package-subgraph ABI
                                                                           │
                                                                           ▼
-                                              MTLCommandBuffer + MTLComputeCommandEncoder
+                                      classic compute encoder  /  MTL4 ML package encoder
                                                                           │
                                                                           ▼
                                                                 on-device execution
@@ -112,10 +124,10 @@ paths share one ABI; they only differ in *when* the symbol is chosen.
 
 ---
 
-## Apple CPU backend (Phase 8.2)
+## Apple CPU backend
 
-`@jit(target="apple_cpu")` executes natively through an Accelerate / BNNS
-shim. The lowering pass `MatmulToAppleCPU`
+The generic `@jit(target="apple_cpu")` route executes its GEMM operations
+natively through an Accelerate / BNNS shim. The lowering pass `MatmulToAppleCPU`
 (`lib/Target/Apple/Lowering/MatmulToAppleCPU.cpp`) turns static-shape rank-2
 f32 `tessera.matmul` into `func.call @tessera_apple_cpu_gemm_f32`; the
 pipeline alias is `tessera-lower-to-apple_cpu-runtime` (parallel to the
@@ -136,7 +148,8 @@ Python boundary:
 
 - `_execute_apple_cpu_accelerate_artifact` chains arbitrary supported op
   sequences: matmul/gemm dispatch to Accelerate, every other supported op
-  falls through to the numpy reference. Multi-op programs are first-class.
+  falls through to the NumPy reference. Multi-op programs are first-class, but
+  this is **not** a claim of native codegen for their non-GEMM operations.
 - `_apple_cpu_dispatch_matmul` selects rank-2 f32 / rank-3 batched f32 /
   rank-2 fp16 (BNNS) / `np.matmul` fallback.
 - bf16 uses `ml_dtypes.bfloat16` (a soft import — the bf16 fast path is
@@ -155,6 +168,21 @@ GEMM bitwise-matches numpy; multi-op tiny decode bitwise-matches the numpy
 reference; rank-3 batched GEMM bitwise-matches numpy; fp16 matmul matches an
 f32-converted reference at fp16 tolerance. Tests:
 `tests/unit/test_apple_backend_roadmap.py`.
+
+### Strict Apple Value Target-IR lane
+
+The `tessera-lower-to-apple_cpu-runtime-full` path is a distinct, value-preserving
+execution unit. It lowers one supported operation to `tessera_apple.cpu.call`,
+carries the named C ABI symbol in artifact metadata, and executes only the
+allowlisted symbol—never by a parallel op-name fallback. Alongside GEMM, this
+currently covers f32 Cholesky, triangular solve, Cholesky solve, LU, QR, and
+SVD through Accelerate/LAPACK. It is deliberately restricted to a **single
+value call** per artifact today; composing several calls is future compiler
+work, not evidence that the generic multi-op JIT is native.
+
+The generated [Apple execution inventory](../../audit/generated/apple_execution_inventory.md)
+is the canonical status view for this split. The Value Target-IR proof surface
+is `tests/unit/test_apple_value_target_ir.py`.
 
 ---
 
@@ -199,13 +227,13 @@ ordering.
 ## GPU kernel inventory
 
 > The full kernel + lane inventory now lives in its own doc:
-> **[apple_gpu_kernel_inventory.md](apple_gpu_kernel_inventory.md)** — the native
+> **[kernel-guide.md](kernel-guide.md)** — the native
 > MSL / MPS / MPSGraph / linear-algebra / RNG symbol tables (single-op, fused
 > 2-op/3-op, the MPSGraph long tail, the `MPSMatrix*` factorizations,
 > capability/diagnostic symbols, the ABI summary, and the core-9 coverage
 > matrix) **plus** the `runtime.launch()` reference/compute lanes that reach
 > op-family parity with x86/ROCm (§2). Machine-readable truth:
-> [`runtime_abi.csv`](audit/generated/runtime_abi.csv).
+> [`runtime_abi.csv`](../../audit/generated/runtime_abi.csv).
 
 The **GPU linear-algebra implementation state** (batched / QR / SVD details,
 perf, and `@jit` wiring) is documented in the Metal 4 section below.
@@ -252,7 +280,7 @@ data-types docs, and Apple Newsroom M1–M5 announcements.
 
 > The Metal 4 *ladder* (M0–M8 + P-series — what to build, in what order) has all
 > landed; it is archived at
-> [`docs/audit/backend/apple/archive/apple_gpu_metal4_adoption.md`](audit/backend/apple/archive/apple_gpu_metal4_adoption.md).
+> [`docs/audit/backend/apple/archive/apple_gpu_metal4_adoption.md`](../../audit/backend/apple/archive/apple_gpu_metal4_adoption.md).
 > This section is the *review of what has actually landed*, cross-checked against
 > the macOS 26.5 (Tahoe) SDK headers (`MTLTensor.h`, `MTL4*.h`,
 > `MTLResidencySet.h`, the MPP `matmul2d` headers) and the runtime in
@@ -284,8 +312,21 @@ data-types docs, and Apple Newsroom M1–M5 announcements.
 | **P4** | MTL4 binary archive (pipeline persistence) | **Done, opt-in** — `tessera_apple_gpu_mtl4_archive_enable(path)` / `_flush()`; fresh-process round-trip verified |
 | **P5** | bf16 matmul routes to native tensor-op by default | **Done** — rank-2 bf16 → `tessera_apple_gpu_mtl4_matmul2d_bf16` by default; **14.7× (1024³), 11.8× (2048³)** vs forced-legacy. Toggle `TESSERA_APPLE_GPU_MTL4_BF16=0`. (f32 stays opt-in — MPS f32 GEMM is well-tuned) |
 | **P6** | compile-time `linear+bias+activation` fusion | **Done** — `matmul/gemm → add(bias) [→ gelu|relu|silu]` auto-fuses to one MPP `matmul2d` epilogue (fp32-accumulated); f32/residual cases still get the matmul on-GPU |
-| **P7** | `MTLTensorUsageMachineLearning` path unused | **Open (intentional)** — the `MTL4MachineLearningCommandEncoder` (compiled `.mtlpackage`) is a higher-level surface; hand-written cooperative kernels give fusion control CoreML/MPSGraph can't. Revisit only to run whole compiled subgraphs |
+| **P7** | ML encoder not selected by generic JIT | **Open (intentional)** — `.mtlpackage` author/load/dispatch exists, but `MTL4MachineLearningCommandEncoder` is not yet selected as a generic `package_call` route. Keep hand-written cooperative kernels for individual fused regions; revisit only for resident, whole compiled subgraphs. |
 | **P8** | conv on the matrix units | **Done, opt-in** — f16/bf16 conv via im2col + M7 matmul2d epilogue (GPU im2col landed); native `mpp::tensor_ops::convolution2d` multi-tile **cracked** (`spike_conv2d_{single,multi}_tile_f16`, bit-correct). Still off by default — im2col loses to MPSGraph's *fused* conv; native spike is narrow (Cin=Cout=4, K=3, f16). Toggle `TESSERA_APPLE_GPU_MTL4_CONV=1` |
+
+### Packaged ML subgraphs
+
+The `.mtlpackage` runtime lifecycle—package authoring, load/compile,
+reflection, tensor preparation, ML-encoder dispatch, and numerical proof—is
+implemented. It is **not** the default individual-kernel path: MPS/MSL/MPP
+remain preferable when Tessera needs exact fusion control. The deferred
+compiler integration is selection and execution of a package-backed *whole
+subgraph*: `package_call` must carry a binding spec, package identity, shapes,
+and resident-tensor ABI, then be selected only when it beats the ordinary
+MPSGraph or fused-MSL route. The generated execution inventory records this as
+`package_call launch gated`, rather than calling package authoring generic JIT
+execution.
 
 ### GPU linear-algebra implementation state
 
@@ -549,20 +590,20 @@ checked against observed caps when a probe ran. Tests:
 
 The plans, surveys, and reviews that used to sit alongside this file have been
 folded into this reference (and the [kernel + lane
-inventory](apple_gpu_kernel_inventory.md)). Their full historical text is
+inventory](kernel-guide.md)). Their full historical text is
 preserved for provenance under
-[`docs/audit/backend/apple/archive/`](audit/backend/apple/archive/) — there are
+[`docs/audit/backend/apple/archive/`](../../audit/backend/apple/archive/) — there are
 no redirect stubs at the old `docs/` paths; link directly to the archive:
 
 | Archived document | What it covered |
 |---|---|
-| [docs/audit/backend/apple/archive/apple_backend_capability_roadmap.md](audit/backend/apple/archive/apple_backend_capability_roadmap.md) | P1–P8 capability / performance ladder (packaged kernels, memory accounting, quant). |
-| [docs/audit/backend/apple/archive/apple_gpu_metal4_adoption.md](audit/backend/apple/archive/apple_gpu_metal4_adoption.md) | The M0–M8 / R0 Metal 4 adoption ladder. |
-| [docs/audit/backend/apple/archive/apple_gpu_control_flow_lowering.md](audit/backend/apple/archive/apple_gpu_control_flow_lowering.md) | Phase-G `if` / `while` → MSL control-flow mapping. |
-| [docs/audit/backend/apple/archive/apple_gpu_resident_activations_plan.md](audit/backend/apple/archive/apple_gpu_resident_activations_plan.md) | Device-resident activation strategy. |
-| [docs/audit/backend/apple/archive/apple_gpu_tier2_tier3_plan.md](audit/backend/apple/archive/apple_gpu_tier2_tier3_plan.md) | Tier-2 / Tier-3 packaged-kernel (`.mtlpackage`) roadmap. |
-| [docs/audit/backend/apple/archive/apple_gpu_mlx_ecosystem_survey.md](audit/backend/apple/archive/apple_gpu_mlx_ecosystem_survey.md) | MLX reference-vocabulary survey (Decision #23 — reference only). |
-| [docs/audit/backend/apple/archive/ldt_primitives_metal4_mapping.md](audit/backend/apple/archive/ldt_primitives_metal4_mapping.md) | Functional → perf path for `count_nonzero` / `popcount` / `asymmetric_bce` / `masked_categorical`. |
+| [docs/audit/backend/apple/archive/apple_backend_capability_roadmap.md](../../audit/backend/apple/archive/apple_backend_capability_roadmap.md) | P1–P8 capability / performance ladder (packaged kernels, memory accounting, quant). |
+| [docs/audit/backend/apple/archive/apple_gpu_metal4_adoption.md](../../audit/backend/apple/archive/apple_gpu_metal4_adoption.md) | The M0–M8 / R0 Metal 4 adoption ladder. |
+| [docs/audit/backend/apple/archive/apple_gpu_control_flow_lowering.md](../../audit/backend/apple/archive/apple_gpu_control_flow_lowering.md) | Phase-G `if` / `while` → MSL control-flow mapping. |
+| [docs/audit/backend/apple/archive/apple_gpu_resident_activations_plan.md](../../audit/backend/apple/archive/apple_gpu_resident_activations_plan.md) | Device-resident activation strategy. |
+| [docs/audit/backend/apple/archive/apple_gpu_tier2_tier3_plan.md](../../audit/backend/apple/archive/apple_gpu_tier2_tier3_plan.md) | Tier-2 / Tier-3 packaged-kernel (`.mtlpackage`) roadmap. |
+| [docs/audit/backend/apple/archive/apple_gpu_mlx_ecosystem_survey.md](../../audit/backend/apple/archive/apple_gpu_mlx_ecosystem_survey.md) | MLX reference-vocabulary survey (Decision #23 — reference only). |
+| [docs/audit/backend/apple/archive/ldt_primitives_metal4_mapping.md](../../audit/backend/apple/archive/ldt_primitives_metal4_mapping.md) | Functional → perf path for `count_nonzero` / `popcount` / `asymmetric_bce` / `masked_categorical`. |
 
 Older Apple provenance (chain audits, GA/EBM execution-gap notes, single-command-
 buffer decode plan) also lives in that archive directory.

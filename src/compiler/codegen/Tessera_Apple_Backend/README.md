@@ -46,7 +46,7 @@ the ROCm and NVIDIA hardware lanes.
 
 ## Canonical references
 
-- [`docs/apple_backend.md`](../../../../docs/apple_backend.md) — the canonical
+- [`docs/backends/apple/`](../../../../docs/backends/apple/) — the canonical
   Apple CPU+GPU reference.
 - [`docs/audit/backend/apple/archive/apple_gpu_metal4_adoption.md`](../../../../docs/audit/backend/apple/archive/apple_gpu_metal4_adoption.md)
   — the forward-looking Metal 4 adoption ladder.

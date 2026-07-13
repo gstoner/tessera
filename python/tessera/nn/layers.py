@@ -1573,7 +1573,7 @@ class MinimaxSparseAttention(Module):
     dense GQA attention (a drop-in baseline / training-warmup setting).
 
     Grouped-query projections: ``num_heads`` query heads, ``num_kv_heads`` KV
-    heads (``num_heads % num_kv_heads == 0``). See docs/msa.md.
+    heads (``num_heads % num_kv_heads == 0``). See docs/architecture/workloads/msa.md.
     """
 
     def __init__(

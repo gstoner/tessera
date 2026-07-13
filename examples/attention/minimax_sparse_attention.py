@@ -17,7 +17,7 @@ Runs on the CPU reference path — no accelerator required. The reference numpy
 path does selection + gather on the host and is *not* a speedup; the native
 fused sparse kernel (the paper's exp-free Top-k + KV-outer attention) is future
 work, so this example reports theoretical compute, never wall-clock speedup.
-See docs/msa.md.
+See docs/architecture/workloads/msa.md.
 """
 
 from __future__ import annotations
@@ -169,7 +169,7 @@ def main():
     print()
     print("Reference path runs selection + gather on the host (no speedup). The "
           "native fused sparse kernel\n(exp-free Top-k + KV-outer attention) is "
-          "future work — see docs/msa.md.")
+          "future work — see docs/architecture/workloads/msa.md.")
 
 
 if __name__ == "__main__":

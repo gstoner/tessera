@@ -6,7 +6,7 @@
 > doc is the source material; the action plans derived from it live in
 > [`apple_backend_capability_roadmap.md`](apple_backend_capability_roadmap.md)
 > (engine / kernels / optimization) and
-> [`tessera_inference_serving_plan.md`](tessera_inference_serving_plan.md)
+> [`docs/architecture/inference/serving.md`](../../../../architecture/inference/serving.md)
 > (serving tier + embeddable app + dflash production envelope).
 >
 > **Repos surveyed:** `ml-explore/mlx`, `ml-explore/mlx-c`, `ml-explore/mlx-lm`,
@@ -288,7 +288,7 @@ portable Python bundle.
 > EnginePool + Scheduler + tiered KV cache + HF-style download/register + portable
 > bundle. Tessera's `server.py` scaffolding (`Scheduler`, `KVCacheManager`,
 > `ModelManifest`, `TesseraPackage`) is the seed; the gap is wiring it to a live
-> streaming engine. See [`tessera_inference_serving_plan.md`](tessera_inference_serving_plan.md).
+> streaming engine. See [`docs/architecture/inference/serving.md`](../../../../architecture/inference/serving.md).
 
 ---
 
@@ -298,7 +298,7 @@ Ranked and sequenced in the two derived plans:
 - **Engine / kernels / optimization →**
   [`apple_backend_capability_roadmap.md`](apple_backend_capability_roadmap.md)
 - **Serving tier + embeddable app + dflash envelope →**
-  [`tessera_inference_serving_plan.md`](tessera_inference_serving_plan.md)
+  [`docs/architecture/inference/serving.md`](../../../../architecture/inference/serving.md)
 
 ### Sources
 MLX docs (ml-explore.github.io/mlx): lazy_evaluation, compile, function_transforms,

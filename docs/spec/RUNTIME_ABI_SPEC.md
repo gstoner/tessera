@@ -50,7 +50,7 @@ Resolution:
     hardware-runtime surface: MPS/MPSGraph lanes, custom MSL kernels,
     GA/EBM/M7 fused kernels, Metal 4 matmul2d / epilogue / session /
     archive / conv lanes, and packaged `.mtlpackage` lifecycle symbols.
-    Inventory: `docs/apple_gpu_kernel_inventory.md` and
+    Inventory: `docs/backends/apple/kernel-guide.md` and
     `docs/audit/generated/runtime_abi.md`.
 - **Backend-kernel manifest** — `python/tessera/compiler/backend_manifest.py`
   synthesizes per-target × per-dtype kernel coverage from

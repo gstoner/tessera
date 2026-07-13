@@ -9,7 +9,7 @@ last_updated: 2026-05-11
 
 > Hardware-free reference enumerating every fused kernel Tessera plans
 > to ship on NVIDIA SM_90+ under CUDA Toolkit 13.3. Companion
-> to `docs/apple_gpu_kernel_inventory.md` and
+> to `docs/backends/apple/kernel-guide.md` and
 > the backend manifest. Each entry locks the WGMMA tile
 > shape, dtype matrix, cluster size, expected MFU, and roofline target
 > so the compile path can be validated without hardware.

@@ -36,7 +36,7 @@ Target hardware: x86 AMX/AVX-512, Apple Silicon CPU/GPU, NVIDIA CUDA, and AMD RO
 | **NVIDIA GPU lowering** | Tile/Target artifact path implemented for supported kernels; runtime/native readiness is target- and op-gated. |
 | **Apple CPU/GPU native path** | Apple CPU executes via Accelerate; Apple GPU executes via MPS / MPSGraph / custom MSL with fused chains, descriptor-driven dispatch (Decision #19), and packaged-kernel lifecycle. Fused native kernels exist for the audited GA/EBM and selected Visual Complex surfaces. |
 | **ROCm** | MFMA/WMMA capability modeling is present, including `gfx1200`; native execution is still capability-gated. |
-| **Distributed / collectives** | Lowering and adapter surfaces exist; production multi-rank execution is validation-gated. An expert-parallel **MegaMoE** forward (GShard 2× all-to-all dispatch/combine, FP8×FP4, async comm/compute overlap) runs over in-process mock collectives with the expert FFN on the Apple GPU — see [`docs/distributed_megamoe.md`](../distributed_megamoe.md). |
+| **Distributed / collectives** | Lowering and adapter surfaces exist; production multi-rank execution is validation-gated. An expert-parallel **MegaMoE** forward (GShard 2× all-to-all dispatch/combine, FP8×FP4, async comm/compute overlap) runs over in-process mock collectives with the expert FFN on the Apple GPU — see [`docs/architecture/distributed/megamoe.md`](distributed/megamoe.md). |
 | **Runtime ABI** | C ABI and Python wrapper exist, with runtime smoke and sanitizer coverage. |
 
 ---

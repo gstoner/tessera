@@ -354,7 +354,7 @@ relu,109,34,9,143,0,bf16 f16 f32 f64 fp32 fp8_e4m3 int8,directly_tested,143 dire
 remat,0,0,0,0,1,,structural_only,category default for 'transform'
 repeat,4,0,0,4,0,,directly_tested,4 direct test references
 reshape,11,15,1,26,0,,directly_tested,26 direct test references
-retention,14,0,2,14,0,,directly_tested,14 direct test references
+retention,16,0,2,16,0,,directly_tested,16 direct test references
 rfft,6,0,1,6,0,fp32,directly_tested,6 direct test references
 rmsnorm,77,13,4,90,0,bf16 f16 f32 f64 fp32,directly_tested,90 direct test references
 rmsnorm_safe,9,5,1,14,0,bf16 f16 f32,directly_tested,14 direct test references

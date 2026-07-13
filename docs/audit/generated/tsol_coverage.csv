@@ -3,11 +3,11 @@ all_gather,Collectives,1,complete,complete,complete,complete,complete,complete,p
 all_reduce,Collectives,1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 all_to_all,Collectives,1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 reduce_scatter,Collectives,1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
-pack,Layout and Packing,1,complete,complete,complete,non_differentiable,non_differentiable,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
-rearrange,Layout and Packing,1,complete,complete,complete,non_differentiable,non_differentiable,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
-tile_view,Layout and Packing,1,complete,complete,complete,non_differentiable,non_differentiable,complete,no_kernel_required,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
-transpose,Layout and Packing,1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
-unpack,Layout and Packing,1,complete,complete,complete,non_differentiable,non_differentiable,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
+pack,Layout And Packing,1,complete,complete,complete,non_differentiable,non_differentiable,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
+rearrange,Layout And Packing,1,complete,complete,complete,non_differentiable,non_differentiable,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
+tile_view,Layout And Packing,1,complete,complete,complete,non_differentiable,non_differentiable,complete,no_kernel_required,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
+transpose,Layout And Packing,1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
+unpack,Layout And Packing,1,complete,complete,complete,non_differentiable,non_differentiable,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 batched_gemm,Linear Algebra,1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 cholesky,Linear Algebra,1,complete,complete,complete,complete,complete,partial,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 einsum,Linear Algebra,1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible. Python reference/tests shipped: Einsum layer helper — S7 landed 2026-05-10
@@ -32,13 +32,13 @@ rmsnorm,Neural Network Primitives,1,complete,complete,complete,complete,complete
 rope,Neural Network Primitives,1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 silu,Neural Network Primitives,1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 softmax,Neural Network Primitives,1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
-rng_normal,RNG and Initialization,1,complete,complete,complete,non_differentiable,non_differentiable,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
-rng_uniform,RNG and Initialization,1,complete,complete,complete,non_differentiable,non_differentiable,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
-bsmm,"Sparse, Segment, and Graph Operators",1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
-sddmm,"Sparse, Segment, and Graph Operators",1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
-segment_reduce,"Sparse, Segment, and Graph Operators",1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
-spmm_coo,"Sparse, Segment, and Graph Operators",1,complete,complete,complete,complete,complete,partial,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
-spmm_csr,"Sparse, Segment, and Graph Operators",1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
+rng_normal,RNG And Initialization,1,complete,complete,complete,non_differentiable,non_differentiable,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
+rng_uniform,RNG And Initialization,1,complete,complete,complete,non_differentiable,non_differentiable,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
+bsmm,"Sparse, Segment, And Graph Operators",1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
+sddmm,"Sparse, Segment, And Graph Operators",1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
+segment_reduce,"Sparse, Segment, And Graph Operators",1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
+spmm_coo,"Sparse, Segment, And Graph Operators",1,complete,complete,complete,complete,complete,partial,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
+spmm_csr,"Sparse, Segment, And Graph Operators",1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 fft,Spectral Operators,1,complete,complete,complete,complete,complete,partial,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 ifft,Spectral Operators,1,complete,complete,complete,complete,complete,partial,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 irfft,Spectral Operators,1,complete,complete,complete,complete,complete,partial,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.

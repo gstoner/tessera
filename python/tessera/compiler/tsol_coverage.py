@@ -1,10 +1,10 @@
 """TSOL-1 (2026-05-22) — Tessera Standard Operator Library coverage filter.
 
 The Tessera Standard Operator Library (TSOL) is the curated portable
-operator surface users call via ``tessera.ops.<name>``.  Its spec at
-``docs/operations/Tessera_Standard_Operations.md`` enumerates the
-canonical names per category (linear algebra / neural network
-primitives / spectral / sparse / RNG / collectives / layout).
+operator surface users call via ``tessera.ops.<name>``.  This module owns
+the canonical names and categories; the normative catalog embedded in
+``docs/operations/Tessera_Standard_Operations.md`` and the generated
+coverage dashboard are projections of this inventory.
 
 The primitive coverage registry at ``primitive_coverage.py`` tracks
 432 entries × 12 contract axes for *every* Tessera primitive — TSOL
@@ -42,13 +42,12 @@ _DASHBOARD_PATH = (
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# Canonical TSOL op list — sourced from
-# docs/operations/Tessera_Standard_Operations.md catalog sections.
+# Canonical TSOL op list.
 #
-# Grouped by spec category so the dashboard reads in the same order
-# as the spec.  When a new op is added to the spec, append it here.
-# When an op is REMOVED from the spec, delete it here.  The drift
-# gate will catch the inconsistency in either direction.
+# Grouped by normative category so the spec catalog and dashboard read
+# in the same order.  Each canonical name has exactly one category.
+# Update this inventory when TSOL admits, moves, or removes an op; drift
+# gates ensure both rendered documents are regenerated.
 # ─────────────────────────────────────────────────────────────────────────
 
 
@@ -80,15 +79,15 @@ _TSOL_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
-        "Sparse, Segment, and Graph Operators",
+        "Sparse, Segment, And Graph Operators",
         (
             "spmm_coo", "spmm_csr", "sddmm", "bsmm",
             "segment_reduce",
         ),
     ),
     (
-        "RNG and Initialization",
-        ("rng_uniform", "rng_normal", "dropout"),
+        "RNG And Initialization",
+        ("rng_uniform", "rng_normal"),
     ),
     (
         "Collectives",
@@ -98,7 +97,7 @@ _TSOL_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
-        "Layout and Packing",
+        "Layout And Packing",
         (
             "transpose", "rearrange",
             "pack", "unpack",
@@ -119,6 +118,24 @@ def all_tsol_op_names() -> tuple[str, ...]:
                 seen.add(n)
                 out.append(n)
     return tuple(sorted(out))
+
+
+SPEC_CATALOG_BEGIN = "<!-- BEGIN GENERATED TSOL CATALOG -->"
+SPEC_CATALOG_END = "<!-- END GENERATED TSOL CATALOG -->"
+
+
+def render_spec_catalog() -> str:
+    """Render the normative document's generated catalog block."""
+    lines = [
+        SPEC_CATALOG_BEGIN,
+        "| Category | Canonical operations |",
+        "|----------|----------------------|",
+    ]
+    for category, names in _TSOL_CATEGORIES:
+        operations = ", ".join(f"`tessera.ops.{name}`" for name in names)
+        lines.append(f"| {category} | {operations} |")
+    lines.append(SPEC_CATALOG_END)
+    return "\n".join(lines)
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -149,9 +166,7 @@ class TSOLRow:
 
 
 def _category_of(name: str) -> str:
-    """Return the spec category for a canonical TSOL op name.  When
-    an op appears in multiple categories (e.g., ``dropout`` is in
-    NN + RNG), return the first occurrence."""
+    """Return the normative category for a canonical TSOL op name."""
     for cat, names in _TSOL_CATEGORIES:
         if name in names:
             return cat
@@ -435,10 +450,11 @@ def render_dashboard() -> str:
         "(`primitive_coverage.py` line 351-352), `backend_kernel = "
         "complete` requires every declared target to ship a real "
         "hardware kernel with numerical proof.  Today **zero** TSOL "
-        "entries can claim `complete` because NVIDIA / ROCm / "
-        "NVIDIA / ROCm proofs aren't available on this Mac.  "
-        "See `docs/audit/backend/BACKEND_AUDIT.md` for the "
-        "full hardware-gated punch list."
+        "entries can claim that all-target aggregate.  Per-target "
+        "native proof is reported separately and may exist even while "
+        "this aggregate remains incomplete.  See "
+        "`docs/audit/backend/BACKEND_AUDIT.md` and its target maps for "
+        "the exact-target evidence and remaining punch list."
     )
     lines.append("")
 
@@ -460,5 +476,8 @@ __all__ = [
     "collect_tsol_coverage",
     "coverage_summary",
     "render_dashboard",
+    "render_spec_catalog",
+    "SPEC_CATALOG_BEGIN",
+    "SPEC_CATALOG_END",
     "write_dashboard",
 ]

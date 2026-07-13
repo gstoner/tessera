@@ -32,7 +32,7 @@ runtime, and phase/status claims:
 | Clifford / geometric algebra primitive surface | `docs/spec/CLIFFORD_SPEC.md` |
 | Energy-based model primitive surface | `docs/spec/EBM_SPEC.md` |
 | GA + EBM execution status by implementation layer | `docs/spec/GA_EBM_EXECUTION_STATUS.md` |
-| GA + EBM native milestone status and health check | `docs/status/ga_ebm_milestone.md` |
+| GA + EBM status and health check | `docs/status/ga_ebm.md` |
 | Generated 8-axis compiler support table (M0 / M0.5 — drift-gated by `tests/unit/test_compiler_audit.py`; regenerate via `python -m tessera.compiler.audit support_table`) | `docs/audit/generated/support_table.md` |
 | Error handling and diagnostics | `docs/guides/Tessera_Error_Handling_And_Diagnostics_Guide.md` |
 | Runtime C ABI | `docs/spec/RUNTIME_ABI_SPEC.md` |
@@ -163,7 +163,7 @@ Use these labels consistently in active docs:
 | Distributed collectives and planner foundation | implemented / scaffolded | `src/collectives/`, `python/tessera/testing/mock_collective.py`, `tests/unit/test_nccl_adapter.py` |
 | Solver, RNG, sparse, linalg, and resilience passes | implemented / lit-testable | `src/solvers/`, `tests/unit/test_*solver*.py`, `tests/tessera-ir/phase5/` |
 | Clifford / geometric algebra surface | implemented / lit-testable / hardware-runtime for 17/17 registered Apple GPU fused GA kernels, benchmarked by `benchmark_ga_ebm.py --ci` | `docs/spec/CLIFFORD_SPEC.md`, `docs/spec/GA_EBM_EXECUTION_STATUS.md`, `python/tessera/ga/`, `python/tessera/autodiff/geometric/`, `src/solvers/clifford/` |
-| Energy-based model surface | implemented / lit-testable / hardware-runtime for **9/9 native Apple GPU EBM rows** (incl. `ebm_partition_exact` via stable-logsumexp MSL kernel, 2026-05-17) | `docs/spec/EBM_SPEC.md`, `docs/spec/GA_EBM_EXECUTION_STATUS.md`, `docs/status/ga_ebm_milestone.md`, `python/tessera/ebm/`, `src/solvers/ebm/`, `benchmarks/apple_gpu/benchmark_ga_ebm.py` |
+| Energy-based model surface | See generated evidence for current target and execution status. | `docs/spec/EBM_SPEC.md`, `docs/spec/GA_EBM_EXECUTION_STATUS.md`, `docs/status/ga_ebm.md`, `docs/audit/generated/support_table.md`, `docs/audit/generated/runtime_execution_matrix.md`, `python/tessera/ebm/`, `src/solvers/ebm/`, `benchmarks/apple_gpu/benchmark_ga_ebm.py` |
 | Agent-native MoE training stack (`tessera.train`) — MoE router/FFN, sparse dispatch, Qwen3-MoE model, GRPO loop; lazily bound at top level | implemented (Python reference) / hardware-runtime on Apple GPU single-node; multi-node EP/PP collectives hardware-gated (Phase G/H) | `docs/spec/PYTHON_API_SPEC.md` §20, `python/tessera/train/`, `tests/unit/test_train_*.py` |
 | Runtime C ABI and Python wrapper | mock-runtime / hardware-runtime where C backend is built and device-present | `docs/spec/RUNTIME_ABI_SPEC.md`, `python/tessera/runtime.py`, `src/runtime/` |
 | Apple CPU backend | implemented / lit-testable / hardware-runtime via Accelerate + BNNS | `python/tessera/compiler/target_ir.py`, `src/compiler/codegen/Tessera_Apple_Backend/`, `python/tessera/runtime.py`, Apple target-contract tests |

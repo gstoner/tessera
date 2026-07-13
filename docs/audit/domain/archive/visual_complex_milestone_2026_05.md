@@ -1,13 +1,21 @@
-# Visual Complex Analysis (M7) — milestone status (engineering-internal)
+---
+status: Historical
+classification: Historical snapshot
+audit_role: snapshot
+authority: May 2026 visual-complex milestone context; not current execution status.
+scope: Historical implementation claims, acceptance criteria, and next milestones.
+last_updated: 2026-05-20
+---
 
-> **Engineering audit; not the public landing page.**  External
-> readers, partners, and downstream tooling should land on
-> [`docs/status/visual_complex.md`](visual_complex.md) (one-page
-> public status) and follow links back here for the engineering claims.
+# Visual Complex Analysis (M7) — May 2026 Milestone Snapshot
+
+> **Historical engineering audit; not the public landing page.** External
+> readers, partners, and downstream tooling should start at
+> [`docs/status/visual_complex.md`](../../../status/visual_complex.md) and use
+> generated audits for current execution evidence.
 >
-> **One-page canonical status.** Update this page when something
-> changes; everything else in the repo (READMEs, roadmap, audit) cites
-> the *claims* below rather than restating them.
+> This document preserves the May 2026 milestone rationale and acceptance
+> snapshot. It is not a current-status authority.
 >
 > **Last updated:** 2026-05-20 — E3 partial-ops uplift landed.  M7
 > long-tail ops now have OP_SPECS rows, the audit walker reports

@@ -1,4 +1,14 @@
-# Apple release gate — policy
+---
+status: Normative
+classification: Normative
+authority: Release-gate policy; executable enforcement in scripts/release_gate.py
+scope: Target release claims and required release validation
+last_updated: 2026-07-13
+---
+
+# Release Gates
+
+## Apple release gate — policy
 
 > **Locked in 2026-05-20 (Apple follow-up #4).** This document is
 > the canonical policy that every release claiming Apple support

@@ -2,7 +2,7 @@
 
 Sister of `clifford_core` and `energy_core` — composes both lanes'
 primitives in one flow.  Matches the M7 visual-complex milestone shape
-(see `docs/status/visual_complex_milestone.md`) but stays domain-neutral.
+(see `docs/status/visual_complex.md`) but stays domain-neutral.
 
 ## Composition
 

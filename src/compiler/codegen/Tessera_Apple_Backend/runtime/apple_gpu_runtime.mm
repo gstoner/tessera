@@ -13119,7 +13119,7 @@ extern "C" void tessera_apple_gpu_ebm_inner_step_f32(
 // and runs the T-step recurrence locally, so the whole refinement
 // chain costs one dispatch + one register-resident loop instead of
 // T host-side dispatches with ping-pong buffers.  This is what
-// `docs/status/ga_ebm_milestone.md` § "Known non-claims" #1 called out;
+// `docs/status/ga_ebm.md` describes the current evidence and non-claims.
 // the fused kernel below is the fix.
 // ===========================================================================
 

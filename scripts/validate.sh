@@ -88,7 +88,7 @@ echo "==> GPU target map drift checks (NVIDIA + ROCm)"
 # external-release blocker for any release claiming Apple support.
 # Run it as part of the CPU validation spine on Darwin so a stale
 # Apple claim fails CI before it can ship.  See
-# ``docs/status/apple_release_gate.md`` for the policy.
+# ``docs/operations/release_gates.md`` for the policy.
 if [ "$(uname)" = "Darwin" ]; then
     echo "==> Apple release gate (--target=apple_gpu)"
     "$PYTHON" scripts/release_gate.py --target=apple_gpu
@@ -140,7 +140,7 @@ echo "==> Benchmark telemetry smoke"
 
 # Apple-Silicon-aware GA/EBM native-execution health check.
 # Promoted to the validation spine 2026-05-17 — see
-# docs/status/ga_ebm_milestone.md for the contract.  On non-Darwin
+# docs/status/ga_ebm.md for the current evidence-routing contract. On non-Darwin
 # hosts the benchmark exits 0 with `skipped_apple_gpu` populated.
 # On Apple Silicon it exercises 17 GA + 9 native EBM + 4 workload
 # rows through the full stack (Python API → manifest lookup → MSL

@@ -1,16 +1,8 @@
-"""Visual Complex status-doc drift gates.
+"""Visual-complex status-document routing checks.
 
-Slice 3 of the four-ask sweep (2026-05-22): a public-facing status
-doc landed at ``docs/status/visual_complex.md`` to complement the
-engineering-internal ``visual_complex_milestone.md``.  These tests
-lock both docs against drift:
-
-  * The public doc exists and names the surface, the 4 fused Apple
-    GPU kernels, the planned-slot dtype caveat, and the related-pages
-    cross-link.
-  * The milestone doc is correctly tagged "engineering-internal" and
-    points to the public doc.
-  * Visual Complex rows survive in the generated support_table.
+The public status card must remain a compact entry point to generated
+evidence. The dated milestone belongs under ``docs/audit/domain`` and must
+identify itself as historical rather than presenting a second live inventory.
 """
 from __future__ import annotations
 
@@ -21,7 +13,11 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 PUBLIC_STATUS = REPO_ROOT / "docs" / "status" / "visual_complex.md"
-MILESTONE = REPO_ROOT / "docs" / "status" / "visual_complex_milestone.md"
+STATUS_INDEX = REPO_ROOT / "docs" / "status" / "README.md"
+MILESTONE = (
+    REPO_ROOT / "docs" / "audit" / "domain" / "archive"
+    / "visual_complex_milestone_2026_05.md"
+)
 SUPPORT_TABLE = (
     REPO_ROOT / "docs" / "audit" / "generated" / "support_table.md"
 )
@@ -35,8 +31,7 @@ def test_public_status_doc_exists() -> None:
 
 def test_public_status_doc_names_required_surfaces() -> None:
     text = PUBLIC_STATUS.read_text()
-    # Surface coverage — these MUST be named so external readers can
-    # find the surface.
+    # Surface coverage — these must be named so external readers can find it.
     for token in (
         "tessera.complex",
         "@complex_jit",
@@ -44,48 +39,51 @@ def test_public_status_doc_names_required_surfaces() -> None:
         "mobius",
         "stereographic",
         "Wirtinger",
-        "Cauchy-Riemann",
     ):
         assert token in text, f"missing required token {token!r}"
-    # Exactly 4 fused Apple GPU kernels are listed.
-    for kernel in ("complex_mul", "complex_exp", "mobius", "stereographic"):
-        assert kernel in text, f"missing fused kernel {kernel!r}"
 
 
-def test_public_status_doc_declares_dtype_caveat() -> None:
-    """Reading rule for planned dtype rows must be reproduced
-    verbatim in the public doc so external readers don't misread
-    a planned fp16 slot as runtime-available."""
+def test_public_status_doc_routes_to_generated_evidence() -> None:
+    """The status card must not become a second mutable target inventory."""
     text = PUBLIC_STATUS.read_text()
-    # The dtype caveat block.
-    assert "Dtype caveat" in text
-    assert "target kernel" in text
-    assert "not what runs today" in text
+    for token in (
+        "support_table.md",
+        "runtime_execution_matrix.md",
+        "visual_complex_fused",
+        "separate facts",
+    ):
+        assert token in text, f"missing evidence-routing token {token!r}"
 
 
 def test_public_status_doc_cross_links_milestone_audit() -> None:
     text = PUBLIC_STATUS.read_text()
-    assert "visual_complex_milestone.md" in text
+    assert "visual_complex_milestone_2026_05.md" in text
 
 
 def test_milestone_doc_redirects_external_readers_to_public_doc() -> None:
     text = MILESTONE.read_text()
-    # The redirect banner must appear in the first ~10 lines.
-    head = "\n".join(text.splitlines()[:12])
+    # The redirect banner must appear near the frontmatter and title.
+    head = "\n".join(text.splitlines()[:20])
     assert "visual_complex.md" in head, (
         "milestone doc must direct external readers to the public status"
     )
-    assert "engineering-internal" in head.lower() or \
-           "engineering audit" in head.lower(), (
-        "milestone doc must declare itself engineering-internal"
+    assert "historical" in head.lower(), (
+        "milestone doc must declare itself historical"
     )
+
+
+def test_status_index_routes_to_both_status_cards() -> None:
+    text = STATUS_INDEX.read_text()
+    assert "ga_ebm.md" in text
+    assert "visual_complex.md" in text
+    assert "release_gates.md" in text
 
 
 def test_support_table_includes_visual_complex_rows() -> None:
     """The generated support table must surface the visual_complex
     family.  This pins one of the M7-shipped guarantees."""
     text = SUPPORT_TABLE.read_text()
-    # 22 rows under family `visual_complex` per the milestone doc.
+    # Row count belongs to the generated table, so only require the family.
     occurrences = text.count("visual_complex")
     assert occurrences >= 20, (
         f"expected at least 20 visual_complex references in support_table; "

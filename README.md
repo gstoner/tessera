@@ -329,7 +329,7 @@ Key documents:
 | [`docs/spec/CLIFFORD_SPEC.md`](docs/spec/CLIFFORD_SPEC.md) | Clifford signatures, multivector type contract, GA ops, autodiff, dialect, and lowering |
 | [`docs/spec/EBM_SPEC.md`](docs/spec/EBM_SPEC.md) | Energy primitive contract, inner-loop schedule, training losses, and EBM IR mapping |
 | [`docs/spec/GA_EBM_EXECUTION_STATUS.md`](docs/spec/GA_EBM_EXECUTION_STATUS.md) | Layered status for Python reference, MLIR/lit, manifests, and native execution |
-| [`docs/status/ga_ebm_milestone.md`](docs/status/ga_ebm_milestone.md) | Canonical GA/EBM native milestone status, health check, non-claims, and next targets |
+| [`docs/status/ga_ebm.md`](docs/status/ga_ebm.md) | GA / EBM status card, evidence routing, health checks, and non-claims |
 | [`docs/audit/domain/DOMAIN_AUDIT.md`](docs/audit/domain/DOMAIN_AUDIT.md) | Sprint roadmap and acceptance history for the GA + EBM tracks |
 
 The June 8 lane-unification keystone closes the earlier GA/EBM gap between the

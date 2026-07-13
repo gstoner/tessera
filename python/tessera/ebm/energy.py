@@ -138,7 +138,7 @@ def inner_step(
             f"grad={grad_arr.shape}."
         )
     # Apple GPU fast path — closes the integration gap (#1 of
-    # docs/status/ga_ebm_milestone.md). Routes the no-noise f32 case
+    # docs/status/ga_ebm.md). Routes the no-noise f32 case
     # to `tessera_apple_gpu_ebm_inner_step_f32` when the runtime is up.
     # Bit-identical with the numpy path within fp32; falls back silently
     # on non-Darwin / no runtime / unsupported dtype.

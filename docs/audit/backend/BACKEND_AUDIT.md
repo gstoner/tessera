@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-06-26
+last_updated: 2026-07-12
 audit_role: theme
 ---
 
@@ -112,9 +112,16 @@ Apple, NVIDIA, and ROCm details live in sibling platform folders.
   compiler-generated lane (the `rocm_compiled` analog), NVFP4 block-scale,
   sm_120 flash_attn, and sm_80/90/100 (still `artifact_only`, need their own
   silicon). See [nvidia/NVIDIA_AUDIT.md](nvidia/NVIDIA_AUDIT.md).
-- **ROCm runtime execution:** ✅ executable rows exist (gfx1151 / Strix Halo
-  matmul + flash_attn). Remaining: CDNA (MI300-class) silicon + a registered
-  HIP launch lane for flash_attn.
+- **ROCm runtime execution:** ✅ the gfx1151 / Strix Halo lane now has broad
+  native execution, not merely matmul + flash-attention: the generated
+  execution matrix records 69 `native_gpu` ROCm family rows, including the
+  compiler-generated attention family, norms/activations, matmul-family
+  compositions, MoE transport, SSM forward/backward, and EBM lanes. The
+  remaining boundary is **exact-device expansion**, not a missing gfx1151 HIP
+  launcher: gfx1200/gfx1201/gfx1250 and CDNA gfx942/gfx950 rows remain
+  artifact-only until each architecture has launch and numerical proof. See
+  [rocm_target_map.md](../generated/rocm_target_map.md) and
+  [rocm/ROCM_AUDIT.md](rocm/ROCM_AUDIT.md).
 
 > **ISA reference data:** structured RDNA3 / RDNA3.5 / RDNA4 instruction +
 > encoding archive (opcodes, pseudocode, microcode bit-fields, cross-version

@@ -7,7 +7,7 @@ last_updated: 2026-05-18
 
 # Sprint plan — Task 4 + cross-cutting concerns
 
-> Companion to [`docs/status/ga_ebm_milestone.md`](../status/ga_ebm_milestone.md).
+> Current status: [`docs/status/ga_ebm.md`](../../../status/ga_ebm.md).
 > The milestone page is the canonical "where we are"; this page is
 > "what we're doing next, why, and how the pieces connect."
 

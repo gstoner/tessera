@@ -1,7 +1,7 @@
 """Shared lazy Apple GPU runtime loader.
 
 This module is the foundation for closing the compiler/runtime
-integration gap (see ``docs/status/ga_ebm_milestone.md`` § "Known
+integration gap (see ``docs/status/ga_ebm.md`` § "Known
 non-claims" #1). Before this module landed, every caller that wanted
 the Apple GPU MSL kernels had to compile the runtime dylib themselves
 via ``subprocess`` + ``clang++`` and bind ctypes signatures by hand —

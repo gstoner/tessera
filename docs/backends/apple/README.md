@@ -16,7 +16,7 @@
 > MSL/MPS/MPSGraph/linalg/RNG symbol tables **plus** the `runtime.launch()`
 > reference/compute lanes that reach op-family parity with x86/ROCm.
 >
-> Related: GA/EBM milestone — [docs/status/ga_ebm_milestone.md](../../status/ga_ebm_milestone.md).
+> Related: [GA / EBM status](../../status/ga_ebm.md).
 >
 > **Execution status is generated, not maintained here.** Read
 > [`apple_execution_inventory.md`](../../audit/generated/apple_execution_inventory.md)

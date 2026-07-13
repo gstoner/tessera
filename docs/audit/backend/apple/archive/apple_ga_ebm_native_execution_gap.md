@@ -1,5 +1,5 @@
 ---
-status: Historical (superseded by docs/status/ga_ebm_milestone.md)
+status: Historical (superseded by docs/status/ga_ebm.md)
 classification: Audit / Execution gap (frozen snapshot)
 authority: Original framing of the GA + EBM native-execution gap; kept for context only
 last_updated: 2026-05-17
@@ -9,7 +9,7 @@ last_updated: 2026-05-17
 > framing of the Apple GA + EBM native-execution gap (and the
 > running evaluation as that gap was closed).  The **canonical
 > current status** now lives at
-> [`docs/status/ga_ebm_milestone.md`](../status/ga_ebm_milestone.md)
+> [`docs/status/ga_ebm.md`](../../../status/ga_ebm.md)
 > — read that page for the up-to-date TL;DR, known non-claims, and
 > next targets.  This document is kept as a record of how the
 > milestone was reached; it is no longer updated as features ship.
@@ -254,7 +254,7 @@ What is missing:
 - `ebm_partition_monte_carlo` and `ebm_partition_ais` execute through
   Python/NumPy; `ebm_partition_exact` is now superseded by the native
   stable-logsumexp Apple GPU path tracked in
-  [`docs/status/ga_ebm_milestone.md`](../status/ga_ebm_milestone.md).
+  [`docs/status/ga_ebm.md`](../../../status/ga_ebm.md).
 - Arbitrary user-defined energy functions do not yet lower to native MSL; the
   current native `ebm_energy` row is the quadratic specialization.
 - **All 26 fast paths route through the `jit_bridge`** (17 GA + 9

@@ -723,7 +723,8 @@ def _public_doc_paths() -> list[Path]:
     return [
         Path("README.md"),
         Path("docs/README.md"),
-        Path("docs/status/ga_ebm_milestone.md"),
+        Path("docs/status/ga_ebm.md"),
+        Path("docs/status/visual_complex.md"),
         Path("docs/spec/GA_EBM_EXECUTION_STATUS.md"),
         Path("benchmarks/apple_gpu/README.md"),
     ]

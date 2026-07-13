@@ -160,7 +160,11 @@ Python-JIT differentiation selection, and the backend backward-launch ABI.
 
 **Build-claim standardization.** Core MLIR fixtures are validated by
 `build-llvm22-ninja` (LLVM/MLIR 22.1.6); lean/artifact-only builds must not claim
-core-pass coverage. The ledger records *which build proved each rung*.
+core-pass coverage. The ledger records *which build proved each axis* using
+stable configuration identifiers rather than host-local build directories:
+`python-unit-registry`, `llvm22-core`, `llvm22-core+rocm-gfx1151`, and
+`x86-runtime-avx512`. Exact-target device claims source their build identifier
+from the same execution-matrix row as their fixture and proof status.
 
 > **The rungs supersede the coarse "F4 landed / not landed" language.** A family
 > can be `ir_adjoint` and still be nowhere near `oracle_proven` — that is the
@@ -205,8 +209,10 @@ as its per-family template; P6 additionally needs real silicon.
   the ledger's `python_reference` set may not diverge from `primitive_coverage`;
   native/placeholder classes stay grounded in the C++ source; a missing source
   raises (no silent zero).
-- ⬜ *Residual:* wire the build-validates-which-claim mapping into the ledger
-  rows (record which build proved each rung) — lands with the P4 backward column.
+- ✅ Build-validates-claim mapping landed 2026-07-12: every populated ledger row
+  carries `build_evidence`; verified device rows are rejected unless their
+  execution-matrix source names `proof_build`, exact target, and numerical
+  fixture.
 
 **Exit (met):** the generated ledger answers "which ops have a native vs.
 placeholder IR adjoint, and does any execute backward natively on this target?"
@@ -331,7 +337,7 @@ ABI lowering. The recompute-all cut recomputes forward intermediates the gradien
 doesn't need (e.g. the forward matmul in `@loss__bwd` is dead) — a follow-on
 canonicalize/DCE pass collapses them; correctness is unaffected.
 
-### Phase 3 — One complete CPU vertical slice  *(Task #4 — ✅ IR-oracle cut landed 2026-07-11)*
+### Phase 3 — One complete CPU vertical slice  *(Task #4 — ✅ native slice landed 2026-07-12)*
 **Goal:** prove the architecture before broadening coverage. Scope **only**:
 static tensors → `matmul` → `tanh`/`sigmoid` → reduction-to-scalar-loss →
 gradients for both inputs.
@@ -359,15 +365,14 @@ gradients for both inputs.
   tanh, sigmoid — with layernorm/softmax as placeholder round-trips. Read the
   generated ledger for live counts, Decision #26.)
 
-**Residual (not in this cut, honestly):**
-- **Native CPU execution** (LLVM lowering + runtime launch of `@f__bwd`) — that
-  is the runtime ABI binding, which is **Phase 4**; only then does the ledger's
-  `oracle_proven`/`runtime_bound` flip.
-- **Python `@jit` static-shape emission** — the front-end still emits shape-free
-  `tensor<*x?>` that `tessera-opt` won't parse (found in Phase 1). This slice
-  used hand-shaped forward MLIR; wiring example-arg shapes through Graph IR
-  emission so `@jit(autodiff="reverse")` round-trips is the remaining Phase 3
-  front-end task.
+**Residual closure (2026-07-12):** unannotated autodiff JIT functions now cache a
+concrete Graph-IR specialization per first-call dtype/shape signature. The actual
+`--tessera-autodiff-paired` output is compiled through MLIR/LLVM and launched as
+a multi-result function through `runtime.launch()` + `libtessera_jit`, with no
+NumPy fallback. `tests/unit/test_autodiff_native_cpu_vertical.py` proves tanh and
+sigmoid matmul gradients against independent formulas and asserts the native JIT
+invocation counter advances. The execution matrix and ledger credit only
+`cpu_x86_64`, with build `llvm22-core+x86_64-jit`.
 
 Original scope notes (retained):
 
@@ -391,7 +396,7 @@ VJP reference. Concrete artifacts:
 backward CPU code and passes numerical comparison — and the ledger shows that
 family/CPU at `oracle_proven`.
 
-### Phase 4 — Connect compiler output to the runtime ABI  *(Task #5 — ✅ exit met 2026-07-11 via A2+A3; §9a)*
+### Phase 4 — Connect compiler output to the runtime ABI  *(Task #5 — ✅ A1–A4 complete 2026-07-12; §9a)*
 **Goal:** make the slice a product path, not a test-only pipeline. Define an
 explicit compiled fwd/bwd artifact bundle; bind input/output/residual/cotangent/
 gradient buffers; add runtime ABI entries for backward entry points; add the
@@ -406,6 +411,11 @@ unsupported / numerical-proof states for forward and backward **independently**,
 and the ledger's `runtime_bound` rung is sourced from the matrix, not asserted.
 
 ### Phase 5 — Expand by closed operation families  *(Task #6)*
+**Start gate met for the narrow matmul/tanh/sigmoid slice (2026-07-12):** the
+compiler-generated CPU `@f__bwd` path is runtime-bound and directly
+oracle-proven. Broader families still repeat this template independently;
+existing hand-written ROCm/x86 backward kernels remain separate Tier-3 proofs.
+
 Promotion order: (1) core tensor algebra (add/mul/broadcast/reductions/GEMM);
 (2) pointwise + normalization (tanh/sigmoid/GELU/SiLU/RMSNorm/layernorm);
 (3) losses + optimizer primitives; (4) fused matmul epilogues (explicit
@@ -427,6 +437,26 @@ execute-and-compare; add mixed precision / loss scaling only after accum +
 residual dtypes are explicit; add checkpointing / fused backward kernels only
 when benchmark evidence names the real bottleneck. The ledger's fwd/bwd split
 must prevent "forward native" from being reported as "training supported."
+
+**Foundation landed 2026-07-12:** the F5 collective ops now implement the
+compiler `AdjointInterface`: `all_reduce(sum)` is self-dual and
+`all_gather ↔ reduce_scatter` are transposes in the paired backward. This wires
+the existing DDP/FSDP semantics; it does not add new placement logic.
+`autodiff_promotion.py` makes the promotion boundary executable policy:
+
+- `mock_collective` is `reference_only`, never device-training proof;
+- NCCL/RCCL remain `hardware_gated` without an exact multi-device target and
+  numerical fixture;
+- a forward row always returns `forward_only`;
+- Apple GPU requires `execution_mode="metal_runtime"` from a fresh process;
+- ROCm requires `hip_runtime`; NVIDIA requires a CUDA execution mode;
+- every promoted row still requires canonical device proof, exact target,
+  fixture, and proof build.
+
+The remaining Phase-6 work is hardware execution, not policy ambiguity: land
+fresh-process Apple backward fixtures, exact NVIDIA backward rows family by
+family, and real multi-rank NCCL/RCCL collective fixtures. Mixed precision,
+checkpoint tuning, and fused backward promotion remain gated as ordered above.
 
 > **ROCm is the special case — its backward already runs (see §9).** gfx1151
 > executes native matmul/flash-attn/GQA/selective-ssm backward *today*, so the
@@ -477,12 +507,12 @@ must prevent "forward native" from being reported as "training supported."
 | 1 | 0 | Ledger projection + `AUTODIFF_SPEC` §F4 correction | Task #1 | ✅ |
 | 2 | 1 | Python differentiation request + diagnostics (backward `CompileResult` facet) | Task #2 | ✅ |
 | 3 | 2 | Paired forward/backward/residual IR contract | Task #3 | ✅ first cut |
-| 4 | 3 | Static CPU `matmul → tanh/sigmoid → loss` oracle proof | Task #4 | 🟡 IR-oracle cut (native exec → P4; `@jit` static-shape emission remains) |
-| 5 | 4 | Runtime ABI binding + backward matrix column + `native_required` enforcement | Task #5 | ✅ A2+A3 (A1 → Phase 5) |
+| 4 | 3 | Static CPU `matmul → tanh/sigmoid → loss` oracle proof | Task #4 | ✅ first-call specialization + paired MLIR/LLVM runtime launch + direct oracle proof |
+| 5 | 4 | Runtime ABI binding + backward matrix column + `native_required` enforcement | Task #5 | ✅ A1–A4 |
 
-**Next up: Phase 5 (Task #6)** — expand by closed operation families; the first
-executing Tier-1 synthesized backward unblocks A1 (register the WMMA backward as
-a Tier-3 arbiter candidate, §9a Inc 3). Then Phase 6 (Task #7).
+**Next up: Phase 5 (Task #6)** — expand by closed operation families using the
+dedicated/composed implementation and residual-policy contracts. Then Phase 6
+(Task #7).
 
 ---
 
@@ -498,8 +528,8 @@ once Phase 0 lands.
 | 0 | Ledger projection + spec correction (F4 smoke build-verified) | ✅ landed 2026-07-11 |
 | 1 | `@jit(autodiff=…)` request + backward provenance | ✅ landed 2026-07-11 |
 | 2 | Paired fwd/bwd/residual contract (`--tessera-autodiff-paired`, recompute-all) | ✅ first cut landed 2026-07-11 |
-| 3 | matmul→tanh/sigmoid→loss — backward IR oracle-proven on CPU (interpreted) | 🟡 IR-oracle cut landed 2026-07-11 (native execution → Phase 4; `@jit` static-shape emission remains) |
-| 4 | Compiled backward bound to runtime ABI (ROCm first) | ✅ **exit met** 2026-07-11 via A2+A3; evidence model hardened 2026-07-12 (matrix backward rows now distinguish `runtime_bound`, exact-target `device_verified_jit`, and `device_verified_abi`; `CompileResult.backward` truthful + `native_required` honored for verified paths). A1 arbiter dispatch deferred to Phase 5 |
+| 3 | matmul→tanh/sigmoid→loss — backward native on CPU | ✅ paired-pass output launches through MLIR/LLVM JIT on `cpu_x86_64`; direct gradient oracle proof landed 2026-07-12 |
+| 4 | Compiled backward bound to runtime ABI (ROCm first) | ✅ **complete** 2026-07-12 via A1–A4; aliases share their dedicated implementation, matmul is an explicit two-GEMM composition, and residual policy is structured per target. |
 
 Per-family × per-target rung truth is now the **generated ledger**, not a hand
 table — read [`generated/autodiff_connection_ledger.md`](../generated/autodiff_connection_ledger.md)
@@ -558,10 +588,10 @@ per-`(op, target)` residual policy is the knob.
 
 | # | Item | Phase | Why AMD-specific |
 |---|---|---|---|
-| A1 | Register the ROCm flash-attn/matmul/GQA/ssm **backward kernels as backward-ABI candidates** keyed to the paired contract, so `@jit(autodiff="reverse", target="rocm")` reaches them (today: only via the standalone `rocm_flash_attn_bwd_compiled` path). | 4 | The kernels exist but are ABI-disconnected. |
+| A1 | ✅ Connect ROCm backward implementations to the paired ABI. Flash-attn (including MHA/GQA/MQA aliases) and selective SSM are dedicated candidates; matmul is explicitly a composition of two generated forward GEMMs, not a fictitious backward kernel. | 4 | Landed 2026-07-12; implementation kind is machine-readable. |
 | A2 | Wire backward runtime and proof axes to `runtime_execution_matrix`; keep runtime binding distinct from exact-target `device_verified_jit` / `device_verified_abi`. | 4 | Prevents executable or family-level rows from being promoted as device proof. |
-| A3 | Flip the Phase 1 `has_native_backward` hook to `True` for `(matmul, rocm)`, `(flash_attn, rocm)`, … so `native_required=True` **succeeds** on ROCm for those families — the first place it is not rejected. | 4 | Enforcement first pays off on AMD. |
-| A4 | Record per-`(op, target)` **residual policy** (`recompute` for ROCm flash-attn today); expose the memory/compute tradeoff to the arbiter + a future `save-L` variant. | 5 | Residual policy is target-specific. |
+| A3 | ✅ Resolve `has_native_backward` for matmul composition, flash-attn/MHA/GQA/MQA aliases, and selective SSM on generic ROCm and exact gfx1151. | 4 | Landed 2026-07-12; aliases share proof rather than inventing rows. |
+| A4 | ✅ Record per-`(op, target)` **residual policy** and tradeoff in the execution-matrix projection consumed by the ledger/arbiter: `recompute_all` for flash/SSM and `save_inputs` for composed matmul. | 5 | Landed 2026-07-12; a future save-L candidate remains a new alternative, not missing metadata. |
 | A5 | Keep the **RDNA-live / CDNA-gated** split: gfx1151 (RDNA 3.5, WMMA, no FP8) is proven; CDNA (MI300, distinct MFMA table + FP4/FP6) stays hardware-gated — same split as forward. | 6 | Distinct ISA; no CDNA device yet. |
 
 Net: on AMD the plan is **connect, don't build** — the hardware backward is
@@ -573,8 +603,8 @@ end-to-end native-backward training path in the compiler.
 
 ## 9a. Phase 4 ROCm — implementation plan (design decided + landed 2026-07-11)
 
-Grounded in a read of the current surfaces. **A2 + A3 landed** (increments below
-marked accordingly); A1 deferred to Phase 5. The `ExecutionRow.direction` /
+Grounded in a read of the current surfaces. **A1–A4 landed** (increments below
+marked accordingly). The `ExecutionRow.direction` /
 `op_family` fields, the `native_backward_targets()` / `has_native_backward()`
 matrix accessors, the ledger sourcing its `bwd_*` rungs from the matrix, and the
 `resolve_backward_provenance` wiring at `jit.py` are all in tree and covered by
@@ -638,22 +668,20 @@ ROCm; counts come from the matrix, never assertion.
 covered family returns a truthful `NATIVE_EXECUTABLE` backward facet; every other
 `(family, target)` still resolves honestly (`UNSUPPORTED`/`IR_TRANSFORMED`).
 
-### Increment 3 — A1: register the ROCm backward kernels as paired-ABI candidates *(deferred to Phase 5 — see finding)*
+### Increment 3 — A1/A4: paired candidates and residual contracts *(✅ landed)*
 
-**Finding (2026-07-11): A1 is premature and correctly deferred.** Two facts,
-found while landing A2/A3:
+**Finding (2026-07-11, resolved 2026-07-12):** two facts determine the model:
 
 1. **The backward already dispatches natively** — the gfx1151 flash-attn / ssm
    backward is reached through the `autodiff.vjp` rules (`vjp_flash_attn` /
    `vjp_selective_ssm` call `runtime._rocm_*_bwd` directly), not only the
    standalone `compiler_path`. So the reverse-mode path *does* reach the native
    kernel today; A2/A3 make that reality honest in the ledger + `CompileResult`.
-2. **There is only one executing backward candidate.** The accuracy-budgeted
-   arbiter's job is to *choose* among candidates; the Tier-1 synthesized backward
-   (`--tessera-autodiff-paired`) is **IR-only** (oracle-verified on CPU by
-   interpretation, not executed — Phase 3). Until it executes (Phase 5), the
-   WMMA backward is the sole candidate, so routing backward through the emit
-   arbiter would add a duplicative dispatch path with nothing to arbitrate.
+2. **Implementation identity matters.** Flash-attn/MHA/GQA/MQA share one
+   dedicated kernel, selective SSM has another, while matmul backward composes
+   two generated forward GEMMs. The execution matrix now records aliases,
+   composition, residual policy, and the memory/compute tradeoff without
+   double-counting kernels.
 
 Whether the executed Tier-1 backward should flow through the `emit/candidate`
 arbiter (a parallel path) or the existing `autodiff.vjp` seam is a real
@@ -661,14 +689,12 @@ Decision-#28 architecture choice, **taken when a second executing backward
 candidate exists (Phase 5)** — not a mechanical wiring. Registering a
 one-candidate arbiter lane now would not be clean.
 
-**Exit (Phase 5):** with the Tier-1 synthesized backward executing, register the
-WMMA backward as a **Tier-3** candidate on the paired `@f__bwd(inputs,
-out_cotangents) -> input_cotangents` contract (residual policy `recompute`), and
-let the accuracy-budgeted arbiter pick per `(op, shape-bucket, dtype, "rocm")`
-(Decision #28 — the hand-tuned WMMA stays first-class, displaced only by a faster
-in-budget compiled backward).
+**Exit:** the public paired ABI reaches each real implementation; the ledger and
+arbiter consume a structured per-`(op,target)` residual contract. A future
+save-L flash candidate can be added alongside `recompute_all` and selected by
+shape/dtype/accuracy budget without changing the ABI.
 
-### Phase 4 status: **exit criteria met by A2 + A3**
+### Phase 4 status: **exit criteria met by A1–A4**
 
 The Phase 4 exit (§4) — *"`CompileResult` truthfully exposes native-launch /
 fallback / unsupported / numerical-proof states for forward and backward
@@ -678,7 +704,8 @@ device-proof backward axes from the matrix; A3 makes
 `CompileResult.backward` resolve `NATIVE_EXECUTABLE` / `UNSUPPORTED` /
 `IR_TRANSFORMED` honestly and honors `native_required`. Both are hardware-verified
 on gfx1151 (`test_rocm_flash_attn_launch_execute.py`, 13 passed, full CORE+HIP
-build). A1 arbiter dispatch moves to Phase 5 per the finding above.
+build). A1/A4 additionally make implementation identity and residual policy
+machine-readable for the ledger and arbiter.
 
 ### Verification (all on the gfx1151 box)
 
@@ -700,10 +727,7 @@ or a verified claim without an exact target and checked-in fixture. This retains
 the execution matrix as the source while enforcing the same
 `device_verified_jit` / `device_verified_abi` definitions used by forward
 conformance.
-- **matmul/GQA/ssm backward reachability. → Resolved.** Only families that launch
-  a *distinct* backward get a row: `flash_attn` (which subsumes `GQA`/`MQA`) and
-  `selective_ssm`. `matmul` backward composes the **forward** matmul lane (two
-  transposed matmuls), so it is not tagged with a separate backward row — adding
-  one would double-count a launch the matrix already records forward (Decision
-  #21). If an on-hardware pass later shows a *distinct* matmul-backward launch
-  worth crediting, tag it then, not by assertion.
+- **matmul/GQA/ssm backward reachability. → Resolved.** Dedicated rows declare
+  aliases (`flash_attn` subsumes MHA/GQA/MQA); matmul declares a composition of
+  two transposed forward GEMM launches. Thus `has_native_backward` recognizes
+  every public family without double-counting an invented kernel (Decision #21).

@@ -37,7 +37,10 @@ def test_native_and_placeholder_adjoints_are_disjoint_and_grounded() -> None:
     # This pins the classifier against the regression where LayerNormOp /
     # SoftmaxOp (hand-written defs that emit a `CustomAdjointCallOp` placeholder)
     # were miscounted as native merely because they had explicit definitions.
-    assert native == {"matmul", "tanh", "sigmoid"}, (
+    assert native == {
+        "matmul", "tanh", "sigmoid",
+        "all_reduce", "all_gather", "reduce_scatter",
+    }, (
         f"native adjoint set drifted: {sorted(native)} — a buildAdjoint that "
         "emits a CustomAdjointCallOp is a Python round-trip, not native"
     )
@@ -45,6 +48,7 @@ def test_native_and_placeholder_adjoints_are_disjoint_and_grounded() -> None:
     # runtime VJP string ("layer_norm"/"softmax") so they land on the primitive.
     assert {"layer_norm", "softmax", "gelu", "relu"} <= placeholder
     assert not ({"layer_norm", "softmax", "gelu", "relu"} & native)
+    assert {"all_reduce", "all_gather", "reduce_scatter"} <= native
 
 
 def test_rows_are_consistent() -> None:
@@ -63,6 +67,15 @@ def test_rows_are_consistent() -> None:
         assert not (set(r.bwd_device_verified_jit) & set(r.bwd_device_verified_abi))
         for t in (*r.bwd_runtime_bound, *verified):
             assert t in autodiff_ledger._TARGETS
+        evidence = set(r.build_evidence)
+        if r.python_reference == "yes":
+            assert "python_reference=python-unit-registry" in evidence
+        if r.ir_adjoint != "none":
+            assert "ir_adjoint=llvm22-core" in evidence
+        if r.bwd_cpu_ir_oracle:
+            assert "bwd_cpu_ir_oracle=llvm22-core" in evidence
+        for target in verified:
+            assert any(item.startswith(f"device[{target}=") for item in evidence)
 
 
 def test_flash_attn_backward_is_jit_verified_on_exact_rocm_target() -> None:
@@ -78,6 +91,26 @@ def test_flash_attn_backward_is_jit_verified_on_exact_rocm_target() -> None:
     assert "rocm_gfx1151" in fa.bwd_device_verified_jit
 
 
+def test_rocm_aliases_composition_and_residual_policy_are_structured() -> None:
+    from tessera.compiler import execution_matrix as em
+
+    for alias in ("multi_head_attention", "gqa_attention", "mqa_attention"):
+        assert em.has_native_backward(alias, "rocm")
+        policy = em.backward_residual_policy(alias, "rocm")
+        assert policy is not None
+        assert policy["policy"] == "recompute_all"
+        assert policy["implementation"] == "dedicated"
+
+    assert em.has_native_backward("matmul", "rocm")
+    matmul = em.backward_residual_policy("matmul", "rocm_gfx1151")
+    assert matmul is not None
+    assert matmul["policy"] == "save_inputs"
+    assert matmul["implementation"] == "composition"
+    compositions = em.backward_compositions()
+    assert len(compositions) == 1
+    assert compositions[0].component_paths == ("rocm_compiled", "rocm_compiled")
+
+
 def test_device_verified_leaders_are_derived_from_rows() -> None:
     rendered = autodiff_ledger.render_markdown()
     rows = autodiff_ledger.collect_rows()
@@ -90,6 +123,17 @@ def test_device_verified_leaders_are_derived_from_rows() -> None:
     assert leaders
     for family in leaders:
         assert f"`{family}`" in section
+
+
+def test_verified_backward_rows_name_build_and_fixture() -> None:
+    from tessera.compiler import execution_matrix
+
+    for row in execution_matrix.backward_rows():
+        if not row.device_proof:
+            continue
+        assert row.evidence_target
+        assert row.numerical_fixture
+        assert row.proof_build
 
 
 def test_missing_source_raises_not_silent(monkeypatch: pytest.MonkeyPatch) -> None:

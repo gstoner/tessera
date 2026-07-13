@@ -102,7 +102,7 @@ factorized_matmul,loop_nest,yes,none,,,,,,,python_reference=python-unit-registry
 factorized_pos_emb,position_encoding,yes,none,,,,,,,python_reference=python-unit-registry,,,
 fake_quantize,quantization,yes,none,,,,,,,python_reference=python-unit-registry,,,
 fft,spectral,yes,none,,,,,,,python_reference=python-unit-registry,,,
-flash_attn,attention,yes,none,,rocm_gfx1151,rocm_gfx1151,rocm_gfx1151,rocm_gfx1151,,python_reference=python-unit-registry;device[rocm_gfx1151=llvm22-core+rocm-gfx1151],native backward executes on rocm_gfx1151 (Phase 4),rocm_gfx1151=recompute_all,rocm_gfx1151=dedicated
+flash_attn,attention,yes,none,,"nvidia_sm120,rocm_gfx1151","nvidia_sm120,rocm_gfx1151","nvidia_sm120,rocm_gfx1151","nvidia_sm120,rocm_gfx1151",,python_reference=python-unit-registry;device[nvidia_sm120=cuda13.3+sm120];device[rocm_gfx1151=llvm22-core+rocm-gfx1151],"native backward executes on nvidia_sm120, rocm_gfx1151 (Phase 4)",nvidia_sm120=recompute_all;rocm_gfx1151=recompute_all,nvidia_sm120=dedicated;rocm_gfx1151=dedicated
 flatten,tensor_algebra,yes,none,,,,,,,python_reference=python-unit-registry,,,
 flip,tensor_algebra,yes,none,,,,,,,python_reference=python-unit-registry,,,
 floor_div,elementwise,yes,none,,,,,,,python_reference=python-unit-registry,,,
@@ -113,7 +113,7 @@ gated_deltanet,attention,yes,none,,,,,,,python_reference=python-unit-registry,,,
 gather,indexing,yes,none,,,,,,,python_reference=python-unit-registry,,,
 gelu,elementwise,yes,placeholder,,,,,,,python_reference=python-unit-registry;ir_adjoint=llvm22-core,custom_adjoint_call → Python VJP (not native IR),,
 gemm,loop_nest,yes,none,,,,,,,python_reference=python-unit-registry,,,
-gqa_attention,attention,yes,none,,rocm_gfx1151,rocm_gfx1151,rocm_gfx1151,rocm_gfx1151,,python_reference=python-unit-registry;device[rocm_gfx1151=llvm22-core+rocm-gfx1151],native backward executes on rocm_gfx1151 (Phase 4),rocm_gfx1151=recompute_all,rocm_gfx1151=dedicated
+gqa_attention,attention,yes,none,,"nvidia_sm120,rocm_gfx1151","nvidia_sm120,rocm_gfx1151","nvidia_sm120,rocm_gfx1151","nvidia_sm120,rocm_gfx1151",,python_reference=python-unit-registry;device[nvidia_sm120=cuda13.3+sm120];device[rocm_gfx1151=llvm22-core+rocm-gfx1151],"native backward executes on nvidia_sm120, rocm_gfx1151 (Phase 4)",nvidia_sm120=recompute_all;rocm_gfx1151=recompute_all,nvidia_sm120=dedicated;rocm_gfx1151=dedicated
 grad_scaler_step,numerics,yes,none,,,,,,,python_reference=python-unit-registry,,,
 group_norm,normalization,yes,none,,,,,,,python_reference=python-unit-registry,,,
 grouped_gemm,loop_nest,yes,none,,,,,,,python_reference=python-unit-registry,,,
@@ -142,8 +142,8 @@ latent_kv_expand_k,loop_nest,yes,none,,,,,,,python_reference=python-unit-registr
 latent_kv_expand_v,loop_nest,yes,none,,,,,,,python_reference=python-unit-registry,,,
 layer_norm,normalization,yes,placeholder,,,,,,,python_reference=python-unit-registry;ir_adjoint=llvm22-core,custom_adjoint_call → Python VJP (not native IR),,
 lgamma,elementwise,yes,none,,,,,,,python_reference=python-unit-registry,,,
-lightning_attention,attention,yes,none,,,,,,,python_reference=python-unit-registry,,,
-linear_attn,attention,yes,none,,,,,,,python_reference=python-unit-registry,,,
+lightning_attention,attention,yes,none,,nvidia_sm120,nvidia_sm120,nvidia_sm120,nvidia_sm120,,python_reference=python-unit-registry;device[nvidia_sm120=cuda13.3+sm120],native backward executes on nvidia_sm120 (Phase 4),nvidia_sm120=recompute_all,nvidia_sm120=dedicated
+linear_attn,attention,yes,none,,nvidia_sm120,nvidia_sm120,nvidia_sm120,nvidia_sm120,,python_reference=python-unit-registry;device[nvidia_sm120=cuda13.3+sm120],native backward executes on nvidia_sm120 (Phase 4),nvidia_sm120=recompute_all,nvidia_sm120=dedicated
 linear_attn_state,attention,yes,none,,,,,,,python_reference=python-unit-registry,,,
 linear_general,model_layer,yes,none,,,,,,,python_reference=python-unit-registry,,,
 lion,functional_optimizer_step,yes,none,,,,,,,python_reference=python-unit-registry,,,
@@ -180,13 +180,13 @@ momentum,functional_optimizer_step,yes,none,,,,,,,python_reference=python-unit-r
 mor_partition,layout_transform,yes,none,,,,,,,python_reference=python-unit-registry,,,
 mor_router,layout_transform,yes,none,,,,,,,python_reference=python-unit-registry,,,
 mor_scatter,layout_transform,yes,none,,,,,,,python_reference=python-unit-registry,,,
-mqa_attention,attention,yes,none,,rocm_gfx1151,rocm_gfx1151,rocm_gfx1151,rocm_gfx1151,,python_reference=python-unit-registry;device[rocm_gfx1151=llvm22-core+rocm-gfx1151],native backward executes on rocm_gfx1151 (Phase 4),rocm_gfx1151=recompute_all,rocm_gfx1151=dedicated
+mqa_attention,attention,yes,none,,"nvidia_sm120,rocm_gfx1151","nvidia_sm120,rocm_gfx1151","nvidia_sm120,rocm_gfx1151","nvidia_sm120,rocm_gfx1151",,python_reference=python-unit-registry;device[nvidia_sm120=cuda13.3+sm120];device[rocm_gfx1151=llvm22-core+rocm-gfx1151],"native backward executes on nvidia_sm120, rocm_gfx1151 (Phase 4)",nvidia_sm120=recompute_all;rocm_gfx1151=recompute_all,nvidia_sm120=dedicated;rocm_gfx1151=dedicated
 mrope_2d,rotary_embedding,yes,none,,,,,,,python_reference=python-unit-registry,,,
 msa_index_scores,attention,yes,none,,,,,,,python_reference=python-unit-registry,,,
 msa_sparse_attention,attention,yes,none,,,,,,,python_reference=python-unit-registry,,,
 mse_loss,loss,yes,none,,,,,,,python_reference=python-unit-registry,,,
 mul,elementwise,yes,none,,,,,,,python_reference=python-unit-registry,,,
-multi_head_attention,attention,yes,none,,rocm_gfx1151,rocm_gfx1151,rocm_gfx1151,rocm_gfx1151,,python_reference=python-unit-registry;device[rocm_gfx1151=llvm22-core+rocm-gfx1151],native backward executes on rocm_gfx1151 (Phase 4),rocm_gfx1151=recompute_all,rocm_gfx1151=dedicated
+multi_head_attention,attention,yes,none,,"nvidia_sm120,rocm_gfx1151","nvidia_sm120,rocm_gfx1151","nvidia_sm120,rocm_gfx1151","nvidia_sm120,rocm_gfx1151",,python_reference=python-unit-registry;device[nvidia_sm120=cuda13.3+sm120];device[rocm_gfx1151=llvm22-core+rocm-gfx1151],"native backward executes on nvidia_sm120, rocm_gfx1151 (Phase 4)",nvidia_sm120=recompute_all;rocm_gfx1151=recompute_all,nvidia_sm120=dedicated;rocm_gfx1151=dedicated
 muon,optimizer,yes,none,,,,,,,python_reference=python-unit-registry,,,
 nesterov,optimizer,yes,none,,,,,,,python_reference=python-unit-registry,,,
 normalize_group_advantages,rl_loss,yes,none,,,,,,,python_reference=python-unit-registry,,,
@@ -224,7 +224,7 @@ reduce_scatter,collective,yes,native,,,,,,,python_reference=python-unit-registry
 relu,elementwise,yes,placeholder,,,,,,,python_reference=python-unit-registry;ir_adjoint=llvm22-core,custom_adjoint_call → Python VJP (not native IR),,
 repeat,tensor_algebra,yes,none,,,,,,,python_reference=python-unit-registry,,,
 reshape,tensor_algebra,yes,none,,,,,,,python_reference=python-unit-registry,,,
-retention,attention,yes,none,,,,,,,python_reference=python-unit-registry,,,
+retention,attention,yes,none,,nvidia_sm120,nvidia_sm120,nvidia_sm120,nvidia_sm120,,python_reference=python-unit-registry;device[nvidia_sm120=cuda13.3+sm120],native backward executes on nvidia_sm120 (Phase 4),nvidia_sm120=recompute_all,nvidia_sm120=dedicated
 rfft,spectral,yes,none,,,,,,,python_reference=python-unit-registry,,,
 rmsnorm,normalization,yes,placeholder,,,,,,,python_reference=python-unit-registry;ir_adjoint=llvm22-core,custom_adjoint_call → Python VJP (not native IR),,
 rmsnorm_safe,normalization,yes,none,,,,,,,python_reference=python-unit-registry,,,

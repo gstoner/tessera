@@ -168,21 +168,17 @@ std::unique_ptr<mlir::Pass> createNVWGMMALoweringPass() {
 std::unique_ptr<mlir::Pass> createNVTMADescriptorPass();
 std::unique_ptr<mlir::Pass> createNVFlashAttnKernelEmitterPass();
 
-void buildTesseraNVIDIABackendPipeline(OpPassManager &pm) {
+void buildTesseraNVIDIALegacyBackendPipeline(OpPassManager &pm) {
   pm.addPass(createNVWGMMALoweringPass());
   pm.addPass(createNVTMADescriptorPass());
   pm.addPass(createNVFlashAttnKernelEmitterPass());
 }
 
-void registerTesseraNVIDIABackendPasses() {
+void registerTesseraNVIDIALegacyBackendPasses() {
   PassPipelineRegistration<> pipeline(
       "tessera-nvidia-backend",
       "Lower Tessera Tile IR to NVIDIA backend calls and kernel metadata",
-      [](OpPassManager &pm) { buildTesseraNVIDIABackendPipeline(pm); });
-}
-
-void registerTesseraNVIDIABackendDialects(DialectRegistry &registry) {
-  registry.insert<func::FuncDialect, arith::ArithDialect>();
+      [](OpPassManager &pm) { buildTesseraNVIDIALegacyBackendPipeline(pm); });
 }
 
 } // namespace tessera

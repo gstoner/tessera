@@ -295,9 +295,11 @@ def _eval_link(target: str, op_name: Optional[str]) -> GateResult:
     # a checked-in numerical-comparison proof). ``packaged`` (PK5) is
     # a parallel path: an ``.mtlpackage`` artifact loaded via
     # ``apple_mlpkg.compile_mlpackage`` ships an executable kernel.
-    # All four count as linkable.
+    # ``device_verified_jit`` is likewise linkable when the generated binary is
+    # loaded and launched by ``runtime.launch()`` (CUDA/ROCm emitted lanes). It
+    # lacks a *shipped* ABI symbol, not a launchable artifact.
     if statuses & {"fused", "reference", "compileable",
-                   "device_verified_abi", "packaged"}:
+                   "device_verified_jit", "device_verified_abi", "packaged"}:
         return GateResult(GATE_LINK, STATUS_PASS)
     if "artifact_only" in statuses:
         return GateResult(GATE_LINK, STATUS_FAIL,

@@ -600,7 +600,7 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     # execute/compare evidence), NOT a bespoke fused Metal kernel.
     "conv1d": {
         "status": _DEVICE_VERIFIED_JIT_STATUS,
-        "dtypes": ("fp32",),
+        "dtypes": ("fp32", "fp16"),
         "notes": ("Structured-compute conv1d via "
                   "apple_gpu_structured_compute_compiled; matches "
                   "tessera.nn.functional.conv1d."),
@@ -608,7 +608,7 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     },
     "conv_transpose": {
         "status": _DEVICE_VERIFIED_JIT_STATUS,
-        "dtypes": ("fp32",),
+        "dtypes": ("fp32", "fp16"),
         "notes": ("Structured-compute conv_transpose via "
                   "apple_gpu_structured_compute_compiled; matches "
                   "tessera.nn.functional.conv_transpose."),
@@ -2091,6 +2091,62 @@ _NVIDIA_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
     },
 }
 
+# Compiler-emitted CUDA lanes with direct execute/compare proof but no shipped
+# C-ABI library symbol yet.  They are intentionally distinct from the GEMM
+# table above: ``device_verified_jit`` proves a generated binary was launched,
+# while ``device_verified_abi`` additionally proves a packaged runtime symbol.
+_NVIDIA_DEVICE_VERIFIED_JIT: dict[str, dict[str, Any]] = {
+    "dsa_block_sparse_attention": {
+        "dtypes": ("fp32",), "feature_flags": ("sparse_attention", "cuda"),
+        "shape_envelope": "rank-4 Q/K/V; arbitrary KV length via masked block-tail padding",
+        "notes": "Exact DSA selected-block contract: canonical block selection creates an additive selected-token mask, then the compiler-emitted CUDA Flash lane executes attention on sm_120.",
+    },
+    "mla_decode": {
+        "dtypes": ("fp32",), "feature_flags": ("mla", "flash_attention", "cuda"),
+        "shape_envelope": "Q[B,Hq,Sq,D], latent K/V with optional last-dimension projection weights",
+        "notes": "Composed MLA decode: f32 latent K/V projections followed by compiler-emitted CUDA Flash Attention on sm_120; fused MLA remains a separate follow-on lane.",
+    },
+    "mla_decode_fused": {
+        "dtypes": ("fp32",), "feature_flags": ("mla", "flash_attention", "fused_projection", "cuda"),
+        "shape_envelope": "x[B,Hkv,Sk,Dx], q[B,Hq,Sq,D], Hq % Hkv == 0; latent/output dims <= 256",
+        "notes": "Dedicated fused MLA CUDA kernel on sm_120. The down-projection and K/V up-projections are evaluated inside the online-softmax key loop without materializing expanded K/V buffers.",
+    },
+    "flash_attn": {
+        "dtypes": ("fp32",),
+        "feature_flags": ("flash_attention", "flash_attention_backward", "gqa", "mqa", "causal", "sliding_window", "attn_bias", "logit_softcap", "cuda"),
+        "shape_envelope": "Q[B,Hq,Sq,D], K[B,Hkv,Sk,D], V[B,Hkv,Sk,Dv]; Hq % Hkv == 0; Dv <= 256; optional dense [B,Hq,Sq,Sk] bias",
+        "notes": "Compiler-emitted CUDA online-softmax Flash Attention forward and VJP with f32/fp16 storage, f32 softmax/accumulation, explicit MHA/GQA/MQA KV-head mapping, causal or sliding-window masking, dense additive bias, and logit soft-cap. Backward recomputes softmax statistics and produces dQ/dK/dV with atomic shared-KV accumulation. Executes via runtime.launch() on consumer Blackwell sm_120.",
+    },
+    "softmax": {
+        "dtypes": ("fp32",),
+        "feature_flags": ("reduction", "cuda"),
+        "shape_envelope": "rank >= 1, last axis > 0; flattened rows with any K",
+        "notes": (
+            "Stable row-softmax emitted as CUDA (f32/f16 storage, f32 max/sum "
+            "reduction; one block per flattened row), nvcc-compiled and launched via runtime.launch() "
+            "on consumer Blackwell sm_120."
+        ),
+    },
+    **{op: {
+        "dtypes": ("fp32", "fp16"),
+        "feature_flags": ("reduction", "cuda"),
+        "shape_envelope": "rank >= 1, last axis > 0; flattened rows with any K",
+        "notes": (
+            "f32/f16-storage row-wise " + kind + " emitted as CUDA (one block per "
+            "flattened row; f32 accumulation; LayerNorm uses a stable two-pass variance), "
+            "nvcc-compiled and launched via runtime.launch() on consumer Blackwell sm_120."
+        ),
+    } for op, kind in (("rmsnorm", "RMSNorm"), ("rmsnorm_safe", "RMSNorm"),
+                       ("layer_norm", "LayerNorm"))},
+    **{op: {
+        "dtypes": ("fp32", "fp16"), "feature_flags": ("reduction", "cuda"),
+        "shape_envelope": "rank >= 1, non-empty reduced axis; arbitrary axis folded to rows",
+        "notes": "f32/f16-storage, f32-accumulating " + kind + " reduction emitted as CUDA (one block per folded row), "
+                 "nvcc-compiled and launched via runtime.launch() on consumer Blackwell sm_120.",
+    } for op, kind in (("sum", "sum"), ("mean", "mean"), ("max", "max"),
+                       ("min", "min"), ("amax", "max"), ("amin", "min"))},
+}
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Audit follow-up A.3 (2026-05-31) — Per-(op, target) test fixtures that
@@ -2512,6 +2568,15 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     # numpy/ml_dtypes reference. Skip-clean when no NVIDIA GPU / NVRTC. The
     # numerical-proof half of the nvidia_sm120 matmul `device_verified_abi` row.
     ("matmul", "nvidia_sm120"): "tests/unit/test_nvidia_mma_runtime_symbol.py",
+    ("flash_attn", "nvidia_sm120"): "tests/unit/test_nvidia_flash_attn_compiled.py",
+    ("dsa_block_sparse_attention", "nvidia_sm120"): "tests/unit/test_nvidia_sparse_attn_compiled.py",
+    ("mla_decode", "nvidia_sm120"): "tests/unit/test_nvidia_mla_decode_compiled.py",
+    ("mla_decode_fused", "nvidia_sm120"): "tests/unit/test_nvidia_mla_decode_compiled.py",
+    ("softmax", "nvidia_sm120"): "tests/unit/test_nvidia_softmax_compiled.py",
+    **{(op, "nvidia_sm120"): "tests/unit/test_nvidia_norm_compiled.py"
+       for op in ("rmsnorm", "rmsnorm_safe", "layer_norm")},
+    **{(op, "nvidia_sm120"): "tests/unit/test_nvidia_reduce_compiled.py"
+       for op in ("sum", "mean", "max", "min", "amax", "amin")},
     # conv2d on the CPU reference path: @jit conv2d_nhwc executes and is
     # assert_allclose'd against a hand-computed expected output (audit
     # 2026-06-10 — promotes conv2d/cpu off the keyword heuristic).
@@ -5265,6 +5330,20 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
                 # benchmarks/baselines/nvidia_sm120_hot_paths.json (Decision #26
                 # forbids pointing at a baseline that does not yet exist).
                 benchmark_json=nv_hv.get("benchmark_json"),
+            ))
+            continue
+        nv_jit = _NVIDIA_DEVICE_VERIFIED_JIT.get(op_name) if target_name == "nvidia_sm120" else None
+        if nv_jit is not None:
+            entries.append(BackendKernelEntry(
+                target="nvidia_sm120",
+                status=_DEVICE_VERIFIED_JIT_STATUS,
+                dtypes=tuple(nv_jit["dtypes"]),
+                feature_flags=tuple(nv_jit["feature_flags"]),
+                notes=str(nv_jit["notes"]),
+                execute_compare_fixture=_NUMERICAL_FIXTURES.get((op_name, "nvidia_sm120")),
+                shape_envelope=nv_jit["shape_envelope"],
+                cuda_arch_min="sm_120a",
+                nvcc_version_min="13.3",
             ))
             continue
         cap = _capability_status(target_name, op_name)

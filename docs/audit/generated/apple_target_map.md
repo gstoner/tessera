@@ -83,9 +83,9 @@ and ``docs/backends/apple/`` (Metal 4 implementation-state review):
 | cholesky_solve | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | cispo_policy_loss | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | contrastive_divergence_loss | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
-| conv1d | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
+| conv1d | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32,fp16 | - | manifest | tests/unit/test_apple_*.py |
 | conv2d | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_abi | - | fp32,fp16,bf16 | tessera_apple_gpu_conv2d_dev_{f32,f16,bf16}_enc | driver | tests/unit/test_apple_*.py |
-| conv_transpose | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
+| conv_transpose | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32,fp16 | - | manifest | tests/unit/test_apple_*.py |
 | cross_attention | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | cross_entropy_loss | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | ctc_loss | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |

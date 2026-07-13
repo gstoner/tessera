@@ -81,6 +81,12 @@ _ENTRY = "tessera_nvidia_fused"
 _ATTN_ENTRY = "tessera_nvidia_attn"
 _GATED_ENTRY = "tessera_nvidia_gated"
 _PW_ENTRY = "tessera_nvidia_pointwise"
+_SOFTMAX_ENTRY = "tessera_nvidia_softmax"
+_FLASH_FWD_ENTRY = "tessera_nvidia_flash_attn_fwd"
+_FLASH_BWD_ENTRY = "tessera_nvidia_flash_attn_bwd"
+_LINEAR_ATTN_ENTRY = "tessera_nvidia_linear_attn"
+_LINEAR_ATTN_BWD_ENTRY = "tessera_nvidia_linear_attn_bwd"
+_MLA_FUSED_ENTRY = "tessera_nvidia_mla_decode_fused"
 _REAL_TAG = "nvidia_cuda"
 #: Max head dim (Dv) the one-thread-per-query flash kernel holds in its per-thread
 #: online-softmax accumulator; larger Dv declines to the reference.
@@ -195,6 +201,391 @@ def _synthesize_attention_cuda() -> str:
         "    return ok;\n"
         "}\n"
     )
+
+
+# ── batched Flash Attention contract lane (CUDA parity P2) ───────────────────
+
+_flash_fwd_artifact: dict[str, str] = {}
+_flash_bwd_artifact: dict[str, str] = {}
+_linear_attn_artifact: str | None = None
+_linear_attn_bwd_artifact: str | None = None
+_linear_attn_variant_artifact: str | None = None
+_linear_attn_variant_bwd_artifact: str | None = None
+_mla_fused_artifact: str | None = None
+
+
+def _synthesize_flash_fwd_cuda() -> str:
+    """CUDA f32 Flash-Attention forward for MHA/GQA/MQA contract variants.
+
+    One thread owns one ``(batch, query-head, query-position)`` row and streams
+    the mapped KV head with online softmax.  This correctness-first kernel keeps
+    the contract explicit: optional dense additive bias, causal/window mask and
+    logit soft-cap are runtime ABI arguments, not host-side preprocessing.
+    """
+    return (
+        "#include <cuda_runtime.h>\n#include <math.h>\n"
+        f"#define TSR_FA_DV_CAP {_ATTN_DV_CAP}\n"
+        "__global__ void tsr_flash_fwd(const float*q,const float*k,const float*v,"
+        " const float*bias,float*o,long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,"
+        " float scale,int causal,long wl,long wr,float softcap){\n"
+        " long row=(long)blockIdx.x*blockDim.x+threadIdx.x,total=B*(long)Hq*Sq; if(row>=total)return;\n"
+        " long m=row%Sq,tmp=row/Sq;int qh=(int)(tmp%Hq);long b=tmp/Hq;int ratio=Hq/Hkv, hk=qh/ratio;\n"
+        " float acc[TSR_FA_DV_CAP];for(int d=0;d<Dv;++d)acc[d]=0.f;float mi=-INFINITY,li=0.f;\n"
+        " for(long n=0;n<Sk;++n){if((causal&&n>m)||(wl>=0&&n<m-wl)||(wr>=0&&n>m+wr))continue;\n"
+        "  float s=0.f;long qo=(((b*(long)Hq+qh)*Sq+m)*D),ko=(((b*(long)Hkv+hk)*Sk+n)*D);\n"
+        "  for(int d=0;d<D;++d)s+=q[qo+d]*k[ko+d];s*=scale;\n"
+        "  if(bias)s+=bias[(((b*(long)Hq+qh)*Sq+m)*Sk+n)];if(softcap>0.f)s=softcap*tanhf(s/softcap);\n"
+        "  float mn=fmaxf(mi,s),corr=expf(mi-mn),p=expf(s-mn);li=li*corr+p;\n"
+        "  long vo=(((b*(long)Hkv+hk)*Sk+n)*Dv);for(int d=0;d<Dv;++d)acc[d]=acc[d]*corr+p*v[vo+d];mi=mn;}\n"
+        " float inv=li>0.f?1.f/li:0.f;long oo=(((b*(long)Hq+qh)*Sq+m)*Dv);for(int d=0;d<Dv;++d)o[oo+d]=acc[d]*inv;}\n"
+        f'extern "C" int {_FLASH_FWD_ENTRY}(const float*hq,const float*hk,const float*hv,const float*hb,float*ho,long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,float scale,int causal,long wl,long wr,float softcap){{\n'
+        " if(!hq||!hk||!hv||!ho||B<=0||Hq<=0||Hkv<=0||Hq%Hkv||Sq<=0||Sk<=0||D<=0||Dv<=0||Dv>TSR_FA_DV_CAP)return 2;\n"
+        " size_t nq=(size_t)B*Hq*Sq*D*4,nk=(size_t)B*Hkv*Sk*D*4,nv=(size_t)B*Hkv*Sk*Dv*4,no=(size_t)B*Hq*Sq*Dv*4,nb=(size_t)B*Hq*Sq*Sk*4;float *dq=0,*dk=0,*dv=0,*db=0,*dout=0;\n"
+        " if(cudaMalloc(&dq,nq)!=cudaSuccess||cudaMalloc(&dk,nk)!=cudaSuccess||cudaMalloc(&dv,nv)!=cudaSuccess||cudaMalloc(&dout,no)!=cudaSuccess){if(dq)cudaFree(dq);if(dk)cudaFree(dk);if(dv)cudaFree(dv);if(dout)cudaFree(dout);return 2;}\n"
+        " if(hb&&cudaMalloc(&db,nb)!=cudaSuccess){cudaFree(dq);cudaFree(dk);cudaFree(dv);cudaFree(dout);return 2;}\n"
+        " if(cudaMemcpy(dq,hq,nq,cudaMemcpyHostToDevice)!=cudaSuccess||cudaMemcpy(dk,hk,nk,cudaMemcpyHostToDevice)!=cudaSuccess||cudaMemcpy(dv,hv,nv,cudaMemcpyHostToDevice)!=cudaSuccess||(hb&&cudaMemcpy(db,hb,nb,cudaMemcpyHostToDevice)!=cudaSuccess)){cudaFree(dq);cudaFree(dk);cudaFree(dv);cudaFree(dout);if(db)cudaFree(db);return 3;}\n"
+        " long rows=B*(long)Hq*Sq;tsr_flash_fwd<<<(unsigned)((rows+127)/128),128>>>(dq,dk,dv,db,dout,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,softcap);int ok=cudaDeviceSynchronize()==cudaSuccess?1:3;\n"
+        " if(ok==1&&cudaMemcpy(ho,dout,no,cudaMemcpyDeviceToHost)!=cudaSuccess)ok=3;cudaFree(dq);cudaFree(dk);cudaFree(dv);cudaFree(dout);if(db)cudaFree(db);return ok;}\n"
+    )
+
+
+def _synthesize_flash_fwd_f16_cuda() -> str:
+    """The Flash-forward contract with fp16 Q/K/V/O storage and fp32 math.
+
+    Keep the f32 implementation as the semantic source of truth: this variant
+    only changes boundary storage/conversions.  Scores, online-softmax state and
+    output accumulators remain float, which is the storage contract used by the
+    tensor-core lanes as well.
+    """
+    src = _synthesize_flash_fwd_cuda()
+    src = src.replace("#include <cuda_runtime.h>\n#include <math.h>\n",
+                      "#include <cuda_runtime.h>\n#include <cuda_fp16.h>\n#include <math.h>\n")
+    src = src.replace(
+        "__global__ void tsr_flash_fwd(const float*q,const float*k,const float*v,"
+        " const float*bias,float*o,",
+        "__global__ void tsr_flash_fwd(const __half*q,const __half*k,const __half*v,"
+        " const float*bias,__half*o,")
+    src = src.replace("s+=q[qo+d]*k[ko+d];", "s+=__half2float(q[qo+d])*__half2float(k[ko+d]);")
+    src = src.replace("p*v[vo+d]", "p*__half2float(v[vo+d])")
+    src = src.replace("o[oo+d]=acc[d]*inv;", "o[oo+d]=__float2half_rn(acc[d]*inv);")
+    src = src.replace(
+        f'extern "C" int {_FLASH_FWD_ENTRY}(const float*hq,const float*hk,const float*hv,const float*hb,float*ho,',
+        f'extern "C" int {_FLASH_FWD_ENTRY}(const __half*hq,const __half*hk,const __half*hv,const float*hb,__half*ho,')
+    src = src.replace(
+        "size_t nq=(size_t)B*Hq*Sq*D*4,nk=(size_t)B*Hkv*Sk*D*4,nv=(size_t)B*Hkv*Sk*Dv*4,no=(size_t)B*Hq*Sq*Dv*4,nb=(size_t)B*Hq*Sq*Sk*4;float *dq=0,*dk=0,*dv=0,*db=0,*dout=0;",
+        "size_t nq=(size_t)B*Hq*Sq*D*2,nk=(size_t)B*Hkv*Sk*D*2,nv=(size_t)B*Hkv*Sk*Dv*2,no=(size_t)B*Hq*Sq*Dv*2,nb=(size_t)B*Hq*Sq*Sk*4;__half *dq=0,*dk=0,*dv=0,*dout=0;float *db=0;")
+    return src
+
+
+def run_flash_attention_forward(q: Any, k: Any, v: Any, *, scale: float,
+                                causal: bool = False, window_left: int | None = None,
+                                window_right: int | None = None, bias: Any = None,
+                                softcap: float | None = None) -> Any:
+    """Execute the f32-accumulating MHA/GQA/MQA Flash-forward contract."""
+    import numpy as np
+    global _flash_fwd_artifact
+    qa, ka, va = (np.asarray(x) for x in (q, k, v))
+    if any(x.dtype not in (np.float32, np.float16) for x in (qa, ka, va)):
+        raise ValueError("NVIDIA flash forward supports f32/f16 storage")
+    if len({x.dtype for x in (qa, ka, va)}) != 1:
+        raise ValueError("NVIDIA flash forward requires Q/K/V to share a storage dtype")
+    storage = "f32" if qa.dtype == np.float32 else "f16"
+    ctype = np.float32 if storage == "f32" else np.float16
+    q, k, v = (np.ascontiguousarray(x, ctype) for x in (qa, ka, va))
+    if q.ndim != 4 or k.ndim != 4 or v.ndim != 4:
+        raise ValueError("NVIDIA flash forward requires Q/K/V rank-4 [B,H,S,D]")
+    B, Hq, Sq, D = q.shape
+    Bk, Hkv, Sk, Dk = k.shape
+    Bv, Hvv, Sv, Dv = v.shape
+    if (B, D) != (Bk, Dk) or (B, Hkv, Sk) != (Bv, Hvv, Sv) or Hq % Hkv or Dv > _ATTN_DV_CAP:
+        raise ValueError("invalid NVIDIA flash forward Q/K/V shape or head mapping")
+    bf = None if bias is None else np.ascontiguousarray(bias, np.float32)
+    if bf is not None and bf.shape != (B, Hq, Sq, Sk):
+        raise ValueError("NVIDIA flash attention bias must have shape [B,Hq,Sq,Sk]")
+    wl = -1 if window_left is None else int(window_left)
+    wr = -1 if window_right is None else int(window_right)
+    cap = 0.0 if softcap is None else float(softcap)
+    if wl < -1 or wr < -1 or cap < 0.0:
+        raise ValueError("window bounds must be >= 0 and softcap must be >= 0")
+    artifact = _flash_fwd_artifact.get(storage)
+    if artifact is None:
+        artifact = _nvidia_cuda_compile_fn(KernelSource(
+            source=(_synthesize_flash_fwd_cuda() if storage == "f32" else _synthesize_flash_fwd_f16_cuda()),
+            entry=_FLASH_FWD_ENTRY, lang=_LANG, spec=SpecPolicy.DYNAMIC,
+            shape_key=(f"flash-fwd-contract-{storage}",)))
+        _flash_fwd_artifact[storage] = artifact
+    fn = getattr(_load_lib(artifact), _FLASH_FWD_ENTRY)
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p] * 5 + [ctypes.c_long, ctypes.c_int, ctypes.c_int,
+                  ctypes.c_long, ctypes.c_long, ctypes.c_int, ctypes.c_int,
+                  ctypes.c_float, ctypes.c_int, ctypes.c_long, ctypes.c_long,
+                  ctypes.c_float]
+    out = np.empty((B, Hq, Sq, Dv), dtype=ctype)
+    rc = fn(_ptr(q), _ptr(k), _ptr(v), _ptr(bf), _ptr(out), B, Hq, Hkv, Sq, Sk,
+            D, Dv, float(scale), int(causal), wl, wr, cap)
+    if rc != 1:
+        raise RuntimeError("NVIDIA Flash Attention forward CUDA launch failed")
+    return out
+
+
+# ── fused MLA decode (latent projection + online-softmax in one CUDA kernel) ─
+
+def _synthesize_mla_fused_cuda() -> str:
+    """Correctness-first fused MLA decode for f32 storage.
+
+    ``x @ W_dkv`` and the K/V up-projections are evaluated inside the streamed
+    key loop.  No expanded K/V tensor is allocated by the ABI.  One thread owns
+    a query row; the latent and output dimensions are capped to keep transient
+    state local, matching the correctness-first Flash lane.
+    """
+    return (
+        "#include <cuda_runtime.h>\n#include <math.h>\n"
+        f"#define TSR_MLA_CAP {_ATTN_DV_CAP}\n"
+        "__global__ void tsr_mla_fused(const float*x,const float*wd,const float*wk,const float*wv,const float*q,float*o,long B,int Hq,int Hkv,long Sq,long Sk,int Dx,int L,int D,int Dv,float scale,int causal){\n"
+        " long row=(long)blockIdx.x*blockDim.x+threadIdx.x,total=B*(long)Hq*Sq;if(row>=total)return;long m=row%Sq,t=row/Sq;int qh=(int)(t%Hq);long b=t/Hq;int hk=qh/(Hq/Hkv);float acc[TSR_MLA_CAP];for(int d=0;d<Dv;d++)acc[d]=0;float mx=-INFINITY,z=0;\n"
+        " for(long n=0;n<Sk;n++){if(causal&&n>m)continue;long xo=(((b*(long)Hkv+hk)*Sk+n)*Dx),qo=(((b*(long)Hq+qh)*Sq+m)*D);float c[TSR_MLA_CAP];for(int l=0;l<L;l++){float a=0;for(int j=0;j<Dx;j++)a+=x[xo+j]*wd[j*(long)L+l];c[l]=a;}float s=0;for(int d=0;d<D;d++){float kd=0;for(int l=0;l<L;l++)kd+=c[l]*wk[l*(long)D+d];s+=q[qo+d]*kd;}s*=scale;float nm=fmaxf(mx,s),corr=expf(mx-nm),p=expf(s-nm);z=z*corr+p;for(int d=0;d<Dv;d++){float vd=0;for(int l=0;l<L;l++)vd+=c[l]*wv[l*(long)Dv+d];acc[d]=acc[d]*corr+p*vd;}mx=nm;}\n"
+        " long oo=(((b*(long)Hq+qh)*Sq+m)*Dv);float inv=z>0?1.f/z:0;for(int d=0;d<Dv;d++)o[oo+d]=acc[d]*inv;}\n"
+        f'extern "C" int {_MLA_FUSED_ENTRY}(const float*hx,const float*hwd,const float*hwk,const float*hwv,const float*hq,float*ho,long B,int Hq,int Hkv,long Sq,long Sk,int Dx,int L,int D,int Dv,float scale,int causal){{\n'
+        " if(!hx||!hwd||!hwk||!hwv||!hq||!ho||B<=0||Hq<=0||Hkv<=0||Hq%Hkv||Sq<=0||Sk<=0||Dx<=0||L<=0||D<=0||Dv<=0||L>TSR_MLA_CAP||Dv>TSR_MLA_CAP)return 2;size_t nx=(size_t)B*Hkv*Sk*Dx*4,nwd=(size_t)Dx*L*4,nwk=(size_t)L*D*4,nwv=(size_t)L*Dv*4,nq=(size_t)B*Hq*Sq*D*4,no=(size_t)B*Hq*Sq*Dv*4;float *x=0,*wd=0,*wk=0,*wv=0,*q=0,*o=0;\n"
+        " if(cudaMalloc(&x,nx)||cudaMalloc(&wd,nwd)||cudaMalloc(&wk,nwk)||cudaMalloc(&wv,nwv)||cudaMalloc(&q,nq)||cudaMalloc(&o,no)){if(x)cudaFree(x);if(wd)cudaFree(wd);if(wk)cudaFree(wk);if(wv)cudaFree(wv);if(q)cudaFree(q);if(o)cudaFree(o);return 2;}\n"
+        " int bad=cudaMemcpy(x,hx,nx,cudaMemcpyHostToDevice)||cudaMemcpy(wd,hwd,nwd,cudaMemcpyHostToDevice)||cudaMemcpy(wk,hwk,nwk,cudaMemcpyHostToDevice)||cudaMemcpy(wv,hwv,nwv,cudaMemcpyHostToDevice)||cudaMemcpy(q,hq,nq,cudaMemcpyHostToDevice);int ok=3;if(!bad){long rows=B*(long)Hq*Sq;tsr_mla_fused<<<(unsigned)((rows+127)/128),128>>>(x,wd,wk,wv,q,o,B,Hq,Hkv,Sq,Sk,Dx,L,D,Dv,scale,causal);ok=cudaDeviceSynchronize()==cudaSuccess?1:3;if(ok==1&&cudaMemcpy(ho,o,no,cudaMemcpyDeviceToHost))ok=3;}cudaFree(x);cudaFree(wd);cudaFree(wk);cudaFree(wv);cudaFree(q);cudaFree(o);return ok;}\n"
+    )
+
+
+def run_mla_decode_fused(x: Any, w_dkv: Any, w_uk: Any, w_uv: Any, q: Any,
+                         *, scale: float, causal: bool = False) -> Any:
+    """Launch the dedicated f32 fused MLA CUDA entry point."""
+    import numpy as np
+    global _mla_fused_artifact
+    x, w_dkv, w_uk, w_uv, q = (
+        np.ascontiguousarray(a, np.float32) for a in (x, w_dkv, w_uk, w_uv, q))
+    if x.ndim != 4 or q.ndim != 4 or any(w.ndim != 2 for w in (w_dkv, w_uk, w_uv)):
+        raise ValueError("NVIDIA fused MLA requires rank-4 x/q and rank-2 weights")
+    B, Hkv, Sk, Dx = x.shape; Bq, Hq, Sq, D = q.shape
+    if Bq != B or Hq % Hkv or w_dkv.shape[0] != Dx:
+        raise ValueError("invalid NVIDIA fused MLA batch/head/down-projection contract")
+    L = w_dkv.shape[1]
+    if w_uk.shape != (L, D) or w_uv.shape[0] != L or max(L, w_uv.shape[1]) > _ATTN_DV_CAP:
+        raise ValueError("invalid NVIDIA fused MLA up-projection contract")
+    Dv = w_uv.shape[1]
+    if _mla_fused_artifact is None:
+        _mla_fused_artifact = _nvidia_cuda_compile_fn(KernelSource(
+            source=_synthesize_mla_fused_cuda(), entry=_MLA_FUSED_ENTRY,
+            lang=_LANG, spec=SpecPolicy.DYNAMIC, shape_key=("mla-decode-fused-f32",)))
+    fn = getattr(_load_lib(_mla_fused_artifact), _MLA_FUSED_ENTRY)
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p] * 6 + [ctypes.c_long, ctypes.c_int, ctypes.c_int,
+                  ctypes.c_long, ctypes.c_long, ctypes.c_int, ctypes.c_int,
+                  ctypes.c_int, ctypes.c_int, ctypes.c_float, ctypes.c_int]
+    out = np.empty((B, Hq, Sq, Dv), np.float32)
+    rc = fn(_ptr(x), _ptr(w_dkv), _ptr(w_uk), _ptr(w_uv), _ptr(q), _ptr(out),
+            B, Hq, Hkv, Sq, Sk, Dx, L, D, Dv, float(scale), int(causal))
+    if rc != 1:
+        raise RuntimeError("NVIDIA fused MLA CUDA launch failed")
+    return out
+
+
+def _synthesize_flash_bwd_cuda() -> str:
+    """Correctness-first f32 Flash-Attention VJP with GQA atomic accumulation."""
+    return (
+        "#include <cuda_runtime.h>\n#include <math.h>\n"
+        "#define TSR_FA_CAP 256\n"
+        "__global__ void tsr_flash_bwd(const float*go,const float*q,const float*k,const float*v,const float*bias,float*dq,float*dk,float*dv,long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,float scale,int causal,long wl,long wr,float cap){\n"
+        " long row=(long)blockIdx.x*blockDim.x+threadIdx.x,total=B*(long)Hq*Sq;if(row>=total)return;long m=row%Sq,tmp=row/Sq;int qh=(int)(tmp%Hq);long b=tmp/Hq,hk=qh/(Hq/Hkv);float acc[TSR_FA_CAP];for(int d=0;d<Dv;++d)acc[d]=0.f;float mx=-INFINITY;\n"
+        " for(long n=0;n<Sk;++n){if((causal&&n>m)||(wl>=0&&n<m-wl)||(wr>=0&&n>m+wr))continue;long qo=(((b*(long)Hq+qh)*Sq+m)*D),ko=(((b*(long)Hkv+hk)*Sk+n)*D);float s=0.f;for(int d=0;d<D;++d)s+=q[qo+d]*k[ko+d];s*=scale;if(bias)s+=bias[(((b*(long)Hq+qh)*Sq+m)*Sk+n)];if(cap>0)s=cap*tanhf(s/cap);mx=fmaxf(mx,s);}\n"
+        " float z=0.f;for(long n=0;n<Sk;++n){if((causal&&n>m)||(wl>=0&&n<m-wl)||(wr>=0&&n>m+wr))continue;long qo=(((b*(long)Hq+qh)*Sq+m)*D),ko=(((b*(long)Hkv+hk)*Sk+n)*D);float s=0.f;for(int d=0;d<D;++d)s+=q[qo+d]*k[ko+d];s*=scale;if(bias)s+=bias[(((b*(long)Hq+qh)*Sq+m)*Sk+n)];if(cap>0)s=cap*tanhf(s/cap);float p=expf(s-mx);z+=p;long vo=(((b*(long)Hkv+hk)*Sk+n)*Dv);for(int d=0;d<Dv;++d)acc[d]+=p*v[vo+d];}\n"
+        " for(int d=0;d<Dv;++d)acc[d]/=z;long goo=(((b*(long)Hq+qh)*Sq+m)*Dv);float delta=0.f;for(int d=0;d<Dv;++d)delta+=go[goo+d]*acc[d];float aq[TSR_FA_CAP];for(int d=0;d<D;++d)aq[d]=0.f;\n"
+        " for(long n=0;n<Sk;++n){if((causal&&n>m)||(wl>=0&&n<m-wl)||(wr>=0&&n>m+wr))continue;long qo=(((b*(long)Hq+qh)*Sq+m)*D),ko=(((b*(long)Hkv+hk)*Sk+n)*D);float raw=0.f;for(int d=0;d<D;++d)raw+=q[qo+d]*k[ko+d];raw*=scale;float s=raw;if(bias)s+=bias[(((b*(long)Hq+qh)*Sq+m)*Sk+n)];float deriv=1.f;if(cap>0){float t=tanhf(s/cap);s=cap*t;deriv=1.f-t*t;}float p=expf(s-mx)/z;long vo=(((b*(long)Hkv+hk)*Sk+n)*Dv);float dp=0.f;for(int d=0;d<Dv;++d){dp+=go[goo+d]*v[vo+d];atomicAdd(&dv[vo+d],p*go[goo+d]);}float ds=p*(dp-delta)*deriv;for(int d=0;d<D;++d){aq[d]+=ds*scale*k[ko+d];atomicAdd(&dk[ko+d],ds*scale*q[qo+d]);}}for(int d=0;d<D;++d)dq[(((b*(long)Hq+qh)*Sq+m)*D)+d]=aq[d];}\n"
+        f'extern "C" int {_FLASH_BWD_ENTRY}(const float*hgo,const float*hq,const float*hk,const float*hv,const float*hb,float*hdq,float*hdk,float*hdv,long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,float scale,int causal,long wl,long wr,float cap){{\n'
+        " if(!hgo||!hq||!hk||!hv||!hdq||!hdk||!hdv||B<=0||Hq<=0||Hkv<=0||Hq%Hkv||Sq<=0||Sk<=0||D<=0||Dv<=0||D>TSR_FA_CAP||Dv>TSR_FA_CAP)return 2;size_t nq=(size_t)B*Hq*Sq*D*4,nkv=(size_t)B*Hkv*Sk*D*4,no=(size_t)B*Hq*Sq*Dv*4,nb=(size_t)B*Hq*Sq*Sk*4;float *go=0,*q=0,*k=0,*v=0,*bi=0,*dq=0,*dk=0,*dv=0;\n"
+        " if(cudaMalloc(&go,no)||cudaMalloc(&q,nq)||cudaMalloc(&k,nkv)||cudaMalloc(&v,(size_t)B*Hkv*Sk*Dv*4)||cudaMalloc(&dq,nq)||cudaMalloc(&dk,nkv)||cudaMalloc(&dv,(size_t)B*Hkv*Sk*Dv*4))return 2;if(hb&&cudaMalloc(&bi,nb))return 2;\n"
+        " cudaMemcpy(go,hgo,no,cudaMemcpyHostToDevice);cudaMemcpy(q,hq,nq,cudaMemcpyHostToDevice);cudaMemcpy(k,hk,nkv,cudaMemcpyHostToDevice);cudaMemcpy(v,hv,(size_t)B*Hkv*Sk*Dv*4,cudaMemcpyHostToDevice);if(hb)cudaMemcpy(bi,hb,nb,cudaMemcpyHostToDevice);cudaMemset(dk,0,nkv);cudaMemset(dv,0,(size_t)B*Hkv*Sk*Dv*4);long rows=B*(long)Hq*Sq;tsr_flash_bwd<<<(unsigned)((rows+127)/128),128>>>(go,q,k,v,bi,dq,dk,dv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);int ok=cudaDeviceSynchronize()==cudaSuccess?1:3;if(ok==1){cudaMemcpy(hdq,dq,nq,cudaMemcpyDeviceToHost);cudaMemcpy(hdk,dk,nkv,cudaMemcpyDeviceToHost);cudaMemcpy(hdv,dv,(size_t)B*Hkv*Sk*Dv*4,cudaMemcpyDeviceToHost);}cudaFree(go);cudaFree(q);cudaFree(k);cudaFree(v);cudaFree(dq);cudaFree(dk);cudaFree(dv);if(bi)cudaFree(bi);return ok;}\n"
+    )
+
+
+def _synthesize_flash_bwd_f16_cuda() -> str:
+    """fp16-storage wrapper around the f32 Flash VJP device kernel.
+
+    Inputs are copied as half to device and widened there; the VJP and GQA/MQA
+    atomic accumulation run in float, then returned gradients are narrowed on
+    device.  Thus no host-side widening hides the storage contract.
+    """
+    f32 = _synthesize_flash_bwd_cuda()
+    kernel = f32[:f32.index('extern "C" int')]
+    kernel = kernel.replace("#include <cuda_runtime.h>\n",
+                            "#include <cuda_runtime.h>\n#include <cuda_fp16.h>\n")
+    return kernel + (
+        "__global__ void tsr_h2f(const __half*x,float*y,long n){long i=(long)blockIdx.x*blockDim.x+threadIdx.x;if(i<n)y[i]=__half2float(x[i]);}\n"
+        "__global__ void tsr_f2h(const float*x,__half*y,long n){long i=(long)blockIdx.x*blockDim.x+threadIdx.x;if(i<n)y[i]=__float2half_rn(x[i]);}\n"
+        f'extern "C" int {_FLASH_BWD_ENTRY}(const __half*hgo,const __half*hq,const __half*hk,const __half*hv,const float*hb,__half*hdq,__half*hdk,__half*hdv,long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,float scale,int causal,long wl,long wr,float cap){{\n'
+        " if(!hgo||!hq||!hk||!hv||!hdq||!hdk||!hdv||B<=0||Hq<=0||Hkv<=0||Hq%Hkv||Sq<=0||Sk<=0||D<=0||Dv<=0||D>TSR_FA_CAP||Dv>TSR_FA_CAP)return 2;long eq=(long)B*Hq*Sq*D,ek=(long)B*Hkv*Sk*D,eo=(long)B*Hq*Sq*Dv,ev=(long)B*Hkv*Sk*Dv;size_t nq2=(size_t)eq*2,nk2=(size_t)ek*2,no2=(size_t)eo*2,nv2=(size_t)ev*2,nq4=(size_t)eq*4,nk4=(size_t)ek*4,no4=(size_t)eo*4,nv4=(size_t)ev*4,nb=(size_t)B*Hq*Sq*Sk*4;__half *hgo_d=0,*hq_d=0,*hk_d=0,*hv_d=0,*hdq_d=0,*hdk_d=0,*hdv_d=0;float *go=0,*q=0,*k=0,*v=0,*dq=0,*dk=0,*dv=0,*bi=0;\n"
+        " if(cudaMalloc(&hgo_d,no2)||cudaMalloc(&hq_d,nq2)||cudaMalloc(&hk_d,nk2)||cudaMalloc(&hv_d,nv2)||cudaMalloc(&hdq_d,nq2)||cudaMalloc(&hdk_d,nk2)||cudaMalloc(&hdv_d,nv2)||cudaMalloc(&go,no4)||cudaMalloc(&q,nq4)||cudaMalloc(&k,nk4)||cudaMalloc(&v,nv4)||cudaMalloc(&dq,nq4)||cudaMalloc(&dk,nk4)||cudaMalloc(&dv,nv4))return 2;if(hb&&cudaMalloc(&bi,nb))return 2;\n"
+        " if(cudaMemcpy(hgo_d,hgo,no2,cudaMemcpyHostToDevice)||cudaMemcpy(hq_d,hq,nq2,cudaMemcpyHostToDevice)||cudaMemcpy(hk_d,hk,nk2,cudaMemcpyHostToDevice)||cudaMemcpy(hv_d,hv,nv2,cudaMemcpyHostToDevice)||(hb&&cudaMemcpy(bi,hb,nb,cudaMemcpyHostToDevice)))return 3;int t=128;tsr_h2f<<<(unsigned)((eo+t-1)/t),t>>>(hgo_d,go,eo);tsr_h2f<<<(unsigned)((eq+t-1)/t),t>>>(hq_d,q,eq);tsr_h2f<<<(unsigned)((ek+t-1)/t),t>>>(hk_d,k,ek);tsr_h2f<<<(unsigned)((ev+t-1)/t),t>>>(hv_d,v,ev);cudaMemset(dk,0,nk4);cudaMemset(dv,0,nv4);long rows=B*(long)Hq*Sq;tsr_flash_bwd<<<(unsigned)((rows+127)/128),128>>>(go,q,k,v,bi,dq,dk,dv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);tsr_f2h<<<(unsigned)((eq+t-1)/t),t>>>(dq,hdq_d,eq);tsr_f2h<<<(unsigned)((ek+t-1)/t),t>>>(dk,hdk_d,ek);tsr_f2h<<<(unsigned)((ev+t-1)/t),t>>>(dv,hdv_d,ev);int ok=cudaDeviceSynchronize()==cudaSuccess?1:3;if(ok==1&&(cudaMemcpy(hdq,hdq_d,nq2,cudaMemcpyDeviceToHost)||cudaMemcpy(hdk,hdk_d,nk2,cudaMemcpyDeviceToHost)||cudaMemcpy(hdv,hdv_d,nv2,cudaMemcpyDeviceToHost)))ok=3;cudaFree(hgo_d);cudaFree(hq_d);cudaFree(hk_d);cudaFree(hv_d);cudaFree(hdq_d);cudaFree(hdk_d);cudaFree(hdv_d);cudaFree(go);cudaFree(q);cudaFree(k);cudaFree(v);cudaFree(dq);cudaFree(dk);cudaFree(dv);if(bi)cudaFree(bi);return ok;}\n"
+    )
+
+
+def run_flash_attention_backward(go: Any, q: Any, k: Any, v: Any, *, scale: float,
+                                 causal: bool = False, window_left: int | None = None,
+                                 window_right: int | None = None, bias: Any = None,
+                                 softcap: float | None = None) -> tuple[Any, Any, Any]:
+    """Execute f32-accumulating Flash-Attention VJP; returns ``(dQ, dK, dV)``."""
+    import numpy as np
+    global _flash_bwd_artifact
+    goa, qa, ka, va = (np.asarray(x) for x in (go, q, k, v))
+    if any(x.dtype not in (np.float32, np.float16) for x in (goa, qa, ka, va)) or len({x.dtype for x in (goa, qa, ka, va)}) != 1:
+        raise ValueError("NVIDIA flash backward requires matching f32 or f16 dO/Q/K/V storage")
+    storage = "f32" if qa.dtype == np.float32 else "f16"
+    ctype = np.float32 if storage == "f32" else np.float16
+    go, q, k, v = (np.ascontiguousarray(x, ctype) for x in (goa, qa, ka, va))
+    if q.ndim != 4 or go.shape[:3] != q.shape[:3] or k.ndim != 4 or v.ndim != 4:
+        raise ValueError("NVIDIA flash backward requires rank-4 dO/Q/K/V tensors")
+    B, Hq, Sq, D = q.shape; Bk, Hkv, Sk, Dk = k.shape; Bv, Hvv, Sv, Dv = v.shape
+    if (B, D) != (Bk, Dk) or (B, Hkv, Sk) != (Bv, Hvv, Sv) or go.shape[-1] != Dv or Hq % Hkv or max(D, Dv) > _ATTN_DV_CAP:
+        raise ValueError("invalid NVIDIA flash backward Q/K/V/dO shape or head mapping")
+    bf = None if bias is None else np.ascontiguousarray(bias, np.float32)
+    if bf is not None and bf.shape != (B, Hq, Sq, Sk):
+        raise ValueError("NVIDIA flash backward bias must have shape [B,Hq,Sq,Sk]")
+    wl, wr = (-1 if window_left is None else int(window_left), -1 if window_right is None else int(window_right))
+    cap = 0.0 if softcap is None else float(softcap)
+    if wl < -1 or wr < -1 or cap < 0.0:
+        raise ValueError("window bounds must be >= 0 and softcap must be >= 0")
+    artifact = _flash_bwd_artifact.get(storage)
+    if artifact is None:
+        artifact = _nvidia_cuda_compile_fn(KernelSource(
+            source=(_synthesize_flash_bwd_cuda() if storage == "f32" else _synthesize_flash_bwd_f16_cuda()),
+            entry=_FLASH_BWD_ENTRY, lang=_LANG, spec=SpecPolicy.DYNAMIC,
+            shape_key=(f"flash-bwd-contract-{storage}",)))
+        _flash_bwd_artifact[storage] = artifact
+    fn = getattr(_load_lib(artifact), _FLASH_BWD_ENTRY)
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p] * 8 + [ctypes.c_long, ctypes.c_int, ctypes.c_int,
+                  ctypes.c_long, ctypes.c_long, ctypes.c_int, ctypes.c_int,
+                  ctypes.c_float, ctypes.c_int, ctypes.c_long, ctypes.c_long,
+                  ctypes.c_float]
+    dq, dk, dv = np.empty_like(q), np.empty_like(k), np.empty_like(v)
+    rc = fn(_ptr(go), _ptr(q), _ptr(k), _ptr(v), _ptr(bf), _ptr(dq), _ptr(dk), _ptr(dv),
+            B, Hq, Hkv, Sq, Sk, D, Dv, float(scale), int(causal), wl, wr, cap)
+    if rc != 1:
+        raise RuntimeError("NVIDIA Flash Attention backward CUDA launch failed")
+    return dq, dk, dv
+
+
+# ── causal linear-attention contract lane (CUDA parity P3) ──────────────────
+
+def _synthesize_linear_attn_cuda() -> str:
+    """f32 identity-feature-map causal linear attention, O=(QKᵀ tril) V.
+
+    This is deliberately a direct CUDA implementation rather than composing
+    NumPy matmuls: each output element streams legal keys.  It is the stable
+    base ABI for later feature-map and decay variants.
+    """
+    return (
+        "#include <cuda_runtime.h>\n"
+        "__global__ void tsr_la(const float*q,const float*k,const float*v,float*o,long B,int H,long S,int D){long x=(long)blockIdx.x*blockDim.x+threadIdx.x,total=B*(long)H*S*D;if(x>=total)return;int d=x%D;long t=x/D,m=t%S,z=t/S,h=z%H,b=z/H;float y=0;for(long n=0;n<=m;n++){long qo=(((b*(long)H+h)*S+m)*D),ko=(((b*(long)H+h)*S+n)*D);float s=0;for(int j=0;j<D;j++)s+=q[qo+j]*k[ko+j];y+=s*v[ko+d];}o[x]=y;}\n"
+        f'extern "C" int {_LINEAR_ATTN_ENTRY}(const float*hq,const float*hk,const float*hv,float*ho,long B,int H,long S,int D){{'
+        "if(!hq||!hk||!hv||!ho||B<=0||H<=0||S<=0||D<=0)return 2;size_t n=(size_t)B*H*S*D*4;float*q=0,*k=0,*v=0,*o=0;if(cudaMalloc(&q,n)||cudaMalloc(&k,n)||cudaMalloc(&v,n)||cudaMalloc(&o,n))return 2;if(cudaMemcpy(q,hq,n,cudaMemcpyHostToDevice)||cudaMemcpy(k,hk,n,cudaMemcpyHostToDevice)||cudaMemcpy(v,hv,n,cudaMemcpyHostToDevice))return 3;long all=B*(long)H*S*D;tsr_la<<<(unsigned)((all+127)/128),128>>>(q,k,v,o,B,H,S,D);int ok=cudaDeviceSynchronize()==cudaSuccess?1:3;if(ok==1&&cudaMemcpy(ho,o,n,cudaMemcpyDeviceToHost))ok=3;cudaFree(q);cudaFree(k);cudaFree(v);cudaFree(o);return ok;}\n"
+    )
+
+
+def run_linear_attention(q: Any, k: Any, v: Any) -> Any:
+    """Launch causal f32 identity linear attention on the NVIDIA device."""
+    import numpy as np
+    global _linear_attn_artifact
+    q, k, v = (np.ascontiguousarray(x, np.float32) for x in (q, k, v))
+    if q.ndim != 4 or k.shape != q.shape or v.shape != q.shape:
+        raise ValueError("NVIDIA linear_attn requires matching f32 [B,H,S,D] Q/K/V")
+    B, H, S, D = q.shape
+    if _linear_attn_artifact is None:
+        _linear_attn_artifact = _nvidia_cuda_compile_fn(KernelSource(
+            source=_synthesize_linear_attn_cuda(), entry=_LINEAR_ATTN_ENTRY,
+            lang=_LANG, spec=SpecPolicy.DYNAMIC, shape_key=("linear-attn-f32",)))
+    fn = getattr(_load_lib(_linear_attn_artifact), _LINEAR_ATTN_ENTRY)
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p] * 4 + [ctypes.c_long, ctypes.c_int,
+                  ctypes.c_long, ctypes.c_int]
+    out = np.empty_like(q)
+    if fn(_ptr(q), _ptr(k), _ptr(v), _ptr(out), B, H, S, D) != 1:
+        raise RuntimeError("NVIDIA linear_attn CUDA launch failed")
+    return out
+
+
+def _synthesize_linear_attn_bwd_cuda() -> str:
+    """f32 VJP for the causal identity linear-attention base contract."""
+    return (
+        "#include <cuda_runtime.h>\n#define D_CAP 256\n"
+        "__global__ void tsr_la_bwd(const float*go,const float*q,const float*k,const float*v,float*dq,float*dk,float*dv,long B,int H,long S,int D){long x=(long)blockIdx.x*blockDim.x+threadIdx.x,total=B*(long)H*S;if(x>=total)return;long m=x%S,z=x/S,h=z%H,b=z/H,qo=(((b*(long)H+h)*S+m)*D);float aq[D_CAP];for(int j=0;j<D;j++)aq[j]=0;for(long n=0;n<=m;n++){long ko=(((b*(long)H+h)*S+n)*D);float score=0,ds=0;for(int j=0;j<D;j++)score+=q[qo+j]*k[ko+j];for(int d=0;d<D;d++){ds+=go[qo+d]*v[ko+d];atomicAdd(&dv[ko+d],score*go[qo+d]);}for(int j=0;j<D;j++){aq[j]+=ds*k[ko+j];atomicAdd(&dk[ko+j],ds*q[qo+j]);}}for(int j=0;j<D;j++)dq[qo+j]=aq[j];}\n"
+        f'extern "C" int {_LINEAR_ATTN_BWD_ENTRY}(const float*hgo,const float*hq,const float*hk,const float*hv,float*hdq,float*hdk,float*hdv,long B,int H,long S,int D){{'
+        "if(!hgo||!hq||!hk||!hv||!hdq||!hdk||!hdv||B<=0||H<=0||S<=0||D<=0||D>D_CAP)return 2;size_t n=(size_t)B*H*S*D*4;float*go=0,*q=0,*k=0,*v=0,*dq=0,*dk=0,*dv=0;if(cudaMalloc(&go,n)||cudaMalloc(&q,n)||cudaMalloc(&k,n)||cudaMalloc(&v,n)||cudaMalloc(&dq,n)||cudaMalloc(&dk,n)||cudaMalloc(&dv,n))return 2;if(cudaMemcpy(go,hgo,n,cudaMemcpyHostToDevice)||cudaMemcpy(q,hq,n,cudaMemcpyHostToDevice)||cudaMemcpy(k,hk,n,cudaMemcpyHostToDevice)||cudaMemcpy(v,hv,n,cudaMemcpyHostToDevice))return 3;cudaMemset(dk,0,n);cudaMemset(dv,0,n);long rows=B*(long)H*S;tsr_la_bwd<<<(unsigned)((rows+127)/128),128>>>(go,q,k,v,dq,dk,dv,B,H,S,D);int ok=cudaDeviceSynchronize()==cudaSuccess?1:3;if(ok==1&&(cudaMemcpy(hdq,dq,n,cudaMemcpyDeviceToHost)||cudaMemcpy(hdk,dk,n,cudaMemcpyDeviceToHost)||cudaMemcpy(hdv,dv,n,cudaMemcpyDeviceToHost)))ok=3;cudaFree(go);cudaFree(q);cudaFree(k);cudaFree(v);cudaFree(dq);cudaFree(dk);cudaFree(dv);return ok;}\n"
+    )
+
+
+def run_linear_attention_backward(go: Any, q: Any, k: Any, v: Any) -> tuple[Any, Any, Any]:
+    """Launch f32 dQ/dK/dV for causal identity linear attention."""
+    import numpy as np
+    global _linear_attn_bwd_artifact
+    go, q, k, v = (np.ascontiguousarray(x, np.float32) for x in (go, q, k, v))
+    if q.ndim != 4 or go.shape != q.shape or k.shape != q.shape or v.shape != q.shape:
+        raise ValueError("NVIDIA linear_attn VJP requires matching f32 [B,H,S,D] tensors")
+    B, H, S, D = q.shape
+    if _linear_attn_bwd_artifact is None:
+        _linear_attn_bwd_artifact = _nvidia_cuda_compile_fn(KernelSource(source=_synthesize_linear_attn_bwd_cuda(), entry=_LINEAR_ATTN_BWD_ENTRY, lang=_LANG, spec=SpecPolicy.DYNAMIC, shape_key=("linear-attn-bwd-f32",)))
+    fn = getattr(_load_lib(_linear_attn_bwd_artifact), _LINEAR_ATTN_BWD_ENTRY)
+    fn.restype = ctypes.c_int; fn.argtypes = [ctypes.c_void_p] * 7 + [ctypes.c_long, ctypes.c_int, ctypes.c_long, ctypes.c_int]
+    dq, dk, dv = np.empty_like(q), np.empty_like(k), np.empty_like(v)
+    if fn(_ptr(go), _ptr(q), _ptr(k), _ptr(v), _ptr(dq), _ptr(dk), _ptr(dv), B, H, S, D) != 1:
+        raise RuntimeError("NVIDIA linear_attn VJP CUDA launch failed")
+    return dq, dk, dv
+
+
+def _synthesize_linear_attn_variant_cuda() -> str:
+    """General f32 causal linear-attention forward: Dqk/Dv, fmap, decay."""
+    return (
+        "#include <cuda_runtime.h>\n#include <math.h>\n"
+        "__device__ float phi(float x,int f){return f==1?fmaxf(x,0.f):(f==2?x*x:x);}\n"
+        "__global__ void tsr_lav(const float*q,const float*k,const float*v,const float*dec,float*o,long B,int H,long S,int D,int Dv,int fmap){long x=(long)blockIdx.x*blockDim.x+threadIdx.x,total=B*(long)H*S*Dv;if(x>=total)return;int d=x%Dv;long t=x/Dv,m=t%S,z=t/S,h=z%H,b=z/H;float y=0;for(long n=0;n<=m;n++){long qo=(((b*(long)H+h)*S+m)*D),ko=(((b*(long)H+h)*S+n)*D);float s=0,fac=1;for(int j=0;j<D;j++)s+=phi(q[qo+j],fmap)*phi(k[ko+j],fmap);if(dec)for(long u=n+1;u<=m;u++)fac*=dec[((b*(long)H+h)*S+u)];y+=fac*s*v[(((b*(long)H+h)*S+n)*Dv+d)];}o[(((b*(long)H+h)*S+m)*Dv+d)]=y;}\n"
+        "extern \"C\" int tessera_nvidia_linear_attn_variant(const float*hq,const float*hk,const float*hv,const float*hd,float*ho,long B,int H,long S,int D,int Dv,int fmap){if(!hq||!hk||!hv||!ho||B<=0||H<=0||S<=0||D<=0||Dv<=0||fmap<0||fmap>2)return 2;size_t nq=(size_t)B*H*S*D*4,nv=(size_t)B*H*S*Dv*4,nd=(size_t)B*H*S*4;float*q=0,*k=0,*v=0,*d=0,*o=0;if(cudaMalloc(&q,nq)||cudaMalloc(&k,nq)||cudaMalloc(&v,nv)||cudaMalloc(&o,nv))return 2;if(hd&&cudaMalloc(&d,nd))return 2;if(cudaMemcpy(q,hq,nq,cudaMemcpyHostToDevice)||cudaMemcpy(k,hk,nq,cudaMemcpyHostToDevice)||cudaMemcpy(v,hv,nv,cudaMemcpyHostToDevice)||(hd&&cudaMemcpy(d,hd,nd,cudaMemcpyHostToDevice)))return 3;long n=B*(long)H*S*Dv;tsr_lav<<<(unsigned)((n+127)/128),128>>>(q,k,v,d,o,B,H,S,D,Dv,fmap);int ok=cudaDeviceSynchronize()==cudaSuccess?1:3;if(ok==1&&cudaMemcpy(ho,o,nv,cudaMemcpyDeviceToHost))ok=3;cudaFree(q);cudaFree(k);cudaFree(v);cudaFree(o);if(d)cudaFree(d);return ok;}\n"
+    )
+
+
+def run_linear_attention_variant(q: Any, k: Any, v: Any, *, feature_map: str,
+                                 decay: Any = None) -> Any:
+    import numpy as np
+    global _linear_attn_variant_artifact
+    q, k, v = (np.ascontiguousarray(x, np.float32) for x in (q, k, v))
+    if q.ndim != 4 or k.shape != q.shape or v.ndim != 4 or v.shape[:3] != q.shape[:3]:
+        raise ValueError("NVIDIA linear-attention variants require Q/K [B,H,S,D], V [B,H,S,Dv]")
+    code = {"identity": 0, "relu": 1, "polynomial_2": 2}.get(feature_map)
+    if code is None: raise ValueError("unsupported NVIDIA linear-attention feature map")
+    dec = None if decay is None else np.ascontiguousarray(decay, np.float32)
+    if dec is not None and dec.shape != q.shape[:3]: raise ValueError("decay must have shape [B,H,S]")
+    if _linear_attn_variant_artifact is None:
+        _linear_attn_variant_artifact = _nvidia_cuda_compile_fn(KernelSource(source=_synthesize_linear_attn_variant_cuda(), entry="tessera_nvidia_linear_attn_variant", lang=_LANG, spec=SpecPolicy.DYNAMIC, shape_key=("linear-attn-variant-f32",)))
+    fn = getattr(_load_lib(_linear_attn_variant_artifact), "tessera_nvidia_linear_attn_variant")
+    fn.restype = ctypes.c_int; fn.argtypes = [ctypes.c_void_p] * 5 + [ctypes.c_long, ctypes.c_int, ctypes.c_long, ctypes.c_int, ctypes.c_int, ctypes.c_int]
+    out = np.empty_like(v)
+    if fn(_ptr(q), _ptr(k), _ptr(v), _ptr(dec), _ptr(out), q.shape[0], q.shape[1], q.shape[2], q.shape[3], v.shape[3], code) != 1: raise RuntimeError("NVIDIA linear-attention variant CUDA launch failed")
+    return out
+
+
+def _synthesize_linear_attn_variant_bwd_cuda() -> str:
+    return ("#include <cuda_runtime.h>\n#include <math.h>\n#define DC 256\n"
+        "__device__ float p(float x,int f){return f==2?x*x:x;}__device__ float dp(float x,int f){return f==2?2*x:1;}\n"
+        "__global__ void kb(const float*go,const float*q,const float*k,const float*v,const float*de,float*dq,float*dk,float*dv,long B,int H,long S,int D,int Vd,int f){long x=(long)blockIdx.x*blockDim.x+threadIdx.x,total=B*(long)H*S;if(x>=total)return;long m=x%S,z=x/S,h=z%H,b=z/H,qo=(((b*(long)H+h)*S+m)*D),g=(((b*(long)H+h)*S+m)*Vd);float a[DC];for(int j=0;j<D;j++)a[j]=0;for(long n=0;n<=m;n++){long ko=(((b*(long)H+h)*S+n)*D),vo=(((b*(long)H+h)*S+n)*Vd);float s=0,fac=1,ds=0;for(int j=0;j<D;j++)s+=p(q[qo+j],f)*p(k[ko+j],f);if(de)for(long u=n+1;u<=m;u++)fac*=de[((b*(long)H+h)*S+u)];for(int d=0;d<Vd;d++){ds+=go[g+d]*v[vo+d];atomicAdd(&dv[vo+d],fac*s*go[g+d]);}ds*=fac;for(int j=0;j<D;j++){a[j]+=ds*dp(q[qo+j],f)*p(k[ko+j],f);atomicAdd(&dk[ko+j],ds*dp(k[ko+j],f)*p(q[qo+j],f));}}for(int j=0;j<D;j++)dq[qo+j]=a[j];}\n"
+        "extern \"C\" int tessera_nvidia_linear_attn_variant_bwd(const float*hg,const float*hq,const float*hk,const float*hv,const float*hd,float*hdq,float*hdk,float*hdv,long B,int H,long S,int D,int Vd,int f){if(!hg||!hq||!hk||!hv||!hdq||!hdk||!hdv||D>DC)return 2;size_t nq=(size_t)B*H*S*D*4,nv=(size_t)B*H*S*Vd*4,nd=(size_t)B*H*S*4;float*g=0,*q=0,*k=0,*v=0,*d=0,*dq=0,*dk=0,*dv=0;int ok=1;if(cudaMalloc(&g,nv)||cudaMalloc(&q,nq)||cudaMalloc(&k,nq)||cudaMalloc(&v,nv)||cudaMalloc(&dq,nq)||cudaMalloc(&dk,nq)||cudaMalloc(&dv,nv)||(hd&&cudaMalloc(&d,nd))){ok=2;}if(ok==1&&(cudaMemcpy(g,hg,nv,cudaMemcpyHostToDevice)||cudaMemcpy(q,hq,nq,cudaMemcpyHostToDevice)||cudaMemcpy(k,hk,nq,cudaMemcpyHostToDevice)||cudaMemcpy(v,hv,nv,cudaMemcpyHostToDevice)||(hd&&cudaMemcpy(d,hd,nd,cudaMemcpyHostToDevice))||cudaMemset(dk,0,nq)||cudaMemset(dv,0,nv))){ok=3;}if(ok==1){long r=B*(long)H*S;kb<<<(r+127)/128,128>>>(g,q,k,v,d,dq,dk,dv,B,H,S,D,Vd,f);ok=cudaDeviceSynchronize()==cudaSuccess?1:3;}if(ok==1&&(cudaMemcpy(hdq,dq,nq,cudaMemcpyDeviceToHost)||cudaMemcpy(hdk,dk,nq,cudaMemcpyDeviceToHost)||cudaMemcpy(hdv,dv,nv,cudaMemcpyDeviceToHost)))ok=3;if(g)cudaFree(g);if(q)cudaFree(q);if(k)cudaFree(k);if(v)cudaFree(v);if(d)cudaFree(d);if(dq)cudaFree(dq);if(dk)cudaFree(dk);if(dv)cudaFree(dv);return ok;}\n")
+
+
+def run_linear_attention_variant_backward(go: Any,q: Any,k: Any,v: Any,*,feature_map: str,decay: Any=None) -> tuple[Any,Any,Any]:
+    import numpy as np
+    global _linear_attn_variant_bwd_artifact
+    go,q,k,v=(np.ascontiguousarray(x,np.float32) for x in (go,q,k,v)); code={"identity":0,"polynomial_2":2}.get(feature_map)
+    if code is None or q.ndim!=4 or k.shape!=q.shape or go.shape!=v.shape or v.shape[:3]!=q.shape[:3]: raise ValueError("invalid NVIDIA linear-attention variant VJP contract")
+    de=None if decay is None else np.ascontiguousarray(decay,np.float32)
+    if de is not None and de.shape!=q.shape[:3]: raise ValueError("decay must be [B,H,S]")
+    if _linear_attn_variant_bwd_artifact is None: _linear_attn_variant_bwd_artifact=_nvidia_cuda_compile_fn(KernelSource(source=_synthesize_linear_attn_variant_bwd_cuda(),entry="tessera_nvidia_linear_attn_variant_bwd",lang=_LANG,spec=SpecPolicy.DYNAMIC,shape_key=("linear-attn-variant-bwd",)))
+    fn=getattr(_load_lib(_linear_attn_variant_bwd_artifact),"tessera_nvidia_linear_attn_variant_bwd");fn.restype=ctypes.c_int;fn.argtypes=[ctypes.c_void_p]*8+[ctypes.c_long,ctypes.c_int,ctypes.c_long,ctypes.c_int,ctypes.c_int,ctypes.c_int]
+    dq,dk,dv=np.empty_like(q),np.empty_like(k),np.empty_like(v)
+    if fn(_ptr(go),_ptr(q),_ptr(k),_ptr(v),_ptr(de),_ptr(dq),_ptr(dk),_ptr(dv),q.shape[0],q.shape[1],q.shape[2],q.shape[3],v.shape[3],code)!=1: raise RuntimeError("NVIDIA variant VJP failed")
+    return dq,dk,dv
 
 
 def _synthesize_gated_cuda(region: GatedMatmulRegion) -> str:
@@ -371,6 +762,255 @@ def _nvidia_cuda_compile_fn(source: KernelSource) -> str:
          "-Xcompiler", "-fPIC", src, "-o", so],
         check=True, capture_output=True, text=True)
     return so
+
+
+# ── standalone row-softmax (CUDA parity P1) ──────────────────────────────────
+
+_softmax_artifact: dict[str, str] = {}
+
+
+def _synthesize_softmax_cuda() -> str:
+    """Stable f32 softmax over the last axis, one CUDA block per row.
+
+    This is deliberately a small, compiler-emitted vertical slice matching the
+    ROCm row-softmax contract: input is flattened to ``[M, K]``, reduction and
+    exponentiation stay in f32, and ``K`` may exceed the block size.  Norm and
+    generic reduction lanes can reuse this launch/cache shape.
+    """
+    return (
+        "#include <cuda_runtime.h>\n"
+        "#include <float.h>\n"
+        "#include <math.h>\n"
+        "#define TSR_SM_BLOCK 256\n"
+        "__global__ void tsr_softmax_kernel(const float* x, float* o, long K) {\n"
+        "  const long row = (long)blockIdx.x; const int tid = threadIdx.x;\n"
+        "  __shared__ float scratch[TSR_SM_BLOCK];\n"
+        "  float mx = -FLT_MAX;\n"
+        "  for (long j = tid; j < K; j += blockDim.x) mx = fmaxf(mx, x[row*K+j]);\n"
+        "  scratch[tid] = mx; __syncthreads();\n"
+        "  for (int s = blockDim.x/2; s; s >>= 1) {\n"
+        "    if (tid < s) scratch[tid] = fmaxf(scratch[tid], scratch[tid+s]);\n"
+        "    __syncthreads();\n"
+        "  }\n"
+        "  mx = scratch[0]; float sum = 0.0f;\n"
+        "  for (long j = tid; j < K; j += blockDim.x) sum += expf(x[row*K+j] - mx);\n"
+        "  scratch[tid] = sum; __syncthreads();\n"
+        "  for (int s = blockDim.x/2; s; s >>= 1) {\n"
+        "    if (tid < s) scratch[tid] += scratch[tid+s]; __syncthreads();\n"
+        "  }\n"
+        "  sum = scratch[0];\n"
+        "  for (long j = tid; j < K; j += blockDim.x) o[row*K+j] = expf(x[row*K+j]-mx)/sum;\n"
+        "}\n"
+        f'extern "C" int {_SOFTMAX_ENTRY}(const float* hx, float* ho, long M, long K) {{\n'
+        "  if (!hx || !ho || M <= 0 || K <= 0) return 2;\n"
+        "  const size_t bytes = (size_t)M * (size_t)K * sizeof(float);\n"
+        "  float *dx = 0, *dout = 0;\n"
+        "  if (cudaMalloc(&dx, bytes) != cudaSuccess) return 2;\n"
+        "  if (cudaMalloc(&dout, bytes) != cudaSuccess) { cudaFree(dx); return 2; }\n"
+        "  if (cudaMemcpy(dx, hx, bytes, cudaMemcpyHostToDevice) != cudaSuccess) { cudaFree(dx); cudaFree(dout); return 3; }\n"
+        "  tsr_softmax_kernel<<<(unsigned)M, TSR_SM_BLOCK>>>(dx, dout, K);\n"
+        "  int ok = (cudaDeviceSynchronize() == cudaSuccess) ? 1 : 3;\n"
+        "  if (ok == 1 && cudaMemcpy(ho, dout, bytes, cudaMemcpyDeviceToHost) != cudaSuccess) ok = 3;\n"
+        "  cudaFree(dx); cudaFree(dout); return ok;\n"
+        "}\n"
+    )
+
+
+def _synthesize_softmax_f16_cuda() -> str:
+    """The fp16-storage sibling of :func:`_synthesize_softmax_cuda`."""
+    return (
+        "#include <cuda_runtime.h>\n#include <cuda_fp16.h>\n#include <float.h>\n#include <math.h>\n"
+        "#define TSR_SM_BLOCK 256\n"
+        "__global__ void tsr_softmax_kernel(const __half*x,__half*o,long K){\n"
+        " long r=(long)blockIdx.x;int t=threadIdx.x;__shared__ float s[TSR_SM_BLOCK];float mx=-FLT_MAX;\n"
+        " for(long j=t;j<K;j+=blockDim.x)mx=fmaxf(mx,__half2float(x[r*K+j]));s[t]=mx;__syncthreads();\n"
+        " for(int d=blockDim.x/2;d;d>>=1){if(t<d)s[t]=fmaxf(s[t],s[t+d]);__syncthreads();}mx=s[0];float sum=0.f;\n"
+        " for(long j=t;j<K;j+=blockDim.x)sum+=expf(__half2float(x[r*K+j])-mx);s[t]=sum;__syncthreads();\n"
+        " for(int d=blockDim.x/2;d;d>>=1){if(t<d)s[t]+=s[t+d];__syncthreads();}sum=s[0];\n"
+        " for(long j=t;j<K;j+=blockDim.x)o[r*K+j]=__float2half(expf(__half2float(x[r*K+j])-mx)/sum);}\n"
+        f'extern "C" int {_SOFTMAX_ENTRY}(const __half*hx,__half*ho,long M,long K){{\n'
+        " if(!hx||!ho||M<=0||K<=0)return 2;size_t n=(size_t)M*K*sizeof(__half);__half *dx=0,*dout=0;\n"
+        " if(cudaMalloc(&dx,n)!=cudaSuccess)return 2;if(cudaMalloc(&dout,n)!=cudaSuccess){cudaFree(dx);return 2;}\n"
+        " if(cudaMemcpy(dx,hx,n,cudaMemcpyHostToDevice)!=cudaSuccess){cudaFree(dx);cudaFree(dout);return 3;}\n"
+        " tsr_softmax_kernel<<<(unsigned)M,TSR_SM_BLOCK>>>(dx,dout,K);int ok=cudaDeviceSynchronize()==cudaSuccess?1:3;\n"
+        " if(ok==1&&cudaMemcpy(ho,dout,n,cudaMemcpyDeviceToHost)!=cudaSuccess)ok=3;cudaFree(dx);cudaFree(dout);return ok;}\n"
+    )
+
+
+def run_row_softmax(x: Any) -> Any:
+    """Execute the compiler-emitted f32 row-softmax on NVIDIA hardware.
+
+    The public runtime calls this only after validating its artifact contract;
+    unavailable CUDA/toolchain errors propagate rather than becoming a falsely
+    labelled reference result.
+    """
+    import numpy as np
+    xf = np.ascontiguousarray(x)
+    if xf.dtype == np.float32:
+        dtype, source = "f32", _synthesize_softmax_cuda()
+    elif xf.dtype == np.float16:
+        dtype, source = "f16", _synthesize_softmax_f16_cuda()
+    else:
+        raise ValueError(f"NVIDIA softmax supports f32/f16 storage, got {xf.dtype}")
+    if xf.ndim < 1 or xf.shape[-1] <= 0:
+        raise ValueError("softmax operand must have a non-empty last dimension")
+    m = int(np.prod(xf.shape[:-1])) if xf.ndim > 1 else 1
+    k = int(xf.shape[-1])
+    artifact = _softmax_artifact.get(dtype)
+    if artifact is None:
+        artifact = _nvidia_cuda_compile_fn(KernelSource(
+            source=source, entry=_SOFTMAX_ENTRY, lang=_LANG,
+            spec=SpecPolicy.DYNAMIC, shape_key=(f"row-softmax-{dtype}",)))
+        _softmax_artifact[dtype] = artifact
+    fn = getattr(_load_lib(artifact), _SOFTMAX_ENTRY)
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long, ctypes.c_long]
+    out = np.empty_like(xf)
+    if fn(_ptr(xf), _ptr(out), m, k) != 1:
+        raise RuntimeError("NVIDIA row-softmax CUDA launch failed")
+    return out
+
+
+# ── standalone row norms (CUDA parity P1) ────────────────────────────────────
+
+_norm_artifact: dict[str, str] = {}
+
+
+def _synthesize_norm_cuda(dtype: str = "f32") -> str:
+    """CUDA source for RMSNorm / LayerNorm with f32 accumulation.
+
+    ``f16`` retains half storage at the ABI boundary but converts each element to
+    f32 before both reduction passes.  That is the same storage/accumulation
+    contract as the ROCm row-norm lane and avoids a silent accuracy downgrade.
+    """
+    if dtype not in {"f32", "f16"}:
+        raise ValueError(f"unsupported NVIDIA norm dtype {dtype!r}")
+    ctype = "float" if dtype == "f32" else "__half"
+    load = "x[r*K+j]" if dtype == "f32" else "__half2float(x[r*K+j])"
+    store = "v" if dtype == "f32" else "__float2half_rn(v)"
+    preamble = "#include <cuda_runtime.h>\n#include <math.h>\n"
+    if dtype == "f16":
+        preamble += "#include <cuda_fp16.h>\n"
+    return (
+        preamble +
+        "#define TSR_NM_BLOCK 256\n"
+        "__device__ float tsr_sum(float v, float* s) {\n"
+        "  int t=threadIdx.x; s[t]=v; __syncthreads();\n"
+        "  for(int d=blockDim.x/2; d; d>>=1) { if(t<d) s[t]+=s[t+d]; __syncthreads(); }\n"
+        "  return s[0];\n"
+        "}\n"
+        f"__global__ void tsr_norm_kernel(const {ctype}* x, {ctype}* o, long K, float eps, int layer) {{\n"
+        "  const long r=(long)blockIdx.x; const int t=threadIdx.x; __shared__ float s[TSR_NM_BLOCK];\n"
+        "  float sum=0.f, sq=0.f;\n"
+        f"  for(long j=t;j<K;j+=blockDim.x) {{ float v={load}; sum+=v; sq+=v*v; }}\n"
+        "  const float mean=layer ? tsr_sum(sum,s)/(float)K : 0.f;\n"
+        "  float denom;\n"
+        f"  if(layer) {{ float dev=0.f; for(long j=t;j<K;j+=blockDim.x) {{ float d={load}-mean; dev+=d*d; }} denom=rsqrtf(tsr_sum(dev,s)/(float)K+eps); }}\n"
+        "  else denom=rsqrtf(tsr_sum(sq,s)/(float)K+eps);\n"
+        f"  for(long j=t;j<K;j+=blockDim.x) {{ float v=({load}-(layer?mean:0.f))*denom; o[r*K+j]={store}; }}\n"
+        "}\n"
+        f'extern "C" int tessera_nvidia_norm(const {ctype}* hx,{ctype}* ho,long M,long K,float eps,int layer) {{\n'
+        f"  if(!hx||!ho||M<=0||K<=0||eps<0.f) return 2; size_t n=(size_t)M*K*sizeof({ctype}); {ctype} *dx=0,*dout=0;\n"
+        "  if(cudaMalloc(&dx,n)!=cudaSuccess) return 2; if(cudaMalloc(&dout,n)!=cudaSuccess){cudaFree(dx);return 2;}\n"
+        "  if(cudaMemcpy(dx,hx,n,cudaMemcpyHostToDevice)!=cudaSuccess){cudaFree(dx);cudaFree(dout);return 3;}\n"
+        "  tsr_norm_kernel<<<(unsigned)M,TSR_NM_BLOCK>>>(dx,dout,K,eps,layer); int ok=cudaDeviceSynchronize()==cudaSuccess?1:3;\n"
+        "  if(ok==1&&cudaMemcpy(ho,dout,n,cudaMemcpyDeviceToHost)!=cudaSuccess) ok=3; cudaFree(dx);cudaFree(dout);return ok;\n"
+        "}\n"
+    )
+
+
+def run_row_norm(x: Any, kind: str, eps: float) -> Any:
+    """Execute generated f32/f16-storage RMSNorm or LayerNorm on NVIDIA."""
+    import numpy as np
+    global _norm_artifact
+    if kind not in {"rmsnorm", "layer_norm"}:
+        raise ValueError(f"unknown NVIDIA norm kind {kind!r}")
+    xa = np.asarray(x)
+    if xa.dtype not in (np.float32, np.float16):
+        raise ValueError(f"NVIDIA row norm supports f32/f16 storage; got {xa.dtype}")
+    dtype = "f32" if xa.dtype == np.float32 else "f16"
+    xf = np.ascontiguousarray(xa)
+    if xf.ndim < 1 or xf.shape[-1] <= 0:
+        raise ValueError("norm operand must have a non-empty last dimension")
+    m = int(np.prod(xf.shape[:-1])) if xf.ndim > 1 else 1
+    k = int(xf.shape[-1])
+    artifact = _norm_artifact.get(dtype)
+    if artifact is None:
+        artifact = _nvidia_cuda_compile_fn(KernelSource(
+            source=_synthesize_norm_cuda(dtype), entry="tessera_nvidia_norm",
+            lang=_LANG, spec=SpecPolicy.DYNAMIC, shape_key=(f"row-norm-{dtype}",)))
+        _norm_artifact[dtype] = artifact
+    fn = getattr(_load_lib(artifact), "tessera_nvidia_norm")
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long, ctypes.c_long,
+                   ctypes.c_float, ctypes.c_int]
+    out = np.empty_like(xf)
+    if fn(_ptr(xf), _ptr(out), m, k, float(eps), int(kind == "layer_norm")) != 1:
+        raise RuntimeError("NVIDIA row-norm CUDA launch failed")
+    return out
+
+
+# ── standalone row reductions (CUDA parity P1) ───────────────────────────────
+
+_reduce_artifact: dict[str, str] = {}
+
+
+def _synthesize_reduce_cuda(dtype: str = "f32") -> str:
+    """CUDA source for f32-accumulating reductions over each flattened row."""
+    if dtype not in {"f32", "f16"}:
+        raise ValueError(f"unsupported NVIDIA reduction dtype {dtype!r}")
+    ctype = "float" if dtype == "f32" else "__half"
+    load = "x[r*K+j]" if dtype == "f32" else "__half2float(x[r*K+j])"
+    preamble = "#include <cuda_runtime.h>\n#include <math.h>\n#include <float.h>\n"
+    if dtype == "f16":
+        preamble += "#include <cuda_fp16.h>\n"
+    return (
+        preamble +
+        "#define TSR_RD_BLOCK 256\n"
+        "__device__ float tsr_rcombine(float a,float b,int kind){\n"
+        " if(kind<2)return a+b; if(isnan(a)||isnan(b))return NAN; return kind==2?fmaxf(a,b):fminf(a,b);}\n"
+        f"__global__ void tsr_reduce_kernel(const {ctype}*x,float*o,long K,int kind){{\n"
+        " long r=(long)blockIdx.x;int t=threadIdx.x;__shared__ float s[TSR_RD_BLOCK];\n"
+        " float v=kind==2?-INFINITY:(kind==3?INFINITY:0.f);\n"
+        f" for(long j=t;j<K;j+=blockDim.x)v=tsr_rcombine(v,{load},kind);\n"
+        " s[t]=v;__syncthreads();for(int d=blockDim.x/2;d;d>>=1){if(t<d)s[t]=tsr_rcombine(s[t],s[t+d],kind);__syncthreads();}\n"
+        " if(t==0)o[r]=(kind==1?s[0]/(float)K:s[0]);}\n"
+        f"extern \"C\" int tessera_nvidia_reduce(const {ctype}*hx,float*ho,long M,long K,int kind){{\n"
+        f" if(!hx||!ho||M<=0||K<=0||kind<0||kind>3)return 2;size_t n=(size_t)M*K*sizeof({ctype});{ctype} *dx=0;float *dout=0;\n"
+        " if(cudaMalloc(&dx,n)!=cudaSuccess)return 2;if(cudaMalloc(&dout,(size_t)M*sizeof(float))!=cudaSuccess){cudaFree(dx);return 2;}\n"
+        " if(cudaMemcpy(dx,hx,n,cudaMemcpyHostToDevice)!=cudaSuccess){cudaFree(dx);cudaFree(dout);return 3;}\n"
+        " tsr_reduce_kernel<<<(unsigned)M,TSR_RD_BLOCK>>>(dx,dout,K,kind);int ok=cudaDeviceSynchronize()==cudaSuccess?1:3;\n"
+        " if(ok==1&&cudaMemcpy(ho,dout,(size_t)M*sizeof(float),cudaMemcpyDeviceToHost)!=cudaSuccess)ok=3;cudaFree(dx);cudaFree(dout);return ok;}\n"
+    )
+
+
+def run_row_reduce(x2d: Any, kind: str) -> Any:
+    """Execute a generated f32/f16-storage row reduction with f32 output."""
+    import numpy as np
+    global _reduce_artifact
+    code = {"sum": 0, "mean": 1, "max": 2, "min": 3}.get(kind)
+    if code is None:
+        raise ValueError(f"unknown NVIDIA reduction kind {kind!r}")
+    xa = np.asarray(x2d)
+    if xa.dtype not in (np.float32, np.float16):
+        raise ValueError(f"NVIDIA row reduction supports f32/f16 storage; got {xa.dtype}")
+    dtype = "f32" if xa.dtype == np.float32 else "f16"
+    xf = np.ascontiguousarray(xa)
+    if xf.ndim != 2 or xf.shape[0] <= 0 or xf.shape[1] <= 0:
+        raise ValueError("NVIDIA row reduction requires a non-empty [M, K] input")
+    artifact = _reduce_artifact.get(dtype)
+    if artifact is None:
+        artifact = _nvidia_cuda_compile_fn(KernelSource(
+            source=_synthesize_reduce_cuda(dtype), entry="tessera_nvidia_reduce",
+            lang=_LANG, spec=SpecPolicy.DYNAMIC, shape_key=(f"row-reduce-{dtype}",)))
+        _reduce_artifact[dtype] = artifact
+    fn = getattr(_load_lib(artifact), "tessera_nvidia_reduce")
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long, ctypes.c_long, ctypes.c_int]
+    out = np.empty((xf.shape[0],), dtype=np.float32)
+    if fn(_ptr(xf), _ptr(out), xf.shape[0], xf.shape[1], code) != 1:
+        raise RuntimeError("NVIDIA row-reduce CUDA launch failed")
+    return out
 
 
 # ── runner (execute → (out, tag)) ─────────────────────────────────────────────

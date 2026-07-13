@@ -1511,8 +1511,8 @@ def _execute_rocm_moe_transport(artifact: RuntimeArtifact, args: Any) -> Any:
     on gfx1151 — ``moe_dispatch`` on the device gather kernel, ``moe_combine`` on
     the device scatter (add) kernel — and report ``native_gpu`` (falling back to
     the stdlib oracle + ``reference_cpu`` when tessera-opt / a GPU is absent).
-    ``grouped_swiglu`` (the expert GEMM) stays on the stdlib oracle and reports
-    ``reference_cpu`` — a native f32-exact grouped GEMM is a separate follow-up.
+    ``grouped_gemm`` consumes contiguous group offsets as one device argument
+    and executes all experts in one generated GPU launch.
     Per-op ``execution_kind`` via the ``(output, kind)`` launch override."""
     import numpy as np
     from .stdlib import moe
@@ -1541,6 +1541,18 @@ def _execute_rocm_moe_transport(artifact: RuntimeArtifact, args: Any) -> Any:
             return (_moe_combine_native(partials, plan, np), "native_gpu")
         except _RocmCompiledUnavailable:
             return (moe.combine(partials, plan), "reference_cpu")
+    if op_name == "tessera.grouped_gemm":
+        try:
+            x, weights, group_sizes = (
+                values["x"], values["weights"], values["group_sizes"])
+        except KeyError as exc:
+            raise ValueError(f"missing grouped_gemm argument {exc.args[0]!r}") from exc
+        try:
+            return (_rocm_grouped_gemm_native(
+                x, weights, group_sizes, np), "native_gpu")
+        except _RocmCompiledUnavailable:
+            from .compiler.grouped_layout import reference_grouped_gemm
+            return (reference_grouped_gemm(x, weights, group_sizes), "reference_cpu")
     if op_name == "tessera.grouped_swiglu":
         try:
             gvals = (values["x_packed"], values["w_gate"], values["w_up"],
@@ -1555,7 +1567,8 @@ def _execute_rocm_moe_transport(artifact: RuntimeArtifact, args: Any) -> Any:
             return (moe.grouped_swiglu(*gvals), "reference_cpu")
     raise ValueError(
         "rocm_moe_transport_compiled executor handles tessera.moe_dispatch, "
-        "tessera.moe_combine, or tessera.grouped_swiglu; "
+        "tessera.moe_combine, tessera.grouped_gemm, or "
+        "tessera.grouped_swiglu; "
         f"got {op_name!r}")
 
 
@@ -2168,7 +2181,7 @@ def _nvidia_device_name() -> str | None:
 _rocm_hip_launch_lib: ctypes.CDLL | None = None
 #: hsaco bytes keyed by (mt, nt, chip, dtype) — the kernel is shape-generic.
 _rocm_compiled_hsaco_cache: dict[
-    tuple[int, int, str, str, bool, str], bytes] = {}
+    tuple[int, int, str, str, bool, str, object], bytes] = {}
 
 
 class _RocmCompiledUnavailable(RuntimeError):
@@ -2242,9 +2255,10 @@ def _rocm_device_name() -> Optional[str]:
 
 
 def _rocm_prod_tile(m: int, n: int, k: int) -> tuple[int, int]:
-    """Mirror the hand-written oracle's size-adaptive macro-tile (prodTile in
-    tessera_rocm_gemm.cpp): 3x4 once min(M,N,K) >= 1024, else 2x4."""
-    return (3, 4) if min(m, n, k) >= 1024 else (2, 4)
+    """Compatibility view of the unified production GEMM schedule."""
+    from .compiler.rocm_schedule import select_rocm_gemm_schedule
+    return select_rocm_gemm_schedule(
+        m, n, k, arch=_rocm_chip()).macro_tile
 
 
 def _extract_hsaco_blob(text: str) -> bytes:
@@ -2270,7 +2284,8 @@ def _extract_hsaco_blob(text: str) -> bytes:
 
 def _build_compiled_gemm_hsaco(mt: int, nt: int, dtype: str = "f16",
                                bias: bool = False,
-                               activation: str = "none") -> bytes:
+                               activation: str = "none", *,
+                               schedule: Any = None) -> bytes:
     """Generate + serialize the compiler's WMMA GEMM kernel to hsaco, fully
     in-process via tessera-opt (Stage L3). Cached per (mt, nt, chip, dtype,
     bias, activation). ``bias``/``activation`` select the fused epilogue — when
@@ -2289,7 +2304,15 @@ def _build_compiled_gemm_hsaco(mt: int, nt: int, dtype: str = "f16",
             f"a gfx11 (RDNA3/RDNA3.5) contract, hardware-verified on gfx1151; "
             f"target '{chip}' needs its own layout (RDNA4 gfx12xx: 16x16x32 WMMA; "
             f"CDNA: MFMA 32x32x8) which is arch-gated on that fragment ISA + silicon")
-    key = (mt, nt, chip, dtype, bias, activation)
+    if schedule is not None:
+        if schedule.arch != chip or schedule.dtype != dtype:
+            raise ValueError(
+                "compiled GEMM schedule target/dtype must match the kernel "
+                f"request ({schedule.arch}/{schedule.dtype} vs {chip}/{dtype})")
+        if (mt, nt) != schedule.macro_tile:
+            raise ValueError("compiled GEMM mt/nt must come from its schedule")
+    key = (mt, nt, chip, dtype, bias, activation,
+           None if schedule is None else schedule.cache_key())
     cached = _rocm_compiled_hsaco_cache.get(key)
     if cached is not None:
         return cached
@@ -2303,11 +2326,23 @@ def _build_compiled_gemm_hsaco(mt: int, nt: int, dtype: str = "f16",
         epi += ", bias = true"
     if activation and activation != "none":
         epi += f', activation = "{activation}"'
+    schedule_attrs = ""
+    if schedule is not None:
+        sa = schedule.target_ir_attrs()
+        schedule_attrs = (
+            f', schedule_arch = "{sa["schedule_arch"]}"'
+            f', schedule_pipeline_stages = {sa["schedule_pipeline_stages"]} : i64'
+            f', schedule_lds_layout = "{sa["schedule_lds_layout"]}"'
+            f', schedule_ownership = "{sa["schedule_ownership"]}"'
+            f', schedule_vgpr_estimate = {sa["schedule_vgpr_estimate"]} : i64'
+            f', schedule_source = "{sa["schedule_source"]}"'
+        )
     directive = (
         'module {\n'
         '  "tessera_rocm.wmma_gemm"() {name = "gemm", m = 16 : i64, '
         'n = 16 : i64, k = 16 : i64, '
-        f'mt = {mt} : i64, nt = {nt} : i64, dtype = "{dtype}"{epi}}} : () -> ()\n'
+        f'mt = {mt} : i64, nt = {nt} : i64, dtype = "{dtype}"'
+        f'{schedule_attrs}{epi}}} : () -> ()\n'
         '}\n'
     )
     pipeline = (
@@ -2464,9 +2499,13 @@ def _rocm_compiled_gemm_impl(artifact: RuntimeArtifact, args: Any) -> Any:
             raise ValueError(
                 f"rocm_compiled bias must have shape ({n},) (one per output "
                 f"column); got {bias_arr.shape}")
-    mt, nt = _rocm_prod_tile(m, n, k)
+    from .compiler.rocm_schedule import select_rocm_gemm_schedule
+    schedule = select_rocm_gemm_schedule(m, n, k, dtype=dtype_tag,
+                                         arch=_rocm_chip())
+    mt, nt = schedule.macro_tile
     hsaco = _build_compiled_gemm_hsaco(
-        mt, nt, dtype_tag, bias=has_bias, activation=activation)
+        mt, nt, dtype_tag, bias=has_bias, activation=activation,
+        schedule=schedule)
 
     hip = _load_hip_for_launch()
     if hip is None:
@@ -2562,8 +2601,11 @@ def _rocm_wmma_gemm_2d(a: Any, b: Any) -> Any:
             f"acc) storage; got {a.dtype} @ {b.dtype}")
     m, k = a.shape
     n = b.shape[1]
-    mt, nt = _rocm_prod_tile(m, n, k)
-    hsaco = _build_compiled_gemm_hsaco(mt, nt, dtype_tag)
+    from .compiler.rocm_schedule import select_rocm_gemm_schedule
+    schedule = select_rocm_gemm_schedule(m, n, k, dtype=dtype_tag,
+                                         arch=_rocm_chip())
+    mt, nt = schedule.macro_tile
+    hsaco = _build_compiled_gemm_hsaco(mt, nt, dtype_tag, schedule=schedule)
 
     hip = _load_hip_for_launch()
     if hip is None:
@@ -2654,9 +2696,13 @@ def _rocm_wmma_fused_2d(a: Any, b: Any, bias: Any = None,
             raise ValueError(
                 f"rocm WMMA bias must have shape ({n},) (one per output column); "
                 f"got {bias_arr.shape}")
-    mt, nt = _rocm_prod_tile(m, n, k)
+    from .compiler.rocm_schedule import select_rocm_gemm_schedule
+    schedule = select_rocm_gemm_schedule(m, n, k, dtype=dtype_tag,
+                                         arch=_rocm_chip())
+    mt, nt = schedule.macro_tile
     hsaco = _build_compiled_gemm_hsaco(
-        mt, nt, dtype_tag, bias=has_bias, activation=activation)
+        mt, nt, dtype_tag, bias=has_bias, activation=activation,
+        schedule=schedule)
 
     hip = _load_hip_for_launch()
     if hip is None:
@@ -14668,7 +14714,19 @@ def _rocm_block_sparse_topk_select_native(scores: Any, np: Any, *,
     # small resident batch has thousands of candidates; keep the choice narrow
     # until another exact target records its own boundary.
     if cooperative is None:
-        cooperative = bool(Nb >= 2048 and B * Hkv * Sq <= 256 and top_k <= 8)
+        from .compiler.ownership_topology import (
+            OwnershipProblem, OwnershipTopology, select_ownership_topology)
+        decision = select_ownership_topology(
+            OwnershipProblem(
+                independent_units=B * Hkv * Sq,
+                work_per_unit=Nb,
+                reduction_width=Nb,
+                outputs_per_unit=int(top_k),
+            ),
+            target=_rocm_chip(),
+            operation="selection",
+        )
+        cooperative = decision.topology is not OwnershipTopology.THREAD
     qpos = (np.arange(Sq, dtype=np.int64) if q_positions is None
             else np.asarray(q_positions, dtype=np.int64).reshape(-1))
     if qpos.shape[0] != Sq:
@@ -15350,6 +15408,55 @@ def _execute_x86_selective_ssm_bwd(artifact: "RuntimeArtifact",
 
 
 _rocm_moe_hsaco_cache: dict[tuple[str], bytes] = {}
+_rocm_grouped_gemm_hsaco_cache: dict[tuple[str], bytes] = {}
+
+
+def _rocm_grouped_gemm_native(x: Any, experts: Any, group_sizes: Any,
+                              np: Any) -> Any:
+    """One-launch contiguous grouped GEMM with device-resident offsets. f32."""
+    xa = np.ascontiguousarray(_as_numpy(x), dtype=np.float32)
+    wa = np.ascontiguousarray(_as_numpy(experts), dtype=np.float32)
+    gs = np.asarray(_as_numpy(group_sizes), dtype=np.int64).reshape(-1)
+    if xa.ndim != 2 or wa.ndim != 3:
+        raise ValueError("grouped_gemm expects x[T,K] and weights[E,K,N]")
+    E, K, N = map(int, wa.shape)
+    T = int(xa.shape[0])
+    if int(xa.shape[1]) != K or gs.shape != (E,):
+        raise ValueError("grouped_gemm K or group_sizes shape mismatch")
+    if np.any(gs < 0) or int(gs.sum()) != T:
+        raise ValueError("grouped_gemm group_sizes must be nonnegative and sum to T")
+    offsets64 = np.concatenate((np.zeros(1, np.int64), np.cumsum(gs)))
+    if int(offsets64[-1]) > np.iinfo(np.int32).max:
+        raise ValueError("grouped_gemm offsets exceed the native i32 ABI")
+    offsets = np.ascontiguousarray(offsets64, dtype=np.int32)
+    out = np.zeros((T, N), dtype=np.float32)
+    chip = _rocm_chip()
+    directive = (
+        'module {\n  "tessera_rocm.grouped_gemm"() '
+        '{name = "grouped_gemm"} : () -> ()\n}\n')
+    hsaco = _build_rocm_elementwise_hsaco(
+        "generate-rocm-moe-kernel", directive,
+        _rocm_grouped_gemm_hsaco_cache, (chip,))
+    hip = _load_hip_for_launch()
+    if hip is None or hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm grouped_gemm: no usable AMD GPU")
+    devs: list[Any] = []
+    try:
+        d_x = _rocm_dev_in(hip, xa.reshape(-1), 4 * xa.size); devs.append(d_x)
+        d_w = _rocm_dev_in(hip, wa.reshape(-1), 4 * wa.size); devs.append(d_w)
+        d_o = _rocm_dev_in(hip, offsets, 4 * offsets.size); devs.append(d_o)
+        d_y = _rocm_dev_in(hip, out.reshape(-1), 4 * out.size); devs.append(d_y)
+        _rocm_sparse_launch(
+            hsaco, b"grouped_gemm",
+            [(d_x, xa.size), (d_w, wa.size), (d_o, offsets.size),
+             (d_y, out.size)],
+            [T, K, N, E], T * N)
+        hip.hipMemcpy(out.ctypes.data_as(ctypes.c_void_p), d_y,
+                      4 * out.size, 2)
+    finally:
+        for dev in devs:
+            hip.hipFree(dev)
+    return out
 
 
 def _rocm_moe(x: Any, experts: Any, route: Any, scores: Any, np: Any) -> Any:

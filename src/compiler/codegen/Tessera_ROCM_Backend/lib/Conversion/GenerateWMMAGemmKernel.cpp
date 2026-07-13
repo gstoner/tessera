@@ -504,6 +504,42 @@ struct GenerateWMMAGemmKernelPass
             << mt << "x" << nt << ")";
         return signalPassFailure();
       }
+      // The runtime and Target-IR now hand this pass one unified schedule
+      // descriptor.  mt/nt are executable knobs; the remaining attributes are
+      // validated evidence carried onto the kernel so profiler A/B output can
+      // be joined back to the exact schedule that ran.
+      if (auto arch = op->getAttrOfType<StringAttr>("schedule_arch")) {
+        if (!arch.getValue().starts_with("gfx11")) {
+          op->emitError("generate-wmma-gemm-kernel: schedule_arch must select "
+                        "the gfx11 16x16x16 WMMA ABI; got ")
+              << arch.getValue();
+          return signalPassFailure();
+        }
+      }
+      if (auto stages =
+              op->getAttrOfType<IntegerAttr>("schedule_pipeline_stages")) {
+        if (stages.getInt() < 1 || stages.getInt() > 4) {
+          op->emitError("generate-wmma-gemm-kernel: schedule pipeline stages "
+                        "must be in [1,4]");
+          return signalPassFailure();
+        }
+      }
+      if (auto layout =
+              op->getAttrOfType<StringAttr>("schedule_lds_layout")) {
+        if (layout.getValue() != "swizzle" && layout.getValue() != "padding") {
+          op->emitError("generate-wmma-gemm-kernel: schedule LDS layout must "
+                        "be swizzle or padding");
+          return signalPassFailure();
+        }
+      }
+      if (auto owner =
+              op->getAttrOfType<StringAttr>("schedule_ownership")) {
+        if (owner.getValue() != "wave") {
+          op->emitError("generate-wmma-gemm-kernel: WMMA macro-tiles require "
+                        "wave ownership");
+          return signalPassFailure();
+        }
+      }
 
       OpBuilder b(module.getBodyRegion());
       b.setInsertionPointToEnd(module.getBody());
@@ -617,6 +653,11 @@ struct GenerateWMMAGemmKernelPass
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
       gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
                        b.getUnitAttr());
+      for (StringRef attrName : {"schedule_arch", "schedule_pipeline_stages",
+                                 "schedule_lds_layout", "schedule_ownership",
+                                 "schedule_vgpr_estimate", "schedule_source"})
+        if (Attribute attr = op->getAttr(attrName))
+          gpuFunc->setAttr((Twine("tessera.rocm.") + attrName).str(), attr);
 
       OpBuilder bodyB(gpuFunc.getContext());
       emitGeneralBody(bodyB, loc, gpuFunc, mt, nt, T, viaTile, hasBias,

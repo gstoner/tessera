@@ -1252,13 +1252,33 @@ def _lower_rocm_op(op: TileOp) -> list[TargetOp]:
         dtype = str(op.attrs.get("dtype", "f16"))
         if dtype not in ("f16", "bf16", "int8", "i8", "int4", "i4"):
             dtype = "f16"
+        schedule_attrs: dict[str, Any] = {
+            key: op.attrs[key]
+            for key in (
+                "mt", "nt", "schedule_arch", "schedule_pipeline_stages",
+                "schedule_lds_layout", "schedule_ownership",
+                "schedule_vgpr_estimate", "schedule_source",
+            )
+            if key in op.attrs
+        }
         return [
             TargetOp("tessera_rocm.mfma", {**base, "arch": "gfx90a", "shape": "m16n16k16", "accum": "f32"}),
             TargetOp("tessera_rocm.wmma_gemm", {**base, "name": "gemm",
-                     "m": 16, "n": 16, "k": 16, "dtype": dtype}),
+                     "m": 16, "n": 16, "k": 16, "dtype": dtype,
+                     **schedule_attrs}),
             TargetOp("tessera_rocm.async_copy", {**base, "src_space": "global", "dst_space": "lds", "bytes": 16}),
             TargetOp("tessera_rocm.wait", {"ordinal": base["ordinal"]}),
         ]
+    if source == "tessera.grouped_gemm":
+        return [TargetOp("tessera_rocm.grouped_gemm", {
+            **base,
+            "name": "grouped_gemm",
+            "arch": "gfx1151",
+            "status": "device_verified_jit",
+            "runtime_lane": "rocm_moe_transport_compiled",
+            "argument_layout": "device_offsets[E+1]",
+            "dispatches": 1,
+        })]
     if op.op_name == "tessera.attn.msa_kv_outer_sparse" or source == "tessera.msa_sparse_attention":
         # MSA KV-outer sparse — the ROCm IR-visible mirror of the CUDA
         # `msa_kv_outer_sparse` contract. Unlike NVIDIA's `artifact_only`

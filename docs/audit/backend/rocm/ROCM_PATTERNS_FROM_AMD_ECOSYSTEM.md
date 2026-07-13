@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-06-18
+last_updated: 2026-07-13
 audit_role: reference
 ---
 
@@ -20,30 +20,31 @@ audit_role: reference
 
 ---
 
-## 0. The frame — where Tessera's ROCm backend actually stops today
+## 0. Current reconciliation with the ROCm audit (2026-07-13)
 
-The patterns below only make sense against the current frontier (mapped from the repo):
+This document is now read against the evidence rules and open work in
+[`ROCM_AUDIT.md`](ROCM_AUDIT.md). The June survey remains useful design input, but its
+original “artifact-only” frontier is obsolete.
 
-- **Real today:** [`python/tessera/compiler/rocdl_emit.py`](../../../../python/tessera/compiler/rocdl_emit.py)
-  emits legal WMMA LLVM-IR for RDNA 3 / 3.5 / 4 and verifies it lowers to real `v_wmma_*`
-  instructions via `llc -mcpu=gfx1151` on the host. Per-arch feature/dtype and
-  MFMA/WMMA shape tables are grounded in
-  [`rocm_target.py`](../../../../python/tessera/compiler/rocm_target.py) and the C++
-  `mfma_table.inc` (generated from the Python `_MFMA_VARIANTS` by
-  [`generate_mfma_table.py`](../../../../scripts/generate_mfma_table.py)).
-- **Artifact-only:** the C++ backend stops at *placeholder marker ops* in
-  [`TesseraTargetToROCDL.cpp`](../../../../src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp)
-  — it never emits real `rocdl.mfma.*` / `rocdl.wmma.*` intrinsics. The Python emitter
-  bypasses the C++ spine entirely.
-- **Missing:** HIP launcher isn't registered into `tsrRegisterGpuLauncher`; zero
-  `execute_compare_fixture`s for ROCm; the RCCL adapter is a version-pin scaffold
-  (`AdapterVersionPin.h`) with no collective kernels; `backend_kernel = complete` is **0/all**.
-- **The unblock:** Strix Halo (gfx1151, RDNA 3.5) — first real non-Apple silicon, on an
-  *open LLVM→AMDGPU* path that generalizes to NVIDIA (unlike Apple's MSL-only route).
+- **Executable today:** the C++ Tile/Target-IR path generates real gfx1151 WMMA GEMM and
+  flash-attention kernels, serializes hsaco, launches through HIP, and compares device
+  results. Generated GEMM, attention, sparse attention/selection, MoE transport, and a
+  broad scalar/reduction family have `device_verified_jit` evidence in the audit.
+- **The main compiler gap moved upward:** hardware-free descriptors for tiling, LDS,
+  layouts, MMA selection, tuned dispatch, and epilogues existed but several were model
+  islands. The immediate work is to make those objects select or transform executing
+  kernels, not to add more disconnected vocabulary.
+- **Performance claims are comparative:** ROCM-6 keeps production and candidate kernels
+  side by side, requires aligned and ragged correctness rungs, records workspace, and
+  promotes only through the audit's named latency ratchets. Native `rocprofv3` PMCs are
+  supporting evidence, never a substitute for wall-clock A/B results.
+- **ROCM-7 is an ownership problem:** gfx1151 measurements show cooperative selection wins
+  for a few rows with thousands of candidates, while thread-owned rows win when independent
+  parallelism is abundant. Ownership is therefore a general schedule axis rather than a
+  sparse-only boolean.
 
-The patterns therefore split into **(A) hardware-free wins to adopt now**,
-**(B) the GEMM perf ladder to wire at Strix Halo bring-up**, and
-**(C) the distributed / GPU-initiated-comm track**.
+The patterns below are split into **(A) compiler objects that must reach a consumer**,
+**(B) measured kernel redesigns**, and **(C) the distributed/GPU-initiated-comm track**.
 
 The throughline across all eight projects: **AMD's stack has converged on "make the
 hardware concept a first-class object"** — layouts, fragments, symmetric heaps, epilogues,
@@ -351,9 +352,10 @@ the forward-looking transport for S12 checkpointing / S15 data pipeline. **[V / 
 
 ---
 
-## 2.5 Implementation status — hardware-free batch landed (2026-06-18)
+## 2.5 Historical implementation snapshot — hardware-free batch (2026-06-18)
 
-The entire **A (hardware-free)** batch is implemented and green (134 unit tests,
+This section is retained as provenance, not current status. The entire original **A
+(hardware-free)** batch was implemented and green (134 unit tests,
 mypy-clean). These are pure Python IR/metadata/dispatch surfaces — no silicon
 required — that the ROCm lowering, autotuner, and audit registry can consume now.
 
@@ -445,20 +447,35 @@ compare on real silicon — see `STRIX_HALO_EXECUTION_PLAN.md`).
 
 ---
 
-## 3. Recommended sequencing
+## 3. Current compiler/backend work derived from the survey
 
-1. **Now (hardware-free, highest ROI):** A4 (tuned-config DB) + A3 (epilogue bit-flags) +
-   A1 (unified `tessera_rocm.mma` type) — pure IR/metadata/dispatch, each lit-testable and
-   guardable without silicon.
-2. **Next (still hardware-free):** A2 (layout types), A6 (FP8 FNUZ/OCP + numeric_policy),
-   A5 (untuned worklist).
-3. **At Strix Halo:** B4 (real intrinsics — the actual blocker) → B1/B2/B3 (GEMM ladder) →
-   B5 (counter scoring). Where `backend_kernel` finally moves off 0.
-4. **Distributed track (parallel, longer horizon):** C1 → C2 → C3.
+| Ecosystem pattern | Current Tessera consumer | Remaining proof/gap |
+|---|---|---|
+| AITER/hipBLASLt schedule rows | `ROCmScheduleDescriptor` now joins macro-tile, VGPR estimate, pipeline depth, LDS layout, ownership, and provenance; production generated GEMM consumes its `mt/nt` and the C++ generator validates/stamps the descriptor. | Replace the initial measured two-point gfx1151 macro-tile policy with tuned rows per dtype/shape; promotion stays ROCM-6-ratcheted. |
+| Gluon register/LDS design | `rocm_tiling.py` and `rocm_lds.py` feed the unified descriptor rather than remaining test-only models. | Make pipeline depth and LDS swizzle alter the generated GEMM body after their A/B candidates clear the audit thresholds. |
+| Iris/Gluon ownership | `ownership_topology.py` owns the `thread|wave|multi_wave|workgroup` axis; ROCM-7 top-k calls it. | Calibrate additional targets and apply the same axis to reductions, attention, and grouped expert work. |
+| Explicit layouts | `#tile.layout` affine extents/strides/offset now materialize executable ROCm LDS copy addresses. Replicated and swizzled layouts fail explicitly instead of being silently ignored. | Add bounds-aware swizzle and multicast lowering; then costed `convert_layout` can become an executing LDS round trip. |
+| Native counter evidence | `collect_rocm6_counters.py` preserves experiment/variant identity with collection disabled by default; its explicit `--native-counters` switch runs retained production/candidate commands under bare-metal `rocprofv3 --pmc` and rejects unsupported WSL collection before launch. | Record bare-metal counter sets supported by gfx1151 for each G6 rung and join them with latency-ratchet rows. |
+| hipBLASLt grouped user args | `tessera_rocm.grouped_gemm` is generated by the MoE pass as one launch with device-resident contiguous offsets `[E+1]`. | Measure against the existing per-group f32 path, then use it inside grouped SwiGLU only if it wins and all MoE fixtures pass. |
 
----
+This reconciliation changes how “implemented” is used: a Python dataclass or copied MLIR
+attribute is a contract; it becomes backend support only when an executing consumer changes
+code generation or device arguments and the corresponding correctness evidence passes.
 
-## 4. Sources
+## 4. Recommended sequencing
+
+1. Run the unified GEMM descriptor through the existing aligned/ragged correctness ladder,
+   then record ROCM-6 G6-A direct-vs-pipeline A/B rows with native PMCs.
+2. Finish bounds-aware swizzled layout consumption and use the costed conversion model to
+   decide when an LDS round trip is legal and worthwhile.
+3. Benchmark the one-launch grouped-offset kernel against per-expert dispatch; promote it
+   into grouped SwiGLU only through a comparative MoE ratchet.
+4. Extend ownership calibration to two-wave FA (G6-B), split dK/dV (G6-C), and general
+   reductions. Do not copy target thresholds without a measured crossover.
+5. Keep C1→C2→C3 as the longer distributed track; it does not block single-gfx1151 kernel
+   progress.
+
+## 5. Sources
 
 - AITER — https://github.com/ROCm/aiter · DeepWiki https://deepwiki.com/ROCm/aiter ·
   GEMM auto-tuning https://deepwiki.com/ROCm/aiter/5.3-gemm-auto-tuning-infrastructure

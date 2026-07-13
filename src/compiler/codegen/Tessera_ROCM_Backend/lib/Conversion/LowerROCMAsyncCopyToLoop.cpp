@@ -18,6 +18,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "TesseraROCM/Passes.h"
+#include "Tessera/Dialect/Tile/TileDialect.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
@@ -30,6 +31,58 @@
 using namespace mlir;
 
 namespace {
+
+// Materialize the affine portion of #tile.layout.  Before this consumer the
+// attribute survived lowering as a marker while the executable loop always
+// indexed dst[i].  A flat logical i is now delinearized by shard extents and
+// reassembled with declared memory-axis strides/offset, so layout changes alter
+// generated LDS addresses without folding lane/wave ownership into a pointer.
+// Replication is deliberately rejected here: one
+// logical source element would require multiple stores, which is a separate
+// multicast lowering rather than an address calculation.
+static FailureOr<Value> applyTileLayout(OpBuilder &b, Location loc,
+                                        Operation *op, Value logical) {
+  auto layout = op->getAttrOfType<tessera::tile::TileLayoutAttr>("tile.layout");
+  if (!layout)
+    return logical;
+  if (!layout.getReplicaCounts().empty()) {
+    op->emitError("lower-rocm-async-copy: replicated #tile.layout needs the "
+                  "multicast lowering, not the single-store copy loop");
+    return failure();
+  }
+  Value physical = b.create<arith::ConstantIndexOp>(loc, layout.getOffset());
+  ArrayRef<int64_t> extents = layout.getShardExtents();
+  ArrayRef<int64_t> strides = layout.getShardStrides();
+  ArrayRef<StringAttr> axes = layout.getShardAxes();
+  int64_t suffix = 1;
+  for (int64_t pos = static_cast<int64_t>(extents.size()) - 1; pos >= 0; --pos) {
+    Value coord = logical;
+    if (suffix != 1)
+      coord = b.create<arith::DivUIOp>(
+          loc, coord, b.create<arith::ConstantIndexOp>(loc, suffix));
+    coord = b.create<arith::RemUIOp>(
+        loc, coord, b.create<arith::ConstantIndexOp>(loc, extents[pos]));
+    // Only memory axes contribute to an LDS address. laneid/waveid/etc. are
+    // ownership coordinates; folding their stride into the pointer would
+    // conflate placement with storage and can alias a cooperative copy.
+    StringRef axis = axes[pos].getValue();
+    if (axis == "lds" || axis == "m") {
+      Value scaled = b.create<arith::MulIOp>(
+          loc, coord, b.create<arith::ConstantIndexOp>(loc, strides[pos]));
+      physical = b.create<arith::AddIOp>(loc, physical, scaled);
+    }
+    suffix *= extents[pos];
+  }
+  // The non-affine swizzle stays explicit until a dedicated ds_read/ds_write
+  // lowering can prove the allocation span.  Rejecting it prevents the old,
+  // dangerous behavior where it was silently ignored by executable code.
+  if (layout.getSwizzle()) {
+    op->emitError("lower-rocm-async-copy: swizzled #tile.layout requires the "
+                  "bounds-aware LDS swizzle lowering");
+    return failure();
+  }
+  return physical;
+}
 
 struct LowerROCMAsyncCopyToLoopPass
     : PassWrapper<LowerROCMAsyncCopyToLoopPass, OperationPass<ModuleOp>> {
@@ -94,7 +147,12 @@ struct LowerROCMAsyncCopyToLoopPass
         b.setInsertionPointToStart(loop.getBody());
         Value i = loop.getInductionVar();
         Value v = b.create<memref::LoadOp>(loc, src, ValueRange{i});
-        b.create<memref::StoreOp>(loc, v, dst, ValueRange{i});
+        FailureOr<Value> physical = applyTileLayout(b, loc, op, i);
+        if (failed(physical)) {
+          signalPassFailure();
+          return;
+        }
+        b.create<memref::StoreOp>(loc, v, dst, ValueRange{*physical});
       }
       // The token result modeled completion ordering; the gpu.barrier (from the
       // consuming wait, lowered above) provides it. Any remaining token use

@@ -543,6 +543,18 @@ def ROCM_MoeKernelOp : TesseraROCM_Op<"moe"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_GroupedGemmKernelOp : TesseraROCM_Op<"grouped_gemm"> {
+  let summary = "Native contiguous grouped GEMM with device-resident offsets";
+  let description = [{
+    `generate-rocm-moe-kernel` expands this directive into one f32 GPU launch
+    over every token/output column. `offsets[E+1]` remains a device argument and
+    identifies the expert weight slice for each contiguous token group; the
+    runtime does not issue a per-expert dispatch or expand offsets into a route.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_GemmF32KernelOp : TesseraROCM_Op<"gemm_f32"> {
   let summary = "Plain single-precision GEMM gpu kernel";
   let description = [{

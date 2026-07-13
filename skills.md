@@ -183,7 +183,7 @@ Source: Apple's `RunningAMachineLearningModelOnTheGPUTimeline` sample (915 LOC O
 
 ### Cross-reference
 
-* `docs/apple_backend.md` — the architectural story.
+* `docs/backends/apple/` — the architectural story.
 * `docs/audit/backend/apple/archive/apple_gpu_tier2_tier3_plan.md` — packaged kernels roadmap (where patterns 1, 2, 3 land).
 * `src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm` — where patterns 4, 5 (follow-on), 6 land.
 

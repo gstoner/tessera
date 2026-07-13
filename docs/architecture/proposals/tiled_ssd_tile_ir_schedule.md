@@ -199,5 +199,5 @@ level and the right time*, not to micro-optimize one backend.
   `docs/architecture/Compiler/Tessera_Compiler_TargetIR_Design.md`.
 - Backend tile-shape truth: `python/tessera/compiler/backend_manifest.py`
   (`_NVIDIA_KERNEL_TILE_SHAPES`, `_ROCM_KERNEL_MFMA_SHAPES`),
-  `docs/nvidia_cuda13_kernel_inventory.md`, `docs/rocm_mfma_kernel_inventory.md`.
+  `docs/backends/nvidia/kernel-inventory.md`, `docs/backends/rocm/kernel-inventory.md`.
 - Decision #19 (hardware-free Target IR) — `CLAUDE.md`.

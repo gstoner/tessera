@@ -163,6 +163,16 @@ def _r_apple_target_map_csv() -> str:
     return apple_target_map.render_csv()
 
 
+def _r_apple_execution_inventory() -> str:
+    from . import apple_execution_inventory
+    return apple_execution_inventory.render_markdown()
+
+
+def _r_apple_execution_inventory_csv() -> str:
+    from . import apple_execution_inventory
+    return apple_execution_inventory.render_csv()
+
+
 def _r_gpu_target_map_csv(target: str) -> Callable[[], str]:
     def render() -> str:
         from . import gpu_target_map
@@ -480,6 +490,12 @@ REGISTRY: tuple[GeneratedDoc, ...] = (
         "apple_target_map", "target_map", _GEN / "apple_target_map.md",
         _r_apple_target_map,
         csv_path=_GEN / "apple_target_map.csv", render_csv=_r_apple_target_map_csv,
+    ),
+    GeneratedDoc(
+        "apple_execution_inventory", "target_map",
+        _GEN / "apple_execution_inventory.md", _r_apple_execution_inventory,
+        csv_path=_GEN / "apple_execution_inventory.csv",
+        render_csv=_r_apple_execution_inventory_csv,
     ),
     GeneratedDoc(
         "nvidia_sm90_target_map", "target_map", _GEN / "nvidia_sm90_target_map.md",

@@ -187,7 +187,7 @@ public:
 // semantic ops while marking them for the block-sparse backend lane; the ops
 // already carry block_size/top_k/force_local_block/causal as ODS attributes, so
 // Schedule/Tile IR reads the selection semantics directly off the op. See
-// docs/msa.md.
+// docs/architecture/workloads/msa.md.
 class MSAExpandPass
     : public PassWrapper<MSAExpandPass, OperationPass<ModuleOp>> {
 public:

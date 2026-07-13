@@ -7,7 +7,7 @@ See ``docs/audit/compiler/EVALUATOR_PLAN.md`` §2 (rung ladder) and §5.
 ``ptxas`` (rung 3) has nothing to consume and NVIDIA sits at rung 1. This module
 is the first step of rung **2.5** — emit real PTX assembler text for a narrow
 sm_90a WGMMA bf16 matmul, in the canonical encoding documented in
-``docs/nvidia_cuda13_kernel_inventory.md`` and asserted by the
+``docs/backends/nvidia/kernel-inventory.md`` and asserted by the
 ``tests/tessera-ir/phase3/cuda13/`` fixtures.
 
 **Honesty ceiling (read this).** This emits the documented WGMMA *instruction
@@ -42,7 +42,7 @@ from .gpu_target import TESSERA_TARGET_PTX_ISA
 
 PTX_ISA_VERSION = TESSERA_TARGET_PTX_ISA
 
-# Documented canonical Hopper WGMMA bf16 tiles (docs/nvidia_cuda13_kernel_inventory.md).
+# Documented canonical Hopper WGMMA bf16 tiles (docs/backends/nvidia/kernel-inventory.md).
 _WGMMA_BF16_CANONICAL: frozenset[tuple[int, int, int]] = frozenset(
     {(64, 256, 16), (64, 128, 16), (64, 64, 16)}
 )

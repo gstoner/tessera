@@ -640,7 +640,7 @@ the A–E kernel spine — each PR test-gated:
   every registered doc at sprint end. This retired the byte-exact-markdown
   drift gates that had been reddening CI (`runtime_abi.md` was stale 234 vs 241
   symbols). The four Apple CPU+GPU state docs were also consolidated into the
-  single reference `docs/apple_backend.md`.
+  single reference `docs/backends/apple/`.
 
 ## Still Open
 
@@ -1305,4 +1305,3 @@ with no `depends_on`), tessera-ir phase2/3 + registry/tiling pytest green.
 - `archive/compiler_layer_gap_remediation.md`
 - `archive/compiler_spec_gap_audit.md`
 - `archive/docs/audit/compiler/COMPILER_AUDIT.md`
-

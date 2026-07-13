@@ -156,7 +156,7 @@ CUDA, and this lane executes today:
 - **Auto-batch** coalesces compatible ops so they share one encode-session.
 
 This is the inter-tile equivalent of the NVIDIA `cp_async`/TMA story for the
-Apple backend. See [`docs/apple_backend.md`](../apple_backend.md).
+Apple backend. See [`docs/backends/apple/`](../backends/apple/).
 
 ---
 

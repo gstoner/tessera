@@ -21360,7 +21360,7 @@ def _apple_gpu_conv2d_f16() -> Any:
 # activation` block collapses to one fused matmul2d dispatch on the cooperative
 # tensor units (f16/bf16). This is the robust arbitrary-size conv lane; the native
 # MPP `convolution2d` cooperative op is verified single-tile but its multi-tile
-# grid convention is undocumented (see docs/apple_backend.md P8).
+# grid convention is undocumented (see docs/backends/apple/ P8).
 # OPT-IN, OFF by default. The unfold now runs ON the GPU (an MSL im2col kernel —
 # `apple_gpu_conv2d` prefers the on-device `tessera_apple_gpu_mtl4_conv2d_*`
 # symbol, host im2col only as a fallback), and the matmul runs on the matrix
@@ -21560,7 +21560,7 @@ def apple_gpu_conv2d(X: Any, W: Any, np: Any, *, bias: Any = None, act: str = "n
     Prefers the on-device path (GPU im2col, ``col`` never leaves the GPU); falls
     back to a host im2col + the epilogue when the on-device symbol didn't run.
     Returns ``(Y[N,OH,OW,Cout] float32, ran_on_mtl4)``; numpy fallback off Metal 4.
-    See docs/apple_backend.md (P8)."""
+    See docs/backends/apple/ (P8)."""
     def _pair(v):
         return (int(v[0]), int(v[1])) if isinstance(v, (tuple, list)) else (int(v), int(v))
     sH, sW = _pair(stride); pH, pW = _pair(padding); dH, dW = _pair(dilation)
@@ -21610,7 +21610,7 @@ def apple_gpu_conv2d(X: Any, W: Any, np: Any, *, bias: Any = None, act: str = "n
 # single GPU dispatch; batched (ndim>2) f32 loops the rank-2 kernel per matrix
 # (MPS decomposition/solve are single-matrix per encode — no native batch);
 # non-f32 / off-Metal inputs fall back to the numpy reference. Each returns
-# (result, ran_on_gpu). See docs/apple_backend.md (linalg).
+# (result, ran_on_gpu). See docs/backends/apple/ (linalg).
 
 def _apple_gpu_linalg_sym(name: str, argtypes: list) -> Any:
     runtime = _load_apple_gpu_runtime()
@@ -23108,7 +23108,7 @@ def _apple_gpu_dispatch_sparse_attn(op_name: str, operands: list[Any],
         # Index Branch + Top-k selection. For huge shapes the host scoring matmul
         # (O(B·Hkv·Sq·D·num_blocks)) dominates, so run the whole Index Branch on
         # the GPU (bmm scoring + GPU select kernel). Below the threshold the host
-        # path is cheaper than the GPU launch overhead (docs/msa.md §10).
+        # path is cheaper than the GPU launch overhead (docs/architecture/workloads/msa.md §10).
         sel = None
         _nb = S_k // block_size
         _idx_flops = B * Hkv * S_q * D * _nb
@@ -23983,7 +23983,7 @@ def _apple_gpu_msa_gpu_resident_select(Q, K, *, block_size, top_k, causal,
 
 # Huge-batch threshold (Index-Branch FLOPs ≈ B·Hkv·Sq·D·num_blocks): below this,
 # host selection is cheaper than the GPU launch overhead (Decision: see
-# docs/msa.md §10). Tunable via TESSERA_MSA_GPU_SELECT_FLOPS.
+# docs/architecture/workloads/msa.md §10). Tunable via TESSERA_MSA_GPU_SELECT_FLOPS.
 _MSA_GPU_SELECT_FLOP_THRESHOLD = int(
     os.environ.get("TESSERA_MSA_GPU_SELECT_FLOPS", str(64 * 1024 * 1024))
 )
@@ -25417,7 +25417,7 @@ def apple_gpu_mtl4_archive_enable(path: str) -> bool:
     ``path`` (if present) so matching MTL4 pipelines skip the MSL recompile on
     process start, and captures subsequently-built pipelines for a later
     :func:`apple_gpu_mtl4_archive_flush`. No effect on the default path; returns
-    True if enabled (Metal 4 available). See docs/apple_backend.md
+    True if enabled (Metal 4 available). See docs/backends/apple/
     (P4)."""
     runtime = _load_apple_gpu_runtime()
     sym = getattr(runtime, "tessera_apple_gpu_mtl4_archive_enable", None)
@@ -27885,8 +27885,12 @@ def _build_apple_gpu_runtime_shared(root: Path) -> Path:
     cmd = [cxx, "-std=c++17", "-shared", "-fPIC"]
     if sys.platform == "darwin":
         cmd.extend(["-fobjc-arc", "-x", "objective-c++"])
+    # xdist workers can reach this cache concurrently. Compile to a private
+    # sibling and atomically replace the published path only after the linker
+    # succeeds, so another worker can never dlopen a partially written .so.
+    tmp = out.with_name(f".{out.name}.{os.getpid()}.{time.time_ns()}.tmp")
     cmd.extend([str(source) for source in sources])
-    cmd.extend(["-o", str(out)])
+    cmd.extend(["-o", str(tmp)])
     if sys.platform == "darwin":
         cmd.extend([
             "-framework", "Foundation",
@@ -27898,6 +27902,10 @@ def _build_apple_gpu_runtime_shared(root: Path) -> Path:
     try:
         subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     except subprocess.CalledProcessError as exc:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
         detail = (
             f"Apple GPU runtime compile failed (rc={exc.returncode}).\n"
             f"command: {' '.join(cmd)}\n"
@@ -27905,6 +27913,7 @@ def _build_apple_gpu_runtime_shared(root: Path) -> Path:
             f"stderr:\n{exc.stderr or ''}"
         )
         raise RuntimeError(detail) from exc
+    os.replace(tmp, out)
     return out
 
 

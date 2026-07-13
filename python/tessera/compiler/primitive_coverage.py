@@ -734,7 +734,7 @@ _EXISTING_CONTRACT_OVERRIDES["memory_index_select"] = _MEMORY_INDEX_SELECT_HARDE
 #   - msa_sparse_attention : exact block-sparse Main Branch → differentiable.
 # sharding_rule + backend_kernel stay at the category default (partial): the
 # native sparse-block kernel is Phase 3 work (Apple GPU host-select first, CUDA
-# KV-outer lowering lit-only on this Mac). See docs/msa.md.
+# KV-outer lowering lit-only on this Mac). See docs/architecture/workloads/msa.md.
 _MSA_INDEX_SCORES_HARDENED: dict[str, str] = {
     "math_semantics": "complete",
     "shape_rule": "complete",

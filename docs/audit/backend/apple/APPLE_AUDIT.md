@@ -1,14 +1,24 @@
 ---
-last_updated: 2026-07-10
+last_updated: 2026-07-13
 audit_role: sub_audit
 ---
 
 # Apple Backend Audit
 
-This document consolidates Apple backend audit material across Metal runtime,
-Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
+This document records Apple-specific audit **deltas and decisions**. It is not
+the current execution-status authority: use
+[`apple_execution_inventory.md`](../../generated/apple_execution_inventory.md)
+for execution units, [`apple_target_map.md`](../../generated/apple_target_map.md)
+for generic per-op dispatch, and
+[`runtime_execution_matrix.md`](../../generated/runtime_execution_matrix.md)
+for observed executor placement. `docs/backends/apple/` owns the durable
+architecture narrative.
 
-## Finished
+The terminology is deliberate: *generic route*, *Value Target-IR call*, and
+*package subgraph* are different compiler forms; `native_gpu`, `native_cpu`,
+and `reference_cpu` name actual placement rather than broad support.
+
+## Historical audit deltas
 
 - **Op-family parity with x86/ROCm via `runtime.launch()` (2026-07-09 wave, PRs
   #340–#350 + cf067fe).** Apple GPU closed the tail-lane gaps that had left it
@@ -230,9 +240,9 @@ Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
   no-execute-compare allowlist (`ebm_self_verify` / `ebm_langevin_step` /
   `kv_cache_read`) and locks `hardware_verified ⟹ fixture`.
 
-## Open Work
+## Active decisions and backlog
 
-_No open Apple-compiler items on the correctness track._ The 2026-06-02 PK8–PK8h
+_No open Apple-compiler items on the existing correctness track._ The 2026-06-02 PK8–PK8h
 arc closed packaged-kernel authoring end to end, the 2026-06-09 sprint closed the
 four remaining themes (descriptor-driven dispatch, feature-table-driven selection,
 perf ratchets, auto_batch polish), and the 2026-07-09 wave closed the op-family
@@ -240,6 +250,12 @@ parity gap vs x86/ROCm (see **Finished** above). Everything previously tracked
 under "Still Open" / "Next Work" has landed.
 
 The remaining frontier is **performance + precision, not backend correctness**:
+
+- **Package-subgraph compiler integration.** The package lifecycle and explicit
+  authoring are proven, but `package_call` is not yet a compiler-selected launch
+  route. The first promotion must be a resident-tensor, whole-subgraph result
+  that beats both MPSGraph and the best fused-MSL alternative; it is tracked as
+  `package_call launch gated` in the execution inventory.
 
 - **`quantize`/`dequantize` fp4/fp6/fp8/nvfp4 — the one uncovered op family.**
   Gated on the macOS-27 / Metal 4.1 tensor toolchain (`MTLTensor` FP8/FP4/MX
@@ -319,4 +335,3 @@ gated). **(5) Custom MSL hook** — `mx.fast.metal_kernel` as a debug/escape-hat
 - `archive/single_command_buffer_decode_plan.md`
 - `archive/apple_ga_ebm_native_execution_gap.md`
 - `../../compiler/archive/compiler_apple_backend_end_to_end_audit_2026_06_02.md`
-

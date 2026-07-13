@@ -18,7 +18,7 @@
 //     →gelu)
 //
 // The pass runs first in the Apple GPU pipeline (longest fusion wins, per
-// the ordering rule in `docs/apple_backend.md`). If any constraint
+// the ordering rule in `docs/backends/apple/`). If any constraint
 // fails, the fused op falls through to the next pass; if no Apple GPU
 // pattern claims it, it stays as `tessera.swiglu_fused` and the runtime
 // path falls back to per-op execution.

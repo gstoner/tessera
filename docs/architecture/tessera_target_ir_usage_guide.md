@@ -220,7 +220,7 @@ rocdl.ds.read.b128 %addr : (!llvm.ptr<3>) -> vector<4xi32>
 ROCm target support is split by architecture family. CDNA targets use MFMA
 shapes where the inventory reports them; RDNA4 / `gfx1200` is modeled as
 WMMA-only, including FP8/BF8 and planned-gated INT4 coverage. See
-`docs/rocm_mfma_kernel_inventory.md` and
+`docs/backends/rocm/kernel-inventory.md` and
 `docs/audit/backend/BACKEND_AUDIT.md` for the current dtype and
 instruction matrix.
 

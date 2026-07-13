@@ -8,7 +8,7 @@ folded into a per-row additive mask). The GPU result must match the numpy
 reference `ops.msa_sparse_attention` bit-for-bit (within fp32 tolerance).
 
 Skips cleanly when the Apple GPU runtime can't be loaded (non-Darwin / no Metal).
-See docs/msa.md §6.
+See docs/architecture/workloads/msa.md §6.
 """
 
 from __future__ import annotations

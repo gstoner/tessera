@@ -1,18 +1,23 @@
-# Apple GPU kernel + lane inventory (reference)
+# Apple GPU kernel + lane guide (reference)
 
-> The **machine-readable** truth for the full exported C-ABI symbol surface is
+> This is a **human guide to kernel families, ABI conventions, and constraints**.
+> It is not a competing status ledger. The **machine-readable** truth for the
+> full exported C-ABI symbol surface is
 > the generated, drift-gated
-> [`docs/audit/generated/runtime_abi.csv`](audit/generated/runtime_abi.csv)
-> (human summary: [`runtime_abi.md`](audit/generated/runtime_abi.md)). The op ×
+> [`docs/audit/generated/runtime_abi.csv`](../../audit/generated/runtime_abi.csv)
+> (human summary: [`runtime_abi.md`](../../audit/generated/runtime_abi.md)). The op ×
 > target × dtype matrix is
-> [`apple_target_map.md`](audit/generated/apple_target_map.md);
+> [`apple_target_map.md`](../../audit/generated/apple_target_map.md);
 > what actually executes per lane is
-> [`runtime_execution_matrix.md`](audit/generated/runtime_execution_matrix.md).
-> The tables below are the curated human reference.
+> [`runtime_execution_matrix.md`](../../audit/generated/runtime_execution_matrix.md).
+> [`apple_execution_inventory.md`](../../audit/generated/apple_execution_inventory.md)
+> adds the execution-unit view (generic route, Value Target-IR, package
+> subgraph, and reference fallback). The tables below intentionally explain
+> the implementation rather than certify current placement or proof status.
 >
 > Architecture, execution gates, the Metal 4 lane, datatypes, and the
 > how-to-add-a-kernel guides live in the single backend reference,
-> [apple_backend.md](apple_backend.md).
+> [Apple backend reference](README.md).
 
 Two families of Apple GPU execution coexist:
 
@@ -90,7 +95,7 @@ falls back to numpy otherwise.
 Custom batched MSL grid kernels (`cholesky_batched`, `tri_solve_batched`,
 `_svd_bl_batched_f32` Brent–Luk Jacobi) measure 30–388× a per-matrix MPS loop.
 QR = Cholesky-QR with a `‖QᵀQ−I‖` verify → Householder fallback. See
-[apple_backend.md](apple_backend.md#gpu-linear-algebra-implementation-state).
+[Apple backend reference](README.md#gpu-linear-algebra-implementation-state).
 
 ### Capability / diagnostic + GPU-native RNG symbols
 
@@ -121,7 +126,7 @@ Tensor pointers are `i64` at the `func.call` boundary; dims are `i32`; scale/eps
 **9 kernel concepts × dtypes = 26 core runtime symbols.** The MTL4 cooperative
 `matmul2d` lane (fp16/bf16 + fused bias/act epilogue + resident-weight session)
 and the GA/EBM fused kernels add further symbols — see
-[apple_backend.md](apple_backend.md) and `runtime_abi.csv`.
+[Apple backend reference](README.md) and `runtime_abi.csv`.
 
 ---
 
@@ -133,9 +138,9 @@ x86/ROCm lanes). `execution_kind` is honest per lane: `native_gpu` genuinely
 dispatches to the MPS/MSL compute lanes above (numpy fallback when Metal is
 unavailable); `reference_cpu` runs the CPU reference where Apple ships no device
 kernel. Manifest/status truth:
-[`apple_target_map.md`](audit/generated/apple_target_map.md);
+[`apple_target_map.md`](../../audit/generated/apple_target_map.md);
 per-lane execution truth:
-[`runtime_execution_matrix.md`](audit/generated/runtime_execution_matrix.md).
+[`runtime_execution_matrix.md`](../../audit/generated/runtime_execution_matrix.md).
 
 | `compiler_path` | Ops | `execution_kind` |
 |-----------------|-----|------------------|

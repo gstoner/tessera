@@ -9,8 +9,8 @@ last_updated: 2026-07-10
 
 > Reference enumerating every fused kernel Tessera plans to ship on AMD
 > CDNA 2/3/4 (MFMA) and RDNA 3 / RDNA 3.5 / RDNA 4 (WMMA) under ROCm 7.2.4 +
-> HIP 7.2.4. Companion to `docs/nvidia_cuda13_kernel_inventory.md` (parallel
-> coverage tracking) and `docs/apple_gpu_kernel_inventory.md`.
+> HIP 7.2.4. Companion to `docs/backends/nvidia/kernel-inventory.md` (parallel
+> coverage tracking) and `docs/backends/apple/kernel-guide.md`.
 >
 > **Execution status (2026-07-10):** far past hardware-free. On the
 > **RDNA 3.5 `gfx1151`** (Strix Halo APU — Ryzen AI Max+ 395 / Radeon 8060S)
@@ -28,7 +28,7 @@ last_updated: 2026-07-10
 > execute-vs-reference verified, no perf ladder yet).
 >
 > **Status truth is the generated matrix, not this prose (Decision #26):**
-> [`docs/audit/generated/runtime_execution_matrix.md`](audit/generated/runtime_execution_matrix.md)
+> [`docs/audit/generated/runtime_execution_matrix.md`](../../audit/generated/runtime_execution_matrix.md)
 > is the drift-gated source for which `(op, target)` rows execute and by which
 > lane. This inventory is the *kernel contract* (shapes, dtypes, MFU targets);
 > read it against that matrix for live execution status. See §7, §9, and
@@ -388,7 +388,7 @@ GFX12 scalar prefetch / load notes tracked for future scheduler work:
 | `fused` | Performance characterized against the MFU targets in §5 | only `matmul`/`gemm` has a *measured perf ladder*; **no MFU-target sign-off anywhere**; CDNA MFU targets need MI300X/MI325X |
 
 **Status truth is the generated matrix, not this table (Decision #26).**
-[`docs/audit/generated/runtime_execution_matrix.md`](audit/generated/runtime_execution_matrix.md)
+[`docs/audit/generated/runtime_execution_matrix.md`](../../audit/generated/runtime_execution_matrix.md)
 is the drift-gated source for which `(op, target)` rows execute. As of 2026-07-10
 the ROCm backend runs **dozens of compiler-generated HIP kernels natively on
 `gfx1151`** through `runtime.launch()` (`execution_mode="hip_runtime"`) — see the
@@ -562,7 +562,7 @@ promotes them to `compileable`. See §9 for the concrete done / open / blocked s
 ## 10. M7 Visual Complex Analysis (E3 follow-up)
 
 Parallel to the NVIDIA M7 plan (see
-`docs/nvidia_cuda13_kernel_inventory.md` §9).
+`docs/backends/nvidia/kernel-inventory.md` §9).
 
 > **Update (2026-07-10).** This family is **no longer reference-only on ROCm.**
 > The M7 pointwise complex ops execute on `gfx1151` via `rocm_complex_compiled`

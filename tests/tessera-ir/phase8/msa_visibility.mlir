@@ -2,7 +2,7 @@
 // compiler-visibility slot: it preserves the three semantic MSA ops (Index
 // Branch / Top-k selector / exact block-sparse Main Branch) and marks them for
 // the block-sparse backend lane, without claiming a fused kernel. The ops carry
-// block_size/top_k/force_local_block/causal as ODS attributes. See docs/msa.md.
+// block_size/top_k/force_local_block/causal as ODS attributes. See docs/architecture/workloads/msa.md.
 //
 // RUN: %tessera_strict_opt %s -tessera-msa-expand | FileCheck %s
 

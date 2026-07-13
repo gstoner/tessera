@@ -1523,9 +1523,9 @@ uses the clipped weight as a detached multiplier on the log-prob objective.
 | `attn_compressed_blocks(Q, K_c, V_c)` | `(array,array,array) → array` | `state` | NSA-1 branch — attention over per-block compressed K/V summaries |
 | `attn_top_k_blocks(Q, K, V, *, scores, top_k, block_size, causal=True)` | `(array,array,array) → array` | `state` | NSA-1 branch — top-k block-selected attention |
 | `deepseek_sparse_attention(Q, K, V, gate_logits=None, ...)` | `(array,array,array,optional array) → array` | `state` | DeepSeek/NSA wrapper composing sliding, compressed, and top-k branches |
-| `msa_index_scores(Q, K, *, block_size, scale=None)` | `(array,array) → array` | `pure` | MSA Index Branch — exp-free per-GQA-group KV-block scores `(B, Hkv, Sq, num_blocks)`; differentiable (VJP+JVP). See [docs/msa.md](../msa.md) |
+| `msa_index_scores(Q, K, *, block_size, scale=None)` | `(array,array) → array` | `pure` | MSA Index Branch — exp-free per-GQA-group KV-block scores `(B, Hkv, Sq, num_blocks)`; differentiable (VJP+JVP). See [MSA](../architecture/workloads/msa.md) |
 | `msa_select_blocks(scores, *, top_k, block_size, force_local_block=True, causal=True)` | `(array) → int64-array` | `pure` | MSA Top-k block selection per GQA group — deterministic, forced-local, exp-free; returns sorted block ids `(B, Hkv, Sq, top_k)` (non-differentiable) |
-| `msa_sparse_attention(Q, K, V, *, block_size, top_k, force_local_block=True, causal=True, scale=None, return_debug=False)` | `(array,array,array) → array \| (array, dict)` | `state` | MiniMax Sparse Attention exact block-sparse Main Branch over the selected blocks; `top_k == num_blocks` ⇒ dense GQA. `return_debug` adds selected-block ids / coverage / local-block-hit. See [docs/msa.md](../msa.md) |
+| `msa_sparse_attention(Q, K, V, *, block_size, top_k, force_local_block=True, causal=True, scale=None, return_debug=False)` | `(array,array,array) → array \| (array, dict)` | `state` | MiniMax Sparse Attention exact block-sparse Main Branch over the selected blocks; `top_k == num_blocks` ⇒ dense GQA. `return_debug` adds selected-block ids / coverage / local-block-hit. See [MSA](../architecture/workloads/msa.md) |
 | `score_combine(base, delta, *, gamma=1.0)` | `(array,array) → array` | `pure` | Diffusion-guidance (CGG) score composition — `base + gamma·delta`. Compiler-executable: Graph IR `tessera.score_combine` (verifier + `tessera-to-linalg` elementwise lowering). |
 | `memory_index_select(indexer_keys, query, *, block_size, threshold=0.5, causal=True, ...)` | `(array,array) → bool-array` | `pure` | LSA selector — sigmoid-threshold historical-block selection (union across layers, empty-selection fallback); returns a boolean block mask |
 | `memory_index_score(indexer_keys, query, *, scale=None)` | `(array,array) → array` | `pure` | LSA indexer-training scoring head — `sigmoid(query·keysᵀ·scale)` per-block probabilities; differentiable (closed-form VJP+JVP) so indexer keys are trainable |
@@ -1807,7 +1807,7 @@ Block-diffusion speculative-decoding draft ([z-lab/dflash](https://github.com/z-
 arXiv:2602.06036). Python reference; the attention core runs on the Apple GPU
 `metal_runtime` lane via the `attn_bias` substrate (§13). Greedy speculative
 output equals greedy autoregressive decode (proven vs the MLX reference). See
-[`docs/dflash.md`](../dflash.md) for the architecture overview.
+[`docs/architecture/workloads/dflash.md`](../architecture/workloads/dflash.md) for the architecture overview.
 
 ### 18.1 `tessera.nn.functional` — attention primitive
 

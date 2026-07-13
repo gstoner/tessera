@@ -4,7 +4,7 @@ Forward correctness of the three MSA primitives (Index Branch scoring, Top-k
 block selection, exact block-sparse Main Branch), the nn.functional wrapper,
 autodiff registration, and the op_catalog / primitive_coverage contract. The
 key anchor is dense-equivalence: when ``top_k == num_blocks`` MSA collapses to
-ordinary (causal) GQA attention bit-for-bit. See docs/msa.md.
+ordinary (causal) GQA attention bit-for-bit. See docs/architecture/workloads/msa.md.
 """
 
 from __future__ import annotations

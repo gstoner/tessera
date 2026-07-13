@@ -1,3 +1,9 @@
+---
+classification: Architecture / Workload
+authority: DFlash workload design and implementation guide
+last_updated: 2026-07-13
+---
+
 # DFlash — block-diffusion speculative decoding
 
 DFlash ([z-lab/dflash](https://github.com/z-lab/dflash), arXiv:2602.06036) is a
@@ -114,7 +120,7 @@ verification corrects every divergence.
 
 DFlash rides `flash_attn` + `attn_bias`, so its non-Apple backend seams are
 sequenced with the rest of the attention family in
-[`attention_family_backend_plan.md`](attention_family_backend_plan.md). DFlash
+[`attention-family.md`](attention-family.md). DFlash
 *always* passes an `attn_bias`, so each backend seam needs its flash lane to
 accept the bias operand first.
 
@@ -139,5 +145,5 @@ accept the bias operand first.
   head) into one `@jit(target="apple_gpu")` artifact needs a GPU gather/embedding
   op. The matmul-heavy pieces are GPU-eligible today via `ops.*`.
 
-Audit trail: [`docs/audit/MASTER_AUDIT.md`](audit/MASTER_AUDIT.md) (Domain
-Tracks) and [`docs/audit/domain/DOMAIN_AUDIT.md`](audit/domain/DOMAIN_AUDIT.md).
+Audit trail: [`docs/audit/MASTER_AUDIT.md`](../../audit/MASTER_AUDIT.md) (Domain
+Tracks) and [`docs/audit/domain/DOMAIN_AUDIT.md`](../../audit/domain/DOMAIN_AUDIT.md).

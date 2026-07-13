@@ -9,7 +9,7 @@ last_updated: 2026-07-11
 
 This is the consolidated, tri-backend execution plan for the **diffusion / DFlash
 + MiniMax Sparse Attention (MSA) + Mamba2** attention family. It supersedes the
-NVIDIA-only [`msa_cuda_phase3_plan.md`](msa_cuda_phase3_plan.md) by widening it to
+NVIDIA-only [`MSA CUDA detail`](msa-cuda-phase3.md) by widening it to
 **ROCm (gfx1151, RDNA3.5)**, **CUDA (sm_120, consumer Blackwell)**, and **x86
 (AVX-512)** — the three lead/CPU targets per Decision #28 (ROCm and CUDA are the
 lead performance targets; x86 is the CPU floor). Apple GPU is already native
@@ -20,10 +20,10 @@ verified against source, and every gap cites the closest reusable kernel and the
 reference to mirror. Where MASTER_AUDIT prose overstates a lane, this doc records
 the honest status (see NVIDIA flash-attention, §Status).
 
-Related docs: [`dflash.md`](dflash.md) · [`msa.md`](msa.md) ·
-[`msa_cuda_phase3_plan.md`](msa_cuda_phase3_plan.md) ·
-[`porting_advanced_examples.md`](porting_advanced_examples.md). Status truth stays
-in [`docs/audit/MASTER_AUDIT.md`](audit/MASTER_AUDIT.md) + the generated
+Related docs: [`DFlash`](dflash.md) · [`MSA`](msa.md) ·
+[`MSA CUDA detail`](msa-cuda-phase3.md) ·
+[`advanced example porting`](../../guides/porting_advanced_examples.md). Status truth stays
+in [`docs/audit/MASTER_AUDIT.md`](../../audit/MASTER_AUDIT.md) + the generated
 dashboards (Decision #26); this doc is *direction*.
 
 ---
@@ -62,10 +62,10 @@ Legend: ✅ native & executing · ⚠️ executes but unproven/unrecorded · �
 
 **¹ NVIDIA flash-attention — honest status.** A real `mma.sync` tensor-core FA
 kernel exists in the `emit/` plugin framework
-([`python/tessera/compiler/emit/nvidia_cuda.py`](../python/tessera/compiler/emit/nvidia_cuda.py):815
+([`python/tessera/compiler/emit/nvidia_cuda.py`](../../../python/tessera/compiler/emit/nvidia_cuda.py):815
 `_synthesize_mma_attn_cuda`, candidate `NvidiaMmaAttnCandidate` :911) — nvcc-compiled
 for `sm_120a`, launched on-device by the measured arbiter
-([`emit/autotune.py`](../python/tessera/compiler/emit/autotune.py) `measured_arbitrate`),
+([`emit/autotune.py`](../../../python/tessera/compiler/emit/autotune.py) `measured_arbitrate`),
 gated by the F4 oracle. **But** it is *not* `hardware_verified` in the manifest
 (`_NVIDIA_HARDWARE_VERIFIED` = matmul only, `backend_manifest.py:1787`), *not* in
 the execution matrix, has *no* committed baseline (only matmul rows in

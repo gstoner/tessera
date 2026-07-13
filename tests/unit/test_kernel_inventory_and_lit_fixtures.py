@@ -2,7 +2,7 @@
 
 Hardware-free guards for the per-target kernel pre-work:
 
-  G-2: `docs/nvidia_cuda13_kernel_inventory.md` — enumerates every
+  G-2: `docs/backends/nvidia/kernel-inventory.md` — enumerates every
        planned NVIDIA fused kernel under CUDA 13.3.
   G-3: `BackendKernelEntry` schema extended with `cuda_arch_min`,
        `nvcc_version_min`, `wgmma_shape`, `cluster_size`, `mfma_shape`,
@@ -11,7 +11,7 @@ Hardware-free guards for the per-target kernel pre-work:
        `tests/tessera-ir/phase3/cuda13/` — WGMMA matmul (bf16, fp8),
        FA-4 forward, MLA decode, DeepSeek NSA, Lightning attention,
        matmul→softmax fusion, SwiGLU MLP, Blackwell tcgen05, AdamW.
-  H-3: `docs/rocm_mfma_kernel_inventory.md` — enumerates every planned
+  H-3: `docs/backends/rocm/kernel-inventory.md` — enumerates every planned
        ROCm fused kernel under ROCm 7.2.4.
   H-4: ROCm lit fixtures under `tests/tessera-ir/phase8/rocm_7_2/`
        — MFMA matmul (bf16, fp8, fp4-CDNA4), FA fwd, MLA decode,
@@ -241,11 +241,11 @@ class TestG3ManifestWiring:
 
 class TestG2NvidiaInventoryDoc:
     def test_doc_exists(self):
-        doc = REPO / "docs" / "nvidia_cuda13_kernel_inventory.md"
+        doc = REPO / "docs/backends/nvidia/kernel-inventory.md"
         assert doc.exists()
 
     def test_doc_covers_required_sections(self):
-        doc = (REPO / "docs" / "nvidia_cuda13_kernel_inventory.md").read_text()
+        doc = (REPO / "docs/backends/nvidia/kernel-inventory.md").read_text()
         for section in (
             "Toolchain pin",
             "Per-SM feature matrix",
@@ -258,7 +258,7 @@ class TestG2NvidiaInventoryDoc:
             assert section in doc, f"Section {section!r} missing"
 
     def test_doc_mentions_canonical_kernel_families(self):
-        doc = (REPO / "docs" / "nvidia_cuda13_kernel_inventory.md").read_text()
+        doc = (REPO / "docs/backends/nvidia/kernel-inventory.md").read_text()
         for kernel in (
             "flash_attn",          # FA-4
             "mla_decode",          # DeepSeek MLA
@@ -272,7 +272,7 @@ class TestG2NvidiaInventoryDoc:
             assert kernel in doc, f"{kernel} missing from inventory"
 
     def test_doc_documents_ptx_patterns(self):
-        doc = (REPO / "docs" / "nvidia_cuda13_kernel_inventory.md").read_text()
+        doc = (REPO / "docs/backends/nvidia/kernel-inventory.md").read_text()
         for ptx in (
             "wgmma.mma_async.sync.aligned",
             "cp.async.bulk.tensor",
@@ -289,11 +289,11 @@ class TestG2NvidiaInventoryDoc:
 
 class TestH3RocmInventoryDoc:
     def test_doc_exists(self):
-        doc = REPO / "docs" / "rocm_mfma_kernel_inventory.md"
+        doc = REPO / "docs/backends/rocm/kernel-inventory.md"
         assert doc.exists()
 
     def test_doc_covers_required_sections(self):
-        doc = (REPO / "docs" / "rocm_mfma_kernel_inventory.md").read_text()
+        doc = (REPO / "docs/backends/rocm/kernel-inventory.md").read_text()
         for section in (
             "Toolchain pin",
             "Per-arch feature matrix",
@@ -308,7 +308,7 @@ class TestH3RocmInventoryDoc:
             assert section in doc, f"Section {section!r} missing"
 
     def test_doc_mentions_arch_families(self):
-        doc = (REPO / "docs" / "rocm_mfma_kernel_inventory.md").read_text()
+        doc = (REPO / "docs/backends/rocm/kernel-inventory.md").read_text()
         for arch in ("gfx90a", "gfx940", "gfx942", "gfx950", "gfx1100",
                      "gfx1200", "CDNA 2", "CDNA 3", "CDNA 4", "RDNA 3",
                      "RDNA 4",
@@ -316,7 +316,7 @@ class TestH3RocmInventoryDoc:
             assert arch in doc, f"{arch} missing from inventory"
 
     def test_doc_documents_amdgcn_patterns(self):
-        doc = (REPO / "docs" / "rocm_mfma_kernel_inventory.md").read_text()
+        doc = (REPO / "docs/backends/rocm/kernel-inventory.md").read_text()
         for intrinsic in (
             "llvm.amdgcn.mfma.f32.32x32x8bf16",
             "llvm.amdgcn.mfma.f32.16x16x16bf16",
@@ -327,7 +327,7 @@ class TestH3RocmInventoryDoc:
             assert intrinsic in doc, f"intrinsic {intrinsic!r} missing"
 
     def test_doc_documents_cdna4_fp4_lanes(self):
-        doc = (REPO / "docs" / "rocm_mfma_kernel_inventory.md").read_text()
+        doc = (REPO / "docs/backends/rocm/kernel-inventory.md").read_text()
         for fp4 in (
             "llvm.amdgcn.mfma.f32.32x32x32f4f4",
             "(32, 32, 32, 1)",
@@ -346,7 +346,7 @@ class TestH3RocmInventoryDoc:
 # ──────────────────────────────────────────────────────────────────────────
 
 class TestH3RocmInventoryExecutionStatus:
-    INVENTORY = REPO / "docs" / "rocm_mfma_kernel_inventory.md"
+    INVENTORY = REPO / "docs/backends/rocm/kernel-inventory.md"
     MATRIX = REPO / "docs" / "audit" / "generated" / "runtime_execution_matrix.md"
 
     def test_doc_points_at_generated_truth_surface(self):

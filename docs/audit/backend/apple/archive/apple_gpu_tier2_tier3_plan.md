@@ -2,7 +2,7 @@
 
 > Status: planning + in-progress. Tier-1 (activations / norms / SwiGLU gate via
 > the MetalPerformanceShadersGraph lane) and the f16/bf16 fused-chain matrix are
-> shipped (see [`apple_backend.md`](apple_backend.md)). This doc tracks
+> shipped (see [`docs/backends/apple/`](../../../../backends/apple/)). This doc tracks
 > the next two tiers. **Batched matmul (`bmm`) is the keystone — it is being
 > implemented first** because every Tier-2 attention/projection item depends on it.
 

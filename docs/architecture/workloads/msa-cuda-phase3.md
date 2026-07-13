@@ -1,8 +1,14 @@
+---
+classification: Architecture / Workload Plan
+authority: CUDA detail for the MSA workload
+last_updated: 2026-07-13
+---
+
 # MSA Phase 3 — CUDA/NVIDIA KV-Outer Sparse Attention Plan
 
 > **Widened 2026-07-09:** this NVIDIA-only plan is now the CUDA column of the
 > consolidated tri-backend plan
-> [`attention_family_backend_plan.md`](attention_family_backend_plan.md), which
+> [`attention-family.md`](attention-family.md), which
 > covers the whole DFlash / MSA / Mamba2 family across ROCm, CUDA, and x86. Start
 > there for the cross-backend status matrix and sequencing; this doc remains the
 > detailed CUDA KV-outer contract.
@@ -77,6 +83,6 @@ Guard: `tests/unit/test_msa_kv_outer_schedule.py`.
 
 ## Fixture
 
-[`msa_kv_outer_sparse_attention.mlir`](../tests/tessera-ir/phase3/cuda13/msa_kv_outer_sparse_attention.mlir)
+[`msa_kv_outer_sparse_attention.mlir`](../../../tests/tessera-ir/phase3/cuda13/msa_kv_outer_sparse_attention.mlir)
 locks the Tile IR target name and selected-block worklist metadata. It is a
 contract fixture, not proof of a native kernel implementation.

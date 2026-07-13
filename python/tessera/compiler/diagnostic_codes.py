@@ -154,7 +154,7 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         fix_hint=(
             "Verify the schedule's tile knobs against the target "
             "profile's accept-set (e.g., WGMMA tile shapes from "
-            "`docs/nvidia_cuda13_kernel_inventory.md`)."
+            "`docs/backends/nvidia/kernel-inventory.md`)."
         ),
         spec="docs/spec/TILE_IR.md",
         sprint="Phase 3",

@@ -1,10 +1,21 @@
 ---
-last_updated: 2026-06-15
-audit_role: plan
-plan_state: landing
+last_updated: 2026-07-13
+audit_role: historical_design
+plan_state: superseded_for_active_execution_work
 ---
 
-# Apple GPU Codegen Plan — Dispatcher → Compiler
+# Apple GPU Codegen Plan — historical dispatcher → compiler plan
+
+> **Historical planning record.** This document explains the rationale and
+> milestones that produced the current MSL/MTL4 codegen substrate; it is not a
+> current support or execution-status source. Read
+> [`docs/backends/apple/`](../../../backends/apple/) for architecture,
+> [`apple_execution_inventory.md`](../../generated/apple_execution_inventory.md)
+> for execution-unit status, and `APPLE_AUDIT.md` for active Apple decisions.
+>
+> Current terminology: a **generic route** dispatches ordinary JIT regions;
+> a **Value Target-IR call** is a strict single ABI call; a **package subgraph**
+> is an authored `.mtlpackage` region. None of those terms imply the others.
 
 Status surface for growing the Apple GPU lane from a **runtime dispatcher**
 (pattern-match op names → MPS / MPSGraph / hand-written MSL) into a real

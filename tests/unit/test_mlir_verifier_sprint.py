@@ -242,7 +242,7 @@ def test_sprint_v3_per_sm_head_dim_table_present() -> None:
     for sm in ("sm_80", "sm_90", "sm_90a", "sm_100", "sm_120", "sm_120a"):
         assert f'"{sm}"' in cpp, (
             f"head_dim table is missing SM variant {sm!r} — keep "
-            f"docs/nvidia_cuda13_kernel_inventory.md in sync"
+            f"docs/backends/nvidia/kernel-inventory.md in sync"
         )
 
 

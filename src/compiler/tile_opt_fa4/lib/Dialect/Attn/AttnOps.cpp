@@ -114,7 +114,7 @@ static mlir::LogicalResult verifySameRankedTensor(mlir::Operation *op,
 // Per-SM (tile_q_max, tile_kv_max) for the FA-4 ScaledDotProduct kernel.
 // Generalizes the V3 FlashAttnOp head_dim pattern to the FA-4 Tile IR
 // op family.  Numbers come from the canonical FA-2/FA-3/FA-4 kernel
-// shapes documented in `docs/nvidia_cuda13_kernel_inventory.md` +
+// shapes documented in `docs/backends/nvidia/kernel-inventory.md` +
 // CLAUDE.md Phase 3 description.
 //
 // sm_70 / sm_75 / sm_80 / sm_86 / sm_89  — FA-2 baseline: 64 × 128

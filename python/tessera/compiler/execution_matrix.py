@@ -758,10 +758,10 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "rocm_composite_helper_compiled": "ROCm composite helper lane for "
                             "memory_index_score / msa_index_scores / "
                             "varlen_sdpa / score_combine. The Target IR lane "
-                            "keeps the op compiler-visible and delegates to "
-                            "existing matmul/flash-attn/binary helper semantics; "
-                            "runtime.launch has an exact reference fallback "
-                            "until a HIP-native helper is hardware-proven. f32",
+                            "keeps the op compiler-visible and composes the "
+                            "compiler-generated f32 GEMM, softmax, unary, and "
+                            "binary HIP kernels without a numerical reference "
+                            "fallback. f32",
     "rocm_optimizer_compiled": "AMD GPU RDNA optimizer steps (sgd / momentum / "
                             "adam / adamw / lion) — COMPILER-GENERATED gfx1151 "
                             "fused per-parameter update kernel (generate-rocm-"
@@ -2296,9 +2296,9 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         executor_id="rocm_composite_helper_compiled", runtime_status="success",
         reason="ROCm composite-helper lane keeps memory_index_score, "
                "msa_index_scores, varlen_sdpa, and score_combine visible to "
-               "Target IR while composing the existing matmul/flash-attn/binary "
-               "helper semantics. runtime.launch reports reference_cpu until "
-               "the HIP-native helper path is hardware-proven. f32.",
+               "Target IR while composing compiler-generated f32 GEMM, "
+               "softmax, unary, and binary kernels. Host work is limited to "
+               "shape/packed-offset metadata; numerical work runs on HIP. f32.",
         execution_mode="hip_runtime"),
     ("rocm", "rocm_optimizer_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_optimizer_compiled",

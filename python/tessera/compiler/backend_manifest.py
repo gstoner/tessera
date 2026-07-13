@@ -1627,9 +1627,9 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
         "feature_flags": ("composite_helper", "wmma"),
         "notes": f"Composite helper {op} — Target IR keeps the helper "
                  "compiler-visible while composing existing ROCm matmul/"
-                 "flash-attn/binary helper semantics plus host metadata logic. "
+                 "softmax/unary/binary kernels plus host metadata logic. "
                  "Executes via runtime.launch() (rocm_composite_helper_compiled) "
-                 "with exact reference fallback until HIP-native proof lands.",
+                 "without a numerical reference fallback.",
     } for op in ("memory_index_score", "msa_index_scores", "varlen_sdpa",
                  "score_combine")},
     # MoE compute (PR) — routed per-token expert GEMVs (top-1) on gfx1151
@@ -3483,9 +3483,9 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": f"Composite helper {op} — host shape/metadata logic composes "
-                 "existing AVX-512-compatible matmul/attention/binary runtime "
-                 "semantics; x86_composite_helper_compiled lane; f32, matches "
-                 "the public op reference",
+                 "the AVX-512 f32 GEMM, softmax, transcendental, and binary "
+                 "kernels; x86_composite_helper_compiled lane with no numerical "
+                 "reference fallback; f32, matches the public op reference",
     } for op in ("memory_index_score", "msa_index_scores", "varlen_sdpa",
                  "score_combine")},
     # MoE compute (PR) — routed per-token expert GEMVs (top-1), AVX-512

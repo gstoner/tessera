@@ -68,11 +68,15 @@ def _case(op_name):
     ("target", "path", "execution_kind"),
     (
         ("x86", "x86_composite_helper_compiled", "native_cpu"),
-        ("rocm", "rocm_composite_helper_compiled", "reference_cpu"),
+        ("rocm", "rocm_composite_helper_compiled", "native_gpu"),
     ),
 )
 @pytest.mark.parametrize("op_name", HELPERS)
 def test_composite_helper_launch_matches_reference(target, path, execution_kind, op_name):
+    if target == "x86" and not rt._x86_elementwise_available():
+        pytest.skip("AVX-512 runtime library unavailable")
+    if target == "rocm" and not rt._rocm_compiled_gemm_f32_available():
+        pytest.skip("compiled ROCm f32 lane unavailable")
     args, arg_names, kwargs, ref = _case(op_name)
     res = rt.launch(_artifact(target, path, op_name, arg_names, kwargs), args)
 
@@ -80,6 +84,15 @@ def test_composite_helper_launch_matches_reference(target, path, execution_kind,
     assert res["compiler_path"] == path
     assert res["execution_kind"] == execution_kind
     np.testing.assert_allclose(res["output"], ref, rtol=2e-5, atol=2e-5)
+
+
+def test_composite_helper_executor_has_no_reference_dispatch():
+    # Structural guard: both target wrappers must enter the native composition
+    # implementation, which no longer accepts a reference-fallback switch.
+    import inspect
+    source = inspect.getsource(rt._execute_composite_helper_compiled)
+    assert "_execute_runtime_cpu_op" not in source
+    assert "rocm_fallback" not in source
 
 
 def test_execution_matrix_has_composite_helper_rows():

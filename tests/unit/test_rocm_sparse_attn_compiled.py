@@ -288,3 +288,23 @@ def test_rocm_block_sparse_topk_codegen_lowers():
          "reconcile-unrealized-casts))"],
         input=directive, capture_output=True, text=True)
     assert low.returncode == 0 and "llvm." in low.stdout
+
+
+def test_rocm_large_topk_cooperative_matches_serial_on_hardware():
+    if rt._tessera_opt_path() is None:
+        pytest.skip("tessera-opt not built")
+    if not rt._rocm_wmma_runtime_available():
+        pytest.skip("no usable AMD GPU")
+
+    rng = np.random.default_rng(61)
+    scores = rng.standard_normal((1, 2, 32, 2048), dtype=np.float32)
+    kwargs = {
+        "top_k": 8, "block_size": 16, "causal": True,
+        "q_positions": np.arange(32, dtype=np.int64) * 64,
+    }
+    serial = rt._rocm_block_sparse_topk_select_native(
+        scores, np, cooperative=False, **kwargs)
+    cooperative = rt._rocm_block_sparse_topk_select_native(
+        scores, np, cooperative=True, **kwargs)
+
+    np.testing.assert_array_equal(cooperative, serial)

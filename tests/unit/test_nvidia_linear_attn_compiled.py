@@ -109,3 +109,30 @@ def test_live_nvidia_linear_attn_variant_vjp(op, square):
             fac=np.prod(de[0,0,n+1:m+1]); pq=q[0,0,m]**2 if square else q[0,0,m]; pk=k[0,0,n]**2 if square else k[0,0,n]; ds=fac*(go[0,0,m]@v[0,0,n]); dq[0,0,m]+=ds*pk*(2*q[0,0,m] if square else 1); dk[0,0,n]+=ds*pq*(2*k[0,0,n] if square else 1); dv[0,0,n]+=fac*(pq@pk)*go[0,0,m]
     got=rt.launch(_variant_bwd_artifact(op, decay=de.tolist(), deg=2), (go,q,k,v)); assert got["ok"],got.get("reason")
     for a,e in zip(got["output"],(dq,dk,dv)): np.testing.assert_allclose(a,e,atol=8e-5,rtol=0)
+
+
+@pytest.mark.slow
+def test_live_nvidia_retention_vjp_honors_log_g():
+    rt = _runtime(); rng = np.random.default_rng(967)
+    q = rng.standard_normal((1, 1, 3, 2), dtype=np.float32)
+    k = rng.standard_normal(q.shape, dtype=np.float32)
+    v = rng.standard_normal((1, 1, 3, 3), dtype=np.float32)
+    go = rng.standard_normal(v.shape, dtype=np.float32)
+    decay = np.array([[[1.0, .8, .6]]], np.float32)
+    expected = rt.launch(
+        _variant_bwd_artifact("tessera.retention", decay=decay.tolist(), deg=2),
+        (go, q, k, v))
+    actual = rt.launch(
+        _variant_bwd_artifact("tessera.retention", log_g=np.log(decay).tolist(), deg=2),
+        (go, q, k, v))
+    assert expected["ok"], expected.get("reason")
+    assert actual["ok"], actual.get("reason")
+    for got, want in zip(actual["output"], expected["output"]):
+        np.testing.assert_allclose(got, want, atol=8e-5, rtol=0)
+
+
+def test_nvidia_variant_vjp_cuda_wrapper_releases_allocations():
+    from tessera.compiler.emit.nvidia_cuda import _synthesize_linear_attn_variant_bwd_cuda
+    source = _synthesize_linear_attn_variant_bwd_cuda()
+    for device_buffer in ("g", "q", "k", "v", "d", "dq", "dk", "dv"):
+        assert f"if({device_buffer})cudaFree({device_buffer})" in source

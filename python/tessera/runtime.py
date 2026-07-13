@@ -4641,8 +4641,12 @@ def _execute_nvidia_linear_attn_bwd_compiled(artifact: RuntimeArtifact, args: An
     if name == "tessera.lightning_attention": fmap = "identity"
     elif name == "tessera.retention": fmap = "polynomial_2"
     else: fmap = str(kw.get("feature_map", "identity"))
-    decay = kw.get("decay")
-    if decay is not None: decay = np.broadcast_to(np.asarray(decay, np.float32), q.shape[:3]).copy()
+    decay = kw.get("decay", kw.get("log_g", None))
+    if decay is not None:
+        decay = np.asarray(decay, np.float32)
+        if kw.get("log_g") is not None:
+            decay = np.exp(decay, dtype=np.float32)
+        decay = np.broadcast_to(decay, q.shape[:3]).copy()
     if fmap == "identity" and decay is None and q.shape[-1] == v.shape[-1]:
         from .compiler.emit.nvidia_cuda import run_linear_attention_backward
         return run_linear_attention_backward(go, q, k, v)
@@ -4664,8 +4668,17 @@ def _execute_nvidia_sparse_attn_compiled(artifact: RuntimeArtifact, args: Any) -
     selected=attn.dsa_select_blocks(attn.dsa_block_index(q,k,block_size=bs,scale=kw.get("index_scale")),top_k=min(top,k.shape[2]//bs),block_size=bs,causal=causal,q_positions=kw.get("q_positions"))
     keep=np.repeat(selected,bs,axis=-1); keep[..., sk_real:] = False
     B,Hq,Sq,_=q.shape; Hkv=k.shape[1]; bias=np.where(keep[:,np.arange(Hq)//(Hq//Hkv)],0.,-np.inf).astype(np.float32)
+    q_positions = kw.get("q_positions")
+    if causal and q_positions is not None:
+        qpos = np.asarray(q_positions, dtype=np.int64).reshape(-1)
+        if qpos.shape[0] != Sq:
+            raise ValueError(f"q_positions length {qpos.shape[0]} must equal Sq={Sq}")
+        token_causal = np.arange(k.shape[2], dtype=np.int64)[None, :] <= qpos[:, None]
+        bias = np.where(token_causal[None, None, :, :], bias, -np.inf).astype(np.float32)
     from .compiler.emit.nvidia_cuda import run_flash_attention_forward
-    return run_flash_attention_forward(q,k,v,scale=scale,causal=causal,bias=bias)
+    return run_flash_attention_forward(
+        q, k, v, scale=scale,
+        causal=causal and q_positions is None, bias=bias)
 
 
 def _execute_nvidia_mla_decode_compiled(artifact: RuntimeArtifact, args: Any) -> Any:

@@ -1,18 +1,15 @@
-"""Compiler-generated device RNG on Apple GPU.
+"""Apple GPU Philox base lane.
 
-Counter-based Philox-4x32-10 (the JAX/cuRAND algorithm). Apple ships no device
-Philox kernel, so the lane draws uniform[0,1) bits from the same
-tessera.rng_device numpy reference the x86/ROCm device kernels are bit-matched
-against; the host applies the distribution transform (uniform-scale / Box-Muller
-normal / dropout mask), and the higher-level samplers run the public tessera.rng
-RNGKey contract. Reachable via `compiler_path="apple_gpu_rng_compiled"`.
-Validated BIT-EXACTLY against tessera.rng_device / tessera.rng — parity with
-test_x86_rng_compiled. The reference path always runs (no skip).
+Uniform uses the bit-exact Metal Philox-4x32-10 stream; normal and training
+dropout apply their device transforms to that stream. The same artifact has a
+reference fallback for non-Darwin hosts; distribution samplers and RNG-key
+transformations remain host-structured by design.
 """
 
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from tessera import rng as keyed_rng
 from tessera import rng_device as R
@@ -33,9 +30,14 @@ def _launch(op, kwargs, operands=()):
     res = rt.launch(_art(op, kwargs, operands), operands)
     assert res["ok"] is True, res.get("reason")
     assert res["compiler_path"] == "apple_gpu_rng_compiled"
-    # Apple ships no device Philox; the lane runs on the CPU reference path.
-    assert res["execution_kind"] == "reference_cpu"
     return res["output"]
+
+
+def test_rng_execution_matrix_declares_native_base_lane():
+    from tessera.compiler.execution_matrix import lookup
+    row = lookup("apple_gpu", "apple_gpu_rng_compiled")
+    assert row is not None
+    assert row.execution_kind == "native_gpu"
 
 
 def test_rng_uniform_bit_exact_and_shape():
@@ -55,7 +57,10 @@ def test_rng_uniform_accepts_lo_hi_alias():
 def test_rng_normal_bit_exact_and_stats():
     out = np.asarray(_launch("tessera.rng_normal",
                              {"seed": 7, "shape": [100], "mean": 2.0, "std": 0.5}))
-    np.testing.assert_array_equal(out, R.normal(7, 100, 2.0, 0.5))
+    # The Philox words/counter schedule are canonical.  Box--Muller uses device
+    # transcendental functions, so native Metal is numerically equivalent rather
+    # than bit-identical to NumPy's libm implementation.
+    np.testing.assert_allclose(out, R.normal(7, 100, 2.0, 0.5), rtol=2e-6, atol=2e-6)
     big = np.asarray(_launch("tessera.rng_normal", {"seed": 1, "shape": [200000]}))
     assert abs(big.mean()) < 1e-2 and abs(big.std() - 1.0) < 1e-2
 
@@ -75,6 +80,21 @@ def test_rng_determinism():
     a = _launch("tessera.rng_uniform", {"seed": 9, "shape": [1000]})
     b = _launch("tessera.rng_uniform", {"seed": 9, "shape": [1000]})
     np.testing.assert_array_equal(np.asarray(a), np.asarray(b))
+
+
+def test_rng_base_ops_report_native_gpu_on_darwin():
+    if __import__("sys").platform != "darwin" or not rt.DeviceTensor.is_metal():
+        pytest.skip("requires an available Apple Metal runtime")
+    for op, kwargs, operands in (
+        ("tessera.rng_uniform", {"seed": 11, "shape": [16]}, ()),
+        ("tessera.rng_normal", {"seed": 12, "shape": [16]}, ()),
+        ("tessera.dropout", {"seed": 13, "p": 0.25, "training": True},
+         (np.ones(16, np.float32),)),
+    ):
+        res = rt.launch(_art(op, kwargs, operands), operands)
+        assert res["ok"] is True, res.get("reason")
+        assert res["execution_kind"] == "native_gpu"
+        assert res["execution_mode"] == "metal_runtime"
 
 
 def test_rng_distribution_tail_matches_keyed_reference():

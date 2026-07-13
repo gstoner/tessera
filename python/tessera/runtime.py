@@ -9780,23 +9780,125 @@ def _execute_x86_compiled_rng(artifact: RuntimeArtifact, args: Any) -> Any:
     return _execute_rng(artifact, args, _x86_philox_uniform, "x86_rng_compiled")
 
 
-def _apple_rng_uniform(seed: int, counter_base: int, n: int) -> Any:
-    """Apple GPU Philox uniform — Apple ships no device Philox kernel, so the
-    lane draws from the same counter-based Philox-4x32-10 reference
-    (tessera.rng_device.philox_uniform) the x86/ROCm device kernels are
-    bit-matched against. Exercises the RNGKey/Philox contract with an executable
-    apple_gpu artifact + compare fixture; not a bespoke fused Metal kernel."""
+def _apple_rng_reference_uniform(seed: int, counter_base: int, n: int) -> Any:
+    """Portable oracle for the Apple Philox lane."""
     from tessera import rng_device
     return rng_device.philox_uniform(int(seed), int(counter_base), int(n))
 
 
+def _apple_rng_bind(symbol: str, argtypes: tuple[Any, ...]) -> Any:
+    """Bind one device-Philox C ABI symbol through the shared Apple loader."""
+    try:
+        from ._apple_gpu_dispatch import bind_symbol
+        return bind_symbol(symbol, argtypes, ctypes.c_int32)
+    except Exception:
+        return None
+
+
+def _try_apple_rng_uniform(seed: int, counter_base: int, n: int,
+                           lo: float, hi: float) -> Any | None:
+    import numpy as np
+    out = np.empty(int(n), np.float32)
+    fn = _apple_rng_bind(
+        "tessera_apple_gpu_philox_uniform_f32",
+        (ctypes.c_uint64, ctypes.c_uint64, ctypes.c_float, ctypes.c_float,
+         ctypes.POINTER(ctypes.c_float), ctypes.c_int32),
+    )
+    if fn is None:
+        return None
+    ok = fn(ctypes.c_uint64(int(seed) & 0xFFFFFFFFFFFFFFFF),
+            ctypes.c_uint64(int(counter_base) & 0xFFFFFFFFFFFFFFFF),
+            ctypes.c_float(lo), ctypes.c_float(hi),
+            out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)), ctypes.c_int32(n))
+    return out if ok else None
+
+
+def _try_apple_rng_normal(seed: int, counter_base: int, n: int,
+                          mean: float, std: float) -> Any | None:
+    import numpy as np
+    out = np.empty(int(n), np.float32)
+    fn = _apple_rng_bind(
+        "tessera_apple_gpu_philox_normal_f32",
+        (ctypes.c_uint64, ctypes.c_uint64, ctypes.c_float, ctypes.c_float,
+         ctypes.POINTER(ctypes.c_float), ctypes.c_int32),
+    )
+    if fn is None:
+        return None
+    ok = fn(ctypes.c_uint64(int(seed) & 0xFFFFFFFFFFFFFFFF),
+            ctypes.c_uint64(int(counter_base) & 0xFFFFFFFFFFFFFFFF),
+            ctypes.c_float(mean), ctypes.c_float(std),
+            out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)), ctypes.c_int32(n))
+    return out if ok else None
+
+
+def _try_apple_rng_dropout(x: Any, seed: int, counter_base: int,
+                           p: float) -> Any | None:
+    import numpy as np
+    x_c = np.ascontiguousarray(x, np.float32)
+    out = np.empty_like(x_c)
+    fn = _apple_rng_bind(
+        "tessera_apple_gpu_philox_dropout_f32",
+        (ctypes.POINTER(ctypes.c_float), ctypes.c_uint64, ctypes.c_uint64,
+         ctypes.c_float, ctypes.POINTER(ctypes.c_float), ctypes.c_int32),
+    )
+    if fn is None:
+        return None
+    ok = fn(x_c.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            ctypes.c_uint64(int(seed) & 0xFFFFFFFFFFFFFFFF),
+            ctypes.c_uint64(int(counter_base) & 0xFFFFFFFFFFFFFFFF),
+            ctypes.c_float(p),
+            out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            ctypes.c_int32(x_c.size))
+    return out if ok else None
+
+
 def _execute_apple_gpu_compiled_rng(artifact: RuntimeArtifact, args: Any) -> Any:
-    """The ``target="apple_gpu"`` Philox RNG lane — rng_uniform/rng_normal/
-    dropout via the Philox reference core, and the higher-level distribution
-    samplers via the public tessera.rng RNGKey contract (host structure — the
-    same path x86/ROCm take for the distribution ops). Matches tessera.rng /
-    tessera.rng_device — parity with x86/rocm_rng_compiled."""
-    return _execute_rng(artifact, args, _apple_rng_uniform, "apple_gpu_rng_compiled")
+    """Native Apple Philox base lane with a truthful reference fallback.
+
+    Uniform, normal, and training dropout are generated in the Metal runtime.
+    Higher-level distributions and RNG-key transformations stay host-structured;
+    they are not misreported as GPU-native execution.
+    """
+    import numpy as np
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    if len(ops) != 1:
+        raise ValueError("apple_gpu_rng_compiled expects exactly one operation")
+    op = ops[0]
+    op_name = str(op.get("op_name", ""))
+    kwargs = dict(op.get("kwargs") or {})
+    values = _bind_launch_args(args, list(metadata.get("arg_names") or []))
+    operands = [_as_numpy(values[str(n)]) for n in op.get("operands", [])]
+    seed = int(kwargs.get("seed", 0))
+    counter_base = int(kwargs.get("counter_base", 0))
+    out = None
+    if op_name == "tessera.rng_uniform":
+        shape = tuple(int(d) for d in kwargs.get("shape", ()))
+        n = int(np.prod(shape)) if shape else 1
+        lo = float(kwargs.get("lo", kwargs.get("low", 0.0)))
+        hi = float(kwargs.get("hi", kwargs.get("high", 1.0)))
+        out = _try_apple_rng_uniform(seed, counter_base, n, lo, hi)
+        if out is not None:
+            return out.reshape(shape).astype(np.float32), "native_gpu"
+    elif op_name == "tessera.rng_normal":
+        shape = tuple(int(d) for d in kwargs.get("shape", ()))
+        n = int(np.prod(shape)) if shape else 1
+        out = _try_apple_rng_normal(seed, counter_base, n,
+                                    float(kwargs.get("mean", 0.0)),
+                                    float(kwargs.get("std", 1.0)))
+        if out is not None:
+            return out.reshape(shape).astype(np.float32), "native_gpu"
+    elif op_name == "tessera.dropout" and bool(kwargs.get("training", True)):
+        p = float(kwargs.get("p", 0.5))
+        if 0.0 < p <= 1.0:
+            out = _try_apple_rng_dropout(operands[0], seed, counter_base, p)
+            if out is not None:
+                return out.reshape(np.asarray(operands[0]).shape), "native_gpu"
+    # Keep no-op dropout and every higher-level distribution on the exact
+    # public reference contract. Returning the override prevents launch() from
+    # claiming native execution for this documented fallback.
+    return (_execute_rng(artifact, args, _apple_rng_reference_uniform,
+                         "apple_gpu_rng_compiled"), "reference_cpu")
 
 
 _rocm_philox_hsaco_cache: dict[tuple[str], bytes] = {}

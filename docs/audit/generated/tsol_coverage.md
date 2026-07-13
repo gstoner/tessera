@@ -74,7 +74,7 @@ Status legend: ✅ `complete`  • ◐ `partial`  • ◯ `planned`  • — exp
 | `istft` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ | ◐ |
 | `spectral_filter` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ | ◐ |
 
-### Sparse, Segment, and Graph Operators
+### Sparse, Segment, And Graph Operators
 
 | Op | math | shape | dtype | vjp | jvp | lowering | sharding | backend |
 |----|------|-------|-------|-----|-----|----------|----------|---------|
@@ -84,7 +84,7 @@ Status legend: ✅ `complete`  • ◐ `partial`  • ◯ `planned`  • — exp
 | `bsmm` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
 | `segment_reduce` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
 
-### RNG and Initialization
+### RNG And Initialization
 
 | Op | math | shape | dtype | vjp | jvp | lowering | sharding | backend |
 |----|------|-------|-------|-----|-----|----------|----------|---------|
@@ -100,7 +100,7 @@ Status legend: ✅ `complete`  • ◐ `partial`  • ◯ `planned`  • — exp
 | `all_gather` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
 | `all_to_all` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
 
-### Layout and Packing
+### Layout And Packing
 
 | Op | math | shape | dtype | vjp | jvp | lowering | sharding | backend |
 |----|------|-------|-------|-----|-----|----------|----------|---------|
@@ -116,4 +116,4 @@ _None today — every TSOL canonical op has a registry entry and an explicit VJP
 
 ## Backend kernel honest baseline
 
-Per the registry's gating rule (`primitive_coverage.py` line 351-352), `backend_kernel = complete` requires every declared target to ship a real hardware kernel with numerical proof.  Today **zero** TSOL entries can claim `complete` because NVIDIA / ROCm / NVIDIA / ROCm proofs aren't available on this Mac.  See `docs/audit/backend/BACKEND_AUDIT.md` for the full hardware-gated punch list.
+Per the registry's gating rule (`primitive_coverage.py` line 351-352), `backend_kernel = complete` requires every declared target to ship a real hardware kernel with numerical proof.  Today **zero** TSOL entries can claim that all-target aggregate.  Per-target native proof is reported separately and may exist even while this aggregate remains incomplete.  See `docs/audit/backend/BACKEND_AUDIT.md` and its target maps for the exact-target evidence and remaining punch list.

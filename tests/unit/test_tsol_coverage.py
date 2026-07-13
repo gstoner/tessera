@@ -20,16 +20,20 @@ import pytest
 
 from tessera.compiler.primitive_coverage import all_primitive_coverages
 from tessera.compiler.tsol_coverage import (
+    SPEC_CATALOG_BEGIN,
+    SPEC_CATALOG_END,
     TSOLRow,
     all_tsol_op_names,
     collect_tsol_coverage,
     coverage_summary,
     render_dashboard,
+    render_spec_catalog,
 )
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DASHBOARD = REPO_ROOT / "docs" / "audit" / "generated" / "tsol_coverage.md"
+SPEC = REPO_ROOT / "docs" / "operations" / "Tessera_Standard_Operations.md"
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -51,6 +55,20 @@ def test_tsol_catalog_count_at_or_above_baseline() -> None:
     assert len(names) >= 47, (
         f"TSOL catalog dropped below 47 ops ({len(names)}) — was "
         f"_TSOL_CATEGORIES accidentally truncated?"
+    )
+
+
+def test_normative_spec_catalog_matches_live_inventory() -> None:
+    """The readable catalog in the normative spec is generated from the
+    same inventory as the coverage dashboard."""
+    text = SPEC.read_text()
+    assert text.count(SPEC_CATALOG_BEGIN) == 1
+    assert text.count(SPEC_CATALOG_END) == 1
+    start = text.index(SPEC_CATALOG_BEGIN)
+    end = text.index(SPEC_CATALOG_END) + len(SPEC_CATALOG_END)
+    assert text[start:end] == render_spec_catalog(), (
+        "TSOL normative catalog drifted from tsol_coverage.py; regenerate "
+        "the marked catalog block."
     )
 
 
@@ -116,10 +134,8 @@ def test_tsol_axis_at_or_above_complete_floor(axis: str, floor: int) -> None:
 
 def test_no_tsol_op_claims_backend_kernel_complete() -> None:
     """By registry design, backend_kernel = complete requires real
-    GPU hardware proofs across every declared target — unavailable
-    on this Mac.  Today no TSOL op claims `complete`.  When the first
-    NVIDIA / ROCm proof lands (and an `execute_compare_fixture` is
-    registered), update this test to expect the first complete entry."""
+    hardware proofs across every declared target. Exact-target proof
+    may exist while this all-target aggregate remains incomplete."""
     summary = coverage_summary()
     complete = summary["backend_kernel"].get("complete", 0)
     assert complete == 0, (

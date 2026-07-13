@@ -41,7 +41,8 @@ does not transfer to RDNA 4, Wave32 WMMA v2, or CDNA MFMA targets.
 | Positional features | `rope` and `alibi` execute as compiler-generated kernels. | Exact-device proof on additional architectures. | [`rocm_target_map.md`](../../generated/rocm_target_map.md) |
 | General math and reductions | Row reductions, unary/binary math, comparisons, logical operations, and bitwise operations have native gfx1151 lanes. | Broaden tuned shapes and dtype coverage without weakening numerical semantics. | [`runtime_execution_matrix.md`](../../generated/runtime_execution_matrix.md) |
 | SSM, MSA, and EBM | Selective SSM forward/backward, MSA sparse attention, and native EBM kernels execute on gfx1151. | Optimize broader shapes and promote only with exact-target provenance. | [`runtime_execution_matrix.md`](../../generated/runtime_execution_matrix.md) |
-| Asynchronous staging | Global→LDS `async_copy` and a staged WMMA GEMM tile execute correctly. | Use the substrate in production only when profiling finds a staging-bound kernel. | `test_rocm_async_copy_runnable.py`, `test_rocm_gemm_staged_async_copy.py` |
+| MoE/grouped GEMM | MoE dispatch/combine execute natively; contiguous f32 grouped GEMM now takes device-resident offsets `[E+1]` and computes every expert group in one generated launch. | Comparative-ratchet the one-launch kernel against the existing per-group path before making grouped SwiGLU consume it. | `test_rocm_moe_transport_compiled.py`, `grouped_gemm_device_args.mlir` |
+| Asynchronous staging and layouts | Global→LDS `async_copy` and a staged WMMA GEMM tile execute correctly. Structured affine `#tile.layout` extents/strides/offset now change the generated LDS store address instead of surviving as a marker. | Add bounds-aware swizzle and multicast consumers; use staging in production only when profiling finds a staging-bound kernel. | `async_copy_runnable.mlir`, `async_copy_consumes_layout.mlir`, `test_rocm_gemm_staged_async_copy.py` |
 
 ## Open actions
 
@@ -75,6 +76,16 @@ experiment must additionally report its retained-production/candidate ratio;
 this prevents a noisy absolute cap from promoting a redesign that is merely
 within tolerance but not faster.
 
+The production generated GEMM now receives a unified schedule descriptor
+(instruction/macro tile, VGPR estimate, pipeline depth, LDS layout, ownership,
+and provenance). Its measured gfx1151 `2x4`/`3x4` macro-tile changes the emitted
+kernel; the generator validates and stamps the remaining fields so each ROCM-6
+run can be joined to the schedule that executed. `collect_rocm6_counters.py`
+runs either retained production or candidate under native `rocprofv3 --pmc` and
+keeps the experiment/variant/command identity beside raw outputs. Counter names
+must be enumerated on the target; an unavailable PMC is a failed evidence run,
+not a synthesized zero.
+
 ### ROCM-7 closure: cooperative sparse attention
 
 ROCM-7 now has compiler, runtime, correctness, and comparative performance
@@ -86,9 +97,10 @@ evidence on the exact WSL gfx1151 target:
   retained as the benchmark control.
 - The resident top-k candidate uses two Wave32s to scan thousands of candidate
   blocks and tree-reduce deterministic `(score, block-id)` winners. Runtime
-  auto-selection is deliberately limited to at most 256 score rows, at least
-  2,048 candidate blocks, and `top_k <= 8`; ordinary shapes keep the faster
-  serial-row kernel.
+  calls the shared ownership-topology selector (`thread|wave|multi_wave|workgroup`),
+  whose current gfx1151 selection calibration remains deliberately limited to
+  at most 256 score rows, at least 2,048 candidate blocks, and `top_k <= 8`;
+  ordinary shapes keep the faster thread-owned row kernel.
 - The committed comparative ratchet records a 1.605× attention win and 1.772×
   / 1.937× selection wins at 2,048 / 4,096 blocks. It gates both a candidate
   latency cap and a minimum 1.10× A/B speedup, so “inside the noise margin” is

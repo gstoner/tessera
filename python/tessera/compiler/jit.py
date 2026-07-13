@@ -1256,6 +1256,16 @@ class JitFn:
             and _rocm_compiled_lane_available()
         )
 
+    def _uses_rocm_grouped_gemm_default(self) -> bool:
+        """True for the one-launch grouped-offset ROCm GEMM on a live device."""
+        return (
+            self.cpu_plan is not None
+            and str(self.cpu_plan.target_kind).startswith("rocm")
+            and len(self.cpu_plan.ops) == 1
+            and self.cpu_plan.ops[0].op_name == "tessera.grouped_gemm"
+            and _rocm_compiled_lane_available()
+        )
+
     def _uses_nvidia_mma_default(self) -> bool:
         """sm_120 bring-up — True iff this is an ``nvidia_sm120`` single
         matmul/gemm AND the shipped mma.sync lane can run on THIS host
@@ -1276,6 +1286,8 @@ class JitFn:
         if self._uses_rocm_compiled_default():
             return "native_gpu"
         if self._uses_rocm_sparse_attn_default():
+            return "native_gpu"
+        if self._uses_rocm_grouped_gemm_default():
             return "native_gpu"
         if self._uses_nvidia_mma_default():
             return "native_gpu"
@@ -1575,6 +1587,30 @@ class JitFn:
                 "output_name": self.cpu_plan.output_name,
                 "ops": ops_payload,
                 "cpu_tile": list(self.cpu_plan.tile),
+            })
+        elif self._uses_rocm_grouped_gemm_default():
+            assert self.cpu_plan is not None
+            ops_payload = [
+                {
+                    "op_name": op.op_name,
+                    "result": op.result,
+                    "operands": [o[1:] if o.startswith("%") else o
+                                 for o in op.operands],
+                    "kwargs": dict(op.kwargs),
+                }
+                for op in self.cpu_plan.ops
+            ]
+            metadata.update({
+                "executable": True,
+                "compiler_path": "rocm_moe_transport_compiled",
+                "execution_kind": "native_gpu",
+                "runtime_status": "ready",
+                "execution_mode": "hip_runtime",
+                "arg_names": list(self.arg_names),
+                "output_name": self.cpu_plan.output_name,
+                "ops": ops_payload,
+                "cpu_tile": list(self.cpu_plan.tile),
+                "grouped_argument_layout": "device_offsets[E+1]",
             })
         elif self._uses_nvidia_mma_default():
             # sm_120 bring-up — @jit(target="nvidia_sm120") matmul dispatches to

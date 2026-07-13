@@ -1,6 +1,7 @@
 import time
 
 import numpy as np
+import tessera as ts
 
 from tessera import runtime as rt
 from tessera.stdlib import moe
@@ -129,3 +130,39 @@ def test_dk3_rocm_moe_transport_perf_baseline_is_bounded():
     launch_ms = _median_ms(lambda: rt.launch(art, (x, plan)), reps=9)
 
     assert launch_ms < max(75.0, direct_ms * 4.0)
+
+
+def test_rocm_grouped_gemm_uses_one_native_offsets_argument():
+    from tessera.compiler.grouped_layout import reference_grouped_gemm
+
+    rng = np.random.default_rng(47)
+    sizes = np.array([2, 0, 3], dtype=np.int64)
+    x = rng.standard_normal((5, 7)).astype(np.float32)
+    weights = rng.standard_normal((3, 7, 6)).astype(np.float32)
+    res = rt.launch(
+        _artifact("tessera.grouped_gemm", ["x", "weights", "group_sizes"]),
+        {"x": x, "weights": weights, "group_sizes": sizes},
+    )
+    assert res["ok"]
+    assert res["execution_kind"] == ("native_gpu" if _expect_native()
+                                     else "reference_cpu")
+    np.testing.assert_allclose(
+        res["output"], reference_grouped_gemm(x, weights, sizes),
+        rtol=2e-5, atol=2e-5)
+
+
+def test_jit_grouped_gemm_stamps_native_rocm_lane(monkeypatch):
+    import importlib
+
+    jit_module = importlib.import_module("tessera.compiler.jit")
+
+    monkeypatch.setattr(jit_module, "_rocm_compiled_lane_available", lambda: True)
+
+    @ts.jit(target="rocm")
+    def grouped(x, weights, group_sizes):
+        return ts.ops.grouped_gemm(x, weights, group_sizes)
+
+    artifact = grouped.runtime_artifact()
+    assert artifact.metadata["compiler_path"] == "rocm_moe_transport_compiled"
+    assert artifact.metadata["grouped_argument_layout"] == "device_offsets[E+1]"
+    assert artifact.metadata["ops"][0]["op_name"] == "tessera.grouped_gemm"

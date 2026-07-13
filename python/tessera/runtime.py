@@ -14622,7 +14622,7 @@ def _rocm_dev_in(hip: Any, host: Any, nbytes: int) -> Any:
 
 
 _rocm_block_sparse_attn_hsaco_cache: dict[tuple[str, bool], bytes] = {}
-_rocm_block_sparse_topk_hsaco_cache: dict[tuple[str], bytes] = {}
+_rocm_block_sparse_topk_hsaco_cache: dict[tuple[str, bool], bytes] = {}
 
 
 def _rocm_block_sparse_attn_hsaco(*, tiled: bool = True) -> bytes:
@@ -14638,34 +14638,43 @@ def _rocm_block_sparse_attn_hsaco(*, tiled: bool = True) -> bytes:
         _rocm_block_sparse_attn_hsaco_cache, (chip, bool(tiled)))
 
 
-def _rocm_block_sparse_topk_hsaco() -> bytes:
+def _rocm_block_sparse_topk_hsaco(*, cooperative: bool = True) -> bytes:
     chip = _rocm_chip()
+    strategy = "cooperative" if cooperative else "serial"
     directive = (
         'module {\n'
-        '  "tessera_rocm.block_sparse_topk_select"() {name = "btopk"} : () -> ()\n'
+        f'  "tessera_rocm.block_sparse_topk_select"() '
+        f'{{name = "btopk", strategy = "{strategy}"}} : () -> ()\n'
         '}\n')
     return _build_rocm_elementwise_hsaco(
         "generate-rocm-block-sparse-topk-kernel", directive,
-        _rocm_block_sparse_topk_hsaco_cache, (chip,))
+        _rocm_block_sparse_topk_hsaco_cache, (chip, bool(cooperative)))
 
 
 def _rocm_block_sparse_topk_select_native(scores: Any, np: Any, *,
                                           top_k: int, block_size: int,
                                           causal: bool = True,
                                           force_local_block: bool = True,
-                                          q_positions: Any = None) -> Any:
+                                          q_positions: Any = None,
+                                          cooperative: bool | None = None) -> Any:
     sc = np.ascontiguousarray(np.asarray(scores, dtype=np.float32))
     if sc.ndim != 4:
         raise ValueError("block sparse top-k scores must be (B,Hkv,Sq,num_blocks)")
     B, Hkv, Sq, Nb = map(int, sc.shape)
     if not (1 <= int(top_k) <= Nb):
         raise ValueError(f"top_k={top_k} must be in [1, num_blocks={Nb}]")
+    # gfx1151 A/B measurements show that independent serial row owners win for
+    # ordinary block counts or many rows.  Cooperative scans cross over once a
+    # small resident batch has thousands of candidates; keep the choice narrow
+    # until another exact target records its own boundary.
+    if cooperative is None:
+        cooperative = bool(Nb >= 2048 and B * Hkv * Sq <= 256 and top_k <= 8)
     qpos = (np.arange(Sq, dtype=np.int64) if q_positions is None
             else np.asarray(q_positions, dtype=np.int64).reshape(-1))
     if qpos.shape[0] != Sq:
         raise ValueError(f"q_positions length {qpos.shape[0]} must equal Sq={Sq}")
 
-    hsaco = _rocm_block_sparse_topk_hsaco()
+    hsaco = _rocm_block_sparse_topk_hsaco(cooperative=cooperative)
     hip = _load_hip_for_launch()
     if hip is None:
         raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
@@ -14677,12 +14686,15 @@ def _rocm_block_sparse_topk_select_native(scores: Any, np: Any, *,
         d_s = _rocm_dev_in(hip, sc.reshape(-1), 4 * sc.size); devs.append(d_s)
         d_qp = _rocm_dev_in(hip, qpos.reshape(-1), 8 * qpos.size); devs.append(d_qp)
         d_o = _rocm_dev_in(hip, out.reshape(-1), 8 * out.size); devs.append(d_o)
-        _rocm_sparse_launch(
-            hsaco, b"btopk",
-            [(d_s, sc.size), (d_qp, qpos.size), (d_o, out.size)],
-            [B, Hkv, Sq, Nb, int(top_k), int(block_size),
-             1 if causal else 0, 1 if force_local_block else 0],
-            B * Hkv * Sq)
+        buffers = [(d_s, sc.size), (d_qp, qpos.size), (d_o, out.size)]
+        scalars = [B, Hkv, Sq, Nb, int(top_k), int(block_size),
+                   1 if causal else 0, 1 if force_local_block else 0]
+        if cooperative:
+            _rocm_sparse_launch_custom(hsaco, b"btopk", buffers, scalars,
+                                       B * Hkv * Sq, 64)
+        else:
+            _rocm_sparse_launch(hsaco, b"btopk", buffers, scalars,
+                                B * Hkv * Sq)
         hip.hipMemcpy(out.ctypes.data_as(ctypes.c_void_p), d_o, 8 * out.size, 2)
     finally:
         for dev in devs:
@@ -14735,7 +14747,9 @@ def _rocm_selected_block_attention_native(Q: Any, K: Any, V: Any,
     q_scale = np.float32((1.0 / np.sqrt(D)) if sc is None else sc)
     q = np.ascontiguousarray(q * q_scale, dtype=np.float32)
 
-    use_tiled = bool(tiled) and Dv <= 256
+    # The cooperative kernel stages one score/weight per selected token in a
+    # fixed 256-entry LDS tile and maps value lanes across a 256-thread block.
+    use_tiled = bool(tiled) and Dv <= 256 and Ksel * int(block_size) <= 256
     hsaco = _rocm_block_sparse_attn_hsaco(tiled=use_tiled)
     hip = _load_hip_for_launch()
     if hip is None:
@@ -14757,7 +14771,7 @@ def _rocm_selected_block_attention_native(Q: Any, K: Any, V: Any,
                    1 if causal else 0]
         if use_tiled:
             _rocm_sparse_launch_custom(hsaco, b"bsat", buffers, scalars,
-                                       B * Hq * Sq, max(1, Dv))
+                                       B * Hq * Sq, 256)
         else:
             _rocm_sparse_launch(hsaco, b"bsa", buffers, scalars, out.size)
         hip.hipMemcpy(out.ctypes.data_as(ctypes.c_void_p), d_o, 4 * out.size, 2)
@@ -28060,9 +28074,17 @@ def _execute_composite_helper_compiled(
     args: Any,
     *,
     compiler_path: str,
-    rocm_fallback: bool = False,
+    target: str,
 ) -> Any:
-    """Launch a compiler-visible helper composed from existing runtime ops."""
+    """Run a composite helper on the target's compiled f32 primitives.
+
+    Shape transforms, packed-sequence offsets, and constant construction remain
+    host metadata.  Every numerical contraction, reduction/softmax, and
+    pointwise operation is dispatched through the AVX-512 or ROCm compiled
+    lanes.  This function deliberately has no reference fallback: an unavailable
+    native prerequisite must surface as an unavailable compiled artifact rather
+    than silently preserving a ``device_verified_jit`` claim on NumPy.
+    """
     import numpy as np
 
     md = artifact.metadata or {}
@@ -28083,21 +28105,169 @@ def _execute_composite_helper_compiled(
     operands = [_as_numpy(bound[str(name)]) for name in op.get("operands", arg_names)]
     kwargs = dict(md.get("kwargs") or {})
     kwargs.update(dict(op.get("kwargs") or {}))
-    out = _execute_runtime_cpu_op(op_name, operands, kwargs, np)
-    if rocm_fallback:
-        return out, "reference_cpu"
-    return out
+
+    if target == "x86":
+        gemm = lambda a, b: _x86_batched_gemm(a, b)
+        binary = _x86_binary_exec
+
+        def sigmoid(x: Any) -> Any:
+            sub = RuntimeArtifact(metadata={
+                "target": "x86", "compiler_path": "x86_transcendental_compiled",
+                "arg_names": ["x"], "output_name": "o",
+                "ops": [{"op_name": "tessera.sigmoid", "result": "o",
+                         "operands": ["x"], "kwargs": {}}]})
+            return _execute_x86_compiled_transcendental(sub, (x,))
+
+        def softmax(x: Any) -> Any:
+            sub = RuntimeArtifact(metadata={
+                "target": "x86", "compiler_path": "x86_softmax_compiled",
+                "arg_names": ["x"], "output_name": "o",
+                "ops": [{"op_name": "tessera.softmax", "result": "o",
+                         "operands": ["x"], "kwargs": {"axis": -1}}]})
+            return _execute_x86_compiled_softmax(sub, (x,))
+    elif target == "rocm":
+        gemm = lambda a, b: _rocm_batched_gemm_f32(a, b, np)
+        binary = _rocm_binary_exec
+
+        def sigmoid(x: Any) -> Any:
+            sub = RuntimeArtifact(metadata={
+                "target": "rocm", "compiler_path": "rocm_unary_compiled",
+                "arg_names": ["x"], "output_name": "o",
+                "ops": [{"op_name": "tessera.sigmoid", "result": "o",
+                         "operands": ["x"], "kwargs": {}}]})
+            return _execute_rocm_compiled_unary(sub, (x,))
+
+        def softmax(x: Any) -> Any:
+            sub = RuntimeArtifact(metadata={
+                "target": "rocm", "compiler_path": "rocm_softmax_compiled",
+                "arg_names": ["x"], "output_name": "o",
+                "ops": [{"op_name": "tessera.softmax", "result": "o",
+                         "operands": ["x"], "kwargs": {"axis": -1}}]})
+            return _execute_rocm_compiled_softmax(sub, (x,))
+    else:
+        raise ValueError(f"unsupported composite-helper target {target!r}")
+
+    def f32(value: Any, name: str) -> Any:
+        arr = np.asarray(value)
+        if arr.dtype != np.float32:
+            raise ValueError(
+                f"{compiler_path} handles f32 tensors; {name} has {arr.dtype}")
+        return np.ascontiguousarray(arr)
+
+    def scaled(x: Any, factor: float) -> Any:
+        xc = f32(x, "scaled operand")
+        scale_arr = np.full(xc.shape, np.float32(factor), dtype=np.float32)
+        return binary("tessera.mul", xc, scale_arr)
+
+    if op_name == "tessera.score_combine":
+        if len(operands) != 2:
+            raise ValueError("score_combine expects base and delta")
+        base, delta = f32(operands[0], "base"), f32(operands[1], "delta")
+        if base.shape != delta.shape:
+            raise ValueError("score_combine expects identical operand shapes")
+        return binary("tessera.add", base,
+                      scaled(delta, float(kwargs.get("gamma", 1.0))))
+
+    if op_name == "tessera.memory_index_score":
+        if len(operands) != 2:
+            raise ValueError("memory_index_score expects indexer_keys and query")
+        keys, query = f32(operands[0], "indexer_keys"), f32(operands[1], "query")
+        if (keys.ndim != 4 or query.ndim != 4 or keys.shape[:2] != query.shape[:2]
+                or keys.shape[-1] != query.shape[-1]):
+            raise ValueError(
+                "indexer_keys (B,H,nb,Dk) and query (B,H,S_q,Dk) required")
+        scale = kwargs.get("scale")
+        sc = float(scale) if scale is not None else 1.0 / np.sqrt(query.shape[-1])
+        scores = gemm(query, np.swapaxes(keys, -1, -2))
+        return sigmoid(scaled(scores, sc))
+
+    if op_name == "tessera.msa_index_scores":
+        if len(operands) != 2:
+            raise ValueError("msa_index_scores expects Q and K")
+        q, k = f32(operands[0], "Q"), f32(operands[1], "K")
+        if q.ndim != 4 or k.ndim != 4:
+            raise ValueError("msa_index_scores expects rank-4 Q and K")
+        b, hq, sq, d = q.shape
+        bk, hkv, sk, dk = k.shape
+        block_size = int(kwargs.get("block_size", 0))
+        if b != bk or d != dk:
+            raise ValueError(f"Q/K batch+head_dim must match; got Q {q.shape}, K {k.shape}")
+        if hkv <= 0 or hq % hkv:
+            raise ValueError(f"GQA requires Hq % Hkv == 0; got Hq={hq}, Hkv={hkv}")
+        if block_size <= 0:
+            raise ValueError("block_size must be > 0")
+        pad = (-sk) % block_size
+        if pad:
+            k = np.concatenate(
+                [k, np.zeros((b, hkv, pad, d), dtype=np.float32)], axis=2)
+        nb, group = k.shape[2] // block_size, hq // hkv
+        group_avg = np.full((group, 1), np.float32(1.0 / group), np.float32)
+        block_avg = np.full(
+            (block_size, 1), np.float32(1.0 / block_size), np.float32)
+        # Pool query heads and key blocks with compiled GEMMs. Transposes and
+        # reshapes only define the contraction layout; they do no arithmetic.
+        q_groups = q.reshape(b, hkv, group, sq, d)
+        q_pool_in = np.transpose(q_groups, (0, 1, 3, 4, 2))
+        q_grouped = gemm(q_pool_in, group_avg).squeeze(-1)
+        k_blocks = k.reshape(b, hkv, nb, block_size, d)
+        k_pool_in = np.transpose(k_blocks, (0, 1, 2, 4, 3))
+        k_centers = gemm(k_pool_in, block_avg).squeeze(-1)
+        scores = gemm(q_grouped, np.swapaxes(k_centers, -1, -2))
+        scale = kwargs.get("scale")
+        sc = float(scale) if scale is not None else 1.0 / np.sqrt(d)
+        return scaled(scores, sc)
+
+    if op_name == "tessera.varlen_sdpa":
+        if len(operands) != 5:
+            raise ValueError("varlen_sdpa expects Q, K, V, cu_seqlens_q, cu_seqlens_k")
+        q, k, v = (f32(operands[i], name)
+                   for i, name in enumerate(("Q", "K", "V")))
+        if q.ndim != 3 or k.ndim != 3 or v.ndim != 3:
+            raise ValueError("varlen_sdpa expects rank-3 (H,total,D) packed streams")
+        h, total_q, d = q.shape
+        if (k.shape[0] != h or v.shape[0] != h or k.shape[1] != v.shape[1]
+                or k.shape[2] != d or v.shape[2] != d):
+            raise ValueError("Q/K/V must share heads and head_dim; K/V share length")
+        cu_q = np.asarray(operands[3], dtype=np.int64)
+        cu_k = np.asarray(operands[4], dtype=np.int64)
+        if (cu_q.ndim != 1 or cu_k.ndim != 1 or cu_q.size != cu_k.size
+                or cu_q.size < 2 or cu_q[0] != 0 or cu_k[0] != 0
+                or cu_q[-1] != total_q or cu_k[-1] != k.shape[1]
+                or np.any(np.diff(cu_q) < 0) or np.any(np.diff(cu_k) < 0)):
+            raise ValueError("invalid varlen cumulative sequence lengths")
+        sc_kw = kwargs.get("scale")
+        sc = float(sc_kw) if sc_kw is not None else 1.0 / np.sqrt(d)
+        causal = bool(kwargs.get("causal", False))
+        out = np.zeros((h, total_q, d), dtype=np.float32)
+        for i in range(cu_q.size - 1):
+            q0, q1 = int(cu_q[i]), int(cu_q[i + 1])
+            k0, k1 = int(cu_k[i]), int(cu_k[i + 1])
+            lq, lk = q1 - q0, k1 - k0
+            if lq == 0 or lk == 0:
+                continue
+            scores = scaled(gemm(q[:, q0:q1], np.swapaxes(k[:, k0:k1], -1, -2)), sc)
+            if causal:
+                qi = np.arange(lq)[:, None]
+                ki = np.arange(lk)[None, :]
+                allow = ki <= (lk - lq + qi)
+                bias = np.broadcast_to(
+                    np.where(allow, 0.0, -np.inf).astype(np.float32), scores.shape)
+                scores = binary("tessera.add", scores, np.ascontiguousarray(bias))
+            weights = softmax(scores)
+            out[:, q0:q1] = gemm(weights, v[:, k0:k1])
+        return out
+
+    raise AssertionError(f"unhandled composite helper {op_name!r}")
 
 
 def _execute_x86_composite_helper_compiled(artifact: RuntimeArtifact, args: Any) -> Any:
     return _execute_composite_helper_compiled(
-        artifact, args, compiler_path="x86_composite_helper_compiled")
+        artifact, args, compiler_path="x86_composite_helper_compiled", target="x86")
 
 
 def _execute_rocm_composite_helper_compiled(artifact: RuntimeArtifact, args: Any) -> Any:
     return _execute_composite_helper_compiled(
-        artifact, args, compiler_path="rocm_composite_helper_compiled",
-        rocm_fallback=True)
+        artifact, args, compiler_path="rocm_composite_helper_compiled", target="rocm")
 
 
 def _runtime_pair(value: Any) -> tuple[int, int]:

@@ -1,0 +1,36 @@
+{
+  "schema": "tessera.benchmark.comparative-ratchet.v1",
+  "target": "rocm:gfx1151",
+  "rows": [
+    {
+      "op": "sparse_attention",
+      "shape": "1x8x128x2048x64-k8-b16",
+      "dtype": "f32",
+      "baseline_ms": 5.1977,
+      "candidate_ms": 3.2388,
+      "speedup": 1.6048,
+      "max_candidate_ms": 4.8582,
+      "min_speedup": 1.1
+    },
+    {
+      "op": "sparse_topk",
+      "shape": "1x4x64x2048-k8",
+      "dtype": "f32",
+      "baseline_ms": 11.95,
+      "candidate_ms": 6.7424,
+      "speedup": 1.7724,
+      "max_candidate_ms": 10.1136,
+      "min_speedup": 1.1
+    },
+    {
+      "op": "sparse_topk",
+      "shape": "1x4x64x4096-k8",
+      "dtype": "f32",
+      "baseline_ms": 20.6568,
+      "candidate_ms": 10.6655,
+      "speedup": 1.9368,
+      "max_candidate_ms": 15.9982,
+      "min_speedup": 1.1
+    }
+  ]
+}

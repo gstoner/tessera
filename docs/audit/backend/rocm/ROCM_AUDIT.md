@@ -36,7 +36,7 @@ does not transfer to RDNA 4, Wave32 WMMA v2, or CDNA MFMA targets.
 |---|---|---|---|
 | Matrix compute | `matmul` has shipped C-ABI proof; `batched_gemm`, `einsum`, `factorized_matmul`, `linear_general`, `qkv_projection`, and fused epilogues execute through compiler-generated WMMA lanes. | Exact-device proof on other architectures; occupancy and issue-rate tuning. | [`rocm_target_map.md`](../../generated/rocm_target_map.md) |
 | Dense attention | `flash_attn` has shipped C-ABI proof. Compiler-generated forward/backward, GQA, MQA, MHA, sliding-window attention, additive bias, and logit soft-capping execute through the FA lane. | Higher-occupancy kernel design and broader exact-target validation. | [`rocm_target_map.md`](../../generated/rocm_target_map.md), [`runtime_execution_matrix.md`](../../generated/runtime_execution_matrix.md) |
-| Linear, exotic, sparse, and recurrent attention | Linear/lightning attention, `gated_attention`, MLA decode variants, `hybrid_attention`, `deepseek_sparse_attention`, and the DeltaNet family have executing compiler-generated lanes. | Cooperative sparse tiling and larger device-resident selection. | [`rocm_target_map.md`](../../generated/rocm_target_map.md) |
+| Linear, exotic, sparse, and recurrent attention | Linear/lightning attention, `gated_attention`, MLA decode variants, `hybrid_attention`, `deepseek_sparse_attention`, and the DeltaNet family have executing compiler-generated lanes. Sparse attention shares QK scores and weights cooperatively; large-block selection has a measured resident-GPU crossover. | Broaden the sparse crossover map beyond gfx1151 and beyond the recorded DK2/MSA shapes. | [`rocm_target_map.md`](../../generated/rocm_target_map.md) |
 | Norms and activations | `softmax`/`softmax_safe`, `rmsnorm`/`rmsnorm_safe`, `layer_norm`, `gelu`, `silu`, and `silu_mul` execute as compiler-generated kernels. | Optimize only where measurements identify a useful rung. | [`rocm_target_map.md`](../../generated/rocm_target_map.md) |
 | Positional features | `rope` and `alibi` execute as compiler-generated kernels. | Exact-device proof on additional architectures. | [`rocm_target_map.md`](../../generated/rocm_target_map.md) |
 | General math and reductions | Row reductions, unary/binary math, comparisons, logical operations, and bitwise operations have native gfx1151 lanes. | Broaden tuned shapes and dtype coverage without weakening numerical semantics. | [`runtime_execution_matrix.md`](../../generated/runtime_execution_matrix.md) |
@@ -55,9 +55,51 @@ its stated evidence exists; emitting an artifact alone is not completion.
 | ROCM-3 | P0 | Add gfx1250 MI455X exact-device proof. | The upstream-LLVM artifact is joined to an exact-device launch and numerical fixture with gfx1250 provenance. |
 | ROCM-4 | P1 | Add gfx1200 consumer-device proof and retain gfx942 as an explicitly tested compatibility target. | Each promoted row carries its own runtime and numerical evidence; unsupported feature forms fail with stable diagnostics. |
 | ROCM-5 | P1 | Finish architecture-specific MMA enablement instead of reusing gfx1151 layouts. | Separate RDNA 4, Wave32 WMMA v2, and CDNA MFMA fragment/layout guards pass assemble-and-compare fixtures on their matching devices. |
-| ROCM-6 | P1 | Raise GEMM and flash-attention roofline attainment on gfx1151. | Device-timed ratchets show a repeatable gain without correctness, ragged-shape, or dtype regressions. Focus on VGPR/LDS budgets, occupancy, and WMMA issue scheduling. |
-| ROCM-7 | P1 | Promote sparse-attention performance. | Cooperative tiled sparse attention and a larger GPU-resident top-k path beat the current baseline on representative DK2/MSA workloads and retain dense-equivalence checks. |
+| ROCM-6 | P1 | Run the three concrete redesign experiments below: VGPR-bounded multi-wave GEMM, two-wave online-softmax forward attention, and split/reduced dK/dV backward attention. | An experiment may replace production only when its named aligned and ragged rungs clear the comparative gain gate, all dtype/correctness fixtures remain green, and its winning latency is recorded in `rocm_gfx1151_hot_paths.json`. |
 | ROCM-8 | P2 | Re-evaluate copy versus zero-copy on bare-metal ROCm. | Device and end-to-end measurements identify a stable crossover outside WSL before any automatic selection policy lands. |
+
+### ROCM-6 redesign experiments and ratchets
+
+ROCM-6 is no longer an open-ended request to “tune occupancy.” Each candidate
+must be kept beside the production kernel for an A/B run, and a local win does
+not change dispatch until the full gate passes.
+
+| Experiment | Concrete design | Required A/B rungs on gfx1151 | Promotion ratchet |
+|---|---|---|---|
+| G6-A: multi-wave GEMM | Split one output macro-tile across two Wave32 groups, reduce partial f32 accumulators through a bounded LDS tile, and cap the per-wave accumulator footprint below the measured 4×4 VGPR cliff. | f16 and bf16 at 2048³ and 4096³; ragged `2049x4093x2051`; int8 at 2048³. | At least 10% median latency gain on both aligned f16 rungs; no rung slower by more than 3%; exact existing dtype/ragged oracles pass. Winning production rows replace, rather than append around, the matching hot-path baseline. |
+| G6-B: two-wave FA forward | Assign two waves to a query tile, share K/V traversal, retain per-wave online `(m,l,O)` state, and merge states once per KV tile. This tests a different occupancy/ownership model rather than another LDS prefetch layer. | `(1,8,512,64)`, `(1,8,1024,64)`, `(1,16,1024,128)`, plus causal ragged sequence 1009 at D=128. | At least 10% on both D=128 rungs, no D=64 regression beyond 3%, and forward/GQA/ragged numerical fixtures pass. Record the promoted rows in the existing hot-path ratchet. |
+| G6-C: split dK/dV backward | Give dQ and dK/dV independent wave ownership; write bounded partial dK/dV tiles and reduce them in a second generated kernel, avoiding the current large shared accumulator lifetime. | `(1,8,512,64)` and `(1,16,1024,128)`, causal and noncausal, plus grouped-query backward. | At least 15% on D=128 and 10% on D=64; temporary storage is explicitly reported and stays below one extra K+V gradient footprint; all gradient oracles pass before updating the backward ratchet. |
+
+The checked-in hot-path recorder remains the absolute regression guard. Each
+experiment must additionally report its retained-production/candidate ratio;
+this prevents a noisy absolute cap from promoting a redesign that is merely
+within tolerance but not faster.
+
+### ROCM-7 closure: cooperative sparse attention
+
+ROCM-7 now has compiler, runtime, correctness, and comparative performance
+evidence on the exact WSL gfx1151 target:
+
+- The tiled selected-block kernel assigns one workgroup to a query row. One
+  lane computes each selected QK score once, scores and softmax weights live in
+  a 256-entry LDS tile, and value lanes reuse them. The prior scalar kernel is
+  retained as the benchmark control.
+- The resident top-k candidate uses two Wave32s to scan thousands of candidate
+  blocks and tree-reduce deterministic `(score, block-id)` winners. Runtime
+  auto-selection is deliberately limited to at most 256 score rows, at least
+  2,048 candidate blocks, and `top_k <= 8`; ordinary shapes keep the faster
+  serial-row kernel.
+- The committed comparative ratchet records a 1.605× attention win and 1.772×
+  / 1.937× selection wins at 2,048 / 4,096 blocks. It gates both a candidate
+  latency cap and a minimum 1.10× A/B speedup, so “inside the noise margin” is
+  not sufficient for promotion.
+- The full sparse compiler suite and exact serial/cooperative selection compare
+  run on gfx1151; selected-block dense-equivalence remains covered.
+
+Evidence: `benchmark_sparse_redesign.py`,
+`rocm_gfx1151_sparse_redesign.json`,
+`test_rocm_sparse_redesign_ratchet.py`, and
+`test_rocm_sparse_attn_compiled.py`.
 
 ### Accepted-deferred work
 
@@ -146,6 +188,11 @@ feature claim means. Individual status rows and counts remain generated.
 - **Composite attention:** gated attention and MLA variants compose already
   proven GEMM, attention, and pointwise lanes. DeltaNet uses a dedicated causal
   sequential-scan kernel rather than claiming composition as a new fused kernel.
+- **Composite helpers:** `memory_index_score`, `msa_index_scores`,
+  `score_combine`, and `varlen_sdpa` compose the compiler-generated f32 GEMM,
+  softmax, unary, and binary HIP kernels. Host work is limited to shape,
+  padding, and packed-sequence metadata; the lane has no numerical reference
+  fallback and returns `execution_kind=native_gpu` on gfx1151.
 
 ### Norms, reductions, and general math
 

@@ -81,10 +81,12 @@ The production generated GEMM now receives a unified schedule descriptor
 and provenance). Its measured gfx1151 `2x4`/`3x4` macro-tile changes the emitted
 kernel; the generator validates and stamps the remaining fields so each ROCM-6
 run can be joined to the schedule that executed. `collect_rocm6_counters.py`
-runs either retained production or candidate under native `rocprofv3 --pmc` and
-keeps the experiment/variant/command identity beside raw outputs. Counter names
-must be enumerated on the target; an unavailable PMC is a failed evidence run,
-not a synthesized zero.
+keeps native collection disabled unless `--native-counters` is passed. That
+switch is bare-metal only: WSL rejects it before spawning `rocprofv3`, while a
+bare-metal run profiles either retained production or candidate under
+`rocprofv3 --pmc` and keeps the experiment/variant/command identity beside raw
+outputs. Counter names must be enumerated on the target; an unavailable PMC is
+a failed evidence run, not a synthesized zero.
 
 ### ROCM-7 closure: cooperative sparse attention
 

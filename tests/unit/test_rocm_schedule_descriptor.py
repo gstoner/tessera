@@ -49,10 +49,12 @@ def test_native_counter_runner_records_exact_ab_identity(tmp_path, monkeypatch):
         return Completed()
 
     monkeypatch.setattr("subprocess.run", fake_run)
+    monkeypatch.setattr(
+        "tessera.compiler.rocm_profiler_experiment.is_wsl", lambda: False)
     run = collect_native_counters(
         "G6-A", "candidate", ["bench", "--shape", "1024"],
         counters=["SQ_WAVES", "SQ_INSTS_VALU"], output_directory=tmp_path,
-        rocprofv3="/opt/rocm/bin/rocprofv3")
+        rocprofv3="/opt/rocm/bin/rocprofv3", enabled=True)
     assert "--pmc" in calls[0][0]
     assert calls[0][0][-4:] == ("--", "bench", "--shape", "1024")
     payload = json.loads((tmp_path / "tessera_rocm6_run.json").read_text())
@@ -60,3 +62,26 @@ def test_native_counter_runner_records_exact_ab_identity(tmp_path, monkeypatch):
     assert payload["variant"] == "candidate"
     assert payload["native"] is True
     assert run.returncode == 0
+    assert run.status == "collected"
+
+
+def test_native_counter_switch_defaults_off_without_spawning(tmp_path, monkeypatch):
+    def fail_run(*args, **kwargs):
+        raise AssertionError("disabled profiler switch must not spawn rocprofv3")
+
+    monkeypatch.setattr("subprocess.run", fail_run)
+    run = collect_native_counters(
+        "G6-B", "production", [], counters=[], output_directory=tmp_path)
+    assert run.status == "disabled"
+    assert run.returncode is None
+    assert run.as_metadata_dict()["native"] is False
+
+
+def test_native_counter_switch_rejects_wsl(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "tessera.compiler.rocm_profiler_experiment.is_wsl", lambda: True)
+    with pytest.raises(RuntimeError, match="unsupported under WSL"):
+        collect_native_counters(
+            "G6-C", "candidate", ["bench"], counters=["SQ_WAVES"],
+            output_directory=tmp_path, enabled=True,
+            rocprofv3="/opt/rocm/bin/rocprofv3")

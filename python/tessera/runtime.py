@@ -2181,7 +2181,7 @@ def _nvidia_device_name() -> str | None:
 _rocm_hip_launch_lib: ctypes.CDLL | None = None
 #: hsaco bytes keyed by (mt, nt, chip, dtype) — the kernel is shape-generic.
 _rocm_compiled_hsaco_cache: dict[
-    tuple[int, int, str, str, bool, str], bytes] = {}
+    tuple[int, int, str, str, bool, str, object], bytes] = {}
 
 
 class _RocmCompiledUnavailable(RuntimeError):

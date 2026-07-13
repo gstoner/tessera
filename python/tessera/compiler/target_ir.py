@@ -1252,7 +1252,7 @@ def _lower_rocm_op(op: TileOp) -> list[TargetOp]:
         dtype = str(op.attrs.get("dtype", "f16"))
         if dtype not in ("f16", "bf16", "int8", "i8", "int4", "i4"):
             dtype = "f16"
-        schedule_attrs = {
+        schedule_attrs: dict[str, Any] = {
             key: op.attrs[key]
             for key in (
                 "mt", "nt", "schedule_arch", "schedule_pipeline_stages",

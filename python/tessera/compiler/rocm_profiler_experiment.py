@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import platform
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -21,7 +22,9 @@ class ROCmCounterRun:
     command: tuple[str, ...]
     counters: tuple[str, ...]
     output_directory: str
-    returncode: int
+    returncode: int | None
+    status: str
+    reason: str | None = None
 
     def as_metadata_dict(self) -> dict[str, object]:
         return {
@@ -33,8 +36,16 @@ class ROCmCounterRun:
             "output_directory": self.output_directory,
             "returncode": self.returncode,
             "provider": "rocprofv3",
-            "native": True,
+            "native": self.status == "collected",
+            "status": self.status,
+            "reason": self.reason,
         }
+
+
+def is_wsl() -> bool:
+    """Return whether this process is running under Microsoft's WSL kernel."""
+    release = platform.release().lower()
+    return "microsoft" in release or "wsl" in release
 
 
 def collect_native_counters(
@@ -45,12 +56,32 @@ def collect_native_counters(
     counters: Sequence[str],
     output_directory: str | Path,
     rocprofv3: str | None = None,
+    enabled: bool = False,
 ) -> ROCmCounterRun:
-    """Run one retained-production/candidate command under native rocprofv3."""
+    """Run one retained-production/candidate command under native rocprofv3.
+
+    Native PMC collection is an explicit switch and currently a bare-metal-only
+    capability. WSL exposes gfx1151 execution but not a usable rocprofiler PMC
+    enumeration path, so an enabled WSL run fails before spawning rocprofv3.
+    """
     if experiment not in ROCM6_EXPERIMENTS:
         raise ValueError(f"unknown ROCM-6 experiment {experiment!r}")
     if variant not in {"production", "candidate"}:
         raise ValueError("variant must be production or candidate")
+    out = Path(output_directory)
+    out.mkdir(parents=True, exist_ok=True)
+    if not enabled:
+        run = ROCmCounterRun(
+            experiment, variant, tuple(application), tuple(counters), str(out),
+            None, "disabled", "native counters were not enabled",
+        )
+        (out / "tessera_rocm6_run.json").write_text(
+            json.dumps(run.as_metadata_dict(), indent=2) + "\n", encoding="utf-8")
+        return run
+    if is_wsl():
+        raise RuntimeError(
+            "native ROCm performance counters are unsupported under WSL; "
+            "run this switch on a bare-metal ROCm system")
     if not application:
         raise ValueError("application command must not be empty")
     if not counters:
@@ -58,8 +89,6 @@ def collect_native_counters(
     profiler = rocprofv3 or shutil.which("rocprofv3")
     if profiler is None:
         raise RuntimeError("rocprofv3 is not installed or not on PATH")
-    out = Path(output_directory)
-    out.mkdir(parents=True, exist_ok=True)
     cmd = (
         profiler, "--kernel-trace", "--stats", "--pmc", *counters,
         "--output-format", "csv", "json", "--output-directory", str(out),
@@ -68,7 +97,7 @@ def collect_native_counters(
     completed = subprocess.run(cmd, check=False)
     run = ROCmCounterRun(
         experiment, variant, tuple(application), tuple(counters), str(out),
-        completed.returncode,
+        completed.returncode, "collected",
     )
     (out / "tessera_rocm6_run.json").write_text(
         json.dumps(run.as_metadata_dict(), indent=2) + "\n", encoding="utf-8")
@@ -86,5 +115,5 @@ def read_counter_csv(path: str | Path) -> list[dict[str, str]]:
 
 __all__ = [
     "ROCM6_EXPERIMENTS", "ROCmCounterRun", "collect_native_counters",
-    "read_counter_csv",
+    "is_wsl", "read_counter_csv",
 ]

@@ -200,7 +200,7 @@ gguf_export,1,0,0,1,1,,structural_only,category default for 'aot'
 gqa_attention,10,0,2,10,0,,directly_tested,10 direct test references
 grad_scaler_step,3,0,0,3,0,,directly_tested,3 direct test references
 group_norm,9,0,0,9,0,,directly_tested,9 direct test references
-grouped_gemm,28,24,2,52,0,fp32 fp4_e2m1 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,52 direct test references
+grouped_gemm,31,24,2,55,0,fp32 fp4_e2m1 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,55 direct test references
 grpo_policy_loss,10,3,0,13,0,,directly_tested,13 direct test references
 gru_cell,7,0,1,7,0,bf16 f16 f32 fp16,directly_tested,7 direct test references
 gt,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references

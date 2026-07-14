@@ -94,6 +94,7 @@ _CONTROL_SCAN_ENTRY = "tessera_nvidia_control_scan_f32"
 _ROPE_ENTRY = "tessera_nvidia_rope_f32"
 _ALIBI_ENTRY = "tessera_nvidia_alibi_f32"
 _SSM_ENTRY = "tessera_nvidia_selective_ssm_f32"
+_SSM_REPLAY_ENTRY = "tessera_nvidia_ssm_replay_decode_f32"
 _DELTANET_ENTRY = "tessera_nvidia_deltanet_f32"
 _MOE_DISPATCH_ENTRY = "tessera_nvidia_moe_dispatch_f32"
 _MOE_COMBINE_ENTRY = "tessera_nvidia_moe_combine_f32"
@@ -230,6 +231,7 @@ _mla_fused_artifact: str | None = None
 _control_flow_artifact: str | None = None
 _posenc_artifact: str | None = None
 _ssm_artifact: str | None = None
+_ssm_replay_artifact: str | None = None
 _deltanet_artifact: str | None = None
 _moe_artifact: str | None = None
 _dequant_artifact: str | None = None
@@ -1256,6 +1258,151 @@ def run_selective_ssm_f32(x: Any, A: Any, B: Any, C: Any, delta: Any,
     null=ctypes.c_void_p()
     if fn(_ptr(x),_ptr(A),_ptr(B),_ptr(C),_ptr(delta),_ptr(gate) if gate is not None else null,_ptr(state) if state is not None else null,_ptr(out),bs,s,d,n)!=1: raise RuntimeError("NVIDIA selective_ssm CUDA launch failed")
     return out
+
+
+# ── ReplaySSM output-only decode (CUDA vertical slice) ──────────────────────
+
+def _synthesize_ssm_replay_decode_cuda() -> str:
+    """One-launch scalar-A ReplaySSM output reconstruction.
+
+    The kernel owns one ``(batch, channel)`` output and reconstructs it from a
+    checkpoint plus the live replay window.  This intentionally mirrors the
+    established Metal ABI so ``SSMStateHandle`` can use it as an optional
+    output-only fast path.  It does not materialize the ``[B,D,N]`` live state.
+    """
+    return r'''#include <cuda_runtime.h>
+#include <math.h>
+__global__ void ssm_replay_k(const float*delta,const float*x,const float*b,const float*s0,const float*c,const float*a,float*y,int B,int D,int N,int M){int z=blockIdx.x*blockDim.x+threadIdx.x;if(z>=B*D)return;int bi=z/D,d=z%D;float dc=0.f;for(int i=0;i<M;++i)dc+=delta[((long)i*B+bi)*D+d]*a[d];float out=0.f;for(int n=0;n<N;++n)out+=c[(long)bi*N+n]*s0[((long)bi*D+d)*N+n];out*=expf(dc);float prefix=0.f;for(int i=0;i<M;++i){long q=((long)i*B+bi)*D+d;prefix+=delta[q]*a[d];float gram=0.f;for(int n=0;n<N;++n)gram+=c[(long)bi*N+n]*b[((long)i*B+bi)*N+n];out+=expf(dc-prefix)*delta[q]*x[q]*gram;}y[(long)bi*D+d]=out;}
+static int cp(float**d,const float*h,size_t z){return cudaMalloc(d,z)==cudaSuccess&&cudaMemcpy(*d,h,z,cudaMemcpyHostToDevice)==cudaSuccess;}
+extern "C" int tessera_nvidia_ssm_replay_decode_f32(const float*hd,const float*hx,const float*hb,const float*hs,const float*hc,const float*ha,float*hy,int B,int D,int N,int M){if(!hd||!hx||!hb||!hs||!hc||!ha||!hy||B<1||D<1||N<1||M<1)return 2;size_t zbd=(size_t)M*B*D*4,zbn=(size_t)M*B*N*4,zs=(size_t)B*D*N*4,zc=(size_t)B*N*4,za=(size_t)D*4,zy=(size_t)B*D*4;float *d=0,*x=0,*b=0,*s=0,*c=0,*a=0,*y=0;if(!cp(&d,hd,zbd)||!cp(&x,hx,zbd)||!cp(&b,hb,zbn)||!cp(&s,hs,zs)||!cp(&c,hc,zc)||!cp(&a,ha,za)||cudaMalloc(&y,zy)!=cudaSuccess){if(d)cudaFree(d);if(x)cudaFree(x);if(b)cudaFree(b);if(s)cudaFree(s);if(c)cudaFree(c);if(a)cudaFree(a);return 3;}ssm_replay_k<<<(B*D+127)/128,128>>>(d,x,b,s,c,a,y,B,D,N,M);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(hy,y,zy,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(d);cudaFree(x);cudaFree(b);cudaFree(s);cudaFree(c);cudaFree(a);cudaFree(y);return ok?1:3;}
+'''
+
+
+def run_ssm_replay_decode_f32(delta: Any, x: Any, b: Any, s0: Any, c: Any,
+                              a: Any) -> Any:
+    """Run the scalar-A ReplaySSM output-only CUDA kernel.
+
+    Inputs use the ``SSMStateHandle`` layout: ``delta/x=[M,B,D]``,
+    ``b=[M,B,N]``, ``s0=[B,D,N]``, ``c=[B,N]``, and ``a=[D]``.  The wrapper is
+    deliberately a correctness vertical slice; persistent device ownership is
+    introduced by the state-handle runtime ABI, not hidden behind this call.
+    """
+    import numpy as np
+    delta, x, b, s0, c, a = (
+        np.ascontiguousarray(v, dtype=np.float32) for v in (delta, x, b, s0, c, a)
+    )
+    if delta.ndim != 3 or x.shape != delta.shape:
+        raise ValueError("ReplaySSM delta and x must be matching [M,B,D] f32 arrays")
+    M, B, D = delta.shape
+    if (M < 1 or b.shape[:2] != (M, B) or s0.ndim != 3
+            or s0.shape[:2] != (B, D) or c.shape != (B, s0.shape[2])
+            or b.shape[2] != s0.shape[2] or a.shape != (D,)):
+        raise ValueError("invalid scalar-A ReplaySSM decode shapes")
+    N = s0.shape[2]
+    global _ssm_replay_artifact
+    if _ssm_replay_artifact is None:
+        _ssm_replay_artifact = _nvidia_cuda_compile_fn(KernelSource(
+            source=_synthesize_ssm_replay_decode_cuda(), entry=_SSM_REPLAY_ENTRY,
+            lang=_LANG, spec=SpecPolicy.DYNAMIC, shape_key=("ssm-replay-f32",)))
+    out = np.empty((B, D), dtype=np.float32)
+    fn = getattr(_load_lib(_ssm_replay_artifact), _SSM_REPLAY_ENTRY)
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p] * 7 + [ctypes.c_int] * 4
+    if fn(_ptr(delta), _ptr(x), _ptr(b), _ptr(s0), _ptr(c), _ptr(a), _ptr(out),
+          B, D, N, M) != 1:
+        raise RuntimeError("NVIDIA ReplaySSM CUDA launch failed")
+    return out
+
+
+_ssm_replay_device_artifact: str | None = None
+
+
+def _synthesize_ssm_replay_device_cuda() -> str:
+    """Persistent scalar-A ReplaySSM context; inputs stay in CUDA allocations."""
+    return r'''#include <cuda_runtime.h>
+#include <math.h>
+#include <stdlib.h>
+struct Q{float*d,*x,*b,*s,*c,*a,*y,*dy,*pd,*px,*pb,*pc,*py;cudaStream_t st;cudaEvent_t ev;int B,D,N,L,pending;};
+__global__ void out(Q q,int M){int z=blockIdx.x*blockDim.x+threadIdx.x;if(z>=q.B*q.D)return;int bi=z/q.D,di=z%q.D;float t=0,v=0,p=0;for(int i=0;i<M;i++)t+=q.d[((long)i*q.B+bi)*q.D+di]*q.a[di];for(int n=0;n<q.N;n++)v+=q.c[(long)bi*q.N+n]*q.s[((long)bi*q.D+di)*q.N+n];v*=expf(t);for(int i=0;i<M;i++){long k=((long)i*q.B+bi)*q.D+di;p+=q.d[k]*q.a[di];float g=0;for(int n=0;n<q.N;n++)g+=q.c[(long)bi*q.N+n]*q.b[((long)i*q.B+bi)*q.N+n];v+=expf(t-p)*q.d[k]*q.x[k]*g;}q.y[(long)bi*q.D+di]=v;}
+__global__ void fl(Q q,int M){long z=(long)blockIdx.x*blockDim.x+threadIdx.x,n=(long)q.B*q.D*q.N;if(z>=n)return;int ni=z%q.N,di=(z/q.N)%q.D,bi=z/(q.N*q.D);float v=q.s[z];for(int i=0;i<M;i++){long k=((long)i*q.B+bi)*q.D+di;v=expf(q.d[k]*q.a[di])*v+q.d[k]*q.x[k]*q.b[((long)i*q.B+bi)*q.N+ni];}q.s[z]=v;}
+extern "C" int cr(void**o,const float*s,const float*a,int B,int D,int N,int L){Q*q=(Q*)calloc(1,sizeof(Q));if(!q||B<1||D<1||N<1||L<1)return 2;q->B=B;q->D=D;q->N=N;q->L=L;size_t bd=(size_t)L*B*D*4,bn=(size_t)L*B*N*4,st=(size_t)B*D*N*4,c=(size_t)B*N*4,aa=(size_t)D*4,y=(size_t)B*D*4;if(cudaMalloc(&q->d,bd)||cudaMalloc(&q->x,bd)||cudaMalloc(&q->b,bn)||cudaMalloc(&q->s,st)||cudaMalloc(&q->c,c)||cudaMalloc(&q->a,aa)||cudaMalloc(&q->y,y)||cudaMalloc(&q->dy,bd)||cudaHostAlloc(&q->pd,bd,cudaHostAllocDefault)||cudaHostAlloc(&q->px,bd,cudaHostAllocDefault)||cudaHostAlloc(&q->pb,bn,cudaHostAllocDefault)||cudaHostAlloc(&q->pc,bn,cudaHostAllocDefault)||cudaHostAlloc(&q->py,bd,cudaHostAllocDefault)||cudaStreamCreate(&q->st)||cudaEventCreateWithFlags(&q->ev,cudaEventDisableTiming)||cudaMemcpy(q->s,s,st,cudaMemcpyHostToDevice)||cudaMemcpy(q->a,a,aa,cudaMemcpyHostToDevice))return 3;*o=q;return 1;}
+extern "C" int ap(void*v,const float*d,const float*x,const float*b,int i){Q*q=(Q*)v;if(!q||i<0||i>=q->L)return 2;size_t bd=(size_t)q->B*q->D*4,bn=(size_t)q->B*q->N*4;return cudaMemcpy(q->d+(size_t)i*q->B*q->D,d,bd,cudaMemcpyHostToDevice)||cudaMemcpy(q->x+(size_t)i*q->B*q->D,x,bd,cudaMemcpyHostToDevice)||cudaMemcpy(q->b+(size_t)i*q->B*q->N,b,bn,cudaMemcpyHostToDevice)?3:1;}
+extern "C" int de(void*v,const float*c,float*y,int M){Q*q=(Q*)v;if(!q||M<1||M>q->L)return 2;if(cudaMemcpy(q->c,c,(size_t)q->B*q->N*4,cudaMemcpyHostToDevice))return 3;out<<<(q->B*q->D+127)/128,128>>>(*q,M);return cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(y,q->y,(size_t)q->B*q->D*4,cudaMemcpyDeviceToHost)==cudaSuccess?1:3;}
+extern "C" int fu(void*v,int M){Q*q=(Q*)v;if(!q||M<1||M>q->L)return 2;long n=(long)q->B*q->D*q->N;fl<<<(n+127)/128,128>>>(*q,M);return cudaDeviceSynchronize()==cudaSuccess?1:3;}
+extern "C" int bl(void*v,const float*d,const float*x,const float*b,const float*c,float*y,int T,int start){Q*q=(Q*)v;if(!q||!d||!x||!b||!c||!y||T<1||start<0||start+T>q->L)return 2;size_t bd=(size_t)q->B*q->D*4,bn=(size_t)q->B*q->N*4,yo=(size_t)q->B*q->D;for(int i=0;i<T;i++){int p=start+i;if(cudaMemcpy(q->d+(size_t)p*q->B*q->D,d+(size_t)i*q->B*q->D,bd,cudaMemcpyHostToDevice)||cudaMemcpy(q->x+(size_t)p*q->B*q->D,x+(size_t)i*q->B*q->D,bd,cudaMemcpyHostToDevice)||cudaMemcpy(q->b+(size_t)p*q->B*q->N,b+(size_t)i*q->B*q->N,bn,cudaMemcpyHostToDevice)||cudaMemcpy(q->c,c+(size_t)i*q->B*q->N,bn,cudaMemcpyHostToDevice))return 3;out<<<(q->B*q->D+127)/128,128>>>(*q,p+1);if(cudaGetLastError()!=cudaSuccess||cudaMemcpy(y+(size_t)i*yo,q->y,bd,cudaMemcpyDeviceToHost)!=cudaSuccess)return 3;}return 1;}
+extern "C" int as(void*v,const float*d,const float*x,const float*b,const float*c,int T,int start){Q*q=(Q*)v;if(!q||q->pending||T<1||start<0||start+T>q->L)return 2;size_t bd=(size_t)q->B*q->D*4,bn=(size_t)q->B*q->N*4,yo=(size_t)q->B*q->D;memcpy(q->pd,d,(size_t)T*bd);memcpy(q->px,x,(size_t)T*bd);memcpy(q->pb,b,(size_t)T*bn);memcpy(q->pc,c,(size_t)T*bn);for(int i=0;i<T;i++){int p=start+i;if(cudaMemcpyAsync(q->d+(size_t)p*yo,q->pd+(size_t)i*yo,bd,cudaMemcpyHostToDevice,q->st)||cudaMemcpyAsync(q->x+(size_t)p*yo,q->px+(size_t)i*yo,bd,cudaMemcpyHostToDevice,q->st)||cudaMemcpyAsync(q->b+(size_t)p*q->B*q->N,q->pb+(size_t)i*q->B*q->N,bn,cudaMemcpyHostToDevice,q->st)||cudaMemcpyAsync(q->c,q->pc+(size_t)i*q->B*q->N,bn,cudaMemcpyHostToDevice,q->st))return 3;out<<<(q->B*q->D+127)/128,128,0,q->st>>>(*q,p+1);if(cudaMemcpyAsync(q->dy+(size_t)i*yo,q->y,bd,cudaMemcpyDeviceToDevice,q->st)||cudaMemcpyAsync(q->py+(size_t)i*yo,q->y,bd,cudaMemcpyDeviceToHost,q->st))return 3;}q->pending=T;return cudaEventRecord(q->ev,q->st)==cudaSuccess?1:3;}
+extern "C" int aw(void*v,float*y,int T){Q*q=(Q*)v;if(!q||!q->pending||T!=q->pending)return 2;if(cudaEventSynchronize(q->ev)!=cudaSuccess)return 3;memcpy(y,q->py,(size_t)T*q->B*q->D*4);q->pending=0;return 1;}
+extern "C" void dl(void*v){Q*q=(Q*)v;if(!q)return;cudaFree(q->d);cudaFree(q->x);cudaFree(q->b);cudaFree(q->s);cudaFree(q->c);cudaFree(q->a);cudaFree(q->y);cudaFree(q->dy);if(q->pd)cudaFreeHost(q->pd);if(q->px)cudaFreeHost(q->px);if(q->pb)cudaFreeHost(q->pb);if(q->pc)cudaFreeHost(q->pc);if(q->py)cudaFreeHost(q->py);if(q->ev)cudaEventDestroy(q->ev);if(q->st)cudaStreamDestroy(q->st);free(q);}'''
+
+
+class NvidiaReplayDeviceState:
+    """CUDA-owned S0 and replay ring; only current token inputs cross PCIe."""
+    def __init__(self, s0: Any, a: Any, capacity: int):
+        import numpy as np
+        global _ssm_replay_device_artifact
+        s0=np.ascontiguousarray(s0,np.float32); a=np.ascontiguousarray(a,np.float32)
+        self.B,self.D,self.N=s0.shape; self.capacity=capacity
+        if _ssm_replay_device_artifact is None: _ssm_replay_device_artifact=_nvidia_cuda_compile_fn(KernelSource(source=_synthesize_ssm_replay_device_cuda(),entry="cr",lang=_LANG,spec=SpecPolicy.DYNAMIC,shape_key=("ssm-replay-device",)))
+        self.lib=_load_lib(_ssm_replay_device_artifact); self.ctx=ctypes.c_void_p(); f=self.lib.cr; f.restype=ctypes.c_int
+        if f(ctypes.byref(self.ctx),_ptr(s0),_ptr(a),self.B,self.D,self.N,capacity)!=1: raise RuntimeError("ReplaySSM CUDA allocation failed")
+    def append(self,d: Any,x: Any,b: Any,i:int)->None:
+        import numpy as np
+        f=self.lib.ap; f.restype=ctypes.c_int; vs=[np.ascontiguousarray(v,np.float32) for v in(d,x,b)]
+        if f(self.ctx,*(_ptr(v) for v in vs),i)!=1: raise RuntimeError("ReplaySSM CUDA append failed")
+    def decode(self,c: Any,m:int)->Any:
+        import numpy as np
+        c=np.ascontiguousarray(c,np.float32); y=np.empty((self.B,self.D),np.float32); f=self.lib.de; f.restype=ctypes.c_int
+        if f(self.ctx,_ptr(c),_ptr(y),m)!=1: raise RuntimeError("ReplaySSM CUDA decode failed")
+        return y
+    def flush(self,m:int)->None:
+        f=self.lib.fu; f.restype=ctypes.c_int
+        if f(self.ctx,m)!=1: raise RuntimeError("ReplaySSM CUDA flush failed")
+    def submit_block(self,d: Any,x: Any,b: Any,c: Any,start:int)->Any:
+        import numpy as np
+        d,x,b,c=(np.ascontiguousarray(v,np.float32) for v in (d,x,b,c)); T=d.shape[0]
+        y=np.empty((T,self.B,self.D),np.float32); f=self.lib.bl; f.restype=ctypes.c_int
+        if f(self.ctx,_ptr(d),_ptr(x),_ptr(b),_ptr(c),_ptr(y),T,start)!=1: raise RuntimeError("ReplaySSM CUDA block submit failed")
+        return y
+    def submit_block_async(self,d: Any,x: Any,b: Any,c: Any,start:int)->"NvidiaReplayAsyncResult":
+        import numpy as np
+        d,x,b,c=(np.ascontiguousarray(v,np.float32) for v in (d,x,b,c)); T=d.shape[0]
+        f=getattr(self.lib, "as"); f.restype=ctypes.c_int
+        if f(self.ctx,_ptr(d),_ptr(x),_ptr(b),_ptr(c),T,start)!=1: raise RuntimeError("ReplaySSM CUDA async submit failed")
+        return NvidiaReplayAsyncResult(self,T)
+    def close(self)->None:
+        if getattr(self,"ctx",None) and self.ctx.value: self.lib.dl(self.ctx); self.ctx=ctypes.c_void_p()
+    def __del__(self)->None: self.close()
+
+
+class CudaEvent:
+    """Opaque completion token owned by a CUDA result; no raw event escapes."""
+    def __init__(self, result: "NvidiaReplayAsyncResult"):
+        self._result = result
+    def wait(self) -> None:
+        self._result.wait()
+
+
+class CudaDeviceBuffer:
+    """Opaque lease of a CUDA output range, valid until its result is consumed."""
+    def __init__(self, result: "NvidiaReplayAsyncResult", shape: tuple[int, ...]):
+        self._result, self.shape, self.dtype = result, shape, "float32"
+    def numpy(self) -> Any:
+        return self._result.wait()
+
+
+class NvidiaReplayAsyncResult:
+    """One in-flight ReplaySSM submission; call :meth:`wait` for host output."""
+    def __init__(self, state: NvidiaReplayDeviceState, tokens: int):
+        self._state, self._tokens, self._done = state, tokens, False
+        self.event = CudaEvent(self)
+        self.device_buffer = CudaDeviceBuffer(self, (tokens, state.B, state.D))
+    def wait(self) -> Any:
+        import numpy as np
+        if self._done: raise RuntimeError("ReplaySSM async result already consumed")
+        out=np.empty((self._tokens,self._state.B,self._state.D),np.float32); f=self._state.lib.aw; f.restype=ctypes.c_int
+        if f(self._state.ctx,_ptr(out),self._tokens)!=1: raise RuntimeError("ReplaySSM CUDA async wait failed")
+        self._done=True
+        return out
 
 
 def _synthesize_posenc_cuda() -> str:

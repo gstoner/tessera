@@ -1,7 +1,7 @@
 ---
 status: Tutorial
 classification: Tutorial
-last_updated: 2026-06-11
+last_updated: 2026-07-14
 ---
 
 > **Phase status note (updated 2026-06-11):** Phases 1–7 are complete and Phase 8 (Apple M-Series CPU via Accelerate, GPU via Metal/MPS/MPSGraph/custom MSL) is operational — on Apple Silicon this is the primary single-node execution path. Autodiff (forward/reverse transforms + activation checkpointing), ZeRO-2 optimizer sharding, the Bayesian autotuner, and the runtime Python wrapper (`tessera.runtime.TesseraRuntime`) are **shipped**. Genuinely still planned: **multi-GPU / multi-rank** execution of distributed collectives (NCCL/RCCL), `Cyclic` distribution lowering, and **NVL72** rack-scale execution (single-device collectives run over in-process mock ranks today). Canonical API names: `docs/CANONICAL_API.md`; phase table: root `CLAUDE.md`.
@@ -33,7 +33,7 @@ Numerics, data movement, state, and parallelism are first-class.
 •	Graph optimizations baked in:
 •	Op fusion, rematerialization, activation offload, memory planning with liveness.
 •	Numerics guards (NaN/Inf sentinels, loss-scales, safe softmax/attention).
-•	Interoperability: drop-in tensors for NumPy/PyTorch, ONNX import/export, custom ops bind straight to the kernel layer.
+•	Interoperability: NumPy-style tensor semantics and file-format compatibility (SafeTensors/GGUF/StableHLO export); custom ops bind straight to the kernel layer. Tessera is a standalone compiler — PyTorch/JAX are reference vocabularies only, not runtime interop (Decision #23).
 
 3) The kernel/scheduling language (“tiles, not threads”)
 
@@ -127,7 +127,7 @@ Error Diagnostics - Clear error messages when shape mismatches occur
 
 - AOT bundles: Graph IR + tuned schedules + fatbins; per-arch variants.
 - Deterministic replay (ordered reductions, fixed tie-breakers).
-- ONNX import/export; PyTorch/JAX interop shims for transition.
+- SafeTensors/GGUF/StableHLO import/export — file-format compatibility only; no PyTorch/JAX runtime shims (Decision #23).
 
 # Example Snippets
 

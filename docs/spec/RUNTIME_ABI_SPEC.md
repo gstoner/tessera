@@ -2,7 +2,7 @@
 status: Normative
 classification: Normative
 authority: Runtime C ABI
-last_updated: 2026-06-20
+last_updated: 2026-07-14
 ---
 
 # Tessera Runtime ABI Specification
@@ -90,7 +90,7 @@ from the host toolchain, language bindings, and vendor drivers. It provides:
 - **Profiling timestamps** for performance measurement.
 
 The ABI is versioned (`MAJOR.MINOR.PATCH`) and follows semantic versioning. Breaking changes
-increment `MAJOR`. The current version is **0.2.0** (see `tsr_version.h`).
+increment `MAJOR`. The current version is **0.1.0** (see `tsr_version.h`).
 
 All public functions are declared `extern "C"`, making the ABI callable from both C and C++.
 Python bindings wrap the runtime surface through `tessera.runtime.TesseraRuntime`
@@ -366,7 +366,7 @@ TsrStatus tsrLaunchKernel(tsrStream s, tsrKernel kernel,
                           void** args, size_t nargs);
 
 // Register a backend GPU launcher (name → device-symbol dispatch).
-typedef TsrStatus (*tsrGpuLauncherFn)(tsrStream s, const char* name,
+typedef TsrStatus (*tsrGpuLauncherFn)(const char* target, const char* kernel_name,
                                       const tsrGpuLaunchParams* params,
                                       void* user);
 TsrStatus tsrRegisterGpuLauncher(tsrGpuLauncherFn fn, void* user);
@@ -542,7 +542,7 @@ if (s != TSR_STATUS_SUCCESS) {
 
 ```c
 #define TESSERA_VERSION_MAJOR  0
-#define TESSERA_VERSION_MINOR  2
+#define TESSERA_VERSION_MINOR  1
 #define TESSERA_VERSION_PATCH  0
 
 void tsrGetVersion(int* major, int* minor, int* patch);

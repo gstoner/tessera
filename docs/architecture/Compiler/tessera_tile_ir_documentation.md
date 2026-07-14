@@ -1,10 +1,12 @@
 ---
 status: Informative
 classification: Informative
-last_updated: 2026-04-26
+last_updated: 2026-07-14
 ---
 
-> **Current-state note (2026-05-20):** This is historical architecture guidance. Phase labels below are design lineage, not current support claims. For implementation status, use `docs/spec/COMPILER_REFERENCE.md`, `docs/audit/generated/support_table.md`, `docs/audit/generated/e2e_op_coverage.md`, and `docs/spec/VALIDATION_SPINE.md`.
+> **Current-state note (2026-07-14):** This is historical architecture guidance. Phase labels below are design lineage, not current support claims. For implementation status, use `docs/spec/COMPILER_REFERENCE.md`, `docs/audit/generated/support_table.md`, `docs/audit/generated/e2e_op_coverage.md`, and `docs/spec/VALIDATION_SPINE.md`.
+>
+> **Naming drift (does not match source — read as illustrative):** The `tessera_tile.*` dialect prefix, the `#tessera_tile.memory_space` / `thread_map` / `!tessera_tile.fragment` types, and the per-op names used throughout this document are *design sketches* and do not exist in the codebase. The real Tile IR dialect is named **`tile`** (`src/compiler/ir/include/Tessera/Dialect/Tile/TileOps.td`, `let name = "tile"`), with a much smaller committed op set — `tile.matmul`, `tile.gemm`, `tile.batched_gemm`, `tile.async_copy`, `tile.wait_async`, `tile.mma`, `tile.s_barrier` — not the alloc/copy/load/store/reduce/elementwise/swizzle/layout_cast ops shown below. Likewise the "Transformation Passes" names below (`tessera-memory-hierarchy-optimization`, `tessera-bank-conflict-elimination`, `tessera-tensor-core-optimization`, `tessera-blackwell-optimization`, `tessera-cute-preparation`, etc.) are **not** real passes; the actual Tile IR / GPU passes are `TileIRLoweringPass`, `WarpSpecializationPass`, `AsyncCopyLoweringPass`, `NVWGMMALoweringPass`, `NVTMADescriptorPass`, and `NVFlashAttnKernelEmitter`.
 
 
 # Tessera Tile IR - Architecture and Design Documentation
@@ -376,9 +378,16 @@ Based on the design and optimization capabilities:
 - **Register Efficiency**: Minimal register spilling through fragment optimization
 - **Occupancy**: High occupancy through optimal resource management
 
-### Benchmarking Results (Projected)
+### Benchmarking Results (Illustrative — not measured)
 
-| Operation | Baseline (PyTorch) | Tessera Tile IR | Speedup |
+> These are hypothetical design-era figures, **not** committed measurements.
+> Tessera is a standalone compiler with no PyTorch dependency at runtime
+> (Decision #23) — PyTorch is a reference vocabulary only, so a PyTorch
+> baseline column is not something the codebase produces or validates. Real
+> numbers live in the benchmark JSON (Decision #12) and the generated
+> dashboards.
+
+| Operation | Reference baseline | Tessera Tile IR | Speedup |
 |-----------|-------------------|-----------------|---------|
 | Flash Attention | 100ms | 32ms | 3.1x |
 | GEMM (Mixed Precision) | 50ms | 18ms | 2.8x |

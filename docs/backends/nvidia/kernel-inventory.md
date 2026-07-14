@@ -2,7 +2,7 @@
 status: Informative
 classification: Reference / Kernel Inventory
 authority: Companion to Phase G NVIDIA backend pre-work
-last_updated: 2026-05-11
+last_updated: 2026-07-14
 ---
 
 # NVIDIA CUDA 13.3 Kernel Inventory
@@ -291,7 +291,9 @@ cp.async.bulk.wait_group
 | `executable` | The cubin loads on a real H100/B100 and produces correct output vs CPU reference (fp64) | requires H100/B100/Rubin hardware |
 | `fused` | Performance characterized; achieves the MFU targets in §4 | requires hardware + perf tuning sprint |
 
-Today the NVIDIA backend sits at `artifact_only` across every entry.
+Today the SM_90+ WGMMA/TMA entries in this inventory sit at `artifact_only`.
+(The separate consumer-Blackwell sm_120 `mma.sync` GEMM path is hardware-verified
+on an RTX 5070 Ti and executes — see `sm120-kernel-guide.md`.)
 Sprint G-4 lit fixtures validate the IR + PTX patterns hardware-free.
 Sprint G-6/G-7/G-8 will promote entries to `compileable` once
 `nvcc 13.3` runs the compile-only validation.
@@ -321,7 +323,7 @@ Sprint G-6/G-7/G-8 will promote entries to `compileable` once
 - ✅ Schema extension (Sprint G-3)
 - ✅ Lit fixtures with PTX patterns (Sprint G-4)
 - 🔜 `nvcc -ptx -arch=sm_90a` compile-only validation (Sprint G-6/G-7/G-8)
-- 🔜 Named pass pipeline `NVIDIATargetPipeline` in `tessera-opt` (Sprint G-5)
+- ✅ Named pass pipeline `NVIDIATargetPipeline` in `tessera-opt` (Sprint G-5) — registered as `tessera-nvidia-pipeline` (+ `-sm90`/`-sm100`/`-sm120`) via `buildCUDA13Pipeline`
 - 🔜 NCCL 2.22 bindings compile + symbol resolution (Sprint G-9)
 
 ### Blocked on hardware

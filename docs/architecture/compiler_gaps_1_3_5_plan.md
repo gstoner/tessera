@@ -1,15 +1,18 @@
 ---
-status: Deferred
+status: Partially landed
 classification: Plan
-last_updated: 2026-05-20
+last_updated: 2026-07-14
 ---
 
-# Compiler Gaps 1, 3, 5 — Deferred Execution-Ready Plan
+# Compiler Gaps 1, 3, 5 — Execution-Ready Plan
 
-> Status (2026-05-20): **deferred**. Gaps 2 and 4 (`BoundaryConditionLowerPass`
-> and `attn_local_window_2d`) landed in the same sprint; this document
-> captures the remaining three so the next engineer to pick them up does
-> not have to re-derive scope.
+> Status (2026-07-14): **Gaps 1 and 5 have landed**; Gap 3 remains partial.
+> `StencilLoopMaterializePass` (Gap 1) and `HaloTransportLowerPass` (Gap 5)
+> are implemented, registered in `tessera-opt`, and lit-covered. Gap 3
+> (halo + mesh boundary integration) has a lit fixture but its named
+> reconciliation helper was never created. Gaps 2 and 4
+> (`BoundaryConditionLowerPass` and `attn_local_window_2d`) landed earlier;
+> this document retains the original contracts for context.
 >
 > Each gap below has: precise contract, file list, lit fixture target,
 > acceptance criteria, deferral rationale, and a sequencing recommendation.
@@ -23,19 +26,29 @@ Gaps 1, 2, 3, 4, 5 were called out together as compiler-correctness items
 
 | # | Title                                  | Decision    | Why                                                                          |
 |---|----------------------------------------|-------------|------------------------------------------------------------------------------|
-| 1 | Stencil loop materialization           | **defer**   | Architecture-specific (x86 scalar vs NVIDIA TMA-async). Multi-week.          |
+| 1 | Stencil loop materialization           | **landed**  | `StencilLoopMaterializePass` emits the scf.for nest with per-axis BC fixups. |
 | 2 | Boundary condition lowering            | **landed**  | Pure attribute pass; ships periodic / reflect / dirichlet(v) / neumann(v).   |
-| 3 | Halo + mesh boundary integration       | **defer**   | Requires `DistributionLoweringPass` rewrite; couples two dialects.           |
+| 3 | Halo + mesh boundary integration       | **partial** | Lit fixture present; named `HaloMeshReconcile` helper not created.           |
 | 4 | 2D local-window attention              | **landed**  | Pure library work; ~500 LOC including registry + VJP + JVP + 16 tests.       |
-| 5 | Async halo transport kernels           | **defer**   | Needs Gap 1 + Gap 3 in place to have anything to lower.                      |
+| 5 | Async halo transport kernels           | **landed**  | `HaloTransportLowerPass` ships pack / exchange / unpack lowering.            |
 
-The deferred work is **sequenced**: Gap 1 must land first because it
-defines the loop nest those halo exchanges (Gaps 3 + 5) wrap and lower
-through. Gap 5 is a no-op without Gap 1's loop body.
+The work was **sequenced**: Gap 1 landed first because it defines the loop
+nest those halo exchanges (Gaps 3 + 5) wrap and lower through; Gap 5's
+`HaloTransportLowerPass` then landed on top of it.
 
 ---
 
-## Gap 1 — Stencil Loop Materialization
+## Gap 1 — Stencil Loop Materialization  ✅ LANDED
+
+> **Landed.** Implemented as a single
+> `src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp`
+> (`-tessera-stencil-loop-materialize`, `buildLoopNest` emits an `scf.for`
+> tower with per-axis BC fixups, idempotent sentinel `stencil.materialized`),
+> registered via `registerStencilLoopMaterializePass()` in
+> `tools/tessera-opt/tessera-opt.cpp`. Lit fixtures:
+> `tests/tessera-ir/phase7/neighbors_stencil_materialize.mlir` and
+> `neighbors_stencil_materialize_rank3.mlir`. (The plan below anticipated a
+> separate x86/TMA pass split; the landed pass unifies them.)
 
 ### Contract
 
@@ -60,12 +73,14 @@ loop nest**. The downstream target lowering needs:
   - `src/compiler/tessera_neighbors/include/.../Transforms/Passes.h`
   - `src/compiler/tessera_neighbors/CMakeLists.txt`
   - `tools/tessera-opt/tessera-opt.cpp`
-- Two target hand-off pieces (separable PRs):
-  - `src/transforms/lib/StencilToX86Pass.cpp` — scalar `scf.for` body
-  - `src/transforms/lib/StencilToTilePass.cpp` — Tile-IR + TMA path
-- Lit fixtures:
-  - `tests/tessera-ir/phase7/neighbors_stencil_materialize_x86.mlir`
-  - `tests/tessera-ir/phase7/neighbors_stencil_materialize_tma.mlir`
+- Two target hand-off pieces (separable PRs) — *anticipated split, never
+  created; the landed `StencilLoopMaterializePass` unified them (see banner above)*:
+  - `StencilToX86Pass.cpp` — scalar `scf.for` body
+  - `StencilToTilePass.cpp` — Tile-IR + TMA path
+- Lit fixtures — *these split-specific fixtures were never created; the actual
+  fixtures are `neighbors_stencil_materialize{,_rank3}.mlir` (cited above)*:
+  - `neighbors_stencil_materialize_x86.mlir`
+  - `neighbors_stencil_materialize_tma.mlir`
 - Python guards:
   - `tests/unit/test_neighbors_stencil_materialize.py`
 
@@ -101,7 +116,12 @@ Gap 2 settles the BC ABI.
 
 ---
 
-## Gap 3 — Halo + Mesh Boundary Integration
+## Gap 3 — Halo + Mesh Boundary Integration  🟡 PARTIAL
+
+> **Partial.** A lit fixture
+> `tests/tessera-ir/phase7/neighbors_halo_mesh_integration.mlir` (and
+> `halo_mesh_integration_attn_local_window_2d.mlir`) exists, so the halo/mesh
+> integration surface is at least partially present, but the named `HaloMeshReconcile.cpp` helper below was never created.
 
 ### Contract
 
@@ -135,9 +155,9 @@ The contract this gap delivers:
   `src/transforms/lib/DistributionLoweringPass.cpp` — add a post-pass
   walk that finds `stencil.apply` consumers and inserts `halo.exchange`
   on every sharded operand.
-- New helper:
-  `src/transforms/lib/lib/HaloMeshReconcile.cpp` — owns the BC
-  reconciliation table.
+- New helper — *never created (see banner above); the BC reconciliation table
+  was not split out into its own file*:
+  `HaloMeshReconcile.cpp` — owns the BC reconciliation table.
 - Lit fixture:
   `tests/tessera-ir/phase7/neighbors_halo_mesh_integration.mlir`
 - Python guard:
@@ -175,7 +195,13 @@ reconciliation helper. The lit fixture is the bulk of the test work.
 
 ---
 
-## Gap 5 — Async Halo Transport Kernels
+## Gap 5 — Async Halo Transport Kernels  ✅ LANDED
+
+> **Landed.** Implemented as
+> `src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/HaloTransportLowerPass.cpp`,
+> registered via `registerHaloTransportLowerPass()` in
+> `tools/tessera-opt/tessera-opt.cpp`, with lit fixture
+> `tests/tessera-ir/phase7/neighbors_halo_transport_lower.mlir`.
 
 ### Contract
 

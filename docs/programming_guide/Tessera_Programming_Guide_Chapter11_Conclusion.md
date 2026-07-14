@@ -1,7 +1,7 @@
 ---
 status: Tutorial
 classification: Tutorial
-last_updated: 2026-06-11
+last_updated: 2026-07-14
 ---
 
 > **Phase status note (updated 2026-06-11):** Phases 1–7 are complete and Phase 8 (Apple M-Series CPU via Accelerate, GPU via Metal/MPS/MPSGraph/custom MSL) is operational — on Apple Silicon this is the primary single-node execution path. Autodiff (forward/reverse transforms + activation checkpointing), ZeRO-2 optimizer sharding, the Bayesian autotuner, and the runtime Python wrapper (`tessera.runtime.TesseraRuntime`) are **shipped**. Genuinely still planned: **multi-GPU / multi-rank** execution of distributed collectives (NCCL/RCCL), `Cyclic` distribution lowering, and **NVL72** rack-scale execution (single-device collectives run over in-process mock ranks today). Canonical API names: `docs/CANONICAL_API.md`; phase table: root `CLAUDE.md`.
@@ -10,7 +10,7 @@ last_updated: 2026-06-11
 # Tessera Programming Guide  
 ## Chapter 11: Conclusion & Putting It All Together (Updated)
 
-This guide has introduced the Tessera programming model: a **tile-first, distributed, and numerics-aware framework** for programming modern accelerators. Tessera bridges the gap between high-level productivity and low-level performance. Today it **executes** on x86, Apple M-Series CPU/GPU, and a CPU MLIR→LLVM JIT lane; the design scales toward multi-GPU and NVL72-scale systems as those execution paths land (Phase 4 / Phase G–I).
+This guide has introduced the Tessera programming model: a **tile-first, distributed, and numerics-aware framework** for programming modern accelerators. Tessera bridges the gap between high-level productivity and low-level performance. Today it **executes** on x86, Apple M-Series CPU/GPU, a CPU MLIR→LLVM JIT lane, and — since the 2026-06-24 hardware bring-up — NVIDIA sm_120 (consumer Blackwell, a hardware-verified `mma.sync` matmul) and ROCm gfx1151 (Strix Halo, a compiler-generated matmul + flash-attention family via `runtime.launch()`); the design scales toward multi-GPU and NVL72-scale systems as those execution paths land (Phase 4 / Phase G–I).
 
 ---
 

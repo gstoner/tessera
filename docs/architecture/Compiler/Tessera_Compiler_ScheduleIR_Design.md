@@ -1,7 +1,7 @@
 ---
 status: Informative
 classification: Informative
-last_updated: 2026-05-06
+last_updated: 2026-07-14
 ---
 
 > **Current-state note (2026-05-20):** This is historical architecture guidance. Phase labels below are design lineage, not current support claims. For implementation status, use `docs/spec/COMPILER_REFERENCE.md`, `docs/audit/generated/support_table.md`, `docs/audit/generated/e2e_op_coverage.md`, and `docs/spec/VALIDATION_SPINE.md`.
@@ -61,16 +61,20 @@ Schedule IR bridges semantic operations and explicit tiled kernels.
 ## 3. Schedule IR Entities
 
 **Module / Func**
-- `sched.module`  
-- `sched.func @name` {attrs}  
+- `schedule.module`  
+- `schedule.func @name` {attrs}  
 
-**Ops**
-- `sched.fuse` : merge ops into a fused region.  
-- `sched.split` : split iteration space.  
-- `sched.tile` : assign block, warp, stage dimensions.  
-- `sched.pipeline` : mark pipelined loops with async stages.  
-- `sched.autotune` : define search space for autotuner.  
-- `sched.collective_overlap` : annotate comm/compute overlap.  
+**Ops** *(design-lineage names below; the concrete `schedule` dialect defined in
+`src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td` exposes
+`mesh.define`, `mesh.region`, `pipeline.region`, `stage`, `tile`, `elementwise`,
+`layout`, `warp`, `optimizer_shard`, `prefetch`, `async_copy`, `await_movement`,
+`artifact`, `knob`, `yield` — there are no literal `fuse`/`split`/`autotune`/`collective_overlap` ops)*
+- `schedule.fuse` : merge ops into a fused region.  
+- `schedule.split` : split iteration space.  
+- `schedule.tile` : assign block, warp, stage dimensions.  
+- `schedule.pipeline` : mark pipelined loops with async stages.  
+- `schedule.autotune` : define search space for autotuner.  
+- `schedule.collective_overlap` : annotate comm/compute overlap.  
 
 **Attributes**
 - `{block=[128,128], warps=8, stages=3, vector=8, swizzle="xor"}`  
@@ -105,9 +109,9 @@ Schedule IR bridges semantic operations and explicit tiled kernels.
 
 **Schedule IR**
 ```mlir
-%s0 = sched.fuse %y, %z
-sched.tile %s0 {block=[128,128], warps=8, stages=3, vector=8}
-sched.pipeline %s0 {stages=3}
+%s0 = schedule.fuse %y, %z
+schedule.tile %s0 {block=[128,128], warps=8, stages=3, vector=8}
+schedule.pipeline %s0 {stages=3}
 ```
 
 ---
@@ -116,7 +120,7 @@ sched.pipeline %s0 {stages=3}
 
 - **Define spaces** in Schedule IR:  
 ```mlir
-sched.autotune %gemm {BM=[64,128], BN=[64,128], BK=[32,64], warps=[4,8], stages=[2,3]}
+schedule.autotune %gemm {BM=[64,128], BN=[64,128], BK=[32,64], warps=[4,8], stages=[2,3]}
 ```
 
 - Autotuner explores legal configurations.  
@@ -138,7 +142,7 @@ Diagnostics are surfaced with source locations and suggested fixes.
 
 ## 9. Implementation Notes
 
-- Implement as MLIR dialect: `sched`.  
+- Implement as MLIR dialect: `schedule`.  
 - SSA form; ops map to `tile` dialect during lowering.  
 - Autotuner integrated with runtime measurement harness.  
 - LSP integration: schedule suggestions and inspection.
@@ -146,6 +150,11 @@ Diagnostics are surfaced with source locations and suggested fixes.
 ---
 
 ## 10. Example: GEMM Scheduling Flow
+
+> **API note:** `@kernel.autotune(space=...)` and `@kernel.schedule(...)` below are
+> design-lineage sketches — the `tessera.kernel` decorator exposes no `.autotune` or
+> `.schedule` attribute. The canonical autotune surface is the top-level
+> `tessera.autotune(op, shapes=..., dtype=..., ...)` function (see `docs/CANONICAL_API.md`).
 
 **High-level source**
 ```python
@@ -160,9 +169,9 @@ def gemm(A, B, C): ...
 
 **Schedule IR**
 ```mlir
-sched.autotune %y {BM=[128,256], BN=[128,256], BK=[64], stages=[2,3]}
-sched.tile %y {block=[128,128], warps=8, stages=3, vector=8}
-sched.pipeline %y {stages=3}
+schedule.autotune %y {BM=[128,256], BN=[128,256], BK=[64], stages=[2,3]}
+schedule.tile %y {block=[128,128], warps=8, stages=3, vector=8}
+schedule.pipeline %y {stages=3}
 ```
 
 **Tile IR**
@@ -194,14 +203,14 @@ You don’t write Schedule IR directly — but you can **inspect it** to underst
 @kernel.autotune(space=dict(BM=[128,256], BN=[128,256], BK=[64], stages=[2,3]))
 def gemm(A, B, C): return gemm_tile(A,B,C)
 
-gemm.graph_ir.to_mlir()
+gemm.schedule_ir   # textual Schedule IR artifact (or gemm.lowering_artifacts())
 ```
 
 Example output:  
 ```mlir
-sched.autotune %y {BM=[128,256], BN=[128,256], BK=[64], stages=[2,3]}
-sched.tile %y {block=[128,128], warps=8, stages=3, vector=8}
-sched.pipeline %y {stages=3}
+schedule.autotune %y {BM=[128,256], BN=[128,256], BK=[64], stages=[2,3]}
+schedule.tile %y {block=[128,128], warps=8, stages=3, vector=8}
+schedule.pipeline %y {stages=3}
 ```
 
 ---
@@ -232,7 +241,7 @@ sched.pipeline %y {stages=3}
 
 2. Inspect Schedule IR:  
    ```python
-   gemm_kernel.graph_ir.to_mlir()
+   gemm_kernel.schedule_ir
    ```
    → Shows autotune space and tiling strategy.
 

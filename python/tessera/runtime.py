@@ -22221,6 +22221,132 @@ def apple_gpu_fused_ssm_state_handle(
     )
 
 
+def nvidia_ssm_replay_state_handle(
+    batch: int,
+    num_channels: int,
+    state_dim: int,
+    a: Any,
+    *,
+    capacity: int = 64,
+    spec_window: int = 0,
+    dtype: str = "fp32",
+) -> Any:
+    """Build the CUDA ReplaySSM output-only decode handle.
+
+    The scalar-A CUDA context owns ``S0`` and the fixed-capacity replay inputs;
+    append transfers only the current token and decode reads resident history.
+    It declines cleanly to the reference path when CUDA/nvcc is unavailable.
+    Device-side flush/materialization remains the next CUDA slice.
+    """
+    from .cache import SSMStateHandle
+    from .compiler.emit.nvidia_cuda import NvidiaReplayDeviceState
+
+    class _Handle(SSMStateHandle):
+        """Reference mirror with CUDA as the authoritative hot replay store."""
+        _device: Any = None
+
+        def __post_init__(self) -> None:
+            super().__post_init__()
+            if self._scalar_a:
+                try:
+                    self._device = NvidiaReplayDeviceState(self._s0, self._a1d, self.capacity)
+                except (FileNotFoundError, OSError, RuntimeError, subprocess.CalledProcessError):
+                    self._device = None
+
+        def append(self, delta_t: Any, x_t: Any, b_t: Any, *, auto_flush: bool = True) -> Any:
+            super().append(delta_t, x_t, b_t, auto_flush=auto_flush)
+            if self._device is not None:
+                try: self._device.append(delta_t, x_t, b_t, self._count - 1)
+                except RuntimeError: self._device.close(); self._device = None
+            return self
+
+        def read_output(self, c_t: Any, *, gate_t: Any = None) -> Any:
+            if self._device is not None and self._count:
+                import numpy as np
+                # Apply the base handle's (B, N) size check BEFORE the C decode,
+                # which otherwise blindly copies B*N floats from the c_t pointer
+                # (a wrong-sized c_t would over-read the NumPy allocation).
+                c = np.asarray(c_t, dtype=np.float64).reshape(self.batch, self.state_dim)
+                try:
+                    y = self._device.decode(c, self._count).astype("float64")
+                    if gate_t is not None:
+                        y *= np.asarray(gate_t).reshape(self.batch, self.num_channels)
+                    return y
+                except RuntimeError: self._device.close(); self._device = None
+            return super().read_output(c_t, gate_t=gate_t)
+
+        def reset(self) -> Any:
+            super().reset()
+            # Keep the CUDA-owned S0 in sync with the reset host mirror. After a
+            # flush() has folded tokens into the device checkpoint, zeroing only
+            # the host S0 would leave decode()/append() reading the stale device
+            # state — a new sequence could echo the previous one. Recreate the
+            # device context from the freshly-zeroed S0 (drop it if that fails).
+            if self._device is not None:
+                try:
+                    self._device.close()
+                    self._device = NvidiaReplayDeviceState(
+                        self._s0, self._a1d, self.capacity)
+                except (FileNotFoundError, OSError, RuntimeError,
+                        subprocess.CalledProcessError):
+                    self._device = None
+            return self
+
+        def flush(self) -> Any:
+            # The host mirror preserves checkpoint/serialization semantics;
+            # CUDA materializes its resident S0 exactly at this policy boundary.
+            if self._device is not None and self._count:
+                try: self._device.flush(self._count)
+                except RuntimeError: self._device.close(); self._device = None
+            return super().flush()
+
+        def step_block(self, deltas: Any, xs: Any, bs: Any, cs: Any) -> Any:
+            """Commit a decode span through one native CUDA submission.
+
+            A span crossing the normal flush reservation falls back to ordered
+            steps, preserving the cache policy exactly.
+            """
+            import numpy as np
+            ds, xx, bb, cc = (np.asarray(v) for v in (deltas, xs, bs, cs))
+            T = int(ds.shape[0])
+            if self._device is None or T < 1 or self.should_flush(T):
+                return np.stack([self.step(ds[i], xx[i], bb[i], cc[i]) for i in range(T)])
+            if ds.shape != (T, self.batch, self.num_channels) or xx.shape != ds.shape:
+                raise ValueError("ReplaySSM block delta/x must be [T,B,D]")
+            if bb.shape != (T, self.batch, self.state_dim) or cc.shape != bb.shape:
+                raise ValueError("ReplaySSM block b/c must be [T,B,N]")
+            try:
+                out = self._device.submit_block(ds, xx, bb, cc, self._count)
+                for i in range(T): SSMStateHandle.append(self, ds[i], xx[i], bb[i], auto_flush=False)
+                return out.astype(np.float64)
+            except RuntimeError:
+                self._device.close(); self._device = None
+                return np.stack([self.step(ds[i], xx[i], bb[i], cc[i]) for i in range(T)])
+
+        def submit_block_async(self, deltas: Any, xs: Any, bs: Any, cs: Any) -> Any:
+            """Enqueue a nonblocking CUDA replay span; consume with ``wait()``."""
+            import numpy as np
+            ds, xx, bb, cc = (np.asarray(v) for v in (deltas, xs, bs, cs)); T=int(ds.shape[0])
+            if self._device is None or T < 1 or self.should_flush(T):
+                raise RuntimeError("async ReplaySSM span must fit before the flush boundary")
+            # Validate the block shapes before the CUDA enqueue (same checks as
+            # step_block) — submit_block_async memcpys T*B*D / T*B*N floats from
+            # these pointers, so a mis-sized operand would over-read host memory.
+            if ds.shape != (T, self.batch, self.num_channels) or xx.shape != ds.shape:
+                raise ValueError("ReplaySSM block delta/x must be [T,B,D]")
+            if bb.shape != (T, self.batch, self.state_dim) or cc.shape != bb.shape:
+                raise ValueError("ReplaySSM block b/c must be [T,B,N]")
+            future=self._device.submit_block_async(ds, xx, bb, cc, self._count)
+            for i in range(T): SSMStateHandle.append(self, ds[i], xx[i], bb[i], auto_flush=False)
+            return future
+
+    return _Handle(
+        batch=batch, num_channels=num_channels, state_dim=state_dim, a=a,
+        capacity=capacity, spec_window=spec_window, dtype=dtype,
+        backend="nvidia_sm120_replay_device",
+    )
+
+
 def _apple_gpu_gated_delta_rule_decode_f32() -> Any:
     runtime = _load_apple_gpu_runtime()
     sym = getattr(runtime, "tessera_apple_gpu_gated_delta_rule_decode_f32", None)

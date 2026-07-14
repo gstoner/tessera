@@ -2,7 +2,7 @@
 status: Informative
 classification: Informative
 authority: Terminology reference; normative definitions defer to docs/CANONICAL_API.md and docs/spec/
-last_updated: 2026-04-30
+last_updated: 2026-07-14
 ---
 
 # Tessera Glossary
@@ -120,7 +120,8 @@ See [`docs/spec/GRAPH_IR_SPEC.md`](spec/GRAPH_IR_SPEC.md).
 ## ISA (Instruction Set Architecture)
 
 Tessera's `ISA` enum identifies GPU compute capability: `SM_80` (A100),
-`SM_90` (H100/GH200), `SM_100` (B100/GB200). WGMMA and TMA require SM_90+.
+`SM_90` (H100/GH200), `SM_100` (B100/GB200), `SM_120` (RTX 50-series /
+consumer Blackwell). WGMMA and TMA require SM_90+.
 
 ## Index Launch
 
@@ -142,8 +143,10 @@ input/output layouts or require an explicit `layout_cast`.
 ## Lowering Pipeline
 
 A named sequence of MLIR passes that transforms Graph IR down to target code.
-Two pipelines exist today: `tessera-lower-to-x86` (AMX/AVX-512) and
-`tessera-lower-to-gpu` (SM_90+ NVIDIA). See
+Named pipelines registered today include `tessera-lower-to-x86` (AMX/AVX-512),
+`tessera-lower-to-gpu` (SM_90+ NVIDIA), `tessera-lower-to-rocm` (AMD ROCm),
+`tessera-lower-to-apple_cpu` / `tessera-lower-to-apple_gpu` (Apple), plus the
+`tessera-nvidia-pipeline-{sm90,sm100,sm120}` variants. See
 [`docs/spec/COMPILER_REFERENCE.md`](spec/COMPILER_REFERENCE.md).
 
 ## mbarrier (Transaction Barrier)

@@ -99,7 +99,7 @@
 
 | Symbol | Spec location |
 |--------|--------------|
-| `TesseraConstraintError`, `TesseraEffectError`, `TesseraJitError`, `TesseraTargetError`, `TesseraAttnConfigError`, `TesseraPrivilegeError`, `MockCollectiveError` | PYTHON_API_SPEC §16 |
+| `TesseraConstraintError`, `TesseraEffectError`, `TesseraJitError`, `TesseraTargetError`, `TesseraAttnConfigError`, `MockCollectiveError` | PYTHON_API_SPEC §16 |
 
 ### Testing
 

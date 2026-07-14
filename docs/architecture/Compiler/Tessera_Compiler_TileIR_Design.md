@@ -1,7 +1,7 @@
 ---
 status: Informative
 classification: Informative
-last_updated: 2026-05-06
+last_updated: 2026-07-14
 ---
 
 > **Current-state note (2026-05-20):** This is historical architecture guidance. Phase labels below are design lineage, not current support claims. For implementation status, use `docs/spec/COMPILER_REFERENCE.md`, `docs/audit/generated/support_table.md`, `docs/audit/generated/e2e_op_coverage.md`, and `docs/spec/VALIDATION_SPINE.md`.
@@ -108,7 +108,7 @@ Target IR (PTX, CUDA Tile IR, LLVM)
 
 **Schedule IR**
 ```mlir
-sched.tile %y {block=[128,128], warps=8, stages=3, vector=8}
+schedule.tile %y {block=[128,128], warps=8, stages=3, vector=8}
 ```
 
 **Tile IR**
@@ -167,7 +167,7 @@ Programmers use Tile IR to:
 ## 10. Inspecting Tile IR
 
 ```python
-gemm_kernel.graph_ir.to_mlir()
+gemm_kernel.tile_ir   # or gemm_kernel.lowering_artifacts()
 ```
 
 Example output:  
@@ -209,7 +209,9 @@ This shows the **explicit tile-level kernel** the compiler will lower to PTX/CTI
 
 ## 12. Programmer Workflow Example
 
-1. You write:  
+1. You write (`@kernel.autotune` is a design-lineage sketch — the canonical
+   autotune surface is the top-level `tessera.autotune(op, shapes=..., ...)` function;
+   `tessera.kernel` has no `.autotune` attribute):  
    ```python
    @kernel.autotune(space=dict(BM=[128],BN=[128],BK=[64],stages=[3]))
    def gemm(A,B,C): return gemm_tile(A,B,C)
@@ -217,7 +219,7 @@ This shows the **explicit tile-level kernel** the compiler will lower to PTX/CTI
 
 2. Inspect Tile IR:  
    ```python
-   gemm.graph_ir.to_mlir()
+   gemm.tile_ir
    ```
    → Shows explicit shared memory allocation, cp.async prefetch, mma.  
 

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-11
+last_updated: 2026-07-14
 audit_role: plan
 plan_state: open
 ---
@@ -361,9 +361,10 @@ gradients for both inputs.
   — hand-written defs that *emit a `CustomAdjointCallOp` placeholder* — as
   native. The classifier is now **body-aware**: a `buildAdjoint` whose body
   constructs a `CustomAdjointCallOp` is placeholder, keyed by the runtime VJP
-  string it carries. The ledger shows the true **3** native adjoints — matmul,
-  tanh, sigmoid — with layernorm/softmax as placeholder round-trips. Read the
-  generated ledger for live counts, Decision #26.)
+  string it carries. The ledger now shows **6** native adjoints — all_gather,
+  all_reduce, matmul, reduce_scatter, sigmoid, tanh (the 3 collective adjoints
+  landed 2026-07-12) — with layernorm/softmax as placeholder round-trips. Read
+  the generated ledger for live counts, Decision #26.)
 
 **Residual closure (2026-07-12):** unannotated autodiff JIT functions now cache a
 concrete Graph-IR specialization per first-call dtype/shape signature. The actual
@@ -537,7 +538,8 @@ Per-family × per-target rung truth is now the **generated ledger**, not a hand
 table — read [`generated/autodiff_connection_ledger.md`](../generated/autodiff_connection_ledger.md)
 for live counts (Decision #26 — don't trust enumerations copied into prose). The
 shape it records: `python_reference` broad; the native `ir_adjoint` set is
-exactly matmul, tanh, sigmoid (buildAdjoint bodies that emit real Graph IR),
+the 6 families all_gather, all_reduce, matmul, reduce_scatter, sigmoid, tanh
+(buildAdjoint bodies that emit real Graph IR),
 with layernorm/softmax and the pointwise macro ops as `placeholder` round-trips;
 `bwd_cpu_ir_oracle` on the matmul/tanh/sigmoid slice (backward IR
 interpreted on CPU, oracle-matched). Phase 4's native backward evidence is now

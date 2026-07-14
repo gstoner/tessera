@@ -2,7 +2,7 @@
 status: Decided (deferred, sequenced to NVIDIA/AMD execution)
 classification: Architecture Decision
 authority: Proposal; defers to docs/architecture/Compiler/Tessera_Compiler_TileIR_Design.md
-last_updated: 2026-06-07
+last_updated: 2026-07-14
 ---
 
 # Tiled Fused SSD as a Tile-IR Schedule — Architecture Decision
@@ -33,10 +33,11 @@ last_updated: 2026-06-07
    recomputes the shared gram `C@Bᵀ` `D` times and is *slower* than the current
    3-`bmm` path. It is also the exact anti-pattern you would never write on
    NVIDIA/AMD.
-4. **Apple is the proving ground.** Build the tiled schedule once, validate it
-   bit-exact on Apple (the only backend that executes today), and let the
-   NVIDIA/AMD lowerings inherit the schedule and slot in their matmul intrinsic
-   when hardware lights up.
+4. **Apple is the proving ground for this schedule.** Build the tiled schedule
+   once, validate it bit-exact on Apple (which executes `simdgroup_matrix`
+   today; the tiled-SSD schedule does not yet execute on the NVIDIA sm_120 /
+   ROCm gfx1151 lanes), and let the NVIDIA/AMD lowerings inherit the schedule
+   and slot in their matmul intrinsic when hardware lights up.
 
 ---
 
@@ -138,8 +139,10 @@ tile-centric model, rather than a one-backend runtime hack.
 
 ## Apple as the executable proving ground
 
-Apple/Metal is the only backend that executes today (NVIDIA/AMD are
-hardware-gated; the registry has 0 `backend_kernel=complete` entries). So:
+Apple/Metal executes this matmul-family schedule today; the NVIDIA sm_120 and
+ROCm gfx1151 lanes now have hardware-verified execution for the matmul /
+flash-attention family, but not yet for the tiled-SSD schedule, and broader
+archs stay hardware-gated. So Apple remains the executable proving ground here:
 
 - Build the tiled SSD **Tile-IR schedule** and prototype its lowering on Apple
   (`simdgroup_matrix` + `threadgroup` memory).

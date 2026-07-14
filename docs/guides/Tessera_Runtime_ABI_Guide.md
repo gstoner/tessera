@@ -1,7 +1,7 @@
 ---
 status: Tutorial
 classification: Tutorial
-last_updated: 2026-06-20
+last_updated: 2026-07-14
 ---
 
 > **Phase status note (updated 2026-06-11):** The runtime Python wrapper
@@ -334,7 +334,7 @@ tsrRegisterGpuLauncher(my_launcher_fn, user_ctx);
 // Launch: args[0] is a const tsrGpuLaunchParams* for a GPU artifact kernel.
 void* args[1] = { &gpu_params };
 TsrStatus st = tsrLaunchKernel(stream, kernel, args, 1);
-// If no launcher is registered (or the name is unknown), st == TSR_UNIMPLEMENTED
+// If no launcher is registered (or the name is unknown), st == TSR_STATUS_UNIMPLEMENTED
 // — never a silent no-op.
 ```
 
@@ -539,14 +539,14 @@ the same thread. Copy it before making any further API calls.
 ```c
 int major, minor, patch;
 tsrGetVersion(&major, &minor, &patch);
-// Currently: 0.2.0
+// Currently: 0.1.0
 ```
 
 Defined as macros in `tsr_version.h`:
 
 ```c
 #define TESSERA_VERSION_MAJOR  0
-#define TESSERA_VERSION_MINOR  2
+#define TESSERA_VERSION_MINOR  1
 #define TESSERA_VERSION_PATCH  0
 ```
 

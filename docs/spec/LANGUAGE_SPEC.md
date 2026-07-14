@@ -2,7 +2,7 @@
 status: Normative
 classification: Normative
 authority: Language surface semantics; defers all symbol names and signatures to docs/spec/PYTHON_API_SPEC.md
-last_updated: 2026-04-26
+last_updated: 2026-07-14
 ---
 
 # Tessera Language Specification (Normative)
@@ -125,7 +125,7 @@ tessera.Region["reduce_min"]  # commutative accumulation (min)
 | `"reduce_min"` | Commutative accumulation; safe to insert `all_reduce(min)` | `collective.all_reduce(op=min)` at DP boundary (Phase 4+) |
 
 **Conflict rule (normative):** Two `"write"` annotations on arguments that may alias the
-same underlying storage is a **conflict** and **shall** raise `TesseraPrivilegeError` at
+same underlying storage is a **conflict** and **shall** raise `TesseraConstraintError` at
 decoration time. Read and reduce annotations never conflict with each other.
 
 **Graph IR lowering:** `Region["read"]` on argument `x` becomes:
@@ -234,15 +234,18 @@ Every Tessera function has an **inferred effect level** that is the least upper 
 the effects of all ops it calls. The lattice is totally ordered:
 
 ```
-pure (0) < random (1) < memory (2) < io (3) < top (4)
+pure (0) < random (1) < movement (2) < state (3) < collective (4) < memory (5) < io (6) < top (7)
 ```
 
 | Level | Meaning |
 |-------|---------|
 | `pure` | No side effects; output depends only on inputs; safe to recompute |
 | `random` | Calls an RNG op; result varies across otherwise-identical inputs |
-| `memory` | Reads or writes mutable state (KV cache, attention state) |
-| `io` | Performs collective communication or host I/O |
+| `movement` | Explicit prefetch / async-copy / wait movement |
+| `state` | Reads or writes compiler-visible state (KV cache, ring) |
+| `collective` | Performs async device/rank communication |
+| `memory` | Writes mutable tensors or aliases host-visible memory |
+| `io` | Performs host I/O or unknown external calls |
 | `top` | Conservative fallback; used when source cannot be inspected |
 
 ### 5.2 Effect Inference
@@ -258,9 +261,12 @@ The effect table (normative for Phase 1):
 | Op | Effect |
 |----|--------|
 | `gemm`, `matmul`, `conv2d`, `layer_norm`, `softmax`, `gelu`, `relu`, `transpose`, `cast`, `fused_epilogue` | `pure` |
-| `dropout`, `randn`, `rand`, `bernoulli`, `normal` | `random` |
-| `flash_attn`, `kv_cache_read`, `kv_cache_write` | `memory` |
-| `all_reduce`, `reduce_scatter`, `all_gather`, `send`, `recv`, `barrier` | `io` |
+| `dropout`, `randn`, `rand`, `bernoulli`, `normal`, `flash_attn` with `dropout_p != 0.0` | `random` |
+| `prefetch`, `async_copy`, `wait_async` | `movement` |
+| `kv_cache_read`, `kv_cache_write`, `ring.*` | `state` |
+| `all_reduce`, `reduce_scatter`, `all_gather`, `collective.*` | `collective` |
+| `copy`, write/`reduce_*` region args | `memory` |
+| external (non-tessera) `func.call`, host I/O | `io` |
 
 Functions whose source cannot be retrieved (C extensions, built-ins) are conservatively
 assigned `top`.

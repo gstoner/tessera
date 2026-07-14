@@ -2,7 +2,7 @@
 status: Normative
 classification: Normative
 authority: Tensor layout and explicit data movement guidance; defers memory ordering to docs/spec/MEMORY_MODEL_SPEC.md
-last_updated: 2026-04-28
+last_updated: 2026-07-14
 ---
 
 # Tessera Tensor Layout And Data Movement Guide
@@ -53,9 +53,9 @@ elements map to storage lanes.
 | `int8`, `int4` | Quantized storage with per-tensor/per-channel scale policy. |
 | `bf16`, `fp16` | Common Tensor Core storage; usually FP32 accumulation. |
 
-Rubin target note: `GPUTargetProfile(isa=ISA.SM_120)` is a Tessera placeholder
-for Rubin-family target planning until NVIDIA publishes final compute
-capability numbering. It exposes Tensor Core dtype support for `nvfp4`,
+SM_120 target note: `GPUTargetProfile(isa=ISA.SM_120)` targets RTX 50-series
+consumer Blackwell (GB20x, compute capability 12.0) — a real, hardware-verified
+target (RTX 5070 Ti). It exposes Tensor Core dtype support for `nvfp4`,
 `fp4_e2m1`, FP8, FP6, INT8, FP16, BF16, TF32, and FP64.
 
 ## 3. Movement Effects

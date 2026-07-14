@@ -321,7 +321,7 @@ class TensorParallelGEMMBenchmark:
         compute_latencies   = []
         collective_latencies = []
 
-        def _dispatch(rank_group):
+        def _dispatch(rank):   # per-rank MockRank; collectives live on MockRank
             # Local GEMM
             t_compute = time.perf_counter()
             tessera.index_launch(axis="tp")(tp_gemm_shard)(
@@ -333,7 +333,7 @@ class TensorParallelGEMMBenchmark:
 
             # Collective: all_reduce across tp axis (Phase 1: mock barrier+sum)
             t_coll = time.perf_counter()
-            rank_group.all_reduce(Y, op="sum", axis="tp")
+            rank.all_reduce(Y, op="sum")
             collective_latencies.append((time.perf_counter() - t_coll) * 1000)
 
         harness.run(_dispatch, warmup=3, repeat=10)
@@ -459,13 +459,13 @@ class CollectiveBenchmark:
         arr      = tessera.array.from_domain(domain, dtype="f32", distribution=dist,
                                               fill="ones")
 
-        def _run(rank_group):
+        def _run(rank):   # per-rank MockRank; collectives live on MockRank
             if op == "all_reduce":
-                rank_group.all_reduce(arr, op="sum", axis="dp")
+                rank.all_reduce(arr, op="sum")
             elif op == "reduce_scatter":
-                rank_group.reduce_scatter(arr, op="sum", axis="dp")
+                rank.reduce_scatter(arr, op="sum")
             elif op == "all_gather":
-                rank_group.all_gather(arr, axis="dp")
+                rank.all_gather(arr)
 
         latencies = harness.run(_run, warmup=warmup, repeat=repeat)
         avg_ms    = sum(latencies) / len(latencies)
@@ -496,7 +496,9 @@ based on link topology. The benchmark below validates and measures the effect
 of chunk size on effective bandwidth.
 
 ```python
-# Phase 4 planned — ChunkPlanner from src/collectives/lib/ChunkPlanner.cpp
+# Phase 4 planned — ChunkPlanner is not yet implemented as a standalone source file;
+# chunk submission today lives in
+#   src/collectives/lib/Dialect/Collective/Runtime/Execution.cpp
 # The constants below reflect the spec from docs/CLAUDE.md:
 #   NVLink:  512 KiB per chunk
 #   PCIe:    128 KiB per chunk
@@ -555,11 +557,10 @@ class TopologyAwareBenchmark:
 
         bandwidth_by_chunk = {}
         for chunk_bytes in chunk_sizes:
-            def _run(rank_group, chunk=chunk_bytes):
-                # Phase 4: rank_group.all_reduce(arr, op="sum", axis="dp",
-                #                                chunk_bytes=chunk)
+            def _run(rank, chunk=chunk_bytes):   # per-rank MockRank
+                # Phase 4: rank.all_reduce(arr, op="sum", chunk_bytes=chunk)
                 # Phase 1 mock ignores chunk size:
-                rank_group.all_reduce(arr, op="sum", axis="dp")
+                rank.all_reduce(arr, op="sum")
 
             latencies  = harness.run(_run, warmup=3, repeat=10)
             avg_ms     = sum(latencies) / len(latencies)

@@ -52,8 +52,8 @@ Y = tessera.ops.gemm(X, W)
 
 - **Convolutions**: direct, Winograd, FFT-based.  
 - **Pooling**: max, average.  
-- **Activations**: relu, gelu_safe, swish.  
-- **Normalizations**: layernorm_safe, rmsnorm_safe.  
+- **Activations**: relu, gelu, swish.  
+- **Normalizations**: layer_norm, rmsnorm_safe.  
 - **RNN Primitives**: lstm_cell, gru_cell.  
 - **Attention**: flash_attention (v1, v2).  
 

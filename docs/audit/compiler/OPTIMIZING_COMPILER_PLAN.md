@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-02
+last_updated: 2026-07-14
 audit_role: plan
 plan_state: open
 ---
@@ -34,10 +34,13 @@ plan_state: open
 >    synthesizer. The correct model is the **three-tier / measured-arbiter** model
 >    in [`COMPILER_THEORY_OF_OPERATION.md`](COMPILER_THEORY_OF_OPERATION.md): the
 >    synthesizer generalizes for the *fusable-DAG middle ground*; the leads keep
->    hand-tuned kernels as first-class **arbiter candidates**. Also, the
->    synthesizer is **not** cleanly liftable today — `fusion.py` welds the region
->    model to MSL string emission (the `.msl` fields); the split into a
->    `KernelEmitter` plugin is prerequisite work, tracked as Workstream B/C in
+>    hand-tuned kernels as first-class **arbiter candidates**. The prerequisite
+>    liftability split has since **landed** (post-dated by
+>    [`WORKSTREAM_C_HANDOFF.md`](WORKSTREAM_C_HANDOFF.md), 2026-07-06): the
+>    arch-agnostic core is `fusion_core.py`, the `KernelEmitter`/`KernelRunner`/
+>    `SpecPolicy` interface + cache live in `emit/kernel_emitter.py` +
+>    `emit/kernel_cache.py`, and `emit/apple_msl.py` is the reference plugin;
+>    `fusion.py` is now a re-export facade. Tracked as Workstream B/C in
 >    [`COMPILER_REFACTOR_PLAN.md`](COMPILER_REFACTOR_PLAN.md).
 >
 > §1–§5 below are preserved as the original design record (still accurate for the
@@ -242,7 +245,9 @@ and attention, and the catalog starts shrinking instead of growing.
 
 ## 6. Landed status (Apple proving ground)
 
-All code in `python/tessera/compiler/fusion.py`; guards in
+Code now lives in `python/tessera/compiler/fusion_core.py` (arch-agnostic
+discovery/cost/verify) + `emit/apple_msl.py` (MSL synthesis + autotune),
+re-exported through the `fusion.py` facade; guards in
 `tests/unit/test_fusion_synthesis.py` (57 tests, Metal-gated rows
 hardware-verified on Apple Silicon); runtime wiring in
 `runtime._apple_gpu_try_synthesized_fusion`.

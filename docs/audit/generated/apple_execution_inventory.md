@@ -3,7 +3,7 @@
 
 This is the status authority for **execution units**, not a broad op-support claim. It separates the generic JIT route, strict Value Target-IR calls, package-authored subgraphs, and explicit CPU-reference execution.
 
-Terminology: `native_cpu` and `native_gpu` name where work runs; `reference_cpu` is correct fallback execution; `package_call launch gated` means author/load/dispatch are proven but compiler-selected package-call launch is not.
+Terminology: `native_cpu` and `native_gpu` name where work runs; `reference_cpu` is correct fallback execution; package auto selection requires a matching-shape native/correctness characterization. Value Target-IR `package_call` remains gated.
 
 | Target | Unit | Identity | Compiler form | Runtime executor | Placement | Proof | Scope | Evidence |
 |---|---|---|---|---|---|---|---|---|
@@ -17,5 +17,5 @@ Terminology: `native_cpu` and `native_gpu` name where work runs; `reference_cpu`
 | apple_cpu | op | svd | Apple Value Target-IR cpu.call | LAPACK gesdd | native_cpu | executable value-call allowlist | strict single call | tests/unit/test_apple_value_target_ir.py |
 | apple_gpu | op / fused region | MPS, MPSGraph, MSL, MTL4 MPP lanes | generic JIT dispatch | Metal runtime | native_gpu | per-op proof in runtime execution matrix | generic @jit | runtime_execution_matrix.csv + apple_target_map.csv |
 | apple_gpu | subgraph | MPSGraph authorable single-op region | package recognition + explicit authoring | MTL4 ML pipeline encoder | native_gpu | package lifecycle and numerical tests | AOT package; not auto launch | tests/unit/test_apple_package_author.py |
-| apple_gpu | subgraph | matmul_softmax / matmul_softmax_matmul / rmsnorm_matmul | package recognition + explicit authoring | MTL4 ML pipeline encoder | native_gpu | package lifecycle and numerical tests | AOT package; package_call launch gated | tests/unit/test_apple_jit_emit_package.py |
+| apple_gpu | subgraph | matmul_softmax / matmul_softmax_matmul / rmsnorm_matmul | package recognition + evidence-gated JIT auto selection | MTL4 ML pipeline encoder | native_gpu | matching-shape native/correctness characterization | generic @jit auto; Value Target-IR package_call remains gated | tests/unit/test_apple_jit_emit_package.py |
 | apple_gpu | op family | runtime.launch reference lanes | family executor | Tessera reference implementation | reference_cpu | execute-and-compare | explicit fallback | runtime_execution_matrix.csv |

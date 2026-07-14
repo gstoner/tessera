@@ -383,10 +383,27 @@ def test_auto_routes_single_matmul_to_live_lane():
     assert _mm_auto._package_path_cache == {}  # never authored
 
 
-def test_auto_routes_fused_chain_to_package_lane():
-    """In auto mode a fused chain DOES route through the package (benchmark:
-    up to ~14× faster) — a package is authored + cached."""
+def test_auto_routes_fused_chain_to_package_lane_when_characterized(tmp_path,
+                                                                      monkeypatch):
+    """Auto-routing needs exact-shape native/correctness evidence, then
+    authors and caches the package-backed whole subgraph."""
     _require_packaged_ml()
+    import json
+    from tessera.compiler.apple_route_selector import ROUTE_REPORT_SCHEMA_VERSION
+    report = tmp_path / "apple-routes.json"
+    common = {
+        "op": "matmul_softmax", "shape": "4x6x5", "dtype": "f32",
+        "device": "apple_silicon_metal", "native_dispatched": True,
+        "numerically_validated": True,
+    }
+    report.write_text(json.dumps({
+        "schema_version": ROUTE_REPORT_SCHEMA_VERSION,
+        "runs": [
+            {**common, "route": "live", "latency_ms": 1.0},
+            {**common, "route": "package", "latency_ms": 0.4},
+        ],
+    }))
+    monkeypatch.setenv("TESSERA_APPLE_GPU_ROUTE_CHARACTERIZATION", str(report))
     rng = np.random.default_rng(81)
     a = rng.standard_normal((4, 6)).astype(np.float32)
     b = rng.standard_normal((6, 5)).astype(np.float32)

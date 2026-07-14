@@ -313,7 +313,7 @@ data-types docs, and Apple Newsroom M1–M5 announcements.
 | **P4** | MTL4 binary archive (pipeline persistence) | **Done, opt-in** — `tessera_apple_gpu_mtl4_archive_enable(path)` / `_flush()`; fresh-process round-trip verified |
 | **P5** | bf16 matmul routes to native tensor-op by default | **Done** — rank-2 bf16 → `tessera_apple_gpu_mtl4_matmul2d_bf16` by default; **14.7× (1024³), 11.8× (2048³)** vs forced-legacy. Toggle `TESSERA_APPLE_GPU_MTL4_BF16=0`. (f32 stays opt-in — MPS f32 GEMM is well-tuned) |
 | **P6** | compile-time `linear+bias+activation` fusion | **Done** — `matmul/gemm → add(bias) [→ gelu|relu|silu]` auto-fuses to one MPP `matmul2d` epilogue (fp32-accumulated); f32/residual cases still get the matmul on-GPU |
-| **P7** | ML encoder not selected by generic JIT | **Open (intentional)** — `.mtlpackage` author/load/dispatch exists, but `MTL4MachineLearningCommandEncoder` is not yet selected as a generic `package_call` route. Keep hand-written cooperative kernels for individual fused regions; revisit only for resident, whole compiled subgraphs. |
+| **P7** | ML encoder selected indiscriminately by generic JIT | **Evidence-gated** — `.mtlpackage` author/load/dispatch exists, and opt-in generic JIT auto-routing may select a fused whole subgraph only when a matching device/shape characterization report proves native dispatch, numerical agreement, and lower steady-state latency than the live lane. Value Target-IR `package_call` remains gated. |
 | **P8** | conv on the matrix units | **Done, opt-in** — f16/bf16 conv via im2col + M7 matmul2d epilogue (GPU im2col landed); native `mpp::tensor_ops::convolution2d` multi-tile **cracked** (`spike_conv2d_{single,multi}_tile_f16`, bit-correct). Still off by default — im2col loses to MPSGraph's *fused* conv; native spike is narrow (Cin=Cout=4, K=3, f16). Toggle `TESSERA_APPLE_GPU_MTL4_CONV=1` |
 
 ### Packaged ML subgraphs
@@ -321,13 +321,13 @@ data-types docs, and Apple Newsroom M1–M5 announcements.
 The `.mtlpackage` runtime lifecycle—package authoring, load/compile,
 reflection, tensor preparation, ML-encoder dispatch, and numerical proof—is
 implemented. It is **not** the default individual-kernel path: MPS/MSL/MPP
-remain preferable when Tessera needs exact fusion control. The deferred
-compiler integration is selection and execution of a package-backed *whole
-subgraph*: `package_call` must carry a binding spec, package identity, shapes,
-and resident-tensor ABI, then be selected only when it beats the ordinary
-MPSGraph or fused-MSL route. The generated execution inventory records this as
-`package_call launch gated`, rather than calling package authoring generic JIT
-execution.
+remain preferable when Tessera needs exact fusion control. An opt-in generic
+JIT auto route may now select an authored fused whole subgraph, but only from a
+fresh characterization record for that exact device/shape/dtype with native
+dispatch and numerical proof, and only when it wins against the live route.
+This leaves Value Target-IR `package_call` deliberately gated: its binding
+spec, package identity, shapes, and resident-tensor ABI still need an explicit
+value-call execution contract.
 
 ### GPU linear-algebra implementation state
 

@@ -276,12 +276,13 @@ not current support counts.
    accumulation and explicit storage conversions in the ABI contract. Start with
    matmul/epilogue, attention, and the structured-sparse experiment rather than
    broad dtype claims for every existing f32 kernel.
-5. **Keep package-subgraph execution selective.** The package lifecycle and
-   explicit authoring are proven, but `package_call` is not yet a compiler-selected
-   launch route. Promote only a resident-tensor whole subgraph that beats both
-   MPSGraph and the best fused-MSL alternative. Cheap epilogues are candidates;
-   softmax- or reduction-heavy regions must compete with decomposed kernels. It
-   remains `package_call launch gated` in the execution inventory until then.
+5. **Keep package-subgraph execution selective.** Generic JIT auto-routing now
+   consumes only a matching native-and-correct characterization record and
+   promotes a package only when it beats its live incumbent. Extend those
+   records to resident-tensor whole subgraphs and compare against both MPSGraph
+   and the best fused-MSL alternative. Cheap epilogues are candidates;
+   softmax- or reduction-heavy regions must compete with decomposed kernels.
+   Value Target-IR `package_call` remains launch gated.
 6. **Treat FP4/FP6/FP8/NVFP4 as compatibility work, not a performance claim.**
    `quantize`/`dequantize` remains uncovered. A macOS-27 / Metal 4.1 tensor
    toolchain is necessary, but it is not sufficient for promotion: each format

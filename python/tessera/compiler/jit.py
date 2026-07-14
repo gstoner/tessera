@@ -577,10 +577,12 @@ class JitFn:
         rec = self.recognized_package
         if rec is None:
             return _PKG_FALLBACK
-        # PK8g auto-heuristic — only fused chains win on the package lane
-        # (benchmark: matmul→softmax up to ~14× faster at 256³; single matmul
-        # is 1.3–2.8× slower). In "auto" mode, route only chains through the
-        # package; everything else falls back to the live lane.
+        # Package auto-routing is intentionally narrower than package
+        # availability.  Only fused chains are candidates, and a current
+        # device/shape-specific characterization report must prove that the
+        # package beat the live route with native dispatch + oracle agreement.
+        # This prevents a stale one-off benchmark or a host fallback from
+        # silently changing generic JIT routing.
         if self.dispatch_via_package == "auto" and \
                 getattr(rec, "kind", None) != "chain":
             return _PKG_FALLBACK
@@ -599,6 +601,15 @@ class JitFn:
         plan = plan_from_shapes(rec, shapes)
         if plan is None or plan.output_shape is None:
             return _PKG_FALLBACK
+        if self.dispatch_via_package == "auto":
+            import os
+            from .apple_route_selector import package_route_selected
+            report = os.environ.get("TESSERA_APPLE_GPU_ROUTE_CHARACTERIZATION")
+            shape = "x".join(str(d) for d in plan.dims)
+            if not package_route_selected(
+                report, op=plan.name, shape=shape, dtype="f32",
+            ):
+                return _PKG_FALLBACK
         key = (plan.name, plan.dims)
 
         from .. import apple_mlpkg as _mp

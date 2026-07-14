@@ -23,13 +23,15 @@ Usage:
         --shapes 8x16x32 64x64x64 256x256x256 --reps 50 \\
         --output apple_gpu_package_lane.json
 
-Output schema (matches ``benchmark_gemm.py`` / ``benchmark_fusion.py``):
+Output schema (also consumed by ``apple_route_selector``):
 
     {"backend": "apple_gpu", "op": "matmul" | "matmul_softmax",
      "shape": "MxKxN", "dtype": "f32", "mode": "package" | "live",
      "reps": N, "latency_ms": <median>, "stdev_ms": <float>,
      "cold_author_ms": <float|null>, "tflops": <float>,
-     "memory_bw_gb_s": <float>, "device": "...", "tessera_version": "..."}
+     "memory_bw_gb_s": <float>, "device": "...", "tessera_version": "...",
+     "route": "package" | "live", "native_dispatched": <bool>,
+     "numerically_validated": <bool>}
 
 Best-effort: runs only on Darwin with Metal + packaged-ML available; on
 other hosts it writes an empty/skipped payload and exits 0.
@@ -111,21 +113,27 @@ def _bench_op(op: str, M: int, K: int, N: int, reps: int) -> list[dict]:
     rw_bytes = 4 * (M * K + K * N + M * N)
 
     # Live lane: warm up (compile + pipeline), then time.
-    live(A, B)
+    live_out = live(A, B)
     live_ms, live_sd = _time_reps(lambda: live(A, B), reps)
 
     # Package lane: time the COLD first call (author + compile + prepare),
     # then warm steady-state.
     t0 = time.perf_counter_ns()
-    pkg(A, B)
+    pkg_out = pkg(A, B)
     cold_ms = (time.perf_counter_ns() - t0) / 1e6
     pkg_ms, pkg_sd = _time_reps(lambda: pkg(A, B), reps)
 
     shape = f"{M}x{K}x{N}"
     rows = []
-    for mode, ms, sd, cold in (
-        ("live", live_ms, live_sd, None),
-        ("package", pkg_ms, pkg_sd, cold_ms),
+    # A route is eligible to influence generic JIT selection only after it has
+    # both an oracle comparison and concrete evidence that its package pipeline
+    # was actually prepared rather than silently falling back to the live lane.
+    package_native = bool(getattr(pkg, "_package_pipeline_cache", {}))
+    package_ok = bool(np.allclose(pkg_out, live_out, rtol=1e-4, atol=1e-5))
+    live_ok = bool(np.allclose(live_out, pkg_out, rtol=1e-4, atol=1e-5))
+    for mode, ms, sd, cold, native, correct in (
+        ("live", live_ms, live_sd, None, True, live_ok),
+        ("package", pkg_ms, pkg_sd, cold_ms, package_native, package_ok),
     ):
         sec = ms / 1000.0
         rows.append({
@@ -134,6 +142,9 @@ def _bench_op(op: str, M: int, K: int, N: int, reps: int) -> list[dict]:
             "shape": shape,
             "dtype": "f32",
             "mode": mode,
+            "route": mode,
+            "native_dispatched": native,
+            "numerically_validated": correct,
             "reps": reps,
             "latency_ms": ms,
             "stdev_ms": sd,
@@ -189,7 +200,7 @@ def main(argv: list[str] | None = None) -> int:
     ok, reason = (False, "non-Darwin host — no Metal device") \
         if sys.platform != "darwin" else _packaged_ml_ok()
     if not ok:
-        payload = {"runs": [], "skipped_apple_gpu": reason}
+        payload = {"schema_version": 1, "runs": [], "skipped_apple_gpu": reason}
         if args.output is not None:
             args.output.write_text(json.dumps(payload, indent=2,
                                                sort_keys=True))
@@ -203,7 +214,7 @@ def main(argv: list[str] | None = None) -> int:
             M, K, N = _parse_shape(shape)
             rows.extend(_bench_op(op, M, K, N, args.reps))
 
-    payload = {"runs": rows}
+    payload = {"schema_version": 1, "runs": rows}
     output = json.dumps(payload, indent=2, sort_keys=True)
     if args.output is not None:
         args.output.write_text(output)

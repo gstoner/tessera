@@ -10,3 +10,7 @@ Rules:
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+
+## Test execution environment
+
+All tests for this project must run in the host WSL environment, never in the Codex sandbox. Use an escalated/unsandboxed command for every test invocation, including targeted tests, smoke tests, and full suites. Do not treat or report a sandbox test run as project validation. For CUDA and ROCm tests, verify that the intended host GPU and toolchain are visible from WSL before running; if they are not, report the host-environment blocker instead of substituting a sandbox run.

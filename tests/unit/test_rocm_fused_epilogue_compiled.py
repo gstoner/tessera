@@ -110,12 +110,20 @@ def _launch_epilogue(rt, a, b, bias, activation):
     return d
 
 
-@pytest.mark.parametrize("activation", ["none", "relu", "gelu", "silu"])
-@pytest.mark.parametrize("with_bias", [False, True])
+_FUSED_EPILOGUES = [
+    ("relu", False),
+    ("gelu", False),
+    ("silu", False),
+    ("none", True),
+    ("relu", True),
+    ("gelu", True),
+    ("silu", True),
+]
+
+
+@pytest.mark.parametrize("activation,with_bias", _FUSED_EPILOGUES)
 @pytest.mark.parametrize("m,n,k", [(16, 16, 16), (64, 48, 32), (96, 80, 64)])
 def test_fused_epilogue_matches_numpy(activation, with_bias, m, n, k):
-    if activation == "none" and not with_bias:
-        pytest.skip("plain GEMM is covered by the matmul lane test")
     rt = _rt_or_skip()
     rng = np.random.default_rng(7 + m + n + k + len(activation) + int(with_bias))
     a = (rng.standard_normal((m, k)) * 0.4).astype(np.float16)

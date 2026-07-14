@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-13
+last_updated: 2026-07-14
 audit_role: sub_audit
 ---
 
@@ -43,11 +43,14 @@ does not transfer to RDNA 4, Wave32 WMMA v2, or CDNA MFMA targets.
 | SSM, MSA, and EBM | Selective SSM forward/backward, MSA sparse attention, and native EBM kernels execute on gfx1151. | Optimize broader shapes and promote only with exact-target provenance. | [`runtime_execution_matrix.md`](../../generated/runtime_execution_matrix.md) |
 | MoE/grouped GEMM | MoE dispatch/combine execute natively; contiguous f32 grouped GEMM now takes device-resident offsets `[E+1]` and computes every expert group in one generated launch. | Comparative-ratchet the one-launch kernel against the existing per-group path before making grouped SwiGLU consume it. | `test_rocm_moe_transport_compiled.py`, `grouped_gemm_device_args.mlir` |
 | Asynchronous staging and layouts | Global→LDS `async_copy` and a staged WMMA GEMM tile execute correctly. Structured affine `#tile.layout` extents/strides/offset now change the generated LDS store address instead of surviving as a marker. | Add bounds-aware swizzle and multicast consumers; use staging in production only when profiling finds a staging-bound kernel. | `async_copy_runnable.mlir`, `async_copy_consumes_layout.mlir`, `test_rocm_gemm_staged_async_copy.py` |
+| Paged KV serving ABI | ROCm attention now receives versioned PLHD physical K/V pages plus an i32 logical→physical page table. A HIP gather handles arbitrary token indices before the existing FA ABI; permuted-page structural/reference tests prevent contiguous-layout assumptions. | Run the new permuted-page HIP fixture on gfx1151, then fuse page-table reads into attention only when measured—without changing the cache ABI. | `test_paged_kv_rocm_abi.py`, `test_paged_kv_rocm_native.py` |
 
 ## Open actions
 
 The table below is the actionable ROCm backlog. An item is complete only when
 its stated evidence exists; emitting an artifact alone is not completion.
+Implementation order, portable Tile/ReplaySSM additions, and per-item test gates
+are maintained in [`todo.md`](todo.md).
 
 | ID | Priority | Action | Completion evidence |
 |---|---|---|---|
@@ -57,6 +60,7 @@ its stated evidence exists; emitting an artifact alone is not completion.
 | ROCM-4 | P1 | Add gfx1200 consumer-device proof and retain gfx942 as an explicitly tested compatibility target. | Each promoted row carries its own runtime and numerical evidence; unsupported feature forms fail with stable diagnostics. |
 | ROCM-5 | P1 | Finish architecture-specific MMA enablement instead of reusing gfx1151 layouts. | Separate RDNA 4, Wave32 WMMA v2, and CDNA MFMA fragment/layout guards pass assemble-and-compare fixtures on their matching devices. |
 | ROCM-6 | P1 | Run the three concrete redesign experiments below: VGPR-bounded multi-wave GEMM, two-wave online-softmax forward attention, and split/reduced dK/dV backward attention. | An experiment may replace production only when its named aligned and ragged rungs clear the comparative gain gate, all dtype/correctness fixtures remain green, and its winning latency is recorded in `rocm_gfx1151_hot_paths.json`. |
+| ROCM-9 | P1 | Close exact-device proof for the stable paged-KV ABI, then evaluate a fused paged-attention consumer. | A non-identity logical→physical table gathers correctly on gfx1151 and feeds the FA numerical oracle. Any fused replacement retains the same ABI and wins a device/end-to-end benchmark against gather→FA composition. |
 | ROCM-8 | P2 | Re-evaluate copy versus zero-copy on bare-metal ROCm. | Device and end-to-end measurements identify a stable crossover outside WSL before any automatic selection policy lands. |
 
 ### ROCM-6 redesign experiments and ratchets
@@ -194,6 +198,12 @@ feature claim means. Individual status rows and counts remain generated.
   WMMA primitive, f32 softmax/accumulation, causal/ragged handling, and
   `runtime.launch()`. GQA/MQA share the forward body; grouped backward combines
   shared-KV gradients correctly.
+- **Paged KV boundary:** the serving contract is independent of attention:
+  physical K/V pages are PLHD, an i32 table maps logical pages to physical
+  pages, and an i64 token-index vector defines gather order. The initial ROCm
+  implementation is a HIP gather followed by the dense FA launch. This is an
+  explicit composition boundary, not permission for attention to infer a
+  contiguous cache layout.
 - **Attention variants:** sliding windows skip fully excluded KV tiles; logit
   soft-capping applies `cap*tanh(score/cap)` before masking and softmax; additive
   bias provides the DFlash seam.

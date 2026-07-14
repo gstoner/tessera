@@ -49,7 +49,7 @@ tf32/reg; fp8: m16n8k32, packs 4 bytes/reg). The fp8 paths are bit-exact because
 the host reference dequantizes with the same OCP fp8 decode the hardware uses and
 the f32 accumulation of those coarse values stays exactly representable.
 
-## NVFP4 block-scaled MMA (m16n8k64) — partial, grounded (action item #9)
+## NVFP4 block-scaled MMA (m16n8k64) — execute-and-compare complete
 
 The consumer-Blackwell headline: warp-level **block-scaled** NVFP4 (e2m1 data +
 ue4m3 per-16-block scale). Files: `nvfp4_probe.cu` (assemble probe),
@@ -65,17 +65,17 @@ ue4m3 per-16-block scale). Files: `nvfp4_probe.cu` (assemble probe),
   `compute_120`/`sm_120` PTX target rejects `.kind::mxf4nvf4` / `.block_scale` /
   `.scale_vec::4X` — so build with `-gencode arch=compute_120a,code=sm_120a`
   (an `-arch=sm_120a` build that also emits base PTX fails at the PTX stage).
-
-**NOT yet verified (needs the PTX ISA block-scale spec, absent from the on-box
-CUDA 13.3 headers — only the datacenter `tcgen05` block-scale variant ships
-there):** the numerics. A scale-byte sweep shows the scale is multiplicative
-(`0x00` → result ≈ 0) but the `ue4m3` scale **encoding** and the
-`{byte-id, thread-id}` **scale-distribution** semantics are non-standard (the
-e4m3 code for 1.0, `0x38`, yields ~3e9 not unit), so a guessed layout does not
-reproduce a reference. Per the grounding rule we do **not** claim a working
-NVFP4 GEMM. Next step: obtain the PTX ISA §"mma with block scaling" operand/scale
-mapping, then finish `nvfp4_gemm.cu`'s reference match (the e2m1 data fragment
-layout + selector semantics).
+- PTX ISA 9.3 specifies the missing selector mapping. For `scale_vec::4X`, all
+  four bytes participate and byte-id is zero; thread-id A selects one lane pair
+  per quad while thread-id B selects one lane. The oracle uses A lanes 0/1 for
+  rows `gid`/`gid+8` and B lane 0 for column `gid`.
+- `nvfp4_gemm.cu` matches all 128 outputs exactly for uniform UE4M3 scale codes
+  `0x30` (0.5), `0x38` (1.0), and `0x40` (2.0), and for distinct scales in the
+  full A `16x4` and B `4x8` scale matrices. The original ~3e9 report was a host
+  harness bug: correct FP32 output bits were copied into `unsigned[]` and then
+  numerically converted instead of copied into `float[]`.
+- `tests/unit/test_nvidia_nvfp4_compiled.py` preserves the execute/compare proof
+  and asserts `OMMA.SF.16864.F32.E2M1.E2M1.UE4M3.4X` in SASS.
 
 ## Result
 

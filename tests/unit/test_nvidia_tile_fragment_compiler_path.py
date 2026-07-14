@@ -42,7 +42,9 @@ def _run(command: list[str], *, stdin: Path | None = None,
 
 
 def _compile_cubin(work: Path, fixture: Path = FIXTURE,
-                   entries: tuple[str, ...] = ("pointer_fragment_store",)) -> Path:
+                   entries: tuple[str, ...] = ("pointer_fragment_store",),
+                   expected_mma: str =
+                   "mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32") -> Path:
     tools = {
         "opt": str(NVIDIA_OPT) if NVIDIA_OPT.is_file() else None,
         "mlir-opt": _tool("/usr/lib/llvm-22/bin/mlir-opt"),
@@ -71,9 +73,44 @@ def _compile_cubin(work: Path, fixture: Path = FIXTURE,
     ptx_text = ptx.read_text()
     for entry in entries:
         assert f".visible .entry {entry}" in ptx_text
-    assert "mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32" in ptx_text
+    assert expected_mma in ptx_text
     _run([tools["ptxas"], "-arch=sm_120", str(ptx), "-o", str(cubin)])
     return cubin
+
+
+def _write_dtype_fixture(work: Path, *, entry: str, dtype: str, k: int,
+                         accumulator: str) -> Path:
+    """Create the same layout-bearing Tile kernel for a physical MMA dtype."""
+    fixture = work / f"{entry}.mlir"
+    text = f'''module {{
+  llvm.func @{entry}(%a_ptr: !llvm.ptr, %b_ptr: !llvm.ptr,
+                     %d_ptr: !llvm.ptr, %zero: i64) attributes {{nvvm.kernel}} {{
+    %a_tile = tile.view %a_ptr, %zero, %zero {{
+      tile.layout = #tile.layout<shard = [16, {k}] : [{k}, 1] on ["laneid", "reg"], replica = [] : [] on [], offset = 0>,
+      tile.memory = #tile.memory_layout<space = "gmem", order = "row_major", leading_dim = {k}>
+    }} : (!llvm.ptr, i64, i64) -> !tile.tile
+    %b_tile = tile.view %b_ptr, %zero, %zero {{
+      tile.layout = #tile.layout<shard = [{k}, 8] : [8, 1] on ["laneid", "reg"], replica = [] : [] on [], offset = 0>,
+      tile.memory = #tile.memory_layout<space = "gmem", order = "col_major", leading_dim = {k}>
+    }} : (!llvm.ptr, i64, i64) -> !tile.tile
+    %a = tile.fragment_pack %a_tile {{role = "a", mma = #tile.mma_desc<family = "mma_sync", m = 16, n = 8, k = {k}, a = "{dtype}", b = "{dtype}", acc = "{accumulator}", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>}} : (!tile.tile) -> !tile.fragment
+    %b = tile.fragment_pack %b_tile {{role = "b", mma = #tile.mma_desc<family = "mma_sync", m = 16, n = 8, k = {k}, a = "{dtype}", b = "{dtype}", acc = "{accumulator}", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>}} : (!tile.tile) -> !tile.fragment
+    %c = tile.fragment_zero {{role = "acc", mma = #tile.mma_desc<family = "mma_sync", m = 16, n = 8, k = {k}, a = "{dtype}", b = "{dtype}", acc = "{accumulator}", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>}} : !tile.fragment
+    %d = tile.mma %a, %b, %c {{mma = #tile.mma_desc<family = "mma_sync", m = 16, n = 8, k = {k}, a = "{dtype}", b = "{dtype}", acc = "{accumulator}", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>}} : (!tile.fragment, !tile.fragment, !tile.fragment) -> !tile.fragment
+    %out = tile.fragment_unpack %d {{
+      tile.layout = #tile.layout<shard = [16, 8] : [8, 1] on ["laneid", "reg"], replica = [] : [] on [], offset = 0>,
+      mma = #tile.mma_desc<family = "mma_sync", m = 16, n = 8, k = {k}, a = "{dtype}", b = "{dtype}", acc = "{accumulator}", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>
+    }} : (!tile.fragment) -> !tile.tile
+    "tile.store"(%out, %d_ptr, %zero, %zero) {{
+      tile.layout = #tile.layout<shard = [16, 8] : [8, 1] on ["laneid", "reg"], replica = [] : [] on [], offset = 0>,
+      tile.memory = #tile.memory_layout<space = "gmem", order = "row_major", leading_dim = 8>
+    }} : (!tile.tile, !llvm.ptr, i64, i64) -> ()
+    llvm.return
+  }}
+}}
+'''
+    fixture.write_text(text)
+    return fixture
 
 
 class _CudaDriver:
@@ -247,6 +284,71 @@ def test_sm120_tile_fragment_compiler_path_matches_numpy() -> None:
             driver.close()
     max_error = float(np.max(np.abs(actual - reference)))
     assert max_error < 1e-2, f"compiler-generated Tile GEMM max_error={max_error}"
+
+
+@pytest.mark.parametrize(
+    "dtype,k,accumulator,storage,ptx_dtype,atol",
+    [
+        ("tf32", 8, "f32", "tf32", "tf32", 1e-2),
+        ("e4m3", 32, "f32", "e4m3", "e4m3", 1.0),
+        ("e5m2", 32, "f32", "e5m2", "e5m2", 2.0),
+    ],
+)
+def test_sm120_tile_dtype_fragment_paths_match_numpy(
+        dtype: str, k: int, accumulator: str, storage: str,
+        ptx_dtype: str, atol: float) -> None:
+    rng = np.random.default_rng(20260718 + k)
+    a_source = rng.uniform(-1, 1, (16, k)).astype(np.float32)
+    b_source = np.asfortranarray(rng.uniform(-1, 1, (k, 8)), dtype=np.float32)
+    if storage == "tf32":
+        a, b = a_source, b_source
+        reference = a @ b
+    else:
+        ml_dtypes = pytest.importorskip("ml_dtypes")
+        fp8 = (ml_dtypes.float8_e4m3fn if storage == "e4m3"
+               else ml_dtypes.float8_e5m2)
+        a_quant = np.asarray(a_source, dtype=fp8)
+        b_quant = np.asfortranarray(b_source, dtype=fp8)
+        reference = a_quant.astype(np.float32) @ b_quant.astype(np.float32)
+        a = a_quant.view(np.uint8)
+        b = b_quant.view(np.uint8)
+    out = np.zeros((16, 8), dtype=np.float32)
+    entry = f"pointer_fragment_store_{dtype}"
+    with tempfile.TemporaryDirectory(prefix=f"tessera-sm120-{dtype}-") as tmp:
+        work = Path(tmp)
+        fixture = _write_dtype_fixture(
+            work, entry=entry, dtype=dtype, k=k, accumulator=accumulator)
+        cubin = _compile_cubin(
+            work, fixture, (entry,),
+            f"mma.sync.aligned.m16n8k{k}.row.col.f32.{ptx_dtype}.{ptx_dtype}.f32")
+        driver = _CudaDriver()
+        try:
+            actual = driver.launch(cubin, entry, [a, b, out], 2, [0], (1, 1))
+        finally:
+            driver.close()
+    np.testing.assert_allclose(actual, reference, rtol=0, atol=atol)
+
+
+def test_sm120_tile_int8_fragment_path_matches_numpy() -> None:
+    rng = np.random.default_rng(20260719)
+    a = rng.integers(-8, 9, size=(16, 32), dtype=np.int8)
+    b = np.asfortranarray(rng.integers(-8, 9, size=(32, 8), dtype=np.int8))
+    reference = a.astype(np.int32) @ b.astype(np.int32)
+    out = np.zeros((16, 8), dtype=np.int32)
+    entry = "pointer_fragment_store_s8"
+    with tempfile.TemporaryDirectory(prefix="tessera-sm120-s8-") as tmp:
+        work = Path(tmp)
+        fixture = _write_dtype_fixture(
+            work, entry=entry, dtype="s8", k=32, accumulator="s32")
+        cubin = _compile_cubin(
+            work, fixture, (entry,),
+            "mma.sync.aligned.m16n8k32.row.col.s32.s8.s8.s32")
+        driver = _CudaDriver()
+        try:
+            actual = driver.launch(cubin, entry, [a, b, out], 2, [0], (1, 1))
+        finally:
+            driver.close()
+    np.testing.assert_array_equal(actual, reference)
 
 
 def test_sm120_launch_level_matmul_handles_grid_and_ragged_k() -> None:

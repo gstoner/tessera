@@ -52,7 +52,7 @@ correctness-first floor; 16-bit storage is served by the GEMM lanes below.
 | `tessera_mma_m16n8k16_bf16` | matmul (single tile) | 16×8×16 | bf16→f32 | `mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32` | ✅ |
 | `tessera_mma_gemm_bf16` | matmul (general) | aligned M%16/N%8/K%16, index < 2³¹ | bf16→f32 | m16n8k16 tile, K-loop + grid-tiled | ✅ (C2 breadth) |
 | `tessera_mma_gemm_f16` | matmul (general) | aligned M%16/N%8/K%16, index < 2³¹ | f16→f32 | m16n8k16 tile, K-loop + grid-tiled | ✅ |
-| `tessera_nvfp4_mma_m16n8k64` | matmul (block-scale) | 16×8×64 | fp4 e2m1 + ue4m3 scales → f32 | `mma.sync…m16n8k64…kind::mxf4nvf4.block_scale.scale_vec::4X` | 🟡 assemble-only (numerics gated on PTX-ISA scale spec) |
+| `tessera_nvfp4_mma_m16n8k64` | matmul (block-scale) | 16×8×64 | fp4 e2m1 + ue4m3 scales → f32 | `mma.sync…m16n8k64…kind::mxf4nvf4.block_scale.scale_vec::4X` | ✅ sm_120a execute/compare, non-uniform block scales + SASS pinned |
 | `tessera_wgmma_matmul_bf16` | matmul (Hopper) | m64n{64,128,256}k16 | bf16→f32 | `wgmma.mma_async…` | ⬜ skeleton (needs smem descriptors + TMA; sm_90a, no Hopper box) |
 
 The emitted general GEMM (`tessera_mma_gemm_{bf16,f16}`) is the **Tier-2 emitted**
@@ -66,6 +66,19 @@ i32-index-overflow shapes (element count > 2³¹) honestly.
 | `tessera_nvidia_mma_gemm_f16` | matmul (general tiled) | any M/N/K | f16→f32 | ✅ |
 | `tessera_nvidia_mma_gemm_bf16` | matmul (general tiled) | any M/N/K | bf16→f32 | ✅ |
 | `tessera_nvidia_mma_gemm_tf32` | matmul (general tiled) | any M/N/K | fp32/tf32-math→f32 | ✅ |
+
+### FP8 representation versus execution
+
+These are separate contracts. CUDA Math's `__nv_fp8_e4m3` and
+`__nv_fp8_e5m2` provide byte representation, saturating construction, and
+conversion; Tessera uses them in the resident f32→FP8 conversion kernels.
+CUTLASS names the corresponding numeric types `float_e4m3_t` and
+`float_e5m2_t` and also defines unsigned scale formats such as UE4M3/E8M0.
+Tensor-core execution in Tessera does not claim the narrow `nvcuda::wmma` C++
+surface: the shipped kernel and Tile lowering pack four FP8 bytes per 32-bit
+fragment register and issue PTX `mma.sync.aligned.m16n8k32` E4M3/E5M2 forms.
+E4M3 has finite range through ±448 and no infinity encoding; E5M2 reaches
+±57344 and supports infinities. Accumulation/output here are f32.
 
 The shipped GEMM is the **Tier-3 hand-tuned** D1 candidate
 (`NvidiaMmaGemmShippedCandidate`) — the arbiter default (lead-safe, Decision #28),
@@ -96,7 +109,9 @@ time; the compiler-emitted CUDA lane needs `nvcc`.
 
 ## Still open
 
-NVFP4 execution + non-unit-scale numerics; mma.sync tensor-core versions of the
-attention + fused lanes (perf); dtypes beyond f32 for the fused/attention/gated
-lanes; the Hopper `wgmma` completion (sm_90a) and sm_100 `tcgen05` (their own
-silicon). See [`docs/audit/backend/nvidia/NVIDIA_AUDIT.md`](../../audit/backend/nvidia/NVIDIA_AUDIT.md).
+NVFP4 **productization** into general-shape Tile/runtime dispatch (the sm_120a
+scale map, non-unit numerics, and SASS proof are complete); native single-kernel
+TF32/FP8 fused/attention/gated performance beyond the completed device-resident
+compositions; and Hopper `wgmma` (sm_90a) / sm_100 `tcgen05` on their own
+silicon. See
+[`docs/audit/backend/nvidia/NVIDIA_AUDIT.md`](../../audit/backend/nvidia/NVIDIA_AUDIT.md).

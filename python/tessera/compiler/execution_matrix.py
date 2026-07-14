@@ -945,6 +945,19 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "tessera_nvidia_mma_gemm_{f16,bf16,tf32} C ABI symbol "
                             "(NVRTC-compiled for the device arch; f16/bf16/"
                             "fp32(tf32-math) storage, f32 accumulate)",
+    "nvidia_matmul_relu_compiled": "NVIDIA GPU (consumer Blackwell sm_120) "
+                            "compiler-emitted mma.sync GEMM with ReLU in the "
+                            "canonical accumulator epilogue; f16/bf16 storage "
+                            "and f32 accumulation",
+    "nvidia_matmul_softmax_compiled": "NVIDIA GPU (consumer Blackwell sm_120) "
+                            "two-launch composition of the shipped mma.sync "
+                            "GEMM and compiler-generated stable row-softmax",
+    "nvidia_kv_cache_compiled": "NVIDIA GPU (consumer Blackwell sm_120) "
+                            "compiler-emitted logical-page to physical-page "
+                            "KV cache gather with explicit bounds",
+    "nvidia_conv2d_compiled": "NVIDIA GPU (consumer Blackwell sm_120) "
+                            "guarded direct NHWC/HWIO f32 convolution with "
+                            "stride, padding, dilation, and optional bias",
     "nvidia_flash_attn_compiled": "NVIDIA GPU (consumer Blackwell sm_120) "
                             "compiler-emitted Flash Attention forward; f32/fp16 storage, "
                             "f32 accumulation, MHA/GQA/MQA "
@@ -2791,6 +2804,56 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "f16/bf16/fp32(tf32-math) storage, f32 accumulate). Directly "
                "selectable by stamping compiler_path=\"nvidia_mma\".",
         execution_mode="cuda_runtime"),
+    ("nvidia_sm120", "nvidia_matmul_relu_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_matmul_relu_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_matmul_relu_compiled", runtime_status="success",
+        reason="NVIDIA sm_120 compiler-emitted mma.sync GEMM with optional "
+               "column bias and ReLU applied to the f32 accumulator before "
+               "the canonical mapped store for f16/bf16. TF32/E4M3/E5M2 "
+               "breadth uses the shipped tensor-core GEMM plus a generated "
+               "CUDA ReLU epilogue as a two-launch path.",
+        execution_mode="cuda_runtime", direction="forward",
+        op_family="matmul_relu", device_proof="device_verified_jit",
+        evidence_target="nvidia_sm120",
+        numerical_fixture="tests/unit/test_nvidia_matmul_relu_compiled.py",
+        proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_matmul_softmax_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_matmul_softmax_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_matmul_softmax_compiled", runtime_status="success",
+        reason="NVIDIA sm_120 two-launch composition: shipped mma.sync GEMM "
+               "followed by compiler-generated stable row-softmax. The first "
+               "correctness slice materializes the score matrix between launches.",
+        execution_mode="cuda_runtime", direction="forward",
+        op_family="matmul_softmax", device_proof="device_verified_jit",
+        evidence_target="nvidia_sm120",
+        numerical_fixture="tests/unit/test_nvidia_matmul_softmax_compiled.py",
+        proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_kv_cache_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_kv_cache_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_kv_cache_compiled", runtime_status="success",
+        reason="NVIDIA sm_120 compiler-emitted paged KV read: an i32 logical "
+               "page table maps [start,end) token rows into physical CUDA page "
+               "storage, including reads crossing page boundaries.",
+        execution_mode="cuda_runtime", direction="forward",
+        op_family="kv_cache_read", device_proof="device_verified_jit",
+        evidence_target="nvidia_sm120",
+        numerical_fixture="tests/unit/test_nvidia_kv_cache_compiled.py",
+        proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_conv2d_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_conv2d_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_conv2d_compiled", runtime_status="success",
+        reason="NVIDIA sm_120 guarded direct NHWC/HWIO f32 convolution with "
+               "explicit output-shape checks, stride/padding/dilation, groups=1, "
+               "and optional column bias.",
+        execution_mode="cuda_runtime", direction="forward",
+        op_family="conv2d", device_proof="device_verified_jit",
+        evidence_target="nvidia_sm120",
+        numerical_fixture="tests/unit/test_nvidia_conv2d_compiled.py",
+        proof_build="cuda13.3+sm120"),
     ("nvidia_sm120", "nvidia_softmax_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_softmax_compiled",
         execution_kind="native_gpu", executable=True,

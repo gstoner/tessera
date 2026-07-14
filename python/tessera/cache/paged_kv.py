@@ -29,6 +29,7 @@ the underlying cache.
 from __future__ import annotations
 
 import enum
+import subprocess
 from dataclasses import dataclass
 from typing import Any, Protocol, Sequence, runtime_checkable
 
@@ -84,6 +85,57 @@ class PageTableEntry:
     page_id: int
     tier: PageTier
     shared_with: tuple[int, ...] = ()
+
+
+@dataclass(frozen=True)
+class PagedKVBufferABI:
+    """Stable physical-page ABI presented to device backends.
+
+    K/V pages use ``[physical_page, page_offset, head, dim]`` (``PLHD``), while
+    ``page_table[logical_page]`` names the physical page. Attention kernels must
+    not infer physical placement from a logical token index. Version 1 is f32;
+    later quantized/latent variants can add explicit descriptors without
+    changing the logical-to-physical indirection.
+    """
+
+    k_pages: np.ndarray
+    v_pages: np.ndarray
+    page_table: np.ndarray
+    logical_length: int
+    abi_version: int = 1
+    layout: str = "PLHD"
+
+    def __post_init__(self) -> None:
+        k = np.asarray(self.k_pages)
+        v = np.asarray(self.v_pages)
+        table = np.asarray(self.page_table)
+        if self.abi_version != 1 or self.layout != "PLHD":
+            raise ValueError("unsupported paged KV buffer ABI version/layout")
+        if (k.dtype != np.float32 or v.dtype != np.float32
+                or k.ndim != 4 or k.shape != v.shape):
+            raise ValueError("paged KV ABI requires equal rank-4 f32 K/V pages")
+        if table.dtype != np.int32 or table.ndim != 1 or table.size < 1:
+            raise ValueError("paged KV ABI page_table must be non-empty rank-1 i32")
+        if np.any(table < 0) or np.any(table >= k.shape[0]):
+            raise ValueError("paged KV ABI page_table references an invalid physical page")
+        capacity = int(table.size) * int(k.shape[1])
+        if self.logical_length < 0 or self.logical_length > capacity:
+            raise ValueError("paged KV ABI logical_length exceeds table capacity")
+
+    @property
+    def page_size(self) -> int:
+        return int(self.k_pages.shape[1])
+
+    def gather(self, token_indices: Any) -> tuple[np.ndarray, np.ndarray]:
+        """Reference gather through the page table, preserving caller order."""
+        idx = np.asarray(token_indices, dtype=np.int64).reshape(-1)
+        if idx.size and (idx.min() < 0 or idx.max() >= self.logical_length):
+            raise IndexError(
+                f"paged KV token index outside [0, {self.logical_length})")
+        logical_page, offset = np.divmod(idx, self.page_size)
+        physical_page = self.page_table[logical_page]
+        return (np.asarray(self.k_pages[physical_page, offset], np.float32),
+                np.asarray(self.v_pages[physical_page, offset], np.float32))
 
 
 @runtime_checkable
@@ -365,6 +417,42 @@ def quantized_tail_paged_kv(K_full: np.ndarray, V_full: np.ndarray, *,
         split=split, page_size=page_size)
 
 
+def materialize_paged_kv_abi(kv_state: Any) -> PagedKVBufferABI:
+    """Expose any :class:`PagedKVState` through the stable device-page ABI.
+
+    A backend-native state may provide ``paged_kv_abi()`` and retain its own
+    physical placement. Generic adapters are packed once at this boundary; the
+    attention implementation still consumes only pages + page table and never
+    reaches into a cache's contiguous storage.
+    """
+    state = as_paged_kv_state(kv_state)
+    native = getattr(state, "paged_kv_abi", None)
+    if callable(native):
+        abi = native()
+        if not isinstance(abi, PagedKVBufferABI):
+            raise TypeError("paged_kv_abi() must return PagedKVBufferABI")
+        return abi
+
+    geometry = state.kv_geometry()
+    n = state.seq_len()
+    page_size = int(geometry.page_size)
+    logical_pages = max(1, (n + page_size - 1) // page_size)
+    shape = (logical_pages, page_size,
+             int(geometry.num_heads), int(geometry.head_dim))
+    k_pages = np.zeros(shape, np.float32)
+    v_pages = np.zeros(shape, np.float32)
+    if n:
+        k, v = state.gather(range(n))
+        flat_k = k_pages.reshape(-1, geometry.num_heads, geometry.head_dim)
+        flat_v = v_pages.reshape(-1, geometry.num_heads, geometry.head_dim)
+        flat_k[:n] = np.asarray(k, np.float32)
+        flat_v[:n] = np.asarray(v, np.float32)
+    return PagedKVBufferABI(
+        k_pages=k_pages, v_pages=v_pages,
+        page_table=np.arange(logical_pages, dtype=np.int32),
+        logical_length=n)
+
+
 def _reference_attention(Q: np.ndarray, K: np.ndarray, V: np.ndarray,
                          scale: float, causal: bool) -> np.ndarray:
     """Per-head numpy attention. Q (H,q,d), K/V (H,S,d) → (H,q,d)."""
@@ -409,8 +497,10 @@ def paged_attention(
         WMMA forward kernel on gfx1151 (the folded ``(num_heads, S, head_dim)``
         batch is exactly the lane's ``[..., S, D]`` contract). Gather is the
         staging stage; the fused attention runs on ``native_gpu``.
-      * ``"nvidia"`` — gathered K/V feeds the compiler-emitted CUDA Flash
-        Attention lane in one launch across all heads (f32 storage/accumulate).
+      * ``"nvidia"`` — size-dispatched CUDA execution over the stable page-table
+        ABI: a direct single-launch paged-attention kernel for short decode, or a
+        staged device-resident gather/contraction plan for longer contexts. D2
+        warm-starts the measured crossover; neither route stages through host.
 
     With ``return_execution=True`` returns ``(out, execution_kind)`` where
     ``execution_kind`` is the native provenance token (``"metal_runtime"`` for
@@ -425,23 +515,31 @@ def paged_attention(
 
     n = state.seq_len()
     idx = list(range(n)) if token_indices is None else list(token_indices)
-    # gather → (S, num_heads, head_dim); transpose to per-head (num_heads, S, hd).
-    # This is the staging + dequant stage — host→resident waves + int/latent
-    # decode happen inside the PagedKVState.gather the lowering pass owns.
-    gk, gv = state.gather(idx)
-    K = np.transpose(gk, (1, 0, 2))
-    V = np.transpose(gv, (1, 0, 2))
-
     d = Q.shape[-1]
     if scale is None:
         scale = 1.0 / np.sqrt(d)
 
+    if backend == "rocm":
+        # ROCm consumes the stable physical-page ABI. Its HIP gather follows the
+        # logical→physical table; attention never assumes logical pages are
+        # contiguous or identity-mapped.
+        abi = materialize_paged_kv_abi(state)
+        out, exe = _paged_attention_rocm(
+            Q, abi, idx, float(scale), causal)
+        return (out, exe) if return_execution else out
+    if backend == "nvidia":
+        abi = materialize_paged_kv_abi(state)
+        out, exe = _paged_attention_nvidia(
+            Q, abi, idx, float(scale), causal)
+        return (out, exe) if return_execution else out
+
+    # Other backends still consume dense K/V today. Their gather remains behind
+    # PagedKVState rather than reaching into a cache's physical representation.
+    gk, gv = state.gather(idx)
+    K = np.transpose(gk, (1, 0, 2))
+    V = np.transpose(gv, (1, 0, 2))
     if backend == "apple_gpu":
         out, exe = _paged_attention_apple_gpu(Q, K, V, float(scale), causal)
-    elif backend == "rocm":
-        out, exe = _paged_attention_rocm(Q, K, V, float(scale), causal)
-    elif backend == "nvidia":
-        out, exe = _paged_attention_nvidia(Q, K, V, float(scale), causal)
     elif backend == "reference":
         out, exe = _reference_attention(Q, K, V, float(scale), causal), "reference"
     else:
@@ -476,15 +574,16 @@ def _paged_attention_apple_gpu(Q: np.ndarray, K: np.ndarray, V: np.ndarray,
     return out, ("metal_runtime" if all_native else "reference")
 
 
-def _paged_attention_rocm(Q: np.ndarray, K: np.ndarray, V: np.ndarray,
-                          scale: float, causal: bool) -> tuple[np.ndarray, str]:
-    """Run the gathered per-head attention on the compiled ROCm FA-2 WMMA kernel.
+def _paged_attention_rocm(
+    Q: np.ndarray, abi: PagedKVBufferABI, token_indices: Sequence[int],
+    scale: float, causal: bool,
+) -> tuple[np.ndarray, str]:
+    """Read stable physical pages, then run the compiled ROCm FA-2 WMMA kernel.
 
-    The gathered ``(num_heads, S, head_dim)`` tensors fold directly onto the
-    forward flash lane's ``[..., S, D]`` contract (leading dims = batch·heads), so
-    a single launch attends all heads — no per-head Python loop like the Apple
-    path. RDNA WMMA is f16/bf16-only (f32 softmax + accumulate internally), so the
-    dense f32 gather is cast to f16 for storage; the returned O is f32.
+    The first HIP launch follows ``abi.page_table`` to gather arbitrary logical
+    tokens. The resulting ``(num_heads,S,head_dim)`` staging tensor then feeds
+    the current FlashAttention ABI. This explicit boundary is intentionally
+    replaceable by a fused paged-attention kernel without changing the cache ABI.
 
     Reports ``native_gpu`` only when the kernel genuinely fired. A host without a
     usable lane (no GPU / tessera-opt) or a shape the WMMA kernel cannot take
@@ -493,39 +592,61 @@ def _paged_attention_rocm(Q: np.ndarray, K: np.ndarray, V: np.ndarray,
     """
     from .. import runtime as rt
 
+    idx = np.asarray(token_indices, dtype=np.int64).reshape(-1)
+
+    def reference() -> np.ndarray:
+        gk, gv = abi.gather(idx)
+        return _reference_attention(
+            Q, np.transpose(gk, (1, 0, 2)), np.transpose(gv, (1, 0, 2)),
+            scale, causal)
+
     head_dim = int(Q.shape[-1])
     # The WMMA kernel needs head_dim a positive multiple of 16 and a usable lane;
     # anything else is a clean demotion to the numpy reference, not an error (the
     # reference is still correct, we just didn't earn the native rung).
     if (head_dim <= 0 or head_dim % 16 != 0
             or not rt._rocm_compiled_flash_attn_available()):
-        return _reference_attention(Q, K, V, scale, causal), "reference"
+        return reference(), "reference"
 
-    q16 = Q.astype(np.float16)
-    k16 = K.astype(np.float16)
-    v16 = V.astype(np.float16)
     try:
+        from ..compiler.emit.rocm_hip import run_paged_kv_cache_read_f32
+        gk = run_paged_kv_cache_read_f32(
+            abi.k_pages, abi.page_table, idx)
+        gv = run_paged_kv_cache_read_f32(
+            abi.v_pages, abi.page_table, idx)
+        K = np.transpose(gk, (1, 0, 2))
+        V = np.transpose(gv, (1, 0, 2))
+        q16 = Q.astype(np.float16)
+        k16 = K.astype(np.float16)
+        v16 = V.astype(np.float16)
         o = rt._rocm_flash_attn_forward_o(q16, k16, v16, float(scale),
                                           1 if causal else 0)
-    except rt._RocmCompiledUnavailable:
+    except (rt._RocmCompiledUnavailable, RuntimeError, OSError,
+            FileNotFoundError, subprocess.CalledProcessError):
         # Lane probed available but couldn't launch here (serialization / driver);
         # fall back rather than fail the paged-attention call.
-        return _reference_attention(Q, K, V, scale, causal), "reference"
+        return reference(), "reference"
     out = np.asarray(o, dtype=np.float32).reshape(Q.shape[0], Q.shape[1], V.shape[-1])
     return out, "native_gpu"
 
 
-def _paged_attention_nvidia(Q: np.ndarray, K: np.ndarray, V: np.ndarray,
-                            scale: float, causal: bool) -> tuple[np.ndarray, str]:
-    """Consume gathered pages with one compiler-emitted CUDA Flash launch."""
+def _paged_attention_nvidia(
+    Q: np.ndarray, abi: PagedKVBufferABI, token_indices: Sequence[int],
+    scale: float, causal: bool,
+) -> tuple[np.ndarray, str]:
+    """Consume physical pages through a device-resident CUDA attention plan."""
+    idx = np.asarray(token_indices, np.int64)
     try:
-        from ..compiler.emit.nvidia_cuda import run_flash_attention_forward
-        # Flash ABI is [B,H,S,D]; the PagedKV consumer has one logical batch.
-        out = run_flash_attention_forward(
-            Q[None], K[None], V[None], scale=float(scale), causal=causal)
+        from ..compiler.emit.nvidia_cuda import run_paged_attention_resident_f32
+        out, _latency_ms = run_paged_attention_resident_f32(
+            Q, abi.k_pages, abi.v_pages, abi.page_table, idx,
+            scale=float(scale), causal=causal)
     except (RuntimeError, OSError, FileNotFoundError):
-        return _reference_attention(Q, K, V, scale, causal), "reference"
-    return np.asarray(out[0], dtype=np.float32), "native_gpu"
+        k, v = abi.gather(idx)
+        return _reference_attention(
+            Q, np.transpose(k, (1, 0, 2)), np.transpose(v, (1, 0, 2)),
+            scale, causal), "reference"
+    return np.asarray(out, dtype=np.float32), "native_gpu"
 
 
 def as_paged_kv_state(cache: Any, *, kind: KVKind | None = None) -> PagedKVState:
@@ -560,7 +681,9 @@ __all__ = [
     "KVGeometry",
     "PageTableEntry",
     "PagedKVState",
+    "PagedKVBufferABI",
     "as_paged_kv_state",
+    "materialize_paged_kv_abi",
     "paged_attention",
     "latent_paged_kv",
     "quantized_tail_paged_kv",

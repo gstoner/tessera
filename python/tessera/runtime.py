@@ -1821,6 +1821,8 @@ _NVIDIA_GEMM_SYMBOLS = {
     "float16": "tessera_nvidia_mma_gemm_f16",
     "bfloat16": "tessera_nvidia_mma_gemm_bf16",
     "float32": "tessera_nvidia_mma_gemm_tf32",
+    "float8_e4m3fn": "tessera_nvidia_mma_gemm_e4m3",
+    "float8_e5m2": "tessera_nvidia_mma_gemm_e5m2",
 }
 
 
@@ -1954,9 +1956,12 @@ def _execute_nvidia_mma_artifact(artifact: RuntimeArtifact, args: Any) -> Any:
     elif a.dtype == np.float32 and b.dtype == np.float32:
         # fp32 storage → tf32-math GEMM (Decision #15a).
         sym, store = _NVIDIA_GEMM_SYMBOLS["float32"], np.float32
+    elif str(a.dtype) in ("float8_e4m3fn", "float8_e5m2") and a.dtype == b.dtype:
+        sym, store = _NVIDIA_GEMM_SYMBOLS[str(a.dtype)], a.dtype
     else:
         raise ValueError(
-            "nvidia_mma executor handles f16/bf16/fp32(tf32-math) storage "
+            "nvidia_mma executor handles f16/bf16/fp32(tf32-math)/"
+            "fp8_e4m3/fp8_e5m2 storage "
             f"(f32 accumulate); got {a.dtype} @ {b.dtype}")
     fn = getattr(lib, sym, None)
     if fn is None:
@@ -2010,7 +2015,19 @@ def _nvidia_mma_gemm_2d(A: Any, B: Any, dtype: str = "bfloat16") -> Any:
     fn = getattr(lib, sym, None) if sym else None
     if fn is None:
         raise RuntimeError(f"shipped GEMM lacks a symbol for dtype {dtype!r}")
-    store = np.float16 if dtype == "float16" else _bfloat16_dtype()
+    store: Any
+    if dtype == "float16":
+        store = np.float16
+    elif dtype == "bfloat16":
+        store = _bfloat16_dtype()
+    elif dtype == "float32":
+        store = np.float32
+    elif dtype in ("float8_e4m3fn", "float8_e5m2"):
+        import ml_dtypes
+        store = (ml_dtypes.float8_e4m3fn if dtype == "float8_e4m3fn"
+                 else ml_dtypes.float8_e5m2)
+    else:
+        raise ValueError(f"unsupported NVIDIA GEMM dtype {dtype!r}")
     if store is None:
         raise RuntimeError("bfloat16 dtype unavailable (ml_dtypes not installed)")
     Ac = np.ascontiguousarray(Aa, store)
@@ -18094,6 +18111,196 @@ def _execute_x86_compiled_deltanet(artifact: RuntimeArtifact, args: Any) -> Any:
     return out.astype(np.result_type(q, k, v), copy=False)
 
 
+def _execute_nvidia_matmul_relu_compiled(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """Execute the canonical sm_120 mma.sync GEMM + ReLU epilogue lane."""
+    import numpy as np
+    from .compiler import fusion_core as fusion
+    from .compiler.emit import candidate as candidates
+    from .compiler.emit import nvidia_cuda as _nvidia_cuda  # noqa: F401
+
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    op = ops[0] if len(ops) == 1 else {}
+    if op.get("op_name") not in (
+        "tessera.matmul_relu", "tessera.fused_epilogue", "matmul_relu"
+    ):
+        raise ValueError(
+            "nvidia_matmul_relu_compiled handles exactly one matmul_relu op")
+    names = [str(n) for n in op.get("operands", [])]
+    if len(names) not in (2, 3):
+        raise ValueError("NVIDIA matmul_relu requires A, B, and optional bias")
+    values = _bind_launch_args(args, list(metadata.get("arg_names") or []))
+    a, b = (_as_numpy(values[n]) for n in names[:2])
+    bias = _as_numpy(values[names[2]]) if len(names) == 3 else None
+    if a.ndim != 2 or b.ndim != 2 or a.shape[1] != b.shape[0]:
+        raise ValueError("NVIDIA matmul_relu requires compatible rank-2 operands")
+    if bias is not None and bias.shape != (b.shape[1],):
+        raise ValueError("NVIDIA matmul_relu bias must have shape [N]")
+    storage = str((op.get("kwargs") or {}).get("storage_dtype", "f16"))
+    supported = ("f16", "bf16", "tf32", "fp8_e4m3", "fp8_e5m2")
+    if storage not in supported:
+        raise ValueError(
+            "NVIDIA matmul_relu storage_dtype must be one of "
+            + ", ".join(supported))
+    if any(x.dtype.kind not in "fc" and str(x.dtype) != "bfloat16"
+           for x in (a, b)):
+        raise ValueError("NVIDIA matmul_relu requires floating-point operands")
+    if storage in ("f16", "bf16"):
+        epilogue = (("bias", "relu") if bias is not None else ("relu",))
+        region = fusion.FusedRegion(epilogue=epilogue, storage_dtype=storage)
+        force = ("nvidia_mma_fused" if storage == "f16"
+                 else "nvidia_mma_fused_bf16")
+        out, tag = candidates.run_arbitrated(
+            region, candidates.OP_FUSED_REGION, "nvidia", a, b, bias,
+            force=force, verify=False)
+        if tag != "nvidia_cuda":
+            raise RuntimeError(
+                "compiler-generated NVIDIA matmul_relu declined CUDA execution")
+        return np.asarray(out)
+
+    # TF32/FP8 breadth uses the shipped dtype-specific tensor-core GEMM followed
+    # by a generated CUDA ReLU epilogue. It is a truthful two-launch path, not a
+    # single-kernel fusion claim.
+    aa, bb = a, b
+    if storage.startswith("fp8_"):
+        import ml_dtypes
+        dtype = (ml_dtypes.float8_e4m3fn if storage == "fp8_e4m3"
+                 else ml_dtypes.float8_e5m2)
+        aa, bb = np.asarray(a, dtype=dtype), np.asarray(b, dtype=dtype)
+    dtype_key = {"tf32": "float32", "fp8_e4m3": "float8_e4m3fn",
+                 "fp8_e5m2": "float8_e5m2"}[storage]
+    from .compiler.emit.nvidia_cuda import run_matmul_epilogue_resident
+    out, _latency_ms = run_matmul_epilogue_resident(
+        aa, bb, bias, dtype_key, "relu")
+    return out
+
+
+def _execute_nvidia_matmul_softmax_compiled(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """Run a guarded sm_120 GEMM followed by generated row-softmax."""
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    op = ops[0] if len(ops) == 1 else {}
+    kw = op.get("kwargs") or {}
+    if (op.get("op_name") != "tessera.fused_epilogue"
+            or kw.get("activation") != "softmax"):
+        raise ValueError(
+            "nvidia_matmul_softmax_compiled requires one fused_epilogue "
+            "artifact with activation=softmax")
+    names = [str(n) for n in op.get("operands", [])]
+    if len(names) != 2:
+        raise ValueError("NVIDIA matmul_softmax requires exactly A and B")
+    values = _bind_launch_args(args, list(metadata.get("arg_names") or []))
+    a, b = (_as_numpy(values[n]) for n in names)
+    if a.dtype != b.dtype:
+        raise ValueError("NVIDIA matmul_softmax operands must share storage dtype")
+    dtype_key = {"float16": "float16", "bfloat16": "bfloat16",
+                 "float32": "float32", "float8_e4m3fn": "float8_e4m3fn",
+                 "float8_e5m2": "float8_e5m2"}.get(str(a.dtype))
+    if dtype_key is None:
+        raise ValueError(f"unsupported NVIDIA matmul_softmax dtype {a.dtype}")
+    from .compiler.emit.nvidia_cuda import run_matmul_softmax_resident
+    out, _latency_ms = run_matmul_softmax_resident(a, b, dtype_key)
+    return out
+
+
+def _execute_nvidia_kv_cache_compiled(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """Execute a guarded logical-page to physical-page CUDA cache read."""
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    op = ops[0] if len(ops) == 1 else {}
+    if op.get("op_name") != "tessera.kv_cache.read":
+        raise ValueError(
+            "nvidia_kv_cache_compiled handles exactly one kv_cache.read op")
+    names = [str(n) for n in op.get("operands", [])]
+    if len(names) != 2:
+        raise ValueError("NVIDIA paged KV read requires pages and page_table")
+    values = _bind_launch_args(args, list(metadata.get("arg_names") or []))
+    kw = op.get("kwargs") or {}
+    if "start" not in kw or "end" not in kw:
+        raise ValueError("NVIDIA paged KV read requires explicit start and end")
+    from .compiler.emit.nvidia_cuda import run_paged_kv_cache_read_f32
+    return run_paged_kv_cache_read_f32(
+        _as_numpy(values[names[0]]), _as_numpy(values[names[1]]),
+        int(kw["start"]), int(kw["end"]))
+
+
+_nvidia_conv2d_route_cache: dict[tuple[Any, ...], str] = {}
+_nvidia_conv2d_route_evidence: dict[tuple[Any, ...], dict[str, float]] = {}
+
+
+def _execute_nvidia_conv2d_compiled(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """Execute guarded direct NHWC/HWIO CUDA convolution."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    op = ops[0] if len(ops) == 1 else {}
+    if op.get("op_name") not in ("tessera.conv2d", "tessera.conv2d_nhwc"):
+        raise ValueError("nvidia_conv2d_compiled handles exactly one conv2d op")
+    names = [str(n) for n in op.get("operands", [])]
+    if len(names) not in (2, 3):
+        raise ValueError("NVIDIA conv2d requires input, weight, and optional bias")
+    values = _bind_launch_args(args, list(metadata.get("arg_names") or []))
+    kw = op.get("kwargs") or {}
+    if int(kw.get("groups", 1)) != 1:
+        raise ValueError("NVIDIA direct conv2d baseline requires groups=1")
+
+    def pair(value: Any, name: str) -> tuple[int, int]:
+        if isinstance(value, (tuple, list)) and len(value) == 2:
+            return int(value[0]), int(value[1])
+        if isinstance(value, int):
+            return value, value
+        raise ValueError(f"NVIDIA conv2d {name} must be an int or pair")
+
+    x, weight = _as_numpy(values[names[0]]), _as_numpy(values[names[1]])
+    bias = _as_numpy(values[names[2]]) if len(names) == 3 else None
+    stride = pair(kw.get("stride", kw.get("strides", 1)), "stride")
+    padding = pair(kw.get("padding", kw.get("pads", 0)), "padding")
+    dilation = pair(kw.get("dilation", kw.get("dilations", 1)), "dilation")
+    forced = kw.get("route")
+    routes = ("direct", "shared", "im2col_tf32")
+    if forced is not None and forced not in routes:
+        raise ValueError(f"unknown NVIDIA conv2d route {forced!r}")
+    from .compiler.emit.nvidia_cuda import run_conv2d_resident_candidate
+    if forced is not None:
+        return run_conv2d_resident_candidate(
+            x, weight, bias, route=str(forced), stride=stride,
+            padding=padding, dilation=dilation)[0]
+    key = (tuple(x.shape), tuple(weight.shape), stride, padding, dilation,
+           bias is not None)
+    route = _nvidia_conv2d_route_cache.get(key)
+    if route is None:
+        outputs: dict[str, Any] = {}
+        timings: dict[str, float] = {}
+        for candidate in routes:
+            out, latency = run_conv2d_resident_candidate(
+                x, weight, bias, route=candidate, stride=stride,
+                padding=padding, dilation=dilation, reps=10, warmup=3)
+            outputs[candidate], timings[candidate] = out, latency
+        oracle = outputs["direct"]
+        valid = {
+            name: latency for name, latency in timings.items()
+            if np.allclose(outputs[name], oracle, rtol=0,
+                           atol=2e-2 if name == "im2col_tf32" else 2e-5)
+        }
+        if not valid:
+            raise RuntimeError("no numerically valid NVIDIA conv2d route")
+        route = min(valid, key=valid.__getitem__)
+        _nvidia_conv2d_route_cache[key] = route
+        _nvidia_conv2d_route_evidence[key] = timings
+        return outputs[route]
+    return run_conv2d_resident_candidate(
+        x, weight, bias, route=route, stride=stride,
+        padding=padding, dilation=dilation, reps=1, warmup=0)[0]
+
+
 def _executor_table():
     # Lazily resolved: these symbols are defined later in this file.
     return {
@@ -18135,6 +18342,10 @@ def _executor_table():
         "rocm_linear_attn_compiled": _execute_rocm_compiled_linear_attn,
         "rocm_dspark_draft_block_compiled": _execute_rocm_dspark_draft_block_reference,
         "nvidia_softmax_compiled": _execute_nvidia_compiled_softmax,
+        "nvidia_matmul_relu_compiled": _execute_nvidia_matmul_relu_compiled,
+        "nvidia_matmul_softmax_compiled": _execute_nvidia_matmul_softmax_compiled,
+        "nvidia_kv_cache_compiled": _execute_nvidia_kv_cache_compiled,
+        "nvidia_conv2d_compiled": _execute_nvidia_conv2d_compiled,
         "nvidia_norm_compiled": _execute_nvidia_compiled_norm,
         "nvidia_reduce_compiled": _execute_nvidia_compiled_reduce,
         "nvidia_control_flow_compiled": _execute_nvidia_control_flow_compiled,
@@ -22387,6 +22598,7 @@ def nvidia_ssm_replay_state_handle(
     capacity: int = 64,
     spec_window: int = 0,
     dtype: str = "fp32",
+    async_slots: int = 3,
 ) -> Any:
     """Build the CUDA ReplaySSM output-only decode handle.
 
@@ -22406,7 +22618,8 @@ def nvidia_ssm_replay_state_handle(
             super().__post_init__()
             if self._scalar_a:
                 try:
-                    self._device = NvidiaReplayDeviceState(self._s0, self._a1d, self.capacity)
+                    self._device = NvidiaReplayDeviceState(
+                        self._s0, self._a1d, self.capacity, async_slots)
                 except (FileNotFoundError, OSError, RuntimeError, subprocess.CalledProcessError):
                     self._device = None
 
@@ -22443,7 +22656,7 @@ def nvidia_ssm_replay_state_handle(
                 try:
                     self._device.close()
                     self._device = NvidiaReplayDeviceState(
-                        self._s0, self._a1d, self.capacity)
+                        self._s0, self._a1d, self.capacity, async_slots)
                 except (FileNotFoundError, OSError, RuntimeError,
                         subprocess.CalledProcessError):
                     self._device = None

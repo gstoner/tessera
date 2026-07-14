@@ -159,16 +159,14 @@ def test_apple_gpu_fused_chain_is_marked_fused():
     assert cell.runtime_execute == cm.PROOF_COMPLETE
 
 
-def test_compose_only_chain_is_marked_compose():
-    """matmul_relu on every target should be marked as a compose, never a
-    fuse — no backend ships a matmul+relu fusion pass today."""
+def test_matmul_relu_notes_match_target_implementation():
+    """sm_120 owns a fused accumulator epilogue; other targets compose."""
     for cell in cm.build_matrix():
         if cell.op != "matmul_relu":
             continue
-        assert any("composes" in n for n in cell.notes), (
-            f"{cell.target}: matmul_relu should be marked compose-only, "
-            f"got notes={cell.notes}"
-        )
+        expected = "fused" if cell.target == "nvidia_sm120" else "composes"
+        assert any(expected in n for n in cell.notes), (
+            f"{cell.target}: expected {expected!r}, got notes={cell.notes}")
 
 
 def test_rows_use_exact_target_grain():
@@ -216,10 +214,15 @@ def test_runtime_and_numerical_proof_are_exact_target_specific():
 
 def test_composite_first_failure_checks_every_component():
     cell = next(c for c in cm.build_matrix()
-                if c.op == "matmul_relu" and c.target == "nvidia_sm120")
+                if c.op == "matmul_relu" and c.target == "nvidia_sm100")
     assert cell.first_failing_gate == "backend_compile"
     assert cell.backend_compile == cm.PROOF_MISSING
     assert "matmul,relu" in cell.first_failing_gate_detail
+
+    sm120 = next(c for c in cm.build_matrix()
+                 if c.op == "matmul_relu" and c.target == "nvidia_sm120")
+    assert sm120.overall == cm.PROOF_COMPLETE
+    assert sm120.first_failing_gate is None
 
 
 def test_complete_cells_have_no_failure_and_open_cells_name_first_rung():

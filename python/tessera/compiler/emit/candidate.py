@@ -132,6 +132,9 @@ class Candidate(ABC):
     #: a half-precision lead candidate (f16 WMMA) sets a looser value so its
     #: rounding is not misread as a miscompile. ``None`` = the oracle default.
     accuracy_atol: float | None = None
+    #: Optional relative precision budget for numerically amplifying regions
+    #: such as gated matmul. Exact/f32 candidates leave this unset.
+    accuracy_rtol: float | None = None
 
     def available(self) -> bool:
         """Whether this candidate can execute here *right now* (device/toolchain/
@@ -214,6 +217,7 @@ def _as_runner(candidate: Candidate) -> Any:
     class _CandidateRunner(KernelRunner):
         target = f"{_PROBE_NS}::{candidate.target}::{candidate.name}"
         accuracy_atol = candidate.accuracy_atol
+        accuracy_rtol = candidate.accuracy_rtol
         last_execution: str | None = None
 
         def run_fused_region(self, region, *a, **k):

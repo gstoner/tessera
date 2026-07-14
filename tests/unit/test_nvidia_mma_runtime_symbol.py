@@ -120,3 +120,45 @@ def test_shipped_nvidia_mma_gemm_matches_numpy(dt):
         tol = base * (5 if K > 256 else 1)
         assert maxerr < tol, f"{dt} GEMM{(M,N,K)} maxerr={maxerr} >= {tol}"
     assert not skipped_all
+
+
+@pytest.mark.parametrize("dt", _DTYPES)
+def test_runtime_launch_reaches_every_declared_nvidia_mma_dtype(dt):
+    """The public execution row must expose every dtype the shipped ABI claims."""
+    from tessera import runtime as rt
+    _load_lib()
+    a, b, ref = _case(dt, np.random.default_rng(1200 + len(dt)), 17, 9, 31)
+    artifact = rt.RuntimeArtifact(metadata={
+        "target": "nvidia_sm120", "compiler_path": "nvidia_mma",
+        "executable": True, "execution_kind": "native_gpu",
+        "arg_names": ["a", "b"], "output_name": "d",
+        "ops": [{"op_name": "tessera.matmul", "result": "d",
+                 "operands": ["a", "b"], "kwargs": {}}],
+    })
+    result = rt.launch(artifact, (a, b))
+    assert result["ok"] is True, result.get("reason")
+    tol = {"bf16": .2, "f16": .05, "tf32": .01,
+           "e4m3": 1.0, "e5m2": 2.0}[dt]
+    np.testing.assert_allclose(result["output"], ref, rtol=0, atol=tol)
+
+
+@pytest.mark.parametrize("dt", _DTYPES)
+def test_device_resident_gemm_stream_and_event_abi(dt):
+    """No H2D/D2H occurs between the timed resident GEMM launches."""
+    from tessera.compiler.emit.nvidia_cuda import NvidiaDeviceSession
+    _load_lib()
+    a, b, ref = _case(dt, np.random.default_rng(1300 + len(dt)), 19, 13, 29)
+    dtype_key = {"bf16": "bfloat16", "f16": "float16", "tf32": "float32",
+                 "e4m3": "float8_e4m3fn", "e5m2": "float8_e5m2"}[dt]
+    with NvidiaDeviceSession() as session:
+        da, db = session.upload(a), session.upload(b)
+        out = session.empty((19, 13), np.float32)
+        def launch():
+            session.gemm(da, db, out, dtype_key)
+        launch()
+        latency = session.measure(launch, reps=8, warmup=2)
+        got = out.numpy()
+    assert latency > 0
+    tol = {"bf16": .2, "f16": .05, "tf32": .01,
+           "e4m3": 1.0, "e5m2": 2.0}[dt]
+    np.testing.assert_allclose(got, ref, rtol=0, atol=tol)

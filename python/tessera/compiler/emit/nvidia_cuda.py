@@ -1315,6 +1315,223 @@ def run_ssm_replay_decode_f32(delta: Any, x: Any, b: Any, s0: Any, c: Any,
     return out
 
 
+_paged_kv_artifact: str | None = None
+
+
+def _synthesize_paged_kv_read_cuda() -> str:
+    """Paged KV gather: logical page table -> physical CUDA page storage."""
+    return r'''#include <cuda_runtime.h>
+__global__ void kvread(const float*pages,const int*table,float*out,long start,long tokens,int page_size,int H,int D){long z=(long)blockIdx.x*blockDim.x+threadIdx.x,n=tokens*(long)H*D;if(z>=n)return;int d=z%D,h=(z/D)%H;long t=z/(D*H),logical=start+t,lp=logical/page_size,off=logical%page_size,pp=table[lp];out[z]=pages[(((long)pp*page_size+off)*H+h)*D+d];}
+extern "C" int tessera_nvidia_paged_kv_read_f32(const float*hp,const int*ht,float*ho,int P,int LP,int PS,int H,int D,long start,long end){if(!hp||!ht||!ho||P<1||LP<1||PS<1||H<1||D<1||start<0||end<=start||end>(long)LP*PS)return 2;size_t pb=(size_t)P*PS*H*D*4,tb=(size_t)LP*4,ob=(size_t)(end-start)*H*D*4;float *p=0,*o=0;int*t=0;if(cudaMalloc(&p,pb)||cudaMalloc(&t,tb)||cudaMalloc(&o,ob))return 3;if(cudaMemcpy(p,hp,pb,cudaMemcpyHostToDevice)||cudaMemcpy(t,ht,tb,cudaMemcpyHostToDevice)){cudaFree(p);cudaFree(t);cudaFree(o);return 3;}long n=(end-start)*(long)H*D;kvread<<<(n+255)/256,256>>>(p,t,o,start,end-start,PS,H,D);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(ho,o,ob,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(p);cudaFree(t);cudaFree(o);return ok?1:3;}'''
+
+
+def run_paged_kv_cache_read_f32(
+    pages: Any, page_table: Any, start: int, end: int
+) -> Any:
+    """Gather ``[start,end)`` from physical paged f32 KV storage on CUDA."""
+    import numpy as np
+    p = np.ascontiguousarray(pages)
+    table = np.ascontiguousarray(page_table, dtype=np.int32)
+    if p.dtype != np.float32 or p.ndim != 4:
+        raise ValueError("NVIDIA paged KV pages must be rank-4 f32 [P,L,H,D]")
+    if table.ndim != 1 or table.size < 1:
+        raise ValueError("NVIDIA paged KV page_table must be non-empty rank-1")
+    P, page_size, H, D = (int(x) for x in p.shape)
+    if np.any(table < 0) or np.any(table >= P):
+        raise ValueError("NVIDIA paged KV page_table contains an invalid physical page")
+    if start < 0 or end <= start or end > table.size * page_size:
+        raise ValueError("NVIDIA paged KV read bounds exceed the logical cache")
+    global _paged_kv_artifact
+    if _paged_kv_artifact is None:
+        _paged_kv_artifact = _nvidia_cuda_compile_fn(KernelSource(
+            source=_synthesize_paged_kv_read_cuda(),
+            entry="tessera_nvidia_paged_kv_read_f32", lang=_LANG,
+            spec=SpecPolicy.DYNAMIC, shape_key=("paged-kv-read-f32",)))
+    out = np.empty((end - start, H, D), dtype=np.float32)
+    fn = getattr(_load_lib(_paged_kv_artifact),
+                 "tessera_nvidia_paged_kv_read_f32")
+    fn.restype = ctypes.c_int
+    fn.argtypes = ([ctypes.c_void_p] * 3 + [ctypes.c_int] * 5
+                   + [ctypes.c_long] * 2)
+    rc = fn(_ptr(p), _ptr(table), _ptr(out), P, int(table.size), page_size,
+            H, D, start, end)
+    if rc != 1:
+        raise RuntimeError(f"NVIDIA paged KV read launch failed (rc={rc})")
+    return out
+
+
+_conv2d_artifact: str | None = None
+_relu_bias_artifact: str | None = None
+_gated_epilogue_artifacts: dict[str, str] = {}
+_fused_epilogue_artifacts: dict[str, str] = {}
+
+
+def run_relu_bias_f32(x: Any, bias: Any = None) -> Any:
+    """CUDA ReLU epilogue over an f32 matrix, with optional column bias."""
+    import numpy as np
+    xx = np.ascontiguousarray(x, dtype=np.float32)
+    if xx.ndim != 2:
+        raise ValueError("NVIDIA ReLU epilogue requires a rank-2 matrix")
+    bb = None if bias is None else np.ascontiguousarray(bias, dtype=np.float32)
+    if bb is not None and bb.shape != (xx.shape[1],):
+        raise ValueError("NVIDIA ReLU epilogue bias must have shape [N]")
+    source = r'''#include <cuda_runtime.h>
+__global__ void k(const float*x,const float*b,float*y,long n,int N){long i=(long)blockIdx.x*blockDim.x+threadIdx.x;if(i<n){float v=x[i]+(b?b[i%N]:0.f);y[i]=v>0.f?v:0.f;}}
+extern "C" int tessera_nvidia_relu_bias_f32(const float*hx,const float*hb,float*hy,long n,int N){if(!hx||!hy||n<1||N<1)return 2;size_t z=(size_t)n*4,bz=(size_t)N*4;float *x=0,*b=0,*y=0;if(cudaMalloc(&x,z)||cudaMalloc(&y,z))return 3;if(cudaMemcpy(x,hx,z,cudaMemcpyHostToDevice))return 3;if(hb&&(cudaMalloc(&b,bz)||cudaMemcpy(b,hb,bz,cudaMemcpyHostToDevice)))return 3;k<<<(n+255)/256,256>>>(x,b,y,n,N);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(hy,y,z,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(x);cudaFree(y);if(b)cudaFree(b);return ok?1:3;}'''
+    global _relu_bias_artifact
+    if _relu_bias_artifact is None:
+        _relu_bias_artifact = _nvidia_cuda_compile_fn(KernelSource(
+            source=source, entry="tessera_nvidia_relu_bias_f32", lang=_LANG,
+            spec=SpecPolicy.DYNAMIC, shape_key=("relu-bias-f32",)))
+    out = np.empty_like(xx)
+    fn = getattr(_load_lib(_relu_bias_artifact), "tessera_nvidia_relu_bias_f32")
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p] * 3 + [ctypes.c_long, ctypes.c_int]
+    if fn(_ptr(xx), _ptr(bb), _ptr(out), xx.size, xx.shape[1]) != 1:
+        raise RuntimeError("NVIDIA ReLU epilogue launch failed")
+    return out
+
+
+def run_gated_epilogue_f32(gate: Any, up: Any, activation: str) -> Any:
+    """Apply ``activation(gate) * up`` in a generated f32 CUDA epilogue."""
+    import numpy as np
+    from tessera.compiler.emit._fused_scalar_body import pointwise_snippet
+    gg = np.ascontiguousarray(gate, dtype=np.float32)
+    uu = np.ascontiguousarray(up, dtype=np.float32)
+    if gg.ndim != 2 or gg.shape != uu.shape:
+        raise ValueError("NVIDIA gated epilogue requires equal rank-2 matrices")
+    snippet = pointwise_snippet(activation, "v")
+    entry = f"tessera_nvidia_gated_epilogue_{activation}"
+    source = (
+        "#include <cuda_runtime.h>\n#include <math.h>\n"
+        "__global__ void k(const float*g,const float*u,float*o,long n){"
+        "long i=(long)blockIdx.x*blockDim.x+threadIdx.x;if(i<n){float v=g[i];"
+        f"{snippet}o[i]=v*u[i];}}}}\n"
+        f'extern "C" int {entry}(const float*hg,const float*hu,float*ho,long n){{'
+        "if(!hg||!hu||!ho||n<1)return 2;size_t z=(size_t)n*4;"
+        "float *g=0,*u=0,*o=0;if(cudaMalloc(&g,z)||cudaMalloc(&u,z)||cudaMalloc(&o,z))return 3;"
+        "if(cudaMemcpy(g,hg,z,cudaMemcpyHostToDevice)||cudaMemcpy(u,hu,z,cudaMemcpyHostToDevice))return 3;"
+        "k<<<(n+255)/256,256>>>(g,u,o,n);int ok=cudaDeviceSynchronize()==cudaSuccess&&"
+        "cudaMemcpy(ho,o,z,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(g);cudaFree(u);cudaFree(o);"
+        "return ok?1:3;}"
+    )
+    artifact = _gated_epilogue_artifacts.get(activation)
+    if artifact is None:
+        artifact = _nvidia_cuda_compile_fn(KernelSource(
+            source=source, entry=entry, lang=_LANG, spec=SpecPolicy.DYNAMIC,
+            shape_key=(f"gated-epilogue-{activation}",)))
+        _gated_epilogue_artifacts[activation] = artifact
+    out = np.empty_like(gg)
+    fn = getattr(_load_lib(artifact), entry)
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p] * 3 + [ctypes.c_long]
+    if fn(_ptr(gg), _ptr(uu), _ptr(out), gg.size) != 1:
+        raise RuntimeError("NVIDIA gated CUDA epilogue launch failed")
+    return out
+
+
+def run_fused_epilogue_f32(
+    x: Any, bias: Any = None, activation: str | None = None,
+) -> Any:
+    """Apply optional column bias and activation in one generated CUDA stage."""
+    import numpy as np
+    from tessera.compiler.emit._fused_scalar_body import pointwise_snippet
+    xx = np.ascontiguousarray(x, dtype=np.float32)
+    bb = None if bias is None else np.ascontiguousarray(bias, dtype=np.float32)
+    if xx.ndim != 2:
+        raise ValueError("NVIDIA fused epilogue requires a rank-2 matrix")
+    if bb is not None and bb.shape != (xx.shape[1],):
+        raise ValueError("NVIDIA fused epilogue bias must have shape [N]")
+    if activation is None and bb is None:
+        raise ValueError("NVIDIA fused epilogue requires bias or activation")
+    snippet = ("" if activation is None
+               else pointwise_snippet(activation, "v"))
+    suffix = activation or "identity"
+    entry = f"tessera_nvidia_fused_epilogue_{suffix}"
+    source = (
+        "#include <cuda_runtime.h>\n#include <math.h>\n"
+        "__global__ void k(const float*x,const float*b,float*o,long n,int N){"
+        "long i=(long)blockIdx.x*blockDim.x+threadIdx.x;if(i<n){"
+        "float v=x[i]+(b?b[i%N]:0.f);"
+        f"{snippet}o[i]=v;}}}}\n"
+        f'extern "C" int {entry}(const float*hx,const float*hb,float*ho,long n,int N){{'
+        "if(!hx||!ho||n<1||N<1)return 2;size_t z=(size_t)n*4,bz=(size_t)N*4;"
+        "float *x=0,*b=0,*o=0;if(cudaMalloc(&x,z)||cudaMalloc(&o,z))return 3;"
+        "if(cudaMemcpy(x,hx,z,cudaMemcpyHostToDevice))return 3;"
+        "if(hb&&(cudaMalloc(&b,bz)||cudaMemcpy(b,hb,bz,cudaMemcpyHostToDevice)))return 3;"
+        "k<<<(n+255)/256,256>>>(x,b,o,n,N);int ok=cudaDeviceSynchronize()==cudaSuccess&&"
+        "cudaMemcpy(ho,o,z,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(x);cudaFree(o);"
+        "if(b)cudaFree(b);return ok?1:3;}"
+    )
+    artifact = _fused_epilogue_artifacts.get(suffix)
+    if artifact is None:
+        artifact = _nvidia_cuda_compile_fn(KernelSource(
+            source=source, entry=entry, lang=_LANG, spec=SpecPolicy.DYNAMIC,
+            shape_key=(f"fused-epilogue-{suffix}",)))
+        _fused_epilogue_artifacts[suffix] = artifact
+    out = np.empty_like(xx)
+    fn = getattr(_load_lib(artifact), entry)
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p] * 3 + [ctypes.c_long, ctypes.c_int]
+    if fn(_ptr(xx), _ptr(bb), _ptr(out), xx.size, xx.shape[1]) != 1:
+        raise RuntimeError("NVIDIA fused CUDA epilogue launch failed")
+    return out
+
+
+def _synthesize_conv2d_nhwc_cuda() -> str:
+    """Guarded direct NHWC x HWIO f32 convolution baseline."""
+    return r'''#include <cuda_runtime.h>
+__global__ void conv(const float*x,const float*w,const float*b,float*y,int B,int IH,int IW,int CI,int KH,int KW,int CO,int OH,int OW,int SH,int SW,int PH,int PW,int DH,int DW){long z=(long)blockIdx.x*blockDim.x+threadIdx.x,n=(long)B*OH*OW*CO;if(z>=n)return;int co=z%CO,ow=(z/CO)%OW,oh=(z/(CO*OW))%OH,bi=z/(CO*OW*OH);float v=b?b[co]:0.f;for(int kh=0;kh<KH;kh++){int ih=oh*SH-PH+kh*DH;if(ih<0||ih>=IH)continue;for(int kw=0;kw<KW;kw++){int iw=ow*SW-PW+kw*DW;if(iw<0||iw>=IW)continue;for(int ci=0;ci<CI;ci++)v+=x[((long)bi*IH*IW+ih*IW+iw)*CI+ci]*w[((long)kh*KW*CI+kw*CI+ci)*CO+co];}}y[z]=v;}
+extern "C" int tessera_nvidia_conv2d_nhwc_f32(const float*hx,const float*hw,const float*hb,float*hy,int B,int IH,int IW,int CI,int KH,int KW,int CO,int OH,int OW,int SH,int SW,int PH,int PW,int DH,int DW){if(!hx||!hw||!hy||B<1||IH<1||IW<1||CI<1||KH<1||KW<1||CO<1||OH<1||OW<1)return 2;size_t xb=(size_t)B*IH*IW*CI*4,wb=(size_t)KH*KW*CI*CO*4,yb=(size_t)B*OH*OW*CO*4,bb=(size_t)CO*4;float *x=0,*w=0,*b=0,*y=0;if(cudaMalloc(&x,xb)||cudaMalloc(&w,wb)||cudaMalloc(&y,yb))return 3;if(cudaMemcpy(x,hx,xb,cudaMemcpyHostToDevice)||cudaMemcpy(w,hw,wb,cudaMemcpyHostToDevice)){cudaFree(x);cudaFree(w);cudaFree(y);return 3;}if(hb&&(cudaMalloc(&b,bb)||cudaMemcpy(b,hb,bb,cudaMemcpyHostToDevice))){cudaFree(x);cudaFree(w);cudaFree(y);if(b)cudaFree(b);return 3;}long n=(long)B*OH*OW*CO;conv<<<(n+255)/256,256>>>(x,w,b,y,B,IH,IW,CI,KH,KW,CO,OH,OW,SH,SW,PH,PW,DH,DW);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(hy,y,yb,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(x);cudaFree(w);cudaFree(y);if(b)cudaFree(b);return ok?1:3;}'''
+
+
+def run_conv2d_nhwc_f32(
+    x: Any, weight: Any, bias: Any = None, *,
+    stride: tuple[int, int] = (1, 1),
+    padding: tuple[int, int] = (0, 0),
+    dilation: tuple[int, int] = (1, 1),
+) -> Any:
+    """Execute guarded direct f32 NHWC/HWIO convolution on NVIDIA CUDA."""
+    import numpy as np
+    xx = np.ascontiguousarray(x)
+    ww = np.ascontiguousarray(weight)
+    bb = None if bias is None else np.ascontiguousarray(bias)
+    if xx.dtype != np.float32 or ww.dtype != np.float32 or (
+            bb is not None and bb.dtype != np.float32):
+        raise ValueError("NVIDIA conv2d baseline requires f32 storage")
+    if xx.ndim != 4 or ww.ndim != 4:
+        raise ValueError("NVIDIA conv2d requires NHWC input and HWIO weight")
+    B, IH, IW, CI = (int(v) for v in xx.shape)
+    KH, KW, WCI, CO = (int(v) for v in ww.shape)
+    if CI != WCI:
+        raise ValueError("NVIDIA conv2d input channels must match HWIO weight")
+    if bb is not None and bb.shape != (CO,):
+        raise ValueError("NVIDIA conv2d bias must have shape [Cout]")
+    SH, SW = stride; PH, PW = padding; DH, DW = dilation
+    if min(SH, SW, DH, DW) < 1 or min(PH, PW) < 0:
+        raise ValueError("NVIDIA conv2d stride/dilation must be positive and padding nonnegative")
+    OH = (IH + 2 * PH - DH * (KH - 1) - 1) // SH + 1
+    OW = (IW + 2 * PW - DW * (KW - 1) - 1) // SW + 1
+    if OH < 1 or OW < 1:
+        raise ValueError("NVIDIA conv2d kernel exceeds the padded input")
+    global _conv2d_artifact
+    if _conv2d_artifact is None:
+        _conv2d_artifact = _nvidia_cuda_compile_fn(KernelSource(
+            source=_synthesize_conv2d_nhwc_cuda(),
+            entry="tessera_nvidia_conv2d_nhwc_f32", lang=_LANG,
+            spec=SpecPolicy.DYNAMIC, shape_key=("conv2d-nhwc-f32",)))
+    out = np.empty((B, OH, OW, CO), np.float32)
+    fn = getattr(_load_lib(_conv2d_artifact),
+                 "tessera_nvidia_conv2d_nhwc_f32")
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p] * 4 + [ctypes.c_int] * 15
+    rc = fn(_ptr(xx), _ptr(ww), _ptr(bb), _ptr(out), B, IH, IW, CI, KH, KW,
+            CO, OH, OW, SH, SW, PH, PW, DH, DW)
+    if rc != 1:
+        raise RuntimeError(f"NVIDIA conv2d launch failed (rc={rc})")
+    return out
+
+
 _ssm_replay_device_artifact: str | None = None
 
 
@@ -1323,29 +1540,40 @@ def _synthesize_ssm_replay_device_cuda() -> str:
     return r'''#include <cuda_runtime.h>
 #include <math.h>
 #include <stdlib.h>
-struct Q{float*d,*x,*b,*s,*c,*a,*y,*dy,*pd,*px,*pb,*pc,*py;cudaStream_t st;cudaEvent_t ev;int B,D,N,L,pending;};
+#include <string.h>
+struct S{float*pd,*px,*pb,*pc,*py,*dy;cudaEvent_t beg,ev;int state,tokens;};
+struct Q{float*d,*x,*b,*s,*c,*a,*y;cudaStream_t st;S*slots;int B,D,N,L,ns,next;};
 __global__ void out(Q q,int M){int z=blockIdx.x*blockDim.x+threadIdx.x;if(z>=q.B*q.D)return;int bi=z/q.D,di=z%q.D;float t=0,v=0,p=0;for(int i=0;i<M;i++)t+=q.d[((long)i*q.B+bi)*q.D+di]*q.a[di];for(int n=0;n<q.N;n++)v+=q.c[(long)bi*q.N+n]*q.s[((long)bi*q.D+di)*q.N+n];v*=expf(t);for(int i=0;i<M;i++){long k=((long)i*q.B+bi)*q.D+di;p+=q.d[k]*q.a[di];float g=0;for(int n=0;n<q.N;n++)g+=q.c[(long)bi*q.N+n]*q.b[((long)i*q.B+bi)*q.N+n];v+=expf(t-p)*q.d[k]*q.x[k]*g;}q.y[(long)bi*q.D+di]=v;}
 __global__ void fl(Q q,int M){long z=(long)blockIdx.x*blockDim.x+threadIdx.x,n=(long)q.B*q.D*q.N;if(z>=n)return;int ni=z%q.N,di=(z/q.N)%q.D,bi=z/(q.N*q.D);float v=q.s[z];for(int i=0;i<M;i++){long k=((long)i*q.B+bi)*q.D+di;v=expf(q.d[k]*q.a[di])*v+q.d[k]*q.x[k]*q.b[((long)i*q.B+bi)*q.N+ni];}q.s[z]=v;}
-extern "C" int cr(void**o,const float*s,const float*a,int B,int D,int N,int L){Q*q=(Q*)calloc(1,sizeof(Q));if(!q||B<1||D<1||N<1||L<1)return 2;q->B=B;q->D=D;q->N=N;q->L=L;size_t bd=(size_t)L*B*D*4,bn=(size_t)L*B*N*4,st=(size_t)B*D*N*4,c=(size_t)B*N*4,aa=(size_t)D*4,y=(size_t)B*D*4;if(cudaMalloc(&q->d,bd)||cudaMalloc(&q->x,bd)||cudaMalloc(&q->b,bn)||cudaMalloc(&q->s,st)||cudaMalloc(&q->c,c)||cudaMalloc(&q->a,aa)||cudaMalloc(&q->y,y)||cudaMalloc(&q->dy,bd)||cudaHostAlloc(&q->pd,bd,cudaHostAllocDefault)||cudaHostAlloc(&q->px,bd,cudaHostAllocDefault)||cudaHostAlloc(&q->pb,bn,cudaHostAllocDefault)||cudaHostAlloc(&q->pc,bn,cudaHostAllocDefault)||cudaHostAlloc(&q->py,bd,cudaHostAllocDefault)||cudaStreamCreate(&q->st)||cudaEventCreateWithFlags(&q->ev,cudaEventDisableTiming)||cudaMemcpy(q->s,s,st,cudaMemcpyHostToDevice)||cudaMemcpy(q->a,a,aa,cudaMemcpyHostToDevice))return 3;*o=q;return 1;}
+extern "C" int cr(void**o,const float*s,const float*a,int B,int D,int N,int L,int ns){Q*q=(Q*)calloc(1,sizeof(Q));if(!q||B<1||D<1||N<1||L<1||ns<2)return 2;q->B=B;q->D=D;q->N=N;q->L=L;q->ns=ns;q->slots=(S*)calloc(ns,sizeof(S));size_t bd=(size_t)L*B*D*4,bn=(size_t)L*B*N*4,st=(size_t)B*D*N*4,c=(size_t)B*N*4,aa=(size_t)D*4,y=(size_t)B*D*4;if(!q->slots||cudaMalloc(&q->d,bd)||cudaMalloc(&q->x,bd)||cudaMalloc(&q->b,bn)||cudaMalloc(&q->s,st)||cudaMalloc(&q->c,c)||cudaMalloc(&q->a,aa)||cudaMalloc(&q->y,y)||cudaStreamCreate(&q->st)||cudaMemcpy(q->s,s,st,cudaMemcpyHostToDevice)||cudaMemcpy(q->a,a,aa,cudaMemcpyHostToDevice))return 3;for(int i=0;i<ns;i++){S&z=q->slots[i];if(cudaMalloc(&z.dy,bd)||cudaHostAlloc(&z.pd,bd,cudaHostAllocDefault)||cudaHostAlloc(&z.px,bd,cudaHostAllocDefault)||cudaHostAlloc(&z.pb,bn,cudaHostAllocDefault)||cudaHostAlloc(&z.pc,bn,cudaHostAllocDefault)||cudaHostAlloc(&z.py,bd,cudaHostAllocDefault)||cudaEventCreate(&z.beg)||cudaEventCreate(&z.ev))return 3;}*o=q;return 1;}
 extern "C" int ap(void*v,const float*d,const float*x,const float*b,int i){Q*q=(Q*)v;if(!q||i<0||i>=q->L)return 2;size_t bd=(size_t)q->B*q->D*4,bn=(size_t)q->B*q->N*4;return cudaMemcpy(q->d+(size_t)i*q->B*q->D,d,bd,cudaMemcpyHostToDevice)||cudaMemcpy(q->x+(size_t)i*q->B*q->D,x,bd,cudaMemcpyHostToDevice)||cudaMemcpy(q->b+(size_t)i*q->B*q->N,b,bn,cudaMemcpyHostToDevice)?3:1;}
 extern "C" int de(void*v,const float*c,float*y,int M){Q*q=(Q*)v;if(!q||M<1||M>q->L)return 2;if(cudaMemcpy(q->c,c,(size_t)q->B*q->N*4,cudaMemcpyHostToDevice))return 3;out<<<(q->B*q->D+127)/128,128>>>(*q,M);return cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(y,q->y,(size_t)q->B*q->D*4,cudaMemcpyDeviceToHost)==cudaSuccess?1:3;}
 extern "C" int fu(void*v,int M){Q*q=(Q*)v;if(!q||M<1||M>q->L)return 2;long n=(long)q->B*q->D*q->N;fl<<<(n+127)/128,128>>>(*q,M);return cudaDeviceSynchronize()==cudaSuccess?1:3;}
 extern "C" int bl(void*v,const float*d,const float*x,const float*b,const float*c,float*y,int T,int start){Q*q=(Q*)v;if(!q||!d||!x||!b||!c||!y||T<1||start<0||start+T>q->L)return 2;size_t bd=(size_t)q->B*q->D*4,bn=(size_t)q->B*q->N*4,yo=(size_t)q->B*q->D;for(int i=0;i<T;i++){int p=start+i;if(cudaMemcpy(q->d+(size_t)p*q->B*q->D,d+(size_t)i*q->B*q->D,bd,cudaMemcpyHostToDevice)||cudaMemcpy(q->x+(size_t)p*q->B*q->D,x+(size_t)i*q->B*q->D,bd,cudaMemcpyHostToDevice)||cudaMemcpy(q->b+(size_t)p*q->B*q->N,b+(size_t)i*q->B*q->N,bn,cudaMemcpyHostToDevice)||cudaMemcpy(q->c,c+(size_t)i*q->B*q->N,bn,cudaMemcpyHostToDevice))return 3;out<<<(q->B*q->D+127)/128,128>>>(*q,p+1);if(cudaGetLastError()!=cudaSuccess||cudaMemcpy(y+(size_t)i*yo,q->y,bd,cudaMemcpyDeviceToHost)!=cudaSuccess)return 3;}return 1;}
-extern "C" int as(void*v,const float*d,const float*x,const float*b,const float*c,int T,int start){Q*q=(Q*)v;if(!q||q->pending||T<1||start<0||start+T>q->L)return 2;size_t bd=(size_t)q->B*q->D*4,bn=(size_t)q->B*q->N*4,yo=(size_t)q->B*q->D;memcpy(q->pd,d,(size_t)T*bd);memcpy(q->px,x,(size_t)T*bd);memcpy(q->pb,b,(size_t)T*bn);memcpy(q->pc,c,(size_t)T*bn);for(int i=0;i<T;i++){int p=start+i;if(cudaMemcpyAsync(q->d+(size_t)p*yo,q->pd+(size_t)i*yo,bd,cudaMemcpyHostToDevice,q->st)||cudaMemcpyAsync(q->x+(size_t)p*yo,q->px+(size_t)i*yo,bd,cudaMemcpyHostToDevice,q->st)||cudaMemcpyAsync(q->b+(size_t)p*q->B*q->N,q->pb+(size_t)i*q->B*q->N,bn,cudaMemcpyHostToDevice,q->st)||cudaMemcpyAsync(q->c,q->pc+(size_t)i*q->B*q->N,bn,cudaMemcpyHostToDevice,q->st))return 3;out<<<(q->B*q->D+127)/128,128,0,q->st>>>(*q,p+1);if(cudaMemcpyAsync(q->dy+(size_t)i*yo,q->y,bd,cudaMemcpyDeviceToDevice,q->st)||cudaMemcpyAsync(q->py+(size_t)i*yo,q->y,bd,cudaMemcpyDeviceToHost,q->st))return 3;}q->pending=T;return cudaEventRecord(q->ev,q->st)==cudaSuccess?1:3;}
-extern "C" int aw(void*v,float*y,int T){Q*q=(Q*)v;if(!q||!q->pending||T!=q->pending)return 2;if(cudaEventSynchronize(q->ev)!=cudaSuccess)return 3;memcpy(y,q->py,(size_t)T*q->B*q->D*4);q->pending=0;return 1;}
-extern "C" void dl(void*v){Q*q=(Q*)v;if(!q)return;cudaFree(q->d);cudaFree(q->x);cudaFree(q->b);cudaFree(q->s);cudaFree(q->c);cudaFree(q->a);cudaFree(q->y);cudaFree(q->dy);if(q->pd)cudaFreeHost(q->pd);if(q->px)cudaFreeHost(q->px);if(q->pb)cudaFreeHost(q->pb);if(q->pc)cudaFreeHost(q->pc);if(q->py)cudaFreeHost(q->py);if(q->ev)cudaEventDestroy(q->ev);if(q->st)cudaStreamDestroy(q->st);free(q);}'''
+static int take(Q*q){for(int n=0;n<q->ns;n++){int i=(q->next+n)%q->ns;S&z=q->slots[i];if(z.state==2&&cudaEventQuery(z.ev)==cudaSuccess)z.state=0;if(z.state==0){z.state=1;q->next=(i+1)%q->ns;return i;}}return -1;}
+extern "C" int as(void*v,const float*d,const float*x,const float*b,const float*c,int T,int start,int*slot){Q*q=(Q*)v;if(!q||!slot||T<1||start<0||start+T>q->L)return 2;int si=take(q);if(si<0)return 4;S&z=q->slots[si];size_t bd=(size_t)q->B*q->D*4,bn=(size_t)q->B*q->N*4,yo=(size_t)q->B*q->D;memcpy(z.pd,d,(size_t)T*bd);memcpy(z.px,x,(size_t)T*bd);memcpy(z.pb,b,(size_t)T*bn);memcpy(z.pc,c,(size_t)T*bn);if(cudaEventRecord(z.beg,q->st)!=cudaSuccess)return 3;for(int i=0;i<T;i++){int p=start+i;if(cudaMemcpyAsync(q->d+(size_t)p*yo,z.pd+(size_t)i*yo,bd,cudaMemcpyHostToDevice,q->st)||cudaMemcpyAsync(q->x+(size_t)p*yo,z.px+(size_t)i*yo,bd,cudaMemcpyHostToDevice,q->st)||cudaMemcpyAsync(q->b+(size_t)p*q->B*q->N,z.pb+(size_t)i*q->B*q->N,bn,cudaMemcpyHostToDevice,q->st)||cudaMemcpyAsync(q->c,z.pc+(size_t)i*q->B*q->N,bn,cudaMemcpyHostToDevice,q->st))return 3;out<<<(q->B*q->D+127)/128,128,0,q->st>>>(*q,p+1);if(cudaMemcpyAsync(z.dy+(size_t)i*yo,q->y,bd,cudaMemcpyDeviceToDevice,q->st)||cudaMemcpyAsync(z.py+(size_t)i*yo,q->y,bd,cudaMemcpyDeviceToHost,q->st))return 3;}z.tokens=T;if(cudaEventRecord(z.ev,q->st)!=cudaSuccess)return 3;*slot=si;return 1;}
+extern "C" int aw(void*v,int si,float*y,int T){Q*q=(Q*)v;if(!q||si<0||si>=q->ns||!y)return 2;S&z=q->slots[si];if(z.state!=1||T!=z.tokens)return 2;if(cudaEventSynchronize(z.ev)!=cudaSuccess)return 3;memcpy(y,z.py,(size_t)T*q->B*q->D*4);z.state=0;return 1;}
+extern "C" int ew(void*v,int si){Q*q=(Q*)v;if(!q||si<0||si>=q->ns||q->slots[si].state!=1)return 2;return cudaEventSynchronize(q->slots[si].ev)==cudaSuccess?1:3;}
+extern "C" int et(void*v,int si,float*ms){Q*q=(Q*)v;if(!q||si<0||si>=q->ns||q->slots[si].state!=1||!ms)return 2;S&z=q->slots[si];if(cudaEventSynchronize(z.ev)!=cudaSuccess)return 3;return cudaEventElapsedTime(ms,z.beg,z.ev)==cudaSuccess?1:3;}
+extern "C" int ws(void*v,int si,void*stream){Q*q=(Q*)v;if(!q||si<0||si>=q->ns||q->slots[si].state!=1||!stream)return 2;return cudaStreamWaitEvent((cudaStream_t)stream,q->slots[si].ev,0)==cudaSuccess?1:3;}
+extern "C" int rs(void*v,int si,void*stream){Q*q=(Q*)v;if(!q||si<0||si>=q->ns||q->slots[si].state!=1)return 2;S&z=q->slots[si];cudaStream_t st=stream?(cudaStream_t)stream:q->st;if(cudaEventRecord(z.ev,st)!=cudaSuccess)return 3;z.state=2;return 1;}
+extern "C" void* dp(void*v,int si){Q*q=(Q*)v;if(!q||si<0||si>=q->ns||q->slots[si].state!=1)return 0;return q->slots[si].dy;}
+extern "C" void* ps(void*v){Q*q=(Q*)v;return q?(void*)q->st:0;}
+extern "C" void dl(void*v){Q*q=(Q*)v;if(!q)return;cudaStreamSynchronize(q->st);cudaFree(q->d);cudaFree(q->x);cudaFree(q->b);cudaFree(q->s);cudaFree(q->c);cudaFree(q->a);cudaFree(q->y);for(int i=0;i<q->ns;i++){S&z=q->slots[i];if(z.state&&z.ev)cudaEventSynchronize(z.ev);if(z.dy)cudaFree(z.dy);if(z.pd)cudaFreeHost(z.pd);if(z.px)cudaFreeHost(z.px);if(z.pb)cudaFreeHost(z.pb);if(z.pc)cudaFreeHost(z.pc);if(z.py)cudaFreeHost(z.py);if(z.beg)cudaEventDestroy(z.beg);if(z.ev)cudaEventDestroy(z.ev);}free(q->slots);if(q->st)cudaStreamDestroy(q->st);free(q);}'''
 
 
 class NvidiaReplayDeviceState:
     """CUDA-owned S0 and replay ring; only current token inputs cross PCIe."""
-    def __init__(self, s0: Any, a: Any, capacity: int):
+    def __init__(self, s0: Any, a: Any, capacity: int, async_slots: int = 3):
         import numpy as np
         global _ssm_replay_device_artifact
         s0=np.ascontiguousarray(s0,np.float32); a=np.ascontiguousarray(a,np.float32)
         self.B,self.D,self.N=s0.shape; self.capacity=capacity
+        if async_slots < 2: raise ValueError("ReplaySSM async ring requires at least two slots")
         if _ssm_replay_device_artifact is None: _ssm_replay_device_artifact=_nvidia_cuda_compile_fn(KernelSource(source=_synthesize_ssm_replay_device_cuda(),entry="cr",lang=_LANG,spec=SpecPolicy.DYNAMIC,shape_key=("ssm-replay-device",)))
         self.lib=_load_lib(_ssm_replay_device_artifact); self.ctx=ctypes.c_void_p(); f=self.lib.cr; f.restype=ctypes.c_int
-        if f(ctypes.byref(self.ctx),_ptr(s0),_ptr(a),self.B,self.D,self.N,capacity)!=1: raise RuntimeError("ReplaySSM CUDA allocation failed")
+        self.async_slots=async_slots
+        if f(ctypes.byref(self.ctx),_ptr(s0),_ptr(a),self.B,self.D,self.N,capacity,async_slots)!=1: raise RuntimeError("ReplaySSM CUDA allocation failed")
     def append(self,d: Any,x: Any,b: Any,i:int)->None:
         import numpy as np
         f=self.lib.ap; f.restype=ctypes.c_int; vs=[np.ascontiguousarray(v,np.float32) for v in(d,x,b)]
@@ -1368,8 +1596,11 @@ class NvidiaReplayDeviceState:
         import numpy as np
         d,x,b,c=(np.ascontiguousarray(v,np.float32) for v in (d,x,b,c)); T=d.shape[0]
         f=getattr(self.lib, "as"); f.restype=ctypes.c_int
-        if f(self.ctx,_ptr(d),_ptr(x),_ptr(b),_ptr(c),T,start)!=1: raise RuntimeError("ReplaySSM CUDA async submit failed")
-        return NvidiaReplayAsyncResult(self,T)
+        slot=ctypes.c_int(-1)
+        rc=f(self.ctx,_ptr(d),_ptr(x),_ptr(b),_ptr(c),T,start,ctypes.byref(slot))
+        if rc==4: raise RuntimeError("ReplaySSM CUDA async ring is full")
+        if rc!=1: raise RuntimeError("ReplaySSM CUDA async submit failed")
+        return NvidiaReplayAsyncResult(self,T,slot.value)
     def close(self)->None:
         if getattr(self,"ctx",None) and self.ctx.value: self.lib.dl(self.ctx); self.ctx=ctypes.c_void_p()
     def __del__(self)->None: self.close()
@@ -1380,7 +1611,13 @@ class CudaEvent:
     def __init__(self, result: "NvidiaReplayAsyncResult"):
         self._result = result
     def wait(self) -> None:
-        self._result.wait()
+        self._result._wait_event()
+    def wait_on(self, stream: int) -> None:
+        """Make an external CUDA stream wait without synchronizing the host."""
+        self._result._wait_on_stream(stream)
+    def elapsed_ms(self) -> float:
+        """Device time from the slot's first copy through its completion."""
+        return self._result._elapsed_ms()
 
 
 class CudaDeviceBuffer:
@@ -1389,21 +1626,605 @@ class CudaDeviceBuffer:
         self._result, self.shape, self.dtype = result, shape, "float32"
     def numpy(self) -> Any:
         return self._result.wait()
+    @property
+    def __cuda_array_interface__(self) -> dict[str, Any]:
+        """Standard zero-copy CUDA consumer protocol for this leased output."""
+        return {
+            "shape": self.shape, "strides": None, "typestr": "<f4",
+            "data": (self._result._device_pointer(), False), "version": 3,
+            "stream": self._result._producer_stream(),
+        }
+
+
+class CudaOwnedDeviceBuffer:
+    """Owned device allocation used by CUDA-resident multi-launch plans."""
+
+    def __init__(self, session: "NvidiaDeviceSession", ptr: int,
+                 shape: tuple[int, ...], dtype: Any, nbytes: int,
+                 *, owns: bool = True) -> None:
+        self._session = session
+        self.ptr = ptr
+        self.shape = shape
+        self.dtype = dtype
+        self.nbytes = nbytes
+        self._owns = owns
+        self._closed = False
+
+    @property
+    def __cuda_array_interface__(self) -> dict[str, Any]:
+        import numpy as np
+        if self._closed:
+            raise RuntimeError("CUDA device buffer is closed")
+        return {"shape": self.shape, "strides": None,
+                "typestr": np.dtype(self.dtype).str,
+                "data": (self.ptr, False), "version": 3,
+                "stream": self._session.stream}
+
+    def numpy(self) -> Any:
+        return self._session.download(self)
+
+    def close(self) -> None:
+        if not self._closed:
+            if self._owns and self._session.lib.tessera_nvidia_device_free(
+                    ctypes.c_void_p(self.ptr)) != 0:
+                raise RuntimeError("CUDA device free failed")
+            self._closed = True
+
+    def view(self, offset_bytes: int, shape: tuple[int, ...],
+             dtype: Any) -> "CudaOwnedDeviceBuffer":
+        import numpy as np
+        nbytes = int(np.prod(shape)) * np.dtype(dtype).itemsize
+        if offset_bytes < 0 or offset_bytes + nbytes > self.nbytes:
+            raise ValueError("CUDA device view exceeds its parent allocation")
+        return CudaOwnedDeviceBuffer(
+            self._session, self.ptr + offset_bytes, shape, dtype, nbytes,
+            owns=False)
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        except Exception:
+            pass
+
+
+class NvidiaDeviceSession:
+    """One nonblocking stream plus owned buffers and CUDA-event timing."""
+
+    def __init__(self) -> None:
+        from tessera import runtime as rt
+        lib = rt._load_nvidia_gemm_runtime()
+        if lib is None:
+            raise RuntimeError("NVIDIA device runtime is unavailable")
+        self.lib = lib
+        self._bind()
+        stream = ctypes.c_void_p()
+        if lib.tessera_nvidia_stream_create(ctypes.byref(stream)) != 0:
+            raise RuntimeError("CUDA stream creation failed")
+        self.stream = int(stream.value or 0)
+        self._buffers: list[CudaOwnedDeviceBuffer] = []
+
+    def _bind(self) -> None:
+        lib = self.lib
+        lib.tessera_nvidia_device_alloc.argtypes = [
+            ctypes.POINTER(ctypes.c_void_p), ctypes.c_size_t]
+        lib.tessera_nvidia_device_alloc.restype = ctypes.c_int
+        for name in ("tessera_nvidia_device_free",
+                     "tessera_nvidia_stream_destroy",
+                     "tessera_nvidia_stream_synchronize",
+                     "tessera_nvidia_event_destroy",
+                     "tessera_nvidia_event_synchronize"):
+            fn = getattr(lib, name); fn.argtypes = [ctypes.c_void_p]
+            fn.restype = ctypes.c_int
+        for name in ("tessera_nvidia_device_upload",
+                     "tessera_nvidia_device_download"):
+            fn = getattr(lib, name)
+            fn.argtypes = [ctypes.c_void_p, ctypes.c_void_p,
+                           ctypes.c_size_t, ctypes.c_void_p]
+            fn.restype = ctypes.c_int
+        lib.tessera_nvidia_event_create.argtypes = [
+            ctypes.POINTER(ctypes.c_void_p)]
+        lib.tessera_nvidia_event_create.restype = ctypes.c_int
+        lib.tessera_nvidia_event_record.argtypes = [
+            ctypes.c_void_p, ctypes.c_void_p]
+        lib.tessera_nvidia_event_record.restype = ctypes.c_int
+        lib.tessera_nvidia_event_elapsed_ms.argtypes = [
+            ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(ctypes.c_float)]
+        lib.tessera_nvidia_event_elapsed_ms.restype = ctypes.c_int
+
+    def empty(self, shape: tuple[int, ...], dtype: Any) -> CudaOwnedDeviceBuffer:
+        import numpy as np
+        nbytes = int(np.prod(shape)) * np.dtype(dtype).itemsize
+        ptr = ctypes.c_void_p()
+        if self.lib.tessera_nvidia_device_alloc(
+                ctypes.byref(ptr), nbytes) != 0:
+            raise RuntimeError("CUDA device allocation failed")
+        out = CudaOwnedDeviceBuffer(
+            self, int(ptr.value or 0), shape, dtype, nbytes)
+        self._buffers.append(out)
+        return out
+
+    def upload(self, array: Any) -> CudaOwnedDeviceBuffer:
+        import numpy as np
+        host = np.ascontiguousarray(array)
+        out = self.empty(tuple(host.shape), host.dtype)
+        if self.lib.tessera_nvidia_device_upload(
+                ctypes.c_void_p(out.ptr), _ptr(host), out.nbytes,
+                ctypes.c_void_p(self.stream)) != 0:
+            raise RuntimeError("CUDA asynchronous upload failed")
+        return out
+
+    def download(self, buffer: CudaOwnedDeviceBuffer) -> Any:
+        import numpy as np
+        host = np.empty(buffer.shape, dtype=buffer.dtype)
+        if self.lib.tessera_nvidia_device_download(
+                _ptr(host), ctypes.c_void_p(buffer.ptr), buffer.nbytes,
+                ctypes.c_void_p(self.stream)) != 0 or self.synchronize() != 0:
+            raise RuntimeError("CUDA asynchronous download failed")
+        return host
+
+    def synchronize(self) -> int:
+        return int(self.lib.tessera_nvidia_stream_synchronize(
+            ctypes.c_void_p(self.stream)))
+
+    def gemm(self, a: CudaOwnedDeviceBuffer, b: CudaOwnedDeviceBuffer,
+             out: CudaOwnedDeviceBuffer, dtype_key: str) -> None:
+        from tessera import runtime as rt
+        symbol = rt._NVIDIA_GEMM_SYMBOLS[dtype_key] + "_device"
+        fn = getattr(self.lib, symbol)
+        fn.argtypes = ([ctypes.c_void_p] * 3 + [ctypes.c_int] * 3
+                       + [ctypes.c_void_p])
+        fn.restype = ctypes.c_int
+        m, k = a.shape; _, n = b.shape
+        if fn(ctypes.c_void_p(a.ptr), ctypes.c_void_p(b.ptr),
+              ctypes.c_void_p(out.ptr), m, n, k,
+              ctypes.c_void_p(self.stream)) != 0:
+            raise RuntimeError(f"CUDA resident GEMM failed for {dtype_key}")
+
+    def measure(self, launch: Any, *, reps: int = 100, warmup: int = 10) -> float:
+        for _ in range(warmup):
+            launch()
+        start, stop = ctypes.c_void_p(), ctypes.c_void_p()
+        if (self.lib.tessera_nvidia_event_create(ctypes.byref(start)) != 0
+                or self.lib.tessera_nvidia_event_create(ctypes.byref(stop)) != 0):
+            raise RuntimeError("CUDA timing event creation failed")
+        try:
+            self.lib.tessera_nvidia_event_record(start, ctypes.c_void_p(self.stream))
+            for _ in range(reps):
+                launch()
+            self.lib.tessera_nvidia_event_record(stop, ctypes.c_void_p(self.stream))
+            if self.lib.tessera_nvidia_event_synchronize(stop) != 0:
+                raise RuntimeError("CUDA timing event synchronization failed")
+            ms = ctypes.c_float()
+            if self.lib.tessera_nvidia_event_elapsed_ms(
+                    start, stop, ctypes.byref(ms)) != 0:
+                raise RuntimeError("CUDA event elapsed-time query failed")
+            return float(ms.value) / reps
+        finally:
+            if start.value: self.lib.tessera_nvidia_event_destroy(start)
+            if stop.value: self.lib.tessera_nvidia_event_destroy(stop)
+
+    def close(self) -> None:
+        if getattr(self, "stream", 0):
+            self.synchronize()
+            for buffer in reversed(self._buffers):
+                buffer.close()
+            self._buffers.clear()
+            self.lib.tessera_nvidia_stream_destroy(ctypes.c_void_p(self.stream))
+            self.stream = 0
+
+    def __enter__(self) -> "NvidiaDeviceSession": return self
+    def __exit__(self, *args: Any) -> None: self.close()
+    def __del__(self) -> None:
+        try: self.close()
+        except Exception: pass
+
+
+_resident_ops_artifact: str | None = None
+
+
+def _synthesize_resident_ops_cuda() -> str:
+    """Device-pointer CUDA stages shared by all multi-launch compositions."""
+    return r'''#include <cuda_runtime.h>
+#include <cuda_fp8.h>
+#include <float.h>
+#include <math.h>
+__device__ float act(float v,int a){if(a==1)return v>0.f?v:0.f;if(a==2){float t=0.7978845608f*(v+0.044715f*v*v*v);t=fminf(30.f,fmaxf(-30.f,t));return .5f*v*(1.f+tanhf(t));}if(a==3)return v/(1.f+expf(-v));if(a==4)return 1.f/(1.f+expf(-v));if(a==5)return tanhf(v);return v;}
+__global__ void epi(const float*x,const float*b,float*o,long n,int N,int a){long i=(long)blockIdx.x*blockDim.x+threadIdx.x;if(i<n)o[i]=act(x[i]+(b?b[i%N]:0.f),a);}
+__global__ void gate(const float*g,const float*u,float*o,long n,int a){long i=(long)blockIdx.x*blockDim.x+threadIdx.x;if(i<n)o[i]=act(g[i],a)*u[i];}
+__global__ void mm_f32(const float*a,const float*b,float*c,int M,int N,int K){long z=(long)blockIdx.x*blockDim.x+threadIdx.x,n=(long)M*N;if(z<n){int r=z/N,col=z%N;float v=0;for(int k=0;k<K;k++)v+=a[(long)r*K+k]*b[(long)k*N+col];c[z]=v;}}
+__global__ void im2col(const float*x,float*c,int B,int IH,int IW,int CI,int KH,int KW,int OH,int OW,int SH,int SW,int PH,int PW,int DH,int DW){long z=(long)blockIdx.x*blockDim.x+threadIdx.x,K=(long)KH*KW*CI,n=(long)B*OH*OW*K;if(z<n){int k=z%K,row=z/K,ci=k%CI,kw=(k/CI)%KW,kh=k/(CI*KW),ow=row%OW,oh=(row/OW)%OH,b=row/(OW*OH),ih=oh*SH-PH+kh*DH,iw=ow*SW-PW+kw*DW;c[z]=(ih>=0&&ih<IH&&iw>=0&&iw<IW)?x[((long)b*IH*IW+ih*IW+iw)*CI+ci]:0.f;}}
+__global__ void conv_shared(const float*x,const float*w,const float*bias,float*y,int B,int IH,int IW,int CI,int KH,int KW,int CO,int OH,int OW,int SH,int SW,int PH,int PW,int DH,int DW){__shared__ float sw[8];int lane=threadIdx.x,po=lane>>3,lc=lane&7;long spatial=(long)B*OH*OW,p0=(long)blockIdx.x*8;int c0=blockIdx.y*8,co=c0+lc;long p=p0+po;float v=(p<spatial&&co<CO&&bias)?bias[co]:0.f;int ow=p%OW,oh=(p/OW)%OH,bi=p/(OW*OH);for(int kh=0;kh<KH;kh++)for(int kw=0;kw<KW;kw++)for(int ci=0;ci<CI;ci++){if(po==0)sw[lc]=(co<CO)?w[((long)kh*KW*CI+kw*CI+ci)*CO+co]:0.f;__syncthreads();int ih=oh*SH-PH+kh*DH,iw=ow*SW-PW+kw*DW;if(p<spatial&&ih>=0&&ih<IH&&iw>=0&&iw<IW)v+=x[((long)bi*IH*IW+ih*IW+iw)*CI+ci]*sw[lc];__syncthreads();}if(p<spatial&&co<CO)y[p*CO+co]=v;}
+__global__ void conv_direct(const float*x,const float*w,const float*bias,float*y,int B,int IH,int IW,int CI,int KH,int KW,int CO,int OH,int OW,int SH,int SW,int PH,int PW,int DH,int DW){long z=(long)blockIdx.x*blockDim.x+threadIdx.x,n=(long)B*OH*OW*CO;if(z>=n)return;int co=z%CO,ow=(z/CO)%OW,oh=(z/(CO*OW))%OH,bi=z/(CO*OW*OH);float v=bias?bias[co]:0.f;for(int kh=0;kh<KH;kh++){int ih=oh*SH-PH+kh*DH;if(ih<0||ih>=IH)continue;for(int kw=0;kw<KW;kw++){int iw=ow*SW-PW+kw*DW;if(iw<0||iw>=IW)continue;for(int ci=0;ci<CI;ci++)v+=x[((long)bi*IH*IW+ih*IW+iw)*CI+ci]*w[((long)kh*KW*CI+kw*CI+ci)*CO+co];}}y[z]=v;}
+__global__ void scale_mask(float*x,int M,int N,float s,int causal,int off){long i=(long)blockIdx.x*blockDim.x+threadIdx.x,n=(long)M*N;if(i<n){int r=i/N,c=i%N;x[i]=(causal&&c>r+off)?-INFINITY:x[i]*s;}}
+__global__ void softmax(const float*x,float*o,int K){int r=blockIdx.x,t=threadIdx.x;__shared__ float q[256];float m=-FLT_MAX;for(int j=t;j<K;j+=256)m=fmaxf(m,x[(long)r*K+j]);q[t]=m;__syncthreads();for(int s=128;s;s>>=1){if(t<s)q[t]=fmaxf(q[t],q[t+s]);__syncthreads();}m=q[0];float z=0;for(int j=t;j<K;j+=256)z+=expf(x[(long)r*K+j]-m);q[t]=z;__syncthreads();for(int s=128;s;s>>=1){if(t<s)q[t]+=q[t+s];__syncthreads();}z=q[0];for(int j=t;j<K;j+=256)o[(long)r*K+j]=expf(x[(long)r*K+j]-m)/z;}
+__global__ void cast_e4(const float*x,__nv_fp8_e4m3*o,long n){long i=(long)blockIdx.x*blockDim.x+threadIdx.x;if(i<n)o[i]=__nv_fp8_e4m3(x[i]);}
+__global__ void cast_e5(const float*x,__nv_fp8_e5m2*o,long n){long i=(long)blockIdx.x*blockDim.x+threadIdx.x;if(i<n)o[i]=__nv_fp8_e5m2(x[i]);}
+__global__ void paged(const float*p,const int*t,const long long*idx,float*o,long T,int L,int H,int D,int transpose){long z=(long)blockIdx.x*blockDim.x+threadIdx.x,n=T*H*D;if(z<n){int d=z%D,h=(z/D)%H;long x=z/(D*H),tok=idx[x];int lp=tok/L,off=tok%L,pp=t[lp];long dst=transpose?((long)h*D+d)*T+x:((long)h*T+x)*D+d;o[dst]=p[(((long)pp*L+off)*H+h)*D+d];}}
+__global__ void paged_attn(const float*q,const float*kp,const float*vp,const int*table,const long long*idx,float*out,int T,int L,int H,int D,int Q,float scale,int causal){int qi=blockIdx.x%Q,h=blockIdx.x/Q,t=threadIdx.x;extern __shared__ float scores[];__shared__ float red[128];int limit=qi+(T>Q?T-Q:0);for(int j=0;j<T;j++){float v=0.f;if(!causal||j<=limit){long tok=idx[j];int pp=table[tok/L],off=tok%L;const float*k=kp+(((long)pp*L+off)*H+h)*D;const float*qr=q+((long)h*Q+qi)*D;for(int d=t;d<D;d+=128)v+=qr[d]*k[d];}red[t]=v;__syncthreads();for(int s=64;s;s>>=1){if(t<s)red[t]+=red[t+s];__syncthreads();}if(t==0)scores[j]=(causal&&j>limit)?-INFINITY:red[0]*scale;__syncthreads();}float m=-FLT_MAX;for(int j=t;j<T;j+=128)m=fmaxf(m,scores[j]);red[t]=m;__syncthreads();for(int s=64;s;s>>=1){if(t<s)red[t]=fmaxf(red[t],red[t+s]);__syncthreads();}m=red[0];float z=0.f;for(int j=t;j<T;j+=128)z+=expf(scores[j]-m);red[t]=z;__syncthreads();for(int s=64;s;s>>=1){if(t<s)red[t]+=red[t+s];__syncthreads();}z=red[0];for(int d=t;d<D;d+=128){float acc=0.f;for(int j=0;j<T;j++){long tok=idx[j];int pp=table[tok/L],off=tok%L;const float*v=vp+(((long)pp*L+off)*H+h)*D;acc+=expf(scores[j]-m)/z*v[d];}out[((long)h*Q+qi)*D+d]=acc;}}
+extern "C" int tessera_nvidia_resident_epilogue(const float*x,const float*b,float*o,long n,int N,int a,void*s){epi<<<(n+255)/256,256,0,(cudaStream_t)s>>>(x,b,o,n,N,a);return cudaGetLastError()==cudaSuccess?1:3;}
+extern "C" int tessera_nvidia_resident_gated(const float*g,const float*u,float*o,long n,int a,void*s){gate<<<(n+255)/256,256,0,(cudaStream_t)s>>>(g,u,o,n,a);return cudaGetLastError()==cudaSuccess?1:3;}
+extern "C" int tessera_nvidia_resident_matmul_f32(const float*a,const float*b,float*c,int M,int N,int K,void*s){long n=(long)M*N;mm_f32<<<(n+255)/256,256,0,(cudaStream_t)s>>>(a,b,c,M,N,K);return cudaGetLastError()==cudaSuccess?1:3;}
+extern "C" int tessera_nvidia_resident_im2col(const float*x,float*c,int B,int IH,int IW,int CI,int KH,int KW,int OH,int OW,int SH,int SW,int PH,int PW,int DH,int DW,void*s){long n=(long)B*OH*OW*KH*KW*CI;im2col<<<(n+255)/256,256,0,(cudaStream_t)s>>>(x,c,B,IH,IW,CI,KH,KW,OH,OW,SH,SW,PH,PW,DH,DW);return cudaGetLastError()==cudaSuccess?1:3;}
+extern "C" int tessera_nvidia_resident_conv_shared(const float*x,const float*w,const float*b,float*y,int B,int IH,int IW,int CI,int KH,int KW,int CO,int OH,int OW,int SH,int SW,int PH,int PW,int DH,int DW,void*s){long p=(long)B*OH*OW;conv_shared<<<dim3((p+7)/8,(CO+7)/8),64,0,(cudaStream_t)s>>>(x,w,b,y,B,IH,IW,CI,KH,KW,CO,OH,OW,SH,SW,PH,PW,DH,DW);return cudaGetLastError()==cudaSuccess?1:3;}
+extern "C" int tessera_nvidia_resident_conv_direct(const float*x,const float*w,const float*b,float*y,int B,int IH,int IW,int CI,int KH,int KW,int CO,int OH,int OW,int SH,int SW,int PH,int PW,int DH,int DW,void*s){long n=(long)B*OH*OW*CO;conv_direct<<<(n+255)/256,256,0,(cudaStream_t)s>>>(x,w,b,y,B,IH,IW,CI,KH,KW,CO,OH,OW,SH,SW,PH,PW,DH,DW);return cudaGetLastError()==cudaSuccess?1:3;}
+extern "C" int tessera_nvidia_resident_scale_mask(float*x,int M,int N,float scale,int causal,int off,void*s){long n=(long)M*N;scale_mask<<<(n+255)/256,256,0,(cudaStream_t)s>>>(x,M,N,scale,causal,off);return cudaGetLastError()==cudaSuccess?1:3;}
+extern "C" int tessera_nvidia_resident_softmax(const float*x,float*o,int M,int N,void*s){softmax<<<M,256,0,(cudaStream_t)s>>>(x,o,N);return cudaGetLastError()==cudaSuccess?1:3;}
+extern "C" int tessera_nvidia_resident_cast_fp8(const float*x,void*o,long n,int kind,void*s){if(kind==4)cast_e4<<<(n+255)/256,256,0,(cudaStream_t)s>>>(x,(__nv_fp8_e4m3*)o,n);else cast_e5<<<(n+255)/256,256,0,(cudaStream_t)s>>>(x,(__nv_fp8_e5m2*)o,n);return cudaGetLastError()==cudaSuccess?1:3;}
+extern "C" int tessera_nvidia_resident_paged(const float*p,const int*t,const long long*i,float*o,long T,int L,int H,int D,int transpose,void*s){long n=T*H*D;paged<<<(n+255)/256,256,0,(cudaStream_t)s>>>(p,t,i,o,T,L,H,D,transpose);return cudaGetLastError()==cudaSuccess?1:3;}
+extern "C" int tessera_nvidia_resident_paged_attention(const float*q,const float*kp,const float*vp,const int*t,const long long*i,float*o,int T,int L,int H,int D,int Q,float scale,int causal,void*s){if(T<1||T>8192)return 2;paged_attn<<<H*Q,128,(size_t)T*sizeof(float),(cudaStream_t)s>>>(q,kp,vp,t,i,o,T,L,H,D,Q,scale,causal);return cudaGetLastError()==cudaSuccess?1:3;}
+'''
+
+
+def _resident_ops_lib() -> Any:
+    global _resident_ops_artifact
+    if _resident_ops_artifact is None:
+        _resident_ops_artifact = _nvidia_cuda_compile_fn(KernelSource(
+            source=_synthesize_resident_ops_cuda(),
+            entry="tessera_nvidia_resident_epilogue", lang=_LANG,
+            spec=SpecPolicy.DYNAMIC, shape_key=("resident-ops-v1",)))
+    return _load_lib(_resident_ops_artifact)
+
+
+_ACTIVATION_IDS = {None: 0, "relu": 1, "gelu": 2, "silu": 3,
+                   "sigmoid": 4, "tanh": 5}
+
+
+def _resident_epilogue(session: NvidiaDeviceSession,
+                       x: CudaOwnedDeviceBuffer,
+                       bias: CudaOwnedDeviceBuffer | None,
+                       out: CudaOwnedDeviceBuffer,
+                       activation: str | None) -> None:
+    fn = _resident_ops_lib().tessera_nvidia_resident_epilogue
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p] * 3 + [ctypes.c_long, ctypes.c_int,
+                                           ctypes.c_int, ctypes.c_void_p]
+    if fn(x.ptr, bias.ptr if bias else 0, out.ptr, int(x.shape[0] * x.shape[1]),
+          int(x.shape[1]), _ACTIVATION_IDS[activation], session.stream) != 1:
+        raise RuntimeError("CUDA resident epilogue launch failed")
+
+
+def _resident_gated(session: NvidiaDeviceSession, gate: CudaOwnedDeviceBuffer,
+                    up: CudaOwnedDeviceBuffer, out: CudaOwnedDeviceBuffer,
+                    activation: str) -> None:
+    fn = _resident_ops_lib().tessera_nvidia_resident_gated
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p] * 3 + [ctypes.c_long, ctypes.c_int,
+                                           ctypes.c_void_p]
+    if fn(gate.ptr, up.ptr, out.ptr, int(gate.shape[0] * gate.shape[1]),
+          _ACTIVATION_IDS[activation], session.stream) != 1:
+        raise RuntimeError("CUDA resident gated launch failed")
+
+
+def _resident_attention_stages(
+    session: NvidiaDeviceSession, scores: CudaOwnedDeviceBuffer,
+    probs: CudaOwnedDeviceBuffer, *, scale: float, causal: bool,
+    causal_offset: int = 0,
+) -> None:
+    lib = _resident_ops_lib()
+    scale_fn = lib.tessera_nvidia_resident_scale_mask
+    scale_fn.restype = ctypes.c_int
+    scale_fn.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int,
+                         ctypes.c_float, ctypes.c_int, ctypes.c_int,
+                         ctypes.c_void_p]
+    softmax_fn = lib.tessera_nvidia_resident_softmax
+    softmax_fn.restype = ctypes.c_int
+    softmax_fn.argtypes = [ctypes.c_void_p] * 2 + [ctypes.c_int] * 2 + [ctypes.c_void_p]
+    m, n = scores.shape
+    if scale_fn(scores.ptr, m, n, float(scale), int(causal), causal_offset,
+                session.stream) != 1:
+        raise RuntimeError("CUDA resident scale/mask launch failed")
+    if softmax_fn(scores.ptr, probs.ptr, m, n, session.stream) != 1:
+        raise RuntimeError("CUDA resident softmax launch failed")
+
+
+def _resident_cast_fp8(session: NvidiaDeviceSession,
+                       x: CudaOwnedDeviceBuffer,
+                       out: CudaOwnedDeviceBuffer, storage: str) -> None:
+    fn = _resident_ops_lib().tessera_nvidia_resident_cast_fp8
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p] * 2 + [ctypes.c_long, ctypes.c_int,
+                                           ctypes.c_void_p]
+    if fn(x.ptr, out.ptr, int(x.shape[0] * x.shape[1]),
+          4 if storage == "fp8_e4m3" else 5, session.stream) != 1:
+        raise RuntimeError("CUDA resident FP8 cast launch failed")
+
+
+def _resident_matmul_f32(session: NvidiaDeviceSession,
+                         a: CudaOwnedDeviceBuffer,
+                         b: CudaOwnedDeviceBuffer,
+                         out: CudaOwnedDeviceBuffer) -> None:
+    fn = _resident_ops_lib().tessera_nvidia_resident_matmul_f32
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p] * 3 + [ctypes.c_int] * 3 + [ctypes.c_void_p]
+    m, k = a.shape; _, n = b.shape
+    if fn(a.ptr, b.ptr, out.ptr, m, n, k, session.stream) != 1:
+        raise RuntimeError("CUDA resident f32 matmul launch failed")
+
+
+def _resident_paged_gather(
+    session: NvidiaDeviceSession, pages: CudaOwnedDeviceBuffer,
+    table: CudaOwnedDeviceBuffer, indices: CudaOwnedDeviceBuffer,
+    out: CudaOwnedDeviceBuffer, *, page_size: int, heads: int, dim: int,
+    transpose: bool,
+) -> None:
+    fn = _resident_ops_lib().tessera_nvidia_resident_paged
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p] * 4 + [ctypes.c_long] + [ctypes.c_int] * 4 + [ctypes.c_void_p]
+    tokens = int(indices.shape[0])
+    if fn(pages.ptr, table.ptr, indices.ptr, out.ptr, tokens, page_size,
+          heads, dim, int(transpose), session.stream) != 1:
+        raise RuntimeError("CUDA resident paged gather launch failed")
+
+
+_nvidia_paged_attention_route_cache: dict[tuple[Any, ...], str] = {}
+_nvidia_paged_attention_route_evidence: dict[
+    tuple[Any, ...], dict[str, float]] = {}
+
+
+def _paged_attention_corpus_winner(
+    q_len: int, heads: int, tokens: int, dim: int,
+) -> str | None:
+    """Warm-start a serving route from the committed device-timed D2 row."""
+    from tessera.compiler.emit import autotune as at
+    from tessera.compiler.emit.kernel_emitter import SpecPolicy, bucket_key
+
+    cache = at.MeasureCache()
+    at.load_corpus(cache=cache)
+    record = cache.get((
+        "nvidia:sm_120", "nvidia", "paged_kv_decode",
+        bucket_key((q_len, heads, tokens, dim), SpecPolicy.BUCKET),
+        "f32", at.TIMING_DEVICE))
+    if record is not None and record.winner in {
+            "fused_paged_attention", "staged_paged_attention"}:
+        return record.winner.removesuffix("_paged_attention")
+    return None
+
+
+def run_paged_attention_resident_f32(
+    q: Any, k_pages: Any, v_pages: Any, page_table: Any, token_indices: Any,
+    *, scale: float, causal: bool, route: str | None = None,
+) -> tuple[Any, float]:
+    """Size-dispatched direct-fused or staged device-resident paged attention."""
+    import numpy as np
+    qq = np.ascontiguousarray(q, np.float32)
+    kp = np.ascontiguousarray(k_pages, np.float32)
+    vp = np.ascontiguousarray(v_pages, np.float32)
+    table = np.ascontiguousarray(page_table, np.int32)
+    idx = np.ascontiguousarray(token_indices, np.int64).reshape(-1)
+    if qq.ndim != 3 or kp.ndim != 4 or kp.shape != vp.shape:
+        raise ValueError("resident paged attention requires Q[H,Q,D], pages[P,L,H,D]")
+    P, L, H, D = kp.shape
+    if qq.shape[0] != H or qq.shape[2] != D or idx.size < 1:
+        raise ValueError("resident paged attention geometry mismatch")
+    if (table.ndim != 1 or np.any(table < 0) or np.any(table >= P)
+            or np.any(idx < 0) or np.any(idx >= table.size * L)):
+        raise ValueError("resident paged attention table/index is invalid")
+    Q, T = int(qq.shape[1]), int(idx.size)
+    if T > 8192:
+        raise ValueError("fused paged attention supports at most 8192 tokens")
+    routes = ("fused", "staged")
+    if route is not None and route not in routes:
+        raise ValueError(f"unknown CUDA paged-attention route {route!r}")
+
+    def execute(selected: str) -> tuple[Any, float]:
+        with NvidiaDeviceSession() as s:
+            dq, dkp, dvp = s.upload(qq), s.upload(kp), s.upload(vp)
+            dt, di = s.upload(table), s.upload(idx)
+            out = s.empty((H, Q, D), np.float32)
+            if selected == "fused":
+                fn = _resident_ops_lib().tessera_nvidia_resident_paged_attention
+                fn.restype = ctypes.c_int
+                fn.argtypes = ([ctypes.c_void_p] * 6 + [ctypes.c_int] * 5
+                               + [ctypes.c_float, ctypes.c_int,
+                                  ctypes.c_void_p])
+
+                def launch() -> None:
+                    rc = fn(dq.ptr, dkp.ptr, dvp.ptr, dt.ptr, di.ptr, out.ptr,
+                            T, L, H, D, Q, float(scale), int(causal), s.stream)
+                    if rc != 1:
+                        raise RuntimeError(
+                            "CUDA fused paged attention launch failed")
+            else:
+                dk = s.empty((H, D, T), np.float32)
+                dv = s.empty((H, T, D), np.float32)
+                scores = s.empty((H, Q, T), np.float32)
+                probs = s.empty(scores.shape, np.float32)
+
+                def launch() -> None:
+                    _resident_paged_gather(
+                        s, dkp, dt, di, dk, page_size=L, heads=H, dim=D,
+                        transpose=True)
+                    _resident_paged_gather(
+                        s, dvp, dt, di, dv, page_size=L, heads=H, dim=D,
+                        transpose=False)
+                    for h in range(H):
+                        qh = dq.view(h * Q * D * 4, (Q, D), np.float32)
+                        kh = dk.view(h * D * T * 4, (D, T), np.float32)
+                        vh = dv.view(h * T * D * 4, (T, D), np.float32)
+                        sh = scores.view(h * Q * T * 4, (Q, T), np.float32)
+                        ph = probs.view(h * Q * T * 4, (Q, T), np.float32)
+                        oh = out.view(h * Q * D * 4, (Q, D), np.float32)
+                        _resident_matmul_f32(s, qh, kh, sh)
+                        _resident_attention_stages(
+                            s, sh, ph, scale=scale, causal=causal,
+                            causal_offset=max(T - Q, 0))
+                        _resident_matmul_f32(s, ph, vh, oh)
+            launch()
+            latency = s.measure(launch, reps=20, warmup=3)
+            return out.numpy(), latency
+
+    key = (H, Q, T, D, L, bool(causal))
+    if route is not None:
+        return execute(route)
+    cached = _nvidia_paged_attention_route_cache.get(key)
+    if cached is None:
+        cached = _paged_attention_corpus_winner(Q, H, T, D)
+        if cached is not None:
+            _nvidia_paged_attention_route_cache[key] = cached
+    if cached is not None:
+        return execute(cached)
+    results = {name: execute(name) for name in routes}
+    if not np.allclose(results["fused"][0], results["staged"][0],
+                       rtol=2e-5, atol=2e-5):
+        raise RuntimeError("CUDA paged-attention routes disagree")
+    evidence = {name: result[1] for name, result in results.items()}
+    winner = min(evidence, key=evidence.__getitem__)
+    _nvidia_paged_attention_route_cache[key] = winner
+    _nvidia_paged_attention_route_evidence[key] = evidence
+    return results[winner]
+
+
+def run_matmul_softmax_resident(
+    a: Any, b: Any, dtype_key: str,
+) -> tuple[Any, float]:
+    """Resident GEMM→row-softmax with one final D2H transfer."""
+    import numpy as np
+    aa, bb = np.ascontiguousarray(a), np.ascontiguousarray(b)
+    with NvidiaDeviceSession() as s:
+        da, db = s.upload(aa), s.upload(bb)
+        scores = s.empty((aa.shape[0], bb.shape[1]), np.float32)
+        out = s.empty(scores.shape, np.float32)
+
+        def launch() -> None:
+            s.gemm(da, db, scores, dtype_key)
+            _resident_attention_stages(
+                s, scores, out, scale=1.0, causal=False)
+
+        launch()
+        latency = s.measure(launch, reps=20, warmup=3)
+        return out.numpy(), latency
+
+
+def run_matmul_epilogue_resident(
+    a: Any, b: Any, bias: Any, dtype_key: str, activation: str | None,
+) -> tuple[Any, float]:
+    """Resident GEMM→bias/activation with one final D2H transfer."""
+    import numpy as np
+    aa, bb = np.ascontiguousarray(a), np.ascontiguousarray(b)
+    bias_host = None if bias is None else np.ascontiguousarray(bias, np.float32)
+    with NvidiaDeviceSession() as s:
+        da, db = s.upload(aa), s.upload(bb)
+        bias_dev = s.upload(bias_host) if bias_host is not None else None
+        scores = s.empty((aa.shape[0], bb.shape[1]), np.float32)
+        out = s.empty(scores.shape, np.float32)
+
+        def launch() -> None:
+            s.gemm(da, db, scores, dtype_key)
+            _resident_epilogue(s, scores, bias_dev, out, activation)
+
+        launch()
+        latency = s.measure(launch, reps=20, warmup=3)
+        return out.numpy(), latency
+
+
+def run_conv2d_resident_candidate(
+    x: Any, weight: Any, bias: Any = None, *, route: str,
+    stride: tuple[int, int] = (1, 1), padding: tuple[int, int] = (0, 0),
+    dilation: tuple[int, int] = (1, 1), reps: int = 20, warmup: int = 3,
+) -> tuple[Any, float]:
+    """Execute and device-time one direct/shared/im2col convolution route."""
+    import numpy as np
+    xx, ww = np.ascontiguousarray(x, np.float32), np.ascontiguousarray(weight, np.float32)
+    bb = None if bias is None else np.ascontiguousarray(bias, np.float32)
+    if xx.ndim != 4 or ww.ndim != 4:
+        raise ValueError("CUDA conv2d candidates require NHWC/HWIO tensors")
+    B, IH, IW, CI = xx.shape; KH, KW, WCI, CO = ww.shape
+    if CI != WCI or (bb is not None and bb.shape != (CO,)):
+        raise ValueError("CUDA conv2d candidate channels/bias mismatch")
+    SH, SW = stride; PH, PW = padding; DH, DW = dilation
+    OH = (IH + 2 * PH - DH * (KH - 1) - 1) // SH + 1
+    OW = (IW + 2 * PW - DW * (KW - 1) - 1) // SW + 1
+    if min(SH, SW, DH, DW, OH, OW) < 1 or min(PH, PW) < 0:
+        raise ValueError("CUDA conv2d candidate has invalid geometry")
+    if route not in {"direct", "shared", "im2col_tf32"}:
+        raise ValueError(f"unknown CUDA conv2d route {route!r}")
+    lib = _resident_ops_lib()
+    with NvidiaDeviceSession() as s:
+        dx, dw = s.upload(xx), s.upload(ww)
+        db = s.upload(bb) if bb is not None else None
+        out = s.empty((B, OH, OW, CO), np.float32)
+        if route == "im2col_tf32":
+            rows, inner = B * OH * OW, KH * KW * CI
+            cols = s.empty((rows, inner), np.float32)
+            wmat = dw.view(0, (inner, CO), np.float32)
+            omat = out.view(0, (rows, CO), np.float32)
+            im2col_fn = lib.tessera_nvidia_resident_im2col
+            im2col_fn.restype = ctypes.c_int
+            im2col_fn.argtypes = ([ctypes.c_void_p] * 2
+                                  + [ctypes.c_int] * 14 + [ctypes.c_void_p])
+
+            def launch() -> None:
+                rc = im2col_fn(
+                    dx.ptr, cols.ptr, B, IH, IW, CI, KH, KW, OH, OW,
+                    SH, SW, PH, PW, DH, DW, s.stream)
+                if rc != 1:
+                    raise RuntimeError("CUDA im2col launch failed")
+                s.gemm(cols, wmat, omat, "float32")
+                if db is not None:
+                    _resident_epilogue(s, omat, db, omat, None)
+        else:
+            fn = getattr(lib, f"tessera_nvidia_resident_conv_{route}")
+            fn.restype = ctypes.c_int
+            fn.argtypes = ([ctypes.c_void_p] * 4
+                           + [ctypes.c_int] * 15 + [ctypes.c_void_p])
+
+            def launch() -> None:
+                rc = fn(dx.ptr, dw.ptr, db.ptr if db else 0, out.ptr,
+                        B, IH, IW, CI, KH, KW, CO, OH, OW,
+                        SH, SW, PH, PW, DH, DW, s.stream)
+                if rc != 1:
+                    raise RuntimeError(f"CUDA {route} conv2d launch failed")
+        launch()
+        latency = s.measure(launch, reps=reps, warmup=warmup)
+        return out.numpy(), latency
 
 
 class NvidiaReplayAsyncResult:
     """One in-flight ReplaySSM submission; call :meth:`wait` for host output."""
-    def __init__(self, state: NvidiaReplayDeviceState, tokens: int):
-        self._state, self._tokens, self._done = state, tokens, False
+    def __init__(self, state: NvidiaReplayDeviceState, tokens: int, slot: int):
+        self._state, self._tokens, self._slot, self._done = state, tokens, slot, False
         self.event = CudaEvent(self)
         self.device_buffer = CudaDeviceBuffer(self, (tokens, state.B, state.D))
     def wait(self) -> Any:
         import numpy as np
         if self._done: raise RuntimeError("ReplaySSM async result already consumed")
         out=np.empty((self._tokens,self._state.B,self._state.D),np.float32); f=self._state.lib.aw; f.restype=ctypes.c_int
-        if f(self._state.ctx,_ptr(out),self._tokens)!=1: raise RuntimeError("ReplaySSM CUDA async wait failed")
+        if f(self._state.ctx,self._slot,_ptr(out),self._tokens)!=1: raise RuntimeError("ReplaySSM CUDA async wait failed")
         self._done=True
         return out
+    def _wait_event(self) -> None:
+        if self._done: raise RuntimeError("ReplaySSM async result already consumed")
+        f=self._state.lib.ew; f.restype=ctypes.c_int
+        if f(self._state.ctx,self._slot)!=1: raise RuntimeError("ReplaySSM CUDA event wait failed")
+    def _elapsed_ms(self) -> float:
+        if self._done: raise RuntimeError("ReplaySSM async result already consumed")
+        f=self._state.lib.et; f.restype=ctypes.c_int
+        ms=ctypes.c_float()
+        if f(self._state.ctx,self._slot,ctypes.byref(ms))!=1: raise RuntimeError("ReplaySSM CUDA event timing failed")
+        return float(ms.value)
+    def _wait_on_stream(self, stream: int) -> None:
+        if self._done: raise RuntimeError("ReplaySSM async result already consumed")
+        if not isinstance(stream,int) or stream==0: raise ValueError("CUDA stream handle must be a nonzero integer")
+        f=self._state.lib.ws; f.restype=ctypes.c_int
+        if f(self._state.ctx,self._slot,ctypes.c_void_p(stream))!=1: raise RuntimeError("ReplaySSM CUDA stream wait failed")
+    def release(self, *, stream: int | None = None) -> None:
+        """Retire the lease after a device consumer, optionally on its stream."""
+        if self._done: raise RuntimeError("ReplaySSM async result already consumed")
+        if stream is not None and (not isinstance(stream,int) or stream==0): raise ValueError("CUDA stream handle must be a nonzero integer")
+        f=self._state.lib.rs; f.restype=ctypes.c_int
+        if f(self._state.ctx,self._slot,ctypes.c_void_p(stream or 0))!=1: raise RuntimeError("ReplaySSM CUDA result release failed")
+        self._done=True
+    def _device_pointer(self) -> int:
+        if self._done: raise RuntimeError("ReplaySSM async result already consumed")
+        f=self._state.lib.dp; f.restype=ctypes.c_void_p
+        ptr=f(self._state.ctx,self._slot)
+        if not ptr: raise RuntimeError("ReplaySSM CUDA device buffer unavailable")
+        return int(ptr)
+    def _producer_stream(self) -> int:
+        f=self._state.lib.ps; f.restype=ctypes.c_void_p
+        ptr=f(self._state.ctx)
+        if not ptr: raise RuntimeError("ReplaySSM CUDA producer stream unavailable")
+        return int(ptr)
 
 
 def _synthesize_posenc_cuda() -> str:
@@ -2266,6 +3087,289 @@ class NvidiaMmaGatedCandidate(Candidate):
         return region.reference(A, Wg, Wu), "reference"
 
 
+# ── composed TF32 / FP8 transformer lanes ─────────────────────────────────────
+
+_COMPOSED_STORAGE = {
+    "f32": ("float32", "tf32", 2e-2),
+    "fp8_e4m3": ("float8_e4m3fn", "fp8_e4m3", 2e-1),
+    "fp8_e5m2": ("float8_e5m2", "fp8_e5m2", 4e-1),
+}
+
+
+def _composed_operand(x: Any, storage: str) -> Any:
+    """Contiguous operand in the storage expected by the shipped MMA ABI."""
+    import numpy as np
+    if storage == "f32":
+        dtype: Any = np.float32
+    else:
+        import ml_dtypes
+        dtype = (ml_dtypes.float8_e4m3fn if storage == "fp8_e4m3"
+                 else ml_dtypes.float8_e5m2)
+    return np.ascontiguousarray(x, dtype=dtype)
+
+
+class NvidiaMmaAttnComposedCandidate(Candidate):
+    """Correctness-first TF32/FP8 attention composition.
+
+    This is deliberately a separate candidate from the native f16/bf16 flash
+    kernel: QKᵀ and PV use the shipped tensor-core GEMM ABI, while scale/mask
+    and row softmax form an explicit launch boundary. The current host-pointer
+    ABI materializes between launches; a device-resident composition can replace
+    that boundary without changing the region contract.
+    """
+
+    tier = Tier.EMITTED
+    target = _TARGET
+    op = OP_ATTENTION
+
+    def __init__(self, storage: str) -> None:
+        dtype_key, suffix, atol = _COMPOSED_STORAGE[storage]
+        self.storage = storage
+        self.dtype_key = dtype_key
+        self.name = f"nvidia_mma_attn_composed_{suffix}"
+        self.accuracy_atol = atol
+        self.accuracy_rtol = atol
+
+    def available(self) -> bool:
+        try:
+            from tessera import runtime as rt
+            return rt._nvidia_mma_runtime_available()
+        except Exception:
+            return False
+
+    def applies_to(self, region: Any) -> bool:
+        return (isinstance(region, AttentionRegion)
+                and region.storage_dtype == self.storage)
+
+    def run(self, region: Any, Q: Any, K: Any, V: Any,
+            *a: Any, **k: Any) -> tuple[Any, str]:
+        import numpy as np
+        try:
+            Qn, Kn = region._natural(Q, K, cast=False)
+            Vf = np.asarray(V)
+            if (Qn.ndim != 2 or Kn.ndim != 2 or Vf.ndim != 2
+                    or Qn.shape[1] != Kn.shape[1]
+                    or Kn.shape[0] != Vf.shape[0]):
+                return region.reference(Q, K, V), "reference"
+            q = _composed_operand(Qn, self.storage)
+            kt = _composed_operand(np.ascontiguousarray(Kn.T), self.storage)
+            v = _composed_operand(Vf, self.storage)
+            with NvidiaDeviceSession() as session:
+                dq, dkt, dv = session.upload(q), session.upload(kt), session.upload(v)
+                scores = session.empty((q.shape[0], kt.shape[1]), np.float32)
+                probs = session.empty(scores.shape, np.float32)
+                out_dev = session.empty((q.shape[0], v.shape[1]), np.float32)
+                session.gemm(dq, dkt, scores, self.dtype_key)
+                _resident_attention_stages(
+                    session, scores, probs, scale=float(region.scale),
+                    causal=bool(region.causal))
+                if self.storage == "f32":
+                    prob_operand = probs
+                else:
+                    p_host = _composed_operand(
+                        np.empty(probs.shape, np.float32), self.storage)
+                    prob_operand = session.empty(probs.shape, p_host.dtype)
+                    _resident_cast_fp8(session, probs, prob_operand, self.storage)
+                session.gemm(prob_operand, dv, out_dev, self.dtype_key)
+                out = out_dev.numpy()
+            return out, "nvidia_cuda_composed"
+        except Exception:
+            return region.reference(Q, K, V), "reference"
+
+    def measure_device_latency(self, region: Any, *inputs: Any,
+                               reps: int = 100, warmup: int = 10) -> float | None:
+        if len(inputs) != 3:
+            return None
+        import numpy as np
+        try:
+            Qn, Kn = region._natural(inputs[0], inputs[1], cast=False)
+            q = _composed_operand(Qn, self.storage)
+            kt = _composed_operand(np.ascontiguousarray(Kn.T), self.storage)
+            v = _composed_operand(inputs[2], self.storage)
+            with NvidiaDeviceSession() as s:
+                dq, dk, dv = s.upload(q), s.upload(kt), s.upload(v)
+                scores = s.empty((q.shape[0], kt.shape[1]), np.float32)
+                probs = s.empty(scores.shape, np.float32)
+                out = s.empty((q.shape[0], v.shape[1]), np.float32)
+                if self.storage == "f32":
+                    prob_operand = probs
+                else:
+                    sample = _composed_operand(np.empty(probs.shape), self.storage)
+                    prob_operand = s.empty(probs.shape, sample.dtype)
+
+                def launch() -> None:
+                    s.gemm(dq, dk, scores, self.dtype_key)
+                    _resident_attention_stages(
+                        s, scores, probs, scale=float(region.scale),
+                        causal=bool(region.causal))
+                    if self.storage != "f32":
+                        _resident_cast_fp8(s, probs, prob_operand, self.storage)
+                    s.gemm(prob_operand, dv, out, self.dtype_key)
+                return s.measure(launch, reps=reps, warmup=warmup)
+        except Exception:
+            return None
+
+
+class NvidiaMmaFusedComposedCandidate(Candidate):
+    """Shipped TF32/FP8 GEMM followed by one generated CUDA epilogue stage."""
+
+    tier = Tier.EMITTED
+    target = _TARGET
+    op = OP_FUSED_REGION
+
+    def __init__(self, storage: str) -> None:
+        dtype_key, suffix, atol = _COMPOSED_STORAGE[storage]
+        self.storage = storage
+        self.dtype_key = dtype_key
+        self.name = f"nvidia_mma_fused_composed_{suffix}"
+        self.accuracy_atol = atol
+        self.accuracy_rtol = atol
+
+    def available(self) -> bool:
+        try:
+            from tessera import runtime as rt
+            return rt._nvidia_mma_runtime_available()
+        except Exception:
+            return False
+
+    def applies_to(self, region: Any) -> bool:
+        return (_mma_fused_epilogue(region) is not None
+                and getattr(region, "storage_dtype", "f16") == self.storage)
+
+    def run(self, region: Any, A: Any, B: Any, bias: Any = None,
+            *a: Any, residual: Any = None, **k: Any) -> tuple[Any, str]:
+        import numpy as np
+        epi = _mma_fused_epilogue(region)
+        if epi is None:
+            return region.reference(A, B, bias), "reference"
+        has_bias, activation = epi
+        Aa, Ba = np.asarray(A), np.asarray(B)
+        if (Aa.ndim != 2 or Ba.ndim != 2 or Aa.shape[1] != Ba.shape[0]
+                or (has_bias and (bias is None
+                                  or np.asarray(bias).shape != (Ba.shape[1],)))):
+            return region.reference(A, B, bias), "reference"
+        try:
+            aa = _composed_operand(Aa, self.storage)
+            bb = _composed_operand(Ba, self.storage)
+            with NvidiaDeviceSession() as session:
+                da, db = session.upload(aa), session.upload(bb)
+                scores = session.empty((aa.shape[0], bb.shape[1]), np.float32)
+                out_dev = session.empty(scores.shape, np.float32)
+                bias_dev = (session.upload(np.ascontiguousarray(bias, np.float32))
+                            if has_bias else None)
+                session.gemm(da, db, scores, self.dtype_key)
+                _resident_epilogue(
+                    session, scores, bias_dev, out_dev, activation)
+                out = out_dev.numpy()
+            return out, "nvidia_cuda_composed"
+        except Exception:
+            return region.reference(A, B, bias), "reference"
+
+    def measure_device_latency(self, region: Any, *inputs: Any,
+                               reps: int = 100, warmup: int = 10) -> float | None:
+        if len(inputs) < 2:
+            return None
+        import numpy as np
+        try:
+            epi = _mma_fused_epilogue(region)
+            if epi is None:
+                return None
+            has_bias, activation = epi
+            aa = _composed_operand(inputs[0], self.storage)
+            bb = _composed_operand(inputs[1], self.storage)
+            bias = inputs[2] if len(inputs) > 2 else None
+            with NvidiaDeviceSession() as s:
+                da, db = s.upload(aa), s.upload(bb)
+                scores = s.empty((aa.shape[0], bb.shape[1]), np.float32)
+                out = s.empty(scores.shape, np.float32)
+                bias_dev = (s.upload(np.ascontiguousarray(bias, np.float32))
+                            if has_bias else None)
+
+                def launch() -> None:
+                    s.gemm(da, db, scores, self.dtype_key)
+                    _resident_epilogue(s, scores, bias_dev, out, activation)
+                return s.measure(launch, reps=reps, warmup=warmup)
+        except Exception:
+            return None
+
+
+class NvidiaMmaGatedComposedCandidate(Candidate):
+    """Two shipped TF32/FP8 projections plus a generated CUDA gate epilogue."""
+
+    tier = Tier.EMITTED
+    target = _TARGET
+    op = OP_GATED_MATMUL
+
+    def __init__(self, storage: str) -> None:
+        dtype_key, suffix, atol = _COMPOSED_STORAGE[storage]
+        self.storage = storage
+        self.dtype_key = dtype_key
+        self.name = f"nvidia_mma_gated_composed_{suffix}"
+        self.accuracy_atol = atol
+        # Two approximate projections are multiplied by the gate, so absolute
+        # error grows with activation magnitude; use the same declared storage
+        # budget relatively as well as absolutely in the universal F4 oracle.
+        self.accuracy_rtol = atol
+
+    def available(self) -> bool:
+        try:
+            from tessera import runtime as rt
+            return rt._nvidia_mma_runtime_available()
+        except Exception:
+            return False
+
+    def applies_to(self, region: Any) -> bool:
+        return (isinstance(region, GatedMatmulRegion)
+                and region.storage_dtype == self.storage)
+
+    def run(self, region: Any, A: Any, Wg: Any, Wu: Any,
+            *a: Any, **k: Any) -> tuple[Any, str]:
+        import numpy as np
+        Aa, Wga, Wua = np.asarray(A), np.asarray(Wg), np.asarray(Wu)
+        if (Aa.ndim != 2 or Wga.ndim != 2 or Wua.ndim != 2
+                or Aa.shape[1] != Wga.shape[0] or Wga.shape != Wua.shape):
+            return region.reference(A, Wg, Wu), "reference"
+        try:
+            aa = _composed_operand(Aa, self.storage)
+            wg = _composed_operand(Wga, self.storage)
+            wu = _composed_operand(Wua, self.storage)
+            with NvidiaDeviceSession() as session:
+                da, dwg, dwu = session.upload(aa), session.upload(wg), session.upload(wu)
+                gate = session.empty((aa.shape[0], wg.shape[1]), np.float32)
+                up = session.empty(gate.shape, np.float32)
+                out_dev = session.empty(gate.shape, np.float32)
+                session.gemm(da, dwg, gate, self.dtype_key)
+                session.gemm(da, dwu, up, self.dtype_key)
+                _resident_gated(session, gate, up, out_dev, region.gate_act)
+                out = out_dev.numpy()
+            return out, "nvidia_cuda_composed"
+        except Exception:
+            return region.reference(A, Wg, Wu), "reference"
+
+    def measure_device_latency(self, region: Any, *inputs: Any,
+                               reps: int = 100, warmup: int = 10) -> float | None:
+        if len(inputs) != 3:
+            return None
+        import numpy as np
+        try:
+            aa = _composed_operand(inputs[0], self.storage)
+            wg = _composed_operand(inputs[1], self.storage)
+            wu = _composed_operand(inputs[2], self.storage)
+            with NvidiaDeviceSession() as s:
+                da, dwg, dwu = s.upload(aa), s.upload(wg), s.upload(wu)
+                gate = s.empty((aa.shape[0], wg.shape[1]), np.float32)
+                up = s.empty(gate.shape, np.float32)
+                out = s.empty(gate.shape, np.float32)
+
+                def launch() -> None:
+                    s.gemm(da, dwg, gate, self.dtype_key)
+                    s.gemm(da, dwu, up, self.dtype_key)
+                    _resident_gated(s, gate, up, out, region.gate_act)
+                return s.measure(launch, reps=reps, warmup=warmup)
+        except Exception:
+            return None
+
+
 # ── D1 matmul candidates (B1) — bare GEMM, Tier-2 emitted vs Tier-3 shipped ────
 #
 # The arbiter enumerates these per (target="nvidia", op=matmul) and F4-gates each.
@@ -2421,12 +3525,21 @@ register_runner(NvidiaCudaRunner(), default=False)
 register_candidate(NvidiaGenericCudaCandidate())
 register_candidate(NvidiaMmaFusedCandidate("f16"))   # tensor-core fused GEMM+epi
 register_candidate(NvidiaMmaFusedCandidate("bf16"))
+register_candidate(NvidiaMmaFusedComposedCandidate("f32"))
+register_candidate(NvidiaMmaFusedComposedCandidate("fp8_e4m3"))
+register_candidate(NvidiaMmaFusedComposedCandidate("fp8_e5m2"))
 register_candidate(NvidiaFlashAttnCandidate())        # C4: synthesized attention
 register_candidate(NvidiaMmaAttnCandidate("f16"))    # tensor-core flash attention
 register_candidate(NvidiaMmaAttnCandidate("bf16"))
+register_candidate(NvidiaMmaAttnComposedCandidate("f32"))
+register_candidate(NvidiaMmaAttnComposedCandidate("fp8_e4m3"))
+register_candidate(NvidiaMmaAttnComposedCandidate("fp8_e5m2"))
 register_candidate(NvidiaGatedCandidate())            # C5: SwiGLU gate
 register_candidate(NvidiaMmaGatedCandidate("f16"))
 register_candidate(NvidiaMmaGatedCandidate("bf16"))
+register_candidate(NvidiaMmaGatedComposedCandidate("f32"))
+register_candidate(NvidiaMmaGatedComposedCandidate("fp8_e4m3"))
+register_candidate(NvidiaMmaGatedComposedCandidate("fp8_e5m2"))
 register_candidate(NvidiaPointwiseCandidate())        # C5: pointwise DAG
 # Bare-GEMM lanes: hand-tuned shipped (Tier 3) + compiler-emitted (Tier 2).
 register_candidate(NvidiaMmaGemmShippedCandidate())

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-07
+last_updated: 2026-07-14
 audit_role: sub_audit
 ---
 
@@ -78,11 +78,11 @@ sm_120 (RTX 5070 Ti, PRs #290–#297):
   (B1), with D2 measured autotune + D3 fallback logging choosing/observing between
   them. So NVIDIA now has the `rocm_compiled` analog it lacked, plus the arbiter
   surface.
-- **NVFP4 block-scale matmul (#9)** — **emit + ptxas-assemble landed** (#291,
-  `emit_nvfp4_block_scale_mma_ptx`). The 2026-07-13 RTX 5070 Ti `sm_120a`
-  probe exposed that the presumed unit-scale mapping is incorrect (128/128
-  outputs failed), so unit- and non-unit-scale numerics plus the runtime ABI
-  remain gated. Assembly is not cited as execution proof.
+- **NVFP4 block-scale matmul (#9)** — **execute-and-compare complete** on the
+  RTX 5070 Ti `sm_120a`. Uniform 0.5/1/2 and distinct per-block UE4M3 scale
+  matrices match exactly; the PTX 9.3 selector ABI and
+  `OMMA.SF.16864.F32.E2M1.E2M1.UE4M3.4X` SASS are regression-tested. The old
+  128/128 failure was an unsigned-host-buffer conversion bug in the spike.
 - **Other NVIDIA SMs stay `artifact_only`** — sm_80/90/100 are proven only on
   sm_120 silicon; promoting them needs their own hardware (Hopper box for
   sm_90a WGMMA; datacenter Blackwell for sm_100 `tcgen05`/TMEM).
@@ -120,9 +120,9 @@ Done (2026-07-07): the compiler-generated lane (#290–#297), the sm_120 `mma.sy
 flash-attention execute-compare (C4), and the sm_120 kernel-inventory doc
 (`docs/backends/nvidia/sm120-kernel-guide.md`). Remaining:
 
-1. **NVFP4 block-scale execution + numerics** — bind the fp4 fragment packing and
-   flip the manifest row once execute-and-compare passes on `sm_120a` and the
-   scale-distribution numerics are grounded (emit + ptxas-assemble already land).
+1. **NVFP4 block-scale productization** — execution, fragment packing, scale
+   distribution, and numerics are now grounded on `sm_120a`; connect the proven
+   oracle to general-shape runtime dispatch and the Tile fragment contract.
 2. **mma.sync tensor-core FUSED + FLASH-ATTENTION + GATED lanes — LANDED**
    (Tier-2, f16 and bf16 storage): `NvidiaMmaFusedCandidate` — a warp-tiled
    `mma.sync.m16n8k16` GEMM +
@@ -143,8 +143,15 @@ flash-attention execute-compare (C4), and the sm_120 kernel-inventory doc
    device/op/shape-bucket/dtype verdict before tier priority, while retaining F4
    verification and explicit-force precedence. Expand this corpus when a new
    candidate, representative workload, or target device is introduced.
-3. **Dtype breadth after f16/bf16:** tf32 and supported FP8 variants for fused /
-   attention / gated, each gated on an execution oracle and numerical budget.
+3. **Dtype breadth after f16/bf16 — LANDED for executable composition
+   (2026-07-14).** The shipped GEMM ABI now dispatches all five implemented
+   symbols: f16, bf16, TF32 math over f32 storage, E4M3, and E5M2. TF32/FP8
+   `matmul_relu`, `matmul_softmax`, attention, and gated projections execute as
+   explicit multi-launch compositions with generated CUDA softmax/ReLU/gate
+   stages, one-stream device-resident intermediates, CUDA-event timing, and
+   declared numerical budgets. The f16/bf16 candidates remain the
+   native single-kernel fused performance lanes; TF32/FP8 are not mislabeled as
+   fused until equivalent native kernels have their own execution oracle.
 4. **`wgmma` sm_90a** — complete the instruction-encoding skeleton into a real
    Hopper WGMMA kernel (assemble-only until a Hopper box) — and **sm_100 tcgen05**.
 5. Promote sm_80/90/100 manifest rows only when their own silicon is available
@@ -173,9 +180,12 @@ flash-attention execute-compare (C4), and the sm_120 kernel-inventory doc
    CUDA Driver API, and matches NumPy on the RTX 5070 Ti; proof:
    `sm120_pointer_fragment_store.mlir` and
    `tests/unit/test_nvidia_tile_fragment_compiler_path.py`; explicit bf16 pack
-   proof is `sm120_pointer_fragment_store_bf16.mlir`. **Still open:** tf32 / int
-   fragment shapes +
-   `wgmma`/`tcgen05`/TMEM as their silicon lands. This converges the MLIR Target IR
+   proof is `sm120_pointer_fragment_store_bf16.mlir`. **Dtype fragment breadth
+   landed:** TF32 m16n8k8, E4M3/E5M2 m16n8k32, and s8 m16n8k32 layout-bearing
+   packs lower, assemble, launch, and compare on the RTX 5070 Ti. LLVM 22's NVVM
+   verifier handles TF32/int8; FP8 uses narrowly typed inline PTX until the
+   dialect accepts those valid encodings. Still open are
+   `wgmma`/`tcgen05`/TMEM on their silicon. This converges the MLIR Target IR
    path with the Python emit path that currently carries execution. The
    cross-vendor Tile view/fragment-pack/unpack contract and delivery order are in
    [`tile_fragment_abi.md`](../../../architecture/proposals/tile_fragment_abi.md).
@@ -208,23 +218,37 @@ flash-attention execute-compare (C4), and the sm_120 kernel-inventory doc
    measurement hook. The committed f16/bf16 rows prove the direct→shared
    crossover between 512³ and 1024³ and select shared at 1024/2048.
 
-7. **sm_120 op×target conformance backlog.** The generated
+7. **sm_120 op×target conformance backlog — initial queue CLOSED
+   (2026-07-14).** The generated
    [`op_target_conformance.md`](../../op_target_conformance.md) dashboard is the
-   authoritative completion check; do **not** edit it directly. Its open
-   `nvidia_sm120` cells are planned here so an operation moves only after all
-   proof rungs (compile, execution, and numerical comparison) turn green:
+   authoritative completion check; do **not** edit it directly. All four
+   formerly open `nvidia_sm120` cells below now have compile, live execution,
+   and numerical fixtures:
 
-   | Order | Open operation | First failing gate | Intended implementation / dependency |
+   | Order | Operation | Status | Implementation / proof |
    |---:|---|---|---|
-   | A | `matmul_relu` | `backend_compile` | Add the fusable ReLU epilogue to the canonical `mma.sync` Tile→fragment path (priority #3), then prove its compiled CUDA entry point against the reference. |
-   | B | `matmul_softmax` | `runtime_execute` | Compose the already-complete sm_120 matmul and softmax lanes under one runtime plan; start with correct multi-launch execution, then decide whether a fused score kernel earns a separate lane. |
-   | C | `kv_cache_read` | `backend_compile` | Promote the existing artifact to a compiled sm_120 paged-KV read kernel, then add decode-length and page-boundary execute-and-compare fixtures. This is the prerequisite for an end-to-end decoder serving path. |
-   | D | `conv2d` | `backend_compile` | Add an explicit im2col/direct-convolution CUDA choice with shape guards; validate against the reference before considering tensor-core specialization. |
+   | A | `matmul_relu` | Complete | Canonical Tile accumulator epilogue for f16/bf16; TF32/FP8 use shipped MMA + generated CUDA ReLU. Bias and ragged stores execute-and-compare on sm_120. |
+   | B | `matmul_softmax` | Complete | Device-resident GEMM→row-softmax composition, including TF32/E4M3/E5M2 execution and event timing. |
+   | C | `kv_cache_read` | Complete | Stable paged f32 ABI with logical→physical tables, arbitrary crossings, guards, and resident gather→attention decode with only final D2H. |
+   | D | `conv2d` | Complete | Guarded direct, shared-weight tiled, and im2col→TF32 routes with numerical fixtures and event-timed size dispatch. D2 selects direct at 1×32×32×32/3×3×64 and im2col→TF32 at 1×64×64×64/3×3×64 on this RTX 5070 Ti. |
 
-   `matmul`, `softmax`, and `flash_attn` are already complete on sm_120. Re-run
+   `matmul`, `softmax`, and `flash_attn` were already complete on sm_120. Re-run
    `python -m tessera.cli.conformance_matrix --render` after each promotion; the
    dashboard and its drift test are the completion gate. Keep NVFP4 separate from
    this queue until its block-scale ABI/numerics are grounded.
+
+8. **Serving evidence landed (2026-07-14).** ReplaySSM's ordered multi-slot
+   ring now exposes start/completion event timing while retaining its opaque
+   device-buffer lease. `benchmarks/baselines/nvidia_sm120_serving.json` records
+   live async ReplaySSM and resident paged-KV decode. For the measured 16-token
+   wave, analytical recurrent-state traffic falls 20.4× at B1/D128/N64 and 25.5×
+   at B1/D256/N128; device time is 0.098 and 0.101 ms/token. Paged decode now
+   compares a single-launch kernel that reads the page table directly against
+   the staged resident plan. D2 selects fused at 128 tokens (0.107 vs 0.320 ms)
+   and staged at 512 (0.374 vs 0.434 ms) and 2048 (0.469 vs 1.722 ms), then
+   warm-starts runtime selection from those committed rows. The corpus also
+   carries device-only TF32/E4M3/E5M2 fused, attention, gated, convolution, and
+   ReplaySSM route measurements.
 
 ## Source Material Consolidated
 

@@ -161,6 +161,29 @@ def test_nvidia_mma_gated_candidates_registered_and_apply_by_storage():
     assert not mf.applies_to(F.GatedMatmulRegion(storage_dtype="bf16"))
 
 
+def test_nvidia_tf32_fp8_composed_candidates_registered_by_storage():
+    from tessera.compiler.emit.candidate import OP_ATTENTION, OP_GATED_MATMUL
+    fused = {c.name: c for c in C.candidates_for("nvidia", OP_FUSED_REGION)}
+    attn = {c.name: c for c in C.candidates_for("nvidia", OP_ATTENTION)}
+    gated = {c.name: c for c in C.candidates_for("nvidia", OP_GATED_MATMUL)}
+    suffixes = {"tf32": "f32", "fp8_e4m3": "fp8_e4m3",
+                "fp8_e5m2": "fp8_e5m2"}
+    for suffix, storage in suffixes.items():
+        ac = attn[f"nvidia_mma_attn_composed_{suffix}"]
+        fc = fused[f"nvidia_mma_fused_composed_{suffix}"]
+        gc = gated[f"nvidia_mma_gated_composed_{suffix}"]
+        assert ac.tier == fc.tier == gc.tier == Tier.EMITTED
+        assert ac.applies_to(F.AttentionRegion(storage_dtype=storage))
+        assert fc.applies_to(F.FusedRegion(
+            epilogue=("bias", "gelu"), storage_dtype=storage))
+        assert gc.applies_to(F.GatedMatmulRegion(storage_dtype=storage))
+        other = "fp8_e5m2" if storage != "fp8_e5m2" else "f32"
+        assert not ac.applies_to(F.AttentionRegion(storage_dtype=other))
+        assert not fc.applies_to(F.FusedRegion(
+            epilogue=("relu",), storage_dtype=other))
+        assert not gc.applies_to(F.GatedMatmulRegion(storage_dtype=other))
+
+
 def test_nvidia_mma_fused_rejects_bad_inputs():
     # PR #301 review: a mismatched contraction dim or a short bias must raise (like
     # FusedRegion.reference), not launch the C ABI on an overreading buffer.
@@ -428,12 +451,11 @@ def test_live_nvidia_tile_matmul_schedule_candidates(dtype, schedule):
 @pytest.mark.slow
 @pytest.mark.skipif(not _nvidia_tile_matmul_live(),
                     reason="live sm_120 + Tile compiler + PTX bridge required")
-def test_live_nvidia_device_timing_selects_tile_crossover():
+def test_live_nvidia_device_timing_records_fastest_tile_schedule():
     from tessera.compiler.emit import autotune as AT
     cache = AT.MeasureCache()
     region = F.MatmulRegion(dtype="float16")
     rng = np.random.default_rng(121)
-    winners = {}
     for size in (512, 1024):
         A = rng.uniform(-1, 1, (size, size)).astype(np.float32)
         B = rng.uniform(-1, 1, (size, size)).astype(np.float32)
@@ -442,13 +464,17 @@ def test_live_nvidia_device_timing_selects_tile_crossover():
             dtype="float16", cache=cache, reps=50, warmup=10,
             timing="device")
         assert winner is not None
-        winners[size] = winner.name
-    assert winners == {512: "nvidia_tile_matmul_direct",
-                       1024: "nvidia_tile_matmul_shared"}
     rows = cache.to_dict()["records"]
     assert all(row["timing"] == "device" for row in rows)
     assert all(set(row["candidates"]) == {
         "nvidia_tile_matmul_direct", "nvidia_tile_matmul_shared"}
+               for row in rows)
+    # Clocks, thermals, and neighboring WSL activity can move the crossover.
+    # The invariant is evidence-based selection: each persisted winner must be
+    # the schedule with the lowest latency in that measurement, not a hard-coded
+    # shape threshold learned on one run.
+    assert all(row["winner"] == min(
+        row["candidates"], key=lambda name: row["candidates"][name])
                for row in rows)
 
 
@@ -754,3 +780,48 @@ def test_live_nvidia_tensor_core_dtype_variants(kind, candidate_name, atol):
     out, tag = candidate.run(region, *inputs)
     assert tag == "nvidia_cuda"
     np.testing.assert_allclose(out, region.reference(*inputs), atol=atol)
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not _nvidia_cuda_live(),
+                    reason="live NVIDIA GPU + nvcc required")
+@pytest.mark.parametrize("kind", ["fused", "attention", "gated"])
+@pytest.mark.parametrize(
+    "storage,suffix,atol",
+    [("f32", "tf32", 2e-2),
+     ("fp8_e4m3", "fp8_e4m3", 2e-1),
+     ("fp8_e5m2", "fp8_e5m2", 4e-1)],
+)
+def test_live_nvidia_tf32_fp8_composed_transformer_lanes(
+        kind, storage, suffix, atol):
+    """Execute composed MMA→CUDA-stage lanes on ragged transformer shapes."""
+    from tessera.compiler.emit.candidate import OP_ATTENTION, OP_GATED_MATMUL
+    rng = np.random.default_rng(121)
+    if kind == "fused":
+        region = F.FusedRegion(
+            epilogue=("bias", "gelu"), storage_dtype=storage)
+        op, prefix = OP_FUSED_REGION, "nvidia_mma_fused_composed_"
+        A = (rng.standard_normal((19, 29)) * 0.15).astype(np.float32)
+        B = (rng.standard_normal((29, 23)) * 0.15).astype(np.float32)
+        bias = (rng.standard_normal((23,)) * 0.05).astype(np.float32)
+        inputs = (A, B, bias)
+    elif kind == "attention":
+        region = F.AttentionRegion(
+            scale=0.125, causal=True, storage_dtype=storage)
+        op, prefix = OP_ATTENTION, "nvidia_mma_attn_composed_"
+        inputs = tuple((rng.standard_normal(shape) * 0.15).astype(np.float32)
+                       for shape in ((19, 29), (21, 29), (21, 23)))
+    else:
+        region = F.GatedMatmulRegion(
+            gate_act="silu", storage_dtype=storage)
+        op, prefix = OP_GATED_MATMUL, "nvidia_mma_gated_composed_"
+        inputs = tuple((rng.standard_normal(shape) * 0.15).astype(np.float32)
+                       for shape in ((19, 29), (29, 23), (29, 23)))
+    candidate = next(c for c in C.candidates_for("nvidia", op)
+                     if c.name == prefix + suffix)
+    out, tag = candidate.run(region, *inputs)
+    assert tag == "nvidia_cuda_composed"
+    np.testing.assert_allclose(out, region.reference(*inputs), atol=atol)
+    latency = candidate.measure_device_latency(
+        region, *inputs, reps=5, warmup=2)
+    assert latency is not None and latency > 0

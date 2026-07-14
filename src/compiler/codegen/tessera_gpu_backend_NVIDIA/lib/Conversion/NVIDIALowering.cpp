@@ -55,14 +55,23 @@ static Operation *createContractOp(OpBuilder &builder, Location loc,
 }
 
 static bool isCanonicalSm120Mma16(tessera::tile::TileMmaDescAttr desc) {
-  return desc && (desc.getFamily() == "auto" || desc.getFamily() == "mma_sync") &&
-         desc.getM() == 16 && desc.getN() == 8 && desc.getK() == 16 &&
-         (desc.getAType() == "f16" || desc.getAType() == "bf16") &&
-         desc.getBType() == desc.getAType() &&
-         (desc.getAccType() == "f32" ||
-          (desc.getAType() == "f16" && desc.getAccType() == "f16")) &&
-         desc.getALayout() == "row_major" &&
-         desc.getBLayout() == "col_major" && desc.getKBlocks() == 1;
+  if (!desc || (desc.getFamily() != "auto" && desc.getFamily() != "mma_sync") ||
+      desc.getM() != 16 || desc.getN() != 8 ||
+      desc.getAType() != desc.getBType() ||
+      desc.getALayout() != "row_major" || desc.getBLayout() != "col_major" ||
+      desc.getKBlocks() != 1)
+    return false;
+  StringRef dtype = desc.getAType();
+  if ((dtype == "f16" || dtype == "bf16") && desc.getK() == 16)
+    return desc.getAccType() == "f32" ||
+           (dtype == "f16" && desc.getAccType() == "f16");
+  if (dtype == "tf32" && desc.getK() == 8)
+    return desc.getAccType() == "f32";
+  if ((dtype == "e4m3" || dtype == "e5m2") && desc.getK() == 32)
+    return desc.getAccType() == "f32";
+  if ((dtype == "s8" || dtype == "int8") && desc.getK() == 32)
+    return desc.getAccType() == "s32" || desc.getAccType() == "int32";
+  return false;
 }
 
 static Value i64Constant(OpBuilder &builder, Location loc, int64_t value) {
@@ -475,13 +484,13 @@ static LogicalResult materializeSm120MatmulKernel(
 
 static FailureOr<SmallVector<Value>> materializeSm120Mma16Pack(
     tessera::tile::FragmentPackOp pack, OpBuilder &builder, Value gid,
-    Value twoTig) {
+    Value tig) {
   Operation *op = pack.getOperation();
   auto role = op->getAttrOfType<StringAttr>("role");
   auto desc = op->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma");
   if (!role || !isCanonicalSm120Mma16(desc)) {
-    op->emitError("sm_120 fragment materialization requires canonical "
-                  "m16n8k16 row/col f16 or bf16 descriptor");
+    op->emitError("sm_120 fragment materialization requires a supported "
+                  "m16n8k{8,16,32} row/col descriptor");
     return failure();
   }
 
@@ -501,7 +510,8 @@ static FailureOr<SmallVector<Value>> materializeSm120Mma16Pack(
 
   StringRef expectedOrder = role.getValue() == "a" ? "row_major" : "col_major";
   SmallVector<int64_t, 2> expectedShape = role.getValue() == "a"
-      ? SmallVector<int64_t, 2>{16, 16} : SmallVector<int64_t, 2>{16, 8};
+      ? SmallVector<int64_t, 2>{16, desc.getK()}
+      : SmallVector<int64_t, 2>{desc.getK(), 8};
   if ((role.getValue() != "a" && role.getValue() != "b") ||
       memory.getOrder() != expectedOrder || memory.getSpace() == "lds" ||
       layout.getShardExtents() != ArrayRef<int64_t>(expectedShape) ||
@@ -532,20 +542,44 @@ static FailureOr<SmallVector<Value>> materializeSm120Mma16Pack(
 
   Location loc = op->getLoc();
   MLIRContext *ctx = builder.getContext();
-  Type inputTy = desc.getAType() == "bf16"
-      ? Type(BFloat16Type::get(ctx)) : Type(Float16Type::get(ctx));
-  auto loadTy = VectorType::get({2}, inputTy);
+  StringRef dtype = desc.getAType();
+  Type inputTy;
+  Type loadTy;
+  unsigned alignment;
+  int64_t columnsPerRegister;
+  if (dtype == "f16" || dtype == "bf16") {
+    inputTy = dtype == "bf16" ? Type(BFloat16Type::get(ctx))
+                               : Type(Float16Type::get(ctx));
+    loadTy = VectorType::get({2}, inputTy);
+    alignment = 2;
+    columnsPerRegister = 2;
+  } else if (dtype == "tf32") {
+    inputTy = builder.getF32Type();
+    loadTy = inputTy;
+    alignment = 4;
+    columnsPerRegister = 1;
+  } else {
+    inputTy = builder.getI8Type();
+    loadTy = VectorType::get({4}, inputTy);
+    alignment = 1;
+    columnsPerRegister = 4;
+  }
   Value leadingDim = i64Constant(builder, loc, memory.getLeadingDim());
   Value eight = i64Constant(builder, loc, 8);
+  Value registerColumn = mulI64(
+      builder, loc, tig, i64Constant(builder, loc, columnsPerRegister));
+  Value halfK = i64Constant(builder, loc, desc.getK() / 2);
 
   SmallVector<std::pair<Value, Value>> coords;
   if (role.getValue() == "a") {
-    coords = {{gid, twoTig}, {addI64(builder, loc, gid, eight), twoTig},
-              {gid, addI64(builder, loc, twoTig, eight)},
+    coords = {{gid, registerColumn},
+              {addI64(builder, loc, gid, eight), registerColumn},
+              {gid, addI64(builder, loc, registerColumn, halfK)},
               {addI64(builder, loc, gid, eight),
-               addI64(builder, loc, twoTig, eight)}};
+               addI64(builder, loc, registerColumn, halfK)}};
   } else {
-    coords = {{twoTig, gid}, {addI64(builder, loc, twoTig, eight), gid}};
+    coords = {{registerColumn, gid},
+              {addI64(builder, loc, registerColumn, halfK), gid}};
   }
 
   SmallVector<Value> fragments;
@@ -557,9 +591,8 @@ static FailureOr<SmallVector<Value>> materializeSm120Mma16Pack(
         : addI64(builder, loc, mulI64(builder, loc, col, leadingDim), row);
     Value ptr = LLVM::GEPOp::create(builder, loc, base.getType(), inputTy, base,
                                     ValueRange{linear});
-    Value fragment = LLVM::LoadOp::create(builder, loc, loadTy, ptr,
-                                          /*alignment=*/2);
-    if (desc.getAType() == "bf16")
+    Value fragment = LLVM::LoadOp::create(builder, loc, loadTy, ptr, alignment);
+    if (dtype != "f16")
       fragment = LLVM::BitcastOp::create(
           builder, loc, builder.getI32Type(), fragment);
     fragments.push_back(fragment);
@@ -567,7 +600,7 @@ static FailureOr<SmallVector<Value>> materializeSm120Mma16Pack(
   return fragments;
 }
 
-static LogicalResult materializeSm120F32Store(
+static LogicalResult materializeSm120AccumulatorStore(
     Operation *mmaTarget, tessera::tile::FragmentUnpackOp unpack,
     tessera::tile::StoreOp store, OpBuilder &builder, Value gid,
     Value twoTig) {
@@ -580,7 +613,10 @@ static LogicalResult materializeSm120F32Store(
   auto memory =
       store->getAttrOfType<tessera::tile::TileMemoryLayoutAttr>("tile.memory");
   std::array<int64_t, 2> outputShape{16, 8};
-  if (!isCanonicalSm120Mma16(desc) || desc.getAccType() != "f32" ||
+  bool isF32 = desc && desc.getAccType() == "f32";
+  bool isS32 = desc && (desc.getAccType() == "s32" ||
+                        desc.getAccType() == "int32");
+  if (!isCanonicalSm120Mma16(desc) || (!isF32 && !isS32) ||
       !unpackLayout || !storeLayout || !memory ||
       unpackLayout.getShardExtents() != ArrayRef<int64_t>(outputShape) ||
       storeLayout.getShardExtents() != ArrayRef<int64_t>(outputShape) ||
@@ -588,7 +624,7 @@ static LogicalResult materializeSm120F32Store(
       storeLayout.getSwizzle() || memory.getSpace() != "gmem" ||
       memory.getOrder() != "row_major") {
     op->emitError("sm_120 accumulator store requires unswizzled 16x8 row-major "
-                  "gmem output and f32 accumulator");
+                  "gmem output and f32 or s32 accumulator");
     return failure();
   }
 
@@ -604,7 +640,8 @@ static LogicalResult materializeSm120F32Store(
   }
 
   Location loc = op->getLoc();
-  Type f32Ty = builder.getF32Type();
+  Type accumulatorTy = isF32 ? Type(builder.getF32Type())
+                             : Type(builder.getI32Type());
   Value one = i64Constant(builder, loc, 1);
   Value eight = i64Constant(builder, loc, 8);
   SmallVector<std::pair<Value, Value>> coords = {
@@ -620,10 +657,10 @@ static LogicalResult materializeSm120F32Store(
     Value col = addI64(builder, loc, colOrigin, coord.second);
     Value linear = addI64(builder, loc,
                           mulI64(builder, loc, row, leadingDim), col);
-    Value ptr = LLVM::GEPOp::create(builder, loc, base.getType(), f32Ty, base,
+    Value ptr = LLVM::GEPOp::create(builder, loc, base.getType(), accumulatorTy, base,
                                     ValueRange{linear});
     Value scalar = LLVM::ExtractValueOp::create(
-        builder, loc, f32Ty, result,
+        builder, loc, accumulatorTy, result,
         ArrayRef<int64_t>{static_cast<int64_t>(index)});
     LLVM::StoreOp::create(builder, loc, scalar, ptr, /*alignment=*/4);
   }
@@ -744,8 +781,9 @@ struct LowerTileToNVIDIAPass
             signalPassFailure();
             return;
           }
-          if (hasOutputStore && desc.getAccType() != "f32") {
-            op->emitError("sm_120 fragment unpack/store requires f32 accumulator");
+          if (hasOutputStore && desc.getAccType() != "f32" &&
+              desc.getAccType() != "s32" && desc.getAccType() != "int32") {
+            op->emitError("sm_120 fragment unpack/store requires f32 or s32 accumulator");
             signalPassFailure();
             return;
           }
@@ -764,22 +802,22 @@ struct LowerTileToNVIDIAPass
               builder, loc, tig32,
               arith::ConstantIntOp::create(builder, loc, 2, 32));
           Value gid = arith::ExtUIOp::create(builder, loc, builder.getI64Type(), gid32);
+          Value tig = arith::ExtUIOp::create(builder, loc, builder.getI64Type(),
+                                             tig32);
           Value twoTig = arith::ExtUIOp::create(builder, loc, builder.getI64Type(),
                                                 twoTig32);
           FailureOr<SmallVector<Value>> a =
-              materializeSm120Mma16Pack(aPack, builder, gid, twoTig);
+              materializeSm120Mma16Pack(aPack, builder, gid, tig);
           FailureOr<SmallVector<Value>> b =
-              materializeSm120Mma16Pack(bPack, builder, gid, twoTig);
+              materializeSm120Mma16Pack(bPack, builder, gid, tig);
           if (failed(a) || failed(b)) {
             signalPassFailure();
             return;
           }
 
-          Type inputTy = desc.getAType() == "bf16"
-              ? Type(BFloat16Type::get(ctx)) : Type(Float16Type::get(ctx));
-          Type fragTy = desc.getAType() == "bf16"
-              ? Type(builder.getI32Type())
-              : Type(VectorType::get({2}, inputTy));
+          Type fragTy = desc.getAType() == "f16"
+              ? Type(VectorType::get({2}, Float16Type::get(ctx)))
+              : Type(builder.getI32Type());
           SmallVector<Value> operands(*a);
           operands.append(b->begin(), b->end());
           Type resultTy;
@@ -790,16 +828,23 @@ struct LowerTileToNVIDIAPass
             resultTy = LLVM::LLVMStructType::getLiteral(
                 ctx, {builder.getF32Type(), builder.getF32Type(),
                       builder.getF32Type(), builder.getF32Type()});
-          } else {
+          } else if (desc.getAccType() == "f16") {
             Value zero = arith::ConstantOp::create(
                 builder, loc, fragTy, builder.getZeroAttr(fragTy));
             operands.push_back(zero);
             operands.push_back(zero);
             resultTy = LLVM::LLVMStructType::getLiteral(ctx, {fragTy, fragTy});
+          } else {
+            Value zero = arith::ConstantIntOp::create(builder, loc, 0, 32);
+            operands.append(4, zero);
+            resultTy = LLVM::LLVMStructType::getLiteral(
+                ctx, {builder.getI32Type(), builder.getI32Type(),
+                      builder.getI32Type(), builder.getI32Type()});
           }
+          std::string shape = "m16n8k" + std::to_string(desc.getK());
           SmallVector<NamedAttribute> mmaAttrs = {
               builder.getNamedAttr("arch", builder.getStringAttr("sm_120")),
-              builder.getNamedAttr("shape", builder.getStringAttr("m16n8k16")),
+              builder.getNamedAttr("shape", builder.getStringAttr(shape)),
               builder.getNamedAttr("dtype_ab",
                                    builder.getStringAttr(desc.getAType())),
               builder.getNamedAttr("dtype_c",
@@ -809,8 +854,8 @@ struct LowerTileToNVIDIAPass
               builder, loc, "tessera_nvidia.mma_sync", operands,
               TypeRange{resultTy}, mmaAttrs);
           if (hasOutputStore &&
-              failed(materializeSm120F32Store(target, unpack, store, builder,
-                                               gid, twoTig))) {
+              failed(materializeSm120AccumulatorStore(
+                  target, unpack, store, builder, gid, twoTig))) {
             signalPassFailure();
             return;
           }
@@ -1087,18 +1132,25 @@ static StringRef markerForTargetOp(StringRef opName) {
 // (C:4 f32, four-f32 struct result) are accepted. The abstract tile->target form
 // (scalar operands, dtype_ab="bf16") does NOT match and falls through to the
 // honest marker (Decision #21: never silently emit a different / wrong kernel).
-// f16 and bf16 multiplicands share the 4×A / 2×B 16-bit register shape; tf32 /
-// int fragment shapes remain follow-on (hardware-gated) work.
+// f16/bf16, tf32, fp8, and int8 all use four A and two B registers for the
+// canonical sm_120 shapes. Their physical register types and K extents differ.
 static bool tryLowerMmaSyncToNVVM(Operation *op, OpBuilder &builder) {
   if (op->getName().getStringRef() != "tessera_nvidia.mma_sync")
     return false;
   auto shape = op->getAttrOfType<StringAttr>("shape");
   auto dtypeAB = op->getAttrOfType<StringAttr>("dtype_ab");
   auto dtypeC = op->getAttrOfType<StringAttr>("dtype_c");
-  if (!shape || shape.getValue() != "m16n8k16")
+  if (!shape || !dtypeAB)
     return false;
-  if (!dtypeAB || (dtypeAB.getValue() != "f16" &&
-                   dtypeAB.getValue() != "bf16"))
+  StringRef dtype = dtypeAB.getValue();
+  bool isF16 = dtype == "f16";
+  bool isBF16 = dtype == "bf16";
+  bool isTF32 = dtype == "tf32";
+  bool isFP8 = dtype == "e4m3" || dtype == "e5m2";
+  bool isS8 = dtype == "s8" || dtype == "int8";
+  if (!((shape.getValue() == "m16n8k16" && (isF16 || isBF16)) ||
+        (shape.getValue() == "m16n8k8" && isTF32) ||
+        (shape.getValue() == "m16n8k32" && (isFP8 || isS8))))
     return false;
   if (op->getNumResults() != 1)
     return false;
@@ -1106,19 +1158,26 @@ static bool tryLowerMmaSyncToNVVM(Operation *op, OpBuilder &builder) {
   if (!structTy)
     return false;
   ValueRange operands = op->getOperands();
-  Type fragTy = dtypeAB.getValue() == "bf16"
-      ? Type(IntegerType::get(op->getContext(), 32))
-      : Type(VectorType::get({2}, Float16Type::get(op->getContext())));
-  if (!dtypeC || (dtypeC.getValue() != "f16" && dtypeC.getValue() != "f32"))
+  Type fragTy = isF16
+      ? Type(VectorType::get({2}, Float16Type::get(op->getContext())))
+      : Type(IntegerType::get(op->getContext(), 32));
+  bool isF32Accumulator = dtypeC && dtypeC.getValue() == "f32";
+  bool isF16Accumulator = dtypeC && dtypeC.getValue() == "f16";
+  bool isS32Accumulator = dtypeC &&
+      (dtypeC.getValue() == "s32" || dtypeC.getValue() == "int32");
+  if ((!isS8 && !isF32Accumulator && !(isF16 && isF16Accumulator)) ||
+      (isS8 && !isS32Accumulator))
     return false;
-  unsigned cCount = dtypeC.getValue() == "f32" ? 4 : 2;
+  unsigned cCount = isF16Accumulator ? 2 : 4;
   if (operands.size() != 6 + cCount)
     return false;
   for (Value v : operands.take_front(6))
     if (v.getType() != fragTy)
       return false;
-  Type cType = dtypeC.getValue() == "f32"
-      ? Float32Type::get(op->getContext()) : Type(fragTy);
+  Type cType = isF32Accumulator
+      ? Type(Float32Type::get(op->getContext()))
+      : (isS32Accumulator ? Type(IntegerType::get(op->getContext(), 32))
+                          : Type(fragTy));
   for (Value v : operands.drop_front(6))
     if (v.getType() != cType)
       return false;
@@ -1131,12 +1190,48 @@ static bool tryLowerMmaSyncToNVVM(Operation *op, OpBuilder &builder) {
   SmallVector<Value> b(operands.begin() + 4, operands.begin() + 6);
   SmallVector<Value> c(operands.begin() + 6, operands.end());
   builder.setInsertionPoint(op);
-  NVVM::MMATypes inputPtxType = dtypeAB.getValue() == "bf16"
-      ? NVVM::MMATypes::bf16 : NVVM::MMATypes::f16;
+  // LLVM 22 exposes FP8 MMA enums but its NVVM MmaOp verifier does not yet
+  // admit the m16n8k32 FP8 shapes accepted by CUDA 13.3 and sm_120. Keep the
+  // same typed i32/f32 contract and legalize only that gap through inline PTX.
+  if (isFP8) {
+    SmallVector<Value> asmOperands(a);
+    asmOperands.append(b.begin(), b.end());
+    asmOperands.append(c.begin(), c.end());
+    std::string assembly =
+        "mma.sync.aligned.m16n8k32.row.col.f32." + dtype.str() + "." +
+        dtype.str() +
+        ".f32 {$0,$1,$2,$3}, {$4,$5,$6,$7}, {$8,$9}, "
+        "{$10,$11,$12,$13};";
+    auto inlineMma = LLVM::InlineAsmOp::create(
+        builder, op->getLoc(), structTy, ValueRange(asmOperands), assembly,
+        "=f,=f,=f,=f,r,r,r,r,r,r,0,1,2,3",
+        /*has_side_effects=*/false, /*is_align_stack=*/false,
+        LLVM::tailcallkind::TailCallKind::None, /*asm_dialect=*/nullptr,
+        /*operand_attrs=*/nullptr);
+    op->replaceAllUsesWith(inlineMma.getOperation()->getResults());
+    op->erase();
+    return true;
+  }
+  NVVM::MMATypes inputPtxType = NVVM::MMATypes::f16;
+  if (isBF16)
+    inputPtxType = NVVM::MMATypes::bf16;
+  else if (isTF32)
+    inputPtxType = NVVM::MMATypes::tf32;
+  else if (dtype == "e4m3")
+    inputPtxType = NVVM::MMATypes::e4m3;
+  else if (dtype == "e5m2")
+    inputPtxType = NVVM::MMATypes::e5m2;
+  else if (isS8)
+    inputPtxType = NVVM::MMATypes::s8;
+  int64_t k = shape.getValue() == "m16n8k8" ? 8 :
+              (shape.getValue() == "m16n8k32" ? 32 : 16);
+  std::optional<NVVM::MMAIntOverflow> intOverflow = std::nullopt;
+  if (isS8)
+    intOverflow = NVVM::MMAIntOverflow::wrapped;
   auto mma = builder.create<NVVM::MmaOp>(
       op->getLoc(), structTy, ValueRange(a), ValueRange(b), ValueRange(c),
-      ArrayRef<int64_t>{16, 8, 16}, /*b1Op=*/std::nullopt,
-      /*intOverflow=*/std::nullopt,
+      ArrayRef<int64_t>{16, 8, k}, /*b1Op=*/std::nullopt,
+      /*intOverflow=*/intOverflow,
       /*multiplicandPtxTypes=*/
       std::array<NVVM::MMATypes, 2>{inputPtxType, inputPtxType},
       /*multiplicandLayouts=*/

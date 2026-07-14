@@ -37,6 +37,10 @@ def _render() -> str:
     return cm.render_markdown()
 
 
+def _csv_path(markdown_path: Path) -> Path:
+    return markdown_path.with_suffix(".csv")
+
+
 @dataclass(frozen=True)
 class FixtureResult:
     op: str
@@ -142,10 +146,14 @@ def main(argv: list[str] | None = None) -> int:
         return _verify_fixtures(pytest_args=tuple(args.pytest_arg))
 
     rendered = _render()
+    rendered_csv = cm.render_csv()
     if args.render:
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(rendered)
+        csv_path = _csv_path(args.out)
+        csv_path.write_text(rendered_csv)
         print(f"[conformance_matrix] wrote {len(rendered)} bytes → {args.out}")
+        print(f"[conformance_matrix] wrote {len(rendered_csv)} bytes → {csv_path}")
         counts = cm.status_summary()
         nonzero = {k: v for k, v in counts.items() if v}
         print(f"[conformance_matrix] {nonzero}")
@@ -155,10 +163,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[conformance_matrix] dashboard missing: {args.out}",
               file=sys.stderr)
         return 2
+    csv_path = _csv_path(args.out)
     on_disk = args.out.read_text()
-    if on_disk == rendered:
-        print(f"[conformance_matrix] in sync ({args.out})")
+    csv_on_disk = csv_path.read_text() if csv_path.is_file() else ""
+    if on_disk == rendered and csv_on_disk == rendered_csv:
+        print(f"[conformance_matrix] in sync ({args.out}, {csv_path})")
         return 0
+    if csv_on_disk != rendered_csv:
+        print(f"[conformance_matrix] CSV OUT OF SYNC — {csv_path}",
+              file=sys.stderr)
     diff = "".join(difflib.unified_diff(
         on_disk.splitlines(keepends=True),
         rendered.splitlines(keepends=True),

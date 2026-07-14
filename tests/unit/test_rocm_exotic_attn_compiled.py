@@ -1,5 +1,5 @@
 """Compiler-generated exotic-attention compositions on gfx1151 — gated_attention,
-mla_decode, mla_decode_fused, built by composing the already-device_verified_jit WMMA
+mla_decode, mla_decode_fused, built by composing the already-compiled WMMA
 flash_attn kernel + the WMMA GEMM kernel (MLA latent projections) + an
 elementwise gate (the attention analog of the matmul-family lane).
 

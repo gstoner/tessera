@@ -26,7 +26,7 @@ def _rocm_or_skip():
         pytest.skip("no hipcc")
     # Gate on the COMPILED flash lane, not just the shipped WMMA GEMM probe:
     # rocm_attention_fn catches _RocmCompiledUnavailable and falls back to numpy,
-    # so without this a box where tessera-opt / the device_verified_jit flash lane is absent
+    # so without this a box where tessera-opt / the compiled flash lane is absent
     # would "pass" these parity tests entirely on the numpy path — never proving
     # the flash+bias seam actually ran on the GPU.
     if not rt._rocm_compiled_flash_attn_available():

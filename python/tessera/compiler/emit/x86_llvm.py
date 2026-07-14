@@ -94,7 +94,7 @@ class X86CEmitter(KernelEmitter):
                 f"X86CEmitter cannot emit a region of type {type(region).__name__} "
                 "(only FusedRegion so far)")
         # DYNAMIC is supported: the generic C kernel already takes M/N/K as runtime
-        # args (dims-invariant source), so one device_verified_jit kernel serves every shape
+        # args (dims-invariant source), so one compiled kernel serves every shape
         # (Workstream G / W2). DYNAMIC only changes the shape_key below to the
         # symbolic identity, collapsing the cache to one entry across all shapes.
         if dtype != "f32":
@@ -175,9 +175,9 @@ class X86CRunner(KernelRunner):
             M, K = Af.shape
             _, N = Bf.shape
             # Shape-anonymous build: the C kernel takes M/N/K at runtime, so one
-            # device_verified_jit artifact serves every shape (dims=None → no shape key).
-            device_verified_jit = build(region, _TARGET, dtype="f32", dims=None)
-            fn = _load_entry(device_verified_jit.artifact)
+            # compiled artifact serves every shape (dims=None → no shape key).
+            compiled = build(region, _TARGET, dtype="f32", dims=None)
+            fn = _load_entry(compiled.artifact)
             bias_arr = (np.ascontiguousarray(bias, np.float32)
                         if bias is not None else None)
             res_arr = (np.ascontiguousarray(residual, np.float32)

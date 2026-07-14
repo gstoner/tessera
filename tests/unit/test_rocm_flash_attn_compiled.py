@@ -183,5 +183,5 @@ def test_compiled_flash_attn_matches_numpy(D, B, H, Sq, Sk, causal):
 
     ref = _ref(Q, K, Vv, scale, causal)
     maxerr = float(np.max(np.abs(O - ref)))
-    assert maxerr < 2e-2, f"device_verified_jit flash_attn maxerr={maxerr} at " \
+    assert maxerr < 2e-2, f"compiled flash_attn maxerr={maxerr} at " \
         f"D={D} {B}x{H}x{Sq}x{Sk} causal={causal}"

@@ -51,7 +51,7 @@ def _act_ref(x, activation):
 
 def _launch_epilogue(rt, a, b, bias, activation):
     """Build + launch the fused-epilogue GEMM (f16 storage, f32 accumulate),
-    returning the MxN f32 result. Mirrors the device_verified_jit-GEMM HIP launch, with the
+    returning the MxN f32 result. Mirrors the compiled-GEMM HIP launch, with the
     optional per-column bias appended as the trailing memref argument."""
     m, k = a.shape
     n = b.shape[1]

@@ -50,7 +50,7 @@ def test_recognizer_accepts_all_gpu_capable_chain():
     b = np.ones((8, 16), np.float32)
     f = _compiled(_matmul_transpose_gelu, a, b)
     plan = getattr(f, "cpu_plan", None)
-    assert plan is not None, "expected a device_verified_jit cpu_plan (def, not lambda)"
+    assert plan is not None, "expected a compiled cpu_plan (def, not lambda)"
     assert _apple_gpu_chain_kind(plan) == "per_op_metal"
 
 

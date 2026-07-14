@@ -8,7 +8,7 @@ kernel (`swiglu_f32`). Combined with the attention fusion from Sprint 3.3, a
 **full pre-norm transformer block (attention + SwiGLU MLP + residuals)** now
 routes end-to-end on the Apple GPU back-half — the Phase 3 block milestone.
 
-Oracle (D4): the same graph built ``target="cpu"`` (device_verified_jit linalg→LLVM→ORC).
+Oracle (D4): the same graph built ``target="cpu"`` (compiled linalg→LLVM→ORC).
 
 Skips on non-Darwin / when the Apple GPU runtime or libtessera_jit can't load.
 """

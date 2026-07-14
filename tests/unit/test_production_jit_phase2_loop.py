@@ -1,10 +1,10 @@
 """Phase 2 Sprint 2.2 — scf.for control flow (docs/spec/PRODUCTION_COMPILER_PLAN.md).
 
-Real control flow: a bounded loop with a tensor carry, device_verified_jit as one function
+Real control flow: a bounded loop with a tensor carry, compiled as one function
 through tessera→linalg→scf→cf→llvm. `GraphFn.for_loop(count, init, body)` builds
 the loop; the body uses tessera ops and may close over outer values.
 
-numpy oracle + invocation-counter (a loop is still ONE device_verified_jit function).
+numpy oracle + invocation-counter (a loop is still ONE compiled function).
 Skips when libtessera_jit is not built.
 """
 
@@ -29,7 +29,7 @@ def test_for_loop_accumulate():
     g.ret(r)
     before = jb.invocation_count()
     out = g.run(x)
-    assert jb.invocation_count() == before + 1  # a loop is ONE device_verified_jit function
+    assert jb.invocation_count() == before + 1  # a loop is ONE compiled function
     np.testing.assert_allclose(out, 4 * x, rtol=1e-6)
 
 
@@ -67,7 +67,7 @@ def test_for_loop_iterated_matmul_power():
 
 def test_for_loop_iterated_transformer_blocks():
     """Apply the same (bias-free, rmsnorm) FFN block N times in a loop — a
-    'deep' stack with shared weights, device_verified_jit as one function."""
+    'deep' stack with shared weights, compiled as one function."""
     rng = np.random.default_rng(3)
     T, D, F = 4, 8, 16
 

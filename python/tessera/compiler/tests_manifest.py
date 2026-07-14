@@ -154,7 +154,7 @@ _ENTRIES: tuple[SurfaceEntry, ...] = (
         status="scaffold",
         reason=(
             "Numerical validation harness (reference-vs-runtime "
-            "comparisons for device_verified_jit CPU + future hardware "
+            "comparisons for compiled CPU + future hardware "
             "backends).  Today the directory contains ``README.md`` "
             "+ ``requirements.txt`` + ``run_all.sh`` + a "
             "``tessera_numerics/`` Python package, but **no "

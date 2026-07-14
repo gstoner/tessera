@@ -91,7 +91,7 @@ def test_v7_tessera_opt_includes_header() -> None:
 
 def test_v7_tessera_opt_calls_register() -> None:
     """tessera-opt.cpp main() must call registerAttnDialect when the
-    feature is device_verified_jit in."""
+    feature is compiled in."""
     text = TESSERA_OPT_CPP.read_text()
     assert "tessera::attn::registerAttnDialect(registry)" in text, (
         "tessera-opt main() must call "

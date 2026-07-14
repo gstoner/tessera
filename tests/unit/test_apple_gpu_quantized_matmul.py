@@ -148,7 +148,7 @@ def test_lane_resolves_to_quant_matmul_handler():
 
 @pytest.mark.parametrize("M,N,K,gs", [(1, 32, 128, 64), (4, 48, 256, 64)])
 def test_metadata_artifact_dispatches_to_gpu(M, N, K, gs):
-    """The device_verified_jit-artifact form (metadata op list) routes
+    """The compiled-artifact form (metadata op list) routes
     tessera.quantized_matmul through the apple_gpu executor → lane handler → GPU
     kernel, producing the correct result. This is the end-to-end artifact
     dispatch (the runtime form a @jit(target='apple_gpu') program lowers to)."""

@@ -1,5 +1,5 @@
 """Hand-written AVX-512 unary-math kernel on x86 — the CPU analog of the ROCm
-device_verified_jit unary lane, for the direct-intrinsic algebraic + rounding subset.
+compiled unary lane, for the direct-intrinsic algebraic + rounding subset.
 
 `tessera_x86_avx512_unary_f32` is exported by libtessera_x86_elementwise.so; the
 Python runtime ctypes-loads it and calls it from `runtime.launch()` via

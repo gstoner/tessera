@@ -294,7 +294,7 @@ def validate_benchmark_row(row: Mapping[str, Any]) -> None:
     Raises :class:`ValueError` when required fields are missing,
     unknown fields appear, or the row claims native execution
     (``backend != python_ref``, ``mode in NATIVE_MODES``) without a
-    route proof or device_verified_jit-artifact entry.  This is the M5 "no
+    route proof or compiled-artifact entry.  This is the M5 "no
     silent native claim" guarantee.
     """
     missing = REQUIRED_BENCHMARK_FIELDS - row.keys()

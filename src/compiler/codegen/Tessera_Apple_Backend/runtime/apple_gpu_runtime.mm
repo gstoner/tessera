@@ -394,6 +394,31 @@ extern "C" int32_t tessera_apple_gpu_simd_caps(void) {
   return ctx.ok ? ctx.simd_caps : 0;
 }
 
+// Introspection: the active SKU's actual threadgroup-memory byte cap
+// (`[device maxThreadgroupMemoryLength]`). Returns 0 when no Metal device is
+// available; callers (apple_target.probe_apple_runtime_limits) treat 0 as
+// "unknown — consult the static per-arch floor" rather than a hard cap.
+extern "C" int64_t tessera_apple_gpu_max_threadgroup_memory_length(void) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !ctx.device) return 0;
+  return (int64_t)[ctx.device maxThreadgroupMemoryLength];
+}
+
+// Introspection: the raw MTLGPUFamilyApple* enum value of the active GPU
+// (e.g. Apple7 == 1007, Apple9 == 1009 — see MTLDevice.h). Scans downward from
+// the highest known family so a newer SKU reports its true (higher) family, and
+// probing an as-yet-undefined family value simply returns NO. -1 when no Metal
+// device is present or no Apple family matches (older-runtime sentinel).
+extern "C" int32_t tessera_apple_gpu_family_integer(void) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !ctx.device) return -1;
+  id<MTLDevice> dev = ctx.device;
+  for (int32_t fam = 1010 /* MTLGPUFamilyApple10 */; fam >= 1001; --fam) {
+    if ([dev supportsFamily:(MTLGPUFamily)fam]) return fam;
+  }
+  return -1;
+}
+
 //===----------------------------------------------------------------------===//
 // P5 — memory-budget introspection (MLX-style allocator accounting). Mirrors
 // the non-Darwin stub's surface so the Python ctypes layer is platform-agnostic

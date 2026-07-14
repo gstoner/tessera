@@ -47,7 +47,7 @@ _OPT_TARGET = "tessera-rocm-opt"
 # ROCm backend source tree, and the sub-dirs whose mtime gates opt-binary
 # freshness: the IR/conversion/driver inputs that compile INTO tessera-rocm-opt.
 # Deliberately excludes ``runtime/`` (the HIP kernel → separate
-# libtessera_rocm_gemm.so) and ``test/`` (lit fixtures, not device_verified_jit in).
+# libtessera_rocm_gemm.so) and ``test/`` (lit fixtures, not compiled in).
 _ROCM_SRC = _REPO / "src/compiler/codegen/Tessera_ROCM_Backend"
 _OPT_SRC_DIRS = ("lib", "include", "tools")
 _SRC_GLOBS = ("*.cpp", "*.h", "*.hpp", "*.td", "*.inc", "CMakeLists.txt")

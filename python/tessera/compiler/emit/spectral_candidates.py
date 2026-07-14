@@ -7,7 +7,7 @@ first-class arbiter *candidates* for the ``spectral_fft`` op-kind, each F4-gated
 against a ``numpy.fft`` reference.  Instead of the pass hard-wiring one symbol,
 the arbiter enumerates the lanes for ``(op="spectral_fft", target)`` and picks
 the fastest in-budget one — the crown-jewel HIP Stockham kernel stays a
-first-class candidate, displaced only when a device_verified_jit lane measures faster and
+first-class candidate, displaced only when a compiled lane measures faster and
 in budget (lead-safety).
 
 Two lanes, both running the *real shipped kernel* via ctypes:
@@ -145,7 +145,7 @@ def _cptr(a: np.ndarray) -> ctypes.c_void_p:
 
 # --- candidates --------------------------------------------------------------
 class CpuStockhamFFTCandidate(Candidate):
-    """Tier-1: the shipped CPU mixed-radix Stockham kernel, device_verified_jit + dlopened.
+    """Tier-1: the shipped CPU mixed-radix Stockham kernel, compiled + dlopened.
     Runs the real ``ts_fft_stockham_cpu`` symbol the Target-IR lowering names."""
 
     name = "cpu_stockham"

@@ -25,7 +25,7 @@ import pytest
 import tessera as ts
 from tessera import _jit_boundary as jb
 
-# The CPU JIT lane is the *executed* path here, so every test needs the device_verified_jit
+# The CPU JIT lane is the *executed* path here, so every test needs the compiled
 # `libtessera_jit` dylib. CI's unit lane is Python-only (no C++ build), so skip
 # the whole module when the lib isn't built rather than hard-failing — exactly
 # the pattern the Apple/lit suites use when their backend is unavailable. Locally

@@ -7,7 +7,7 @@ per-iteration interpreter). The body is the recorded straight-line op-list; the
 carry threads through the loop iteration argument. v1: f32, single carry, init is
 a function arg, body references only args + carry.
 
-Oracle (D4): the SAME graph built target="cpu" (device_verified_jit tessera→linalg→scf→LLVM),
+Oracle (D4): the SAME graph built target="cpu" (compiled tessera→linalg→scf→LLVM),
 which itself matches numpy.
 
 Skips off-Darwin / when the Apple GPU runtime or libtessera_jit is unavailable.

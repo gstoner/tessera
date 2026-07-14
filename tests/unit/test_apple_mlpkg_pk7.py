@@ -16,7 +16,7 @@ PK7 ships:
   drift-validation (round-trips through ``ExpectedBinding``), and
   for compiler-side artifact emission.
 * ``extract_argument_layout(pipeline)`` — builds the layout from a
-  device_verified_jit pipeline's reflection.
+  compiled pipeline's reflection.
 
 These tests use the bundled Apple matrix-multiplication package
 (inputA / inputB / output, 2D fp32) as the proving ground.

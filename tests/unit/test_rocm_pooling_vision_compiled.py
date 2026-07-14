@@ -1,4 +1,4 @@
-"""ROCm device_verified_jit-composite pooling and image affine lanes."""
+"""ROCm compiled-composite pooling and image affine lanes."""
 
 from __future__ import annotations
 

@@ -1,5 +1,5 @@
 """Hand-written AVX-512 2-operand binary-arithmetic kernel on x86 — the CPU
-analog of the ROCm device_verified_jit binary lane, for the direct-intrinsic subset.
+analog of the ROCm compiled binary lane, for the direct-intrinsic subset.
 
 `tessera_x86_avx512_binary_f32` is exported by libtessera_x86_elementwise.so; the
 Python runtime ctypes-loads it and calls it from `runtime.launch()` via

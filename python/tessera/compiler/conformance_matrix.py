@@ -410,7 +410,7 @@ def _proof_cell(op: ConformanceOp, target: str) -> ProofCell:
             )
         # Composition is a real end-to-end proof when every component has a
         # declared execute/compare fixture. Fusion is a performance property,
-        # not a correctness prerequisite, so do not demote a fully device_verified_jit
+        # not a correctness prerequisite, so do not demote a fully compiled
         # chain merely because it launches more than one kernel.
 
     runtime_execute = _proof_status_from_runtime(
@@ -465,7 +465,7 @@ def _proof_status_from_backend_compile(
 
     Reference and compileable are explicit non-complete states. A fused source
     row completes this rung only when an execute/compare fixture proves that the
-    source was device_verified_jit and ran for the same exact target.
+    source was compiled and ran for the same exact target.
     """
     if any(s == "missing" for s in statuses):
         return PROOF_MISSING

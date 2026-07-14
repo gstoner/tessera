@@ -9,7 +9,7 @@ The @jit decorator:
   5. Emits Graph IR text via GraphIRBuilder
   6. Returns a JitFn wrapper that executes the Python function eagerly (Phase 1)
 
-Phase 3: replace step 6 with device_verified_jit kernel dispatch through the MLIR toolchain.
+Phase 3: replace step 6 with compiled kernel dispatch through the MLIR toolchain.
 
 Reference: CLAUDE.md §Key Design Contracts
            CLAUDE.md §Phase 1 Mission
@@ -330,7 +330,7 @@ class JitFn:
     A @jit-decorated Tessera function.
 
     Wraps the original Python function. In Phase 1 it executes eagerly
-    (plain Python call). In Phase 3 it will invoke the device_verified_jit kernel
+    (plain Python call). In Phase 3 it will invoke the compiled kernel
     through the MLIR lowering chain when target is set.
 
     Attributes:
@@ -457,7 +457,7 @@ class JitFn:
         failed).
 
         Authorable when ``self.recognized_package`` is set — i.e. the
-        device_verified_jit region is a matmul, a single MPSGraph-lane op, or a fused
+        compiled region is a matmul, a single MPSGraph-lane op, or a fused
         chain (see :mod:`tessera.compiler.apple_package_author`). The
         packaged kernel needs concrete fp32 shapes:
 
@@ -1325,7 +1325,7 @@ class JitFn:
         return self.cpu_plan is not None
 
     def lowering_artifacts(self):
-        """Return Graph/Schedule/Tile/Target artifacts for the device_verified_jit path.
+        """Return Graph/Schedule/Tile/Target artifacts for the compiled path.
 
         .. note:: ``fn.explain().ir`` exposes the same four layers as
            strings on a typed namespace (``.graph``/``.schedule``/
@@ -2154,7 +2154,7 @@ def jit(
                 f"but its source could not be inspected (source_origin="
                 f"{source_origin!r}). Without source, no Graph IR is emitted "
                 f"and the call would silently fall back to eager Python — "
-                f"giving the appearance of a device_verified_jit run while actually "
+                f"giving the appearance of a compiled run while actually "
                 f"executing pure Python. Define the function in a file, or "
                 f"pass @jit(target=..., source=<source string>) or "
                 f"@jit(target=..., source_path=<path>) to enable AST lowering."
@@ -2354,7 +2354,7 @@ def jit(
                 f"(normalized={target_kind!r}).")
 
         # Workstream B — phase specialization metadata. Prefill and decode are
-        # device_verified_jit from the same source but scheduled differently; the
+        # compiled from the same source but scheduled differently; the
         # PhaseSpecializationPass (compiler/phase_specialization.py) reads these
         # to pick a schedule policy and thread the CacheHandoff. Lightweight
         # passthrough: attached for inspection/consumption, no behavior change.

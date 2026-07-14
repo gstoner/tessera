@@ -155,7 +155,10 @@ def test_apple_gpu_tiny_decode_artifact_covers_rope_softmax_matmul_and_kv_cache(
     assert "rope_contract" in target_ir
     assert "softmax_contract" in target_ir
     assert "tessera_apple.diagnostic" in target_ir
-    assert "KV-cache target lowering is not implemented for Apple GPU" in target_ir
+    # Diagnostic wording unified across targets to "KV-cache mutation ..."
+    # (c53010c); the stable contract is the "... is not implemented for Apple
+    # GPU" tail + severity="unsupported" naming the op (see Decision #21).
+    assert "KV-cache mutation target lowering is not implemented for Apple GPU" in target_ir
     assert 'framework = "MPSGraph"' in target_ir
     assert 'execution_mode = "metal_artifact"' in target_ir
     assert not tiny_decode.is_executable
@@ -233,17 +236,43 @@ def test_apple_cpu_simple_moe_solver_executes_reference_expert_routing():
     np.testing.assert_allclose(simple_moe(x, experts), expected)
 
 
-def test_apple_gpu_simple_moe_solver_emits_metal_artifact_contract():
+def test_apple_gpu_simple_moe_solver_runs_metal_runtime():
+    """Native local-MoE compute lane (``_APPLE_GPU_MOE_COMPUTE_OPS``, added by
+    the sparse/local-MoE kernels): ``tessera.moe`` now has an Apple GPU dispatch
+    lane — routing/grouping stays host-side metadata, but every nonempty expert
+    block runs through the native f32 MPS matmul ABI. A single-op moe program
+    therefore runs metal_runtime end-to-end, superseding the old "moe =
+    artifact_only" contract. The strongest assertion is numerical.
+
+    (The ``.target_ir`` projection still renders the per-op artifact-contract
+    format for this op — the cosmetic representation gap tracked since the
+    per_op_metal gate landed — so the runtime claim is read from the artifact
+    metadata, which is the source of truth.)"""
     @ts.jit(target="apple_gpu")
     def simple_moe(x, experts):
         return ts.ops.moe(x, experts)
 
+    x = np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0]],
+                 dtype=np.float32)
+    experts = np.stack([
+        np.eye(2, dtype=np.float32),
+        np.array([[2.0, 0.0], [0.0, 3.0]], dtype=np.float32),
+    ], axis=0)
+    expected = np.stack([
+        x[0] @ experts[0], x[1] @ experts[1],
+        x[2] @ experts[0], x[3] @ experts[1],
+    ])
+
     artifact = simple_moe.runtime_artifact()
-    assert artifact.metadata["execution_mode"] == "metal_artifact"
-    assert artifact.metadata["runtime_status"] == "artifact_only"
+    assert artifact.metadata["execution_mode"] == "metal_runtime"
+    assert artifact.metadata["runtime_status"] == "ready"
+    assert simple_moe.is_executable
     assert "tessera.moe" in simple_moe.ir_text()
     assert 'kernel = "moe_contract"' in simple_moe.target_ir
     assert 'grid = "tokens_experts"' in simple_moe.target_ir
+    # Native Metal path matches the numpy top-1 MoE reference.
+    np.testing.assert_allclose(simple_moe(x, experts), expected,
+                               rtol=1e-5, atol=1e-6)
 
 
 def test_apple_cpu_simple_transformer_block_executes_attention_and_mlp():
@@ -810,11 +839,20 @@ def test_apple_gpu_all_gpu_capable_multi_op_runs_per_op_metal():
 
 def test_apple_gpu_multi_op_with_non_gpu_op_stays_metal_artifact():
     """The residency gate is conservative: a multi-op program containing an op
-    with NO GPU lane (here tessera.moe) must NOT be claimed per-op metal — it
-    stays on the metal_artifact contract (artifact_only, not executable)."""
+    with NO GPU lane must NOT be claimed per-op metal — it stays on the
+    metal_artifact contract (artifact_only, not executable).
+
+    ``tessera.flip`` is the non-lane op here; ``matmul`` and ``gelu`` both have
+    lanes, so flip is what demotes the whole program. (This guard used to use
+    ``tessera.moe``, which since gained a native compute lane — the assert below
+    fails loudly if flip likewise gains one, rather than silently becoming a
+    metal_runtime test.)"""
+    from tessera.compiler.apple_gpu_envelope import lane_for
+    assert lane_for("tessera.flip") is None  # premise: flip has no apple_gpu lane
+
     @ts.jit(target="apple_gpu")
-    def chain(x, experts):
-        return ts.ops.gelu(ts.ops.moe(x, experts))
+    def chain(x, w):
+        return ts.ops.gelu(ts.ops.flip(ts.ops.matmul(x, w), axis=-1))
 
     artifact = chain.runtime_artifact()
     assert artifact.metadata["execution_mode"] == "metal_artifact"

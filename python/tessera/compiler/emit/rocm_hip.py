@@ -2,7 +2,7 @@
 
 Two lanes under one `target = "rocm"` plugin, both F4-gated on real silicon:
 
-* **Generic device_verified_jit lane (C3)** — a full three seams for the fusable
+* **Generic compiled lane (C3)** — a full three seams for the fusable
   middle ground (`FusedRegion`: matmul + prologue/epilogue/residual/reduction):
   - :class:`RocmHipEmitter` (`register_emitter`) — region → HIP source (a
     ``__global__`` one-thread-per-row kernel + a host-pointer C-ABI wrapper),
@@ -14,7 +14,7 @@ Two lanes under one `target = "rocm"` plugin, both F4-gated on real silicon:
   - :meth:`RocmHipRunner.run_fused_region` — H2D / launch / D2H via the shipped
     lib's host-pointer ABI → `(out, "rocm_hip")`, else the reference.
 * **Shipped hand-tuned lane (Tier 3)** — :meth:`RocmHipRunner.run_fused_attention`
-  runs the shipped device_verified_jit FA-2 flash-attn kernel (not generically emitted); the
+  runs the shipped compiled FA-2 flash-attn kernel (not generically emitted); the
   same universal oracle gates it. This is the cross-backend differential-
   equivalence superpower on the lead's real kernels.
 
@@ -134,7 +134,7 @@ class RocmHipEmitter(KernelEmitter):
                 "shipped flash lane)")
         # DYNAMIC is supported: the generic HIP kernel already takes M/N/K as
         # runtime args with an in-kernel bounds guard, so the source is
-        # dims-invariant — one device_verified_jit kernel serves every shape (Workstream G /
+        # dims-invariant — one compiled kernel serves every shape (Workstream G /
         # W2). The only difference from BUCKET is the shape_key below, which under
         # DYNAMIC is the symbolic identity, so the cache holds ONE entry across all
         # shapes instead of one per bucket.
@@ -221,8 +221,8 @@ class RocmHipRunner(KernelRunner):
             Bf = np.ascontiguousarray(B, np.float32)
             M, K = Af.shape
             _, N = Bf.shape
-            device_verified_jit = build(region, _TARGET, dtype="f32", dims=None)
-            fn = _load_entry(device_verified_jit.artifact)
+            compiled = build(region, _TARGET, dtype="f32", dims=None)
+            fn = _load_entry(compiled.artifact)
             bias_arr = (np.ascontiguousarray(bias, np.float32)
                         if bias is not None else None)
             res_arr = (np.ascontiguousarray(residual, np.float32)
@@ -277,7 +277,7 @@ class RocmHipRunner(KernelRunner):
 #                            `Generate*` pass), serves the bias/relu/gelu/silu
 #                            middle ground on matrix cores. THIS is the C3 tail:
 #                            the crown-jewel GEMM driven through the same loop.
-#   • device_verified_jit FA-2 flash  — Tier 3 (hand-tuned), serves attention.
+#   • compiled FA-2 flash  — Tier 3 (hand-tuned), serves attention.
 # Lead-safety (Decision #28): the default arbiter prefers the highest tier, so
 # WMMA wins over the generic lane wherever it applies — until D2's measured loop
 # proves the generic lane faster + in budget on a given shape-bucket.
@@ -379,7 +379,7 @@ class RocmWmmaGemmCandidate(Candidate):
 
 
 class RocmFlashAttnCandidate(Candidate):
-    """Tier-3: the shipped device_verified_jit FA-2 flash-attention lane (not generically
+    """Tier-3: the shipped compiled FA-2 flash-attention lane (not generically
     emitted) — the crown-jewel attention candidate, gated by the same oracle."""
 
     name = "rocm_flash_attn"

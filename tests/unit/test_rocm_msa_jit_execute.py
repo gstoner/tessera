@@ -46,7 +46,7 @@ def test_jit_rocm_msa_executes_via_launch():
 
     # JitFn.__call__ fast-dispatches only CPU/Apple targets and otherwise falls
     # through to the eager Python body — so calling _msa_jit(...) would NOT run
-    # the device_verified_jit lane. Exercise it the way it is actually reached: launch the
+    # the compiled lane. Exercise it the way it is actually reached: launch the
     # stamped artifact and assert THAT result (the block-sparse WMMA + GPU top-k
     # lane) matches the reference. A broken rocm_sparse_attn_compiled artifact
     # now fails here instead of hiding behind the eager fallback.

@@ -97,6 +97,10 @@ extern "C" void* tessera_apple_gpu_device_handle(void) { return nullptr; }
 extern "C" void* tessera_apple_gpu_command_queue_handle(void) { return nullptr; }
 // SIMD-feature caps — no Metal device off Darwin, so no SIMD intrinsics.
 extern "C" int32_t tessera_apple_gpu_simd_caps(void) { return 0; }
+// Device limits — no Metal device off Darwin. 0 threadgroup bytes means "unknown,
+// use the static floor"; -1 family is the "older/absent runtime" sentinel.
+extern "C" int64_t tessera_apple_gpu_max_threadgroup_memory_length(void) { return 0; }
+extern "C" int32_t tessera_apple_gpu_family_integer(void) { return -1; }
 // GPU-native RNG (opt-in) — no Metal off Darwin; return 0 so Python uses its
 // own RNG fallback.
 extern "C" int32_t tessera_apple_gpu_random_uniform_f32(float*, int64_t, uint64_t,

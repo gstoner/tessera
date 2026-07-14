@@ -218,7 +218,7 @@ class TestFlashAttnManifest:
 
     def test_x86_ships_compiled_flash_attn_partner(self):
         """P10 — x86 now ships an AVX-512 online-softmax flash_attn forward
-        (the partner to the ROCm WMMA flash_attn), so the x86 slot is device_verified_jit."""
+        (the partner to the ROCm WMMA flash_attn), so the x86 slot is compiled."""
         entries = {e.target: e for e in manifest_for("flash_attn")}
         assert "x86" in entries
         x86 = entries["x86"]

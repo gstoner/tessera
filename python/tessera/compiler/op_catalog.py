@@ -188,7 +188,7 @@ _SPECS = [
     OpSpec("rope", "tessera.rope", 2, 2, lowering="rotary_embedding"),
     OpSpec("kv_cache_append", "tessera.kv_cache.append", 3, 3, effect="state", lowering="state_update"),
     OpSpec("kv_cache_prune", "tessera.kv_cache.prune", 1, 1, effect="state", lowering="state_update"),
-    # ``end`` is optional at the Python surface. The explicit device_verified_jit form
+    # ``end`` is optional at the Python surface. The explicit compiled form
     # carries (cache, start, end), while a single-token read carries two.
     OpSpec("kv_cache_read", "tessera.kv_cache.read", 2, 3, effect="state", lowering="state_update"),
     # SD1-3 — speculative-decode cache cursor ops (typed state effect, no device

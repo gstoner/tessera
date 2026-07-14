@@ -2,7 +2,7 @@
 
 The generic scalar kernels (x86 C, ROCm HIP, NVIDIA CUDA) already take M/N/K as
 runtime args with in-kernel bounds guards, so their *source* is dims-invariant —
-one device_verified_jit kernel serves every shape. `SpecPolicy.DYNAMIC` was defined from day
+one compiled kernel serves every shape. `SpecPolicy.DYNAMIC` was defined from day
 one (the interface half of W2) but the emitters raised on it; enabling it is the
 implementation half:
 
@@ -73,7 +73,7 @@ def test_dynamic_shape_key_is_shape_independent(target):
 @pytest.mark.parametrize("target", _GENERIC_TARGETS)
 def test_dynamic_collapses_cache_key_across_shapes(target):
     # The payoff: under DYNAMIC one cache entry serves all shapes; under BUCKET the
-    # (source-identical) kernel is keyed — and thus device_verified_jit — once per bucket.
+    # (source-identical) kernel is keyed — and thus compiled — once per bucket.
     e = get_emitter(target)
     region = F.FusedRegion(epilogue=("bias",))
     kd1 = KC.cache_key(e.emit(region, spec=SpecPolicy.DYNAMIC, dims=(64, 64)),
@@ -109,10 +109,10 @@ def test_live_rocm_dynamic_one_compile_serves_many_shapes():
     rng = np.random.default_rng(0)
     artifacts = []
     for (M, N, K) in [(64, 64, 64), (256, 128, 96), (512, 512, 512)]:
-        device_verified_jit = KC.build(region, "rocm", spec=SpecPolicy.DYNAMIC,
+        compiled = KC.build(region, "rocm", spec=SpecPolicy.DYNAMIC,
                             dtype="f32", dims=(M, N), cache=cache)
-        artifacts.append(device_verified_jit.artifact)
-        fn = _load_entry(device_verified_jit.artifact)
+        artifacts.append(compiled.artifact)
+        fn = _load_entry(compiled.artifact)
         assert fn is not None
         A = rng.standard_normal((M, K)).astype(np.float32)
         B = rng.standard_normal((K, N)).astype(np.float32)

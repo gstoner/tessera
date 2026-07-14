@@ -6,7 +6,7 @@ the kernels that complete a transformer block on the Apple GPU back-half:
 norms (rmsnorm/layer_norm), silu, the **fused single-head attention block**
 ``softmax(A@B)@C``, and the fused MLP chains (matmul→gelu, matmul→rmsnorm).
 
-Contract (D4): every GPU result must match the **device_verified_jit CPU production lane**
+Contract (D4): every GPU result must match the **compiled CPU production lane**
 (`tessera._jit_boundary`), which matches numpy. f32 only this sprint.
 
 Skips on non-Darwin / when the Apple GPU runtime or libtessera_jit can't load.

@@ -65,7 +65,7 @@ def test_x86_deltanet_matches_reference(op_name, erase, gate, beta, decay):
     Q = rng.standard_normal((B, H, S, Dqk)).astype(np.float32)
     K = rng.standard_normal((B, H, S, Dqk)).astype(np.float32)
     # L2-normalize keys — DeltaNet is ill-conditioned in f32 otherwise (per the
-    # reference's L1.1 note); the device_verified_jit kernel and oracle both see normed K.
+    # reference's L1.1 note); the compiled kernel and oracle both see normed K.
     K = (K / (np.linalg.norm(K, axis=-1, keepdims=True) + 1e-6)).astype(np.float32)
     V = rng.standard_normal((B, H, S, Dv)).astype(np.float32)
     g = rng.standard_normal((B, H, S, Dv)).astype(np.float32) if gate else None

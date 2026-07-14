@@ -160,7 +160,7 @@ def _compile_gemm_hsaco(mlir_opt: str) -> bytes:
 
 
 def _launch_gemm(hip, hsaco: bytes, A, B):
-    """Load + launch the device_verified_jit 16×16×16 GEMM (1 block × 32 threads). Returns
+    """Load + launch the compiled 16×16×16 GEMM (1 block × 32 threads). Returns
     the f32 result, or None if the device is unusable (skip signal)."""
     if hip.hipInit(0) != 0:
         return None
@@ -234,7 +234,7 @@ def test_target_ir_wmma_gemm_matches_numpy_and_oracle():
         pytest.skip("no usable AMD GPU (load/launch unavailable)")
 
     ref = A.astype(np.float32) @ B.astype(np.float32)
-    assert float(np.max(np.abs(D - ref))) < 1e-2, "device_verified_jit GEMM != numpy"
+    assert float(np.max(np.abs(D - ref))) < 1e-2, "compiled GEMM != numpy"
 
     if not ORACLE_LIB.is_file():
         pytest.skip("oracle lib not built: ninja -C build tessera_rocm_gemm")

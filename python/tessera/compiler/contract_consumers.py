@@ -68,7 +68,7 @@ _CONSUMERS: tuple[ContractConsumer, ...] = (
         "(Metal + ROCm rungs)",
         _has("tessera", "ops"),  # refined below to check the op itself
         "Unifies contiguous/tiered/latent/quantized-tail KV; runs native on "
-        "Metal and the device_verified_jit ROCm FA-2 lane.",
+        "Metal and the compiled ROCm FA-2 lane.",
     ),
     ContractConsumer(
         "B", "SchedulePolicy / CacheHandoff", "#2",

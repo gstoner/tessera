@@ -2,7 +2,7 @@
 
 _runtime_snapshot() constructs + init()s a TesseraRuntime and probes every
 device (~30ms). available_backends() is on the launch() hot path (via
-backend_capabilities), so re-probing per call added ~32ms to EVERY device_verified_jit-lane
+backend_capabilities), so re-probing per call added ~32ms to EVERY compiled-lane
 launch — dwarfing the kernels (a kernel is µs–ms). This test locks the cache by
 call-count (not timing, which is flaky): the device probe must run at most once
 across many launches, and reset must re-enable it.

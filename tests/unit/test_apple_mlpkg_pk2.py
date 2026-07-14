@@ -140,7 +140,7 @@ def test_reflection_extraction_from_real_mlpackage():
     """When a ``.mtlpackage`` fixture is present, ``bindings()`` must
     return a non-empty dict. Apple's sample matrix-multiplication
     package has three bindings: ``inputA`` / ``inputB`` / ``output``,
-    each 2D float32. Any device_verified_jit Metal package will have at least
+    each 2D float32. Any compiled Metal package will have at least
     one binding (otherwise the kernel can't take or produce data)."""
     if not packaged_ml_available():
         pytest.skip(packaged_ml_skip_reason() or "packaged ML unavailable")

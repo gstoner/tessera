@@ -5,7 +5,7 @@ the hand-written oracle. L1 generalizes the emitted kernel: the `tessera_rocm.
 wmma_gemm` directive still carries the WMMA *instruction* tile (16x16x16), but
 `generate-wmma-gemm-kernel` now emits a kernel that takes the runtime `(M,N,K)`
 as `index` arguments, runs a 2-D grid of one wave per 16x16 output tile, an
-`scf.for` K-loop, and ragged-edge masking — so ONE device_verified_jit kernel computes any
+`scf.for` K-loop, and ragged-edge masking — so ONE compiled kernel computes any
 shape:
 
     "tessera_rocm.wmma_gemm"{m=n=k=16}

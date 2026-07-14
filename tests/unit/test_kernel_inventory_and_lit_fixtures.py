@@ -217,7 +217,7 @@ class TestG3ManifestWiring:
     def test_rocm_attention_family_promotions_are_not_mfma_artifacts(self):
         # The executing members moved off the CDNA MFMA artifact path:
         # flash_attn → WMMA device_verified_abi, multi_head_attention → WMMA
-        # `device_verified_jit`, and DeepSeek/NSA → the DK2 sparse-attention device_verified_jit lane.
+        # `device_verified_jit`, and DeepSeek/NSA → the DK2 sparse-attention compiled lane.
         from tessera.compiler.backend_manifest import manifest_for
         nsa = {e.target: e for e in manifest_for("deepseek_sparse_attention")}
         assert nsa["rocm"].status == "device_verified_jit"
@@ -341,7 +341,7 @@ class TestH3RocmInventoryDoc:
 #     runtime execution matrix.  Added 2026-07-10 after the doc silently
 #     drifted for weeks — the structural guards above never checked *what
 #     executes*, so §7/§9 kept claiming only matmul+flash_attn ran on gfx1151
-#     while dozens of device_verified_jit HIP lanes had already landed.  This ties the
+#     while dozens of compiled HIP lanes had already landed.  This ties the
 #     inventory's execution claims to the drift-gated matrix (Decision #26).
 # ──────────────────────────────────────────────────────────────────────────
 
@@ -359,7 +359,7 @@ class TestH3RocmInventoryExecutionStatus:
 
     def test_doc_acknowledges_native_rocm_execution(self):
         # A revert to the stale 'only matmul + flash_attn execute' framing would
-        # drop these markers of the native HIP device_verified_jit-lane program.
+        # drop these markers of the native HIP compiled-lane program.
         doc = self.INVENTORY.read_text()
         assert "hip_runtime" in doc
         assert "device_verified_jit" in doc
@@ -375,10 +375,10 @@ class TestH3RocmInventoryExecutionStatus:
         lane_re = re.compile(r"rocm_[a-z0-9]+(?:_[a-z0-9]+)*_compiled")
         doc_lanes = set(lane_re.findall(doc))
         matrix_lanes = set(lane_re.findall(matrix))
-        assert doc_lanes, "inventory should name the executing rocm device_verified_jit lanes"
+        assert doc_lanes, "inventory should name the executing rocm compiled lanes"
         missing = sorted(doc_lanes - matrix_lanes)
         assert not missing, (
-            f"inventory names device_verified_jit lanes absent from the generated matrix: "
+            f"inventory names compiled lanes absent from the generated matrix: "
             f"{missing}"
         )
 

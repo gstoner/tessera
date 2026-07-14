@@ -2,7 +2,7 @@
 seam pointed at the D1 candidate arbiter.
 
 Verifies the shipped Stockham kernel is registered as an F4-gated candidate for
-the ``spectral_fft`` op-kind: the real device_verified_jit CPU kernel matches ``numpy.fft``
+the ``spectral_fft`` op-kind: the real compiled CPU kernel matches ``numpy.fft``
 through the arbiter, a wrong candidate is refused even at a higher tier, and the
 arbiter falls back honestly to the reference when nothing applies.  The CPU lane
 compiles the shipped ``TargetHooks/CPU/StockhamRadix4.cpp``; if no C++ toolchain

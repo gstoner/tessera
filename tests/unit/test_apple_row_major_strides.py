@@ -20,21 +20,17 @@ import ctypes
 
 import pytest
 
-from tessera._apple_gpu_dispatch import apple_gpu_runtime, bind_symbol
+from tessera._apple_gpu_dispatch import apple_gpu_runtime, bind_registered
 
 
 def _bind_strides_probe():
-    """Resolve ``tessera_apple_gpu_row_major_strides`` from the runtime
-    dylib. Returns ``None`` if the runtime can't be built / loaded."""
-    runtime = apple_gpu_runtime()
-    if runtime is None:
+    """Resolve ``tessera_apple_gpu_row_major_strides`` via the ``APPLE_ABI``
+    registry (the ctypes signature lives there now, not inline). Returns
+    ``None`` if the runtime can't be built / loaded — shared by the reject
+    tests below, which call the probe with deliberately bad args."""
+    if apple_gpu_runtime() is None:
         return None
-    return bind_symbol(
-        "tessera_apple_gpu_row_major_strides",
-        (ctypes.POINTER(ctypes.c_int64), ctypes.c_int32,
-         ctypes.POINTER(ctypes.c_int64)),
-        restype=ctypes.c_int32,
-    )
+    return bind_registered("tessera_apple_gpu_row_major_strides")
 
 
 def _strides(dims):

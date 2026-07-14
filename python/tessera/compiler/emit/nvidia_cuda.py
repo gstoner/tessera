@@ -2398,9 +2398,12 @@ class NvidiaTileMatmulCandidate(Candidate):
         except Exception:
             return region.reference(A, B), "reference"
 
-    def measure_device_latency(self, region: Any, A: Any, B: Any, *a: Any,
-                               reps: int = 100, warmup: int = 10,
-                               **k: Any) -> float | None:
+    def measure_device_latency(self, region: Any, *inputs: Any,
+                               reps: int = 100,
+                               warmup: int = 10) -> float | None:
+        if len(inputs) != 2:
+            return None
+        A, B = inputs
         try:
             from tessera import runtime as rt
             An, Bn = region._natural(A, B, cast=False)

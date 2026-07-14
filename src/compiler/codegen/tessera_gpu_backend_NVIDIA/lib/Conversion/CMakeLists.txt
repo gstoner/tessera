@@ -2,6 +2,7 @@ add_mlir_library(TesseraNVIDIAConversion
   NVIDIALowering.cpp
 
   LINK_LIBS PUBLIC
+    TesseraIR
     TesseraNVIDIAIR
     MLIRArithDialect
     MLIRFuncDialect

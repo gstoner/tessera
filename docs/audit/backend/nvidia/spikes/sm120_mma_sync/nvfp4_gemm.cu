@@ -1,9 +1,12 @@
-// NVFP4 (e2m1 + ue4m3 block scale) m16n8k64 warp MMA — data-path validation.
+// NVFP4 (e2m1 + ue4m3 block scale) m16n8k64 warp MMA — provisional data-path
+// probe. This is a NEGATIVE gate today: the 2026-07-13 RTX 5070 Ti run compiled
+// for sm_120a but failed all 128 numerical outputs. Do not cite it as runtime
+// evidence until the fragment/scale mapping below is corrected.
 // One warp: D[16x8] f32 = A[16x64] @ B[64x8], fp4 e2m1 operands, UNIT block scales.
 // Host builds per-lane fragments per the m16n8k64 fp4 layout, uploads them, the
 // kernel runs the block-scale mma, host gathers D and compares to a fp4 reference.
-// Unit scales (all 1.0) isolate the e2m1 DATA fragment layout from the (separately
-// documented) scale-distribution semantics.
+// Presumed unit scales attempt to isolate the E2M1 data layout. The assumption
+// UE4M3_ONE=0x38 and/or selector/fragment mapping is not yet validated.
 #include <cstdio>
 #include <cstdint>
 #include <cmath>

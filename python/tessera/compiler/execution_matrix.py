@@ -953,6 +953,26 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "nvidia_reduce_compiled": "NVIDIA GPU (consumer Blackwell sm_120) "
                             "sum/mean/max/min row reductions emitted as CUDA; f32/f16 "
                             "storage with f32 accumulation, launched through runtime.launch()",
+    "nvidia_control_flow_compiled": "NVIDIA GPU (consumer Blackwell sm_120) "
+                            "bounded for/cond/while/scan emitted as single-launch "
+                            "CUDA kernels; static rank-1 f32 correctness envelope",
+    "nvidia_posenc_compiled": "NVIDIA GPU (consumer Blackwell sm_120) native "
+                            "compiler-emitted CUDA RoPE and ALiBi positional encoding",
+    "nvidia_ssm_compiled": "NVIDIA GPU (consumer Blackwell sm_120) native "
+                            "single-launch f32 selective SSM recurrent scan",
+    "nvidia_deltanet_compiled": "NVIDIA GPU (consumer Blackwell sm_120) native "
+                            "single-launch f32 DeltaNet recurrence with gate, beta, "
+                            "decay, erase, and modified variants",
+    "nvidia_moe_transport_compiled": "NVIDIA GPU (consumer Blackwell sm_120) "
+                            "single-launch MoE dispatch/combine and contiguous grouped GEMM",
+    "nvidia_dequant_gemm_compiled": "NVIDIA GPU (consumer Blackwell sm_120) "
+                            "fused int4/int8 per-group dequantization inside grouped GEMM",
+    "nvidia_optimizer_compiled": "NVIDIA GPU (consumer Blackwell sm_120) fused "
+                            "f32 SGD, momentum, Nesterov, Adam, AdamW, and Lion updates",
+    "nvidia_local_collective_compiled": "NVIDIA GPU (consumer Blackwell sm_120) "
+                            "one-device identity execution for collective-facing ops",
+    "nvidia_fpquant_compiled": "NVIDIA GPU (consumer Blackwell sm_120) native "
+                            "shape-preserving FP8/FP6/FP4 quantize/dequantize grid snap",
     # Note: pure-numpy `reference_cpu` is reached only as an internal *fallback*
     # inside `launch()`'s native_cpu branch (when `_execute_native_cpu_artifact`
     # raises and `_execute_jit_cpu_artifact` succeeds). It's not a directly
@@ -2800,6 +2820,100 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         execution_mode="cuda_runtime", direction="forward", op_family="reduction",
         device_proof="device_verified_jit", evidence_target="nvidia_sm120",
         numerical_fixture="tests/unit/test_nvidia_reduce_compiled.py",
+        proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_control_flow_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_control_flow_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_control_flow_compiled", runtime_status="success",
+        reason="NVIDIA sm_120 typed bounded for/cond/while/scan correctness ABI; "
+               "static rank-1 f32 state remains device-resident and each control "
+               "construct executes in one compiler-emitted CUDA launch.",
+        execution_mode="cuda_runtime", direction="forward",
+        op_family="control_flow", device_proof="device_verified_jit",
+        evidence_target="nvidia_sm120",
+        numerical_fixture="tests/unit/test_nvidia_control_flow_cuda.py",
+        proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_posenc_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_posenc_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_posenc_compiled", runtime_status="success",
+        reason="NVIDIA sm_120 f32 RoPE pair rotation and ALiBi bias generation "
+               "through compiler-emitted CUDA kernels.",
+        execution_mode="cuda_runtime", direction="forward",
+        op_family="position_encoding", device_proof="device_verified_jit",
+        evidence_target="nvidia_sm120",
+        numerical_fixture="tests/unit/test_nvidia_posenc_compiled.py",
+        proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_ssm_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_ssm_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_ssm_compiled", runtime_status="success",
+        reason="NVIDIA sm_120 selective SSM sequential recurrence with f32 state "
+               "and optional gate/initial state in one CUDA launch.",
+        execution_mode="cuda_runtime", direction="forward", op_family="selective_ssm",
+        device_proof="device_verified_jit", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/unit/test_nvidia_ssm_compiled.py",
+        proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_deltanet_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_deltanet_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_deltanet_compiled", runtime_status="success",
+        reason="NVIDIA sm_120 causal DeltaNet recurrence covering plain, gated, "
+               "beta/decay, erase, and modified updates in one CUDA launch.",
+        execution_mode="cuda_runtime", direction="forward", op_family="deltanet",
+        device_proof="device_verified_jit", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/unit/test_nvidia_deltanet_compiled.py",
+        proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_moe_transport_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_moe_transport_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_moe_transport_compiled", runtime_status="success",
+        reason="NVIDIA sm_120 expert-sorted gather, weighted scatter-add combine, "
+               "and contiguous grouped GEMM using device offsets.",
+        execution_mode="cuda_runtime", direction="forward", op_family="moe_transport",
+        device_proof="device_verified_jit", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/unit/test_nvidia_moe_transport_compiled.py",
+        proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_dequant_gemm_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_dequant_gemm_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_dequant_gemm_compiled", runtime_status="success",
+        reason="NVIDIA sm_120 fused int4/int8 packed-weight dequantization inside "
+               "single and grouped GEMM, with per-group scales and device offsets.",
+        execution_mode="cuda_runtime", direction="forward", op_family="dequant_gemm",
+        device_proof="device_verified_jit", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/unit/test_nvidia_dequant_gemm_compiled.py",
+        proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_optimizer_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_optimizer_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_optimizer_compiled", runtime_status="success",
+        reason="NVIDIA sm_120 fused f32 SGD, momentum, Nesterov, Adam, AdamW, "
+               "and Lion parameter/state updates.",
+        execution_mode="cuda_runtime", direction="forward", op_family="optimizer",
+        device_proof="device_verified_jit", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/unit/test_nvidia_optimizer_compiled.py",
+        proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_local_collective_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_local_collective_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_local_collective_compiled", runtime_status="success",
+        reason="NVIDIA sm_120 one-device identity execution for all-reduce, "
+               "reduce-scatter, all-gather, and all-to-all; world_size>1 is "
+               "rejected and remains an NCCL distributed-validation concern.",
+        execution_mode="cuda_runtime", direction="forward", op_family="collective_local",
+        device_proof="device_verified_jit", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/unit/test_nvidia_local_collective_compiled.py",
+        proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_fpquant_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_fpquant_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_fpquant_compiled", runtime_status="success",
+        reason="NVIDIA sm_120 shape-preserving f32 FP8/FP6/FP4 quantize and "
+               "dequantize contracts through compiler-emitted CUDA.",
+        execution_mode="cuda_runtime", direction="forward", op_family="quantization",
+        device_proof="device_verified_jit", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/unit/test_nvidia_fpquant_compiled.py",
         proof_build="cuda13.3+sm120"),
 }
 

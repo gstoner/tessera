@@ -42,7 +42,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 |---|---|---:|---:|---:|---|---|
 | `Verifier coverage` | mixed | 163 | 174 | 11 | no_verifier=11, real=163 | Add real verifier implementations for no_verifier ops, prioritizing native codegen lanes. |
 | `Direct test evidence` | mixed | 363 | 480 | 117 | covered_by_family=26, directly_tested=363, hardware_gated=4, structural_only=87 | Convert structural_only and needs_direct_test rows into direct compare fixtures; keep hardware_gated tied to backend proof. |
-| `Runtime execution matrix` | closed | 168 | 168 | 0 | apple_cpu=2, apple_gpu=16, cpu=5, nvidia_sm120=11, rocm=69, x86=65 | Add rows only when a launch path actually executes. |
+| `Runtime execution matrix` | closed | 177 | 177 | 0 | apple_cpu=2, apple_gpu=16, cpu=5, nvidia_sm120=20, rocm=69, x86=65 | Add rows only when a launch path actually executes. |
 | `Runtime ABI symbols` | mixed | 406 | 659 | 253 | apple=560, nvidia=7, rocm=12, x86=80 | Reduce stub-only ABI rows where a backend claims native execution. |
 | `Audited repo surfaces` | mixed | 31 | 58 | 27 | archived=4, compile_only=12, runnable=31, runnable_optional=1, scaffold=10 | Graduate compile_only/scaffold entries that exercise compiler pathways; archive dead surfaces. |
 
@@ -54,7 +54,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 | `Apple GPU` | mixed | 187 | 189 | 2 | runtime: apple_gpu=16; target_map: absent=2, device_verified_abi=11, device_verified_jit=102, fused=58 | Close the remaining absent target-map lane or document why it is host-only. |
 | `x86 / CPU` | closed | 5 | 5 | 0 | runtime: cpu=5 | Keep native CPU and numpy reference lanes separate in runtime proofs. |
 | `ROCm / HIP` | mixed | 105 | 116 | 11 | runtime: rocm=69; target_map: artifact_only=11, device_verified_abi=2, device_verified_jit=34 | Close the artifact-only target-map tail and preserve CDNA as hardware-gated. |
-| `CUDA / NVIDIA` | mixed | 11 | 52 | 41 | runtime: nvidia_sm120=11; target_map: artifact_only=41 | Promote artifact-only rows with execute-and-compare, starting from sm_120 matmul adjacency and attention. |
+| `CUDA / NVIDIA` | mixed | 20 | 61 | 41 | runtime: nvidia_sm120=20; target_map: artifact_only=41 | Promote artifact-only rows with execute-and-compare, starting from sm_120 matmul adjacency and attention. |
 
 ## Open Work Summary
 

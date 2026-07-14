@@ -6,6 +6,7 @@ target_include_directories(tessera-nvidia-opt PRIVATE
 )
 
 target_link_libraries(tessera-nvidia-opt PRIVATE
+  TesseraIR
   TesseraNVIDIAIR
   TesseraNVIDIAConversion
   MLIRArithDialect

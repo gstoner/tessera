@@ -208,6 +208,65 @@ LogicalResult verifyRank2Matmul(Operation *op, ValueRange inputs,
     return op->emitOpError("result column dimension must equal rhs N");
   return success();
 }
+
+LogicalResult verifyTileControl(Operation *op, ValueRange inputs,
+                                ValueRange outputs) {
+  auto verifyStatic = [&](ValueRange values) -> LogicalResult {
+    for (Value value : values) {
+      auto type = dyn_cast<RankedTensorType>(value.getType());
+      if (!type || !type.hasStaticShape())
+        return op->emitOpError(
+            "NVIDIA control-flow Tile contract requires static ranked tensors");
+    }
+    return success();
+  };
+  if (failed(verifyStatic(inputs)) || failed(verifyStatic(outputs)))
+    return failure();
+  StringRef name = op->getName().getStringRef();
+  if (!op->getAttrOfType<StringAttr>("source"))
+    return op->emitOpError("requires a source Graph op attribute");
+
+  if (name == "tile.control_for") {
+    auto start = op->getAttrOfType<IntegerAttr>("start");
+    auto stop = op->getAttrOfType<IntegerAttr>("stop");
+    auto step = op->getAttrOfType<IntegerAttr>("step");
+    if (!start || !stop || !step || step.getInt() == 0)
+      return op->emitOpError("requires start/stop and a non-zero step");
+    int64_t carry = 0;
+    if (auto attr = op->getAttrOfType<IntegerAttr>("carry_arg_index"))
+      carry = attr.getInt();
+    if (carry < 0 || carry >= static_cast<int64_t>(inputs.size()) ||
+        outputs.size() != 1 || outputs[0].getType() != inputs[carry].getType())
+      return op->emitOpError("requires one shape-stable carried result");
+  } else if (name == "tile.control_if") {
+    auto flag = op->getAttrOfType<IntegerAttr>("flag_arg_index");
+    if (!flag || flag.getInt() < 0 ||
+        flag.getInt() >= static_cast<int64_t>(inputs.size()) || outputs.empty())
+      return op->emitOpError("requires an in-range flag and branch result");
+  } else if (name == "tile.control_while") {
+    auto maxIters = op->getAttrOfType<IntegerAttr>("max_iters");
+    auto carry = op->getAttrOfType<IntegerAttr>("carry_arg_index");
+    if (!maxIters || maxIters.getInt() <= 0 || !carry || carry.getInt() < 0 ||
+        carry.getInt() >= static_cast<int64_t>(inputs.size()) ||
+        outputs.size() != 1 ||
+        outputs[0].getType() != inputs[carry.getInt()].getType())
+      return op->emitOpError(
+          "requires max_iters>0 and one shape-stable carried result");
+  } else if (name == "tile.control_scan") {
+    auto trip = op->getAttrOfType<IntegerAttr>("trip");
+    if (!trip || trip.getInt() <= 0 || inputs.size() < 2 ||
+        outputs.size() != 2 || outputs[0].getType() != inputs[0].getType())
+      return op->emitOpError(
+          "requires trip>0, init/xs, and shape-stable carry/ys results");
+    auto xs = cast<RankedTensorType>(inputs[1].getType());
+    auto ys = cast<RankedTensorType>(outputs[1].getType());
+    if (xs.getRank() < 1 || ys.getRank() < 1 ||
+        xs.getDimSize(0) != trip.getInt() ||
+        ys.getDimSize(0) != trip.getInt())
+      return op->emitOpError("xs/ys leading dimension must equal trip");
+  }
+  return success();
+}
 } // namespace
 
 LogicalResult MatmulOp::verify() {
@@ -242,6 +301,22 @@ LogicalResult BatchedGemmOp::verify() {
   if (!agree(res.getDimSize(2), rhs.getDimSize(2)))
     return emitOpError("result N must equal rhs N");
   return success();
+}
+
+LogicalResult ControlForOp::verify() {
+  return verifyTileControl(getOperation(), getInputs(), getOutputs());
+}
+
+LogicalResult ControlIfOp::verify() {
+  return verifyTileControl(getOperation(), getInputs(), getOutputs());
+}
+
+LogicalResult ControlWhileOp::verify() {
+  return verifyTileControl(getOperation(), getInputs(), getOutputs());
+}
+
+LogicalResult ControlScanOp::verify() {
+  return verifyTileControl(getOperation(), getInputs(), getOutputs());
 }
 
 LogicalResult PPOPolicyLossOp::verify() {

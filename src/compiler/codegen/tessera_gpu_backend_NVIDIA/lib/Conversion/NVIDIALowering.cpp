@@ -1,4 +1,5 @@
 #include "tessera/gpu/BackendRegistration.h"
+#include "Tessera/Dialect/Tile/TileDialect.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -92,7 +93,8 @@ struct LowerTileToNVIDIAPass
       StringRef name = op->getName().getStringRef();
       if (name == "tile.mma" || name == "tile.async_copy" ||
           name == "tile.wait_async" || name == "tile.conv2d" ||
-          name == "tile.kv_cache" || name.starts_with("tile.tmem."))
+          name == "tile.kv_cache" || name.starts_with("tile.control_") ||
+          name.starts_with("tile.tmem."))
         worklist.push_back(op);
     });
 
@@ -259,6 +261,25 @@ struct LowerTileToNVIDIAPass
         continue;
       }
 
+      if (name.starts_with("tile.control_")) {
+        for (NamedAttribute attr : op->getAttrs())
+          if (attr.getName() != "arch")
+            attrs.push_back(attr);
+        StringRef targetName = "tessera_nvidia.control_for";
+        if (name == "tile.control_if")
+          targetName = "tessera_nvidia.control_if";
+        else if (name == "tile.control_while")
+          targetName = "tessera_nvidia.control_while";
+        else if (name == "tile.control_scan")
+          targetName = "tessera_nvidia.control_scan";
+        Operation *target = createContractOp(
+            builder, loc, targetName, op->getOperands(), op->getResultTypes(),
+            attrs);
+        op->replaceAllUsesWith(target->getResults());
+        op->erase();
+        continue;
+      }
+
       if (name.starts_with("tile.tmem.")) {
         StringRef contractName = "tessera_nvidia.tmem_store";
         if (name == "tile.tmem.alloc")
@@ -304,6 +325,8 @@ static StringRef markerForTargetOp(StringRef opName) {
     return "llvm.nvvm.tmem.store.contract";
   if (opName == "tessera_nvidia.cuda_kernel")
     return "llvm.nvvm.cuda.kernel.contract";
+  if (opName.starts_with("tessera_nvidia.control_"))
+    return "llvm.nvvm.cuda.control.contract";
   return "llvm.nvvm.tessera.nvidia.diagnostic.contract";
 }
 
@@ -444,7 +467,8 @@ void registerTesseraNVIDIABackendPasses() {
 
 void registerTesseraNVIDIABackendDialects(DialectRegistry &registry) {
   registry.insert<arith::ArithDialect, func::FuncDialect, LLVM::LLVMDialect,
-                  NVVM::NVVMDialect, tessera::nvidia::TesseraNVIDIADialect>();
+                  NVVM::NVVMDialect, tessera::nvidia::TesseraNVIDIADialect,
+                  tessera::tile::TesseraTileDialect>();
 }
 
 } // namespace tessera

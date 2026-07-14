@@ -34,9 +34,9 @@ sys.path.insert(0, str(ROOT / "python"))
 
 OUT = ROOT / "benchmarks" / "baselines" / "nvidia_sm120_hot_paths.json"
 
-# mma.sync matmul ladder, f16 storage / f32 accumulate — the hardware-verified
-# NVIDIA sm_120 hot path (consumer Blackwell, repo Decision #26). Small squares
-# so a ratchet regression pins to the primitive.
+# Bare mma.sync matmul ladder plus the sm_120 differentiation promotions.  The
+# latter deliberately use the production candidate/runtime entry points, not a
+# benchmark-only kernel, so the timing also smokes their public ABI.
 HOT_PATH_SIZES = [(512, 512, 512), (1024, 1024, 1024), (2048, 2048, 2048)]
 
 
@@ -85,6 +85,56 @@ def hot_path_cases(rt):
     cases = []
     for (m, n, k) in HOT_PATH_SIZES:
         cases.append(("matmul", f"{m}x{n}x{k}", "f16", "mma_sync", _make(m, n, k)))
+
+    # Fused epilogue: the same JIT-compiled mma.sync + bias/GELU candidate used
+    # by arbitration.  Keep operands bounded so its declared f16 budget applies.
+    from tessera.compiler.emit import candidate as candidate_mod
+    from tessera.compiler import fusion as fusion_mod
+    from tessera.compiler.emit.candidate import OP_ATTENTION, OP_FUSED_REGION
+    from tessera.compiler.emit.nvidia_cuda import run_fpquant_f32
+
+    fused = next(c for c in candidate_mod.candidates_for("nvidia", OP_FUSED_REGION)
+                 if c.name == "nvidia_mma_fused")
+    freg = fusion_mod.FusedRegion(epilogue=("bias", "gelu"))
+    fa = (rng.standard_normal((256, 256)) * 0.25).astype(np.float32)
+    fb = (rng.standard_normal((256, 256)) * 0.25).astype(np.float32)
+    fbi = (rng.standard_normal((256,)) * 0.25).astype(np.float32)
+
+    def _fused():
+        _, tag = fused.run(freg, fa, fb, fbi)
+        if tag != "nvidia_cuda":
+            raise RuntimeError(f"fused mma.sync declined to {tag}")
+
+    cases.append(("fused_gemm_bias_gelu", "256x256x256", "f16/f32",
+                  "mma_sync_fused", _fused))
+
+    attn = next(c for c in candidate_mod.candidates_for("nvidia", OP_ATTENTION)
+                if c.name == "nvidia_mma_attn")
+    areg = fusion_mod.AttentionRegion(scale=0.125, causal=True)
+    q = rng.standard_normal((128, 64)).astype(np.float32)
+    k = rng.standard_normal((128, 64)).astype(np.float32)
+    v = rng.standard_normal((128, 64)).astype(np.float32)
+
+    def _attn():
+        _, tag = attn.run(areg, q, k, v)
+        if tag != "nvidia_cuda":
+            raise RuntimeError(f"mma.sync attention declined to {tag}")
+
+    cases.append(("flash_attention", "128x128x64x64", "f16/f32",
+                  "mma_sync_attention", _attn))
+
+    fpq = rng.standard_normal((1 << 18,)).astype(np.float32)
+
+    def _fp8():
+        run_fpquant_f32(fpq, 240.0, 8, 3, 1.0)
+
+    def _fp6():
+        run_fpquant_f32(fpq, 28.0, 4, 2, 1.0)
+
+    cases.append(("quantize", "262144", "fp8_e4m3_storage",
+                  "cuda_fpquant", _fp8))
+    cases.append(("quantize", "262144", "fp6_e3m2_storage",
+                  "cuda_fpquant", _fp6))
     return cases
 
 

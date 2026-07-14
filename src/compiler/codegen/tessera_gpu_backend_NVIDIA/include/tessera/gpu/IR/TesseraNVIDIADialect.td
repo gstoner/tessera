@@ -53,6 +53,9 @@ class TesseraNVIDIA_Op<string mnemonic, list<Trait> traits = []> :
       OptionalAttr<StrAttr>:$dtype_ab,
       OptionalAttr<StrAttr>:$dtype_c,
       OptionalAttr<StrAttr>:$accum,
+      OptionalAttr<StrAttr>:$format,
+      OptionalAttr<StrAttr>:$epilogue,
+      OptionalAttr<StrAttr>:$mask,
       OptionalAttr<StrAttr>:$src_space,
       OptionalAttr<StrAttr>:$dst_space,
       OptionalAttr<BoolAttr>:$block_scaled,
@@ -68,6 +71,18 @@ class TesseraNVIDIA_Op<string mnemonic, list<Trait> traits = []> :
 
 def NVIDIA_MmaSyncOp : TesseraNVIDIA_Op<"mma_sync"> {
   let summary = "Consumer Blackwell (sm_120) warp-level mma.sync contract";
+}
+def NVIDIA_MmaFusedOp : TesseraNVIDIA_Op<"mma_fused"> {
+  let summary = "sm_120 mma.sync GEMM with a fused pointwise epilogue";
+}
+def NVIDIA_MmaAttentionOp : TesseraNVIDIA_Op<"mma_attention"> {
+  let summary = "sm_120 two-MMA attention with f32 softmax accumulation";
+}
+def NVIDIA_FpQuantOp : TesseraNVIDIA_Op<"fpquant"> {
+  let summary = "sm_120 FP8/FP6/FP4 storage quantize or dequantize contract";
+}
+def NVIDIA_Nvfp4BlockScaleMmaOp : TesseraNVIDIA_Op<"nvfp4_block_scale_mma"> {
+  let summary = "sm_120a NVFP4 E2M1 MMA with UE4M3 block scales";
 }
 def NVIDIA_WgmmaOp : TesseraNVIDIA_Op<"wgmma"> {
   let summary = "Hopper (sm_90a) warpgroup wgmma contract";
@@ -95,6 +110,18 @@ def NVIDIA_TmemStoreOp : TesseraNVIDIA_Op<"tmem_store"> {
 }
 def NVIDIA_CudaKernelOp : TesseraNVIDIA_Op<"cuda_kernel"> {
   let summary = "Generic CUDA kernel artifact contract";
+}
+def NVIDIA_ControlForOp : TesseraNVIDIA_Op<"control_for"> {
+  let summary = "Single-launch bounded for-loop CUDA contract";
+}
+def NVIDIA_ControlIfOp : TesseraNVIDIA_Op<"control_if"> {
+  let summary = "Single-launch divergent conditional CUDA contract";
+}
+def NVIDIA_ControlWhileOp : TesseraNVIDIA_Op<"control_while"> {
+  let summary = "Single-launch bounded while-loop CUDA contract";
+}
+def NVIDIA_ControlScanOp : TesseraNVIDIA_Op<"control_scan"> {
+  let summary = "Single-launch streaming scan CUDA contract";
 }
 
 // Wrapper / probe ops. The **Python** Target IR emitters (``target_ir.py`` /

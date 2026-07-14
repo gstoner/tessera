@@ -87,6 +87,21 @@ _FLASH_BWD_ENTRY = "tessera_nvidia_flash_attn_bwd"
 _LINEAR_ATTN_ENTRY = "tessera_nvidia_linear_attn"
 _LINEAR_ATTN_BWD_ENTRY = "tessera_nvidia_linear_attn_bwd"
 _MLA_FUSED_ENTRY = "tessera_nvidia_mla_decode_fused"
+_CONTROL_FOR_ENTRY = "tessera_nvidia_control_for_f32"
+_CONTROL_IF_ENTRY = "tessera_nvidia_control_if_f32"
+_CONTROL_WHILE_ENTRY = "tessera_nvidia_control_while_f32"
+_CONTROL_SCAN_ENTRY = "tessera_nvidia_control_scan_f32"
+_ROPE_ENTRY = "tessera_nvidia_rope_f32"
+_ALIBI_ENTRY = "tessera_nvidia_alibi_f32"
+_SSM_ENTRY = "tessera_nvidia_selective_ssm_f32"
+_DELTANET_ENTRY = "tessera_nvidia_deltanet_f32"
+_MOE_DISPATCH_ENTRY = "tessera_nvidia_moe_dispatch_f32"
+_MOE_COMBINE_ENTRY = "tessera_nvidia_moe_combine_f32"
+_GROUPED_GEMM_ENTRY = "tessera_nvidia_grouped_gemm_f32"
+_DEQUANT_GROUPED_ENTRY = "tessera_nvidia_dequant_grouped_gemm_f32"
+_OPTIMIZER_ENTRY = "tessera_nvidia_optimizer_f32"
+_LOCAL_COLLECTIVE_ENTRY = "tessera_nvidia_local_collective_f32"
+_FPQUANT_ENTRY = "tessera_nvidia_fpquant_f32"
 _REAL_TAG = "nvidia_cuda"
 #: Max head dim (Dv) the one-thread-per-query flash kernel holds in its per-thread
 #: online-softmax accumulator; larger Dv declines to the reference.
@@ -212,6 +227,15 @@ _linear_attn_bwd_artifact: str | None = None
 _linear_attn_variant_artifact: str | None = None
 _linear_attn_variant_bwd_artifact: str | None = None
 _mla_fused_artifact: str | None = None
+_control_flow_artifact: str | None = None
+_posenc_artifact: str | None = None
+_ssm_artifact: str | None = None
+_deltanet_artifact: str | None = None
+_moe_artifact: str | None = None
+_dequant_artifact: str | None = None
+_optimizer_artifact: str | None = None
+_local_collective_artifact: str | None = None
+_fpquant_artifact: str | None = None
 
 
 def _synthesize_flash_fwd_cuda() -> str:
@@ -1014,6 +1038,353 @@ def run_row_reduce(x2d: Any, kind: str) -> Any:
 
 
 # ── runner (execute → (out, tag)) ─────────────────────────────────────────────
+
+def _synthesize_fpquant_cuda() -> str:
+    return r'''#include <cuda_runtime.h>
+#include <math.h>
+__global__ void fq_k(const float*x,float*o,long n,float mx,int mb,int me){long i=(long)blockIdx.x*blockDim.x+threadIdx.x;if(i<n){float z=x[i];if(isnan(z)){o[i]=z;return;}float a=fminf(fabsf(z),mx);if(a==0){o[i]=z;return;}int e=(int)floorf(log2f(a));e=e<me?me:e;float step=ldexpf(1.f,e-mb);float q=nearbyintf(z/step)*step;o[i]=fminf(fmaxf(q,-mx),mx);}}
+extern "C" int tessera_nvidia_fpquant_f32(const float*x,float*o,long n,float mx,int mb,int me){float *dx=0,*d=0;size_t z=n*4;if(cudaMalloc(&dx,z)!=cudaSuccess||cudaMalloc(&d,z)!=cudaSuccess||cudaMemcpy(dx,x,z,cudaMemcpyHostToDevice)!=cudaSuccess)return 3;fq_k<<<(n+255)/256,256>>>(dx,d,n,mx,mb,me);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,d,z,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(d);return ok?1:3;}
+'''
+
+
+def run_fpquant_f32(x: Any, max_normal: float, mantissa_bits: int,
+                    min_exp: int, scale: float) -> Any:
+    import numpy as np
+    x=np.ascontiguousarray(x)
+    if x.dtype!=np.float32:raise ValueError("NVIDIA fpquant requires f32")
+    if not x.size:return np.array(x,copy=True)
+    scaled=np.clip(x/np.float32(scale),-max_normal,max_normal).astype(np.float32)
+    global _fpquant_artifact
+    if _fpquant_artifact is None:_fpquant_artifact=_nvidia_cuda_compile_fn(KernelSource(source=_synthesize_fpquant_cuda(),entry=_FPQUANT_ENTRY,lang=_LANG,spec=SpecPolicy.DYNAMIC,shape_key=("fpquant-f32",)))
+    out=np.empty_like(x);fn=getattr(_load_lib(_fpquant_artifact),_FPQUANT_ENTRY);fn.restype=ctypes.c_int;fn.argtypes=[ctypes.c_void_p,ctypes.c_void_p,ctypes.c_long,ctypes.c_float,ctypes.c_int,ctypes.c_int]
+    if fn(_ptr(scaled),_ptr(out),x.size,max_normal,mantissa_bits,min_exp)!=1:raise RuntimeError("NVIDIA fpquant launch failed")
+    return (out*np.float32(scale)).astype(np.float32)
+
+
+def _synthesize_local_collective_cuda() -> str:
+    return r'''#include <cuda_runtime.h>
+__global__ void copy_k(const float*x,float*o,long n){long i=(long)blockIdx.x*blockDim.x+threadIdx.x;if(i<n)o[i]=x[i];}
+extern "C" int tessera_nvidia_local_collective_f32(const float*x,float*o,long n){float *dx=0,*d=0;size_t z=n*4;if(cudaMalloc(&dx,z)!=cudaSuccess||cudaMalloc(&d,z)!=cudaSuccess||cudaMemcpy(dx,x,z,cudaMemcpyHostToDevice)!=cudaSuccess)return 3;copy_k<<<(n+255)/256,256>>>(dx,d,n);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,d,z,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(d);return ok?1:3;}
+'''
+
+
+def run_local_collective_f32(x: Any) -> Any:
+    import numpy as np
+    x=np.ascontiguousarray(x)
+    if x.dtype!=np.float32:raise ValueError("NVIDIA local collective v1 requires f32")
+    if not x.size:return np.array(x,copy=True)
+    global _local_collective_artifact
+    if _local_collective_artifact is None:_local_collective_artifact=_nvidia_cuda_compile_fn(KernelSource(source=_synthesize_local_collective_cuda(),entry=_LOCAL_COLLECTIVE_ENTRY,lang=_LANG,spec=SpecPolicy.DYNAMIC,shape_key=("local-collective-f32",)))
+    out=np.empty_like(x);fn=getattr(_load_lib(_local_collective_artifact),_LOCAL_COLLECTIVE_ENTRY);fn.restype=ctypes.c_int;fn.argtypes=[ctypes.c_void_p,ctypes.c_void_p,ctypes.c_long]
+    if fn(_ptr(x),_ptr(out),x.size)!=1:raise RuntimeError("NVIDIA local collective launch failed")
+    return out
+
+
+def _synthesize_optimizer_cuda() -> str:
+    return r'''#include <cuda_runtime.h>
+#include <math.h>
+__global__ void opt_k(const float*p,const float*g,const float*m,const float*v,float*po,float*mo,float*vo,long n,int kind,float lr,float b1,float b2,float eps,float wd,float b1c,float b2c){long i=(long)blockIdx.x*blockDim.x+threadIdx.x;if(i<n){float P=p[i],G=g[i],M=m[i],V=v[i],PN=P,MN=M,VN=V;if(kind==0)PN=P-lr*G;else if(kind==1||kind==5){VN=b1*V+G;PN=P-lr*(kind==5?G+b1*VN:VN);}else if(kind==4){float u=b1*M+(1-b1)*G;MN=b2*M+(1-b2)*G;float pp=wd!=0?P*(1-lr*wd):P;PN=pp-lr*((u>0)-(u<0));}else{MN=b1*M+(1-b1)*G;VN=b2*V+(1-b2)*G*G;float pp=(kind==3&&wd!=0)?P*(1-lr*wd):P;PN=pp-lr*(MN/b1c)/(sqrtf(VN/b2c)+eps);}po[i]=PN;mo[i]=MN;vo[i]=VN;}}
+static int ac(float**d,const float*h,size_t z){return cudaMalloc(d,z)==cudaSuccess&&cudaMemcpy(*d,h,z,cudaMemcpyHostToDevice)==cudaSuccess;}
+extern "C" int tessera_nvidia_optimizer_f32(const float*p,const float*g,const float*m,const float*v,float*po,float*mo,float*vo,long n,int kind,float lr,float b1,float b2,float eps,float wd,float b1c,float b2c){float *dp=0,*dg=0,*dm=0,*dv=0,*dpo=0,*dmo=0,*dvo=0;size_t z=n*4;if(!ac(&dp,p,z)||!ac(&dg,g,z)||!ac(&dm,m,z)||!ac(&dv,v,z)||cudaMalloc(&dpo,z)!=cudaSuccess||cudaMalloc(&dmo,z)!=cudaSuccess||cudaMalloc(&dvo,z)!=cudaSuccess)return 3;opt_k<<<(n+255)/256,256>>>(dp,dg,dm,dv,dpo,dmo,dvo,n,kind,lr,b1,b2,eps,wd,b1c,b2c);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(po,dpo,z,cudaMemcpyDeviceToHost)==cudaSuccess&&cudaMemcpy(mo,dmo,z,cudaMemcpyDeviceToHost)==cudaSuccess&&cudaMemcpy(vo,dvo,z,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dp);cudaFree(dg);cudaFree(dm);cudaFree(dv);cudaFree(dpo);cudaFree(dmo);cudaFree(dvo);return ok?1:3;}
+'''
+
+
+def run_optimizer_f32(kind: int, p: Any, g: Any, m: Any, v: Any, n: int,
+                      lr: float, b1: float, b2: float, eps: float, wd: float,
+                      b1c: float, b2c: float):
+    import numpy as np
+    vals=[np.ascontiguousarray(x,dtype=np.float32).reshape(-1) for x in (p,g,m,v)]
+    if any(x.size!=n for x in vals):raise ValueError("optimizer buffers must have n elements")
+    global _optimizer_artifact
+    if _optimizer_artifact is None:_optimizer_artifact=_nvidia_cuda_compile_fn(KernelSource(source=_synthesize_optimizer_cuda(),entry=_OPTIMIZER_ENTRY,lang=_LANG,spec=SpecPolicy.DYNAMIC,shape_key=("optimizer-f32",)))
+    outs=[np.empty(n,np.float32) for _ in range(3)];fn=getattr(_load_lib(_optimizer_artifact),_OPTIMIZER_ENTRY);fn.restype=ctypes.c_int;fn.argtypes=[ctypes.c_void_p]*7+[ctypes.c_long,ctypes.c_int]+[ctypes.c_float]*7
+    if fn(*[_ptr(x) for x in vals],*[_ptr(x) for x in outs],n,kind,lr,b1,b2,eps,wd,b1c,b2c)!=1:raise RuntimeError("NVIDIA optimizer launch failed")
+    return tuple(outs)
+
+
+def _synthesize_dequant_grouped_cuda() -> str:
+    return r'''#include <cuda_runtime.h>
+__global__ void dqg_k(const float*x,const unsigned char*codes,const float*sc,const int*off,float*o,int T,int K,int N,int E,int G,int mode){long z=(long)blockIdx.x*blockDim.x+threadIdx.x,total=(long)T*N;if(z<total){int r=z/N,c=z%N,e=0;while(e+1<E&&r>=off[e+1])++e;float a=0;for(int k=0;k<K;++k){int gi=k/G;float q;if(mode==4){int kb=K/2;unsigned char b=codes[((long)e*N+c)*kb+k/2];int v=(k&1)?(b>>4):(b&15);q=(float)(v>=8?v-16:v);}else{q=(float)((const signed char*)codes)[((long)e*K+k)*N+c];}a+=x[(long)r*K+k]*q*sc[((long)e*(K/G)+gi)*N+c];}o[z]=a;}}
+static int ac(void**d,const void*h,size_t z){return cudaMalloc(d,z)==cudaSuccess&&cudaMemcpy(*d,h,z,cudaMemcpyHostToDevice)==cudaSuccess;}
+extern "C" int tessera_nvidia_dequant_grouped_gemm_f32(const float*x,const unsigned char*c,const float*s,const int*off,float*o,int T,int K,int N,int E,int G,int mode){size_t nx=(size_t)T*K*4,nc=(size_t)E*(mode==4?N*(K/2):K*N),ns=(size_t)E*(K/G)*N*4,no=(size_t)T*N*4;float *dx=0,*ds=0,*dout=0;unsigned char*dc=0;int*df=0;if(!ac((void**)&dx,x,nx)||!ac((void**)&dc,c,nc)||!ac((void**)&ds,s,ns)||!ac((void**)&df,off,(E+1)*4)||cudaMalloc(&dout,no)!=cudaSuccess)return 3;dqg_k<<<(T*N+255)/256,256>>>(dx,dc,ds,df,dout,T,K,N,E,G,mode);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,dout,no,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(dc);cudaFree(ds);cudaFree(df);cudaFree(dout);return ok?1:3;}
+'''
+
+
+def run_dequant_grouped_gemm_f32(x: Any, packed_experts: Any,
+                                  group_sizes: Any) -> Any:
+    import numpy as np
+    x=np.ascontiguousarray(x);experts=list(packed_experts);gs=np.asarray(group_sizes,dtype=np.int64).reshape(-1)
+    if x.dtype!=np.float32 or x.ndim!=2 or not experts:raise ValueError("dequant grouped GEMM requires x[T,K] f32 and experts")
+    E=len(experts);first=experts[0];K,N=first.shape;scheme=first.scheme;G=scheme.group_size or K
+    if scheme.dtype not in ("int4","int8") or K%G or (scheme.dtype=="int4" and K%2):raise ValueError("NVIDIA dequant grouped GEMM supports aligned int4/int8")
+    if gs.shape!=(E,) or np.any(gs<0) or int(gs.sum())!=x.shape[0] or x.shape[1]!=K:raise ValueError("invalid dequant grouped GEMM partition")
+    for p in experts:
+        if p.shape!=(K,N) or p.scheme!=scheme:raise ValueError("dequant grouped experts must share shape and scheme")
+    codes=np.ascontiguousarray(np.stack([p.codes for p in experts])).view(np.uint8);sc=np.ascontiguousarray(np.stack([p.scales for p in experts]),dtype=np.float32)
+    off=np.ascontiguousarray(np.concatenate(([0],np.cumsum(gs))),dtype=np.int32);out=np.empty((x.shape[0],N),np.float32)
+    if not x.shape[0]:return out
+    global _dequant_artifact
+    if _dequant_artifact is None:_dequant_artifact=_nvidia_cuda_compile_fn(KernelSource(source=_synthesize_dequant_grouped_cuda(),entry=_DEQUANT_GROUPED_ENTRY,lang=_LANG,spec=SpecPolicy.DYNAMIC,shape_key=("dequant-grouped-f32",)))
+    fn=getattr(_load_lib(_dequant_artifact),_DEQUANT_GROUPED_ENTRY);fn.restype=ctypes.c_int;fn.argtypes=[ctypes.c_void_p]*5+[ctypes.c_int]*6
+    if fn(_ptr(x),_ptr(codes),_ptr(sc),_ptr(off),_ptr(out),x.shape[0],K,N,E,G,4 if scheme.dtype=="int4" else 8)!=1:raise RuntimeError("NVIDIA dequant grouped GEMM launch failed")
+    return out
+
+
+def _synthesize_moe_cuda() -> str:
+    return r'''#include <cuda_runtime.h>
+__global__ void gather_k(const float*x,const int*tok,float*o,int S,int H){long z=(long)blockIdx.x*blockDim.x+threadIdx.x,n=(long)S*H;if(z<n){int s=z/H,h=z%H;o[z]=x[(long)tok[s]*H+h];}}
+__global__ void combine_k(const float*x,const int*tok,const float*w,float*o,int S,int H){long z=(long)blockIdx.x*blockDim.x+threadIdx.x,n=(long)S*H;if(z<n){int s=z/H,h=z%H;atomicAdd(&o[(long)tok[s]*H+h],w[s]*x[z]);}}
+__global__ void gg_k(const float*x,const float*w,const int*off,float*o,int T,int K,int N,int E){long z=(long)blockIdx.x*blockDim.x+threadIdx.x,n=(long)T*N;if(z<n){int r=z/N,c=z%N,e=0;while(e+1<E&&r>=off[e+1])++e;float a=0;for(int k=0;k<K;++k)a+=x[(long)r*K+k]*w[((long)e*K+k)*N+c];o[z]=a;}}
+static int ac(void**d,const void*h,size_t z){return cudaMalloc(d,z)==cudaSuccess&&cudaMemcpy(*d,h,z,cudaMemcpyHostToDevice)==cudaSuccess;}
+extern "C" int tessera_nvidia_moe_dispatch_f32(const float*x,const int*tok,float*o,int T,int S,int H){float *dx=0,*dout=0;int*dt=0;size_t nx=(size_t)T*H*4,no=(size_t)S*H*4;if(!ac((void**)&dx,x,nx)||!ac((void**)&dt,tok,S*4)||cudaMalloc(&dout,no)!=cudaSuccess)return 3;gather_k<<<(S*H+255)/256,256>>>(dx,dt,dout,S,H);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,dout,no,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(dt);cudaFree(dout);return ok?1:3;}
+extern "C" int tessera_nvidia_moe_combine_f32(const float*x,const int*tok,const float*w,float*o,int T,int S,int H){float *dx=0,*dw=0,*dout=0;int*dt=0;size_t ni=(size_t)S*H*4,no=(size_t)T*H*4;if(!ac((void**)&dx,x,ni)||!ac((void**)&dt,tok,S*4)||!ac((void**)&dw,w,S*4)||cudaMalloc(&dout,no)!=cudaSuccess)return 3;cudaMemset(dout,0,no);combine_k<<<(S*H+255)/256,256>>>(dx,dt,dw,dout,S,H);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,dout,no,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(dt);cudaFree(dw);cudaFree(dout);return ok?1:3;}
+extern "C" int tessera_nvidia_grouped_gemm_f32(const float*x,const float*w,const int*off,float*o,int T,int K,int N,int E){float *dx=0,*dw=0,*dout=0;int*df=0;size_t nx=(size_t)T*K*4,nw=(size_t)E*K*N*4,no=(size_t)T*N*4;if(!ac((void**)&dx,x,nx)||!ac((void**)&dw,w,nw)||!ac((void**)&df,off,(E+1)*4)||cudaMalloc(&dout,no)!=cudaSuccess)return 3;gg_k<<<(T*N+255)/256,256>>>(dx,dw,df,dout,T,K,N,E);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,dout,no,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(dw);cudaFree(df);cudaFree(dout);return ok?1:3;}
+'''
+
+
+def _moe_lib():
+    global _moe_artifact
+    if _moe_artifact is None:
+        _moe_artifact=_nvidia_cuda_compile_fn(KernelSource(source=_synthesize_moe_cuda(),entry=_GROUPED_GEMM_ENTRY,lang=_LANG,spec=SpecPolicy.DYNAMIC,shape_key=("moe-transport-f32",)))
+    return _load_lib(_moe_artifact)
+
+
+def run_moe_dispatch_f32(x: Any, token_of_slot: Any) -> Any:
+    import numpy as np
+    x=np.ascontiguousarray(x);raw=np.asarray(token_of_slot,dtype=np.int64).reshape(-1)
+    if np.any(raw>np.iinfo(np.int32).max):raise ValueError("MoE token indices exceed i32 CUDA ABI")
+    tok=np.ascontiguousarray(raw,dtype=np.int32)
+    if x.dtype!=np.float32 or x.ndim!=2:raise ValueError("NVIDIA MoE dispatch requires x[T,H] f32")
+    if np.any(tok<0) or np.any(tok>=x.shape[0]):raise ValueError("MoE token indices out of range")
+    if not tok.size:return np.empty((0,x.shape[1]),np.float32)
+    out=np.empty((tok.size,x.shape[1]),np.float32);fn=getattr(_moe_lib(),_MOE_DISPATCH_ENTRY);fn.restype=ctypes.c_int;fn.argtypes=[ctypes.c_void_p]*3+[ctypes.c_int]*3
+    if fn(_ptr(x),_ptr(tok),_ptr(out),x.shape[0],tok.size,x.shape[1])!=1:raise RuntimeError("NVIDIA MoE dispatch launch failed")
+    return out
+
+
+def run_moe_combine_f32(partials: Any, token_of_slot: Any, weights: Any,
+                        num_tokens: int) -> Any:
+    import numpy as np
+    p=np.ascontiguousarray(partials);tok=np.ascontiguousarray(token_of_slot,dtype=np.int32).reshape(-1);w=np.ascontiguousarray(weights,dtype=np.float32).reshape(-1)
+    if p.dtype!=np.float32 or p.ndim!=2 or tok.size!=p.shape[0] or w.size!=p.shape[0]:raise ValueError("invalid NVIDIA MoE combine shapes")
+    if np.any(tok<0) or np.any(tok>=num_tokens):raise ValueError("MoE combine token indices out of range")
+    if not p.shape[0]:return np.zeros((num_tokens,p.shape[1]),np.float32)
+    out=np.empty((num_tokens,p.shape[1]),np.float32);fn=getattr(_moe_lib(),_MOE_COMBINE_ENTRY);fn.restype=ctypes.c_int;fn.argtypes=[ctypes.c_void_p]*4+[ctypes.c_int]*3
+    if fn(_ptr(p),_ptr(tok),_ptr(w),_ptr(out),num_tokens,p.shape[0],p.shape[1])!=1:raise RuntimeError("NVIDIA MoE combine launch failed")
+    return out
+
+
+def run_grouped_gemm_f32(x: Any, weights: Any, group_sizes: Any) -> Any:
+    import numpy as np
+    x=np.ascontiguousarray(x);w=np.ascontiguousarray(weights);gs=np.asarray(group_sizes,dtype=np.int64).reshape(-1)
+    if x.dtype!=np.float32 or w.dtype!=np.float32 or x.ndim!=2 or w.ndim!=3:raise ValueError("grouped_gemm requires f32 x[T,K], weights[E,K,N]")
+    E,K,N=w.shape
+    if x.shape[1]!=K or gs.shape!=(E,) or np.any(gs<0) or int(gs.sum())!=x.shape[0]:raise ValueError("invalid grouped_gemm K/group_sizes")
+    if not x.shape[0]:return np.empty((0,N),np.float32)
+    off64=np.concatenate(([0],np.cumsum(gs)))
+    if int(off64[-1])>np.iinfo(np.int32).max:raise ValueError("grouped_gemm offsets exceed i32 CUDA ABI")
+    off=np.ascontiguousarray(off64,dtype=np.int32);out=np.empty((x.shape[0],N),np.float32)
+    fn=getattr(_moe_lib(),_GROUPED_GEMM_ENTRY);fn.restype=ctypes.c_int;fn.argtypes=[ctypes.c_void_p]*4+[ctypes.c_int]*4
+    if fn(_ptr(x),_ptr(w),_ptr(off),_ptr(out),x.shape[0],K,N,E)!=1:raise RuntimeError("NVIDIA grouped_gemm launch failed")
+    return out
+
+
+def _synthesize_deltanet_cuda() -> str:
+    return r'''#include <cuda_runtime.h>
+#include <math.h>
+__global__ void dn_k(const float*q,const float*k,const float*v,const float*g,const float*beta,const float*decay,float*o,int BH,int S,int DK,int DV,int erase,int modified){int bh=blockIdx.x,e=threadIdx.x;if(bh>=BH||e>=DV)return;extern __shared__ float sm[];float*st=sm;float*target=st+DK*DV;float*ms=target+DV;for(int z=e;z<DK*DV;z+=DV)st[z]=0.f;__syncthreads();for(int t=0;t<S;++t){long base=((long)bh*S+t);float de=decay?decay[base]:1.f;float tar=v[base*DV+e];if(erase){float vh=0.f;for(int d=0;d<DK;++d)vh+=k[base*DK+d]*st[d*DV+e];tar-=de*vh;}target[e]=tar;__syncthreads();if(e==0){float sc=1.f;if(modified){float kn=0.f,tn=0.f;for(int d=0;d<DK;++d){float z=k[base*DK+d];kn+=z*z;}for(int j=0;j<DV;++j)tn+=target[j]*target[j];sc=1.f/(1.f+sqrtf(kn*tn));}*ms=sc;}__syncthreads();float w=beta?beta[base]:1.f;for(int d=0;d<DK;++d)st[d*DV+e]=de*st[d*DV+e]+w*k[base*DK+d]*target[e]*(*ms);float y=0.f;for(int d=0;d<DK;++d)y+=q[base*DK+d]*st[d*DV+e];if(g)y*=1.f/(1.f+expf(-g[base*DV+e]));o[base*DV+e]=y;__syncthreads();}}
+static int ac(float**d,const float*h,size_t z){return cudaMalloc(d,z)==cudaSuccess&&cudaMemcpy(*d,h,z,cudaMemcpyHostToDevice)==cudaSuccess;}
+extern "C" int tessera_nvidia_deltanet_f32(const float*q,const float*k,const float*v,const float*g,const float*beta,const float*decay,float*o,int B,int H,int S,int DK,int DV,int erase,int modified){if(DK<1||DK>64||DV<1||DV>64)return 2;int BH=B*H;size_t nq=(size_t)BH*S*DK*4,nv=(size_t)BH*S*DV*4,ns=(size_t)BH*S*4;float *dq=0,*dk=0,*dv=0,*dg=0,*db=0,*dd=0,*dout=0;if(!ac(&dq,q,nq)||!ac(&dk,k,nq)||!ac(&dv,v,nv)||cudaMalloc(&dout,nv)!=cudaSuccess)return 3;if(g&&!ac(&dg,g,nv))return 3;if(beta&&!ac(&db,beta,ns))return 3;if(decay&&!ac(&dd,decay,ns))return 3;size_t sh=((size_t)DK*DV+DV+1)*4;dn_k<<<BH,DV,sh>>>(dq,dk,dv,dg,db,dd,dout,BH,S,DK,DV,erase,modified);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,dout,nv,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dq);cudaFree(dk);cudaFree(dv);cudaFree(dout);if(dg)cudaFree(dg);if(db)cudaFree(db);if(dd)cudaFree(dd);return ok?1:3;}
+'''
+
+
+def run_deltanet_f32(q: Any, k: Any, v: Any, *, gate: Any = None,
+                     beta: Any = None, decay: Any = None, erase: bool = False,
+                     modified: bool = False) -> Any:
+    import numpy as np
+    q=np.ascontiguousarray(q);k=np.ascontiguousarray(k);v=np.ascontiguousarray(v)
+    if any(x.dtype != np.float32 or x.ndim != 4 for x in (q,k,v)):
+        raise ValueError("NVIDIA DeltaNet v1 requires rank-4 f32 Q/K/V")
+    if k.shape != q.shape or v.shape[:3] != q.shape[:3]:
+        raise ValueError("DeltaNet K must match Q and V must share B,H,S")
+    B,H,S,DK=q.shape;DV=v.shape[-1]
+    if DK>64 or DV>64: raise ValueError("DeltaNet v1 requires Dqk,Dv <= 64")
+    def opt(x,shape,label):
+        if x is None:return None
+        a=np.ascontiguousarray(x,dtype=np.float32)
+        if a.shape != shape:raise ValueError(f"DeltaNet {label} shape must be {shape}")
+        return a
+    gate=opt(gate,v.shape,"gate");beta=opt(beta,(B,H,S),"beta");decay=opt(decay,(B,H,S),"decay")
+    global _deltanet_artifact
+    if _deltanet_artifact is None:_deltanet_artifact=_nvidia_cuda_compile_fn(KernelSource(source=_synthesize_deltanet_cuda(),entry=_DELTANET_ENTRY,lang=_LANG,spec=SpecPolicy.DYNAMIC,shape_key=("deltanet-f32",)))
+    out=np.empty_like(v);fn=getattr(_load_lib(_deltanet_artifact),_DELTANET_ENTRY);fn.restype=ctypes.c_int;fn.argtypes=[ctypes.c_void_p]*7+[ctypes.c_int]*7;null=ctypes.c_void_p()
+    if fn(_ptr(q),_ptr(k),_ptr(v),_ptr(gate) if gate is not None else null,_ptr(beta) if beta is not None else null,_ptr(decay) if decay is not None else null,_ptr(out),B,H,S,DK,DV,int(erase),int(modified))!=1:raise RuntimeError("NVIDIA DeltaNet CUDA launch failed")
+    return out
+
+
+def _synthesize_ssm_cuda() -> str:
+    return r'''#include <cuda_runtime.h>
+#include <math.h>
+#define MAX_N 64
+__global__ void ssm_k(const float*x,const float*A,const float*Bv,const float*C,const float*dt,const float*g,const float*st,float*y,int BS,int S,int D,int N){int z=blockIdx.x*blockDim.x+threadIdx.x;if(z>=BS*D)return;int b=z/D,d=z%D;float h[MAX_N];for(int n=0;n<N;++n)h[n]=st?st[((long)b*D+d)*N+n]:0.f;for(int t=0;t<S;++t){long xd=((long)b*S+t)*D+d;float xv=x[xd],dl=dt[xd],sum=0.f;for(int n=0;n<N;++n){h[n]=expf(dl*A[(long)d*N+n])*h[n]+dl*Bv[((long)b*S+t)*N+n]*xv;sum+=C[((long)b*S+t)*N+n]*h[n];}y[xd]=g?sum*g[xd]:sum;}}
+static int ac(float**d,const float*h,size_t z){return cudaMalloc(d,z)==cudaSuccess&&cudaMemcpy(*d,h,z,cudaMemcpyHostToDevice)==cudaSuccess;}
+extern "C" int tessera_nvidia_selective_ssm_f32(const float*x,const float*A,const float*Bv,const float*C,const float*dt,const float*g,const float*st,float*y,int BS,int S,int D,int N){if(N<1||N>MAX_N)return 2;size_t nx=(size_t)BS*S*D*4,na=(size_t)D*N*4,nb=(size_t)BS*S*N*4,ns=(size_t)BS*D*N*4;float *dx=0,*da=0,*db=0,*dc=0,*dd=0,*dg=0,*ds=0,*dy=0;if(!ac(&dx,x,nx)||!ac(&da,A,na)||!ac(&db,Bv,nb)||!ac(&dc,C,nb)||!ac(&dd,dt,nx)||cudaMalloc(&dy,nx)!=cudaSuccess)return 3;if(g&&!ac(&dg,g,nx))return 3;if(st&&!ac(&ds,st,ns))return 3;ssm_k<<<(BS*D+127)/128,128>>>(dx,da,db,dc,dd,dg,ds,dy,BS,S,D,N);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(y,dy,nx,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(da);cudaFree(db);cudaFree(dc);cudaFree(dd);cudaFree(dy);if(dg)cudaFree(dg);if(ds)cudaFree(ds);return ok?1:3;}
+'''
+
+
+def run_selective_ssm_f32(x: Any, A: Any, B: Any, C: Any, delta: Any,
+                          *, gate: Any = None, state: Any = None) -> Any:
+    import numpy as np
+    vals=[np.ascontiguousarray(v) for v in (x,A,B,C,delta)]
+    x,A,B,C,delta=vals
+    if any(v.dtype != np.float32 for v in vals) or x.ndim != 3:
+        raise ValueError("NVIDIA selective_ssm v1 requires rank-3 f32 inputs")
+    bs,s,d=x.shape
+    if A.ndim != 2 or A.shape[0] != d: raise ValueError("selective_ssm A must be [D,N]")
+    n=A.shape[1]
+    if n < 1 or n > 64 or B.shape != (bs,s,n) or C.shape != B.shape or delta.shape != x.shape:
+        raise ValueError("invalid selective_ssm shapes or N outside [1,64]")
+    gate=None if gate is None else np.ascontiguousarray(gate,np.float32)
+    state=None if state is None else np.ascontiguousarray(state,np.float32)
+    if gate is not None and gate.shape != x.shape: raise ValueError("selective_ssm gate shape must match x")
+    if state is not None and state.shape != (bs,d,n): raise ValueError("selective_ssm state must be [B,D,N]")
+    global _ssm_artifact
+    if _ssm_artifact is None:
+        _ssm_artifact=_nvidia_cuda_compile_fn(KernelSource(source=_synthesize_ssm_cuda(),entry=_SSM_ENTRY,lang=_LANG,spec=SpecPolicy.DYNAMIC,shape_key=("ssm-f32",)))
+    out=np.empty_like(x);fn=getattr(_load_lib(_ssm_artifact),_SSM_ENTRY);fn.restype=ctypes.c_int
+    fn.argtypes=[ctypes.c_void_p]*8+[ctypes.c_int]*4
+    null=ctypes.c_void_p()
+    if fn(_ptr(x),_ptr(A),_ptr(B),_ptr(C),_ptr(delta),_ptr(gate) if gate is not None else null,_ptr(state) if state is not None else null,_ptr(out),bs,s,d,n)!=1: raise RuntimeError("NVIDIA selective_ssm CUDA launch failed")
+    return out
+
+
+def _synthesize_posenc_cuda() -> str:
+    return r'''#include <cuda_runtime.h>
+#include <math.h>
+__global__ void rope_k(const float*x,const float*t,float*o,long n){long p=(long)blockIdx.x*blockDim.x+threadIdx.x;if(p<n/2){long e=2*p;float a=t[e],c=cosf(a),s=sinf(a),xe=x[e],xo=x[e+1];o[e]=xe*c-xo*s;o[e+1]=xe*s+xo*c;}}
+__global__ void alibi_k(const float*s,float*o,long H,long S){long x=(long)blockIdx.x*blockDim.x+threadIdx.x,n=H*S*S;if(x<n){long j=x%S,i=(x/S)%S,h=x/(S*S);o[x]=s[h]*(float)(j-i);}}
+static int ac(float**d,const float*h,size_t z){return cudaMalloc(d,z)==cudaSuccess&&cudaMemcpy(*d,h,z,cudaMemcpyHostToDevice)==cudaSuccess;}
+extern "C" int tessera_nvidia_rope_f32(const float*x,const float*t,float*o,long n){float *dx=0,*dt=0,*d=0;size_t z=n*4;if(!ac(&dx,x,z)||!ac(&dt,t,z)||cudaMalloc(&d,z)!=cudaSuccess)return 3;rope_k<<<(n/2+255)/256,256>>>(dx,dt,d,n);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,d,z,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(dt);cudaFree(d);return ok?1:3;}
+extern "C" int tessera_nvidia_alibi_f32(const float*s,float*o,long H,long S){float *ds=0,*d=0;size_t n=H*S*S,z=n*4;if(!ac(&ds,s,H*4)||cudaMalloc(&d,z)!=cudaSuccess)return 3;alibi_k<<<(n+255)/256,256>>>(ds,d,H,S);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,d,z,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(ds);cudaFree(d);return ok?1:3;}
+'''
+
+
+def _posenc_lib():
+    global _posenc_artifact
+    if _posenc_artifact is None:
+        _posenc_artifact = _nvidia_cuda_compile_fn(KernelSource(
+            source=_synthesize_posenc_cuda(), entry=_ROPE_ENTRY, lang=_LANG,
+            spec=SpecPolicy.DYNAMIC, shape_key=("posenc-f32",)))
+    return _load_lib(_posenc_artifact)
+
+
+def run_rope_f32(x: Any, theta: Any) -> Any:
+    import numpy as np
+    x = np.ascontiguousarray(x); theta = np.ascontiguousarray(theta)
+    if x.dtype != np.float32 or theta.dtype != np.float32:
+        raise ValueError("NVIDIA RoPE v1 requires f32 x/theta")
+    if x.shape != theta.shape or x.ndim < 1 or x.shape[-1] % 2:
+        raise ValueError("NVIDIA RoPE requires matching shapes and even final dimension")
+    out = np.empty_like(x); fn = getattr(_posenc_lib(), _ROPE_ENTRY)
+    fn.restype = ctypes.c_int; fn.argtypes = [ctypes.c_void_p] * 3 + [ctypes.c_long]
+    if fn(_ptr(x), _ptr(theta), _ptr(out), x.size) != 1:
+        raise RuntimeError("NVIDIA RoPE CUDA launch failed")
+    return out
+
+
+def run_alibi_f32(num_heads: int, seq_len: int, slopes: Any = None) -> Any:
+    import numpy as np
+    if num_heads <= 0 or seq_len <= 0:
+        raise ValueError("NVIDIA ALiBi requires positive num_heads/seq_len")
+    if slopes is None:
+        k = np.arange(1, num_heads + 1, dtype=np.float32)
+        slopes = np.float32(2.0) ** (-np.float32(8.0) * k / num_heads)
+    slopes = np.ascontiguousarray(slopes, dtype=np.float32).reshape(-1)
+    if slopes.size != num_heads:
+        raise ValueError(f"ALiBi slopes must have length {num_heads}")
+    out = np.empty((num_heads, seq_len, seq_len), np.float32)
+    fn = getattr(_posenc_lib(), _ALIBI_ENTRY); fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long, ctypes.c_long]
+    if fn(_ptr(slopes), _ptr(out), num_heads, seq_len) != 1:
+        raise RuntimeError("NVIDIA ALiBi CUDA launch failed")
+    return out
+
+
+def _synthesize_control_flow_cuda() -> str:
+    """Emit one-launch rank-1 f32 kernels for the four typed control ops."""
+    return r'''#include <cuda_runtime.h>
+__global__ void cf_for(const float*x,float*o,long n,int trip,float a,float b){long i=(long)blockIdx.x*blockDim.x+threadIdx.x;if(i<n){float c=x[i];for(int t=0;t<trip;++t)c=a*c+b;o[i]=c;}}
+__global__ void cf_if(const float*f,const float*x,float*o,long n,float ta,float tb,float ea,float eb){long i=(long)blockIdx.x*blockDim.x+threadIdx.x;if(i<n)o[i]=f[0]>0.f?ta*x[i]+tb:ea*x[i]+eb;}
+__global__ void cf_while(const float*x,float*o,long n,int m,float limit,float a,float b){__shared__ int active;long i=threadIdx.x;if(i<n)o[i]=x[i];__syncthreads();for(int t=0;t<m;++t){if(i==0)active=o[0]<limit;__syncthreads();if(!active)break;if(i<n)o[i]=a*o[i]+b;__syncthreads();}}
+__global__ void cf_scan(const float*init,const float*xs,float*c,float*ys,long n,int trip,float a){long i=(long)blockIdx.x*blockDim.x+threadIdx.x;if(i<n){float v=init[i];for(int t=0;t<trip;++t){v=a*v+xs[(long)t*n+i];ys[(long)t*n+i]=v;}c[i]=v;}}
+static int ac(float**d,const float*h,size_t z){return cudaMalloc(d,z)==cudaSuccess&&cudaMemcpy(*d,h,z,cudaMemcpyHostToDevice)==cudaSuccess;}
+extern "C" int tessera_nvidia_control_for_f32(const float*x,float*o,long n,int t,float a,float b){float *dx=0,*d=0;size_t z=n*4;if(!ac(&dx,x,z)||cudaMalloc(&d,z)!=cudaSuccess)return 3;cf_for<<<(n+255)/256,256>>>(dx,d,n,t,a,b);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,d,z,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(d);return ok?1:3;}
+extern "C" int tessera_nvidia_control_if_f32(const float*f,const float*x,float*o,long n,float ta,float tb,float ea,float eb){float *df=0,*dx=0,*d=0;size_t z=n*4;if(!ac(&df,f,4)||!ac(&dx,x,z)||cudaMalloc(&d,z)!=cudaSuccess)return 3;cf_if<<<(n+255)/256,256>>>(df,dx,d,n,ta,tb,ea,eb);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,d,z,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(df);cudaFree(dx);cudaFree(d);return ok?1:3;}
+extern "C" int tessera_nvidia_control_while_f32(const float*x,float*o,long n,int m,float l,float a,float b){if(n<1||n>1024)return 2;float *dx=0,*d=0;size_t z=n*4;if(!ac(&dx,x,z)||cudaMalloc(&d,z)!=cudaSuccess)return 3;cf_while<<<1,n>>>(dx,d,n,m,l,a,b);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,d,z,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(d);return ok?1:3;}
+extern "C" int tessera_nvidia_control_scan_f32(const float*i,const float*x,float*c,float*y,long n,int t,float a){float *di=0,*dx=0,*dc=0,*dy=0;size_t z=n*4,zs=z*t;if(!ac(&di,i,z)||!ac(&dx,x,zs)||cudaMalloc(&dc,z)!=cudaSuccess||cudaMalloc(&dy,zs)!=cudaSuccess)return 3;cf_scan<<<(n+255)/256,256>>>(di,dx,dc,dy,n,t,a);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(c,dc,z,cudaMemcpyDeviceToHost)==cudaSuccess&&cudaMemcpy(y,dy,zs,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(di);cudaFree(dx);cudaFree(dc);cudaFree(dy);return ok?1:3;}
+'''
+
+
+def _control_flow_lib():
+    global _control_flow_artifact
+    if _control_flow_artifact is None:
+        _control_flow_artifact = _nvidia_cuda_compile_fn(KernelSource(
+            source=_synthesize_control_flow_cuda(), entry=_CONTROL_FOR_ENTRY,
+            lang=_LANG, spec=SpecPolicy.DYNAMIC,
+            shape_key=("bounded-control-flow-f32",)))
+    return _load_lib(_control_flow_artifact)
+
+
+def _f32_vector(x: Any, label: str):
+    import numpy as np
+    a = np.ascontiguousarray(x)
+    if a.dtype != np.float32 or a.ndim != 1 or not a.size:
+        raise ValueError(f"NVIDIA {label} requires a non-empty rank-1 f32 tensor")
+    return a
+
+
+def run_control_for_f32(x: Any, *, trip: int, alpha: float = 1.0,
+                        beta: float = 0.0) -> Any:
+    import numpy as np
+    x = _f32_vector(x, "control_for")
+    if trip < 0: raise ValueError("control_for trip must be non-negative")
+    out = np.empty_like(x); fn = getattr(_control_flow_lib(), _CONTROL_FOR_ENTRY)
+    fn.restype = ctypes.c_int; fn.argtypes = [ctypes.c_void_p] * 2 + [ctypes.c_long, ctypes.c_int, ctypes.c_float, ctypes.c_float]
+    if fn(_ptr(x), _ptr(out), x.size, trip, alpha, beta) != 1: raise RuntimeError("NVIDIA control_for CUDA launch failed")
+    return out
+
+
+def run_control_if_f32(flag: Any, x: Any, *, then_alpha: float = 1.0,
+                       then_beta: float = 0.0, else_alpha: float = 1.0,
+                       else_beta: float = 0.0) -> Any:
+    import numpy as np
+    flag = _f32_vector(flag, "control_if flag"); x = _f32_vector(x, "control_if"); out = np.empty_like(x)
+    fn = getattr(_control_flow_lib(), _CONTROL_IF_ENTRY); fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p] * 3 + [ctypes.c_long] + [ctypes.c_float] * 4
+    if fn(_ptr(flag), _ptr(x), _ptr(out), x.size, then_alpha, then_beta, else_alpha, else_beta) != 1: raise RuntimeError("NVIDIA control_if CUDA launch failed")
+    return out
+
+
+def run_control_while_f32(x: Any, *, max_iters: int, limit: float,
+                          alpha: float = 1.0, beta: float = 0.0) -> Any:
+    import numpy as np
+    x = _f32_vector(x, "control_while")
+    if max_iters <= 0 or x.size > 1024: raise ValueError("control_while requires max_iters>0 and N<=1024")
+    out = np.empty_like(x); fn = getattr(_control_flow_lib(), _CONTROL_WHILE_ENTRY); fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p] * 2 + [ctypes.c_long, ctypes.c_int] + [ctypes.c_float] * 3
+    if fn(_ptr(x), _ptr(out), x.size, max_iters, limit, alpha, beta) != 1: raise RuntimeError("NVIDIA control_while CUDA launch failed")
+    return out
+
+
+def run_control_scan_f32(init: Any, xs: Any, *, alpha: float = 1.0):
+    import numpy as np
+    init = _f32_vector(init, "control_scan init"); xs = np.ascontiguousarray(xs)
+    if xs.dtype != np.float32 or xs.ndim != 2 or xs.shape[1] != init.size or not xs.shape[0]: raise ValueError("control_scan xs must be non-empty [trip,N] f32")
+    carry = np.empty_like(init); ys = np.empty_like(xs); fn = getattr(_control_flow_lib(), _CONTROL_SCAN_ENTRY); fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p] * 4 + [ctypes.c_long, ctypes.c_int, ctypes.c_float]
+    if fn(_ptr(init), _ptr(xs), _ptr(carry), _ptr(ys), init.size, xs.shape[0], alpha) != 1: raise RuntimeError("NVIDIA control_scan CUDA launch failed")
+    return carry, ys
+
 
 _LIB_CACHE: dict[str, Any] = {}
 

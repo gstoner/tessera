@@ -310,9 +310,10 @@ void registerTesseraPasses() {
                "Full Phase 3 lowering chain to NVIDIA SM_90 GPU backend",
       [](OpPassManager &pm, const TesseraLoweringPipelineOptions &opts) {
         addGraphIRPreLoweringPasses(pm);
-        // CF2 → CF0: lower control_for to scf.for first; guard what's left.
+        // CF2: lower region-structured forms to SCF first. Executable payload
+        // forms remain Graph ops until TileIRLowering gives them a typed Tile
+        // carrier; only unsupported residual Graph forms are guarded below.
         pm.addPass(createLowerControlFlowToSCFPass());
-        pm.addPass(createControlFlowTargetGuardPass("nvidia_sm90"));
         pm.addPass(createDistributionLoweringPass());
         // 2026-06-22: optional layout assignment (see lowerToX86 / opts).
         if (opts.assignLayouts)
@@ -329,6 +330,7 @@ void registerTesseraPasses() {
         // after distribution lowering (see lowerToX86 comment).
         pm.addPass(createSymbolicDimEqualityPass());
         pm.addPass(createTileIRLoweringPass());
+        pm.addPass(createControlFlowTargetGuardPass("nvidia_sm90"));
         pm.addPass(createWarpSpecializationPass());
         // C2/C3/C6 (2026-06-23): warp-spec legality gates run on the markers
         // WarpSpecialization now emits — phase asymmetry + barrier-kind (C3),
@@ -379,10 +381,9 @@ void registerTesseraPasses() {
   auto buildCUDA13Pipeline = [](OpPassManager &pm,
                                 const TesseraLoweringPipelineOptions &opts) {
     addGraphIRPreLoweringPasses(pm);
-    // CF2 → CF0: lower control_for to scf.for first; the executable-payload
-    // form is skipped and still guarded (no device control-flow yet — CF3).
+    // CF2: region-structured forms become SCF. Executable payload forms remain
+    // Graph ops until TileIRLowering converts them to typed Tile carriers.
     pm.addPass(createLowerControlFlowToSCFPass());
-    pm.addPass(createControlFlowTargetGuardPass("nvidia_sm90"));
     pm.addPass(createDistributionLoweringPass());
     // 2026-06-22: optional layout assignment (see lowerToX86 / opts).
     if (opts.assignLayouts)
@@ -397,6 +398,9 @@ void registerTesseraPasses() {
     // Sprint V6b (2026-05-22): symbolic-dim equality recheck.
     pm.addPass(createSymbolicDimEqualityPass());
     pm.addPass(createTileIRLoweringPass());
+    // Decision #21 still rejects any Graph control form outside the Tile
+    // envelope, but no longer rejects supported NVIDIA payload contracts.
+    pm.addPass(createControlFlowTargetGuardPass("nvidia_sm90"));
     pm.addPass(createWarpSpecializationPass());
     // C2/C3/C6 (2026-06-23): warp-spec legality gates on the WarpSpec markers.
     pm.addPass(createTilePipelineLegalityPass());

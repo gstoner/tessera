@@ -519,7 +519,10 @@ def paged_kv_equivalence(
 
 # Native provenance token each paged-attention GPU backend reports when its
 # kernel genuinely fires — the string the provenance gate below checks for.
-_PAGED_NATIVE_TOKEN = {"apple_gpu": "metal_runtime", "rocm": "native_gpu"}
+_PAGED_NATIVE_TOKEN = {
+    "apple_gpu": "metal_runtime", "rocm": "native_gpu",
+    "nvidia": "native_gpu",
+}
 
 
 def paged_kv_native_equivalence(

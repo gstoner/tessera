@@ -46,7 +46,12 @@ def test_nvidia_replay_factory_wires_scalar_decode_path():
     h = rt.nvidia_ssm_replay_state_handle(1, 4, 3, -np.ones(4), capacity=8)
     assert isinstance(h, SSMStateHandle)
     assert h.backend == "nvidia_sm120_replay_device"
-    assert getattr(h, "_device") is not None
+    # The CUDA device state binds only on a CUDA-ready host; off-device the
+    # factory declines cleanly to the reference mirror (_device is None).
+    if _cuda_host_ready():
+        assert getattr(h, "_device") is not None
+    else:
+        assert getattr(h, "_device") is None
 
 
 def test_nvidia_replay_decode_matches_eager_or_falls_back():
@@ -117,6 +122,7 @@ def test_cuda_replay_block_submit_matches_ordered_steps():
     np.testing.assert_allclose(got, want, rtol=2e-4, atol=2e-4)
 
 
+@pytest.mark.skipif(not _cuda_host_ready(), reason="CUDA toolkit or GPU unavailable")
 def test_cuda_replay_async_submit_wait_matches_ordered_steps():
     rng = np.random.default_rng(201)
     T, B, D, N = 4, 1, 3, 2

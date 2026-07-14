@@ -66,8 +66,15 @@ def test_baseline_well_formed_when_present():
     ops = {(r["op"], r["shape"]) for r in rows}
     for (m, n, k) in recorder.HOT_PATH_SIZES:
         assert ("matmul", f"{m}x{n}x{k}") in ops, f"baseline missing {m}x{n}x{k}"
+    required_promotions = {
+        ("fused_gemm_bias_gelu", "mma_sync_fused"),
+        ("flash_attention", "mma_sync_attention"),
+        ("quantize", "cuda_fpquant"),
+    }
+    assert required_promotions <= {(r["op"], r["mode"]) for r in rows}
     for r in rows:
-        assert r["mode"] == "mma_sync"
+        assert r["mode"] in {"mma_sync", "mma_sync_fused",
+                             "mma_sync_attention", "cuda_fpquant"}
         assert r["max_latency_ms"] > r["median_ms"] > 0
 
 

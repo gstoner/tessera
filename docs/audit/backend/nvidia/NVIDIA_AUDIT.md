@@ -79,11 +79,10 @@ sm_120 (RTX 5070 Ti, PRs #290–#297):
   them. So NVIDIA now has the `rocm_compiled` analog it lacked, plus the arbiter
   surface.
 - **NVFP4 block-scale matmul (#9)** — **emit + ptxas-assemble landed** (#291,
-  `emit_nvfp4_block_scale_mma_ptx`); on-device execution + non-unit-scale numerics
-  stay gated on the PTX-ISA scale-distribution spec. The warp `mma.sync…block_scale`
-  instruction already assembles + executes on `sm_120a` (see
-  `spikes/sm120_mma_sync/`); productization is pending the PTX ISA
-  scale-distribution spec for numerics.
+  `emit_nvfp4_block_scale_mma_ptx`). The 2026-07-13 RTX 5070 Ti `sm_120a`
+  probe exposed that the presumed unit-scale mapping is incorrect (128/128
+  outputs failed), so unit- and non-unit-scale numerics plus the runtime ABI
+  remain gated. Assembly is not cited as execution proof.
 - **Other NVIDIA SMs stay `artifact_only`** — sm_80/90/100 are proven only on
   sm_120 silicon; promoting them needs their own hardware (Hopper box for
   sm_90a WGMMA; datacenter Blackwell for sm_100 `tcgen05`/TMEM).

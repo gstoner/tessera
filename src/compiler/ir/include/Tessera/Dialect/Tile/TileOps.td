@@ -200,6 +200,22 @@ def Tile_LUOp            : Tile_LinalgOp<"lu">;
 def Tile_QROp            : Tile_LinalgOp<"qr">;
 def Tile_SVDOp           : Tile_LinalgOp<"svd">;
 
+// CF2/CF3 — portable device-control carriers.  These ops are the explicit
+// Schedule/SCF -> Tile seam for bounded control flow.  The executable body is
+// still symbol/payload described by discardable attributes copied from the
+// verified Graph op; operands/results retain the value-semantic tensor ABI.
+class Tile_ControlOp<string mnemonic> : Tile_Op<mnemonic, [Pure]> {
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs Variadic<AnyType>:$outputs);
+  let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $outputs)";
+  let hasVerifier = 1;
+}
+
+def Tile_ControlForOp   : Tile_ControlOp<"control_for">;
+def Tile_ControlIfOp    : Tile_ControlOp<"control_if">;
+def Tile_ControlWhileOp : Tile_ControlOp<"control_while">;
+def Tile_ControlScanOp  : Tile_ControlOp<"control_scan">;
+
 //===----------------------------------------------------------------------===//
 // Tile synchronization ops (TIRx op-layer convergence, 2026-06-23, Phase A0).
 //

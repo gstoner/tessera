@@ -409,6 +409,8 @@ def paged_attention(
         WMMA forward kernel on gfx1151 (the folded ``(num_heads, S, head_dim)``
         batch is exactly the lane's ``[..., S, D]`` contract). Gather is the
         staging stage; the fused attention runs on ``native_gpu``.
+      * ``"nvidia"`` — gathered K/V feeds the compiler-emitted CUDA Flash
+        Attention lane in one launch across all heads (f32 storage/accumulate).
 
     With ``return_execution=True`` returns ``(out, execution_kind)`` where
     ``execution_kind`` is the native provenance token (``"metal_runtime"`` for
@@ -438,11 +440,14 @@ def paged_attention(
         out, exe = _paged_attention_apple_gpu(Q, K, V, float(scale), causal)
     elif backend == "rocm":
         out, exe = _paged_attention_rocm(Q, K, V, float(scale), causal)
+    elif backend == "nvidia":
+        out, exe = _paged_attention_nvidia(Q, K, V, float(scale), causal)
     elif backend == "reference":
         out, exe = _reference_attention(Q, K, V, float(scale), causal), "reference"
     else:
         raise ValueError(
-            f"unknown backend {backend!r}; use 'reference', 'apple_gpu', or 'rocm'")
+            f"unknown backend {backend!r}; use 'reference', 'apple_gpu', 'rocm', "
+            "or 'nvidia'")
 
     return (out, exe) if return_execution else out
 
@@ -508,6 +513,19 @@ def _paged_attention_rocm(Q: np.ndarray, K: np.ndarray, V: np.ndarray,
         return _reference_attention(Q, K, V, scale, causal), "reference"
     out = np.asarray(o, dtype=np.float32).reshape(Q.shape[0], Q.shape[1], V.shape[-1])
     return out, "native_gpu"
+
+
+def _paged_attention_nvidia(Q: np.ndarray, K: np.ndarray, V: np.ndarray,
+                            scale: float, causal: bool) -> tuple[np.ndarray, str]:
+    """Consume gathered pages with one compiler-emitted CUDA Flash launch."""
+    try:
+        from ..compiler.emit.nvidia_cuda import run_flash_attention_forward
+        # Flash ABI is [B,H,S,D]; the PagedKV consumer has one logical batch.
+        out = run_flash_attention_forward(
+            Q[None], K[None], V[None], scale=float(scale), causal=causal)
+    except (RuntimeError, OSError, FileNotFoundError):
+        return _reference_attention(Q, K, V, scale, causal), "reference"
+    return np.asarray(out[0], dtype=np.float32), "native_gpu"
 
 
 def as_paged_kv_state(cache: Any, *, kind: KVKind | None = None) -> PagedKVState:

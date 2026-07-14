@@ -510,12 +510,11 @@ def validate_mma_sync_gemm_ptx_structure(ptx: str, *, arch: str = "sm_120a") -> 
 # NVFP4 block-scale matmul (spike #9 productized to emit+assemble) — the warp
 # ``mma.sync…m16n8k64…kind::mxf4nvf4.block_scale`` on sm_120a: fp4 (e2m1) A/B
 # operands with per-block ue4m3 scale factors, f32 accumulate. The instruction
-# encoding + a UNIT-scale data path are proven in
-# ``docs/audit/backend/nvidia/spikes/sm120_mma_sync/nvfp4_gemm.cu``. This emits
-# the complete kernel and (rung 3) assembles it with ptxas; on-device *execution*
-# and NON-unit scale numerics remain gated on the PTX-ISA scale-distribution spec
-# (NVIDIA_AUDIT "Still Open"), so this is deliberately emit+assemble only — the fp4
-# fragment packing + numpy reference is not wired into the launch bridge yet.
+# encoding is assemble-proven. The provisional data-path spike in
+# ``docs/audit/backend/nvidia/spikes/sm120_mma_sync/nvfp4_gemm.cu`` is a negative
+# live gate: on 2026-07-13 its presumed unit-scale mapping failed all 128 outputs
+# on the RTX 5070 Ti. This remains deliberately emit+assemble only until both
+# unit- and non-unit-scale numerical fixtures pass on sm_120a.
 # ─────────────────────────────────────────────────────────────────────────────
 
 #: Entry name for the sm_120a NVFP4 block-scale m16n8k64 tile.
@@ -534,10 +533,11 @@ def emit_nvfp4_block_scale_mma_ptx(
     """Emit a COMPLETE, assemblable sm_120a NVFP4 block-scale ``mma.sync`` kernel
     (one warp, m16n8k64): D[16x8] f32 = A[16x64] · B[64x8], fp4 e2m1 operands with
     per-lane ue4m3 block-scale selectors, f32 accumulate — the PTX of the proven
-    spike (unit-scale data path). Per-lane fragments: A = 4x`.b32`, B = 2x`.b32`,
+    spike (provisional unit-scale data path). Per-lane fragments: A = 4x`.b32`, B = 2x`.b32`,
     scale-A/B = 1x`.b32`; the scale byte/thread selectors are `{0,0}` immediates.
-    Assemble-verifiable (rung 3) here; on-device execution + non-unit numerics stay
-    gated on the PTX-ISA scale spec (so this is emit+assemble, not launch)."""
+    Assemble-verifiable (rung 3) here; on-device unit-scale validation currently
+    fails and non-unit numerics are not wired (so this is emit+assemble, not a
+    launchable/runtime-promoted lane)."""
     return f""".version {PTX_ISA_VERSION}
 .target {arch}
 .address_size 64

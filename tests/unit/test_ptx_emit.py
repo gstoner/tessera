@@ -176,7 +176,7 @@ def test_mma_sync_gemm_ptx_assembles_for_sm120a():
         assert res.assembled, f"ptxas rejected the {dt} GEMM: {res.detail}"
 
 
-# ── NVFP4 block-scale mma (emit + assemble; execution/numerics still gated) ────
+# ── NVFP4 block-scale mma (emit + assemble; live numerical probe fails) ───────
 
 def test_nvfp4_emits_clean_with_block_scale_and_scale_params():
     ptx = P.emit_nvfp4_block_scale_mma_ptx()

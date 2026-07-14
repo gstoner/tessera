@@ -21,6 +21,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Tessera/Transforms/Passes.h"
+#include "Tessera/Dialect/Tile/TileDialect.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
@@ -244,6 +245,30 @@ struct LowerSchedulePrefetchToTileCopy : public RewritePattern {
   }
 };
 
+// Preserve the verified Graph control ABI at the Tile boundary.  Payload attrs
+// are copied verbatim: CUDA codegen consumes them inside one kernel launch.
+struct LowerControlToTileIR : public RewritePattern {
+  std::string tileName;
+
+  LowerControlToTileIR(MLIRContext *ctx, StringRef graphName,
+                       StringRef tileName)
+      : RewritePattern(graphName, /*benefit=*/3, ctx),
+        tileName(tileName.str()) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    OperationState state(op->getLoc(), tileName);
+    state.addOperands(op->getOperands());
+    state.addTypes(op->getResultTypes());
+    state.addAttributes(op->getAttrs());
+    state.addAttribute("source", rewriter.getStringAttr(
+                                     op->getName().getStringRef()));
+    Operation *tile = rewriter.create(state);
+    rewriter.replaceOp(op, tile->getResults());
+    return success();
+  }
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Pass definition
 // ─────────────────────────────────────────────────────────────────────────────
@@ -268,8 +293,8 @@ struct TileIRLoweringPass
 
   StringRef getArgument() const override { return "tessera-tile-ir-lowering"; }
   StringRef getDescription() const override {
-    return "Lower schedule.mesh.region { tessera.flash_attn / tessera.matmul }"
-           " to FA-4 Tile IR ops (tile.async_copy, tile.mma, tessera.attn.*)";
+    return "Lower Graph/Schedule attention, matmul, and executable bounded "
+           "control-flow contracts to typed Tile IR";
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {
@@ -277,6 +302,7 @@ struct TileIRLoweringPass
     registry.insert<scf::SCFDialect>();
     registry.insert<tensor::TensorDialect>();
     registry.insert<func::FuncDialect>();
+    registry.insert<tessera::tile::TesseraTileDialect>();
   }
 
   void runOnOperation() override {
@@ -285,6 +311,14 @@ struct TileIRLoweringPass
     patterns.add<LowerFlashAttnToTileIR>(ctx, tileQ, tileKV, smVersion);
     patterns.add<LowerMatmulToTileMMA>(ctx, tileQ, tileKV, smVersion);
     patterns.add<LowerSchedulePrefetchToTileCopy>(ctx);
+    patterns.add<LowerControlToTileIR>(
+        ctx, "tessera.control_for", "tile.control_for");
+    patterns.add<LowerControlToTileIR>(
+        ctx, "tessera.control_if", "tile.control_if");
+    patterns.add<LowerControlToTileIR>(
+        ctx, "tessera.control_while", "tile.control_while");
+    patterns.add<LowerControlToTileIR>(
+        ctx, "tessera.control_scan", "tile.control_scan");
 
     if (failed(applyPatternsAndFoldGreedily(getOperation(),
                                             std::move(patterns)))) {
@@ -293,13 +327,15 @@ struct TileIRLoweringPass
     }
 
     // Decision #21: applyPatternsAndFoldGreedily returns success even when it
-    // matched nothing, so a tessera.flash_attn / tessera.matmul that failed a
+    // matched nothing, so a supported source op that failed a
     // pattern guard (e.g. unsupported operand count / shape) would silently
     // survive and the module would be reported as "GPU-lowered". Refuse that:
     // any surviving target op is a hard lowering failure with a named diagnostic.
     WalkResult residual = getOperation()->walk([&](Operation *op) {
       StringRef name = op->getName().getStringRef();
-      if (name == "tessera.flash_attn" || name == "tessera.matmul") {
+      if (name == "tessera.flash_attn" || name == "tessera.matmul" ||
+          name == "tessera.control_for" || name == "tessera.control_if" ||
+          name == "tessera.control_while" || name == "tessera.control_scan") {
         op->emitError() << "[TILE_IR_LOWERING] '" << name
                         << "' was not lowered to FA-4 Tile IR for sm_"
                         << smVersion

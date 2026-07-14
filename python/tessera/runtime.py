@@ -4509,6 +4509,166 @@ def _execute_nvidia_compiled_reduce(artifact: RuntimeArtifact, args: Any) -> Any
     return out
 
 
+def _execute_nvidia_control_flow_compiled(artifact: RuntimeArtifact,
+                                          args: Any) -> Any:
+    """Dispatch the narrow single-launch CUDA ABI for typed bounded controls."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    op = ops[0] if len(ops) == 1 else {}
+    name = str(op.get("op_name", ""))
+    valid = {"tessera.control_for", "tessera.control_if",
+             "tessera.control_while", "tessera.control_scan"}
+    if name not in valid:
+        raise ValueError("nvidia_control_flow_compiled requires exactly one "
+                         f"typed bounded control op; got {name!r}")
+    names = [str(n) for n in op.get("operands", [])]
+    values = _bind_launch_args(args, list(metadata.get("arg_names") or []))
+    xs = [_as_numpy(values[n]) for n in names]
+    if any(x.dtype != np.float32 for x in xs):
+        raise ValueError("NVIDIA bounded-control v1 requires f32 storage")
+    kw = op.get("kwargs") or {}
+    from .compiler.emit import nvidia_cuda as nv
+    if name == "tessera.control_for":
+        if len(xs) != 1: raise ValueError("control_for v1 requires one carry")
+        return nv.run_control_for_f32(
+            xs[0], trip=int(kw["trip"]), alpha=float(kw.get("alpha", 1)),
+            beta=float(kw.get("beta", 0)))
+    if name == "tessera.control_if":
+        if len(xs) != 2: raise ValueError("control_if v1 requires flag and value")
+        return nv.run_control_if_f32(
+            xs[0], xs[1], then_alpha=float(kw.get("then_alpha", 1)),
+            then_beta=float(kw.get("then_beta", 0)),
+            else_alpha=float(kw.get("else_alpha", 1)),
+            else_beta=float(kw.get("else_beta", 0)))
+    if name == "tessera.control_while":
+        if len(xs) != 1: raise ValueError("control_while v1 requires one carry")
+        return nv.run_control_while_f32(
+            xs[0], max_iters=int(kw["max_iters"]), limit=float(kw["limit"]),
+            alpha=float(kw.get("alpha", 1)), beta=float(kw.get("beta", 0)))
+    if len(xs) != 2: raise ValueError("control_scan v1 requires init and xs")
+    return nv.run_control_scan_f32(xs[0], xs[1], alpha=float(kw.get("alpha", 1)))
+
+
+def _execute_nvidia_posenc_compiled(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Native compiler-emitted CUDA RoPE and ALiBi contracts."""
+    import numpy as np
+    metadata = artifact.metadata or {}; ops = list(metadata.get("ops") or [])
+    op = ops[0] if len(ops) == 1 else {}; name = str(op.get("op_name", ""))
+    if name not in ("tessera.rope", "tessera.alibi"):
+        raise ValueError("nvidia_posenc_compiled handles one rope or alibi op")
+    names = [str(n) for n in op.get("operands", [])]
+    values = _bind_launch_args(args, list(metadata.get("arg_names") or []))
+    from .compiler.emit import nvidia_cuda as nv
+    if name == "tessera.rope":
+        if len(names) != 2: raise ValueError("RoPE requires x and theta")
+        return nv.run_rope_f32(
+            _as_numpy(values[names[0]]), _as_numpy(values[names[1]]))
+    kw = op.get("kwargs") or {}
+    slopes = _as_numpy(values[names[0]]) if names else None
+    return nv.run_alibi_f32(
+        int(kw["num_heads"]), int(kw["seq_len"]), slopes)
+
+
+def _execute_nvidia_ssm_compiled(artifact: RuntimeArtifact, args: Any) -> Any:
+    metadata=artifact.metadata or {};ops=list(metadata.get("ops") or []);op=ops[0] if len(ops)==1 else {}
+    if op.get("op_name") != "tessera.selective_ssm": raise ValueError("nvidia_ssm_compiled handles selective_ssm")
+    names=[str(n) for n in op.get("operands",[])];values=_bind_launch_args(args,list(metadata.get("arg_names") or []))
+    if len(names) < 5 or len(names) > 7: raise ValueError("selective_ssm requires x,A,B,C,delta[,gate,state]")
+    xs=[_as_numpy(values[n]) for n in names];extras=list((op.get("kwargs") or {}).get("extras") or [])
+    gate=xs[5] if len(xs)>5 and (not extras or extras[0]=="gate") else None
+    state=xs[-1] if "state" in extras else None
+    from .compiler.emit.nvidia_cuda import run_selective_ssm_f32
+    return run_selective_ssm_f32(*xs[:5],gate=gate,state=state)
+
+
+def _execute_nvidia_deltanet_compiled(artifact: RuntimeArtifact, args: Any) -> Any:
+    metadata=artifact.metadata or {};ops=list(metadata.get("ops") or []);op=ops[0] if len(ops)==1 else {};name=str(op.get("op_name",""))
+    valid=("tessera.gated_deltanet","tessera.kimi_delta_attention","tessera.modified_delta_attention")
+    if name not in valid:raise ValueError(f"nvidia_deltanet_compiled handles {valid}")
+    kw=op.get("kwargs") or {}
+    if not bool(kw.get("causal",True)):raise ValueError("NVIDIA DeltaNet is causal-only")
+    names=[str(n) for n in op.get("operands",[])];values=_bind_launch_args(args,list(metadata.get("arg_names") or []));xs=[_as_numpy(values[n]) for n in names]
+    hg,hb,hd=bool(kw.get("has_gate",False)),bool(kw.get("has_beta",False)),bool(kw.get("has_decay",False));need=3+hg+hb+hd
+    if len(xs)!=need:raise ValueError(f"DeltaNet expected {need} operands, got {len(xs)}")
+    p=3;gate=xs[p] if hg else None;p+=hg;beta=xs[p] if hb else None;p+=hb;decay=xs[p] if hd else None
+    from .compiler.emit.nvidia_cuda import run_deltanet_f32
+    return run_deltanet_f32(*xs[:3],gate=gate,beta=beta,decay=decay,
+        erase=bool(kw.get("erase",False)),modified=name=="tessera.modified_delta_attention")
+
+
+def _execute_nvidia_moe_transport(artifact: RuntimeArtifact, args: Any) -> Any:
+    import numpy as np
+    metadata=artifact.metadata or {};ops=list(metadata.get("ops") or []);name=str(ops[0].get("op_name","")) if len(ops)==1 else ""
+    values=dict(args) if isinstance(args,Mapping) else _bind_launch_args(args,list(metadata.get("arg_names") or []))
+    from .compiler.emit.nvidia_cuda import (run_grouped_gemm_f32,
+        run_moe_combine_f32,run_moe_dispatch_f32)
+    if name=="tessera.moe_dispatch":
+        x,plan=values["x"],values["plan"];slots=np.asarray(plan.sort_perm,np.int64);tok=slots//int(plan.top_k)
+        return run_moe_dispatch_f32(x,tok),"native_gpu"
+    if name=="tessera.moe_combine":
+        p,plan=values["partials"],values["plan"];slots=np.asarray(plan.sort_perm,np.int64);tok=slots//int(plan.top_k);w=np.asarray(plan.weights,np.float32).reshape(-1)[slots]
+        return run_moe_combine_f32(p,tok,w,int(plan.num_tokens)),"native_gpu"
+    if name=="tessera.grouped_gemm":
+        return run_grouped_gemm_f32(values["x"],values["weights"],values["group_sizes"]),"native_gpu"
+    raise ValueError("nvidia_moe_transport_compiled handles moe_dispatch, moe_combine, or grouped_gemm")
+
+
+def _execute_nvidia_dequant_gemm(artifact: RuntimeArtifact, args: Any) -> Any:
+    import numpy as np
+    metadata=artifact.metadata or {};ops=list(metadata.get("ops") or []);name=str(ops[0].get("op_name","")) if len(ops)==1 else "";values=dict(args) if isinstance(args,Mapping) else _bind_launch_args(args,list(metadata.get("arg_names") or []))
+    from .compiler.emit.nvidia_cuda import run_dequant_grouped_gemm_f32
+    if name=="tessera.dequant_matmul":
+        x=values["x"];return run_dequant_grouped_gemm_f32(x,[values["packed_w"]],np.array([np.shape(x)[0]],np.int64)),"native_gpu"
+    if name=="tessera.dequant_grouped_gemm":
+        return run_dequant_grouped_gemm_f32(values["x"],values["packed_experts"],values["group_sizes"]),"native_gpu"
+    raise ValueError("nvidia_dequant_gemm_compiled handles dequant_matmul or dequant_grouped_gemm")
+
+
+def _execute_nvidia_optimizer(artifact: RuntimeArtifact, args: Any) -> Any:
+    import numpy as np
+    metadata=artifact.metadata or {};ops=list(metadata.get("ops") or []);op=ops[0] if len(ops)==1 else {};name=str(op.get("op_name",""))
+    if name not in _OPTIMIZER_OPS:raise ValueError(f"nvidia_optimizer_compiled handles {tuple(_OPTIMIZER_OPS)}")
+    values=_bind_launch_args(args,list(metadata.get("arg_names") or []));p,g,m,v=_optimizer_bind(op,values)
+    from .compiler.emit.nvidia_cuda import run_optimizer_f32
+    return _optimizer_compute(name,p,g,m,v,op.get("kwargs") or {},run_optimizer_f32,np)
+
+
+def _execute_nvidia_local_collective(artifact: RuntimeArtifact, args: Any) -> Any:
+    metadata=artifact.metadata or {};ops=list(metadata.get("ops") or []);op=ops[0] if len(ops)==1 else {};name=str(op.get("op_name",""));valid=("tessera.all_reduce","tessera.reduce_scatter","tessera.all_gather","tessera.all_to_all")
+    if name not in valid:raise ValueError(f"nvidia_local_collective_compiled handles {valid}")
+    kw=op.get("kwargs") or {};world=int(kw.get("world_size",1))
+    if world!=1:raise ValueError("NVIDIA local collective path requires world_size=1; multi-rank requires NCCL")
+    names=[str(n) for n in op.get("operands",[])];values=_bind_launch_args(args,list(metadata.get("arg_names") or []))
+    if len(names)!=1:raise ValueError("local collective requires one tensor operand")
+    from .compiler.emit.nvidia_cuda import run_local_collective_f32
+    return run_local_collective_f32(_as_numpy(values[names[0]]))
+
+
+_NVIDIA_FPQUANT_OPS = {
+    "tessera.quantize_fp8": (True,{"e4m3":(448.,3,-6),"e5m2":(57344.,2,-14)},"e4m3"),
+    "tessera.dequantize_fp8": (False,{"e4m3":(448.,3,-6),"e5m2":(57344.,2,-14)},"e4m3"),
+    "tessera.quantize_fp6": (True,{"e2m3":(7.5,3,-126),"e3m2":(28.,2,-126)},"e3m2"),
+    "tessera.dequantize_fp6": (False,{"e2m3":(7.5,3,-126),"e3m2":(28.,2,-126)},"e3m2"),
+    "tessera.quantize_fp4": (True,{"e2m1":(6.,1,-126)},"e2m1"),
+    "tessera.dequantize_fp4": (False,{"e2m1":(6.,1,-126)},"e2m1"),
+}
+
+
+def _execute_nvidia_fpquant(artifact: RuntimeArtifact, args: Any) -> Any:
+    import numpy as np
+    metadata=artifact.metadata or {};ops=list(metadata.get("ops") or []);op=ops[0] if len(ops)==1 else {};name=str(op.get("op_name",""))
+    if name not in _NVIDIA_FPQUANT_OPS:raise ValueError(f"nvidia_fpquant_compiled handles {tuple(_NVIDIA_FPQUANT_OPS)}")
+    quant,fmts,default=_NVIDIA_FPQUANT_OPS[name];kw=op.get("kwargs") or {};fmt=str(kw.get("format",default))
+    if fmt not in fmts:raise ValueError(f"invalid {name} format {fmt!r}")
+    names=[str(n) for n in op.get("operands",[])];values=_bind_launch_args(args,list(metadata.get("arg_names") or []));x=_as_numpy(values[names[0]])
+    if x.dtype!=np.float32:raise ValueError("NVIDIA fpquant requires f32")
+    from .compiler.emit.nvidia_cuda import run_fpquant_f32,run_local_collective_f32
+    if not quant:return run_local_collective_f32(x)
+    mx,mb,me=fmts[fmt];amax=float(np.max(np.abs(x))) if x.size else 0.;scale_kw=kw.get("scale");scale=max(amax/mx,1e-12) if scale_kw is None else float(scale_kw)
+    return run_fpquant_f32(x,mx,mb,me,scale)
+
+
 def _execute_nvidia_flash_attn_compiled(artifact: RuntimeArtifact, args: Any) -> Any:
     """Run CUDA Flash Attention forward with f32 accumulation and MHA/GQA/MQA fields.
 
@@ -17061,6 +17221,15 @@ def _executor_table():
         "nvidia_softmax_compiled": _execute_nvidia_compiled_softmax,
         "nvidia_norm_compiled": _execute_nvidia_compiled_norm,
         "nvidia_reduce_compiled": _execute_nvidia_compiled_reduce,
+        "nvidia_control_flow_compiled": _execute_nvidia_control_flow_compiled,
+        "nvidia_posenc_compiled": _execute_nvidia_posenc_compiled,
+        "nvidia_ssm_compiled": _execute_nvidia_ssm_compiled,
+        "nvidia_deltanet_compiled": _execute_nvidia_deltanet_compiled,
+        "nvidia_moe_transport_compiled": _execute_nvidia_moe_transport,
+        "nvidia_dequant_gemm_compiled": _execute_nvidia_dequant_gemm,
+        "nvidia_optimizer_compiled": _execute_nvidia_optimizer,
+        "nvidia_local_collective_compiled": _execute_nvidia_local_collective,
+        "nvidia_fpquant_compiled": _execute_nvidia_fpquant,
         "nvidia_flash_attn_compiled": _execute_nvidia_flash_attn_compiled,
         "nvidia_flash_attn_bwd_compiled": _execute_nvidia_flash_attn_bwd_compiled,
         "nvidia_linear_attn_compiled": _execute_nvidia_linear_attn_compiled,

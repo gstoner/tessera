@@ -808,7 +808,7 @@ runtime readiness label. Native execution is established only by an exact
 | `tile.wait_async` | Phase 3 | implemented / verifier-backed / lit-tested | Synchronizes a target-specific async-copy contract; not itself a device-runtime proof. |
 | `tile.mma` | Phase 3 | implemented / verifier-backed / lit-tested | Selects target MMA lowering; native proof is specific to the selected architecture and dtype/layout envelope. |
 | `tessera.tma.*` | Phase 3 | lit-tested SM90 Target-IR contract | No native TMA proof is implied, and it does not describe the proven consumer-Blackwell sm120 `mma.sync` lane. |
-| `tessera.nvgpu.wgmma.*` | Phase 3 | lit-tested SM90 Target-IR contract | No native WGMMA proof is implied; Hopper execution requires matching-device evidence. |
+| `tessera.nvgpu.wgmma.*` | Phase 3 | lit-tested SM90 Target-IR contract | These placeholder kernels are not native-runtime claims; Hopper execution requires matching-device evidence. |
 | `tessera.nvgpu.wmma.*` | Phase 3 | lit-tested target artifact | Native behavior is target-specific; it is not inherited from a sibling architecture. |
 | NCCL/RCCL native collectives | Phase 4 | lowering/adapters plus mock/local contracts | Production multi-rank execution remains separately validated; one-device routes do not prove distributed transport. |
 | ROCm Target IR / HIP runtime path | Phase 6+ | implemented / lit-tested | Supported generic-ROCm rows execute through HIP with exact gfx1151 RDNA 3.5 evidence; other CDNA/RDNA targets require their own proof. |

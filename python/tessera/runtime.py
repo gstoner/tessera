@@ -10862,6 +10862,10 @@ def _apple_sddmm_metal(a: Any, b: Any, mask: Any, np: Any) -> Any:
     """Run sampled dense-dense f32 multiplication on the Apple Metal runtime."""
     from ._apple_gpu_dispatch import bind_symbol
 
+    if not DeviceTensor.is_metal():
+        # Fail closed when no Metal device is present so a host without a real
+        # GPU cannot complete this path and mislabel the result as native_gpu.
+        raise RuntimeError("Apple Metal device unavailable for SDDMM compute")
     af, bf, mf = (np.asarray(value) for value in (a, b, mask))
     m, k, n = int(af.shape[0]), int(af.shape[1]), int(bf.shape[1])
     out = np.empty((m, n), np.float32)
@@ -10906,6 +10910,12 @@ def _apple_bsmm_native_contract(operands: list[Any]) -> bool:
 
 def _apple_bsmm_metal(a: Any, b: Any, np: Any) -> Any:
     """Invoke the existing native f32 Apple rank-2 matmul ABI for BSMM."""
+    if not DeviceTensor.is_metal():
+        # The f32 matmul ABI resolves to the non-Darwin/disabled-device CPU
+        # reference symbol when no Metal device is present, which would let this
+        # path complete and mislabel host compute as native_gpu.  Fail closed so
+        # the caller falls back to the reference and reports reference_cpu.
+        raise RuntimeError("Apple Metal device unavailable for dense-block BSMM compute")
     af, bf = (np.asarray(value) for value in (a, b))
     gemm = _apple_gpu_mps_matmul_f32()
     if gemm is None:
@@ -11083,7 +11093,7 @@ def _execute_apple_gpu_compiled_sddmm(artifact: RuntimeArtifact,
     if not _apple_sddmm_native_contract(operands):
         return _apple_sddmm_reference(operands, np), "reference_cpu"
     try:
-        return _apple_sddmm_metal(*operands, np), "native_gpu"
+        return _apple_sddmm_metal(operands[0], operands[1], operands[2], np), "native_gpu"
     except Exception:
         return _apple_sddmm_reference(operands, np), "reference_cpu"
 
@@ -11106,7 +11116,7 @@ def _execute_apple_gpu_compiled_bsmm(artifact: RuntimeArtifact,
     if not _apple_bsmm_native_contract(operands):
         return _apple_bsmm_reference(operands, np), "reference_cpu"
     try:
-        return _apple_bsmm_metal(*operands, np), "native_gpu"
+        return _apple_bsmm_metal(operands[0], operands[1], np), "native_gpu"
     except Exception:
         return _apple_bsmm_reference(operands, np), "reference_cpu"
 
@@ -11144,7 +11154,7 @@ def _apple_gpu_dispatch_sddmm(op_name: str, operands: list[Any],
     if op_name != "tessera.sddmm" or not _apple_sddmm_native_contract(operands):
         return None
     try:
-        return _apple_sddmm_metal(*operands, np)
+        return _apple_sddmm_metal(operands[0], operands[1], operands[2], np)
     except Exception:
         return None
 
@@ -11154,7 +11164,7 @@ def _apple_gpu_dispatch_bsmm(op_name: str, operands: list[Any],
     if op_name != "tessera.bsmm" or not _apple_bsmm_native_contract(operands):
         return None
     try:
-        return _apple_bsmm_metal(*operands, np)
+        return _apple_bsmm_metal(operands[0], operands[1], np)
     except Exception:
         return None
 

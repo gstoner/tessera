@@ -82,3 +82,14 @@ def test_bsmm_f32_reports_native_gpu_on_metal():
     assert result["execution_kind"] == "native_gpu"
     assert result["execution_mode"] == "metal_runtime"
     np.testing.assert_allclose(out, a @ b, rtol=2e-5, atol=2e-5)
+
+
+def test_bsmm_f32_demotes_to_reference_cpu_without_metal(monkeypatch):
+    """No Metal device -> the f32 matmul ABI would resolve to the CPU reference
+    symbol, so BSMM must fall back and report reference_cpu, never native_gpu."""
+    monkeypatch.setattr(rt.DeviceTensor, "is_metal", staticmethod(lambda: False))
+    a = np.arange(12, dtype=np.float32).reshape(3, 4)
+    b = np.arange(20, dtype=np.float32).reshape(4, 5)
+    out, result = _launch(a, b)
+    assert result["execution_kind"] == "reference_cpu"
+    np.testing.assert_allclose(out, a @ b, rtol=2e-5, atol=2e-5)

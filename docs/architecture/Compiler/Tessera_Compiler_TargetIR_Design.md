@@ -1,15 +1,19 @@
 ---
 status: Informative
 classification: Informative
-last_updated: 2026-06-11
+last_updated: 2026-07-13
 ---
 
-> **Current-state note (2026-05-20):** This is historical architecture guidance. Phase labels below are design lineage, not current support claims. For implementation status, use `docs/spec/COMPILER_REFERENCE.md`, `docs/audit/generated/support_table.md`, `docs/audit/generated/e2e_op_coverage.md`, and `docs/spec/VALIDATION_SPINE.md`.
+> **Current-state note (2026-07-13):** This is architecture guidance, not the
+> execution-status authority. Phase labels are design lineage. For current
+> implementation status use `docs/spec/COMPILER_REFERENCE.md`,
+> `docs/audit/generated/runtime_execution_matrix.md`,
+> `docs/audit/generated/rocm_target_map.md`, and `docs/spec/VALIDATION_SPINE.md`.
 
 
 # Tessera Compiler — Target IR Design
 *Scope:* Tile IR → Target IR → Binary (PTX, CUDA Tile IR, LLVM, ROCm, oneAPI)  
-*Status:* Draft v0.2 (with programmer context)
+*Status:* Informative design guide; exact runtime proof is per target and op.
 
 > **API note:** Legacy Target IR inspection helpers shown in older examples are
 > superseded by `fn.target_ir` and `fn.lowering_artifacts()`. CPU/x86,
@@ -20,7 +24,7 @@ last_updated: 2026-06-11
 
 ## 0. Goals
 - Provide backend-specific lowering for accelerators.  
-- Support NVIDIA PTX and CUDA Tile IR, AMD ROCm/XDLops, Intel oneAPI/DPAS.  
+- Support NVIDIA PTX/CUDA and AMD ROCm/ROCDL lowering, plus future Intel oneAPI/DPAS.
 - Ensure deterministic, reproducible codegen across vendors.  
 - Preserve **numerics policies, distributions, and collectives** into final kernels.  
 - Integrate with **autotuning** and artifact caching.
@@ -44,7 +48,8 @@ Target IR is the final compiler stage before code generation and binary packagin
 - **CUDA Tile IR (CTIR)**: preferred for Hopper/Blackwell, includes cp.async, TMA, WGMMA.  
 
 **AMD ROCm**
-- Lowers to LLVM with **XDLops** intrinsics.  
+- Uses RDNA WMMA or CDNA MFMA according to the exact target; generic HIP runtime
+  rows are currently proven on gfx1151 RDNA 3.5.
 - RCCL for collectives.  
 
 **Intel oneAPI**
@@ -104,12 +109,13 @@ wgmma.mma_async.aligned.m64n128k32.f32.fp8.fp8.fp32 ...
 
 - Schedule IR attributes (`block`, `warp`, `vector`) flow into Target IR kernels.  
 - Autotune caches store **final target binaries per arch** where a backend emits them.  
-- **Packaging status is per-backend, not uniform.** Apple ships a production
+- **Packaging and execution status are per target and operation, not uniform.** Apple ships a production
   packaged-kernel path (`.mtlpackage` lifecycle PK1–PK7 with reflection +
-  binding-spec ABI validation), so Apple packaging is real today. NVIDIA/ROCm
-  remain artifact-only with packaging validation-gated on Phase G/H hardware.
-  Artifact metadata already tracks Graph IR, Schedule IR, Tile IR, Target IR,
-  and tuned binaries where a backend emits them.
+  binding-spec ABI validation), so Apple packaging is real today. CUDA execution
+  is proven for supported consumer-Blackwell `nvidia_sm120` rows and HIP
+  execution for supported gfx1151-backed ROCm rows. Other target contracts may
+  still be artifact-only; artifact metadata tracks Graph IR, Schedule IR, Tile
+  IR, Target IR, and tuned binaries where a backend emits them.
 
 ---
 
@@ -182,7 +188,8 @@ wgmma.mma_async.aligned.m64n128k32.f32.fp8.fp8.fp32 ...
 st.global.f32 [%rdC], {%f0-%f7};
 ```
 
-On AMD this might show LLVM with XDLops intrinsics:  
+On a CDNA target this might show LLVM/ROCDL MFMA intrinsics (an RDNA target
+uses its matching WMMA form instead):
 ```llvm
 %a = call <16 x i32> @llvm.amdgcn.mfma.f32.16x16x16.fp16(...)
 ```
@@ -243,7 +250,7 @@ This workflow ensures **numerics and backend mappings are correct** before deplo
 - **Target IR** is the **final IR before GPU/accelerator execution**.  
 - Use **`fn.target_ir`** or `fn.lowering_artifacts()` for current Target IR inspection.  
 - It’s useful for debugging:  
-  - Intrinsics (WGMMA/WMMA, XDLops, DPAS).  
+  - Intrinsics (WGMMA/WMMA, MFMA, DPAS).
   - Numerics policies (fp8→fp32 accum).  
   - Collective lowering (NCCL, RCCL, oneCCL).  
 - Most users won’t touch Target IR, but **power users can validate hardware mappings** and **diagnose perf issues**.  

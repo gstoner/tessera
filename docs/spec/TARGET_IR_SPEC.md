@@ -1,12 +1,12 @@
 ---
 status: Normative
 classification: Normative
-last_updated: 2026-06-11
+last_updated: 2026-07-13
 ---
 
 # Tessera Target IR Specification
 **Status:** Normative — grounded in `src/compiler/tile_opt_fa4/`, `src/compiler/programming_model/ir/schedule/`, and `src/compiler/codegen/tessera_gpu_backend_NVIDIA/` Phase 2–8 implementations
-**Last updated:** June 11, 2026
+**Last updated:** July 13, 2026
 **Cross-references:** `docs/spec/GRAPH_IR_SPEC.md`, `docs/spec/LOWERING_PIPELINE_SPEC.md`
 
 ---
@@ -69,29 +69,30 @@ accelerate_op_count, accelerate_ops, fallback_path) for multi-op
 programs. This is **developer-tooling metadata**, not part of the C
 runtime ABI. Use `RUNTIME_ABI_SPEC.md` for the C ABI contract.
 
-### Per-backend status table (canonical truth as of 2026-05-22)
+### Per-backend status table
 
 | Backend | Hardware-free Target IR | Real-runtime execution | Notes |
 |---------|-------------------------|------------------------|-------|
-| x86 AMX / AVX-512 | ✅ `tessera.x86.*` | ✅ Phase 2 | Only fully wired exec path today |
+| x86 AMX / AVX-512 | ✅ `tessera.x86.*` | ✅ supported x86 runtime rows | Exact ABI/JIT proof is tracked per row |
 | Apple CPU | ✅ `tessera_apple.cpu.*` | ✅ Phase 8.2 (Accelerate cblas + BNNS f16/bf16) | bf16 GEMM via BNNS |
 | Apple GPU | ✅ `tessera_apple.gpu.*` plus packaged-kernel binding contracts | ✅ MPS, MPSGraph, custom MSL, additive Metal 4 lanes, and PK1–PK7 packaged `.mtlpackage` lifecycle on capable Darwin hosts | Metal buffer pool, Metal 4 capability gates, `AppleTensorBindingSpec` / `AppleKernelBindingSpec` reflection validation |
-| NVIDIA SM_80+ | ✅ `tessera_nvidia.*` ODS + WGMMA placeholders | 🟡 IR artifact; gated on Phase G hardware | Sprint G-1 pins CUDA 13.3 |
-| ROCm gfx90a / 940 / 942 / 950 / 1100 | ✅ `tessera_rocm.*` ODS + MFMA table | 🟡 artifact only; gated on Phase H | Sprint H-1 pins ROCm 7.2.4 |
+| NVIDIA GPU family | ✅ `tessera_nvidia.*` ODS, NVVM contracts, and CUDA runtime routes | ✅ supported `nvidia_sm120` CUDA rows; other SM-specific contracts are artifact-only until exact-device proof | Consumer Blackwell uses `mma.sync`; Hopper WGMMA and datacenter TCGEN05/TMEM are not inferred from that proof |
+| AMD ROCm family | ✅ `tessera_rocm.*` ODS, ROCDL contracts, and HIP runtime routes | ✅ supported generic-ROCm rows proven on `rocm_gfx1151`; other CDNA/RDNA targets are artifact-only until exact-device proof | gfx1151 is RDNA 3.5 / Wave32 WMMA, not a CDNA MFMA proxy |
 
 Architecture Decision #21 (CLAUDE.md): when a backend cannot lower an
 op, it must emit a **stable diagnostic** naming the op and target —
 never silently no-op. Per-target KV-cache coverage matrix is in
 `docs/audit/coverage/COVERAGE_AUDIT.md`.
 
-### Sprint G/H batch 3 hardware-free pre-work (2026-05-11)
+### Historical toolchain pre-work (2026-05-11)
 
 The G-5 / H-2 / G-6/7/8 / H-6/7/8 / G-9 / H-8 pre-work landed
 hardware-free toolchain pins, lit fixtures, and pre-execution validators
-under `cmake/TesseraToolchainPins.cmake` + `scripts/validate_{nvcc,hipcc}_compile.py`
-+ `src/collectives/include/.../AdapterVersionPin.h`. NCCL ≥ 2.22 /
-RCCL ≥ 2.22 are enforced by `#error` directives at C++ compile time
-when the libraries are present.
+under `cmake/TesseraToolchainPins.cmake` and
+`scripts/validate_{nvcc,hipcc}_compile.py`. It describes toolchain and lit
+readiness only; it is superseded for execution status by the exact-target
+runtime rows above. NCCL/RCCL multi-rank readiness remains a distinct
+distributed-runtime concern.
 
 ---
 
@@ -119,7 +120,7 @@ This document specifies four dialect layers that together constitute the Target 
 3. **`tessera.queue` dialect** — tile queue synchronisation (Tile IR layer, Phase 3)
 4. **`tile.*` ops** — generic tile async copy and MMA primitives (Tile IR layer)
 5. **`tessera_nvidia` dialect** — hardware-free Hopper/Blackwell Target IR contracts
-6. **`tessera.cpu`, `tessera_rocm`, and `tessera_apple` contracts** — hardware-free CPU/x86, AMD, and Apple Target IR artifacts
+6. **`tessera.cpu`, `tessera_rocm`, and `tessera_apple` contracts** — hardware-free CPU/x86, AMD, and Apple Target IR contracts, with execution determined by an exact target/runtime row
 
 The active Python compiler has verifier-backed object models for Schedule IR,
 Tile IR, and CPU/NVIDIA/Apple/ROCm Target IR in `python/tessera/compiler/`.
@@ -782,32 +783,36 @@ module @flash_attn_sm90 attributes {tessera.version = "1.0", tessera.target_sm =
 
 ---
 
-## 8. Phase Coverage
+## 8. IR Contract and Execution Scope
 
-| Dialect / Op | Phase introduced | Current status |
-|--------------|-----------------|----------------|
-| `schedule.mesh.define` | 2 | implemented / lit-testable |
-| `schedule.mesh.region` | 2 | implemented / lit-testable |
-| `schedule.pipeline.region` | 4 (designed Phase 2) | implemented / lit-testable |
-| `schedule.stage` | 4 (designed Phase 2) | implemented / lit-testable |
-| `schedule.yield` | 2 | implemented / lit-testable |
-| `tessera.attn.lse.save` | 1 (v1.3) | implemented / lit-testable |
-| `tessera.attn.lse.load` | 1 (v1.3) | implemented / lit-testable |
-| `tessera.attn.scaled_dot_product` | 3 (v2.0) | implemented / lit-testable |
-| `tessera.attn.online_softmax` | 3 (v2.0) | implemented / lit-testable |
-| `tessera.attn.lse_accumulate` | 3 (v2.0) | implemented / lit-testable |
-| `tessera.attn.dropout_mask` | 3 (v2.0) | implemented / lit-testable |
-| `tessera.attn.causal_mask` | 3 (v2.0) | implemented / lit-testable |
-| `tessera.queue.create/push/pop` | 3 | implemented / lit-testable |
-| `tile.async_copy` | 3 | implemented / lit-testable |
-| `tile.wait_async` | 3 | implemented / lit-testable |
-| `tile.mma` | 3 | implemented / lit-testable |
-| `tessera.tma.*` | 3 | lit-testable target artifact |
-| `tessera.nvgpu.wgmma.*` | 3 | lit-testable target artifact; placeholder kernels are not native-runtime claims |
-| `tessera.nvgpu.wmma.*` | 3 | lit-testable target artifact |
-| NCCL/RCCL native collectives | 4 | planned / scaffolded mock support |
-| ROCm MFMA artifact path | 6 | implemented / lit-testable / scaffolded runtime |
-| Apple CPU/GPU artifact and packaged-kernel paths | 8 + Metal 4 + PK1-PK7 | implemented / lit-testable / hardware-runtime where capability-gated |
+The design lineage records when a contract entered the compiler; it is not a
+runtime readiness label. Native execution is established only by an exact
+`(target, compiler_path)` row in the generated execution matrix.
+
+| Dialect / Op | Design lineage | Compiler contract | Native-execution interpretation |
+|--------------|----------------|-------------------|---------------------------------|
+| `schedule.mesh.define` | Phase 2 | implemented / verifier-backed / lit-tested | Schedule metadata only; not an independently executable operation. |
+| `schedule.mesh.region` | Phase 2 | implemented / verifier-backed / lit-tested | Compiler region container; backend execution comes from its lowered body. |
+| `schedule.pipeline.region` | Phase 4 | implemented / verifier-backed / lit-tested | Pipeline scheduling container; multi-rank execution remains separately validated. |
+| `schedule.stage` | Phase 4 | implemented / verifier-backed / lit-tested | Stage metadata/container; not a standalone runtime dispatch. |
+| `schedule.yield` | Phase 2 | implemented / verifier-backed / lit-tested | Region terminator only; no independent runtime meaning. |
+| `tessera.attn.lse.save` | Phase 1 (v1.3) | implemented / dialect + lit-tested | Intermediate attention state; native behavior is part of a selected backend attention composite. |
+| `tessera.attn.lse.load` | Phase 1 (v1.3) | implemented / dialect + lit-tested | Intermediate attention state; native behavior is part of a selected backend attention composite. |
+| `tessera.attn.scaled_dot_product` | Phase 3 (v2.0) | implemented / dialect + Tile-IR lowering + lit-tested | Reaches native execution only through a proven target-specific attention route. |
+| `tessera.attn.online_softmax` | Phase 3 (v2.0) | implemented / dialect + Tile-IR lowering + lit-tested | Stateless forms may reuse a backend softmax lane; streaming-state support remains envelope-specific. |
+| `tessera.attn.lse_accumulate` | Phase 3 (v2.0) | implemented / dialect + Tile-IR lowering + lit-tested | Attention-composite intermediate; not a standalone native ABI claim. |
+| `tessera.attn.dropout_mask` | Phase 3 (v2.0) | implemented / dialect + lit-tested | Native use depends on the target attention/RNG envelope and its proof row. |
+| `tessera.attn.causal_mask` | Phase 3 (v2.0) | implemented / dialect + Tile-IR lowering + lit-tested | Usually folded into a selected attention kernel; no universal standalone dispatch claim. |
+| `tessera.queue.create/push/pop` | Phase 3 | implemented / verifier-backed / lit-tested | Compiler synchronization contracts; physical queue/barrier realization is target-specific. |
+| `tile.async_copy` | Phase 3 | implemented / verifier-backed / lit-tested | Lowers to a target-specific movement primitive (for example TMA, cp.async, or ROCm LDS flow) only within its legal target envelope. |
+| `tile.wait_async` | Phase 3 | implemented / verifier-backed / lit-tested | Synchronizes a target-specific async-copy contract; not itself a device-runtime proof. |
+| `tile.mma` | Phase 3 | implemented / verifier-backed / lit-tested | Selects target MMA lowering; native proof is specific to the selected architecture and dtype/layout envelope. |
+| `tessera.tma.*` | Phase 3 | lit-tested SM90 Target-IR contract | No native TMA proof is implied, and it does not describe the proven consumer-Blackwell sm120 `mma.sync` lane. |
+| `tessera.nvgpu.wgmma.*` | Phase 3 | lit-tested SM90 Target-IR contract | No native WGMMA proof is implied; Hopper execution requires matching-device evidence. |
+| `tessera.nvgpu.wmma.*` | Phase 3 | lit-tested target artifact | Native behavior is target-specific; it is not inherited from a sibling architecture. |
+| NCCL/RCCL native collectives | Phase 4 | lowering/adapters plus mock/local contracts | Production multi-rank execution remains separately validated; one-device routes do not prove distributed transport. |
+| ROCm Target IR / HIP runtime path | Phase 6+ | implemented / lit-tested | Supported generic-ROCm rows execute through HIP with exact gfx1151 RDNA 3.5 evidence; other CDNA/RDNA targets require their own proof. |
+| Apple CPU/GPU artifact and packaged-kernel paths | Phase 8 + Metal 4 + PK1–PK7 | implemented / lit-tested | Supported rows execute on capable Darwin hosts; unsupported envelopes retain explicit fallback behavior. |
 
 ## 9. Backend Status Appendix
 
@@ -816,6 +821,6 @@ Target IR status is reported separately from native runtime status:
 | Backend | Semantic compiler behavior | Target artifact generation | Mock/runtime fallback | Native hardware runtime |
 |---------|----------------------------|----------------------------|-----------------------|-------------------------|
 | CPU/x86 | `tessera.cpu.*` matmul, elementwise, attention, and state contracts | implemented / lit-testable | NumPy-backed CPU execution for supported ops | AMX/AVX-512 hardware-runtime path for supported kernels |
-| NVIDIA | FA-4, queue, WGMMA/TMA contracts | lit-testable | Python/JIT artifact inspection | planned unless backend-specific hardware tests are run |
-| ROCm | MFMA/async-copy contracts | implemented / lit-testable | artifact-only | scaffolded; HIP loader/runtime paths require build flags and devices |
+| NVIDIA | CUDA/FA-4, queue, WGMMA/TMA, and consumer-Blackwell mma.sync contracts | implemented / lit-testable | explicit artifact/reference fallback outside the native envelope | supported `nvidia_sm120` rows execute through CUDA; SM90/SM100 specialized paths require their own proof |
+| ROCm | RDNA WMMA and CDNA MFMA/async-copy contracts | implemented / lit-testable | explicit artifact/reference fallback outside the native envelope | supported generic-ROCm rows execute through HIP with gfx1151 evidence; other architectures require their own proof |
 | Apple | CPU/GPU target contracts, Metal 4 lanes, and packaged `.mtlpackage` ABI contracts | implemented / lit-testable | artifact inspection plus CPU fallback where applicable | hardware-runtime on capable Darwin hosts through Accelerate/BNNS, MPS/MPSGraph/custom MSL, Metal 4, and packaged-kernel validation |

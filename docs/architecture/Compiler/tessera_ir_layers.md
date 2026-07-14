@@ -2,10 +2,15 @@
 status: Informative
 classification: Informative
 authority: IR layer narrative; normative op semantics defer to docs/spec/
-last_updated: 2026-04-30
+last_updated: 2026-07-13
 ---
 
-> **Current-state note (2026-05-20):** This is historical architecture guidance. Phase labels below are design lineage, not current support claims. For implementation status, use `docs/spec/COMPILER_REFERENCE.md`, `docs/audit/generated/support_table.md`, `docs/audit/generated/e2e_op_coverage.md`, and `docs/spec/VALIDATION_SPINE.md`.
+> **Current-state note (2026-07-13):** This is architecture guidance; phase
+> labels are design lineage rather than backend-wide execution claims. Use
+> `docs/spec/COMPILER_REFERENCE.md`,
+> `docs/audit/generated/runtime_execution_matrix.md`,
+> `docs/audit/generated/rocm_target_map.md`, and
+> `docs/spec/VALIDATION_SPINE.md` for current exact-target status.
 
 # Tessera IR Layers
 
@@ -231,7 +236,8 @@ backend emission.
 
 **Dialects (NVIDIA):** `tessera.nvgpu.wgmma.*`, `tessera.tma.*`, `tessera.tcgen05.*`
 
-**Dialects (AMD):** `rocdl.*` MFMA ops, LDS intrinsics
+**Dialects (AMD):** `tessera_rocm.*` contracts lowered through ROCDL; CDNA uses
+MFMA while RDNA uses WMMA where supported, plus LDS/memory intrinsics.
 
 **Dialects (x86):** `func.call` to `@tessera_x86_amx_gemm_bf16` etc.
 
@@ -321,9 +327,10 @@ All pointers are address-space-qualified global pointers. Scalar uniforms are
 | Schedule IR (Python object model + x86 path: Distribution → Tiling → TileToX86) | ✅ implemented / lit-testable |
 | Tile IR + warp specialization (Python object model + GPU path) | ✅ implemented / lit-testable |
 | Target IR — NVIDIA WGMMA / TMA / mbarrier (SM_90+) | ✅ Phase 3 complete |
-| Target IR — Apple and AMD/ROCm artifact lowering | ✅ implemented / lit-testable / artifact-only |
-| Target IR — AMD MFMA native runtime coverage | 🔲 planned beyond artifact path |
-| Target IR — Runtime C ABI wired for launch | ✅ implemented for the runtime ABI smoke path; backend execution remains target-gated |
+| Target IR — Apple, NVIDIA, and AMD/ROCm lowering contracts | ✅ implemented / lit-testable; artifact-only remains a per-target/per-op state |
+| Target IR — AMD HIP runtime coverage | ✅ supported generic-ROCm rows execute with exact gfx1151 RDNA 3.5 evidence; CDNA and other RDNA targets remain separately gated |
+| Target IR — NVIDIA CUDA runtime coverage | ✅ supported consumer-Blackwell `nvidia_sm120` rows execute; Hopper/SM100 specialized paths remain separately gated |
+| Target IR — Runtime C ABI wired for launch | ✅ native execution is target- and operation-scoped; consult the generated execution matrix rather than a backend-wide label |
 | Distributed collectives in Schedule/Target IR | ✅ lowering/adapters present; production multi-rank readiness is validation-gated |
 
 ---

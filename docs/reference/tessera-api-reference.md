@@ -1,7 +1,7 @@
 ---
 status: Informative
 classification: Informative
-last_updated: 2026-06-11
+last_updated: 2026-07-13
 ---
 
 # Tessera API Reference
@@ -236,11 +236,11 @@ Use `ts.ops`.
 
 | API | Status |
 |-----|--------|
-| `gemm`, `matmul` | Implemented with CPU reference execution and target-gated native/artifact paths. Apple GPU native dispatch is available only where the support table reports it. |
+| `gemm`, `matmul` | Implemented with reference execution plus target-gated native paths. The generated support tables report the supported Apple, `nvidia_sm120`, and gfx1151-backed ROCm envelopes; other combinations remain explicit fallback/artifact cases. |
 | `layer_norm`, `softmax`, `gelu`, `relu`, `transpose`, `cast` | Implemented with CPU reference execution; selected ops also have fused/native target paths reported by the generated support table. |
 | `dropout` | Implemented with a random effect in the Python/compiler surface; native lowering remains target-specific. |
 | `conv2d` | Implemented — NHWC + NCHW Module forms (`tessera.nn.Conv2d` / `Conv2dNCHW`); Graph IR op + VJP/JVP registered. |
-| `flash_attn` | Implemented with reference execution and NVIDIA-oriented Tile/Target artifact paths; native execution is target-gated. |
+| `flash_attn` | Implemented with reference execution and target-specific compiler paths; native execution is available only where the generated support tables report an exact proven target (including supported `nvidia_sm120` and gfx1151-backed ROCm rows). |
 | `grouped_gemm`, `moe_swiglu_block` | Implemented — ragged grouped matmul / SwiGLU-fused MoE expert FFN (Graph IR ops + Apple GPU fused MSL kernels); first-class `scale_layout` operand for FP8/FP4. |
 | `dequant_matmul`, `dequant_grouped_gemm` | Implemented — fused dequantize-into-GEMM over packed INT4/INT8/FP8 weight codes + a separate per-group scale operand, fp32 accumulate (model-class roadmap M1). Registered `tessera.*` MLIR dialect ops + VJP/JVP; **fused Apple GPU Metal kernel** (`backend="apple_gpu"`, in-register dequant). |
 | `all_reduce`, `reduce_scatter`, `all_gather` | Implemented distributed lowering (`GPUCollectiveInsertionPass`); NCCL/RCCL adapters wired; VJP+JVP registered for all four collectives. Production multi-rank execution is validation-gated. |
@@ -342,10 +342,11 @@ blocks) so KV-cached decode ≡ recompute. LSA also ships a `TieredKVCache`
 ## Targeting
 
 `@ts.jit(target=...)` accepts both a `GPUTargetProfile` object and **string
-aliases**. Valid string targets: `"apple_cpu"`, `"apple_gpu"`, `"rocm"`
-(Architecture Decision #20). On Apple Silicon, `"apple_cpu"` and
-`"apple_gpu"` are **executable** today; NVIDIA/ROCm string/profile targets emit
-artifacts pending Phase G/H hardware.
+aliases**. Valid string targets include `"apple_cpu"`, `"apple_gpu"`, `"rocm"`,
+and exact NVIDIA profiles such as `"nvidia_sm120"`. Apple CPU/GPU are executable
+on capable Apple Silicon; supported `nvidia_sm120` rows execute through CUDA;
+and supported `"rocm"` rows execute through HIP with gfx1151 evidence. Other
+target/op envelopes remain explicit artifact or fallback cases.
 
 ```python
 # Apple GPU (executable on Apple Silicon)
@@ -353,7 +354,7 @@ artifacts pending Phase G/H hardware.
 def gemm(A, B):
     return ts.ops.matmul(A, B)
 
-# NVIDIA via a profile object (artifact today; hardware Phase G)
+# NVIDIA via a profile object; exact native support is reported per target/op.
 from tessera.compiler.gpu_target import GPUTargetProfile, ISA
 from tessera.compiler.attn_lower import FlashAttnLoweringConfig
 

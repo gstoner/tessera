@@ -8,10 +8,12 @@
 // RUN:   --tessera-control-flow-to-scf \
 // RUN:   --tessera-control-flow-target-guard=target=rocm
 //
-// And through the NAMED pipeline (CF2-before-guard is wired there too): the
-// executable-payload control_for is skipped by CF2 and still guarded.
-// RUN: tessera-opt %s -split-input-file -verify-diagnostics \
-// RUN:   --tessera-lower-to-gpu --allow-unregistered-dialect
+// NOTE: the named GPU pipeline (`--tessera-lower-to-gpu`) is intentionally NOT
+// exercised here anymore: as of the NVIDIA control-flow completion it lowers
+// tessera.control_if to tile.control_if (CF2b) rather than leaving it for the
+// target guard to reject, so the "control_if survives and is guarded" contract
+// only holds for the explicit control-flow-to-scf pass above. GPU control_if
+// lowering is covered by tests/tessera-ir/phase3/control_flow_tile_lowering.mlir.
 
 // control_for lowers → no guard diagnostic (the function verifies clean).
 func.func private @body(%c: tensor<1x8xf32>) -> tensor<1x8xf32>

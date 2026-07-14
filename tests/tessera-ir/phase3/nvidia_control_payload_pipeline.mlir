@@ -1,3 +1,6 @@
+// The --lower-tile-to-nvidia pass is only registered in an NVIDIA-backend
+// tessera-opt (TESSERA_HAVE_NVIDIA_BACKEND); UNSUPPORTED, not failed, elsewhere.
+// REQUIRES: tessera-nvidia-backend
 // RUN: tessera-opt --tessera-nvidia-pipeline-sm120 \
 // RUN:   --lower-tile-to-nvidia='sm=120' %s | FileCheck %s
 

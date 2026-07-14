@@ -26,5 +26,9 @@ def test_inventory_keeps_execution_units_distinct() -> None:
                for r in inventory)
     package = [r for r in inventory if r.unit == "subgraph"]
     assert package
-    assert all(r.scope.endswith("launch gated") or r.scope.startswith("AOT package")
-               for r in package)
+    assert any(r.scope.startswith("AOT package") for r in package)
+    assert any(
+        r.compiler_form == "package recognition + evidence-gated JIT auto selection"
+        and "Value Target-IR package_call remains gated" in r.scope
+        for r in package
+    )

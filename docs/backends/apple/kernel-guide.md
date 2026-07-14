@@ -156,7 +156,7 @@ per-lane execution truth:
 | `apple_gpu_optimizer_compiled` | sgd / momentum / adam / adamw / lion (state m/v in/out) | reference_cpu — numpy update rules, matches `tessera.optim` |
 | `apple_gpu_shape_compiled` | pad / roll / flip / tile / repeat / stack (0-move gather) + sort / argsort | reference_cpu |
 | `apple_gpu_scatter_compiled` | scatter / scatter_add / scatter_reduce (set/add/min/max) | reference_cpu |
-| `apple_gpu_sparse_compiled` | spmm_csr / spmm_coo / sddmm / bsmm + moe (routed per-token expert GEMVs) | reference_cpu |
+| `apple_gpu_sparse_compiled` | legacy sparse/MoE artifacts | reference_cpu — retained only for stamped artifacts; the current dedicated CSR/COO SpMM, SDDMM, dense-block BSMM, and local top-1 MoE executors below are the native f32 routes when their contracts hold |
 | `apple_gpu_tail_compiled` | MLA latent-KV (compress/expand_k/expand_v), alibi, lgamma/digamma, fused_epilogue, asymmetric_bce (`tessera.loss.asymmetric_bce`), normalize_group_advantages (`tessera.rl.normalize_group_advantages`), spec_accept / spec_accept_sample / spec_accept_tree_sample | reference_cpu — reuses the public `tessera.ops`/`losses`/`rl` reference |
 
 **Not yet covered:** `quantize`/`dequantize` fp4/fp6/fp8/nvfp4 +

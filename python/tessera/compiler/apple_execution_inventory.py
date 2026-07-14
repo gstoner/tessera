@@ -75,8 +75,8 @@ def rows() -> tuple[AppleExecutionRow, ...]:
         ),
         AppleExecutionRow(
             "apple_gpu", "subgraph", "matmul_softmax / matmul_softmax_matmul / rmsnorm_matmul",
-            "package recognition + explicit authoring", "MTL4 ML pipeline encoder",
-            "native_gpu", "package lifecycle and numerical tests", "AOT package; package_call launch gated",
+            "package recognition + evidence-gated JIT auto selection", "MTL4 ML pipeline encoder",
+            "native_gpu", "matching-shape native/correctness characterization", "generic @jit auto; Value Target-IR package_call remains gated",
             "tests/unit/test_apple_jit_emit_package.py",
         ),
         AppleExecutionRow(
@@ -110,8 +110,9 @@ def render_markdown() -> str:
         "package-authored subgraphs, and explicit CPU-reference execution.",
         "",
         "Terminology: `native_cpu` and `native_gpu` name where work runs; "
-        "`reference_cpu` is correct fallback execution; `package_call launch gated` "
-        "means author/load/dispatch are proven but compiler-selected package-call launch is not.",
+        "`reference_cpu` is correct fallback execution; package auto selection requires a "
+        "matching-shape native/correctness characterization. Value Target-IR `package_call` "
+        "remains gated.",
         "",
         "| Target | Unit | Identity | Compiler form | Runtime executor | Placement | Proof | Scope | Evidence |",
         "|---|---|---|---|---|---|---|---|---|",

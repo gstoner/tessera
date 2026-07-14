@@ -6,6 +6,7 @@ Benchmark drivers live here:
 |---|---|
 | [`benchmark_fusion.py`](benchmark_fusion.py) | Phase 8.4.x MSL fusion sweep — `matmul → softmax`, SwiGLU MLP block. Fused-vs-sequential pairing. |
 | [`benchmark_package_lane.py`](benchmark_package_lane.py) | **PK8e** — `package` lane (`@jit(dispatch_via_package=True)`, MTL4 ML-encoder dispatch of a Tessera-authored `.mtlpackage`) vs `live` lane (MPS/MSL envelope), same jitted fn. Steady-state row pair + `cold_author_ms`. See "Package-lane findings" below. |
+| [`benchmark_route_characterization.py`](benchmark_route_characterization.py) | Fresh-process route evidence for comparable native pairs: MPSGraph vs handwritten MSL softmax, MPS vs `simdgroup_matrix` f32 matmul, and MPS vs cooperative-tensor fp16 matmul. Produces selector-compatible JSON. |
 | [`benchmark_encode_session.py`](benchmark_encode_session.py) | R2 command-buffer batching — a dependent bmm chain per-op (one sync/op) vs. batched into one command buffer. |
 | [`benchmark_gumiho.py`](benchmark_gumiho.py) | Gumiho speculative decoding — algorithmic tokens-per-target-pass + resident vs per-op serial draft wall-clock. |
 | [`benchmark_ga_ebm.py`](benchmark_ga_ebm.py) | GA + EBM end-to-end stack walk **plus workload mode**. 17 GA primitives + **9 native EBM primitives** (including `ebm_partition_exact`) + Python-reference comparison rows + **4 workload rows** (GA feature pipeline + EBT-tiny refinement, each in apple_gpu + python_ref variants), plus opt-in `--ebt-sweep`. |
@@ -39,6 +40,24 @@ package wins):
   one-shot calls.
 
 (Sample: [`sample_package_lane_report.json`](sample_package_lane_report.json).)
+
+## Characterization-driven route promotion
+
+`benchmark_package_lane.py` now emits an evidence-bearing route record for
+each warm measurement: exact op/shape/dtype/device, route, latency, native
+dispatch proof, and numerical validation. To let generic
+`@jit(target="apple_gpu")` package-auto routing consume a freshly measured
+report, opt in with both:
+
+```bash
+TESSERA_APPLE_GPU_PACKAGE_AUTOROUTE=1 \
+TESSERA_APPLE_GPU_ROUTE_CHARACTERIZATION=/absolute/path/apple_gpu_package_lane.json
+```
+
+The selector promotes only a fused chain whose exact-shape package row and
+live incumbent row are both native and numerically validated, and only when
+the package latency wins. An old snapshot without this proof schema is
+intentionally advisory-only; it cannot change compilation.
 
 ## Gumiho speculative-decoding benchmark
 

@@ -7,7 +7,7 @@ dispatch — only the taken branch executes. Each branch is the recorded
 straight-line op-list over the args; both produce the same shape. v1: f32, flag
 is a function arg.
 
-Oracle (D4): the SAME graph built target="cpu" (device_verified_jit tessera→linalg→scf.if→
+Oracle (D4): the SAME graph built target="cpu" (compiled tessera→linalg→scf.if→
 LLVM), which matches numpy.
 
 Skips off-Darwin / when the Apple GPU runtime or libtessera_jit is unavailable.

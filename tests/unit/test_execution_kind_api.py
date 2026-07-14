@@ -39,11 +39,11 @@ def test_uninspectable_function_reports_fallback_eager():
     ns = {}
     exec("def dynamic_relu(x):\n    return ts.ops.relu(x)\n", {"ts": ts}, ns)
 
-    device_verified_jit = ts.jit(ns["dynamic_relu"])
+    compiled = ts.jit(ns["dynamic_relu"])
 
-    assert device_verified_jit.execution_kind == "fallback_eager"
-    assert not device_verified_jit.is_executable
-    assert device_verified_jit.runtime_artifact().metadata["execution_kind"] == "fallback_eager"
+    assert compiled.execution_kind == "fallback_eager"
+    assert not compiled.is_executable
+    assert compiled.runtime_artifact().metadata["execution_kind"] == "fallback_eager"
 
 
 def test_target_execution_kinds_cover_native_and_artifact_modes():

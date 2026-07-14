@@ -5,9 +5,9 @@
 hand fusions). `GraphFn.run_mlpkg()` instead authors the WHOLE straight-line graph
 into one serialized MPSGraph package (the new `mlpkg_author_graph` C ABI / PK8c)
 and dispatches it as a SINGLE Metal ML pass — MPSGraph fuses the entire graph
-globally. The device_verified_jit package is cached on the instance.
+globally. The compiled package is cached on the instance.
 
-Oracle (D4): the same graph built target="cpu" (device_verified_jit linalg→LLVM→ORC).
+Oracle (D4): the same graph built target="cpu" (compiled linalg→LLVM→ORC).
 
 Needs the packaged-ML dispatch path (newer macOS / MTL4 ML encoder); skips cleanly
 otherwise, and off-Darwin / when the runtime can't load.
@@ -105,7 +105,7 @@ def test_mlpkg_full_transformer_block_one_dispatch():
         gg.close()
 
 
-# ── the device_verified_jit package is cached across runs ───────────────────────────────
+# ── the compiled package is cached across runs ───────────────────────────────
 
 
 def test_mlpkg_pipeline_cached_across_runs():
@@ -123,7 +123,7 @@ def test_mlpkg_pipeline_cached_across_runs():
         b1 = rng.standard_normal((K, N)).astype(np.float32)
         gg.run_mlpkg(a1, b1)
         pipe1 = gg._mlpkg_pipe
-        # second run with DIFFERENT data must reuse the device_verified_jit pipeline
+        # second run with DIFFERENT data must reuse the compiled pipeline
         a2 = (rng.standard_normal((M, K)) / 4).astype(np.float32)
         b2 = rng.standard_normal((K, N)).astype(np.float32)
         out2 = gg.run_mlpkg(a2, b2)

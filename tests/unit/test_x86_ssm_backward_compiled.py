@@ -59,7 +59,7 @@ def test_x86_ssm_backward_matches_vjp(n, a_1d, gate_on, state_on):
 
 
 def test_ssm_device_backward_reached_via_autodiff(monkeypatch):
-    # The registered VJP must route an f32 selective_ssm adjoint to the device_verified_jit
+    # The registered VJP must route an f32 selective_ssm adjoint to the compiled
     # kernel (not just be callable directly) — spy the device helper across a
     # real tape().backward and assert it fired.
     rt = _rt_or_skip()

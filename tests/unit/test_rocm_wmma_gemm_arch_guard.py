@@ -1,4 +1,4 @@
-"""Arch coverage for the device_verified_jit ROCm WMMA GEMM lane.
+"""Arch coverage for the compiled ROCm WMMA GEMM lane.
 
 The compiler-generated GEMM emits the RDNA WMMA **16x16x16** f16/bf16 fragment
 layout, which the ROCDL backend selects only on the **gfx11 family** (RDNA3 /

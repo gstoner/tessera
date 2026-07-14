@@ -1,7 +1,7 @@
 """The Graph -> Tile -> Target-IR lowering of a rocm matmul PRODUCES the
 executable `tessera_rocm.wmma_gemm` directive (Decision #19, Stage L glue).
 
-Before this, the device_verified_jit lane was reached only because the runtime *synthesized*
+Before this, the compiled lane was reached only because the runtime *synthesized*
 the directive from op metadata at launch. Now the IR stack itself emits it: a
 `@jit(target="rocm")` matmul lowers (Graph -> Schedule -> Tile -> Target IR) to a
 Target IR that contains `tessera_rocm.wmma_gemm{m=n=k=16, dtype}`, the same
@@ -9,7 +9,7 @@ directive the `generate-wmma-gemm-kernel` pass expands into a real WMMA kernel.
 
 This test is GPU-free (pure IR): it proves the directive is produced with the
 right attributes AND is consumable by the generate pass (emits the gpu.func +
-the WMMA op). Execution of that directive is covered by the device_verified_jit-lane tests
+the WMMA op). Execution of that directive is covered by the compiled-lane tests
 (`test_rocm_compiled_launch_execute.py` / `test_rocm_wmma_gemm_general.py`),
 which exercise the identical op.
 """

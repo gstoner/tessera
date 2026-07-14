@@ -1,6 +1,6 @@
 """The COMPILER-GENERATED ROCm flash_attn forward through ``runtime.launch()``.
 
-The attention analog of the device_verified_jit-GEMM launch lane (test_rocm_compiled_launch_
+The attention analog of the compiled-GEMM launch lane (test_rocm_compiled_launch_
 execute.py): an artifact stamped ``compiler_path = "rocm_flash_attn_compiled"``
 routes through ``runtime.launch()`` → the matrix → the
 ``rocm_flash_attn_compiled`` executor, which generates + serializes the FA-2

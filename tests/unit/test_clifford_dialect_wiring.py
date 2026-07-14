@@ -249,7 +249,7 @@ def test_clifford_cmake_links_tessera_clifford_library_and_driver() -> None:
     assert "TesseraClifford" in cm
     assert "add_executable(ts-clifford-opt" in cm
     assert "add_custom_target(check-clifford" in cm
-    # GA8 source files must be device_verified_jit into the library.
+    # GA8 source files must be compiled into the library.
     for src in (
         "lib/Passes/ExpandProductTable.cpp",
         "lib/Passes/GradeFusion.cpp",

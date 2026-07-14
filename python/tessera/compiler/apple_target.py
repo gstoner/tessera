@@ -405,7 +405,7 @@ def apple_threadgroup_tiled_softmax_n_cap(
     return budget // max(1, int(elem_bytes))
 
 
-# Per-thread stack budget the hand-written fused MSL kernels are device_verified_jit
+# Per-thread stack budget the hand-written fused MSL kernels are compiled
 # with (`float scores[...]` / `float out[...]` arrays). 1 KiB of fp32 per
 # array — the source of the historical "N <= 256" / "head_dim <= 256" caps.
 _FUSED_KERNEL_STACK_BUDGET_BYTES = 1024

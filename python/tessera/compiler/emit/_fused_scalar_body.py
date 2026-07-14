@@ -1,4 +1,4 @@
-"""Shared scalar kernel body for the ``FusedRegion`` device_verified_jit lanes (x86 C + ROCm
+"""Shared scalar kernel body for the ``FusedRegion`` compiled lanes (x86 C + ROCm
 HIP). The per-element math is arch-agnostic — the same ``expf``/``tanhf``/
 ``rsqrtf`` snippets compile in host C (clang/cc, x86 lane) and HIP device code
 (hipcc, ROCm lane) — so both backends synthesize the *identical* body from here

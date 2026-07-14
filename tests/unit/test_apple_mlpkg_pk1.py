@@ -45,7 +45,7 @@ def _find_mtlpackage() -> Path | None:
     """Locate a ``.mtlpackage`` test fixture if one is present.
 
     Developers can drop the Apple-sample ``matrix-multiplication.mtlpackage``
-    (or any other device_verified_jit Metal package) into ``tests/fixtures/apple_gpu/``
+    (or any other compiled Metal package) into ``tests/fixtures/apple_gpu/``
     to exercise the real-artifact path. Empty / missing → tests skip
     that path cleanly.
     """
@@ -185,7 +185,7 @@ def test_compile_loads_real_metal_package():
         pytest.fail(
             f"compile_mlpackage failed for {pkg}; "
             f"last_error_kind={err}. Common causes: macOS < 26, "
-            f"the package was device_verified_jit against a different OS, or the "
+            f"the package was compiled against a different OS, or the "
             f"function 'main' isn't the entry point.")
     try:
         assert pipe.is_compiled is True
@@ -194,7 +194,7 @@ def test_compile_loads_real_metal_package():
         # Metadata round-trips on the Python side.
         assert pipe.package_path == str(pkg)
         assert pipe.function_name == "main"
-        assert "device_verified_jit" in repr(pipe)
+        assert "compiled" in repr(pipe)
     finally:
         pipe.destroy()
 
@@ -202,7 +202,7 @@ def test_compile_loads_real_metal_package():
 def test_destroyed_pipeline_reports_destroyed_state():
     """After explicit destroy(), is_compiled flips to False and repr()
     reflects the state. Catches a regression where the Python side
-    caches the device_verified_jit state."""
+    caches the compiled state."""
     if not packaged_ml_available():
         pytest.skip(packaged_ml_skip_reason() or "packaged ML unavailable")
     pkg = _find_mtlpackage()

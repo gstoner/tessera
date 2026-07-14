@@ -482,7 +482,7 @@ def explain_cpu_plan(module: GraphIRModule, *, target: str = "cpu") -> JitDiagno
         return JitDiagnostic(
             "info",
             _Code.COMPILED_CPU.value,
-            f"device_verified_jit {fn.name} through Graph IR -> Schedule IR -> Tile IR -> Target IR -> CPU",
+            f"compiled {fn.name} through Graph IR -> Schedule IR -> Tile IR -> Target IR -> CPU",
         )
     if target == "apple_gpu":
         # Keep the diagnostic aligned with the runtime envelope, rather than
@@ -499,14 +499,14 @@ def explain_cpu_plan(module: GraphIRModule, *, target: str = "cpu") -> JitDiagno
             return JitDiagnostic(
                 "info",
                 _Code.COMPILED_TARGET_RUNTIME.value,
-                (f"device_verified_jit {fn.name} through Graph IR -> Schedule IR -> "
+                (f"compiled {fn.name} through Graph IR -> Schedule IR -> "
                  "Tile IR -> apple_gpu Target IR -> Metal runtime dispatch"),
             )
     return JitDiagnostic(
         "info",
         _Code.TARGET_IR_ARTIFACT_ONLY.value,
         (
-            f"device_verified_jit {fn.name} through Graph IR -> Schedule IR -> Tile IR -> "
+            f"compiled {fn.name} through Graph IR -> Schedule IR -> Tile IR -> "
             f"{target} Target IR artifact; native execution is not wired"
         ),
     )

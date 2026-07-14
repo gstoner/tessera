@@ -1,4 +1,4 @@
-"""Phase specialization — prefill and decode as different device_verified_jit programs.
+"""Phase specialization — prefill and decode as different compiled programs.
 
 Workstream B. Mooncake's lesson: prefill is bulk throughput, decode is
 latency/SLO/cache scheduling — so they should compile and *schedule* differently,
@@ -34,7 +34,7 @@ import numpy as np
 
 
 class Phase(enum.Enum):
-    """Which device_verified_jit program a graph is specialized for."""
+    """Which compiled program a graph is specialized for."""
 
     PREFILL = "prefill"   # bulk: process the whole prompt, high arithmetic intensity
     DECODE = "decode"     # latency: one token at a time, KV-bound, SLO-sensitive

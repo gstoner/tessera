@@ -1,4 +1,4 @@
-"""x86 device_verified_jit-composite pooling and image affine lanes."""
+"""x86 compiled-composite pooling and image affine lanes."""
 
 from __future__ import annotations
 

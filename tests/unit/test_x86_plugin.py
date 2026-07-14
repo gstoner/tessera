@@ -60,7 +60,7 @@ def test_emit_rejects_non_fused_region():
 
 def test_emit_accepts_dynamic_spec():
     # DYNAMIC is supported (Workstream G / W2): the runtime-arg kernel is
-    # dims-invariant, so DYNAMIC emits the same source as BUCKET — one device_verified_jit
+    # dims-invariant, so DYNAMIC emits the same source as BUCKET — one compiled
     # kernel serves every shape (see test_dynamic_shape_emit.py for the full proof).
     e = get_emitter("x86")
     region = F.FusedRegion(epilogue=("relu",))
@@ -122,7 +122,7 @@ def test_x86_kernel_runs_and_matches_numpy(region):
     B = rng.standard_normal((12, 16)).astype(np.float32)
     bias = rng.standard_normal((16,)).astype(np.float32) if region.has_bias else None
     out, execution = runner.run_fused_region(region, A, B, bias)
-    assert execution == "x86_native"  # a real device_verified_jit kernel ran on this box
+    assert execution == "x86_native"  # a real compiled kernel ran on this box
     assert np.allclose(out, region.reference(A, B, bias), atol=1e-3)
 
 

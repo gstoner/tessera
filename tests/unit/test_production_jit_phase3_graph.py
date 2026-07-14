@@ -7,7 +7,7 @@ the recorded graph against the bespoke Metal kernels and auto-fuses the canonica
 chains (matmul→softmax→matmul, matmul→softmax, matmul→gelu, matmul→rmsnorm) into
 single fused Metal kernels.
 
-Oracle (D4): the SAME graph built with ``target="cpu"`` (device_verified_jit linalg→LLVM→ORC,
+Oracle (D4): the SAME graph built with ``target="cpu"`` (compiled linalg→LLVM→ORC,
 which matches numpy). ``g.last_dispatch()`` lets us prove fusion actually fired.
 
 Skips on non-Darwin / when the Apple GPU runtime or libtessera_jit can't load.

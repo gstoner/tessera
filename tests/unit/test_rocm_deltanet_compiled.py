@@ -1,5 +1,5 @@
 """Compiler-generated gated/delta linear-attention scan on gfx1151 — the first
-RECURRENT device_verified_jit ROCm kernel (gated_deltanet / kimi_delta_attention /
+RECURRENT compiled ROCm kernel (gated_deltanet / kimi_delta_attention /
 modified_delta_attention).
 
 The `tessera_rocm.deltanet` directive expands (via

@@ -4,7 +4,7 @@ The normalization device kernels already exist; these two ops were numerically
 identical to existing kernels but not yet dispatched to them:
 
 * ``online_softmax`` (no streaming state) == ``softmax`` over the last axis — it
-  rides the device_verified_jit softmax lane on ROCm gfx1151 (rocm_softmax_compiled) and x86
+  rides the compiled softmax lane on ROCm gfx1151 (rocm_softmax_compiled) and x86
   AVX-512 (x86_softmax_compiled). The streaming (``state``) form is declined
   (Decision #21 — never a silent wrong answer).
 * ``rmsnorm_safe`` == ``rmsnorm`` (tighter eps default) — already dispatched on
@@ -86,7 +86,7 @@ def test_x86_rmsnorm_safe_matches_reference(shape):
 
 
 def test_online_softmax_streaming_state_declined():
-    """Decision #21: the device_verified_jit softmax lane must NOT silently mishandle the
+    """Decision #21: the compiled softmax lane must NOT silently mishandle the
     streaming (state) form — it declines with a clear error."""
     from tessera import runtime as rt
     art = rt.RuntimeArtifact(metadata={

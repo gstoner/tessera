@@ -2,16 +2,16 @@
 
 Stages L1–L3 made the compiler generate a correct, problem-generic, register-
 blocked WMMA GEMM and serialize it to hsaco entirely in-process (no mlir-opt).
-L4 wires that device_verified_jit path into the production runtime dispatch as an *opt-in*
+L4 wires that compiled path into the production runtime dispatch as an *opt-in*
 lane: an artifact stamped ``compiler_path = "rocm_compiled"`` routes through the
 execution matrix to ``_execute_rocm_compiled_gemm``, which generates + serializes
 the kernel via tessera-opt and launches the hsaco on the AMD GPU.
 
 This is the same ``runtime.launch()`` entry point the hand-written ``rocm_wmma``
 lane uses — the only difference is *which kernel runs*: the one the Tessera
-compiler emitted, not the hand-written HIPRTC kernel. The device_verified_jit lane is
+compiler emitted, not the hand-written HIPRTC kernel. The compiled lane is
 opt-in; the hand-written lane stays the default + reference oracle (ROCM_AUDIT
-L4). Here we prove the device_verified_jit lane executes through ``launch()`` and matches
+L4). Here we prove the compiled lane executes through ``launch()`` and matches
 both numpy AND the hand-written oracle (bit-identical).
 
 Skip-clean: tessera-opt not built (or no in-process serialization), or no AMD GPU.
@@ -73,7 +73,7 @@ def test_launch_rocm_compiled_matmul_f16_matches_numpy_and_oracle(shape):
     a = (rng.standard_normal((m, k)) * 0.4).astype(np.float16)
     b = (rng.standard_normal((k, n)) * 0.4).astype(np.float16)
 
-    # The device_verified_jit lane: tessera-opt generates + serializes the kernel in-process,
+    # The compiled lane: tessera-opt generates + serializes the kernel in-process,
     # HIP launches the hsaco.
     res = rt.launch(_artifact(rt, "rocm_compiled"), (a, b))
     assert res["ok"] is True, res.get("reason")
@@ -90,7 +90,7 @@ def test_launch_rocm_compiled_matmul_f16_matches_numpy_and_oracle(shape):
     oracle = rt.launch(_artifact(rt, "rocm_wmma"), (a, b))
     assert oracle["ok"] is True, oracle.get("reason")
     assert float(np.max(np.abs(out - oracle["output"]))) == 0.0, \
-        f"device_verified_jit lane != hand-written oracle at {shape}"
+        f"compiled lane != hand-written oracle at {shape}"
 
 
 def test_launch_rocm_compiled_bf16_matches_numpy_and_oracle():
@@ -123,7 +123,7 @@ def test_launch_rocm_compiled_bf16_matches_numpy_and_oracle():
                                    (40, 24, 48), (33, 17, 31)])
 def test_launch_rocm_compiled_int8_matches_numpy(m, n, k):
     """int8 storage, i32 accumulate (rocdl iu8 WMMA, signed). Integer arithmetic
-    is exact, so the device_verified_jit kernel must match numpy's int32 matmul EXACTLY —
+    is exact, so the compiled kernel must match numpy's int32 matmul EXACTLY —
     across aligned, ragged-M/N, and ragged-K shapes (the iu8 fragment is the 16
     int8 of a row/col bitcast to vector<4xi32>)."""
     rt = _compiled_or_skip()
@@ -177,7 +177,7 @@ def test_launch_rocm_compiled_rejects_f32():
     assert "f16/bf16" in res["reason"]
 
 
-# ── Stage L4 default flip: @jit(target="rocm") matmul -> device_verified_jit lane ────────
+# ── Stage L4 default flip: @jit(target="rocm") matmul -> compiled lane ────────
 
 def test_jit_rocm_matmul_defaults_to_compiled_lane():
     """On a capable host the rocm matmul artifact is executable through the
@@ -203,7 +203,7 @@ def test_jit_rocm_matmul_defaults_to_compiled_lane():
 
 
 def test_compiled_lane_falls_back_to_oracle_when_unavailable(monkeypatch):
-    """When the device_verified_jit lane can't run (here: tessera-opt forced absent), the
+    """When the compiled lane can't run (here: tessera-opt forced absent), the
     executor degrades to the hand-written rocm_wmma oracle — so flipping the
     default never regresses availability. A genuine kernel failure is NOT masked
     (only _RocmCompiledUnavailable triggers the fallback)."""
@@ -214,7 +214,7 @@ def test_compiled_lane_falls_back_to_oracle_when_unavailable(monkeypatch):
     rng = np.random.default_rng(4)
     a = (rng.standard_normal((m, k)) * 0.4).astype(np.float16)
     b = (rng.standard_normal((k, n)) * 0.4).astype(np.float16)
-    # Direct executor call: device_verified_jit build raises _RocmCompiledUnavailable ->
+    # Direct executor call: compiled build raises _RocmCompiledUnavailable ->
     # falls back to the hand-written oracle, which returns the correct result.
     out = rt._execute_rocm_compiled_gemm(_artifact(rt, "rocm_compiled"), (a, b))
     ref = a.astype(np.float32) @ b.astype(np.float32)

@@ -9,7 +9,7 @@ Three layers:
    a runner's declared ``accuracy_atol`` so an f16 lead kernel's rounding is not
    misread as a miscompile, while an O(1) miscompile still is.
 3. **Live gates (needs a live gfx1151)** — the generic HIP FusedRegion lane
-   (`hipcc` compile + launch, "rocm_hip") and the shipped device_verified_jit flash-attn
+   (`hipcc` compile + launch, "rocm_hip") and the shipped compiled flash-attn
    lane are both gated by the same universal oracle on-device.
 """
 from __future__ import annotations
@@ -206,7 +206,7 @@ def test_live_rocm_generic_hip_gated(region):
 
 @pytest.mark.slow
 @pytest.mark.skipif(not _rocm_flash_live(),
-                    reason="live gfx1151 + device_verified_jit flash-attn lane required")
+                    reason="live gfx1151 + compiled flash-attn lane required")
 @pytest.mark.parametrize("scale,causal", [(1.0, False), (0.25, False), (0.125, True)])
 def test_live_rocm_attention_gated(scale, causal):
     F.clear_verification_cache()

@@ -199,8 +199,8 @@ def test_s8_compiler_artifacts_for_foundation_targets():
         if spec.model_id not in representative:
             continue
         for target in FOUNDATION_TARGETS:
-            device_verified_jit = jit(spec.compile_fn, target=target)
-            artifact = device_verified_jit.runtime_artifact()
+            compiled = jit(spec.compile_fn, target=target)
+            artifact = compiled.runtime_artifact()
             assert artifact.graph_ir
             assert artifact.schedule_ir
             assert artifact.tile_ir

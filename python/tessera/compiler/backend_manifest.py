@@ -1210,10 +1210,10 @@ _ROCM_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
             "vs the hand-written kernel across aligned/ragged/f16/bf16. The "
             "shipped hand-written libtessera_rocm_gemm.so symbol "
             "(tessera_rocm_wmma_gemm_f16, the runtime_symbol above) is the "
-            "reference ORACLE the device_verified_jit kernel is checked bit-identical "
-            "against AND the availability fallback when the device_verified_jit lane can't "
+            "reference ORACLE the compiled kernel is checked bit-identical "
+            "against AND the availability fallback when the compiled lane can't "
             "run on a host. Numerically validated vs numpy by the "
-            "execute_compare_fixture; the device_verified_jit lane is validated vs the "
+            "execute_compare_fixture; the compiled lane is validated vs the "
             "oracle by tests/unit/test_rocm_compiled_launch_execute.py."
         ),
     },
@@ -1257,13 +1257,13 @@ _ROCM_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
             "16x16x16 WMMA, online softmax, one wave per (query-tile, b*h). "
             "Correctness-first (no perf ladder yet)"
         ),
-        # E2 (2026-07-06) — device_verified_jit FA-2 flash_attn ladder ratchet baseline
+        # E2 (2026-07-06) — compiled FA-2 flash_attn ladder ratchet baseline
         # (rt._rocm_flash_attn), recorded on the gfx1151 box alongside matmul.
         "benchmark_json": "benchmarks/baselines/rocm_gfx1151_hot_paths.json",
         "notes": (
             "RDNA 3.5 WMMA flash-attention forward executes on the AMD GPU "
             "through the shipped libtessera_rocm_flash_attn.so symbols "
-            "(tessera_rocm_wmma_flash_attn_{f16,bf16}, HIPRTC-device_verified_jit for the "
+            "(tessera_rocm_wmma_flash_attn_{f16,bf16}, HIPRTC-compiled for the "
             "device arch at load); ROCm 7.2.4. The second op after matmul to run "
             "natively on a non-Apple backend. Numerically validated vs a numpy "
             "attention reference by the execute_compare_fixture. The FA-2 "
@@ -1286,7 +1286,7 @@ _ROCM_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
 # shipped C-ABI ``runtime_symbol``, so they are a rung below ``device_verified_abi``
 # (which matmul/flash_attn earn via their shipped libtessera_rocm_*.so symbols).
 #
-# Honesty (Decision #25): these are the device_verified_jit-lane CAPABILITIES proven on the
+# Honesty (Decision #25): these are the compiled-lane CAPABILITIES proven on the
 # box. The flash_attn-family rows (gqa/mqa/mha/sliding-window) are realized by the
 # flash_attn kernel with directive attrs (+ the runtime detects/forwards them);
 # fused_epilogue is the matmul kernel + a fused bias/activation epilogue; the
@@ -1371,7 +1371,7 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("reduction",),
         "notes": "Row-wise stable softmax over the last axis — the first "
-                 "non-matmul/non-WMMA device_verified_jit ROCm kernel "
+                 "non-matmul/non-WMMA compiled ROCm kernel "
                  "(generate-rocm-softmax-kernel: one workgroup per row, LDS "
                  "tree-reduce, f32 reduce). Executes via runtime.launch() "
                  "(rocm_softmax_compiled).",
@@ -1380,7 +1380,7 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("reduction",),
         "notes": "Stateless online_softmax (== softmax over the last axis) rides "
-                 "the device_verified_jit softmax kernel (generate-rocm-softmax-kernel) via "
+                 "the compiled softmax kernel (generate-rocm-softmax-kernel) via "
                  "runtime.launch() (rocm_softmax_compiled); the streaming-state "
                  "form is declined (Decision #21).",
     },
@@ -2069,7 +2069,7 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
         "notes": "Gated/delta linear-attention recurrence as a causal "
                  "SEQUENTIAL-SCAN kernel (generate-rocm-deltanet-kernel: one "
                  "workgroup per (b,h), one thread per value-column, LDS state) — "
-                 "the first recurrent device_verified_jit ROCm kernel. erase/gate/beta/decay "
+                 "the first recurrent compiled ROCm kernel. erase/gate/beta/decay "
                  "flags. Executes via runtime.launch() (rocm_deltanet_compiled).",
     },
     "kimi_delta_attention": {
@@ -2124,7 +2124,7 @@ _NVIDIA_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
             "Warp-level mma.sync GEMM on consumer Blackwell (sm_120, CC 12.0), "
             "CUDA 13.3. Ships five C-ABI symbols in libtessera_nvidia_gemm.so "
             "(CMake target tessera_nvidia_gemm): tessera_nvidia_mma_gemm_"
-            "{bf16,f16,tf32,e4m3,e5m2}, each NVRTC-device_verified_jit (compute_XX from "
+            "{bf16,f16,tf32,e4m3,e5m2}, each NVRTC-compiled (compute_XX from "
             "cuDeviceGetAttribute) at first call and launched via the CUDA driver "
             "API. fp32 storage runs tf32-math (mma.sync m16n8k8.tf32). Numerically "
             "validated vs numpy/ml_dtypes references by the execute_compare_fixture "
@@ -2222,7 +2222,7 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
         "tests/unit/test_cpu_conformance_compositions.py",
     ("matmul_softmax", "cpu"):
         "tests/unit/test_cpu_conformance_compositions.py",
-    # Native x86 conformance proof: AVX-512 GEMM plus device_verified_jit AVX-512
+    # Native x86 conformance proof: AVX-512 GEMM plus compiled AVX-512
     # maximum/softmax composition, each compared to the same-shape numpy oracle.
     ("matmul", "x86"): "tests/unit/test_x86_conformance_compositions.py",
     ("relu", "x86"): "tests/unit/test_x86_conformance_compositions.py",
@@ -2281,7 +2281,7 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     **{(op, "x86"): "tests/unit/test_x86_mla_compiled.py"
        for op in ("latent_kv_compress", "latent_kv_expand_k",
                   "latent_kv_expand_v", "mla_decode_fused")},
-    # rocm device_verified_jit-lane family (2026-06-25) — compiler-generated hsaco executing
+    # rocm compiled-lane family (2026-06-25) — compiler-generated hsaco executing
     # via runtime.launch(), each compared to a numpy reference on gfx1151. These
     # back the ``device_verified_jit`` status (no shipped C-ABI symbol). Skip-clean w/o GPU.
     ("gqa_attention", "rocm"):
@@ -2983,7 +2983,7 @@ _ROCM_KERNEL_MFU: dict[tuple[str, str], float] = {
 # x86 backend — two honest readiness tiers:
 #
 #   * matmul/gemm: AMX BF16 fused backend row.
-#   * AVX-512 f32/i32/bool lanes: runtime-loaded device_verified_jit kernels from
+#   * AVX-512 f32/i32/bool lanes: runtime-loaded compiled kernels from
 #     libtessera_x86_elementwise.so, each backed by an execute-compare fixture.
 #     These are ``device_verified_jit`` rather than ``device_verified_abi`` because the
 #     manifest does not claim per-op C ABI runtime_symbol contracts.
@@ -3385,7 +3385,7 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
     # P10 scan-family — linear-attention backbone (linear_attn / power_attn /
     # retention) via the quadratic-parallel form (φQ·φKᵀ ⊙ causal ⊙ decay)@V on
     # the AVX-512 GEMM; feature map / mask / decay on host (x86_linear_attn_
-    # device_verified_jit lane). The AVX-512 partner to the ROCm linear_attn lane.
+    # compiled lane). The AVX-512 partner to the ROCm linear_attn lane.
     **{op: {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
@@ -3986,7 +3986,7 @@ def clifford_manifest_for(op_name: str) -> list[BackendKernelEntry]:
         notes="Gated on Phase G; canonical bf16 Cl(3,0) bivector kernel is the first target",
     ))
 
-    # ROCm — native device_verified_jit bilinear lane (P12) for the table-driven products;
+    # ROCm — native compiled bilinear lane (P12) for the table-driven products;
     # planned (Phase H) for the rest.
     if _device:
         entries.append(BackendKernelEntry(
@@ -5130,7 +5130,7 @@ def _single_gpu_compute_reference_manifest_for(
                     feature_flags=flags,
                     notes=(
                         "Single-GPU closeout compute-tail CUDA owner: planned "
-                        "kernel lane. X86/ROCm have device_verified_jit structured-compute "
+                        "kernel lane. X86/ROCm have compiled structured-compute "
                         "proof; CUDA remains explicitly open."
                     ),
                     cuda_arch_min=arch_min,
@@ -5170,7 +5170,7 @@ def _single_gpu_compute_reference_manifest_for(
             feature_flags=("hip", "rocm", "planned_kernel"),
             notes=(
                 "Single-GPU closeout compute-tail ROCm owner: HIP backend "
-                "planned lane. No device_verified_jit hsaco/runtime proof claimed yet."
+                "planned lane. No compiled hsaco/runtime proof claimed yet."
             ),
         ),
     ]

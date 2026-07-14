@@ -538,7 +538,7 @@ def paged_kv_native_equivalence(
     path must run on its native runtime **and** agree with the numpy reference.
 
     Two genuinely-independent lowering paths over the same staged KV — the fused
-    GPU attention kernel (Apple Metal ``metal_runtime`` or the device_verified_jit ROCm FA-2
+    GPU attention kernel (Apple Metal ``metal_runtime`` or the compiled ROCm FA-2
     ``native_gpu`` lane) vs numpy — cross-check each other (DESIL). The verdict is
     ``inconclusive`` unless the GPU path actually fired (provenance gate: a silent
     fallback cannot earn the native rung), and ``divergent`` if the two paths

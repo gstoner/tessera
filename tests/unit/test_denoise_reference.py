@@ -4,7 +4,7 @@ A small, seed-reproducible numpy oracle exercising band-dispatch + EDM
 preconditioning + an Euler ODE sampler end-to-end (DiffusionBlocks recipe,
 arXiv:2506.14202).  The Bayes-optimal denoiser over a fixed class codebook is
 closed-form, so these are exact/oracle checks — the kind of metamorphic
-invariant the Evaluator's metamorphic oracle would grade a device_verified_jit denoiser
+invariant the Evaluator's metamorphic oracle would grade a compiled denoiser
 against.
 """
 

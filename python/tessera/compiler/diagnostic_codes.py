@@ -333,7 +333,7 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         pass_origin="tessera.compiler.JitDiagnosticCode",
         severity="warning",
         summary=(
-            "JIT device_verified_jit the function down the CPU lane — useful "
+            "JIT compiled the function down the CPU lane — useful "
             "context, not a failure."
         ),
         fix_hint=(
@@ -372,7 +372,7 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         ),
         fix_hint=(
             "Inspect the function signature; the JIT requires a "
-            "fixed positional arity for device_verified_jit paths."
+            "fixed positional arity for compiled paths."
         ),
         spec=None,
         sprint="P0-2",
@@ -443,7 +443,7 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
             "contains structured control flow (`tessera.scf.*` "
             "markers) that no backend currently lowers to executable "
             "code. The function runs correctly through Python; only "
-            "the device_verified_jit fast path is missing."
+            "the compiled fast path is missing."
         ),
         fix_hint=(
             "Eager Python is numerically correct and safe. To get the "
@@ -461,7 +461,7 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         pass_origin="tessera.compiler.JitDiagnosticCode",
         severity="warning",
         summary=(
-            "JIT device_verified_jit using source provided via "
+            "JIT compiled using source provided via "
             "`tessera.from_text(source=...)` rather than inspected "
             "via `inspect.getsource(fn)`."
         ),
@@ -497,7 +497,7 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         pass_origin="tessera.compiler.JitDiagnosticCode",
         severity="warning",
         summary=(
-            "JIT device_verified_jit the function down to Target IR but the "
+            "JIT compiled the function down to Target IR but the "
             "current backend ships only an artifact (no runtime "
             "dispatch path)."
         ),

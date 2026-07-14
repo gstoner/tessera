@@ -353,6 +353,7 @@ _LOCKED_SENTINEL_CODES = (
     # dashboards can surface it as an expected eager path.
     "JIT_EAGER_FALLBACK_CONTROL_FLOW",
     "JIT_COMPILED_CPU",
+    "JIT_COMPILED_TARGET_RUNTIME",
     "JIT_TARGET_IR_ARTIFACT_ONLY",
     "TS_ERR_INVALID_ARG",
     "TS_ERR_SHAPE_MISMATCH",

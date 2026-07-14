@@ -160,9 +160,10 @@ per-lane execution truth:
 | `apple_gpu_tail_compiled` | MLA latent-KV (compress/expand_k/expand_v), alibi, lgamma/digamma, fused_epilogue, asymmetric_bce (`tessera.loss.asymmetric_bce`), normalize_group_advantages (`tessera.rl.normalize_group_advantages`), spec_accept / spec_accept_sample / spec_accept_tree_sample | reference_cpu — reuses the public `tessera.ops`/`losses`/`rl` reference |
 
 **Not yet covered:** `quantize`/`dequantize` fp4/fp6/fp8/nvfp4 +
-`dequant_grouped_gemm` — gated on the macOS 27 / FP8 (Metal 4.1) tensor
-toolchain. Everything else the x86/ROCm device lanes cover now has an executable
-Apple GPU artifact path.
+`dequant_grouped_gemm`. The macOS 27 / Metal 4.1 tensor toolchain is necessary,
+but each format also needs per-device numerical and throughput evidence before it
+can be described as a native-performance lane. Everything else the x86/ROCm
+device lanes cover now has an executable Apple GPU artifact path.
 
 ---
 

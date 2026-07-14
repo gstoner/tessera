@@ -178,6 +178,13 @@ TESSERA_APPLE_GPU_RUNTIME_OP("tessera.group_norm")
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.instance_norm")
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.weight_norm")
 
+// lane: optimizer (5 ops)
+TESSERA_APPLE_GPU_RUNTIME_OP("tessera.adam")
+TESSERA_APPLE_GPU_RUNTIME_OP("tessera.adamw")
+TESSERA_APPLE_GPU_RUNTIME_OP("tessera.lion")
+TESSERA_APPLE_GPU_RUNTIME_OP("tessera.momentum")
+TESSERA_APPLE_GPU_RUNTIME_OP("tessera.sgd")
+
 // lane: popcount (1 ops)
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.popcount")
 
@@ -213,6 +220,11 @@ TESSERA_APPLE_GPU_RUNTIME_OP("tessera.layer_norm")
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.log_softmax")
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.rmsnorm")
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.rmsnorm_safe")
+
+// lane: scatter (3 ops)
+TESSERA_APPLE_GPU_RUNTIME_OP("tessera.scatter")
+TESSERA_APPLE_GPU_RUNTIME_OP("tessera.scatter_add")
+TESSERA_APPLE_GPU_RUNTIME_OP("tessera.scatter_reduce")
 
 // lane: silu_mul (1 ops)
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.silu_mul")
@@ -299,5 +311,5 @@ TESSERA_APPLE_GPU_RUNTIME_OP("tessera.where")
 // lane: z_loss (1 ops)
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.loss.z_loss")
 
-// Total runtime-executable ops: 189
+// Total runtime-executable ops: 197
 #undef TESSERA_APPLE_GPU_RUNTIME_OP

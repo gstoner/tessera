@@ -425,6 +425,8 @@ def _is_apple_cpu_accelerate_executable(cpu_plan: CPUPlan | None) -> bool:
 from .apple_gpu_envelope import (  # noqa: F401
     _APPLE_GPU_MPS_OPS,
     _APPLE_GPU_MSL_OPS,
+    _APPLE_GPU_OPTIMIZER_OPS,
+    _APPLE_GPU_SCATTER_OPS,
     _APPLE_GPU_MPSGRAPH_OPS,
     _APPLE_GPU_PROJECTION_OPS,
     _APPLE_GPU_REDUCTION_OPS,
@@ -973,6 +975,16 @@ def _backend_artifact_for(target_kind: str, cpu_plan: CPUPlan | None) -> Lowerin
                 abi = "MSLComputePipelineState"
             elif only_op == "tessera.gelu":
                 symbol = "tessera_apple_gpu_gelu_f32"
+                framework = "Metal"
+                abi = "MSLComputePipelineState"
+            elif only_op in _APPLE_GPU_OPTIMIZER_OPS:
+                # Stateful p/g/m/v f32 update ABI, shared semantically with
+                # the x86 AVX-512 and ROCm optimizer kernels.
+                symbol = "tessera_apple_gpu_optimizer_f32"
+                framework = "Metal"
+                abi = "MSLComputePipelineState"
+            elif only_op in _APPLE_GPU_SCATTER_OPS:
+                symbol = "tessera_apple_gpu_scatter_f32"
                 framework = "Metal"
                 abi = "MSLComputePipelineState"
             else:

@@ -699,16 +699,14 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
                   "tessera.complex."),
         "execute_compare_fixture": "tests/unit/test_apple_gpu_complex_compiled.py",
     },
-    # Optimizer lane (2026-07-10) — sgd/momentum/adam/adamw/lion per-parameter
-    # update via apple_gpu_optimizer_compiled. Apple ships no device optimizer
-    # kernel; the elementwise update rules run on the numpy reference the x86/ROCm
-    # device kernels are matched against. ``device_verified_jit`` (direct execute/compare),
-    # NOT a bespoke fused Metal kernel.
+    # Optimizer lane — sgd/momentum/adam/adamw/lion share one fused Metal f32
+    # p/g/m/v update ABI with the x86/ROCm lanes. Unsupported layouts/dtypes
+    # remain explicit reference fallbacks.
     **{op: {
         "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32",),
-        "notes": (f"Optimizer {op} via apple_gpu_optimizer_compiled (numpy "
-                  "reference update rules); matches tessera.optim."),
+        "notes": (f"Optimizer {op} via apple_gpu_optimizer_compiled "
+                  "(fused Metal f32 p/g/m/v update); matches tessera.optim."),
         "execute_compare_fixture": "tests/unit/test_apple_gpu_optimizer_compiled.py",
     } for op in ("sgd", "momentum", "adam", "adamw", "lion")},
     # 0-move + sort lane (2026-07-10) — pad/roll/flip/tile/repeat/stack +
@@ -732,16 +730,27 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
                   "lane); matches numpy.sum."),
         "execute_compare_fixture": "tests/unit/test_apple_gpu_reduce_compiled.py",
     },
-    # Scatter lane (2026-07-10) — scatter/scatter_add/scatter_reduce via
-    # apple_gpu_scatter_compiled (numpy indexed store; Apple ships no device
-    # scatter kernel). ``device_verified_jit`` (direct execute/compare).
+    # Scatter lane — deterministic f32 Metal row-scatter (set/add/min/max).
+    # The ABI matches x86/ROCm; unsupported dtype/layout contracts use an
+    # explicit reference override.
     **{op: {
         "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32",),
-        "notes": (f"Scatter {op} via apple_gpu_scatter_compiled (numpy indexed "
-                  "store reference); matches numpy scatter."),
+        "notes": (f"Scatter {op} via apple_gpu_scatter_compiled "
+                  "(deterministic Metal f32 row-scatter); matches numpy."),
         "execute_compare_fixture": "tests/unit/test_apple_gpu_scatter_compiled.py",
     } for op in ("scatter", "scatter_add", "scatter_reduce")},
+    # Local MoE transport — dispatch gathers the kept expert-sorted token rows;
+    # combine pre-scales by route weights then uses native scatter-add. This is
+    # deliberately not a distributed all-to-all or general sparse claim.
+    **{op: {
+        "status": _DEVICE_VERIFIED_JIT_STATUS,
+        "dtypes": ("fp32",),
+        "notes": (f"Local MoE {op} via apple_gpu_moe_transport_compiled "
+                  "(MPSGraph row gather + Metal scatter-add); matches "
+                  "tessera.stdlib.moe DispatchPlan semantics."),
+        "execute_compare_fixture": "tests/unit/test_apple_gpu_moe_transport_compiled.py",
+    } for op in ("moe_dispatch", "moe_combine")},
     # Sparse + MoE lane (2026-07-10) — spmm_csr/spmm_coo/sddmm/bsmm/moe via
     # apple_gpu_sparse_compiled (numpy CSR SpMM / (a@b)*mask / a@b / routed
     # per-token expert GEMVs; Apple ships no device sparse/moe kernel).

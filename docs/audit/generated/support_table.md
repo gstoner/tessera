@@ -221,8 +221,8 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `z_loss` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `linear_general` | model_layer | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `moe` | moe | public | public | registered | complete | fused | device_verified_jit | ready | none |
-| `moe_combine` | moe_transport | public | public | registered | complete | partial | reference | ready | none |
-| `moe_dispatch` | moe_transport | public | public | registered | complete | partial | reference | ready | none |
+| `moe_combine` | moe_transport | public | public | registered | complete | fused | device_verified_jit | ready | none |
+| `moe_dispatch` | moe_transport | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `group_norm` | normalization | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `instance_norm` | normalization | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `layer_norm` | normalization | public | public | registered | complete | fused | device_verified_abi | ready | benchmarked |
@@ -354,7 +354,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | loss | 19 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | model_layer | 1 | PPGCFCN· |
 | moe | 1 | PPGCFCN· |
-| moe_transport | 2 | PPGCpRN· PPGCpRN· |
+| moe_transport | 2 | PPGCFCN· PPGCFCN· |
 | normalization | 6 | PPGCFCN· PPGCFCN· PPGCFHNB PPGCFHNB PPGCFCN· PPGCFCN· |
 | numeric_helper | 15 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | position_encoding | 2 | PPGCFCN· PPGCFHN· |

@@ -346,6 +346,23 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         status="implemented",
     ),
     DiagnosticCode(
+        code="JIT_COMPILED_TARGET_RUNTIME",
+        pass_origin="tessera.compiler.JitDiagnosticCode",
+        severity="warning",
+        summary=(
+            "JIT emitted Target IR for a supported program and selected the "
+            "target runtime dispatch lane."
+        ),
+        fix_hint=(
+            "No action required; inspect the runtime artifact for the exact "
+            "launch contract and any explicit reference fallback."
+        ),
+        spec=None,
+        sprint="Apple optimizer vertical slice",
+        language="python",
+        status="implemented",
+    ),
+    DiagnosticCode(
         code="JIT_EAGER_FALLBACK_ARITY",
         pass_origin="tessera.compiler.JitDiagnosticCode",
         severity="warning",

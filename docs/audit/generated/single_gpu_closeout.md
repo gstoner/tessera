@@ -16,8 +16,8 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | 381 | backend_pathway_owned=366, multi_gpu_deferred=15 | backend_codegen=366, distributed_validation=15 |
 | `benchmark_evidence` | 1 | benchmark_required=1 | benchmarks=1 |
 | `sharding_rule` | 43 | local_layout_transform=1, multi_gpu_deferred=2, needs_mesh_or_domain_proof=40 | compiler_middle_end=1, distributed_validation=2, primitive_registry=40 |
-| `target_ir` | 6 | multi_gpu_deferred=6 | distributed_validation=6 |
-| `tile_ir` | 6 | multi_gpu_deferred=6 | distributed_validation=6 |
+| `target_ir` | 4 | multi_gpu_deferred=4 | distributed_validation=4 |
+| `tile_ir` | 4 | multi_gpu_deferred=4 | distributed_validation=4 |
 
 ## Rows
 
@@ -452,11 +452,7 @@ test, ABI, and surface dashboards.
 | `target_ir` | `all_reduce` | collective | reference | `multi_gpu_deferred` | distributed_validation | Keep reference lane until a real collective/distributed proof exists. |
 | `target_ir` | `all_to_all` | collective | reference | `multi_gpu_deferred` | distributed_validation | Keep reference lane until a real collective/distributed proof exists. |
 | `target_ir` | `reduce_scatter` | collective | reference | `multi_gpu_deferred` | distributed_validation | Keep reference lane until a real collective/distributed proof exists. |
-| `target_ir` | `moe_combine` | moe_transport | reference | `multi_gpu_deferred` | distributed_validation | Keep reference lane until a real collective/distributed proof exists. |
-| `target_ir` | `moe_dispatch` | moe_transport | reference | `multi_gpu_deferred` | distributed_validation | Keep reference lane until a real collective/distributed proof exists. |
 | `tile_ir` | `all_gather` | collective | partial | `multi_gpu_deferred` | distributed_validation | Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle. |
 | `tile_ir` | `all_reduce` | collective | partial | `multi_gpu_deferred` | distributed_validation | Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle. |
 | `tile_ir` | `all_to_all` | collective | partial | `multi_gpu_deferred` | distributed_validation | Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle. |
 | `tile_ir` | `reduce_scatter` | collective | partial | `multi_gpu_deferred` | distributed_validation | Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle. |
-| `tile_ir` | `moe_combine` | moe_transport | partial | `multi_gpu_deferred` | distributed_validation | Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle. |
-| `tile_ir` | `moe_dispatch` | moe_transport | partial | `multi_gpu_deferred` | distributed_validation | Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle. |

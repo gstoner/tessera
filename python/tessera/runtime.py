@@ -7472,12 +7472,62 @@ def _apple_optimizer_kernel(kind: int, p: Any, g: Any, m: Any, v: Any, n: int,
             np.asarray(v_out, np.float32))
 
 
+def _apple_optimizer_metal_kernel(kind: int, p: Any, g: Any, m: Any, v: Any,
+                                  n: int, lr: float, b1: float, b2: float,
+                                  eps: float, wd: float, b1c: float,
+                                  b2c: float) -> tuple:
+    """Run the shared f32 optimizer contract on the Apple Metal runtime."""
+    import numpy as np
+    from ._apple_gpu_dispatch import bind_symbol
+
+    cf = ctypes.POINTER(ctypes.c_float)
+    fn = bind_symbol(
+        "tessera_apple_gpu_optimizer_f32",
+        (cf, cf, cf, cf, ctypes.c_int32, ctypes.c_int32,
+         ctypes.c_float, ctypes.c_float, ctypes.c_float, ctypes.c_float,
+         ctypes.c_float, ctypes.c_float, ctypes.c_float, cf, cf, cf),
+        ctypes.c_int32,
+    )
+    if fn is None:
+        raise RuntimeError("Apple Metal optimizer symbol unavailable")
+    p_out = np.empty(int(n), np.float32)
+    m_out = np.empty(int(n), np.float32)
+    v_out = np.empty(int(n), np.float32)
+    ok = fn(p.ctypes.data_as(cf), g.ctypes.data_as(cf), m.ctypes.data_as(cf),
+            v.ctypes.data_as(cf), ctypes.c_int32(n), ctypes.c_int32(kind),
+            ctypes.c_float(lr), ctypes.c_float(b1), ctypes.c_float(b2),
+            ctypes.c_float(eps), ctypes.c_float(wd), ctypes.c_float(b1c),
+            ctypes.c_float(b2c), p_out.ctypes.data_as(cf),
+            m_out.ctypes.data_as(cf), v_out.ctypes.data_as(cf))
+    if not ok:
+        raise RuntimeError("Apple Metal optimizer dispatch failed")
+    return p_out, m_out, v_out
+
+
+def _apple_optimizer_native_contract(p: Any, g: Any, m: Any, v: Any) -> bool:
+    """Whether inputs retain the shared x86/ROCm f32 optimizer ABI exactly.
+
+    The Metal entry point accepts flat contiguous f32 buffers.  Do not silently
+    cast or pack an unsupported caller into a native claim: those calls belong
+    to the explicit reference override below.
+    """
+    import numpy as np
+
+    arrays = [np.asarray(x) for x in (p, g) if x is not None]
+    arrays.extend(np.asarray(x) for x in (m, v) if x is not None)
+    if not arrays:
+        return False
+    first = arrays[0]
+    return all(a.dtype == np.float32 and a.flags.c_contiguous and
+               a.shape == first.shape for a in arrays)
+
+
 def _execute_apple_gpu_compiled_optimizer(artifact: RuntimeArtifact,
                                           args: Any) -> Any:
     """The ``target="apple_gpu"`` optimizer lane: sgd / momentum / adam / adamw /
-    lion per-parameter update via the numpy reference (Apple ships no device
-    optimizer kernel — runs on the CPU reference path). f32; matches
-    tessera.optim — parity with x86/rocm_optimizer_compiled."""
+    lion per-parameter update on the native Metal f32 kernel.  It shares the
+    p/g/m/v ABI and update rules with x86 and ROCm; unsupported dtype, layout,
+    or state contracts explicitly use the CPU reference override."""
     import numpy as np
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
@@ -7489,8 +7539,17 @@ def _execute_apple_gpu_compiled_optimizer(artifact: RuntimeArtifact,
             f"{tuple(_OPTIMIZER_OPS)}; got {[o.get('op_name') for o in ops]!r}")
     values = _bind_launch_args(args, arg_names)
     p, g, m, v = _optimizer_bind(ops[0], values)
-    return _optimizer_compute(op_name, p, g, m, v, ops[0].get("kwargs") or {},
-                              _apple_optimizer_kernel, np)
+    kwargs = ops[0].get("kwargs") or {}
+    if not _apple_optimizer_native_contract(p, g, m, v):
+        return (_optimizer_compute(op_name, p, g, m, v, kwargs,
+                                   _apple_optimizer_kernel, np), "reference_cpu")
+    try:
+        out = _optimizer_compute(op_name, p, g, m, v, kwargs,
+                                 _apple_optimizer_metal_kernel, np)
+    except Exception:
+        return (_optimizer_compute(op_name, p, g, m, v, kwargs,
+                                   _apple_optimizer_kernel, np), "reference_cpu")
+    return out, "native_gpu"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -10500,14 +10559,150 @@ def _apple_scatter(out: Any, src: Any, idx: Any, out_rows: int, row_len: int,
         np.maximum.at(o, ix, s)
 
 
+def _apple_scatter_native_contract(operands: list[Any]) -> bool:
+    """Native scatter accepts contiguous f32 base/updates and int64 indices."""
+    import numpy as np
+
+    if len(operands) != 3:
+        return False
+    x, idx, updates = (np.asarray(value) for value in operands)
+    return (x.dtype == np.float32 and updates.dtype == np.float32 and
+            idx.dtype == np.int64 and x.flags.c_contiguous and
+            idx.flags.c_contiguous and updates.flags.c_contiguous)
+
+
+def _apple_scatter_metal(out: Any, src: Any, idx: Any, out_rows: int,
+                         row_len: int, mode: int, np: Any) -> None:
+    """Run the deterministic f32 row-scatter ABI on the Apple Metal runtime."""
+    from ._apple_gpu_dispatch import bind_symbol
+
+    # Match NumPy indexed-store semantics before launching Metal. The kernel
+    # accepts normalized negative indices, but an out-of-range index must raise
+    # rather than silently skip a device update.
+    raw_idx = np.asarray(idx, np.int64).reshape(-1)
+    normalized_idx = np.where(raw_idx < 0, raw_idx + int(out_rows), raw_idx)
+    invalid = (normalized_idx < 0) | (normalized_idx >= int(out_rows))
+    if np.any(invalid):
+        bad = int(raw_idx[np.flatnonzero(invalid)[0]])
+        raise IndexError(
+            f"scatter index {bad} is out of bounds for axis with size {out_rows}")
+
+    cf = ctypes.POINTER(ctypes.c_float)
+    ci = ctypes.POINTER(ctypes.c_int64)
+    fn = bind_symbol(
+        "tessera_apple_gpu_scatter_f32",
+        (cf, cf, ci, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+         ctypes.c_int32),
+        ctypes.c_int32,
+    )
+    if fn is None:
+        raise RuntimeError("Apple Metal scatter symbol unavailable")
+    ok = fn(out.ctypes.data_as(cf), src.ctypes.data_as(cf), idx.ctypes.data_as(ci),
+            ctypes.c_int32(out_rows), ctypes.c_int32(int(idx.shape[0])),
+            ctypes.c_int32(row_len), ctypes.c_int32(mode))
+    if not ok:
+        raise RuntimeError("Apple Metal scatter dispatch failed")
+
+
 def _execute_apple_gpu_compiled_scatter(artifact: RuntimeArtifact,
                                         args: Any) -> Any:
-    """The ``target="apple_gpu"`` scatter lane (scatter / scatter_add /
-    scatter_reduce) via the numpy reference — no Metal dispatch,
-    execution_kind=reference_cpu. Matches numpy scatter / np.add.at /
-    np.minimum.at / np.maximum.at — parity with x86/rocm_scatter_compiled."""
-    return _execute_scatter(artifact, args, _apple_scatter,
-                            "apple_gpu_scatter_compiled")
+    """The Apple f32 scatter lane, with an explicit CPU reference override."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    arg_names = list(metadata.get("arg_names") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if op_name not in _SCATTER_OPS:
+        raise ValueError("apple_gpu_scatter_compiled requires one scatter op")
+    values = _bind_launch_args(args, arg_names)
+    names = [str(name) for name in ops[0].get("operands", [])]
+    operands = [_as_numpy(values[name]) for name in names]
+    if not _apple_scatter_native_contract(operands):
+        return (_execute_scatter(artifact, args, _apple_scatter,
+                                 "apple_gpu_scatter_compiled"), "reference_cpu")
+    kwargs = ops[0].get("kwargs") or {}
+    mode = _scatter_mode(op_name, kwargs)
+    out, src, idx, out_rows, row_len, restore = _scatter_prepare(operands, kwargs, np)
+    try:
+        _apple_scatter_metal(out, src, idx, out_rows, row_len, mode, np)
+    except Exception:
+        _apple_scatter(out, src, idx, out_rows, row_len, mode, np)
+        return restore(out), "reference_cpu"
+    return restore(out), "native_gpu"
+
+
+def _apple_moe_dispatch_native(x: Any, plan: Any, np: Any) -> Any:
+    """Gather kept, expert-sorted token rows through the native MPSGraph lane."""
+    xa = np.ascontiguousarray(_as_numpy(x), np.float32)
+    if xa.ndim != 2 or not DeviceTensor.is_metal():
+        raise RuntimeError("Apple Metal MoE dispatch requires a 2-D f32 device lane")
+    token_of_slot = (np.asarray(plan.sort_perm, np.int64) // int(plan.top_k))
+    if token_of_slot.size == 0:
+        return np.zeros((0, int(xa.shape[1])), np.float32)
+    # The gather dispatcher normalizes negative indices and invokes the native
+    # axis-0 f32 MPSGraph ABI on this device.
+    return np.ascontiguousarray(
+        _apple_gpu_dispatch_gather("tessera.gather", [xa, token_of_slot],
+                                   {"axis": 0}, np), np.float32)
+
+
+def _apple_moe_combine_native(y_packed: Any, plan: Any, np: Any) -> Any:
+    """Weighted token-order combine through the native f32 scatter-add ABI."""
+    yp = np.ascontiguousarray(_as_numpy(y_packed), np.float32)
+    if yp.ndim != 2 or not DeviceTensor.is_metal():
+        raise RuntimeError("Apple Metal MoE combine requires a 2-D f32 device lane")
+    slots = np.asarray(plan.sort_perm, np.int64)
+    T, H = int(plan.num_tokens), int(yp.shape[1])
+    out = np.zeros((T, H), np.float32)
+    if slots.size == 0:
+        return out
+    weights = np.asarray(plan.weights, np.float32).reshape(-1)[slots].reshape(-1, 1)
+    scaled = np.ascontiguousarray(yp * weights, np.float32)
+    token_of_slot = np.ascontiguousarray(slots // int(plan.top_k), np.int64)
+    _apple_scatter_metal(out, scaled, token_of_slot, T, H, 1, np)
+    return out
+
+
+def _execute_apple_gpu_moe_transport(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Native Apple MoE transport: MPSGraph dispatch + Metal scatter-add combine.
+
+    This is intentionally limited to local f32 ``DispatchPlan`` transport. It
+    does not claim generic sparse SpMM, distributed all-to-all, or unsupported
+    route representations.
+    """
+    import numpy as np
+    from .stdlib import moe
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    values = dict(args) if isinstance(args, Mapping) else _bind_launch_args(args, arg_names)
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    try:
+        if op_name == "tessera.moe_dispatch":
+            return _apple_moe_dispatch_native(values["x"], values["plan"], np), "native_gpu"
+        if op_name == "tessera.moe_combine":
+            return _apple_moe_combine_native(values["partials"], values["plan"], np), "native_gpu"
+    except Exception:
+        if op_name == "tessera.moe_dispatch":
+            return moe.dispatch(values["x"], values["plan"]), "reference_cpu"
+        if op_name == "tessera.moe_combine":
+            return moe.combine(values["partials"], values["plan"]), "reference_cpu"
+    raise ValueError("apple_gpu_moe_transport_compiled requires moe_dispatch or moe_combine")
+
+
+def _apple_gpu_dispatch_scatter(op_name: str, operands: list[Any],
+                                kwargs: dict, np: Any) -> Any | None:
+    """Generic compiler-envelope scatter dispatch for the f32 row ABI."""
+    if op_name not in _SCATTER_OPS or not _apple_scatter_native_contract(operands):
+        return None
+    try:
+        mode = _scatter_mode(op_name, kwargs)
+        out, src, idx, out_rows, row_len, restore = _scatter_prepare(operands, kwargs, np)
+        _apple_scatter_metal(out, src, idx, out_rows, row_len, mode, np)
+        return restore(out)
+    except Exception:
+        return None
 
 
 def _apple_spmm_csr(indptr: Any, indices: Any, vals: Any, b: Any,
@@ -17303,6 +17498,7 @@ def _executor_table():
         "apple_gpu_shape_compiled": _execute_apple_gpu_compiled_shape,
         "apple_gpu_reduce_compiled": _execute_apple_gpu_compiled_reduce,
         "apple_gpu_scatter_compiled": _execute_apple_gpu_compiled_scatter,
+        "apple_gpu_moe_transport_compiled": _execute_apple_gpu_moe_transport,
         "apple_gpu_sparse_compiled": _execute_apple_gpu_compiled_sparse,
         "apple_gpu_tail_compiled": _execute_apple_gpu_compiled_tail,
         "apple_gpu_optimizer_compiled": _execute_apple_gpu_compiled_optimizer,
@@ -18557,6 +18753,7 @@ def _load_apple_cpu_runtime() -> ctypes.CDLL:
 from .compiler.apple_gpu_envelope import (  # noqa: F401
     _APPLE_GPU_MPS_OPS,
     _APPLE_GPU_MSL_OPS,
+    _APPLE_GPU_OPTIMIZER_OPS,
     _APPLE_GPU_UNARY_OPCODES,
     _APPLE_GPU_BINARY_OPCODES,
     _APPLE_GPU_ROWOP_KINDS,
@@ -19332,6 +19529,36 @@ def _apple_gpu_dispatch_quantized_matmul(arrays: list[Any], kwargs: Mapping[str,
 _APPLE_GPU_LANE_HANDLERS: dict[str, Any] | None = None
 
 
+def _apple_gpu_dispatch_optimizer(op_name: str, operands: list[Any],
+                                  kwargs: dict, np: Any) -> Any | None:
+    """Native f32 optimizer step for the generic Apple-GPU envelope.
+
+    Only contiguous same-shaped f32 parameter/state tensors are a device claim;
+    callers outside that contract return ``None`` and are provenance-demoted by
+    the per-op dispatcher.
+    """
+    if op_name not in _OPTIMIZER_OPS or len(operands) < 2:
+        return None
+    p, g = (np.asarray(operands[0]), np.asarray(operands[1]))
+    if not _apple_optimizer_native_contract(p, g, None, None):
+        return None
+    # Graph IR carries optimizer state as positional operands. The generic
+    # envelope does not retain the runtime-launch ``extras`` annotation, so use
+    # the op's canonical state ABI rather than reinitializing m/v.
+    state_names = _OPTIMIZER_OPS[op_name][2]
+    if len(operands) != 2 + len(state_names):
+        return None
+    state = dict(zip(state_names, operands[2:]))
+    m, v = state.get("m"), state.get("v")
+    if not _apple_optimizer_native_contract(p, g, m, v):
+        return None
+    try:
+        return _optimizer_compute(op_name, p, g, m, v, kwargs,
+                                  _apple_optimizer_metal_kernel, np)
+    except Exception:
+        return None
+
+
 def _apple_gpu_dispatch_composite_helper(op_name: str, operands: list[Any],
                                          kwargs: dict, np: Any) -> Any:
     """Single-GPU helpers composed from existing Apple GPU lanes."""
@@ -19455,6 +19682,8 @@ def _apple_gpu_lane_handlers() -> dict[str, Any]:
         return _APPLE_GPU_LANE_HANDLERS
     table: dict[str, Any] = {
         "mps": lambda op, a, k, np: _apple_gpu_dispatch_matmul(op, a, np),
+        "optimizer": _apple_gpu_dispatch_optimizer,
+        "scatter": _apple_gpu_dispatch_scatter,
         "rope": lambda op, a, k, np: _apple_gpu_dispatch_rope(op, a, np),
         "flash_attn": _apple_gpu_dispatch_flash_attn,
         "softmax": _apple_gpu_dispatch_softmax,
@@ -22849,6 +23078,18 @@ def _apple_gpu_host_reference(op_name: str, operands: list[Any], kwargs: dict,
     """Honest host reference for a lane that could not run on Metal. Only ops
     with a defined reference are handled; anything else raises (never fabricate a
     result for an op we cannot honestly compute on the host)."""
+    if op_name in _OPTIMIZER_OPS:
+        extras = list(kwargs.get("extras", []))
+        state = {name: operands[2 + i] for i, name in enumerate(extras)
+                 if 2 + i < len(operands)}
+        return _optimizer_compute(op_name, operands[0], operands[1],
+                                  state.get("m"), state.get("v"), kwargs,
+                                  _apple_optimizer_kernel, np)
+    if op_name in _SCATTER_OPS:
+        mode = _scatter_mode(op_name, kwargs)
+        out, src, idx, out_rows, row_len, restore = _scatter_prepare(operands, kwargs, np)
+        _apple_scatter(out, src, idx, out_rows, row_len, mode, np)
+        return restore(out)
     if op_name in ("tessera.conv2d", "tessera.conv2d_nhwc"):
         return _host_conv2d_nhwc(operands, kwargs, np)
     raise ValueError(

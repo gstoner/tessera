@@ -149,6 +149,10 @@ _APPLE_GPU_FRAMEWORK_HINTS: dict[str, str] = {
     "rope":         "Metal (MSL)",
     "flash_attn":   "Metal (MSL)",
     "rmsnorm":      "Metal (MSL)",
+    **{op: "Metal (MSL)" for op in
+       ("sgd", "momentum", "adam", "adamw", "lion")},
+    **{op: "Metal (MSL)" for op in
+       ("scatter", "scatter_add", "scatter_reduce")},
 }
 
 # Apple GPU dispatch route per op family.  "manifest" = goes through a
@@ -159,6 +163,8 @@ _APPLE_GPU_FRAMEWORK_HINTS: dict[str, str] = {
 _DRIVER_DISPATCH_OPS: frozenset[str] = frozenset({
     "matmul", "softmax", "softmax_safe", "gelu",
     "rope", "flash_attn", "rmsnorm",
+    "sgd", "momentum", "adam", "adamw", "lion",
+    "scatter", "scatter_add", "scatter_reduce",
     # Followup A.1 (2026-05-31) — manifest entries landed for these
     # three; they dispatch via the driver (MPSGraph unary opcode /
     # native multitile MPP / MPS matmul) so the drift gate routes
@@ -197,6 +203,10 @@ _PROOF_TESTS: dict[str, str] = {
     "rope":         "tests/unit/test_apple_backend_roadmap.py",
     "flash_attn":   "tests/unit/test_apple_backend_roadmap.py",
     "rmsnorm":      "tests/unit/test_apple_backend_roadmap.py",
+    **{op: "tests/unit/test_apple_gpu_optimizer_compiled.py" for op in
+       ("sgd", "momentum", "adam", "adamw", "lion")},
+    **{op: "tests/unit/test_apple_gpu_scatter_compiled.py" for op in
+       ("scatter", "scatter_add", "scatter_reduce")},
     "gemm":         "tests/unit/test_apple_backend_roadmap.py",
     "transpose":    "tests/unit/test_apple_gpu_transpose.py",
     "gather":       "tests/unit/test_apple_gpu_gather.py",
@@ -308,6 +318,10 @@ _APPLE_GPU_KERNELS_SYMBOL_MAP: dict[str, str] = {
     "dequant_matmul":   "tessera_apple_gpu_dequant_matmul_f32",
     "quantized_matmul": "tessera_apple_gpu_quantized_matmul_i4_f32",
     "masked_categorical": "tessera_apple_gpu_masked_categorical_f32",
+    **{op: "tessera_apple_gpu_optimizer_f32" for op in
+       ("sgd", "momentum", "adam", "adamw", "lion")},
+    **{op: "tessera_apple_gpu_scatter_f32" for op in
+       ("scatter", "scatter_add", "scatter_reduce")},
     # Structural MPSGraph data movers. f16 symbols carry both f16 and bf16 raw
     # 16-bit paths.
     "transpose":    "tessera_apple_gpu_mpsgraph_transpose_{f32,f16}",

@@ -103,6 +103,8 @@ class BackwardComposition:
 KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "apple_cpu_accelerate": "Apple Silicon CPU via the Accelerate cblas_sgemm shim",
     "apple_gpu_mps":        "Apple Silicon GPU via MPS / MSL / MPSGraph (per envelope)",
+    "apple_gpu_moe_transport_compiled": "Apple GPU local MoE transport via "
+                             "MPSGraph row gather and native Metal f32 scatter-add",
     "apple_value_target_ir": "Apple CPU value-call dispatch — invokes the C ABI "
                              "symbol named in a tessera_apple.cpu.call value op "
                              "(Value Target IR sprint; CPU cholesky executable)",
@@ -179,11 +181,10 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                              "reference the x86/ROCm GEMM lanes match. Matches "
                              "numpy — parity with x86/rocm_matmul_family_compiled.",
     "apple_gpu_optimizer_compiled": "Apple GPU optimizer lane — sgd / momentum / "
-                             "adam / adamw / lion per-parameter update. Apple "
-                             "ships no device optimizer kernel, so the elementwise "
-                             "update rules run on the numpy reference the x86/ROCm "
-                             "device kernels are matched against (state m/v in/"
-                             "out). Matches tessera.optim — parity with "
+                             "adam / adamw / lion per-parameter update through a "
+                             "fused f32 Metal kernel, sharing the x86/ROCm p/g/m/v "
+                             "and bias-correction ABI. Unsupported dtype/layout "
+                             "cases report reference_cpu. Matches tessera.optim — parity with "
                              "x86/rocm_optimizer_compiled.",
     "apple_gpu_shape_compiled": "Apple GPU 0-move + sort lane — pad / roll / flip "
                              "/ tile / repeat / stack (host index-map + numpy "
@@ -199,10 +200,9 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                              "x86/rocm_reduce_compiled.",
     "apple_gpu_scatter_compiled": "Apple GPU scatter lane — scatter (set) / "
                              "scatter_add (sum) / scatter_reduce (min/max), "
-                             "row-wise along an axis. Apple ships no device "
-                             "scatter kernel, so the indexed store runs on the "
-                             "numpy reference (np.add.at / np.minimum.at / "
-                             "np.maximum.at). Matches numpy — parity with "
+                             "row-wise along an axis through the deterministic "
+                             "Metal f32 ABI. Unsupported dtype/layout contracts "
+                             "report reference_cpu. Matches numpy — parity with "
                              "x86/rocm_scatter_compiled.",
     "apple_gpu_sparse_compiled": "Apple GPU sparse + MoE lane — spmm_csr / "
                              "spmm_coo / sddmm / bsmm (numpy CSR SpMM / (a@b)*mask "
@@ -1180,19 +1180,18 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "CPU reference path (no Metal dispatch) — "
                "execution_kind=reference_cpu; matches numpy, parity with "
                "x86/rocm_matmul_family_compiled."),
-    # Apple GPU optimizer lane (2026-07-10) — sgd/momentum/adam/adamw/lion. Apple
-    # ships no device optimizer kernel, so the elementwise update rules run on
-    # the numpy reference (no Metal dispatch) — execution_kind=reference_cpu.
+    # Apple GPU f32 optimizer lane. The supported dense f32 contract is native;
+    # unsupported dtype/layout/state variants override to reference_cpu.
     ("apple_gpu", "apple_gpu_optimizer_compiled"): ExecutionRow(
         target="apple_gpu", compiler_path="apple_gpu_optimizer_compiled",
-        execution_kind="reference_cpu", executable=True,
+        execution_kind="native_gpu", executable=True,
         executor_id="apple_gpu_optimizer_compiled", runtime_status="success",
         reason="Apple GPU optimizer artifact runs sgd / momentum / adam / adamw "
-               "/ lion per-parameter updates (state m/v in/out) via the numpy "
-               "reference the x86/ROCm device kernels are matched against. Runs "
-               "on the CPU reference path (no Metal dispatch) — "
-               "execution_kind=reference_cpu; matches tessera.optim, parity with "
-               "x86/rocm_optimizer_compiled."),
+               "/ lion as a dense f32 fused Metal update (p/g/m/v in, p/m/v out; "
+               "host bias correction); unsupported dtype/layout/state variants "
+               "report reference_cpu. Matches tessera.optim, parity with "
+               "x86/rocm_optimizer_compiled.",
+        execution_mode="metal_runtime"),
     # Apple GPU 0-move + sort lane (2026-07-10) — pad/roll/flip/tile/repeat/stack
     # (host index-map + numpy gather) + sort/argsort (numpy stable sort). Apple
     # ships no device gather/sort kernel, so this runs on the CPU reference path
@@ -1218,19 +1217,26 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "Metal is unavailable). f32, matches numpy.sum — parity with "
                "x86/rocm_reduce_compiled.",
         execution_mode="metal_runtime"),
-    # Apple GPU scatter + sparse/MoE lanes (2026-07-10) — Apple ships no device
-    # scatter/spmm/sddmm/moe kernel, so these run the numpy reference (no Metal
-    # dispatch) — execution_kind=reference_cpu.
+    # Apple GPU f32 scatter is native; sparse/MoE remains a separate reference
+    # lane until it can reuse this substrate end-to-end.
     ("apple_gpu", "apple_gpu_scatter_compiled"): ExecutionRow(
         target="apple_gpu", compiler_path="apple_gpu_scatter_compiled",
-        execution_kind="reference_cpu", executable=True,
+        execution_kind="native_gpu", executable=True,
         executor_id="apple_gpu_scatter_compiled", runtime_status="success",
         reason="Apple GPU scatter artifact runs scatter / scatter_add / "
-               "scatter_reduce (row-wise indexed store, set/add/min/max) via the "
-               "numpy reference (np.add.at / np.minimum.at / np.maximum.at). Runs "
-               "on the CPU reference path (no Metal dispatch) — "
-               "execution_kind=reference_cpu; matches numpy, parity with "
-               "x86/rocm_scatter_compiled."),
+               "scatter_reduce (row-wise indexed store, set/add/min/max) through "
+               "the deterministic f32 Metal kernel. Unsupported dtype/layout "
+               "contracts report reference_cpu; matches numpy, parity with "
+               "x86/rocm_scatter_compiled.", execution_mode="metal_runtime"),
+    ("apple_gpu", "apple_gpu_moe_transport_compiled"): ExecutionRow(
+        target="apple_gpu", compiler_path="apple_gpu_moe_transport_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="apple_gpu_moe_transport_compiled", runtime_status="success",
+        reason="Apple GPU local MoE transport runs DispatchPlan token dispatch "
+               "through MPSGraph row gather and weighted combine through native "
+               "f32 Metal scatter-add. Unsupported contracts report reference_cpu; "
+               "distributed transport and generic sparse kernels are not claimed.",
+        execution_mode="metal_runtime"),
     ("apple_gpu", "apple_gpu_sparse_compiled"): ExecutionRow(
         target="apple_gpu", compiler_path="apple_gpu_sparse_compiled",
         execution_kind="reference_cpu", executable=True,

@@ -205,8 +205,8 @@ vlb_loss,loss,public,public,registered,complete,fused,device_verified_jit,ready,
 z_loss,loss,public,public,registered,complete,fused,device_verified_jit,ready,none
 linear_general,model_layer,public,public,registered,complete,fused,device_verified_jit,ready,none
 moe,moe,public,public,registered,complete,fused,device_verified_jit,ready,none
-moe_combine,moe_transport,public,public,registered,complete,partial,reference,ready,none
-moe_dispatch,moe_transport,public,public,registered,complete,partial,reference,ready,none
+moe_combine,moe_transport,public,public,registered,complete,fused,device_verified_jit,ready,none
+moe_dispatch,moe_transport,public,public,registered,complete,fused,device_verified_jit,ready,none
 group_norm,normalization,public,public,registered,complete,fused,device_verified_jit,ready,none
 instance_norm,normalization,public,public,registered,complete,fused,device_verified_jit,ready,none
 layer_norm,normalization,public,public,registered,complete,fused,device_verified_abi,ready,benchmarked

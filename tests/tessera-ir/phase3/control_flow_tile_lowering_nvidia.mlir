@@ -1,7 +1,12 @@
-// Tile-IR lowering of the control-flow family (target-agnostic: emits the
-// tile.control_* ops). The NVIDIA target projection (tessera_nvidia.control_*)
-// lives in control_flow_tile_lowering_nvidia.mlir, gated on the NVIDIA backend.
-// RUN: tessera-opt --tessera-tile-ir-lowering='sm=120' %s | FileCheck %s
+// NVIDIA target projection of the control-flow family: tile.control_* lowered
+// to the tessera_nvidia.control_* target ops. Split out of
+// control_flow_tile_lowering.mlir so it is gated on the NVIDIA backend — the
+// --lower-tile-to-nvidia pass is only registered when tessera-opt is built with
+// TESSERA_HAVE_NVIDIA_BACKEND (the default CPU+Apple / CI build omits it).
+//
+// REQUIRES: tessera-nvidia-backend
+// RUN: tessera-opt --tessera-tile-ir-lowering='sm=120' \
+// RUN:   --lower-tile-to-nvidia='sm=120' %s | FileCheck %s --check-prefix=NVIDIA
 
 module {
   func.func private @for_body(%x: tensor<4xf32>) -> tensor<4xf32>
@@ -46,11 +51,15 @@ module {
   }
 }
 
-// CHECK: tile.control_for
-// CHECK-SAME: source = "tessera.control_for"
-// CHECK: tile.control_if
-// CHECK-SAME: source = "tessera.control_if"
-// CHECK: tile.control_while
-// CHECK-SAME: source = "tessera.control_while"
-// CHECK: tile.control_scan
-// CHECK-SAME: source = "tessera.control_scan"
+// NVIDIA: tessera_nvidia.control_for
+// NVIDIA-SAME: arch = "sm_120"
+// NVIDIA-SAME: source = "tessera.control_for"
+// NVIDIA: tessera_nvidia.control_if
+// NVIDIA-SAME: arch = "sm_120"
+// NVIDIA-SAME: source = "tessera.control_if"
+// NVIDIA: tessera_nvidia.control_while
+// NVIDIA-SAME: arch = "sm_120"
+// NVIDIA-SAME: max_iters = 8
+// NVIDIA: tessera_nvidia.control_scan
+// NVIDIA-SAME: arch = "sm_120"
+// NVIDIA-SAME: trip = 6

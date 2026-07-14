@@ -101,3 +101,11 @@ def _opt_help_contains(needle: str) -> bool:
 
 if _opt_help_contains("tessera-lower-to-rocm"):
     config.available_features.add("tessera-rocm-backend")
+
+# The NVIDIA tile→target pass (`--lower-tile-to-nvidia`, which emits the
+# tessera_nvidia.control_* ops) is only registered when tessera-opt is built
+# with the NVIDIA backend (TESSERA_HAVE_NVIDIA_BACKEND). The default CPU+Apple
+# build (and the CI lit lane) omits it, so per-target fixtures REQUIRE this
+# feature and are UNSUPPORTED — not failed — where the pass is absent.
+if _opt_help_contains("lower-tile-to-nvidia"):
+    config.available_features.add("tessera-nvidia-backend")

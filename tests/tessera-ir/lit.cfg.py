@@ -88,24 +88,40 @@ config.substitutions.append(('FileCheck', f'"{_FILECHECK}"'))
 
 # Probe tessera-opt for optional backends so per-target fixtures can
 # REQUIRE the right feature. We only mark the feature as available if
-# the corresponding pipeline alias is actually registered in this build.
-def _opt_help_contains(needle: str) -> bool:
+# the corresponding pipeline alias(es) are actually registered in this build.
+# The `--help` text is fetched once and reused.
+def _opt_help_text() -> str:
     if not (os.path.isfile(_TESSERA_OPT) and os.access(_TESSERA_OPT, os.X_OK)):
-        return False
+        return ""
     try:
-        out = subprocess.run([_TESSERA_OPT, "--help"], capture_output=True,
-                             text=True, timeout=10).stdout
+        return subprocess.run([_TESSERA_OPT, "--help"], capture_output=True,
+                              text=True, timeout=10).stdout
     except Exception:
-        return False
-    return needle in out
+        return ""
+
+_OPT_HELP = _opt_help_text()
+
+def _opt_help_contains(needle: str) -> bool:
+    return needle in _OPT_HELP
 
 if _opt_help_contains("tessera-lower-to-rocm"):
     config.available_features.add("tessera-rocm-backend")
 
-# The NVIDIA tile→target pass (`--lower-tile-to-nvidia`, which emits the
-# tessera_nvidia.control_* ops) is only registered when tessera-opt is built
-# with the NVIDIA backend (TESSERA_HAVE_NVIDIA_BACKEND). The default CPU+Apple
-# build (and the CI lit lane) omits it, so per-target fixtures REQUIRE this
-# feature and are UNSUPPORTED — not failed — where the pass is absent.
-if _opt_help_contains("lower-tile-to-nvidia"):
+# The NVIDIA control-flow fixtures invoke the NVIDIA tile→target pass
+# (`--lower-tile-to-nvidia`, which emits tessera_nvidia.control_*) AND the core
+# pipelines that feed it (`--tessera-tile-ir-lowering` /
+# `--tessera-nvidia-pipeline-sm120`). Gate on the WHOLE set, not just the target
+# pass: the lean hardware-free NVIDIA build (TESSERA_BUILD_NVIDIA_BACKEND=ON,
+# TESSERA_ENABLE_CUDA=OFF) registers the target pass but omits the core spine
+# (no TESSERA_HAVE_CORE_TESSERA_IR), so probing only `lower-tile-to-nvidia`
+# there would enable the feature and the fixtures would fail on the missing core
+# pipelines. Requiring all three means the feature is present only in a build
+# that can actually run them; everywhere else the fixtures are UNSUPPORTED, not
+# failed. The default CPU+Apple build (and the CI lit lane) has none of them.
+_NVIDIA_LIT_PASSES = (
+    "lower-tile-to-nvidia",
+    "tessera-tile-ir-lowering",
+    "tessera-nvidia-pipeline-sm120",
+)
+if all(_opt_help_contains(p) for p in _NVIDIA_LIT_PASSES):
     config.available_features.add("tessera-nvidia-backend")

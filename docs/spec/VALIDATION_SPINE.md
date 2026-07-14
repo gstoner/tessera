@@ -2,7 +2,7 @@
 status: Normative
 classification: Spec
 authority: Distinguishes unit / lit / build / artifact-only / hardware-runtime checks across the Tessera validation spine
-last_updated: 2026-05-18
+last_updated: 2026-07-13
 ---
 
 # Tessera validation spine — M5 deliverable
@@ -21,8 +21,8 @@ maps unambiguously to **command**.
 | **Python unit tests** | Python frontend, IR layers, audit, registries, error semantics | `pytest tests/unit -m "not slow"` | CPU only | yes |
 | **MLIR lit tests** | C++ pass + dialect contracts on canonical input MLIR | `lit tests/tessera-ir -v` (the console script; the `python -m lit` form does not work — lit's package has no `__main__`) | CPU only (after building `tessera-opt`) | opt-in: `TESSERA_VALIDATE_LIT=1 scripts/validate.sh` runs lit when both `lit` and `tessera-opt` are on PATH (or in `build/tools/tessera-opt/`); otherwise the layer is skipped with a clear diagnostic. |
 | **C++ build checks** | the C++ tree compiles against MLIR 22 / LLVM 22 | `cmake -B build && cmake --build build` | toolchain only | partial — gated on environment |
-| **Artifact-only target lowering** | `tessera-lower-to-{rocm,apple_gpu}` produce textual artifacts; **no execution** | `tessera-opt ... | FileCheck` | none | yes |
-| **Hardware-runtime smoke tests** | a fused symbol actually dispatches on the device | `pytest tests/unit -m hardware_apple_gpu` (or `-m hardware_nvidia`, etc.) | the named accelerator | no (skipped without hardware) |
+| **Artifact-only target lowering** | an exact target/op has no executable runtime row; textual Target IR is still inspectable | `tessera-opt ... | FileCheck` | none | yes |
+| **Hardware-runtime smoke tests** | a supported symbol actually dispatches on its named device | backend-specific execute-and-compare fixtures (Apple, `nvidia_sm120`, or `rocm_gfx1151`) | the named accelerator | no (skipped without hardware) |
 | **Generated audit drift** | `op_catalog` / `primitive_coverage` / `backend_manifest` / `capabilities` haven't drifted from the generated support table | `python -m tessera.compiler.audit support_table --check` | CPU only | yes |
 | **Canonical-program reports** | each shipped canonical program runs CPU-only and produces a deterministic `CompileReport` | `pytest tests/unit/test_compile_report.py tests/unit/test_canonical_program_registry.py` | CPU only | yes |
 | **Benchmark schema validation** | every emitted benchmark row matches the M5 canonical schema | `pytest tests/unit/test_benchmark_row.py` | CPU only | yes |
@@ -86,7 +86,8 @@ reason — never silently mark themselves green.
 
 - A unified C++ build / lit / hardware-runtime CI job (deferred to
   whichever post-M5 sprint owns CI infrastructure).
-- A cross-target benchmark sweep that runs once on each accelerator;
-  today the only end-to-end hardware path is Apple GPU.
+- A full cross-target benchmark sweep that runs once on every accelerator;
+  current proof is scoped to the exact Apple, `nvidia_sm120`, and gfx1151 rows
+  recorded in the generated execution matrix.
 - Tooling that auto-promotes a primitive's claim layer when the
   required tests appear — for now the audit drift gate is enough.

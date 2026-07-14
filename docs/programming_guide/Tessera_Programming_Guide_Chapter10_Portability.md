@@ -1,7 +1,7 @@
 ---
 status: Tutorial
 classification: Tutorial
-last_updated: 2026-06-11
+last_updated: 2026-07-13
 ---
 
 > **Phase status note (updated 2026-06-11):** Phases 1–7 are complete and Phase 8 (Apple M-Series CPU via Accelerate, GPU via Metal/MPS/MPSGraph/custom MSL) is operational — on Apple Silicon this is the primary single-node execution path. Autodiff (forward/reverse transforms + activation checkpointing), ZeRO-2 optimizer sharding, the Bayesian autotuner, and the runtime Python wrapper (`tessera.runtime.TesseraRuntime`) are **shipped**. Genuinely still planned: **multi-GPU / multi-rank** execution of distributed collectives (NCCL/RCCL), `Cyclic` distribution lowering, and **NVL72** rack-scale execution (single-device collectives run over in-process mock ranks today). Canonical API names: `docs/CANONICAL_API.md`; phase table: root `CLAUDE.md`.
@@ -10,7 +10,14 @@ last_updated: 2026-06-11
 # Tessera Programming Guide  
 ## Chapter 10: Portability (Updated)
 
-Tessera is designed for **performance portability**. The **executable** paths today are x86 (AMX/AVX-512), Apple M-Series CPU (Accelerate) and GPU (Metal/MPS/MPSGraph/MSL), and a production CPU MLIR→LLVM JIT lane; NVIDIA SM_80+ and AMD ROCm **emit Target IR artifacts** today with hardware execution gated on Phase G/H. Future extensions target distributed/rack-scale NVIDIA systems, Intel, and other accelerators. Portability is achieved through a **multi-level IR stack**, target profiles, domains/distributions, and planned mapper/runtime policy APIs.
+Tessera is designed for **performance portability**. Executable paths today
+include x86, Apple M-Series CPU/GPU, NVIDIA consumer-Blackwell `nvidia_sm120`
+for its supported CUDA rows, and AMD ROCm through supported generic runtime rows
+with exact `rocm_gfx1151` (RDNA 3.5) evidence. Other NVIDIA/ROCm architecture,
+dtype, layout, and operation combinations may still emit an artifact or select a
+reference fallback. Portability is achieved through a **multi-level IR stack**,
+target profiles, domains/distributions, and runtime dispatch that reports the
+selected execution kind.
 
 ---
 
@@ -27,11 +34,12 @@ This design ensures that high-level programs remain portable, while low-level op
 
 ---
 
-### 10.2 NVIDIA GPUs (artifact today; hardware execution Phase G)
+### 10.2 NVIDIA GPUs (native sm120 lane plus architecture-specific contracts)
 
-On NVIDIA accelerators (Ampere, Hopper, Blackwell), Tessera **emits Target IR
-artifacts** (PTX / CUDA Tile IR) today; real-hardware execute-and-compare is
-gated on Phase G hardware not present on the dev machine:
+On NVIDIA accelerators, Tessera emits PTX/CUDA Target IR and executes supported
+`nvidia_sm120` consumer-Blackwell rows through CUDA. Hopper WGMMA and datacenter
+Blackwell TCGEN05/TMEM contracts are distinct architecture tracks; they are not
+claimed native merely because sm120 has a proven `mma.sync` lane:
 
 - **PTX backend**: traditional lowering path.  
 - **CUDA Tile IR backend**: preferred on Hopper/Blackwell.  
@@ -69,10 +77,11 @@ against numpy. See [`docs/backends/apple/`](../backends/apple/).
 
 ---
 
-### 10.4 AMD GPUs (artifact today; hardware execution Phase H)
+### 10.4 AMD GPUs (native gfx1151 ROCm lane plus architecture-specific contracts)
 
-- **ROCm 7.2.4 / MFMA**: Target IR + MFMA shape tables emit today
-  (gfx90a / 940 / 942 / 950 / 1100); hardware execute-and-compare is Phase H.  
+- **ROCm 7.2.4 / HIP**: supported generic runtime rows execute with exact
+  `gfx1151` RDNA 3.5 / Wave32 WMMA evidence. CDNA MFMA targets and other RDNA
+  architectures remain separate exact-device promotion tracks.
 - **rccl**: collective backend.  
 - **Unified memory (HMM)** support.  
 
@@ -150,8 +159,9 @@ The same code can run on **smaller NVIDIA clusters** or **future AMD/Intel syste
 ### 10.10 Summary
 
 - Tessera achieves portability through **multi-level IR** and **Mapper API hooks**.  
-- Executable today: x86, Apple CPU (Accelerate), Apple GPU (Metal/MPS/MPSGraph/MSL), CPU JIT.
-- NVIDIA SM_80+ and AMD ROCm emit artifacts today; hardware execution is Phase G/H.
+- Executable today: x86, Apple CPU/GPU, supported `nvidia_sm120` CUDA rows, and
+  supported generic-ROCm HIP rows with gfx1151 evidence.
+- Artifact-only is a per-target/per-op result, not a backend-wide NVIDIA or ROCm label.
 - NCCL-backed multi-GPU distributed execution is Phase 4 planned; Intel support is planned (oneAPI/DPAS/oneCCL).
 - Domains, distributions, and index launches are portable abstractions.  
 - NVL72 illustrates how Tessera adapts to extreme-scale NVIDIA systems.  

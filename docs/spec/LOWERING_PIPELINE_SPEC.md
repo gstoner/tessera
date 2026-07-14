@@ -1,22 +1,35 @@
 ---
 status: Normative
 classification: Normative
-last_updated: 2026-06-11
+last_updated: 2026-07-13
 ---
 
 # Tessera Lowering Pipeline Specification
 **Status:** Normative — grounded in `src/transforms/lib/` and `src/compiler/tile_opt_fa4/lib/` Phase 1–8 implementations
-**Last updated:** June 11, 2026
+**Last updated:** July 13, 2026
 **Cross-references:** `docs/spec/COMPILER_REFERENCE.md` §Pass Pipeline Registry, `docs/spec/GRAPH_IR_SPEC.md`, `docs/spec/TARGET_IR_SPEC.md`
 
 ---
 
-## Documentation refresh (2026-05-22)
+## Current status and proof taxonomy
 
-The 2026-05-06 audit asked this spec to (a) name all 6+ shipped lowering
-pipelines (not just x86/gpu), (b) add a target-path status table for
-the Python `compile_graph_module` driver, and (c) document the
-Python-side object-model lowering. Status:
+This specification separates a registered/lit-tested compiler pipeline from
+native execution. A family name never inherits hardware proof from a different
+architecture: the generated execution matrix is the authority for the exact
+`(target, compiler_path)` proof row.
+
+- `rocm` is the family selector; the current native HIP evidence is for
+  `rocm_gfx1151` (RDNA 3.5 / Wave32) and is carried by the generic runtime
+  route's exact-target evidence.
+- `nvidia_sm120` (consumer Blackwell) has native CUDA execution for its proven
+  rows. SM80, SM90, and SM100 pipeline contracts and specialized WGMMA/TCGEN05
+  paths remain separately scoped until they have matching-device evidence.
+- An artifact-only row is an unsupported or unproven *row*, not a statement
+  that the complete ROCm or NVIDIA backend cannot execute.
+
+See [`runtime_execution_matrix.md`](../audit/generated/runtime_execution_matrix.md)
+and [`rocm_target_map.md`](../audit/generated/rocm_target_map.md) for current
+per-op proof, fallback, and exact-device scope.
 
 ### Shipped named lowering pipelines (canonical truth)
 
@@ -26,13 +39,13 @@ current set registered in `tools/tessera-opt/tessera-opt.cpp` is:
 | Pipeline | Target | Phase | Status |
 |----------|--------|-------|--------|
 | `tessera-lower-to-x86` | x86 AMX/AVX-512 | 2 | ✅ executable runtime |
-| `tessera-lower-to-gpu` | NVIDIA SM_80+ WGMMA/TMA | 3 | 🟡 IR artifact; runtime gated on Phase G |
-| `tessera-lower-to-rocm` | AMD ROCm MFMA (gfx90a / 940 / 942 / 950 / 1100) | 8 | 🟡 artifact; runtime gated on Phase H |
+| `tessera-lower-to-gpu` | NVIDIA CUDA target family: SM80/90/100 contracts plus SM120 consumer Blackwell | 3 | ✅ implemented / lit-testable; native CUDA runtime is proven for supported `nvidia_sm120` rows; other architecture-specific contracts remain separately scoped |
+| `tessera-lower-to-rocm` | AMD ROCm target family: CDNA MFMA and RDNA WMMA, including gfx1151 RDNA 3.5 | 8 | ✅ implemented / lit-testable; native HIP runtime is proven for supported `rocm_gfx1151` rows; CDNA and other RDNA targets require exact-device promotion |
 | `tessera-lower-to-apple_cpu` | Apple Silicon CPU (artifact) | 8.1 | ✅ lit-testable |
 | `tessera-lower-to-apple_cpu-runtime` | Apple Silicon CPU (Accelerate cblas_sgemm + BNNS f16/bf16) | 8.2 | ✅ executable runtime |
 | `tessera-lower-to-apple_gpu` | Apple Silicon GPU (artifact) | 8.1 | ✅ lit-testable |
 | `tessera-lower-to-apple_gpu-runtime` | Apple Silicon GPU (MPS, MPSGraph, custom MSL, additive Metal 4 lanes, and packaged-kernel ABI validation) | 8.3 → Metal 4 + PK1–PK7 | ✅ executable runtime on capable Darwin hosts |
-| `tessera-nvidia-pipeline-{sm90,sm100,sm120}` | NVIDIA target-specific composition | 3+ | 🟡 G-5 named alias (Sprint G/H batch 3) |
+| `tessera-nvidia-pipeline-{sm90,sm100,sm120}` | NVIDIA target-specific composition | 3+ | ✅ registered / lit-testable; runtime proof is target- and op-specific (currently sm120 rows) |
 | `tessera-spectral-pipeline` | Spectral solver end-to-end | 5 | ✅ via `ts-spectral-opt` |
 | `tpp-space-time` | Tensor Parallel Primitives | 5 | ✅ via `tessera-opt` (4/4 lit fixtures) |
 
@@ -96,12 +109,15 @@ end-to-end in `docs/audit/compiler/COMPILER_AUDIT.md`.
 
 ## 1. Overview
 
-Tessera provides two named lowering pipelines, each composed of a fixed sequence of MLIR passes:
+Tessera has multiple named lowering pipelines. The two foundational chains
+below explain the x86 and NVIDIA Tile-IR lineage; Apple and ROCm have their own
+registered target pipelines listed above. Pipeline registration does not itself
+claim universal native execution.
 
 | Pipeline | CLI flag | Target | Phase |
 |----------|----------|--------|-------|
 | `tessera-lower-to-x86` | `--tessera-lower-to-x86` | CPU (x86 AMX / AVX-512) | 2 |
-| `tessera-lower-to-gpu` | `--tessera-lower-to-gpu` | NVIDIA GPU (SM_80+) | 3 |
+| `tessera-lower-to-gpu` | `--tessera-lower-to-gpu` | NVIDIA GPU family (SM80/90/100/120) | 3 |
 
 Both pipelines start from the same Graph IR input (emitted by `@tessera.jit`) and produce different backend-specific IR. The IR stack at each stage is:
 
@@ -136,10 +152,11 @@ GraphIRModule
 
 This path constructs IR objects directly, runs verifier checks before textual
 artifact emission, and records graph/schedule/tile/target hashes in compile
-bundle metadata. It currently supports CPU/x86, NVIDIA, Apple CPU/GPU, and ROCm
-artifact paths. Native execution is available for supported x86/CPU and Apple
-CPU/GPU runtime paths; NVIDIA and ROCm remain inspectable artifacts unless their
-backend-specific hardware gates pass.
+bundle metadata. It supports CPU/x86, NVIDIA, Apple CPU/GPU, and ROCm targets.
+Native execution is available for supported x86/CPU and Apple CPU/GPU rows,
+for proven CUDA `nvidia_sm120` rows, and for proven HIP `rocm_gfx1151` rows.
+Unsupported dtype/layout/shape combinations and unproven sibling architectures
+remain explicit artifact or reference-fallback cases.
 
 Debug switches:
 
@@ -160,7 +177,8 @@ Pipeline status is split by behavior type:
 | Pipeline | Semantic compiler behavior | Target artifact generation | Mock/runtime fallback | Native hardware runtime |
 |----------|----------------------------|----------------------------|-----------------------|-------------------------|
 | `tessera-lower-to-x86` | implemented / lit-testable | x86/CPU call artifacts | NumPy-backed CPU fallback for supported ops | AMX/AVX-512 hardware-runtime tests cover supported paths |
-| `tessera-lower-to-gpu` | implemented / lit-testable | NVIDIA target artifacts | artifact inspection | planned unless backend-specific hardware tests are run |
+| `tessera-lower-to-gpu` | implemented / lit-testable | NVIDIA target artifacts | explicit artifact/reference fallback outside the native envelope | native CUDA execution for supported `nvidia_sm120` rows; other SM-specific paths remain separately proven |
+| `tessera-lower-to-rocm` | implemented / lit-testable | ROCm Target IR / HSACO contracts | explicit artifact/reference fallback outside the native envelope | native HIP execution for supported `rocm_gfx1151` rows; CDNA and other RDNA targets remain separately proven |
 
 ### 2.1 `tessera-lower-to-x86`
 

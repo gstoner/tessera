@@ -92,7 +92,11 @@ def test_target_ir_spec_splits_artifact_runtime_and_backend_status():
         "Target artifact generation",
         "Mock/runtime fallback",
         "Native hardware runtime",
-        "placeholder kernels are not native-runtime claims",
+            "IR Contract and Execution Scope",
+            "Native-execution interpretation",
+            "No native WGMMA proof is implied",
+            "nvidia_sm120",
+            "rocm_gfx1151",
         # NOTE: "matmul lowers to artifact op" (Metalium) and "PJRT execute is
         # scaffolded" (TPU) were dropped when those backends were retired
         # (commit b1cfade — focus on x86 + Apple + NVIDIA + ROCm).
@@ -101,6 +105,7 @@ def test_target_ir_spec_splits_artifact_runtime_and_backend_status():
     ]
     for term in required:
         assert term in text
+    assert "placeholder kernels are not native-runtime claims" not in text
 
 
 def test_tile_ir_spec_uses_canonical_alloc_shared_and_mbarrier_status():

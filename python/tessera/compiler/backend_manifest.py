@@ -778,17 +778,19 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
                   "tessera.complex."),
         "execute_compare_fixture": "tests/unit/test_apple_gpu_complex_compiled.py",
     },
-    # Philox RNG base lane (2026-07-10) — rng_uniform / rng_normal / dropout via
-    # apple_gpu_rng_compiled. Apple ships no device Philox kernel; the lane draws
-    # from the counter-based Philox-4x32-10 reference (tessera.rng_device) the
-    # x86/ROCm device kernels are bit-matched against. ``device_verified_jit`` (direct
-    # execute/compare), NOT a bespoke fused Metal kernel.
+    # Philox RNG base lane — rng_uniform / rng_normal / training dropout via
+    # apple_gpu_rng_compiled. The Apple runtime owns an MSL Philox-4x32-10
+    # kernel with the tessera.rng_device seed/counter contract and the same
+    # Philox core already used by the EBM Langevin consumer. Distribution
+    # samplers and RNGKey handling
+    # remain host-structured. ``device_verified_jit`` remains the direct
+    # execute/compare support designation; compiler-envelope proof is separate.
     **{op: {
         "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": dts,
         "notes": (f"Philox RNG {op} via apple_gpu_rng_compiled "
-                  "(Philox-4x32-10 reference core); matches "
-                  "tessera.rng_device."),
+                  "(Metal Philox-4x32-10 base kernel; matches "
+                  "tessera.rng_device)."),
         "execute_compare_fixture": "tests/unit/test_apple_gpu_rng_compiled.py",
     } for op, dts in (("rng_uniform", ("fp32",)), ("rng_normal", ("fp32",)),
                       ("dropout", ("fp32",)))},

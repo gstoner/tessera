@@ -155,9 +155,9 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                              "Matches tessera.complex — parity with "
                              "x86/rocm_conformal_compiled.",
     "apple_gpu_rng_compiled": "Apple GPU Philox RNG lane — rng_uniform / "
-                             "rng_normal / dropout draw from the counter-based "
-                             "Philox-4x32-10 reference (tessera.rng_device; Apple "
-                             "ships no device Philox kernel), and the distribution "
+                             "rng_normal / training dropout dispatch the canonical "
+                             "counter-based Philox-4x32-10 stream through a Metal "
+                             "kernel (matching tessera.rng_device), while the distribution "
                              "samplers (bernoulli / beta / categorical / dirichlet "
                              "/ gamma / poisson / randint / truncated_normal / "
                              "permutation / multinomial, RNGKey key/split/fold_in/"
@@ -1137,25 +1137,22 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "f32, matches tessera.complex — parity with "
                "x86/rocm_conformal_compiled.",
         execution_mode="metal_runtime"),
-    # Apple GPU Philox RNG lane (2026-07-10) — parity with the x86/ROCm rng
-    # lanes. Apple ships no device Philox kernel, so this lane runs entirely on
-    # the CPU reference (tessera.rng_device Philox core + tessera.rng RNGKey
-    # contract) — no Metal dispatch. It is an executable apple_gpu artifact path
-    # with a compare fixture, but it does NOT run on the GPU: execution_kind is
-    # reference_cpu so telemetry/audit never miscount it as Apple GPU execution.
+    # Apple GPU Philox base lane. Uniform uses the bit-exact MSL Philox stream;
+    # normal and training dropout use that stream with their device transforms.
+    # Distribution samplers and RNGKey bookkeeping remain documented reference
+    # fallbacks and override the row's execution kind at launch time.
     ("apple_gpu", "apple_gpu_rng_compiled"): ExecutionRow(
         target="apple_gpu", compiler_path="apple_gpu_rng_compiled",
-        execution_kind="reference_cpu", executable=True,
+        execution_kind="native_gpu", executable=True,
         executor_id="apple_gpu_rng_compiled", runtime_status="success",
-        reason="Apple GPU RNG artifact runs rng_uniform / rng_normal / dropout "
-               "from the counter-based Philox-4x32-10 reference "
-               "(tessera.rng_device; Apple ships no device Philox), and the "
+        reason="Apple GPU RNG artifact runs rng_uniform / rng_normal / training "
+               "dropout from the canonical Metal Philox-4x32-10 stream; the "
                "distribution samplers (bernoulli/beta/categorical/dirichlet/"
                "gamma/poisson/randint/truncated_normal/permutation/multinomial, "
                "RNGKey key/split/fold_in/clone, MCMC samplers) via the public "
-               "tessera.rng RNGKey contract. Runs on the CPU reference path (no "
-               "Metal dispatch) — execution_kind=reference_cpu; matches "
-               "tessera.rng / tessera.rng_device, parity with x86/rocm_rng_compiled."),
+               "tessera.rng RNGKey contract and report reference_cpu. Base-kernel "
+               "output matches tessera.rng_device; parity with x86/rocm_rng_compiled.",
+        execution_mode="metal_runtime"),
     # Apple GPU linalg + matmul-family lanes (2026-07-10) — parity with the
     # x86/ROCm linalg / matmul-family lanes. Apple has no MPS lu/qr/svd primitive,
     # so these lanes run entirely on the CPU numpy reference (no Metal dispatch):

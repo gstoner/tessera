@@ -13221,6 +13221,160 @@ extern "C" int32_t tessera_apple_gpu_ebm_refinement_value_f32(
 }
 
 // ===========================================================================
+// Shared device Philox RNG lane.
+//
+// The compiler-visible rng_uniform / rng_normal / dropout operations use the
+// same counter-block mapping as python/tessera/rng_device.py: counter block b
+// is (counter_base + b, 0, 0), and its four Philox words fill output slots
+// 4b..4b+3.  This is intentionally distinct from MPSMatrixRandomPhilox, whose
+// stream is Philox-family but not Tessera's bit-exact public device contract.
+// ===========================================================================
+
+static NSString *const kPhiloxRngF32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+constant constexpr uint RNG_PHILOX_M0 = 0xD2511F53u;
+constant constexpr uint RNG_PHILOX_M1 = 0xCD9E8D57u;
+constant constexpr uint RNG_PHILOX_W0 = 0x9E3779B9u;
+constant constexpr uint RNG_PHILOX_W1 = 0xBB67AE85u;
+
+inline void rng_philox_mulhilo(uint a, uint b, thread uint &lo, thread uint &hi) {
+    ulong p = (ulong)a * (ulong)b;
+    lo = (uint)(p & 0xFFFFFFFFu);
+    hi = (uint)(p >> 32);
+}
+
+inline void rng_philox_4x32_10(thread uint ctr[4], thread uint key[2]) {
+    for (uint r = 0; r < 10; ++r) {
+        uint lo0, hi0, lo1, hi1;
+        rng_philox_mulhilo(RNG_PHILOX_M0, ctr[0], lo0, hi0);
+        rng_philox_mulhilo(RNG_PHILOX_M1, ctr[2], lo1, hi1);
+        uint c0 = hi1 ^ ctr[1] ^ key[0];
+        uint c1 = lo1;
+        uint c2 = hi0 ^ ctr[3] ^ key[1];
+        uint c3 = lo0;
+        ctr[0] = c0; ctr[1] = c1; ctr[2] = c2; ctr[3] = c3;
+        key[0] += RNG_PHILOX_W0; key[1] += RNG_PHILOX_W1;
+    }
+}
+
+inline float rng_philox_word(uint2 seed, uint2 counter_base, uint word) {
+    uint block = word >> 2;
+    uint lane = word & 3u;
+    uint c0 = counter_base.x + block;
+    uint ctr[4] = {c0, counter_base.y + (c0 < counter_base.x ? 1u : 0u), 0u, 0u};
+    uint key[2] = {seed.x, seed.y};
+    rng_philox_4x32_10(ctr, key);
+    return (float)ctr[lane] * 0x1.0p-32f;
+}
+
+kernel void philox_uniform_f32(
+    constant uint2& seed [[buffer(0)]], constant uint2& counter_base [[buffer(1)]],
+    constant float& lo [[buffer(2)]], constant float& hi [[buffer(3)]],
+    device float* out [[buffer(4)]], constant int32_t& n [[buffer(5)]],
+    uint i [[thread_position_in_grid]]) {
+    if ((int)i >= n) return;
+    out[i] = lo + (hi - lo) * rng_philox_word(seed, counter_base, i);
+}
+
+kernel void philox_normal_f32(
+    constant uint2& seed [[buffer(0)]], constant uint2& counter_base [[buffer(1)]],
+    constant float& mean [[buffer(2)]], constant float& stddev [[buffer(3)]],
+    device float* out [[buffer(4)]], constant int32_t& n [[buffer(5)]],
+    uint pair [[thread_position_in_grid]]) {
+    uint m = ((uint)n + 1u) >> 1;
+    if (pair >= m) return;
+    float u1 = clamp(rng_philox_word(seed, counter_base, pair), 1.0e-7f, 1.0f);
+    uint offset = ((m + 3u) >> 2) + 1u;
+    uint2 second = uint2(counter_base.x + offset, counter_base.y +
+                         (counter_base.x + offset < counter_base.x ? 1u : 0u));
+    float u2 = rng_philox_word(seed, second, pair);
+    float radius = sqrt(-2.0f * log(u1));
+    float theta = 2.0f * (float)M_PI_F * u2;
+    uint i = pair << 1;
+    out[i] = mean + stddev * radius * cos(theta);
+    if ((int)(i + 1u) < n) out[i + 1u] = mean + stddev * radius * sin(theta);
+}
+
+kernel void philox_dropout_f32(
+    device const float* x [[buffer(0)]], constant uint2& seed [[buffer(1)]],
+    constant uint2& counter_base [[buffer(2)]], constant float& p [[buffer(3)]],
+    constant float& unused [[buffer(4)]], device float* out [[buffer(5)]],
+    constant int32_t& n [[buffer(6)]],
+    uint i [[thread_position_in_grid]]) {
+    if ((int)i >= n) return;
+    float scale = p >= 1.0f ? 0.0f : 1.0f / (1.0f - p);
+    out[i] = x[i] * (rng_philox_word(seed, counter_base, i) >= p ? scale : 0.0f);
+}
+)MSL";
+
+static bool dispatch_philox_rng_f32_msl(
+    MetalDeviceContext &ctx, NSString *kernel_name,
+    const float *x, uint64_t seed, uint64_t counter_base,
+    float first, float second, float *out, int32_t n) {
+  if (n < 0) return false;
+  if (n == 0) return true;
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(ctx, kPhiloxRngF32Source,
+                                                           kernel_name);
+    if (!pso) return false;
+    const NSUInteger bytes = sizeof(float) * (NSUInteger)n;
+    TS_METAL_BUF_ACQUIRE(bO, ctx, bytes);
+    if (!bO) return false;
+    MetalBufferGuard gX(ctx, x != nullptr
+        ? metal_buffer_acquire_with_bytes(ctx, x, bytes) : nil, bytes);
+    id<MTLBuffer> bX = gX.buf;
+    if (x != nullptr && !bX) return false;
+    uint32_t seed_pack[2] = {(uint32_t)seed, (uint32_t)(seed >> 32)};
+    uint32_t counter_pack[2] = {(uint32_t)counter_base,
+                                (uint32_t)(counter_base >> 32)};
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    NSUInteger idx = 0;
+    if (x != nullptr) [enc setBuffer:bX offset:0 atIndex:idx++];
+    [enc setBytes:seed_pack length:sizeof(seed_pack) atIndex:idx++];
+    [enc setBytes:counter_pack length:sizeof(counter_pack) atIndex:idx++];
+    [enc setBytes:&first length:sizeof(first) atIndex:idx++];
+    [enc setBytes:&second length:sizeof(second) atIndex:idx++];
+    [enc setBuffer:bO offset:0 atIndex:idx++];
+    [enc setBytes:&n length:sizeof(n) atIndex:idx++];
+    const NSUInteger count = [kernel_name isEqualToString:@"philox_normal_f32"]
+        ? ((NSUInteger)n + 1u) / 2u : (NSUInteger)n;
+    const NSUInteger tg = std::max<NSUInteger>(1u, std::min<NSUInteger>(
+        std::max<NSUInteger>(1u, count), pso.maxTotalThreadsPerThreadgroup));
+    [enc dispatchThreads:MTLSizeMake(count, 1, 1)
+    threadsPerThreadgroup:MTLSizeMake(tg, 1, 1)];
+    [enc endEncoding];
+    bool ok = commit_and_wait_with_timeout(ctx, cb, 60000, "philox_rng_f32_msl");
+    if (ok && n > 0) std::memcpy(out, [bO contents], bytes);
+    return ok;
+  }
+}
+
+extern "C" int32_t tessera_apple_gpu_philox_uniform_f32(
+    uint64_t seed, uint64_t counter_base, float lo, float hi, float *out, int32_t n) {
+  MetalDeviceContext &ctx = deviceContext();
+  return (ctx.ok && dispatch_philox_rng_f32_msl(ctx, @"philox_uniform_f32", nullptr,
+      seed, counter_base, lo, hi, out, n)) ? 1 : 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_philox_normal_f32(
+    uint64_t seed, uint64_t counter_base, float mean, float stddev, float *out, int32_t n) {
+  MetalDeviceContext &ctx = deviceContext();
+  return (ctx.ok && dispatch_philox_rng_f32_msl(ctx, @"philox_normal_f32", nullptr,
+      seed, counter_base, mean, stddev, out, n)) ? 1 : 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_philox_dropout_f32(
+    const float *x, uint64_t seed, uint64_t counter_base, float p, float *out, int32_t n) {
+  MetalDeviceContext &ctx = deviceContext();
+  return (ctx.ok && dispatch_philox_rng_f32_msl(ctx, @"philox_dropout_f32", x,
+      seed, counter_base, p, 0.0f, out, n)) ? 1 : 0;
+}
+
+// ===========================================================================
 // EBM langevin_step  —  out[i] = y[i] - eta * grad[i] + noise_scale * noise[i]
 //
 // Caller pre-generates `noise` on the host (deterministic via the

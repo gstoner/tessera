@@ -33,6 +33,15 @@ int tessera_nvidia_ptx_invoke(const char* kernel_name,
                               void** buffers, size_t num_buffers,
                               const int64_t* dims, size_t num_dims);
 
+// Benchmark a registered Tile GEMM with device-resident buffers. Host inputs are
+// copied once before warmup; CUDA events time only ``repetitions`` kernel
+// launches. Returns the mean device latency in ``latency_ms``.
+int tessera_nvidia_ptx_benchmark(const char* kernel_name,
+                                 void** buffers, size_t num_buffers,
+                                 const int64_t* dims, size_t num_dims,
+                                 int warmup, int repetitions,
+                                 float* latency_ms);
+
 // Register this bridge as the process-wide GPU launcher (tsrRegisterGpuLauncher),
 // so tsrLaunchKernel routes ("nvidia*", kernel_name) here. Returns 0 on success.
 // Requires linking against the core runtime (libtessera_runtime); the direct

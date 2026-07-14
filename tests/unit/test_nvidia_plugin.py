@@ -39,6 +39,14 @@ def _nvidia_cuda_live() -> bool:
         return False
 
 
+def _nvidia_tile_matmul_live() -> bool:
+    try:
+        from tessera import runtime as rt
+        return rt._nvidia_tile_runtime_available()
+    except Exception:
+        return False
+
+
 # ── 1. Registration + emit + decline paths (host-free) ────────────────────────
 
 def test_nvidia_runner_registered():
@@ -106,20 +114,25 @@ def test_nvidia_flash_attn_candidate_registered_and_emits():
 
 
 def test_nvidia_mma_attn_candidate_registered():
-    # Tensor-core attention perf lane: Tier-2 emitted, f16 accuracy budget.
+    # Tensor-core attention perf lanes: one candidate per explicit storage policy.
     from tessera.compiler.emit.candidate import OP_ATTENTION
     cands = {c.name: c for c in C.candidates_for("nvidia", OP_ATTENTION)}
-    assert "nvidia_mma_attn" in cands
+    assert {"nvidia_mma_attn", "nvidia_mma_attn_bf16"} <= cands.keys()
     mf = cands["nvidia_mma_attn"]
     assert mf.tier == Tier.EMITTED and mf.accuracy_atol == 5e-3
     assert mf.op == OP_ATTENTION
+    assert mf.applies_to(F.AttentionRegion(storage_dtype="f16"))
+    assert not mf.applies_to(F.AttentionRegion(storage_dtype="bf16"))
+    mb = cands["nvidia_mma_attn_bf16"]
+    assert mb.accuracy_atol == 5e-2
+    assert mb.applies_to(F.AttentionRegion(storage_dtype="bf16"))
 
 
 def test_nvidia_mma_fused_candidate_registered_and_applies():
     # Tensor-core perf lane: a Tier-2 emitted FusedRegion candidate (mma.sync GEMM
     # + bias/activation epilogue), f16 storage → f16 accuracy budget.
     cands = {c.name: c for c in C.candidates_for("nvidia", OP_FUSED_REGION)}
-    assert "nvidia_mma_fused" in cands
+    assert {"nvidia_mma_fused", "nvidia_mma_fused_bf16"} <= cands.keys()
     mf = cands["nvidia_mma_fused"]
     assert mf.tier == Tier.EMITTED and mf.accuracy_atol == 5e-3
     # fusable: bias?, one activation, no reduction/residual/prologue.
@@ -128,6 +141,24 @@ def test_nvidia_mma_fused_candidate_registered_and_applies():
     assert not mf.applies_to(F.FusedRegion(epilogue=("bias",), reduction="softmax"))
     assert not mf.applies_to(F.FusedRegion(epilogue=("relu",), residual=True))
     assert not mf.applies_to(F.FusedRegion(epilogue=("gelu",), prologue=("relu",)))
+    mb = cands["nvidia_mma_fused_bf16"]
+    assert mb.accuracy_atol == 5e-2
+    assert mb.applies_to(F.FusedRegion(epilogue=("bias", "gelu"),
+                                      storage_dtype="bf16"))
+    assert not mf.applies_to(F.FusedRegion(epilogue=("relu",),
+                                           storage_dtype="bf16"))
+
+
+def test_nvidia_mma_gated_candidates_registered_and_apply_by_storage():
+    from tessera.compiler.emit.candidate import OP_GATED_MATMUL
+    cands = {c.name: c for c in C.candidates_for("nvidia", OP_GATED_MATMUL)}
+    assert {"nvidia_mma_gated", "nvidia_mma_gated_bf16"} <= cands.keys()
+    mf, mb = cands["nvidia_mma_gated"], cands["nvidia_mma_gated_bf16"]
+    assert mf.tier == Tier.EMITTED and mf.accuracy_atol == 1e-2
+    assert mb.tier == Tier.EMITTED and mb.accuracy_atol == 1e-1
+    assert mf.applies_to(F.GatedMatmulRegion(storage_dtype="f16"))
+    assert mb.applies_to(F.GatedMatmulRegion(storage_dtype="bf16"))
+    assert not mf.applies_to(F.GatedMatmulRegion(storage_dtype="bf16"))
 
 
 def test_nvidia_mma_fused_rejects_bad_inputs():
@@ -150,6 +181,15 @@ def test_nvidia_generic_candidate_registered():
     assert "nvidia_generic_cuda" in names
     gen = next(c for c in cands if c.name == "nvidia_generic_cuda")
     assert gen.tier == Tier.SYNTHESIZED and gen.target == "nvidia"
+
+
+def test_nvidia_tile_matmul_schedule_candidates_registered():
+    cands = {c.name: c for c in C.candidates_for("nvidia", OP_MATMUL)}
+    assert {"nvidia_tile_matmul_direct", "nvidia_tile_matmul_shared"} <= cands.keys()
+    for name in ("nvidia_tile_matmul_direct", "nvidia_tile_matmul_shared"):
+        assert cands[name].tier == Tier.EMITTED
+        assert cands[name].applies_to(F.MatmulRegion(dtype="float16"))
+        assert cands[name].applies_to(F.MatmulRegion(dtype="bfloat16"))
 
 
 def test_nvidia_arbitrated_residual_threads_not_raises():
@@ -181,10 +221,12 @@ def test_nvidia_gemm_helpers_reject_mismatched_k():
 
 
 def test_nvidia_matmul_candidates_registered():
-    # B1: the bare-matmul op-kind + the two GEMM lanes (shipped Tier-3, emitted
-    # Tier-2) registered under (nvidia, matmul).
+    # Bare matmul includes the shipped/legacy-emitted lanes plus the two
+    # compiler-generated Tile schedules measured by D2.
     cands = {c.name: c for c in C.candidates_for("nvidia", OP_MATMUL)}
-    assert set(cands) == {"nvidia_mma_gemm_shipped", "nvidia_mma_gemm_emitted"}
+    assert set(cands) == {
+        "nvidia_mma_gemm_shipped", "nvidia_mma_gemm_emitted",
+        "nvidia_tile_matmul_direct", "nvidia_tile_matmul_shared"}
     assert cands["nvidia_mma_gemm_shipped"].tier == Tier.HAND_TUNED
     assert cands["nvidia_mma_gemm_emitted"].tier == Tier.EMITTED
     for c in cands.values():
@@ -199,8 +241,8 @@ def test_nvidia_matmul_candidates_registered():
 def test_nvidia_matmul_off_gpu_arbitrates_to_reference():
     # Host-free: with no GPU the candidates are unavailable, so the arbiter finds
     # no winner and run_arbitrated returns the numpy reference (never raises).
-    if _nvidia_cuda_live():
-        pytest.skip("GPU present — covered by the live arbitration test")
+    if any(c.available() for c in C.candidates_for("nvidia", OP_MATMUL)):
+        pytest.skip("NVIDIA matmul runtime present — covered by live arbitration")
     region = F.MatmulRegion(dtype="bfloat16")
     rng = np.random.default_rng(0)
     A = rng.standard_normal((32, 32)).astype(np.float32)
@@ -310,9 +352,9 @@ def _nvidia_matmul_live() -> bool:
 @pytest.mark.parametrize("shape", [(16, 8, 16), (32, 16, 32), (64, 64, 64)],
                          ids=lambda s: f"{s[0]}x{s[1]}x{s[2]}")
 def test_live_nvidia_matmul_arbitrated(dtype, shape):
-    # B1: the arbiter picks the hand-tuned shipped GEMM (Tier 3) by default and
-    # runs it on-GPU; the E3 escape hatch forces the compiler-emitted lane (Tier 2)
-    # through the PTX launch bridge. Both match the dtype-rounded reference.
+    # B1+D2: a matching persisted measurement wins; otherwise the arbiter uses
+    # the hand-tuned Tier-3 default. E3 can still force the emitted lane.
+    from tessera.compiler.emit import autotune as AT
     F.clear_verification_cache()
     M, N, K = shape
     region = F.MatmulRegion(dtype=dtype)
@@ -320,8 +362,14 @@ def test_live_nvidia_matmul_arbitrated(dtype, shape):
     A = (rng.standard_normal((M, K)) * 0.4).astype(np.float32)
     B = (rng.standard_normal((K, N)) * 0.4).astype(np.float32)
     ref = region.reference(A, B)
+    preferred = AT.corpus_winner(region, OP_MATMUL, "nvidia", A, B)
     out, tag = C.run_arbitrated(region, OP_MATMUL, "nvidia", A, B)
-    assert tag == "nvidia_mma_shipped"                       # Tier-3 default
+    expected_tag = {
+        "nvidia_mma_gemm_emitted": "nvidia_ptx_gemm",
+        "nvidia_tile_matmul_direct": "nvidia_tile_direct",
+        "nvidia_tile_matmul_shared": "nvidia_tile_shared",
+    }.get(preferred, "nvidia_mma_shipped")
+    assert tag == expected_tag
     np.testing.assert_allclose(out, ref, atol=5e-3, rtol=0)
     out2, tag2 = C.run_arbitrated(region, OP_MATMUL, "nvidia", A, B,
                                   force="nvidia_mma_gemm_emitted")
@@ -346,14 +394,62 @@ def test_live_nvidia_matmul_measured_autotune():
                                 dims=(64, 64, 64), dtype="bfloat16",
                                 cache=cache, reps=6, warmup=2)
     assert win is not None and win.name in (
-        "nvidia_mma_gemm_shipped", "nvidia_mma_gemm_emitted")
+        "nvidia_mma_gemm_shipped", "nvidia_mma_gemm_emitted",
+        "nvidia_tile_matmul_direct", "nvidia_tile_matmul_shared")
     assert cache.misses == 1 and cache.size == 1
     rec = cache.to_dict()["records"][0]
-    assert set(rec["candidates"]) == {"nvidia_mma_gemm_shipped",
-                                      "nvidia_mma_gemm_emitted"}
+    assert set(rec["candidates"]) == {
+        "nvidia_mma_gemm_shipped", "nvidia_mma_gemm_emitted",
+        "nvidia_tile_matmul_direct", "nvidia_tile_matmul_shared"}
     AT.measured_arbitrate(region, OP_MATMUL, "nvidia", A, B, dims=(64, 64, 64),
                           dtype="bfloat16", cache=cache, reps=6, warmup=2)
     assert cache.hits == 1                                   # re-query hits the cache
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not _nvidia_tile_matmul_live(),
+                    reason="live sm_120 + Tile compiler + PTX bridge required")
+@pytest.mark.parametrize("dtype", ["float16", "bfloat16"])
+@pytest.mark.parametrize("schedule", ["direct", "shared"])
+def test_live_nvidia_tile_matmul_schedule_candidates(dtype, schedule):
+    """Both autotune choices use the production compiler and launch bridge."""
+    region = F.MatmulRegion(dtype=dtype)
+    candidate = next(
+        c for c in C.candidates_for("nvidia", OP_MATMUL)
+        if c.name == f"nvidia_tile_matmul_{schedule}")
+    rng = np.random.default_rng(120)
+    A = rng.uniform(-1, 1, (35, 29)).astype(np.float32)
+    B = rng.uniform(-1, 1, (29, 21)).astype(np.float32)
+    out, tag = candidate.run(region, A, B)
+    assert tag == f"nvidia_tile_{schedule}"
+    np.testing.assert_allclose(out, region.reference(A, B), atol=5e-2, rtol=0)
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not _nvidia_tile_matmul_live(),
+                    reason="live sm_120 + Tile compiler + PTX bridge required")
+def test_live_nvidia_device_timing_selects_tile_crossover():
+    from tessera.compiler.emit import autotune as AT
+    cache = AT.MeasureCache()
+    region = F.MatmulRegion(dtype="float16")
+    rng = np.random.default_rng(121)
+    winners = {}
+    for size in (512, 1024):
+        A = rng.uniform(-1, 1, (size, size)).astype(np.float32)
+        B = rng.uniform(-1, 1, (size, size)).astype(np.float32)
+        winner = AT.measured_arbitrate(
+            region, OP_MATMUL, "nvidia", A, B, dims=(size, size, size),
+            dtype="float16", cache=cache, reps=50, warmup=10,
+            timing="device")
+        assert winner is not None
+        winners[size] = winner.name
+    assert winners == {512: "nvidia_tile_matmul_direct",
+                       1024: "nvidia_tile_matmul_shared"}
+    rows = cache.to_dict()["records"]
+    assert all(row["timing"] == "device" for row in rows)
+    assert all(set(row["candidates"]) == {
+        "nvidia_tile_matmul_direct", "nvidia_tile_matmul_shared"}
+               for row in rows)
 
 
 @pytest.mark.slow
@@ -614,3 +710,47 @@ def test_live_nvidia_mma_attn_large_magnitude_delegates_not_degrades():
     # the returned result tracks the f32 reference (not an f16-degraded one).
     ref = region.reference(Q, K, V)
     assert float(np.max(np.abs(out - ref))) / (float(np.max(np.abs(ref))) + 1e-9) < 1e-2
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not _nvidia_cuda_live(),
+                    reason="live NVIDIA GPU + nvcc required")
+@pytest.mark.parametrize(
+    "kind,candidate_name,atol",
+    [("fused", "nvidia_mma_fused_bf16", 5e-2),
+     ("attention", "nvidia_mma_attn_bf16", 5e-2),
+     ("gated", "nvidia_mma_gated", 1e-2),
+     ("gated", "nvidia_mma_gated_bf16", 1e-1)],
+)
+def test_live_nvidia_tensor_core_dtype_variants(kind, candidate_name, atol):
+    """Compile and execute every newly added tensor-core storage lane.
+
+    Ragged dimensions exercise the masked tail loads/stores as well as the core
+    f16/bf16 ``mma.sync.m16n8k16`` instruction.
+    """
+    rng = np.random.default_rng(120)
+    storage = "bf16" if candidate_name.endswith("_bf16") else "f16"
+    if kind == "fused":
+        region = F.FusedRegion(epilogue=("bias", "relu"), storage_dtype=storage)
+        op = OP_FUSED_REGION
+        A = (rng.standard_normal((19, 29)) * 0.2).astype(np.float32)
+        B = (rng.standard_normal((29, 23)) * 0.2).astype(np.float32)
+        bias = (rng.standard_normal((23,)) * 0.1).astype(np.float32)
+        inputs = (A, B, bias)
+    elif kind == "attention":
+        from tessera.compiler.emit.candidate import OP_ATTENTION
+        region = F.AttentionRegion(scale=0.125, storage_dtype=storage)
+        op = OP_ATTENTION
+        inputs = tuple((rng.standard_normal(shape) * 0.2).astype(np.float32)
+                       for shape in ((19, 29), (21, 29), (21, 23)))
+    else:
+        from tessera.compiler.emit.candidate import OP_GATED_MATMUL
+        region = F.GatedMatmulRegion(gate_act="silu", storage_dtype=storage)
+        op = OP_GATED_MATMUL
+        inputs = tuple((rng.standard_normal(shape) * 0.2).astype(np.float32)
+                       for shape in ((19, 29), (29, 23), (29, 23)))
+    candidate = next(c for c in C.candidates_for("nvidia", op)
+                     if c.name == candidate_name)
+    out, tag = candidate.run(region, *inputs)
+    assert tag == "nvidia_cuda"
+    np.testing.assert_allclose(out, region.reference(*inputs), atol=atol)

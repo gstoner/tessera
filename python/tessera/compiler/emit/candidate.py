@@ -145,6 +145,16 @@ class Candidate(ABC):
         region with a reduction epilogue it cannot fuse)."""
         return True
 
+    def measure_device_latency(self, region: Any, *inputs: Any, reps: int = 100,
+                               warmup: int = 10) -> float | None:
+        """Optional device-resident latency in milliseconds.
+
+        Candidates with a stream/event-capable runtime override this. ``None``
+        keeps them out of device-only arbitration while preserving ordinary
+        end-to-end measurement.
+        """
+        return None
+
     @abstractmethod
     def run(self, region: Any, *inputs: Any, **kwargs: Any) -> tuple[Any, str]:
         """Execute ``region`` on ``inputs`` → ``(output, execution_tag)``. The tag
@@ -317,12 +327,28 @@ def _reg_index(candidate: Candidate) -> int:
 
 def run_arbitrated(region: Any, op: str, target: str, *inputs: Any,
                    verify: bool = True, force: str | None = None,
-                   measure: MeasureFn | None = None) -> tuple[Any, str]:
+                   measure: MeasureFn | None = None,
+                   dims: tuple[int, ...] | None = None,
+                   dtype: str | None = None,
+                   use_corpus: bool = True,
+                   autotune_cache: Any = None,
+                   device: str | None = None,
+                   timing: str = "end_to_end") -> tuple[Any, str]:
     """Arbitrate then execute: pick the winning candidate and run it on
     ``inputs`` → ``(output, tag)``. When no candidate applies/verifies, fall back
     to ``region.reference(*inputs)`` tagged ``"reference"`` (Decision #21: honest —
     never a mislabeled kernel). Every dispatch is recorded in the D3 arbiter log."""
-    winner = arbitrate(region, op, target, verify=verify, force=force,
+    # Explicit E3 forcing and an online measurement callback are authoritative.
+    # Otherwise consult D2's persisted, device-qualified verdict before falling
+    # back to tier priority. The import stays lazy to avoid candidate↔autotune's
+    # module dependency becoming an import cycle.
+    preferred = force
+    if preferred is None and measure is None and use_corpus:
+        from tessera.compiler.emit.autotune import corpus_winner
+        preferred = corpus_winner(
+            region, op, target, *inputs, dims=dims, dtype=dtype,
+            cache=autotune_cache, device=device, timing=timing)
+    winner = arbitrate(region, op, target, verify=verify, force=preferred,
                        measure=measure)
     if winner is None:
         _note_arbiter_dispatch(target, op, None, "reference")

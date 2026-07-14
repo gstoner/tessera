@@ -1,0 +1,257 @@
+---
+status: Proposal
+classification: Architecture / Tile IR
+last_updated: 2026-07-14
+---
+
+# Portable Tile Fragment ABI
+
+## Decision
+
+Make the Tile IR responsible for describing a **logical tile**, its placement,
+and the selected matrix instruction.  Make each target backend responsible for
+the exact mapping from logical elements to lanes and registers.
+
+The shared IR must never use NVIDIA's `vector<2xf16>` fragment shape, nor an
+AMD VGPR ordering, as its portable representation.  Those are ABI details of a
+particular instruction and ISA revision.  The portable contract is an opaque
+`!tile.fragment` value with a verifier-checked descriptor and layout.
+
+This closes the current gap where `tile.mma` can reach NVIDIA `nvvm.mma.sync`
+only after a test supplies pre-packed LLVM vectors, while ROCm forwards generic
+operands to WMMA/MFMA without a materialization contract.
+
+## Scope and non-goals
+
+This proposal covers register fragments for cooperative matrix operations on
+NVIDIA and AMD ROCm.  It builds on existing `#tile.layout`,
+`#tile.buffer_ref`, `!tile.async_token`, and pipeline/barrier attributes.
+
+It does not introduce a general CuTe clone, mandate a C++ CUDA Tile dependency,
+or prescribe a universal physical layout.  Tensor-map descriptors, NVIDIA
+TMEM, and AMD LDS remain target-specific memory facilities behind the same
+logical source interface.
+
+## New IR vocabulary
+
+### Types and attributes
+
+```mlir
+!tile.tile<element = f16, shape = [16, 16], layout = #tile.layout<...>>
+!tile.fragment<role = a, element = f16, mma = #tile.mma_desc<...>>
+#tile.mma_desc<family = auto, m = 16, n = 8, k = 16,
+               a = f16, b = f16, acc = f16,
+               a_layout = row_major, b_layout = col_major>
+```
+
+`!tile.tile` is a logical, distributed value.  It says what region of a source
+is owned by the participating threads; it is not a promise about a pointer,
+vector width, or register order.  `!tile.fragment` is deliberately opaque to
+generic Tile passes.  In the first implementation its role and descriptor are
+carried by its defining operation, rather than type parameters, so generic
+passes cannot accidentally reconstruct a vendor register ABI.  Its role is
+`a`, `b`, or `acc`; its descriptor determines the compatible MMA instruction
+family.
+
+`#tile.mma_desc` is target-neutral at construction time (`family = auto`).
+Target selection resolves it to a concrete instruction capability during
+lowering.  A target may reject it if no exact instruction exists.  A resolved
+descriptor records instruction shape, input/accumulator dtypes, logical A/B
+orientation, and any semantic packing granularity (for example K-blocks), but
+not lane-to-register numbering.
+
+### Operations
+
+```mlir
+%tile = tile.view %source[%m, %k]
+    {shape = [16, 16], layout = #tile.layout<...>,
+     tile.memory = #tile.memory_layout<space = "smem", order = "row_major", leading_dim = 16>, bounds = mask}
+    : (...) -> !tile.tile<...>
+
+%a = tile.fragment_pack %tile
+    {role = "a", mma = #tile.mma_desc<...>}
+    : !tile.tile<...> -> !tile.fragment<role = a, ...>
+
+%d = tile.mma %a, %b, %c {mma = #tile.mma_desc<...>}
+    : (!tile.fragment<role = a, ...>, !tile.fragment<role = b, ...>,
+       !tile.fragment<role = acc, ...>) -> !tile.fragment<role = acc, ...>
+
+%result = tile.fragment_unpack %d {layout = #tile.layout<...>}
+    : !tile.fragment<role = acc, ...> -> !tile.tile<...>
+
+tile.store %result, %destination[%m, %n] {bounds = mask}
+    : !tile.tile<...>, ... -> ()
+```
+
+`tile.view` has no memory effect and expresses logical slicing, coordinate
+origin, layout, and edge mask.  It replaces the current stringly staged-buffer
+convention as the operand that a pack can consume.  `tile.load` is a convenience
+form that combines `view` and a synchronous materialization; it is optional for
+the first implementation because `tile.async_copy` + `tile.wait_async` already
+provide the global-to-shared/LDS pipeline.
+
+A `tile.view` becomes materializable when it carries `tile.memory` and has
+`(base_pointer, row_origin, column_origin)` operands. `#tile.memory_layout`
+names gmem/smem/lds, row/column order, and leading dimension in elements. This
+is the physical boundary the NVIDIA and ROCm packers consume; a tensor-only
+logical view remains valid Tile IR but cannot be lowered to machine loads.
+
+`tile.fragment_pack` is the important missing operation.  It consumes either a
+tile value or a waited staged tile and produces a role-specific fragment.  It
+is the only boundary at which a backend may choose its lane/register ordering.
+`tile.fragment_unpack` is its inverse at a logical-result boundary.  Neither
+op is a no-op conversion: both have a defined logical element mapping and must
+be lowered or rejected.
+
+The existing permissive `tile.mma` form stays accepted during migration.  The
+typed three-fragment form is the only form eligible for hardware MMA lowering;
+the legacy form remains an abstract/value-lane carrier.
+
+## Implemented first slice
+
+The dialect now registers `!tile.tile`, `!tile.fragment`,
+`#tile.mma_desc`, `tile.view`, `tile.fragment_pack`, `tile.fragment_unpack`,
+`tile.store`, launch-level `tile.matmul_kernel`, and portable `#tile.epilogue`.
+Their structural verifiers enforce role/descriptor
+agreement through `tile.mma`, require a logical layout at view/unpack
+boundaries, and retain legacy untyped `tile.mma` compatibility.
+
+The NVIDIA backend now materializes the first exact physical slice:
+`sm_120` `m16n8k16.row.col` f16 or bf16 with pointer-backed A/B views and a
+portable `tile.fragment_zero` f32 accumulator. It emits four A and two B
+registers using the tested lane map (`vector<2xf16>` for f16; packed `i32` for
+bf16, with the bitcast owned by the backend), reaches the real NVVM MMA op,
+then extracts the four f32 results per lane and stores the logical 16x8 tile.
+The emitted LLVM kernel translates to PTX, assembles for sm_120, and executes
+against a NumPy GEMM oracle on an RTX 5070 Ti. Unsupported shapes, storage
+orders, swizzles, sources, or live fragment results are named errors. ROCm still
+rejects the typed fragment operations until its WMMA/MFMA materializer is
+implemented.
+
+Fixtures:
+
+- `tile_fragment_abi.mlir` — portable parser/verifier contract;
+- `sm120_pointer_fragment_pack.mlir` — six physical loads through real MMA;
+- `sm120_pointer_fragment_pack_invalid.mlir` — wrong B order rejection.
+- `sm120_pointer_fragment_store.mlir` — f32 accumulator unpack and output store;
+- `sm120_pointer_fragment_store_bf16.mlir` — explicit packed-i32 bf16 ABI proof;
+- `test_nvidia_tile_fragment_compiler_path.py` — LLVM/PTX/cubin generation and
+  on-device numerical comparison.
+
+## Required verifier invariants
+
+- The three fragments used by `tile.mma` have the same resolved MMA descriptor.
+- Roles are exactly A, B, accumulator; output is an accumulator fragment.
+- Fragment element types and logical extents match the descriptor.  An
+  accumulator conversion is explicit; it is never inferred from a vector type.
+- The source tile layout covers each required logical element once, except where
+  a descriptor explicitly permits replication or a boundary mask supplies a
+  zero/identity value.
+- A pack from `smem`/`lds` that depends on `tile.async_copy` must carry the
+  relevant `!tile.async_token` through `tile.wait_async`.  The existing backend
+  pipeline legality passes remain the authority for multi-stage ordering.
+- `fragment_unpack`/`store` cannot silently discard masked or replicated
+  elements; their boundary policy is explicit.
+
+## Backend lowering contract
+
+| Portable operation | NVIDIA | AMD ROCm |
+|---|---|---|
+| Resolve descriptor | Select `mma.sync`, WGMMA, or tcgen05 only when that target supports the exact dtype/shape. | Call the existing `MmaDescriptor` selector; it chooses RDNA WMMA or CDNA MFMA by gfx architecture. |
+| `fragment_pack` | Map Tile layout to instruction fragments. The `sm_120` `mma.sync.m16n8k16` path gives A four and B two physical registers: `vector<2xf16>` for f16 or packed `i32` for bf16; the f32 accumulator has four scalar registers. | Map the same logical tile to the selected WMMA/MFMA VGPR operands. Register order remains owned by the ROCm lowering, not exposed in Tile IR. |
+| `tile.mma` | Lower typed fragments to the matching NVVM MMA op; preserve the accumulator. | Lower typed fragments to `tessera_rocm.wmma` or `tessera_rocm.mfma`; preserve the selected `MmaDescriptor` metadata. |
+| `fragment_unpack` | Materialize the logical accumulator tile for an epilogue/store. | Materialize the logical accumulator tile for an epilogue/store. |
+
+This design deliberately accommodates different shapes: NVIDIA's initial
+`m16n8k16` f16 path, RDNA WMMA's 16x16 variants, and CDNA MFMA variants do not
+need a shared physical fragment width to share a Tile program.
+
+## Delivery plan
+
+1. Add the opaque types, `#tile.mma_desc`, and structural verifier.  Keep the
+   existing generic `tile.mma` path working.
+2. Add `tile.view`, `tile.fragment_pack`, and `tile.fragment_unpack` with
+   canonical generic assembly and negative verifier tests.
+3. Complete: extend the NVIDIA `sm_120` f16 A/B pointer materializer with f32
+   accumulator unpack/store, emit a launchable cubin, and compare the generated
+   kernel against NumPy on the RTX 5070 Ti.
+4. Implement ROCm descriptor resolution and pack/unpack for one RDNA WMMA and
+   one CDNA MFMA f16 case.  Validate the identical logical Tile fixture against
+   ROCm reference output on each family.
+5. bf16 complete for the canonical sm_120 path. Add tf32, int8, and FP8/FP4
+   only after each variant has an execution oracle and layout tests.
+
+## Acceptance criteria for the first slice
+
+The first slice is complete when one source-level logical `16x16` A tile,
+`16x8` B tile, and `16x8` accumulator tile can be packed, executed, unpacked,
+and stored on `sm_120` f16 without test-authored LLVM fragment vectors; the
+same Tile fixture is either executed on a supported ROCm WMMA/MFMA target or
+fails at descriptor resolution with a named capability error.
+
+## sm_120 A/B mapping reference
+
+The first NVIDIA materializer is constrained to `m16n8k16.row.col` f16/bf16. Its
+tested A/B mapping is in `python/tessera/compiler/nvidia_fragment_layout.py`,
+derived directly from the on-silicon PTX kernel: `gid = lane >> 2`,
+`tig = lane & 3`; A loads rows `{gid, gid+8}` and K pairs at `{2*tig, 2*tig+8}`;
+B loads N column `gid` and K pairs at `{2*tig, 2*tig+8}`.  The map returns
+logical element pairs, not byte addresses, so it is valid for global or staged
+shared-memory sources.
+
+For the f32 accumulator, each lane owns `(gid, 2*tig)`, `(gid, 2*tig+1)`,
+`(gid+8, 2*tig)`, and `(gid+8, 2*tig+1)`. The generated-kernel execution oracle
+validates this mapping independently of the input-fragment map.
+
+## Launch-level materialization
+
+`tile.matmul_kernel` is the portable bridge from one logical contraction to a
+launchable tiled kernel. Its pointer ABI is A, B, optional bias, D, M, N, K;
+`#tile.mma_desc` selects the contraction and `#tile.epilogue` owns bias,
+activation, and output-conversion semantics without exposing physical fragment
+registers. The NVIDIA materializer retains a one-warp/direct-global 16x8
+baseline and adds a four-warp shared-memory path. The latter cooperatively
+stages A[32,16] and B[16,32], then each warp computes two adjacent m16n8
+fragments, producing a 32x32 CTA macro-tile (eight MMA instructions per barrier
+interval). Block Y/X derive macro-tile origins, masked loads zero-fill ragged
+M/N/K, an `scf.for` carries eight f32 accumulator values per warp across
+16-wide K panels, and masked stores suppress edge writes. Bias, ReLU, and
+f32-to-f16 conversion reuse the accumulator mapping immediately before stores.
+
+Kernel-only measurements on the RTX 5070 Ti show why both paths remain useful:
+the staged path is slower at 256/512 square GEMMs, but is 1.20x faster at 1024³
+(0.2225 ms versus 0.2679 ms) and 1.37x at 2048³ (1.5060 ms versus 2.0628 ms).
+Dispatch should therefore select by measured shape rather than globally
+replacing direct fragment loads.
+
+That dispatch is now wired through the normal D2 candidate arbiter. The runtime
+compiles both canonical Tile schedules through `tessera-nvidia-opt` → NVVM →
+LLVM NVPTX, registers their PTX with the shipped launch bridge, and exposes
+`nvidia_tile_matmul_direct` and `nvidia_tile_matmul_shared` as separate emitted
+matmul candidates. The bridge owns their distinct launch contracts: direct uses
+ceil(N/8)×ceil(M/16) blocks of 32 threads; shared uses
+ceil(N/32)×ceil(M/32) blocks of 128 threads. Both take i64 M/N/K arguments and
+accept ragged shapes.
+
+Normal dispatch consults the device/shape-bucket/dtype corpus before tier
+priority. Online tuning compares the two Tile schedules with the shipped and
+legacy-emitted GEMMs under the same correctness gate and end-to-end latency
+metric, then persists the fastest candidate. Explicit candidate forcing remains
+available for compiler-path isolation. This deliberately distinguishes the
+kernel-only crossover from application-visible selection: shared staging can
+beat direct fragment loads while the shipped kernel still wins after considering
+the complete candidate set.
+
+Server-oriented tuning also has a distinct `timing="device"` mode. The PTX
+bridge allocates and uploads A/B once, warms both schedules, and uses CUDA driver
+events around repeated kernel launches; allocation, H2D, and D2H are outside the
+timed interval. D2 includes the timing mode in its persisted key, so device-only
+evidence cannot overwrite or be mistaken for end-to-end evidence. Candidates
+without a device-resident measurement hook are excluded from this mode rather
+than assigned a fabricated latency. On the RTX 5070 Ti the stable f16 crossover
+is direct at 512³ (0.0403 versus 0.0532 ms) and shared at 1024³ (0.2208 versus
+0.2692 ms); shared reaches 1.36x at 2048³.
+
+This launch form executes aligned and ragged shapes on sm_120. ROCm currently
+rejects it with a named capability error until its WMMA/MFMA pack/loop/epilogue
+materializer consumes the same portable contract.

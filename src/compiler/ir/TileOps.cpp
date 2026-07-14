@@ -9,6 +9,7 @@
 
 #include "Tessera/Dialect/Tile/TileDialect.h"
 
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "llvm/ADT/SmallVector.h"
@@ -42,6 +43,28 @@ LogicalResult requireBoolAttr(Operation *op, llvm::StringRef name,
   if (boolAttr(op, name) != expected)
     return op->emitOpError()
            << name << " must be " << (expected ? "true" : "false");
+  return success();
+}
+
+TileMmaDescAttr mmaDescAttr(Operation *op) {
+  return op->getAttrOfType<TileMmaDescAttr>("mma");
+}
+
+LogicalResult requireFragmentProducer(Operation *op, Value value,
+                                      llvm::StringRef expectedRole,
+                                      TileMmaDescAttr expectedDesc) {
+  if (!isa<FragmentType>(value.getType()))
+    return op->emitOpError() << "expects !tile.fragment operands";
+  Operation *producer = value.getDefiningOp();
+  if (!producer)
+    return op->emitOpError() << "fragment operand must have a Tile producer";
+  auto role = producer->getAttrOfType<StringAttr>("role");
+  auto desc = mmaDescAttr(producer);
+  if (!role || role.getValue() != expectedRole)
+    return op->emitOpError() << "expects a fragment with role \"" << expectedRole
+                             << "\"";
+  if (!desc || desc != expectedDesc)
+    return op->emitOpError() << "fragment descriptor must match tile.mma";
   return success();
 }
 
@@ -506,6 +529,133 @@ LogicalResult CliffordNormOp::verify() {
 LogicalResult CliffordRotorSandwichOp::verify() {
   return verifyCliffordBinary(getOperation(), getInputs(), getOutputs(),
                               "clifford_rotor_sandwich");
+}
+
+LogicalResult ViewOp::verify() {
+  if (getInputs().empty())
+    return emitOpError("expects a source and optional index operands");
+  if (!getOperation()->getAttrOfType<TileLayoutAttr>("tile.layout"))
+    return emitOpError("requires a #tile.layout attribute");
+  if (auto memory = getOperation()->getAttrOfType<TileMemoryLayoutAttr>("tile.memory")) {
+    if (getInputs().size() < 3)
+      return emitOpError("pointer-backed tile.view requires base pointer plus row/column origins");
+    (void)memory;
+  }
+  return success();
+}
+
+LogicalResult FragmentPackOp::verify() {
+  if (getInputs().size() != 1 || !isa<TileValueType>(getInputs().front().getType()))
+    return emitOpError("expects exactly one !tile.tile input");
+  auto role = getOperation()->getAttrOfType<StringAttr>("role");
+  if (!role || (role.getValue() != "a" && role.getValue() != "b" &&
+                role.getValue() != "acc"))
+    return emitOpError("requires role = a, b, or acc");
+  if (!mmaDescAttr(getOperation()))
+    return emitOpError("requires a #tile.mma_desc mma attribute");
+  return success();
+}
+
+LogicalResult FragmentZeroOp::verify() {
+  auto role = getOperation()->getAttrOfType<StringAttr>("role");
+  if (!role || role.getValue() != "acc")
+    return emitOpError("requires role = acc");
+  if (!mmaDescAttr(getOperation()))
+    return emitOpError("requires a #tile.mma_desc mma attribute");
+  return success();
+}
+
+LogicalResult MMAOp::verify() {
+  // Preserve the legacy permissive form during migration. Only the typed
+  // fragment form is eligible for physical cooperative-matrix lowering.
+  bool hasFragment = llvm::any_of(getInputs(), [](Value v) {
+    return isa<FragmentType>(v.getType());
+  });
+  if (!hasFragment)
+    return success();
+  if (getInputs().size() != 3 || getOutputs().size() != 1 ||
+      !isa<FragmentType>(getOutputs().front().getType()))
+    return emitOpError(
+        "typed fragment form expects A, B, accumulator -> !tile.fragment");
+  auto desc = mmaDescAttr(getOperation());
+  if (!desc)
+    return emitOpError("typed fragment form requires a #tile.mma_desc mma attribute");
+  if (failed(requireFragmentProducer(getOperation(), getInputs()[0], "a", desc)) ||
+      failed(requireFragmentProducer(getOperation(), getInputs()[1], "b", desc)))
+    return failure();
+  Value accumulator = getInputs()[2];
+  if (!isa<FragmentType>(accumulator.getType()))
+    return emitOpError("accumulator must be a !tile.fragment");
+  Operation *accProducer = accumulator.getDefiningOp();
+  if (!accProducer || !mmaDescAttr(accProducer) || mmaDescAttr(accProducer) != desc)
+    return emitOpError("accumulator descriptor must match tile.mma");
+  auto role = accProducer->getAttrOfType<StringAttr>("role");
+  if (role && role.getValue() != "acc")
+    return emitOpError("accumulator fragment must have role acc");
+  return success();
+}
+
+LogicalResult FragmentUnpackOp::verify() {
+  if (getInputs().size() != 1 || !isa<FragmentType>(getInputs().front().getType()))
+    return emitOpError("expects exactly one !tile.fragment input");
+  Operation *producer = getInputs().front().getDefiningOp();
+  if (!producer || !mmaDescAttr(producer))
+    return emitOpError("fragment must be produced by a descriptor-carrying Tile op");
+  auto role = producer->getAttrOfType<StringAttr>("role");
+  if (role && role.getValue() != "acc")
+    return emitOpError("only an accumulator fragment may be unpacked");
+  auto desc = mmaDescAttr(getOperation());
+  if (desc && desc != mmaDescAttr(producer))
+    return emitOpError("mma attribute must match the input fragment descriptor");
+  if (!getOperation()->getAttrOfType<TileLayoutAttr>("tile.layout"))
+    return emitOpError("requires a #tile.layout attribute");
+  return success();
+}
+
+LogicalResult StoreOp::verify() {
+  if (getInputs().size() != 4 ||
+      !isa<TileValueType>(getInputs().front().getType()))
+    return emitOpError(
+        "pointer-backed form expects tile, base, row origin, column origin");
+  if (!getOperation()->getAttrOfType<TileLayoutAttr>("tile.layout"))
+    return emitOpError("requires a #tile.layout attribute");
+  if (!getOperation()->getAttrOfType<TileMemoryLayoutAttr>("tile.memory"))
+    return emitOpError("requires a #tile.memory_layout attribute");
+  return success();
+}
+
+LogicalResult MatmulKernelOp::verify() {
+  auto desc = getOperation()->getAttrOfType<TileMmaDescAttr>("mma");
+  auto epilogue = getOperation()->getAttrOfType<TileEpilogueAttr>("epilogue");
+  if (!desc)
+    return emitOpError("requires a #tile.mma_desc mma attribute");
+  if (!epilogue)
+    return emitOpError("requires a #tile.epilogue epilogue attribute");
+  unsigned expected = epilogue.getBias() ? 7 : 6;
+  if (getInputs().size() != expected)
+    return emitOpError() << "expects A, B, "
+                         << (epilogue.getBias() ? "bias, " : "")
+                         << "D, M, N, K operands";
+  unsigned dimStart = expected - 3;
+  for (Value dim : getInputs().drop_front(dimStart))
+    if (!dim.getType().isInteger(64))
+      return emitOpError("M, N, and K must be i64");
+  for (Value pointer : getInputs().take_front(dimStart))
+    if (!isa<LLVM::LLVMPointerType>(pointer.getType()))
+      return emitOpError("A, B, optional bias, and D must be !llvm.ptr");
+  int64_t warps = 1;
+  if (auto attr = getOperation()->getAttrOfType<IntegerAttr>("warps"))
+    warps = attr.getInt();
+  if (warps != 1 && warps != 4)
+    return emitOpError("warps must be 1 or 4");
+  StringRef staging = "global";
+  if (auto attr = getOperation()->getAttrOfType<StringAttr>("staging"))
+    staging = attr.getValue();
+  if (staging != "global" && staging != "shared")
+    return emitOpError("staging must be global or shared");
+  if (staging == "shared" && warps != 4)
+    return emitOpError("shared staging currently requires four warps");
+  return success();
 }
 
 } // namespace tile

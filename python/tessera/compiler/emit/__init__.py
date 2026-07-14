@@ -77,6 +77,9 @@ from tessera.compiler.emit.candidate import (
 from tessera.compiler.emit.autotune import (
     MeasureCache,
     MeasureRecord,
+    TIMING_DEVICE,
+    TIMING_END_TO_END,
+    corpus_winner,
     corpus_path,
     load_corpus,
     measure_latency,
@@ -104,5 +107,6 @@ __all__ = [
     # D2 autotune
     "MeasureCache", "MeasureRecord", "measured_arbitrate",
     "run_measured_arbitrated", "measure_latency", "load_corpus", "save_corpus",
-    "corpus_path", "measure_cache_default",
+    "corpus_path", "corpus_winner", "measure_cache_default",
+    "TIMING_END_TO_END", "TIMING_DEVICE",
 ]

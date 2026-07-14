@@ -430,7 +430,13 @@ chains, small attention). Crown-jewel GEMM stays Tier 2/3.
   the measured loop overrides tier-priority *both ways* — the Tier-1 generic lane
   wins the 64³ bucket (WMMA launch overhead dominates) while WMMA wins from 256³ up
   (~19× at 1024³). **Still open:** CDNA/sm_90/sm_100 analytical-roofline +
-  `MmaDescriptor` fallback until silicon.
+  `MmaDescriptor` fallback until silicon. **NVIDIA persisted-consumption slice
+  landed 2026-07-15:** normal `run_arbitrated()` dispatch infers canonical GEMM,
+  fused, and attention dimensions from operands and consumes an unambiguous
+  matching corpus verdict before tier priority. Explicit E3 forcing and online
+  measurement remain authoritative, and the selected candidate still passes the
+  existing availability/applicability/F4 gates. The sm_120 corpus now covers
+  eight square, rectangular, small/large, and short/long workload buckets.
 - **D3 · Fallback log everywhere** — **landed 2026-07-07.** The arbiter records every
   dispatch as `(target, op, selected, tag)` (`candidate._note_arbiter_dispatch`, wired
   into `run_arbitrated` + `run_measured_arbitrated`); `arbiter_dispatch_histogram()`

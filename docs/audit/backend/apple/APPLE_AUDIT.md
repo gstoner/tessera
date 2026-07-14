@@ -249,22 +249,47 @@ perf ratchets, auto_batch polish), and the 2026-07-09 wave closed the op-family
 parity gap vs x86/ROCm (see **Finished** above). Everything previously tracked
 under "Still Open" / "Next Work" has landed.
 
-The remaining frontier is **performance + precision, not backend correctness**:
+The remaining frontier is **performance + precision, not backend correctness**.
+The following is the active promotion plan; it owns choices and acceptance gates,
+not current support counts.
 
-- **Package-subgraph compiler integration.** The package lifecycle and explicit
-  authoring are proven, but `package_call` is not yet a compiler-selected launch
-  route. The first promotion must be a resident-tensor, whole-subgraph result
-  that beats both MPSGraph and the best fused-MSL alternative; it is tracked as
-  `package_call launch gated` in the execution inventory.
-
-- **`quantize`/`dequantize` fp4/fp6/fp8/nvfp4 — the one uncovered op family.**
-  Gated on the macOS-27 / Metal 4.1 tensor toolchain (`MTLTensor` FP8/FP4/MX
-  dtypes), not hardware. The hardware-free bridge is
-  `python/tessera/compiler/microscaling.py`.
-- **Native `simdgroup_matrix` "steel-like" GEMM/attention lane** — the clear-MPS
-  direction (see the MLX mining pass below).
-- Cross-backend **real-hardware** proof for NVIDIA / ROCm — tracked in the
-  per-platform audits, not here.
+1. **Finish general irregular sparse transport.** Promote f32 CSR SpMM first,
+   using the native gather/scatter/reduction substrate and preserving CPU fallback
+   for unsupported layouts. Then promote sparse/MoE routing and combine on that
+   substrate. This is the general representation for irregular sparsity and cache
+   updates.
+2. **Add a separate structured-sparsity experiment.** Sparse convolution and
+   fixed-neighbourhood workloads should not be forced through CSR. Evaluate an
+   implicit-GEMM / masked-neighbour-map kernel with `simdgroup_matrix`, f32
+   accumulation, and cached neighbour maps. Its admission gate is a fresh-device
+   benchmark against both dense and CSR alternatives; it becomes a distinct
+   compiler route only when it wins for a declared shape/sparsity envelope.
+3. **Build a Metal 4 characterization harness before further dtype or package
+   promotion.** In a fresh process and fresh runtime image, measure bare GEMM,
+   GEMM+bias+GELU, GEMM+softmax, and the representative structured-sparse
+   epilogue for each supported device/deployment target. Record correctness,
+   output/state residency, execution kind, and the best of MPSGraph, custom MSL,
+   `simdgroup_matrix`, and MPP/cooperative tensors. This benchmark is the selector
+   input, not a one-off research result.
+4. **Promote bf16/fp16 by measured kernel family.** Prefer native MTL4 or
+   `simdgroup_matrix` only where the characterization shows a win; keep f32
+   accumulation and explicit storage conversions in the ABI contract. Start with
+   matmul/epilogue, attention, and the structured-sparse experiment rather than
+   broad dtype claims for every existing f32 kernel.
+5. **Keep package-subgraph execution selective.** The package lifecycle and
+   explicit authoring are proven, but `package_call` is not yet a compiler-selected
+   launch route. Promote only a resident-tensor whole subgraph that beats both
+   MPSGraph and the best fused-MSL alternative. Cheap epilogues are candidates;
+   softmax- or reduction-heavy regions must compete with decomposed kernels. It
+   remains `package_call launch gated` in the execution inventory until then.
+6. **Treat FP4/FP6/FP8/NVFP4 as compatibility work, not a performance claim.**
+   `quantize`/`dequantize` remains uncovered. A macOS-27 / Metal 4.1 tensor
+   toolchain is necessary, but it is not sufficient for promotion: each format
+   needs a per-device numerical and throughput comparison against fp16/bf16 and
+   a demonstrated performance win or a documented footprint-only use case. The
+   hardware-free bridge remains `python/tessera/compiler/microscaling.py`.
+7. **Cross-backend real-hardware proof** for NVIDIA / ROCm remains tracked in
+   the per-platform audits, not here.
 
 ## Hardware capability reference (grounded 2026-06-17)
 

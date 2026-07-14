@@ -13469,6 +13469,153 @@ extern "C" int32_t tessera_apple_gpu_ebm_langevin_step_value_f32(
   return 0;
 }
 
+// Fused f32 optimizer ABI shared with the x86/ROCm lanes. kind: sgd=0,
+// momentum=1, adam=2, adamw=3, lion=4. p/g/m/v are dense flat buffers.
+static NSString *const kOptimizerF32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+kernel void optimizer_f32(device const float* p [[buffer(0)]], device const float* g [[buffer(1)]], device const float* m [[buffer(2)]], device const float* v [[buffer(3)]], constant int& n [[buffer(4)]], constant int& kind [[buffer(5)]], constant float& lr [[buffer(6)]], constant float& b1 [[buffer(7)]], constant float& b2 [[buffer(8)]], constant float& eps [[buffer(9)]], constant float& wd [[buffer(10)]], constant float& b1c [[buffer(11)]], constant float& b2c [[buffer(12)]], device float* po [[buffer(13)]], device float* mo [[buffer(14)]], device float* vo [[buffer(15)]], uint i [[thread_position_in_grid]]) {
+  if ((int)i >= n) return;
+  float pi=p[i], gi=g[i], mi=m[i], vi=v[i]; mo[i]=mi; vo[i]=vi;
+  if (kind==0) { po[i]=pi-lr*gi; return; }
+  if (kind==1) { float nv=b1*vi+gi; vo[i]=nv; po[i]=pi-lr*nv; return; }
+  if (kind==4) { float u=b1*mi+(1.0f-b1)*gi; mo[i]=b2*mi+(1.0f-b2)*gi; float s=u>0.0f?1.0f:(u<0.0f?-1.0f:0.0f); if(wd!=0.0f) pi*=1.0f-lr*wd; po[i]=pi-lr*s; return; }
+  float nm=b1*mi+(1.0f-b1)*gi, nv=b2*vi+(1.0f-b2)*gi*gi; mo[i]=nm; vo[i]=nv;
+  if(kind==3 && wd!=0.0f) pi*=1.0f-lr*wd;
+  po[i]=pi-lr*((nm/b1c)/(sqrt(nv/b2c)+eps));
+}
+)MSL";
+
+extern "C" int32_t tessera_apple_gpu_optimizer_f32(
+    const float *p, const float *g, const float *m, const float *v, int32_t n,
+    int32_t kind, float lr, float b1, float b2, float eps, float wd, float b1c,
+    float b2c, float *po, float *mo, float *vo) {
+  if (n < 0 || kind < 0 || kind > 4)
+    return 0;
+  if (n == 0)
+    return 1;
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok)
+    return 0;
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kOptimizerF32Source, @"optimizer_f32");
+    if (!pso)
+      return 0;
+    NSUInteger bytes = sizeof(float) * (NSUInteger)n;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bp, ctx, p, bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bg, ctx, g, bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bm, ctx, m, bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bv, ctx, v, bytes);
+    TS_METAL_BUF_ACQUIRE(bpo, ctx, bytes);
+    TS_METAL_BUF_ACQUIRE(bmo, ctx, bytes);
+    TS_METAL_BUF_ACQUIRE(bvo, ctx, bytes);
+    if (!bp || !bg || !bm || !bv || !bpo || !bmo || !bvo)
+      return 0;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bp offset:0 atIndex:0];
+    [enc setBuffer:bg offset:0 atIndex:1];
+    [enc setBuffer:bm offset:0 atIndex:2];
+    [enc setBuffer:bv offset:0 atIndex:3];
+    [enc setBytes:&n length:sizeof(n) atIndex:4];
+    [enc setBytes:&kind length:sizeof(kind) atIndex:5];
+    [enc setBytes:&lr length:sizeof(lr) atIndex:6];
+    [enc setBytes:&b1 length:sizeof(b1) atIndex:7];
+    [enc setBytes:&b2 length:sizeof(b2) atIndex:8];
+    [enc setBytes:&eps length:sizeof(eps) atIndex:9];
+    [enc setBytes:&wd length:sizeof(wd) atIndex:10];
+    [enc setBytes:&b1c length:sizeof(b1c) atIndex:11];
+    [enc setBytes:&b2c length:sizeof(b2c) atIndex:12];
+    [enc setBuffer:bpo offset:0 atIndex:13];
+    [enc setBuffer:bmo offset:0 atIndex:14];
+    [enc setBuffer:bvo offset:0 atIndex:15];
+    NSUInteger tg = std::max<NSUInteger>(
+        1u,
+        std::min<NSUInteger>((NSUInteger)n, pso.maxTotalThreadsPerThreadgroup));
+    [enc dispatchThreads:MTLSizeMake((NSUInteger)n, 1, 1)
+        threadsPerThreadgroup:MTLSizeMake(tg, 1, 1)];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "optimizer_f32"))
+      return 0;
+    std::memcpy(po, [bpo contents], bytes);
+    std::memcpy(mo, [bmo contents], bytes);
+    std::memcpy(vo, [bvo contents], bytes);
+    return 1;
+  }
+}
+
+// Correctness-first f32 row scatter.  A single Metal thread preserves the
+// ordered duplicate-index semantics required by set/add/min/max; parallel
+// atomic variants can replace this implementation without changing the ABI.
+static NSString *const kScatterF32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+kernel void scatter_f32(device float *out [[buffer(0)]],
+                        device const float *src [[buffer(1)]],
+                        device const long *idx [[buffer(2)]],
+                        constant int &out_rows [[buffer(3)]],
+                        constant int &n_idx [[buffer(4)]],
+                        constant int &row_len [[buffer(5)]],
+                        constant int &mode [[buffer(6)]],
+                        uint tid [[thread_position_in_grid]]) {
+  if (tid != 0) return;
+  for (int r = 0; r < n_idx; ++r) {
+    long dst = idx[r];
+    if (dst < 0) dst += out_rows;
+    if (dst < 0 || dst >= out_rows) continue;
+    for (int c = 0; c < row_len; ++c) {
+      const uint o = uint(dst) * uint(row_len) + uint(c);
+      const float value = src[uint(r) * uint(row_len) + uint(c)];
+      if (mode == 0) out[o] = value;
+      else if (mode == 1) out[o] += value;
+      else if (mode == 2) out[o] = min(out[o], value);
+      else out[o] = max(out[o], value);
+    }
+  }
+}
+)MSL";
+
+extern "C" int32_t tessera_apple_gpu_scatter_f32(
+    float *out, const float *src, const int64_t *idx, int32_t out_rows,
+    int32_t n_idx, int32_t row_len, int32_t mode) {
+  if (!out || !src || !idx || out_rows < 0 || n_idx < 0 || row_len < 0 ||
+      mode < 0 || mode > 3)
+    return 0;
+  if (n_idx == 0 || row_len == 0) return 1;
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kScatterF32Source, @"scatter_f32");
+    if (!pso) return 0;
+    const NSUInteger outBytes = sizeof(float) * (NSUInteger)out_rows * row_len;
+    const NSUInteger srcBytes = sizeof(float) * (NSUInteger)n_idx * row_len;
+    const NSUInteger idxBytes = sizeof(int64_t) * (NSUInteger)n_idx;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(outBuffer, ctx, out, outBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(srcBuffer, ctx, src, srcBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(idxBuffer, ctx, idx, idxBytes);
+    if (!outBuffer || !srcBuffer || !idxBuffer) return 0;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:outBuffer offset:0 atIndex:0];
+    [enc setBuffer:srcBuffer offset:0 atIndex:1];
+    [enc setBuffer:idxBuffer offset:0 atIndex:2];
+    [enc setBytes:&out_rows length:sizeof(out_rows) atIndex:3];
+    [enc setBytes:&n_idx length:sizeof(n_idx) atIndex:4];
+    [enc setBytes:&row_len length:sizeof(row_len) atIndex:5];
+    [enc setBytes:&mode length:sizeof(mode) atIndex:6];
+    [enc dispatchThreads:MTLSizeMake(1, 1, 1)
+        threadsPerThreadgroup:MTLSizeMake(1, 1, 1)];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "scatter_f32")) return 0;
+    std::memcpy(out, [outBuffer contents], outBytes);
+    return 1;
+  }
+}
+
 // ===========================================================================
 // EBM langevin_step + on-device Philox-4x32-10 (M6 Step 4 runtime emission).
 //

@@ -99,6 +99,12 @@ class JitDiagnosticCode(str, Enum):
     #: CPU path.
     COMPILED_CPU = "JIT_COMPILED_CPU"
 
+    #: Info-level: the JIT emitted Target IR for a target whose complete op
+    #: program has a runtime dispatch lane.  Individual launch contracts (for
+    #: example Apple optimizer f32 contiguous p/g/m/v) can still select an
+    #: explicit reference override.
+    COMPILED_TARGET_RUNTIME = "JIT_COMPILED_TARGET_RUNTIME"
+
     #: Info-level: the JIT emitted a Target IR artifact for a non-CPU
     #: target but no native execution is wired today.  Caller sees
     #: ``execution_kind == "artifact_only"``.

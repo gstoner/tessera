@@ -47,6 +47,7 @@ class TestJitDiagnosticCode:
                 "JIT_EAGER_FALLBACK_CONTROL_FLOW"
             ),
             "COMPILED_CPU": "JIT_COMPILED_CPU",
+            "COMPILED_TARGET_RUNTIME": "JIT_COMPILED_TARGET_RUNTIME",
             "TARGET_IR_ARTIFACT_ONLY": "JIT_TARGET_IR_ARTIFACT_ONLY",
         }
         for name, value in expected.items():

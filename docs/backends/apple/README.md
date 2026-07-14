@@ -44,10 +44,10 @@
   tail through Apple's optimizing graph compiler; no `N ≤ 256` limit;
   completes the f16/bf16 + large-N fused-chain matrix.
 - **Metal 4 lane (M0–M8 + P-series)** — MTL4 command model + `MTLTensor` +
-  MetalPerformancePrimitives cooperative `matmul2d`: fp16 matmul beats MPS,
-  bf16 beats the conversion fallback ~10–15×, fused bias+activation epilogue,
-  resident-weight MLP session, default bf16 matmul routing, conv on the
-  matrix units (opt-in).
+  MetalPerformancePrimitives cooperative `matmul2d`: an evidence-gated fp16/bf16
+  matmul and cheap-epilogue lane, plus resident-weight MLP session and opt-in
+  matrix-unit convolution. Selection is per device, deployment target, shape,
+  dtype, and fused region; a Metal 4 feature alone does not promote a route.
 - **GA / EBM (2026-05-18)** — 17/17 GA + 9/9 native EBM primitives ship fused
   MSL kernels; `@clifford_jit(target="apple_gpu")` lowers AST →
   `CliffordIRProgram` at decoration time.
@@ -62,8 +62,9 @@
   is F4-gated against the standalone reference and reported honestly per lane —
   `native_gpu` where it genuinely dispatches to MPS/MSL (loss/complex/reduce,
   numpy fallback off-Metal), `reference_cpu` where Apple ships no device kernel.
-  The only remaining gap is `quantize`/`dequantize` fp4/fp6/fp8/nvfp4, gated on
-  the macOS 27 / FP8 (Metal 4.1) tensor toolchain. Full table:
+  The only remaining gap is `quantize`/`dequantize` fp4/fp6/fp8/nvfp4. It needs
+  the macOS 27 / Metal 4.1 tensor toolchain *and* device-specific numerical and
+  throughput evidence; availability alone is not a native-performance claim. Full table:
   [kernel-guide.md](kernel-guide.md) §2.
 
 f32 is fully wired for the named native lanes. f16/bf16 are wired for matmul,

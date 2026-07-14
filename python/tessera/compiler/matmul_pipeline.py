@@ -484,6 +484,24 @@ def explain_cpu_plan(module: GraphIRModule, *, target: str = "cpu") -> JitDiagno
             _Code.COMPILED_CPU.value,
             f"device_verified_jit {fn.name} through Graph IR -> Schedule IR -> Tile IR -> Target IR -> CPU",
         )
+    if target == "apple_gpu":
+        # Keep the diagnostic aligned with the runtime envelope, rather than
+        # calling a target artifact-only after the compiler has selected an
+        # actual Metal dispatch lane.  Runtime contract guards remain the
+        # source of truth for per-launch reference overrides.
+        from .apple_gpu_envelope import runtime_ops
+        from .capabilities import supports_op
+
+        op_names = tuple(_canonical_op_name(op.op_name) for op in fn.body)
+        if (op_names and all(op_name in runtime_ops() for op_name in op_names)
+                and all(supports_op("apple_gpu", op_name).runtime_status == "ready"
+                        for op_name in op_names)):
+            return JitDiagnostic(
+                "info",
+                _Code.COMPILED_TARGET_RUNTIME.value,
+                (f"device_verified_jit {fn.name} through Graph IR -> Schedule IR -> "
+                 "Tile IR -> apple_gpu Target IR -> Metal runtime dispatch"),
+            )
     return JitDiagnostic(
         "info",
         _Code.TARGET_IR_ARTIFACT_ONLY.value,

@@ -428,11 +428,7 @@ target_ir,all_gather,collective,reference,multi_gpu_deferred,distributed_validat
 target_ir,all_reduce,collective,reference,multi_gpu_deferred,distributed_validation,Keep reference lane until a real collective/distributed proof exists.,support_table.csv
 target_ir,all_to_all,collective,reference,multi_gpu_deferred,distributed_validation,Keep reference lane until a real collective/distributed proof exists.,support_table.csv
 target_ir,reduce_scatter,collective,reference,multi_gpu_deferred,distributed_validation,Keep reference lane until a real collective/distributed proof exists.,support_table.csv
-target_ir,moe_combine,moe_transport,reference,multi_gpu_deferred,distributed_validation,Keep reference lane until a real collective/distributed proof exists.,support_table.csv
-target_ir,moe_dispatch,moe_transport,reference,multi_gpu_deferred,distributed_validation,Keep reference lane until a real collective/distributed proof exists.,support_table.csv
 tile_ir,all_gather,collective,partial,multi_gpu_deferred,distributed_validation,Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle.,support_table.csv
 tile_ir,all_reduce,collective,partial,multi_gpu_deferred,distributed_validation,Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle.,support_table.csv
 tile_ir,all_to_all,collective,partial,multi_gpu_deferred,distributed_validation,Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle.,support_table.csv
 tile_ir,reduce_scatter,collective,partial,multi_gpu_deferred,distributed_validation,Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle.,support_table.csv
-tile_ir,moe_combine,moe_transport,partial,multi_gpu_deferred,distributed_validation,Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle.,support_table.csv
-tile_ir,moe_dispatch,moe_transport,partial,multi_gpu_deferred,distributed_validation,Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle.,support_table.csv

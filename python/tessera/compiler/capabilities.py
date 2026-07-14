@@ -144,6 +144,19 @@ def _ops(status: RuntimeStatus, names: tuple[str, ...], *, reason: str = "", dty
 
 _CPU_OPS = tuple(sorted(GRAPH_OP_TO_SPEC))
 _APPLE_GPU_READY = ("tessera.matmul", "tessera.flash_attn", "tessera.softmax", "tessera.softmax_safe", "tessera.gelu", "tessera.rope")
+# Stateful f32 optimizer kernel.  The p/g/m/v buffer ABI and update rules are
+# deliberately shared with the x86 and ROCm optimizer lanes; non-f32 or
+# non-contiguous calls are runtime reference overrides, not native support.
+_APPLE_GPU_OPTIMIZER_READY = (
+    "tessera.sgd", "tessera.momentum", "tessera.adam", "tessera.adamw",
+    "tessera.lion",
+)
+_APPLE_GPU_SCATTER_READY = (
+    "tessera.scatter", "tessera.scatter_add", "tessera.scatter_reduce",
+)
+_APPLE_GPU_MOE_TRANSPORT_READY = (
+    "tessera.moe_dispatch", "tessera.moe_combine",
+)
 
 # E1 (partial-ops uplift, 2026-05-20).  apple_gpu ships fused MSL kernels for
 # all 17 GA primitives (12 GA3 core + 5 GA5 differential-form) and 9 EBM
@@ -602,6 +615,19 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         # truth for "does this specific op support this dtype today".
         supported_ops={
             **_ops("ready", _APPLE_GPU_READY, reason="Apple GPU runtime shim supports this single-op smoke path"),
+            **_ops(
+                "ready", _APPLE_GPU_OPTIMIZER_READY,
+                reason=("Apple GPU fused Metal f32 optimizer ABI; shares p/g/m/v "
+                        "semantics with x86 and ROCm"),
+            ),
+            **_ops(
+                "ready", _APPLE_GPU_SCATTER_READY,
+                reason="Apple GPU deterministic Metal f32 row-scatter ABI",
+            ),
+            **_ops(
+                "ready", _APPLE_GPU_MOE_TRANSPORT_READY,
+                reason="Apple GPU local f32 MoE dispatch gather and combine scatter-add",
+            ),
             **_ops("artifact_only", ("tessera.moe", "tessera.add", "tessera.mul"), reason="Apple GPU target contract exists but native execution is not wired for this op"),
             # E1 (2026-05-20) — 26 fused GA + EBM MSL kernels.  These are
             # the same kernels documented in ``backend_manifest`` and

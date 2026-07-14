@@ -71,12 +71,20 @@ def _act_ref(x, activation):
     raise AssertionError(activation)
 
 
-@pytest.mark.parametrize("activation", ["none", "relu", "gelu", "silu"])
-@pytest.mark.parametrize("with_bias", [False, True])
+_FUSED_EPILOGUES = [
+    ("relu", False),
+    ("gelu", False),
+    ("silu", False),
+    ("none", True),
+    ("relu", True),
+    ("gelu", True),
+    ("silu", True),
+]
+
+
+@pytest.mark.parametrize("activation,with_bias", _FUSED_EPILOGUES)
 @pytest.mark.parametrize("m,n,k", [(16, 16, 16), (64, 48, 32)])
 def test_launch_fused_epilogue_matches_numpy(activation, with_bias, m, n, k):
-    if activation == "none" and not with_bias:
-        pytest.skip("plain GEMM is the matmul-lane test")
     rt = _compiled_or_skip()
     rng = np.random.default_rng(11 + m + n + k + len(activation) + with_bias)
     a = (rng.standard_normal((m, k)) * 0.4).astype(np.float16)

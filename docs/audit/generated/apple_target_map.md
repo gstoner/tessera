@@ -77,7 +77,7 @@ and ``docs/backends/apple/`` (Metal 4 implementation-state review):
 | bidirectional_scan | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | binary_cross_entropy_loss | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | bmm | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_abi | - | fp32,fp16,bf16 | tessera_apple_gpu_bmm_dev_{f32,f16,bf16}_enc | driver | tests/unit/test_apple_*.py |
-| bsmm | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
+| bsmm | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | MetalPerformanceShaders (dense-block ABI) | fp32 | tessera_apple_gpu_mps_matmul_f32 (dense-block ABI) | driver | tests/unit/test_apple_gpu_bsmm_compiled.py |
 | cast | reference | numpy_reference | fp32 | - | numpy_reference | fused | - | fp32,fp16,bf16 | - | manifest | tests/unit/test_apple_gpu_resident_mlp.py |
 | center_crop | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | cholesky_solve | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
@@ -137,7 +137,7 @@ and ``docs/backends/apple/`` (Metal 4 implementation-state review):
 | memory_index_score | reference | numpy_reference | fp32 | - | numpy_reference | fused | - | fp32 | - | manifest | tests/unit/test_apple_gpu_composite_helpers.py |
 | memory_read | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | mobius | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
-| moe | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
+| moe | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | MetalPerformanceShaders (local f32 expert blocks; host routing) | fp32 | tessera_apple_gpu_mps_matmul_f32 (per-expert blocks; host routing) | driver | tests/unit/test_apple_gpu_moe_compiled.py |
 | moe_combine | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | moe_dispatch | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | moe_swiglu_block | reference | numpy_reference | fp32 | - | numpy_reference | fused | - | fp32 | tessera_apple_gpu_moe_swiglu_f32 | driver | tests/unit/test_apple_*.py |
@@ -176,7 +176,7 @@ and ``docs/backends/apple/`` (Metal 4 implementation-state review):
 | scatter_reduce | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | Metal (MSL) | fp32 | tessera_apple_gpu_scatter_f32 | driver | tests/unit/test_apple_gpu_scatter_compiled.py |
 | score_combine | reference | numpy_reference | fp32 | - | numpy_reference | fused | - | fp32 | - | manifest | tests/unit/test_apple_gpu_composite_helpers.py |
 | score_matching_loss | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
-| sddmm | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
+| sddmm | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | Metal (MSL) | fp32 | tessera_apple_gpu_sddmm_f32 | driver | tests/unit/test_apple_gpu_sddmm_compiled.py |
 | sgd | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | Metal (MSL) | fp32 | tessera_apple_gpu_optimizer_f32 | driver | tests/unit/test_apple_gpu_optimizer_compiled.py |
 | silu | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_abi | - | fp32,fp16,bf16 | tessera_apple_gpu_unary_dev_{f32,f16,bf16}_enc | driver | tests/unit/test_apple_*.py |
 | simple_rnn_cell | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
@@ -189,8 +189,8 @@ and ``docs/backends/apple/`` (Metal 4 implementation-state review):
 | spec_accept_sample | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | spec_accept_tree_sample | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | spectral_norm | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
-| spmm_coo | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
-| spmm_csr | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
+| spmm_coo | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | Metal (MSL; host COO-to-CSR adapter) | fp32 | tessera_apple_gpu_spmm_csr_f32 (COO-to-CSR adapter) | driver | tests/unit/test_apple_gpu_spmm_coo_compiled.py |
+| spmm_csr | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | Metal (MSL) | fp32 | tessera_apple_gpu_spmm_csr_f32 | driver | tests/unit/test_apple_gpu_spmm_csr_compiled.py |
 | stack | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | stereographic | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | sum | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |

@@ -46,6 +46,24 @@ _APPLE_GPU_OPTIMIZER_OPS = frozenset({
 _APPLE_GPU_SCATTER_OPS = frozenset({
     "tessera.scatter", "tessera.scatter_add", "tessera.scatter_reduce",
 })
+# First irregular sparse vertical slice.  The runtime preserves the CSR tuple
+# through its envelope adapter, validates the narrow i64/f32 ABI on the host,
+# then launches a direct Metal CSR × dense kernel.  COO, SDDMM, and dense-block
+# BSMM each now have their own native adapter as well.
+_APPLE_GPU_SPMM_CSR_OPS = frozenset({"tessera.spmm_csr"})
+# COO has no independent device kernel: a validated contiguous f32/i64 COO
+# payload is canonicalized on the host and its multiplication reuses CSR's
+# direct Metal kernel.  Keep this distinct so the conversion is never hidden.
+_APPLE_GPU_SPMM_COO_OPS = frozenset({"tessera.spmm_coo"})
+# Sampled dense-dense multiplication has an independent Metal kernel.  Its
+# narrow f32 contiguous A/B/mask contract remains explicit in runtime.py.
+_APPLE_GPU_SDDMM_OPS = frozenset({"tessera.sddmm"})
+# BSMM presently carries two dense matrices rather than BSR metadata.  Its
+# native route is therefore the proven f32 Apple rank-2 matmul ABI.
+_APPLE_GPU_BSMM_OPS = frozenset({"tessera.bsmm"})
+# Local top-1 MoE compute: routing/grouping remains explicit host metadata work;
+# every nonempty expert block runs through the native f32 MPS matmul ABI.
+_APPLE_GPU_MOE_COMPUTE_OPS = frozenset({"tessera.moe"})
 
 # P3 — packed-weight int4 quantized matmul (custom MSL kernels;
 # quantized_matmul_i4_{f32,f16,tiled_f32}). Operands (x, w_packed, scales,
@@ -303,6 +321,11 @@ _APPLE_GPU_RUNTIME_OPS = (
     | _APPLE_GPU_QUANT_OPS
     | _APPLE_GPU_OPTIMIZER_OPS
     | _APPLE_GPU_SCATTER_OPS
+    | _APPLE_GPU_SPMM_CSR_OPS
+    | _APPLE_GPU_SPMM_COO_OPS
+    | _APPLE_GPU_SDDMM_OPS
+    | _APPLE_GPU_BSMM_OPS
+    | _APPLE_GPU_MOE_COMPUTE_OPS
     | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS | _APPLE_GPU_TOPK_OPS
     | _APPLE_GPU_CONV_OPS
     | _APPLE_GPU_LINALG_OPS | _APPLE_GPU_SSM_OPS | _APPLE_GPU_MOE_OPS
@@ -331,6 +354,11 @@ def _build_lane_by_op() -> dict[str, str]:
     put(_APPLE_GPU_MPS_OPS, "mps")
     put(_APPLE_GPU_OPTIMIZER_OPS, "optimizer")
     put(_APPLE_GPU_SCATTER_OPS, "scatter")
+    put(_APPLE_GPU_SPMM_CSR_OPS, "spmm_csr")
+    put(_APPLE_GPU_SPMM_COO_OPS, "spmm_coo")
+    put(_APPLE_GPU_SDDMM_OPS, "sddmm")
+    put(_APPLE_GPU_BSMM_OPS, "bsmm")
+    put(_APPLE_GPU_MOE_COMPUTE_OPS, "moe_compute")
     put({"tessera.rope"}, "rope")
     put({"tessera.flash_attn"}, "flash_attn")
     put({"tessera.softmax", "tessera.softmax_safe"}, "softmax")

@@ -204,13 +204,36 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                              "Metal f32 ABI. Unsupported dtype/layout contracts "
                              "report reference_cpu. Matches numpy — parity with "
                              "x86/rocm_scatter_compiled.",
+    "apple_gpu_spmm_csr_compiled": "Apple GPU sparse lane — f32 CSR x dense "
+                             "SpMM through a direct Metal kernel. The supported "
+                             "contract is contiguous i64 indptr/indices, f32 "
+                             "values, and a contiguous row-major f32 RHS; "
+                             "unsupported layouts and dtypes report reference_cpu.",
+    "apple_gpu_spmm_coo_compiled": "Apple GPU sparse lane — f32 COO x dense "
+                             "SpMM canonicalizes contiguous i64 COO coordinates "
+                             "and f32 values on the host, then dispatches the "
+                             "native CSR Metal kernel; unsupported contracts "
+                             "report reference_cpu.",
+    "apple_gpu_sddmm_compiled": "Apple GPU sparse lane — f32 sampled "
+                             "dense-dense multiplication through a direct Metal "
+                             "kernel; contiguous row-major f32 A, B, and mask "
+                             "are native, and unsupported contracts report "
+                             "reference_cpu.",
+    "apple_gpu_bsmm_compiled": "Apple GPU dense-block lane — contiguous "
+                             "rank-2 f32 BSMM through the existing native Apple "
+                             "matmul ABI; unsupported contracts report "
+                             "reference_cpu and the route does not claim BSR "
+                             "metadata support.",
+    "apple_gpu_moe_compiled": "Apple GPU local MoE compute lane — top-1 f32 "
+                             "routing/grouping is explicit host metadata work, "
+                             "while each nonempty expert block runs through the "
+                             "checked native MPS matmul ABI. Unsupported contracts "
+                             "report reference_cpu; this is not distributed MoE.",
     "apple_gpu_sparse_compiled": "Apple GPU sparse + MoE lane — spmm_csr / "
-                             "spmm_coo / sddmm / bsmm (numpy CSR SpMM / (a@b)*mask "
-                             "/ a@b) and moe (routed per-token expert GEMVs, "
-                             "top-1). Apple ships no device sparse/moe kernel, so "
-                             "these run on the numpy reference. Matches numpy / "
-                             "tessera — parity with the x86/ROCm sparse + moe "
-                             "lanes.",
+                             "spmm_coo / sddmm / bsmm and moe legacy artifacts. "
+                             "Current compiler routes use their dedicated native "
+                             "lanes; this executor remains reference_cpu only for "
+                             "backward compatibility with stamped artifacts.",
     "apple_gpu_tail_compiled": "Apple GPU reference tail lane — the heterogeneous "
                              "remainder: MLA latent-KV (compress / expand_k / "
                              "expand_v), alibi bias, lgamma / digamma, "
@@ -1237,16 +1260,67 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "f32 Metal scatter-add. Unsupported contracts report reference_cpu; "
                "distributed transport and generic sparse kernels are not claimed.",
         execution_mode="metal_runtime"),
+    ("apple_gpu", "apple_gpu_spmm_csr_compiled"): ExecutionRow(
+        target="apple_gpu", compiler_path="apple_gpu_spmm_csr_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="apple_gpu_spmm_csr_compiled", runtime_status="success",
+        reason="Apple GPU CSR SpMM artifact runs f32 CSR × dense RHS through a "
+               "direct Metal kernel (one output element walks its sparse CSR row). "
+               "The native ABI requires contiguous i64 indptr/indices, f32 values, "
+               "and a contiguous row-major f32 RHS; unsupported dtype/layout/"
+               "structure contracts report reference_cpu. COO, SDDMM, and BSMM "
+               "remain on the separate reference sparse lane.",
+        execution_mode="metal_runtime"),
+    ("apple_gpu", "apple_gpu_spmm_coo_compiled"): ExecutionRow(
+        target="apple_gpu", compiler_path="apple_gpu_spmm_coo_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="apple_gpu_spmm_coo_compiled", runtime_status="success",
+        reason="Apple GPU COO SpMM adapter canonicalizes contiguous i64 COO "
+               "coordinates and f32 values to CSR on the host (preserving COO "
+               "last-write duplicate semantics), then runs the f32 CSR × dense "
+               "multiplication through the direct Metal kernel. Unsupported "
+               "dtype/layout/structure contracts report reference_cpu; SDDMM "
+               "and BSMM remain on the separate reference sparse lane.",
+        execution_mode="metal_runtime"),
+    ("apple_gpu", "apple_gpu_sddmm_compiled"): ExecutionRow(
+        target="apple_gpu", compiler_path="apple_gpu_sddmm_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="apple_gpu_sddmm_compiled", runtime_status="success",
+        reason="Apple GPU SDDMM artifact runs f32 sampled dense-dense "
+               "multiplication through a direct Metal kernel: zero mask entries "
+               "skip the dot product and nonzero entries produce (A @ B) * mask. "
+               "The native ABI requires contiguous row-major f32 A[M,K], B[K,N], "
+               "and mask[M,N]; unsupported dtype/layout/shape contracts report "
+               "reference_cpu. BSMM remains on the separate reference sparse lane.",
+        execution_mode="metal_runtime"),
+    ("apple_gpu", "apple_gpu_bsmm_compiled"): ExecutionRow(
+        target="apple_gpu", compiler_path="apple_gpu_bsmm_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="apple_gpu_bsmm_compiled", runtime_status="success",
+        reason="Apple GPU BSMM artifact routes the public two-dense-operand f32 "
+               "dense-block contract through the existing native rank-2 MPS "
+               "matmul ABI. The native ABI requires contiguous row-major f32 "
+               "A[M,K] and B[K,N]; unsupported dtype/layout/shape contracts "
+               "report reference_cpu. This is not a claim of BSR/block-map "
+               "metadata support.",
+        execution_mode="metal_runtime"),
+    ("apple_gpu", "apple_gpu_moe_compiled"): ExecutionRow(
+        target="apple_gpu", compiler_path="apple_gpu_moe_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="apple_gpu_moe_compiled", runtime_status="success",
+        reason="Apple GPU local top-1 MoE compute groups routes on the host, "
+               "then runs every nonempty contiguous f32 expert block through "
+               "the checked native rank-2 MPS matmul ABI. Token-order assembly "
+               "is host-side metadata/copy work; unsupported dtype/layout/route "
+               "contracts report reference_cpu. This is not a distributed MoE claim.",
+        execution_mode="metal_runtime"),
     ("apple_gpu", "apple_gpu_sparse_compiled"): ExecutionRow(
         target="apple_gpu", compiler_path="apple_gpu_sparse_compiled",
         execution_kind="reference_cpu", executable=True,
         executor_id="apple_gpu_sparse_compiled", runtime_status="success",
-        reason="Apple GPU sparse/MoE artifact runs spmm_csr / spmm_coo / sddmm / "
-               "bsmm (numpy CSR SpMM / (a@b)*mask / a@b) and moe (routed "
-               "per-token expert GEMVs, top-1) via the numpy reference. Runs on "
-               "the CPU reference path (no Metal dispatch) — "
-               "execution_kind=reference_cpu; matches numpy / tessera, parity "
-               "with the x86/ROCm sparse + moe lanes."),
+        reason="Legacy Apple GPU sparse/MoE artifacts retain the CPU reference "
+               "path for backward compatibility. Current compiler routes use "
+               "the dedicated native CSR/COO/SDDMM/BSMM/MoE lanes instead."),
     # Apple GPU reference tail lane (2026-07-10) — the heterogeneous remainder
     # (MLA latent-KV, alibi, lgamma/digamma, fused_epilogue, asymmetric_bce,
     # normalize_group_advantages, speculative-decode accept). Apple ships no

@@ -153,6 +153,11 @@ _APPLE_GPU_FRAMEWORK_HINTS: dict[str, str] = {
        ("sgd", "momentum", "adam", "adamw", "lion")},
     **{op: "Metal (MSL)" for op in
        ("scatter", "scatter_add", "scatter_reduce")},
+    "spmm_csr": "Metal (MSL)",
+    "spmm_coo": "Metal (MSL; host COO-to-CSR adapter)",
+    "sddmm": "Metal (MSL)",
+    "bsmm": "MetalPerformanceShaders (dense-block ABI)",
+    "moe": "MetalPerformanceShaders (local f32 expert blocks; host routing)",
 }
 
 # Apple GPU dispatch route per op family.  "manifest" = goes through a
@@ -165,6 +170,11 @@ _DRIVER_DISPATCH_OPS: frozenset[str] = frozenset({
     "rope", "flash_attn", "rmsnorm",
     "sgd", "momentum", "adam", "adamw", "lion",
     "scatter", "scatter_add", "scatter_reduce",
+    "spmm_csr",
+    "spmm_coo",
+    "sddmm",
+    "bsmm",
+    "moe",
     # Followup A.1 (2026-05-31) — manifest entries landed for these
     # three; they dispatch via the driver (MPSGraph unary opcode /
     # native multitile MPP / MPS matmul) so the drift gate routes
@@ -207,6 +217,11 @@ _PROOF_TESTS: dict[str, str] = {
        ("sgd", "momentum", "adam", "adamw", "lion")},
     **{op: "tests/unit/test_apple_gpu_scatter_compiled.py" for op in
        ("scatter", "scatter_add", "scatter_reduce")},
+    "spmm_csr": "tests/unit/test_apple_gpu_spmm_csr_compiled.py",
+    "spmm_coo": "tests/unit/test_apple_gpu_spmm_coo_compiled.py",
+    "sddmm": "tests/unit/test_apple_gpu_sddmm_compiled.py",
+    "bsmm": "tests/unit/test_apple_gpu_bsmm_compiled.py",
+    "moe": "tests/unit/test_apple_gpu_moe_compiled.py",
     "gemm":         "tests/unit/test_apple_backend_roadmap.py",
     "transpose":    "tests/unit/test_apple_gpu_transpose.py",
     "gather":       "tests/unit/test_apple_gpu_gather.py",
@@ -322,6 +337,11 @@ _APPLE_GPU_KERNELS_SYMBOL_MAP: dict[str, str] = {
        ("sgd", "momentum", "adam", "adamw", "lion")},
     **{op: "tessera_apple_gpu_scatter_f32" for op in
        ("scatter", "scatter_add", "scatter_reduce")},
+    "spmm_csr": "tessera_apple_gpu_spmm_csr_f32",
+    "spmm_coo": "tessera_apple_gpu_spmm_csr_f32 (COO-to-CSR adapter)",
+    "sddmm": "tessera_apple_gpu_sddmm_f32",
+    "bsmm": "tessera_apple_gpu_mps_matmul_f32 (dense-block ABI)",
+    "moe": "tessera_apple_gpu_mps_matmul_f32 (per-expert blocks; host routing)",
     # Structural MPSGraph data movers. f16 symbols carry both f16 and bf16 raw
     # 16-bit paths.
     "transpose":    "tessera_apple_gpu_mpsgraph_transpose_{f32,f16}",

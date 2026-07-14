@@ -2185,8 +2185,10 @@ extern "C" int32_t tessera_apple_gpu_mtl4_archive_enable(const char *path) {
 // returned. ``archive_path_out`` is filled up to ``archive_path_len``
 // bytes (always NUL-terminated when ``archive_path_len > 0``); the
 // remaining flags are set when the corresponding output pointer is
-// non-null. Returns 1 when the runtime is initialized + the snapshot
-// fields are valid, 0 when the runtime isn't ready.
+// non-null. Returns 1 whenever this Darwin runtime can report the snapshot.
+// A host without an accessible Metal device still receives the valid disabled
+// state (all flags false, empty path); 0 is reserved for the non-Darwin stub
+// where this telemetry ABI is unavailable.
 extern "C" int32_t tessera_apple_gpu_mtl4_archive_state(
     int32_t *archive_enabled_out,
     int32_t *has_lookup_archive_out,
@@ -2198,7 +2200,11 @@ extern "C" int32_t tessera_apple_gpu_mtl4_archive_state(
   if (has_lookup_archive_out) *has_lookup_archive_out = 0;
   if (archive_path_out && archive_path_len > 0) archive_path_out[0] = '\0';
   MetalDeviceContext &ctx = deviceContext();
-  if (!ctx.ok) return 0;
+  // ``ctx.ok`` answers whether a Metal device is usable, not whether this
+  // process can truthfully expose archive state.  Keep the disabled defaults
+  // above in a sandbox/no-device process so Python telemetry distinguishes a
+  // responding runtime from the non-Darwin ABI stub.
+  if (!ctx.ok) return 1;
   std::lock_guard<std::mutex> lock(ctx.mtl4_mu);
   if (archive_enabled_out)
     *archive_enabled_out = ctx.mtl4_archive_enabled ? 1 : 0;
@@ -13611,6 +13617,147 @@ extern "C" int32_t tessera_apple_gpu_scatter_f32(
         threadsPerThreadgroup:MTLSizeMake(1, 1, 1)];
     [enc endEncoding];
     if (!commit_and_wait_with_timeout(ctx, cb, 60000, "scatter_f32")) return 0;
+    std::memcpy(out, [outBuffer contents], outBytes);
+    return 1;
+  }
+}
+
+// Correctness-first CSR SpMM.  Each thread owns one output C[row, col] and
+// walks that CSR row, so the kernel is deliberately simple but genuinely
+// sparse: it never materializes A or calls a dense GEMM.  The Python entry
+// point owns the public contract validation (contiguous f32 values/RHS and
+// i64 CSR structure) before this ABI is reached.
+static NSString *const kSpmmCsrF32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+kernel void spmm_csr_f32(device const long *indptr [[buffer(0)]],
+                         device const long *indices [[buffer(1)]],
+                         device const float *values [[buffer(2)]],
+                         device const float *rhs [[buffer(3)]],
+                         device float *out [[buffer(4)]],
+                         constant int &m [[buffer(5)]],
+                         constant int &n [[buffer(6)]],
+                         uint2 gid [[thread_position_in_grid]]) {
+  const int row = int(gid.y), col = int(gid.x);
+  if (row >= m || col >= n) return;
+  float acc = 0.0f;
+  const long begin = indptr[row], end = indptr[row + 1];
+  for (long p = begin; p < end; ++p)
+    acc += values[p] * rhs[indices[p] * long(n) + col];
+  out[long(row) * long(n) + col] = acc;
+}
+)MSL";
+
+extern "C" int32_t tessera_apple_gpu_spmm_csr_f32(
+    const int64_t *indptr, const int64_t *indices, const float *values,
+    const float *rhs, float *out, int32_t m, int32_t k, int32_t n,
+    int32_t nnz) {
+  if (!indptr || !indices || !values || !rhs || !out || m <= 0 || k <= 0 ||
+      n <= 0 || nnz <= 0)
+    return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kSpmmCsrF32Source, @"spmm_csr_f32");
+    if (!pso) return 0;
+    const NSUInteger indptrBytes = sizeof(int64_t) * (NSUInteger)(m + 1);
+    const NSUInteger nnzIndexBytes = sizeof(int64_t) * (NSUInteger)nnz;
+    const NSUInteger nnzValueBytes = sizeof(float) * (NSUInteger)nnz;
+    const NSUInteger rhsBytes = sizeof(float) * (NSUInteger)k * n;
+    const NSUInteger outBytes = sizeof(float) * (NSUInteger)m * n;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(indptrBuffer, ctx, indptr, indptrBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(indicesBuffer, ctx, indices, nnzIndexBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(valuesBuffer, ctx, values, nnzValueBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(rhsBuffer, ctx, rhs, rhsBytes);
+    TS_METAL_BUF_ACQUIRE(outBuffer, ctx, outBytes);
+    if (!indptrBuffer || !indicesBuffer || !valuesBuffer || !rhsBuffer || !outBuffer)
+      return 0;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:indptrBuffer offset:0 atIndex:0];
+    [enc setBuffer:indicesBuffer offset:0 atIndex:1];
+    [enc setBuffer:valuesBuffer offset:0 atIndex:2];
+    [enc setBuffer:rhsBuffer offset:0 atIndex:3];
+    [enc setBuffer:outBuffer offset:0 atIndex:4];
+    [enc setBytes:&m length:sizeof(m) atIndex:5];
+    [enc setBytes:&n length:sizeof(n) atIndex:6];
+    const NSUInteger tx = std::min<NSUInteger>(16u, pso.maxTotalThreadsPerThreadgroup);
+    const NSUInteger ty = std::max<NSUInteger>(1u, std::min<NSUInteger>(
+        16u, pso.maxTotalThreadsPerThreadgroup / std::max<NSUInteger>(1u, tx)));
+    [enc dispatchThreads:MTLSizeMake((NSUInteger)n, (NSUInteger)m, 1)
+        threadsPerThreadgroup:MTLSizeMake(tx, ty, 1)];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "spmm_csr_f32")) return 0;
+    std::memcpy(out, [outBuffer contents], outBytes);
+    return 1;
+  }
+}
+
+// Sampled dense-dense matrix multiplication.  A thread owns one output cell;
+// an exact-zero mask exits before reading either dot-product row/column.  This
+// is a correctness-first sparse kernel, not a dense GEMM relabel: the mask is
+// part of the device execution contract and controls which products are read.
+static NSString *const kSddmmF32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+kernel void sddmm_f32(device const float *a [[buffer(0)]],
+                      device const float *b [[buffer(1)]],
+                      device const float *mask [[buffer(2)]],
+                      device float *out [[buffer(3)]],
+                      constant int &m [[buffer(4)]],
+                      constant int &k [[buffer(5)]],
+                      constant int &n [[buffer(6)]],
+                      uint2 gid [[thread_position_in_grid]]) {
+  const int row = int(gid.y), col = int(gid.x);
+  if (row >= m || col >= n) return;
+  const long offset = long(row) * long(n) + col;
+  const float sampled = mask[offset];
+  if (sampled == 0.0f) { out[offset] = 0.0f; return; }
+  float acc = 0.0f;
+  for (int t = 0; t < k; ++t)
+    acc += a[long(row) * long(k) + t] * b[long(t) * long(n) + col];
+  out[offset] = acc * sampled;
+}
+)MSL";
+
+extern "C" int32_t tessera_apple_gpu_sddmm_f32(
+    const float *a, const float *b, const float *mask, float *out,
+    int32_t m, int32_t k, int32_t n) {
+  if (!a || !b || !mask || !out || m <= 0 || k <= 0 || n <= 0)
+    return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kSddmmF32Source, @"sddmm_f32");
+    if (!pso) return 0;
+    const NSUInteger aBytes = sizeof(float) * (NSUInteger)m * k;
+    const NSUInteger bBytes = sizeof(float) * (NSUInteger)k * n;
+    const NSUInteger outBytes = sizeof(float) * (NSUInteger)m * n;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(aBuffer, ctx, a, aBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bBuffer, ctx, b, bBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(maskBuffer, ctx, mask, outBytes);
+    TS_METAL_BUF_ACQUIRE(outBuffer, ctx, outBytes);
+    if (!aBuffer || !bBuffer || !maskBuffer || !outBuffer) return 0;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:aBuffer offset:0 atIndex:0];
+    [enc setBuffer:bBuffer offset:0 atIndex:1];
+    [enc setBuffer:maskBuffer offset:0 atIndex:2];
+    [enc setBuffer:outBuffer offset:0 atIndex:3];
+    [enc setBytes:&m length:sizeof(m) atIndex:4];
+    [enc setBytes:&k length:sizeof(k) atIndex:5];
+    [enc setBytes:&n length:sizeof(n) atIndex:6];
+    const NSUInteger tx = std::min<NSUInteger>(16u, pso.maxTotalThreadsPerThreadgroup);
+    const NSUInteger ty = std::max<NSUInteger>(1u, std::min<NSUInteger>(
+        16u, pso.maxTotalThreadsPerThreadgroup / std::max<NSUInteger>(1u, tx)));
+    [enc dispatchThreads:MTLSizeMake((NSUInteger)n, (NSUInteger)m, 1)
+        threadsPerThreadgroup:MTLSizeMake(tx, ty, 1)];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "sddmm_f32")) return 0;
     std::memcpy(out, [outBuffer contents], outBytes);
     return 1;
   }

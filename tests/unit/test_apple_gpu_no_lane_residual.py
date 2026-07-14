@@ -83,7 +83,7 @@ _NO_LANE_BARE: frozenset[str] = frozenset(
         # Dense linalg solves / decompositions.
         "cholesky_solve", "factorized_matmul", "lu", "qr", "svd",
         # Sparse linalg.
-        "bsmm", "sddmm", "segment_reduce", "spmm_coo", "spmm_csr",
+        "segment_reduce",
         # Special functions.
         "digamma", "lgamma",
         # Structural / shape / view / gather-scatter (no arithmetic kernel).
@@ -96,7 +96,7 @@ _NO_LANE_BARE: frozenset[str] = frozenset(
         # Latent-KV (target-lowering gated, Decision #21).
         "latent_kv_compress", "latent_kv_expand_k", "latent_kv_expand_v",
         # MoE / MoR routing + score combine.
-        "moe", "moe_combine", "moe_dispatch", "mor_partition", "mor_router",
+        "moe_combine", "moe_dispatch", "mor_partition", "mor_router",
         "mor_scatter",
         # Titans/Atlas memory-index + MSA block selection.
         "memory_index_select", "memory_index_select_ste", "msa_select_blocks",

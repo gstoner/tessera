@@ -154,6 +154,11 @@ _APPLE_GPU_OPTIMIZER_READY = (
 _APPLE_GPU_SCATTER_READY = (
     "tessera.scatter", "tessera.scatter_add", "tessera.scatter_reduce",
 )
+_APPLE_GPU_SPMM_CSR_READY = ("tessera.spmm_csr",)
+_APPLE_GPU_SPMM_COO_READY = ("tessera.spmm_coo",)
+_APPLE_GPU_SDDMM_READY = ("tessera.sddmm",)
+_APPLE_GPU_BSMM_READY = ("tessera.bsmm",)
+_APPLE_GPU_MOE_COMPUTE_READY = ("tessera.moe",)
 _APPLE_GPU_MOE_TRANSPORT_READY = (
     "tessera.moe_dispatch", "tessera.moe_combine",
 )
@@ -625,10 +630,35 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
                 reason="Apple GPU deterministic Metal f32 row-scatter ABI",
             ),
             **_ops(
+                "ready", _APPLE_GPU_SPMM_CSR_READY,
+                reason=("Apple GPU direct Metal f32 CSR SpMM; contiguous i64 "
+                        "CSR structure and row-major f32 RHS"),
+            ),
+            **_ops(
+                "ready", _APPLE_GPU_SPMM_COO_READY,
+                reason=("Apple GPU COO-to-CSR host canonicalization plus direct "
+                        "Metal f32 CSR SpMM"),
+            ),
+            **_ops(
+                "ready", _APPLE_GPU_SDDMM_READY,
+                reason=("Apple GPU direct Metal f32 sampled dense-dense "
+                        "multiplication with an explicit f32 mask contract"),
+            ),
+            **_ops(
+                "ready", _APPLE_GPU_BSMM_READY,
+                reason=("Apple GPU native f32 dense-block BSMM through the "
+                        "rank-2 MPS matmul ABI; no BSR metadata contract"),
+            ),
+            **_ops(
+                "ready", _APPLE_GPU_MOE_COMPUTE_READY,
+                reason=("Apple GPU local top-1 f32 MoE compute: host route grouping "
+                        "and native MPS expert-block matmuls"),
+            ),
+            **_ops(
                 "ready", _APPLE_GPU_MOE_TRANSPORT_READY,
                 reason="Apple GPU local f32 MoE dispatch gather and combine scatter-add",
             ),
-            **_ops("artifact_only", ("tessera.moe", "tessera.add", "tessera.mul"), reason="Apple GPU target contract exists but native execution is not wired for this op"),
+            **_ops("artifact_only", ("tessera.add", "tessera.mul"), reason="Apple GPU target contract exists but native execution is not wired for this op"),
             # E1 (2026-05-20) — 26 fused GA + EBM MSL kernels.  These are
             # the same kernels documented in ``backend_manifest`` and
             # benchmarked end-to-end by ``benchmarks/apple_gpu/benchmark_ga_ebm.py``.

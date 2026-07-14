@@ -1,7 +1,7 @@
 ---
 status: Informative
 classification: Informative
-last_updated: 2026-04-26
+last_updated: 2026-07-14
 ---
 
 > **Current-state note (2026-05-20):** This is historical architecture guidance. Phase labels below are design lineage, not current support claims. For implementation status, use `docs/spec/COMPILER_REFERENCE.md`, `docs/audit/generated/support_table.md`, `docs/audit/generated/e2e_op_coverage.md`, and `docs/spec/VALIDATION_SPINE.md`.
@@ -135,7 +135,7 @@ def flash_forward(Q, K, V):
 | `Region["reduce_max"]` | `"reduce_max"` | No |
 | `Region["reduce_min"]` | `"reduce_min"` | No |
 
-Two `Region["write"]` parameters on overlapping tensors → `TesseraPrivilegeError` at decoration time.
+Two `Region["write"]` parameters on overlapping tensors → `TesseraConstraintError` at decoration time.
 
 ### 2.5 Domain and distribution
 

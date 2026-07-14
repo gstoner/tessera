@@ -1,7 +1,7 @@
 ---
 classification: Architecture / Workload
 authority: DFlash workload design and implementation guide
-last_updated: 2026-07-13
+last_updated: 2026-07-14
 ---
 
 # DFlash — block-diffusion speculative decoding
@@ -133,7 +133,9 @@ accept the bias operand first.
   the AVX-512 flash lane. f32-native, no head-dim constraint, so it matches the
   numpy reference to f32 epsilon (block-attention parity + whole-draft greedy
   tokens identical); falls back when the x86 elementwise lib isn't built.
-- **CUDA** — pending the emit/ FA bias operand (Phase 1 CUDA).
+- **CUDA** — pending the DFlash seam. The `flash_attn` NVIDIA lane now carries
+  the `attn_bias` feature flag (`backend_manifest.py`), but
+  `tessera.dflash.nvidia_attention_fn` is not yet wired.
 
 ## 6. External gates (not yet closed)
 

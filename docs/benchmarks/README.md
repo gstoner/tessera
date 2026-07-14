@@ -2,7 +2,7 @@
 status: Informative
 classification: Informative
 authority: TesseraBench documentation index
-last_updated: 2026-04-30
+last_updated: 2026-07-14
 ---
 
 # TesseraBench Documentation
@@ -41,17 +41,18 @@ The Python benchmark runner suite lives in `benchmarks/` at the repo root
 ## Quick Start
 
 ```python
-from benchmarks.benchmark_gemm import run_gemm_benchmark
+from benchmarks.benchmark_gemm import GEMMBenchmark
 
-results = run_gemm_benchmark(
-    backends=["x86"],                  # "x86", "nvidia", "rocm"
+bench = GEMMBenchmark(dtype="bf16")
+results = bench.run(
     sizes=[(512, 512, 512),
            (1024, 1024, 1024),
            (4096, 4096, 4096)],
 )
 
 for r in results:
-    print(f"M={r.M} N={r.N} K={r.K}  {r.tflops:.1f} TFLOPS  {r.latency_ms:.2f} ms")
+    print(f"M={r.config.M} N={r.config.N} K={r.config.K}  "
+          f"{r.tflops:.1f} TFLOPS  {r.latency_ms:.2f} ms")
 ```
 
 Run all benchmarks and produce the JSON report:

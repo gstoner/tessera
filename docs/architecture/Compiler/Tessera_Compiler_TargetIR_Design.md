@@ -1,7 +1,7 @@
 ---
 status: Informative
 classification: Informative
-last_updated: 2026-07-13
+last_updated: 2026-07-14
 ---
 
 > **Current-state note (2026-07-13):** This is architecture guidance, not the
@@ -132,10 +132,11 @@ wgmma.mma_async.aligned.m64n128k32.f32.fp8.fp8.fp32 ...
 
 ## 8. Debugging & Inspection
 
-Programmers can inspect target IR:
+Programmers can inspect target IR (`graph_ir.to_mlir()` emits Graph IR text — for
+lowered target output use `fn.target_ir`):
 
 ```python
-print(kernel.graph_ir.to_mlir())
+print(kernel.target_ir)
 ```
 
 Outputs:
@@ -177,7 +178,7 @@ You don’t usually need to modify Target IR, but you can **inspect it** to:
 ## 11. Inspecting Target IR
 
 ```python
-gemm_kernel.graph_ir.to_mlir()
+gemm_kernel.target_ir   # or gemm_kernel.lowering_artifacts()
 ```
 
 On NVIDIA (Blackwell) this might show:  
@@ -229,7 +230,7 @@ On Intel this might show DPAS intrinsics:
 
 2. Inspect Target IR:  
    ```python
-   step.graph_ir.to_mlir()
+   step.target_ir
    ```
    → Shows `wgmma.mma_async` with `fp8.fp8.fp32` accumulate.  
 

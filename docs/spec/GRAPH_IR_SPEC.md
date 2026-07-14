@@ -1,7 +1,7 @@
 ---
 status: Normative
 classification: Normative
-last_updated: 2026-05-22
+last_updated: 2026-07-14
 ---
 
 # Tessera Graph IR Specification
@@ -41,7 +41,7 @@ debug-marker operations. Resolution:
   detection (Issue #1) and is **not** a normative IR contract for
   downstream passes.
 - **Attention-family Graph IR ops** — `flash_attn`, `mla_decode`,
-  `deepseek_sparse_attention`, `lightning_attention`, `kimi_delta`,
+  `deepseek_sparse_attention`, `lightning_attention`, `kimi_delta_attention`,
   `gated_deltanet`, etc., are normative Graph IR ops registered in
   `TesseraOps.td` and lowered by
   `src/transforms/lib/AttentionFamilyPasses.cpp`.
@@ -103,12 +103,19 @@ Used by `tessera.conv2d_nhwc` (`epilogue` attr) and `tessera.fused_epilogue` (`e
 
 Attached to `func.func` operations by `EffectAnnotationPass`. String-valued.
 
+Values are drawn from the totally-ordered 8-level effect lattice
+`pure < random < movement < state < collective < memory < io < top`; a
+function's attribute is the join (max) over its body.
+
 | Value | Meaning |
 |-------|---------|
 | `"pure"` | No side effects; recompute-safe |
-| `"random"` | Calls RNG; result varies |
-| `"memory"` | Reads/writes mutable state |
-| `"io"` | Collective communication or host I/O |
+| `"random"` | Calls RNG / dropout; result varies |
+| `"movement"` | Explicit prefetch / async-copy / wait movement |
+| `"state"` | Reads/writes compiler-visible state (KV cache, ring) |
+| `"collective"` | Async device/rank communication |
+| `"memory"` | Writes mutable tensors / aliases host-visible memory |
+| `"io"` | Host I/O or external (non-tessera) calls |
 
 ### 3.3 `tessera.shard` Argument Attribute
 
@@ -473,11 +480,17 @@ The `EffectAnnotationPass` (flag: `--tessera-effect-annotation`) attaches `tesse
 
 | Condition | Effect assigned |
 |-----------|----------------|
-| Body contains `tessera.flash_attn` with `dropout_p != 0.0` | `random` |
+| Body contains `tessera.flash_attn` with `dropout_p != 0.0`, `tessera.dropout`, or `tessera.rng.*` / `rng.uniform` | `random` |
+| Body contains `schedule.prefetch` / `schedule.async_copy` / `tile.async_copy` / `tile.wait_async` | `movement` |
+| Body contains `tessera.kv_cache.*` / `tessera.ring.*` / `cache.*` | `state` |
+| Body contains `tessera.all_reduce` / `reduce_scatter` / `all_gather` / `tessera.collective.*` | `collective` |
 | Body contains `tessera.copy` | `memory` |
 | Any argument has `tessera.effect = "write"` or `"reduce_*"` attribute | `memory` |
 | Body contains `func.call` to external non-tessera function | `io` |
 | None of the above | `pure` |
+
+The function's effect is the lattice join (max) over these per-op effects, not
+a first-match.
 
 **Validation:** If a function already has `tessera.effect = "pure"` and the inferred level is higher, the pass emits an error and signals failure (enforcing the `@jit(deterministic=True)` contract).
 

@@ -10,7 +10,7 @@ last_updated: 2026-06-11
 # Tessera Programming Guide  
 ## Chapter 1: Introduction & Overview (Updated)
 
-Tessera is a new programming model for modern accelerators. The current implemented stack covers the Python frontend; **executable backends** today are x86 (AMX/AVX-512), Apple M-Series CPU (Accelerate) and Apple M-Series GPU (Metal/MPS/MPSGraph/custom MSL), plus a production CPU MLIR→LLVM **JIT** lane. NVIDIA SM_90+ and AMD ROCm produce Target IR artifacts but real-hardware execution is gated on Phase G/H hardware. Autodiff (forward/reverse + checkpointing) is shipped. Multi-GPU distributed training and NVL72 rack-scale execution remain Phase 4 planned.
+Tessera is a new programming model for modern accelerators. The current implemented stack covers the Python frontend; **executable backends** today are x86 (AMX/AVX-512), Apple M-Series CPU (Accelerate) and Apple M-Series GPU (Metal/MPS/MPSGraph/custom MSL), plus a production CPU MLIR→LLVM **JIT** lane. Non-Apple hardware is no longer purely gated: NVIDIA sm_120 (consumer Blackwell) has a hardware-verified `mma.sync` matmul and ROCm gfx1151 (Strix Halo) executes a compiler-generated matmul + flash-attention family via `runtime.launch()`. Broader op coverage and datacenter archs (NVIDIA Hopper sm_90 / sm_100, ROCm CDNA) still produce Target IR artifacts with real-hardware execution gated on Phase G/H. Autodiff (forward/reverse + checkpointing) is shipped. Multi-GPU distributed training and NVL72 rack-scale execution remain Phase 4 planned.
 
 Unlike thread- and block-centric models (e.g., CUDA), Tessera is **tile-first**: programmers think in terms of tiles, groups, and meshes. This abstraction, combined with an expressive type system and a multi-level IR, makes Tessera code both **portable** and **high-performance**.
 
@@ -24,7 +24,7 @@ Unlike thread- and block-centric models (e.g., CUDA), Tessera is **tile-first**:
 - **Autodiff-aware design**: tape-based forward/reverse transforms, custom VJP/JVP rules, and activation checkpointing are **shipped** (effect-aware and collective-aware adjoints registered); see Ch.7.  
 - **Standalone compiler**: the runtime is independent of PyTorch / JAX / Flax — they are reference vocabularies only (Architecture Decision #23). The S-series Python reference surface (RNG, state, control, sharding, NN functional, quantization, optimizers, losses + RL, checkpointing, custom ops, AOT, data pipeline) has shipped.  
 - **Distributed by construction**: domains/distributions exist today; multi-GPU/multi-rank collective execution is Phase 4 planned (single-device runs over in-process mock ranks).  
-- **Portability**: x86 + Apple CPU/GPU execute today; NVIDIA PTX/Tile IR and AMD ROCm artifacts emit today with hardware execution gated on Phase G/H.  
+- **Portability**: x86 + Apple CPU/GPU execute today; NVIDIA sm_120 and ROCm gfx1151 now execute a compiler-generated matmul/flash-attention family on hardware; broader op coverage and datacenter archs (Hopper sm_90 / sm_100, ROCm CDNA) emit PTX/Tile IR + ROCm artifacts with hardware execution gated on Phase G/H.  
 - **NVL72 design target**: treating a 72-GPU NVSwitch rack as a single programming domain is Phase 4 planned.  
 
 ---

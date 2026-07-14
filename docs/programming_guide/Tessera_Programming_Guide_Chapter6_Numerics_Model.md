@@ -60,8 +60,8 @@ x: Tensor["B","D", fp8_e4m3 @accum(fp32) @stochastic_round]
 Tessera provides **safe versions** of numerically sensitive operations:
 
 - `softmax_safe` → stable softmax with log-sum-exp trick.  
-- `layernorm_safe`, `rmsnorm_safe` → prevent overflow/underflow in normalization.  
-- `logsumexp_safe` → robust to large exponents.  
+- `rmsnorm_safe` → prevents overflow/underflow in normalization (companion to `layer_norm`).  
+- `logsumexp` → robust to large exponents.  
 
 Example:
 ```python

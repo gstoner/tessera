@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-06-28
+last_updated: 2026-07-14
 audit_role: plan
 plan_state: open
 ---
@@ -55,7 +55,7 @@ Not all gaps are compute. Four dispositions:
 This is **not** a single not_applicable audit. `backend_kernel = not_applicable`
 is the right *disposition for the kernel axis* on the pure-view subset, but the
 ops still need real **IR + lowering + runtime-movement + contract** support to be
-*compiled* rather than numpy-interpreted. Today **28 of 33 structural ops have no
+*compiled* rather than numpy-interpreted. Today **22 of 33 structural ops have no
 Graph IR op at all** — they exist only at the Python frontend + numpy runtime, so
 they cannot enter a compiled pipeline, be fused, or lower to device memory
 movement. The foundation work is specified in **§6**. Three kernel-axis sub-classes:
@@ -255,8 +255,8 @@ and sharded* — not numpy-interpreted.
 |---|---|---|
 | **Stdlib surface** | ✅ all 33 ops registered with `lowering="layout_transform"/"indexing"`; numpy reference complete; exposed via `tessera.ops.*` | `python/tessera/compiler/op_catalog.py` (47 layout/indexing OpSpecs) |
 | **Autodiff (VJP)** | ✅ largely complete — incl. gather (`vjp.py:535`), scatter (`:444`), scatter_add/reduce (`:458/:467`), masked_fill (`:688`), reshape/transpose/pad/cat/slice/take/… | `python/tessera/autodiff/vjp.py` |
-| **Autodiff (JVP)** | ❌ only scatter_add/scatter_reduce; rest deferred | `python/tessera/autodiff/jvp.py` |
-| **Graph IR (ODS)** | ❌ **only 5/33**: transpose (`TesseraOps.td:1693`), reshape (`:1724`), cast (`:1743`), select (`:1314`), masked_fill (`:1320`). 28 ops have **no IR op**. | `src/compiler/ir/TesseraOps.td` |
+| **Autodiff (JVP)** | ✅ largely complete — the whole structural family now has `@_jvp` rules: reshape, transpose, flatten, squeeze, permute, broadcast, expand, cat, pad, roll, flip, slice, select, gather, take, scatter, scatter_add/scatter_reduce, masked_fill, … | `python/tessera/autodiff/jvp.py` |
+| **Graph IR (ODS)** | ⚠️ **11/33**: transpose (`TesseraOps.td:1723`), reshape (`:1754`), cast (`:1773`), select (`:1337`), masked_fill (`:1344`), squeeze (`:1798`), unsqueeze (`:1807`), expand (`:1816`), broadcast (`:1825`), permute (`:1834`), flatten (`:1843`). 22 ops have **no IR op**. | `src/compiler/ir/TesseraOps.td` |
 | **Lowering** | ❌ no structural→Tile/Target path; transpose only folds into matmul; reshape has a folder | `src/transforms/lib/CanonicalizeTesseraIR.cpp` |
 | **View vs copy** | ❌ no IR concept; zero-copy view exists ONLY on Apple Metal (`DeviceTensor.reshape_view`), not backend-agnostic | runtime Apple GPU path |
 | **Runtime movement** | ❌ numpy advanced-indexing only; no strided-copy / gather-scatter device primitive | `python/tessera/__init__.py` op refs |
@@ -364,8 +364,10 @@ biggest correctness gap (vmap/`shard_map` can't route structural ops without it)
   surface if subsumed by quantization.
 - **Fix the gather `lowering=` inconsistency** (catalogued `layout_transform` but
   semantically `indexing`).
-- **JVP rules** for the structural ops (forward-mode) — currently only
-  scatter_add/reduce; the rest are mechanical given the VJPs (Phase F item).
+- **JVP rules** for the structural ops (forward-mode) — ✅ landed: the whole
+  structural family now has `@_jvp` rules (reshape/transpose/gather/scatter/pad/
+  cat/slice/take/squeeze/permute/broadcast/expand/roll/flip/masked_fill/…),
+  beyond the original scatter_add/reduce.
 
 ### 6.F Sequencing of the Tier-0 foundation
 
@@ -381,7 +383,7 @@ biggest correctness gap (vmap/`shard_map` can't route structural ops without it)
    hardening (§6.E).
 
 F1→F2 are pure compiler; F3→F4 reuse the proven kernel cadence; F5 is contracts.
-Only after F1 do the 28 ops become *compileable*; only after F3 is "not_applicable"
+Only after F1 do the 22 ops become *compileable*; only after F3 is "not_applicable"
 on the 0-view set **true in the compiled pipeline**, not just on paper.
 
 ---
@@ -398,7 +400,7 @@ the **kernel** approach (if any), **dependencies**, **validation**, and the hone
 
 **What already exists (this is *not* greenfield):**
 - **Graph IR:** `all_gather`/`all_reduce`/`reduce_scatter` have ODS ops
-  (`TesseraOps.td:1787-1788`, `Tessera_CollectiveOp`); moe_dispatch/combine too
+  (`TesseraOps.td:1891-1893`, `Tessera_CollectiveOp` at `:1877`); moe_dispatch/combine too
   (`:972-990`). So the IR + single-rank reference semantics are present.
 - **Runtime:** in-process **mock collectives** (`testing/mock_collective.py`,
   `MockRankGroup`) execute multi-rank semantics on threads (Decision #6) — correct

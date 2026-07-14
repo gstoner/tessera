@@ -996,7 +996,7 @@ class FlashAttentionBenchmark:
     def setup(self, config: BenchmarkConfig) -> None:
         """Setup Flash Attention benchmark"""
         self.config = config
-        self.tessera_integration = TesseraIntegration(tessera.get_runtime())
+        self.tessera_integration = TesseraIntegration(tessera.runtime.TesseraRuntime())
         
         # Compile Flash Attention kernel for each precision
         self.compiled_kernels = {}

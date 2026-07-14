@@ -1,7 +1,7 @@
 ---
 status: Normative
 classification: Normative
-last_updated: 2026-06-16
+last_updated: 2026-07-14
 ---
 
 # Tessera Python API Specification
@@ -104,8 +104,7 @@ Python symbols beyond what is already specified here.
 tessera/
 ├── __init__.py                   # top-level namespace (see §1.1)
 ├── core/
-│   ├── __init__.py               # Tensor, NumericalPolicy, Module
-│   └── tensor.py                 # Tensor base + __class_getitem__
+│   └── __init__.py               # Tensor (+ __class_getitem__), NumericalPolicy, Module
 ├── distributed/
 │   ├── __init__.py               # re-exports all distributed symbols
 │   ├── region.py                 # Region, RegionType, RegionMeta
@@ -133,8 +132,7 @@ tessera/
 ├── rl.py                         # PPO/GRPO/CISPO reasoning post-training helpers
 ├── server.py                     # inference package, scheduler, KV cache, app registry
 ├── dtype.py                      # canonical dtype names, aliases, Dtype wrapper, promotion helpers
-├── ops/
-│   └── __init__.py               # tessera.ops.* namespace
+├── ops.pyi                       # tessera.ops.* type stub (namespace is generated, not a package)
 └── testing/
     └── mock_collective.py        # MockRankGroup, MockRank, MockCollectiveError
 ```
@@ -366,9 +364,9 @@ path is the **`tessera_jit` MLIR→LLVM JIT lane** (genuine codegen-and-run, not
 numpy reference): `@tessera.jit(target="cpu")` translates the whole-graph op-list
 into one `GraphFn` and runs it through `tessera-to-linalg → bufferize →
 linalg-to-loops → LLVM` *before* the numpy interpreter. The covered op set
-(`_JIT_GRAPH_OPS`) includes `matmul` (±transpose), `batched_gemm`,
+(`_JIT_GRAPH_OPS`) includes `matmul`/`gemm`,
 `add/sub/mul/div`, `relu/sigmoid/tanh/silu/gelu`, `softmax`, `rmsnorm`,
-`layer_norm`, `transpose`, `select`, `masked_fill`, and `reduce(sum/max/min/mean)`,
+`layer_norm`, `transpose`, `select`, and `masked_fill`,
 over f32/f16/bf16/f64. Anything outside the covered set / dtype / rank falls back
 to the numpy reference (a fallback handles "couldn't run", never "ran wrong");
 `.execution_kind` reports `native_cpu` vs `reference_cpu`, and the decision is

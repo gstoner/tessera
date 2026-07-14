@@ -16,25 +16,13 @@ _11 no-verifier ops need manual triage_ (many — pure elementwise — legitimat
 
 ## P1 — software conformance gaps (op×target proof ladder)
 
-63 op×target cells: {'reference': 11, 'complete': 17, 'missing': 35}.
+63 op×target cells: {'reference': 13, 'complete': 25, 'missing': 25}.
 
-First-failing gate: {'backend_compile': 37, 'schedule_legal': 9}.
+First-failing gate: {'backend_compile': 37, 'runtime_execute': 1}.
 
-**Software-actionable: 12** (stops at ['backend_compile', 'schedule_legal']) — real lowering/codegen gaps to fix:
-  - `kv_cache_read` → `apple_cpu` (stops @ schedule_legal)
-  - `kv_cache_read` → `apple_gpu` (stops @ schedule_legal)
-  - `kv_cache_read` → `cpu` (stops @ schedule_legal)
-  - `kv_cache_read` → `nvidia_sm100` (stops @ schedule_legal)
-  - `kv_cache_read` → `nvidia_sm120` (stops @ schedule_legal)
-  - `kv_cache_read` → `nvidia_sm80` (stops @ schedule_legal)
-  - `kv_cache_read` → `nvidia_sm90` (stops @ schedule_legal)
-  - `kv_cache_read` → `rocm` (stops @ schedule_legal)
-  - `kv_cache_read` → `x86` (stops @ schedule_legal)
-  - `matmul` → `x86` (stops @ backend_compile)
-  - `matmul_relu` → `x86` (stops @ backend_compile)
-  - `matmul_softmax` → `x86` (stops @ backend_compile)
+**Software-actionable: 0** (stops at []) — real lowering/codegen gaps to fix:
 
-_Target-environment-gated: 23 (stops at ['backend_compile']) — expected; requires the target toolchain and/or silicon proof lane._
+_Target-environment-gated: 25 (stops at ['backend_compile', 'runtime_execute']) — expected; requires the target toolchain and/or silicon proof lane._
 
 ## P2 — thin-test tail (the differential-generator target, item #2)
 
@@ -46,7 +34,7 @@ Zero-ref sample: `aot_export`, `aot_load`, `associative_scan`, `autocast`, `axis
 
 ## Takeaway
 
-- The compiler is **not stub-riddled**: remaining definite verifier stubs or software conformance cells are listed above; other gaps are target-environment-gated or thin-test work.
+- **No definite verifier stubs or software-actionable curated conformance gaps remain.** The open surface is no-verifier triage, target-environment proof, and thin-test hardening.
 - **#4 (IR round-trip + fuzz)** hardens the parser/printer/verifier across all ops cheaply, no oracle needed.
 - **#2 (differential generator)** is the right tool for the 0 needs-direct-test ops + miscompile detection.
 

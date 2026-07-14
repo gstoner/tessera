@@ -1,7 +1,7 @@
 ---
 status: Informative
 classification: Informative
-last_updated: 2026-04-26
+last_updated: 2026-07-14
 ---
 
 > **Current-state note (2026-05-20):** This is historical architecture guidance. Phase labels below are design lineage, not current support claims. For implementation status, use `docs/spec/COMPILER_REFERENCE.md`, `docs/audit/generated/support_table.md`, `docs/audit/generated/e2e_op_coverage.md`, and `docs/spec/VALIDATION_SPINE.md`.
@@ -88,7 +88,7 @@ Key files:
 - `tessera.Tensor["M", "K"]` → `TensorType(dim_names=("M", "K"))`
 - Any other annotation → passed through without tessera validation
 
-Privilege conflict detection happens here: if two `Region["write"]` annotations appear on parameters that the body assigns simultaneously, `TesseraPrivilegeError` is raised immediately.
+Privilege conflict detection happens here: if two `Region["write"]` annotations appear on parameters that the body assigns simultaneously, a privilege error is raised immediately. (Note: `TesseraPrivilegeError` is design intent documented in `distributed/region.py` but is not yet implemented as a distinct exception class.)
 
 ### Step 2 — AST constraint extraction
 
@@ -199,7 +199,7 @@ class Equal:
 
 ### 4.3 Checking
 
-`ConstraintSolver.check(bindings: dict[str, int])` evaluates one constraint against a concrete dim map. `check_all(bindings)` evaluates all added constraints in order, stopping at the first violation.
+`ConstraintSolver.check(bindings: dict[str, int])` evaluates all constraints and raises at the first violation. `check_all(bindings)` evaluates every added constraint and returns the full list of violations (not just the first) — useful for diagnostic reporting that surfaces all problems at once.
 
 When `bindings` lacks a dimension referenced by a constraint, that constraint is skipped (deferred to a later call where the size is known).
 
@@ -332,7 +332,7 @@ tessera.index_launch(axis="tp")   # → IndexLauncher(axis="tp")
 |-------|-------|
 | `TesseraConstraintError` | Constraint violated and `bindings=` provided concrete values. E.g. `Divisible("K", 64)` with `K=100`. |
 | `TesseraEffectError` | `deterministic=True` + unseeded `random` op (e.g. `dropout` without `seed`). |
-| `TesseraPrivilegeError` | Two `Region["write"]` annotations on the same tensor. |
+| `TesseraPrivilegeError` (planned — not yet implemented) | Two `Region["write"]` annotations on the same tensor. |
 | `TesseraTargetError` | Invalid `GPUTargetProfile` (e.g. `warps_per_cta` not a power of 2). |
 | `TesseraAttnConfigError` | Invalid `FlashAttnLoweringConfig` (e.g. non-power-of-2 tile size). |
 | `TesseraJitError` | `GraphIRBuilder` fails to emit valid IR (unsupported op, internal error). |

@@ -1,3 +1,8 @@
+---
+last_updated: 2026-07-13
+audit_role: reference
+---
+
 # NVIDIA sm_120 differentiation closeout
 
 Updated 2026-07-13 from the RTX 5070 Ti WSL CUDA host. “Promoted” requires all

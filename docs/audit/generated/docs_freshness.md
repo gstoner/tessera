@@ -7,8 +7,8 @@ Reference date for staleness: **2026-07-13**.
 ## Headline
 
 - **110** docs catalogued across the canonical doc tree.
-- **108** carry a `last_updated:` marker; **2** are undated (invisible to the freshness audit until tagged).
-- **47** updated within the last 30 days.
+- **109** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **48** updated within the last 30 days.
 - **0** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -16,7 +16,6 @@ Reference date for staleness: **2026-07-13**.
 These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-form `Last updated:` line to participate in the audit.  Until tagged, the freshness signal is unavailable.
 
 - `docs/reference/tessera_frontend_lanes.md`
-- `docs/audit/backend/nvidia/SM120_DIFFERENTIATION_DASHBOARD.md`
 
 ## Per-root inventory
 
@@ -139,7 +138,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `backend/apple/README.md` | - | 2026-07-13 | 0 | ✓ |
 | `backend/nvidia/BLACKWELL_SM120_EXECUTION_PLAN.md` | - | 2026-06-24 | 19 | ✓ |
 | `backend/nvidia/NVIDIA_AUDIT.md` | - | 2026-07-07 | 6 | ✓ |
-| `backend/nvidia/SM120_DIFFERENTIATION_DASHBOARD.md` | - | _undated_ | - | _body_ |
+| `backend/nvidia/SM120_DIFFERENTIATION_DASHBOARD.md` | - | 2026-07-13 | 0 | ✓ |
 | `backend/nvidia/VERIFY_TARGET_IR_TAIL.md` | - | 2026-07-13 | 0 | ✓ |
 | `backend/nvidia/spikes/sm120_mma_sync/README.md` | - | 2026-06-24 | 19 | ✓ |
 | `backend/rocm/ROCM_AUDIT.md` | - | 2026-07-13 | 0 | ✓ |

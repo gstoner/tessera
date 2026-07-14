@@ -4552,7 +4552,6 @@ def _execute_nvidia_control_flow_compiled(artifact: RuntimeArtifact,
 
 def _execute_nvidia_posenc_compiled(artifact: RuntimeArtifact, args: Any) -> Any:
     """Native compiler-emitted CUDA RoPE and ALiBi contracts."""
-    import numpy as np
     metadata = artifact.metadata or {}; ops = list(metadata.get("ops") or [])
     op = ops[0] if len(ops) == 1 else {}; name = str(op.get("op_name", ""))
     if name not in ("tessera.rope", "tessera.alibi"):

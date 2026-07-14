@@ -63,8 +63,8 @@ def _t(bare: str) -> str:
 # the live computation, so the grouping is documentation only.
 _NO_LANE_BARE: frozenset[str] = frozenset(
     {
-        # Optimizer step ops (host-side state update, not a GPU kernel target).
-        "adafactor", "adam", "adamw", "lion", "momentum", "sgd",
+        # Optimizer step ops without an Apple GPU lane.
+        "adafactor",
         # Distributed collectives (mock/host today; real NCCL/RCCL is Phase G/H).
         "all_gather", "all_reduce", "all_to_all", "reduce_scatter",
         # RNG / stochastic.
@@ -90,8 +90,8 @@ _NO_LANE_BARE: frozenset[str] = frozenset(
         "arange", "broadcast", "cast", "chunk", "dynamic_slice",
         "dynamic_update_slice", "expand", "flatten", "flip", "index_select",
         "index_update", "masked_fill", "nonzero", "pad", "permute", "rearrange",
-        "repeat", "reshape", "roll", "scatter", "scatter_add", "scatter_reduce",
-        "select", "split", "squeeze", "stack", "take", "tile", "tile_view",
+        "repeat", "reshape", "roll", "select", "split", "squeeze", "stack",
+        "take", "tile", "tile_view",
         "unsqueeze", "view", "argsort", "sort",
         # Latent-KV (target-lowering gated, Decision #21).
         "latent_kv_compress", "latent_kv_expand_k", "latent_kv_expand_v",

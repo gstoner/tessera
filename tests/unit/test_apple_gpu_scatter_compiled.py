@@ -75,3 +75,19 @@ def test_scatter_non_f32_uses_reference_cpu_override():
     upd = np.ones((1, 2), np.float64)
     _, res = _run("tessera.scatter", x, idx, upd)
     assert res["execution_kind"] == "reference_cpu"
+
+
+def test_scatter_out_of_range_preserves_reference_error():
+    x = np.zeros((3, 2), np.float32)
+    idx = np.array([3], np.int64)
+    upd = np.ones((1, 2), np.float32)
+    art = rt.RuntimeArtifact(metadata={
+        "target": "apple_gpu", "compiler_path": "apple_gpu_scatter_compiled",
+        "executable": True, "execution_kind": "native_gpu",
+        "arg_names": ["x", "i", "u"], "output_name": "o",
+        "ops": [{"op_name": "tessera.scatter", "result": "o",
+                 "operands": ["x", "i", "u"], "kwargs": {}}],
+    })
+    res = rt.launch(art, (x, idx, upd))
+    assert res["ok"] is False
+    assert "out of bounds" in res["reason"]

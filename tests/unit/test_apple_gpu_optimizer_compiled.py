@@ -124,6 +124,27 @@ def test_adam_multistep():
         p = pn
 
 
+def test_generic_envelope_preserves_positional_adam_state(monkeypatch):
+    """Graph-IR envelope operands carry m/v positionally, without ``extras``."""
+    rng = np.random.default_rng(41)
+    p = rng.standard_normal(SHAPE).astype(np.float32)
+    g = rng.standard_normal(SHAPE).astype(np.float32)
+    m = rng.standard_normal(SHAPE).astype(np.float32)
+    v = np.abs(rng.standard_normal(SHAPE)).astype(np.float32)
+    monkeypatch.setattr(rt, "_apple_optimizer_metal_kernel", rt._apple_optimizer_kernel)
+
+    out = rt._apple_gpu_dispatch_optimizer(
+        "tessera.adam", [p, g, m, v], {"lr": 1e-3, "step": 3}, np)
+    ref_p, ref_state = optim.adam(
+        p, g, {"m": m, "v": v, "step": 2}, lr=1e-3)
+
+    assert out is not None
+    pn, mn, vn = (np.asarray(value) for value in out)
+    np.testing.assert_allclose(pn, np.asarray(ref_p), atol=2e-5)
+    np.testing.assert_allclose(mn, np.asarray(ref_state["m"]), atol=2e-5)
+    np.testing.assert_allclose(vn, np.asarray(ref_state["v"]), atol=2e-6)
+
+
 def test_lion():
     rng = np.random.default_rng(5)
     p = rng.standard_normal(SHAPE).astype(np.float32)

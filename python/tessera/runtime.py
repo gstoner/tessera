@@ -10576,6 +10576,17 @@ def _apple_scatter_metal(out: Any, src: Any, idx: Any, out_rows: int,
     """Run the deterministic f32 row-scatter ABI on the Apple Metal runtime."""
     from ._apple_gpu_dispatch import bind_symbol
 
+    # Match NumPy indexed-store semantics before launching Metal. The kernel
+    # accepts normalized negative indices, but an out-of-range index must raise
+    # rather than silently skip a device update.
+    raw_idx = np.asarray(idx, np.int64).reshape(-1)
+    normalized_idx = np.where(raw_idx < 0, raw_idx + int(out_rows), raw_idx)
+    invalid = (normalized_idx < 0) | (normalized_idx >= int(out_rows))
+    if np.any(invalid):
+        bad = int(raw_idx[np.flatnonzero(invalid)[0]])
+        raise IndexError(
+            f"scatter index {bad} is out of bounds for axis with size {out_rows}")
+
     cf = ctypes.POINTER(ctypes.c_float)
     ci = ctypes.POINTER(ctypes.c_int64)
     fn = bind_symbol(
@@ -19531,9 +19542,13 @@ def _apple_gpu_dispatch_optimizer(op_name: str, operands: list[Any],
     p, g = (np.asarray(operands[0]), np.asarray(operands[1]))
     if not _apple_optimizer_native_contract(p, g, None, None):
         return None
-    extras = list(kwargs.get("extras", []))
-    state = {name: operands[2 + i] for i, name in enumerate(extras)
-             if 2 + i < len(operands)}
+    # Graph IR carries optimizer state as positional operands. The generic
+    # envelope does not retain the runtime-launch ``extras`` annotation, so use
+    # the op's canonical state ABI rather than reinitializing m/v.
+    state_names = _OPTIMIZER_OPS[op_name][2]
+    if len(operands) != 2 + len(state_names):
+        return None
+    state = dict(zip(state_names, operands[2:]))
     m, v = state.get("m"), state.get("v")
     if not _apple_optimizer_native_contract(p, g, m, v):
         return None

@@ -3,7 +3,7 @@ abs,6,0,1,6,0,bf16 f32,directly_tested,6 direct test references
 absolute,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 acos,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 adafactor,4,0,0,4,0,fp32 fp64,directly_tested,4 direct test references
-adam,14,5,0,19,0,fp32 fp64,directly_tested,19 direct test references
+adam,16,5,0,21,0,fp32 fp64,directly_tested,21 direct test references
 adamw,14,2,0,16,0,fp32 fp64,directly_tested,16 direct test references
 adaptive_pool,6,0,0,6,0,,directly_tested,6 direct test references
 add,113,29,10,142,0,bf16 f16 f32 f64 fp16 fp32,directly_tested,142 direct test references
@@ -388,7 +388,7 @@ safetensors_export,1,0,0,1,1,,structural_only,category default for 'aot'
 save_sharded,1,0,1,1,1,,structural_only,category default for 'serialization'
 save_state,6,0,2,6,0,,directly_tested,6 direct test references
 scan,12,0,2,12,0,fp16,directly_tested,12 direct test references
-scatter,9,0,0,9,0,,directly_tested,9 direct test references
+scatter,10,0,0,10,0,,directly_tested,10 direct test references
 scatter_add,12,0,0,12,0,,directly_tested,12 direct test references
 scatter_reduce,10,0,0,10,0,,directly_tested,10 direct test references
 score_combine,8,6,1,14,0,,directly_tested,14 direct test references

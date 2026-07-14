@@ -7172,6 +7172,33 @@ def _coo_to_csr(coords: Any, nrows: int, np: Any) -> Any:
     return order, indptr
 
 
+def _coo_last_write_to_csr(coords: Any, values: Any, nrows: int, np: Any) -> Any:
+    """Canonicalize COO to CSR with the public COO last-write semantics.
+
+    ``tessera.ops.spmm_coo`` constructs its dense reference by indexed
+    assignment, so duplicate ``(row, col)`` entries keep the final input value.
+    Sparse device kernels instead naturally sum duplicate CSR entries.  Collapse
+    duplicates here before every backend calls the CSR kernel, preserving the
+    public contract instead of silently changing it during promotion.
+    """
+    c = np.asarray(coords)
+    v = np.asarray(values)
+    if c.shape[0] == 0:
+        return (np.zeros(nrows + 1, np.int64), np.empty(0, np.int64),
+                np.empty(0, np.float32))
+    order = np.lexsort((c[:, 1], c[:, 0]))
+    sc, sv = c[order], v[order]
+    keep = np.empty(sc.shape[0], dtype=bool)
+    keep[-1] = True
+    keep[:-1] = np.any(sc[:-1] != sc[1:], axis=1)
+    sc, sv = sc[keep], sv[keep]
+    counts = np.zeros(nrows + 1, np.int64)
+    np.add.at(counts, sc[:, 0].astype(np.int64) + 1, 1)
+    return (np.cumsum(counts, dtype=np.int64),
+            np.ascontiguousarray(sc[:, 1], np.int64),
+            np.ascontiguousarray(sv, np.float32))
+
+
 def _x86_spmm_csr(indptr: Any, indices: Any, values: Any, B: Any,
                   m: int, n: int, np: Any) -> Any:
     lib = _load_x86_elementwise()
@@ -7224,9 +7251,7 @@ def _sparse_compute(op_name: str, operands: list, spmm_fn: Any, sddmm_fn: Any,
                            np.asarray(values, np.float32), b, m, int(b.shape[1]))
         coords, values, shape = a
         m = int(shape[0])
-        order, indptr = _coo_to_csr(coords, m, np)
-        indices = np.asarray(coords)[order, 1].astype(np.int32)
-        values = np.asarray(values, np.float32)[order]
+        indptr, indices, values = _coo_last_write_to_csr(coords, values, m, np)
         return spmm_fn(indptr, indices, values, b, m, int(b.shape[1]))
     if op_name == "tessera.sddmm":
         return sddmm_fn(np.asarray(operands[0], np.float32),
@@ -10721,14 +10746,450 @@ def _apple_spmm_csr(indptr: Any, indices: Any, vals: Any, b: Any,
     return out
 
 
+def _apple_spmm_csr_native_contract(csr: Any, rhs: Any) -> bool:
+    """Whether a CSR × dense RHS call can use the f32 Metal ABI.
+
+    This intentionally accepts only the first vertical slice: an i64,
+    contiguous CSR tuple and a contiguous row-major f32 RHS.  Shape and bounds
+    validation happens here on the host so an invalid sparse structure cannot
+    become an invalid device memory access.  Other dtype/layout/empty cases
+    stay on the public reference path.
+    """
+    import numpy as np
+
+    if not isinstance(csr, tuple) or len(csr) != 4:
+        return False
+    indptr, indices, values, shape = csr
+    try:
+        ip, ix, vv, b = (np.asarray(value) for value in (indptr, indices, values, rhs))
+        m, k = (int(shape[0]), int(shape[1]))
+    except (TypeError, ValueError, IndexError):
+        return False
+    if (ip.dtype != np.int64 or ix.dtype != np.int64 or vv.dtype != np.float32 or
+            b.dtype != np.float32 or ip.ndim != 1 or ix.ndim != 1 or
+            vv.ndim != 1 or b.ndim != 2 or not ip.flags.c_contiguous or
+            not ix.flags.c_contiguous or not vv.flags.c_contiguous or
+            not b.flags.c_contiguous or m <= 0 or k <= 0 or b.shape[0] != k or
+            b.shape[1] <= 0 or ip.size != m + 1 or ix.size != vv.size or
+            ix.size == 0):
+        return False
+    # CSR structural checks are part of the native ABI boundary.  The reference
+    # override remains the source of truth for anything outside this contract.
+    return bool(ip[0] == 0 and ip[-1] == ix.size and
+                np.all(ip[1:] >= ip[:-1]) and np.all(ip >= 0) and
+                np.all(ip <= ix.size) and np.all(ix >= 0) and np.all(ix < k))
+
+
+def _apple_spmm_csr_metal(csr: Any, rhs: Any, np: Any) -> Any:
+    """Dispatch contiguous f32 CSR SpMM through the Apple Metal C ABI."""
+    from ._apple_gpu_dispatch import bind_symbol
+
+    indptr, indices, values, shape = csr
+    ip = np.asarray(indptr)
+    ix = np.asarray(indices)
+    vv = np.asarray(values)
+    b = np.asarray(rhs)
+    m, k, n = int(shape[0]), int(shape[1]), int(b.shape[1])
+    out = np.empty((m, n), np.float32)
+    ci = ctypes.POINTER(ctypes.c_int64)
+    cf = ctypes.POINTER(ctypes.c_float)
+    fn = bind_symbol(
+        "tessera_apple_gpu_spmm_csr_f32",
+        (ci, ci, cf, cf, cf, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+         ctypes.c_int32),
+        ctypes.c_int32,
+    )
+    if fn is None:
+        raise RuntimeError("Apple Metal CSR SpMM symbol unavailable")
+    ok = fn(ip.ctypes.data_as(ci), ix.ctypes.data_as(ci), vv.ctypes.data_as(cf),
+            b.ctypes.data_as(cf), out.ctypes.data_as(cf), ctypes.c_int32(m),
+            ctypes.c_int32(k), ctypes.c_int32(n), ctypes.c_int32(int(ix.size)))
+    if not ok:
+        raise RuntimeError("Apple Metal CSR SpMM dispatch failed")
+    return out
+
+
+def _apple_coo_to_csr_native(coo: Any, rhs: Any, np: Any) -> Any | None:
+    """Validate and canonicalize the narrow f32 COO adapter contract.
+
+    COO canonicalization is intentionally host-side metadata work.  The sparse
+    multiplication itself is the proven Metal CSR kernel, and this function
+    returns ``None`` rather than copying/converting unsupported input layouts.
+    """
+    if not isinstance(coo, tuple) or len(coo) != 3:
+        return None
+    coords, values, shape = coo
+    try:
+        c, v, b = (np.asarray(value) for value in (coords, values, rhs))
+        m, k = int(shape[0]), int(shape[1])
+    except (TypeError, ValueError, IndexError):
+        return None
+    if (c.dtype != np.int64 or v.dtype != np.float32 or b.dtype != np.float32 or
+            c.ndim != 2 or c.shape[1] != 2 or v.ndim != 1 or b.ndim != 2 or
+            c.shape[0] != v.size or not c.flags.c_contiguous or
+            not v.flags.c_contiguous or not b.flags.c_contiguous or m <= 0 or
+            k <= 0 or b.shape[0] != k or b.shape[1] <= 0 or v.size == 0 or
+            np.any(c[:, 0] < 0) or np.any(c[:, 0] >= m) or
+            np.any(c[:, 1] < 0) or np.any(c[:, 1] >= k)):
+        return None
+    indptr, indices, canonical_values = _coo_last_write_to_csr(c, v, m, np)
+    csr = (np.ascontiguousarray(indptr, np.int64),
+           np.ascontiguousarray(indices, np.int64), canonical_values, (m, k))
+    return csr if _apple_spmm_csr_native_contract(csr, b) else None
+
+
+def _apple_spmm_coo_reference(coo: Any, rhs: Any, np: Any) -> Any:
+    return _sparse_compute("tessera.spmm_coo", [coo, rhs], _apple_spmm_csr,
+                           lambda a, b, mk: (a @ b) * mk, np.matmul, np)
+
+
+def _apple_sddmm_native_contract(operands: list[Any]) -> bool:
+    """Narrow f32 row-major sampled-dot contract for the Metal ABI."""
+    import numpy as np
+
+    if len(operands) != 3:
+        return False
+    a, b, mask = (np.asarray(value) for value in operands)
+    return bool(a.dtype == np.float32 and b.dtype == np.float32 and
+                mask.dtype == np.float32 and a.ndim == b.ndim == mask.ndim == 2 and
+                a.flags.c_contiguous and b.flags.c_contiguous and
+                mask.flags.c_contiguous and a.shape[1] == b.shape[0] and
+                mask.shape == (a.shape[0], b.shape[1]) and all(a.shape) and
+                all(b.shape))
+
+
+def _apple_sddmm_metal(a: Any, b: Any, mask: Any, np: Any) -> Any:
+    """Run sampled dense-dense f32 multiplication on the Apple Metal runtime."""
+    from ._apple_gpu_dispatch import bind_symbol
+
+    if not DeviceTensor.is_metal():
+        # Fail closed when no Metal device is present so a host without a real
+        # GPU cannot complete this path and mislabel the result as native_gpu.
+        raise RuntimeError("Apple Metal device unavailable for SDDMM compute")
+    af, bf, mf = (np.asarray(value) for value in (a, b, mask))
+    m, k, n = int(af.shape[0]), int(af.shape[1]), int(bf.shape[1])
+    out = np.empty((m, n), np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    fn = bind_symbol(
+        "tessera_apple_gpu_sddmm_f32",
+        (cf, cf, cf, cf, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32),
+        ctypes.c_int32,
+    )
+    if fn is None:
+        raise RuntimeError("Apple Metal SDDMM symbol unavailable")
+    ok = fn(af.ctypes.data_as(cf), bf.ctypes.data_as(cf), mf.ctypes.data_as(cf),
+            out.ctypes.data_as(cf), ctypes.c_int32(m), ctypes.c_int32(k),
+            ctypes.c_int32(n))
+    if not ok:
+        raise RuntimeError("Apple Metal SDDMM dispatch failed")
+    return out
+
+
+def _apple_sddmm_reference(operands: list[Any], np: Any) -> Any:
+    return _sparse_compute("tessera.sddmm", operands, _apple_spmm_csr,
+                           lambda a, b, mk: (a @ b) * mk, np.matmul, np)
+
+
+def _apple_bsmm_native_contract(operands: list[Any]) -> bool:
+    """Dense-block BSMM is a contiguous rank-2 f32 GEMM contract today.
+
+    The public primitive has no BSR block-map operand, so this is explicitly a
+    dense-block route through the proven Apple matmul ABI—not a claim of a
+    general block-sparse representation or kernel.
+    """
+    import numpy as np
+
+    if len(operands) != 2:
+        return False
+    a, b = (np.asarray(value) for value in operands)
+    return bool(a.dtype == np.float32 and b.dtype == np.float32 and
+                a.ndim == b.ndim == 2 and a.flags.c_contiguous and
+                b.flags.c_contiguous and a.shape[1] == b.shape[0] and
+                all(a.shape) and all(b.shape))
+
+
+def _apple_bsmm_metal(a: Any, b: Any, np: Any) -> Any:
+    """Invoke the existing native f32 Apple rank-2 matmul ABI for BSMM."""
+    if not DeviceTensor.is_metal():
+        # The f32 matmul ABI resolves to the non-Darwin/disabled-device CPU
+        # reference symbol when no Metal device is present, which would let this
+        # path complete and mislabel host compute as native_gpu.  Fail closed so
+        # the caller falls back to the reference and reports reference_cpu.
+        raise RuntimeError("Apple Metal device unavailable for dense-block BSMM compute")
+    af, bf = (np.asarray(value) for value in (a, b))
+    gemm = _apple_gpu_mps_matmul_f32()
+    if gemm is None:
+        raise RuntimeError("Apple Metal f32 matmul symbol unavailable")
+    out = np.zeros((af.shape[0], bf.shape[1]), np.float32)
+    _apple_gpu_arm_gpu_error()
+    _apple_gpu_gemm2d_call(gemm, af, bf, out, np)
+    err = _apple_gpu_consume_gpu_error()
+    if err is not None:
+        raise RuntimeError(f"Apple Metal BSMM matmul failed: {err}")
+    return out
+
+
+def _apple_bsmm_reference(operands: list[Any], np: Any) -> Any:
+    return _sparse_compute("tessera.bsmm", operands, _apple_spmm_csr,
+                           lambda a, b, mk: (a @ b) * mk, np.matmul, np)
+
+
+def _apple_moe_native_contract(x: Any, experts: Any, route: Any, scores: Any,
+                               np: Any) -> bool:
+    """Narrow local top-1 f32 MoE contract for native expert-block GEMMs.
+
+    Route selection and grouping are deliberately host-side metadata work.  The
+    actual per-expert matrix products must retain their f32 contiguous inputs,
+    so unsupported dtype/layout/score contracts cannot be mislabeled native.
+    """
+    xa, ea = (np.asarray(value) for value in (x, experts))
+    if (xa.dtype != np.float32 or ea.dtype != np.float32 or xa.ndim < 2 or
+            ea.ndim not in (2, 3) or not xa.flags.c_contiguous or
+            not ea.flags.c_contiguous or not all(xa.shape) or not all(ea.shape)):
+        return False
+    if ea.ndim == 2:
+        ea = ea[None, :, :]
+    tokens = int(np.prod(xa.shape[:-1]))
+    if xa.shape[-1] != ea.shape[1] or ea.shape[2] <= 0:
+        return False
+    if route is not None:
+        ra = np.asarray(route)
+        if (ra.dtype != np.int64 or not ra.flags.c_contiguous or
+                ra.size != tokens):
+            return False
+    if scores is not None:
+        sa = np.asarray(scores)
+        if (sa.dtype != np.float32 or not sa.flags.c_contiguous or
+                sa.size != tokens * int(ea.shape[0])):
+            return False
+    return True
+
+
+def _apple_moe_metal(x: Any, experts: Any, route: Any, scores: Any, np: Any) -> Any:
+    """Run local top-1 f32 MoE expert blocks through the native MPS ABI.
+
+    This is intentionally not a distributed MoE claim: selecting/grouping the
+    route and restoring token order are host metadata/copy work.  Each nonempty
+    expert block, which carries the numerical compute, is a checked Metal f32
+    matmul.  A failed device call raises so the caller reports reference_cpu.
+    """
+    if not DeviceTensor.is_metal():
+        raise RuntimeError("Apple Metal device unavailable for local MoE compute")
+    tk, ex, routes, lead, _in_dim, out_dim = _moe_prepare(x, experts, route, scores, np)
+    gemm = _apple_gpu_mps_matmul_f32()
+    if gemm is None:
+        raise RuntimeError("Apple Metal f32 matmul symbol unavailable")
+    out = np.empty((int(tk.shape[0]), out_dim), np.float32)
+    for expert in range(int(ex.shape[0])):
+        token_ids = np.ascontiguousarray(np.flatnonzero(routes == expert), np.int64)
+        if token_ids.size == 0:
+            continue
+        # The route partition is host metadata; this contiguous block is the
+        # numerical payload handed to the proven native rank-2 MPS GEMM ABI.
+        x_block = np.ascontiguousarray(tk[token_ids], np.float32)
+        y_block = np.empty((int(token_ids.size), out_dim), np.float32)
+        _apple_gpu_arm_gpu_error()
+        _apple_gpu_gemm2d_call(gemm, x_block, ex[expert], y_block, np)
+        err = _apple_gpu_consume_gpu_error()
+        if err is not None:
+            raise RuntimeError(f"Apple Metal MoE expert matmul failed: {err}")
+        out[token_ids] = y_block
+    return out.reshape(lead + (out_dim,))
+
+
+def _apple_moe_reference(x: Any, experts: Any, route: Any, scores: Any, np: Any) -> Any:
+    tk, ex, routes, lead, _in_dim, out_dim = _moe_prepare(x, experts, route, scores, np)
+    out = np.empty((int(tk.shape[0]), out_dim), np.float32)
+    for token in range(int(tk.shape[0])):
+        out[token] = tk[token] @ ex[int(routes[token])]
+    return out.reshape(lead + (out_dim,))
+
+
+def _execute_apple_gpu_compiled_moe(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Native local f32 top-1 MoE compute with an explicit reference override."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    arg_names = list(metadata.get("arg_names") or [])
+    if len(ops) != 1 or str(ops[0].get("op_name", "")) != "tessera.moe":
+        raise ValueError("apple_gpu_moe_compiled requires one tessera.moe op")
+    values = _bind_launch_args(args, arg_names)
+    x, experts, route, scores = _moe_bind(ops[0], values)
+    if not _apple_moe_native_contract(x, experts, route, scores, np):
+        return _apple_moe_reference(x, experts, route, scores, np), "reference_cpu"
+    try:
+        return _apple_moe_metal(x, experts, route, scores, np), "native_gpu"
+    except Exception:
+        return _apple_moe_reference(x, experts, route, scores, np), "reference_cpu"
+
+
+def _execute_apple_gpu_compiled_spmm_csr(artifact: RuntimeArtifact,
+                                         args: Any) -> Any:
+    """Native f32 CSR × dense SpMM with an explicit reference override."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    arg_names = list(metadata.get("arg_names") or [])
+    if len(ops) != 1 or str(ops[0].get("op_name", "")) != "tessera.spmm_csr":
+        raise ValueError("apple_gpu_spmm_csr_compiled requires one tessera.spmm_csr op")
+    values = _bind_launch_args(args, arg_names)
+    names = [str(name) for name in ops[0].get("operands", [])]
+    if len(names) != 2:
+        raise ValueError("apple_gpu_spmm_csr_compiled requires CSR and RHS operands")
+    csr, rhs = (values[name] for name in names)
+    if not _apple_spmm_csr_native_contract(csr, rhs):
+        return (_sparse_compute("tessera.spmm_csr", [csr, rhs], _apple_spmm_csr,
+                                lambda a, b, mk: (a @ b) * mk, np.matmul, np),
+                "reference_cpu")
+    try:
+        return _apple_spmm_csr_metal(csr, rhs, np), "native_gpu"
+    except Exception:
+        return (_sparse_compute("tessera.spmm_csr", [csr, rhs], _apple_spmm_csr,
+                                lambda a, b, mk: (a @ b) * mk, np.matmul, np),
+                "reference_cpu")
+
+
+def _execute_apple_gpu_compiled_spmm_coo(artifact: RuntimeArtifact,
+                                         args: Any) -> Any:
+    """COO adapter: host canonicalization followed by native CSR Metal SpMM."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    arg_names = list(metadata.get("arg_names") or [])
+    if len(ops) != 1 or str(ops[0].get("op_name", "")) != "tessera.spmm_coo":
+        raise ValueError("apple_gpu_spmm_coo_compiled requires one tessera.spmm_coo op")
+    values = _bind_launch_args(args, arg_names)
+    names = [str(name) for name in ops[0].get("operands", [])]
+    if len(names) != 2:
+        raise ValueError("apple_gpu_spmm_coo_compiled requires COO and RHS operands")
+    coo, rhs = (values[name] for name in names)
+    csr = _apple_coo_to_csr_native(coo, rhs, np)
+    if csr is None:
+        return _apple_spmm_coo_reference(coo, rhs, np), "reference_cpu"
+    try:
+        return _apple_spmm_csr_metal(csr, rhs, np), "native_gpu"
+    except Exception:
+        return _apple_spmm_coo_reference(coo, rhs, np), "reference_cpu"
+
+
+def _execute_apple_gpu_compiled_sddmm(artifact: RuntimeArtifact,
+                                      args: Any) -> Any:
+    """Native f32 SDDMM with an explicit CPU reference override."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    arg_names = list(metadata.get("arg_names") or [])
+    if len(ops) != 1 or str(ops[0].get("op_name", "")) != "tessera.sddmm":
+        raise ValueError("apple_gpu_sddmm_compiled requires one tessera.sddmm op")
+    values = _bind_launch_args(args, arg_names)
+    names = [str(name) for name in ops[0].get("operands", [])]
+    if len(names) != 3:
+        raise ValueError("apple_gpu_sddmm_compiled requires A, B, and mask operands")
+    operands = [values[name] for name in names]
+    if not _apple_sddmm_native_contract(operands):
+        return _apple_sddmm_reference(operands, np), "reference_cpu"
+    try:
+        return _apple_sddmm_metal(operands[0], operands[1], operands[2], np), "native_gpu"
+    except Exception:
+        return _apple_sddmm_reference(operands, np), "reference_cpu"
+
+
+def _execute_apple_gpu_compiled_bsmm(artifact: RuntimeArtifact,
+                                     args: Any) -> Any:
+    """Native dense-block f32 BSMM with an explicit CPU reference override."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    arg_names = list(metadata.get("arg_names") or [])
+    if len(ops) != 1 or str(ops[0].get("op_name", "")) != "tessera.bsmm":
+        raise ValueError("apple_gpu_bsmm_compiled requires one tessera.bsmm op")
+    values = _bind_launch_args(args, arg_names)
+    names = [str(name) for name in ops[0].get("operands", [])]
+    if len(names) != 2:
+        raise ValueError("apple_gpu_bsmm_compiled requires two dense-block operands")
+    operands = [values[name] for name in names]
+    if not _apple_bsmm_native_contract(operands):
+        return _apple_bsmm_reference(operands, np), "reference_cpu"
+    try:
+        return _apple_bsmm_metal(operands[0], operands[1], np), "native_gpu"
+    except Exception:
+        return _apple_bsmm_reference(operands, np), "reference_cpu"
+
+
+def _apple_gpu_dispatch_spmm_csr(op_name: str, operands: list[Any],
+                                 _kwargs: dict, np: Any) -> Any | None:
+    """General Apple compiler-envelope adapter for the native CSR slice."""
+    if op_name != "tessera.spmm_csr" or len(operands) != 2:
+        return None
+    csr, rhs = operands
+    if not _apple_spmm_csr_native_contract(csr, rhs):
+        return None
+    try:
+        return _apple_spmm_csr_metal(csr, rhs, np)
+    except Exception:
+        return None
+
+
+def _apple_gpu_dispatch_spmm_coo(op_name: str, operands: list[Any],
+                                 _kwargs: dict, np: Any) -> Any | None:
+    """General Apple compiler-envelope adapter for COO→CSR→Metal SpMM."""
+    if op_name != "tessera.spmm_coo" or len(operands) != 2:
+        return None
+    csr = _apple_coo_to_csr_native(operands[0], operands[1], np)
+    if csr is None:
+        return None
+    try:
+        return _apple_spmm_csr_metal(csr, operands[1], np)
+    except Exception:
+        return None
+
+
+def _apple_gpu_dispatch_sddmm(op_name: str, operands: list[Any],
+                              _kwargs: dict, np: Any) -> Any | None:
+    if op_name != "tessera.sddmm" or not _apple_sddmm_native_contract(operands):
+        return None
+    try:
+        return _apple_sddmm_metal(operands[0], operands[1], operands[2], np)
+    except Exception:
+        return None
+
+
+def _apple_gpu_dispatch_bsmm(op_name: str, operands: list[Any],
+                             _kwargs: dict, np: Any) -> Any | None:
+    if op_name != "tessera.bsmm" or not _apple_bsmm_native_contract(operands):
+        return None
+    try:
+        return _apple_bsmm_metal(operands[0], operands[1], np)
+    except Exception:
+        return None
+
+
+def _apple_gpu_dispatch_moe_compute(op_name: str, operands: list[Any],
+                                    kwargs: dict, np: Any) -> Any | None:
+    """Compiler-envelope adapter for local top-1 f32 MoE expert blocks."""
+    if op_name != "tessera.moe" or len(operands) < 2:
+        return None
+    extras = list(kwargs.get("extras", []))
+    extra_values = {name: operands[2 + i] for i, name in enumerate(extras)
+                    if 2 + i < len(operands)}
+    x, experts = operands[:2]
+    route, scores = extra_values.get("route"), extra_values.get("scores")
+    if not _apple_moe_native_contract(x, experts, route, scores, np):
+        return None
+    try:
+        return _apple_moe_metal(x, experts, route, scores, np)
+    except Exception:
+        return None
+
+
 def _execute_apple_gpu_compiled_sparse(artifact: RuntimeArtifact,
                                        args: Any) -> Any:
-    """The ``target="apple_gpu"`` sparse + MoE lane: spmm_csr / spmm_coo / sddmm
-    / bsmm (via _sparse_compute with numpy spmm / (a@b)*mask / a@b) and moe
-    (routed per-token expert GEMVs, top-1). Apple ships no device sparse/moe
-    kernel — runs on the CPU reference (no Metal dispatch),
-    execution_kind=reference_cpu. Matches numpy / tessera — parity with
-    x86/rocm sparse + moe lanes."""
+    """Legacy Apple sparse reference executor retained for stamped artifacts."""
     import numpy as np
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
@@ -10737,13 +11198,7 @@ def _execute_apple_gpu_compiled_sparse(artifact: RuntimeArtifact,
     if op_name == "tessera.moe":
         values = _bind_launch_args(args, arg_names)
         x, experts, route, scores = _moe_bind(ops[0], values)
-        tk, ex, r, lead, in_dim, out_dim = _moe_prepare(
-            x, experts, route, scores, np)
-        t = int(tk.shape[0])
-        out = np.zeros((t, out_dim), np.float32)
-        for i in range(t):
-            out[i] = np.ascontiguousarray(tk[i], np.float32) @ ex[int(r[i])]
-        return out.reshape(lead + (out_dim,))
+        return _apple_moe_reference(x, experts, route, scores, np)
     if op_name not in _SPARSE_OPS:
         raise ValueError(
             "apple_gpu_sparse_compiled executor handles one of "
@@ -17499,6 +17954,11 @@ def _executor_table():
         "apple_gpu_reduce_compiled": _execute_apple_gpu_compiled_reduce,
         "apple_gpu_scatter_compiled": _execute_apple_gpu_compiled_scatter,
         "apple_gpu_moe_transport_compiled": _execute_apple_gpu_moe_transport,
+        "apple_gpu_moe_compiled": _execute_apple_gpu_compiled_moe,
+        "apple_gpu_spmm_csr_compiled": _execute_apple_gpu_compiled_spmm_csr,
+        "apple_gpu_spmm_coo_compiled": _execute_apple_gpu_compiled_spmm_coo,
+        "apple_gpu_sddmm_compiled": _execute_apple_gpu_compiled_sddmm,
+        "apple_gpu_bsmm_compiled": _execute_apple_gpu_compiled_bsmm,
         "apple_gpu_sparse_compiled": _execute_apple_gpu_compiled_sparse,
         "apple_gpu_tail_compiled": _execute_apple_gpu_compiled_tail,
         "apple_gpu_optimizer_compiled": _execute_apple_gpu_compiled_optimizer,
@@ -19465,7 +19925,8 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any,
         if not result:
             raise ValueError(f"artifact op {op_name!r} has no result")
 
-        handler = _apple_gpu_lane_handlers().get(APPLE_GPU_LANE_BY_OP.get(op_name, ""))
+        lane = APPLE_GPU_LANE_BY_OP.get(op_name, "")
+        handler = _apple_gpu_lane_handlers().get(lane)
         if handler is None:
             # The envelope module owns the op set; driver.py gates on the same
             # tables at compile time, so a miss here means gating drift.
@@ -19484,7 +19945,12 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any,
                  if isinstance(vv, str) and vv.lstrip("%") in values else vv)
             for kk, vv in kwargs.items()
         }
-        op_operands = [_as_numpy(values[name]) for name in operand_names]
+        # CSR is structurally a tuple (indptr, indices, values, shape), not a
+        # tensor. Preserve it through the envelope so its host validation runs
+        # before any array coercion; every other lane receives tensor operands.
+        op_operands = ([values[name] for name in operand_names]
+                       if lane in {"spmm_csr", "spmm_coo"} else
+                       [_as_numpy(values[name]) for name in operand_names])
         op_out = handler(op_name, op_operands, resolved_kwargs, np)
         if op_out is None:
             # The native lane could not run this op on Metal here (e.g. the conv
@@ -19684,6 +20150,11 @@ def _apple_gpu_lane_handlers() -> dict[str, Any]:
         "mps": lambda op, a, k, np: _apple_gpu_dispatch_matmul(op, a, np),
         "optimizer": _apple_gpu_dispatch_optimizer,
         "scatter": _apple_gpu_dispatch_scatter,
+        "spmm_csr": _apple_gpu_dispatch_spmm_csr,
+        "spmm_coo": _apple_gpu_dispatch_spmm_coo,
+        "sddmm": _apple_gpu_dispatch_sddmm,
+        "bsmm": _apple_gpu_dispatch_bsmm,
+        "moe_compute": _apple_gpu_dispatch_moe_compute,
         "rope": lambda op, a, k, np: _apple_gpu_dispatch_rope(op, a, np),
         "flash_attn": _apple_gpu_dispatch_flash_attn,
         "softmax": _apple_gpu_dispatch_softmax,
@@ -23090,6 +23561,22 @@ def _apple_gpu_host_reference(op_name: str, operands: list[Any], kwargs: dict,
         out, src, idx, out_rows, row_len, restore = _scatter_prepare(operands, kwargs, np)
         _apple_scatter(out, src, idx, out_rows, row_len, mode, np)
         return restore(out)
+    if op_name == "tessera.spmm_csr":
+        return _sparse_compute(op_name, operands, _apple_spmm_csr,
+                               lambda a, b, mk: (a @ b) * mk, np.matmul, np)
+    if op_name == "tessera.spmm_coo":
+        return _apple_spmm_coo_reference(operands[0], operands[1], np)
+    if op_name == "tessera.sddmm":
+        return _apple_sddmm_reference(operands, np)
+    if op_name == "tessera.bsmm":
+        return _apple_bsmm_reference(operands, np)
+    if op_name == "tessera.moe":
+        extras = list(kwargs.get("extras", []))
+        extra_values = {name: operands[2 + i] for i, name in enumerate(extras)
+                        if 2 + i < len(operands)}
+        return _apple_moe_reference(operands[0], operands[1],
+                                    extra_values.get("route"),
+                                    extra_values.get("scores"), np)
     if op_name in ("tessera.conv2d", "tessera.conv2d_nhwc"):
         return _host_conv2d_nhwc(operands, kwargs, np)
     raise ValueError(

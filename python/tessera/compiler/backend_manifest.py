@@ -751,16 +751,49 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
                   "tessera.stdlib.moe DispatchPlan semantics."),
         "execute_compare_fixture": "tests/unit/test_apple_gpu_moe_transport_compiled.py",
     } for op in ("moe_dispatch", "moe_combine")},
-    # Sparse + MoE lane (2026-07-10) — spmm_csr/spmm_coo/sddmm/bsmm/moe via
-    # apple_gpu_sparse_compiled (numpy CSR SpMM / (a@b)*mask / a@b / routed
-    # per-token expert GEMVs; Apple ships no device sparse/moe kernel).
-    **{op: {
+    # First sparse vertical slice: genuinely sparse f32 CSR x dense SpMM through
+    # the direct Metal ABI. The narrow i64-contiguous CSR/RHS contract is
+    # enforced at runtime; unsupported cases use an explicit reference override.
+    "spmm_csr": {
         "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32",),
-        "notes": (f"Sparse/MoE {op} via apple_gpu_sparse_compiled (numpy "
-                  "reference); matches numpy / tessera."),
-        "execute_compare_fixture": "tests/unit/test_apple_gpu_sparse_compiled.py",
-    } for op in ("spmm_csr", "spmm_coo", "sddmm", "bsmm", "moe")},
+        "notes": ("CSR SpMM via apple_gpu_spmm_csr_compiled (direct Metal "
+                  "f32 CSR row-walk); unsupported dtype/layout/structure cases "
+                  "use reference_cpu."),
+        "execute_compare_fixture": "tests/unit/test_apple_gpu_spmm_csr_compiled.py",
+    },
+    "spmm_coo": {
+        "status": _DEVICE_VERIFIED_JIT_STATUS,
+        "dtypes": ("fp32",),
+        "notes": ("COO SpMM via apple_gpu_spmm_coo_compiled: host COO-to-CSR "
+                  "canonicalization followed by direct Metal f32 CSR row-walk; "
+                  "unsupported dtype/layout/structure cases use reference_cpu."),
+        "execute_compare_fixture": "tests/unit/test_apple_gpu_spmm_coo_compiled.py",
+    },
+    "sddmm": {
+        "status": _DEVICE_VERIFIED_JIT_STATUS,
+        "dtypes": ("fp32",),
+        "notes": ("SDDMM via apple_gpu_sddmm_compiled (direct Metal f32 "
+                  "sampled dot; exact-zero mask entries skip device dots); "
+                  "unsupported dtype/layout/shape cases use reference_cpu."),
+        "execute_compare_fixture": "tests/unit/test_apple_gpu_sddmm_compiled.py",
+    },
+    "bsmm": {
+        "status": _DEVICE_VERIFIED_JIT_STATUS,
+        "dtypes": ("fp32",),
+        "notes": ("BSMM via apple_gpu_bsmm_compiled (native f32 dense-block "
+                  "MPS matmul ABI); this public route has no BSR/block-map "
+                  "metadata support, and unsupported cases use reference_cpu."),
+        "execute_compare_fixture": "tests/unit/test_apple_gpu_bsmm_compiled.py",
+    },
+    "moe": {
+        "status": _DEVICE_VERIFIED_JIT_STATUS,
+        "dtypes": ("fp32",),
+        "notes": ("Local top-1 MoE compute via apple_gpu_moe_compiled: host "
+                  "route grouping plus native f32 MPS expert-block matmuls; "
+                  "unsupported dtype/layout/route contracts use reference_cpu."),
+        "execute_compare_fixture": "tests/unit/test_apple_gpu_moe_compiled.py",
+    },
     # Reference tail lane (2026-07-10) — the heterogeneous remainder (MLA
     # latent-KV, alibi, lgamma/digamma, fused_epilogue, asymmetric_bce,
     # normalize_group_advantages, speculative-decode accept) via

@@ -21,28 +21,13 @@ returns:
 
 from __future__ import annotations
 
-import ctypes
-
 import pytest
 
-from tessera._apple_gpu_dispatch import apple_gpu_runtime, bind_symbol
-
-
-def _bind_timeout_probe():
-    runtime = apple_gpu_runtime()
-    if runtime is None:
-        return None
-    return bind_symbol(
-        "tessera_apple_gpu_commit_and_wait_timeout_probe",
-        (ctypes.c_uint64,),
-        restype=ctypes.c_int32,
-    )
+from tests.unit._apple_gpu_abi_testutil import bind_or_skip
 
 
 def _probe(timeout_ms: int) -> int:
-    fn = _bind_timeout_probe()
-    if fn is None:
-        pytest.skip("Apple GPU runtime not buildable on this host")
+    fn = bind_or_skip("tessera_apple_gpu_commit_and_wait_timeout_probe")
     return fn(timeout_ms)
 
 

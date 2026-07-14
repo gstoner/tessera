@@ -239,6 +239,56 @@ LogicalResult TileBufferRefAttr::verify(
   return success();
 }
 
+LogicalResult TileMmaDescAttr::verify(
+    llvm::function_ref<InFlightDiagnostic()> emitError, StringRef family,
+    int64_t m, int64_t n, int64_t k, StringRef aType, StringRef bType,
+    StringRef accType, StringRef aLayout, StringRef bLayout,
+    int64_t kBlocks) {
+  static const llvm::StringSet<> kFamilies = {
+      "auto", "mma_sync", "wgmma", "tcgen05", "wmma", "mfma"};
+  if (!kFamilies.contains(family))
+    return emitError() << "TILE_MMA_DESC_BAD_FAMILY: family \"" << family
+                       << "\" is not one of {auto, mma_sync, wgmma, tcgen05, "
+                          "wmma, mfma}";
+  if (m <= 0 || n <= 0 || k <= 0)
+    return emitError() << "TILE_MMA_DESC_NONPOSITIVE_SHAPE: m/n/k must be > 0";
+  if (kBlocks < 1)
+    return emitError() << "TILE_MMA_DESC_BAD_K_BLOCKS: k_blocks must be >= 1";
+  if (aType.empty() || bType.empty() || accType.empty())
+    return emitError() << "TILE_MMA_DESC_EMPTY_DTYPE: a/b/acc must be named";
+  static const llvm::StringSet<> kLayouts = {"row_major", "col_major"};
+  if (!kLayouts.contains(aLayout) || !kLayouts.contains(bLayout))
+    return emitError() << "TILE_MMA_DESC_BAD_LAYOUT: a_layout and b_layout "
+                          "must be row_major or col_major";
+  return success();
+}
+
+LogicalResult TileMemoryLayoutAttr::verify(
+    llvm::function_ref<InFlightDiagnostic()> emitError, StringRef space,
+    StringRef order, int64_t leadingDim) {
+  static const llvm::StringSet<> kSpaces = {"gmem", "smem", "lds"};
+  static const llvm::StringSet<> kOrders = {"row_major", "col_major"};
+  if (!kSpaces.contains(space))
+    return emitError() << "TILE_MEMORY_LAYOUT_BAD_SPACE: space must be gmem, smem, or lds";
+  if (!kOrders.contains(order))
+    return emitError() << "TILE_MEMORY_LAYOUT_BAD_ORDER: order must be row_major or col_major";
+  if (leadingDim < 1)
+    return emitError() << "TILE_MEMORY_LAYOUT_BAD_LEADING_DIM: leading_dim must be >= 1";
+  return success();
+}
+
+LogicalResult TileEpilogueAttr::verify(
+    llvm::function_ref<InFlightDiagnostic()> emitError, bool bias,
+    StringRef activation, StringRef outputType) {
+  (void)bias;
+  if (activation != "none" && activation != "relu")
+    return emitError() << "TILE_EPILOGUE_BAD_ACTIVATION: activation must be "
+                          "none or relu";
+  if (outputType != "f32" && outputType != "f16")
+    return emitError() << "TILE_EPILOGUE_BAD_OUTPUT: output must be f32 or f16";
+  return success();
+}
+
 LogicalResult TilePipelineDepthsAttr::verify(
     llvm::function_ref<InFlightDiagnostic()> emitError, int64_t q, int64_t kv,
     int64_t tmem) {

@@ -110,6 +110,7 @@ _ATTN_DV_CAP = 256
 #: 16-bit storage accuracy budget vs the f32 reference (Decision #28) — shared by
 #: the tensor-core fused lane and the bf16/f16 GEMM candidates.
 _GEMM_F16_ATOL = 5e-3
+_GEMM_BF16_ATOL = 5e-2
 _GEMM_DTYPES = ("bfloat16", "float16")
 
 
@@ -1779,7 +1780,7 @@ class NvidiaPointwiseCandidate(Candidate):
 _MMA_FUSED_ENTRY = "tessera_nvidia_mma_fused"
 #: Activations the mma.sync fused epilogue applies after the (optional) bias add.
 _MMA_FUSED_ACTS = ("relu", "gelu", "silu", "sigmoid", "tanh")
-_mma_fused_fn_cache: dict[tuple[bool, str | None], Any] = {}
+_mma_fused_fn_cache: dict[tuple[str, bool, str | None], Any] = {}
 
 
 def _mma_fused_epilogue(region: Any) -> tuple[bool, str | None] | None:
@@ -1803,13 +1804,17 @@ def _mma_fused_epilogue(region: Any) -> tuple[bool, str | None] | None:
     return None                               # bias-after-act / unfusable op
 
 
-def _synthesize_mma_fused_cuda(has_bias: bool, act: str | None) -> str:
+def _synthesize_mma_fused_cuda(has_bias: bool, act: str | None,
+                               storage: str = "f16") -> str:
     """CUDA source for a warp-tiled ``mma.sync.m16n8k16`` f16 GEMM (row-major A/B,
     f32 accumulate) with a fused ``bias? + activation?`` epilogue. One warp per
     16x8 output tile, K-looped, boundary-checked (same fragment layout as the
     shipped tiled kernel). f16 (10-bit mantissa) keeps the rounding vs the f32
     reference inside the 5e-3 budget where bf16 (7-bit) would not."""
     from tessera.compiler.emit._fused_scalar_body import pointwise_snippet
+    if storage not in ("f16", "bf16"):
+        raise ValueError(f"unsupported tensor-core storage {storage}")
+    mma_type = "f16" if storage == "f16" else "bf16"
     bias_param = "const float* bias, " if has_bias else ""
 
     def epi(var: str, col: str) -> str:
@@ -1837,7 +1842,7 @@ def _synthesize_mma_fused_cuda(has_bias: bool, act: str | None) -> str:
         "      unsigned lo=(rr<K&&cc<N)?B[rr*N+cc]:0u, hi=(rr+1<K&&cc<N)?B[(rr+1)*N+cc]:0u; return (hi<<16)|lo;};\n"
         "    unsigned a0=la(gid,2*tig),a1=la(gid+8,2*tig),a2=la(gid,2*tig+8),a3=la(gid+8,2*tig+8);\n"
         "    unsigned b0=lb(2*tig,gid),b1=lb(2*tig+8,gid);\n"
-        "    asm volatile(\"mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32 \"\n"
+        f"    asm volatile(\"mma.sync.aligned.m16n8k16.row.col.f32.{mma_type}.{mma_type}.f32 \"\n"
         "      \"{%0,%1,%2,%3},{%4,%5,%6,%7},{%8,%9},{%0,%1,%2,%3};\\n\"\n"
         "      :\"+f\"(d0),\"+f\"(d1),\"+f\"(d2),\"+f\"(d3):\"r\"(a0),\"r\"(a1),\"r\"(a2),\"r\"(a3),\"r\"(b0),\"r\"(b1));\n"
         "  }\n"
@@ -1867,15 +1872,15 @@ def _synthesize_mma_fused_cuda(has_bias: bool, act: str | None) -> str:
     )
 
 
-def _mma_fused_fn(has_bias: bool, act: str | None):
+def _mma_fused_fn(has_bias: bool, act: str | None, storage: str = "f16"):
     """Compile (once per epilogue signature) the mma.sync fused kernel and return
     its bound entry symbol: ``int(A bf16, B bf16, bias f32|NULL, D f32, M,N,K)``."""
-    sig = (has_bias, act)
+    sig = (storage, has_bias, act)
     fn = _mma_fused_fn_cache.get(sig)
     if fn is not None:
         return fn
     from tessera.compiler.emit.kernel_emitter import KernelSource
-    src = KernelSource(source=_synthesize_mma_fused_cuda(has_bias, act),
+    src = KernelSource(source=_synthesize_mma_fused_cuda(has_bias, act, storage),
                        entry=_MMA_FUSED_ENTRY, lang=_LANG)
     artifact = _nvidia_cuda_compile_fn(src)
     lib = _load_lib(artifact)
@@ -1894,11 +1899,15 @@ class NvidiaMmaFusedCandidate(Candidate):
     budget. Declines (to the reference) off an NVIDIA GPU, for a region it cannot
     fuse, or when a required bias buffer is missing."""
 
-    name = "nvidia_mma_fused"
     tier = Tier.EMITTED
     target = _TARGET
     op = OP_FUSED_REGION
-    accuracy_atol = _GEMM_F16_ATOL
+    def __init__(self, storage: str = "f16") -> None:
+        self.storage = storage
+        self.name = ("nvidia_mma_fused" if storage == "f16"
+                     else "nvidia_mma_fused_bf16")
+        self.accuracy_atol = (_GEMM_F16_ATOL if storage == "f16"
+                              else _GEMM_BF16_ATOL)
 
     def available(self) -> bool:
         try:
@@ -1908,7 +1917,8 @@ class NvidiaMmaFusedCandidate(Candidate):
             return False
 
     def applies_to(self, region: Any) -> bool:
-        return _mma_fused_epilogue(region) is not None
+        return (_mma_fused_epilogue(region) is not None
+                and getattr(region, "storage_dtype", "f16") == self.storage)
 
     def run(self, region: Any, A: Any, B: Any, bias: Any = None,
             *a: Any, residual: Any = None, **k: Any) -> tuple[Any, str]:
@@ -1929,14 +1939,18 @@ class NvidiaMmaFusedCandidate(Candidate):
                 or (has_bias and np.asarray(bias).shape != (Ba.shape[1],))):
             return region.reference(A, B, bias), "reference"
         try:
-            Ab = np.ascontiguousarray(Aa, np.float16)  # f16 storage, f32 accumulate
-            Bb = np.ascontiguousarray(Ba, np.float16)
+            storage_dtype = np.float16
+            if self.storage == "bf16":
+                import ml_dtypes
+                storage_dtype = ml_dtypes.bfloat16
+            Ab = np.ascontiguousarray(Aa, storage_dtype)
+            Bb = np.ascontiguousarray(Ba, storage_dtype)
             M, K = Ab.shape
             _, N = Bb.shape
             bias_arr = (np.ascontiguousarray(bias, np.float32)
                         if has_bias else None)
             out = np.zeros((M, N), np.float32)
-            fn = _mma_fused_fn(has_bias, act)
+            fn = _mma_fused_fn(has_bias, act, self.storage)
             rc = fn(_ptr(Ab), _ptr(Bb), _ptr(bias_arr), _ptr(out), M, N, K)
             if rc == 1:
                 return out, _REAL_TAG
@@ -1967,21 +1981,26 @@ _MMA_ATTN_NK_CAP = 1536
 #: error under the 5e-3 budget across scale/D/magnitude).
 _MMA_ATTN_ABS_CAP = 5.0
 _MMA_ATTN_SHARPNESS_CAP = 500.0
-_mma_attn_fn_cache: list[Any] = []
+_mma_attn_fn_cache: dict[str, Any] = {}
 
 
-def _synthesize_mma_attn_cuda() -> str:
+def _synthesize_mma_attn_cuda(storage: str = "f16") -> str:
     """CUDA source for ``O = softmax(scale·Q·Kᵀ)·V`` via two ``mma.sync.m16n8k16``
     f16 matmuls with the row softmax staged in shared memory (16xNk f32 scores).
     Natural Q(M,D)/K(Nk,D)/V(Nk,Dv), row-major; boundary-checked; causal masks
     keys ``n > m``. One warp per 16-query block."""
+    if storage not in ("f16", "bf16"):
+        raise ValueError(f"unsupported tensor-core storage {storage}")
     e = _MMA_ATTN_ENTRY
-    MMA = ('asm volatile("mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32 "\n'
+    mma_type = "f16" if storage == "f16" else "bf16"
+    probability_cast = ("__half_as_ushort(__float2half" if storage == "f16"
+                        else "__bfloat16_as_ushort(__float2bfloat16")
+    MMA = (f'asm volatile("mma.sync.aligned.m16n8k16.row.col.f32.{mma_type}.{mma_type}.f32 "\n'
            '        "{%0,%1,%2,%3},{%4,%5,%6,%7},{%8,%9},{%0,%1,%2,%3};\\n"\n'
            '        :"+f"(d0),"+f"(d1),"+f"(d2),"+f"(d3):"r"(a0),"r"(a1),"r"(a2),'
            '"r"(a3),"r"(b0),"r"(b1));')
     return (
-        "#include <cuda_runtime.h>\n#include <cuda_fp16.h>\n#include <math.h>\n"
+        "#include <cuda_runtime.h>\n#include <cuda_fp16.h>\n#include <cuda_bf16.h>\n#include <math.h>\n"
         f"__global__ void {e}_kernel(const unsigned short* Q, const unsigned short* K,\n"
         "    const unsigned short* V, float* O, int M, int Nk, int D, int Dv,\n"
         "    float scale, int causal) {\n"
@@ -2014,8 +2033,8 @@ def _synthesize_mma_attn_cuda() -> str:
         "    float d0=0,d1=0,d2=0,d3=0;\n"
         "    for (int k0=0;k0<Nk;k0+=16){\n"
         "      auto lp=[&](int r,int c)->unsigned{int cc=k0+c;\n"
-        "        unsigned short lo=(r<16&&cc<Nk)?__half_as_ushort(__float2half(S[r*Nk+cc])):(unsigned short)0;\n"
-        "        unsigned short hi=(r<16&&cc+1<Nk)?__half_as_ushort(__float2half(S[r*Nk+cc+1])):(unsigned short)0;\n"
+        f"        unsigned short lo=(r<16&&cc<Nk)?{probability_cast}(S[r*Nk+cc])):(unsigned short)0;\n"
+        f"        unsigned short hi=(r<16&&cc+1<Nk)?{probability_cast}(S[r*Nk+cc+1])):(unsigned short)0;\n"
         "        return ((unsigned)hi<<16)|lo;};\n"
         "      auto lv=[&](int r,int c)->unsigned{int rr=k0+r,cc=nt+c;\n"
         "        unsigned lo=(rr<Nk&&cc<Dv)?V[rr*Dv+cc]:0u, hi=(rr+1<Nk&&cc<Dv)?V[(rr+1)*Dv+cc]:0u; return (hi<<16)|lo;};\n"
@@ -2050,19 +2069,19 @@ def _synthesize_mma_attn_cuda() -> str:
     )
 
 
-def _mma_attn_fn():
+def _mma_attn_fn(storage: str = "f16"):
     """Compile (once) the mma.sync attention kernel and return its bound entry:
     ``int(Q f16, K f16, V f16, O f32, M,Nk,D,Dv, scale, causal)``."""
-    if _mma_attn_fn_cache:
-        return _mma_attn_fn_cache[0]
+    if storage in _mma_attn_fn_cache:
+        return _mma_attn_fn_cache[storage]
     from tessera.compiler.emit.kernel_emitter import KernelSource
-    src = KernelSource(source=_synthesize_mma_attn_cuda(), entry=_MMA_ATTN_ENTRY,
+    src = KernelSource(source=_synthesize_mma_attn_cuda(storage), entry=_MMA_ATTN_ENTRY,
                        lang=_LANG)
     fn = getattr(_load_lib(_nvidia_cuda_compile_fn(src)), _MMA_ATTN_ENTRY)
     fn.restype = ctypes.c_int
     fn.argtypes = ([ctypes.c_void_p] * 4 + [ctypes.c_int] * 4
                    + [ctypes.c_float, ctypes.c_int])
-    _mma_attn_fn_cache.append(fn)
+    _mma_attn_fn_cache[storage] = fn
     return fn
 
 
@@ -2073,11 +2092,17 @@ class NvidiaMmaAttnCandidate(Candidate):
     scalar flash lane (which streams any length), so it never declines a shape the
     scalar lane can run. f16 accuracy budget."""
 
-    name = "nvidia_mma_attn"
     tier = Tier.EMITTED
     target = _TARGET
     op = OP_ATTENTION
-    accuracy_atol = 5e-3                        # f16 storage budget (Decision #28)
+    def __init__(self, storage: str = "f16") -> None:
+        self.storage = storage
+        self.name = ("nvidia_mma_attn" if storage == "f16"
+                     else "nvidia_mma_attn_bf16")
+        self.accuracy_atol = (5e-3 if storage == "f16" else 5e-2)
+
+    def applies_to(self, region: Any) -> bool:
+        return getattr(region, "storage_dtype", "f16") == self.storage
 
     def available(self) -> bool:
         try:
@@ -2108,11 +2133,15 @@ class NvidiaMmaAttnCandidate(Candidate):
             if (Nk > _MMA_ATTN_NK_CAP or amax > _MMA_ATTN_ABS_CAP
                     or float(region.scale) * D * amax * amax > _MMA_ATTN_SHARPNESS_CAP):
                 return _SHARED_RUNNER.run_fused_attention(region, Q, K, V)
-            Qh = np.ascontiguousarray(Qn, np.float16)
-            Kh = np.ascontiguousarray(Kn, np.float16)
-            Vh = np.ascontiguousarray(Vf, np.float16)
+            storage_dtype = np.float16
+            if self.storage == "bf16":
+                import ml_dtypes
+                storage_dtype = ml_dtypes.bfloat16
+            Qh = np.ascontiguousarray(Qn, storage_dtype)
+            Kh = np.ascontiguousarray(Kn, storage_dtype)
+            Vh = np.ascontiguousarray(Vf, storage_dtype)
             out = np.zeros((M, Dv), np.float32)
-            rc = _mma_attn_fn()(_ptr(Qh), _ptr(Kh), _ptr(Vh), _ptr(out),
+            rc = _mma_attn_fn(self.storage)(_ptr(Qh), _ptr(Kh), _ptr(Vh), _ptr(out),
                                 M, Nk, D, Dv, ctypes.c_float(float(region.scale)),
                                 1 if region.causal else 0)
             if rc == 1:
@@ -2120,6 +2149,121 @@ class NvidiaMmaAttnCandidate(Candidate):
         except Exception:
             pass
         return region.reference(Q, K, V), "reference"
+
+
+# ── tensor-core GATED lane — paired mma.sync projections + gate epilogue ─────
+
+_MMA_GATED_ENTRY = "tessera_nvidia_mma_gated"
+_mma_gated_fn_cache: dict[tuple[str, str], Any] = {}
+
+
+def _synthesize_mma_gated_cuda(storage: str, act: str) -> str:
+    """Two tensor-core projections sharing A, followed by gate(AWg) * AWu."""
+    from tessera.compiler.emit._fused_scalar_body import pointwise_snippet
+    if storage not in ("f16", "bf16"):
+        raise ValueError(f"unsupported tensor-core storage {storage}")
+    mma_type = "f16" if storage == "f16" else "bf16"
+    e = _MMA_GATED_ENTRY
+    gate = "".join(f"    {pointwise_snippet(act, f'g{i}')}\n" for i in range(4))
+    mma = (f'asm volatile("mma.sync.aligned.m16n8k16.row.col.f32.{mma_type}.{mma_type}.f32 "\n'
+           '      "{%0,%1,%2,%3},{%4,%5,%6,%7},{%8,%9},{%0,%1,%2,%3};\\n"')
+    return (
+        "#include <cuda_runtime.h>\n#include <math.h>\n"
+        f"extern \"C\" __global__ void {e}_kernel(const unsigned short* A,\n"
+        "    const unsigned short* Wg, const unsigned short* Wu, float* O,\n"
+        "    int M, int H, int K) {\n"
+        "  int mt=blockIdx.x*16, nt=blockIdx.y*8, lane=threadIdx.x, gid=lane>>2, tig=lane&3;\n"
+        "  float g0=0,g1=0,g2=0,g3=0,u0=0,u1=0,u2=0,u3=0;\n"
+        "  for(int k0=0;k0<K;k0+=16){\n"
+        "    auto la=[&](int r,int c)->unsigned{int rr=mt+r,cc=k0+c;\n"
+        "      unsigned lo=(rr<M&&cc<K)?A[rr*K+cc]:0u, hi=(rr<M&&cc+1<K)?A[rr*K+cc+1]:0u; return (hi<<16)|lo;};\n"
+        "    auto lw=[&](const unsigned short* W,int r,int c)->unsigned{int rr=k0+r,cc=nt+c;\n"
+        "      unsigned lo=(rr<K&&cc<H)?W[rr*H+cc]:0u, hi=(rr+1<K&&cc<H)?W[(rr+1)*H+cc]:0u; return (hi<<16)|lo;};\n"
+        "    unsigned a0=la(gid,2*tig),a1=la(gid+8,2*tig),a2=la(gid,2*tig+8),a3=la(gid+8,2*tig+8);\n"
+        "    unsigned bg0=lw(Wg,2*tig,gid),bg1=lw(Wg,2*tig+8,gid);\n"
+        f"    {mma}\n"
+        "      :\"+f\"(g0),\"+f\"(g1),\"+f\"(g2),\"+f\"(g3):\"r\"(a0),\"r\"(a1),\"r\"(a2),\"r\"(a3),\"r\"(bg0),\"r\"(bg1));\n"
+        "    unsigned bu0=lw(Wu,2*tig,gid),bu1=lw(Wu,2*tig+8,gid);\n"
+        f"    {mma}\n"
+        "      :\"+f\"(u0),\"+f\"(u1),\"+f\"(u2),\"+f\"(u3):\"r\"(a0),\"r\"(a1),\"r\"(a2),\"r\"(a3),\"r\"(bu0),\"r\"(bu1));\n"
+        "  }\n"
+        f"{gate}"
+        "  auto st=[&](int r,int c,float v){int rr=mt+r,cc=nt+c;if(rr<M&&cc<H)O[rr*H+cc]=v;};\n"
+        "  st(gid,2*tig,g0*u0);st(gid,2*tig+1,g1*u1);st(gid+8,2*tig,g2*u2);st(gid+8,2*tig+1,g3*u3);\n"
+        "}\n"
+        f'extern "C" int {e}(const unsigned short* hA, const unsigned short* hWg,\n'
+        "    const unsigned short* hWu, float* hO, int M, int H, int K) {\n"
+        "  size_t szA=(size_t)M*K*2, szW=(size_t)K*H*2, szO=(size_t)M*H*4;\n"
+        "  unsigned short *dA=0,*dWg=0,*dWu=0; float* dO=0;\n"
+        "  if(cudaMalloc(&dA,szA)!=cudaSuccess) return 3;\n"
+        "  if(cudaMalloc(&dWg,szW)!=cudaSuccess||cudaMalloc(&dWu,szW)!=cudaSuccess||cudaMalloc(&dO,szO)!=cudaSuccess){cudaFree(dA);cudaFree(dWg);cudaFree(dWu);cudaFree(dO);return 3;}\n"
+        "  cudaMemcpy(dA,hA,szA,cudaMemcpyHostToDevice);cudaMemcpy(dWg,hWg,szW,cudaMemcpyHostToDevice);cudaMemcpy(dWu,hWu,szW,cudaMemcpyHostToDevice);\n"
+        f"  {e}_kernel<<<dim3((M+15)/16,(H+7)/8),32>>>(dA,dWg,dWu,dO,M,H,K);\n"
+        "  int ok=(cudaDeviceSynchronize()==cudaSuccess)?1:3;if(ok==1)cudaMemcpy(hO,dO,szO,cudaMemcpyDeviceToHost);\n"
+        "  cudaFree(dA);cudaFree(dWg);cudaFree(dWu);cudaFree(dO);return ok;\n}"
+    )
+
+
+def _mma_gated_fn(storage: str, act: str):
+    key = (storage, act)
+    if key in _mma_gated_fn_cache:
+        return _mma_gated_fn_cache[key]
+    src = KernelSource(source=_synthesize_mma_gated_cuda(storage, act),
+                       entry=_MMA_GATED_ENTRY, lang=_LANG)
+    fn = getattr(_load_lib(_nvidia_cuda_compile_fn(src)), _MMA_GATED_ENTRY)
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p] * 4 + [ctypes.c_int] * 3
+    _mma_gated_fn_cache[key] = fn
+    return fn
+
+
+class NvidiaMmaGatedCandidate(Candidate):
+    tier = Tier.EMITTED
+    target = _TARGET
+    op = OP_GATED_MATMUL
+
+    def __init__(self, storage: str = "f16") -> None:
+        self.storage = storage
+        self.name = ("nvidia_mma_gated" if storage == "f16"
+                     else "nvidia_mma_gated_bf16")
+        self.accuracy_atol = (1e-2 if storage == "f16" else 1e-1)
+
+    def available(self) -> bool:
+        try:
+            from tessera import runtime as rt
+            return rt._nvidia_mma_runtime_available()
+        except Exception:
+            return False
+
+    def applies_to(self, region: Any) -> bool:
+        return (isinstance(region, GatedMatmulRegion)
+                and region.storage_dtype == self.storage)
+
+    def run(self, region: Any, A: Any, Wg: Any, Wu: Any,
+            *a: Any, **k: Any) -> tuple[Any, str]:
+        import numpy as np
+        Aa, Wga, Wua = np.asarray(A), np.asarray(Wg), np.asarray(Wu)
+        if (Aa.ndim != 2 or Wga.ndim != 2 or Wua.ndim != 2
+                or Aa.shape[1] != Wga.shape[0] or Wga.shape != Wua.shape):
+            return region.reference(A, Wg, Wu), "reference"
+        try:
+            storage_dtype = np.float16
+            if self.storage == "bf16":
+                import ml_dtypes
+                storage_dtype = ml_dtypes.bfloat16
+            Ah = np.ascontiguousarray(Aa, storage_dtype)
+            Wgh = np.ascontiguousarray(Wga, storage_dtype)
+            Wuh = np.ascontiguousarray(Wua, storage_dtype)
+            M, K = Ah.shape
+            _, H = Wgh.shape
+            out = np.zeros((M, H), np.float32)
+            rc = _mma_gated_fn(self.storage, region.gate_act)(
+                _ptr(Ah), _ptr(Wgh), _ptr(Wuh), _ptr(out), M, H, K)
+            if rc == 1:
+                return out, _REAL_TAG
+        except Exception:
+            pass
+        return region.reference(A, Wg, Wu), "reference"
 
 
 # ── D1 matmul candidates (B1) — bare GEMM, Tier-2 emitted vs Tier-3 shipped ────
@@ -2213,17 +2357,79 @@ class NvidiaMmaGemmEmittedCandidate(Candidate):
             return region.reference(A, B), "reference"
 
 
+class NvidiaTileMatmulCandidate(Candidate):
+    """Compiler-generated Tile→fragment GEMM schedule.
+
+    The two instances deliberately remain separate candidates: D2 measures them
+    under the same device/shape/dtype key and persists the faster schedule. This
+    preserves the observed sm_120 crossover instead of baking one tile into all
+    workloads.
+    """
+
+    tier = Tier.EMITTED
+    target = _TARGET
+    op = OP_MATMUL
+    accuracy_atol = _GEMM_F16_ATOL
+
+    def __init__(self, schedule: str) -> None:
+        if schedule not in ("direct", "shared"):
+            raise ValueError(f"unknown Tile matmul schedule {schedule!r}")
+        self.schedule = schedule
+        self.name = f"nvidia_tile_matmul_{schedule}"
+
+    def available(self) -> bool:
+        try:
+            from tessera import runtime as rt
+            return rt._nvidia_tile_runtime_available()
+        except Exception:
+            return False
+
+    def applies_to(self, region: Any) -> bool:
+        return isinstance(region, MatmulRegion) and region.dtype in _GEMM_DTYPES
+
+    def run(self, region: Any, A: Any, B: Any, *a: Any,
+            **k: Any) -> tuple[Any, str]:
+        try:
+            from tessera import runtime as rt
+            An, Bn = region._natural(A, B, cast=False)
+            out = rt._nvidia_tile_matmul_2d(
+                An, Bn, region.dtype, self.schedule)
+            return out, f"nvidia_tile_{self.schedule}"
+        except Exception:
+            return region.reference(A, B), "reference"
+
+    def measure_device_latency(self, region: Any, *inputs: Any,
+                               reps: int = 100,
+                               warmup: int = 10) -> float | None:
+        if len(inputs) != 2:
+            return None
+        A, B = inputs
+        try:
+            from tessera import runtime as rt
+            An, Bn = region._natural(A, B, cast=False)
+            return rt._nvidia_tile_matmul_device_latency(
+                An, Bn, region.dtype, self.schedule, reps=reps, warmup=warmup)
+        except Exception:
+            return None
+
+
 # ── registration (import side effect, exactly like rocm_hip / x86_llvm) ────────
 register_emitter(NvidiaCudaEmitter())
 register_compiler(_TARGET, _nvidia_cuda_compile_fn)
 register_runner(NvidiaCudaRunner(), default=False)
 
 register_candidate(NvidiaGenericCudaCandidate())
-register_candidate(NvidiaMmaFusedCandidate())         # tensor-core fused GEMM+epi
+register_candidate(NvidiaMmaFusedCandidate("f16"))   # tensor-core fused GEMM+epi
+register_candidate(NvidiaMmaFusedCandidate("bf16"))
 register_candidate(NvidiaFlashAttnCandidate())        # C4: synthesized attention
-register_candidate(NvidiaMmaAttnCandidate())          # tensor-core flash attention
+register_candidate(NvidiaMmaAttnCandidate("f16"))    # tensor-core flash attention
+register_candidate(NvidiaMmaAttnCandidate("bf16"))
 register_candidate(NvidiaGatedCandidate())            # C5: SwiGLU gate
+register_candidate(NvidiaMmaGatedCandidate("f16"))
+register_candidate(NvidiaMmaGatedCandidate("bf16"))
 register_candidate(NvidiaPointwiseCandidate())        # C5: pointwise DAG
 # Bare-GEMM lanes: hand-tuned shipped (Tier 3) + compiler-emitted (Tier 2).
 register_candidate(NvidiaMmaGemmShippedCandidate())
 register_candidate(NvidiaMmaGemmEmittedCandidate())
+register_candidate(NvidiaTileMatmulCandidate("direct"))
+register_candidate(NvidiaTileMatmulCandidate("shared"))

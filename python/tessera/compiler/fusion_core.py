@@ -241,8 +241,13 @@ class FusedRegion:
     # from operands); it lets a SpecPolicy.DYNAMIC emitter key one kernel by
     # symbolic identity rather than concrete values. ``None`` = anonymous/static.
     dim_names: tuple[str, ...] | None = None
+    # Storage policy for target candidates. The reference remains f32; tensor-
+    # core candidates quantize operands at this explicit ABI boundary.
+    storage_dtype: str = "f16"
 
     def __post_init__(self) -> None:
+        if self.storage_dtype not in ("f16", "bf16", "f32"):
+            raise ValueError("storage_dtype must be f16, bf16, or f32")
         for op in self.epilogue:
             if op not in EPILOGUE_OPS:
                 raise ValueError(f"unknown epilogue op {op!r}")
@@ -639,6 +644,11 @@ class AttentionRegion:
     # natural — so direct AttentionRegion() construction is unchanged.
     q_transposed: bool = False
     k_transposed: bool = False
+    storage_dtype: str = "f16"
+
+    def __post_init__(self) -> None:
+        if self.storage_dtype not in ("f16", "bf16", "f32"):
+            raise ValueError("storage_dtype must be f16, bf16, or f32")
 
     def _natural(self, Q: np.ndarray, K: np.ndarray, cast: bool = True):
         """Flip raw operands to natural Q(M,D)/K(Nk,D) per the transpose flags.
@@ -700,8 +710,11 @@ class GatedMatmulRegion:
     a_name: str = "A"
     wg_name: str = "Wg"
     wu_name: str = "Wu"
+    storage_dtype: str = "f16"
 
     def __post_init__(self) -> None:
+        if self.storage_dtype not in ("f16", "bf16", "f32"):
+            raise ValueError("storage_dtype must be f16, bf16, or f32")
         if (self.gate_act not in EPILOGUE_OPS
                 or EPILOGUE_OPS[self.gate_act].needs_bias):
             raise ValueError(

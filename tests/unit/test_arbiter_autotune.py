@@ -37,11 +37,13 @@ class _FakeCand(Candidate):
     op = OP_MATMUL
     target = _TGT
 
-    def __init__(self, name, tag, tier=Tier.EMITTED, delay=0.0):
+    def __init__(self, name, tag, tier=Tier.EMITTED, delay=0.0,
+                 device_ms=None):
         self.name = name
         self.tier = tier
         self._tag = tag
         self._delay = delay
+        self._device_ms = device_ms
         self.runs = 0
 
     def run(self, region, A, B, *a, **k):
@@ -49,6 +51,9 @@ class _FakeCand(Candidate):
         if self._delay:
             time.sleep(self._delay)
         return region.reference(A, B), self._tag
+
+    def measure_device_latency(self, region, *inputs, reps=100, warmup=10):
+        return self._device_ms
 
 
 def _mm(m=4, k=4, n=4):
@@ -97,6 +102,60 @@ def test_measured_arbitrate_buckets_distinct_shapes_separately():
     AT.measured_arbitrate(region, OP_MATMUL, _TGT, A, B, dims=(64, 64, 64),
                           cache=cache, reps=2, warmup=1, device="fakedev")
     assert cache.size == 2       # different power-of-two buckets → distinct keys
+
+
+def test_device_timing_is_separate_and_can_choose_a_different_winner():
+    wall_fast = _FakeCand("fake_wall_fast", "wall_real", delay=0.0,
+                          device_ms=2.0)
+    device_fast = _FakeCand("fake_device_fast", "device_real", delay=0.003,
+                            device_ms=0.25)
+    wall_fast.target = device_fast.target = "d2_metric_faketarget"
+    register_candidate(wall_fast)
+    register_candidate(device_fast)
+    region, cache = _FakeRegion(), AT.MeasureCache()
+    A, B = _mm()
+    wall = AT.measured_arbitrate(
+        region, OP_MATMUL, wall_fast.target, A, B, dims=(4, 4, 4), dtype="bfloat16",
+        cache=cache, reps=3, warmup=1, device="fakedev", timing="end_to_end")
+    device = AT.measured_arbitrate(
+        region, OP_MATMUL, wall_fast.target, A, B, dims=(4, 4, 4), dtype="bfloat16",
+        cache=cache, reps=3, warmup=1, device="fakedev", timing="device")
+    assert wall.name == "fake_wall_fast"
+    assert device.name == "fake_device_fast"
+    assert cache.size == 2
+    rows = cache.to_dict()["records"]
+    assert {row["timing"] for row in rows} == {"end_to_end", "device"}
+    _, tag = run_arbitrated(
+        region, OP_MATMUL, wall_fast.target, A, B, verify=False,
+        autotune_cache=cache, device="fakedev", timing="device")
+    assert tag == "device_real"
+
+
+def test_persisted_corpus_drives_normal_arbitrated_dispatch():
+    measured = _FakeCand("fake_corpus_measured", "measured_real", Tier.EMITTED)
+    crown = _FakeCand("fake_corpus_crown", "crown_real", Tier.HAND_TUNED)
+    register_candidate(measured)
+    register_candidate(crown)
+    cache = AT.MeasureCache()
+    key = ("fakedev", _TGT, OP_MATMUL, (4, 4, 4), "bfloat16")
+    cache.put(key, AT.MeasureRecord(
+        winner=measured.name, latency_ms=0.5,
+        candidates={measured.name: 0.5, crown.name: 1.0}))
+    region = _FakeRegion()
+    A, B = _mm()
+
+    # No online measurement call: ordinary dispatch consumes the persisted row,
+    # overriding tier priority for this exact device/workload bucket.
+    _, tag = run_arbitrated(
+        region, OP_MATMUL, _TGT, A, B, verify=False,
+        autotune_cache=cache, device="fakedev")
+    assert tag == "measured_real"
+
+    # The E3 escape hatch remains authoritative over corpus evidence.
+    _, forced_tag = run_arbitrated(
+        region, OP_MATMUL, _TGT, A, B, verify=False, force=crown.name,
+        autotune_cache=cache, device="fakedev")
+    assert forced_tag == "crown_real"
 
 
 # ── D3: arbiter dispatch log (won / degraded / no_candidate) ─────────────────

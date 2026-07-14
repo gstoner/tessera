@@ -111,7 +111,10 @@ struct LowerTileToROCMPass
     SmallVector<Operation *> worklist;
     getOperation().walk([&](Operation *op) {
       StringRef name = op->getName().getStringRef();
-      if (name == "tile.mma" || name == "tile.async_copy" ||
+      if (name == "tile.mma" || name == "tile.view" ||
+          name == "tile.fragment_pack" || name == "tile.fragment_unpack" ||
+          name == "tile.matmul_kernel" ||
+          name == "tile.async_copy" ||
           name == "tile.wait_async" || name == "tile.kv_cache" ||
           name.starts_with("tile.tmem."))
         worklist.push_back(op);
@@ -127,7 +130,30 @@ struct LowerTileToROCMPass
       OpBuilder builder(op);
       StringRef name = op->getName().getStringRef();
 
+      if (name == "tile.view" || name == "tile.fragment_pack" ||
+          name == "tile.fragment_unpack") {
+        op->emitError("ROCm lowering requires the Tile-to-fragment pack "
+                      "lowering before backend lowering");
+        signalPassFailure();
+        return;
+      }
+
+      if (name == "tile.matmul_kernel") {
+        op->emitError("ROCm tile.matmul_kernel pack/loop/epilogue materializer "
+                      "is not implemented for this target");
+        signalPassFailure();
+        return;
+      }
+
       if (name == "tile.mma") {
+        if (llvm::any_of(op->getOperandTypes(), [](Type type) {
+              return isa<tessera::tile::FragmentType>(type);
+            })) {
+          op->emitError("ROCm lowering requires Tile-to-fragment pack "
+                        "lowering before lowering typed tile.mma");
+          signalPassFailure();
+          return;
+        }
         if (failed(rejectUnconsumedStoragePack(op))) {
           signalPassFailure();
           return;

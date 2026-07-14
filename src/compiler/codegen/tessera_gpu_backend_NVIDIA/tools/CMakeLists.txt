@@ -16,6 +16,7 @@ target_link_libraries(tessera-nvidia-opt PRIVATE
   MLIRNVVMDialect
   MLIRParser
   MLIRPass
+  MLIRSCFDialect
   MLIRSupport
   MLIRTransforms
   MLIROptLib

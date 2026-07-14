@@ -123,18 +123,28 @@ flash-attention execute-compare (C4), and the sm_120 kernel-inventory doc
 1. **NVFP4 block-scale execution + numerics** — bind the fp4 fragment packing and
    flip the manifest row once execute-and-compare passes on `sm_120a` and the
    scale-distribution numerics are grounded (emit + ptxas-assemble already land).
-2. **mma.sync tensor-core FUSED + FLASH-ATTENTION lanes — LANDED** (Tier-2):
-   `NvidiaMmaFusedCandidate` — a warp-tiled `mma.sync.m16n8k16` f16 GEMM +
+2. **mma.sync tensor-core FUSED + FLASH-ATTENTION + GATED lanes — LANDED**
+   (Tier-2, f16 and bf16 storage): `NvidiaMmaFusedCandidate` — a warp-tiled
+   `mma.sync.m16n8k16` GEMM +
    bias/activation epilogue, ~6x faster than the scalar generic lane on 512³; and
    `NvidiaMmaAttnCandidate` — two `mma.sync` matmuls with a smem-staged row softmax
    (sidesteps the accumulator→operand fragment shuffle), ~2.7x faster on
-   64×512×64×64. Both F4-gated within the f16 budget, arbiter-preferred over Tier-1.
+   64×512×64×64; and `NvidiaMmaGatedCandidate` — paired gate/up projections
+   sharing A followed by the gate activation and multiply. Each has explicit
+   f16/bf16 candidates and storage-policy applicability, with on-device ragged
+   execute-and-compare coverage. They are arbiter-preferred over Tier-1.
    The attention lane **gates on softmax sharpness** (`scale·D·amax²`) + operand
    magnitude, delegating large-scale/large-magnitude f32 attention to the exact
-   scalar lane so it never silently degrades f32 semantics. **Still open:** the
-   **D2 fleet-shared autotune corpus** (persist `MeasureCache`, Theory §7.5).
-3. **Dtypes beyond f32** for the fused / attention / gated lanes (16-bit storage
-   is served by the B1 matmul lane today).
+   scalar lane so it never silently degrades f32 semantics. **D2 corpus landed
+   and consumed:** measured, device-keyed `nvidia:sm_120` rows cover square and
+   rectangular bf16 matmul, small/large fused GEMM+bias+GELU, and short/long
+   causal attention; see `benchmarks/nvidia/record_autotune_corpus.py`. Normal
+   `run_arbitrated()` dispatch consults the matching persisted
+   device/op/shape-bucket/dtype verdict before tier priority, while retaining F4
+   verification and explicit-force precedence. Expand this corpus when a new
+   candidate, representative workload, or target device is introduced.
+3. **Dtype breadth after f16/bf16:** tf32 and supported FP8 variants for fused /
+   attention / gated, each gated on an execution oracle and numerical budget.
 4. **`wgmma` sm_90a** — complete the instruction-encoding skeleton into a real
    Hopper WGMMA kernel (assemble-only until a Hopper box) — and **sm_100 tcgen05**.
 5. Promote sm_80/90/100 manifest rows only when their own silicon is available
@@ -142,17 +152,79 @@ flash-attention execute-compare (C4), and the sm_120 kernel-inventory doc
 6. **Native NVVM lowering for the typed Target IR (Tile IR / Target IR tail).**
    Increment 1 typed the `tessera_nvidia` dialect. **Increment 2 (landed):**
    `LowerNVIDIAToNVVM` now emits a **real `nvvm.mma.sync`** (not a void marker) for
-   the canonical **m16n8k16 f16** fragment contract — A:4 / B:2 / C:2 `vector<2xf16>`
-   fragments, `!llvm.struct<(vector<2xf16>, vector<2xf16>)>` result — built via the
-   dedicated `NVVM::MmaOp` builder (row/col layout, f16 ptx types) and **validated by
+   the canonical **m16n8k16 f16/bf16** fragment contract. f16 A/B registers are
+   `vector<2xf16>`; bf16 uses NVVM's packed-i32 ABI, with the backend owning the
+   `vector<2xbf16>` bitcast. Both are built via the dedicated `NVVM::MmaOp`
+   builder (row/col layout) and **validated by
    the NVVM verifier** (a real structural correctness signal without a device). It is
    gated on the fragment types: the abstract tile→target form (scalar operands,
    `dtype_ab="bf16"`) carries no fragments and falls through to the honest marker
-   (Decision #21). Proof: `test/nvidia/nvidia_mma_sync_to_nvvm.mlir`. **Still open:**
-   the tile→fragment decomposition that would feed this from `tile.mma`, on-device
-   execution (sm_120 RTX 5070 Ti), and the bf16 / tf32 / int fragment shapes +
+   (Decision #21). Proof: `test/nvidia/nvidia_mma_sync_to_nvvm.mlir`.
+   **Fragment-form bridge landed:** canonical `tile.mma` with A×4/B×2/C×2
+   `vector<2xf16>` operands now feeds the real intrinsic; proof:
+   `test/nvidia/sm120_fragment_tile_to_nvvm.mlir`. **A/B pointer materialization
+   landed:** canonical layout-bearing `tile.view` + `tile.fragment_pack` emits
+   four A / two B `vector<2xf16>` loads and reaches real `nvvm.mma.sync`; proof:
+   `test/nvidia/sm120_pointer_fragment_pack.mlir`, with wrong-layout rejection in
+   `sm120_pointer_fragment_pack_invalid.mlir`. **Accumulator/output and execution
+   landed:** `tile.fragment_unpack` + `tile.store` lower the four f32 accumulator
+   registers per lane to the canonical row-major 16x8 output mapping. The LLVM
+   kernel translates to PTX, assembles to an sm_120 cubin, launches through the
+   CUDA Driver API, and matches NumPy on the RTX 5070 Ti; proof:
+   `sm120_pointer_fragment_store.mlir` and
+   `tests/unit/test_nvidia_tile_fragment_compiler_path.py`; explicit bf16 pack
+   proof is `sm120_pointer_fragment_store_bf16.mlir`. **Still open:** tf32 / int
+   fragment shapes +
    `wgmma`/`tcgen05`/TMEM as their silicon lands. This converges the MLIR Target IR
-   path with the Python emit path that currently carries execution.
+   path with the Python emit path that currently carries execution. The
+   cross-vendor Tile view/fragment-pack/unpack contract and delivery order are in
+   [`tile_fragment_abi.md`](../../../architecture/proposals/tile_fragment_abi.md).
+   **Useful launch kernel landed:** portable `tile.matmul_kernel` and
+   `#tile.epilogue` retain a direct-global one-warp baseline and add a shared
+   four-warp 32x32 CTA macro-tile. A[32,16]/B[16,32] panels are cooperatively
+   staged; each warp executes two adjacent m16n8 MMAs, amortizing each barrier
+   interval over eight CTA MMAs. The path masks ragged M/N/K traffic, carries
+   eight f32 accumulator registers per warp through the K-panel loop, and reuses
+   the output mapping for bias, ReLU, f32/f16 conversion, and masked store. On
+   the RTX 5070 Ti it is 1.20x faster than direct loads at 1024³ and 1.37x at
+   2048³, but slower at 256/512, so shape-aware dispatch remains required. The
+   generated sm_120
+   cubin passes aligned and ragged execute-compare on the RTX 5070 Ti; structural
+   proof is `sm120_matmul_kernel.mlir`, numerical proof is
+   `test_nvidia_tile_fragment_compiler_path.py`.
+   **Size-aware production dispatch landed:** the runtime compiles the direct and
+   shared Tile schedules through the C++ Tile→NVVM pipeline, registers both PTX
+   entries with the launch bridge, and exposes them as
+   `nvidia_tile_matmul_{direct,shared}` candidates. D2 measures them alongside
+   the shipped and legacy-emitted GEMMs and persists winners by
+   `(device, shape bucket, dtype)`. The bridge uses the schedule-specific grid,
+   block size, and i64 dimension ABI; ragged f16/bf16 execute-and-compare passes.
+   The committed sm_120 corpus covers 64/256/512/1024/2048 square buckets for
+   both storage dtypes, so ordinary dispatch consumes evidence while explicit
+   forcing still isolates either compiler schedule.
+   **Device-resident timing landed:** `timing="device"` uses CUDA driver events
+   around repeated launches after one-time allocation/upload, stores a separate
+   corpus row from `end_to_end`, and excludes candidates lacking a resident
+   measurement hook. The committed f16/bf16 rows prove the direct→shared
+   crossover between 512³ and 1024³ and select shared at 1024/2048.
+
+7. **sm_120 op×target conformance backlog.** The generated
+   [`op_target_conformance.md`](../../op_target_conformance.md) dashboard is the
+   authoritative completion check; do **not** edit it directly. Its open
+   `nvidia_sm120` cells are planned here so an operation moves only after all
+   proof rungs (compile, execution, and numerical comparison) turn green:
+
+   | Order | Open operation | First failing gate | Intended implementation / dependency |
+   |---:|---|---|---|
+   | A | `matmul_relu` | `backend_compile` | Add the fusable ReLU epilogue to the canonical `mma.sync` Tile→fragment path (priority #3), then prove its compiled CUDA entry point against the reference. |
+   | B | `matmul_softmax` | `runtime_execute` | Compose the already-complete sm_120 matmul and softmax lanes under one runtime plan; start with correct multi-launch execution, then decide whether a fused score kernel earns a separate lane. |
+   | C | `kv_cache_read` | `backend_compile` | Promote the existing artifact to a compiled sm_120 paged-KV read kernel, then add decode-length and page-boundary execute-and-compare fixtures. This is the prerequisite for an end-to-end decoder serving path. |
+   | D | `conv2d` | `backend_compile` | Add an explicit im2col/direct-convolution CUDA choice with shape guards; validate against the reference before considering tensor-core specialization. |
+
+   `matmul`, `softmax`, and `flash_attn` are already complete on sm_120. Re-run
+   `python -m tessera.cli.conformance_matrix --render` after each promotion; the
+   dashboard and its drift test are the completion gate. Keep NVFP4 separate from
+   this queue until its block-scale ABI/numerics are grounded.
 
 ## Source Material Consolidated
 

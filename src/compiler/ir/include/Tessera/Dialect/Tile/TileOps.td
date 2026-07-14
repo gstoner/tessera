@@ -69,6 +69,19 @@ def Tile_AsyncTokenType : Tile_Type<"AsyncToken", "async_token"> {
   let summary = "Completion token for an asynchronous tile copy";
 }
 
+// Portable tile-fragment ABI (2026-07-14).  These types deliberately carry no
+// target register shape: `!tile.fragment` is a logical cooperative-matrix
+// operand, while `#tile.mma_desc` on its defining/consuming operation supplies
+// the role and instruction contract.  NVIDIA vector fragments and AMD VGPR
+// orderings are target-lowering details, never part of shared Tile IR.
+def Tile_TileValueType : Tile_Type<"TileValue", "tile"> {
+  let summary = "Logical distributed tile value";
+}
+
+def Tile_FragmentType : Tile_Type<"Fragment", "fragment"> {
+  let summary = "Opaque cooperative-matrix fragment";
+}
+
 // Rank-2 dense matmul: C = A @ B (non-transposed value envelope).
 def Tile_MatmulOp : Tile_Op<"matmul", [Pure]> {
   let summary = "Rank-2 tile-level matmul (value lane)";
@@ -265,6 +278,73 @@ def Tile_MMAOp : Tile_Op<"mma"> {
   let arguments = (ins Variadic<AnyType>:$inputs);
   let results = (outs Variadic<AnyType>:$outputs);
   let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $outputs)";
+  let hasVerifier = 1;
+}
+
+// A logical subregion of a source, distributed according to `tile.layout`.
+// It is a pure coordinate/layout view, not a physical register-pack operation.
+def Tile_ViewOp : Tile_Op<"view", [Pure]> {
+  let summary = "Create a logical distributed tile view";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs Tile_TileValueType:$result);
+  let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $result)";
+  let hasVerifier = 1;
+}
+
+// Materialize a logical tile in the target-selected cooperative-matrix ABI.
+// The `role` and `mma` attributes are checked by the op verifier and are the
+// portable contract consumed by NVIDIA/ROCm pack lowerings.
+def Tile_FragmentPackOp : Tile_Op<"fragment_pack"> {
+  let summary = "Pack a logical tile into an opaque MMA fragment";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs Tile_FragmentType:$result);
+  let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $result)";
+  let hasVerifier = 1;
+}
+
+// Construct the additive-identity accumulator without imposing a physical
+// memory mapping. This is portable across cooperative-matrix backends and is
+// the canonical initial C operand for the first A/B materialization slice.
+def Tile_FragmentZeroOp : Tile_Op<"fragment_zero", [Pure]> {
+  let summary = "Create a zero-initialized MMA accumulator fragment";
+  let arguments = (ins);
+  let results = (outs Tile_FragmentType:$result);
+  let assemblyFormat = "attr-dict `:` type($result)";
+  let hasVerifier = 1;
+}
+
+// Convert an accumulator fragment back to a logical tile for an epilogue or
+// store. Target lowering owns the register unpack; Tile IR owns the logical
+// result layout and descriptor compatibility.
+def Tile_FragmentUnpackOp : Tile_Op<"fragment_unpack"> {
+  let summary = "Unpack an MMA accumulator fragment into a logical tile";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs Tile_TileValueType:$result);
+  let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $result)";
+  let hasVerifier = 1;
+}
+
+// Store a logical tile to a physical destination. For a pointer-backed store,
+// inputs are (tile, base pointer, row origin, column origin) and `tile.memory`
+// supplies address space/order/leading dimension. Conservatively side-effecting.
+def Tile_StoreOp : Tile_Op<"store"> {
+  let summary = "Store a logical tile through a physical memory layout";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
+// Launch-level contraction envelope. Unlike the value-lane tile.matmul, this
+// form names the pointer ABI and runtime M/N/K dimensions needed to materialize
+// a grid of cooperative-matrix tiles. Inputs are A, B, [bias], D, M, N, K; the
+// optional bias operand is controlled by #tile.epilogue.
+def Tile_MatmulKernelOp : Tile_Op<"matmul_kernel"> {
+  let summary = "Launch-level tiled matmul with a portable epilogue contract";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
 }
 
 // Workgroup / wave barrier (s_barrier / bar.sync) — drains all outstanding work.
@@ -415,6 +495,55 @@ def Tile_BufferRefAttr : Tile_Attr<"TileBufferRef", "buffer_ref"> {
                         StringRefParameter<"">:$access);
   let assemblyFormat =
       "`<` `name` `=` $name `,` `space` `=` $space `,` `access` `=` $access `>`";
+  let genVerifyDecl = 1;
+}
+
+// The target-neutral cooperative-matrix instruction contract. `family=auto`
+// is resolved by the target lowering (mma.sync/WGMMA/tcgen05 on NVIDIA;
+// WMMA/MFMA on ROCm). The descriptor records logical compatibility only, never
+// lane or register order.
+def Tile_MmaDescAttr : Tile_Attr<"TileMmaDesc", "mma_desc"> {
+  let summary = "Logical cooperative-matrix instruction descriptor";
+  let parameters = (ins StringRefParameter<"">:$family,
+                        "int64_t":$m,
+                        "int64_t":$n,
+                        "int64_t":$k,
+                        StringRefParameter<"">:$aType,
+                        StringRefParameter<"">:$bType,
+                        StringRefParameter<"">:$accType,
+                        StringRefParameter<"">:$aLayout,
+                        StringRefParameter<"">:$bLayout,
+                        "int64_t":$kBlocks);
+  let assemblyFormat =
+      "`<` `family` `=` $family `,` `m` `=` $m `,` `n` `=` $n `,` `k` `=` $k `,` "
+      "`a` `=` $aType `,` `b` `=` $bType `,` `acc` `=` $accType `,` "
+      "`a_layout` `=` $aLayout `,` `b_layout` `=` $bLayout `,` "
+      "`k_blocks` `=` $kBlocks `>`";
+  let genVerifyDecl = 1;
+}
+
+// Physical address contract for a pointer-backed tile.view. `leading_dim` is
+// measured in elements; origin coordinates are SSA operands of tile.view.
+def Tile_MemoryLayoutAttr : Tile_Attr<"TileMemoryLayout", "memory_layout"> {
+  let summary = "Physical storage layout for a pointer-backed logical tile";
+  let parameters = (ins StringRefParameter<"">:$space,
+                        StringRefParameter<"">:$order,
+                        "int64_t":$leadingDim);
+  let assemblyFormat = "`<` `space` `=` $space `,` `order` `=` $order `,` "
+                       "`leading_dim` `=` $leadingDim `>`";
+  let genVerifyDecl = 1;
+}
+
+// Post-MMA transformation before the final Tile store. Physical accumulator
+// registers remain target-owned; bias, activation, and output conversion are
+// portable semantics shared by NVIDIA and ROCm materializers.
+def Tile_EpilogueAttr : Tile_Attr<"TileEpilogue", "epilogue"> {
+  let summary = "Portable matrix-accumulator epilogue contract";
+  let parameters = (ins "bool":$bias,
+                        StringRefParameter<"">:$activation,
+                        StringRefParameter<"">:$outputType);
+  let assemblyFormat = "`<` `bias` `=` $bias `,` `activation` `=` $activation `,` "
+                       "`output` `=` $outputType `>`";
   let genVerifyDecl = 1;
 }
 

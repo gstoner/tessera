@@ -26,7 +26,7 @@ import pytest
 import tessera.compiler.fusion as F
 import tessera.compiler.emit.rocm_hip as rocm  # noqa: F401 — self-registers
 from tessera.compiler.emit import autotune as AT
-from tessera.compiler.emit.candidate import OP_FUSED_REGION
+from tessera.compiler.emit.candidate import OP_FUSED_REGION, OP_MATMUL
 
 
 def _rocm_hip_live() -> bool:
@@ -134,14 +134,76 @@ def test_corpus_save_load_disk(tmp_path):
     assert fresh.size == 2
 
 
-def test_committed_corpus_is_gfx1151_and_loads():
-    # The corpus committed in this branch is real gfx1151 data and warm-starts.
+def test_committed_corpus_contains_live_device_records_and_loads():
+    # The corpus carries only device-keyed, measured records and warm-starts.
     fresh = AT.MeasureCache()
     n = AT.load_corpus(cache=fresh)
     assert n >= 1
     for rec in fresh.to_dict()["records"]:
-        assert rec["device"] == "rocm:gfx1151"
-        assert rec["winner"] in ("rocm_generic_hip", "rocm_wmma_gemm")
+        assert rec["device"] in ("rocm:gfx1151", "nvidia:sm_120")
+        assert rec["winner"] in ("rocm_generic_hip", "rocm_wmma_gemm",
+                                 "nvidia_mma_gemm_shipped", "nvidia_mma_gemm_emitted",
+                                 "nvidia_tile_matmul_direct",
+                                 "nvidia_tile_matmul_shared",
+                                 "nvidia_mma_fused", "nvidia_mma_attn")
+
+
+def test_committed_corpus_has_sm120_matmul_comparisons():
+    fresh = AT.MeasureCache()
+    AT.load_corpus(cache=fresh)
+    rows = [r for r in fresh.to_dict()["records"]
+            if r["device"] == "nvidia:sm_120" and r["op"] == OP_MATMUL
+            and r["timing"] == "end_to_end"]
+    assert {tuple(r["bucket"]) for r in rows} >= {
+        (64, 64, 64), (256, 256, 256), (128, 256, 64),
+        (512, 512, 512), (1024, 1024, 1024), (2048, 2048, 2048)
+    }
+    for row in rows:
+        assert {"nvidia_mma_gemm_shipped", "nvidia_mma_gemm_emitted"} <= set(
+            row["candidates"])
+        if tuple(row["bucket"]) in {
+                (512, 512, 512), (1024, 1024, 1024), (2048, 2048, 2048)}:
+            assert {"nvidia_tile_matmul_direct",
+                    "nvidia_tile_matmul_shared"} <= set(row["candidates"])
+
+
+def test_committed_corpus_has_sm120_device_resident_tile_crossover():
+    fresh = AT.MeasureCache()
+    AT.load_corpus(cache=fresh)
+    rows = [r for r in fresh.to_dict()["records"]
+            if r["device"] == "nvidia:sm_120" and r["op"] == OP_MATMUL
+            and r["timing"] == "device"]
+    by_key = {(r["dtype"], tuple(r["bucket"])): r for r in rows}
+    for dtype in ("float16", "bfloat16"):
+        assert by_key[(dtype, (512, 512, 512))]["winner"] == (
+            "nvidia_tile_matmul_direct")
+        assert by_key[(dtype, (1024, 1024, 1024))]["winner"] == (
+            "nvidia_tile_matmul_shared")
+        assert set(by_key[(dtype, (1024, 1024, 1024))]["candidates"]) == {
+            "nvidia_tile_matmul_direct", "nvidia_tile_matmul_shared"}
+
+
+def test_committed_corpus_has_sm120_model_workload_comparisons():
+    fresh = AT.MeasureCache()
+    AT.load_corpus(cache=fresh)
+    rows = {r["op"]: r for r in fresh.to_dict()["records"]
+            if r["device"] == "nvidia:sm_120"}
+    assert set(rows) >= {OP_FUSED_REGION, "attention"}
+    assert set(rows[OP_FUSED_REGION]["candidates"]) == {
+        "nvidia_generic_cuda", "nvidia_mma_fused"
+    }
+    assert set(rows["attention"]["candidates"]) == {
+        "nvidia_flash_attn", "nvidia_mma_attn"
+    }
+
+    nvidia = [r for r in fresh.to_dict()["records"]
+              if r["device"] == "nvidia:sm_120"]
+    fused_buckets = {tuple(r["bucket"]) for r in nvidia
+                     if r["op"] == OP_FUSED_REGION}
+    attention_buckets = {tuple(r["bucket"]) for r in nvidia
+                         if r["op"] == "attention"}
+    assert fused_buckets >= {(64, 64, 64), (256, 256, 256), (128, 512, 256)}
+    assert attention_buckets >= {(128, 128, 64, 64), (64, 512, 64, 64)}
 
 
 def test_warm_start_does_not_clobber_local_measurement():
@@ -167,6 +229,17 @@ def test_corpus_version_mismatch_loads_nothing():
          "bucket": None, "dtype": "f16", "winner": "w", "latency_ms": 1.0,
          "candidates": {}}]}) == 0
     assert fresh.size == 0
+
+
+def test_v1_corpus_rows_migrate_to_end_to_end_timing():
+    fresh = AT.MeasureCache()
+    assert fresh.load_dict({"version": 1, "records": [
+        {"device": "d", "target": "rocm", "op": OP_FUSED_REGION,
+         "bucket": None, "dtype": "f16", "winner": "w", "latency_ms": 1.0,
+         "candidates": {"w": 1.0}}]}) == 1
+    row = fresh.to_dict()["records"][0]
+    assert row["timing"] == "end_to_end"
+    assert fresh.to_dict()["version"] == AT.CORPUS_VERSION == 2
 
 
 def test_bucket_none_key_round_trips():

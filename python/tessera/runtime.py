@@ -2027,6 +2027,7 @@ def _nvidia_mma_gemm_2d(A: Any, B: Any, dtype: str = "bfloat16") -> Any:
 
 _nvidia_ptx_launch_lib: ctypes.CDLL | None = None
 _nvidia_ptx_registered: set[str] = set()
+_nvidia_tile_ptx_cache: dict[tuple[str, str], tuple[str, str]] = {}
 
 
 def _nvidia_ptx_launch_lib_path() -> Optional[Path]:
@@ -2076,6 +2077,11 @@ def _load_nvidia_ptx_launch() -> ctypes.CDLL | None:
         ctypes.c_char_p, ctypes.POINTER(ctypes.c_void_p), ctypes.c_size_t,
         ctypes.POINTER(ctypes.c_int64), ctypes.c_size_t]
     lib.tessera_nvidia_ptx_invoke.restype = ctypes.c_int
+    lib.tessera_nvidia_ptx_benchmark.argtypes = [
+        ctypes.c_char_p, ctypes.POINTER(ctypes.c_void_p), ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_int64), ctypes.c_size_t, ctypes.c_int,
+        ctypes.c_int, ctypes.POINTER(ctypes.c_float)]
+    lib.tessera_nvidia_ptx_benchmark.restype = ctypes.c_int
     _nvidia_ptx_launch_lib = lib
     return lib
 
@@ -2118,6 +2124,157 @@ def _nvidia_ptx_gemm_2d(A: Any, B: Any, dtype: str = "bfloat16") -> Any:
     if rc != 0:
         raise RuntimeError(f"emitted nvidia GEMM invoke rc={rc}")
     return D
+
+
+def _nvidia_tile_tool(name: str) -> Path | None:
+    """Locate one tool in the Tile→NVVM→PTX production pipeline."""
+    root = Path(__file__).resolve().parents[2]
+    candidates = {
+        "tessera-nvidia-opt": (
+            root / "build/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools"
+            / "tessera-nvidia-opt"),
+        "mlir-opt": Path("/usr/lib/llvm-22/bin/mlir-opt"),
+        "mlir-translate": Path("/usr/lib/llvm-22/bin/mlir-translate"),
+        "llc": Path("/usr/lib/llvm-22/bin/llc"),
+    }
+    path = candidates[name]
+    if path.is_file():
+        return path
+    found = shutil.which(name)
+    return Path(found) if found else None
+
+
+def _nvidia_tile_runtime_available() -> bool:
+    """Whether the compiler-generated Tile GEMM can be built and launched."""
+    return (_nvidia_device_name() == "sm_120"
+            and _load_nvidia_ptx_launch() is not None
+            and all(_nvidia_tile_tool(name) is not None for name in
+                    ("tessera-nvidia-opt", "mlir-opt", "mlir-translate", "llc")))
+
+
+def _nvidia_tile_matmul_ptx(schedule: str, dtype: str) -> tuple[str, str]:
+    """Compile one canonical Tile matmul schedule to PTX, cached by schedule/dtype.
+
+    ``schedule`` is ``direct`` (one warp, global fragment loads) or ``shared``
+    (four warps, shared A/B panels, 32x32 CTA macro-tile). The generated kernel
+    has the launch bridge's common A/B/D/M/N/K ABI.
+    """
+    if schedule not in ("direct", "shared"):
+        raise ValueError(f"unknown NVIDIA Tile matmul schedule {schedule!r}")
+    if dtype not in ("float16", "bfloat16"):
+        raise ValueError(f"unsupported NVIDIA Tile matmul dtype {dtype!r}")
+    key = (schedule, dtype)
+    cached = _nvidia_tile_ptx_cache.get(key)
+    if cached is not None:
+        return cached
+    tools = {name: _nvidia_tile_tool(name) for name in
+             ("tessera-nvidia-opt", "mlir-opt", "mlir-translate", "llc")}
+    if any(path is None for path in tools.values()):
+        missing = [name for name, path in tools.items() if path is None]
+        raise RuntimeError(f"NVIDIA Tile compiler tools unavailable: {missing}")
+    short_dtype = "f16" if dtype == "float16" else "bf16"
+    entry = f"tessera_tile_matmul_{schedule}_{short_dtype}"
+    warps, staging = ((1, "global") if schedule == "direct"
+                      else (4, "shared"))
+    source = f'''module {{
+  llvm.func @{entry}(%a: !llvm.ptr, %b: !llvm.ptr, %d: !llvm.ptr,
+                     %m: i64, %n: i64, %k: i64) attributes {{nvvm.kernel}} {{
+    tile.matmul_kernel %a, %b, %d, %m, %n, %k {{
+      mma = #tile.mma_desc<family = "mma_sync", m = 16, n = 8, k = 16, a = "{short_dtype}", b = "{short_dtype}", acc = "f32", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>,
+      epilogue = #tile.epilogue<bias = false, activation = "none", output = "f32">,
+      warps = {warps} : i64, staging = "{staging}"
+    }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64
+    llvm.return
+  }}
+}}
+'''.encode()
+
+    def run(command: list[str], data: bytes) -> bytes:
+        result = subprocess.run(command, input=data, capture_output=True)
+        if result.returncode:
+            detail = result.stderr.decode(errors="replace").strip()
+            raise RuntimeError(f"NVIDIA Tile compilation failed: {detail}")
+        return result.stdout
+
+    lowered = run([str(tools["tessera-nvidia-opt"]),
+                   "--lower-tile-to-nvidia=sm=120",
+                   "--lower-tessera-nvidia-to-nvvm"], source)
+    llvm_mlir = run([str(tools["mlir-opt"]), "--convert-scf-to-cf",
+                     "--convert-arith-to-llvm", "--convert-cf-to-llvm",
+                     "--reconcile-unrealized-casts"], lowered)
+    llvm_ir = run([str(tools["mlir-translate"]), "--mlir-to-llvmir"], llvm_mlir)
+    ptx = run([str(tools["llc"]), "-mtriple=nvptx64-nvidia-cuda",
+               "-mcpu=sm_120", "-O3"], llvm_ir).decode()
+    if f".visible .entry {entry}" not in ptx:
+        raise RuntimeError(f"NVIDIA Tile PTX is missing entry {entry}")
+    _nvidia_tile_ptx_cache[key] = (entry, ptx)
+    return entry, ptx
+
+
+def _nvidia_tile_matmul_2d(A: Any, B: Any, dtype: str,
+                           schedule: str) -> Any:
+    """Execute one compiler-generated Tile matmul schedule through the PTX bridge."""
+    import numpy as np
+    Aa, Ba = np.asarray(A), np.asarray(B)
+    if Aa.ndim != 2 or Ba.ndim != 2 or Aa.shape[1] != Ba.shape[0]:
+        raise ValueError(f"NVIDIA Tile GEMM shape mismatch: {Aa.shape} @ {Ba.shape}")
+    lib = _load_nvidia_ptx_launch()
+    if lib is None:
+        raise RuntimeError("libtessera_nvidia_ptx_launch.so not loadable")
+    entry, ptx = _nvidia_tile_matmul_ptx(schedule, dtype)
+    if entry not in _nvidia_ptx_registered:
+        if lib.tessera_nvidia_ptx_register(entry.encode(), ptx.encode()) != 0:
+            raise RuntimeError(f"PTX register failed for {entry}")
+        _nvidia_ptx_registered.add(entry)
+    store = np.float16 if dtype == "float16" else _bfloat16_dtype()
+    if store is None:
+        raise RuntimeError("bfloat16 dtype unavailable (ml_dtypes not installed)")
+    Ac = np.ascontiguousarray(Aa, store)
+    Bc = np.asfortranarray(np.ascontiguousarray(Ba, store))
+    M, K = Ac.shape
+    _, N = Bc.shape
+    D = np.zeros((M, N), np.float32)
+    bufs = (ctypes.c_void_p * 3)(Ac.ctypes.data, Bc.ctypes.data, D.ctypes.data)
+    dims = (ctypes.c_int64 * 3)(int(M), int(N), int(K))
+    rc = lib.tessera_nvidia_ptx_invoke(entry.encode(), bufs, 3, dims, 3)
+    if rc != 0:
+        raise RuntimeError(f"NVIDIA Tile {schedule} GEMM invoke rc={rc}")
+    return D
+
+
+def _nvidia_tile_matmul_device_latency(A: Any, B: Any, dtype: str,
+                                       schedule: str, *, reps: int = 100,
+                                       warmup: int = 10) -> float:
+    """CUDA-event kernel latency with A/B/D resident for the timed interval."""
+    import numpy as np
+    Aa, Ba = np.asarray(A), np.asarray(B)
+    if Aa.ndim != 2 or Ba.ndim != 2 or Aa.shape[1] != Ba.shape[0]:
+        raise ValueError(f"NVIDIA Tile GEMM shape mismatch: {Aa.shape} @ {Ba.shape}")
+    lib = _load_nvidia_ptx_launch()
+    if lib is None:
+        raise RuntimeError("libtessera_nvidia_ptx_launch.so not loadable")
+    entry, ptx = _nvidia_tile_matmul_ptx(schedule, dtype)
+    if entry not in _nvidia_ptx_registered:
+        if lib.tessera_nvidia_ptx_register(entry.encode(), ptx.encode()) != 0:
+            raise RuntimeError(f"PTX register failed for {entry}")
+        _nvidia_ptx_registered.add(entry)
+    store = np.float16 if dtype == "float16" else _bfloat16_dtype()
+    if store is None:
+        raise RuntimeError("bfloat16 dtype unavailable (ml_dtypes not installed)")
+    Ac = np.ascontiguousarray(Aa, store)
+    Bc = np.asfortranarray(np.ascontiguousarray(Ba, store))
+    M, K = Ac.shape
+    _, N = Bc.shape
+    D = np.empty((M, N), np.float32)
+    bufs = (ctypes.c_void_p * 3)(Ac.ctypes.data, Bc.ctypes.data, D.ctypes.data)
+    dims = (ctypes.c_int64 * 3)(int(M), int(N), int(K))
+    latency = ctypes.c_float()
+    rc = lib.tessera_nvidia_ptx_benchmark(
+        entry.encode(), bufs, 3, dims, 3, int(warmup), int(reps),
+        ctypes.byref(latency))
+    if rc != 0:
+        raise RuntimeError(f"NVIDIA Tile {schedule} benchmark rc={rc}")
+    return float(latency.value)
 
 
 _nvidia_device_name_probe: Any = False       # False = unprobed; None/str after

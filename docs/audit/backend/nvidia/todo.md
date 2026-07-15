@@ -13,7 +13,7 @@ the CUDA compiler tests on the NVIDIA box. It complements
 [`NVIDIA_AUDIT.md`](NVIDIA_AUDIT.md); it does not reopen completed sm_120 feature
 work unless a test exposes a real defect.
 
-Baseline state on the NVIDIA box (2026-07-15, commit `fca323a7`):
+Baseline state on the NVIDIA box (2026-07-15, commit `ecf9483f`):
 
 - The repository collects **241 exact-device CUDA tests** under
   `pytest -m hardware_nvidia`: **223 correctness** cases and **18 measured
@@ -32,6 +32,18 @@ Baseline state on the NVIDIA box (2026-07-15, commit `fca323a7`):
   non-performance lane passed twice: **224 selected, 0 failed, 0 errored, 1
   Apple-only skip** (54.783 s and 53.658 s). This covers the required
   execute/compare layer, but it does not constitute performance evidence.
+- The serial measured lane passed **18 CUDA tests** (plus the same unrelated
+  Apple-only collection skip; JUnit: `/tmp/nvidia-performance-ecf9483f.xml`).
+  The production hot-path ratchet, device-resident event timing, convolution
+  routes, and Tile/autotune selection were included. Verbose `ptxas` and
+  `cuobjdump --dump-resource-usage` for the compiler-produced Tile kernels
+  report zero spills: 36 registers and no shared/local memory for direct,
+  GELU, and SiLU; 42 registers and 2 KiB static shared memory from `ptxas`
+  (3 KiB in the cubin resource table) for shared-staging f32/bf16/bias-ReLU.
+  Nsight Compute 2026.2.1 is installed, but its dynamic occupancy/counter
+  collection is presently blocked by `ERR_NVGPUCTRPERM`; do not treat this as
+  occupancy evidence until the NVIDIA performance-counter permission is
+  enabled on the host.
 - The first device run exposed a product defect in Tile GELU: NVPTX could not
   select LLVM's `ftanh`; after its arithmetic lowering, SiLU exposed the same
   issue for `fexp`. Both now lower through a bounded Pade tanh expression, so
@@ -225,9 +237,9 @@ after two stable runs and an explicit before/after review.
 
 ## Next update
 
-The collection contract and the compiler-artifact and exact-device correctness
-layers now have a recorded baseline. Next, run the measured lane serially with
-resource inspection, then retain the evidence and continue the numerical-policy
-and test-layout migrations. Keep `plan_state: landing` while any implementation,
-migration, or re-run remains. Move this plan to the NVIDIA archive only after
-every completion gate is met.
+The collection contract, compiler-artifact, exact-device correctness, and
+serial measured lanes now have a recorded baseline. Enable NVIDIA performance
+counters and capture dynamic occupancy before closing NVIDIA-TEST-5; then
+continue the numerical-policy and test-layout migrations. Keep
+`plan_state: landing` while any implementation, migration, or re-run remains.
+Move this plan to the NVIDIA archive only after every completion gate is met.

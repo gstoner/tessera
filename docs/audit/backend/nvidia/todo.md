@@ -13,7 +13,7 @@ the CUDA compiler tests on the NVIDIA box. It complements
 [`NVIDIA_AUDIT.md`](NVIDIA_AUDIT.md); it does not reopen completed sm_120 feature
 work unless a test exposes a real defect.
 
-Current state at plan creation:
+Baseline state on the NVIDIA box (2026-07-15, commit `fca323a7`):
 
 - The repository collects **241 exact-device CUDA tests** under
   `pytest -m hardware_nvidia`: **223 correctness** cases and **18 measured
@@ -24,9 +24,19 @@ Current state at plan creation:
   registry, and source-contract tests.
 - Live CUDA tests carry `hardware_nvidia`; measured tests additionally carry
   `performance`; compiler/toolchain crossings carry `compiler_tool`.
-- The current WSL AMD host has neither `nvidia-smi` nor `nvcc`. Collection and
-  state-policy validation ran here, but CUDA execution must run on the RTX 5070
-  Ti sm_120 box. Reference fallback is not acceptable device evidence.
+- The WSL NVIDIA host is an RTX 5070 Ti (UUID
+  `GPU-5072cda5-509a-008c-93c8-dc06e105f307`, CC 12.0), driver 610.62, CUDA
+  13.3.73, LLVM/MLIR 22.1.8, and Python 3.14.4. At collection it was idle;
+  observed graphics clock/power were 375 MHz / 23.18 W with a 300 W limit.
+- The compiler-artifact lit suite passed **19/19**. The exact-device
+  non-performance lane passed twice: **224 selected, 0 failed, 0 errored, 1
+  Apple-only skip** (54.783 s and 53.658 s). This covers the required
+  execute/compare layer, but it does not constitute performance evidence.
+- The first device run exposed a product defect in Tile GELU: NVPTX could not
+  select LLVM's `ftanh`; after its arithmetic lowering, SiLU exposed the same
+  issue for `fexp`. Both now lower through a bounded Pade tanh expression, so
+  no unsupported transcendental libcall is emitted. Focused Tile and related
+  CUDA correctness tests passed **38/38** after the fix.
 
 ## Completion definition
 
@@ -215,7 +225,9 @@ after two stable runs and an explicit before/after review.
 
 ## Next update
 
-After the first NVIDIA-box baseline, replace the current node count with the
-captured JUnit totals and append a concise failure table by family. Keep
-`plan_state: landing` while any implementation, migration, or re-run remains.
-Move this plan to the NVIDIA archive only after every completion gate is met.
+The collection contract and the compiler-artifact and exact-device correctness
+layers now have a recorded baseline. Next, run the measured lane serially with
+resource inspection, then retain the evidence and continue the numerical-policy
+and test-layout migrations. Keep `plan_state: landing` while any implementation,
+migration, or re-run remains. Move this plan to the NVIDIA archive only after
+every completion gate is met.

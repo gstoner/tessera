@@ -1,6 +1,6 @@
 ---
 audit_role: plan
-plan_state: open
+plan_state: landing
 owner: Apple backend
 target: apple_gpu
 last_updated: 2026-07-15
@@ -25,11 +25,15 @@ remain Apple-owned.
 
 ## Current state and immediate risk
 
-- The repository contains 181 Apple/Metal/MPS-oriented unit-test modules, but
-  the current `pytest -m hardware_apple_gpu` collection selects only **3 of
-  15,326** unit tests. Most exact-device candidates still use inline Darwin,
-  runtime-symbol, or Metal-availability skips and often exercise a portable
-  reference fallback in the same test.
+- The repository contains 181 Apple/Metal/MPS-oriented unit-test modules. The
+  first APPLE-TEST-1 migration cohort raises `pytest -m hardware_apple_gpu`
+  collection from **3 to 12 of 15,331** unit tests: the MPSGraph warmup and
+  MegaMoE measured paths plus exact native proofs for f32 CSR/COO SpMM, SDDMM,
+  BSMM, scatter, optimizer, local MoE, MoE transport, and RNG. The shared
+  pytest boundary now supplies the Darwin/Metal skip; the marked proofs retain
+  their explicit `native_gpu` assertions. Most exact-device candidates still
+  use inline Darwin, runtime-symbol, or Metal-availability skips and need the
+  same migration.
 - A fallback result can prove semantics, but it cannot prove `native_gpu`, GPU
   residency, Metal ordering, resource lifetime, or performance. Device tests
   must assert their execution state and provenance explicitly.

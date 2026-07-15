@@ -7,8 +7,6 @@ claim a general block-sparse kernel.
 
 from __future__ import annotations
 
-import sys
-
 import numpy as np
 import pytest
 
@@ -73,9 +71,8 @@ def test_bsmm_non_f32_uses_reference_cpu_override():
     np.testing.assert_allclose(out, a @ b)
 
 
+@pytest.mark.hardware_apple_gpu
 def test_bsmm_f32_reports_native_gpu_on_metal():
-    if sys.platform != "darwin" or not rt.DeviceTensor.is_metal():
-        pytest.skip("requires an available Apple Metal runtime")
     a = np.arange(12, dtype=np.float32).reshape(3, 4)
     b = np.arange(20, dtype=np.float32).reshape(4, 5)
     out, result = _launch(a, b)

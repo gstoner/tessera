@@ -7,8 +7,6 @@ public NumPy reference path.
 
 from __future__ import annotations
 
-import sys
-
 import numpy as np
 import pytest
 
@@ -98,9 +96,8 @@ def test_local_moe_execution_matrix_declares_native_lane():
     assert row.execution_kind == "native_gpu"
 
 
+@pytest.mark.hardware_apple_gpu
 def test_local_moe_f32_reports_native_gpu_on_metal():
-    if sys.platform != "darwin" or not rt.DeviceTensor.is_metal():
-        pytest.skip("requires an available Apple Metal runtime")
     rng = np.random.default_rng(73)
     x = rng.standard_normal((7, 5)).astype(np.float32)
     experts = rng.standard_normal((3, 5, 4)).astype(np.float32)

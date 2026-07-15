@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-
 import numpy as np
 import pytest
 
@@ -88,9 +86,8 @@ def test_spmm_coo_non_f32_uses_reference_cpu_override():
     np.testing.assert_allclose(out, dense @ rhs)
 
 
+@pytest.mark.hardware_apple_gpu
 def test_spmm_coo_f32_reports_native_gpu_on_metal():
-    if sys.platform != "darwin" or not rt.DeviceTensor.is_metal():
-        pytest.skip("requires an available Apple Metal runtime")
     dense = np.array([[1, 0, 2], [0, -1, 0]], np.float32)
     rhs = np.arange(12, dtype=np.float32).reshape(3, 4)
     out, result = _launch(_coo(dense), rhs)

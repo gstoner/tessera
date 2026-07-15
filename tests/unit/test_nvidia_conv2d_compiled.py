@@ -5,16 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tests._support.environment import nvidia_cuda_tool
-
-
-def _cuda_or_skip():
-    if nvidia_cuda_tool("nvcc") is None:
-        pytest.skip("nvcc not installed")
-    from tessera import runtime as rt
-    if not rt._nvidia_mma_runtime_available():
-        pytest.skip("no usable NVIDIA CUDA device")
-    return rt
+from _nvidia_testutil import require_nvidia_mma_runtime
 
 
 def _artifact(*, bias: bool, stride=1, padding=0, dilation=1, groups=1,
@@ -70,7 +61,7 @@ def _reference(x, w, bias, stride, padding, dilation):
 def test_live_nvidia_conv2d_matches_reference(
     shape, kernel, stride, padding, dilation, bias
 ):
-    rt = _cuda_or_skip()
+    rt = require_nvidia_mma_runtime()
     rng = np.random.default_rng(sum(shape) + sum(kernel))
     x = (rng.standard_normal(shape) * .2).astype(np.float32)
     w = (rng.standard_normal(kernel) * .2).astype(np.float32)
@@ -107,7 +98,7 @@ def test_nvidia_conv2d_rejects_bad_channels_before_cuda():
 @pytest.mark.parametrize("route,atol", [
     ("direct", 2e-5), ("shared", 2e-5), ("im2col_tf32", 2e-2)])
 def test_live_nvidia_conv2d_performance_routes(route, atol):
-    rt = _cuda_or_skip()
+    rt = require_nvidia_mma_runtime()
     rng = np.random.default_rng(1400 + len(route))
     x = (rng.standard_normal((1, 12, 11, 8)) * .1).astype(np.float32)
     w = (rng.standard_normal((3, 3, 8, 16)) * .1).astype(np.float32)
@@ -123,7 +114,7 @@ def test_live_nvidia_conv2d_performance_routes(route, atol):
 @pytest.mark.hardware_nvidia
 @pytest.mark.performance
 def test_live_nvidia_conv2d_size_aware_dispatch_records_measurements():
-    rt = _cuda_or_skip()
+    rt = require_nvidia_mma_runtime()
     rt._nvidia_conv2d_route_cache.clear()
     rt._nvidia_conv2d_route_evidence.clear()
     rng = np.random.default_rng(1500)

@@ -2,20 +2,10 @@
 
 from __future__ import annotations
 
-import os
-import shutil
-
 import numpy as np
 import pytest
 
-
-def _cuda_or_skip():
-    if not (shutil.which("nvcc") or os.path.exists("/usr/local/cuda/bin/nvcc")):
-        pytest.skip("nvcc not installed")
-    from tessera import runtime as rt
-    if not rt._nvidia_mma_runtime_available():
-        pytest.skip("no usable NVIDIA CUDA device")
-    return rt
+from _nvidia_testutil import require_nvidia_mma_runtime
 
 
 def _artifact(op_name: str = "tessera.softmax", *, axis: int = -1):
@@ -39,7 +29,7 @@ def _ref(x: np.ndarray) -> np.ndarray:
 @pytest.mark.parametrize("dtype,tol", [(np.float32, 2e-6), (np.float16, 4e-3)])
 @pytest.mark.parametrize("shape", [(1, 16), (8, 64), (4, 300), (32, 17), (2, 3, 48)])
 def test_live_nvidia_softmax_matches_numpy(dtype, tol, shape):
-    rt = _cuda_or_skip()
+    rt = require_nvidia_mma_runtime()
     rng = np.random.default_rng(100 + len(shape) + shape[-1])
     x = (rng.standard_normal(shape) * 3.0).astype(dtype)
     result = rt.launch(_artifact(), (x,))

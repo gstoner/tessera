@@ -2,22 +2,11 @@
 
 from __future__ import annotations
 
-import os
-import shutil
-
 import numpy as np
 import pytest
 
 import tessera
-
-
-def _cuda_or_skip():
-    if not (shutil.which("nvcc") or os.path.exists("/usr/local/cuda/bin/nvcc")):
-        pytest.skip("nvcc not installed")
-    from tessera import runtime as rt
-    if not rt._nvidia_mma_runtime_available():
-        pytest.skip("no usable NVIDIA CUDA device")
-    return rt
+from _nvidia_testutil import require_nvidia_mma_runtime
 
 
 def _artifact(start: int, end: int):
@@ -53,7 +42,7 @@ def _page(logical: np.ndarray, page_size: int, table: np.ndarray) -> np.ndarray:
 @pytest.mark.hardware_nvidia
 @pytest.mark.parametrize("start,end", [(0, 1), (3, 10), (7, 13)])
 def test_live_nvidia_paged_kv_read_matches_handle(start, end):
-    rt = _cuda_or_skip()
+    rt = require_nvidia_mma_runtime()
     rng = np.random.default_rng(610 + start + end)
     handle = tessera.cache.KVCacheHandle(num_heads=3, head_dim=8, max_seq=16)
     keys = rng.standard_normal((13, 3, 8)).astype(np.float32)
@@ -69,7 +58,7 @@ def test_live_nvidia_paged_kv_read_matches_handle(start, end):
 @pytest.mark.slow
 @pytest.mark.hardware_nvidia
 def test_live_nvidia_paged_kv_read_feeds_decode_attention():
-    rt = _cuda_or_skip()
+    rt = require_nvidia_mma_runtime()
     rng = np.random.default_rng(711)
     H, D, S, page_size = 2, 8, 11, 4
     keys = rng.standard_normal((S, H, D)).astype(np.float32) * .2

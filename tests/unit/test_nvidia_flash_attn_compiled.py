@@ -2,20 +2,10 @@
 
 from __future__ import annotations
 
-import os
-import shutil
-
 import numpy as np
 import pytest
 
-
-def _cuda_or_skip():
-    if not (shutil.which("nvcc") or os.path.exists("/usr/local/cuda/bin/nvcc")):
-        pytest.skip("nvcc not installed")
-    from tessera import runtime as rt
-    if not rt._nvidia_mma_runtime_available():
-        pytest.skip("no usable NVIDIA CUDA device")
-    return rt
+from _nvidia_testutil import require_nvidia_mma_runtime
 
 
 def _artifact(*, with_bias: bool, **kwargs):
@@ -70,7 +60,7 @@ def _reference(q, k, v, *, scale, causal=False, window=None, bias=None, softcap=
 @pytest.mark.hardware_nvidia
 @pytest.mark.parametrize("hkv", [4, 2, 1], ids=["mha", "gqa", "mqa"])
 def test_live_nvidia_flash_attn_mha_gqa_mqa(hkv):
-    rt = _cuda_or_skip()
+    rt = require_nvidia_mma_runtime()
     rng = np.random.default_rng(817 + hkv)
     q = rng.standard_normal((2, 4, 5, 8), dtype=np.float32)
     k = rng.standard_normal((2, hkv, 7, 8), dtype=np.float32)
@@ -85,7 +75,7 @@ def test_live_nvidia_flash_attn_mha_gqa_mqa(hkv):
 @pytest.mark.slow
 @pytest.mark.hardware_nvidia
 def test_live_nvidia_flash_attn_causal_window_bias_softcap():
-    rt = _cuda_or_skip()
+    rt = require_nvidia_mma_runtime()
     rng = np.random.default_rng(818)
     q = rng.standard_normal((1, 4, 6, 8), dtype=np.float32)
     k = rng.standard_normal((1, 2, 8, 8), dtype=np.float32)
@@ -101,7 +91,7 @@ def test_live_nvidia_flash_attn_causal_window_bias_softcap():
 @pytest.mark.slow
 @pytest.mark.hardware_nvidia
 def test_live_nvidia_flash_attn_f16_storage_f32_accumulation():
-    rt = _cuda_or_skip()
+    rt = require_nvidia_mma_runtime()
     rng = np.random.default_rng(821)
     q = rng.standard_normal((1, 4, 5, 8), dtype=np.float32).astype(np.float16)
     k = rng.standard_normal((1, 2, 7, 8), dtype=np.float32).astype(np.float16)

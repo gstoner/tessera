@@ -2,20 +2,10 @@
 
 from __future__ import annotations
 
-import os
-import shutil
-
 import numpy as np
 import pytest
 
-
-def _cuda_or_skip():
-    if not (shutil.which("nvcc") or os.path.exists("/usr/local/cuda/bin/nvcc")):
-        pytest.skip("nvcc not installed")
-    from tessera import runtime as rt
-    if not rt._nvidia_mma_runtime_available():
-        pytest.skip("no usable NVIDIA CUDA device")
-    return rt
+from _nvidia_testutil import require_nvidia_mma_runtime
 
 
 def _artifact():
@@ -46,7 +36,7 @@ def _softmax(x: np.ndarray) -> np.ndarray:
 @pytest.mark.hardware_nvidia
 @pytest.mark.parametrize("m,n,k", [(16, 8, 16), (39, 27, 31), (5, 300, 17)])
 def test_live_nvidia_matmul_softmax_matches_numpy(m, n, k):
-    rt = _cuda_or_skip()
+    rt = require_nvidia_mma_runtime()
     rng = np.random.default_rng(500 + m + n + k)
     a = (rng.standard_normal((m, k)) * .2).astype(np.float16)
     b = (rng.standard_normal((k, n)) * .2).astype(np.float16)
@@ -81,7 +71,7 @@ def _round_tf32(x: np.ndarray) -> np.ndarray:
 @pytest.mark.parametrize(
     "storage,atol", [("tf32", 2e-4), ("e4m3", 2e-2), ("e5m2", 4e-2)])
 def test_live_nvidia_matmul_softmax_tf32_fp8_breadth(storage, atol):
-    rt = _cuda_or_skip()
+    rt = require_nvidia_mma_runtime()
     rng = np.random.default_rng(1500 + len(storage))
     a = (rng.standard_normal((17, 31)) * .15).astype(np.float32)
     b = (rng.standard_normal((31, 13)) * .15).astype(np.float32)

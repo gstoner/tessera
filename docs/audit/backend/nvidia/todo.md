@@ -83,6 +83,11 @@ Baseline state on the NVIDIA box (2026-07-15, commit `ecf9483f`):
   the first batch; 70 focused tests passed and the canonical device collection
   remains 243 nodes. This is NVIDIA-only test infrastructure; Apple and ROCm
   plan states are unaffected.
+- The second batch removed the same local MMA-runtime probe from norm, softmax,
+  matmul-ReLU, matmul-softmax, compiled KV-cache, forward/backward Flash
+  Attention, and convolution tests. Their 89 focused exact-device tests passed
+  on the RTX 5070 Ti. Specialized compiler and Tile availability probes remain
+  local until their stronger capability contracts can be preserved explicitly.
 - The first device run exposed a product defect in Tile GELU: NVPTX could not
   select LLVM's `ftanh`; after its arithmetic lowering, SiLU exposed the same
   issue for `fexp`. Both now lower through a bounded Pade tanh expression, so

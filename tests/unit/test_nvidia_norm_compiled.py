@@ -2,20 +2,10 @@
 
 from __future__ import annotations
 
-import os
-import shutil
-
 import numpy as np
 import pytest
 
-
-def _cuda_or_skip():
-    if not (shutil.which("nvcc") or os.path.exists("/usr/local/cuda/bin/nvcc")):
-        pytest.skip("nvcc not installed")
-    from tessera import runtime as rt
-    if not rt._nvidia_mma_runtime_available():
-        pytest.skip("no usable NVIDIA CUDA device")
-    return rt
+from _nvidia_testutil import require_nvidia_mma_runtime
 
 
 def _artifact(op_name: str, eps: float | None = None):
@@ -44,7 +34,7 @@ def _ref(x: np.ndarray, op: str, eps: float) -> np.ndarray:
 @pytest.mark.parametrize("shape", [(1, 16), (8, 64), (4, 300), (32, 17), (2, 3, 48)])
 @pytest.mark.parametrize("dtype", [np.float32, np.float16])
 def test_live_nvidia_norm_matches_numpy(op, eps, shape, dtype):
-    rt = _cuda_or_skip()
+    rt = require_nvidia_mma_runtime()
     rng = np.random.default_rng(200 + len(shape) + shape[-1])
     x = (rng.standard_normal(shape) * 2.0 + 0.5).astype(dtype)
     result = rt.launch(_artifact(op), (x,))
@@ -57,7 +47,7 @@ def test_live_nvidia_norm_matches_numpy(op, eps, shape, dtype):
 @pytest.mark.slow
 @pytest.mark.hardware_nvidia
 def test_live_nvidia_layer_norm_large_offset_small_variance():
-    rt = _cuda_or_skip()
+    rt = require_nvidia_mma_runtime()
     rng = np.random.default_rng(2024)
     x = (1e4 + rng.standard_normal((4, 128))).astype(np.float32)
     out = rt.launch(_artifact("tessera.layer_norm"), (x,))["output"]

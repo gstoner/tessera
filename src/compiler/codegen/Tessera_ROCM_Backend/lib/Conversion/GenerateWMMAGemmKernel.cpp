@@ -1,7 +1,10 @@
 //===- GenerateWMMAGemmKernel.cpp - compiler-generated WMMA GEMM ----------===//
 //
-// Expands a `tessera_rocm.wmma_gemm` matmul directive into a real, fragment-
-// materialized RDNA WMMA GEMM kernel: a `gpu.module` + `gpu.func` whose body
+// Expands a portable `tile.matmul_kernel` or legacy
+// `tessera_rocm.wmma_gemm` directive into a real, fragment-materialized RDNA
+// WMMA GEMM kernel. Both front doors populate one in-memory request consumed by
+// the same generator; the portable path creates no temporary target op. The
+// generated `gpu.module` + `gpu.func`
 // loads the A/B tiles into WMMA fragment vectors, calls `tessera_rocm.wmma`
 // (Stage J lowers that to the real `rocdl.wmma` intrinsic), and stores the f32
 // accumulator with the wave32 lane/element layout. The GEMM is therefore
@@ -40,8 +43,11 @@
 
 #include "TesseraROCM/Passes.h"
 #include "Tessera/Dialect/Tile/TileDialect.h"
+#include "Tessera/Dialect/Tile/TileEpilogue.h"
+#include "TesseraROCMDialect.h.inc"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -51,6 +57,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/STLExtras.h"
 
 using namespace mlir;
 
@@ -81,22 +88,45 @@ struct WmmaTypes {
   int packFactor;
 };
 
+/// Backend-neutral input to the one gfx11 WMMA kernel generator. Portable
+/// tile.matmul_kernel and the legacy tessera_rocm.wmma_gemm directive are only
+/// adapters that populate this request; neither creates an intermediate IR op.
+struct WmmaGemmRequest {
+  Operation *anchor = nullptr;
+  Operation *eraseOwner = nullptr;
+  std::string name;
+  int64_t m = 16, n = 16, k = 16;
+  int64_t mt = 1, nt = 1;
+  std::string dtype = "f16";
+  std::string activation = "none";
+  std::string output;
+  bool bias = false;
+  bool portableABI = false;
+  DictionaryAttr storagePack;
+};
+
 // Emit the problem-size-generic, register-blocked (mt x nt) WMMA GEMM body into
 // `gpuFunc` (args: A, B, D : memref<?>, M, N, K : index), for the dtype in `T`.
 void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                      int64_t mt, int64_t nt, const WmmaTypes &T,
+                     Type outputType, bool portableABI = false,
                      bool viaTile = false, bool hasBias = false,
                      StringRef activation = "none") {
   b.setInsertionPointToStart(&gpuFunc.getBody().front());
   Value A = gpuFunc.getArgument(0);
   Value B = gpuFunc.getArgument(1);
-  Value D = gpuFunc.getArgument(2);
-  Value M = gpuFunc.getArgument(3);
-  Value N = gpuFunc.getArgument(4);
-  Value K = gpuFunc.getArgument(5);
+  // Preserve the portable Tile ABI (A, B, bias, D, M, N, K). The legacy
+  // backend directive retains its historical (A, B, D, M, N, K, bias) ABI.
+  unsigned dIndex = portableABI && hasBias ? 3 : 2;
+  Value D = gpuFunc.getArgument(dIndex);
+  Value M = gpuFunc.getArgument(dIndex + 1);
+  Value N = gpuFunc.getArgument(dIndex + 2);
+  Value K = gpuFunc.getArgument(dIndex + 3);
   // Fused-epilogue bias is the trailing memref arg (length N), present only when
   // `hasBias`. Only float dtypes reach the epilogue (gated at the pass level).
-  Value bias = hasBias ? gpuFunc.getArgument(6) : Value();
+  Value bias = hasBias
+      ? gpuFunc.getArgument(portableABI ? 2 : 6)
+      : Value();
 
   Type loadTy = T.load;
   Type fragTy = T.frag;
@@ -306,58 +336,17 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
     return wmmaAll(bb, l, aFrag, bFrag, acc);
   };
 
-  // Fused epilogue, applied per accumulator element on the in-register f32
-  // value before the store (no intermediate D round-trip): optional per-column
-  // bias add, then an optional pointwise activation. `colS` is the clamped
-  // (OOB-safe) column for the bias load; the actual masked store still guards
-  // the write. Activation transcendentals (exp/tanh) lower through the same
-  // `math` → ROCDL path the flash_attn softmax uses.
-  auto applyEpilogue = [&](OpBuilder &sb, Value dv, Value colS) -> Value {
-    if (bias) {
-      Value bv = sb.create<memref::LoadOp>(loc, bias, ValueRange{colS});
-      dv = sb.create<arith::AddFOp>(loc, dv, bv);
-    }
-    if (activation == "relu") {
-      Value z = sb.create<arith::ConstantOp>(loc, T.accElem,
-                                             sb.getF32FloatAttr(0.0f));
-      dv = sb.create<arith::MaximumFOp>(loc, dv, z);
-    } else if (activation == "silu") {
-      // silu(x) = x * sigmoid(x) = x / (1 + exp(-x)).
-      Value one = sb.create<arith::ConstantOp>(loc, T.accElem,
-                                               sb.getF32FloatAttr(1.0f));
-      Value negx = sb.create<arith::NegFOp>(loc, dv);
-      Value e = sb.create<math::ExpOp>(loc, negx);
-      Value den = sb.create<arith::AddFOp>(loc, one, e);
-      dv = sb.create<arith::DivFOp>(loc, dv, den);
-    } else if (activation == "gelu") {
-      // gelu tanh approximation (matches gelu(approximate='tanh')):
-      //   0.5*x*(1 + tanh( sqrt(2/pi) * (x + 0.044715 x^3) )).
-      Value half = sb.create<arith::ConstantOp>(loc, T.accElem,
-                                                sb.getF32FloatAttr(0.5f));
-      Value one = sb.create<arith::ConstantOp>(loc, T.accElem,
-                                               sb.getF32FloatAttr(1.0f));
-      Value c0p044 = sb.create<arith::ConstantOp>(
-          loc, T.accElem, sb.getF32FloatAttr(0.044715f));
-      Value cSqrt = sb.create<arith::ConstantOp>(
-          loc, T.accElem, sb.getF32FloatAttr(0.7978845608028654f));
-      Value x2 = sb.create<arith::MulFOp>(loc, dv, dv);
-      Value x3 = sb.create<arith::MulFOp>(loc, x2, dv);
-      Value inner = sb.create<arith::AddFOp>(
-          loc, dv, sb.create<arith::MulFOp>(loc, c0p044, x3));
-      inner = sb.create<arith::MulFOp>(loc, cSqrt, inner);
-      Value t = sb.create<math::TanhOp>(loc, inner);
-      Value oneP = sb.create<arith::AddFOp>(loc, one, t);
-      dv = sb.create<arith::MulFOp>(
-          loc, sb.create<arith::MulFOp>(loc, half, dv), oneP);
-    }
-    return dv;
-  };
-
   // Shared store. When `masked`, each store is scf.if-guarded against the ragged
-  // M/N edge (stores run once, so the guard cost is negligible).
+  // M/N edge (stores run once, so the guard cost is negligible). Bias is
+  // invariant across all eight accumulator elements and every M tile for one
+  // output column, so load it once per N tile and reuse it.
   auto emitStore = [&](OpBuilder &sb, ValueRange accs, bool masked) {
-    for (int64_t mi = 0; mi < mt; ++mi)
-      for (int64_t ni = 0; ni < nt; ++ni) {
+    for (int64_t ni = 0; ni < nt; ++ni) {
+      Value biasValue = bias
+          ? Value(sb.create<memref::LoadOp>(loc, bias,
+                                            ValueRange{colSafe[ni]}))
+          : Value();
+      for (int64_t mi = 0; mi < mt; ++mi) {
         Value accF = accs[mi * nt + ni];
         for (int64_t e = 0; e < 8; ++e) {
           Value twoE = sb.create<arith::ConstantIndexOp>(loc, e * 2);
@@ -365,7 +354,14 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
           Value r = sb.create<arith::AddIOp>(loc, rowOrigin[mi], rowOff);
           Value dv =
               sb.create<vector::ExtractOp>(loc, accF, ArrayRef<int64_t>{e});
-          dv = applyEpilogue(sb, dv, colSafe[ni]);
+          if (biasValue)
+            dv = sb.create<arith::AddFOp>(loc, dv, biasValue);
+          if (!T.isInt)
+            dv = tessera::tile::emitScalarFloatActivation(
+                sb, loc, dv, activation);
+          if (!T.isInt)
+            dv = tessera::tile::emitFloatOutputConversion(
+                sb, loc, dv, outputType);
           Value didx = sb.create<arith::AddIOp>(
               loc, sb.create<arith::MulIOp>(loc, r, N), colN[ni]);
           if (!masked) {
@@ -380,6 +376,7 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
           sb.create<memref::StoreOp>(loc, dv, D, ValueRange{didx});
         }
       }
+    }
   };
 
   SmallVector<Value> initAccs(mt * nt, accZero);
@@ -464,11 +461,77 @@ struct GenerateWMMAGemmKernelPass
     registry.insert<gpu::GPUDialect, scf::SCFDialect, vector::VectorDialect,
                     arith::ArithDialect, math::MathDialect,
                     memref::MemRefDialect,
-                    tessera::tile::TesseraTileDialect>();
+                    tessera::tile::TesseraTileDialect,
+                    mlir::tessera_rocm::TesseraROCMDialect>();
   }
 
   void runOnOperation() override {
     ModuleOp module = getOperation();
+
+    SmallVector<WmmaGemmRequest> requests;
+
+    // Portable launch-level adapter. It validates the target-neutral contract
+    // and directly populates the in-memory request consumed by the production
+    // generator below. No temporary backend directive or marker is introduced.
+    SmallVector<tessera::tile::MatmulKernelOp> portableKernels;
+    module.walk([&](tessera::tile::MatmulKernelOp op) {
+      portableKernels.push_back(op);
+    });
+    for (tessera::tile::MatmulKernelOp kernel : portableKernels) {
+      Operation *op = kernel.getOperation();
+      auto desc = op->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma");
+      auto epilogue =
+          op->getAttrOfType<tessera::tile::TileEpilogueAttr>("epilogue");
+      bool common = desc && epilogue &&
+          (desc.getFamily() == "auto" || desc.getFamily() == "wmma") &&
+          desc.getM() == 16 && desc.getN() == 16 && desc.getK() == 16 &&
+          desc.getAType() == desc.getBType() && desc.getALayout() == "row_major" &&
+          desc.getBLayout() == "col_major" && desc.getKBlocks() == 1;
+      bool floatContract = common &&
+          (desc.getAType() == "f16" || desc.getAType() == "bf16") &&
+          desc.getAccType() == "f32";
+      bool integerContract = common &&
+          (desc.getAType() == "int8" || desc.getAType() == "int4") &&
+          (desc.getAccType() == "i32" || desc.getAccType() == "int32");
+      bool canonical = floatContract || integerContract;
+      if (!canonical) {
+        op->emitError("ROCm tile.matmul_kernel requires an m16n16k16 row/col "
+                      "WMMA descriptor: f16/bf16 with f32 accumulation or "
+                      "int8/int4 with i32 accumulation");
+        return signalPassFailure();
+      }
+      if (auto staging = op->getAttrOfType<StringAttr>("staging");
+          staging && staging.getValue() != "global") {
+        op->emitError("ROCm tile.matmul_kernel portable-fragment slice currently "
+                      "requires global staging");
+        return signalPassFailure();
+      }
+      auto parent = op->getParentOfType<func::FuncOp>();
+      if (!parent) {
+        op->emitError("ROCm tile.matmul_kernel must be nested in func.func");
+        return signalPassFailure();
+      }
+      int64_t mt = 1, nt = 1;
+      if (auto warps = op->getAttrOfType<IntegerAttr>("warps");
+          warps && warps.getInt() == 4) {
+        mt = 2;
+        nt = 2;
+      }
+      WmmaGemmRequest request;
+      request.anchor = op;
+      request.eraseOwner = parent;
+      request.name = parent.getSymName().str();
+      request.mt = mt;
+      request.nt = nt;
+      request.dtype = desc.getAType().str();
+      request.bias = epilogue.getBias();
+      request.activation = epilogue.getActivation().str();
+      request.output = epilogue.getOutputType().str();
+      request.portableABI = true;
+      requests.push_back(std::move(request));
+    }
+
+    // Backward-compatible legacy directive adapter.
     SmallVector<Operation *> directives;
     module.walk([&](Operation *op) {
       if (op->getName().getStringRef() == "tessera_rocm.wmma_gemm")
@@ -484,20 +547,43 @@ struct GenerateWMMAGemmKernelPass
         op->emitError("tessera_rocm.wmma_gemm missing name/m/n/k");
         return signalPassFailure();
       }
-      if (mAttr.getInt() != 16 || nAttr.getInt() != 16 || kAttr.getInt() != 16) {
+      WmmaGemmRequest request;
+      request.anchor = op;
+      request.eraseOwner = op;
+      request.name = nameAttr.getValue().str();
+      request.m = mAttr.getInt();
+      request.n = nAttr.getInt();
+      request.k = kAttr.getInt();
+      if (auto a = op->getAttrOfType<IntegerAttr>("mt"))
+        request.mt = a.getInt();
+      if (auto a = op->getAttrOfType<IntegerAttr>("nt"))
+        request.nt = a.getInt();
+      if (auto a = op->getAttrOfType<StringAttr>("dtype"))
+        request.dtype = a.getValue().str();
+      if (auto a = op->getAttrOfType<BoolAttr>("bias"))
+        request.bias = a.getValue();
+      if (auto a = op->getAttrOfType<StringAttr>("activation"))
+        request.activation = a.getValue().str();
+      if (auto a = op->getAttrOfType<StringAttr>("output"))
+        request.output = a.getValue().str();
+      request.storagePack =
+          op->getAttrOfType<DictionaryAttr>("tessera.storage_pack");
+      requests.push_back(std::move(request));
+    }
+
+    SmallVector<Operation *> generatedOwners;
+    for (WmmaGemmRequest &request : requests) {
+      Operation *op = request.anchor;
+      if (request.m != 16 || request.n != 16 || request.k != 16) {
         op->emitError("generate-wmma-gemm-kernel: the WMMA instruction tile "
                       "must be 16x16x16 (got ")
-            << mAttr.getInt() << "x" << nAttr.getInt() << "x" << kAttr.getInt()
+            << request.m << "x" << request.n << "x" << request.k
             << "); RDNA V_WMMA exposes no other tile. The problem size is a "
                "runtime (M,N,K) kernel argument, not the tile";
         return signalPassFailure();
       }
       // mt/nt default to 1 (DefaultValuedAttr); the register-blocked macro-tile.
-      int64_t mt = 1, nt = 1;
-      if (auto a = op->getAttrOfType<IntegerAttr>("mt"))
-        mt = a.getInt();
-      if (auto a = op->getAttrOfType<IntegerAttr>("nt"))
-        nt = a.getInt();
+      int64_t mt = request.mt, nt = request.nt;
       if (mt < 1 || nt < 1) {
         op->emitError("generate-wmma-gemm-kernel: mt/nt (macro-tile in WMMA "
                       "tiles) must be >= 1 (got ")
@@ -544,7 +630,7 @@ struct GenerateWMMAGemmKernelPass
       OpBuilder b(module.getBodyRegion());
       b.setInsertionPointToEnd(module.getBody());
       Location loc = op->getLoc();
-      std::string kname = nameAttr.getValue().str();
+      std::string kname = request.name;
 
       // dtype: f16 (default) / bf16 (f32 accumulate), or int8 (i32 accumulate).
       // All confirmed on gfx1151. The fragment/accumulator types follow dtype:
@@ -557,19 +643,17 @@ struct GenerateWMMAGemmKernelPass
       Type i32Ty = b.getIntegerType(32);
       Type f32Ty = b.getF32Type();
       WmmaTypes T;
-      StringRef dt = "f16";
+      StringRef dt = request.dtype;
+      bool portableContract = request.portableABI;
       // C4 reconciliation (2026-06-23): if the directive carries the
       // backend-neutral `tessera.storage_pack = {logical, container, factor}`
       // descriptor (from StoragePackConsume), its `logical` selects the dtype —
       // one packing contract feeds both AMD (here) and NVIDIA. Fall back to the
       // legacy `dtype` attr when no descriptor is present (non-breaking).
-      DictionaryAttr packDesc =
-          op->getAttrOfType<DictionaryAttr>("tessera.storage_pack");
+      DictionaryAttr packDesc = request.storagePack;
       if (packDesc) {
         if (auto logical = packDesc.getAs<StringAttr>("logical"))
           dt = logical.getValue();
-      } else if (auto a = op->getAttrOfType<StringAttr>("dtype")) {
-        dt = a.getValue();
       }
       auto v8i32 = VectorType::get({8}, i32Ty);
       auto v8f32 = VectorType::get({8}, f32Ty);
@@ -619,14 +703,9 @@ struct GenerateWMMAGemmKernelPass
       // applied on the in-register f32 accumulator before the store. The
       // epilogue is float-only (gelu/silu are transcendentals; bias is an fadd):
       // an int8/int4 directive carrying it is a named error, not a silent no-op.
-      bool hasBias = false;
-      if (auto a = op->getAttrOfType<BoolAttr>("bias"))
-        hasBias = a.getValue();
-      StringRef activation = "none";
-      if (auto a = op->getAttrOfType<StringAttr>("activation"))
-        activation = a.getValue();
-      if (activation != "none" && activation != "relu" &&
-          activation != "gelu" && activation != "silu") {
+      bool hasBias = request.bias;
+      StringRef activation = request.activation;
+      if (!tessera::tile::isSupportedActivation(activation)) {
         op->emitError("generate-wmma-gemm-kernel: activation must be one of "
                       "none/relu/gelu/silu (got '")
             << activation << "')";
@@ -638,6 +717,19 @@ struct GenerateWMMAGemmKernelPass
             << dt << "' is integer";
         return signalPassFailure();
       }
+      Type outputTy = T.accElem;
+      if (!request.output.empty()) {
+        StringRef output = request.output;
+        if (!T.isInt && output == "f16")
+          outputTy = f16Ty;
+        else if ((!T.isInt && output != "f32") ||
+                 (T.isInt && output != "i32" && output != "int32")) {
+          op->emitError("generate-wmma-gemm-kernel: output type is incompatible "
+                        "with dtype '")
+              << dt << "'";
+          return signalPassFailure();
+        }
+      }
 
       // gpu.module @<name>_mod { gpu.func @<name>(A,B,D,M,N,K[,bias]) kernel }
       auto gpuMod = b.create<gpu::GPUModuleOp>(loc, kname + "_mod");
@@ -645,10 +737,14 @@ struct GenerateWMMAGemmKernelPass
 
       Type idxTy = b.getIndexType();
       auto abTy = MemRefType::get({ShapedType::kDynamic}, T.store);
-      auto dTy = MemRefType::get({ShapedType::kDynamic}, T.accElem);
-      SmallVector<Type> argTys{abTy, abTy, dTy, idxTy, idxTy, idxTy};
-      if (hasBias)
-        argTys.push_back(dTy); // per-column bias, accumulator dtype, length N
+      auto dTy = MemRefType::get({ShapedType::kDynamic}, outputTy);
+      auto biasTy = MemRefType::get({ShapedType::kDynamic}, T.accElem);
+      SmallVector<Type> argTys{abTy, abTy};
+      if (hasBias && portableContract)
+        argTys.push_back(biasTy);
+      argTys.append({dTy, idxTy, idxTy, idxTy});
+      if (hasBias && !portableContract)
+        argTys.push_back(biasTy); // legacy directive ABI: trailing bias
       auto fnTy = b.getFunctionType(argTys, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
       gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
@@ -660,11 +756,14 @@ struct GenerateWMMAGemmKernelPass
           gpuFunc->setAttr((Twine("tessera.rocm.") + attrName).str(), attr);
 
       OpBuilder bodyB(gpuFunc.getContext());
-      emitGeneralBody(bodyB, loc, gpuFunc, mt, nt, T, viaTile, hasBias,
-                      activation);
+      emitGeneralBody(bodyB, loc, gpuFunc, mt, nt, T, outputTy,
+                      portableContract, viaTile, hasBias, activation);
 
-      op->erase();
+      if (!llvm::is_contained(generatedOwners, request.eraseOwner))
+        generatedOwners.push_back(request.eraseOwner);
     }
+    for (Operation *owner : generatedOwners)
+      owner->erase();
   }
 };
 

@@ -1,0 +1,30 @@
+{
+  "evidence_arch": "gfx1151",
+  "schema_version": 1,
+  "rows": [
+    {"shape": "1x64x64", "tokens": 64, "mode": "summary", "reps": 5,
+     "device_latency_ms": 0.07702212448930368, "latency_ms": 0.182162328125,
+     "state_bytes_per_token": 32768.0, "state_traffic_ratio": 1.0},
+    {"shape": "1x64x64", "tokens": 64, "mode": "output_only", "reps": 5,
+     "device_latency_ms": 0.03995759371900931, "latency_ms": 0.158310296875,
+     "state_bytes_per_token": 1020.0615384615385,
+     "state_traffic_ratio": 32.12355212355212},
+    {"shape": "1x64x64", "tokens": 64, "mode": "async_ring", "chunk": 16,
+     "async_slots": 4, "reps": 5,
+     "device_latency_ms": 0.029475328512489796, "latency_ms": 0.03367021875,
+     "state_bytes_per_token": 1020.0615384615385,
+     "state_traffic_ratio": 32.12355212355212},
+    {"shape": "1x128x128", "tokens": 64, "mode": "summary", "reps": 5,
+     "device_latency_ms": 0.07694801595062017, "latency_ms": 0.187124984375,
+     "state_bytes_per_token": 131072.0, "state_traffic_ratio": 1.0},
+    {"shape": "1x128x128", "tokens": 64, "mode": "output_only", "reps": 5,
+     "device_latency_ms": 0.041003453196026385, "latency_ms": 0.1461935625,
+     "state_bytes_per_token": 2544.246153846154,
+     "state_traffic_ratio": 51.51702786377709},
+    {"shape": "1x128x128", "tokens": 64, "mode": "async_ring", "chunk": 16,
+     "async_slots": 4, "reps": 5,
+     "device_latency_ms": 0.03578260913491249, "latency_ms": 0.040327234375,
+     "state_bytes_per_token": 2544.246153846154,
+     "state_traffic_ratio": 51.51702786377709}
+  ]
+}

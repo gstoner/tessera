@@ -47,7 +47,7 @@ namespace {
 void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
                        Type storeTy, bool viaTile = false, bool gqa = false,
                        bool window = false, bool softcap = false,
-                       bool bias = false) {
+                       bool bias = false, bool twoWave = false) {
   MLIRContext *ctx = b.getContext();
   int64_t DC = D / 16;
   Type f32 = b.getF32Type();
@@ -74,6 +74,11 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   Value sm = f.addWorkgroupAttribution(ldsT(16, f32), loc);
   Value sl = f.addWorkgroupAttribution(ldsT(16, f32), loc);
   Value scorr = f.addWorkgroupAttribution(ldsT(16, f32), loc);
+  // G6-B: each wave writes one 16x16 partial QK tile; wave 0 merges the two
+  // before the shared online-softmax step.  Bounded overhead: 2 KiB LDS.
+  Value sPartial;
+  if (twoWave)
+    sPartial = f.addWorkgroupAttribution(ldsT(2 * 16 * 16, f32), loc);
 
   b.setInsertionPointToStart(&f.getBody().front());
   Value Q = f.getArgument(0), Kk = f.getArgument(1), V = f.getArgument(2);
@@ -82,8 +87,8 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   Value scale = f.getArgument(6), causal = f.getArgument(7);
 
   auto ci = [&](int64_t v) { return b.create<arith::ConstantIndexOp>(loc, v); };
-  Value c0 = ci(0), c1 = ci(1), c4 = ci(4), c15 = ci(15), c16 = ci(16),
-        c32 = ci(32);
+  Value c0 = ci(0), c1 = ci(1), c2 = ci(2), c4 = ci(4), c15 = ci(15),
+        c16 = ci(16), c32 = ci(32), c64 = ci(64), cDC = ci(DC);
   Value cD = ci(D), c16D = ci(16 * D);
   Value zerof = b.create<arith::ConstantOp>(loc, f32, b.getF32FloatAttr(0.0));
   Value negInf =
@@ -97,8 +102,10 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
       loc, accTy, DenseElementsAttr::get(cast<ShapedType>(accTy), APFloat(0.0f)));
 
   Value tid = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
-  Value l15 = b.create<arith::AndIOp>(loc, tid, c15);
-  Value half = b.create<arith::ShRUIOp>(loc, tid, c4);
+  Value lane = twoWave ? b.create<arith::AndIOp>(loc, tid, ci(31)) : tid;
+  Value wave = twoWave ? b.create<arith::ShRUIOp>(loc, tid, ci(5)) : c0;
+  Value l15 = b.create<arith::AndIOp>(loc, lane, c15);
+  Value half = b.create<arith::ShRUIOp>(loc, lane, c4);
   Value qtile = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
   Value bh = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::y);
   Value qbase = b.create<arith::MulIOp>(
@@ -127,7 +134,7 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
 
   // --- zero sAcc: for i = tid; i < 16*D; i += 32 --- (Q is read from global)
   {
-    auto lp = b.create<scf::ForOp>(loc, tid, c16D, c32);
+    auto lp = b.create<scf::ForOp>(loc, tid, c16D, twoWave ? c64 : c32);
     OpBuilder::InsertionGuard g(b);
     b.setInsertionPointToStart(lp.getBody());
     b.create<memref::StoreOp>(loc, zerof, sAcc,
@@ -228,28 +235,40 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
     // (no LDS staging — see the sQ note above), masked on the query bound.
     Value qrow_l15 = add(q0, l15);
     Value qrInb = b.create<arith::CmpIOp>(loc, slt, qrow_l15, Sq);
-    Value cs = accZero;
-    for (int64_t dc = 0; dc < DC; ++dc) {
-      Value dc16 = ci(dc * 16);
+    auto qkChunk = [&](OpBuilder &bb, Value dc16, Value acc) {
       Value aBase = add(add(qbase, mul(qrow_l15, cD)), dc16);
-      Value aSafe = b.create<arith::SelectOp>(loc, qrInb, aBase, c0);
-      Value aFrag = buildFrag(b, loc, [&](int64_t i) {
-        Value v = b.create<memref::LoadOp>(loc, Q, ValueRange{add(aSafe, ci(i))});
-        return b.create<arith::SelectOp>(loc, qrInb, v, storeZero);
+      Value aSafe = bb.create<arith::SelectOp>(loc, qrInb, aBase, c0);
+      Value aFrag = buildFrag(bb, loc, [&](int64_t i) {
+        Value v = bb.create<memref::LoadOp>(loc, Q, ValueRange{add(aSafe, ci(i))});
+        return bb.create<arith::SelectOp>(loc, qrInb, v, storeZero);
       });
       Value bBase = add(add(kbase, mul(kr_l15, cD)), dc16);
-      Value bSafe = b.create<arith::SelectOp>(loc, krInb, bBase, c0);
-      Value bFrag = buildFrag(b, loc, [&](int64_t i) {
-        Value v = b.create<memref::LoadOp>(loc, Kk, ValueRange{add(bSafe, ci(i))});
-        return b.create<arith::SelectOp>(loc, krInb, v, storeZero);
+      Value bSafe = bb.create<arith::SelectOp>(loc, krInb, bBase, c0);
+      Value bFrag = buildFrag(bb, loc, [&](int64_t i) {
+        Value v = bb.create<memref::LoadOp>(loc, Kk, ValueRange{add(bSafe, ci(i))});
+        return bb.create<arith::SelectOp>(loc, krInb, v, storeZero);
       });
-      cs = wmma(b, loc, aFrag, bFrag, cs);
+      return wmma(bb, loc, aFrag, bFrag, acc);
+    };
+    Value cs = accZero;
+    if (twoWave) {
+      auto dloop = b.create<scf::ForOp>(loc, wave, cDC, c2,
+                                        ValueRange{accZero});
+      {
+        OpBuilder::InsertionGuard dg(b);
+        b.setInsertionPointToStart(dloop.getBody());
+        Value dc16 = mul(dloop.getInductionVar(), c16);
+        Value next = qkChunk(b, dc16, dloop.getRegionIterArgs()[0]);
+        b.create<scf::YieldOp>(loc, ValueRange{next});
+      }
+      cs = dloop.getResult(0);
+    } else {
+      for (int64_t dc = 0; dc < DC; ++dc)
+        cs = qkChunk(b, ci(dc * 16), cs);
     }
-    // mask + scale -> sS[qi*16 + ki], qi = 2e+half, ki = l15.
-    for (int64_t e = 0; e < 8; ++e) {
+    auto emitScore = [&](int64_t e, Value csv) {
       Value qi = add(ci(2 * e), half);
       Value gk = add(k0, l15);
-      Value csv = b.create<vector::ExtractOp>(loc, cs, ArrayRef<int64_t>{e});
       Value v0 = b.create<arith::MulFOp>(loc, csv, scale);
       // Gemma-2 logit soft-cap: cap * tanh(v0 / cap), before masking.
       if (softcap) {
@@ -285,6 +304,36 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
       Value v = b.create<arith::SelectOp>(loc, masked, negInf, v0);
       Value sIdx = add(mul(qi, c16), l15);
       b.create<memref::StoreOp>(loc, v, sS, ValueRange{sIdx});
+    };
+    // mask + scale -> sS[qi*16 + ki], qi = 2e+half, ki = l15.
+    if (twoWave) {
+      Value partialBase = mul(wave, ci(16 * 16));
+      for (int64_t e = 0; e < 8; ++e) {
+        Value qi = add(ci(2 * e), half);
+        Value pidx = add(partialBase, add(mul(qi, c16), l15));
+        Value csv = b.create<vector::ExtractOp>(loc, cs, ArrayRef<int64_t>{e});
+        b.create<memref::StoreOp>(loc, csv, sPartial, ValueRange{pidx});
+      }
+      b.create<gpu::BarrierOp>(loc);
+      Value wave0 = b.create<arith::CmpIOp>(
+          loc, arith::CmpIPredicate::eq, wave, c0);
+      auto merge = b.create<scf::IfOp>(loc, wave0, /*withElse=*/false);
+      {
+        OpBuilder::InsertionGuard mg(b);
+        b.setInsertionPointToStart(merge.thenBlock());
+        for (int64_t e = 0; e < 8; ++e) {
+          Value qi = add(ci(2 * e), half);
+          Value pidx = add(mul(qi, c16), l15);
+          Value p0 = b.create<memref::LoadOp>(loc, sPartial, ValueRange{pidx});
+          Value p1 = b.create<memref::LoadOp>(
+              loc, sPartial, ValueRange{add(ci(16 * 16), pidx)});
+          emitScore(e, b.create<arith::AddFOp>(loc, p0, p1));
+        }
+      }
+    } else {
+      for (int64_t e = 0; e < 8; ++e)
+        emitScore(e, b.create<vector::ExtractOp>(
+                         loc, cs, ArrayRef<int64_t>{e}));
     }
     b.create<gpu::BarrierOp>(loc);
 
@@ -331,8 +380,7 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
     // FUSED into the accumulator write below (sAcc = sAcc*corr + cpe) instead of
     // a separate rescale pass — saves a full 16*D LDS read+write pass and one
     // barrier per KV tile (each sAcc entry is written exactly once per tile).
-    for (int64_t dc = 0; dc < DC; ++dc) {
-      Value dc16 = ci(dc * 16);
+    auto emitPVChunk = [&](Value dc16) {
       Value pRow = mul(l15, c16);
       Value apFrag = buildFrag(b, loc, [&](int64_t i) {
         Value s = b.create<memref::LoadOp>(loc, sS, ValueRange{add(pRow, ci(i))});
@@ -360,6 +408,15 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
         b.create<memref::StoreOp>(loc, b.create<arith::AddFOp>(loc, resc, cpe),
                                   sAcc, ValueRange{idx});
       }
+    };
+    if (twoWave) {
+      auto dloop = b.create<scf::ForOp>(loc, wave, cDC, c2);
+      OpBuilder::InsertionGuard pg(b);
+      b.setInsertionPointToStart(dloop.getBody());
+      emitPVChunk(mul(dloop.getInductionVar(), c16));
+    } else {
+      for (int64_t dc = 0; dc < DC; ++dc)
+        emitPVChunk(ci(dc * 16));
     }
     b.create<gpu::BarrierOp>(loc);
   }
@@ -367,7 +424,7 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   // O = sAcc / l (final), for i=tid; i<16*D; i+=32.
   b.setInsertionPointAfter(kloop);
   {
-    auto lp = b.create<scf::ForOp>(loc, tid, c16D, c32);
+    auto lp = b.create<scf::ForOp>(loc, tid, c16D, twoWave ? c64 : c32);
     OpBuilder::InsertionGuard g(b);
     b.setInsertionPointToStart(lp.getBody());
     Value i = lp.getInductionVar();
@@ -479,6 +536,13 @@ struct GenerateWMMAFlashAttnKernelPass
       bool bias = false;
       if (auto a = op->getAttrOfType<BoolAttr>("attn_bias"))
         bias = a.getValue();
+      bool twoWave = false;
+      if (auto a = op->getAttrOfType<BoolAttr>("two_wave"))
+        twoWave = a.getValue();
+      if (twoWave && D != 128) {
+        op->emitError("two_wave flash attention currently requires head_dim=128");
+        return signalPassFailure();
+      }
 
       auto gpuMod = b.create<gpu::GPUModuleOp>(loc, kname + "_mod");
       b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
@@ -506,7 +570,7 @@ struct GenerateWMMAFlashAttnKernelPass
                        b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
       emitFlashAttnBody(body, loc, gpuFunc, D, storeTy, viaTile, gqa, window,
-                        softcap, bias);
+                        softcap, bias, twoWave);
       op->erase();
     }
   }

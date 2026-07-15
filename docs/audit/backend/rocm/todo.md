@@ -64,10 +64,26 @@ preserved while completing this queue:
 
 ## ROCM-TILE-1: portable Tile fragments
 
-The portable dialect already defines `!tile.fragment`, `#tile.mma_desc`,
-`tile.view`, `tile.fragment_pack`, `tile.mma`, `tile.fragment_unpack`, and
-`tile.store`. NVIDIA consumes the typed form; ROCm currently rejects it before
-physical materialization.
+**Status: complete on `gfx1151` (2026-07-14).**
+
+The portable dialect defines `!tile.fragment`, `#tile.mma_desc`, `tile.view`,
+`tile.fragment_pack`, `tile.mma`, `tile.fragment_unpack`, and `tile.store`.
+ROCm now consumes the typed form for gfx1151 Wave32 f16, bf16, signed int8, and
+signed int4 WMMA. The same logical fixture owns only descriptors and layouts;
+the backend owns the physical VGPR fragments, packing, accumulator map, and
+stores.
+
+The checked-in proof is `gfx1151_tile_fragment_store.mlir` plus
+`test_rocm_wmma_gemm_generated.py`. It covers parser/verifier materialization,
+real ROCDL WMMA intrinsics, gfx1151 hsaco assembly, HIP module launch, and
+exact-device comparison with aligned and ragged launch-level shapes. Negative
+fixtures reject a contradictory B storage order and FP8/BF8 with named
+diagnostics. The portable launch contract also reuses the production multi-tile
+K-loop, fused bias/ReLU/GELU/SiLU, output conversion, and ragged-store generator
+while preserving the portable operand ABI. The portable adapter feeds that
+generator through an in-memory request rather than a temporary target-IR
+directive, and per-column bias is loaded once per fast/edge output tile and
+reused across its accumulator elements.
 
 ### Build steps
 
@@ -101,6 +117,8 @@ physical materialization.
 
 ## ROCM-9: paged-KV serving
 
+**Status: complete on `gfx1151` (2026-07-14).**
+
 The ABI is fixed and portable:
 
 - K/V pages: physical `[P, L, H, D]`;
@@ -108,49 +126,126 @@ The ABI is fixed and portable:
 - token indices: i64 gather order;
 - attention must not assume identity or contiguous page placement.
 
-### Work
+The production selector now mirrors the CUDA reference design while preserving
+the portable ABI: it verifies both the retained gather→FA path and a direct
+page-table consumer against one oracle, records HIP-event and full-call timing,
+and warm-starts from D2. The exact-device fixture combines a non-identity table,
+arbitrary token order, page crossings, causal decode offset, and MQA/GQA head
+mapping. It also exposed and fixed a baseline bug: dense FA's query-zero causal
+triangle is not the right-aligned `T-Q` decode mask, so gather→FA now supplies
+that offset explicitly as additive bias.
 
-1. Run `test_live_rocm_paged_gather_handles_permuted_pages` on gfx1151 and
-   retain the actual architecture provenance.
-2. Extend the numerical fixture to cover a non-identity table, arbitrary token
-   order, multi-query causal offsets, and page crossings in one case.
-3. Retain gather→dense-FA as the baseline.
-4. Build a direct paged-attention candidate that consumes the same page table
-   inside K/V traversal without materializing dense K/V.
-5. Event-time both candidates over decode shapes such as 128, 512, 2,048, and
-   8,192 cached tokens; also report end-to-end latency.
-6. Persist the crossover in the ROCm D2 corpus and warm-start runtime selection.
+### Completed work
 
-The fused candidate is not automatically the production winner. Short contexts
-may benefit from removing gather buffers, while long contexts may need the
-parallelism of the staged FA path.
+1. `test_live_rocm_paged_gather_handles_permuted_pages` executes on gfx1151.
+2. The combined direct fixture covers non-identity placement, arbitrary order,
+   page crossings, MQA grouping, and a multi-query causal offset.
+3. Gather→dense-FA remains the named baseline and shares the same oracle.
+4. Direct HIP attention consumes PLHD K/V, the i32 page table, and i64 order in
+   its K/V traversal without materializing dense K/V.
+5. Both routes are HIP-event timed and full-call timed at 128, 512, 2,048, and
+   8,192 cached tokens.
+6. Both timing modes are committed to D2; full-call winners warm-start serving.
+
+### Measured decision
+
+Shape is `Q=1, Hq=Hkv=4, D=32, L=16`, causal decode, f32 PLHD storage. Times are
+milliseconds on the exact `gfx1151` host. The direct candidate wins the current
+host-pointer ABI end to end at every measured length, so it is the production
+selection for these buckets. Gather→FA wins device-only time decisively; if the
+cache ABI becomes device-resident, that evidence requires re-evaluating the
+selection rather than carrying the host-pointer verdict forward.
+
+| Cached tokens | gather→FA device | direct device | device winner | gather→FA E2E | direct E2E | serving winner |
+|---:|---:|---:|---|---:|---:|---|
+| 128 | 0.0232 | 0.1157 | gather→FA | 4.158 | 1.158 | direct |
+| 512 | 0.0671 | 0.4510 | gather→FA | 4.350 | 2.389 | direct |
+| 2,048 | 0.1721 | 1.7967 | gather→FA | 6.614 | 5.741 | direct |
+| 8,192 | 0.6444 | 7.2107 | gather→FA | 22.674 | 19.466 | direct |
 
 Evidence starts in:
 
 - `tests/unit/test_paged_kv_rocm_abi.py`;
 - `tests/unit/test_paged_kv_rocm_native.py`;
 - `python/tessera/compiler/emit/rocm_hip.py`;
-- `python/tessera/cache/paged_kv.py`.
+- `python/tessera/cache/paged_kv.py`;
+- `benchmarks/rocm/record_paged_kv_corpus.py`;
+- `benchmarks/baselines/rocm_gfx1151_paged_kv.json`;
+- `benchmarks/baselines/autotune_corpus.json`.
 
 ## ROCM-REPLAY-1: ReplaySSM serving parity
+
+**Status: complete initial serving slice on `gfx1151` (2026-07-14).**
 
 The reference state ABI, flush policy, speculative rollback, and CUDA serving
 implementation already define the semantics. The ROCm work must preserve those
 semantics rather than introduce a backend-specific cache layout.
 
-### Work
+### Architecture plan
 
-1. Add a HIP-owned persistent S0 and fixed-capacity replay-input ring.
-2. Implement scalar-A output-only decode without writing the full `[B,D,N]`
-   state each token.
-3. Materialize S0 only at the existing flush boundary.
-4. Add block submission for prefill/speculative verification.
-5. Add a multi-slot ordered asynchronous ring with pinned staging, HIP streams,
-   timing events, and opaque device-output leases.
-6. Support device-resident consumers before D2H; host output remains an explicit
-   wait/download operation.
-7. Benchmark summary traffic against ReplaySSM analytical traffic and record
-   device latency, wall latency, throughput, flush frequency, and ring pressure.
+The implementation is a handle-side serving runtime, not a new Graph-IR state
+type. `SSMStateHandle` remains the semantic authority for shape validation,
+flush policy, checkpoint/restore, cloning, and the host reference mirror. A
+scalar-A-only ROCm context is attached by `rocm_ssm_replay_state_handle`; if the
+HIP toolchain or exact device is unavailable, the factory retains the same
+handle and honestly falls back to the reference path.
+
+The ROCm context owns these allocations for its entire lifetime:
+
+- resident checkpoint `S0[B,D,N]` and scalar decay `A[D]`;
+- fixed-capacity replay inputs `delta[L,B,D]`, `x[L,B,D]`, and `b[L,B,N]`;
+- one scratch `c[B,N]` and `y[B,D]` for synchronous decode;
+- an ordered ring of at least two asynchronous slots, each with pinned host
+  staging for `(delta,x,b,c,y)`, device output `[L,B,D]`, and begin/completion
+  HIP events.
+
+One nonblocking producer HIP stream owns all device mutation. Append, block
+submit, output-only reconstruction, and flush are ordered on this stream. The
+output-only kernel reads resident `S0` plus replay inputs and writes only
+`y[B,D]`. The flush kernel is the sole writer of `S0`; after it completes, both
+host and device cursors return to zero. General `(D,N)` A continues through the
+reference handle because the scalar-A factorization is the ReplaySSM contract
+implemented by this first serving slice.
+
+Rollback never launches a kernel: the host cursor rewinds and future appends
+overwrite rejected positions. A speculative block must fit wholly before the
+reserved flush boundary; mid-block flush is rejected. Synchronous block submit
+and asynchronous submit use identical validation and token ordering. The host
+mirror advances only after a successful enqueue, so failed submissions cannot
+create a split-brain cursor.
+
+An async slot has three states: free, leased to a result, and retired pending a
+consumer event. Submission copies into pinned staging, enqueues H2D + ordered
+decode kernels, retains device outputs, and records completion. `wait()` performs
+the explicit D2H handoff and frees the lease. Device consumers receive an opaque
+HIP buffer and producer-stream handle; `event.wait_on(stream)` establishes
+cross-stream order, and `release(stream=...)` retires the lease only after that
+consumer. Reusing a slot before its completion event is forbidden and reports
+backpressure rather than silently synchronizing.
+
+Correctness gates are layered:
+
+1. source/ABI and shape guards run without a GPU;
+2. output-only, flush, long decode, reset, rollback, speculative rejection, and
+   block submission compare against `SSMStateHandle` on gfx1151;
+3. multi-slot ordering, backpressure, wait/download, device lease, and release
+   lifetime run on the live HIP runtime;
+4. device-event and wall-time benchmarks compare replay against eager summary
+   traffic and commit exact-architecture evidence.
+
+### Completed work
+
+1. The HIP context owns persistent S0 and fixed-capacity replay inputs.
+2. Scalar-A output-only decode writes only `[B,D]`; shared history Gram scalars
+   are computed once per `(token,batch)` rather than once per channel.
+3. Only the flush kernel materializes and writes the full state.
+4. Ordered block submission covers prefill and speculative verification.
+5. The multi-slot ring uses pinned staging, a nonblocking producer stream,
+   begin/completion events, backpressure, and opaque output leases.
+6. Device consumers can wait on the producer event and retire a lease on their
+   own HIP stream without a host download.
+7. Summary, sequential output-only, and four-slot async modes have committed
+   device/wall timing and analytical traffic rows.
 
 ### Required proof
 
@@ -160,9 +255,114 @@ semantics rather than introduce a backend-specific cache layout.
 - ring ordering, backpressure, event waits, and device-buffer lifetime tests;
 - representative serving rows committed to D2 with exact gfx1151 provenance.
 
+All required proof cases execute in `test_ssm_rocm_replay.py`: 43-token decode
+across repeated flushes, rollback and reset, speculative suffix rejection,
+ordered block submission, two-slot backpressure, event timing, host wait, HIP
+device-buffer exposure, cross-stream wait, and lease retirement. The broader
+SSM/ReplaySSM regression sweep is 95 passed, 4 skipped.
+
+### Measured decision
+
+The table reports milliseconds per token for 64-token scalar-A decode on exact
+gfx1151 (five repetitions). `summary` reconstructs output and writes resident
+S0 every token. `output-only` is true sequential decode. `async` submits four
+16-token blocks through the ordered slot ring.
+
+| Shape `(B,D,N)` | Mode | Device ms/token | Wall ms/token | Speedup vs summary wall | State-traffic reduction |
+|---|---|---:|---:|---:|---:|
+| `1,64,64` | summary | 0.0770 | 0.1822 | 1.00× | 1.0× |
+| `1,64,64` | output-only | 0.0400 | 0.1583 | 1.15× | 32.1× |
+| `1,64,64` | async, chunk 16 | 0.0295 | 0.0337 | 5.41× | 32.1× |
+| `1,128,128` | summary | 0.0769 | 0.1871 | 1.00× | 1.0× |
+| `1,128,128` | output-only | 0.0410 | 0.1462 | 1.28× | 51.5× |
+| `1,128,128` | async, chunk 16 | 0.0358 | 0.0403 | 4.64× | 51.5× |
+
+#### Wider compiler matrix
+
+The follow-up compiler matrix expands this to five geometries
+(`1x32x16`, `1x64x64`, `1x128x64`, `1x128x128`, and batched `4x64x64`), token
+lengths 16/64/256, capacities 16/64, and async schedules `(chunk=4,slots=2)`
+and `(chunk=16,slots=4)`. It contains 75 exact-device rows, including forced
+flush cases. Every row is checked against `SSMStateHandle`; maximum absolute
+error is `5.07e-8`, and no ReplaySSM row loses to its matching summary row.
+
+| Mode | Wall speedup min / median / max | Device speedup min / median / max |
+|---|---|---|
+| sequential output-only | 1.07× / 1.24× / 1.42× | 1.86× / 2.26× / 3.02× |
+| async chunk 4, two slots | 3.11× / 3.69× / 5.06× | 1.96× / 2.58× / 3.66× |
+| async chunk 16, four slots | 4.11× / 5.04× / 6.31× | 2.12× / 2.81× / 4.21× |
+
+At `T=256, capacity=64` (three real flushes), chunk-16 throughput ranges from
+22,998 tokens/s for `1x128x128` to 31,021 tokens/s for `1x32x16`. The narrowest
+sequential win is 1.07× (`4x64x64`, `T=64`, `capacity=16`), so it is the first
+candidate for a future performance ratchet rather than being hidden by the
+matrix aggregate.
+
+Evidence is in:
+
+- `python/tessera/compiler/emit/rocm_hip.py`;
+- `python/tessera/runtime.py`;
+- `tests/unit/test_ssm_rocm_replay.py`;
+- `tests/unit/test_ssm_rocm_replay_benchmark.py`;
+- `benchmarks/rocm/benchmark_ssm_replay.py`;
+- `benchmarks/baselines/rocm_gfx1151_ssm_replay.json`;
+- `benchmarks/baselines/rocm_gfx1151_ssm_replay_matrix.json`.
+
 ## ROCM-6: performance redesign experiments
 
 Production remains in place while each candidate is measured.
+
+### Phase 0: rebaseline older kernels with the current compiler
+
+The 2026-07-14 exact-device survey reran the older compiler-generated GEMM and
+flash-attention ladders with ROCm 7.2 and LLVM 22. This changes the premise of
+G6-A but not G6-B or G6-C.
+
+Generated f16 GEMM now reaches 12.23, 12.99, 23.51, and 26.29 TFLOP/s at
+512³, 1024³, 2048³, and 4096³. The best tiles are respectively 2x4, 4x4, 2x4,
+and 4x4. In particular, 4x4 is no longer a universal compiler-path VGPR cliff:
+it wins at 1024³ and 4096³. At 4096³ the same 4x4 schedule reaches 25.90
+TFLOP/s bf16, 29.53 TOP/s int8, and 31.32 TOP/s int4. G6-A must therefore begin
+by rebuilding the size/dtype schedule ratchet with repeated medians and compiler
+resource evidence; the two-wave/LDS reduction candidate is implemented only if
+that renewed evidence still exposes an occupancy gap.
+
+The older pipeline route is still specialized. It is 2.53x faster at 512³ but
+only 1.002x, 1.007x, and 1.006x the direct route at 1024³, 2048³, and 4096³.
+It must not become a general default.
+
+Attention did not receive the same automatic compiler uplift. Forward remains
+6.57--6.89 TFLOP/s at D=64 and 3.04 TFLOP/s at D=128; backward remains
+3.92--4.15 TFLOP/s at D=64 and 2.13 TFLOP/s at D=128. Those numbers reproduce
+the previous ceiling closely enough that the two-wave D=128 forward experiment
+and split/reduced dK/dV backward remain the first kernel redesigns.
+
+The survey is committed in
+`benchmarks/baselines/rocm_gfx1151_legacy_compiler_rebaseline.json`. It is
+exploratory evidence, not yet a promotion ratchet: the next measurement pass
+must use repeated medians, preserve numerical oracles, and record code-object
+VGPR/LDS occupancy before changing production selection.
+
+That promotion pass is now complete. The 37-case, 185-row matrix uses nine
+interleaved trials per tile so APU clock movement is paired rather than mistaken
+for a schedule win. It covers square sizes 512 through 4096, transition sizes
+1536/3072, model-shaped rectangular rows through `4096x11008x4096`, three
+ragged rungs, f16/bf16/int8/int4, and bias/ReLU/GELU/SiLU epilogues. Every row
+matches its numerical oracle and every tile is bitwise equal to the common
+device result.
+
+Assembler metadata explains why selection remains shape-dependent. Plain f16
+1x1 and 2x2 use 51 and 136 VGPRs with no spills. The 2x4, 3x4, and 4x4 kernels
+reach 256 VGPRs and report respectively 41, 257, and 392 spills with 108, 424,
+and 736 bytes of scratch per work-item. Large aligned and wide shapes can
+amortize that cost; small and ragged shapes cannot.
+
+Production now uses the rows that clear both gates (at least 3% paired-median
+gain and a win in at least 75% of interleaved rounds). Three near-ties retain
+the previous selector: 3072-cube 4x4 over 3x4 (2.6%), the required large ragged
+2x4 over 3x4 (2.1% after a 21-trial tie-breaker), and skinny-M=128 2x2 over
+2x4 (2.8%). Evidence is committed in
+`benchmarks/baselines/rocm_gfx1151_gemm_schedule_matrix.json`.
 
 ### G6-A: VGPR-bounded multi-wave GEMM
 
@@ -176,6 +376,8 @@ Production remains in place while each candidate is measured.
 
 ### G6-B: two-wave online-softmax forward attention
 
+**Status: promoted for plain/causal D=128 on gfx1151 (2026-07-15).**
+
 - Give two waves one query tile and share K/V traversal.
 - Merge per-wave online `(m,l,O)` state once per K/V tile.
 - Measure `(1,8,512,64)`, `(1,8,1024,64)`, `(1,16,1024,128)`, and causal
@@ -183,13 +385,56 @@ Production remains in place while each candidate is measured.
 - Promote only with at least 10% gain on both D=128 rungs and no D=64
   regression beyond 3%.
 
+Two Wave32 groups now own one query tile at D=128. They split the QK head-
+dimension chunks, reduce a bounded 2x16x16 partial score tile through 2 KiB of
+additional LDS, share the online-softmax state, and split the PV output chunks
+without a second reduction. The assembler result moves from 256 to 121 VGPRs,
+removes 82 VGPR spills and 332 scratch bytes, and raises modeled occupancy from
+6 to 12 waves/SIMD. Nine interleaved trials measure 2.045x at noncausal
+`(1,16,1024,128)` and 2.106x at causal sequence 1009, with 100% win rates and
+maximum differences of 5.6e-7 and 8.4e-6. D=64 and advanced GQA/window/bias/
+soft-cap variants retain the one-wave kernel pending their own matrix.
+
 ### G6-C: split/reduced dK/dV backward attention
+
+**Status: implemented and rejected for production on gfx1151 (2026-07-15).**
 
 - Separate dQ and dK/dV wave ownership.
 - Reduce bounded partial dK/dV tiles in a second generated kernel.
 - Measure `(1,8,512,64)` and `(1,16,1024,128)`, causal/noncausal and GQA.
 - Promote only with at least 15% at D=128 and 10% at D=64; temporary storage
   must remain below one extra K+V gradient footprint.
+
+The opt-in compiler candidate partitions query tiles across two dK/dV blocks,
+writes the second split into exactly one extra dK+dV footprint, and launches a
+generated reduction kernel. It matches the serial kernel across MHA, causal,
+ragged, and GQA with maximum absolute error 3.13e-7. It does not clear the
+performance gate: nine-trial device speedups span 0.908--1.013x and end-to-end
+speedups span 0.904--1.070x, with neither required D=64 nor D=128 rung meeting
+the gain threshold. The existing key-tile/head grid already exposes enough
+parallelism, so the extra global partial traffic is not amortized. Production
+therefore remains on serial-per-key-tile dK/dV; the candidate, correctness tests,
+and rejection benchmark stay available for later architectures.
+
+### Older-kernel retune closeout
+
+The scalar f32 GEMM compiler now accepts compile-time output tiles. Production
+uses 2x2 only for square sizes through 256 (0.0483 ms versus 0.0508 ms for the
+old 4x4 at 256 cube) and conservatively retains 4x4 elsewhere where device and
+end-to-end winners disagree. Grouped GEMM uses `tn=1` below 64k output elements,
+`tn=2` at 64k, and `tn=4` from 131k, with exact-divisibility fallback; promoted
+model rows are 1.92--3.42x faster in the resident kernel.
+
+Grouped SwiGLU now collapses `3E` per-expert GEMM launches into three grouped
+launches. E8 model rows improve resident GEMM time by 4.64--7.64x and end-to-end
+time by 3.58--4.72x with 100% paired win rates. By contrast, compiler-generated
+row-gather and weighted-scatter candidates for KV/MoE transport did not clear
+both resident and end-to-end gates and remain non-production experiments.
+
+The consolidated evidence is
+`benchmarks/baselines/rocm_gfx1151_compiler_retune_2026_07_15.json`; the
+reproducers are the `benchmark_rocm_{f32,grouped_gemm,swiglu,transport}_retune.py`
+and `benchmark_rocm_g6{b_two_wave,c_split_reduced}.py` scripts.
 
 All winners update
 `benchmarks/baselines/rocm_gfx1151_hot_paths.json`; native counter collection

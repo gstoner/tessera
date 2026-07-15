@@ -65,6 +65,49 @@ void emitGatherBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f) {
   b.create<gpu::ReturnOp>(loc);
 }
 
+// Row gather avoids materializing an element-wise i64 index map on the host:
+// out[r,j] = src[row_ids[r],j].  This is the transport primitive used by MoE
+// dispatch and paged/contiguous KV reads.
+void emitRowGatherBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f) {
+  Type i64 = b.getIntegerType(64);
+  Type idxTy = b.getIndexType();
+  b.setInsertionPointToStart(&f.getBody().front());
+  Value SRC = f.getArgument(0), IDS = f.getArgument(1);
+  Value OUT = f.getArgument(2), SRCROWS = f.getArgument(3);
+  Value ROWS = f.getArgument(4), WIDTH = f.getArgument(5);
+  Value bid = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
+  Value tid = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
+  Value gid = b.create<arith::AddIOp>(
+      loc, b.create<arith::MulIOp>(
+               loc, bid, b.create<arith::ConstantIndexOp>(loc, BD)), tid);
+  Value total = b.create<arith::MulIOp>(loc, ROWS, WIDTH);
+  Value inb = b.create<arith::CmpIOp>(
+      loc, arith::CmpIPredicate::slt, gid, total);
+  auto guard = b.create<scf::IfOp>(loc, inb, /*withElse=*/false);
+  b.setInsertionPointToStart(guard.thenBlock());
+  Value r = b.create<arith::DivUIOp>(loc, gid, WIDTH);
+  Value col = b.create<arith::RemUIOp>(loc, gid, WIDTH);
+  Value row64 = b.create<memref::LoadOp>(loc, IDS, ValueRange{r});
+  Value zero64 = b.create<arith::ConstantOp>(loc, i64, b.getI64IntegerAttr(0));
+  Value srcRows64 = b.create<arith::IndexCastOp>(loc, i64, SRCROWS);
+  Value ge0 = b.create<arith::CmpIOp>(
+      loc, arith::CmpIPredicate::sge, row64, zero64);
+  Value ltN = b.create<arith::CmpIOp>(
+      loc, arith::CmpIPredicate::slt, row64, srcRows64);
+  Value valid = b.create<arith::AndIOp>(loc, ge0, ltN);
+  auto copy = b.create<scf::IfOp>(loc, valid, /*withElse=*/false);
+  {
+    OpBuilder wb = OpBuilder::atBlockBegin(copy.thenBlock());
+    Value row = wb.create<arith::IndexCastOp>(loc, idxTy, row64);
+    Value srcIndex = wb.create<arith::AddIOp>(
+        loc, wb.create<arith::MulIOp>(loc, row, WIDTH), col);
+    Value value = wb.create<memref::LoadOp>(loc, SRC, ValueRange{srcIndex});
+    wb.create<memref::StoreOp>(loc, value, OUT, ValueRange{gid});
+  }
+  b.setInsertionPointToEnd(&f.getBody().front());
+  b.create<gpu::ReturnOp>(loc);
+}
+
 struct GenerateROCMGatherKernelPass
     : PassWrapper<GenerateROCMGatherKernelPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(GenerateROCMGatherKernelPass)
@@ -96,19 +139,28 @@ struct GenerateROCMGatherKernelPass
       b.setInsertionPointToEnd(module.getBody());
       Location loc = op->getLoc();
       std::string kname = nameAttr.getValue().str();
+      bool rowGather = false;
+      if (auto attr = op->getAttrOfType<BoolAttr>("row"))
+        rowGather = attr.getValue();
       Type f32 = b.getF32Type();
       Type i64 = b.getIntegerType(64);
       Type idxTy = b.getIndexType();
       auto memF32 = MemRefType::get({ShapedType::kDynamic}, f32);
       auto memI64 = MemRefType::get({ShapedType::kDynamic}, i64);
-      auto fnTy = b.getFunctionType(
-          {memF32, idxTy, memI64, memF32, idxTy}, {});
+      auto fnTy = rowGather
+          ? b.getFunctionType(
+                {memF32, memI64, memF32, idxTy, idxTy, idxTy}, {})
+          : b.getFunctionType(
+                {memF32, idxTy, memI64, memF32, idxTy}, {});
       auto gpuMod = b.create<gpu::GPUModuleOp>(loc, kname + "_mod");
       b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
       gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(), b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
-      emitGatherBody(body, loc, gpuFunc);
+      if (rowGather)
+        emitRowGatherBody(body, loc, gpuFunc);
+      else
+        emitGatherBody(body, loc, gpuFunc);
       op->erase();
     }
   }

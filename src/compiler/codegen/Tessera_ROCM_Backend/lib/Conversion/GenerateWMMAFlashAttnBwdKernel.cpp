@@ -463,7 +463,8 @@ void recomputeScoreTile(Emit &e, OpBuilder &b, Location loc, const ScoreCtx &x,
 //===----------------------------------------------------------------------===//
 void emitDkDv(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
               Type storeTy, bool gqa = false, bool bias = false,
-              bool window = false, bool softcap = false) {
+              bool window = false, bool softcap = false,
+              bool splitReduced = false) {
   MLIRContext *ctx = b.getContext();
   Value sP = f.addWorkgroupAttribution(ldsT(ctx, 16 * 16, storeTy), loc);
   Value sDS = f.addWorkgroupAttribution(ldsT(ctx, 16 * 16, storeTy), loc);
@@ -475,28 +476,38 @@ void emitDkDv(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   Value Q = f.getArgument(0), Kk = f.getArgument(1), V = f.getArgument(2);
   Value dO = f.getArgument(3), L = f.getArgument(4), Dd = f.getArgument(5);
   Value dK = f.getArgument(6), dV = f.getArgument(7);
-  Value Sq = f.getArgument(8), Sk = f.getArgument(9);
-  Value scale = f.getArgument(10), causal = f.getArgument(11);
+  Value pK = splitReduced ? f.getArgument(8) : Value();
+  Value pV = splitReduced ? f.getArgument(9) : Value();
+  int64_t scalarBase = splitReduced ? 10 : 8;
+  Value Sq = f.getArgument(scalarBase), Sk = f.getArgument(scalarBase + 1);
+  Value scale = f.getArgument(scalarBase + 2);
+  Value causal = f.getArgument(scalarBase + 3);
 
   Value c0 = e.ci(0), c1 = e.ci(1), c15 = e.ci(15), c16 = e.ci(16),
         c32 = e.ci(32), cD = e.ci(D), c16D = e.ci(16 * D);
   Value tid = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
   Value l15 = b.create<arith::AndIOp>(loc, tid, c15);
   Value half = b.create<arith::ShRUIOp>(loc, tid, e.ci(4));
-  Value ktile = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
+  Value rawTile = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
+  Value split = splitReduced ? b.create<arith::RemUIOp>(loc, rawTile, e.ci(2))
+                             : c0;
+  Value ktile = splitReduced ? b.create<arith::DivUIOp>(loc, rawTile, e.ci(2))
+                             : rawTile;
   Value bh = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::y);
   Value k0 = e.mul(ktile, c16);
   Value qbase = e.mul(e.mul(bh, Sq), cD);
   // GQA: bh is a query head; K/V/dK/dV live at the grouped KV head. The dK/dV
   // writes below become atomic adds (the kv_ratio query-head blocks sharing this
   // KV head accumulate into the same global rows; host pre-zeros dK/dV).
-  Value kbase = gqa ? groupedKvBase(e, b, loc, bh, f.getArgument(12),
-                                    f.getArgument(13), Sk, cD)
+  int64_t optionBase = scalarBase + 4;
+  Value kbase = gqa ? groupedKvBase(e, b, loc, bh,
+                                    f.getArgument(optionBase),
+                                    f.getArgument(optionBase + 1), Sk, cD)
                     : e.mul(e.mul(bh, Sk), cD);
   Value isCausal = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ne,
                                            causal, c0);
   // Trailing args: gqa | window(W) | softcap(cap) | bias (LAST). Base = 12.
-  int64_t p = 12 + (gqa ? 2 : 0);
+  int64_t p = optionBase + (gqa ? 2 : 0);
   Value W = window ? f.getArgument(p) : Value();
   if (window) ++p;
   Value cap = softcap ? f.getArgument(p) : Value();
@@ -524,7 +535,10 @@ void emitDkDv(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   // diagonal); the diagonal tile qt==ktile is still per-element masked. ~halves
   // the query-tile work for causal. Non-causal starts at 0.
   Value qStart = e.sel(useCausal, ktile, c0);
-  auto qloop = b.create<scf::ForOp>(loc, qStart, nQ, c1);
+  if (splitReduced)
+    qStart = e.add(qStart, split);
+  auto qloop = b.create<scf::ForOp>(
+      loc, qStart, nQ, splitReduced ? e.ci(2) : c1);
   {
     OpBuilder::InsertionGuard g(b);
     b.setInsertionPointToStart(qloop.getBody());
@@ -601,7 +615,34 @@ void emitDkDv(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
     b.setInsertionPointToStart(ifo.thenBlock());
     Value gidx = e.add(e.add(kbase, e.mul(gk, cD)), c);
     Value vK = e.f32load(dKacc, i), vV = e.f32load(dVacc, i);
-    if (gqa) {
+    if (splitReduced) {
+      Value first = b.create<arith::CmpIOp>(
+          loc, arith::CmpIPredicate::eq, split, c0);
+      auto choose = b.create<scf::IfOp>(loc, first, /*withElse=*/true);
+      {
+        OpBuilder::InsertionGuard cg(b);
+        b.setInsertionPointToStart(choose.thenBlock());
+        if (gqa) {
+          b.create<memref::AtomicRMWOp>(loc, arith::AtomicRMWKind::addf, vK, dK,
+                                        ValueRange{gidx});
+          b.create<memref::AtomicRMWOp>(loc, arith::AtomicRMWKind::addf, vV, dV,
+                                        ValueRange{gidx});
+        } else {
+          b.create<memref::StoreOp>(loc, vK, dK, ValueRange{gidx});
+          b.create<memref::StoreOp>(loc, vV, dV, ValueRange{gidx});
+        }
+        b.setInsertionPointToStart(choose.elseBlock());
+        if (gqa) {
+          b.create<memref::AtomicRMWOp>(loc, arith::AtomicRMWKind::addf, vK, pK,
+                                        ValueRange{gidx});
+          b.create<memref::AtomicRMWOp>(loc, arith::AtomicRMWKind::addf, vV, pV,
+                                        ValueRange{gidx});
+        } else {
+          b.create<memref::StoreOp>(loc, vK, pK, ValueRange{gidx});
+          b.create<memref::StoreOp>(loc, vV, pV, ValueRange{gidx});
+        }
+      }
+    } else if (gqa) {
       // kv_ratio query-head blocks share this KV head — accumulate atomically
       // (host pre-zeros dK/dV). MHA (non-gqa) has one head per KV head: plain
       // store, no atomic overhead.
@@ -614,6 +655,34 @@ void emitDkDv(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
       b.create<memref::StoreOp>(loc, vV, dV, ValueRange{gidx});
     }
   }
+  b.setInsertionPointToEnd(&f.getBody().front());
+  b.create<gpu::ReturnOp>(loc);
+}
+
+// G6-C second stage: reduce the second query-tile split into the first.  The
+// temporary footprint is exactly one additional dK+dV pair, independent of
+// sequence length, head count, and GQA ratio.
+void emitDkDvReduce(OpBuilder &b, Location loc, gpu::GPUFuncOp f) {
+  b.setInsertionPointToStart(&f.getBody().front());
+  Value dK = f.getArgument(0), dV = f.getArgument(1);
+  Value pK = f.getArgument(2), pV = f.getArgument(3), N = f.getArgument(4);
+  Value bid = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
+  Value tid = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
+  Value gid = b.create<arith::AddIOp>(
+      loc, b.create<arith::MulIOp>(
+               loc, bid, b.create<arith::ConstantIndexOp>(loc, 256)), tid);
+  Value inb = b.create<arith::CmpIOp>(
+      loc, arith::CmpIPredicate::slt, gid, N);
+  auto guard = b.create<scf::IfOp>(loc, inb, /*withElse=*/false);
+  b.setInsertionPointToStart(guard.thenBlock());
+  Value k = b.create<arith::AddFOp>(
+      loc, b.create<memref::LoadOp>(loc, dK, ValueRange{gid}),
+      b.create<memref::LoadOp>(loc, pK, ValueRange{gid}));
+  Value v = b.create<arith::AddFOp>(
+      loc, b.create<memref::LoadOp>(loc, dV, ValueRange{gid}),
+      b.create<memref::LoadOp>(loc, pV, ValueRange{gid}));
+  b.create<memref::StoreOp>(loc, k, dK, ValueRange{gid});
+  b.create<memref::StoreOp>(loc, v, dV, ValueRange{gid});
   b.setInsertionPointToEnd(&f.getBody().front());
   b.create<gpu::ReturnOp>(loc);
 }
@@ -832,6 +901,7 @@ struct GenerateWMMAFlashAttnBwdKernelPass
       bool window = flag("sliding_window");
       bool softcap = flag("logit_softcap");
       bool bias = flag("attn_bias");
+      bool splitReduced = flag("split_reduced");
 
       auto mk = [&](StringRef suffix, ArrayRef<Type> args,
                     function_ref<void(OpBuilder &, Location, gpu::GPUFuncOp)> body) {
@@ -856,10 +926,23 @@ struct GenerateWMMAFlashAttnBwdKernelPass
            emitPre(bb, l, fn, D, storeTy, gqa, bias, window, softcap);
          });
       // _dkdv : (Q,K,V,dO:store, L,Dd:f32, dK,dV:f32, Sq,Sk:idx, scale, causal [+opts])
-      mk("_dkdv", withGqa({sv, sv, sv, sv, fv, fv, fv, fv, idxTy, idxTy, f32, idxTy}),
+      SmallVector<Type> dkdvBase{sv, sv, sv, sv, fv, fv, fv, fv};
+      if (splitReduced) {
+        dkdvBase.push_back(fv);  // partial dK
+        dkdvBase.push_back(fv);  // partial dV
+      }
+      dkdvBase.append({idxTy, idxTy, f32, idxTy});
+      mk("_dkdv", withGqa(dkdvBase),
          [&](OpBuilder &bb, Location l, gpu::GPUFuncOp fn) {
-           emitDkDv(bb, l, fn, D, storeTy, gqa, bias, window, softcap);
+           emitDkDv(bb, l, fn, D, storeTy, gqa, bias, window, softcap,
+                    splitReduced);
          });
+      if (splitReduced) {
+        mk("_dkdv_reduce", {fv, fv, fv, fv, idxTy},
+           [&](OpBuilder &bb, Location l, gpu::GPUFuncOp fn) {
+             emitDkDvReduce(bb, l, fn);
+           });
+      }
       // _dq : (Q,K,V,dO:store, L,Dd:f32, dQ:f32, Sq,Sk:idx, scale, causal [+opts])
       mk("_dq", withGqa({sv, sv, sv, sv, fv, fv, fv, idxTy, idxTy, f32, idxTy}),
          [&](OpBuilder &bb, Location l, gpu::GPUFuncOp fn) {

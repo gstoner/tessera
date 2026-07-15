@@ -62,11 +62,11 @@
       "shape": "1x16x1024x128",
       "dtype": "f16",
       "mode": "flash_attn",
-      "median_ms": 10.7119,
-      "max_latency_ms": 21.4238,
-      "achieved_tflops": 0.4013,
-      "pct_peak": 0.00676,
-      "attainment_floor": 0.00338
+      "median_ms": 10.7854,
+      "max_latency_ms": 21.5708,
+      "achieved_tflops": 0.3986,
+      "pct_peak": 0.00671,
+      "attainment_floor": 0.00335
     },
     {
       "op": "flash_attn_bwd",

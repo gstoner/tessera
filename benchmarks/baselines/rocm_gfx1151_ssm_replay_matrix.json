@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "evidence_arch": "gfx1151",
+  "compiler_path": "rocm_replayssm_hip",
+  "dtype": "f32",
+  "matrix": {
+    "shapes": ["1x32x16", "1x64x64", "1x128x64", "1x128x128", "4x64x64"],
+    "token_capacity_cases": [[16, 16], [64, 16], [64, 64], [256, 64]],
+    "async_schedules": [{"chunk": 4, "slots": 2}, {"chunk": 16, "slots": 4}],
+    "reps": 3,
+    "measured_rows": 75,
+    "max_abs_error": 5.0677107850394254e-08,
+    "losing_rows": 0
+  },
+  "aggregate_speedup_vs_summary": {
+    "output_only_wall": {"min": 1.0655390148603057, "median": 1.2393878156458564, "max": 1.4208522082244928},
+    "output_only_device": {"min": 1.8569292594993612, "median": 2.262027725341909, "max": 3.017854638149249},
+    "async_chunk4_wall": {"min": 3.111897121468084, "median": 3.694598457373008, "max": 5.058395710125935},
+    "async_chunk4_device": {"min": 1.9626552542513693, "median": 2.5819089673561013, "max": 3.6636195271947254},
+    "async_chunk16_wall": {"min": 4.109955867904139, "median": 5.035444962529972, "max": 6.313032675745747},
+    "async_chunk16_device": {"min": 2.116832051071771, "median": 2.809777166301118, "max": 4.211928339992846}
+  },
+  "per_shape_wall_speedup": [
+    {"shape": "1x32x16", "output_only_min": 1.2539721371874073, "output_only_median": 1.3014511372976274, "chunk16_min": 5.194261245185682, "chunk16_median": 5.620910676152691},
+    {"shape": "1x64x64", "output_only_min": 1.2034527981322818, "output_only_median": 1.2385160635492032, "chunk16_min": 4.307047906922402, "chunk16_median": 5.036997376746619},
+    {"shape": "1x128x64", "output_only_min": 1.1904123911834945, "output_only_median": 1.2308327781729376, "chunk16_min": 4.371702839820643, "chunk16_median": 5.035444962529972},
+    {"shape": "1x128x128", "output_only_min": 1.1285606451417933, "output_only_median": 1.237031791555101, "chunk16_min": 4.109955867904139, "chunk16_median": 4.504740622937073},
+    {"shape": "4x64x64", "output_only_min": 1.0655390148603057, "output_only_median": 1.2325980485033146, "chunk16_min": 4.326196934147457, "chunk16_median": 4.907552553029102}
+  ],
+  "long_decode_rows": [
+    {"shape": "1x32x16", "mode": "summary", "device_ms": 0.06866437502321787, "wall_ms": 0.17655725390625, "tokens_per_second": 5663.885101718841},
+    {"shape": "1x32x16", "mode": "output_only", "device_ms": 0.03162777342367917, "wall_ms": 0.14079838671875, "tokens_per_second": 7102.35410578629, "flushes": 3},
+    {"shape": "1x32x16", "mode": "async_chunk16", "device_ms": 0.02525039843749255, "wall_ms": 0.03223583203125, "tokens_per_second": 31021.380153320748, "flushes": 3},
+    {"shape": "1x64x64", "mode": "summary", "device_ms": 0.07000560539017897, "wall_ms": 0.17684016796875, "tokens_per_second": 5654.8238530101},
+    {"shape": "1x64x64", "mode": "output_only", "device_ms": 0.03603307802404743, "wall_ms": 0.146944, "tokens_per_second": 6805.313588850175, "flushes": 3},
+    {"shape": "1x64x64", "mode": "async_chunk16", "device_ms": 0.029298015753738582, "wall_ms": 0.03612862890625, "tokens_per_second": 27678.880441184054, "flushes": 3},
+    {"shape": "1x128x64", "mode": "summary", "device_ms": 0.0720707500440767, "wall_ms": 0.18227723828125, "tokens_per_second": 5486.148514369198},
+    {"shape": "1x128x64", "mode": "output_only", "device_ms": 0.03656403515196871, "wall_ms": 0.1481224375, "tokens_per_second": 6751.171644741533, "flushes": 3},
+    {"shape": "1x128x64", "mode": "async_chunk16", "device_ms": 0.029429828515276313, "wall_ms": 0.0365091875, "tokens_per_second": 27390.36578121603, "flushes": 3},
+    {"shape": "1x128x128", "mode": "summary", "device_ms": 0.07811198422859889, "wall_ms": 0.18628583203125, "tokens_per_second": 5368.094766499726},
+    {"shape": "1x128x128", "mode": "output_only", "device_ms": 0.04152484359656228, "wall_ms": 0.16506497265625, "tokens_per_second": 6058.220492863215, "flushes": 3},
+    {"shape": "1x128x128", "mode": "async_chunk16", "device_ms": 0.03579339443240315, "wall_ms": 0.04348203125, "tokens_per_second": 22998.00564169826, "flushes": 3},
+    {"shape": "4x64x64", "mode": "summary", "device_ms": 0.07042648430797271, "wall_ms": 0.17841959375, "tokens_per_second": 5604.765592063793},
+    {"shape": "4x64x64", "mode": "output_only", "device_ms": 0.03652124216750963, "wall_ms": 0.14844759375, "tokens_per_second": 6736.38403114904, "flushes": 3},
+    {"shape": "4x64x64", "mode": "async_chunk16", "device_ms": 0.029636996099725366, "wall_ms": 0.039019703125, "tokens_per_second": 25628.078122390893, "flushes": 3}
+  ]
+}

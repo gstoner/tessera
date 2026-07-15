@@ -166,3 +166,21 @@ def test_jit_grouped_gemm_stamps_native_rocm_lane(monkeypatch):
     assert artifact.metadata["compiler_path"] == "rocm_moe_transport_compiled"
     assert artifact.metadata["grouped_argument_layout"] == "device_offsets[E+1]"
     assert artifact.metadata["ops"][0]["op_name"] == "tessera.grouped_gemm"
+
+
+def test_rocm_grouped_gemm_tile_ratchet_boundaries():
+    from tessera import runtime as rt
+
+    assert rt._rocm_grouped_gemm_tile_n(128, 256) == 1
+    assert rt._rocm_grouped_gemm_tile_n(128, 512) == 2
+    assert rt._rocm_grouped_gemm_tile_n(256, 512) == 4
+    # Tiled kernels have an exact output-divisibility contract.
+    assert rt._rocm_grouped_gemm_tile_n(1024, 513) == 1
+
+
+def test_rocm_f32_gemm_tile_ratchet_boundaries():
+    from tessera import runtime as rt
+
+    assert rt._rocm_f32_gemm_tile(128, 256, 512) == (4, 4)
+    assert rt._rocm_f32_gemm_tile(256, 256, 256) == (2, 2)
+    assert rt._rocm_f32_gemm_tile(512, 512, 512) == (4, 4)

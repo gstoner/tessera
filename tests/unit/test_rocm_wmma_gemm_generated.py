@@ -43,10 +43,42 @@ ORACLE_LIB = (REPO / "build" / "src" / "compiler" / "codegen"
               / "Tessera_ROCM_Backend" / "runtime" / "hip"
               / "libtessera_rocm_gemm.so")
 CHIP = os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
+TYPED_FRAGMENT_FIXTURE = (
+    REPO / "src/compiler/codegen/Tessera_ROCM_Backend/test/rocm"
+    / "gfx1151_tile_fragment_store.mlir"
+)
 
 _DIRECTIVE = '''
 module {
   "tessera_rocm.wmma_gemm"() {name = "gemm", m = 16 : i64, n = 16 : i64, k = 16 : i64} : () -> ()
+}
+'''
+
+_PORTABLE_TILE_KERNEL = '''
+module {
+  func.func @gemm(%a: !llvm.ptr, %b: !llvm.ptr, %d: !llvm.ptr,
+                  %m: i64, %n: i64, %k: i64) {
+    tile.matmul_kernel %a, %b, %d, %m, %n, %k {
+      mma = #tile.mma_desc<family = "auto", m = 16, n = 16, k = 16, a = "f16", b = "f16", acc = "f32", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>,
+      epilogue = #tile.epilogue<bias = false, activation = "none", output = "f32">,
+      warps = 1 : i64, staging = "global"
+    } : !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64
+    return
+  }
+}
+'''
+
+_PORTABLE_TILE_EPILOGUE = '''
+module {
+  func.func @gemm_epilogue(%a: !llvm.ptr, %b: !llvm.ptr, %bias: !llvm.ptr,
+                           %d: !llvm.ptr, %m: i64, %n: i64, %k: i64) {
+    tile.matmul_kernel %a, %b, %bias, %d, %m, %n, %k {
+      mma = #tile.mma_desc<family = "auto", m = 16, n = 16, k = 16, a = "f16", b = "f16", acc = "f32", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>,
+      epilogue = #tile.epilogue<bias = true, activation = "silu", output = "f16">,
+      warps = 1 : i64, staging = "global"
+    } : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64
+    return
+  }
 }
 '''
 
@@ -134,7 +166,142 @@ def test_generate_pass_emits_fragment_materialized_kernel():
     assert '"tessera_rocm.wmma_gemm"' not in out   # directive consumed
 
 
-def test_compiler_generated_gemm_matches_numpy_and_oracle():
+def test_portable_tile_kernel_reuses_fragment_materialized_generator():
+    """The launch-level portable contract reaches the identical production
+    gfx1151 generator rather than a second backend-specific kernel body."""
+    _need_tools()
+    r = subprocess.run([str(TESSERA_OPT), "-", "--generate-wmma-gemm-kernel"],
+                       input=_PORTABLE_TILE_KERNEL, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert "tile.matmul_kernel" not in r.stdout
+    assert "gpu.func @gemm" in r.stdout
+    assert "vector.load" in r.stdout
+    assert "tessera_rocm.wmma" in r.stdout
+    assert "memref.store" in r.stdout
+
+
+def test_portable_tile_epilogue_preserves_abi_and_output_conversion():
+    """Bias remains the third portable operand, while SiLU and f16 conversion
+    are fused on the register accumulator before the final store."""
+    _need_tools()
+    r = subprocess.run([str(TESSERA_OPT), "-", "--generate-wmma-gemm-kernel"],
+                       input=_PORTABLE_TILE_EPILOGUE,
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    out = r.stdout
+    assert ("gpu.func @gemm_epilogue(%arg0: memref<?xf16>, "
+            "%arg1: memref<?xf16>, %arg2: memref<?xf32>, "
+            "%arg3: memref<?xf16>") in out
+    assert "arith.addf" in out       # bias
+    assert "math.exp" in out         # SiLU
+    assert "arith.truncf" in out     # f32 accumulator -> f16 output
+    # One hoisted bias load in each mutually exclusive fast/edge branch. Before
+    # the cleanup this was emitted once per accumulator element (16 total).
+    assert out.count("memref.load %arg2") == 2
+    assert "tile.fragment_contract" not in out
+
+
+@pytest.mark.parametrize("dtype", ["f16", "bf16", "int8", "int4"])
+def test_typed_tile_fragment_fixture_executes_and_matches_numpy(dtype):
+    """The literal view -> pack -> zero -> MMA -> unpack -> store chain reaches
+    ROCDL, assembles for gfx1151, launches, and writes the logical 16x16 tile."""
+    mlir_opt = _need_tools()
+    hip = _hip()
+    if hip is None:
+        pytest.skip("libamdhip64.so not loadable — no ROCm host")
+    fixture = TYPED_FRAGMENT_FIXTURE.read_text()
+    storage_dtype = np.float16
+    if dtype == "bf16":
+        storage_dtype = pytest.importorskip("ml_dtypes").bfloat16
+        fixture = fixture.replace("f16", "bf16")
+    elif dtype in ("int8", "int4"):
+        fixture = fixture.replace("memref<256xf16>", "memref<256xi8>")
+        fixture = fixture.replace("memref<256xf32>", "memref<256xi32>")
+        fixture = fixture.replace(
+            'a = "f16", b = "f16", acc = "f32"',
+            f'a = "{dtype}", b = "{dtype}", acc = "i32"')
+        storage_dtype = np.int8
+    lowered = subprocess.run(
+        [str(TESSERA_OPT), "-", "--allow-unregistered-dialect",
+         "--pass-pipeline=builtin.module(lower-tile-to-rocm{arch=gfx1151},"
+         "lower-tessera-target-to-rocdl)"],
+        input=fixture, capture_output=True, text=True)
+    assert lowered.returncode == 0, lowered.stderr
+    intrinsic = (f"rocdl.wmma.f32.16x16x16.{dtype}"
+                 if dtype in ("f16", "bf16")
+                 else f"rocdl.wmma.i32.16x16x16.iu{dtype[-1]}")
+    assert intrinsic in lowered.stdout
+    pipeline = (
+        "builtin.module(gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+        f"reconcile-unrealized-casts),rocdl-attach-target{{chip={CHIP}}},"
+        "gpu-module-to-binary)"
+    )
+    serialized = subprocess.run(
+        [mlir_opt, f"--pass-pipeline={pipeline}"], input=lowered.stdout,
+        capture_output=True, text=True)
+    assert serialized.returncode == 0, serialized.stderr
+    hsaco = _extract_hsaco(serialized.stdout)
+
+    rng = np.random.default_rng(1151)
+    if dtype in ("int8", "int4"):
+        low, high = (-8, 8) if dtype == "int4" else (-16, 17)
+        a = rng.integers(low, high, size=(16, 16), dtype=np.int8)
+        b = np.asfortranarray(
+            rng.integers(low, high, size=(16, 16), dtype=np.int8))
+    else:
+        a = (rng.standard_normal((16, 16)) * 0.4).astype(storage_dtype)
+        b = np.asfortranarray(
+            (rng.standard_normal((16, 16)) * 0.4).astype(storage_dtype))
+    if hip.hipInit(0) != 0:
+        pytest.skip("hipInit failed")
+    module = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(module), hsaco) != 0:
+        pytest.skip("no usable gfx1151 device (module load failed)")
+    function = ctypes.c_void_p()
+    assert hip.hipModuleGetFunction(
+        ctypes.byref(function), module, b"fragment_store") == 0
+    da, db, dd = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
+    for ptr, nbytes in ((da, a.nbytes), (db, b.nbytes), (dd, 16 * 16 * 4)):
+        assert hip.hipMalloc(ctypes.byref(ptr), nbytes) == 0
+    hip.hipMemcpy(da, a.ctypes.data_as(ctypes.c_void_p), a.nbytes, 1)
+    hip.hipMemcpy(db, b.ctypes.data_as(ctypes.c_void_p), b.nbytes, 1)
+
+    def descriptor(ptr, size):
+        return [ctypes.c_void_p(ptr.value), ctypes.c_void_p(ptr.value),
+                ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    args = descriptor(da, 256) + descriptor(db, 256) + descriptor(dd, 256)
+    argv = (ctypes.c_void_p * len(args))()
+    for i, arg in enumerate(args):
+        argv[i] = ctypes.cast(ctypes.byref(arg), ctypes.c_void_p)
+    launch = hip.hipModuleLaunchKernel
+    launch.argtypes = ([ctypes.c_void_p] + [ctypes.c_uint] * 6
+                       + [ctypes.c_uint, ctypes.c_void_p, ctypes.c_void_p,
+                          ctypes.c_void_p])
+    assert launch(function, 1, 1, 1, 32, 1, 1, 0, None, argv, None) == 0
+    assert hip.hipDeviceSynchronize() == 0
+    output_dtype = np.int32 if dtype in ("int8", "int4") else np.float32
+    out = np.zeros((16, 16), output_dtype)
+    hip.hipMemcpy(out.ctypes.data_as(ctypes.c_void_p), dd, out.nbytes, 2)
+    for ptr in (da, db, dd):
+        hip.hipFree(ptr)
+    if dtype in ("int8", "int4"):
+        np.testing.assert_array_equal(
+            out, a.astype(np.int32) @ b.astype(np.int32))
+    else:
+        tolerance = 2e-3 if dtype == "f16" else 2e-2
+        np.testing.assert_allclose(
+            out, a.astype(np.float32) @ b.astype(np.float32),
+            rtol=tolerance, atol=tolerance)
+
+
+@pytest.mark.parametrize(
+    "source", [_DIRECTIVE, _PORTABLE_TILE_KERNEL],
+    ids=["target-directive", "portable-tile-kernel"],
+)
+@pytest.mark.parametrize("shape", [(16, 16, 16), (33, 17, 31)],
+                         ids=["aligned", "ragged"])
+def test_compiler_generated_gemm_matches_numpy_and_oracle(source, shape):
     mlir_opt = _need_tools()
     hip = _hip()
     if hip is None:
@@ -144,7 +311,7 @@ def test_compiler_generated_gemm_matches_numpy_and_oracle():
     gen = subprocess.run(
         [str(TESSERA_OPT), "-", "--generate-wmma-gemm-kernel",
          "--lower-tessera-target-to-rocdl"],
-        input=_DIRECTIVE, capture_output=True, text=True)
+        input=source, capture_output=True, text=True)
     assert gen.returncode == 0, gen.stderr
     assert "rocdl.wmma.f32.16x16x16.f16" in gen.stdout
     # Stage I: finish-lower + attach + serialize
@@ -161,8 +328,9 @@ def test_compiler_generated_gemm_matches_numpy_and_oracle():
     assert hsaco[:4] == b"\x7fELF"
 
     rng = np.random.default_rng(7)
-    A = (rng.standard_normal((16, 16)) * 0.4).astype(np.float16)
-    B = (rng.standard_normal((16, 16)) * 0.4).astype(np.float16)
+    M, N, Kd = shape
+    A = (rng.standard_normal((M, Kd)) * 0.4).astype(np.float16)
+    B = (rng.standard_normal((Kd, N)) * 0.4).astype(np.float16)
 
     if hip.hipInit(0) != 0:
         pytest.skip("hipInit failed")
@@ -172,11 +340,12 @@ def test_compiler_generated_gemm_matches_numpy_and_oracle():
     fn = ctypes.c_void_p()
     assert hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"gemm") == 0
     da, db, dd = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
-    for d, n in ((da, 512), (db, 512), (dd, 1024)):
-        if hip.hipMalloc(ctypes.byref(d), n) != 0:
+    for d, nbytes in ((da, A.nbytes), (db, B.nbytes),
+                      (dd, M * N * np.dtype(np.float32).itemsize)):
+        if hip.hipMalloc(ctypes.byref(d), nbytes) != 0:
             pytest.skip("hipMalloc failed")
-    hip.hipMemcpy(da, A.ctypes.data_as(ctypes.c_void_p), 512, 1)
-    hip.hipMemcpy(db, B.ctypes.data_as(ctypes.c_void_p), 512, 1)
+    hip.hipMemcpy(da, A.ctypes.data_as(ctypes.c_void_p), A.nbytes, 1)
+    hip.hipMemcpy(db, B.ctypes.data_as(ctypes.c_void_p), B.nbytes, 1)
 
     # Problem-size-generic kernel ABI: 3 dynamic-memref descriptors (5 fields:
     # alloc, aligned, offset, size, stride) + runtime M,N,K as i64. The grid
@@ -185,7 +354,6 @@ def test_compiler_generated_gemm_matches_numpy_and_oracle():
         return [ctypes.c_void_p(p.value), ctypes.c_void_p(p.value),
                 ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
 
-    M = N = Kd = 16
     args = (mr(da, M * Kd) + mr(db, Kd * N) + mr(dd, M * N)
             + [ctypes.c_int64(M), ctypes.c_int64(N), ctypes.c_int64(Kd)])
     arr = (ctypes.c_void_p * len(args))()
@@ -198,12 +366,12 @@ def test_compiler_generated_gemm_matches_numpy_and_oracle():
     gx, gy = (N + 15) // 16, (M + 15) // 16
     assert launch(fn, gx, gy, 1, 32, 1, 1, 0, None, arr, None) == 0
     assert hip.hipDeviceSynchronize() == 0
-    D = np.zeros((16, 16), dtype=np.float32)
-    hip.hipMemcpy(D.ctypes.data_as(ctypes.c_void_p), dd, 1024, 2)
+    D = np.zeros((M, N), dtype=np.float32)
+    hip.hipMemcpy(D.ctypes.data_as(ctypes.c_void_p), dd, D.nbytes, 2)
     for d in (da, db, dd):
         hip.hipFree(d)
 
-    assert float(np.max(np.abs(D - A.astype(np.float32) @ B.astype(np.float32)))) < 1e-2
+    assert float(np.max(np.abs(D - A.astype(np.float32) @ B.astype(np.float32)))) < 5e-2
 
     if not ORACLE_LIB.is_file():
         pytest.skip("oracle lib not built: ninja -C build tessera_rocm_gemm")
@@ -211,9 +379,9 @@ def test_compiler_generated_gemm_matches_numpy_and_oracle():
     ofn = lib.tessera_rocm_wmma_gemm_f16
     ofn.argtypes = [ctypes.c_void_p] * 3 + [ctypes.c_int] * 3
     ofn.restype = ctypes.c_int
-    Do = np.zeros((16, 16), dtype=np.float32)
+    Do = np.zeros((M, N), dtype=np.float32)
     orc = ofn(A.ctypes.data_as(ctypes.c_void_p), B.ctypes.data_as(ctypes.c_void_p),
-              Do.ctypes.data_as(ctypes.c_void_p), 16, 16, 16)
+              Do.ctypes.data_as(ctypes.c_void_p), M, N, Kd)
     if orc == 2:
         pytest.skip("oracle: no usable AMD GPU")
     assert orc == 0

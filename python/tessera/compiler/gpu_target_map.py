@@ -505,7 +505,8 @@ def _rocm_fp8_section() -> list[str]:
     arches = (
         _rt.AMDArch.GFX_90A, _rt.AMDArch.GFX_940, _rt.AMDArch.GFX_942,
         _rt.AMDArch.GFX_950, _rt.AMDArch.GFX_1100, _rt.AMDArch.GFX_1151,
-        _rt.AMDArch.GFX_1200, _rt.AMDArch.GFX_1250, _rt.AMDArch.GFX_1251,
+        _rt.AMDArch.GFX_1200, _rt.AMDArch.GFX_1201,
+        _rt.AMDArch.GFX_1250, _rt.AMDArch.GFX_1251,
     )
     lines = [
         "## FP8 numeric semantics (per arch)",
@@ -529,8 +530,6 @@ def _rocm_fp8_section() -> list[str]:
         lines.append(f"| `{arch}` | {sem} | {e4} | {e5} |")
         if arch == "gfx1151":
             lines.append("| `gfx1152` | none | - | - |")
-        if arch == "gfx1200":
-            lines.append(f"| `gfx1201` | {sem} | {e4} | {e5} |")
     lines.append("")
     return lines
 

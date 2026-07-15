@@ -248,6 +248,7 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             "rocm_gfx1100",
             "rocm_gfx1151",
             "rocm_gfx1200",
+            "rocm_gfx1201",
         ),
         verifier_passes=("rocm-wave-lds-legality",),
         lit_fixtures=(),

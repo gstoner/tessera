@@ -47,7 +47,7 @@ _MLIR_FP8 = {"fp8_e4m3": "f8E4M3FN", "fp8_e5m2": "f8E5M2"}
 # Every arch the Python table knows about.
 _ALL_ARCHES = [
     AMDArch.GFX_90A, AMDArch.GFX_940, AMDArch.GFX_942, AMDArch.GFX_950,
-    AMDArch.GFX_1100, AMDArch.GFX_1151, AMDArch.GFX_1200,
+    AMDArch.GFX_1100, AMDArch.GFX_1151, AMDArch.GFX_1200, AMDArch.GFX_1201,
     AMDArch.GFX_1250, AMDArch.GFX_1251,
 ]
 

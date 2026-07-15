@@ -336,7 +336,7 @@ class TestROCmCapabilityRegistry:
     @pytest.mark.parametrize("name", [
         "rocm", "rocm_gfx90a", "rocm_gfx940",
         "rocm_gfx942", "rocm_gfx950", "rocm_gfx1100", "rocm_gfx1151",
-        "rocm_gfx1200",
+        "rocm_gfx1200", "rocm_gfx1201",
     ])
     def test_rocm_723_marker_present(self, name):
         cap = TARGET_CAPABILITIES[name]
@@ -372,6 +372,13 @@ class TestROCmCapabilityRegistry:
 
     def test_gfx1200_has_wmma_f8_dtype_matrix(self):
         cap = TARGET_CAPABILITIES["rocm_gfx1200"]
+        assert "wmma_f8" in cap.features
+        assert "mfma" not in cap.features
+        for dt in ("fp8_e4m3", "fp8_e5m2", "int32", "int4"):
+            assert dt in cap.supported_dtypes
+
+    def test_gfx1201_has_wmma_f8_dtype_matrix(self):
+        cap = TARGET_CAPABILITIES["rocm_gfx1201"]
         assert "wmma_f8" in cap.features
         assert "mfma" not in cap.features
         for dt in ("fp8_e4m3", "fp8_e5m2", "int32", "int4"):

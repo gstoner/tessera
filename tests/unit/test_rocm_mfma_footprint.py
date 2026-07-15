@@ -101,7 +101,8 @@ def test_k_filter_rejects_absent_width() -> None:
 
 
 def test_cheapest_rejects_wmma_arch() -> None:
-    for arch in (AMDArch.GFX_1100, AMDArch.GFX_1151, AMDArch.GFX_1200):
+    for arch in (AMDArch.GFX_1100, AMDArch.GFX_1151,
+                 AMDArch.GFX_1200, AMDArch.GFX_1201):
         with pytest.raises(TesseraROCmTargetError, match="no MFMA shapes"):
             cheapest_mfma_shape(arch)
 

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-14
+last_updated: 2026-07-15
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
@@ -114,6 +114,48 @@ reused across its accumulator elements.
 - object/hsaco assembly for the exact target;
 - aligned and ragged execute-and-compare through the production HIP bridge;
 - a named rejection for every unsupported dtype/architecture pairing.
+
+## ROCM-5: architecture-owned fragment layouts
+
+**Status: compiler and exact-target assembly complete; remote exact-device
+closure remains open (2026-07-15).**
+
+The portable Tile program no longer inherits gfx1151's physical register map.
+`rocm_fragment.py` and `ROCMFragmentLayout.h` select a data-only physical
+descriptor after the exact gfx architecture is known. The descriptor owns the
+matrix family, Wave32/Wave64 width, per-lane elements and registers, gfx11 input
+replication, accumulator map, intrinsic ABI, and materialization readiness.
+Python/C++ name-consistency tests and named family/dtype/shape errors prevent a
+prefix fallback from silently selecting the wrong ABI.
+
+The same logical pack/MMA/unpack/store fixture now lowers as follows:
+
+| Architecture family | Physical contract | Enabled forms | Cross-assembly resources |
+|---|---|---|---|
+| gfx1100/gfx1151 | duplicated gfx11 Wave32 WMMA, padded accumulator map | f16/bf16/int8/int4 | f16: 25 VGPR, 6 SGPR |
+| gfx1200/gfx1201 | dense SOA Wave32 RDNA 4 WMMA | f16/bf16/E4M3/E5M2/int8, K32 int4 | 18–35 VGPR, 8 SGPR |
+| gfx1250/gfx1251 | K32 Wave32 WMMA-v2 with explicit sign/modC/reuse properties | f16/bf16 | 28 VGPR, 6 SGPR |
+| gfx90a | Wave64 CDNA2 MFMA | f16/bf16 | 12 VGPR, 12 SGPR |
+| gfx940/gfx942 | Wave64 CDNA3 MFMA | f16/bf16 | gfx942: 14 VGPR, 14 SGPR |
+| gfx950 | Wave64 CDNA4 MFMA | f16/bf16 | 14 VGPR, 14 SGPR |
+
+All serialized rows use zero LDS and scratch and report zero VGPR/SGPR spills.
+gfx940 reaches a real MFMA op, but the installed Debian LLVM 22 serializer does
+not recognize `gfx940`; gfx942 provides the same-family object proof. The
+repeated-median compiler/serializer harness is
+`benchmark_rocm_arch_fragments.py`; the stable resource baseline is
+`rocm_arch_fragment_resources.json`.
+
+Exact-device execution remains deliberately narrower than cross-assembly. The
+available gfx1151 host passes f16, bf16, signed int8, and signed int4 numerical
+oracles. No RDNA 4, gfx125x, or CDNA performance or numerical claim is promoted
+without matching silicon. The remaining ROCM-5 completion work is therefore:
+
+1. run the shared fixture on gfx1200/gfx1201 and compare every enabled dtype;
+2. run f16/bf16 on at least one gfx942 and one gfx950 device;
+3. record kernel-only latency and measured occupancy on each exact device;
+4. enable gfx125x FP8 and additional CDNA low-precision forms only after their
+   physical packing map and numerical oracle are proven on matching hardware.
 
 ## ROCM-9: paged-KV serving
 

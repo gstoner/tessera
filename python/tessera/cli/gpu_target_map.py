@@ -28,6 +28,7 @@ _TARGETS = (
     "nvidia_sm80", "nvidia_sm90", "nvidia_sm100", "nvidia_sm120",
     "rocm", "rocm_gfx90a", "rocm_gfx940", "rocm_gfx942",
     "rocm_gfx950", "rocm_gfx1100", "rocm_gfx1151", "rocm_gfx1200",
+    "rocm_gfx1201",
 )
 
 

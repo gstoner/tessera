@@ -175,6 +175,21 @@ This design deliberately accommodates different shapes: NVIDIA's initial
 `m16n8k16` f16 path, RDNA WMMA's 16x16 variants, and CDNA MFMA variants do not
 need a shared physical fragment width to share a Tile program.
 
+ROCm now resolves that backend column through an exact architecture-owned
+descriptor rather than a gfx-prefix convention. gfx11 uses duplicated 16-value
+inputs and its padded accumulator map; RDNA 4 uses dense eight-value SOA inputs;
+gfx125x WMMA-v2 uses K32 16-value f16/bf16 inputs plus explicit sign, C-modifier,
+and operand-reuse properties; CDNA2/3/4 use Wave64 four-value f16/bf16 MFMA
+inputs and accumulators. The C++ materializer and Python selector mirror the
+same family and intrinsic-ABI names, with a unit ratchet preventing drift.
+
+The shared architecture fixture cross-assembles without spills for gfx1100,
+gfx1151, gfx1200, gfx1201, gfx1250, gfx1251, gfx90a, gfx942, and gfx950. gfx940
+real-MFMA lowering is covered but object serialization is toolchain-gated in the
+installed Debian LLVM 22 build. These object results prove instruction legality
+and resource use, not remote-device numerical behavior or performance; those
+claims remain exact-device gated.
+
 ## Delivery plan
 
 1. Add the opaque types, `#tile.mma_desc`, and structural verifier.  Keep the
@@ -184,9 +199,11 @@ need a shared physical fragment width to share a Tile program.
 3. Complete: extend the NVIDIA `sm_120` f16 A/B pointer materializer with f32
    accumulator unpack/store, emit a launchable cubin, and compare the generated
    kernel against NumPy on the RTX 5070 Ti.
-4. Implement ROCm descriptor resolution and pack/unpack for one RDNA WMMA and
-   one CDNA MFMA f16 case.  Validate the identical logical Tile fixture against
-   ROCm reference output on each family.
+4. Complete at compiler/object level: ROCm descriptor resolution and
+   pack/unpack cover RDNA3, RDNA4, gfx125x WMMA-v2, and CDNA2/3/4 MFMA. The
+   identical logical Tile fixture executes against a reference on gfx1151;
+   RDNA4, gfx125x, and CDNA exact-device numerical/performance closure remains
+   gated on access to matching silicon.
 5. bf16 is complete for the canonical sm_120 Tile path. The shipped CUDA GEMM
    ABI and composed transformer lanes now provide TF32/E4M3/E5M2 execution
    oracles; their portable Tile fragment pack/layout variants remain open. Add
@@ -274,5 +291,6 @@ consumed by its production WMMA K-loop/epilogue generator. The legacy
 `tessera_rocm.wmma_gemm` directive is only a compatibility adapter into that
 same request; the portable path creates no temporary marker operation. ROCm
 also hoists each per-column bias load outside the accumulator-element loop.
-Other ROCm architecture families retain named guards until their own WMMA v2 or
-MFMA fragment maps exist.
+Other ROCm architecture families now resolve their own WMMA-v2 or MFMA fragment
+maps. Forms whose physical materialization is not yet proven—gfx125x FP8 and
+additional CDNA low-precision variants—retain named readiness guards.

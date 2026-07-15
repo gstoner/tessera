@@ -1,0 +1,33 @@
+{
+  "schema": "tessera.rocm.arch-fragment-resources.v1",
+  "recorded_at": "2026-07-15",
+  "method": {
+    "benchmark": "benchmarks/rocm/benchmark_rocm_arch_fragments.py",
+    "repetitions": 7,
+    "timing": "host wall-clock median and MAD for lowering and exact-target serialization",
+    "resource_source": "AMDGPU code-object metadata",
+    "device_performance_scope": "none; cross-assembly is not a remote-device performance claim"
+  },
+  "resources": [
+    {"arch": "gfx1100", "family": "rdna3_wmma", "dtype": "f16", "wave": 32, "vgpr": 25, "sgpr": 6, "lds": 0, "scratch": 0, "spills": 0},
+    {"arch": "gfx1151", "family": "rdna3_wmma", "dtype": "f16", "wave": 32, "vgpr": 25, "sgpr": 6, "lds": 0, "scratch": 0, "spills": 0},
+    {"arch": "gfx1200", "family": "rdna4_wmma", "dtype": "f16", "wave": 32, "vgpr": 22, "sgpr": 8, "lds": 0, "scratch": 0, "spills": 0},
+    {"arch": "gfx1201", "family": "rdna4_wmma", "dtype": "f16", "wave": 32, "vgpr": 22, "sgpr": 8, "lds": 0, "scratch": 0, "spills": 0},
+    {"arch": "gfx1201", "family": "rdna4_wmma", "dtype": "bf16", "wave": 32, "vgpr": 22, "sgpr": 8, "lds": 0, "scratch": 0, "spills": 0},
+    {"arch": "gfx1201", "family": "rdna4_wmma", "dtype": "e4m3/e5m2/int8", "wave": 32, "vgpr": 18, "sgpr": 8, "lds": 0, "scratch": 0, "spills": 0},
+    {"arch": "gfx1201", "family": "rdna4_wmma", "dtype": "int4", "wave": 32, "vgpr": 35, "sgpr": 8, "lds": 0, "scratch": 0, "spills": 0},
+    {"arch": "gfx1250/gfx1251", "family": "gfx125x_wmma_v2", "dtype": "f16/bf16", "wave": 32, "vgpr": 28, "sgpr": 6, "lds": 0, "scratch": 0, "spills": 0},
+    {"arch": "gfx90a", "family": "cdna2_mfma", "dtype": "f16/bf16", "wave": 64, "vgpr": 12, "sgpr": 12, "lds": 0, "scratch": 0, "spills": 0},
+    {"arch": "gfx942", "family": "cdna3_mfma", "dtype": "f16/bf16", "wave": 64, "vgpr": 14, "sgpr": 14, "lds": 0, "scratch": 0, "spills": 0},
+    {"arch": "gfx950", "family": "cdna4_mfma", "dtype": "f16/bf16", "wave": 64, "vgpr": 14, "sgpr": 14, "lds": 0, "scratch": 0, "spills": 0}
+  ],
+  "toolchain_gates": [
+    {"arch": "gfx940", "status": "real MFMA lowering passes; installed Debian LLVM 22 serializer does not recognize the processor; gfx942 supplies CDNA3 object proof"}
+  ],
+  "exact_device": {
+    "arch": "gfx1151",
+    "numeric_cases": ["f16", "bf16", "int8", "int4"],
+    "status": "all pass",
+    "remote_arches": "not measured"
+  }
+}

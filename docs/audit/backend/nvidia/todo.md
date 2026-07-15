@@ -40,10 +40,12 @@ Baseline state on the NVIDIA box (2026-07-15, commit `ecf9483f`):
   report zero spills: 36 registers and no shared/local memory for direct,
   GELU, and SiLU; 42 registers and 2 KiB static shared memory from `ptxas`
   (3 KiB in the cubin resource table) for shared-staging f32/bf16/bias-ReLU.
-  Nsight Compute 2026.2.1 is installed, but its dynamic occupancy/counter
-  collection is presently blocked by `ERR_NVGPUCTRPERM`; do not treat this as
-  occupancy evidence until the NVIDIA performance-counter permission is
-  enabled on the host.
+  Nsight Compute 2026.2.1 profiled the f16 device-resident GEMM proof: the
+  19x13x29 case launches four one-warp blocks (2x2 grid), uses 40
+  registers/thread and no kernel shared memory, and reports 50% theoretical
+  versus 2.08% achieved occupancy. The low achieved value is expected for this
+  deliberately tiny ABI fixture: four blocks cannot occupy all 70 SMs. It is
+  launch-shape evidence, not a production-throughput claim.
 - The first device run exposed a product defect in Tile GELU: NVPTX could not
   select LLVM's `ftanh`; after its arithmetic lowering, SiLU exposed the same
   issue for `fexp`. Both now lower through a bounded Pade tanh expression, so
@@ -238,8 +240,8 @@ after two stable runs and an explicit before/after review.
 ## Next update
 
 The collection contract, compiler-artifact, exact-device correctness, and
-serial measured lanes now have a recorded baseline. Enable NVIDIA performance
-counters and capture dynamic occupancy before closing NVIDIA-TEST-5; then
-continue the numerical-policy and test-layout migrations. Keep
+serial measured lanes now have a recorded baseline. Extend Nsight Compute
+captures to the production-sized hot-path rows before closing NVIDIA-TEST-5;
+then continue the numerical-policy and test-layout migrations. Keep
 `plan_state: landing` while any implementation, migration, or re-run remains.
 Move this plan to the NVIDIA archive only after every completion gate is met.

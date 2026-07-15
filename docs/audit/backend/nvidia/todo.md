@@ -46,6 +46,21 @@ Baseline state on the NVIDIA box (2026-07-15, commit `ecf9483f`):
   versus 2.08% achieved occupancy. The low achieved value is expected for this
   deliberately tiny ABI fixture: four blocks cannot occupy all 70 SMs. It is
   launch-shape evidence, not a production-throughput claim.
+- Nsight captures for the production hot-path, convolution-route, and Tile
+  schedule tests are retained under `/tmp/nvidia-*-ncu.ncu-rep`. Hot-path
+  GEMM/fused/attention use 40 registers/thread and no shared memory (the
+  attention kernel has 22.92% theoretical occupancy); fp quantization uses 18
+  registers/thread, no shared memory, and 74.36% achieved occupancy. The
+  direct/shared convolution routes use 40/30 registers and 0/32 bytes static
+  shared memory, respectively. The selected Tile candidates report direct:
+  36 registers, 0 shared, 50% theoretical occupancy; shared: 42 registers,
+  2.05 KiB shared, 83.33% theoretical occupancy. The measured achieved
+  occupancies are shape-dependent and low for the micro-grid fixtures, so they
+  are resource evidence rather than selector-retuning evidence.
+- The hot-path ratchet intentionally fails when run under Nsight Compute:
+  profiler replay raises the wall-clock samples above its uninstrumented
+  repeated-median caps. Its ordinary serial run remains the timing proof; the
+  Nsight run is resource-only and must never update or relax the ratchet.
 - The first device run exposed a product defect in Tile GELU: NVPTX could not
   select LLVM's `ftanh`; after its arithmetic lowering, SiLU exposed the same
   issue for `fexp`. Both now lower through a bounded Pade tanh expression, so

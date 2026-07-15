@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# NVIDIA-TEST-7: exact-device release gate for the RTX 5070 Ti (sm_120).
+# NVIDIA-TEST-7: local exact-device proof gate for the RTX 5070 Ti (sm_120).
 #
 # Keeps CPU, compiler-artifact, device-correctness, and serial-performance
 # evidence separate.  All reports live under $TESSERA_NVIDIA_REPORT_DIR so a
@@ -10,12 +10,12 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 PYTHON="${PYTHON:-}"
-RUNNER_VENV="${TESSERA_NVIDIA_VENV:-$HOME/.cache/tessera/nvidia-release-gate-venv}"
+LOCAL_VENV="${TESSERA_NVIDIA_VENV:-$ROOT/.venv}"
 if [ -z "$PYTHON" ]; then
-  if [ -x "$ROOT/.venv/bin/python" ]; then
-    PYTHON="$ROOT/.venv/bin/python"
+  if [ -x "$LOCAL_VENV/bin/python" ]; then
+    PYTHON="$LOCAL_VENV/bin/python"
   else
-    PYTHON="$RUNNER_VENV/bin/python"
+    PYTHON=python3
   fi
 fi
 BUILD_DIR="${TESSERA_NVIDIA_BUILD_DIR:-$ROOT/build-nvidia-cuda}"
@@ -40,15 +40,10 @@ fi
 
 mkdir -p "$REPORT_DIR"
 if ! "$PYTHON" -c 'import pytest, xdist, hypothesis' >/dev/null 2>&1; then
-  # Actions checkouts are intentionally clean and do not include .venv.  Keep
-  # the runner's test environment outside the worktree so checkout cleanup
-  # cannot delete it, and use the repository's single dependency authority.
-  mkdir -p "$(dirname "$RUNNER_VENV")"
-  if [ ! -x "$RUNNER_VENV/bin/python" ]; then
-    python3 -m venv "$RUNNER_VENV"
-  fi
-  PYTHON="$RUNNER_VENV/bin/python" bash scripts/install_test_deps.sh
-  PYTHON="$RUNNER_VENV/bin/python"
+  # Exact-device proof is a local pre-PR operation.  Its venv belongs to this
+  # checkout; no GitHub Actions runner state or service is involved.
+  PYTHON=python3 bash scripts/install_test_deps.sh --venv
+  PYTHON="$LOCAL_VENV/bin/python"
 fi
 if [ ! -x "$CUDA_BIN/nvcc" ] || [ ! -x "$CUDA_BIN/ptxas" ]; then
   echo "NVIDIA release gate requires nvcc and ptxas; set CUDA_BIN to the toolkit bin directory" >&2
@@ -78,6 +73,15 @@ fi
   "$PYTHON" --version
   git rev-parse HEAD
 } >"$REPORT_DIR/machine-identity.txt"
+cat >"$REPORT_DIR/README.md" <<EOF
+# NVIDIA exact-device proof bundle
+
+Commit: $(git rev-parse HEAD)
+Target: RTX 5070 Ti / sm_120
+
+This directory is the local pre-PR evidence bundle.  Attach or summarize it in
+the PR after all four JUnit layers complete; it is not a GitHub Actions artifact.
+EOF
 
 PATH="$CUDA_BIN:$PATH" cmake -S . -B "$BUILD_DIR" -G Ninja \
   -DTESSERA_BUILD_NVIDIA_BACKEND=ON \

@@ -1,54 +1,22 @@
-"""Shared NVIDIA exact-device test probes and provenance assertions."""
-from __future__ import annotations
+"""Compatibility imports for NVIDIA helpers retained by unit tests.
 
-import os
-import shutil
-import subprocess
-from typing import Any
+New exact-device tests import from :mod:`tests._support.nvidia`, so their
+location does not make helper availability depend on pytest's test-directory
+import path.
+"""
 
-import pytest
+from tests._support.nvidia import (
+    assert_native_gpu,
+    nvidia_cuda_host_ready,
+    nvidia_cuda_toolchain_available,
+    nvidia_mma_runtime_available,
+    require_nvidia_mma_runtime,
+)
 
-
-def nvidia_cuda_toolchain_available() -> bool:
-    """Whether the host exposes an NVIDIA CUDA compiler."""
-    return bool(shutil.which("nvcc") or os.path.isfile("/usr/local/cuda/bin/nvcc"))
-
-
-def nvidia_mma_runtime_available() -> bool:
-    """Whether the shipped NVIDIA MMA runtime can execute on this host."""
-    if not nvidia_cuda_toolchain_available():
-        return False
-    try:
-        from tessera import runtime as rt
-        return rt._nvidia_mma_runtime_available()
-    except Exception:
-        return False
-
-
-def require_nvidia_mma_runtime() -> Any:
-    """Return the runtime or skip with a stable, capability-specific reason."""
-    if not nvidia_cuda_toolchain_available():
-        pytest.skip("nvcc not installed")
-    from tessera import runtime as rt
-    if not rt._nvidia_mma_runtime_available():
-        pytest.skip("no usable NVIDIA CUDA device")
-    return rt
-
-
-def nvidia_cuda_host_ready() -> bool:
-    """Whether CUDA tooling and the NVIDIA driver are reachable from this host."""
-    if not nvidia_cuda_toolchain_available() or shutil.which("nvidia-smi") is None:
-        return False
-    try:
-        return subprocess.run(
-            ["nvidia-smi"], stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL, timeout=5, check=False,
-        ).returncode == 0
-    except OSError:
-        return False
-
-
-def assert_native_gpu(result: dict[str, Any]) -> None:
-    """Require a successful result with actual NVIDIA device provenance."""
-    assert result["ok"] is True, result.get("reason")
-    assert result["execution_kind"] == "native_gpu", result.get("reason")
+__all__ = [
+    "assert_native_gpu",
+    "nvidia_cuda_host_ready",
+    "nvidia_cuda_toolchain_available",
+    "nvidia_mma_runtime_available",
+    "require_nvidia_mma_runtime",
+]

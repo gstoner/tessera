@@ -76,7 +76,8 @@ Baseline state on the NVIDIA box (2026-07-15, commit `ecf9483f`):
   the canonical exact-device collection; its host-only rejection test remains
   unmarked. Reductions and transport still need productized repeated-median
   benchmark rows before NVIDIA-TEST-5 can close.
-- NVIDIA-TEST-6 has begun with `tests/unit/_nvidia_testutil.py`: it centralizes
+- NVIDIA-TEST-6 has begun with `tests/_support/nvidia.py` (with a retained
+  `tests/unit/_nvidia_testutil.py` compatibility import): it centralizes
   CUDA-toolchain, MMA-runtime, and bare CUDA-host probes without conflating
   their skip semantics, and supplies a common native-provenance assertion.
   The MoE transport, reductions, paged-KV, and ReplaySSM families migrated in
@@ -94,6 +95,46 @@ Baseline state on the NVIDIA box (2026-07-15, commit `ecf9483f`):
   `hardware_nvidia` while leaving host-only negative tests unmarked. The 32
   focused tests passed; collection increased from 243 to 264 exact-device
   nodes (246 correctness, 18 performance).
+- The next helper-deduplication batch replaced private ordinary MMA-runtime
+  probes in linear attention, MLA decode, and sparse attention with the shared
+  capability-specific helper. The E3 hand-tuned GEMM proof now uses the shared
+  MMA-plus-PTX-launch predicate; Tile tool/runtime checks remain local because
+  they prove a stronger compiler-path capability.
+- The second physical relocation split the mixed NVIDIA MMA launch file into
+  two host-free execution-matrix contracts and five exact-device launch/JIT
+  proofs under `tests/device/nvidia/`. The mapped cohort passed 21 focused
+  tests, 19/19 compiler lit plus its compiler pytest contract, exact-device
+  correctness twice (246 passed, one Apple-only skip each), and serial
+  performance (18 passed, one Apple-only skip).
+- The third physical relocation moved the two device-only DSA sparse-attention
+  proofs to `tests/device/nvidia/test_sparse_attention.py`. Its node map,
+  focused execute/compare run, compiler artifact lane, two exact-device runs
+  (246 passed, one Apple-only skip each), and serial performance lane (18
+  passed, one Apple-only skip) all passed without changing the 264-node
+  NVIDIA marker topology.
+- NVIDIA compiler-artifact selection no longer relies on the
+  `test_nvidia_*.py` filename pattern: the `compiler_nvidia` marker owns the
+  CUDA artifact lane and its release-gate selection. `NvidiaDeviceSession`
+  now frees all tracked buffers and destroys its stream even after a
+  synchronization failure, and destroys a successfully-created timing event
+  if its partner event cannot be created. Host-free fault-injection tests pass
+  (2/2); the marker artifact lane passed and the real stream/event ABI fixture
+  passed 15/15 on the RTX 5070 Ti.
+- The TEST-6 closure audit found no remaining ordinary private MMA/PTX probe
+  implementation: plugin and hot-path-ratchet compatibility names now delegate
+  to shared predicates, while the Tile probe remains intentionally specialized.
+  Running the hot-path ratchet immediately after the broad plugin matrix
+  exceeded two f16 caps (512³ and 1024³); two isolated serial reruns both
+  passed. The disposition is test-state contamination outside the canonical
+  isolated performance lane, not a tolerance change or performance regression.
+  Keep TEST-6 `landing`: additional mature device families still require the
+  same mapped relocation and four-layer proof contract.
+- The control-flow cohort is now accepted: source/rejection contracts remain
+  host-free under `tests/unit`, while the bounded-control and runtime-binding
+  execute/compare proofs moved to `tests/device/nvidia/test_control_flow.py`.
+  Its mapped nodes passed focused validation, 19/19 compiler lit plus the
+  NVIDIA compiler marker lane, exact-device correctness twice (246 passed,
+  one Apple-only skip each), and serial performance (18 passed, one skip).
 - The first device run exposed a product defect in Tile GELU: NVPTX could not
   select LLVM's `ftanh`; after its arithmetic lowering, SiLU exposed the same
   issue for `fexp`. Both now lower through a bounded Pade tanh expression, so
@@ -189,28 +230,84 @@ old paths have no duplicate collection, and run the host-free, artifact,
 exact-device, and serial-performance layers. Do not combine this migration with
 backend behavior, tolerance, or selector changes.
 
+**Pilot evidence (2026-07-15, `landing`).** MoE transport is the first
+relocated family. Its two native CUDA execute/compare nodes now live in
+`tests/device/nvidia/test_moe_transport.py`; its host-free invalid-partition
+contract remains in `tests/unit/test_nvidia_moe_transport_contract.py`. The
+checked-in old-to-new map is `tests/device/nvidia/node_migrations.json`, and
+`tests/unit/test_nvidia_test_location_migration.py` prevents restoration of
+the old file or duplicate destinations. The second cohort applies the same
+contract to the former mixed `test_nvidia_launch_execute.py`: two host-free
+execution-matrix nodes remain under `tests/unit/`, and five native launch/JIT
+nodes move to `tests/device/nvidia/test_launch_execute.py`. The combined roots
+collect exactly **264** `hardware_nvidia` nodes (246 correctness, 18
+performance). The two device-only DSA sparse-attention nodes are also mapped
+to `tests/device/nvidia/test_sparse_attention.py`. Every relocated node
+preserves its `hardware_nvidia` classification; none gained `performance` or
+`compiler_tool` classification.
+
+The compiler-artifact proof passed (19/19 lit and 1 compiler-tool pytest
+contract), exact-device correctness passed twice (246 passed, 1 unrelated
+Apple-only skip, zero failures/errors on each run), and the serial performance
+lane passed (18 passed, 1 unrelated Apple-only skip). The second cohort
+repeated those artifact, two-run correctness, and serial-performance proofs;
+its executable node-map and retained host-free contracts passed (4/4). The
+complete host-free PR command is **not an
+NVIDIA-host acceptance gate** when it exercises Apple/ROCm compiler passes:
+this WSL checkout's generic `build/` is intentionally NVIDIA-only, so 274
+foreign-backend compiler tests cannot run here. This is not a relocation
+failure or an NVIDIA-TEST-6-HIGH blocker. `APPLE-CI-2` and `ROCM-TEST-1` own
+validation of their respective host-free compiler configurations on the correct
+backend hosts; the NVIDIA host retains the focused host-free migration guard
+plus its artifact and exact-device proof layers.
+
+**Completion evidence (2026-07-15, `landing`).** The executable map now covers
+**286** relocated node IDs. Mature execute/compare families are collected from
+`tests/device/nvidia/`; paged-KV, ReplaySSM, and the MMA bridge are in
+`tests/integration/`; and hot-path, Conv2D, MMA-symbol, and plugin timing
+proofs are in `tests/performance/nvidia/`. The mixed plugin implementation is
+shared through a non-discovered support module, while its 20 host-free
+contracts, 53 native nodes, and 8 measured nodes are collected only from their
+respective unit/device/performance entry points. The only remaining
+`hardware_nvidia` references under `tests/unit/` are release-gate and
+marker-policy structural assertions.
+
+The final migrated plugin cohort passed its focused mapping/architecture guard
+(93 tests), compiler artifacts (19/19 lit; one compiler pytest pass and one
+hardware-excluded skip), exact-device correctness twice (246 passed and one
+Apple-only skip each), and serial performance (18 passed and one skip).
+Relocating Conv2D exposed an order-dependent product defect: automatic f32
+dispatch admitted the explicit `im2col_tf32` candidate under a looser internal
+tolerance. Automatic dispatch now selects only f32-accurate direct/shared
+routes; explicitly requested TF32 performance coverage remains intact. The
+post-fix exact-device matrix passed twice (246 passed and one skip each), and
+the serial performance lane passed (18 passed and one skip). This is a product
+correctness fix with retained before/after numerical evidence, not a tolerance
+relaxation.
+
 ## Canonical commands on the NVIDIA box
 
 ```bash
-# 0. State/collection contract (currently 241 nodes)
-python3 -m pytest tests/unit -m hardware_nvidia --collect-only -q --no-header
+# 0. State/collection contract (currently 264 nodes)
+python3 -m pytest tests/unit tests/device/nvidia tests/performance/nvidia tests/integration \
+  -m hardware_nvidia --collect-only -q --no-header
 
 # 1. Host-free PR contract, including CUDA emit/validation/rejection tests
 python3 scripts/run_unit_tests.py --timeout=180 -q
 
 # 2. Compiler artifacts without claiming device execution
 ninja -C build-nvidia-cuda check-tessera-nvidia
-python3 -m pytest tests/unit/test_nvidia_*.py \
-  -m "compiler_tool and not hardware_nvidia" -q --durations=50 \
+python3 -m pytest tests/unit tests/device/nvidia \
+  -m "compiler_nvidia and not hardware_nvidia" -q --durations=50 \
   --junitxml=/tmp/nvidia-compiler-tool.xml
 
 # 3. Exact-device correctness; run twice from the same clean build
-python3 -m pytest tests/unit \
+python3 -m pytest tests/unit tests/device/nvidia \
   -m "hardware_nvidia and not performance" -q --durations=100 \
   --junitxml=/tmp/nvidia-device-correctness.xml
 
 # 4. Measured lane: serial only
-python3 -m pytest tests/unit \
+python3 -m pytest tests/unit tests/device/nvidia \
   -m "hardware_nvidia and performance" -q -n 0 --durations=0 \
   --junitxml=/tmp/nvidia-performance.xml
 ```
@@ -279,12 +376,12 @@ The first focused CUDA parity proof on the NVIDIA box is:
 
 ```bash
 python3 -m pytest -q \
-  tests/unit/test_nvidia_tile_fragment_compiler_path.py \
+  tests/device/nvidia/test_tile_fragment_compiler_path.py \
   tests/unit/test_nvidia_fragment_layout.py \
-  tests/unit/test_paged_kv_nvidia_native.py \
-  tests/unit/test_ssm_nvidia_replay.py \
-  tests/unit/test_nvidia_flash_attn_compiled.py \
-  tests/unit/test_nvidia_flash_attn_bwd_compiled.py
+  tests/integration/test_nvidia_paged_kv_native.py \
+  tests/integration/test_nvidia_replay_ssm.py \
+  tests/device/nvidia/test_flash_attention.py \
+  tests/device/nvidia/test_flash_attention_backward.py
 
 python3 benchmarks/nvidia/benchmark_serving.py \
   --shapes 1x128x64 1x256x128 \

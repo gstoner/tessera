@@ -38,7 +38,7 @@ def test_fpquant_provenance_is_native_and_nvfp4_is_not_runtime_promoted():
     assert row is not None
     assert row.executable and row.execution_kind == "native_gpu"
     assert row.device_proof == "device_verified_jit"
-    assert row.numerical_fixture == "tests/unit/test_nvidia_fpquant_compiled.py"
+    assert row.numerical_fixture == "tests/device/nvidia/test_fpquant.py"
 
     # An emitted PTX kernel is not a RuntimeArtifact compiler path.  This remains
     # None until a launch ABI and passing direct comparison are both present.

@@ -1,0 +1,8 @@
+"""Serial measured NVIDIA plugin proofs."""
+
+from tests._support import nvidia_plugin_cases as cases
+
+
+test_live_nvidia_matmul_arbitrated = cases.test_live_nvidia_matmul_arbitrated
+test_live_nvidia_matmul_measured_autotune = cases.test_live_nvidia_matmul_measured_autotune
+test_live_nvidia_device_timing_records_fastest_tile_schedule = cases.test_live_nvidia_device_timing_records_fastest_tile_schedule

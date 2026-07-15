@@ -107,32 +107,3 @@ def test_ratchet_fails_missing_coverage():
 def test_ratchet_rejects_unknown_schema():
     assert perf_gate.evaluate_ratchet([], {"schema": "bogus"}) == [
         "unsupported ratchet baseline schema 'bogus'"]
-
-
-# ── 3. Live ratchet (needs a live NVIDIA GPU; slow) ───────────────────
-
-def _nvidia_live():
-    try:
-        from tessera import runtime as rt
-        return rt._nvidia_mma_runtime_available()
-    except Exception:
-        return False
-
-
-@pytest.mark.slow
-@pytest.mark.hardware_nvidia
-@pytest.mark.performance
-@pytest.mark.skipif(not _nvidia_live(), reason="live NVIDIA GPU (sm_120) required")
-def test_live_hot_paths_within_ratchet():
-    if not BASELINE.is_file():
-        pytest.skip("nvidia baseline not recorded yet — run the recorder first")
-    from tessera import runtime as rt
-
-    baseline = json.loads(BASELINE.read_text())
-    rows = []
-    for op, shape, dtype, mode, thunk in recorder.hot_path_cases(rt):
-        med = recorder._median_ms(thunk, reps=10)
-        rows.append({"op": op, "shape": shape, "dtype": dtype,
-                     "mode": mode, "latency_ms": med})
-    failures = perf_gate.evaluate_ratchet(rows, baseline)
-    assert not failures, "\n".join(failures)

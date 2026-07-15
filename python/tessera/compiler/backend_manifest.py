@@ -2635,21 +2635,21 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     # (libtessera_nvidia_gemm.so) are dlopened and each dtype's GEMM compared to a
     # numpy/ml_dtypes reference. Skip-clean when no NVIDIA GPU / NVRTC. The
     # numerical-proof half of the nvidia_sm120 matmul `device_verified_abi` row.
-    ("matmul", "nvidia_sm120"): "tests/unit/test_nvidia_mma_runtime_symbol.py",
-    ("fused_epilogue", "nvidia_sm120"): "tests/unit/test_nvidia_matmul_relu_compiled.py",
-    ("relu", "nvidia_sm120"): "tests/unit/test_nvidia_matmul_relu_compiled.py",
-    ("matmul_relu", "nvidia_sm120"): "tests/unit/test_nvidia_matmul_relu_compiled.py",
-    ("matmul_softmax", "nvidia_sm120"): "tests/unit/test_nvidia_matmul_softmax_compiled.py",
-    ("kv_cache_read", "nvidia_sm120"): "tests/unit/test_nvidia_kv_cache_compiled.py",
-    ("conv2d", "nvidia_sm120"): "tests/unit/test_nvidia_conv2d_compiled.py",
-    ("flash_attn", "nvidia_sm120"): "tests/unit/test_nvidia_flash_attn_compiled.py",
-    ("dsa_block_sparse_attention", "nvidia_sm120"): "tests/unit/test_nvidia_sparse_attn_compiled.py",
-    ("mla_decode", "nvidia_sm120"): "tests/unit/test_nvidia_mla_decode_compiled.py",
-    ("mla_decode_fused", "nvidia_sm120"): "tests/unit/test_nvidia_mla_decode_compiled.py",
-    ("softmax", "nvidia_sm120"): "tests/unit/test_nvidia_softmax_compiled.py",
-    **{(op, "nvidia_sm120"): "tests/unit/test_nvidia_norm_compiled.py"
+    ("matmul", "nvidia_sm120"): "tests/device/nvidia/test_mma_runtime_symbol.py",
+    ("fused_epilogue", "nvidia_sm120"): "tests/device/nvidia/test_matmul_relu.py",
+    ("relu", "nvidia_sm120"): "tests/device/nvidia/test_matmul_relu.py",
+    ("matmul_relu", "nvidia_sm120"): "tests/device/nvidia/test_matmul_relu.py",
+    ("matmul_softmax", "nvidia_sm120"): "tests/device/nvidia/test_matmul_softmax.py",
+    ("kv_cache_read", "nvidia_sm120"): "tests/device/nvidia/test_kv_cache.py",
+    ("conv2d", "nvidia_sm120"): "tests/device/nvidia/test_conv2d.py",
+    ("flash_attn", "nvidia_sm120"): "tests/device/nvidia/test_flash_attention.py",
+    ("dsa_block_sparse_attention", "nvidia_sm120"): "tests/device/nvidia/test_sparse_attention.py",
+    ("mla_decode", "nvidia_sm120"): "tests/device/nvidia/test_mla_decode.py",
+    ("mla_decode_fused", "nvidia_sm120"): "tests/device/nvidia/test_mla_decode.py",
+    ("softmax", "nvidia_sm120"): "tests/device/nvidia/test_softmax.py",
+    **{(op, "nvidia_sm120"): "tests/device/nvidia/test_norm.py"
        for op in ("rmsnorm", "rmsnorm_safe", "layer_norm")},
-    **{(op, "nvidia_sm120"): "tests/unit/test_nvidia_reduce_compiled.py"
+    **{(op, "nvidia_sm120"): "tests/device/nvidia/test_reduce.py"
        for op in ("sum", "mean", "max", "min", "amax", "amin")},
     # conv2d on the CPU reference path: @jit conv2d_nhwc executes and is
     # assert_allclose'd against a hand-computed expected output (audit

@@ -49,7 +49,7 @@ This document consolidates NVIDIA-specific audit material.
     existing sm_90a WGMMA emitter — the WGMMA path does not run on sm_120).
   - **CUDA launcher** registered into the C-ABI bridge `tsrRegisterGpuLauncher`
     (loads the emitted PTX via the Driver API, runs through `tsrLaunchKernel`).
-  - **Tests:** `tests/unit/test_nvidia_mma_runtime_symbol.py` (dlopen +
+  - **Tests:** `tests/device/nvidia/test_mma_runtime_symbol.py` (dlopen +
     numerical validation of all 5 dtypes vs numpy/ml_dtypes),
     `test_conformance_execute_compare_nvidia.py` (launch-bridge
     execute-and-compare), `test_nvidia_launch_execute.py` (matrix row +

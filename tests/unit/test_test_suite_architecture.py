@@ -157,6 +157,11 @@ def test_migrated_compiler_fixture_has_no_private_tool_probe():
     ["test_nvidia_plugin.py", "test_rocm_plugin.py", "test_x86_plugin.py"],
 )
 def test_migrated_child_process_guards_use_shared_import_state(filename):
-    text = (UNIT / filename).read_text(encoding="utf-8")
+    path = (
+        ROOT / "tests/_support/nvidia_plugin_cases.py"
+        if filename == "test_nvidia_plugin.py"
+        else UNIT / filename
+    )
+    text = path.read_text(encoding="utf-8")
     assert "python_subprocess_env" in text
     assert "env=python_subprocess_env" in text

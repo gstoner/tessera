@@ -8,9 +8,9 @@ contributors should start here.
 | Goal | Command |
 |---|---|
 | Hermetic CPU PR lane (14,217 selected on 2026-07-15; 6m18s on a 24-worker WSL host) | `python scripts/run_unit_tests.py -q` |
-| Full Python collection, including device/performance states (~15,326 tests) | `pytest tests/unit/ --collect-only -q` |
-| NVIDIA exact-device correctness (RTX 5070 Ti box) | `pytest tests/unit/ -m "hardware_nvidia and not performance" -q` |
-| NVIDIA measured performance, serial (RTX 5070 Ti box) | `pytest tests/unit/ -m "hardware_nvidia and performance" -q -n 0` |
+| Full Python collection, including device/performance states (~15,326 tests) | `pytest tests/unit/ tests/device/nvidia/ tests/performance/nvidia/ tests/integration/ --collect-only -q` |
+| NVIDIA exact-device correctness (RTX 5070 Ti box) | `pytest tests/unit/ tests/device/nvidia/ tests/integration/ -m "hardware_nvidia and not performance" -q` |
+| NVIDIA measured performance, serial (RTX 5070 Ti box) | `pytest tests/unit/ tests/device/nvidia/ tests/performance/nvidia/ tests/integration/ -m "hardware_nvidia and performance" -q -n 0` |
 | MLIR lit fixtures (needs `tessera-opt` on `$PATH`) | `lit tests/tessera-ir/ -v` |
 | Just the autodiff slice (~213 tests, ~2 s) | `pytest tests/unit/test_autodiff_*.py tests/unit/test_conv1d_autodiff.py tests/unit/test_deferred_vjps.py tests/unit/test_sprint_*.py tests/unit/test_standalone_compiler_roadmap.py -q` |
 
@@ -25,6 +25,7 @@ SuperBench / GEMM tail.
 | Directory | Purpose | Default run |
 |---|---|---|
 | `tests/unit/` | Transitional flattened suite; proof layer and environment are selected by markers while families migrate to dedicated directories | `python scripts/run_unit_tests.py` |
+| `tests/device/nvidia/` | NVIDIA exact-device suites; selected only by the NVIDIA proof commands, with node-ID maps retained for each relocation | `pytest tests/unit tests/device/nvidia tests/integration -m hardware_nvidia -q` |
 | `tests/tessera-ir/` | FileCheck-based MLIR pass and pipeline lit fixtures | `lit tests/tessera-ir/` |
 | `tests/performance/` | Deterministic roofline/proxy performance contracts (compile latency, generated-artifact size, GEMM/attention/collective timings, benchmark JSON schema) | `cmake --build . --target check-tessera-performance` or `TESSERA_RUN_PERFORMANCE_TESTS=1 ./scripts/test.sh` |
 | `tests/kernel_tests/` | C++ kernel-level tests | Built via CMake when CUDA/HIP backends are enabled |
@@ -42,6 +43,7 @@ Declared in `pyproject.toml` `[tool.pytest.ini_options]`:
 |---|---|
 | `slow` | Legacy runtime/cost partition. Heavy benchmark modules use it module-wide; some device tests retain it during migration. It is not an environment marker. |
 | `compiler_tool` | Requires a built external compiler tool such as `tessera-opt`, `tessera-nvidia-opt`, or `mlir-opt`. |
+| `compiler_nvidia` | NVIDIA-owned compiler-artifact proof; selects the CUDA compiler lane without a filename allowlist. |
 | `integration` | Crosses a child-process, package, runtime, or component boundary. |
 | `performance` | Uses measured wall-clock/device timing; excluded from the parallel CPU PR lane and run serially. |
 | `hardware_apple_gpu` | Tests that require a Darwin host with Metal hardware. Skipped silently when collecting on non-Darwin or in CI without hardware. |

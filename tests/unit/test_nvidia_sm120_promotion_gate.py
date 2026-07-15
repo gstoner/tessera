@@ -29,8 +29,8 @@ def test_promoted_lanes_have_typed_artifact_benchmark_and_dashboard_evidence():
     dashboard = DASHBOARD.read_text()
     assert "**promoted**" in dashboard
     assert "**promoted (storage)**" in dashboard
-    assert "**blocked at numerical gate**" in dashboard
-    assert "128/128 outputs" in dashboard
+    assert "**blocked at runtime-dispatch gate**" in dashboard
+    assert "passes** fixed-tile unit and non-uniform scale oracle" in dashboard
 
 
 def test_fpquant_provenance_is_native_and_nvfp4_is_not_runtime_promoted():

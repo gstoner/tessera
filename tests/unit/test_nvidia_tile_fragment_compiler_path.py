@@ -29,10 +29,14 @@ FIXTURE = (ROOT / "src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia"
            / "sm120_pointer_fragment_store.mlir")
 KERNEL_FIXTURE = (ROOT / "src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia"
                   / "sm120_matmul_kernel.mlir")
-_NVIDIA_OPT_CANDIDATES = (
-    ROOT / "build/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools"
+_NVIDIA_OPT_CANDIDATES = tuple(
+    Path(value) for value in (os.environ.get("TESSERA_NVIDIA_OPT"),) if value
+) + (
+    ROOT / "build-nvidia-cuda/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools"
     / "tessera-nvidia-opt",
     ROOT / "build-nvidia/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools"
+    / "tessera-nvidia-opt",
+    ROOT / "build/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools"
     / "tessera-nvidia-opt",
 )
 NVIDIA_OPT = next((path for path in _NVIDIA_OPT_CANDIDATES if path.is_file()),
@@ -73,7 +77,7 @@ def _compile_cubin(work: Path, fixture: Path = FIXTURE,
     _run([tools["opt"], "--lower-tile-to-nvidia=sm=120",
           "--lower-tessera-nvidia-to-nvvm", str(fixture)], stdout=lowered)
     _run([tools["mlir-opt"], "--convert-scf-to-cf", "--convert-arith-to-llvm",
-          "--convert-cf-to-llvm",
+          "--convert-cf-to-llvm", "--convert-math-to-llvm",
           "--reconcile-unrealized-casts"], stdin=lowered, stdout=llvm_mlir)
     _run([tools["mlir-translate"], "--mlir-to-llvmir"],
          stdin=llvm_mlir, stdout=llvm_ir)

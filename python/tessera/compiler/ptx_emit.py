@@ -510,11 +510,11 @@ def validate_mma_sync_gemm_ptx_structure(ptx: str, *, arch: str = "sm_120a") -> 
 # NVFP4 block-scale matmul (spike #9 productized to emit+assemble) — the warp
 # ``mma.sync…m16n8k64…kind::mxf4nvf4.block_scale`` on sm_120a: fp4 (e2m1) A/B
 # operands with per-block ue4m3 scale factors, f32 accumulate. The instruction
-# encoding is assemble-proven. The provisional data-path spike in
-# ``docs/audit/backend/nvidia/spikes/sm120_mma_sync/nvfp4_gemm.cu`` is a negative
-# live gate: on 2026-07-13 its presumed unit-scale mapping failed all 128 outputs
-# on the RTX 5070 Ti. This remains deliberately emit+assemble only until both
-# unit- and non-unit-scale numerical fixtures pass on sm_120a.
+# encoding and the fixed-tile data path are proven on sm_120a: the spike in
+# ``docs/audit/backend/nvidia/spikes/sm120_mma_sync/nvfp4_gemm.cu`` passes unit
+# and non-uniform scale fixtures on the RTX 5070 Ti. This emitter remains
+# emit+assemble only because it has no general-shape launch ABI or Tile fragment
+# integration yet; that is a productization gap, not a numerical one.
 # ─────────────────────────────────────────────────────────────────────────────
 
 #: Entry name for the sm_120a NVFP4 block-scale m16n8k64 tile.
@@ -535,9 +535,9 @@ def emit_nvfp4_block_scale_mma_ptx(
     per-lane ue4m3 block-scale selectors, f32 accumulate — the PTX of the proven
     spike (provisional unit-scale data path). Per-lane fragments: A = 4x`.b32`, B = 2x`.b32`,
     scale-A/B = 1x`.b32`; the scale byte/thread selectors are `{0,0}` immediates.
-    Assemble-verifiable (rung 3) here; on-device unit-scale validation currently
-    fails and non-unit numerics are not wired (so this is emit+assemble, not a
-    launchable/runtime-promoted lane)."""
+    The fixed-tile hardware oracle passes unit and non-uniform scales on sm_120a.
+    This function is still emit+assemble rather than runtime-promoted because it
+    lacks general-shape dispatch and Tile fragment integration."""
     return f""".version {PTX_ISA_VERSION}
 .target {arch}
 .address_size 64

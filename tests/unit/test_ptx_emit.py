@@ -176,7 +176,7 @@ def test_mma_sync_gemm_ptx_assembles_for_sm120a():
         assert res.assembled, f"ptxas rejected the {dt} GEMM: {res.detail}"
 
 
-# ── NVFP4 block-scale mma (emit + assemble; live numerical probe fails) ───────
+# ── NVFP4 block-scale mma (emit + assemble; fixed-tile hardware proof passes) ─
 
 def test_nvfp4_emits_clean_with_block_scale_and_scale_params():
     ptx = P.emit_nvfp4_block_scale_mma_ptx()
@@ -195,7 +195,7 @@ def test_nvfp4_validator_catches_missing_scale_params():
 @pytest.mark.skipif(shutil.which("ptxas") is None, reason="ptxas not on PATH")
 def test_nvfp4_block_scale_ptx_assembles_for_sm120a():
     """Rung 3 — the NVFP4 block-scale kernel assembles on sm_120a (the encoding is
-    productized). On-device execution + non-unit-scale numerics stay gated on the
-    PTX-ISA scale-distribution spec, so this proves assembly, not launch."""
+    productized). The separate on-silicon fixture proves the fixed tile's unit
+    and non-uniform scale numerics; this test intentionally covers only assembly."""
     res = P.ptxas_assemble(P.emit_nvfp4_block_scale_mma_ptx(), arch="sm_120a")
     assert res.assembled, f"ptxas rejected the NVFP4 block-scale kernel: {res.detail}"

@@ -76,6 +76,13 @@ Baseline state on the NVIDIA box (2026-07-15, commit `ecf9483f`):
   the canonical exact-device collection; its host-only rejection test remains
   unmarked. Reductions and transport still need productized repeated-median
   benchmark rows before NVIDIA-TEST-5 can close.
+- NVIDIA-TEST-6 has begun with `tests/unit/_nvidia_testutil.py`: it centralizes
+  CUDA-toolchain, MMA-runtime, and bare CUDA-host probes without conflating
+  their skip semantics, and supplies a common native-provenance assertion.
+  The MoE transport, reductions, paged-KV, and ReplaySSM families migrated in
+  the first batch; 70 focused tests passed and the canonical device collection
+  remains 243 nodes. This is NVIDIA-only test infrastructure; Apple and ROCm
+  plan states are unaffected.
 - The first device run exposed a product defect in Tile GELU: NVPTX could not
   select LLVM's `ftanh`; after its arithmetic lowering, SiLU exposed the same
   issue for `fexp`. Both now lower through a bounded Pade tanh expression, so

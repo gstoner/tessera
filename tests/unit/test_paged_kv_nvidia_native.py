@@ -2,21 +2,12 @@
 
 from __future__ import annotations
 
-import os
-import shutil
-
 import numpy as np
 import pytest
 
+from _nvidia_testutil import nvidia_mma_runtime_available
 from tessera.cache import KVCacheHandle, paged_attention
 from tessera.compiler.evaluator import paged_kv_native_equivalence
-
-
-def _live():
-    if not (shutil.which("nvcc") or os.path.exists("/usr/local/cuda/bin/nvcc")):
-        return False
-    from tessera import runtime
-    return runtime._nvidia_mma_runtime_available()
 
 
 def _case(seed=3):
@@ -28,7 +19,7 @@ def _case(seed=3):
     return h, q
 
 
-@pytest.mark.skipif(not _live(), reason="requires nvcc and a live NVIDIA GPU")
+@pytest.mark.skipif(not nvidia_mma_runtime_available(), reason="requires nvcc and a live NVIDIA GPU")
 @pytest.mark.hardware_nvidia
 def test_nvidia_paged_consumer_matches_reference_and_provenance():
     from tessera.compiler.emit import nvidia_cuda
@@ -46,7 +37,7 @@ def test_nvidia_paged_consumer_matches_reference_and_provenance():
     assert all(value > 0 for value in evidence.values())
 
 
-@pytest.mark.skipif(not _live(), reason="requires nvcc and a live NVIDIA GPU")
+@pytest.mark.skipif(not nvidia_mma_runtime_available(), reason="requires nvcc and a live NVIDIA GPU")
 @pytest.mark.hardware_nvidia
 def test_nvidia_paged_native_equivalence_oracle():
     state, q = _case(7)
@@ -56,7 +47,7 @@ def test_nvidia_paged_native_equivalence_oracle():
     assert "nvidia:native_gpu" in verdict.paths
 
 
-@pytest.mark.skipif(not _live(), reason="requires nvcc and a live NVIDIA GPU")
+@pytest.mark.skipif(not nvidia_mma_runtime_available(), reason="requires nvcc and a live NVIDIA GPU")
 @pytest.mark.hardware_nvidia
 def test_fused_paged_attention_honors_remap_and_causal_offset():
     from tessera.cache.paged_kv import _reference_attention

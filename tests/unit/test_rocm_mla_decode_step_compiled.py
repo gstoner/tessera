@@ -88,6 +88,7 @@ def test_rocm_mla_decode_step_matches_stdlib_and_cache_side_effects():
                                rtol=0, atol=0)
 
 
+@pytest.mark.performance
 def test_dk1_rocm_mla_decode_step_perf_baseline_is_bounded():
     weights, x_t, _, _ = _case(seed=44)
     art = _artifact()
@@ -114,6 +115,7 @@ def test_dk1_rocm_mla_decode_step_perf_baseline_is_bounded():
     assert float(np.median(launch_vals)) < max(75.0, float(np.median(direct_vals)) * 4.0)
 
 
+@pytest.mark.hardware_rocm
 def test_rocm_mla_decode_step_native_gpu_matches_reference_on_hardware():
     if rt._tessera_opt_path() is None:
         pytest.skip("tessera-opt not built")
@@ -129,6 +131,7 @@ def test_rocm_mla_decode_step_native_gpu_matches_reference_on_hardware():
     np.testing.assert_allclose(res["output"], expected, rtol=2e-4, atol=2e-4)
 
 
+@pytest.mark.compiler_tool
 def test_rocm_mla_absorb_decode_codegen_lowers():
     import subprocess
     from pathlib import Path

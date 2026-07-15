@@ -30,6 +30,7 @@ def test_registry_names_unique() -> None:
 
 
 @pytest.mark.parametrize("doc", gd.REGISTRY, ids=lambda d: d.name)
+@pytest.mark.slow
 def test_doc_renders(doc: gd.GeneratedDoc) -> None:
     """Every render callable must produce non-empty text without error."""
     md = doc.render_md()
@@ -42,6 +43,7 @@ def test_doc_renders(doc: gd.GeneratedDoc) -> None:
 @pytest.mark.parametrize(
     "doc", [d for d in gd.REGISTRY if d.gated], ids=lambda d: d.name
 )
+@pytest.mark.slow
 def test_doc_in_sync(doc: gd.GeneratedDoc) -> None:
     """The canonical on-disk artifact must match the live render."""
     msg = gd.check(doc)

@@ -38,6 +38,7 @@ def _artifact(*, bias: bool = False, storage: str = "f16"):
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 @pytest.mark.parametrize("storage,atol", [("f16", 5e-3), ("bf16", 5e-2)])
 @pytest.mark.parametrize("m,n,k", [(16, 8, 16), (37, 23, 29)])
 @pytest.mark.parametrize("with_bias", [False, True])
@@ -94,6 +95,7 @@ def _round_tf32(x: np.ndarray) -> np.ndarray:
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 @pytest.mark.parametrize(
     "storage,atol", [("tf32", 1e-2), ("fp8_e4m3", 1.0),
                      ("fp8_e5m2", 2.0)])

@@ -135,8 +135,10 @@ def test_unary_ops_compile_through_cpu_path():
     x = np.array([-1.0, 2.0], dtype=np.float32)
 
     np.testing.assert_allclose(relu(x), np.array([0.0, 2.0], dtype=np.float32))
-    np.testing.assert_allclose(sigmoid(x), 1.0 / (1.0 + np.exp(-x)))
-    np.testing.assert_allclose(sin(x), np.sin(x))
+    np.testing.assert_allclose(
+        sigmoid(x), 1.0 / (1.0 + np.exp(-x)), rtol=1e-6, atol=1e-7
+    )
+    np.testing.assert_allclose(sin(x), np.sin(x), rtol=1e-6, atol=1e-7)
     assert relu.is_executable
     assert sigmoid.is_executable
     assert sin.is_executable

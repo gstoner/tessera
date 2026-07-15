@@ -27,6 +27,8 @@ placement, and proof rung.
 ## Documents in this directory
 
 - [`APPLE_AUDIT.md`](APPLE_AUDIT.md) is the active decision and audit-delta log.
+- [`todo.md`](todo.md) is the active compiler, exact-device test, and
+  performance execution plan derived from the CUDA/ROCm proof standard.
 - [`APPLE_GPU_CODEGEN_PLAN.md`](APPLE_GPU_CODEGEN_PLAN.md) is a historical
   codegen plan; do not use it for current status.
 - [`MPSGRAPH_RUNTIME_GLASS_JAWS.md`](MPSGRAPH_RUNTIME_GLASS_JAWS.md) is a

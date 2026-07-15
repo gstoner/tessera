@@ -1,6 +1,7 @@
 import time
 
 import numpy as np
+import pytest
 
 from tessera import runtime as rt
 from tessera.stdlib import dspark
@@ -27,6 +28,7 @@ def _median_ms(fn, reps=7):
     return float(np.median(times))
 
 
+@pytest.mark.performance
 def test_ds1_reference_draft_block_has_cpu_perf_budget():
     cfg = dspark.DSparkConfig(num_anchors=4, block_size=8, vocab_size=64)
     rng = np.random.default_rng(21)
@@ -44,6 +46,7 @@ def test_ds1_reference_draft_block_has_cpu_perf_budget():
     assert ms < 80.0
 
 
+@pytest.mark.performance
 def test_ds2_runtime_launch_overhead_is_bounded_against_ds1_oracle():
     cfg = dspark.DSparkConfig(num_anchors=2, block_size=4, vocab_size=64)
     rng = np.random.default_rng(22)

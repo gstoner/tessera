@@ -36,6 +36,8 @@ def test_sparse_redesign_baseline_is_complete():
         assert row["speedup"] >= row["min_speedup"] >= 1.0
 
 
+@pytest.mark.performance
+@pytest.mark.hardware_rocm
 def test_live_sparse_redesign_within_comparative_ratchet():
     from tessera import runtime as rt
     if rt._tessera_opt_path() is None or not rt._rocm_wmma_runtime_available():

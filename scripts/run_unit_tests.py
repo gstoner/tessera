@@ -30,8 +30,8 @@ Knobs (env or flag):
     --workers N     / TESSERA_TEST_WORKERS             force N (skip auto-sizing)
     --dry-run                                          print the plan, run nothing
 
-Defaults: targets ``tests/unit`` with ``-m "not slow"`` unless you pass your own
-paths / ``-m``. Extra args pass straight through to pytest.
+Defaults to the hermetic CPU PR marker expression unless you pass your own paths
+or ``-m``. Extra args pass straight through to pytest.
 
 NOTE on isolation: xdist redistributes tests across workers, which changes
 execution order. This suite has a few known cross-test global-state
@@ -47,6 +47,12 @@ import importlib.util
 import os
 import subprocess
 import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+
+from tests._support.policy import PR_MARKER_EXPRESSION
 
 
 def total_ram_bytes() -> int | None:
@@ -126,7 +132,7 @@ def main(argv: list[str] | None = None) -> int:
     if not has_path:
         cmd.append("tests/unit")
     if not has_marker:
-        cmd += ["-m", "not slow"]
+        cmd += ["-m", PR_MARKER_EXPRESSION]
     cmd += pa
 
     if have_xdist and n > 1:

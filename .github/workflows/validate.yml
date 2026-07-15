@@ -120,7 +120,10 @@ jobs:
         # hung test fails loudly instead of eating the 20-min budget (also
         # silences the "Unknown config option: timeout" warning — the config
         # expected pytest-timeout, now installed).
-        run: python -m pytest tests/unit -q -m "not slow" -n auto --timeout=180
+        run: >-
+          python -m pytest tests/unit -q
+          -m "not slow and not performance and not hardware_apple_gpu and not hardware_nvidia and not hardware_rocm"
+          -n auto --timeout=180
 
   # ────────────────────────────────────────────────────────────────────
   # Lane 3 — audit  (support_table drift + claim_lint + examples)   ~10s

@@ -227,6 +227,8 @@ def test_pipelined_composes_with_fp8xfp4():
     np.testing.assert_allclose(y_pl, y_ov, rtol=1e-4, atol=1e-4)
 
 
+@pytest.mark.performance
+@pytest.mark.hardware_apple_gpu
 @gpu
 def test_real_overlap_hides_dispatch_comm_under_gpu_compute():
     # The headline: with a real GPU expert FFN and a modeled interconnect
@@ -315,6 +317,8 @@ def test_single_chunk_overlaps_no_combine():
     assert s.num_chunks == 1 and s.overlapped_combines == 0
 
 
+@pytest.mark.performance
+@pytest.mark.hardware_apple_gpu
 @gpu
 def test_two_stage_hides_more_comm_than_one_stage():
     # The headline: in a compute-dominant regime the 2-stage pipeline hides the

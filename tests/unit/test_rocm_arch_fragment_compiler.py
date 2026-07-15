@@ -8,21 +8,29 @@ from pathlib import Path
 
 import pytest
 
+from tests._support.environment import CompilerToolchain
+
+
+pytestmark = pytest.mark.compiler_tool
+
 
 REPO = Path(__file__).resolve().parents[2]
-TESSERA_OPT = REPO / "build/tools/tessera-opt/tessera-opt"
-MLIR_OPT = Path("/usr/lib/llvm-22/bin/mlir-opt")
 FIXTURE = (
     REPO / "src/compiler/codegen/Tessera_ROCM_Backend/test/rocm"
     / "architecture_tile_fragment_store.mlir"
 )
 
 
-def _lower(arch: str, source: str | None = None, *, generic: bool = False) -> str:
-    if not TESSERA_OPT.is_file() or not MLIR_OPT.is_file():
-        pytest.skip("build tessera-opt and install MLIR 22")
+def _lower(
+    tools: CompilerToolchain,
+    arch: str,
+    source: str | None = None,
+    *,
+    generic: bool = False,
+) -> str:
+    tessera_opt = tools.require_tessera_opt()
     command = [
-        str(TESSERA_OPT), "-" if source is not None else str(FIXTURE),
+        str(tessera_opt), "-" if source is not None else str(FIXTURE),
         "--allow-unregistered-dialect",
     ]
     if generic:
@@ -87,14 +95,15 @@ def _gfx125x_source(dtype: str) -> str:
     return source
 
 
-def _serialize(lowered: str, arch: str) -> str:
+def _serialize(tools: CompilerToolchain, lowered: str, arch: str) -> str:
+    mlir_opt = tools.require_mlir_opt()
     pipeline = (
         "builtin.module(gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
         "reconcile-unrealized-casts),"
         f"rocdl-attach-target{{chip={arch}}},gpu-module-to-binary)"
     )
     result = subprocess.run(
-        [str(MLIR_OPT), f"--pass-pipeline={pipeline}"],
+        [str(mlir_opt), f"--pass-pipeline={pipeline}"],
         input=lowered, capture_output=True, text=True,
     )
     assert result.returncode == 0, result.stderr
@@ -115,18 +124,18 @@ def _serialize(lowered: str, arch: str) -> str:
     ],
 )
 def test_same_tile_fixture_selects_and_assembles_exact_family(
-    arch, input_type, intrinsic, wave_size,
+    compiler_toolchain, arch, input_type, intrinsic, wave_size,
 ):
-    lowered = _lower(arch)
+    lowered = _lower(compiler_toolchain, arch)
     assert input_type in lowered
     assert intrinsic in lowered
-    binary = _serialize(lowered, arch)
+    binary = _serialize(compiler_toolchain, lowered, arch)
     assert f"wavefront_size = {wave_size} : i64" in binary
     assert "vgpr_spill_count = 0 : i64" in binary
     assert "sgpr_spill_count = 0 : i64" in binary
 
 
-def test_fragment_resource_ratchet_keeps_family_proofs_compact():
+def test_fragment_resource_ratchet_keeps_family_proofs_compact(compiler_toolchain):
     # gfx1151 needs one extra live value versus the historical one-wave-only
     # path because lane identity is now reduced modulo wave_size, making the
     # materializer correct inside multi-wave workgroups.
@@ -136,7 +145,11 @@ def test_fragment_resource_ratchet_keeps_family_proofs_compact():
         "gfx90a": 16, "gfx942": 16, "gfx950": 16,
     }
     for arch, limit in limits.items():
-        binary = _serialize(_lower(arch), arch)
+        binary = _serialize(
+            compiler_toolchain,
+            _lower(compiler_toolchain, arch),
+            arch,
+        )
         match = re.search(r"vgpr_count = (\d+) : i64", binary)
         assert match, binary[:1000]
         assert int(match.group(1)) <= limit, (arch, match.group(1), limit)
@@ -152,10 +165,12 @@ def test_fragment_resource_ratchet_keeps_family_proofs_compact():
         ("int4", "rocdl.wmma.i32.16x16x32.iu4"),
     ],
 )
-def test_rdna4_dtype_fragment_forms_lower_and_assemble(dtype, intrinsic):
-    lowered = _lower("gfx1201", _typed_source(dtype))
+def test_rdna4_dtype_fragment_forms_lower_and_assemble(
+    compiler_toolchain, dtype, intrinsic,
+):
+    lowered = _lower(compiler_toolchain, "gfx1201", _typed_source(dtype))
     assert intrinsic in lowered
-    binary = _serialize(lowered, "gfx1201")
+    binary = _serialize(compiler_toolchain, lowered, "gfx1201")
     assert "vgpr_spill_count = 0 : i64" in binary
     vgpr = re.search(r"vgpr_count = (\d+) : i64", binary)
     assert vgpr
@@ -163,11 +178,11 @@ def test_rdna4_dtype_fragment_forms_lower_and_assemble(dtype, intrinsic):
 
 
 @pytest.mark.parametrize("arch", ["gfx90a", "gfx942", "gfx950"])
-def test_cdna_bf16_fragment_form_lowers_and_assembles(arch):
-    lowered = _lower(arch, _typed_source("bf16"))
+def test_cdna_bf16_fragment_form_lowers_and_assembles(compiler_toolchain, arch):
+    lowered = _lower(compiler_toolchain, arch, _typed_source("bf16"))
     assert "vector<4xbf16>" in lowered
     assert "rocdl.mfma.f32.16x16x16bf16.1k" in lowered
-    binary = _serialize(lowered, arch)
+    binary = _serialize(compiler_toolchain, lowered, arch)
     assert "vgpr_spill_count = 0 : i64" in binary
     vgpr = re.search(r"vgpr_count = (\d+) : i64", binary)
     assert vgpr and int(vgpr.group(1)) <= 16
@@ -175,16 +190,18 @@ def test_cdna_bf16_fragment_form_lowers_and_assembles(arch):
 
 @pytest.mark.parametrize("arch", ["gfx1250", "gfx1251"])
 @pytest.mark.parametrize("dtype", ["fp16", "bf16"])
-def test_gfx125x_wmma_v2_lowers_modifiers_and_assembles(arch, dtype):
+def test_gfx125x_wmma_v2_lowers_modifiers_and_assembles(
+    compiler_toolchain, arch, dtype,
+):
     source = _gfx125x_source("bf16" if dtype == "bf16" else "fp16")
-    lowered = _lower(arch, source, generic=True)
+    lowered = _lower(compiler_toolchain, arch, source, generic=True)
     assert f"rocdl.wmma.f32.16x16x32.{dtype.replace('fp', 'f')}" in lowered
     assert "signA = false" in lowered
     assert "signB = false" in lowered
     assert "modC = 0" in lowered
     assert "reuseA = false" in lowered
     assert "reuseB = false" in lowered
-    binary = _serialize(lowered, arch)
+    binary = _serialize(compiler_toolchain, lowered, arch)
     assert "wavefront_size = 32 : i64" in binary
     assert "vgpr_spill_count = 0 : i64" in binary
     assert "sgpr_spill_count = 0 : i64" in binary
@@ -192,22 +209,21 @@ def test_gfx125x_wmma_v2_lowers_modifiers_and_assembles(arch, dtype):
     assert vgpr and int(vgpr.group(1)) <= 30
 
 
-def test_gfx940_descriptor_path_lowers_to_real_mfma():
+def test_gfx940_descriptor_path_lowers_to_real_mfma(compiler_toolchain):
     # Debian LLVM 22 does not recognize gfx940 as a serialization processor;
     # retain the real lowering proof while gfx942 covers the same CDNA3 ISA
     # family through object generation.
-    lowered = _lower("gfx940")
+    lowered = _lower(compiler_toolchain, "gfx940")
     assert "vector<4xf16>" in lowered
     assert "rocdl.mfma.f32.16x16x16f16" in lowered
 
 
-def test_family_mismatch_is_a_named_error():
-    if not TESSERA_OPT.is_file():
-        pytest.skip("build tessera-opt")
+def test_family_mismatch_is_a_named_error(compiler_toolchain):
+    tessera_opt = compiler_toolchain.require_tessera_opt()
     source = FIXTURE.read_text().replace('family = "auto"', 'family = "mfma"')
     result = subprocess.run(
         [
-            str(TESSERA_OPT), "-", "--allow-unregistered-dialect",
+            str(tessera_opt), "-", "--allow-unregistered-dialect",
             "--pass-pipeline=builtin.module(lower-tile-to-rocm{arch=gfx1201})",
         ],
         input=source, capture_output=True, text=True,

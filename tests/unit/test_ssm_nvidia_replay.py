@@ -189,6 +189,7 @@ def test_cuda_replay_multi_slot_ring_and_device_consumer_protocol():
 
 
 @pytest.mark.skipif(not _cuda_host_ready(), reason="CUDA toolkit or GPU unavailable")
+@pytest.mark.hardware_nvidia
 def test_cuda_replay_async_ring_reports_backpressure():
     rng = np.random.default_rng(1210)
     B, D, N = 1, 2, 2
@@ -212,6 +213,7 @@ def test_cuda_replay_async_ring_reports_backpressure():
 
 
 @pytest.mark.skipif(not _cuda_host_ready(), reason="CUDA toolkit or GPU unavailable")
+@pytest.mark.hardware_nvidia
 def test_cuda_replay_kernel_executes_on_available_nvidia_host():
     rng = np.random.default_rng(73)
     M, B, D, N = 5, 2, 4, 3

@@ -50,6 +50,7 @@ def _page(logical: np.ndarray, page_size: int, table: np.ndarray) -> np.ndarray:
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 @pytest.mark.parametrize("start,end", [(0, 1), (3, 10), (7, 13)])
 def test_live_nvidia_paged_kv_read_matches_handle(start, end):
     rt = _cuda_or_skip()
@@ -66,6 +67,7 @@ def test_live_nvidia_paged_kv_read_matches_handle(start, end):
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 def test_live_nvidia_paged_kv_read_feeds_decode_attention():
     rt = _cuda_or_skip()
     rng = np.random.default_rng(711)

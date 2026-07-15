@@ -28,6 +28,8 @@ def _require_sm120a() -> tuple[str, str]:
     return nvcc, cuobjdump
 
 
+@pytest.mark.compiler_tool
+@pytest.mark.hardware_nvidia
 def test_sm120a_nvfp4_nonuniform_scales_match_and_emit_omma(tmp_path: Path) -> None:
     nvcc, cuobjdump = _require_sm120a()
     binary = tmp_path / "nvfp4_gemm"

@@ -29,6 +29,7 @@ def _case(seed=3):
 
 
 @pytest.mark.skipif(not _live(), reason="requires nvcc and a live NVIDIA GPU")
+@pytest.mark.hardware_nvidia
 def test_nvidia_paged_consumer_matches_reference_and_provenance():
     from tessera.compiler.emit import nvidia_cuda
     nvidia_cuda._nvidia_paged_attention_route_cache.clear()
@@ -46,6 +47,7 @@ def test_nvidia_paged_consumer_matches_reference_and_provenance():
 
 
 @pytest.mark.skipif(not _live(), reason="requires nvcc and a live NVIDIA GPU")
+@pytest.mark.hardware_nvidia
 def test_nvidia_paged_native_equivalence_oracle():
     state, q = _case(7)
     verdict = paged_kv_native_equivalence(
@@ -55,6 +57,7 @@ def test_nvidia_paged_native_equivalence_oracle():
 
 
 @pytest.mark.skipif(not _live(), reason="requires nvcc and a live NVIDIA GPU")
+@pytest.mark.hardware_nvidia
 def test_fused_paged_attention_honors_remap_and_causal_offset():
     from tessera.cache.paged_kv import _reference_attention
     from tessera.compiler.emit.nvidia_cuda import run_paged_attention_resident_f32

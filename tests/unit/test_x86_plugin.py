@@ -126,7 +126,10 @@ def test_x86_kernel_runs_and_matches_numpy(region):
     assert np.allclose(out, region.reference(A, B, bias), atol=1e-3)
 
 
-def test_x86_missing_required_buffer_declines_not_segfault():
+@pytest.mark.integration
+def test_x86_missing_required_buffer_declines_not_segfault(
+    python_subprocess_env,
+):
     # A residual/bias region invoked WITHOUT the required buffer must NOT launch
     # the kernel — the emitted C dereferences residual[...] / bias[n], so a null
     # would SIGSEGV past Python's except. The runner routes through the reference,
@@ -153,7 +156,12 @@ def test_x86_missing_required_buffer_declines_not_segfault():
         print("ok")
         """
     )
-    p = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    p = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        env=python_subprocess_env,
+    )
     assert p.returncode == 0, (
         f"missing-buffer guard failed (rc={p.returncode}, -11=SIGSEGV): "
         f"{p.stderr[-300:]}")

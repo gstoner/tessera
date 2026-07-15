@@ -57,6 +57,7 @@ def _reference(q, k, v):
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 def test_live_nvidia_linear_attn_causal_identity_f32():
     rt = _runtime(); rng = np.random.default_rng(941)
     q = rng.standard_normal((2, 3, 5, 4), dtype=np.float32)
@@ -68,6 +69,7 @@ def test_live_nvidia_linear_attn_causal_identity_f32():
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 def test_live_nvidia_linear_attn_vjp_f32():
     rt = _runtime(); rng = np.random.default_rng(947)
     q = rng.standard_normal((1, 2, 4, 3), dtype=np.float32); k = rng.standard_normal(q.shape, dtype=np.float32); v = rng.standard_normal(q.shape, dtype=np.float32); go = rng.standard_normal(q.shape, dtype=np.float32)
@@ -85,6 +87,7 @@ def test_live_nvidia_linear_attn_vjp_f32():
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 @pytest.mark.parametrize("op,fmap", [("tessera.lightning_attention", "identity"), ("tessera.retention", "polynomial_2")])
 def test_live_nvidia_linear_attn_decay_variants(op, fmap):
     rt = _runtime(); rng = np.random.default_rng(953)
@@ -101,6 +104,7 @@ def test_live_nvidia_linear_attn_decay_variants(op, fmap):
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 @pytest.mark.parametrize("op,square", [("tessera.lightning_attention", False), ("tessera.retention", True)])
 def test_live_nvidia_linear_attn_variant_vjp(op, square):
     rt = _runtime(); rng = np.random.default_rng(961); q = rng.standard_normal((1,1,3,2), dtype=np.float32); k = rng.standard_normal(q.shape, dtype=np.float32); v = rng.standard_normal((1,1,3,3), dtype=np.float32); go = rng.standard_normal(v.shape, dtype=np.float32); de = np.array([[[1,.8,.6]]], np.float32); dq=np.zeros_like(q);dk=np.zeros_like(k);dv=np.zeros_like(v)
@@ -112,6 +116,7 @@ def test_live_nvidia_linear_attn_variant_vjp(op, square):
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 def test_live_nvidia_retention_vjp_honors_log_g():
     rt = _runtime(); rng = np.random.default_rng(967)
     q = rng.standard_normal((1, 1, 3, 2), dtype=np.float32)

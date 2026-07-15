@@ -12,6 +12,7 @@ def _art(rt,op,world=1):
     return rt.RuntimeArtifact(metadata={"target":"nvidia_sm120","compiler_path":"nvidia_local_collective_compiled","executable":True,"execution_kind":"native_gpu","arg_names":["x"],"output_name":"o","ops":[{"op_name":op,"result":"o","operands":["x"],"kwargs":{"world_size":world}}]})
 
 @pytest.mark.skipif(not _live(),reason="requires nvcc and NVIDIA GPU")
+@pytest.mark.hardware_nvidia
 @pytest.mark.parametrize("op",["tessera.all_reduce","tessera.reduce_scatter","tessera.all_gather","tessera.all_to_all"])
 def test_single_device_collective_identity_runs_on_cuda(op):
     from tessera import runtime as rt

@@ -47,12 +47,14 @@ _ENTRIES: tuple[SurfaceEntry, ...] = (
         entry_point="tests/unit",
         status="runnable",
         command=(
-            "python -m pytest tests/unit/ -q -m 'not slow' "
+            "python -m pytest tests/unit/ -q -m 'not slow and not performance "
+            "and not hardware_apple_gpu and not hardware_nvidia "
+            "and not hardware_rocm' "
             "--collect-only --no-header"
         ),
         notes=(
-            "Daily edit-loop Python suite.  Collected today: 13,088 "
-            "fast tests, 778 slow-marked deselected, 13,866 total.  "
+            "Daily hermetic CPU edit-loop suite. Measured performance and "
+            "hardware-marked tests are separate proof layers.  "
             "Smoke = collect-only so the manifest check stays under "
             "a second; the real exec runs via "
             "``scripts/validate.sh`` and ``release_gate.py``."

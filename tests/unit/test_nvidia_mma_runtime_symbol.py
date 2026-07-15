@@ -23,6 +23,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+pytestmark = pytest.mark.hardware_nvidia
+
 ml_dtypes = pytest.importorskip("ml_dtypes")
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -143,6 +145,7 @@ def test_runtime_launch_reaches_every_declared_nvidia_mma_dtype(dt):
 
 
 @pytest.mark.parametrize("dt", _DTYPES)
+@pytest.mark.performance
 def test_device_resident_gemm_stream_and_event_abi(dt):
     """No H2D/D2H occurs between the timed resident GEMM launches."""
     from tessera.compiler.emit.nvidia_cuda import NvidiaDeviceSession

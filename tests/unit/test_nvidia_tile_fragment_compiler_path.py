@@ -21,6 +21,9 @@ import numpy as np
 import pytest
 
 
+pytestmark = [pytest.mark.compiler_tool, pytest.mark.hardware_nvidia]
+
+
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = (ROOT / "src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia"
            / "sm120_pointer_fragment_store.mlir")

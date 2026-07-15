@@ -43,6 +43,7 @@ def _softmax(x: np.ndarray) -> np.ndarray:
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 @pytest.mark.parametrize("m,n,k", [(16, 8, 16), (39, 27, 31), (5, 300, 17)])
 def test_live_nvidia_matmul_softmax_matches_numpy(m, n, k):
     rt = _cuda_or_skip()
@@ -76,6 +77,7 @@ def _round_tf32(x: np.ndarray) -> np.ndarray:
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 @pytest.mark.parametrize(
     "storage,atol", [("tf32", 2e-4), ("e4m3", 2e-2), ("e5m2", 4e-2)])
 def test_live_nvidia_matmul_softmax_tf32_fp8_breadth(storage, atol):

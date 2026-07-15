@@ -37,6 +37,7 @@ def _ref(x: np.ndarray, op: str, eps: float) -> np.ndarray:
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 @pytest.mark.parametrize("op,eps", [("tessera.rmsnorm", 1e-5),
                                      ("tessera.rmsnorm_safe", 1e-6),
                                      ("tessera.layer_norm", 1e-5)])
@@ -54,6 +55,7 @@ def test_live_nvidia_norm_matches_numpy(op, eps, shape, dtype):
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 def test_live_nvidia_layer_norm_large_offset_small_variance():
     rt = _cuda_or_skip()
     rng = np.random.default_rng(2024)

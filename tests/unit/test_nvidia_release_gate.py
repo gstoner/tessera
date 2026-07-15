@@ -25,6 +25,8 @@ def test_nvidia_release_gate_separates_and_retains_all_proof_layers():
     assert "/usr/local/cuda/bin" in text
     assert "/usr/local/cuda-*/bin" in text
     assert "/usr/lib/llvm-22/bin/lit" in text
+    assert "nvidia-release-gate-venv" in text
+    assert "scripts/install_test_deps.sh" in text
     for report in (
         "machine-identity.txt",
         "cpu.xml",

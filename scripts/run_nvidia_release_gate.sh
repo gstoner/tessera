@@ -10,11 +10,12 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 PYTHON="${PYTHON:-}"
+RUNNER_VENV="${TESSERA_NVIDIA_VENV:-$HOME/.cache/tessera/nvidia-release-gate-venv}"
 if [ -z "$PYTHON" ]; then
   if [ -x "$ROOT/.venv/bin/python" ]; then
     PYTHON="$ROOT/.venv/bin/python"
   else
-    PYTHON=python3
+    PYTHON="$RUNNER_VENV/bin/python"
   fi
 fi
 BUILD_DIR="${TESSERA_NVIDIA_BUILD_DIR:-$ROOT/build-nvidia-cuda}"
@@ -38,6 +39,17 @@ if [ -z "$CUDA_BIN" ] || [ ! -x "$CUDA_BIN/nvcc" ]; then
 fi
 
 mkdir -p "$REPORT_DIR"
+if ! "$PYTHON" -c 'import pytest, xdist, hypothesis' >/dev/null 2>&1; then
+  # Actions checkouts are intentionally clean and do not include .venv.  Keep
+  # the runner's test environment outside the worktree so checkout cleanup
+  # cannot delete it, and use the repository's single dependency authority.
+  mkdir -p "$(dirname "$RUNNER_VENV")"
+  if [ ! -x "$RUNNER_VENV/bin/python" ]; then
+    python3 -m venv "$RUNNER_VENV"
+  fi
+  PYTHON="$RUNNER_VENV/bin/python" bash scripts/install_test_deps.sh
+  PYTHON="$RUNNER_VENV/bin/python"
+fi
 if [ ! -x "$CUDA_BIN/nvcc" ] || [ ! -x "$CUDA_BIN/ptxas" ]; then
   echo "NVIDIA release gate requires nvcc and ptxas; set CUDA_BIN to the toolkit bin directory" >&2
   exit 2

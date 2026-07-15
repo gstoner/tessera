@@ -22,6 +22,9 @@ def test_nvidia_release_workflow_serializes_the_sm120_box_and_retains_evidence()
 
 def test_nvidia_release_gate_separates_and_retains_all_proof_layers():
     text = GATE.read_text(encoding="utf-8")
+    assert "/usr/local/cuda/bin" in text
+    assert "/usr/local/cuda-*/bin" in text
+    assert "/usr/lib/llvm-22/bin/lit" in text
     for report in (
         "machine-identity.txt",
         "cpu.xml",

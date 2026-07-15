@@ -20,20 +20,38 @@ fi
 BUILD_DIR="${TESSERA_NVIDIA_BUILD_DIR:-$ROOT/build-nvidia-cuda}"
 REPORT_DIR="${TESSERA_NVIDIA_REPORT_DIR:-$ROOT/artifacts/nvidia-release}"
 MLIR_DIR="${MLIR_DIR:-/usr/lib/llvm-22/lib/cmake/mlir}"
-CUDA_BIN="${CUDA_BIN:-$(dirname "$(command -v nvcc || true)")}"
+CUDA_BIN="${CUDA_BIN:-}"
 LLVM_LIT="${LLVM_LIT:-}"
+
+# A systemd user service has a deliberately minimal PATH.  Prefer an explicit
+# override, then the normal CUDA symlink, then versioned toolkit installs.
+if [ -z "$CUDA_BIN" ]; then
+  CUDA_BIN="$(dirname "$(command -v nvcc || true)")"
+fi
+if [ -z "$CUDA_BIN" ] || [ ! -x "$CUDA_BIN/nvcc" ]; then
+  for candidate in /usr/local/cuda/bin /usr/local/cuda-*/bin; do
+    if [ -x "$candidate/nvcc" ] && [ -x "$candidate/ptxas" ]; then
+      CUDA_BIN="$candidate"
+      break
+    fi
+  done
+fi
 
 mkdir -p "$REPORT_DIR"
 if [ ! -x "$CUDA_BIN/nvcc" ] || [ ! -x "$CUDA_BIN/ptxas" ]; then
-  echo "NVIDIA release gate requires nvcc and ptxas on PATH or CUDA_BIN" >&2
+  echo "NVIDIA release gate requires nvcc and ptxas; set CUDA_BIN to the toolkit bin directory" >&2
   exit 2
 fi
+export PATH="$CUDA_BIN:/usr/lib/wsl/lib:$PATH"
 if [ ! -f "$MLIR_DIR/MLIRConfig.cmake" ]; then
   echo "NVIDIA release gate requires MLIR_DIR/MLIRConfig.cmake; got $MLIR_DIR" >&2
   exit 2
 fi
 if [ -z "$LLVM_LIT" ]; then
   LLVM_LIT="$(command -v llvm-lit || command -v lit || true)"
+fi
+if [ -z "$LLVM_LIT" ] && [ -x /usr/lib/llvm-22/bin/lit ]; then
+  LLVM_LIT=/usr/lib/llvm-22/bin/lit
 fi
 if [ -z "$LLVM_LIT" ] || [ ! -x "$LLVM_LIT" ]; then
   echo "NVIDIA release gate requires LLVM lit; set LLVM_LIT or install lit on the NVIDIA runner" >&2

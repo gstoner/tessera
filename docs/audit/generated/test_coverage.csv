@@ -99,7 +99,7 @@ constant_lr,3,0,0,3,0,,directly_tested,3 direct test references
 contrastive_divergence_loss,5,0,0,5,0,,directly_tested,5 direct test references
 contrastive_loss,9,0,0,9,0,,directly_tested,9 direct test references
 conv1d,6,0,0,6,0,fp16,directly_tested,6 direct test references
-conv2d,18,2,0,20,0,bf16 f16 f32 fp16 fp32,directly_tested,20 direct test references
+conv2d,19,2,0,21,0,bf16 f16 f32 fp16 fp32,directly_tested,21 direct test references
 conv3d,10,0,0,10,0,,directly_tested,10 direct test references
 conv_transpose,4,0,0,4,0,,directly_tested,4 direct test references
 cos,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
@@ -182,14 +182,14 @@ factorized_matmul,6,0,1,6,0,,directly_tested,6 direct test references
 factorized_pos_emb,12,0,1,12,0,fp16,directly_tested,12 direct test references
 fake_quantize,6,0,1,6,0,,directly_tested,6 direct test references
 fft,17,2,0,19,0,f32 fp32,directly_tested,19 direct test references
-flash_attn,111,57,7,168,0,bf16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,168 direct test references
+flash_attn,112,57,8,169,0,bf16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,169 direct test references
 flatten,5,5,0,10,0,,directly_tested,10 direct test references
 flip,7,0,0,7,0,,directly_tested,7 direct test references
 floor,5,0,1,5,0,bf16 f32 fp32,directly_tested,5 direct test references
 floor_div,3,0,0,3,0,f32,directly_tested,3 direct test references
 focal_loss,8,0,0,8,0,,directly_tested,8 direct test references
 fori_loop,24,0,3,24,0,fp16,directly_tested,24 direct test references
-fused_epilogue,4,6,1,10,0,,directly_tested,10 direct test references
+fused_epilogue,6,6,1,12,0,bf16 f16 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,12 direct test references
 gated_attention,8,0,1,8,0,,directly_tested,8 direct test references
 gated_deltanet,30,4,3,34,0,f32 fp64,directly_tested,34 direct test references
 gather,16,1,0,17,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,17 direct test references
@@ -267,7 +267,7 @@ map,0,0,0,0,1,,structural_only,category default for 'control_flow'
 masked_categorical,10,0,0,10,0,,directly_tested,10 direct test references
 masked_fill,10,0,0,10,0,fp16 fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,10 direct test references
 masked_scatter,14,0,1,14,0,fp16,directly_tested,14 direct test references
-matmul,421,230,18,651,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,651 direct test references
+matmul,422,230,18,652,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,652 direct test references
 max,8,0,3,8,0,bf16 f32,directly_tested,8 direct test references
 max_pool,6,0,0,6,0,,directly_tested,6 direct test references
 maximum,9,0,2,9,0,bf16 f32,directly_tested,9 direct test references
@@ -396,7 +396,7 @@ score_matching_loss,5,0,0,5,0,,directly_tested,5 direct test references
 sddmm,7,0,0,7,0,,directly_tested,7 direct test references
 segment_reduce,4,0,0,4,0,fp32,directly_tested,4 direct test references
 select,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-selective_ssm,71,10,2,81,0,bf16 f16 fp16 fp32,directly_tested,81 direct test references
+selective_ssm,71,10,3,81,0,bf16 f16 fp16 fp32,directly_tested,81 direct test references
 seq2seq_loss,7,0,0,7,0,,directly_tested,7 direct test references
 sgd,17,0,0,17,0,,directly_tested,17 direct test references
 shard_map,0,0,0,0,1,,structural_only,category default for 'sharding'

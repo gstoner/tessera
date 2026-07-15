@@ -141,11 +141,11 @@ def test_committed_corpus_contains_live_device_records_and_loads():
     assert n >= 1
     for rec in fresh.to_dict()["records"]:
         assert rec["device"] in ("rocm:gfx1151", "nvidia:sm_120")
-        assert rec["winner"] in ("rocm_generic_hip", "rocm_wmma_gemm",
-                                 "nvidia_mma_gemm_shipped", "nvidia_mma_gemm_emitted",
-                                 "nvidia_tile_matmul_direct",
-                                 "nvidia_tile_matmul_shared",
-                                 "nvidia_mma_fused", "nvidia_mma_attn")
+        # Candidate names grow as new measured lanes land.  The durable corpus
+        # invariant is that its winner was actually timed in that record.
+        assert rec["candidates"]
+        assert rec["winner"] in rec["candidates"]
+        assert rec["latency_ms"] == rec["candidates"][rec["winner"]]
 
 
 def test_committed_corpus_has_sm120_matmul_comparisons():
@@ -186,22 +186,23 @@ def test_committed_corpus_has_sm120_device_resident_tile_crossover():
 def test_committed_corpus_has_sm120_model_workload_comparisons():
     fresh = AT.MeasureCache()
     AT.load_corpus(cache=fresh)
-    rows = {r["op"]: r for r in fresh.to_dict()["records"]
-            if r["device"] == "nvidia:sm_120"}
-    assert set(rows) >= {OP_FUSED_REGION, "attention"}
-    assert set(rows[OP_FUSED_REGION]["candidates"]) == {
-        "nvidia_generic_cuda", "nvidia_mma_fused"
-    }
-    assert set(rows["attention"]["candidates"]) == {
-        "nvidia_flash_attn", "nvidia_mma_attn"
-    }
-
+    # Keep this assertion scoped to the original end-to-end f16 comparisons.
+    # Device-timed TF32/FP8 rows intentionally share these op names and must not
+    # overwrite them merely because they appear later in the persisted corpus.
     nvidia = [r for r in fresh.to_dict()["records"]
-              if r["device"] == "nvidia:sm_120"]
-    fused_buckets = {tuple(r["bucket"]) for r in nvidia
+              if r["device"] == "nvidia:sm_120"
+              and r["timing"] == "end_to_end" and r["dtype"] == "f16"]
+    fused = [r for r in nvidia if r["op"] == OP_FUSED_REGION]
+    attention = [r for r in nvidia if r["op"] == "attention"]
+    assert fused and attention
+    assert all(set(r["candidates"]) == {
+        "nvidia_generic_cuda", "nvidia_mma_fused"} for r in fused)
+    assert all(set(r["candidates"]) == {
+        "nvidia_flash_attn", "nvidia_mma_attn"} for r in attention)
+
+    fused_buckets = {tuple(r["bucket"]) for r in fused
                      if r["op"] == OP_FUSED_REGION}
-    attention_buckets = {tuple(r["bucket"]) for r in nvidia
-                         if r["op"] == "attention"}
+    attention_buckets = {tuple(r["bucket"]) for r in attention}
     assert fused_buckets >= {(64, 64, 64), (256, 256, 256), (128, 512, 256)}
     assert attention_buckets >= {(128, 128, 64, 64), (64, 512, 64, 64)}
 

@@ -261,16 +261,18 @@ def test_nvidia_matmul_candidates_registered():
         assert not c.applies_to(F.FusedRegion(epilogue=("relu",)))   # not a matmul
 
 
-def test_nvidia_matmul_off_gpu_arbitrates_to_reference():
-    # Host-free: with no GPU the candidates are unavailable, so the arbiter finds
-    # no winner and run_arbitrated returns the numpy reference (never raises).
-    if any(c.available() for c in C.candidates_for("nvidia", OP_MATMUL)):
-        pytest.skip("NVIDIA matmul runtime present — covered by live arbitration")
+def test_nvidia_matmul_off_gpu_arbitrates_to_reference(monkeypatch):
+    # Host-free and deterministic on GPU hosts: model an unavailable NVIDIA
+    # runtime at the candidate boundary, so this test always covers the arbiter's
+    # no-winner fallback instead of skipping precisely where CUDA is installed.
+    for candidate in C.candidates_for("nvidia", OP_MATMUL):
+        monkeypatch.setattr(candidate, "available", lambda: False)
     region = F.MatmulRegion(dtype="bfloat16")
     rng = np.random.default_rng(0)
     A = rng.standard_normal((32, 32)).astype(np.float32)
     B = rng.standard_normal((32, 16)).astype(np.float32)
-    out, tag = C.run_arbitrated(region, OP_MATMUL, "nvidia", A, B)
+    out, tag = C.run_arbitrated(
+        region, OP_MATMUL, "nvidia", A, B, use_corpus=False)
     assert tag == "reference"
     np.testing.assert_allclose(out, region.reference(A, B), atol=1e-3)
 

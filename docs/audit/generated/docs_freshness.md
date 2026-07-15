@@ -6,9 +6,9 @@ Reference date for staleness: **2026-07-14**.
 
 ## Headline
 
-- **110** docs catalogued across the canonical doc tree.
-- **109** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **67** updated within the last 30 days.
+- **112** docs catalogued across the canonical doc tree.
+- **111** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **69** updated within the last 30 days.
 - **0** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -106,6 +106,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `frontend_substrate_plan.md` | Active | 2026-05-20 | 55 | ✓ |
 | `inference/serving.md` | - | 2026-07-13 | 1 | ✓ |
 | `proposals/cute_tessera_enhancement.md` | Proposal | 2026-04-26 | 79 | ✓ |
+| `proposals/tile_fragment_abi.md` | Proposal | 2026-07-14 | 0 | ✓ |
 | `proposals/tiled_ssd_tile_ir_schedule.md` | - | 2026-07-14 | 0 | ✓ |
 | `stencil_materialize_and_window_lowering.md` | Informative | 2026-05-20 | 55 | ✓ |
 | `system_overview.md` | Informative | 2026-06-11 | 33 | ✓ |
@@ -137,13 +138,14 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `backend/apple/MPSGRAPH_RUNTIME_GLASS_JAWS.md` | - | 2026-07-13 | 1 | ✓ |
 | `backend/apple/README.md` | - | 2026-07-13 | 1 | ✓ |
 | `backend/nvidia/BLACKWELL_SM120_EXECUTION_PLAN.md` | - | 2026-06-24 | 20 | ✓ |
-| `backend/nvidia/NVIDIA_AUDIT.md` | - | 2026-07-07 | 7 | ✓ |
+| `backend/nvidia/NVIDIA_AUDIT.md` | - | 2026-07-14 | 0 | ✓ |
 | `backend/nvidia/SM120_DIFFERENTIATION_DASHBOARD.md` | - | 2026-07-13 | 1 | ✓ |
 | `backend/nvidia/VERIFY_TARGET_IR_TAIL.md` | - | 2026-07-13 | 1 | ✓ |
 | `backend/nvidia/spikes/sm120_mma_sync/README.md` | - | 2026-06-24 | 20 | ✓ |
-| `backend/rocm/ROCM_AUDIT.md` | - | 2026-07-13 | 1 | ✓ |
+| `backend/rocm/ROCM_AUDIT.md` | - | 2026-07-14 | 0 | ✓ |
 | `backend/rocm/ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md` | - | 2026-07-13 | 1 | ✓ |
 | `backend/rocm/STRIX_HALO_EXECUTION_PLAN.md` | - | 2026-06-23 | 21 | ✓ |
+| `backend/rocm/todo.md` | - | 2026-07-14 | 0 | ✓ |
 | `compiler/AUTODIFF_UNIFICATION_PLAN.md` | - | 2026-07-14 | 0 | ✓ |
 | `compiler/COMPILER_AUDIT.md` | - | 2026-07-10 | 4 | ✓ |
 | `compiler/COMPILER_REFACTOR_PLAN.md` | - | 2026-07-11 | 3 | ✓ |

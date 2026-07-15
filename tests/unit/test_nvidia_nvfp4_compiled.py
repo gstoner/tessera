@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-import shutil
 import subprocess
 
 import pytest
+
+from tests._support.environment import nvidia_cuda_tool
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -15,9 +16,9 @@ SOURCE = (ROOT / "docs/audit/backend/nvidia/spikes/sm120_mma_sync"
 
 
 def _require_sm120a() -> tuple[str, str]:
-    nvcc = shutil.which("nvcc")
-    cuobjdump = shutil.which("cuobjdump")
-    nvidia_smi = shutil.which("nvidia-smi")
+    nvcc = nvidia_cuda_tool("nvcc")
+    cuobjdump = nvidia_cuda_tool("cuobjdump")
+    nvidia_smi = nvidia_cuda_tool("nvidia-smi")
     if not nvcc or not cuobjdump or not nvidia_smi:
         pytest.skip("NVFP4 proof requires nvcc, cuobjdump, and nvidia-smi")
     capability = subprocess.run(
@@ -25,7 +26,7 @@ def _require_sm120a() -> tuple[str, str]:
         check=True, capture_output=True, text=True).stdout.splitlines()[0].strip()
     if capability != "12.0":
         pytest.skip(f"NVFP4 proof requires sm_120, found compute capability {capability}")
-    return nvcc, cuobjdump
+    return str(nvcc), str(cuobjdump)
 
 
 @pytest.mark.compiler_tool

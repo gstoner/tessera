@@ -13,6 +13,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PYTHON_ROOT = REPO_ROOT / "python"
+CUDA_BIN_DIRS = (Path("/usr/local/cuda/bin"), Path("/usr/local/cuda-13.3/bin"))
 
 
 def _tool_path(env_name: str, *candidates: Path | str) -> Path | None:
@@ -28,12 +29,23 @@ def _tool_path(env_name: str, *candidates: Path | str) -> Path | None:
     return Path(executable) if executable else None
 
 
+def nvidia_cuda_tool(name: str) -> Path | None:
+    """Find a CUDA executable from PATH or the supported host installations."""
+
+    executable = shutil.which(name)
+    if executable:
+        return Path(executable)
+    return next((path for path in (root / name for root in CUDA_BIN_DIRS)
+                 if path.is_file()), None)
+
+
 @dataclass(frozen=True)
 class CompilerToolchain:
     """Discovered host compiler tools; requirement checks skip consistently."""
 
     tessera_opt: Path | None
     mlir_opt: Path | None
+    nvidia_opt: Path | None = None
 
     @classmethod
     def discover(cls) -> "CompilerToolchain":
@@ -46,6 +58,15 @@ class CompilerToolchain:
                 "MLIR_OPT",
                 "/usr/lib/llvm-22/bin/mlir-opt",
                 "/opt/homebrew/opt/llvm/bin/mlir-opt",
+            ),
+            nvidia_opt=_tool_path(
+                "TESSERA_NVIDIA_OPT",
+                REPO_ROOT / "build-nvidia-cuda/src/compiler/codegen"
+                / "tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt",
+                REPO_ROOT / "build/src/compiler/codegen"
+                / "tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt",
+                REPO_ROOT / "build-nvidia/src/compiler/codegen"
+                / "tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt",
             ),
         )
 
@@ -62,6 +83,14 @@ class CompilerToolchain:
                 "compiler-tool test requires MLIR 22 mlir-opt; set MLIR_OPT"
             )
         return self.mlir_opt
+
+    def require_nvidia_opt(self) -> Path:
+        if self.nvidia_opt is None:
+            pytest.skip(
+                "compiler-tool test requires tessera-nvidia-opt; build it or set "
+                "TESSERA_NVIDIA_OPT"
+            )
+        return self.nvidia_opt
 
 
 def python_subprocess_environment(

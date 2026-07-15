@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-import os
-import shutil
-
 import numpy as np
 import pytest
 
+from tests._support.environment import nvidia_cuda_tool
+
 
 def _cuda_or_skip():
-    if not (shutil.which("nvcc") or os.path.exists("/usr/local/cuda/bin/nvcc")):
+    if nvidia_cuda_tool("nvcc") is None:
         pytest.skip("nvcc not installed")
     from tessera import runtime as rt
     if not rt._nvidia_mma_runtime_available():

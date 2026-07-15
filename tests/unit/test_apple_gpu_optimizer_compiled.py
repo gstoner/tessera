@@ -159,9 +159,8 @@ def test_lion():
     np.testing.assert_allclose(mn, np.asarray(rst["m"]), atol=2e-6)
 
 
+@pytest.mark.hardware_apple_gpu
 def test_f32_optimizer_ops_report_native_gpu_on_metal():
-    if __import__("sys").platform != "darwin" or not rt.DeviceTensor.is_metal():
-        pytest.skip("requires an available Apple Metal runtime")
     p = np.ones(SHAPE, np.float32)
     g = np.full(SHAPE, 0.25, np.float32)
     m = np.zeros(SHAPE, np.float32)

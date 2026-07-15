@@ -82,9 +82,8 @@ def test_rng_determinism():
     np.testing.assert_array_equal(np.asarray(a), np.asarray(b))
 
 
+@pytest.mark.hardware_apple_gpu
 def test_rng_base_ops_report_native_gpu_on_darwin():
-    if __import__("sys").platform != "darwin" or not rt.DeviceTensor.is_metal():
-        pytest.skip("requires an available Apple Metal runtime")
     for op, kwargs, operands in (
         ("tessera.rng_uniform", {"seed": 11, "shape": [16]}, ()),
         ("tessera.rng_normal", {"seed": 12, "shape": [16]}, ()),

@@ -44,9 +44,8 @@ def test_moe_combine_matches_weighted_scatter_oracle():
                                rtol=1e-5, atol=1e-6)
 
 
+@pytest.mark.hardware_apple_gpu
 def test_moe_transport_reports_native_gpu_on_metal():
-    if __import__("sys").platform != "darwin" or not rt.DeviceTensor.is_metal():
-        pytest.skip("requires an available Apple Metal runtime")
     x = np.random.default_rng(44).standard_normal((12, 8)).astype(np.float32)
     plan = _plan(44)
     dispatch = rt.launch(_artifact("tessera.moe_dispatch", ["x", "plan"]), (x, plan))

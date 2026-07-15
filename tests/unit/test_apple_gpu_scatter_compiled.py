@@ -58,9 +58,8 @@ def test_scatter_reduce_min_max():
             O.scatter_reduce(x, idx, upd, reduce=reduce), rtol=1e-5, atol=1e-5)
 
 
+@pytest.mark.hardware_apple_gpu
 def test_scatter_f32_reports_native_gpu_on_metal():
-    if __import__("sys").platform != "darwin" or not rt.DeviceTensor.is_metal():
-        pytest.skip("requires an available Apple Metal runtime")
     x = np.zeros((4, 3), np.float32)
     idx = np.array([1, 1, 3], np.int64)
     upd = np.ones((3, 3), np.float32)

@@ -23,7 +23,7 @@ The script runs a sequence of structurally identical checks:
     For apple_gpu: ``benchmark_fusion.py --ci``,
     ``benchmark_ga_ebm.py --ci``, ``benchmark_execution_kind.py --ci``,
     ``spectral_correctness.py`` (Apple-host-agnostic — always runnable).
-  * **hardware-marked tests** — pytest -m "hardware and apple_gpu" if
+  * **hardware-marked tests** — pytest -m "hardware_apple_gpu" if
     any such tests exist.
 
 Exit codes:
@@ -141,11 +141,11 @@ _APPLE_GPU_GATES: tuple[Gate, ...] = (
         cmd=(
             PYTHON, "-m", "pytest",
             str(ROOT / "tests/unit/"),
-            "-m", "hardware and apple_gpu",
+            "-m", "hardware_apple_gpu",
             "-q", "--no-header",
         ),
         description=(
-            "Any pytest tests marked ``hardware and apple_gpu``. "
+            "Any pytest tests marked ``hardware_apple_gpu``. "
             "Skipped silently if no such tests exist (pytest returns "
             "exit code 5)."
         ),

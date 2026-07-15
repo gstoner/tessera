@@ -29,7 +29,8 @@ permissions:
 jobs:
   release-gate:
     name: NVIDIA sm_120 (CPU, artifact, device, performance)
-    runs-on: [self-hosted, linux, nvidia-sm120]
+    # This is evidence for one physical device, not a generic CUDA lane.
+    runs-on: [self-hosted, linux, nvidia-rtx5070ti-sm120]
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5

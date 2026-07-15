@@ -14,7 +14,7 @@ def test_nvidia_release_workflow_serializes_the_sm120_box_and_retains_evidence()
     text = WORKFLOW.read_text(encoding="utf-8")
     assert "nvidia-sm120-release-gate" in text
     assert "cancel-in-progress: false" in text
-    assert "runs-on: [self-hosted, linux, nvidia-sm120]" in text
+    assert "runs-on: [self-hosted, linux, nvidia-rtx5070ti-sm120]" in text
     assert "scripts/run_nvidia_release_gate.sh" in text
     assert "actions/upload-artifact@v4" in text
     assert "retention-days: 30" in text

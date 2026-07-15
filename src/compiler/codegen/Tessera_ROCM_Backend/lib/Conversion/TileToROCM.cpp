@@ -1,7 +1,10 @@
 #include "TesseraROCM/Passes.h"
+#include "ROCMFragmentLayout.h"
 
 #include "Tessera/Dialect/Tile/TileDialect.h"
 #include "TesseraROCMDialect.h.inc"
+#define GET_TYPEDEF_CLASSES
+#include "TesseraROCMTypes.h.inc"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -11,6 +14,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/ADT/Twine.h"
 
 using namespace mlir;
 
@@ -49,54 +53,42 @@ static bool isWmmaArch(llvm::StringRef arch) {
   return arch.starts_with("gfx11") || arch.starts_with("gfx12");
 }
 
-static bool isCanonicalGfx1151Mma16(
-    tessera::tile::TileMmaDescAttr desc, llvm::StringRef arch) {
-  if (!desc || (arch != "gfx1151" && arch != "gfx1100") ||
-      (desc.getFamily() != "auto" && desc.getFamily() != "wmma") ||
-      desc.getM() != 16 || desc.getN() != 16 || desc.getK() != 16 ||
-      desc.getAType() != desc.getBType() ||
-      desc.getALayout() != "row_major" ||
-      desc.getBLayout() != "col_major" || desc.getKBlocks() != 1)
-    return false;
-  bool fp = (desc.getAType() == "f16" || desc.getAType() == "bf16") &&
-            desc.getAccType() == "f32";
-  bool integer = (desc.getAType() == "int8" || desc.getAType() == "int4") &&
-                 (desc.getAccType() == "i32" ||
-                  desc.getAccType() == "int32");
-  return fp || integer;
-}
-
 static Value toIndex(OpBuilder &builder, Location loc, Value value) {
   if (value.getType().isIndex())
     return value;
   return arith::IndexCastOp::create(builder, loc, builder.getIndexType(), value);
 }
 
-static FailureOr<Value> materializeGfx1151Pack(
+static FailureOr<Value> materializeFragmentPack(
     tessera::tile::FragmentPackOp pack, OpBuilder &builder, Value lane,
-    llvm::StringRef arch) {
+    Value laneGroup,
+    const tessera_rocm::FragmentLayoutDescriptor &physical) {
   Operation *op = pack.getOperation();
   auto role = op->getAttrOfType<StringAttr>("role");
   auto desc = op->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma");
   auto view = pack.getInputs().front().getDefiningOp<tessera::tile::ViewOp>();
-  if (!role || !view || !isCanonicalGfx1151Mma16(desc, arch)) {
-    op->emitError("gfx1151 fragment materialization requires tile.view-backed "
-                  "A/B fragments with an m16n16k16 f16/bf16/int8/int4 "
-                  "row/col descriptor");
+  if (!role || !view || !desc) {
+    op->emitError("ROCM_FRAGMENT_MISSING_CONTRACT: fragment materialization "
+                  "requires tile.view-backed A/B fragments and a resolved "
+                  "architecture descriptor");
     return failure();
   }
   auto memory = view->getAttrOfType<tessera::tile::TileMemoryLayoutAttr>(
       "tile.memory");
   auto layout = view->getAttrOfType<tessera::tile::TileLayoutAttr>(
       "tile.layout");
-  std::array<int64_t, 2> expectedShape{16, 16};
+  std::array<int64_t, 2> expectedShape =
+      role.getValue() == "a"
+          ? std::array<int64_t, 2>{desc.getM(), desc.getK()}
+          : std::array<int64_t, 2>{desc.getK(), desc.getN()};
   StringRef expectedOrder = role.getValue() == "a" ? "row_major" : "col_major";
   if ((role.getValue() != "a" && role.getValue() != "b") || !memory ||
       !layout || view.getInputs().size() != 3 ||
       memory.getSpace() != "gmem" || memory.getOrder() != expectedOrder ||
       layout.getShardExtents() != ArrayRef<int64_t>(expectedShape) ||
       layout.getSwizzle()) {
-    op->emitError("unsupported gfx1151 fragment source layout for role ")
+    op->emitError("ROCM_FRAGMENT_UNSUPPORTED_SOURCE_LAYOUT: unsupported ")
+        << physical.familyName << " fragment source layout for role "
         << (role ? role.getValue() : StringRef("<missing>"));
     return failure();
   }
@@ -104,16 +96,25 @@ static FailureOr<Value> materializeGfx1151Pack(
   Value base = view.getInputs()[0];
   auto memrefTy = dyn_cast<MemRefType>(base.getType());
   if (!memrefTy || memrefTy.getRank() != 1) {
-    op->emitError("gfx1151 fragment_pack currently requires a rank-1 memref source");
+    op->emitError("ROCM_FRAGMENT_SOURCE_RANK: fragment_pack currently requires "
+                  "a rank-1 memref source");
     return failure();
   }
   bool integer = desc.getAType() == "int8" || desc.getAType() == "int4";
-  Type elementTy = integer
-      ? Type(builder.getIntegerType(8))
-      : (desc.getAType() == "bf16" ? Type(builder.getBF16Type())
-                                     : Type(builder.getF16Type()));
+  Type elementTy;
+  if (integer)
+    elementTy = builder.getIntegerType(8);
+  else if (desc.getAType() == "bf16")
+    elementTy = builder.getBF16Type();
+  else if (desc.getAType() == "e4m3" || desc.getAType() == "fp8")
+    elementTy = Float8E4M3FNType::get(builder.getContext());
+  else if (desc.getAType() == "e5m2" || desc.getAType() == "bf8")
+    elementTy = Float8E5M2Type::get(builder.getContext());
+  else
+    elementTy = builder.getF16Type();
   if (memrefTy.getElementType() != elementTy) {
-    op->emitError("gfx1151 fragment source element type does not match mma descriptor");
+    op->emitError("ROCM_FRAGMENT_SOURCE_TYPE: source element type does not "
+                  "match the architecture MMA descriptor");
     return failure();
   }
 
@@ -122,38 +123,40 @@ static FailureOr<Value> materializeGfx1151Pack(
   Value colOrigin = toIndex(builder, loc, view.getInputs()[2]);
   Value leadingDim = arith::ConstantIndexOp::create(
       builder, loc, memory.getLeadingDim());
-  auto vectorTy = VectorType::get({16}, elementTy);
+  auto vectorTy =
+      VectorType::get({physical.inputElementsPerLane}, elementTy);
   Value zero = arith::ConstantOp::create(builder, loc, vectorTy,
                                          builder.getZeroAttr(vectorTy));
   Value fragment = zero;
+  Value kBase = arith::MulIOp::create(
+      builder, loc, laneGroup,
+      arith::ConstantIndexOp::create(builder, loc,
+                                     physical.inputElementsPerLane));
   if (role.getValue() == "a") {
     Value row = arith::AddIOp::create(builder, loc, rowOrigin, lane);
+    Value col = arith::AddIOp::create(builder, loc, colOrigin, kBase);
     Value linear = arith::AddIOp::create(
         builder, loc,
-        arith::MulIOp::create(builder, loc, row, leadingDim), colOrigin);
+        arith::MulIOp::create(builder, loc, row, leadingDim), col);
     fragment = vector::LoadOp::create(builder, loc, vectorTy, base,
                                       ValueRange{linear});
   } else {
-    for (int64_t i = 0; i < 16; ++i) {
-      Value ci = arith::ConstantIndexOp::create(builder, loc, i);
-      Value row = arith::AddIOp::create(builder, loc, rowOrigin, ci);
-      Value col = arith::AddIOp::create(builder, loc, colOrigin, lane);
-      Value linear = memory.getOrder() == "row_major"
-          ? Value(arith::AddIOp::create(
-                builder, loc,
-                arith::MulIOp::create(builder, loc, row, leadingDim), col))
-          : Value(arith::AddIOp::create(
-                builder, loc,
-                arith::MulIOp::create(builder, loc, col, leadingDim), row));
-      Value scalar = memref::LoadOp::create(builder, loc, base,
-                                            ValueRange{linear});
-      fragment = vector::InsertOp::create(builder, loc, scalar, fragment,
-                                          ArrayRef<int64_t>{i});
-    }
+    Value row = arith::AddIOp::create(builder, loc, rowOrigin, kBase);
+    Value col = arith::AddIOp::create(builder, loc, colOrigin, lane);
+    Value linear = arith::AddIOp::create(
+        builder, loc,
+        arith::MulIOp::create(builder, loc, col, leadingDim), row);
+    fragment = vector::LoadOp::create(builder, loc, vectorTy, base,
+                                      ValueRange{linear});
   }
-  if (desc.getAType() == "int8")
+  bool packToI32 = physical.inputFormat ==
+                       tessera_rocm::FragmentRegisterFormat::SOAInt ||
+                   desc.getAType() == "int8";
+  if (packToI32 && desc.getAType() != "int4")
     return Value(vector::BitCastOp::create(
-        builder, loc, VectorType::get({4}, builder.getIntegerType(32)),
+        builder, loc,
+        VectorType::get({physical.inputRegistersPerLane},
+                        builder.getIntegerType(32)),
         fragment));
   if (desc.getAType() != "int4")
     return fragment;
@@ -162,10 +165,10 @@ static FailureOr<Value> materializeGfx1151Pack(
   // into the gfx11 iu4 operand ABI: 16 values -> two i32 words per lane.
   Type i32Ty = builder.getIntegerType(32);
   Value mask = arith::ConstantIntOp::create(builder, loc, 0xf, 32);
-  Value words[2] = {
-      arith::ConstantIntOp::create(builder, loc, 0, 32),
-      arith::ConstantIntOp::create(builder, loc, 0, 32)};
-  for (int64_t i = 0; i < 16; ++i) {
+  SmallVector<Value> words(
+      physical.inputRegistersPerLane,
+      arith::ConstantIntOp::create(builder, loc, 0, 32));
+  for (int64_t i = 0; i < physical.inputElementsPerLane; ++i) {
     Value scalar = vector::ExtractOp::create(builder, loc, fragment,
                                              ArrayRef<int64_t>{i});
     Value extended = arith::ExtUIOp::create(builder, loc, i32Ty, scalar);
@@ -175,19 +178,20 @@ static FailureOr<Value> materializeGfx1151Pack(
     words[i / 8] =
         arith::OrIOp::create(builder, loc, words[i / 8], shifted);
   }
-  auto packedTy = VectorType::get({2}, i32Ty);
+  auto packedTy = VectorType::get({physical.inputRegistersPerLane}, i32Ty);
   Value packed = arith::ConstantOp::create(builder, loc, packedTy,
                                            builder.getZeroAttr(packedTy));
-  packed = vector::InsertOp::create(builder, loc, words[0], packed,
-                                    ArrayRef<int64_t>{0});
-  return Value(vector::InsertOp::create(builder, loc, words[1], packed,
-                                        ArrayRef<int64_t>{1}));
+  for (int64_t i = 0; i < physical.inputRegistersPerLane; ++i)
+    packed = vector::InsertOp::create(builder, loc, words[i], packed,
+                                      ArrayRef<int64_t>{i});
+  return packed;
 }
 
-static LogicalResult materializeGfx1151Store(
+static LogicalResult materializeFragmentStore(
     Operation *target, tessera::tile::FragmentUnpackOp unpack,
-    tessera::tile::StoreOp store, OpBuilder &builder, Value lane, Value lhi,
-    llvm::StringRef arch) {
+    tessera::tile::StoreOp store, OpBuilder &builder, Value lane,
+    Value laneGroup,
+    const tessera_rocm::FragmentLayoutDescriptor &physical) {
   Operation *op = store.getOperation();
   auto desc = unpack->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma");
   auto unpackLayout =
@@ -197,14 +201,15 @@ static LogicalResult materializeGfx1151Store(
   auto memory =
       store->getAttrOfType<tessera::tile::TileMemoryLayoutAttr>("tile.memory");
   std::array<int64_t, 2> outputShape{16, 16};
-  if (!isCanonicalGfx1151Mma16(desc, arch) || !unpackLayout || !storeLayout ||
-      !memory || memory.getSpace() != "gmem" ||
+  if (!desc || !unpackLayout || !storeLayout || !memory ||
+      memory.getSpace() != "gmem" ||
       memory.getOrder() != "row_major" || unpackLayout.getSwizzle() ||
       storeLayout.getSwizzle() ||
       unpackLayout.getShardExtents() != ArrayRef<int64_t>(outputShape) ||
       storeLayout.getShardExtents() != ArrayRef<int64_t>(outputShape)) {
-    op->emitError("gfx1151 accumulator store requires unswizzled 16x16 "
-                  "row-major gmem output with f32/i32 accumulation");
+    op->emitError("ROCM_FRAGMENT_STORE_LAYOUT: architecture accumulator store "
+                  "requires unswizzled 16x16 row-major gmem output with "
+                  "f32/i32 accumulation");
     return failure();
   }
   Value base = store.getInputs()[1];
@@ -214,7 +219,8 @@ static LogicalResult materializeGfx1151Store(
                           : Type(builder.getF32Type());
   if (!memrefTy || memrefTy.getRank() != 1 ||
       memrefTy.getElementType() != outputTy) {
-    op->emitError("gfx1151 accumulator store requires a rank-1 memref whose "
+    op->emitError("ROCM_FRAGMENT_STORE_TYPE: accumulator store requires a "
+                  "rank-1 memref whose "
                   "element type matches the f32/i32 accumulator");
     return failure();
   }
@@ -223,13 +229,26 @@ static LogicalResult materializeGfx1151Store(
   Value colOrigin = toIndex(builder, loc, store.getInputs()[3]);
   Value leadingDim = arith::ConstantIndexOp::create(
       builder, loc, memory.getLeadingDim());
-  Value two = arith::ConstantIndexOp::create(builder, loc, 2);
-  for (int64_t i = 0; i < 8; ++i) {
+  Value groupStride = arith::ConstantIndexOp::create(
+      builder, loc, physical.accumulatorElementsPerLane);
+  for (int64_t i = 0; i < physical.accumulatorElementsPerLane; ++i) {
     Value ci = arith::ConstantIndexOp::create(builder, loc, i);
-    Value rowOffset = arith::AddIOp::create(
-        builder, loc, arith::MulIOp::create(builder, loc, ci, two), lhi);
-    Value row = arith::AddIOp::create(builder, loc, rowOrigin, rowOffset);
-    Value col = arith::AddIOp::create(builder, loc, colOrigin, lane);
+    Value row;
+    Value col;
+    if (physical.usesGfx11AccumulatorMap()) {
+      Value two = arith::ConstantIndexOp::create(builder, loc, 2);
+      Value rowOffset = arith::AddIOp::create(
+          builder, loc, arith::MulIOp::create(builder, loc, ci, two),
+          laneGroup);
+      row = arith::AddIOp::create(builder, loc, rowOrigin, rowOffset);
+      col = arith::AddIOp::create(builder, loc, colOrigin, lane);
+    } else {
+      row = arith::AddIOp::create(builder, loc, rowOrigin, lane);
+      Value colOffset = arith::AddIOp::create(
+          builder, loc,
+          arith::MulIOp::create(builder, loc, laneGroup, groupStride), ci);
+      col = arith::AddIOp::create(builder, loc, colOrigin, colOffset);
+    }
     Value linear = arith::AddIOp::create(
         builder, loc,
         arith::MulIOp::create(builder, loc, row, leadingDim), col);
@@ -244,8 +263,8 @@ static LogicalResult materializeGfx1151Store(
 static llvm::StringRef fp8SemanticsForArch(llvm::StringRef arch) {
   if (arch == "gfx940" || arch == "gfx942")
     return "fnuz"; // CDNA 3 — E4M3FNUZ / E5M2FNUZ
-  if (arch == "gfx950" || arch == "gfx1200" || arch == "gfx1250" ||
-      arch == "gfx1251")
+  if (arch == "gfx950" || arch == "gfx1200" || arch == "gfx1201" ||
+      arch == "gfx1250" || arch == "gfx1251")
     return "ocp"; // CDNA 4 / RDNA 4 / gfx125x — OCP E4M3 / E5M2
   return "none";  // gfx90a, gfx1100, gfx1151 — no FP8 matrix path
 }
@@ -341,7 +360,7 @@ struct LowerTileToROCMPass
             });
         if (typedFragmentForm) {
           if (op->getNumOperands() != 3 || op->getNumResults() != 1) {
-            op->emitError("typed gfx1151 tile.mma requires exactly A, B, "
+            op->emitError("typed ROCm tile.mma requires exactly A, B, "
                           "accumulator -> one fragment");
             signalPassFailure();
             return;
@@ -366,35 +385,56 @@ struct LowerTileToROCMPass
                            .getDefiningOp<tessera::tile::FragmentZeroOp>();
           auto desc =
               op->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma");
-          if (desc && (arch == "gfx1151" || arch == "gfx1100") &&
-              (desc.getAType() == "e4m3" || desc.getAType() == "e5m2" ||
-               desc.getAType() == "fp8" || desc.getAType() == "bf8")) {
-            op->emitError(
-                "ROCM_TILE_UNSUPPORTED_DTYPE: gfx1151 RDNA 3.5 WMMA has no "
-                "FP8/BF8 matrix form; use f16, bf16, int8, or int4, or select "
-                "an exact RDNA 4/CDNA target");
+          std::optional<tessera_rocm::FragmentLayoutDescriptor> physical =
+              tessera_rocm::resolveFragmentLayout(desc, arch);
+          if (!physical) {
+            if ((arch == "gfx1100" || arch == "gfx1151") && desc &&
+                tessera_rocm::isAnyOf(
+                    desc.getAType(), {"e4m3", "e5m2", "fp8", "bf8"})) {
+              op->emitError("ROCM_TILE_UNSUPPORTED_DTYPE: gfx1151 RDNA 3.5 "
+                            "WMMA has no FP8/BF8 matrix form");
+              signalPassFailure();
+              return;
+            }
+            op->emitError("ROCM_FRAGMENT_ILLEGAL_ARCH_DESCRIPTOR: no exact ")
+                << arch
+                << " fragment layout accepts the requested family/dtype/shape; "
+                   "RDNA3, RDNA4, gfx125x WMMA-v2, and CDNA MFMA descriptors "
+                   "are intentionally non-interchangeable";
             signalPassFailure();
             return;
           }
-          if (!aPack || !bPack || !cZero || !hasOutputStore ||
-              !isCanonicalGfx1151Mma16(desc, arch)) {
+          if (!physical->materializationReady) {
+            op->emitError("ROCM_FRAGMENT_MATERIALIZATION_GATED: ")
+                << physical->familyName
+                << " recognizes this instruction ABI but its physical "
+                   "pack/unpack map is not enabled";
+            signalPassFailure();
+            return;
+          }
+          if (!aPack || !bPack || !cZero || !hasOutputStore) {
             op->emitError(
-                "typed gfx1151 lowering requires fragment_pack A/B, "
+                "typed ROCm lowering requires fragment_pack A/B, "
                 "fragment_zero accumulator, fragment_unpack -> tile.store, "
-                "and an m16n16k16 f16/bf16/int8/int4 descriptor");
+                "and an exact architecture fragment descriptor");
             signalPassFailure();
             return;
           }
 
           Location loc = op->getLoc();
           Value tx = gpu::ThreadIdOp::create(builder, loc, gpu::Dimension::x);
+          Value waveSize = arith::ConstantIndexOp::create(
+              builder, loc, physical->waveSize);
+          Value waveLane = arith::RemUIOp::create(builder, loc, tx, waveSize);
           Value c16 = arith::ConstantIndexOp::create(builder, loc, 16);
-          Value lane = arith::RemUIOp::create(builder, loc, tx, c16);
-          Value lhi = arith::DivUIOp::create(builder, loc, tx, c16);
+          Value lane = arith::RemUIOp::create(builder, loc, waveLane, c16);
+          Value laneGroup = arith::DivUIOp::create(builder, loc, waveLane, c16);
+          if (physical->inputLaneReplication > 1)
+            laneGroup = arith::ConstantIndexOp::create(builder, loc, 0);
           FailureOr<Value> a =
-              materializeGfx1151Pack(aPack, builder, lane, arch);
+              materializeFragmentPack(aPack, builder, lane, laneGroup, *physical);
           FailureOr<Value> b =
-              materializeGfx1151Pack(bPack, builder, lane, arch);
+              materializeFragmentPack(bPack, builder, lane, laneGroup, *physical);
           if (failed(a) || failed(b)) {
             signalPassFailure();
             return;
@@ -403,22 +443,41 @@ struct LowerTileToROCMPass
               desc.getAType() == "int8" || desc.getAType() == "int4";
           Type accElem = integer ? Type(builder.getIntegerType(32))
                                  : Type(builder.getF32Type());
-          auto accTy = VectorType::get({8}, accElem);
+          auto accTy =
+              VectorType::get({physical->accumulatorElementsPerLane}, accElem);
           Value zero = arith::ConstantOp::create(
               builder, loc, accTy, builder.getZeroAttr(accTy));
-          OperationState state(loc, "tessera_rocm.wmma");
+          OperationState state(
+              loc, physical->matrixOp == "wmma" ? "tessera_rocm.wmma"
+                                                : "tessera_rocm.mfma");
           state.addOperands({*a, *b, zero});
           state.addTypes({accTy});
           state.addAttribute("arch", builder.getStringAttr(arch));
-          state.addAttribute("shape", builder.getStringAttr("m16n16k16"));
+          state.addAttribute(
+              "shape",
+              builder.getStringAttr(("m16n16k" + Twine(desc.getK())).str()));
           state.addAttribute("accum",
                              builder.getStringAttr(integer ? "i32" : "f32"));
+          state.addAttribute("input_dtype",
+                             builder.getStringAttr(desc.getAType()));
           state.addAttribute("source",
                              builder.getStringAttr("tile.fragment_pack"));
+          state.addAttribute("fragment_family",
+                             builder.getStringAttr(physical->familyName));
+          state.addAttribute(
+              "fragment_input_format",
+              builder.getStringAttr(
+                  tessera_rocm::registerFormatName(physical->inputFormat)));
+          state.addAttribute("fragment_wave_size",
+                             builder.getI64IntegerAttr(physical->waveSize));
+          state.addAttribute(
+              "fragment_intrinsic_abi",
+              builder.getStringAttr(physical->intrinsicABI));
           state.addAttribute("ordinal", builder.getI64IntegerAttr(0));
           Operation *target = builder.create(state);
-          if (failed(materializeGfx1151Store(target, unpack, store, builder,
-                                             lane, lhi, arch))) {
+          Value storeGroup = arith::DivUIOp::create(builder, loc, waveLane, c16);
+          if (failed(materializeFragmentStore(target, unpack, store, builder,
+                                              lane, storeGroup, *physical))) {
             signalPassFailure();
             return;
           }
@@ -520,10 +579,15 @@ struct LowerTileToROCMPass
           return;
         }
 
+        Value byteCount = op->getOperand(2);
+        if (byteCount.getType().isIndex())
+          byteCount = arith::IndexCastOp::create(
+              builder, op->getLoc(), builder.getI64Type(), byteCount);
         OperationState state(op->getLoc(), "tessera_rocm.async_copy");
         state.addOperands({op->getOperand(0), op->getOperand(1),
-                           op->getOperand(2)});
-        state.addTypes(op->getResult(0).getType());
+                           byteCount});
+        state.addTypes(
+            mlir::tessera_rocm::TokenType::get(builder.getContext()));
         state.addAttribute("src_space", builder.getStringAttr("global"));
         state.addAttribute("dst_space", builder.getStringAttr("lds"));
         state.addAttribute("arch", builder.getStringAttr(arch));

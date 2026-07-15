@@ -1382,6 +1382,62 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
     # ROCm shared Tile-IR convergence (2026-06-23) — AMD consumes the shared
     # Tile contract but keeps LDS / waitcnt legality target-specific.
     DiagnosticCode(
+        code="ROCM_FRAGMENT_ILLEGAL_ARCH_DESCRIPTOR", pass_origin="LowerTileToROCMPass",
+        severity="error",
+        summary="No exact RDNA3, RDNA4, gfx125x, or CDNA physical fragment descriptor accepts the requested Tile MMA family, dtype, shape, and layouts.",
+        fix_hint="Select a matrix family, dtype, shape, and logical A/B layout supported by the exact gfx architecture; do not reuse another architecture's fragment ABI.",
+        spec="docs/audit/backend/rocm/todo.md §ROCM-5", sprint="ROCM-5",
+    ),
+    DiagnosticCode(
+        code="ROCM_FRAGMENT_MATERIALIZATION_GATED", pass_origin="LowerTileToROCMPass",
+        severity="error",
+        summary="The exact architecture recognizes the matrix instruction ABI, but Tessera has not enabled its physical fragment pack/unpack map.",
+        fix_hint="Keep the dtype gated until its architecture-specific packing map, real intrinsic lowering, exact-target assembly, and numerical oracle are implemented.",
+        spec="docs/audit/backend/rocm/todo.md §ROCM-5", sprint="ROCM-5",
+    ),
+    DiagnosticCode(
+        code="ROCM_FRAGMENT_MISSING_CONTRACT", pass_origin="LowerTileToROCMPass",
+        severity="error",
+        summary="ROCm fragment materialization is missing a Tile view, role, or MMA descriptor required to resolve the physical ABI.",
+        fix_hint="Feed fragment_pack from tile.view and attach matching role and #tile.mma_desc attributes to every fragment operation.",
+        spec="docs/architecture/proposals/tile_fragment_abi.md", sprint="ROCM-5",
+    ),
+    DiagnosticCode(
+        code="ROCM_FRAGMENT_SOURCE_RANK", pass_origin="LowerTileToROCMPass",
+        severity="error",
+        summary="The current ROCm fragment materializer received a source that is not a rank-one memref view.",
+        fix_hint="Flatten the backing allocation to the supported rank-one memref ABI and express matrix coordinates through tile.view origins and memory layout.",
+        spec="docs/architecture/proposals/tile_fragment_abi.md", sprint="ROCM-5",
+    ),
+    DiagnosticCode(
+        code="ROCM_FRAGMENT_SOURCE_TYPE", pass_origin="LowerTileToROCMPass",
+        severity="error",
+        summary="The fragment source element type disagrees with the exact architecture MMA descriptor.",
+        fix_hint="Make the source memref element type match the descriptor's A/B dtype and use an explicit storage-pack conversion for sub-byte formats.",
+        spec="docs/architecture/proposals/tile_fragment_abi.md", sprint="ROCM-5",
+    ),
+    DiagnosticCode(
+        code="ROCM_FRAGMENT_STORE_LAYOUT", pass_origin="LowerTileToROCMPass",
+        severity="error",
+        summary="ROCm fragment unpack/store received an unsupported output layout or memory order.",
+        fix_hint="Use an unswizzled 16x16 row-major global-memory output layout, or implement and test a new architecture-specific accumulator map.",
+        spec="docs/architecture/proposals/tile_fragment_abi.md", sprint="ROCM-5",
+    ),
+    DiagnosticCode(
+        code="ROCM_FRAGMENT_STORE_TYPE", pass_origin="LowerTileToROCMPass",
+        severity="error",
+        summary="The fragment store destination type does not match the selected f32 or i32 accumulator contract.",
+        fix_hint="Store floating matrix results to rank-one f32 memrefs and integer WMMA results to rank-one i32 memrefs, or add an explicit epilogue conversion.",
+        spec="docs/architecture/proposals/tile_fragment_abi.md", sprint="ROCM-5",
+    ),
+    DiagnosticCode(
+        code="ROCM_FRAGMENT_UNSUPPORTED_SOURCE_LAYOUT", pass_origin="LowerTileToROCMPass",
+        severity="error",
+        summary="The Tile source memory order, shard shape, space, or swizzle cannot be packed by the selected architecture fragment map.",
+        fix_hint="Use the supported row-major A and column-major B global-memory views with the exact descriptor shape, or implement a tested layout transform.",
+        spec="docs/architecture/proposals/tile_fragment_abi.md", sprint="ROCM-5",
+    ),
+    DiagnosticCode(
         code="ROCM_LOWERING_LAYOUT_NOT_LDS", pass_origin="LowerTileToROCMPass",
         severity="error",
         summary="ROCm lowering saw a #tile.layout on tile.async_copy that does not place storage on the lds axis.",

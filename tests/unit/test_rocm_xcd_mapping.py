@@ -30,7 +30,8 @@ def test_xcd_counts() -> None:
 
 
 def test_rdna_is_monolithic() -> None:
-    for arch in (AMDArch.GFX_1100, AMDArch.GFX_1151, AMDArch.GFX_1200):
+    for arch in (AMDArch.GFX_1100, AMDArch.GFX_1151,
+                 AMDArch.GFX_1200, AMDArch.GFX_1201):
         assert xcd_count(arch) == 1
 
 

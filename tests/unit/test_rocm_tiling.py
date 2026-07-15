@@ -57,7 +57,8 @@ def test_all_cdna_arches_have_512_budget() -> None:
 
 def test_all_wave32_arches_have_256_budget() -> None:
     for arch in (
-        AMDArch.GFX_1100, AMDArch.GFX_1151, AMDArch.GFX_1200,
+        AMDArch.GFX_1100, AMDArch.GFX_1151,
+        AMDArch.GFX_1200, AMDArch.GFX_1201,
         AMDArch.GFX_1250, AMDArch.GFX_1251,
     ):
         prof = ROCmTargetProfile(arch=arch)

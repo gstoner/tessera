@@ -25,11 +25,11 @@
 // PLAN-SAME: tile.barrier_id = "rocm.waitcnt.1"
 // PLAN-SAME: tile.waitcnt_threshold = 0
 
-// LOWER: %[[A0:.*]] = "tessera_rocm.async_copy"
-// LOWER: %[[A1:.*]] = "tessera_rocm.async_copy"
+// LOWER: %[[A0:.*]] = tessera_rocm.async_copy
+// LOWER: %[[A1:.*]] = tessera_rocm.async_copy
 // Each wait gates a DISTINCT copy (oldest first), with the threshold metadata.
-// LOWER: "tessera_rocm.wait"(%[[A0]]) {barrier_id = "rocm.waitcnt.0", counter = "vmcnt", threshold = 1 : i64}
-// LOWER: "tessera_rocm.wait"(%[[A1]]) {barrier_id = "rocm.waitcnt.1", counter = "vmcnt", threshold = 0 : i64}
+// LOWER: tessera_rocm.wait %[[A0]] {barrier_id = "rocm.waitcnt.0", counter = "vmcnt", threshold = 1 : i64}
+// LOWER: tessera_rocm.wait %[[A1]] {barrier_id = "rocm.waitcnt.1", counter = "vmcnt", threshold = 0 : i64}
 func.func @double_buffer(%d0: memref<64xf16>, %d1: memref<64xf16>,
                          %s: memref<64xf16>, %b: index) {
   %t0 = "tile.async_copy"(%d0, %s, %b) : (memref<64xf16>, memref<64xf16>, index) -> i32

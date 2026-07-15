@@ -112,6 +112,14 @@ def test_rdna4_gfx1200_has_fp8_wmma():
     assert d.operand_a.k_width == 4
 
 
+def test_rdna4_gfx1201_has_its_own_descriptor_identity():
+    d = select_mma(AMDArch.GFX_1201, "bf16")
+    assert d.arch is AMDArch.GFX_1201
+    assert d.kind == "wmma"
+    assert d.shape == (16, 16, 16)
+    assert d.fragment_layout.family.value == "rdna4_wmma"
+
+
 def test_gfx1250_doubles_k_for_f16():
     d = select_mma(AMDArch.GFX_1250, "fp16")
     assert d.shape == (16, 16, 32)  # v2 ABI K-doubled

@@ -61,7 +61,7 @@ def test_gfx1151_has_no_fp8_wmma():
     # The load-bearing RDNA3.5 distinction: gfx1151 has bf16/fp16/int8 WMMA, NO fp8.
     isa = M.get_isa("rocm", "gfx1151")
     assert isa.mma_class == "wmma" and isa.lane_count == 32
-    assert isa.dtypes == frozenset({"fp16", "bf16", "int8"})
+    assert isa.dtypes == frozenset({"fp16", "bf16", "int8", "int4"})
     with pytest.raises(M.MmaSelectorError):
         M.select_mma(isa, "fp8_e4m3")
 

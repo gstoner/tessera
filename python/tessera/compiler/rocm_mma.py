@@ -39,6 +39,7 @@ from .rocm_target import (
     rocm_feature_status,
     wmma_variants,
 )
+from .rocm_fragment import FragmentLayoutDescriptor, select_fragment_layout
 
 # ── dtype bit widths (MMA-relevant canonical dtypes) ────────────────────────
 # Storage bit width per canonical dtype; used to derive the K-packing hint and
@@ -53,6 +54,7 @@ _DTYPE_BITS: dict[str, int] = {
     "fp8_e5m2": 8,
     "fp4_e2m1": 4,
     "int8": 8,
+    "int4": 4,
 }
 
 # Canonical MMA input dtypes (a/b operand storage).  fp32 routes through the
@@ -76,16 +78,19 @@ _MFMA_K_BY_DTYPE: dict[str, int] = {
 # RDNA generations doubled K.  RDNA 3/3.5 (gfx1100/1151): all combos at K=16.
 # RDNA 4 (gfx1200): f16/bf16/fp8 at K=16, int4 at K=32.  gfx125x ("v2" ABI):
 # K is doubled — f16/bf16 at K=32, fp8 at K=64.  (Grounded in `_WMMA_VARIANTS`.)
-_WMMA_K_RDNA3: dict[str, int] = {"fp16": 16, "bf16": 16, "int8": 16}
+_WMMA_K_RDNA3: dict[str, int] = {
+    "fp16": 16, "bf16": 16, "int8": 16, "int4": 16,
+}
 _WMMA_K_RDNA4: dict[str, int] = {
-    "fp16": 16, "bf16": 16, "int8": 16, "fp8_e4m3": 16, "fp8_e5m2": 16,
+    "fp16": 16, "bf16": 16, "int8": 16, "int4": 32,
+    "fp8_e4m3": 16, "fp8_e5m2": 16,
 }
 _WMMA_K_GFX125X: dict[str, int] = {
     "fp16": 32, "bf16": 32, "fp8_e4m3": 64, "fp8_e5m2": 64,
 }
 
 _RDNA3_CLASS = frozenset({AMDArch.GFX_1100, AMDArch.GFX_1151})
-_RDNA4_CLASS = frozenset({AMDArch.GFX_1200})
+_RDNA4_CLASS = frozenset({AMDArch.GFX_1200, AMDArch.GFX_1201})
 _GFX125X_CLASS = frozenset({AMDArch.GFX_1250, AMDArch.GFX_1251})
 
 
@@ -103,7 +108,7 @@ def _k_packing_hint(dtype: str) -> int:
 def _accum_dtype(in_dtype: str) -> str:
     """Accumulator dtype per the rocWMMA rule: i32 for int8, f64 for f64, else
     f32 (every low-precision float path accumulates in fp32)."""
-    if in_dtype == "int8":
+    if in_dtype in ("int8", "int4"):
         return "int32"
     if in_dtype == "fp64":
         return "fp64"
@@ -188,6 +193,10 @@ class MmaDescriptor:
         return (self.operand_a, self.operand_b, self.accumulator)
 
     @property
+    def fragment_layout(self) -> FragmentLayoutDescriptor:
+        return select_fragment_layout(self.arch, self.in_dtype, self.shape)
+
+    @property
     def intrinsic(self) -> str:
         """Documented mnemonic family, e.g. ``v_wmma_f32_16x16x16_f16`` or
         ``v_mfma_f32_16x16x16_bf16``.  Readability/lit aid, not an ABI claim."""
@@ -208,6 +217,7 @@ class MmaDescriptor:
             "transposed": self.transposed,
             "intrinsic": self.intrinsic,
             "operands": [op.as_metadata_dict() for op in self.operands],
+            "physical_fragment": self.fragment_layout.as_metadata_dict(),
         }
 
 
@@ -261,6 +271,7 @@ def select_mma(
 
     is_wave32 = arch in (
         AMDArch.GFX_1100, AMDArch.GFX_1151, AMDArch.GFX_1200,
+        AMDArch.GFX_1201,
         AMDArch.GFX_1250, AMDArch.GFX_1251,
     )
 

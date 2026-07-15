@@ -202,6 +202,8 @@ def test_gfx940_descriptor_path_lowers_to_real_mfma():
 
 
 def test_family_mismatch_is_a_named_error():
+    if not TESSERA_OPT.is_file():
+        pytest.skip("build tessera-opt")
     source = FIXTURE.read_text().replace('family = "auto"', 'family = "mfma"')
     result = subprocess.run(
         [

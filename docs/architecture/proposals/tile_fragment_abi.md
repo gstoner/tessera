@@ -178,8 +178,12 @@ need a shared physical fragment width to share a Tile program.
 4. Implement ROCm descriptor resolution and pack/unpack for one RDNA WMMA and
    one CDNA MFMA f16 case.  Validate the identical logical Tile fixture against
    ROCm reference output on each family.
-5. bf16 complete for the canonical sm_120 path. Add tf32, int8, and FP8/FP4
-   only after each variant has an execution oracle and layout tests.
+5. bf16 is complete for the canonical sm_120 Tile path. The shipped CUDA GEMM
+   ABI and composed transformer lanes now provide TF32/E4M3/E5M2 execution
+   oracles; their portable Tile fragment pack/layout variants remain open. Add
+   each Tile variant only with matching layout tests. Int8 and FP8/FP4 Tile
+   variants remain gated on their fragment contracts (NVFP4 also remains gated
+   on correct block-scale numerics).
 
 ## Acceptance criteria for the first slice
 

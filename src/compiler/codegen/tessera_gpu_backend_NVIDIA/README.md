@@ -31,9 +31,10 @@ Blackwell, CC 12.0, CUDA 13.3). The full rung ladder clears —
 
 On-silicon multi-dtype sweep (RTX 5070 Ti, NVRTC `compute_120`, execute-and-compare
 across 7 shapes incl. ragged): **bf16, f16, tf32, fp8 e4m3, fp8 e5m2** all match a
-host reference (fp8 bit-exact). NVFP4 block-scaled `mma.sync.m16n8k64` **assembles
-and executes on `sm_120a`** but its numerics are not yet claimed (the PTX ISA
-block-scale operand/scale mapping is absent from the on-box CUDA 13.3 headers).
+host reference (fp8 bit-exact). NVFP4 block-scaled `mma.sync.m16n8k64` also
+**assembles, executes, and matches exactly on `sm_120a`**, including distinct
+UE4M3 scales for every 16-element K block. The scale selector ABI is grounded
+against PTX ISA 9.3 and the emitted `OMMA.SF.16864...UE4M3.4X` SASS is pinned.
 See the grounded spike write-up:
 [`docs/audit/backend/nvidia/spikes/sm120_mma_sync/README.md`](../../../../docs/audit/backend/nvidia/spikes/sm120_mma_sync/README.md).
 

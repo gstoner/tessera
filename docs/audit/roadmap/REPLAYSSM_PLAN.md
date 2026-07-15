@@ -9,7 +9,16 @@ plan_state: landing
 > **Status:** Phases 0–6 + 5-bench + block-decode + f16/bf16 + big-GDN +
 > size-heuristic prefill default ✅ (2026-06-15) — Track-R complete on Apple.
 > Sibling to the Track-L delta-rule work (`python/tessera/stdlib/delta_rule.py`).
-> **Remaining — now in active backend development (no longer hardware-gated).**
+> **NVIDIA status (2026-07-14): complete initial serving slice.** The sm_120
+> implementation has persistent checkpoint state, output-only decode, device
+> flush at the existing boundary, batch submission, speculative rollback,
+> stream/event submission, pinned staging, opaque device-buffer/event exposure,
+> device-consumer ordering, and an ordered multi-slot staging/event ring. Live
+> long-decode and rollback tests run on the RTX 5070 Ti. The remaining backend
+> work in this plan is ROCm enablement and performance measurement/optimization,
+> not a missing NVIDIA state or asynchronous-submission contract.
+>
+> **Remaining — active ROCm backend development (no longer hardware-gated).**
 > Both target boxes are in hand (Strix Halo gfx1151 / RDNA3.5; RTX 5070 Ti
 > sm_120 / Blackwell), so the CUDA/ROCm work is a kernel-enablement task, not a
 > wait on silicon. Kernels to enable, then `execute-and-compare` against the
@@ -329,3 +338,13 @@ proves: `replay ≡ summary` is a metamorphic/horizontal-equivalence oracle, and
 `greedy-spec ≡ greedy-AR` is the proven DFlash invariant. Track-R turns
 ReplaySSM from a serving trick into a contract with a derive-validates-declare
 proof.
+
+### NVIDIA sm_120 serving closure ✅ (2026-07-14)
+
+The CUDA handle owns persistent S0, output-only decode, flush-boundary
+materialization, block submission, pinned staging, an ordered multi-slot ring,
+and opaque device-buffer/event leases. Timing-capable start/completion events
+separate host enqueue/wait latency from device work. Live RTX 5070 Ti evidence
+is committed in `benchmarks/baselines/nvidia_sm120_serving.json`, alongside a
+direct page-table-consuming attention kernel and its staged-resident fallback.
+Their measured crossover is persisted in D2 and consumed as a runtime warm start.

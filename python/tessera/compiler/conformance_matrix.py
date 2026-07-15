@@ -121,9 +121,9 @@ class ConformanceOp:
 # The seven ops the audit called out, with realistic fusion expectations:
 #   * matmul_softmax has a real fused MSL kernel on apple_gpu (see
 #     docs/backends/apple/). On other targets it is compose-only.
-#   * matmul_relu is compose-only on every target today — there is no
-#     matmul→relu fusion pass in any backend. Surfacing this distinction is
-#     the point of the matrix.
+#   * matmul_relu is fused on nvidia_sm120 through the canonical Tile
+#     accumulator epilogue; other targets retain their independently proven
+#     composition/fusion status.
 CONFORMANCE_OPS: tuple[ConformanceOp, ...] = (
     ConformanceOp(
         name="matmul",
@@ -132,8 +132,8 @@ CONFORMANCE_OPS: tuple[ConformanceOp, ...] = (
     ConformanceOp(
         name="matmul_relu",
         component_ops=("matmul", "relu"),
-        fusion_targets=frozenset(),  # no native fusion pass for matmul+relu today
-        notes="composes from primitives; no fused single-kernel today",
+        fusion_targets=frozenset({"nvidia_sm120"}),
+        notes="fused Tile accumulator epilogue on nvidia_sm120; composes elsewhere",
     ),
     ConformanceOp(
         name="softmax",

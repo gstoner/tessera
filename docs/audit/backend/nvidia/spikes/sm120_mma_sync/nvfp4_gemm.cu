@@ -1,12 +1,9 @@
-// NVFP4 (e2m1 + ue4m3 block scale) m16n8k64 warp MMA — provisional data-path
-// probe. This is a NEGATIVE gate today: the 2026-07-13 RTX 5070 Ti run compiled
-// for sm_120a but failed all 128 numerical outputs. Do not cite it as runtime
-// evidence until the fragment/scale mapping below is corrected.
+// NVFP4 (e2m1 + ue4m3 block scale) m16n8k64 warp MMA numerical oracle.
 // One warp: D[16x8] f32 = A[16x64] @ B[64x8], fp4 e2m1 operands, UNIT block scales.
 // Host builds per-lane fragments per the m16n8k64 fp4 layout, uploads them, the
 // kernel runs the block-scale mma, host gathers D and compares to a fp4 reference.
-// Presumed unit scales attempt to isolate the E2M1 data layout. The assumption
-// UE4M3_ONE=0x38 and/or selector/fragment mapping is not yet validated.
+// PTX ISA 9.3 grounds the 4X selector ABI: all four scale bytes participate,
+// byte-id is zero, A is supplied by the lower lane pair and B by lane 0.
 #include <cstdio>
 #include <cstdint>
 #include <cmath>
@@ -35,6 +32,18 @@ __host__ static unsigned e2m1_enc(float f){
 // ue4m3 scale = 1.0 -> exp=bias(7), mant=0 -> 0b0111000 = 0x38.
 #define UE4M3_ONE 0x38u
 
+__host__ static float ue4m3_dec(unsigned code) {
+  unsigned exponent = (code >> 3) & 0xf, mantissa = code & 7;
+  if (exponent == 0)
+    return ldexpf((float)mantissa / 8.0f, -6);
+  return ldexpf(1.0f + (float)mantissa / 8.0f, (int)exponent - 7);
+}
+
+__host__ static unsigned pack_scale4(const unsigned values[4]) {
+  return values[0] | (values[1] << 8) | (values[2] << 16) |
+         (values[3] << 24);
+}
+
 __global__ void nvfp4_tile(const unsigned* A, const unsigned* B,
                            const unsigned* SFa, const unsigned* SFb, float* D) {
   int lane=threadIdx.x;
@@ -54,18 +63,31 @@ __global__ void nvfp4_tile(const unsigned* A, const unsigned* B,
 }
 
 int main(int argc, char** argv){
-  unsigned scale_byte = (argc>1) ? (unsigned)strtoul(argv[1],0,16) : UE4M3_ONE;
+  bool mapped_scales = argc > 1 && strcmp(argv[1], "mapped") == 0;
+  unsigned scale_byte = (argc>1 && !mapped_scales)
+      ? (unsigned)strtoul(argv[1],0,16) : UE4M3_ONE;
+  unsigned scaleA[M][4], scaleB[4][N];
+  const unsigned scale_codes[3] = {0x30u, 0x38u, 0x40u};
+  for (int m=0;m<M;m++) for (int block=0;block<4;block++)
+    scaleA[m][block] = mapped_scales ? scale_codes[(m + block) % 3] : scale_byte;
+  for (int block=0;block<4;block++) for (int n=0;n<N;n++)
+    scaleB[block][n] = mapped_scales ? scale_codes[(2*block + n) % 3] : scale_byte;
   // logical fp4 matrices (codes 0..15) + decoded float values
   unsigned Ac[M*K], Bc[K*N]; float Af[M*K], Bf[K*N], ref[M*N];
   srand(7);
   for(int i=0;i<M*K;i++){ float v=((rand()%13)-6)*0.5f; Ac[i]=e2m1_enc(v); Af[i]=e2m1_dec(Ac[i]); }
   for(int i=0;i<K*N;i++){ float v=((rand()%13)-6)*0.5f; Bc[i]=e2m1_enc(v); Bf[i]=e2m1_dec(Bc[i]); }
-  for(int m=0;m<M;m++)for(int n=0;n<N;n++){ float a=0; for(int k=0;k<K;k++) a+=Af[m*K+k]*Bf[k*N+n]; ref[m*N+n]=a; }
+  for(int m=0;m<M;m++)for(int n=0;n<N;n++){ float a=0; for(int k=0;k<K;k++) {
+    int block=k/16;
+    a+=Af[m*K+k]*ue4m3_dec(scaleA[m][block])*
+       Bf[k*N+n]*ue4m3_dec(scaleB[block][n]);
+  } ref[m*N+n]=a; }
 
   // Build per-lane fragments per hypothesised m16n8k64 fp4 layout.
   // a0:(row=gid,col=8tig+j) a1:(row=gid+8,..) a2:(row=gid,col=8tig+32+j) a3:(row=gid+8,..)
   // b0:(col=gid,row=8tig+j) b1:(col=gid,row=8tig+32+j); j=0..7 in bits[4j..4j+3].
-  unsigned hA[32*4]={0}, hB[32*2]={0}, hSFa[32], hSFb[32], hD[32*4];
+  unsigned hA[32*4]={0}, hB[32*2]={0}, hSFa[32], hSFb[32];
+  float hD[32*4];
   for(int lane=0;lane<32;lane++){
     int gid=lane>>2, tig=lane&3;
     auto packA=[&](int row,int col0)->unsigned{ unsigned w=0; for(int j=0;j<8;j++){int c=col0+j; w|=(Ac[row*K+c]&0xf)<<(4*j);} return w; };
@@ -76,8 +98,16 @@ int main(int argc, char** argv){
     auto packB=[&](int col,int row0)->unsigned{ unsigned w=0; for(int j=0;j<8;j++){int r=row0+j; w|=(Bc[r*N+col]&0xf)<<(4*j);} return w; };
     hB[lane*2+0]=packB(gid, 8*tig);
     hB[lane*2+1]=packB(gid, 8*tig+32);
-    hSFa[lane]=scale_byte|(scale_byte<<8)|(scale_byte<<16)|(scale_byte<<24);
-    hSFb[lane]=hSFa[lane];
+    unsigned a_values[4] = {0,0,0,0}, b_values[4] = {0,0,0,0};
+    // thread-id-a=0 selects tig 0/1: lower lane supplies row gid, upper
+    // lane supplies row gid+8. thread-id-b=0 selects tig 0 for column gid.
+    if(tig==0) for(int block=0;block<4;block++) {
+      a_values[block]=scaleA[gid][block]; b_values[block]=scaleB[block][gid];
+    }
+    if(tig==1) for(int block=0;block<4;block++)
+      a_values[block]=scaleA[gid+8][block];
+    hSFa[lane]=pack_scale4(a_values);
+    hSFb[lane]=pack_scale4(b_values);
   }
 
   unsigned *dA,*dB,*dSa,*dSb; float* dD;
@@ -98,10 +128,11 @@ int main(int argc, char** argv){
     Dg[(gid+8)*N+2*tig]=hD[lane*4+2]; Dg[(gid+8)*N+2*tig+1]=hD[lane*4+3]; }
   double mx=0; int bad=0;
   for(int i=0;i<M*N;i++){ double e=fabs(Dg[i]-ref[i]); if(e>mx)mx=e; if(e>1e-3)bad++; }
-  printf("NVFP4 m16n8k64 block_scale (UNIT scales) data-path test\n");
+  printf("NVFP4 m16n8k64 block_scale (%s scales) data-path test\n",
+         mapped_scales ? "mapped non-uniform" : "uniform");
   printf("max abs error vs fp4 ref = %g, elements off = %d/%d\n", mx, bad, M*N);
   printf("sample D[0..3]=%.3f %.3f %.3f %.3f  ref=%.3f %.3f %.3f %.3f\n",
          Dg[0],Dg[1],Dg[2],Dg[3], ref[0],ref[1],ref[2],ref[3]);
-  printf("RESULT: %s\n", bad==0?"PASS (e2m1 data fragment layout verified on sm_120)":"FAIL");
+  printf("RESULT: %s\n", bad==0?"PASS (data + UE4M3 scale ABI verified on sm_120a)":"FAIL");
   return bad?1:0;
 }

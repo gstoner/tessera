@@ -89,8 +89,11 @@ def test_rocm_native_oracle_is_inconclusive_without_gpu(monkeypatch):
     # equivalence (provenance gate): a silent fallback can't earn the native rung.
     import tessera.cache.paged_kv as pk
 
-    def fake_rocm(Q, K, V, scale, causal):
-        return pk._reference_attention(Q, K, V, scale, causal), "reference"
+    def fake_rocm(Q, abi, token_indices, scale, causal):
+        k, v = abi.gather(token_indices)
+        return pk._reference_attention(
+            Q, np.transpose(k, (1, 0, 2)), np.transpose(v, (1, 0, 2)),
+            scale, causal), "reference"
 
     monkeypatch.setattr(pk, "_paged_attention_rocm", fake_rocm)
     h, _, _ = _fill(2, 16, 16)

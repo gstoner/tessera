@@ -201,6 +201,51 @@ def _ptr(arr):
     return arr.ctypes.data_as(ctypes.c_void_p) if arr is not None else None
 
 
+_PAGED_KV_ENTRY = "tessera_rocm_paged_kv_read_f32"
+_paged_kv_artifact: str | None = None
+
+
+def _synthesize_paged_kv_read_hip() -> str:
+    """HIP gather for the stable PLHD pages + logical-page-table ABI."""
+    return f'''#include <hip/hip_runtime.h>
+__global__ void paged_read(const float*pages,const int*table,const long long*idx,float*out,int page_size,int H,int D,long long T){{long long z=(long long)blockIdx.x*blockDim.x+threadIdx.x,n=T*H*D;if(z>=n)return;int d=z%D,h=(z/D)%H;long long t=z/(D*H),tok=idx[t];int lp=(int)(tok/page_size),off=(int)(tok%page_size),pp=table[lp];out[z]=pages[(((long long)pp*page_size+off)*H+h)*D+d];}}
+extern "C" int {_PAGED_KV_ENTRY}(const float*hp,const int*ht,const long long*hi,float*ho,int P,int LP,int page_size,int H,int D,long long T){{if(!hp||!ht||!hi||!ho||P<1||LP<1||page_size<1||H<1||D<1||T<1)return 2;size_t pb=(size_t)P*page_size*H*D*4,tb=(size_t)LP*4,ib=(size_t)T*8,ob=(size_t)T*H*D*4;float *p=0,*o=0;int*t=0;long long*i=0;if(hipMalloc(&p,pb)!=hipSuccess||hipMalloc(&t,tb)!=hipSuccess||hipMalloc(&i,ib)!=hipSuccess||hipMalloc(&o,ob)!=hipSuccess)return 3;if(hipMemcpy(p,hp,pb,hipMemcpyHostToDevice)!=hipSuccess||hipMemcpy(t,ht,tb,hipMemcpyHostToDevice)!=hipSuccess||hipMemcpy(i,hi,ib,hipMemcpyHostToDevice)!=hipSuccess)return 3;long long n=T*H*D;hipLaunchKernelGGL(paged_read,dim3((unsigned)((n+255)/256)),dim3(256),0,0,p,t,i,o,page_size,H,D,T);int ok=hipDeviceSynchronize()==hipSuccess&&hipMemcpy(ho,o,ob,hipMemcpyDeviceToHost)==hipSuccess;hipFree(p);hipFree(t);hipFree(i);hipFree(o);return ok?1:3;}}'''
+
+
+def run_paged_kv_cache_read_f32(
+    pages: Any, page_table: Any, token_indices: Any,
+) -> Any:
+    """Gather arbitrary logical tokens from stable physical f32 pages on ROCm."""
+    import numpy as np
+    p = np.ascontiguousarray(pages)
+    table = np.ascontiguousarray(page_table, dtype=np.int32)
+    idx = np.ascontiguousarray(token_indices, dtype=np.int64).reshape(-1)
+    if p.dtype != np.float32 or p.ndim != 4:
+        raise ValueError("ROCm paged KV pages must be rank-4 f32 [P,L,H,D]")
+    if table.ndim != 1 or table.size < 1:
+        raise ValueError("ROCm paged KV page_table must be non-empty rank-1")
+    if np.any(table < 0) or np.any(table >= p.shape[0]):
+        raise ValueError("ROCm paged KV page_table references an invalid physical page")
+    if idx.size < 1 or np.any(idx < 0) or np.any(idx >= table.size * p.shape[1]):
+        raise ValueError("ROCm paged KV token index exceeds logical table capacity")
+    global _paged_kv_artifact
+    if _paged_kv_artifact is None:
+        _paged_kv_artifact = _rocm_hip_compile_fn(KernelSource(
+            source=_synthesize_paged_kv_read_hip(), entry=_PAGED_KV_ENTRY,
+            lang=_LANG, spec=SpecPolicy.DYNAMIC, shape_key=("paged-kv-v1",)))
+    fn = getattr(ctypes.CDLL(_paged_kv_artifact), _PAGED_KV_ENTRY)
+    fn.restype = ctypes.c_int
+    fn.argtypes = ([ctypes.c_void_p] * 4 + [ctypes.c_int] * 5
+                   + [ctypes.c_longlong])
+    P, page_size, H, D = (int(x) for x in p.shape)
+    out = np.empty((idx.size, H, D), np.float32)
+    rc = fn(_ptr(p), _ptr(table), _ptr(idx), _ptr(out), P, int(table.size),
+            page_size, H, D, int(idx.size))
+    if rc != 1:
+        raise RuntimeError(f"ROCm paged KV read launch failed (rc={rc})")
+    return out
+
+
 class RocmHipRunner(KernelRunner):
     target = _TARGET
     accuracy_atol = _F16_ATOL

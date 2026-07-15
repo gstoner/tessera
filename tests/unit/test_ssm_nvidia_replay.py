@@ -54,6 +54,12 @@ def test_nvidia_replay_factory_wires_scalar_decode_path():
         assert getattr(h, "_device") is None
 
 
+def test_nvidia_replay_factory_rejects_single_async_slot():
+    with pytest.raises(ValueError, match="at least two slots"):
+        rt.nvidia_ssm_replay_state_handle(
+            1, 4, 3, -np.ones(4), capacity=8, async_slots=1)
+
+
 def test_nvidia_replay_decode_matches_eager_or_falls_back():
     """The CUDA kernel runs when available; otherwise the factory declines.
 
@@ -79,6 +85,17 @@ def test_cuda_replay_source_keeps_state_read_only():
     assert "const float*s0" in source
     assert "float*y" in source
     assert "cudaMemcpy(hy,y" in source
+
+
+def test_cuda_replay_async_source_owns_an_ordered_slot_ring():
+    source = nvidia_cuda._synthesize_ssm_replay_device_cuda()
+    assert "S*slots" in source
+    assert "cudaEvent_t beg,ev" in source
+    assert "cudaEventQuery(z.ev)" in source
+    assert "cudaEventElapsedTime(ms,z.beg,z.ev)" in source
+    assert "cudaStreamWaitEvent" in source
+    assert "cudaEventRecord(z.ev,st)" in source
+    assert "extern \"C\" void* dp" in source
 
 
 def test_cuda_replay_shape_validation_precedes_compilation():
@@ -133,9 +150,65 @@ def test_cuda_replay_async_submit_wait_matches_ordered_steps():
     future = gpu.submit_block_async(d,x,b,c)
     assert future.device_buffer.shape == (T, B, D)
     assert future.device_buffer.dtype == "float32"
+    assert future.event.elapsed_ms() > 0
     got = future.wait()
     want = np.stack([ref.step(d[i],x[i],b[i],c[i]) for i in range(T)])
     np.testing.assert_allclose(got,want,rtol=2e-4,atol=2e-4)
+
+
+@pytest.mark.skipif(not _cuda_host_ready(), reason="CUDA toolkit or GPU unavailable")
+def test_cuda_replay_multi_slot_ring_and_device_consumer_protocol():
+    rng = np.random.default_rng(1209)
+    B, D, N = 1, 4, 3
+    a = -np.abs(rng.standard_normal(D))
+    gpu = rt.nvidia_ssm_replay_state_handle(
+        B, D, N, a, capacity=12, async_slots=2)
+    ref = SSMStateHandle(B, D, N, a, capacity=12)
+
+    futures = []
+    expected = []
+    for T in (2, 3):
+        d = np.abs(rng.standard_normal((T, B, D))) * .2
+        x = rng.standard_normal((T, B, D))
+        b = rng.standard_normal((T, B, N))
+        c = rng.standard_normal((T, B, N))
+        futures.append(gpu.submit_block_async(d, x, b, c))
+        expected.append(np.stack([
+            ref.step(d[i], x[i], b[i], c[i]) for i in range(T)]))
+
+    iface = futures[0].device_buffer.__cuda_array_interface__
+    assert iface["shape"] == (2, B, D)
+    assert iface["typestr"] == "<f4"
+    assert iface["data"][0] != 0
+    assert iface["stream"] != 0
+    futures[0].event.wait()
+    np.testing.assert_allclose(
+        futures[0].wait(), expected[0], rtol=2e-4, atol=2e-4)
+    np.testing.assert_allclose(
+        futures[1].wait(), expected[1], rtol=2e-4, atol=2e-4)
+
+
+@pytest.mark.skipif(not _cuda_host_ready(), reason="CUDA toolkit or GPU unavailable")
+def test_cuda_replay_async_ring_reports_backpressure():
+    rng = np.random.default_rng(1210)
+    B, D, N = 1, 2, 2
+    gpu = rt.nvidia_ssm_replay_state_handle(
+        B, D, N, -np.ones(D), capacity=8, async_slots=2)
+
+    def inputs():
+        return (np.abs(rng.standard_normal((1, B, D))) * .1,
+                rng.standard_normal((1, B, D)),
+                rng.standard_normal((1, B, N)),
+                rng.standard_normal((1, B, N)))
+
+    first = gpu.submit_block_async(*inputs())
+    second = gpu.submit_block_async(*inputs())
+    with pytest.raises(RuntimeError, match="ring is full"):
+        gpu.submit_block_async(*inputs())
+    first.wait()
+    third = gpu.submit_block_async(*inputs())
+    second.wait()
+    third.wait()
 
 
 @pytest.mark.skipif(not _cuda_host_ready(), reason="CUDA toolkit or GPU unavailable")

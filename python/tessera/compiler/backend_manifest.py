@@ -1362,7 +1362,7 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "runtime.launch() (rocm_linear_attn_compiled).",
     },
     "fused_epilogue": {
-        "dtypes": ("fp16", "bf16"),
+        "dtypes": ("fp16", "bf16", "fp32", "fp8_e4m3", "fp8_e5m2"),
         "notes": "Matmul + fused bias/relu/gelu/silu epilogue on the f32 "
                  "accumulator (generate-wmma-gemm-kernel). Executes via "
                  "runtime.launch() (rocm_compiled + activation kwarg); float-only.",
@@ -2140,6 +2140,30 @@ _NVIDIA_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
 # table above: ``device_verified_jit`` proves a generated binary was launched,
 # while ``device_verified_abi`` additionally proves a packaged runtime symbol.
 _NVIDIA_DEVICE_VERIFIED_JIT: dict[str, dict[str, Any]] = {
+    "conv2d": {
+        "dtypes": ("fp32",),
+        "feature_flags": ("conv2d", "direct", "cuda"),
+        "shape_envelope": "NHWC input x HWIO weight, groups=1, positive stride/dilation, nonnegative symmetric H/W padding, optional [Cout] bias",
+        "notes": "Guarded direct CUDA convolution baseline with one thread per NHWC output element and f32 accumulation. Tensor-core/im2col selection remains a measured follow-on.",
+    },
+    "kv_cache_read": {
+        "dtypes": ("fp32",),
+        "feature_flags": ("kv_cache", "paged", "cuda"),
+        "shape_envelope": "Physical pages[P,page_size,H,D] plus logical->physical i32 page table; explicit valid [start,end) crossing arbitrary page boundaries",
+        "notes": "Compiler-emitted CUDA paged KV gather. Logical page IDs are translated through an explicit page table before reading resident page storage.",
+    },
+    "fused_epilogue": {
+        "dtypes": ("fp16", "bf16"),
+        "feature_flags": ("mma_sync", "fused_epilogue", "cuda"),
+        "shape_envelope": "Rank-2 f16/bf16 mma.sync matmul with optional column bias and one supported accumulator activation; aligned or ragged positive M/N/K",
+        "notes": "Canonical sm_120 mma.sync accumulator epilogue is single-kernel for f16/bf16. TF32 and FP8 use the shipped dtype-specific GEMM followed by a generated CUDA epilogue as an explicitly two-launch breadth path.",
+    },
+    "relu": {
+        "dtypes": ("fp16", "bf16", "fp32", "fp8_e4m3", "fp8_e5m2"),
+        "feature_flags": ("mma_sync", "fused_epilogue", "cuda"),
+        "shape_envelope": "ReLU applied to the f32 accumulator of a rank-2 f16/bf16 mma.sync matmul; aligned or ragged positive M/N/K",
+        "notes": "ReLU is compiled into the canonical sm_120 mma.sync accumulator epilogue and executes without an intermediate global-memory tensor.",
+    },
     "dsa_block_sparse_attention": {
         "dtypes": ("fp32",), "feature_flags": ("sparse_attention", "cuda"),
         "shape_envelope": "rank-4 Q/K/V; arbitrary KV length via masked block-tail padding",
@@ -2612,6 +2636,12 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     # numpy/ml_dtypes reference. Skip-clean when no NVIDIA GPU / NVRTC. The
     # numerical-proof half of the nvidia_sm120 matmul `device_verified_abi` row.
     ("matmul", "nvidia_sm120"): "tests/unit/test_nvidia_mma_runtime_symbol.py",
+    ("fused_epilogue", "nvidia_sm120"): "tests/unit/test_nvidia_matmul_relu_compiled.py",
+    ("relu", "nvidia_sm120"): "tests/unit/test_nvidia_matmul_relu_compiled.py",
+    ("matmul_relu", "nvidia_sm120"): "tests/unit/test_nvidia_matmul_relu_compiled.py",
+    ("matmul_softmax", "nvidia_sm120"): "tests/unit/test_nvidia_matmul_softmax_compiled.py",
+    ("kv_cache_read", "nvidia_sm120"): "tests/unit/test_nvidia_kv_cache_compiled.py",
+    ("conv2d", "nvidia_sm120"): "tests/unit/test_nvidia_conv2d_compiled.py",
     ("flash_attn", "nvidia_sm120"): "tests/unit/test_nvidia_flash_attn_compiled.py",
     ("dsa_block_sparse_attention", "nvidia_sm120"): "tests/unit/test_nvidia_sparse_attn_compiled.py",
     ("mla_decode", "nvidia_sm120"): "tests/unit/test_nvidia_mla_decode_compiled.py",

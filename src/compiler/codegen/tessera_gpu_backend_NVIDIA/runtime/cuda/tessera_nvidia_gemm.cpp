@@ -169,11 +169,35 @@ int runGemm(CUfunction fn, const void* A, const void* B, void* D,
   return rc;
 }
 
+int runGemmDevice(CUfunction fn, const void* A, const void* B, void* D,
+                  int M, int N, int K, void* stream) {
+  if (M <= 0 || N <= 0 || K <= 0 || A == nullptr || B == nullptr || D == nullptr)
+    return 1;
+  if (fn == nullptr) return 2;
+  CUdeviceptr dA = reinterpret_cast<CUdeviceptr>(A);
+  CUdeviceptr dB = reinterpret_cast<CUdeviceptr>(B);
+  CUdeviceptr dD = reinterpret_cast<CUdeviceptr>(D);
+  CUstream st = reinterpret_cast<CUstream>(stream);
+  int mt = (M + 15) / 16, nt = (N + 7) / 8;
+  void* args[] = {&dA, &dB, &dD, &M, &N, &K};
+  return cuLaunchKernel(fn, mt, nt, 1, 32, 1, 1, 0, st, args, nullptr)
+             == CUDA_SUCCESS ? 0 : 3;
+}
+
 int dispatch(Kernel* k, const char* tmpl, const char* type,
              const void* A, const void* B, void* D, int M, int N, int K, int esz) {
   std::call_once(g_ctx_once, initCtxOnce);
   if (!g_ctx_ok) return 2;
   return runGemm(getKernel(k, tmpl, type), A, B, D, M, N, K, esz);
+}
+
+int dispatchDevice(Kernel* k, const char* tmpl, const char* type,
+                   const void* A, const void* B, void* D,
+                   int M, int N, int K, void* stream) {
+  std::call_once(g_ctx_once, initCtxOnce);
+  if (!g_ctx_ok) return 2;
+  return runGemmDevice(
+      getKernel(k, tmpl, type), A, B, D, M, N, K, stream);
 }
 
 }  // namespace
@@ -194,6 +218,107 @@ int tessera_nvidia_mma_gemm_e4m3(const void* A, const void* B, void* D, int M, i
 }
 int tessera_nvidia_mma_gemm_e5m2(const void* A, const void* B, void* D, int M, int N, int K) {
   return dispatch(&g_ke5, kSrcF8, "e5m2", A, B, D, M, N, K, 1);
+}
+
+#define TESSERA_DEVICE_GEMM(name, kernel, source, type)                         \
+int name(const void* A, const void* B, void* D, int M, int N, int K,           \
+         void* stream) {                                                        \
+  return dispatchDevice(kernel, source, type, A, B, D, M, N, K, stream);       \
+}
+
+TESSERA_DEVICE_GEMM(tessera_nvidia_mma_gemm_bf16_device,
+                    &g_k16bf, kSrc16, "bf16")
+TESSERA_DEVICE_GEMM(tessera_nvidia_mma_gemm_f16_device,
+                    &g_k16f, kSrc16, "f16")
+TESSERA_DEVICE_GEMM(tessera_nvidia_mma_gemm_tf32_device,
+                    &g_ktf32, kSrcTf32, nullptr)
+TESSERA_DEVICE_GEMM(tessera_nvidia_mma_gemm_e4m3_device,
+                    &g_ke4, kSrcF8, "e4m3")
+TESSERA_DEVICE_GEMM(tessera_nvidia_mma_gemm_e5m2_device,
+                    &g_ke5, kSrcF8, "e5m2")
+
+#undef TESSERA_DEVICE_GEMM
+
+int tessera_nvidia_device_alloc(void** out, size_t bytes) {
+  if (out == nullptr || bytes == 0) return 1;
+  std::call_once(g_ctx_once, initCtxOnce);
+  if (!g_ctx_ok) return 2;
+  CUdeviceptr ptr = 0;
+  if (cuMemAlloc(&ptr, bytes) != CUDA_SUCCESS) return 3;
+  *out = reinterpret_cast<void*>(ptr);
+  return 0;
+}
+
+int tessera_nvidia_device_free(void* ptr) {
+  return ptr && cuMemFree(reinterpret_cast<CUdeviceptr>(ptr)) == CUDA_SUCCESS
+             ? 0 : 1;
+}
+
+int tessera_nvidia_stream_create(void** out) {
+  if (out == nullptr) return 1;
+  std::call_once(g_ctx_once, initCtxOnce);
+  if (!g_ctx_ok) return 2;
+  CUstream stream = nullptr;
+  if (cuStreamCreate(&stream, CU_STREAM_NON_BLOCKING) != CUDA_SUCCESS) return 3;
+  *out = reinterpret_cast<void*>(stream);
+  return 0;
+}
+
+int tessera_nvidia_stream_destroy(void* stream) {
+  return stream && cuStreamDestroy(reinterpret_cast<CUstream>(stream)) == CUDA_SUCCESS
+             ? 0 : 1;
+}
+
+int tessera_nvidia_stream_synchronize(void* stream) {
+  return cuStreamSynchronize(reinterpret_cast<CUstream>(stream)) == CUDA_SUCCESS
+             ? 0 : 3;
+}
+
+int tessera_nvidia_device_upload(void* dst, const void* src, size_t bytes,
+                                 void* stream) {
+  if (!dst || !src || bytes == 0) return 1;
+  return cuMemcpyHtoDAsync(reinterpret_cast<CUdeviceptr>(dst), src, bytes,
+                           reinterpret_cast<CUstream>(stream)) == CUDA_SUCCESS
+             ? 0 : 3;
+}
+
+int tessera_nvidia_device_download(void* dst, const void* src, size_t bytes,
+                                   void* stream) {
+  if (!dst || !src || bytes == 0) return 1;
+  return cuMemcpyDtoHAsync(dst, reinterpret_cast<CUdeviceptr>(src), bytes,
+                           reinterpret_cast<CUstream>(stream)) == CUDA_SUCCESS
+             ? 0 : 3;
+}
+
+int tessera_nvidia_event_create(void** out) {
+  if (!out) return 1;
+  std::call_once(g_ctx_once, initCtxOnce);
+  if (!g_ctx_ok) return 2;
+  CUevent event = nullptr;
+  if (cuEventCreate(&event, CU_EVENT_DEFAULT) != CUDA_SUCCESS) return 3;
+  *out = reinterpret_cast<void*>(event);
+  return 0;
+}
+
+int tessera_nvidia_event_destroy(void* event) {
+  return event && cuEventDestroy(reinterpret_cast<CUevent>(event)) == CUDA_SUCCESS
+             ? 0 : 1;
+}
+
+int tessera_nvidia_event_record(void* event, void* stream) {
+  return cuEventRecord(reinterpret_cast<CUevent>(event),
+                       reinterpret_cast<CUstream>(stream)) == CUDA_SUCCESS ? 0 : 3;
+}
+
+int tessera_nvidia_event_synchronize(void* event) {
+  return cuEventSynchronize(reinterpret_cast<CUevent>(event)) == CUDA_SUCCESS
+             ? 0 : 3;
+}
+
+int tessera_nvidia_event_elapsed_ms(void* start, void* stop, float* ms) {
+  if (!start || !stop || !ms) return 1;
+  return cuEventElapsedTime(ms, reinterpret_cast<CUevent>(start),
+                            reinterpret_cast<CUevent>(stop)) == CUDA_SUCCESS ? 0 : 3;
 }
 
 }  // extern "C"

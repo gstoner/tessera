@@ -60,6 +60,12 @@ def _effective_atol(runner: KernelRunner, atol: float) -> float:
     return atol if budget is None else max(atol, budget)
 
 
+def _effective_rtol(runner: KernelRunner) -> float:
+    """Backend-declared relative budget, preserving NumPy's strict default."""
+    budget = getattr(runner, "accuracy_rtol", None)
+    return 1e-5 if budget is None else float(budget)
+
+
 SYNTH_MAX_N = 1024
 
 #: Cap on head_dim for the ONLINE-softmax attention kernel (M2): it streams keys
@@ -246,8 +252,10 @@ class FusedRegion:
     storage_dtype: str = "f16"
 
     def __post_init__(self) -> None:
-        if self.storage_dtype not in ("f16", "bf16", "f32"):
-            raise ValueError("storage_dtype must be f16, bf16, or f32")
+        if self.storage_dtype not in (
+                "f16", "bf16", "f32", "fp8_e4m3", "fp8_e5m2"):
+            raise ValueError(
+                "storage_dtype must be f16, bf16, f32, fp8_e4m3, or fp8_e5m2")
         for op in self.epilogue:
             if op not in EPILOGUE_OPS:
                 raise ValueError(f"unknown epilogue op {op!r}")
@@ -647,8 +655,10 @@ class AttentionRegion:
     storage_dtype: str = "f16"
 
     def __post_init__(self) -> None:
-        if self.storage_dtype not in ("f16", "bf16", "f32"):
-            raise ValueError("storage_dtype must be f16, bf16, or f32")
+        if self.storage_dtype not in (
+                "f16", "bf16", "f32", "fp8_e4m3", "fp8_e5m2"):
+            raise ValueError(
+                "storage_dtype must be f16, bf16, f32, fp8_e4m3, or fp8_e5m2")
 
     def _natural(self, Q: np.ndarray, K: np.ndarray, cast: bool = True):
         """Flip raw operands to natural Q(M,D)/K(Nk,D) per the transpose flags.
@@ -713,8 +723,10 @@ class GatedMatmulRegion:
     storage_dtype: str = "f16"
 
     def __post_init__(self) -> None:
-        if self.storage_dtype not in ("f16", "bf16", "f32"):
-            raise ValueError("storage_dtype must be f16, bf16, or f32")
+        if self.storage_dtype not in (
+                "f16", "bf16", "f32", "fp8_e4m3", "fp8_e5m2"):
+            raise ValueError(
+                "storage_dtype must be f16, bf16, f32, fp8_e4m3, or fp8_e5m2")
         if (self.gate_act not in EPILOGUE_OPS
                 or EPILOGUE_OPS[self.gate_act].needs_bias):
             raise ValueError(
@@ -755,15 +767,19 @@ def verify_synthesized_gated(region: GatedMatmulRegion, *, seed: int = 0,
     if not force and key in _GATED_VERIFY_CACHE:
         return _GATED_VERIFY_CACHE[key]
     rng = np.random.default_rng(seed)
-    A = rng.standard_normal((8, 12)).astype(np.float32)
-    Wg = rng.standard_normal((12, 16)).astype(np.float32)
-    Wu = rng.standard_normal((12, 16)).astype(np.float32)
+    # Keep the probe in the bounded activation range used by the low-precision
+    # execution contracts. Unscaled N(0,1) inputs amplify two FP8 projections
+    # through the gate and test overflow/error growth rather than codegen.
+    A = (rng.standard_normal((8, 12)) * .2).astype(np.float32)
+    Wg = (rng.standard_normal((12, 16)) * .2).astype(np.float32)
+    Wu = (rng.standard_normal((12, 16)) * .2).astype(np.float32)
     out, execution = r.run_gated_matmul_region(region, A, Wg, Wu)
     if execution in REFERENCE_EXECUTIONS:
         verdict = True
     else:
-        verdict = bool(np.allclose(out, region.reference(A, Wg, Wu),
-                                   atol=_effective_atol(r, atol)))
+        verdict = bool(np.allclose(
+            out, region.reference(A, Wg, Wu), atol=_effective_atol(r, atol),
+            rtol=_effective_rtol(r)))
     _GATED_VERIFY_CACHE[key] = verdict
     return verdict
 
@@ -988,21 +1004,22 @@ def verify_synthesized_region(region: FusedRegion, *, seed: int = 0,
     if not force and key in _VERIFY_CACHE:
         return _VERIFY_CACHE[key]
     rng = np.random.default_rng(seed)
-    A = rng.standard_normal((8, 12)).astype(np.float32)
-    B = rng.standard_normal((12, 16)).astype(np.float32)
-    bias = (rng.standard_normal((16,)).astype(np.float32)
+    A = (rng.standard_normal((8, 12)) * .2).astype(np.float32)
+    B = (rng.standard_normal((12, 16)) * .2).astype(np.float32)
+    bias = ((rng.standard_normal((16,)) * .2).astype(np.float32)
             if region.has_bias else None)
     # A residual region needs its (M,N) residual probe too, else the runner's
     # required-buffer guard raises instead of exercising the synthesized kernel
     # (which supports residuals). None for a non-residual region — unchanged.
-    residual = (rng.standard_normal((8, 16)).astype(np.float32)
+    residual = ((rng.standard_normal((8, 16)) * .2).astype(np.float32)
                 if region.has_residual else None)
     out, execution = r.run_fused_region(region, A, B, bias, residual=residual)
     if execution in REFERENCE_EXECUTIONS:
         verdict = True                         # no synthesized kernel to distrust
     else:
-        verdict = bool(np.allclose(out, region.reference(A, B, bias, residual),
-                                   atol=_effective_atol(r, atol)))
+        verdict = bool(np.allclose(
+            out, region.reference(A, B, bias, residual),
+            atol=_effective_atol(r, atol), rtol=_effective_rtol(r)))
     _VERIFY_CACHE[key] = verdict
     return verdict
 
@@ -1055,15 +1072,16 @@ def verify_synthesized_attention(region: AttentionRegion, *, seed: int = 0,
     if not force and key in _VERIFY_CACHE:
         return _VERIFY_CACHE[key]
     rng = np.random.default_rng(seed)
-    Q = rng.standard_normal((8, 16)).astype(np.float32)
-    K = rng.standard_normal((8, 16)).astype(np.float32)
-    V = rng.standard_normal((8, 16)).astype(np.float32)
+    Q = (rng.standard_normal((8, 16)) * .2).astype(np.float32)
+    K = (rng.standard_normal((8, 16)) * .2).astype(np.float32)
+    V = (rng.standard_normal((8, 16)) * .2).astype(np.float32)
     out, execution = r.run_fused_attention(region, Q, K, V)
     if execution in REFERENCE_EXECUTIONS:
         verdict = True
     else:
-        verdict = bool(np.allclose(out, region.reference(Q, K, V),
-                                   atol=_effective_atol(r, atol)))
+        verdict = bool(np.allclose(
+            out, region.reference(Q, K, V), atol=_effective_atol(r, atol),
+            rtol=_effective_rtol(r)))
     _VERIFY_CACHE[key] = verdict
     return verdict
 

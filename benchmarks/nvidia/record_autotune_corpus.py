@@ -39,6 +39,12 @@ def main() -> int:
     parser.add_argument(
         "--attention-shapes", nargs="+",
         default=("128x128x64x64", "64x512x64x64"), metavar="MxNkxDxDv")
+    parser.add_argument("--gated-shapes", nargs="+",
+                        default=("64x256x256", "128x512x512"),
+                        metavar="MxHxK")
+    parser.add_argument("--conv-shapes", nargs="+",
+                        default=("1x32x32x32x3x3x64", "1x64x64x64x3x3x64"),
+                        metavar="BxIHxIWxCIxKHxKWxCO")
     parser.add_argument("--reps", type=int, default=20)
     parser.add_argument("--warmup", type=int, default=3)
     parser.add_argument("--device-reps", type=int, default=100)
@@ -46,14 +52,19 @@ def main() -> int:
     parser.add_argument("--matmul-dtypes", nargs="+",
                         choices=("float16", "bfloat16"),
                         default=("float16", "bfloat16"))
+    parser.add_argument("--composed-dtypes", nargs="+",
+                        choices=("f32", "fp8_e4m3", "fp8_e5m2"),
+                        default=("f32", "fp8_e4m3", "fp8_e5m2"))
     args = parser.parse_args()
 
     from tessera import runtime as rt
     from tessera.compiler.emit import nvidia_cuda  # registers candidates
     from tessera.compiler.emit import autotune as at
     from tessera.compiler.emit.candidate import OP_MATMUL
-    from tessera.compiler.emit.candidate import OP_FUSED_REGION, OP_ATTENTION
-    from tessera.compiler.fusion import MatmulRegion, FusedRegion, AttentionRegion
+    from tessera.compiler.emit.candidate import (
+        OP_ATTENTION, OP_FUSED_REGION, OP_GATED_MATMUL)
+    from tessera.compiler.fusion import (
+        AttentionRegion, FusedRegion, GatedMatmulRegion, MatmulRegion)
 
     if rt._nvidia_device_name() != "sm_120":
         print("sm_120 NVIDIA runtime unavailable; corpus unchanged")
@@ -112,6 +123,68 @@ def main() -> int:
             raise RuntimeError(
                 f"no verified NVIDIA attention candidate for {m}x{nk}x{d}x{dv}")
         print(f"attention {m}x{nk}x{d}x{dv}: {winner.name}")
+    # Device-only transformer composition rows. These keep H2D/D2H out of the
+    # TF32/FP8 crossover evidence and cover fused, attention, and gated paths.
+    for storage in args.composed_dtypes:
+        for shape_text in args.fused_shapes:
+            m, n, k = _shape(shape_text, 3)
+            a = (rng.standard_normal((m, k)) * .1).astype(np.float32)
+            b = (rng.standard_normal((k, n)) * .1).astype(np.float32)
+            bias = (rng.standard_normal(n) * .05).astype(np.float32)
+            region = FusedRegion(
+                epilogue=("bias", "gelu"), storage_dtype=storage)
+            winner = at.measured_arbitrate(
+                region, OP_FUSED_REGION, "nvidia", a, b, bias,
+                dims=(m, n, k), dtype=storage, cache=cache,
+                reps=args.device_reps, warmup=args.device_warmup,
+                timing="device")
+            if winner is None:
+                raise RuntimeError(f"no {storage} fused device candidate")
+            print(f"fused-device {storage} {shape_text}: {winner.name}")
+        for shape_text in args.attention_shapes:
+            m, nk, d, dv = _shape(shape_text, 4)
+            q, kk, v = ((rng.standard_normal(s) * .1).astype(np.float32)
+                        for s in ((m, d), (nk, d), (nk, dv)))
+            region = AttentionRegion(
+                scale=d ** -.5, causal=True, storage_dtype=storage)
+            winner = at.measured_arbitrate(
+                region, OP_ATTENTION, "nvidia", q, kk, v,
+                dims=(m, nk, d, dv), dtype=storage, cache=cache,
+                reps=args.device_reps, warmup=args.device_warmup,
+                timing="device")
+            if winner is None:
+                raise RuntimeError(f"no {storage} attention device candidate")
+            print(f"attention-device {storage} {shape_text}: {winner.name}")
+        for shape_text in args.gated_shapes:
+            m, h, k = _shape(shape_text, 3)
+            a, wg, wu = ((rng.standard_normal(s) * .1).astype(np.float32)
+                         for s in ((m, k), (k, h), (k, h)))
+            region = GatedMatmulRegion(
+                gate_act="silu", storage_dtype=storage)
+            winner = at.measured_arbitrate(
+                region, OP_GATED_MATMUL, "nvidia", a, wg, wu,
+                dims=(m, h, k), dtype=storage, cache=cache,
+                reps=args.device_reps, warmup=args.device_warmup,
+                timing="device")
+            if winner is None:
+                raise RuntimeError(f"no {storage} gated device candidate")
+            print(f"gated-device {storage} {shape_text}: {winner.name}")
+    # Convolution is a route family rather than a Candidate op today. Persist
+    # the same device-event evidence in D2 so promotion can consume it later.
+    for shape_text in args.conv_shapes:
+        B, IH, IW, CI, KH, KW, CO = _shape(shape_text, 7)
+        x = (rng.standard_normal((B, IH, IW, CI)) * .1).astype(np.float32)
+        w = (rng.standard_normal((KH, KW, CI, CO)) * .1).astype(np.float32)
+        timings = {}
+        for route in ("direct", "shared", "im2col_tf32"):
+            _, timings[route] = nvidia_cuda.run_conv2d_resident_candidate(
+                x, w, route=route, padding=(KH // 2, KW // 2),
+                reps=args.device_reps, warmup=args.device_warmup)
+        winner = min(timings, key=timings.__getitem__)
+        cache.put(("nvidia:sm_120", "nvidia", "conv2d",
+                   (B, IH, IW, CI, KH, KW, CO), "f32", "device"),
+                  at.MeasureRecord(winner, timings[winner], timings))
+        print(f"conv2d-device {shape_text}: {winner}")
     print(f"wrote {at.save_corpus(cache=cache)}")
     return 0
 

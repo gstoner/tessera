@@ -19,8 +19,9 @@ from __future__ import annotations
 
 from .handle import KVCacheHandle
 from .latent import LatentKVCacheHandle
-from .paged_kv import (PagedKVState, PageTier, KVKind, KVGeometry,
-                       PageTableEntry, as_paged_kv_state, paged_attention,
+from .paged_kv import (PagedKVState, PagedKVBufferABI, PageTier, KVKind,
+                       KVGeometry, PageTableEntry, as_paged_kv_state,
+                       materialize_paged_kv_abi, paged_attention,
                        latent_paged_kv, quantized_tail_paged_kv)
 from .memory_state import MemoryStateHandle
 from .mla_block_paged import MLABlockPagedCache, MLABlockPagedCacheError
@@ -42,11 +43,13 @@ __all__ = [
     "KVCacheHandle",
     "LatentKVCacheHandle",
     "PagedKVState",
+    "PagedKVBufferABI",
     "PageTier",
     "KVKind",
     "KVGeometry",
     "PageTableEntry",
     "as_paged_kv_state",
+    "materialize_paged_kv_abi",
     "paged_attention",
     "latent_paged_kv",
     "quantized_tail_paged_kv",

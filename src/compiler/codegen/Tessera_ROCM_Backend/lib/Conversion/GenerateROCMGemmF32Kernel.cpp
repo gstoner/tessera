@@ -32,10 +32,8 @@ static constexpr int64_t BD = 256;
 // TM*TN FMAs (each A elt reused TN times, each B elt TM times) — the arithmetic-
 // intensity / register-budget lever that wins on Strix Halo's unified memory
 // (STRIX_HALO_EXECUTION_PLAN Stage F: "register-budget tiling is the lever").
-static constexpr int64_t TM = 4;
-static constexpr int64_t TN = 4;
-
-void emitGemmF32Body(OpBuilder &b, Location loc, gpu::GPUFuncOp f) {
+void emitGemmF32Body(OpBuilder &b, Location loc, gpu::GPUFuncOp f,
+                     int64_t TM, int64_t TN) {
   Type f32 = b.getF32Type();
   auto slt = arith::CmpIPredicate::slt;
   b.setInsertionPointToStart(&f.getBody().front());
@@ -132,7 +130,8 @@ struct GenerateROCMGemmF32KernelPass
   StringRef getArgument() const final { return "generate-rocm-gemm-f32-kernel"; }
   StringRef getDescription() const final {
     return "Expand a tessera_rocm.gemm_f32 directive into an f32 GEMM kernel "
-           "(C=A@B, register-blocked TMxTN output tile per thread, f32 k-loop)";
+           "(C=A@B, configurable register-blocked TMxTN output tile per thread, "
+           "f32 k-loop)";
   }
   void getDependentDialects(DialectRegistry &registry) const final {
     registry.insert<gpu::GPUDialect, scf::SCFDialect, arith::ArithDialect,
@@ -156,6 +155,17 @@ struct GenerateROCMGemmF32KernelPass
       b.setInsertionPointToEnd(module.getBody());
       Location loc = op->getLoc();
       std::string kname = nameAttr.getValue().str();
+      int64_t tm = 4, tn = 4;
+      if (auto attr = op->getAttrOfType<IntegerAttr>("tm"))
+        tm = attr.getInt();
+      if (auto attr = op->getAttrOfType<IntegerAttr>("tn"))
+        tn = attr.getInt();
+      if (tm < 1 || tn < 1 || tm * tn > 32) {
+        op->emitError("tessera_rocm.gemm_f32 requires tm/tn >= 1 and "
+                      "tm*tn <= 32 (got ")
+            << tm << "x" << tn << ")";
+        return signalPassFailure();
+      }
       Type f32 = b.getF32Type();
       Type idxTy = b.getIndexType();
       auto memF32 = MemRefType::get({ShapedType::kDynamic}, f32);
@@ -166,7 +176,9 @@ struct GenerateROCMGemmF32KernelPass
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
       gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(), b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
-      emitGemmF32Body(body, loc, gpuFunc);
+      gpuFunc->setAttr("tessera.rocm.tm", b.getI64IntegerAttr(tm));
+      gpuFunc->setAttr("tessera.rocm.tn", b.getI64IntegerAttr(tn));
+      emitGemmF32Body(body, loc, gpuFunc, tm, tn);
       op->erase();
     }
   }

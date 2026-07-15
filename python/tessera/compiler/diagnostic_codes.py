@@ -1444,6 +1444,13 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         fix_hint="Use ROCm LDS/register contracts; TMEM is not available on the ROCm path.",
         spec="docs/audit/compiler/COMPILER_AUDIT.md §ROCm Tile-IR convergence", sprint="ROCm Tile-IR convergence",
     ),
+    DiagnosticCode(
+        code="ROCM_TILE_UNSUPPORTED_DTYPE", pass_origin="LowerTileToROCMPass",
+        severity="error",
+        summary="A tile.mma on gfx1151 (RDNA 3.5) requested an FP8/BF8 matrix form, which RDNA 3.5 WMMA does not provide.",
+        fix_hint="Use f16, bf16, int8, or int4 for the gfx1151 WMMA path, or select an exact RDNA 4 / CDNA target that has FP8/BF8 matrix instructions.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §ROCm Tile-IR convergence", sprint="ROCm Tile-IR convergence",
+    ),
 
     # ───────────────────────────────────────────────────────────────────────
     # Pipeline-parallel layer (2026-06-23) — the 1F1B schedule proof

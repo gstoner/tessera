@@ -28,6 +28,8 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BASELINE = REPO_ROOT / "benchmarks" / "baselines" / "rocm_gfx1151_hot_paths.json"
+LEGACY_REBASELINE = (REPO_ROOT / "benchmarks" / "baselines" /
+                     "rocm_gfx1151_legacy_compiler_rebaseline.json")
 RECORDER = REPO_ROOT / "benchmarks" / "rocm" / "record_hot_path_baseline.py"
 
 
@@ -113,6 +115,31 @@ def test_baseline_well_formed_when_present():
         if r["mode"] in _MOVEMENT:
             assert "pct_peak_bw" in r and "bw_attainment_floor" in r
             assert "pct_peak" not in r
+
+
+def test_legacy_compiler_rebaseline_records_current_decisions():
+    doc = json.loads(LEGACY_REBASELINE.read_text())
+    assert doc["schema"] == "tessera.benchmark.survey.v1"
+    assert doc["evidence_arch"] == "gfx1151"
+    assert doc["method"]["timing"].startswith("HIP events")
+
+    gemm = {row["shape"]: row for row in doc["gemm_f16_best"]}
+    assert set(gemm) == {
+        "512x512x512", "1024x1024x1024",
+        "2048x2048x2048", "4096x4096x4096",
+    }
+    assert gemm["1024x1024x1024"]["tile"] == "4x4"
+    assert gemm["2048x2048x2048"]["tile"] == "2x4"
+    assert gemm["4096x4096x4096"]["tflops"] > 25.0
+
+    pipeline = doc["pipeline_vs_direct"]
+    assert pipeline[0]["ratio"] > 2.0
+    assert all(0.97 <= row["ratio"] <= 1.03 for row in pipeline[1:])
+
+    fwd = doc["flash_attention"]["forward"]
+    bwd = doc["flash_attention"]["backward"]
+    assert max(row["tflops"] for row in fwd if row["shape"].endswith("x128")) < 3.2
+    assert max(row["tflops"] for row in bwd if row["shape"].endswith("x128")) < 2.2
 
 
 def test_hot_path_manifest_rows_carry_benchmark_json():

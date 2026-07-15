@@ -124,9 +124,14 @@ bf16, with the bitcast owned by the backend), reaches the real NVVM MMA op,
 then extracts the four f32 results per lane and stores the logical 16x8 tile.
 The emitted LLVM kernel translates to PTX, assembles for sm_120, and executes
 against a NumPy GEMM oracle on an RTX 5070 Ti. Unsupported shapes, storage
-orders, swizzles, sources, or live fragment results are named errors. ROCm still
-rejects the typed fragment operations until its WMMA/MFMA materializer is
-implemented.
+orders, swizzles, sources, or live fragment results are named errors.
+
+The ROCm backend materializes the corresponding gfx1151 Wave32
+`m16n16k16.row.col` slice for f16, bf16, signed int8, and signed int4. It lowers
+the portable view/pack/zero/MMA/unpack/store chain to the real RDNA WMMA
+intrinsic and executes the backend-owned lane/register map through the HIP
+module runtime. FP8/BF8 and contradictory physical layouts fail with named diagnostics;
+RDNA 4 WMMA v2 and CDNA MFMA maps remain architecture-specific follow-on work.
 
 Fixtures:
 
@@ -137,6 +142,10 @@ Fixtures:
 - `sm120_pointer_fragment_store_bf16.mlir` — explicit packed-i32 bf16 ABI proof;
 - `test_nvidia_tile_fragment_compiler_path.py` — LLVM/PTX/cubin generation and
   on-device numerical comparison.
+- `gfx1151_tile_fragment_store.mlir` — portable gfx1151 pack/MMA/unpack/store
+  and real ROCDL intrinsic proof;
+- `test_rocm_wmma_gemm_generated.py` — gfx1151 hsaco generation, production HIP
+  launch, all four supported dtype comparisons, and aligned/ragged launch proof.
 
 ## Required verifier invariants
 
@@ -219,8 +228,11 @@ stages A[32,16] and B[16,32], then each warp computes two adjacent m16n8
 fragments, producing a 32x32 CTA macro-tile (eight MMA instructions per barrier
 interval). Block Y/X derive macro-tile origins, masked loads zero-fill ragged
 M/N/K, an `scf.for` carries eight f32 accumulator values per warp across
-16-wide K panels, and masked stores suppress edge writes. Bias, ReLU, and
-f32-to-f16 conversion reuse the accumulator mapping immediately before stores.
+16-wide K panels, and masked stores suppress edge writes. Bias,
+ReLU/GELU/SiLU, and f32-to-f16 conversion reuse the accumulator mapping
+immediately before stores. NVIDIA and ROCm call the same inline Tile activation
+emitter; address-space-specific bias loads and masked stores remain backend
+owned.
 
 Kernel-only measurements on the RTX 5070 Ti show why both paths remain useful:
 the staged path is slower at 256/512 square GEMMs, but is 1.20x faster at 1024³
@@ -256,6 +268,11 @@ than assigned a fabricated latency. On the RTX 5070 Ti the stable f16 crossover
 is direct at 512³ (0.0403 versus 0.0532 ms) and shared at 1024³ (0.2208 versus
 0.2692 ms); shared reaches 1.36x at 2048³.
 
-This launch form executes aligned and ragged shapes on sm_120. ROCm currently
-rejects it with a named capability error until its WMMA/MFMA pack/loop/epilogue
-materializer consumes the same portable contract.
+This launch form executes aligned and ragged shapes on sm_120 and gfx1151. The
+ROCm path converts `tile.matmul_kernel` directly into an in-memory GEMM request
+consumed by its production WMMA K-loop/epilogue generator. The legacy
+`tessera_rocm.wmma_gemm` directive is only a compatibility adapter into that
+same request; the portable path creates no temporary marker operation. ROCm
+also hoists each per-column bias load outside the accumulator-element loop.
+Other ROCm architecture families retain named guards until their own WMMA v2 or
+MFMA fragment maps exist.

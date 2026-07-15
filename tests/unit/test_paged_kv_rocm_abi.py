@@ -107,6 +107,37 @@ def test_rocm_hip_gather_source_uses_logical_to_physical_indirection():
     assert "pages[(((long long)pp*page_size+off)" in source
 
 
+def test_rocm_direct_attention_source_consumes_plhd_without_staging():
+    from tessera.compiler.emit.rocm_hip import (
+        _synthesize_paged_attention_direct_hip,
+    )
+    source = _synthesize_paged_attention_direct_hip()
+    assert "__global__ void paged_attn" in source
+    assert "const float*kp,const float*vp,const int*table" in source
+    assert "kh=qh/ratio" in source  # grouped/MQA head mapping
+    assert "limit=qi+(T>Q?T-Q:0)" in source  # decode causal offset
+    assert "pp=table[tok/L]" in source
+
+
+def test_reference_attention_supports_mqa_and_arbitrary_token_order():
+    from tessera.cache.paged_kv import _reference_attention
+    rng = np.random.default_rng(91)
+    q = rng.standard_normal((4, 3, 8)).astype(np.float32)
+    k = rng.standard_normal((1, 7, 8)).astype(np.float32)
+    v = rng.standard_normal((1, 7, 8)).astype(np.float32)
+    order = np.asarray([6, 1, 5, 0, 3])
+    actual = _reference_attention(q, k[:, order], v[:, order], 8 ** -.5, True)
+    expected = _reference_attention(
+        q, np.repeat(k[:, order], 4, axis=0),
+        np.repeat(v[:, order], 4, axis=0), 8 ** -.5, True)
+    np.testing.assert_allclose(actual, expected, rtol=1e-6, atol=1e-6)
+
+
+def test_rocm_route_warm_starts_from_committed_gfx1151_corpus():
+    from tessera.cache.paged_kv import _rocm_paged_attention_corpus_winner
+    assert _rocm_paged_attention_corpus_winner(4, 4, 1, 512, 32, 16) == "direct"
+
+
 @pytest.mark.skipif(
     not _rocm_live(),
     reason="requires a live ROCm device and HIP toolchain",

@@ -26,8 +26,14 @@ FIXTURE = (ROOT / "src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia"
            / "sm120_pointer_fragment_store.mlir")
 KERNEL_FIXTURE = (ROOT / "src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia"
                   / "sm120_matmul_kernel.mlir")
-NVIDIA_OPT = (ROOT / "build/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools"
-              / "tessera-nvidia-opt")
+_NVIDIA_OPT_CANDIDATES = (
+    ROOT / "build/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools"
+    / "tessera-nvidia-opt",
+    ROOT / "build-nvidia/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools"
+    / "tessera-nvidia-opt",
+)
+NVIDIA_OPT = next((path for path in _NVIDIA_OPT_CANDIDATES if path.is_file()),
+                  _NVIDIA_OPT_CANDIDATES[0])
 
 
 def _tool(path: str) -> str | None:
@@ -353,7 +359,8 @@ def test_sm120_tile_int8_fragment_path_matches_numpy() -> None:
 
 def test_sm120_launch_level_matmul_handles_grid_and_ragged_k() -> None:
     entries = ("tile_matmul_f32", "tile_matmul_bias_relu_f16",
-               "tile_matmul_bf16", "tile_matmul_f32_direct")
+               "tile_matmul_bf16", "tile_matmul_f32_direct",
+               "tile_matmul_gelu", "tile_matmul_silu")
     shapes = ((16, 8, 16), (31, 13, 19), (33, 17, 37))
     rng = np.random.default_rng(20260715)
     with tempfile.TemporaryDirectory(prefix="tessera-sm120-grid-") as tmp:
@@ -386,6 +393,24 @@ def test_sm120_launch_level_matmul_handles_grid_and_ragged_k() -> None:
                     ((n + 31) // 32, (m + 31) // 32), block_threads=128)
                 fused_reference = np.maximum(reference + bias, 0).astype(np.float16)
                 np.testing.assert_allclose(fused, fused_reference, atol=1e-2,
+                                           rtol=0)
+
+                gelu_out = np.zeros((m, n), dtype=np.float32)
+                gelu = driver.launch(
+                    cubin, entries[4], [a, b, gelu_out], 2, [m, n, k],
+                    ((n + 7) // 8, (m + 15) // 16), block_threads=32)
+                gelu_reference = (0.5 * reference * (1 + np.tanh(
+                    np.sqrt(2 / np.pi) *
+                    (reference + 0.044715 * reference ** 3))))
+                np.testing.assert_allclose(gelu, gelu_reference, atol=2e-2,
+                                           rtol=0)
+
+                silu_out = np.zeros((m, n), dtype=np.float32)
+                silu = driver.launch(
+                    cubin, entries[5], [a, b, silu_out], 2, [m, n, k],
+                    ((n + 7) // 8, (m + 15) // 16), block_threads=32)
+                silu_reference = reference / (1 + np.exp(-reference))
+                np.testing.assert_allclose(silu, silu_reference, atol=2e-2,
                                            rtol=0)
 
             ml_dtypes = pytest.importorskip("ml_dtypes")

@@ -14,12 +14,36 @@ def test_gfx1151_schedule_preserves_measured_macro_tile_and_models_resources():
     small = select_rocm_gemm_schedule(257, 509, 127, arch="gfx1151")
     large = select_rocm_gemm_schedule(1024, 1024, 1024, arch="gfx1151")
     assert small.macro_tile == (2, 4)
-    assert large.macro_tile == (3, 4)
+    assert large.macro_tile == (4, 4)
     assert large.target_ir_attrs()["schedule_ownership"] == "wave"
     assert large.target_ir_attrs()["schedule_lds_layout"] == "swizzle"
     assert large.vgpr_estimate > small.vgpr_estimate
     assert select_rocm_gemm_schedule(
         64, 64, 64, dtype="int4", arch="gfx1151").vgpr_estimate > 0
+
+
+def test_gfx1151_schedule_uses_promoted_shape_and_dtype_rows():
+    cases = {
+        (512, 512, 512, "f16"): (2, 4),
+        (1024, 1024, 1024, "f16"): (4, 4),
+        (1024, 1024, 1024, "int4"): (2, 4),
+        (1536, 1536, 1536, "f16"): (2, 4),
+        (2048, 2048, 2048, "bf16"): (2, 4),
+        (3072, 3072, 3072, "f16"): (3, 4),
+        (4096, 4096, 4096, "int8"): (4, 4),
+        (128, 4096, 4096, "f16"): (2, 4),
+        (256, 11008, 4096, "f16"): (4, 4),
+        (1024, 4096, 1024, "f16"): (4, 4),
+        (2048, 8192, 2048, "f16"): (4, 4),
+        (4096, 11008, 4096, "f16"): (4, 4),
+        # Required ragged rung failed the 3% promotion gate: retain 3x4.
+        (2049, 4093, 2051, "f16"): (3, 4),
+    }
+    for (m, n, k, dtype), expected in cases.items():
+        schedule = select_rocm_gemm_schedule(
+            m, n, k, dtype=dtype, arch="gfx1151")
+        assert schedule.macro_tile == expected
+        assert "interleaved schedule matrix" in schedule.source
 
 
 @pytest.mark.parametrize(

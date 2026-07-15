@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-06-15
+last_updated: 2026-07-14
 audit_role: plan
 plan_state: landing
 ---
@@ -14,11 +14,18 @@ plan_state: landing
 > flush at the existing boundary, batch submission, speculative rollback,
 > stream/event submission, pinned staging, opaque device-buffer/event exposure,
 > device-consumer ordering, and an ordered multi-slot staging/event ring. Live
-> long-decode and rollback tests run on the RTX 5070 Ti. The remaining backend
-> work in this plan is ROCm enablement and performance measurement/optimization,
-> not a missing NVIDIA state or asynchronous-submission contract.
+> long-decode and rollback tests run on the RTX 5070 Ti.
 >
-> **Remaining — active ROCm backend development (no longer hardware-gated).**
+> **ROCm status (2026-07-14): complete initial serving slice on gfx1151.**
+> The HIP implementation now has persistent S0/replay storage, scalar-A
+> output-only decode, device flush, block submission, rollback-compatible cursor
+> overwrite, pinned multi-slot async submission, HIP event/stream ordering, and
+> opaque device-output leases. Exact-device long-decode/speculative/async tests
+> pass and summary-vs-replay device/wall measurements are committed. Follow-on
+> work is dtype expansion and architecture generalization, not a missing serving
+> contract.
+>
+> **Historical enablement checklist.**
 > Both target boxes are in hand (Strix Halo gfx1151 / RDNA3.5; RTX 5070 Ti
 > sm_120 / Blackwell), so the CUDA/ROCm work is a kernel-enablement task, not a
 > wait on silicon. Kernels to enable, then `execute-and-compare` against the
@@ -27,11 +34,9 @@ plan_state: landing
 >     buffer-replay path (no state writeback).
 >   - **`selective_state_update_replayssm_state_and_output`** — fused decode +
 >     flush path (materialize `S_t` → new `S_0`, clear the ring buffer).
-> Both must keep `S_0` resident across the ring buffer (that residency is the
-> bandwidth win). Lower to ROCm (MFMA/WMMA via the Strix Halo lane) and NVIDIA
-> (sm_120 `mma.sync` via the Blackwell lane). This plan stays `plan_state:
-> landing` until both backends have a green execute-and-compare row; close it
-> out once they do.
+> Both implementations keep `S_0` resident across the ring buffer (that
+> residency is the bandwidth win). The named CUDA and HIP paths now have green
+> execute-and-compare rows, so this cross-backend plan is closed.
 >
 > **Thesis:** ReplaySSM ([Dao AI Lab, 2026](https://tridao.me/blog/2026/replayssm/);
 > [repo](https://github.com/Johnny-Liou/ReplaySSM)) is a *route-selection-over-a-

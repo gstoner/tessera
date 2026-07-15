@@ -50,6 +50,28 @@ module {
     } : !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64
     llvm.return
   }
+
+  llvm.func @tile_matmul_gelu(%a: !llvm.ptr, %b: !llvm.ptr, %d: !llvm.ptr,
+                              %m: i64, %n: i64, %k: i64)
+      attributes {nvvm.kernel} {
+    tile.matmul_kernel %a, %b, %d, %m, %n, %k {
+      mma = #tile.mma_desc<family = "mma_sync", m = 16, n = 8, k = 16, a = "f16", b = "f16", acc = "f32", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>,
+      epilogue = #tile.epilogue<bias = false, activation = "gelu", output = "f32">,
+      warps = 1 : i64, staging = "global"
+    } : !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64
+    llvm.return
+  }
+
+  llvm.func @tile_matmul_silu(%a: !llvm.ptr, %b: !llvm.ptr, %d: !llvm.ptr,
+                              %m: i64, %n: i64, %k: i64)
+      attributes {nvvm.kernel} {
+    tile.matmul_kernel %a, %b, %d, %m, %n, %k {
+      mma = #tile.mma_desc<family = "mma_sync", m = 16, n = 8, k = 16, a = "f16", b = "f16", acc = "f32", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>,
+      epilogue = #tile.epilogue<bias = false, activation = "silu", output = "f32">,
+      warps = 1 : i64, staging = "global"
+    } : !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64
+    llvm.return
+  }
 }
 
 // CHECK-LABEL: llvm.func @tile_matmul_f32_direct
@@ -72,4 +94,12 @@ module {
 // CHECK-LABEL: llvm.func @tile_matmul_bf16
 // CHECK: scf.for
 // CHECK: nvvm.mma.sync
+// CHECK: llvm.intr.masked.store
+// CHECK-LABEL: llvm.func @tile_matmul_gelu
+// CHECK: nvvm.mma.sync
+// CHECK: math.tanh
+// CHECK: llvm.intr.masked.store
+// CHECK-LABEL: llvm.func @tile_matmul_silu
+// CHECK: nvvm.mma.sync
+// CHECK: math.exp
 // CHECK: llvm.intr.masked.store

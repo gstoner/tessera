@@ -1,0 +1,26 @@
+{
+  "evidence_arch": "gfx1151",
+  "schema_version": 1,
+  "rows": [
+    {"tokens": 128, "heads": 4, "kv_heads": 4, "dim": 32, "page_size": 16,
+     "device_ms": {"gather_fa": 0.02322759968228638, "direct": 0.11566904932260513},
+     "device_winner": "gather_fa",
+     "end_to_end_ms": {"gather_fa": 4.158245006692596, "direct": 1.1582860024645925},
+     "end_to_end_winner": "direct", "selected": "direct"},
+    {"tokens": 512, "heads": 4, "kv_heads": 4, "dim": 32, "page_size": 16,
+     "device_ms": {"gather_fa": 0.06712430138140917, "direct": 0.45102667808532715},
+     "device_winner": "gather_fa",
+     "end_to_end_ms": {"gather_fa": 4.350147006334737, "direct": 2.3888949945103377},
+     "end_to_end_winner": "direct", "selected": "direct"},
+    {"tokens": 2048, "heads": 4, "kv_heads": 4, "dim": 32, "page_size": 16,
+     "device_ms": {"gather_fa": 0.1721413979306817, "direct": 1.7966610193252563},
+     "device_winner": "gather_fa",
+     "end_to_end_ms": {"gather_fa": 6.613915000343695, "direct": 5.7414689945289865},
+     "end_to_end_winner": "direct", "selected": "direct"},
+    {"tokens": 8192, "heads": 4, "kv_heads": 4, "dim": 32, "page_size": 16,
+     "device_ms": {"gather_fa": 0.6443891078233719, "direct": 7.210736274719238},
+     "device_winner": "gather_fa",
+     "end_to_end_ms": {"gather_fa": 22.673601997666992, "direct": 19.466054000076838},
+     "end_to_end_winner": "direct", "selected": "direct"}
+  ]
+}

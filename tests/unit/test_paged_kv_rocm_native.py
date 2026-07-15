@@ -57,6 +57,55 @@ def test_rocm_backend_matches_reference():
     np.testing.assert_allclose(gpu, ref, rtol=tol, atol=tol)
 
 
+@pytest.mark.skipif(not _rocm_available(), reason="requires live ROCm FA/HIP lane")
+def test_rocm_routes_record_device_and_end_to_end_winners(monkeypatch):
+    import tessera.cache.paged_kv as pk
+    monkeypatch.setattr(pk, "_rocm_paged_attention_corpus_winner",
+                        lambda *args: None)
+    pk._rocm_paged_attention_route_cache.clear()
+    pk._rocm_paged_attention_route_evidence.clear()
+    h, _, _ = _fill(4, 32, 37, seed=17, page_size=8)
+    q = _rng(18).standard_normal((4, 3, 32)).astype(np.float32)
+    ref = paged_attention(q, h, backend="reference", causal=True,
+                          token_indices=[32, 1, 17, 8, 36, 5, 24])
+    out, exe = paged_attention(
+        q, h, backend="rocm", causal=True,
+        token_indices=[32, 1, 17, 8, 36, 5, 24], return_execution=True)
+    assert exe == "native_gpu"
+    np.testing.assert_allclose(out, ref, rtol=2e-2, atol=2e-2)
+    evidence = next(iter(pk._rocm_paged_attention_route_evidence.values()))
+    assert set(evidence["device_ms"]) == {"gather_fa", "direct"}
+    assert set(evidence["end_to_end_ms"]) == {"gather_fa", "direct"}
+    assert all(v > 0 for v in evidence["device_ms"].values())
+    assert all(v > 0 for v in evidence["end_to_end_ms"].values())
+    assert evidence["selected"] == evidence["end_to_end_winner"]
+
+
+@pytest.mark.skipif(not _rocm_available(), reason="requires live ROCm FA/HIP lane")
+def test_rocm_direct_paged_attention_permutation_crossing_and_mqa():
+    from tessera.cache.paged_kv import _reference_attention
+    from tessera.compiler.emit.rocm_hip import run_paged_attention_direct_f32
+    rng = _rng(1209)
+    P, L, HKV, HQ, D = 4, 4, 1, 4, 16
+    dense_k = (rng.standard_normal((P * L, HKV, D)) * .1).astype(np.float32)
+    dense_v = (rng.standard_normal(dense_k.shape) * .1).astype(np.float32)
+    table = np.asarray([2, 0, 3, 1], np.int32)
+    kp = np.empty((P, L, HKV, D), np.float32)
+    vp = np.empty_like(kp)
+    for logical, physical in enumerate(table):
+        kp[physical] = dense_k[logical * L:(logical + 1) * L]
+        vp[physical] = dense_v[logical * L:(logical + 1) * L]
+    idx = np.asarray([12, 1, 9, 4, 15, 6, 0], np.int64)
+    q = (rng.standard_normal((HQ, 3, D)) * .1).astype(np.float32)
+    out, device_ms, wall_ms = run_paged_attention_direct_f32(
+        q, kp, vp, table, idx, scale=D ** -.5, causal=True)
+    expected = _reference_attention(
+        q, np.transpose(dense_k[idx], (1, 0, 2)),
+        np.transpose(dense_v[idx], (1, 0, 2)), D ** -.5, True)
+    assert device_ms > 0 and wall_ms > 0
+    np.testing.assert_allclose(out, expected, rtol=3e-5, atol=3e-5)
+
+
 def test_rocm_backend_demotes_on_unsupported_head_dim():
     # head_dim=8 is not a multiple of the 16-wide WMMA tile — the lane cannot run
     # it, so the call demotes to the (correct) reference. GPU-free: always runs.

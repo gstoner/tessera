@@ -91,7 +91,32 @@ def select_rocm_gemm_schedule(
         raise ValueError(f"GEMM dimensions must be positive, got {(m, n, k)}")
     amd_arch = parse_arch(arch)
     profile = ROCmTargetProfile(arch=amd_arch, waves_per_cu=4, pipeline_stages=2)
-    mt, nt = ((3, 4) if min(m, n, k) >= 1024 else (2, 4))
+    # ROCM-6 Phase-0 promotion (2026-07-14): nine interleaved HIP-event
+    # trials, five candidate tiles, full square/rectangular/ragged/dtype/
+    # epilogue oracles, and assembler VGPR/spill evidence.  Retain the old 3x4
+    # row wherever a replacement failed the >=3% paired-median and >=75%
+    # interleaved win-rate gate.
+    aligned = (m % 16 == 0 and n % 16 == 0 and k % 16 == 0)
+    square = m == n == k
+    if square and aligned:
+        if m >= 4096:
+            mt, nt = 4, 4
+        elif m >= 2560:
+            mt, nt = 3, 4       # 3072: 4x4 gained only 2.6%; retain
+        elif m >= 1280:
+            mt, nt = 2, 4       # 1536/2048: spill-bounded 2x4 wins
+        elif m >= 1024:
+            mt, nt = ((2, 4) if dtype in ("int4", "i4") else (4, 4))
+        else:
+            mt, nt = 2, 4
+    elif aligned and m >= 256 and k >= 2048 and n >= 4 * m:
+        mt, nt = 4, 4           # wide projection and MLP rows
+    elif aligned and m >= 1024 and n >= 4 * m:
+        mt, nt = 4, 4           # wide rows with K=1024/2048
+    elif aligned and min(m, n, k) >= 4096:
+        mt, nt = 4, 4
+    else:
+        mt, nt = ((3, 4) if min(m, n, k) >= 1024 else (2, 4))
     model_dtype = _DTYPE.get(dtype, dtype)
     candidate = TileCandidate(
         TileShape(16 * mt, 16 * nt, 16), model_dtype, double_buffer=True
@@ -110,7 +135,8 @@ def select_rocm_gemm_schedule(
         lds_layout=lds_kind,
         ownership=OwnershipTopology.WAVE,
         vgpr_estimate=vgprs,
-        source="gfx1151 measured GEMM macro-tile + ROCm budget models",
+        source=("gfx1151 ROCM-6 interleaved schedule matrix v1 + ROCm "
+                "assembler resource and budget models"),
     )
 
 

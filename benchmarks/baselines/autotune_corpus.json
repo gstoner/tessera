@@ -887,6 +887,54 @@
       "target": "nvidia",
       "timing": "device",
       "winner": "staged_paged_attention"
+    },
+    {
+      "bucket": [1, 4, 4, 128, 32, 16],
+      "candidates": {"direct": 0.11566904932260513, "gather_fa": 0.02322759968228638},
+      "device": "rocm:gfx1151", "dtype": "f32", "latency_ms": 0.02322759968228638,
+      "op": "paged_kv_decode", "target": "rocm", "timing": "device", "winner": "gather_fa"
+    },
+    {
+      "bucket": [1, 4, 4, 128, 32, 16],
+      "candidates": {"direct": 1.1582860024645925, "gather_fa": 4.158245006692596},
+      "device": "rocm:gfx1151", "dtype": "f32", "latency_ms": 1.1582860024645925,
+      "op": "paged_kv_decode", "target": "rocm", "timing": "end_to_end", "winner": "direct"
+    },
+    {
+      "bucket": [1, 4, 4, 512, 32, 16],
+      "candidates": {"direct": 0.45102667808532715, "gather_fa": 0.06712430138140917},
+      "device": "rocm:gfx1151", "dtype": "f32", "latency_ms": 0.06712430138140917,
+      "op": "paged_kv_decode", "target": "rocm", "timing": "device", "winner": "gather_fa"
+    },
+    {
+      "bucket": [1, 4, 4, 512, 32, 16],
+      "candidates": {"direct": 2.3888949945103377, "gather_fa": 4.350147006334737},
+      "device": "rocm:gfx1151", "dtype": "f32", "latency_ms": 2.3888949945103377,
+      "op": "paged_kv_decode", "target": "rocm", "timing": "end_to_end", "winner": "direct"
+    },
+    {
+      "bucket": [1, 4, 4, 2048, 32, 16],
+      "candidates": {"direct": 1.7966610193252563, "gather_fa": 0.1721413979306817},
+      "device": "rocm:gfx1151", "dtype": "f32", "latency_ms": 0.1721413979306817,
+      "op": "paged_kv_decode", "target": "rocm", "timing": "device", "winner": "gather_fa"
+    },
+    {
+      "bucket": [1, 4, 4, 2048, 32, 16],
+      "candidates": {"direct": 5.7414689945289865, "gather_fa": 6.613915000343695},
+      "device": "rocm:gfx1151", "dtype": "f32", "latency_ms": 5.7414689945289865,
+      "op": "paged_kv_decode", "target": "rocm", "timing": "end_to_end", "winner": "direct"
+    },
+    {
+      "bucket": [1, 4, 4, 8192, 32, 16],
+      "candidates": {"direct": 7.210736274719238, "gather_fa": 0.6443891078233719},
+      "device": "rocm:gfx1151", "dtype": "f32", "latency_ms": 0.6443891078233719,
+      "op": "paged_kv_decode", "target": "rocm", "timing": "device", "winner": "gather_fa"
+    },
+    {
+      "bucket": [1, 4, 4, 8192, 32, 16],
+      "candidates": {"direct": 19.466054000076838, "gather_fa": 22.673601997666992},
+      "device": "rocm:gfx1151", "dtype": "f32", "latency_ms": 19.466054000076838,
+      "op": "paged_kv_decode", "target": "rocm", "timing": "end_to_end", "winner": "direct"
     }
   ],
   "version": 2

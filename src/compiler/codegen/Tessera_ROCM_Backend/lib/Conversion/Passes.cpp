@@ -19,6 +19,10 @@ std::unique_ptr<Pass> createLowerTesseraTargetToROCDLPass() {
 }
 
 void buildTesseraROCMBackendPipeline(OpPassManager &pm) {
+  // Consume launch-level tile.matmul_kernel contracts before the lower-level
+  // Tile pass materializes individual typed fragments. The generator is a no-op
+  // when neither a portable kernel nor a wmma_gemm directive is present.
+  pm.addPass(createGenerateWMMAGemmKernelPass());
   pm.addPass(createROCMWaveLdsPipelinePass());
   pm.addPass(createROCMWaveLdsLegalityPass());
   pm.addPass(createLowerTileToROCMPass());

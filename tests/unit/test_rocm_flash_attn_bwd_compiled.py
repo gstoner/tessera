@@ -236,3 +236,33 @@ def test_compiled_flash_attn_bwd_matches_numpy(D, B, H, Sq, Sk, causal):
     assert eQ < tol and eK < tol and eV < tol, (
         f"compiled flash_attn_bwd rel-err dQ={eQ:.3e} dK={eK:.3e} dV={eV:.3e} "
         f"at D={D} {B}x{H}x{Sq}x{Sk} causal={causal}")
+
+
+@pytest.mark.parametrize("causal,kv_heads", [
+    (False, 2), (True, 2), (False, 1), (True, 1),
+])
+def test_g6c_split_reduced_candidate_matches_one_wave(causal, kv_heads):
+    from tessera import runtime as rt
+
+    if not TESSERA_OPT.is_file() or _hip() is None:
+        pytest.skip("ROCm compiler/device unavailable")
+    rng = np.random.default_rng(606 + causal)
+    shape = (1, 2, 33, 64)
+    q = (rng.standard_normal(shape) * 0.2).astype(np.float16)
+    kv_shape = (shape[0], kv_heads, shape[2], shape[3])
+    k = (rng.standard_normal(kv_shape) * 0.2).astype(np.float16)
+    v = (rng.standard_normal(kv_shape) * 0.2).astype(np.float16)
+    do = (rng.standard_normal(shape) * 0.2).astype(np.float16)
+    artifact = rt.RuntimeArtifact(metadata={
+        "target": "rocm", "compiler_path": "rocm_flash_attn_bwd_compiled",
+        "executable": True, "arg_names": ["do", "q", "k", "v"],
+        "ops": [{"op_name": "tessera.flash_attn_bwd",
+                 "operands": ["do", "q", "k", "v"],
+                 "kwargs": {"causal": causal}}],
+    })
+    baseline = rt._execute_rocm_compiled_flash_attn_bwd(
+        artifact, (do, q, k, v))
+    candidate = rt._execute_rocm_compiled_flash_attn_bwd(
+        artifact, (do, q, k, v), _split_reduced=True)
+    for got, expected in zip(candidate, baseline, strict=True):
+        np.testing.assert_allclose(got, expected, rtol=3e-3, atol=3e-4)

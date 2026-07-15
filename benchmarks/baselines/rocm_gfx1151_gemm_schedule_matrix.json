@@ -1,0 +1,51 @@
+{
+  "schema": "tessera.rocm.gemm_schedule_ratchet.v1",
+  "recorded_at": "2026-07-14",
+  "target": "rocm",
+  "evidence_arch": "gfx1151",
+  "method": {
+    "case_count": 37,
+    "row_count": 185,
+    "tiles": [[1, 1], [2, 2], [2, 4], [3, 4], [4, 4]],
+    "trials": 9,
+    "iterations_per_trial": 30,
+    "timing": "HIP event, resident buffers, interleaved rotated tile order",
+    "correctness": "full NumPy oracle plus bitwise cross-schedule equivalence; 4096-cube integer rows use 64 exact int64 samples plus full cross-schedule equivalence",
+    "promotion_gate": "paired median >= 1.03 and paired win rate >= 0.75",
+    "all_rows_correct": true
+  },
+  "code_object_resources_f16_plain": [
+    {"tile": [1, 1], "vgpr": 51, "sgpr": 57, "scratch_bytes": 0, "spill_count": 0, "vgpr_limited_waves_per_simd": 16},
+    {"tile": [2, 2], "vgpr": 136, "sgpr": 89, "scratch_bytes": 0, "spill_count": 0, "vgpr_limited_waves_per_simd": 11},
+    {"tile": [2, 4], "vgpr": 256, "sgpr": 107, "scratch_bytes": 108, "spill_count": 41, "vgpr_limited_waves_per_simd": 6},
+    {"tile": [3, 4], "vgpr": 256, "sgpr": 107, "scratch_bytes": 424, "spill_count": 257, "vgpr_limited_waves_per_simd": 6},
+    {"tile": [4, 4], "vgpr": 256, "sgpr": 107, "scratch_bytes": 736, "spill_count": 392, "vgpr_limited_waves_per_simd": 6}
+  ],
+  "promoted_rows": [
+    {"bucket": "square-1024", "dtype": "f16/bf16/int8", "from": [3, 4], "to": [4, 4], "paired_speedup_min": 1.113},
+    {"bucket": "square-1280-through-2048", "dtype": "all", "from": [3, 4], "to": [2, 4], "paired_speedup_min": 1.121},
+    {"bucket": "square-4096-plus", "dtype": "all", "from": [3, 4], "to": [4, 4], "paired_speedup_min": 1.125},
+    {"bucket": "wide-m>=1024,n>=4m", "dtype": "f16", "from": [3, 4], "to": [4, 4], "paired_speedup_min": 1.146},
+    {"bucket": "wide-m>=256,k>=2048,n>=4m", "dtype": "f16", "from": [2, 4], "to": [4, 4], "paired_speedup_min": 1.615},
+    {"bucket": "aligned-min>=4096", "dtype": "f16", "from": [3, 4], "to": [4, 4], "paired_speedup_min": 1.443}
+  ],
+  "retained_non_promotions": [
+    {"case": "ragged:2049x4093x2051:f16:none", "retained": [3, 4], "candidate": [2, 4], "paired_speedup": 1.021, "paired_win_rate": 0.762, "reason": "below 3% gate after 21-trial tie-breaker"},
+    {"case": "square:3072x3072x3072:f16:none", "retained": [3, 4], "candidate": [4, 4], "paired_speedup": 1.026, "paired_win_rate": 0.889, "reason": "below 3% gate"},
+    {"case": "rectangular:128x4096x4096:f16:none", "retained": [2, 4], "candidate": [2, 2], "paired_speedup": 1.028, "paired_win_rate": 0.778, "reason": "below 3% gate"}
+  ],
+  "representative_winners": [
+    {"case": "square:512x512x512:f16:none", "tile": [2, 4], "tflops": 12.58},
+    {"case": "square:1024x1024x1024:f16:none", "tile": [4, 4], "tflops": 12.10},
+    {"case": "square:1536x1536x1536:f16:none", "tile": [2, 4], "tflops": 19.36},
+    {"case": "square:2048x2048x2048:f16:none", "tile": [2, 4], "tflops": 19.82},
+    {"case": "square:3072x3072x3072:f16:none", "tile": [3, 4], "tflops": 23.56},
+    {"case": "square:4096x4096x4096:f16:none", "tile": [4, 4], "tflops": 22.30},
+    {"case": "rectangular:256x11008x4096:f16:none", "tile": [4, 4], "tflops": 20.61},
+    {"case": "rectangular:4096x11008x4096:f16:none", "tile": [4, 4], "tflops": 16.37},
+    {"case": "dtype:4096x4096x4096:int4:none", "tile": [4, 4], "tops": 28.62},
+    {"case": "epilogue:1024x1024x1024:f16:bias+gelu", "tile": [4, 4], "tflops": 11.88},
+    {"case": "epilogue:2048x2048x2048:f16:bias+gelu", "tile": [2, 4], "tflops": 21.00}
+  ],
+  "raw_reproduction": "python benchmarks/rocm/benchmark_rocm_gemm_schedule_matrix.py --trials 9 --iterations 30 --warmup 5 --output <path>"
+}

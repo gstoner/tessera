@@ -1,5 +1,6 @@
 #include "tessera/gpu/BackendRegistration.h"
 #include "Tessera/Dialect/Tile/TileDialect.h"
+#include "Tessera/Dialect/Tile/TileEpilogue.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -175,7 +176,6 @@ static LogicalResult materializeSm120MatmulKernel(
                   "with f32 accumulation");
     return failure();
   }
-
   ValueRange inputs = kernel.getInputs();
   bool hasBias = epilogue.getBias();
   Value aBase = inputs[0], bBase = inputs[1];
@@ -452,14 +452,14 @@ static LogicalResult materializeSm120MatmulKernel(
       values[base + 3] = arith::AddFOp::create(
           builder, loc, values[base + 3], bias1);
     }
-    if (epilogue.getActivation() == "relu")
+    if (epilogue.getActivation() != "none")
       for (unsigned i = 0; i < 4; ++i)
-        values[base + i] = arith::MaximumFOp::create(
-            builder, loc, values[base + i], zeroF32);
+        values[base + i] = tessera::tile::emitScalarFloatActivation(
+            builder, loc, values[base + i], epilogue.getActivation());
     if (outputType == f16)
       for (unsigned i = 0; i < 4; ++i)
-        values[base + i] = arith::TruncFOp::create(
-            builder, loc, f16, values[base + i]);
+        values[base + i] = tessera::tile::emitFloatOutputConversion(
+            builder, loc, values[base + i], outputType);
 
     for (unsigned pair = 0; pair < 2; ++pair) {
       Value rowOffset = pair == 0 ? gid : addI64(builder, loc, gid, eight);
@@ -690,7 +690,8 @@ struct LowerTileToNVIDIAPass
 
   void getDependentDialects(DialectRegistry &registry) const final {
     registry.insert<arith::ArithDialect, func::FuncDialect,
-                    LLVM::LLVMDialect, NVVM::NVVMDialect, scf::SCFDialect,
+                    LLVM::LLVMDialect, math::MathDialect, NVVM::NVVMDialect,
+                    scf::SCFDialect,
                     tessera::nvidia::TesseraNVIDIADialect>();
   }
 

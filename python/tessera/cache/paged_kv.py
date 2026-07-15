@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import enum
 import subprocess
+import time
 from dataclasses import dataclass
 from typing import Any, Protocol, Sequence, runtime_checkable
 
@@ -456,6 +457,14 @@ def materialize_paged_kv_abi(kv_state: Any) -> PagedKVBufferABI:
 def _reference_attention(Q: np.ndarray, K: np.ndarray, V: np.ndarray,
                          scale: float, causal: bool) -> np.ndarray:
     """Per-head numpy attention. Q (H,q,d), K/V (H,S,d) → (H,q,d)."""
+    if K.shape[0] != Q.shape[0]:
+        if K.shape[0] < 1 or Q.shape[0] % K.shape[0]:
+            raise ValueError(
+                "attention query heads must be divisible by KV heads; got "
+                f"Q={Q.shape[0]} KV={K.shape[0]}")
+        ratio = Q.shape[0] // K.shape[0]
+        K = np.repeat(K, ratio, axis=0)
+        V = np.repeat(V, ratio, axis=0)
     scores = np.matmul(Q, K.swapaxes(-1, -2)) * scale
     if causal:
         q_len, k_len = scores.shape[-2], scores.shape[-1]
@@ -574,9 +583,32 @@ def _paged_attention_apple_gpu(Q: np.ndarray, K: np.ndarray, V: np.ndarray,
     return out, ("metal_runtime" if all_native else "reference")
 
 
+_rocm_paged_attention_route_cache: dict[tuple[Any, ...], str] = {}
+_rocm_paged_attention_route_evidence: dict[tuple[Any, ...], dict[str, Any]] = {}
+
+
+def _rocm_paged_attention_corpus_winner(
+    q_heads: int, kv_heads: int, q_len: int, tokens: int, dim: int,
+    page_size: int,
+) -> str | None:
+    """Warm-start the production route from committed gfx1151 wall timing."""
+    from ..compiler.emit import autotune as at
+    from ..compiler.emit.kernel_emitter import SpecPolicy, bucket_key
+    cache = at.MeasureCache()
+    at.load_corpus(cache=cache)
+    record = cache.get((
+        "rocm:gfx1151", "rocm", "paged_kv_decode",
+        bucket_key((q_len, q_heads, kv_heads, tokens, dim, page_size),
+                   SpecPolicy.BUCKET),
+        "f32", at.TIMING_END_TO_END))
+    if record is not None and record.winner in {"gather_fa", "direct"}:
+        return record.winner
+    return None
+
+
 def _paged_attention_rocm(
     Q: np.ndarray, abi: PagedKVBufferABI, token_indices: Sequence[int],
-    scale: float, causal: bool,
+    scale: float, causal: bool, *, _force_measure: bool = False,
 ) -> tuple[np.ndarray, str]:
     """Read stable physical pages, then run the compiled ROCm FA-2 WMMA kernel.
 
@@ -609,24 +641,120 @@ def _paged_attention_rocm(
         return reference(), "reference"
 
     try:
-        from ..compiler.emit.rocm_hip import run_paged_kv_cache_read_f32
-        gk = run_paged_kv_cache_read_f32(
-            abi.k_pages, abi.page_table, idx)
-        gv = run_paged_kv_cache_read_f32(
-            abi.v_pages, abi.page_table, idx)
-        K = np.transpose(gk, (1, 0, 2))
-        V = np.transpose(gv, (1, 0, 2))
-        q16 = Q.astype(np.float16)
-        k16 = K.astype(np.float16)
-        v16 = V.astype(np.float16)
-        o = rt._rocm_flash_attn_forward_o(q16, k16, v16, float(scale),
-                                          1 if causal else 0)
+        from ..compiler.emit.rocm_hip import (
+            run_paged_attention_direct_f32,
+            run_paged_kv_cache_read_f32,
+        )
+
+        def execute(route: str) -> tuple[np.ndarray, float, float]:
+            if route == "direct":
+                _, device_ms, _ = run_paged_attention_direct_f32(
+                    Q, abi.k_pages, abi.v_pages, abi.page_table, idx,
+                    scale=float(scale), causal=causal)
+                out, _, wall_ms = run_paged_attention_direct_f32(
+                    Q, abi.k_pages, abi.v_pages, abi.page_table, idx,
+                    scale=float(scale), causal=causal, reps=1)
+                return out, device_ms, wall_ms
+
+            def gather_fa(reps: int) -> tuple[np.ndarray, float, float]:
+                start = time.perf_counter()
+                gk, k_ms = run_paged_kv_cache_read_f32(
+                    abi.k_pages, abi.page_table, idx, return_device_ms=True,
+                    reps=reps)
+                gv, v_ms = run_paged_kv_cache_read_f32(
+                    abi.v_pages, abi.page_table, idx, return_device_ms=True,
+                    reps=reps)
+                K = np.transpose(gk, (1, 0, 2))
+                V = np.transpose(gv, (1, 0, 2))
+                # Dense FA's causal mask is anchored at query 0. Paged decode
+                # needs the right-aligned T-Q offset, expressed as bias here.
+                bias = None
+                if causal:
+                    q_len, tokens = int(Q.shape[1]), int(idx.size)
+                    limit = np.arange(q_len)[:, None] + max(tokens - q_len, 0)
+                    bias = np.where(
+                        np.arange(tokens)[None, :] <= limit, 0.0,
+                        -np.inf).astype(np.float32)
+                result, fa_ms = rt._rocm_flash_attn_forward_o(
+                    Q.astype(np.float16), K.astype(np.float16),
+                    V.astype(np.float16), float(scale), 0, bias=bias,
+                    _timed_reps=reps)
+                out = np.asarray(result, np.float32).reshape(Q.shape)
+                return out, k_ms + v_ms + float(fa_ms), \
+                    (time.perf_counter() - start) * 1e3
+
+            _, device_ms, _ = gather_fa(20)  # also warms code + allocations
+            out, _, wall_ms = gather_fa(1)
+            return out, device_ms, wall_ms
+
+        _, page_size, kv_heads, _ = abi.k_pages.shape
+        key = (int(Q.shape[0]), int(kv_heads), int(Q.shape[1]), int(idx.size),
+               head_dim, int(page_size), bool(causal))
+        selected = (None if _force_measure else
+                    _rocm_paged_attention_route_cache.get(key))
+        if selected is None and not _force_measure:
+            selected = _rocm_paged_attention_corpus_winner(
+                int(Q.shape[0]), int(kv_heads), int(Q.shape[1]), int(idx.size),
+                head_dim, int(page_size))
+            if selected is not None:
+                _rocm_paged_attention_route_cache[key] = selected
+        if selected is not None:
+            # Cached/corpus routes execute once; timing loops are paid only on a
+            # genuine miss or by the recorder, never on every serving request.
+            if selected == "direct":
+                out, _, _ = run_paged_attention_direct_f32(
+                    Q, abi.k_pages, abi.v_pages, abi.page_table, idx,
+                    scale=float(scale), causal=causal, reps=1)
+            else:
+                gk = run_paged_kv_cache_read_f32(
+                    abi.k_pages, abi.page_table, idx, reps=1)
+                gv = run_paged_kv_cache_read_f32(
+                    abi.v_pages, abi.page_table, idx, reps=1)
+                K = np.transpose(gk, (1, 0, 2))
+                V = np.transpose(gv, (1, 0, 2))
+                bias = None
+                if causal:
+                    q_len, tokens = int(Q.shape[1]), int(idx.size)
+                    limit = np.arange(q_len)[:, None] + max(tokens - q_len, 0)
+                    bias = np.where(
+                        np.arange(tokens)[None, :] <= limit, 0.0,
+                        -np.inf).astype(np.float32)
+                result = rt._rocm_flash_attn_forward_o(
+                    Q.astype(np.float16), K.astype(np.float16),
+                    V.astype(np.float16), float(scale), 0, bias=bias)
+                out = np.asarray(result, np.float32).reshape(Q.shape)
+            return out, "native_gpu"
+
+        oracle = reference()
+        results = {route: execute(route) for route in ("gather_fa", "direct")}
+        for route, (candidate, _, _) in results.items():
+            tolerance = 2e-2 if route == "gather_fa" else 3e-5
+            if not np.allclose(candidate, oracle, rtol=tolerance, atol=tolerance):
+                raise RuntimeError(
+                    f"ROCm paged-attention {route} disagrees with oracle")
+        if not np.allclose(results["gather_fa"][0], results["direct"][0],
+                           rtol=2e-2, atol=2e-2):
+            raise RuntimeError("ROCm paged-attention routes disagree")
+        device = {name: value[1] for name, value in results.items()}
+        end_to_end = {name: value[2] for name, value in results.items()}
+        device_winner = min(device, key=device.__getitem__)
+        end_to_end_winner = min(end_to_end, key=end_to_end.__getitem__)
+        # Serving chooses full-call latency. Keep the device winner beside it so
+        # a future resident ABI can make a deliberate, evidence-backed switch.
+        selected = end_to_end_winner
+        _rocm_paged_attention_route_cache[key] = selected
+        _rocm_paged_attention_route_evidence[key] = {
+            "device_ms": device, "end_to_end_ms": end_to_end,
+            "device_winner": device_winner,
+            "end_to_end_winner": end_to_end_winner,
+            "selected": selected,
+        }
+        out = results[selected][0]
     except (rt._RocmCompiledUnavailable, RuntimeError, OSError,
             FileNotFoundError, subprocess.CalledProcessError):
         # Lane probed available but couldn't launch here (serialization / driver);
         # fall back rather than fail the paged-attention call.
         return reference(), "reference"
-    out = np.asarray(o, dtype=np.float32).reshape(Q.shape[0], Q.shape[1], V.shape[-1])
     return out, "native_gpu"
 
 

@@ -82,7 +82,8 @@ void emitMoeBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f) {
 // OFFSETS[E+1] identifies the expert owning token t.  This is one GPU launch
 // over all groups; there is no host per-expert dispatch and no expanded route
 // array in the ABI.
-void emitGroupedGemmBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f) {
+void emitGroupedGemmBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f,
+                         int64_t tileN) {
   Type f32 = b.getF32Type();
   Type idx = b.getIndexType();
   b.setInsertionPointToStart(&f.getBody().front());
@@ -95,14 +96,21 @@ void emitGroupedGemmBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f) {
   Value gid = b.create<arith::AddIOp>(
       loc, b.create<arith::MulIOp>(
                loc, bid, b.create<arith::ConstantIndexOp>(loc, BD)), tid);
-  Value total = b.create<arith::MulIOp>(loc, tokens, OUTD);
+  // One work item owns tileN adjacent output columns.  X and the group lookup
+  // are consequently reused across tileN dot products.  The runtime only uses
+  // tileN > 1 when OUTD is exactly divisible, so none of the unrolled loads can
+  // cross an expert's weight matrix boundary.
+  Value cTileN = b.create<arith::ConstantIndexOp>(loc, tileN);
+  Value outTiles = b.create<arith::DivUIOp>(loc, OUTD, cTileN);
+  Value total = b.create<arith::MulIOp>(loc, tokens, outTiles);
   Value inb = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt, gid, total);
   auto guard = b.create<scf::IfOp>(loc, inb, /*withElse=*/false);
   b.setInsertionPointToStart(guard.thenBlock());
   Value c0 = b.create<arith::ConstantIndexOp>(loc, 0);
   Value c1 = b.create<arith::ConstantIndexOp>(loc, 1);
-  Value t = b.create<arith::DivUIOp>(loc, gid, OUTD);
-  Value o = b.create<arith::RemUIOp>(loc, gid, OUTD);
+  Value t = b.create<arith::DivUIOp>(loc, gid, outTiles);
+  Value oTile = b.create<arith::RemUIOp>(loc, gid, outTiles);
+  Value oBase = b.create<arith::MulIOp>(loc, oTile, cTileN);
   auto find = b.create<scf::ForOp>(loc, c0, experts, c1, ValueRange{c0});
   {
     OpBuilder::InsertionGuard g(b);
@@ -126,22 +134,37 @@ void emitGroupedGemmBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f) {
   Value xbase = b.create<arith::MulIOp>(loc, t, IN);
   Value ebase = b.create<arith::MulIOp>(
       loc, e, b.create<arith::MulIOp>(loc, IN, OUTD));
-  auto kl = b.create<scf::ForOp>(loc, c0, IN, c1, ValueRange{zero});
+  SmallVector<Value> initial(tileN, zero);
+  auto kl = b.create<scf::ForOp>(loc, c0, IN, c1, initial);
   {
     OpBuilder::InsertionGuard g(b);
     b.setInsertionPointToStart(kl.getBody());
     Value i = kl.getInductionVar();
     Value xv = b.create<memref::LoadOp>(
         loc, X, ValueRange{b.create<arith::AddIOp>(loc, xbase, i)});
-    Value woff = b.create<arith::AddIOp>(
-        loc, ebase, b.create<arith::AddIOp>(
-                        loc, b.create<arith::MulIOp>(loc, i, OUTD), o));
-    Value wv = b.create<memref::LoadOp>(loc, EXP, ValueRange{woff});
-    Value acc = b.create<arith::AddFOp>(
-        loc, kl.getRegionIterArgs()[0], b.create<arith::MulFOp>(loc, xv, wv));
-    b.create<scf::YieldOp>(loc, ValueRange{acc});
+    Value wrow = b.create<arith::AddIOp>(
+        loc, ebase, b.create<arith::MulIOp>(loc, i, OUTD));
+    SmallVector<Value> next;
+    next.reserve(tileN);
+    for (int64_t lane = 0; lane < tileN; ++lane) {
+      Value o = b.create<arith::AddIOp>(
+          loc, oBase, b.create<arith::ConstantIndexOp>(loc, lane));
+      Value woff = b.create<arith::AddIOp>(loc, wrow, o);
+      Value wv = b.create<memref::LoadOp>(loc, EXP, ValueRange{woff});
+      next.push_back(b.create<arith::AddFOp>(
+          loc, kl.getRegionIterArgs()[lane],
+          b.create<arith::MulFOp>(loc, xv, wv)));
+    }
+    b.create<scf::YieldOp>(loc, next);
   }
-  b.create<memref::StoreOp>(loc, kl.getResult(0), OUT, ValueRange{gid});
+  Value outBase = b.create<arith::AddIOp>(
+      loc, b.create<arith::MulIOp>(loc, t, OUTD), oBase);
+  for (int64_t lane = 0; lane < tileN; ++lane) {
+    Value outIndex = b.create<arith::AddIOp>(
+        loc, outBase, b.create<arith::ConstantIndexOp>(loc, lane));
+    b.create<memref::StoreOp>(loc, kl.getResult(lane), OUT,
+                              ValueRange{outIndex});
+  }
   b.setInsertionPointToEnd(&f.getBody().front());
   b.create<gpu::ReturnOp>(loc);
 }
@@ -179,6 +202,15 @@ struct GenerateROCMMoeKernelPass
       Location loc = op->getLoc();
       std::string kname = nameAttr.getValue().str();
       bool grouped = op->getName().getStringRef() == "tessera_rocm.grouped_gemm";
+      int64_t tileN = 1;
+      if (grouped) {
+        if (auto attr = op->getAttrOfType<IntegerAttr>("tn"))
+          tileN = attr.getInt();
+        if (tileN < 1 || tileN > 16) {
+          op->emitError("grouped_gemm tn must be in [1, 16]");
+          return signalPassFailure();
+        }
+      }
       Type f32 = b.getF32Type();
       Type i32 = b.getI32Type();
       Type idxTy = b.getIndexType();
@@ -195,7 +227,7 @@ struct GenerateROCMMoeKernelPass
       gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(), b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
       if (grouped)
-        emitGroupedGemmBody(body, loc, gpuFunc);
+        emitGroupedGemmBody(body, loc, gpuFunc, tileN);
       else
         emitMoeBody(body, loc, gpuFunc);
       op->erase();

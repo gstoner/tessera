@@ -1,6 +1,7 @@
 //===- TileDialect.cpp - Tessera Tile IR dialect --------------*- C++ -*-===//
 
 #include "Tessera/Dialect/Tile/TileDialect.h"
+#include "Tessera/Dialect/Tile/TileEpilogue.h"
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -281,11 +282,11 @@ LogicalResult TileEpilogueAttr::verify(
     llvm::function_ref<InFlightDiagnostic()> emitError, bool bias,
     StringRef activation, StringRef outputType) {
   (void)bias;
-  if (activation != "none" && activation != "relu")
+  if (!isSupportedActivation(activation))
     return emitError() << "TILE_EPILOGUE_BAD_ACTIVATION: activation must be "
-                          "none or relu";
-  if (outputType != "f32" && outputType != "f16")
-    return emitError() << "TILE_EPILOGUE_BAD_OUTPUT: output must be f32 or f16";
+                          "none, relu, gelu, or silu";
+  if (!isSupportedOutputType(outputType))
+    return emitError() << "TILE_EPILOGUE_BAD_OUTPUT: output must be f32, f16, or i32";
   return success();
 }
 

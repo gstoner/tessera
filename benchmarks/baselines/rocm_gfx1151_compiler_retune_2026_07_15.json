@@ -1,0 +1,84 @@
+{
+  "schema": "tessera.rocm.compiler_retune.v1",
+  "device": "gfx1151",
+  "toolchain": {
+    "rocm": "7.2",
+    "llvm": "22"
+  },
+  "method": {
+    "trials": 9,
+    "timing": ["HIP-event resident kernel", "wall-clock end-to-end"],
+    "ordering": "interleaved and alternating where candidates share a case",
+    "promotion_gate": "correct oracle plus shape-specific repeated-median gate"
+  },
+  "f32_gemm": {
+    "benchmark": "benchmarks/rocm/benchmark_rocm_f32_retune.py",
+    "decision": "promote 2x2 only for square sizes through 256; retain 4x4 elsewhere",
+    "rows": [
+      {"shape": [256, 256, 256], "tile": [2, 2], "device_ms": 0.048315, "e2e_ms": 1.831, "tflops": 0.694},
+      {"shape": [512, 512, 512], "tile": [4, 4], "device_ms": 0.123563, "e2e_ms": 2.898, "tflops": 2.172},
+      {"shape": [1024, 1024, 1024], "tile": [4, 4], "device_ms": 0.633256, "e2e_ms": 7.999, "tflops": 3.391},
+      {"shape": [128, 512, 256], "tile": [4, 4], "device_ms": 0.0516, "e2e_ms": 1.927, "tflops": 0.650},
+      {"shape": [512, 1024, 512], "tile": [4, 4], "device_ms": 0.1741, "e2e_ms": 5.979, "tflops": 3.084},
+      {"shape": [1025, 1537, 1009], "tile": [4, 4], "device_ms": 1.0209, "e2e_ms": 8.513, "tflops": 3.114}
+    ]
+  },
+  "grouped_gemm": {
+    "benchmark": "benchmarks/rocm/benchmark_rocm_grouped_gemm_retune.py",
+    "decision": "tn=1 below 64k outputs, tn=2 at 64k, tn=4 from 131k; exact-divisibility fallback to 1",
+    "rows": [
+      {"case": "balanced_small", "shape": [128, 256, 256], "tile_n": 1, "device_ms": 0.0512},
+      {"case": "transition_64k", "shape": [128, 512, 512], "tile_n": 2, "device_ms": 0.1034, "speedup_vs_tn1": 1.92},
+      {"case": "transition_64k_high_k", "shape": [256, 1024, 256], "tile_n": 2, "device_ms": 0.2016, "speedup_vs_tn1": 1.93},
+      {"case": "balanced_model", "shape": [256, 512, 512], "tile_n": 4, "device_ms": 0.1087, "speedup_vs_tn1": 3.42},
+      {"case": "ragged_model", "shape": [256, 512, 512], "tile_n": 4, "device_ms": 0.1100, "speedup_vs_tn1": 3.32},
+      {"case": "wide_ffn", "shape": [128, 256, 1024], "tile_n": 4, "device_ms": 0.0563, "speedup_vs_tn1": 3.35},
+      {"case": "narrow_down", "shape": [128, 1024, 256], "tile_n": 1, "device_ms": 0.1962}
+    ]
+  },
+  "grouped_swiglu": {
+    "benchmark": "benchmarks/rocm/benchmark_rocm_swiglu_retune.py",
+    "decision": "promote three grouped GEMMs in place of 3E per-expert GEMMs",
+    "rows": [
+      {"shape": [8, 128, 256, 512], "launches_before": 24, "launches_after": 3, "device_speedup": 7.6444, "e2e_speedup": 3.5775, "win_rate": 1.0, "max_abs_error": 2.80e-10},
+      {"shape": [8, 256, 512, 1024], "launches_before": 24, "launches_after": 3, "device_speedup": 4.6432, "e2e_speedup": 4.7175, "win_rate": 1.0, "max_abs_error": 1.32e-9}
+    ]
+  },
+  "kv_moe_transport": {
+    "benchmark": "benchmarks/rocm/benchmark_rocm_transport_retune.py",
+    "decision": "reject row-gather and weighted-scatter candidates; retain flat gather and host-prescaled scatter",
+    "candidate_ranges": {
+      "row_gather_device_speedup": [0.9110, 1.0100],
+      "row_gather_e2e_speedup": [0.9531, 1.0240],
+      "weighted_scatter_device_speedup": [0.9603, 1.0901],
+      "weighted_scatter_e2e_speedup": [0.9064, 0.9885],
+      "max_win_rate": 0.6667
+    }
+  },
+  "g6b": {
+    "benchmark": "benchmarks/rocm/benchmark_rocm_g6b_two_wave.py",
+    "decision": "promote two-wave plain/causal D=128; retain one-wave D=64 and advanced variants",
+    "resources": {
+      "one_wave_d128": {"vgpr": 256, "sgpr": 51, "lds_bytes": 9408, "scratch_bytes": 332, "vgpr_spills": 82, "modeled_waves_per_simd": 6},
+      "two_wave_d128": {"vgpr": 121, "sgpr": 48, "lds_bytes": 11456, "scratch_bytes": 0, "vgpr_spills": 0, "modeled_waves_per_simd": 12}
+    },
+    "rows": [
+      {"shape": [1, 16, 1024, 128], "causal": false, "one_wave_ms": 2.892129, "two_wave_ms": 1.418873, "paired_speedup": 2.0446, "win_rate": 1.0, "max_abs_error": 5.60e-7},
+      {"shape": [1, 16, 1009, 128], "causal": true, "one_wave_ms": 1.570797, "two_wave_ms": 0.743311, "paired_speedup": 2.1057, "win_rate": 1.0, "max_abs_error": 8.36e-6}
+    ]
+  },
+  "g6c": {
+    "benchmark": "benchmarks/rocm/benchmark_rocm_g6c_split_reduced.py",
+    "decision": "reject production promotion; retain opt-in compiler candidate and correctness tests",
+    "temporary_storage": "one additional dK+dV footprint",
+    "rows": [
+      {"shape": [1, 8, 8, 512, 64], "causal": false, "device_speedup": 0.9190, "e2e_speedup": 0.9304, "device_win_rate": 0.0},
+      {"shape": [1, 8, 8, 512, 64], "causal": true, "device_speedup": 1.0130, "e2e_speedup": 0.9234, "device_win_rate": 0.7778},
+      {"shape": [1, 16, 16, 1024, 128], "causal": false, "device_speedup": 0.9648, "e2e_speedup": 1.0698, "device_win_rate": 0.0},
+      {"shape": [1, 16, 16, 1024, 128], "causal": true, "device_speedup": 0.9940, "e2e_speedup": 0.9165, "device_win_rate": 0.3333},
+      {"shape": [1, 8, 2, 512, 64], "causal": false, "device_speedup": 0.9078, "e2e_speedup": 0.9041, "device_win_rate": 0.0},
+      {"shape": [1, 16, 4, 1024, 128], "causal": true, "device_speedup": 0.9741, "e2e_speedup": 0.9528, "device_win_rate": 0.0}
+    ],
+    "max_abs_error": 3.13e-7
+  }
+}

@@ -45,9 +45,14 @@ void emitScatterBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f,
   auto sge = arith::CmpIPredicate::sge;
 
   b.setInsertionPointToStart(&f.getBody().front());
-  Value OUT = f.getArgument(0), OUTROWS = f.getArgument(1);
-  Value SRC = f.getArgument(2), IDX = f.getArgument(3);
-  Value NIDX = f.getArgument(4), ROWLEN = f.getArgument(5);
+  bool weighted = mode == "weighted_add";
+  Value OUT = f.getArgument(0);
+  Value SRC = weighted ? f.getArgument(1) : f.getArgument(2);
+  Value IDX = weighted ? f.getArgument(2) : f.getArgument(3);
+  Value WEIGHT = weighted ? f.getArgument(3) : Value();
+  Value OUTROWS = weighted ? f.getArgument(4) : f.getArgument(1);
+  Value NIDX = weighted ? f.getArgument(5) : f.getArgument(4);
+  Value ROWLEN = weighted ? f.getArgument(6) : f.getArgument(5);
 
   Value bid = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
   Value tid = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
@@ -75,7 +80,11 @@ void emitScatterBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f,
     Value dst = wb.create<arith::AddIOp>(
         loc, wb.create<arith::MulIOp>(loc, r, ROWLEN), c);
     Value v = wb.create<memref::LoadOp>(loc, SRC, ValueRange{gid});
-    if (mode == "add") {
+    if (weighted) {
+      Value scale = wb.create<memref::LoadOp>(loc, WEIGHT, ValueRange{i});
+      v = wb.create<arith::MulFOp>(loc, v, scale);
+    }
+    if (mode == "add" || weighted) {
       wb.create<memref::AtomicRMWOp>(loc, arith::AtomicRMWKind::addf, v, OUT,
                                      ValueRange{dst});
     } else if (mode == "min") {
@@ -130,8 +139,12 @@ struct GenerateROCMScatterKernelPass
       Type idxTy = b.getIndexType();
       auto memF32 = MemRefType::get({ShapedType::kDynamic}, f32);
       auto memI64 = MemRefType::get({ShapedType::kDynamic}, i64);
-      auto fnTy = b.getFunctionType(
-          {memF32, idxTy, memF32, memI64, idxTy, idxTy}, {});
+      auto fnTy = modeAttr.getValue() == "weighted_add"
+          ? b.getFunctionType(
+                {memF32, memF32, memI64, memF32,
+                 idxTy, idxTy, idxTy}, {})
+          : b.getFunctionType(
+                {memF32, idxTy, memF32, memI64, idxTy, idxTy}, {});
       auto gpuMod = b.create<gpu::GPUModuleOp>(loc, kname + "_mod");
       b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);

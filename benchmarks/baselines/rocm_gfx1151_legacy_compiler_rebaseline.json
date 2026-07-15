@@ -1,0 +1,54 @@
+{
+  "schema": "tessera.benchmark.survey.v1",
+  "recorded_at": "2026-07-14",
+  "target": "rocm",
+  "evidence_arch": "gfx1151",
+  "device": "AMD Radeon(TM) 8060S Graphics",
+  "toolchain": {
+    "rocm": "7.2.53211-97f5574fe2",
+    "llvm": "22.0.0git",
+    "compiler": "build/tools/tessera-opt/tessera-opt"
+  },
+  "method": {
+    "timing": "HIP events, resident device buffers",
+    "iterations": 20,
+    "note": "Exploratory compiler rebaseline. Promotion still requires repeated medians and the ROCM-6 correctness and regression gates."
+  },
+  "gemm_f16_best": [
+    {"shape": "512x512x512", "tile": "2x4", "latency_ms": 0.021945, "tflops": 12.231969},
+    {"shape": "1024x1024x1024", "tile": "4x4", "latency_ms": 0.165266, "tflops": 12.994116},
+    {"shape": "2048x2048x2048", "tile": "2x4", "latency_ms": 0.730765, "tflops": 23.509426},
+    {"shape": "4096x4096x4096", "tile": "4x4", "latency_ms": 5.227991, "tflops": 26.289056}
+  ],
+  "gemm_4096_dtype_best": [
+    {"dtype": "f16", "tile": "4x4", "tflops": 25.929381},
+    {"dtype": "bf16", "tile": "4x4", "tflops": 25.897398},
+    {"dtype": "int8", "tile": "4x4", "tops": 29.525317},
+    {"dtype": "int4", "tile": "4x4", "tops": 31.320134}
+  ],
+  "pipeline_vs_direct": [
+    {"shape": "512x512x512", "direct_tflops": 4.087826, "pipeline_tflops": 10.359823, "ratio": 2.534},
+    {"shape": "1024x1024x1024", "direct_tflops": 9.910444, "pipeline_tflops": 9.929094, "ratio": 1.002},
+    {"shape": "2048x2048x2048", "direct_tflops": 18.322411, "pipeline_tflops": 18.451736, "ratio": 1.007},
+    {"shape": "4096x4096x4096", "direct_tflops": 22.156823, "pipeline_tflops": 22.287756, "ratio": 1.006}
+  ],
+  "flash_attention": {
+    "forward": [
+      {"shape": "4x8x512x512x64", "latency_ms": 0.311626, "tflops": 6.891223},
+      {"shape": "2x8x1024x1024x64", "latency_ms": 0.624074, "tflops": 6.882146},
+      {"shape": "2x8x1024x1024x128", "latency_ms": 2.821838, "tflops": 3.044092},
+      {"shape": "1x8x2048x2048x64", "latency_ms": 1.307388, "tflops": 6.570304}
+    ],
+    "backward": [
+      {"shape": "4x8x512x512x64", "latency_ms": 1.368358, "tflops": 3.923469},
+      {"shape": "2x8x1024x1024x64", "latency_ms": 2.673824, "tflops": 4.015753},
+      {"shape": "2x8x1024x1024x128", "latency_ms": 10.096008, "tflops": 2.127062},
+      {"shape": "1x8x2048x2048x64", "latency_ms": 5.178616, "tflops": 4.146830}
+    ]
+  },
+  "decisions": {
+    "gemm": "The old universal 4x4 VGPR-cliff assumption is stale for generated code. Rebuild the size/dtype schedule ratchet before implementing multi-wave GEMM.",
+    "pipeline": "The pipeline route is a 512-cube specialization; it is parity from 1024 through 4096 and should not become a generic default.",
+    "attention": "Current compiler output reproduces the prior attention ceiling. G6-B D=128 forward and G6-C backward remain redesign priorities."
+  }
+}

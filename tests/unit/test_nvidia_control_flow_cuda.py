@@ -29,6 +29,7 @@ def test_control_source_has_four_single_launch_entries():
 
 
 @pytest.mark.skipif(not _live(), reason="requires nvcc and a live NVIDIA GPU")
+@pytest.mark.hardware_nvidia
 def test_bounded_control_cuda_matches_numpy():
     x = np.linspace(1.0, 2.0, 32, dtype=np.float32)
     np.testing.assert_allclose(
@@ -56,6 +57,7 @@ def test_bounded_control_cuda_matches_numpy():
 
 
 @pytest.mark.skipif(not _live(), reason="requires nvcc and a live NVIDIA GPU")
+@pytest.mark.hardware_nvidia
 def test_control_scan_runtime_binding_matches_numpy():
     from tessera import runtime as rt
     init = np.arange(8, dtype=np.float32)

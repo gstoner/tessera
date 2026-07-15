@@ -7,6 +7,9 @@ last_updated: 2026-07-13
 
 # Tessera validation spine — M5 deliverable
 
+The proof-layer and environment-state rules are defined in
+[`compiler_test_architecture.md`](../architecture/compiler_test_architecture.md).
+
 Tessera ships multiple validation layers; this document is the
 canonical map of what each layer proves and how to run it.  Until
 M5 the layers were documented piecemeal in benchmark and audit
@@ -18,7 +21,10 @@ maps unambiguously to **command**.
 
 | Layer | What it proves | Canonical command | Hardware required | CI default |
 |-------|----------------|-------------------|-------------------|------------|
-| **Python unit tests** | Python frontend, IR layers, audit, registries, error semantics | `pytest tests/unit -m "not slow"` | CPU only | yes |
+| **Python unit tests** | Hermetic Python frontend, IR, registry, and error semantics | `python scripts/run_unit_tests.py` | CPU only | yes |
+| **Compiler-tool tests** | External `tessera-opt` / MLIR lowering and artifact contracts | `pytest -m compiler_tool` | built compiler toolchain | environment-gated |
+| **Process integration tests** | Package/import/runtime behavior across a child-process boundary | `pytest -m integration` | CPU; inherited source-package environment | yes |
+| **Measured performance tests** | Repeated timing against a versioned absolute or comparative ratchet | `pytest -m performance` | workload-specific; run serially | no |
 | **MLIR lit tests** | C++ pass + dialect contracts on canonical input MLIR | `lit tests/tessera-ir -v` (the console script; the `python -m lit` form does not work — lit's package has no `__main__`) | CPU only (after building `tessera-opt`) | opt-in: `TESSERA_VALIDATE_LIT=1 scripts/validate.sh` runs lit when both `lit` and `tessera-opt` are on PATH (or in `build/tools/tessera-opt/`); otherwise the layer is skipped with a clear diagnostic. |
 | **C++ build checks** | the C++ tree compiles against MLIR 22 / LLVM 22 | `cmake -B build && cmake --build build` | toolchain only | partial — gated on environment |
 | **Artifact-only target lowering** | an exact target/op has no executable runtime row; textual Target IR is still inspectable | `tessera-opt ... | FileCheck` | none | yes |
@@ -75,12 +81,18 @@ the spine layers as follows:
 
 ## Hardware gating in CI
 
-Hardware-runtime checks live in `tests/unit/` but are tagged with
+Hardware-runtime checks are tagged with
 markers (`@pytest.mark.hardware_apple_gpu`, etc.) and are excluded
 from the default sweep.  CI configurations that have the matching
 hardware opt in by passing `-m hardware_apple_gpu` (or whichever
 marker).  Tests without hardware emit a `skip` with the canonical
 reason — never silently mark themselves green.
+
+The required CPU PR lane excludes ``performance`` and every hardware marker.
+External compiler-tool tests use the shared ``compiler_toolchain`` fixture so
+missing tools produce one canonical skip state instead of ad-hoc path probes.
+Child-process tests use ``python_subprocess_env`` so source checkouts and
+editable installs exercise the same import state.
 
 ## What's intentionally out of scope this milestone
 

@@ -120,6 +120,8 @@ def _nvidia_live():
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
+@pytest.mark.performance
 @pytest.mark.skipif(not _nvidia_live(), reason="live NVIDIA GPU (sm_120) required")
 def test_live_hot_paths_within_ratchet():
     if not BASELINE.is_file():

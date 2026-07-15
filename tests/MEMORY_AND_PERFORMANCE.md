@@ -4,42 +4,37 @@ Status: informative
 
 This document characterizes what you should expect to see (peak RAM, wall
 clock, parallelism budget) when running the Tessera Python test suites,
-and explains the `slow` marker boundary.
+and explains the proof-layer and environment-marker boundaries.
 
-If you only need one sentence: **the default daily-driver sweep
-(`pytest -m "not slow"`) peaks at ~125 MB resident and finishes in
-~13 minutes on the GitHub Actions CPU lane (measured 2026-07-02).** The numbers below were measured
-on Apple Silicon with Python 3.14 via `/usr/bin/time -l`; figures
-will vary by ~25% across machines but the orders of magnitude hold.
+If you only need one sentence: **run `python scripts/run_unit_tests.py`; it
+selects the hermetic CPU PR state and sizes xdist to both RAM and cores.** Never
+run measured performance under xdist, and never interpret a device skip as
+native proof.
 
 ## Suite-by-suite footprint
 
-Measured 2026-07-02 against the current test tree (~13,360 fast / ~506
-deselected / ~13,866 total collected via `pytest --collect-only`).
-Counts grew from earlier baselines as Apple GPU encode/conv2d,
-MTL4 routing, optimizer-batching, descriptor, feature-limit, the
-Phase-G attention-family / accelerator-proof composition suites, and the
-ROCm + x86 compiled primitive-closure lanes landed:
+Measured 2026-07-15 after the compiler test-state split. Full collection is
+~15,326 tests. The CPU PR expression selected 14,217 tests on the WSL compiler
+host: 12,366 passed and 1,851 capability-skipped in 6m18s with 24 loadfile
+workers. Device and performance totals overlap other markers and are therefore
+reported by their own collection commands, not added to the CPU total.
 
 | Suite | Tests | Wall clock | Peak RSS | Source of pressure |
 |---|---:|---:|---:|---|
-| **`-m "not slow"`** (default) | ~13,360 | ~13 min in GitHub Actions | **~125 MB** (measured `/usr/bin/time -l`) | Python interpreter + pytest + numpy + tessera modules; small fp64 working arrays for autodiff tests + the expanded S-series / Apple GPU encode-session / MTL4 / descriptor / feature-limit coverage |
-| **`-m slow`** (heavy benchmarks) | ~506 | ~30 min (serial) | ~1.5–2 GB (estimated) | fp32 8192³ GEMM in `test_benchmark_gemm.py`; SuperBench subprocess in `test_benchmark_compiler_contract.py`; operator-bench bridge in `test_operator_benchmarks_contract.py` |
-| **Full suite** (`-m ""`) | ~13,866 | ~30+ min | ~1.5–2 GB | Same as `slow`; pytest is serial by default so peaks aren't additive |
+| **CPU PR state** | 14,217 selected | 6m18s on 32-core/62-GB WSL (24 workers) | worker-count dependent | Hermetic semantics plus capability-skipped legacy tests; excludes slow, performance, and all hardware markers |
+| **NVIDIA correctness** | 223 | NVIDIA-box measurement pending | device dependent | Exact-device execute/compare; `hardware_nvidia and not performance` |
+| **NVIDIA performance** | 18 | NVIDIA-box measurement pending; serial only | device dependent | Repeated timing/resource ratchets; `hardware_nvidia and performance` |
+| **Full collection** | ~15,326 | execution intentionally split by state | workload dependent | Includes CPU, external tools, all devices, measured performance, and the legacy slow tail |
 
-The measured fast-suite numbers (~125 MB peak, ~4 min) leave a
-comfortable margin on any modern machine.  Peak RSS dropped from the
-2026-05 baseline of ~213 MB because every heavy test that previously
-dominated steady-state allocation has been moved behind
-`pytestmark = pytest.mark.slow` — the fast lane is now allocation-disciplined.
-The wall-clock budget grew from ~31 s to ~13 min in CI because the registry,
-audit, Apple, ROCm, x86, and S-series coverage all expanded; the test-doc drift
-gate (`tests/unit/test_test_docs_drift.py`) keeps this table in sync
-with the actual measurements going forward.
+The CPU lane remains larger than a pure unit suite because migration is
+incremental. Compiler-tool, integration, device, performance, and audit layers
+are being separated without deleting proof. The architecture ratchets prevent
+new direct wall-clock tests from entering the CPU state and keep all required
+entry points on the same marker expression.
 
 ## What gets allocated where
 
-### Fast suite (`-m "not slow"`)
+### CPU PR state (`python scripts/run_unit_tests.py`)
 
 | Component | Approximate RSS contribution |
 |---|---:|
@@ -69,25 +64,24 @@ high-water mark can creep up over the full slow sweep — budget ~2 GB.
 
 With `pytest-xdist` (`pytest -n auto`), each worker holds its own state:
 
-| Workers | Fast-suite total RSS | Slow-suite total RSS |
+| Workers | CPU-state total RSS | Slow/performance total RSS |
 |---:|---:|---:|
 | 1 (default) | ~213 MB | ~1.5–2 GB |
 | 4 | ~850 MB | ~6–8 GB |
 | 8 | ~1.7 GB | ~12–16 GB |
 | 10+ (typical M-series core count) | ~2.1 GB | ~15–20 GB |
 
-**Recommendation:** the fast suite is memory-light but no longer tiny, so
-`-n auto` may help on local machines after confirming xdist stability; the slow suite is dominated by subprocess
-spawns and an 8192³ GEMM, neither of which parallelizes cleanly across
-pytest workers. Stick to serial execution.
+**Recommendation:** use `scripts/run_unit_tests.py` so worker count is bounded
+by RAM and cores. Slow and measured-performance states are dominated by
+subprocesses, large arrays, compilation, or device timing; run them serially.
 
 ## Practical guidance by system RAM
 
 | System RAM | What you can run |
 |---|---|
-| **4 GB** | Fast suite only (`pytest -m "not slow"`); skip slow suite |
-| **8 GB** | Fast + slow comfortably, serial |
-| **16 GB+** | Everything including small `-n` worker counts on the fast suite |
+| **4 GB** | CPU PR state with `TESSERA_TEST_WORKERS=1`; skip slow/performance |
+| **8 GB** | CPU PR state plus selected slow tests serially |
+| **16 GB+** | CPU PR state with a modest worker count; slow tests serially |
 | **32 GB+** | Can run multiple worktrees / parallel pytest invocations |
 
 For most contributor workflows **8 GB is plenty**.
@@ -96,14 +90,18 @@ For most contributor workflows **8 GB is plenty**.
 
 | Workflow | Command | Expected RSS | Expected time |
 |---|---|---:|---:|
-| Edit-loop sanity check | `pytest tests/unit/ -m "not slow" -q` | < 512 MB | ~13 min in GitHub Actions |
+| Edit-loop sanity check | `python scripts/run_unit_tests.py -q` | sized from host RAM/cores | 6m18s on the measured WSL host |
 | Just the autodiff slice | `pytest tests/unit/test_autodiff_*.py tests/unit/test_conv1d_autodiff.py tests/unit/test_deferred_vjps.py tests/unit/test_sprint_*.py tests/unit/test_attention_family_support.py tests/unit/test_reasoning_model_support.py tests/unit/test_optimizer_mixed_precision_support.py tests/unit/test_standalone_compiler_roadmap.py -q` | < 200 MB | ~2 s |
-| Pre-PR full check | `pytest tests/unit/ -m "not slow" -q && pytest tests/unit/ -m slow -q` | ~2 GB peak | ~31 min |
+| CUDA correctness on NVIDIA box | `pytest tests/unit -m "hardware_nvidia and not performance" -q` | device dependent | pending NVIDIA-box rebaseline |
+| CUDA performance on NVIDIA box | `pytest tests/unit -m "hardware_nvidia and performance" -q -n 0` | device dependent | serial; pending NVIDIA-box rebaseline |
 | MLIR lit fixtures | `lit tests/tessera-ir/ -v` (needs `tessera-opt` on PATH) | < 100 MB | < 1 s |
 
 ## What the `slow` marker covers
 
-Three test files carry `pytestmark = pytest.mark.slow` at module level:
+The original heavy benchmark modules remain slow-marked, and legacy live-device
+tests may carry both `slow` and a target marker during migration. The target
+marker is the environment truth; `slow` alone must not be used to select a
+device lane. Representative CPU-heavy modules are:
 
 | File | Tests | Reason |
 |---|---:|---|
@@ -117,22 +115,15 @@ use the explicit path: `pytest path/to/test_benchmark_gemm.py::TestGEMMRun::test
 
 ## Pre-existing failures unrelated to memory
 
-Three tests in `tests/unit/test_debug_env.py::TestDiffCommand` have been
-failing for several sessions:
-
-- `test_identical_files_exit_zero`
-- `test_differing_files_exit_one_and_show_diff`
-- `test_diff_writes_output_file`
-
-They expect a `tessera-mlir diff` CLI entry point that isn't being
-resolved in the current dev environment. They reproduce on `main` before
-any of the recent autodiff/S-series work and are **not** indicative of
-memory or correctness issues. Track them separately when fixing the
-CLI's diff subcommand.
+None in the CPU PR state as of the 2026-07-15 host run. Exact CUDA execution is
+tracked separately because the WSL compiler host does not expose NVIDIA
+hardware or a CUDA toolkit.
 
 ## Cross-references
 
 - `tests/COMPILER_TEST_PLAN.md` — overall test plan and CI tier matrix.
+- `docs/architecture/compiler_test_architecture.md` — normative state model.
+- `docs/audit/backend/nvidia/todo.md` — CUDA evaluation on the NVIDIA box.
 - `pyproject.toml` `[tool.pytest.ini_options]` — marker declarations.
 - `scripts/validate.sh` — CPU validation spine (calls the fast suite).
 - `CLAUDE.md` "Testing" section — top-level command reference.

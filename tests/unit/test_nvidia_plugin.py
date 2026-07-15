@@ -277,7 +277,10 @@ def test_nvidia_matmul_off_gpu_arbitrates_to_reference(monkeypatch):
     np.testing.assert_allclose(out, region.reference(A, B), atol=1e-3)
 
 
-def test_nvidia_missing_required_buffer_declines_not_segfault():
+@pytest.mark.integration
+def test_nvidia_missing_required_buffer_declines_not_segfault(
+    python_subprocess_env,
+):
     # Same NULL-deref guard as x86/ROCm: a residual/bias region without the buffer
     # must not launch the CUDA kernel (which would deref a null). Child process so a
     # regression is a failed assert, not a crashed session.
@@ -302,7 +305,12 @@ def test_nvidia_missing_required_buffer_declines_not_segfault():
         print("ok")
         """
     )
-    p = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    p = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        env=python_subprocess_env,
+    )
     assert p.returncode == 0, (
         f"missing-buffer guard failed (rc={p.returncode}, -11=SIGSEGV): "
         f"{p.stderr[-300:]}")
@@ -323,6 +331,7 @@ _C2_CHAINS = [
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 @pytest.mark.skipif(not _nvidia_cuda_live(),
                     reason="live NVIDIA GPU + nvcc required")
 @pytest.mark.parametrize("region", _C2_CHAINS,
@@ -343,6 +352,7 @@ def test_live_nvidia_generic_cuda_gated(region):
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 @pytest.mark.skipif(not _nvidia_cuda_live(),
                     reason="live NVIDIA GPU + nvcc required")
 def test_live_nvidia_arbitrated_residual_executes():
@@ -371,6 +381,8 @@ def _nvidia_matmul_live() -> bool:
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
+@pytest.mark.performance
 @pytest.mark.skipif(not _nvidia_matmul_live(),
                     reason="live NVIDIA GPU + shipped GEMM + PTX launch bridge required")
 @pytest.mark.parametrize("dtype", ["bfloat16", "float16"])
@@ -403,6 +415,8 @@ def test_live_nvidia_matmul_arbitrated(dtype, shape):
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
+@pytest.mark.performance
 @pytest.mark.skipif(not _nvidia_matmul_live(),
                     reason="live NVIDIA GPU + shipped GEMM + PTX launch bridge required")
 def test_live_nvidia_matmul_measured_autotune():
@@ -432,6 +446,7 @@ def test_live_nvidia_matmul_measured_autotune():
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 @pytest.mark.skipif(not _nvidia_tile_matmul_live(),
                     reason="live sm_120 + Tile compiler + PTX bridge required")
 @pytest.mark.parametrize("dtype", ["float16", "bfloat16"])
@@ -451,6 +466,8 @@ def test_live_nvidia_tile_matmul_schedule_candidates(dtype, schedule):
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
+@pytest.mark.performance
 @pytest.mark.skipif(not _nvidia_tile_matmul_live(),
                     reason="live sm_120 + Tile compiler + PTX bridge required")
 def test_live_nvidia_device_timing_records_fastest_tile_schedule():
@@ -481,6 +498,7 @@ def test_live_nvidia_device_timing_records_fastest_tile_schedule():
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 @pytest.mark.skipif(not _nvidia_matmul_live(),
                     reason="live NVIDIA GPU + shipped GEMM + PTX launch bridge required")
 def test_live_nvidia_emitted_ragged_degrade_is_logged():
@@ -502,6 +520,7 @@ def test_live_nvidia_emitted_ragged_degrade_is_logged():
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 @pytest.mark.skipif(not _nvidia_cuda_live(),
                     reason="live NVIDIA GPU + nvcc required")
 @pytest.mark.parametrize("scale,causal", [(1.0, False), (0.25, False), (0.125, True)])
@@ -533,6 +552,7 @@ def test_live_nvidia_flash_attention(scale, causal, shape):
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 @pytest.mark.skipif(not _nvidia_cuda_live(),
                     reason="live NVIDIA GPU + nvcc required")
 @pytest.mark.parametrize("act", ["silu", "gelu", "relu"])
@@ -552,6 +572,7 @@ def test_live_nvidia_gated_swiglu(act):
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 @pytest.mark.skipif(not _nvidia_cuda_live(),
                     reason="live NVIDIA GPU + nvcc required")
 def test_live_nvidia_pointwise_dag():
@@ -600,6 +621,7 @@ def test_nvidia_pointwise_max_min_nan_shims_and_buffer_free():
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 @pytest.mark.skipif(not _nvidia_cuda_live(),
                     reason="live NVIDIA GPU + nvcc required")
 def test_live_nvidia_pointwise_max_min_preserve_nan():
@@ -619,6 +641,7 @@ def test_live_nvidia_pointwise_max_min_preserve_nan():
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 @pytest.mark.skipif(not _nvidia_cuda_live(),
                     reason="live NVIDIA GPU + nvcc required")
 def test_live_nvidia_pointwise_gelu_and_nan_sign():
@@ -646,6 +669,7 @@ def test_live_nvidia_pointwise_gelu_and_nan_sign():
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 @pytest.mark.skipif(not _nvidia_cuda_live(),
                     reason="live NVIDIA GPU + nvcc required")
 @pytest.mark.parametrize("epilogue", [("bias", "gelu"), ("relu",), ("silu",),
@@ -672,6 +696,7 @@ def test_live_nvidia_mma_fused_tensor_core(epilogue):
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 @pytest.mark.skipif(not _nvidia_cuda_live(),
                     reason="live NVIDIA GPU + nvcc required")
 @pytest.mark.parametrize("scale,causal", [(0.125, False), (0.25, False), (0.125, True)])
@@ -701,6 +726,7 @@ def test_live_nvidia_mma_attn_tensor_core(scale, causal, shape):
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 @pytest.mark.skipif(not _nvidia_cuda_live(),
                     reason="live NVIDIA GPU + nvcc required")
 def test_live_nvidia_mma_attn_large_nk_delegates_to_scalar():
@@ -720,6 +746,7 @@ def test_live_nvidia_mma_attn_large_nk_delegates_to_scalar():
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 @pytest.mark.skipif(not _nvidia_cuda_live(),
                     reason="live NVIDIA GPU + nvcc required")
 def test_live_nvidia_mma_attn_large_magnitude_delegates_not_degrades():
@@ -741,6 +768,7 @@ def test_live_nvidia_mma_attn_large_magnitude_delegates_not_degrades():
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 @pytest.mark.skipif(not _nvidia_cuda_live(),
                     reason="live NVIDIA GPU + nvcc required")
 @pytest.mark.parametrize(
@@ -785,6 +813,7 @@ def test_live_nvidia_tensor_core_dtype_variants(kind, candidate_name, atol):
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 @pytest.mark.skipif(not _nvidia_cuda_live(),
                     reason="live NVIDIA GPU + nvcc required")
 @pytest.mark.parametrize("kind", ["fused", "attention", "gated"])

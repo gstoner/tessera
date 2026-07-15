@@ -67,6 +67,7 @@ def _reference(q, k, v, *, scale, causal=False, window=None, bias=None, softcap=
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 @pytest.mark.parametrize("hkv", [4, 2, 1], ids=["mha", "gqa", "mqa"])
 def test_live_nvidia_flash_attn_mha_gqa_mqa(hkv):
     rt = _cuda_or_skip()
@@ -82,6 +83,7 @@ def test_live_nvidia_flash_attn_mha_gqa_mqa(hkv):
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 def test_live_nvidia_flash_attn_causal_window_bias_softcap():
     rt = _cuda_or_skip()
     rng = np.random.default_rng(818)
@@ -97,6 +99,7 @@ def test_live_nvidia_flash_attn_causal_window_bias_softcap():
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 def test_live_nvidia_flash_attn_f16_storage_f32_accumulation():
     rt = _cuda_or_skip()
     rng = np.random.default_rng(821)

@@ -61,6 +61,7 @@ def _reference(x, w, bias, stride, padding, dilation):
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 @pytest.mark.parametrize(
     "shape,kernel,stride,padding,dilation,bias",
     [((1, 8, 7, 3), (3, 3, 3, 5), 1, 1, 1, False),
@@ -102,6 +103,8 @@ def test_nvidia_conv2d_rejects_bad_channels_before_cuda():
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
+@pytest.mark.performance
 @pytest.mark.parametrize("route,atol", [
     ("direct", 2e-5), ("shared", 2e-5), ("im2col_tf32", 2e-2)])
 def test_live_nvidia_conv2d_performance_routes(route, atol):
@@ -118,6 +121,8 @@ def test_live_nvidia_conv2d_performance_routes(route, atol):
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
+@pytest.mark.performance
 def test_live_nvidia_conv2d_size_aware_dispatch_records_measurements():
     rt = _cuda_or_skip()
     rt._nvidia_conv2d_route_cache.clear()

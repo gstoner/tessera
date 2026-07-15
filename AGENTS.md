@@ -66,6 +66,35 @@ focused drift gates in host WSL before the broader unit/validation lanes. Treat
 audit, lint, or build lane rather than changing the fan-in gate or weakening a
 test state.
 
+## Cross-backend work coordination
+
+The active architecture queues are:
+
+- `docs/audit/backend/apple/todo.md`
+- `docs/audit/backend/nvidia/todo.md`
+- `docs/audit/backend/rocm/todo.md`
+
+Before starting backend compiler or runtime work, read all three plans and
+identify the owning work-item ID.
+
+When a change affects shared IR, ABI, dtype/op registration, diagnostics,
+numerical policy, test infrastructure, benchmark schemas, or runtime contracts,
+the same PR must assess all three backends and update each affected plan. Record
+the sibling-backend outcome as follow-up required, parity validated, or not
+applicable with an architecture-specific reason.
+
+Use PRs as synchronization points. Every cross-backend PR must name its owning
+item, shared contracts changed, backend-plan updates, validation performed, and
+missing exact-device evidence. Link follow-up hardware PRs with a common
+cross-backend synchronization key.
+
+Never transfer physical schedules between architectures or mark sibling work
+complete without exact-device evidence from that backend's required host. A
+shared-contract PR may land with host-free tests and plan updates before its
+linked exact-device follow-ups; do not hold unrelated backend work in one giant
+multi-hardware PR. After a coordinating PR merges, reread all three plans before
+selecting the next architecture action.
+
 ## RDNA ISA data archive
 
 Use `docs/reference/isa/rdna/` as the does-this-op-exist-on-my-target truth before emitting. It is a structured, regenerable extraction of AMD's RDNA3 / RDNA3.5 / RDNA4 ISA guides plus the Micro Engine Scheduler. Each version has an instruction database at `<ver>/instructions.json` (opcodes and pseudocode) and microcode encoding bit-fields at `encodings.json`; the cross-version opcode matrix is at `cross_version/instruction_matrix.{json,md}`.

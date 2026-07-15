@@ -1,6 +1,7 @@
 import time
 
 import numpy as np
+import pytest
 import tessera as ts
 
 from tessera import runtime as rt
@@ -120,6 +121,7 @@ def test_rocm_grouped_swiglu_runtime_matches_grouped_gemm_oracle():
     )
 
 
+@pytest.mark.performance
 def test_dk3_rocm_moe_transport_perf_baseline_is_bounded():
     rng = np.random.default_rng(45)
     x = rng.standard_normal((24, 32)).astype(np.float32)

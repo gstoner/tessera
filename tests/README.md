@@ -7,8 +7,10 @@ contributors should start here.
 
 | Goal | Command |
 |---|---|
-| Daily edit-loop sanity check (~13,360 fast tests, ~5 min, < 512 MB RAM) | `pytest tests/unit/ -m "not slow" -q` |
-| Full Python suite including heavy benchmarks (~13,866 collected total; ~30 min full sweep, ~2 GB RAM) | `pytest tests/unit/ -q` |
+| Hermetic CPU PR lane (14,217 selected on 2026-07-15; 6m18s on a 24-worker WSL host) | `python scripts/run_unit_tests.py -q` |
+| Full Python collection, including device/performance states (~15,326 tests) | `pytest tests/unit/ --collect-only -q` |
+| NVIDIA exact-device correctness (RTX 5070 Ti box) | `pytest tests/unit/ -m "hardware_nvidia and not performance" -q` |
+| NVIDIA measured performance, serial (RTX 5070 Ti box) | `pytest tests/unit/ -m "hardware_nvidia and performance" -q -n 0` |
 | MLIR lit fixtures (needs `tessera-opt` on `$PATH`) | `lit tests/tessera-ir/ -v` |
 | Just the autodiff slice (~213 tests, ~2 s) | `pytest tests/unit/test_autodiff_*.py tests/unit/test_conv1d_autodiff.py tests/unit/test_deferred_vjps.py tests/unit/test_sprint_*.py tests/unit/test_standalone_compiler_roadmap.py -q` |
 
@@ -22,7 +24,7 @@ SuperBench / GEMM tail.
 
 | Directory | Purpose | Default run |
 |---|---|---|
-| `tests/unit/` | Fast correctness contracts for Python compiler APIs, IR emission, pass preconditions, CPU proxy execution, autodiff coverage, registry guards | `pytest -m "not slow"` |
+| `tests/unit/` | Transitional flattened suite; proof layer and environment are selected by markers while families migrate to dedicated directories | `python scripts/run_unit_tests.py` |
 | `tests/tessera-ir/` | FileCheck-based MLIR pass and pipeline lit fixtures | `lit tests/tessera-ir/` |
 | `tests/performance/` | Deterministic roofline/proxy performance contracts (compile latency, generated-artifact size, GEMM/attention/collective timings, benchmark JSON schema) | `cmake --build . --target check-tessera-performance` or `TESSERA_RUN_PERFORMANCE_TESTS=1 ./scripts/test.sh` |
 | `tests/kernel_tests/` | C++ kernel-level tests | Built via CMake when CUDA/HIP backends are enabled |
@@ -38,13 +40,19 @@ Declared in `pyproject.toml` `[tool.pytest.ini_options]`:
 
 | Marker | Effect |
 |---|---|
-| `slow` | Excluded from `-m "not slow"`. Currently applied module-wide to `test_benchmark_gemm.py`, `test_benchmark_compiler_contract.py`, `test_operator_benchmarks_contract.py` — these are the 30-min heavy tail. |
-| `performance` | Deterministic compiler performance / benchmark-proxy tests. |
+| `slow` | Legacy runtime/cost partition. Heavy benchmark modules use it module-wide; some device tests retain it during migration. It is not an environment marker. |
+| `compiler_tool` | Requires a built external compiler tool such as `tessera-opt`, `tessera-nvidia-opt`, or `mlir-opt`. |
+| `integration` | Crosses a child-process, package, runtime, or component boundary. |
+| `performance` | Uses measured wall-clock/device timing; excluded from the parallel CPU PR lane and run serially. |
 | `hardware_apple_gpu` | Tests that require a Darwin host with Metal hardware. Skipped silently when collecting on non-Darwin or in CI without hardware. |
 | `hardware_nvidia` | Tests that require an NVIDIA GPU with CUDA toolkit. |
 | `hardware_rocm` | Tests that require an AMD GPU with the ROCm toolkit. |
 
-The `hardware_*` markers are how `scripts/release_gate.py --target=<accel>` selects per-target tests for the release-gate hardware lane. Tests not yet using a marker still rely on `skipif(sys.platform != "darwin")`-style guards; landing the marker on each hardware test is incremental work and tracked in the tests-manifest dashboard.
+The `hardware_*` markers are how target boxes select exact-device tests. The
+CPU PR expression excludes every hardware marker and `performance`; a missing
+device must not turn a native proof into a reference success. CUDA's current
+lane and NVIDIA-box work plan are recorded in
+[`docs/audit/backend/nvidia/todo.md`](../docs/audit/backend/nvidia/todo.md).
 
 See [`MEMORY_AND_PERFORMANCE.md`](MEMORY_AND_PERFORMANCE.md) for what
 each marker actually costs.
@@ -55,6 +63,7 @@ each marker actually costs.
 |---|---|
 | [`COMPILER_TEST_PLAN.md`](COMPILER_TEST_PLAN.md) | Authoritative test plan — Tier 0–4 CI matrix, layering by IR stage, test ownership |
 | [`MEMORY_AND_PERFORMANCE.md`](MEMORY_AND_PERFORMANCE.md) | What to expect when you run the suites — peak RAM, wall clock, parallelism budget, `slow` marker rationale |
+| [`compiler_test_architecture.md`](../docs/architecture/compiler_test_architecture.md) | Normative proof-layer, environment-state, and migration rules |
 
 ## Known pre-existing failures
 

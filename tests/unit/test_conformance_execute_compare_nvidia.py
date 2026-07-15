@@ -188,6 +188,9 @@ int main(int argc, char** argv) {
 """
 
 
+@pytest.mark.compiler_tool
+@pytest.mark.integration
+@pytest.mark.hardware_nvidia
 def test_nvidia_mma_sync_gemm_executes_and_compares_through_bridge(tmp_path):
     nvcc = _nvcc()
     if nvcc is None:

@@ -175,6 +175,7 @@ def test_rocm_deepseek_topk_branch_does_not_apply_msa_token_mask(monkeypatch):
     np.testing.assert_allclose(out, ref, rtol=2e-5, atol=2e-5)
 
 
+@pytest.mark.performance
 def test_dk2_rocm_sparse_attention_perf_baseline_is_bounded():
     Q, K, V = _qkv(seed=54, Sq=8, Sk=8, D=4)
     kw = {"block_size": 2, "top_k": 2, "causal": True}
@@ -192,6 +193,7 @@ def test_dk2_rocm_sparse_attention_perf_baseline_is_bounded():
     assert float(np.median(launch_vals)) < max(75.0, float(np.median(direct_vals)) * 4.0)
 
 
+@pytest.mark.hardware_rocm
 def test_rocm_sparse_attention_native_gpu_matches_reference_on_hardware():
     if rt._tessera_opt_path() is None:
         pytest.skip("tessera-opt not built")
@@ -209,6 +211,7 @@ def test_rocm_sparse_attention_native_gpu_matches_reference_on_hardware():
     np.testing.assert_allclose(res["output"], ref, rtol=2e-4, atol=2e-4)
 
 
+@pytest.mark.hardware_rocm
 def test_rocm_deepseek_sparse_attention_native_gpu_matches_reference_on_hardware():
     import tessera as ts
 
@@ -230,6 +233,7 @@ def test_rocm_deepseek_sparse_attention_native_gpu_matches_reference_on_hardware
     np.testing.assert_allclose(res["output"], ref, rtol=2e-4, atol=2e-4)
 
 
+@pytest.mark.compiler_tool
 def test_rocm_block_sparse_attention_codegen_lowers():
     import subprocess
     from pathlib import Path
@@ -250,6 +254,7 @@ def test_rocm_block_sparse_attention_codegen_lowers():
     assert low.returncode == 0 and "llvm." in low.stdout
 
 
+@pytest.mark.compiler_tool
 def test_rocm_block_sparse_attention_tiled_codegen_lowers():
     import subprocess
     from pathlib import Path
@@ -270,6 +275,7 @@ def test_rocm_block_sparse_attention_tiled_codegen_lowers():
     assert low.returncode == 0 and "llvm." in low.stdout
 
 
+@pytest.mark.compiler_tool
 def test_rocm_block_sparse_topk_codegen_lowers():
     import subprocess
     from pathlib import Path
@@ -290,6 +296,7 @@ def test_rocm_block_sparse_topk_codegen_lowers():
     assert low.returncode == 0 and "llvm." in low.stdout
 
 
+@pytest.mark.hardware_rocm
 def test_rocm_large_topk_cooperative_matches_serial_on_hardware():
     if rt._tessera_opt_path() is None:
         pytest.skip("tessera-opt not built")

@@ -81,6 +81,7 @@ def test_rocm_dequant_grouped_gemm_runtime_matches_per_expert_oracle():
     )
 
 
+@pytest.mark.performance
 def test_dk4_rocm_dequant_gemm_perf_baseline_is_bounded():
     rng = np.random.default_rng(33)
     x = rng.standard_normal((16, 64)).astype(np.float32)
@@ -96,6 +97,7 @@ def test_dk4_rocm_dequant_gemm_perf_baseline_is_bounded():
     assert launch_ms < max(75.0, direct_ms * 4.0)
 
 
+@pytest.mark.hardware_rocm
 def test_rocm_dequant_gemm_native_gpu_matches_reference_on_hardware():
     if rt._tessera_opt_path() is None:
         pytest.skip("tessera-opt not built")
@@ -119,6 +121,7 @@ def test_rocm_dequant_gemm_native_gpu_matches_reference_on_hardware():
     )
 
 
+@pytest.mark.compiler_tool
 def test_rocm_dequant_gemm_codegen_lowers():
     import subprocess
     from pathlib import Path

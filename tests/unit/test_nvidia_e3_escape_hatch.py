@@ -92,6 +92,7 @@ def _nvidia_matmul_live() -> bool:
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 @pytest.mark.skipif(not _nvidia_matmul_live(),
                     reason="live NVIDIA GPU + shipped GEMM + PTX launch bridge required")
 def test_e3_live_nvidia_hand_tuned_forced_and_wins():

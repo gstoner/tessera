@@ -121,6 +121,8 @@ def test_warmup_grows_mpsgraph_cache():
 
 # ---- Warmup speeds up subsequent calls --------------------------------
 
+@pytest.mark.performance
+@pytest.mark.hardware_apple_gpu
 def test_warmup_then_production_call_is_faster_than_cold():
     """After warmup, the production call (default chunking budget)
     should be measurably faster than the very first call would be.

@@ -61,6 +61,7 @@ def _matmul_artifact(rt):
 
 
 @pytest.mark.parametrize("shape", [(16, 16, 16), (64, 48, 32), (128, 96, 64)])
+@pytest.mark.hardware_nvidia
 def test_launch_nvidia_mma_matmul_f16_matches_numpy(shape):
     rt = _nvidia_runtime_or_skip()
     m, n, k = shape
@@ -77,6 +78,7 @@ def test_launch_nvidia_mma_matmul_f16_matches_numpy(shape):
     assert maxerr < 1e-2, f"nvidia_mma launch{shape} maxerr={maxerr}"
 
 
+@pytest.mark.hardware_nvidia
 def test_launch_nvidia_mma_matmul_bf16_matches_numpy():
     rt = _nvidia_runtime_or_skip()
     bf16 = rt._bfloat16_dtype()
@@ -93,6 +95,7 @@ def test_launch_nvidia_mma_matmul_bf16_matches_numpy():
     assert float(np.max(np.abs(res["output"] - ref))) < 2e-1
 
 
+@pytest.mark.hardware_nvidia
 def test_jit_nvidia_sm120_matmul_dispatches_to_shipped_symbol():
     """On a capable host, @jit(target="nvidia_sm120") matmul is executable
     through the shipped mma.sync lane (was artifact_only). Off-device it stays

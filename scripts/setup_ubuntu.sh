@@ -186,7 +186,8 @@ Next steps
   export PYTHONPATH=${REPO_ROOT}/python
 
   # Python unit tests (no C++ build needed):
-  python -m pytest tests/unit/ -m "not slow"
+  python -m pytest tests/unit/ -m \
+    "not slow and not performance and not hardware_apple_gpu and not hardware_nvidia and not hardware_rocm"
 
   # MLIR lit tests (after building tessera-opt):
   python -m lit tests/tessera-ir/ -v

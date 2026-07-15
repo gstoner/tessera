@@ -90,7 +90,10 @@ def test_rocm_declines_gated_and_pointwise():
     assert ex == "reference"
 
 
-def test_rocm_missing_required_buffer_declines_not_segfault():
+@pytest.mark.integration
+def test_rocm_missing_required_buffer_declines_not_segfault(
+    python_subprocess_env,
+):
     # Same NULL-deref guard as x86: a residual/bias region without the buffer must
     # not launch the HIP kernel (which would deref a null). Child process so a
     # regression is a failed assert, not a crashed session.
@@ -115,7 +118,12 @@ def test_rocm_missing_required_buffer_declines_not_segfault():
         print("ok")
         """
     )
-    p = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    p = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        env=python_subprocess_env,
+    )
     assert p.returncode == 0, (
         f"missing-buffer guard failed (rc={p.returncode}, -11=SIGSEGV): "
         f"{p.stderr[-300:]}")

@@ -21,6 +21,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[2]
 README = ROOT / "tests" / "README.md"
@@ -82,6 +84,7 @@ def _within_tolerance(claimed: int, measured: int) -> bool:
     return abs(claimed - measured) / measured <= _TOLERANCE
 
 
+@pytest.mark.slow
 def test_readme_fast_count_is_current() -> None:
     """The README's fast-suite test count must be within ±15% of the
     actual ``pytest --collect-only -m 'not slow'`` result, OR the doc
@@ -123,6 +126,7 @@ def test_readme_fast_count_is_current() -> None:
     )
 
 
+@pytest.mark.slow
 def test_perf_doc_fast_and_full_counts_are_current() -> None:
     """``MEMORY_AND_PERFORMANCE.md`` must carry fast + full counts
     within ±15% of the live pytest collect numbers."""

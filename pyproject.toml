@@ -118,7 +118,9 @@ pythonpath = [".", "python"]
 timeout = 300
 markers = [
     "slow: long-running tests excluded from quick local sweeps",
-    "performance: deterministic compiler performance and benchmark proxy tests",
+    "compiler_tool: requires a built external compiler tool such as tessera-opt or mlir-opt",
+    "integration: crosses a process, package, runtime, or component boundary",
+    "performance: measures wall-clock/device performance; excluded from the CPU PR lane",
     # Hardware-gated markers — declared 2026-05-20.  Per-target tests
     # mark themselves so ``release_gate.py --target=<accel>`` can
     # select the right subset.  Tests still using

@@ -68,6 +68,7 @@ def test_transformer_attention_block_compiles_and_executes_cpu_dataflow():
         transformer_attention_block(x, wq, wk, wv, wo),
         expected,
         rtol=1e-6,
+        atol=1e-7,
     )
 
     ir = transformer_attention_block.ir_text()

@@ -2,6 +2,7 @@ import os, shutil
 import numpy as np
 import pytest
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 def test_live_nvidia_mla_decode_composed():
     if not (shutil.which("nvcc") or os.path.exists("/usr/local/cuda/bin/nvcc")): pytest.skip("nvcc unavailable")
     from tessera import runtime as rt
@@ -13,6 +14,7 @@ def test_live_nvidia_mla_decode_composed():
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 def test_live_nvidia_mla_decode_fused_entry_smoke():
     rt = _cuda_runtime()
     from tessera.compiler.emit.nvidia_cuda import run_mla_decode_fused
@@ -29,6 +31,7 @@ def test_live_nvidia_mla_decode_fused_entry_smoke():
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 def test_live_nvidia_mla_decode_fused_three_way():
     rt = _cuda_runtime()
     from tessera.compiler.emit.nvidia_cuda import (

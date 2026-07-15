@@ -249,6 +249,7 @@ def test_block_prefill_size_heuristic_default(monkeypatch):
         assert np.max(np.abs(y - y_eager)) < 5e-3, f"shape {(B,S,D,N)}"
 
 
+@pytest.mark.performance
 def test_block_decode_beats_per_token():
     """One dispatch for T tokens must be materially faster than T per-token
     dispatches (the documented decode-1 dispatch-overhead fix)."""

@@ -11,6 +11,7 @@ def _rt():
     return rt
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 def test_live_nvidia_dsa_sparse_attention():
     from tessera import runtime as rt
     from tessera.stdlib.attention import dsa_block_sparse_attention
@@ -22,6 +23,7 @@ def test_live_nvidia_dsa_sparse_attention():
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 def test_live_nvidia_dsa_incremental_decode_uses_global_q_position():
     from tessera import runtime as rt
     from tessera.stdlib.attention import dsa_block_sparse_attention

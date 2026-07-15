@@ -33,6 +33,7 @@ _NP = {"tessera.sum": np.sum, "tessera.mean": np.mean, "tessera.max": np.max,
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 @pytest.mark.parametrize("op", list(_NP))
 @pytest.mark.parametrize("shape,axis", [((8, 64), -1), ((4, 130), -1),
                                           ((3, 5, 16), 1), ((6, 48), None)])
@@ -48,6 +49,7 @@ def test_live_nvidia_reduce_matches_numpy(op, shape, axis, dtype):
 
 
 @pytest.mark.slow
+@pytest.mark.hardware_nvidia
 def test_live_nvidia_reduce_keepdims_and_nan_propagation():
     rt = _cuda_or_skip()
     x = np.array([[1.0, np.nan, 3.0], [2.0, 4.0, 1.0]], np.float32)

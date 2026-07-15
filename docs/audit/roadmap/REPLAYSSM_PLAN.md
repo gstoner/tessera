@@ -1,7 +1,7 @@
 ---
 last_updated: 2026-07-14
 audit_role: plan
-plan_state: complete
+plan_state: landing
 ---
 
 # ReplaySSM — SSM decode-state ABI plan

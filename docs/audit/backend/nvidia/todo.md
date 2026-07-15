@@ -15,8 +15,8 @@ work unless a test exposes a real defect.
 
 Baseline state on the NVIDIA box (2026-07-15, commit `ecf9483f`):
 
-- The repository collects **241 exact-device CUDA tests** under
-  `pytest -m hardware_nvidia`: **223 correctness** cases and **18 measured
+- The repository collects **243 exact-device CUDA tests** under
+  `pytest -m hardware_nvidia`: **225 correctness** cases and **18 measured
   performance** cases. Eight of the correctness cases also require external
   compiler tools.
 - The required CPU PR lane now excludes hardware and measured-performance
@@ -61,6 +61,21 @@ Baseline state on the NVIDIA box (2026-07-15, commit `ecf9483f`):
   profiler replay raises the wall-clock samples above its uninstrumented
   repeated-median caps. Its ordinary serial run remains the timing proof; the
   Nsight run is resource-only and must never update or relax the ratchet.
+- The serving benchmark completed 20-repetition device-event and end-to-end
+  rows for ReplaySSM `1x128x64`/`1x256x128` and fused/staged paged-KV decode
+  at 128/512/2048 tokens (`/tmp/nvidia-sm120-serving-test5.json`). A temporary
+  candidate corpus records both timing domains for rectangular `128x256x64`
+  and ragged `127x259x63` f16 GEMM: end-to-end selects shared Tile (0.506 and
+  0.490 ms), while device timing selects direct Tile (0.00657 and 0.00703 ms).
+  No committed selector or timing cap changed.
+- Nsight reduction coverage passed 49 native cases: f32/f16 kernels use 28
+  registers and 1.02 KiB static shared memory with 100% theoretical occupancy.
+  MoE transport passed three native cases: gather/combine use 20 registers and
+  no shared memory; grouped GEMM uses 40 registers and no shared memory. The
+  two live MoE transport tests were missing `hardware_nvidia` and are now in
+  the canonical exact-device collection; its host-only rejection test remains
+  unmarked. Reductions and transport still need productized repeated-median
+  benchmark rows before NVIDIA-TEST-5 can close.
 - The first device run exposed a product defect in Tile GELU: NVPTX could not
   select LLVM's `ftanh`; after its arithmetic lowering, SiLU exposed the same
   issue for `fexp`. Both now lower through a bounded Pade tanh expression, so

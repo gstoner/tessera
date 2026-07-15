@@ -17,6 +17,7 @@ def _plan(seed=1):
     return moe.plan_dispatch(ids,w,4,capacity=5)
 
 @pytest.mark.skipif(not _live(),reason="requires nvcc and NVIDIA GPU")
+@pytest.mark.hardware_nvidia
 def test_dispatch_and_combine_match_oracles():
     from tessera import runtime as rt
     rng=np.random.default_rng(3);x=rng.standard_normal((12,9)).astype(np.float32);plan=_plan(3)
@@ -25,6 +26,7 @@ def test_dispatch_and_combine_match_oracles():
     c=rt.launch(_art(rt,"tessera.moe_combine",["partials","plan"]),(partials,plan));assert c["execution_kind"]=="native_gpu";np.testing.assert_allclose(c["output"],moe.combine(partials,plan),rtol=1e-5,atol=1e-6)
 
 @pytest.mark.skipif(not _live(),reason="requires nvcc and NVIDIA GPU")
+@pytest.mark.hardware_nvidia
 def test_grouped_gemm_matches_per_expert_oracle():
     from tessera import runtime as rt
     from tessera.compiler.grouped_layout import reference_grouped_gemm

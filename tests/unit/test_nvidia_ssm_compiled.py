@@ -1,18 +1,14 @@
 from __future__ import annotations
-import os,shutil
 import numpy as np
 import pytest
 import tessera
-
-def _live():
-    if not (shutil.which("nvcc") or os.path.exists("/usr/local/cuda/bin/nvcc")): return False
-    from tessera import runtime as rt
-    return rt._nvidia_mma_runtime_available()
+from _nvidia_testutil import nvidia_mma_runtime_available
 
 def _artifact(rt,names,extras):
     return rt.RuntimeArtifact(metadata={"target":"nvidia_sm120","compiler_path":"nvidia_ssm_compiled","executable":True,"execution_kind":"native_gpu","arg_names":names,"output_name":"o","ops":[{"op_name":"tessera.selective_ssm","result":"o","operands":names,"kwargs":{"extras":extras}}]})
 
-@pytest.mark.skipif(not _live(),reason="requires nvcc and NVIDIA GPU")
+@pytest.mark.skipif(not nvidia_mma_runtime_available(),reason="requires nvcc and NVIDIA GPU")
+@pytest.mark.hardware_nvidia
 @pytest.mark.parametrize("with_extras",[False,True])
 def test_selective_ssm_matches_reference(with_extras):
     from tessera import runtime as rt

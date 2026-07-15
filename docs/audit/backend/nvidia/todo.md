@@ -15,8 +15,8 @@ work unless a test exposes a real defect.
 
 Baseline state on the NVIDIA box (2026-07-15, commit `ecf9483f`):
 
-- The repository collects **243 exact-device CUDA tests** under
-  `pytest -m hardware_nvidia`: **225 correctness** cases and **18 measured
+- The repository collects **264 exact-device CUDA tests** under
+  `pytest -m hardware_nvidia`: **246 correctness** cases and **18 measured
   performance** cases. Eight of the correctness cases also require external
   compiler tools.
 - The required CPU PR lane now excludes hardware and measured-performance
@@ -88,6 +88,12 @@ Baseline state on the NVIDIA box (2026-07-15, commit `ecf9483f`):
   Attention, and convolution tests. Their 89 focused exact-device tests passed
   on the RTX 5070 Ti. Specialized compiler and Tile availability probes remain
   local until their stronger capability contracts can be preserved explicitly.
+- The third batch migrated control flow, DeltaNet, dequant GEMM, FP quant,
+  local collectives, optimizers, positional encoding, and SSM to the shared
+  MMA-runtime probe. It also classified their live CUDA tests with
+  `hardware_nvidia` while leaving host-only negative tests unmarked. The 32
+  focused tests passed; collection increased from 243 to 264 exact-device
+  nodes (246 correctness, 18 performance).
 - The first device run exposed a product defect in Tile GELU: NVPTX could not
   select LLVM's `ftanh`; after its arithmetic lowering, SiLU exposed the same
   issue for `fexp`. Both now lower through a bounded Pade tanh expression, so
@@ -167,6 +173,21 @@ generator places it under `build-nvidia-cuda/tools/tessera-opt/` differently.
 | 5 | NVIDIA-TEST-5 | Measured performance | Run `hardware_nvidia and performance` serially. Warm up compilation and caches; use repeated medians; measure kernel-only and end-to-end separately; record registers, shared memory, occupancy, spills, and selected route. | Stable baselines cover square/rectangular/ragged GEMM, fused epilogues, attention, paged KV, ReplaySSM, reductions, and transport. Each ratchet identifies the selected implementation. |
 | 6 | NVIDIA-TEST-6 | Refactor and deduplicate | Move mature families toward `tests/compiler/`, `tests/device/nvidia/`, `tests/integration/`, and `tests/performance/nvidia/`. Consolidate repeated CUDA availability, compilation, launch, oracle, and cleanup code. | No central filename allowlist; no duplicated private CUDA probe/loader; process trees and device allocations clean up on failure. |
 | 7 | NVIDIA-TEST-7 | CI/release ownership | Add the NVIDIA-box workflow/release-gate command with concurrency control and retained artifacts. Keep device correctness required for NVIDIA promotion; run performance on an isolated/scheduled lane. | A clean branch run reports CPU, artifact, device, and performance states independently and links retained evidence. |
+
+### High-risk NVIDIA-TEST-6 migration
+
+**NVIDIA-TEST-6-HIGH — Relocate mature CUDA families without breaking the
+proof contract.** Move mature compiler, device, integration, and performance
+families toward `tests/compiler/`, `tests/device/nvidia/`,
+`tests/integration/`, and `tests/performance/nvidia/`. This is high risk because
+pytest node IDs, import roots, marker collection, CI selection, and retained
+JUnit history can all change even if individual assertions still pass.
+
+Before accepting the migration, record an old-to-new node map, preserve every
+`hardware_nvidia`/`performance`/`compiler_tool` classification, prove that the
+old paths have no duplicate collection, and run the host-free, artifact,
+exact-device, and serial-performance layers. Do not combine this migration with
+backend behavior, tolerance, or selector changes.
 
 ## Canonical commands on the NVIDIA box
 

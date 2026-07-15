@@ -1,12 +1,7 @@
 from __future__ import annotations
-import os,shutil
 import numpy as np
 import pytest
-
-def _live():
-    if not (shutil.which("nvcc") or os.path.exists("/usr/local/cuda/bin/nvcc")):return False
-    from tessera import runtime as rt
-    return rt._nvidia_mma_runtime_available()
+from _nvidia_testutil import nvidia_mma_runtime_available
 
 def _ref(Q,K,V,gate=None,beta=None,decay=None,erase=False,modified=False):
     B,H,S,D=Q.shape;DV=V.shape[-1];st=np.zeros((B,H,D,DV),np.float64);o=np.zeros((B,H,S,DV),np.float64)
@@ -26,7 +21,8 @@ def _artifact(rt,name,vals,kw):
     names=[f"x{i}" for i in range(len(vals))]
     return rt.RuntimeArtifact(metadata={"target":"nvidia_sm120","compiler_path":"nvidia_deltanet_compiled","executable":True,"execution_kind":"native_gpu","arg_names":names,"output_name":"o","ops":[{"op_name":name,"result":"o","operands":names,"kwargs":kw}]}),tuple(vals)
 
-@pytest.mark.skipif(not _live(),reason="requires nvcc and NVIDIA GPU")
+@pytest.mark.skipif(not nvidia_mma_runtime_available(),reason="requires nvcc and NVIDIA GPU")
+@pytest.mark.hardware_nvidia
 @pytest.mark.parametrize("variant",["plain","kimi","gated","erase","modified"])
 def test_deltanet_variants_match_oracle(variant):
     from tessera import runtime as rt

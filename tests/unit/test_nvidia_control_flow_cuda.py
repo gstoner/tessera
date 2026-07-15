@@ -2,23 +2,11 @@
 
 from __future__ import annotations
 
-import os
-import shutil
-
 import numpy as np
 import pytest
 
+from _nvidia_testutil import nvidia_mma_runtime_available
 from tessera.compiler.emit import nvidia_cuda as nv
-
-
-def _live() -> bool:
-    if not (shutil.which("nvcc") or os.path.exists("/usr/local/cuda/bin/nvcc")):
-        return False
-    try:
-        from tessera import runtime
-        return runtime._nvidia_mma_runtime_available()
-    except Exception:
-        return False
 
 
 def test_control_source_has_four_single_launch_entries():
@@ -28,7 +16,7 @@ def test_control_source_has_four_single_launch_entries():
     assert src.count("<<<") == 4
 
 
-@pytest.mark.skipif(not _live(), reason="requires nvcc and a live NVIDIA GPU")
+@pytest.mark.skipif(not nvidia_mma_runtime_available(), reason="requires nvcc and a live NVIDIA GPU")
 @pytest.mark.hardware_nvidia
 def test_bounded_control_cuda_matches_numpy():
     x = np.linspace(1.0, 2.0, 32, dtype=np.float32)
@@ -56,7 +44,7 @@ def test_bounded_control_cuda_matches_numpy():
     np.testing.assert_allclose(got_ys, np.stack(ref_ys), rtol=1e-6, atol=1e-6)
 
 
-@pytest.mark.skipif(not _live(), reason="requires nvcc and a live NVIDIA GPU")
+@pytest.mark.skipif(not nvidia_mma_runtime_available(), reason="requires nvcc and a live NVIDIA GPU")
 @pytest.mark.hardware_nvidia
 def test_control_scan_runtime_binding_matches_numpy():
     from tessera import runtime as rt

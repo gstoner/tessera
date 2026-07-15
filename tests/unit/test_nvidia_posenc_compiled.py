@@ -1,16 +1,9 @@
 """Native CUDA RoPE/ALiBi positional encoding contracts."""
 
 from __future__ import annotations
-import os, shutil
 import numpy as np
 import pytest
-
-
-def _live():
-    if not (shutil.which("nvcc") or os.path.exists("/usr/local/cuda/bin/nvcc")):
-        return False
-    from tessera import runtime
-    return runtime._nvidia_mma_runtime_available()
+from _nvidia_testutil import nvidia_mma_runtime_available
 
 
 def _artifact(rt, op, operands, args, kwargs):
@@ -22,7 +15,8 @@ def _artifact(rt, op, operands, args, kwargs):
                  "kwargs": kwargs}]})
 
 
-@pytest.mark.skipif(not _live(), reason="requires nvcc and a live NVIDIA GPU")
+@pytest.mark.skipif(not nvidia_mma_runtime_available(), reason="requires nvcc and a live NVIDIA GPU")
+@pytest.mark.hardware_nvidia
 def test_rope_runtime_matches_pairwise_oracle():
     from tessera import runtime as rt
     rng = np.random.default_rng(11); x = rng.standard_normal((3, 5, 32)).astype(np.float32)
@@ -34,7 +28,8 @@ def test_rope_runtime_matches_pairwise_oracle():
     np.testing.assert_allclose(out, ref, rtol=2e-6, atol=2e-6)
 
 
-@pytest.mark.skipif(not _live(), reason="requires nvcc and a live NVIDIA GPU")
+@pytest.mark.skipif(not nvidia_mma_runtime_available(), reason="requires nvcc and a live NVIDIA GPU")
+@pytest.mark.hardware_nvidia
 def test_alibi_default_and_explicit_slopes():
     from tessera import runtime as rt
     h,s=4,17

@@ -1,3 +1,7 @@
+---
+last_updated: 2026-07-15
+---
+
 # Dedicated Hardware Runners
 
 Each physical backend machine is a single-purpose GitHub Actions runner.  A

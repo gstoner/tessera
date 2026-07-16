@@ -1,4 +1,6 @@
 #pragma once
+#include "tessera/Dialect/Collective/Runtime/Adapters.h"
+
 #include <cstdint>
 #include <cstddef>
 #include <cstring>
@@ -40,8 +42,6 @@ inline uint8_t fp32_to_fp8_e4m3(float f) {
   int mant = (int)std::ldexp(m, 4) & 0x7; // 4 because hidden bit -> 3 mant bits
   return (uint8_t)((s<<7) | ((e & 0xF)<<3) | (mant & 0x7));
 }
-
-enum class WireDType { FP32, BF16, FP8 };
 
 struct PackResult {
   std::vector<uint8_t> bytes;

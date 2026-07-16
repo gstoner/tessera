@@ -66,7 +66,7 @@ _MACRO_TILES = [(1, 1), (2, 2), (2, 4), (3, 4)]
 def _find_mlir_opt():
     if env := os.environ.get("TESSERA_MLIR_OPT"):
         return env if Path(env).is_file() else None
-    for c in ("/usr/lib/llvm-22/bin/mlir-opt", "/opt/homebrew/opt/llvm/bin/mlir-opt"):
+    for c in ("/usr/lib/llvm-23/bin/mlir-opt", "/opt/homebrew/opt/llvm/bin/mlir-opt"):
         if Path(c).is_file():
             return c
     return shutil.which("mlir-opt")
@@ -112,7 +112,7 @@ def _build_hsaco(mt=1, nt=1) -> bytes:
         pytest.skip("build tessera-opt: ninja -C build tessera-opt")
     mlir_opt = _find_mlir_opt()
     if mlir_opt is None:
-        pytest.skip("mlir-opt not found (set TESSERA_MLIR_OPT or install LLVM 22)")
+        pytest.skip("mlir-opt not found (set TESSERA_MLIR_OPT or install LLVM 23)")
     gen = subprocess.run(
         [str(TESSERA_OPT), "-", "--generate-wmma-gemm-kernel",
          "--lower-tessera-target-to-rocdl"],

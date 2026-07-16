@@ -126,7 +126,7 @@ def test_compiler_toolchain_missing_state_is_a_canonical_skip():
     tools = CompilerToolchain(tessera_opt=None, mlir_opt=None)
     with pytest.raises(pytest.skip.Exception, match="requires tessera-opt"):
         tools.require_tessera_opt()
-    with pytest.raises(pytest.skip.Exception, match="requires MLIR 22 mlir-opt"):
+    with pytest.raises(pytest.skip.Exception, match="requires MLIR 23 mlir-opt"):
         tools.require_mlir_opt()
     with pytest.raises(pytest.skip.Exception, match="requires tessera-nvidia-opt"):
         tools.require_nvidia_opt()

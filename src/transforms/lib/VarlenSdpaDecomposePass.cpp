@@ -110,7 +110,7 @@ LogicalResult tryDecompose(Operation *op, OpBuilder &b) {
     Value vb = b.create<tensor::ExtractSliceOp>(loc, kbT, v, kOff, kSz, strides);
 
     // Build tessera.flash_attn generically (the dialect stores
-    // operandSegmentSizes as a normal attribute — usePropertiesForAttributes=0).
+    // operandSegmentSizes as a normal attribute).
     OperationState fa(loc, "tessera.flash_attn");
     fa.addOperands({qb, kb, vb});
     fa.addTypes({qbT});

@@ -192,7 +192,8 @@ struct Canon : public PassWrapper<Canon, OperationPass<ModuleOp>> {
     RewritePatternSet patterns(&getContext());
     patterns.add<FuseMatmulBiasGELU, FuseConvRelu, DropoutZeroSimplify, TransposeIntoMatmul,
                  TransposeThroughPointwise, EraseIdentityCast>(&getContext());
-    if (failed(applyPatternsAndFoldGreedily(getOperation(), std::move(patterns))))
+    FrozenRewritePatternSet frozenPatterns(std::move(patterns));
+    if (failed(applyPatternsGreedily(getOperation(), frozenPatterns)))
       getOperation()->emitWarning()
           << "tessera-canonicalize: greedy pattern application did not "
              "converge within the iteration limit";

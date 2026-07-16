@@ -57,22 +57,17 @@ bool lowerRealWMMA(Operation *op, PatternRewriter &rewriter) {
   // exact dense A*B+C operation represented by Tile's logical mma contract.
   if (fragmentFamily == "gfx125x_wmma_v2" &&
       isVec(c.getType(), 8, f32) && isVec(resTy, 8, f32)) {
-    SmallVector<NamedAttribute> attrs = {
-        rewriter.getNamedAttr("signA", rewriter.getBoolAttr(false)),
-        rewriter.getNamedAttr("signB", rewriter.getBoolAttr(false)),
-        rewriter.getNamedAttr("modC", rewriter.getI16IntegerAttr(0)),
-        rewriter.getNamedAttr("reuseA", rewriter.getBoolAttr(false)),
-        rewriter.getNamedAttr("reuseB", rewriter.getBoolAttr(false)),
-    };
     Operation *real = nullptr;
     if (isVec(a.getType(), 16, rewriter.getF16Type()) &&
         isVec(b.getType(), 16, rewriter.getF16Type()))
       real = rewriter.create<ROCDL::wmma_f32_16x16x32_f16>(
-          loc, TypeRange{resTy}, ValueRange{a, b, c}, attrs);
+          loc, resTy, a, b, ROCDL::WMMACModifier::none, c,
+          /*reuseA=*/false, /*reuseB=*/false);
     else if (isVec(a.getType(), 16, rewriter.getBF16Type()) &&
              isVec(b.getType(), 16, rewriter.getBF16Type()))
       real = rewriter.create<ROCDL::wmma_f32_16x16x32_bf16>(
-          loc, TypeRange{resTy}, ValueRange{a, b, c}, attrs);
+          loc, resTy, a, b, ROCDL::WMMACModifier::none, c,
+          /*reuseA=*/false, /*reuseB=*/false);
     if (real) {
       rewriter.replaceOp(op, real->getResults());
       return true;
@@ -158,9 +153,8 @@ bool lowerRealWMMA(Operation *op, PatternRewriter &rewriter) {
 }
 
 // CDNA's canonical 16x16x16 f16/bf16 MFMA ABI is wave64: four input
-// elements and four f32 accumulator elements per lane. MFMA carries three
-// immediate control operands (cbsz, abid, blgp); zero selects the unmodified
-// dense product used by Tile's logical mma contract.
+// elements and four f32 accumulator elements per lane. MLIR 23 models the
+// unmodified dense-product form with only the A, B, and accumulator operands.
 bool lowerRealMFMA(Operation *op, PatternRewriter &rewriter) {
   if (op->getNumOperands() != 3 || op->getNumResults() != 1)
     return false;
@@ -176,14 +170,11 @@ bool lowerRealMFMA(Operation *op, PatternRewriter &rewriter) {
     return false;
 
   Location loc = op->getLoc();
-  Type i32 = rewriter.getIntegerType(32);
-  Value ctrl = rewriter.create<LLVM::ConstantOp>(
-      loc, i32, rewriter.getI32IntegerAttr(0));
-  SmallVector<Value> args{a, b, c, ctrl, ctrl, ctrl};
   if (isVec(a.getType(), 4, rewriter.getF16Type()) &&
       isVec(b.getType(), 4, rewriter.getF16Type())) {
     Operation *real = rewriter.create<ROCDL::mfma_f32_16x16x16f16>(
-        loc, resTy, ValueRange(args));
+        loc, resTy, a, b, c, /*cbsz=*/0, /*abid=*/0,
+        ROCDL::MFMAPermB::none);
     rewriter.replaceOp(op, real->getResults());
     return true;
   }
@@ -192,10 +183,9 @@ bool lowerRealMFMA(Operation *op, PatternRewriter &rewriter) {
     Type i16Vec = VectorType::get({4}, rewriter.getIntegerType(16));
     Value ai = rewriter.create<LLVM::BitcastOp>(loc, i16Vec, a);
     Value bi = rewriter.create<LLVM::BitcastOp>(loc, i16Vec, b);
-    args[0] = ai;
-    args[1] = bi;
     Operation *real = rewriter.create<ROCDL::mfma_f32_16x16x16bf16_1k>(
-        loc, resTy, ValueRange(args));
+        loc, resTy, ai, bi, c, /*cbsz=*/0, /*abid=*/0,
+        ROCDL::MFMAPermB::none);
     rewriter.replaceOp(op, real->getResults());
     return true;
   }

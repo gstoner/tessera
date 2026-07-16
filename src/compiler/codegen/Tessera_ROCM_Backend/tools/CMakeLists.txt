@@ -5,4 +5,5 @@ target_link_libraries(tessera-rocm-opt PRIVATE
   MLIRLLVMDialect MLIRROCDLDialect MLIROptLib TesseraROCMIR TesseraROCMConversion)
 
 add_executable(tessera-rocm-emit tessera_rocm_emit.cpp)
-target_link_libraries(tessera-rocm-emit PRIVATE MLIRSupport MLIRIR MLIRParser MLIRPass)
+target_link_libraries(tessera-rocm-emit PRIVATE
+  MLIRSupport MLIRIR MLIRParser MLIRPass MLIRFuncDialect)

@@ -107,15 +107,21 @@ endif()
 # --------------------------------------------------------------------------
 # LLVM / MLIR
 # --------------------------------------------------------------------------
-# Tessera targets LLVM/MLIR 22+. We match without a version constraint so any
-# 22.x patch release works (LLVM's CMake config only accepts exact major.minor
+# Tessera targets LLVM/MLIR 23+. We match without a version constraint so any
+# 23.x patch release works (LLVM's CMake config only accepts exact major.minor
 # matches via the find_package version arg), then assert the major below.
 find_package(LLVM REQUIRED CONFIG)
 find_package(MLIR REQUIRED CONFIG)
 
-if(LLVM_VERSION_MAJOR LESS 22)
+if(LLVM_VERSION_MAJOR LESS 23)
   message(FATAL_ERROR
-    "Tessera requires LLVM/MLIR 22 or newer; found ${LLVM_PACKAGE_VERSION}")
+    "Tessera requires LLVM/MLIR 23 or newer; found ${LLVM_PACKAGE_VERSION}")
+endif()
+
+if(DEFINED MLIR_VERSION_MAJOR AND NOT MLIR_VERSION_MAJOR EQUAL LLVM_VERSION_MAJOR)
+  message(FATAL_ERROR
+    "Tessera requires matching LLVM/MLIR major versions; found LLVM "
+    "${LLVM_VERSION_MAJOR} and MLIR ${MLIR_VERSION_MAJOR}")
 endif()
 
 # Pull in MLIR cmake helpers (TableGen, AddMLIR, …) — required by sub-components

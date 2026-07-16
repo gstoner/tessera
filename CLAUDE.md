@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > [`docs/audit/MASTER_AUDIT.md`](docs/audit/MASTER_AUDIT.md) (Decision #26).**
 > Counts (entries, tests, symbols) live in `docs/audit/generated/` — do not
 > trust or copy numeric snapshots written into prose anywhere, including here.
-> Build pin: LLVM/MLIR 22.1.6 (Homebrew `llvm`).
+> Build pin: matched LLVM/MLIR 23.
 
 ---
 
@@ -258,22 +258,23 @@ Heavy SuperBench / benchmark-contract tests are marked `slow` and excluded by de
 
 Everything needed for build / lint / typecheck / lit / unit-test is on Homebrew
 on this Mac under `/opt/homebrew/bin/`: `python3` (3.14.5), `ninja`, `cmake`,
-`pytest`, `mypy`, `ruff`, `black`, `isort`, `flake8`, `lit`. **LLVM/MLIR 22.1.6**
+`pytest`, `mypy`, `ruff`, `black`, `isort`, `flake8`, `lit`. **LLVM/MLIR 23**
 is `/opt/homebrew/opt/llvm/` (`brew install llvm`). Run the Python flow directly
 with `python3 -m …` — no venv. `numpy`, `scipy`, `torch`, `transformers`,
 `ml_dtypes` are installed under `/opt/homebrew/lib/python3.14/site-packages/`.
 
 When pointing CMake at LLVM, use `/opt/homebrew/opt/llvm/lib/cmake/{llvm,mlir}`
-(NOT the older `llvm@21` path that stale `build/` caches reference).
+(NOT an older versioned keg that stale `build/` caches reference).
 
-### Ubuntu 24.04 (x86 + AMD ROCm 7.2.4)
+### Ubuntu 24.04 (x86 + AMD ROCm 7.14)
 
 The same tree builds on Ubuntu 24.04. `bash scripts/setup_ubuntu.sh` provisions
-LLVM/MLIR 22 from **apt.llvm.org** (ROCm's bundled LLVM has no MLIR), the base
+matched LLVM/MLIR 23 from **apt.llvm.org**, the base
 build deps, and a project-local `.venv` — then `source .venv/bin/activate` and
-`export PYTHONPATH=python`. CMake LLVM lives at `/usr/lib/llvm-22/lib/cmake/
-{llvm,mlir}`; ROCm **7.2.4** at `/opt/rocm` (`-DTESSERA_ENABLE_HIP=ON
--DTESSERA_BUILD_ROCM_BACKEND=ON -DCMAKE_PREFIX_PATH=/opt/rocm`). ROCm kernel
+`export PYTHONPATH=python`. CMake LLVM lives at `/usr/lib/llvm-23/lib/cmake/
+{llvm,mlir}`; TheRock ROCm **7.14** lives under `/opt/rocm/core`
+(`-DTESSERA_ENABLE_HIP=ON -DTESSERA_BUILD_ROCM_BACKEND=ON
+-DCMAKE_PREFIX_PATH=/opt/rocm/core`). ROCm kernel
 execution stays hardware-gated (Phase H) until a GPU + `/dev/kfd` are present;
 the build and lit fixtures need no GPU. The venv caps `numpy<2.2` (numpy ≥2.2
 stubs break the `python_version=3.10` mypy ratchet). See `docs/GETTING_STARTED.md`
@@ -284,7 +285,7 @@ for the full cross-platform matrix.
 ## C++ Build
 
 ```bash
-# Canonical local configure — CPU + Apple backend against Homebrew LLVM/MLIR 22 (Ninja)
+# Canonical local configure — CPU + Apple backend against Homebrew LLVM/MLIR 23 (Ninja)
 cmake -S . -B build -G Ninja \
   -DLLVM_DIR=/opt/homebrew/opt/llvm/lib/cmake/llvm \
   -DMLIR_DIR=/opt/homebrew/opt/llvm/lib/cmake/mlir \

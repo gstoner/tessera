@@ -151,11 +151,48 @@ is using the GPU. Use at least one established Metal 3 host and one Metal 4 host
 for capability-dependent promotion; never generalize a winner across Apple GPU
 families without a matching record.
 
+### Install LLVM/MLIR 23 with Homebrew
+
+Homebrew's stable `llvm` formula is still LLVM 22 as of 2026-07-16 and there is
+no `llvm@23` formula yet. Apple validation therefore uses the Homebrew HEAD
+build and must reject the keg unless `llvm-config`, `mlir-opt`, and
+`mlir-tblgen` all report major version 23. Install the Xcode Command Line Tools
+first, then run:
+
+```bash
+xcode-select --install                    # omit if already installed
+brew update
+brew install cmake ninja lit
+brew install llvm --HEAD                  # builds LLVM/MLIR 23 today
+# If stable Homebrew LLVM was already installed, switch it with:
+# brew reinstall llvm --HEAD
+
+LLVM_PREFIX="$(brew --prefix llvm)"
+export PATH="$LLVM_PREFIX/bin:$PATH"
+export CMAKE_PREFIX_PATH="$LLVM_PREFIX${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
+
+"$LLVM_PREFIX/bin/llvm-config" --version
+"$LLVM_PREFIX/bin/mlir-opt" --version
+"$LLVM_PREFIX/bin/mlir-tblgen" --version
+"$(brew --prefix lit)/bin/lit" --version
+```
+
+Do not use AppleClang's system LLVM libraries or mix a stable LLVM 22 keg with
+HEAD MLIR 23. Before configuring Tessera, require all three LLVM/MLIR version
+commands above to begin with `23.` and record `brew info llvm` in the build
+evidence.
+
 For compiler artifacts, build the Apple backend and portable MLIR tools:
 
 ```bash
+LLVM_PREFIX="$(brew --prefix llvm)"
 cmake -S . -B build-apple -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_C_COMPILER="$LLVM_PREFIX/bin/clang" \
+  -DCMAKE_CXX_COMPILER="$LLVM_PREFIX/bin/clang++" \
+  -DLLVM_DIR="$LLVM_PREFIX/lib/cmake/llvm" \
+  -DMLIR_DIR="$LLVM_PREFIX/lib/cmake/mlir" \
+  -DLLVM_EXTERNAL_LIT="$(brew --prefix lit)/bin/lit" \
   -DTESSERA_BUILD_APPLE_BACKEND=ON \
   -DTESSERA_BUILD_EXAMPLES=ON
 cmake --build build-apple --target tessera-opt tessera-translate-mlir \
@@ -167,6 +204,13 @@ export PYTHONPATH="$PWD/python:$PWD"
 Use the actual Ninja output path if the local LLVM/MLIR build lays out
 `tessera-opt` differently. Build or load one fresh Apple runtime image for the
 device lane; duplicate or stale dylibs invalidate symbol and placement proof.
+
+The 2026-07-16 shared compiler migration raises the project floor to matched
+LLVM/MLIR 23 and removes the obsolete Apple dialect property switch. The
+portable Apple sources are assessed by the shared-source migration, but the
+current WSL host cannot build or execute the Darwin/Metal runtime; Apple
+LLVM/MLIR 23 build and exact-device parity are **follow-up required** on the
+named Apple hosts.
 
 ## Ordered work
 

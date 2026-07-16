@@ -1,2 +1,9 @@
+#include "llvm/ADT/TypeSwitch.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/DialectImplementation.h"
+
+#define GET_TYPEDEF_CLASSES
 #include "CollectiveTypes.h.inc"
-using namespace mlir; using namespace tessera::collective;
+
+#define GET_TYPEDEF_CLASSES
+#include "CollectiveTypes.cpp.inc"

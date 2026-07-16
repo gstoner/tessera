@@ -1,0 +1,43 @@
+{
+  "schema": "tessera.rocm.wsl-profile-capabilities.v1",
+  "recorded_at": "2026-07-16",
+  "evidence_arch": "gfx1151",
+  "environment": {
+    "rocm": "7.14.0",
+    "hip": "7.14.60850",
+    "llvm_mlir": "23.0.0",
+    "rocprofv3": "1.3.2",
+    "rocdxg": "1.2.1",
+    "amd_smi_tool": "1.2.1",
+    "amd_smi_library": "1.2.1",
+    "windows_driver": "26.10.21.05-260626a-202082C-AMD-Software-Adrenalin-Edition"
+  },
+  "hip_api_trace": {
+    "status": "supported",
+    "profiled_fixture": "tests/unit/test_rocm_wmma_runtime_symbol.py::test_shipped_rocm_wmma_f16_matches_numpy[shape0]",
+    "fixture_result": "1 passed",
+    "record_count": 14,
+    "observed_calls": [
+      "hipGetDevicePropertiesR0600",
+      "hipModuleLoadData",
+      "hipModuleGetFunction",
+      "hipMalloc",
+      "hipMemcpy",
+      "hipModuleLaunchKernel",
+      "hipDeviceSynchronize",
+      "hipFree"
+    ],
+    "command_shape": "rocprofv3 --hip-runtime-trace --memory-allocation-trace --memory-copy-trace --kernel-trace -- <application>"
+  },
+  "device_activity": {
+    "kernel_dispatch_records": 0,
+    "memory_copy_records": 0,
+    "memory_allocation_records": 0,
+    "claim": "HIP API call tracing only; no separate device-timeline claim"
+  },
+  "unsupported": {
+    "pmc": "librocdxg 1.2.1 hsaKmtPmc entry points return HSAKMT_STATUS_NOT_SUPPORTED",
+    "pc_sampling": "librocdxg 1.2.1 hsaKmtPcSampling entry points return HSAKMT_STATUS_NOT_SUPPORTED",
+    "aggregate_runtime_trace": "enables a KFD-dependent subdomain and aborts opening /dev/kfd on WSL"
+  }
+}

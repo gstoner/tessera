@@ -43,7 +43,7 @@ def _find(tool: str, *cands: str):
 
 
 def _mlir_translate():
-    return _find("mlir-translate", "/usr/lib/llvm-22/bin/mlir-translate",
+    return _find("mlir-translate", "/usr/lib/llvm-23/bin/mlir-translate",
                  "/opt/homebrew/opt/llvm/bin/mlir-translate")
 
 
@@ -65,7 +65,7 @@ def _lower(src: str) -> str:
 def _to_llvmir(rocdl_mlir: str) -> str:
     mt = _mlir_translate()
     if mt is None:
-        pytest.skip("mlir-translate not found (install LLVM 22)")
+        pytest.skip("mlir-translate not found (install LLVM 23)")
     r = _run([mt, "--mlir-to-llvmir"], rocdl_mlir)
     assert r.returncode == 0, f"mlir-translate failed: {r.stderr}"
     return r.stdout

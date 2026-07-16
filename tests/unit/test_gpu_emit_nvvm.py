@@ -18,7 +18,7 @@ import pytest
 REPO = Path(__file__).resolve().parents[2]
 _CANDIDATES = (
     REPO / "build" / "tools" / "tessera-opt" / "tessera-opt",
-    REPO / "build-llvm22" / "tools" / "tessera-opt" / "tessera-opt",
+    REPO / "build-llvm23" / "tools" / "tessera-opt" / "tessera-opt",
 )
 
 

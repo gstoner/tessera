@@ -13,7 +13,7 @@ def TileQueue : TypeDef<Tessera_Queue_Dialect, "TileQueue"> {
   let assemblyFormat = "";
 }
 
-def Token : TypeDef<Tessera_Queue_Dialect, "Token"> {
+def QueueToken : TypeDef<Tessera_Queue_Dialect, "Token"> {
   let mnemonic = "token";
   let summary = "Opaque token for queue ordering";
   let assemblyFormat = "";
@@ -33,7 +33,7 @@ def CreateOp : Op<Tessera_Queue_Dialect, "create", []> {
 def PushOp : Op<Tessera_Queue_Dialect, "push", []> {
   let summary = "Push a tile into the queue";
   let arguments = (ins TileQueue:$q, AnyType:$tile);
-  let results = (outs Token:$t);
+  let results = (outs QueueToken:$t);
   let assemblyFormat = "$q `,` $tile attr-dict `:` type($tile)";
   // Sprint V8 (2026-05-22): producer-end data-flow well-formedness.
   // Queue handle MUST be defined by `tessera.queue.create`; tile
@@ -44,7 +44,7 @@ def PushOp : Op<Tessera_Queue_Dialect, "push", []> {
 
 def PopOp : Op<Tessera_Queue_Dialect, "pop", []> {
   let summary = "Pop a tile from the queue";
-  let arguments = (ins TileQueue:$q, Token:$dep);
+  let arguments = (ins TileQueue:$q, QueueToken:$dep);
   let results = (outs AnyType:$tile);
   let assemblyFormat = "$q `,` $dep attr-dict `:` type($tile)";
   // Sprint V8 (2026-05-22): consumer-end data-flow well-formedness.

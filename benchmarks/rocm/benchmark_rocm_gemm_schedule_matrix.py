@@ -254,23 +254,35 @@ class DeviceCase:
         for _ in range(warmup):
             if self.launch() != 0:
                 raise RuntimeError("GEMM warmup launch failed")
-        self.hip.hipDeviceSynchronize()
+        if self.hip.hipDeviceSynchronize() != 0:
+            raise RuntimeError("GEMM warmup synchronization failed")
         samples = []
         for _ in range(trials):
             start, stop = ctypes.c_void_p(), ctypes.c_void_p()
-            self.hip.hipEventCreate(ctypes.byref(start))
-            self.hip.hipEventCreate(ctypes.byref(stop))
-            self.hip.hipEventRecord(start, None)
+            if self.hip.hipEventCreate(ctypes.byref(start)) != 0:
+                raise RuntimeError("GEMM start-event creation failed")
+            if self.hip.hipEventCreate(ctypes.byref(stop)) != 0:
+                self.hip.hipEventDestroy(start)
+                raise RuntimeError("GEMM stop-event creation failed")
+            if self.hip.hipEventRecord(start, None) != 0:
+                raise RuntimeError("GEMM start-event record failed")
             for _ in range(iterations):
                 if self.launch() != 0:
                     raise RuntimeError("GEMM timed launch failed")
-            self.hip.hipEventRecord(stop, None)
-            self.hip.hipEventSynchronize(stop)
+            if self.hip.hipEventRecord(stop, None) != 0:
+                raise RuntimeError("GEMM stop-event record failed")
+            if self.hip.hipEventSynchronize(stop) != 0:
+                raise RuntimeError("GEMM stop-event synchronization failed")
             elapsed = ctypes.c_float()
-            self.hip.hipEventElapsedTime(ctypes.byref(elapsed), start, stop)
+            if self.hip.hipEventElapsedTime(
+                    ctypes.byref(elapsed), start, stop) != 0:
+                raise RuntimeError("GEMM HIP event timing failed")
             self.hip.hipEventDestroy(start)
             self.hip.hipEventDestroy(stop)
-            samples.append(float(elapsed.value) / iterations)
+            sample = float(elapsed.value) / iterations
+            if not math.isfinite(sample) or sample <= 0.0:
+                raise RuntimeError(f"invalid GEMM timing sample: {sample} ms")
+            samples.append(sample)
         return samples
 
     def close(self) -> None:
@@ -284,7 +296,7 @@ class DeviceCase:
 
 def _tool(name: str) -> str | None:
     candidates = (Path("/opt/rocm/llvm/bin") / name,
-                  Path("/usr/lib/llvm-22/bin") / name)
+                  Path("/usr/lib/llvm-23/bin") / name)
     for candidate in candidates:
         if candidate.is_file():
             return str(candidate)
@@ -415,7 +427,8 @@ def summarize_winners(rows: list[dict[str, Any]],
 def run_matrix(*, quick: bool, trials: int, iterations: int,
                warmup: int, checkpoint: Path | None = None,
                resume: bool = False,
-               cases: list[Case] | None = None) -> dict[str, Any]:
+               cases: list[Case] | None = None,
+               correctness_only: bool = False) -> dict[str, Any]:
     if CHIP != "gfx1151":
         raise RuntimeError(f"this evidence matrix is exact-target gfx1151, got {CHIP}")
     hip = rt._load_hip_for_launch()
@@ -471,6 +484,22 @@ def run_matrix(*, quick: bool, trials: int, iterations: int,
                 "device_oracle": schedule_metrics,
             }
 
+        if correctness_only:
+            for mt, nt in TILES:
+                info = tile_info[(mt, nt)]
+                passed = (_correct(case, info["oracle"])
+                          and info["device_oracle"]["max_abs_error"] == 0)
+                rows.append({
+                    "case": case.key, "family": case.family,
+                    "shape": [case.m, case.n, case.k], "dtype": case.dtype,
+                    "bias": case.bias, "activation": case.activation,
+                    "tile": [mt, nt], "oracle": info["oracle"],
+                    "oracle_kind": info["oracle_kind"],
+                    "device_oracle": info["device_oracle"],
+                    "correct": passed, "resources": info["resources"],
+                })
+            continue
+
         samples_by_tile = {tile: [] for tile in TILES}
         for trial in range(trials):
             # Rotate and alternate direction.  Every tile occupies every part
@@ -522,19 +551,23 @@ def run_matrix(*, quick: bool, trials: int, iterations: int,
                 }, indent=2) + "\n")
             print(f"  {mt}x{nt}: {median_ms:.4f} ms {tflops:.2f} T/s "
                   f"MAD={row['relative_mad']:.2%} correct={passed}", flush=True)
-    winners = summarize_winners(rows, selected_cases)
+    winners = [] if correctness_only else summarize_winners(rows, selected_cases)
     return {
         "schema": "tessera.rocm.gemm_schedule_matrix.v1",
         "recorded_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "target": "rocm", "evidence_arch": CHIP,
-        "timing": ("HIP event, resident buffers, median of interleaved "
+        "timing": ("not run (correctness/resource-only mode)"
+                   if correctness_only else
+                   "HIP event, resident buffers, median of interleaved "
                    "rotated per-trial means"),
         "trials": trials, "iterations_per_trial": iterations,
+        "performance_status": ("not_run" if correctness_only else "measured"),
         "warmup_launches": warmup,
         "tiles": [list(tile) for tile in TILES],
         "rows": rows, "winners": winners,
         "all_correct": all(row["correct"] for row in rows),
-        "all_stable": all(winner["stable"] for winner in winners),
+        "all_stable": (None if correctness_only else
+                       all(winner["stable"] for winner in winners)),
     }
 
 
@@ -550,6 +583,8 @@ def main() -> int:
                         help="recompute paired winner gates from --output")
     parser.add_argument("--case", action="append", default=[],
                         help="run only an exact case key; repeat as needed")
+    parser.add_argument("--correctness-only", action="store_true",
+                        help="run oracle/resource checks without device timing")
     args = parser.parse_args()
     if min(args.trials, args.iterations, args.warmup) < 1:
         parser.error("trials, iterations, and warmup must be positive")
@@ -572,10 +607,13 @@ def main() -> int:
     result = run_matrix(quick=args.quick, trials=args.trials,
                         iterations=args.iterations, warmup=args.warmup,
                         checkpoint=output, resume=args.resume,
-                        cases=selected_cases)
+                        cases=selected_cases,
+                        correctness_only=args.correctness_only)
     output.write_text(json.dumps(result, indent=2) + "\n")
     print(f"wrote {args.output}: {len(result['rows'])} rows, "
-          f"correct={result['all_correct']} stable={result['all_stable']}")
+          f"correct={result['all_correct']} "
+          f"performance={result['performance_status']} "
+          f"stable={result['all_stable']}")
     return 0 if result["all_correct"] else 1
 
 

@@ -52,7 +52,7 @@ policy.)
 | unit         | ~2min             | `pytest -m "not slow"`, ~4300 tests. |
 | audit        | ~10s              | support_table drift + claim_lint + examples audit. |
 | build        | ~5min             | CMake runtime + collectives compile-check. |
-| lit          | ~10min if installed | LLVM/MLIR 22 install + tessera-opt build + lit. |
+| lit          | ~10min if installed | LLVM/MLIR 23 install + tessera-opt build + lit. |
 | sanitizer    | ~15min per matrix | asan + tsan + ubsan run in parallel. |
 
 The lit + sanitizer lanes are intentionally off the critical path so a

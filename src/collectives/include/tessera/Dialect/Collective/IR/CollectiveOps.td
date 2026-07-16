@@ -1,15 +1,10 @@
 include "mlir/IR/OpBase.td"
+include "mlir/IR/CommonAttrConstraints.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
-include "CollectiveTypes.td"
+include "tessera/Dialect/Collective/IR/CollectiveTypes.td"
 
-class TesseraCollectiveOp<string m, list<OpTrait> T = []>
+class TesseraCollectiveOp<string m, list<Trait> T = []>
     : Op<Tessera_Collective_Dialect, m, T>;
-
-def Attr_WireDType : StrEnumAttr<"WireDType", "wire dtype",
-    ["fp32", "bf16", "fp16", "fp8", "i8"]>;
-
-def Attr_ReduceOp : StrEnumAttr<"ReduceOp", "reduction operation",
-    ["sum", "max", "min", "prod"]>;
 
 //===----------------------------------------------------------------------===//
 // Point-to-all collectives (existing)
@@ -19,10 +14,10 @@ def AllToAllOp : TesseraCollectiveOp<"all_to_all",
     [MemoryEffects<[MemWrite, MemRead]>]> {
   let summary = "All-to-all scatter: each rank sends a distinct shard to every other rank";
   let arguments = (ins AnyMemRef:$input,
-                       OptionalAttr<Attr_WireDType>:$dtype,
+                       OptionalAttr<StrAttr>:$dtype,
                        OptionalAttr<I64Attr>:$chunk_bytes);
   let results = (outs Tessera_FutureType:$result);
-  let assemblyFormat = [{ $input attr-dict }];
+  let assemblyFormat = [{ $input attr-dict `:` type($input) `->` type($result) }];
 }
 
 //===----------------------------------------------------------------------===//
@@ -40,13 +35,13 @@ def AllReduceOp : TesseraCollectiveOp<"all_reduce",
     `chunk_bytes` controls the transport chunk size for the ring algorithm.
   }];
   let arguments = (ins AnyMemRef:$input,
-                       Attr_ReduceOp:$reduce_op,
+                       StrAttr:$reduce_op,
                        StrAttr:$mesh_axis,
-                       OptionalAttr<Attr_WireDType>:$dtype,
+                       OptionalAttr<StrAttr>:$dtype,
                        OptionalAttr<I64Attr>:$chunk_bytes);
   let results = (outs Tessera_FutureType:$result);
   let assemblyFormat = [{
-    $input `,` $reduce_op `on` $mesh_axis attr-dict
+    $input `,` $reduce_op `on` $mesh_axis attr-dict `:` type($input) `->` type($result)
   }];
 }
 
@@ -64,14 +59,14 @@ def ReduceScatterOp : TesseraCollectiveOp<"reduce_scatter",
     `scatter_dim` is the tensor dimension to scatter along (typically 0).
   }];
   let arguments = (ins AnyMemRef:$input,
-                       Attr_ReduceOp:$reduce_op,
+                       StrAttr:$reduce_op,
                        StrAttr:$mesh_axis,
                        I64Attr:$scatter_dim,
-                       OptionalAttr<Attr_WireDType>:$dtype,
+                       OptionalAttr<StrAttr>:$dtype,
                        OptionalAttr<I64Attr>:$chunk_bytes);
   let results = (outs Tessera_FutureType:$result);
   let assemblyFormat = [{
-    $input `,` $reduce_op `on` $mesh_axis `dim` $scatter_dim attr-dict
+    $input `,` $reduce_op `on` $mesh_axis `dim` $scatter_dim attr-dict `:` type($input) `->` type($result)
   }];
 }
 
@@ -90,11 +85,11 @@ def AllGatherOp : TesseraCollectiveOp<"all_gather",
   let arguments = (ins AnyMemRef:$input,
                        StrAttr:$mesh_axis,
                        I64Attr:$gather_dim,
-                       OptionalAttr<Attr_WireDType>:$dtype,
+                       OptionalAttr<StrAttr>:$dtype,
                        OptionalAttr<I64Attr>:$chunk_bytes);
   let results = (outs Tessera_FutureType:$result);
   let assemblyFormat = [{
-    $input `on` $mesh_axis `dim` $gather_dim attr-dict
+    $input `on` $mesh_axis `dim` $gather_dim attr-dict `:` type($input) `->` type($result)
   }];
 }
 
@@ -104,23 +99,23 @@ def AllGatherOp : TesseraCollectiveOp<"all_gather",
 
 def PackCastOp : Op<Tessera_Collective_Dialect, "pack_cast", []> {
   let summary = "Cast and pack elements to wire dtype before transport";
-  let arguments = (ins AnyMemRef:$input, OptionalAttr<Attr_WireDType>:$to_dtype);
+  let arguments = (ins AnyMemRef:$input, OptionalAttr<StrAttr>:$to_dtype);
   let results   = (outs AnyMemRef:$packed);
-  let assemblyFormat = [{ $input attr-dict }];
+  let assemblyFormat = [{ $input attr-dict `:` type($input) `->` type($packed) }];
 }
 
 def AwaitOp : Op<Tessera_Collective_Dialect, "await", []> {
   let summary = "Await completion of an async collective future";
   let arguments = (ins Tessera_FutureType:$future);
   let results = (outs AnyType:$value);
-  let assemblyFormat = [{ $future attr-dict }];
+  let assemblyFormat = [{ $future attr-dict `:` type($future) `->` type($value) }];
 }
 
 def ShardViewOp : Op<Tessera_Collective_Dialect, "shard_view", []> {
   let summary = "Create a typed logical shard view of a tensor/memref value";
   let arguments = (ins AnyType:$input, StrAttr:$mesh_axis, I64Attr:$dim);
   let results = (outs Tessera_ShardType:$shard);
-  let assemblyFormat = "$input `on` $mesh_axis `dim` $dim attr-dict `:` type($input)";
+  let assemblyFormat = "$input `on` $mesh_axis `dim` $dim attr-dict `:` type($input) `->` type($shard)";
   let hasVerifier = 1;
 }
 
@@ -128,7 +123,7 @@ def MaterializeShardOp : Op<Tessera_Collective_Dialect, "materialize_shard", []>
   let summary = "Materialize a typed shard back into its payload value";
   let arguments = (ins Tessera_ShardType:$shard);
   let results = (outs AnyType:$value);
-  let assemblyFormat = "$shard attr-dict";
+  let assemblyFormat = "$shard attr-dict `:` type($shard) `->` type($value)";
   let hasVerifier = 1;
 }
 

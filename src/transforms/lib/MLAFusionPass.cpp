@@ -120,7 +120,8 @@ struct MLAFusion
   void runOnOperation() override {
     RewritePatternSet patterns(&getContext());
     patterns.add<FuseMLADecodeChain>(&getContext());
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    FrozenRewritePatternSet frozenPatterns(std::move(patterns));
+    (void)applyPatternsGreedily(getOperation(), frozenPatterns);
   }
 };
 

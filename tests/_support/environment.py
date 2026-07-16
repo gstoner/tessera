@@ -74,7 +74,8 @@ class CompilerToolchain:
             ),
             mlir_opt=_tool_path(
                 "MLIR_OPT",
-                "/usr/lib/llvm-22/bin/mlir-opt",
+                "/usr/lib/llvm-23/bin/mlir-opt",
+                "/opt/rocm/core/lib/llvm/bin/mlir-opt",
                 "/opt/homebrew/opt/llvm/bin/mlir-opt",
             ),
             nvidia_opt=_tool_path(
@@ -98,7 +99,7 @@ class CompilerToolchain:
     def require_mlir_opt(self) -> Path:
         if self.mlir_opt is None:
             pytest.skip(
-                "compiler-tool test requires MLIR 22 mlir-opt; set MLIR_OPT"
+                "compiler-tool test requires MLIR 23 mlir-opt; set MLIR_OPT"
             )
         return self.mlir_opt
 

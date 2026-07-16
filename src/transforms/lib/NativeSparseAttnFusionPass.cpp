@@ -161,7 +161,8 @@ struct NativeSparseAttnFusion
   void runOnOperation() override {
     RewritePatternSet patterns(&getContext());
     patterns.add<FuseNSABranches>(&getContext());
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    FrozenRewritePatternSet frozenPatterns(std::move(patterns));
+    (void)applyPatternsGreedily(getOperation(), frozenPatterns);
   }
 };
 

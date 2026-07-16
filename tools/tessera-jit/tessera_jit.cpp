@@ -292,7 +292,11 @@ static LogicalResult lowerVectorOps(ModuleOp module) {
   vector::populateVectorContractLoweringPatterns(
       patterns, vector::VectorContractLowering::OuterProduct);
   // Any multi_reduction the raise didn't catch still needs lowering.
-  vector::populateVectorMultiReductionLoweringPatterns(
+  vector::populateVectorMultiReductionReorderPatterns(
+      patterns, vector::VectorMultiReductionLowering::InnerReduction);
+  vector::populateVectorMultiReductionFlatteningPatterns(
+      patterns, vector::VectorMultiReductionLowering::InnerReduction);
+  vector::populateVectorMultiReductionUnrollingPatterns(
       patterns, vector::VectorMultiReductionLowering::InnerReduction);
   vector::populateVectorBroadcastLoweringPatterns(patterns);
   // NB: do NOT run populateVectorTransferLoweringPatterns — it rewrites

@@ -1045,18 +1045,17 @@ class LlcResult:
 
 
 def _find_llc() -> str | None:
-    # macOS Homebrew keg, the apt.llvm.org keg on Ubuntu (LLVM 22, newest first),
+    # macOS Homebrew keg, the apt.llvm.org keg on Ubuntu (newest first),
     # the versioned console script, then a bare ``llc`` on PATH.
     fixed = (
         "/opt/homebrew/opt/llvm/bin/llc",
         "/usr/lib/llvm-24/bin/llc",
         "/usr/lib/llvm-23/bin/llc",
-        "/usr/lib/llvm-22/bin/llc",
     )
     for cand in fixed:
         if Path(cand).exists():
             return cand
-    for cand in ("llc-24", "llc-23", "llc-22", "llc"):
+    for cand in ("llc-24", "llc-23", "llc"):
         p = shutil.which(cand)
         if p:
             return p

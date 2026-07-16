@@ -7,7 +7,7 @@
 // ``TesseraOps.td``); this file supplies the definitions.
 //
 // Status (2026-05-20, B3 v2):
-//   * MatmulOp: full v1 implementation against MLIR 22 signatures.
+//   * MatmulOp: full v1 implementation against MLIR 23 signatures.
 //     ``getTiledImplementation`` clones the op with annotation attrs
 //     so a tile driver can verify the tiling decision flowed
 //     through.  Operand-tile extraction (``tensor.extract_slice`` on
@@ -132,6 +132,13 @@ FailureOr<TilingResult> MatmulOp::getTiledImplementation(
   return result;
 }
 
+FailureOr<TilingResult> MatmulOp::getTiledImplementation(
+    OpBuilder &b, ArrayRef<OpFoldResult> offsets,
+    ArrayRef<OpFoldResult> sizes,
+    ArrayRef<InnerTileAlignment> /*innerTileAlignments*/) {
+  return getTiledImplementation(b, offsets, sizes);
+}
+
 LogicalResult MatmulOp::getResultTilePosition(
     OpBuilder & /*b*/, unsigned resultNumber,
     ArrayRef<OpFoldResult> offsets, ArrayRef<OpFoldResult> sizes,
@@ -178,6 +185,13 @@ FailureOr<TilingResult> Conv2DNHWCOp::getTiledImplementation(
   // that lands a tile driver should fall through to a non-tiled
   // lowering path; ``failure()`` is the safe answer.
   return failure();
+}
+
+FailureOr<TilingResult> Conv2DNHWCOp::getTiledImplementation(
+    OpBuilder &b, ArrayRef<OpFoldResult> offsets,
+    ArrayRef<OpFoldResult> sizes,
+    ArrayRef<InnerTileAlignment> /*innerTileAlignments*/) {
+  return getTiledImplementation(b, offsets, sizes);
 }
 
 LogicalResult Conv2DNHWCOp::getResultTilePosition(

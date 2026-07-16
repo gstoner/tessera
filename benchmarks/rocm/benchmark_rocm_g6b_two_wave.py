@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import ctypes
 import json
+import math
 import re
 import statistics
 import subprocess
@@ -31,7 +32,7 @@ def _mr(p, size):
 
 def _resources(blob):
     tool = next((p for p in (Path("/opt/rocm/llvm/bin/llvm-readobj"),
-                              Path("/usr/lib/llvm-22/bin/llvm-readobj"))
+                              Path("/usr/lib/llvm-23/bin/llvm-readobj"))
                  if p.is_file()), None)
     result = {"vgpr_count": None, "sgpr_count": None, "lds_bytes": None,
               "scratch_bytes": None, "vgpr_spill_count": None,
@@ -106,14 +107,27 @@ class _Session:
 
 def _device_ms(hip, session, iterations):
     start, stop = ctypes.c_void_p(), ctypes.c_void_p()
-    hip.hipEventCreate(ctypes.byref(start)); hip.hipEventCreate(ctypes.byref(stop))
-    hip.hipEventRecord(start, None)
-    for _ in range(iterations):
-        if session.launch(): raise RuntimeError("FA timed launch failed")
-    hip.hipEventRecord(stop, None); hip.hipEventSynchronize(stop)
-    value = ctypes.c_float(); hip.hipEventElapsedTime(ctypes.byref(value), start, stop)
-    hip.hipEventDestroy(start); hip.hipEventDestroy(stop)
-    return float(value.value) / iterations
+    if hip.hipEventCreate(ctypes.byref(start)):
+        raise RuntimeError("G6-B start-event creation failed")
+    if hip.hipEventCreate(ctypes.byref(stop)):
+        hip.hipEventDestroy(start)
+        raise RuntimeError("G6-B stop-event creation failed")
+    try:
+        if hip.hipEventRecord(start, None):
+            raise RuntimeError("G6-B start-event record failed")
+        for _ in range(iterations):
+            if session.launch(): raise RuntimeError("FA timed launch failed")
+        if hip.hipEventRecord(stop, None) or hip.hipEventSynchronize(stop):
+            raise RuntimeError("G6-B stop-event synchronization failed")
+        value = ctypes.c_float()
+        if hip.hipEventElapsedTime(ctypes.byref(value), start, stop):
+            raise RuntimeError("G6-B HIP event timing failed")
+        sample = float(value.value) / iterations
+        if not math.isfinite(sample) or sample <= 0.0:
+            raise RuntimeError(f"invalid G6-B timing sample: {sample} ms")
+        return sample
+    finally:
+        hip.hipEventDestroy(start); hip.hipEventDestroy(stop)
 
 
 def _e2e(hip, q, k, v, causal, two_wave):
@@ -124,7 +138,7 @@ def _e2e(hip, q, k, v, causal, two_wave):
     return (time.perf_counter_ns() - start) / 1e6
 
 
-def run(trials, iterations):
+def run(trials, iterations, correctness_only=False):
     hip = rt._load_hip_for_launch()
     if hip is None or hip.hipInit(0): raise RuntimeError("live ROCm device required")
     rows = []
@@ -140,6 +154,15 @@ def run(trials, iterations):
         max_error = float(np.max(np.abs(actual - expected)))
         if max_error > 3e-3: raise AssertionError(f"G6-B mismatch {max_error}")
         sessions = (("one_wave", base), ("two_wave", candidate)) if candidate else (("one_wave", base),)
+        if correctness_only:
+            for name, session in sessions:
+                rows.append({"shape": [b, h, s, d], "causal": causal,
+                             "schedule": name,
+                             "resources": _resources(session.hsaco),
+                             "max_abs_vs_one_wave": max_error})
+            base.close()
+            if candidate: candidate.close()
+            continue
         samples = {name: {"device": [], "e2e": []} for name, _ in sessions}
         for session in [x[1] for x in sessions]:
             for _ in range(3): session.launch()
@@ -172,13 +195,15 @@ def run(trials, iterations):
         if candidate: candidate.close()
     return {"schema": "tessera.rocm.g6b.v1", "evidence_arch": "gfx1151",
             "trials": trials, "iterations": iterations, "rows": rows,
+            "performance_status": ("not_run" if correctness_only else "measured"),
             "all_correct": True}
 
 
 def main():
     p = argparse.ArgumentParser(); p.add_argument("--trials", type=int, default=9)
     p.add_argument("--iterations", type=int, default=20); p.add_argument("--output", required=True)
-    a = p.parse_args(); result = run(a.trials, a.iterations)
+    p.add_argument("--correctness-only", action="store_true")
+    a = p.parse_args(); result = run(a.trials, a.iterations, a.correctness_only)
     Path(a.output).write_text(json.dumps(result, indent=2) + "\n")
 
 

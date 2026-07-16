@@ -217,10 +217,55 @@ tests compile the architecture-specific `sm_120a` target. Record driver, CUDA
 toolkit, LLVM/MLIR, Python, GPU UUID, clocks/power mode, and whether another
 process is using the device.
 
+### Install LLVM/MLIR 23 on Ubuntu
+
+Use the repository bootstrap on Ubuntu 24.04; it installs one matched LLVM,
+Clang, LLD, MLIR, and Polly 23 toolchain from apt.llvm.org:
+
+```bash
+bash scripts/setup_ubuntu.sh
+source .venv/bin/activate
+```
+
+For a toolchain-only manual installation, use a dedicated versioned source
+file rather than replacing the distribution LLVM packages:
+
+```bash
+sudo install -d -m 0755 /etc/apt/keyrings
+wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
+  | sudo gpg --dearmor --yes -o /etc/apt/keyrings/apt.llvm.org.gpg
+
+echo 'deb [signed-by=/etc/apt/keyrings/apt.llvm.org.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble-23 main' \
+  | sudo tee /etc/apt/sources.list.d/llvm-23.list >/dev/null
+sudo apt-get update
+sudo apt-get install -y \
+  clang-23 lld-23 llvm-23 llvm-23-dev llvm-23-tools \
+  mlir-23-tools libmlir-23-dev libpolly-23-dev
+
+export LLVM_ROOT=/usr/lib/llvm-23
+export PATH="$LLVM_ROOT/bin:$PATH"
+export CMAKE_PREFIX_PATH="$LLVM_ROOT${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
+
+llvm-config --version
+mlir-opt --version
+mlir-tblgen --version
+FileCheck --version
+```
+
+All four commands must report major version 23. Remove or disable any stale
+`llvm-toolchain-noble-22` source selection from the build environment; keeping
+multiple apt repositories installed is acceptable, but Tessera's CMake cache,
+compiler executables, MLIR tools, and CMake package directories must all resolve
+to `/usr/lib/llvm-23`.
+
 Build the compiler and CUDA runtime from a clean NVIDIA build directory:
 
 ```bash
 cmake -S . -B build-nvidia-cuda -G Ninja \
+  -DCMAKE_C_COMPILER=/usr/lib/llvm-23/bin/clang \
+  -DCMAKE_CXX_COMPILER=/usr/lib/llvm-23/bin/clang++ \
+  -DLLVM_DIR=/usr/lib/llvm-23/lib/cmake/llvm \
+  -DMLIR_DIR=/usr/lib/llvm-23/lib/cmake/mlir \
   -DTESSERA_BUILD_NVIDIA_BACKEND=ON \
   -DTESSERA_ENABLE_CUDA=ON \
   -DTESSERA_CUDA_ARCH=sm_120a \
@@ -233,12 +278,18 @@ Export explicit tool paths rather than relying on a previous build:
 
 ```bash
 export TESSERA_OPT="$PWD/build-nvidia-cuda/tools/tessera-opt/tessera-opt"
-export MLIR_OPT=/usr/lib/llvm-22/bin/mlir-opt
+export MLIR_OPT=/usr/lib/llvm-23/bin/mlir-opt
 export PYTHONPATH="$PWD/python:$PWD"
 ```
 
 Adjust `TESSERA_OPT` to the actual Ninja output reported by the build if the
 generator places it under `build-nvidia-cuda/tools/tessera-opt/` differently.
+
+The 2026-07-16 shared compiler migration raises the project floor to matched
+LLVM/MLIR 23 and updates portable Tile/NVIDIA TableGen plus greedy-rewrite
+compatibility. The shared sources compile in the LLVM/MLIR 23 ROCm build;
+NVIDIA exact-device parity is **follow-up required** on the `sm_120` host and
+no CUDA execution status is promoted by the ROCm run.
 
 ## Ordered work
 

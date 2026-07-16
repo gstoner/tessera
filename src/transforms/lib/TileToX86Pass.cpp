@@ -373,8 +373,8 @@ struct TileToX86PassImpl
     patterns.add<LowerKVCacheToX86>(&getContext(), "tessera.kv_cache.append");
     patterns.add<LowerKVCacheToX86>(&getContext(), "tessera.kv_cache.prune");
     patterns.add<LowerKVCacheToX86>(&getContext(), "tessera.kv_cache.read");
-    if (failed(applyPatternsAndFoldGreedily(getOperation(),
-                                           std::move(patterns))))
+    FrozenRewritePatternSet frozenPatterns(std::move(patterns));
+    if (failed(applyPatternsGreedily(getOperation(), frozenPatterns)))
       signalPassFailure();
   }
 };

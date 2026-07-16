@@ -19,6 +19,7 @@ import time
 
 import numpy as np
 import pytest
+from tests._support.nvidia_numerics import assert_matches
 
 
 pytestmark = [pytest.mark.compiler_tool, pytest.mark.hardware_nvidia]
@@ -384,13 +385,13 @@ def test_sm120_launch_level_matmul_handles_grid_and_ragged_k() -> None:
                     cubin, entries[0], [a, b, out], 2, [m, n, k],
                     ((n + 31) // 32, (m + 31) // 32), block_threads=128)
                 reference = a.astype(np.float32) @ b.astype(np.float32)
-                np.testing.assert_allclose(actual, reference, atol=1e-2, rtol=0)
+                assert_matches(actual, reference, "f16", reduction_length=k)
 
                 direct_out = np.zeros((m, n), dtype=np.float32)
                 direct = driver.launch(
                     cubin, entries[3], [a, b, direct_out], 2, [m, n, k],
                     ((n + 7) // 8, (m + 15) // 16), block_threads=32)
-                np.testing.assert_allclose(direct, reference, atol=1e-2, rtol=0)
+                assert_matches(direct, reference, "f16", reduction_length=k)
 
                 bias = np.ascontiguousarray(
                     rng.uniform(-.5, .5, (n,)), dtype=np.float32)
@@ -399,8 +400,7 @@ def test_sm120_launch_level_matmul_handles_grid_and_ragged_k() -> None:
                     cubin, entries[1], [a, b, bias, out_f16], 3, [m, n, k],
                     ((n + 31) // 32, (m + 31) // 32), block_threads=128)
                 fused_reference = np.maximum(reference + bias, 0).astype(np.float16)
-                np.testing.assert_allclose(fused, fused_reference, atol=1e-2,
-                                           rtol=0)
+                assert_matches(fused, fused_reference, "f16", reduction_length=k)
 
                 gelu_out = np.zeros((m, n), dtype=np.float32)
                 gelu = driver.launch(
@@ -409,16 +409,14 @@ def test_sm120_launch_level_matmul_handles_grid_and_ragged_k() -> None:
                 gelu_reference = (0.5 * reference * (1 + np.tanh(
                     np.sqrt(2 / np.pi) *
                     (reference + 0.044715 * reference ** 3))))
-                np.testing.assert_allclose(gelu, gelu_reference, atol=2e-2,
-                                           rtol=0)
+                assert_matches(gelu, gelu_reference, "f16", reduction_length=k)
 
                 silu_out = np.zeros((m, n), dtype=np.float32)
                 silu = driver.launch(
                     cubin, entries[5], [a, b, silu_out], 2, [m, n, k],
                     ((n + 7) // 8, (m + 15) // 16), block_threads=32)
                 silu_reference = reference / (1 + np.exp(-reference))
-                np.testing.assert_allclose(silu, silu_reference, atol=2e-2,
-                                           rtol=0)
+                assert_matches(silu, silu_reference, "f16", reduction_length=k)
 
             ml_dtypes = pytest.importorskip("ml_dtypes")
             m, n, k = 35, 21, 29
@@ -431,6 +429,6 @@ def test_sm120_launch_level_matmul_handles_grid_and_ragged_k() -> None:
                 cubin, entries[2], [a, b, out], 2, [m, n, k],
                 ((n + 31) // 32, (m + 31) // 32), block_threads=128)
             reference = a.astype(np.float32) @ b.astype(np.float32)
-            np.testing.assert_allclose(actual, reference, atol=1e-1, rtol=0)
+            assert_matches(actual, reference, "bf16", reduction_length=k)
         finally:
             driver.close()

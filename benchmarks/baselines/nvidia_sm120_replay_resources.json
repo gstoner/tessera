@@ -1,0 +1,24 @@
+{
+  "schema": "tessera.nvidia.resources.v1",
+  "source": "nvidia_sm120_replay_resources.ncu-rep",
+  "source_sha256": "7f805f9eca614962bdedc64d9fb5001a41761347b0d4f44d78fcc4defec9f7ce",
+  "rows": [
+    {
+      "kernel": "out(Q, int)",
+      "launches": 1,
+      "cc": "12.0",
+      "block_size": "(128, 1, 1)",
+      "grid_size": "(1, 1, 1)",
+      "registers_per_thread": 40,
+      "static_shared_memory_bytes": 0,
+      "dynamic_shared_memory_bytes": 0,
+      "theoretical_occupancy_pct": 100,
+      "achieved_occupancy_pct": 8.33,
+      "local_load_transactions": 0,
+      "local_store_transactions": 0,
+      "spill_evidence_complete": true,
+      "spills_detected": false,
+      "resource_fingerprint": "sha256:47a021979a13753fa7c18e1ea9285cda35bfa6ca4bcd5fd0fb8e3e68329aeef2"
+    }
+  ]
+}

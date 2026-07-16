@@ -47,22 +47,25 @@ class MeasureRecord:
     winner: str
     latency_ms: float
     candidates: dict[str, float] = field(default_factory=dict)
+    evidence: dict[str, Any] = field(default_factory=dict)
 
     def as_json(self) -> dict[str, Any]:
         return {"winner": self.winner, "latency_ms": self.latency_ms,
-                "candidates": dict(self.candidates)}
+                "candidates": dict(self.candidates),
+                **({"evidence": dict(self.evidence)} if self.evidence else {})}
 
     @classmethod
     def from_json(cls, d: dict[str, Any]) -> "MeasureRecord":
         return cls(winner=str(d["winner"]),
                    latency_ms=float(d["latency_ms"]),
                    candidates={str(k): float(v)
-                               for k, v in dict(d.get("candidates", {})).items()})
+                               for k, v in dict(d.get("candidates", {})).items()},
+                   evidence=dict(d.get("evidence", {})))
 
 
 #: Corpus JSON schema version — bump if the record/key shape changes so a stale
 #: committed corpus is skipped rather than mis-read.
-CORPUS_VERSION = 2
+CORPUS_VERSION = 3
 
 
 TIMING_END_TO_END = "end_to_end"
@@ -144,7 +147,7 @@ class MeasureCache:
         nothing (a stale corpus is skipped, not mis-read)."""
         # v1 lacked the additive ``timing`` key; its rows are unambiguously the
         # historical end-to-end metric and migrate as such.
-        if int(payload.get("version", -1)) not in (1, CORPUS_VERSION):
+        if int(payload.get("version", -1)) not in (1, 2, CORPUS_VERSION):
             return 0
         loaded = 0
         for r in payload.get("records", ()):

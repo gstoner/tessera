@@ -16,6 +16,23 @@ PYTHON_ROOT = REPO_ROOT / "python"
 CUDA_BIN_DIRS = (Path("/usr/local/cuda/bin"), Path("/usr/local/cuda-13.3/bin"))
 
 
+def ensure_cuda_bin_on_path() -> Path | None:
+    """Make the canonical WSL CUDA toolkit visible to this process.
+
+    NVIDIA hosts commonly install CUDA under ``/usr/local/cuda`` without
+    adding it to non-interactive WSL shells.  Prefer an existing user PATH
+    entry; otherwise prepend the first real toolkit directory so subprocesses
+    (pytest fixtures, NVRTC compilation, and benchmark recorders) inherit it.
+    """
+    entries = os.environ.get("PATH", "").split(os.pathsep)
+    for root in CUDA_BIN_DIRS:
+        if (root / "nvcc").is_file():
+            if str(root) not in entries:
+                os.environ["PATH"] = os.pathsep.join([str(root), *filter(None, entries)])
+            return root
+    return None
+
+
 def _tool_path(env_name: str, *candidates: Path | str) -> Path | None:
     configured = os.environ.get(env_name)
     if configured:
@@ -32,6 +49,7 @@ def _tool_path(env_name: str, *candidates: Path | str) -> Path | None:
 def nvidia_cuda_tool(name: str) -> Path | None:
     """Find a CUDA executable from PATH or the supported host installations."""
 
+    ensure_cuda_bin_on_path()
     executable = shutil.which(name)
     if executable:
         return Path(executable)
@@ -99,6 +117,9 @@ def python_subprocess_environment(
     """Return an inherited environment where the source package is importable."""
 
     env = os.environ.copy()
+    cuda_bin = ensure_cuda_bin_on_path()
+    if cuda_bin is not None:
+        env["PATH"] = os.environ["PATH"]
     existing = env.get("PYTHONPATH")
     entries = [str(PYTHON_ROOT), str(REPO_ROOT)]
     if existing:

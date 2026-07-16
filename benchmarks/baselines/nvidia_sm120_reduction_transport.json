@@ -1,0 +1,451 @@
+{
+  "device": "nvidia:sm_120",
+  "margin": 2.0,
+  "rows": [
+    {
+      "cache_state": "warm",
+      "compile_state": "warm_after_preflight",
+      "compiler_fingerprint": "sha256:cf24ed3a2015c6eedbe47a5f86a4387361fc5441b5c242d56ace440d908d209d",
+      "dtype": "f32",
+      "max_latency_ms": 1.371501,
+      "median_ms": 0.68575,
+      "mode": "generated_row_reduce:end_to_end",
+      "op": "reduction_sum",
+      "resource_evidence": "ncu production capture required",
+      "resource_evidence_complete": true,
+      "resource_fingerprints": [
+        "sha256:52d95b10fd6bb9c9caef215b5dc5b3502d12a3463f805946516b2faeaa096054"
+      ],
+      "resources": [
+        {
+          "achieved_occupancy_pct": 57.09,
+          "block_size": "(256, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 0,
+          "grid_size": "(257, 1, 1)",
+          "kernel": "tsr_reduce_kernel(const float *, float *, long, int)",
+          "launches": 3,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "registers_per_thread": 28,
+          "resource_fingerprint": "sha256:52d95b10fd6bb9c9caef215b5dc5b3502d12a3463f805946516b2faeaa096054",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "static_shared_memory_bytes": 1024,
+          "theoretical_occupancy_pct": 100
+        }
+      ],
+      "selected_route": "generated_row_reduce",
+      "shape": "257x1025",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "cache_state": "warm",
+      "compile_state": "warm_after_preflight",
+      "compiler_fingerprint": "sha256:cf24ed3a2015c6eedbe47a5f86a4387361fc5441b5c242d56ace440d908d209d",
+      "dtype": "f32",
+      "max_latency_ms": 0.017182,
+      "median_ms": 0.008591,
+      "mode": "generated_row_reduce:device_event",
+      "op": "reduction_sum",
+      "resource_evidence": "ncu production capture required",
+      "resource_evidence_complete": true,
+      "resource_fingerprints": [
+        "sha256:52d95b10fd6bb9c9caef215b5dc5b3502d12a3463f805946516b2faeaa096054"
+      ],
+      "resources": [
+        {
+          "achieved_occupancy_pct": 57.09,
+          "block_size": "(256, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 0,
+          "grid_size": "(257, 1, 1)",
+          "kernel": "tsr_reduce_kernel(const float *, float *, long, int)",
+          "launches": 3,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "registers_per_thread": 28,
+          "resource_fingerprint": "sha256:52d95b10fd6bb9c9caef215b5dc5b3502d12a3463f805946516b2faeaa096054",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "static_shared_memory_bytes": 1024,
+          "theoretical_occupancy_pct": 100
+        }
+      ],
+      "selected_route": "generated_row_reduce",
+      "shape": "257x1025",
+      "timing_domain": "device_event"
+    },
+    {
+      "cache_state": "warm",
+      "compile_state": "warm_after_preflight",
+      "compiler_fingerprint": "sha256:cf24ed3a2015c6eedbe47a5f86a4387361fc5441b5c242d56ace440d908d209d",
+      "dtype": "f16",
+      "max_latency_ms": 1.020528,
+      "median_ms": 0.510264,
+      "mode": "generated_row_reduce:end_to_end",
+      "op": "reduction_mean",
+      "resource_evidence": "ncu production capture required",
+      "resource_evidence_complete": true,
+      "resource_fingerprints": [
+        "sha256:52d95b10fd6bb9c9caef215b5dc5b3502d12a3463f805946516b2faeaa096054"
+      ],
+      "resources": [
+        {
+          "achieved_occupancy_pct": 57.09,
+          "block_size": "(256, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 0,
+          "grid_size": "(257, 1, 1)",
+          "kernel": "tsr_reduce_kernel(const float *, float *, long, int)",
+          "launches": 3,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "registers_per_thread": 28,
+          "resource_fingerprint": "sha256:52d95b10fd6bb9c9caef215b5dc5b3502d12a3463f805946516b2faeaa096054",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "static_shared_memory_bytes": 1024,
+          "theoretical_occupancy_pct": 100
+        }
+      ],
+      "selected_route": "generated_row_reduce",
+      "shape": "255x1023",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "cache_state": "warm",
+      "compile_state": "warm_after_preflight",
+      "compiler_fingerprint": "sha256:cf24ed3a2015c6eedbe47a5f86a4387361fc5441b5c242d56ace440d908d209d",
+      "dtype": "f16",
+      "max_latency_ms": 0.014989,
+      "median_ms": 0.007495,
+      "mode": "generated_row_reduce:device_event",
+      "op": "reduction_mean",
+      "resource_evidence": "ncu production capture required",
+      "resource_evidence_complete": true,
+      "resource_fingerprints": [
+        "sha256:52d95b10fd6bb9c9caef215b5dc5b3502d12a3463f805946516b2faeaa096054"
+      ],
+      "resources": [
+        {
+          "achieved_occupancy_pct": 57.09,
+          "block_size": "(256, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 0,
+          "grid_size": "(257, 1, 1)",
+          "kernel": "tsr_reduce_kernel(const float *, float *, long, int)",
+          "launches": 3,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "registers_per_thread": 28,
+          "resource_fingerprint": "sha256:52d95b10fd6bb9c9caef215b5dc5b3502d12a3463f805946516b2faeaa096054",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "static_shared_memory_bytes": 1024,
+          "theoretical_occupancy_pct": 100
+        }
+      ],
+      "selected_route": "generated_row_reduce",
+      "shape": "255x1023",
+      "timing_domain": "device_event"
+    },
+    {
+      "cache_state": "warm",
+      "compile_state": "warm_after_preflight",
+      "compiler_fingerprint": "sha256:cf24ed3a2015c6eedbe47a5f86a4387361fc5441b5c242d56ace440d908d209d",
+      "dtype": "f32",
+      "max_latency_ms": 0.984826,
+      "median_ms": 0.492413,
+      "mode": "generated_row_reduce:end_to_end",
+      "op": "reduction_max",
+      "resource_evidence": "ncu production capture required",
+      "resource_evidence_complete": true,
+      "resource_fingerprints": [
+        "sha256:52d95b10fd6bb9c9caef215b5dc5b3502d12a3463f805946516b2faeaa096054"
+      ],
+      "resources": [
+        {
+          "achieved_occupancy_pct": 57.09,
+          "block_size": "(256, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 0,
+          "grid_size": "(257, 1, 1)",
+          "kernel": "tsr_reduce_kernel(const float *, float *, long, int)",
+          "launches": 3,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "registers_per_thread": 28,
+          "resource_fingerprint": "sha256:52d95b10fd6bb9c9caef215b5dc5b3502d12a3463f805946516b2faeaa096054",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "static_shared_memory_bytes": 1024,
+          "theoretical_occupancy_pct": 100
+        }
+      ],
+      "selected_route": "generated_row_reduce",
+      "shape": "129x769",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "cache_state": "warm",
+      "compile_state": "warm_after_preflight",
+      "compiler_fingerprint": "sha256:cf24ed3a2015c6eedbe47a5f86a4387361fc5441b5c242d56ace440d908d209d",
+      "dtype": "f32",
+      "max_latency_ms": 0.015447,
+      "median_ms": 0.007724,
+      "mode": "generated_row_reduce:device_event",
+      "op": "reduction_max",
+      "resource_evidence": "ncu production capture required",
+      "resource_evidence_complete": true,
+      "resource_fingerprints": [
+        "sha256:52d95b10fd6bb9c9caef215b5dc5b3502d12a3463f805946516b2faeaa096054"
+      ],
+      "resources": [
+        {
+          "achieved_occupancy_pct": 57.09,
+          "block_size": "(256, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 0,
+          "grid_size": "(257, 1, 1)",
+          "kernel": "tsr_reduce_kernel(const float *, float *, long, int)",
+          "launches": 3,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "registers_per_thread": 28,
+          "resource_fingerprint": "sha256:52d95b10fd6bb9c9caef215b5dc5b3502d12a3463f805946516b2faeaa096054",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "static_shared_memory_bytes": 1024,
+          "theoretical_occupancy_pct": 100
+        }
+      ],
+      "selected_route": "generated_row_reduce",
+      "shape": "129x769",
+      "timing_domain": "device_event"
+    },
+    {
+      "cache_state": "warm",
+      "compile_state": "warm_after_preflight",
+      "compiler_fingerprint": "sha256:cf24ed3a2015c6eedbe47a5f86a4387361fc5441b5c242d56ace440d908d209d",
+      "dtype": "f32",
+      "max_latency_ms": 1.10609,
+      "median_ms": 0.553045,
+      "mode": "generated_gather:end_to_end",
+      "op": "moe_dispatch",
+      "resource_evidence": "ncu production capture required",
+      "resource_evidence_complete": true,
+      "resource_fingerprints": [
+        "sha256:6cc8bdcfa0faf3100a65cc2ae5d3fa9649cefadcefa5062d2432f5795141f3ab"
+      ],
+      "resources": [
+        {
+          "achieved_occupancy_pct": 41.975,
+          "block_size": "(256, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 0,
+          "grid_size": "(194, 1, 1)",
+          "kernel": "gather_k(const float *, const int *, float *, int, int)",
+          "launches": 4,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "registers_per_thread": 20,
+          "resource_fingerprint": "sha256:6cc8bdcfa0faf3100a65cc2ae5d3fa9649cefadcefa5062d2432f5795141f3ab",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "static_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 100
+        }
+      ],
+      "selected_route": "generated_gather",
+      "shape": "257x193",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "cache_state": "warm",
+      "compile_state": "warm_after_preflight",
+      "compiler_fingerprint": "sha256:cf24ed3a2015c6eedbe47a5f86a4387361fc5441b5c242d56ace440d908d209d",
+      "dtype": "f32",
+      "max_latency_ms": 0.017122,
+      "median_ms": 0.008561,
+      "mode": "generated_gather:device_event",
+      "op": "moe_dispatch",
+      "resource_evidence": "ncu production capture required",
+      "resource_evidence_complete": true,
+      "resource_fingerprints": [
+        "sha256:6cc8bdcfa0faf3100a65cc2ae5d3fa9649cefadcefa5062d2432f5795141f3ab"
+      ],
+      "resources": [
+        {
+          "achieved_occupancy_pct": 41.975,
+          "block_size": "(256, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 0,
+          "grid_size": "(194, 1, 1)",
+          "kernel": "gather_k(const float *, const int *, float *, int, int)",
+          "launches": 4,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "registers_per_thread": 20,
+          "resource_fingerprint": "sha256:6cc8bdcfa0faf3100a65cc2ae5d3fa9649cefadcefa5062d2432f5795141f3ab",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "static_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 100
+        }
+      ],
+      "selected_route": "generated_gather",
+      "shape": "257x193",
+      "timing_domain": "device_event"
+    },
+    {
+      "cache_state": "warm",
+      "compile_state": "warm_after_preflight",
+      "compiler_fingerprint": "sha256:cf24ed3a2015c6eedbe47a5f86a4387361fc5441b5c242d56ace440d908d209d",
+      "dtype": "f32",
+      "max_latency_ms": 0.963688,
+      "median_ms": 0.481844,
+      "mode": "generated_combine:end_to_end",
+      "op": "moe_combine",
+      "resource_evidence": "ncu production capture required",
+      "resource_evidence_complete": true,
+      "resource_fingerprints": [
+        "sha256:b871fc3f58d9e9462ecc9b9a555c20c0018f64c82b5e1d29646a1c5c3933334e"
+      ],
+      "resources": [
+        {
+          "achieved_occupancy_pct": 40.65,
+          "block_size": "(256, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 0,
+          "grid_size": "(194, 1, 1)",
+          "kernel": "combine_k(const float *, const int *, const float *, float *, int, int)",
+          "launches": 3,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "registers_per_thread": 20,
+          "resource_fingerprint": "sha256:b871fc3f58d9e9462ecc9b9a555c20c0018f64c82b5e1d29646a1c5c3933334e",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "static_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 100
+        }
+      ],
+      "selected_route": "generated_combine",
+      "shape": "257x193",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "cache_state": "warm",
+      "compile_state": "warm_after_preflight",
+      "compiler_fingerprint": "sha256:cf24ed3a2015c6eedbe47a5f86a4387361fc5441b5c242d56ace440d908d209d",
+      "dtype": "f32",
+      "max_latency_ms": 0.027944,
+      "median_ms": 0.013972,
+      "mode": "generated_combine:device_event",
+      "op": "moe_combine",
+      "resource_evidence": "ncu production capture required",
+      "resource_evidence_complete": true,
+      "resource_fingerprints": [
+        "sha256:b871fc3f58d9e9462ecc9b9a555c20c0018f64c82b5e1d29646a1c5c3933334e"
+      ],
+      "resources": [
+        {
+          "achieved_occupancy_pct": 40.65,
+          "block_size": "(256, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 0,
+          "grid_size": "(194, 1, 1)",
+          "kernel": "combine_k(const float *, const int *, const float *, float *, int, int)",
+          "launches": 3,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "registers_per_thread": 20,
+          "resource_fingerprint": "sha256:b871fc3f58d9e9462ecc9b9a555c20c0018f64c82b5e1d29646a1c5c3933334e",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "static_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 100
+        }
+      ],
+      "selected_route": "generated_combine",
+      "shape": "257x193",
+      "timing_domain": "device_event"
+    },
+    {
+      "cache_state": "warm",
+      "compile_state": "warm_after_preflight",
+      "compiler_fingerprint": "sha256:cf24ed3a2015c6eedbe47a5f86a4387361fc5441b5c242d56ace440d908d209d",
+      "dtype": "f32",
+      "max_latency_ms": 1.102515,
+      "median_ms": 0.551257,
+      "mode": "generated_grouped:end_to_end",
+      "op": "grouped_gemm",
+      "resource_evidence": "ncu production capture required",
+      "resource_evidence_complete": true,
+      "resource_fingerprints": [
+        "sha256:b0c86b212fdd7607533774e44d181e551a9c87fac4b0114da911fb371be064e1"
+      ],
+      "resources": [
+        {
+          "achieved_occupancy_pct": 29.62,
+          "block_size": "(256, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 0,
+          "grid_size": "(128, 1, 1)",
+          "kernel": "gg_k(const float *, const float *, const int *, float *, int, int, int, int)",
+          "launches": 3,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "registers_per_thread": 40,
+          "resource_fingerprint": "sha256:b0c86b212fdd7607533774e44d181e551a9c87fac4b0114da911fb371be064e1",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "static_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 100
+        }
+      ],
+      "selected_route": "generated_grouped",
+      "shape": "257x193x127x5",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "cache_state": "warm",
+      "compile_state": "warm_after_preflight",
+      "compiler_fingerprint": "sha256:cf24ed3a2015c6eedbe47a5f86a4387361fc5441b5c242d56ace440d908d209d",
+      "dtype": "f32",
+      "max_latency_ms": 0.021335,
+      "median_ms": 0.010668,
+      "mode": "generated_grouped:device_event",
+      "op": "grouped_gemm",
+      "resource_evidence": "ncu production capture required",
+      "resource_evidence_complete": true,
+      "resource_fingerprints": [
+        "sha256:b0c86b212fdd7607533774e44d181e551a9c87fac4b0114da911fb371be064e1"
+      ],
+      "resources": [
+        {
+          "achieved_occupancy_pct": 29.62,
+          "block_size": "(256, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 0,
+          "grid_size": "(128, 1, 1)",
+          "kernel": "gg_k(const float *, const float *, const int *, float *, int, int, int, int)",
+          "launches": 3,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "registers_per_thread": 40,
+          "resource_fingerprint": "sha256:b0c86b212fdd7607533774e44d181e551a9c87fac4b0114da911fb371be064e1",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "static_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 100
+        }
+      ],
+      "selected_route": "generated_grouped",
+      "shape": "257x193x127x5",
+      "timing_domain": "device_event"
+    }
+  ],
+  "schema": "tessera.benchmark.ratchet.v1"
+}

@@ -5,12 +5,14 @@ import pytest
 
 from tests._support.environment import (
     CompilerToolchain,
+    ensure_cuda_bin_on_path,
     python_subprocess_environment,
 )
 from tests._support.policy import MARKERS
 
 
 def pytest_configure(config):
+    ensure_cuda_bin_on_path()
     for name, description in MARKERS.items():
         config.addinivalue_line("markers", f"{name}: {description}")
 

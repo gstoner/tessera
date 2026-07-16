@@ -1,16 +1,21 @@
-"""Host-free NVIDIA reduction rejection contract."""
+"""Host-free malformed-contract coverage for the generated CUDA reduction ABI."""
 from __future__ import annotations
 
 import numpy as np
 import pytest
 
-
-def _artifact():
-    from tessera import runtime as rt
-    return rt.RuntimeArtifact(metadata={"target": "nvidia_sm120", "compiler_path": "nvidia_reduce_compiled", "executable": True, "execution_kind": "native_gpu", "arg_names": ["x"], "output_name": "o", "ops": [{"op_name": "tessera.sum", "result": "o", "operands": ["x"], "kwargs": {"axis": -1}}]})
+from tessera.compiler.emit.nvidia_cuda import run_row_reduce
 
 
-def test_nvidia_reduce_rejects_non_float_without_gpu():
-    from tessera import runtime as rt
-    with pytest.raises(ValueError, match="f32/f16"):
-        rt._execute_nvidia_compiled_reduce(_artifact(), (np.zeros((2, 8), np.int32),))
+@pytest.mark.parametrize("x", [np.empty((0, 4), np.float32),
+                             np.empty((2, 0), np.float16),
+                             np.ones((2, 3, 4), np.float32),
+                             np.ones((2, 3), np.int8)])
+def test_row_reduce_rejects_invalid_storage_or_shape_before_launch(x):
+    with pytest.raises(ValueError):
+        run_row_reduce(x, "sum")
+
+
+def test_row_reduce_rejects_unknown_operation_before_launch():
+    with pytest.raises(ValueError, match="unknown NVIDIA reduction kind"):
+        run_row_reduce(np.ones((2, 3), np.float32), "product")

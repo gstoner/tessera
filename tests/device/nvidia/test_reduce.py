@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 
 from tests._support.nvidia import require_nvidia_mma_runtime
+from tests._support.nvidia_numerics import assert_matches
 
 
 def _artifact(op: str, **kwargs):
@@ -26,7 +27,9 @@ def test_live_nvidia_reduce_matches_numpy(op, shape, axis, dtype):
     x = (rng.standard_normal(shape) * 1.5).astype(dtype)
     result = rt.launch(_artifact(op, axis=axis), (x,))
     assert result["ok"] is True, result.get("reason")
-    np.testing.assert_allclose(result["output"], _NP[op](x.astype(np.float32), axis=axis), atol=2e-5, rtol=0)
+    assert_matches(result["output"], _NP[op](x.astype(np.float32), axis=axis),
+                   "f16" if dtype == np.float16 else "f32",
+                   reduction_length=shape[axis] if axis is not None else x.size)
 
 
 @pytest.mark.slow
@@ -38,3 +41,16 @@ def test_live_nvidia_reduce_keepdims_and_nan_propagation():
     assert out.shape == (2, 1)
     np.testing.assert_array_equal(np.isnan(out), np.isnan(np.max(x, axis=-1, keepdims=True)))
     np.testing.assert_allclose(out[1], np.max(x, axis=-1, keepdims=True)[1], atol=1e-6)
+
+
+@pytest.mark.slow
+@pytest.mark.hardware_nvidia
+@pytest.mark.parametrize("dtype", [np.float32, np.float16])
+def test_live_nvidia_reduce_nonfinite_policy_matches_numpy(dtype):
+    rt = require_nvidia_mma_runtime()
+    x = np.array([[np.nan, 1, -np.inf], [np.inf, 2, 3]], dtype=dtype)
+    out = rt.launch(_artifact("tessera.sum", axis=-1), (x,))["output"]
+    expected = np.sum(x.astype(np.float32), axis=-1)
+    assert np.array_equal(np.isnan(out), np.isnan(expected))
+    assert np.array_equal(np.isposinf(out), np.isposinf(expected))
+    assert np.array_equal(np.isneginf(out), np.isneginf(expected))

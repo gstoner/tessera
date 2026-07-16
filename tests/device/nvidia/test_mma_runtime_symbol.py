@@ -22,6 +22,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from tests._support.nvidia_numerics import assert_matches
 
 pytestmark = pytest.mark.hardware_nvidia
 
@@ -116,11 +117,7 @@ def test_shipped_nvidia_mma_gemm_matches_numpy(dt):
             pytest.skip("no usable NVIDIA GPU / NVRTC (shipped symbol returned rc=2)")
         assert rc == 0, f"tessera_nvidia_mma_gemm_{dt}{(M,N,K)} returned {rc}"
         skipped_all = False
-        maxerr = float(np.max(np.abs(D - ref)))
-        # tf32/16-bit accumulate more rounding with K; fp8 is coarse but exact-ish.
-        base = {"bf16": 2e-1, "f16": 5e-2, "tf32": 1e-2, "e4m3": 1.0, "e5m2": 2.0}[dt]
-        tol = base * (5 if K > 256 else 1)
-        assert maxerr < tol, f"{dt} GEMM{(M,N,K)} maxerr={maxerr} >= {tol}"
+        assert_matches(D, ref, dt, reduction_length=K)
     assert not skipped_all
 
 

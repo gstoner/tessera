@@ -240,7 +240,22 @@ def test_v1_corpus_rows_migrate_to_end_to_end_timing():
          "candidates": {"w": 1.0}}]}) == 1
     row = fresh.to_dict()["records"][0]
     assert row["timing"] == "end_to_end"
-    assert fresh.to_dict()["version"] == AT.CORPUS_VERSION == 2
+    assert fresh.to_dict()["version"] == AT.CORPUS_VERSION == 3
+
+
+def test_v3_corpus_preserves_resource_and_stability_evidence():
+    cache = AT.MeasureCache()
+    key = ("nvidia:sm_120", "nvidia", OP_FUSED_REGION,
+           (127, 259, 63), "f16", "device")
+    evidence = {
+        "stable_runs": 2, "stable_winner": True,
+        "selector_eligible": True, "compiler_fingerprint": "nvcc-13.3",
+        "resource_fingerprint": "sha256:abc", "cache_state": "warm",
+    }
+    cache.put(key, AT.MeasureRecord("winner", 1.0, {"winner": 1.0}, evidence))
+    fresh = AT.MeasureCache()
+    assert fresh.load_dict(cache.to_dict()) == 1
+    assert fresh.get(key).evidence == evidence
 
 
 def test_bucket_none_key_round_trips():

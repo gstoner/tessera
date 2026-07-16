@@ -11,8 +11,8 @@ without the caller needing to export ``PATH`` first.  Probe order:
      local build location used by
      ``cmake --build build --target tessera-opt``),
   3. plain ``tessera-opt`` resolved against the caller's PATH,
-  4. common LLVM 22 bin directories such as Homebrew and
-     ``/usr/lib/llvm-22/bin``,
+  4. common LLVM 23 bin directories such as Homebrew, TheRock, and
+     ``/usr/lib/llvm-23/bin``,
   5. plain ``tessera-opt`` as the literal substitution (leaves any
      resolution failure to the test process).
 
@@ -24,13 +24,14 @@ import os, shutil, subprocess, lit.formats
 
 
 # Common Homebrew / system LLVM install locations to probe when
-# the binary isn't on PATH.  Pinned to MLIR 22.
+# the binary isn't on PATH. Pinned to MLIR 23.
 _LLVM_BIN_HINTS = (
     "/opt/homebrew/opt/llvm/bin",
-    "/opt/homebrew/opt/llvm@22/bin",
+    "/opt/homebrew/opt/llvm@23/bin",
     "/usr/local/opt/llvm/bin",
-    "/usr/local/opt/llvm@22/bin",
-    "/usr/lib/llvm-22/bin",
+    "/usr/local/opt/llvm@23/bin",
+    "/opt/rocm/core/lib/llvm/bin",
+    "/usr/lib/llvm-23/bin",
 )
 
 
@@ -67,7 +68,7 @@ def _resolve(env_var: str, repo_relative: str, fallback: str) -> str:
 
 
 config.name = "Tessera-IR v0.3.1"
-config.test_format = lit.formats.ShTest(execute_external=True)
+config.test_format = lit.formats.ShTest(execute_external=False)
 config.suffixes = ['.mlir']
 config.environment['PATH'] = os.environ.get('PATH', '')
 

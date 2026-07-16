@@ -196,9 +196,11 @@ def test_gfx125x_wmma_v2_lowers_modifiers_and_assembles(
     source = _gfx125x_source("bf16" if dtype == "bf16" else "fp16")
     lowered = _lower(compiler_toolchain, arch, source, generic=True)
     assert f"rocdl.wmma.f32.16x16x32.{dtype.replace('fp', 'f')}" in lowered
-    assert "signA = false" in lowered
-    assert "signB = false" in lowered
-    assert "modC = 0" in lowered
+    # LLVM 23's gfx125x f16/bf16 WMMA-v2 ops encode only the C modifier and
+    # reuse controls.  signA/signB are not properties of this typed op.
+    assert "signA" not in lowered
+    assert "signB" not in lowered
+    assert "modC = #rocdl<wmma_c_modifier none>" in lowered
     assert "reuseA = false" in lowered
     assert "reuseB = false" in lowered
     binary = _serialize(compiler_toolchain, lowered, arch)

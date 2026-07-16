@@ -103,7 +103,7 @@ def _extract_hsaco(text):
 
 
 def _find_mlir_opt():
-    for c in ("/usr/lib/llvm-22/bin/mlir-opt",
+    for c in ("/usr/lib/llvm-23/bin/mlir-opt",
               "/opt/homebrew/opt/llvm/bin/mlir-opt"):
         if Path(c).is_file():
             return c

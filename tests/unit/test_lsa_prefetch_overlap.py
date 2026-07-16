@@ -20,7 +20,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SRC = REPO_ROOT / "src" / "solvers" / "tpp" / "lib" / "Passes" / "AsyncPrefetch.cpp"
 _CANDIDATES = (
     REPO_ROOT / "build" / "tools" / "tessera-opt" / "tessera-opt",
-    REPO_ROOT / "build-llvm22" / "tools" / "tessera-opt" / "tessera-opt",
+    REPO_ROOT / "build-llvm23" / "tools" / "tessera-opt" / "tessera-opt",
 )
 
 

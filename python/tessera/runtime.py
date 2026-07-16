@@ -2152,9 +2152,9 @@ def _nvidia_tile_tool(name: str) -> Path | None:
         "tessera-nvidia-opt": (
             root / "build/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools"
             / "tessera-nvidia-opt"),
-        "mlir-opt": Path("/usr/lib/llvm-22/bin/mlir-opt"),
-        "mlir-translate": Path("/usr/lib/llvm-22/bin/mlir-translate"),
-        "llc": Path("/usr/lib/llvm-22/bin/llc"),
+        "mlir-opt": Path("/usr/lib/llvm-23/bin/mlir-opt"),
+        "mlir-translate": Path("/usr/lib/llvm-23/bin/mlir-translate"),
+        "llc": Path("/usr/lib/llvm-23/bin/llc"),
     }
     path = candidates[name]
     if path.is_file():

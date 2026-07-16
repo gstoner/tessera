@@ -1,6 +1,6 @@
 #include "mlir/InitAllDialects.h"
 #include "mlir/InitAllPasses.h"
-#include "mlir/Support/MlirOptMain.h"
+#include "mlir/Tools/mlir-opt/MlirOptMain.h"
 using namespace mlir;
 int main(int argc, char **argv){
   DialectRegistry R; registerAllDialects(R); registerAllPasses();

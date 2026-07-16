@@ -57,16 +57,68 @@ preserved while completing this queue:
   parity validated by `test_rocm_measured_autotune.py`; no NVIDIA schedule,
   resource claim, or selector decision applies to gfx1151 or other AMD targets.
 
-## Recommended implementation order on gfx1151
+## LLVM/MLIR 23 and ROCm 7.14 transition evidence
 
-| Order | ID | Work | Why now | Completion gate |
+**Status: host build and gfx1151 correctness ratchets complete in WSL
+(2026-07-16); bare-metal-only gates remain open.**
+
+The project-wide compiler floor is now a matched LLVM/MLIR 23 toolchain. On the
+gfx1151 WSL host, the validated configuration uses upstream Ubuntu LLVM/MLIR
+23.0.0 for Tessera's C++ compiler and TheRock Core SDK 7.14 for HIP, HIPRTC,
+device libraries, and the HIP compiler. Mixing the former LLVM/MLIR 22 build
+with TheRock's LLVM 23 `ocml.bc` was rejected after the reader reported an
+LLVM-bitcode attribute-version mismatch.
+
+The clean `build-rocm-7.14-llvm23-clean` configuration and full Ninja build
+pass.
+The migration includes MLIR 23's removed dialect property switch, Queue
+TableGen name collision, greedy-rewrite API split, tiling-interface alignment
+overload, vector multi-reduction API split, and MFMA control operands becoming
+attributes. Validation on the visible `gfx1151` device records:
+
+- ROCm Target IR lit: **32/32 pass**;
+- compiled ROCm correctness corpus on gfx1151: **1280/1280 pass**;
+- valid baseline/performance ratchets: **21/21 pass**;
+- combined paged-KV, ReplaySSM, portable Tile, grouped GEMM/SwiGLU, and
+  architecture sweep: **86/90**, with only four source-confirmed invalid
+  zero-event assertions remaining and no gfx1250/gfx1251 LLVM 23 failures;
+- HIP version **7.14.60850**, TheRock HIP clang **23.0.0git**, and upstream
+  LLVM/MLIR **23.0.0**.
+
+This is WSL exact-gfx1151 correctness evidence, not bare-metal transport
+evidence and not evidence for any sibling architecture.
+
+## Status ledger
+
+| ID | State | Current outcome |
+|---|---|---|
+| LLVM23/ROCm 7.14 | complete on gfx1151 WSL | Clean build, 32/32 ROCm lit, 1280/1280 compiled correctness, and 21/21 valid performance ratchets pass; the combined sweep is 86/90 with four zero-event-only failures. |
+| ROCM-TILE-1 | complete on gfx1151 | Portable f16/bf16/int8/int4 fragments execute and compare on gfx1151. Other architectures are owned by ROCM-1 through ROCM-5. |
+| ROCM-9 | complete on gfx1151 | Non-identity paged-KV direct and gather routes execute, compare, and have a measured serving decision. |
+| ROCM-REPLAY-1 | complete on gfx1151 | Persistent state, flush/rollback, block submission, asynchronous ring, lifetime proof, and the wider performance matrix are committed. |
+| ROCM-6 | open revalidation; timing blocked | LLVM/MLIR 23 + ROCm 7.14 correctness is green for G6-A/B/C, but WSL HIP events return invalid zero durations. Existing production choices stay in force pending valid paired device timing. |
+| ROCM-8 | blocked | Bare-metal gfx1151 access is required; WSL characterization cannot close it. |
+| ROCM-1/2/3 | open, access-gated | P0 exact-device execution on gfx950, gfx1201, and gfx1250 is the active release frontier. |
+| ROCM-4a/4b | open, access-gated | P1 compatibility execution on gfx1200 and gfx942 follows the P0 packet. |
+| ROCM-5 | landing, exact-device closure open | Architecture-owned descriptors and cross-assembly exist; numerical and performance closure depends on ROCM-1 through ROCM-4b. |
+
+## Recommended open-work order
+
+Completed and measured-non-winning gfx1151 work is intentionally absent from
+this queue. The local WSL host may prepare artifacts and harnesses, but only the
+named exact device can satisfy an execution gate.
+
+| Order | ID | Work | Access state | Completion gate |
 |---:|---|---|---|---|
-| 1 | ROCM-TILE-1 | Portable Tile fragment materialization for RDNA WMMA | It closes the remaining cross-vendor Tile IR gap and provides the reusable boundary for later architectures and dtypes. | The same logical Tile fixture resolves, packs, executes, unpacks, stores, and matches the reference on gfx1151 without test-authored physical fragments. |
-| 2 | ROCM-9 | Exact-device paged-KV proof and measured fused consumer | The stable ABI exists, but its non-identity HIP fixture still needs exact-device closure; direct page-table attention should land only if it beats gather→FA. | Permuted pages execute on gfx1151; gather→FA and direct-paged candidates match the same oracle; device and end-to-end rows select a winner without changing the ABI. |
-| 3 | ROCM-REPLAY-1 | Persistent ROCm ReplaySSM serving path | Selective SSM exists, but ROCm lacks CUDA-equivalent persistent S0, output-only decode, flush, and asynchronous serving machinery. | Long decode, flush, rollback, speculative rejection, block submit, and an ordered async ring match `SSMStateHandle`; traffic and latency are committed. |
-| 4 | ROCM-6 | Run the three ratcheted gfx1151 redesign experiments | Existing measurements identify occupancy/VGPR ownership—not another generic staging layer—as the credible performance lever. | Each candidate clears its named A/B rungs and regression thresholds before replacing production. |
-| 5 | ROCM-5 | Generalize fragment/layout selection by architecture | RDNA 4 WMMA v2 and CDNA MFMA cannot reuse gfx1151 register maps. | Per-family descriptor, pack/unpack, legality guards, and exact-device fixtures exist. |
-| 6 | ROCM-TEST-1 | Validate ROCm host-free compiler ownership | On the ROCm build host, construct the compiler artifact used by host-free tests and prove which ROCm/Apple/NVIDIA pass families it contains. Split or capability-gate foreign-backend compiler tests when that host intentionally builds only ROCm; do not treat a foreign pass absence as a ROCm device or test-location failure. Record command, build flags, tool path, collected node IDs, and diagnostic for each unavailable foreign capability. | The ROCm host-free lane is green for its declared compiler capability set, every excluded foreign compiler test has an explicit owner/selection rule, and no ROCm migration is blocked by a CUDA/Apple-only build assumption. |
+| 1 | ROCM-2 | Run the common P0 packet on Radeon AI PRO R9700 `gfx1201` | owner and reservation required | RDNA 4 WMMA-v2 f16/bf16 plus enabled FP8/integer forms assemble, launch, match aligned/ragged oracles, and record resources and timing. |
+| 2 | ROCM-1 | Run the common P0 packet on MI350-series `gfx950` | owner and reservation required | CDNA 4 matmul, flash attention, softmax, and GELU launch and compare; low-precision breadth advances only with physical-layout proof. |
+| 3 | ROCM-3 | Run the common P0 packet on MI455X `gfx1250` | owner and reservation required | The upstream-LLVM artifact joins to a launch/numerical proof; WMMA-v2 properties and fragment layout match the device. |
+| 4 | ROCM-6 | Revalidate G6-A/B/C with valid paired device timing | bare-metal gfx1151 or repaired event timing required | Original correctness, resource, aligned/ragged, dtype, device-time, and E2E gates are rerun under LLVM/MLIR 23 + ROCm 7.14 before reaffirming or changing production. |
+| 5 | ROCM-8 | Measure copy versus mapped-host memory on bare-metal `gfx1151` | bare-metal owner and reservation required | Repeated kernel-only and end-to-end measurements establish a stable crossover without using WSL evidence. |
+| 6 | ROCM-4b | Retain compatibility proof on MI300X/MI325X `gfx942` | owner and reservation required | f16/bf16 MFMA plus retained matmul/attention/softmax/GELU paths launch and compare. |
+| 7 | ROCM-4a | Add Radeon RX 9000 `gfx1200` exact-device proof | owner and reservation required | Matmul launches and compares; unsupported forms reject stably. |
+| 8 | ROCM-5 | Close the architecture-owned fragment umbrella | depends on ROCM-1 through ROCM-4b | Every enabled family/dtype has exact-device packing, numerical, resource, and timing evidence, or an explicit unsupported/deferred state. |
+| 9 | ROCM-TEST-1 | Validate ROCm host-free compiler ownership | available on the ROCm build host | Build the declared ROCm compiler capability set, explicitly select or exclude foreign-backend compiler tests, and retain command, build flags, tool path, node IDs, and diagnostics; no CUDA/Apple-only build assumption blocks the ROCm lane. |
 
 ## ROCM-TILE-1: portable Tile fragments
 
@@ -140,14 +192,14 @@ The same logical pack/MMA/unpack/store fixture now lowers as follows:
 |---|---|---|---|
 | gfx1100/gfx1151 | duplicated gfx11 Wave32 WMMA, padded accumulator map | f16/bf16/int8/int4 | f16: 25 VGPR, 6 SGPR |
 | gfx1200/gfx1201 | dense SOA Wave32 RDNA 4 WMMA | f16/bf16/E4M3/E5M2/int8, K32 int4 | 18–35 VGPR, 8 SGPR |
-| gfx1250/gfx1251 | K32 Wave32 WMMA-v2 with explicit sign/modC/reuse properties | f16/bf16 | 28 VGPR, 6 SGPR |
+| gfx1250/gfx1251 | K32 Wave32 WMMA-v2 with typed `modC` and reuse properties (`signA`/`signB` are not properties of the LLVM 23 f16/bf16 ops) | f16/bf16 | 28 VGPR, 6 SGPR |
 | gfx90a | Wave64 CDNA2 MFMA | f16/bf16 | 12 VGPR, 12 SGPR |
 | gfx940/gfx942 | Wave64 CDNA3 MFMA | f16/bf16 | gfx942: 14 VGPR, 14 SGPR |
 | gfx950 | Wave64 CDNA4 MFMA | f16/bf16 | 14 VGPR, 14 SGPR |
 
 All serialized rows use zero LDS and scratch and report zero VGPR/SGPR spills.
-gfx940 reaches a real MFMA op, but the installed Debian LLVM 22 serializer does
-not recognize `gfx940`; gfx942 provides the same-family object proof. The
+LLVM 23 still cannot serialize `gfx940` in the installed Ubuntu package;
+gfx942 supplies the same-family object proof. The
 repeated-median compiler/serializer harness is
 `benchmark_rocm_arch_fragments.py`; the stable resource baseline is
 `rocm_arch_fragment_resources.json`.
@@ -223,7 +275,7 @@ Evidence starts in:
 
 ## ROCM-REPLAY-1: ReplaySSM serving parity
 
-**Status: complete initial serving slice on `gfx1151` (2026-07-14).**
+**Status: complete on `gfx1151` (2026-07-14).**
 
 The reference state ABI, flush policy, speculative rollback, and CUDA serving
 implementation already define the semantics. The ROCm work must preserve those
@@ -358,7 +410,30 @@ Evidence is in:
 
 ## ROCM-6: performance redesign experiments
 
-Production remains in place while each candidate is measured.
+**Status: open revalidation under LLVM/MLIR 23 + ROCm 7.14; performance
+blocked by invalid WSL HIP event timing (2026-07-16).**
+
+The refreshed build passes the full required correctness matrices: G6-A passes
+20/20 schedule rows over its four aligned/ragged/dtype cases; G6-B passes all
+four cases with maximum difference `8.36e-6` versus one wave; G6-C passes all
+six cases with maximum difference `3.13e-7` versus serial dK/dV. G6-B retains
+its D=128 resource advantage: 121 VGPR with zero scratch/spills versus 218 VGPR
+for one wave.
+
+All three paired performance harnesses are blocked because ROCm 7.14 WSL HIP
+event calls return success but report `0.0 ms`. The harnesses now reject
+zero/non-finite samples and expose correctness-only mode. Until valid paired
+device and E2E timing is collected, existing production choices stay in force
+without claiming the old performance decisions were reaffirmed:
+
+- G6-A remains non-production and is reopened for measurement;
+- G6-B remains the current production route, with correctness/resources
+  reaffirmed but performance revalidation open;
+- G6-C remains non-production, with correctness reaffirmed but its prior
+  performance rejection awaiting revalidation.
+
+Evidence is recorded in
+`benchmarks/baselines/rocm_gfx1151_rocm6_llvm23_rocm714_revalidation.json`.
 
 ### Phase 0: rebaseline older kernels with the current compiler
 
@@ -414,6 +489,20 @@ the previous selector: 3072-cube 4x4 over 3x4 (2.6%), the required large ragged
 
 ### G6-A: VGPR-bounded multi-wave GEMM
 
+**Status: reopened for performance revalidation (2026-07-16); non-production
+until the original gate passes.**
+
+The ROCm 7.14 production correctness and performance ratchets pass, and the
+existing repeated-median schedule baseline remains shape-dependent. A renewed
+G6-A matrix was attempted at both required aligned f16 sizes plus the ragged
+and int8 rungs. Under WSL, ROCm 7.14's HIP event API returned success but a
+zero elapsed time for module-launch batches; the harness now rejects zero,
+non-finite, and failed timing samples rather than emitting fabricated
+throughput. Because the renewed measurement is invalid rather than negative,
+it cannot reject or promote the two-wave/LDS-reduction design. Valid repeated
+device timing must show whether the existing selector misses the stated 10%
+opportunity before implementation proceeds.
+
 - Split an output macro-tile across two Wave32 groups.
 - Reduce bounded partial f32 accumulators through LDS.
 - Keep per-wave accumulator pressure below the measured 4x4 VGPR cliff.
@@ -424,7 +513,8 @@ the previous selector: 3072-cube 4x4 over 3x4 (2.6%), the required large ragged
 
 ### G6-B: two-wave online-softmax forward attention
 
-**Status: promoted for plain/causal D=128 on gfx1151 (2026-07-15).**
+**Status: current production route from ROCm 7.2 evidence; LLVM/MLIR 23 + ROCm
+7.14 correctness/resources reaffirmed, performance revalidation open.**
 
 - Give two waves one query tile and share K/V traversal.
 - Merge per-wave online `(m,l,O)` state once per K/V tile.
@@ -445,7 +535,8 @@ soft-cap variants retain the one-wave kernel pending their own matrix.
 
 ### G6-C: split/reduced dK/dV backward attention
 
-**Status: implemented and rejected for production on gfx1151 (2026-07-15).**
+**Status: implemented and non-production; LLVM/MLIR 23 + ROCm 7.14
+correctness reaffirmed, performance rejection revalidation open.**
 
 - Separate dQ and dK/dV wave ownership.
 - Reduce bounded partial dK/dV tiles in a second generated kernel.
@@ -494,16 +585,62 @@ These retain the release priorities from `ROCM_AUDIT.md`, but execution is
 hardware-gated. Compiler-only work may proceed locally; promotion waits for the
 named device.
 
-| ID | Priority | Target | Required first proof |
+| ID | Priority | State | Target | Required first proof |
+|---|---|---|---|---|
+| ROCM-2 | P0 | open, access-gated | gfx1201, Radeon AI PRO R9700 | RDNA 4 matmul assembles, launches, and matches; establish WMMA-v2 fragment layout before adding FP8. |
+| ROCM-1 | P0 | open, access-gated | gfx950, MI350 series | Compile, launch, and numerical proof for matmul, flash attention, softmax, and GELU; then CDNA 4 FP8/FP6/FP4 breadth. |
+| ROCM-3 | P0 | open, access-gated | gfx1250, MI455X | Join the upstream-LLVM artifact to an exact-device matmul launch and numerical fixture. |
+| ROCM-4b | P1 | open, access-gated | gfx942, MI300X/MI325X | Retain explicit compatibility proof for matmul, flash attention, softmax, and GELU. |
+| ROCM-4a | P1 | open, access-gated | gfx1200, Radeon RX 9000 | Exact-device matmul proof plus stable rejection of unsupported feature forms. |
+| ROCM-5 | P1 | landing; depends on rows above | all above | Close RDNA 4 WMMA-v2, gfx125x WMMA-v2, and CDNA MFMA descriptors with exact-device layouts, dtype guards, resources, and numerical proof. |
+
+### P0 exact-device access coordination
+
+The three P0 queues require externally scheduled hardware; no P0 device is
+reachable from the gfx1151 WSL host. The access handoff is ready with one
+common synchronization key, `ROCM-P0-LLVM23-2026-07`, and must retain the
+configure cache, compiler versions, device identity, JUnit, emitted object,
+and numerical outputs for each run.
+
+| Queue | Required host | Access state | First scheduled command/result |
 |---|---|---|---|
-| ROCM-1 | P0 | gfx950, MI350 series | Compile, launch, and numerical proof for matmul, flash attention, softmax, and GELU; then CDNA 4 FP8/FP6/FP4 breadth. |
-| ROCM-2 | P0 | gfx1201, Radeon AI PRO R9700 | RDNA 4 matmul assembles, launches, and matches; establish WMMA v2 fragment layout before adding FP8. |
-| ROCM-3 | P0 | gfx1250, MI455X | Join the upstream-LLVM artifact to an exact-device matmul launch and numerical fixture. |
-| ROCM-4a | P1 | gfx1200, Radeon RX 9000 | Exact-device matmul proof plus stable rejection of unsupported feature forms. |
-| ROCM-4b | P1 | gfx942, MI300X/MI325X | Retain explicit compatibility proof for matmul, flash attention, softmax, and GELU. |
-| ROCM-5 | P1 | all above | Separate RDNA 4 WMMA v2 and CDNA MFMA descriptors, fragment layouts, and dtype guards. |
+| ROCM-1 | MI350-series `gfx950` | owner and reservation required | LLVM/MLIR 23 clean build; matmul, flash attention, softmax, and GELU compile/launch/oracle packet |
+| ROCM-2 | Radeon AI PRO R9700 `gfx1201` | owner and reservation required | LLVM/MLIR 23 clean build; WMMA-v2 fragment layout plus aligned/ragged matmul packet |
+| ROCM-3 | MI455X `gfx1250` | owner and reservation required | LLVM/MLIR 23 clean build; upstream artifact joined to launch and numerical packet |
+
+Access coordination is not complete until a named operator and reservation are
+recorded for each host. Compiler-only artifacts may be prepared locally, but
+no queue status advances from that evidence.
+
+The LLVM 23 compiler-only handoff is prepared with
+`benchmark_rocm_arch_fragments.py --artifact-directory`. The 2026-07-16 packet
+contains input MLIR, target-lowered ROCDL, embedded code-object MLIR, resource
+metadata, and median/MAD compiler timings for gfx1201, gfx950, gfx1250, gfx942,
+and gfx1200. Every requested row assembled with a real target intrinsic, zero
+scratch, and zero VGPR/SGPR spills. Recreate the transferable packet from the
+clean build with:
+
+```bash
+TESSERA_OPT="$PWD/build-rocm-7.14-llvm23-clean/tools/tessera-opt/tessera-opt" \
+MLIR_OPT=/usr/lib/llvm-23/bin/mlir-opt \
+.venv/bin/python benchmarks/rocm/benchmark_rocm_arch_fragments.py \
+  --repetitions 3 --arch gfx1201 --arch gfx950 --arch gfx1250 \
+  --arch gfx942 --arch gfx1200 \
+  --artifact-directory /tmp/tessera-rocm714-remote-packets \
+  --output /tmp/tessera-rocm714-remote-packets.json
+```
+
+These packets are compiler-only. Remote operators must append device identity,
+module load/launch, aligned and ragged numerical output, device and end-to-end
+timing, and measured occupancy before any exact-target row advances.
+The local bundle contains 40 files at
+`/tmp/tessera-rocm714-remote-packets.tar.gz` with SHA-256
+`3d569f1de9c837fefef5a84c435c5508f2f8d1c691c38620e59dd6a6a015ee4e`.
 
 ## ROCM-8: bare-metal copy versus zero-copy
+
+**Status: blocked on access to a bare-metal gfx1151 host (2026-07-16). WSL
+results are characterization only and cannot close ROCM-8.**
 
 WSL measurements show an environment-specific crossover, but Windows driver
 round trips affect registration and allocation. Before automatic selection:
@@ -554,8 +691,8 @@ coverage. Closure requires:
   target;
 - stable paged-KV serving with exact-device proof and measured route selection;
 - ReplaySSM persistent/asynchronous serving parity;
-- ROCM-6 candidates either promoted through their ratchets or explicitly
-  retained as measured non-winners;
+- ROCM-6 candidates revalidated under the current toolchain and either promoted
+  through their ratchets or explicitly retained as measured non-winners;
 - exact-device evidence for the priority RDNA 4/CDNA targets, without inherited
   gfx1151 proof;
 - generated target, runtime, and conformance dashboards agreeing with the

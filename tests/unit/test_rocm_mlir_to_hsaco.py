@@ -53,7 +53,7 @@ _KERNELS = {
 def _find_mlir_opt():
     if env := os.environ.get("TESSERA_MLIR_OPT"):
         return env if Path(env).is_file() else None
-    for c in ("/usr/lib/llvm-22/bin/mlir-opt", "/opt/homebrew/opt/llvm/bin/mlir-opt"):
+    for c in ("/usr/lib/llvm-23/bin/mlir-opt", "/opt/homebrew/opt/llvm/bin/mlir-opt"):
         if Path(c).is_file():
             return c
     return shutil.which("mlir-opt")
@@ -190,7 +190,7 @@ def test_tessera_kernel_compiles_through_mlir_and_executes(op):
         pytest.skip("build tessera-opt: ninja -C build tessera-opt")
     mlir_opt = _find_mlir_opt()
     if mlir_opt is None:
-        pytest.skip("mlir-opt not found (set TESSERA_MLIR_OPT or install LLVM 22)")
+        pytest.skip("mlir-opt not found (set TESSERA_MLIR_OPT or install LLVM 23)")
     hip = _hip()
     if hip is None:
         pytest.skip("libamdhip64.so not loadable — no ROCm host")
@@ -217,7 +217,7 @@ def test_emit_rocdl_serializes_to_a_real_hsaco_elf():
         pytest.skip("build tessera-opt: ninja -C build tessera-opt")
     mlir_opt = _find_mlir_opt()
     if mlir_opt is None:
-        pytest.skip("mlir-opt not found (set TESSERA_MLIR_OPT or install LLVM 22)")
+        pytest.skip("mlir-opt not found (set TESSERA_MLIR_OPT or install LLVM 23)")
     hsaco = _compile_to_hsaco("tessera.add", mlir_opt, 64)
     assert hsaco[:4] == b"\x7fELF"
     assert len(hsaco) > 256, "hsaco implausibly small"

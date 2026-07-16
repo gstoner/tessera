@@ -1,11 +1,14 @@
+#include "mlir/Bytecode/BytecodeOpInterface.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/OpDefinition.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
+
+#define GET_TYPEDEF_CLASSES
+#include "CollectiveTypes.h.inc"
+
+#define GET_OP_CLASSES
 #include "CollectiveOps.h.inc"
-using namespace mlir; using namespace tessera::collective;
-LogicalResult AwaitOp::inferReturnTypes(MLIRContext *ctx, std::optional<Location>, ValueRange operands,
-                                        DictionaryAttr, RegionRange, SmallVectorImpl<Type>&tys){
-  if (operands.empty()) return failure();
-  auto f = dyn_cast<Tessera_FutureType>(operands.front().getType());
-  if (!f) return failure();
-  tys.push_back(f.getValueType()); return success();
-}
+
+#define GET_OP_CLASSES
+#include "CollectiveOps.cpp.inc"

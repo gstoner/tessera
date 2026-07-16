@@ -25,9 +25,6 @@ def Tessera_Tile_Dialect : Dialect {
     replaceOp cleanly). Op-specific metadata (`source`, `transposeA/B`, linalg
     solver flags, ordinal) rides as discardable attributes.
   }];
-  // Plain attributes (no op-properties storage) — keeps the dialect header-only
-  // and matches the Tessera / Apple dialects.
-  let usePropertiesForAttributes = 0;
   // C1 (2026-06-23) — the dialect now owns first-class layout attributes
   // (#tile.layout / #tile.swizzle), so it needs the generated attribute
   // printer/parser hooks.

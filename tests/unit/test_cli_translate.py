@@ -3,7 +3,7 @@
 Locks the Python-side surface for ``tools/tessera-translate/``
 (closes the M5 follow-up "tessera-translate directory is empty").
 The C++ MLIR-side ``tessera-translate`` binary is still gated on
-``tessera-opt`` building against MLIR 22; the Python CLI surfaces
+``tessera-opt`` building against MLIR 23; the Python CLI surfaces
 the subset of inter-IR translation that doesn't need it.
 """
 

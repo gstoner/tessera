@@ -2,7 +2,7 @@ import lit.formats
 import os
 
 config.name = "TesseraClifford"
-config.test_format = lit.formats.ShTest(execute_external=True)
+config.test_format = lit.formats.ShTest(execute_external=False)
 config.suffixes = ['.mlir']
 config.test_source_root = os.path.dirname(__file__)
 config.test_exec_root = config.test_source_root

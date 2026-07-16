@@ -1,0 +1,56 @@
+{
+  "schema": "tessera.rocm.rocm6_revalidation.v1",
+  "recorded_at": "2026-07-16",
+  "evidence_arch": "gfx1151",
+  "environment": {
+    "host": "WSL2",
+    "rocm": "7.14.60850",
+    "hip_compiler": "TheRock AMD clang 23.0.0git",
+    "llvm_mlir": "Ubuntu LLVM/MLIR 23.0.0",
+    "build": "build-rocm-7.14-llvm23-clean"
+  },
+  "correctness": {
+    "g6a": {
+      "cases": 4,
+      "schedule_rows": 20,
+      "all_correct": true,
+      "all_schedules_bitwise_equal": true,
+      "max_oracle_absolute_error": 0.00008678436279296875
+    },
+    "g6b": {
+      "cases": 4,
+      "schedule_rows": 6,
+      "all_correct": true,
+      "max_absolute_error_vs_one_wave": 0.000008357688784599304
+    },
+    "g6c": {
+      "cases": 6,
+      "schedule_rows": 12,
+      "all_correct": true,
+      "max_absolute_error_vs_serial": 0.0000003129243850708008
+    }
+  },
+  "resource_observations": {
+    "g6a": "1x1 and 2x2 remain spill-free; 2x4, 3x4, and 4x4 reach 256 VGPR and spill on the refreshed required cases",
+    "g6b": "D=128 one-wave uses 218 VGPR; two-wave uses 121 VGPR with zero scratch and zero reported VGPR spills"
+  },
+  "performance": {
+    "status": "blocked",
+    "reason": "ROCm 7.14 WSL HIP event APIs report success but return 0.0 ms for the G6-A, G6-B, and G6-C module-launch batches",
+    "post_mixed_install_cleanup_retest_ms": 0.0,
+    "post_mixed_install_cleanup_retest": "failed the benchmark guard because the timing sample remained exactly zero",
+    "policy": "A zero or non-finite timing sample is invalid and cannot reaffirm, reject, or promote a candidate",
+    "required_next_host": "bare-metal gfx1151 or another environment with validated nonzero HIP event timing"
+  },
+  "decision": {
+    "rocm6": "open_revalidation",
+    "g6a": "open; candidate remains non-production pending valid paired timing",
+    "g6b": "current production route retained; correctness and resource advantage reaffirmed, performance promotion awaits revalidation",
+    "g6c": "candidate remains non-production; correctness reaffirmed, prior performance rejection awaits revalidation"
+  },
+  "reproducers": [
+    "benchmarks/rocm/benchmark_rocm_gemm_schedule_matrix.py",
+    "benchmarks/rocm/benchmark_rocm_g6b_two_wave.py",
+    "benchmarks/rocm/benchmark_rocm_g6c_split_reduced.py"
+  ]
+}

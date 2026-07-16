@@ -7,8 +7,8 @@
 # CLAUDE.md "Local Toolchain"). Target environment:
 #
 #   * Ubuntu 24.04 LTS (noble)
-#   * LLVM/MLIR 22 from apt.llvm.org  (ROCm's bundled LLVM has no MLIR)
-#   * ROCm 7.2.4 at /opt/rocm  (the AMD ROCm backend's pinned toolchain)
+#   * LLVM/MLIR 23 from apt.llvm.org
+#   * TheRock ROCm 7.14 at /opt/rocm/core
 #   * A project-local Python venv (.venv) with the lean dependency set
 #
 # This script needs root for the apt steps; it calls `sudo` itself, so run it
@@ -23,8 +23,8 @@
 # =============================================================================
 set -euo pipefail
 
-LLVM_VERSION=22
-ROCM_REQUIRED="7.2.4"
+LLVM_VERSION=23
+ROCM_REQUIRED="7.14"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LLVM_PREFIX="/usr/lib/llvm-${LLVM_VERSION}"
 
@@ -88,7 +88,7 @@ if [[ $DO_LLVM -eq 1 ]]; then
       | $SUDO tee "$LIST" >/dev/null
     $SUDO apt-get update -y
   fi
-  # MLIR dev libs + tools are the part ROCm's LLVM lacks.
+  # Use one matched upstream LLVM/MLIR major for the whole compiler build.
   $SUDO apt-get install -y \
     llvm-${LLVM_VERSION} llvm-${LLVM_VERSION}-dev llvm-${LLVM_VERSION}-tools \
     libmlir-${LLVM_VERSION}-dev mlir-${LLVM_VERSION}-tools \
@@ -164,7 +164,8 @@ cmake -S "${REPO_ROOT}" -B "${REPO_ROOT}/build" -G Ninja \\
   -DMLIR_DIR=${LLVM_PREFIX}/lib/cmake/mlir \\
   -DTESSERA_ENABLE_HIP=ON \\
   -DTESSERA_BUILD_ROCM_BACKEND=ON \\
-  -DCMAKE_PREFIX_PATH=/opt/rocm
+  -DCMAKE_HIP_COMPILER=/opt/rocm/core/lib/llvm/bin/clang++ \
+  -DCMAKE_PREFIX_PATH=/opt/rocm/core
 ninja -C "${REPO_ROOT}/build" tessera-opt
 EOF
 )
@@ -195,7 +196,7 @@ Next steps
   # Generated-doc drift gate:
   bash scripts/check_generated_docs.sh
 
-  # Validate ROCm 7.2.4 AMDGCN intrinsics against installed hipcc:
+  # Validate AMDGCN intrinsics against the installed ROCm hipcc:
   python scripts/validate_hipcc_compile.py --hipcc /opt/rocm/bin/hipcc
 
 See docs/GETTING_STARTED.md for the cross-platform build matrix (Linux + macOS).

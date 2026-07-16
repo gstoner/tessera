@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-14
+last_updated: 2026-07-16
 audit_role: sub_audit
 ---
 
@@ -41,9 +41,11 @@ does not transfer to RDNA 4, Wave32 WMMA v2, or CDNA MFMA targets.
 | Positional features | `rope` and `alibi` execute as compiler-generated kernels. | Exact-device proof on additional architectures. | [`rocm_target_map.md`](../../generated/rocm_target_map.md) |
 | General math and reductions | Row reductions, unary/binary math, comparisons, logical operations, and bitwise operations have native gfx1151 lanes. | Broaden tuned shapes and dtype coverage without weakening numerical semantics. | [`runtime_execution_matrix.md`](../../generated/runtime_execution_matrix.md) |
 | SSM, MSA, and EBM | Selective SSM forward/backward, MSA sparse attention, and native EBM kernels execute on gfx1151. | Optimize broader shapes and promote only with exact-target provenance. | [`runtime_execution_matrix.md`](../../generated/runtime_execution_matrix.md) |
-| MoE/grouped GEMM | MoE dispatch/combine execute natively; contiguous f32 grouped GEMM now takes device-resident offsets `[E+1]` and computes every expert group in one generated launch. | Comparative-ratchet the one-launch kernel against the existing per-group path before making grouped SwiGLU consume it. | `test_rocm_moe_transport_compiled.py`, `grouped_gemm_device_args.mlir` |
+| MoE/grouped GEMM | MoE dispatch/combine execute natively. Grouped GEMM uses the measured size-adaptive tile selector, and grouped SwiGLU collapses `3E` per-expert GEMMs into three grouped launches; the promoted E8 rows are committed to the hot-path ratchet. | Re-measure on new architectures; retain the generated gather/scatter transport candidates as non-production until they clear both device and end-to-end gates. | `test_rocm_moe_transport_compiled.py`, `test_rocm_compiler_retune_benchmarks.py`, `rocm_gfx1151_compiler_retune_2026_07_15.json` |
+| Portable Tile fragments | One portable logical Tile program lowers through backend-owned gfx1151 f16/bf16/int8/int4 fragment layouts, assembles, launches, and compares on aligned and ragged shapes. | Exact-device completion for RDNA 4, gfx125x, and CDNA remains under ROCM-1 through ROCM-5. | `gfx1151_tile_fragment_store.mlir`, `test_rocm_wmma_gemm_generated.py` |
+| ReplaySSM serving | Persistent state, output-only decode, flush/rollback, block submission, asynchronous slots, cross-stream leases, and the wider performance matrix are complete on gfx1151. | Re-run timing on a host that returns valid events; keep general matrix-A on the reference handle until a separate contract is implemented. | `test_ssm_rocm_replay.py`, `test_ssm_rocm_replay_benchmark.py` |
 | Asynchronous staging and layouts | Global→LDS `async_copy` and a staged WMMA GEMM tile execute correctly. Structured affine `#tile.layout` extents/strides/offset now change the generated LDS store address instead of surviving as a marker. | Add bounds-aware swizzle and multicast consumers; use staging in production only when profiling finds a staging-bound kernel. | `async_copy_runnable.mlir`, `async_copy_consumes_layout.mlir`, `test_rocm_gemm_staged_async_copy.py` |
-| Paged KV serving ABI | ROCm attention now receives versioned PLHD physical K/V pages plus an i32 logical→physical page table. A HIP gather handles arbitrary token indices before the existing FA ABI; permuted-page structural/reference tests prevent contiguous-layout assumptions. | Run the new permuted-page HIP fixture on gfx1151, then fuse page-table reads into attention only when measured—without changing the cache ABI. | `test_paged_kv_rocm_abi.py`, `test_paged_kv_rocm_native.py` |
+| Paged KV serving ABI | The versioned PLHD ABI, permuted-page gather route, and direct fused page-table consumer execute and compare on gfx1151 across page crossings, arbitrary order, causal decode offset, and MQA/GQA mapping. The committed host-pointer decision selects direct serving while retaining gather→FA as the device-resident baseline. | Re-evaluate route selection if the cache ABI becomes device-resident or on a new exact device; do not reopen implementation that is already complete. | `test_paged_kv_rocm_abi.py`, `test_paged_kv_rocm_native.py`, `rocm_gfx1151_paged_kv.json` |
 
 ## Open actions
 
@@ -59,11 +61,65 @@ are maintained in [`todo.md`](todo.md).
 | ROCM-3 | P0 | Add gfx1250 MI455X exact-device proof. | The upstream-LLVM artifact is joined to an exact-device launch and numerical fixture with gfx1250 provenance. |
 | ROCM-4 | P1 | Add gfx1200 consumer-device proof and retain gfx942 as an explicitly tested compatibility target. | Each promoted row carries its own runtime and numerical evidence; unsupported feature forms fail with stable diagnostics. |
 | ROCM-5 | P1 | Finish architecture-specific MMA enablement instead of reusing gfx1151 layouts. | Separate RDNA 4, Wave32 WMMA v2, and CDNA MFMA fragment/layout guards pass assemble-and-compare fixtures on their matching devices. |
-| ROCM-6 | P1 | Run the three concrete redesign experiments below: VGPR-bounded multi-wave GEMM, two-wave online-softmax forward attention, and split/reduced dK/dV backward attention. | An experiment may replace production only when its named aligned and ragged rungs clear the comparative gain gate, all dtype/correctness fixtures remain green, and its winning latency is recorded in `rocm_gfx1151_hot_paths.json`. |
-| ROCM-9 | P1 | Close exact-device proof for the stable paged-KV ABI, then evaluate a fused paged-attention consumer. | A non-identity logical→physical table gathers correctly on gfx1151 and feeds the FA numerical oracle. Any fused replacement retains the same ABI and wins a device/end-to-end benchmark against gather→FA composition. |
+| ROCM-6 | P1 | Revalidate the three redesign experiments under LLVM/MLIR 23 + ROCm 7.14. Correctness is green, but WSL HIP event timing returns invalid zero durations. | A candidate may retain or change production status only when its aligned/ragged correctness and resource gates pass with valid paired device and E2E timing. Zero/non-finite timing is a blocker, not evidence. |
 | ROCM-8 | P2 | Re-evaluate copy versus zero-copy on bare-metal ROCm. | Device and end-to-end measurements identify a stable crossover outside WSL before any automatic selection policy lands. |
 
 ### ROCM-6 redesign experiments and ratchets
+
+**Status: open revalidation (2026-07-16).** The refreshed toolchain passes all
+required correctness rows: G6-A 20/20 schedule rows, G6-B four cases with
+maximum `8.36e-6` difference, and G6-C six cases with maximum `3.13e-7`
+difference. G6-B's two-wave D=128 kernel remains at 121 VGPR with zero scratch
+and spills, versus 218 VGPR for one wave.
+
+ROCm 7.14 WSL HIP events return `0.0 ms` for all three paired harnesses. The
+old performance decisions therefore remain operational defaults but are not
+represented as reaffirmed by the new compiler: G6-A and G6-C stay
+non-production, while G6-B stays the current production route. Valid paired
+device and E2E timing, preferably on bare-metal gfx1151, is required to close
+the revalidation. The compact evidence record is
+`benchmarks/baselines/rocm_gfx1151_rocm6_llvm23_rocm714_revalidation.json`.
+
+`rocprofv3` 1.3.2 traces HIP runtime APIs through `/dev/dxg` on this WSL host.
+The validated granular run captured 14 calls, including `hipMalloc`,
+`hipMemcpy`, `hipModuleLaunchKernel`, synchronization, and frees, while the
+profiled gfx1151 WMMA correctness fixture passed. The aggregate
+`--runtime-trace` preset must not be used here because it enables an additional
+KFD-dependent subdomain and aborts while opening `/dev/kfd`; select
+`--hip-runtime-trace`, `--memory-allocation-trace`, `--memory-copy-trace`, and
+`--kernel-trace` explicitly. The API stream records allocation, copy, and
+launch calls; the separate device-activity tables were empty on this run and
+are not claimed as device-timeline evidence.
+The compact trace capability record is
+`benchmarks/baselines/rocm_gfx1151_rocm714_wsl_profile.json`.
+
+ROCm 7.14 is selected through the Core SDK prefix `/opt/rocm/core`; the login
+shell and unqualified tools now resolve to that release after the mixed legacy
+installation was removed. WSL AMD SMI tool/library 1.2.1 initializes through
+the separately built `/opt/rocm-wsl` component and reports Windows driver
+`26.10.21.05-260626a-202082C-AMD-Software-Adrenalin-Edition`. ROCm 7.14
+`rocminfo` reports the full gfx1151 topology, but
+`rocprofv3-avail` still constructs a zero-property agent and cannot enumerate
+PMCs. `rocprof-compute` 3.7.0 independently lists the complete gfx1151 metric
+schema, including occupancy, instruction mix, cache hierarchy, LDS conflict,
+wave-wait, DRAM-bandwidth, and GRBM panels. Installing librocdxg's separate WSL
+AMD SMI component under `/opt/rocm-wsl` fixes machine-spec preflight and lets
+`rocprof-compute` identify `RDNA35_HALO` and construct the requested counter
+set. Collection still cannot proceed: current librocdxg 1.2.1 implements every
+`hsaKmtPcSampling*` and `hsaKmtPmc*` entry point as an explicit
+`HSAKMT_STATUS_NOT_SUPPORTED` stub. The schema listing is therefore not a
+hardware-support claim. ROCProfiler SDK then mishandles the unsupported
+PC-sampling path by attempting `/dev/kfd` and aborting. On this release, WSL
+supports HIP/API tracing through DXG, but PMCs and PC sampling require a future
+ROCDXG implementation or a bare-metal KFD host.
+
+The post-cleanup HIP-event retest still returned exactly `0.0 ms`. Final local
+validation totals are: clean build complete, ROCm lit **32/32**, compiled ROCm
+correctness **1280/1280**, valid baseline/performance ratchets **21/21**, and
+the combined paged-KV, ReplaySSM, portable Tile, grouped GEMM/SwiGLU, and
+architecture sweep **86/90**. Its four failures are exclusively the known
+zero-event assertions; the prior four gfx1250/gfx1251 LLVM 23 serialization
+failures are fixed.
 
 ROCM-6 is no longer an open-ended request to “tune occupancy.” Each candidate
 must be kept beside the production kernel for an A/B run, and a local win does
@@ -85,12 +141,14 @@ The production generated GEMM now receives a unified schedule descriptor
 and provenance). Its measured gfx1151 `2x4`/`3x4` macro-tile changes the emitted
 kernel; the generator validates and stamps the remaining fields so each ROCM-6
 run can be joined to the schedule that executed. `collect_rocm6_counters.py`
-keeps native collection disabled unless `--native-counters` is passed. That
-switch is bare-metal only: WSL rejects it before spawning `rocprofv3`, while a
-bare-metal run profiles either retained production or candidate under
-`rocprofv3 --pmc` and keeps the experiment/variant/command identity beside raw
-outputs. Counter names must be enumerated on the target; an unavailable PMC is
-a failed evidence run, not a synthesized zero.
+keeps native collection disabled unless `--native-counters` is passed. Native
+collection requires a profiler-supported GPU/driver path: bare metal is valid,
+and ROCDXG-enabled WSL is also valid when `rocprofv3 --list-avail` enumerates
+counters for that exact agent. This gfx1151 host fails that capability gate. A
+valid run profiles either retained production or candidate under `rocprofv3
+--pmc` and keeps the experiment/variant/command identity beside raw outputs.
+Counter names must be enumerated on the target; an unavailable PMC is a failed
+evidence run, not a synthesized zero.
 
 ### ROCM-7 closure: cooperative sparse attention
 
@@ -134,8 +192,9 @@ These are measured decisions, not unowned tasks:
 
 ## Proof environment and target semantics
 
-The primary development system is Ubuntu 24.04 under WSL2 with ROCm 7.2.4 and
-LLVM/MLIR 22.1.8. The device enumerates natively as `gfx1151`. Early bring-up
+The primary development system is Ubuntu 24.04 under WSL2 with TheRock ROCm
+7.14.0, HIP 7.14.60850, and LLVM/MLIR 23.0.0. The device enumerates through
+`/dev/dxg` as `gfx1151`. Early bring-up
 temporarily reported `gfx1100`; historical notes that name gfx1100 describe that
 environment and are not evidence for a separate exact target.
 
@@ -235,6 +294,11 @@ feature claim means. Individual status rows and counts remain generated.
 - **Selective SSM:** forward and backward execute on gfx1151. Half-storage
   scalar-A workloads can use the chunked-parallel SSD path; f32 stays on the
   exact sequential scan to avoid the observed half-path overflow behavior.
+- **ReplaySSM:** the persistent scalar-A serving context owns resident state,
+  bounded replay inputs, ordered asynchronous slots, and cross-stream output
+  leases. Flush is the only resident-state writer; rollback rewinds the host
+  cursor without launching a kernel. The committed wider matrix covers 75
+  exact-device rows.
 - **MSA/DK2:** selected-block sparse attention and GPU-resident top-k execute,
   including GQA grouping, causal position masking, and dense-equivalence when
   all blocks are selected.

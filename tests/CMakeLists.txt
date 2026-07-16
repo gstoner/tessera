@@ -50,7 +50,7 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tessera-ir)
 
     add_custom_target(check-tessera-ir
         COMMAND ${CMAKE_COMMAND} -E env
-            "PATH=$<TARGET_FILE_DIR:tessera-opt>:${LLVM_TOOLS_BINARY_DIR}:$ENV{PATH}"
+            "PATH=$<TARGET_FILE_DIR:tessera-opt>:${LLVM_TOOLS_BINARY_DIR}:/usr/local/bin:/usr/bin:/bin"
             ${LLVM_LIT} -v ${TESSERA_LIT_TEST_DIR}
         DEPENDS ${TESSERA_TEST_DEPENDS}
         COMMENT "Running Tessera IR lit regression tests"

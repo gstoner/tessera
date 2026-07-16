@@ -50,25 +50,35 @@ print(tessera.__version__)
 
 Tessera builds on **macOS (Apple backend)** and **Ubuntu 24.04 (x86/ROCm
 backend)** from one source tree. The Python flow needs only the lean deps above;
-the C++ compiler (`tessera-opt` and friends) additionally needs **LLVM/MLIR 22**.
+the C++ compiler (`tessera-opt` and friends) additionally needs a matched
+**LLVM/MLIR 23** toolchain.
 
 ### macOS (Homebrew) — Apple backend
 
-LLVM/MLIR 22, ninja, cmake, and the Python tooling come from Homebrew (no venv):
+LLVM/MLIR 23, ninja, cmake, and the Python tooling come from Homebrew (no venv).
+Until Homebrew publishes a stable LLVM 23 formula, use the HEAD build and verify
+the installed major explicitly:
 
 ```bash
-brew install llvm ninja cmake        # LLVM/MLIR 22.x
+brew update
+brew install ninja cmake lit
+brew install llvm --HEAD             # use `brew reinstall llvm --HEAD` if needed
+LLVM_PREFIX="$(brew --prefix llvm)"
+"$LLVM_PREFIX/bin/llvm-config" --version
+"$LLVM_PREFIX/bin/mlir-opt" --version
 cmake -S . -B build -G Ninja \
-  -DLLVM_DIR=/opt/homebrew/opt/llvm/lib/cmake/llvm \
-  -DMLIR_DIR=/opt/homebrew/opt/llvm/lib/cmake/mlir \
+  -DCMAKE_C_COMPILER="$LLVM_PREFIX/bin/clang" \
+  -DCMAKE_CXX_COMPILER="$LLVM_PREFIX/bin/clang++" \
+  -DLLVM_DIR="$LLVM_PREFIX/lib/cmake/llvm" \
+  -DMLIR_DIR="$LLVM_PREFIX/lib/cmake/mlir" \
   -DTESSERA_CPU_ONLY=ON -DTESSERA_BUILD_APPLE_BACKEND=ON
 ninja -C build tessera-opt
 ```
 
-### Ubuntu 24.04 — x86 + AMD ROCm 7.2.4 backend
+### Ubuntu 24.04 — x86 + TheRock ROCm 7.14 backend
 
-One script provisions LLVM/MLIR 22 (from apt.llvm.org — ROCm's bundled LLVM has
-no MLIR), the base build deps, and a project-local `.venv`. It needs `sudo` for
+One script provisions LLVM/MLIR 23 from apt.llvm.org, the base build deps, and
+a project-local `.venv`. It needs `sudo` for
 the apt steps and is idempotent:
 
 ```bash
@@ -77,16 +87,17 @@ source .venv/bin/activate
 ```
 
 Then configure + build the compiler with the ROCm Target IR backend (ROCm
-**7.2.4** at `/opt/rocm`; kernel execution is hardware-gated on a GPU + `kfd`
+**7.14** at `/opt/rocm/core`; kernel execution is hardware-gated on a GPU + `kfd`
 driver, Phase H — the build itself needs no GPU):
 
 ```bash
 cmake -S . -B build -G Ninja \
-  -DLLVM_DIR=/usr/lib/llvm-22/lib/cmake/llvm \
-  -DMLIR_DIR=/usr/lib/llvm-22/lib/cmake/mlir \
+  -DLLVM_DIR=/usr/lib/llvm-23/lib/cmake/llvm \
+  -DMLIR_DIR=/usr/lib/llvm-23/lib/cmake/mlir \
   -DTESSERA_ENABLE_HIP=ON \
   -DTESSERA_BUILD_ROCM_BACKEND=ON \
-  -DCMAKE_PREFIX_PATH=/opt/rocm
+  -DCMAKE_HIP_COMPILER=/opt/rocm/core/lib/llvm/bin/clang++ \
+  -DCMAKE_PREFIX_PATH=/opt/rocm/core
 ninja -C build tessera-opt
 ```
 

@@ -1,3 +1,4 @@
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Parser/Parser.h"
 #include "mlir/Support/FileUtilities.h"
@@ -6,13 +7,14 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Support/JSON.h"
+#include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/SourceMgr.h"
 
 #include <vector>
 #include <string>
 
 static bool which(const char* exe){
-  std::string path = llvm::sys::FindProgramByName(exe).str();
-  return !path.empty();
+  return static_cast<bool>(llvm::sys::findProgramByName(exe));
 }
 
 static int run(const std::vector<std::string>& cmd){
@@ -36,8 +38,8 @@ static void writeMetadata(const std::string& path, mlir::ModuleOp m){
     k["name"] = fn.getName().str();
     auto wg = fn->getAttrOfType<mlir::ArrayAttr>("amdgpu-flat-work-group-size");
     if (wg && wg.size()==2) {
-      k["wg_min"] = wg[0].cast<mlir::IntegerAttr>().getInt();
-      k["wg_max"] = wg[1].cast<mlir::IntegerAttr>().getInt();
+      k["wg_min"] = mlir::cast<mlir::IntegerAttr>(wg[0]).getInt();
+      k["wg_max"] = mlir::cast<mlir::IntegerAttr>(wg[1]).getInt();
     }
     if (auto lds = fn->getAttrOfType<mlir::IntegerAttr>("amdgpu-lds-size"))
       k["lds_bytes"] = (int64_t)lds.getInt();
@@ -66,7 +68,7 @@ int main(int argc, char **argv){
   if (!fileOrErr){ llvm::errs() << "cannot open " << inMlir << "\n"; return 1; }
   sm.AddNewSourceBuffer(std::move(fileOrErr), llvm::SMLoc());
   mlir::MLIRContext ctx;
-  auto module = parseSourceFile<mlir::ModuleOp>(sm, &ctx);
+  auto module = mlir::parseSourceFile<mlir::ModuleOp>(sm, &ctx);
   if (!module){ llvm::errs() << "parse failed\n"; return 1; }
 
   // Derive intermediates

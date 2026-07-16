@@ -6,7 +6,7 @@
 # also what scripts/setup_ubuntu.sh calls for its venv pip step, so the two never
 # drift. Linux-focused but harmless on macOS.
 #
-# It does NOT install the C++ build toolchain (LLVM/MLIR 22, cmake, ninja) — for
+# It does NOT install the C++ build toolchain (LLVM/MLIR 23, cmake, ninja) — for
 # that use scripts/setup_ubuntu.sh. It DOES check for the LLVM lit helpers
 # (FileCheck / not) the MLIR lit suite needs and tells you how to get them.
 #
@@ -101,7 +101,7 @@ else
   # the exact export — far more useful than "reinstall LLVM".
   FOUND_BIN=""
   # Prefer an llvm-config's own bindir (matches the version we build against).
-  for cfg in llvm-config-${LLVM_VERSION:-22} llvm-config; do
+  for cfg in llvm-config-${LLVM_VERSION:-23} llvm-config; do
     command -v "$cfg" >/dev/null 2>&1 || continue
     d="$("$cfg" --bindir 2>/dev/null || true)"
     if [[ -x "$d/FileCheck" && -x "$d/not" ]]; then FOUND_BIN="$d"; break; fi
@@ -117,7 +117,7 @@ else
   else
     warn "MLIR lit tests (tests/tessera-ir, tests/.../test/) need FileCheck + 'not'"
     warn "from LLVM. Install them via:  bash scripts/setup_ubuntu.sh   (apt.llvm.org"
-    warn "LLVM 22), or 'apt-get install llvm-22-tools', then add its bin/ to PATH."
+    warn "LLVM 23), or 'apt-get install llvm-23-tools', then add its bin/ to PATH."
   fi
   warn "Pure-Python unit tests (pytest tests/unit) do NOT need these."
 fi

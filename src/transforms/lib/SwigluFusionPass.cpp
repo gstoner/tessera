@@ -149,7 +149,8 @@ struct SwigluFusion
   void runOnOperation() override {
     RewritePatternSet patterns(&getContext());
     patterns.add<FuseSwiGLUChain>(&getContext());
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    FrozenRewritePatternSet frozenPatterns(std::move(patterns));
+    (void)applyPatternsGreedily(getOperation(), frozenPatterns);
   }
 };
 

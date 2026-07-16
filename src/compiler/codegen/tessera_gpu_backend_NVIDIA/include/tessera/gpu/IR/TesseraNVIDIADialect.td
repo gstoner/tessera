@@ -33,7 +33,6 @@ def TesseraNVIDIADialect : Dialect {
   // generic `OperationState` builders in NVIDIALowering.cpp populate the
   // attributes without the `getProperties()` machinery — mirrors the Apple
   // reference dialect (TesseraAppleOps.td).
-  let usePropertiesForAttributes = 0;
 }
 
 // v1 typed contract. Each op carries the region's values as variadic operands

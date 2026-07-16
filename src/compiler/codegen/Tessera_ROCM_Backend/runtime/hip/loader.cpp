@@ -1,11 +1,5 @@
 #include "loader.h"
 #include <iostream>
-#ifdef __has_include
-#  if __has_include(<hip/hip_runtime.h>)
-#    include <hip/hip_runtime.h>
-#    define TESSERA_HAS_HIP 1
-#  endif
-#endif
 namespace tessera::rocm {
 Loader::~Loader() {}
 bool Loader::loadFile(const std::string &hsacoPath) {

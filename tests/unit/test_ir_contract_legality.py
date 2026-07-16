@@ -19,7 +19,7 @@ REPO = Path(__file__).resolve().parents[2]
 PASS_SRC = REPO / "src" / "transforms" / "lib" / "IRContractLegalityPass.cpp"
 _CANDIDATES = (
     REPO / "build" / "tools" / "tessera-opt" / "tessera-opt",
-    REPO / "build-llvm22" / "tools" / "tessera-opt" / "tessera-opt",
+    REPO / "build-llvm23" / "tools" / "tessera-opt" / "tessera-opt",
 )
 
 

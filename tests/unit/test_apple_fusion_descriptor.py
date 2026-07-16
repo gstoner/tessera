@@ -27,7 +27,7 @@ CHAIN_UTILS = (REPO / "src" / "compiler" / "codegen" / "Tessera_Apple_Backend" /
                "include" / "Tessera" / "Target" / "Apple" / "FusionChainUtils.h")
 _CANDIDATES = (
     REPO / "build" / "tools" / "tessera-opt" / "tessera-opt",
-    REPO / "build-llvm22" / "tools" / "tessera-opt" / "tessera-opt",
+    REPO / "build-llvm23" / "tools" / "tessera-opt" / "tessera-opt",
 )
 
 

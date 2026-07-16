@@ -320,13 +320,13 @@ struct TileIRLoweringPass
     patterns.add<LowerControlToTileIR>(
         ctx, "tessera.control_scan", "tile.control_scan");
 
-    if (failed(applyPatternsAndFoldGreedily(getOperation(),
-                                            std::move(patterns)))) {
+    FrozenRewritePatternSet frozenPatterns(std::move(patterns));
+    if (failed(applyPatternsGreedily(getOperation(), frozenPatterns))) {
       signalPassFailure();
       return;
     }
 
-    // Decision #21: applyPatternsAndFoldGreedily returns success even when it
+    // Decision #21: applyPatternsGreedily returns success even when it
     // matched nothing, so a supported source op that failed a
     // pattern guard (e.g. unsupported operand count / shape) would silently
     // survive and the module would be reported as "GPU-lowered". Refuse that:

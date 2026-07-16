@@ -61,9 +61,9 @@ def _compile_cubin(work: Path, fixture: Path = FIXTURE,
                    "mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32") -> Path:
     tools = {
         "opt": str(NVIDIA_OPT) if NVIDIA_OPT.is_file() else None,
-        "mlir-opt": _tool("/usr/lib/llvm-22/bin/mlir-opt"),
-        "mlir-translate": _tool("/usr/lib/llvm-22/bin/mlir-translate"),
-        "llc": _tool("/usr/lib/llvm-22/bin/llc"),
+        "mlir-opt": _tool("/usr/lib/llvm-23/bin/mlir-opt"),
+        "mlir-translate": _tool("/usr/lib/llvm-23/bin/mlir-translate"),
+        "llc": _tool("/usr/lib/llvm-23/bin/llc"),
         "ptxas": _tool("/usr/local/cuda/bin/ptxas"),
     }
     missing = [name for name, path in tools.items() if path is None]

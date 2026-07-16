@@ -152,8 +152,8 @@ struct NVWGMMALoweringPass
     MLIRContext *ctx = &getContext();
     RewritePatternSet patterns(ctx);
     patterns.add<LowerTileMMA>(ctx, smVersion);
-    if (failed(applyPatternsAndFoldGreedily(getOperation(),
-                                            std::move(patterns)))) {
+    FrozenRewritePatternSet frozenPatterns(std::move(patterns));
+    if (failed(applyPatternsGreedily(getOperation(), frozenPatterns))) {
       signalPassFailure();
     }
   }

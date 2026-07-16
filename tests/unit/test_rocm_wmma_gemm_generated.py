@@ -86,7 +86,7 @@ module {
 def _find_mlir_opt():
     if env := os.environ.get("TESSERA_MLIR_OPT"):
         return env if Path(env).is_file() else None
-    for c in ("/usr/lib/llvm-22/bin/mlir-opt", "/opt/homebrew/opt/llvm/bin/mlir-opt"):
+    for c in ("/usr/lib/llvm-23/bin/mlir-opt", "/opt/homebrew/opt/llvm/bin/mlir-opt"):
         if Path(c).is_file():
             return c
     return shutil.which("mlir-opt")
@@ -132,7 +132,7 @@ def _need_tools():
         pytest.skip("build tessera-opt: ninja -C build tessera-opt")
     mo = _find_mlir_opt()
     if mo is None:
-        pytest.skip("mlir-opt not found (set TESSERA_MLIR_OPT or install LLVM 22)")
+        pytest.skip("mlir-opt not found (set TESSERA_MLIR_OPT or install LLVM 23)")
     return mo
 
 

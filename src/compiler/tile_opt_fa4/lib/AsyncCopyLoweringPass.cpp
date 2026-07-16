@@ -226,8 +226,8 @@ struct AsyncCopyLoweringPass
     patterns.add<LowerAsyncCopyTMA>(ctx, smVersion);
     patterns.add<LowerWaitAsync>(ctx, smVersion);
 
-    if (failed(applyPatternsAndFoldGreedily(getOperation(),
-                                            std::move(patterns)))) {
+    FrozenRewritePatternSet frozenPatterns(std::move(patterns));
+    if (failed(applyPatternsGreedily(getOperation(), frozenPatterns))) {
       signalPassFailure();
     }
   }

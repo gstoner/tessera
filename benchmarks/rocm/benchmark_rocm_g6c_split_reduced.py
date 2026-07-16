@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import statistics
 import sys
 import time
@@ -37,7 +38,7 @@ def _call(artifact, values, split, reps=0):
         artifact, values, _split_reduced=split, _timed_reps=reps)
 
 
-def run(trials, iterations):
+def run(trials, iterations, correctness_only=False):
     hip = rt._load_hip_for_launch()
     if hip is None or hip.hipInit(0): raise RuntimeError("live ROCm device required")
     rows = []
@@ -55,12 +56,26 @@ def run(trials, iterations):
                   for a, e in zip(actual, expected, strict=True)]
         for a, e in zip(actual, expected, strict=True):
             np.testing.assert_allclose(a, e, rtol=4e-3, atol=4e-4)
+        if correctness_only:
+            for split in (False, True):
+                rows.append({
+                    "shape": [b, h, g, s, d], "causal": causal,
+                    "schedule": "split_reduced" if split else "serial_dkdv",
+                    "max_abs_vs_serial": errors,
+                    "temporary_bytes": 2 * b * g * s * d * 4 if split else 0,
+                    "gradient_kv_bytes": 2 * b * g * s * d * 4,
+                })
+            continue
         samples = {False: {"device": [], "e2e": []},
                    True: {"device": [], "e2e": []}}
         for trial in range(trials):
             order = (False, True) if not (trial & 1) else (True, False)
             for split in order:
                 _, device_ms = _call(artifact, values, split, iterations)
+                if (device_ms is None or not math.isfinite(device_ms)
+                        or device_ms <= 0.0):
+                    raise RuntimeError(
+                        f"invalid G6-C timing sample: {device_ms} ms")
                 samples[split]["device"].append(device_ms)
                 start = time.perf_counter_ns(); _call(artifact, values, split)
                 samples[split]["e2e"].append(
@@ -94,13 +109,15 @@ def run(trials, iterations):
                   f"e2e={emed:.2f} ms", flush=True)
     return {"schema": "tessera.rocm.g6c.v1", "evidence_arch": "gfx1151",
             "trials": trials, "iterations": iterations, "rows": rows,
+            "performance_status": ("not_run" if correctness_only else "measured"),
             "all_correct": True}
 
 
 def main():
     p = argparse.ArgumentParser(); p.add_argument("--trials", type=int, default=9)
     p.add_argument("--iterations", type=int, default=10); p.add_argument("--output", required=True)
-    a = p.parse_args(); result = run(a.trials, a.iterations)
+    p.add_argument("--correctness-only", action="store_true")
+    a = p.parse_args(); result = run(a.trials, a.iterations, a.correctness_only)
     Path(a.output).write_text(json.dumps(result, indent=2) + "\n")
 
 

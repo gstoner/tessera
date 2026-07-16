@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import statistics
 import subprocess
@@ -22,8 +23,11 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
-TESSERA_OPT = ROOT / "build/tools/tessera-opt/tessera-opt"
-MLIR_OPT = Path("/usr/lib/llvm-22/bin/mlir-opt")
+TESSERA_OPT = Path(os.environ.get(
+    "TESSERA_OPT",
+    ROOT / "build/tools/tessera-opt/tessera-opt",
+))
+MLIR_OPT = Path(os.environ.get("MLIR_OPT", "/usr/lib/llvm-23/bin/mlir-opt"))
 FIXTURE = (
     ROOT / "src/compiler/codegen/Tessera_ROCM_Backend/test/rocm"
     / "architecture_tile_fragment_store.mlir"
@@ -54,8 +58,8 @@ CASES = (
     Case("gfx1251", "gfx125x_wmma_v2", "bf16"),
     Case("gfx90a", "cdna2_mfma", "f16"),
     Case("gfx90a", "cdna2_mfma", "bf16"),
-    # The installed Debian LLVM 22 serializer does not recognize gfx940.
-    # Lowering is still measured; gfx942 serializes the same CDNA3 family.
+    # Ubuntu LLVM 23 still does not recognize gfx940 as a serialization
+    # processor; gfx942 supplies the same-family CDNA3 object proof.
     Case("gfx940", "cdna3_mfma", "f16", serialize=False),
     Case("gfx942", "cdna3_mfma", "f16"),
     Case("gfx942", "cdna3_mfma", "bf16"),
@@ -150,7 +154,11 @@ def _resources(binary: str) -> dict[str, int | None]:
     return result
 
 
-def measure(case: Case, repetitions: int) -> dict[str, Any]:
+def measure(
+    case: Case,
+    repetitions: int,
+    artifact_directory: Path | None = None,
+) -> dict[str, Any]:
     source = _source(case)
     lower_samples: list[float] = []
     lowered = ""
@@ -185,6 +193,14 @@ def measure(case: Case, repetitions: int) -> dict[str, Any]:
         "resources": _resources(binary),
         "evidence": "exact_target_cross_assembly",
     })
+    if artifact_directory is not None:
+        stem = f"{case.arch}-{case.dtype}"
+        case_directory = artifact_directory / stem
+        case_directory.mkdir(parents=True, exist_ok=True)
+        (case_directory / "input.mlir").write_text(source)
+        (case_directory / "lowered.mlir").write_text(lowered)
+        (case_directory / "code-object.mlir").write_text(binary)
+        row["artifact_directory"] = str(case_directory)
     return row
 
 
@@ -192,17 +208,36 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repetitions", type=int, default=7)
     parser.add_argument("--output", type=Path)
+    parser.add_argument(
+        "--arch",
+        action="append",
+        choices=sorted({case.arch for case in CASES}),
+        help="limit the packet to one or more target architectures",
+    )
+    parser.add_argument(
+        "--artifact-directory",
+        type=Path,
+        help="write input, lowered IR, and embedded code-object MLIR per case",
+    )
     args = parser.parse_args()
     if args.repetitions < 3:
         parser.error("--repetitions must be at least 3 for median/MAD evidence")
     if not TESSERA_OPT.is_file() or not MLIR_OPT.is_file():
-        raise SystemExit("build tessera-opt and install MLIR 22 first")
+        raise SystemExit("build tessera-opt and install MLIR 23 first")
+    selected_cases = tuple(
+        case for case in CASES if not args.arch or case.arch in args.arch
+    )
     payload = {
         "schema": "tessera.rocm.arch-fragment-benchmark.v1",
         "repetitions": args.repetitions,
         "fixture": str(FIXTURE.relative_to(ROOT)),
         "scope": "compiler/cross-assembly; no remote-device performance claims",
-        "rows": [measure(case, args.repetitions) for case in CASES],
+        "tessera_opt": str(TESSERA_OPT),
+        "mlir_opt": str(MLIR_OPT),
+        "rows": [
+            measure(case, args.repetitions, args.artifact_directory)
+            for case in selected_cases
+        ],
     }
     encoded = json.dumps(payload, indent=2, sort_keys=True) + "\n"
     print(encoded, end="")

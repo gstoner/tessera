@@ -446,13 +446,13 @@ scripts/release_gate.py --target=apple_gpu
 mypy python/tessera/
 ```
 
-C++/MLIR builds require LLVM/MLIR 22 or newer:
+C++/MLIR builds require a matched LLVM/MLIR 23 toolchain:
 
 ```bash
 # Convenience build wrapper; defaults to CPU-only unless CUDA/HIP is enabled
 scripts/build.sh
 
-# Or configure explicitly, for example on macOS with Homebrew LLVM 22
+# Or configure explicitly, for example on macOS with Homebrew LLVM 23
 LLVM_PREFIX="$(brew --prefix llvm)"
 cmake -S . -B build \
   -DCMAKE_PREFIX_PATH="$LLVM_PREFIX" \
@@ -464,15 +464,16 @@ cmake -S . -B build \
 
 cmake --build build --parallel
 
-# On Ubuntu 24.04 (x86 + AMD ROCm 7.2.4): bootstrap the toolchain once with
-#   bash scripts/setup_ubuntu.sh           # LLVM/MLIR 22 from apt.llvm.org + venv
-# then configure against the system LLVM and ROCm at /opt/rocm:
+# On Ubuntu 24.04 (x86 + TheRock ROCm 7.14): bootstrap the toolchain once with
+#   bash scripts/setup_ubuntu.sh           # LLVM/MLIR 23 from apt.llvm.org + venv
+# then configure against upstream LLVM/MLIR and TheRock at /opt/rocm/core:
 cmake -S . -B build -G Ninja \
-  -DLLVM_DIR=/usr/lib/llvm-22/lib/cmake/llvm \
-  -DMLIR_DIR=/usr/lib/llvm-22/lib/cmake/mlir \
+  -DLLVM_DIR=/usr/lib/llvm-23/lib/cmake/llvm \
+  -DMLIR_DIR=/usr/lib/llvm-23/lib/cmake/mlir \
   -DTESSERA_ENABLE_HIP=ON \
   -DTESSERA_BUILD_ROCM_BACKEND=ON \
-  -DCMAKE_PREFIX_PATH=/opt/rocm
+  -DCMAKE_HIP_COMPILER=/opt/rocm/core/lib/llvm/bin/clang++ \
+  -DCMAKE_PREFIX_PATH=/opt/rocm/core
 ninja -C build tessera-opt
 
 # MLIR lit tests require a built tessera-opt on PATH

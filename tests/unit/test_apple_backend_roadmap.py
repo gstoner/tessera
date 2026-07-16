@@ -929,14 +929,12 @@ def test_apple_gpu_rope_executes_through_msl_kernel():
     np.testing.assert_allclose(out, expected, rtol=1e-5, atol=1e-5)
 
 
+@pytest.mark.hardware_apple_gpu
 def test_apple_gpu_msl_runtime_caches_kernel_pipeline_state(tmp_path):
     """Compile the apple_gpu runtime shim from source and verify the MSL
     cache size grows from 0 -> 1 after first dispatch and stays at 1 across
     a second dispatch (cache hit). On non-Darwin the symbol returns -1; the
     test gates on platform."""
-
-    if sys.platform != "darwin":
-        pytest.skip("MSL kernel cache is Apple-only")
 
     cxx = shutil.which("c++") or shutil.which("clang++") or shutil.which("g++")
     if cxx is None:
@@ -961,8 +959,7 @@ def test_apple_gpu_msl_runtime_caches_kernel_pipeline_state(tmp_path):
     has_metal = runtime.tessera_apple_gpu_runtime_has_metal
     has_metal.argtypes = []
     has_metal.restype = ctypes.c_int32
-    if has_metal() == 0:
-        pytest.skip("Metal device not available on this host")
+    assert has_metal() != 0, "Metal device unavailable on the hardware test host"
 
     rope = runtime.tessera_apple_gpu_rope_f32
     rope.argtypes = [

@@ -102,12 +102,13 @@ def test_gate_status_helper_resolves_by_name():
 
 # ---- Executable / reason agreement ----
 
-@pytest.mark.skipif(sys.platform != "darwin",
-                    reason="hardware_smoke evaluator requires Darwin "
-                           "for apple_cpu / apple_gpu; CPU is the focus here")
+@pytest.mark.integration
 def test_cpu_matmul_is_executable_with_empty_reason():
     """On a developer Mac, CPU matmul passes every gate; the canonical
     answer is executable=True with no reason text."""
+    from tests._support.apple import require_apple_accelerate
+
+    require_apple_accelerate()
     result = cn.canonical_compile(_tiny_matmul_module(), target="cpu")
     assert result.executable is True, (
         f"expected executable, got reason={result.reason!r}")

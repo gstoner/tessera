@@ -20,7 +20,7 @@ import pytest
 
 import tessera.runtime as R
 
-DARWIN = sys.platform == "darwin"
+pytestmark = pytest.mark.integration
 
 _SYMBOLS = (
     "tessera_apple_gpu_get_active_memory",
@@ -43,9 +43,11 @@ def test_budget_symbols_present_in_runtime():
 
 def test_memory_stats_surface_shape():
     """The Python introspection helper returns the documented keys."""
+    from tests._support.apple import require_apple_gpu_memory_abi
+
+    require_apple_gpu_memory_abi()
     stats = R.apple_gpu_memory_stats()
-    if stats is None:
-        pytest.skip("apple_gpu runtime unavailable")
+    assert stats is not None
     assert set(stats) == {"active", "cache", "peak", "limit"}
     for k, v in stats.items():
         assert isinstance(v, int), k
@@ -56,9 +58,10 @@ def test_memory_limit_round_trips():
     """set_memory_limit returns the previous value; get reflects the new one;
     restoring the prior limit leaves the runtime as found. Works on the stub
     too (the limit is a plain stored value)."""
-    rt = R._apple_gpu_memory_api()
-    if rt is None:
-        pytest.skip("apple_gpu runtime unavailable")
+    from tests._support.apple import require_apple_gpu_memory_abi
+
+    require_apple_gpu_memory_abi()
+    assert R._apple_gpu_memory_api() is not None
     prev = R.apple_gpu_set_memory_limit(123 << 20)
     try:
         assert R.apple_gpu_memory_stats()["limit"] == (123 << 20)
@@ -73,29 +76,29 @@ def test_memory_limit_round_trips():
 def test_clear_cache_empties_cache_counter():
     """After clear_cache, the cache counter is exactly 0 regardless of prior
     pool state, and the reported freed bytes are non-negative."""
-    rt = R._apple_gpu_memory_api()
-    if rt is None:
-        pytest.skip("apple_gpu runtime unavailable")
+    from tests._support.apple import require_apple_gpu_memory_abi
+
+    require_apple_gpu_memory_abi()
+    assert R._apple_gpu_memory_api() is not None
     freed = R.apple_gpu_clear_cache()
     assert freed is not None and freed >= 0
     assert R.apple_gpu_memory_stats()["cache"] == 0
 
 
-@pytest.mark.skipif(not DARWIN, reason="device-tensor accounting needs Metal")
+@pytest.mark.hardware_apple_gpu
 def test_device_tensor_alloc_free_accounting():
     """Allocating a resident DeviceTensor raises ``active`` by exactly its byte
     count; freeing it restores the level. Single-threaded within this test, so
     the delta is exact."""
-    if R.apple_gpu_memory_stats() is None:
-        pytest.skip("apple_gpu runtime unavailable")
-    if not getattr(R.DeviceTensor, "is_metal", lambda: False)():
-        pytest.skip("Metal device-tensor path unavailable")
+    from tests._support.apple import require_apple_gpu_memory_abi
+
+    require_apple_gpu_memory_abi()
+    assert R.apple_gpu_memory_stats() is not None
 
     nbytes = 1 << 20  # 1 MiB, large enough to dwarf any incidental noise
     before = R.apple_gpu_memory_stats()["active"]
     dt = R.DeviceTensor.empty((nbytes // 4,), np.float32)
-    if dt is None:
-        pytest.skip("device-tensor allocation unavailable")
+    assert dt is not None
     try:
         after = R.apple_gpu_memory_stats()["active"]
         assert after - before == nbytes, (before, after)
@@ -105,14 +108,14 @@ def test_device_tensor_alloc_free_accounting():
     assert restored == before, (before, restored)
 
 
-@pytest.mark.skipif(not DARWIN, reason="peak tracking needs the Metal path")
+@pytest.mark.hardware_apple_gpu
 def test_peak_tracks_high_water_and_resets():
     """Peak is >= active and >= a freshly allocated resident tensor; resetting
     pins peak back down to the current active level."""
-    if R.apple_gpu_memory_stats() is None:
-        pytest.skip("apple_gpu runtime unavailable")
-    if not getattr(R.DeviceTensor, "is_metal", lambda: False)():
-        pytest.skip("Metal device-tensor path unavailable")
+    from tests._support.apple import require_apple_gpu_memory_abi
+
+    require_apple_gpu_memory_abi()
+    assert R.apple_gpu_memory_stats() is not None
 
     nbytes = 2 << 20
     dt = R.DeviceTensor.empty((nbytes // 4,), np.float32)

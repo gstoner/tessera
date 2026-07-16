@@ -16,7 +16,7 @@ from tessera import _jit_boundary as jb
 from tessera.compiler.jit import TesseraJitError  # the class @jit decoration raises
 
 _GPU = agb.is_available() and jb.is_available()
-gpu = pytest.mark.skipif(not _GPU, reason="apple_gpu runtime / libtessera_jit unavailable")
+gpu = pytest.mark.hardware_apple_gpu
 
 
 # This body made AST emission fail ("unresolved operand") before the relaxation:

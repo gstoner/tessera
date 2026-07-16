@@ -17,7 +17,7 @@ from tessera import runtime as _runtime
 from tessera.compiler import driver as _driver
 
 _GPU = agb.is_available() and jb.is_available()
-gpu = pytest.mark.skipif(not _GPU, reason="apple_gpu runtime / libtessera_jit unavailable")
+gpu = pytest.mark.hardware_apple_gpu
 
 _EBM_GRAPH_OPS = [
     "tessera.ebm_energy_quadratic",

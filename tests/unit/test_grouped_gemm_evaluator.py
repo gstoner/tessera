@@ -15,8 +15,6 @@ The teeth test shows a genuinely non-equivalent relation is flagged divergent.
 
 from __future__ import annotations
 
-import sys
-
 import numpy as np
 import pytest
 
@@ -58,7 +56,7 @@ def _operands(seed=0):
 _BUDGETS = {"fp8_e4m3": 0.30, "nvfp4": 0.75, "fp8xfp4": 0.75}
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="Metal execution is Darwin-only.")
+@pytest.mark.hardware_apple_gpu
 @pytest.mark.parametrize("quant", ["fp8_e4m3", "nvfp4", "fp8xfp4"])
 def test_grouped_gemm_quant_equivalent_to_f32_via_evaluator(quant):
     """The low-precision grouped GEMM ≡ the f32 grouped GEMM within the
@@ -71,7 +69,7 @@ def test_grouped_gemm_quant_equivalent_to_f32_via_evaluator(quant):
     assert not v.is_divergent
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="Metal execution is Darwin-only.")
+@pytest.mark.hardware_apple_gpu
 def test_evaluator_oracle_has_teeth():
     """A non-equivalent relation (weights scaled 4×) must be flagged divergent —
     proving the oracle isn't vacuously passing on any input pair."""

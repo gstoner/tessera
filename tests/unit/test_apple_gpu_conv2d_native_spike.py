@@ -44,8 +44,7 @@ def _runtime_lib_path() -> Path | None:
     return None
 
 
-pytestmark = pytest.mark.skipif(
-    not _on_darwin(), reason="spike harness exercises Metal (Apple-only)")
+pytestmark = pytest.mark.hardware_apple_gpu
 
 
 def _compile_runtime_dylib_if_needed(tmp_path: Path) -> Path:

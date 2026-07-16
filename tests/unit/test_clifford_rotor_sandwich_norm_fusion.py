@@ -29,7 +29,7 @@ from tessera.compiler.clifford_jit import (
 )
 
 _GPU = agb.is_available() and jb.is_available()
-gpu = pytest.mark.skipif(not _GPU, reason="apple_gpu runtime / libtessera_jit unavailable")
+gpu = pytest.mark.hardware_apple_gpu
 
 
 def _mv(seed, shape=(4, 8)):

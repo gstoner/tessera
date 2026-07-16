@@ -44,9 +44,10 @@ def test_topk_lane_has_a_registered_handler():
 
 # ── Darwin: full @jit pipeline — top_k flows to metal_runtime ────────────────
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="TopK executes on Metal.")
+@pytest.mark.hardware_apple_gpu
 def test_jit_top_k_routes_to_metal_runtime_at_rung8():
     from tessera.compiler.evaluator import Rung, evaluate
+    from tests._support.apple import assert_native_apple_jit
 
     rng = np.random.default_rng(7)
     x = rng.standard_normal((4, 64)).astype(np.float32)
@@ -61,11 +62,12 @@ def test_jit_top_k_routes_to_metal_runtime_at_rung8():
     oracle = np.stack([ovals, oidx.astype(np.float32)])  # (values, indices) tuple
     verdict = evaluate("apple_gpu", j, (x,), oracle, rtol=5e-3, atol=1e-3)
     assert verdict.rung is Rung.HARDWARE_VERIFIED, verdict.detail
+    assert_native_apple_jit(j)
 
 
 # ── Darwin: hardware-verified Metal TopK (direct dispatch) ───────────────────
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="TopK executes on Metal.")
+@pytest.mark.hardware_apple_gpu
 @pytest.mark.parametrize("rows,cols,k", [(5, 64, 4), (8, 256, 1), (3, 1024, 16)])
 def test_metal_topk_matches_numpy(rows, cols, k):
     from tessera.runtime import _apple_gpu_dispatch_topk
@@ -82,14 +84,14 @@ def test_metal_topk_matches_numpy(rows, cols, k):
     assert idx.dtype == np.int64
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="TopK executes on Metal.")
+@pytest.mark.hardware_apple_gpu
 def test_metal_topk_symbol_present():
     from tessera.runtime import _apple_gpu_mpsgraph_topk_f32
 
     assert _apple_gpu_mpsgraph_topk_f32() is not None
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="TopK executes on Metal.")
+@pytest.mark.hardware_apple_gpu
 def test_metal_topk_axis_folding():
     # a non-last axis is folded to the last axis and restored
     from tessera.runtime import _apple_gpu_dispatch_topk

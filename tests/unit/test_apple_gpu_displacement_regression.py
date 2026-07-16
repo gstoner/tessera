@@ -62,7 +62,7 @@ def test_fallback_histogram_returns_a_dict():
         assert isinstance(count, int)
 
 
-@pytest.mark.skipif(not DARWIN, reason="GPU-residency check requires Metal (Darwin)")
+@pytest.mark.hardware_apple_gpu
 def test_decoder_block_does_not_silently_rot_to_numpy():
     """D2 — the real regression lock: on Metal, a representative decoder block
     must run entirely on the GPU lanes; any failure-class fallback to numpy is a

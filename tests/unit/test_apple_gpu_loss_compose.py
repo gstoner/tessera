@@ -17,7 +17,7 @@ from tessera.compiler import driver as _driver
 
 R = _runtime
 _GPU = agb.is_available() and jb.is_available()
-gpu = pytest.mark.skipif(not _GPU, reason="apple_gpu runtime / libtessera_jit unavailable")
+gpu = pytest.mark.hardware_apple_gpu
 
 _LOSSES = ["mse", "mae", "huber", "smooth_l1", "log_cosh", "vlb",
            "ddpm_noise_pred", "binary_cross_entropy", "cross_entropy"]
@@ -76,7 +76,6 @@ def test_vlb_and_bce():
         float(L.binary_cross_entropy_loss(a, t)), atol=1e-3)
 
 
-@gpu
 def test_cross_entropy_onehot_gpu_and_integer_fallback():
     rng = np.random.default_rng(7)
     logits = rng.standard_normal((5, 4)).astype(np.float32)

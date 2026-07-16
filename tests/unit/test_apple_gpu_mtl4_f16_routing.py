@@ -15,14 +15,6 @@ import pytest
 from tessera import runtime as rt
 
 
-def _mtl4_available() -> bool:
-    try:
-        caps = rt._mtl4_caps_cached()
-    except Exception:
-        return False
-    return bool(caps.get("command_queue") and caps.get("compiler"))
-
-
 # ---- Gate logic (no GPU needed — exercises the routing predicate) -----
 
 def test_f16_route_mode_default_is_auto():
@@ -69,9 +61,9 @@ def test_f16_auto_mode_gates_to_m_equals_one():
 
 # ---- Numerics (Metal-gated) -------------------------------------------
 
+@pytest.mark.hardware_apple_gpu
+@pytest.mark.metal4
 def test_f16_m1_route_matches_reference():
-    if not _mtl4_available():
-        pytest.skip("Metal 4 unavailable")
     prev = rt.apple_gpu_mtl4_f16_mode()
     try:
         rt.set_apple_gpu_mtl4_f16_mode("auto")
@@ -89,11 +81,11 @@ def test_f16_m1_route_matches_reference():
         rt.set_apple_gpu_mtl4_f16_mode(prev)
 
 
+@pytest.mark.hardware_apple_gpu
+@pytest.mark.metal4
 def test_f16_all_mode_routes_square():
     """'all' mode routes every fp16 2-D matmul (the benchmarking knob);
     numerically must still match the reference."""
-    if not _mtl4_available():
-        pytest.skip("Metal 4 unavailable")
     prev = rt.apple_gpu_mtl4_f16_mode()
     try:
         rt.set_apple_gpu_mtl4_f16_mode("all")

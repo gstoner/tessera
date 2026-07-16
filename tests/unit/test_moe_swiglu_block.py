@@ -18,7 +18,7 @@ from tessera.compiler import driver as _driver
 
 R = _runtime
 _GPU = agb.is_available() and jb.is_available()
-gpu = pytest.mark.skipif(not _GPU, reason="apple_gpu runtime / libtessera_jit unavailable")
+gpu = pytest.mark.hardware_apple_gpu
 
 
 def _silu(z):
@@ -150,7 +150,6 @@ def test_fused_fast_path_matches_composed():
     assert rel < 1e-5, f"fused fast-path rel {rel:.2e}"  # f32, scale-robust
 
 
-@gpu
 def test_large_hidden_dim_falls_back_to_composed():
     # H > 256 exceeds the per-row stack buffers; the fused kernel early-returns
     # so the dispatcher must still produce the correct result via the composed

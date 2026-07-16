@@ -160,7 +160,7 @@ def test_pointwise_reduce_region_validation():
         F.PointwiseReduceRegion((("abs", ("x",), "a"),), ("x",), "a", "nope")
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.hardware_apple_gpu
 @pytest.mark.parametrize("reduce,fn", [
     ("sum", lambda a: a.sum(-1)),
     ("mean", lambda a: a.mean(-1)),
@@ -179,7 +179,7 @@ def test_pointwise_reduce_on_metal(reduce, fn):
     np.testing.assert_allclose(np.asarray(out), fn(x * x), rtol=1e-4, atol=1e-3)
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.hardware_apple_gpu
 def test_pointwise_reduce_3d_reduces_last_axis():
     # 3D input → output keeps leading dims, drops the last.
     region = F.PointwiseReduceRegion(

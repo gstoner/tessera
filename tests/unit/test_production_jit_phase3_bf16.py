@@ -23,10 +23,10 @@ from tessera._jit_boundary import GraphFn, TesseraJitError
 ml_dtypes = pytest.importorskip("ml_dtypes")
 bf16 = ml_dtypes.bfloat16
 
-pytestmark = pytest.mark.skipif(
-    not (agb.is_available() and jb.is_available()),
-    reason="Apple GPU runtime or libtessera_jit unavailable",
-)
+pytestmark = [
+    pytest.mark.hardware_apple_gpu,
+    pytest.mark.usefixtures("apple_gpu_jit_runtime"),
+]
 
 
 # ── back-half kernels: bf16 output, matches the f32 kernel at bf16 tol ───────

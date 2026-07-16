@@ -104,18 +104,22 @@ def test_jit_projections_runtime_executable():
     assert meta["execution_mode"] in ("metal_runtime", "metal_artifact")
 
 
-@pytest.mark.skipif(not DARWIN, reason="metal_runtime dispatch is Darwin-only")
+@pytest.mark.hardware_apple_gpu
 def test_jit_linear_general_metal_runtime_on_darwin():
+    from tests._support.apple import assert_native_apple_jit
+
     rng = np.random.RandomState(6)
     x = rng.randn(4, 10, 16).astype(np.float32)
     w = rng.randn(16, 32).astype(np.float32)
     out = np.asarray(_jit_linear_general(x, w))
     np.testing.assert_allclose(out, x @ w, rtol=1e-5, atol=1e-4)
-    assert _jit_linear_general.runtime_artifact().metadata["execution_mode"] == "metal_runtime"
+    assert_native_apple_jit(_jit_linear_general)
 
 
-@pytest.mark.skipif(not DARWIN, reason="metal_runtime dispatch is Darwin-only")
+@pytest.mark.hardware_apple_gpu
 def test_jit_qkv_projection_metal_runtime_on_darwin():
+    from tests._support.apple import assert_native_apple_jit
+
     rng = np.random.RandomState(7)
     x = rng.randn(4, 16).astype(np.float32)
     w = rng.randn(16, 48).astype(np.float32)
@@ -123,4 +127,4 @@ def test_jit_qkv_projection_metal_runtime_on_darwin():
     assert isinstance(out, tuple) and len(out) == 3
     rq, rk, rv = np.split(x @ w, 3, axis=-1)
     np.testing.assert_allclose(np.asarray(out[0]), rq, rtol=1e-5, atol=1e-4)
-    assert _jit_qkv.runtime_artifact().metadata["execution_mode"] == "metal_runtime"
+    assert_native_apple_jit(_jit_qkv)

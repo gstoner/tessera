@@ -150,7 +150,7 @@ def test_ratchet_rejects_unknown_schema():
 # ── 3. Live ratchet (Darwin + Metal; slow) ───────────────────────────
 
 @pytest.mark.slow
-@pytest.mark.skipif(sys.platform != "darwin", reason="Metal required")
+@pytest.mark.hardware_apple_gpu
 def test_live_hot_paths_within_ratchet():
     from tessera import runtime as rt
 

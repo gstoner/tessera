@@ -156,7 +156,7 @@ def _apple_gpu_available() -> bool:
         return False
 
 
-@pytest.mark.skipif(not _apple_gpu_available(), reason="Apple GPU / Metal not available")
+@pytest.mark.hardware_apple_gpu
 def test_mla_apple_gpu_matches_reference():
     rng = np.random.default_rng(10)
     w = _mla_weights(rng)
@@ -167,7 +167,7 @@ def test_mla_apple_gpu_matches_reference():
     np.testing.assert_allclose(gpu, ref, rtol=1e-3, atol=1e-3)
 
 
-@pytest.mark.skipif(not _apple_gpu_available(), reason="Apple GPU / Metal not available")
+@pytest.mark.hardware_apple_gpu
 def test_dsa_apple_gpu_matches_reference():
     rng = np.random.default_rng(11)
     Q, K, V = _qkv(rng, S=16, D=8)

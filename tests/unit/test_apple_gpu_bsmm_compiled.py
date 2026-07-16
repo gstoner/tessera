@@ -12,6 +12,7 @@ import pytest
 
 import tessera as ts
 from tessera import runtime as rt
+from tests._support.apple import assert_native_apple_gpu, assert_reference_cpu
 
 
 @ts.jit(target="apple_gpu")
@@ -67,7 +68,7 @@ def test_bsmm_non_f32_uses_reference_cpu_override():
     a = np.ones((2, 3), np.float64)
     b = np.ones((3, 4), np.float64)
     out, result = _launch(a, b)
-    assert result["execution_kind"] == "reference_cpu"
+    assert_reference_cpu(result)
     np.testing.assert_allclose(out, a @ b)
 
 
@@ -76,8 +77,7 @@ def test_bsmm_f32_reports_native_gpu_on_metal():
     a = np.arange(12, dtype=np.float32).reshape(3, 4)
     b = np.arange(20, dtype=np.float32).reshape(4, 5)
     out, result = _launch(a, b)
-    assert result["execution_kind"] == "native_gpu"
-    assert result["execution_mode"] == "metal_runtime"
+    assert_native_apple_gpu(result, compiler_path="apple_gpu_bsmm_compiled")
     np.testing.assert_allclose(out, a @ b, rtol=2e-5, atol=2e-5)
 
 
@@ -88,5 +88,5 @@ def test_bsmm_f32_demotes_to_reference_cpu_without_metal(monkeypatch):
     a = np.arange(12, dtype=np.float32).reshape(3, 4)
     b = np.arange(20, dtype=np.float32).reshape(4, 5)
     out, result = _launch(a, b)
-    assert result["execution_kind"] == "reference_cpu"
+    assert_reference_cpu(result)
     np.testing.assert_allclose(out, a @ b, rtol=2e-5, atol=2e-5)

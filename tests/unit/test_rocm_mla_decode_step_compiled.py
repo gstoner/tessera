@@ -132,6 +132,7 @@ def test_rocm_mla_decode_step_native_gpu_matches_reference_on_hardware():
 
 
 @pytest.mark.compiler_tool
+@pytest.mark.compiler_rocm
 def test_rocm_mla_absorb_decode_codegen_lowers():
     import subprocess
     from pathlib import Path

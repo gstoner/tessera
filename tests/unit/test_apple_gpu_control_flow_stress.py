@@ -20,7 +20,6 @@ of taking down the whole suite. Override the iteration count with
 from __future__ import annotations
 
 import os
-import sys
 
 import numpy as np
 import pytest
@@ -28,14 +27,7 @@ import pytest
 from tessera import runtime as R
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="MPSGraph stress is Darwin-only")
-@pytest.mark.skipif(
-    not R.DeviceTensor.is_metal(),
-    reason=(
-        "needs Metal access in this process; Codex sandbox may hide "
-        "MTLCreateSystemDefaultDevice"
-    ),
-)
+@pytest.mark.hardware_apple_gpu
 def test_cf_while_generate_after_bulk_bmm_dispatches():
     iterations = int(os.environ.get("TESSERA_APPLE_GPU_CF_STRESS_ITERS", "25"))
     rng = np.random.default_rng(20260612)

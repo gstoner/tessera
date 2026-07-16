@@ -2525,6 +2525,7 @@ def run_report(reps: int = DEFAULT_REPS_MANUAL,
                include_ebt_sweep: bool = False,
                include_jit_bridge: bool = True,
                include_vertical_slice: bool = True,
+               enable_apple_gpu: bool = True,
                ebt_sweep_points: tuple[tuple[int, int, int, int], ...]
                    = _DEFAULT_EBT_SWEEP) -> dict[str, Any]:
     """Top-level entry: build the report dict (no I/O).
@@ -2546,13 +2547,19 @@ def run_report(reps: int = DEFAULT_REPS_MANUAL,
         GA/EBM proof rows. These validate chained math contracts and
         value-call metadata, but remain reference-executed until the
         Apple value runtime grows a multi-call or fused executor.
+      - ``enable_apple_gpu``: when false, retain the portable report schema
+        and reference rows without compiling or dispatching the Apple runtime.
     """
     if tmp_dir is None:
         import tempfile
         tmp_dir = Path(tempfile.mkdtemp(prefix="tessera_ga_ebm_bench_"))
     device = _device_name()
     version = _tessera_version()
-    rt, compile_time_ms, skip_reason = compile_apple_gpu_runtime(tmp_dir)
+    if enable_apple_gpu:
+        rt, compile_time_ms, skip_reason = compile_apple_gpu_runtime(tmp_dir)
+    else:
+        rt, compile_time_ms = None, 0.0
+        skip_reason = "Apple GPU execution disabled by caller"
     rows: list[dict[str, Any]] = []
     native_ebm_ops: set[str] = set()
 

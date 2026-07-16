@@ -33,9 +33,7 @@ def _apple_gpu_available() -> bool:
         return False
 
 
-pytestmark = pytest.mark.skipif(
-    not _apple_gpu_available(), reason="Apple GPU runtime unavailable (non-Darwin / no Metal)"
-)
+pytestmark = pytest.mark.hardware_apple_gpu
 
 
 def _qkv(B=1, Hq=4, Hkv=2, Sq=16, Sk=16, D=8, Dv=8, seed=0):

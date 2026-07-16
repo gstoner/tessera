@@ -20,10 +20,10 @@ from tessera import _apple_gpu_backend as agb
 from tessera import _jit_boundary as jb
 from tessera._jit_boundary import GraphFn
 
-pytestmark = pytest.mark.skipif(
-    not (agb.is_available() and jb.is_available()),
-    reason="Apple GPU runtime or libtessera_jit unavailable",
-)
+pytestmark = [
+    pytest.mark.hardware_apple_gpu,
+    pytest.mark.usefixtures("apple_gpu_jit_runtime"),
+]
 
 
 def _run_both(build, ar):

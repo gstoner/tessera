@@ -53,11 +53,7 @@ def test_apple_cpu_stateful_kv_builder_is_numerically_corroborated():
 
 # ── Darwin: independently reproduce each complete cell on real hardware ───────
 
-@pytest.mark.skipif(
-    sys.platform != "darwin",
-    reason="Apple CPU/GPU native execution is Darwin-only; the coverage gate "
-    "above runs everywhere.",
-)
+@pytest.mark.hardware_apple_gpu
 def test_complete_cells_are_evaluator_corroborated_on_darwin():
     rng = np.random.default_rng(20260611)
     results = CE.corroborate_complete(rng)

@@ -262,7 +262,7 @@ lookahead_sparse_attention,19,4,1,23,0,fp16,directly_tested,23 direct test refer
 lora_linear,8,0,0,8,0,fp16,directly_tested,8 direct test references
 lt,4,0,2,4,0,bf16 f32,directly_tested,4 direct test references
 lu,6,1,0,7,0,bf16 f16 f32 fp16 fp32,directly_tested,7 direct test references
-mae_loss,7,0,0,7,0,f32,directly_tested,7 direct test references
+mae_loss,11,0,0,11,0,f32,directly_tested,11 direct test references
 map,0,0,0,0,1,,structural_only,category default for 'control_flow'
 masked_categorical,10,0,0,10,0,,directly_tested,10 direct test references
 masked_fill,10,0,0,10,0,fp16 fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,10 direct test references
@@ -289,8 +289,8 @@ mod,4,0,0,4,0,f32,directly_tested,4 direct test references
 modified_delta_attention,9,0,0,9,0,f32 fp64,directly_tested,9 direct test references
 module_state_tree,0,0,0,0,1,,structural_only,category default for 'state_tree'
 moe,32,0,0,32,0,fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,32 direct test references
-moe_combine,7,0,0,7,0,,directly_tested,7 direct test references
-moe_dispatch,5,3,0,8,0,,directly_tested,8 direct test references
+moe_combine,8,0,0,8,0,,directly_tested,8 direct test references
+moe_dispatch,6,3,0,9,0,,directly_tested,9 direct test references
 moe_swiglu_block,14,19,1,33,0,fp8_e4m3 nvfp4,directly_tested,33 direct test references
 momentum,10,0,0,10,0,,directly_tested,10 direct test references
 mor_partition,8,2,1,10,0,fp16,directly_tested,10 direct test references
@@ -301,7 +301,7 @@ mrope_2d,14,0,1,14,0,fp16,directly_tested,14 direct test references
 msa_index_scores,12,4,1,16,0,,directly_tested,16 direct test references
 msa_select_blocks,8,6,1,14,0,,directly_tested,14 direct test references
 msa_sparse_attention,47,11,1,58,0,,directly_tested,58 direct test references
-mse_loss,20,0,5,20,0,f32,directly_tested,20 direct test references
+mse_loss,24,0,5,24,0,f32,directly_tested,24 direct test references
 mul,89,9,7,98,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,98 direct test references
 multi_head_attention,9,0,1,9,0,,directly_tested,9 direct test references
 muon,13,0,0,13,0,,directly_tested,13 direct test references
@@ -358,7 +358,7 @@ retention,12,0,2,12,0,,directly_tested,12 direct test references
 rfft,6,0,1,6,0,fp32,directly_tested,6 direct test references
 rmsnorm,76,13,4,89,0,bf16 f16 f32 f64 fp32,directly_tested,89 direct test references
 rmsnorm_safe,8,5,1,13,0,bf16 f16 f32,directly_tested,13 direct test references
-rng_bernoulli,3,0,0,3,0,,directly_tested,3 direct test references
+rng_bernoulli,4,0,0,4,0,,directly_tested,4 direct test references
 rng_beta,3,0,0,3,0,,directly_tested,3 direct test references
 rng_categorical,3,0,0,3,0,,directly_tested,3 direct test references
 rng_clone,0,0,0,0,1,,covered_by_family,category default for 'rng'

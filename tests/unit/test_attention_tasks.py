@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-
 import numpy as np
 import pytest
 
@@ -35,7 +33,7 @@ def test_causal_reference_differs_from_full():
 
 # ── Darwin: grade every (mask × seqlen) cell ─────────────────────────────────
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="flash_attn executes on Metal.")
+@pytest.mark.hardware_apple_gpu
 def test_every_attention_cell_grades_pass():
     rng = np.random.default_rng(20260612)
     for name in A.attention_task_names():
@@ -73,7 +71,7 @@ def test_structured_mask_changes_the_reference(mask, param):
         assert np.allclose(masked[0, 0, 0], masked2[0, 0, 0], atol=1e-5)
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="flash_attn executes on Metal.")
+@pytest.mark.hardware_apple_gpu
 def test_every_structured_cell_grades_pass():
     rng = np.random.default_rng(20260614)
     for name in A.structured_attention_task_names():

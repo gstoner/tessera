@@ -188,13 +188,11 @@ def test_clifford_jit_accepts_native_required() -> None:
     assert isinstance(f, CliffordCompiledCallable)
 
 
-@pytest.mark.skipif(
-    sys.platform == "darwin",
-    reason="Test exercises the non-Darwin failure path",
-)
-def test_clifford_jit_native_required_raises_on_non_darwin() -> None:
+def test_clifford_jit_native_required_raises_on_non_darwin(monkeypatch) -> None:
     """On a non-Darwin host, ``native_required=True`` must raise
     rather than fall back."""
+
+    monkeypatch.setattr(sys, "platform", "linux")
 
     @clifford_jit(target="apple_gpu", native_required=True)
     def f(rotor, points):
@@ -209,10 +207,7 @@ def test_clifford_jit_native_required_raises_on_non_darwin() -> None:
     assert exc.value.reason == FallbackReason.NON_DARWIN_HOST
 
 
-@pytest.mark.skipif(
-    sys.platform != "darwin",
-    reason="Apple GPU runtime only on Darwin",
-)
+@pytest.mark.hardware_apple_gpu
 def test_clifford_jit_native_required_runs_on_darwin() -> None:
     """On Darwin with the runtime available, ``native_required=True``
     is a no-op — the function runs as normal."""
@@ -243,31 +238,22 @@ def test_rotor_canonical_driver_default_falls_back_on_non_darwin() -> None:
         assert report.as_dict()["fallback_reason"] == "non_darwin_host"
 
 
-@pytest.mark.skipif(
-    sys.platform == "darwin",
-    reason="Test exercises the non-Darwin failure path",
-)
-def test_rotor_canonical_driver_native_required_raises_on_non_darwin() -> None:
+def test_rotor_canonical_driver_native_required_raises_on_non_darwin(monkeypatch) -> None:
+    monkeypatch.setattr(sys, "platform", "linux")
     with pytest.raises(TesseraNativeRequiredError) as exc:
         rotor_sandwich_norm.run(native_required=True)
     assert exc.value.reason == FallbackReason.NON_DARWIN_HOST
     assert "rotor_sandwich_norm" in str(exc.value)
 
 
-@pytest.mark.skipif(
-    sys.platform == "darwin",
-    reason="Test exercises the non-Darwin failure path",
-)
-def test_matmul_canonical_driver_native_required_raises_on_non_darwin() -> None:
+def test_matmul_canonical_driver_native_required_raises_on_non_darwin(monkeypatch) -> None:
+    monkeypatch.setattr(sys, "platform", "linux")
     with pytest.raises(TesseraNativeRequiredError) as exc:
         matmul_softmax_matmul.run(native_required=True)
     assert exc.value.reason == FallbackReason.NON_DARWIN_HOST
 
 
-@pytest.mark.skipif(
-    sys.platform != "darwin",
-    reason="Apple GPU runtime only on Darwin",
-)
+@pytest.mark.hardware_apple_gpu
 def test_rotor_sandwich_norm_native_required_runs_on_darwin() -> None:
     """``rotor_sandwich_norm`` actually dispatches the fused MSL
     kernel via ``@clifford_jit`` on Darwin, so
@@ -276,10 +262,7 @@ def test_rotor_sandwich_norm_native_required_runs_on_darwin() -> None:
     assert r1.fallback_reason is None
 
 
-@pytest.mark.skipif(
-    sys.platform != "darwin",
-    reason="Apple GPU runtime only on Darwin",
-)
+@pytest.mark.hardware_apple_gpu
 def test_matmul_softmax_matmul_native_required_succeeds_on_darwin() -> None:
     """Phase E (Apple plan, 2026-05-20): the canonical now dispatches
     the fused MSL kernel on Darwin.  With ``native_required=True``
@@ -296,10 +279,7 @@ def test_matmul_softmax_matmul_native_required_succeeds_on_darwin() -> None:
     assert "NATIVE DISPATCH" in report.target_decision["apple_gpu"]
 
 
-@pytest.mark.skipif(
-    sys.platform != "darwin",
-    reason="Apple GPU runtime only on Darwin",
-)
+@pytest.mark.hardware_apple_gpu
 def test_matmul_softmax_matmul_native_required_raises_outside_envelope_on_darwin() -> None:
     """Phase E (2026-05-20): outside the kernel's documented shape
     envelope (N + P ≤ 256), the canonical still raises

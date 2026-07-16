@@ -64,9 +64,10 @@ def test_jit_softcap_literal_cap_matches_numpy():
     np.testing.assert_allclose(np.asarray(f(x)), _ref(x, 20.0), rtol=1e-4, atol=1e-4)
 
 
-@pytest.mark.skipif(not DARWIN, reason="GPU-residency check requires Metal (Darwin)")
+@pytest.mark.hardware_apple_gpu
 def test_softcap_runs_on_metal_no_fallback():
     from tessera.compiler import apple_gpu_coverage as cov
+    from tests._support.apple import assert_native_apple_jit
 
     @ts.jit(target="apple_gpu")
     def f(x):
@@ -74,3 +75,4 @@ def test_softcap_runs_on_metal_no_fallback():
 
     x = (_RNG.standard_normal((8, 16)) * 15).astype(np.float32)
     assert cov.fallback_histogram(lambda: f(x)) == {}
+    assert_native_apple_jit(f)

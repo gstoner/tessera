@@ -19,7 +19,6 @@ contract so the example can never drift into over-claiming:
 from __future__ import annotations
 
 import importlib.util
-import sys
 from pathlib import Path
 
 import pytest
@@ -148,11 +147,10 @@ def test_executable_envelope_rows_classification(report):
             assert r["skip_reason"]
 
 
-@pytest.mark.skipif(sys.platform != "darwin",
-                    reason="executable envelope only runs on Darwin/Metal")
+@pytest.mark.hardware_apple_gpu
+@pytest.mark.performance
 def test_executable_envelope_actually_ran_when_metal_active(bench, report):
-    if not report["metal_active"]:
-        pytest.skip("metal runtime inactive on this host")
+    assert report["metal_active"], "Metal runtime inactive on this host"
     ex = [r for r in report["rows"]
           if r["variant_kind"] == "executable_envelope"]
     ran = [r for r in ex if r["skip_reason"] is None]

@@ -10,8 +10,6 @@
 
 from __future__ import annotations
 
-import sys
-
 import numpy as np
 import pytest
 
@@ -46,7 +44,7 @@ def test_safe_input_rejects_unknown_kind():
 
 # ── Darwin: metamorphic-equivalence oracle on real Metal ─────────────────────
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="Metal execution is Darwin-only.")
+@pytest.mark.hardware_apple_gpu
 def test_softmax_shift_invariance_holds():
     """softmax(x) ≡ softmax(x + c) is an algebraic invariant the compiler must
     preserve — a reference-free numerical-stability check."""
@@ -57,7 +55,7 @@ def test_softmax_shift_invariance_holds():
     assert v.relation == "equivalent", v.detail
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="Metal execution is Darwin-only.")
+@pytest.mark.hardware_apple_gpu
 def test_softmax_is_not_scale_invariant_oracle_catches_it():
     """softmax(x) ≠ softmax(2x): a relation that is NOT an invariant must be
     flagged divergent — proving the metamorphic oracle has teeth."""

@@ -24,7 +24,7 @@ from tessera._jit_boundary import (
 )
 
 _GPU = agb.is_available() and jb.is_available() and _find_tessera_opt() is not None
-gpu = pytest.mark.skipif(not _GPU, reason="apple_gpu runtime / tessera-opt unavailable")
+gpu = pytest.mark.hardware_apple_gpu
 cpu = pytest.mark.skipif(not jb.is_available(), reason="libtessera_jit unavailable")
 
 

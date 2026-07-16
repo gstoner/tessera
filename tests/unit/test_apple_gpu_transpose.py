@@ -58,9 +58,10 @@ def test_jit_transpose_matches_numpy():
     np.testing.assert_array_equal(np.asarray(f(x)), x.T)
 
 
-@pytest.mark.skipif(not DARWIN, reason="GPU-residency check requires Metal (Darwin)")
+@pytest.mark.hardware_apple_gpu
 def test_transpose_runs_on_metal_no_fallback():
     from tessera.compiler import apple_gpu_coverage as cov
+    from tests._support.apple import assert_native_apple_jit
 
     @ts.jit(target="apple_gpu")
     def f(x):
@@ -68,3 +69,4 @@ def test_transpose_runs_on_metal_no_fallback():
 
     x = _RNG.standard_normal((8, 16)).astype(np.float32)
     assert cov.fallback_histogram(lambda: f(x)) == {}
+    assert_native_apple_jit(f)

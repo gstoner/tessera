@@ -73,8 +73,7 @@ def test_evaluate_returns_seven_results_in_canonical_order():
     assert tuple(r.gate for r in results) == pg.GATE_ORDER
 
 
-@pytest.mark.skipif(sys.platform != "darwin",
-                    reason="apple_cpu / apple_gpu hardware_smoke requires Darwin")
+@pytest.mark.hardware_apple_gpu
 @pytest.mark.parametrize("target", ["cpu", "apple_cpu", "apple_gpu"])
 def test_known_good_target_passes_all_gates_for_matmul(target):
     """matmul on a host with all the right pieces should pass every gate."""
@@ -127,11 +126,10 @@ def test_every_failing_gate_has_a_nonempty_detail():
                         "every fail must say why")
 
 
+@pytest.mark.hardware_apple_gpu
 def test_apple_gpu_softmax_passes_via_runtime_path():
     """softmax on apple_gpu has a fused MSL kernel + runtime envelope entry.
     Every gate should pass on Darwin."""
-    if sys.platform != "darwin":
-        pytest.skip("requires Darwin for apple_gpu hardware_smoke")
     assert pg.first_failing_gate("apple_gpu", "softmax") is None
 
 

@@ -13,6 +13,7 @@ import pytest
 import tessera as ts
 from tessera import optim
 from tessera import runtime as rt
+from tests._support.apple import assert_native_apple_gpu, assert_reference_cpu
 
 SHAPE = (4, 5)
 
@@ -167,15 +168,12 @@ def test_f32_optimizer_ops_report_native_gpu_on_metal():
     v = np.zeros(SHAPE, np.float32)
     res = rt.launch(_art("tessera.adamw", [p, g, m, v], ["m", "v"],
                          {"lr": 1e-3, "step": 1}), (p, g, m, v))
-    assert res["ok"] is True, res.get("reason")
-    assert res["execution_kind"] == "native_gpu"
-    assert res["execution_mode"] == "metal_runtime"
+    assert_native_apple_gpu(res, compiler_path="apple_gpu_optimizer_compiled")
 
 
 def test_unsupported_optimizer_dtype_uses_reference_cpu_override():
     p = np.ones(SHAPE, np.float64)
     g = np.full(SHAPE, 0.25, np.float64)
     res = rt.launch(_art("tessera.sgd", [p, g], [], {"lr": 0.1}), (p, g))
-    assert res["ok"] is True, res.get("reason")
-    assert res["execution_kind"] == "reference_cpu"
+    assert_reference_cpu(res)
     np.testing.assert_allclose(np.asarray(res["output"]), p - 0.1 * g)

@@ -144,12 +144,11 @@ def test_from_compile_report_preserves_correctness_envelope() -> None:
         assert row.tolerance == report.correctness["tolerance"]
 
 
-def test_from_compile_report_does_not_claim_native_for_cpu_target() -> None:
+def test_from_compile_report_does_not_claim_native_for_cpu_target(monkeypatch) -> None:
     """The bridge must NOT silently flip a CPU-targeted report into a
     native claim — that's the M5 invariant the validator enforces."""
     import sys
-    if sys.platform == "darwin":
-        pytest.skip("CPU-target path only exercised on non-Darwin")
+    monkeypatch.setattr(sys, "platform", "linux")
     report = matmul_softmax_matmul.run()
     row = BenchmarkRow.from_compile_report(
         report, namespace="canonical", shape="M=32,N=32,K=32",
@@ -181,13 +180,12 @@ def test_to_compile_report_round_trip_preserves_essentials() -> None:
 # Symbol provenance from proof routes
 # ---------------------------------------------------------------------------
 
+@pytest.mark.hardware_apple_gpu
 def test_from_compile_report_extracts_symbols_from_routes() -> None:
     """When a CompileReport carries bridge routes (Darwin), the
     row's ``symbols`` list pulls the manifest-resolved C ABI names
     so the benchmark JSON is self-describing."""
     import sys
-    if sys.platform != "darwin":
-        pytest.skip("Bridge routes only populate on Darwin")
     report = rotor_sandwich_norm.run()
     row = BenchmarkRow.from_compile_report(
         report, namespace="canonical", shape="B=8/Cl(3,0)",

@@ -22,6 +22,9 @@ _OPT_DEFAULT = REPO_ROOT / "build" / "tools" / "tessera-opt" / "tessera-opt"
 
 
 def _find_opt() -> str | None:
+    configured = os.environ.get("TESSERA_OPT")
+    if configured and os.access(configured, os.X_OK):
+        return configured
     if _OPT_DEFAULT.is_file() and os.access(_OPT_DEFAULT, os.X_OK):
         return str(_OPT_DEFAULT)
     return shutil.which("tessera-opt")
@@ -382,13 +385,15 @@ def test_value_artifact_routes_through_apple_value_target_ir():
     assert row.execution_kind == "native_cpu"
 
 
-@pytest.mark.skipif(sys.platform != "darwin",
-                    reason="Accelerate-LAPACK cholesky is Darwin-only")
+@pytest.mark.integration
 def test_launch_executes_cholesky_by_ir_named_symbol():
     """End-to-end: runtime.launch dispatches the symbol named in
     apple_value_calls and returns the correct Cholesky factor."""
     import numpy as np
     from tessera.runtime import launch
+    from tests._support.apple import require_apple_accelerate
+
+    require_apple_accelerate()
 
     rng = np.random.default_rng(0)
     m = rng.standard_normal((3, 3)).astype(np.float32)
@@ -545,12 +550,14 @@ def test_front_door_default_mode_stays_artifact():
     assert meta["apple_target_ir_kind"] != "value_target_ir"
 
 
-@pytest.mark.skipif(sys.platform != "darwin",
-                    reason="Accelerate-LAPACK linalg is Darwin-only")
+@pytest.mark.integration
 def test_front_door_launch_cholesky_end_to_end():
     """Front door → launch: no injected IR, dispatched by the IR-named symbol."""
     import numpy as np
     from tessera.runtime import launch
+    from tests._support.apple import require_apple_accelerate
+
+    require_apple_accelerate()
     rng = np.random.default_rng(0)
     mm = rng.standard_normal((4, 4)).astype(np.float32)
     a = (mm @ mm.T + 4 * np.eye(4, dtype=np.float32)).astype(np.float32)
@@ -564,13 +571,15 @@ def test_front_door_launch_cholesky_end_to_end():
                                rtol=1e-4, atol=1e-4)
 
 
-@pytest.mark.skipif(sys.platform != "darwin",
-                    reason="Accelerate-LAPACK linalg is Darwin-only")
+@pytest.mark.integration
 def test_front_door_launch_qr_multi_result_end_to_end():
     """Multi-result op (QR) through the front door returns a tuple in SSA order
     (Q, R) with the right shapes, no injected IR."""
     import numpy as np
     from tessera.runtime import launch
+    from tests._support.apple import require_apple_accelerate
+
+    require_apple_accelerate()
     rng = np.random.default_rng(1)
     a = rng.standard_normal((6, 4)).astype(np.float32)
     m = _build_module("tessera.qr", "q,r",
@@ -588,9 +597,14 @@ def test_front_door_launch_qr_multi_result_end_to_end():
 
 
 # Per-op numerical conformance through the front door + launch (Darwin).
-@pytest.mark.skipif(sys.platform != "darwin",
-                    reason="Accelerate-LAPACK linalg is Darwin-only")
+@pytest.mark.integration
 class TestFrontDoorLinalgFamilyLaunch:
+    @pytest.fixture(autouse=True)
+    def _require_accelerate(self):
+        from tests._support.apple import require_apple_accelerate
+
+        require_apple_accelerate()
+
     def _spd(self, n, rng):
         import numpy as np
         m = rng.standard_normal((n, n)).astype(np.float32)
@@ -960,9 +974,14 @@ def test_front_door_default_matmul_stays_artifact():
     assert meta.get("apple_target_ir_kind") != "value_target_ir"
 
 
-@pytest.mark.skipif(sys.platform != "darwin",
-                    reason="Accelerate cblas_sgemm is Darwin-only")
+@pytest.mark.integration
 class TestSprint5Matmul:
+    @pytest.fixture(autouse=True)
+    def _require_accelerate(self):
+        from tests._support.apple import require_apple_accelerate
+
+        require_apple_accelerate()
+
     def _launch(self, M, K, N, seed):
         import numpy as np
         from tessera.runtime import launch
@@ -1025,11 +1044,13 @@ def test_non_fp32_matmul_value_mode_lowers_to_dtype_symbol(mlir_dtype, dtype, sy
     assert calls and calls[0]["symbol"] == symbol and calls[0]["op_kind"] == "matmul"
 
 
-@pytest.mark.skipif(sys.platform != "darwin",
-                    reason="Apple BNNS f16/bf16 GEMM is Darwin-only")
+@pytest.mark.integration
 def test_f16_matmul_executes_vs_fp32_oracle():
     import numpy as np
     from tessera.runtime import launch
+    from tests._support.apple import require_apple_accelerate
+
+    require_apple_accelerate()
     rng = np.random.default_rng(0)
     a = rng.standard_normal((4, 8)).astype(np.float16)
     b = rng.standard_normal((8, 16)).astype(np.float16)
@@ -1041,14 +1062,16 @@ def test_f16_matmul_executes_vs_fp32_oracle():
     np.testing.assert_allclose(r["output"].astype(np.float32), ref, rtol=3e-2, atol=3e-2)
 
 
-@pytest.mark.skipif(sys.platform != "darwin",
-                    reason="Apple BNNS f16/bf16 GEMM is Darwin-only")
+@pytest.mark.integration
 def test_bf16_matmul_executes_or_skips_cleanly():
     """bf16 matmul executes when ml_dtypes is available; if not, launch fails
     with a *named* unsupported-dependency error — never a silent fp32 fallback."""
     import numpy as np
     import pytest as _pytest
     from tessera.runtime import launch
+    from tests._support.apple import require_apple_accelerate
+
+    require_apple_accelerate()
     try:
         import ml_dtypes  # noqa: F401
     except Exception:
@@ -1213,9 +1236,14 @@ def test_front_door_default_batched_stays_artifact():
     assert meta.get("compiler_path") != "apple_value_target_ir"
 
 
-@pytest.mark.skipif(sys.platform != "darwin",
-                    reason="Accelerate batched cblas_sgemm is Darwin-only")
+@pytest.mark.integration
 class TestSprint6BatchedMatmul:
+    @pytest.fixture(autouse=True)
+    def _require_accelerate(self):
+        from tests._support.apple import require_apple_accelerate
+
+        require_apple_accelerate()
+
     def test_batched_matches_numpy(self):
         import numpy as np
         from tessera.runtime import launch
@@ -1575,7 +1603,7 @@ def test_gpu_ebm_value_call_executable_is_per_symbol_and_probe(monkeypatch):
     assert not driver.apple_value_call_is_executable(off_allowlist)
 
 
-def test_gpu_ebm_value_non_darwin_stub_is_not_executable():
+def test_gpu_ebm_value_non_darwin_stub_is_not_executable(monkeypatch):
     """Non-Darwin value symbols return non-success; launch must not fabricate a
     CPU result while claiming Apple GPU value execution."""
     import numpy as np
@@ -1583,8 +1611,7 @@ def test_gpu_ebm_value_non_darwin_stub_is_not_executable():
     import sys
     from tessera import runtime
 
-    if sys.platform == "darwin":
-        pytest.skip("Darwin may have a real Metal EBM value executor")
+    monkeypatch.setattr(sys, "platform", "linux")
     artifact = runtime.RuntimeArtifact(metadata={
         "target": "apple_gpu",
         "compiler_path": "apple_value_target_ir",
@@ -1754,16 +1781,14 @@ def test_gpu_clifford_geometric_product_value_dispatch_matches_reference(monkeyp
     assert bad["runtime_status"] == "invalid_artifact"
 
 
-@pytest.mark.skipif(sys.platform != "darwin",
-                    reason="Apple GPU EBM value kernels are Darwin-only")
+@pytest.mark.hardware_apple_gpu
 def test_gpu_ebm_one_step_langevin_value_launch_vs_numpy():
     import numpy as np
     import pytest
     from tessera import runtime
     from tessera.runtime import launch
 
-    if not runtime._apple_gpu_ebm_langevin_step_value_available():
-        pytest.skip("fresh Metal EBM Langevin value dylib/probe unavailable")
+    assert runtime._apple_gpu_ebm_langevin_step_value_available()
     m = _build_module(
         "tessera.ebm.langevin_step", "o",
         [("tensor<2x3xf32>", (2, 3)), ("tensor<2x3xf32>", (2, 3)),
@@ -1784,8 +1809,7 @@ def test_gpu_ebm_one_step_langevin_value_launch_vs_numpy():
         rtol=1.0e-5, atol=1.0e-6)
 
 
-@pytest.mark.skipif(sys.platform != "darwin",
-                    reason="Apple GPU MPSGraph bmm is Darwin-only")
+@pytest.mark.hardware_apple_gpu
 @pytest.mark.parametrize("dtype,mlir", [("fp32", "f32"), ("fp16", "f16"), ("bf16", "bf16")])
 def test_gpu_batched_value_launch_vs_numpy(dtype, mlir):
     import numpy as np
@@ -1899,8 +1923,7 @@ def test_gpu_value_extra_operand_is_rejected():
     assert res["runtime_status"] == "invalid_artifact"
 
 
-@pytest.mark.skipif(sys.platform != "darwin",
-                    reason="Apple GPU MPSGraph bmm is Darwin-only")
+@pytest.mark.hardware_apple_gpu
 def test_gpu_value_repeated_launch_no_unbounded_growth():
     """Leak/concurrency guard: repeated GPU value batched launches do not grow
     the MPSGraph cache without bound (it is LRU-capped)."""
@@ -2150,7 +2173,7 @@ func.func @f(%q: tensor<1x2x8x4xf32>, %k: tensor<1x2x8x4xf32>,
     assert meta.get("executable") is not True
 
 
-def test_gpu_value_native_sparse_non_darwin_stub_is_not_executable():
+def test_gpu_value_native_sparse_non_darwin_stub_is_not_executable(monkeypatch):
     """The non-Darwin C++ stub exports the native-sparse symbol but zero-fills;
     the value executor must reject it instead of fabricating success."""
     import sys
@@ -2158,8 +2181,7 @@ def test_gpu_value_native_sparse_non_darwin_stub_is_not_executable():
     import pytest
     from tessera import runtime
 
-    if sys.platform == "darwin":
-        pytest.skip("Darwin may have a real Metal native-sparse executor")
+    monkeypatch.setattr(sys, "platform", "linux")
     artifact = runtime.RuntimeArtifact(metadata={
         "target": "apple_gpu",
         "compiler_path": "apple_value_target_ir",

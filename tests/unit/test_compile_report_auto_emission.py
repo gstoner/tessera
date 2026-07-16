@@ -95,10 +95,7 @@ def test_clifford_jit_exposes_compile_report_accessor() -> None:
     assert "graph_ir" in report.ir_hashes
 
 
-@pytest.mark.skipif(
-    sys.platform != "darwin",
-    reason="@clifford_jit __call__ requires the Apple GPU runtime",
-)
+@pytest.mark.hardware_apple_gpu
 def test_clifford_jit_auto_emits_on_call() -> None:
     from tessera import ga
 

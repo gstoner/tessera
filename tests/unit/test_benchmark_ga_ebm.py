@@ -130,8 +130,16 @@ REQUIRED_ENVELOPE_FIELDS = {
 
 @pytest.fixture(scope="module")
 def report(tmp_path_factory) -> dict:
-    """Build the GA/EBM benchmark report once for all assertions."""
+    """Build a host-free GA/EBM report once for portable assertions."""
     tmp_dir = tmp_path_factory.mktemp("ga_ebm_bench")
+    return bench.run_report(
+        reps=bench.DEFAULT_REPS_CI, tmp_dir=tmp_dir, enable_apple_gpu=False)
+
+
+@pytest.fixture(scope="module")
+def native_report(tmp_path_factory) -> dict:
+    """Build the measured native report only for exact-device assertions."""
+    tmp_dir = tmp_path_factory.mktemp("ga_ebm_native_bench")
     return bench.run_report(reps=bench.DEFAULT_REPS_CI, tmp_dir=tmp_dir)
 
 
@@ -414,58 +422,57 @@ def test_natively_promoted_ebm_op_marked_fused_in_manifest(op: str) -> None:
 # Apple-GPU gates
 # ---------------------------------------------------------------------------
 
-def test_apple_gpu_rows_emitted_when_runtime_available(report: dict) -> None:
-    if not _apple_gpu_available(report):
-        pytest.skip(f"apple_gpu unavailable: {report.get('skipped_apple_gpu')}")
-    ga_ops = {r["op"] for r in _ga_rows(report)}
+@pytest.mark.performance
+@pytest.mark.hardware_apple_gpu
+def test_apple_gpu_rows_emitted_when_runtime_available(native_report: dict) -> None:
+    ga_ops = {r["op"] for r in _ga_rows(native_report)}
     assert ga_ops == EXPECTED_GA_OPS
-    assert report["ga_primitives_count"] == len(EXPECTED_GA_OPS)
+    assert native_report["ga_primitives_count"] == len(EXPECTED_GA_OPS)
 
 
-def test_six_native_ebm_rows_emitted_when_runtime_available(report: dict) -> None:
-    if not _apple_gpu_available(report):
-        pytest.skip(f"apple_gpu unavailable: {report.get('skipped_apple_gpu')}")
-    native_ops = {r["op"] for r in _ebm_native_rows(report)}
+@pytest.mark.performance
+@pytest.mark.hardware_apple_gpu
+def test_six_native_ebm_rows_emitted_when_runtime_available(native_report: dict) -> None:
+    native_ops = {r["op"] for r in _ebm_native_rows(native_report)}
     assert native_ops == EXPECTED_NATIVE_EBM_OPS, (
         f"native set mismatch: have {native_ops}, expected {EXPECTED_NATIVE_EBM_OPS}"
     )
-    assert set(report["native_ebm_ops"]) == EXPECTED_NATIVE_EBM_OPS
-    assert report["ebm_native_apple_gpu_count"] == len(EXPECTED_NATIVE_EBM_OPS)
+    assert set(native_report["native_ebm_ops"]) == EXPECTED_NATIVE_EBM_OPS
+    assert native_report["ebm_native_apple_gpu_count"] == len(EXPECTED_NATIVE_EBM_OPS)
 
 
-def test_non_apple_host_records_skip_reason(report: dict) -> None:
-    if _apple_gpu_available(report):
-        pytest.skip("apple_gpu runtime is available on this host")
+def test_portable_report_records_disable_reason(report: dict) -> None:
     assert isinstance(report["skipped_apple_gpu"], str)
+    assert report["skipped_apple_gpu"] == "Apple GPU execution disabled by caller"
     assert report["ga_primitives_count"] == 0
     assert report["ebm_native_apple_gpu_count"] == 0
 
 
 @pytest.mark.parametrize("op", sorted(EXPECTED_GA_OPS))
-def test_each_ga_row_passes_correctness_gate(report: dict, op: str) -> None:
-    if not _apple_gpu_available(report):
-        pytest.skip("apple_gpu unavailable")
-    row = next(r for r in _ga_rows(report) if r["op"] == op)
+@pytest.mark.performance
+@pytest.mark.hardware_apple_gpu
+def test_each_ga_row_passes_correctness_gate(native_report: dict, op: str) -> None:
+    row = next(r for r in _ga_rows(native_report) if r["op"] == op)
     assert row["ok"] is True
     assert row["backend"] == "apple_gpu"
     assert row["mode"] == "fused"
 
 
 @pytest.mark.parametrize("op", sorted(EXPECTED_GA_OPS))
+@pytest.mark.performance
+@pytest.mark.hardware_apple_gpu
 def test_each_ga_row_carries_manifest_resolved_symbol(
-        report: dict, op: str) -> None:
-    if not _apple_gpu_available(report):
-        pytest.skip("apple_gpu unavailable")
-    row = next(r for r in _ga_rows(report) if r["op"] == op)
+        native_report: dict, op: str) -> None:
+    row = next(r for r in _ga_rows(native_report) if r["op"] == op)
     assert row["symbol"] == bench._resolve_symbol(op)
 
 
 @pytest.mark.parametrize("op", sorted(EXPECTED_NATIVE_EBM_OPS))
+@pytest.mark.performance
+@pytest.mark.hardware_apple_gpu
 def test_each_native_ebm_row_passes_correctness_and_manifest_gate(
-        report: dict, op: str) -> None:
-    if not _apple_gpu_available(report):
-        pytest.skip("apple_gpu unavailable")
-    row = next(r for r in _ebm_native_rows(report) if r["op"] == op)
+        native_report: dict, op: str) -> None:
+    row = next(r for r in _ebm_native_rows(native_report) if r["op"] == op)
     assert row["ok"] is True, (
         f"{op}: native EBM diverged — err={row['max_abs_err']}"
     )
@@ -496,11 +503,11 @@ def test_workload_python_rows_always_emitted(report: dict) -> None:
     assert ops == EXPECTED_WORKLOAD_OPS
 
 
+@pytest.mark.performance
+@pytest.mark.hardware_apple_gpu
 def test_workload_apple_gpu_rows_emitted_when_runtime_available(
-        report: dict) -> None:
-    if not _apple_gpu_available(report):
-        pytest.skip("apple_gpu unavailable")
-    ops = {r["op"] for r in _workload_native_rows(report)}
+        native_report: dict) -> None:
+    ops = {r["op"] for r in _workload_native_rows(native_report)}
     assert ops == EXPECTED_WORKLOAD_OPS
 
 
@@ -517,12 +524,12 @@ def test_each_workload_python_row_correct(report: dict, op: str) -> None:
 
 
 @pytest.mark.parametrize("op", sorted(EXPECTED_WORKLOAD_OPS))
+@pytest.mark.performance
+@pytest.mark.hardware_apple_gpu
 def test_each_workload_apple_gpu_row_correct_and_chains_known_symbols(
-        report: dict, op: str) -> None:
+        native_report: dict, op: str) -> None:
     """Native workload rows carry the multi-symbol chain in `symbols`."""
-    if not _apple_gpu_available(report):
-        pytest.skip("apple_gpu unavailable")
-    row = next(r for r in _workload_native_rows(report) if r["op"] == op)
+    row = next(r for r in _workload_native_rows(native_report) if r["op"] == op)
     assert row["ok"] is True, (
         f"{op}: native workload diverged — err={row['max_abs_err']}"
     )
@@ -536,13 +543,13 @@ def test_each_workload_apple_gpu_row_correct_and_chains_known_symbols(
         assert sym.startswith("tessera_apple_gpu_") or sym.startswith("ebm.")
 
 
+@pytest.mark.performance
+@pytest.mark.hardware_apple_gpu
 def test_ga_feature_pipeline_chains_three_known_msl_kernels(
-        report: dict) -> None:
+        native_report: dict) -> None:
     """The GA workload must reference exp → rotor_sandwich → norm — the
     chain documented in the benchmark module."""
-    if not _apple_gpu_available(report):
-        pytest.skip("apple_gpu unavailable")
-    row = next(r for r in _workload_native_rows(report)
+    row = next(r for r in _workload_native_rows(native_report)
                if r["op"] == "ga_feature_pipeline")
     syms = row["symbols"]
     assert any("clifford_exp" in s for s in syms)
@@ -550,13 +557,13 @@ def test_ga_feature_pipeline_chains_three_known_msl_kernels(
     assert any("clifford_norm" in s for s in syms)
 
 
-def test_ebt_tiny_workload_uses_fused_kernel(report: dict) -> None:
+@pytest.mark.performance
+@pytest.mark.hardware_apple_gpu
+def test_ebt_tiny_workload_uses_fused_kernel(native_report: dict) -> None:
     """The EBT-tiny workload must reference the fused single-dispatch
     kernel (after the 2026-05-17 optimization that collapsed
     refinement + self_verify into one MSL dispatch)."""
-    if not _apple_gpu_available(report):
-        pytest.skip("apple_gpu unavailable")
-    row = next(r for r in _workload_native_rows(report)
+    row = next(r for r in _workload_native_rows(native_report)
                if r["op"] == "ebt_tiny_refinement")
     syms = row["symbols"]
     assert any("ebt_tiny_refinement_argmin_f32" in s for s in syms), (
@@ -1018,12 +1025,12 @@ def test_ebm_refinement_public_api_matches_closed_form() -> None:
     assert float(np.abs(out - expected).max()) <= 5e-6
 
 
-def test_workloads_use_public_apis_not_local_ctypes(report: dict) -> None:
+@pytest.mark.performance
+@pytest.mark.hardware_apple_gpu
+def test_workloads_use_public_apis_not_local_ctypes(native_report: dict) -> None:
     """Workload rows must carry `[via ga.* | ebm.*]` provenance in their
     symbol strings — proves the rewrite to public APIs landed."""
-    if not _apple_gpu_available(report):
-        pytest.skip("apple_gpu unavailable")
-    by_op = {r["op"]: r for r in _workload_native_rows(report)}
+    by_op = {r["op"]: r for r in _workload_native_rows(native_report)}
     ga_row = by_op["ga_feature_pipeline"]
     assert any("via ga.exp_mv" in s for s in ga_row["symbols"])
     assert any("via ga.rotor_sandwich" in s for s in ga_row["symbols"])
@@ -1079,22 +1086,22 @@ def _jit_bridge_rows(report):
     return _rows(report, lambda r: r.get("namespace") == "jit_bridge")
 
 
-def test_jit_bridge_rows_emitted_when_runtime_available(report: dict) -> None:
-    if not _apple_gpu_available(report):
-        pytest.skip("apple_gpu unavailable")
-    rows = _jit_bridge_rows(report)
+@pytest.mark.performance
+@pytest.mark.hardware_apple_gpu
+def test_jit_bridge_rows_emitted_when_runtime_available(native_report: dict) -> None:
+    rows = _jit_bridge_rows(native_report)
     ops = {r["op"] for r in rows}
     assert ops == {"clifford_inner", "ebm_inner_step"}
     assert report["jit_bridge_count"] == len(rows)
 
 
-def test_jit_bridge_rows_carry_routes_with_jit_context(report: dict) -> None:
+@pytest.mark.performance
+@pytest.mark.hardware_apple_gpu
+def test_jit_bridge_rows_carry_routes_with_jit_context(native_report: dict) -> None:
     """Each jit_bridge row must include a `routes` column populated by
     the bridge's thread-local trace, and the context tag must mark
     it as JIT-driven."""
-    if not _apple_gpu_available(report):
-        pytest.skip("apple_gpu unavailable")
-    for row in _jit_bridge_rows(report):
+    for row in _jit_bridge_rows(native_report):
         assert "routes" in row
         assert isinstance(row["routes"], list)
         assert len(row["routes"]) >= 1, (
@@ -1107,13 +1114,13 @@ def test_jit_bridge_rows_carry_routes_with_jit_context(report: dict) -> None:
             assert "tessera_apple_gpu_" in route["symbol"]
 
 
-def test_jit_bridge_routes_resolve_via_manifest(report: dict) -> None:
+@pytest.mark.performance
+@pytest.mark.hardware_apple_gpu
+def test_jit_bridge_routes_resolve_via_manifest(native_report: dict) -> None:
     """The symbol recorded in each route must be the one the manifest
     resolves for that op — proves we went through the manifest."""
-    if not _apple_gpu_available(report):
-        pytest.skip("apple_gpu unavailable")
     from tessera.compiler import jit_bridge as bridge_mod
-    for row in _jit_bridge_rows(report):
+    for row in _jit_bridge_rows(native_report):
         for route in row["routes"]:
             expected = bridge_mod.lookup_apple_gpu_symbol(route["op"])
             assert route["symbol"] == expected, (
@@ -1122,10 +1129,10 @@ def test_jit_bridge_routes_resolve_via_manifest(report: dict) -> None:
             )
 
 
-def test_jit_bridge_rows_pass_correctness_gate(report: dict) -> None:
-    if not _apple_gpu_available(report):
-        pytest.skip("apple_gpu unavailable")
-    for row in _jit_bridge_rows(report):
+@pytest.mark.performance
+@pytest.mark.hardware_apple_gpu
+def test_jit_bridge_rows_pass_correctness_gate(native_report: dict) -> None:
+    for row in _jit_bridge_rows(native_report):
         assert row["ok"] is True, (
             f"{row['op']}: bridge route diverged from numpy ref — "
             f"err={row['max_abs_err']} > tol={row['tolerance']}"
@@ -1150,10 +1157,10 @@ def _vertical_slice_rows(report):
     return _rows(report, lambda r: r.get("namespace") == "vertical_slice")
 
 
-def test_vertical_slice_row_emitted_when_runtime_available(report: dict) -> None:
-    if not _apple_gpu_available(report):
-        pytest.skip("apple_gpu unavailable")
-    rows = _vertical_slice_rows(report)
+@pytest.mark.performance
+@pytest.mark.hardware_apple_gpu
+def test_vertical_slice_row_emitted_when_runtime_available(native_report: dict) -> None:
+    rows = _vertical_slice_rows(native_report)
     assert len(rows) == 1
     row = rows[0]
     assert row["op"] == "point_cloud_rotor_invariant"
@@ -1178,18 +1185,18 @@ def test_vertical_slice_row_emitted_when_runtime_available(report: dict) -> None
         assert entry["symbol"] == bridge_mod.lookup_apple_gpu_symbol(entry["op"])
 
 
-def test_vertical_slice_envelope_count(report: dict) -> None:
-    if not _apple_gpu_available(report):
-        pytest.skip("apple_gpu unavailable")
-    assert report["vertical_slice_count"] == 1
+@pytest.mark.performance
+@pytest.mark.hardware_apple_gpu
+def test_vertical_slice_envelope_count(native_report: dict) -> None:
+    assert native_report["vertical_slice_count"] == 1
 
 
-def test_rotor_conditioned_ebt_workload_emits_apple_gpu_row(report: dict) -> None:
+@pytest.mark.performance
+@pytest.mark.hardware_apple_gpu
+def test_rotor_conditioned_ebt_workload_emits_apple_gpu_row(native_report: dict) -> None:
     """The fused GA+EBM workload must emit a native row that
     dispatched on GPU, with all three op families represented."""
-    if not _apple_gpu_available(report):
-        pytest.skip("apple_gpu unavailable")
-    rows = [r for r in _workload_native_rows(report)
+    rows = [r for r in _workload_native_rows(native_report)
             if r["op"] == "rotor_conditioned_ebt"]
     assert len(rows) == 1
     row = rows[0]
@@ -1201,9 +1208,9 @@ def test_rotor_conditioned_ebt_workload_emits_apple_gpu_row(report: dict) -> Non
     assert any("ebm.ebt_tiny" in s for s in syms)
 
 
-def test_compile_time_separated_from_dispatch_time(report: dict) -> None:
-    if not _apple_gpu_available(report):
-        pytest.skip("apple_gpu unavailable")
-    assert report["compile_time_ms"] > 0.0
-    for row in report["runs"]:
+@pytest.mark.performance
+@pytest.mark.hardware_apple_gpu
+def test_compile_time_separated_from_dispatch_time(native_report: dict) -> None:
+    assert native_report["compile_time_ms"] > 0.0
+    for row in native_report["runs"]:
         assert "compile_time_ms" not in row

@@ -277,12 +277,7 @@ def test_apple_gpu_mla_e2e_artifact_metadata_consistent():
         assert meta["execution_mode"] in ("metal_runtime", "metal_artifact")
 
 
-@pytest.mark.skipif(
-    sys.platform != "darwin",
-    reason="Apple GPU metal_runtime end-to-end is Darwin-only; "
-    "the portable reference fallback still produces correct values "
-    "but the metadata path differs.",
-)
+@pytest.mark.hardware_apple_gpu
 def test_apple_gpu_mla_e2e_darwin_uses_metal_runtime():
     """On Darwin specifically, the MLA path must hit metal_runtime
     (not the portable reference fallback)."""

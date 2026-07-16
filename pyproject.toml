@@ -131,6 +131,7 @@ markers = [
     # incrementally migrated; tests-manifest dashboard tracks
     # coverage progress.
     "hardware_apple_gpu: requires a Darwin host with Metal hardware",
+    "metal4: requires a Metal 4-capable Apple GPU runtime",
     "hardware_nvidia: requires an NVIDIA GPU with the CUDA toolkit",
     "hardware_rocm: requires an AMD GPU with the ROCm toolkit",
 ]

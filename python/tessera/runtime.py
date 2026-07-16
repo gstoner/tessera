@@ -19792,7 +19792,18 @@ def _load_apple_cpu_runtime() -> ctypes.CDLL:
             return _apple_cpu_runtime
 
     built = _build_apple_cpu_runtime_shared(root)
-    _apple_cpu_runtime = ctypes.CDLL(str(built))
+    try:
+        _apple_cpu_runtime = ctypes.CDLL(str(built))
+    except OSError:
+        # A prior parallel test worker may have left a partial cache artifact
+        # from the old in-place compiler path. Discard it once and rebuild;
+        # explicitly configured libraries above remain fail-fast.
+        try:
+            built.unlink()
+        except OSError:
+            pass
+        built = _build_apple_cpu_runtime_shared(root)
+        _apple_cpu_runtime = ctypes.CDLL(str(built))
     return _apple_cpu_runtime
 
 
@@ -30256,10 +30267,20 @@ def _build_apple_cpu_runtime_shared(root: Path) -> Path:
     out = out_dir / f"libtessera_apple_cpu_runtime{suffix}"
     if out.exists() and out.stat().st_mtime >= source.stat().st_mtime:
         return out
-    cmd = [cxx, "-std=c++17", "-shared", "-fPIC", str(source), "-o", str(out)]
+    tmp = out.with_name(f".{out.name}.{os.getpid()}.tmp")
+    cmd = [cxx, "-std=c++17", "-shared", "-fPIC", str(source), "-o", str(tmp)]
     if sys.platform == "darwin":
         cmd.extend(["-framework", "Accelerate"])
-    subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        # Atomic publication prevents xdist workers from dlopening a partially
+        # written shared object.
+        os.replace(tmp, out)
+    finally:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
     return out
 
 

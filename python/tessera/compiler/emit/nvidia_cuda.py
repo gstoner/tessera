@@ -1784,10 +1784,11 @@ class NvidiaDeviceSession:
         for _ in range(warmup):
             launch()
         start, stop = ctypes.c_void_p(), ctypes.c_void_p()
-        if (self.lib.tessera_nvidia_event_create(ctypes.byref(start)) != 0
-                or self.lib.tessera_nvidia_event_create(ctypes.byref(stop)) != 0):
-            raise RuntimeError("CUDA timing event creation failed")
         try:
+            if self.lib.tessera_nvidia_event_create(ctypes.byref(start)) != 0:
+                raise RuntimeError("CUDA timing event creation failed")
+            if self.lib.tessera_nvidia_event_create(ctypes.byref(stop)) != 0:
+                raise RuntimeError("CUDA timing event creation failed")
             self.lib.tessera_nvidia_event_record(start, ctypes.c_void_p(self.stream))
             for _ in range(reps):
                 launch()
@@ -1805,12 +1806,25 @@ class NvidiaDeviceSession:
 
     def close(self) -> None:
         if getattr(self, "stream", 0):
-            self.synchronize()
+            errors: list[Exception] = []
+            try:
+                if self.synchronize() != 0:
+                    errors.append(RuntimeError("CUDA stream synchronization failed during cleanup"))
+            except Exception as error:
+                errors.append(error)
             for buffer in reversed(self._buffers):
-                buffer.close()
+                try:
+                    buffer.close()
+                except Exception as error:
+                    errors.append(error)
             self._buffers.clear()
-            self.lib.tessera_nvidia_stream_destroy(ctypes.c_void_p(self.stream))
-            self.stream = 0
+            try:
+                if self.lib.tessera_nvidia_stream_destroy(ctypes.c_void_p(self.stream)) != 0:
+                    errors.append(RuntimeError("CUDA stream destruction failed during cleanup"))
+            finally:
+                self.stream = 0
+            if errors:
+                raise errors[0]
 
     def __enter__(self) -> "NvidiaDeviceSession": return self
     def __exit__(self, *args: Any) -> None: self.close()

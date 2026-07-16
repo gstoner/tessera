@@ -7,30 +7,14 @@ off-device these tests still validate the exact same state-handle ABI.
 
 from __future__ import annotations
 
-import os
-import shutil
-import subprocess
-
 import numpy as np
 import pytest
 
+from _nvidia_testutil import nvidia_cuda_host_ready
 import tessera
 from tessera import runtime as rt
 from tessera.cache import SSMStateHandle
 from tessera.compiler.emit import nvidia_cuda
-
-
-def _cuda_host_ready() -> bool:
-    nvcc = shutil.which("nvcc") or "/usr/local/cuda/bin/nvcc"
-    if not os.path.isfile(nvcc) or shutil.which("nvidia-smi") is None:
-        return False
-    try:
-        return subprocess.run(
-            ["nvidia-smi"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            timeout=5, check=False,
-        ).returncode == 0
-    except OSError:
-        return False
 
 
 def _decode(handle, delta, x, b, c):
@@ -48,7 +32,7 @@ def test_nvidia_replay_factory_wires_scalar_decode_path():
     assert h.backend == "nvidia_sm120_replay_device"
     # The CUDA device state binds only on a CUDA-ready host; off-device the
     # factory declines cleanly to the reference mirror (_device is None).
-    if _cuda_host_ready():
+    if nvidia_cuda_host_ready():
         assert getattr(h, "_device") is not None
     else:
         assert getattr(h, "_device") is None
@@ -139,7 +123,7 @@ def test_cuda_replay_block_submit_matches_ordered_steps():
     np.testing.assert_allclose(got, want, rtol=2e-4, atol=2e-4)
 
 
-@pytest.mark.skipif(not _cuda_host_ready(), reason="CUDA toolkit or GPU unavailable")
+@pytest.mark.skipif(not nvidia_cuda_host_ready(), reason="CUDA toolkit or GPU unavailable")
 def test_cuda_replay_async_submit_wait_matches_ordered_steps():
     rng = np.random.default_rng(201)
     T, B, D, N = 4, 1, 3, 2
@@ -156,7 +140,7 @@ def test_cuda_replay_async_submit_wait_matches_ordered_steps():
     np.testing.assert_allclose(got,want,rtol=2e-4,atol=2e-4)
 
 
-@pytest.mark.skipif(not _cuda_host_ready(), reason="CUDA toolkit or GPU unavailable")
+@pytest.mark.skipif(not nvidia_cuda_host_ready(), reason="CUDA toolkit or GPU unavailable")
 def test_cuda_replay_multi_slot_ring_and_device_consumer_protocol():
     rng = np.random.default_rng(1209)
     B, D, N = 1, 4, 3
@@ -186,47 +170,3 @@ def test_cuda_replay_multi_slot_ring_and_device_consumer_protocol():
         futures[0].wait(), expected[0], rtol=2e-4, atol=2e-4)
     np.testing.assert_allclose(
         futures[1].wait(), expected[1], rtol=2e-4, atol=2e-4)
-
-
-@pytest.mark.skipif(not _cuda_host_ready(), reason="CUDA toolkit or GPU unavailable")
-@pytest.mark.hardware_nvidia
-def test_cuda_replay_async_ring_reports_backpressure():
-    rng = np.random.default_rng(1210)
-    B, D, N = 1, 2, 2
-    gpu = rt.nvidia_ssm_replay_state_handle(
-        B, D, N, -np.ones(D), capacity=8, async_slots=2)
-
-    def inputs():
-        return (np.abs(rng.standard_normal((1, B, D))) * .1,
-                rng.standard_normal((1, B, D)),
-                rng.standard_normal((1, B, N)),
-                rng.standard_normal((1, B, N)))
-
-    first = gpu.submit_block_async(*inputs())
-    second = gpu.submit_block_async(*inputs())
-    with pytest.raises(RuntimeError, match="ring is full"):
-        gpu.submit_block_async(*inputs())
-    first.wait()
-    third = gpu.submit_block_async(*inputs())
-    second.wait()
-    third.wait()
-
-
-@pytest.mark.skipif(not _cuda_host_ready(), reason="CUDA toolkit or GPU unavailable")
-@pytest.mark.hardware_nvidia
-def test_cuda_replay_kernel_executes_on_available_nvidia_host():
-    rng = np.random.default_rng(73)
-    M, B, D, N = 5, 2, 4, 3
-    delta = np.abs(rng.standard_normal((M, B, D))).astype(np.float32) * 0.25
-    x = rng.standard_normal((M, B, D)).astype(np.float32)
-    b = rng.standard_normal((M, B, N)).astype(np.float32)
-    s0 = rng.standard_normal((B, D, N)).astype(np.float32)
-    c = rng.standard_normal((B, N)).astype(np.float32)
-    a = (-np.abs(rng.standard_normal(D))).astype(np.float32)
-    out = nvidia_cuda.run_ssm_replay_decode_f32(delta, x, b, s0, c, a)
-    reference = SSMStateHandle(batch=B, num_channels=D, state_dim=N, a=a,
-                               capacity=M + 1)
-    reference._s0 = s0.astype(np.float64)
-    for i in range(M):
-        reference.append(delta[i], x[i], b[i])
-    np.testing.assert_allclose(out, reference.read_output(c), rtol=5e-5, atol=5e-5)

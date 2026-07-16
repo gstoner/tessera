@@ -97,9 +97,15 @@ module {
 // CHECK: llvm.intr.masked.store
 // CHECK-LABEL: llvm.func @tile_matmul_gelu
 // CHECK: nvvm.mma.sync
-// CHECK: math.tanh
+// CHECK: arith.maximumf
+// CHECK: arith.minimumf
+// CHECK: arith.divf
+// CHECK-NOT: math.tanh
 // CHECK: llvm.intr.masked.store
 // CHECK-LABEL: llvm.func @tile_matmul_silu
 // CHECK: nvvm.mma.sync
-// CHECK: math.exp
+// CHECK: arith.maximumf
+// CHECK: arith.minimumf
+// CHECK: arith.divf
+// CHECK-NOT: math.exp
 // CHECK: llvm.intr.masked.store

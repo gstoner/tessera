@@ -74,7 +74,7 @@ ue4m3 per-16-block scale). Files: `nvfp4_probe.cu` (assemble probe),
   full A `16x4` and B `4x8` scale matrices. The original ~3e9 report was a host
   harness bug: correct FP32 output bits were copied into `unsigned[]` and then
   numerically converted instead of copied into `float[]`.
-- `tests/unit/test_nvidia_nvfp4_compiled.py` preserves the execute/compare proof
+- `tests/device/nvidia/test_nvfp4.py` preserves the execute/compare proof
   and asserts `OMMA.SF.16864.F32.E2M1.E2M1.UE4M3.4X` in SASS.
 
 ## Result

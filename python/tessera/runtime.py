@@ -18499,10 +18499,14 @@ def _execute_nvidia_conv2d_compiled(
                 padding=padding, dilation=dilation, reps=10, warmup=3)
             outputs[candidate], timings[candidate] = out, latency
         oracle = outputs["direct"]
+        # The unannotated Conv2D artifact has an f32 numerical contract.  TF32
+        # is useful for an explicitly requested measured route, but its looser
+        # approximation must never win automatic dispatch and silently replace
+        # an f32 result solely because its timing happened to be lower.
         valid = {
             name: latency for name, latency in timings.items()
-            if np.allclose(outputs[name], oracle, rtol=0,
-                           atol=2e-2 if name == "im2col_tf32" else 2e-5)
+            if name != "im2col_tf32"
+            and np.allclose(outputs[name], oracle, rtol=0, atol=2e-5)
         }
         if not valid:
             raise RuntimeError("no numerically valid NVIDIA conv2d route")

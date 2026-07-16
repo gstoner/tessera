@@ -10,7 +10,7 @@ import pytest
 from tests._support.environment import CompilerToolchain
 
 
-pytestmark = pytest.mark.compiler_tool
+pytestmark = [pytest.mark.compiler_tool, pytest.mark.compiler_nvidia]
 
 
 ROOT = Path(__file__).resolve().parents[2]

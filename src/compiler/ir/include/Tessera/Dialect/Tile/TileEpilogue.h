@@ -31,16 +31,58 @@ inline mlir::Value emitScalarFloatActivation(mlir::OpBuilder &builder,
     return mlir::arith::ConstantOp::create(
         builder, loc, type, builder.getFloatAttr(type, number));
   };
+  auto boundedTanhApprox = [&](mlir::Value input) {
+    // NVPTX has no instruction-selection pattern for LLVM's `ftanh` intrinsic.
+    // This stable [7/7] Pade form is accurate through [-5, 5], where tanh is
+    // already within 1e-4 of saturation, and lowers to portable arithmetic.
+    mlir::Value bounded = mlir::arith::MaximumFOp::create(
+        builder, loc, input, constant(-5.0));
+    bounded = mlir::arith::MinimumFOp::create(builder, loc, bounded,
+                                               constant(5.0));
+    mlir::Value z2 = mlir::arith::MulFOp::create(builder, loc, bounded, bounded);
+    auto horner = [&](double a, double b, mlir::Value x) {
+      return mlir::arith::AddFOp::create(
+          builder, loc, constant(a),
+          mlir::arith::MulFOp::create(builder, loc, constant(b), x));
+    };
+    mlir::Value numeratorPoly = horner(135135.0, 17325.0, z2);
+    numeratorPoly = mlir::arith::AddFOp::create(
+        builder, loc, numeratorPoly,
+        mlir::arith::MulFOp::create(builder, loc, horner(0.0, 378.0, z2), z2));
+    numeratorPoly = mlir::arith::AddFOp::create(
+        builder, loc, numeratorPoly,
+        mlir::arith::MulFOp::create(
+            builder, loc,
+            mlir::arith::MulFOp::create(builder, loc, z2, z2), z2));
+    mlir::Value denominatorPoly = horner(135135.0, 62370.0, z2);
+    denominatorPoly = mlir::arith::AddFOp::create(
+        builder, loc, denominatorPoly,
+        mlir::arith::MulFOp::create(builder, loc, horner(0.0, 3150.0, z2), z2));
+    denominatorPoly = mlir::arith::AddFOp::create(
+        builder, loc, denominatorPoly,
+        mlir::arith::MulFOp::create(
+            builder, loc,
+            mlir::arith::MulFOp::create(builder, loc, constant(28.0), z2),
+            mlir::arith::MulFOp::create(builder, loc, z2, z2)));
+    return mlir::arith::DivFOp::create(
+        builder, loc,
+        mlir::arith::MulFOp::create(builder, loc, bounded, numeratorPoly),
+        denominatorPoly);
+  };
   if (activation == "none")
     return value;
   if (activation == "relu")
     return mlir::arith::MaximumFOp::create(builder, loc, value, constant(0.0));
   if (activation == "silu") {
-    mlir::Value exponent = mlir::math::ExpOp::create(
-        builder, loc, mlir::arith::NegFOp::create(builder, loc, value));
-    mlir::Value denominator = mlir::arith::AddFOp::create(
-        builder, loc, constant(1.0), exponent);
-    return mlir::arith::DivFOp::create(builder, loc, value, denominator);
+    // sigmoid(x) = 0.5 * (1 + tanh(x / 2)); use the arithmetic form above
+    // so the CUDA path does not require an unavailable fexp libcall either.
+    mlir::Value sigmoid = mlir::arith::MulFOp::create(
+        builder, loc, constant(0.5),
+        mlir::arith::AddFOp::create(
+            builder, loc, constant(1.0),
+            boundedTanhApprox(mlir::arith::MulFOp::create(
+                builder, loc, constant(0.5), value))));
+    return mlir::arith::MulFOp::create(builder, loc, value, sigmoid);
   }
 
   // GELU tanh approximation, matching gelu(approximate="tanh"):
@@ -54,8 +96,7 @@ inline mlir::Value emitScalarFloatActivation(mlir::OpBuilder &builder,
   inner = mlir::arith::MulFOp::create(builder, loc, constant(0.7978845608028654),
                                       inner);
   mlir::Value onePlusTanh = mlir::arith::AddFOp::create(
-      builder, loc, constant(1.0),
-      mlir::math::TanhOp::create(builder, loc, inner));
+      builder, loc, constant(1.0), boundedTanhApprox(inner));
   return mlir::arith::MulFOp::create(
       builder, loc,
       mlir::arith::MulFOp::create(builder, loc, constant(0.5), value),

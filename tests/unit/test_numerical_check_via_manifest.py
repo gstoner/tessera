@@ -41,7 +41,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 def test_every_declared_fixture_actually_exists():
     """Each fixture path in ``_NUMERICAL_FIXTURES`` must resolve to a
-    real file under tests/unit/. Catches a regression where a fixture
+    real file under tests/. Catches a regression where a fixture
     is renamed/deleted but the manifest still claims it."""
     missing: list[tuple[tuple[str, str], str]] = []
     for key, rel in bm._NUMERICAL_FIXTURES.items():
@@ -51,12 +51,11 @@ def test_every_declared_fixture_actually_exists():
         f"manifest declares fixtures that don't exist on disk: {missing}")
 
 
-def test_every_declared_fixture_is_under_tests_unit():
-    """Sanity: fixtures should live in tests/unit/, not somewhere
-    else where they wouldn't be exercised by the regular test sweep."""
+def test_every_declared_fixture_is_under_tests_tree():
+    """Fixtures must live in a selected test suite, not arbitrary source/docs."""
     for key, rel in bm._NUMERICAL_FIXTURES.items():
-        assert rel.startswith("tests/unit/"), (
-            f"fixture {key} → {rel!r} should be under tests/unit/")
+        assert rel.startswith("tests/"), (
+            f"fixture {key} → {rel!r} should be under tests/")
 
 
 # ---- manifest_for attaches the fixture ----
@@ -78,7 +77,7 @@ def test_manifest_for_attaches_fixture_only_to_matching_target():
         "tests/unit/test_end_to_end_matmul_cpu_path.py")
     # nvidia_sm120 now ships a shipped runtime symbol + execute-compare fixture.
     assert by_target["nvidia_sm120"].execute_compare_fixture == (
-        "tests/unit/test_nvidia_mma_runtime_symbol.py")
+        "tests/device/nvidia/test_mma_runtime_symbol.py")
     # The other NVIDIA arches are still artifact_only — the fixture must NOT
     # falsely attach to them.
     for t in ("nvidia_sm80", "nvidia_sm90", "nvidia_sm100"):

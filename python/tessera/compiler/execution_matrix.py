@@ -2816,7 +2816,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         execution_mode="cuda_runtime", direction="forward",
         op_family="matmul_relu", device_proof="device_verified_jit",
         evidence_target="nvidia_sm120",
-        numerical_fixture="tests/unit/test_nvidia_matmul_relu_compiled.py",
+        numerical_fixture="tests/device/nvidia/test_matmul_relu.py",
         proof_build="cuda13.3+sm120"),
     ("nvidia_sm120", "nvidia_matmul_softmax_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_matmul_softmax_compiled",
@@ -2828,7 +2828,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         execution_mode="cuda_runtime", direction="forward",
         op_family="matmul_softmax", device_proof="device_verified_jit",
         evidence_target="nvidia_sm120",
-        numerical_fixture="tests/unit/test_nvidia_matmul_softmax_compiled.py",
+        numerical_fixture="tests/device/nvidia/test_matmul_softmax.py",
         proof_build="cuda13.3+sm120"),
     ("nvidia_sm120", "nvidia_kv_cache_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_kv_cache_compiled",
@@ -2840,7 +2840,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         execution_mode="cuda_runtime", direction="forward",
         op_family="kv_cache_read", device_proof="device_verified_jit",
         evidence_target="nvidia_sm120",
-        numerical_fixture="tests/unit/test_nvidia_kv_cache_compiled.py",
+        numerical_fixture="tests/device/nvidia/test_kv_cache.py",
         proof_build="cuda13.3+sm120"),
     ("nvidia_sm120", "nvidia_conv2d_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_conv2d_compiled",
@@ -2852,7 +2852,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         execution_mode="cuda_runtime", direction="forward",
         op_family="conv2d", device_proof="device_verified_jit",
         evidence_target="nvidia_sm120",
-        numerical_fixture="tests/unit/test_nvidia_conv2d_compiled.py",
+        numerical_fixture="tests/device/nvidia/test_conv2d.py",
         proof_build="cuda13.3+sm120"),
     ("nvidia_sm120", "nvidia_softmax_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_softmax_compiled",
@@ -2863,7 +2863,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "through runtime.launch().",
         execution_mode="cuda_runtime", direction="forward", op_family="softmax",
         device_proof="device_verified_jit", evidence_target="nvidia_sm120",
-        numerical_fixture="tests/unit/test_nvidia_softmax_compiled.py",
+        numerical_fixture="tests/device/nvidia/test_softmax.py",
         proof_build="cuda13.3+sm120"),
     ("nvidia_sm120", "nvidia_flash_attn_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_flash_attn_compiled",
@@ -2875,7 +2875,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "and logit soft-cap; one CUDA launch over all B*Hq*Sq query rows.",
         execution_mode="cuda_runtime", direction="forward", op_family="attention",
         device_proof="device_verified_jit", evidence_target="nvidia_sm120",
-        numerical_fixture="tests/unit/test_nvidia_flash_attn_compiled.py",
+        numerical_fixture="tests/device/nvidia/test_flash_attention.py",
         proof_build="cuda13.3+sm120"),
     ("nvidia_sm120", "nvidia_flash_attn_bwd_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_flash_attn_bwd_compiled",
@@ -2891,7 +2891,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         residual_policy="recompute_all",
         residual_tradeoff="save no forward tensors; recompute softmax statistics",
         device_proof="device_verified_jit", evidence_target="nvidia_sm120",
-        numerical_fixture="tests/unit/test_nvidia_flash_attn_bwd_compiled.py",
+        numerical_fixture="tests/device/nvidia/test_flash_attention_backward.py",
         proof_build="cuda13.3+sm120"),
     ("nvidia_sm120", "nvidia_linear_attn_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_linear_attn_compiled",
@@ -2901,7 +2901,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "feature map, f32 Q/K/V/O, with each output element streaming legal keys.",
         execution_mode="cuda_runtime", direction="forward", op_family="linear_attn",
         device_proof="device_verified_jit", evidence_target="nvidia_sm120",
-        numerical_fixture="tests/unit/test_nvidia_linear_attn_compiled.py",
+        numerical_fixture="tests/device/nvidia/test_linear_attention.py",
         proof_build="cuda13.3+sm120"),
     ("nvidia_sm120", "nvidia_linear_attn_bwd_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_linear_attn_bwd_compiled",
@@ -2913,7 +2913,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         backward_aliases=("lightning_attention", "retention"),
         residual_policy="recompute_all", residual_tradeoff="save no forward tensors",
         device_proof="device_verified_jit", evidence_target="nvidia_sm120",
-        numerical_fixture="tests/unit/test_nvidia_linear_attn_compiled.py",
+        numerical_fixture="tests/device/nvidia/test_linear_attention.py",
         proof_build="cuda13.3+sm120"),
     ("nvidia_sm120", "nvidia_sparse_attn_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_sparse_attn_compiled",
@@ -2923,14 +2923,14 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "fed to the compiler-emitted CUDA Flash Attention lane.",
         execution_mode="cuda_runtime", direction="forward", op_family="sparse_attention",
         device_proof="device_verified_jit", evidence_target="nvidia_sm120",
-        numerical_fixture="tests/unit/test_nvidia_sparse_attn_compiled.py",
+        numerical_fixture="tests/device/nvidia/test_sparse_attention.py",
         proof_build="cuda13.3+sm120"),
     ("nvidia_sm120", "nvidia_mla_decode_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_mla_decode_compiled", execution_kind="native_gpu", executable=True,
         executor_id="nvidia_mla_decode_compiled", runtime_status="success",
         reason="NVIDIA sm_120 composed MLA decode: f32 latent K/V projections followed by compiler-emitted CUDA Flash Attention.",
         execution_mode="cuda_runtime", direction="forward", op_family="mla_decode", device_proof="device_verified_jit", evidence_target="nvidia_sm120",
-        numerical_fixture="tests/unit/test_nvidia_mla_decode_compiled.py", proof_build="cuda13.3+sm120"),
+        numerical_fixture="tests/device/nvidia/test_mla_decode.py", proof_build="cuda13.3+sm120"),
     ("nvidia_sm120", "nvidia_mla_decode_fused_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_mla_decode_fused_compiled",
         execution_kind="native_gpu", executable=True,
@@ -2940,7 +2940,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "CUDA kernel; no expanded K/V buffers cross the host ABI.",
         execution_mode="cuda_runtime", direction="forward", op_family="mla_decode_fused",
         device_proof="device_verified_jit", evidence_target="nvidia_sm120",
-        numerical_fixture="tests/unit/test_nvidia_mla_decode_compiled.py",
+        numerical_fixture="tests/device/nvidia/test_mla_decode.py",
         proof_build="cuda13.3+sm120"),
     ("nvidia_sm120", "nvidia_norm_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_norm_compiled",
@@ -2951,7 +2951,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "nvcc-compiled and launched through runtime.launch().",
         execution_mode="cuda_runtime", direction="forward", op_family="norm",
         device_proof="device_verified_jit", evidence_target="nvidia_sm120",
-        numerical_fixture="tests/unit/test_nvidia_norm_compiled.py",
+        numerical_fixture="tests/device/nvidia/test_norm.py",
         proof_build="cuda13.3+sm120"),
     ("nvidia_sm120", "nvidia_reduce_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_reduce_compiled",
@@ -2962,7 +2962,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "runtime.launch().",
         execution_mode="cuda_runtime", direction="forward", op_family="reduction",
         device_proof="device_verified_jit", evidence_target="nvidia_sm120",
-        numerical_fixture="tests/unit/test_nvidia_reduce_compiled.py",
+        numerical_fixture="tests/device/nvidia/test_reduce.py",
         proof_build="cuda13.3+sm120"),
     ("nvidia_sm120", "nvidia_control_flow_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_control_flow_compiled",
@@ -2974,7 +2974,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         execution_mode="cuda_runtime", direction="forward",
         op_family="control_flow", device_proof="device_verified_jit",
         evidence_target="nvidia_sm120",
-        numerical_fixture="tests/unit/test_nvidia_control_flow_cuda.py",
+        numerical_fixture="tests/device/nvidia/test_control_flow.py",
         proof_build="cuda13.3+sm120"),
     ("nvidia_sm120", "nvidia_posenc_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_posenc_compiled",
@@ -2985,7 +2985,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         execution_mode="cuda_runtime", direction="forward",
         op_family="position_encoding", device_proof="device_verified_jit",
         evidence_target="nvidia_sm120",
-        numerical_fixture="tests/unit/test_nvidia_posenc_compiled.py",
+        numerical_fixture="tests/device/nvidia/test_positional_encoding.py",
         proof_build="cuda13.3+sm120"),
     ("nvidia_sm120", "nvidia_ssm_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_ssm_compiled",
@@ -2995,7 +2995,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "and optional gate/initial state in one CUDA launch.",
         execution_mode="cuda_runtime", direction="forward", op_family="selective_ssm",
         device_proof="device_verified_jit", evidence_target="nvidia_sm120",
-        numerical_fixture="tests/unit/test_nvidia_ssm_compiled.py",
+        numerical_fixture="tests/device/nvidia/test_selective_ssm.py",
         proof_build="cuda13.3+sm120"),
     ("nvidia_sm120", "nvidia_deltanet_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_deltanet_compiled",
@@ -3005,7 +3005,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "beta/decay, erase, and modified updates in one CUDA launch.",
         execution_mode="cuda_runtime", direction="forward", op_family="deltanet",
         device_proof="device_verified_jit", evidence_target="nvidia_sm120",
-        numerical_fixture="tests/unit/test_nvidia_deltanet_compiled.py",
+        numerical_fixture="tests/device/nvidia/test_deltanet.py",
         proof_build="cuda13.3+sm120"),
     ("nvidia_sm120", "nvidia_moe_transport_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_moe_transport_compiled",
@@ -3015,7 +3015,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "and contiguous grouped GEMM using device offsets.",
         execution_mode="cuda_runtime", direction="forward", op_family="moe_transport",
         device_proof="device_verified_jit", evidence_target="nvidia_sm120",
-        numerical_fixture="tests/unit/test_nvidia_moe_transport_compiled.py",
+        numerical_fixture="tests/device/nvidia/test_moe_transport.py",
         proof_build="cuda13.3+sm120"),
     ("nvidia_sm120", "nvidia_dequant_gemm_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_dequant_gemm_compiled",
@@ -3025,7 +3025,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "single and grouped GEMM, with per-group scales and device offsets.",
         execution_mode="cuda_runtime", direction="forward", op_family="dequant_gemm",
         device_proof="device_verified_jit", evidence_target="nvidia_sm120",
-        numerical_fixture="tests/unit/test_nvidia_dequant_gemm_compiled.py",
+        numerical_fixture="tests/device/nvidia/test_dequant_gemm.py",
         proof_build="cuda13.3+sm120"),
     ("nvidia_sm120", "nvidia_optimizer_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_optimizer_compiled",
@@ -3035,7 +3035,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "and Lion parameter/state updates.",
         execution_mode="cuda_runtime", direction="forward", op_family="optimizer",
         device_proof="device_verified_jit", evidence_target="nvidia_sm120",
-        numerical_fixture="tests/unit/test_nvidia_optimizer_compiled.py",
+        numerical_fixture="tests/device/nvidia/test_optimizer.py",
         proof_build="cuda13.3+sm120"),
     ("nvidia_sm120", "nvidia_local_collective_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_local_collective_compiled",
@@ -3046,7 +3046,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "rejected and remains an NCCL distributed-validation concern.",
         execution_mode="cuda_runtime", direction="forward", op_family="collective_local",
         device_proof="device_verified_jit", evidence_target="nvidia_sm120",
-        numerical_fixture="tests/unit/test_nvidia_local_collective_compiled.py",
+        numerical_fixture="tests/device/nvidia/test_local_collective.py",
         proof_build="cuda13.3+sm120"),
     ("nvidia_sm120", "nvidia_fpquant_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_fpquant_compiled",
@@ -3056,7 +3056,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "dequantize contracts through compiler-emitted CUDA.",
         execution_mode="cuda_runtime", direction="forward", op_family="quantization",
         device_proof="device_verified_jit", evidence_target="nvidia_sm120",
-        numerical_fixture="tests/unit/test_nvidia_fpquant_compiled.py",
+        numerical_fixture="tests/device/nvidia/test_fpquant.py",
         proof_build="cuda13.3+sm120"),
 }
 

@@ -102,13 +102,13 @@ export PYTHONPATH="$ROOT/python:$ROOT${PYTHONPATH:+:$PYTHONPATH}"
 # CPU state is deliberately separate from any device proof.
 "$PYTHON" scripts/run_unit_tests.py --timeout=180 -q \
   --junitxml="$REPORT_DIR/cpu.xml"
-"$PYTHON" -m pytest tests/unit/test_nvidia_*.py \
-  -m "compiler_tool and not hardware_nvidia" -q --durations=50 \
+"$PYTHON" -m pytest tests/unit tests/device/nvidia \
+  -m "compiler_nvidia and not hardware_nvidia" -q --durations=50 \
   --junitxml="$REPORT_DIR/compiler-artifact.xml"
-"$PYTHON" -m pytest tests/unit -m "hardware_nvidia and not performance" \
+"$PYTHON" -m pytest tests/unit tests/device/nvidia tests/integration -m "hardware_nvidia and not performance" \
   -q --durations=100 --junitxml="$REPORT_DIR/device-correctness-1.xml"
-"$PYTHON" -m pytest tests/unit -m "hardware_nvidia and not performance" \
+"$PYTHON" -m pytest tests/unit tests/device/nvidia tests/integration -m "hardware_nvidia and not performance" \
   -q --durations=100 --junitxml="$REPORT_DIR/device-correctness-2.xml"
 # Never add xdist here: performance timing must be serial and isolated.
-"$PYTHON" -m pytest tests/unit -m "hardware_nvidia and performance" \
+"$PYTHON" -m pytest tests/unit tests/device/nvidia tests/performance/nvidia tests/integration -m "hardware_nvidia and performance" \
   -q -n 0 --durations=0 --junitxml="$REPORT_DIR/performance.xml"

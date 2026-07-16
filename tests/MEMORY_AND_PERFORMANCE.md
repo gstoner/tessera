@@ -92,8 +92,8 @@ For most contributor workflows **8 GB is plenty**.
 |---|---|---:|---:|
 | Edit-loop sanity check | `python scripts/run_unit_tests.py -q` | sized from host RAM/cores | 6m18s on the measured WSL host |
 | Just the autodiff slice | `pytest tests/unit/test_autodiff_*.py tests/unit/test_conv1d_autodiff.py tests/unit/test_deferred_vjps.py tests/unit/test_sprint_*.py tests/unit/test_attention_family_support.py tests/unit/test_reasoning_model_support.py tests/unit/test_optimizer_mixed_precision_support.py tests/unit/test_standalone_compiler_roadmap.py -q` | < 200 MB | ~2 s |
-| CUDA correctness on NVIDIA box | `pytest tests/unit -m "hardware_nvidia and not performance" -q` | device dependent | pending NVIDIA-box rebaseline |
-| CUDA performance on NVIDIA box | `pytest tests/unit -m "hardware_nvidia and performance" -q -n 0` | device dependent | serial; pending NVIDIA-box rebaseline |
+| CUDA correctness on NVIDIA box | `pytest tests/unit tests/device/nvidia -m "hardware_nvidia and not performance" -q` | device dependent | pending NVIDIA-box rebaseline |
+| CUDA performance on NVIDIA box | `pytest tests/unit tests/device/nvidia -m "hardware_nvidia and performance" -q -n 0` | device dependent | serial; pending NVIDIA-box rebaseline |
 | MLIR lit fixtures | `lit tests/tessera-ir/ -v` (needs `tessera-opt` on PATH) | < 100 MB | < 1 s |
 
 ## What the `slow` marker covers

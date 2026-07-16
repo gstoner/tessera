@@ -1,0 +1,167 @@
+{
+  "device": "nvidia:sm_120",
+  "margin": 2.0,
+  "rows": [
+    {
+      "cache_state": "warm",
+      "cold_compile_ms": 1137.882176,
+      "compile_state": "warm_after_preflight",
+      "compiler_fingerprint": "sha256:cf24ed3a2015c6eedbe47a5f86a4387361fc5441b5c242d56ace440d908d209d",
+      "dtype": "f32",
+      "max_latency_ms": 5.903746,
+      "median_ms": 2.951873,
+      "mode": "generated_atomic_vjp:end_to_end",
+      "op": "flash_attention_backward",
+      "reps": 20,
+      "resource_evidence_complete": true,
+      "resource_fingerprints": [
+        "sha256:00d8055154b4e9d5aafac488024803aa8d8d041af968d14be7ffb43b56d3189f"
+      ],
+      "resource_key": "tsr_flash_bwd",
+      "resources": [
+        {
+          "achieved_occupancy_pct": 7.03,
+          "block_size": "(128, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 0,
+          "grid_size": "(2, 1, 1)",
+          "kernel": "tsr_flash_bwd(const float *, const float *, const float *, const float *, const float *, float *, float *, float *, long, int, int, long, long, int, int, float, int, long, long, float)",
+          "launches": 3,
+          "local_load_transactions": 546816,
+          "local_store_transactions": 546861,
+          "registers_per_thread": 48,
+          "resource_fingerprint": "sha256:00d8055154b4e9d5aafac488024803aa8d8d041af968d14be7ffb43b56d3189f",
+          "spill_evidence_complete": true,
+          "spills_detected": true,
+          "static_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 83.33
+        }
+      ],
+      "selected_route": "generated_atomic_vjp",
+      "shape": "1x8x128x64",
+      "timing_domain": "end_to_end",
+      "warmup": 3
+    },
+    {
+      "cache_state": "warm",
+      "cold_compile_ms": 1137.882176,
+      "compile_state": "warm_after_preflight",
+      "compiler_fingerprint": "sha256:cf24ed3a2015c6eedbe47a5f86a4387361fc5441b5c242d56ace440d908d209d",
+      "dtype": "f32",
+      "max_latency_ms": 4.464671,
+      "median_ms": 2.232335,
+      "mode": "generated_atomic_vjp:device_event",
+      "op": "flash_attention_backward",
+      "reps": 20,
+      "resource_evidence_complete": true,
+      "resource_fingerprints": [
+        "sha256:00d8055154b4e9d5aafac488024803aa8d8d041af968d14be7ffb43b56d3189f"
+      ],
+      "resource_key": "tsr_flash_bwd",
+      "resources": [
+        {
+          "achieved_occupancy_pct": 7.03,
+          "block_size": "(128, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 0,
+          "grid_size": "(2, 1, 1)",
+          "kernel": "tsr_flash_bwd(const float *, const float *, const float *, const float *, const float *, float *, float *, float *, long, int, int, long, long, int, int, float, int, long, long, float)",
+          "launches": 3,
+          "local_load_transactions": 546816,
+          "local_store_transactions": 546861,
+          "registers_per_thread": 48,
+          "resource_fingerprint": "sha256:00d8055154b4e9d5aafac488024803aa8d8d041af968d14be7ffb43b56d3189f",
+          "spill_evidence_complete": true,
+          "spills_detected": true,
+          "static_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 83.33
+        }
+      ],
+      "selected_route": "generated_atomic_vjp",
+      "shape": "1x8x128x64",
+      "timing_domain": "device_event",
+      "warmup": 3
+    },
+    {
+      "cache_state": "warm",
+      "cold_compile_ms": 8.51367,
+      "compile_state": "warm_after_preflight",
+      "compiler_fingerprint": "sha256:cf24ed3a2015c6eedbe47a5f86a4387361fc5441b5c242d56ace440d908d209d",
+      "dtype": "f32",
+      "max_latency_ms": 15.681744,
+      "median_ms": 7.840872,
+      "mode": "generated_atomic_vjp:end_to_end",
+      "op": "flash_attention_backward",
+      "reps": 20,
+      "resource_evidence_complete": true,
+      "resource_fingerprints": [
+        "sha256:00d8055154b4e9d5aafac488024803aa8d8d041af968d14be7ffb43b56d3189f"
+      ],
+      "resource_key": "tsr_flash_bwd",
+      "resources": [
+        {
+          "achieved_occupancy_pct": 7.03,
+          "block_size": "(128, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 0,
+          "grid_size": "(2, 1, 1)",
+          "kernel": "tsr_flash_bwd(const float *, const float *, const float *, const float *, const float *, float *, float *, float *, long, int, int, long, long, int, int, float, int, long, long, float)",
+          "launches": 3,
+          "local_load_transactions": 546816,
+          "local_store_transactions": 546861,
+          "registers_per_thread": 48,
+          "resource_fingerprint": "sha256:00d8055154b4e9d5aafac488024803aa8d8d041af968d14be7ffb43b56d3189f",
+          "spill_evidence_complete": true,
+          "spills_detected": true,
+          "static_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 83.33
+        }
+      ],
+      "selected_route": "generated_atomic_vjp",
+      "shape": "1x8x257x64",
+      "timing_domain": "end_to_end",
+      "warmup": 3
+    },
+    {
+      "cache_state": "warm",
+      "cold_compile_ms": 8.51367,
+      "compile_state": "warm_after_preflight",
+      "compiler_fingerprint": "sha256:cf24ed3a2015c6eedbe47a5f86a4387361fc5441b5c242d56ace440d908d209d",
+      "dtype": "f32",
+      "max_latency_ms": 11.982405,
+      "median_ms": 5.991202,
+      "mode": "generated_atomic_vjp:device_event",
+      "op": "flash_attention_backward",
+      "reps": 20,
+      "resource_evidence_complete": true,
+      "resource_fingerprints": [
+        "sha256:00d8055154b4e9d5aafac488024803aa8d8d041af968d14be7ffb43b56d3189f"
+      ],
+      "resource_key": "tsr_flash_bwd",
+      "resources": [
+        {
+          "achieved_occupancy_pct": 7.03,
+          "block_size": "(128, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 0,
+          "grid_size": "(2, 1, 1)",
+          "kernel": "tsr_flash_bwd(const float *, const float *, const float *, const float *, const float *, float *, float *, float *, long, int, int, long, long, int, int, float, int, long, long, float)",
+          "launches": 3,
+          "local_load_transactions": 546816,
+          "local_store_transactions": 546861,
+          "registers_per_thread": 48,
+          "resource_fingerprint": "sha256:00d8055154b4e9d5aafac488024803aa8d8d041af968d14be7ffb43b56d3189f",
+          "spill_evidence_complete": true,
+          "spills_detected": true,
+          "static_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 83.33
+        }
+      ],
+      "selected_route": "generated_atomic_vjp",
+      "shape": "1x8x257x64",
+      "timing_domain": "device_event",
+      "warmup": 3
+    }
+  ],
+  "schema": "tessera.benchmark.ratchet.v1"
+}

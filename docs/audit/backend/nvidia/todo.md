@@ -3,7 +3,7 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-07-15
+last_updated: 2026-07-16
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
@@ -74,8 +74,45 @@ Baseline state on the NVIDIA box (2026-07-15, commit `ecf9483f`):
   no shared memory; grouped GEMM uses 40 registers and no shared memory. The
   two live MoE transport tests were missing `hardware_nvidia` and are now in
   the canonical exact-device collection; its host-only rejection test remains
-  unmarked. Reductions and transport still need productized repeated-median
-  benchmark rows before NVIDIA-TEST-5 can close.
+  unmarked. Their repeated-median rows and resource evidence are now committed
+  under the TEST-5 baselines described below.
+- NVIDIA-TEST-4 now has a shared storage/accumulation tolerance contract for
+  f32, f16, bf16, TF32, FP8, int8, and NVFP4 semantics. The shipped MMA and
+  compiler-produced Tile proofs consume that contract; exact integer/NVFP4
+  contracts remain bit-exact. The reduction matrix now also proves f16/f32
+  non-finite propagation and rejects empty, rank-invalid, unsupported-storage,
+  and unknown-operation contracts before launch. Two WSL exact-device runs
+  recorded 243 tests with zero failures/errors (one expected Apple-only skip).
+- NVIDIA-TEST-5 now productizes repeated-median reduction and MoE transport
+  rows in `record_reduction_transport_baseline.py`: every route records both
+  end-to-end and CUDA-event timing through the production generated kernel.
+  Two 20-sample sm_120 runs were recorded, the committed ratchet baseline
+  covers reduction sum/mean/max plus MoE dispatch/combine/grouped-GEMM, and
+  the first expanded serial performance lane passed 19 tests (one expected
+  skip). The wider corpus and parsed resource evidence have since landed.
+- The TEST-5 D2 corpus now includes measured square `512x512x512`, rectangular
+  `128x256x64`, and ragged `127x259x63` f16/bf16 GEMM rows in both timing
+  domains, alongside fused GELU, forward attention, gated MLP, and convolution
+  routes. Two 20-sample WSL runs were taken before retaining the second corpus;
+  the initial end-to-end winners varied between runs, so no selector was
+  promoted from that evidence.
+  Serving was likewise refreshed from two 20-sample runs for ReplaySSM and
+  fused/staged paged-KV at 128/512/2048 tokens, retaining device-event and
+  end-to-end medians separately.
+- **NVIDIA-TEST-5 is closed (2026-07-16).** Two fresh high-sample sweeps
+  (50 end-to-end repetitions after 10 warmups; 200 device-event repetitions
+  after 20 warmups) converge for all 20 retained D2 rows under the declared 3%
+  noise policy. Every row is selector-eligible only because both runs share a
+  near-winner consensus and the selected route has a committed resource
+  fingerprint. Backward attention adds regular `1x8x128x64` and ragged
+  `1x8x257x64` dual-domain ratchets. Parsed Nsight evidence records registers,
+  static/dynamic shared memory, theoretical/achieved occupancy, and explicit
+  local-load/store spill counters for GEMM/Tile, fused and forward/backward
+  attention, convolution, reductions, MoE transport, paged-KV, and ReplaySSM.
+  The backward VJP uses 48 registers and measurable local-memory traffic; this
+  is retained evidence, not hidden by a zero-spill claim. All other selected
+  rows in the resource manifest recorded zero local spill traffic. The final
+  serial performance lane passed 20 tests with one expected Apple-only skip.
 - NVIDIA-TEST-6 has begun with `tests/_support/nvidia.py` (with a retained
   `tests/unit/_nvidia_testutil.py` compatibility import): it centralizes
   CUDA-toolchain, MMA-runtime, and bare CUDA-host probes without conflating
@@ -400,8 +437,7 @@ after two stable runs and an explicit before/after review.
 ## Next update
 
 The collection contract, compiler-artifact, exact-device correctness, and
-serial measured lanes now have a recorded baseline. Extend Nsight Compute
-captures to the production-sized hot-path rows before closing NVIDIA-TEST-5;
-then continue the numerical-policy and test-layout migrations. Keep
-`plan_state: landing` while any implementation, migration, or re-run remains.
+serial measured lanes now have recorded baselines. NVIDIA-TEST-5 is closed;
+continue the test-layout migrations under NVIDIA-TEST-6. Keep `plan_state:
+landing` while those implementation, migration, or re-run items remain.
 Move this plan to the NVIDIA archive only after every completion gate is met.

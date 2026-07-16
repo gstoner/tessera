@@ -5,6 +5,9 @@ Run on a live NVIDIA host; the recorder never fabricates data off-device.
 from __future__ import annotations
 
 import argparse
+import dataclasses
+import hashlib
+import subprocess
 import sys
 from pathlib import Path
 
@@ -30,11 +33,12 @@ def main() -> int:
     parser.add_argument(
         "--matmul-shapes", nargs="+", default=(
             "64x64x64", "256x256x256", "512x512x512",
-            "1024x1024x1024", "2048x2048x2048", "128x256x64"),
+            "1024x1024x1024", "2048x2048x2048", "128x256x64",
+            "127x259x63"),
         metavar="MxNxK")
     parser.add_argument(
         "--fused-shapes", nargs="+", default=("64x64x64", "256x256x256",
-                                                "128x512x256"),
+        "128x512x256", "127x259x63"),
         metavar="MxNxK")
     parser.add_argument(
         "--attention-shapes", nargs="+",
@@ -55,11 +59,14 @@ def main() -> int:
     parser.add_argument("--composed-dtypes", nargs="+",
                         choices=("f32", "fp8_e4m3", "fp8_e5m2"),
                         default=("f32", "fp8_e4m3", "fp8_e5m2"))
+    parser.add_argument("--warm-start", action="store_true",
+                        help="load existing corpus instead of measuring from a fresh cache")
     args = parser.parse_args()
 
     from tessera import runtime as rt
     from tessera.compiler.emit import nvidia_cuda  # registers candidates
     from tessera.compiler.emit import autotune as at
+    from tessera.compiler.emit.kernel_emitter import SpecPolicy, bucket_key
     from tessera.compiler.emit.candidate import OP_MATMUL
     from tessera.compiler.emit.candidate import (
         OP_ATTENTION, OP_FUSED_REGION, OP_GATED_MATMUL)
@@ -70,7 +77,14 @@ def main() -> int:
         print("sm_120 NVIDIA runtime unavailable; corpus unchanged")
         return 0
     cache = at.MeasureCache()
-    at.load_corpus(cache=cache)
+    observed_shapes: dict[tuple[object, ...], list[int]] = {}
+    if args.warm_start:
+        at.load_corpus(cache=cache)
+    nvcc_version = subprocess.run(
+        ["/usr/local/cuda/bin/nvcc", "--version"], check=True,
+        capture_output=True, text=True).stdout
+    compiler_fingerprint = "sha256:" + hashlib.sha256(
+        nvcc_version.encode()).hexdigest()
     rng = np.random.default_rng(20260714)
     for dtype in args.matmul_dtypes:
         for shape_text in args.matmul_shapes:
@@ -93,6 +107,10 @@ def main() -> int:
                 raise RuntimeError(
                     f"no device-timed NVIDIA {dtype} candidate for {m}x{n}x{k}")
             print(f"matmul-device {dtype} {m}x{n}x{k}: {device_winner.name}")
+            bucket = bucket_key((m, n, k), SpecPolicy.BUCKET)
+            for timing in (at.TIMING_END_TO_END, at.TIMING_DEVICE):
+                observed_shapes[("nvidia:sm_120", "nvidia", OP_MATMUL,
+                                 bucket, dtype, timing)] = [m, n, k]
     # Representative production regions: each row compares every F4-passing
     # NVIDIA candidate, so generic and tensor-core lanes are evidence-ranked.
     for shape_text in args.fused_shapes:
@@ -185,6 +203,23 @@ def main() -> int:
                    (B, IH, IW, CI, KH, KW, CO), "f32", "device"),
                   at.MeasureRecord(winner, timings[winner], timings))
         print(f"conv2d-device {shape_text}: {winner}")
+    evidence = {
+        "compiler_fingerprint": compiler_fingerprint,
+        "compile_state": "warm_after_correctness_gate",
+        "warmup": args.warmup,
+        "reps": args.reps,
+        "device_warmup": args.device_warmup,
+        "device_reps": args.device_reps,
+        "measure_cache": "warm_started" if args.warm_start else "fresh",
+        "cache_hits": cache.hits,
+        "cache_misses": cache.misses,
+    }
+    for key, record in list(cache._store.items()):
+        workload_shape = observed_shapes.get(key)
+        cache._store[key] = dataclasses.replace(
+            record, evidence={**record.evidence, **evidence,
+                              **({"workload_shape": workload_shape}
+                                 if workload_shape else {})})
     print(f"wrote {at.save_corpus(cache=cache)}")
     return 0
 

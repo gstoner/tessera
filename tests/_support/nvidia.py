@@ -7,10 +7,12 @@ import subprocess
 from typing import Any
 
 import pytest
+from tests._support.environment import ensure_cuda_bin_on_path
 
 
 def nvidia_cuda_toolchain_available() -> bool:
     """Whether the host exposes an NVIDIA CUDA compiler."""
+    ensure_cuda_bin_on_path()
     return bool(shutil.which("nvcc") or os.path.isfile("/usr/local/cuda/bin/nvcc"))
 
 

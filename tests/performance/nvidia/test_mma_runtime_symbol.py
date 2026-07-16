@@ -4,6 +4,7 @@ import ctypes
 import numpy as np
 import pytest
 from tests.device.nvidia import test_mma_runtime_symbol as mma
+from tests._support.nvidia_numerics import assert_matches
 
 pytestmark = pytest.mark.hardware_nvidia
 
@@ -18,4 +19,4 @@ def test_device_resident_gemm_stream_and_event_abi(dt):
         def launch(): session.gemm(da, db, out, dtype_key)
         launch(); latency = session.measure(launch, reps=8, warmup=2); got = out.numpy()
     assert latency > 0
-    np.testing.assert_allclose(got, ref, rtol=0, atol={"bf16": .2, "f16": .05, "tf32": .01, "e4m3": 1.0, "e5m2": 2.0}[dt])
+    assert_matches(got, ref, dt, reduction_length=29)

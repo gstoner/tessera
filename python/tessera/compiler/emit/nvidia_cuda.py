@@ -427,6 +427,11 @@ def _synthesize_flash_bwd_cuda() -> str:
         " if(!hgo||!hq||!hk||!hv||!hdq||!hdk||!hdv||B<=0||Hq<=0||Hkv<=0||Hq%Hkv||Sq<=0||Sk<=0||D<=0||Dv<=0||D>TSR_FA_CAP||Dv>TSR_FA_CAP)return 2;size_t nq=(size_t)B*Hq*Sq*D*4,nkv=(size_t)B*Hkv*Sk*D*4,no=(size_t)B*Hq*Sq*Dv*4,nb=(size_t)B*Hq*Sq*Sk*4;float *go=0,*q=0,*k=0,*v=0,*bi=0,*dq=0,*dk=0,*dv=0;\n"
         " if(cudaMalloc(&go,no)||cudaMalloc(&q,nq)||cudaMalloc(&k,nkv)||cudaMalloc(&v,(size_t)B*Hkv*Sk*Dv*4)||cudaMalloc(&dq,nq)||cudaMalloc(&dk,nkv)||cudaMalloc(&dv,(size_t)B*Hkv*Sk*Dv*4))return 2;if(hb&&cudaMalloc(&bi,nb))return 2;\n"
         " cudaMemcpy(go,hgo,no,cudaMemcpyHostToDevice);cudaMemcpy(q,hq,nq,cudaMemcpyHostToDevice);cudaMemcpy(k,hk,nkv,cudaMemcpyHostToDevice);cudaMemcpy(v,hv,(size_t)B*Hkv*Sk*Dv*4,cudaMemcpyHostToDevice);if(hb)cudaMemcpy(bi,hb,nb,cudaMemcpyHostToDevice);cudaMemset(dk,0,nkv);cudaMemset(dv,0,(size_t)B*Hkv*Sk*Dv*4);long rows=B*(long)Hq*Sq;tsr_flash_bwd<<<(unsigned)((rows+127)/128),128>>>(go,q,k,v,bi,dq,dk,dv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);int ok=cudaDeviceSynchronize()==cudaSuccess?1:3;if(ok==1){cudaMemcpy(hdq,dq,nq,cudaMemcpyDeviceToHost);cudaMemcpy(hdk,dk,nkv,cudaMemcpyDeviceToHost);cudaMemcpy(hdv,dv,(size_t)B*Hkv*Sk*Dv*4,cudaMemcpyDeviceToHost);}cudaFree(go);cudaFree(q);cudaFree(k);cudaFree(v);cudaFree(dq);cudaFree(dk);cudaFree(dv);if(bi)cudaFree(bi);return ok;}\n"
+        f'extern "C" int {_FLASH_BWD_ENTRY}_timed(const float*hgo,const float*hq,const float*hk,const float*hv,const float*hb,long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,float scale,int causal,long wl,long wr,float cap,int reps,float*ms){{\n'
+        " if(!hgo||!hq||!hk||!hv||!ms||B<=0||Hq<=0||Hkv<=0||Hq%Hkv||Sq<=0||Sk<=0||D<=0||Dv<=0||D>TSR_FA_CAP||Dv>TSR_FA_CAP||reps<1)return 2;size_t nq=(size_t)B*Hq*Sq*D*4,nkv=(size_t)B*Hkv*Sk*D*4,no=(size_t)B*Hq*Sq*Dv*4,nv=(size_t)B*Hkv*Sk*Dv*4,nb=(size_t)B*Hq*Sq*Sk*4;float *go=0,*q=0,*k=0,*v=0,*bi=0,*dq=0,*dk=0,*dv=0;cudaEvent_t a=0,z=0;\n"
+        " if(cudaMalloc(&go,no)||cudaMalloc(&q,nq)||cudaMalloc(&k,nkv)||cudaMalloc(&v,nv)||cudaMalloc(&dq,nq)||cudaMalloc(&dk,nkv)||cudaMalloc(&dv,nv)||(hb&&cudaMalloc(&bi,nb)))goto fail;if(cudaMemcpy(go,hgo,no,cudaMemcpyHostToDevice)||cudaMemcpy(q,hq,nq,cudaMemcpyHostToDevice)||cudaMemcpy(k,hk,nkv,cudaMemcpyHostToDevice)||cudaMemcpy(v,hv,nv,cudaMemcpyHostToDevice)||(hb&&cudaMemcpy(bi,hb,nb,cudaMemcpyHostToDevice)))goto fail;\n"
+        " {long rows=B*(long)Hq*Sq;cudaMemset(dk,0,nkv);cudaMemset(dv,0,nv);tsr_flash_bwd<<<(unsigned)((rows+127)/128),128>>>(go,q,k,v,bi,dq,dk,dv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);if(cudaDeviceSynchronize()!=cudaSuccess||cudaEventCreate(&a)!=cudaSuccess||cudaEventCreate(&z)!=cudaSuccess||cudaEventRecord(a)!=cudaSuccess)goto fail;for(int r=0;r<reps;r++){cudaMemset(dk,0,nkv);cudaMemset(dv,0,nv);tsr_flash_bwd<<<(unsigned)((rows+127)/128),128>>>(go,q,k,v,bi,dq,dk,dv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);}if(cudaEventRecord(z)!=cudaSuccess||cudaEventSynchronize(z)!=cudaSuccess)goto fail;float elapsed=0;if(cudaEventElapsedTime(&elapsed,a,z)!=cudaSuccess)goto fail;*ms=elapsed/(float)reps;}\n"
+        " cudaEventDestroy(a);cudaEventDestroy(z);cudaFree(go);cudaFree(q);cudaFree(k);cudaFree(v);cudaFree(dq);cudaFree(dk);cudaFree(dv);if(bi)cudaFree(bi);return 1;fail:if(a)cudaEventDestroy(a);if(z)cudaEventDestroy(z);if(go)cudaFree(go);if(q)cudaFree(q);if(k)cudaFree(k);if(v)cudaFree(v);if(dq)cudaFree(dq);if(dk)cudaFree(dk);if(dv)cudaFree(dv);if(bi)cudaFree(bi);return 3;}\n"
     )
 
 
@@ -495,6 +500,45 @@ def run_flash_attention_backward(go: Any, q: Any, k: Any, v: Any, *, scale: floa
     if rc != 1:
         raise RuntimeError("NVIDIA Flash Attention backward CUDA launch failed")
     return dq, dk, dv
+
+
+def measure_flash_attention_backward_device(
+        go: Any, q: Any, k: Any, v: Any, *, scale: float,
+        causal: bool = False, window_left: int | None = None,
+        window_right: int | None = None, bias: Any = None,
+        softcap: float | None = None, reps: int = 20) -> float:
+    """CUDA-event latency for the production f32 Flash-Attention VJP kernel."""
+    import numpy as np
+    arrays = tuple(np.ascontiguousarray(x) for x in (go, q, k, v))
+    go, q, k, v = arrays
+    if any(x.dtype != np.float32 for x in arrays):
+        raise ValueError("NVIDIA flash backward event timing currently requires f32 storage")
+    if reps < 1:
+        raise ValueError("positive reps required")
+    # Validate shapes and compile the exact production artifact.
+    run_flash_attention_backward(
+        go, q, k, v, scale=scale, causal=causal,
+        window_left=window_left, window_right=window_right,
+        bias=bias, softcap=softcap)
+    B, Hq, Sq, D = q.shape; _, Hkv, Sk, _ = k.shape; Dv = v.shape[-1]
+    bf = None if bias is None else np.ascontiguousarray(bias, np.float32)
+    wl = -1 if window_left is None else int(window_left)
+    wr = -1 if window_right is None else int(window_right)
+    cap = 0.0 if softcap is None else float(softcap)
+    fn = getattr(_load_lib(_flash_bwd_artifact["f32"]),
+                 f"{_FLASH_BWD_ENTRY}_timed")
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p] * 5 + [ctypes.c_long, ctypes.c_int,
+        ctypes.c_int, ctypes.c_long, ctypes.c_long, ctypes.c_int, ctypes.c_int,
+        ctypes.c_float, ctypes.c_int, ctypes.c_long, ctypes.c_long,
+        ctypes.c_float, ctypes.c_int, ctypes.POINTER(ctypes.c_float)]
+    ms = ctypes.c_float()
+    rc = fn(_ptr(go), _ptr(q), _ptr(k), _ptr(v), _ptr(bf), B, Hq, Hkv,
+            Sq, Sk, D, Dv, float(scale), int(causal), wl, wr, cap, reps,
+            ctypes.byref(ms))
+    if rc != 1:
+        raise RuntimeError("NVIDIA Flash Attention backward event timing failed")
+    return float(ms.value)
 
 
 # ── causal linear-attention contract lane (CUDA parity P3) ──────────────────
@@ -1008,6 +1052,13 @@ def _synthesize_reduce_cuda(dtype: str = "f32") -> str:
         " if(cudaMemcpy(dx,hx,n,cudaMemcpyHostToDevice)!=cudaSuccess){cudaFree(dx);cudaFree(dout);return 3;}\n"
         " tsr_reduce_kernel<<<(unsigned)M,TSR_RD_BLOCK>>>(dx,dout,K,kind);int ok=cudaDeviceSynchronize()==cudaSuccess?1:3;\n"
         " if(ok==1&&cudaMemcpy(ho,dout,(size_t)M*sizeof(float),cudaMemcpyDeviceToHost)!=cudaSuccess)ok=3;cudaFree(dx);cudaFree(dout);return ok;}\n"
+        f"extern \"C\" int tessera_nvidia_reduce_timed(const {ctype}*hx,long M,long K,int kind,int reps,float*ms){{\n"
+        f" if(!hx||!ms||M<=0||K<=0||kind<0||kind>3||reps<1)return 2;size_t n=(size_t)M*K*sizeof({ctype});{ctype} *dx=0;float *dout=0;cudaEvent_t a=0,b=0;\n"
+        " if(cudaMalloc(&dx,n)!=cudaSuccess||cudaMalloc(&dout,(size_t)M*sizeof(float))!=cudaSuccess||cudaMemcpy(dx,hx,n,cudaMemcpyHostToDevice)!=cudaSuccess)goto fail;\n"
+        " tsr_reduce_kernel<<<(unsigned)M,TSR_RD_BLOCK>>>(dx,dout,K,kind);if(cudaDeviceSynchronize()!=cudaSuccess||cudaEventCreate(&a)!=cudaSuccess||cudaEventCreate(&b)!=cudaSuccess)goto fail;\n"
+        " if(cudaEventRecord(a)!=cudaSuccess)goto fail;for(int r=0;r<reps;r++)tsr_reduce_kernel<<<(unsigned)M,TSR_RD_BLOCK>>>(dx,dout,K,kind);if(cudaEventRecord(b)!=cudaSuccess||cudaEventSynchronize(b)!=cudaSuccess)goto fail;\n"
+        " {float elapsed=0;if(cudaEventElapsedTime(&elapsed,a,b)!=cudaSuccess)goto fail;*ms=elapsed/(float)reps;}cudaEventDestroy(a);cudaEventDestroy(b);cudaFree(dx);cudaFree(dout);return 1;\n"
+        " fail:if(a)cudaEventDestroy(a);if(b)cudaEventDestroy(b);if(dx)cudaFree(dx);if(dout)cudaFree(dout);return 3;}\n"
     )
 
 
@@ -1038,6 +1089,33 @@ def run_row_reduce(x2d: Any, kind: str) -> Any:
     if fn(_ptr(xf), _ptr(out), xf.shape[0], xf.shape[1], code) != 1:
         raise RuntimeError("NVIDIA row-reduce CUDA launch failed")
     return out
+
+
+def measure_row_reduce_device(x2d: Any, kind: str, *, reps: int = 100) -> float:
+    """Median-friendly CUDA-event timing for the production row-reduce kernel.
+
+    Host allocation/upload and download are intentionally outside the event
+    interval; callers measure those separately with :func:`run_row_reduce`.
+    """
+    import numpy as np
+    code = {"sum": 0, "mean": 1, "max": 2, "min": 3}.get(kind)
+    if code is None or reps < 1:
+        raise ValueError("known reduction kind and positive reps required")
+    xa = np.ascontiguousarray(x2d)
+    if xa.dtype not in (np.float32, np.float16) or xa.ndim != 2 or not xa.size:
+        raise ValueError("NVIDIA row reduction timing requires non-empty f32/f16 [M, K]")
+    # Ensure the generated artifact has been compiled using the exact same
+    # source/shape key as the execution route.
+    run_row_reduce(xa, kind)
+    fn = getattr(_load_lib(_reduce_artifact["f32" if xa.dtype == np.float32 else "f16"]),
+                 "tessera_nvidia_reduce_timed")
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p, ctypes.c_long, ctypes.c_long, ctypes.c_int,
+                   ctypes.c_int, ctypes.POINTER(ctypes.c_float)]
+    ms = ctypes.c_float()
+    if fn(_ptr(xa), xa.shape[0], xa.shape[1], code, reps, ctypes.byref(ms)) != 1:
+        raise RuntimeError("NVIDIA row-reduce event timing failed")
+    return float(ms.value)
 
 
 # ── runner (execute → (out, tag)) ─────────────────────────────────────────────
@@ -1142,6 +1220,7 @@ static int ac(void**d,const void*h,size_t z){return cudaMalloc(d,z)==cudaSuccess
 extern "C" int tessera_nvidia_moe_dispatch_f32(const float*x,const int*tok,float*o,int T,int S,int H){float *dx=0,*dout=0;int*dt=0;size_t nx=(size_t)T*H*4,no=(size_t)S*H*4;if(!ac((void**)&dx,x,nx)||!ac((void**)&dt,tok,S*4)||cudaMalloc(&dout,no)!=cudaSuccess)return 3;gather_k<<<(S*H+255)/256,256>>>(dx,dt,dout,S,H);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,dout,no,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(dt);cudaFree(dout);return ok?1:3;}
 extern "C" int tessera_nvidia_moe_combine_f32(const float*x,const int*tok,const float*w,float*o,int T,int S,int H){float *dx=0,*dw=0,*dout=0;int*dt=0;size_t ni=(size_t)S*H*4,no=(size_t)T*H*4;if(!ac((void**)&dx,x,ni)||!ac((void**)&dt,tok,S*4)||!ac((void**)&dw,w,S*4)||cudaMalloc(&dout,no)!=cudaSuccess)return 3;cudaMemset(dout,0,no);combine_k<<<(S*H+255)/256,256>>>(dx,dt,dw,dout,S,H);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,dout,no,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(dt);cudaFree(dw);cudaFree(dout);return ok?1:3;}
 extern "C" int tessera_nvidia_grouped_gemm_f32(const float*x,const float*w,const int*off,float*o,int T,int K,int N,int E){float *dx=0,*dw=0,*dout=0;int*df=0;size_t nx=(size_t)T*K*4,nw=(size_t)E*K*N*4,no=(size_t)T*N*4;if(!ac((void**)&dx,x,nx)||!ac((void**)&dw,w,nw)||!ac((void**)&df,off,(E+1)*4)||cudaMalloc(&dout,no)!=cudaSuccess)return 3;gg_k<<<(T*N+255)/256,256>>>(dx,dw,df,dout,T,K,N,E);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,dout,no,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(dw);cudaFree(df);cudaFree(dout);return ok?1:3;}
+extern "C" int tessera_nvidia_moe_timed(const float*x,const int*tok,const float*w,const float*weights,const int*off,int T,int S,int H,int K,int N,int E,int kind,int reps,float*ms){float *dx=0,*dw=0,*do_=0;int*dt=0,*df=0;cudaEvent_t a=0,b=0;size_t nx=(size_t)(kind==1?S:T)*(kind==2?K:H)*4,no=(size_t)(kind==2?T*N:(kind==0?S*H:T*H))*4;if(!x||!tok||!ms||T<=0||S<=0||H<=0||reps<1||kind<0||kind>2)return 2;if(!ac((void**)&dx,x,nx)||!ac((void**)&dt,tok,(size_t)S*4)||cudaMalloc(&do_,no)!=cudaSuccess)goto fail;if(kind==1&&(!weights||!ac((void**)&dw,weights,(size_t)S*4)))goto fail;if(kind==2&&(!w||!off||!ac((void**)&dw,w,(size_t)E*K*N*4)||!ac((void**)&df,off,(size_t)(E+1)*4)))goto fail;if(kind==0)gather_k<<<(S*H+255)/256,256>>>(dx,dt,do_,S,H);else if(kind==1){cudaMemset(do_,0,no);combine_k<<<(S*H+255)/256,256>>>(dx,dt,dw,do_,S,H);}else gg_k<<<(T*N+255)/256,256>>>(dx,dw,df,do_,T,K,N,E);if(cudaDeviceSynchronize()!=cudaSuccess||cudaEventCreate(&a)!=cudaSuccess||cudaEventCreate(&b)!=cudaSuccess||cudaEventRecord(a)!=cudaSuccess)goto fail;for(int r=0;r<reps;r++){if(kind==0)gather_k<<<(S*H+255)/256,256>>>(dx,dt,do_,S,H);else if(kind==1){cudaMemset(do_,0,no);combine_k<<<(S*H+255)/256,256>>>(dx,dt,dw,do_,S,H);}else gg_k<<<(T*N+255)/256,256>>>(dx,dw,df,do_,T,K,N,E);}if(cudaEventRecord(b)!=cudaSuccess||cudaEventSynchronize(b)!=cudaSuccess)goto fail;{float elapsed=0;if(cudaEventElapsedTime(&elapsed,a,b)!=cudaSuccess)goto fail;*ms=elapsed/(float)reps;}cudaEventDestroy(a);cudaEventDestroy(b);cudaFree(dx);cudaFree(dt);if(dw)cudaFree(dw);if(df)cudaFree(df);cudaFree(do_);return 1;fail:if(a)cudaEventDestroy(a);if(b)cudaEventDestroy(b);if(dx)cudaFree(dx);if(dt)cudaFree(dt);if(dw)cudaFree(dw);if(df)cudaFree(df);if(do_)cudaFree(do_);return 3;}
 '''
 
 
@@ -1190,6 +1269,76 @@ def run_grouped_gemm_f32(x: Any, weights: Any, group_sizes: Any) -> Any:
     fn=getattr(_moe_lib(),_GROUPED_GEMM_ENTRY);fn.restype=ctypes.c_int;fn.argtypes=[ctypes.c_void_p]*4+[ctypes.c_int]*4
     if fn(_ptr(x),_ptr(w),_ptr(off),_ptr(out),x.shape[0],K,N,E)!=1:raise RuntimeError("NVIDIA grouped_gemm launch failed")
     return out
+
+
+def _measure_moe_device(x: Any, token_of_slot: Any, *, kind: int, reps: int,
+                        weights: Any | None = None, expert_weights: Any | None = None,
+                        group_sizes: Any | None = None,
+                        num_tokens: int | None = None) -> float:
+    """Time one production MoE kernel with CUDA events and resident operands."""
+    import numpy as np
+    if reps < 1:
+        raise ValueError("positive reps required")
+    xa = np.ascontiguousarray(x, dtype=np.float32)
+    tok = np.ascontiguousarray(token_of_slot, dtype=np.int32).reshape(-1)
+    if xa.ndim != 2 or not xa.size or not tok.size:
+        raise ValueError("MoE timing requires non-empty f32 rank-2 values and slots")
+    source_rows, width = xa.shape
+    T = int(num_tokens) if kind == 1 and num_tokens is not None else source_rows
+    S = tok.size
+    w = np.ascontiguousarray(expert_weights, dtype=np.float32) if expert_weights is not None else None
+    if kind == 2:
+        if w is None or w.ndim != 3 or w.shape[1] != width:
+            raise ValueError("grouped GEMM timing requires [E,K,N] f32 weights")
+        E, K, N = w.shape
+        groups = np.asarray(group_sizes, dtype=np.int64).reshape(-1)
+        if groups.shape != (E,) or int(groups.sum()) != T or np.any(groups < 0):
+            raise ValueError("invalid grouped GEMM timing partition")
+        off = np.ascontiguousarray(np.concatenate(([0], np.cumsum(groups))), dtype=np.int32)
+    else:
+        E, K, N = 1, width, width
+        off = np.zeros(2, dtype=np.int32)
+    combine_weights = (np.ascontiguousarray(weights, dtype=np.float32).reshape(-1)
+                       if weights is not None else np.zeros(S, dtype=np.float32))
+    if combine_weights.size != S:
+        raise ValueError("MoE combine timing weights must match slots")
+    # Compile/cache the exact shared source before binding the timed ABI.
+    if kind == 0:
+        run_moe_dispatch_f32(xa, tok)
+    elif kind == 1:
+        run_moe_combine_f32(xa, tok, combine_weights, T)
+    else:
+        run_grouped_gemm_f32(xa, w, np.diff(off).astype(np.int64))
+    fn = getattr(_moe_lib(), "tessera_nvidia_moe_timed")
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p] * 5 + [ctypes.c_int] * 8 + [ctypes.POINTER(ctypes.c_float)]
+    ms = ctypes.c_float()
+    kernel_weights = w if w is not None else np.zeros(1, dtype=np.float32)
+    if fn(_ptr(xa), _ptr(tok), _ptr(kernel_weights), _ptr(combine_weights),
+          _ptr(off), T, S, width, K, N, E, kind, reps, ctypes.byref(ms)) != 1:
+        raise RuntimeError("NVIDIA MoE event timing failed")
+    return float(ms.value)
+
+
+def measure_moe_dispatch_device(x: Any, token_of_slot: Any, *, reps: int = 100) -> float:
+    return _measure_moe_device(x, token_of_slot, kind=0, reps=reps)
+
+
+def measure_moe_combine_device(partials: Any, token_of_slot: Any, weights: Any,
+                               num_tokens: int, *, reps: int = 100) -> float:
+    import numpy as np
+    if np.asarray(partials).shape[0] != np.asarray(token_of_slot).size:
+        raise ValueError("MoE combine timing slots must match partial rows")
+    return _measure_moe_device(partials, token_of_slot, kind=1, reps=reps,
+                               weights=weights, num_tokens=num_tokens)
+
+
+def measure_grouped_gemm_device(x: Any, weights: Any, group_sizes: Any, *,
+                                reps: int = 100) -> float:
+    # Grouped GEMM's slots are unused but the common ABI still carries one.
+    import numpy as np
+    return _measure_moe_device(x, np.array([0], dtype=np.int32), kind=2, reps=reps,
+                               expert_weights=weights, group_sizes=group_sizes)
 
 
 def _synthesize_deltanet_cuda() -> str:
@@ -1559,6 +1708,7 @@ extern "C" int ws(void*v,int si,void*stream){Q*q=(Q*)v;if(!q||si<0||si>=q->ns||q
 extern "C" int rs(void*v,int si,void*stream){Q*q=(Q*)v;if(!q||si<0||si>=q->ns||q->slots[si].state!=1)return 2;S&z=q->slots[si];cudaStream_t st=stream?(cudaStream_t)stream:q->st;if(cudaEventRecord(z.ev,st)!=cudaSuccess)return 3;z.state=2;return 1;}
 extern "C" void* dp(void*v,int si){Q*q=(Q*)v;if(!q||si<0||si>=q->ns||q->slots[si].state!=1)return 0;return q->slots[si].dy;}
 extern "C" void* ps(void*v){Q*q=(Q*)v;return q?(void*)q->st:0;}
+extern "C" int rp(int B,int D,int N){Q q={};q.B=B;q.D=D;q.N=N;q.L=1;if(B<1||D<1||N<1)return 2;size_t bd=(size_t)B*D*4,bn=(size_t)B*N*4,st=(size_t)B*D*N*4;if(cudaMalloc(&q.d,bd)||cudaMalloc(&q.x,bd)||cudaMalloc(&q.b,bn)||cudaMalloc(&q.s,st)||cudaMalloc(&q.c,bn)||cudaMalloc(&q.a,(size_t)D*4)||cudaMalloc(&q.y,bd))return 3;cudaMemset(q.d,0,bd);cudaMemset(q.x,0,bd);cudaMemset(q.b,0,bn);cudaMemset(q.s,0,st);cudaMemset(q.c,0,bn);cudaMemset(q.a,0,(size_t)D*4);out<<<(B*D+127)/128,128>>>(q,1);int ok=cudaDeviceSynchronize()==cudaSuccess?1:3;cudaFree(q.d);cudaFree(q.x);cudaFree(q.b);cudaFree(q.s);cudaFree(q.c);cudaFree(q.a);cudaFree(q.y);return ok;}
 extern "C" void dl(void*v){Q*q=(Q*)v;if(!q)return;cudaStreamSynchronize(q->st);cudaFree(q->d);cudaFree(q->x);cudaFree(q->b);cudaFree(q->s);cudaFree(q->c);cudaFree(q->a);cudaFree(q->y);for(int i=0;i<q->ns;i++){S&z=q->slots[i];if(z.state&&z.ev)cudaEventSynchronize(z.ev);if(z.dy)cudaFree(z.dy);if(z.pd)cudaFreeHost(z.pd);if(z.px)cudaFreeHost(z.px);if(z.pb)cudaFreeHost(z.pb);if(z.pc)cudaFreeHost(z.pc);if(z.py)cudaFreeHost(z.py);if(z.beg)cudaEventDestroy(z.beg);if(z.ev)cudaEventDestroy(z.ev);}free(q->slots);if(q->st)cudaStreamDestroy(q->st);free(q);}'''
 
 
@@ -1604,6 +1754,21 @@ class NvidiaReplayDeviceState:
     def close(self)->None:
         if getattr(self,"ctx",None) and self.ctx.value: self.lib.dl(self.ctx); self.ctx=ctypes.c_void_p()
     def __del__(self)->None: self.close()
+
+
+def profile_replay_out_resources(batch: int = 1, dim: int = 128,
+                                 state_dim: int = 64) -> None:
+    """Launch the exact ReplaySSM ``out`` kernel with isolated probe lifetime."""
+    global _ssm_replay_device_artifact
+    if _ssm_replay_device_artifact is None:
+        _ssm_replay_device_artifact = _nvidia_cuda_compile_fn(KernelSource(
+            source=_synthesize_ssm_replay_device_cuda(), entry="cr", lang=_LANG,
+            spec=SpecPolicy.DYNAMIC, shape_key=("ssm-replay-device",)))
+    fn = getattr(_load_lib(_ssm_replay_device_artifact), "rp")
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_int]
+    if fn(batch, dim, state_dim) != 1:
+        raise RuntimeError("ReplaySSM isolated resource probe failed")
 
 
 class CudaEvent:

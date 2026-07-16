@@ -159,7 +159,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--heads", type=int, default=8)
     p.add_argument("--dim", type=int, default=64)
     p.add_argument("--page-size", type=int, default=16)
-    p.add_argument("--reps", type=int, default=5)
+    p.add_argument("--reps", type=int, default=20,
+                   help="repeated-median samples per serving route")
     p.add_argument("--output", type=Path, default=None)
     p.add_argument("--update-corpus", action="store_true")
     args = p.parse_args(argv)

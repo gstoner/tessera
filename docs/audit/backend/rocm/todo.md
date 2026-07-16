@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-15
+last_updated: 2026-07-16
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
@@ -51,6 +51,11 @@ preserved while completing this queue:
 - a versioned PLHD paged-KV ABI with an i32 logical-to-physical page table;
 - cooperative sparse attention and resident top-k with committed comparative
   ratchets.
+- Cross-backend sync `NVIDIA-TEST5-2026-07-16`: the shared autotune corpus v3
+  adds compiler/resource, cold/warm, cache, and two-run stability evidence while
+  retaining v1/v2 loading. ROCm corpus round-trip and warm-start behavior are
+  parity validated by `test_rocm_measured_autotune.py`; no NVIDIA schedule,
+  resource claim, or selector decision applies to gfx1151 or other AMD targets.
 
 ## Recommended implementation order on gfx1151
 

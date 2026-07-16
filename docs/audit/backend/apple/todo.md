@@ -3,7 +3,7 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-07-15
+last_updated: 2026-07-16
 ---
 
 # Apple compiler, exact-device, and performance plan
@@ -51,6 +51,12 @@ remain Apple-owned.
 - FP8/FP4/MX execution remains gated by the macOS 27 SDK/runtime surface. The
   compiler-side scale-layout and multi-plane contracts already exist; do not
   claim hardware execution until the public Metal tensor path runs natively.
+- Cross-backend sync `NVIDIA-TEST5-2026-07-16`: the shared autotune corpus now
+  carries additive compiler/resource, cold/warm, cache, and two-run stability
+  evidence. Existing v1/v2 rows migrate without changing Apple selection, and
+  no CUDA schedule or selector is transferred to Metal. Apple follow-up is to
+  populate the same logical evidence fields from Metal-native counters during
+  its own performance work; current Apple plan state is otherwise unaffected.
 
 ## Completion definition
 

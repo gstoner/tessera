@@ -29,8 +29,7 @@ from tessera.compiler import driver as _driver
 from tessera import runtime as _runtime
 
 _GPU = agb.is_available() and jb.is_available()
-gpu = pytest.mark.skipif(
-    not _GPU, reason="apple_gpu runtime / libtessera_jit unavailable")
+gpu = pytest.mark.hardware_apple_gpu
 
 
 def _rand_ssm(rng, Bsz, S, D, N, *, scalar_A=True):
@@ -118,7 +117,6 @@ def test_selective_ssm_apple_gpu_scalar_A(shape):
     assert f.runtime_artifact().metadata["execution_mode"] == "metal_runtime"
 
 
-@gpu
 def test_selective_ssm_apple_gpu_general_A_falls_back():
     rng = np.random.default_rng(3)
     x, A, B, C, delta = _rand_ssm(rng, 2, 12, 4, 3, scalar_A=False)

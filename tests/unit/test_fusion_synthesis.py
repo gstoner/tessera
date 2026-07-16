@@ -82,7 +82,7 @@ def test_residual_region_reference_matches_numpy():
     np.testing.assert_allclose(out, g + r, rtol=1e-5, atol=1e-5)
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.hardware_apple_gpu
 @pytest.mark.parametrize("epi", [(), ("gelu",), ("bias",)])
 def test_residual_fusion_equals_unfused_on_metal(epi):
     # The transformer x + sublayer(x) pattern fused into the matmul kernel.
@@ -138,7 +138,7 @@ def test_prologue_region_declines_coopmat():
     assert coopmat_eligible(FusedRegion(("relu",)))    # epilogue still eligible
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.hardware_apple_gpu
 @pytest.mark.parametrize("pro,epi,red", [
     (("relu",), (), None),                  # matmul(relu(A), B)
     (("silu",), ("gelu",), None),           # prologue + epilogue
@@ -158,7 +158,7 @@ def test_prologue_fusion_equals_unfused_on_metal(pro, epi, red):
     assert np.allclose(out, region.reference(A, B, bias), atol=1e-4)
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.hardware_apple_gpu
 def test_prologue_tiled_large_n_equals_unfused_on_metal():
     # large-N routes to the tiled kernel; the prologue must thread through it too.
     from tessera.compiler.fusion import run_fused_region
@@ -315,7 +315,7 @@ def test_gated_discovery_requires_shared_a_and_single_use():
     assert discover_gated_matmul_regions(multi) == []
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.hardware_apple_gpu
 @pytest.mark.parametrize("act", ["silu", "gelu", "relu", "sigmoid", "tanh"])
 def test_gated_fusion_equals_unfused_on_metal(act):
     rng = np.random.default_rng(hash(act) & 0xFFFF)
@@ -329,7 +329,6 @@ def test_gated_fusion_equals_unfused_on_metal(act):
     assert np.allclose(out, region.reference(A, Wg, Wu), atol=1e-4)
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
 def test_gated_over_cap_falls_back_to_reference():
     region = GatedMatmulRegion()
     rng = np.random.default_rng(1)
@@ -341,8 +340,7 @@ def test_gated_over_cap_falls_back_to_reference():
     assert np.allclose(out, region.reference(A, Wg, Wu), atol=1e-4)
 
 
-@pytest.mark.skipif(sys.platform != "darwin",
-                    reason="the gated prepass block only claims ops on metal_runtime")
+@pytest.mark.hardware_apple_gpu
 def test_runtime_prepass_fuses_swiglu_gate_from_primitives():
     # The orchestrator must fuse matmul(A,Wg)->silu, matmul(A,Wu), mul(...) into
     # ONE gated kernel — and the gated pass must run BEFORE matmul-epilogue (which
@@ -367,8 +365,7 @@ def test_runtime_prepass_fuses_swiglu_gate_from_primitives():
                        atol=1e-4)
 
 
-@pytest.mark.skipif(sys.platform != "darwin",
-                    reason="metal_runtime dispatch is Darwin-only")
+@pytest.mark.hardware_apple_gpu
 def test_public_jit_gate_routes_to_apple_gpu_mps_metal_runtime():
     # The full pipeline proof: a real @jit(target="apple_gpu") gate from
     # primitives must route through the compile-time recognizer
@@ -394,8 +391,7 @@ def test_public_jit_gate_routes_to_apple_gpu_mps_metal_runtime():
     assert meta["execution_mode"] == "metal_runtime", meta.get("execution_mode")
 
 
-@pytest.mark.skipif(sys.platform != "darwin",
-                    reason="metal_runtime dispatch is Darwin-only")
+@pytest.mark.hardware_apple_gpu
 def test_public_jit_pointwise_dag_routes_to_apple_gpu_mps_metal_runtime():
     # The pointwise-gap closure: a bare pointwise DAG (every op in the pointwise
     # vocabulary) routes through driver._apple_gpu_chain_kind -> "pointwise" to
@@ -458,7 +454,7 @@ _CHAINS = [
 ]
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.hardware_apple_gpu
 @pytest.mark.parametrize("chain,has_bias", _CHAINS, ids=[str(c) for c, _ in _CHAINS])
 def test_synthesized_kernel_equals_unfused_on_metal(chain, has_bias):
     rng = np.random.default_rng(hash(chain) & 0xFFFF)
@@ -473,7 +469,7 @@ def test_synthesized_kernel_equals_unfused_on_metal(chain, has_bias):
     assert np.allclose(out, region.reference(A, B, bias), atol=1e-4)  # horizontal oracle
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.hardware_apple_gpu
 def test_synthesizer_reproduces_the_handwritten_matmul_gelu():
     # the synthesized matmul->gelu must match the hand-written catalog kernel it
     # replaces — proving the synthesizer can retire it.
@@ -549,7 +545,7 @@ _REDUCTION_CHAINS = [
 ]
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.hardware_apple_gpu
 @pytest.mark.parametrize("chain,red,has_bias", _REDUCTION_CHAINS,
                          ids=[f"{c}_{r}" for c, r, _ in _REDUCTION_CHAINS])
 def test_synthesized_reduction_equals_unfused_on_metal(chain, red, has_bias):
@@ -565,7 +561,7 @@ def test_synthesized_reduction_equals_unfused_on_metal(chain, red, has_bias):
     assert np.allclose(out, region.reference(A, B, bias), atol=1e-4)
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.hardware_apple_gpu
 def test_synthesizer_reproduces_the_handwritten_matmul_rmsnorm():
     import ctypes
     from tessera.runtime import _load_apple_gpu_runtime
@@ -747,7 +743,7 @@ _ATTN_SHAPES = [
 ]
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.hardware_apple_gpu
 @pytest.mark.parametrize("M,Nk,D,Dv,scale,causal", _ATTN_SHAPES)
 def test_synthesized_attention_equals_unfused_on_metal(M, Nk, D, Dv, scale, causal):
     rng = np.random.default_rng((M * 31 + Nk) & 0xFFFF)
@@ -783,7 +779,7 @@ _ATTN_LARGE_N = [
 ]
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.hardware_apple_gpu
 @pytest.mark.parametrize("M,Nk,D,Dv,causal", _ATTN_LARGE_N)
 def test_online_attention_large_n_equals_unfused_on_metal(M, Nk, D, Dv, causal):
     from tessera.compiler.fusion import SYNTH_MAX_N
@@ -806,7 +802,7 @@ _ATTN_DTYPES = [
 ]
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.hardware_apple_gpu
 @pytest.mark.parametrize("Nk", [64, 2048])   # materialized + online paths
 @pytest.mark.parametrize("tag,npdt,tol", _ATTN_DTYPES)
 def test_half_precision_attention_equals_unfused_on_metal(tag, npdt, tol, Nk):
@@ -829,7 +825,7 @@ def test_half_precision_attention_equals_unfused_on_metal(tag, npdt, tol, Nk):
     assert err < tol, err                              # horizontal oracle (half tol)
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.hardware_apple_gpu
 def test_synthesized_attention_reproduces_handwritten_flash_attn():
     # the synthesized attention block must match the hand-written flash_attn
     # catalog kernel it can replace — same online-softmax math.
@@ -968,7 +964,7 @@ def test_verify_passes_for_a_correct_synthesizer():
     assert verify_synthesized_region(FusedRegion(("gelu",)), force=True) is True
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="needs Metal to run a kernel.")
+@pytest.mark.hardware_apple_gpu
 def test_verify_rejects_a_broken_synthesizer(monkeypatch):
     # The anti-cheat invariant: a synthesizer that emits a kernel which COMPILES
     # but computes the wrong thing (drops the epilogue) must be REJECTED.  This is
@@ -1008,12 +1004,11 @@ kernel void {F._ENTRY}(
     region = FusedRegion((), reduction="rmsnorm")
     out, execution = F.run_fused_region(region, np.ones((4, 4), np.float32),
                                         np.ones((4, 4), np.float32))
-    if execution != "metal_runtime":
-        pytest.skip("Metal unavailable; cannot exercise the GPU divergence gate")
+    assert execution == "metal_runtime"
     assert verify_synthesized_region(region, force=True) is False  # rejected
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="needs Metal to run a kernel.")
+@pytest.mark.hardware_apple_gpu
 def test_runtime_prepass_skips_a_region_the_oracle_rejects(monkeypatch):
     # End-to-end: if the synthesized kernel diverges, the runtime pre-pass must
     # NOT consume the ops — they fall back to the trusted per-op path.
@@ -1051,8 +1046,7 @@ kernel void {F._ENTRY}(
            {"op_name": "tessera.rmsnorm", "operands": ["%m"], "result": "%r"}]
     # probe whether Metal actually runs the (broken) kernel first.
     _o, ex = F.run_fused_region(FusedRegion((), reduction="rmsnorm"), A, B)
-    if ex != "metal_runtime":
-        pytest.skip("Metal unavailable; oracle gate not exercised")
+    assert ex == "metal_runtime"
     F.clear_verification_cache()
     consumed = _apple_gpu_try_synthesized_fusion(ops, {"x": A, "W": B}, np)
     assert consumed == set()                   # oracle rejected → not fused
@@ -1087,7 +1081,8 @@ def test_best_variant_defaults_to_broadcast_when_unseen():
     assert best_variant_for(FusedRegion(("gelu",)), 64, 128, 256) == "broadcast"
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="autotune measures on Metal.")
+@pytest.mark.performance
+@pytest.mark.hardware_apple_gpu
 def test_autotune_records_a_correct_variant_on_metal():
     from tessera.compiler.fusion import (
         autotune_matmul_epilogue, best_variant_for, clear_autotune_corpus,
@@ -1095,15 +1090,15 @@ def test_autotune_records_a_correct_variant_on_metal():
     clear_autotune_corpus()
     region = FusedRegion(("bias", "gelu"), bias_name="bias")
     rec = autotune_matmul_epilogue(region, M=32, N=64, K=48, reps=3)
-    if rec is None:
-        pytest.skip("Metal unavailable; autotune not exercised")
+    assert rec is not None
     assert rec.chosen in ("broadcast", "dot")
     assert rec.correct.get(rec.chosen) is True          # the winner passed the oracle
     # the corpus now distills an O(1) decision for this shape-class.
     assert best_variant_for(region, 32, 64, 48) == rec.chosen
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="autotune measures on Metal.")
+@pytest.mark.performance
+@pytest.mark.hardware_apple_gpu
 def test_autotune_skips_non_fusible_region():
     from tessera.compiler.fusion import autotune_matmul_epilogue, SYNTH_MAX_N_TILED
     # N over the TILED cap → F3 declines → autotune returns None.
@@ -1138,7 +1133,7 @@ _TILED_CASES = [
 ]
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.hardware_apple_gpu
 @pytest.mark.parametrize("chain,red,has_bias", _TILED_CASES)
 @pytest.mark.parametrize("N", [2048, 4096])
 def test_tiled_synthesis_equals_unfused_on_metal(chain, red, has_bias, N):
@@ -1195,7 +1190,7 @@ _HALF_CASES = [
 ]
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.hardware_apple_gpu
 @pytest.mark.parametrize("chain,red,has_bias", _HALF_CASES)
 @pytest.mark.parametrize("N", [64, 2048])      # stack + tiled
 def test_f16_synthesis_equals_unfused_on_metal(chain, red, has_bias, N):
@@ -1213,7 +1208,7 @@ def test_f16_synthesis_equals_unfused_on_metal(chain, red, has_bias, N):
     assert np.allclose(out.astype(np.float32), ref, atol=2e-2, rtol=2e-2)
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.hardware_apple_gpu
 def test_bf16_synthesis_converts_and_runs_on_metal():
     bf16 = pytest.importorskip("ml_dtypes").bfloat16
     rng = np.random.default_rng(11)
@@ -1229,7 +1224,7 @@ def test_bf16_synthesis_converts_and_runs_on_metal():
     assert np.allclose(out.astype(np.float32), ref, atol=3e-2, rtol=3e-2)
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.hardware_apple_gpu
 def test_f16_synthesis_reproduces_handwritten_matmul_gelu_f16():
     import ctypes
     from tessera.runtime import _load_apple_gpu_runtime
@@ -1278,7 +1273,7 @@ def test_coopmat_synthesizer_emits_bfloat_simdgroup_matrix():
     assert "device const bfloat* A" in src             # bfloat I/O
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.hardware_apple_gpu
 @pytest.mark.parametrize("M,K,N", [(64, 64, 64), (128, 256, 384)])
 def test_coopmat_bf16_matmul_epilogue_on_metal(M, K, N):
     # M2: bf16 matmul+epilogue runs on the simdgroup_matrix MMA units (not the
@@ -1336,7 +1331,8 @@ def test_coopmat_tile_corpus_overrides_heuristic():
     clear_coopmat_tile_corpus()
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="autotune measures on Metal.")
+@pytest.mark.performance
+@pytest.mark.hardware_apple_gpu
 def test_autotune_coopmat_tile_picks_a_correct_winner():
     from tessera.compiler.fusion import (
         autotune_coopmat_tile, coopmat_tile_for, clear_coopmat_tile_corpus,
@@ -1345,15 +1341,14 @@ def test_autotune_coopmat_tile_picks_a_correct_winner():
     region = FusedRegion(("gelu",))
     M, N, K = 512, 512, 512
     lat = autotune_coopmat_tile(region, M, N, K, reps=4)
-    if not lat:
-        pytest.skip("Metal unavailable; autotune not exercised")
+    assert lat
     winner = coopmat_tile_for(M, N, K, region)
     assert winner in (32, 64)
     assert lat[winner] == min(lat.values())     # the recorded tile is the fastest
     clear_coopmat_tile_corpus()
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.hardware_apple_gpu
 @pytest.mark.parametrize("dtype", [np.float32, np.float16])
 def test_coopmat_64_tile_equals_unfused_on_metal(dtype):
     from tessera.compiler.fusion import run_fused_region_coopmat
@@ -1391,7 +1386,7 @@ _COOPMAT_CASES = [
 ]
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.hardware_apple_gpu
 @pytest.mark.parametrize("chain,has_bias", _COOPMAT_CASES)
 @pytest.mark.parametrize("dtype", [np.float32, np.float16])
 @pytest.mark.parametrize("shape", [(64, 48, 96), (128, 256, 128)])  # non-aligned + aligned
@@ -1437,7 +1432,7 @@ _COOPMAT_REDUCE_CASES = [
 ]
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.hardware_apple_gpu
 @pytest.mark.parametrize("chain,red,has_bias", _COOPMAT_REDUCE_CASES)
 @pytest.mark.parametrize("dtype", [np.float32, np.float16])
 @pytest.mark.parametrize("shape", [(64, 48, 96), (40, 128, 256), (8, 64, 512)])
@@ -1457,7 +1452,7 @@ def test_coopmat_reduce_equals_unfused_on_metal(chain, red, has_bias, dtype, sha
                        atol=atol, rtol=atol)
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="dispatch runs on Metal.")
+@pytest.mark.hardware_apple_gpu
 def test_matmul_heavy_reduction_routes_to_compose_and_is_correct():
     # Perf routing (F2d measurement): a matmul-heavy matmul->softmax/rmsnorm
     # routes to MPS-matmul + MPSGraph-reduce (compose) instead of the slow
@@ -1494,7 +1489,7 @@ def test_coopmat_reduce_falls_back_above_cap():
     assert np.allclose(out, region.reference(A, B), atol=1e-4)
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.hardware_apple_gpu
 def test_run_fused_region_prefers_coopmat_for_pointwise():
     # run_fused_region routes pointwise f16/f32 regions to coopmat; a reduction
     # region still works (scalar path) — both correct.
@@ -1511,7 +1506,7 @@ def test_run_fused_region_prefers_coopmat_for_pointwise():
                        FusedRegion((), reduction="softmax").reference(A, B), atol=3e-2)
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.hardware_apple_gpu
 def test_tiled_synthesis_reproduces_handwritten_matmul_softmax_tiled():
     # the synthesized tiled softmax must match the hand-written tiled kernel it
     # will replace — same cooperative online-softmax math.

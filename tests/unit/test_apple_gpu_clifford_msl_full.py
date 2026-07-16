@@ -31,10 +31,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 
-pytestmark = pytest.mark.skipif(
-    sys.platform != "darwin",
-    reason="Apple GPU MSL kernels require macOS / Apple Silicon",
-)
+pytestmark = pytest.mark.hardware_apple_gpu
 
 
 @pytest.fixture(scope="module")
@@ -42,7 +39,7 @@ def apple_gpu_runtime(tmp_path_factory):
     """Compile apple_gpu_runtime.mm into a dylib and ctypes-load."""
     cxx = shutil.which("clang++") or shutil.which("c++")
     if cxx is None:
-        pytest.skip("clang++ not available")
+        pytest.fail("C++ compiler unavailable on the Apple hardware test host")
     source = ROOT / "src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm"
     tmp_dir = tmp_path_factory.mktemp("apple_gpu_full")
     lib = tmp_dir / "libtessera_apple_gpu_runtime.dylib"
@@ -54,7 +51,7 @@ def apple_gpu_runtime(tmp_path_factory):
            "-framework", "Foundation"]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
-        pytest.skip(f"apple_gpu_runtime.mm did not compile:\n{proc.stderr[-2000:]}")
+        pytest.fail(f"apple_gpu_runtime.mm did not compile:\n{proc.stderr[-2000:]}")
     return ctypes.CDLL(str(lib))
 
 

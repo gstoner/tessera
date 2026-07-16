@@ -28,8 +28,7 @@ _vjp = importlib.import_module("tessera.autodiff.vjp")
 _jvp = importlib.import_module("tessera.autodiff.jvp")
 
 _GPU = agb.is_available() and jb.is_available()
-gpu = pytest.mark.skipif(
-    not _GPU, reason="apple_gpu runtime / libtessera_jit unavailable")
+gpu = pytest.mark.hardware_apple_gpu
 
 
 def _ref(x, w, gs):

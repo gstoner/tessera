@@ -177,8 +177,7 @@ def test_registry_has_no_unused_entries_that_are_never_referenced():
 
 # ── on-device ABI net (skips without the runtime dylib) ───────────────────────
 
-@pytest.mark.skipif(apple_gpu_runtime() is None,
-                    reason="Apple GPU runtime dylib not available")
+@pytest.mark.hardware_apple_gpu
 def test_dylib_exports_resolve_every_registry_symbol():
     unresolved = [sym for sym in expected_symbols() if bind_registered(sym) is None]
     assert not unresolved, (

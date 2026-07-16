@@ -69,14 +69,12 @@ def test_unknown_backend_raises():
 # ── native cross-path oracle (the promoted rung) ─────────────────────────────
 
 
+@pytest.mark.hardware_apple_gpu
 def test_native_equivalence_oracle():
     h, _, _ = _fill(4, 32, 64)
     Q = _rng(2).standard_normal((4, 4, 32)).astype(np.float32)
     verdict = paged_kv_native_equivalence(h, Q)
-    if not _metal_available():
-        # Honest: no Metal → inconclusive, never a false pass.
-        assert verdict.relation == "inconclusive"
-        pytest.skip("Metal runtime not available — native rung not earnable here")
+    assert _metal_available(), "Metal runtime unavailable on the hardware test host"
     assert verdict.relation == "equivalent", verdict.detail
     assert "apple_gpu:metal_runtime" in verdict.paths
 

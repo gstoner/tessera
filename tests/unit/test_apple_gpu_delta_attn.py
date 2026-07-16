@@ -18,7 +18,7 @@ from tessera.compiler import driver as _driver
 
 R = _runtime
 _GPU = agb.is_available() and jb.is_available()
-gpu = pytest.mark.skipif(not _GPU, reason="apple_gpu runtime / libtessera_jit unavailable")
+gpu = pytest.mark.hardware_apple_gpu
 
 _B, _H, _S, _D = 2, 3, 14, 12
 
@@ -68,7 +68,6 @@ def test_delta_attention(op, ref_fn, variant):
     np.testing.assert_allclose(np.asarray(out), np.asarray(ref), rtol=1e-3, atol=1e-3)
 
 
-@gpu
 def test_return_state_falls_back_to_numpy():
     d = _inputs(1)
     # return_state path is not GPU-routed → dispatcher returns None.

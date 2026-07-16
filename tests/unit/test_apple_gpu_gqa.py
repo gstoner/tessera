@@ -89,7 +89,7 @@ def test_gqa_symbol_exported():
     assert R._apple_gpu_flash_attn_gqa_f32() is not None
 
 
-@pytest.mark.skipif(not DARWIN, reason="native half-width GQA symbols are Darwin-only")
+@pytest.mark.hardware_apple_gpu
 def test_gqa_f16_bf16_symbols_exported():
     rt = R._load_apple_gpu_runtime()
     assert hasattr(rt, "tessera_apple_gpu_flash_attn_gqa_f16")

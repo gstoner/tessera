@@ -13,6 +13,7 @@ import pytest
 
 from tessera import ops as O
 from tessera import runtime as rt
+from tests._support.apple import assert_native_apple_gpu, assert_reference_cpu
 
 _RNG = np.random.default_rng(0)
 
@@ -64,7 +65,7 @@ def test_scatter_f32_reports_native_gpu_on_metal():
     idx = np.array([1, 1, 3], np.int64)
     upd = np.ones((3, 3), np.float32)
     out, res = _run("tessera.scatter_add", x, idx, upd)
-    assert res["execution_kind"] == "native_gpu"
+    assert_native_apple_gpu(res, compiler_path="apple_gpu_scatter_compiled")
     np.testing.assert_allclose(out, O.scatter_add(x, idx, upd))
 
 
@@ -73,7 +74,7 @@ def test_scatter_non_f32_uses_reference_cpu_override():
     idx = np.array([1], np.int64)
     upd = np.ones((1, 2), np.float64)
     _, res = _run("tessera.scatter", x, idx, upd)
-    assert res["execution_kind"] == "reference_cpu"
+    assert_reference_cpu(res)
 
 
 def test_scatter_out_of_range_preserves_reference_error():

@@ -23,10 +23,7 @@ import sys
 import numpy as np
 import pytest
 
-darwin_only = pytest.mark.skipif(
-    sys.platform != "darwin",
-    reason="Apple GPU runtime only loadable on macOS",
-)
+darwin_only = pytest.mark.hardware_apple_gpu
 
 from tessera.compiler.clifford_jit import (
     CliffordJitError,

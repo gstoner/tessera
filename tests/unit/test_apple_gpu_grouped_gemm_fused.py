@@ -15,8 +15,7 @@ from tessera import _jit_boundary as jb
 from tessera import runtime as _runtime
 
 _GPU = agb.is_available() and jb.is_available()
-gpu = pytest.mark.skipif(
-    not _GPU, reason="apple_gpu runtime / libtessera_jit unavailable")
+gpu = pytest.mark.hardware_apple_gpu
 
 
 def _ref(x, w, gs):
@@ -27,14 +26,14 @@ def _ref(x, w, gs):
     return out
 
 
+@gpu
 def test_grouped_gemm_symbol_present_in_runtime():
     # The sentinel is always the *newest* symbol (it moves as kernels land);
     # what matters for grouped_gemm is that its C ABI symbol is loadable in the
     # current runtime image (i.e. the recompile picked it up).
     from tessera import _apple_gpu_dispatch as agd
     assert isinstance(agd._SENTINEL_SYMBOL, str) and agd._SENTINEL_SYMBOL
-    if not _GPU:
-        pytest.skip("apple_gpu runtime unavailable")
+    assert _GPU, "Apple GPU runtime unavailable on the hardware test host"
     lib = agb._load()
     assert hasattr(lib, "tessera_apple_gpu_grouped_gemm_f32")
 

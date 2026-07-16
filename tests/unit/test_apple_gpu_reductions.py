@@ -129,10 +129,12 @@ def test_jit_reductions_runtime_executable():
         assert meta["execution_mode"] in ("metal_runtime", "metal_artifact")
 
 
-@pytest.mark.skipif(not DARWIN, reason="metal_runtime dispatch is Darwin-only")
+@pytest.mark.hardware_apple_gpu
 def test_jit_mean_metal_runtime_on_darwin():
+    from tests._support.apple import assert_native_apple_jit
+
     rng = np.random.RandomState(7)
     x = rng.randn(4, 16).astype(np.float32)
     out = np.asarray(_jit_mean(x))
     np.testing.assert_allclose(out, x.mean(-1), rtol=1e-4, atol=1e-4)
-    assert _jit_mean.runtime_artifact().metadata["execution_mode"] == "metal_runtime"
+    assert_native_apple_jit(_jit_mean)

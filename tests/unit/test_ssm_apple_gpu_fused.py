@@ -43,11 +43,10 @@ def test_fused_factory_wires_decode_fn():
     assert h.decode_fn is not None
 
 
+@pytest.mark.hardware_apple_gpu
 def test_decode_symbol_resolves():
     """The C ABI symbol must be present in the (on-demand-compiled) runtime."""
     sym = rt._apple_gpu_ssm_replay_decode_f32()
-    if sym is None:
-        pytest.skip("apple_gpu runtime symbol unavailable on this host")
     assert callable(sym)
 
 

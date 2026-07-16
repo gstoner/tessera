@@ -95,7 +95,8 @@ def test_pick_best_by_latency_and_tflops():
 
 # ── Darwin: autotune over the measurable Apple knob space ────────────────────
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="Metal measurement is Darwin-only.")
+@pytest.mark.hardware_apple_gpu
+@pytest.mark.performance
 def test_autotune_matmul_over_dtype_returns_best_and_corpus():
     rng = np.random.default_rng(20260612)
     best, corpus = autotune_matmul("apple_gpu", _MM, 512, 512, 512, rng,

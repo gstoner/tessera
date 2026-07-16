@@ -113,7 +113,7 @@ def _apple_gpu_available() -> bool:
         return False
 
 
-@pytest.mark.skipif(not _apple_gpu_available(), reason="Apple GPU / Metal not available")
+@pytest.mark.hardware_apple_gpu
 def test_dequant_matmul_apple_gpu_matches_oracle():
     """Fused dequant-GEMM runs on the Metal kernel and matches the oracle —
     the M1 'executes on Apple GPU' claim."""
@@ -126,7 +126,7 @@ def test_dequant_matmul_apple_gpu_matches_oracle():
     np.testing.assert_allclose(got, oracle, rtol=1e-3, atol=1e-3)
 
 
-@pytest.mark.skipif(not _apple_gpu_available(), reason="Apple GPU / Metal not available")
+@pytest.mark.hardware_apple_gpu
 @pytest.mark.parametrize("dtype,gsz", [("int4", 16), ("int8", 32), ("fp8_e4m3", 32)])
 def test_fused_dequant_kernel_in_register(dtype, gsz):
     """The M1.1 fused dequant-into-GEMM MSL kernel (in-register dequant from unit

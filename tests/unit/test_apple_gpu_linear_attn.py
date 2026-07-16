@@ -18,7 +18,7 @@ from tessera.compiler import driver as _driver
 
 R = _runtime
 _GPU = agb.is_available() and jb.is_available()
-gpu = pytest.mark.skipif(not _GPU, reason="apple_gpu runtime / libtessera_jit unavailable")
+gpu = pytest.mark.hardware_apple_gpu
 
 _B, _H, _S, _D = 2, 3, 16, 16
 

@@ -18,7 +18,7 @@ from tessera import runtime as R
 from tessera.stdlib import delta_rule as dr
 
 _GPU = agb.is_available()
-gpu = pytest.mark.skipif(not _GPU, reason="apple_gpu runtime unavailable")
+gpu = pytest.mark.hardware_apple_gpu
 
 _B, _H, _S, _D = 2, 3, 16, 16
 

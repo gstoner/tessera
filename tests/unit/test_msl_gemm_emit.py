@@ -9,8 +9,6 @@ from __future__ import annotations
 
 import pytest
 
-import shutil
-
 from tessera.compiler.msl_gemm_emit import (
     SIMDGROUP_FRAG,
     MslGemmShape,
@@ -21,22 +19,6 @@ from tessera.compiler.msl_gemm_emit import (
     validate_msl_gemm_structure,
     validate_steel_gemm_structure,
 )
-
-# Metal-CI rung-3: real on a Metal-capable host, skip-clean otherwise (arm64 dev
-# Mac w/ CommandLineTools only, Linux). Mirrors ptx_emit's ptxas gate.
-def _has_metal_compiler() -> bool:
-    if shutil.which("metal") is not None:
-        return True
-    import subprocess
-    try:
-        return bool(subprocess.run(
-            ["xcrun", "-f", "metal"], capture_output=True, text=True, timeout=20
-        ).stdout.strip())
-    except (OSError, subprocess.SubprocessError):
-        return False
-
-
-_HAVE_METAL = _has_metal_compiler()
 
 
 @pytest.mark.parametrize("dtype", ["f16", "bf16", "f32"])
@@ -178,19 +160,25 @@ def test_steel_validator_catches_dropped_staging():
 
 # ── Metal-CI rung-3 lane: actually compile when a Metal toolchain is present ──
 
-@pytest.mark.skipif(not _HAVE_METAL, reason="offline `metal` compiler not available (rung-3 host)")
+@pytest.mark.compiler_tool
 @pytest.mark.parametrize("dtype", ["f16", "bf16", "f32"])
 def test_rung3_simdgroup_gemm_compiles_on_metal_host(dtype):
     """On a Metal-capable runner, the emitted minimal kernel must actually compile
     to AIR — the rung-3 gate that catches MSL the host-free validator can't."""
+    from tests._support.apple import require_metal_compiler
+
+    require_metal_compiler()
     msl = emit_simdgroup_gemm_msl(dtype, 8, 8, 8)
     r = metal_compile(msl, dtype=dtype)
     assert r.status == "ok", f"{dtype}: {r.detail}"
 
 
-@pytest.mark.skipif(not _HAVE_METAL, reason="offline `metal` compiler not available (rung-3 host)")
+@pytest.mark.compiler_tool
 @pytest.mark.parametrize("dtype", ["f16", "bf16", "f32"])
 def test_rung3_steel_gemm_compiles_on_metal_host(dtype):
+    from tests._support.apple import require_metal_compiler
+
+    require_metal_compiler()
     msl = emit_steel_gemm_msl(dtype, 32, 32, 16)
     r = metal_compile(msl, dtype=dtype)
     assert r.status == "ok", f"{dtype}: {r.detail}"
@@ -250,11 +238,14 @@ def test_steel_validator_catches_missing_partial_scratch():
     assert any("partial-edge" in r for r in v.reasons)
 
 
-@pytest.mark.skipif(not _HAVE_METAL, reason="offline `metal` compiler not available (rung-3 host)")
+@pytest.mark.compiler_tool
 @pytest.mark.parametrize("partial_edge,double_buffer", [(True, False), (False, True), (True, True)])
 def test_rung3_steel_refinements_compile_on_metal_host(partial_edge, double_buffer):
     """B3: the B1/B2 refinements compile to AIR on a Metal-capable runner — the
     real verification for the structures the host-free validator can only token-check."""
+    from tests._support.apple import require_metal_compiler
+
+    require_metal_compiler()
     msl = emit_steel_gemm_msl("f16", 32, 32, 16,
                               partial_edge=partial_edge, double_buffer=double_buffer)
     r = metal_compile(msl, dtype="f16")

@@ -79,6 +79,7 @@ def test_affine_norm_matches_reference(norm, weight, bias, residual):
                                region.reference(X, R, G, B), rtol=1e-5, atol=1e-5)
 
 
+@pytest.mark.hardware_apple_gpu
 def test_msl_compile_error_is_surfaced():
     # The runtime used to swallow `newLibraryWithSource` failures (silent
     # fallback); now compile_msl_kernel records them via the last-error channel.
@@ -88,8 +89,7 @@ def test_msl_compile_error_is_surfaced():
     # Metal-gate: only meaningful when the GPU runtime is live.
     probe = F.NormChainRegion("rmsnorm", add_residual=True)
     X = _RNG.standard_normal((4, 8)).astype(np.float32)
-    if F.run_norm_chain_region(probe, X, X)[1] != "metal_runtime":
-        pytest.skip("Metal runtime not available")
+    assert F.run_norm_chain_region(probe, X, X)[1] == "metal_runtime"
     rt = _load_apple_gpu_runtime()
     rt.tessera_apple_gpu_clear_last_error()
     rt.tessera_apple_gpu_last_error_message.restype = ctypes.c_char_p

@@ -7,6 +7,7 @@ import pytest
 
 from tessera import runtime as rt
 from tessera.stdlib import moe
+from tests._support.apple import assert_native_apple_gpu, assert_reference_cpu
 
 
 def _plan(seed: int = 41):
@@ -51,5 +52,16 @@ def test_moe_transport_reports_native_gpu_on_metal():
     dispatch = rt.launch(_artifact("tessera.moe_dispatch", ["x", "plan"]), (x, plan))
     combine = rt.launch(_artifact("tessera.moe_combine", ["partials", "plan"]),
                         (dispatch["output"], plan))
-    assert dispatch["execution_kind"] == "native_gpu"
-    assert combine["execution_kind"] == "native_gpu"
+    assert_native_apple_gpu(dispatch, compiler_path="apple_gpu_moe_transport_compiled")
+    assert_native_apple_gpu(combine, compiler_path="apple_gpu_moe_transport_compiled")
+
+
+def test_moe_transport_demotes_to_reference_cpu_without_metal(monkeypatch):
+    monkeypatch.setattr(rt.DeviceTensor, "is_metal", staticmethod(lambda: False))
+    x = np.random.default_rng(45).standard_normal((12, 8)).astype(np.float32)
+    plan = _plan(45)
+    dispatch = rt.launch(_artifact("tessera.moe_dispatch", ["x", "plan"]), (x, plan))
+    combine = rt.launch(_artifact("tessera.moe_combine", ["partials", "plan"]),
+                        (dispatch["output"], plan))
+    assert_reference_cpu(dispatch)
+    assert_reference_cpu(combine)

@@ -86,11 +86,13 @@ def test_matmul_transpose_gelu_stays_gpu_resident():
         assert f.execution_kind == "native_gpu"
 
 
-@pytest.mark.skipif(not DARWIN, reason="GPU-residency check requires Metal (Darwin)")
+@pytest.mark.hardware_apple_gpu
 def test_mixed_program_no_fallback_on_metal():
     from tessera.compiler import apple_gpu_coverage as cov
+    from tests._support.apple import assert_native_apple_jit
 
     a = _RNG.standard_normal((4, 8)).astype(np.float32)
     b = _RNG.standard_normal((8, 16)).astype(np.float32)
     f = _compiled(_matmul_transpose_gelu, a, b)
     assert cov.fallback_histogram(lambda: f(a, b)) == {}
+    assert_native_apple_jit(f)

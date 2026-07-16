@@ -95,14 +95,13 @@ def test_apple_gpu_matmul_relu_matches_numpy() -> None:
                                rtol=1e-4, atol=1e-5)
 
 
+@pytest.mark.hardware_apple_gpu
 def test_apple_gpu_kv_cache_read_matches_source() -> None:
     cache = KVCacheHandle(num_heads=2, head_dim=4, max_seq=16, page_size=4)
     keys = np.arange(8 * 2 * 4, dtype=np.float32).reshape(8, 2, 4)
     values = keys + 50.0
     cache.append(keys, values)
     read_keys, read_values, mode = apple_gpu_kv_cache_read(cache, 1, 6)
-    if mode != "metal_runtime":
-        pytest.skip("requires the Apple Metal DeviceTensor KV-cache path")
     assert mode == "metal_runtime"
     np.testing.assert_allclose(read_keys, keys[1:6])
     np.testing.assert_allclose(read_values, values[1:6])

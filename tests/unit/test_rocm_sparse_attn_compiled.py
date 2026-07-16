@@ -234,6 +234,7 @@ def test_rocm_deepseek_sparse_attention_native_gpu_matches_reference_on_hardware
 
 
 @pytest.mark.compiler_tool
+@pytest.mark.compiler_rocm
 def test_rocm_block_sparse_attention_codegen_lowers():
     import subprocess
     from pathlib import Path
@@ -255,6 +256,7 @@ def test_rocm_block_sparse_attention_codegen_lowers():
 
 
 @pytest.mark.compiler_tool
+@pytest.mark.compiler_rocm
 def test_rocm_block_sparse_attention_tiled_codegen_lowers():
     import subprocess
     from pathlib import Path
@@ -276,6 +278,7 @@ def test_rocm_block_sparse_attention_tiled_codegen_lowers():
 
 
 @pytest.mark.compiler_tool
+@pytest.mark.compiler_rocm
 def test_rocm_block_sparse_topk_codegen_lowers():
     import subprocess
     from pathlib import Path

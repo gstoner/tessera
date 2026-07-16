@@ -452,6 +452,8 @@ def test_mtl4_bf16_is_default_routed_and_correct():
 
 @pytest.mark.parametrize("dtype", ["f16", "bf16"])
 @pytest.mark.parametrize("act", ["none", "gelu", "relu", "silu"])
+@pytest.mark.metal4
+@pytest.mark.hardware_apple_gpu
 def test_p6_linear_bias_act_fuses_to_epilogue(dtype, act):
     """P6: a `linear + bias (+ activation)` block on @jit(target="apple_gpu") in
     f16/bf16 lowers to one matmul2d epilogue dispatch. The compile-time chain
@@ -492,9 +494,6 @@ def test_p6_linear_bias_act_fuses_to_epilogue(dtype, act):
     # compile-time chain recognition
     expected_kind = "matmul_bias" if act == "none" else f"matmul_bias_{act}"
     assert driver._apple_gpu_chain_kind(f.cpu_plan) == expected_kind
-    if not R.apple_gpu_metal4_caps()["available"]:
-        pytest.skip("Metal 4 unavailable; epilogue numerical contract is hardware-gated")
-
     rng = np.random.default_rng(_seed(dtype, act))
     M, N, K = 64, 96, 128
     x = (rng.standard_normal((M, K)) * 0.2).astype(cast)
@@ -552,6 +551,8 @@ def test_p4_mtl4_archive_api_contract(tmp_path):
     assert isinstance(R.apple_gpu_mtl4_archive_flush(), bool)
 
 
+@pytest.mark.metal4
+@pytest.mark.hardware_apple_gpu
 def test_p4_mtl4_archive_roundtrip_fresh_process(tmp_path):
     """P4 in a fresh process (the real contract): enable BEFORE any MTL4 op so the
     pipeline is built through the capturing compiler, flush writes a non-empty
@@ -562,12 +563,12 @@ def test_p4_mtl4_archive_roundtrip_fresh_process(tmp_path):
     archive = str(tmp_path / "fresh.mtl4archive")
     root = str(__import__("pathlib").Path(__file__).resolve().parents[2])
     prog = (
-        "import sys; sys.path.insert(0, %r)\n" % (root + "/python") +
+        f"import sys; sys.path.insert(0, {root + '/python'!r})\n"
         "import numpy as np\n"
         "from tessera import runtime as R\n"
         "if not R.apple_gpu_metal4_caps()['available']:\n"
         "    print('SKIP'); sys.exit(0)\n"
-        "load = %r\n" % archive +
+        f"load = {archive!r}\n"
         "import os\n"
         "had = os.path.exists(load)\n"
         "assert R.apple_gpu_mtl4_archive_enable(load)\n"
@@ -579,13 +580,10 @@ def test_p4_mtl4_archive_roundtrip_fresh_process(tmp_path):
         "assert R.apple_gpu_mtl4_archive_flush()\n"
         "print('USED_ARCHIVE' if had else 'WROTE_ARCHIVE', 'OK' if ok else 'BAD')\n"
     )
-    if not R.apple_gpu_metal4_caps()["available"]:
-        pytest.skip("Metal 4 unavailable")
     # Process 1: build + capture + flush -> writes the archive.
     r1 = subprocess.run([sys.executable, "-c", prog], capture_output=True, text=True)
     assert r1.returncode == 0, r1.stderr
-    if "SKIP" in r1.stdout:
-        pytest.skip("Metal 4 unavailable in subprocess")
+    assert "SKIP" not in r1.stdout
     import os
     assert os.path.exists(archive) and os.path.getsize(archive) > 0, r1.stdout
     assert "OK" in r1.stdout and "WROTE_ARCHIVE" in r1.stdout

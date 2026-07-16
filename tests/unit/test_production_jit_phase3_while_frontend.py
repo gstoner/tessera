@@ -16,10 +16,8 @@ from tessera import _apple_gpu_backend as agb
 from tessera import _jit_boundary as jb
 from tessera._jit_boundary import _find_tessera_opt, build_while_loop, jit_while_loop
 
-pytestmark = pytest.mark.skipif(
-    not (agb.is_available() and jb.is_available() and _find_tessera_opt() is not None),
-    reason="Apple GPU runtime / libtessera_jit / tessera-opt unavailable",
-)
+pytestmark = [pytest.mark.hardware_apple_gpu, pytest.mark.compiler_tool,
+              pytest.mark.usefixtures("apple_gpu_jit_runtime")]
 
 
 @pytest.mark.parametrize("max_iters", [2, 4])

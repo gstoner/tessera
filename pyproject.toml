@@ -119,7 +119,9 @@ timeout = 300
 markers = [
     "slow: long-running tests excluded from quick local sweeps",
     "compiler_tool: requires a built external compiler tool such as tessera-opt or mlir-opt",
+    "compiler_apple: compiler-artifact proof owned by the Apple backend",
     "compiler_nvidia: compiler-artifact proof owned by the NVIDIA backend",
+    "compiler_rocm: compiler-artifact proof owned by the ROCm backend",
     "integration: crosses a process, package, runtime, or component boundary",
     "performance: measures wall-clock/device performance; excluded from the CPU PR lane",
     # Hardware-gated markers — declared 2026-05-20.  Per-target tests

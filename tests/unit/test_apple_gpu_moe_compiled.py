@@ -12,6 +12,7 @@ import pytest
 
 import tessera as ts
 from tessera import runtime as rt
+from tests._support.apple import assert_native_apple_gpu, assert_reference_cpu
 
 
 @ts.jit(target="apple_gpu")
@@ -77,7 +78,7 @@ def test_local_moe_non_f32_and_strided_route_use_reference_cpu_override():
     x = np.ones((4, 3), np.float64)
     experts = np.ones((2, 3, 5), np.float64)
     out, result = _launch(x, experts)
-    assert result["execution_kind"] == "reference_cpu"
+    assert_reference_cpu(result)
     np.testing.assert_allclose(out, ts.ops.moe(x, experts))
 
     xf = np.ones((4, 3), np.float32)
@@ -85,7 +86,7 @@ def test_local_moe_non_f32_and_strided_route_use_reference_cpu_override():
     route = np.arange(8, dtype=np.int64)[::2]
     assert not route.flags.c_contiguous
     out, result = _launch(xf, ef, route, names=["route"])
-    assert result["execution_kind"] == "reference_cpu"
+    assert_reference_cpu(result)
     np.testing.assert_allclose(out, ts.ops.moe(xf, ef, route=route))
 
 
@@ -103,7 +104,6 @@ def test_local_moe_f32_reports_native_gpu_on_metal():
     experts = rng.standard_normal((3, 5, 4)).astype(np.float32)
     route = np.asarray([0, 2, 1, 2, 0, 1, 2], np.int64)
     out, result = _launch(x, experts, route, names=["route"])
-    assert result["execution_kind"] == "native_gpu"
-    assert result["execution_mode"] == "metal_runtime"
+    assert_native_apple_gpu(result, compiler_path="apple_gpu_moe_compiled")
     np.testing.assert_allclose(out, ts.ops.moe(x, experts, route=route),
                                rtol=2e-5, atol=2e-5)

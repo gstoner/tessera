@@ -164,11 +164,15 @@ def test_cross_path_relation_classifier():
     assert _cross_path_relation(3, 1e-1, tol=1e-3)[0] == "divergent"
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="needs apple_gpu + apple_cpu execution.")
+@pytest.mark.integration
+@pytest.mark.hardware_apple_gpu
 def test_matmul_agrees_across_metal_and_accelerate():
     """The same matmul lowered through two independent compilers (Metal MPS vs
     Accelerate) must agree — reference-free cross-path differential."""
     rng = np.random.default_rng(20260612)
+    from tests._support.apple import require_apple_accelerate
+
+    require_apple_accelerate()
     a = rng.standard_normal((64, 64)).astype(np.float32)
     b = rng.standard_normal((64, 64)).astype(np.float32)
     v = cross_path_equivalence([("apple_gpu", _MM), ("apple_cpu", _MM_CPU)], (a, b))
@@ -176,11 +180,15 @@ def test_matmul_agrees_across_metal_and_accelerate():
     assert set(v.paths) == {"apple_gpu", "apple_cpu"}
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="needs apple_gpu + apple_cpu execution.")
+@pytest.mark.integration
+@pytest.mark.hardware_apple_gpu
 def test_cross_path_catches_a_divergent_lowering():
     """If one path computes something different, cross-path must flag divergence
     (proving the oracle has teeth) — here the cpu path computes a@a not a@b."""
     rng = np.random.default_rng(3)
+    from tests._support.apple import require_apple_accelerate
+
+    require_apple_accelerate()
     a = rng.standard_normal((64, 64)).astype(np.float32)
     b = rng.standard_normal((64, 64)).astype(np.float32)
     v = cross_path_equivalence([("apple_gpu", _MM), ("apple_cpu", _MM_AA_CPU)], (a, b))
@@ -189,11 +197,7 @@ def test_cross_path_catches_a_divergent_lowering():
 
 # ── Darwin-gated: derive verdicts from real Metal runs ───────────────────────
 
-@pytest.mark.skipif(
-    sys.platform != "darwin",
-    reason="Apple GPU native execution is Darwin-only; the verdict contract "
-    "above is exercised portably.",
-)
+@pytest.mark.hardware_apple_gpu
 def test_native_ops_reach_hardware_verified_on_darwin():
     """matmul and gelu genuinely execute on Metal (native_gpu/success) — the
     execution-derived rung-7 path, vs accelerator_proof's static `proven`."""
@@ -210,10 +214,6 @@ def test_native_ops_reach_hardware_verified_on_darwin():
     assert vg.rung is Rung.HARDWARE_VERIFIED, vg.detail
 
 
-@pytest.mark.skipif(
-    sys.platform != "darwin",
-    reason="Apple GPU native execution is Darwin-only.",
-)
 def test_fallback_lane_classified_honestly_no_silent_miscompile():
     """Run the existing differential lane through the Evaluator. Its ops fall
     back to eager numpy (the registry-vs-reality gap: envelope-adjacent ops that
@@ -270,7 +270,7 @@ def test_horizontal_inconclusive_when_incomparable():
 
 # ── E1b: horizontal oracle over real Metal fusion ────────────────────────────
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="Metal fusion is Darwin-only.")
+@pytest.mark.hardware_apple_gpu
 def test_fused_chains_are_equivalent_to_their_unfused_composition():
     """The PolyJuice self-consistency check: a fused chain run as one kernel must
     equal the same math composed from separately-executed native ops, on the
@@ -306,7 +306,7 @@ def test_fused_chains_are_equivalent_to_their_unfused_composition():
     assert vm.relation in ("equivalent", "inconclusive"), vm.detail
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="Metal fusion is Darwin-only.")
+@pytest.mark.hardware_apple_gpu
 def test_horizontal_oracle_catches_a_divergent_unfused():
     """Prove the oracle actually flags divergence: a deliberately-perturbed (but
     'native') unfused operand must be reported divergent, not waved through."""

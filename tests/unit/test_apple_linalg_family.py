@@ -41,8 +41,9 @@ def runtime(tmp_path_factory):
     if sys.platform == "darwin":
         cmd += ["-framework", "Accelerate"]
     subprocess.run(cmd, check=True, capture_output=True, text=True)
-    if sys.platform != "darwin":
-        pytest.skip("linalg family runtime is Accelerate-backed (Darwin only)")
+    from tests._support.apple import require_apple_accelerate
+
+    require_apple_accelerate()
     return ctypes.CDLL(str(lib))
 
 

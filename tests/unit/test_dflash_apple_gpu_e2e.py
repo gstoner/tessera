@@ -23,10 +23,7 @@ except Exception:  # pragma: no cover
 
 DARWIN = sys.platform == "darwin"
 
-pytestmark = pytest.mark.skipif(
-    not (DARWIN and apple_gpu_available()),
-    reason=f"Metal device required ({apple_gpu_skip_reason()})",
-)
+pytestmark = pytest.mark.hardware_apple_gpu
 
 
 # Module-level so @jit can inspect the source (heredoc / closures can't be).

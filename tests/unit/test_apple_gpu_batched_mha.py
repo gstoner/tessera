@@ -138,12 +138,19 @@ def test_batched_mha_ops_runtime_executable():
         assert meta["execution_mode"] in ("metal_runtime", "metal_artifact")
 
 
-@pytest.mark.skipif(not DARWIN, reason="metal_runtime dispatch is Darwin-only")
+@pytest.mark.hardware_apple_gpu
 def test_batched_mha_ops_metal_runtime_on_darwin():
-    _bmm(np.zeros((8, 8, 8), np.float32), np.zeros((8, 8, 8), np.float32))
-    _softmax(np.zeros((8, 8, 8), np.float32))
-    assert _bmm.runtime_artifact().metadata["execution_mode"] == "metal_runtime"
-    assert _softmax.runtime_artifact().metadata["execution_mode"] == "metal_runtime"
+    from tests._support.apple import assert_native_apple_jit
+
+    rng = np.random.RandomState(20260715)
+    B, T, Dm, H = 2, 8, 32, 4
+    x = (rng.randn(B, T, Dm) * 0.5).astype(np.float32)
+    w_qkv = (rng.randn(Dm, 3 * Dm) * 0.3).astype(np.float32)
+    w_o = (rng.randn(Dm, Dm) * 0.3).astype(np.float32)
+    out = _run_mha(x, w_qkv, w_o, H)
+    np.testing.assert_allclose(out, _np_mha(x, w_qkv, w_o, H), rtol=1.5e-3, atol=1.5e-3)
+    for fn in (_proj_qkv, _bmm, _softmax, _out_proj):
+        assert_native_apple_jit(fn)
 
 
 def test_batched_mha_large_head_dim_no_flash_limit():

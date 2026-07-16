@@ -304,11 +304,7 @@ def test_apple_gpu_decoder_new_ops_report_metal_runtime():
         assert meta["execution_mode"] in ("metal_runtime", "metal_artifact")
 
 
-@pytest.mark.skipif(
-    sys.platform != "darwin",
-    reason="metal_runtime dispatch is Darwin-only; the portable reference "
-    "path still produces correct values but the metadata path differs.",
-)
+@pytest.mark.hardware_apple_gpu
 def test_apple_gpu_decoder_new_ops_darwin_metal_runtime():
     """On Darwin the new rmsnorm / silu_mul ops must hit metal_runtime."""
     rms_norm, _project, _attn, swiglu_act = _build_decoder_blocks()

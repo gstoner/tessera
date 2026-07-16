@@ -31,6 +31,7 @@ def test_lane_never_diverges(kind):
 
 
 @pytest.mark.parametrize("kind", FE.DISPLACED_LANES)
+@pytest.mark.hardware_apple_gpu
 def test_lane_equivalent_when_on_metal(kind):
     shape = {
         "matmul_epilogue": (16, 64, 128),
@@ -44,7 +45,7 @@ def test_lane_equivalent_when_on_metal(kind):
         assert v.relation == "equivalent", v.detail
         assert v.max_rel_err is not None and v.max_rel_err < 1e-2
     else:
-        pytest.skip(f"{kind}: no Metal runtime here ({v.relation})")
+        pytest.fail(f"{kind}: no Metal runtime on the hardware test host ({v.relation})")
 
 
 def test_gate_all_no_divergence():

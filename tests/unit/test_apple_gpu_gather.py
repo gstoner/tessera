@@ -63,9 +63,10 @@ def test_jit_gather_matches_numpy():
     np.testing.assert_array_equal(np.asarray(f(table, ids)), table[ids])
 
 
-@pytest.mark.skipif(not DARWIN, reason="GPU-residency check requires Metal (Darwin)")
+@pytest.mark.hardware_apple_gpu
 def test_gather_runs_on_metal_no_fallback():
     from tessera.compiler import apple_gpu_coverage as cov
+    from tests._support.apple import assert_native_apple_jit
 
     @ts.jit(target="apple_gpu")
     def f(table, ids):
@@ -74,3 +75,4 @@ def test_gather_runs_on_metal_no_fallback():
     table = _RNG.standard_normal((10, 8)).astype(np.float32)
     ids = _RNG.integers(0, 10, size=(4,)).astype(np.int32)
     assert cov.fallback_histogram(lambda: f(table, ids)) == {}
+    assert_native_apple_jit(f)

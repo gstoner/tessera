@@ -186,7 +186,7 @@ from tessera.distributed.moe import (  # noqa: E402
 )
 
 _GPU = _agb.is_available() and _jb.is_available()
-gpu = pytest.mark.skipif(not _GPU, reason="apple_gpu runtime unavailable")
+gpu = pytest.mark.hardware_apple_gpu
 
 
 @pytest.mark.parametrize("num_chunks", [1, 2, 4])

@@ -24,11 +24,15 @@ MARKERS: dict[str, str] = {
     "compiler_tool": (
         "requires a built external compiler tool such as tessera-opt or mlir-opt"
     ),
+    "compiler_apple": "compiler-artifact proof owned by the Apple backend",
+    "compiler_nvidia": "compiler-artifact proof owned by the NVIDIA backend",
+    "compiler_rocm": "compiler-artifact proof owned by the ROCm backend",
     "integration": "crosses a process, package, runtime, or component boundary",
     "performance": (
         "measures wall-clock/device performance; excluded from the CPU PR lane"
     ),
     "hardware_apple_gpu": "requires a Darwin host with Metal hardware",
+    "metal4": "requires a Metal 4-capable Apple GPU runtime",
     "hardware_nvidia": "requires an NVIDIA GPU with the CUDA toolkit",
     "hardware_rocm": "requires an AMD GPU with the ROCm toolkit",
 }
@@ -37,4 +41,10 @@ MARKERS: dict[str, str] = {
 PR_MARKER_EXPRESSION = (
     "not slow and not performance and not hardware_apple_gpu "
     "and not hardware_nvidia and not hardware_rocm"
+)
+
+
+APPLE_HOST_FREE_COMPILER_EXPRESSION = (
+    "compiler_tool and not hardware_apple_gpu and not performance "
+    "and not compiler_nvidia and not compiler_rocm"
 )

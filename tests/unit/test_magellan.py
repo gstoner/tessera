@@ -52,7 +52,7 @@ def test_evolve_never_takes_an_infeasible_neighbor():
 
 # ── Darwin: evolve a real heuristic gated behind measured correctness ─────────
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="fitness measures on Metal.")
+@pytest.mark.hardware_apple_gpu
 def test_dtype_policy_search_returns_a_feasible_policy():
     rng = np.random.default_rng(20260612)
     thresholds = [0, 256, 99999]               # always-f16 … always-f32

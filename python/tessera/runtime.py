@@ -10310,11 +10310,11 @@ def _apple_rng_reference_uniform(seed: int, counter_base: int, n: int) -> Any:
     return rng_device.philox_uniform(int(seed), int(counter_base), int(n))
 
 
-def _apple_rng_bind(symbol: str, argtypes: tuple[Any, ...]) -> Any:
-    """Bind one device-Philox C ABI symbol through the shared Apple loader."""
+def _apple_rng_bind(symbol: str) -> Any:
+    """Bind one registered device-Philox C ABI symbol."""
     try:
-        from ._apple_gpu_dispatch import bind_symbol
-        return bind_symbol(symbol, argtypes, ctypes.c_int32)
+        from ._apple_gpu_dispatch import bind_registered
+        return bind_registered(symbol)
     except Exception:
         return None
 
@@ -10323,11 +10323,7 @@ def _try_apple_rng_uniform(seed: int, counter_base: int, n: int,
                            lo: float, hi: float) -> Any | None:
     import numpy as np
     out = np.empty(int(n), np.float32)
-    fn = _apple_rng_bind(
-        "tessera_apple_gpu_philox_uniform_f32",
-        (ctypes.c_uint64, ctypes.c_uint64, ctypes.c_float, ctypes.c_float,
-         ctypes.POINTER(ctypes.c_float), ctypes.c_int32),
-    )
+    fn = _apple_rng_bind("tessera_apple_gpu_philox_uniform_f32")
     if fn is None:
         return None
     ok = fn(ctypes.c_uint64(int(seed) & 0xFFFFFFFFFFFFFFFF),
@@ -10341,11 +10337,7 @@ def _try_apple_rng_normal(seed: int, counter_base: int, n: int,
                           mean: float, std: float) -> Any | None:
     import numpy as np
     out = np.empty(int(n), np.float32)
-    fn = _apple_rng_bind(
-        "tessera_apple_gpu_philox_normal_f32",
-        (ctypes.c_uint64, ctypes.c_uint64, ctypes.c_float, ctypes.c_float,
-         ctypes.POINTER(ctypes.c_float), ctypes.c_int32),
-    )
+    fn = _apple_rng_bind("tessera_apple_gpu_philox_normal_f32")
     if fn is None:
         return None
     ok = fn(ctypes.c_uint64(int(seed) & 0xFFFFFFFFFFFFFFFF),
@@ -10360,11 +10352,7 @@ def _try_apple_rng_dropout(x: Any, seed: int, counter_base: int,
     import numpy as np
     x_c = np.ascontiguousarray(x, np.float32)
     out = np.empty_like(x_c)
-    fn = _apple_rng_bind(
-        "tessera_apple_gpu_philox_dropout_f32",
-        (ctypes.POINTER(ctypes.c_float), ctypes.c_uint64, ctypes.c_uint64,
-         ctypes.c_float, ctypes.POINTER(ctypes.c_float), ctypes.c_int32),
-    )
+    fn = _apple_rng_bind("tessera_apple_gpu_philox_dropout_f32")
     if fn is None:
         return None
     ok = fn(x_c.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
@@ -10660,9 +10648,13 @@ def _execute_apple_gpu_compiled_reduce(artifact: RuntimeArtifact,
     x = _as_numpy(values[operand_names[0]])
     red_kwargs = {"axis": kwargs.get("axis", None),
                   "keepdims": bool(kwargs.get("keepdims", False))}
-    return np.asarray(
+    native = bool(DeviceTensor.is_metal() and _apple_gpu_mpsgraph_reduce_f32())
+    output = np.asarray(
         _apple_gpu_dispatch_reduce("tessera.reduce", [x], red_kwargs, np),
         np.float32)
+    # The row describes the native MPSGraph route, but an unavailable device or
+    # ABI binding must be observable as reference execution at launch time.
+    return output if native else (output, "reference_cpu")
 
 
 #: op_name -> (module, callable) for the heterogeneous Apple GPU tail lane —
@@ -15633,6 +15625,17 @@ def _execute_apple_gpu_compiled_loss(artifact: RuntimeArtifact,
     pred = np.ascontiguousarray(np.broadcast_to(pred, bshape), np.float32)
     target = np.ascontiguousarray(np.broadcast_to(target, bshape), np.float32)
 
+    # Only mse/mae have an end-to-end device elementwise route. The remaining
+    # loss kinds retain a host-side middle and therefore cannot report the
+    # native-GPU matrix default as their observed execution result.
+    native = bool(
+        kind in (0, 1)
+        and DeviceTensor.is_metal()
+        and _apple_gpu_mpsgraph_binary_f32()
+        and _apple_gpu_mpsgraph_unary_f32()
+        and _apple_gpu_mpsgraph_reduce_f32()
+    )
+
     # Residual on the GPU binary lane (pred - target).
     r = np.asarray(
         _apple_gpu_dispatch_mpsgraph_binary("tessera.sub", [pred, target], {}, np),
@@ -15657,11 +15660,13 @@ def _execute_apple_gpu_compiled_loss(artifact: RuntimeArtifact,
             np.float32)
 
     if reduction == "none":
-        return per.reshape(bshape)
+        output = per.reshape(bshape)
+        return output if native else (output, "reference_cpu")
     # none/mean/sum reduction on the MPSGraph reduce lane (op 0 = sum, 1 = mean).
     key = "tessera.mean" if reduction == "mean" else "tessera.reduce"
-    return np.asarray(
+    output = np.asarray(
         _apple_gpu_dispatch_reduce(key, [per], {"axis": None}, np), np.float32)
+    return output if native else (output, "reference_cpu")
 
 
 #: op_name -> (reference module, callable name). The Apple GPU loss-family lane
@@ -24933,14 +24938,8 @@ def _apple_gpu_dispatch_gqa(Q: Any, K: Any, V: Any, num_q_heads: int,
 
 
 def _apple_gpu_bsmm_f32() -> Any:
-    runtime = _load_apple_gpu_runtime()
-    sym = getattr(runtime, "tessera_apple_gpu_mpsgraph_bsmm_f32", None)
-    if sym is None:
-        return None
-    sym.argtypes = [ctypes.POINTER(ctypes.c_float)] * 4 + [ctypes.c_int32] * 5 + [
-        ctypes.c_float]
-    sym.restype = None
-    return sym
+    from ._apple_gpu_dispatch import bind_registered
+    return bind_registered("tessera_apple_gpu_mpsgraph_bsmm_f32")
 
 
 def _apple_gpu_bsmm_f16() -> Any:
@@ -25885,18 +25884,8 @@ def _apple_gpu_dispatch_masked_attn(op_name: str, operands: list[Any],
 
 
 def _apple_gpu_mps_matmul_f32() -> Any:
-    runtime = _load_apple_gpu_runtime()
-    sym = runtime.tessera_apple_gpu_mps_matmul_f32
-    sym.argtypes = [
-        ctypes.POINTER(ctypes.c_float),
-        ctypes.POINTER(ctypes.c_float),
-        ctypes.POINTER(ctypes.c_float),
-        ctypes.c_int32,
-        ctypes.c_int32,
-        ctypes.c_int32,
-    ]
-    sym.restype = None
-    return sym
+    from ._apple_gpu_dispatch import bind_registered
+    return bind_registered("tessera_apple_gpu_mps_matmul_f32")
 
 
 def _apple_gpu_mps_matmul_f16() -> Any:
@@ -26814,18 +26803,8 @@ def _apple_gpu_dispatch_transpose(op_name: str, operands: list[Any],
 
 
 def _apple_gpu_mpsgraph_gather_f32() -> Any:
-    runtime = _load_apple_gpu_runtime()
-    sym = getattr(runtime, "tessera_apple_gpu_mpsgraph_gather_f32", None)
-    if sym is None:
-        return None
-    sym.argtypes = [
-        ctypes.POINTER(ctypes.c_float),    # table [rows, cols]
-        ctypes.POINTER(ctypes.c_int32),    # indices [n_idx]
-        ctypes.POINTER(ctypes.c_float),    # out [n_idx, cols]
-        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,  # rows, cols, n_idx
-    ]
-    sym.restype = None
-    return sym
+    from ._apple_gpu_dispatch import bind_registered
+    return bind_registered("tessera_apple_gpu_mpsgraph_gather_f32")
 
 
 def _apple_gpu_mpsgraph_gather_f16() -> Any:

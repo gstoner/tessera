@@ -68,6 +68,7 @@ def test_packed_weight_bandwidth_is_8x_smaller():
         (1, 8, 96, 96),      # single group (gs == K)
     ],
 )
+@pytest.mark.hardware_apple_gpu
 def test_gpu_quant_matmul_matches_dequant_reference(M, N, K, gs):
     rng = np.random.RandomState(M * 100 + N + K)
     X = rng.randn(M, K).astype(np.float32)
@@ -75,8 +76,7 @@ def test_gpu_quant_matmul_matches_dequant_reference(M, N, K, gs):
     packed, scales, biases = quantize_int4_packed(W, group_size=gs)
 
     out = R.apple_gpu_quantized_matmul_i4(X, packed, scales, biases, K=K, group_size=gs)
-    if out is None:
-        pytest.skip("apple_gpu runtime unavailable")
+    assert out is not None
 
     Wdq = dequantize_int4_packed(packed, scales, biases, k=K, group_size=gs)
     ref = X @ Wdq.T  # O[m,n] = sum_k X[m,k] * dequant(W[n,k])
@@ -84,6 +84,7 @@ def test_gpu_quant_matmul_matches_dequant_reference(M, N, K, gs):
     np.testing.assert_allclose(out, ref, rtol=1e-4, atol=1e-4)
 
 
+@pytest.mark.hardware_apple_gpu
 def test_tiled_variant_present_and_matches_untiled():
     rt = R._load_apple_gpu_runtime()
     assert hasattr(rt, "tessera_apple_gpu_quantized_matmul_i4_tiled_f32")
@@ -96,14 +97,14 @@ def test_tiled_variant_present_and_matches_untiled():
     tiled = R.apple_gpu_quantized_matmul_i4(
         X, packed, scales, biases, K=K, group_size=gs, variant="tiled"
     )
-    if untiled is None or tiled is None:
-        pytest.skip("apple_gpu runtime unavailable")
+    assert untiled is not None and tiled is not None
     # Tiled is the same math with threadgroup-cached X — must match the untiled
     # kernel closely (only float reduction-order differences).
     np.testing.assert_allclose(tiled, untiled, rtol=1e-4, atol=1e-4)
 
 
 @pytest.mark.parametrize("M,N,K,gs", [(1, 32, 128, 64), (4, 48, 256, 64)])
+@pytest.mark.hardware_apple_gpu
 def test_f16_variant_matches_dequant_reference(M, N, K, gs):
     rt = R._load_apple_gpu_runtime()
     assert hasattr(rt, "tessera_apple_gpu_quantized_matmul_i4_f16")
@@ -114,8 +115,7 @@ def test_f16_variant_matches_dequant_reference(M, N, K, gs):
     out = R.apple_gpu_quantized_matmul_i4(
         Xf16, packed, scales, biases, K=K, group_size=gs, variant="f16"
     )
-    if out is None:
-        pytest.skip("apple_gpu runtime unavailable")
+    assert out is not None
     Wdq = dequantize_int4_packed(packed, scales, biases, k=K, group_size=gs)
     # Reference uses the same fp16 X (upcast to f32) so the only error is f16
     # rounding of X — tight tolerance, not a quant-error fudge.
@@ -232,6 +232,7 @@ def test_quantized_matmul_vjp_matches_analytic_and_finite_difference():
     np.testing.assert_allclose(dx, fd, rtol=1e-2, atol=1e-2)
 
 
+@pytest.mark.hardware_apple_gpu
 def test_splitk_variant_present_and_matches_untiled():
     """Split-K parallelizes the K reduction (M·N·S threads + host partial-sum);
     same math as the untiled kernel. K large enough that the heuristic uses S>1."""
@@ -246,8 +247,7 @@ def test_splitk_variant_present_and_matches_untiled():
     sk = R.apple_gpu_quantized_matmul_i4(
         X, packed, scales, biases, K=K, group_size=gs, variant="splitk"
     )
-    if base is None or sk is None:
-        pytest.skip("apple_gpu runtime unavailable")
+    assert base is not None and sk is not None
     Wdq = dequantize_int4_packed(packed, scales, biases, k=K, group_size=gs)
     ref = X @ Wdq.T
     np.testing.assert_allclose(sk, base, rtol=1e-4, atol=1e-4)
@@ -276,6 +276,7 @@ def test_fp4_pack_roundtrip_quantizes_to_e2m1_grid():
 @pytest.mark.parametrize(
     "mode,gs", [("mx", 32), ("nv", 16)],  # MXFP4 (g32, pow2 scale) / NVFP4 (g16)
 )
+@pytest.mark.hardware_apple_gpu
 def test_gpu_fp4_matmul_matches_dequant_reference(mode, gs):
     rng = np.random.RandomState(hash((mode, gs)) & 0xFFFF)
     M, N, K = 4, 32, 128
@@ -283,8 +284,7 @@ def test_gpu_fp4_matmul_matches_dequant_reference(mode, gs):
     W = rng.randn(N, K).astype(np.float32)
     packed, scales = quantize_fp4_packed(W, group_size=gs, scale_mode=mode)
     out = R.apple_gpu_quantized_matmul_fp4(X, packed, scales, K=K, group_size=gs)
-    if out is None:
-        pytest.skip("apple_gpu runtime unavailable")
+    assert out is not None
     Wdq = dequantize_fp4_packed(packed, scales, k=K, group_size=gs)
     ref = X @ Wdq.T
     assert out.shape == (M, N)

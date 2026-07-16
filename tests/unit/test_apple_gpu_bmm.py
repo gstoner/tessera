@@ -160,11 +160,13 @@ def test_jit_rank3_matmul_runtime_executable():
     assert meta["execution_mode"] in ("metal_runtime", "metal_artifact")
 
 
-@pytest.mark.skipif(not DARWIN, reason="metal_runtime dispatch is Darwin-only")
+@pytest.mark.hardware_apple_gpu
 def test_jit_rank3_matmul_metal_runtime_on_darwin():
+    from tests._support.apple import assert_native_apple_jit
+
     rng = np.random.RandomState(7)
     a = rng.randn(4, 8, 16).astype(np.float32)
     b = rng.randn(4, 16, 32).astype(np.float32)
     out = np.asarray(_jit_bmm(a, b))
     np.testing.assert_allclose(out, a @ b, rtol=1e-5, atol=1e-4)
-    assert _jit_bmm.runtime_artifact().metadata["execution_mode"] == "metal_runtime"
+    assert_native_apple_jit(_jit_bmm)

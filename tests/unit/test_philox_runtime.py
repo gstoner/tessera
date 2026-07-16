@@ -24,7 +24,6 @@ Coverage:
 from __future__ import annotations
 
 import re
-import sys
 from pathlib import Path
 
 import numpy as np
@@ -206,10 +205,7 @@ def test_python_reference_matches_explicit_box_muller_at_thread_zero() -> None:
 # Cross-platform determinism (Darwin only)
 # ---------------------------------------------------------------------------
 
-@pytest.mark.skipif(
-    sys.platform != "darwin",
-    reason="Apple GPU runtime only loadable on macOS",
-)
+@pytest.mark.hardware_apple_gpu
 def test_apple_gpu_path_matches_numpy_reference() -> None:
     """The headline M6 Step 4 invariant: same ``(y, grad, key,
     counter, η, σ)`` produces the same f32 output on Apple GPU and
@@ -250,10 +246,7 @@ def test_apple_gpu_path_matches_numpy_reference() -> None:
 # Bridge wiring
 # ---------------------------------------------------------------------------
 
-@pytest.mark.skipif(
-    sys.platform != "darwin",
-    reason="Apple GPU runtime only loadable on macOS",
-)
+@pytest.mark.hardware_apple_gpu
 def test_apple_gpu_dispatch_records_bridge_route() -> None:
     """When tracing is on, the call must record a JitBridgeRoute
     whose op_name is the manifest name (not the raw symbol)."""

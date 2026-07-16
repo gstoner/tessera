@@ -221,7 +221,7 @@ def test_native_decoder_numpy_vs_gpu_backend_consistent():
     assert agree >= 0.6
 
 
-@pytest.mark.skipif(not (DARWIN and apple_gpu_available()), reason="Metal device required")
+@pytest.mark.hardware_apple_gpu
 def test_denoiser_attention_envelope_on_metal():
     """At production head_dim=256 the per-head attention is in the GPU kernel
     envelope; confirm the metal path runs and matches numpy."""

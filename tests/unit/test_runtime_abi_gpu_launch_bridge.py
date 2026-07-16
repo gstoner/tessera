@@ -143,22 +143,18 @@ int main(int argc, char** argv) {
 """
 
 
-@pytest.mark.skipif(
-    sys.platform != "darwin", reason="Apple GPU launch bridge — macOS/Metal only")
+@pytest.mark.hardware_apple_gpu
+@pytest.mark.integration
 def test_gpu_launch_bridge_runs_apple_gemm_through_c_abi(tmp_path):
-    if not RUNTIME_LIB.is_file():
-        pytest.skip("build libtessera_runtime.a (ninja -C build tessera_runtime)")
+    assert RUNTIME_LIB.is_file(), "build libtessera_runtime.a before the ABI integration test"
     cxx = _cxx()
-    if cxx is None:
-        pytest.skip("no C++ compiler")
+    assert cxx is not None, "C++ compiler unavailable on the ABI integration host"
     # Locate the loadable Apple GPU runtime dylib (Python compiles/caches it).
     from tessera import _apple_gpu_backend as agb
-    if not agb.is_available():
-        pytest.skip("apple_gpu runtime unavailable")
+    assert agb.is_available(), "Apple GPU runtime unavailable on the hardware test host"
     import tessera.runtime as rt
     dylib = getattr(rt._load_apple_gpu_runtime(), "_name", None)
-    if not dylib or not os.path.isfile(dylib):
-        pytest.skip("apple_gpu runtime dylib not found")
+    assert dylib and os.path.isfile(dylib), "Apple GPU runtime dylib not found"
 
     src_path = tmp_path / "gpu_launch_bridge.cpp"
     bin_path = tmp_path / "gpu_launch_bridge"

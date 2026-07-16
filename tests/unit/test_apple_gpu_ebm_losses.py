@@ -17,7 +17,7 @@ from tessera import runtime as _runtime
 from tessera.compiler import driver as _driver
 
 _GPU = agb.is_available() and jb.is_available()
-gpu = pytest.mark.skipif(not _GPU, reason="apple_gpu runtime / libtessera_jit unavailable")
+gpu = pytest.mark.hardware_apple_gpu
 
 _LOSS_GRAPH_OPS = [
     "tessera.loss.contrastive_divergence",
@@ -118,7 +118,6 @@ def test_dsm_jit_metal_runtime():
     assert dsm.runtime_artifact().metadata["execution_mode"] == "metal_runtime"
 
 
-@gpu
 def test_non_mean_reduction_falls_back_correct():
     # sum/none reductions aren't GPU-kerneled; must still be numerically correct.
     rng = np.random.default_rng(6)

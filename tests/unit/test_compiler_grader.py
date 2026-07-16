@@ -7,8 +7,6 @@ grade carries a real check, never an empty/vacuous pass.
 
 from __future__ import annotations
 
-import sys
-
 import numpy as np
 import pytest
 
@@ -48,7 +46,7 @@ def test_duplicate_task_name_is_rejected():
 
 # ── Darwin: every seed task passes on hidden inputs ──────────────────────────
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="seed tasks execute on Metal.")
+@pytest.mark.hardware_apple_gpu
 def test_all_seed_tasks_pass_on_hidden_inputs():
     grades = grade_all(np.random.default_rng(20260612))
     assert len(grades) >= 4
@@ -57,7 +55,7 @@ def test_all_seed_tasks_pass_on_hidden_inputs():
         assert g.passed, f"{g.task} failed: {[c.detail for c in g.failures]}"
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="seed tasks execute on Metal.")
+@pytest.mark.hardware_apple_gpu
 def test_grades_are_stable_across_independent_hidden_draws():
     """Re-grading on a different RNG must still pass — the checks are real
     invariants, not fit to one input set."""

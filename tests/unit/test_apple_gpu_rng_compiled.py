@@ -14,6 +14,7 @@ import pytest
 from tessera import rng as keyed_rng
 from tessera import rng_device as R
 from tessera import runtime as rt
+from tests._support.apple import assert_native_apple_gpu, assert_reference_cpu
 
 
 def _art(op, kwargs, operands=()):
@@ -91,9 +92,15 @@ def test_rng_base_ops_report_native_gpu_on_darwin():
          (np.ones(16, np.float32),)),
     ):
         res = rt.launch(_art(op, kwargs, operands), operands)
-        assert res["ok"] is True, res.get("reason")
-        assert res["execution_kind"] == "native_gpu"
-        assert res["execution_mode"] == "metal_runtime"
+        assert_native_apple_gpu(res, compiler_path="apple_gpu_rng_compiled")
+
+
+def test_rng_non_base_op_uses_reference_cpu_override():
+    res = rt.launch(
+        _art("tessera.rng_bernoulli", {"seed": 29, "shape": [8], "p": 0.5}),
+        (),
+    )
+    assert_reference_cpu(res)
 
 
 def test_rng_distribution_tail_matches_keyed_reference():

@@ -214,8 +214,7 @@ def test_apple_gpu_native_sparse_attn_runtime_shim_exposes_symbol(tmp_path):
     assert sym is not None, "missing C ABI symbol: tessera_apple_gpu_native_sparse_attn_f32"
 
 
-@pytest.mark.skipif(sys.platform != "darwin",
-                    reason="native sparse MSL proof requires Darwin/Metal")
+@pytest.mark.hardware_apple_gpu
 def test_apple_gpu_native_sparse_attn_runtime_msl_numerics():
     """Call the C ABI symbol and prove the real MSL path ran.
 
@@ -224,12 +223,6 @@ def test_apple_gpu_native_sparse_attn_runtime_msl_numerics():
     pipeline cache grows, then verifies numerical output against the public
     numpy reference.
     """
-    from tessera._apple_gpu_dispatch import apple_gpu_skip_reason
-
-    reason = apple_gpu_skip_reason()
-    if reason is not None:
-        pytest.skip(reason)
-
     from tessera._apple_gpu_dispatch import apple_gpu_runtime
 
     runtime = apple_gpu_runtime()
@@ -238,8 +231,7 @@ def test_apple_gpu_native_sparse_attn_runtime_msl_numerics():
     cache_size.argtypes = []
     cache_size.restype = ctypes.c_int32
     before = cache_size()
-    if before < 0:
-        pytest.skip("Metal device context is not active")
+    assert before >= 0, "Metal device context is not active"
 
     sym = runtime.tessera_apple_gpu_native_sparse_attn_f32
     fp = ctypes.POINTER(ctypes.c_float)

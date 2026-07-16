@@ -261,12 +261,14 @@ def test_jit_tier1_ops_are_runtime_executable():
         assert meta["execution_mode"] in ("metal_runtime", "metal_artifact")
 
 
-@pytest.mark.skipif(not DARWIN, reason="metal_runtime dispatch is Darwin-only")
+@pytest.mark.hardware_apple_gpu
 def test_jit_tier1_ops_metal_runtime_on_darwin():
+    from tests._support.apple import assert_native_apple_jit
+
     x = np.random.RandomState(11).randn(8, 64).astype(np.float32)
     out = np.asarray(_jit_silu(x))
     np.testing.assert_allclose(out, _silu(x), rtol=1e-5, atol=1e-5)
-    assert _jit_silu.runtime_artifact().metadata["execution_mode"] == "metal_runtime"
+    assert_native_apple_jit(_jit_silu)
 
 
 def test_synthesized_epilogue_symbols_are_exported():
@@ -289,7 +291,7 @@ def test_synthesized_epilogue_symbols_are_exported():
         assert not hasattr(rt, retired), f"retired kernel still present: {retired}"
 
 
-@pytest.mark.skipif(not DARWIN, reason="Metal device required")
+@pytest.mark.hardware_apple_gpu
 def test_runtime_reports_metal_available():
     rt = R._load_apple_gpu_runtime()
     assert rt.tessera_apple_gpu_runtime_has_metal() == 1
@@ -321,7 +323,7 @@ def test_gelu_no_nan_for_large_activations(scale):
 
 
 # ── MPSGraph executable caching ─────────────────────────────────────────────
-@pytest.mark.skipif(not DARWIN, reason="MPSGraph cache is Darwin-only")
+@pytest.mark.hardware_apple_gpu
 def test_mpsgraph_graph_cache_reuses_across_calls():
     """Repeated dispatches with the same (op, dtype, shape) signature reuse a
     single cached MPSGraph; new signatures add one entry each."""

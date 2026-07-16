@@ -49,7 +49,7 @@ def test_select_none_when_nothing_passes():
 
 # ── Darwin: drive the search with the real grader ────────────────────────────
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="real grader tasks execute on Metal.")
+@pytest.mark.hardware_apple_gpu
 def test_search_over_real_graded_tasks_picks_a_passing_candidate():
     rng = np.random.default_rng(20260612)
     cands = [

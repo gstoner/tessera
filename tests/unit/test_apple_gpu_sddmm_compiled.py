@@ -7,6 +7,7 @@ import pytest
 
 import tessera as ts
 from tessera import runtime as rt
+from tests._support.apple import assert_native_apple_gpu, assert_reference_cpu
 
 
 @ts.jit(target="apple_gpu")
@@ -73,7 +74,7 @@ def test_sddmm_non_f32_uses_reference_cpu_override():
     b = np.ones((3, 4), np.float64)
     mask = np.ones((2, 4), np.float64)
     out, result = _launch(a, b, mask)
-    assert result["execution_kind"] == "reference_cpu"
+    assert_reference_cpu(result)
     np.testing.assert_allclose(out, (a @ b) * mask)
 
 
@@ -83,6 +84,5 @@ def test_sddmm_f32_reports_native_gpu_on_metal():
     b = np.arange(20, dtype=np.float32).reshape(4, 5)
     mask = np.eye(3, 5, dtype=np.float32)
     out, result = _launch(a, b, mask)
-    assert result["execution_kind"] == "native_gpu"
-    assert result["execution_mode"] == "metal_runtime"
+    assert_native_apple_gpu(result, compiler_path="apple_gpu_sddmm_compiled")
     np.testing.assert_allclose(out, (a @ b) * mask, rtol=2e-5, atol=2e-5)

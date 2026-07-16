@@ -95,7 +95,7 @@ def test_eager_broadcast_bias():
 
 # ── Apple GPU lane (Darwin-gated): causal+bias and broadcast bias ───────────
 
-@pytest.mark.skipif(not (DARWIN and apple_gpu_available()), reason="Metal device required")
+@pytest.mark.hardware_apple_gpu
 def test_gpu_dispatch_causal_plus_bias_and_broadcast():
     from tessera.runtime import _apple_gpu_dispatch_flash_attn
 

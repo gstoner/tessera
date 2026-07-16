@@ -19,7 +19,7 @@ from tessera import _jit_boundary as jb
 from tessera.compiler.trace import TesseraTraceError, run_traced, trace
 
 _GPU = agb.is_available() and jb.is_available()
-gpu = pytest.mark.skipif(not _GPU, reason="apple_gpu runtime / libtessera_jit unavailable")
+gpu = pytest.mark.hardware_apple_gpu
 
 
 def _silu(z):

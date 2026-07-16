@@ -117,8 +117,11 @@ def test_m1_max_peak_is_calibrated_not_nominal():
     assert p.peak_tflops > NOMINAL_APPLE_GPU_PEAK.peak_tflops  # 10.4 > 8 nominal
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="chip detection is Darwin-only.")
+@pytest.mark.integration
 def test_detect_device_id_resolves_the_real_chip_on_darwin():
+    from tests._support.apple import require_apple_chip_identity
+
+    require_apple_chip_identity()
     did = detect_device_id("apple_gpu")
     assert did.startswith("apple_gpu:apple-m")   # real chip, not the coarse fallback
     assert did != default_device_id("apple_gpu")
@@ -188,7 +191,8 @@ def test_efficiency_trend_skips_non_native_records():
 
 # ── Darwin: record a real matmul on Metal ────────────────────────────────────
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="Metal measurement is Darwin-only.")
+@pytest.mark.performance
+@pytest.mark.hardware_apple_gpu
 def test_flywheel_records_a_real_matmul():
     rng = np.random.default_rng(20260612)
     a = rng.standard_normal((256, 256)).astype(np.float32)
@@ -210,7 +214,8 @@ def test_flywheel_records_a_real_matmul():
     assert rec.roofline_residual_ms > 0.0
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="Metal measurement is Darwin-only.")
+@pytest.mark.performance
+@pytest.mark.hardware_apple_gpu
 def test_sweep_builds_a_corpus_with_rising_efficiency():
     """The candidate sweep is a corpus, and efficiency climbs with size as launch
     overhead amortizes — a host-independent trend (assert the trend, not numbers)."""
@@ -231,7 +236,8 @@ def test_sweep_builds_a_corpus_with_rising_efficiency():
     assert tflops[-1] > tflops[0] * 3.0, dict(trend)
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="Metal measurement is Darwin-only.")
+@pytest.mark.performance
+@pytest.mark.hardware_apple_gpu
 def test_sweep_records_f16_natively():
     rng = np.random.default_rng(1)
     records = sweep_matmul("apple_gpu", _MM, (512,), rng, dtype="f16", reps=6)

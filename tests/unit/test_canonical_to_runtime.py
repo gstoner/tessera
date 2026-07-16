@@ -173,12 +173,14 @@ def test_canonical_artifact_runtime_status_stays_honest():
 
 # ---- C.2 trust path means: no re-derive when canonical answer is None ----
 
+@pytest.mark.integration
 def test_canonical_artifact_with_all_gates_passing_has_no_first_failing_gate():
     """When the canonical answer says every gate passes, the trust path
     must surface ``first_failing_gate is None`` — not re-run anything that
     could produce a different answer."""
-    if sys.platform != "darwin":
-        pytest.skip("apple_cpu needs Darwin; the cpu target is the focus")
+    from tests._support.apple import require_apple_accelerate
+
+    require_apple_accelerate()
     result = canonical_compile(_tiny_matmul_module(), target="cpu")
     assert result.first_failing_gate is None, result.reason
     artifact = result.to_runtime_artifact()

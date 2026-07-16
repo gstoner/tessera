@@ -122,6 +122,7 @@ def test_rocm_dequant_gemm_native_gpu_matches_reference_on_hardware():
 
 
 @pytest.mark.compiler_tool
+@pytest.mark.compiler_rocm
 def test_rocm_dequant_gemm_codegen_lowers():
     import subprocess
     from pathlib import Path

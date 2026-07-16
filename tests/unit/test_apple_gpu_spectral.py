@@ -16,7 +16,7 @@ from tessera import runtime as R
 from tessera.compiler import apple_gpu_envelope as env
 
 _GPU = agb.is_available() and jb.is_available()
-gpu = pytest.mark.skipif(not _GPU, reason="apple_gpu runtime unavailable")
+gpu = pytest.mark.hardware_apple_gpu
 
 
 def _D(op, operands, **kw):

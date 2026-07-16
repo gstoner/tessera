@@ -66,7 +66,8 @@ class TestCPUReferenceDynamicShapes:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.skipif(not _IS_DARWIN, reason="Apple targets require Darwin")
+@pytest.mark.integration
+@pytest.mark.usefixtures("apple_accelerate")
 class TestAppleCPUDynamicShapes:
     def test_gemm_accepts_dynamic_K(self):
         @ts.jit(target="apple_cpu")
@@ -84,7 +85,7 @@ class TestAppleCPUDynamicShapes:
         assert out_k16.shape == (4, 16)
 
 
-@pytest.mark.skipif(not _IS_DARWIN, reason="Apple targets require Darwin")
+@pytest.mark.hardware_apple_gpu
 class TestAppleGPUDynamicShapes:
     def test_gemm_accepts_dynamic_K(self):
         @ts.jit(target="apple_gpu")

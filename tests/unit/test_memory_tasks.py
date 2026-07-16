@@ -34,7 +34,7 @@ def test_score_and_soft_read_oracles_are_consistent():
 
 # ── Darwin: grade every (op × bank-size) cell on Metal ───────────────────────
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="memory ops execute on Metal.")
+@pytest.mark.hardware_apple_gpu
 def test_every_memory_cell_grades_pass():
     rng = np.random.default_rng(20260614)
     for name in M.memory_task_names():

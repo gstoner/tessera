@@ -54,15 +54,12 @@ import tessera.apple_gpu_ops as agpu
 
 # ---- Symbol availability -----------------------------------------------
 
+@pytest.mark.hardware_apple_gpu
 def test_conv2d_dev_f32_enc_symbol_resolves():
     fn = bind_symbol(
         "tessera_apple_gpu_conv2d_dev_f32_enc",
         (ctypes.c_void_p,) * 5 + (ctypes.c_int32,) * 14,
         ctypes.c_int32)
-    if fn is None and not session_available():
-        pytest.skip(
-            "encode-session unavailable: "
-            f"{apple_gpu_skip_reason() or 'required symbols unavailable'}")
     assert fn is not None, (
         "tessera_apple_gpu_conv2d_dev_f32_enc not exported by the "
         "runtime — rebuild TesseraAppleRuntime")

@@ -21,10 +21,8 @@ from tessera import _jit_boundary as jb
 from tessera import apple_mlpkg as mp
 from tessera._jit_boundary import GraphFn, TesseraJitError
 
-pytestmark = pytest.mark.skipif(
-    not (agb.is_available() and jb.is_available() and mp.packaged_ml_available()),
-    reason="Apple GPU runtime / libtessera_jit / packaged-ML dispatch unavailable",
-)
+pytestmark = [pytest.mark.hardware_apple_gpu, pytest.mark.integration,
+              pytest.mark.usefixtures("apple_gpu_jit_runtime")]
 
 
 # ── a 2-op graph compiles+dispatches as one package ──────────────────────────

@@ -24,7 +24,7 @@ MM = REPO / "src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtim
 STUB = REPO / "src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime_stub.cpp"
 
 _GPU = agb.is_available() and jb.is_available()
-gpu = pytest.mark.skipif(not _GPU, reason="apple_gpu runtime / libtessera_jit unavailable")
+gpu = pytest.mark.hardware_apple_gpu
 
 _OP = "tessera.lookahead_sparse_attention"
 
@@ -67,7 +67,6 @@ def test_fused_matches_oracle(threshold, window_size):
     np.testing.assert_allclose(np.asarray(out), np.asarray(ref), atol=1e-4)
 
 
-@gpu
 def test_fused_matches_multi_dispatch_fallback(monkeypatch):
     # Forcing the fused symbol to be unavailable selects the bmm + mask-add +
     # softmax + bmm fallback; both paths must agree (same math, fewer dispatches).

@@ -206,9 +206,9 @@ def test_destroyed_pipeline_reports_destroyed_state():
     if not packaged_ml_available():
         pytest.skip(packaged_ml_skip_reason() or "packaged ML unavailable")
     pkg = _find_mtlpackage()
-    if pkg is None:
-        pytest.skip("no .mtlpackage fixture; see "
-                    "test_compile_loads_real_metal_package")
+    from tests._support.apple import require_apple_package_fixture
+
+    require_apple_package_fixture(pkg)
     M = N = K = 4
     pipe = compile_mlpackage(
         pkg, function_name="main",

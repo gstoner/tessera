@@ -237,6 +237,7 @@ def test_matmul_softmax_matmul_target_decision_includes_apple_gpu_on_darwin() ->
         assert report.fallback_reason is not None
 
 
+@pytest.mark.hardware_apple_gpu
 def test_matmul_softmax_matmul_outside_envelope_falls_back_to_reference() -> None:
     """Phase E (2026-05-20) — the fused MSL kernel's documented
     envelope is N + P ≤ 256.  Above that the canonical falls back
@@ -244,8 +245,6 @@ def test_matmul_softmax_matmul_outside_envelope_falls_back_to_reference() -> Non
     explains why.  Verifies the canonical reports the gap honestly
     rather than silently dispatching numpy under the apple_gpu
     label."""
-    if sys.platform != "darwin":
-        pytest.skip("Darwin-only: tests the apple_gpu envelope check")
     from tessera.compiler.fallback import FallbackReason
     # N = 512 is outside the envelope; canonical must report
     # REFERENCE_FORCED with the shape note.

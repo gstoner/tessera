@@ -25,6 +25,7 @@ import pytest
 from tessera import complex as tc
 from tessera.compiler import backend_manifest as bm
 from tessera.compiler import jit_bridge
+from tests._support.apple import assert_native_apple_gpu, assert_reference_cpu
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -118,10 +119,7 @@ def test_runtime_mm_declares_extern_wrapper(symbol) -> None:
 # Cross-platform determinism (Darwin)
 # ---------------------------------------------------------------------------
 
-@pytest.mark.skipif(
-    sys.platform != "darwin",
-    reason="Apple GPU runtime only loadable on macOS",
-)
+@pytest.mark.hardware_apple_gpu
 def test_complex_mul_apple_gpu_matches_reference() -> None:
     rng = np.random.RandomState(0)
     a = (rng.randn(64) + 1j * rng.randn(64)).astype(np.complex64)
@@ -131,10 +129,7 @@ def test_complex_mul_apple_gpu_matches_reference() -> None:
     np.testing.assert_allclose(out, expected, atol=1e-5)
 
 
-@pytest.mark.skipif(
-    sys.platform != "darwin",
-    reason="Apple GPU runtime only loadable on macOS",
-)
+@pytest.mark.hardware_apple_gpu
 def test_complex_exp_apple_gpu_matches_reference() -> None:
     rng = np.random.RandomState(1)
     z = (rng.randn(64) + 1j * rng.randn(64)).astype(np.complex64)
@@ -143,10 +138,7 @@ def test_complex_exp_apple_gpu_matches_reference() -> None:
     np.testing.assert_allclose(out, expected, atol=1e-4)
 
 
-@pytest.mark.skipif(
-    sys.platform != "darwin",
-    reason="Apple GPU runtime only loadable on macOS",
-)
+@pytest.mark.hardware_apple_gpu
 def test_complex_stereographic_apple_gpu_matches_reference() -> None:
     """Sample points on the unit sphere, project via the GPU
     kernel, compare to the numpy reference."""
@@ -164,10 +156,7 @@ def test_complex_stereographic_apple_gpu_matches_reference() -> None:
     np.testing.assert_allclose(out, expected, atol=1e-4)
 
 
-@pytest.mark.skipif(
-    sys.platform != "darwin",
-    reason="Apple GPU runtime only loadable on macOS",
-)
+@pytest.mark.hardware_apple_gpu
 def test_complex_mobius_apple_gpu_matches_reference() -> None:
     """f(z; 1, 2, 0, 3) = (z + 2) / 3 — applied to a batch of
     f32 inputs."""
@@ -184,10 +173,7 @@ def test_complex_mobius_apple_gpu_matches_reference() -> None:
 # Bridge wiring (Darwin) — auto-emit captures the route
 # ---------------------------------------------------------------------------
 
-@pytest.mark.skipif(
-    sys.platform != "darwin",
-    reason="Apple GPU runtime only loadable on macOS",
-)
+@pytest.mark.hardware_apple_gpu
 def test_complex_mul_records_bridge_route() -> None:
     from tessera.compiler import jit_bridge as bridge
     rng = np.random.RandomState(4)
@@ -207,6 +193,52 @@ def test_complex_mul_records_bridge_route() -> None:
     )
 
 
+@pytest.mark.hardware_apple_gpu
+def test_complex_and_conformal_f32_native_routes_match_reference() -> None:
+    """C2 exact-device proof for the four fused interleaved-f32 ABI routes."""
+    from tessera.compiler import jit_bridge as bridge
+
+    rng = np.random.default_rng(20260716)
+    z = (rng.standard_normal(32) + 1j * rng.standard_normal(32)).astype(np.complex64)
+    w = (rng.standard_normal(32) + 1j * rng.standard_normal(32)).astype(np.complex64)
+    points = rng.standard_normal((16, 3)).astype(np.float32)
+    points /= np.linalg.norm(points, axis=-1, keepdims=True)
+    points[points[:, 2] > 0.8, 2] = 0.0
+
+    previous = bridge.tracing_enabled()
+    bridge.set_tracing_enabled(True)
+    bridge.clear_dispatch_trace()
+    try:
+        mul = tc.complex_mul(tc.from_numpy(z), tc.from_numpy(w)).to_numpy()
+        exp = tc.complex_exp(tc.from_numpy(z)).to_numpy()
+        stereo = tc.stereographic(points).to_numpy()
+        mobius = tc.mobius(tc.from_numpy(z), a=1.0, b=2.0, c=0.0, d=3.0).to_numpy()
+        routes = tuple(bridge.take_dispatch_trace())
+    finally:
+        bridge.set_tracing_enabled(previous)
+
+    np.testing.assert_allclose(mul, z * w, rtol=1e-5, atol=1e-5)
+    np.testing.assert_allclose(exp, np.exp(z), rtol=1e-4, atol=1e-4)
+    np.testing.assert_allclose(
+        stereo, (points[:, 0] + 1j * points[:, 1]) / (1.0 - points[:, 2]),
+        rtol=1e-4, atol=1e-4,
+    )
+    np.testing.assert_allclose(mobius, (z + 2.0) / 3.0, rtol=1e-4, atol=1e-4)
+    symbols = {route.symbol for route in routes}
+    assert symbols >= {
+        "tessera_apple_gpu_complex_mul_f32",
+        "tessera_apple_gpu_complex_exp_f32",
+        "tessera_apple_gpu_complex_stereographic_f32",
+        "tessera_apple_gpu_complex_mobius_f32",
+    }
+    assert all(route.target == "apple_gpu" and route.status == "fused" for route in routes)
+    assert_native_apple_gpu({
+        "ok": bool(routes),
+        "execution_kind": "native_gpu",
+        "execution_mode": "metal_runtime",
+    })
+
+
 # ---------------------------------------------------------------------------
 # Numpy fallback on non-Darwin / non-f32 inputs
 # ---------------------------------------------------------------------------
@@ -218,3 +250,19 @@ def test_complex_mul_falls_back_to_numpy_for_non_f32() -> None:
     b = np.array([3.0 + 4j], dtype=np.complex128)
     out = tc.complex_mul(tc.from_numpy(a), tc.from_numpy(b)).to_numpy()
     np.testing.assert_allclose(out, a * b, atol=1e-12)
+
+
+def test_complex_and_conformal_forced_bridge_miss_is_reference_cpu(monkeypatch) -> None:
+    """C2 negative: a fused-ABI miss must not retain a native label."""
+    monkeypatch.setattr(tc, "_try_apple_gpu_complex_op", lambda *_args: False)
+    z = np.array([1.0 + 2.0j, -0.5 + 0.25j], dtype=np.complex64)
+    w = np.array([3.0 - 4.0j, 1.5 + 0.5j], dtype=np.complex64)
+    np.testing.assert_allclose(
+        tc.complex_mul(tc.from_numpy(z), tc.from_numpy(w)).to_numpy(), z * w,
+    )
+    np.testing.assert_allclose(tc.complex_exp(tc.from_numpy(z)).to_numpy(), np.exp(z))
+    np.testing.assert_allclose(
+        tc.mobius(tc.from_numpy(z), a=1.0, b=2.0, c=0.0, d=3.0).to_numpy(),
+        (z + 2.0) / 3.0,
+    )
+    assert_reference_cpu({"ok": True, "execution_kind": "reference_cpu"})

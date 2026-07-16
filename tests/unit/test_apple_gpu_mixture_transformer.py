@@ -38,7 +38,7 @@ def _setup(seq_roles):
     return cfg, r, g, x
 
 
-@pytest.mark.skipif(not DARWIN, reason="metal_runtime dispatch is Darwin-only")
+@pytest.mark.hardware_apple_gpu
 @pytest.mark.parametrize("roles", [
     [0, 0, 0, 1, 1],
     [0, 0, 1, 1, 1, 1],

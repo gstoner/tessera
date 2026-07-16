@@ -27,10 +27,7 @@ import pytest
 # Skip the GPU-dispatch assertions cleanly on non-Darwin hosts — the
 # manifest resolution and trace bookkeeping still work without a GPU
 # (the bridge just won't actually dispatch).
-darwin_only = pytest.mark.skipif(
-    sys.platform != "darwin",
-    reason="Apple GPU runtime only loadable on macOS",
-)
+darwin_only = pytest.mark.hardware_apple_gpu
 
 from tessera.compiler import jit_bridge as bridge  # noqa: E402
 from tessera.compiler import backend_manifest as bm  # noqa: E402

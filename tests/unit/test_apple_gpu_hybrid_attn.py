@@ -17,7 +17,7 @@ from tessera.compiler import driver as _driver
 
 R = _runtime
 _GPU = agb.is_available() and jb.is_available()
-gpu = pytest.mark.skipif(not _GPU, reason="apple_gpu runtime / libtessera_jit unavailable")
+gpu = pytest.mark.hardware_apple_gpu
 
 _B, _H, _S, _D = 2, 3, 12, 12
 
@@ -58,7 +58,6 @@ def test_hybrid_attention(kw):
     np.testing.assert_allclose(np.asarray(out), np.asarray(ref), rtol=1e-3, atol=1e-3)
 
 
-@gpu
 def test_return_state_falls_back():
     d = _inputs(1)
     assert R._apple_gpu_dispatch_hybrid_attn(

@@ -91,9 +91,10 @@ def test_jit_slice_is_native_gpu():
     assert f.execution_kind == "native_gpu"
 
 
-@pytest.mark.skipif(not DARWIN, reason="GPU-residency check requires Metal (Darwin)")
+@pytest.mark.hardware_apple_gpu
 def test_slice_runs_on_metal_no_fallback():
     from tessera.compiler import apple_gpu_coverage as cov
+    from tests._support.apple import assert_native_apple_jit
 
     @ts.jit(target="apple_gpu")
     def f(x):
@@ -101,12 +102,14 @@ def test_slice_runs_on_metal_no_fallback():
 
     x = _RNG.standard_normal((4, 6)).astype(np.float32)
     assert cov.fallback_histogram(lambda: f(x)) == {}
+    assert_native_apple_jit(f)
 
 
-@pytest.mark.skipif(not DARWIN, reason="GPU-residency check requires Metal (Darwin)")
+@pytest.mark.hardware_apple_gpu
 def test_slice_compounds_with_matmul_per_op_metal():
     """matmul -> slice: windowing a matmul output keeps the chain GPU-resident."""
     from tessera.compiler import apple_gpu_coverage as cov
+    from tests._support.apple import assert_native_apple_jit
 
     @ts.jit(target="apple_gpu")
     def chain(a, b):
@@ -118,3 +121,4 @@ def test_slice_compounds_with_matmul_per_op_metal():
     np.testing.assert_allclose(out, (a @ b)[0:2, 1:4], rtol=1e-4, atol=1e-4)
     assert chain.execution_kind == "native_gpu"
     assert cov.fallback_histogram(lambda: chain(a, b)) == {}
+    assert_native_apple_jit(chain)

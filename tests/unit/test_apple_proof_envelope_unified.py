@@ -23,8 +23,7 @@ from dataclasses import fields
 
 import pytest
 
-if sys.platform != "darwin":
-    pytest.skip("Apple GPU runtime only on Darwin", allow_module_level=True)
+pytestmark = pytest.mark.hardware_apple_gpu
 
 
 # Fields we expect on every JitBridgeRoute, regardless of lane.

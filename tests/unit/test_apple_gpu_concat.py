@@ -89,9 +89,10 @@ def test_jit_concat_is_native_gpu():
     assert f.execution_kind == "native_gpu"
 
 
-@pytest.mark.skipif(not DARWIN, reason="GPU-residency check requires Metal (Darwin)")
+@pytest.mark.hardware_apple_gpu
 def test_concat_runs_on_metal_no_fallback():
     from tessera.compiler import apple_gpu_coverage as cov
+    from tests._support.apple import assert_native_apple_jit
 
     @ts.jit(target="apple_gpu")
     def f(a, b):
@@ -100,12 +101,14 @@ def test_concat_runs_on_metal_no_fallback():
     a = _RNG.standard_normal((2, 8)).astype(np.float32)
     b = _RNG.standard_normal((3, 8)).astype(np.float32)
     assert cov.fallback_histogram(lambda: f(a, b)) == {}
+    assert_native_apple_jit(f)
 
 
-@pytest.mark.skipif(not DARWIN, reason="GPU-residency check requires Metal (Darwin)")
+@pytest.mark.hardware_apple_gpu
 def test_concat_compounds_with_matmul_per_op_metal():
     """matmul -> cat: the data-mover mid-program keeps the chain GPU-resident."""
     from tessera.compiler import apple_gpu_coverage as cov
+    from tests._support.apple import assert_native_apple_jit
 
     @ts.jit(target="apple_gpu")
     def chain(x, w, tail):
@@ -118,3 +121,4 @@ def test_concat_compounds_with_matmul_per_op_metal():
     np.testing.assert_allclose(out, np.concatenate([x @ w, tail], 0), rtol=1e-4, atol=1e-4)
     assert chain.execution_kind == "native_gpu"
     assert cov.fallback_histogram(lambda: chain(x, w, tail)) == {}
+    assert_native_apple_jit(chain)

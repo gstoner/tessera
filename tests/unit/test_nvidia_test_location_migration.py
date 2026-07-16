@@ -30,7 +30,7 @@ def test_nvidia_moe_transport_node_migration_has_no_old_file_duplicate():
     data = json.loads(MIGRATIONS.read_text(encoding="utf-8"))
     mappings = _expanded_mappings(data)
     assert data["migration"] == "NVIDIA-TEST-6-HIGH"
-    assert len(mappings) == 286
+    assert len(mappings) == 292
     for new_node in mappings.values():
         assert _node_path(new_node).is_file(), new_node
     assert len(set(mappings.values())) == len(mappings)

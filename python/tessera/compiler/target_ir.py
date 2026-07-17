@@ -1446,6 +1446,16 @@ def _lower_nvidia_op(op: TileOp, *, target_kind: str) -> list[TargetOp]:
             }
             requested = str(op.attrs.get(
                 "dtype_ab", op.attrs.get("dtype", "bf16"))).lower()
+            if requested in {"f32", "float32", "fp32"}:
+                # Graph/Tile f32 is an exact-storage contract.  It must not be
+                # silently reinterpreted as TF32 merely because SM120 has a
+                # tensor-core TF32 fragment.  Retain an explicit scalar CUDA
+                # artifact until a separately requested TF32 contract exists.
+                return [TargetOp("tessera_nvidia.cuda_kernel", {
+                    **base, "arch": arch, "kernel": "matmul_f32_contract",
+                    "dtype_ab": "f32", "dtype_c": "f32",
+                    "tensor_core": False, "status": "artifact_only",
+                })]
             dtype = aliases.get(requested)
             if dtype is None:
                 raise ValueError(

@@ -146,7 +146,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `backend/nvidia/VERIFY_TARGET_IR_TAIL.md` | - | 2026-07-13 | 3 | ✓ |
 | `backend/nvidia/spikes/sm120_mma_sync/README.md` | - | 2026-06-24 | 22 | ✓ |
 | `backend/nvidia/todo.md` | - | 2026-07-16 | 0 | ✓ |
-| `backend/rocm/ROCM_AUDIT.md` | - | 2026-07-14 | 2 | ✓ |
+| `backend/rocm/ROCM_AUDIT.md` | - | 2026-07-16 | 0 | ✓ |
 | `backend/rocm/ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md` | - | 2026-07-13 | 3 | ✓ |
 | `backend/rocm/STRIX_HALO_EXECUTION_PLAN.md` | - | 2026-06-23 | 23 | ✓ |
 | `backend/rocm/todo.md` | - | 2026-07-16 | 0 | ✓ |

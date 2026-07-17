@@ -226,6 +226,22 @@ def test_lower_tile_to_nvidia_sm120_selects_dtype_specific_mma_contract(
     assert f'dtype_c = "{dtype_c}"' in text
 
 
+def test_lower_tile_to_nvidia_sm120_keeps_f32_exact_not_implicit_tf32():
+    tile = TileIRModule(functions=[TileFunction(
+        "main", body=[TileOp("tile.mma", {
+            "source": "tessera.matmul", "result": "C", "ordinal": 0,
+            "dtype": "f32"})], target="nvidia_sm120")])
+    target = lower_tile_to_target_ir(tile, target_kind="nvidia_sm120")
+    assert target.verify().ok
+    text = target.to_mlir()
+    assert "tessera_nvidia.cuda_kernel" in text
+    assert 'kernel = "matmul_f32_contract"' in text
+    assert 'dtype_ab = "f32"' in text
+    assert "tensor_core = false" in text
+    assert "tessera_nvidia.mma_sync" not in text
+    assert 'dtype_ab = "tf32"' not in text
+
+
 def test_lower_tile_to_nvidia_sm120_nvfp4_requires_and_preserves_scales():
     attrs = {"source": "tessera.matmul", "result": "C", "ordinal": 0,
              "dtype": "nvfp4", "scale_a": "SFa", "scale_b": "SFb"}

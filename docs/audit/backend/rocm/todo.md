@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-16
+last_updated: 2026-07-17
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
@@ -68,6 +68,13 @@ preserved while completing this queue:
   NVFP4 block-scaled matrix instruction. ROCm retains its named unsupported
   capability result; NVIDIA nibble packing and scale-selector lane maps are not
   transferred.
+- Cross-backend sync `PR420-REVIEW-2026-07-17`: the NVFP4 scale-origin repair
+  and canonical `fp16` selector alias are NVIDIA-only and do not change ROCm
+  fragment layouts, dtype support, runtime ABI, or exact-device evidence. The
+  shared Ubuntu bootstrap now installs `ca-certificates`, `wget`, and `gnupg`
+  before probing apt.llvm.org and removes only its version-owned stale source
+  file before the prerequisite update. This is parity validated as setup
+  infrastructure; it does not transfer CUDA schedules or make a new gfx claim.
 
 ## LLVM/MLIR 23 and ROCm 7.14 transition evidence
 

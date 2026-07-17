@@ -1437,7 +1437,7 @@ def _lower_nvidia_op(op: TileOp, *, target_kind: str) -> list[TargetOp]:
             # gpu_target._CUDA_13_3_FEATURES[ISA.SM_120]: wgmma/tcgen05/tmem =
             # not_supported; tma/mbarrier/block_scaled_mma = ready.
             aliases = {
-                "float16": "f16", "f16": "f16",
+                "float16": "f16", "fp16": "f16", "f16": "f16",
                 "bfloat16": "bf16", "bf16": "bf16",
                 "tf32": "tf32", "fp8_e4m3": "e4m3", "e4m3": "e4m3",
                 "fp8_e5m2": "e5m2", "e5m2": "e5m2",

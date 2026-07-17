@@ -3,7 +3,7 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-07-16
+last_updated: 2026-07-17
 ---
 
 # Apple compiler, exact-device, and performance plan
@@ -328,6 +328,12 @@ MSL/Metal 4 schedules. NVIDIA now validates the complete 43-case supported
 execution matrix, but that CUDA result does not transfer: APPLE-EPILOGUE-1 must
 validate the same semantic order, dtype matrix, residual guards, and diagnostics
 on its exact Metal host before claiming parity.
+
+Cross-backend sync `PR420-REVIEW-2026-07-17`: not applicable to Apple compiler
+or runtime behavior. The scale-origin repair and canonical `fp16` alias are
+confined to the SM120 NVIDIA fragment materializer/selector, and the bootstrap
+ordering repair is confined to Ubuntu apt.llvm.org setup. No Apple IR, Metal
+layout, dtype support, ABI, schedule, or exact-device claim changes.
 
 After the first Apple-host collection, replace the provisional marker count
 with the migrated exact-device totals and append a failure table by execution

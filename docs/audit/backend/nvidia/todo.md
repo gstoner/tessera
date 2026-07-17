@@ -3,7 +3,7 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-07-16
+last_updated: 2026-07-17
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
@@ -405,7 +405,7 @@ relaxation.
 
 The final static audit finds no `hardware_nvidia` test function under
 `tests/unit`; structural marker/release assertions remain host-free. The
-expanded map contains 292 relocations plus 22 post-migration nodes. The final
+expanded map contains 292 relocations plus 23 post-migration nodes. The final
 four-layer proof is 20/20 compiler lit, 313/313 exact-device correctness twice,
 and 20/20 serial performance on the RTX 5070 Ti. This closes the migration;
 future native tests must land directly in device, integration, or performance
@@ -414,7 +414,7 @@ roots and satisfy the same AST/node-map ratchets.
 ## Canonical commands on the NVIDIA box
 
 ```bash
-# 0. State/collection contract (currently 333 nodes)
+# 0. State/collection contract (currently 334 nodes)
 python3 -m pytest tests/unit tests/device/nvidia tests/performance/nvidia tests/integration \
   -m hardware_nvidia --collect-only -q --no-header
 
@@ -613,6 +613,17 @@ Cross-backend sync `NVFP4-TILE-SCALES-2026-07-16` changes the shared typed Tile
 operand contract only. NVIDIA supplies exact-device materialization evidence;
 Apple and ROCm do not inherit its physical schedule and record their outcomes
 in their own plans.
+
+Cross-backend sync `PR420-REVIEW-2026-07-17` corrects the NVIDIA-owned NVFP4
+scale materializer to apply both `tile.view` origins using the declared
+row-major A-scale and column-major B-scale layouts. A live `sm_120a` fixture
+selects nonzero A-row and B-column scale tiles and matches the NumPy oracle;
+the NVIDIA compiler lit suite passes 21/21. The SM120 Target IR selector also
+accepts canonical `fp16` as the existing f16 fragment contract. This is a
+correctness/dispatch repair only: no physical fragment, resource record,
+timing row, or production selector changes. The same sync makes Ubuntu LLVM
+repository setup install its probe prerequisites before first use; sibling
+backend outcomes are recorded in their plans.
 
 The first focused CUDA parity proof on the NVIDIA box is:
 

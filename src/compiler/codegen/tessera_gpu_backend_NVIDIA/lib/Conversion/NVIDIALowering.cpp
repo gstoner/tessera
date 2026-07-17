@@ -719,10 +719,15 @@ static FailureOr<Value> materializeSm120NVFP4ScalePack(
     return failure();
   }
   Value base = view.getInputs()[0];
+  Value rowOrigin = view.getInputs()[1];
+  Value colOrigin = view.getInputs()[2];
   auto pointerType = dyn_cast<LLVM::LLVMPointerType>(base.getType());
   if (!pointerType ||
-      (pointerType.getAddressSpace() != 0 && pointerType.getAddressSpace() != 1)) {
-    op->emitError("NVFP4 scale view requires a global-memory LLVM pointer");
+      (pointerType.getAddressSpace() != 0 && pointerType.getAddressSpace() != 1) ||
+      !rowOrigin.getType().isInteger(64) ||
+      !colOrigin.getType().isInteger(64)) {
+    op->emitError("NVFP4 scale view requires a global-memory LLVM pointer and "
+                  "i64 origins");
     return failure();
   }
 
@@ -741,14 +746,21 @@ static FailureOr<Value> materializeSm120NVFP4ScalePack(
         builder, loc, isUpper, addI64(builder, loc, gid,
                                      i64Constant(builder, loc, 8)), gid);
   }
-  Value linear = role.getValue() == "scale_a"
-      ? mulI64(builder, loc, scaleRow, i64Constant(builder, loc, 4))
-      : mulI64(builder, loc, gid, i64Constant(builder, loc, 4));
+  Value row = role.getValue() == "scale_a"
+      ? addI64(builder, loc, rowOrigin, scaleRow)
+      : rowOrigin;
+  Value col = role.getValue() == "scale_a"
+      ? colOrigin
+      : addI64(builder, loc, colOrigin, gid);
+  Value leadingDim = i64Constant(builder, loc, memory.getLeadingDim());
+  Value linear = memory.getOrder() == "row_major"
+      ? addI64(builder, loc, mulI64(builder, loc, row, leadingDim), col)
+      : addI64(builder, loc, mulI64(builder, loc, col, leadingDim), row);
   Value ptr = LLVM::GEPOp::create(builder, loc, base.getType(),
                                   builder.getI8Type(), base,
                                   ValueRange{linear});
   Value loaded = LLVM::LoadOp::create(builder, loc, builder.getI32Type(), ptr,
-                                      /*alignment=*/4);
+                                      /*alignment=*/1);
   return arith::SelectOp::create(builder, loc, activeTig, loaded, zero32)
       .getResult();
 }

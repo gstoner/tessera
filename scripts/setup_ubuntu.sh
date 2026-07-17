@@ -87,9 +87,30 @@ configure_llvm_repo() {
   echo "  apt suite: ${suite}"
 }
 
+install_llvm_repo_prerequisites() {
+  local list=/etc/apt/sources.list.d/llvm-${LLVM_VERSION}.list
+
+  if [[ $DO_APT -eq 0 ]]; then
+    command -v wget >/dev/null 2>&1 \
+      || die "--no-apt requires wget before configuring apt.llvm.org"
+    command -v gpg >/dev/null 2>&1 \
+      || die "--no-apt requires gpg before configuring apt.llvm.org"
+    return
+  fi
+
+  # A malformed or stale LLVM source prevents even the prerequisite apt update.
+  # Remove only the version-owned file; configure_llvm_repo recreates it below.
+  $SUDO rm -f "$list"
+  $SUDO apt-get update -y
+  $SUDO apt-get install -y --no-install-recommends \
+    ca-certificates wget gnupg
+}
+
 # Repair/configure the LLVM source before the first apt update. This matters
 # when a previous failed attempt left an invalid source in llvm-23.list.
 if [[ $DO_LLVM -eq 1 && ! -x "${LLVM_PREFIX}/bin/mlir-tblgen" ]]; then
+  say "Installing apt.llvm.org prerequisites"
+  install_llvm_repo_prerequisites
   say "Configuring LLVM/MLIR ${LLVM_VERSION} apt source (codename: ${CODENAME})"
   configure_llvm_repo
 fi

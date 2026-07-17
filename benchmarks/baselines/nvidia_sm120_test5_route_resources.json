@@ -16,6 +16,10 @@
     {
       "name": "nvidia_sm120_emitted_gemm_resources.ncu-rep",
       "sha256": "8aa171ac0eb9faf389ffe0fbab0c7ce94930b36b4fdb9bd13dff2595529290b4"
+    },
+    {
+      "name": "nvidia-sm120-generic-fused-resources.ncu-rep",
+      "sha256": "b103c363615a1a7b57aac346444cf7110a80f351d14d67c36a9929ae6686bbed"
     }
   ],
   "routes": {
@@ -30,6 +34,9 @@
     ],
     "nvidia_mma_gemm_emitted": [
       "sha256:19d6aa2e02ae89b366e8de98129d3745643150ed6c2e307a0af42bb6bdcb32f5"
+    ],
+    "nvidia_generic_cuda": [
+      "sha256:566757e4f8e0768b441c9cdeaa910385f777a094254cb2180212ae3b24d8accd"
     ],
     "nvidia_mma_fused": [
       "sha256:ec6a0379e976a6b3a99d5878c88b7d8566ba4d87d67d4f8bfaadf93c68d32712"
@@ -158,6 +165,25 @@
         "spill_evidence_complete": true,
         "spills_detected": false,
         "resource_fingerprint": "sha256:19d6aa2e02ae89b366e8de98129d3745643150ed6c2e307a0af42bb6bdcb32f5"
+      }
+    ],
+    "nvidia_generic_cuda": [
+      {
+        "kernel": "tessera_nvidia_fused_kernel(const float *, const float *, const float *, const float *, float *, int, int, int)",
+        "launches": 1,
+        "cc": "12.0",
+        "block_size": "(64, 1, 1)",
+        "grid_size": "(4, 1, 1)",
+        "registers_per_thread": 40,
+        "static_shared_memory_bytes": 0,
+        "dynamic_shared_memory_bytes": 0,
+        "theoretical_occupancy_pct": 100,
+        "achieved_occupancy_pct": 4.18,
+        "local_spill_requests": 0,
+        "shared_spill_requests": 0,
+        "spill_evidence_complete": true,
+        "spills_detected": false,
+        "resource_fingerprint": "sha256:566757e4f8e0768b441c9cdeaa910385f777a094254cb2180212ae3b24d8accd"
       }
     ],
     "nvidia_mma_fused": [

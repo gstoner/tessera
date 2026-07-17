@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from _nvidia_testutil import require_nvidia_mma_runtime
+from tests._support.nvidia import require_nvidia_mma_runtime
 
 
 def _artifact(bias: bool, **kwargs):

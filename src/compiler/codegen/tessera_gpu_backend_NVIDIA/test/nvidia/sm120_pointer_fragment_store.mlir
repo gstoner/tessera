@@ -1,4 +1,5 @@
 // RUN: %tnv --lower-tile-to-nvidia='sm=120' --lower-tessera-nvidia-to-nvvm %s | FileCheck %s
+// RUN: %tnv --lower-tile-to-nvidia='sm=120' %s | FileCheck %s --check-prefix=ABI
 //
 // Complete compiler path for one m16n8k16 f16 tile with f32 accumulation:
 // pointer-backed A/B loads, real MMA, accumulator unpack, row-major D stores.
@@ -56,3 +57,9 @@ module {
 // CHECK-NEXT: llvm.store
 // CHECK-NOT: tile.fragment
 // CHECK-NOT: tile.store
+
+// ABI: tessera_nvidia.mma_sync
+// ABI-SAME: a_registers_per_lane = 4
+// ABI-SAME: accumulator_registers_per_lane = 4
+// ABI-SAME: b_registers_per_lane = 2
+// ABI-SAME: instruction_family = "mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32"

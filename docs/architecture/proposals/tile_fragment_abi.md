@@ -49,8 +49,10 @@ is owned by the participating threads; it is not a promise about a pointer,
 vector width, or register order.  `!tile.fragment` is deliberately opaque to
 generic Tile passes.  In the first implementation its role and descriptor are
 carried by its defining operation, rather than type parameters, so generic
-passes cannot accidentally reconstruct a vendor register ABI.  Its role is
-`a`, `b`, or `acc`; its descriptor determines the compatible MMA instruction
+passes cannot accidentally reconstruct a vendor register ABI. Its role is
+`a`, `b`, or `acc`; block-scaled descriptors may additionally use `scale_a`
+and `scale_b`. Scale fragments are logical scale tiles, never packed vendor
+selector registers. Its descriptor determines the compatible MMA instruction
 family.
 
 `#tile.mma_desc` is target-neutral at construction time (`family = auto`).
@@ -104,8 +106,9 @@ op is a no-op conversion: both have a defined logical element mapping and must
 be lowered or rejected.
 
 The existing permissive `tile.mma` form stays accepted during migration.  The
-typed three-fragment form is the only form eligible for hardware MMA lowering;
-the legacy form remains an abstract/value-lane carrier.
+typed three-fragment form is eligible for ordinary hardware MMA lowering.
+NVFP4 uses the verifier-checked five-fragment form `(A, B, accumulator,
+scale_a, scale_b)`; the legacy form remains an abstract/value-lane carrier.
 
 ## Implemented first slice
 
@@ -116,8 +119,12 @@ Their structural verifiers enforce role/descriptor
 agreement through `tile.mma`, require a logical layout at view/unpack
 boundaries, and retain legacy untyped `tile.mma` compatibility.
 
-The NVIDIA backend now materializes the first exact physical slice:
-`sm_120` `m16n8k16.row.col` f16 or bf16 with pointer-backed A/B views and a
+The NVIDIA backend now materializes exact `sm_120` f16, bf16, TF32, FP8,
+int8, and block-scaled NVFP4 slices. NVFP4 consumes nibble-packed logical
+`16x64`/`64x8` matrices plus logical UE4M3 `16x4`/`4x8` scale views; only the
+NVIDIA lowering maps them to four A registers, two B registers, per-lane scale
+selectors, and `mma.sync...mxf4nvf4.block_scale`. The ordinary f16/bf16 path
+uses pointer-backed A/B views and a
 portable `tile.fragment_zero` f32 accumulator. It emits four A and two B
 registers using the tested lane map (`vector<2xf16>` for f16; packed `i32` for
 bf16, with the bitcast owned by the backend), reaches the real NVVM MMA op,
@@ -149,8 +156,9 @@ Fixtures:
 
 ## Required verifier invariants
 
-- The three fragments used by `tile.mma` have the same resolved MMA descriptor.
-- Roles are exactly A, B, accumulator; output is an accumulator fragment.
+- All fragments used by `tile.mma` have the same resolved MMA descriptor.
+- Ordinary roles are exactly A, B, accumulator. Block-scaled NVFP4 additionally
+  requires scale-A and scale-B; output is always an accumulator fragment.
 - Fragment element types and logical extents match the descriptor.  An
   accumulator conversion is explicit; it is never inferred from a vector type.
 - The source tile layout covers each required logical element once, except where
@@ -250,6 +258,17 @@ ReLU/GELU/SiLU, and f32-to-f16 conversion reuse the accumulator mapping
 immediately before stores. NVIDIA and ROCm call the same inline Tile activation
 emitter; address-space-specific bias loads and masked stores remain backend
 owned.
+
+### Shared epilogue order and rejection contract
+
+The backend-neutral `FusedRegion` oracle defines the semantic order as f32
+accumulation, the authored pointwise epilogue chain (including at most one
+per-column bias), optional full-shape residual addition, then any terminal row
+reduction. Storage rounding occurs at the operand ABI; it does not change the
+accumulator or reorder bias, activation, and residual. Missing bias/residual
+operands and unsupported dtype/op/order combinations fail with registered
+`E_FUSED_EPILOGUE_*` diagnostics. A backend may decline a physical fusion, but
+must report a non-fused execution route rather than label it native fused work.
 
 Kernel-only measurements on the RTX 5070 Ti show why both paths remain useful:
 the staged path is slower at 256/512 square GEMMs, but is 1.20x faster at 1024³

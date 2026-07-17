@@ -549,10 +549,16 @@ LogicalResult FragmentPackOp::verify() {
     return emitOpError("expects exactly one !tile.tile input");
   auto role = getOperation()->getAttrOfType<StringAttr>("role");
   if (!role || (role.getValue() != "a" && role.getValue() != "b" &&
-                role.getValue() != "acc"))
-    return emitOpError("requires role = a, b, or acc");
-  if (!mmaDescAttr(getOperation()))
+                role.getValue() != "acc" && role.getValue() != "scale_a" &&
+                role.getValue() != "scale_b"))
+    return emitOpError("requires role = a, b, acc, scale_a, or scale_b");
+  auto desc = mmaDescAttr(getOperation());
+  if (!desc)
     return emitOpError("requires a #tile.mma_desc mma attribute");
+  bool isScale = role.getValue() == "scale_a" || role.getValue() == "scale_b";
+  bool isNVFP4 = desc.getAType() == "nvfp4" || desc.getAType() == "fp4_e2m1";
+  if (isScale && !isNVFP4)
+    return emitOpError("scale fragments require an NVFP4 MMA descriptor");
   return success();
 }
 
@@ -573,13 +579,16 @@ LogicalResult MMAOp::verify() {
   });
   if (!hasFragment)
     return success();
-  if (getInputs().size() != 3 || getOutputs().size() != 1 ||
-      !isa<FragmentType>(getOutputs().front().getType()))
-    return emitOpError(
-        "typed fragment form expects A, B, accumulator -> !tile.fragment");
   auto desc = mmaDescAttr(getOperation());
   if (!desc)
     return emitOpError("typed fragment form requires a #tile.mma_desc mma attribute");
+  bool isNVFP4 = desc.getAType() == "nvfp4" || desc.getAType() == "fp4_e2m1";
+  unsigned expectedInputs = isNVFP4 ? 5 : 3;
+  if (getInputs().size() != expectedInputs || getOutputs().size() != 1 ||
+      !isa<FragmentType>(getOutputs().front().getType()))
+    return emitOpError(isNVFP4
+        ? "typed NVFP4 fragment form expects A, B, accumulator, scale_a, scale_b -> !tile.fragment"
+        : "typed fragment form expects A, B, accumulator -> !tile.fragment");
   if (failed(requireFragmentProducer(getOperation(), getInputs()[0], "a", desc)) ||
       failed(requireFragmentProducer(getOperation(), getInputs()[1], "b", desc)))
     return failure();
@@ -592,6 +601,12 @@ LogicalResult MMAOp::verify() {
   auto role = accProducer->getAttrOfType<StringAttr>("role");
   if (role && role.getValue() != "acc")
     return emitOpError("accumulator fragment must have role acc");
+  if (isNVFP4 &&
+      (failed(requireFragmentProducer(getOperation(), getInputs()[3],
+                                      "scale_a", desc)) ||
+       failed(requireFragmentProducer(getOperation(), getInputs()[4],
+                                      "scale_b", desc))))
+    return failure();
   return success();
 }
 

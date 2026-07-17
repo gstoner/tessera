@@ -1,0 +1,399 @@
+{
+  "schema": "tessera.nvidia.attention-forward-schedules.v1",
+  "device": "NVIDIA GeForce RTX 5070 Ti, GPU-5072cda5-509a-008c-93c8-dc06e105f307, 12.0, 610.62",
+  "noise_policy": 0.03,
+  "rows": [
+    {
+      "case": "mha_512",
+      "shape": [
+        1,
+        8,
+        512,
+        512,
+        128
+      ],
+      "dtype": "f32",
+      "candidate": "warp_per_query_w4",
+      "warps_per_cta": 4,
+      "runs": [
+        {
+          "run": 1,
+          "device_event_ms": 0.7399328351020813,
+          "end_to_end_ms": 2.9188344997237436,
+          "max_abs_error": 5.4016709327697754e-08
+        },
+        {
+          "run": 2,
+          "device_event_ms": 0.7436166405677795,
+          "end_to_end_ms": 2.7249209979345324,
+          "max_abs_error": 5.4016709327697754e-08
+        }
+      ],
+      "stable": false,
+      "device_stable": true,
+      "end_to_end_stable": false,
+      "device_winner_consensus": true,
+      "end_to_end_winner_consensus": true,
+      "traffic_bytes": 8388608,
+      "resource": {
+        "kernel": "tessera_nvidia_flash_attn_fwd_w4_kernel",
+        "schedule": "warp_per_query_w4",
+        "registers_per_thread": 56,
+        "stack_bytes": 0,
+        "static_shared_memory_bytes": 0,
+        "local_bytes": 0,
+        "block_threads": 128,
+        "max_active_blocks_per_sm": 9,
+        "theoretical_occupancy_pct": 75.0,
+        "sass_instruction_families": [],
+        "spill_evidence_complete": true,
+        "spills_detected": false,
+        "resource_fingerprint": "sha256:e252f306d85bcaed1c5774da75d4c362a2dae2aa127bf02c78c50455fb22548e",
+        "cubin_sha256": "9930d2c4804598e582770a10c28146854c54bc92e9b8f6c605265f65aac90947"
+      }
+    },
+    {
+      "case": "mha_512",
+      "shape": [
+        1,
+        8,
+        512,
+        512,
+        128
+      ],
+      "dtype": "f32",
+      "candidate": "warp_per_query_w8",
+      "warps_per_cta": 8,
+      "runs": [
+        {
+          "run": 1,
+          "device_event_ms": 0.7779594659805298,
+          "end_to_end_ms": 2.973532500618603,
+          "max_abs_error": 5.4016709327697754e-08
+        },
+        {
+          "run": 2,
+          "device_event_ms": 0.7840564250946045,
+          "end_to_end_ms": 2.7957575002801605,
+          "max_abs_error": 5.4016709327697754e-08
+        }
+      ],
+      "stable": false,
+      "device_stable": true,
+      "end_to_end_stable": false,
+      "device_winner_consensus": false,
+      "end_to_end_winner_consensus": false,
+      "traffic_bytes": 8388608,
+      "resource": {
+        "kernel": "tessera_nvidia_flash_attn_fwd_w8_kernel",
+        "schedule": "warp_per_query_w8",
+        "registers_per_thread": 56,
+        "stack_bytes": 0,
+        "static_shared_memory_bytes": 0,
+        "local_bytes": 0,
+        "block_threads": 256,
+        "max_active_blocks_per_sm": 4,
+        "theoretical_occupancy_pct": 66.6667,
+        "sass_instruction_families": [],
+        "spill_evidence_complete": true,
+        "spills_detected": false,
+        "resource_fingerprint": "sha256:308d9c99ee8747035e6af7126588e89a8effe27bbcbabcefa23f2618c3cec46a",
+        "cubin_sha256": "af4d75634b8c1b66d19173d98c51191626313c5a831313f2efcbd34bb9846129"
+      }
+    },
+    {
+      "case": "causal_ragged_1009",
+      "shape": [
+        1,
+        8,
+        1009,
+        1009,
+        128
+      ],
+      "dtype": "f32",
+      "candidate": "warp_per_query_w4",
+      "warps_per_cta": 4,
+      "runs": [
+        {
+          "run": 1,
+          "device_event_ms": 1.6923859119415283,
+          "end_to_end_ms": 4.4341725024423795,
+          "max_abs_error": 6.705522537231445e-08
+        },
+        {
+          "run": 2,
+          "device_event_ms": 1.6941219568252563,
+          "end_to_end_ms": 4.387274500913918,
+          "max_abs_error": 6.705522537231445e-08
+        }
+      ],
+      "stable": true,
+      "device_stable": true,
+      "end_to_end_stable": true,
+      "device_winner_consensus": true,
+      "end_to_end_winner_consensus": true,
+      "traffic_bytes": 16531456,
+      "resource": {
+        "kernel": "tessera_nvidia_flash_attn_fwd_w4_kernel",
+        "schedule": "warp_per_query_w4",
+        "registers_per_thread": 56,
+        "stack_bytes": 0,
+        "static_shared_memory_bytes": 0,
+        "local_bytes": 0,
+        "block_threads": 128,
+        "max_active_blocks_per_sm": 9,
+        "theoretical_occupancy_pct": 75.0,
+        "sass_instruction_families": [],
+        "spill_evidence_complete": true,
+        "spills_detected": false,
+        "resource_fingerprint": "sha256:e252f306d85bcaed1c5774da75d4c362a2dae2aa127bf02c78c50455fb22548e",
+        "cubin_sha256": "9930d2c4804598e582770a10c28146854c54bc92e9b8f6c605265f65aac90947"
+      }
+    },
+    {
+      "case": "causal_ragged_1009",
+      "shape": [
+        1,
+        8,
+        1009,
+        1009,
+        128
+      ],
+      "dtype": "f32",
+      "candidate": "warp_per_query_w8",
+      "warps_per_cta": 8,
+      "runs": [
+        {
+          "run": 1,
+          "device_event_ms": 1.8655271530151367,
+          "end_to_end_ms": 4.509377999056596,
+          "max_abs_error": 6.705522537231445e-08
+        },
+        {
+          "run": 2,
+          "device_event_ms": 1.846364140510559,
+          "end_to_end_ms": 4.584510001222952,
+          "max_abs_error": 6.705522537231445e-08
+        }
+      ],
+      "stable": true,
+      "device_stable": true,
+      "end_to_end_stable": true,
+      "device_winner_consensus": false,
+      "end_to_end_winner_consensus": false,
+      "traffic_bytes": 16531456,
+      "resource": {
+        "kernel": "tessera_nvidia_flash_attn_fwd_w8_kernel",
+        "schedule": "warp_per_query_w8",
+        "registers_per_thread": 56,
+        "stack_bytes": 0,
+        "static_shared_memory_bytes": 0,
+        "local_bytes": 0,
+        "block_threads": 256,
+        "max_active_blocks_per_sm": 4,
+        "theoretical_occupancy_pct": 66.6667,
+        "sass_instruction_families": [],
+        "spill_evidence_complete": true,
+        "spills_detected": false,
+        "resource_fingerprint": "sha256:308d9c99ee8747035e6af7126588e89a8effe27bbcbabcefa23f2618c3cec46a",
+        "cubin_sha256": "af4d75634b8c1b66d19173d98c51191626313c5a831313f2efcbd34bb9846129"
+      }
+    },
+    {
+      "case": "gqa_window_ragged",
+      "shape": [
+        1,
+        8,
+        257,
+        509,
+        128
+      ],
+      "dtype": "f32",
+      "candidate": "warp_per_query_w4",
+      "warps_per_cta": 4,
+      "runs": [
+        {
+          "run": 1,
+          "device_event_ms": 0.12287818640470505,
+          "end_to_end_ms": 1.2249715000507422,
+          "max_abs_error": 5.960464477539063e-08
+        },
+        {
+          "run": 2,
+          "device_event_ms": 0.12413589656352997,
+          "end_to_end_ms": 1.0820955012604827,
+          "max_abs_error": 5.960464477539063e-08
+        }
+      ],
+      "stable": false,
+      "device_stable": true,
+      "end_to_end_stable": false,
+      "device_winner_consensus": true,
+      "end_to_end_winner_consensus": true,
+      "traffic_bytes": 3147776,
+      "resource": {
+        "kernel": "tessera_nvidia_flash_attn_fwd_w4_kernel",
+        "schedule": "warp_per_query_w4",
+        "registers_per_thread": 56,
+        "stack_bytes": 0,
+        "static_shared_memory_bytes": 0,
+        "local_bytes": 0,
+        "block_threads": 128,
+        "max_active_blocks_per_sm": 9,
+        "theoretical_occupancy_pct": 75.0,
+        "sass_instruction_families": [],
+        "spill_evidence_complete": true,
+        "spills_detected": false,
+        "resource_fingerprint": "sha256:e252f306d85bcaed1c5774da75d4c362a2dae2aa127bf02c78c50455fb22548e",
+        "cubin_sha256": "9930d2c4804598e582770a10c28146854c54bc92e9b8f6c605265f65aac90947"
+      }
+    },
+    {
+      "case": "gqa_window_ragged",
+      "shape": [
+        1,
+        8,
+        257,
+        509,
+        128
+      ],
+      "dtype": "f32",
+      "candidate": "warp_per_query_w8",
+      "warps_per_cta": 8,
+      "runs": [
+        {
+          "run": 1,
+          "device_event_ms": 0.12834441661834717,
+          "end_to_end_ms": 1.2268375012354227,
+          "max_abs_error": 5.960464477539063e-08
+        },
+        {
+          "run": 2,
+          "device_event_ms": 0.1282995194196701,
+          "end_to_end_ms": 1.0996614983014297,
+          "max_abs_error": 5.960464477539063e-08
+        }
+      ],
+      "stable": false,
+      "device_stable": true,
+      "end_to_end_stable": false,
+      "device_winner_consensus": false,
+      "end_to_end_winner_consensus": false,
+      "traffic_bytes": 3147776,
+      "resource": {
+        "kernel": "tessera_nvidia_flash_attn_fwd_w8_kernel",
+        "schedule": "warp_per_query_w8",
+        "registers_per_thread": 56,
+        "stack_bytes": 0,
+        "static_shared_memory_bytes": 0,
+        "local_bytes": 0,
+        "block_threads": 256,
+        "max_active_blocks_per_sm": 4,
+        "theoretical_occupancy_pct": 66.6667,
+        "sass_instruction_families": [],
+        "spill_evidence_complete": true,
+        "spills_detected": false,
+        "resource_fingerprint": "sha256:308d9c99ee8747035e6af7126588e89a8effe27bbcbabcefa23f2618c3cec46a",
+        "cubin_sha256": "af4d75634b8c1b66d19173d98c51191626313c5a831313f2efcbd34bb9846129"
+      }
+    },
+    {
+      "case": "mqa_bias_softcap",
+      "shape": [
+        1,
+        8,
+        129,
+        257,
+        128
+      ],
+      "dtype": "f32",
+      "candidate": "warp_per_query_w4",
+      "warps_per_cta": 4,
+      "runs": [
+        {
+          "run": 1,
+          "device_event_ms": 0.2149365246295929,
+          "end_to_end_ms": 1.502316998085007,
+          "max_abs_error": 5.587935447692871e-08
+        },
+        {
+          "run": 2,
+          "device_event_ms": 0.224494069814682,
+          "end_to_end_ms": 1.4847610000288114,
+          "max_abs_error": 5.587935447692871e-08
+        }
+      ],
+      "stable": false,
+      "device_stable": false,
+      "end_to_end_stable": true,
+      "device_winner_consensus": true,
+      "end_to_end_winner_consensus": false,
+      "traffic_bytes": 2380832,
+      "resource": {
+        "kernel": "tessera_nvidia_flash_attn_fwd_w4_kernel",
+        "schedule": "warp_per_query_w4",
+        "registers_per_thread": 56,
+        "stack_bytes": 0,
+        "static_shared_memory_bytes": 0,
+        "local_bytes": 0,
+        "block_threads": 128,
+        "max_active_blocks_per_sm": 9,
+        "theoretical_occupancy_pct": 75.0,
+        "sass_instruction_families": [],
+        "spill_evidence_complete": true,
+        "spills_detected": false,
+        "resource_fingerprint": "sha256:e252f306d85bcaed1c5774da75d4c362a2dae2aa127bf02c78c50455fb22548e",
+        "cubin_sha256": "9930d2c4804598e582770a10c28146854c54bc92e9b8f6c605265f65aac90947"
+      }
+    },
+    {
+      "case": "mqa_bias_softcap",
+      "shape": [
+        1,
+        8,
+        129,
+        257,
+        128
+      ],
+      "dtype": "f32",
+      "candidate": "warp_per_query_w8",
+      "warps_per_cta": 8,
+      "runs": [
+        {
+          "run": 1,
+          "device_event_ms": 0.21700534224510193,
+          "end_to_end_ms": 1.4702825028507505,
+          "max_abs_error": 5.587935447692871e-08
+        },
+        {
+          "run": 2,
+          "device_event_ms": 0.22506177425384521,
+          "end_to_end_ms": 1.4746050001122057,
+          "max_abs_error": 5.587935447692871e-08
+        }
+      ],
+      "stable": false,
+      "device_stable": false,
+      "end_to_end_stable": true,
+      "device_winner_consensus": false,
+      "end_to_end_winner_consensus": true,
+      "traffic_bytes": 2380832,
+      "resource": {
+        "kernel": "tessera_nvidia_flash_attn_fwd_w8_kernel",
+        "schedule": "warp_per_query_w8",
+        "registers_per_thread": 56,
+        "stack_bytes": 0,
+        "static_shared_memory_bytes": 0,
+        "local_bytes": 0,
+        "block_threads": 256,
+        "max_active_blocks_per_sm": 4,
+        "theoretical_occupancy_pct": 66.6667,
+        "sass_instruction_families": [],
+        "spill_evidence_complete": true,
+        "spills_detected": false,
+        "resource_fingerprint": "sha256:308d9c99ee8747035e6af7126588e89a8effe27bbcbabcefa23f2618c3cec46a",
+        "cubin_sha256": "af4d75634b8c1b66d19173d98c51191626313c5a831313f2efcbd34bb9846129"
+      }
+    }
+  ]
+}

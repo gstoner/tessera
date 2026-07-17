@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from _nvidia_testutil import require_nvidia_mma_runtime
+from tests._support.nvidia import require_nvidia_mma_runtime
 
 
 def _artifact(*, with_bias: bool, **kwargs):
@@ -104,3 +104,46 @@ def test_live_nvidia_flash_attn_f16_storage_f32_accumulation():
                                _reference(q.astype(np.float32), k.astype(np.float32),
                                           v.astype(np.float32), scale=scale),
                                atol=2e-3, rtol=0)
+
+
+@pytest.mark.slow
+@pytest.mark.hardware_nvidia
+@pytest.mark.parametrize("warps_per_cta", [4, 8])
+def test_live_nvidia_flash_attn_multiwarp_d128_mha_gqa_mqa(warps_per_cta):
+    require_nvidia_mma_runtime()
+    from tessera.compiler.emit.nvidia_cuda import (
+        run_flash_attention_forward_schedule,
+    )
+    rng = np.random.default_rng(20260721 + warps_per_cta)
+    for hkv in (4, 2, 1):
+        q = rng.standard_normal((1, 4, 17, 128), dtype=np.float32) * 0.25
+        k = rng.standard_normal((1, hkv, 19, 128), dtype=np.float32) * 0.25
+        v = rng.standard_normal((1, hkv, 19, 128), dtype=np.float32) * 0.25
+        scale = 1.0 / np.sqrt(128.0)
+        got = run_flash_attention_forward_schedule(
+            q, k, v, scale=scale, warps_per_cta=warps_per_cta)
+        np.testing.assert_allclose(
+            got, _reference(q, k, v, scale=scale), atol=5e-5, rtol=0)
+
+
+@pytest.mark.slow
+@pytest.mark.hardware_nvidia
+@pytest.mark.parametrize("warps_per_cta", [4, 8])
+def test_live_nvidia_flash_attn_multiwarp_ragged_mask_bias_softcap(
+        warps_per_cta):
+    require_nvidia_mma_runtime()
+    from tessera.compiler.emit.nvidia_cuda import (
+        run_flash_attention_forward_schedule,
+    )
+    rng = np.random.default_rng(20260730 + warps_per_cta)
+    q = rng.standard_normal((1, 4, 17, 128), dtype=np.float32) * 0.2
+    k = rng.standard_normal((1, 2, 37, 128), dtype=np.float32) * 0.2
+    v = rng.standard_normal((1, 2, 37, 128), dtype=np.float32) * 0.2
+    bias = rng.standard_normal((1, 4, 17, 37), dtype=np.float32) * 0.05
+    kwargs = dict(scale=1.0 / np.sqrt(128.0), causal=True,
+                  window_left=11, window_right=1, bias=bias, softcap=1.7)
+    got = run_flash_attention_forward_schedule(
+        q, k, v, warps_per_cta=warps_per_cta, **kwargs)
+    ref = _reference(q, k, v, scale=kwargs["scale"], causal=True,
+                     window=(11, 1), bias=bias, softcap=1.7)
+    np.testing.assert_allclose(got, ref, atol=6e-5, rtol=0)

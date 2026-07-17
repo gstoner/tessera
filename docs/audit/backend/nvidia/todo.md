@@ -121,6 +121,25 @@ Baseline state on the NVIDIA box (2026-07-15, commit `ecf9483f`):
   the first batch; 70 focused tests passed and the canonical device collection
   remains 243 nodes. This is NVIDIA-only test infrastructure; Apple and ROCm
   plan states are unaffected.
+- Cross-backend sync `LLVM23-NVIDIA-2026-07-16`: NVIDIA exact-device parity is
+  now validated on the RTX 5070 Ti after the shared LLVM/MLIR 23 migration.
+  A clean `sm_120a` build required the MLIR bytecode interface include and the
+  `NVVM::Barrier0Op` to `NVVM::BarrierOp` API migration. NVIDIA lit passes
+  19/19, two stable collections contain the same 268 nodes, the host-free
+  compiler-artifact proof passes, exact-device correctness passes 248/248
+  twice, TEST-4/TEST-6 focused gates pass 190/190, and the isolated TEST-5
+  lane passes 20/20. Explicit Tile tool paths now take precedence over stale
+  build-tree binaries. ROCm receives only the LLVM 23 lit-shell compatibility
+  update; Apple has no affected physical schedule or runtime contract.
+- **NVIDIA-TEST-7 is closed as local WSL release ownership; GitHub runners are
+  intentionally not used.** The release command exposes independent `cpu`,
+  `compiler`, `device`, and `performance` layers, rejects overlapping runs with
+  a host lock, writes a fail-closed status record, retains timestamped machine,
+  JUnit, and baseline bundles, and keeps performance serial. The finalized
+  all-layer invocation passed 410 host-free/shared-registry tests (one explicit
+  skip), 20/20 lit, 1/1 compiler artifact, 268/268 correctness twice, and 20/20
+  performance. Its retained bundle is
+  `artifacts/nvidia-release/20260717T003224Z-18866bbb/all/`.
 - The second batch removed the same local MMA-runtime probe from norm, softmax,
   matmul-ReLU, matmul-softmax, compiled KV-cache, forward/backward Flash
   Attention, and convolution tests. Their 89 focused exact-device tests passed
@@ -235,7 +254,13 @@ sudo install -d -m 0755 /etc/apt/keyrings
 wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
   | sudo gpg --dearmor --yes -o /etc/apt/keyrings/apt.llvm.org.gpg
 
-echo 'deb [signed-by=/etc/apt/keyrings/apt.llvm.org.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble-23 main' \
+. /etc/os-release
+LLVM_SUITE="llvm-toolchain-${VERSION_CODENAME}-23"
+if ! wget -q --spider \
+  "https://apt.llvm.org/${VERSION_CODENAME}/dists/${LLVM_SUITE}/Release"; then
+  LLVM_SUITE="llvm-toolchain-${VERSION_CODENAME}"
+fi
+echo "deb [signed-by=/etc/apt/keyrings/apt.llvm.org.gpg] https://apt.llvm.org/${VERSION_CODENAME}/ ${LLVM_SUITE} main" \
   | sudo tee /etc/apt/sources.list.d/llvm-23.list >/dev/null
 sudo apt-get update
 sudo apt-get install -y \
@@ -287,9 +312,9 @@ generator places it under `build-nvidia-cuda/tools/tessera-opt/` differently.
 
 The 2026-07-16 shared compiler migration raises the project floor to matched
 LLVM/MLIR 23 and updates portable Tile/NVIDIA TableGen plus greedy-rewrite
-compatibility. The shared sources compile in the LLVM/MLIR 23 ROCm build;
-NVIDIA exact-device parity is **follow-up required** on the `sm_120` host and
-no CUDA execution status is promoted by the ROCm run.
+compatibility. The shared sources compile in the LLVM/MLIR 23 ROCm build, and
+NVIDIA exact-device parity is now validated independently on the `sm_120`
+host. No CUDA execution status was inferred or promoted from the ROCm run.
 
 ## Ordered work
 
@@ -301,7 +326,7 @@ no CUDA execution status is promoted by the ROCm run.
 | 4 | NVIDIA-TEST-4 | Numerical policy | Centralize dtype/op tolerances from accumulation/storage behavior. Add ragged, rectangular, boundary, non-finite, misalignment, and invalid-contract cases where absent. | f16/bf16/tf32/FP8/int8/NVFP4 cases use documented tolerances; no default zero-`atol` checks near zero. |
 | 5 | NVIDIA-TEST-5 | Measured performance | Run `hardware_nvidia and performance` serially. Warm up compilation and caches; use repeated medians; measure kernel-only and end-to-end separately; record registers, shared memory, occupancy, spills, and selected route. | Stable baselines cover square/rectangular/ragged GEMM, fused epilogues, attention, paged KV, ReplaySSM, reductions, and transport. Each ratchet identifies the selected implementation. |
 | 6 | NVIDIA-TEST-6 | Refactor and deduplicate | Move mature families toward `tests/compiler/`, `tests/device/nvidia/`, `tests/integration/`, and `tests/performance/nvidia/`. Consolidate repeated CUDA availability, compilation, launch, oracle, and cleanup code. | No central filename allowlist; no duplicated private CUDA probe/loader; process trees and device allocations clean up on failure. |
-| 7 | NVIDIA-TEST-7 | CI/release ownership | Add the NVIDIA-box workflow/release-gate command with concurrency control and retained artifacts. Keep device correctness required for NVIDIA promotion; run performance on an isolated/scheduled lane. | A clean branch run reports CPU, artifact, device, and performance states independently and links retained evidence. |
+| 7 | NVIDIA-TEST-7 | Local release ownership | Own the NVIDIA-box release gate locally in WSL with a host concurrency lock and retained artifacts; GitHub runners are intentionally not used. Keep two-run device correctness required for NVIDIA promotion and performance serial. | A clean branch run reports NVIDIA host-free/shared registries, compiler artifact, device correctness, and performance independently and retains the fail-closed evidence bundle. |
 
 ### High-risk NVIDIA-TEST-6 migration
 
@@ -376,7 +401,7 @@ relaxation.
 ## Canonical commands on the NVIDIA box
 
 ```bash
-# 0. State/collection contract (currently 264 nodes)
+# 0. State/collection contract (currently 268 nodes)
 python3 -m pytest tests/unit tests/device/nvidia tests/performance/nvidia tests/integration \
   -m hardware_nvidia --collect-only -q --no-header
 
@@ -459,6 +484,104 @@ selector change below requires fresh `sm_120a` measurements on the NVIDIA box.
 | 8 | NVIDIA-PARITY-EPILOGUE | Make the common Tile epilogue contract explicit for bias, ReLU, GELU, and SiLU. Check accumulator precision, operation order, optional bias/residual guards, ragged stores, and all supported storage dtypes against shared CUDA/ROCm fixtures. | CUDA emits fused epilogues and plugin tests cover representative forms. | One backend-neutral oracle drives both backends; every supported fusion executes natively; unsupported dtype/op pairs reject with registered diagnostic codes rather than silently de-fusing. |
 | 9 | NVIDIA-PARITY-AUTOTUNE | Align CUDA and ROCm corpus schemas around device-keyed candidates, timing domain, compiler/resource fingerprint, cold/warm compile state, and cache behavior. Promote a winner only after the relevant correctness and schedule ratchets pass. | CUDA has autotune and serving corpus writers, but their evidence must be reconciled with the newer ROCm records. | Corpus validation rejects stale devices, compilers, resources, and timing domains; cold/warm behavior is reproducible; selector decisions cite a retained measurement row. |
 | 10 | NVIDIA-PARITY-TRANSPORT | Close KV-movement and MoE-transport parity with direct/staged routes, ragged/grouped loads, bandwidth attainment, and launch-amortization measurements. Feed any winner into the legacy retune only after ABI and correctness closure. | CUDA transport operations exist but lack one consolidated exact-device performance proof. | Byte counts and achieved bandwidth are auditable; kernel-only and end-to-end winners are separate; awkward sizes and grouped routes match their reference without leaks or hidden host staging. |
+
+### CUDA parity execution record
+
+The parity queue uses ROCm's logical coverage and proof methodology, not its
+physical schedules. CUDA owns warp/register packing, `HMMA`/`QMMA`/`IMMA`/OMMA
+selection, shared-memory staging, barriers, occupancy limits, and every selector
+winner. An AMD wave shape, LDS strategy, or VGPR result is never a CUDA default.
+
+- **NVIDIA-PARITY-TILE — complete on sm_120a.** The architecture-owned SM120 fragment
+  selector now describes f16 (f16/f32 accumulation), bf16, TF32, FP8 E4M3/E5M2,
+  int8, and block-scaled NVFP4 separately. C++ lowering consumes the descriptor
+  for physical input packing and per-lane register-count validation. The exact
+  compiler path passes the shared numerical oracle for f16/bf16/TF32/FP8/int8,
+  direct/shared grids, ragged edges, and bias/ReLU/GELU/SiLU. The reproducible
+  13-row `nvidia_sm120_tile_fragment_resources.json` record retains cubin hashes,
+  registers, shared memory, theoretical occupancy, spills, and observed SASS:
+  `HMMA` for f16/bf16/TF32, `QMMA` for FP8, `IMMA` for int8, and block-scaled
+  `OMMA` for NVFP4. Portable typed Tile now carries NVFP4's two logical UE4M3
+  scale tiles. C++ consumes nibble-packed logical A/B storage, materializes the
+  backend-owned scale selectors, emits real block-scaled inline PTX, assembles
+  for `sm_120a`, and passes the non-uniform-scale numerical oracle without
+  fixture-authored physical fragments. The resource row now comes from that
+  typed compiler artifact rather than the original CUDA spike.
+- **NVIDIA-PARITY-GEMM-RATCHET — measured complete; no promotion.** The
+  device-keyed `nvidia_sm120_gemm_schedule_matrix.json` contains 34 exact-case
+  rows spanning square, rectangular, ragged, f16/bf16, and bias plus
+  none/ReLU/GELU/SiLU epilogues. Every row has two stable repeated-median runs,
+  separate CUDA-event and rotated-interleaved end-to-end timing, complete
+  per-candidate resource fingerprints, and an explicit 3% noise policy. The
+  smallest ragged rows require 50 untimed device warmups to remove clock-ramp
+  drift. The record intentionally leaves the production selector unchanged.
+  CUDA 13.3's renamed local/shared spill-request metrics are normalized alongside
+  the legacy Nsight metrics, and the synthesized fused fallback now has retained
+  production-sized Nsight evidence.
+- **NVIDIA-PARITY-LEGACY-RETUNE — landing; no selector promotion.** The
+  device-keyed `nvidia_sm120_legacy_retune.json` now compares compiled exact-f32
+  and shipped TF32 GEMM on square/ragged rows, one grouped GEMM launch against
+  the retained per-expert decomposition, and a new grouped SwiGLU route whose
+  four launches are independent of expert count against the legacy `4E` route.
+  All candidates use one f32 oracle and retain separate event/end-to-end rows,
+  byte and achieved-bandwidth accounting, launch counts, and linked resources.
+  SwiGLU rows retain both the grouped-GEMM cubin fingerprint and the exact
+  generated SiLU-gate registers, occupancy, and spill record.
+  Grouped GEMM and SwiGLU show large launch-collapse wins, but several two-run
+  medians remain outside the 3% policy, so the evidence does not authorize a
+  selector change. KV/MoE movement rows are retained from TEST-5; their shared
+  transport evidence is now parity-validated, but this legacy-retune corpus
+  remains independently blocked on its unstable candidate comparisons.
+- **NVIDIA-PARITY-ATTN-FWD — landing; CUDA 4-warp candidate leads kernel time.**
+  CUDA-owned 4- and 8-warp CTA candidates now cover D=128 MHA, causal sequence
+  1009, ragged GQA windowing, and MQA bias+softcap. Each warp owns one query,
+  uses warp shuffles for QK, and keeps distributed online-softmax/PV state;
+  this is not ROCm's two-wave LDS schedule. All rows match the shared oracle
+  within `7e-8`. Both candidates use 56 registers with zero spills; modeled
+  occupancy is 75% for four warps and 66.67% for eight. Four warps win CUDA-event
+  timing on both retained runs for every case. Some allocation/copy-inclusive
+  medians still exceed the 3% two-run stability policy despite rotated 200-sample
+  collection, so production selection remains unchanged.
+- **NVIDIA-PARITY-PAGED-KV — correctness and timing complete; no promotion.** Both fused
+  and staged routes now pass the same permuted-page oracle at lengths 1, 3, 4,
+  5, 7, 8, 9, and 13, including non-monotonic logical indices and global causal
+  offsets. The 13-row transport corpus covers 127/128/129/511-token boundaries
+  with separate device/end-to-end keys, byte formulas, resources, and no
+  selector change. Repeated event batches now remain inside one warmed resident
+  session; all eight fused/staged rows pass the 3% two-run policy, with maximum
+  device and end-to-end deltas of 1.89% and 1.85% respectively.
+- **NVIDIA-PARITY-REPLAY — correctness and timing complete.** Exact-device
+  tests cover long decode across flushes, rollback, speculative rejection,
+  block submit, reset, ordered ring backpressure, rejected-submit immutability,
+  and teardown over wider B/D/N shapes. The 10-row replay corpus spans five
+  geometries and 16/64 tokens with traffic, resources, and both timing domains.
+  The CPU oracle is outside the end-to-end interval; each retained run has 100
+  disjoint four-route batch medians with recorded out-of-band clock conditioning.
+  All errors are below `1.5e-8`; maximum device and end-to-end two-run deltas are
+  0.93% and 1.58%.
+- **NVIDIA-PARITY-EPILOGUE — shared contract landing.** `FusedRegion` is the
+  backend-neutral bias/activation/residual/order oracle and now emits registered
+  `E_FUSED_EPILOGUE_*` diagnostics for unsupported dtype/op/order and missing
+  operands. Existing CUDA f16/bf16/f32/FP8 native lanes consume that oracle;
+  the full supported-pair execution matrix remains the closure gate.
+- **NVIDIA-PARITY-AUTOTUNE — strict admission complete; no promotion.** Corpus
+  admission can require exact device, timing domain, compiler fingerprint,
+  resource fingerprints, compile state, and cache state. The committed
+  reproducibility record admits all 20 selector-eligible NVIDIA rows, rejects
+  stale device/timing/compiler/resource mutations, and reproduces one kernel
+  cache key across two cold builds and warm hits (about 0.05 ms warm lookup).
+- **NVIDIA-PARITY-TRANSPORT — correctness, evidence, and timing complete.**
+  The consolidated 13-row paged-KV/MoE/grouped corpus retains auditable traffic
+  formulas, achieved bandwidth, launch-amortization keys, exact resources, and
+  independent timing domains. Maximum oracle error is below `3e-7`; all 13 rows
+  pass the 3% two-run policy. MoE CUDA-event samples retain one native allocation
+  set across repeated batches, and the tiny routes use 101 medians per run. No
+  selector or legacy-retune winner is promoted by this evidence.
+
+Cross-backend sync `NVFP4-TILE-SCALES-2026-07-16` changes the shared typed Tile
+operand contract only. NVIDIA supplies exact-device materialization evidence;
+Apple and ROCm do not inherit its physical schedule and record their outcomes
+in their own plans.
 
 The first focused CUDA parity proof on the NVIDIA box is:
 

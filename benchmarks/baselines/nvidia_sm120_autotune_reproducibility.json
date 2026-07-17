@@ -1,0 +1,35 @@
+{
+  "schema": "tessera.nvidia.autotune-reproducibility.v1",
+  "device": "nvidia:sm_120",
+  "compiler_fingerprint": "sha256:cf24ed3a2015c6eedbe47a5f86a4387361fc5441b5c242d56ace440d908d209d",
+  "kernel_cache_reproducible": true,
+  "builds": [
+    {
+      "run": 1,
+      "cold_compile_ms": 983.21805,
+      "warm_cache_lookup_ms": 0.059268,
+      "cache_hits": 1,
+      "cache_misses": 1,
+      "kernel_cache_key": "83f4e13ca8ded29dcd0fe5322aea1efecb1f16d5c3da244b2a4512403df7c23b",
+      "artifact_present": true
+    },
+    {
+      "run": 2,
+      "cold_compile_ms": 714.796537,
+      "warm_cache_lookup_ms": 0.04736,
+      "cache_hits": 1,
+      "cache_misses": 1,
+      "kernel_cache_key": "83f4e13ca8ded29dcd0fe5322aea1efecb1f16d5c3da244b2a4512403df7c23b",
+      "artifact_present": true
+    }
+  ],
+  "strict_records_considered": 20,
+  "strict_records_admitted": 20,
+  "stale_rejections": {
+    "device": true,
+    "timing": true,
+    "compiler_fingerprint": true,
+    "resource_fingerprints": true
+  },
+  "selector_changed": false
+}

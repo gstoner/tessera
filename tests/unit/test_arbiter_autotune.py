@@ -158,6 +158,57 @@ def test_persisted_corpus_drives_normal_arbitrated_dispatch():
     assert forced_tag == "crown_real"
 
 
+def test_corpus_admission_rejects_stale_fingerprints_and_timing_domain():
+    cache = AT.MeasureCache()
+    key = ("nvidia:sm_120", "nvidia", OP_MATMUL, (64, 64, 64),
+           "float16", "device")
+    cache.put(key, AT.MeasureRecord(
+        winner="candidate", latency_ms=.1, candidates={"candidate": .1},
+        evidence={
+            "compiler_fingerprint": "sha256:compiler-current",
+            "resource_fingerprints": ["sha256:resource-current"],
+            "compile_state": "warm_after_correctness_gate",
+            "cache_state": "warm",
+        }))
+    payload = cache.to_dict()
+    policy = {
+        "device": "nvidia:sm_120", "timing": "device",
+        "compiler_fingerprint": "sha256:compiler-current",
+        "resource_fingerprints": ["sha256:resource-current"],
+        "compile_state": "warm_after_correctness_gate",
+        "cache_state": "warm",
+    }
+    assert AT.MeasureCache().load_dict(
+        payload, required_evidence=policy) == 1
+    for field, stale in (
+        ("device", "nvidia:sm_999"),
+        ("timing", "end_to_end"),
+        ("compiler_fingerprint", "sha256:compiler-stale"),
+        ("resource_fingerprints", ["sha256:resource-stale"]),
+        ("compile_state", "cold"),
+        ("cache_state", "cold"),
+    ):
+        rejected = AT.MeasureCache()
+        assert rejected.load_dict(
+            payload, required_evidence={**policy, field: stale}) == 0
+        assert rejected.size == 0
+
+
+def test_corpus_cold_to_warm_roundtrip_is_reproducible():
+    cold = AT.MeasureCache()
+    key = ("nvidia:sm_120", "nvidia", OP_MATMUL, (64, 64, 64),
+           "float16", "device")
+    record = AT.MeasureRecord(
+        winner="candidate", latency_ms=.1, candidates={"candidate": .1},
+        evidence={"cache_state": "warm", "compile_state": "warm"})
+    assert cold.get(key) is None
+    cold.put(key, record)
+    warm = AT.MeasureCache()
+    assert warm.load_dict(cold.to_dict()) == 1
+    assert warm.get(key) == record
+    assert warm.hits == 1 and warm.misses == 0
+
+
 # ── D3: arbiter dispatch log (won / degraded / no_candidate) ─────────────────
 
 def test_dispatch_log_records_won_degraded_no_candidate():

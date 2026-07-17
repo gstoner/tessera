@@ -38,7 +38,7 @@ def main() -> int:
     bias = (rng.standard_normal(512) * .05).astype(np.float32)
     fused = FusedRegion(epilogue=("bias", "gelu"))
     for candidate in candidates_for("nvidia", OP_FUSED_REGION):
-        if candidate.name == "nvidia_mma_fused":
+        if candidate.name in {"nvidia_generic_cuda", "nvidia_mma_fused"}:
             candidate.run(fused, a, b, bias)
     q = (rng.standard_normal((256, 64)) * .1).astype(np.float32)
     k = (rng.standard_normal((256, 64)) * .1).astype(np.float32)

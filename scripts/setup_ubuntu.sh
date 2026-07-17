@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Tessera — Ubuntu 24.04 (noble) developer setup
+# Tessera — Ubuntu developer setup
 #
 # Provisions the toolchain Tessera needs to build / lint / lit-test / unit-test
 # on Linux, alongside the existing macOS Homebrew flow (which is unchanged — see
 # CLAUDE.md "Local Toolchain"). Target environment:
 #
-#   * Ubuntu 24.04 LTS (noble)
+#   * A supported Ubuntu release
 #   * LLVM/MLIR 23 from apt.llvm.org
 #   * TheRock ROCm 7.14 at /opt/rocm/core
 #   * A project-local Python venv (.venv) with the lean dependency set
@@ -58,6 +58,42 @@ CODENAME="${VERSION_CODENAME:-noble}"
 echo "  ${PRETTY_NAME:-unknown}  (codename: ${CODENAME})"
 [[ "$ID" == "ubuntu" ]] || warn "not Ubuntu — apt package names assume Debian/Ubuntu"
 
+configure_llvm_repo() {
+  local keyring=/etc/apt/keyrings/apt.llvm.org.gpg
+  local list=/etc/apt/sources.list.d/llvm-${LLVM_VERSION}.list
+  local versioned_suite=llvm-toolchain-${CODENAME}-${LLVM_VERSION}
+  local snapshot_suite=llvm-toolchain-${CODENAME}
+  local suite=$versioned_suite
+
+  # apt.llvm.org publishes the development major through the unversioned
+  # snapshot suite. Once that major branches, it moves to the versioned suite.
+  # Probe both so setup remains valid across that transition and across Ubuntu
+  # releases (for example Resolute currently serves LLVM 23 as the snapshot).
+  if ! wget -q --spider \
+      "https://apt.llvm.org/${CODENAME}/dists/${versioned_suite}/Release"; then
+    suite=$snapshot_suite
+    wget -q --spider \
+      "https://apt.llvm.org/${CODENAME}/dists/${suite}/Release" \
+      || die "apt.llvm.org has neither ${versioned_suite} nor ${snapshot_suite}"
+  fi
+
+  $SUDO install -d -m 0755 /etc/apt/keyrings
+  if [[ ! -s "$keyring" ]]; then
+    wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
+      | $SUDO gpg --dearmor -o "$keyring"
+  fi
+  echo "deb [signed-by=${keyring}] https://apt.llvm.org/${CODENAME}/ ${suite} main" \
+    | $SUDO tee "$list" >/dev/null
+  echo "  apt suite: ${suite}"
+}
+
+# Repair/configure the LLVM source before the first apt update. This matters
+# when a previous failed attempt left an invalid source in llvm-23.list.
+if [[ $DO_LLVM -eq 1 && ! -x "${LLVM_PREFIX}/bin/mlir-tblgen" ]]; then
+  say "Configuring LLVM/MLIR ${LLVM_VERSION} apt source (codename: ${CODENAME})"
+  configure_llvm_repo
+fi
+
 # ---------------------------------------------------------------------------
 if [[ $DO_APT -eq 1 ]]; then
   say "Installing base build dependencies (apt)"
@@ -76,16 +112,6 @@ if [[ $DO_LLVM -eq 1 ]]; then
   if [[ -x "${LLVM_PREFIX}/bin/mlir-tblgen" ]]; then
     echo "  ${LLVM_PREFIX} already has MLIR — skipping repo add"
   else
-    # Repo signing key (idempotent).
-    KEYRING=/etc/apt/keyrings/apt.llvm.org.gpg
-    $SUDO install -d -m 0755 /etc/apt/keyrings
-    if [[ ! -s "$KEYRING" ]]; then
-      wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
-        | $SUDO gpg --dearmor -o "$KEYRING"
-    fi
-    LIST=/etc/apt/sources.list.d/llvm-${LLVM_VERSION}.list
-    echo "deb [signed-by=${KEYRING}] http://apt.llvm.org/${CODENAME}/ llvm-toolchain-${CODENAME}-${LLVM_VERSION} main" \
-      | $SUDO tee "$LIST" >/dev/null
     $SUDO apt-get update -y
   fi
   # Use one matched upstream LLVM/MLIR major for the whole compiler build.

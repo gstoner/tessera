@@ -858,6 +858,9 @@ class TargetIRVerifier:
             # Consumer Blackwell (sm_120) warp-level MMA — no warpgroup (mma.sync
             # is warp-scoped, unlike Hopper's warpgroup-scoped wgmma).
             self._require(op, diagnostics, "arch", "shape", "dtype_ab", "dtype_c")
+        elif op.op_name == "tessera_nvidia.nvfp4_block_scale_mma":
+            self._require(op, diagnostics, "arch", "shape", "dtype_ab", "dtype_c",
+                          "scale_a", "scale_b", "scale_dtype", "scale_vector")
         elif op.op_name == "tessera_nvidia.tma_async_copy":
             self._require(op, diagnostics, "arch", "src_space", "dst_space", "bytes")
         elif op.op_name == "tessera_nvidia.mbarrier":
@@ -1433,15 +1436,55 @@ def _lower_nvidia_op(op: TileOp, *, target_kind: str) -> list[TargetOp]:
             # barrier pair mirrors the wgmma path. Grounded in
             # gpu_target._CUDA_13_3_FEATURES[ISA.SM_120]: wgmma/tcgen05/tmem =
             # not_supported; tma/mbarrier/block_scaled_mma = ready.
-            return [
-                TargetOp("tessera_nvidia.mma_sync", {
-                    **base,
-                    "arch": arch,
-                    "shape": "m16n8k16",
-                    "dtype_ab": "bf16",
-                    "dtype_c": "f32",
+            aliases = {
+                "float16": "f16", "f16": "f16",
+                "bfloat16": "bf16", "bf16": "bf16",
+                "tf32": "tf32", "fp8_e4m3": "e4m3", "e4m3": "e4m3",
+                "fp8_e5m2": "e5m2", "e5m2": "e5m2",
+                "int8": "s8", "i8": "s8", "s8": "s8",
+                "nvfp4": "nvfp4", "fp4_e2m1": "nvfp4",
+            }
+            requested = str(op.attrs.get(
+                "dtype_ab", op.attrs.get("dtype", "bf16"))).lower()
+            if requested in {"f32", "float32", "fp32"}:
+                # Graph/Tile f32 is an exact-storage contract.  It must not be
+                # silently reinterpreted as TF32 merely because SM120 has a
+                # tensor-core TF32 fragment.  Retain an explicit scalar CUDA
+                # artifact until a separately requested TF32 contract exists.
+                return [TargetOp("tessera_nvidia.cuda_kernel", {
+                    **base, "arch": arch, "kernel": "matmul_f32_contract",
+                    "dtype_ab": "f32", "dtype_c": "f32",
+                    "tensor_core": False, "status": "artifact_only",
+                })]
+            dtype = aliases.get(requested)
+            if dtype is None:
+                raise ValueError(
+                    f"sm_120 has no proven matrix fragment for dtype {requested!r}")
+            if dtype == "nvfp4":
+                scale_a = op.attrs.get("scale_a")
+                scale_b = op.attrs.get("scale_b")
+                if not scale_a or not scale_b:
+                    raise ValueError(
+                        "sm_120 NVFP4 tile.mma requires logical scale_a and scale_b operands")
+                matrix_op = TargetOp("tessera_nvidia.nvfp4_block_scale_mma", {
+                    **base, "arch": "sm_120a", "shape": "m16n8k64",
+                    "dtype_ab": "e2m1", "dtype_c": "f32",
+                    "scale_a": scale_a, "scale_b": scale_b,
+                    "scale_dtype": "ue4m3", "scale_vector": "4X",
+                    "block_scaled": True,
+                })
+            else:
+                shape = {"tf32": "m16n8k8", "e4m3": "m16n8k32",
+                         "e5m2": "m16n8k32", "s8": "m16n8k32"}.get(
+                             dtype, "m16n8k16")
+                matrix_op = TargetOp("tessera_nvidia.mma_sync", {
+                    **base, "arch": arch, "shape": shape,
+                    "dtype_ab": dtype,
+                    "dtype_c": "s32" if dtype == "s8" else "f32",
                     "block_scaled": False,
-                }),
+                })
+            return [
+                matrix_op,
                 TargetOp("tessera_nvidia.tma_async_copy", {
                     **base,
                     "arch": arch,

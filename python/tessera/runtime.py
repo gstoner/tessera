@@ -2148,10 +2148,19 @@ def _nvidia_ptx_gemm_2d(A: Any, B: Any, dtype: str = "bfloat16") -> Any:
 def _nvidia_tile_tool(name: str) -> Path | None:
     """Locate one tool in the Tile→NVVM→PTX production pipeline."""
     root = Path(__file__).resolve().parents[2]
+    environment = {
+        "tessera-nvidia-opt": "TESSERA_NVIDIA_OPT",
+        "mlir-opt": "MLIR_OPT",
+        "mlir-translate": "MLIR_TRANSLATE",
+        "llc": "LLC",
+    }
+    if configured := os.environ.get(environment[name]):
+        path = Path(configured).expanduser()
+        return path if path.is_file() else None
     candidates = {
         "tessera-nvidia-opt": (
-            root / "build/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools"
-            / "tessera-nvidia-opt"),
+            root / "build-nvidia-cuda/src/compiler/codegen/"
+            "tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt"),
         "mlir-opt": Path("/usr/lib/llvm-23/bin/mlir-opt"),
         "mlir-translate": Path("/usr/lib/llvm-23/bin/mlir-translate"),
         "llc": Path("/usr/lib/llvm-23/bin/llc"),
@@ -2159,6 +2168,11 @@ def _nvidia_tile_tool(name: str) -> Path | None:
     path = candidates[name]
     if path.is_file():
         return path
+    if name == "tessera-nvidia-opt":
+        legacy = (root / "build/src/compiler/codegen/"
+                  "tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt")
+        if legacy.is_file():
+            return legacy
     found = shutil.which(name)
     return Path(found) if found else None
 

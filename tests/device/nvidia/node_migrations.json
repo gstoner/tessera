@@ -1,6 +1,28 @@
 {
   "schema_version": 1,
   "migration": "NVIDIA-TEST-6-HIGH",
+  "post_migration_nodes": [
+    "tests/device/nvidia/test_flash_attention.py::test_live_nvidia_flash_attn_multiwarp_d128_mha_gqa_mqa[4]",
+    "tests/device/nvidia/test_flash_attention.py::test_live_nvidia_flash_attn_multiwarp_d128_mha_gqa_mqa[8]",
+    "tests/device/nvidia/test_flash_attention.py::test_live_nvidia_flash_attn_multiwarp_ragged_mask_bias_softcap[4]",
+    "tests/device/nvidia/test_flash_attention.py::test_live_nvidia_flash_attn_multiwarp_ragged_mask_bias_softcap[8]",
+    "tests/device/nvidia/test_moe_transport.py::test_grouped_swiglu_collapsed_route_matches_legacy_decomposition",
+    "tests/device/nvidia/test_moe_transport.py::test_moe_device_timing_retains_resident_batches",
+    "tests/device/nvidia/test_tile_fragment_compiler_path.py::test_sm120_tile_nvfp4_logical_scales_match_numpy",
+    "tests/integration/test_nvidia_paged_kv_native.py::test_paged_routes_cover_permuted_pages_and_boundary_lengths[1-1]",
+    "tests/integration/test_nvidia_paged_kv_native.py::test_paged_routes_cover_permuted_pages_and_boundary_lengths[13-3]",
+    "tests/integration/test_nvidia_paged_kv_native.py::test_paged_routes_cover_permuted_pages_and_boundary_lengths[3-1]",
+    "tests/integration/test_nvidia_paged_kv_native.py::test_paged_routes_cover_permuted_pages_and_boundary_lengths[4-3]",
+    "tests/integration/test_nvidia_paged_kv_native.py::test_paged_routes_cover_permuted_pages_and_boundary_lengths[5-3]",
+    "tests/integration/test_nvidia_paged_kv_native.py::test_paged_routes_cover_permuted_pages_and_boundary_lengths[7-3]",
+    "tests/integration/test_nvidia_paged_kv_native.py::test_paged_routes_cover_permuted_pages_and_boundary_lengths[8-3]",
+    "tests/integration/test_nvidia_paged_kv_native.py::test_paged_routes_cover_permuted_pages_and_boundary_lengths[9-3]",
+    "tests/integration/test_nvidia_paged_kv_native.py::test_paged_routes_survive_physical_page_remap_and_reuse",
+    "tests/integration/test_nvidia_replay_ssm.py::test_cuda_replay_rejected_async_work_does_not_advance_committed_cursor",
+    "tests/integration/test_nvidia_replay_ssm.py::test_cuda_replay_wide_transition_matrix[1-3-2]",
+    "tests/integration/test_nvidia_replay_ssm.py::test_cuda_replay_wide_transition_matrix[2-7-5]",
+    "tests/integration/test_nvidia_replay_ssm.py::test_cuda_replay_wide_transition_matrix[4-8-3]"
+  ],
   "mappings": {
     "tests/unit/test_nvidia_moe_transport_compiled.py::test_dispatch_and_combine_match_oracles": "tests/device/nvidia/test_moe_transport.py::test_dispatch_and_combine_match_oracles",
     "tests/unit/test_nvidia_moe_transport_compiled.py::test_grouped_gemm_matches_per_expert_oracle": "tests/device/nvidia/test_moe_transport.py::test_grouped_gemm_matches_per_expert_oracle",

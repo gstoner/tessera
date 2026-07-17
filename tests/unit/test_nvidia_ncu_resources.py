@@ -31,3 +31,18 @@ def test_ncu_csv_normalizes_resources_spills_and_fingerprint():
     assert row["spill_evidence_complete"] is True
     assert row["spills_detected"] is False
     assert row["resource_fingerprint"].startswith("sha256:")
+
+
+def test_ncu_csv_accepts_cuda_13_spill_request_counters():
+    header = ("\"ID\",\"Kernel Name\",\"CC\",\"Block Size\",\"Grid Size\","
+              "\"Metric Name\",\"Metric Value\"\n")
+    rows = [
+        '"0","kernel(float*)","12.0","64","4","Registers Per Thread","40"',
+        '"0","kernel(float*)","12.0","64","4","Local Memory Spilling Requests","0"',
+        '"0","kernel(float*)","12.0","64","4","Shared Memory Spilling Requests","0"',
+    ]
+    row = mod.parse_csv(header + "\n".join(rows) + "\n")[0]
+    assert row["local_spill_requests"] == 0
+    assert row["shared_spill_requests"] == 0
+    assert row["spill_evidence_complete"] is True
+    assert row["spills_detected"] is False

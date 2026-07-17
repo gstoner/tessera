@@ -77,6 +77,12 @@ tests/tessera-ir/**/Output/
 tests/tessera-ir/.lit_test_times.txt
 src/solvers/tpp/test/TPP/Output/
 src/solvers/tpp/test/TPP/.lit_test_times.txt
+src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia/Output/
+src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/.lit_test_times.txt
+
+# Local exact-device proof bundles (retained on the hardware host, never
+# represented as source or GitHub-hosted evidence).
+artifacts/
 
 # Claude Code harness — transient scheduler / worktree / lock artifacts.
 # settings.local.json is per-user and should NOT be checked in either.

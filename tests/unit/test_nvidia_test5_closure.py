@@ -57,7 +57,8 @@ def test_test5_resource_manifest_has_every_selected_route_and_spill_state():
     manifest = _load("nvidia_sm120_test5_route_resources.json")
     required = {
         "nvidia_mma_gemm_shipped", "nvidia_tile_matmul_direct",
-        "nvidia_tile_matmul_shared", "nvidia_mma_fused", "nvidia_mma_attn",
+        "nvidia_tile_matmul_shared", "nvidia_generic_cuda",
+        "nvidia_mma_fused", "nvidia_mma_attn",
         "generated_atomic_vjp", "generated_row_reduce", "generated_gather",
         "generated_combine", "generated_grouped", "fused_paged_attention",
         "staged_paged_attention", "async_ring", "direct",
@@ -66,3 +67,21 @@ def test_test5_resource_manifest_has_every_selected_route_and_spill_state():
     assert all(item["spill_evidence_complete"]
                for route in required for item in manifest["details"][route])
     assert manifest["details"]["generated_atomic_vjp"][0]["spills_detected"]
+
+
+def test_cuda_parity_gemm_matrix_retains_exact_cases_and_candidate_resources():
+    payload = _load("nvidia_sm120_gemm_schedule_matrix.json")
+    rows = payload["rows"]
+    assert payload["schema"] == "tessera.nvidia.gemm-schedule-matrix.v1"
+    assert payload["method"]["runs"] == 2
+    assert payload["method"]["selector_changed"] is False
+    assert {row["timing"] for row in rows} == {"device", "end_to_end"}
+    assert {row["case"].split(":")[1] for row in rows
+            if row["op"] == "matmul"} >= {"square", "rectangular", "ragged"}
+    assert {row["case"].split(":")[1] for row in rows
+            if row["op"] == "fused_region"} >= {"none", "relu", "gelu", "silu"}
+    assert all(row["stable"] and row["selector_eligible"] for row in rows)
+    assert all(len(row["runs"]) == 2 for row in rows)
+    assert all(all(fingerprints for fingerprints in
+                   row["candidate_resource_fingerprints"].values())
+               for row in rows)

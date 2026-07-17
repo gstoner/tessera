@@ -12,6 +12,7 @@ _ROUTES = {
     "nvidia_tile_matmul_shared": ("tessera_tile_matmul_shared",),
     "nvidia_mma_gemm_shipped": ("^gemm",),
     "nvidia_mma_gemm_emitted": ("mma_gemm",),
+    "nvidia_generic_cuda": ("tessera_nvidia_fused_kernel",),
     "nvidia_mma_fused": ("tessera_nvidia_mma_fused_kernel",),
     "nvidia_mma_attn": ("tessera_nvidia_mma_attn_kernel",),
     "nvidia_mma_fused_composed_tf32": ("gemm", "epi("),

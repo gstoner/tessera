@@ -104,6 +104,42 @@ class DiagnosticCode:
 # ─────────────────────────────────────────────────────────────────────────
 
 REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
+    DiagnosticCode(
+        code="E_FUSED_EPILOGUE_BAD_DTYPE",
+        pass_origin="tessera.compiler.fusion_core.FusedRegion",
+        severity="error",
+        summary="A fused epilogue requested an unsupported storage dtype.",
+        fix_hint="Use f16, bf16, f32, fp8_e4m3, or fp8_e5m2 storage.",
+        spec="docs/architecture/proposals/tile_fragment_abi.md",
+        sprint="NVIDIA-PARITY-EPILOGUE", language="python",
+    ),
+    DiagnosticCode(
+        code="E_FUSED_EPILOGUE_BAD_OP",
+        pass_origin="tessera.compiler.fusion_core.FusedRegion",
+        severity="error",
+        summary="A fused prologue or epilogue requested an unknown operation.",
+        fix_hint="Use a registered EPILOGUE_OPS operation.",
+        spec="docs/architecture/proposals/tile_fragment_abi.md",
+        sprint="NVIDIA-PARITY-EPILOGUE", language="python",
+    ),
+    DiagnosticCode(
+        code="E_FUSED_EPILOGUE_BAD_ORDER",
+        pass_origin="tessera.compiler.fusion_core.FusedRegion",
+        severity="error",
+        summary="A fused epilogue chain violates the shared operation-order contract.",
+        fix_hint="Use one bias, pointwise activations, optional residual, then reduction.",
+        spec="docs/architecture/proposals/tile_fragment_abi.md",
+        sprint="NVIDIA-PARITY-EPILOGUE", language="python",
+    ),
+    DiagnosticCode(
+        code="E_FUSED_EPILOGUE_MISSING_OPERAND",
+        pass_origin="tessera.compiler.fusion_core.FusedRegion",
+        severity="error",
+        summary="A declared bias or residual operand was not supplied.",
+        fix_hint="Supply the bias/residual buffer required by the fused region.",
+        spec="docs/architecture/proposals/tile_fragment_abi.md",
+        sprint="NVIDIA-PARITY-EPILOGUE", language="python",
+    ),
     # ── Python-side: TesseraErrorCode enum (TSOL-2, 2026-05-22) ──────────
     # These E_* codes live in `python/tessera/diagnostics.py`.  The
     # enum class is `TesseraErrorCode`; values are emitted via raised
@@ -1189,15 +1225,15 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         code="TILE_EPILOGUE_BAD_ACTIVATION", pass_origin="TileEpilogueAttr",
         severity="error",
         summary="A #tile.epilogue activation is not a supported portable activation.",
-        fix_hint="Use none or relu, or add an explicitly verified epilogue lowering.",
+        fix_hint="Use none, relu, gelu, or silu, or add an explicitly verified lowering.",
         spec="docs/architecture/proposals/tile_fragment_abi.md",
         sprint="Portable Tile fragment ABI",
     ),
     DiagnosticCode(
         code="TILE_EPILOGUE_BAD_OUTPUT", pass_origin="TileEpilogueAttr",
         severity="error",
-        summary="A #tile.epilogue output dtype is not f32 or f16.",
-        fix_hint="Use output=f32 or output=f16 until another conversion is implemented.",
+        summary="A #tile.epilogue output dtype is not f32, f16, or i32.",
+        fix_hint="Use output=f32, output=f16, or output=i32.",
         spec="docs/architecture/proposals/tile_fragment_abi.md",
         sprint="Portable Tile fragment ABI",
     ),

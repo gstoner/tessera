@@ -14,3 +14,13 @@ def test_nvidia_cuda_tool_discovers_canonical_wsl_toolkit(monkeypatch):
         assert str(ensure_cuda_bin_on_path()) in __import__("os").environ["PATH"]
     else:
         assert tool is None
+
+
+def test_nvidia_tile_tool_honors_explicit_compiler_path(monkeypatch, tmp_path):
+    from tessera import runtime as rt
+
+    compiler = tmp_path / "tessera-nvidia-opt"
+    compiler.touch()
+    monkeypatch.setenv("TESSERA_NVIDIA_OPT", str(compiler))
+
+    assert rt._nvidia_tile_tool("tessera-nvidia-opt") == compiler

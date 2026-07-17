@@ -3,7 +3,7 @@ import os
 import lit.formats
 
 config.name = "tessera-rocm"
-config.test_format = lit.formats.ShTest(True)
+config.test_format = lit.formats.ShTest(execute_external=False)
 config.suffixes = ['.mlir']
 
 # Make the LLVM tools the fixtures invoke (FileCheck, not, count) resolvable

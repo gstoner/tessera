@@ -103,6 +103,10 @@ remain Apple-owned.
   no CUDA schedule or selector is transferred to Metal. Apple follow-up is to
   populate the same logical evidence fields from Metal-native counters during
   its own performance work; current Apple plan state is otherwise unaffected.
+- Cross-backend sync `LLVM23-NVIDIA-2026-07-16`: not applicable to Apple
+  execution. The fixes are confined to Ubuntu apt.llvm.org discovery,
+  CUDA/NVVM lowering, and Linux NVIDIA/ROCm lit shell selection. No Apple IR,
+  ABI, Metal schedule, numerical policy, or exact-device evidence changed.
 
 ## Completion definition
 
@@ -310,6 +314,18 @@ Derive numerical policy from storage/accumulation semantics and performance
 policy from stable repeated-median evidence.
 
 ## Next update
+
+Cross-backend sync `NVFP4-TILE-SCALES-2026-07-16`: shared typed Tile IR now
+permits logical `scale_a`/`scale_b` fragments only on NVFP4 MMA descriptors.
+Apple has no enabled NVFP4 cooperative-matrix route, so this is follow-up
+required at capability rejection only; no NVIDIA nibble, lane, scale-selector,
+or OMMA mapping applies to Metal.
+
+Cross-backend sync `EPILOGUE-CONTRACT-2026-07-16`: the shared `FusedRegion`
+oracle now names bias/activation/residual order and emits registered
+`E_FUSED_EPILOGUE_*` rejection diagnostics. Apple retains its architecture-owned
+MSL/Metal 4 schedules; APPLE-EPILOGUE-1 must validate the same semantic order
+and diagnostics on its exact host before claiming parity.
 
 After the first Apple-host collection, replace the provisional marker count
 with the migrated exact-device totals and append a failure table by execution

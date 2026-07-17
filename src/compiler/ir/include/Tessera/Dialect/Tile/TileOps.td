@@ -290,7 +290,9 @@ def Tile_ViewOp : Tile_Op<"view", [Pure]> {
 
 // Materialize a logical tile in the target-selected cooperative-matrix ABI.
 // The `role` and `mma` attributes are checked by the op verifier and are the
-// portable contract consumed by NVIDIA/ROCm pack lowerings.
+// portable contract consumed by NVIDIA/ROCm pack lowerings. Block-scaled
+// descriptors may carry additional logical scale_a/scale_b fragments without
+// exposing either backend's physical scale-selector registers.
 def Tile_FragmentPackOp : Tile_Op<"fragment_pack"> {
   let summary = "Pack a logical tile into an opaque MMA fragment";
   let arguments = (ins Variadic<AnyType>:$inputs);

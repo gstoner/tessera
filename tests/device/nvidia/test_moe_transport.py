@@ -62,3 +62,35 @@ def test_grouped_gemm_matches_per_expert_oracle():
     np.testing.assert_allclose(
         result["output"], reference_grouped_gemm(x, weights, sizes), rtol=2e-5, atol=2e-5,
     )
+
+
+@pytest.mark.skipif(not nvidia_mma_runtime_available(), reason="requires nvcc and NVIDIA GPU")
+@pytest.mark.hardware_nvidia
+def test_moe_device_timing_retains_resident_batches():
+    from tessera.compiler.emit.nvidia_cuda import measure_moe_dispatch_device
+
+    x = np.arange(17 * 31, dtype=np.float32).reshape(17, 31)
+    token_ids = np.arange(23, dtype=np.int32) % 17
+    batch_medians = []
+    latency = measure_moe_dispatch_device(
+        x, token_ids, reps=10, batches=3, batch_medians=batch_medians)
+    assert latency > 0
+    assert len(batch_medians) == 3
+    assert all(sample > 0 for sample in batch_medians)
+
+
+@pytest.mark.skipif(not nvidia_mma_runtime_available(), reason="requires nvcc and NVIDIA GPU")
+@pytest.mark.hardware_nvidia
+def test_grouped_swiglu_collapsed_route_matches_legacy_decomposition():
+    from tessera.compiler.emit.nvidia_cuda import (
+        run_grouped_swiglu_f32, run_grouped_swiglu_legacy_f32,
+    )
+    rng = np.random.default_rng(20260722)
+    groups = np.array([5, 0, 7, 4], np.int64)
+    x = (rng.standard_normal((16, 13)) * 0.2).astype(np.float32)
+    wg = (rng.standard_normal((4, 13, 11)) * 0.15).astype(np.float32)
+    wu = (rng.standard_normal((4, 13, 11)) * 0.15).astype(np.float32)
+    wd = (rng.standard_normal((4, 11, 13)) * 0.15).astype(np.float32)
+    collapsed = run_grouped_swiglu_f32(x, wg, wu, wd, groups)
+    legacy = run_grouped_swiglu_legacy_f32(x, wg, wu, wd, groups)
+    np.testing.assert_allclose(collapsed, legacy, rtol=2e-5, atol=2e-5)

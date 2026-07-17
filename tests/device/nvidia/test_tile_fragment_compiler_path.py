@@ -30,6 +30,8 @@ FIXTURE = (ROOT / "src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia"
            / "sm120_pointer_fragment_store.mlir")
 KERNEL_FIXTURE = (ROOT / "src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia"
                   / "sm120_matmul_kernel.mlir")
+NVFP4_FIXTURE = (ROOT / "src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia"
+                 / "sm120_nvfp4_fragment_store.mlir")
 _NVIDIA_OPT_CANDIDATES = tuple(
     Path(value) for value in (os.environ.get("TESSERA_NVIDIA_OPT"),) if value
 ) + (
@@ -58,7 +60,8 @@ def _run(command: list[str], *, stdin: Path | None = None,
 def _compile_cubin(work: Path, fixture: Path = FIXTURE,
                    entries: tuple[str, ...] = ("pointer_fragment_store",),
                    expected_mma: str =
-                   "mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32") -> Path:
+                   "mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32",
+                   arch: str = "sm_120") -> Path:
     tools = {
         "opt": str(NVIDIA_OPT) if NVIDIA_OPT.is_file() else None,
         "mlir-opt": _tool("/usr/lib/llvm-23/bin/mlir-opt"),
@@ -85,10 +88,13 @@ def _compile_cubin(work: Path, fixture: Path = FIXTURE,
     _run([tools["llc"], "-mtriple=nvptx64-nvidia-cuda", "-mcpu=sm_120",
           "-O3"], stdin=llvm_ir, stdout=ptx)
     ptx_text = ptx.read_text()
+    if arch == "sm_120a":
+        ptx_text = ptx_text.replace(".target sm_120", ".target sm_120a")
+        ptx.write_text(ptx_text)
     for entry in entries:
         assert f".visible .entry {entry}" in ptx_text
     assert expected_mma in ptx_text
-    _run([tools["ptxas"], "-arch=sm_120", str(ptx), "-o", str(cubin)])
+    _run([tools["ptxas"], f"-arch={arch}", str(ptx), "-o", str(cubin)])
     return cubin
 
 
@@ -363,6 +369,53 @@ def test_sm120_tile_int8_fragment_path_matches_numpy() -> None:
         finally:
             driver.close()
     np.testing.assert_array_equal(actual, reference)
+
+
+def test_sm120_tile_nvfp4_logical_scales_match_numpy() -> None:
+    """The portable fixture supplies logical packed matrices and scale tiles."""
+    rng = np.random.default_rng(20260720)
+    a_codes = rng.integers(0, 16, size=(16, 64), dtype=np.uint8)
+    b_codes = rng.integers(0, 16, size=(64, 8), dtype=np.uint8)
+    scale_choices = np.array([0x30, 0x38, 0x40], dtype=np.uint8)
+    scale_a = scale_choices[(np.arange(16)[:, None] + np.arange(4)) % 3]
+    scale_b = scale_choices[(2 * np.arange(4)[:, None] + np.arange(8)) % 3]
+
+    # Canonical sub-byte storage packs adjacent logical E2M1 codes into bytes.
+    a_packed = np.ascontiguousarray(
+        a_codes[:, 0::2] | (a_codes[:, 1::2] << np.uint8(4)))
+    b_packed = np.asfortranarray(
+        b_codes[0::2, :] | (b_codes[1::2, :] << np.uint8(4)))
+    scale_a_storage = np.ascontiguousarray(scale_a)
+    scale_b_storage = np.asfortranarray(scale_b)
+
+    e2m1 = np.array(
+        [0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0,
+         -0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0],
+        dtype=np.float32)
+
+    def decode_scale(codes: np.ndarray) -> np.ndarray:
+        exponent = ((codes >> 3) & 0xF).astype(np.int32)
+        mantissa = (codes & 7).astype(np.float32)
+        return np.ldexp(1.0 + mantissa / 8.0, exponent - 7).astype(np.float32)
+
+    a = e2m1[a_codes] * np.repeat(decode_scale(scale_a), 16, axis=1)
+    b = e2m1[b_codes] * np.repeat(decode_scale(scale_b), 16, axis=0)
+    reference = a @ b
+    out = np.zeros((16, 8), dtype=np.float32)
+    with tempfile.TemporaryDirectory(prefix="tessera-sm120-nvfp4-") as tmp:
+        cubin = _compile_cubin(
+            Path(tmp), NVFP4_FIXTURE, ("nvfp4_fragment_store",),
+            "mma.sync.aligned.m16n8k64.row.col.kind::mxf4nvf4.block_scale",
+            arch="sm_120a")
+        driver = _CudaDriver()
+        try:
+            actual = driver.launch(
+                cubin, "nvfp4_fragment_store",
+                [a_packed, b_packed, scale_a_storage, scale_b_storage, out],
+                4, [0], (1, 1))
+        finally:
+            driver.close()
+    np.testing.assert_allclose(actual, reference, rtol=0, atol=1e-3)
 
 
 def test_sm120_launch_level_matmul_handles_grid_and_ragged_k() -> None:

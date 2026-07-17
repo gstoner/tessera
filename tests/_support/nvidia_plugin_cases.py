@@ -217,7 +217,8 @@ def test_nvidia_arbitrated_residual_threads_not_raises():
     # residual (not drop it into *a → missing-buffer guard → ValueError). Host-free:
     # off-GPU the candidate declines and the arbiter falls back to the numpy
     # reference — the point is it returns a correct result, never raises.
-    region = F.FusedRegion(epilogue=("relu",), residual=True)
+    region = F.FusedRegion(
+        epilogue=("relu",), residual=True, storage_dtype="f32")
     rng = np.random.default_rng(0)
     A = rng.standard_normal((8, 12)).astype(np.float32)
     B = rng.standard_normal((12, 16)).astype(np.float32)
@@ -356,7 +357,8 @@ def test_live_nvidia_arbitrated_residual_executes():
     # threaded through the positional inputs), not fall back / raise. Verify
     # (default) also exercises the residual probe added to the F4 oracle.
     F.clear_verification_cache()
-    region = F.FusedRegion(epilogue=("relu",), residual=True)
+    region = F.FusedRegion(
+        epilogue=("relu",), residual=True, storage_dtype="f32")
     rng = np.random.default_rng(0)
     A = rng.standard_normal((8, 12)).astype(np.float32)
     B = rng.standard_normal((12, 16)).astype(np.float32)

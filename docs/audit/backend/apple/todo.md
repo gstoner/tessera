@@ -324,8 +324,10 @@ or OMMA mapping applies to Metal.
 Cross-backend sync `EPILOGUE-CONTRACT-2026-07-16`: the shared `FusedRegion`
 oracle now names bias/activation/residual order and emits registered
 `E_FUSED_EPILOGUE_*` rejection diagnostics. Apple retains its architecture-owned
-MSL/Metal 4 schedules; APPLE-EPILOGUE-1 must validate the same semantic order
-and diagnostics on its exact host before claiming parity.
+MSL/Metal 4 schedules. NVIDIA now validates the complete 43-case supported
+execution matrix, but that CUDA result does not transfer: APPLE-EPILOGUE-1 must
+validate the same semantic order, dtype matrix, residual guards, and diagnostics
+on its exact Metal host before claiming parity.
 
 After the first Apple-host collection, replace the provisional marker count
 with the migrated exact-device totals and append a failure table by execution

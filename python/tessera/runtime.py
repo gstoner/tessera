@@ -5044,7 +5044,10 @@ def _execute_nvidia_flash_attn_bwd_compiled(artifact: RuntimeArtifact, args: Any
         do, q, k, v, scale=scale, causal=bool(kw.get("causal", False)),
         window_left=None if wl is None else int(wl),
         window_right=None if wr is None else int(wr), bias=bias,
-        softcap=kw.get("softcap", kw.get("logit_softcap", None)))
+        softcap=kw.get("softcap", kw.get("logit_softcap", None)),
+        route=str(kw.get("route", "auto")),
+        deterministic=bool(kw.get("deterministic", False)),
+        workspace_limit_bytes=kw.get("workspace_limit_bytes"))
 
 
 def _execute_nvidia_linear_attn_compiled(artifact: RuntimeArtifact, args: Any) -> Any:

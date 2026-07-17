@@ -669,8 +669,11 @@ round trips affect registration and allocation. Before automatic selection:
 Cross-backend sync `EPILOGUE-CONTRACT-2026-07-16` updates only the shared
 `FusedRegion` bias/activation/residual order and registered rejection
 diagnostics. Existing gfx1151 epilogue fixtures already consume this oracle;
-no CUDA warp, register, or schedule result transfers to ROCm. Re-run the shared
-contract gates on the ROCm host when this coordinating change lands.
+NVIDIA now validates the complete 43-case CUDA execution matrix. No CUDA warp,
+register, dtype-support, or schedule result transfers to ROCm. Re-run the shared
+contract and architecture-supported execution matrix on the gfx1151 host when
+this coordinating change lands; retain explicit not-applicable results for
+CUDA-only storage forms.
 
 Do not schedule these without new evidence:
 

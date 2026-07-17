@@ -101,30 +101,56 @@ def _legacy_grouped_device(x, weights, groups, reps):
 
 
 def _candidate_case(name, shape, dtype, reference, candidates, *,
-                    e2e_reps, device_reps, warmup, traffic_bytes):
+                    e2e_reps, e2e_batches, device_reps, device_batches,
+                    warmup, traffic_bytes):
+    from benchmarks.nvidia._clock_conditioning import condition_sm120
     errors = {}
     for candidate, spec in candidates.items():
         errors[candidate] = float(np.max(np.abs(spec["run"]() - reference)))
     runs = {candidate: [] for candidate in candidates}
     names = tuple(candidates)
-    for run_id in (1, 2):
-        device = {}
-        for candidate in (names if run_id == 1 else names[::-1]):
-            # Median several independently event-timed batches; a single short
-            # batch is too sensitive to WSL clock ramp for small grouped rows.
-            device[candidate] = statistics.median(
-                candidates[candidate]["device"](device_reps, warmup)
-                for _ in range(5))
-        samples = {candidate: [] for candidate in candidates}
-        for sample in range(e2e_reps):
-            order = names if (sample + run_id) % 2 else names[::-1]
+    clock_condition_ms = condition_sm120(reps=100)
+    device_samples = {
+        run_id: {candidate: [] for candidate in candidates}
+        for run_id in (1, 2)}
+    for batch in range(device_batches):
+        run_order = (1, 2) if batch % 2 == 0 else (2, 1)
+        order = names if batch % 2 == 0 else names[::-1]
+        for run_id in run_order:
+            for candidate in order:
+                device_samples[run_id][candidate].append(
+                    candidates[candidate]["device"](device_reps, warmup))
+    batch_medians = {
+        run_id: {candidate: [] for candidate in candidates}
+        for run_id in (1, 2)}
+    for batch in range(e2e_batches):
+        samples = {
+            run_id: {candidate: [] for candidate in candidates}
+            for run_id in (1, 2)}
+        cohort_order = (1, 2, 2, 1)
+        for sample in range(e2e_reps * 2):
+            run_id = cohort_order[sample % len(cohort_order)]
+            order = (names if (sample // 4 + batch) % 2 == 0
+                     else names[::-1])
             for candidate in order:
                 elapsed, _ = _wall(candidates[candidate]["run"])
-                samples[candidate].append(elapsed)
+                samples[run_id][candidate].append(elapsed)
+        for run_id in (1, 2):
+            for candidate in candidates:
+                batch_medians[run_id][candidate].append(
+                    statistics.median(samples[run_id][candidate]))
+    for run_id in (1, 2):
         for candidate in candidates:
+            candidate_batches = batch_medians[run_id][candidate]
             runs[candidate].append({
-                "run": run_id, "device_event_ms": device[candidate],
-                "end_to_end_ms": statistics.median(samples[candidate]),
+                "run": run_id,
+                "device_event_ms": statistics.median(
+                    device_samples[run_id][candidate]),
+                "device_batch_medians_ms":
+                    device_samples[run_id][candidate],
+                "end_to_end_ms": statistics.median(candidate_batches),
+                "end_to_end_batch_medians_ms": candidate_batches,
+                "clock_condition_ms": clock_condition_ms,
                 "max_abs_error": errors[candidate],
             })
     winners = {domain: [min(names, key=lambda n: runs[n][i][domain])
@@ -152,17 +178,27 @@ def _candidate_case(name, shape, dtype, reference, candidates, *,
             "achieved_bandwidth_gbps": traffic_bytes / (device_median * 1e6),
             "resources": resource_rows, "resource_fingerprints": fingerprints,
             "resource_evidence_complete": bool(resource_rows),
+            "sampling": {
+                "device_batches": device_batches,
+                "device_reps_per_batch": device_reps,
+                "end_to_end_batches": e2e_batches,
+                "end_to_end_reps_per_batch": e2e_reps,
+                "candidate_order": "rotated_interleaved",
+                "run_cohorts": "disjoint_interleaved_samples",
+                "clock_conditioning": "resident_tf32_gemm",
+            },
         })
     return rows
 
 
-def record(*, e2e_reps=30, device_reps=100, warmup=20):
+def record(*, e2e_reps=40, e2e_batches=20, device_reps=1000,
+           device_batches=10, warmup=1000):
     from tessera.compiler.emit import nvidia_cuda as nv
     rng = np.random.default_rng(20260723)
     gate_resource = _gated_epilogue_resource("silu")
     rows = []
-    for name, (M, N, K) in (("f32_square", (256, 256, 256)),
-                            ("f32_ragged", (127, 259, 63))):
+    for name, (M, N, K) in (("f32_square", (512, 512, 512)),
+                            ("f32_ragged", (509, 773, 257))):
         a = (rng.standard_normal((M, K)) * .2).astype(np.float32)
         b = (rng.standard_normal((K, N)) * .2).astype(np.float32)
         reference = a @ b; weights = b[None, :, :]; groups = np.array([M], np.int64)
@@ -180,11 +216,13 @@ def record(*, e2e_reps=30, device_reps=100, warmup=20):
                 "launches": 1, "resource_route": "nvidia_mma_fused_composed_tf32"},
         }
         rows.extend(_candidate_case(name, f"{M}x{N}x{K}", "f32/tf32",
-            reference, candidates, e2e_reps=e2e_reps, device_reps=device_reps,
-            warmup=warmup, traffic_bytes=a.nbytes + b.nbytes + reference.nbytes))
+            reference, candidates, e2e_reps=e2e_reps,
+            e2e_batches=e2e_batches, device_reps=device_reps,
+            device_batches=device_batches, warmup=warmup,
+            traffic_bytes=a.nbytes + b.nbytes + reference.nbytes))
 
-    T, K, N, E = 257, 193, 127, 5
-    groups = np.array([51, 0, 73, 61, 72], np.int64)
+    T, K, N, E = 1024, 384, 256, 5
+    groups = np.array([203, 0, 291, 244, 286], np.int64)
     x = (rng.standard_normal((T, K)) * .2).astype(np.float32)
     weights = (rng.standard_normal((E, K, N)) * .1).astype(np.float32)
     reference = _legacy_grouped(x, weights, groups)
@@ -196,10 +234,11 @@ def record(*, e2e_reps=30, device_reps=100, warmup=20):
             "legacy_per_expert": {"run": lambda: _legacy_grouped(x, weights, groups),
                 "device": lambda reps, warmup: _legacy_grouped_device(x, weights, groups, reps),
                 "launches": int(np.count_nonzero(groups)), "resource_route": "generated_grouped"}},
-        e2e_reps=e2e_reps, device_reps=device_reps, warmup=warmup,
+        e2e_reps=e2e_reps, e2e_batches=e2e_batches,
+        device_reps=device_reps, device_batches=device_batches, warmup=warmup,
         traffic_bytes=x.nbytes + weights.nbytes + reference.nbytes))
 
-    T, H, F, E = 128, 64, 96, 8; groups = np.full(E, T // E, np.int64)
+    T, H, F, E = 512, 256, 384, 8; groups = np.full(E, T // E, np.int64)
     x = (rng.standard_normal((T, H)) * .15).astype(np.float32)
     wg = (rng.standard_normal((E, H, F)) * .1).astype(np.float32)
     wu = (rng.standard_normal((E, H, F)) * .1).astype(np.float32)
@@ -215,7 +254,8 @@ def record(*, e2e_reps=30, device_reps=100, warmup=20):
                 "device": lambda reps, warmup: nv.measure_grouped_swiglu_device(x, wg, wu, wd, groups, legacy=True, reps=reps),
                 "launches": 4 * E, "resource_route": "generated_grouped",
                 "additional_resources": [gate_resource]}},
-        e2e_reps=e2e_reps, device_reps=device_reps, warmup=warmup,
+        e2e_reps=e2e_reps, e2e_batches=e2e_batches,
+        device_reps=device_reps, device_batches=device_batches, warmup=warmup,
         traffic_bytes=x.nbytes + wg.nbytes + wu.nbytes + wd.nbytes + reference.nbytes))
 
     # Transport is already exact-device timed; retain its production rows and
@@ -235,12 +275,16 @@ def record(*, e2e_reps=30, device_reps=100, warmup=20):
 
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--e2e-reps", type=int, default=30)
-    p.add_argument("--device-reps", type=int, default=100)
-    p.add_argument("--warmup", type=int, default=20)
+    p.add_argument("--e2e-reps", type=int, default=40)
+    p.add_argument("--e2e-batches", type=int, default=20)
+    p.add_argument("--device-reps", type=int, default=1000)
+    p.add_argument("--device-batches", type=int, default=10)
+    p.add_argument("--warmup", type=int, default=1000)
     p.add_argument("--output", type=Path, default=OUT)
-    a = p.parse_args(argv); result = record(e2e_reps=a.e2e_reps,
-        device_reps=a.device_reps, warmup=a.warmup)
+    a = p.parse_args(argv); result = record(
+        e2e_reps=a.e2e_reps, e2e_batches=a.e2e_batches,
+        device_reps=a.device_reps, device_batches=a.device_batches,
+        warmup=a.warmup)
     a.output.write_text(json.dumps(result, indent=2) + "\n")
     print(f"wrote {a.output} ({len(result['rows'])} candidate rows)")
     return 0

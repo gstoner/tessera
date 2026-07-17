@@ -106,7 +106,9 @@ def _resources(warps):
             occupancy.close()
 
 
-def record(*, e2e_reps=20, device_reps=100, warmup=20):
+def record(*, e2e_reps=40, e2e_batches=10, device_reps=100,
+           device_batches=5, warmup=20):
+    from benchmarks.nvidia._clock_conditioning import condition_sm120
     from tessera.compiler.emit.nvidia_cuda import (
         measure_flash_attention_forward_schedule_device,
         run_flash_attention_forward_schedule,
@@ -122,27 +124,55 @@ def record(*, e2e_reps=20, device_reps=100, warmup=20):
             actual = run_flash_attention_forward_schedule(
                 q, k, v, warps_per_cta=warps, **kwargs)
             errors[warps] = float(np.max(np.abs(actual - reference)))
-        for run_id in (1, 2):
-            devices = {}
-            for warps in ((4, 8) if run_id == 1 else (8, 4)):
-                devices[warps] = measure_flash_attention_forward_schedule_device(
-                    q, k, v, warps_per_cta=warps, warmup=warmup,
-                    reps=device_reps, **kwargs)
-            # Rotate candidates within one sampling window so clock/allocation
-            # movement cannot be mistaken for a schedule win.
-            e2e_samples = {4: [], 8: []}
-            for sample in range(e2e_reps):
-                order = (4, 8) if (sample + run_id) % 2 else (8, 4)
+        clock_condition_ms = condition_sm120(reps=100)
+        device_samples = {run_id: {4: [], 8: []} for run_id in (1, 2)}
+        for epoch in range(device_batches * 2):
+            run_id = epoch % 2 + 1
+            order = (4, 8) if epoch % 2 == 0 else (8, 4)
+            for warps in order:
+                device_samples[run_id][warps].append(
+                    measure_flash_attention_forward_schedule_device(
+                        q, k, v, warps_per_cta=warps, warmup=warmup,
+                        reps=device_reps, **kwargs))
+        # End-to-end includes CUDA allocation/copy. Prime that lifecycle once,
+        # then assign alternating batches to two disjoint run cohorts. This
+        # preserves independent evidence while cancelling monotonic clock and
+        # allocator drift that otherwise aliases with run order.
+        for _ in range(warmup):
+            for warps in (4, 8):
+                run_flash_attention_forward_schedule(
+                    q, k, v, warps_per_cta=warps, **kwargs)
+        e2e_condition_ms = condition_sm120(reps=100)
+        e2e_batches_by_run = {
+            run_id: {4: [], 8: []} for run_id in (1, 2)}
+        for batch in range(e2e_batches):
+            samples = {
+                run_id: {4: [], 8: []} for run_id in (1, 2)}
+            for sample in range(e2e_reps * 2):
+                run_id = sample % 2 + 1
+                order = ((4, 8) if (sample // 2 + batch) % 2 == 0
+                         else (8, 4))
                 for warps in order:
                     start = time.perf_counter()
                     run_flash_attention_forward_schedule(
                         q, k, v, warps_per_cta=warps, **kwargs)
-                    e2e_samples[warps].append(
+                    samples[run_id][warps].append(
                         (time.perf_counter() - start) * 1e3)
+            for run_id in (1, 2):
+                for warps in (4, 8):
+                    e2e_batches_by_run[run_id][warps].append(
+                        statistics.median(samples[run_id][warps]))
+        for run_id in (1, 2):
             for warps in (4, 8):
+                batch_medians = e2e_batches_by_run[run_id][warps]
                 candidate_runs[warps].append({
-                    "run": run_id, "device_event_ms": devices[warps],
-                    "end_to_end_ms": statistics.median(e2e_samples[warps]),
+                    "run": run_id,
+                    "device_event_ms": statistics.median(
+                        device_samples[run_id][warps]),
+                    "end_to_end_ms": statistics.median(batch_medians),
+                    "end_to_end_batch_medians_ms": batch_medians,
+                    "clock_condition_ms": clock_condition_ms,
+                    "end_to_end_clock_condition_ms": e2e_condition_ms,
                     "max_abs_error": errors[warps],
                 })
         winners = {}
@@ -167,6 +197,15 @@ def record(*, e2e_reps=20, device_reps=100, warmup=20):
                 "traffic_bytes": int(q.nbytes + k.nbytes + v.nbytes + reference.nbytes +
                                      (0 if kwargs.get("bias") is None else kwargs["bias"].nbytes)),
                 "resource": resources[warps],
+                "sampling": {
+                    "device_batches": device_batches,
+                    "device_reps_per_batch": device_reps,
+                    "end_to_end_batches": e2e_batches,
+                    "end_to_end_reps_per_batch": e2e_reps,
+                    "candidate_order": "rotated_interleaved",
+                    "run_cohorts": "disjoint_interleaved_samples",
+                    "clock_conditioning": "resident_tf32_gemm",
+                },
             })
     device = subprocess.run([
         "nvidia-smi", "--query-gpu=name,uuid,compute_cap,driver_version",
@@ -177,12 +216,17 @@ def record(*, e2e_reps=20, device_reps=100, warmup=20):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--e2e-reps", type=int, default=20)
+    parser.add_argument("--e2e-reps", type=int, default=40)
+    parser.add_argument("--e2e-batches", type=int, default=10)
     parser.add_argument("--device-reps", type=int, default=100)
+    parser.add_argument("--device-batches", type=int, default=5)
     parser.add_argument("--warmup", type=int, default=20)
     parser.add_argument("--output", type=Path, default=OUT)
     args = parser.parse_args(argv)
-    result = record(e2e_reps=args.e2e_reps, device_reps=args.device_reps,
+    result = record(e2e_reps=args.e2e_reps,
+                    e2e_batches=args.e2e_batches,
+                    device_reps=args.device_reps,
+                    device_batches=args.device_batches,
                     warmup=args.warmup)
     args.output.write_text(json.dumps(result, indent=2) + "\n")
     print(f"wrote {args.output} ({len(result['rows'])} rows)")

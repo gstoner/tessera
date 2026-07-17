@@ -2,6 +2,8 @@
   "schema_version": 1,
   "migration": "NVIDIA-TEST-6-HIGH",
   "post_migration_nodes": [
+    "tests/device/nvidia/test_flash_attention_backward.py::test_live_nvidia_flash_attn_bwd_atomic_and_split_share_advanced_oracle",
+    "tests/device/nvidia/test_flash_attention_backward.py::test_live_nvidia_flash_attn_bwd_split_reduced_is_deterministic_and_bounded",
     "tests/device/nvidia/test_flash_attention.py::test_live_nvidia_flash_attn_multiwarp_d128_mha_gqa_mqa[4]",
     "tests/device/nvidia/test_flash_attention.py::test_live_nvidia_flash_attn_multiwarp_d128_mha_gqa_mqa[8]",
     "tests/device/nvidia/test_flash_attention.py::test_live_nvidia_flash_attn_multiwarp_ragged_mask_bias_softcap[4]",

@@ -176,15 +176,20 @@ Baseline state on the NVIDIA box (2026-07-15, commit `ecf9483f`):
   if its partner event cannot be created. Host-free fault-injection tests pass
   (2/2); the marker artifact lane passed and the real stream/event ABI fixture
   passed 15/15 on the RTX 5070 Ti.
-- The TEST-6 closure audit found no remaining ordinary private MMA/PTX probe
+- **NVIDIA-TEST-6 is complete (2026-07-16).** The closure audit found no
+  remaining ordinary private MMA/PTX probe
   implementation: plugin and hot-path-ratchet compatibility names now delegate
   to shared predicates, while the Tile probe remains intentionally specialized.
   Running the hot-path ratchet immediately after the broad plugin matrix
   exceeded two f16 caps (512³ and 1024³); two isolated serial reruns both
   passed. The disposition is test-state contamination outside the canonical
   isolated performance lane, not a tolerance change or performance regression.
-  Keep TEST-6 `landing`: additional mature device families still require the
-  same mapped relocation and four-layer proof contract.
+  An AST ratchet now rejects any future exact-device test under `tests/unit`.
+  The final topology collects 333 NVIDIA nodes; compiler artifacts pass 20/20,
+  exact-device correctness passes 313/313 twice, and the serial measured lane
+  passes 20/20. New backward-attention and epilogue families landed directly
+  in `tests/device/nvidia`, and the backward nodes are recorded in the
+  executable post-migration map.
 - The control-flow cohort is now accepted: source/rejection contracts remain
   host-free under `tests/unit`, while the bounded-control and runtime-binding
   execute/compare proofs moved to `tests/device/nvidia/test_control_flow.py`.
@@ -374,7 +379,7 @@ validation of their respective host-free compiler configurations on the correct
 backend hosts; the NVIDIA host retains the focused host-free migration guard
 plus its artifact and exact-device proof layers.
 
-**Completion evidence (2026-07-15, `landing`).** The executable map now covers
+**Completion evidence (2026-07-16, `complete`).** The executable map now covers
 **286** relocated node IDs. Mature execute/compare families are collected from
 `tests/device/nvidia/`; paged-KV, ReplaySSM, and the MMA bridge are in
 `tests/integration/`; and hot-path, Conv2D, MMA-symbol, and plugin timing
@@ -398,10 +403,18 @@ the serial performance lane passed (18 passed and one skip). This is a product
 correctness fix with retained before/after numerical evidence, not a tolerance
 relaxation.
 
+The final static audit finds no `hardware_nvidia` test function under
+`tests/unit`; structural marker/release assertions remain host-free. The
+expanded map contains 292 relocations plus 22 post-migration nodes. The final
+four-layer proof is 20/20 compiler lit, 313/313 exact-device correctness twice,
+and 20/20 serial performance on the RTX 5070 Ti. This closes the migration;
+future native tests must land directly in device, integration, or performance
+roots and satisfy the same AST/node-map ratchets.
+
 ## Canonical commands on the NVIDIA box
 
 ```bash
-# 0. State/collection contract (currently 268 nodes)
+# 0. State/collection contract (currently 333 nodes)
 python3 -m pytest tests/unit tests/device/nvidia tests/performance/nvidia tests/integration \
   -m hardware_nvidia --collect-only -q --no-header
 
@@ -410,17 +423,17 @@ python3 scripts/run_unit_tests.py --timeout=180 -q
 
 # 2. Compiler artifacts without claiming device execution
 ninja -C build-nvidia-cuda check-tessera-nvidia
-python3 -m pytest tests/unit tests/device/nvidia \
+python3 -m pytest tests/unit tests/device/nvidia tests/integration \
   -m "compiler_nvidia and not hardware_nvidia" -q --durations=50 \
   --junitxml=/tmp/nvidia-compiler-tool.xml
 
 # 3. Exact-device correctness; run twice from the same clean build
-python3 -m pytest tests/unit tests/device/nvidia \
+python3 -m pytest tests/unit tests/device/nvidia tests/integration \
   -m "hardware_nvidia and not performance" -q --durations=100 \
   --junitxml=/tmp/nvidia-device-correctness.xml
 
 # 4. Measured lane: serial only
-python3 -m pytest tests/unit tests/device/nvidia \
+python3 -m pytest tests/unit tests/device/nvidia tests/performance/nvidia tests/integration \
   -m "hardware_nvidia and performance" -q -n 0 --durations=0 \
   --junitxml=/tmp/nvidia-performance.xml
 ```
@@ -518,7 +531,7 @@ winner. An AMD wave shape, LDS strategy, or VGPR result is never a CUDA default.
   CUDA 13.3's renamed local/shared spill-request metrics are normalized alongside
   the legacy Nsight metrics, and the synthesized fused fallback now has retained
   production-sized Nsight evidence.
-- **NVIDIA-PARITY-LEGACY-RETUNE — landing; no selector promotion.** The
+- **NVIDIA-PARITY-LEGACY-RETUNE — stable complete; no selector promotion.** The
   device-keyed `nvidia_sm120_legacy_retune.json` now compares compiled exact-f32
   and shipped TF32 GEMM on square/ragged rows, one grouped GEMM launch against
   the retained per-expert decomposition, and a new grouped SwiGLU route whose
@@ -527,21 +540,36 @@ winner. An AMD wave shape, LDS strategy, or VGPR result is never a CUDA default.
   byte and achieved-bandwidth accounting, launch counts, and linked resources.
   SwiGLU rows retain both the grouped-GEMM cubin fingerprint and the exact
   generated SiLU-gate registers, occupancy, and spill record.
-  Grouped GEMM and SwiGLU show large launch-collapse wins, but several two-run
-  medians remain outside the 3% policy, so the evidence does not authorize a
-  selector change. KV/MoE movement rows are retained from TEST-5; their shared
-  transport evidence is now parity-validated, but this legacy-retune corpus
-  remains independently blocked on its unstable candidate comparisons.
-- **NVIDIA-PARITY-ATTN-FWD — landing; CUDA 4-warp candidate leads kernel time.**
+  The final corpus uses production-scale 512-square and 509x773x257 ragged
+  GEMM, 1024x384x256x5 grouped GEMM, and 512x256x384x8 grouped SwiGLU rows.
+  Exact-route resident warmup occurs after allocation in the timed session,
+  and two disjoint interleaved cohorts retain every device and end-to-end batch.
+  All eight rows pass 3% (maximum device/end-to-end deltas 2.47%/0.77%). TF32
+  and the launch-collapsed grouped routes win both retained runs, but this
+  evidence intentionally leaves selectors unchanged.
+- **NVIDIA-PARITY-ATTN-FWD — stable complete; CUDA 4-warp candidate leads kernel time.**
   CUDA-owned 4- and 8-warp CTA candidates now cover D=128 MHA, causal sequence
   1009, ragged GQA windowing, and MQA bias+softcap. Each warp owns one query,
   uses warp shuffles for QK, and keeps distributed online-softmax/PV state;
   this is not ROCm's two-wave LDS schedule. All rows match the shared oracle
   within `7e-8`. Both candidates use 56 registers with zero spills; modeled
   occupancy is 75% for four warps and 66.67% for eight. Four warps win CUDA-event
-  timing on both retained runs for every case. Some allocation/copy-inclusive
-  medians still exceed the 3% two-run stability policy despite rotated 200-sample
-  collection, so production selection remains unchanged.
+  timing on both retained runs for every case. Ten disjoint, sample-interleaved
+  end-to-end batches remove run-order aliasing without sharing observations;
+  all eight rows now pass 3% with maximum device/end-to-end deltas of
+  0.22%/1.84%. Small end-to-end rows do not have unanimous winner consensus,
+  so production selection remains unchanged.
+- **NVIDIA-PARITY-ATTN-BWD — measured complete; atomic retained.** The atomic
+  incumbent and deterministic two-part split/workspace/fixed-order-reduction
+  candidate share one forward-derived oracle across D64 MHA, causal D128 MHA,
+  and ragged windowed GQA. The split route is bitwise repeatable, rejects
+  unsupported f16 storage, and enforces an exact one-extra-dK+dV f32 workspace
+  cap (524,288 bytes on MHA rows; 134,144 on ragged GQA). All six candidate
+  rows pass 3% with maximum device/end-to-end deltas of 0.36%/1.67%. Resources
+  retain atomic 48-register/83.33%-occupancy and split dQ 48-register,
+  dK/dV 56-register/75%-occupancy, and reduction 12-register/100%-occupancy
+  fingerprints plus spill evidence. Atomic wins both timing domains in every
+  case by a large margin, so `selector_changed` remains false.
 - **NVIDIA-PARITY-PAGED-KV — correctness and timing complete; no promotion.** Both fused
   and staged routes now pass the same permuted-page oracle at lengths 1, 3, 4,
   5, 7, 8, 9, and 13, including non-monotonic logical indices and global causal
@@ -559,11 +587,14 @@ winner. An AMD wave shape, LDS strategy, or VGPR result is never a CUDA default.
   disjoint four-route batch medians with recorded out-of-band clock conditioning.
   All errors are below `1.5e-8`; maximum device and end-to-end two-run deltas are
   0.93% and 1.58%.
-- **NVIDIA-PARITY-EPILOGUE — shared contract landing.** `FusedRegion` is the
+- **NVIDIA-PARITY-EPILOGUE — execution matrix complete.** `FusedRegion` is the
   backend-neutral bias/activation/residual/order oracle and now emits registered
   `E_FUSED_EPILOGUE_*` diagnostics for unsupported dtype/op/order and missing
-  operands. Existing CUDA f16/bf16/f32/FP8 native lanes consume that oracle;
-  the full supported-pair execution matrix remains the closure gate.
+  operands. The exact-device matrix now executes all 43 supported combinations
+  over f32/f16/bf16/FP8 E4M3/FP8 E5M2, optional bias, no activation or
+  ReLU/GELU/SiLU, and f32 residual-after-activation ordering. Accumulation is
+  f32; low-precision residual, activation-before-bias, repeated activation,
+  and unsupported dtype/op pairs reject with the registered diagnostics.
 - **NVIDIA-PARITY-AUTOTUNE — strict admission complete; no promotion.** Corpus
   admission can require exact device, timing domain, compiler fingerprint,
   resource fingerprints, compile state, and cache state. The committed
@@ -611,7 +642,8 @@ after two stable runs and an explicit before/after review.
 ## Next update
 
 The collection contract, compiler-artifact, exact-device correctness, and
-serial measured lanes now have recorded baselines. NVIDIA-TEST-5 is closed;
-continue the test-layout migrations under NVIDIA-TEST-6. Keep `plan_state:
-landing` while those implementation, migration, or re-run items remain.
+serial measured lanes now have recorded baselines. NVIDIA-TEST-5 and
+NVIDIA-TEST-6 are closed; the requested attention, epilogue, and legacy-retune
+parity records are stable without a selector promotion. Keep `plan_state:
+landing` while unrelated implementation or exact-device follow-ons remain.
 Move this plan to the NVIDIA archive only after every completion gate is met.

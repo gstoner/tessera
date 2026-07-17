@@ -209,7 +209,8 @@ def test_lower_tile_to_nvidia_sm120_target_ir_maps_mma_to_warp_level_mma_sync():
 
 @pytest.mark.parametrize(
     "dtype,shape,dtype_c",
-    [("f16", "m16n8k16", "f32"), ("tf32", "m16n8k8", "f32"),
+    [("f16", "m16n8k16", "f32"), ("fp16", "m16n8k16", "f32"),
+     ("tf32", "m16n8k8", "f32"),
      ("fp8_e4m3", "m16n8k32", "f32"),
      ("fp8_e5m2", "m16n8k32", "f32"), ("int8", "m16n8k32", "s32")],
 )

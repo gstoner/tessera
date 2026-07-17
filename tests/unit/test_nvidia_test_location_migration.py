@@ -82,8 +82,14 @@ def test_nvidia_test6_leaves_no_exact_device_test_under_unit_root():
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
             for decorator in node.decorator_list:
-                text = ast.unparse(decorator)
-                if text == "pytest.mark.hardware_nvidia":
+                if (
+                    isinstance(decorator, ast.Attribute)
+                    and decorator.attr == "hardware_nvidia"
+                    and isinstance(decorator.value, ast.Attribute)
+                    and decorator.value.attr == "mark"
+                    and isinstance(decorator.value.value, ast.Name)
+                    and decorator.value.value.id == "pytest"
+                ):
                     violations.append(
                         f"{path.relative_to(ROOT)}::{node.name}")
     assert not violations, (

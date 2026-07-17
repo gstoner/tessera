@@ -93,3 +93,51 @@ def test_live_nvidia_flash_attn_bwd_f16_storage_f32_accumulation():
     for actual, expected in zip(got["output"], ref):
         assert actual.dtype == np.float16
         np.testing.assert_allclose(actual.astype(np.float32), expected, atol=3e-3, rtol=0)
+
+
+@pytest.mark.slow
+@pytest.mark.hardware_nvidia
+def test_live_nvidia_flash_attn_bwd_split_reduced_is_deterministic_and_bounded():
+    from tessera.compiler.emit.nvidia_cuda import (
+        flash_attention_backward_workspace_bytes,
+    )
+
+    rt = require_nvidia_mma_runtime(); rng = np.random.default_rng(929)
+    q = rng.standard_normal((1, 4, 7, 8), dtype=np.float32)
+    k = rng.standard_normal((1, 2, 9, 8), dtype=np.float32)
+    v = rng.standard_normal((1, 2, 9, 6), dtype=np.float32)
+    do = rng.standard_normal((1, 4, 7, 6), dtype=np.float32)
+    workspace = flash_attention_backward_workspace_bytes(k, v)
+    kwargs = {
+        "scale": 8 ** -0.5,
+        "causal": True,
+        "route": "split_reduced",
+        "deterministic": True,
+        "workspace_limit_bytes": workspace,
+    }
+    first = rt.launch(_artifact(False, **kwargs), (do, q, k, v))
+    second = rt.launch(_artifact(False, **kwargs), (do, q, k, v))
+    assert first["ok"] and second["ok"]
+    reference = _ref(do, q, k, v, scale=kwargs["scale"], causal=True)
+    for a, b, expected in zip(first["output"], second["output"], reference):
+        np.testing.assert_array_equal(a, b)
+        np.testing.assert_allclose(a, expected, atol=1e-4, rtol=0)
+
+
+@pytest.mark.slow
+@pytest.mark.hardware_nvidia
+def test_live_nvidia_flash_attn_bwd_atomic_and_split_share_advanced_oracle():
+    rt = require_nvidia_mma_runtime(); rng = np.random.default_rng(937)
+    q = rng.standard_normal((1, 2, 5, 8), dtype=np.float32)
+    k = rng.standard_normal((1, 1, 7, 8), dtype=np.float32)
+    v = rng.standard_normal((1, 1, 7, 5), dtype=np.float32)
+    do = rng.standard_normal((1, 2, 5, 5), dtype=np.float32)
+    bias = (rng.standard_normal((1, 2, 5, 7)) * 0.05).astype(np.float32)
+    common = dict(scale=8 ** -0.5, causal=True, window=(3, 1), softcap=1.7)
+    expected = _ref(do, q, k, v, bias=bias, **common)
+    for route in ("atomic", "split_reduced"):
+        got = rt.launch(_artifact(True, route=route, **common),
+                        (do, q, k, v, bias))
+        assert got["ok"], got.get("reason")
+        for actual, ref in zip(got["output"], expected):
+            np.testing.assert_allclose(actual, ref, atol=1e-4, rtol=0)

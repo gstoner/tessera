@@ -1,6 +1,7 @@
 """Static guard for the NVIDIA-TEST-6-HIGH node-ID relocation contract."""
 from __future__ import annotations
 
+import ast
 import json
 from pathlib import Path
 import subprocess
@@ -32,7 +33,7 @@ def test_nvidia_moe_transport_node_migration_has_no_old_file_duplicate():
     post_migration_nodes = set(data["post_migration_nodes"])
     assert data["migration"] == "NVIDIA-TEST-6-HIGH"
     assert len(mappings) == 292
-    assert len(post_migration_nodes) == 20
+    assert len(post_migration_nodes) == 22
     for new_node in mappings.values():
         assert _node_path(new_node).is_file(), new_node
     for node in post_migration_nodes:
@@ -70,3 +71,28 @@ def test_nvidia_moe_transport_node_migration_has_no_old_file_duplicate():
         assert old_proc.returncode == 0, old_proc.stderr
         old_collected = {line for line in old_proc.stdout.splitlines() if line.startswith("tests/")}
         assert not old_collected.intersection(mappings), old_collected.intersection(mappings)
+
+
+def test_nvidia_test6_leaves_no_exact_device_test_under_unit_root():
+    """NVIDIA-TEST-6 closes only when execution tests live in device roots."""
+    violations = []
+    for path in sorted((ROOT / "tests/unit").glob("test_*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for decorator in node.decorator_list:
+                if (
+                    isinstance(decorator, ast.Attribute)
+                    and decorator.attr == "hardware_nvidia"
+                    and isinstance(decorator.value, ast.Attribute)
+                    and decorator.value.attr == "mark"
+                    and isinstance(decorator.value.value, ast.Name)
+                    and decorator.value.value.id == "pytest"
+                ):
+                    violations.append(
+                        f"{path.relative_to(ROOT)}::{node.name}")
+    assert not violations, (
+        "exact-device NVIDIA tests must live under tests/device/nvidia, "
+        "tests/integration, or tests/performance/nvidia: " +
+        ", ".join(violations))

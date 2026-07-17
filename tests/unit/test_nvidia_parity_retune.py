@@ -41,6 +41,9 @@ def test_committed_attention_forward_matrix_retains_dual_timing_and_resources():
         assert row["resource"]["resource_fingerprint"].startswith("sha256:")
         assert row["stable"] == (row["device_stable"] and
                                   row["end_to_end_stable"])
+        assert row["stable"]
+        assert row["sampling"]["run_cohorts"] == (
+            "disjoint_interleaved_samples")
 
 
 def test_committed_legacy_retune_retains_launch_collapse_and_oracles():
@@ -52,6 +55,9 @@ def test_committed_legacy_retune_retains_launch_collapse_and_oracles():
     assert rows[("grouped_gemm", "legacy_per_expert")]["launches_per_call"] == 4
     assert rows[("grouped_swiglu", "collapsed_grouped")]["launches_per_call"] == 4
     assert rows[("grouped_swiglu", "legacy_per_expert")]["launches_per_call"] == 32
+    assert rows[("f32_square", "shipped_tf32")]["shape"] == "512x512x512"
+    assert rows[("grouped_gemm", "single_grouped_launch")]["shape"] == (
+        "1024x384x256x5")
     for row in rows.values():
         assert len(row["runs"]) == 2
         assert all(run["device_event_ms"] > 0 and run["end_to_end_ms"] > 0
@@ -60,6 +66,11 @@ def test_committed_legacy_retune_retains_launch_collapse_and_oracles():
         assert row["resource_fingerprints"]
         assert row["stable"] == (row["device_stable"] and
                                   row["end_to_end_stable"])
+        assert row["stable"]
+        assert row["sampling"]["run_cohorts"] == (
+            "disjoint_interleaved_samples")
+        assert all(len(run["device_batch_medians_ms"]) == 10
+                   for run in row["runs"])
     for candidate in ("collapsed_grouped", "legacy_per_expert"):
         resource_kinds = {resource.get("row_kind") for resource in
                           rows[("grouped_swiglu", candidate)]["resources"]}

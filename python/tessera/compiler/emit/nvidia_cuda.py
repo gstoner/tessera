@@ -67,6 +67,9 @@ from tessera.compiler.emit.kernel_emitter import (
     register_runner,
 )
 from tessera.compiler.fusion_core import (
+    E_FUSED_EPILOGUE_BAD_DTYPE,
+    E_FUSED_EPILOGUE_BAD_OP,
+    E_FUSED_EPILOGUE_BAD_ORDER,
     POINTWISE_OPS,
     AttentionRegion,
     FusedRegion,
@@ -84,6 +87,7 @@ _PW_ENTRY = "tessera_nvidia_pointwise"
 _SOFTMAX_ENTRY = "tessera_nvidia_softmax"
 _FLASH_FWD_ENTRY = "tessera_nvidia_flash_attn_fwd"
 _FLASH_BWD_ENTRY = "tessera_nvidia_flash_attn_bwd"
+_FLASH_BWD_SPLIT_ENTRY = "tessera_nvidia_flash_attn_bwd_split_reduced"
 _LINEAR_ATTN_ENTRY = "tessera_nvidia_linear_attn"
 _LINEAR_ATTN_BWD_ENTRY = "tessera_nvidia_linear_attn_bwd"
 _MLA_FUSED_ENTRY = "tessera_nvidia_mla_decode_fused"
@@ -583,26 +587,50 @@ def run_mla_decode_fused(x: Any, w_dkv: Any, w_uk: Any, w_uv: Any, q: Any,
 
 
 def _synthesize_flash_bwd_cuda() -> str:
-    """Correctness-first f32 Flash-Attention VJP with GQA atomic accumulation."""
-    return (
-        "#include <cuda_runtime.h>\n#include <math.h>\n"
-        "#define TSR_FA_CAP 256\n"
-        "__global__ void tsr_flash_bwd(const float*go,const float*q,const float*k,const float*v,const float*bias,float*dq,float*dk,float*dv,long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,float scale,int causal,long wl,long wr,float cap){\n"
-        " long row=(long)blockIdx.x*blockDim.x+threadIdx.x,total=B*(long)Hq*Sq;if(row>=total)return;long m=row%Sq,tmp=row/Sq;int qh=(int)(tmp%Hq);long b=tmp/Hq,hk=qh/(Hq/Hkv);float acc[TSR_FA_CAP];for(int d=0;d<Dv;++d)acc[d]=0.f;float mx=-INFINITY;\n"
-        " for(long n=0;n<Sk;++n){if((causal&&n>m)||(wl>=0&&n<m-wl)||(wr>=0&&n>m+wr))continue;long qo=(((b*(long)Hq+qh)*Sq+m)*D),ko=(((b*(long)Hkv+hk)*Sk+n)*D);float s=0.f;for(int d=0;d<D;++d)s+=q[qo+d]*k[ko+d];s*=scale;if(bias)s+=bias[(((b*(long)Hq+qh)*Sq+m)*Sk+n)];if(cap>0)s=cap*tanhf(s/cap);mx=fmaxf(mx,s);}\n"
-        " float z=0.f;for(long n=0;n<Sk;++n){if((causal&&n>m)||(wl>=0&&n<m-wl)||(wr>=0&&n>m+wr))continue;long qo=(((b*(long)Hq+qh)*Sq+m)*D),ko=(((b*(long)Hkv+hk)*Sk+n)*D);float s=0.f;for(int d=0;d<D;++d)s+=q[qo+d]*k[ko+d];s*=scale;if(bias)s+=bias[(((b*(long)Hq+qh)*Sq+m)*Sk+n)];if(cap>0)s=cap*tanhf(s/cap);float p=expf(s-mx);z+=p;long vo=(((b*(long)Hkv+hk)*Sk+n)*Dv);for(int d=0;d<Dv;++d)acc[d]+=p*v[vo+d];}\n"
-        " for(int d=0;d<Dv;++d)acc[d]/=z;long goo=(((b*(long)Hq+qh)*Sq+m)*Dv);float delta=0.f;for(int d=0;d<Dv;++d)delta+=go[goo+d]*acc[d];float aq[TSR_FA_CAP];for(int d=0;d<D;++d)aq[d]=0.f;\n"
-        " for(long n=0;n<Sk;++n){if((causal&&n>m)||(wl>=0&&n<m-wl)||(wr>=0&&n>m+wr))continue;long qo=(((b*(long)Hq+qh)*Sq+m)*D),ko=(((b*(long)Hkv+hk)*Sk+n)*D);float raw=0.f;for(int d=0;d<D;++d)raw+=q[qo+d]*k[ko+d];raw*=scale;float s=raw;if(bias)s+=bias[(((b*(long)Hq+qh)*Sq+m)*Sk+n)];float deriv=1.f;if(cap>0){float t=tanhf(s/cap);s=cap*t;deriv=1.f-t*t;}float p=expf(s-mx)/z;long vo=(((b*(long)Hkv+hk)*Sk+n)*Dv);float dp=0.f;for(int d=0;d<Dv;++d){dp+=go[goo+d]*v[vo+d];atomicAdd(&dv[vo+d],p*go[goo+d]);}float ds=p*(dp-delta)*deriv;for(int d=0;d<D;++d){aq[d]+=ds*scale*k[ko+d];atomicAdd(&dk[ko+d],ds*scale*q[qo+d]);}}for(int d=0;d<D;++d)dq[(((b*(long)Hq+qh)*Sq+m)*D)+d]=aq[d];}\n"
-        f'extern "C" int {_FLASH_BWD_ENTRY}(const float*hgo,const float*hq,const float*hk,const float*hv,const float*hb,float*hdq,float*hdk,float*hdv,long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,float scale,int causal,long wl,long wr,float cap){{\n'
-        " if(!hgo||!hq||!hk||!hv||!hdq||!hdk||!hdv||B<=0||Hq<=0||Hkv<=0||Hq%Hkv||Sq<=0||Sk<=0||D<=0||Dv<=0||D>TSR_FA_CAP||Dv>TSR_FA_CAP)return 2;size_t nq=(size_t)B*Hq*Sq*D*4,nkv=(size_t)B*Hkv*Sk*D*4,no=(size_t)B*Hq*Sq*Dv*4,nb=(size_t)B*Hq*Sq*Sk*4;float *go=0,*q=0,*k=0,*v=0,*bi=0,*dq=0,*dk=0,*dv=0;\n"
-        " if(cudaMalloc(&go,no)||cudaMalloc(&q,nq)||cudaMalloc(&k,nkv)||cudaMalloc(&v,(size_t)B*Hkv*Sk*Dv*4)||cudaMalloc(&dq,nq)||cudaMalloc(&dk,nkv)||cudaMalloc(&dv,(size_t)B*Hkv*Sk*Dv*4))return 2;if(hb&&cudaMalloc(&bi,nb))return 2;\n"
-        " cudaMemcpy(go,hgo,no,cudaMemcpyHostToDevice);cudaMemcpy(q,hq,nq,cudaMemcpyHostToDevice);cudaMemcpy(k,hk,nkv,cudaMemcpyHostToDevice);cudaMemcpy(v,hv,(size_t)B*Hkv*Sk*Dv*4,cudaMemcpyHostToDevice);if(hb)cudaMemcpy(bi,hb,nb,cudaMemcpyHostToDevice);cudaMemset(dk,0,nkv);cudaMemset(dv,0,(size_t)B*Hkv*Sk*Dv*4);long rows=B*(long)Hq*Sq;tsr_flash_bwd<<<(unsigned)((rows+127)/128),128>>>(go,q,k,v,bi,dq,dk,dv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);int ok=cudaDeviceSynchronize()==cudaSuccess?1:3;if(ok==1){cudaMemcpy(hdq,dq,nq,cudaMemcpyDeviceToHost);cudaMemcpy(hdk,dk,nkv,cudaMemcpyDeviceToHost);cudaMemcpy(hdv,dv,(size_t)B*Hkv*Sk*Dv*4,cudaMemcpyDeviceToHost);}cudaFree(go);cudaFree(q);cudaFree(k);cudaFree(v);cudaFree(dq);cudaFree(dk);cudaFree(dv);if(bi)cudaFree(bi);return ok;}\n"
-        f'extern "C" int {_FLASH_BWD_ENTRY}_timed(const float*hgo,const float*hq,const float*hk,const float*hv,const float*hb,long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,float scale,int causal,long wl,long wr,float cap,int reps,float*ms){{\n'
-        " if(!hgo||!hq||!hk||!hv||!ms||B<=0||Hq<=0||Hkv<=0||Hq%Hkv||Sq<=0||Sk<=0||D<=0||Dv<=0||D>TSR_FA_CAP||Dv>TSR_FA_CAP||reps<1)return 2;size_t nq=(size_t)B*Hq*Sq*D*4,nkv=(size_t)B*Hkv*Sk*D*4,no=(size_t)B*Hq*Sq*Dv*4,nv=(size_t)B*Hkv*Sk*Dv*4,nb=(size_t)B*Hq*Sq*Sk*4;float *go=0,*q=0,*k=0,*v=0,*bi=0,*dq=0,*dk=0,*dv=0;cudaEvent_t a=0,z=0;\n"
-        " if(cudaMalloc(&go,no)||cudaMalloc(&q,nq)||cudaMalloc(&k,nkv)||cudaMalloc(&v,nv)||cudaMalloc(&dq,nq)||cudaMalloc(&dk,nkv)||cudaMalloc(&dv,nv)||(hb&&cudaMalloc(&bi,nb)))goto fail;if(cudaMemcpy(go,hgo,no,cudaMemcpyHostToDevice)||cudaMemcpy(q,hq,nq,cudaMemcpyHostToDevice)||cudaMemcpy(k,hk,nkv,cudaMemcpyHostToDevice)||cudaMemcpy(v,hv,nv,cudaMemcpyHostToDevice)||(hb&&cudaMemcpy(bi,hb,nb,cudaMemcpyHostToDevice)))goto fail;\n"
-        " {long rows=B*(long)Hq*Sq;cudaMemset(dk,0,nkv);cudaMemset(dv,0,nv);tsr_flash_bwd<<<(unsigned)((rows+127)/128),128>>>(go,q,k,v,bi,dq,dk,dv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);if(cudaDeviceSynchronize()!=cudaSuccess||cudaEventCreate(&a)!=cudaSuccess||cudaEventCreate(&z)!=cudaSuccess||cudaEventRecord(a)!=cudaSuccess)goto fail;for(int r=0;r<reps;r++){cudaMemset(dk,0,nkv);cudaMemset(dv,0,nv);tsr_flash_bwd<<<(unsigned)((rows+127)/128),128>>>(go,q,k,v,bi,dq,dk,dv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);}if(cudaEventRecord(z)!=cudaSuccess||cudaEventSynchronize(z)!=cudaSuccess)goto fail;float elapsed=0;if(cudaEventElapsedTime(&elapsed,a,z)!=cudaSuccess)goto fail;*ms=elapsed/(float)reps;}\n"
-        " cudaEventDestroy(a);cudaEventDestroy(z);cudaFree(go);cudaFree(q);cudaFree(k);cudaFree(v);cudaFree(dq);cudaFree(dk);cudaFree(dv);if(bi)cudaFree(bi);return 1;fail:if(a)cudaEventDestroy(a);if(z)cudaEventDestroy(z);if(go)cudaFree(go);if(q)cudaFree(q);if(k)cudaFree(k);if(v)cudaFree(v);if(dq)cudaFree(dq);if(dk)cudaFree(dk);if(dv)cudaFree(dv);if(bi)cudaFree(bi);return 3;}\n"
-    )
+    """CUDA VJP candidates: incumbent atomics and deterministic split/reduce.
+
+    The split route writes partition zero directly to ``dK/dV``, partition one
+    to exactly one extra ``dK+dV`` workspace, then reduces in fixed order.  It
+    is deliberately architecture-owned CUDA rather than a copy of ROCm G6-C.
+    """
+    source = r'''#include <cuda_runtime.h>
+#include <math.h>
+#define TSR_FA_CAP 256
+__device__ __forceinline__ bool tsr_legal(long n,long m,int causal,long wl,long wr){return !((causal&&n>m)||(wl>=0&&n<m-wl)||(wr>=0&&n>m+wr));}
+__device__ __forceinline__ float tsr_score(const float*q,const float*k,const float*bias,long b,int qh,int hk,long m,long n,int Hq,int Hkv,long Sq,long Sk,int D,float scale,float cap){long qo=(((b*(long)Hq+qh)*Sq+m)*D),ko=(((b*(long)Hkv+hk)*Sk+n)*D);float s=0.f;for(int d=0;d<D;++d)s+=q[qo+d]*k[ko+d];s*=scale;if(bias)s+=bias[(((b*(long)Hq+qh)*Sq+m)*Sk+n)];return cap>0.f?cap*tanhf(s/cap):s;}
+__global__ void tsr_flash_bwd(const float*go,const float*q,const float*k,const float*v,const float*bias,float*dq,float*dk,float*dv,long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,float scale,int causal,long wl,long wr,float cap){
+ long row=(long)blockIdx.x*blockDim.x+threadIdx.x,total=B*(long)Hq*Sq;if(row>=total)return;long m=row%Sq,tmp=row/Sq;int qh=(int)(tmp%Hq);long b=tmp/Hq;int hk=qh/(Hq/Hkv);float acc[TSR_FA_CAP];for(int d=0;d<Dv;++d)acc[d]=0.f;float mx=-INFINITY;
+ for(long n=0;n<Sk;++n){if(!tsr_legal(n,m,causal,wl,wr))continue;mx=fmaxf(mx,tsr_score(q,k,bias,b,qh,hk,m,n,Hq,Hkv,Sq,Sk,D,scale,cap));}
+ float z=0.f;for(long n=0;n<Sk;++n){if(!tsr_legal(n,m,causal,wl,wr))continue;float p=expf(tsr_score(q,k,bias,b,qh,hk,m,n,Hq,Hkv,Sq,Sk,D,scale,cap)-mx);z+=p;long vo=(((b*(long)Hkv+hk)*Sk+n)*Dv);for(int d=0;d<Dv;++d)acc[d]+=p*v[vo+d];}
+ long goo=(((b*(long)Hq+qh)*Sq+m)*Dv);float delta=0.f;if(z>0.f)for(int d=0;d<Dv;++d)delta+=go[goo+d]*(acc[d]/z);float aq[TSR_FA_CAP];for(int d=0;d<D;++d)aq[d]=0.f;
+ for(long n=0;n<Sk&&z>0.f;++n){if(!tsr_legal(n,m,causal,wl,wr))continue;float raw=tsr_score(q,k,bias,b,qh,hk,m,n,Hq,Hkv,Sq,Sk,D,scale,0.f),s=raw,deriv=1.f;if(cap>0.f){float t=tanhf(s/cap);s=cap*t;deriv=1.f-t*t;}float p=expf(s-mx)/z;long qo=(((b*(long)Hq+qh)*Sq+m)*D),ko=(((b*(long)Hkv+hk)*Sk+n)*D),vo=(((b*(long)Hkv+hk)*Sk+n)*Dv);float dp=0.f;for(int d=0;d<Dv;++d){dp+=go[goo+d]*v[vo+d];atomicAdd(&dv[vo+d],p*go[goo+d]);}float ds=p*(dp-delta)*deriv;for(int d=0;d<D;++d){aq[d]+=ds*scale*k[ko+d];atomicAdd(&dk[ko+d],ds*scale*q[qo+d]);}}
+ for(int d=0;d<D;++d)dq[(((b*(long)Hq+qh)*Sq+m)*D)+d]=aq[d];}
+__global__ void tsr_flash_bwd_dq(const float*go,const float*q,const float*k,const float*v,const float*bias,float*dq,long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,float scale,int causal,long wl,long wr,float cap){
+ long row=(long)blockIdx.x*blockDim.x+threadIdx.x,total=B*(long)Hq*Sq;if(row>=total)return;long m=row%Sq,tmp=row/Sq;int qh=(int)(tmp%Hq);long b=tmp/Hq;int hk=qh/(Hq/Hkv);float mx=-INFINITY;
+ for(long n=0;n<Sk;++n)if(tsr_legal(n,m,causal,wl,wr))mx=fmaxf(mx,tsr_score(q,k,bias,b,qh,hk,m,n,Hq,Hkv,Sq,Sk,D,scale,cap));
+ float z=0.f,delta_num=0.f;long goo=(((b*(long)Hq+qh)*Sq+m)*Dv);for(long n=0;n<Sk;++n){if(!tsr_legal(n,m,causal,wl,wr))continue;float e=expf(tsr_score(q,k,bias,b,qh,hk,m,n,Hq,Hkv,Sq,Sk,D,scale,cap)-mx),dp=0.f;long vo=(((b*(long)Hkv+hk)*Sk+n)*Dv);for(int j=0;j<Dv;++j)dp+=go[goo+j]*v[vo+j];z+=e;delta_num+=e*dp;}
+ float delta=z>0.f?delta_num/z:0.f;for(int d=0;d<D;++d){float out=0.f;for(long n=0;n<Sk&&z>0.f;++n){if(!tsr_legal(n,m,causal,wl,wr))continue;float raw=tsr_score(q,k,bias,b,qh,hk,m,n,Hq,Hkv,Sq,Sk,D,scale,0.f),s=raw,deriv=1.f;if(cap>0.f){float t=tanhf(s/cap);s=cap*t;deriv=1.f-t*t;}float p=expf(s-mx)/z,dp=0.f;long ko=(((b*(long)Hkv+hk)*Sk+n)*D),vo=(((b*(long)Hkv+hk)*Sk+n)*Dv);for(int j=0;j<Dv;++j)dp+=go[goo+j]*v[vo+j];out+=p*(dp-delta)*deriv*scale*k[ko+d];}dq[(((b*(long)Hq+qh)*Sq+m)*D)+d]=out;}}
+__global__ void tsr_flash_bwd_split(const float*go,const float*q,const float*k,const float*v,const float*bias,float*dk,float*dv,long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,float scale,int causal,long wl,long wr,float cap,int split){
+ long item=(long)blockIdx.x*blockDim.x+threadIdx.x,total=B*(long)Hkv*Sk;if(item>=total)return;long n=item%Sk,t=item/Sk;int hk=(int)(t%Hkv);long b=t/Hkv;int ratio=Hq/Hkv;long mbeg=(Sq*split)/2,mend=(Sq*(split+1))/2;float ak[TSR_FA_CAP],av[TSR_FA_CAP];for(int d=0;d<D;++d)ak[d]=0.f;for(int d=0;d<Dv;++d)av[d]=0.f;
+ for(int qh=hk*ratio;qh<(hk+1)*ratio;++qh)for(long m=mbeg;m<mend;++m){if(!tsr_legal(n,m,causal,wl,wr))continue;float mx=-INFINITY;for(long j=0;j<Sk;++j)if(tsr_legal(j,m,causal,wl,wr))mx=fmaxf(mx,tsr_score(q,k,bias,b,qh,hk,m,j,Hq,Hkv,Sq,Sk,D,scale,cap));float z=0.f,delta_num=0.f;long goo=(((b*(long)Hq+qh)*Sq+m)*Dv);for(long j=0;j<Sk;++j){if(!tsr_legal(j,m,causal,wl,wr))continue;float e=expf(tsr_score(q,k,bias,b,qh,hk,m,j,Hq,Hkv,Sq,Sk,D,scale,cap)-mx),dp=0.f;long vo=(((b*(long)Hkv+hk)*Sk+j)*Dv);for(int x=0;x<Dv;++x)dp+=go[goo+x]*v[vo+x];z+=e;delta_num+=e*dp;}if(z<=0.f)continue;float raw=tsr_score(q,k,bias,b,qh,hk,m,n,Hq,Hkv,Sq,Sk,D,scale,0.f),s=raw,deriv=1.f;if(cap>0.f){float th=tanhf(s/cap);s=cap*th;deriv=1.f-th*th;}float p=expf(s-mx)/z,dp=0.f;long qo=(((b*(long)Hq+qh)*Sq+m)*D),vo=(((b*(long)Hkv+hk)*Sk+n)*Dv);for(int x=0;x<Dv;++x)dp+=go[goo+x]*v[vo+x];float ds=p*(dp-delta_num/z)*deriv;for(int d=0;d<D;++d)ak[d]+=ds*scale*q[qo+d];for(int d=0;d<Dv;++d)av[d]+=p*go[goo+d];}
+ long base=((b*(long)Hkv+hk)*Sk+n);for(int d=0;d<D;++d)dk[base*D+d]=ak[d];for(int d=0;d<Dv;++d)dv[base*Dv+d]=av[d];}
+__global__ void tsr_flash_bwd_reduce(float*dk,float*dv,const float*wk,const float*wv,long nk,long nv){long i=(long)blockIdx.x*blockDim.x+threadIdx.x;if(i<nk)dk[i]+=wk[i];if(i<nv)dv[i]+=wv[i];}
+extern "C" int TSR_ATOMIC_ENTRY(const float*hgo,const float*hq,const float*hk,const float*hv,const float*hb,float*hdq,float*hdk,float*hdv,long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,float scale,int causal,long wl,long wr,float cap){
+ if(!hgo||!hq||!hk||!hv||!hdq||!hdk||!hdv||B<=0||Hq<=0||Hkv<=0||Hq%Hkv||Sq<=0||Sk<=0||D<=0||Dv<=0||D>TSR_FA_CAP||Dv>TSR_FA_CAP)return 2;size_t nq=(size_t)B*Hq*Sq*D*4,nk=(size_t)B*Hkv*Sk*D*4,no=(size_t)B*Hq*Sq*Dv*4,nv=(size_t)B*Hkv*Sk*Dv*4,nb=(size_t)B*Hq*Sq*Sk*4;float *go=0,*q=0,*k=0,*v=0,*bi=0,*dq=0,*dk=0,*dv=0;if(cudaMalloc(&go,no)||cudaMalloc(&q,nq)||cudaMalloc(&k,nk)||cudaMalloc(&v,nv)||cudaMalloc(&dq,nq)||cudaMalloc(&dk,nk)||cudaMalloc(&dv,nv))return 2;if(hb&&cudaMalloc(&bi,nb))return 2;cudaMemcpy(go,hgo,no,cudaMemcpyHostToDevice);cudaMemcpy(q,hq,nq,cudaMemcpyHostToDevice);cudaMemcpy(k,hk,nk,cudaMemcpyHostToDevice);cudaMemcpy(v,hv,nv,cudaMemcpyHostToDevice);if(hb)cudaMemcpy(bi,hb,nb,cudaMemcpyHostToDevice);cudaMemset(dk,0,nk);cudaMemset(dv,0,nv);long rows=B*(long)Hq*Sq;tsr_flash_bwd<<<(rows+127)/128,128>>>(go,q,k,v,bi,dq,dk,dv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);int ok=cudaDeviceSynchronize()==cudaSuccess?1:3;if(ok==1){cudaMemcpy(hdq,dq,nq,cudaMemcpyDeviceToHost);cudaMemcpy(hdk,dk,nk,cudaMemcpyDeviceToHost);cudaMemcpy(hdv,dv,nv,cudaMemcpyDeviceToHost);}cudaFree(go);cudaFree(q);cudaFree(k);cudaFree(v);cudaFree(dq);cudaFree(dk);cudaFree(dv);if(bi)cudaFree(bi);return ok;}
+extern "C" int TSR_ATOMIC_ENTRY_timed(const float*hgo,const float*hq,const float*hk,const float*hv,const float*hb,long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,float scale,int causal,long wl,long wr,float cap,int reps,float*ms){
+ if(!hgo||!hq||!hk||!hv||!ms||B<=0||Hq<=0||Hkv<=0||Hq%Hkv||Sq<=0||Sk<=0||D<=0||Dv<=0||D>TSR_FA_CAP||Dv>TSR_FA_CAP||reps<1)return 2;size_t nq=(size_t)B*Hq*Sq*D*4,nk=(size_t)B*Hkv*Sk*D*4,no=(size_t)B*Hq*Sq*Dv*4,nv=(size_t)B*Hkv*Sk*Dv*4,nb=(size_t)B*Hq*Sq*Sk*4;float *go=0,*q=0,*k=0,*v=0,*bi=0,*dq=0,*dk=0,*dv=0;cudaEvent_t a=0,z=0;if(cudaMalloc(&go,no)||cudaMalloc(&q,nq)||cudaMalloc(&k,nk)||cudaMalloc(&v,nv)||cudaMalloc(&dq,nq)||cudaMalloc(&dk,nk)||cudaMalloc(&dv,nv)||(hb&&cudaMalloc(&bi,nb)))goto fail;if(cudaMemcpy(go,hgo,no,cudaMemcpyHostToDevice)||cudaMemcpy(q,hq,nq,cudaMemcpyHostToDevice)||cudaMemcpy(k,hk,nk,cudaMemcpyHostToDevice)||cudaMemcpy(v,hv,nv,cudaMemcpyHostToDevice)||(hb&&cudaMemcpy(bi,hb,nb,cudaMemcpyHostToDevice)))goto fail;{long rows=B*(long)Hq*Sq;cudaMemset(dk,0,nk);cudaMemset(dv,0,nv);tsr_flash_bwd<<<(rows+127)/128,128>>>(go,q,k,v,bi,dq,dk,dv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);if(cudaDeviceSynchronize()!=cudaSuccess||cudaEventCreate(&a)!=cudaSuccess||cudaEventCreate(&z)!=cudaSuccess||cudaEventRecord(a)!=cudaSuccess)goto fail;for(int r=0;r<reps;r++){cudaMemset(dk,0,nk);cudaMemset(dv,0,nv);tsr_flash_bwd<<<(rows+127)/128,128>>>(go,q,k,v,bi,dq,dk,dv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);}if(cudaEventRecord(z)!=cudaSuccess||cudaEventSynchronize(z)!=cudaSuccess)goto fail;float elapsed=0;if(cudaEventElapsedTime(&elapsed,a,z)!=cudaSuccess)goto fail;*ms=elapsed/reps;}cudaEventDestroy(a);cudaEventDestroy(z);cudaFree(go);cudaFree(q);cudaFree(k);cudaFree(v);cudaFree(dq);cudaFree(dk);cudaFree(dv);if(bi)cudaFree(bi);return 1;fail:if(a)cudaEventDestroy(a);if(z)cudaEventDestroy(z);if(go)cudaFree(go);if(q)cudaFree(q);if(k)cudaFree(k);if(v)cudaFree(v);if(dq)cudaFree(dq);if(dk)cudaFree(dk);if(dv)cudaFree(dv);if(bi)cudaFree(bi);return 3;}
+extern "C" int TSR_SPLIT_ENTRY(const float*hgo,const float*hq,const float*hk,const float*hv,const float*hb,float*hdq,float*hdk,float*hdv,long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,float scale,int causal,long wl,long wr,float cap){
+ if(!hgo||!hq||!hk||!hv||!hdq||!hdk||!hdv||B<=0||Hq<=0||Hkv<=0||Hq%Hkv||Sq<=0||Sk<=0||D<=0||Dv<=0||D>TSR_FA_CAP||Dv>TSR_FA_CAP)return 2;size_t nq=(size_t)B*Hq*Sq*D*4,nk=(size_t)B*Hkv*Sk*D*4,no=(size_t)B*Hq*Sq*Dv*4,nv=(size_t)B*Hkv*Sk*Dv*4,nb=(size_t)B*Hq*Sq*Sk*4;float *go=0,*q=0,*k=0,*v=0,*bi=0,*dq=0,*dk=0,*dv=0,*wk=0,*wv=0;if(cudaMalloc(&go,no)||cudaMalloc(&q,nq)||cudaMalloc(&k,nk)||cudaMalloc(&v,nv)||cudaMalloc(&dq,nq)||cudaMalloc(&dk,nk)||cudaMalloc(&dv,nv)||cudaMalloc(&wk,nk)||cudaMalloc(&wv,nv))goto fail;if(hb&&cudaMalloc(&bi,nb))goto fail;if(cudaMemcpy(go,hgo,no,cudaMemcpyHostToDevice)||cudaMemcpy(q,hq,nq,cudaMemcpyHostToDevice)||cudaMemcpy(k,hk,nk,cudaMemcpyHostToDevice)||cudaMemcpy(v,hv,nv,cudaMemcpyHostToDevice)||(hb&&cudaMemcpy(bi,hb,nb,cudaMemcpyHostToDevice)))goto fail;{long rows=B*(long)Hq*Sq,items=B*(long)Hkv*Sk*(D+Dv),mx=nk>nv?nk/4:nv/4;tsr_flash_bwd_dq<<<(rows+127)/128,128>>>(go,q,k,v,bi,dq,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);tsr_flash_bwd_split<<<(items+127)/128,128>>>(go,q,k,v,bi,dk,dv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap,0);tsr_flash_bwd_split<<<(items+127)/128,128>>>(go,q,k,v,bi,wk,wv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap,1);tsr_flash_bwd_reduce<<<(mx+127)/128,128>>>(dk,dv,wk,wv,nk/4,nv/4);if(cudaDeviceSynchronize()!=cudaSuccess)goto fail;}if(cudaMemcpy(hdq,dq,nq,cudaMemcpyDeviceToHost)||cudaMemcpy(hdk,dk,nk,cudaMemcpyDeviceToHost)||cudaMemcpy(hdv,dv,nv,cudaMemcpyDeviceToHost))goto fail;cudaFree(go);cudaFree(q);cudaFree(k);cudaFree(v);cudaFree(dq);cudaFree(dk);cudaFree(dv);cudaFree(wk);cudaFree(wv);if(bi)cudaFree(bi);return 1;fail:if(go)cudaFree(go);if(q)cudaFree(q);if(k)cudaFree(k);if(v)cudaFree(v);if(dq)cudaFree(dq);if(dk)cudaFree(dk);if(dv)cudaFree(dv);if(wk)cudaFree(wk);if(wv)cudaFree(wv);if(bi)cudaFree(bi);return 3;}
+extern "C" int TSR_SPLIT_ENTRY_timed(const float*hgo,const float*hq,const float*hk,const float*hv,const float*hb,long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,float scale,int causal,long wl,long wr,float cap,int reps,float*ms){
+ if(!hgo||!hq||!hk||!hv||!ms||reps<1||B<=0||Hq<=0||Hkv<=0||Hq%Hkv||Sq<=0||Sk<=0||D<=0||Dv<=0||D>TSR_FA_CAP||Dv>TSR_FA_CAP)return 2;size_t nq=(size_t)B*Hq*Sq*D*4,nk=(size_t)B*Hkv*Sk*D*4,no=(size_t)B*Hq*Sq*Dv*4,nv=(size_t)B*Hkv*Sk*Dv*4,nb=(size_t)B*Hq*Sq*Sk*4;float *go=0,*q=0,*k=0,*v=0,*bi=0,*dq=0,*dk=0,*dv=0,*wk=0,*wv=0;cudaEvent_t a=0,z=0;if(cudaMalloc(&go,no)||cudaMalloc(&q,nq)||cudaMalloc(&k,nk)||cudaMalloc(&v,nv)||cudaMalloc(&dq,nq)||cudaMalloc(&dk,nk)||cudaMalloc(&dv,nv)||cudaMalloc(&wk,nk)||cudaMalloc(&wv,nv)||(hb&&cudaMalloc(&bi,nb)))goto fail;if(cudaMemcpy(go,hgo,no,cudaMemcpyHostToDevice)||cudaMemcpy(q,hq,nq,cudaMemcpyHostToDevice)||cudaMemcpy(k,hk,nk,cudaMemcpyHostToDevice)||cudaMemcpy(v,hv,nv,cudaMemcpyHostToDevice)||(hb&&cudaMemcpy(bi,hb,nb,cudaMemcpyHostToDevice)))goto fail;{long rows=B*(long)Hq*Sq,items=B*(long)Hkv*Sk*(D+Dv),mx=nk>nv?nk/4:nv/4;tsr_flash_bwd_dq<<<(rows+127)/128,128>>>(go,q,k,v,bi,dq,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);tsr_flash_bwd_split<<<(items+127)/128,128>>>(go,q,k,v,bi,dk,dv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap,0);tsr_flash_bwd_split<<<(items+127)/128,128>>>(go,q,k,v,bi,wk,wv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap,1);tsr_flash_bwd_reduce<<<(mx+127)/128,128>>>(dk,dv,wk,wv,nk/4,nv/4);if(cudaDeviceSynchronize()!=cudaSuccess||cudaEventCreate(&a)!=cudaSuccess||cudaEventCreate(&z)!=cudaSuccess||cudaEventRecord(a)!=cudaSuccess)goto fail;for(int r=0;r<reps;r++){tsr_flash_bwd_dq<<<(rows+127)/128,128>>>(go,q,k,v,bi,dq,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap);tsr_flash_bwd_split<<<(items+127)/128,128>>>(go,q,k,v,bi,dk,dv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap,0);tsr_flash_bwd_split<<<(items+127)/128,128>>>(go,q,k,v,bi,wk,wv,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,cap,1);tsr_flash_bwd_reduce<<<(mx+127)/128,128>>>(dk,dv,wk,wv,nk/4,nv/4);}if(cudaEventRecord(z)!=cudaSuccess||cudaEventSynchronize(z)!=cudaSuccess)goto fail;float elapsed=0;if(cudaEventElapsedTime(&elapsed,a,z)!=cudaSuccess)goto fail;*ms=elapsed/reps;}cudaEventDestroy(a);cudaEventDestroy(z);cudaFree(go);cudaFree(q);cudaFree(k);cudaFree(v);cudaFree(dq);cudaFree(dk);cudaFree(dv);cudaFree(wk);cudaFree(wv);if(bi)cudaFree(bi);return 1;fail:if(a)cudaEventDestroy(a);if(z)cudaEventDestroy(z);if(go)cudaFree(go);if(q)cudaFree(q);if(k)cudaFree(k);if(v)cudaFree(v);if(dq)cudaFree(dq);if(dk)cudaFree(dk);if(dv)cudaFree(dv);if(wk)cudaFree(wk);if(wv)cudaFree(wv);if(bi)cudaFree(bi);return 3;}
+'''
+    # The split kernel owns one complete (batch, KV-head, key) row per
+    # thread.  Keep launch geometry in that semantic space; D and Dv are
+    # handled by the thread's fixed-order inner loops.
+    source = source.replace(
+        "items=B*(long)Hkv*Sk*(D+Dv)", "items=B*(long)Hkv*Sk")
+    return source.replace("TSR_ATOMIC_ENTRY", _FLASH_BWD_ENTRY).replace(
+        "TSR_SPLIT_ENTRY", _FLASH_BWD_SPLIT_ENTRY)
 
 
 def _synthesize_flash_bwd_f16_cuda() -> str:
@@ -626,11 +654,37 @@ def _synthesize_flash_bwd_f16_cuda() -> str:
     )
 
 
+def flash_attention_backward_workspace_bytes(
+        k: Any, v: Any, *, route: str = "split_reduced") -> int:
+    """Return temporary bytes for a CUDA backward-attention route.
+
+    ``split_reduced`` uses one extra f32 ``dK+dV`` footprint.  The incumbent
+    atomic route uses no explicit workspace.  This calculation is host-only so
+    callers can enforce a memory budget before compiling or allocating CUDA.
+    """
+    import numpy as np
+    if route not in ("atomic", "split_reduced"):
+        raise ValueError(f"unknown NVIDIA flash backward route {route!r}")
+    ka, va = np.asarray(k), np.asarray(v)
+    if ka.ndim != 4 or va.ndim != 4 or ka.shape[:3] != va.shape[:3]:
+        raise ValueError("workspace query requires matching rank-4 K/V tensors")
+    return 0 if route == "atomic" else int((ka.size + va.size) * 4)
+
+
 def run_flash_attention_backward(go: Any, q: Any, k: Any, v: Any, *, scale: float,
                                  causal: bool = False, window_left: int | None = None,
                                  window_right: int | None = None, bias: Any = None,
-                                 softcap: float | None = None) -> tuple[Any, Any, Any]:
-    """Execute f32-accumulating Flash-Attention VJP; returns ``(dQ, dK, dV)``."""
+                                 softcap: float | None = None,
+                                 route: str = "auto",
+                                 deterministic: bool = False,
+                                 workspace_limit_bytes: int | None = None,
+                                 ) -> tuple[Any, Any, Any]:
+    """Execute a f32-accumulating VJP and return ``(dQ, dK, dV)``.
+
+    ``atomic`` is the unchanged production route.  ``split_reduced`` is the
+    deterministic comparison candidate.  Requesting determinism selects the
+    split route unless the caller explicitly requested an incompatible route.
+    """
     import numpy as np
     global _flash_bwd_artifact
     goa, qa, ka, va = (np.asarray(x) for x in (go, q, k, v))
@@ -651,6 +705,27 @@ def run_flash_attention_backward(go: Any, q: Any, k: Any, v: Any, *, scale: floa
     cap = 0.0 if softcap is None else float(softcap)
     if wl < -1 or wr < -1 or cap < 0.0:
         raise ValueError("window bounds must be >= 0 and softcap must be >= 0")
+    if route not in ("atomic", "split_reduced", "auto"):
+        raise ValueError(f"unknown NVIDIA flash backward route {route!r}")
+    if deterministic:
+        if route == "atomic":
+            raise ValueError(
+                "deterministic NVIDIA flash backward requires split_reduced")
+        route = "split_reduced"
+    elif route == "auto":
+        route = "atomic"
+    if route == "split_reduced" and storage != "f32":
+        raise ValueError(
+            "split_reduced NVIDIA flash backward currently requires f32 storage")
+    workspace_bytes = flash_attention_backward_workspace_bytes(k, v, route=route)
+    if workspace_limit_bytes is not None:
+        if workspace_limit_bytes < 0:
+            raise ValueError("workspace_limit_bytes must be nonnegative")
+        if workspace_bytes > workspace_limit_bytes:
+            raise ValueError(
+                "split_reduced NVIDIA flash backward requires "
+                f"{workspace_bytes} workspace bytes, exceeding limit "
+                f"{workspace_limit_bytes}")
     artifact = _flash_bwd_artifact.get(storage)
     if artifact is None:
         artifact = _nvidia_cuda_compile_fn(KernelSource(
@@ -658,7 +733,9 @@ def run_flash_attention_backward(go: Any, q: Any, k: Any, v: Any, *, scale: floa
             entry=_FLASH_BWD_ENTRY, lang=_LANG, spec=SpecPolicy.DYNAMIC,
             shape_key=(f"flash-bwd-contract-{storage}",)))
         _flash_bwd_artifact[storage] = artifact
-    fn = getattr(_load_lib(artifact), _FLASH_BWD_ENTRY)
+    entry = (_FLASH_BWD_ENTRY if route == "atomic"
+             else _FLASH_BWD_SPLIT_ENTRY)
+    fn = getattr(_load_lib(artifact), entry)
     fn.restype = ctypes.c_int
     fn.argtypes = [ctypes.c_void_p] * 8 + [ctypes.c_long, ctypes.c_int, ctypes.c_int,
                   ctypes.c_long, ctypes.c_long, ctypes.c_int, ctypes.c_int,
@@ -676,8 +753,10 @@ def measure_flash_attention_backward_device(
         go: Any, q: Any, k: Any, v: Any, *, scale: float,
         causal: bool = False, window_left: int | None = None,
         window_right: int | None = None, bias: Any = None,
-        softcap: float | None = None, reps: int = 20) -> float:
-    """CUDA-event latency for the production f32 Flash-Attention VJP kernel."""
+        softcap: float | None = None, reps: int = 20,
+        route: str = "auto", deterministic: bool = False,
+        workspace_limit_bytes: int | None = None) -> float:
+    """CUDA-event latency for an exact backward-attention candidate."""
     import numpy as np
     arrays = tuple(np.ascontiguousarray(x) for x in (go, q, k, v))
     go, q, k, v = arrays
@@ -689,14 +768,21 @@ def measure_flash_attention_backward_device(
     run_flash_attention_backward(
         go, q, k, v, scale=scale, causal=causal,
         window_left=window_left, window_right=window_right,
-        bias=bias, softcap=softcap)
+        bias=bias, softcap=softcap, route=route,
+        deterministic=deterministic,
+        workspace_limit_bytes=workspace_limit_bytes)
+    if deterministic:
+        route = "split_reduced"
+    elif route == "auto":
+        route = "atomic"
     B, Hq, Sq, D = q.shape; _, Hkv, Sk, _ = k.shape; Dv = v.shape[-1]
     bf = None if bias is None else np.ascontiguousarray(bias, np.float32)
     wl = -1 if window_left is None else int(window_left)
     wr = -1 if window_right is None else int(window_right)
     cap = 0.0 if softcap is None else float(softcap)
-    fn = getattr(_load_lib(_flash_bwd_artifact["f32"]),
-                 f"{_FLASH_BWD_ENTRY}_timed")
+    entry = (_FLASH_BWD_ENTRY if route == "atomic"
+             else _FLASH_BWD_SPLIT_ENTRY)
+    fn = getattr(_load_lib(_flash_bwd_artifact["f32"]), f"{entry}_timed")
     fn.restype = ctypes.c_int
     fn.argtypes = [ctypes.c_void_p] * 5 + [ctypes.c_long, ctypes.c_int,
         ctypes.c_int, ctypes.c_long, ctypes.c_long, ctypes.c_int, ctypes.c_int,
@@ -1382,7 +1468,7 @@ def run_dequant_grouped_gemm_f32(x: Any, packed_experts: Any,
 
 
 def _synthesize_moe_cuda() -> str:
-    return r'''#include <cuda_runtime.h>
+    source = r'''#include <cuda_runtime.h>
 __global__ void gather_k(const float*x,const int*tok,float*o,int S,int H){long z=(long)blockIdx.x*blockDim.x+threadIdx.x,n=(long)S*H;if(z<n){int s=z/H,h=z%H;o[z]=x[(long)tok[s]*H+h];}}
 __global__ void combine_k(const float*x,const int*tok,const float*w,float*o,int S,int H){long z=(long)blockIdx.x*blockDim.x+threadIdx.x,n=(long)S*H;if(z<n){int s=z/H,h=z%H;atomicAdd(&o[(long)tok[s]*H+h],w[s]*x[z]);}}
 __global__ void gg_k(const float*x,const float*w,const int*off,float*o,int T,int K,int N,int E){long z=(long)blockIdx.x*blockDim.x+threadIdx.x,n=(long)T*N;if(z<n){int r=z/N,c=z%N,e=0;while(e+1<E&&r>=off[e+1])++e;float a=0;for(int k=0;k<K;++k)a+=x[(long)r*K+k]*w[((long)e*K+k)*N+c];o[z]=a;}}
@@ -1392,6 +1478,16 @@ extern "C" int tessera_nvidia_moe_combine_f32(const float*x,const int*tok,const 
 extern "C" int tessera_nvidia_grouped_gemm_f32(const float*x,const float*w,const int*off,float*o,int T,int K,int N,int E){float *dx=0,*dw=0,*dout=0;int*df=0;size_t nx=(size_t)T*K*4,nw=(size_t)E*K*N*4,no=(size_t)T*N*4;if(!ac((void**)&dx,x,nx)||!ac((void**)&dw,w,nw)||!ac((void**)&df,off,(E+1)*4)||cudaMalloc(&dout,no)!=cudaSuccess)return 3;gg_k<<<(T*N+255)/256,256>>>(dx,dw,df,dout,T,K,N,E);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,dout,no,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(dw);cudaFree(df);cudaFree(dout);return ok?1:3;}
 extern "C" int tessera_nvidia_moe_timed(const float*x,const int*tok,const float*w,const float*weights,const int*off,int T,int S,int H,int K,int N,int E,int kind,int reps,int batches,float*ms){float *dx=0,*dw=0,*do_=0;int*dt=0,*df=0;cudaEvent_t a=0,b=0;size_t nx=(size_t)(kind==1?S:T)*(kind==2?K:H)*4,no=(size_t)(kind==2?T*N:(kind==0?S*H:T*H))*4;if(!x||!tok||!ms||T<=0||S<=0||H<=0||reps<1||batches<1||kind<0||kind>2)return 2;if(!ac((void**)&dx,x,nx)||!ac((void**)&dt,tok,(size_t)S*4)||cudaMalloc(&do_,no)!=cudaSuccess)goto fail;if(kind==1&&(!weights||!ac((void**)&dw,weights,(size_t)S*4)))goto fail;if(kind==2&&(!w||!off||!ac((void**)&dw,w,(size_t)E*K*N*4)||!ac((void**)&df,off,(size_t)(E+1)*4)))goto fail;if(kind==0)gather_k<<<(S*H+255)/256,256>>>(dx,dt,do_,S,H);else if(kind==1){cudaMemset(do_,0,no);combine_k<<<(S*H+255)/256,256>>>(dx,dt,dw,do_,S,H);}else gg_k<<<(T*N+255)/256,256>>>(dx,dw,df,do_,T,K,N,E);if(cudaDeviceSynchronize()!=cudaSuccess||cudaEventCreate(&a)!=cudaSuccess||cudaEventCreate(&b)!=cudaSuccess)goto fail;for(int batch=0;batch<batches;batch++){if(cudaEventRecord(a)!=cudaSuccess)goto fail;for(int r=0;r<reps;r++){if(kind==0)gather_k<<<(S*H+255)/256,256>>>(dx,dt,do_,S,H);else if(kind==1){cudaMemset(do_,0,no);combine_k<<<(S*H+255)/256,256>>>(dx,dt,dw,do_,S,H);}else gg_k<<<(T*N+255)/256,256>>>(dx,dw,df,do_,T,K,N,E);}if(cudaEventRecord(b)!=cudaSuccess||cudaEventSynchronize(b)!=cudaSuccess)goto fail;float elapsed=0;if(cudaEventElapsedTime(&elapsed,a,b)!=cudaSuccess)goto fail;ms[batch]=elapsed/(float)reps;}cudaEventDestroy(a);cudaEventDestroy(b);cudaFree(dx);cudaFree(dt);if(dw)cudaFree(dw);if(df)cudaFree(df);cudaFree(do_);return 1;fail:if(a)cudaEventDestroy(a);if(b)cudaEventDestroy(b);if(dx)cudaFree(dx);if(dt)cudaFree(dt);if(dw)cudaFree(dw);if(df)cudaFree(df);if(do_)cudaFree(do_);return 3;}
 '''
+    launch = ("if(kind==0)gather_k<<<(S*H+255)/256,256>>>(dx,dt,do_,S,H);"
+              "else if(kind==1){cudaMemset(do_,0,no);combine_k<<<"
+              "(S*H+255)/256,256>>>(dx,dt,dw,do_,S,H);}else gg_k<<<"
+              "(T*N+255)/256,256>>>(dx,dw,df,do_,T,K,N,E);")
+    # Warm the exact resident route after allocations and before events.  A
+    # single microkernel launch does not reliably leave WSL's P8 state.
+    return source.replace(
+        launch + "if(cudaDeviceSynchronize",
+        "for(int warm=0;warm<100;warm++){" + launch +
+        "}if(cudaDeviceSynchronize", 1)
 
 
 def _moe_lib():
@@ -1821,7 +1917,8 @@ def _synthesize_gated_epilogue_cuda(activation: str) -> tuple[str, str, str]:
         "if(!hg||!hu||!ms||n<1||reps<1)return 2;size_t z=(size_t)n*4;"
         "float *g=0,*u=0,*o=0;cudaEvent_t a=0,b=0;if(cudaMalloc(&g,z)||cudaMalloc(&u,z)||cudaMalloc(&o,z))goto fail;"
         "if(cudaMemcpy(g,hg,z,cudaMemcpyHostToDevice)||cudaMemcpy(u,hu,z,cudaMemcpyHostToDevice))goto fail;"
-        f"{kernel}<<<(n+255)/256,256>>>(g,u,o,n);if(cudaDeviceSynchronize()||cudaEventCreate(&a)||cudaEventCreate(&b))goto fail;"
+        f"for(int warm=0;warm<100;warm++){kernel}<<<(n+255)/256,256>>>(g,u,o,n);"
+        "if(cudaDeviceSynchronize()||cudaEventCreate(&a)||cudaEventCreate(&b))goto fail;"
         f"cudaEventRecord(a);for(int i=0;i<reps;i++){kernel}<<<(n+255)/256,256>>>(g,u,o,n);cudaEventRecord(b);cudaEventSynchronize(b);"
         "{float all=0;if(cudaEventElapsedTime(&all,a,b))goto fail;*ms=all/reps;}cudaEventDestroy(a);cudaEventDestroy(b);cudaFree(g);cudaFree(u);cudaFree(o);return 1;"
         "fail:if(a)cudaEventDestroy(a);if(b)cudaEventDestroy(b);if(g)cudaFree(g);if(u)cudaFree(u);if(o)cudaFree(o);return 3;}"
@@ -3017,12 +3114,22 @@ class NvidiaGenericCudaCandidate(Candidate):
     target = _TARGET
     op = OP_FUSED_REGION
 
+    def applies_to(self, region: Any) -> bool:
+        try:
+            return (nvidia_epilogue_execution_contract(region)["candidate"] ==
+                    self.name)
+        except ValueError:
+            return False
+
     def run(self, region: Any, A: Any, B: Any, bias: Any = None,
             residual: Any = None, *a: Any, **k: Any) -> tuple[Any, str]:
         # residual is positional-or-keyword (matching the A,B,bias,residual
         # reference ABI) so the arbiter's positional inputs thread it instead of
         # dropping it into *a — else a residual fusion hits the missing-buffer
         # guard and raises (PR #290 review).
+        contract = nvidia_epilogue_execution_contract(region)
+        if contract["candidate"] != self.name:
+            return region.reference(A, B, bias, residual), "reference"
         return _SHARED_RUNNER.run_fused_region(region, A, B, bias,
                                                residual=residual)
 
@@ -3087,6 +3194,63 @@ _MMA_FUSED_ENTRY = "tessera_nvidia_mma_fused"
 _MMA_FUSED_ACTS = ("relu", "gelu", "silu", "sigmoid", "tanh")
 _mma_fused_fn_cache: dict[tuple[str, bool, str | None], Any] = {}
 _mma_fused_device_fn_cache: dict[tuple[str, bool, str | None], Any] = {}
+
+
+def nvidia_epilogue_execution_contract(region: Any) -> dict[str, Any]:
+    """Resolve the canonical NVIDIA fused-epilogue execution contract.
+
+    The supported order is ``matmul -> bias? -> activation? -> residual?``.
+    Exact f32 uses the scalar CUDA accumulator/store lane, f16/bf16 use native
+    MMA fusion, and FP8 uses the composed matrix-core plus resident epilogue
+    lane.  Low-precision residual fusion remains explicitly unsupported rather
+    than silently widening to the generic f32 candidate.
+    """
+    if not isinstance(region, FusedRegion):
+        raise ValueError(
+            f"{E_FUSED_EPILOGUE_BAD_OP}: NVIDIA epilogue requires FusedRegion")
+    epilogue = tuple(region.epilogue)
+    bias_positions = [i for i, op in enumerate(epilogue) if op == "bias"]
+    if bias_positions and bias_positions != [0]:
+        raise ValueError(
+            f"{E_FUSED_EPILOGUE_BAD_ORDER}: NVIDIA bias must precede activation")
+    activations = tuple(op for op in epilogue if op != "bias")
+    if len(activations) > 1:
+        raise ValueError(
+            f"{E_FUSED_EPILOGUE_BAD_ORDER}: NVIDIA supports one fused activation")
+    activation = activations[0] if activations else None
+    if activation is not None and activation not in _MMA_FUSED_ACTS:
+        raise ValueError(
+            f"{E_FUSED_EPILOGUE_BAD_OP}: unsupported NVIDIA activation "
+            f"{activation!r}")
+    storage = region.storage_dtype
+    if region.residual and storage != "f32":
+        raise ValueError(
+            f"{E_FUSED_EPILOGUE_BAD_DTYPE}: NVIDIA residual fusion requires "
+            "exact f32 storage")
+    if storage == "f32":
+        candidate = "nvidia_generic_cuda"
+        route = "exact_f32_scalar"
+    elif storage in ("f16", "bf16"):
+        candidate = ("nvidia_mma_fused" if storage == "f16"
+                     else "nvidia_mma_fused_bf16")
+        route = "mma_fused"
+    elif storage in ("fp8_e4m3", "fp8_e5m2"):
+        candidate = f"nvidia_mma_fused_composed_{storage}"
+        route = "matrix_core_plus_resident_epilogue"
+    else:
+        raise ValueError(
+            f"{E_FUSED_EPILOGUE_BAD_DTYPE}: unsupported NVIDIA epilogue "
+            f"storage {storage!r}")
+    return {
+        "storage_dtype": storage,
+        "has_bias": bool(bias_positions),
+        "activation": activation,
+        "has_residual": bool(region.residual),
+        "order": ("matmul", "bias", "activation", "residual"),
+        "candidate": candidate,
+        "route": route,
+        "accumulation_dtype": "f32",
+    }
 
 
 def _mma_fused_epilogue(region: Any) -> tuple[bool, str | None] | None:

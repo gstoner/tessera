@@ -207,6 +207,47 @@ def test_lower_tile_to_nvidia_sm120_target_ir_maps_mma_to_warp_level_mma_sync():
     assert "tessera_nvidia.tmem_alloc" not in text
 
 
+@pytest.mark.parametrize(
+    "dtype,shape,dtype_c",
+    [("f16", "m16n8k16", "f32"), ("tf32", "m16n8k8", "f32"),
+     ("fp8_e4m3", "m16n8k32", "f32"),
+     ("fp8_e5m2", "m16n8k32", "f32"), ("int8", "m16n8k32", "s32")],
+)
+def test_lower_tile_to_nvidia_sm120_selects_dtype_specific_mma_contract(
+        dtype, shape, dtype_c):
+    tile = TileIRModule(functions=[TileFunction(
+        "main", body=[TileOp("tile.mma", {
+            "source": "tessera.matmul", "result": "C", "ordinal": 0,
+            "dtype": dtype})], target="nvidia_sm120")])
+    target = lower_tile_to_target_ir(tile, target_kind="nvidia_sm120")
+    assert target.verify().ok
+    text = target.to_mlir()
+    assert f'shape = "{shape}"' in text
+    assert f'dtype_c = "{dtype_c}"' in text
+
+
+def test_lower_tile_to_nvidia_sm120_nvfp4_requires_and_preserves_scales():
+    attrs = {"source": "tessera.matmul", "result": "C", "ordinal": 0,
+             "dtype": "nvfp4", "scale_a": "SFa", "scale_b": "SFb"}
+    tile = TileIRModule(functions=[TileFunction(
+        "main", body=[TileOp("tile.mma", attrs)], target="nvidia_sm120")])
+    target = lower_tile_to_target_ir(tile, target_kind="nvidia_sm120")
+    assert target.verify().ok
+    text = target.to_mlir()
+    assert "tessera_nvidia.nvfp4_block_scale_mma" in text
+    assert 'arch = "sm_120a"' in text
+    assert 'scale_a = "SFa"' in text and 'scale_b = "SFb"' in text
+    assert 'scale_dtype = "ue4m3"' in text and 'scale_vector = "4X"' in text
+
+    missing = TileIRModule(functions=[TileFunction(
+        "main", body=[TileOp("tile.mma", {**attrs, "scale_b": ""})],
+        target="nvidia_sm120")])
+    with pytest.raises(ValueError, match="requires logical scale_a and scale_b"):
+        lower_tile_to_target_ir(missing, target_kind="nvidia_sm120")
+    assert "tessera_nvidia.tcgen05_mma" not in text
+    assert "tessera_nvidia.tmem_alloc" not in text
+
+
 def test_lower_tile_to_apple_gpu_target_ir_maps_fa4_to_msl_runtime_contract():
     """Phase 8.4.1 — a single-source flash_attn tile module qualifies for the
     runtime path; the lowering emits the MSL kernel + mps_dispatch contract

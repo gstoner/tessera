@@ -7,56 +7,56 @@
       "shape": "512x512x512",
       "dtype": "f16",
       "mode": "mma_sync",
-      "median_ms": 0.7845,
-      "max_latency_ms": 1.5691
+      "median_ms": 0.7604,
+      "max_latency_ms": 1.5208
     },
     {
       "op": "matmul",
       "shape": "1024x1024x1024",
       "dtype": "f16",
       "mode": "mma_sync",
-      "median_ms": 2.0617,
-      "max_latency_ms": 4.1234
+      "median_ms": 1.9577,
+      "max_latency_ms": 3.9154
     },
     {
       "op": "matmul",
       "shape": "2048x2048x2048",
       "dtype": "f16",
       "mode": "mma_sync",
-      "median_ms": 6.5198,
-      "max_latency_ms": 13.0397
+      "median_ms": 5.6104,
+      "max_latency_ms": 11.2207
     },
     {
       "op": "fused_gemm_bias_gelu",
       "shape": "256x256x256",
       "dtype": "f16/f32",
       "mode": "mma_sync_fused",
-      "median_ms": 0.9167,
-      "max_latency_ms": 1.8334
+      "median_ms": 0.7286,
+      "max_latency_ms": 1.4572
     },
     {
       "op": "flash_attention",
       "shape": "128x128x64x64",
       "dtype": "f16/f32",
       "mode": "mma_sync_attention",
-      "median_ms": 0.6416,
-      "max_latency_ms": 1.2832
+      "median_ms": 0.6999,
+      "max_latency_ms": 1.3998
     },
     {
       "op": "quantize",
       "shape": "262144",
       "dtype": "fp8_e4m3_storage",
       "mode": "cuda_fpquant",
-      "median_ms": 1.0513,
-      "max_latency_ms": 2.1026
+      "median_ms": 1.1299,
+      "max_latency_ms": 2.2598
     },
     {
       "op": "quantize",
       "shape": "262144",
       "dtype": "fp6_e3m2_storage",
       "mode": "cuda_fpquant",
-      "median_ms": 1.0244,
-      "max_latency_ms": 2.0489
+      "median_ms": 1.1467,
+      "max_latency_ms": 2.2933
     }
   ]
 }

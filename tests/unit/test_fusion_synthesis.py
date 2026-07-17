@@ -173,10 +173,12 @@ def test_prologue_tiled_large_n_equals_unfused_on_metal():
 
 
 def test_region_validation():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="E_FUSED_EPILOGUE_BAD_OP"):
         FusedRegion(("not_a_real_op",))
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="E_FUSED_EPILOGUE_BAD_ORDER"):
         FusedRegion(("bias", "bias"))                  # at most one bias
+    with pytest.raises(ValueError, match="E_FUSED_EPILOGUE_BAD_DTYPE"):
+        FusedRegion(("relu",), storage_dtype="int8")
 
 
 def test_region_reference_matches_manual_numpy():
@@ -187,6 +189,22 @@ def test_region_reference_matches_manual_numpy():
     got = FusedRegion(("bias", "relu")).reference(A, B, bias)
     expected = np.maximum(A @ B + bias, 0.0)
     assert np.allclose(got, expected, atol=1e-5)
+
+
+def test_shared_epilogue_order_is_bias_activation_residual():
+    rng = np.random.default_rng(441)
+    A = rng.standard_normal((3, 5)).astype(np.float32)
+    B = rng.standard_normal((5, 7)).astype(np.float32)
+    bias = rng.standard_normal(7).astype(np.float32)
+    residual = rng.standard_normal((3, 7)).astype(np.float32)
+    region = FusedRegion(("bias", "silu"), residual=True)
+    preactivation = A @ B + bias
+    expected = preactivation / (1.0 + np.exp(-preactivation)) + residual
+    np.testing.assert_allclose(
+        region.reference(A, B, bias, residual), expected,
+        rtol=1e-6, atol=1e-6)
+    with pytest.raises(ValueError, match="E_FUSED_EPILOGUE_MISSING_OPERAND"):
+        region.reference(A, B, bias)
 
 
 # ── F1a: discovery (portable) ────────────────────────────────────────────────

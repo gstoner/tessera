@@ -25,6 +25,10 @@ _FIELDS = {
     "l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum": "local_store_transactions",
     "l1tex__t_sectors_pipe_lsu_mem_local_op_ld": "local_load_transactions",
     "l1tex__t_sectors_pipe_lsu_mem_local_op_st": "local_store_transactions",
+    # CUDA 13.3 full-set display names. Both local and shared counters are
+    # retained because Blackwell can spill registers into either memory space.
+    "Local Memory Spilling Requests": "local_spill_requests",
+    "Shared Memory Spilling Requests": "shared_spill_requests",
 }
 
 
@@ -45,7 +49,8 @@ def parse_csv(text: str) -> list[dict[str, Any]]:
         if not kernel or metric not in _FIELDS or not value:
             continue
         field = _FIELDS[metric]
-        if field in {"local_load_transactions", "local_store_transactions"}:
+        if field in {"local_load_transactions", "local_store_transactions",
+                     "local_spill_requests", "shared_spill_requests"}:
             seen_spill_metrics.add(field)
         launch = launches.setdefault((kernel, launch_id), {
             "kernel": kernel, "cc": row.get("CC", ""),
@@ -70,11 +75,17 @@ def parse_csv(text: str) -> list[dict[str, Any]]:
             if values:
                 value = statistics.median(values)
                 row[field] = int(value) if value.is_integer() else round(value, 4)
-        complete = {"local_load_transactions", "local_store_transactions"} <= seen_spill_metrics
+        legacy_complete = {
+            "local_load_transactions", "local_store_transactions"} <= seen_spill_metrics
+        cuda_13_complete = {
+            "local_spill_requests", "shared_spill_requests"} <= seen_spill_metrics
+        complete = legacy_complete or cuda_13_complete
         row["spill_evidence_complete"] = complete
         row["spills_detected"] = (None if not complete else bool(
             row.get("local_load_transactions", 0) or
-            row.get("local_store_transactions", 0)))
+            row.get("local_store_transactions", 0) or
+            row.get("local_spill_requests", 0) or
+            row.get("shared_spill_requests", 0)))
         canonical = json.dumps(row, sort_keys=True, separators=(",", ":"))
         row["resource_fingerprint"] = "sha256:" + hashlib.sha256(
             canonical.encode()).hexdigest()

@@ -133,6 +133,13 @@ EPILOGUE_OPS: dict[str, EpilogueOp] = {
     "tanh":    EpilogueOp("tanh", "v = tanh(v);", np.tanh),
 }
 
+# Stable shared-contract diagnostics. Keeping the code separate from the detail
+# lets registry tooling discover the emission site and callers match the code.
+E_FUSED_EPILOGUE_BAD_DTYPE = "E_FUSED_EPILOGUE_BAD_DTYPE"
+E_FUSED_EPILOGUE_BAD_OP = "E_FUSED_EPILOGUE_BAD_OP"
+E_FUSED_EPILOGUE_BAD_ORDER = "E_FUSED_EPILOGUE_BAD_ORDER"
+E_FUSED_EPILOGUE_MISSING_OPERAND = "E_FUSED_EPILOGUE_MISSING_OPERAND"
+
 
 @dataclass(frozen=True)
 class ReductionOp:
@@ -255,26 +262,37 @@ class FusedRegion:
         if self.storage_dtype not in (
                 "f16", "bf16", "f32", "fp8_e4m3", "fp8_e5m2"):
             raise ValueError(
-                "storage_dtype must be f16, bf16, f32, fp8_e4m3, or fp8_e5m2")
+                f"{E_FUSED_EPILOGUE_BAD_DTYPE}: storage_dtype must be f16, bf16, "
+                "f32, fp8_e4m3, or fp8_e5m2")
         for op in self.epilogue:
             if op not in EPILOGUE_OPS:
-                raise ValueError(f"unknown epilogue op {op!r}")
+                raise ValueError(
+                    f"{E_FUSED_EPILOGUE_BAD_OP}: unknown epilogue op {op!r}")
         bias_ops = [op for op in self.epilogue if EPILOGUE_OPS[op].needs_bias]
         if len(bias_ops) > 1:
-            raise ValueError("at most one bias op per region")
+            raise ValueError(
+                f"{E_FUSED_EPILOGUE_BAD_ORDER}: at most one bias op per region")
         for op in self.prologue:
             if op not in EPILOGUE_OPS:
-                raise ValueError(f"unknown prologue op {op!r}")
+                raise ValueError(
+                    f"{E_FUSED_EPILOGUE_BAD_OP}: unknown prologue op {op!r}")
             if EPILOGUE_OPS[op].needs_bias:
-                raise ValueError(f"prologue op {op!r} cannot need a bias")
+                raise ValueError(
+                    f"{E_FUSED_EPILOGUE_BAD_ORDER}: prologue op {op!r} cannot "
+                    "need a bias")
         if self.reduction is not None and self.reduction not in REDUCTION_OPS:
-            raise ValueError(f"unknown reduction epilogue {self.reduction!r}")
+            raise ValueError(
+                f"{E_FUSED_EPILOGUE_BAD_OP}: unknown reduction epilogue "
+                f"{self.reduction!r}")
         if self.residual and self.reduction is not None:
-            raise ValueError("residual + reduction not supported (v1)")
+            raise ValueError(
+                f"{E_FUSED_EPILOGUE_BAD_ORDER}: residual + reduction not supported "
+                "(v1)")
         if (not self.epilogue and self.reduction is None and not self.residual
                 and not self.prologue):
             raise ValueError(
-                "a region must have a prologue, epilogue op, reduction, or residual")
+                f"{E_FUSED_EPILOGUE_BAD_OP}: a region must have a prologue, "
+                "epilogue op, reduction, or residual")
 
     @property
     def has_bias(self) -> bool:
@@ -302,13 +320,16 @@ class FusedRegion:
             spec = EPILOGUE_OPS[op]
             if spec.needs_bias:
                 if bias is None:
-                    raise ValueError(f"region needs a bias for {op!r}")
+                    raise ValueError(
+                        f"{E_FUSED_EPILOGUE_MISSING_OPERAND}: region needs a bias "
+                        f"for {op!r}")
                 out = out + np.asarray(bias, np.float32)
             else:
                 out = spec.ref(out)
         if self.residual:
             if residual is None:
-                raise ValueError("region needs a residual")
+                raise ValueError(
+                    f"{E_FUSED_EPILOGUE_MISSING_OPERAND}: region needs a residual")
             out = out + np.asarray(residual, np.float32)
         if self.reduction is not None:
             out = REDUCTION_OPS[self.reduction].ref(out, self.eps)

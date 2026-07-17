@@ -3,7 +3,7 @@ import os
 import lit.formats
 
 config.name = "tessera-nvidia"
-config.test_format = lit.formats.ShTest(True)
+config.test_format = lit.formats.ShTest(execute_external=False)
 config.suffixes = [".mlir"]
 
 if getattr(config, "environment", None) is None:

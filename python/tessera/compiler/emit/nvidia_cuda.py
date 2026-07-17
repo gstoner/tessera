@@ -223,6 +223,7 @@ def _synthesize_attention_cuda() -> str:
 # ── batched Flash Attention contract lane (CUDA parity P2) ───────────────────
 
 _flash_fwd_artifact: dict[str, str] = {}
+_flash_fwd_schedule_artifact: dict[int, str] = {}
 _flash_bwd_artifact: dict[str, str] = {}
 _linear_attn_artifact: str | None = None
 _linear_attn_bwd_artifact: str | None = None
@@ -353,6 +354,175 @@ def run_flash_attention_forward(q: Any, k: Any, v: Any, *, scale: float,
     if rc != 1:
         raise RuntimeError("NVIDIA Flash Attention forward CUDA launch failed")
     return out
+
+
+def _synthesize_flash_fwd_multiwarp_cuda(warps_per_cta: int) -> str:
+    """CUDA-native forward-attention schedule candidate for D=128 retuning.
+
+    A CTA owns ``warps_per_cta`` adjacent query rows. Each CUDA warp owns one
+    row, cooperatively reduces QK over lanes, and keeps distributed online
+    softmax/PV state in registers. This deliberately does not copy ROCm's
+    two-wave partial-score/LDS schedule.
+    """
+    if warps_per_cta not in (4, 8):
+        raise ValueError("forward-attention schedule supports 4 or 8 warps per CTA")
+    entry = f"tessera_nvidia_flash_attn_fwd_w{warps_per_cta}"
+    return f'''#include <cuda_runtime.h>
+#include <math.h>
+#define WARPS {warps_per_cta}
+#define DV_CAP {_ATTN_DV_CAP}
+extern "C" __global__ void {entry}_kernel(
+    const float*q,const float*k,const float*v,const float*bias,float*o,
+    long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,float scale,
+    int causal,long wl,long wr,float softcap){{
+  int lane=threadIdx.x&31,warp=threadIdx.x>>5;
+  long row=(long)blockIdx.x*WARPS+warp,total=B*(long)Hq*Sq;
+  if(row>=total)return;
+  long m=row%Sq,tmp=row/Sq;int qh=(int)(tmp%Hq);long b=tmp/Hq;
+  int hk=qh/(Hq/Hkv);float acc[(DV_CAP+31)/32];
+  #pragma unroll
+  for(int j=0;j<(DV_CAP+31)/32;j++)acc[j]=0.f;
+  float mi=-INFINITY,li=0.f;
+  long qo=(((b*(long)Hq+qh)*Sq+m)*D);
+  for(long n=0;n<Sk;n++){{
+    if((causal&&n>m)||(wl>=0&&n<m-wl)||(wr>=0&&n>m+wr))continue;
+    long ko=(((b*(long)Hkv+hk)*Sk+n)*D);float s=0.f;
+    for(int d=lane;d<D;d+=32)s+=q[qo+d]*k[ko+d];
+    for(int off=16;off;off>>=1)s+=__shfl_down_sync(0xffffffff,s,off);
+    if(lane==0){{s*=scale;if(bias)s+=bias[(((b*(long)Hq+qh)*Sq+m)*Sk+n)];
+      if(softcap>0.f)s=softcap*tanhf(s/softcap);}}
+    s=__shfl_sync(0xffffffff,s,0);float mn=fmaxf(mi,s);
+    float corr=expf(mi-mn),p=expf(s-mn);li=li*corr+p;
+    long vo=(((b*(long)Hkv+hk)*Sk+n)*Dv);
+    #pragma unroll
+    for(int j=0;j<(DV_CAP+31)/32;j++){{int d=lane+32*j;
+      if(d<Dv)acc[j]=acc[j]*corr+p*v[vo+d];}}
+    mi=mn;
+  }}
+  float inv=li>0.f?1.f/li:0.f;long oo=(((b*(long)Hq+qh)*Sq+m)*Dv);
+  #pragma unroll
+  for(int j=0;j<(DV_CAP+31)/32;j++){{int d=lane+32*j;if(d<Dv)o[oo+d]=acc[j]*inv;}}
+}}
+static int alloc_inputs(const float*hq,const float*hk,const float*hv,const float*hb,
+    float**dq,float**dk,float**dv,float**db,float**dout,long B,int Hq,int Hkv,
+    long Sq,long Sk,int D,int Dv){{
+  size_t nq=(size_t)B*Hq*Sq*D*4,nk=(size_t)B*Hkv*Sk*D*4;
+  size_t nv=(size_t)B*Hkv*Sk*Dv*4,no=(size_t)B*Hq*Sq*Dv*4;
+  size_t nb=(size_t)B*Hq*Sq*Sk*4;
+  if(cudaMalloc(dq,nq)||cudaMalloc(dk,nk)||cudaMalloc(dv,nv)||cudaMalloc(dout,no))return 0;
+  if(hb&&cudaMalloc(db,nb))return 0;
+  return !cudaMemcpy(*dq,hq,nq,cudaMemcpyHostToDevice)&&
+         !cudaMemcpy(*dk,hk,nk,cudaMemcpyHostToDevice)&&
+         !cudaMemcpy(*dv,hv,nv,cudaMemcpyHostToDevice)&&
+         (!hb||!cudaMemcpy(*db,hb,nb,cudaMemcpyHostToDevice));
+}}
+static void release_inputs(float*q,float*k,float*v,float*b,float*o){{
+  if(q)cudaFree(q);if(k)cudaFree(k);if(v)cudaFree(v);if(b)cudaFree(b);if(o)cudaFree(o);
+}}
+extern "C" int {entry}(const float*hq,const float*hk,const float*hv,
+    const float*hb,float*ho,long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,
+    float scale,int causal,long wl,long wr,float softcap){{
+  if(!hq||!hk||!hv||!ho||B<=0||Hq<=0||Hkv<=0||Hq%Hkv||Sq<=0||Sk<=0||
+     D<=0||Dv<=0||D>128||Dv>DV_CAP)return 2;
+  float *q=0,*k=0,*v=0,*b=0,*o=0;
+  if(!alloc_inputs(hq,hk,hv,hb,&q,&k,&v,&b,&o,B,Hq,Hkv,Sq,Sk,D,Dv)){{release_inputs(q,k,v,b,o);return 3;}}
+  long rows=B*(long)Hq*Sq;{entry}_kernel<<<(unsigned)((rows+WARPS-1)/WARPS),WARPS*32>>>(
+      q,k,v,b,o,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,softcap);
+  size_t no=(size_t)B*Hq*Sq*Dv*4;int ok=cudaDeviceSynchronize()==cudaSuccess?1:3;
+  if(ok==1&&cudaMemcpy(ho,o,no,cudaMemcpyDeviceToHost))ok=3;
+  release_inputs(q,k,v,b,o);return ok;
+}}
+extern "C" int {entry}_timed(const float*hq,const float*hk,const float*hv,
+    const float*hb,long B,int Hq,int Hkv,long Sq,long Sk,int D,int Dv,float scale,
+    int causal,long wl,long wr,float softcap,int warmup,int reps,float*out_ms){{
+  if(!out_ms||warmup<0||reps<1||D>128||Dv>DV_CAP)return 2;
+  float *q=0,*k=0,*v=0,*b=0,*o=0;
+  if(!alloc_inputs(hq,hk,hv,hb,&q,&k,&v,&b,&o,B,Hq,Hkv,Sq,Sk,D,Dv)){{release_inputs(q,k,v,b,o);return 3;}}
+  long rows=B*(long)Hq*Sq;auto launch=[&](){{{entry}_kernel<<<(unsigned)((rows+WARPS-1)/WARPS),WARPS*32>>>(
+      q,k,v,b,o,B,Hq,Hkv,Sq,Sk,D,Dv,scale,causal,wl,wr,softcap);}};
+  for(int i=0;i<warmup;i++)launch();cudaEvent_t a,z;cudaEventCreate(&a);cudaEventCreate(&z);
+  cudaEventRecord(a);for(int i=0;i<reps;i++)launch();cudaEventRecord(z);cudaEventSynchronize(z);
+  float ms=0;cudaEventElapsedTime(&ms,a,z);*out_ms=ms/reps;cudaEventDestroy(a);cudaEventDestroy(z);
+  int ok=cudaGetLastError()==cudaSuccess?1:3;release_inputs(q,k,v,b,o);return ok;
+}}
+'''
+
+
+def _flash_fwd_schedule_fn(warps_per_cta: int, *, timed: bool = False):
+    entry = f"tessera_nvidia_flash_attn_fwd_w{warps_per_cta}"
+    artifact = _flash_fwd_schedule_artifact.get(warps_per_cta)
+    if artifact is None:
+        artifact = _nvidia_cuda_compile_fn(KernelSource(
+            source=_synthesize_flash_fwd_multiwarp_cuda(warps_per_cta),
+            entry=entry, lang=_LANG, spec=SpecPolicy.DYNAMIC,
+            shape_key=(f"flash-fwd-multiwarp-{warps_per_cta}",)))
+        _flash_fwd_schedule_artifact[warps_per_cta] = artifact
+    return getattr(_load_lib(artifact), entry + ("_timed" if timed else ""))
+
+
+def _prepare_flash_fwd_schedule_inputs(q: Any, k: Any, v: Any, bias: Any):
+    import numpy as np
+    q, k, v = (np.ascontiguousarray(x, np.float32) for x in (q, k, v))
+    if q.ndim != 4 or k.ndim != 4 or v.ndim != 4:
+        raise ValueError("multi-warp attention requires rank-4 [B,H,S,D]")
+    B, Hq, Sq, D = q.shape; Bk, Hkv, Sk, Dk = k.shape
+    if (B, D) != (Bk, Dk) or v.shape[:3] != (B, Hkv, Sk) or Hq % Hkv:
+        raise ValueError("invalid multi-warp attention batch/head mapping")
+    bf = None if bias is None else np.ascontiguousarray(bias, np.float32)
+    if bf is not None and bf.shape != (B, Hq, Sq, Sk):
+        raise ValueError("attention bias must have shape [B,Hq,Sq,Sk]")
+    return q, k, v, bf, (B, Hq, Hkv, Sq, Sk, D, v.shape[-1])
+
+
+def run_flash_attention_forward_schedule(q: Any, k: Any, v: Any, *, scale: float,
+        warps_per_cta: int, causal: bool = False, window_left: int | None = None,
+        window_right: int | None = None, bias: Any = None,
+        softcap: float | None = None) -> Any:
+    """Execute a CUDA-native multi-warp forward-attention candidate."""
+    import numpy as np
+    q, k, v, bf, dims = _prepare_flash_fwd_schedule_inputs(q, k, v, bias)
+    B, Hq, Hkv, Sq, Sk, D, Dv = dims
+    out = np.empty((B, Hq, Sq, Dv), np.float32)
+    fn = _flash_fwd_schedule_fn(warps_per_cta)
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p] * 5 + [ctypes.c_long, ctypes.c_int,
+        ctypes.c_int, ctypes.c_long, ctypes.c_long, ctypes.c_int, ctypes.c_int,
+        ctypes.c_float, ctypes.c_int, ctypes.c_long, ctypes.c_long, ctypes.c_float]
+    rc = fn(_ptr(q), _ptr(k), _ptr(v), _ptr(bf), _ptr(out), B, Hq, Hkv, Sq, Sk,
+            D, Dv, float(scale), int(causal),
+            -1 if window_left is None else int(window_left),
+            -1 if window_right is None else int(window_right),
+            0.0 if softcap is None else float(softcap))
+    if rc != 1:
+        raise RuntimeError("NVIDIA multi-warp forward-attention launch failed")
+    return out
+
+
+def measure_flash_attention_forward_schedule_device(q: Any, k: Any, v: Any, *,
+        scale: float, warps_per_cta: int, causal: bool = False,
+        window_left: int | None = None, window_right: int | None = None,
+        bias: Any = None, softcap: float | None = None, warmup: int = 20,
+        reps: int = 100) -> float:
+    """Return CUDA-event time for a resident multi-warp candidate."""
+    q, k, v, bf, dims = _prepare_flash_fwd_schedule_inputs(q, k, v, bias)
+    B, Hq, Hkv, Sq, Sk, D, Dv = dims
+    fn = _flash_fwd_schedule_fn(warps_per_cta, timed=True)
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p] * 4 + [ctypes.c_long, ctypes.c_int,
+        ctypes.c_int, ctypes.c_long, ctypes.c_long, ctypes.c_int, ctypes.c_int,
+        ctypes.c_float, ctypes.c_int, ctypes.c_long, ctypes.c_long,
+        ctypes.c_float, ctypes.c_int, ctypes.c_int,
+        ctypes.POINTER(ctypes.c_float)]
+    ms = ctypes.c_float()
+    rc = fn(_ptr(q), _ptr(k), _ptr(v), _ptr(bf), B, Hq, Hkv, Sq, Sk, D, Dv,
+            float(scale), int(causal),
+            -1 if window_left is None else int(window_left),
+            -1 if window_right is None else int(window_right),
+            0.0 if softcap is None else float(softcap), warmup, reps,
+            ctypes.byref(ms))
+    if rc != 1:
+        raise RuntimeError("NVIDIA multi-warp forward-attention event timing failed")
+    return float(ms.value)
 
 
 # ── fused MLA decode (latent projection + online-softmax in one CUDA kernel) ─
@@ -1220,7 +1390,7 @@ static int ac(void**d,const void*h,size_t z){return cudaMalloc(d,z)==cudaSuccess
 extern "C" int tessera_nvidia_moe_dispatch_f32(const float*x,const int*tok,float*o,int T,int S,int H){float *dx=0,*dout=0;int*dt=0;size_t nx=(size_t)T*H*4,no=(size_t)S*H*4;if(!ac((void**)&dx,x,nx)||!ac((void**)&dt,tok,S*4)||cudaMalloc(&dout,no)!=cudaSuccess)return 3;gather_k<<<(S*H+255)/256,256>>>(dx,dt,dout,S,H);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,dout,no,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(dt);cudaFree(dout);return ok?1:3;}
 extern "C" int tessera_nvidia_moe_combine_f32(const float*x,const int*tok,const float*w,float*o,int T,int S,int H){float *dx=0,*dw=0,*dout=0;int*dt=0;size_t ni=(size_t)S*H*4,no=(size_t)T*H*4;if(!ac((void**)&dx,x,ni)||!ac((void**)&dt,tok,S*4)||!ac((void**)&dw,w,S*4)||cudaMalloc(&dout,no)!=cudaSuccess)return 3;cudaMemset(dout,0,no);combine_k<<<(S*H+255)/256,256>>>(dx,dt,dw,dout,S,H);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,dout,no,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(dt);cudaFree(dw);cudaFree(dout);return ok?1:3;}
 extern "C" int tessera_nvidia_grouped_gemm_f32(const float*x,const float*w,const int*off,float*o,int T,int K,int N,int E){float *dx=0,*dw=0,*dout=0;int*df=0;size_t nx=(size_t)T*K*4,nw=(size_t)E*K*N*4,no=(size_t)T*N*4;if(!ac((void**)&dx,x,nx)||!ac((void**)&dw,w,nw)||!ac((void**)&df,off,(E+1)*4)||cudaMalloc(&dout,no)!=cudaSuccess)return 3;gg_k<<<(T*N+255)/256,256>>>(dx,dw,df,dout,T,K,N,E);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,dout,no,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(dw);cudaFree(df);cudaFree(dout);return ok?1:3;}
-extern "C" int tessera_nvidia_moe_timed(const float*x,const int*tok,const float*w,const float*weights,const int*off,int T,int S,int H,int K,int N,int E,int kind,int reps,float*ms){float *dx=0,*dw=0,*do_=0;int*dt=0,*df=0;cudaEvent_t a=0,b=0;size_t nx=(size_t)(kind==1?S:T)*(kind==2?K:H)*4,no=(size_t)(kind==2?T*N:(kind==0?S*H:T*H))*4;if(!x||!tok||!ms||T<=0||S<=0||H<=0||reps<1||kind<0||kind>2)return 2;if(!ac((void**)&dx,x,nx)||!ac((void**)&dt,tok,(size_t)S*4)||cudaMalloc(&do_,no)!=cudaSuccess)goto fail;if(kind==1&&(!weights||!ac((void**)&dw,weights,(size_t)S*4)))goto fail;if(kind==2&&(!w||!off||!ac((void**)&dw,w,(size_t)E*K*N*4)||!ac((void**)&df,off,(size_t)(E+1)*4)))goto fail;if(kind==0)gather_k<<<(S*H+255)/256,256>>>(dx,dt,do_,S,H);else if(kind==1){cudaMemset(do_,0,no);combine_k<<<(S*H+255)/256,256>>>(dx,dt,dw,do_,S,H);}else gg_k<<<(T*N+255)/256,256>>>(dx,dw,df,do_,T,K,N,E);if(cudaDeviceSynchronize()!=cudaSuccess||cudaEventCreate(&a)!=cudaSuccess||cudaEventCreate(&b)!=cudaSuccess||cudaEventRecord(a)!=cudaSuccess)goto fail;for(int r=0;r<reps;r++){if(kind==0)gather_k<<<(S*H+255)/256,256>>>(dx,dt,do_,S,H);else if(kind==1){cudaMemset(do_,0,no);combine_k<<<(S*H+255)/256,256>>>(dx,dt,dw,do_,S,H);}else gg_k<<<(T*N+255)/256,256>>>(dx,dw,df,do_,T,K,N,E);}if(cudaEventRecord(b)!=cudaSuccess||cudaEventSynchronize(b)!=cudaSuccess)goto fail;{float elapsed=0;if(cudaEventElapsedTime(&elapsed,a,b)!=cudaSuccess)goto fail;*ms=elapsed/(float)reps;}cudaEventDestroy(a);cudaEventDestroy(b);cudaFree(dx);cudaFree(dt);if(dw)cudaFree(dw);if(df)cudaFree(df);cudaFree(do_);return 1;fail:if(a)cudaEventDestroy(a);if(b)cudaEventDestroy(b);if(dx)cudaFree(dx);if(dt)cudaFree(dt);if(dw)cudaFree(dw);if(df)cudaFree(df);if(do_)cudaFree(do_);return 3;}
+extern "C" int tessera_nvidia_moe_timed(const float*x,const int*tok,const float*w,const float*weights,const int*off,int T,int S,int H,int K,int N,int E,int kind,int reps,int batches,float*ms){float *dx=0,*dw=0,*do_=0;int*dt=0,*df=0;cudaEvent_t a=0,b=0;size_t nx=(size_t)(kind==1?S:T)*(kind==2?K:H)*4,no=(size_t)(kind==2?T*N:(kind==0?S*H:T*H))*4;if(!x||!tok||!ms||T<=0||S<=0||H<=0||reps<1||batches<1||kind<0||kind>2)return 2;if(!ac((void**)&dx,x,nx)||!ac((void**)&dt,tok,(size_t)S*4)||cudaMalloc(&do_,no)!=cudaSuccess)goto fail;if(kind==1&&(!weights||!ac((void**)&dw,weights,(size_t)S*4)))goto fail;if(kind==2&&(!w||!off||!ac((void**)&dw,w,(size_t)E*K*N*4)||!ac((void**)&df,off,(size_t)(E+1)*4)))goto fail;if(kind==0)gather_k<<<(S*H+255)/256,256>>>(dx,dt,do_,S,H);else if(kind==1){cudaMemset(do_,0,no);combine_k<<<(S*H+255)/256,256>>>(dx,dt,dw,do_,S,H);}else gg_k<<<(T*N+255)/256,256>>>(dx,dw,df,do_,T,K,N,E);if(cudaDeviceSynchronize()!=cudaSuccess||cudaEventCreate(&a)!=cudaSuccess||cudaEventCreate(&b)!=cudaSuccess)goto fail;for(int batch=0;batch<batches;batch++){if(cudaEventRecord(a)!=cudaSuccess)goto fail;for(int r=0;r<reps;r++){if(kind==0)gather_k<<<(S*H+255)/256,256>>>(dx,dt,do_,S,H);else if(kind==1){cudaMemset(do_,0,no);combine_k<<<(S*H+255)/256,256>>>(dx,dt,dw,do_,S,H);}else gg_k<<<(T*N+255)/256,256>>>(dx,dw,df,do_,T,K,N,E);}if(cudaEventRecord(b)!=cudaSuccess||cudaEventSynchronize(b)!=cudaSuccess)goto fail;float elapsed=0;if(cudaEventElapsedTime(&elapsed,a,b)!=cudaSuccess)goto fail;ms[batch]=elapsed/(float)reps;}cudaEventDestroy(a);cudaEventDestroy(b);cudaFree(dx);cudaFree(dt);if(dw)cudaFree(dw);if(df)cudaFree(df);cudaFree(do_);return 1;fail:if(a)cudaEventDestroy(a);if(b)cudaEventDestroy(b);if(dx)cudaFree(dx);if(dt)cudaFree(dt);if(dw)cudaFree(dw);if(df)cudaFree(df);if(do_)cudaFree(do_);return 3;}
 '''
 
 
@@ -1272,13 +1442,15 @@ def run_grouped_gemm_f32(x: Any, weights: Any, group_sizes: Any) -> Any:
 
 
 def _measure_moe_device(x: Any, token_of_slot: Any, *, kind: int, reps: int,
+                        batches: int = 1,
+                        batch_medians: list[float] | None = None,
                         weights: Any | None = None, expert_weights: Any | None = None,
                         group_sizes: Any | None = None,
                         num_tokens: int | None = None) -> float:
     """Time one production MoE kernel with CUDA events and resident operands."""
     import numpy as np
-    if reps < 1:
-        raise ValueError("positive reps required")
+    if reps < 1 or batches < 1:
+        raise ValueError("positive reps and batches required")
     xa = np.ascontiguousarray(x, dtype=np.float32)
     tok = np.ascontiguousarray(token_of_slot, dtype=np.int32).reshape(-1)
     if xa.ndim != 2 or not xa.size or not tok.size:
@@ -1311,34 +1483,120 @@ def _measure_moe_device(x: Any, token_of_slot: Any, *, kind: int, reps: int,
         run_grouped_gemm_f32(xa, w, np.diff(off).astype(np.int64))
     fn = getattr(_moe_lib(), "tessera_nvidia_moe_timed")
     fn.restype = ctypes.c_int
-    fn.argtypes = [ctypes.c_void_p] * 5 + [ctypes.c_int] * 8 + [ctypes.POINTER(ctypes.c_float)]
-    ms = ctypes.c_float()
+    fn.argtypes = ([ctypes.c_void_p] * 5 + [ctypes.c_int] * 9
+                   + [ctypes.POINTER(ctypes.c_float)])
+    samples = (ctypes.c_float * batches)()
     kernel_weights = w if w is not None else np.zeros(1, dtype=np.float32)
     if fn(_ptr(xa), _ptr(tok), _ptr(kernel_weights), _ptr(combine_weights),
-          _ptr(off), T, S, width, K, N, E, kind, reps, ctypes.byref(ms)) != 1:
+          _ptr(off), T, S, width, K, N, E, kind, reps, batches, samples) != 1:
         raise RuntimeError("NVIDIA MoE event timing failed")
-    return float(ms.value)
+    values = [float(value) for value in samples]
+    if batch_medians is not None:
+        batch_medians.extend(values)
+    return float(np.median(values))
 
 
-def measure_moe_dispatch_device(x: Any, token_of_slot: Any, *, reps: int = 100) -> float:
-    return _measure_moe_device(x, token_of_slot, kind=0, reps=reps)
+def measure_moe_dispatch_device(x: Any, token_of_slot: Any, *, reps: int = 100,
+                                batches: int = 1,
+                                batch_medians: list[float] | None = None) -> float:
+    return _measure_moe_device(x, token_of_slot, kind=0, reps=reps,
+                               batches=batches, batch_medians=batch_medians)
 
 
 def measure_moe_combine_device(partials: Any, token_of_slot: Any, weights: Any,
-                               num_tokens: int, *, reps: int = 100) -> float:
+                               num_tokens: int, *, reps: int = 100,
+                               batches: int = 1,
+                               batch_medians: list[float] | None = None) -> float:
     import numpy as np
     if np.asarray(partials).shape[0] != np.asarray(token_of_slot).size:
         raise ValueError("MoE combine timing slots must match partial rows")
     return _measure_moe_device(partials, token_of_slot, kind=1, reps=reps,
+                               batches=batches, batch_medians=batch_medians,
                                weights=weights, num_tokens=num_tokens)
 
 
 def measure_grouped_gemm_device(x: Any, weights: Any, group_sizes: Any, *,
-                                reps: int = 100) -> float:
+                                reps: int = 100, batches: int = 1,
+                                batch_medians: list[float] | None = None) -> float:
     # Grouped GEMM's slots are unused but the common ABI still carries one.
     import numpy as np
     return _measure_moe_device(x, np.array([0], dtype=np.int32), kind=2, reps=reps,
+                               batches=batches, batch_medians=batch_medians,
                                expert_weights=weights, group_sizes=group_sizes)
+
+
+def run_grouped_swiglu_f32(x: Any, w_gate: Any, w_up: Any, w_down: Any,
+                           group_sizes: Any) -> Any:
+    """Three grouped GEMMs (independent of expert count) plus SiLU gating."""
+    gate = run_grouped_gemm_f32(x, w_gate, group_sizes)
+    up = run_grouped_gemm_f32(x, w_up, group_sizes)
+    hidden = run_gated_epilogue_f32(gate, up, "silu")
+    return run_grouped_gemm_f32(hidden, w_down, group_sizes)
+
+
+def run_grouped_swiglu_legacy_f32(x: Any, w_gate: Any, w_up: Any,
+                                  w_down: Any, group_sizes: Any) -> Any:
+    """Legacy 3E-launch decomposition retained as a retune comparator."""
+    import numpy as np
+    x = np.ascontiguousarray(x, np.float32)
+    wg, wu, wd = (np.ascontiguousarray(w, np.float32)
+                  for w in (w_gate, w_up, w_down))
+    groups = np.asarray(group_sizes, np.int64).reshape(-1)
+    if wg.shape != wu.shape or wg.ndim != 3 or wd.ndim != 3 or (
+            wg.shape[0] != groups.size or int(groups.sum()) != x.shape[0] or
+            wd.shape != (wg.shape[0], wg.shape[2], x.shape[1])):
+        raise ValueError("invalid grouped SwiGLU weights or partition")
+    outputs = []; start = 0
+    for expert, count in enumerate(groups):
+        stop = start + int(count)
+        if stop > start:
+            one = np.array([stop - start], np.int64)
+            gate = run_grouped_gemm_f32(x[start:stop], wg[expert:expert + 1], one)
+            up = run_grouped_gemm_f32(x[start:stop], wu[expert:expert + 1], one)
+            hidden = run_gated_epilogue_f32(gate, up, "silu")
+            outputs.append(run_grouped_gemm_f32(
+                hidden, wd[expert:expert + 1], one))
+        start = stop
+    return np.concatenate(outputs, axis=0) if outputs else np.empty_like(x)
+
+
+def measure_grouped_swiglu_device(x: Any, w_gate: Any, w_up: Any,
+                                  w_down: Any, group_sizes: Any, *,
+                                  legacy: bool = False,
+                                  reps: int = 100) -> float:
+    """Sum resident kernel-event medians for grouped or legacy SwiGLU."""
+    import numpy as np
+    x = np.ascontiguousarray(x, np.float32)
+    wg, wu, wd = (np.ascontiguousarray(w, np.float32)
+                  for w in (w_gate, w_up, w_down))
+    groups = np.asarray(group_sizes, np.int64).reshape(-1)
+    if not legacy:
+        gate = run_grouped_gemm_f32(x, wg, groups)
+        up = run_grouped_gemm_f32(x, wu, groups)
+        hidden = (gate / (1.0 + np.exp(-gate)) * up).astype(np.float32)
+        return (measure_grouped_gemm_device(x, wg, groups, reps=reps) +
+                measure_grouped_gemm_device(x, wu, groups, reps=reps) +
+                measure_gated_epilogue_device(gate, up, "silu", reps=reps) +
+                measure_grouped_gemm_device(hidden, wd, groups, reps=reps))
+    elapsed = 0.0; start = 0
+    for expert, count in enumerate(groups):
+        stop = start + int(count)
+        if stop > start:
+            one = np.array([stop - start], np.int64)
+            xe = x[start:stop]
+            gate = run_grouped_gemm_f32(xe, wg[expert:expert + 1], one)
+            up = run_grouped_gemm_f32(xe, wu[expert:expert + 1], one)
+            hidden = (gate / (1.0 + np.exp(-gate)) * up).astype(np.float32)
+            elapsed += measure_grouped_gemm_device(
+                xe, wg[expert:expert + 1], one, reps=reps)
+            elapsed += measure_grouped_gemm_device(
+                xe, wu[expert:expert + 1], one, reps=reps)
+            elapsed += measure_gated_epilogue_device(
+                gate, up, "silu", reps=reps)
+            elapsed += measure_grouped_gemm_device(
+                hidden, wd[expert:expert + 1], one, reps=reps)
+        start = stop
+    return elapsed
 
 
 def _synthesize_deltanet_cuda() -> str:
@@ -1541,29 +1799,44 @@ extern "C" int tessera_nvidia_relu_bias_f32(const float*hx,const float*hb,float*
     return out
 
 
-def run_gated_epilogue_f32(gate: Any, up: Any, activation: str) -> Any:
-    """Apply ``activation(gate) * up`` in a generated f32 CUDA epilogue."""
-    import numpy as np
+def _synthesize_gated_epilogue_cuda(activation: str) -> tuple[str, str, str]:
+    """Return the entry, kernel, and CUDA source for a gated f32 epilogue."""
     from tessera.compiler.emit._fused_scalar_body import pointwise_snippet
-    gg = np.ascontiguousarray(gate, dtype=np.float32)
-    uu = np.ascontiguousarray(up, dtype=np.float32)
-    if gg.ndim != 2 or gg.shape != uu.shape:
-        raise ValueError("NVIDIA gated epilogue requires equal rank-2 matrices")
     snippet = pointwise_snippet(activation, "v")
     entry = f"tessera_nvidia_gated_epilogue_{activation}"
+    kernel = f"tessera_nvidia_gated_epilogue_{activation}_kernel"
     source = (
         "#include <cuda_runtime.h>\n#include <math.h>\n"
-        "__global__ void k(const float*g,const float*u,float*o,long n){"
+        f'extern "C" __global__ void {kernel}(const float*g,const float*u,float*o,long n){{'
         "long i=(long)blockIdx.x*blockDim.x+threadIdx.x;if(i<n){float v=g[i];"
         f"{snippet}o[i]=v*u[i];}}}}\n"
         f'extern "C" int {entry}(const float*hg,const float*hu,float*ho,long n){{'
         "if(!hg||!hu||!ho||n<1)return 2;size_t z=(size_t)n*4;"
         "float *g=0,*u=0,*o=0;if(cudaMalloc(&g,z)||cudaMalloc(&u,z)||cudaMalloc(&o,z))return 3;"
         "if(cudaMemcpy(g,hg,z,cudaMemcpyHostToDevice)||cudaMemcpy(u,hu,z,cudaMemcpyHostToDevice))return 3;"
-        "k<<<(n+255)/256,256>>>(g,u,o,n);int ok=cudaDeviceSynchronize()==cudaSuccess&&"
+        f"{kernel}<<<(n+255)/256,256>>>(g,u,o,n);int ok=cudaDeviceSynchronize()==cudaSuccess&&"
         "cudaMemcpy(ho,o,z,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(g);cudaFree(u);cudaFree(o);"
         "return ok?1:3;}"
+        f'extern "C" int {entry}_timed(const float*hg,const float*hu,long n,int reps,float*ms){{'
+        "if(!hg||!hu||!ms||n<1||reps<1)return 2;size_t z=(size_t)n*4;"
+        "float *g=0,*u=0,*o=0;cudaEvent_t a=0,b=0;if(cudaMalloc(&g,z)||cudaMalloc(&u,z)||cudaMalloc(&o,z))goto fail;"
+        "if(cudaMemcpy(g,hg,z,cudaMemcpyHostToDevice)||cudaMemcpy(u,hu,z,cudaMemcpyHostToDevice))goto fail;"
+        f"{kernel}<<<(n+255)/256,256>>>(g,u,o,n);if(cudaDeviceSynchronize()||cudaEventCreate(&a)||cudaEventCreate(&b))goto fail;"
+        f"cudaEventRecord(a);for(int i=0;i<reps;i++){kernel}<<<(n+255)/256,256>>>(g,u,o,n);cudaEventRecord(b);cudaEventSynchronize(b);"
+        "{float all=0;if(cudaEventElapsedTime(&all,a,b))goto fail;*ms=all/reps;}cudaEventDestroy(a);cudaEventDestroy(b);cudaFree(g);cudaFree(u);cudaFree(o);return 1;"
+        "fail:if(a)cudaEventDestroy(a);if(b)cudaEventDestroy(b);if(g)cudaFree(g);if(u)cudaFree(u);if(o)cudaFree(o);return 3;}"
     )
+    return entry, kernel, source
+
+
+def run_gated_epilogue_f32(gate: Any, up: Any, activation: str) -> Any:
+    """Apply ``activation(gate) * up`` in a generated f32 CUDA epilogue."""
+    import numpy as np
+    gg = np.ascontiguousarray(gate, dtype=np.float32)
+    uu = np.ascontiguousarray(up, dtype=np.float32)
+    if gg.ndim != 2 or gg.shape != uu.shape:
+        raise ValueError("NVIDIA gated epilogue requires equal rank-2 matrices")
+    entry, _, source = _synthesize_gated_epilogue_cuda(activation)
     artifact = _gated_epilogue_artifacts.get(activation)
     if artifact is None:
         artifact = _nvidia_cuda_compile_fn(KernelSource(
@@ -1625,6 +1898,27 @@ def run_fused_epilogue_f32(
     if fn(_ptr(xx), _ptr(bb), _ptr(out), xx.size, xx.shape[1]) != 1:
         raise RuntimeError("NVIDIA fused CUDA epilogue launch failed")
     return out
+
+
+def measure_gated_epilogue_device(gate: Any, up: Any, activation: str,
+                                  *, reps: int = 100) -> float:
+    """CUDA-event time for the resident grouped-SwiGLU activation stage."""
+    import numpy as np
+    gg = np.ascontiguousarray(gate, dtype=np.float32)
+    uu = np.ascontiguousarray(up, dtype=np.float32)
+    if gg.ndim != 2 or gg.shape != uu.shape or reps < 1:
+        raise ValueError("gated epilogue timing requires equal rank-2 inputs")
+    run_gated_epilogue_f32(gg, uu, activation)
+    entry = f"tessera_nvidia_gated_epilogue_{activation}"
+    fn = getattr(_load_lib(_gated_epilogue_artifacts[activation]),
+                 entry + "_timed")
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long,
+                   ctypes.c_int, ctypes.POINTER(ctypes.c_float)]
+    ms = ctypes.c_float()
+    if fn(_ptr(gg), _ptr(uu), gg.size, reps, ctypes.byref(ms)) != 1:
+        raise RuntimeError("NVIDIA gated epilogue event timing failed")
+    return float(ms.value)
 
 
 def _synthesize_conv2d_nhwc_cuda() -> str:
@@ -2162,6 +2456,9 @@ def _paged_attention_corpus_winner(
 def run_paged_attention_resident_f32(
     q: Any, k_pages: Any, v_pages: Any, page_table: Any, token_indices: Any,
     *, scale: float, causal: bool, route: str | None = None,
+    measure_device: bool = True, device_reps: int = 20,
+    device_warmup: int = 3, device_batches: int = 1,
+    device_batch_medians: list[float] | None = None,
 ) -> tuple[Any, float]:
     """Size-dispatched direct-fused or staged device-resident paged attention."""
     import numpy as np
@@ -2181,6 +2478,9 @@ def run_paged_attention_resident_f32(
     Q, T = int(qq.shape[1]), int(idx.size)
     if T > 8192:
         raise ValueError("fused paged attention supports at most 8192 tokens")
+    if measure_device and (device_reps < 1 or device_warmup < 0
+                           or device_batches < 1):
+        raise ValueError("paged-attention timing requires positive reps and nonnegative warmup")
     routes = ("fused", "staged")
     if route is not None and route not in routes:
         raise ValueError(f"unknown CUDA paged-attention route {route!r}")
@@ -2229,7 +2529,12 @@ def run_paged_attention_resident_f32(
                             causal_offset=max(T - Q, 0))
                         _resident_matmul_f32(s, ph, vh, oh)
             launch()
-            latency = s.measure(launch, reps=20, warmup=3)
+            samples = ([s.measure(
+                launch, reps=device_reps, warmup=device_warmup)
+                for _ in range(device_batches)] if measure_device else [])
+            if device_batch_medians is not None:
+                device_batch_medians.extend(samples)
+            latency = float(np.median(samples)) if samples else 0.0
             return out.numpy(), latency
 
     key = (H, Q, T, D, L, bool(causal))
@@ -2781,6 +3086,7 @@ _MMA_FUSED_ENTRY = "tessera_nvidia_mma_fused"
 #: Activations the mma.sync fused epilogue applies after the (optional) bias add.
 _MMA_FUSED_ACTS = ("relu", "gelu", "silu", "sigmoid", "tanh")
 _mma_fused_fn_cache: dict[tuple[str, bool, str | None], Any] = {}
+_mma_fused_device_fn_cache: dict[tuple[str, bool, str | None], Any] = {}
 
 
 def _mma_fused_epilogue(region: Any) -> tuple[bool, str | None] | None:
@@ -2869,6 +3175,32 @@ def _synthesize_mma_fused_cuda(has_bias: bool, act: str | None,
         "  cudaFree(dA); cudaFree(dB); cudaFree(dD); if (dbias) cudaFree(dbias);\n"
         "  return ok;\n"
         "}\n"
+        f'extern "C" float {_MMA_FUSED_ENTRY}_device_ms(const unsigned short* hA,\n'
+        "    const unsigned short* hB, const float* hbias, int M, int N, int K,\n"
+        "    int warmup, int reps) {\n"
+        "  if (warmup < 0 || reps < 1) return -1.0f;\n"
+        "  size_t szA=(size_t)M*K*2, szB=(size_t)K*N*2, szO=(size_t)M*N*4, szBias=(size_t)N*4;\n"
+        "  unsigned short *dA=0,*dB=0; float *dbias=0,*dD=0; cudaEvent_t beg=0,end=0;\n"
+        "  if (cudaMalloc(&dA,szA)!=cudaSuccess || cudaMalloc(&dB,szB)!=cudaSuccess ||\n"
+        "      cudaMalloc(&dD,szO)!=cudaSuccess) goto fail;\n"
+        "  if (cudaMemcpy(dA,hA,szA,cudaMemcpyHostToDevice)!=cudaSuccess ||\n"
+        "      cudaMemcpy(dB,hB,szB,cudaMemcpyHostToDevice)!=cudaSuccess) goto fail;\n"
+        "  if (hbias) { if (cudaMalloc(&dbias,szBias)!=cudaSuccess ||\n"
+        "      cudaMemcpy(dbias,hbias,szBias,cudaMemcpyHostToDevice)!=cudaSuccess) goto fail; }\n"
+        "  { dim3 grid((M+15)/16,(N+7)/8), block(32);\n"
+        f"    for(int i=0;i<warmup;i++) {_MMA_FUSED_ENTRY}_kernel<<<grid,block>>>(dA,dB,dbias,dD,M,N,K);\n"
+        "    if (cudaDeviceSynchronize()!=cudaSuccess || cudaEventCreate(&beg)!=cudaSuccess ||\n"
+        "        cudaEventCreate(&end)!=cudaSuccess || cudaEventRecord(beg)!=cudaSuccess) goto fail;\n"
+        f"    for(int i=0;i<reps;i++) {_MMA_FUSED_ENTRY}_kernel<<<grid,block>>>(dA,dB,dbias,dD,M,N,K);\n"
+        "    if (cudaEventRecord(end)!=cudaSuccess || cudaEventSynchronize(end)!=cudaSuccess) goto fail;\n"
+        "    float elapsed=0.0f; if (cudaEventElapsedTime(&elapsed,beg,end)!=cudaSuccess) goto fail;\n"
+        "    cudaEventDestroy(beg); cudaEventDestroy(end); cudaFree(dA); cudaFree(dB);\n"
+        "    cudaFree(dD); if(dbias) cudaFree(dbias); return elapsed/reps; }\n"
+        "fail:\n"
+        "  if(beg) cudaEventDestroy(beg); if(end) cudaEventDestroy(end);\n"
+        "  if(dA) cudaFree(dA); if(dB) cudaFree(dB); if(dD) cudaFree(dD);\n"
+        "  if(dbias) cudaFree(dbias); return -1.0f;\n"
+        "}\n"
     )
 
 
@@ -2888,6 +3220,23 @@ def _mma_fused_fn(has_bias: bool, act: str | None, storage: str = "f16"):
     fn.restype = ctypes.c_int
     fn.argtypes = [ctypes.c_void_p] * 4 + [ctypes.c_int] * 3
     _mma_fused_fn_cache[sig] = fn
+    return fn
+
+
+def _mma_fused_device_fn(has_bias: bool, act: str | None,
+                         storage: str = "f16"):
+    sig = (storage, has_bias, act)
+    fn = _mma_fused_device_fn_cache.get(sig)
+    if fn is not None:
+        return fn
+    from tessera.compiler.emit.kernel_emitter import KernelSource
+    src = KernelSource(source=_synthesize_mma_fused_cuda(has_bias, act, storage),
+                       entry=_MMA_FUSED_ENTRY, lang=_LANG)
+    artifact = _nvidia_cuda_compile_fn(src)
+    fn = getattr(_load_lib(artifact), f"{_MMA_FUSED_ENTRY}_device_ms")
+    fn.restype = ctypes.c_float
+    fn.argtypes = [ctypes.c_void_p] * 3 + [ctypes.c_int] * 5
+    _mma_fused_device_fn_cache[sig] = fn
     return fn
 
 
@@ -2957,6 +3306,40 @@ class NvidiaMmaFusedCandidate(Candidate):
         except Exception:
             pass
         return region.reference(A, B, bias), "reference"
+
+    def measure_device_latency(self, region: Any, *inputs: Any,
+                               reps: int = 100,
+                               warmup: int = 10) -> float | None:
+        if len(inputs) < 2:
+            return None
+        import numpy as np
+        epi = _mma_fused_epilogue(region)
+        if epi is None:
+            return None
+        has_bias, act = epi
+        bias = inputs[2] if len(inputs) > 2 else None
+        if has_bias and bias is None:
+            return None
+        try:
+            storage_dtype = np.float16
+            if self.storage == "bf16":
+                import ml_dtypes
+                storage_dtype = ml_dtypes.bfloat16
+            aa = np.ascontiguousarray(inputs[0], storage_dtype)
+            bb = np.ascontiguousarray(inputs[1], storage_dtype)
+            if aa.ndim != 2 or bb.ndim != 2 or aa.shape[1] != bb.shape[0]:
+                return None
+            bias_arr = (np.ascontiguousarray(bias, np.float32)
+                        if has_bias else None)
+            if bias_arr is not None and bias_arr.shape != (bb.shape[1],):
+                return None
+            fn = _mma_fused_device_fn(has_bias, act, self.storage)
+            elapsed = float(fn(_ptr(aa), _ptr(bb), _ptr(bias_arr),
+                               aa.shape[0], bb.shape[1], aa.shape[1],
+                               warmup, reps))
+            return elapsed if elapsed >= 0 else None
+        except Exception:
+            return None
 
 
 # ── tensor-core ATTENTION lane — mma.sync flash, smem-staged softmax (Tier-2) ─

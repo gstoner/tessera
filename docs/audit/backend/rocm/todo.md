@@ -56,6 +56,18 @@ preserved while completing this queue:
   retaining v1/v2 loading. ROCm corpus round-trip and warm-start behavior are
   parity validated by `test_rocm_measured_autotune.py`; no NVIDIA schedule,
   resource claim, or selector decision applies to gfx1151 or other AMD targets.
+- Cross-backend sync `LLVM23-NVIDIA-2026-07-16`: ROCm's lit configuration uses
+  LLVM 23's supported internal shell, matching its already recorded 32/32
+  gfx1151 WSL proof. The Ubuntu bootstrap now probes the apt.llvm.org suite so
+  current LLVM 23 snapshot packages work on Resolute as well as the documented
+  Noble host. No NVIDIA lowering, route, timing, or resource evidence is
+  transferred to ROCm; no new AMD exact-device claim is made here.
+- Cross-backend sync `NVFP4-TILE-SCALES-2026-07-16`: shared typed Tile IR now
+  permits logical `scale_a`/`scale_b` fragments only on NVFP4 MMA descriptors.
+  This is not applicable to enabled gfx1151 WMMA matrix forms: gfx1151 has no
+  NVFP4 block-scaled matrix instruction. ROCm retains its named unsupported
+  capability result; NVIDIA nibble packing and scale-selector lane maps are not
+  transferred.
 
 ## LLVM/MLIR 23 and ROCm 7.14 transition evidence
 
@@ -653,6 +665,12 @@ round trips affect registration and allocation. Before automatic selection:
    reproducible and guarded by a ratchet.
 
 ## Accepted-deferred work
+
+Cross-backend sync `EPILOGUE-CONTRACT-2026-07-16` updates only the shared
+`FusedRegion` bias/activation/residual order and registered rejection
+diagnostics. Existing gfx1151 epilogue fixtures already consume this oracle;
+no CUDA warp, register, or schedule result transfers to ROCm. Re-run the shared
+contract gates on the ROCm host when this coordinating change lands.
 
 Do not schedule these without new evidence:
 

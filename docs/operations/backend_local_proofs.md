@@ -23,3 +23,25 @@ different physical target.
 
 The NVIDIA command writes its bundle to `artifacts/nvidia-release/` by default.
 Set `TESSERA_NVIDIA_REPORT_DIR` to place the bundle elsewhere.
+
+## NVIDIA local release ownership
+
+NVIDIA-TEST-7 intentionally uses no GitHub or self-hosted runner. Ordinary PR
+CI owns the complete cross-backend CPU suite. The WSL release command owns the
+physical RTX 5070 Ti directly, rejects concurrent runs through a host lock,
+records success or failure in every bundle, and keeps NVIDIA host-free/shared
+registry gates, compiler artifact, two-run device correctness, and serial
+performance selectable as separate layers:
+
+```bash
+bash scripts/run_nvidia_release_gate.sh --layer compiler
+bash scripts/run_nvidia_release_gate.sh --layer device
+bash scripts/run_nvidia_release_gate.sh --layer performance
+```
+
+Running without `--layer` executes all four layers fail-closed. By default,
+bundles are retained under a timestamped commit directory in
+`artifacts/nvidia-release/`; set `TESSERA_NVIDIA_REPORT_DIR` for an explicit
+archive location. The performance bundle includes the committed sm_120
+baseline corpus and SHA-256 inventory. Summarize or attach the local bundle to
+the coordinating PR; do not describe it as GitHub-hosted evidence.

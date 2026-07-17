@@ -23,7 +23,7 @@ import statistics
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from tessera.compiler.emit.candidate import (
     Candidate,
@@ -98,6 +98,34 @@ def _key_from_json(d: dict[str, Any]) -> tuple[Any, ...]:
             d.get("timing", TIMING_END_TO_END))
 
 
+def _evidence_matches(
+    key: tuple[Any, ...], record: MeasureRecord,
+    required: Mapping[str, Any] | None,
+) -> bool:
+    """Whether a retained row matches an explicit selector evidence policy.
+
+    Device and timing are key fields; compiler/resource/cache fingerprints are
+    evidence fields. Missing evidence fails closed whenever a requirement is
+    supplied, which prevents a legacy or stale row from silently selecting a
+    production route.
+    """
+    if not required:
+        return True
+    dev, target, op, _, dtype, timing = _normalize_key(key)
+    key_fields = {
+        "device": dev, "target": target, "op": op,
+        "dtype": dtype, "timing": timing,
+    }
+    for name, expected in required.items():
+        actual = key_fields.get(name, record.evidence.get(name))
+        if name == "resource_fingerprints":
+            if actual is None or sorted(actual) != sorted(expected):
+                return False
+        elif actual != expected:
+            return False
+    return True
+
+
 class MeasureCache:
     """Content-keyed cache of :class:`MeasureRecord` — measure-at-first-miss. Key =
     ``(device, target, op, shape-bucket, dtype, timing)`` so nearby shapes share a verdict
@@ -140,7 +168,8 @@ class MeasureCache:
                         for k, rec in self._store.items()],
         }
 
-    def load_dict(self, payload: dict[str, Any], *, overwrite: bool = False) -> int:
+    def load_dict(self, payload: dict[str, Any], *, overwrite: bool = False,
+                  required_evidence: Mapping[str, Any] | None = None) -> int:
         """Merge a :meth:`to_dict` payload into the cache (warm-start). Returns the
         number of records loaded. A record whose key is already present is kept
         (measure-on-this-box wins) unless ``overwrite``. A version mismatch loads
@@ -152,9 +181,12 @@ class MeasureCache:
         loaded = 0
         for r in payload.get("records", ()):
             key = _key_from_json(r)
+            record = MeasureRecord.from_json(r)
+            if not _evidence_matches(key, record, required_evidence):
+                continue
             if not overwrite and key in self._store:
                 continue
-            self._store[key] = MeasureRecord.from_json(r)
+            self._store[key] = record
             loaded += 1
         return loaded
 
@@ -200,7 +232,8 @@ def save_corpus(path: Path | str | None = None,
 
 def load_corpus(path: Path | str | None = None,
                 cache: MeasureCache | None = None, *,
-                overwrite: bool = False) -> int:
+                overwrite: bool = False,
+                required_evidence: Mapping[str, Any] | None = None) -> int:
     """Merge the committed corpus at ``path`` into ``cache`` (warm-start). Returns
     the count loaded; a missing/unreadable/version-mismatched corpus loads nothing
     (never raises) so a fresh checkout or stale file degrades to measure-on-miss."""
@@ -210,7 +243,8 @@ def load_corpus(path: Path | str | None = None,
         payload = json.loads(p.read_text())
     except (OSError, ValueError):
         return 0
-    return cache.load_dict(payload, overwrite=overwrite)
+    return cache.load_dict(payload, overwrite=overwrite,
+                           required_evidence=required_evidence)
 
 
 _warm_started = False
@@ -304,7 +338,8 @@ def corpus_winner(region: Any, op: str, target: str, *inputs: Any,
                   dtype: str | None = None,
                   cache: MeasureCache | None = None,
                   device: str | None = None,
-                  timing: str = TIMING_END_TO_END) -> str | None:
+                  timing: str = TIMING_END_TO_END,
+                  required_evidence: Mapping[str, Any] | None = None) -> str | None:
     """Return the applicable winner persisted for this workload, if unambiguous.
 
     The recommendation is only a selection hint. ``run_arbitrated`` still runs
@@ -329,7 +364,10 @@ def corpus_winner(region: Any, op: str, target: str, *inputs: Any,
                in cache._store.items()
                if key_dev == dev and key_target == target and key_op == op
                and key_bucket == bucket and key_timing == timing
-               and (dtype is None or key_dtype == dtype)]
+               and (dtype is None or key_dtype == dtype)
+               and _evidence_matches(
+                   (key_dev, key_target, key_op, key_bucket, key_dtype,
+                    key_timing), rec, required_evidence)]
     winners = {rec.winner for rec in matches}
     if len(winners) != 1:
         return None

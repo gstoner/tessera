@@ -29,11 +29,16 @@ def _expanded_mappings(data: dict) -> dict[str, str]:
 def test_nvidia_moe_transport_node_migration_has_no_old_file_duplicate():
     data = json.loads(MIGRATIONS.read_text(encoding="utf-8"))
     mappings = _expanded_mappings(data)
+    post_migration_nodes = set(data["post_migration_nodes"])
     assert data["migration"] == "NVIDIA-TEST-6-HIGH"
     assert len(mappings) == 292
+    assert len(post_migration_nodes) == 20
     for new_node in mappings.values():
         assert _node_path(new_node).is_file(), new_node
+    for node in post_migration_nodes:
+        assert _node_path(node).is_file(), node
     assert len(set(mappings.values())) == len(mappings)
+    assert post_migration_nodes.isdisjoint(mappings.values())
 
     proc = subprocess.run(
         [
@@ -54,7 +59,7 @@ def test_nvidia_moe_transport_node_migration_has_no_old_file_duplicate():
     collected = {
         line for line in proc.stdout.splitlines() if line.startswith("tests/")
     }
-    assert collected == set(mappings.values())
+    assert collected == set(mappings.values()) | post_migration_nodes
 
     old_paths = sorted({_node_path(node) for node in mappings if _node_path(node).is_file()})
     if old_paths:

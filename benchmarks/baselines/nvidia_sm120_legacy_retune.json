@@ -1,0 +1,1024 @@
+{
+  "schema": "tessera.nvidia.legacy-retune.v1",
+  "device": "NVIDIA GeForce RTX 5070 Ti, GPU-5072cda5-509a-008c-93c8-dc06e105f307, 12.0, 610.62",
+  "noise_policy": 0.03,
+  "rows": [
+    {
+      "case": "f32_square",
+      "shape": "256x256x256",
+      "dtype": "f32/tf32",
+      "candidate": "compiled_exact_f32",
+      "runs": [
+        {
+          "run": 1,
+          "device_event_ms": 0.018162880092859268,
+          "end_to_end_ms": 0.6029144988133339,
+          "max_abs_error": 7.152557373046875e-07
+        },
+        {
+          "run": 2,
+          "device_event_ms": 0.017407359555363655,
+          "end_to_end_ms": 0.611374998698011,
+          "max_abs_error": 7.152557373046875e-07
+        }
+      ],
+      "stable": false,
+      "device_stable": false,
+      "end_to_end_stable": true,
+      "device_winner_consensus": false,
+      "end_to_end_winner_consensus": false,
+      "launches_per_call": 1,
+      "traffic_bytes": 786432,
+      "achieved_bandwidth_gbps": 44.21853818121745,
+      "resources": [
+        {
+          "kernel": "gg_k(const float *, const float *, const int *, float *, int, int, int, int)",
+          "launches": 3,
+          "cc": "12.0",
+          "block_size": "(256, 1, 1)",
+          "grid_size": "(128, 1, 1)",
+          "registers_per_thread": 40,
+          "static_shared_memory_bytes": 0,
+          "dynamic_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 100,
+          "achieved_occupancy_pct": 29.62,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "resource_fingerprint": "sha256:b0c86b212fdd7607533774e44d181e551a9c87fac4b0114da911fb371be064e1"
+        }
+      ],
+      "resource_fingerprints": [
+        "sha256:b0c86b212fdd7607533774e44d181e551a9c87fac4b0114da911fb371be064e1"
+      ],
+      "resource_evidence_complete": true
+    },
+    {
+      "case": "f32_square",
+      "shape": "256x256x256",
+      "dtype": "f32/tf32",
+      "candidate": "shipped_tf32",
+      "runs": [
+        {
+          "run": 1,
+          "device_event_ms": 0.01229200005531311,
+          "end_to_end_ms": 0.5596604987658793,
+          "max_abs_error": 0.0024225711822509766
+        },
+        {
+          "run": 2,
+          "device_event_ms": 0.023091359138488768,
+          "end_to_end_ms": 0.6060694977350067,
+          "max_abs_error": 0.0024225711822509766
+        }
+      ],
+      "stable": false,
+      "device_stable": false,
+      "end_to_end_stable": false,
+      "device_winner_consensus": false,
+      "end_to_end_winner_consensus": true,
+      "launches_per_call": 1,
+      "traffic_bytes": 786432,
+      "achieved_bandwidth_gbps": 44.45208244319322,
+      "resources": [
+        {
+          "kernel": "epi(const float *, const float *, float *, long, int, int)",
+          "launches": 1,
+          "cc": "12.0",
+          "block_size": "(256, 1, 1)",
+          "grid_size": "(1024, 1, 1)",
+          "registers_per_thread": 20,
+          "static_shared_memory_bytes": 0,
+          "dynamic_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 100,
+          "achieved_occupancy_pct": 76.28,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "resource_fingerprint": "sha256:3e1de8b5b2a119389c56fb6dbbb9ceb87e6980296f79fcbce5545b75092db422"
+        },
+        {
+          "kernel": "gemm",
+          "launches": 6,
+          "cc": "12.0",
+          "block_size": "(32, 1, 1)",
+          "grid_size": "(32, 64, 1)",
+          "registers_per_thread": 40,
+          "static_shared_memory_bytes": 0,
+          "dynamic_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 50,
+          "achieved_occupancy_pct": 9.26,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "resource_fingerprint": "sha256:da7f3128232d841750ea3a63c6a5bd276898f5c4a33d4a354765c83d0e69254d"
+        },
+        {
+          "kernel": "tessera_mma_gemm_f16",
+          "launches": 1,
+          "cc": "12.0",
+          "block_size": "(32, 1, 1)",
+          "grid_size": "(8, 32, 1)",
+          "registers_per_thread": 40,
+          "static_shared_memory_bytes": 0,
+          "dynamic_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 50,
+          "achieved_occupancy_pct": 7.34,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "resource_fingerprint": "sha256:19d6aa2e02ae89b366e8de98129d3745643150ed6c2e307a0af42bb6bdcb32f5"
+        }
+      ],
+      "resource_fingerprints": [
+        "sha256:3e1de8b5b2a119389c56fb6dbbb9ceb87e6980296f79fcbce5545b75092db422",
+        "sha256:da7f3128232d841750ea3a63c6a5bd276898f5c4a33d4a354765c83d0e69254d",
+        "sha256:19d6aa2e02ae89b366e8de98129d3745643150ed6c2e307a0af42bb6bdcb32f5"
+      ],
+      "resource_evidence_complete": true
+    },
+    {
+      "case": "f32_ragged",
+      "shape": "127x259x63",
+      "dtype": "f32/tf32",
+      "candidate": "compiled_exact_f32",
+      "runs": [
+        {
+          "run": 1,
+          "device_event_ms": 0.010537919588387012,
+          "end_to_end_ms": 0.5122170005051885,
+          "max_abs_error": 2.384185791015625e-07
+        },
+        {
+          "run": 2,
+          "device_event_ms": 0.00873488001525402,
+          "end_to_end_ms": 0.48929700096778106,
+          "max_abs_error": 2.384185791015625e-07
+        }
+      ],
+      "stable": false,
+      "device_stable": false,
+      "end_to_end_stable": false,
+      "device_winner_consensus": true,
+      "end_to_end_winner_consensus": false,
+      "launches_per_call": 1,
+      "traffic_bytes": 228844,
+      "achieved_bandwidth_gbps": 23.74787313792923,
+      "resources": [
+        {
+          "kernel": "gg_k(const float *, const float *, const int *, float *, int, int, int, int)",
+          "launches": 3,
+          "cc": "12.0",
+          "block_size": "(256, 1, 1)",
+          "grid_size": "(128, 1, 1)",
+          "registers_per_thread": 40,
+          "static_shared_memory_bytes": 0,
+          "dynamic_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 100,
+          "achieved_occupancy_pct": 29.62,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "resource_fingerprint": "sha256:b0c86b212fdd7607533774e44d181e551a9c87fac4b0114da911fb371be064e1"
+        }
+      ],
+      "resource_fingerprints": [
+        "sha256:b0c86b212fdd7607533774e44d181e551a9c87fac4b0114da911fb371be064e1"
+      ],
+      "resource_evidence_complete": true
+    },
+    {
+      "case": "f32_ragged",
+      "shape": "127x259x63",
+      "dtype": "f32/tf32",
+      "candidate": "shipped_tf32",
+      "runs": [
+        {
+          "run": 1,
+          "device_event_ms": 0.01604848027229309,
+          "end_to_end_ms": 0.5296520012052497,
+          "max_abs_error": 0.0012716054916381836
+        },
+        {
+          "run": 2,
+          "device_event_ms": 0.010099359750747681,
+          "end_to_end_ms": 0.4646224988391623,
+          "max_abs_error": 0.0012716054916381836
+        }
+      ],
+      "stable": false,
+      "device_stable": false,
+      "end_to_end_stable": false,
+      "device_winner_consensus": false,
+      "end_to_end_winner_consensus": false,
+      "launches_per_call": 1,
+      "traffic_bytes": 228844,
+      "achieved_bandwidth_gbps": 17.50385498751322,
+      "resources": [
+        {
+          "kernel": "epi(const float *, const float *, float *, long, int, int)",
+          "launches": 1,
+          "cc": "12.0",
+          "block_size": "(256, 1, 1)",
+          "grid_size": "(1024, 1, 1)",
+          "registers_per_thread": 20,
+          "static_shared_memory_bytes": 0,
+          "dynamic_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 100,
+          "achieved_occupancy_pct": 76.28,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "resource_fingerprint": "sha256:3e1de8b5b2a119389c56fb6dbbb9ceb87e6980296f79fcbce5545b75092db422"
+        },
+        {
+          "kernel": "gemm",
+          "launches": 6,
+          "cc": "12.0",
+          "block_size": "(32, 1, 1)",
+          "grid_size": "(32, 64, 1)",
+          "registers_per_thread": 40,
+          "static_shared_memory_bytes": 0,
+          "dynamic_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 50,
+          "achieved_occupancy_pct": 9.26,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "resource_fingerprint": "sha256:da7f3128232d841750ea3a63c6a5bd276898f5c4a33d4a354765c83d0e69254d"
+        },
+        {
+          "kernel": "tessera_mma_gemm_f16",
+          "launches": 1,
+          "cc": "12.0",
+          "block_size": "(32, 1, 1)",
+          "grid_size": "(8, 32, 1)",
+          "registers_per_thread": 40,
+          "static_shared_memory_bytes": 0,
+          "dynamic_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 50,
+          "achieved_occupancy_pct": 7.34,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "resource_fingerprint": "sha256:19d6aa2e02ae89b366e8de98129d3745643150ed6c2e307a0af42bb6bdcb32f5"
+        }
+      ],
+      "resource_fingerprints": [
+        "sha256:3e1de8b5b2a119389c56fb6dbbb9ceb87e6980296f79fcbce5545b75092db422",
+        "sha256:da7f3128232d841750ea3a63c6a5bd276898f5c4a33d4a354765c83d0e69254d",
+        "sha256:19d6aa2e02ae89b366e8de98129d3745643150ed6c2e307a0af42bb6bdcb32f5"
+      ],
+      "resource_evidence_complete": true
+    },
+    {
+      "case": "grouped_gemm",
+      "shape": "257x193x127x5",
+      "dtype": "f32",
+      "candidate": "single_grouped_launch",
+      "runs": [
+        {
+          "run": 1,
+          "device_event_ms": 0.011846560053527355,
+          "end_to_end_ms": 0.6213110027601942,
+          "max_abs_error": 0.0
+        },
+        {
+          "run": 2,
+          "device_event_ms": 0.01101503986865282,
+          "end_to_end_ms": 0.6365859990182798,
+          "max_abs_error": 0.0
+        }
+      ],
+      "stable": false,
+      "device_stable": false,
+      "end_to_end_stable": true,
+      "device_winner_consensus": true,
+      "end_to_end_winner_consensus": true,
+      "launches_per_call": 1,
+      "traffic_bytes": 819180,
+      "achieved_bandwidth_gbps": 71.66427571022594,
+      "resources": [
+        {
+          "kernel": "gg_k(const float *, const float *, const int *, float *, int, int, int, int)",
+          "launches": 3,
+          "cc": "12.0",
+          "block_size": "(256, 1, 1)",
+          "grid_size": "(128, 1, 1)",
+          "registers_per_thread": 40,
+          "static_shared_memory_bytes": 0,
+          "dynamic_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 100,
+          "achieved_occupancy_pct": 29.62,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "resource_fingerprint": "sha256:b0c86b212fdd7607533774e44d181e551a9c87fac4b0114da911fb371be064e1"
+        }
+      ],
+      "resource_fingerprints": [
+        "sha256:b0c86b212fdd7607533774e44d181e551a9c87fac4b0114da911fb371be064e1"
+      ],
+      "resource_evidence_complete": true
+    },
+    {
+      "case": "grouped_gemm",
+      "shape": "257x193x127x5",
+      "dtype": "f32",
+      "candidate": "legacy_per_expert",
+      "runs": [
+        {
+          "run": 1,
+          "device_event_ms": 0.05022064037621021,
+          "end_to_end_ms": 2.3248044999490958,
+          "max_abs_error": 0.0
+        },
+        {
+          "run": 2,
+          "device_event_ms": 0.05510751996189356,
+          "end_to_end_ms": 2.4649700008012587,
+          "max_abs_error": 0.0
+        }
+      ],
+      "stable": false,
+      "device_stable": false,
+      "end_to_end_stable": false,
+      "device_winner_consensus": false,
+      "end_to_end_winner_consensus": false,
+      "launches_per_call": 4,
+      "traffic_bytes": 819180,
+      "achieved_bandwidth_gbps": 15.554814540962822,
+      "resources": [
+        {
+          "kernel": "gg_k(const float *, const float *, const int *, float *, int, int, int, int)",
+          "launches": 3,
+          "cc": "12.0",
+          "block_size": "(256, 1, 1)",
+          "grid_size": "(128, 1, 1)",
+          "registers_per_thread": 40,
+          "static_shared_memory_bytes": 0,
+          "dynamic_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 100,
+          "achieved_occupancy_pct": 29.62,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "resource_fingerprint": "sha256:b0c86b212fdd7607533774e44d181e551a9c87fac4b0114da911fb371be064e1"
+        }
+      ],
+      "resource_fingerprints": [
+        "sha256:b0c86b212fdd7607533774e44d181e551a9c87fac4b0114da911fb371be064e1"
+      ],
+      "resource_evidence_complete": true
+    },
+    {
+      "case": "grouped_swiglu",
+      "shape": "128x64x96x8",
+      "dtype": "f32",
+      "candidate": "collapsed_grouped",
+      "runs": [
+        {
+          "run": 1,
+          "device_event_ms": 0.04721696116030216,
+          "end_to_end_ms": 2.194300499468227,
+          "max_abs_error": 0.0
+        },
+        {
+          "run": 2,
+          "device_event_ms": 0.03808832122012973,
+          "end_to_end_ms": 2.3678140005358728,
+          "max_abs_error": 0.0
+        }
+      ],
+      "stable": false,
+      "device_stable": false,
+      "end_to_end_stable": false,
+      "device_winner_consensus": true,
+      "end_to_end_winner_consensus": true,
+      "launches_per_call": 4,
+      "traffic_bytes": 655360,
+      "achieved_bandwidth_gbps": 15.365050831842332,
+      "resources": [
+        {
+          "kernel": "gg_k(const float *, const float *, const int *, float *, int, int, int, int)",
+          "launches": 3,
+          "cc": "12.0",
+          "block_size": "(256, 1, 1)",
+          "grid_size": "(128, 1, 1)",
+          "registers_per_thread": 40,
+          "static_shared_memory_bytes": 0,
+          "dynamic_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 100,
+          "achieved_occupancy_pct": 29.62,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "resource_fingerprint": "sha256:b0c86b212fdd7607533774e44d181e551a9c87fac4b0114da911fb371be064e1"
+        },
+        {
+          "kernel": "tessera_nvidia_gated_epilogue_silu_kernel",
+          "row_kind": "generated_epilogue",
+          "schedule": "gated_silu",
+          "registers_per_thread": 16,
+          "stack_bytes": 0,
+          "static_shared_memory_bytes": 0,
+          "local_bytes": 0,
+          "block_threads": 256,
+          "max_active_blocks_per_sm": 6,
+          "theoretical_occupancy_pct": 100.0,
+          "sass_instruction_families": [],
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "resource_fingerprint": "sha256:21c22f15c193d242a7b6449fca3e3a33a0cfb202e6f2ab32a8fb9d18834fbb75",
+          "cubin_sha256": "f65dbd2b7e8f7b42b5dcfc428084950ef04a3d9b3e795b3348a55a5c0553dc6a"
+        }
+      ],
+      "resource_fingerprints": [
+        "sha256:b0c86b212fdd7607533774e44d181e551a9c87fac4b0114da911fb371be064e1",
+        "sha256:21c22f15c193d242a7b6449fca3e3a33a0cfb202e6f2ab32a8fb9d18834fbb75"
+      ],
+      "resource_evidence_complete": true
+    },
+    {
+      "case": "grouped_swiglu",
+      "shape": "128x64x96x8",
+      "dtype": "f32",
+      "candidate": "legacy_per_expert",
+      "runs": [
+        {
+          "run": 1,
+          "device_event_ms": 0.3498867214657366,
+          "end_to_end_ms": 16.85976549924817,
+          "max_abs_error": 0.0
+        },
+        {
+          "run": 2,
+          "device_event_ms": 0.3611163226887584,
+          "end_to_end_ms": 18.543544500062126,
+          "max_abs_error": 0.0
+        }
+      ],
+      "stable": false,
+      "device_stable": false,
+      "end_to_end_stable": false,
+      "device_winner_consensus": false,
+      "end_to_end_winner_consensus": false,
+      "launches_per_call": 32,
+      "traffic_bytes": 655360,
+      "achieved_bandwidth_gbps": 1.8434801521260316,
+      "resources": [
+        {
+          "kernel": "gg_k(const float *, const float *, const int *, float *, int, int, int, int)",
+          "launches": 3,
+          "cc": "12.0",
+          "block_size": "(256, 1, 1)",
+          "grid_size": "(128, 1, 1)",
+          "registers_per_thread": 40,
+          "static_shared_memory_bytes": 0,
+          "dynamic_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 100,
+          "achieved_occupancy_pct": 29.62,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "resource_fingerprint": "sha256:b0c86b212fdd7607533774e44d181e551a9c87fac4b0114da911fb371be064e1"
+        },
+        {
+          "kernel": "tessera_nvidia_gated_epilogue_silu_kernel",
+          "row_kind": "generated_epilogue",
+          "schedule": "gated_silu",
+          "registers_per_thread": 16,
+          "stack_bytes": 0,
+          "static_shared_memory_bytes": 0,
+          "local_bytes": 0,
+          "block_threads": 256,
+          "max_active_blocks_per_sm": 6,
+          "theoretical_occupancy_pct": 100.0,
+          "sass_instruction_families": [],
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "resource_fingerprint": "sha256:21c22f15c193d242a7b6449fca3e3a33a0cfb202e6f2ab32a8fb9d18834fbb75",
+          "cubin_sha256": "f65dbd2b7e8f7b42b5dcfc428084950ef04a3d9b3e795b3348a55a5c0553dc6a"
+        }
+      ],
+      "resource_fingerprints": [
+        "sha256:b0c86b212fdd7607533774e44d181e551a9c87fac4b0114da911fb371be064e1",
+        "sha256:21c22f15c193d242a7b6449fca3e3a33a0cfb202e6f2ab32a8fb9d18834fbb75"
+      ],
+      "resource_evidence_complete": true
+    }
+  ],
+  "retained_transport_rows": [
+    {
+      "cache_state": "warm",
+      "compile_state": "warm_after_preflight",
+      "compiler_fingerprint": "sha256:cf24ed3a2015c6eedbe47a5f86a4387361fc5441b5c242d56ace440d908d209d",
+      "dtype": "f32",
+      "max_latency_ms": 1.10609,
+      "median_ms": 0.553045,
+      "mode": "generated_gather:end_to_end",
+      "op": "moe_dispatch",
+      "resource_evidence": "ncu production capture required",
+      "resource_evidence_complete": true,
+      "resource_fingerprints": [
+        "sha256:6cc8bdcfa0faf3100a65cc2ae5d3fa9649cefadcefa5062d2432f5795141f3ab"
+      ],
+      "resources": [
+        {
+          "achieved_occupancy_pct": 41.975,
+          "block_size": "(256, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 0,
+          "grid_size": "(194, 1, 1)",
+          "kernel": "gather_k(const float *, const int *, float *, int, int)",
+          "launches": 4,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "registers_per_thread": 20,
+          "resource_fingerprint": "sha256:6cc8bdcfa0faf3100a65cc2ae5d3fa9649cefadcefa5062d2432f5795141f3ab",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "static_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 100
+        }
+      ],
+      "selected_route": "generated_gather",
+      "shape": "257x193",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "cache_state": "warm",
+      "compile_state": "warm_after_preflight",
+      "compiler_fingerprint": "sha256:cf24ed3a2015c6eedbe47a5f86a4387361fc5441b5c242d56ace440d908d209d",
+      "dtype": "f32",
+      "max_latency_ms": 0.017122,
+      "median_ms": 0.008561,
+      "mode": "generated_gather:device_event",
+      "op": "moe_dispatch",
+      "resource_evidence": "ncu production capture required",
+      "resource_evidence_complete": true,
+      "resource_fingerprints": [
+        "sha256:6cc8bdcfa0faf3100a65cc2ae5d3fa9649cefadcefa5062d2432f5795141f3ab"
+      ],
+      "resources": [
+        {
+          "achieved_occupancy_pct": 41.975,
+          "block_size": "(256, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 0,
+          "grid_size": "(194, 1, 1)",
+          "kernel": "gather_k(const float *, const int *, float *, int, int)",
+          "launches": 4,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "registers_per_thread": 20,
+          "resource_fingerprint": "sha256:6cc8bdcfa0faf3100a65cc2ae5d3fa9649cefadcefa5062d2432f5795141f3ab",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "static_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 100
+        }
+      ],
+      "selected_route": "generated_gather",
+      "shape": "257x193",
+      "timing_domain": "device_event"
+    },
+    {
+      "cache_state": "warm",
+      "compile_state": "warm_after_preflight",
+      "compiler_fingerprint": "sha256:cf24ed3a2015c6eedbe47a5f86a4387361fc5441b5c242d56ace440d908d209d",
+      "dtype": "f32",
+      "max_latency_ms": 0.963688,
+      "median_ms": 0.481844,
+      "mode": "generated_combine:end_to_end",
+      "op": "moe_combine",
+      "resource_evidence": "ncu production capture required",
+      "resource_evidence_complete": true,
+      "resource_fingerprints": [
+        "sha256:b871fc3f58d9e9462ecc9b9a555c20c0018f64c82b5e1d29646a1c5c3933334e"
+      ],
+      "resources": [
+        {
+          "achieved_occupancy_pct": 40.65,
+          "block_size": "(256, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 0,
+          "grid_size": "(194, 1, 1)",
+          "kernel": "combine_k(const float *, const int *, const float *, float *, int, int)",
+          "launches": 3,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "registers_per_thread": 20,
+          "resource_fingerprint": "sha256:b871fc3f58d9e9462ecc9b9a555c20c0018f64c82b5e1d29646a1c5c3933334e",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "static_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 100
+        }
+      ],
+      "selected_route": "generated_combine",
+      "shape": "257x193",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "cache_state": "warm",
+      "compile_state": "warm_after_preflight",
+      "compiler_fingerprint": "sha256:cf24ed3a2015c6eedbe47a5f86a4387361fc5441b5c242d56ace440d908d209d",
+      "dtype": "f32",
+      "max_latency_ms": 0.027944,
+      "median_ms": 0.013972,
+      "mode": "generated_combine:device_event",
+      "op": "moe_combine",
+      "resource_evidence": "ncu production capture required",
+      "resource_evidence_complete": true,
+      "resource_fingerprints": [
+        "sha256:b871fc3f58d9e9462ecc9b9a555c20c0018f64c82b5e1d29646a1c5c3933334e"
+      ],
+      "resources": [
+        {
+          "achieved_occupancy_pct": 40.65,
+          "block_size": "(256, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 0,
+          "grid_size": "(194, 1, 1)",
+          "kernel": "combine_k(const float *, const int *, const float *, float *, int, int)",
+          "launches": 3,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "registers_per_thread": 20,
+          "resource_fingerprint": "sha256:b871fc3f58d9e9462ecc9b9a555c20c0018f64c82b5e1d29646a1c5c3933334e",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "static_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 100
+        }
+      ],
+      "selected_route": "generated_combine",
+      "shape": "257x193",
+      "timing_domain": "device_event"
+    }
+  ],
+  "retained_kv_rows": [
+    {
+      "backend": "nvidia",
+      "cache_state": "warm",
+      "compile_state": "warm_after_preflight",
+      "compiler_fingerprint": "sha256:cf24ed3a2015c6eedbe47a5f86a4387361fc5441b5c242d56ace440d908d209d",
+      "device": "sm_120",
+      "device_latency_ms": 0.10576159954071046,
+      "dtype": "f32",
+      "latency_ms": 3.203285,
+      "mode": "fused_paged_attention",
+      "op": "paged_kv_decode",
+      "page_size": 16,
+      "reps": 20,
+      "resource_evidence_complete": true,
+      "resource_fingerprints": [
+        "sha256:1028e8ccfb651d6c4b6082204b2806a779c70658719f64197588f1e765c340f2"
+      ],
+      "resources": [
+        {
+          "achieved_occupancy_pct": 6.86,
+          "block_size": "(128, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 2048,
+          "grid_size": "(8, 1, 1)",
+          "kernel": "paged_attn(const float *, const float *, const float *, const int *, const long long *, float *, int, int, int, int, int, float, int)",
+          "launches": 24,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "registers_per_thread": 40,
+          "resource_fingerprint": "sha256:1028e8ccfb651d6c4b6082204b2806a779c70658719f64197588f1e765c340f2",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "static_shared_memory_bytes": 512,
+          "theoretical_occupancy_pct": 100
+        }
+      ],
+      "selected_route": "fused_paged_attention",
+      "shape": "1x8x128x64",
+      "tokens": 128
+    },
+    {
+      "backend": "nvidia",
+      "cache_state": "warm",
+      "compile_state": "warm_after_preflight",
+      "compiler_fingerprint": "sha256:cf24ed3a2015c6eedbe47a5f86a4387361fc5441b5c242d56ace440d908d209d",
+      "device": "sm_120",
+      "device_latency_ms": 0.25252399444580076,
+      "dtype": "f32",
+      "latency_ms": 6.805914,
+      "mode": "staged_paged_attention",
+      "op": "paged_kv_decode",
+      "page_size": 16,
+      "reps": 20,
+      "resource_evidence_complete": true,
+      "resource_fingerprints": [
+        "sha256:71ebaeb28aae51e7767c84941f3b8824bea36485163e4825ed3d552a59bc5341",
+        "sha256:e390ec30404e659bcb6c9e824cdec420235fd80e78d8ede01b79e4367a75caaa",
+        "sha256:fea7b93d076a06f4d15f0d2cff377e0bfd586681564bf28cee075edf1b6b4b90"
+      ],
+      "resources": [
+        {
+          "achieved_occupancy_pct": 9.845,
+          "block_size": "(256, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 0,
+          "grid_size": "(2, 1, 1)",
+          "kernel": "mm_f32(const float *, const float *, float *, int, int, int)",
+          "launches": 384,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "registers_per_thread": 40,
+          "resource_fingerprint": "sha256:71ebaeb28aae51e7767c84941f3b8824bea36485163e4825ed3d552a59bc5341",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "static_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 100
+        },
+        {
+          "achieved_occupancy_pct": 15.81,
+          "block_size": "(256, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 0,
+          "grid_size": "(2, 1, 1)",
+          "kernel": "scale_mask(float *, int, int, float, int, int)",
+          "launches": 192,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "registers_per_thread": 16,
+          "resource_fingerprint": "sha256:e390ec30404e659bcb6c9e824cdec420235fd80e78d8ede01b79e4367a75caaa",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "static_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 100
+        },
+        {
+          "achieved_occupancy_pct": 16.62,
+          "block_size": "(256, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 0,
+          "grid_size": "(1, 1, 1)",
+          "kernel": "softmax(const float *, float *, int)",
+          "launches": 192,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "registers_per_thread": 38,
+          "resource_fingerprint": "sha256:fea7b93d076a06f4d15f0d2cff377e0bfd586681564bf28cee075edf1b6b4b90",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "static_shared_memory_bytes": 1024,
+          "theoretical_occupancy_pct": 100
+        }
+      ],
+      "selected_route": "staged_paged_attention",
+      "shape": "1x8x128x64",
+      "tokens": 128
+    },
+    {
+      "backend": "nvidia",
+      "cache_state": "warm",
+      "compile_state": "warm_after_preflight",
+      "compiler_fingerprint": "sha256:cf24ed3a2015c6eedbe47a5f86a4387361fc5441b5c242d56ace440d908d209d",
+      "device": "sm_120",
+      "device_latency_ms": 0.4317192077636719,
+      "dtype": "f32",
+      "latency_ms": 11.429634,
+      "mode": "fused_paged_attention",
+      "op": "paged_kv_decode",
+      "page_size": 16,
+      "reps": 20,
+      "resource_evidence_complete": true,
+      "resource_fingerprints": [
+        "sha256:1028e8ccfb651d6c4b6082204b2806a779c70658719f64197588f1e765c340f2"
+      ],
+      "resources": [
+        {
+          "achieved_occupancy_pct": 6.86,
+          "block_size": "(128, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 2048,
+          "grid_size": "(8, 1, 1)",
+          "kernel": "paged_attn(const float *, const float *, const float *, const int *, const long long *, float *, int, int, int, int, int, float, int)",
+          "launches": 24,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "registers_per_thread": 40,
+          "resource_fingerprint": "sha256:1028e8ccfb651d6c4b6082204b2806a779c70658719f64197588f1e765c340f2",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "static_shared_memory_bytes": 512,
+          "theoretical_occupancy_pct": 100
+        }
+      ],
+      "selected_route": "fused_paged_attention",
+      "shape": "1x8x512x64",
+      "tokens": 512
+    },
+    {
+      "backend": "nvidia",
+      "cache_state": "warm",
+      "compile_state": "warm_after_preflight",
+      "compiler_fingerprint": "sha256:cf24ed3a2015c6eedbe47a5f86a4387361fc5441b5c242d56ace440d908d209d",
+      "device": "sm_120",
+      "device_latency_ms": 0.25634080171585083,
+      "dtype": "f32",
+      "latency_ms": 7.7920774999999995,
+      "mode": "staged_paged_attention",
+      "op": "paged_kv_decode",
+      "page_size": 16,
+      "reps": 20,
+      "resource_evidence_complete": true,
+      "resource_fingerprints": [
+        "sha256:71ebaeb28aae51e7767c84941f3b8824bea36485163e4825ed3d552a59bc5341",
+        "sha256:e390ec30404e659bcb6c9e824cdec420235fd80e78d8ede01b79e4367a75caaa",
+        "sha256:fea7b93d076a06f4d15f0d2cff377e0bfd586681564bf28cee075edf1b6b4b90"
+      ],
+      "resources": [
+        {
+          "achieved_occupancy_pct": 9.845,
+          "block_size": "(256, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 0,
+          "grid_size": "(2, 1, 1)",
+          "kernel": "mm_f32(const float *, const float *, float *, int, int, int)",
+          "launches": 384,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "registers_per_thread": 40,
+          "resource_fingerprint": "sha256:71ebaeb28aae51e7767c84941f3b8824bea36485163e4825ed3d552a59bc5341",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "static_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 100
+        },
+        {
+          "achieved_occupancy_pct": 15.81,
+          "block_size": "(256, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 0,
+          "grid_size": "(2, 1, 1)",
+          "kernel": "scale_mask(float *, int, int, float, int, int)",
+          "launches": 192,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "registers_per_thread": 16,
+          "resource_fingerprint": "sha256:e390ec30404e659bcb6c9e824cdec420235fd80e78d8ede01b79e4367a75caaa",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "static_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 100
+        },
+        {
+          "achieved_occupancy_pct": 16.62,
+          "block_size": "(256, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 0,
+          "grid_size": "(1, 1, 1)",
+          "kernel": "softmax(const float *, float *, int)",
+          "launches": 192,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "registers_per_thread": 38,
+          "resource_fingerprint": "sha256:fea7b93d076a06f4d15f0d2cff377e0bfd586681564bf28cee075edf1b6b4b90",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "static_shared_memory_bytes": 1024,
+          "theoretical_occupancy_pct": 100
+        }
+      ],
+      "selected_route": "staged_paged_attention",
+      "shape": "1x8x512x64",
+      "tokens": 512
+    },
+    {
+      "backend": "nvidia",
+      "cache_state": "warm",
+      "compile_state": "warm_after_preflight",
+      "compiler_fingerprint": "sha256:cf24ed3a2015c6eedbe47a5f86a4387361fc5441b5c242d56ace440d908d209d",
+      "device": "sm_120",
+      "device_latency_ms": 1.713080883026123,
+      "dtype": "f32",
+      "latency_ms": 43.4309995,
+      "mode": "fused_paged_attention",
+      "op": "paged_kv_decode",
+      "page_size": 16,
+      "reps": 20,
+      "resource_evidence_complete": true,
+      "resource_fingerprints": [
+        "sha256:1028e8ccfb651d6c4b6082204b2806a779c70658719f64197588f1e765c340f2"
+      ],
+      "resources": [
+        {
+          "achieved_occupancy_pct": 6.86,
+          "block_size": "(128, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 2048,
+          "grid_size": "(8, 1, 1)",
+          "kernel": "paged_attn(const float *, const float *, const float *, const int *, const long long *, float *, int, int, int, int, int, float, int)",
+          "launches": 24,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "registers_per_thread": 40,
+          "resource_fingerprint": "sha256:1028e8ccfb651d6c4b6082204b2806a779c70658719f64197588f1e765c340f2",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "static_shared_memory_bytes": 512,
+          "theoretical_occupancy_pct": 100
+        }
+      ],
+      "selected_route": "fused_paged_attention",
+      "shape": "1x8x2048x64",
+      "tokens": 2048
+    },
+    {
+      "backend": "nvidia",
+      "cache_state": "warm",
+      "compile_state": "warm_after_preflight",
+      "compiler_fingerprint": "sha256:cf24ed3a2015c6eedbe47a5f86a4387361fc5441b5c242d56ace440d908d209d",
+      "device": "sm_120",
+      "device_latency_ms": 0.4607167959213257,
+      "dtype": "f32",
+      "latency_ms": 13.758153,
+      "mode": "staged_paged_attention",
+      "op": "paged_kv_decode",
+      "page_size": 16,
+      "reps": 20,
+      "resource_evidence_complete": true,
+      "resource_fingerprints": [
+        "sha256:71ebaeb28aae51e7767c84941f3b8824bea36485163e4825ed3d552a59bc5341",
+        "sha256:e390ec30404e659bcb6c9e824cdec420235fd80e78d8ede01b79e4367a75caaa",
+        "sha256:fea7b93d076a06f4d15f0d2cff377e0bfd586681564bf28cee075edf1b6b4b90"
+      ],
+      "resources": [
+        {
+          "achieved_occupancy_pct": 9.845,
+          "block_size": "(256, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 0,
+          "grid_size": "(2, 1, 1)",
+          "kernel": "mm_f32(const float *, const float *, float *, int, int, int)",
+          "launches": 384,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "registers_per_thread": 40,
+          "resource_fingerprint": "sha256:71ebaeb28aae51e7767c84941f3b8824bea36485163e4825ed3d552a59bc5341",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "static_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 100
+        },
+        {
+          "achieved_occupancy_pct": 15.81,
+          "block_size": "(256, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 0,
+          "grid_size": "(2, 1, 1)",
+          "kernel": "scale_mask(float *, int, int, float, int, int)",
+          "launches": 192,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "registers_per_thread": 16,
+          "resource_fingerprint": "sha256:e390ec30404e659bcb6c9e824cdec420235fd80e78d8ede01b79e4367a75caaa",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "static_shared_memory_bytes": 0,
+          "theoretical_occupancy_pct": 100
+        },
+        {
+          "achieved_occupancy_pct": 16.62,
+          "block_size": "(256, 1, 1)",
+          "cc": "12.0",
+          "dynamic_shared_memory_bytes": 0,
+          "grid_size": "(1, 1, 1)",
+          "kernel": "softmax(const float *, float *, int)",
+          "launches": 192,
+          "local_load_transactions": 0,
+          "local_store_transactions": 0,
+          "registers_per_thread": 38,
+          "resource_fingerprint": "sha256:fea7b93d076a06f4d15f0d2cff377e0bfd586681564bf28cee075edf1b6b4b90",
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "static_shared_memory_bytes": 1024,
+          "theoretical_occupancy_pct": 100
+        }
+      ],
+      "selected_route": "staged_paged_attention",
+      "shape": "1x8x2048x64",
+      "tokens": 2048
+    }
+  ],
+  "transport_dependency": "NVIDIA-PARITY-TRANSPORT"
+}

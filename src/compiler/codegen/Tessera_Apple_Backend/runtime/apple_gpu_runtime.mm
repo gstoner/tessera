@@ -907,20 +907,44 @@ static bool commit_and_wait_with_timeout(MetalDeviceContext &ctx,
   return true;
 }
 
+// MPSGraph may commitAndContinue while encoding, so no individual underlying
+// MTLCommandBuffer necessarily spans one graph dispatch. When Metal 4 timestamp
+// heaps are available, this bracket uses shared events to place timestamps on a
+// separate MTL4 queue immediately before graph execution and immediately after
+// the graph's documented completion event. It therefore covers every internal
+// root-command-buffer rotation without treating a partial root interval as the
+// whole graph. The bracket is telemetry-only; correctness never depends on it.
+struct MPSGraphTimingBracket {
+  MetalDeviceContext *ctx = nullptr;
+  std::unique_lock<std::mutex> mtl4_lock;
+  MPSGraphExecutionDescriptor *execution_descriptor = nil;
+  id mtl4_queue = nil;
+  id start_event = nil;
+  id completion_event = nil;
+  id done_event = nil;
+  id timestamp_heap = nil;
+  uint64_t start_value = 0;
+  uint64_t completion_value = 0;
+  uint64_t done_value = 0;
+  bool active = false;
+
+  explicit MPSGraphTimingBracket(MetalDeviceContext &context);
+  bool finish(uint64_t timeout_ms);
+};
+
 // Commit an explicitly-owned MPSGraph command buffer while retaining honest
 // whole-dispatch timing. MPSGraph is permitted to call commitAndContinue while
 // encoding and replace the wrapper's underlying Metal command buffer. The live
-// root is always the correct object to commit/wait, but its GPU timestamps only
-// cover the complete graph when it is still the command buffer we supplied.
-// In the auto-flush case correctness is preserved and telemetry remains
-// unavailable instead of reporting a partial interval as a whole dispatch.
+// root is always the correct object to commit/wait; the optional event bracket
+// above provides a whole-graph interval even when that root rotates.
 API_AVAILABLE(macos(10.15), ios(13.0))
 static bool commit_mpsgraph_and_wait_with_timeout(
     MetalDeviceContext &ctx, MPSCommandBuffer *mps_cb,
     id<MTLCommandBuffer> original_cb, uint64_t timeout_ms,
-    const char *op_name) {
+    const char *op_name, MPSGraphTimingBracket *timing = nullptr) {
   if (!mps_cb) return false;
-  if (g_dispatch_telemetry_enabled.load(std::memory_order_relaxed))
+  if (g_dispatch_telemetry_enabled.load(std::memory_order_relaxed) &&
+      (!timing || !timing->active))
     ts_clear_dispatch_telemetry();
   id<MTLCommandBuffer> root = mps_cb.rootCommandBuffer;
   if (!root) return false;
@@ -950,7 +974,14 @@ static bool commit_mpsgraph_and_wait_with_timeout(
                           [[root.error localizedDescription] UTF8String]);
     return false;
   }
-  if (owns_whole_dispatch) ts_record_dispatch_gpu_elapsed(root);
+  if (timing && timing->active) {
+    // Do not turn a profiling limitation into a native-execution failure. A
+    // failed or unavailable bracket leaves telemetry empty, just like the old
+    // auto-flush path, while the graph result remains valid.
+    (void)timing->finish(timeout_ms);
+  } else if (owns_whole_dispatch) {
+    ts_record_dispatch_gpu_elapsed(root);
+  }
   return true;
 }
 
@@ -3879,7 +3910,8 @@ static void mtl4_ensure_dispatch_objects(MetalDeviceContext &ctx) {
 
 API_AVAILABLE(macos(26.0), ios(26.0))
 static void mtl4_record_dispatch_telemetry(MetalDeviceContext &ctx,
-                                           id<MTL4CounterHeap> heap) {
+                                           id<MTL4CounterHeap> heap,
+                                           int32_t timing_source = 3) {
   if (!g_dispatch_telemetry_enabled.load(std::memory_order_relaxed)) return;
   g_last_dispatch_counter_supported = heap ? 1 : 0;
   if (!heap) return;
@@ -3894,7 +3926,8 @@ static void mtl4_record_dispatch_telemetry(MetalDeviceContext &ctx,
   g_last_dispatch_device_time_ns = static_cast<int64_t>(
       (static_cast<long double>(delta) * 1.0e9L) /
       static_cast<long double>(frequency));
-  g_last_dispatch_timing_source = g_last_dispatch_device_time_ns >= 0 ? 3 : 0;
+  g_last_dispatch_timing_source =
+      g_last_dispatch_device_time_ns >= 0 ? timing_source : 0;
 }
 
 // Repopulate the reusable residency set with `count` allocations and make them
@@ -3973,6 +4006,93 @@ static bool mtl4_encode_and_wait(MetalDeviceContext &ctx, id<MTL4CommandQueue> q
   const bool done = [ev waitUntilSignaledValue:v timeoutMS:10000];
   if (done) mtl4_record_dispatch_telemetry(ctx, timestampHeap);
   return done;
+}
+
+API_AVAILABLE(macos(26.0), ios(26.0))
+static bool mtl4_write_timestamp(id<MTLDevice> device,
+                                 id<MTL4CommandQueue> queue,
+                                 id<MTL4CounterHeap> heap,
+                                 NSUInteger index) {
+  id<MTL4CommandAllocator> allocator = [device newCommandAllocator];
+  id<MTL4CommandBuffer> command_buffer = [device newCommandBuffer];
+  if (!allocator || !command_buffer || !heap) return false;
+  [command_buffer beginCommandBufferWithAllocator:allocator];
+  id<MTL4ComputeCommandEncoder> encoder = [command_buffer computeCommandEncoder];
+  if (!encoder) return false;
+  [encoder writeTimestampWithGranularity:MTL4TimestampGranularityPrecise
+                                intoHeap:heap atIndex:index];
+  [encoder endEncoding];
+  [command_buffer endCommandBuffer];
+  const id<MTL4CommandBuffer> buffers[1] = {command_buffer};
+  [queue commit:buffers count:1];
+  return true;
+}
+
+MPSGraphTimingBracket::MPSGraphTimingBracket(MetalDeviceContext &context)
+    : ctx(&context) {
+  if (!g_dispatch_telemetry_enabled.load(std::memory_order_relaxed) ||
+      !context.ok || !context.device)
+    return;
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    // Keep unrelated MTL4 work out of the event bracket. The lock is held only
+    // in the opt-in telemetry path and is released with this stack object.
+    mtl4_lock = std::unique_lock<std::mutex>(context.mtl4_dispatch_mu);
+    id<MTL4CommandQueue> queue = mtl4_shared_queue(context);
+    id<MTLSharedEvent> start = [context.device newSharedEvent];
+    id<MTLSharedEvent> complete = [context.device newSharedEvent];
+    id<MTLSharedEvent> done = [context.device newSharedEvent];
+    MTL4CounterHeapDescriptor *heap_desc =
+        [[MTL4CounterHeapDescriptor alloc] init];
+    heap_desc.type = MTL4CounterHeapTypeTimestamp;
+    heap_desc.count = 2;
+    id<MTL4CounterHeap> heap =
+        [context.device newCounterHeapWithDescriptor:heap_desc error:nil];
+    if (!queue || !start || !complete || !done || !heap) return;
+
+    start_value = 1;
+    completion_value = 1;
+    done_value = 1;
+    [heap invalidateCounterRange:NSMakeRange(0, 2)];
+    if (!mtl4_write_timestamp(context.device, queue, heap, 0)) return;
+    [queue signalEvent:start value:start_value];
+
+    MPSGraphExecutionDescriptor *descriptor =
+        [[MPSGraphExecutionDescriptor alloc] init];
+    if (!descriptor) return;
+    [descriptor waitForEvent:start value:start_value];
+    [descriptor signalEvent:complete
+            atExecutionEvent:MPSGraphExecutionStageCompleted
+                       value:completion_value];
+    execution_descriptor = descriptor;
+    mtl4_queue = queue;
+    start_event = start;
+    completion_event = complete;
+    done_event = done;
+    timestamp_heap = heap;
+    ts_clear_dispatch_telemetry();
+    active = true;
+  }
+}
+
+bool MPSGraphTimingBracket::finish(uint64_t timeout_ms) {
+  if (!active || !ctx) return false;
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    id<MTL4CommandQueue> queue = (id<MTL4CommandQueue>)mtl4_queue;
+    id<MTL4CounterHeap> heap = (id<MTL4CounterHeap>)timestamp_heap;
+    id<MTLSharedEvent> complete = (id<MTLSharedEvent>)completion_event;
+    id<MTLSharedEvent> done = (id<MTLSharedEvent>)done_event;
+    if (!queue || !heap || !complete || !done) return false;
+    [queue waitForEvent:complete value:completion_value];
+    if (!mtl4_write_timestamp(ctx->device, queue, heap, 1)) return false;
+    [queue signalEvent:done value:done_value];
+    if (![done waitUntilSignaledValue:done_value timeoutMS:timeout_ms]) return false;
+    // This is an event-ordered MPSGraph envelope, not the direct encoder
+    // interval emitted by the regular MTL4 route. Keep the provenance
+    // distinguishable for route selection and benchmark comparison.
+    mtl4_record_dispatch_telemetry(*ctx, heap, 4);
+    return g_last_dispatch_device_time_ns > 0;
+  }
+  return false;
 }
 
 // MSL source for f32 RoPE — lifted to namespace scope so both the
@@ -4158,6 +4278,43 @@ kernel void ssm_replay_decode_output_only_f32(
         y += gi * exp(dcum_t - dcum_i) * gram;
     }
     out[b * D + d] = y;
+}
+
+kernel void ssm_replay_decode_output_only_dev_f32(
+    device const float* delta [[buffer(0)]],
+    device const float* xin [[buffer(1)]],
+    device const float* bin [[buffer(2)]],
+    device const float* s0 [[buffer(3)]],
+    device const float* cin [[buffer(4)]],
+    device const float* a [[buffer(5)]],
+    device float* out [[buffer(6)]],
+    constant int& B [[buffer(7)]],
+    constant int& D [[buffer(8)]],
+    constant int& N [[buffer(9)]],
+    constant int& M [[buffer(10)]],
+    constant int& c_index [[buffer(11)]],
+    constant int& out_index [[buffer(12)]],
+    uint gid [[thread_position_in_grid]]) {
+  if ((int)gid >= B * D) return;
+  int b = (int)gid / D, d = (int)gid % D;
+  float dcum_t = 0.0f;
+  for (int i = 0; i < M; ++i)
+    dcum_t += delta[(i * B + b) * D + d] * a[d];
+  int cbase = (c_index * B + b) * N;
+  float sproj = 0.0f;
+  for (int n = 0; n < N; ++n)
+    sproj += cin[cbase + n] * s0[(b * D + d) * N + n];
+  float y = exp(dcum_t) * sproj;
+  float dcum_i = 0.0f;
+  for (int i = 0; i < M; ++i) {
+    dcum_i += delta[(i * B + b) * D + d] * a[d];
+    float gram = 0.0f;
+    for (int n = 0; n < N; ++n)
+      gram += cin[cbase + n] * bin[(i * B + b) * N + n];
+    int k = (i * B + b) * D + d;
+    y += delta[k] * xin[k] * exp(dcum_t - dcum_i) * gram;
+  }
+  out[(out_index * B + b) * D + d] = y;
 }
 )MSL";
 
@@ -4898,6 +5055,657 @@ bool dispatch_flash_attn_msl(MetalDeviceContext &ctx, const float* Q,
   }
 }
 
+// APPLE-ATTN-BWD-1: query-streaming dQ plus serial, relaxed-atomic, or
+// deterministic two-part dK/dV ownership. The source template reads native
+// f32/f16/bf16 storage, accumulates gradients in f32, and shares the forward
+// MHA/GQA/MQA bias/window/softcap semantics.
+static NSString *const kFlashAttnBwdSourceTemplate = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+__TESSERA_BWD_STORAGE_DECL__
+
+struct BwdParams {
+  int B;
+  int q_heads;
+  int kv_heads;
+  int Sq;
+  int Sk;
+  int D;
+  float scale;
+  int causal;
+  int causal_offset;
+  int has_bias;
+  int window_size;
+  float logit_softcap;
+};
+
+inline bool bwd_keep(int q, int k, constant BwdParams &p) {
+  int qpos = q + p.causal_offset;
+  if (p.causal != 0 && k > qpos) return false;
+  if (p.window_size <= 0) return true;
+  if (p.causal != 0) return k > qpos - p.window_size;
+  int half_window = p.window_size / 2;
+  return k >= qpos - half_window && k <= qpos + half_window;
+}
+
+inline int bwd_kv_batch(int query_batch, constant BwdParams &p) {
+  int outer = query_batch / p.q_heads;
+  int q_head = query_batch % p.q_heads;
+  return outer * p.kv_heads + q_head / (p.q_heads / p.kv_heads);
+}
+
+inline float bwd_raw_score(device const bwd_storage_t *Q,
+                           device const bwd_storage_t *K,
+                           device const bwd_storage_t *bias, int qoff, int koff,
+                           int query_batch, int q, int k,
+                           constant BwdParams &p) {
+  float s = 0.0f;
+  for (int i = 0; i < p.D; ++i)
+    s += bwd_load(Q, qoff + i) * bwd_load(K, koff + i);
+  s *= p.scale;
+  if (p.has_bias != 0)
+    s += bwd_load(bias, (query_batch * p.Sq + q) * p.Sk + k);
+  return s;
+}
+
+inline float bwd_score(float raw, constant BwdParams &p) {
+  return p.logit_softcap > 0.0f
+      ? p.logit_softcap * tanh(raw / p.logit_softcap) : raw;
+}
+
+inline float bwd_score_grad(float raw, constant BwdParams &p) {
+  if (p.logit_softcap <= 0.0f) return 1.0f;
+  float t = tanh(raw / p.logit_softcap);
+  return 1.0f - t * t;
+}
+
+kernel void flash_attn_bwd_dq_f32(
+    device const bwd_storage_t *Q [[buffer(0)]],
+    device const bwd_storage_t *K [[buffer(1)]],
+    device const bwd_storage_t *V [[buffer(2)]],
+    device const bwd_storage_t *dO [[buffer(3)]],
+    device const bwd_storage_t *bias [[buffer(4)]],
+    device float *dQ [[buffer(5)]],
+    constant BwdParams &p [[buffer(6)]],
+    uint3 gid [[thread_position_in_grid]]) {
+  int d = int(gid.x), q = int(gid.y), b = int(gid.z);
+  if (d >= p.D || q >= p.Sq || b >= p.B) return;
+  int kvb = bwd_kv_batch(b, p);
+  int qoff = (b * p.Sq + q) * p.D, base = kvb * p.Sk * p.D;
+  float m = -INFINITY;
+  for (int k = 0; k < p.Sk; ++k) if (bwd_keep(q, k, p)) {
+    float raw = bwd_raw_score(Q, K, bias, qoff, base + k * p.D,
+                              b, q, k, p);
+    m = max(m, bwd_score(raw, p));
+  }
+  float l = 0.0f;
+  for (int k = 0; k < p.Sk; ++k) if (bwd_keep(q, k, p)) {
+    float raw = bwd_raw_score(Q, K, bias, qoff, base + k * p.D,
+                              b, q, k, p);
+    l += exp(bwd_score(raw, p) - m);
+  }
+  if (l == 0.0f) { dQ[qoff + d] = 0.0f; return; }
+  float dd = 0.0f;
+  for (int k = 0; k < p.Sk; ++k) if (bwd_keep(q, k, p)) {
+    int koff = base + k * p.D;
+    float raw = bwd_raw_score(Q, K, bias, qoff, koff, b, q, k, p);
+    float probability = exp(bwd_score(raw, p) - m) / l;
+    float dp = 0.0f;
+    for (int i = 0; i < p.D; ++i)
+      dp += bwd_load(dO, qoff + i) * bwd_load(V, koff + i);
+    dd += probability * dp;
+  }
+  float sum = 0.0f;
+  for (int k = 0; k < p.Sk; ++k) if (bwd_keep(q, k, p)) {
+    int koff = base + k * p.D;
+    float raw = bwd_raw_score(Q, K, bias, qoff, koff, b, q, k, p);
+    float probability = exp(bwd_score(raw, p) - m) / l;
+    float dp = 0.0f;
+    for (int i = 0; i < p.D; ++i)
+      dp += bwd_load(dO, qoff + i) * bwd_load(V, koff + i);
+    sum += probability * (dp - dd) * bwd_score_grad(raw, p) *
+           bwd_load(K, koff + d);
+  }
+  dQ[qoff + d] = p.scale * sum;
+}
+
+kernel void flash_attn_bwd_dkdv_f32(
+    device const bwd_storage_t *Q [[buffer(0)]],
+    device const bwd_storage_t *K [[buffer(1)]],
+    device const bwd_storage_t *V [[buffer(2)]],
+    device const bwd_storage_t *dO [[buffer(3)]],
+    device const bwd_storage_t *bias [[buffer(4)]], device float *dK [[buffer(5)]],
+    device float *dV [[buffer(6)]], constant BwdParams &p [[buffer(7)]],
+    uint3 gid [[thread_position_in_grid]]) {
+  int d = int(gid.x), k = int(gid.y), kvb = int(gid.z);
+  int kv_outer = (p.B / p.q_heads) * p.kv_heads;
+  if (d >= p.D || k >= p.Sk || kvb >= kv_outer) return;
+  int outer = kvb / p.kv_heads, kv_head = kvb % p.kv_heads;
+  int group = p.q_heads / p.kv_heads;
+  int koff = (kvb * p.Sk + k) * p.D;
+  float dk = 0.0f, dv = 0.0f;
+  for (int local_head = 0; local_head < group; ++local_head) {
+   int b = outer * p.q_heads + kv_head * group + local_head;
+   for (int q = 0; q < p.Sq; ++q) {
+    if (!bwd_keep(q, k, p)) continue;
+    int qoff = (b * p.Sq + q) * p.D, base = kvb * p.Sk * p.D;
+    float m = -INFINITY;
+    for (int j = 0; j < p.Sk; ++j) if (bwd_keep(q, j, p)) {
+      float raw = bwd_raw_score(Q, K, bias, qoff, base + j * p.D,
+                                b, q, j, p);
+      m = max(m, bwd_score(raw, p));
+    }
+    float l = 0.0f;
+    for (int j = 0; j < p.Sk; ++j) if (bwd_keep(q, j, p)) {
+      float raw = bwd_raw_score(Q, K, bias, qoff, base + j * p.D,
+                                b, q, j, p);
+      l += exp(bwd_score(raw, p) - m);
+    }
+    if (l == 0.0f) continue;
+    float dd = 0.0f;
+    for (int j = 0; j < p.Sk; ++j) if (bwd_keep(q, j, p)) {
+      int joff = base + j * p.D;
+      float raw = bwd_raw_score(Q, K, bias, qoff, joff, b, q, j, p);
+      float probability = exp(bwd_score(raw, p) - m) / l;
+      float dp = 0.0f;
+      for (int i = 0; i < p.D; ++i)
+        dp += bwd_load(dO, qoff + i) * bwd_load(V, joff + i);
+      dd += probability * dp;
+    }
+    float raw = bwd_raw_score(Q, K, bias, qoff, koff, b, q, k, p);
+    float probability = exp(bwd_score(raw, p) - m) / l;
+    float dp = 0.0f;
+    for (int i = 0; i < p.D; ++i)
+      dp += bwd_load(dO, qoff + i) * bwd_load(V, koff + i);
+    dk += p.scale * probability * (dp - dd) * bwd_score_grad(raw, p) *
+          bwd_load(Q, qoff + d);
+    dv += probability * bwd_load(dO, qoff + d);
+   }
+  }
+  dK[koff + d] = dk; dV[koff + d] = dv;
+}
+
+inline void bwd_atomic_add(device atomic_uint *address, float value) {
+  uint observed = atomic_load_explicit(address, memory_order_relaxed);
+  while (true) {
+    uint desired = as_type<uint>(as_type<float>(observed) + value);
+    if (atomic_compare_exchange_weak_explicit(
+            address, &observed, desired, memory_order_relaxed,
+            memory_order_relaxed)) return;
+  }
+}
+
+kernel void flash_attn_bwd_atomic_f32(
+    device const bwd_storage_t *Q [[buffer(0)]],
+    device const bwd_storage_t *K [[buffer(1)]],
+    device const bwd_storage_t *V [[buffer(2)]],
+    device const bwd_storage_t *dO [[buffer(3)]],
+    device const bwd_storage_t *bias [[buffer(4)]],
+    device atomic_uint *dK [[buffer(5)]], device atomic_uint *dV [[buffer(6)]],
+    constant BwdParams &p [[buffer(7)]],
+    uint3 gid [[thread_position_in_grid]]) {
+  int d = int(gid.x), k = int(gid.y), z = int(gid.z);
+  int q = z % p.Sq, b = z / p.Sq;
+  if (d >= p.D || k >= p.Sk || b >= p.B || !bwd_keep(q, k, p)) return;
+  int kvb = bwd_kv_batch(b, p);
+  int qoff = (b * p.Sq + q) * p.D;
+  int base = kvb * p.Sk * p.D, koff = base + k * p.D;
+  float m = -INFINITY, l = 0.0f, dd = 0.0f;
+  for (int j = 0; j < p.Sk; ++j) if (bwd_keep(q, j, p)) {
+    float raw = bwd_raw_score(Q, K, bias, qoff, base + j * p.D,
+                              b, q, j, p);
+    m = max(m, bwd_score(raw, p));
+  }
+  for (int j = 0; j < p.Sk; ++j) if (bwd_keep(q, j, p)) {
+    float raw = bwd_raw_score(Q, K, bias, qoff, base + j * p.D,
+                              b, q, j, p);
+    l += exp(bwd_score(raw, p) - m);
+  }
+  if (l == 0.0f) return;
+  for (int j = 0; j < p.Sk; ++j) if (bwd_keep(q, j, p)) {
+    int joff = base + j * p.D;
+    float raw = bwd_raw_score(Q, K, bias, qoff, joff, b, q, j, p);
+    float probability = exp(bwd_score(raw, p) - m) / l;
+    float dp = 0.0f;
+    for (int i = 0; i < p.D; ++i)
+      dp += bwd_load(dO, qoff + i) * bwd_load(V, joff + i);
+    dd += probability * dp;
+  }
+  float raw = bwd_raw_score(Q, K, bias, qoff, koff, b, q, k, p);
+  float probability = exp(bwd_score(raw, p) - m) / l;
+  float dp = 0.0f;
+  for (int i = 0; i < p.D; ++i)
+    dp += bwd_load(dO, qoff + i) * bwd_load(V, koff + i);
+  bwd_atomic_add(dK + koff + d, p.scale * probability * (dp - dd) *
+                 bwd_score_grad(raw, p) * bwd_load(Q, qoff + d));
+  bwd_atomic_add(dV + koff + d, probability * bwd_load(dO, qoff + d));
+}
+
+kernel void flash_attn_bwd_split_f32(
+    device const bwd_storage_t *Q [[buffer(0)]],
+    device const bwd_storage_t *K [[buffer(1)]],
+    device const bwd_storage_t *V [[buffer(2)]],
+    device const bwd_storage_t *dO [[buffer(3)]],
+    device const bwd_storage_t *bias [[buffer(4)]],
+    device float *dK0 [[buffer(5)]], device float *dV0 [[buffer(6)]],
+    device float *dK1 [[buffer(7)]], device float *dV1 [[buffer(8)]],
+    constant BwdParams &p [[buffer(9)]],
+    uint3 gid [[thread_position_in_grid]]) {
+  int d = int(gid.x), k = int(gid.y), z = int(gid.z), part = z & 1;
+  int kvb = z >> 1, kv_outer = (p.B / p.q_heads) * p.kv_heads;
+  if (d >= p.D || k >= p.Sk || kvb >= kv_outer) return;
+  int outer = kvb / p.kv_heads, kv_head = kvb % p.kv_heads;
+  int group = p.q_heads / p.kv_heads, total = group * p.Sq;
+  int begin = part == 0 ? 0 : (total + 1) / 2;
+  int end = part == 0 ? (total + 1) / 2 : total;
+  int koff = (kvb * p.Sk + k) * p.D; float dk = 0.0f, dv = 0.0f;
+  for (int linear = begin; linear < end; ++linear) {
+    int local_head = linear / p.Sq, q = linear % p.Sq;
+    int b = outer * p.q_heads + kv_head * group + local_head;
+    if (!bwd_keep(q, k, p)) continue;
+    int qoff = (b * p.Sq + q) * p.D, base = kvb * p.Sk * p.D;
+    float m = -INFINITY, l = 0.0f, dd = 0.0f;
+    for (int j = 0; j < p.Sk; ++j) if (bwd_keep(q, j, p)) {
+      float raw = bwd_raw_score(Q, K, bias, qoff, base + j * p.D,
+                                b, q, j, p);
+      m = max(m, bwd_score(raw, p));
+    }
+    for (int j = 0; j < p.Sk; ++j) if (bwd_keep(q, j, p)) {
+      float raw = bwd_raw_score(Q, K, bias, qoff, base + j * p.D,
+                                b, q, j, p);
+      l += exp(bwd_score(raw, p) - m);
+    }
+    if (l == 0.0f) continue;
+    for (int j = 0; j < p.Sk; ++j) if (bwd_keep(q, j, p)) {
+      int joff = base + j * p.D;
+      float raw = bwd_raw_score(Q, K, bias, qoff, joff, b, q, j, p);
+      float probability = exp(bwd_score(raw, p) - m) / l;
+      float dp = 0.0f;
+      for (int i = 0; i < p.D; ++i)
+        dp += bwd_load(dO, qoff + i) * bwd_load(V, joff + i);
+      dd += probability * dp;
+    }
+    float raw = bwd_raw_score(Q, K, bias, qoff, koff, b, q, k, p);
+    float probability = exp(bwd_score(raw, p) - m) / l;
+    float dp = 0.0f;
+    for (int i = 0; i < p.D; ++i)
+      dp += bwd_load(dO, qoff + i) * bwd_load(V, koff + i);
+    dk += p.scale * probability * (dp - dd) * bwd_score_grad(raw, p) *
+          bwd_load(Q, qoff + d);
+    dv += probability * bwd_load(dO, qoff + d);
+  }
+  if (part == 0) { dK0[koff + d] = dk; dV0[koff + d] = dv; }
+  else { dK1[koff + d] = dk; dV1[koff + d] = dv; }
+}
+
+inline bool bwd_query_stats(
+    device const bwd_storage_t *Q, device const bwd_storage_t *K,
+    device const bwd_storage_t *V, device const bwd_storage_t *dO,
+    device const bwd_storage_t *bias, int b, int q, int kvb,
+    constant BwdParams &p, thread float &m, thread float &l,
+    thread float &dd) {
+  int qoff = (b * p.Sq + q) * p.D;
+  int base = kvb * p.Sk * p.D;
+  m = -INFINITY;
+  for (int k = 0; k < p.Sk; ++k) if (bwd_keep(q, k, p)) {
+    float raw = bwd_raw_score(Q, K, bias, qoff, base + k * p.D,
+                              b, q, k, p);
+    m = max(m, bwd_score(raw, p));
+  }
+  l = 0.0f;
+  for (int k = 0; k < p.Sk; ++k) if (bwd_keep(q, k, p)) {
+    float raw = bwd_raw_score(Q, K, bias, qoff, base + k * p.D,
+                              b, q, k, p);
+    l += exp(bwd_score(raw, p) - m);
+  }
+  if (l == 0.0f) { dd = 0.0f; return false; }
+  dd = 0.0f;
+  for (int k = 0; k < p.Sk; ++k) if (bwd_keep(q, k, p)) {
+    int koff = base + k * p.D;
+    float raw = bwd_raw_score(Q, K, bias, qoff, koff, b, q, k, p);
+    float probability = exp(bwd_score(raw, p) - m) / l;
+    float dp = 0.0f;
+    for (int d = 0; d < p.D; ++d)
+      dp += bwd_load(dO, qoff + d) * bwd_load(V, koff + d);
+    dd += probability * dp;
+  }
+  return true;
+}
+
+// One thread owns one query row. It computes the row softmax once and retains
+// all dQ components locally, removing the per-output softmax recomputation of
+// the original proof kernel.
+kernel void flash_attn_bwd_dq_stream_f32(
+    device const bwd_storage_t *Q [[buffer(0)]],
+    device const bwd_storage_t *K [[buffer(1)]],
+    device const bwd_storage_t *V [[buffer(2)]],
+    device const bwd_storage_t *dO [[buffer(3)]],
+    device const bwd_storage_t *bias [[buffer(4)]],
+    device float *dQ [[buffer(5)]], constant BwdParams &p [[buffer(6)]],
+    uint gid [[thread_position_in_grid]]) {
+  int b = int(gid) / p.Sq, q = int(gid) % p.Sq;
+  if (b >= p.B) return;
+  int kvb = bwd_kv_batch(b, p), qoff = (b * p.Sq + q) * p.D;
+  int base = kvb * p.Sk * p.D;
+  float gradient[256];
+  for (int d = 0; d < p.D; ++d) gradient[d] = 0.0f;
+  float m, l, dd;
+  if (!bwd_query_stats(Q, K, V, dO, bias, b, q, kvb, p, m, l, dd)) {
+    for (int d = 0; d < p.D; ++d) dQ[qoff + d] = 0.0f;
+    return;
+  }
+  for (int k = 0; k < p.Sk; ++k) if (bwd_keep(q, k, p)) {
+    int koff = base + k * p.D;
+    float raw = bwd_raw_score(Q, K, bias, qoff, koff, b, q, k, p);
+    float probability = exp(bwd_score(raw, p) - m) / l;
+    float dp = 0.0f;
+    for (int d = 0; d < p.D; ++d)
+      dp += bwd_load(dO, qoff + d) * bwd_load(V, koff + d);
+    float coeff = p.scale * probability * (dp - dd) *
+                  bwd_score_grad(raw, p);
+    for (int d = 0; d < p.D; ++d)
+      gradient[d] += coeff * bwd_load(K, koff + d);
+  }
+  for (int d = 0; d < p.D; ++d) dQ[qoff + d] = gradient[d];
+}
+
+// The atomic candidate likewise owns a query row. Contention is confined to
+// the final dK/dV updates; softmax and dP are computed once per query.
+kernel void flash_attn_bwd_atomic_stream_f32(
+    device const bwd_storage_t *Q [[buffer(0)]],
+    device const bwd_storage_t *K [[buffer(1)]],
+    device const bwd_storage_t *V [[buffer(2)]],
+    device const bwd_storage_t *dO [[buffer(3)]],
+    device const bwd_storage_t *bias [[buffer(4)]],
+    device atomic_uint *dK [[buffer(5)]],
+    device atomic_uint *dV [[buffer(6)]],
+    constant BwdParams &p [[buffer(7)]],
+    uint gid [[thread_position_in_grid]]) {
+  int b = int(gid) / p.Sq, q = int(gid) % p.Sq;
+  if (b >= p.B) return;
+  int kvb = bwd_kv_batch(b, p), qoff = (b * p.Sq + q) * p.D;
+  int base = kvb * p.Sk * p.D;
+  float m, l, dd;
+  if (!bwd_query_stats(Q, K, V, dO, bias, b, q, kvb, p, m, l, dd)) return;
+  for (int k = 0; k < p.Sk; ++k) if (bwd_keep(q, k, p)) {
+    int koff = base + k * p.D;
+    float raw = bwd_raw_score(Q, K, bias, qoff, koff, b, q, k, p);
+    float probability = exp(bwd_score(raw, p) - m) / l;
+    float dp = 0.0f;
+    for (int d = 0; d < p.D; ++d)
+      dp += bwd_load(dO, qoff + d) * bwd_load(V, koff + d);
+    float coeff = p.scale * probability * (dp - dd) *
+                  bwd_score_grad(raw, p);
+    for (int d = 0; d < p.D; ++d) {
+      bwd_atomic_add(dK + koff + d, coeff * bwd_load(Q, qoff + d));
+      bwd_atomic_add(dV + koff + d,
+                     probability * bwd_load(dO, qoff + d));
+    }
+  }
+}
+
+inline void bwd_accumulate_query(
+    device const bwd_storage_t *Q, device const bwd_storage_t *K,
+    device const bwd_storage_t *V, device const bwd_storage_t *dO,
+    device const bwd_storage_t *bias, device float *dK, device float *dV,
+    int b, int q, int kvb, constant BwdParams &p) {
+  int qoff = (b * p.Sq + q) * p.D, base = kvb * p.Sk * p.D;
+  float m, l, dd;
+  if (!bwd_query_stats(Q, K, V, dO, bias, b, q, kvb, p, m, l, dd)) return;
+  for (int k = 0; k < p.Sk; ++k) if (bwd_keep(q, k, p)) {
+    int koff = base + k * p.D;
+    float raw = bwd_raw_score(Q, K, bias, qoff, koff, b, q, k, p);
+    float probability = exp(bwd_score(raw, p) - m) / l;
+    float dp = 0.0f;
+    for (int d = 0; d < p.D; ++d)
+      dp += bwd_load(dO, qoff + d) * bwd_load(V, koff + d);
+    float coeff = p.scale * probability * (dp - dd) *
+                  bwd_score_grad(raw, p);
+    for (int d = 0; d < p.D; ++d) {
+      dK[koff + d] += coeff * bwd_load(Q, qoff + d);
+      dV[koff + d] += probability * bwd_load(dO, qoff + d);
+    }
+  }
+}
+
+kernel void flash_attn_bwd_serial_stream_f32(
+    device const bwd_storage_t *Q [[buffer(0)]],
+    device const bwd_storage_t *K [[buffer(1)]],
+    device const bwd_storage_t *V [[buffer(2)]],
+    device const bwd_storage_t *dO [[buffer(3)]],
+    device const bwd_storage_t *bias [[buffer(4)]],
+    device float *dK [[buffer(5)]], device float *dV [[buffer(6)]],
+    constant BwdParams &p [[buffer(7)]],
+    uint gid [[thread_position_in_grid]]) {
+  int kvb = int(gid), kv_outer = (p.B / p.q_heads) * p.kv_heads;
+  if (kvb >= kv_outer) return;
+  int elements = p.Sk * p.D, base = kvb * elements;
+  for (int i = 0; i < elements; ++i) {
+    dK[base + i] = 0.0f; dV[base + i] = 0.0f;
+  }
+  int outer = kvb / p.kv_heads, kv_head = kvb % p.kv_heads;
+  int group = p.q_heads / p.kv_heads;
+  for (int local_head = 0; local_head < group; ++local_head) {
+    int b = outer * p.q_heads + kv_head * group + local_head;
+    for (int q = 0; q < p.Sq; ++q)
+      bwd_accumulate_query(Q, K, V, dO, bias, dK, dV, b, q, kvb, p);
+  }
+}
+
+kernel void flash_attn_bwd_split_stream_f32(
+    device const bwd_storage_t *Q [[buffer(0)]],
+    device const bwd_storage_t *K [[buffer(1)]],
+    device const bwd_storage_t *V [[buffer(2)]],
+    device const bwd_storage_t *dO [[buffer(3)]],
+    device const bwd_storage_t *bias [[buffer(4)]],
+    device float *dK0 [[buffer(5)]], device float *dV0 [[buffer(6)]],
+    device float *dK1 [[buffer(7)]], device float *dV1 [[buffer(8)]],
+    constant BwdParams &p [[buffer(9)]],
+    uint gid [[thread_position_in_grid]]) {
+  int part = int(gid) & 1, kvb = int(gid) >> 1;
+  int kv_outer = (p.B / p.q_heads) * p.kv_heads;
+  if (kvb >= kv_outer) return;
+  device float *outK = part == 0 ? dK0 : dK1;
+  device float *outV = part == 0 ? dV0 : dV1;
+  int elements = p.Sk * p.D, base = kvb * elements;
+  for (int i = 0; i < elements; ++i) {
+    outK[base + i] = 0.0f; outV[base + i] = 0.0f;
+  }
+  int outer = kvb / p.kv_heads, kv_head = kvb % p.kv_heads;
+  int group = p.q_heads / p.kv_heads, total = group * p.Sq;
+  int begin = part == 0 ? 0 : (total + 1) / 2;
+  int end = part == 0 ? (total + 1) / 2 : total;
+  for (int linear = begin; linear < end; ++linear) {
+    int local_head = linear / p.Sq, q = linear % p.Sq;
+    int b = outer * p.q_heads + kv_head * group + local_head;
+    bwd_accumulate_query(Q, K, V, dO, bias, outK, outV, b, q, kvb, p);
+  }
+}
+
+kernel void flash_attn_bwd_reduce_f32(
+    device float *dK [[buffer(0)]], device float *dV [[buffer(1)]],
+    device const float *pK [[buffer(2)]], device const float *pV [[buffer(3)]],
+    constant int &N [[buffer(4)]], uint gid [[thread_position_in_grid]]) {
+  if (gid < uint(N)) { dK[gid] += pK[gid]; dV[gid] += pV[gid]; }
+}
+)MSL";
+
+enum : int32_t {
+  kFlashAttnBwdStorageF32 = 0,
+  kFlashAttnBwdStorageF16 = 1,
+  kFlashAttnBwdStorageBF16 = 2,
+};
+
+static NSString *flash_attn_bwd_source(int32_t storage_dtype) {
+  NSString *declaration = nil;
+  if (storage_dtype == kFlashAttnBwdStorageF32) {
+    declaration = @"typedef float bwd_storage_t;\n"
+                   "inline float bwd_load(device const bwd_storage_t *p, int i) "
+                   "{ return p[i]; }";
+  } else if (storage_dtype == kFlashAttnBwdStorageF16) {
+    declaration = @"typedef half bwd_storage_t;\n"
+                   "inline float bwd_load(device const bwd_storage_t *p, int i) "
+                   "{ return float(p[i]); }";
+  } else if (storage_dtype == kFlashAttnBwdStorageBF16) {
+    declaration = @"typedef ushort bwd_storage_t;\n"
+                   "inline float bwd_load(device const bwd_storage_t *p, int i) "
+                   "{ return as_type<float>(uint(p[i]) << 16); }";
+  } else {
+    return nil;
+  }
+  return [kFlashAttnBwdSourceTemplate
+      stringByReplacingOccurrencesOfString:@"__TESSERA_BWD_STORAGE_DECL__"
+                                withString:declaration];
+}
+
+struct FlashAttnBwdParams {
+  int32_t B;
+  int32_t q_heads;
+  int32_t kv_heads;
+  int32_t Sq;
+  int32_t Sk;
+  int32_t D;
+  float scale;
+  int32_t causal;
+  int32_t causal_offset;
+  int32_t has_bias;
+  int32_t window_size;
+  float logit_softcap;
+};
+static_assert(sizeof(FlashAttnBwdParams) == 48,
+              "Metal backward parameter ABI must stay packed");
+
+static bool dispatch_flash_attn_bwd_msl(MetalDeviceContext &ctx,
+    const void *Q, const void *K, const void *V, const void *dO,
+    const void *bias, float *dQ, float *dK, float *dV, int32_t B,
+    int32_t q_heads, int32_t kv_heads, int32_t Sq, int32_t Sk, int32_t D,
+    float scale, int32_t causal, int32_t causal_offset, int32_t window_size,
+    float logit_softcap, int32_t storage_dtype, int32_t route = 0) {
+  if (B <= 0 || Sq <= 0 || Sk <= 0 || D <= 0 || D > 256 ||
+      q_heads <= 0 || kv_heads <= 0 || B % q_heads != 0 ||
+      q_heads % kv_heads != 0 || window_size < 0 || logit_softcap < 0.0f)
+    return false;
+  if (route < 0 || route > 2) return false;
+  if (storage_dtype < kFlashAttnBwdStorageF32 ||
+      storage_dtype > kFlashAttnBwdStorageBF16) return false;
+  @autoreleasepool {
+    NSString *source = flash_attn_bwd_source(storage_dtype);
+    if (!source) return false;
+    id<MTLComputePipelineState> dq_pso = compile_msl_kernel(
+        ctx, source, @"flash_attn_bwd_dq_stream_f32");
+    NSString *dkdv_entry = route == 0 ? @"flash_attn_bwd_serial_stream_f32" :
+        (route == 1 ? @"flash_attn_bwd_atomic_stream_f32"
+                    : @"flash_attn_bwd_split_stream_f32");
+    id<MTLComputePipelineState> dkdv_pso = compile_msl_kernel(
+        ctx, source, dkdv_entry);
+    if (!dq_pso || !dkdv_pso) return false;
+    NSUInteger input_element_bytes =
+        storage_dtype == kFlashAttnBwdStorageF32 ? sizeof(float)
+                                                 : sizeof(uint16_t);
+    NSUInteger q_input_bytes =
+        input_element_bytes * static_cast<NSUInteger>(B) * Sq * D;
+    NSUInteger q_bytes = sizeof(float) * static_cast<NSUInteger>(B) * Sq * D;
+    int32_t kv_outer = (B / q_heads) * kv_heads;
+    NSUInteger kv_input_bytes =
+        input_element_bytes * static_cast<NSUInteger>(kv_outer) * Sk * D;
+    NSUInteger kv_bytes =
+        sizeof(float) * static_cast<NSUInteger>(kv_outer) * Sk * D;
+    NSUInteger bias_bytes = bias
+        ? input_element_bytes * static_cast<NSUInteger>(B) * Sq * Sk
+        : input_element_bytes;
+    const uint32_t zero_bias = 0;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufQ, ctx, Q, q_input_bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufK, ctx, K, kv_input_bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufV, ctx, V, kv_input_bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufDO, ctx, dO, q_input_bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufBias, ctx, bias ? bias : &zero_bias,
+                                    bias_bytes);
+    TS_METAL_BUF_ACQUIRE(bufDQ, ctx, q_bytes);
+    TS_METAL_BUF_ACQUIRE(bufDK, ctx, kv_bytes);
+    TS_METAL_BUF_ACQUIRE(bufDV, ctx, kv_bytes);
+    MetalBufferGuard guardPK(
+        ctx, route == 2 ? metal_buffer_acquire(ctx, kv_bytes) : nil,
+        route == 2 ? kv_bytes : 0);
+    MetalBufferGuard guardPV(
+        ctx, route == 2 ? metal_buffer_acquire(ctx, kv_bytes) : nil,
+        route == 2 ? kv_bytes : 0);
+    id<MTLBuffer> bufPK = guardPK.buf;
+    id<MTLBuffer> bufPV = guardPV.buf;
+    if (!bufQ || !bufK || !bufV || !bufDO || !bufBias || !bufDQ || !bufDK || !bufDV ||
+        (route == 2 && (!bufPK || !bufPV))) return false;
+    FlashAttnBwdParams params{B, q_heads, kv_heads, Sq, Sk, D, scale, causal,
+                              causal_offset, bias ? 1 : 0, window_size,
+                              logit_softcap};
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    cb.label = route == 0 ? @"tessera.attn.backward.serial_recompute.f32" :
+        (route == 1 ? @"tessera.attn.backward.atomic.f32" :
+                      @"tessera.attn.backward.split_reduced.f32");
+    if (route == 1) {
+      id<MTLBlitCommandEncoder> clear = [cb blitCommandEncoder];
+      [clear fillBuffer:bufDK range:NSMakeRange(0, kv_bytes) value:0];
+      [clear fillBuffer:bufDV range:NSMakeRange(0, kv_bytes) value:0];
+      [clear endEncoding];
+    }
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:dq_pso];
+    [enc setBuffer:bufQ offset:0 atIndex:0]; [enc setBuffer:bufK offset:0 atIndex:1];
+    [enc setBuffer:bufV offset:0 atIndex:2]; [enc setBuffer:bufDO offset:0 atIndex:3];
+    [enc setBuffer:bufBias offset:0 atIndex:4];
+    [enc setBuffer:bufDQ offset:0 atIndex:5];
+    [enc setBytes:&params length:sizeof(params) atIndex:6];
+    NSUInteger dq_threads = static_cast<NSUInteger>(B) * Sq;
+    NSUInteger dq_tg_width = std::max<NSUInteger>(1, std::min<NSUInteger>(
+        dq_threads, std::min<NSUInteger>(dq_pso.maxTotalThreadsPerThreadgroup,
+                                         64)));
+    MTLSize dq_tg = MTLSizeMake(dq_tg_width, 1, 1);
+    [enc dispatchThreads:MTLSizeMake(dq_threads, 1, 1)
+        threadsPerThreadgroup:dq_tg];
+    [enc endEncoding];
+    enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:dkdv_pso];
+    [enc setBuffer:bufQ offset:0 atIndex:0]; [enc setBuffer:bufK offset:0 atIndex:1];
+    [enc setBuffer:bufV offset:0 atIndex:2]; [enc setBuffer:bufDO offset:0 atIndex:3];
+    [enc setBuffer:bufBias offset:0 atIndex:4];
+    if (route == 2) {
+      [enc setBuffer:bufDK offset:0 atIndex:5]; [enc setBuffer:bufDV offset:0 atIndex:6];
+      [enc setBuffer:bufPK offset:0 atIndex:7]; [enc setBuffer:bufPV offset:0 atIndex:8];
+      [enc setBytes:&params length:sizeof(params) atIndex:9];
+    } else {
+      [enc setBuffer:bufDK offset:0 atIndex:5]; [enc setBuffer:bufDV offset:0 atIndex:6];
+      [enc setBytes:&params length:sizeof(params) atIndex:7];
+    }
+    NSUInteger dkdv_threads = route == 1 ? static_cast<NSUInteger>(B) * Sq :
+        (route == 2 ? static_cast<NSUInteger>(kv_outer) * 2
+                    : static_cast<NSUInteger>(kv_outer));
+    NSUInteger dkdv_tg_width = std::max<NSUInteger>(1, std::min<NSUInteger>(
+        dkdv_threads,
+        std::min<NSUInteger>(dkdv_pso.maxTotalThreadsPerThreadgroup, 64)));
+    MTLSize dkdv_tg = MTLSizeMake(dkdv_tg_width, 1, 1);
+    [enc dispatchThreads:MTLSizeMake(dkdv_threads, 1, 1)
+        threadsPerThreadgroup:dkdv_tg];
+    [enc endEncoding];
+    if (route == 2) {
+      id<MTLComputePipelineState> reduce_pso = compile_msl_kernel(
+          ctx, source, @"flash_attn_bwd_reduce_f32");
+      if (!reduce_pso) return false;
+      int32_t n = kv_outer * Sk * D;
+      enc = [cb computeCommandEncoder];
+      [enc setComputePipelineState:reduce_pso];
+      [enc setBuffer:bufDK offset:0 atIndex:0]; [enc setBuffer:bufDV offset:0 atIndex:1];
+      [enc setBuffer:bufPK offset:0 atIndex:2]; [enc setBuffer:bufPV offset:0 atIndex:3];
+      [enc setBytes:&n length:sizeof(n) atIndex:4];
+      NSUInteger width = std::min<NSUInteger>(reduce_pso.maxTotalThreadsPerThreadgroup, 256);
+      [enc dispatchThreads:MTLSizeMake(n, 1, 1)
+          threadsPerThreadgroup:MTLSizeMake(width, 1, 1)];
+      [enc endEncoding];
+    }
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "flash_attn_bwd_msl")) return false;
+    ts_record_pipeline_resources(dkdv_pso, dkdv_tg);
+    std::memcpy(dQ, [bufDQ contents], q_bytes); std::memcpy(dK, [bufDK contents], kv_bytes);
+    std::memcpy(dV, [bufDV contents], kv_bytes); return true;
+  }
+}
+
 // Encode flash_attn into a session-shared MPSCommandBuffer (no commit /
 // wait / memcpy). Single-cb decoder block scaffold — pairs with
 // ``mpsg_encode_bmm_dev`` and ``mpsg_encode_layer_norm_dev`` so an
@@ -5026,6 +5834,88 @@ extern "C" void tessera_apple_gpu_flash_attn_f32(const float* Q, const float* K,
   if (tessera_apple_gpu_flash_attn_f32_status(
           Q, K, V, O, B, Sq, Sk, D, scale, causal)) return;
   reference_flash_attn_f32(Q, K, V, O, B, Sq, Sk, D, scale, causal);
+}
+
+// Deterministic, zero-workspace APPLE-ATTN-BWD-1 baseline. This status-only
+// ABI never falls through to a host gradient, so callers can keep native
+// placement separate from a reference-oracle result.
+extern "C" int32_t tessera_apple_gpu_flash_attn_bwd_f32_status(
+    const float *Q, const float *K, const float *V, const float *dO,
+    float *dQ, float *dK, float *dV, int32_t B, int32_t Sq, int32_t Sk,
+    int32_t D, float scale, int32_t causal) {
+  MetalDeviceContext &ctx = deviceContext();
+  return (ctx.ok && Q && K && V && dO && dQ && dK && dV &&
+          dispatch_flash_attn_bwd_msl(ctx, Q, K, V, dO, nullptr,
+                                      dQ, dK, dV, B, 1, 1, Sq, Sk, D,
+                                      scale, causal, 0, 0, 0.0f,
+                                      kFlashAttnBwdStorageF32)) ? 1 : 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_flash_attn_bwd_route_f32_status(
+    const float *Q, const float *K, const float *V, const float *dO,
+    float *dQ, float *dK, float *dV, int32_t B, int32_t Sq, int32_t Sk,
+    int32_t D, float scale, int32_t causal, int32_t route) {
+  MetalDeviceContext &ctx = deviceContext();
+  return (ctx.ok && Q && K && V && dO && dQ && dK && dV &&
+          dispatch_flash_attn_bwd_msl(ctx, Q, K, V, dO, nullptr,
+                                      dQ, dK, dV, B, 1, 1, Sq, Sk, D,
+                                      scale, causal, 0, 0, 0.0f,
+                                      kFlashAttnBwdStorageF32, route)) ? 1 : 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_flash_attn_bwd_variant_f32_status(
+    const float *Q, const float *K, const float *V, const float *dO,
+    const float *bias, float *dQ, float *dK, float *dV, int32_t B,
+    int32_t q_heads, int32_t kv_heads, int32_t Sq, int32_t Sk, int32_t D,
+    float scale, int32_t causal, int32_t window_size, float logit_softcap,
+    int32_t route) {
+  MetalDeviceContext &ctx = deviceContext();
+  return (ctx.ok && Q && K && V && dO && dQ && dK && dV &&
+          dispatch_flash_attn_bwd_msl(
+              ctx, Q, K, V, dO, bias, dQ, dK, dV, B, q_heads, kv_heads,
+              Sq, Sk, D, scale, causal, std::max(Sk - Sq, 0), window_size,
+              logit_softcap, kFlashAttnBwdStorageF32, route))
+      ? 1 : 0;
+}
+
+static int32_t flash_attn_bwd_variant_16_status(
+    const uint16_t *Q, const uint16_t *K, const uint16_t *V,
+    const uint16_t *dO, const uint16_t *bias, float *dQ, float *dK,
+    float *dV, int32_t B, int32_t q_heads, int32_t kv_heads, int32_t Sq,
+    int32_t Sk, int32_t D, float scale, int32_t causal,
+    int32_t window_size, float logit_softcap, int32_t route,
+    int32_t storage_dtype) {
+  MetalDeviceContext &ctx = deviceContext();
+  return (ctx.ok && Q && K && V && dO && dQ && dK && dV &&
+          dispatch_flash_attn_bwd_msl(
+              ctx, Q, K, V, dO, bias, dQ, dK, dV, B, q_heads, kv_heads,
+              Sq, Sk, D, scale, causal, std::max(Sk - Sq, 0), window_size,
+              logit_softcap, storage_dtype, route))
+      ? 1 : 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_flash_attn_bwd_variant_f16_status(
+    const uint16_t *Q, const uint16_t *K, const uint16_t *V,
+    const uint16_t *dO, const uint16_t *bias, float *dQ, float *dK,
+    float *dV, int32_t B, int32_t q_heads, int32_t kv_heads, int32_t Sq,
+    int32_t Sk, int32_t D, float scale, int32_t causal,
+    int32_t window_size, float logit_softcap, int32_t route) {
+  return flash_attn_bwd_variant_16_status(
+      Q, K, V, dO, bias, dQ, dK, dV, B, q_heads, kv_heads, Sq, Sk, D,
+      scale, causal, window_size, logit_softcap, route,
+      kFlashAttnBwdStorageF16);
+}
+
+extern "C" int32_t tessera_apple_gpu_flash_attn_bwd_variant_bf16_status(
+    const uint16_t *Q, const uint16_t *K, const uint16_t *V,
+    const uint16_t *dO, const uint16_t *bias, float *dQ, float *dK,
+    float *dV, int32_t B, int32_t q_heads, int32_t kv_heads, int32_t Sq,
+    int32_t Sk, int32_t D, float scale, int32_t causal,
+    int32_t window_size, float logit_softcap, int32_t route) {
+  return flash_attn_bwd_variant_16_status(
+      Q, K, V, dO, bias, dQ, dK, dV, B, q_heads, kv_heads, Sq, Sk, D,
+      scale, causal, window_size, logit_softcap, route,
+      kFlashAttnBwdStorageBF16);
 }
 
 //===---------------------------------------------------------------------===//
@@ -15855,13 +16745,14 @@ static bool mpsg_run_transpose(MetalDeviceContext &ctx, const void *x, void *out
     MPSCommandBuffer *mps_cb =
         [MPSCommandBuffer commandBufferWithCommandBuffer:metal_cb];
     if (!mps_cb) return false;
+    MPSGraphTimingBracket timing(ctx);
     [g encodeToCommandBuffer:mps_cb
                        feeds:@{ph : xd}
             targetOperations:nil
         resultsDictionary:@{y : od}
-      executionDescriptor:nil];
+      executionDescriptor:timing.execution_descriptor];
     if (!commit_mpsgraph_and_wait_with_timeout(
-            ctx, mps_cb, metal_cb, 30000, "mpsgraph_unary"))
+            ctx, mps_cb, metal_cb, 30000, "mpsgraph_unary", &timing))
       return false;
     std::memcpy(out, [bufO contents], bytes);
     return true;
@@ -16105,13 +16996,26 @@ static bool mpsg_run_unary(MetalDeviceContext &ctx, int op, const void *x,
     }
     MPSGraphTensorData *xd =
         [[MPSGraphTensorData alloc] initWithMTLBuffer:bufX shape:shape dataType:ioType];
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:@{ph : xd}
-                                    targetTensors:@[ y ]
-                                 targetOperations:nil];
-    MPSGraphTensorData *od = res[y];
-    if (!od) return false;
-    [[od mpsndarray] readBytes:out strideBytes:nil];
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, bytes);
+    if (!bufO) return false;
+    MPSGraphTensorData *od = [[MPSGraphTensorData alloc]
+        initWithMTLBuffer:bufO shape:shape dataType:ioType];
+    id<MTLCommandBuffer> metal_cb = [ctx.queue commandBuffer];
+    if (!metal_cb) return false;
+    metal_cb.label = @"tessera.epilogue.unary.mpsgraph";
+    MPSCommandBuffer *mps_cb =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:metal_cb];
+    if (!mps_cb) return false;
+    MPSGraphTimingBracket timing(ctx);
+    [g encodeToCommandBuffer:mps_cb
+                       feeds:@{ph : xd}
+            targetOperations:nil
+        resultsDictionary:@{y : od}
+      executionDescriptor:timing.execution_descriptor];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, mps_cb, metal_cb, 30000, "mpsgraph_unary", &timing))
+      return false;
+    std::memcpy(out, [bufO contents], bytes);
     return true;
   }
 }
@@ -16162,13 +17066,14 @@ static bool mpsg_run_binary(MetalDeviceContext &ctx, int op, const void *a,
     MPSCommandBuffer *mps_cb =
         [MPSCommandBuffer commandBufferWithCommandBuffer:metal_cb];
     if (!mps_cb) return false;
+    MPSGraphTimingBracket timing(ctx);
     [g encodeToCommandBuffer:mps_cb
                        feeds:@{pa : ad, pb : bd}
             targetOperations:nil
         resultsDictionary:@{y : od}
-      executionDescriptor:nil];
+      executionDescriptor:timing.execution_descriptor];
     if (!commit_mpsgraph_and_wait_with_timeout(
-            ctx, mps_cb, metal_cb, 30000, "mpsgraph_binary"))
+            ctx, mps_cb, metal_cb, 30000, "mpsgraph_binary", &timing))
       return false;
     std::memcpy(out, [bufO contents], bytes);
     return true;
@@ -16299,13 +17204,14 @@ static bool mpsg_run_rowop(MetalDeviceContext &ctx, int kind, const void *x,
     MPSCommandBuffer *mps_cb =
         [MPSCommandBuffer commandBufferWithCommandBuffer:metal_cb];
     if (!mps_cb) return false;
+    MPSGraphTimingBracket timing(ctx);
     [g encodeToCommandBuffer:mps_cb
                        feeds:feeds
             targetOperations:nil
         resultsDictionary:@{y : od}
-      executionDescriptor:nil];
+      executionDescriptor:timing.execution_descriptor];
     if (!commit_mpsgraph_and_wait_with_timeout(
-            ctx, mps_cb, metal_cb, 30000, "mpsgraph_rowop"))
+            ctx, mps_cb, metal_cb, 30000, "mpsgraph_rowop", &timing))
       return false;
     std::memcpy(out, [bufO contents], xbytes);
     return true;
@@ -20248,6 +21154,8 @@ static bool mpsg_encode_bmm_dev(MPSCommandBuffer *cb, id<MTLBuffer> bufA,
 struct TsEncodeSession {
   MPSCommandBuffer *cb;
   id<MTLCommandBuffer> mtlcb;
+  id<MTLSharedEvent> asyncEvent;
+  uint64_t asyncSignal;
 };
 
 extern "C" TsEncodeSession *ts_enc_begin(void) {
@@ -20257,7 +21165,7 @@ extern "C" TsEncodeSession *ts_enc_begin(void) {
     id<MTLCommandBuffer> mtlcb = [ctx.queue commandBuffer];
     if (!mtlcb) return nullptr;
     MPSCommandBuffer *cb = [MPSCommandBuffer commandBufferWithCommandBuffer:mtlcb];
-    return new TsEncodeSession{cb, mtlcb};
+    return new TsEncodeSession{cb, mtlcb, nil, 0};
   }
 }
 
@@ -20320,6 +21228,86 @@ extern "C" void ts_enc_commit_wait(TsEncodeSession *s) {
   s->cb = nil;
   s->mtlcb = nil;
   delete s;
+}
+
+// Replay serving needs a genuinely nonblocking submission boundary. These two
+// calls split the existing commit+wait lifecycle while retaining ownership in
+// the opaque session until the consumer waits and destroys it.
+extern "C" int32_t ts_enc_commit_async(TsEncodeSession *s) {
+  if (!s || !s->mtlcb) return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok) {
+    std::lock_guard<std::mutex> lock(ctx.legacy_event_mu);
+    if (!ctx.legacy_event) ctx.legacy_event = [ctx.device newSharedEvent];
+    s->asyncEvent = (id<MTLSharedEvent>)ctx.legacy_event;
+    if (s->asyncEvent) {
+      s->asyncSignal = ++ctx.legacy_event_val;
+      [s->mtlcb encodeSignalEvent:s->asyncEvent value:s->asyncSignal];
+    }
+  }
+  [s->mtlcb commit];
+  s->cb = nil;
+  return 1;
+}
+
+extern "C" int32_t ts_enc_wait_destroy(TsEncodeSession *s) {
+  if (!s || !s->mtlcb) return 0;
+  bool completed = true;
+  if (s->asyncEvent && s->asyncSignal) {
+    completed = [s->asyncEvent waitUntilSignaledValue:s->asyncSignal
+                                            timeoutMS:30000];
+  } else {
+    [s->mtlcb waitUntilCompleted];
+  }
+  // The shared-event signal is ordered after every encoded kernel. Metal may
+  // publish it a few microseconds before the host-visible status advances from
+  // Scheduled to Completed, so the signal itself is the completion proof;
+  // only an explicit command-buffer error overrides it.
+  bool ok = completed && s->mtlcb.status != MTLCommandBufferStatusError;
+  ts_record_dispatch_gpu_elapsed(s->mtlcb);
+  s->asyncEvent = nil;
+  s->asyncSignal = 0;
+  s->mtlcb = nil;
+  delete s;
+  return ok ? 1 : 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_ssm_replay_decode_dev_f32_enc(
+    TsEncodeSession *s, TsDeviceTensor *delta, TsDeviceTensor *xin,
+    TsDeviceTensor *bin, TsDeviceTensor *s0, TsDeviceTensor *cin,
+    TsDeviceTensor *a, TsDeviceTensor *out, int32_t B, int32_t D,
+    int32_t N, int32_t M, int32_t c_index, int32_t out_index) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !s->mtlcb || !delta || !xin || !bin || !s0 || !cin ||
+      !a || !out || B <= 0 || D <= 0 || N <= 0 || M <= 0)
+    return 0;
+  id<MTLComputePipelineState> pso = compile_msl_kernel(
+      ctx, kSsmReplayDecodeF32Source,
+      @"ssm_replay_decode_output_only_dev_f32");
+  if (!pso) return 0;
+  id<MTLComputeCommandEncoder> enc = [s->mtlcb computeCommandEncoder];
+  [enc setComputePipelineState:pso];
+  [enc setBuffer:delta->buf offset:0 atIndex:0];
+  [enc setBuffer:xin->buf offset:0 atIndex:1];
+  [enc setBuffer:bin->buf offset:0 atIndex:2];
+  [enc setBuffer:s0->buf offset:0 atIndex:3];
+  [enc setBuffer:cin->buf offset:0 atIndex:4];
+  [enc setBuffer:a->buf offset:0 atIndex:5];
+  [enc setBuffer:out->buf offset:0 atIndex:6];
+  [enc setBytes:&B length:sizeof(int32_t) atIndex:7];
+  [enc setBytes:&D length:sizeof(int32_t) atIndex:8];
+  [enc setBytes:&N length:sizeof(int32_t) atIndex:9];
+  [enc setBytes:&M length:sizeof(int32_t) atIndex:10];
+  [enc setBytes:&c_index length:sizeof(int32_t) atIndex:11];
+  [enc setBytes:&out_index length:sizeof(int32_t) atIndex:12];
+  NSUInteger total = (NSUInteger)B * D;
+  NSUInteger tg = std::min<NSUInteger>(total,
+      pso.maxTotalThreadsPerThreadgroup);
+  [enc dispatchThreads:MTLSizeMake(total, 1, 1)
+      threadsPerThreadgroup:MTLSizeMake(std::max<NSUInteger>(tg, 1), 1, 1)];
+  [enc endEncoding];
+  ts_record_pipeline_resources(pso, MTLSizeMake(std::max<NSUInteger>(tg, 1), 1, 1));
+  return 1;
 }
 
 // Encoded device-resident bmm — appends to the session's command buffer.
@@ -20914,13 +21902,14 @@ static bool mpsg_run_gather_blocks(MetalDeviceContext &ctx, id<MTLBuffer> pool,
       MPSCommandBuffer *owned =
           [MPSCommandBuffer commandBufferWithCommandBuffer:metal_cb];
       if (!owned) return false;
+      MPSGraphTimingBracket timing(ctx);
       [g encodeToCommandBuffer:owned
                          feeds:@{pp : pd, pi : id_}
               targetOperations:nil
           resultsDictionary:@{y : od}
-        executionDescriptor:nil];
+        executionDescriptor:timing.execution_descriptor];
       if (!commit_mpsgraph_and_wait_with_timeout(
-              ctx, owned, metal_cb, 30000, "paged_kv_gather"))
+              ctx, owned, metal_cb, 30000, "paged_kv_gather", &timing))
         return false;
     }
     return true;
@@ -20945,6 +21934,214 @@ extern "C" int32_t tessera_apple_gpu_gather_blocks_dev_f32_enc(
   if (!ctx.ok || !s || !pool || !block_table || !out) return 0;
   return mpsg_run_gather_blocks(ctx, pool->buf, block_table->buf, out->buf,
                                 s->cb, num_blocks, n, block_size, dim) ? 1 : 0;
+}
+
+// APPLE-PAGED-KV-1 — direct resident page-table MLA attention. The rope pool
+// supplies keys and the latent pool supplies values; the logical-to-physical
+// table is followed in-kernel, so no dense gather/staging buffer exists.
+namespace {
+static NSString *const kPagedLatentAttentionF32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void paged_latent_attention_f32(
+    device const float* q [[buffer(0)]],
+    device const float* latent [[buffer(1)]],
+    device const float* rope [[buffer(2)]],
+    device const int* page_table [[buffer(3)]],
+    device float* out [[buffer(4)]],
+    constant int& block_size [[buffer(5)]],
+    constant int& logical_length [[buffer(6)]],
+    constant int& q_len [[buffer(7)]],
+    constant int& latent_dim [[buffer(8)]],
+    constant int& rope_dim [[buffer(9)]],
+    constant int& causal_offset [[buffer(10)]],
+    constant int& window [[buffer(11)]],
+    constant float& scale [[buffer(12)]],
+    uint2 gid [[thread_position_in_grid]]) {
+  int od = (int)gid.x;
+  int qi = (int)gid.y;
+  if (od >= latent_dim || qi >= q_len) return;
+  int last = logical_length - 1;
+  if (causal_offset >= 0) last = min(last, causal_offset + qi);
+  int first = window > 0 ? max(0, last - window + 1) : 0;
+  float max_score = -INFINITY;
+  for (int pos = first; pos <= last; ++pos) {
+    int block = page_table[pos / block_size];
+    int slot = pos % block_size;
+    int key_base = (block * block_size + slot) * rope_dim;
+    float score = 0.0f;
+    for (int d = 0; d < rope_dim; ++d)
+      score += q[qi * rope_dim + d] * rope[key_base + d];
+    max_score = max(max_score, score * scale);
+  }
+  float denom = 0.0f;
+  float numer = 0.0f;
+  for (int pos = first; pos <= last; ++pos) {
+    int block = page_table[pos / block_size];
+    int slot = pos % block_size;
+    int key_base = (block * block_size + slot) * rope_dim;
+    float score = 0.0f;
+    for (int d = 0; d < rope_dim; ++d)
+      score += q[qi * rope_dim + d] * rope[key_base + d];
+    float weight = exp(score * scale - max_score);
+    denom += weight;
+    numer += weight * latent[(block * block_size + slot) * latent_dim + od];
+  }
+  out[qi * latent_dim + od] = numer / denom;
+}
+
+kernel void dense_latent_attention_f32(
+    device const float* q [[buffer(0)]],
+    device const float* latent [[buffer(1)]],
+    device const float* rope [[buffer(2)]],
+    device float* out [[buffer(3)]],
+    constant int& logical_length [[buffer(4)]],
+    constant int& q_len [[buffer(5)]],
+    constant int& latent_dim [[buffer(6)]],
+    constant int& rope_dim [[buffer(7)]],
+    constant int& causal_offset [[buffer(8)]],
+    constant int& window [[buffer(9)]],
+    constant float& scale [[buffer(10)]],
+    uint2 gid [[thread_position_in_grid]]) {
+  int od = (int)gid.x;
+  int qi = (int)gid.y;
+  if (od >= latent_dim || qi >= q_len) return;
+  int last = logical_length - 1;
+  if (causal_offset >= 0) last = min(last, causal_offset + qi);
+  int first = window > 0 ? max(0, last - window + 1) : 0;
+  float max_score = -INFINITY;
+  for (int pos = first; pos <= last; ++pos) {
+    float score = 0.0f;
+    for (int d = 0; d < rope_dim; ++d)
+      score += q[qi * rope_dim + d] * rope[pos * rope_dim + d];
+    max_score = max(max_score, score * scale);
+  }
+  float denom = 0.0f, numer = 0.0f;
+  for (int pos = first; pos <= last; ++pos) {
+    float score = 0.0f;
+    for (int d = 0; d < rope_dim; ++d)
+      score += q[qi * rope_dim + d] * rope[pos * rope_dim + d];
+    float weight = exp(score * scale - max_score);
+    denom += weight;
+    numer += weight * latent[pos * latent_dim + od];
+  }
+  out[qi * latent_dim + od] = numer / denom;
+}
+)MSL";
+
+bool dispatch_paged_latent_attention(
+    MetalDeviceContext &ctx, id<MTLBuffer> q, id<MTLBuffer> latent,
+    id<MTLBuffer> rope, id<MTLBuffer> table, id<MTLBuffer> out,
+    int32_t block_size, int32_t logical_length, int32_t q_len,
+    int32_t latent_dim, int32_t rope_dim, int32_t causal_offset,
+    int32_t window, float scale) {
+  if (block_size <= 0 || logical_length <= 0 || q_len <= 0 ||
+      latent_dim <= 0 || rope_dim <= 0) return false;
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, kPagedLatentAttentionF32Source, @"paged_latent_attention_f32");
+    if (!pso) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    if (!cb) return false;
+    cb.label = @"tessera.paged_kv.direct_latent_attention";
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:q offset:0 atIndex:0];
+    [enc setBuffer:latent offset:0 atIndex:1];
+    [enc setBuffer:rope offset:0 atIndex:2];
+    [enc setBuffer:table offset:0 atIndex:3];
+    [enc setBuffer:out offset:0 atIndex:4];
+    [enc setBytes:&block_size length:sizeof(int32_t) atIndex:5];
+    [enc setBytes:&logical_length length:sizeof(int32_t) atIndex:6];
+    [enc setBytes:&q_len length:sizeof(int32_t) atIndex:7];
+    [enc setBytes:&latent_dim length:sizeof(int32_t) atIndex:8];
+    [enc setBytes:&rope_dim length:sizeof(int32_t) atIndex:9];
+    [enc setBytes:&causal_offset length:sizeof(int32_t) atIndex:10];
+    [enc setBytes:&window length:sizeof(int32_t) atIndex:11];
+    [enc setBytes:&scale length:sizeof(float) atIndex:12];
+    NSUInteger tx = std::min<NSUInteger>(32, (NSUInteger)latent_dim);
+    NSUInteger ty = std::max<NSUInteger>(1, std::min<NSUInteger>(
+        (NSUInteger)q_len, pso.maxTotalThreadsPerThreadgroup / tx));
+    [enc dispatchThreads:MTLSizeMake(latent_dim, q_len, 1)
+        threadsPerThreadgroup:MTLSizeMake(tx, ty, 1)];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 30000,
+                                      "paged_latent_attention_f32"))
+      return false;
+    ts_record_pipeline_resources(pso, MTLSizeMake(tx, ty, 1));
+    return true;
+  }
+}
+
+bool dispatch_dense_latent_attention(
+    MetalDeviceContext &ctx, id<MTLBuffer> q, id<MTLBuffer> latent,
+    id<MTLBuffer> rope, id<MTLBuffer> out, int32_t logical_length,
+    int32_t q_len, int32_t latent_dim, int32_t rope_dim,
+    int32_t causal_offset, int32_t window, float scale) {
+  if (logical_length <= 0 || q_len <= 0 || latent_dim <= 0 || rope_dim <= 0)
+    return false;
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, kPagedLatentAttentionF32Source, @"dense_latent_attention_f32");
+    if (!pso) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    if (!cb) return false;
+    cb.label = @"tessera.paged_kv.staged_latent_attention";
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:q offset:0 atIndex:0];
+    [enc setBuffer:latent offset:0 atIndex:1];
+    [enc setBuffer:rope offset:0 atIndex:2];
+    [enc setBuffer:out offset:0 atIndex:3];
+    [enc setBytes:&logical_length length:sizeof(int32_t) atIndex:4];
+    [enc setBytes:&q_len length:sizeof(int32_t) atIndex:5];
+    [enc setBytes:&latent_dim length:sizeof(int32_t) atIndex:6];
+    [enc setBytes:&rope_dim length:sizeof(int32_t) atIndex:7];
+    [enc setBytes:&causal_offset length:sizeof(int32_t) atIndex:8];
+    [enc setBytes:&window length:sizeof(int32_t) atIndex:9];
+    [enc setBytes:&scale length:sizeof(float) atIndex:10];
+    NSUInteger tx = std::min<NSUInteger>(32, (NSUInteger)latent_dim);
+    NSUInteger ty = std::max<NSUInteger>(1, std::min<NSUInteger>(
+        (NSUInteger)q_len, pso.maxTotalThreadsPerThreadgroup / tx));
+    [enc dispatchThreads:MTLSizeMake(latent_dim, q_len, 1)
+        threadsPerThreadgroup:MTLSizeMake(tx, ty, 1)];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 30000,
+                                      "dense_latent_attention_f32"))
+      return false;
+    ts_record_pipeline_resources(pso, MTLSizeMake(tx, ty, 1));
+    return true;
+  }
+}
+}  // namespace
+
+extern "C" int32_t tessera_apple_gpu_paged_latent_attention_dev_f32(
+    TsDeviceTensor *q, TsDeviceTensor *latent_pool, TsDeviceTensor *rope_pool,
+    TsDeviceTensor *block_table, TsDeviceTensor *out, int32_t num_blocks,
+    int32_t n_blocks, int32_t block_size, int32_t logical_length,
+    int32_t q_len, int32_t latent_dim, int32_t rope_dim,
+    int32_t causal_offset, int32_t window, float scale) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !q || !latent_pool || !rope_pool || !block_table || !out ||
+      num_blocks <= 0 || n_blocks <= 0 || n_blocks > num_blocks)
+    return 0;
+  return dispatch_paged_latent_attention(
+      ctx, q->buf, latent_pool->buf, rope_pool->buf, block_table->buf, out->buf,
+      block_size, logical_length, q_len, latent_dim, rope_dim, causal_offset,
+      window, scale) ? 1 : 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_dense_latent_attention_dev_f32(
+    TsDeviceTensor *q, TsDeviceTensor *latent, TsDeviceTensor *rope,
+    TsDeviceTensor *out, int32_t logical_length, int32_t q_len,
+    int32_t latent_dim, int32_t rope_dim, int32_t causal_offset,
+    int32_t window, float scale) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !q || !latent || !rope || !out) return 0;
+  return dispatch_dense_latent_attention(
+      ctx, q->buf, latent->buf, rope->buf, out->buf, logical_length, q_len,
+      latent_dim, rope_dim, causal_offset, window, scale) ? 1 : 0;
 }
 
 // R1 device-resident bmm entry point. A/B/O are TsDeviceTensor handles whose
@@ -23695,13 +24892,14 @@ static bool mpsg_run_bsmm(MetalDeviceContext &ctx, const void *A, const void *B,
     MPSCommandBuffer *mps_cb =
         [MPSCommandBuffer commandBufferWithCommandBuffer:metal_cb];
     if (!mps_cb) return false;
+    MPSGraphTimingBracket timing(ctx);
     [g encodeToCommandBuffer:mps_cb
                        feeds:@{pa : ad, pb : bd, pc : cd}
             targetOperations:nil
         resultsDictionary:@{y : od}
-      executionDescriptor:nil];
+      executionDescriptor:timing.execution_descriptor];
     if (!commit_mpsgraph_and_wait_with_timeout(
-            ctx, mps_cb, metal_cb, 60000, "mpsgraph_bsmm"))
+            ctx, mps_cb, metal_cb, 60000, "mpsgraph_bsmm", &timing))
       return false;
     std::memcpy(O, [bufO contents], oBytes);
     return true;

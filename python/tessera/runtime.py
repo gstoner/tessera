@@ -36,7 +36,7 @@ import time
 from dataclasses import dataclass
 from enum import IntEnum
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, cast
 
 from .telemetry import TELEMETRY_SCHEMA_VERSION, make_event, telemetry_report
 from .compiler.capabilities import get_target_capability, normalize_target, runtime_status as compiler_runtime_status
@@ -22670,6 +22670,8 @@ def _apple_gpu_dispatch_selective_ssm(operands: Any, kwargs: Any, np: Any) -> An
                   np.moveaxis(B, 1, 0), np.moveaxis(C, 1, 0), s0,
                   np.asarray(A).reshape(-1), Bsz, S, Dd, Nn)
         if out is not None:
+            if isinstance(out, tuple) and len(out) == 2:
+                out, _provenance = out
             y = np.moveaxis(np.asarray(out), 0, 1)        # (B, S, D)
             if gate is not None:
                 y = y * np.asarray(gate)
@@ -22874,6 +22876,310 @@ def apple_gpu_fused_ssm_state_handle(
         decode_fn=apple_gpu_ssm_decode_callable(),
         block_fn=apple_gpu_ssm_block_callable(compute_dtype),
         backend="apple_gpu_fused",
+    )
+
+
+def apple_gpu_resident_ssm_replay_state_handle(
+    batch: int,
+    num_channels: int,
+    state_dim: int,
+    a: Any,
+    *,
+    capacity: int = 64,
+    spec_window: int = 0,
+    dtype: str = "fp32",
+    async_slots: int = 3,
+) -> Any:
+    """Persistent Apple ReplaySSM handle with ordered resident submissions.
+
+    ``S0``, scalar ``A``, and the fixed-capacity delta/x/b/c rings are
+    ``DeviceTensor`` buffers. Async blocks encode directly against those
+    buffers and commit without waiting; Metal's single command queue preserves
+    submission order. Slots remain leased until ``wait()`` consumes their
+    resident output, providing explicit backpressure and deterministic cleanup.
+    The ordinary :class:`SSMStateHandle` remains the semantic mirror used for
+    checkpointing, rollback, and a fail-closed fallback.
+    """
+    import numpy as np
+    from .cache import SSMStateHandle
+
+    if async_slots <= 0:
+        raise ValueError("async_slots must be positive")
+    api = _apple_gpu_enc_api()
+    native_api = bool(
+        DeviceTensor.is_metal() and api is not None
+        and getattr(api, "ts_enc_commit_async", None) is not None
+        and getattr(api, "ts_enc_wait_destroy", None) is not None
+        and getattr(api, "tessera_apple_gpu_ssm_replay_decode_dev_f32_enc", None)
+        is not None)
+
+    class _Future:
+        def __init__(self, owner: Any, slot: int, session: Any,
+                     output: Any, tokens: int) -> None:
+            self._owner = owner
+            self._slot = slot
+            self._session = session
+            self._output = output
+            self._tokens = tokens
+            self._consumed = False
+
+        @property
+        def device_buffer(self) -> Any:
+            if self._consumed:
+                raise RuntimeError("ReplaySSM result already consumed")
+            return self._output
+
+        @property
+        def event(self) -> Any:
+            return self
+
+        def wait(self) -> Any:
+            if self._consumed:
+                raise RuntimeError("ReplaySSM result already consumed")
+            return self._owner._consume(self)
+
+        def elapsed_ms(self) -> float:
+            telemetry = self._owner.last_submission_telemetry or {}
+            value = telemetry.get("device_time_ns")
+            return float(value) / 1e6 if isinstance(value, int) else 0.0
+
+    class _Handle(SSMStateHandle):
+        _resident_tensors: tuple[Any, ...] = ()
+
+        def __post_init__(self) -> None:
+            super().__post_init__()
+            self._closed = False
+            self._slots = [False] * async_slots
+            self._pending: list[_Future] = []
+            self.last_submission_telemetry: dict[str, Any] | None = None
+            self.last_flush_execution = "uninitialized"
+            self._native_api = native_api and self._scalar_a
+            self._resident_tensors = ()
+            if not self._native_api:
+                return
+            shapes = (
+                (self.capacity, self.batch, self.num_channels),
+                (self.capacity, self.batch, self.num_channels),
+                (self.capacity, self.batch, self.state_dim),
+                (self.capacity, self.batch, self.state_dim),
+                (self.batch, self.num_channels, self.state_dim),
+                (self.num_channels,),
+            )
+            tensors = tuple(DeviceTensor.empty(shape, np.float32) for shape in shapes)
+            if any(t is None for t in tensors):
+                for t in tensors:
+                    if t is not None:
+                        t.free()
+                self._native_api = False
+                return
+            resident_tensors = cast(tuple[DeviceTensor, ...], tensors)
+            self._d_dev, self._x_dev, self._b_dev, self._c_dev, self._s0_dev, self._a_dev = resident_tensors
+            self._resident_tensors = resident_tensors
+            self._d_view = self._d_dev.numpy(); self._x_view = self._x_dev.numpy()
+            self._b_view = self._b_dev.numpy(); self._c_view = self._c_dev.numpy()
+            self._s0_view = self._s0_dev.numpy(); self._a_view = self._a_dev.numpy()
+            for view in (self._d_view, self._x_view, self._b_view,
+                         self._c_view, self._s0_view):
+                view[...] = 0
+            self._a_view[...] = np.asarray(self._a1d, np.float32)
+
+        @property
+        def resident_inputs(self) -> bool:
+            return bool(self._native_api and not self._closed)
+
+        @property
+        def pending_submissions(self) -> int:
+            return len(self._pending)
+
+        def _require_idle(self, action: str) -> None:
+            if self._pending:
+                raise RuntimeError(
+                    f"cannot {action} with {len(self._pending)} pending ReplaySSM submissions")
+
+        def append(self, delta_t: Any, x_t: Any, b_t: Any,
+                   *, auto_flush: bool = True) -> Any:
+            if self._closed:
+                raise RuntimeError("ReplaySSM handle is closed")
+            before = self._count
+            super().append(delta_t, x_t, b_t, auto_flush=auto_flush)
+            index = self._count - 1
+            # An automatic flush moves the insertion index back to zero.
+            if before >= self.capacity:
+                index = 0
+            if self._native_api:
+                self._d_view[index] = np.asarray(delta_t, np.float32).reshape(
+                    self.batch, self.num_channels)
+                self._x_view[index] = np.asarray(x_t, np.float32).reshape(
+                    self.batch, self.num_channels)
+                self._b_view[index] = np.asarray(b_t, np.float32).reshape(
+                    self.batch, self.state_dim)
+            return self
+
+        def _encode(self, cs: Any, start: int, tokens: int) -> _Future:
+            slot = next((i for i, used in enumerate(self._slots) if not used), -1)
+            if slot < 0:
+                raise RuntimeError("Apple ReplaySSM async ring is full")
+            output = DeviceTensor.empty(
+                (tokens, self.batch, self.num_channels), np.float32)
+            session = api.ts_enc_begin() if self._native_api else None
+            if output is None or session is None:
+                if output is not None:
+                    output.free()
+                raise RuntimeError("Apple ReplaySSM resident submission unavailable")
+            self._c_view[start:start + tokens] = np.asarray(cs, np.float32)
+            ok = True
+            for i in range(tokens):
+                rc = api.tessera_apple_gpu_ssm_replay_decode_dev_f32_enc(
+                    session, self._d_dev.handle, self._x_dev.handle,
+                    self._b_dev.handle, self._s0_dev.handle, self._c_dev.handle,
+                    self._a_dev.handle, output.handle, ctypes.c_int32(self.batch),
+                    ctypes.c_int32(self.num_channels), ctypes.c_int32(self.state_dim),
+                    ctypes.c_int32(start + i + 1), ctypes.c_int32(start + i),
+                    ctypes.c_int32(i))
+                ok = ok and rc == 1
+            if not ok:
+                # The session has not been committed. Commit any successfully
+                # encoded prefix synchronously so destruction cannot wait on an
+                # unsubmitted command buffer.
+                api.ts_enc_commit_wait(session)
+                output.free()
+                raise RuntimeError("Apple ReplaySSM command-buffer encoding failed")
+            if api.ts_enc_commit_async(session) != 1:
+                api.ts_enc_commit_wait(session)
+                output.free()
+                raise RuntimeError("Apple ReplaySSM command-buffer submission failed")
+            future = _Future(self, slot, session, output, tokens)
+            self._slots[slot] = True
+            self._pending.append(future)
+            return future
+
+        def _consume(self, future: _Future) -> Any:
+            from ._apple_gpu_dispatch import read_dispatch_telemetry
+            ok = api.ts_enc_wait_destroy(future._session) == 1
+            result = future._output.copy_to_host() if ok else None
+            future._output.free()
+            future._session = None
+            future._consumed = True
+            self._slots[future._slot] = False
+            if future in self._pending:
+                self._pending.remove(future)
+            self.last_submission_telemetry = {
+                **read_dispatch_telemetry(),
+                "submission_mode": "ordered_async_command_buffer",
+                "ring_slot": future._slot,
+                "tokens": future._tokens,
+            }
+            if not ok or result is None:
+                raise RuntimeError("Apple ReplaySSM command buffer failed")
+            return result.astype(np.float64)
+
+        def read_output(self, c_t: Any, *, gate_t: Any = None) -> Any:
+            if not self._native_api or self._count == 0:
+                return super().read_output(c_t, gate_t=gate_t)
+            self._require_idle("read output")
+            c = np.asarray(c_t, np.float32).reshape(self.batch, self.state_dim)
+            future = self._encode(c[None], self._count - 1, 1)
+            y = future.wait()[0]
+            self.last_decode_execution = "native_gpu"
+            if gate_t is not None:
+                y *= np.asarray(gate_t).reshape(self.batch, self.num_channels)
+            return y
+
+        def submit_block_async(self, deltas: Any, xs: Any, bs: Any, cs: Any) -> Any:
+            ds, xx, bb, cc = (np.asarray(v) for v in (deltas, xs, bs, cs))
+            tokens = int(ds.shape[0])
+            if tokens < 1 or self.should_flush(tokens):
+                raise RuntimeError("async ReplaySSM span must fit before the flush boundary")
+            if ds.shape != (tokens, self.batch, self.num_channels) or xx.shape != ds.shape:
+                raise ValueError("ReplaySSM block delta/x must be [T,B,D]")
+            if bb.shape != (tokens, self.batch, self.state_dim) or cc.shape != bb.shape:
+                raise ValueError("ReplaySSM block b/c must be [T,B,N]")
+            if all(self._slots):
+                raise RuntimeError("Apple ReplaySSM async ring is full")
+            start = self._count
+            for i in range(tokens):
+                self.append(ds[i], xx[i], bb[i], auto_flush=False)
+            try:
+                return self._encode(cc, start, tokens)
+            except Exception:
+                old = self._count
+                SSMStateHandle.rollback(self, tokens)
+                if self._native_api:
+                    self._d_view[self._count:old] = 0
+                    self._x_view[self._count:old] = 0
+                    self._b_view[self._count:old] = 0
+                    self._c_view[self._count:old] = 0
+                raise
+
+        def step_block(self, deltas: Any, xs: Any, bs: Any, cs: Any) -> Any:
+            if not self._native_api or self.should_flush(int(np.asarray(deltas).shape[0])):
+                return np.stack([
+                    self.step(deltas[i], xs[i], bs[i], cs[i])
+                    for i in range(int(np.asarray(deltas).shape[0]))])
+            return self.submit_block_async(deltas, xs, bs, cs).wait()
+
+        def flush(self) -> Any:
+            self._require_idle("flush")
+            super().flush()
+            if self._native_api:
+                self._s0_view[...] = np.asarray(self._s0, np.float32)
+                self._d_view[...] = 0; self._x_view[...] = 0
+                self._b_view[...] = 0; self._c_view[...] = 0
+                self.last_flush_execution = "resident_write_after_reference_fold"
+            return self
+
+        def rollback(self, n: int) -> Any:
+            self._require_idle("rollback")
+            old = self._count
+            super().rollback(n)
+            if self._native_api:
+                self._d_view[self._count:old] = 0
+                self._x_view[self._count:old] = 0
+                self._b_view[self._count:old] = 0
+                self._c_view[self._count:old] = 0
+            return self
+
+        def reset(self) -> Any:
+            self._require_idle("reset")
+            super().reset()
+            if self._native_api:
+                for view in (self._d_view, self._x_view, self._b_view,
+                             self._c_view, self._s0_view):
+                    view[...] = 0
+            return self
+
+        def lifecycle_telemetry(self) -> dict[str, Any]:
+            return {
+                "resident_inputs": self.resident_inputs,
+                "capacity": self.capacity,
+                "count": self._count,
+                "ring_slots": len(self._slots),
+                "leased_slots": sum(self._slots),
+                "pending_submissions": len(self._pending),
+                "closed": self._closed,
+            }
+
+        def close(self) -> None:
+            if self._closed:
+                return
+            for future in list(self._pending):
+                future.wait()
+            for tensor in self._resident_tensors:
+                tensor.free()
+            self._resident_tensors = ()
+            self._native_api = False
+            self._closed = True
+
+        def __del__(self) -> None:
+            try:
+                self.close()
+            except Exception:
+                pass
+
+    return _Handle(
+        batch=batch, num_channels=num_channels, state_dim=state_dim, a=a,
+        capacity=capacity, spec_window=spec_window, dtype=dtype,
+        backend="apple_gpu_resident_replay",
     )
 
 
@@ -29883,6 +30189,117 @@ def _apple_gpu_gather_blocks_device(pool: "DeviceTensor",
     return out
 
 
+_PAGED_LATENT_ATTN_DEV_CONFIGURED = False
+
+
+def _apple_gpu_paged_latent_attention_dev_sym() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(
+        runtime, "tessera_apple_gpu_paged_latent_attention_dev_f32", None)
+    if sym is None:
+        return None
+    global _PAGED_LATENT_ATTN_DEV_CONFIGURED
+    if not _PAGED_LATENT_ATTN_DEV_CONFIGURED:
+        vp, i32, f32 = ctypes.c_void_p, ctypes.c_int32, ctypes.c_float
+        sym.argtypes = [vp, vp, vp, vp, vp,
+                        i32, i32, i32, i32, i32, i32, i32, i32, i32, f32]
+        sym.restype = i32
+        _PAGED_LATENT_ATTN_DEV_CONFIGURED = True
+    return sym
+
+
+def _apple_gpu_paged_latent_attention_device(
+    query: "DeviceTensor",
+    latent_pool: "DeviceTensor",
+    rope_pool: "DeviceTensor",
+    block_table: "DeviceTensor",
+    *,
+    num_blocks: int,
+    n_blocks: int,
+    block_size: int,
+    logical_length: int,
+    latent_dim: int,
+    rope_dim: int,
+    causal_offset: int,
+    window: int,
+    scale: float,
+) -> "DeviceTensor | None":
+    """Single-dispatch resident MLA page-table attention.
+
+    The kernel consumes physical latent/rope pages and the resident logical to
+    physical table directly. No dense cache window is allocated or gathered.
+    """
+    import numpy as _np
+    if (query.dtype != _np.float32 or latent_pool.dtype != _np.float32
+            or rope_pool.dtype != _np.float32 or block_table.dtype != _np.int32
+            or len(query.shape) != 2):
+        return None
+    q_len = int(query.shape[0])
+    sym = _apple_gpu_paged_latent_attention_dev_sym()
+    if sym is None:
+        return None
+    out = DeviceTensor.empty((q_len, latent_dim), _np.float32)
+    if out is None:
+        return None
+    rc = sym(
+        query.handle, latent_pool.handle, rope_pool.handle, block_table.handle,
+        out.handle, ctypes.c_int32(num_blocks), ctypes.c_int32(n_blocks),
+        ctypes.c_int32(block_size), ctypes.c_int32(logical_length),
+        ctypes.c_int32(q_len), ctypes.c_int32(latent_dim),
+        ctypes.c_int32(rope_dim), ctypes.c_int32(causal_offset),
+        ctypes.c_int32(window), ctypes.c_float(scale))
+    if rc != 1:
+        out.free()
+        return None
+    return out
+
+
+_DENSE_LATENT_ATTN_DEV_CONFIGURED = False
+
+
+def _apple_gpu_dense_latent_attention_dev_sym() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(
+        runtime, "tessera_apple_gpu_dense_latent_attention_dev_f32", None)
+    if sym is None:
+        return None
+    global _DENSE_LATENT_ATTN_DEV_CONFIGURED
+    if not _DENSE_LATENT_ATTN_DEV_CONFIGURED:
+        vp, i32, f32 = ctypes.c_void_p, ctypes.c_int32, ctypes.c_float
+        sym.argtypes = [vp, vp, vp, vp, i32, i32, i32, i32, i32, i32, f32]
+        sym.restype = i32
+        _DENSE_LATENT_ATTN_DEV_CONFIGURED = True
+    return sym
+
+
+def _apple_gpu_dense_latent_attention_device(
+    query: "DeviceTensor", latent: "DeviceTensor", rope: "DeviceTensor", *,
+    logical_length: int, latent_dim: int, rope_dim: int, causal_offset: int,
+    window: int, scale: float,
+) -> "DeviceTensor | None":
+    """Dense resident attention used after the staged page-table gathers."""
+    import numpy as _np
+    if any(t.dtype != _np.float32 for t in (query, latent, rope)):
+        return None
+    q_len = int(query.shape[0])
+    sym = _apple_gpu_dense_latent_attention_dev_sym()
+    if sym is None:
+        return None
+    out = DeviceTensor.empty((q_len, latent_dim), _np.float32)
+    if out is None:
+        return None
+    rc = sym(
+        query.handle, latent.handle, rope.handle, out.handle,
+        ctypes.c_int32(logical_length), ctypes.c_int32(q_len),
+        ctypes.c_int32(latent_dim), ctypes.c_int32(rope_dim),
+        ctypes.c_int32(causal_offset), ctypes.c_int32(window),
+        ctypes.c_float(scale))
+    if rc != 1:
+        out.free()
+        return None
+    return out
+
+
 def _apple_gpu_bmm_device(A: "DeviceTensor", B: "DeviceTensor",
                           b_broadcast: bool = False) -> "DeviceTensor | None":
     """R1 — device-resident batched matmul. Both inputs are ``DeviceTensor``s
@@ -29928,6 +30345,17 @@ def _apple_gpu_enc_api() -> Any:
         vp, i32, f32 = ctypes.c_void_p, ctypes.c_int32, ctypes.c_float
         runtime.ts_enc_begin.argtypes = []; runtime.ts_enc_begin.restype = vp
         runtime.ts_enc_commit_wait.argtypes = [vp]; runtime.ts_enc_commit_wait.restype = None
+        if getattr(runtime, "ts_enc_commit_async", None) is not None:
+            runtime.ts_enc_commit_async.argtypes = [vp]
+            runtime.ts_enc_commit_async.restype = i32
+        if getattr(runtime, "ts_enc_wait_destroy", None) is not None:
+            runtime.ts_enc_wait_destroy.argtypes = [vp]
+            runtime.ts_enc_wait_destroy.restype = i32
+        if getattr(runtime, "tessera_apple_gpu_ssm_replay_decode_dev_f32_enc", None) is not None:
+            runtime.tessera_apple_gpu_ssm_replay_decode_dev_f32_enc.argtypes = [
+                vp, vp, vp, vp, vp, vp, vp, vp,
+                i32, i32, i32, i32, i32, i32]
+            runtime.tessera_apple_gpu_ssm_replay_decode_dev_f32_enc.restype = i32
         runtime.tessera_apple_gpu_bmm_dev_f32_enc.argtypes = [vp, vp, vp, vp, i32, i32, i32, i32, i32]
         runtime.tessera_apple_gpu_bmm_dev_f32_enc.restype = i32
         runtime.tessera_apple_gpu_rowop_dev_f32_enc.argtypes = [vp, vp, vp, vp, i32, i32, i32, f32]

@@ -41,6 +41,26 @@ _PRODUCTION_ROUTE_PROMOTIONS = {
     # Device-interval winners are intentionally separate from host-input
     # end-to-end selection. The f16 rows retained online MSL in this domain.
     ("apple7", "flash_attn_mha", "b1_h16_sq16_sk1025_d256", "f32", "device"): "mpsgraph_bsmm",
+    # APPLE-ATTN-BWD-1: the backward policy applies workspace and determinism
+    # requirements after exact-row lookup. Device-domain rows retain serial.
+    ("apple7", "flash_attn_bwd", "b1_hq2_hkv2_sq4_sk1025_d64_c1_w0_bias0_sc0p0", "f32", "end_to_end"): "split_reduced",
+    ("apple7", "flash_attn_bwd", "b1_hq4_hkv4_sq16_sk16_d16_c0_w0_bias0_sc0p0", "f32", "end_to_end"): "split_reduced",
+    ("apple7", "flash_attn_bwd", "b1_hq4_hkv4_sq17_sk19_d64_c1_w0_bias0_sc0p0", "f32", "end_to_end"): "atomic",
+    ("apple7", "flash_attn_bwd", "b1_hq8_hkv1_sq8_sk65_d64_c0_w17_bias0_sc0p0", "f16", "end_to_end"): "atomic",
+    ("apple7", "flash_attn_bwd", "b1_hq8_hkv2_sq9_sk33_d64_c1_w17_bias1_sc2p5", "f32", "end_to_end"): "split_reduced",
+    ("apple7", "flash_attn_bwd", "b2_hq4_hkv2_sq9_sk33_d64_c1_w0_bias1_sc1p5", "bf16", "end_to_end"): "split_reduced",
+    # APPLE-PAGED-KV-1: the direct resident page-table route won both retained
+    # timing domains in two runs for each exact non-identity corpus row.
+    ("apple7", "resident_paged_kv", "127x64x32x1", "f32", "end_to_end"): "direct",
+    ("apple7", "resident_paged_kv", "127x64x32x1", "f32", "device"): "direct",
+    ("apple7", "resident_paged_kv", "512x128x64x1", "f32", "end_to_end"): "direct",
+    ("apple7", "resident_paged_kv", "512x128x64x1", "f32", "device"): "direct",
+    # APPLE-REPLAY-1: fused block is the stable end-to-end winner. The smaller
+    # device-domain row flipped between paired runs, so it deliberately has no
+    # promotion and retains the fused-block incumbent.
+    ("apple7", "resident_replay", "1x128x64_t16", "f32", "end_to_end"): "fused_block",
+    ("apple7", "resident_replay", "1x256x128_t16", "f32", "end_to_end"): "fused_block",
+    ("apple7", "resident_replay", "1x256x128_t16", "f32", "device"): "fused_block",
 }
 
 

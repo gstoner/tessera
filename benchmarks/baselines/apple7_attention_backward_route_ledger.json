@@ -1,0 +1,3951 @@
+{
+  "attention_backward_proof": {
+    "atomic_determinism": "nondeterministic",
+    "candidate_routes": [
+      "serial_recompute",
+      "atomic",
+      "split_reduced"
+    ],
+    "complete": true,
+    "gradient_accumulation_dtype": "f32",
+    "native_storage_dtypes": [
+      "bf16",
+      "f16",
+      "f32"
+    ],
+    "runs": [
+      {
+        "all_native_correct_and_timed": true,
+        "device": "apple7",
+        "dtype_route_pairs": [
+          [
+            "bf16",
+            "atomic"
+          ],
+          [
+            "bf16",
+            "serial_recompute"
+          ],
+          [
+            "bf16",
+            "split_reduced"
+          ],
+          [
+            "f16",
+            "atomic"
+          ],
+          [
+            "f16",
+            "serial_recompute"
+          ],
+          [
+            "f16",
+            "split_reduced"
+          ],
+          [
+            "f32",
+            "atomic"
+          ],
+          [
+            "f32",
+            "serial_recompute"
+          ],
+          [
+            "f32",
+            "split_reduced"
+          ]
+        ],
+        "dtypes": [
+          "bf16",
+          "f16",
+          "f32"
+        ],
+        "routes": [
+          "atomic",
+          "serial_recompute",
+          "split_reduced"
+        ],
+        "row_count": 18,
+        "run": 1,
+        "semantic_matrix_present": true
+      },
+      {
+        "all_native_correct_and_timed": true,
+        "device": "apple7",
+        "dtype_route_pairs": [
+          [
+            "bf16",
+            "atomic"
+          ],
+          [
+            "bf16",
+            "serial_recompute"
+          ],
+          [
+            "bf16",
+            "split_reduced"
+          ],
+          [
+            "f16",
+            "atomic"
+          ],
+          [
+            "f16",
+            "serial_recompute"
+          ],
+          [
+            "f16",
+            "split_reduced"
+          ],
+          [
+            "f32",
+            "atomic"
+          ],
+          [
+            "f32",
+            "serial_recompute"
+          ],
+          [
+            "f32",
+            "split_reduced"
+          ]
+        ],
+        "dtypes": [
+          "bf16",
+          "f16",
+          "f32"
+        ],
+        "routes": [
+          "atomic",
+          "serial_recompute",
+          "split_reduced"
+        ],
+        "row_count": 18,
+        "run": 2,
+        "semantic_matrix_present": true
+      }
+    ],
+    "split_reduction_order": "fixed_two_partition"
+  },
+  "decisions": [
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "serial_recompute",
+      "op": "flash_attn_bwd",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "atomic": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.005109234756635189,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.20747383018878157,
+            0.21258306494541676
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.2063437964817529,
+              0.2102601942174757,
+              0.20747383018878157,
+              0.20833933433301682,
+              0.20559116815558284
+            ],
+            [
+              0.22085702677070757,
+              0.20411319795800517,
+              0.21258306494541676,
+              0.20982864304326426,
+              0.21791720739010617
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              218660750,
+              217968417,
+              218609791,
+              219489833,
+              219599625
+            ],
+            [
+              215190167,
+              212751917,
+              213378375,
+              213107042,
+              212837250
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                8,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0078125,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                8,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0078125,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.026060649839999186,
+          "speedups_vs_incumbent": [
+            0.2077517439727926,
+            0.2135843482255953
+          ],
+          "times_ns": [
+            218660750,
+            213107042
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "serial_recompute": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              275510667,
+              276000292,
+              275839208,
+              277252417,
+              276431500
+            ],
+            [
+              276188292,
+              267314292,
+              270985250,
+              269697250,
+              272141584
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                2,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.001953125,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                2,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.001953125,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.0185066973202416,
+          "times_ns": [
+            276000292,
+            270985250
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "split_reduced": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.0030317730938175247,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.3855513439942347,
+            0.3885831170880522
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.3874468860401692,
+              0.38162520132406236,
+              0.3815474629698038,
+              0.3855513439942347,
+              0.38686287199541297
+            ],
+            [
+              0.40579305946828476,
+              0.37913642118319657,
+              0.3982277005851795,
+              0.3844044868829771,
+              0.3885831170880522
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              168764917,
+              170671625,
+              170593458,
+              170357375,
+              169490416
+            ],
+            [
+              164113000,
+              165965708,
+              163071417,
+              166024417,
+              166391959
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.00390625,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.00390625,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.026461291630196282,
+          "speedups_vs_incumbent": [
+            0.3827637870759934,
+            0.38754707866941096
+          ],
+          "times_ns": [
+            170357375,
+            165965708
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "split_reduced",
+      "shape": "b1_hq2_hkv2_sq4_sk1025_d64_c1_w0_bias0_sc0p0",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "serial_recompute",
+      "op": "flash_attn_bwd",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "atomic": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.13529892097393714,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.4227038796516231,
+            -0.28740495867768595
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.05391420849599224,
+              -0.32343627229219746,
+              -0.4227038796516231,
+              -0.7507181008902077,
+              -0.45842359249329756
+            ],
+            [
+              -0.021897810218978103,
+              -0.35257803468208093,
+              -0.40236396878943165,
+              0.1764562345313208,
+              -0.28740495867768595
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              45625,
+              55583,
+              57500,
+              73749,
+              67999
+            ],
+            [
+              70000,
+              58499,
+              54458,
+              47250,
+              58416
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.2
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                8,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0078125,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                8,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0078125,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.015930434782608697,
+          "speedups_vs_incumbent": [
+            -0.3649851632047478,
+            -0.28740495867768595
+          ],
+          "times_ns": [
+            57500,
+            58416
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "serial_recompute": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              43291,
+              41999,
+              40416,
+              42125,
+              46625
+            ],
+            [
+              68500,
+              43250,
+              38833,
+              57374,
+              45375
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                2,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.001953125,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                2,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.001953125,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.0771513353115727,
+          "times_ns": [
+            42125,
+            45375
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "split_reduced": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.2526559526588223,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.33402612826603323,
+            -0.5866820809248555
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.2848860040193112,
+              -0.33334127003023883,
+              -0.33402612826603323,
+              -0.44211275964391694,
+              -0.3958820375335121
+            ],
+            [
+              0.1387007299270073,
+              -0.5866820809248555,
+              -0.6802719336646667,
+              0.0406630180918186,
+              -0.71900826446281
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              55624,
+              55999,
+              53916,
+              60749,
+              65083
+            ],
+            [
+              58999,
+              68624,
+              65250,
+              55041,
+              78000
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.4
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.00390625,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.00390625,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.16519937856033143,
+          "speedups_vs_incumbent": [
+            -0.329353115727003,
+            -0.4380165289256198
+          ],
+          "times_ns": [
+            55999,
+            65250
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "serial_recompute",
+      "shape": "b1_hq2_hkv2_sq4_sk1025_d64_c1_w0_bias0_sc0p0",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "serial_recompute",
+      "op": "flash_attn_bwd",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "atomic": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.017273367364653236,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.30941893348137023,
+            0.292145566116717
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.30941893348137023,
+              0.31386261149787953,
+              0.31750308940814825,
+              0.27766623777070804,
+              0.2784187030413769
+            ],
+            [
+              0.292145566116717,
+              0.34283355078136324,
+              0.2651688728206024,
+              0.25910147044812143,
+              0.30398415144177854
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              2643458,
+              2647833,
+              2673625,
+              2728917,
+              2754125
+            ],
+            [
+              2785083,
+              2833291,
+              2876833,
+              2916084,
+              2766750
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.05971892094067044,
+          "speedups_vs_incumbent": [
+            0.30153805962838387,
+            0.28013694540604056
+          ],
+          "times_ns": [
+            2673625,
+            2833291
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "serial_recompute": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              3827875,
+              3859042,
+              3917417,
+              3777917,
+              3816791
+            ],
+            [
+              3934542,
+              4311375,
+              3914958,
+              3935875,
+              3975125
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.00390625,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.00390625,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.028214087450609018,
+          "times_ns": [
+            3827875,
+            3935875
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "split_reduced": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.0016085108954735916,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.3952270375820945,
+            0.3936185266866209
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.38404676223753387,
+              0.4052713082676996,
+              0.39779630302314,
+              0.371501014977301,
+              0.3952270375820945
+            ],
+            [
+              0.33908038089312553,
+              0.4407236670435766,
+              0.3936185266866209,
+              0.3810461460285197,
+              0.409725228766391
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              2357792,
+              2295083,
+              2359083,
+              2374417,
+              2308292
+            ],
+            [
+              2600416,
+              2411250,
+              2373958,
+              2436125,
+              2346416
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                8,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0078125,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                8,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0078125,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.02267290753382826,
+          "speedups_vs_incumbent": [
+            0.38404676223753387,
+            0.38736621462825926
+          ],
+          "times_ns": [
+            2357792,
+            2411250
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "split_reduced",
+      "shape": "b1_hq4_hkv4_sq16_sk16_d16_c0_w0_bias0_sc0p0",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "serial_recompute",
+      "op": "flash_attn_bwd",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "atomic": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.1860604299580718,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.1629241831714394,
+            0.02313624678663239
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.021164179104477612,
+              -0.1629241831714394,
+              -0.02258714547805949,
+              -0.3791177762439606,
+              -0.26200035425400015
+            ],
+            [
+              -0.7225615934686315,
+              0.027659192825112106,
+              0.02313624678663239,
+              -0.34197319478065774,
+              0.139701843117198
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              32791,
+              36874,
+              34000,
+              43958,
+              42749
+            ],
+            [
+              59499,
+              54208,
+              47500,
+              45458,
+              45416
+            ]
+          ],
+          "paired_win_fractions": [
+            0.2,
+            0.6
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.2881705266583501,
+          "speedups_vs_incumbent": [
+            -0.10902583536346958,
+            0.02313624678663239
+          ],
+          "times_ns": [
+            36874,
+            47500
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "serial_recompute": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              33500,
+              31708,
+              33249,
+              31874,
+              33874
+            ],
+            [
+              34541,
+              55750,
+              48625,
+              33874,
+              52791
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.00390625,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.00390625,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.4624499984961954,
+          "times_ns": [
+            33249,
+            48625
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "split_reduced": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.013174079717471053,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.012310326504103443,
+            0.0008637532133676093
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.0933134328358209,
+              -0.03548000504604516,
+              -0.026316580949803003,
+              -0.006557068457049633,
+              -0.012310326504103443
+            ],
+            [
+              -0.27625141136620246,
+              0.18387443946188342,
+              0.0008637532133676093,
+              -0.35425400011808467,
+              0.21861680968346878
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              30374,
+              32833,
+              34124,
+              32083,
+              34291
+            ],
+            [
+              44083,
+              45499,
+              48583,
+              45874,
+              41250
+            ]
+          ],
+          "paired_win_fractions": [
+            0.2,
+            0.6
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                8,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0078125,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                8,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0078125,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.3857704139128316,
+          "speedups_vs_incumbent": [
+            0.012511654485849198,
+            0.0642879177377892
+          ],
+          "times_ns": [
+            32833,
+            45499
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "serial_recompute",
+      "shape": "b1_hq4_hkv4_sq16_sk16_d16_c0_w0_bias0_sc0p0",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "serial_recompute",
+      "op": "flash_attn_bwd",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "atomic": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.002883474030028199,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.280760684778209,
+            0.2778772107481808
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.27960358276590475,
+              0.28585355414739694,
+              0.2741987701987702,
+              0.280760684778209,
+              0.28126154422832134
+            ],
+            [
+              0.2659052483476986,
+              0.2778772107481808,
+              0.2692917905951187,
+              0.28458657085291944,
+              0.28941175923016954
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              7630709,
+              7508625,
+              7613292,
+              7551833,
+              7550916
+            ],
+            [
+              7761125,
+              7665875,
+              7721333,
+              7820333,
+              7633583
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.022444881924692985,
+          "speedups_vs_incumbent": [
+            0.2811742590348504,
+            0.2726530862162353
+          ],
+          "times_ns": [
+            7551833,
+            7721333
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "serial_recompute": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              10592375,
+              10514125,
+              10489500,
+              10499750,
+              10505791
+            ],
+            [
+              10572375,
+              10615750,
+              10566917,
+              10931208,
+              10742625
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.00390625,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.00390625,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.01046651318306256,
+          "times_ns": [
+            10505791,
+            10615750
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "split_reduced": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.0073548698846549465,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.2252447245523921,
+            0.21788985466773717
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.22790771663578754,
+              0.22513761249747363,
+              0.22333848133848133,
+              0.23173961284792496,
+              0.2252447245523921
+            ],
+            [
+              0.20087728632402843,
+              0.2225662812330735,
+              0.2074556845672205,
+              0.2416513344179344,
+              0.21788985466773717
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              8178291,
+              8147000,
+              8146791,
+              8066542,
+              8139417
+            ],
+            [
+              8448625,
+              8253042,
+              8374750,
+              8289667,
+              8401916
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                8,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0078125,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                8,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0078125,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.02798144692799901,
+          "speedups_vs_incumbent": [
+            0.22454282595189642,
+            0.2111014294797824
+          ],
+          "times_ns": [
+            8146791,
+            8374750
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "atomic",
+      "shape": "b1_hq4_hkv4_sq17_sk19_d64_c1_w0_bias0_sc0p0",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "serial_recompute",
+      "op": "flash_attn_bwd",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "atomic": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.04570358182355753,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.09964241054779194,
+            -0.05393882872423441
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.138318231526324,
+              0.12096774193548387,
+              -0.06067155011601984,
+              -0.24344027303754268,
+              -0.09964241054779194
+            ],
+            [
+              -0.19542831508329764,
+              -0.05393882872423441,
+              -0.03614813720784256,
+              0.15512759187238734,
+              -0.13414479752581795
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              58291,
+              40875,
+              46625,
+              45541,
+              50125
+            ],
+            [
+              58625,
+              55375,
+              56124,
+              40624,
+              62708
+            ]
+          ],
+          "paired_win_fractions": [
+            0.2,
+            0.2
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.2037319034852547,
+          "speedups_vs_incumbent": [
+            -0.022859399337472303,
+            -0.06819436249785882
+          ],
+          "times_ns": [
+            46625,
+            56124
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "serial_recompute": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              51208,
+              46500,
+              43958,
+              36625,
+              45583
+            ],
+            [
+              49041,
+              52541,
+              54166,
+              48083,
+              55291
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.00390625,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.00390625,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.15264462628611544,
+          "times_ns": [
+            45583,
+            52541
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "split_reduced": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.21633720335549303,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.4407616361071932,
+            -0.22442443275170018
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.17575378847055148,
+              -0.4605591397849462,
+              -0.4407616361071932,
+              -0.6541433447098977,
+              -0.017374898536735187
+            ],
+            [
+              -0.12065414653045411,
+              -0.4203193696351421,
+              -0.020012554000664623,
+              -0.22442443275170018,
+              -0.5448445497458899
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              60208,
+              67916,
+              63333,
+              60583,
+              46375
+            ],
+            [
+              54958,
+              74625,
+              55250,
+              58874,
+              85416
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                8,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0078125,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                8,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0078125,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.029028093895437715,
+          "speedups_vs_incumbent": [
+            -0.329070048044227,
+            -0.12053443977084563
+          ],
+          "times_ns": [
+            60583,
+            58874
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "serial_recompute",
+      "shape": "b1_hq4_hkv4_sq17_sk19_d64_c1_w0_bias0_sc0p0",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "serial_recompute",
+      "op": "flash_attn_bwd",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "atomic": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.0016287030957015114,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.6730958218984842,
+            0.6714671188027826
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.6745081574297189,
+              0.6702669805730392,
+              0.6730958218984842,
+              0.6733531004055525,
+              0.671671960326496
+            ],
+            [
+              0.6714671188027826,
+              0.6712591761715984,
+              0.6715356018127352,
+              0.6702649438954654,
+              0.671571163903946
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              12663667,
+              12867625,
+              12745667,
+              12715833,
+              12761208
+            ],
+            [
+              12787417,
+              12822166,
+              12828834,
+              12820250,
+              12898208
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.0060019612939832805,
+          "speedups_vs_incumbent": [
+            0.6725867185568367,
+            0.6712591761715984
+          ],
+          "times_ns": [
+            12745667,
+            12822166
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "serial_recompute": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              38906250,
+              39024375,
+              38989000,
+              38928375,
+              38867250
+            ],
+            [
+              38922792,
+              39003875,
+              39057000,
+              38880458,
+              39272459
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                1,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0009765625,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                1,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0009765625,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.0019394593275470656,
+          "times_ns": [
+            38928375,
+            39003875
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "split_reduced": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.0024686556953107397,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.46764306710662573,
+            0.465174411411315
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.46493493975903616,
+              0.46726672752606546,
+              0.4683393777732181,
+              0.46820068908604584,
+              0.46764306710662573
+            ],
+            [
+              0.46502424594823516,
+              0.4687194541567985,
+              0.46478649153800855,
+              0.46574703415273555,
+              0.465174411411315
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              20817375,
+              20789583,
+              20728916,
+              20702083,
+              20691250
+            ],
+            [
+              20822750,
+              20722000,
+              20903834,
+              20772000,
+              21003916
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                2,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.001953125,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                2,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.001953125,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.004526720065824957,
+          "speedups_vs_incumbent": [
+            0.4675113975345747,
+            0.46613637747531494
+          ],
+          "times_ns": [
+            20728916,
+            20822750
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "atomic",
+      "shape": "b1_hq8_hkv1_sq8_sk65_d64_c0_w17_bias0_sc0p0",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "serial_recompute",
+      "op": "flash_attn_bwd",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "atomic": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.012553138956344084,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.010088133805138575,
+            -0.02264127276148266
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.01853774284443126,
+              -0.08154682779456193,
+              0.005871345029239766,
+              -0.010088133805138575,
+              0.03780304370907804
+            ],
+            [
+              -0.0929219986194446,
+              -0.02264127276148266,
+              -0.48366013071895425,
+              0.15712540163823144,
+              -0.002437074730459535
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              41208,
+              44749,
+              42499,
+              45958,
+              43499
+            ],
+            [
+              41166,
+              48916,
+              56750,
+              55875,
+              51416
+            ]
+          ],
+          "paired_win_fractions": [
+            0.4,
+            0.2
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.18200418400423,
+          "speedups_vs_incumbent": [
+            -0.01752046783625731,
+            -0.07490644534108251
+          ],
+          "times_ns": [
+            43499,
+            51416
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "serial_recompute": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              40458,
+              41375,
+              42750,
+              45499,
+              45208
+            ],
+            [
+              37666,
+              47833,
+              38250,
+              66291,
+              51291
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                1,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0009765625,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                1,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0009765625,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.11890058479532163,
+          "times_ns": [
+            42750,
+            47833
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "split_reduced": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.1656203001639658,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.012084592145015106,
+            -0.1535357080189507
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.028820010875475803,
+              0.012084592145015106,
+              -0.05260818713450292,
+              0.05859469438888767,
+              0.11059989382410193
+            ],
+            [
+              -0.8152976158870069,
+              0.11151297221583426,
+              -0.19498039215686275,
+              0.2394744384607262,
+              -0.1535357080189507
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              41624,
+              40875,
+              44999,
+              42833,
+              40208
+            ],
+            [
+              68375,
+              42499,
+              45708,
+              50416,
+              59166
+            ]
+          ],
+          "paired_win_fractions": [
+            0.6,
+            0.4
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                2,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.001953125,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                2,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.001953125,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.21122429367672496,
+          "speedups_vs_incumbent": [
+            0.026339181286549707,
+            -0.05400037630924257
+          ],
+          "times_ns": [
+            41624,
+            50416
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "serial_recompute",
+      "shape": "b1_hq8_hkv1_sq8_sk65_d64_c0_w17_bias0_sc0p0",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "serial_recompute",
+      "op": "flash_attn_bwd",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "atomic": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.001706083706539907,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.42001137436739,
+            0.4217174580739299
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.41866593545112996,
+              0.4186338571308127,
+              0.42661507225599965,
+              0.4246568091239707,
+              0.42001137436739
+            ],
+            [
+              0.4246366693715336,
+              0.41760679651383237,
+              0.4217174580739299,
+              0.4172289287454212,
+              0.4249457920440959
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              17755541,
+              17811000,
+              17817459,
+              17738334,
+              17726458
+            ],
+            [
+              17759500,
+              17852584,
+              17812958,
+              17936042,
+              17735750
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.0032337510864918167,
+          "speedups_vs_incumbent": [
+            0.42044408591737054,
+            0.4217174580739299
+          ],
+          "times_ns": [
+            17755541,
+            17812958
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "serial_recompute": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              30542750,
+              30636459,
+              31074167,
+              30830875,
+              30563458
+            ],
+            [
+              30866583,
+              30653833,
+              30803209,
+              30777166,
+              30841875
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                2,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.001953125,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                2,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.001953125,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.005442861395959631,
+          "times_ns": [
+            30636459,
+            30803209
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "split_reduced": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.0025046735669729814,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.45173568195398256,
+            0.45424035552095554
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.45173568195398256,
+              0.4512951056125644,
+              0.4555498784569189,
+              0.4509724423974344,
+              0.45306008894674155
+            ],
+            [
+              0.4563160424981281,
+              0.45424035552095554,
+              0.4476103122892164,
+              0.4531944559157916,
+              0.4546497254139056
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              16745500,
+              16810375,
+              16918334,
+              16927000,
+              16716375
+            ],
+            [
+              16781666,
+              16729625,
+              17015375,
+              16829125,
+              16819625
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.00390625,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.00390625,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.0005502554226184723,
+          "speedups_vs_incumbent": [
+            0.4512951056125644,
+            0.45396516966787454
+          ],
+          "times_ns": [
+            16810375,
+            16819625
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "split_reduced",
+      "shape": "b1_hq8_hkv2_sq9_sk33_d64_c1_w17_bias1_sc2p5",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "serial_recompute",
+      "op": "flash_attn_bwd",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "atomic": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.14556826204561357,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.16764071856287424,
+            -0.022072456517260662
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.09243765903307888,
+              -0.15170278637770898,
+              -0.16764071856287424,
+              -0.5403362681659064,
+              -0.28923076923076924
+            ],
+            [
+              -0.4762949215454699,
+              -0.40769190664048244,
+              0.1944156999437213,
+              0.027793663502230354,
+              -0.022072456517260662
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              53666,
+              46500,
+              48749,
+              58083,
+              52375
+            ],
+            [
+              70000,
+              81000,
+              44374,
+              51000,
+              69458
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.4
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.3261670644391408,
+          "speedups_vs_incumbent": [
+            -0.28923076923076924,
+            -0.26096980919702994
+          ],
+          "times_ns": [
+            52375,
+            69458
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "serial_recompute": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              49125,
+              40375,
+              41750,
+              37708,
+              40625
+            ],
+            [
+              47416,
+              57541,
+              55083,
+              52458,
+              67958
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                2,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.001953125,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                2,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.001953125,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.3558892307692308,
+          "times_ns": [
+            40625,
+            55083
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "split_reduced": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.3223788245826939,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.4045325077399381,
+            -0.08215368315724418
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.33331297709923663,
+              -0.4045325077399381,
+              -0.5628502994011976,
+              -0.6961387503977936,
+              -0.36
+            ],
+            [
+              -0.3761177661548844,
+              -0.025338454319528685,
+              -0.5695949748561262,
+              0.11517785657097106,
+              -0.08215368315724418
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              65499,
+              56708,
+              65249,
+              63958,
+              55250
+            ],
+            [
+              65250,
+              58999,
+              86458,
+              46416,
+              73541
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.2
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.00390625,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.00390625,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.020200756746614965,
+          "speedups_vs_incumbent": [
+            -0.5743507692307692,
+            -0.18457600348564893
+          ],
+          "times_ns": [
+            63958,
+            65250
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "serial_recompute",
+      "shape": "b1_hq8_hkv2_sq9_sk33_d64_c1_w17_bias1_sc2p5",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "bf16",
+      "incumbent_route": "serial_recompute",
+      "op": "flash_attn_bwd",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "atomic": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.003094388174460061,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.32350084304669746,
+            0.3265952312211575
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.32350084304669746,
+              0.32140460134323795,
+              0.3325195001756773,
+              0.32594580192350114,
+              0.31892960880499094
+            ],
+            [
+              0.3274861064764293,
+              0.3269508260238682,
+              0.3265952312211575,
+              0.31496794891653057,
+              0.31459584919906225
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              18456250,
+              18578500,
+              18522417,
+              18528542,
+              18517708
+            ],
+            [
+              18641917,
+              18496625,
+              18368041,
+              18353750,
+              18382625
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.0076045722523306655,
+          "speedups_vs_incumbent": [
+            0.3234530802701086,
+            0.3260605560672927
+          ],
+          "times_ns": [
+            18522417,
+            18382625
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "serial_recompute": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              27282000,
+              27377875,
+              27749750,
+              27488208,
+              27189125
+            ],
+            [
+              27719750,
+              27481833,
+              27276375,
+              26792542,
+              26820125
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.00390625,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.00390625,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.003721168960318224,
+          "times_ns": [
+            27377875,
+            27276375
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "split_reduced": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.0008721420644950406,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.4428194413899274,
+            0.44369158345442244
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.4428194413899274,
+              0.44917353885208405,
+              0.44388987288173765,
+              0.44101336107468336,
+              0.44174981725230217
+            ],
+            [
+              0.4485881005420323,
+              0.44369158345442244,
+              0.4511214925003781,
+              0.44258118546571656,
+              0.44291989690577505
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              15201000,
+              15080458,
+              15431917,
+              15365541,
+              15178334
+            ],
+            [
+              15285000,
+              15288375,
+              14971416,
+              14934667,
+              14940958
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                8,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0078125,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                8,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0078125,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.015334822036873466,
+          "speedups_vs_incumbent": [
+            0.4447706405263374,
+            0.4511214925003781
+          ],
+          "times_ns": [
+            15201000,
+            14971416
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "split_reduced",
+      "shape": "b2_hq4_hkv2_sq9_sk33_d64_c1_w0_bias1_sc1p5",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "bf16",
+      "incumbent_route": "serial_recompute",
+      "op": "flash_attn_bwd",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "atomic": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.27900543578404274,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.08349456421595725,
+            -0.3625
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.08109184215183153,
+              -0.366781516967952,
+              -0.0428019561911807,
+              -0.08349456421595725,
+              -0.35837908496732024
+            ],
+            [
+              -0.6206187845303868,
+              -0.4346723608701455,
+              -0.17876121613380958,
+              0.025641683120080003,
+              -0.3625
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              48874,
+              57916,
+              50749,
+              47041,
+              51958
+            ],
+            [
+              73333,
+              64500,
+              54124,
+              37999,
+              54500
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.2
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.07391278645884648,
+          "speedups_vs_incumbent": [
+            -0.16890086604016952,
+            -0.21224253747942523
+          ],
+          "times_ns": [
+            50749,
+            54500
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "serial_recompute": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              45208,
+              42374,
+              48666,
+              43416,
+              38250
+            ],
+            [
+              45250,
+              44958,
+              45916,
+              38999,
+              40000
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.00390625,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.00390625,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.03551686014372581,
+          "times_ns": [
+            43416,
+            44958
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "split_reduced": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.017217300439496375,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.0662198267919661,
+            -0.049002526352469725
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.1640638824986728,
+              0.021617029310426205,
+              0.06764476225701722,
+              -0.0662198267919661,
+              -0.1568627450980392
+            ],
+            [
+              0.005546961325966851,
+              -0.4976867298367365,
+              -0.049002526352469725,
+              -0.33654709095105,
+              -0.021875
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              52625,
+              41458,
+              45374,
+              46291,
+              44250
+            ],
+            [
+              44999,
+              67333,
+              48166,
+              52124,
+              40875
+            ]
+          ],
+          "paired_win_fractions": [
+            0.4,
+            0.2
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                8,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0078125,
+              "threadgroup_memory_bytes": 0
+            },
+            {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 1,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                8,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0078125,
+              "threadgroup_memory_bytes": 0
+            }
+          ],
+          "run_drift_fraction": 0.06153303654075021,
+          "speedups_vs_incumbent": [
+            -0.04509858116823291,
+            -0.07135548734374304
+          ],
+          "times_ns": [
+            45374,
+            48166
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "serial_recompute",
+      "shape": "b2_hq4_hkv2_sq9_sk33_d64_c1_w0_bias1_sc1p5",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    }
+  ],
+  "promotion_rules": {
+    "absolute_time_drift_is_diagnostic_only": true,
+    "maximum_cross_run_drift_fraction": 0.15,
+    "maximum_cross_run_speedup_spread": 0.05,
+    "minimum_paired_win_fraction_each_run": 0.75,
+    "minimum_speedup_fraction_each_run": 0.05,
+    "requires_interleaved_paired_trials": true,
+    "requires_native_dispatch": true,
+    "requires_numerical_validation": true,
+    "requires_repeated_measurement": true,
+    "requires_resource_evidence": true
+  },
+  "report_count": 2,
+  "schema_version": 1,
+  "source_report_schema_version": 1
+}

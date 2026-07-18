@@ -3,7 +3,7 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-07-17
+last_updated: 2026-07-18
 ---
 
 # Apple compiler, exact-device, and performance plan
@@ -321,9 +321,10 @@ remain Apple-owned.
   threadgroup and both match the backend-neutral `FusedRegion` oracle.
   MPSGraph unary and binary epilogue dispatches now use an explicitly owned
   `MPSCommandBuffer` and expose status-returning ABI variants, so native
-  placement is independent of numerical success. MPSGraph may legally call
-  `commitAndContinue`; when that replaces the supplied root command buffer,
-  device timing remains null rather than reporting a partial interval.
+  placement is independent of numerical success. Before the later Metal 4
+  envelope closure below, MPSGraph could legally call `commitAndContinue` and
+  replace the supplied root command buffer, so timing remained null rather
+  than reporting a partial interval.
   `benchmark_epilogue_routes.py` collected two fresh Apple7 runs with seven
   alternating trials of 15 repetitions for aligned `64x64x64`, ragged
   `65x63x67`, and `256x256x256` f32/f16 ReLU plus f32 bias+SiLU. The committed
@@ -338,6 +339,41 @@ remain Apple-owned.
   mixed-dtype or missing-MPSGraph incumbent. NVIDIA and ROCm are not applicable:
   the new ABI and schedule evidence are Apple Metal-only and no shared IR or
   numerical contract changed.
+- **2026-07-18 APPLE-TILE-1 closure:** the shared logical fixture now selects
+  an Apple-owned descriptor and schedule without test-authored physical maps;
+  the selected f16/bf16 fragment path has packing, ragged-edge, resource,
+  provenance, native execute/compare, device-time, and counter-capability
+  evidence. The two-run aligned/ragged corpus retains MPS in every end-to-end
+  row. That measured non-promotion is a valid selector outcome, not unfinished
+  Tile work. **APPLE-TILE-1 is closed.**
+- **2026-07-18 APPLE-GEMM-1 closure:** the paired Apple7 ledger records a
+  stable decision for every measured timing-domain row: three promotions and
+  nineteen incumbent retentions, with no inconclusive rows. Native placement,
+  numerical validation, timing-domain separation, resources, and bounded
+  Instruments compiler/spill evidence are retained. New device families or
+  candidate routes require a new corpus; they do not keep this Apple7 ratchet
+  open. **APPLE-GEMM-1 is closed.**
+- **2026-07-18 APPLE-EPILOGUE-1 closure:** every supported f32/f16/bf16
+  epilogue has native placement, common-oracle, resource, ragged-store, and
+  fallback-negative proof. The two-run Apple7 ledger records stable
+  synthesized-fusion end-to-end wins for all nine comparable rows. Unsupported
+  pairs retain an explicit non-fused route or registered diagnostic.
+  **APPLE-EPILOGUE-1 is closed.**
+- **2026-07-18 MPSGraph device-interval closure:** the telemetry-only Metal 4
+  bracket writes a timestamp before graph execution, makes MPSGraph wait on
+  that event, signals a second event at its documented completed stage, then
+  writes the final timestamp after that signal. It therefore spans every
+  internal `commitAndContinue` root rotation without treating a partial root
+  interval as a graph interval. Unary (including the prior queue-owned
+  epilogue path), binary, row-op, transpose, paged gather, and BSMM now encode
+  through the owned descriptor path. The result is labeled
+  `metal4_mpsgraph_envelope`, deliberately distinct from direct MTL4 encoder
+  timing; without a Metal 4 timestamp heap telemetry stays unavailable rather
+  than fabricated. Fresh exact-device softmax and epilogue smoke evidence has
+  complete MPSGraph interval coverage. The historical Apple7 selector ledger
+  is unchanged: a new two-run corpus is required before any device-domain
+  selector decision can use this new timing domain. NVIDIA and ROCm are not
+  applicable because this is an Apple Metal runtime telemetry path only.
 - **2026-07-17 APPLE-ATTN-FWD-1 placement/resource landing rung:** the f32 and
   f16 online-softmax MSL command buffers now carry stable route labels, retain
   their actual `Sq x B`-derived threadgroup and live pipeline limits, and expose
@@ -434,6 +470,37 @@ remain Apple-owned.
   ring backpressure, cleanup stress, and a paired selector corpus remain open.
   NVIDIA and ROCm are not applicable to these Apple-only runtime ABI changes;
   shared SSM state semantics and numerical policy are unchanged.
+- **2026-07-18 APPLE-PAGED-KV-1 closure:** `ResidentBlockPagedKVCache` now owns
+  one persistent int32 page table per live sequence. Its direct f32 MSL
+  candidate forms rope-key scores and latent values by following that physical
+  table in one dispatch; the staged peer performs two on-GPU non-contiguous
+  gathers plus dense resident attention. Both share the same non-identity
+  oracle, right-aligned or explicit causal offsets, and bounded windows. A
+  failed multi-block reservation is transactional, lifecycle telemetry accounts
+  for live pages/tables/calls, and teardown frees every table and pool. Thirteen
+  focused tests pass on the Apple host, including exact-device direct/staged
+  placement and equivalence. The committed two-run Apple7 corpus covers
+  `127x64x32x1` and `512x128x64x1` with ten measured repetitions after three
+  warmups. Direct wins both runs in both device and end-to-end domains and is
+  promoted only for those exact f32 rows; unmeasured rows retain staged.
+- **2026-07-18 APPLE-REPLAY-1 closure:** the Apple serving handle keeps scalar
+  A, S0, and fixed-capacity delta/x/b/c rings in persistent `DeviceTensor`
+  buffers. Block submissions encode against those buffers, commit without
+  waiting, and rely on ordered Metal command-queue execution. Output slots stay
+  leased until `wait()`, enforce explicit backpressure, reject flush/rollback
+  while submissions are pending, and are drained during idempotent cleanup.
+  Forced flush, ordered multi-block submission, rollback, partial speculative
+  rejection, slot reuse, and cleanup match `SSMStateHandle` in five new
+  exact-device tests; the combined Apple ReplaySSM regression set passes 23
+  tests. Checkpoint folding at flush remains the shared reference fold followed
+  by a write into the resident checkpoint buffer and is labeled as such; the
+  hot replay/read and ring submissions are native. The paired two-run Apple7
+  corpus compares `fused_block` with `resident_ring` at `1x128x64/T16` and
+  `1x256x128/T16`, ten repetitions after three warmups. Fused block is the
+  stable end-to-end winner; the smaller device-domain winner flips between
+  runs and therefore earns no promotion, while the larger row stably retains
+  fused block. NVIDIA and ROCm are not affected: their resident CUDA/HIP
+  contexts and physical schedules remain independently proven.
 - A fallback result can prove semantics, but it cannot prove `native_gpu`, GPU
   residency, Metal ordering, resource lifetime, or performance. Device tests
   must assert their execution state and provenance explicitly.
@@ -446,8 +513,58 @@ remain Apple-owned.
 - The committed Apple hot-path ratchet is predominantly f32 and end-to-end
   wall-clock. It does not yet provide the square/rectangular/ragged/dtype matrix
   or per-candidate GPU-counter/resource evidence now required for CUDA/ROCm.
-- Attention backward does not have a CUDA/ROCm-equivalent native Apple proof.
-  It is an implementation gap, not merely a missing benchmark.
+- Attention backward now has an Apple-owned native proof and stable route
+  ledger; its physical schedules remain independent of CUDA and ROCm.
+- **2026-07-18 APPLE-ATTN-BWD-1 native-candidate foundation:** the Apple
+  runtime now exposes a status-only f32 MHA backward ABI. Two MSL encoders on
+  one labeled command buffer recompute the softmax and produce dQ, dK, and dV
+  with f32 accumulation; each output element owns its reduction, so the route
+  is deterministic and has zero workspace/atomic traffic. Exact-device ragged
+  and causal oracle tests verify all three gradients and repeated launches are
+  bit-identical. The same ABI now owns a zero-workspace atomic dK/dV candidate
+  using relaxed compare/exchange f32 accumulation and a deterministic two-way
+  split candidate using exactly one additional f32 dK+dV partial plus a
+  fixed-order reduction. The policy rejects deterministic atomic requests and
+  insufficient split workspace before dispatch. Exact-device tests cover all
+  three routes on ragged, batched, causal, and noncausal shapes against the same
+  oracle; serial and split repeats are bit-identical, while atomic repeats are
+  validated numerically under its explicitly nondeterministic contract.
+  `benchmark_attention_backward.py` produces paired route rows with warmup
+  separation, per-trial GPU/end-to-end medians, resources, workspace policy,
+  and per-gradient error. Two Apple7 smoke collections each have twelve native,
+  numerically valid rows and complete device-time coverage. Atomic wins every
+  end-to-end row on this small foundation matrix; device-interval winners vary
+  by row and run, so no timing domain is collapsed into another and `auto`
+  remains on serial recompute. This is not yet a selector corpus: GQA/MQA,
+  bias, softcap/window, f16/bf16 storage, workspace caps, wider and long-context
+  shapes, and a committed stable selection corpus remain active. NVIDIA
+  and ROCm are not applicable: the shared derivative semantics are unchanged
+  and no CUDA/ROCm schedule is transferred.
+- **2026-07-18 APPLE-ATTN-BWD-1 closure:** all three candidates now use
+  query-streaming softmax/dP work rather than recomputing one softmax per output
+  element. Atomic work owns one query row and confines contention to final
+  dK/dV updates; serial gives one deterministic owner each KV head; split gives
+  two deterministic owners one exact additional f32 dK+dV footprint and then
+  reduces in fixed order. The status ABI shares forward's flattened-head
+  MHA/GQA/MQA mapping, right-aligned causal and sliding-window masks, additive
+  bias, and correctly differentiated logit softcap. Legacy rectangular causal
+  callers retain their original zero-offset triangle. Native f16 and bf16
+  inputs are read directly from two-byte Metal storage; dQ/dK/dV accumulate and
+  return f32. Exact-device tests cover every route and dtype, batched/ragged
+  MHA, GQA, MQA, bias, causal/noncausal windows, softcap, invalid-route
+  rejection, deterministic repeats, and workspace limits.
+  Two independent Apple7 reports contain 18 native, numerically valid, fully
+  device-timed rows each. The committed
+  `benchmarks/baselines/apple7_attention_backward_route_ledger.json` contains
+  twelve timing-domain decisions. End-to-end selection promotes split-reduce
+  for four rows, including causal `Sk=1025`, and atomic for two rows; paired
+  median wins range from 27.8% to 67.3%, with 100% trial wins in both reports.
+  Every device-interval row retains serial recompute. Production lookup is
+  exact-device/shape/dtype/domain keyed, falls back to serial for missing rows,
+  rejects atomic when determinism is required, and falls back from split when
+  its workspace cap is unavailable. **APPLE-ATTN-BWD-1 is closed.** NVIDIA and
+  ROCm are not applicable to the Apple ABI, storage readers, schedules, or
+  selector rows; shared derivative semantics remain unchanged.
 - FP8/FP4/MX execution remains gated by the macOS 27 SDK/runtime surface. The
   compiler-side scale-layout and multi-plane contracts already exist; do not
   claim hardware execution until the public Metal tensor path runs natively.
@@ -604,13 +721,13 @@ implementation/proof work; `blocked` names an external prerequisite.
 | 2 | APPLE-CI-2 | landing | The host-free compiler ownership gate is executable and green for the declared Apple capability set. Retain it as the Apple compiler configuration changes. |
 | 3 | APPLE-TEST-2 | **closed** | Fresh-runtime correctness (**850/850**), fallback-injection negatives, ordering/stress, and the serial measured lane are complete. |
 | 4 | APPLE-REG-1 | **closed** | ABI/target-map/exact-device/Tile drift gates are registered and passing. |
-| 5 | APPLE-TILE-1 | landing | Descriptor, resource contract, f16/bf16 native simdgroup execution, ragged proof, provenance, device timing, counters, and the two-run corpus landed. Keep MPS as production until a broader corpus earns the explicit promotion threshold. |
-| 6 | APPLE-GEMM-1 | landing | Capture telemetry, paired stable selection, and Metal trace/counter evidence landed; the Apple7 ledger has three timing-domain promotions. Extend only for new device families or candidate routes. |
-| 7 | APPLE-EPILOGUE-1 | landing | Native f32/f16/bf16 correctness/resource proof and stable fused end-to-end wins landed. Expand the comparable candidate matrix only when a semantically equivalent incumbent exists. |
+| 5 | APPLE-TILE-1 | **closed** | The selected f16/bf16 simdgroup fragment and its two-run corpus meet the completion gate. MPS retaining every measured end-to-end row is the valid production decision. |
+| 6 | APPLE-GEMM-1 | **closed** | The Apple7 paired ledger has stable decisions for every measured row: three promotions and nineteen incumbent retentions. New devices/routes require a new corpus. |
+| 7 | APPLE-EPILOGUE-1 | **closed** | Supported f32/f16/bf16 fusions have native-oracle/resource proof and stable end-to-end selection; MPSGraph now has an explicitly labeled Metal 4 whole-graph envelope, pending a fresh two-run device-domain corpus. |
 | 8 | APPLE-ATTN-FWD-1 | **closed** | Native forward variants, resident/cooperative candidates, full stated corpus, two-run route ledger, and timing-domain selection are complete. Do not reopen it for backward work. |
-| 9 | APPLE-ATTN-BWD-1 | **active** | Implement and prove native dQ/dK/dV: atomics versus split-reduce workspace, determinism/workspace policy, shared-oracle gradients, and selected-route measurements. |
-| 10 | APPLE-PAGED-KV-1 | **active** | Staged non-contiguous gather has provenance and lifecycle coverage. Add direct resident page-table attention, causal/boundary stress, leak telemetry, and two-domain comparison. |
-| 11 | APPLE-REPLAY-1 | **active** | Native block/replay correctness, resources, and timing landed. Add resident-input serving, flush/rejection/block-submit ordering, ring backpressure/cleanup stress, and a paired selector corpus. |
+| 9 | APPLE-ATTN-BWD-1 | **closed** | Native f32/f16/bf16 MHA/GQA/MQA serial, atomic, and split-reduce routes share one oracle and explicit workspace/determinism policy. The stable two-run Apple7 ledger selects end-to-end routes per exact row and retains serial for every device-domain row. |
+| 10 | APPLE-PAGED-KV-1 | **closed** | Direct resident page-table MLA attention and the staged peer share a non-identity oracle, causal/window boundary proof, transactional exhaustion/leak telemetry, and a paired two-domain Apple7 corpus. Exact retained rows promote direct; unmeasured rows retain staged. |
+| 11 | APPLE-REPLAY-1 | **closed** | Resident inputs, ordered asynchronous ring submissions, forced flush/rollback/partial-rejection ordering, backpressure/cleanup stress, and paired selector evidence are complete. Unstable device-domain evidence retains the fused-block incumbent. |
 | 12 | APPLE-RETUNE-1 | **active** | Retune the remaining older GEMM/grouped-GEMM, KV, MoE, reduction, and decode routes with separate kernel and end-to-end evidence. |
 | 13 | APPLE-ROUTE-1 | **active** | Consolidate the landed per-family ledgers into device-keyed autotuning; reject stale, reference, wrong-device, and wrong-domain records. |
 | 14 | APPLE-DTYPE-1 | **blocked — SDK** | FP8/FP4/MX native execution awaits the public macOS 27 Metal tensor path. Keep older-host int4/int8/f16/bf16 regression coverage. |
@@ -704,10 +821,11 @@ or OMMA mapping applies to Metal.
 Cross-backend sync `EPILOGUE-CONTRACT-2026-07-16`: the shared `FusedRegion`
 oracle now names bias/activation/residual order and emits registered
 `E_FUSED_EPILOGUE_*` rejection diagnostics. Apple retains its architecture-owned
-MSL/Metal 4 schedules. NVIDIA now validates the complete 43-case supported
-execution matrix, but that CUDA result does not transfer: APPLE-EPILOGUE-1 must
-validate the same semantic order, dtype matrix, residual guards, and diagnostics
-on its exact Metal host before claiming parity.
+MSL/Metal 4 schedules. NVIDIA validates the complete 43-case supported
+execution matrix; Apple independently validated its supported semantic order,
+dtype matrix, residual guards, and diagnostics on the exact Metal host before
+closing APPLE-EPILOGUE-1. The schedules and exact-device claims remain
+architecture-specific.
 
 Cross-backend sync `PR420-REVIEW-2026-07-17`: not applicable to Apple compiler
 or runtime behavior. The scale-origin repair and canonical `fp16` alias are

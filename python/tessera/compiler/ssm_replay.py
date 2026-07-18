@@ -117,6 +117,8 @@ _MAMBA2_KERNELS = (
                  "tessera_apple_gpu_ssm_block_decode_f32", "fused"),
     ReplayKernel("mamba2", ROUTE_BLOCK, "metal_fused_f16",
                  "tessera_apple_gpu_ssm_block_decode_f16", "fused"),
+    ReplayKernel("mamba2", ROUTE_BLOCK, "metal_resident_ring",
+                 "tessera_apple_gpu_ssm_replay_decode_dev_f32_enc", "fused"),
 )
 
 _GDN_KERNELS = (
@@ -151,6 +153,22 @@ def kernel_for(family: str, route: str, backend: str) -> ReplayKernel | None:
     return REPLAYSSM_KERNELS.get((family, route, backend))
 
 
+def select_apple_serving_route(
+    batch: int, num_channels: int, state_dim: int, tokens: int, *,
+    dtype: str = "f32", timing_domain: str = "end_to_end",
+    device: str | None = None,
+) -> str:
+    """Exact-row Apple serving choice from the retained paired corpus."""
+    if min(batch, num_channels, state_dim, tokens) <= 0:
+        raise ValueError("ReplaySSM serving geometry must be positive")
+    from .apple_route_selector import production_route_for
+    return production_route_for(
+        op="resident_replay",
+        shape=f"{batch}x{num_channels}x{state_dim}_t{tokens}",
+        dtype=dtype, incumbent_route="fused_block", device=device,
+        timing_domain=timing_domain)
+
+
 __all__ = [
     "ROUTE_SUMMARY",
     "ROUTE_OUTPUT_ONLY",
@@ -163,4 +181,5 @@ __all__ = [
     "ReplayKernel",
     "REPLAYSSM_KERNELS",
     "kernel_for",
+    "select_apple_serving_route",
 ]

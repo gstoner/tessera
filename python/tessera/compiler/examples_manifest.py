@@ -101,7 +101,8 @@ _ENTRIES: tuple[ExampleEntry, ...] = (
         command=(
             "PYTHONPATH=python:examples/getting_started/tessera_flash_attention_demo "
             "python examples/getting_started/tessera_flash_attention_demo/examples/"
-            "flash_attention_demo.py"
+            "flash_attention_demo.py --batch 1 --heads 2 --seq 32 --dim 16 "
+            "--dtype f32 --device cpu --iters 1"
         ),
         extras_required=("torch",),
         notes="Cross-checks Tessera vs. PyTorch reference attention.",

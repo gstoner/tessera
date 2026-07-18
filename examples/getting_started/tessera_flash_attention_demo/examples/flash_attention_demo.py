@@ -99,7 +99,7 @@ def dump_all_irs(func_obj, sample_args, sample_kwargs):
 
 # ---- Tessera wrapper (best-effort) ----------------------------------------
 if TESSERA_AVAILABLE:
-    @tsr.function  # type: ignore
+    @tsr.jit  # type: ignore
     def flash_attn_tessera(q, k, v, causal: bool = False):
         # Expect Tessera tensors or adapters; if given torch, user should wrap beforehand.
         # Using hypothetical API tsr.nn.flash_attention; adjust if your build differs.

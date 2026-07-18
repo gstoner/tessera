@@ -61,6 +61,17 @@ def test_distinct_ops_same_shape_compile_separately():
 def test_cache_size_and_clear():
     jb.clear_cache()
     assert jb.cache_size() == 0
+
+
+def test_cache_evicts_unused_lru_handles(monkeypatch):
+    jb.clear_cache()
+    monkeypatch.setattr(jb, "_CACHE_CAPACITY", 2)
+    try:
+        for n in (2, 3, 4):
+            jb.jit_add(np.ones((n,), np.float32), np.ones((n,), np.float32))
+        assert jb.cache_size() == 2
+    finally:
+        jb.clear_cache()
     jb.jit_add(np.ones((5,), np.float32), np.ones((5,), np.float32))
     jb.jit_mul(np.ones((5,), np.float32), np.ones((5,), np.float32))
     assert jb.cache_size() == 2

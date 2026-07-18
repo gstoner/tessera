@@ -171,6 +171,7 @@ struct MetalDeviceContext {
   id        mtl4_cmdbuf;      // id<MTL4CommandBuffer>
   id        mtl4_argtable;    // id<MTL4ArgumentTable> (maxBufferBindCount = 8)
   id        mtl4_event;       // id<MTLSharedEvent>
+  id        mtl4_timestamp_heap; // id<MTL4CounterHeap>, capture-gated
   // Reusable per-dispatch residency set — repopulated each call (removeAll +
   // addAllocation + commit + requestResidency) and attached to the command
   // buffer via `useResidencySet:` (per-cmdbuf, the granular intended path), so we
@@ -606,7 +607,121 @@ inline void reference_gemm_f32(const float* A, const float* B, float* C,
 namespace {
 thread_local int32_t g_last_gpu_error_kind = 0;
 thread_local std::string g_last_gpu_error_msg;
+thread_local int64_t g_last_tile_device_time_ns = -1;
+thread_local int64_t g_last_tile_counter_delta = -1;
+std::atomic<bool> g_dispatch_telemetry_enabled{false};
+thread_local int64_t g_last_dispatch_device_time_ns = -1;
+thread_local int64_t g_last_dispatch_counter_delta = -1;
+thread_local int32_t g_last_dispatch_counter_supported = -1;
+thread_local int32_t g_last_dispatch_timing_source = 0;
+thread_local int32_t g_last_dispatch_tpg_x = -1;
+thread_local int32_t g_last_dispatch_tpg_y = -1;
+thread_local int32_t g_last_dispatch_tpg_z = -1;
+thread_local int32_t g_last_dispatch_execution_width = -1;
+thread_local int32_t g_last_dispatch_max_threads = -1;
+thread_local int64_t g_last_dispatch_static_tg_memory = -1;
 }  // namespace
+
+static void ts_clear_dispatch_telemetry(void) {
+  g_last_dispatch_device_time_ns = -1;
+  g_last_dispatch_counter_delta = -1;
+  g_last_dispatch_counter_supported = -1;
+  g_last_dispatch_timing_source = 0;
+  g_last_dispatch_tpg_x = -1;
+  g_last_dispatch_tpg_y = -1;
+  g_last_dispatch_tpg_z = -1;
+  g_last_dispatch_execution_width = -1;
+  g_last_dispatch_max_threads = -1;
+  g_last_dispatch_static_tg_memory = -1;
+}
+
+extern "C" void tessera_apple_gpu_dispatch_telemetry_set_enabled(int32_t enabled) {
+  g_dispatch_telemetry_enabled.store(enabled != 0, std::memory_order_relaxed);
+  ts_clear_dispatch_telemetry();
+}
+extern "C" int32_t tessera_apple_gpu_dispatch_telemetry_enabled(void) {
+  return g_dispatch_telemetry_enabled.load(std::memory_order_relaxed) ? 1 : 0;
+}
+extern "C" void tessera_apple_gpu_dispatch_telemetry_clear(void) {
+  ts_clear_dispatch_telemetry();
+}
+extern "C" int64_t tessera_apple_gpu_last_dispatch_device_time_ns(void) {
+  return g_last_dispatch_device_time_ns;
+}
+extern "C" int64_t tessera_apple_gpu_last_dispatch_counter_delta(void) {
+  return g_last_dispatch_counter_delta;
+}
+extern "C" int32_t tessera_apple_gpu_last_dispatch_counter_supported(void) {
+  return g_last_dispatch_counter_supported;
+}
+extern "C" int32_t tessera_apple_gpu_last_dispatch_timing_source(void) {
+  return g_last_dispatch_timing_source;
+}
+extern "C" int32_t tessera_apple_gpu_last_dispatch_resource_record(
+    int32_t *tpg_x, int32_t *tpg_y, int32_t *tpg_z,
+    int32_t *execution_width, int32_t *max_threads,
+    int64_t *static_threadgroup_memory_bytes) {
+  if (tpg_x) *tpg_x = g_last_dispatch_tpg_x;
+  if (tpg_y) *tpg_y = g_last_dispatch_tpg_y;
+  if (tpg_z) *tpg_z = g_last_dispatch_tpg_z;
+  if (execution_width) *execution_width = g_last_dispatch_execution_width;
+  if (max_threads) *max_threads = g_last_dispatch_max_threads;
+  if (static_threadgroup_memory_bytes)
+    *static_threadgroup_memory_bytes = g_last_dispatch_static_tg_memory;
+  return g_last_dispatch_tpg_x >= 0 ? 1 : 0;
+}
+
+// APPLE-GEMM-1 profiling capability matrix. These bits describe evidence the
+// public Metal runtime can genuinely expose on this exact device; absent bits
+// must remain unavailable in benchmark records rather than being inferred.
+//   0: compiled-pipeline limits (execution width/max threads/static TG memory)
+//   1: timestamp counter set
+//   2: statistic counter set
+//   3: stage-utilization counter set
+//   4: dispatch-boundary counter sampling
+//   5: stage-boundary counter sampling
+//   6: Metal 4 timestamp heap
+// Public Metal exposes no register-count, scratch-byte, spill-count, or true
+// occupancy query, so those intentionally have no capability bit.
+extern "C" int32_t tessera_apple_gpu_profiling_capabilities(void) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !ctx.device) return 0;
+  int32_t caps = 1 << 0;
+  for (id<MTLCounterSet> set in ctx.device.counterSets) {
+    if ([set.name isEqualToString:MTLCommonCounterSetTimestamp])
+      caps |= 1 << 1;
+    else if ([set.name isEqualToString:MTLCommonCounterSetStatistic])
+      caps |= 1 << 2;
+    else if ([set.name isEqualToString:MTLCommonCounterSetStageUtilization])
+      caps |= 1 << 3;
+  }
+  if ([ctx.device supportsCounterSampling:MTLCounterSamplingPointAtDispatchBoundary])
+    caps |= 1 << 4;
+  if ([ctx.device supportsCounterSampling:MTLCounterSamplingPointAtStageBoundary])
+    caps |= 1 << 5;
+  if (@available(macOS 26.0, iOS 26.0, *)) {
+    MTL4CounterHeapDescriptor *desc = [[MTL4CounterHeapDescriptor alloc] init];
+    desc.type = MTL4CounterHeapTypeTimestamp;
+    desc.count = 2;
+    if ([ctx.device newCounterHeapWithDescriptor:desc error:nil]) caps |= 1 << 6;
+  }
+  return caps;
+}
+
+static void ts_record_pipeline_resources(id<MTLComputePipelineState> pso,
+                                         MTLSize tpg,
+                                         NSUInteger dynamic_tg_memory = 0) {
+  if (!g_dispatch_telemetry_enabled.load(std::memory_order_relaxed) || !pso)
+    return;
+  g_last_dispatch_tpg_x = static_cast<int32_t>(tpg.width);
+  g_last_dispatch_tpg_y = static_cast<int32_t>(tpg.height);
+  g_last_dispatch_tpg_z = static_cast<int32_t>(tpg.depth);
+  g_last_dispatch_execution_width = static_cast<int32_t>(pso.threadExecutionWidth);
+  g_last_dispatch_max_threads =
+      static_cast<int32_t>(pso.maxTotalThreadsPerThreadgroup);
+  g_last_dispatch_static_tg_memory =
+      static_cast<int64_t>(pso.staticThreadgroupMemoryLength + dynamic_tg_memory);
+}
 
 static void ts_set_last_gpu_error(int32_t kind, const char *op_name,
                                   const char *detail) {
@@ -628,6 +743,80 @@ extern "C" const char *tessera_apple_gpu_last_error_message(void) {
 extern "C" void tessera_apple_gpu_clear_last_error(void) {
   g_last_gpu_error_kind = 0;
   g_last_gpu_error_msg.clear();
+}
+
+extern "C" int64_t tessera_apple_gpu_tile_last_device_time_ns(void) {
+  return g_last_tile_device_time_ns;
+}
+extern "C" int64_t tessera_apple_gpu_tile_last_counter_delta(void) {
+  return g_last_tile_counter_delta;
+}
+extern "C" int32_t tessera_apple_gpu_tile_counter_sampling_supported(void) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || ![ctx.device supportsCounterSampling:MTLCounterSamplingPointAtDispatchBoundary])
+    return 0;
+  for (id<MTLCounterSet> set in ctx.device.counterSets)
+    if ([set.name isEqualToString:MTLCommonCounterSetTimestamp]) return 1;
+  return 0;
+}
+
+static void ts_record_tile_gpu_elapsed(id<MTLCommandBuffer> cb) {
+  // kernelStart/End are the completed compute-kernel interval. GPUStart/End
+  // describe the broader command-buffer scheduling interval and are allowed to
+  // be zero on this driver, so use them only as a fallback.
+  NSTimeInterval start = cb.kernelStartTime;
+  NSTimeInterval end = cb.kernelEndTime;
+  if (!(end >= start && end > 0.0)) {
+    start = cb.GPUStartTime;
+    end = cb.GPUEndTime;
+  }
+  g_last_tile_device_time_ns = (end >= start && end > 0.0)
+      ? static_cast<int64_t>((end - start) * 1.0e9)
+      : -1;
+  if (g_dispatch_telemetry_enabled.load(std::memory_order_relaxed)) {
+    g_last_dispatch_device_time_ns = g_last_tile_device_time_ns;
+    g_last_dispatch_timing_source = g_last_tile_device_time_ns >= 0 ? 1 : 0;
+  }
+}
+
+static void ts_record_dispatch_gpu_elapsed(id<MTLCommandBuffer> cb) {
+  if (!g_dispatch_telemetry_enabled.load(std::memory_order_relaxed)) return;
+  NSTimeInterval start = cb.kernelStartTime;
+  NSTimeInterval end = cb.kernelEndTime;
+  int32_t source = 1;
+  if (!(end >= start && end > 0.0)) {
+    start = cb.GPUStartTime;
+    end = cb.GPUEndTime;
+    source = 2;
+  }
+  g_last_dispatch_device_time_ns = (end >= start && end > 0.0)
+      ? static_cast<int64_t>((end - start) * 1.0e9)
+      : -1;
+  g_last_dispatch_timing_source = g_last_dispatch_device_time_ns >= 0 ? source : 0;
+}
+
+static id<MTLCounterSampleBuffer> ts_make_tile_timestamp_samples(MetalDeviceContext &ctx) {
+  if (!tessera_apple_gpu_tile_counter_sampling_supported()) return nil;
+  id<MTLCounterSet> timestampSet = nil;
+  for (id<MTLCounterSet> set in ctx.device.counterSets)
+    if ([set.name isEqualToString:MTLCommonCounterSetTimestamp]) { timestampSet = set; break; }
+  if (!timestampSet) return nil;
+  MTLCounterSampleBufferDescriptor *desc = [MTLCounterSampleBufferDescriptor new];
+  desc.counterSet = timestampSet;
+  desc.storageMode = MTLStorageModeShared;
+  desc.sampleCount = 2;
+  NSError *error = nil;
+  return [ctx.device newCounterSampleBufferWithDescriptor:desc error:&error];
+}
+
+static void ts_record_tile_counter_delta(id<MTLCounterSampleBuffer> samples) {
+  g_last_tile_counter_delta = -1;
+  if (!samples) return;
+  NSData *data = [samples resolveCounterRange:NSMakeRange(0, 2)];
+  if (!data || data.length < sizeof(MTLCounterResultTimestamp) * 2) return;
+  const auto *values = static_cast<const MTLCounterResultTimestamp *>(data.bytes);
+  if (values[1].timestamp >= values[0].timestamp)
+    g_last_tile_counter_delta = static_cast<int64_t>(values[1].timestamp - values[0].timestamp);
 }
 
 // Apple-sample Pattern 4 (2026-05-31) — Shared-event timeout wrapper for
@@ -653,6 +842,8 @@ static bool commit_and_wait_with_timeout(MetalDeviceContext &ctx,
                                          uint64_t timeout_ms,
                                          const char *op_name) {
   if (!cb) return false;
+  if (g_dispatch_telemetry_enabled.load(std::memory_order_relaxed))
+    ts_clear_dispatch_telemetry();
   // Lazy-init the shared event under the dedicated lock.
   id<MTLSharedEvent> ev;
   uint64_t signal_val;
@@ -666,6 +857,7 @@ static bool commit_and_wait_with_timeout(MetalDeviceContext &ctx,
         // No timeout protection, but at least correct.
         [cb commit];
         [cb waitUntilCompleted];
+        ts_record_dispatch_gpu_elapsed(cb);
         return cb.status == MTLCommandBufferStatusCompleted;
       }
     }
@@ -711,6 +903,54 @@ static bool commit_and_wait_with_timeout(MetalDeviceContext &ctx,
                           [[cb.error localizedDescription] UTF8String]);
     return false;
   }
+  ts_record_dispatch_gpu_elapsed(cb);
+  return true;
+}
+
+// Commit an explicitly-owned MPSGraph command buffer while retaining honest
+// whole-dispatch timing. MPSGraph is permitted to call commitAndContinue while
+// encoding and replace the wrapper's underlying Metal command buffer. The live
+// root is always the correct object to commit/wait, but its GPU timestamps only
+// cover the complete graph when it is still the command buffer we supplied.
+// In the auto-flush case correctness is preserved and telemetry remains
+// unavailable instead of reporting a partial interval as a whole dispatch.
+API_AVAILABLE(macos(10.15), ios(13.0))
+static bool commit_mpsgraph_and_wait_with_timeout(
+    MetalDeviceContext &ctx, MPSCommandBuffer *mps_cb,
+    id<MTLCommandBuffer> original_cb, uint64_t timeout_ms,
+    const char *op_name) {
+  if (!mps_cb) return false;
+  if (g_dispatch_telemetry_enabled.load(std::memory_order_relaxed))
+    ts_clear_dispatch_telemetry();
+  id<MTLCommandBuffer> root = mps_cb.rootCommandBuffer;
+  if (!root) return false;
+  const bool owns_whole_dispatch = root == original_cb;
+
+  id<MTLSharedEvent> ev = nil;
+  uint64_t signal_val = 0;
+  {
+    std::lock_guard<std::mutex> lock(ctx.legacy_event_mu);
+    if (!ctx.legacy_event) ctx.legacy_event = [ctx.device newSharedEvent];
+    ev = (id<MTLSharedEvent>)ctx.legacy_event;
+    if (ev) signal_val = ++ctx.legacy_event_val;
+  }
+  if (ev) [root encodeSignalEvent:ev value:signal_val];
+  [mps_cb commit];
+  if (ev) {
+    if (![ev waitUntilSignaledValue:signal_val timeoutMS:timeout_ms]) {
+      ts_set_last_gpu_error(1, op_name,
+                            "MPSGraph dispatch did not signal (hung/timed out); outputs are invalid");
+      return false;
+    }
+  } else {
+    [root waitUntilCompleted];
+  }
+  if (root.error != nil) {
+    ts_set_last_gpu_error(2, op_name,
+                          [[root.error localizedDescription] UTF8String]);
+    return false;
+  }
+  if (owns_whole_dispatch) ts_record_dispatch_gpu_elapsed(root);
   return true;
 }
 
@@ -765,6 +1005,7 @@ bool dispatch_mps_gemm_f32(MetalDeviceContext &ctx, const float* A,
                   beta:0.0];
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    cb.label = @"tessera.gemm.mps.f32";
     [kernel encodeToCommandBuffer:cb
                        leftMatrix:matA
                       rightMatrix:matB
@@ -777,7 +1018,7 @@ bool dispatch_mps_gemm_f32(MetalDeviceContext &ctx, const float* A,
     bool ok = commit_and_wait_with_timeout(ctx, cb, /*timeout_ms=*/30000,
                                             "mps_gemm_f32");
     if (!ok) return false;
-
+    ts_record_tile_gpu_elapsed(cb);
     std::memcpy(C, [bufC contents], byteCountC);
     return true;
   }
@@ -1340,6 +1581,7 @@ bool dispatch_mps_gemm_f16(MetalDeviceContext &ctx, const uint16_t* A,
                   beta:0.0];
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    cb.label = @"tessera.gemm.mps.f16";
     [kernel encodeToCommandBuffer:cb
                        leftMatrix:matA
                       rightMatrix:matB
@@ -1348,6 +1590,7 @@ bool dispatch_mps_gemm_f16(MetalDeviceContext &ctx, const uint16_t* A,
     // wrapper so a hung f16 GEMM doesn't deadlock the test runner.
     if (!commit_and_wait_with_timeout(ctx, cb, 30000,
                                       "mps_gemm_f16")) return false;
+    ts_record_tile_gpu_elapsed(cb);
     std::memcpy(C, [bufC contents], byteCountC);
     return true;
   }
@@ -1418,6 +1661,27 @@ extern "C" void tessera_apple_gpu_mps_matmul_bf16(const uint16_t* A,
   MetalDeviceContext &ctx = deviceContext();
   if (ctx.ok && dispatch_mps_gemm_bf16_via_fp32(ctx, A, B, C, M, N, K)) return;
   reference_gemm_bf16_via_fp32(A, B, C, M, N, K);
+}
+
+// Status-bearing comparison ABI for TILE-1 characterization.  The legacy
+// void ABI remains source-compatible; benchmark rows use these functions so a
+// CPU reference fallback can never be reported as an MPS measurement.
+extern "C" int32_t tessera_apple_gpu_mps_matmul_f16_status(
+    const uint16_t* A, const uint16_t* B, uint16_t* C,
+    int32_t M, int32_t N, int32_t K) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_mps_gemm_f16(ctx, A, B, C, M, N, K)) return 1;
+  reference_gemm_f16_via_fp32(A, B, C, M, N, K);
+  return 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_mps_matmul_bf16_status(
+    const uint16_t* A, const uint16_t* B, uint16_t* C,
+    int32_t M, int32_t N, int32_t K) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_mps_gemm_bf16_via_fp32(ctx, A, B, C, M, N, K)) return 1;
+  reference_gemm_bf16_via_fp32(A, B, C, M, N, K);
+  return 0;
 }
 
 //===---------------------------------------------------------------------===//
@@ -3604,6 +3868,33 @@ static void mtl4_ensure_dispatch_objects(MetalDeviceContext &ctx) {
     ctx.mtl4_residency = [dev newResidencySetWithDescriptor:
         [[MTLResidencySetDescriptor alloc] init] error:nil];
   }
+  if (g_dispatch_telemetry_enabled.load(std::memory_order_relaxed) &&
+      !ctx.mtl4_timestamp_heap) {
+    MTL4CounterHeapDescriptor *desc = [[MTL4CounterHeapDescriptor alloc] init];
+    desc.type = MTL4CounterHeapTypeTimestamp;
+    desc.count = 2;
+    ctx.mtl4_timestamp_heap = [dev newCounterHeapWithDescriptor:desc error:nil];
+  }
+}
+
+API_AVAILABLE(macos(26.0), ios(26.0))
+static void mtl4_record_dispatch_telemetry(MetalDeviceContext &ctx,
+                                           id<MTL4CounterHeap> heap) {
+  if (!g_dispatch_telemetry_enabled.load(std::memory_order_relaxed)) return;
+  g_last_dispatch_counter_supported = heap ? 1 : 0;
+  if (!heap) return;
+  NSData *data = [heap resolveCounterRange:NSMakeRange(0, 2)];
+  if (!data || data.length < sizeof(MTL4TimestampHeapEntry) * 2) return;
+  const auto *values = static_cast<const MTL4TimestampHeapEntry *>(data.bytes);
+  if (values[1].timestamp < values[0].timestamp) return;
+  const uint64_t delta = values[1].timestamp - values[0].timestamp;
+  const uint64_t frequency = [ctx.device queryTimestampFrequency];
+  g_last_dispatch_counter_delta = static_cast<int64_t>(delta);
+  if (frequency == 0) return;
+  g_last_dispatch_device_time_ns = static_cast<int64_t>(
+      (static_cast<long double>(delta) * 1.0e9L) /
+      static_cast<long double>(frequency));
+  g_last_dispatch_timing_source = g_last_dispatch_device_time_ns >= 0 ? 3 : 0;
 }
 
 // Repopulate the reusable residency set with `count` allocations and make them
@@ -3632,15 +3923,33 @@ static bool mtl4_encode_and_wait(MetalDeviceContext &ctx, id<MTL4CommandQueue> q
                                  id<MTLComputePipelineState> pso,
                                  void (^bind)(id<MTL4ArgumentTable>),
                                  MTLSize grid, MTLSize tpg,
-                                 id<MTLResidencySet> res = nil) {
+                                 id<MTLResidencySet> res = nil,
+                                 NSString *label = nil) {
   mtl4_ensure_dispatch_objects(ctx);
   id<MTL4CommandAllocator> alloc = (id<MTL4CommandAllocator>)ctx.mtl4_allocator;
   id<MTL4CommandBuffer> cb = (id<MTL4CommandBuffer>)ctx.mtl4_cmdbuf;
   id<MTL4ArgumentTable> at = (id<MTL4ArgumentTable>)ctx.mtl4_argtable;
   id<MTLSharedEvent> ev = (id<MTLSharedEvent>)ctx.mtl4_event;
   if (!alloc || !cb || !at || !ev) return false;
+  const bool captureTelemetry =
+      g_dispatch_telemetry_enabled.load(std::memory_order_relaxed);
+  if (captureTelemetry)
+    ts_clear_dispatch_telemetry();
+  id<MTL4CounterHeap> timestampHeap = captureTelemetry
+      ? (id<MTL4CounterHeap>)ctx.mtl4_timestamp_heap : nil;
+  if (timestampHeap) [timestampHeap invalidateCounterRange:NSMakeRange(0, 2)];
+  if (captureTelemetry) {
+    g_last_dispatch_tpg_x = static_cast<int32_t>(tpg.width);
+    g_last_dispatch_tpg_y = static_cast<int32_t>(tpg.height);
+    g_last_dispatch_tpg_z = static_cast<int32_t>(tpg.depth);
+    g_last_dispatch_execution_width = static_cast<int32_t>(pso.threadExecutionWidth);
+    g_last_dispatch_max_threads = static_cast<int32_t>(pso.maxTotalThreadsPerThreadgroup);
+    g_last_dispatch_static_tg_memory =
+        static_cast<int64_t>(pso.staticThreadgroupMemoryLength);
+  }
   bind(at);
   [alloc reset];
+  cb.label = label;
   [cb beginCommandBufferWithAllocator:alloc];
   // Per-command-buffer residency (granular intended path) — keeps `res`'s
   // allocations resident for this dispatch without queue-level add/remove churn.
@@ -3648,14 +3957,22 @@ static bool mtl4_encode_and_wait(MetalDeviceContext &ctx, id<MTL4CommandQueue> q
   id<MTL4ComputeCommandEncoder> enc = [cb computeCommandEncoder];
   [enc setComputePipelineState:pso];
   [enc setArgumentTable:at];
+  if (timestampHeap)
+    [enc writeTimestampWithGranularity:MTL4TimestampGranularityPrecise
+                              intoHeap:timestampHeap atIndex:0];
   [enc dispatchThreadgroups:grid threadsPerThreadgroup:tpg];
+  if (timestampHeap)
+    [enc writeTimestampWithGranularity:MTL4TimestampGranularityPrecise
+                              intoHeap:timestampHeap atIndex:1];
   [enc endEncoding];
   [cb endCommandBuffer];
   const id<MTL4CommandBuffer> cbs[1] = {cb};
   [queue commit:cbs count:1];
   uint64_t v = ++ctx.mtl4_event_val;
   [queue signalEvent:ev value:v];
-  return [ev waitUntilSignaledValue:v timeoutMS:10000];
+  const bool done = [ev waitUntilSignaledValue:v timeoutMS:10000];
+  if (done) mtl4_record_dispatch_telemetry(ctx, timestampHeap);
+  return done;
 }
 
 // MSL source for f32 RoPE — lifted to namespace scope so both the
@@ -3898,6 +4215,7 @@ bool dispatch_ssm_replay_decode_msl(
       return false;
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    cb.label = @"tessera.replay.output_only.f32";
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
     [enc setComputePipelineState:pso];
     [enc setBuffer:bufDelta offset:0 atIndex:0];
@@ -3919,6 +4237,7 @@ bool dispatch_ssm_replay_decode_msl(
     [enc endEncoding];
     if (!commit_and_wait_with_timeout(ctx, cb, 30000,
                                       "ssm_replay_decode_f32")) return false;
+    ts_record_pipeline_resources(pso, MTLSizeMake(tg, 1, 1));
     std::memcpy(out, [bufO contents], bd);
     return true;
   }
@@ -3928,15 +4247,18 @@ bool dispatch_ssm_replay_decode_msl(
 
 // Fused output-only ReplaySSM decode (scalar-A, f32).  Buffers: delta (M,B,D),
 // x (M,B,D), b (M,B,N), s0 (B,D,N), c (B,N), a (D,), out (B,D).
-extern "C" void tessera_apple_gpu_ssm_replay_decode_f32(
+// Returns 1 only when the Metal dispatch completed.  The numerical host
+// reference has the same ABI and must never earn an exact-device proof.
+extern "C" int32_t tessera_apple_gpu_ssm_replay_decode_f32(
     const float* delta, const float* xin, const float* bin, const float* s0,
     const float* cin, const float* a, float* out,
     int32_t B, int32_t D, int32_t N, int32_t M) {
   MetalDeviceContext &ctx = deviceContext();
   if (ctx.ok && dispatch_ssm_replay_decode_msl(
           ctx, delta, xin, bin, s0, cin, a, out, B, D, N, M))
-    return;
+    return 1;
   reference_ssm_replay_decode_f32(delta, xin, bin, s0, cin, a, out, B, D, N, M);
+  return 0;
 }
 
 //===---------------------------------------------------------------------===//
@@ -4037,6 +4359,7 @@ bool dispatch_ssm_block_decode_msl(
     if (!bufDelta || !bufX || !bufB || !bufC || !bufS0 || !bufA || !bufO)
       return false;
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    cb.label = @"tessera.replay.block.f32";
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
     [enc setComputePipelineState:pso];
     [enc setBuffer:bufDelta offset:0 atIndex:0];
@@ -4058,6 +4381,7 @@ bool dispatch_ssm_block_decode_msl(
     [enc endEncoding];
     if (!commit_and_wait_with_timeout(ctx, cb, 60000,
                                       "ssm_block_decode_f32")) return false;
+    ts_record_pipeline_resources(pso, MTLSizeMake(tg, 1, 1));
     std::memcpy(out, [bufO contents], tbd);
     return true;
   }
@@ -4068,14 +4392,21 @@ bool dispatch_ssm_block_decode_msl(
 // Block SSM decode (scalar-A, f32) — T tokens from checkpoint S0 in ONE
 // dispatch.  Buffers: delta/x (T,B,D), b/c (T,B,N), s0 (B,D,N), a (D,),
 // out (T,B,D).
-extern "C" void tessera_apple_gpu_ssm_block_decode_f32(
+extern "C" int32_t tessera_apple_gpu_ssm_block_decode_f32_status(
     const float* delta, const float* xin, const float* bin, const float* cin,
     const float* s0, const float* a, float* out,
     int32_t B, int32_t T, int32_t D, int32_t N) {
   MetalDeviceContext &ctx = deviceContext();
-  if (ctx.ok && dispatch_ssm_block_decode_msl(
-          ctx, delta, xin, bin, cin, s0, a, out, B, T, D, N))
-    return;
+  return (ctx.ok && dispatch_ssm_block_decode_msl(
+      ctx, delta, xin, bin, cin, s0, a, out, B, T, D, N)) ? 1 : 0;
+}
+
+extern "C" void tessera_apple_gpu_ssm_block_decode_f32(
+    const float* delta, const float* xin, const float* bin, const float* cin,
+    const float* s0, const float* a, float* out,
+    int32_t B, int32_t T, int32_t D, int32_t N) {
+  if (tessera_apple_gpu_ssm_block_decode_f32_status(
+          delta, xin, bin, cin, s0, a, out, B, T, D, N)) return;
   reference_ssm_block_decode_f32(delta, xin, bin, cin, s0, a, out, B, T, D, N);
 }
 
@@ -4172,6 +4503,7 @@ bool dispatch_ssm_block_decode_f16_msl(
     if (!bufDelta || !bufX || !bufB || !bufC || !bufS0 || !bufA || !bufO)
       return false;
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    cb.label = @"tessera.replay.block.f16";
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
     [enc setComputePipelineState:pso];
     [enc setBuffer:bufDelta offset:0 atIndex:0];
@@ -4193,6 +4525,7 @@ bool dispatch_ssm_block_decode_f16_msl(
     [enc endEncoding];
     if (!commit_and_wait_with_timeout(ctx, cb, 60000,
                                       "ssm_block_decode_f16")) return false;
+    ts_record_pipeline_resources(pso, MTLSizeMake(tg, 1, 1));
     std::memcpy(out, [bufO contents], tbd);
     return true;
   }
@@ -4202,14 +4535,21 @@ bool dispatch_ssm_block_decode_f16_msl(
 
 // Block SSM decode (scalar-A, f16 storage / f32 accum).  Buffers are half bits
 // (uint16_t): delta/x (T,B,D), b/c (T,B,N), s0 (B,D,N), a (D,), out (T,B,D).
-extern "C" void tessera_apple_gpu_ssm_block_decode_f16(
+extern "C" int32_t tessera_apple_gpu_ssm_block_decode_f16_status(
     const uint16_t* delta, const uint16_t* xin, const uint16_t* bin,
     const uint16_t* cin, const uint16_t* s0, const uint16_t* a, uint16_t* out,
     int32_t B, int32_t T, int32_t D, int32_t N) {
   MetalDeviceContext &ctx = deviceContext();
-  if (ctx.ok && dispatch_ssm_block_decode_f16_msl(
-          ctx, delta, xin, bin, cin, s0, a, out, B, T, D, N))
-    return;
+  return (ctx.ok && dispatch_ssm_block_decode_f16_msl(
+      ctx, delta, xin, bin, cin, s0, a, out, B, T, D, N)) ? 1 : 0;
+}
+
+extern "C" void tessera_apple_gpu_ssm_block_decode_f16(
+    const uint16_t* delta, const uint16_t* xin, const uint16_t* bin,
+    const uint16_t* cin, const uint16_t* s0, const uint16_t* a, uint16_t* out,
+    int32_t B, int32_t T, int32_t D, int32_t N) {
+  if (tessera_apple_gpu_ssm_block_decode_f16_status(
+          delta, xin, bin, cin, s0, a, out, B, T, D, N)) return;
   reference_ssm_block_decode_f16(delta, xin, bin, cin, s0, a, out, B, T, D, N);
 }
 
@@ -4525,6 +4865,7 @@ bool dispatch_flash_attn_msl(MetalDeviceContext &ctx, const float* Q,
     if (!bufQ || !bufK || !bufV || !bufO) return false;
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    cb.label = @"tessera.attn.flash.f32";
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
     [enc setComputePipelineState:pso];
     [enc setBuffer:bufQ offset:0 atIndex:0];
@@ -4551,6 +4892,7 @@ bool dispatch_flash_attn_msl(MetalDeviceContext &ctx, const float* Q,
     // Migration batch 3 (2026-06-01) — flash_attn MSL.
     if (!commit_and_wait_with_timeout(ctx, cb, 60000,
                                       "flash_attn_msl")) return false;
+    ts_record_pipeline_resources(pso, tg);
     std::memcpy(O, [bufO contents], oBytes);
     return true;
   }
@@ -4607,6 +4949,7 @@ static bool encode_flash_attn_msl_dev(MetalDeviceContext &ctx,
   MTLSize tg = MTLSizeMake(tg_x, tg_y, 1);
   [enc dispatchThreads:grid threadsPerThreadgroup:tg];
   [enc endEncoding];
+  ts_record_pipeline_resources(pso, tg);
   return true;
 }
 
@@ -4659,6 +5002,16 @@ inline void reference_flash_attn_f32(const float* Q, const float* K,
 
 } // namespace
 
+extern "C" int32_t tessera_apple_gpu_flash_attn_f32_status(
+    const float* Q, const float* K, const float* V, float* O,
+    int32_t B, int32_t Sq, int32_t Sk, int32_t D,
+    float scale, int32_t causal) {
+  if (D > 256) return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  return (ctx.ok && dispatch_flash_attn_msl(
+      ctx, Q, K, V, O, B, Sq, Sk, D, scale, causal)) ? 1 : 0;
+}
+
 extern "C" void tessera_apple_gpu_flash_attn_f32(const float* Q, const float* K,
                                                  const float* V, float* O,
                                                  int32_t B, int32_t Sq,
@@ -4670,11 +5023,8 @@ extern "C" void tessera_apple_gpu_flash_attn_f32(const float* Q, const float* K,
     reference_flash_attn_f32(Q, K, V, O, B, Sq, Sk, D, scale, causal);
     return;
   }
-  MetalDeviceContext &ctx = deviceContext();
-  if (ctx.ok && dispatch_flash_attn_msl(ctx, Q, K, V, O, B, Sq, Sk, D, scale,
-                                        causal)) {
-    return;
-  }
+  if (tessera_apple_gpu_flash_attn_f32_status(
+          Q, K, V, O, B, Sq, Sk, D, scale, causal)) return;
   reference_flash_attn_f32(Q, K, V, O, B, Sq, Sk, D, scale, causal);
 }
 
@@ -5917,6 +6267,7 @@ bool dispatch_flash_attn_msl_f16(MetalDeviceContext &ctx, const uint16_t* Q,
     if (!bufQ || !bufK || !bufV || !bufO) return false;
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    cb.label = @"tessera.attn.flash.f16";
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
     [enc setComputePipelineState:pso];
     [enc setBuffer:bufQ offset:0 atIndex:0];
@@ -5943,6 +6294,7 @@ bool dispatch_flash_attn_msl_f16(MetalDeviceContext &ctx, const uint16_t* Q,
     // Migration batch 3 (2026-06-01) — flash_attn MSL.
     if (!commit_and_wait_with_timeout(ctx, cb, 60000,
                                       "flash_attn_msl")) return false;
+    ts_record_pipeline_resources(pso, tg);
     std::memcpy(O, [bufO contents], oBytes);
     return true;
   }
@@ -5986,9 +6338,11 @@ static bool encode_flash_attn_msl_f16_dev(MetalDeviceContext &ctx,
       pso.maxTotalThreadsPerThreadgroup /
           std::max<NSUInteger>(tg_x, 1));
   if (tg_y == 0) tg_y = 1;
+  MTLSize tg = MTLSizeMake(tg_x, tg_y, 1);
   [enc dispatchThreads:grid
-         threadsPerThreadgroup:MTLSizeMake(tg_x, tg_y, 1)];
+         threadsPerThreadgroup:tg];
   [enc endEncoding];
+  ts_record_pipeline_resources(pso, tg);
   return true;
 }
 
@@ -6049,6 +6403,16 @@ bool dispatch_flash_attn_bf16_via_fp32(MetalDeviceContext &ctx,
 
 } // namespace
 
+extern "C" int32_t tessera_apple_gpu_flash_attn_f16_status(
+    const uint16_t* Q, const uint16_t* K, const uint16_t* V, uint16_t* O,
+    int32_t B, int32_t Sq, int32_t Sk, int32_t D,
+    float scale, int32_t causal) {
+  if (D > 256) return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  return (ctx.ok && dispatch_flash_attn_msl_f16(
+      ctx, Q, K, V, O, B, Sq, Sk, D, scale, causal)) ? 1 : 0;
+}
+
 extern "C" void tessera_apple_gpu_flash_attn_f16(const uint16_t* Q,
                                                  const uint16_t* K,
                                                  const uint16_t* V,
@@ -6060,9 +6424,8 @@ extern "C" void tessera_apple_gpu_flash_attn_f16(const uint16_t* Q,
     reference_flash_attn_f16_via_fp32(Q, K, V, O, B, Sq, Sk, D, scale, causal);
     return;
   }
-  MetalDeviceContext &ctx = deviceContext();
-  if (ctx.ok && dispatch_flash_attn_msl_f16(ctx, Q, K, V, O, B, Sq, Sk, D, scale, causal))
-    return;
+  if (tessera_apple_gpu_flash_attn_f16_status(
+          Q, K, V, O, B, Sq, Sk, D, scale, causal)) return;
   reference_flash_attn_f16_via_fp32(Q, K, V, O, B, Sq, Sk, D, scale, causal);
 }
 
@@ -6143,6 +6506,7 @@ kernel void softmax_f32(
     if (!bufX || !bufO) return false;
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    cb.label = @"tessera.softmax.msl.f32";
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
     [enc setComputePipelineState:pso];
     [enc setBuffer:bufX offset:0 atIndex:0];
@@ -6160,6 +6524,7 @@ kernel void softmax_f32(
     // Migration batch 3 (2026-06-01) — softmax MSL (f32/f16).
     if (!commit_and_wait_with_timeout(ctx, cb, 30000,
                                       "softmax_msl")) return false;
+    ts_record_pipeline_resources(pso, tg);
     std::memcpy(Out, [bufO contents], byteCount);
     return true;
   }
@@ -6800,7 +7165,6 @@ kernel void matmul_softmax_tiled_f32(
     [enc setBytes:&M length:sizeof(int32_t) atIndex:3];
     [enc setBytes:&N length:sizeof(int32_t) atIndex:4];
     [enc setBytes:&K length:sizeof(int32_t) atIndex:5];
-
     // Dynamic threadgroup memory: scores[N] live floats per threadgroup.
     NSUInteger tg_score_bytes = sizeof(float) * static_cast<NSUInteger>(N);
     [enc setThreadgroupMemoryLength:tg_score_bytes atIndex:0];
@@ -6917,7 +7281,6 @@ kernel void matmul_softmax_f16(
     [enc setBytes:&M length:sizeof(int32_t) atIndex:3];
     [enc setBytes:&N length:sizeof(int32_t) atIndex:4];
     [enc setBytes:&K length:sizeof(int32_t) atIndex:5];
-
     MTLSize grid = MTLSizeMake(static_cast<NSUInteger>(M), 1, 1);
     NSUInteger tg_x = std::min<NSUInteger>(static_cast<NSUInteger>(M),
                                            pso.maxTotalThreadsPerThreadgroup);
@@ -7956,6 +8319,7 @@ extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_f32(
     MetalBufferGuard resGuard(ctx, bufRes, has_residual != 0 ? oBytes : 0);
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    cb.label = @"tessera.epilogue.synth.f32";
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
     [enc setComputePipelineState:pso];
     [enc setBuffer:bufA offset:0 atIndex:0];
@@ -7971,10 +8335,12 @@ extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_f32(
     NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)M,
                                            pso.maxTotalThreadsPerThreadgroup);
     if (tg_x == 0) tg_x = 1;
-    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+    MTLSize tg = MTLSizeMake(tg_x, 1, 1);
+    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
     [enc endEncoding];
     if (!commit_and_wait_with_timeout(ctx, cb, 60000, "synth_matmul_epilogue"))
       return 0;
+    ts_record_pipeline_resources(pso, tg);
     std::memcpy(O, [bufO contents], oBytes);
     return 1;
   }
@@ -8310,6 +8676,7 @@ extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_tiled_f32(
     MetalBufferGuard biasGuard(ctx, bufBias, has_bias != 0 ? biasBytes : 0);
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    cb.label = @"tessera.epilogue.synth.tiled.f32";
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
     [enc setComputePipelineState:pso];
     [enc setBuffer:bufA offset:0 atIndex:0];
@@ -8327,6 +8694,7 @@ extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_tiled_f32(
     [enc endEncoding];
     if (!commit_and_wait_with_timeout(ctx, cb, 60000, "synth_matmul_epilogue_tiled"))
       return 0;
+    ts_record_pipeline_resources(pso, tg, tgScoreBytes);
     std::memcpy(O, [bufO contents], oBytes);
     return 1;
   }
@@ -8377,6 +8745,7 @@ extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_f16(
     MetalBufferGuard resGuard(ctx, bufRes, has_residual != 0 ? oBytes : 0);
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    cb.label = @"tessera.epilogue.synth.f16_bf16";
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
     [enc setComputePipelineState:pso];
     [enc setBuffer:bufA offset:0 atIndex:0];
@@ -8388,21 +8757,26 @@ extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_f16(
     if (has_bias != 0 && bufBias) [enc setBuffer:bufBias offset:0 atIndex:6];
     if (has_residual != 0 && bufRes) [enc setBuffer:bufRes offset:0 atIndex:7];
 
+    MTLSize tg;
+    NSUInteger dynamic_tg_memory = 0;
     if (is_tiled != 0) {
-      [enc setThreadgroupMemoryLength:(sizeof(float) * (NSUInteger)N) atIndex:0];
+      dynamic_tg_memory = sizeof(float) * (NSUInteger)N;
+      [enc setThreadgroupMemoryLength:dynamic_tg_memory atIndex:0];
       MTLSize grid = MTLSizeMake((NSUInteger)M, 1, 1);
-      MTLSize tg = MTLSizeMake(32, 1, 1);
+      tg = MTLSizeMake(32, 1, 1);
       [enc dispatchThreadgroups:grid threadsPerThreadgroup:tg];
     } else {
       MTLSize grid = MTLSizeMake((NSUInteger)M, 1, 1);
       NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)M,
                                              pso.maxTotalThreadsPerThreadgroup);
       if (tg_x == 0) tg_x = 1;
-      [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+      tg = MTLSizeMake(tg_x, 1, 1);
+      [enc dispatchThreads:grid threadsPerThreadgroup:tg];
     }
     [enc endEncoding];
     if (!commit_and_wait_with_timeout(ctx, cb, 60000, "synth_matmul_epilogue_f16"))
       return 0;
+    ts_record_pipeline_resources(pso, tg, dynamic_tg_memory);
     std::memcpy(O, [bufO contents], oBytes);
     return 1;
   }
@@ -8449,6 +8823,7 @@ extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_coopmat(
     MetalBufferGuard biasGuard(ctx, bufBias, has_bias != 0 ? biasBytes : 0);
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    cb.label = @"tessera.epilogue.synth.coopmat";
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
     [enc setComputePipelineState:pso];
     [enc setBuffer:bufA offset:0 atIndex:0];
@@ -8463,13 +8838,79 @@ extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_coopmat(
     const NSUInteger THREADS = (tile_dim == 64) ? 256 : 128;
     MTLSize grid = MTLSizeMake(((NSUInteger)N + TILE - 1) / TILE,
                                ((NSUInteger)M + TILE - 1) / TILE, 1);
-    [enc dispatchThreadgroups:grid threadsPerThreadgroup:MTLSizeMake(THREADS, 1, 1)];
+    MTLSize tg = MTLSizeMake(THREADS, 1, 1);
+    [enc dispatchThreadgroups:grid threadsPerThreadgroup:tg];
     [enc endEncoding];
     if (!commit_and_wait_with_timeout(ctx, cb, 60000, "synth_matmul_epilogue_coopmat"))
       return 0;
+    ts_record_pipeline_resources(pso, tg);
     std::memcpy(O, [bufO contents], oBytes);
     return 1;
   }
+}
+
+// TILE-1 — source-backed Apple7+ simdgroup-matrix GEMM. Unlike the older
+// cooperative-matmul ABI above, this contract is deliberately one simdgroup
+// (32 threads) per emitted steel fragment tile. The caller supplies MSL that
+// conforms to the fixed buffer layout below; returning 0 means no GPU dispatch
+// occurred and lets the caller record an explicit reference fallback.
+// Buffers: 0=A(fp16), 1=B(fp16), 2=O(fp32), 3=M, 4=N, 5=K.
+extern "C" int32_t tessera_apple_gpu_tile_simdgroup_gemm_f16(
+    const char* msl_source, const char* entry, const uint16_t* A,
+    const uint16_t* B, float* O, int32_t M, int32_t N, int32_t K,
+    int32_t bm, int32_t bn, int32_t threads_per_threadgroup) {
+  if (!msl_source || !entry || !A || !B || !O || M <= 0 || N <= 0 || K <= 0 ||
+      bm <= 0 || bn <= 0 || threads_per_threadgroup != 32)
+    return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;
+  @autoreleasepool {
+    NSString *src = [NSString stringWithUTF8String:msl_source];
+    NSString *ep = [NSString stringWithUTF8String:entry];
+    id<MTLComputePipelineState> pso = compile_msl_kernel(ctx, src, ep);
+    if (!pso || pso.maxTotalThreadsPerThreadgroup < 32) return 0;
+    const NSUInteger aBytes = sizeof(uint16_t) * (NSUInteger)M * (NSUInteger)K;
+    const NSUInteger bBytes = sizeof(uint16_t) * (NSUInteger)K * (NSUInteger)N;
+    const NSUInteger oBytes = sizeof(float) * (NSUInteger)M * (NSUInteger)N;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, A, aBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, B, bBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
+    if (!bufA || !bufB || !bufO) return 0;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    id<MTLCounterSampleBuffer> samples = ts_make_tile_timestamp_samples(ctx);
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufA offset:0 atIndex:0];
+    [enc setBuffer:bufB offset:0 atIndex:1];
+    [enc setBuffer:bufO offset:0 atIndex:2];
+    [enc setBytes:&M length:sizeof(int32_t) atIndex:3];
+    [enc setBytes:&N length:sizeof(int32_t) atIndex:4];
+    [enc setBytes:&K length:sizeof(int32_t) atIndex:5];
+    if (samples) [enc sampleCountersInBuffer:samples atSampleIndex:0 withBarrier:YES];
+    MTLSize grid = MTLSizeMake(((NSUInteger)N + (NSUInteger)bn - 1) / (NSUInteger)bn,
+                               ((NSUInteger)M + (NSUInteger)bm - 1) / (NSUInteger)bm, 1);
+    [enc dispatchThreadgroups:grid
+        threadsPerThreadgroup:MTLSizeMake((NSUInteger)threads_per_threadgroup, 1, 1)];
+    if (samples) [enc sampleCountersInBuffer:samples atSampleIndex:1 withBarrier:YES];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "tile_simdgroup_gemm_f16"))
+      return 0;
+    ts_record_tile_gpu_elapsed(cb);
+    ts_record_tile_counter_delta(samples);
+    std::memcpy(O, [bufO contents], oBytes);
+    return 1;
+  }
+}
+
+// Same source-backed layout as the fp16 entry above. The element representation
+// is selected by the supplied MSL source; bf16 has the same 16-bit host ABI and
+// retains fp32 accumulation/output.
+extern "C" int32_t tessera_apple_gpu_tile_simdgroup_gemm_bf16(
+    const char* msl_source, const char* entry, const uint16_t* A,
+    const uint16_t* B, float* O, int32_t M, int32_t N, int32_t K,
+    int32_t bm, int32_t bn, int32_t threads_per_threadgroup) {
+  return tessera_apple_gpu_tile_simdgroup_gemm_f16(
+      msl_source, entry, A, B, O, M, N, K, bm, bn, threads_per_threadgroup);
 }
 
 // COOPERATIVE-MATRIX matmul + fused row REDUCTION (Optimizing-Compiler Plan
@@ -15404,13 +15845,25 @@ static bool mpsg_run_transpose(MetalDeviceContext &ctx, const void *x, void *out
     if (!y) return false;
     MPSGraphTensorData *xd =
         [[MPSGraphTensorData alloc] initWithMTLBuffer:bufX shape:shape dataType:ioType];
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:@{ph : xd}
-                                    targetTensors:@[ y ]
-                                 targetOperations:nil];
-    MPSGraphTensorData *od = res[y];
-    if (!od) return false;
-    [[od mpsndarray] readBytes:out strideBytes:nil];
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, bytes);
+    if (!bufO) return false;
+    MPSGraphTensorData *od = [[MPSGraphTensorData alloc]
+        initWithMTLBuffer:bufO shape:shape dataType:ioType];
+    id<MTLCommandBuffer> metal_cb = [ctx.queue commandBuffer];
+    if (!metal_cb) return false;
+    metal_cb.label = @"tessera.epilogue.unary.mpsgraph";
+    MPSCommandBuffer *mps_cb =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:metal_cb];
+    if (!mps_cb) return false;
+    [g encodeToCommandBuffer:mps_cb
+                       feeds:@{ph : xd}
+            targetOperations:nil
+        resultsDictionary:@{y : od}
+      executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, mps_cb, metal_cb, 30000, "mpsgraph_unary"))
+      return false;
+    std::memcpy(out, [bufO contents], bytes);
     return true;
   }
 }
@@ -15699,13 +16152,25 @@ static bool mpsg_run_binary(MetalDeviceContext &ctx, int op, const void *a,
         [[MPSGraphTensorData alloc] initWithMTLBuffer:bufA shape:shape dataType:ioType];
     MPSGraphTensorData *bd =
         [[MPSGraphTensorData alloc] initWithMTLBuffer:bufB shape:shape dataType:ioType];
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:@{pa : ad, pb : bd}
-                                    targetTensors:@[ y ]
-                                 targetOperations:nil];
-    MPSGraphTensorData *od = res[y];
-    if (!od) return false;
-    [[od mpsndarray] readBytes:out strideBytes:nil];
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, bytes);
+    if (!bufO) return false;
+    MPSGraphTensorData *od = [[MPSGraphTensorData alloc]
+        initWithMTLBuffer:bufO shape:shape dataType:ioType];
+    id<MTLCommandBuffer> metal_cb = [ctx.queue commandBuffer];
+    if (!metal_cb) return false;
+    metal_cb.label = @"tessera.epilogue.binary.mpsgraph";
+    MPSCommandBuffer *mps_cb =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:metal_cb];
+    if (!mps_cb) return false;
+    [g encodeToCommandBuffer:mps_cb
+                       feeds:@{pa : ad, pb : bd}
+            targetOperations:nil
+        resultsDictionary:@{y : od}
+      executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, mps_cb, metal_cb, 30000, "mpsgraph_binary"))
+      return false;
+    std::memcpy(out, [bufO contents], bytes);
     return true;
   }
 }
@@ -15808,6 +16273,8 @@ static bool mpsg_run_rowop(MetalDeviceContext &ctx, int kind, const void *x,
     // from x's bytes when the op has no gamma/beta).
     TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufG, ctx, gamma ? gamma : x, cbytes);
     TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, beta ? beta : x, cbytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, xbytes);
+    if (!bufO) return false;
     NSArray<NSNumber *> *xs = @[ @(rows), @(cols) ];
     NSArray<NSNumber *> *gs = @[ @(cols) ];
     NSArray *phs;
@@ -15824,13 +16291,23 @@ static bool mpsg_run_rowop(MetalDeviceContext &ctx, int kind, const void *x,
     if (phs.count >= 3)
       feeds[phs[2]] =
           [[MPSGraphTensorData alloc] initWithMTLBuffer:bufB shape:gs dataType:ioType];
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:feeds
-                                    targetTensors:@[ y ]
-                                 targetOperations:nil];
-    MPSGraphTensorData *od = res[y];
-    if (!od) return false;
-    [[od mpsndarray] readBytes:out strideBytes:nil];
+    MPSGraphTensorData *od = [[MPSGraphTensorData alloc]
+        initWithMTLBuffer:bufO shape:xs dataType:ioType];
+    id<MTLCommandBuffer> metal_cb = [ctx.queue commandBuffer];
+    metal_cb.label = @"tessera.rowop.mpsgraph";
+    if (!metal_cb) return false;
+    MPSCommandBuffer *mps_cb =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:metal_cb];
+    if (!mps_cb) return false;
+    [g encodeToCommandBuffer:mps_cb
+                       feeds:feeds
+            targetOperations:nil
+        resultsDictionary:@{y : od}
+      executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, mps_cb, metal_cb, 30000, "mpsgraph_rowop"))
+      return false;
+    std::memcpy(out, [bufO contents], xbytes);
     return true;
   }
 }
@@ -17049,10 +17526,16 @@ extern "C" int64_t tessera_apple_gpu_mpsgraph_cache_capacity(void) {
 }
 
 // ---- C ABI: unary -----------------------------------------------------------
+extern "C" int32_t tessera_apple_gpu_mpsgraph_unary_f32_status(
+    int32_t op, const float *x, float *out, int64_t n) {
+  MetalDeviceContext &ctx = deviceContext();
+  return (ctx.ok && mpsg_run_unary(
+      ctx, op, x, out, n, MPSDataTypeFloat32, 4)) ? 1 : 0;
+}
+
 extern "C" void tessera_apple_gpu_mpsgraph_unary_f32(int32_t op, const float *x,
                                                      float *out, int64_t n) {
-  MetalDeviceContext &ctx = deviceContext();
-  if (ctx.ok && mpsg_run_unary(ctx, op, x, out, n, MPSDataTypeFloat32, 4)) return;
+  if (tessera_apple_gpu_mpsgraph_unary_f32_status(op, x, out, n)) return;
   // host reference fallback
   for (int64_t i = 0; i < n; ++i) {
     float v = x[i];
@@ -17097,21 +17580,33 @@ extern "C" void tessera_apple_gpu_mpsgraph_unary_f32(int32_t op, const float *x,
   }
 }
 
+extern "C" int32_t tessera_apple_gpu_mpsgraph_unary_f16_status(
+    int32_t op, const uint16_t *x, uint16_t *out, int64_t n) {
+  MetalDeviceContext &ctx = deviceContext();
+  return (ctx.ok && mpsg_run_unary(
+      ctx, op, x, out, n, MPSDataTypeFloat16, 2)) ? 1 : 0;
+}
+
 extern "C" void tessera_apple_gpu_mpsgraph_unary_f16(int32_t op,
                                                      const uint16_t *x,
                                                      uint16_t *out, int64_t n) {
-  MetalDeviceContext &ctx = deviceContext();
-  if (ctx.ok && mpsg_run_unary(ctx, op, x, out, n, MPSDataTypeFloat16, 2)) return;
+  if (tessera_apple_gpu_mpsgraph_unary_f16_status(op, x, out, n)) return;
   // No host-side half arithmetic here: python upcasts on fallback.
   std::memcpy(out, x, (size_t)n * 2);
 }
 
 // ---- C ABI: binary ----------------------------------------------------------
+extern "C" int32_t tessera_apple_gpu_mpsgraph_binary_f32_status(
+    int32_t op, const float *a, const float *b, float *out, int64_t n) {
+  MetalDeviceContext &ctx = deviceContext();
+  return (ctx.ok && mpsg_run_binary(
+      ctx, op, a, b, out, n, MPSDataTypeFloat32, 4)) ? 1 : 0;
+}
+
 extern "C" void tessera_apple_gpu_mpsgraph_binary_f32(int32_t op, const float *a,
                                                       const float *b, float *out,
                                                       int64_t n) {
-  MetalDeviceContext &ctx = deviceContext();
-  if (ctx.ok && mpsg_run_binary(ctx, op, a, b, out, n, MPSDataTypeFloat32, 4)) return;
+  if (tessera_apple_gpu_mpsgraph_binary_f32_status(op, a, b, out, n)) return;
   for (int64_t i = 0; i < n; ++i) {
     float x = a[i], y = b[i];
     switch (op) {
@@ -18088,38 +18583,24 @@ extern "C" int32_t tessera_apple_gpu_mtl4_matmul_sg_f32(const float *A,
       [res commit];
       [res requestResidency];
 
-      MTL4ArgumentTableDescriptor *atd = [[MTL4ArgumentTableDescriptor alloc] init];
-      atd.maxBufferBindCount = 4;
-      id<MTL4ArgumentTable> at = [dev newArgumentTableWithDescriptor:atd error:&err];
-      if (!at) return 0;
-      id<MTLBuffer> bufs[4] = {bA, bB, bC, bD};
-      for (int i = 0; i < 4; ++i) [at setAddress:bufs[i].gpuAddress atIndex:i];
-
       id<MTL4CommandQueue> queue = mtl4_shared_queue(ctx);
-      id<MTL4CommandAllocator> alloc = [dev newCommandAllocator];
-      id<MTL4CommandBuffer> cb = [dev newCommandBuffer];
-      if (!queue || !alloc || !cb) return 0;
-      [queue addResidencySet:res];
-      [cb beginCommandBufferWithAllocator:alloc];
-      id<MTL4ComputeCommandEncoder> enc = [cb computeCommandEncoder];
-      [enc setComputePipelineState:pso];
-      [enc setArgumentTable:at];
-      // fast: 64x64 tile / 8 SIMD groups (256 threads). general: 32x32 / 128.
-      if (fast)
-        [enc dispatchThreadgroups:MTLSizeMake(N / 64, M / 64, 1)
-            threadsPerThreadgroup:MTLSizeMake(256, 1, 1)];
-      else
-        [enc dispatchThreadgroups:MTLSizeMake((N + 31) / 32, (M + 31) / 32, 1)
-            threadsPerThreadgroup:MTLSizeMake(128, 1, 1)];
-      [enc endEncoding];
-      [cb endCommandBuffer];
-
-      const id<MTL4CommandBuffer> cbs[1] = {cb};
-      [queue commit:cbs count:1];
-      id<MTLSharedEvent> ev = [dev newSharedEvent];
-      [queue signalEvent:ev value:1];
-      bool done = [ev waitUntilSignaledValue:1 timeoutMS:10000];
-      [queue removeResidencySet:res];   // cached/shared queue — limit 32
+      if (!queue) return 0;
+      bool done = false;
+      {
+        std::lock_guard<std::mutex> lock(ctx.mtl4_dispatch_mu);
+        done = mtl4_encode_and_wait(
+            ctx, queue, pso,
+            ^(id<MTL4ArgumentTable> at) {
+              [at setAddress:bA.gpuAddress atIndex:0];
+              [at setAddress:bB.gpuAddress atIndex:1];
+              [at setAddress:bC.gpuAddress atIndex:2];
+              [at setAddress:bD.gpuAddress atIndex:3];
+            },
+            fast ? MTLSizeMake(N / 64, M / 64, 1)
+                 : MTLSizeMake((N + 31) / 32, (M + 31) / 32, 1),
+            MTLSizeMake(fast ? 256 : 128, 1, 1), res,
+            @"tessera.gemm.simdgroup.f32");
+      }
       if (!done) return 0;
 
       std::memcpy(C, [bC contents], (size_t)M * N * 4);
@@ -18317,7 +18798,8 @@ static int32_t mtl4_matmul2d_dispatch(NSString *entry, MTLTensorDataType dt,
             [at setAddress:bBias.gpuAddress atIndex:3];
             [at setAddress:bP.gpuAddress atIndex:4];
           }
-        }, MTLSizeMake((M + 63) / 64, (N + 63) / 64, 1), MTLSizeMake(128, 1, 1), res);
+        }, MTLSizeMake((M + 63) / 64, (N + 63) / 64, 1),
+           MTLSizeMake(128, 1, 1), res, entry);
       }
       if (!done) return 0;
 
@@ -19829,6 +20311,12 @@ extern "C" void ts_enc_commit_wait(TsEncodeSession *s) {
     // path (matches the helper's own fallback).
     [root waitUntilCompleted];
   }
+  // APPLE-ATTN-FWD-1: publish the complete interval for an owned resident
+  // session. The shared-event signal is encoded after all session work, so the
+  // command buffer is complete before this read. An MPSGraph auto-flush may
+  // replace the original root; in that case this deliberately reports only the
+  // live root interval rather than inventing whole-session coverage.
+  ts_record_dispatch_gpu_elapsed(root);
   s->cb = nil;
   s->mtlcb = nil;
   delete s;
@@ -20419,8 +20907,22 @@ static bool mpsg_run_gather_blocks(MetalDeviceContext &ctx, id<MTLBuffer> pool,
     MPSGraphTensorData *od = [[MPSGraphTensorData alloc] initWithMTLBuffer:out shape:outShape dataType:MPSDataTypeFloat32];
     if (cb)
       [g encodeToCommandBuffer:cb feeds:@{pp : pd, pi : id_} targetOperations:nil resultsDictionary:@{y : od} executionDescriptor:nil];
-    else
-      [g runWithMTLCommandQueue:ctx.queue feeds:@{pp : pd, pi : id_} targetOperations:nil resultsDictionary:@{y : od}];
+    else {
+      id<MTLCommandBuffer> metal_cb = [ctx.queue commandBuffer];
+      if (!metal_cb) return false;
+      metal_cb.label = @"tessera.paged_kv.gather.mpsgraph";
+      MPSCommandBuffer *owned =
+          [MPSCommandBuffer commandBufferWithCommandBuffer:metal_cb];
+      if (!owned) return false;
+      [g encodeToCommandBuffer:owned
+                         feeds:@{pp : pd, pi : id_}
+              targetOperations:nil
+          resultsDictionary:@{y : od}
+        executionDescriptor:nil];
+      if (!commit_mpsgraph_and_wait_with_timeout(
+              ctx, owned, metal_cb, 30000, "paged_kv_gather"))
+        return false;
+    }
     return true;
   }
 }
@@ -22739,12 +23241,7 @@ extern "C" void tessera_apple_gpu_mpsgraph_scan_f32(int32_t op, const float *x,
 
 namespace {
 
-bool dispatch_flash_attn_gqa_msl(MetalDeviceContext &ctx, const float *Q,
-                                 const float *K, const float *V, float *O,
-                                 int32_t B, int32_t q_heads, int32_t kv_heads,
-                                 int32_t Sq, int32_t Sk, int32_t D, float scale,
-                                 int32_t causal) {
-  static NSString *const kSrc = @R"MSL(
+static NSString *const kFlashAttnGqaF32Source = @R"MSL(
 #include <metal_stdlib>
 using namespace metal;
 #define TESSERA_GQA_MAX_D 256
@@ -22761,6 +23258,10 @@ kernel void flash_attn_gqa_f32(
     constant int&       D       [[buffer(9)]],
     constant float&     scale   [[buffer(10)]],
     constant int&       causal  [[buffer(11)]],
+    device const float* bias    [[buffer(12)]],
+    constant int&       has_bias[[buffer(13)]],
+    constant int&       window_size [[buffer(14)]],
+    constant float&     logit_softcap [[buffer(15)]],
     uint2 gid [[thread_position_in_grid]])
 {
     if (gid.y >= (uint)B || gid.x >= (uint)Sq) return;
@@ -22774,16 +23275,31 @@ kernel void flash_attn_gqa_f32(
     int kv_batch = b_outer * kv_heads + kv_head;
     int q_off = batch * Sq * D + q_row * D;
     int kv_base = kv_batch * Sk * D;
+    int causal_offset = max(Sk - Sq, 0);
+    int q_position = q_row + causal_offset;
     float m = -INFINITY;
     float l = 0.0f;
     float o[TESSERA_GQA_MAX_D];
     for (int d = 0; d < D; ++d) o[d] = 0.0f;
     for (int k_row = 0; k_row < Sk; ++k_row) {
-        if (causal != 0 && k_row > q_row) break;
+        if (causal != 0 && k_row > q_position) break;
+        if (window_size > 0) {
+            if (causal != 0) {
+                if (k_row <= q_position - window_size) continue;
+            } else {
+                int half_window = window_size / 2;
+                if (k_row < q_position - half_window ||
+                    k_row > q_position + half_window) continue;
+            }
+        }
         int k_off = kv_base + k_row * D;
         float score = 0.0f;
         for (int d = 0; d < D; ++d) score += Q[q_off + d] * K[k_off + d];
         score *= scale;
+        if (has_bias != 0)
+            score += bias[((batch * Sq + q_row) * Sk) + k_row];
+        if (logit_softcap > 0.0f)
+            score = logit_softcap * tanh(score / logit_softcap);
         float new_m = max(m, score);
         float exp_old = exp(m - new_m);
         float exp_score = exp(score - new_m);
@@ -22796,10 +23312,20 @@ kernel void flash_attn_gqa_f32(
     else { float inv = 1.0f / l; for (int d = 0; d < D; ++d) O[q_off + d] = o[d] * inv; }
 }
 )MSL";
-  if (q_heads <= 0 || kv_heads <= 0 || q_heads % kv_heads != 0) return false;
+
+bool dispatch_flash_attn_gqa_msl(MetalDeviceContext &ctx, const float *Q,
+                                 const float *K, const float *V, float *O,
+                                 int32_t B, int32_t q_heads, int32_t kv_heads,
+                                 int32_t Sq, int32_t Sk, int32_t D, float scale,
+                                 int32_t causal, const float *bias,
+                                 int32_t window_size, float logit_softcap) {
+  if (B <= 0 || Sq <= 0 || Sk <= 0 || D <= 0 || D > 256 ||
+      q_heads <= 0 || kv_heads <= 0 || B % q_heads != 0 ||
+      q_heads % kv_heads != 0 || window_size < 0 || logit_softcap < 0.0f)
+    return false;
   @autoreleasepool {
     id<MTLComputePipelineState> pso =
-        compile_msl_kernel(ctx, kSrc, @"flash_attn_gqa_f32");
+        compile_msl_kernel(ctx, kFlashAttnGqaF32Source, @"flash_attn_gqa_f32");
     if (!pso) return false;
     int32_t kv_outer = (B / q_heads) * kv_heads;
     NSUInteger qBytes = sizeof(float) * (NSUInteger)B * Sq * D;
@@ -22808,8 +23334,15 @@ kernel void flash_attn_gqa_f32(
     TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufK, ctx, K, kvBytes);
     TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufV, ctx, V, kvBytes);
     TS_METAL_BUF_ACQUIRE(bufO, ctx, qBytes);
-    if (!bufQ || !bufK || !bufV || !bufO) return false;
+    const float zeroBias = 0.0f;
+    const NSUInteger biasBytes = bias
+        ? sizeof(float) * (NSUInteger)B * Sq * Sk
+        : sizeof(float);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufBias, ctx, bias ? bias : &zeroBias,
+                                    biasBytes);
+    if (!bufQ || !bufK || !bufV || !bufO || !bufBias) return false;
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    cb.label = @"tessera.attn.variant.gqa.f32";
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
     [enc setComputePipelineState:pso];
     [enc setBuffer:bufQ offset:0 atIndex:0];
@@ -22824,19 +23357,212 @@ kernel void flash_attn_gqa_f32(
     [enc setBytes:&D length:sizeof(int32_t) atIndex:9];
     [enc setBytes:&scale length:sizeof(float) atIndex:10];
     [enc setBytes:&causal length:sizeof(int32_t) atIndex:11];
+    int32_t has_bias = bias ? 1 : 0;
+    [enc setBuffer:bufBias offset:0 atIndex:12];
+    [enc setBytes:&has_bias length:sizeof(int32_t) atIndex:13];
+    [enc setBytes:&window_size length:sizeof(int32_t) atIndex:14];
+    [enc setBytes:&logit_softcap length:sizeof(float) atIndex:15];
     MTLSize grid = MTLSizeMake((NSUInteger)Sq, (NSUInteger)B, 1);
     NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)Sq, 32);
     NSUInteger tg_y = std::min<NSUInteger>((NSUInteger)B,
         pso.maxTotalThreadsPerThreadgroup / std::max<NSUInteger>(tg_x, 1));
     if (tg_y == 0) tg_y = 1;
-    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, tg_y, 1)];
+    MTLSize tg = MTLSizeMake(tg_x, tg_y, 1);
+    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
     [enc endEncoding];
     // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
     if (!commit_and_wait_with_timeout(ctx, cb, 60000,
                                       "flash_attn_gqa_msl")) return false;
+    ts_record_pipeline_resources(pso, tg);
     std::memcpy(O, [bufO contents], qBytes);
     return true;
   }
+}
+
+static bool encode_flash_attn_gqa_msl_dev(
+    MetalDeviceContext &ctx, MPSCommandBuffer *cb, id<MTLBuffer> bufQ,
+    id<MTLBuffer> bufK, id<MTLBuffer> bufV, id<MTLBuffer> bufBias,
+    id<MTLBuffer> bufO, int32_t B, int32_t q_heads, int32_t kv_heads,
+    int32_t Sq, int32_t Sk, int32_t D, float scale, int32_t causal,
+    int32_t window_size, float logit_softcap) {
+  if (B <= 0 || Sq <= 0 || Sk <= 0 || D <= 0 || D > 256 ||
+      q_heads <= 0 || kv_heads <= 0 || B % q_heads != 0 ||
+      q_heads % kv_heads != 0 || window_size < 0 || logit_softcap < 0.0f)
+    return false;
+  if (!cb || !bufQ || !bufK || !bufV || !bufO) return false;
+  id<MTLComputePipelineState> pso =
+      compile_msl_kernel(ctx, kFlashAttnGqaF32Source, @"flash_attn_gqa_f32");
+  if (!pso) return false;
+  id<MTLBuffer> dummyBias = nil;
+  if (!bufBias) {
+    dummyBias = [ctx.device newBufferWithLength:sizeof(float)
+                                      options:MTLResourceStorageModeShared];
+    if (!dummyBias) return false;
+    bufBias = dummyBias;
+  }
+  id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+  if (!enc) return false;
+  [enc setComputePipelineState:pso];
+  [enc setBuffer:bufQ offset:0 atIndex:0];
+  [enc setBuffer:bufK offset:0 atIndex:1];
+  [enc setBuffer:bufV offset:0 atIndex:2];
+  [enc setBuffer:bufO offset:0 atIndex:3];
+  [enc setBytes:&B length:sizeof(int32_t) atIndex:4];
+  [enc setBytes:&q_heads length:sizeof(int32_t) atIndex:5];
+  [enc setBytes:&kv_heads length:sizeof(int32_t) atIndex:6];
+  [enc setBytes:&Sq length:sizeof(int32_t) atIndex:7];
+  [enc setBytes:&Sk length:sizeof(int32_t) atIndex:8];
+  [enc setBytes:&D length:sizeof(int32_t) atIndex:9];
+  [enc setBytes:&scale length:sizeof(float) atIndex:10];
+  [enc setBytes:&causal length:sizeof(int32_t) atIndex:11];
+  int32_t has_bias = dummyBias ? 0 : 1;
+  [enc setBuffer:bufBias offset:0 atIndex:12];
+  [enc setBytes:&has_bias length:sizeof(int32_t) atIndex:13];
+  [enc setBytes:&window_size length:sizeof(int32_t) atIndex:14];
+  [enc setBytes:&logit_softcap length:sizeof(float) atIndex:15];
+  MTLSize grid = MTLSizeMake((NSUInteger)Sq, (NSUInteger)B, 1);
+  NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)Sq, 32);
+  NSUInteger tg_y = std::min<NSUInteger>(
+      (NSUInteger)B, pso.maxTotalThreadsPerThreadgroup /
+                         std::max<NSUInteger>(tg_x, 1));
+  if (tg_y == 0) tg_y = 1;
+  MTLSize tg = MTLSizeMake(tg_x, tg_y, 1);
+  [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+  [enc endEncoding];
+  ts_record_pipeline_resources(pso, tg);
+  return true;
+}
+
+static NSString *const kFlashAttnGqaCooperativeF32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+#define TESSERA_GQA_MAX_D 256
+#define TESSERA_GQA_LANES 32
+kernel void flash_attn_gqa_cooperative_f32(
+    device const float* Q [[buffer(0)]], device const float* K [[buffer(1)]],
+    device const float* V [[buffer(2)]], device float* O [[buffer(3)]],
+    constant int& B [[buffer(4)]], constant int& q_heads [[buffer(5)]],
+    constant int& kv_heads [[buffer(6)]], constant int& Sq [[buffer(7)]],
+    constant int& Sk [[buffer(8)]], constant int& D [[buffer(9)]],
+    constant float& scale [[buffer(10)]], constant int& causal [[buffer(11)]],
+    device const float* bias [[buffer(12)]],
+    constant int& has_bias [[buffer(13)]],
+    constant int& window_size [[buffer(14)]],
+    constant float& logit_softcap [[buffer(15)]],
+    uint gid [[thread_position_in_grid]],
+    uint lane [[thread_index_in_simdgroup]]) {
+  int query = int(gid / TESSERA_GQA_LANES);
+  if (query >= B * Sq || D > TESSERA_GQA_MAX_D) return;
+  int batch = query / Sq;
+  int q_row = query % Sq;
+  int outer = batch / q_heads;
+  int q_head = batch % q_heads;
+  int group = q_heads / kv_heads;
+  int kv_batch = outer * kv_heads + q_head / group;
+  int q_off = (batch * Sq + q_row) * D;
+  int kv_base = kv_batch * Sk * D;
+  int causal_offset = max(Sk - Sq, 0);
+  int q_position = q_row + causal_offset;
+  float m = -INFINITY;
+  float l = 0.0f;
+  float o[8];
+  for (int i = 0; i < 8; ++i) o[i] = 0.0f;
+  for (int k_row = 0; k_row < Sk; ++k_row) {
+    if (causal != 0 && k_row > q_position) break;
+    if (window_size > 0) {
+      if (causal != 0) {
+        if (k_row <= q_position - window_size) continue;
+      } else {
+        int half_window = window_size / 2;
+        if (k_row < q_position - half_window ||
+            k_row > q_position + half_window) continue;
+      }
+    }
+    int k_off = kv_base + k_row * D;
+    float score = 0.0f;
+    for (int d = int(lane); d < D; d += TESSERA_GQA_LANES)
+      score += Q[q_off + d] * K[k_off + d];
+    score = simd_sum(score) * scale;
+    if (has_bias != 0)
+      score += bias[(batch * Sq + q_row) * Sk + k_row];
+    if (logit_softcap > 0.0f)
+      score = logit_softcap * tanh(score / logit_softcap);
+    float new_m = max(m, score);
+    float exp_old = exp(m - new_m);
+    float exp_score = exp(score - new_m);
+    float new_l = l * exp_old + exp_score;
+    int slot = 0;
+    for (int d = int(lane); d < D; d += TESSERA_GQA_LANES) {
+      o[slot] = o[slot] * exp_old + V[k_off + d] * exp_score;
+      ++slot;
+    }
+    m = new_m;
+    l = new_l;
+  }
+  int slot = 0;
+  if (l == 0.0f) {
+    for (int d = int(lane); d < D; d += TESSERA_GQA_LANES)
+      O[q_off + d] = 0.0f;
+  } else {
+    float inv = 1.0f / l;
+    for (int d = int(lane); d < D; d += TESSERA_GQA_LANES)
+      O[q_off + d] = o[slot++] * inv;
+  }
+}
+)MSL";
+
+static bool encode_flash_attn_gqa_cooperative_msl_dev(
+    MetalDeviceContext &ctx, MPSCommandBuffer *cb, id<MTLBuffer> bufQ,
+    id<MTLBuffer> bufK, id<MTLBuffer> bufV, id<MTLBuffer> bufBias,
+    id<MTLBuffer> bufO, int32_t B, int32_t q_heads, int32_t kv_heads,
+    int32_t Sq, int32_t Sk, int32_t D, float scale, int32_t causal,
+    int32_t window_size, float logit_softcap) {
+  if (B <= 0 || Sq <= 0 || Sk <= 0 || D <= 0 || D > 256 ||
+      q_heads <= 0 || kv_heads <= 0 || B % q_heads != 0 ||
+      q_heads % kv_heads != 0 || window_size < 0 || logit_softcap < 0.0f)
+    return false;
+  if (!cb || !bufQ || !bufK || !bufV || !bufO) return false;
+  id<MTLComputePipelineState> pso = compile_msl_kernel(
+      ctx, kFlashAttnGqaCooperativeF32Source,
+      @"flash_attn_gqa_cooperative_f32");
+  if (!pso) return false;
+  id<MTLBuffer> dummyBias = nil;
+  if (!bufBias) {
+    dummyBias = [ctx.device newBufferWithLength:sizeof(float)
+                                      options:MTLResourceStorageModeShared];
+    if (!dummyBias) return false;
+    bufBias = dummyBias;
+  }
+  id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+  if (!enc) return false;
+  [enc setComputePipelineState:pso];
+  [enc setBuffer:bufQ offset:0 atIndex:0];
+  [enc setBuffer:bufK offset:0 atIndex:1];
+  [enc setBuffer:bufV offset:0 atIndex:2];
+  [enc setBuffer:bufO offset:0 atIndex:3];
+  [enc setBytes:&B length:sizeof(int32_t) atIndex:4];
+  [enc setBytes:&q_heads length:sizeof(int32_t) atIndex:5];
+  [enc setBytes:&kv_heads length:sizeof(int32_t) atIndex:6];
+  [enc setBytes:&Sq length:sizeof(int32_t) atIndex:7];
+  [enc setBytes:&Sk length:sizeof(int32_t) atIndex:8];
+  [enc setBytes:&D length:sizeof(int32_t) atIndex:9];
+  [enc setBytes:&scale length:sizeof(float) atIndex:10];
+  [enc setBytes:&causal length:sizeof(int32_t) atIndex:11];
+  int32_t has_bias = dummyBias ? 0 : 1;
+  [enc setBuffer:bufBias offset:0 atIndex:12];
+  [enc setBytes:&has_bias length:sizeof(int32_t) atIndex:13];
+  [enc setBytes:&window_size length:sizeof(int32_t) atIndex:14];
+  [enc setBytes:&logit_softcap length:sizeof(float) atIndex:15];
+  NSUInteger threads = (NSUInteger)B * (NSUInteger)Sq * 32;
+  NSUInteger tg_width = std::min<NSUInteger>(
+      256, pso.maxTotalThreadsPerThreadgroup);
+  tg_width = std::max<NSUInteger>(32, (tg_width / 32) * 32);
+  MTLSize grid = MTLSizeMake(threads, 1, 1);
+  MTLSize tg = MTLSizeMake(tg_width, 1, 1);
+  [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+  [enc endEncoding];
+  ts_record_pipeline_resources(pso, tg);
+  return true;
 }
 
 static void reference_flash_attn_gqa_f32(const float *Q, const float *K,
@@ -22880,10 +23606,22 @@ extern "C" void tessera_apple_gpu_flash_attn_gqa_f32(
     float scale, int32_t causal) {
   MetalDeviceContext &ctx = deviceContext();
   if (ctx.ok && dispatch_flash_attn_gqa_msl(ctx, Q, K, V, O, B, q_heads,
-                                            kv_heads, Sq, Sk, D, scale, causal))
+                                            kv_heads, Sq, Sk, D, scale, causal,
+                                            nullptr, 0, 0.0f))
     return;
   reference_flash_attn_gqa_f32(Q, K, V, O, B, q_heads, kv_heads, Sq, Sk, D,
                                scale, causal);
+}
+
+extern "C" int32_t tessera_apple_gpu_flash_attn_variant_f32_status(
+    const float *Q, const float *K, const float *V, const float *bias, float *O,
+    int32_t B, int32_t q_heads, int32_t kv_heads, int32_t Sq, int32_t Sk,
+    int32_t D, float scale, int32_t causal, int32_t window_size,
+    float logit_softcap) {
+  MetalDeviceContext &ctx = deviceContext();
+  return (ctx.ok && dispatch_flash_attn_gqa_msl(
+      ctx, Q, K, V, O, B, q_heads, kv_heads, Sq, Sk, D, scale, causal, bias,
+      window_size, logit_softcap)) ? 1 : 0;
 }
 
 //===----------------------------------------------------------------------===//
@@ -22907,10 +23645,12 @@ static bool mpsg_run_bsmm(MetalDeviceContext &ctx, const void *A, const void *B,
     size_t aBytes = (size_t)batch * M * K * elemSize;
     size_t bBytes = (size_t)batch * K * N * elemSize;
     size_t cBytes = (size_t)batch * N * P * elemSize;
+    size_t oBytes = (size_t)batch * M * P * elemSize;
     TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, A, aBytes);
     TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, B, bBytes);
     TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufC, ctx, C, cBytes);
-    if (!bufA || !bufB || !bufC) return false;
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
+    if (!bufA || !bufB || !bufC || !bufO) return false;
     NSArray<NSNumber *> *aShape = @[ @(batch), @(M), @(K) ];
     NSArray<NSNumber *> *bShape = @[ @(batch), @(K), @(N) ];
     NSArray<NSNumber *> *cShape = @[ @(batch), @(N), @(P) ];
@@ -22947,13 +23687,23 @@ static bool mpsg_run_bsmm(MetalDeviceContext &ctx, const void *A, const void *B,
     MPSGraphTensorData *ad = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufA shape:aShape dataType:ioType];
     MPSGraphTensorData *bd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufB shape:bShape dataType:ioType];
     MPSGraphTensorData *cd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufC shape:cShape dataType:ioType];
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:@{pa : ad, pb : bd, pc : cd}
-                                    targetTensors:@[ y ]
-                                 targetOperations:nil];
-    MPSGraphTensorData *od = res[y];
-    if (!od) return false;
-    [[od mpsndarray] readBytes:O strideBytes:nil];
+    MPSGraphTensorData *od = [[MPSGraphTensorData alloc]
+        initWithMTLBuffer:bufO shape:@[ @(batch), @(M), @(P) ] dataType:ioType];
+    id<MTLCommandBuffer> metal_cb = [ctx.queue commandBuffer];
+    if (!metal_cb) return false;
+    metal_cb.label = @"tessera.attn.bsmm.mpsgraph";
+    MPSCommandBuffer *mps_cb =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:metal_cb];
+    if (!mps_cb) return false;
+    [g encodeToCommandBuffer:mps_cb
+                       feeds:@{pa : ad, pb : bd, pc : cd}
+            targetOperations:nil
+        resultsDictionary:@{y : od}
+      executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, mps_cb, metal_cb, 60000, "mpsgraph_bsmm"))
+      return false;
+    std::memcpy(O, [bufO contents], oBytes);
     return true;
   }
 }
@@ -22989,16 +23739,30 @@ static void reference_bsmm_f32(const float *A, const float *B, const float *C,
 
 }  // namespace
 
+extern "C" int32_t tessera_apple_gpu_mpsgraph_bsmm_f32_status(
+    const float *A, const float *B, const float *C, float *O, int32_t batch,
+    int32_t M, int32_t N, int32_t P, int32_t K, float scale) {
+  MetalDeviceContext &ctx = deviceContext();
+  return (ctx.ok && mpsg_run_bsmm(ctx, A, B, C, O, batch, M, N, P, K, scale,
+                                  MPSDataTypeFloat32, 4)) ? 1 : 0;
+}
+
 extern "C" void tessera_apple_gpu_mpsgraph_bsmm_f32(const float *A, const float *B,
                                                     const float *C, float *O,
                                                     int32_t batch, int32_t M,
                                                     int32_t N, int32_t P, int32_t K,
                                                     float scale) {
-  MetalDeviceContext &ctx = deviceContext();
-  if (ctx.ok && mpsg_run_bsmm(ctx, A, B, C, O, batch, M, N, P, K, scale,
-                              MPSDataTypeFloat32, 4))
-    return;
+  if (tessera_apple_gpu_mpsgraph_bsmm_f32_status(
+          A, B, C, O, batch, M, N, P, K, scale)) return;
   reference_bsmm_f32(A, B, C, O, batch, M, N, P, K, scale);
+}
+
+extern "C" int32_t tessera_apple_gpu_mpsgraph_bsmm_f16_status(
+    const uint16_t *A, const uint16_t *B, const uint16_t *C, uint16_t *O,
+    int32_t batch, int32_t M, int32_t N, int32_t P, int32_t K, float scale) {
+  MetalDeviceContext &ctx = deviceContext();
+  return (ctx.ok && mpsg_run_bsmm(ctx, A, B, C, O, batch, M, N, P, K, scale,
+                                  MPSDataTypeFloat16, 2)) ? 1 : 0;
 }
 
 extern "C" void tessera_apple_gpu_mpsgraph_bsmm_f16(const uint16_t *A,
@@ -23007,10 +23771,8 @@ extern "C" void tessera_apple_gpu_mpsgraph_bsmm_f16(const uint16_t *A,
                                                     uint16_t *O, int32_t batch,
                                                     int32_t M, int32_t N, int32_t P,
                                                     int32_t K, float scale) {
-  MetalDeviceContext &ctx = deviceContext();
-  if (ctx.ok && mpsg_run_bsmm(ctx, A, B, C, O, batch, M, N, P, K, scale,
-                              MPSDataTypeFloat16, 2))
-    return;
+  if (tessera_apple_gpu_mpsgraph_bsmm_f16_status(
+          A, B, C, O, batch, M, N, P, K, scale)) return;
   std::memset(O, 0, (size_t)batch * M * P * 2);
 }
 
@@ -23134,12 +23896,7 @@ extern "C" void tessera_apple_gpu_flash_attn_gqa_f32(const float *, const float 
 
 namespace {
 
-bool dispatch_flash_attn_gqa_msl_f16(MetalDeviceContext &ctx, const uint16_t *Q,
-                                     const uint16_t *K, const uint16_t *V,
-                                     uint16_t *O, int32_t B, int32_t q_heads,
-                                     int32_t kv_heads, int32_t Sq, int32_t Sk,
-                                     int32_t D, float scale, int32_t causal) {
-  static NSString *const kSrc = @R"MSL(
+static NSString *const kFlashAttnGqaF16Source = @R"MSL(
 #include <metal_stdlib>
 using namespace metal;
 #define TESSERA_GQA_MAX_D 256
@@ -23156,6 +23913,10 @@ kernel void flash_attn_gqa_f16(
     constant int&       D       [[buffer(9)]],
     constant float&     scale   [[buffer(10)]],
     constant int&       causal  [[buffer(11)]],
+    device const half*  bias    [[buffer(12)]],
+    constant int&       has_bias[[buffer(13)]],
+    constant int&       window_size [[buffer(14)]],
+    constant float&     logit_softcap [[buffer(15)]],
     uint2 gid [[thread_position_in_grid]])
 {
     if (gid.y >= (uint)B || gid.x >= (uint)Sq) return;
@@ -23168,16 +23929,31 @@ kernel void flash_attn_gqa_f16(
     int kv_batch = b_outer * kv_heads + (q_head / group);
     int q_off = batch * Sq * D + q_row * D;
     int kv_base = kv_batch * Sk * D;
+    int causal_offset = max(Sk - Sq, 0);
+    int q_position = q_row + causal_offset;
     float m = -INFINITY;
     float l = 0.0f;
     float o[TESSERA_GQA_MAX_D];
     for (int d = 0; d < D; ++d) o[d] = 0.0f;
     for (int k_row = 0; k_row < Sk; ++k_row) {
-        if (causal != 0 && k_row > q_row) break;
+        if (causal != 0 && k_row > q_position) break;
+        if (window_size > 0) {
+            if (causal != 0) {
+                if (k_row <= q_position - window_size) continue;
+            } else {
+                int half_window = window_size / 2;
+                if (k_row < q_position - half_window ||
+                    k_row > q_position + half_window) continue;
+            }
+        }
         int k_off = kv_base + k_row * D;
         float score = 0.0f;
         for (int d = 0; d < D; ++d) score += float(Q[q_off + d]) * float(K[k_off + d]);
         score *= scale;
+        if (has_bias != 0)
+            score += float(bias[((batch * Sq + q_row) * Sk) + k_row]);
+        if (logit_softcap > 0.0f)
+            score = logit_softcap * tanh(score / logit_softcap);
         float new_m = max(m, score);
         float exp_old = exp(m - new_m);
         float exp_score = exp(score - new_m);
@@ -23190,10 +23966,21 @@ kernel void flash_attn_gqa_f16(
     else { float inv = 1.0f / l; for (int d = 0; d < D; ++d) O[q_off + d] = half(o[d] * inv); }
 }
 )MSL";
-  if (q_heads <= 0 || kv_heads <= 0 || q_heads % kv_heads != 0) return false;
+
+bool dispatch_flash_attn_gqa_msl_f16(MetalDeviceContext &ctx, const uint16_t *Q,
+                                     const uint16_t *K, const uint16_t *V,
+                                     uint16_t *O, int32_t B, int32_t q_heads,
+                                     int32_t kv_heads, int32_t Sq, int32_t Sk,
+                                     int32_t D, float scale, int32_t causal,
+                                     const uint16_t *bias, int32_t window_size,
+                                     float logit_softcap) {
+  if (B <= 0 || Sq <= 0 || Sk <= 0 || D <= 0 || D > 256 ||
+      q_heads <= 0 || kv_heads <= 0 || B % q_heads != 0 ||
+      q_heads % kv_heads != 0 || window_size < 0 || logit_softcap < 0.0f)
+    return false;
   @autoreleasepool {
     id<MTLComputePipelineState> pso =
-        compile_msl_kernel(ctx, kSrc, @"flash_attn_gqa_f16");
+        compile_msl_kernel(ctx, kFlashAttnGqaF16Source, @"flash_attn_gqa_f16");
     if (!pso) return false;
     int32_t kv_outer = (B / q_heads) * kv_heads;
     NSUInteger qBytes = sizeof(uint16_t) * (NSUInteger)B * Sq * D;
@@ -23202,8 +23989,15 @@ kernel void flash_attn_gqa_f16(
     TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufK, ctx, K, kvBytes);
     TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufV, ctx, V, kvBytes);
     TS_METAL_BUF_ACQUIRE(bufO, ctx, qBytes);
-    if (!bufQ || !bufK || !bufV || !bufO) return false;
+    const uint16_t zeroBias = 0;
+    const NSUInteger biasBytes = bias
+        ? sizeof(uint16_t) * (NSUInteger)B * Sq * Sk
+        : sizeof(uint16_t);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufBias, ctx, bias ? bias : &zeroBias,
+                                    biasBytes);
+    if (!bufQ || !bufK || !bufV || !bufO || !bufBias) return false;
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    cb.label = @"tessera.attn.variant.gqa.f16";
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
     [enc setComputePipelineState:pso];
     [enc setBuffer:bufQ offset:0 atIndex:0];
@@ -23218,19 +24012,80 @@ kernel void flash_attn_gqa_f16(
     [enc setBytes:&D length:sizeof(int32_t) atIndex:9];
     [enc setBytes:&scale length:sizeof(float) atIndex:10];
     [enc setBytes:&causal length:sizeof(int32_t) atIndex:11];
+    int32_t has_bias = bias ? 1 : 0;
+    [enc setBuffer:bufBias offset:0 atIndex:12];
+    [enc setBytes:&has_bias length:sizeof(int32_t) atIndex:13];
+    [enc setBytes:&window_size length:sizeof(int32_t) atIndex:14];
+    [enc setBytes:&logit_softcap length:sizeof(float) atIndex:15];
     MTLSize grid = MTLSizeMake((NSUInteger)Sq, (NSUInteger)B, 1);
     NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)Sq, 32);
     NSUInteger tg_y = std::min<NSUInteger>((NSUInteger)B,
         pso.maxTotalThreadsPerThreadgroup / std::max<NSUInteger>(tg_x, 1));
     if (tg_y == 0) tg_y = 1;
-    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, tg_y, 1)];
+    MTLSize tg = MTLSizeMake(tg_x, tg_y, 1);
+    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
     [enc endEncoding];
     // waitUntilCompleted migration (2026-06-01) — Pattern 4 wrapper.
     if (!commit_and_wait_with_timeout(ctx, cb, 60000,
                                       "flash_attn_gqa_msl_f16")) return false;
+    ts_record_pipeline_resources(pso, tg);
     std::memcpy(O, [bufO contents], qBytes);
     return true;
   }
+}
+
+static bool encode_flash_attn_gqa_msl_f16_dev(
+    MetalDeviceContext &ctx, MPSCommandBuffer *cb, id<MTLBuffer> bufQ,
+    id<MTLBuffer> bufK, id<MTLBuffer> bufV, id<MTLBuffer> bufBias,
+    id<MTLBuffer> bufO, int32_t B, int32_t q_heads, int32_t kv_heads,
+    int32_t Sq, int32_t Sk, int32_t D, float scale, int32_t causal,
+    int32_t window_size, float logit_softcap) {
+  if (B <= 0 || Sq <= 0 || Sk <= 0 || D <= 0 || D > 256 ||
+      q_heads <= 0 || kv_heads <= 0 || B % q_heads != 0 ||
+      q_heads % kv_heads != 0 || window_size < 0 || logit_softcap < 0.0f)
+    return false;
+  if (!cb || !bufQ || !bufK || !bufV || !bufO) return false;
+  id<MTLComputePipelineState> pso =
+      compile_msl_kernel(ctx, kFlashAttnGqaF16Source, @"flash_attn_gqa_f16");
+  if (!pso) return false;
+  id<MTLBuffer> dummyBias = nil;
+  if (!bufBias) {
+    dummyBias = [ctx.device newBufferWithLength:sizeof(uint16_t)
+                                      options:MTLResourceStorageModeShared];
+    if (!dummyBias) return false;
+    bufBias = dummyBias;
+  }
+  id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+  if (!enc) return false;
+  [enc setComputePipelineState:pso];
+  [enc setBuffer:bufQ offset:0 atIndex:0];
+  [enc setBuffer:bufK offset:0 atIndex:1];
+  [enc setBuffer:bufV offset:0 atIndex:2];
+  [enc setBuffer:bufO offset:0 atIndex:3];
+  [enc setBytes:&B length:sizeof(int32_t) atIndex:4];
+  [enc setBytes:&q_heads length:sizeof(int32_t) atIndex:5];
+  [enc setBytes:&kv_heads length:sizeof(int32_t) atIndex:6];
+  [enc setBytes:&Sq length:sizeof(int32_t) atIndex:7];
+  [enc setBytes:&Sk length:sizeof(int32_t) atIndex:8];
+  [enc setBytes:&D length:sizeof(int32_t) atIndex:9];
+  [enc setBytes:&scale length:sizeof(float) atIndex:10];
+  [enc setBytes:&causal length:sizeof(int32_t) atIndex:11];
+  int32_t has_bias = dummyBias ? 0 : 1;
+  [enc setBuffer:bufBias offset:0 atIndex:12];
+  [enc setBytes:&has_bias length:sizeof(int32_t) atIndex:13];
+  [enc setBytes:&window_size length:sizeof(int32_t) atIndex:14];
+  [enc setBytes:&logit_softcap length:sizeof(float) atIndex:15];
+  MTLSize grid = MTLSizeMake((NSUInteger)Sq, (NSUInteger)B, 1);
+  NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)Sq, 32);
+  NSUInteger tg_y = std::min<NSUInteger>(
+      (NSUInteger)B, pso.maxTotalThreadsPerThreadgroup /
+                         std::max<NSUInteger>(tg_x, 1));
+  if (tg_y == 0) tg_y = 1;
+  MTLSize tg = MTLSizeMake(tg_x, tg_y, 1);
+  [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+  [enc endEncoding];
+  ts_record_pipeline_resources(pso, tg);
+  return true;
 }
 
 // bf16 <-> f32 bit helpers (top 16 bits of f32).
@@ -23255,9 +24110,177 @@ extern "C" void tessera_apple_gpu_flash_attn_gqa_f16(
     int32_t D, float scale, int32_t causal) {
   MetalDeviceContext &ctx = deviceContext();
   if (ctx.ok && dispatch_flash_attn_gqa_msl_f16(ctx, Q, K, V, O, B, q_heads,
-                                                kv_heads, Sq, Sk, D, scale, causal))
+                                                kv_heads, Sq, Sk, D, scale, causal,
+                                                nullptr, 0, 0.0f))
     return;
   std::memset(O, 0, (size_t)B * Sq * D * 2);  // python upcasts on fallback
+}
+
+extern "C" int32_t tessera_apple_gpu_flash_attn_variant_f16_status(
+    const uint16_t *Q, const uint16_t *K, const uint16_t *V,
+    const uint16_t *bias, uint16_t *O, int32_t B, int32_t q_heads,
+    int32_t kv_heads, int32_t Sq, int32_t Sk, int32_t D, float scale,
+    int32_t causal, int32_t window_size, float logit_softcap) {
+  MetalDeviceContext &ctx = deviceContext();
+  return (ctx.ok && dispatch_flash_attn_gqa_msl_f16(
+      ctx, Q, K, V, O, B, q_heads, kv_heads, Sq, Sk, D, scale, causal, bias,
+      window_size, logit_softcap)) ? 1 : 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_flash_attn_variant_dev_f32_enc(
+    TsEncodeSession *s, TsDeviceTensor *Q, TsDeviceTensor *K,
+    TsDeviceTensor *V, TsDeviceTensor *bias, TsDeviceTensor *O, int32_t B,
+    int32_t q_heads, int32_t kv_heads, int32_t Sq, int32_t Sk, int32_t D,
+    float scale, int32_t causal, int32_t window_size, float logit_softcap) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !Q || !K || !V || !O) return 0;
+  return encode_flash_attn_gqa_msl_dev(
+      ctx, s->cb, Q->buf, K->buf, V->buf, bias ? bias->buf : nil, O->buf, B,
+      q_heads, kv_heads, Sq, Sk, D, scale, causal, window_size, logit_softcap)
+             ? 1
+             : 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_flash_attn_variant_dev_f16_enc(
+    TsEncodeSession *s, TsDeviceTensor *Q, TsDeviceTensor *K,
+    TsDeviceTensor *V, TsDeviceTensor *bias, TsDeviceTensor *O, int32_t B,
+    int32_t q_heads, int32_t kv_heads, int32_t Sq, int32_t Sk, int32_t D,
+    float scale, int32_t causal, int32_t window_size, float logit_softcap) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !Q || !K || !V || !O) return 0;
+  return encode_flash_attn_gqa_msl_f16_dev(
+      ctx, s->cb, Q->buf, K->buf, V->buf, bias ? bias->buf : nil, O->buf, B,
+      q_heads, kv_heads, Sq, Sk, D, scale, causal, window_size, logit_softcap)
+             ? 1
+             : 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_flash_attn_variant_dev_bf16_enc(
+    TsEncodeSession *s, TsDeviceTensor *Q, TsDeviceTensor *K,
+    TsDeviceTensor *V, TsDeviceTensor *bias, TsDeviceTensor *O, int32_t B,
+    int32_t q_heads, int32_t kv_heads, int32_t Sq, int32_t Sk, int32_t D,
+    float scale, int32_t causal, int32_t window_size, float logit_softcap) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !Q || !K || !V || !O) return 0;
+  if (B <= 0 || q_heads <= 0 || kv_heads <= 0 || Sq <= 0 || Sk <= 0 ||
+      D <= 0 || D > 256 || B % q_heads != 0 || q_heads % kv_heads != 0 ||
+      window_size < 0 || logit_softcap < 0.0f)
+    return 0;
+  int64_t qN = (int64_t)B * Sq * D;
+  int64_t kvN = (int64_t)(B / q_heads) * kv_heads * Sk * D;
+  int64_t biasN = (int64_t)B * Sq * Sk;
+  id<MTLBuffer> qf = [ctx.device newBufferWithLength:(NSUInteger)qN * 4
+                                             options:MTLResourceStorageModeShared];
+  id<MTLBuffer> kf = [ctx.device newBufferWithLength:(NSUInteger)kvN * 4
+                                             options:MTLResourceStorageModeShared];
+  id<MTLBuffer> vf = [ctx.device newBufferWithLength:(NSUInteger)kvN * 4
+                                             options:MTLResourceStorageModeShared];
+  id<MTLBuffer> of = [ctx.device newBufferWithLength:(NSUInteger)qN * 4
+                                             options:MTLResourceStorageModeShared];
+  id<MTLBuffer> bf = bias
+      ? [ctx.device newBufferWithLength:(NSUInteger)biasN * 4
+                                options:MTLResourceStorageModeShared]
+      : nil;
+  if (!qf || !kf || !vf || !of || (bias && !bf)) return 0;
+  if (!mpsg_encode_cast_dev(s->cb, Q->buf, qf, qN,
+                             MPSDataTypeBFloat16, MPSDataTypeFloat32) ||
+      !mpsg_encode_cast_dev(s->cb, K->buf, kf, kvN,
+                             MPSDataTypeBFloat16, MPSDataTypeFloat32) ||
+      !mpsg_encode_cast_dev(s->cb, V->buf, vf, kvN,
+                             MPSDataTypeBFloat16, MPSDataTypeFloat32) ||
+      (bias && !mpsg_encode_cast_dev(s->cb, bias->buf, bf, biasN,
+                                      MPSDataTypeBFloat16,
+                                      MPSDataTypeFloat32)))
+    return 0;
+  if (!encode_flash_attn_gqa_msl_dev(
+          ctx, s->cb, qf, kf, vf, bf, of, B, q_heads, kv_heads, Sq, Sk, D,
+          scale, causal, window_size, logit_softcap))
+    return 0;
+  return mpsg_encode_cast_dev(s->cb, of, O->buf, qN,
+                               MPSDataTypeFloat32, MPSDataTypeBFloat16)
+             ? 1
+             : 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_flash_attn_cooperative_dev_f32_enc(
+    TsEncodeSession *s, TsDeviceTensor *Q, TsDeviceTensor *K,
+    TsDeviceTensor *V, TsDeviceTensor *bias, TsDeviceTensor *O, int32_t B,
+    int32_t q_heads, int32_t kv_heads, int32_t Sq, int32_t Sk, int32_t D,
+    float scale, int32_t causal, int32_t window_size, float logit_softcap) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !Q || !K || !V || !O) return 0;
+  return encode_flash_attn_gqa_cooperative_msl_dev(
+      ctx, s->cb, Q->buf, K->buf, V->buf, bias ? bias->buf : nil, O->buf, B,
+      q_heads, kv_heads, Sq, Sk, D, scale, causal, window_size, logit_softcap)
+             ? 1
+             : 0;
+}
+
+static int32_t encode_flash_attn_cooperative_cast_storage(
+    TsEncodeSession *s, TsDeviceTensor *Q, TsDeviceTensor *K,
+    TsDeviceTensor *V, TsDeviceTensor *bias, TsDeviceTensor *O, int32_t B,
+    int32_t q_heads, int32_t kv_heads, int32_t Sq, int32_t Sk, int32_t D,
+    float scale, int32_t causal, int32_t window_size, float logit_softcap,
+    MPSDataType storageType) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !Q || !K || !V || !O || B <= 0 || q_heads <= 0 ||
+      kv_heads <= 0 || Sq <= 0 || Sk <= 0 || D <= 0 || D > 256 ||
+      B % q_heads != 0 || q_heads % kv_heads != 0 || window_size < 0 ||
+      logit_softcap < 0.0f)
+    return 0;
+  int64_t qN = (int64_t)B * Sq * D;
+  int64_t kvN = (int64_t)(B / q_heads) * kv_heads * Sk * D;
+  int64_t biasN = (int64_t)B * Sq * Sk;
+  id<MTLBuffer> qf = [ctx.device newBufferWithLength:(NSUInteger)qN * 4
+                                             options:MTLResourceStorageModeShared];
+  id<MTLBuffer> kf = [ctx.device newBufferWithLength:(NSUInteger)kvN * 4
+                                             options:MTLResourceStorageModeShared];
+  id<MTLBuffer> vf = [ctx.device newBufferWithLength:(NSUInteger)kvN * 4
+                                             options:MTLResourceStorageModeShared];
+  id<MTLBuffer> of = [ctx.device newBufferWithLength:(NSUInteger)qN * 4
+                                             options:MTLResourceStorageModeShared];
+  id<MTLBuffer> bf = bias
+      ? [ctx.device newBufferWithLength:(NSUInteger)biasN * 4
+                                options:MTLResourceStorageModeShared]
+      : nil;
+  if (!qf || !kf || !vf || !of || (bias && !bf)) return 0;
+  if (!mpsg_encode_cast_dev(s->cb, Q->buf, qf, qN,
+                             storageType, MPSDataTypeFloat32) ||
+      !mpsg_encode_cast_dev(s->cb, K->buf, kf, kvN,
+                             storageType, MPSDataTypeFloat32) ||
+      !mpsg_encode_cast_dev(s->cb, V->buf, vf, kvN,
+                             storageType, MPSDataTypeFloat32) ||
+      (bias && !mpsg_encode_cast_dev(s->cb, bias->buf, bf, biasN,
+                                      storageType, MPSDataTypeFloat32)))
+    return 0;
+  if (!encode_flash_attn_gqa_cooperative_msl_dev(
+          ctx, s->cb, qf, kf, vf, bf, of, B, q_heads, kv_heads, Sq, Sk, D,
+          scale, causal, window_size, logit_softcap))
+    return 0;
+  return mpsg_encode_cast_dev(s->cb, of, O->buf, qN,
+                               MPSDataTypeFloat32, storageType)
+             ? 1
+             : 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_flash_attn_cooperative_dev_f16_enc(
+    TsEncodeSession *s, TsDeviceTensor *Q, TsDeviceTensor *K,
+    TsDeviceTensor *V, TsDeviceTensor *bias, TsDeviceTensor *O, int32_t B,
+    int32_t q_heads, int32_t kv_heads, int32_t Sq, int32_t Sk, int32_t D,
+    float scale, int32_t causal, int32_t window_size, float logit_softcap) {
+  return encode_flash_attn_cooperative_cast_storage(
+      s, Q, K, V, bias, O, B, q_heads, kv_heads, Sq, Sk, D, scale, causal,
+      window_size, logit_softcap, MPSDataTypeFloat16);
+}
+
+extern "C" int32_t tessera_apple_gpu_flash_attn_cooperative_dev_bf16_enc(
+    TsEncodeSession *s, TsDeviceTensor *Q, TsDeviceTensor *K,
+    TsDeviceTensor *V, TsDeviceTensor *bias, TsDeviceTensor *O, int32_t B,
+    int32_t q_heads, int32_t kv_heads, int32_t Sq, int32_t Sk, int32_t D,
+    float scale, int32_t causal, int32_t window_size, float logit_softcap) {
+  return encode_flash_attn_cooperative_cast_storage(
+      s, Q, K, V, bias, O, B, q_heads, kv_heads, Sq, Sk, D, scale, causal,
+      window_size, logit_softcap, MPSDataTypeBFloat16);
 }
 
 extern "C" void tessera_apple_gpu_flash_attn_gqa_bf16(

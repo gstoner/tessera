@@ -49,6 +49,8 @@ static int64_t spatialRank(Operation *op) {
 }
 
 struct HaloInfer : public PassWrapper<HaloInfer, OperationPass<ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(HaloInfer)
+
   StringRef getArgument() const final { return "tpp-halo-infer"; }
   StringRef getDescription() const final {
     return "Infer per-dimension halo widths from tpp.grad / tpp.stencil.apply "

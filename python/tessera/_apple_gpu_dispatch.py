@@ -49,6 +49,10 @@ __all__ = [
     "bind_symbol",
     "bind_registered",
     "expected_symbols",
+    "read_profiling_capabilities",
+    "read_dispatch_telemetry",
+    "set_dispatch_telemetry_enabled",
+    "clear_dispatch_telemetry",
     "APPLE_ABI",
 ]
 
@@ -90,7 +94,7 @@ def _find_runtime_source() -> Optional[Path]:
 # Newest C ABI symbol — used as the staleness sentinel when accepting a
 # prebuilt library (env-pointed or CMake-built). If a candidate lacks it,
 # it predates the current source and we fall through to a fresh build.
-_SENTINEL_SYMBOL = "tessera_apple_gpu_fft_f32"
+_SENTINEL_SYMBOL = "tessera_apple_gpu_profiling_capabilities"
 
 
 def _prebuilt_candidate() -> Optional[ctypes.CDLL]:
@@ -355,6 +359,16 @@ APPLE_ABI: dict[str, tuple[tuple, object]] = {
     "tessera_apple_gpu_flash_attn_dev_bf16_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_float, ctypes.c_int32), ctypes.c_int32),
     "tessera_apple_gpu_flash_attn_dev_f16_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_float, ctypes.c_int32), ctypes.c_int32),
     "tessera_apple_gpu_flash_attn_dev_f32_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_float, ctypes.c_int32), ctypes.c_int32),
+    "tessera_apple_gpu_flash_attn_f32_status": ((ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_float, ctypes.c_int32), ctypes.c_int32),
+    "tessera_apple_gpu_flash_attn_f16_status": ((ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_float, ctypes.c_int32), ctypes.c_int32),
+    "tessera_apple_gpu_flash_attn_variant_f32_status": ((ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_float, ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
+    "tessera_apple_gpu_flash_attn_variant_f16_status": ((ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_float, ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
+    "tessera_apple_gpu_flash_attn_variant_dev_f32_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_float, ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
+    "tessera_apple_gpu_flash_attn_variant_dev_f16_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_float, ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
+    "tessera_apple_gpu_flash_attn_variant_dev_bf16_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_float, ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
+    "tessera_apple_gpu_flash_attn_cooperative_dev_f32_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_float, ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
+    "tessera_apple_gpu_flash_attn_cooperative_dev_f16_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_float, ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
+    "tessera_apple_gpu_flash_attn_cooperative_dev_bf16_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_float, ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
     "tessera_apple_gpu_layer_norm_dev_bf16_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
     "tessera_apple_gpu_layer_norm_dev_f16_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
     "tessera_apple_gpu_layer_norm_dev_f32_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
@@ -388,19 +402,32 @@ APPLE_ABI: dict[str, tuple[tuple, object]] = {
     "tessera_apple_gpu_mpsgraph_cache_size": ((), ctypes.c_int32),
     "tessera_apple_gpu_mtl4_archive_enable": ((ctypes.c_char_p,), ctypes.c_int32),
     "tessera_apple_gpu_mtl4_archive_state": ((ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32), ctypes.c_char_p, ctypes.c_int32), ctypes.c_int32),
+    "tessera_apple_gpu_mtl4_matmul_sg_f32": ((ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.c_int32, ctypes.c_int32, ctypes.c_int32), ctypes.c_int32),
+    "tessera_apple_gpu_mtl4_matmul2d_f16": ((ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_float), ctypes.c_int32, ctypes.c_int32, ctypes.c_int32), ctypes.c_int32),
+    "tessera_apple_gpu_mtl4_matmul2d_bf16": ((ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_float), ctypes.c_int32, ctypes.c_int32, ctypes.c_int32), ctypes.c_int32),
     "tessera_apple_gpu_optimizer_f32": ((ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.c_int32, ctypes.c_int32, ctypes.c_float, ctypes.c_float, ctypes.c_float, ctypes.c_float, ctypes.c_float, ctypes.c_float, ctypes.c_float, ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float)), ctypes.c_int32),
     "tessera_apple_gpu_mps_matmul_f32": ((ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.c_int32, ctypes.c_int32, ctypes.c_int32), None),
+    "tessera_apple_gpu_mps_matmul_f16_status": ((ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.c_int32, ctypes.c_int32, ctypes.c_int32), ctypes.c_int32),
+    "tessera_apple_gpu_mps_matmul_bf16_status": ((ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.c_int32, ctypes.c_int32, ctypes.c_int32), ctypes.c_int32),
     "tessera_apple_gpu_mpsgraph_bsmm_f32": ((ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_float), None),
+    "tessera_apple_gpu_mpsgraph_bsmm_f32_status": ((ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
+    "tessera_apple_gpu_mpsgraph_bsmm_f16_status": ((ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
     "tessera_apple_gpu_mpsgraph_gather_f32": ((ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_float), ctypes.c_int32, ctypes.c_int32, ctypes.c_int32), None),
     "tessera_apple_gpu_mpsgraph_binary_f32": ((ctypes.c_int32, ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.c_int64), None),
+    "tessera_apple_gpu_mpsgraph_binary_f32_status": ((ctypes.c_int32, ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.c_int64), ctypes.c_int32),
     "tessera_apple_gpu_mpsgraph_reduce_f32": ((ctypes.c_int32, ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.c_int32, ctypes.c_int32), None),
     "tessera_apple_gpu_mpsgraph_unary_f32": ((ctypes.c_int32, ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.c_int64), None),
+    "tessera_apple_gpu_mpsgraph_unary_f32_status": ((ctypes.c_int32, ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.c_int64), ctypes.c_int32),
+    "tessera_apple_gpu_mpsgraph_unary_f16_status": ((ctypes.c_int32, ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.c_int64), ctypes.c_int32),
     "tessera_apple_gpu_philox_uniform_f32": ((ctypes.c_uint64, ctypes.c_uint64, ctypes.c_float, ctypes.c_float, ctypes.POINTER(ctypes.c_float), ctypes.c_int32), ctypes.c_int32),
     "tessera_apple_gpu_philox_normal_f32": ((ctypes.c_uint64, ctypes.c_uint64, ctypes.c_float, ctypes.c_float, ctypes.POINTER(ctypes.c_float), ctypes.c_int32), ctypes.c_int32),
     "tessera_apple_gpu_philox_dropout_f32": ((ctypes.POINTER(ctypes.c_float), ctypes.c_uint64, ctypes.c_uint64, ctypes.c_float, ctypes.POINTER(ctypes.c_float), ctypes.c_int32), ctypes.c_int32),
     "tessera_apple_gpu_rmsnorm_dev_bf16_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
     "tessera_apple_gpu_rmsnorm_dev_f16_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
     "tessera_apple_gpu_rmsnorm_dev_f32_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
+    "tessera_apple_gpu_ssm_replay_decode_f32": ((ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32), ctypes.c_int32),
+    "tessera_apple_gpu_ssm_block_decode_f32_status": ((ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32), ctypes.c_int32),
+    "tessera_apple_gpu_ssm_block_decode_f16_status": ((ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32), ctypes.c_int32),
     "tessera_apple_gpu_rope_dev_bf16_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32), ctypes.c_int32),
     "tessera_apple_gpu_rope_dev_f16_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32), ctypes.c_int32),
     "tessera_apple_gpu_rope_dev_f32_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32), ctypes.c_int32),
@@ -423,6 +450,20 @@ APPLE_ABI: dict[str, tuple[tuple, object]] = {
     "tessera_apple_gpu_solve_lu_f32": ((ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.c_int32, ctypes.c_int32), ctypes.c_int32),
     "tessera_apple_gpu_spmm_csr_f32": ((ctypes.POINTER(ctypes.c_int64), ctypes.POINTER(ctypes.c_int64), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32), ctypes.c_int32),
     "tessera_apple_gpu_tri_solve_f32": ((ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32), ctypes.c_int32),
+    "tessera_apple_gpu_tile_simdgroup_gemm_f16": ((ctypes.c_char_p, ctypes.c_char_p, ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_float), ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32), ctypes.c_int32),
+    "tessera_apple_gpu_tile_simdgroup_gemm_bf16": ((ctypes.c_char_p, ctypes.c_char_p, ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_float), ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32), ctypes.c_int32),
+    "tessera_apple_gpu_tile_last_device_time_ns": ((), ctypes.c_int64),
+    "tessera_apple_gpu_tile_last_counter_delta": ((), ctypes.c_int64),
+    "tessera_apple_gpu_tile_counter_sampling_supported": ((), ctypes.c_int32),
+    "tessera_apple_gpu_dispatch_telemetry_set_enabled": ((ctypes.c_int32,), None),
+    "tessera_apple_gpu_dispatch_telemetry_enabled": ((), ctypes.c_int32),
+    "tessera_apple_gpu_dispatch_telemetry_clear": ((), None),
+    "tessera_apple_gpu_last_dispatch_device_time_ns": ((), ctypes.c_int64),
+    "tessera_apple_gpu_last_dispatch_counter_delta": ((), ctypes.c_int64),
+    "tessera_apple_gpu_last_dispatch_counter_supported": ((), ctypes.c_int32),
+    "tessera_apple_gpu_last_dispatch_timing_source": ((), ctypes.c_int32),
+    "tessera_apple_gpu_last_dispatch_resource_record": ((ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int64)), ctypes.c_int32),
+    "tessera_apple_gpu_profiling_capabilities": ((), ctypes.c_int32),
     "tessera_apple_gpu_unary_dev_bf16_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int64, ctypes.c_int32), ctypes.c_int32),
     "tessera_apple_gpu_unary_dev_f16_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int64, ctypes.c_int32), ctypes.c_int32),
     "tessera_apple_gpu_unary_dev_f32_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int64, ctypes.c_int32), ctypes.c_int32),
@@ -456,6 +497,135 @@ def expected_symbols() -> tuple[str, ...]:
     """All Apple GPU C-ABI symbols the registry declares — consumed by the
     off-device drift guard and the on-device dylib-export check."""
     return tuple(APPLE_ABI)
+
+
+_DISPATCH_TIMING_SOURCES = {
+    0: None,
+    1: "metal_kernel_interval",
+    2: "metal_command_buffer_interval",
+    3: "metal4_timestamp_heap",
+}
+
+_PROFILING_CAPABILITY_BITS = (
+    (1 << 0, "pipeline_limits"),
+    (1 << 1, "timestamp_counter_set"),
+    (1 << 2, "statistic_counter_set"),
+    (1 << 3, "stage_utilization_counter_set"),
+    (1 << 4, "dispatch_boundary_sampling"),
+    (1 << 5, "stage_boundary_sampling"),
+    (1 << 6, "metal4_timestamp_heap"),
+)
+
+
+def read_profiling_capabilities() -> dict[str, object]:
+    """Return exact-device public Metal profiling capabilities.
+
+    Register count, scratch bytes, spill count, and true occupancy are named
+    explicitly because the public Metal API does not expose them. They remain
+    false even when pipeline-limit or timestamp evidence is available.
+    """
+    probe = bind_registered("tessera_apple_gpu_profiling_capabilities")
+    raw = int(probe()) if probe is not None else 0
+    decoded = {name: bool(raw & bit) for bit, name in _PROFILING_CAPABILITY_BITS}
+    decoded.update({
+        "register_count": False,
+        "scratch_bytes": False,
+        "spill_count": False,
+        "occupancy": False,
+    })
+    return {"raw": raw, "capabilities": decoded}
+
+
+def set_dispatch_telemetry_enabled(enabled: bool) -> bool:
+    """Enable the opt-in per-dispatch timing/counter record.
+
+    Metal 4 timestamp heaps use precise encoder-boundary samples and therefore
+    carry measurable overhead. They stay disabled for normal production calls;
+    benchmark/proof lanes opt in explicitly.
+    """
+    setter = bind_registered("tessera_apple_gpu_dispatch_telemetry_set_enabled")
+    probe = bind_registered("tessera_apple_gpu_dispatch_telemetry_enabled")
+    if setter is None or probe is None:
+        return False
+    setter(ctypes.c_int32(1 if enabled else 0))
+    return bool(probe()) == bool(enabled)
+
+
+def clear_dispatch_telemetry() -> None:
+    clear = bind_registered("tessera_apple_gpu_dispatch_telemetry_clear")
+    if clear is not None:
+        clear()
+
+
+def read_dispatch_telemetry() -> dict[str, object]:
+    """Read the current thread's last native dispatch record.
+
+    Missing values are returned as ``None``. In particular, a queue-only
+    MPSGraph call does not inherit a prior command buffer's timing after the
+    caller clears the record.
+    """
+    enabled = bind_registered("tessera_apple_gpu_dispatch_telemetry_enabled")
+    timing = bind_registered("tessera_apple_gpu_last_dispatch_device_time_ns")
+    counter = bind_registered("tessera_apple_gpu_last_dispatch_counter_delta")
+    counter_supported = bind_registered(
+        "tessera_apple_gpu_last_dispatch_counter_supported")
+    source = bind_registered("tessera_apple_gpu_last_dispatch_timing_source")
+    resource = bind_registered("tessera_apple_gpu_last_dispatch_resource_record")
+    if None in (enabled, timing, counter, counter_supported, source, resource):
+        return {
+            "capture_enabled": False,
+            "device_time_ns": None,
+            "timing_source": None,
+            "counter_sampling_supported": None,
+            "counter_timestamp_delta": None,
+            "resources": None,
+        }
+    device_time_ns = int(timing())
+    counter_delta = int(counter())
+    counter_state = int(counter_supported())
+    source_id = int(source())
+    tpg_x = ctypes.c_int32(-1)
+    tpg_y = ctypes.c_int32(-1)
+    tpg_z = ctypes.c_int32(-1)
+    execution_width = ctypes.c_int32(-1)
+    max_threads = ctypes.c_int32(-1)
+    static_tg_memory = ctypes.c_int64(-1)
+    has_resources = bool(resource(
+        ctypes.byref(tpg_x), ctypes.byref(tpg_y), ctypes.byref(tpg_z),
+        ctypes.byref(execution_width), ctypes.byref(max_threads),
+        ctypes.byref(static_tg_memory)))
+    resources = None
+    if has_resources:
+        total_threads = tpg_x.value * tpg_y.value * tpg_z.value
+        width = execution_width.value
+        capacity = max_threads.value
+        resources = {
+            "threadgroup": [tpg_x.value, tpg_y.value, tpg_z.value],
+            "thread_execution_width": width,
+            "max_total_threads_per_threadgroup": capacity,
+            "static_threadgroup_memory_bytes": static_tg_memory.value,
+            # The ABI field predates dynamic threadgroup allocations. Current
+            # runtimes report pipeline-static plus encoder-requested memory;
+            # keep the legacy key and expose the accurate schema name too.
+            "threadgroup_memory_bytes": static_tg_memory.value,
+            "simdgroups_per_threadgroup": (
+                (total_threads + width - 1) // width if width > 0 else None),
+            "threadgroup_capacity_fraction": (
+                total_threads / capacity if capacity > 0 else None),
+            "occupancy": None,
+            "register_count": None,
+            "scratch_bytes": None,
+            "spill_count": None,
+        }
+    return {
+        "capture_enabled": bool(enabled()),
+        "device_time_ns": device_time_ns if device_time_ns >= 0 else None,
+        "timing_source": _DISPATCH_TIMING_SOURCES.get(source_id),
+        "counter_sampling_supported": (
+            bool(counter_state) if counter_state >= 0 else None),
+        "counter_timestamp_delta": counter_delta if counter_delta >= 0 else None,
+        "resources": resources,
+    }
 
 
 

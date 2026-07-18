@@ -1,0 +1,371 @@
+{
+  "backend": "apple_gpu",
+  "device": "apple7",
+  "op": "ssm_replay_decode",
+  "report_count": 2,
+  "rows": [
+    {
+      "device_cross_run_drift_fraction": 0.045454545454545456,
+      "device_per_token_ns": [
+        88,
+        92
+      ],
+      "device_time_coverage": [
+        1.0,
+        1.0
+      ],
+      "dtype": "f32",
+      "end_to_end_cross_run_drift_fraction": 0.015975809546120035,
+      "end_to_end_per_token_ms": [
+        0.026037840820312498,
+        0.02645381640625
+      ],
+      "evidence_complete": true,
+      "mode": "replay_block",
+      "native_dispatched_all_runs": true,
+      "numerically_validated_all_runs": true,
+      "report_count": 2,
+      "resource_evidence_all_runs": true,
+      "resources": [
+        {
+          "max_total_threads_per_threadgroup": 1024,
+          "occupancy": null,
+          "register_count": null,
+          "scratch_bytes": null,
+          "simdgroups_per_threadgroup": 4,
+          "spill_count": null,
+          "static_threadgroup_memory_bytes": 0,
+          "thread_execution_width": 32,
+          "threadgroup": [
+            128,
+            1,
+            1
+          ],
+          "threadgroup_capacity_fraction": 0.125,
+          "threadgroup_memory_bytes": 0
+        },
+        {
+          "max_total_threads_per_threadgroup": 1024,
+          "occupancy": null,
+          "register_count": null,
+          "scratch_bytes": null,
+          "simdgroups_per_threadgroup": 4,
+          "spill_count": null,
+          "static_threadgroup_memory_bytes": 0,
+          "thread_execution_width": 32,
+          "threadgroup": [
+            128,
+            1,
+            1
+          ],
+          "threadgroup_capacity_fraction": 0.125,
+          "threadgroup_memory_bytes": 0
+        }
+      ],
+      "shape": "1x128x128"
+    },
+    {
+      "device_cross_run_drift_fraction": 0.10790220584574017,
+      "device_per_token_ns": [
+        22250,
+        20083
+      ],
+      "device_time_coverage": [
+        1.0,
+        1.0
+      ],
+      "dtype": "f32",
+      "end_to_end_cross_run_drift_fraction": 0.002799105010748409,
+      "end_to_end_per_token_ms": [
+        0.46722802734375,
+        0.46853584765625
+      ],
+      "evidence_complete": true,
+      "mode": "replay_fused",
+      "native_dispatched_all_runs": true,
+      "numerically_validated_all_runs": true,
+      "report_count": 2,
+      "resource_evidence_all_runs": true,
+      "resources": [
+        {
+          "max_total_threads_per_threadgroup": 1024,
+          "occupancy": null,
+          "register_count": null,
+          "scratch_bytes": null,
+          "simdgroups_per_threadgroup": 4,
+          "spill_count": null,
+          "static_threadgroup_memory_bytes": 0,
+          "thread_execution_width": 32,
+          "threadgroup": [
+            128,
+            1,
+            1
+          ],
+          "threadgroup_capacity_fraction": 0.125,
+          "threadgroup_memory_bytes": 0
+        },
+        {
+          "max_total_threads_per_threadgroup": 1024,
+          "occupancy": null,
+          "register_count": null,
+          "scratch_bytes": null,
+          "simdgroups_per_threadgroup": 4,
+          "spill_count": null,
+          "static_threadgroup_memory_bytes": 0,
+          "thread_execution_width": 32,
+          "threadgroup": [
+            128,
+            1,
+            1
+          ],
+          "threadgroup_capacity_fraction": 0.125,
+          "threadgroup_memory_bytes": 0
+        }
+      ],
+      "shape": "1x128x128"
+    },
+    {
+      "device_cross_run_drift_fraction": 0.26804123711340205,
+      "device_per_token_ns": [
+        97,
+        123
+      ],
+      "device_time_coverage": [
+        1.0,
+        1.0
+      ],
+      "dtype": "f32",
+      "end_to_end_cross_run_drift_fraction": 0.02135904695441672,
+      "end_to_end_per_token_ms": [
+        0.026247842773437502,
+        0.0268084716796875
+      ],
+      "evidence_complete": true,
+      "mode": "replay_block",
+      "native_dispatched_all_runs": true,
+      "numerically_validated_all_runs": true,
+      "report_count": 2,
+      "resource_evidence_all_runs": true,
+      "resources": [
+        {
+          "max_total_threads_per_threadgroup": 1024,
+          "occupancy": null,
+          "register_count": null,
+          "scratch_bytes": null,
+          "simdgroups_per_threadgroup": 8,
+          "spill_count": null,
+          "static_threadgroup_memory_bytes": 0,
+          "thread_execution_width": 32,
+          "threadgroup": [
+            256,
+            1,
+            1
+          ],
+          "threadgroup_capacity_fraction": 0.25,
+          "threadgroup_memory_bytes": 0
+        },
+        {
+          "max_total_threads_per_threadgroup": 1024,
+          "occupancy": null,
+          "register_count": null,
+          "scratch_bytes": null,
+          "simdgroups_per_threadgroup": 8,
+          "spill_count": null,
+          "static_threadgroup_memory_bytes": 0,
+          "thread_execution_width": 32,
+          "threadgroup": [
+            256,
+            1,
+            1
+          ],
+          "threadgroup_capacity_fraction": 0.25,
+          "threadgroup_memory_bytes": 0
+        }
+      ],
+      "shape": "1x256x128"
+    },
+    {
+      "device_cross_run_drift_fraction": 0.034378159757330634,
+      "device_per_token_ns": [
+        19437,
+        18791
+      ],
+      "device_time_coverage": [
+        1.0,
+        1.0
+      ],
+      "dtype": "f32",
+      "end_to_end_cross_run_drift_fraction": 0.004748044837664884,
+      "end_to_end_per_token_ms": [
+        0.494078369140625,
+        0.496424275390625
+      ],
+      "evidence_complete": true,
+      "mode": "replay_fused",
+      "native_dispatched_all_runs": true,
+      "numerically_validated_all_runs": true,
+      "report_count": 2,
+      "resource_evidence_all_runs": true,
+      "resources": [
+        {
+          "max_total_threads_per_threadgroup": 1024,
+          "occupancy": null,
+          "register_count": null,
+          "scratch_bytes": null,
+          "simdgroups_per_threadgroup": 8,
+          "spill_count": null,
+          "static_threadgroup_memory_bytes": 0,
+          "thread_execution_width": 32,
+          "threadgroup": [
+            256,
+            1,
+            1
+          ],
+          "threadgroup_capacity_fraction": 0.25,
+          "threadgroup_memory_bytes": 0
+        },
+        {
+          "max_total_threads_per_threadgroup": 1024,
+          "occupancy": null,
+          "register_count": null,
+          "scratch_bytes": null,
+          "simdgroups_per_threadgroup": 8,
+          "spill_count": null,
+          "static_threadgroup_memory_bytes": 0,
+          "thread_execution_width": 32,
+          "threadgroup": [
+            256,
+            1,
+            1
+          ],
+          "threadgroup_capacity_fraction": 0.25,
+          "threadgroup_memory_bytes": 0
+        }
+      ],
+      "shape": "1x256x128"
+    },
+    {
+      "device_cross_run_drift_fraction": 0.008620689655172414,
+      "device_per_token_ns": [
+        116,
+        117
+      ],
+      "device_time_coverage": [
+        1.0,
+        1.0
+      ],
+      "dtype": "f32",
+      "end_to_end_cross_run_drift_fraction": 0.008383727911467471,
+      "end_to_end_per_token_ms": [
+        0.015045654296874999,
+        0.01517179296875
+      ],
+      "evidence_complete": true,
+      "mode": "replay_block",
+      "native_dispatched_all_runs": true,
+      "numerically_validated_all_runs": true,
+      "report_count": 2,
+      "resource_evidence_all_runs": true,
+      "resources": [
+        {
+          "max_total_threads_per_threadgroup": 1024,
+          "occupancy": null,
+          "register_count": null,
+          "scratch_bytes": null,
+          "simdgroups_per_threadgroup": 16,
+          "spill_count": null,
+          "static_threadgroup_memory_bytes": 0,
+          "thread_execution_width": 32,
+          "threadgroup": [
+            512,
+            1,
+            1
+          ],
+          "threadgroup_capacity_fraction": 0.5,
+          "threadgroup_memory_bytes": 0
+        },
+        {
+          "max_total_threads_per_threadgroup": 1024,
+          "occupancy": null,
+          "register_count": null,
+          "scratch_bytes": null,
+          "simdgroups_per_threadgroup": 16,
+          "spill_count": null,
+          "static_threadgroup_memory_bytes": 0,
+          "thread_execution_width": 32,
+          "threadgroup": [
+            512,
+            1,
+            1
+          ],
+          "threadgroup_capacity_fraction": 0.5,
+          "threadgroup_memory_bytes": 0
+        }
+      ],
+      "shape": "4x128x64"
+    },
+    {
+      "device_cross_run_drift_fraction": 0.093460273153225,
+      "device_per_token_ns": [
+        21937,
+        20062
+      ],
+      "device_time_coverage": [
+        1.0,
+        1.0
+      ],
+      "dtype": "f32",
+      "end_to_end_cross_run_drift_fraction": 0.0025360099443036276,
+      "end_to_end_per_token_ms": [
+        0.432993001953125,
+        0.43189770507812497
+      ],
+      "evidence_complete": true,
+      "mode": "replay_fused",
+      "native_dispatched_all_runs": true,
+      "numerically_validated_all_runs": true,
+      "report_count": 2,
+      "resource_evidence_all_runs": true,
+      "resources": [
+        {
+          "max_total_threads_per_threadgroup": 1024,
+          "occupancy": null,
+          "register_count": null,
+          "scratch_bytes": null,
+          "simdgroups_per_threadgroup": 16,
+          "spill_count": null,
+          "static_threadgroup_memory_bytes": 0,
+          "thread_execution_width": 32,
+          "threadgroup": [
+            512,
+            1,
+            1
+          ],
+          "threadgroup_capacity_fraction": 0.5,
+          "threadgroup_memory_bytes": 0
+        },
+        {
+          "max_total_threads_per_threadgroup": 1024,
+          "occupancy": null,
+          "register_count": null,
+          "scratch_bytes": null,
+          "simdgroups_per_threadgroup": 16,
+          "spill_count": null,
+          "static_threadgroup_memory_bytes": 0,
+          "thread_execution_width": 32,
+          "threadgroup": [
+            512,
+            1,
+            1
+          ],
+          "threadgroup_capacity_fraction": 0.5,
+          "threadgroup_memory_bytes": 0
+        }
+      ],
+      "shape": "4x128x64"
+    }
+  ],
+  "schema_version": 1,
+  "selector_reason": "reports retain independent repeated medians but do not use interleaved paired route blocks",
+  "selector_status": "characterized_not_selector_eligible"
+}

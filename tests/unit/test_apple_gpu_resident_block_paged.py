@@ -130,3 +130,40 @@ def test_symbols_exported():
     rt = R._load_apple_gpu_runtime()
     assert hasattr(rt, "tessera_apple_gpu_gather_blocks_dev_f32")
     assert hasattr(rt, "tessera_apple_gpu_gather_blocks_dev_f32_enc")
+
+
+@pytest.mark.hardware_apple_gpu
+def test_noncontiguous_gather_retains_native_provenance_and_honest_resources():
+    from tessera._apple_gpu_dispatch import (
+        clear_dispatch_telemetry, set_dispatch_telemetry_enabled)
+    from tests._support.apple import require_apple_metal
+
+    require_apple_metal()
+    c = ResidentBlockPagedKVCache(
+        latent_dim=6, rope_dim=2, num_blocks=8, block_size=2)
+    rng = np.random.default_rng(2007)
+    c.add_sequence("a")
+    c.add_sequence("b")
+    expected = []
+    for _ in range(3):
+        a = rng.standard_normal((2, 6)).astype(np.float32)
+        expected.append(a)
+        c.append("a", a, rng.standard_normal((2, 2)).astype(np.float32))
+        c.append("b", rng.standard_normal((2, 6)).astype(np.float32),
+                 rng.standard_normal((2, 2)).astype(np.float32))
+    assert c.block_table("a") == [0, 2, 4]
+    try:
+        assert set_dispatch_telemetry_enabled(True)
+        clear_dispatch_telemetry()
+        window = c.gather_latent("a")
+        assert c.last_gather_execution == "native_gpu"
+        assert c.last_gather_telemetry["capture_enabled"] is True
+        resources = c.last_gather_telemetry["resources"]
+        assert resources["api"] == "MPSGraph.gatherWithUpdatesTensor"
+        assert resources["pipeline_limits"] is None
+        np.testing.assert_allclose(
+            _np(window), np.concatenate(expected), rtol=1e-5, atol=1e-5)
+        window.free()
+    finally:
+        set_dispatch_telemetry_enabled(False)
+        c.free()

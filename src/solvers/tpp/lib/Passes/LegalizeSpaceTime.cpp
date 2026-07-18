@@ -49,6 +49,8 @@ static std::pair<int64_t, int64_t> timeSchemeInfo(StringRef s) {
 
 struct LegalizeSpaceTime
     : public PassWrapper<LegalizeSpaceTime, OperationPass<ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LegalizeSpaceTime)
+
   StringRef getArgument() const final { return "tpp-legalize-space-time"; }
   StringRef getDescription() const final {
     return "Normalize + validate TPP space-time metadata (stencil scheme/order,"

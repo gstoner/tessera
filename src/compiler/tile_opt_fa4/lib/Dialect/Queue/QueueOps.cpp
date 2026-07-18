@@ -10,12 +10,6 @@
 #define GET_OP_CLASSES
 #include "QueueOps.h.inc"
 
-// Sprint V8 (2026-05-22): the Queue dialect anchors its eager-load
-// extension on the parent `tessera` (Graph IR) dialect — same pattern
-// V7b used for Attn.  Including TesseraOps.h pulls in the
-// TesseraDialect class declaration that the extension lambda needs.
-#include "Tessera/IR/TesseraOps.h"
-
 namespace tessera {
 namespace queue {
 
@@ -34,15 +28,11 @@ void TesseraQueueDialect::initialize() {
 // longest-prefix dialect lookup needs `tessera.queue` to be
 // pre-loaded in the context.
 //
-// The DialectExtension fires once per MLIRContext, immediately after
-// the parent `tessera` Graph IR dialect attaches — making the
-// dotted-prefix parse path work for `tessera.queue.*` ops and types.
+// MLIR 23 rejects the legacy dotted namespace at dialect construction time.
+// Register it without eagerly loading it alongside the parent `tessera`
+// dialect, so ordinary Graph IR parsing does not abort.
 void registerQueueDialect(::mlir::DialectRegistry &registry) {
   registry.insert<TesseraQueueDialect>();
-  registry.addExtension(
-      +[](::mlir::MLIRContext *ctx, ::tessera::TesseraDialect *) {
-        ctx->getOrLoadDialect<TesseraQueueDialect>();
-      });
 }
 
 } // namespace queue

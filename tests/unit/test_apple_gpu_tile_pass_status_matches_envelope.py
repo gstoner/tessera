@@ -28,6 +28,9 @@ _DEFAULT = REPO_ROOT / "build" / "tools" / "tessera-opt" / "tessera-opt"
 
 
 def _find_opt() -> str | None:
+    configured = os.environ.get("TESSERA_OPT")
+    if configured and Path(configured).is_file() and os.access(configured, os.X_OK):
+        return configured
     if _DEFAULT.is_file() and os.access(_DEFAULT, os.X_OK):
         return str(_DEFAULT)
     return shutil.which("tessera-opt")

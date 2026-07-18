@@ -25,6 +25,7 @@ MARKERS: dict[str, str] = {
         "requires a built external compiler tool such as tessera-opt or mlir-opt"
     ),
     "compiler_apple": "compiler-artifact proof owned by the Apple backend",
+    "compiler_cpu": "compiler-artifact proof owned by the CPU JIT backend",
     "compiler_nvidia": "compiler-artifact proof owned by the NVIDIA backend",
     "compiler_rocm": "compiler-artifact proof owned by the ROCm backend",
     "integration": "crosses a process, package, runtime, or component boundary",
@@ -46,5 +47,5 @@ PR_MARKER_EXPRESSION = (
 
 APPLE_HOST_FREE_COMPILER_EXPRESSION = (
     "compiler_tool and not hardware_apple_gpu and not performance "
-    "and not compiler_nvidia and not compiler_rocm"
+    "and not compiler_cpu and not compiler_nvidia and not compiler_rocm"
 )

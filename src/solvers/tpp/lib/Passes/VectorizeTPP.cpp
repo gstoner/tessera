@@ -48,6 +48,8 @@ static int64_t floorPow2(int64_t n) {
 }
 
 struct VectorizeTPP : public PassWrapper<VectorizeTPP, OperationPass<ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(VectorizeTPP)
+
   static constexpr int64_t kRowTile = 64;   // innermost blocking cap
   static constexpr int64_t kOuterTile = 8;  // outer-dim blocking cap
 

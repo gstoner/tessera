@@ -658,3 +658,17 @@ NVIDIA-TEST-6 are closed; the requested attention, epilogue, and legacy-retune
 parity records are stable without a selector promotion. Keep `plan_state:
 landing` while unrelated implementation or exact-device follow-ons remain.
 Move this plan to the NVIDIA archive only after every completion gate is met.
+
+Consumer plan `SEQUENCE-MIXER-2026-07-17`: the compiler-direction Sequence Mixer
+track ([`../../compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md`](../../compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md))
+consumes the NVIDIA families as a **lead performance target** (Decision #28 — its
+`wgmma`/`mma.sync` candidates set the ceiling and are never capped by the shared
+mixer framework). It adds candidates under existing families, opening no new
+NVIDIA-TEST item: channel-wise KDA/GDN decode → **NVIDIA-TEST-3/-5 KV/ReplaySSM**;
+`sliding_window`/full mixer fwd + backward → **attention** (split/reduced dK/dV,
+G6-C-style); chunkwise-scan inner GEMMs → **GEMM/Tile** (`wgmma` sm_90 / `mma.sync`
+sm_120, preferably via the NVIDIA Tile IR lowering target); NVFP4/MXFP8 mixer GEMMs
+→ **NVIDIA-TEST-4** numerical policy (this is the executing FP4 lane — sm_120
+`mma.sync`, not `tcgen05`). Inherits the TEST-3 native-provenance / TEST-5
+kernel-vs-E2E evidence contract unchanged. Direction pointer only; no NVIDIA gate,
+route, or exact-device claim changes here.

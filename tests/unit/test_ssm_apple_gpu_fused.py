@@ -44,10 +44,31 @@ def test_fused_factory_wires_decode_fn():
 
 
 @pytest.mark.hardware_apple_gpu
-def test_decode_symbol_resolves():
-    """The C ABI symbol must be present in the (on-demand-compiled) runtime."""
-    sym = rt._apple_gpu_ssm_replay_decode_f32()
-    assert callable(sym)
+def test_fused_decode_reports_native_gpu_and_matches_eager():
+    """A callable ABI is insufficient: this asserts the actual MSL dispatch."""
+    rng = np.random.default_rng(37)
+    B, S, D, N = 1, 6, 4, 3
+    x, a, Bp, Cp, dt = _inputs(rng, B, S, D, N)
+    eager = np.asarray(tessera.ops.selective_ssm(x, a, Bp, Cp, dt))
+    h = rt.apple_gpu_fused_ssm_state_handle(B, D, N, a, capacity=16)
+    out = _decode(h, dt, x, Bp, Cp)
+
+    assert h.last_decode_execution == "native_gpu"
+    assert np.max(np.abs(out - eager)) < 5e-4
+
+
+def test_fused_decode_forced_missing_binding_is_reference_and_correct(monkeypatch):
+    """A missing fused binding must retain reference provenance."""
+    monkeypatch.setattr(rt, "apple_gpu_ssm_decode_callable", lambda: lambda *_: None)
+    rng = np.random.default_rng(38)
+    B, S, D, N = 1, 6, 4, 3
+    x, a, Bp, Cp, dt = _inputs(rng, B, S, D, N)
+    eager = np.asarray(tessera.ops.selective_ssm(x, a, Bp, Cp, dt))
+    h = rt.apple_gpu_fused_ssm_state_handle(B, D, N, a, capacity=16)
+    out = _decode(h, dt, x, Bp, Cp)
+
+    assert h.last_decode_execution == "reference_cpu"
+    assert np.max(np.abs(out - eager)) < 5e-4
 
 
 @pytest.mark.parametrize("B,S,D,N,cap,spec", [
@@ -105,3 +126,54 @@ def test_fused_speculative_rollback_still_exact():
         yb = base.step(dt[:, t, :], x[:, t, :], Bp[:, t, :], Cp[:, t, :])
         ys = spec.step(dt[:, t, :], x[:, t, :], Bp[:, t, :], Cp[:, t, :])
         assert np.max(np.abs(yb - ys)) < 1e-5
+
+
+@pytest.mark.hardware_apple_gpu
+@pytest.mark.parametrize("compute_dtype,tolerance", [("fp32", 5e-4), ("fp16", 3e-2)])
+def test_block_decode_reports_native_resources_and_matches_reference(
+        compute_dtype, tolerance):
+    from tessera._apple_gpu_dispatch import (
+        clear_dispatch_telemetry,
+        read_dispatch_telemetry,
+        set_dispatch_telemetry_enabled,
+    )
+    from tests._support.apple import require_apple_metal
+
+    require_apple_metal()
+    rng = np.random.default_rng(1907)
+    B, T, D, N = 2, 7, 8, 5
+    x = rng.standard_normal((T, B, D))
+    a = -np.abs(rng.standard_normal(D))
+    bp = rng.standard_normal((T, B, N))
+    cp = rng.standard_normal((T, B, N))
+    dt = np.abs(rng.standard_normal((T, B, D))) * 0.2
+    reference = SSMStateHandle(B, D, N, a).decode_block(dt, x, bp, cp)
+    handle = rt.apple_gpu_fused_ssm_state_handle(
+        B, D, N, a, capacity=16, compute_dtype=compute_dtype)
+    try:
+        assert set_dispatch_telemetry_enabled(True)
+        clear_dispatch_telemetry()
+        output = handle.decode_block(dt, x, bp, cp)
+        record = read_dispatch_telemetry()
+        assert handle.last_block_execution == "native_gpu"
+        assert record["device_time_ns"] > 0
+        assert record["resources"]["threadgroup"] == [B * D, 1, 1]
+        assert record["resources"]["thread_execution_width"] > 0
+        assert np.max(np.abs(output - reference)) < tolerance
+    finally:
+        set_dispatch_telemetry_enabled(False)
+
+
+def test_block_decode_out_of_native_envelope_is_explicit_reference():
+    """N>256 must not retain a native label through the legacy fallback ABI."""
+    B, T, D, N = 1, 2, 2, 257
+    a = -np.ones(D)
+    dt = np.full((T, B, D), 0.1)
+    x = np.ones((T, B, D))
+    bp = np.ones((T, B, N))
+    cp = np.ones((T, B, N))
+    reference = SSMStateHandle(B, D, N, a).decode_block(dt, x, bp, cp)
+    handle = rt.apple_gpu_fused_ssm_state_handle(B, D, N, a, compute_dtype="fp32")
+    output = handle.decode_block(dt, x, bp, cp)
+    assert handle.last_block_execution == "reference_cpu"
+    np.testing.assert_allclose(output, reference, rtol=0, atol=0)

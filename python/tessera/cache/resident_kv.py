@@ -181,6 +181,8 @@ class ResidentBlockPagedKVCache:
             self._rope_view = np.zeros((self.num_blocks, self.block_size, self.rope_dim), np.float32)
         self._free: list[int] = list(range(self.num_blocks - 1, -1, -1))
         self._seqs: dict[Any, _SeqState] = {}
+        self.last_gather_execution = "uninitialized"
+        self.last_gather_telemetry: dict[str, Any] | None = None
 
     # ------------------------------------------------------------------
     @property
@@ -254,6 +256,8 @@ class ResidentBlockPagedKVCache:
     def _gather(self, st: _SeqState, pool: Any, view: Any, dim: int) -> Any:
         """Return a resident DeviceTensor window [length, dim] (or numpy when
         not resident)."""
+        self.last_gather_execution = "reference_cpu"
+        self.last_gather_telemetry = None
         n_blk = len(st.block_table)
         if n_blk == 0:
             raise ResidentBlockPagedKVCacheError("empty sequence")
@@ -264,6 +268,18 @@ class ResidentBlockPagedKVCache:
                 pool, bt, self.num_blocks, n_blk, self.block_size, dim)
             bt.free()
             if win is not None:
+                from .._apple_gpu_dispatch import read_dispatch_telemetry
+                telemetry = read_dispatch_telemetry()
+                pipeline = telemetry.get("resources")
+                telemetry["resources"] = {
+                    "api": "MPSGraph.gatherWithUpdatesTensor",
+                    "pipeline_limits": pipeline,
+                    "pipeline_limits_unavailable_reason": (
+                        None if pipeline is not None
+                        else "framework_pipeline_not_publicly_exposed"),
+                }
+                self.last_gather_execution = "native_gpu"
+                self.last_gather_telemetry = telemetry
                 # [n_blk, block_size, dim] -> [n_blk*block_size, dim] -> [length, dim]
                 flat = win.reshape_view(n_blk * self.block_size, dim)
                 out = flat.prefix_view(st.length)

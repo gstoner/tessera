@@ -43,6 +43,8 @@ namespace {
 
 struct DistributeHalo
     : public PassWrapper<DistributeHalo, OperationPass<ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(DistributeHalo)
+
   StringRef getArgument() const final { return "tpp-distribute-halo"; }
   StringRef getDescription() const final {
     return "Materialise tpp.halo.exchange ops (overlapped ghost-cell exchange) "

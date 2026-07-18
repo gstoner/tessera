@@ -14,6 +14,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from dataclasses import dataclass, field
@@ -506,6 +507,8 @@ _APPLE_VALUE_GPU_SYMBOL_PROBES: Mapping[str, str] = {
     "tessera_apple_gpu_bmm_f32": "_apple_gpu_bmm_f32",
     "tessera_apple_gpu_bmm_f16": "_apple_gpu_bmm_f16",
     "tessera_apple_gpu_bmm_bf16": "_apple_gpu_bmm_bf16",
+    "tessera_apple_gpu_tile_simdgroup_gemm_f16": "_apple_gpu_tile_simdgroup_gemm_available",
+    "tessera_apple_gpu_tile_simdgroup_gemm_bf16": "_apple_gpu_tile_simdgroup_gemm_available",
     "tessera_apple_gpu_native_sparse_attn_f32": "_apple_gpu_native_sparse_attn_f32",
     "tessera_apple_gpu_ppo_policy_loss_f32": "_apple_gpu_ppo_policy_loss_available",
     "tessera_apple_gpu_ppo_policy_loss_ex_f32": "_apple_gpu_ppo_policy_loss_ex_available",
@@ -1114,17 +1117,20 @@ def _tessera_repo_root() -> Path | None:
 
 def _resolve_tessera_opt() -> str | None:
     """Find tessera-opt with precedence: TESSERA_OPT env, then PATH (both via
-    _find_tessera_opt), then the in-repo build at
-    ``<repo>/build/tools/tessera-opt/tessera-opt`` — so the value front door
-    works without any environment setup when run from a source checkout."""
+    _find_tessera_opt), then an in-repo platform build followed by the generic
+    build. Prefer ``build-apple`` on Darwin source checkouts so a stale generic
+    binary linked against an older Homebrew LLVM cannot silently win over the
+    compiler that owns the active Apple backend."""
     found = _find_tessera_opt()
     if found:
         return found
     repo = _tessera_repo_root()
     if repo is not None:
-        built = repo / "build" / "tools" / "tessera-opt" / "tessera-opt"
-        if built.is_file() and os.access(built, os.X_OK):
-            return str(built)
+        build_dirs = ("build-apple", "build") if sys.platform == "darwin" else ("build",)
+        for build_dir in build_dirs:
+            built = repo / build_dir / "tools" / "tessera-opt" / "tessera-opt"
+            if built.is_file() and os.access(built, os.X_OK):
+                return str(built)
     return None
 
 

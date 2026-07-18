@@ -80,6 +80,360 @@ remain Apple-owned.
   the loss-family lane remain outside C3 because their middle computations are
   host structured. NVIDIA/ROCm require no plan change: their loss/reduction
   paths have separate exact-device owners and no shared ABI changed.
+- **2026-07-17 C1–C3 exact-device evidence:** all 12 distinct ledger-native
+  nodes passed twice on Metal from separate freshly compiled runtime images;
+  the 12 corresponding fallback-injection nodes passed and asserted
+  `reference_cpu`. The two C2 rows intentionally share one fused
+  complex/conformal native node and one bridge-miss negative. This closes the
+  first cohort's placement, oracle, fresh-runtime, and fallback-negative
+  evidence only; **APPLE-TEST-2 remains landing/open** until the same proof
+  ladder covers the remaining Apple families, ordering/stress, and performance
+  layers.
+- **2026-07-17 broader exact-device evidence:** two independent fresh-runtime
+  runs collected 853 nodes and each completed **849 passed, 4 skipped, 0
+  failed** (97.4 s / 99.2 s). The four skipped legacy hand-written synthesis
+  comparisons have now been explicitly reclassified as retired, non-native ABI
+  contracts; their live synthesized replacements carry the Metal-placement and
+  numerical-oracle evidence, and a forced missing-synthesis binding must return
+  the reference route. A third fresh-runtime post-reclassification run completed
+  **850 passed, 0 skipped, 0 failed** (100.5 s). The LLVM/MLIR 23 migration also
+  fixed the JIT engine transformer's dangling callback and bounded the
+  process-wide ExecutionEngine cache, which had previously made serial device
+  validation segfault after accumulated JIT compiles.
+- **2026-07-17 stateful and performance ladder evidence:** a separate fresh
+  runtime passed the package/session-cache, resident block-paged KV, ReplaySSM,
+  command-buffer, MPSGraph-LRU, and control-flow cohort (**63 passed**), with
+  the bulk-MPSGraph/control-flow ordering stress raised to 75 iterations. Two
+  independent route-characterization runs (21 rows each) and two independent
+  ReplaySSM runs (12 rows each) reported native dispatch and numerical
+  validation for every row. The temporary artifacts are
+  `/private/tmp/apple-routes-proof-{a,b}.json` and
+  `/private/tmp/apple-ssm-replay-proof-{a,b}.json`; they are evidence, not a
+  committed performance ratchet. The remaining proof-ledger work is to add the
+  same explicit fallback-injection record to the other native family owners;
+  the closure update immediately below records the final family set and
+  corrected serial performance selection.
+- **2026-07-17 APPLE-TEST-2 closure:** the proof ledger now includes the C1--C3
+  ABI cohort, synthesized matmul/reduction replacement, paged-KV attention, and
+  fused ReplaySSM. ReplaySSM's C ABI now returns an explicit dispatch bit: its
+  exact-device node requires `native_gpu` and its forced missing-binding
+  negative requires `reference_cpu`, so a numerically identical host reference
+  can no longer earn the native rung. The final fresh-runtime correctness lane
+  passed **850/850**; the serial measured lane passed **69/69**. Two simulated
+  distributed-MoE wall-clock tests were removed from the Apple hardware marker
+  because they use modeled communication and do not assert an Apple route; the
+  JIT-bridge benchmark fixture typo was corrected. **APPLE-TEST-2 is closed.**
+  The plan remains `landing` because APPLE-REG-1, TILE, retuning, paged-KV,
+  ReplaySSM serving expansion, and device-keyed performance selection are
+  separate owning items.
+- **2026-07-17 APPLE-REG-1 closure:** the canonical Apple ABI registry,
+  runtime-header ABI, target-map, exact-device proof, and Tile-envelope drift
+  gates passed against the LLVM/MLIR 23 `build-apple` compiler. The Tile status
+  test now honors `$TESSERA_OPT` before the stale default build path, preventing
+  an ABI-incompatible LLVM dylib from masquerading as a lowering failure.
+  **APPLE-REG-1 is closed.** No dtype/op/diagnostic/target state was added in
+  this slice, so NVIDIA and ROCm are not applicable.
+- **2026-07-17 APPLE-TILE-1 start:** the real Tile-to-Apple status/materialized
+  artifact gate passes with the LLVM 23 compiler, but it is not yet an
+  exact-device fragment proof: the current fixture uses `tile.mock` and asserts
+  runtime status only. TILE-1 remains open until a shared logical value fixture
+  selects an Apple-owned fragment/layout from target capabilities and proves
+  packing, ragged store, geometry/resource record, and native execute/compare.
+- **2026-07-17 APPLE-TILE-1 value/ragged evidence:** the value-preserving
+  `tile.batched_gemm` path now runs both aligned `2x4x8 @ 2x8x16` and ragged
+  `2x5x7 @ 2x7x9` fixtures for f32/f16/bf16. Each exact-device case asserts
+  `native_gpu` + `metal_runtime` and compares against the NumPy oracle; the
+  fixture supplies only logical shapes, while Apple lowering owns BMM packing
+  and route selection. **8 passed.** TILE-1 remains open for an explicit
+  selected physical fragment/layout and threadgroup/resource record; the MPS
+  BMM value route must not be relabeled as simdgroup-fragment materialization.
+- **2026-07-17 APPLE-TILE-1 fragment-materialization landing rung:** Apple7+
+  Tile selection now owns an exact `simdgroup_matrix` descriptor: fp16/bf16
+  storage, fp32 accumulation, an 8x8x8 MMA fragment, 32 lanes, and a
+  `(32,1,1)` threadgroup. The target-selected materializer consumes that
+  descriptor to emit the existing steel-shaped MSL artifact with cooperative
+  packing, bounds zero-padding, partial-edge store, and double buffering.
+  Its host-free structure and target limits gates passed **85 passed, 9
+  compiler-tool skips**. At that point this was artifact evidence only; the
+  source-backed ABI and exact-device evidence are recorded below.
+- **2026-07-17 APPLE-TILE-1 resource-contract landing rung:** each selected
+  simdgroup artifact now carries a target-owned record for its `(32,1,1)`
+  launch geometry, 32 lanes, staged-A/B bytes, ragged-store scratch, buffering
+  mode, and total threadgroup-memory demand. Materialization rejects a tile
+  that exceeds the selected target's threadgroup-memory capacity (the
+  double-buffered 32x32x16 fp16/bf16 case records 4,352 bytes). The focused
+  fragment/emitter/feature suite passed **67 passed, 9 compiler-tool skips**.
+  This completed resource planning for the artifact path; runtime evidence is
+  recorded below.
+- **2026-07-17 APPLE-TILE-1 native single-fragment rung:** a distinct,
+  registered `tessera_apple_gpu_tile_simdgroup_gemm_f16` C ABI now accepts the
+  selected steel MSL source and entry, binds fp16 A/B and fp32 output, and
+  dispatches exactly one 32-lane `(32,1,1)` threadgroup per 8x8 output tile.
+  It is separate from the MPS BMM ABI and rejects any other threadgroup size;
+  the non-Darwin stub returns 0. A fresh runtime image compiled and ran the
+  8x8 fp16 fragment on Metal with zero fp32-oracle error; the focused proof
+  test also forces the ABI binding missing and observes an explicit non-native
+  result. The follow-on expanded this exact-device proof to bf16 8x8x8 and
+  ragged/multi-fragment fp16 `13x16 @ 16x11`; both remain native and match the
+  fp32 oracle (**46 passed, 9 compiler-tool skips**). A 30-repetition warm
+  end-to-end characterization retained at
+  `/private/tmp/apple-tile-simdgroup-characterization.json` reports medians of
+  0.310 ms (8x8x8), 0.311 ms (13x16x11), and 0.315 ms (32x16x32); it has no
+  device-event timing or MPS comparison, so it is not a selector decision.
+  The C++ full pipeline now selects this ABI only for strict static rank-2
+  `tile.matmul`/`tile.gemm` with fp16 or bf16; rank-3 `tile.batched_gemm`
+  deliberately remains on MPS BMM. The Python value executor materializes the
+  selected source and rejects a non-native result rather than using MPS/NumPy.
+  The compiler/runtime ABI regression passed **18 passed**. TILE-1 remains open
+  for retained runtime resource/provenance telemetry and comparative device-time
+  performance selection.
+- **2026-07-17 APPLE-TILE-1 telemetry/first comparison rung:** every direct
+  source-backed dispatch can now return a record containing the ABI symbol,
+  source SHA-256, native/reference result, execution mode, selected resource
+  record, and runtime MSL pipeline-cache size. Its focused regression passed
+  **17 passed**. A warm 30-repetition `32x16 @ 16x32` end-to-end comparison
+  retained at `/private/tmp/apple-tile-simdgroup-vs-mps.json` recorded 0.314 ms
+  median for native fp16 simdgroup and 0.229 ms for the existing f32 MPS route.
+  These are not equivalent dtype paths and have no device-event timing, so they
+  are explicitly **not** a selector decision. Remaining work is equal-dtype MPS
+  comparison plus Metal device-time/resource telemetry and a two-run stability
+  gate before any production-route change.
+- **2026-07-17 APPLE-TILE-1 equal-dtype stability rung:** two independent warm
+  30-repetition fp16 `32x16 @ 16x32` comparisons passed their respective fp16
+  numerical oracles (the MPS route uses documented `rtol=1e-2` accumulation
+  tolerance). Retained evidence at
+  `/private/tmp/apple-tile-simdgroup-vs-mps-f16-two-run.json` measured
+  simdgroup medians of 0.336/0.293 ms versus MPS medians of 0.234/0.226 ms.
+  MPS is the end-to-end winner for this one shape; no selector changed because
+  the runtime presently exposes neither command-buffer GPU timestamps nor
+  Metal counter sampling. The Tile record supplies selected static resource
+  bytes and pipeline-cache state, but not measured occupancy/spills. The next
+  required implementation is a dedicated runtime timing/counter ABI, followed
+  by a broader shape/dtype corpus and an explicit promotion threshold.
+- **2026-07-17 APPLE-TILE-1 kernel-time rung:** the runtime now records the
+  completed command buffer's `kernelStartTime`/`kernelEndTime` (falling back to
+  GPU start/end only when available) through
+  `tessera_apple_gpu_tile_last_device_time_ns`. The exact-device proof requires
+  a positive measured value (**17 passed**). Two 30-repetition equal-dtype fp16
+  kernel-time runs retained at
+  `/private/tmp/apple-tile-simdgroup-vs-mps-f16-device-two-run.json` measured
+  simdgroup medians 23.1/21.4 us and MPS medians 21.8/18.8 us for `32x16 @
+  16x32`; MPS wins this shape in both domains. The following bounded-counter
+  rung replaces the then-missing capability-gated counter path; no selector
+  changed.
+- **2026-07-17 APPLE-TILE-1 bounded counter/corpus rung:** the runtime now
+  discovers the named `MTLCommonCounterSetTimestamp` set only when the device
+  supports dispatch-boundary samples, allocates a two-sample buffer, and
+  samples immediately before/after the source-backed Tile compute encoder.
+  The dispatch record retains either its measured timestamp delta or explicit
+  `counter_sampling_supported: false`; it never manufactures occupancy or
+  spill values. This M1 Max reports the latter while retaining positive
+  command-buffer kernel timing. The new
+  `benchmark_tile_simdgroup.py` corpus made two independent 30-repetition
+  warm runs for fp16/bf16, aligned `8x8x8`/`32x16x32`/`256x256x256`, and ragged
+  `127x63x129` shapes in both end-to-end and kernel domains. All eight
+  end-to-end rows retain MPS. Kernel-only microcase movement is not a
+  production promotion: the selector's production domain is end-to-end, where
+  MPS remains the route. The selector contract requires native placement plus
+  numerical proof, retained resource/counter evidence, and a 5% win in both
+  intended-domain runs; no production route changed.
+- **2026-07-17 APPLE-GEMM-1 capture-telemetry landing rung:** an opt-in,
+  thread-local dispatch record now spans the owned Apple command-buffer paths.
+  Legacy MPS/MSL records use completed `kernelStartTime`/`kernelEndTime`
+  (command-buffer time only as an explicit fallback); the shared MTL4 encoder
+  uses a reusable two-entry timestamp heap and converts its raw tick delta with
+  the device timestamp frequency. The same record retains the live MTL4
+  threads-per-threadgroup, execution width, maximum threads, and static
+  threadgroup-memory properties. Capture is disabled by default so precise
+  timestamp sampling cannot perturb production dispatch. The standalone
+  MPSGraph row-op path now encodes into an owned `MPSCommandBuffer`, commits its
+  live `rootCommandBuffer`, and reports a whole-dispatch interval only when
+  MPSGraph did not auto-flush and replace the supplied Metal command buffer;
+  occupancy and spill fields remain null rather than inferred.
+  `select_stable_gemm_routes.py` aggregates two or more current-schema reports
+  by exact Apple GPU family and emits separate device/end-to-end decisions. A
+  promotion requires native placement, numerical proof, repeated samples,
+  retained resources/counters, at most 15% cross-run drift, and a 5% win in
+  every run. Two fresh 30-repetition Apple7 reports at
+  `/private/tmp/apple-gemm-stable-{c,d}.json` cover square, rectangular,
+  ragged, fp16/f32, MPS, simdgroup, cooperative-tensor, MSL, and MPSGraph
+  routes; `/private/tmp/apple-gemm-stable-ledger.json` records **0 promotions,
+  13 incumbent retentions, and 9 inconclusive timing-domain rows**. MPSGraph
+  device intervals are present in both reports; its three device decisions are
+  inconclusive because cross-run drift exceeded the 15% bound. No production
+  selector changed. NVIDIA and ROCm are not applicable: this is an Apple-only
+  Metal ABI and Apple-only report extension, with no shared IR, schedule, or
+  cross-backend benchmark schema change.
+- **2026-07-17 APPLE-GEMM-1 paired-winner/resource evidence rung:** absolute
+  cross-process latency is now diagnostic rather than a promotion veto. Each
+  report runs nine alternating route blocks of 30 repetitions; a candidate
+  must win at least 75% of paired blocks, clear 5% median speedup in both fresh
+  processes, and keep cross-process speedup spread within five percentage
+  points. The committed Apple7 ledger is
+  `benchmarks/baselines/apple7_gemm_route_ledger.json`: **3 timing-domain
+  promotions, 19 incumbent retentions, 0 inconclusive rows**. Only
+  end-to-end winners affect production: f32 `128x257` and `256x256` softmax
+  select MPSGraph instead of MSL on Apple7 (24.2--28.0% and 36.9--40.2%
+  paired median wins, respectively, winning all 18 blocks). The f32
+  `64x64x64` simdgroup route wins device time by 38.5--40.1% but loses end to
+  end, so MPS remains production. All other measured matmul shapes retain MPS.
+  The new profiling-capability ABI records what public Metal actually exposes
+  on this M1 Max: compiled-pipeline limits, stage-boundary timestamp sampling,
+  and the Metal 4 timestamp heap are available; statistic/stage-utilization
+  counter sets and dispatch-boundary sampling are unavailable. Live MSL/MTL4
+  records retain execution width, maximum threads, static threadgroup memory,
+  simdgroups per threadgroup, and a clearly named threadgroup-capacity proxy.
+  The runtime ABI exposes no register count, scratch bytes, spill count, or
+  true occupancy metric, so those per-dispatch fields remain null rather than
+  inferred from pipeline limits. A separate bounded Instruments `Metal System
+  Trace` now supplies genuine compiler/spill evidence, summarized reproducibly
+  by `benchmarks/apple_gpu/summarize_metal_trace.py` in
+  `benchmarks/baselines/apple7_gemm_metal_trace_evidence.json`. The exact
+  Apple7 process trace retained four compute-shader compile intervals (2.356 ms
+  total, 1.486 ms maximum), two MTLibrary creation intervals (0.258 ms total),
+  and seven named compute shaders. Exact command-buffer joins observed one
+  64-byte spill event on each of ten `tessera.rowop.mpsgraph` submissions and
+  zero spill events on ten f32 MPS GEMMs, ten f16 MPS GEMMs, ten explicit MSL
+  softmax submissions, and twenty reusable MTL4 submissions. The MTL4 command
+  buffer is intentionally reused and Instruments retains it as `Command Buffer
+  0`, so its zero-event row is an aggregate MTL4 observation rather than a
+  per-kernel claim. The default system-trace template recorded
+  `counter-profile=0`, but the standalone `Metal GPU Counters` instrument is
+  available on this M1 Max and two bounded captures enabled profile 3 with
+  shader profiler 1. Its genuine `Compute Occupancy` counter (ID 24) produced
+  376 command-buffer-correlated samples: f32 MPS GEMM retained 144 samples
+  (one nonzero sample, 0.282% maximum), the reusable MTL4 buffer retained 12
+  zero-valued samples, MPSGraph retained 216 zero-valued samples, and explicit
+  MSL softmax retained four zero-valued samples. Those zeros are the measured
+  counter values for this small characterization workload, not synthesized
+  occupancy estimates; f16 MPS had no in-interval sample and remains null.
+  The live threadgroup-capacity/concurrency proxy remains alongside the raw
+  counter evidence. NVIDIA and ROCm are not applicable because no shared IR,
+  schedule, or cross-backend ABI changed.
+- **2026-07-17 APPLE-EPILOGUE-1 native/resource/selection rung:** synthesized
+  f32, f16, and bf16 epilogues already had common-oracle coverage for bias,
+  ReLU, GELU, SiLU, residual guards, ragged stores, large reductions, and a
+  forced symbol-missing negative. The runtime now labels every synthesized
+  command buffer and retains its live pipeline limits, actual threadgroup, and
+  total pipeline-static plus encoder-requested threadgroup memory. A ragged
+  `64x64x2049` tiled softmax proof records at least `2049 * sizeof(float)`
+  scratch; an fp16 bias+SiLU proof records the selected cooperative-matrix
+  threadgroup and both match the backend-neutral `FusedRegion` oracle.
+  MPSGraph unary and binary epilogue dispatches now use an explicitly owned
+  `MPSCommandBuffer` and expose status-returning ABI variants, so native
+  placement is independent of numerical success. MPSGraph may legally call
+  `commitAndContinue`; when that replaces the supplied root command buffer,
+  device timing remains null rather than reporting a partial interval.
+  `benchmark_epilogue_routes.py` collected two fresh Apple7 runs with seven
+  alternating trials of 15 repetitions for aligned `64x64x64`, ragged
+  `65x63x67`, and `256x256x256` f32/f16 ReLU plus f32 bias+SiLU. The committed
+  `benchmarks/baselines/apple7_epilogue_route_ledger.json` records a stable
+  end-to-end synthesized-fusion win for all nine comparable rows (49.8--71.6%
+  paired median speedup and 100% paired-block wins in both processes). Device
+  decisions remain explicitly inconclusive because the unfused MPSGraph
+  segments do not expose complete command-buffer intervals. Production already
+  selects the synthesized fused route for these supported regions, so this
+  evidence ratifies rather than changes that selector. GELU and bf16 remain
+  native correctness/resource proofs but are not compared against a false
+  mixed-dtype or missing-MPSGraph incumbent. NVIDIA and ROCm are not applicable:
+  the new ABI and schedule evidence are Apple Metal-only and no shared IR or
+  numerical contract changed.
+- **2026-07-17 APPLE-ATTN-FWD-1 placement/resource landing rung:** the f32 and
+  f16 online-softmax MSL command buffers now carry stable route labels, retain
+  their actual `Sq x B`-derived threadgroup and live pipeline limits, and expose
+  status-returning ABI variants. The exact-device proof covers ragged
+  `B=2, Sq=17, Sk=19, D=128`, causal masking, f32/f16 storage with f32 softmax
+  accumulation, positive command-buffer GPU time, and a shared NumPy oracle.
+  The D=257 envelope negative returns status 0 and no device interval, so the
+  legacy reference fallback cannot be mislabeled native. This is a landing
+  rung, not closure: bias, softcap, window, MHA/GQA/MQA, long-context, resident
+  command-buffer, cooperative-matrix, and MPSGraph candidate comparisons still
+  need the full two-run measured corpus; APPLE-ATTN-BWD-1 is untouched.
+- **2026-07-17 APPLE-ATTN-FWD-1 variant/selector rung:** one status-returning
+  online-softmax ABI now composes additive bias, causal or sliding-window
+  masking, logit soft-cap, and direct MHA/GQA/MQA KV-head indexing for native
+  f32/f16 storage. It retains the actual threadgroup and pipeline limits and
+  rejects invalid grouping, negative windows, and D>256 before submission. The
+  exact-device matrix covers MHA, GQA, and MQA, ragged `Sq=5/Sk=37`, the
+  combined bias+window+softcap contract, and MQA `Sk=1025`; every row matches
+  the shared f32-accumulation oracle. The MPSGraph BSMM candidate now owns and
+  labels its command buffer and returns native status. Two independent Apple7
+  runs, each using seven alternating trials of 20 repetitions, compare f32/f16
+  aligned `B1/H4/S64/D64`, ragged `B1/H4/Sq65/Sk67/D64`, and throughput
+  `B1/H8/S128/D64` plain MHA. The retained
+  `benchmarks/baselines/apple7_attention_route_ledger.json` promotes MPSGraph
+  for all six end-to-end rows; production selection is exact-device,
+  exact-shape, dtype, and timing-domain keyed. Device timing retains MSL for
+  rows without a stable 5% MPSGraph win. The resident command-buffer candidate
+  is measured separately in its device-resident input domain and retains live
+  resources, but its shared-session command buffer exposes no complete device
+  interval. No cooperative-matrix attention ABI exists, so that candidate is
+  explicitly unavailable rather than assigned synthetic timing. This is not
+  full APPLE-ATTN-FWD-1 closure: wider B/head/D and long-context matrices,
+  variant-capable resident/cooperative candidates, and complete device timing
+  remain open. bf16 continues to be labeled host-conversion plus f32 GPU
+  compute, and APPLE-ATTN-BWD-1 remains separate. NVIDIA and ROCm are not
+  applicable because the new ABI, selector, and physical schedule are
+  Apple-only; shared attention semantics and numerical policy are unchanged.
+- **2026-07-17 APPLE-ATTN-FWD-1 closure:** the forward lane now covers the
+  remaining physical and evidence gaps without expanding into backward. The
+  selector corpus spans `B=1/2`, 4/8/16 query heads, `D=64/128/256`, aligned
+  and ragged lengths, and plain-MHA context through `Sk=1025`. The variant
+  corpus adds MHA/GQA/MQA, bias+causal+window+softcap, `B=2`, ragged
+  `Sq=65/Sk=67`, and decode-style MQA through `Sk=2049`. The resident scalar
+  and one-SIMD-group-per-query-row candidates now accept the same variant ABI;
+  the latter is named `cooperative_simdgroup` rather than being mislabeled a
+  Metal cooperative-matrix route. No attention-specific cooperative-matrix ABI
+  is available on this SDK/host, and that capability remains explicit rather
+  than receiving synthetic measurements. f16 and bf16 keep native two-byte
+  device storage; GPU-side casts surround f32 accumulation on the resident
+  command buffer, with no host fp32 staging inside the attention ABI.
+  `ts_enc_commit_wait` now publishes the completed owned-command-buffer Metal
+  interval. Two independent Apple7 warm reports, each with five alternating
+  trials of ten repetitions, retain 9 MSL variant rows and 18 resident versus
+  cooperative rows; every row is native, matches the shared oracle, and every
+  resident/cooperative row has 100% device-time coverage. Logical input/output
+  bytes, residency, intermediate-storage policy, actual threadgroup/pipeline
+  limits, GPU time, and end-to-end time are retained; unavailable occupancy,
+  register, and spill counters remain null. The regenerated
+  `benchmarks/baselines/apple7_attention_route_ledger.json` promotes MPSGraph
+  for all eight plain-MHA end-to-end rows. In the distinct device-interval
+  domain only f32 `B1/H16/Sq16/Sk1025/D256` has a stable two-run 5% win;
+  all other device rows retain online MSL. `APPLE-ATTN-BWD-1` remains a
+  separate open item and no backward implementation or policy changed.
+  NVIDIA and ROCm are not applicable: this closes Apple-only runtime ABIs,
+  storage handling, schedules, and evidence, with no shared IR, attention
+  semantic, or numerical-policy change.
+- **2026-07-17 APPLE-PAGED-KV-1 retained staged-gather rung:** the existing
+  non-contiguous resident MPSGraph gather now encodes through an explicitly
+  owned, labeled `MPSCommandBuffer`. `ResidentBlockPagedKVCache` retains
+  `last_gather_execution` and the capture record for each gather; a framework
+  pipeline that exposes no public PSO limits records the MPSGraph API and an
+  explicit unavailability reason rather than synthetic resources. The
+  exact-device proof interleaves two sequences to produce physical table
+  `[0, 2, 4]`, gathers the correct non-identity values, and requires native
+  status. Existing remap/reuse, concurrent-sequence, exhaustion, and teardown
+  tests remain green. This closes provenance loss for the staged candidate but
+  not APPLE-PAGED-KV-1: a direct resident page-table attention candidate,
+  causal-offset/boundary stress, leak telemetry, and two-domain comparison are
+  still required.
+- **2026-07-17 APPLE-REPLAY-1 native block/timing landing rung:** output-only
+  replay and fp32/f16 block decode now label their command buffers and retain
+  live threadgroup/pipeline records. The block ABI returns native status, which
+  propagates to `SSMStateHandle.last_block_execution`; N>256 returns an explicit
+  reference provenance and common-oracle result. Focused rollback, forced
+  binding-miss, f32/f16 block, resource, and ABI tests pass. Two independent
+  Apple7 reports at 512 tokens, capacity 16, and 20 repetitions cover
+  `1x128x128`, `1x256x128`, and `4x128x64`. The committed
+  `benchmarks/baselines/apple7_replay_ssm_evidence.json` retains complete native,
+  numerical, resource, end-to-end, and device-per-token evidence for all six
+  output-only/block rows. End-to-end cross-run drift is 0.3--2.1%; device drift
+  is 0.9--26.8%. The ledger deliberately makes no selector decision because the
+  legacy benchmark does not interleave paired route blocks. Persistent resident
+  inputs, forced flush/partial rejection/block-submit ordering, asynchronous
+  ring backpressure, cleanup stress, and a paired selector corpus remain open.
+  NVIDIA and ROCm are not applicable to these Apple-only runtime ABI changes;
+  shared SSM state semantics and numerical policy are unchanged.
 - A fallback result can prove semantics, but it cannot prove `native_gpu`, GPU
   residency, Metal ordering, resource lifetime, or performance. Device tests
   must assert their execution state and provenance explicitly.
@@ -157,21 +511,30 @@ families without a matching record.
 
 ### Install LLVM/MLIR 23 with Homebrew
 
-Homebrew's stable `llvm` formula is still LLVM 22 as of 2026-07-16 and there is
-no `llvm@23` formula yet. Apple validation therefore uses the Homebrew HEAD
-build and must reject the keg unless `llvm-config`, `mlir-opt`, and
-`mlir-tblgen` all report major version 23. Install the Xcode Command Line Tools
-first, then run:
+Homebrew's stable `llvm` formula is still LLVM 22 and there is no `llvm@23`
+formula yet. Do not use `brew --prefix llvm` for this lane. Apple validation
+uses a pinned upstream `release/23.x` build installed separately at
+`/opt/homebrew/llvm-23.1.0-rc1`; it must be built with
+`LLVM_ENABLE_RTTI=ON`, or Tessera's pass and dialect typeinfo cannot link.
+Install the Xcode Command Line Tools first, then build the isolated toolchain:
 
 ```bash
 xcode-select --install                    # omit if already installed
 brew update
 brew install cmake ninja lit
-brew install llvm --HEAD                  # builds LLVM/MLIR 23 today
-# If stable Homebrew LLVM was already installed, switch it with:
-# brew reinstall llvm --HEAD
+git clone --depth 1 --branch release/23.x https://github.com/llvm/llvm-project.git /private/tmp/llvm-project-23
+cmake -S /private/tmp/llvm-project-23/llvm -B /private/tmp/llvm-23-build -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INSTALL_PREFIX=/opt/homebrew/llvm-23.1.0-rc1 \
+  -DLLVM_ENABLE_PROJECTS='mlir;clang;lld' \
+  -DLLVM_TARGETS_TO_BUILD='AArch64;AMDGPU;NVPTX;X86' \
+  -DLLVM_ENABLE_ASSERTIONS=ON \
+  -DLLVM_ENABLE_RTTI=ON \
+  -DLLVM_BUILD_LLVM_DYLIB=ON \
+  -DLLVM_LINK_LLVM_DYLIB=ON
+cmake --build /private/tmp/llvm-23-build --target install --parallel 8
 
-LLVM_PREFIX="$(brew --prefix llvm)"
+LLVM_PREFIX=/opt/homebrew/llvm-23.1.0-rc1
 export PATH="$LLVM_PREFIX/bin:$PATH"
 export CMAKE_PREFIX_PATH="$LLVM_PREFIX${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
 
@@ -181,15 +544,15 @@ export CMAKE_PREFIX_PATH="$LLVM_PREFIX${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
 "$(brew --prefix lit)/bin/lit" --version
 ```
 
-Do not use AppleClang's system LLVM libraries or mix a stable LLVM 22 keg with
-HEAD MLIR 23. Before configuring Tessera, require all three LLVM/MLIR version
-commands above to begin with `23.` and record `brew info llvm` in the build
-evidence.
+Do not use AppleClang's system LLVM libraries or mix the stable LLVM 22 keg
+with this LLVM/MLIR 23 prefix. Before configuring Tessera, require all three
+LLVM/MLIR version commands above to begin with `23.` and record the upstream
+commit plus `LLVM_ENABLE_RTTI=ON` in the build evidence.
 
 For compiler artifacts, build the Apple backend and portable MLIR tools:
 
 ```bash
-LLVM_PREFIX="$(brew --prefix llvm)"
+LLVM_PREFIX=/opt/homebrew/llvm-23.1.0-rc1
 cmake -S . -B build-apple -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_C_COMPILER="$LLVM_PREFIX/bin/clang" \
@@ -334,6 +697,22 @@ or runtime behavior. The scale-origin repair and canonical `fp16` alias are
 confined to the SM120 NVIDIA fragment materializer/selector, and the bootstrap
 ordering repair is confined to Ubuntu apt.llvm.org setup. No Apple IR, Metal
 layout, dtype support, ABI, schedule, or exact-device claim changes.
+
+Consumer plan `SEQUENCE-MIXER-2026-07-17`: the compiler-direction Sequence Mixer
+track ([`../../compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md`](../../compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md))
+now consumes items **8, 9, 10, 11, 13, 14** as its Apple execution vehicle — it
+adds candidates/state-types under existing items rather than opening new ones,
+and **inherits this plan's evidence contract unchanged** (native `native_gpu`
+placement, separate GPU/end-to-end timing-domain keys, two-run + ≥5% promotion,
+forced binding-miss → `reference_cpu`). Concretely: channel-wise KDA/GDN decode →
+**APPLE-REPLAY-1** (extend ReplaySSM / `SSMStateHandle` / `DeltaNetStateHandle`);
+`sliding_window`/full mixer forward → **APPLE-ATTN-FWD-1** (its window/GQA/softcap
+cases); `windowed_kv` + uniform-block planner → **APPLE-PAGED-KV-1**;
+chunkwise-scan inner GEMMs → **APPLE-RETUNE-1**; mixer arbiter → **APPLE-ROUTE-1**;
+low precision → **APPLE-DTYPE-1** (stays SDK-gated — no NVFP4 cooperative-matrix on
+Apple, so the executing FP4 proof is on NR2 Pro sm_120); mixer backward →
+**APPLE-ATTN-BWD-1**. This is a direction pointer; it changes no Apple gate,
+route, or exact-device claim here.
 
 After the first Apple-host collection, replace the provisional marker count
 with the migrated exact-device totals and append a failure table by execution

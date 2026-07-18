@@ -15,10 +15,20 @@ import importlib.util
 from pathlib import Path
 
 _BENCH = Path(__file__).resolve().parents[2] / "benchmarks" / "apple_gpu" / "benchmark_ssm_replay.py"
+_SUMMARY = (Path(__file__).resolve().parents[2] / "benchmarks" / "apple_gpu"
+            / "summarize_replay_stability.py")
 
 
 def _load():
     spec = importlib.util.spec_from_file_location("benchmark_ssm_replay", _BENCH)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _load_summary():
+    spec = importlib.util.spec_from_file_location("summarize_replay_stability", _SUMMARY)
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -75,3 +85,18 @@ def test_benchmark_main_writes_json(tmp_path):
     assert rc == 0
     payload = json.loads(out.read_text())
     assert "runs" in payload and payload["runs"]
+
+
+def test_replay_stability_requires_native_correct_resource_complete_rows():
+    summary = _load_summary()
+    row = {
+        "shape": "1x4x3", "mode": "replay_block", "latency_ms": 0.1,
+        "native_dispatched": True, "numerically_validated": True,
+        "device_time_median_ns": 1000, "device_time_coverage": 1.0,
+        "resources": {"threadgroup": [4, 1, 1]},
+    }
+    ledger = summary.summarize([{"runs": [row]}, {"runs": [{**row,
+        "latency_ms": 0.11, "device_time_median_ns": 1050}]}])
+    assert ledger["selector_status"] == "characterized_not_selector_eligible"
+    assert ledger["rows"][0]["evidence_complete"]
+    assert ledger["rows"][0]["end_to_end_cross_run_drift_fraction"] == pytest.approx(0.1)

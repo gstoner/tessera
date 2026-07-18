@@ -1,0 +1,4729 @@
+{
+  "attention_forward_proof": {
+    "accumulation_dtype": "f32",
+    "candidate_timing_domain": "device_input_host_output",
+    "complete": true,
+    "cooperative_candidate": "cooperative_simdgroup",
+    "cooperative_matrix_status": "capability_unavailable",
+    "native_storage_dtypes": [
+      "f32",
+      "f16",
+      "bf16"
+    ],
+    "runs": [
+      {
+        "all_resident_candidates_native_correct_and_timed": true,
+        "all_variants_native_and_correct": true,
+        "device": "apple7",
+        "resident_comparison": [
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 49062,
+            "device_time_samples": 50,
+            "dtype": "f32",
+            "end_to_end_median_ns": 2347812,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "none",
+              "logical_input_output_bytes": 473632
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 5,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                17,
+                8,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.1328125,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "resident_command_buffer",
+            "shape": "b1_hq8_hkv2_sq17_sk129_d128",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 31395,
+            "device_time_samples": 50,
+            "dtype": "f32",
+            "end_to_end_median_ns": 399792,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "none",
+              "logical_input_output_bytes": 473632
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 8,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                256,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.25,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "cooperative_simdgroup",
+            "shape": "b1_hq8_hkv2_sq17_sk129_d128",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 61750,
+            "device_time_samples": 50,
+            "dtype": "f32",
+            "end_to_end_median_ns": 3609479,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "none",
+              "logical_input_output_bytes": 1081344
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 16,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                32,
+                16,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.5,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "resident_command_buffer",
+            "shape": "b2_hq8_hkv8_sq65_sk67_d64",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 43166,
+            "device_time_samples": 50,
+            "dtype": "f32",
+            "end_to_end_median_ns": 436833,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "none",
+              "logical_input_output_bytes": 1081344
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 8,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                256,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.25,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "cooperative_simdgroup",
+            "shape": "b2_hq8_hkv8_sq65_sk67_d64",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 56333,
+            "device_time_samples": 50,
+            "dtype": "f32",
+            "end_to_end_median_ns": 11614396,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "none",
+              "logical_input_output_bytes": 4261888
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                16,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "resident_command_buffer",
+            "shape": "b2_hq8_hkv1_sq4_sk2049_d128",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 37374,
+            "device_time_samples": 50,
+            "dtype": "f32",
+            "end_to_end_median_ns": 1575625,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "none",
+              "logical_input_output_bytes": 4261888
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 8,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                256,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.25,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "cooperative_simdgroup",
+            "shape": "b2_hq8_hkv1_sq4_sk2049_d128",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 48374,
+            "device_time_samples": 50,
+            "dtype": "f16",
+            "end_to_end_median_ns": 2283562,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "f32_gpu_cast_buffers",
+              "logical_input_output_bytes": 236816
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 5,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                17,
+                8,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.1328125,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "resident_command_buffer",
+            "shape": "b1_hq8_hkv2_sq17_sk129_d128",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 59916,
+            "device_time_samples": 50,
+            "dtype": "f16",
+            "end_to_end_median_ns": 612770,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "f32_gpu_cast_buffers",
+              "logical_input_output_bytes": 236816
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 8,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                256,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.25,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "cooperative_simdgroup",
+            "shape": "b1_hq8_hkv2_sq17_sk129_d128",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 54187,
+            "device_time_samples": 50,
+            "dtype": "f16",
+            "end_to_end_median_ns": 3357458,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "f32_gpu_cast_buffers",
+              "logical_input_output_bytes": 540672
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 16,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                32,
+                16,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.5,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "resident_command_buffer",
+            "shape": "b2_hq8_hkv8_sq65_sk67_d64",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 84103,
+            "device_time_samples": 50,
+            "dtype": "f16",
+            "end_to_end_median_ns": 631562,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "f32_gpu_cast_buffers",
+              "logical_input_output_bytes": 540672
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 8,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                256,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.25,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "cooperative_simdgroup",
+            "shape": "b2_hq8_hkv8_sq65_sk67_d64",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 56250,
+            "device_time_samples": 50,
+            "dtype": "f16",
+            "end_to_end_median_ns": 11152687,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "f32_gpu_cast_buffers",
+              "logical_input_output_bytes": 2130944
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                16,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "resident_command_buffer",
+            "shape": "b2_hq8_hkv1_sq4_sk2049_d128",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 186707,
+            "device_time_samples": 50,
+            "dtype": "f16",
+            "end_to_end_median_ns": 2095146,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "f32_gpu_cast_buffers",
+              "logical_input_output_bytes": 2130944
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 8,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                256,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.25,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "cooperative_simdgroup",
+            "shape": "b2_hq8_hkv1_sq4_sk2049_d128",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 80145,
+            "device_time_samples": 50,
+            "dtype": "bf16",
+            "end_to_end_median_ns": 2809166,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "f32_gpu_cast_buffers",
+              "logical_input_output_bytes": 236816
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 5,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                17,
+                8,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.1328125,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "resident_command_buffer",
+            "shape": "b1_hq8_hkv2_sq17_sk129_d128",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 59624,
+            "device_time_samples": 50,
+            "dtype": "bf16",
+            "end_to_end_median_ns": 634208,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "f32_gpu_cast_buffers",
+              "logical_input_output_bytes": 236816
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 8,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                256,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.25,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "cooperative_simdgroup",
+            "shape": "b1_hq8_hkv2_sq17_sk129_d128",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 107687,
+            "device_time_samples": 50,
+            "dtype": "bf16",
+            "end_to_end_median_ns": 4017187,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "f32_gpu_cast_buffers",
+              "logical_input_output_bytes": 540672
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 16,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                32,
+                16,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.5,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "resident_command_buffer",
+            "shape": "b2_hq8_hkv8_sq65_sk67_d64",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 84166,
+            "device_time_samples": 50,
+            "dtype": "bf16",
+            "end_to_end_median_ns": 636750,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "f32_gpu_cast_buffers",
+              "logical_input_output_bytes": 540672
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 8,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                256,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.25,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "cooperative_simdgroup",
+            "shape": "b2_hq8_hkv8_sq65_sk67_d64",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 213728,
+            "device_time_samples": 50,
+            "dtype": "bf16",
+            "end_to_end_median_ns": 12116729,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "f32_gpu_cast_buffers",
+              "logical_input_output_bytes": 2130944
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                16,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "resident_command_buffer",
+            "shape": "b2_hq8_hkv1_sq4_sk2049_d128",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 177395,
+            "device_time_samples": 50,
+            "dtype": "bf16",
+            "end_to_end_median_ns": 2046563,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "f32_gpu_cast_buffers",
+              "logical_input_output_bytes": 2130944
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 8,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                256,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.25,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "cooperative_simdgroup",
+            "shape": "b2_hq8_hkv1_sq4_sk2049_d128",
+            "timing_source": "metal_kernel_interval"
+          }
+        ],
+        "run": 1,
+        "variant_coverage": [
+          {
+            "device_time_ns": 132124,
+            "dtype": "f32",
+            "end_to_end_ns": 3348375,
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 5,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                17,
+                8,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.1328125,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "online_msl_variant",
+            "shape": "b1_hq8_hkv2_sq17_sk129_d128",
+            "variant": "gqa_bias_window_softcap"
+          },
+          {
+            "device_time_ns": 107874,
+            "dtype": "f32",
+            "end_to_end_ns": 5202917,
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 16,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                32,
+                16,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.5,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "online_msl_variant",
+            "shape": "b2_hq8_hkv8_sq65_sk67_d64",
+            "variant": "mha_ragged"
+          },
+          {
+            "device_time_ns": 188875,
+            "dtype": "f32",
+            "end_to_end_ns": 12011458,
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                16,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "online_msl_variant",
+            "shape": "b2_hq8_hkv1_sq4_sk2049_d128",
+            "variant": "mqa_long_context"
+          },
+          {
+            "device_time_ns": 85124,
+            "dtype": "f16",
+            "end_to_end_ns": 2998458,
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 5,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                17,
+                8,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.1328125,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "online_msl_variant",
+            "shape": "b1_hq8_hkv2_sq17_sk129_d128",
+            "variant": "gqa_bias_window_softcap"
+          },
+          {
+            "device_time_ns": 84458,
+            "dtype": "f16",
+            "end_to_end_ns": 3838583,
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 16,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                32,
+                16,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.5,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "online_msl_variant",
+            "shape": "b2_hq8_hkv8_sq65_sk67_d64",
+            "variant": "mha_ragged"
+          },
+          {
+            "device_time_ns": 174125,
+            "dtype": "f16",
+            "end_to_end_ns": 11523083,
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                16,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "online_msl_variant",
+            "shape": "b2_hq8_hkv1_sq4_sk2049_d128",
+            "variant": "mqa_long_context"
+          },
+          {
+            "device_time_ns": 772624,
+            "dtype": "bf16",
+            "end_to_end_ns": 20178083,
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 5,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                17,
+                8,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.1328125,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "online_msl_variant",
+            "shape": "b1_hq8_hkv2_sq17_sk129_d128",
+            "variant": "gqa_bias_window_softcap"
+          },
+          {
+            "device_time_ns": 4016375,
+            "dtype": "bf16",
+            "end_to_end_ns": 21504583,
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 16,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                32,
+                16,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.5,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "online_msl_variant",
+            "shape": "b2_hq8_hkv8_sq65_sk67_d64",
+            "variant": "mha_ragged"
+          },
+          {
+            "device_time_ns": 532708,
+            "dtype": "bf16",
+            "end_to_end_ns": 27675375,
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                16,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "online_msl_variant",
+            "shape": "b2_hq8_hkv1_sq4_sk2049_d128",
+            "variant": "mqa_long_context"
+          }
+        ]
+      },
+      {
+        "all_resident_candidates_native_correct_and_timed": true,
+        "all_variants_native_and_correct": true,
+        "device": "apple7",
+        "resident_comparison": [
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 44353,
+            "device_time_samples": 50,
+            "dtype": "f32",
+            "end_to_end_median_ns": 2370020,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "none",
+              "logical_input_output_bytes": 473632
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 5,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                17,
+                8,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.1328125,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "resident_command_buffer",
+            "shape": "b1_hq8_hkv2_sq17_sk129_d128",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 33270,
+            "device_time_samples": 50,
+            "dtype": "f32",
+            "end_to_end_median_ns": 410250,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "none",
+              "logical_input_output_bytes": 473632
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 8,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                256,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.25,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "cooperative_simdgroup",
+            "shape": "b1_hq8_hkv2_sq17_sk129_d128",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 60312,
+            "device_time_samples": 50,
+            "dtype": "f32",
+            "end_to_end_median_ns": 3608208,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "none",
+              "logical_input_output_bytes": 1081344
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 16,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                32,
+                16,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.5,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "resident_command_buffer",
+            "shape": "b2_hq8_hkv8_sq65_sk67_d64",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 46416,
+            "device_time_samples": 50,
+            "dtype": "f32",
+            "end_to_end_median_ns": 431625,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "none",
+              "logical_input_output_bytes": 1081344
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 8,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                256,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.25,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "cooperative_simdgroup",
+            "shape": "b2_hq8_hkv8_sq65_sk67_d64",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 57291,
+            "device_time_samples": 50,
+            "dtype": "f32",
+            "end_to_end_median_ns": 11734020,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "none",
+              "logical_input_output_bytes": 4261888
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                16,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "resident_command_buffer",
+            "shape": "b2_hq8_hkv1_sq4_sk2049_d128",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 32082,
+            "device_time_samples": 50,
+            "dtype": "f32",
+            "end_to_end_median_ns": 1544021,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "none",
+              "logical_input_output_bytes": 4261888
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 8,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                256,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.25,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "cooperative_simdgroup",
+            "shape": "b2_hq8_hkv1_sq4_sk2049_d128",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 45478,
+            "device_time_samples": 50,
+            "dtype": "f16",
+            "end_to_end_median_ns": 2230562,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "f32_gpu_cast_buffers",
+              "logical_input_output_bytes": 236816
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 5,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                17,
+                8,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.1328125,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "resident_command_buffer",
+            "shape": "b1_hq8_hkv2_sq17_sk129_d128",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 60499,
+            "device_time_samples": 50,
+            "dtype": "f16",
+            "end_to_end_median_ns": 657312,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "f32_gpu_cast_buffers",
+              "logical_input_output_bytes": 236816
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 8,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                256,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.25,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "cooperative_simdgroup",
+            "shape": "b1_hq8_hkv2_sq17_sk129_d128",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 60666,
+            "device_time_samples": 50,
+            "dtype": "f16",
+            "end_to_end_median_ns": 3353479,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "f32_gpu_cast_buffers",
+              "logical_input_output_bytes": 540672
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 16,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                32,
+                16,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.5,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "resident_command_buffer",
+            "shape": "b2_hq8_hkv8_sq65_sk67_d64",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 84561,
+            "device_time_samples": 50,
+            "dtype": "f16",
+            "end_to_end_median_ns": 647041,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "f32_gpu_cast_buffers",
+              "logical_input_output_bytes": 540672
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 8,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                256,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.25,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "cooperative_simdgroup",
+            "shape": "b2_hq8_hkv8_sq65_sk67_d64",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 52749,
+            "device_time_samples": 50,
+            "dtype": "f16",
+            "end_to_end_median_ns": 11047229,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "f32_gpu_cast_buffers",
+              "logical_input_output_bytes": 2130944
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                16,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "resident_command_buffer",
+            "shape": "b2_hq8_hkv1_sq4_sk2049_d128",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 176520,
+            "device_time_samples": 50,
+            "dtype": "f16",
+            "end_to_end_median_ns": 2037479,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "f32_gpu_cast_buffers",
+              "logical_input_output_bytes": 2130944
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 8,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                256,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.25,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "cooperative_simdgroup",
+            "shape": "b2_hq8_hkv1_sq4_sk2049_d128",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 83520,
+            "device_time_samples": 50,
+            "dtype": "bf16",
+            "end_to_end_median_ns": 2741395,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "f32_gpu_cast_buffers",
+              "logical_input_output_bytes": 236816
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 5,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                17,
+                8,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.1328125,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "resident_command_buffer",
+            "shape": "b1_hq8_hkv2_sq17_sk129_d128",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 65145,
+            "device_time_samples": 50,
+            "dtype": "bf16",
+            "end_to_end_median_ns": 656208,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "f32_gpu_cast_buffers",
+              "logical_input_output_bytes": 236816
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 8,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                256,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.25,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "cooperative_simdgroup",
+            "shape": "b1_hq8_hkv2_sq17_sk129_d128",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 109416,
+            "device_time_samples": 50,
+            "dtype": "bf16",
+            "end_to_end_median_ns": 4019229,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "f32_gpu_cast_buffers",
+              "logical_input_output_bytes": 540672
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 16,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                32,
+                16,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.5,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "resident_command_buffer",
+            "shape": "b2_hq8_hkv8_sq65_sk67_d64",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 83041,
+            "device_time_samples": 50,
+            "dtype": "bf16",
+            "end_to_end_median_ns": 642417,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "f32_gpu_cast_buffers",
+              "logical_input_output_bytes": 540672
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 8,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                256,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.25,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "cooperative_simdgroup",
+            "shape": "b2_hq8_hkv8_sq65_sk67_d64",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 205541,
+            "device_time_samples": 50,
+            "dtype": "bf16",
+            "end_to_end_median_ns": 12237416,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "f32_gpu_cast_buffers",
+              "logical_input_output_bytes": 2130944
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                16,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "resident_command_buffer",
+            "shape": "b2_hq8_hkv1_sq4_sk2049_d128",
+            "timing_source": "metal_kernel_interval"
+          },
+          {
+            "device_time_coverage": 1.0,
+            "device_time_median_ns": 178645,
+            "device_time_samples": 50,
+            "dtype": "bf16",
+            "end_to_end_median_ns": 2123770,
+            "input_residency_domain": "device_input_host_output",
+            "memory": {
+              "host_staging_inside_attention_abi": false,
+              "input_residency": "device_input_host_output",
+              "intermediate_storage": "f32_gpu_cast_buffers",
+              "logical_input_output_bytes": 2130944
+            },
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 8,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                256,
+                1,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.25,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "cooperative_simdgroup",
+            "shape": "b2_hq8_hkv1_sq4_sk2049_d128",
+            "timing_source": "metal_kernel_interval"
+          }
+        ],
+        "run": 2,
+        "variant_coverage": [
+          {
+            "device_time_ns": 105541,
+            "dtype": "f32",
+            "end_to_end_ns": 2448833,
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 5,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                17,
+                8,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.1328125,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "online_msl_variant",
+            "shape": "b1_hq8_hkv2_sq17_sk129_d128",
+            "variant": "gqa_bias_window_softcap"
+          },
+          {
+            "device_time_ns": 109416,
+            "dtype": "f32",
+            "end_to_end_ns": 4751958,
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 16,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                32,
+                16,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.5,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "online_msl_variant",
+            "shape": "b2_hq8_hkv8_sq65_sk67_d64",
+            "variant": "mha_ragged"
+          },
+          {
+            "device_time_ns": 202708,
+            "dtype": "f32",
+            "end_to_end_ns": 12403458,
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                16,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "online_msl_variant",
+            "shape": "b2_hq8_hkv1_sq4_sk2049_d128",
+            "variant": "mqa_long_context"
+          },
+          {
+            "device_time_ns": 108416,
+            "dtype": "f16",
+            "end_to_end_ns": 2374291,
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 5,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                17,
+                8,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.1328125,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "online_msl_variant",
+            "shape": "b1_hq8_hkv2_sq17_sk129_d128",
+            "variant": "gqa_bias_window_softcap"
+          },
+          {
+            "device_time_ns": 90083,
+            "dtype": "f16",
+            "end_to_end_ns": 3323958,
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 16,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                32,
+                16,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.5,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "online_msl_variant",
+            "shape": "b2_hq8_hkv8_sq65_sk67_d64",
+            "variant": "mha_ragged"
+          },
+          {
+            "device_time_ns": 111208,
+            "dtype": "f16",
+            "end_to_end_ns": 12330750,
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                16,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "online_msl_variant",
+            "shape": "b2_hq8_hkv1_sq4_sk2049_d128",
+            "variant": "mqa_long_context"
+          },
+          {
+            "device_time_ns": 786249,
+            "dtype": "bf16",
+            "end_to_end_ns": 20148958,
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 5,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                17,
+                8,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.1328125,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "online_msl_variant",
+            "shape": "b1_hq8_hkv2_sq17_sk129_d128",
+            "variant": "gqa_bias_window_softcap"
+          },
+          {
+            "device_time_ns": 3695750,
+            "dtype": "bf16",
+            "end_to_end_ns": 21239083,
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 16,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                32,
+                16,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.5,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "online_msl_variant",
+            "shape": "b2_hq8_hkv8_sq65_sk67_d64",
+            "variant": "mha_ragged"
+          },
+          {
+            "device_time_ns": 498250,
+            "dtype": "bf16",
+            "end_to_end_ns": 29306542,
+            "native_dispatched": true,
+            "numerically_validated": true,
+            "resources": {
+              "max_total_threads_per_threadgroup": 1024,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "simdgroups_per_threadgroup": 2,
+              "spill_count": null,
+              "static_threadgroup_memory_bytes": 0,
+              "thread_execution_width": 32,
+              "threadgroup": [
+                4,
+                16,
+                1
+              ],
+              "threadgroup_capacity_fraction": 0.0625,
+              "threadgroup_memory_bytes": 0
+            },
+            "route": "online_msl_variant",
+            "shape": "b2_hq8_hkv1_sq4_sk2049_d128",
+            "variant": "mqa_long_context"
+          }
+        ]
+      }
+    ]
+  },
+  "decisions": [
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.0005152492656396168,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.944719602118678,
+            0.9442043528530384
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.944719602118678,
+              0.9435819952324583,
+              0.9460147663185161,
+              0.9462354382166147,
+              0.942331086352984
+            ],
+            [
+              0.9442043528530384,
+              0.9456337189777558,
+              0.9439837241440769,
+              0.9447673096939774,
+              0.9391609260645892
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              6683354,
+              6792917,
+              6499271,
+              6498937,
+              6921083
+            ],
+            [
+              6703833,
+              6533000,
+              6738395,
+              6651208,
+              7306229
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": 0.0030641800509145557,
+          "speedups_vs_incumbent": [
+            0.9444919615777481,
+            0.9442120819219051
+          ],
+          "times_ns": [
+            6683354,
+            6703833
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            null,
+            null
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              120899166,
+              120403354,
+              120389791,
+              120877708,
+              120014104
+            ],
+            [
+              120149749,
+              120166395,
+              120293520,
+              120421583,
+              120091062
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  16,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  16,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.0019719240141971473,
+          "times_ns": [
+            120403354,
+            120166395
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "mpsgraph_bsmm",
+      "shape": "b1_h16_sq16_sk1025_d256",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": false,
+          "paired_measurement": false,
+          "paired_trial_times_ns": [
+            null,
+            null
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": null,
+          "times_ns": [
+            null,
+            null
+          ],
+          "timing_coverage": [
+            0.0,
+            0.0
+          ],
+          "timing_sources": [
+            null,
+            null
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              355020,
+              358791,
+              359228,
+              310708,
+              350583
+            ],
+            [
+              319812,
+              302478,
+              322228,
+              322937,
+              350124
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  16,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  16,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.10176645108432539,
+          "times_ns": [
+            355020,
+            322228
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "online_msl_variant",
+      "shape": "b1_h16_sq16_sk1025_d256",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.002526412473862538,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.934301061538314,
+            0.9368274740121766
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.9355643178034145,
+              0.9328087340448736,
+              0.934301061538314,
+              0.9355396480957375,
+              0.9332499885821809
+            ],
+            [
+              0.9367453940577662,
+              0.9377700415872096,
+              0.9367732532773035,
+              0.9376618251136215,
+              0.9368274740121766
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              8598437,
+              8933146,
+              8755833,
+              8590521,
+              8872958
+            ],
+            [
+              8432229,
+              8260979,
+              8405041,
+              8298541,
+              8385500
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": 0.04416349651183591,
+          "speedups_vs_incumbent": [
+            0.9342992029942127,
+            0.9369202500448038
+          ],
+          "times_ns": [
+            8755833,
+            8385500
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              133442166,
+              132951000,
+              133272062,
+              133268292,
+              132928187
+            ],
+            [
+              133306166,
+              132749229,
+              132934896,
+              133121334,
+              132739666
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  16,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  16,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.002507964500156528,
+          "times_ns": [
+            133268292,
+            132934896
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "mpsgraph_bsmm",
+      "shape": "b1_h16_sq16_sk1025_d256",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.01989931688366356,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.24639101004772454,
+            0.22649169316406098
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.24995676252506854,
+              -0.30418831607650687,
+              0.24639101004772454,
+              0.262671803632639,
+              0.006018775422930656
+            ],
+            [
+              0.14340591612719997,
+              -0.09649323635481302,
+              0.4694728115747159,
+              0.35538404041208566,
+              0.22649169316406098
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              815312,
+              935999,
+              609999,
+              600354,
+              780979
+            ],
+            [
+              585124,
+              560353,
+              419812,
+              420853,
+              497478
+            ]
+          ],
+          "paired_win_fractions": [
+            0.8,
+            0.8
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": 0.5698764568483431,
+          "speedups_vs_incumbent": [
+            0.035157770153822966,
+            0.2380183618891241
+          ],
+          "times_ns": [
+            780979,
+            497478
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              1087020,
+              717687,
+              809437,
+              814229,
+              785708
+            ],
+            [
+              683082,
+              511041,
+              791311,
+              652874,
+              643145
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  16,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  16,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.2398058430876402,
+          "times_ns": [
+            809437,
+            652874
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "mpsgraph_bsmm",
+      "shape": "b1_h16_sq16_sk1025_d256",
+      "status": "promote_candidate",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.00676893250821331,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.7105615980049629,
+            0.7173305305131762
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.7249584292069335,
+              0.7315936188650732,
+              0.7105615980049629,
+              0.7025354510221141,
+              0.6925089241413092
+            ],
+            [
+              0.7282943408646375,
+              0.7150900724852919,
+              0.7132069625242567,
+              0.7184229870117579,
+              0.7173305305131762
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              448249,
+              440125,
+              468896,
+              489292,
+              484625
+            ],
+            [
+              447437,
+              437396,
+              440562,
+              446270,
+              443479
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": 0.05731274761600887,
+          "speedups_vs_incumbent": [
+            0.7122896149716215,
+            0.7173305305131762
+          ],
+          "times_ns": [
+            468896,
+            443479
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              1629750,
+              1639771,
+              1620020,
+              1644875,
+              1576062
+            ],
+            [
+              1646771,
+              1535208,
+              1536167,
+              1584895,
+              1568896
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.03878778453128824,
+          "times_ns": [
+            1629750,
+            1568896
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "mpsgraph_bsmm",
+      "shape": "b1_h4_sq64_sk64_d64",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.0911914456878231,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.09786549558290354,
+            0.006674049895080438
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.12663013567514536,
+              0.09786549558290354,
+              0.06913103837737358,
+              0.17128832791483395,
+              0.03289255777217254
+            ],
+            [
+              0.07017407522536524,
+              0.0995118089457712,
+              0.006674049895080438,
+              -0.03355084771013975,
+              -0.006079753623957946
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              36499,
+              35333,
+              39561,
+              39000,
+              37958
+            ],
+            [
+              35895,
+              34124,
+              34083,
+              34687,
+              37895
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            0.6
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": 0.09430045838498573,
+          "speedups_vs_incumbent": [
+            0.09171831255533489,
+            0.0790898953963787
+          ],
+          "times_ns": [
+            37958,
+            34687
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              41791,
+              39166,
+              42499,
+              47061,
+              39249
+            ],
+            [
+              38604,
+              37895,
+              34312,
+              33561,
+              37666
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.10951521265863112,
+          "times_ns": [
+            41791,
+            37666
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "online_msl_variant",
+      "shape": "b1_h4_sq64_sk64_d64",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.011922267350781612,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.7275584235577481,
+            0.7394806909085297
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.8448251114678081,
+              0.7275584235577481,
+              0.6613078171122639,
+              0.7494233403535377,
+              0.6658746576221165
+            ],
+            [
+              0.8723442222177719,
+              0.7588435402391015,
+              0.7385068960403381,
+              0.7394806909085297,
+              0.7109451218591333
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              543791,
+              464666,
+              560500,
+              432250,
+              565166
+            ],
+            [
+              427083,
+              406625,
+              440812,
+              438937,
+              478500
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": 0.23888166183301932,
+          "speedups_vs_incumbent": [
+            0.6811660907079309,
+            0.739619160611004
+          ],
+          "times_ns": [
+            543791,
+            438937
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              3504375,
+              1705562,
+              1654895,
+              1725021,
+              1691479
+            ],
+            [
+              3345583,
+              1686146,
+              1685750,
+              1684854,
+              1655395
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.011752632359483909,
+          "times_ns": [
+            1705562,
+            1685750
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "mpsgraph_bsmm",
+      "shape": "b1_h4_sq64_sk64_d64",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.0337612044927401,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.019602012241964662,
+            0.05336321673470477
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.3236515228858261,
+              0.019602012241964662,
+              -0.23532828062839387,
+              0.06774748450644484,
+              0.011524950676098359
+            ],
+            [
+              0.28673008368759173,
+              0.07647846794999008,
+              0.05336321673470477,
+              -0.0903864406779661,
+              -0.037488747568022764
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              39749,
+              39562,
+              42541,
+              39562,
+              41083
+            ],
+            [
+              37416,
+              37229,
+              35479,
+              40208,
+              35728
+            ]
+          ],
+          "paired_win_fractions": [
+            0.8,
+            0.6
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": 0.0676891670471944,
+          "speedups_vs_incumbent": [
+            0.04362157740243491,
+            0.006670402091838096
+          ],
+          "times_ns": [
+            39749,
+            37229
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              58770,
+              40353,
+              34437,
+              42437,
+              41562
+            ],
+            [
+              52457,
+              40312,
+              37479,
+              36875,
+              34437
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.10894100696389979,
+          "times_ns": [
+            41562,
+            37479
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "online_msl_variant",
+      "shape": "b1_h4_sq64_sk64_d64",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.005928597802192015,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.8329558770447865,
+            0.8388844748469785
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.8118451684665078,
+              0.8412937644438815,
+              0.8329558770447865,
+              0.8465092511013216,
+              0.8314026314234129
+            ],
+            [
+              0.8460210810222499,
+              0.8333045581551916,
+              0.8102305283332826,
+              0.8388844748469785,
+              0.8500269883220801
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              573104,
+              498708,
+              480833,
+              479083,
+              530583
+            ],
+            [
+              478188,
+              499166,
+              579125,
+              531896,
+              493458
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": 0.0009183730760284575,
+          "speedups_vs_incumbent": [
+            0.8402217060472567,
+            0.8392660604815521
+          ],
+          "times_ns": [
+            498708,
+            499166
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              3045917,
+              3142334,
+              2878479,
+              3121250,
+              3147042
+            ],
+            [
+              3105542,
+              2994479,
+              3051729,
+              3301333,
+              3290312
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.005058054278448013,
+          "times_ns": [
+            3121250,
+            3105542
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "mpsgraph_bsmm",
+      "shape": "b1_h4_sq65_sk67_d128",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.060230426086755606,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.18389774961765348,
+            0.12366732353089788
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.27511313895689593,
+              0.23473925615714428,
+              0.14788698842250703,
+              0.1555332533718454,
+              0.18389774961765348
+            ],
+            [
+              0.0820875304780435,
+              -0.006633587178602701,
+              0.13052807759157137,
+              0.1628718915329749,
+              0.12366732353089788
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              39083,
+              38374,
+              35770,
+              34499,
+              37353
+            ],
+            [
+              37270,
+              37937,
+              40520,
+              39083,
+              34687
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            0.8
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": 0.015634621047840868,
+          "speedups_vs_incumbent": [
+            0.18389774961765348,
+            0.06566017289362855
+          ],
+          "times_ns": [
+            37353,
+            37937
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              53916,
+              50145,
+              41978,
+              40853,
+              45770
+            ],
+            [
+              40603,
+              37687,
+              46603,
+              46687,
+              39582
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.1272566066546807,
+          "times_ns": [
+            45770,
+            40603
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "online_msl_variant",
+      "shape": "b1_h4_sq65_sk67_d128",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.009557409461984356,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.851271301242609,
+            0.8608287107045933
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.8414893942150263,
+              0.8481161714683423,
+              0.862807193632051,
+              0.851271301242609,
+              0.8611429234369936
+            ],
+            [
+              0.8750320381949573,
+              0.8608287107045933,
+              0.853497914228119,
+              0.8686274812365109,
+              0.8395371469643933
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              544583,
+              495812,
+              468562,
+              492958,
+              475166
+            ],
+            [
+              437354,
+              454458,
+              483875,
+              451229,
+              508333
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": 0.08471629941600764,
+          "speedups_vs_incumbent": [
+            0.8556641566291517,
+            0.8624044538450686
+          ],
+          "times_ns": [
+            492958,
+            454458
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              3435625,
+              3264416,
+              3415354,
+              3314478,
+              3421979
+            ],
+            [
+              3499729,
+              3265458,
+              3302854,
+              3434729,
+              3167917
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.03406145109653651,
+          "times_ns": [
+            3415354,
+            3302854
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "mpsgraph_bsmm",
+      "shape": "b1_h4_sq65_sk67_d128",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.16137459527790987,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.2606597422199273,
+            0.09928514694201747
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.16309379532314783,
+              0.26651996634522035,
+              0.11234030735049065,
+              0.268300820784305,
+              0.2606597422199273
+            ],
+            [
+              0.17937347647943572,
+              0.13940019041574103,
+              0.09928514694201747,
+              -0.02131449093404187,
+              0.04619628264288108
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              42124,
+              33999,
+              38354,
+              32895,
+              37228
+            ],
+            [
+              31645,
+              32541,
+              34020,
+              34979,
+              36999
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            0.8
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": 0.09429747207524986,
+          "speedups_vs_incumbent": [
+            0.19685888723491468,
+            0.10028562361155188
+          ],
+          "times_ns": [
+            37228,
+            34020
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              50333,
+              46353,
+              43208,
+              44957,
+              50353
+            ],
+            [
+              38562,
+              37812,
+              37770,
+              34249,
+              38791
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.225880672802285,
+          "times_ns": [
+            46353,
+            37812
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "online_msl_variant",
+      "shape": "b1_h4_sq65_sk67_d128",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.0009269539372112057,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.9572595339690377,
+            0.9581864879062489
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.9571918246327791,
+              0.9571414129304142,
+              0.961083262673496,
+              0.9599944207321224,
+              0.9572595339690377
+            ],
+            [
+              0.9586613120594835,
+              0.9602551388935666,
+              0.9567830555327653,
+              0.9572073993514536,
+              0.9581864879062489
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              985479,
+              980583,
+              897604,
+              922687,
+              983833
+            ],
+            [
+              945458,
+              919292,
+              1001875,
+              979125,
+              953896
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": 0.027976844435871416,
+          "speedups_vs_incumbent": [
+            0.9574045017437047,
+            0.9583100313154645
+          ],
+          "times_ns": [
+            980583,
+            953896
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            null,
+            null
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              23020813,
+              22879499,
+              23064729,
+              23063958,
+              23018771
+            ],
+            [
+              22871021,
+              23129833,
+              23182458,
+              22880708,
+              22813104
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 16,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.5,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 16,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.5,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.006123280800576626,
+          "times_ns": [
+            23020813,
+            22880708
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "mpsgraph_bsmm",
+      "shape": "b2_h8_sq64_sk257_d128",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": false,
+          "paired_measurement": false,
+          "paired_trial_times_ns": [
+            null,
+            null
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": null,
+          "times_ns": [
+            null,
+            null
+          ],
+          "timing_coverage": [
+            0.0,
+            0.0
+          ],
+          "timing_sources": [
+            null,
+            null
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              57624,
+              45811,
+              49416,
+              52291,
+              49020
+            ],
+            [
+              44416,
+              45583,
+              46416,
+              42395,
+              61145
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 16,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.5,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 16,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.5,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.08408836627690147,
+          "times_ns": [
+            49416,
+            45583
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "online_msl_variant",
+      "shape": "b2_h8_sq64_sk257_d128",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.00105775635926586,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.9537676217900883,
+            0.9548253781493542
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.955218821197012,
+              0.9561320209645001,
+              0.9507758821076883,
+              0.9537676217900883,
+              0.9534983900601522
+            ],
+            [
+              0.9542126614186685,
+              0.9540735718401112,
+              0.9554535281956144,
+              0.9566589328125825,
+              0.9548253781493542
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              1069396,
+              1049291,
+              1171896,
+              1101000,
+              1103458
+            ],
+            [
+              1071687,
+              1077146,
+              1056749,
+              1026479,
+              1047479
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": 0.04187465519248185,
+          "speedups_vs_incumbent": [
+            0.9537676217900883,
+            0.9549432416482684
+          ],
+          "times_ns": [
+            1101000,
+            1056749
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              23880479,
+              23919292,
+              23807354,
+              23814479,
+              23729458
+            ],
+            [
+              23405750,
+              23453729,
+              23722395,
+              23683750,
+              23187333
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 16,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.5,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 16,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.5,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.015381349379452623,
+          "times_ns": [
+            23814479,
+            23453729
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "mpsgraph_bsmm",
+      "shape": "b2_h8_sq64_sk257_d128",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.09610530853432872,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.27673504327700454,
+            0.18062973474267582
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.07872771084337349,
+              0.3866580418304556,
+              0.27673504327700454,
+              0.11112955776454231,
+              0.2929055226199635
+            ],
+            [
+              0.18062973474267582,
+              0.051776292648610625,
+              0.1949245195744502,
+              0.14171576315008688,
+              0.21130050505050504
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              47791,
+              36979,
+              45625,
+              42832,
+              46874
+            ],
+            [
+              36666,
+              40437,
+              38291,
+              40499,
+              37479
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": 0.19153325846804733,
+          "speedups_vs_incumbent": [
+            0.2432535535983812,
+            0.18850930360700208
+          ],
+          "times_ns": [
+            45625,
+            38291
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              51875,
+              60291,
+              63082,
+              48187,
+              66291
+            ],
+            [
+              44749,
+              42645,
+              47562,
+              47186,
+              47520
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 16,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.5,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 16,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.5,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.27773068282965285,
+          "times_ns": [
+            60291,
+            47186
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "online_msl_variant",
+      "shape": "b2_h8_sq64_sk257_d128",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    }
+  ],
+  "promotion_rules": {
+    "absolute_time_drift_is_diagnostic_only": true,
+    "maximum_cross_run_drift_fraction": 0.15,
+    "maximum_cross_run_speedup_spread": 0.05,
+    "minimum_paired_win_fraction_each_run": 0.75,
+    "minimum_speedup_fraction_each_run": 0.05,
+    "requires_interleaved_paired_trials": true,
+    "requires_native_dispatch": true,
+    "requires_numerical_validation": true,
+    "requires_repeated_measurement": true,
+    "requires_resource_evidence": true
+  },
+  "report_count": 2,
+  "schema_version": 1,
+  "source_report_schema_version": 1
+}

@@ -7,72 +7,72 @@
       "shape": "512x512x512",
       "dtype": "f32",
       "mode": "fused",
-      "median_ms": 0.5005,
-      "max_latency_ms": 1.0011
+      "median_ms": 0.4296,
+      "max_latency_ms": 0.8592
     },
     {
       "op": "matmul_softmax",
       "shape": "64x64x256",
       "dtype": "f32",
       "mode": "fused",
-      "median_ms": 3.6864,
-      "max_latency_ms": 7.3728
+      "median_ms": 3.7048,
+      "max_latency_ms": 7.4095
     },
     {
       "op": "matmul_gelu",
       "shape": "64x64x256",
       "dtype": "f32",
       "mode": "fused",
-      "median_ms": 3.6271,
-      "max_latency_ms": 7.2543
+      "median_ms": 0.2611,
+      "max_latency_ms": 0.5222
     },
     {
       "op": "matmul_rmsnorm",
       "shape": "64x64x256",
       "dtype": "f32",
       "mode": "fused",
-      "median_ms": 3.6388,
-      "max_latency_ms": 7.2776
+      "median_ms": 3.6877,
+      "max_latency_ms": 7.3754
     },
     {
       "op": "matmul_softmax_matmul",
       "shape": "64x64x256x64",
       "dtype": "f32",
       "mode": "fused",
-      "median_ms": 7.0285,
-      "max_latency_ms": 14.057
+      "median_ms": 7.1412,
+      "max_latency_ms": 14.2824
     },
     {
       "op": "swiglu",
       "shape": "64x128x256",
       "dtype": "f32",
       "mode": "fused",
-      "median_ms": 15.052,
-      "max_latency_ms": 30.1039
+      "median_ms": 14.4376,
+      "max_latency_ms": 28.8753
     },
     {
       "op": "conv2d",
       "shape": "1x32x32x16_3x3x16x32",
       "dtype": "f32",
       "mode": "fused",
-      "median_ms": 0.4135,
-      "max_latency_ms": 0.827
+      "median_ms": 0.3683,
+      "max_latency_ms": 0.7366
     },
     {
       "op": "grouped_gemm",
       "shape": "64x128x256_E4",
       "dtype": "f32",
       "mode": "fused",
-      "median_ms": 0.3237,
-      "max_latency_ms": 0.6474
+      "median_ms": 0.2829,
+      "max_latency_ms": 0.5658
     },
     {
       "op": "moe_swiglu_block",
       "shape": "64x128x256x128_E4",
       "dtype": "f32",
       "mode": "composed",
-      "median_ms": 1.5,
-      "max_latency_ms": 3.0
+      "median_ms": 1.3812,
+      "max_latency_ms": 2.7623
     }
   ]
 }

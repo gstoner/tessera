@@ -396,7 +396,7 @@ score_matching_loss,5,0,0,5,0,,directly_tested,5 direct test references
 sddmm,7,0,0,7,0,,directly_tested,7 direct test references
 segment_reduce,4,0,0,4,0,fp32,directly_tested,4 direct test references
 select,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-selective_ssm,69,10,3,79,0,bf16 f16 fp16 fp32,directly_tested,79 direct test references
+selective_ssm,71,10,3,81,0,bf16 f16 fp16 fp32,directly_tested,81 direct test references
 seq2seq_loss,7,0,0,7,0,,directly_tested,7 direct test references
 sgd,15,0,0,15,0,,directly_tested,15 direct test references
 shard_map,0,0,0,0,1,,structural_only,category default for 'sharding'
@@ -412,7 +412,7 @@ sinh,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 slice,11,0,0,11,0,,directly_tested,11 direct test references
 smooth_l1_loss,7,0,0,7,0,f32,directly_tested,7 direct test references
 softcap,9,0,1,9,0,,directly_tested,9 direct test references
-softmax,127,38,31,165,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,165 direct test references
+softmax,129,38,31,167,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,167 direct test references
 softmax_safe,6,4,1,10,0,bf16,directly_tested,10 direct test references
 softplus,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
 sort,13,0,0,13,0,,directly_tested,13 direct test references

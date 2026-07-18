@@ -18,7 +18,9 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-_OPT_DEFAULT = REPO_ROOT / "build" / "tools" / "tessera-opt" / "tessera-opt"
+_OPT_DEFAULT = REPO_ROOT / "build-apple" / "tools" / "tessera-opt" / "tessera-opt"
+if not _OPT_DEFAULT.is_file():
+    _OPT_DEFAULT = REPO_ROOT / "build" / "tools" / "tessera-opt" / "tessera-opt"
 
 
 def _find_opt() -> str | None:
@@ -733,7 +735,9 @@ def test_value_mode_output_has_no_husk_or_tile_leftover():
 # exists). It also pins the coverage boundary: CPU linalg value calls execute;
 # GPU value calls and non-linalg value calls stay gated / artifact-mode.
 
-_REPO_BUILT_OPT = REPO_ROOT / "build" / "tools" / "tessera-opt" / "tessera-opt"
+_REPO_BUILT_OPT = REPO_ROOT / "build-apple" / "tools" / "tessera-opt" / "tessera-opt"
+if not _REPO_BUILT_OPT.is_file():
+    _REPO_BUILT_OPT = REPO_ROOT / "build" / "tools" / "tessera-opt" / "tessera-opt"
 
 
 def test_repo_root_walk_finds_source_root():
@@ -937,6 +941,19 @@ def test_cpu_full_matmul_lowers_to_gemm_value_call():
         assert bad not in p.stdout, f"forbidden '{bad}' in matmul value output"
 
 
+@pytest.mark.parametrize("dtype", ["f16", "bf16"])
+def test_gpu_full_low_precision_rank2_matmul_selects_tile_simdgroup_abi(dtype):
+    body = (f'func.func @f(%a: tensor<8x8x{dtype}>, %b: tensor<8x8x{dtype}>) '
+            f'-> tensor<8x8x{dtype}> {{\n'
+            f'  %0 = tessera.matmul %a, %b : '
+            f'(tensor<8x8x{dtype}>, tensor<8x8x{dtype}>) -> tensor<8x8x{dtype}>\n'
+            f'  return %0 : tensor<8x8x{dtype}>\n}}')
+    p = _run("tessera-lower-to-apple_gpu-full", body)
+    assert p.returncode == 0, p.stderr
+    assert 'op_kind = "tile_simdgroup_gemm"' in p.stdout
+    assert f'symbol = "tessera_apple_gpu_tile_simdgroup_gemm_{dtype}"' in p.stdout
+
+
 def test_cpu_full_matmul_symbol_on_runtime_allowlist():
     """The gemm symbol the value lowering writes is exactly what the runtime
     value executor dispatches (IR ↔ runtime agreement)."""
@@ -1088,16 +1105,20 @@ def test_bf16_matmul_executes_or_skips_cleanly():
     np.testing.assert_allclose(r["output"].astype(np.float32), ref, rtol=5e-2, atol=5e-2)
 
 
-def test_gpu_non_fp32_matmul_value_mode_is_gated():
-    """apple_gpu f16/bf16 value matmul stays non-executable (no GPU value
-    executor adapter yet) — never a fabricated CPU dispatch."""
-    for dt, mlir in (("fp16", "f16"), ("bf16", "bf16")):
+def test_gpu_non_fp32_matmul_value_mode_selects_tile_simdgroup_executor():
+    """TILE-1 promotes rank-2 f16/bf16 value matmul to the native simdgroup
+    executor; neither dtype may be represented as an Apple CPU call."""
+    for dt, mlir, symbol in (
+            ("fp16", "f16", "tessera_apple_gpu_tile_simdgroup_gemm_f16"),
+            ("bf16", "bf16", "tessera_apple_gpu_tile_simdgroup_gemm_bf16")):
         art = _front_door_gpu(_matmul_module(4, 8, 16, dtype=dt, mlir_dtype=mlir))
         calls = art.metadata.get("apple_value_calls") or []
         assert not any(c.get("op") == "tessera_apple.cpu.call"
                        and c.get("status") == "executable" for c in calls), (dt, mlir)
-        assert art.metadata.get("compiler_path") != "apple_value_target_ir" \
-            or art.metadata.get("executable") is not True
+        assert art.metadata.get("compiler_path") == "apple_value_target_ir"
+        assert art.metadata.get("executable") is True
+        assert calls and calls[0]["op"] == "tessera_apple.gpu.kernel_call"
+        assert calls[0]["symbol"] == symbol
 
 
 # NOTE: static rank-3 batched matmul is no longer gated — Sprint 6 promoted it
@@ -1540,6 +1561,8 @@ def test_gpu_value_executor_allowlist_exact():
         "tessera_apple_gpu_bmm_f32",
         "tessera_apple_gpu_bmm_f16",
         "tessera_apple_gpu_bmm_bf16",
+        "tessera_apple_gpu_tile_simdgroup_gemm_f16",
+        "tessera_apple_gpu_tile_simdgroup_gemm_bf16",
         "tessera_apple_gpu_native_sparse_attn_f32",
         "tessera_apple_gpu_ppo_policy_loss_f32",
         "tessera_apple_gpu_ppo_policy_loss_ex_f32",
@@ -1811,9 +1834,17 @@ def test_gpu_ebm_one_step_langevin_value_launch_vs_numpy():
 
 @pytest.mark.hardware_apple_gpu
 @pytest.mark.parametrize("dtype,mlir", [("fp32", "f32"), ("fp16", "f16"), ("bf16", "bf16")])
-def test_gpu_batched_value_launch_vs_numpy(dtype, mlir):
+@pytest.mark.parametrize("shape", [(2, 4, 8, 16), (2, 5, 7, 9)])
+def test_gpu_batched_value_launch_vs_numpy(dtype, mlir, shape):
+    """Value Tile batched GEMM executes both aligned and ragged M/N/K shapes.
+
+    The fixture owns only logical dimensions.  The Apple value lowering selects
+    the BMM route and its physical MPS/Metal packing; no test-authored lane map
+    or fragment layout is permitted here.
+    """
     import numpy as np
     from tessera.runtime import launch
+    batch, m, k, n = shape
     npdt = {"fp32": np.float32, "fp16": np.float16}.get(dtype)
     if npdt is None:
         import pytest as _p
@@ -1823,12 +1854,15 @@ def test_gpu_batched_value_launch_vs_numpy(dtype, mlir):
             _p.skip("ml_dtypes unavailable")
         npdt = ml_dtypes.bfloat16
     rng = np.random.default_rng(0)
-    a = rng.standard_normal((2, 4, 8)).astype(npdt)
-    b = rng.standard_normal((2, 8, 16)).astype(npdt)
-    r = launch(_front_door_gpu(_batched_module_dt(2, 4, 8, 16, dtype, mlir)), [a, b])
+    a = rng.standard_normal((batch, m, k)).astype(npdt)
+    b = rng.standard_normal((batch, k, n)).astype(npdt)
+    r = launch(_front_door_gpu(
+        _batched_module_dt(batch, m, k, n, dtype, mlir)), [a, b])
     assert r["ok"], r
     assert r["compiler_path"] == "apple_value_target_ir"
-    assert r["output"].shape == (2, 4, 16)
+    assert r["execution_kind"] == "native_gpu", r
+    assert r["execution_mode"] == "metal_runtime", r
+    assert r["output"].shape == (batch, m, n)
     assert r["output"].dtype == npdt  # honest dtype
     ref = a.astype(np.float32) @ b.astype(np.float32)
     np.testing.assert_allclose(r["output"].astype(np.float32), ref, rtol=5e-2, atol=5e-2)

@@ -2,7 +2,7 @@
 status: Informative
 classification: Reference / Kernel Inventory
 authority: Companion to docs/backends/nvidia/kernel-inventory.md
-last_updated: 2026-07-07
+last_updated: 2026-07-18
 ---
 
 # NVIDIA sm_120 (consumer Blackwell) mma.sync Kernel Inventory
@@ -40,6 +40,9 @@ Execution status legend: **✅ proven** (execute-and-compare on sm_120) ·
 | `tessera_nvidia_attn` | `AttentionRegion` — `O = softmax(scale·Q·Kᵀ)·V` | runtime M/Nk/D/Dv (Dv ≤ 256) | f32 | flash: one query/thread, online softmax, streaming KV, causal + transpose flags | ✅ (C4) |
 | `tessera_nvidia_gated` | `GatedMatmulRegion` — SwiGLU gate `gate_act(A·Wg) ⊙ (A·Wu)` | runtime M/K/H | f32 | one output row/thread, shared A load | ✅ (C5) |
 | `tessera_nvidia_pointwise` | `PointwiseGraphRegion` — same-shape pointwise DAG | runtime numel | f32 | one element/thread; DAG from `POINTWISE_OPS` C-expr table (+ NaN-safe `sign`/`clamp` shims) | ✅ (C5) |
+| `tessera_nvidia_mma_fused` | fused matmul + bias/activation | runtime M/N/K | f16/bf16/TF32/FP8 → f32 | one warp per 16×8; K16/K8/K32 | ✅ |
+| `tessera_nvidia_mma_attn` | fused QK-softmax-PV | runtime M/Nk/D/Dv | f16/bf16/TF32/FP8 → f32 | one warp per 16 queries; dynamic score smem | ✅ |
+| `tessera_nvidia_mma_gated` | paired gated projections | runtime M/H/K | f16/bf16/TF32/FP8 → f32 | one warp per 16×8; shared A fragment | ✅ |
 
 All four are Tier-1 **synthesized** D1 arbiter candidates
 (`Nvidia{Generic,FlashAttn,Gated,Pointwise}…Candidate`). f32 is the
@@ -66,6 +69,9 @@ i32-index-overflow shapes (element count > 2³¹) honestly.
 | `tessera_nvidia_mma_gemm_f16` | matmul (general tiled) | any M/N/K | f16→f32 | ✅ |
 | `tessera_nvidia_mma_gemm_bf16` | matmul (general tiled) | any M/N/K | bf16→f32 | ✅ |
 | `tessera_nvidia_mma_gemm_tf32` | matmul (general tiled) | any M/N/K | fp32/tf32-math→f32 | ✅ |
+| `tessera_nvidia_mma_gemm_e4m3` | matmul (general tiled) | any M/N/K | FP8 E4M3→f32 | ✅ |
+| `tessera_nvidia_mma_gemm_e5m2` | matmul (general tiled) | any M/N/K | FP8 E5M2→f32 | ✅ |
+| `tessera_nvidia_mma_gemm_nvfp4` | block-scaled matmul | any positive M/N/K, ragged zero-fill | packed E2M1 + UE4M3 scales→f32 | ✅ |
 
 ### FP8 representation versus execution
 
@@ -91,9 +97,9 @@ displaced only when D2's measured loop proves the emitted lane faster + in budge
 | op | Tier-3 hand-tuned | Tier-2 emitted | Tier-1 synthesized |
 |---|---|---|---|
 | `matmul` | `tessera_nvidia_mma_gemm_*` (shipped) | `tessera_mma_gemm_*` (PTX bridge) | — |
-| `fused_region` | — | — | `tessera_nvidia_fused` |
-| `attention` | — | — | `tessera_nvidia_attn` |
-| `gated_matmul` | — | — | `tessera_nvidia_gated` |
+| `fused_region` | — | native f16/bf16/TF32/FP8 `tessera_nvidia_mma_fused`; composed candidates retained | `tessera_nvidia_fused` |
+| `attention` | — | native f16/bf16/TF32/FP8 `tessera_nvidia_mma_attn`; composed candidates retained | `tessera_nvidia_attn` |
+| `gated_matmul` | — | native f16/bf16/TF32/FP8 `tessera_nvidia_mma_gated`; composed candidates retained | `tessera_nvidia_gated` |
 | `pointwise` | — | — | `tessera_nvidia_pointwise` |
 
 Selection: tier-priority by default; `emit/autotune.py` measures on-device and
@@ -109,9 +115,10 @@ time; the compiler-emitted CUDA lane needs `nvcc`.
 
 ## Still open
 
-NVFP4 **productization** into general-shape Tile/runtime dispatch (the sm_120a
-scale map, non-unit numerics, and SASS proof are complete); native single-kernel
-TF32/FP8 fused/attention/gated performance beyond the completed device-resident
-compositions; and Hopper `wgmma` (sm_90a) / sm_100 `tcgen05` on their own
-silicon. See
+General-shape NVFP4 dispatch and native TF32/FP8 transformer routes are now
+landed. The retained two-run evidence promotes only cross-domain stable rows;
+long-attention and several small-shape rows intentionally keep composed or
+fallback selection. Remaining architecture work is Hopper `wgmma` (sm_90a) and
+sm_100 `tcgen05` on their own silicon, plus future shape retuning when new stable
+evidence justifies it. See
 [`docs/audit/backend/nvidia/NVIDIA_AUDIT.md`](../../audit/backend/nvidia/NVIDIA_AUDIT.md).

@@ -157,7 +157,7 @@ def test_nvidia_mma_gated_candidates_registered_and_apply_by_storage():
     assert not mf.applies_to(F.GatedMatmulRegion(storage_dtype="bf16"))
 
 
-def test_nvidia_tf32_fp8_composed_candidates_registered_by_storage():
+def test_nvidia_tf32_fp8_native_and_exact_f32_candidates_registered_by_storage():
     from tessera.compiler.emit.candidate import OP_ATTENTION, OP_GATED_MATMUL
     fused = {c.name: c for c in C.candidates_for("nvidia", OP_FUSED_REGION)}
     attn = {c.name: c for c in C.candidates_for("nvidia", OP_ATTENTION)}
@@ -165,9 +165,12 @@ def test_nvidia_tf32_fp8_composed_candidates_registered_by_storage():
     suffixes = {"tf32": "f32", "fp8_e4m3": "fp8_e4m3",
                 "fp8_e5m2": "fp8_e5m2"}
     for suffix, storage in suffixes.items():
-        ac = attn[f"nvidia_mma_attn_composed_{suffix}"]
-        fc = fused[f"nvidia_mma_fused_composed_{suffix}"]
-        gc = gated[f"nvidia_mma_gated_composed_{suffix}"]
+        ac = attn[f"nvidia_mma_attn_{suffix}"]
+        # Exact f32 fused regions retain their explicit composed TF32 candidate;
+        # FP8 can fuse the epilogue into its native K32 kernel.
+        fc = fused[(f"nvidia_mma_fused_composed_{suffix}" if storage == "f32"
+                    else f"nvidia_mma_fused_{suffix}")]
+        gc = gated[f"nvidia_mma_gated_{suffix}"]
         assert ac.tier == fc.tier == gc.tier == Tier.EMITTED
         assert ac.applies_to(F.AttentionRegion(storage_dtype=storage))
         assert fc.applies_to(F.FusedRegion(
@@ -816,7 +819,7 @@ def test_live_nvidia_tensor_core_dtype_variants(kind, candidate_name, atol):
      ("fp8_e4m3", "fp8_e4m3", 2e-1),
      ("fp8_e5m2", "fp8_e5m2", 4e-1)],
 )
-def test_live_nvidia_tf32_fp8_composed_transformer_lanes(
+def test_live_nvidia_tf32_fp8_transformer_lanes(
         kind, storage, suffix, atol):
     """Execute composed MMA→CUDA-stage lanes on ragged transformer shapes."""
     from tessera.compiler.emit.candidate import OP_ATTENTION, OP_GATED_MATMUL
@@ -824,7 +827,8 @@ def test_live_nvidia_tf32_fp8_composed_transformer_lanes(
     if kind == "fused":
         region = F.FusedRegion(
             epilogue=("bias", "gelu"), storage_dtype=storage)
-        op, prefix = OP_FUSED_REGION, "nvidia_mma_fused_composed_"
+        op, prefix = OP_FUSED_REGION, ("nvidia_mma_fused_composed_"
+                                      if storage == "f32" else "nvidia_mma_fused_")
         A = (rng.standard_normal((19, 29)) * 0.15).astype(np.float32)
         B = (rng.standard_normal((29, 23)) * 0.15).astype(np.float32)
         bias = (rng.standard_normal((23,)) * 0.05).astype(np.float32)
@@ -832,20 +836,30 @@ def test_live_nvidia_tf32_fp8_composed_transformer_lanes(
     elif kind == "attention":
         region = F.AttentionRegion(
             scale=0.125, causal=True, storage_dtype=storage)
-        op, prefix = OP_ATTENTION, "nvidia_mma_attn_composed_"
+        op, prefix = OP_ATTENTION, "nvidia_mma_attn_"
         inputs = tuple((rng.standard_normal(shape) * 0.15).astype(np.float32)
                        for shape in ((19, 29), (21, 29), (21, 23)))
     else:
         region = F.GatedMatmulRegion(
             gate_act="silu", storage_dtype=storage)
-        op, prefix = OP_GATED_MATMUL, "nvidia_mma_gated_composed_"
+        op, prefix = OP_GATED_MATMUL, "nvidia_mma_gated_"
         inputs = tuple((rng.standard_normal(shape) * 0.15).astype(np.float32)
                        for shape in ((19, 29), (29, 23), (29, 23)))
     candidate = next(c for c in C.candidates_for("nvidia", op)
                      if c.name == prefix + suffix)
     out, tag = candidate.run(region, *inputs)
-    assert tag == "nvidia_cuda_composed"
+    assert tag == ("nvidia_cuda_composed" if kind == "fused" and storage == "f32"
+                   else "nvidia_cuda")
     np.testing.assert_allclose(out, region.reference(*inputs), atol=atol)
     latency = candidate.measure_device_latency(
         region, *inputs, reps=5, warmup=2)
     assert latency is not None and latency > 0
+
+
+# Compatibility exports used by the physical unit/device wrappers. The names
+# predate the native candidates; keeping them avoids test-node churn while the
+# assertions above now distinguish native and composed routes explicitly.
+test_nvidia_tf32_fp8_composed_candidates_registered_by_storage = (
+    test_nvidia_tf32_fp8_native_and_exact_f32_candidates_registered_by_storage)
+test_live_nvidia_tf32_fp8_composed_transformer_lanes = (
+    test_live_nvidia_tf32_fp8_transformer_lanes)

@@ -1826,6 +1826,7 @@ _NVIDIA_GEMM_SYMBOLS = {
     "float8_e4m3fn": "tessera_nvidia_mma_gemm_e4m3",
     "float8_e5m2": "tessera_nvidia_mma_gemm_e5m2",
 }
+_NVIDIA_NVFP4_SYMBOL = "tessera_nvidia_mma_gemm_nvfp4"
 
 
 def _nvidia_gemm_lib_path() -> Optional[Path]:
@@ -1838,6 +1839,9 @@ def _nvidia_gemm_lib_path() -> Optional[Path]:
     candidates.append(
         root / "build/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda"
         / "libtessera_nvidia_gemm.so")
+    candidates.append(
+        root / "build-nvidia-cuda/src/compiler/codegen/"
+        "tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_gemm.so")
     for c in candidates:
         if c.is_file():
             return c
@@ -1877,6 +1881,10 @@ def _load_nvidia_gemm_runtime() -> ctypes.CDLL | None:
         fn.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                        ctypes.c_int, ctypes.c_int, ctypes.c_int]
         fn.restype = ctypes.c_int
+    nvfp4 = getattr(lib, _NVIDIA_NVFP4_SYMBOL, None)
+    if nvfp4 is not None:
+        nvfp4.argtypes = [ctypes.c_void_p] * 5 + [ctypes.c_int] * 3
+        nvfp4.restype = ctypes.c_int
     _nvidia_gemm_runtime = lib
     return lib
 
@@ -2042,6 +2050,61 @@ def _nvidia_mma_gemm_2d(A: Any, B: Any, dtype: str = "bfloat16") -> Any:
     if rc != 0:
         raise RuntimeError(f"shipped nvidia GEMM returned rc={rc}")
     return D
+
+
+def _nvidia_nvfp4_gemm_2d(A_packed: Any, B_packed: Any,
+                           scale_a: Any, scale_b: Any,
+                           M: int, N: int, K: int) -> Any:
+    """General-shape SM120 NVFP4 GEMM through the shipped runtime ABI.
+
+    ``A_packed`` is ``uint8[M, ceil(K/2)]`` and ``B_packed`` is
+    ``uint8[ceil(K/2), N]``. Each byte packs adjacent contraction-axis E2M1
+    codes low-nibble first. ``scale_a`` is raw UE4M3
+    ``uint8[M, ceil(K/16)]`` and ``scale_b`` is raw UE4M3
+    ``uint8[ceil(K/16), N]``. The CUDA dispatcher zero-fills ragged edge tiles
+    and accumulates every K64 fragment into an f32 result.
+    """
+    import numpy as np
+
+    M, N, K = int(M), int(N), int(K)
+    if M <= 0 or N <= 0 or K <= 0:
+        raise ValueError(f"NVFP4 GEMM dimensions must be positive; got {M}x{N}x{K}")
+    packed_k = (K + 1) // 2
+    scale_k = (K + 15) // 16
+
+    def operand(value: Any, shape: tuple[int, int], name: str) -> Any:
+        arr = np.asarray(value)
+        if arr.dtype != np.uint8 or arr.shape != shape:
+            raise ValueError(
+                f"NVFP4 {name} must be contiguous-compatible uint8{shape}; "
+                f"got {arr.dtype}{arr.shape}")
+        return np.ascontiguousarray(arr)
+
+    ap = operand(A_packed, (M, packed_k), "A_packed")
+    bp = operand(B_packed, (packed_k, N), "B_packed")
+    sa = operand(scale_a, (M, scale_k), "scale_a")
+    sb = operand(scale_b, (scale_k, N), "scale_b")
+    lib = _load_nvidia_gemm_runtime()
+    if lib is None:
+        raise RuntimeError("libtessera_nvidia_gemm.so not loadable")
+    fn = getattr(lib, _NVIDIA_NVFP4_SYMBOL, None)
+    if fn is None:
+        raise RuntimeError(
+            f"shipped GEMM lacks {_NVIDIA_NVFP4_SYMBOL}; rebuild "
+            "tessera_nvidia_gemm")
+    out = np.zeros((M, N), np.float32)
+    rc = fn(ap.ctypes.data_as(ctypes.c_void_p),
+            bp.ctypes.data_as(ctypes.c_void_p),
+            sa.ctypes.data_as(ctypes.c_void_p),
+            sb.ctypes.data_as(ctypes.c_void_p),
+            out.ctypes.data_as(ctypes.c_void_p), M, N, K)
+    if rc == 1:
+        raise ValueError("NVFP4 GEMM runtime rejected its packed-shape contract")
+    if rc == 2:
+        raise RuntimeError("NVFP4 GEMM requires an sm_120a-capable CUDA device/toolchain")
+    if rc != 0:
+        raise RuntimeError(f"NVFP4 GEMM returned rc={rc}")
+    return out
 
 
 _nvidia_ptx_launch_lib: ctypes.CDLL | None = None

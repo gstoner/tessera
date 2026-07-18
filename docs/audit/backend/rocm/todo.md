@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-17
+last_updated: 2026-07-18
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
@@ -698,6 +698,13 @@ register, dtype-support, or schedule result transfers to ROCm. Re-run the shared
 contract and architecture-supported execution matrix on the gfx1151 host when
 this coordinating change lands; retain explicit not-applicable results for
 CUDA-only storage forms.
+
+Cross-backend sync `NVIDIA-SM120-LOWP-2026-07-18`: not applicable to gfx1151
+execution. The CUDA work changes no shared dtype/ScaleLayout, epilogue, or
+autotune schema. gfx1151 supports neither FP8/BF8 WMMA nor NVIDIA NVFP4 OMMA;
+ROCm therefore inherits no CUDA nibble packing, scale selector, wave schedule,
+resource value, timing, or selector promotion. RDNA4/CDNA4 low-precision work
+remains behind its architecture-specific exact-device queues.
 
 Do not schedule these without new evidence:
 

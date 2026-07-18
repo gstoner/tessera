@@ -1,0 +1,247 @@
+{
+  "schema": "tessera.nvidia.lowp-native-resources.v1",
+  "device": "nvidia:sm_120",
+  "arch": "sm_120a",
+  "rows": [
+    {
+      "candidate": "nvidia_mma_fused_tf32",
+      "storage_dtype": "f32",
+      "kernel": "tessera_nvidia_mma_fused_kernel",
+      "dynamic_shared_memory_bytes": 0,
+      "registers_per_thread": 40,
+      "stack_bytes": 0,
+      "static_shared_memory_bytes": 0,
+      "local_bytes": 0,
+      "block_threads": 32,
+      "max_active_blocks_per_sm": 24,
+      "theoretical_occupancy_pct": 50.0,
+      "sass_instruction_families": [
+        "HMMA.1688.F32.TF32"
+      ],
+      "spill_evidence_complete": true,
+      "spills_detected": false,
+      "resource_fingerprint": "sha256:c1b8c8df43890bf631143f3521995afed044ab1c47fddcdab8491ae53d4673ab",
+      "cubin_sha256": "81c45996d147a36d2953e50bf857ba3450e0e6b705b7c670ad452ef3fac98503"
+    },
+    {
+      "candidate": "nvidia_mma_attn_tf32",
+      "storage_dtype": "f32",
+      "kernel": "_Z30tessera_nvidia_mma_attn_kernelPKfS0_S0_Pfiiiifi",
+      "dynamic_shared_memory_bytes": 8192,
+      "registers_per_thread": 40,
+      "stack_bytes": 0,
+      "static_shared_memory_bytes": 1024,
+      "local_bytes": 0,
+      "block_threads": 32,
+      "max_active_blocks_per_sm": 11,
+      "theoretical_occupancy_pct": 22.9167,
+      "sass_instruction_families": [
+        "HMMA.1688.F32.TF32"
+      ],
+      "spill_evidence_complete": true,
+      "spills_detected": false,
+      "resource_fingerprint": "sha256:bab79f69fdeee25035bc5349f988ef06b0a731b4217ff6e6c01dcbc13c96f4af",
+      "cubin_sha256": "f521a01cb99786c7245df2e23fc825990977fbf9334106ba226037a9e94bac3f"
+    },
+    {
+      "candidate": "nvidia_mma_attn_tf32",
+      "storage_dtype": "f32",
+      "kernel": "_Z30tessera_nvidia_mma_attn_kernelPKfS0_S0_Pfiiiifi",
+      "dynamic_shared_memory_bytes": 32768,
+      "registers_per_thread": 40,
+      "stack_bytes": 0,
+      "static_shared_memory_bytes": 1024,
+      "local_bytes": 0,
+      "block_threads": 32,
+      "max_active_blocks_per_sm": 3,
+      "theoretical_occupancy_pct": 6.25,
+      "sass_instruction_families": [
+        "HMMA.1688.F32.TF32"
+      ],
+      "spill_evidence_complete": true,
+      "spills_detected": false,
+      "resource_fingerprint": "sha256:d26565b3b1c01d7dbad48eaf1f932cd42bc35b6b09c850141e868213ca50febf",
+      "cubin_sha256": "f521a01cb99786c7245df2e23fc825990977fbf9334106ba226037a9e94bac3f"
+    },
+    {
+      "candidate": "nvidia_mma_gated_tf32",
+      "storage_dtype": "f32",
+      "kernel": "tessera_nvidia_mma_gated_kernel",
+      "dynamic_shared_memory_bytes": 0,
+      "registers_per_thread": 48,
+      "stack_bytes": 0,
+      "static_shared_memory_bytes": 0,
+      "local_bytes": 0,
+      "block_threads": 32,
+      "max_active_blocks_per_sm": 24,
+      "theoretical_occupancy_pct": 50.0,
+      "sass_instruction_families": [
+        "HMMA.1688.F32.TF32"
+      ],
+      "spill_evidence_complete": true,
+      "spills_detected": false,
+      "resource_fingerprint": "sha256:16cbd2205ae8ba4073c5f67dda31e90df84c4267141bb604907af0d3255fc419",
+      "cubin_sha256": "bbcf9039b463df9f59bd4b5bc0b451f2222ec6efe58a0f1ae0005698f1d448ed"
+    },
+    {
+      "candidate": "nvidia_mma_fused_fp8_e4m3",
+      "storage_dtype": "fp8_e4m3",
+      "kernel": "tessera_nvidia_mma_fused_kernel",
+      "dynamic_shared_memory_bytes": 0,
+      "registers_per_thread": 40,
+      "stack_bytes": 0,
+      "static_shared_memory_bytes": 0,
+      "local_bytes": 0,
+      "block_threads": 32,
+      "max_active_blocks_per_sm": 24,
+      "theoretical_occupancy_pct": 50.0,
+      "sass_instruction_families": [
+        "QMMA.16832.F32.E4M3.E4M3"
+      ],
+      "spill_evidence_complete": true,
+      "spills_detected": false,
+      "resource_fingerprint": "sha256:66456bc24a774fe860cc277463f21105297288fc9bb8eb9274970c92495e8a8c",
+      "cubin_sha256": "d4fe38d4d78a1cd105a97ebfa73d5e09169142373c12e9e0671fb6289ee2ed47"
+    },
+    {
+      "candidate": "nvidia_mma_attn_fp8_e4m3",
+      "storage_dtype": "fp8_e4m3",
+      "kernel": "_Z30tessera_nvidia_mma_attn_kernelPKhS0_S0_Pfiiiifi",
+      "dynamic_shared_memory_bytes": 8192,
+      "registers_per_thread": 40,
+      "stack_bytes": 0,
+      "static_shared_memory_bytes": 1024,
+      "local_bytes": 0,
+      "block_threads": 32,
+      "max_active_blocks_per_sm": 11,
+      "theoretical_occupancy_pct": 22.9167,
+      "sass_instruction_families": [
+        "QMMA.16832.F32.E4M3.E4M3"
+      ],
+      "spill_evidence_complete": true,
+      "spills_detected": false,
+      "resource_fingerprint": "sha256:de2a783b103f9a76f1707b7a2ddb9fc6840338e1ad8c4a5f64bc133928b2b728",
+      "cubin_sha256": "d7bd7a6b41f73d1a638d48732e4b3d1336d12e6bdfb623d9b573cb95f18a1d18"
+    },
+    {
+      "candidate": "nvidia_mma_attn_fp8_e4m3",
+      "storage_dtype": "fp8_e4m3",
+      "kernel": "_Z30tessera_nvidia_mma_attn_kernelPKhS0_S0_Pfiiiifi",
+      "dynamic_shared_memory_bytes": 32768,
+      "registers_per_thread": 40,
+      "stack_bytes": 0,
+      "static_shared_memory_bytes": 1024,
+      "local_bytes": 0,
+      "block_threads": 32,
+      "max_active_blocks_per_sm": 3,
+      "theoretical_occupancy_pct": 6.25,
+      "sass_instruction_families": [
+        "QMMA.16832.F32.E4M3.E4M3"
+      ],
+      "spill_evidence_complete": true,
+      "spills_detected": false,
+      "resource_fingerprint": "sha256:dc0f9abca6dc882055ff58fedae9cb801232a512971b8f919645b6805e5d44f3",
+      "cubin_sha256": "d7bd7a6b41f73d1a638d48732e4b3d1336d12e6bdfb623d9b573cb95f18a1d18"
+    },
+    {
+      "candidate": "nvidia_mma_gated_fp8_e4m3",
+      "storage_dtype": "fp8_e4m3",
+      "kernel": "tessera_nvidia_mma_gated_kernel",
+      "dynamic_shared_memory_bytes": 0,
+      "registers_per_thread": 47,
+      "stack_bytes": 0,
+      "static_shared_memory_bytes": 0,
+      "local_bytes": 0,
+      "block_threads": 32,
+      "max_active_blocks_per_sm": 24,
+      "theoretical_occupancy_pct": 50.0,
+      "sass_instruction_families": [
+        "QMMA.16832.F32.E4M3.E4M3"
+      ],
+      "spill_evidence_complete": true,
+      "spills_detected": false,
+      "resource_fingerprint": "sha256:009514c8a44a5224da6eb06feddc5811e7639078caa9fea2fb08f98a0fd3a211",
+      "cubin_sha256": "57d2ad597dc1d760ab34b381408e2735865498aa4a4ee442ad1c1f779a3069cd"
+    },
+    {
+      "candidate": "nvidia_mma_fused_fp8_e5m2",
+      "storage_dtype": "fp8_e5m2",
+      "kernel": "tessera_nvidia_mma_fused_kernel",
+      "dynamic_shared_memory_bytes": 0,
+      "registers_per_thread": 40,
+      "stack_bytes": 0,
+      "static_shared_memory_bytes": 0,
+      "local_bytes": 0,
+      "block_threads": 32,
+      "max_active_blocks_per_sm": 24,
+      "theoretical_occupancy_pct": 50.0,
+      "sass_instruction_families": [
+        "QMMA.16832.F32.E5M2.E5M2"
+      ],
+      "spill_evidence_complete": true,
+      "spills_detected": false,
+      "resource_fingerprint": "sha256:fead7e39275033408b2cfb1c55aa651b25c680cc08c3c61ad82baa57126202e3",
+      "cubin_sha256": "2a2804963589d3144ad888f44eccf993c5f841ff36408561b25b1e66c15e4fbd"
+    },
+    {
+      "candidate": "nvidia_mma_attn_fp8_e5m2",
+      "storage_dtype": "fp8_e5m2",
+      "kernel": "_Z30tessera_nvidia_mma_attn_kernelPKhS0_S0_Pfiiiifi",
+      "dynamic_shared_memory_bytes": 8192,
+      "registers_per_thread": 40,
+      "stack_bytes": 0,
+      "static_shared_memory_bytes": 1024,
+      "local_bytes": 0,
+      "block_threads": 32,
+      "max_active_blocks_per_sm": 11,
+      "theoretical_occupancy_pct": 22.9167,
+      "sass_instruction_families": [
+        "QMMA.16832.F32.E5M2.E5M2"
+      ],
+      "spill_evidence_complete": true,
+      "spills_detected": false,
+      "resource_fingerprint": "sha256:4eb5ed891a88eef5024aeddb9b514acb9b3bddbac144d5d6c359b5b75d94c20a",
+      "cubin_sha256": "0a6fd8d837321c8e33a35dcc901d2a8f18a3dac7dd2dfc27a834b9c5ad0a8a94"
+    },
+    {
+      "candidate": "nvidia_mma_attn_fp8_e5m2",
+      "storage_dtype": "fp8_e5m2",
+      "kernel": "_Z30tessera_nvidia_mma_attn_kernelPKhS0_S0_Pfiiiifi",
+      "dynamic_shared_memory_bytes": 32768,
+      "registers_per_thread": 40,
+      "stack_bytes": 0,
+      "static_shared_memory_bytes": 1024,
+      "local_bytes": 0,
+      "block_threads": 32,
+      "max_active_blocks_per_sm": 3,
+      "theoretical_occupancy_pct": 6.25,
+      "sass_instruction_families": [
+        "QMMA.16832.F32.E5M2.E5M2"
+      ],
+      "spill_evidence_complete": true,
+      "spills_detected": false,
+      "resource_fingerprint": "sha256:c94627799c5f099b5f188f42c5ed535fb2f66558f280709f33bb20e8f0d82fd2",
+      "cubin_sha256": "0a6fd8d837321c8e33a35dcc901d2a8f18a3dac7dd2dfc27a834b9c5ad0a8a94"
+    },
+    {
+      "candidate": "nvidia_mma_gated_fp8_e5m2",
+      "storage_dtype": "fp8_e5m2",
+      "kernel": "tessera_nvidia_mma_gated_kernel",
+      "dynamic_shared_memory_bytes": 0,
+      "registers_per_thread": 47,
+      "stack_bytes": 0,
+      "static_shared_memory_bytes": 0,
+      "local_bytes": 0,
+      "block_threads": 32,
+      "max_active_blocks_per_sm": 24,
+      "theoretical_occupancy_pct": 50.0,
+      "sass_instruction_families": [
+        "QMMA.16832.F32.E5M2.E5M2"
+      ],
+      "spill_evidence_complete": true,
+      "spills_detected": false,
+      "resource_fingerprint": "sha256:3b1f44de97bd5ba89492d6dd3213461b70149e0e33ebbe7b74e4425f7e99a072",
+      "cubin_sha256": "fb1fc76327e2c89d1f3247c0a5a89377e238a81c3158035d739978af06e15104"
+    }
+  ]
+}

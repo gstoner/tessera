@@ -3196,6 +3196,40 @@ _mma_fused_fn_cache: dict[tuple[str, bool, str | None], Any] = {}
 _mma_fused_device_fn_cache: dict[tuple[str, bool, str | None], Any] = {}
 
 
+def _native_mma_storage_spec(storage: str) -> dict[str, Any]:
+    """CUDA/PTX operand contract for one native warp-level MMA storage."""
+    specs = {
+        "f16": dict(ctype="unsigned short", mma="f16", step=16, pack=2,
+                    bytes=2, suffix="f16", atol=_GEMM_F16_ATOL),
+        "bf16": dict(ctype="unsigned short", mma="bf16", step=16, pack=2,
+                     bytes=2, suffix="bf16", atol=_GEMM_BF16_ATOL),
+        "f32": dict(ctype="float", mma="tf32", step=8, pack=1,
+                    bytes=4, suffix="tf32", atol=2e-2),
+        "fp8_e4m3": dict(ctype="unsigned char", mma="e4m3", step=32, pack=4,
+                         bytes=1, suffix="fp8_e4m3", atol=2e-1),
+        "fp8_e5m2": dict(ctype="unsigned char", mma="e5m2", step=32, pack=4,
+                         bytes=1, suffix="fp8_e5m2", atol=4e-1),
+    }
+    if storage not in specs:
+        raise ValueError(f"unsupported tensor-core storage {storage}")
+    return specs[storage]
+
+
+def _native_mma_word_loader(pointer: str, row: str, col: str,
+                            rows: str, cols: str, pack: int) -> str:
+    """CUDA lambda body packing one logical row-major MMA operand word."""
+    if pack == 1:
+        return (f"int rr={row},cc={col}; float v=(rr<{rows}&&cc<{cols})?"
+                f"{pointer}[rr*{cols}+cc]:0.f; return __float_as_uint(v);")
+    if pack == 2:
+        return (f"int rr={row},cc={col}; unsigned lo=(rr<{rows}&&cc<{cols})?"
+                f"{pointer}[rr*{cols}+cc]:0u, hi=(rr<{rows}&&cc+1<{cols})?"
+                f"{pointer}[rr*{cols}+cc+1]:0u; return (hi<<16)|lo;")
+    return (f"int rr={row},cc={col}; unsigned w=0; for(int j=0;j<4;j++){{"
+            f"int c=cc+j; unsigned v=(rr<{rows}&&c<{cols})?"
+            f"{pointer}[rr*{cols}+c]:0u; w|=v<<(8*j);}} return w;")
+
+
 def nvidia_epilogue_execution_contract(region: Any) -> dict[str, Any]:
     """Resolve the canonical NVIDIA fused-epilogue execution contract.
 
@@ -3235,8 +3269,8 @@ def nvidia_epilogue_execution_contract(region: Any) -> dict[str, Any]:
                      else "nvidia_mma_fused_bf16")
         route = "mma_fused"
     elif storage in ("fp8_e4m3", "fp8_e5m2"):
-        candidate = f"nvidia_mma_fused_composed_{storage}"
-        route = "matrix_core_plus_resident_epilogue"
+        candidate = f"nvidia_mma_fused_{storage}"
+        route = "mma_fused"
     else:
         raise ValueError(
             f"{E_FUSED_EPILOGUE_BAD_DTYPE}: unsupported NVIDIA epilogue "
@@ -3276,15 +3310,23 @@ def _mma_fused_epilogue(region: Any) -> tuple[bool, str | None] | None:
 
 def _synthesize_mma_fused_cuda(has_bias: bool, act: str | None,
                                storage: str = "f16") -> str:
-    """CUDA source for a warp-tiled ``mma.sync.m16n8k16`` f16 GEMM (row-major A/B,
-    f32 accumulate) with a fused ``bias? + activation?`` epilogue. One warp per
-    16x8 output tile, K-looped, boundary-checked (same fragment layout as the
-    shipped tiled kernel). f16 (10-bit mantissa) keeps the rounding vs the f32
-    reference inside the 5e-3 budget where bf16 (7-bit) would not."""
+    """One-kernel native MMA GEMM plus bias/activation store epilogue."""
     from tessera.compiler.emit._fused_scalar_body import pointwise_snippet
-    if storage not in ("f16", "bf16"):
-        raise ValueError(f"unsupported tensor-core storage {storage}")
-    mma_type = "f16" if storage == "f16" else "bf16"
+    spec = _native_mma_storage_spec(storage)
+    ctype, mma_type = spec["ctype"], spec["mma"]
+    step, pack, elem_bytes = spec["step"], spec["pack"], spec["bytes"]
+    load_a = _native_mma_word_loader("A", "mt+r", "k0+c", "M", "K", pack)
+    # B is logically row-major KxN; packing must advance down K for the col operand.
+    if pack == 1:
+        load_b = ("int rr=k0+r,cc=nt+c; float v=(rr<K&&cc<N)?B[rr*N+cc]:0.f; "
+                  "return __float_as_uint(v);")
+    elif pack == 2:
+        load_b = ("int rr=k0+r,cc=nt+c; unsigned lo=(rr<K&&cc<N)?B[rr*N+cc]:0u, "
+                  "hi=(rr+1<K&&cc<N)?B[(rr+1)*N+cc]:0u; return (hi<<16)|lo;")
+    else:
+        load_b = ("int rr=k0+r,cc=nt+c; unsigned w=0; for(int j=0;j<4;j++){"
+                  "int kr=rr+j; unsigned v=(kr<K&&cc<N)?B[kr*N+cc]:0u; "
+                  "w|=v<<(8*j);} return w;")
     bias_param = "const float* bias, " if has_bias else ""
 
     def epi(var: str, col: str) -> str:
@@ -3301,18 +3343,17 @@ def _synthesize_mma_fused_cuda(has_bias: bool, act: str | None,
         "#include <cuda_runtime.h>\n"
         "#include <math.h>\n"
         f"extern \"C\" __global__ void {_MMA_FUSED_ENTRY}_kernel(\n"
-        "    const unsigned short* A, const unsigned short* B, const float* bias,\n"
+        f"    const {ctype}* A, const {ctype}* B, const float* bias,\n"
         "    float* D, int M, int N, int K) {\n"
         "  int mt=blockIdx.x*16, nt=blockIdx.y*8, lane=threadIdx.x, gid=lane>>2, tig=lane&3;\n"
         "  float d0=0,d1=0,d2=0,d3=0;\n"
-        "  for (int k0=0;k0<K;k0+=16){\n"
-        "    auto la=[&](int r,int c)->unsigned{int rr=mt+r,cc=k0+c;\n"
-        "      unsigned lo=(rr<M&&cc<K)?A[rr*K+cc]:0u, hi=(rr<M&&cc+1<K)?A[rr*K+cc+1]:0u; return (hi<<16)|lo;};\n"
-        "    auto lb=[&](int r,int c)->unsigned{int rr=k0+r,cc=nt+c;\n"
-        "      unsigned lo=(rr<K&&cc<N)?B[rr*N+cc]:0u, hi=(rr+1<K&&cc<N)?B[(rr+1)*N+cc]:0u; return (hi<<16)|lo;};\n"
-        "    unsigned a0=la(gid,2*tig),a1=la(gid+8,2*tig),a2=la(gid,2*tig+8),a3=la(gid+8,2*tig+8);\n"
-        "    unsigned b0=lb(2*tig,gid),b1=lb(2*tig+8,gid);\n"
-        f"    asm volatile(\"mma.sync.aligned.m16n8k16.row.col.f32.{mma_type}.{mma_type}.f32 \"\n"
+        f"  for (int k0=0;k0<K;k0+={step}){{\n"
+        f"    auto la=[&](int r,int c)->unsigned{{{load_a}}};\n"
+        f"    auto lb=[&](int r,int c)->unsigned{{{load_b}}};\n"
+        f"    unsigned a0=la(gid,{pack}*tig),a1=la(gid+8,{pack}*tig),"
+        f"a2=la(gid,{pack}*tig+{step//2}),a3=la(gid+8,{pack}*tig+{step//2});\n"
+        f"    unsigned b0=lb({pack}*tig,gid),b1=lb({pack}*tig+{step//2},gid);\n"
+        f"    asm volatile(\"mma.sync.aligned.m16n8k{step}.row.col.f32.{mma_type}.{mma_type}.f32 \"\n"
         "      \"{%0,%1,%2,%3},{%4,%5,%6,%7},{%8,%9},{%0,%1,%2,%3};\\n\"\n"
         "      :\"+f\"(d0),\"+f\"(d1),\"+f\"(d2),\"+f\"(d3):\"r\"(a0),\"r\"(a1),\"r\"(a2),\"r\"(a3),\"r\"(b0),\"r\"(b1));\n"
         "  }\n"
@@ -3323,8 +3364,8 @@ def _synthesize_mma_fused_cuda(has_bias: bool, act: str | None,
         f'extern "C" int {_MMA_FUSED_ENTRY}(const unsigned short* hA,\n'
         "    const unsigned short* hB, const float* hbias, float* hD,\n"
         "    int M, int N, int K) {\n"
-        "  size_t szA=(size_t)M*K*2, szB=(size_t)K*N*2, szO=(size_t)M*N*4, szBias=(size_t)N*4;\n"
-        "  unsigned short *dA=0,*dB=0; float *dbias=0,*dD=0;\n"
+        f"  size_t szA=(size_t)M*K*{elem_bytes}, szB=(size_t)K*N*{elem_bytes}, szO=(size_t)M*N*4, szBias=(size_t)N*4;\n"
+        f"  {ctype} *dA=0,*dB=0; float *dbias=0,*dD=0;\n"
         "  if (cudaMalloc(&dA,szA)!=cudaSuccess) return 3;\n"
         "  if (cudaMalloc(&dB,szB)!=cudaSuccess){cudaFree(dA);return 3;}\n"
         "  if (cudaMalloc(&dD,szO)!=cudaSuccess){cudaFree(dA);cudaFree(dB);return 3;}\n"
@@ -3343,8 +3384,8 @@ def _synthesize_mma_fused_cuda(has_bias: bool, act: str | None,
         "    const unsigned short* hB, const float* hbias, int M, int N, int K,\n"
         "    int warmup, int reps) {\n"
         "  if (warmup < 0 || reps < 1) return -1.0f;\n"
-        "  size_t szA=(size_t)M*K*2, szB=(size_t)K*N*2, szO=(size_t)M*N*4, szBias=(size_t)N*4;\n"
-        "  unsigned short *dA=0,*dB=0; float *dbias=0,*dD=0; cudaEvent_t beg=0,end=0;\n"
+        f"  size_t szA=(size_t)M*K*{elem_bytes}, szB=(size_t)K*N*{elem_bytes}, szO=(size_t)M*N*4, szBias=(size_t)N*4;\n"
+        f"  {ctype} *dA=0,*dB=0; float *dbias=0,*dD=0; cudaEvent_t beg=0,end=0;\n"
         "  if (cudaMalloc(&dA,szA)!=cudaSuccess || cudaMalloc(&dB,szB)!=cudaSuccess ||\n"
         "      cudaMalloc(&dD,szO)!=cudaSuccess) goto fail;\n"
         "  if (cudaMemcpy(dA,hA,szA,cudaMemcpyHostToDevice)!=cudaSuccess ||\n"
@@ -3417,10 +3458,11 @@ class NvidiaMmaFusedCandidate(Candidate):
     op = OP_FUSED_REGION
     def __init__(self, storage: str = "f16") -> None:
         self.storage = storage
+        spec = _native_mma_storage_spec(storage)
         self.name = ("nvidia_mma_fused" if storage == "f16"
-                     else "nvidia_mma_fused_bf16")
-        self.accuracy_atol = (_GEMM_F16_ATOL if storage == "f16"
-                              else _GEMM_BF16_ATOL)
+                     else f"nvidia_mma_fused_{spec['suffix']}")
+        self.accuracy_atol = spec["atol"]
+        self.accuracy_rtol = spec["atol"]
 
     def available(self) -> bool:
         try:
@@ -3452,12 +3494,16 @@ class NvidiaMmaFusedCandidate(Candidate):
                 or (has_bias and np.asarray(bias).shape != (Ba.shape[1],))):
             return region.reference(A, B, bias), "reference"
         try:
-            storage_dtype = np.float16
-            if self.storage == "bf16":
-                import ml_dtypes
-                storage_dtype = ml_dtypes.bfloat16
-            Ab = np.ascontiguousarray(Aa, storage_dtype)
-            Bb = np.ascontiguousarray(Ba, storage_dtype)
+            if self.storage in ("f16", "bf16"):
+                storage_dtype: Any = np.float16
+                if self.storage == "bf16":
+                    import ml_dtypes
+                    storage_dtype = ml_dtypes.bfloat16
+                Ab = np.ascontiguousarray(Aa, storage_dtype)
+                Bb = np.ascontiguousarray(Ba, storage_dtype)
+            else:
+                Ab = _composed_operand(Aa, self.storage)
+                Bb = _composed_operand(Ba, self.storage)
             M, K = Ab.shape
             _, N = Bb.shape
             bias_arr = (np.ascontiguousarray(bias, np.float32)
@@ -3485,12 +3531,16 @@ class NvidiaMmaFusedCandidate(Candidate):
         if has_bias and bias is None:
             return None
         try:
-            storage_dtype = np.float16
-            if self.storage == "bf16":
-                import ml_dtypes
-                storage_dtype = ml_dtypes.bfloat16
-            aa = np.ascontiguousarray(inputs[0], storage_dtype)
-            bb = np.ascontiguousarray(inputs[1], storage_dtype)
+            if self.storage in ("f16", "bf16"):
+                storage_dtype: Any = np.float16
+                if self.storage == "bf16":
+                    import ml_dtypes
+                    storage_dtype = ml_dtypes.bfloat16
+                aa = np.ascontiguousarray(inputs[0], storage_dtype)
+                bb = np.ascontiguousarray(inputs[1], storage_dtype)
+            else:
+                aa = _composed_operand(inputs[0], self.storage)
+                bb = _composed_operand(inputs[1], self.storage)
             if aa.ndim != 2 or bb.ndim != 2 or aa.shape[1] != bb.shape[0]:
                 return None
             bias_arr = (np.ascontiguousarray(bias, np.float32)
@@ -3529,9 +3579,10 @@ _MMA_ATTN_NK_CAP = 1536
 _MMA_ATTN_ABS_CAP = 5.0
 _MMA_ATTN_SHARPNESS_CAP = 500.0
 _mma_attn_fn_cache: dict[str, Any] = {}
+_mma_attn_device_fn_cache: dict[str, Any] = {}
 
 
-def _synthesize_mma_attn_cuda(storage: str = "f16") -> str:
+def _synthesize_mma_attn_16_cuda(storage: str = "f16") -> str:
     """CUDA source for ``O = softmax(scale·Q·Kᵀ)·V`` via two ``mma.sync.m16n8k16``
     f16 matmuls with the row softmax staged in shared memory (16xNk f32 scores).
     Natural Q(M,D)/K(Nk,D)/V(Nk,Dv), row-major; boundary-checked; causal masks
@@ -3616,6 +3667,110 @@ def _synthesize_mma_attn_cuda(storage: str = "f16") -> str:
     )
 
 
+def _synthesize_mma_attn_lowp_cuda(storage: str) -> str:
+    """Single-kernel TF32/FP8 QK-softmax-PV attention for native MMA shapes."""
+    spec = _native_mma_storage_spec(storage)
+    if storage not in ("f32", "fp8_e4m3", "fp8_e5m2"):
+        raise ValueError(f"unsupported low-precision attention storage {storage}")
+    e = _MMA_ATTN_ENTRY
+    ctype, mma = spec["ctype"], spec["mma"]
+    step, pack, elem_bytes = spec["step"], spec["pack"], spec["bytes"]
+    load_q = _native_mma_word_loader("Q", "mt+r", "k0+c", "M", "D", pack)
+    if pack == 1:
+        load_k = ("int rr=k0+r,cc=nt+c; float v=(cc<Nk&&rr<D)?K[cc*D+rr]:0.f; "
+                  "return __float_as_uint(v);")
+        load_v = ("int rr=k0+r,cc=nt+c; float v=(rr<Nk&&cc<Dv)?V[rr*Dv+cc]:0.f; "
+                  "return __float_as_uint(v);")
+        load_p = ("int cc=k0+c; float v=(r<16&&cc<Nk)?S[r*Nk+cc]:0.f; "
+                  "return __float_as_uint(v);")
+        fp8_include = ""
+    else:
+        load_k = ("int rr=k0+r,cc=nt+c; unsigned w=0; for(int j=0;j<4;j++){"
+                  "int kr=rr+j; unsigned v=(cc<Nk&&kr<D)?K[cc*D+kr]:0u; "
+                  "w|=v<<(8*j);} return w;")
+        load_v = ("int rr=k0+r,cc=nt+c; unsigned w=0; for(int j=0;j<4;j++){"
+                  "int kr=rr+j; unsigned v=(kr<Nk&&cc<Dv)?V[kr*Dv+cc]:0u; "
+                  "w|=v<<(8*j);} return w;")
+        interpretation = "__NV_E4M3" if storage == "fp8_e4m3" else "__NV_E5M2"
+        load_p = ("int cc=k0+c; unsigned w=0; for(int j=0;j<4;j++){int kc=cc+j; "
+                  "float v=(r<16&&kc<Nk)?S[r*Nk+kc]:0.f; "
+                  f"w|=(unsigned)__nv_cvt_float_to_fp8(v,__NV_SATFINITE,{interpretation})"
+                  "<<(8*j);} return w;")
+        fp8_include = "#include <cuda_fp8.h>\n"
+    mma_asm = (
+        f'asm volatile("mma.sync.aligned.m16n8k{step}.row.col.f32.{mma}.{mma}.f32 "\n'
+        '  "{%0,%1,%2,%3},{%4,%5,%6,%7},{%8,%9},{%0,%1,%2,%3};\\n"\n'
+        '  :"+f"(d0),"+f"(d1),"+f"(d2),"+f"(d3):"r"(a0),"r"(a1),'
+        '"r"(a2),"r"(a3),"r"(b0),"r"(b1));')
+    return (
+        "#include <cuda_runtime.h>\n#include <math.h>\n" + fp8_include +
+        f"__global__ void {e}_kernel(const {ctype}* Q,const {ctype}* K,"
+        f"const {ctype}* V,float* O,int M,int Nk,int D,int Dv,float scale,int causal){{\n"
+        " extern __shared__ float S[]; int mt=blockIdx.x*16,lane=threadIdx.x,gid=lane>>2,tig=lane&3;\n"
+        " for(int nt=0;nt<Nk;nt+=8){float d0=0,d1=0,d2=0,d3=0;\n"
+        f"  for(int k0=0;k0<D;k0+={step}){{\n"
+        f"   auto lq=[&](int r,int c)->unsigned{{{load_q}}};\n"
+        f"   auto lk=[&](int r,int c)->unsigned{{{load_k}}};\n"
+        f"   unsigned a0=lq(gid,{pack}*tig),a1=lq(gid+8,{pack}*tig),"
+        f"a2=lq(gid,{pack}*tig+{step//2}),a3=lq(gid+8,{pack}*tig+{step//2});\n"
+        f"   unsigned b0=lk({pack}*tig,gid),b1=lk({pack}*tig+{step//2},gid);\n"
+        f"   {mma_asm}\n  }}\n"
+        "  auto st=[&](int r,int c,float v){int cc=nt+c;if(r<16&&cc<Nk){float z=v*scale;"
+        "if(causal&&cc>mt+r)z=-INFINITY;S[r*Nk+cc]=z;}};"
+        "st(gid,2*tig,d0);st(gid,2*tig+1,d1);st(gid+8,2*tig,d2);st(gid+8,2*tig+1,d3);}\n"
+        " __syncwarp(); for(int r=lane;r<16;r+=32){if(mt+r>=M)continue;float mx=-INFINITY;"
+        "for(int n=0;n<Nk;n++)mx=fmaxf(mx,S[r*Nk+n]);float sm=0;for(int n=0;n<Nk;n++){"
+        "float x=__expf(S[r*Nk+n]-mx);S[r*Nk+n]=x;sm+=x;}float inv=sm>0?1.f/sm:0.f;"
+        "for(int n=0;n<Nk;n++)S[r*Nk+n]*=inv;} __syncwarp();\n"
+        " for(int nt=0;nt<Dv;nt+=8){float d0=0,d1=0,d2=0,d3=0;\n"
+        f"  for(int k0=0;k0<Nk;k0+={step}){{\n"
+        f"   auto lp=[&](int r,int c)->unsigned{{{load_p}}};\n"
+        f"   auto lv=[&](int r,int c)->unsigned{{{load_v}}};\n"
+        f"   unsigned a0=lp(gid,{pack}*tig),a1=lp(gid+8,{pack}*tig),"
+        f"a2=lp(gid,{pack}*tig+{step//2}),a3=lp(gid+8,{pack}*tig+{step//2});\n"
+        f"   unsigned b0=lv({pack}*tig,gid),b1=lv({pack}*tig+{step//2},gid);\n"
+        f"   {mma_asm}\n  }}\n"
+        "  auto st=[&](int r,int c,float v){int rr=mt+r,cc=nt+c;if(rr<M&&cc<Dv)O[rr*Dv+cc]=v;};"
+        "st(gid,2*tig,d0);st(gid,2*tig+1,d1);st(gid+8,2*tig,d2);st(gid+8,2*tig+1,d3);}\n}\n"
+        f'extern "C" int {e}(const {ctype}*q,const {ctype}*k,const {ctype}*v,float*o,'
+        "int M,int Nk,int D,int Dv,float scale,int causal){"
+        f"size_t nq=(size_t)M*D*{elem_bytes},nk=(size_t)Nk*D*{elem_bytes},"
+        f"nv=(size_t)Nk*Dv*{elem_bytes},no=(size_t)M*Dv*4;"
+        f"{ctype}*dq=0,*dk=0,*dv=0;float*dout=0;"
+        "if(cudaMalloc(&dq,nq))return 3;if(cudaMalloc(&dk,nk)){cudaFree(dq);return 3;}"
+        "if(cudaMalloc(&dv,nv)){cudaFree(dq);cudaFree(dk);return 3;}"
+        "if(cudaMalloc(&dout,no)){cudaFree(dq);cudaFree(dk);cudaFree(dv);return 3;}"
+        "if(cudaMemcpy(dq,q,nq,cudaMemcpyHostToDevice)||cudaMemcpy(dk,k,nk,cudaMemcpyHostToDevice)||"
+        "cudaMemcpy(dv,v,nv,cudaMemcpyHostToDevice)){cudaFree(dq);cudaFree(dk);cudaFree(dv);"
+        "cudaFree(dout);return 3;}int sh=16*Nk*4;"
+        f"cudaFuncSetAttribute({e}_kernel,cudaFuncAttributeMaxDynamicSharedMemorySize,sh);"
+        f"{e}_kernel<<<(M+15)/16,32,sh>>>(dq,dk,dv,dout,M,Nk,D,Dv,scale,causal);"
+        "int ok=cudaDeviceSynchronize()==cudaSuccess?1:3;if(ok==1)cudaMemcpy(o,dout,no,cudaMemcpyDeviceToHost);"
+        "cudaFree(dq);cudaFree(dk);cudaFree(dv);cudaFree(dout);return ok;}\n"
+        f'extern "C" float {e}_device_ms(const {ctype}*q,const {ctype}*k,const {ctype}*v,'
+        "int M,int Nk,int D,int Dv,float scale,int causal,int warmup,int reps){"
+        f"size_t nq=(size_t)M*D*{elem_bytes},nk=(size_t)Nk*D*{elem_bytes},"
+        f"nv=(size_t)Nk*Dv*{elem_bytes},no=(size_t)M*Dv*4;"
+        f"{ctype}*dq=0,*dk=0,*dv=0;float*o=0;float ms=0;cudaEvent_t x=0,y=0;int sh=16*Nk*4;"
+        "if(reps<1||warmup<0||cudaMalloc(&dq,nq)||cudaMalloc(&dk,nk)||cudaMalloc(&dv,nv)||cudaMalloc(&o,no)||"
+        "cudaMemcpy(dq,q,nq,cudaMemcpyHostToDevice)||cudaMemcpy(dk,k,nk,cudaMemcpyHostToDevice)||"
+        "cudaMemcpy(dv,v,nv,cudaMemcpyHostToDevice))goto fail;"
+        f"cudaFuncSetAttribute({e}_kernel,cudaFuncAttributeMaxDynamicSharedMemorySize,sh);"
+        f"for(int i=0;i<warmup;i++){e}_kernel<<<(M+15)/16,32,sh>>>(dq,dk,dv,o,M,Nk,D,Dv,scale,causal);"
+        "if(cudaDeviceSynchronize()!=cudaSuccess||cudaEventCreate(&x)||cudaEventCreate(&y)||cudaEventRecord(x))goto fail;"
+        f"for(int i=0;i<reps;i++){e}_kernel<<<(M+15)/16,32,sh>>>(dq,dk,dv,o,M,Nk,D,Dv,scale,causal);"
+        "if(cudaEventRecord(y)||cudaEventSynchronize(y)||cudaEventElapsedTime(&ms,x,y))goto fail;"
+        "cudaEventDestroy(x);cudaEventDestroy(y);cudaFree(dq);cudaFree(dk);cudaFree(dv);cudaFree(o);return ms/reps;"
+        "fail:if(x)cudaEventDestroy(x);if(y)cudaEventDestroy(y);if(dq)cudaFree(dq);if(dk)cudaFree(dk);"
+        "if(dv)cudaFree(dv);if(o)cudaFree(o);return -1.f;}\n")
+
+
+def _synthesize_mma_attn_cuda(storage: str = "f16") -> str:
+    if storage in ("f16", "bf16"):
+        return _synthesize_mma_attn_16_cuda(storage)
+    return _synthesize_mma_attn_lowp_cuda(storage)
+
+
 def _mma_attn_fn(storage: str = "f16"):
     """Compile (once) the mma.sync attention kernel and return its bound entry:
     ``int(Q f16, K f16, V f16, O f32, M,Nk,D,Dv, scale, causal)``."""
@@ -3632,6 +3787,22 @@ def _mma_attn_fn(storage: str = "f16"):
     return fn
 
 
+def _mma_attn_device_fn(storage: str):
+    if storage in _mma_attn_device_fn_cache:
+        return _mma_attn_device_fn_cache[storage]
+    if storage in ("f16", "bf16"):
+        return None
+    src = KernelSource(source=_synthesize_mma_attn_cuda(storage),
+                       entry=_MMA_ATTN_ENTRY, lang=_LANG)
+    fn = getattr(_load_lib(_nvidia_cuda_compile_fn(src)),
+                 f"{_MMA_ATTN_ENTRY}_device_ms")
+    fn.restype = ctypes.c_float
+    fn.argtypes = ([ctypes.c_void_p] * 3 + [ctypes.c_int] * 4
+                   + [ctypes.c_float] + [ctypes.c_int] * 3)
+    _mma_attn_device_fn_cache[storage] = fn
+    return fn
+
+
 class NvidiaMmaAttnCandidate(Candidate):
     """Tier-2 (emitted): the tensor-core flash-attention lane — two ``mma.sync``
     matmuls with a smem-staged row softmax, f16 operands / f32 accumulate. Serves
@@ -3644,9 +3815,11 @@ class NvidiaMmaAttnCandidate(Candidate):
     op = OP_ATTENTION
     def __init__(self, storage: str = "f16") -> None:
         self.storage = storage
+        spec = _native_mma_storage_spec(storage)
         self.name = ("nvidia_mma_attn" if storage == "f16"
-                     else "nvidia_mma_attn_bf16")
-        self.accuracy_atol = (5e-3 if storage == "f16" else 5e-2)
+                     else f"nvidia_mma_attn_{spec['suffix']}")
+        self.accuracy_atol = spec["atol"]
+        self.accuracy_rtol = spec["atol"]
 
     def applies_to(self, region: Any) -> bool:
         return getattr(region, "storage_dtype", "f16") == self.storage
@@ -3680,13 +3853,18 @@ class NvidiaMmaAttnCandidate(Candidate):
             if (Nk > _MMA_ATTN_NK_CAP or amax > _MMA_ATTN_ABS_CAP
                     or float(region.scale) * D * amax * amax > _MMA_ATTN_SHARPNESS_CAP):
                 return _SHARED_RUNNER.run_fused_attention(region, Q, K, V)
-            storage_dtype = np.float16
-            if self.storage == "bf16":
-                import ml_dtypes
-                storage_dtype = ml_dtypes.bfloat16
-            Qh = np.ascontiguousarray(Qn, storage_dtype)
-            Kh = np.ascontiguousarray(Kn, storage_dtype)
-            Vh = np.ascontiguousarray(Vf, storage_dtype)
+            if self.storage in ("f16", "bf16"):
+                storage_dtype: Any = np.float16
+                if self.storage == "bf16":
+                    import ml_dtypes
+                    storage_dtype = ml_dtypes.bfloat16
+                Qh = np.ascontiguousarray(Qn, storage_dtype)
+                Kh = np.ascontiguousarray(Kn, storage_dtype)
+                Vh = np.ascontiguousarray(Vf, storage_dtype)
+            else:
+                Qh = _composed_operand(Qn, self.storage)
+                Kh = _composed_operand(Kn, self.storage)
+                Vh = _composed_operand(Vf, self.storage)
             out = np.zeros((M, Dv), np.float32)
             rc = _mma_attn_fn(self.storage)(_ptr(Qh), _ptr(Kh), _ptr(Vh), _ptr(out),
                                 M, Nk, D, Dv, ctypes.c_float(float(region.scale)),
@@ -3697,40 +3875,77 @@ class NvidiaMmaAttnCandidate(Candidate):
             pass
         return region.reference(Q, K, V), "reference"
 
+    def measure_device_latency(self, region: Any, *inputs: Any,
+                               reps: int = 100, warmup: int = 10) -> float | None:
+        if len(inputs) != 3 or self.storage in ("f16", "bf16"):
+            return None
+        import numpy as np
+        try:
+            qn, kn = region._natural(inputs[0], inputs[1], cast=False)
+            v = np.asarray(inputs[2])
+            if (qn.ndim != 2 or kn.ndim != 2 or v.ndim != 2
+                    or qn.shape[1] != kn.shape[1] or kn.shape[0] != v.shape[0]
+                    or kn.shape[0] > _MMA_ATTN_NK_CAP):
+                return None
+            q = _composed_operand(qn, self.storage)
+            k = _composed_operand(kn, self.storage)
+            vv = _composed_operand(v, self.storage)
+            fn = _mma_attn_device_fn(self.storage)
+            if fn is None:
+                return None
+            ms = float(fn(_ptr(q), _ptr(k), _ptr(vv), q.shape[0], k.shape[0],
+                          q.shape[1], vv.shape[1],
+                          ctypes.c_float(float(region.scale)),
+                          1 if region.causal else 0, warmup, reps))
+            return ms if ms >= 0 else None
+        except Exception:
+            return None
+
 
 # ── tensor-core GATED lane — paired mma.sync projections + gate epilogue ─────
 
 _MMA_GATED_ENTRY = "tessera_nvidia_mma_gated"
 _mma_gated_fn_cache: dict[tuple[str, str], Any] = {}
+_mma_gated_device_fn_cache: dict[tuple[str, str], Any] = {}
 
 
 def _synthesize_mma_gated_cuda(storage: str, act: str) -> str:
     """Two tensor-core projections sharing A, followed by gate(AWg) * AWu."""
     from tessera.compiler.emit._fused_scalar_body import pointwise_snippet
-    if storage not in ("f16", "bf16"):
-        raise ValueError(f"unsupported tensor-core storage {storage}")
-    mma_type = "f16" if storage == "f16" else "bf16"
+    spec = _native_mma_storage_spec(storage)
+    ctype, mma_type = spec["ctype"], spec["mma"]
+    step, pack, elem_bytes = spec["step"], spec["pack"], spec["bytes"]
+    load_a = _native_mma_word_loader("A", "mt+r", "k0+c", "M", "K", pack)
+    if pack == 1:
+        load_w = ("int rr=k0+r,cc=nt+c; float v=(rr<K&&cc<H)?W[rr*H+cc]:0.f; "
+                  "return __float_as_uint(v);")
+    elif pack == 2:
+        load_w = ("int rr=k0+r,cc=nt+c; unsigned lo=(rr<K&&cc<H)?W[rr*H+cc]:0u, "
+                  "hi=(rr+1<K&&cc<H)?W[(rr+1)*H+cc]:0u; return (hi<<16)|lo;")
+    else:
+        load_w = ("int rr=k0+r,cc=nt+c; unsigned w=0; for(int j=0;j<4;j++){"
+                  "int kr=rr+j; unsigned v=(kr<K&&cc<H)?W[kr*H+cc]:0u; "
+                  "w|=v<<(8*j);} return w;")
     e = _MMA_GATED_ENTRY
     gate = "".join(f"    {pointwise_snippet(act, f'g{i}')}\n" for i in range(4))
-    mma = (f'asm volatile("mma.sync.aligned.m16n8k16.row.col.f32.{mma_type}.{mma_type}.f32 "\n'
+    mma = (f'asm volatile("mma.sync.aligned.m16n8k{step}.row.col.f32.{mma_type}.{mma_type}.f32 "\n'
            '      "{%0,%1,%2,%3},{%4,%5,%6,%7},{%8,%9},{%0,%1,%2,%3};\\n"')
     return (
         "#include <cuda_runtime.h>\n#include <math.h>\n"
-        f"extern \"C\" __global__ void {e}_kernel(const unsigned short* A,\n"
-        "    const unsigned short* Wg, const unsigned short* Wu, float* O,\n"
+        f"extern \"C\" __global__ void {e}_kernel(const {ctype}* A,\n"
+        f"    const {ctype}* Wg, const {ctype}* Wu, float* O,\n"
         "    int M, int H, int K) {\n"
         "  int mt=blockIdx.x*16, nt=blockIdx.y*8, lane=threadIdx.x, gid=lane>>2, tig=lane&3;\n"
         "  float g0=0,g1=0,g2=0,g3=0,u0=0,u1=0,u2=0,u3=0;\n"
-        "  for(int k0=0;k0<K;k0+=16){\n"
-        "    auto la=[&](int r,int c)->unsigned{int rr=mt+r,cc=k0+c;\n"
-        "      unsigned lo=(rr<M&&cc<K)?A[rr*K+cc]:0u, hi=(rr<M&&cc+1<K)?A[rr*K+cc+1]:0u; return (hi<<16)|lo;};\n"
-        "    auto lw=[&](const unsigned short* W,int r,int c)->unsigned{int rr=k0+r,cc=nt+c;\n"
-        "      unsigned lo=(rr<K&&cc<H)?W[rr*H+cc]:0u, hi=(rr+1<K&&cc<H)?W[(rr+1)*H+cc]:0u; return (hi<<16)|lo;};\n"
-        "    unsigned a0=la(gid,2*tig),a1=la(gid+8,2*tig),a2=la(gid,2*tig+8),a3=la(gid+8,2*tig+8);\n"
-        "    unsigned bg0=lw(Wg,2*tig,gid),bg1=lw(Wg,2*tig+8,gid);\n"
+        f"  for(int k0=0;k0<K;k0+={step}){{\n"
+        f"    auto la=[&](int r,int c)->unsigned{{{load_a}}};\n"
+        f"    auto lw=[&](const {ctype}* W,int r,int c)->unsigned{{{load_w}}};\n"
+        f"    unsigned a0=la(gid,{pack}*tig),a1=la(gid+8,{pack}*tig),"
+        f"a2=la(gid,{pack}*tig+{step//2}),a3=la(gid+8,{pack}*tig+{step//2});\n"
+        f"    unsigned bg0=lw(Wg,{pack}*tig,gid),bg1=lw(Wg,{pack}*tig+{step//2},gid);\n"
         f"    {mma}\n"
         "      :\"+f\"(g0),\"+f\"(g1),\"+f\"(g2),\"+f\"(g3):\"r\"(a0),\"r\"(a1),\"r\"(a2),\"r\"(a3),\"r\"(bg0),\"r\"(bg1));\n"
-        "    unsigned bu0=lw(Wu,2*tig,gid),bu1=lw(Wu,2*tig+8,gid);\n"
+        f"    unsigned bu0=lw(Wu,{pack}*tig,gid),bu1=lw(Wu,{pack}*tig+{step//2},gid);\n"
         f"    {mma}\n"
         "      :\"+f\"(u0),\"+f\"(u1),\"+f\"(u2),\"+f\"(u3):\"r\"(a0),\"r\"(a1),\"r\"(a2),\"r\"(a3),\"r\"(bu0),\"r\"(bu1));\n"
         "  }\n"
@@ -3738,16 +3953,30 @@ def _synthesize_mma_gated_cuda(storage: str, act: str) -> str:
         "  auto st=[&](int r,int c,float v){int rr=mt+r,cc=nt+c;if(rr<M&&cc<H)O[rr*H+cc]=v;};\n"
         "  st(gid,2*tig,g0*u0);st(gid,2*tig+1,g1*u1);st(gid+8,2*tig,g2*u2);st(gid+8,2*tig+1,g3*u3);\n"
         "}\n"
-        f'extern "C" int {e}(const unsigned short* hA, const unsigned short* hWg,\n'
-        "    const unsigned short* hWu, float* hO, int M, int H, int K) {\n"
-        "  size_t szA=(size_t)M*K*2, szW=(size_t)K*H*2, szO=(size_t)M*H*4;\n"
-        "  unsigned short *dA=0,*dWg=0,*dWu=0; float* dO=0;\n"
+        f'extern "C" int {e}(const {ctype}* hA, const {ctype}* hWg,\n'
+        f"    const {ctype}* hWu, float* hO, int M, int H, int K) {{\n"
+        f"  size_t szA=(size_t)M*K*{elem_bytes}, szW=(size_t)K*H*{elem_bytes}, szO=(size_t)M*H*4;\n"
+        f"  {ctype} *dA=0,*dWg=0,*dWu=0; float* dO=0;\n"
         "  if(cudaMalloc(&dA,szA)!=cudaSuccess) return 3;\n"
         "  if(cudaMalloc(&dWg,szW)!=cudaSuccess||cudaMalloc(&dWu,szW)!=cudaSuccess||cudaMalloc(&dO,szO)!=cudaSuccess){cudaFree(dA);cudaFree(dWg);cudaFree(dWu);cudaFree(dO);return 3;}\n"
         "  cudaMemcpy(dA,hA,szA,cudaMemcpyHostToDevice);cudaMemcpy(dWg,hWg,szW,cudaMemcpyHostToDevice);cudaMemcpy(dWu,hWu,szW,cudaMemcpyHostToDevice);\n"
         f"  {e}_kernel<<<dim3((M+15)/16,(H+7)/8),32>>>(dA,dWg,dWu,dO,M,H,K);\n"
         "  int ok=(cudaDeviceSynchronize()==cudaSuccess)?1:3;if(ok==1)cudaMemcpy(hO,dO,szO,cudaMemcpyDeviceToHost);\n"
-        "  cudaFree(dA);cudaFree(dWg);cudaFree(dWu);cudaFree(dO);return ok;\n}"
+        "  cudaFree(dA);cudaFree(dWg);cudaFree(dWu);cudaFree(dO);return ok;\n}\n"
+        f'extern "C" float {e}_device_ms(const {ctype}*hA,const {ctype}*hWg,'
+        f'const {ctype}*hWu,int M,int H,int K,int warmup,int reps){{'
+        f"size_t za=(size_t)M*K*{elem_bytes},zw=(size_t)K*H*{elem_bytes},zo=(size_t)M*H*4;"
+        f"{ctype}*a=0,*g=0,*u=0;float*o=0;float ms=0;cudaEvent_t x=0,y=0;"
+        "if(reps<1||warmup<0||cudaMalloc(&a,za)||cudaMalloc(&g,zw)||cudaMalloc(&u,zw)||"
+        "cudaMalloc(&o,zo)||cudaMemcpy(a,hA,za,cudaMemcpyHostToDevice)||"
+        "cudaMemcpy(g,hWg,zw,cudaMemcpyHostToDevice)||cudaMemcpy(u,hWu,zw,cudaMemcpyHostToDevice))goto fail;"
+        f"for(int i=0;i<warmup;i++){e}_kernel<<<dim3((M+15)/16,(H+7)/8),32>>>(a,g,u,o,M,H,K);"
+        "if(cudaDeviceSynchronize()!=cudaSuccess||cudaEventCreate(&x)||cudaEventCreate(&y)||cudaEventRecord(x))goto fail;"
+        f"for(int i=0;i<reps;i++){e}_kernel<<<dim3((M+15)/16,(H+7)/8),32>>>(a,g,u,o,M,H,K);"
+        "if(cudaEventRecord(y)||cudaEventSynchronize(y))goto fail;if(cudaEventElapsedTime(&ms,x,y))goto fail;"
+        "cudaEventDestroy(x);cudaEventDestroy(y);cudaFree(a);cudaFree(g);cudaFree(u);cudaFree(o);return ms/reps;"
+        "fail:if(x)cudaEventDestroy(x);if(y)cudaEventDestroy(y);if(a)cudaFree(a);if(g)cudaFree(g);"
+        "if(u)cudaFree(u);if(o)cudaFree(o);return -1.f;}\n"
     )
 
 
@@ -3764,6 +3993,20 @@ def _mma_gated_fn(storage: str, act: str):
     return fn
 
 
+def _mma_gated_device_fn(storage: str, act: str):
+    key = (storage, act)
+    if key in _mma_gated_device_fn_cache:
+        return _mma_gated_device_fn_cache[key]
+    src = KernelSource(source=_synthesize_mma_gated_cuda(storage, act),
+                       entry=_MMA_GATED_ENTRY, lang=_LANG)
+    fn = getattr(_load_lib(_nvidia_cuda_compile_fn(src)),
+                 f"{_MMA_GATED_ENTRY}_device_ms")
+    fn.restype = ctypes.c_float
+    fn.argtypes = [ctypes.c_void_p] * 3 + [ctypes.c_int] * 5
+    _mma_gated_device_fn_cache[key] = fn
+    return fn
+
+
 class NvidiaMmaGatedCandidate(Candidate):
     tier = Tier.EMITTED
     target = _TARGET
@@ -3771,9 +4014,11 @@ class NvidiaMmaGatedCandidate(Candidate):
 
     def __init__(self, storage: str = "f16") -> None:
         self.storage = storage
+        spec = _native_mma_storage_spec(storage)
         self.name = ("nvidia_mma_gated" if storage == "f16"
-                     else "nvidia_mma_gated_bf16")
-        self.accuracy_atol = (1e-2 if storage == "f16" else 1e-1)
+                     else f"nvidia_mma_gated_{spec['suffix']}")
+        self.accuracy_atol = max(2 * spec["atol"], 1e-2)
+        self.accuracy_rtol = self.accuracy_atol
 
     def available(self) -> bool:
         try:
@@ -3794,13 +4039,18 @@ class NvidiaMmaGatedCandidate(Candidate):
                 or Aa.shape[1] != Wga.shape[0] or Wga.shape != Wua.shape):
             return region.reference(A, Wg, Wu), "reference"
         try:
-            storage_dtype = np.float16
-            if self.storage == "bf16":
-                import ml_dtypes
-                storage_dtype = ml_dtypes.bfloat16
-            Ah = np.ascontiguousarray(Aa, storage_dtype)
-            Wgh = np.ascontiguousarray(Wga, storage_dtype)
-            Wuh = np.ascontiguousarray(Wua, storage_dtype)
+            if self.storage in ("f16", "bf16"):
+                storage_dtype: Any = np.float16
+                if self.storage == "bf16":
+                    import ml_dtypes
+                    storage_dtype = ml_dtypes.bfloat16
+                Ah = np.ascontiguousarray(Aa, storage_dtype)
+                Wgh = np.ascontiguousarray(Wga, storage_dtype)
+                Wuh = np.ascontiguousarray(Wua, storage_dtype)
+            else:
+                Ah = _composed_operand(Aa, self.storage)
+                Wgh = _composed_operand(Wga, self.storage)
+                Wuh = _composed_operand(Wua, self.storage)
             M, K = Ah.shape
             _, H = Wgh.shape
             out = np.zeros((M, H), np.float32)
@@ -3812,8 +4062,34 @@ class NvidiaMmaGatedCandidate(Candidate):
             pass
         return region.reference(A, Wg, Wu), "reference"
 
+    def measure_device_latency(self, region: Any, *inputs: Any,
+                               reps: int = 100, warmup: int = 10) -> float | None:
+        if len(inputs) != 3:
+            return None
+        import numpy as np
+        try:
+            arrays = []
+            for value in inputs:
+                if self.storage in ("f16", "bf16"):
+                    dtype: Any = np.float16
+                    if self.storage == "bf16":
+                        import ml_dtypes
+                        dtype = ml_dtypes.bfloat16
+                    arrays.append(np.ascontiguousarray(value, dtype))
+                else:
+                    arrays.append(_composed_operand(value, self.storage))
+            a, wg, wu = arrays
+            if a.ndim != 2 or wg.ndim != 2 or wg.shape != wu.shape or a.shape[1] != wg.shape[0]:
+                return None
+            fn = _mma_gated_device_fn(self.storage, region.gate_act)
+            ms = float(fn(_ptr(a), _ptr(wg), _ptr(wu), a.shape[0], wg.shape[1],
+                          a.shape[1], warmup, reps))
+            return ms if ms >= 0 else None
+        except Exception:
+            return None
 
-# ── composed TF32 / FP8 transformer lanes ─────────────────────────────────────
+
+# ── composed TF32 / FP8 comparison lanes ──────────────────────────────────────
 
 _COMPOSED_STORAGE = {
     "f32": ("float32", "tf32", 2e-2),
@@ -3837,11 +4113,10 @@ def _composed_operand(x: Any, storage: str) -> Any:
 class NvidiaMmaAttnComposedCandidate(Candidate):
     """Correctness-first TF32/FP8 attention composition.
 
-    This is deliberately a separate candidate from the native f16/bf16 flash
-    kernel: QKᵀ and PV use the shipped tensor-core GEMM ABI, while scale/mask
-    and row softmax form an explicit launch boundary. The current host-pointer
-    ABI materializes between launches; a device-resident composition can replace
-    that boundary without changing the region contract.
+    This is deliberately retained beside the native single-kernel candidate:
+    QKᵀ and PV use the shipped tensor-core GEMM ABI, while scale/mask and row
+    softmax form explicit launch boundaries. It is a measured fallback/control,
+    not a claim that TF32/FP8 lacks native execution.
     """
 
     tier = Tier.EMITTED
@@ -3893,7 +4168,7 @@ class NvidiaMmaAttnComposedCandidate(Candidate):
                     prob_operand = probs
                 else:
                     p_host = _composed_operand(
-                        np.empty(probs.shape, np.float32), self.storage)
+                        np.zeros(probs.shape, np.float32), self.storage)
                     prob_operand = session.empty(probs.shape, p_host.dtype)
                     _resident_cast_fp8(session, probs, prob_operand, self.storage)
                 session.gemm(prob_operand, dv, out_dev, self.dtype_key)
@@ -3920,7 +4195,7 @@ class NvidiaMmaAttnComposedCandidate(Candidate):
                 if self.storage == "f32":
                     prob_operand = probs
                 else:
-                    sample = _composed_operand(np.empty(probs.shape), self.storage)
+                    sample = _composed_operand(np.zeros(probs.shape), self.storage)
                     prob_operand = s.empty(probs.shape, sample.dtype)
 
                 def launch() -> None:
@@ -4251,18 +4526,27 @@ register_runner(NvidiaCudaRunner(), default=False)
 register_candidate(NvidiaGenericCudaCandidate())
 register_candidate(NvidiaMmaFusedCandidate("f16"))   # tensor-core fused GEMM+epi
 register_candidate(NvidiaMmaFusedCandidate("bf16"))
+register_candidate(NvidiaMmaFusedCandidate("f32"))
 register_candidate(NvidiaMmaFusedComposedCandidate("f32"))
+register_candidate(NvidiaMmaFusedCandidate("fp8_e4m3"))
+register_candidate(NvidiaMmaFusedCandidate("fp8_e5m2"))
 register_candidate(NvidiaMmaFusedComposedCandidate("fp8_e4m3"))
 register_candidate(NvidiaMmaFusedComposedCandidate("fp8_e5m2"))
 register_candidate(NvidiaFlashAttnCandidate())        # C4: synthesized attention
 register_candidate(NvidiaMmaAttnCandidate("f16"))    # tensor-core flash attention
 register_candidate(NvidiaMmaAttnCandidate("bf16"))
+register_candidate(NvidiaMmaAttnCandidate("f32"))
+register_candidate(NvidiaMmaAttnCandidate("fp8_e4m3"))
+register_candidate(NvidiaMmaAttnCandidate("fp8_e5m2"))
 register_candidate(NvidiaMmaAttnComposedCandidate("f32"))
 register_candidate(NvidiaMmaAttnComposedCandidate("fp8_e4m3"))
 register_candidate(NvidiaMmaAttnComposedCandidate("fp8_e5m2"))
 register_candidate(NvidiaGatedCandidate())            # C5: SwiGLU gate
 register_candidate(NvidiaMmaGatedCandidate("f16"))
 register_candidate(NvidiaMmaGatedCandidate("bf16"))
+register_candidate(NvidiaMmaGatedCandidate("f32"))
+register_candidate(NvidiaMmaGatedCandidate("fp8_e4m3"))
+register_candidate(NvidiaMmaGatedCandidate("fp8_e5m2"))
 register_candidate(NvidiaMmaGatedComposedCandidate("f32"))
 register_candidate(NvidiaMmaGatedComposedCandidate("fp8_e4m3"))
 register_candidate(NvidiaMmaGatedComposedCandidate("fp8_e5m2"))

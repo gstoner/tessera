@@ -3,7 +3,7 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-07-17
+last_updated: 2026-07-18
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
@@ -609,6 +609,28 @@ winner. An AMD wave shape, LDS strategy, or VGPR result is never a CUDA default.
   set across repeated batches, and the tiny routes use 101 medians per run. No
   selector or legacy-retune winner is promoted by this evidence.
 
+- **NVIDIA-SM120-LOWP-PRODUCTIZATION — complete (2026-07-18).** The shipped
+  CUDA ABI adds general-shape block-scaled NVFP4: packed E2M1 A/B, raw UE4M3
+  scale views, M16/N8 grid dispatch, K64 accumulation, ragged zero fill, and
+  pre-launch shape/view rejection. Fixed 16x8x64, multi-tile 33x19x129, and
+  sub-tile 7x5x31 non-uniform-scale cases match the exact NVFP4 oracle on the
+  RTX 5070 Ti. Native one-kernel TF32 and FP8 E4M3/E5M2 fused-epilogue,
+  QK-softmax-PV attention, and gated routes now coexist with the composed
+  candidates. Two fresh runs use 20 end-to-end medians and 100 CUDA-event
+  repetitions per route. The cross-domain 3% gate promotes 11 of 18 retained
+  shape/dtype rows; long attention and disagreement rows remain unpromoted.
+  The linked 12-row cubin record reports 40-register fused/attention kernels,
+  47–48-register gated kernels, 8/32 KiB attention dynamic shared memory,
+  shape-dependent 22.92%/6.25% modeled attention occupancy, zero compiler spill
+  storage, and the expected TF32 HMMA / FP8 QMMA SASS. Evidence:
+  `nvidia_sm120_low_precision_native_{routes,resources}.json`.
+- **Audit-document reconciliation — complete (2026-07-18).** This plan,
+  `NVIDIA_AUDIT.md`, and `sm120-kernel-guide.md` now agree that mature SM120
+  fragments lower for real, general NVFP4 dispatch is executable, and native
+  TF32/FP8 transformer candidates exist. The plan remains `landing` only for
+  unrelated architecture-specific follow-ons such as sm_90 WGMMA and sm_100
+  tcgen05 exact-device proof; landed SM120 work is no longer described as open.
+
 Cross-backend sync `NVFP4-TILE-SCALES-2026-07-16` changes the shared typed Tile
 operand contract only. NVIDIA supplies exact-device materialization evidence;
 Apple and ROCm do not inherit its physical schedule and record their outcomes
@@ -624,6 +646,12 @@ correctness/dispatch repair only: no physical fragment, resource record,
 timing row, or production selector changes. The same sync makes Ubuntu LLVM
 repository setup install its probe prerequisites before first use; sibling
 backend outcomes are recorded in their plans.
+
+Cross-backend sync `NVIDIA-SM120-LOWP-2026-07-18` is NVIDIA-owned. It changes no
+shared dtype spelling, portable Tile scale layout, backend-neutral epilogue
+order, or generic autotune schema. Apple has no enabled NVFP4 cooperative-matrix
+route and ROCm gfx1151 has no FP8/FP4 WMMA instruction; neither inherits CUDA
+packing, HMMA/QMMA/OMMA schedules, resource values, timings, or selector rows.
 
 The first focused CUDA parity proof on the NVIDIA box is:
 

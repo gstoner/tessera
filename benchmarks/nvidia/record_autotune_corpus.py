@@ -141,8 +141,10 @@ def main() -> int:
             raise RuntimeError(
                 f"no verified NVIDIA attention candidate for {m}x{nk}x{d}x{dv}")
         print(f"attention {m}x{nk}x{d}x{dv}: {winner.name}")
-    # Device-only transformer composition rows. These keep H2D/D2H out of the
-    # TF32/FP8 crossover evidence and cover fused, attention, and gated paths.
+    # Native-vs-composed TF32/FP8 rows in BOTH timing domains. Device events
+    # establish kernel/launch cost; end-to-end includes compilation-cache lookup,
+    # allocation, and transfers. A production selector requires agreement rather
+    # than inheriting whichever domain happened to be recorded first.
     for storage in args.composed_dtypes:
         for shape_text in args.fused_shapes:
             m, n, k = _shape(shape_text, 3)
@@ -151,42 +153,57 @@ def main() -> int:
             bias = (rng.standard_normal(n) * .05).astype(np.float32)
             region = FusedRegion(
                 epilogue=("bias", "gelu"), storage_dtype=storage)
-            winner = at.measured_arbitrate(
-                region, OP_FUSED_REGION, "nvidia", a, b, bias,
-                dims=(m, n, k), dtype=storage, cache=cache,
-                reps=args.device_reps, warmup=args.device_warmup,
-                timing="device")
-            if winner is None:
-                raise RuntimeError(f"no {storage} fused device candidate")
-            print(f"fused-device {storage} {shape_text}: {winner.name}")
+            for timing, reps, warmup in (
+                    (at.TIMING_END_TO_END, args.reps, args.warmup),
+                    (at.TIMING_DEVICE, args.device_reps, args.device_warmup)):
+                winner = at.measured_arbitrate(
+                    region, OP_FUSED_REGION, "nvidia", a, b, bias,
+                    dims=(m, n, k), dtype=storage, cache=cache,
+                    reps=reps, warmup=warmup, timing=timing)
+                if winner is None:
+                    raise RuntimeError(f"no {storage} fused {timing} candidate")
+                print(f"fused-{timing} {storage} {shape_text}: {winner.name}")
+                observed_shapes[("nvidia:sm_120", "nvidia", OP_FUSED_REGION,
+                                 bucket_key((m, n, k), SpecPolicy.BUCKET),
+                                 storage, timing)] = [m, n, k]
         for shape_text in args.attention_shapes:
             m, nk, d, dv = _shape(shape_text, 4)
             q, kk, v = ((rng.standard_normal(s) * .1).astype(np.float32)
                         for s in ((m, d), (nk, d), (nk, dv)))
             region = AttentionRegion(
                 scale=d ** -.5, causal=True, storage_dtype=storage)
-            winner = at.measured_arbitrate(
-                region, OP_ATTENTION, "nvidia", q, kk, v,
-                dims=(m, nk, d, dv), dtype=storage, cache=cache,
-                reps=args.device_reps, warmup=args.device_warmup,
-                timing="device")
-            if winner is None:
-                raise RuntimeError(f"no {storage} attention device candidate")
-            print(f"attention-device {storage} {shape_text}: {winner.name}")
+            for timing, reps, warmup in (
+                    (at.TIMING_END_TO_END, args.reps, args.warmup),
+                    (at.TIMING_DEVICE, args.device_reps, args.device_warmup)):
+                winner = at.measured_arbitrate(
+                    region, OP_ATTENTION, "nvidia", q, kk, v,
+                    dims=(m, nk, d, dv), dtype=storage, cache=cache,
+                    reps=reps, warmup=warmup, timing=timing)
+                if winner is None:
+                    raise RuntimeError(f"no {storage} attention {timing} candidate")
+                print(f"attention-{timing} {storage} {shape_text}: {winner.name}")
+                observed_shapes[("nvidia:sm_120", "nvidia", OP_ATTENTION,
+                                 bucket_key((m, nk, d, dv), SpecPolicy.BUCKET),
+                                 storage, timing)] = [m, nk, d, dv]
         for shape_text in args.gated_shapes:
             m, h, k = _shape(shape_text, 3)
             a, wg, wu = ((rng.standard_normal(s) * .1).astype(np.float32)
                          for s in ((m, k), (k, h), (k, h)))
             region = GatedMatmulRegion(
                 gate_act="silu", storage_dtype=storage)
-            winner = at.measured_arbitrate(
-                region, OP_GATED_MATMUL, "nvidia", a, wg, wu,
-                dims=(m, h, k), dtype=storage, cache=cache,
-                reps=args.device_reps, warmup=args.device_warmup,
-                timing="device")
-            if winner is None:
-                raise RuntimeError(f"no {storage} gated device candidate")
-            print(f"gated-device {storage} {shape_text}: {winner.name}")
+            for timing, reps, warmup in (
+                    (at.TIMING_END_TO_END, args.reps, args.warmup),
+                    (at.TIMING_DEVICE, args.device_reps, args.device_warmup)):
+                winner = at.measured_arbitrate(
+                    region, OP_GATED_MATMUL, "nvidia", a, wg, wu,
+                    dims=(m, h, k), dtype=storage, cache=cache,
+                    reps=reps, warmup=warmup, timing=timing)
+                if winner is None:
+                    raise RuntimeError(f"no {storage} gated {timing} candidate")
+                print(f"gated-{timing} {storage} {shape_text}: {winner.name}")
+                observed_shapes[("nvidia:sm_120", "nvidia", OP_GATED_MATMUL,
+                                 bucket_key((m, h, k), SpecPolicy.BUCKET),
+                                 storage, timing)] = [m, h, k]
     # Convolution is a route family rather than a Candidate op today. Persist
     # the same device-event evidence in D2 so promotion can consume it later.
     for shape_text in args.conv_shapes:

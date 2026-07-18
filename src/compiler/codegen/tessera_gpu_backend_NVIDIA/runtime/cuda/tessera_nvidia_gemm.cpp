@@ -1,7 +1,8 @@
 // Shipped NVIDIA mma.sync GEMM runtime symbols (consumer Blackwell, CC 12.0+).
 //
 // The NVIDIA analog of src/.../Tessera_ROCM_Backend/runtime/hip/tessera_rocm_gemm.cpp.
-// Exports C-ABI symbols tessera_nvidia_mma_gemm_{bf16,f16,tf32,e4m3,e5m2} that run
+// Exports C-ABI symbols tessera_nvidia_mma_gemm_{bf16,f16,tf32,e4m3,e5m2,nvfp4}
+// that run
 // a general tiled/K-looped warp-level mma.sync GEMM on the GPU:
 //
 //     D[M,N] f32 = A[M,K] @ B[K,N]   (row-major; ragged M/N/K zero-padded)
@@ -92,6 +93,73 @@ extern "C" __global__ void gemm(const unsigned char* A, const unsigned char* B,
 }
 )NVRTC";
 
+// NVFP4: m16n8k64 block-scaled MMA. A and B are packed E2M1 (two logical
+// contraction-axis values per byte). SFa[M,ceil(K/16)] and
+// SFb[ceil(K/16),N] hold raw UE4M3 scale bytes. The kernel constructs the
+// architecture-owned per-lane fragments and loops over K64 tiles; ragged M/N/K
+// values are zero-filled before the instruction and guarded at the store.
+const char* kSrcNvfp4 = R"NVRTC(
+extern "C" __global__ void gemm(const unsigned char* A,
+                                const unsigned char* B,
+                                const unsigned char* SFa,
+                                const unsigned char* SFb,
+                                float* D, int M, int N, int K) {
+  int mt=blockIdx.x*16, nt=blockIdx.y*8;
+  int lane=threadIdx.x, gid=lane>>2, tig=lane&3;
+  int packedK=(K+1)/2, scaleK=(K+15)/16;
+  float d0=0,d1=0,d2=0,d3=0;
+  for (int k0=0;k0<K;k0+=64) {
+    auto acode=[&](int r,int k)->unsigned {
+      if(r>=M || k>=K) return 0u;
+      unsigned byte=A[r*packedK+(k>>1)];
+      return (byte >> ((k&1)*4)) & 15u;
+    };
+    auto bcode=[&](int k,int c)->unsigned {
+      if(k>=K || c>=N) return 0u;
+      unsigned byte=B[(k>>1)*N+c];
+      return (byte >> ((k&1)*4)) & 15u;
+    };
+    auto la=[&](int r,int c)->unsigned {
+      unsigned w=0; for(int j=0;j<8;j++) w|=acode(mt+r,k0+c+j)<<(4*j);
+      return w;
+    };
+    auto lb=[&](int r,int c)->unsigned {
+      unsigned w=0; for(int j=0;j<8;j++) w|=bcode(k0+r+j,nt+c)<<(4*j);
+      return w;
+    };
+    auto sa=[&](int r)->unsigned {
+      if(mt+r>=M) return 0u;
+      unsigned w=0; for(int j=0;j<4;j++) { int kb=k0/16+j;
+        unsigned v=kb<scaleK?SFa[(mt+r)*scaleK+kb]:0u; w|=v<<(8*j); }
+      return w;
+    };
+    auto sb=[&](int c)->unsigned {
+      if(nt+c>=N) return 0u;
+      unsigned w=0; for(int j=0;j<4;j++) { int kb=k0/16+j;
+        unsigned v=kb<scaleK?SFb[kb*N+nt+c]:0u; w|=v<<(8*j); }
+      return w;
+    };
+    unsigned a0=la(gid,8*tig), a1=la(gid+8,8*tig);
+    unsigned a2=la(gid,8*tig+32), a3=la(gid+8,8*tig+32);
+    unsigned b0=lb(8*tig,gid), b1=lb(8*tig+32,gid);
+    unsigned sfa=tig==0?sa(gid):(tig==1?sa(gid+8):0u);
+    unsigned sfb=tig==0?sb(gid):0u;
+    asm volatile(
+      "mma.sync.aligned.m16n8k64.row.col.kind::mxf4nvf4.block_scale.scale_vec::4X."
+      "f32.e2m1.e2m1.f32.ue4m3 "
+      "{%0,%1,%2,%3},{%4,%5,%6,%7},{%8,%9},{%0,%1,%2,%3},"
+      "{%10},{%11,%12},{%13},{%14,%15};\n"
+      : "+f"(d0),"+f"(d1),"+f"(d2),"+f"(d3)
+      : "r"(a0),"r"(a1),"r"(a2),"r"(a3),"r"(b0),"r"(b1),
+        "r"(sfa),"n"(0),"n"(0),"r"(sfb),"n"(0),"n"(0));
+  }
+  auto st=[&](int r,int c,float v){int rr=mt+r,cc=nt+c;
+    if(rr<M&&cc<N)D[rr*N+cc]=v;};
+  st(gid,2*tig,d0); st(gid,2*tig+1,d1);
+  st(gid+8,2*tig,d2); st(gid+8,2*tig+1,d3);
+}
+)NVRTC";
+
 std::once_flag g_ctx_once;
 bool g_ctx_ok = false;
 CUdevice g_dev = 0;
@@ -108,7 +176,8 @@ void initCtxOnce() {
 }
 
 // NVRTC-compile one kernel template (TYPE substituted) for the live device arch.
-bool compileKernel(const char* src_tmpl, const char* type, CUfunction* out) {
+bool compileKernel(const char* src_tmpl, const char* type, CUfunction* out,
+                   bool architectureSpecific = false) {
   std::string src(src_tmpl);
   if (type) {
     for (size_t p; (p = src.find("TYPE")) != std::string::npos;)
@@ -122,7 +191,8 @@ bool compileKernel(const char* src_tmpl, const char* type, CUfunction* out) {
   cuDeviceGetAttribute(&maj, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, g_dev);
   cuDeviceGetAttribute(&min, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, g_dev);
   char arch[40];
-  std::snprintf(arch, sizeof(arch), "--gpu-architecture=compute_%d%d", maj, min);
+  std::snprintf(arch, sizeof(arch), "--gpu-architecture=compute_%d%d%s", maj, min,
+                architectureSpecific ? "a" : "");
   const char* opts[] = {arch};
   nvrtcResult cr = nvrtcCompileProgram(prog, 1, opts);
   if (cr != NVRTC_SUCCESS) { nvrtcDestroyProgram(&prog); return false; }
@@ -138,11 +208,18 @@ bool compileKernel(const char* src_tmpl, const char* type, CUfunction* out) {
 
 // Per-dtype kernel cache (compiled once).
 struct Kernel { std::once_flag once; bool ok = false; CUfunction fn = nullptr; };
-Kernel g_k16bf, g_k16f, g_ktf32, g_ke4, g_ke5;
+Kernel g_k16bf, g_k16f, g_ktf32, g_ke4, g_ke5, g_knvfp4;
 
 CUfunction getKernel(Kernel* k, const char* tmpl, const char* type) {
   std::call_once(k->once, [&] { k->ok = compileKernel(tmpl, type, &k->fn); });
   return k->ok ? k->fn : nullptr;
+}
+
+CUfunction getNvfp4Kernel() {
+  std::call_once(g_knvfp4.once, [&] {
+    g_knvfp4.ok = compileKernel(kSrcNvfp4, nullptr, &g_knvfp4.fn, true);
+  });
+  return g_knvfp4.ok ? g_knvfp4.fn : nullptr;
 }
 
 // elemSize: bytes per A/B element (2 bf16/f16, 4 tf32, 1 fp8).
@@ -184,6 +261,36 @@ int runGemmDevice(CUfunction fn, const void* A, const void* B, void* D,
              == CUDA_SUCCESS ? 0 : 3;
 }
 
+int runNvfp4(CUfunction fn, const void* A, const void* B, const void* SFa,
+             const void* SFb, void* D, int M, int N, int K) {
+  if (M <= 0 || N <= 0 || K <= 0 || !A || !B || !SFa || !SFb || !D) return 1;
+  if (fn == nullptr) return 2;
+  size_t packedK = ((size_t)K + 1) / 2;
+  size_t scaleK = ((size_t)K + 15) / 16;
+  size_t sA = (size_t)M * packedK, sB = packedK * (size_t)N;
+  size_t sSFa = (size_t)M * scaleK, sSFb = scaleK * (size_t)N;
+  size_t sD = (size_t)M * N * 4;
+  CUdeviceptr dA=0,dB=0,dSFa=0,dSFb=0,dD=0;
+  int rc=0;
+  if (cuMemAlloc(&dA,sA)!=CUDA_SUCCESS || cuMemAlloc(&dB,sB)!=CUDA_SUCCESS ||
+      cuMemAlloc(&dSFa,sSFa)!=CUDA_SUCCESS ||
+      cuMemAlloc(&dSFb,sSFb)!=CUDA_SUCCESS ||
+      cuMemAlloc(&dD,sD)!=CUDA_SUCCESS) { rc=3; goto done; }
+  if (cuMemcpyHtoD(dA,A,sA)!=CUDA_SUCCESS || cuMemcpyHtoD(dB,B,sB)!=CUDA_SUCCESS ||
+      cuMemcpyHtoD(dSFa,SFa,sSFa)!=CUDA_SUCCESS ||
+      cuMemcpyHtoD(dSFb,SFb,sSFb)!=CUDA_SUCCESS) { rc=3; goto done; }
+  {
+    void* args[]={&dA,&dB,&dSFa,&dSFb,&dD,&M,&N,&K};
+    if (cuLaunchKernel(fn,(M+15)/16,(N+7)/8,1,32,1,1,0,0,args,0)!=CUDA_SUCCESS ||
+        cuCtxSynchronize()!=CUDA_SUCCESS ||
+        cuMemcpyDtoH(D,dD,sD)!=CUDA_SUCCESS) rc=3;
+  }
+done:
+  if(dA)cuMemFree(dA); if(dB)cuMemFree(dB); if(dSFa)cuMemFree(dSFa);
+  if(dSFb)cuMemFree(dSFb); if(dD)cuMemFree(dD);
+  return rc;
+}
+
 int dispatch(Kernel* k, const char* tmpl, const char* type,
              const void* A, const void* B, void* D, int M, int N, int K, int esz) {
   std::call_once(g_ctx_once, initCtxOnce);
@@ -218,6 +325,13 @@ int tessera_nvidia_mma_gemm_e4m3(const void* A, const void* B, void* D, int M, i
 }
 int tessera_nvidia_mma_gemm_e5m2(const void* A, const void* B, void* D, int M, int N, int K) {
   return dispatch(&g_ke5, kSrcF8, "e5m2", A, B, D, M, N, K, 1);
+}
+int tessera_nvidia_mma_gemm_nvfp4(const void* A, const void* B,
+                                  const void* SFa, const void* SFb, void* D,
+                                  int M, int N, int K) {
+  std::call_once(g_ctx_once, initCtxOnce);
+  if (!g_ctx_ok) return 2;
+  return runNvfp4(getNvfp4Kernel(), A, B, SFa, SFb, D, M, N, K);
 }
 
 #define TESSERA_DEVICE_GEMM(name, kernel, source, type)                         \

@@ -262,7 +262,7 @@ The target system loads **CUDA 13.3** (release notes 27-May-2026). Tessera's pin
      `tsrRegisterGpuLauncher` that loads the **emitted PTX** through the Driver API and runs it via
      `tsrLaunchKernel` (execute-and-compare vs CPU ref).
    - **Shipped runtime symbol:** `libtessera_nvidia_gemm.so` (CMake `tessera_nvidia_gemm`) exports
-     `tessera_nvidia_mma_gemm_{bf16,f16,tf32,e4m3,e5m2}` — a general tiled/K-looped mma.sync GEMM
+     `tessera_nvidia_mma_gemm_{bf16,f16,tf32,e4m3,e5m2,nvfp4}` — a general tiled/K-looped mma.sync GEMM
      NVRTC-compiled for the device arch. `test_nvidia_mma_runtime_symbol.py` dlopens it and numerically
      validates all 5 dtypes vs numpy/ml_dtypes.
    - **Manifest:** `nvidia_sm120` matmul flipped `artifact_only → hardware_verified` (runtime_symbol +

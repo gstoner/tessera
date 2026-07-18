@@ -892,6 +892,13 @@ confined to the SM120 NVIDIA fragment materializer/selector, and the bootstrap
 ordering repair is confined to Ubuntu apt.llvm.org setup. No Apple IR, Metal
 layout, dtype support, ABI, schedule, or exact-device claim changes.
 
+Cross-backend sync `NVIDIA-SM120-LOWP-2026-07-18`: not applicable to Apple
+runtime execution. The change adds a CUDA-owned packed NVFP4 ABI, SM120
+HMMA/QMMA/OMMA kernels, CUDA-event evidence, and device-keyed NVIDIA selector
+rows. It changes no portable dtype spelling, ScaleLayout, epilogue order, or
+autotune schema. Apple remains SDK-gated for FP8/FP4 tensor execution and does
+not inherit CUDA fragments, resource values, timings, or promotions.
+
 Consumer plan `SEQUENCE-MIXER-2026-07-17`: the compiler-direction Sequence Mixer
 track ([`../../compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md`](../../compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md))
 now consumes items **8, 9, 10, 11, 13, 14** as its Apple execution vehicle — it

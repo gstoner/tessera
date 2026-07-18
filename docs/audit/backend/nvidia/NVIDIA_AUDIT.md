@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-14
+last_updated: 2026-07-18
 audit_role: sub_audit
 ---
 
@@ -42,7 +42,7 @@ This document consolidates NVIDIA-specific audit material.
     silicon (max abs err 4.8e-7 — f32 epsilon — 0/128 off).
   - **Shipped runtime symbol:** `libtessera_nvidia_gemm.so` (CMake target
     `tessera_nvidia_gemm`) exporting
-    `tessera_nvidia_mma_gemm_{bf16,f16,tf32,e4m3,e5m2}`, NVRTC-compiled for the
+    `tessera_nvidia_mma_gemm_{bf16,f16,tf32,e4m3,e5m2,nvfp4}`, NVRTC-compiled for the
     device arch (tiled/K-looped `mma.sync` GEMM).
   - **Emit path:** `ptx_emit.emit_mma_sync_matmul_ptx` (+ validators) emits the
     complete sm_120 `mma.sync.aligned.m16n8k16` kernel (parallel to the
@@ -83,10 +83,15 @@ sm_120 (RTX 5070 Ti, PRs #290–#297):
   matrices match exactly; the PTX 9.3 selector ABI and
   `OMMA.SF.16864.F32.E2M1.E2M1.UE4M3.4X` SASS are regression-tested. The old
   128/128 failure was an unsigned-host-buffer conversion bug in the spike.
+- **NVFP4 general-shape runtime — complete (2026-07-18).** The shipped ABI now
+  accepts packed E2M1 A/B, raw UE4M3 `scale_a[M,ceil(K/16)]` and
+  `scale_b[ceil(K/16),N]`, loops the proven OMMA fragment over K64, grids over
+  M16/N8, and zero-fills ragged M/N/K edges. Fixed, multi-tile ragged, and
+  sub-tile non-uniform-scale fixtures pass exactly on the RTX 5070 Ti.
 - **Other NVIDIA SMs stay `artifact_only`** — sm_80/90/100 are proven only on
   sm_120 silicon; promoting them needs their own hardware (Hopper box for
   sm_90a WGMMA; datacenter Blackwell for sm_100 `tcgen05`/TMEM).
-- **MLIR Target IR dialect — typed (Decision #19), NVVM lowering still marker-only.**
+- **MLIR Target IR dialect — typed; mature SM120 fragments lower for real.**
   The hardware-proven sm_120 lanes above run through the **Python** emit path
   (`emit/nvidia_cuda.py` / `ptx_emit.py`), *not* the MLIR `tessera_nvidia` Target
   IR. The `tessera_nvidia` dialect was `isExtensible` with **zero registered ops**
@@ -103,16 +108,19 @@ sm_120 (RTX 5070 Ti, PRs #290–#297):
   `--allow-unregistered-dialect`, and `allowUnknownOperations()` is dropped so a
   malformed `tessera_nvidia.*` op is an error. Proof:
   `test/nvidia/nvidia_target_ir_typed.mlir` + all existing NVIDIA fixtures
-  unregressed. **Still marker-only:** `LowerNVIDIAToNVVM` rewrites every typed op
-  to a void `llvm.nvvm.*.contract` marker — no real `NVVM::MmaOp`/`WgmmaOp`/
-  `tcgen05` intrinsic (see Next Work #6).
+  unregressed. The canonical SM120 f16/bf16/TF32/FP8/int8 and block-scaled
+  NVFP4 fragment forms now materialize architecture-owned operands and lower to
+  real NVVM/inline-PTX instructions. Architecture forms without exact-device
+  support, notably Hopper WGMMA and sm_100 tcgen05/TMEM, retain honest
+  artifact/marker states rather than inheriting SM120 proof.
 - **`flash_attn` on `nvidia_sm120`** — **proven on hardware 2026-07-07** (C4): the
   synthesized flash-attention CUDA lane (`emit/nvidia_cuda.py`
   `NvidiaFlashAttnCandidate` / `run_fused_attention`) computes
   `O = softmax(scale·Q·Kᵀ)·V` with a one-query-per-thread online softmax, executes
   on sm_120, and matches the numpy reference across scale/causal/shape
   (`test_nvidia_plugin.py::test_live_nvidia_flash_attention`), passing the same
-  universal F4 oracle. An mma.sync tensor-core flash version is the perf follow-on.
+  universal F4 oracle. Native f16/bf16/TF32/FP8 tensor-core attention candidates
+  now sit beside this exact scalar fallback; selection remains shape/policy keyed.
 
 ## Next Work
 
@@ -120,9 +128,10 @@ Done (2026-07-07): the compiler-generated lane (#290–#297), the sm_120 `mma.sy
 flash-attention execute-compare (C4), and the sm_120 kernel-inventory doc
 (`docs/backends/nvidia/sm120-kernel-guide.md`). Remaining:
 
-1. **NVFP4 block-scale productization** — execution, fragment packing, scale
-   distribution, and numerics are now grounded on `sm_120a`; connect the proven
-   oracle to general-shape runtime dispatch and the Tile fragment contract.
+1. **NVFP4 block-scale productization — LANDED (2026-07-18).** Typed Tile owns
+   logical scale views; the shipped runtime owns packed general-shape dispatch.
+   The K64/M16/N8 loop, ragged zero fill, scale origins, invalid view rejection,
+   exact numerics, and OMMA SASS/resource proofs are retained separately.
 2. **mma.sync tensor-core FUSED + FLASH-ATTENTION + GATED lanes — LANDED**
    (Tier-2, f16 and bf16 storage): `NvidiaMmaFusedCandidate` — a warp-tiled
    `mma.sync.m16n8k16` GEMM +
@@ -143,15 +152,18 @@ flash-attention execute-compare (C4), and the sm_120 kernel-inventory doc
    device/op/shape-bucket/dtype verdict before tier priority, while retaining F4
    verification and explicit-force precedence. Expand this corpus when a new
    candidate, representative workload, or target device is introduced.
-3. **Dtype breadth after f16/bf16 — LANDED for executable composition
-   (2026-07-14).** The shipped GEMM ABI now dispatches all five implemented
+3. **Dtype breadth after f16/bf16 — native routes landed and selectively
+   promoted (2026-07-18).** The shipped GEMM ABI dispatches
    symbols: f16, bf16, TF32 math over f32 storage, E4M3, and E5M2. TF32/FP8
    `matmul_relu`, `matmul_softmax`, attention, and gated projections execute as
    explicit multi-launch compositions with generated CUDA softmax/ReLU/gate
    stages, one-stream device-resident intermediates, CUDA-event timing, and
-   declared numerical budgets. The f16/bf16 candidates remain the
-   native single-kernel fused performance lanes; TF32/FP8 are not mislabeled as
-   fused until equivalent native kernels have their own execution oracle.
+   declared numerical budgets. Native single-kernel TF32/FP8 fused,
+   attention, and gated candidates now issue HMMA/QMMA directly and pass ragged
+   execute/compare. Two fresh runs cover both CUDA-event and end-to-end timing;
+   only 11 shape/dtype rows with cross-domain near-winner consensus and linked
+   cubin resources enter the corpus. Long-attention and several small gated/
+   fused rows remain composed or unpromoted where the domains/runs disagree.
 4. **`wgmma` sm_90a** — complete the instruction-encoding skeleton into a real
    Hopper WGMMA kernel (assemble-only until a Hopper box) — and **sm_100 tcgen05**.
 5. Promote sm_80/90/100 manifest rows only when their own silicon is available

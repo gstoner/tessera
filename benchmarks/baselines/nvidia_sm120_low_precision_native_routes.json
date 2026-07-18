@@ -1,0 +1,1501 @@
+{
+  "device": "nvidia:sm_120",
+  "method": {
+    "noise_fraction": 0.03,
+    "promotion_requires_cross_domain_consensus": true,
+    "runs": 2,
+    "timing_domains": [
+      "end_to_end",
+      "device"
+    ]
+  },
+  "rows": [
+    {
+      "device": "nvidia:sm_120",
+      "dtype": "f32",
+      "noise_fraction": 0.03,
+      "op": "attention",
+      "resource_fingerprints": [],
+      "resources": [],
+      "selector_eligible": false,
+      "selector_promoted": false,
+      "shape_bucket": [
+        128,
+        128,
+        64,
+        64
+      ],
+      "stable_runs": 2,
+      "target": "nvidia",
+      "timing_domain_consensus": true,
+      "timings": {
+        "device": {
+          "near_winner_consensus": [
+            "nvidia_mma_attn_composed_tf32"
+          ],
+          "run_winners": [
+            "nvidia_mma_attn_composed_tf32",
+            "nvidia_mma_attn_composed_tf32"
+          ],
+          "runs": [
+            {
+              "nvidia_mma_attn_composed_tf32": 0.03890784025192261,
+              "nvidia_mma_attn_tf32": 0.043042879551649094
+            },
+            {
+              "nvidia_mma_attn_composed_tf32": 0.035831360816955565,
+              "nvidia_mma_attn_tf32": 0.0430448018014431
+            }
+          ]
+        },
+        "end_to_end": {
+          "near_winner_consensus": [
+            "nvidia_mma_attn_composed_tf32"
+          ],
+          "run_winners": [
+            "nvidia_mma_attn_composed_tf32",
+            "nvidia_mma_attn_composed_tf32"
+          ],
+          "runs": [
+            {
+              "nvidia_flash_attn": 0.8770094864303246,
+              "nvidia_mma_attn_composed_tf32": 0.5276095034787431,
+              "nvidia_mma_attn_tf32": 0.5276430165395141
+            },
+            {
+              "nvidia_flash_attn": 0.8608015050413087,
+              "nvidia_mma_attn_composed_tf32": 0.5342785007087514,
+              "nvidia_mma_attn_tf32": 0.5674819985870272
+            }
+          ]
+        }
+      },
+      "winner": "nvidia_mma_attn_composed_tf32",
+      "workload_shape": [
+        128,
+        128,
+        64,
+        64
+      ]
+    },
+    {
+      "device": "nvidia:sm_120",
+      "dtype": "fp8_e4m3",
+      "noise_fraction": 0.03,
+      "op": "attention",
+      "resource_fingerprints": [
+        "sha256:de2a783b103f9a76f1707b7a2ddb9fc6840338e1ad8c4a5f64bc133928b2b728",
+        "sha256:dc0f9abca6dc882055ff58fedae9cb801232a512971b8f919645b6805e5d44f3"
+      ],
+      "resources": [
+        {
+          "block_threads": 32,
+          "candidate": "nvidia_mma_attn_fp8_e4m3",
+          "cubin_sha256": "d7bd7a6b41f73d1a638d48732e4b3d1336d12e6bdfb623d9b573cb95f18a1d18",
+          "dynamic_shared_memory_bytes": 8192,
+          "kernel": "_Z30tessera_nvidia_mma_attn_kernelPKhS0_S0_Pfiiiifi",
+          "local_bytes": 0,
+          "max_active_blocks_per_sm": 11,
+          "registers_per_thread": 40,
+          "resource_fingerprint": "sha256:de2a783b103f9a76f1707b7a2ddb9fc6840338e1ad8c4a5f64bc133928b2b728",
+          "sass_instruction_families": [
+            "QMMA.16832.F32.E4M3.E4M3"
+          ],
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "stack_bytes": 0,
+          "static_shared_memory_bytes": 1024,
+          "storage_dtype": "fp8_e4m3",
+          "theoretical_occupancy_pct": 22.9167
+        },
+        {
+          "block_threads": 32,
+          "candidate": "nvidia_mma_attn_fp8_e4m3",
+          "cubin_sha256": "d7bd7a6b41f73d1a638d48732e4b3d1336d12e6bdfb623d9b573cb95f18a1d18",
+          "dynamic_shared_memory_bytes": 32768,
+          "kernel": "_Z30tessera_nvidia_mma_attn_kernelPKhS0_S0_Pfiiiifi",
+          "local_bytes": 0,
+          "max_active_blocks_per_sm": 3,
+          "registers_per_thread": 40,
+          "resource_fingerprint": "sha256:dc0f9abca6dc882055ff58fedae9cb801232a512971b8f919645b6805e5d44f3",
+          "sass_instruction_families": [
+            "QMMA.16832.F32.E4M3.E4M3"
+          ],
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "stack_bytes": 0,
+          "static_shared_memory_bytes": 1024,
+          "storage_dtype": "fp8_e4m3",
+          "theoretical_occupancy_pct": 6.25
+        }
+      ],
+      "selector_eligible": true,
+      "selector_promoted": true,
+      "shape_bucket": [
+        128,
+        128,
+        64,
+        64
+      ],
+      "stable_runs": 2,
+      "target": "nvidia",
+      "timing_domain_consensus": true,
+      "timings": {
+        "device": {
+          "near_winner_consensus": [
+            "nvidia_mma_attn_fp8_e4m3"
+          ],
+          "run_winners": [
+            "nvidia_mma_attn_fp8_e4m3",
+            "nvidia_mma_attn_fp8_e4m3"
+          ],
+          "runs": [
+            {
+              "nvidia_mma_attn_composed_fp8_e4m3": 0.09180895805358887,
+              "nvidia_mma_attn_fp8_e4m3": 0.030602559447288513
+            },
+            {
+              "nvidia_mma_attn_composed_fp8_e4m3": 0.10379263877868652,
+              "nvidia_mma_attn_fp8_e4m3": 0.030472319573163986
+            }
+          ]
+        },
+        "end_to_end": {
+          "near_winner_consensus": [
+            "nvidia_mma_attn_fp8_e4m3"
+          ],
+          "run_winners": [
+            "nvidia_mma_attn_fp8_e4m3",
+            "nvidia_mma_attn_fp8_e4m3"
+          ],
+          "runs": [
+            {
+              "nvidia_flash_attn": 1.007757498882711,
+              "nvidia_mma_attn_composed_fp8_e4m3": 0.7726835028734058,
+              "nvidia_mma_attn_fp8_e4m3": 0.6995925068622455
+            },
+            {
+              "nvidia_flash_attn": 1.0675204975996166,
+              "nvidia_mma_attn_composed_fp8_e4m3": 0.7946015102788806,
+              "nvidia_mma_attn_fp8_e4m3": 0.7140834932215512
+            }
+          ]
+        }
+      },
+      "winner": "nvidia_mma_attn_fp8_e4m3",
+      "workload_shape": [
+        128,
+        128,
+        64,
+        64
+      ]
+    },
+    {
+      "device": "nvidia:sm_120",
+      "dtype": "fp8_e5m2",
+      "noise_fraction": 0.03,
+      "op": "attention",
+      "resource_fingerprints": [
+        "sha256:4eb5ed891a88eef5024aeddb9b514acb9b3bddbac144d5d6c359b5b75d94c20a",
+        "sha256:c94627799c5f099b5f188f42c5ed535fb2f66558f280709f33bb20e8f0d82fd2"
+      ],
+      "resources": [
+        {
+          "block_threads": 32,
+          "candidate": "nvidia_mma_attn_fp8_e5m2",
+          "cubin_sha256": "0a6fd8d837321c8e33a35dcc901d2a8f18a3dac7dd2dfc27a834b9c5ad0a8a94",
+          "dynamic_shared_memory_bytes": 8192,
+          "kernel": "_Z30tessera_nvidia_mma_attn_kernelPKhS0_S0_Pfiiiifi",
+          "local_bytes": 0,
+          "max_active_blocks_per_sm": 11,
+          "registers_per_thread": 40,
+          "resource_fingerprint": "sha256:4eb5ed891a88eef5024aeddb9b514acb9b3bddbac144d5d6c359b5b75d94c20a",
+          "sass_instruction_families": [
+            "QMMA.16832.F32.E5M2.E5M2"
+          ],
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "stack_bytes": 0,
+          "static_shared_memory_bytes": 1024,
+          "storage_dtype": "fp8_e5m2",
+          "theoretical_occupancy_pct": 22.9167
+        },
+        {
+          "block_threads": 32,
+          "candidate": "nvidia_mma_attn_fp8_e5m2",
+          "cubin_sha256": "0a6fd8d837321c8e33a35dcc901d2a8f18a3dac7dd2dfc27a834b9c5ad0a8a94",
+          "dynamic_shared_memory_bytes": 32768,
+          "kernel": "_Z30tessera_nvidia_mma_attn_kernelPKhS0_S0_Pfiiiifi",
+          "local_bytes": 0,
+          "max_active_blocks_per_sm": 3,
+          "registers_per_thread": 40,
+          "resource_fingerprint": "sha256:c94627799c5f099b5f188f42c5ed535fb2f66558f280709f33bb20e8f0d82fd2",
+          "sass_instruction_families": [
+            "QMMA.16832.F32.E5M2.E5M2"
+          ],
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "stack_bytes": 0,
+          "static_shared_memory_bytes": 1024,
+          "storage_dtype": "fp8_e5m2",
+          "theoretical_occupancy_pct": 6.25
+        }
+      ],
+      "selector_eligible": true,
+      "selector_promoted": true,
+      "shape_bucket": [
+        128,
+        128,
+        64,
+        64
+      ],
+      "stable_runs": 2,
+      "target": "nvidia",
+      "timing_domain_consensus": true,
+      "timings": {
+        "device": {
+          "near_winner_consensus": [
+            "nvidia_mma_attn_fp8_e5m2"
+          ],
+          "run_winners": [
+            "nvidia_mma_attn_fp8_e5m2",
+            "nvidia_mma_attn_fp8_e5m2"
+          ],
+          "runs": [
+            {
+              "nvidia_mma_attn_composed_fp8_e5m2": 0.09488224029541016,
+              "nvidia_mma_attn_fp8_e5m2": 0.03449792042374611
+            },
+            {
+              "nvidia_mma_attn_composed_fp8_e5m2": 0.10426752090454101,
+              "nvidia_mma_attn_fp8_e5m2": 0.030520319938659668
+            }
+          ]
+        },
+        "end_to_end": {
+          "near_winner_consensus": [
+            "nvidia_mma_attn_fp8_e5m2"
+          ],
+          "run_winners": [
+            "nvidia_mma_attn_fp8_e5m2",
+            "nvidia_mma_attn_fp8_e5m2"
+          ],
+          "runs": [
+            {
+              "nvidia_flash_attn": 1.0192539921263233,
+              "nvidia_mma_attn_composed_fp8_e5m2": 0.8569144847569987,
+              "nvidia_mma_attn_fp8_e5m2": 0.7503944943891838
+            },
+            {
+              "nvidia_flash_attn": 1.053811502060853,
+              "nvidia_mma_attn_composed_fp8_e5m2": 0.7920420030131936,
+              "nvidia_mma_attn_fp8_e5m2": 0.777102992287837
+            }
+          ]
+        }
+      },
+      "winner": "nvidia_mma_attn_fp8_e5m2",
+      "workload_shape": [
+        128,
+        128,
+        64,
+        64
+      ]
+    },
+    {
+      "device": "nvidia:sm_120",
+      "dtype": "f32",
+      "noise_fraction": 0.03,
+      "op": "attention",
+      "resource_fingerprints": [],
+      "resources": [],
+      "selector_eligible": false,
+      "selector_promoted": false,
+      "shape_bucket": [
+        64,
+        512,
+        64,
+        64
+      ],
+      "stable_runs": 2,
+      "target": "nvidia",
+      "timing_domain_consensus": true,
+      "timings": {
+        "device": {
+          "near_winner_consensus": [
+            "nvidia_mma_attn_composed_tf32"
+          ],
+          "run_winners": [
+            "nvidia_mma_attn_composed_tf32",
+            "nvidia_mma_attn_composed_tf32"
+          ],
+          "runs": [
+            {
+              "nvidia_mma_attn_composed_tf32": 0.06443679809570313,
+              "nvidia_mma_attn_tf32": 0.15972448885440826
+            },
+            {
+              "nvidia_mma_attn_composed_tf32": 0.047386879920959475,
+              "nvidia_mma_attn_tf32": 0.16343456506729126
+            }
+          ]
+        },
+        "end_to_end": {
+          "near_winner_consensus": [
+            "nvidia_mma_attn_composed_tf32"
+          ],
+          "run_winners": [
+            "nvidia_mma_attn_composed_tf32",
+            "nvidia_mma_attn_composed_tf32"
+          ],
+          "runs": [
+            {
+              "nvidia_flash_attn": 0.7868180109653622,
+              "nvidia_mma_attn_composed_tf32": 0.6210830033523962,
+              "nvidia_mma_attn_tf32": 0.8160584984580055
+            },
+            {
+              "nvidia_flash_attn": 0.7677379908272997,
+              "nvidia_mma_attn_composed_tf32": 0.5149085045559332,
+              "nvidia_mma_attn_tf32": 0.7422244962072
+            }
+          ]
+        }
+      },
+      "winner": "nvidia_mma_attn_composed_tf32",
+      "workload_shape": [
+        64,
+        512,
+        64,
+        64
+      ]
+    },
+    {
+      "device": "nvidia:sm_120",
+      "dtype": "fp8_e4m3",
+      "noise_fraction": 0.03,
+      "op": "attention",
+      "resource_fingerprints": [],
+      "resources": [],
+      "selector_eligible": false,
+      "selector_promoted": false,
+      "shape_bucket": [
+        64,
+        512,
+        64,
+        64
+      ],
+      "stable_runs": 2,
+      "target": "nvidia",
+      "timing_domain_consensus": false,
+      "timings": {
+        "device": {
+          "near_winner_consensus": [
+            "nvidia_mma_attn_composed_fp8_e4m3"
+          ],
+          "run_winners": [
+            "nvidia_mma_attn_composed_fp8_e4m3",
+            "nvidia_mma_attn_composed_fp8_e4m3"
+          ],
+          "runs": [
+            {
+              "nvidia_mma_attn_composed_fp8_e4m3": 0.0867686367034912,
+              "nvidia_mma_attn_fp8_e4m3": 0.12444895505905151
+            },
+            {
+              "nvidia_mma_attn_composed_fp8_e4m3": 0.060023040771484376,
+              "nvidia_mma_attn_fp8_e4m3": 0.12597791850566864
+            }
+          ]
+        },
+        "end_to_end": {
+          "near_winner_consensus": [],
+          "run_winners": [
+            "nvidia_mma_attn_composed_fp8_e4m3",
+            "nvidia_flash_attn"
+          ],
+          "runs": [
+            {
+              "nvidia_flash_attn": 1.2875700049335137,
+              "nvidia_mma_attn_composed_fp8_e4m3": 1.1320979974698275,
+              "nvidia_mma_attn_fp8_e4m3": 1.3562804961111397
+            },
+            {
+              "nvidia_flash_attn": 1.031826002872549,
+              "nvidia_mma_attn_composed_fp8_e4m3": 1.0893634898820892,
+              "nvidia_mma_attn_fp8_e4m3": 1.3542810047511011
+            }
+          ]
+        }
+      },
+      "winner": null,
+      "workload_shape": [
+        64,
+        512,
+        64,
+        64
+      ]
+    },
+    {
+      "device": "nvidia:sm_120",
+      "dtype": "fp8_e5m2",
+      "noise_fraction": 0.03,
+      "op": "attention",
+      "resource_fingerprints": [],
+      "resources": [],
+      "selector_eligible": false,
+      "selector_promoted": false,
+      "shape_bucket": [
+        64,
+        512,
+        64,
+        64
+      ],
+      "stable_runs": 2,
+      "target": "nvidia",
+      "timing_domain_consensus": false,
+      "timings": {
+        "device": {
+          "near_winner_consensus": [
+            "nvidia_mma_attn_composed_fp8_e5m2"
+          ],
+          "run_winners": [
+            "nvidia_mma_attn_composed_fp8_e5m2",
+            "nvidia_mma_attn_composed_fp8_e5m2"
+          ],
+          "runs": [
+            {
+              "nvidia_mma_attn_composed_fp8_e5m2": 0.10300383567810059,
+              "nvidia_mma_attn_fp8_e5m2": 0.12292960286140442
+            },
+            {
+              "nvidia_mma_attn_composed_fp8_e5m2": 0.0769545602798462,
+              "nvidia_mma_attn_fp8_e5m2": 0.12680959701538086
+            }
+          ]
+        },
+        "end_to_end": {
+          "near_winner_consensus": [
+            "nvidia_flash_attn"
+          ],
+          "run_winners": [
+            "nvidia_flash_attn",
+            "nvidia_flash_attn"
+          ],
+          "runs": [
+            {
+              "nvidia_flash_attn": 0.8851015008985996,
+              "nvidia_mma_attn_composed_fp8_e5m2": 0.9737575164763257,
+              "nvidia_mma_attn_fp8_e5m2": 1.0828849917743355
+            },
+            {
+              "nvidia_flash_attn": 0.9513709956081584,
+              "nvidia_mma_attn_composed_fp8_e5m2": 1.0645920119713992,
+              "nvidia_mma_attn_fp8_e5m2": 1.1167909833602607
+            }
+          ]
+        }
+      },
+      "winner": null,
+      "workload_shape": [
+        64,
+        512,
+        64,
+        64
+      ]
+    },
+    {
+      "device": "nvidia:sm_120",
+      "dtype": "f32",
+      "noise_fraction": 0.03,
+      "op": "fused_region",
+      "resource_fingerprints": [
+        "sha256:c1b8c8df43890bf631143f3521995afed044ab1c47fddcdab8491ae53d4673ab"
+      ],
+      "resources": [
+        {
+          "block_threads": 32,
+          "candidate": "nvidia_mma_fused_tf32",
+          "cubin_sha256": "81c45996d147a36d2953e50bf857ba3450e0e6b705b7c670ad452ef3fac98503",
+          "dynamic_shared_memory_bytes": 0,
+          "kernel": "tessera_nvidia_mma_fused_kernel",
+          "local_bytes": 0,
+          "max_active_blocks_per_sm": 24,
+          "registers_per_thread": 40,
+          "resource_fingerprint": "sha256:c1b8c8df43890bf631143f3521995afed044ab1c47fddcdab8491ae53d4673ab",
+          "sass_instruction_families": [
+            "HMMA.1688.F32.TF32"
+          ],
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "stack_bytes": 0,
+          "static_shared_memory_bytes": 0,
+          "storage_dtype": "f32",
+          "theoretical_occupancy_pct": 50.0
+        }
+      ],
+      "selector_eligible": true,
+      "selector_promoted": true,
+      "shape_bucket": [
+        128,
+        512,
+        256
+      ],
+      "stable_runs": 2,
+      "target": "nvidia",
+      "timing_domain_consensus": true,
+      "timings": {
+        "device": {
+          "near_winner_consensus": [
+            "nvidia_mma_fused_tf32"
+          ],
+          "run_winners": [
+            "nvidia_mma_fused_tf32",
+            "nvidia_mma_fused_tf32"
+          ],
+          "runs": [
+            {
+              "nvidia_mma_fused_composed_tf32": 0.019681600332260133,
+              "nvidia_mma_fused_tf32": 0.0102463997900486
+            },
+            {
+              "nvidia_mma_fused_composed_tf32": 0.03985408067703247,
+              "nvidia_mma_fused_tf32": 0.016453759744763374
+            }
+          ]
+        },
+        "end_to_end": {
+          "near_winner_consensus": [
+            "nvidia_mma_fused_tf32"
+          ],
+          "run_winners": [
+            "nvidia_mma_fused_tf32",
+            "nvidia_mma_fused_tf32"
+          ],
+          "runs": [
+            {
+              "nvidia_generic_cuda": 4.756341484608129,
+              "nvidia_mma_fused_composed_tf32": 0.770918995840475,
+              "nvidia_mma_fused_tf32": 0.6351154879666865
+            },
+            {
+              "nvidia_generic_cuda": 4.829484998481348,
+              "nvidia_mma_fused_composed_tf32": 0.6622399960178882,
+              "nvidia_mma_fused_tf32": 0.6218495109351352
+            }
+          ]
+        }
+      },
+      "winner": "nvidia_mma_fused_tf32",
+      "workload_shape": [
+        128,
+        512,
+        256
+      ]
+    },
+    {
+      "device": "nvidia:sm_120",
+      "dtype": "fp8_e4m3",
+      "noise_fraction": 0.03,
+      "op": "fused_region",
+      "resource_fingerprints": [
+        "sha256:66456bc24a774fe860cc277463f21105297288fc9bb8eb9274970c92495e8a8c"
+      ],
+      "resources": [
+        {
+          "block_threads": 32,
+          "candidate": "nvidia_mma_fused_fp8_e4m3",
+          "cubin_sha256": "d4fe38d4d78a1cd105a97ebfa73d5e09169142373c12e9e0671fb6289ee2ed47",
+          "dynamic_shared_memory_bytes": 0,
+          "kernel": "tessera_nvidia_mma_fused_kernel",
+          "local_bytes": 0,
+          "max_active_blocks_per_sm": 24,
+          "registers_per_thread": 40,
+          "resource_fingerprint": "sha256:66456bc24a774fe860cc277463f21105297288fc9bb8eb9274970c92495e8a8c",
+          "sass_instruction_families": [
+            "QMMA.16832.F32.E4M3.E4M3"
+          ],
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "stack_bytes": 0,
+          "static_shared_memory_bytes": 0,
+          "storage_dtype": "fp8_e4m3",
+          "theoretical_occupancy_pct": 50.0
+        }
+      ],
+      "selector_eligible": true,
+      "selector_promoted": true,
+      "shape_bucket": [
+        128,
+        512,
+        256
+      ],
+      "stable_runs": 2,
+      "target": "nvidia",
+      "timing_domain_consensus": true,
+      "timings": {
+        "device": {
+          "near_winner_consensus": [
+            "nvidia_mma_fused_fp8_e4m3"
+          ],
+          "run_winners": [
+            "nvidia_mma_fused_fp8_e4m3",
+            "nvidia_mma_fused_fp8_e4m3"
+          ],
+          "runs": [
+            {
+              "nvidia_mma_fused_composed_fp8_e4m3": 0.024425599575042724,
+              "nvidia_mma_fused_fp8_e4m3": 0.01023648027330637
+            },
+            {
+              "nvidia_mma_fused_composed_fp8_e4m3": 0.021307520866394043,
+              "nvidia_mma_fused_fp8_e4m3": 0.011262079700827599
+            }
+          ]
+        },
+        "end_to_end": {
+          "near_winner_consensus": [
+            "nvidia_mma_fused_fp8_e4m3"
+          ],
+          "run_winners": [
+            "nvidia_mma_fused_fp8_e4m3",
+            "nvidia_mma_fused_fp8_e4m3"
+          ],
+          "runs": [
+            {
+              "nvidia_mma_fused_composed_fp8_e4m3": 1.4684500056318939,
+              "nvidia_mma_fused_fp8_e4m3": 1.4141944993752986
+            },
+            {
+              "nvidia_mma_fused_composed_fp8_e4m3": 1.5049374924274161,
+              "nvidia_mma_fused_fp8_e4m3": 1.4315430162241682
+            }
+          ]
+        }
+      },
+      "winner": "nvidia_mma_fused_fp8_e4m3",
+      "workload_shape": [
+        128,
+        512,
+        256
+      ]
+    },
+    {
+      "device": "nvidia:sm_120",
+      "dtype": "fp8_e5m2",
+      "noise_fraction": 0.03,
+      "op": "fused_region",
+      "resource_fingerprints": [
+        "sha256:fead7e39275033408b2cfb1c55aa651b25c680cc08c3c61ad82baa57126202e3"
+      ],
+      "resources": [
+        {
+          "block_threads": 32,
+          "candidate": "nvidia_mma_fused_fp8_e5m2",
+          "cubin_sha256": "2a2804963589d3144ad888f44eccf993c5f841ff36408561b25b1e66c15e4fbd",
+          "dynamic_shared_memory_bytes": 0,
+          "kernel": "tessera_nvidia_mma_fused_kernel",
+          "local_bytes": 0,
+          "max_active_blocks_per_sm": 24,
+          "registers_per_thread": 40,
+          "resource_fingerprint": "sha256:fead7e39275033408b2cfb1c55aa651b25c680cc08c3c61ad82baa57126202e3",
+          "sass_instruction_families": [
+            "QMMA.16832.F32.E5M2.E5M2"
+          ],
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "stack_bytes": 0,
+          "static_shared_memory_bytes": 0,
+          "storage_dtype": "fp8_e5m2",
+          "theoretical_occupancy_pct": 50.0
+        }
+      ],
+      "selector_eligible": true,
+      "selector_promoted": true,
+      "shape_bucket": [
+        128,
+        512,
+        256
+      ],
+      "stable_runs": 2,
+      "target": "nvidia",
+      "timing_domain_consensus": true,
+      "timings": {
+        "device": {
+          "near_winner_consensus": [
+            "nvidia_mma_fused_fp8_e5m2"
+          ],
+          "run_winners": [
+            "nvidia_mma_fused_fp8_e5m2",
+            "nvidia_mma_fused_fp8_e5m2"
+          ],
+          "runs": [
+            {
+              "nvidia_mma_fused_composed_fp8_e5m2": 0.02299423933029175,
+              "nvidia_mma_fused_fp8_e5m2": 0.013335039839148521
+            },
+            {
+              "nvidia_mma_fused_composed_fp8_e5m2": 0.03556128025054932,
+              "nvidia_mma_fused_fp8_e5m2": 0.016587520018219948
+            }
+          ]
+        },
+        "end_to_end": {
+          "near_winner_consensus": [
+            "nvidia_mma_fused_fp8_e5m2"
+          ],
+          "run_winners": [
+            "nvidia_mma_fused_composed_fp8_e5m2",
+            "nvidia_mma_fused_fp8_e5m2"
+          ],
+          "runs": [
+            {
+              "nvidia_mma_fused_composed_fp8_e5m2": 1.3755894906353205,
+              "nvidia_mma_fused_fp8_e5m2": 1.38461850292515
+            },
+            {
+              "nvidia_mma_fused_composed_fp8_e5m2": 1.285283506149426,
+              "nvidia_mma_fused_fp8_e5m2": 1.2473594979383051
+            }
+          ]
+        }
+      },
+      "winner": "nvidia_mma_fused_fp8_e5m2",
+      "workload_shape": [
+        128,
+        512,
+        256
+      ]
+    },
+    {
+      "device": "nvidia:sm_120",
+      "dtype": "f32",
+      "noise_fraction": 0.03,
+      "op": "fused_region",
+      "resource_fingerprints": [
+        "sha256:c1b8c8df43890bf631143f3521995afed044ab1c47fddcdab8491ae53d4673ab"
+      ],
+      "resources": [
+        {
+          "block_threads": 32,
+          "candidate": "nvidia_mma_fused_tf32",
+          "cubin_sha256": "81c45996d147a36d2953e50bf857ba3450e0e6b705b7c670ad452ef3fac98503",
+          "dynamic_shared_memory_bytes": 0,
+          "kernel": "tessera_nvidia_mma_fused_kernel",
+          "local_bytes": 0,
+          "max_active_blocks_per_sm": 24,
+          "registers_per_thread": 40,
+          "resource_fingerprint": "sha256:c1b8c8df43890bf631143f3521995afed044ab1c47fddcdab8491ae53d4673ab",
+          "sass_instruction_families": [
+            "HMMA.1688.F32.TF32"
+          ],
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "stack_bytes": 0,
+          "static_shared_memory_bytes": 0,
+          "storage_dtype": "f32",
+          "theoretical_occupancy_pct": 50.0
+        }
+      ],
+      "selector_eligible": true,
+      "selector_promoted": true,
+      "shape_bucket": [
+        128,
+        512,
+        64
+      ],
+      "stable_runs": 2,
+      "target": "nvidia",
+      "timing_domain_consensus": true,
+      "timings": {
+        "device": {
+          "near_winner_consensus": [
+            "nvidia_mma_fused_tf32"
+          ],
+          "run_winners": [
+            "nvidia_mma_fused_tf32",
+            "nvidia_mma_fused_tf32"
+          ],
+          "runs": [
+            {
+              "nvidia_mma_fused_composed_tf32": 0.018462079763412475,
+              "nvidia_mma_fused_tf32": 0.009389120154082775
+            },
+            {
+              "nvidia_mma_fused_composed_tf32": 0.01782528042793274,
+              "nvidia_mma_fused_tf32": 0.007744640111923218
+            }
+          ]
+        },
+        "end_to_end": {
+          "near_winner_consensus": [
+            "nvidia_mma_fused_tf32"
+          ],
+          "run_winners": [
+            "nvidia_mma_fused_tf32",
+            "nvidia_mma_fused_tf32"
+          ],
+          "runs": [
+            {
+              "nvidia_generic_cuda": 0.9090574749279767,
+              "nvidia_mma_fused_composed_tf32": 0.5192304961383343,
+              "nvidia_mma_fused_tf32": 0.49308598681818694
+            },
+            {
+              "nvidia_generic_cuda": 0.9001139987958595,
+              "nvidia_mma_fused_composed_tf32": 0.6198664923431352,
+              "nvidia_mma_fused_tf32": 0.4606549919117242
+            }
+          ]
+        }
+      },
+      "winner": "nvidia_mma_fused_tf32",
+      "workload_shape": [
+        127,
+        259,
+        63
+      ]
+    },
+    {
+      "device": "nvidia:sm_120",
+      "dtype": "fp8_e4m3",
+      "noise_fraction": 0.03,
+      "op": "fused_region",
+      "resource_fingerprints": [
+        "sha256:66456bc24a774fe860cc277463f21105297288fc9bb8eb9274970c92495e8a8c"
+      ],
+      "resources": [
+        {
+          "block_threads": 32,
+          "candidate": "nvidia_mma_fused_fp8_e4m3",
+          "cubin_sha256": "d4fe38d4d78a1cd105a97ebfa73d5e09169142373c12e9e0671fb6289ee2ed47",
+          "dynamic_shared_memory_bytes": 0,
+          "kernel": "tessera_nvidia_mma_fused_kernel",
+          "local_bytes": 0,
+          "max_active_blocks_per_sm": 24,
+          "registers_per_thread": 40,
+          "resource_fingerprint": "sha256:66456bc24a774fe860cc277463f21105297288fc9bb8eb9274970c92495e8a8c",
+          "sass_instruction_families": [
+            "QMMA.16832.F32.E4M3.E4M3"
+          ],
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "stack_bytes": 0,
+          "static_shared_memory_bytes": 0,
+          "storage_dtype": "fp8_e4m3",
+          "theoretical_occupancy_pct": 50.0
+        }
+      ],
+      "selector_eligible": true,
+      "selector_promoted": true,
+      "shape_bucket": [
+        128,
+        512,
+        64
+      ],
+      "stable_runs": 2,
+      "target": "nvidia",
+      "timing_domain_consensus": true,
+      "timings": {
+        "device": {
+          "near_winner_consensus": [
+            "nvidia_mma_fused_fp8_e4m3"
+          ],
+          "run_winners": [
+            "nvidia_mma_fused_fp8_e4m3",
+            "nvidia_mma_fused_fp8_e4m3"
+          ],
+          "runs": [
+            {
+              "nvidia_mma_fused_composed_fp8_e4m3": 0.01786463975906372,
+              "nvidia_mma_fused_fp8_e4m3": 0.01292863953858614
+            },
+            {
+              "nvidia_mma_fused_composed_fp8_e4m3": 0.017690559625625612,
+              "nvidia_mma_fused_fp8_e4m3": 0.006996160373091698
+            }
+          ]
+        },
+        "end_to_end": {
+          "near_winner_consensus": [
+            "nvidia_mma_fused_fp8_e4m3"
+          ],
+          "run_winners": [
+            "nvidia_mma_fused_fp8_e4m3",
+            "nvidia_mma_fused_fp8_e4m3"
+          ],
+          "runs": [
+            {
+              "nvidia_mma_fused_composed_fp8_e4m3": 0.7124624971766025,
+              "nvidia_mma_fused_fp8_e4m3": 0.6308024894678965
+            },
+            {
+              "nvidia_mma_fused_composed_fp8_e4m3": 0.729181498172693,
+              "nvidia_mma_fused_fp8_e4m3": 0.6422485021175817
+            }
+          ]
+        }
+      },
+      "winner": "nvidia_mma_fused_fp8_e4m3",
+      "workload_shape": [
+        127,
+        259,
+        63
+      ]
+    },
+    {
+      "device": "nvidia:sm_120",
+      "dtype": "fp8_e5m2",
+      "noise_fraction": 0.03,
+      "op": "fused_region",
+      "resource_fingerprints": [],
+      "resources": [],
+      "selector_eligible": false,
+      "selector_promoted": false,
+      "shape_bucket": [
+        128,
+        512,
+        64
+      ],
+      "stable_runs": 2,
+      "target": "nvidia",
+      "timing_domain_consensus": false,
+      "timings": {
+        "device": {
+          "near_winner_consensus": [
+            "nvidia_mma_fused_fp8_e5m2"
+          ],
+          "run_winners": [
+            "nvidia_mma_fused_fp8_e5m2",
+            "nvidia_mma_fused_fp8_e5m2"
+          ],
+          "runs": [
+            {
+              "nvidia_mma_fused_composed_fp8_e5m2": 0.018408639430999754,
+              "nvidia_mma_fused_fp8_e5m2": 0.010033919475972652
+            },
+            {
+              "nvidia_mma_fused_composed_fp8_e5m2": 0.020296640396118164,
+              "nvidia_mma_fused_fp8_e5m2": 0.012616639956831932
+            }
+          ]
+        },
+        "end_to_end": {
+          "near_winner_consensus": [],
+          "run_winners": [
+            "nvidia_mma_fused_composed_fp8_e5m2",
+            "nvidia_mma_fused_fp8_e5m2"
+          ],
+          "runs": [
+            {
+              "nvidia_mma_fused_composed_fp8_e5m2": 0.7018330070422962,
+              "nvidia_mma_fused_fp8_e5m2": 0.7451550045516342
+            },
+            {
+              "nvidia_mma_fused_composed_fp8_e5m2": 0.6302584952209145,
+              "nvidia_mma_fused_fp8_e5m2": 0.5780000064987689
+            }
+          ]
+        }
+      },
+      "winner": null,
+      "workload_shape": [
+        127,
+        259,
+        63
+      ]
+    },
+    {
+      "device": "nvidia:sm_120",
+      "dtype": "f32",
+      "noise_fraction": 0.03,
+      "op": "gated_matmul",
+      "resource_fingerprints": [
+        "sha256:16cbd2205ae8ba4073c5f67dda31e90df84c4267141bb604907af0d3255fc419"
+      ],
+      "resources": [
+        {
+          "block_threads": 32,
+          "candidate": "nvidia_mma_gated_tf32",
+          "cubin_sha256": "bbcf9039b463df9f59bd4b5bc0b451f2222ec6efe58a0f1ae0005698f1d448ed",
+          "dynamic_shared_memory_bytes": 0,
+          "kernel": "tessera_nvidia_mma_gated_kernel",
+          "local_bytes": 0,
+          "max_active_blocks_per_sm": 24,
+          "registers_per_thread": 48,
+          "resource_fingerprint": "sha256:16cbd2205ae8ba4073c5f67dda31e90df84c4267141bb604907af0d3255fc419",
+          "sass_instruction_families": [
+            "HMMA.1688.F32.TF32"
+          ],
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "stack_bytes": 0,
+          "static_shared_memory_bytes": 0,
+          "storage_dtype": "f32",
+          "theoretical_occupancy_pct": 50.0
+        }
+      ],
+      "selector_eligible": true,
+      "selector_promoted": true,
+      "shape_bucket": [
+        128,
+        512,
+        512
+      ],
+      "stable_runs": 2,
+      "target": "nvidia",
+      "timing_domain_consensus": true,
+      "timings": {
+        "device": {
+          "near_winner_consensus": [
+            "nvidia_mma_gated_tf32"
+          ],
+          "run_winners": [
+            "nvidia_mma_gated_tf32",
+            "nvidia_mma_gated_tf32"
+          ],
+          "runs": [
+            {
+              "nvidia_mma_gated_composed_tf32": 0.05811872005462646,
+              "nvidia_mma_gated_tf32": 0.02637183852493763
+            },
+            {
+              "nvidia_mma_gated_composed_tf32": 0.039331839084625245,
+              "nvidia_mma_gated_tf32": 0.024612801149487495
+            }
+          ]
+        },
+        "end_to_end": {
+          "near_winner_consensus": [
+            "nvidia_mma_gated_tf32"
+          ],
+          "run_winners": [
+            "nvidia_mma_gated_tf32",
+            "nvidia_mma_gated_tf32"
+          ],
+          "runs": [
+            {
+              "nvidia_gated": 17.52248700358905,
+              "nvidia_mma_gated_composed_tf32": 1.0677029931684956,
+              "nvidia_mma_gated_tf32": 1.0010589903686196
+            },
+            {
+              "nvidia_gated": 17.5565740064485,
+              "nvidia_mma_gated_composed_tf32": 1.10647949622944,
+              "nvidia_mma_gated_tf32": 1.0138265060959384
+            }
+          ]
+        }
+      },
+      "winner": "nvidia_mma_gated_tf32",
+      "workload_shape": [
+        128,
+        512,
+        512
+      ]
+    },
+    {
+      "device": "nvidia:sm_120",
+      "dtype": "fp8_e4m3",
+      "noise_fraction": 0.03,
+      "op": "gated_matmul",
+      "resource_fingerprints": [
+        "sha256:009514c8a44a5224da6eb06feddc5811e7639078caa9fea2fb08f98a0fd3a211"
+      ],
+      "resources": [
+        {
+          "block_threads": 32,
+          "candidate": "nvidia_mma_gated_fp8_e4m3",
+          "cubin_sha256": "57d2ad597dc1d760ab34b381408e2735865498aa4a4ee442ad1c1f779a3069cd",
+          "dynamic_shared_memory_bytes": 0,
+          "kernel": "tessera_nvidia_mma_gated_kernel",
+          "local_bytes": 0,
+          "max_active_blocks_per_sm": 24,
+          "registers_per_thread": 47,
+          "resource_fingerprint": "sha256:009514c8a44a5224da6eb06feddc5811e7639078caa9fea2fb08f98a0fd3a211",
+          "sass_instruction_families": [
+            "QMMA.16832.F32.E4M3.E4M3"
+          ],
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "stack_bytes": 0,
+          "static_shared_memory_bytes": 0,
+          "storage_dtype": "fp8_e4m3",
+          "theoretical_occupancy_pct": 50.0
+        }
+      ],
+      "selector_eligible": true,
+      "selector_promoted": true,
+      "shape_bucket": [
+        128,
+        512,
+        512
+      ],
+      "stable_runs": 2,
+      "target": "nvidia",
+      "timing_domain_consensus": true,
+      "timings": {
+        "device": {
+          "near_winner_consensus": [
+            "nvidia_mma_gated_fp8_e4m3"
+          ],
+          "run_winners": [
+            "nvidia_mma_gated_fp8_e4m3",
+            "nvidia_mma_gated_fp8_e4m3"
+          ],
+          "runs": [
+            {
+              "nvidia_mma_gated_composed_fp8_e4m3": 0.044840002059936525,
+              "nvidia_mma_gated_fp8_e4m3": 0.02262496016919613
+            },
+            {
+              "nvidia_mma_gated_composed_fp8_e4m3": 0.04305823802947998,
+              "nvidia_mma_gated_fp8_e4m3": 0.021234240382909775
+            }
+          ]
+        },
+        "end_to_end": {
+          "near_winner_consensus": [
+            "nvidia_mma_gated_composed_fp8_e4m3",
+            "nvidia_mma_gated_fp8_e4m3"
+          ],
+          "run_winners": [
+            "nvidia_mma_gated_fp8_e4m3",
+            "nvidia_mma_gated_fp8_e4m3"
+          ],
+          "runs": [
+            {
+              "nvidia_gated": 17.60112501506228,
+              "nvidia_mma_gated_composed_fp8_e4m3": 3.742816494195722,
+              "nvidia_mma_gated_fp8_e4m3": 3.7130194978090003
+            },
+            {
+              "nvidia_gated": 17.67409850435797,
+              "nvidia_mma_gated_composed_fp8_e4m3": 3.900052994140424,
+              "nvidia_mma_gated_fp8_e4m3": 3.858335505356081
+            }
+          ]
+        }
+      },
+      "winner": "nvidia_mma_gated_fp8_e4m3",
+      "workload_shape": [
+        128,
+        512,
+        512
+      ]
+    },
+    {
+      "device": "nvidia:sm_120",
+      "dtype": "fp8_e5m2",
+      "noise_fraction": 0.03,
+      "op": "gated_matmul",
+      "resource_fingerprints": [
+        "sha256:3b1f44de97bd5ba89492d6dd3213461b70149e0e33ebbe7b74e4425f7e99a072"
+      ],
+      "resources": [
+        {
+          "block_threads": 32,
+          "candidate": "nvidia_mma_gated_fp8_e5m2",
+          "cubin_sha256": "fb1fc76327e2c89d1f3247c0a5a89377e238a81c3158035d739978af06e15104",
+          "dynamic_shared_memory_bytes": 0,
+          "kernel": "tessera_nvidia_mma_gated_kernel",
+          "local_bytes": 0,
+          "max_active_blocks_per_sm": 24,
+          "registers_per_thread": 47,
+          "resource_fingerprint": "sha256:3b1f44de97bd5ba89492d6dd3213461b70149e0e33ebbe7b74e4425f7e99a072",
+          "sass_instruction_families": [
+            "QMMA.16832.F32.E5M2.E5M2"
+          ],
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "stack_bytes": 0,
+          "static_shared_memory_bytes": 0,
+          "storage_dtype": "fp8_e5m2",
+          "theoretical_occupancy_pct": 50.0
+        }
+      ],
+      "selector_eligible": true,
+      "selector_promoted": true,
+      "shape_bucket": [
+        128,
+        512,
+        512
+      ],
+      "stable_runs": 2,
+      "target": "nvidia",
+      "timing_domain_consensus": true,
+      "timings": {
+        "device": {
+          "near_winner_consensus": [
+            "nvidia_mma_gated_fp8_e5m2"
+          ],
+          "run_winners": [
+            "nvidia_mma_gated_fp8_e5m2",
+            "nvidia_mma_gated_fp8_e5m2"
+          ],
+          "runs": [
+            {
+              "nvidia_mma_gated_composed_fp8_e5m2": 0.04162591934204102,
+              "nvidia_mma_gated_fp8_e5m2": 0.02145087905228138
+            },
+            {
+              "nvidia_mma_gated_composed_fp8_e5m2": 0.06775775909423828,
+              "nvidia_mma_gated_fp8_e5m2": 0.02504832111299038
+            }
+          ]
+        },
+        "end_to_end": {
+          "near_winner_consensus": [
+            "nvidia_mma_gated_composed_fp8_e5m2",
+            "nvidia_mma_gated_fp8_e5m2"
+          ],
+          "run_winners": [
+            "nvidia_mma_gated_fp8_e5m2",
+            "nvidia_mma_gated_composed_fp8_e5m2"
+          ],
+          "runs": [
+            {
+              "nvidia_gated": 17.30702850909438,
+              "nvidia_mma_gated_composed_fp8_e5m2": 3.3231840061489493,
+              "nvidia_mma_gated_fp8_e5m2": 3.2425929966848344
+            },
+            {
+              "nvidia_gated": 17.179645990836434,
+              "nvidia_mma_gated_composed_fp8_e5m2": 3.2494545012013987,
+              "nvidia_mma_gated_fp8_e5m2": 3.3048344921553507
+            }
+          ]
+        }
+      },
+      "winner": "nvidia_mma_gated_fp8_e5m2",
+      "workload_shape": [
+        128,
+        512,
+        512
+      ]
+    },
+    {
+      "device": "nvidia:sm_120",
+      "dtype": "f32",
+      "noise_fraction": 0.03,
+      "op": "gated_matmul",
+      "resource_fingerprints": [],
+      "resources": [],
+      "selector_eligible": false,
+      "selector_promoted": false,
+      "shape_bucket": [
+        64,
+        256,
+        256
+      ],
+      "stable_runs": 2,
+      "target": "nvidia",
+      "timing_domain_consensus": false,
+      "timings": {
+        "device": {
+          "near_winner_consensus": [
+            "nvidia_mma_gated_tf32"
+          ],
+          "run_winners": [
+            "nvidia_mma_gated_tf32",
+            "nvidia_mma_gated_tf32"
+          ],
+          "runs": [
+            {
+              "nvidia_mma_gated_composed_tf32": 0.030451200008392333,
+              "nvidia_mma_gated_tf32": 0.013743040151894093
+            },
+            {
+              "nvidia_mma_gated_composed_tf32": 0.03349215984344482,
+              "nvidia_mma_gated_tf32": 0.015106240287423134
+            }
+          ]
+        },
+        "end_to_end": {
+          "near_winner_consensus": [
+            "nvidia_mma_gated_composed_tf32"
+          ],
+          "run_winners": [
+            "nvidia_mma_gated_composed_tf32",
+            "nvidia_mma_gated_composed_tf32"
+          ],
+          "runs": [
+            {
+              "nvidia_gated": 3.91196200507693,
+              "nvidia_mma_gated_composed_tf32": 0.5456590006360784,
+              "nvidia_mma_gated_tf32": 0.6786934973206371
+            },
+            {
+              "nvidia_gated": 4.1820234910119325,
+              "nvidia_mma_gated_composed_tf32": 0.6322509871097282,
+              "nvidia_mma_gated_tf32": 0.7802545151207596
+            }
+          ]
+        }
+      },
+      "winner": null,
+      "workload_shape": [
+        64,
+        256,
+        256
+      ]
+    },
+    {
+      "device": "nvidia:sm_120",
+      "dtype": "fp8_e4m3",
+      "noise_fraction": 0.03,
+      "op": "gated_matmul",
+      "resource_fingerprints": [],
+      "resources": [],
+      "selector_eligible": false,
+      "selector_promoted": false,
+      "shape_bucket": [
+        64,
+        256,
+        256
+      ],
+      "stable_runs": 2,
+      "target": "nvidia",
+      "timing_domain_consensus": false,
+      "timings": {
+        "device": {
+          "near_winner_consensus": [
+            "nvidia_mma_gated_fp8_e4m3"
+          ],
+          "run_winners": [
+            "nvidia_mma_gated_fp8_e4m3",
+            "nvidia_mma_gated_fp8_e4m3"
+          ],
+          "runs": [
+            {
+              "nvidia_mma_gated_composed_fp8_e4m3": 0.030208320617675782,
+              "nvidia_mma_gated_fp8_e4m3": 0.014036159962415695
+            },
+            {
+              "nvidia_mma_gated_composed_fp8_e4m3": 0.06360223770141601,
+              "nvidia_mma_gated_fp8_e4m3": 0.01083104033023119
+            }
+          ]
+        },
+        "end_to_end": {
+          "near_winner_consensus": [
+            "nvidia_mma_gated_composed_fp8_e4m3"
+          ],
+          "run_winners": [
+            "nvidia_mma_gated_composed_fp8_e4m3",
+            "nvidia_mma_gated_fp8_e4m3"
+          ],
+          "runs": [
+            {
+              "nvidia_gated": 4.287622999981977,
+              "nvidia_mma_gated_composed_fp8_e4m3": 1.5385555161628872,
+              "nvidia_mma_gated_fp8_e4m3": 1.6260029951808974
+            },
+            {
+              "nvidia_gated": 4.211185500025749,
+              "nvidia_mma_gated_composed_fp8_e4m3": 1.5000410203356296,
+              "nvidia_mma_gated_fp8_e4m3": 1.468836489948444
+            }
+          ]
+        }
+      },
+      "winner": null,
+      "workload_shape": [
+        64,
+        256,
+        256
+      ]
+    },
+    {
+      "device": "nvidia:sm_120",
+      "dtype": "fp8_e5m2",
+      "noise_fraction": 0.03,
+      "op": "gated_matmul",
+      "resource_fingerprints": [
+        "sha256:3b1f44de97bd5ba89492d6dd3213461b70149e0e33ebbe7b74e4425f7e99a072"
+      ],
+      "resources": [
+        {
+          "block_threads": 32,
+          "candidate": "nvidia_mma_gated_fp8_e5m2",
+          "cubin_sha256": "fb1fc76327e2c89d1f3247c0a5a89377e238a81c3158035d739978af06e15104",
+          "dynamic_shared_memory_bytes": 0,
+          "kernel": "tessera_nvidia_mma_gated_kernel",
+          "local_bytes": 0,
+          "max_active_blocks_per_sm": 24,
+          "registers_per_thread": 47,
+          "resource_fingerprint": "sha256:3b1f44de97bd5ba89492d6dd3213461b70149e0e33ebbe7b74e4425f7e99a072",
+          "sass_instruction_families": [
+            "QMMA.16832.F32.E5M2.E5M2"
+          ],
+          "spill_evidence_complete": true,
+          "spills_detected": false,
+          "stack_bytes": 0,
+          "static_shared_memory_bytes": 0,
+          "storage_dtype": "fp8_e5m2",
+          "theoretical_occupancy_pct": 50.0
+        }
+      ],
+      "selector_eligible": true,
+      "selector_promoted": true,
+      "shape_bucket": [
+        64,
+        256,
+        256
+      ],
+      "stable_runs": 2,
+      "target": "nvidia",
+      "timing_domain_consensus": true,
+      "timings": {
+        "device": {
+          "near_winner_consensus": [
+            "nvidia_mma_gated_fp8_e5m2"
+          ],
+          "run_winners": [
+            "nvidia_mma_gated_fp8_e5m2",
+            "nvidia_mma_gated_fp8_e5m2"
+          ],
+          "runs": [
+            {
+              "nvidia_mma_gated_composed_fp8_e5m2": 0.06637599945068359,
+              "nvidia_mma_gated_fp8_e5m2": 0.014911680482327938
+            },
+            {
+              "nvidia_mma_gated_composed_fp8_e5m2": 0.025546560287475584,
+              "nvidia_mma_gated_fp8_e5m2": 0.011098879389464855
+            }
+          ]
+        },
+        "end_to_end": {
+          "near_winner_consensus": [
+            "nvidia_mma_gated_fp8_e5m2"
+          ],
+          "run_winners": [
+            "nvidia_mma_gated_fp8_e5m2",
+            "nvidia_mma_gated_fp8_e5m2"
+          ],
+          "runs": [
+            {
+              "nvidia_gated": 3.93471350253094,
+              "nvidia_mma_gated_composed_fp8_e5m2": 1.2435410171747208,
+              "nvidia_mma_gated_fp8_e5m2": 1.155213001766242
+            },
+            {
+              "nvidia_gated": 4.0690165042178705,
+              "nvidia_mma_gated_composed_fp8_e5m2": 1.4122019929345697,
+              "nvidia_mma_gated_fp8_e5m2": 1.2823809956898913
+            }
+          ]
+        }
+      },
+      "winner": "nvidia_mma_gated_fp8_e5m2",
+      "workload_shape": [
+        64,
+        256,
+        256
+      ]
+    }
+  ],
+  "schema": "tessera.nvidia.lowp-native-routes.v1",
+  "selector_promotions": 11
+}

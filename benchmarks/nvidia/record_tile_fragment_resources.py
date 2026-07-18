@@ -107,7 +107,8 @@ class _CudaOccupancy:
             ctypes.byref(value), attribute, self.device), "cuDeviceGetAttribute")
         return value.value
 
-    def row(self, cubin: Path, kernel: str, block_threads: int) -> dict[str, Any]:
+    def row(self, cubin: Path, kernel: str, block_threads: int,
+            dynamic_shared_memory_bytes: int = 0) -> dict[str, Any]:
         module, function = ctypes.c_void_p(), ctypes.c_void_p()
         self._check(self.lib.cuModuleLoad(ctypes.byref(module), os.fsencode(cubin)),
                     "cuModuleLoad")
@@ -117,7 +118,8 @@ class _CudaOccupancy:
                 "cuModuleGetFunction")
             blocks = ctypes.c_int()
             self._check(self.lib.cuOccupancyMaxActiveBlocksPerMultiprocessor(
-                ctypes.byref(blocks), function, block_threads, 0),
+                ctypes.byref(blocks), function, block_threads,
+                dynamic_shared_memory_bytes),
                 "cuOccupancyMaxActiveBlocksPerMultiprocessor")
             return {
                 "block_threads": block_threads,

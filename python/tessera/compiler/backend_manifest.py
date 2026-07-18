@@ -2129,9 +2129,11 @@ _NVIDIA_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
         ),
         "notes": (
             "Warp-level mma.sync GEMM on consumer Blackwell (sm_120, CC 12.0), "
-            "CUDA 13.3. Ships five C-ABI symbols in libtessera_nvidia_gemm.so "
-            "(CMake target tessera_nvidia_gemm): tessera_nvidia_mma_gemm_"
-            "{bf16,f16,tf32,e4m3,e5m2}, each NVRTC-compiled (compute_XX from "
+            "CUDA 13.3. Ships six C-ABI entry points in libtessera_nvidia_gemm.so "
+            "(CMake target tessera_nvidia_gemm): five plain-storage "
+            "tessera_nvidia_mma_gemm_{bf16,f16,tf32,e4m3,e5m2} symbols plus "
+            "the packed-data/scale tessera_nvidia_mma_gemm_nvfp4 symbol, "
+            "each NVRTC-compiled (compute_XX/compute_120a from "
             "cuDeviceGetAttribute) at first call and launched via the CUDA driver "
             "API. fp32 storage runs tf32-math (mma.sync m16n8k8.tf32). Numerically "
             "validated vs numpy/ml_dtypes references by the execute_compare_fixture "

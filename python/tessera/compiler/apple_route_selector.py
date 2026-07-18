@@ -180,6 +180,8 @@ def _row_time_ns(row: Mapping[str, Any], domain: str) -> int | None:
     if field is None:
         raise ValueError(f"unsupported timing domain: {domain!r}")
     value = telemetry.get(field)
+    if value is None:
+        return None
     try:
         value = int(value)
     except (TypeError, ValueError):
@@ -331,11 +333,16 @@ def aggregate_stable_route_reports(
             if not isinstance(row, Mapping):
                 continue
             try:
-                base = tuple(str(row[name]) for name in ("op", "shape", "dtype", "device"))
+                base: tuple[str, str, str, str] = (
+                    str(row["op"]),
+                    str(row["shape"]),
+                    str(row["dtype"]),
+                    str(row["device"]),
+                )
                 route = str(row["route"])
             except KeyError:
                 continue
-            full = (*base, route)
+            full: tuple[str, str, str, str, str] = (*base, route)
             if full in index:
                 raise ValueError(f"duplicate route row in one report: {full!r}")
             index[full] = row

@@ -571,7 +571,14 @@ def read_dispatch_telemetry() -> dict[str, object]:
         "tessera_apple_gpu_last_dispatch_counter_supported")
     source = bind_registered("tessera_apple_gpu_last_dispatch_timing_source")
     resource = bind_registered("tessera_apple_gpu_last_dispatch_resource_record")
-    if None in (enabled, timing, counter, counter_supported, source, resource):
+    if (
+        enabled is None
+        or timing is None
+        or counter is None
+        or counter_supported is None
+        or source is None
+        or resource is None
+    ):
         return {
             "capture_enabled": False,
             "device_time_ns": None,

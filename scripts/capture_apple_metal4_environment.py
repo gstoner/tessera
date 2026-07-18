@@ -78,7 +78,7 @@ def capture_environment(*, system_name: str | None = None) -> dict[str, Any]:
         probes = {
             "power_mode": _run_probe(commands["power_mode"]),
             "thermal_state": _run_probe(commands["thermal_state"]),
-            # powermetrics requires passwordless sudo on most self-hosted Macs.
+            # powermetrics requires passwordless sudo on most local Macs.
             # Failure is retained as explicit unavailable evidence, never hidden.
             "gpu_contention": _run_probe(commands["gpu_contention"], timeout_s=15.0),
         }

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime
+from datetime import timezone
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -13,6 +15,20 @@ from typing import Any, Mapping
 
 _METAL4_ROUTES = {"cooperative_tensor", "simdgroup_matrix"}
 _ENVIRONMENT_PROBES = {"power_mode", "thermal_state", "gpu_contention"}
+_REQUIRED_BUNDLE_FILES = frozenset({
+    "machine-identity.txt",
+    "metal4-environment.json",
+    "metal4-capabilities.json",
+    "metal4-correctness-1.xml",
+    "metal4-correctness-2.xml",
+    "metal4-routes-1.json",
+    "metal4-routes-2.json",
+    "metal4-stable-ledger.json",
+    "CMakeCache.txt",
+    "ninja-log.txt",
+    "source-commit.txt",
+    "status.txt",
+})
 
 
 def validate_environment(path: Path) -> dict[str, int]:
@@ -66,8 +82,8 @@ def validate_capabilities(path: Path) -> dict[str, Any]:
 
 
 def validate_junit(path: Path) -> dict[str, int]:
-    # The workflow parses only the JUnit file emitted by its immediately
-    # preceding local pytest process; it never accepts an uploaded XML input.
+    # The local gate parses only the JUnit file emitted by its immediately
+    # preceding pytest process; a pushed packet is hash-sealed afterward.
     root = ET.parse(path).getroot()  # noqa: S314
     cases = root.findall(".//testcase")
     counts = {
@@ -135,21 +151,10 @@ def validate_ledger(path: Path) -> dict[str, int]:
 
 
 def validate_bundle(path: Path) -> dict[str, Any]:
-    required = {
-        "machine-identity.txt",
-        "metal4-environment.json",
-        "metal4-capabilities.json",
-        "metal4-correctness-1.xml",
-        "metal4-correctness-2.xml",
-        "metal4-routes-1.json",
-        "metal4-routes-2.json",
-        "metal4-stable-ledger.json",
-        "CMakeCache.txt",
-        "ninja-log.txt",
-    }
-    missing = sorted(name for name in required if not (path / name).is_file())
+    missing = sorted(name for name in _REQUIRED_BUNDLE_FILES if not (path / name).is_file())
     empty = sorted(
-        name for name in required if (path / name).is_file() and (path / name).stat().st_size == 0
+        name for name in _REQUIRED_BUNDLE_FILES
+        if (path / name).is_file() and (path / name).stat().st_size == 0
     )
     if missing or empty:
         raise ValueError(f"Metal 4 proof bundle incomplete: missing={missing}, empty={empty}")
@@ -169,6 +174,13 @@ def validate_bundle(path: Path) -> dict[str, Any]:
     if missing_sections:
         raise ValueError(f"Metal 4 machine identity lacks sections: {missing_sections}")
 
+    source_commit = (path / "source-commit.txt").read_text(encoding="utf-8").strip()
+    if re.fullmatch(r"[0-9a-f]{40}", source_commit) is None:
+        raise ValueError(f"Metal 4 proof has invalid source commit: {source_commit!r}")
+    status = (path / "status.txt").read_text(encoding="utf-8")
+    if "status=success\n" not in status or f"commit={source_commit}\n" not in status:
+        raise ValueError("Metal 4 proof status is not a success for its source commit")
+
     cmake_cache = (path / "CMakeCache.txt").read_text(encoding="utf-8")
     cache_paths = {
         "LLVM_DIR": "/opt/homebrew/llvm-23.1.0-rc1/lib/cmake/llvm",
@@ -181,7 +193,8 @@ def validate_bundle(path: Path) -> dict[str, Any]:
         raise ValueError("Metal 4 CMake cache does not enable the Apple backend")
 
     return {
-        "files": len(required),
+        "files": len(_REQUIRED_BUNDLE_FILES),
+        "tested_commit": source_commit,
         "environment": validate_environment(path / "metal4-environment.json"),
         "capabilities": validate_capabilities(path / "metal4-capabilities.json"),
         "correctness": [
@@ -196,11 +209,61 @@ def validate_bundle(path: Path) -> dict[str, Any]:
     }
 
 
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def seal_bundle(path: Path) -> dict[str, Any]:
+    validation = validate_bundle(path)
+    manifest = {
+        "schema": "tessera.apple.metal4-proof.v1",
+        "sealed_at": datetime.now(timezone.utc).isoformat(),
+        "tested_commit": validation["tested_commit"],
+        "files": {
+            name: {"sha256": _sha256(path / name), "bytes": (path / name).stat().st_size}
+            for name in sorted(_REQUIRED_BUNDLE_FILES)
+        },
+        "validation": validation,
+    }
+    (path / "proof-manifest.json").write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    return {"files": len(_REQUIRED_BUNDLE_FILES), "tested_commit": validation["tested_commit"]}
+
+
+def validate_committed_proof(path: Path) -> dict[str, Any]:
+    manifest_path = path / "proof-manifest.json"
+    if not manifest_path.is_file():
+        raise ValueError(f"committed Metal 4 proof lacks proof-manifest.json: {path}")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest.get("schema") != "tessera.apple.metal4-proof.v1":
+        raise ValueError("unexpected committed Metal 4 proof schema")
+    files = manifest.get("files")
+    if not isinstance(files, Mapping) or set(files) != _REQUIRED_BUNDLE_FILES:
+        raise ValueError("committed Metal 4 proof manifest has the wrong file inventory")
+    for name, record in files.items():
+        if not isinstance(record, Mapping) or record.get("sha256") != _sha256(path / name):
+            raise ValueError(f"committed Metal 4 proof hash mismatch: {name}")
+        if record.get("bytes") != (path / name).stat().st_size:
+            raise ValueError(f"committed Metal 4 proof size mismatch: {name}")
+    validation = validate_bundle(path)
+    if manifest.get("tested_commit") != validation["tested_commit"]:
+        raise ValueError("committed Metal 4 proof tested-commit mismatch")
+    return validation
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "kind",
-        choices=("environment", "capabilities", "junit", "route-report", "ledger", "bundle"),
+        choices=(
+            "environment", "capabilities", "junit", "route-report", "ledger", "bundle",
+            "seal", "committed-proof",
+        ),
     )
     parser.add_argument("path", type=Path)
     args = parser.parse_args(argv)
@@ -211,6 +274,8 @@ def main(argv: list[str] | None = None) -> int:
         "route-report": validate_route_report,
         "ledger": validate_ledger,
         "bundle": validate_bundle,
+        "seal": seal_bundle,
+        "committed-proof": validate_committed_proof,
     }[args.kind](args.path)
     print(json.dumps(result, sort_keys=True))
     return 0

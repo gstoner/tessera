@@ -264,6 +264,7 @@ def production_route_decision(
     device: str | None = None, timing_domain: str = "end_to_end",
     ledger_path: str | Path | None = None,
     context: AppleRouteContext | None = None,
+    now: datetime | None = None,
 ) -> ProductionRouteDecision:
     """Resolve one route and retain an auditable ledger-row citation."""
     if timing_domain not in {"device", "end_to_end"}:
@@ -276,9 +277,12 @@ def production_route_decision(
         mtime_ns = path.stat().st_mtime_ns
     except OSError:
         mtime_ns = -1
-    utc_hour = int(datetime.now(timezone.utc).timestamp() // 3600)
-    ledger = _cached_strict_route_ledger(
-        str(path), ctx, mtime_ns, utc_hour)
+    if now is None:
+        utc_hour = int(datetime.now(timezone.utc).timestamp() // 3600)
+        ledger = _cached_strict_route_ledger(
+            str(path), ctx, mtime_ns, utc_hour)
+    else:
+        ledger = load_strict_route_ledger(path, context=ctx, now=now)
     key = (tag, op, shape, dtype, timing_domain)
     route = ledger.routes.get(key, incumbent_route)
     return ProductionRouteDecision(
@@ -294,12 +298,13 @@ def production_route_for(*, op: str, shape: str, dtype: str,
                          incumbent_route: str, device: str | None = None,
                          timing_domain: str = "end_to_end",
                          ledger_path: str | Path | None = None,
-                         context: AppleRouteContext | None = None) -> str:
+                         context: AppleRouteContext | None = None,
+                         now: datetime | None = None) -> str:
     """Return an admitted exact-device ledger decision or the incumbent."""
     return production_route_decision(
         op=op, shape=shape, dtype=dtype, incumbent_route=incumbent_route,
         device=device, timing_domain=timing_domain, ledger_path=ledger_path,
-        context=context,
+        context=context, now=now,
     ).route
 
 

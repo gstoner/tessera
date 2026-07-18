@@ -634,9 +634,10 @@ remain Apple-owned.
 This plan reaches `closed` only when all of the following are true:
 
 1. Host-free and compiler-artifact tests remain portable lanes. Apple promotion
-   is owned by one required Metal 4 exact-device lane with two fresh-process
-   correctness runs, an isolated paired-performance corpus, and retained
-   reports. Metal 3 is a non-blocking compatibility lane.
+   is owned by one local Metal 4 exact-device gate with two fresh-process
+   correctness runs, an isolated paired-performance corpus, and a sealed packet
+   pushed to the coordinating PR. Registered GitHub self-hosted runners are not
+   used. Metal 3 is a non-blocking compatibility lane.
 2. Every device test proves `native_gpu` placement on the intended route. A
    non-Darwin stub, NumPy fallback, symbol-presence check, or reference
    recomputation cannot earn a device pass.
@@ -782,7 +783,7 @@ implementation/proof work; `blocked` names an external prerequisite.
 | 12 | APPLE-RETUNE-1 | **active** | One paired Apple7 corpus now covers grouped GEMM, MoE, reduction, resident KV, MLA, and Replay decode with honest timing scopes. Expand shapes/dtypes/transport bandwidth and obtain complete device intervals for composed/mapped routes. |
 | 13 | APPLE-ROUTE-1 | **active** | Strict v2 ingestion replaces the literal table and rejects stale, reference, wrong-context, and wrong-domain rows with citations. Re-measure/migrate every legacy family ledger and separate package-subgraph evidence before closure. |
 | 14 | APPLE-DTYPE-1 | **blocked — SDK** | FP8/FP4/MX native execution awaits the public macOS 27 Metal tensor path. Keep older-host int4/int8/f16/bf16 regression coverage. |
-| 15 | APPLE-CI-1 | landing | The dedicated self-hosted Metal 4 promotion workflow serializes one exact device, builds fresh LLVM/MLIR 23 compiler/JIT/runtime artifacts, records power/thermal/GPU-contention availability, rejects incomplete bundles and empty or skipped correctness evidence, runs correctness twice, and retains paired device/end-to-end route evidence. The already-required `validate-required` fan-in now blocks labeled promotions unless this lane succeeds. Execute it on the labeled Metal 4 runner and retain the first proof bundle before closure; Metal 3 remains non-blocking compatibility coverage. |
+| 15 | APPLE-CI-1 | landing | The local Metal 4 release gate serializes the physical Mac without registering a GitHub runner, builds fresh LLVM/MLIR 23 compiler/JIT/runtime artifacts, records power/thermal/GPU-contention availability, rejects incomplete or skipped evidence, runs correctness twice, and seals paired device/end-to-end evidence. Run it on the named Metal 4 host and push its packet under `docs/audit/evidence/apple/metal4/`; portable CI validates the packet before closure. Metal 3 remains non-blocking compatibility coverage. |
 
 ## Canonical validation lanes
 
@@ -808,11 +809,12 @@ python3 -m pytest tests/unit -q -n 0 \
   -m "hardware_apple_gpu and performance" --durations=0 \
   --junitxml=/tmp/apple-performance.xml
 
-# Required Metal 4 promotion is owned by the serialized self-hosted workflow.
-# It rejects zero selected tests, skips, unknown GPU families, reference rows,
-# missing device intervals, and incomplete two-domain selector ledgers.
-# Trigger manually or apply the `apple-metal4-release` PR label.
-.github/workflows/apple-metal4-release.yml
+# Metal 4 promotion runs locally on the named Mac, never through a registered
+# GitHub runner. Push the sealed packet into the coordinating PR; portable CI
+# rejects zero selected tests, skips, hash drift, unknown GPU families,
+# reference rows, missing device intervals, and incomplete two-domain ledgers.
+bash scripts/run_apple_metal4_release_gate.sh \
+  --publish-dir docs/audit/evidence/apple/metal4/<run-id>
 ```
 
 The first focused parity and characterization loop is:

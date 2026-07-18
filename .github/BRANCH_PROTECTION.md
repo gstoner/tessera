@@ -32,17 +32,15 @@ Apply the labels from the PR's right-side sidebar.
 
 ## Apple Metal 4 promotion
 
-Apple backend promotion uses the existing required `validate-required` fan-in.
-Applying the `apple-metal4-release` label makes that fan-in call
-`.github/workflows/apple-metal4-release.yml` and require its `Metal 4
-exact-device promotion` job to succeed. The job runs only on the labeled
-self-hosted Metal 4 machine, serializes the physical device, builds a fresh
-LLVM/MLIR 23 compiler/JIT/runtime image, runs correctness twice without skips,
-captures power/thermal/GPU-contention availability, validates the complete
-proof bundle, and retains a paired device/end-to-end performance ledger.
-Removing the label triggers a fresh policy evaluation. Manual dispatch remains
-available for characterization. Metal 3 is a non-blocking compatibility
-surface.
+Apple exact-device promotion is a local backend-host proof, never a registered
+GitHub self-hosted runner. Run `scripts/run_apple_metal4_release_gate.sh` on the
+named Metal 4 Mac and publish its sealed packet under
+`docs/audit/evidence/apple/metal4/` in the coordinating PR. The ordinary
+required `validate-required` fan-in remains portable: its unit and audit lanes
+verify the pushed packet's schema, hashes, commit provenance, two clean
+correctness reports, paired device/end-to-end evidence, fresh LLVM/MLIR 23
+cache, and explicit power/thermal/GPU-contention availability. Metal 3 is a
+non-blocking compatibility surface.
 
 ## Configuration via GitHub CLI
 

@@ -8,10 +8,12 @@ the Apple runtime and records each candidate's execution contract.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from math import prod
+from pathlib import Path
 from typing import Sequence
 
-from .apple_route_selector import production_route_for
+from .apple_route_selector import AppleRouteContext, production_route_for
 
 
 SERIAL_RECOMPUTE = "serial_recompute"
@@ -37,6 +39,9 @@ def resolve_variant_route(*, outer: int, q_heads: int, kv_heads: int,
                           workspace_limit_bytes: int | None = None,
                           device: str | None = None,
                           timing_domain: str = "end_to_end",
+                          ledger_path: str | Path | None = None,
+                          context: AppleRouteContext | None = None,
+                          now: datetime | None = None,
                           require_implemented: bool = True
                           ) -> BackwardRoutePolicy:
     """Resolve one complete MHA/GQA/MQA invocation against retained evidence."""
@@ -53,7 +58,8 @@ def resolve_variant_route(*, outer: int, q_heads: int, kv_heads: int,
         kv_shape, kv_shape, route=route, deterministic=deterministic,
         workspace_limit_bytes=workspace_limit_bytes,
         require_implemented=require_implemented, selector_key=key,
-        dtype=dtype, device=device, timing_domain=timing_domain)
+        dtype=dtype, device=device, timing_domain=timing_domain,
+        ledger_path=ledger_path, context=context, now=now)
 
 
 class AppleAttentionBackwardPolicyError(ValueError):
@@ -102,7 +108,10 @@ def resolve_route(k_shape: Sequence[int], v_shape: Sequence[int], *,
                   require_implemented: bool = True,
                   selector_key: str | None = None, dtype: str = "f32",
                   device: str | None = None,
-                  timing_domain: str = "end_to_end") -> BackwardRoutePolicy:
+                  timing_domain: str = "end_to_end",
+                  ledger_path: str | Path | None = None,
+                  context: AppleRouteContext | None = None,
+                  now: datetime | None = None) -> BackwardRoutePolicy:
     if workspace_limit_bytes is not None and workspace_limit_bytes < 0:
         raise AppleAttentionBackwardPolicyError(
             "workspace_limit_bytes must be non-negative")
@@ -111,7 +120,8 @@ def resolve_route(k_shape: Sequence[int], v_shape: Sequence[int], *,
         route = (production_route_for(
             op="flash_attn_bwd", shape=selector_key, dtype=dtype,
             incumbent_route=SERIAL_RECOMPUTE, device=device,
-            timing_domain=timing_domain) if selector_key
+            timing_domain=timing_domain, ledger_path=ledger_path,
+            context=context, now=now) if selector_key
                  else SERIAL_RECOMPUTE)
     if route not in ROUTES:
         raise AppleAttentionBackwardPolicyError(

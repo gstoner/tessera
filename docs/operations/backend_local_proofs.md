@@ -12,7 +12,7 @@ and documentation checks; it does not claim device execution.
 |---|---|---|
 | RTX 5070 Ti | NVIDIA `sm_120` | `bash scripts/run_nvidia_release_gate.sh` |
 | Ryzen AI Max+ 395 / Radeon 8060S | ROCm `gfx1151` | Canonical commands in `docs/audit/backend/rocm/todo.md` |
-| Apple M1 Max | Metal `Apple7` | Canonical commands in `docs/audit/backend/apple/todo.md` |
+| Apple M1 Max | Metal `Apple7` | `bash scripts/run_apple_metal4_release_gate.sh` |
 
 Each proof run records the checked-out commit, hardware identity, driver and
 toolchain versions, exact-device JUnit reports, selected routes/provenance,
@@ -23,6 +23,12 @@ different physical target.
 
 The NVIDIA command writes its bundle to `artifacts/nvidia-release/` by default.
 Set `TESSERA_NVIDIA_REPORT_DIR` to place the bundle elsewhere.
+
+The Apple command likewise uses no GitHub or self-hosted runner. Run it on the
+named Metal 4 Mac and pass `--publish-dir
+docs/audit/evidence/apple/metal4/<run-id>` to copy the sealed packet into the
+coordinating PR. Portable CI verifies the pushed packet; it does not execute or
+claim the physical Metal proof.
 
 ## NVIDIA local release ownership
 

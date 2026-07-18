@@ -509,14 +509,31 @@ is using the GPU. Use at least one established Metal 3 host and one Metal 4 host
 for capability-dependent promotion; never generalize a winner across Apple GPU
 families without a matching record.
 
-### Install LLVM/MLIR 23 with Homebrew
+### Use the dedicated LLVM/MLIR 23 prefix
 
-Homebrew's stable `llvm` formula is still LLVM 22 and there is no `llvm@23`
-formula yet. Do not use `brew --prefix llvm` for this lane. Apple validation
-uses a pinned upstream `release/23.x` build installed separately at
+The generic Homebrew `llvm` symlink is not this lane: it may resolve to a
+different keg (currently LLVM 22) or be absent. Apple validation and
+`build-apple` use the dedicated, pinned upstream `release/23.x` build at
 `/opt/homebrew/llvm-23.1.0-rc1`; it must be built with
 `LLVM_ENABLE_RTTI=ON`, or Tessera's pass and dialect typeinfo cannot link.
-Install the Xcode Command Line Tools first, then build the isolated toolchain:
+Before configuring or testing, set and validate this exact prefix:
+
+```bash
+export TESSERA_LLVM23_PREFIX=/opt/homebrew/llvm-23.1.0-rc1
+test -x "$TESSERA_LLVM23_PREFIX/bin/llvm-config"
+test -d "$TESSERA_LLVM23_PREFIX/lib/cmake/mlir"
+export PATH="$TESSERA_LLVM23_PREFIX/bin:$PATH"
+export CMAKE_PREFIX_PATH="$TESSERA_LLVM23_PREFIX${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
+
+"$TESSERA_LLVM23_PREFIX/bin/llvm-config" --version
+"$TESSERA_LLVM23_PREFIX/bin/mlir-opt" --version
+"$TESSERA_LLVM23_PREFIX/bin/mlir-tblgen" --version
+```
+
+All three version commands must begin with `23.`. If either path check fails,
+stop rather than falling back to `brew --prefix llvm` or AppleClang's system
+libraries. To recreate the dedicated toolchain, install the Xcode Command Line
+Tools first, then build it:
 
 ```bash
 xcode-select --install                    # omit if already installed
@@ -534,31 +551,26 @@ cmake -S /private/tmp/llvm-project-23/llvm -B /private/tmp/llvm-23-build -G Ninj
   -DLLVM_LINK_LLVM_DYLIB=ON
 cmake --build /private/tmp/llvm-23-build --target install --parallel 8
 
-LLVM_PREFIX=/opt/homebrew/llvm-23.1.0-rc1
-export PATH="$LLVM_PREFIX/bin:$PATH"
-export CMAKE_PREFIX_PATH="$LLVM_PREFIX${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
-
-"$LLVM_PREFIX/bin/llvm-config" --version
-"$LLVM_PREFIX/bin/mlir-opt" --version
-"$LLVM_PREFIX/bin/mlir-tblgen" --version
+export TESSERA_LLVM23_PREFIX=/opt/homebrew/llvm-23.1.0-rc1
+export PATH="$TESSERA_LLVM23_PREFIX/bin:$PATH"
+export CMAKE_PREFIX_PATH="$TESSERA_LLVM23_PREFIX${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
 "$(brew --prefix lit)/bin/lit" --version
 ```
 
 Do not use AppleClang's system LLVM libraries or mix the stable LLVM 22 keg
-with this LLVM/MLIR 23 prefix. Before configuring Tessera, require all three
-LLVM/MLIR version commands above to begin with `23.` and record the upstream
-commit plus `LLVM_ENABLE_RTTI=ON` in the build evidence.
+with this LLVM/MLIR 23 prefix. Record the upstream commit plus
+`LLVM_ENABLE_RTTI=ON` in the build evidence.
 
 For compiler artifacts, build the Apple backend and portable MLIR tools:
 
 ```bash
-LLVM_PREFIX=/opt/homebrew/llvm-23.1.0-rc1
+export TESSERA_LLVM23_PREFIX=/opt/homebrew/llvm-23.1.0-rc1
 cmake -S . -B build-apple -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_C_COMPILER="$LLVM_PREFIX/bin/clang" \
-  -DCMAKE_CXX_COMPILER="$LLVM_PREFIX/bin/clang++" \
-  -DLLVM_DIR="$LLVM_PREFIX/lib/cmake/llvm" \
-  -DMLIR_DIR="$LLVM_PREFIX/lib/cmake/mlir" \
+  -DCMAKE_C_COMPILER="$TESSERA_LLVM23_PREFIX/bin/clang" \
+  -DCMAKE_CXX_COMPILER="$TESSERA_LLVM23_PREFIX/bin/clang++" \
+  -DLLVM_DIR="$TESSERA_LLVM23_PREFIX/lib/cmake/llvm" \
+  -DMLIR_DIR="$TESSERA_LLVM23_PREFIX/lib/cmake/mlir" \
   -DLLVM_EXTERNAL_LIT="$(brew --prefix lit)/bin/lit" \
   -DTESSERA_BUILD_APPLE_BACKEND=ON \
   -DTESSERA_BUILD_EXAMPLES=ON
@@ -581,23 +593,28 @@ named Apple hosts.
 
 ## Ordered work
 
-| Order | ID | Work | Engineering action | Completion gate |
-|---:|---|---|---|---|
-| 1 | APPLE-TEST-1 | Reclassify Apple tests by execution state | Inventory every inline Darwin/Metal/runtime skip. Split mixed fallback/device tests where needed and apply `hardware_apple_gpu`, `compiler_tool`, `integration`, and `performance` at the actual boundary. Centralize Metal/runtime discovery and fresh-process environment setup in shared test support. | Marker collection accounts for every exact-device candidate; the CPU PR lane cannot execute Metal work; every skip names one unavailable capability; no hardware test can pass through the stub or NumPy fallback. |
-| 2 | APPLE-CI-2 | Validate Apple host-free compiler ownership | On the Apple build host, construct the compiler artifact used by host-free tests and prove which Apple/ROCm/NVIDIA pass families it contains. Split or capability-gate foreign-backend compiler tests when that host intentionally builds only Apple; do not treat a foreign pass absence as an Apple device or test-location failure. Record command, build flags, tool path, collected node IDs, and diagnostic for each unavailable foreign capability. | The Apple host-free lane is green for its declared compiler capability set, every excluded foreign compiler test has an explicit owner/selection rule, and no Apple migration is blocked by a CUDA/ROCm-only build assumption. |
-| 3 | APPLE-TEST-2 | Rebuild the exact-device proof ladder | Separate source/registry, compiler artifact, native dispatch, residency, execute/compare, multi-op ordering, stress, and performance assertions. Replace broad source scans and duplicated runtime probes only after stronger semantic or object/runtime proof exists. | Each family has an explicit strongest proof rung; native rows assert placement and numerical oracle; fresh-runtime and fallback-injection negatives prove the lane cannot mislabel execution. |
-| 4 | APPLE-REG-1 | Close registry and state drift | Audit every Apple dtype, op, target feature, runtime symbol, diagnostic code, package form, and execution state against central registries and generated tables. Require the same registration discipline that caught ROCm's unregistered dtype diagnostic. | Adding an emitted diagnostic, dtype, op, or execution state without registration fails a focused unit test; Apple runtime/envelope/generated docs remain synchronized. |
-| 5 | APPLE-TILE-1 | Portable Tile materialization and architecture-owned fragments | Run the shared logical Tile fixture through Apple lowering and materialize Apple-owned fragments for the selected MPS, `simdgroup_matrix`, or cooperative-tensor route. Cover packing, execute, unpack/store, ragged edges, grid shapes, alignment, and supported storage/accumulator combinations. | No fixture authors lane maps or physical fragments; exact-device output matches the shared oracle; the selected instruction/API family, threadgroup geometry, and resource record agree with the target descriptor. |
-| 6 | APPLE-GEMM-1 | Repeated-median GEMM schedule ratchet | Extend route characterization and the hot-path recorder across square, rectangular, ragged, dtype, and bias/ReLU/GELU/SiLU epilogues. Compare MPS, MPSGraph/package, synthesized MSL, `simdgroup_matrix`, and Metal 4 candidates only where semantics match. Capture GPU time and end-to-end time separately plus threadgroup memory, occupancy/concurrency proxy, compiler statistics, and spill evidence available through Metal tooling. | Two stable runs select a device-family-specific winner per timing domain; correctness and native dispatch precede timing; no production GEMM selector changes without retained before/after evidence. |
-| 7 | APPLE-EPILOGUE-1 | Unify the Tile epilogue contract | Drive bias, ReLU, GELU, and SiLU from the backend-neutral epilogue fixture. Verify accumulator precision, activation order, optional bias/residual guards, large-activation stability, ragged stores, and f32/f16/bf16 routes across MSL and Metal 4. | Every supported fusion executes natively and matches the common oracle; unsupported dtype/op pairs produce a registered diagnostic or explicit non-fused route; no silent host epilogue is labeled fused. |
-| 8 | APPLE-ATTN-FWD-1 | Retune online-softmax forward attention | Apply the ROCM-6 G6-B/CUDA methodology to Apple without assuming a two-wave or multi-warp shape. Evaluate MPSGraph, synthesized online MSL, command-buffer-resident, and cooperative-matrix candidates for D=128 plus ragged, causal/window, bias, softcap, MHA/GQA/MQA, and long-context cases. | Candidates share one oracle and placement proof; memory traffic, residency, resource evidence, GPU time, and end-to-end time explain the selected per-device route. |
-| 9 | APPLE-ATTN-BWD-1 | Implement split/reduced attention backward | Design a native Apple backward path for dQ/dK/dV. Compare atomics with split workspace plus reduction, preserve f32 accumulation, define determinism and workspace policy, and compose it with the same forward variants. | Gradients match the shared CUDA/ROCm oracle across dtype, ragged, causal, GQA/MQA, and boundary cases; determinism and workspace caps are explicit; measured resource and latency rows select the production route. |
-| 10 | APPLE-PAGED-KV-1 | Exact-device paged-KV consumer | Strengthen `ResidentBlockPagedKVCache` beyond on-GPU gather: prove permuted/non-contiguous page tables, remap/reuse, concurrent sequences, causal offsets, boundary lengths, exhaustion, and leak-free teardown. Compare gather/stage-to-attention with a direct resident page-table attention candidate under the unchanged ABI. | Both candidates match the same non-identity oracle; no hidden host copy occurs; GPU and end-to-end timing rows may choose different winners and cache them under distinct timing-domain keys. |
-| 11 | APPLE-REPLAY-1 | Persistent ReplaySSM serving closure | Extend the fused and block ReplaySSM paths through long decode, forced flush, rollback, partial speculative rejection, block submit, ordered asynchronous command-buffer/ring operation, backpressure, and cleanup. Replace the benchmark's fallback-capable fused row with explicit placement proof and GPU timing. | All transitions match `SSMStateHandle`; rejected tokens cannot mutate committed state; ordering and teardown survive stress; traffic, GPU latency, and end-to-end latency are committed for a wider B/D/N/capacity matrix. |
-| 12 | APPLE-RETUNE-1 | Retune older compiler paths | Re-evaluate f32/f16/bf16 GEMM, grouped GEMM/SwiGLU, KV movement, MoE transport, reductions, and decode chains using the improved compiler. Measure primitive kernels separately from command-buffer batching, host synchronization, unified-memory faults, and package authoring/cold compile. | Compiled and incumbent candidates match one oracle; kernel/GPU and end-to-end winners are recorded separately; grouped/transport rows include byte counts, achieved bandwidth, dispatch count, and residency. |
-| 13 | APPLE-ROUTE-1 | Harden device-keyed autotuning | Align Apple route reports with CUDA/ROCm corpus fields: physical device/family, OS/SDK/compiler fingerprint, route, timing domain, native proof, correctness, resources, cold/warm state, and cache behavior. Keep package-subgraph selection separate from single-op selection. | Stale, reference, mismatched-device, or wrong-domain evidence is rejected; selector decisions cite retained rows; cold/warm and package-cache behavior are reproducible. |
-| 14 | APPLE-DTYPE-1 | Finish low-precision execution when the public SDK permits | On macOS 27+, turn the existing scale-layout and auxiliary-plane descriptor contracts into native FP8/FP4/MX tensors and GEMM/epilogue execution. Keep int4/int8 and f16/bf16 regression coverage on older supported hosts. | Native multi-plane buffers execute on-device and match bit-accurate references; scale layout round-trips; unsupported OS/SDK pairs return the registered toolchain-gated state without falling through to a hardware claim. |
-| 15 | APPLE-CI-1 | Own Apple release lanes | Add Apple-host jobs with per-device concurrency, fresh runtime images, retained JUnit/compiler/Metal artifacts, and isolated performance scheduling. Keep the broad host-free Apple lowering tests in ordinary CI. | Release output reports CPU, compiler artifact, Metal 3 correctness, Metal 4 correctness, and performance independently; required Apple promotion cannot pass when exact-device proof is skipped. |
+This is a live queue, not a historical checklist. `closed` means the item's
+stated gate is met; `landing` means the principal implementation and evidence
+landed but a deliberately narrower follow-up remains; `active` is the next
+implementation/proof work; `blocked` names an external prerequisite.
+
+| Order | ID | Status | Current state and next action |
+|---:|---|---|---|
+| 1 | APPLE-TEST-1 | landing | Marker ownership, shared discovery, and the exact-device collection are in place. Retain the classification gate as tests are added. |
+| 2 | APPLE-CI-2 | landing | The host-free compiler ownership gate is executable and green for the declared Apple capability set. Retain it as the Apple compiler configuration changes. |
+| 3 | APPLE-TEST-2 | **closed** | Fresh-runtime correctness (**850/850**), fallback-injection negatives, ordering/stress, and the serial measured lane are complete. |
+| 4 | APPLE-REG-1 | **closed** | ABI/target-map/exact-device/Tile drift gates are registered and passing. |
+| 5 | APPLE-TILE-1 | landing | Descriptor, resource contract, f16/bf16 native simdgroup execution, ragged proof, provenance, device timing, counters, and the two-run corpus landed. Keep MPS as production until a broader corpus earns the explicit promotion threshold. |
+| 6 | APPLE-GEMM-1 | landing | Capture telemetry, paired stable selection, and Metal trace/counter evidence landed; the Apple7 ledger has three timing-domain promotions. Extend only for new device families or candidate routes. |
+| 7 | APPLE-EPILOGUE-1 | landing | Native f32/f16/bf16 correctness/resource proof and stable fused end-to-end wins landed. Expand the comparable candidate matrix only when a semantically equivalent incumbent exists. |
+| 8 | APPLE-ATTN-FWD-1 | **closed** | Native forward variants, resident/cooperative candidates, full stated corpus, two-run route ledger, and timing-domain selection are complete. Do not reopen it for backward work. |
+| 9 | APPLE-ATTN-BWD-1 | **active** | Implement and prove native dQ/dK/dV: atomics versus split-reduce workspace, determinism/workspace policy, shared-oracle gradients, and selected-route measurements. |
+| 10 | APPLE-PAGED-KV-1 | **active** | Staged non-contiguous gather has provenance and lifecycle coverage. Add direct resident page-table attention, causal/boundary stress, leak telemetry, and two-domain comparison. |
+| 11 | APPLE-REPLAY-1 | **active** | Native block/replay correctness, resources, and timing landed. Add resident-input serving, flush/rejection/block-submit ordering, ring backpressure/cleanup stress, and a paired selector corpus. |
+| 12 | APPLE-RETUNE-1 | **active** | Retune the remaining older GEMM/grouped-GEMM, KV, MoE, reduction, and decode routes with separate kernel and end-to-end evidence. |
+| 13 | APPLE-ROUTE-1 | **active** | Consolidate the landed per-family ledgers into device-keyed autotuning; reject stale, reference, wrong-device, and wrong-domain records. |
+| 14 | APPLE-DTYPE-1 | **blocked — SDK** | FP8/FP4/MX native execution awaits the public macOS 27 Metal tensor path. Keep older-host int4/int8/f16/bf16 regression coverage. |
+| 15 | APPLE-CI-1 | **active** | Add Apple-host release ownership: concurrency lock, fresh runtime images, retained artifacts, and separate Metal 3/Metal 4/performance reporting. |
 
 ## Canonical validation lanes
 
@@ -706,8 +723,10 @@ and **inherits this plan's evidence contract unchanged** (native `native_gpu`
 placement, separate GPU/end-to-end timing-domain keys, two-run + ≥5% promotion,
 forced binding-miss → `reference_cpu`). Concretely: channel-wise KDA/GDN decode →
 **APPLE-REPLAY-1** (extend ReplaySSM / `SSMStateHandle` / `DeltaNetStateHandle`);
-`sliding_window`/full mixer forward → **APPLE-ATTN-FWD-1** (its window/GQA/softcap
-cases); `windowed_kv` + uniform-block planner → **APPLE-PAGED-KV-1**;
+`sliding_window`/full mixer forward has closed its current **APPLE-ATTN-FWD-1**
+scope; any new Sequence Mixer forward candidate requires a separately scoped
+follow-up rather than silently reopening that item. `windowed_kv` +
+uniform-block planner → **APPLE-PAGED-KV-1**;
 chunkwise-scan inner GEMMs → **APPLE-RETUNE-1**; mixer arbiter → **APPLE-ROUTE-1**;
 low precision → **APPLE-DTYPE-1** (stays SDK-gated — no NVFP4 cooperative-matrix on
 Apple, so the executing FP4 proof is on NR2 Pro sm_120); mixer backward →

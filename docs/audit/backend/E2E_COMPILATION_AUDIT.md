@@ -42,7 +42,7 @@ The bridge differs per backend but the shape is identical:
 |---|---|---|
 | **Apple GPU** | GEMM + ~16 per-op/fusion passes (attn, rope, softmax, gelu, unary, silu_mul, row-op, linear-attn, MLA-fusion, NSA-fusion, swiglu) | envelope `status`/`symbol` attrs → Python calls `extern "C" tessera_apple_gpu_*` in `apple_gpu_runtime.mm` |
 | **Apple CPU** | **rank-2 f32 matmul → `cblas_sgemm` only** | everything else stops at artifact IR / numpy reference |
-| **x86** | **matmul + fused-epilogue only** (`TileToX86Pass.cpp` has exactly 3 patterns) | `runtime.py` `KNOWN_EXECUTORS` keyed on `compiler_path` → ctypes into `avx512_*.cpp` |
+| **x86** | **matmul + fused-epilogue only** (`TileToX86Pass.cpp` has exactly 3 patterns) | `runtime.py` `_executor_table()` keyed on `executor_id` (the artifact's `compiler_path`) → ctypes into `avx512_*.cpp` |
 | **ROCm** | **WMMA/MFMA GEMM only** (default pipeline wires 1 generator + `TileToROCM`) | `runtime.py` `_build_compiled_*_hsaco` hand-writes `tessera_rocm.*` directive text → shells `tessera-opt` single-generator → HSACO |
 | **NVIDIA** | **two disconnected stacks**; MLIR pipeline is artifact-only except sm_120 `mma.sync`/NVFP4 | Python NVRTC/PTX (`nvidia_cuda.py` + `ptx_launch.cpp` bridge) — real on sm_120 |
 
@@ -160,8 +160,9 @@ is an empty stub (`backend_x86.cpp:45`), and Tile IR lowers straight to
 `func.call` of C-ABI symbols. ~80 `avx512_*`/`amx_*` kernels exist (flash-attn,
 clifford, ebm, deltanet, ssm, moe, loss, policy_loss, norm, softmax, reduce,
 fft, svd, sparse), but all except GEMM/epilogue are reached only by
-`runtime.py`'s `KNOWN_EXECUTORS` table keyed on `compiler_path`
-(`runtime.py:18624-18731`). **Missing:** `TileToX86` patterns for the non-GEMM
+`runtime.py`'s executor-dispatch table (`_executor_table()`, `runtime.py:18544`;
+entries span `~18624-18731`), resolved in `launch()` by the artifact's
+`compiler_path`/`executor_id`. **Missing:** `TileToX86` patterns for the non-GEMM
 lanes (kernels + ABIs already exist), wiring the standalone Graph-IR fusion
 passes (`MLAFusion`, `NativeSparseAttnFusion`, `LightningAttnFusion`,
 `RLLossDecompose`, …) into the pipeline body, and an f32/int8 GEMM path.

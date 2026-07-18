@@ -29,13 +29,13 @@ def test_paired_paged_kv_report_keeps_timing_domains_and_routes_separate():
         "device", "end_to_end"}
 
 
-def test_paged_kv_production_promotions_are_exact_shape_and_domain():
+def test_legacy_paged_kv_corpus_cannot_bypass_strict_production_ledger():
     from tessera.compiler.apple_route_selector import production_route_for
     for domain in ("device", "end_to_end"):
         assert production_route_for(
             op="resident_paged_kv", shape="127x64x32x1", dtype="f32",
             device="apple7", timing_domain=domain,
-            incumbent_route="staged") == "direct"
+            incumbent_route="staged") == "staged"
     assert production_route_for(
         op="resident_paged_kv", shape="128x64x32x1", dtype="f32",
         device="apple7", incumbent_route="staged") == "staged"

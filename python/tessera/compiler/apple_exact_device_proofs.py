@@ -91,6 +91,12 @@ STATEFUL_PROOFS: tuple[AppleStatefulProof, ...] = (
         "tests/unit/test_ssm_apple_gpu_fused.py::test_fused_decode_forced_missing_binding_is_reference_and_correct",
         "tests/unit/test_ssm_apple_gpu_fused.py::test_fused_speculative_rollback_still_exact",
     ),
+    AppleStatefulProof(
+        "ReplaySSM resident checkpoint fold",
+        "tests/unit/test_ssm_apple_gpu_resident_replay.py::test_resident_replay_native_flush_folds_and_clears_on_device",
+        "tests/unit/test_ssm_apple_gpu_resident_replay.py::test_resident_replay_flush_reference_fallback_is_explicit",
+        "tests/unit/test_ssm_apple_gpu_resident_replay.py::test_resident_replay_repeated_native_flush_and_cleanup",
+    ),
 )
 
 

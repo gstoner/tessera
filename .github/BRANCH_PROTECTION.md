@@ -30,6 +30,20 @@ aggregator log.
 
 Apply the labels from the PR's right-side sidebar.
 
+## Apple Metal 4 promotion
+
+Apple backend promotion uses the existing required `validate-required` fan-in.
+Applying the `apple-metal4-release` label makes that fan-in call
+`.github/workflows/apple-metal4-release.yml` and require its `Metal 4
+exact-device promotion` job to succeed. The job runs only on the labeled
+self-hosted Metal 4 machine, serializes the physical device, builds a fresh
+LLVM/MLIR 23 compiler/JIT/runtime image, runs correctness twice without skips,
+captures power/thermal/GPU-contention availability, validates the complete
+proof bundle, and retains a paired device/end-to-end performance ledger.
+Removing the label triggers a fresh policy evaluation. Manual dispatch remains
+available for characterization. Metal 3 is a non-blocking compatibility
+surface.
+
 ## Configuration via GitHub CLI
 
 ```sh

@@ -94,7 +94,7 @@ def _find_runtime_source() -> Optional[Path]:
 # Newest C ABI symbol — used as the staleness sentinel when accepting a
 # prebuilt library (env-pointed or CMake-built). If a candidate lacks it,
 # it predates the current source and we fall through to a fresh build.
-_SENTINEL_SYMBOL = "tessera_apple_gpu_profiling_capabilities"
+_SENTINEL_SYMBOL = "tessera_apple_gpu_ssm_replay_flush_dev_f32_enc"
 
 
 def _prebuilt_candidate() -> Optional[ctypes.CDLL]:
@@ -431,6 +431,8 @@ APPLE_ABI: dict[str, tuple[tuple, object]] = {
     "tessera_apple_gpu_rmsnorm_dev_f16_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
     "tessera_apple_gpu_rmsnorm_dev_f32_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
     "tessera_apple_gpu_ssm_replay_decode_f32": ((ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32), ctypes.c_int32),
+    "tessera_apple_gpu_ssm_replay_decode_dev_f32_enc": ((ctypes.c_void_p,) * 8 + (ctypes.c_int32,) * 6, ctypes.c_int32),
+    "tessera_apple_gpu_ssm_replay_flush_dev_f32_enc": ((ctypes.c_void_p,) * 7 + (ctypes.c_int32,) * 5, ctypes.c_int32),
     "tessera_apple_gpu_ssm_block_decode_f32_status": ((ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32), ctypes.c_int32),
     "tessera_apple_gpu_ssm_block_decode_f16_status": ((ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32), ctypes.c_int32),
     "tessera_apple_gpu_rope_dev_bf16_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32), ctypes.c_int32),
@@ -479,7 +481,9 @@ APPLE_ABI: dict[str, tuple[tuple, object]] = {
     "ts_dev_upload": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int64), None),
     "ts_dev_upload_at": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int64, ctypes.c_int64), None),
     "ts_enc_begin": ((), ctypes.c_void_p),
+    "ts_enc_commit_async": ((ctypes.c_void_p,), ctypes.c_int32),
     "ts_enc_commit_wait": ((ctypes.c_void_p,), None),
+    "ts_enc_wait_destroy": ((ctypes.c_void_p,), ctypes.c_int32),
 }
 
 

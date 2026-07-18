@@ -22448,7 +22448,23 @@ def _apple_gpu_dispatch_moe_swiglu_block(operands: Any, kwargs: Any, np: Any) ->
     # T×N and rides MPS, and gets relatively faster as T grows. So the composed
     # path is the default; the fused kernel stays reachable behind
     # TESSERA_APPLE_MOE_FUSED=1 for a future threadgroup-cooperative rewrite.
-    if kw.get("quant") is None and os.environ.get("TESSERA_APPLE_MOE_FUSED") == "1":
+    selected_route = "composed"
+    if kw.get("quant") is None:
+        try:
+            from .compiler.apple_route_selector import production_route_for
+            xa_shape = np.asarray(x).shape
+            wg_shape = np.asarray(w_gate).shape
+            wd_shape = np.asarray(w_down).shape
+            selected_route = production_route_for(
+                op="retune_moe_swiglu",
+                shape=(f"{int(xa_shape[0])}x{int(xa_shape[1])}x"
+                       f"{int(wg_shape[2])}x{int(wd_shape[2])}_e{int(wg_shape[0])}"),
+                dtype="f32", incumbent_route="composed")
+        except Exception:
+            selected_route = "composed"
+    if (kw.get("quant") is None
+            and (os.environ.get("TESSERA_APPLE_MOE_FUSED") == "1"
+                 or selected_route == "single_fused")):
         xa = np.ascontiguousarray(np.asarray(x, dtype=np.float32))
         wg = np.ascontiguousarray(np.asarray(w_gate, dtype=np.float32))
         wu = np.ascontiguousarray(np.asarray(w_up, dtype=np.float32))
@@ -22897,8 +22913,10 @@ def apple_gpu_resident_ssm_replay_state_handle(
     buffers and commit without waiting; Metal's single command queue preserves
     submission order. Slots remain leased until ``wait()`` consumes their
     resident output, providing explicit backpressure and deterministic cleanup.
-    The ordinary :class:`SSMStateHandle` remains the semantic mirror used for
-    checkpointing, rollback, and a fail-closed fallback.
+    Flush serially folds the resident replay tokens into ``S0`` and clears the
+    complete resident rings in one ordered command buffer. The ordinary
+    :class:`SSMStateHandle` remains the serialization/rollback mirror and the
+    explicitly labeled fail-closed fallback.
     """
     import numpy as np
     from .cache import SSMStateHandle
@@ -22911,6 +22929,8 @@ def apple_gpu_resident_ssm_replay_state_handle(
         and getattr(api, "ts_enc_commit_async", None) is not None
         and getattr(api, "ts_enc_wait_destroy", None) is not None
         and getattr(api, "tessera_apple_gpu_ssm_replay_decode_dev_f32_enc", None)
+        is not None
+        and getattr(api, "tessera_apple_gpu_ssm_replay_flush_dev_f32_enc", None)
         is not None)
 
     class _Future:
@@ -22952,6 +22972,7 @@ def apple_gpu_resident_ssm_replay_state_handle(
             self._slots = [False] * async_slots
             self._pending: list[_Future] = []
             self.last_submission_telemetry: dict[str, Any] | None = None
+            self.last_flush_telemetry: dict[str, Any] | None = None
             self.last_flush_execution = "uninitialized"
             self._native_api = native_api and self._scalar_a
             self._resident_tensors = ()
@@ -23120,12 +23141,64 @@ def apple_gpu_resident_ssm_replay_state_handle(
 
         def flush(self) -> Any:
             self._require_idle("flush")
-            super().flush()
-            if self._native_api:
-                self._s0_view[...] = np.asarray(self._s0, np.float32)
-                self._d_view[...] = 0; self._x_view[...] = 0
-                self._b_view[...] = 0; self._c_view[...] = 0
-                self.last_flush_execution = "resident_write_after_reference_fold"
+            tokens = self._count
+            if tokens == 0:
+                return self
+            if not self._native_api:
+                super().flush()
+                self.last_flush_execution = "reference_cpu"
+                self.last_flush_telemetry = {
+                    "execution_kind": "reference_cpu", "tokens": tokens,
+                }
+                return self
+
+            from ._apple_gpu_dispatch import read_dispatch_telemetry
+            session = api.ts_enc_begin()
+            encoded = bool(session) and bool(
+                api.tessera_apple_gpu_ssm_replay_flush_dev_f32_enc(
+                    session, self._d_dev.handle, self._x_dev.handle,
+                    self._b_dev.handle, self._c_dev.handle,
+                    self._s0_dev.handle, self._a_dev.handle,
+                    ctypes.c_int32(self.batch), ctypes.c_int32(self.num_channels),
+                    ctypes.c_int32(self.state_dim), ctypes.c_int32(tokens),
+                    ctypes.c_int32(self.capacity)))
+            submitted = encoded and api.ts_enc_commit_async(session) == 1
+            completed = submitted and api.ts_enc_wait_destroy(session) == 1
+            if completed:
+                # The resident checkpoint is authoritative. Read it only to
+                # maintain SSMStateHandle's serialization/reference mirror;
+                # no host-computed state is uploaded back to Metal.
+                self._s0 = np.asarray(self._s0_view, dtype=np.float64).copy()
+                self._delta[:tokens] = 0
+                self._x[:tokens] = 0
+                self._b[:tokens] = 0
+                self._count = 0
+                self.last_flush_execution = "native_gpu"
+                self.last_flush_telemetry = {
+                    **read_dispatch_telemetry(),
+                    "execution_kind": "native_gpu",
+                    "submission_mode": "ordered_command_buffer",
+                    "fold_strategy": "serial_per_state_no_atomics",
+                    "checkpoint_residency": "resident_device_tensor",
+                    "ring_clear": "same_command_buffer_full_capacity",
+                    "tokens": tokens,
+                }
+                return self
+
+            if session and not submitted:
+                api.ts_enc_commit_wait(session)
+            # Preserve semantics if the native encoder becomes unavailable at
+            # runtime, but label the reference fold explicitly.
+            SSMStateHandle.flush(self)
+            self._s0_view[...] = np.asarray(self._s0, np.float32)
+            self._d_view[...] = 0; self._x_view[...] = 0
+            self._b_view[...] = 0; self._c_view[...] = 0
+            self.last_flush_execution = "reference_cpu_after_native_failure"
+            self.last_flush_telemetry = {
+                "execution_kind": "reference_cpu", "tokens": tokens,
+                "native_encode_succeeded": encoded,
+                "native_submit_succeeded": submitted,
+            }
             return self
 
         def rollback(self, n: int) -> Any:
@@ -30356,6 +30429,11 @@ def _apple_gpu_enc_api() -> Any:
                 vp, vp, vp, vp, vp, vp, vp, vp,
                 i32, i32, i32, i32, i32, i32]
             runtime.tessera_apple_gpu_ssm_replay_decode_dev_f32_enc.restype = i32
+        if getattr(runtime, "tessera_apple_gpu_ssm_replay_flush_dev_f32_enc", None) is not None:
+            runtime.tessera_apple_gpu_ssm_replay_flush_dev_f32_enc.argtypes = [
+                vp, vp, vp, vp, vp, vp, vp,
+                i32, i32, i32, i32, i32]
+            runtime.tessera_apple_gpu_ssm_replay_flush_dev_f32_enc.restype = i32
         runtime.tessera_apple_gpu_bmm_dev_f32_enc.argtypes = [vp, vp, vp, vp, i32, i32, i32, i32, i32]
         runtime.tessera_apple_gpu_bmm_dev_f32_enc.restype = i32
         runtime.tessera_apple_gpu_rowop_dev_f32_enc.argtypes = [vp, vp, vp, vp, i32, i32, i32, f32]
@@ -30776,6 +30854,8 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 # Freshest staleness sentinel: a prebuilt dylib lacking it is
                 # rejected so a source dylib with the fused kernel is compiled.
                 getattr(lib, "tessera_apple_gpu_lookahead_sparse_attn_f32")
+                # Resident ReplaySSM native checkpoint fold + ring clear.
+                getattr(lib, "tessera_apple_gpu_ssm_replay_flush_dev_f32_enc")
                 _apple_gpu_runtime = lib
                 return _apple_gpu_runtime
             except (OSError, AttributeError):

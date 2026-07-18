@@ -4,6 +4,10 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
+from scripts.run_apple_host_free_compiler_tests import _llvm_runner_utils
+
 from tests._support.apple_inventory import (
     METAL_COMPILER_TESTS,
     NATIVE_RESIDENCY_TESTS,
@@ -115,3 +119,41 @@ def test_cmake_capabilities_require_all_backend_declarations(tmp_path: Path) -> 
         "nvidia": False,
         "rocm": False,
     }
+
+
+@pytest.mark.parametrize("cache_type", ("PATH", "UNINITIALIZED", "FILEPATH"))
+def test_apple_ci2_resolves_runner_utils_for_any_cmake_cache_type(
+    tmp_path: Path, cache_type: str,
+) -> None:
+    prefix = tmp_path / "llvm-23"
+    llvm_dir = prefix / "lib" / "cmake" / "llvm"
+    llvm_dir.mkdir(parents=True)
+    runner_utils = prefix / "lib" / "libmlir_c_runner_utils.dylib"
+    runner_utils.touch()
+    build_dir = tmp_path / "build"
+    build_dir.mkdir()
+    (build_dir / "CMakeCache.txt").write_text(
+        f"LLVM_DIR:{cache_type}={llvm_dir}\n", encoding="utf-8"
+    )
+
+    assert _llvm_runner_utils(build_dir) == runner_utils
+
+
+def test_apple_ci2_rejects_missing_runner_utils(tmp_path: Path) -> None:
+    llvm_dir = tmp_path / "llvm-23" / "lib" / "cmake" / "llvm"
+    llvm_dir.mkdir(parents=True)
+    build_dir = tmp_path / "build"
+    build_dir.mkdir()
+    (build_dir / "CMakeCache.txt").write_text(
+        f"LLVM_DIR:UNINITIALIZED={llvm_dir}\n", encoding="utf-8"
+    )
+
+    with pytest.raises(FileNotFoundError, match="runner-utils dylib not found"):
+        _llvm_runner_utils(build_dir)
+
+
+def test_apple_ci2_requires_llvm_dir_in_cmake_cache(tmp_path: Path) -> None:
+    (tmp_path / "CMakeCache.txt").write_text("CMAKE_BUILD_TYPE:STRING=Release\n")
+
+    with pytest.raises(ValueError, match="does not declare LLVM_DIR"):
+        _llvm_runner_utils(tmp_path)

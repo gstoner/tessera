@@ -22,6 +22,7 @@ on:
     branches: ["main"]
   pull_request:
     branches: ["**"]
+    types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review]
   workflow_dispatch:
 
 concurrency:
@@ -389,6 +390,15 @@ jobs:
       - name: Run sanitizer smoke (${{ matrix.sanitizer }})
         run: bash scripts/run_sanitizers.sh ${{ matrix.sanitizer }}
 
+  # Apple promotion is scarce exact-device work, so it remains label-gated.
+  # When requested, the existing required fan-in below waits for the complete
+  # Metal 4 workflow; an exact-device failure therefore blocks the PR.
+  apple-metal4-release:
+    if: >-
+      github.event_name == 'pull_request'
+      && contains(github.event.pull_request.labels.*.name, 'apple-metal4-release')
+    uses: ./.github/workflows/apple-metal4-release.yml
+
   # ────────────────────────────────────────────────────────────────────
   # Aggregator — fan-in for branch protection.
   #
@@ -399,7 +409,7 @@ jobs:
   validate-required:
     name: validate-required
     runs-on: ubuntu-latest
-    needs: [lint, unit, audit, build]
+    needs: [lint, unit, audit, build, apple-metal4-release]
     if: always()
     steps:
       - name: Verify required lanes succeeded
@@ -420,6 +430,12 @@ jobs:
           done
           if [ "$fail" -ne 0 ]; then
             echo "::error ::Required validation lane failed: lint=${{ needs.lint.result }} unit=${{ needs.unit.result }} audit=${{ needs.audit.result }} build=${{ needs.build.result }}"
+            exit 1
+          fi
+          metal4_required="${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'apple-metal4-release') }}"
+          metal4_result="${{ needs.apple-metal4-release.result }}"
+          if [ "$metal4_required" = "true" ] && [ "$metal4_result" != "success" ]; then
+            echo "::error ::Metal 4 promotion was requested but exact-device result was $metal4_result"
             exit 1
           fi
           echo "All required lanes passed."

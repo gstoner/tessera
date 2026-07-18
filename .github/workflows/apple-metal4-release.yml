@@ -1,0 +1,174 @@
+name: Apple Metal 4 Release
+
+permissions:
+  contents: read
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+# One physical Metal device owns correctness and performance together. Never
+# cancel a measurement halfway through or overlap it with another PR.
+concurrency:
+  group: apple-metal4-exact-device
+  cancel-in-progress: false
+
+env:
+  TESSERA_LLVM23_PREFIX: /opt/homebrew/llvm-23.1.0-rc1
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONUNBUFFERED: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
+
+jobs:
+  metal4-release:
+    name: Metal 4 exact-device promotion
+    runs-on: [self-hosted, macOS, ARM64, tessera-metal4]
+    timeout-minutes: 120
+    env:
+      TESSERA_MLIR_C_RUNNER_UTILS: /opt/homebrew/llvm-23.1.0-rc1/lib/libmlir_c_runner_utils.dylib
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Create isolated paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUN_ROOT="$RUNNER_TEMP/tessera-metal4-$GITHUB_RUN_ID"
+          echo "TESSERA_METAL4_BUILD=$RUN_ROOT/build" >> "$GITHUB_ENV"
+          echo "TESSERA_CACHE_DIR=$RUN_ROOT/cache" >> "$GITHUB_ENV"
+          echo "TESSERA_METAL4_REPORTS=$RUN_ROOT/reports" >> "$GITHUB_ENV"
+          echo "TESSERA_METAL4_VENV=$RUN_ROOT/venv" >> "$GITHUB_ENV"
+          echo "TESSERA_METAL4_PYTHON=$RUN_ROOT/venv/bin/python" >> "$GITHUB_ENV"
+          echo "TESSERA_OPT=$RUN_ROOT/build/tools/tessera-opt/tessera-opt" >> "$GITHUB_ENV"
+          echo "TESSERA_OPT_BIN=$RUN_ROOT/build/tools/tessera-opt/tessera-opt" >> "$GITHUB_ENV"
+          echo "TESSERA_JIT_LIB=$RUN_ROOT/build/tools/tessera-jit/libtessera_jit.dylib" >> "$GITHUB_ENV"
+          echo "$TESSERA_LLVM23_PREFIX/bin" >> "$GITHUB_PATH"
+          mkdir -p "$RUN_ROOT/reports"
+
+      - name: Verify exact Metal 4 host and LLVM 23
+        shell: bash
+        run: |
+          set -euo pipefail
+          REPORTS="$TESSERA_METAL4_REPORTS"
+          test -x "$TESSERA_LLVM23_PREFIX/bin/llvm-config"
+          test -x "$TESSERA_LLVM23_PREFIX/bin/mlir-opt"
+          test -f "$TESSERA_LLVM23_PREFIX/lib/libmlir_c_runner_utils.dylib"
+          test "$("$TESSERA_LLVM23_PREFIX/bin/llvm-config" --version | cut -d. -f1)" = 23
+          {
+            printf '%s\n' '[sw_vers]'
+            sw_vers
+            printf '%s\n' '[system_profiler SPDisplaysDataType]'
+            system_profiler SPDisplaysDataType
+            printf '%s\n' '[xcodebuild]'
+            xcodebuild -version
+            printf '%s\n' '[macOS SDK]'
+            xcrun --sdk macosx --show-sdk-version
+            printf '%s\n' '[metal compiler]'
+            xcrun --find metal
+            printf '%s\n' '[llvm-config]'
+            "$TESSERA_LLVM23_PREFIX/bin/llvm-config" --version
+            printf '%s\n' '[python]'
+            python3 --version
+            printf '%s\n' '[commit]'
+            git rev-parse HEAD
+          } > "$REPORTS/machine-identity.txt"
+
+      - name: Capture power, thermal, and GPU-contention state
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/capture_apple_metal4_environment.py \
+            --output "$TESSERA_METAL4_REPORTS/metal4-environment.json"
+          python3 scripts/validate_apple_metal4_evidence.py environment \
+            "$TESSERA_METAL4_REPORTS/metal4-environment.json"
+
+      - name: Install isolated test environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "$TESSERA_METAL4_VENV"
+          PYTHON="$TESSERA_METAL4_PYTHON" bash scripts/install_test_deps.sh
+          "$TESSERA_METAL4_PYTHON" -m pip install -e . --no-deps
+
+      - name: Build fresh Apple compiler and JIT artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          LLVM_LIT="$(command -v llvm-lit || command -v lit)"
+          cmake -S . -B "$TESSERA_METAL4_BUILD" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER="$TESSERA_LLVM23_PREFIX/bin/clang" \
+            -DCMAKE_CXX_COMPILER="$TESSERA_LLVM23_PREFIX/bin/clang++" \
+            -DLLVM_DIR="$TESSERA_LLVM23_PREFIX/lib/cmake/llvm" \
+            -DMLIR_DIR="$TESSERA_LLVM23_PREFIX/lib/cmake/mlir" \
+            -DLLVM_EXTERNAL_LIT="$LLVM_LIT" \
+            -DTESSERA_BUILD_APPLE_BACKEND=ON \
+            -DTESSERA_BUILD_NVIDIA_BACKEND=OFF \
+            -DTESSERA_BUILD_ROCM_BACKEND=OFF \
+            -DTESSERA_BUILD_EXAMPLES=ON
+          cmake --build "$TESSERA_METAL4_BUILD" --target \
+            tessera-opt tessera-translate-mlir tessera_jit TesseraAppleRuntime
+          cp "$TESSERA_METAL4_BUILD/CMakeCache.txt" "$TESSERA_METAL4_REPORTS/"
+          cp "$TESSERA_METAL4_BUILD/.ninja_log" "$TESSERA_METAL4_REPORTS/ninja-log.txt"
+
+      - name: Prove Metal 4 capability from the fresh runtime cache
+        env:
+          PYTHONPATH: python
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$TESSERA_METAL4_PYTHON" -c 'import json; from tessera import runtime as r; from tessera.compiler.apple_route_selector import live_apple_device_tag; caps=r.apple_gpu_metal4_caps(); assert r.DeviceTensor.is_metal(); assert caps.get("available"); device=live_apple_device_tag(); assert "unknown" not in device; print(json.dumps({"device":device,"metal4":caps},sort_keys=True))' \
+            > "$TESSERA_METAL4_REPORTS/metal4-capabilities.json"
+
+      - name: Metal 4 correctness twice with no skips
+        env:
+          PYTHONPATH: python
+        shell: bash
+        run: |
+          set -euo pipefail
+          for run in 1 2; do
+            "$TESSERA_METAL4_PYTHON" -m pytest tests/unit -q -n 0 \
+              -m "metal4 and hardware_apple_gpu and not performance" \
+              --durations=100 \
+              --junitxml="$TESSERA_METAL4_REPORTS/metal4-correctness-$run.xml"
+            "$TESSERA_METAL4_PYTHON" scripts/validate_apple_metal4_evidence.py junit \
+              "$TESSERA_METAL4_REPORTS/metal4-correctness-$run.xml"
+          done
+
+      - name: Serial paired Metal 4 performance corpus
+        env:
+          PYTHONPATH: python
+        shell: bash
+        run: |
+          set -euo pipefail
+          for run in 1 2; do
+            "$TESSERA_METAL4_PYTHON" benchmarks/apple_gpu/benchmark_route_characterization.py \
+              --ops matmul --matmul-shapes 64x64x64 256x256x256 \
+              --reps 10 --trials 5 \
+              --output "$TESSERA_METAL4_REPORTS/metal4-routes-$run.json"
+            "$TESSERA_METAL4_PYTHON" scripts/validate_apple_metal4_evidence.py route-report \
+              "$TESSERA_METAL4_REPORTS/metal4-routes-$run.json"
+          done
+          "$TESSERA_METAL4_PYTHON" benchmarks/apple_gpu/select_stable_gemm_routes.py \
+            "$TESSERA_METAL4_REPORTS/metal4-routes-1.json" \
+            "$TESSERA_METAL4_REPORTS/metal4-routes-2.json" \
+            --output "$TESSERA_METAL4_REPORTS/metal4-stable-ledger.json"
+          "$TESSERA_METAL4_PYTHON" scripts/validate_apple_metal4_evidence.py ledger \
+            "$TESSERA_METAL4_REPORTS/metal4-stable-ledger.json"
+
+      - name: Verify complete immutable proof bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$TESSERA_METAL4_PYTHON" scripts/validate_apple_metal4_evidence.py bundle \
+            "$TESSERA_METAL4_REPORTS" \
+            > "$TESSERA_METAL4_REPORTS/bundle-validation.json"
+
+      - name: Upload immutable Metal 4 proof bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apple-metal4-release-${{ github.run_id }}
+          path: ${{ runner.temp }}/tessera-metal4-${{ github.run_id }}/reports
+          if-no-files-found: error
+          retention-days: 30

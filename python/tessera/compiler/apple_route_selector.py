@@ -14,55 +14,28 @@ authoring packages during decoration.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from functools import lru_cache
+import hashlib
 import json
+import os
+import platform
 from pathlib import Path
+import re
 import statistics
+import subprocess
 from typing import Any, Iterable, Mapping, Sequence
 
 
 ROUTE_REPORT_SCHEMA_VERSION = 1
 STABLE_ROUTE_LEDGER_SCHEMA_VERSION = 1
+STRICT_ROUTE_LEDGER_SCHEMA = "tessera.apple.route-ledger.v2"
 PACKAGE_ROUTE = "package"
 
-# APPLE-GEMM-1 / APPLE-ATTN-FWD-1: exact-shape promotions from retained
-# Apple7 paired ledgers. Missing rows intentionally retain the existing route.
-_PRODUCTION_ROUTE_PROMOTIONS = {
-    ("apple7", "softmax", "128x257", "f32", "end_to_end"): "mpsgraph",
-    ("apple7", "softmax", "256x256", "f32", "end_to_end"): "mpsgraph",
-    ("apple7", "flash_attn_mha", "b1_h4_sq64_sk64_d64", "f32", "end_to_end"): "mpsgraph_bsmm",
-    ("apple7", "flash_attn_mha", "b1_h4_sq65_sk67_d128", "f32", "end_to_end"): "mpsgraph_bsmm",
-    ("apple7", "flash_attn_mha", "b2_h8_sq64_sk257_d128", "f32", "end_to_end"): "mpsgraph_bsmm",
-    ("apple7", "flash_attn_mha", "b1_h16_sq16_sk1025_d256", "f32", "end_to_end"): "mpsgraph_bsmm",
-    ("apple7", "flash_attn_mha", "b1_h4_sq64_sk64_d64", "f16", "end_to_end"): "mpsgraph_bsmm",
-    ("apple7", "flash_attn_mha", "b1_h4_sq65_sk67_d128", "f16", "end_to_end"): "mpsgraph_bsmm",
-    ("apple7", "flash_attn_mha", "b2_h8_sq64_sk257_d128", "f16", "end_to_end"): "mpsgraph_bsmm",
-    ("apple7", "flash_attn_mha", "b1_h16_sq16_sk1025_d256", "f16", "end_to_end"): "mpsgraph_bsmm",
-    # Device-interval winners are intentionally separate from host-input
-    # end-to-end selection. The f16 rows retained online MSL in this domain.
-    ("apple7", "flash_attn_mha", "b1_h16_sq16_sk1025_d256", "f32", "device"): "mpsgraph_bsmm",
-    # APPLE-ATTN-BWD-1: the backward policy applies workspace and determinism
-    # requirements after exact-row lookup. Device-domain rows retain serial.
-    ("apple7", "flash_attn_bwd", "b1_hq2_hkv2_sq4_sk1025_d64_c1_w0_bias0_sc0p0", "f32", "end_to_end"): "split_reduced",
-    ("apple7", "flash_attn_bwd", "b1_hq4_hkv4_sq16_sk16_d16_c0_w0_bias0_sc0p0", "f32", "end_to_end"): "split_reduced",
-    ("apple7", "flash_attn_bwd", "b1_hq4_hkv4_sq17_sk19_d64_c1_w0_bias0_sc0p0", "f32", "end_to_end"): "atomic",
-    ("apple7", "flash_attn_bwd", "b1_hq8_hkv1_sq8_sk65_d64_c0_w17_bias0_sc0p0", "f16", "end_to_end"): "atomic",
-    ("apple7", "flash_attn_bwd", "b1_hq8_hkv2_sq9_sk33_d64_c1_w17_bias1_sc2p5", "f32", "end_to_end"): "split_reduced",
-    ("apple7", "flash_attn_bwd", "b2_hq4_hkv2_sq9_sk33_d64_c1_w0_bias1_sc1p5", "bf16", "end_to_end"): "split_reduced",
-    # APPLE-PAGED-KV-1: the direct resident page-table route won both retained
-    # timing domains in two runs for each exact non-identity corpus row.
-    ("apple7", "resident_paged_kv", "127x64x32x1", "f32", "end_to_end"): "direct",
-    ("apple7", "resident_paged_kv", "127x64x32x1", "f32", "device"): "direct",
-    ("apple7", "resident_paged_kv", "512x128x64x1", "f32", "end_to_end"): "direct",
-    ("apple7", "resident_paged_kv", "512x128x64x1", "f32", "device"): "direct",
-    # APPLE-REPLAY-1: fused block is the stable end-to-end winner. The smaller
-    # device-domain row flipped between paired runs, so it deliberately has no
-    # promotion and retains the fused-block incumbent.
-    ("apple7", "resident_replay", "1x128x64_t16", "f32", "end_to_end"): "fused_block",
-    ("apple7", "resident_replay", "1x256x128_t16", "f32", "end_to_end"): "fused_block",
-    ("apple7", "resident_replay", "1x256x128_t16", "f32", "device"): "fused_block",
-}
-
+_DEFAULT_STRICT_LEDGER = (
+    Path(__file__).resolve().parents[3]
+    / "benchmarks/baselines/apple_strict_route_ledger.json"
+)
 
 @lru_cache(maxsize=1)
 def live_apple_device_tag() -> str:
@@ -76,13 +49,258 @@ def live_apple_device_tag() -> str:
             else "apple_silicon_metal_unknown_family")
 
 
+def _command_text(*args: str) -> str:
+    try:
+        return subprocess.run(
+            args, check=True, capture_output=True, text=True, timeout=3,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def _runtime_source_fingerprint() -> str:
+    source = (
+        Path(__file__).resolve().parents[3]
+        / "src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm"
+    )
+    try:
+        content = source.read_bytes()
+    except OSError:
+        return "unavailable"
+    return f"sha256:{hashlib.sha256(content).hexdigest()}"
+
+
+def _configured_llvm_dir() -> str:
+    configured = os.environ.get("LLVM_DIR")
+    if configured:
+        return configured
+    cache = Path(__file__).resolve().parents[3] / "build-apple/CMakeCache.txt"
+    try:
+        text = cache.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    match = re.search(r"^LLVM_DIR:[^=]+=(.+)$", text, re.MULTILINE)
+    return match.group(1).strip() if match else ""
+
+
+@dataclass(frozen=True)
+class AppleRouteContext:
+    """Live identity required before retained Apple evidence may select."""
+
+    device: str
+    physical_device: str
+    os_version: str
+    sdk_version: str
+    compiler_fingerprint: str
+    runtime_fingerprint: str
+
+    def as_mapping(self) -> dict[str, str]:
+        return {
+            "device": self.device,
+            "physical_device": self.physical_device,
+            "os_version": self.os_version,
+            "sdk_version": self.sdk_version,
+            "compiler_fingerprint": self.compiler_fingerprint,
+            "runtime_fingerprint": self.runtime_fingerprint,
+        }
+
+
+@lru_cache(maxsize=1)
+def live_apple_route_context() -> AppleRouteContext:
+    """Fingerprint the live Apple device, OS/SDK, compiler, and runtime source.
+
+    Environment overrides are intentional release-lane inputs: a runner may
+    supply a more exact physical-device identifier or compiler artifact digest
+    than the portable probes can discover.
+    """
+    physical = os.environ.get("TESSERA_APPLE_PHYSICAL_DEVICE")
+    if not physical:
+        physical = _command_text("sysctl", "-n", "machdep.cpu.brand_string")
+    sdk = os.environ.get("TESSERA_APPLE_SDK_VERSION") or _command_text(
+        "xcrun", "--sdk", "macosx", "--show-sdk-version")
+    compiler = os.environ.get("TESSERA_APPLE_COMPILER_FINGERPRINT")
+    if not compiler:
+        compiler_text = "\n".join(filter(None, (
+            _command_text("clang", "--version"),
+            _configured_llvm_dir(),
+        )))
+        compiler = (
+            f"sha256:{hashlib.sha256(compiler_text.encode()).hexdigest()}"
+            if compiler_text else "unavailable"
+        )
+    return AppleRouteContext(
+        device=live_apple_device_tag(),
+        physical_device=physical or "unavailable",
+        os_version=platform.mac_ver()[0] or platform.platform(),
+        sdk_version=sdk or "unavailable",
+        compiler_fingerprint=compiler,
+        runtime_fingerprint=(
+            os.environ.get("TESSERA_APPLE_RUNTIME_FINGERPRINT")
+            or _runtime_source_fingerprint()
+        ),
+    )
+
+
+@dataclass(frozen=True)
+class StrictRouteLedger:
+    routes: Mapping[tuple[str, str, str, str, str], str]
+    citations: Mapping[tuple[str, str, str, str, str], str]
+    rejected: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ProductionRouteDecision:
+    route: str
+    incumbent_route: str
+    selected_from_ledger: bool
+    citation: str | None
+    rejected_evidence: tuple[str, ...]
+
+
+def _parse_utc(value: Any) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+
+
+def load_strict_route_ledger(
+    path: str | Path,
+    *,
+    context: AppleRouteContext | None = None,
+    now: datetime | None = None,
+) -> StrictRouteLedger:
+    """Admit only fresh, exact-context, native, domain-specific decisions."""
+    rejected: list[str] = []
+    try:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return StrictRouteLedger({}, {}, (f"ledger_unreadable:{type(exc).__name__}",))
+    if payload.get("schema") != STRICT_ROUTE_LEDGER_SCHEMA:
+        return StrictRouteLedger({}, {}, ("schema_mismatch",))
+    ctx = context or live_apple_route_context()
+    retained = payload.get("context")
+    if not isinstance(retained, Mapping):
+        return StrictRouteLedger({}, {}, ("missing_context",))
+    for field, expected in ctx.as_mapping().items():
+        actual = retained.get(field)
+        if actual != expected:
+            rejected.append(f"context_mismatch:{field}")
+    measured_at = _parse_utc(payload.get("measured_at"))
+    expires_at = _parse_utc(payload.get("expires_at"))
+    current = now or datetime.now(timezone.utc)
+    if measured_at is None or measured_at > current:
+        rejected.append("invalid_measured_at")
+    if expires_at is None or current > expires_at:
+        rejected.append("stale_evidence")
+    if rejected:
+        return StrictRouteLedger({}, {}, tuple(rejected))
+    decisions = payload.get("decisions")
+    if not isinstance(decisions, list):
+        return StrictRouteLedger({}, {}, ("missing_decisions",))
+    routes: dict[tuple[str, str, str, str, str], str] = {}
+    citations: dict[tuple[str, str, str, str, str], str] = {}
+    for index, row in enumerate(decisions):
+        prefix = f"decision[{index}]"
+        if not isinstance(row, Mapping):
+            rejected.append(f"{prefix}:not_mapping")
+            continue
+        try:
+            domain = str(row["timing_domain"])
+            key = (
+                str(row["device"]), str(row["op"]), str(row["shape"]),
+                str(row["dtype"]), domain,
+            )
+            selected = str(row["selected_route"])
+        except KeyError as exc:
+            rejected.append(f"{prefix}:missing:{exc.args[0]}")
+            continue
+        if domain not in {"device", "end_to_end"}:
+            rejected.append(f"{prefix}:wrong_timing_domain")
+            continue
+        if key[0] != ctx.device:
+            rejected.append(f"{prefix}:wrong_device")
+            continue
+        if row.get("status") not in {"promote_candidate", "retain_incumbent"}:
+            rejected.append(f"{prefix}:ineligible_status")
+            continue
+        evidence = row.get("selected_evidence")
+        if not isinstance(evidence, Mapping):
+            rejected.append(f"{prefix}:missing_selected_evidence")
+            continue
+        if evidence.get("provenance") != "native_gpu":
+            rejected.append(f"{prefix}:reference_provenance")
+            continue
+        if evidence.get("correctness") is not True:
+            rejected.append(f"{prefix}:correctness_unproven")
+            continue
+        if evidence.get("timing_domain") != domain:
+            rejected.append(f"{prefix}:wrong_evidence_domain")
+            continue
+        if evidence.get("device") != ctx.device:
+            rejected.append(f"{prefix}:wrong_evidence_device")
+            continue
+        if key in routes:
+            rejected.append(f"{prefix}:duplicate_key")
+            continue
+        routes[key] = selected
+        citations[key] = f"{Path(path)}#decision[{index}]"
+    return StrictRouteLedger(routes, citations, tuple(rejected))
+
+
+@lru_cache(maxsize=16)
+def _cached_strict_route_ledger(
+    path: str, context: AppleRouteContext, mtime_ns: int, utc_hour: int,
+) -> StrictRouteLedger:
+    del mtime_ns, utc_hour  # cache-key invalidators, intentionally not payload fields
+    return load_strict_route_ledger(path, context=context)
+
+
+def production_route_decision(
+    *, op: str, shape: str, dtype: str, incumbent_route: str,
+    device: str | None = None, timing_domain: str = "end_to_end",
+    ledger_path: str | Path | None = None,
+    context: AppleRouteContext | None = None,
+) -> ProductionRouteDecision:
+    """Resolve one route and retain an auditable ledger-row citation."""
+    if timing_domain not in {"device", "end_to_end"}:
+        raise ValueError(f"unsupported timing domain: {timing_domain!r}")
+    ctx = context or live_apple_route_context()
+    tag = device or ctx.device
+    path = Path(ledger_path or os.environ.get("TESSERA_APPLE_ROUTE_LEDGER")
+                or _DEFAULT_STRICT_LEDGER)
+    try:
+        mtime_ns = path.stat().st_mtime_ns
+    except OSError:
+        mtime_ns = -1
+    utc_hour = int(datetime.now(timezone.utc).timestamp() // 3600)
+    ledger = _cached_strict_route_ledger(
+        str(path), ctx, mtime_ns, utc_hour)
+    key = (tag, op, shape, dtype, timing_domain)
+    route = ledger.routes.get(key, incumbent_route)
+    return ProductionRouteDecision(
+        route=route,
+        incumbent_route=incumbent_route,
+        selected_from_ledger=key in ledger.routes,
+        citation=ledger.citations.get(key),
+        rejected_evidence=ledger.rejected,
+    )
+
+
 def production_route_for(*, op: str, shape: str, dtype: str,
                          incumbent_route: str, device: str | None = None,
-                         timing_domain: str = "end_to_end") -> str:
-    """Return a retained exact-device promotion or the current incumbent."""
-    tag = device or live_apple_device_tag()
-    return _PRODUCTION_ROUTE_PROMOTIONS.get(
-        (tag, op, shape, dtype, timing_domain), incumbent_route)
+                         timing_domain: str = "end_to_end",
+                         ledger_path: str | Path | None = None,
+                         context: AppleRouteContext | None = None) -> str:
+    """Return an admitted exact-device ledger decision or the incumbent."""
+    return production_route_decision(
+        op=op, shape=shape, dtype=dtype, incumbent_route=incumbent_route,
+        device=device, timing_domain=timing_domain, ledger_path=ledger_path,
+        context=context,
+    ).route
 
 
 @dataclass(frozen=True)
@@ -471,14 +689,21 @@ def aggregate_stable_route_reports(
 
 
 __all__ = [
+    "AppleRouteContext",
     "AppleRouteMeasurement",
     "PACKAGE_ROUTE",
+    "ProductionRouteDecision",
     "ROUTE_REPORT_SCHEMA_VERSION",
     "STABLE_ROUTE_LEDGER_SCHEMA_VERSION",
+    "STRICT_ROUTE_LEDGER_SCHEMA",
+    "StrictRouteLedger",
     "aggregate_stable_route_reports",
+    "live_apple_route_context",
     "load_route_measurements",
+    "load_strict_route_ledger",
     "package_route_selected",
     "production_route_for",
+    "production_route_decision",
     "live_apple_device_tag",
     "select_route",
 ]

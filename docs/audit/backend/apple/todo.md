@@ -32,8 +32,8 @@ remain Apple-owned.
   boundary. Offline MSL
   compiler checks are now `compiler_tool` tests with a shared `metal`-tool
   boundary, rather than device-gated tests. The first
-  cohorts raise `pytest -m hardware_apple_gpu` collection from **3 to 574 of
-  15,087** unit tests: the MPSGraph warmup and MegaMoE measured paths, exact
+  cohorts raise `pytest -m hardware_apple_gpu` collection from **3 to 976 of
+  15,374** unit tests: the MPSGraph warmup and MegaMoE measured paths, exact
   native proofs for f32 CSR/COO SpMM, SDDMM, BSMM, scatter, optimizer, local
   MoE, MoE transport, and RNG, plus gather/concat/slice/softcap/transpose,
   mixed-program residency, TopK, projections, BMM, reduction, MPSGraph
@@ -51,13 +51,26 @@ remain Apple-owned.
   assertion rejects a semantic `reference_cpu` result. The f32 MPS matmul,
   MPSGraph BSMM/gather, and Philox symbols used by the cohort are now
   ABI-registered, so APPLE-REG-1 rejects an unregistered replacement.
+- **2026-07-18 APPLE-TEST-1 closure:** a fresh full unit-tree collection found
+  **976 of 15,374** nodes behind the centralized `hardware_apple_gpu` boundary,
+  while the structural inventory still found **0** direct Apple/Darwin/Metal
+  capability skips. The residency, runtime, and offline Metal-compiler cohorts
+  retain their marker/provenance ratchets, so a newly added inline gate or
+  misclassified compiler test fails the portable inventory suite. Ongoing
+  classification enforcement is maintenance, not an open implementation rung.
+  **APPLE-TEST-1 is closed.** No shared marker semantics or sibling-backend
+  ownership changed; NVIDIA and ROCm are not applicable.
 - APPLE-CI-2 now has an executable host-free ownership gate:
   `scripts/run_apple_host_free_compiler_tests.py`. It reads the CMake backend
   declarations, probes Apple/NVIDIA/ROCm pass registration, then selects only
   `compiler_tool` tests owned by the declared compiler capability set. On the
   current Apple-only build, Apple lowering is registered while the NVIDIA and
   ROCm probes are explicitly unregistered; the selected Apple artifact lane is
-  green. Foreign compiler tests carry `compiler_nvidia` or `compiler_rocm`.
+  green. The gate accepts any CMake cache type for `LLVM_DIR`, resolves and
+  verifies the matching MLIR runner-utils dylib, and exports that exact path to
+  the selected tests. Foreign compiler tests carry `compiler_nvidia` or
+  `compiler_rocm`. This closes APPLE-CI-2. NVIDIA and ROCm are not applicable:
+  their compiler ownership expressions and toolchain runners are unchanged.
 - Cohort ledger: **APPLE-TEST-2-C1 / APPLE-REG-1-C1** records f32 sparse
   transport (CSR/COO SpMM and SDDMM), BSMM, scatter, optimizer, local MoE,
   MoE transport, and Philox RNG. Each row binds its execution-matrix path,
@@ -490,17 +503,53 @@ remain Apple-owned.
   leased until `wait()`, enforce explicit backpressure, reject flush/rollback
   while submissions are pending, and are drained during idempotent cleanup.
   Forced flush, ordered multi-block submission, rollback, partial speculative
-  rejection, slot reuse, and cleanup match `SSMStateHandle` in five new
-  exact-device tests; the combined Apple ReplaySSM regression set passes 23
-  tests. Checkpoint folding at flush remains the shared reference fold followed
-  by a write into the resident checkpoint buffer and is labeled as such; the
-  hot replay/read and ring submissions are native. The paired two-run Apple7
+  rejection, slot reuse, and cleanup match `SSMStateHandle` in seven new
+  exact-device tests. The expanded Apple ReplaySSM and benchmark-contract
+  regression set passes 52 tests. A narrow checkpoint-fold follow-up now gives
+  one Metal lane to each `(batch, channel, state)` element, serially replays
+  tokens without atomics, and writes resident `S0`; a second kernel clears all
+  fixed-capacity rings in the same ordered command buffer. Native provenance,
+  forced-boundary equivalence, repeated flush/cleanup, and a portable explicit
+  fallback negative cover the
+  lifecycle. The dedicated two-run Apple7 flush corpus records device and
+  end-to-end timing separately at `1x128x64/T16` and `1x256x128/T16`: native
+  device medians are 20.9--30.0 us and end-to-end medians are 298--318 us.
+  The shared vectorized CPU fold remains faster end-to-end for these isolated
+  flushes (44.6--146 us), so the native route is a residency/ordering closure,
+  not a latency promotion. The paired serving two-run Apple7
   corpus compares `fused_block` with `resident_ring` at `1x128x64/T16` and
   `1x256x128/T16`, ten repetitions after three warmups. Fused block is the
   stable end-to-end winner; the smaller device-domain winner flips between
   runs and therefore earns no promotion, while the larger row stably retains
   fused block. NVIDIA and ROCm are not affected: their resident CUDA/HIP
   contexts and physical schedules remain independently proven.
+- **2026-07-18 APPLE-RETUNE-1 paired-corpus foundation:**
+  `benchmark_legacy_retune.py` now measures grouped GEMM, MoE SwiGLU,
+  MPSGraph reduction, contiguous resident-KV reads, absorbed/explicit MLA, and
+  ReplaySSM block/token-loop decode through one interleaved two-run schema.
+  Every row shares a numerical oracle and records native/reference provenance,
+  resource/API evidence, paired end-to-end medians, and a device interval only
+  when it covers the complete route. The Apple7 corpus retains grouped fused
+  GEMM and fused Replay decode, promotes single-dispatch MoE and absorbed MLA
+  end-to-end on their exact small rows, and retains explicit MLA in the device
+  domain. Reduction has end-to-end native evidence but no owned device interval;
+  mapped KV and multi-dispatch peers remain explicitly ineligible for device
+  selection. APPLE-RETUNE-1 stays active for wider shapes/dtypes, grouped
+  SwiGLU/transport byte-bandwidth rows, and complete command-buffer intervals
+  for the remaining composed routes.
+- **2026-07-18 APPLE-ROUTE-1 strict-ingestion foundation:** production lookup
+  no longer reads a literal exact-row table. The v2 ledger gate matches the live
+  Apple family and physical-device model, OS, SDK, configured LLVM/compiler
+  digest, runtime-source digest, expiry window, native provenance, correctness,
+  and requested timing domain; admitted decisions expose their exact ledger-row
+  citation. The fresh Apple7 retune ledger admits eight decisions in a clean
+  host process. Older v1 GEMM/attention/backward/paged-KV/Replay ledgers lack
+  this envelope and are rejected, so those operations conservatively retain
+  their incumbents until fresh strict ledgers are recorded. APPLE-ROUTE-1 stays
+  active until each completed family is migrated and package-subgraph selection
+  is separated into its own strict ledger namespace. NVIDIA and ROCm are not
+  applicable to this Apple-only corpus/selector change; their physical-device
+  probes, retained ledgers, and production selectors are unchanged.
 - A fallback result can prove semantics, but it cannot prove `native_gpu`, GPU
   residency, Metal ordering, resource lifetime, or performance. Device tests
   must assert their execution state and provenance explicitly.
@@ -559,10 +608,11 @@ remain Apple-owned.
   twelve timing-domain decisions. End-to-end selection promotes split-reduce
   for four rows, including causal `Sk=1025`, and atomic for two rows; paired
   median wins range from 27.8% to 67.3%, with 100% trial wins in both reports.
-  Every device-interval row retains serial recompute. Production lookup is
-  exact-device/shape/dtype/domain keyed, falls back to serial for missing rows,
-  rejects atomic when determinism is required, and falls back from split when
-  its workspace cap is unavailable. **APPLE-ATTN-BWD-1 is closed.** NVIDIA and
+  Every device-interval row retains serial recompute. The legacy ledger records
+  exact-device/shape/dtype/domain decisions, but strict v2 production ingestion
+  now retains serial until those rows are re-recorded with current context;
+  determinism and split-workspace policy remain enforced independently.
+  **APPLE-ATTN-BWD-1 is closed.** NVIDIA and
   ROCm are not applicable to the Apple ABI, storage readers, schedules, or
   selector rows; shared derivative semantics remain unchanged.
 - FP8/FP4/MX execution remains gated by the macOS 27 SDK/runtime surface. The
@@ -583,9 +633,10 @@ remain Apple-owned.
 
 This plan reaches `closed` only when all of the following are true:
 
-1. Host-free, compiler-artifact, Apple exact-device correctness, Metal 4, and
-   measured-performance tests are separate selectable lanes with retained
-   reports.
+1. Host-free and compiler-artifact tests remain portable lanes. Apple promotion
+   is owned by one required Metal 4 exact-device lane with two fresh-process
+   correctness runs, an isolated paired-performance corpus, and retained
+   reports. Metal 3 is a non-blocking compatibility lane.
 2. Every device test proves `native_gpu` placement on the intended route. A
    non-Darwin stub, NumPy fallback, symbol-presence check, or reference
    recomputation cannot earn a device pass.
@@ -622,9 +673,9 @@ git rev-parse HEAD
 
 Also record Apple GPU family/capability probe output, macOS deployment target,
 Metal language version, power mode, thermal state, and whether another process
-is using the GPU. Use at least one established Metal 3 host and one Metal 4 host
-for capability-dependent promotion; never generalize a winner across Apple GPU
-families without a matching record.
+is using the GPU. Metal 4 promotion requires a named Metal 4 host. Metal 3
+coverage is compatibility-only and cannot promote a Metal 4 route; never
+generalize a winner across Apple GPU families without a matching record.
 
 ### Use the dedicated LLVM/MLIR 23 prefix
 
@@ -717,8 +768,8 @@ implementation/proof work; `blocked` names an external prerequisite.
 
 | Order | ID | Status | Current state and next action |
 |---:|---|---|---|
-| 1 | APPLE-TEST-1 | landing | Marker ownership, shared discovery, and the exact-device collection are in place. Retain the classification gate as tests are added. |
-| 2 | APPLE-CI-2 | landing | The host-free compiler ownership gate is executable and green for the declared Apple capability set. Retain it as the Apple compiler configuration changes. |
+| 1 | APPLE-TEST-1 | **closed** | The centralized hardware boundary collects 976 of 15,374 unit nodes, the structural scan finds zero inline Apple capability gates, and portable marker/provenance ratchets reject classification drift. |
+| 2 | APPLE-CI-2 | **closed** | The host-free compiler ownership gate is executable and green for the declared Apple capability set, and now validates the exact LLVM/MLIR runner-utils path for every CMake cache type. |
 | 3 | APPLE-TEST-2 | **closed** | Fresh-runtime correctness (**850/850**), fallback-injection negatives, ordering/stress, and the serial measured lane are complete. |
 | 4 | APPLE-REG-1 | **closed** | ABI/target-map/exact-device/Tile drift gates are registered and passing. |
 | 5 | APPLE-TILE-1 | **closed** | The selected f16/bf16 simdgroup fragment and its two-run corpus meet the completion gate. MPS retaining every measured end-to-end row is the valid production decision. |
@@ -726,12 +777,12 @@ implementation/proof work; `blocked` names an external prerequisite.
 | 7 | APPLE-EPILOGUE-1 | **closed** | Supported f32/f16/bf16 fusions have native-oracle/resource proof and stable end-to-end selection; MPSGraph now has an explicitly labeled Metal 4 whole-graph envelope, pending a fresh two-run device-domain corpus. |
 | 8 | APPLE-ATTN-FWD-1 | **closed** | Native forward variants, resident/cooperative candidates, full stated corpus, two-run route ledger, and timing-domain selection are complete. Do not reopen it for backward work. |
 | 9 | APPLE-ATTN-BWD-1 | **closed** | Native f32/f16/bf16 MHA/GQA/MQA serial, atomic, and split-reduce routes share one oracle and explicit workspace/determinism policy. The stable two-run Apple7 ledger selects end-to-end routes per exact row and retains serial for every device-domain row. |
-| 10 | APPLE-PAGED-KV-1 | **closed** | Direct resident page-table MLA attention and the staged peer share a non-identity oracle, causal/window boundary proof, transactional exhaustion/leak telemetry, and a paired two-domain Apple7 corpus. Exact retained rows promote direct; unmeasured rows retain staged. |
-| 11 | APPLE-REPLAY-1 | **closed** | Resident inputs, ordered asynchronous ring submissions, forced flush/rollback/partial-rejection ordering, backpressure/cleanup stress, and paired selector evidence are complete. Unstable device-domain evidence retains the fused-block incumbent. |
-| 12 | APPLE-RETUNE-1 | **active** | Retune the remaining older GEMM/grouped-GEMM, KV, MoE, reduction, and decode routes with separate kernel and end-to-end evidence. |
-| 13 | APPLE-ROUTE-1 | **active** | Consolidate the landed per-family ledgers into device-keyed autotuning; reject stale, reference, wrong-device, and wrong-domain records. |
+| 10 | APPLE-PAGED-KV-1 | **closed** | Direct resident page-table MLA attention and the staged peer share a non-identity oracle, causal/window boundary proof, transactional exhaustion/leak telemetry, and a paired two-domain Apple7 corpus. The legacy corpus records direct wins; strict production ingestion retains staged until those rows are re-recorded with the v2 context envelope. |
+| 11 | APPLE-REPLAY-1 | **closed** | Resident inputs, ordered asynchronous ring submissions, native deterministic checkpoint folding plus same-command-buffer ring clearing, forced flush/rollback/partial-rejection ordering, backpressure/cleanup stress, and paired selector evidence are complete. Unstable device-domain evidence retains the fused-block incumbent. |
+| 12 | APPLE-RETUNE-1 | **active** | One paired Apple7 corpus now covers grouped GEMM, MoE, reduction, resident KV, MLA, and Replay decode with honest timing scopes. Expand shapes/dtypes/transport bandwidth and obtain complete device intervals for composed/mapped routes. |
+| 13 | APPLE-ROUTE-1 | **active** | Strict v2 ingestion replaces the literal table and rejects stale, reference, wrong-context, and wrong-domain rows with citations. Re-measure/migrate every legacy family ledger and separate package-subgraph evidence before closure. |
 | 14 | APPLE-DTYPE-1 | **blocked — SDK** | FP8/FP4/MX native execution awaits the public macOS 27 Metal tensor path. Keep older-host int4/int8/f16/bf16 regression coverage. |
-| 15 | APPLE-CI-1 | **active** | Add Apple-host release ownership: concurrency lock, fresh runtime images, retained artifacts, and separate Metal 3/Metal 4/performance reporting. |
+| 15 | APPLE-CI-1 | landing | The dedicated self-hosted Metal 4 promotion workflow serializes one exact device, builds fresh LLVM/MLIR 23 compiler/JIT/runtime artifacts, records power/thermal/GPU-contention availability, rejects incomplete bundles and empty or skipped correctness evidence, runs correctness twice, and retains paired device/end-to-end route evidence. The already-required `validate-required` fan-in now blocks labeled promotions unless this lane succeeds. Execute it on the labeled Metal 4 runner and retain the first proof bundle before closure; Metal 3 remains non-blocking compatibility coverage. |
 
 ## Canonical validation lanes
 
@@ -756,6 +807,12 @@ python3 -m pytest tests/unit -q \
 python3 -m pytest tests/unit -q -n 0 \
   -m "hardware_apple_gpu and performance" --durations=0 \
   --junitxml=/tmp/apple-performance.xml
+
+# Required Metal 4 promotion is owned by the serialized self-hosted workflow.
+# It rejects zero selected tests, skips, unknown GPU families, reference rows,
+# missing device intervals, and incomplete two-domain selector ledgers.
+# Trigger manually or apply the `apple-metal4-release` PR label.
+.github/workflows/apple-metal4-release.yml
 ```
 
 The first focused parity and characterization loop is:

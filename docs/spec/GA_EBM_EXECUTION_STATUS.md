@@ -2,7 +2,7 @@
 status: Normative (status ledger)
 classification: Spec
 authority: Separates Python reference, MLIR/lit, manifest, and native execution status for GA and EBM
-last_updated: 2026-05-17
+last_updated: 2026-07-18
 ---
 
 # GA + EBM Execution Status
@@ -37,15 +37,15 @@ Status labels follow [`docs/README.md`](../README.md):
 | Component | Python reference | MLIR / lit | Backend manifest | Native execution |
 |-----------|------------------|------------|------------------|------------------|
 | GA signature and multivector values | implemented | n/a | n/a | mock-runtime via Python/NumPy reference |
-| GA primitive ops and calculus | implemented | lit-testable through `tessera_clifford` op fixtures and lowering fixtures | implemented for all registered `clifford_*` primitives | hardware-runtime for 17/17 registered Apple GPU fused GA kernels, benchmarked by `benchmark_ga_ebm.py --ci`; x86 and Apple CPU remain reference-first; NVIDIA/ROCm planned |
+| GA primitive ops and calculus | implemented | lit-testable through `tessera_clifford` op fixtures and lowering fixtures | implemented for all registered `clifford_*` primitives | hardware-runtime for 17/17 registered Apple GPU fused GA kernels (benchmarked by `benchmark_ga_ebm.py --ci`) **and** for the x86 AVX-512 + ROCm gfx1151 compiler-generated Cl(3,0) bilinear lanes (`x86_clifford_compiled` / `rocm_clifford_compiled`, `native` in the runtime execution matrix); Apple CPU reference-first; NVIDIA planned |
 | GA geometric autodiff | implemented | n/a | n/a | mock-runtime via Python reference checks |
 | GA dialect and lowering passes | n/a | implemented / lit-testable | n/a | native execution only where a backend consumes the lowered artifacts |
-| EBM energy primitives | implemented | lit-testable through `tessera_ebm` parse/canonicalize fixtures | implemented for registered `ebm_*` primitives where manifests apply | Apple GPU hardware-runtime for quadratic `ebm_energy`; arbitrary user `energy_fn` lowering remains planned |
-| EBM samplers and partition estimators | implemented | scaffolded for future lowering | implemented / partial depending on primitive | Apple GPU hardware-runtime for `ebm_langevin_step`, `ebm_bivector_langevin`, `ebm_sphere_langevin`, and **`ebm_partition_exact`** (single-dispatch stable-logsumexp MSL kernel landed 2026-05-17); `ebm_partition_monte_carlo` and `ebm_partition_ais` remain Python-only |
-| EBM losses | implemented | n/a | n/a | mock-runtime through tensor loss/autodiff reference path |
+| EBM energy primitives | implemented | lit-testable through `tessera_ebm` parse/canonicalize fixtures | implemented for registered `ebm_*` primitives where manifests apply | Apple GPU hardware-runtime for quadratic `ebm_energy`, mirrored by native x86 + ROCm compute lanes (`x86_ebm_compute_compiled` / `rocm_ebm_compute_compiled`); arbitrary user `energy_fn` lowering remains planned on every target |
+| EBM samplers and partition estimators | implemented | scaffolded for future lowering | implemented / partial depending on primitive | Apple GPU hardware-runtime for `ebm_langevin_step`, `ebm_bivector_langevin`, `ebm_sphere_langevin`, and **`ebm_partition_exact`** (single-dispatch stable-logsumexp MSL kernel), with native x86 + ROCm Langevin lanes (`x86_ebm_langevin_compiled` / `rocm_ebm_langevin_compiled`, on-device Philox); `ebm_partition_monte_carlo` and `ebm_partition_ais` remain Python-only on every target |
+| EBM losses | implemented | n/a | implemented for the loss family across Apple GPU / x86 / ROCm | hardware-runtime for the EBM/diffusion loss family on Apple GPU, x86, and ROCm (`*_ebm_loss_compiled`); Apple CPU reference-first |
 | EBM dialect and annotation passes | n/a | implemented / lit-testable | n/a | no standalone hardware-runtime claim; backend codegen required |
-| EBM inner-loop and decode primitives | implemented | lit-testable through EBM dialect fixtures | implemented for registered `ebm_*` primitives | Apple GPU hardware-runtime for `ebm_inner_step`, `ebm_refinement`, and `ebm_decode_init` |
-| EBM self-verification | implemented | lit-testable through EBM dialect fixtures | implemented for registered `ebm_*` primitives | Apple GPU hardware-runtime for hard-argmin `ebm_self_verify`; soft-min remains planned |
+| EBM inner-loop and decode primitives | implemented | lit-testable through EBM dialect fixtures | implemented for registered `ebm_*` primitives | Apple GPU hardware-runtime for `ebm_inner_step`, `ebm_refinement`, and `ebm_decode_init`, mirrored by native x86 + ROCm compute/decode-init lanes |
+| EBM self-verification | implemented | lit-testable through EBM dialect fixtures | implemented for registered `ebm_*` primitives | hardware-runtime for hard-argmin `ebm_self_verify` on Apple GPU, x86, and ROCm (compute lane); soft-min remains planned |
 | EBM manifold-aware GA sampling | implemented | represented through EBM/Clifford dialect surface | implemented / partial | Apple GPU hardware-runtime for `ebm_bivector_langevin` and `ebm_sphere_langevin` |
 | GA/EBM composite workloads | implemented in benchmark driver | n/a | uses manifest-resolved native symbols where available | `ga_feature_pipeline`, `ebt_tiny_refinement`, and opt-in `--ebt-sweep` emit Apple GPU and Python-reference benchmark rows |
 
@@ -86,15 +86,19 @@ the compiler and audit tooling can inspect.
 For GA, all registered Clifford primitives have manifest coverage. Apple GPU
 fused entries now cover all 17 registered GA primitives; the manifest test gate
 asserts `FUSED_APPLE_GPU_OPS == EXPECTED_CLIFFORD_OPS` and
-`PLANNED_APPLE_GPU_OPS == set()`. x86 and Apple CPU are reference-first for
-this track; NVIDIA and ROCm remain planned for GA.
+`PLANNED_APPLE_GPU_OPS == set()`. x86 (AVX-512) and ROCm gfx1151 now carry
+native compiler-generated Cl(3,0) bilinear lanes as well; Apple CPU is
+reference-first; NVIDIA remains planned for GA. See the runtime execution
+matrix for the exact per-target rows.
 
 For EBM, manifests should be interpreted around the underlying primitive class.
 Apple GPU fused entries currently cover nine benchmarked native ops:
 `ebm_inner_step`, `ebm_refinement`, `ebm_langevin_step`, `ebm_decode_init`,
 `ebm_bivector_langevin`, `ebm_sphere_langevin`, `ebm_self_verify`, and the
 quadratic specialization of `ebm_energy`, plus `ebm_partition_exact` as a
-single-dispatch stable-logsumexp kernel over precomputed energies.
+single-dispatch stable-logsumexp kernel over precomputed energies. x86 (AVX-512)
+and ROCm gfx1151 mirror the EBM compute, Langevin, and loss families with native
+compiler-generated lanes; consult the runtime execution matrix for exact rows.
 
 ### Native Execution
 
@@ -104,14 +108,24 @@ Target IR artifact.
 
 Current high-confidence native claim:
 
-- Clifford Apple GPU fused kernels for all 17 registered GA primitives.
+- Clifford Apple GPU fused kernels for all 17 registered GA primitives, plus
+  the x86 AVX-512 and ROCm gfx1151 compiler-generated Cl(3,0) bilinear lanes
+  (`x86_clifford_compiled` / `rocm_clifford_compiled`).
 - EBM Apple GPU fused kernels for nine registered native rows:
   `inner_step`, `refinement`, `langevin_step`, `decode_init`,
   `bivector_langevin`, `sphere_langevin`, hard-argmin `self_verify`, and
   quadratic `energy`, plus stable-logsumexp `partition_exact`.
+- x86 AVX-512 and ROCm gfx1151 native EBM compute, Langevin, and loss lanes
+  (`*_ebm_compute_compiled` / `*_ebm_langevin_compiled` / `*_ebm_loss_compiled`).
 - Composite workload benchmark rows for `ga_feature_pipeline`,
   `ebt_tiny_refinement`, and opt-in `--ebt-sweep`, each paired with
   Python-reference rows.
+
+> **Compiler-pipeline caveat (Def B).** On x86 and ROCm these native lanes are
+> reached through the runtime's compiler-generated-kernel path, not an
+> in-pipeline Tile→Target lowering. For where each backend's MLIR pipeline
+> actually ends vs. what the runtime bridges, see
+> [`../audit/backend/E2E_COMPILATION_AUDIT.md`](../audit/backend/E2E_COMPILATION_AUDIT.md).
 
 Current non-claims:
 
@@ -123,14 +137,16 @@ Current non-claims:
 - EBM checkpointing and candidate pipelining beyond the measured
   `ebm_refinement` kernel are annotation-layer compiler transformations until a
   backend consumes them.
-- NVIDIA and ROCm GA/EBM execution is planned, not current hardware-runtime.
+- NVIDIA GA/EBM execution is planned, not current hardware-runtime. (ROCm and
+  x86 now have native GA/EBM lanes — see the runtime execution matrix.)
 
 ## Validation Command
 
-Use the repo virtualenv for the current GA + EBM native health check:
+Run the current GA + EBM native health check off the Homebrew `python3` env
+(no venv — see [`CLAUDE.md`](../../CLAUDE.md) "Local Toolchain"):
 
 ```bash
-.venv/bin/python benchmarks/apple_gpu/benchmark_ga_ebm.py --ci
+python3 benchmarks/apple_gpu/benchmark_ga_ebm.py --ci
 ```
 
 On Apple Silicon this emits 17 GA Apple GPU rows, 9 native EBM Apple GPU
@@ -142,7 +158,7 @@ Python-reference rows.
 Use the focused unit suite for GA + EBM API and dialect validation:
 
 ```bash
-.venv/bin/python -m pytest \
+python3 -m pytest \
   tests/unit/test_ga_namespace.py \
   tests/unit/test_ga_signature.py \
   tests/unit/test_ga_multivector.py \

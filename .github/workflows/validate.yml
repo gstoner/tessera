@@ -288,6 +288,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install system deps + LLVM/MLIR 23
+        id: deps
         run: |
           # Drop the runner's flaky pre-installed Microsoft apt repos (see above).
           sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list \
@@ -305,12 +306,23 @@ jobs:
           sudo apt-get update || true
           sudo apt-get install -y --no-install-recommends \
             llvm-23-dev mlir-23-tools libmlir-23-dev clang-23 \
-            || { echo "::warning ::LLVM/MLIR 23 not available — skipping lit lane"; exit 0; }
-          python -m pip install --upgrade pip
-          python -m pip install -e . --no-deps
-          python -m pip install lit FileCheck pytest numpy pyyaml
+            || echo "::warning ::LLVM/MLIR 23 apt install failed (no ${codename}-23 repo yet)"
+          # Gate every downstream step on whether the MLIR 23 CMake package
+          # actually landed. apt.llvm.org has no LLVM 23 channel for some
+          # Ubuntu codenames yet, so the install above may soft-fail; when it
+          # does we skip the build/lit steps instead of hard-failing configure.
+          if [ -f /usr/lib/llvm-23/lib/cmake/mlir/MLIRConfig.cmake ]; then
+            echo "mlir=true" >> "$GITHUB_OUTPUT"
+            python -m pip install --upgrade pip
+            python -m pip install -e . --no-deps
+            python -m pip install lit FileCheck pytest numpy pyyaml
+          else
+            echo "mlir=false" >> "$GITHUB_OUTPUT"
+            echo "::warning ::MLIR 23 CMake package absent — skipping the lit lane build/tests"
+          fi
 
       - name: Configure + build MLIR tools
+        if: steps.deps.outputs.mlir == 'true'
         run: |
           cmake -S . -B build \
             -G Ninja \
@@ -327,6 +339,7 @@ jobs:
           cmake --build build --target tessera-opt tessera-translate-mlir
 
       - name: Run MLIR tool proof tests
+        if: steps.deps.outputs.mlir == 'true'
         env:
           PYTHONPATH: python
           PATH: "${{ github.workspace }}/build/tools/tessera-opt:${{ github.workspace }}/build/tools/tessera-translate:/usr/lib/llvm-23/bin:${{ env.PATH }}"
@@ -337,6 +350,7 @@ jobs:
             -q
 
       - name: Run lit smoke (TESSERA_VALIDATE_LIT=1)
+        if: steps.deps.outputs.mlir == 'true'
         env:
           TESSERA_VALIDATE_LIT: "1"
           PATH: "${{ github.workspace }}/build/tools/tessera-opt:${{ github.workspace }}/build/tools/tessera-translate:/usr/lib/llvm-23/bin:${{ env.PATH }}"

@@ -80,11 +80,13 @@ trap 'exit 143' TERM
   printf '%s\n' '[system_profiler SPDisplaysDataType]'
   system_profiler SPDisplaysDataType
   printf '%s\n' '[xcodebuild]'
-  xcodebuild -version
+  xcodebuild -version 2>&1 || printf '%s\n' \
+    'unavailable: full Xcode is not selected; Command Line Tools are sufficient'
   printf '%s\n' '[macOS SDK]'
   xcrun --sdk macosx --show-sdk-version
   printf '%s\n' '[metal compiler]'
-  xcrun --find metal
+  xcrun --find metal 2>&1 || printf '%s\n' \
+    'unavailable: offline metal CLI is not required by runtime source compilation'
   printf '%s\n' '[llvm-config]'
   "$LLVM23_PREFIX/bin/llvm-config" --version
   printf '%s\n' '[python]'

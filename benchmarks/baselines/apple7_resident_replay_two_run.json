@@ -1,0 +1,292 @@
+{
+  "schema": "tessera.apple.resident_replay.v1",
+  "device": "apple7",
+  "os": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "runs": 2,
+  "warmup": 3,
+  "reps": 10,
+  "rows": [
+    {
+      "run": 1,
+      "device": "apple7",
+      "shape": "1x128x64",
+      "tokens": 16,
+      "route": "fused_block",
+      "timing_domain_end_to_end_ns": 1070021,
+      "timing_domain_device_ns": 38562,
+      "device_time_coverage": 1.0,
+      "native_proof": true,
+      "correctness": true,
+      "device_time_scope": "single_block_dispatch",
+      "resources": {
+        "threadgroup": [
+          128,
+          1,
+          1
+        ],
+        "thread_execution_width": 32,
+        "max_total_threads_per_threadgroup": 1024,
+        "static_threadgroup_memory_bytes": 0,
+        "threadgroup_memory_bytes": 0,
+        "simdgroups_per_threadgroup": 4,
+        "threadgroup_capacity_fraction": 0.125,
+        "occupancy": null,
+        "register_count": null,
+        "scratch_bytes": null,
+        "spill_count": null
+      }
+    },
+    {
+      "run": 1,
+      "device": "apple7",
+      "shape": "1x128x64",
+      "tokens": 16,
+      "route": "resident_ring",
+      "timing_domain_end_to_end_ns": 1988062,
+      "timing_domain_device_ns": 34395,
+      "device_time_coverage": 1.0,
+      "native_proof": true,
+      "correctness": true,
+      "device_time_scope": "ordered_async_command_buffer",
+      "resources": {
+        "threadgroup": [
+          128,
+          1,
+          1
+        ],
+        "thread_execution_width": 32,
+        "max_total_threads_per_threadgroup": 1024,
+        "static_threadgroup_memory_bytes": 0,
+        "threadgroup_memory_bytes": 0,
+        "simdgroups_per_threadgroup": 4,
+        "threadgroup_capacity_fraction": 0.125,
+        "occupancy": null,
+        "register_count": null,
+        "scratch_bytes": null,
+        "spill_count": null
+      }
+    },
+    {
+      "run": 1,
+      "device": "apple7",
+      "shape": "1x256x128",
+      "tokens": 16,
+      "route": "fused_block",
+      "timing_domain_end_to_end_ns": 791770,
+      "timing_domain_device_ns": 34166,
+      "device_time_coverage": 1.0,
+      "native_proof": true,
+      "correctness": true,
+      "device_time_scope": "single_block_dispatch",
+      "resources": {
+        "threadgroup": [
+          256,
+          1,
+          1
+        ],
+        "thread_execution_width": 32,
+        "max_total_threads_per_threadgroup": 1024,
+        "static_threadgroup_memory_bytes": 0,
+        "threadgroup_memory_bytes": 0,
+        "simdgroups_per_threadgroup": 8,
+        "threadgroup_capacity_fraction": 0.25,
+        "occupancy": null,
+        "register_count": null,
+        "scratch_bytes": null,
+        "spill_count": null
+      }
+    },
+    {
+      "run": 1,
+      "device": "apple7",
+      "shape": "1x256x128",
+      "tokens": 16,
+      "route": "resident_ring",
+      "timing_domain_end_to_end_ns": 3395083,
+      "timing_domain_device_ns": 41353,
+      "device_time_coverage": 1.0,
+      "native_proof": true,
+      "correctness": true,
+      "device_time_scope": "ordered_async_command_buffer",
+      "resources": {
+        "threadgroup": [
+          256,
+          1,
+          1
+        ],
+        "thread_execution_width": 32,
+        "max_total_threads_per_threadgroup": 1024,
+        "static_threadgroup_memory_bytes": 0,
+        "threadgroup_memory_bytes": 0,
+        "simdgroups_per_threadgroup": 8,
+        "threadgroup_capacity_fraction": 0.25,
+        "occupancy": null,
+        "register_count": null,
+        "scratch_bytes": null,
+        "spill_count": null
+      }
+    },
+    {
+      "run": 2,
+      "device": "apple7",
+      "shape": "1x128x64",
+      "tokens": 16,
+      "route": "fused_block",
+      "timing_domain_end_to_end_ns": 507646,
+      "timing_domain_device_ns": 29520,
+      "device_time_coverage": 1.0,
+      "native_proof": true,
+      "correctness": true,
+      "device_time_scope": "single_block_dispatch",
+      "resources": {
+        "threadgroup": [
+          128,
+          1,
+          1
+        ],
+        "thread_execution_width": 32,
+        "max_total_threads_per_threadgroup": 1024,
+        "static_threadgroup_memory_bytes": 0,
+        "threadgroup_memory_bytes": 0,
+        "simdgroups_per_threadgroup": 4,
+        "threadgroup_capacity_fraction": 0.125,
+        "occupancy": null,
+        "register_count": null,
+        "scratch_bytes": null,
+        "spill_count": null
+      }
+    },
+    {
+      "run": 2,
+      "device": "apple7",
+      "shape": "1x128x64",
+      "tokens": 16,
+      "route": "resident_ring",
+      "timing_domain_end_to_end_ns": 1897875,
+      "timing_domain_device_ns": 30124,
+      "device_time_coverage": 1.0,
+      "native_proof": true,
+      "correctness": true,
+      "device_time_scope": "ordered_async_command_buffer",
+      "resources": {
+        "threadgroup": [
+          128,
+          1,
+          1
+        ],
+        "thread_execution_width": 32,
+        "max_total_threads_per_threadgroup": 1024,
+        "static_threadgroup_memory_bytes": 0,
+        "threadgroup_memory_bytes": 0,
+        "simdgroups_per_threadgroup": 4,
+        "threadgroup_capacity_fraction": 0.125,
+        "occupancy": null,
+        "register_count": null,
+        "scratch_bytes": null,
+        "spill_count": null
+      }
+    },
+    {
+      "run": 2,
+      "device": "apple7",
+      "shape": "1x256x128",
+      "tokens": 16,
+      "route": "fused_block",
+      "timing_domain_end_to_end_ns": 787792,
+      "timing_domain_device_ns": 31437,
+      "device_time_coverage": 1.0,
+      "native_proof": true,
+      "correctness": true,
+      "device_time_scope": "single_block_dispatch",
+      "resources": {
+        "threadgroup": [
+          256,
+          1,
+          1
+        ],
+        "thread_execution_width": 32,
+        "max_total_threads_per_threadgroup": 1024,
+        "static_threadgroup_memory_bytes": 0,
+        "threadgroup_memory_bytes": 0,
+        "simdgroups_per_threadgroup": 8,
+        "threadgroup_capacity_fraction": 0.25,
+        "occupancy": null,
+        "register_count": null,
+        "scratch_bytes": null,
+        "spill_count": null
+      }
+    },
+    {
+      "run": 2,
+      "device": "apple7",
+      "shape": "1x256x128",
+      "tokens": 16,
+      "route": "resident_ring",
+      "timing_domain_end_to_end_ns": 3476562,
+      "timing_domain_device_ns": 48332,
+      "device_time_coverage": 1.0,
+      "native_proof": true,
+      "correctness": true,
+      "device_time_scope": "ordered_async_command_buffer",
+      "resources": {
+        "threadgroup": [
+          256,
+          1,
+          1
+        ],
+        "thread_execution_width": 32,
+        "max_total_threads_per_threadgroup": 1024,
+        "static_threadgroup_memory_bytes": 0,
+        "threadgroup_memory_bytes": 0,
+        "simdgroups_per_threadgroup": 8,
+        "threadgroup_capacity_fraction": 0.25,
+        "occupancy": null,
+        "register_count": null,
+        "scratch_bytes": null,
+        "spill_count": null
+      }
+    }
+  ],
+  "decisions": [
+    {
+      "shape": "1x128x64",
+      "tokens": 16,
+      "timing_domain": "end_to_end",
+      "run_winners": [
+        "fused_block",
+        "fused_block"
+      ],
+      "stable_winner": "fused_block"
+    },
+    {
+      "shape": "1x128x64",
+      "tokens": 16,
+      "timing_domain": "device",
+      "run_winners": [
+        "resident_ring",
+        "fused_block"
+      ],
+      "stable_winner": null
+    },
+    {
+      "shape": "1x256x128",
+      "tokens": 16,
+      "timing_domain": "end_to_end",
+      "run_winners": [
+        "fused_block",
+        "fused_block"
+      ],
+      "stable_winner": "fused_block"
+    },
+    {
+      "shape": "1x256x128",
+      "tokens": 16,
+      "timing_domain": "device",
+      "run_winners": [
+        "fused_block",
+        "fused_block"
+      ],
+      "stable_winner": "fused_block"
+    }
+  ]
+}

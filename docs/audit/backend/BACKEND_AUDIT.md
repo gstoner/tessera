@@ -104,6 +104,11 @@ Apple, NVIDIA, and ROCm details live in sibling platform folders.
 
 ## Still Open
 
+- **Compiler-native E2E gap (cross-cutting):** the registered MLIR pipelines
+  lower only the core GEMM/matmul lane to native on every backend (plus a broad
+  per-op set on Apple GPU); all other lanes execute via a Python `runtime.py`
+  side-channel, not through Tile→Target lowering. Full per-backend gap analysis
+  + prioritized pass-work queue: [E2E_COMPILATION_AUDIT.md](E2E_COMPILATION_AUDIT.md).
 - **NVIDIA runtime execution:** ✅ first executable row landed (2026-06-25,
   RTX 5070 Ti / sm_120) — `(nvidia_sm120, nvidia_mma)` matmul is
   `device_verified_abi` with an execute-compare fixture and the shipped

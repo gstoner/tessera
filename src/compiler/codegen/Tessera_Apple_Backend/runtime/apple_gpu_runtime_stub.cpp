@@ -517,6 +517,36 @@ extern "C" int32_t tessera_apple_gpu_flash_attn_f32_status(
     const float*, const float*, const float*, float*, int32_t, int32_t,
     int32_t, int32_t, float, int32_t) { return 0; }
 
+extern "C" int32_t tessera_apple_gpu_flash_attn_bwd_f32_status(
+    const float*, const float*, const float*, const float*, float*, float*,
+    float*, int32_t, int32_t, int32_t, int32_t, float, int32_t) { return 0; }
+
+extern "C" int32_t tessera_apple_gpu_flash_attn_bwd_route_f32_status(
+    const float*, const float*, const float*, const float*, float*, float*,
+    float*, int32_t, int32_t, int32_t, int32_t, float, int32_t, int32_t) {
+  return 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_flash_attn_bwd_variant_f32_status(
+    const float*, const float*, const float*, const float*, const float*,
+    float*, float*, float*, int32_t, int32_t, int32_t, int32_t, int32_t,
+    int32_t, float, int32_t, int32_t, float, int32_t) {
+  return 0;
+}
+
+#define TS_STUB_FLASH_ATTN_BWD_VARIANT_16(name)                              \
+extern "C" int32_t name(                                                    \
+    const uint16_t*, const uint16_t*, const uint16_t*, const uint16_t*,      \
+    const uint16_t*, float*, float*, float*, int32_t, int32_t, int32_t,      \
+    int32_t, int32_t, int32_t, float, int32_t, int32_t, float, int32_t) {    \
+  return 0;                                                                  \
+}
+TS_STUB_FLASH_ATTN_BWD_VARIANT_16(
+    tessera_apple_gpu_flash_attn_bwd_variant_f16_status)
+TS_STUB_FLASH_ATTN_BWD_VARIANT_16(
+    tessera_apple_gpu_flash_attn_bwd_variant_bf16_status)
+#undef TS_STUB_FLASH_ATTN_BWD_VARIANT_16
+
 extern "C" void tessera_apple_gpu_flash_attn_f32(const float* Q, const float* K,
                                                  const float* V, float* O,
                                                  int32_t B, int32_t Sq,
@@ -3014,6 +3044,14 @@ extern "C" int32_t tessera_apple_gpu_bmm_dev_f32(TsDeviceTensor* A,
 struct TsEncodeSession { int dummy; };
 extern "C" TsEncodeSession* ts_enc_begin(void) { return new TsEncodeSession{0}; }
 extern "C" void ts_enc_commit_wait(TsEncodeSession* s) { delete s; }
+extern "C" int32_t ts_enc_commit_async(TsEncodeSession* s) {
+  return s ? 1 : 0;
+}
+extern "C" int32_t ts_enc_wait_destroy(TsEncodeSession* s) {
+  if (!s) return 0;
+  delete s;
+  return 1;
+}
 extern "C" int32_t tessera_apple_gpu_bmm_dev_f32_enc(TsEncodeSession* s,
                                                      TsDeviceTensor* A,
                                                      TsDeviceTensor* B,
@@ -3811,6 +3849,75 @@ extern "C" int32_t tessera_apple_gpu_gather_blocks_dev_f32_enc(
                                                  num_blocks, n, block_size, dim);
 }
 
+// APPLE-PAGED-KV-1 direct page-table attention reference. Returning 0 is
+// intentional: this portable implementation validates the ABI/numerics but
+// cannot claim Metal-native placement.
+extern "C" int32_t tessera_apple_gpu_paged_latent_attention_dev_f32(
+    TsDeviceTensor* q, TsDeviceTensor* latent_pool, TsDeviceTensor* rope_pool,
+    TsDeviceTensor* block_table, TsDeviceTensor* out, int32_t num_blocks,
+    int32_t n_blocks, int32_t block_size, int32_t logical_length,
+    int32_t q_len, int32_t latent_dim, int32_t rope_dim,
+    int32_t causal_offset, int32_t window, float scale) {
+  if (!q || !latent_pool || !rope_pool || !block_table || !out ||
+      num_blocks <= 0 || n_blocks <= 0 || block_size <= 0 ||
+      logical_length <= 0 || q_len <= 0 || latent_dim <= 0 || rope_dim <= 0)
+    return 0;
+  const float* Q = static_cast<const float*>(q->data);
+  const float* L = static_cast<const float*>(latent_pool->data);
+  const float* K = static_cast<const float*>(rope_pool->data);
+  const int32_t* table = static_cast<const int32_t*>(block_table->data);
+  float* O = static_cast<float*>(out->data);
+  for (int32_t qi = 0; qi < q_len; ++qi) {
+    int32_t last = logical_length - 1;
+    if (causal_offset >= 0) last = std::min(last, causal_offset + qi);
+    int32_t first = window > 0 ? std::max(0, last - window + 1) : 0;
+    float max_score = -std::numeric_limits<float>::infinity();
+    for (int32_t pos = first; pos <= last; ++pos) {
+      int32_t block = table[pos / block_size];
+      int32_t slot = pos % block_size;
+      if (block < 0 || block >= num_blocks) return 0;
+      float score = 0.0f;
+      const float* key = K +
+          (static_cast<std::size_t>(block) * block_size + slot) * rope_dim;
+      for (int32_t d = 0; d < rope_dim; ++d)
+        score += Q[static_cast<std::size_t>(qi) * rope_dim + d] * key[d];
+      max_score = std::max(max_score, score * scale);
+    }
+    for (int32_t od = 0; od < latent_dim; ++od) {
+      float denom = 0.0f, numer = 0.0f;
+      for (int32_t pos = first; pos <= last; ++pos) {
+        int32_t block = table[pos / block_size];
+        int32_t slot = pos % block_size;
+        std::size_t physical =
+            static_cast<std::size_t>(block) * block_size + slot;
+        float score = 0.0f;
+        const float* key = K + physical * rope_dim;
+        for (int32_t d = 0; d < rope_dim; ++d)
+          score += Q[static_cast<std::size_t>(qi) * rope_dim + d] * key[d];
+        float weight = std::exp(score * scale - max_score);
+        denom += weight;
+        numer += weight * L[physical * latent_dim + od];
+      }
+      O[static_cast<std::size_t>(qi) * latent_dim + od] = numer / denom;
+    }
+  }
+  return 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_dense_latent_attention_dev_f32(
+    TsDeviceTensor* q, TsDeviceTensor* latent, TsDeviceTensor* rope,
+    TsDeviceTensor* out, int32_t logical_length, int32_t q_len,
+    int32_t latent_dim, int32_t rope_dim, int32_t causal_offset,
+    int32_t window, float scale) {
+  if (!q || !latent || !rope || !out) return 0;
+  // Reuse the direct reference with an identity page table would require a
+  // temporary ABI buffer. Portable tests use the Python oracle instead; this
+  // symbol exists solely to keep the cross-platform ABI total.
+  (void)logical_length; (void)q_len; (void)latent_dim; (void)rope_dim;
+  (void)causal_offset; (void)window; (void)scale;
+  return 0;
+}
+
 // ---- Tier-3 reduction lane non-Apple reference (2026-05-29) ----------------
 extern "C" void tessera_apple_gpu_mpsgraph_reduce_f32(int32_t op, const float* x,
                                                       float* out, int32_t rows,
@@ -4257,6 +4364,25 @@ extern "C" int32_t tessera_apple_gpu_ssm_replay_decode_f32(
       out[b * D + d] = y;
     }
   }
+  return 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_ssm_replay_decode_dev_f32_enc(
+    TsEncodeSession* s, TsDeviceTensor* delta, TsDeviceTensor* xin,
+    TsDeviceTensor* bin, TsDeviceTensor* s0, TsDeviceTensor* cin,
+    TsDeviceTensor* a, TsDeviceTensor* out, int32_t B, int32_t D,
+    int32_t N, int32_t M, int32_t c_index, int32_t out_index) {
+  if (!s || !delta || !xin || !bin || !s0 || !cin || !a || !out) return 0;
+  const float* c = static_cast<const float*>(cin->data) +
+      static_cast<std::size_t>(c_index) * B * N;
+  float* y = static_cast<float*>(out->data) +
+      static_cast<std::size_t>(out_index) * B * D;
+  tessera_apple_gpu_ssm_replay_decode_f32(
+      static_cast<const float*>(delta->data),
+      static_cast<const float*>(xin->data),
+      static_cast<const float*>(bin->data),
+      static_cast<const float*>(s0->data), c,
+      static_cast<const float*>(a->data), y, B, D, N, M);
   return 0;
 }
 

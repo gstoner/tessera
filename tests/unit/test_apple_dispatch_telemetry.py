@@ -58,8 +58,17 @@ def test_capture_gate_records_owned_mps_and_mtl4_command_buffers():
         softmax = rt._apple_gpu_dispatch_mpsgraph_softmax(x, np)
         mpsgraph_record = read_dispatch_telemetry()
         assert mpsgraph_record["device_time_ns"] > 0
-        assert mpsgraph_record["timing_source"] in {
-            "metal_kernel_interval", "metal_command_buffer_interval"}
+        if (read_profiling_capabilities()["capabilities"]
+                ["metal4_timestamp_heap"]):
+            # MPSGraph may rotate its owned root command buffer. On a host
+            # with the Metal 4 timestamp heap, the event bracket—not that
+            # potentially partial root interval—is the required evidence.
+            assert mpsgraph_record["timing_source"] == "metal4_mpsgraph_envelope"
+            assert mpsgraph_record["counter_sampling_supported"] is True
+            assert mpsgraph_record["counter_timestamp_delta"] > 0
+        else:
+            assert mpsgraph_record["timing_source"] in {
+                "metal_kernel_interval", "metal_command_buffer_interval"}
         np.testing.assert_allclose(softmax, 1.0 / 64.0, rtol=1e-5, atol=1e-6)
 
         clear_dispatch_telemetry()

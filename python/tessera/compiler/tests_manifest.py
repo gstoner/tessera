@@ -102,7 +102,8 @@ _ENTRIES: tuple[SurfaceEntry, ...] = (
         entry_point="tests/performance/test_compiler_performance_plan.py",
         status="compile_only",
         command=(
-            "python -m pytest tests/performance/ "
+            "python -m pytest tests/performance/test_compiler_performance_plan.py "
+            "tests/performance/nvidia/ "
             "--collect-only -q --no-header"
         ),
         notes=(

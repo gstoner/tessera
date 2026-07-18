@@ -1,0 +1,97 @@
+{
+  "files": {
+    "CMakeCache.txt": {
+      "bytes": 35840,
+      "sha256": "5ed4dd0a8069204fe3562d21f4a8ad3a5c1115ef8b735bc0ecf052071141f6c3"
+    },
+    "machine-identity.txt": {
+      "bytes": 871,
+      "sha256": "0a1c882994c05549ae2a68459c50798536625acf020b2cf39673c5ab71690208"
+    },
+    "metal4-capabilities.json": {
+      "bytes": 162,
+      "sha256": "a3e7bea09f21da32292933b3bf934db8a999329b4ef46b744864d98b13f3df8e"
+    },
+    "metal4-correctness-1.xml": {
+      "bytes": 1664,
+      "sha256": "54203977ca867493b6da3f242dfe3e4e6028c7e5f645ea1e19316a2bb7e3de84"
+    },
+    "metal4-correctness-2.xml": {
+      "bytes": 1664,
+      "sha256": "88ef9e2662522a5d158eabb9271f088d64a51076d8f3099c3c8bdcd8fad2f9e6"
+    },
+    "metal4-environment.json": {
+      "bytes": 1677,
+      "sha256": "5952ac969d19274f13f1b3797649ef93a3a3f17ccc5226d2276706cfebd7ed3f"
+    },
+    "metal4-routes-1.json": {
+      "bytes": 14855,
+      "sha256": "dc30f1ca450fce8cb0a2ab9e30a0bd53e82b814d13271da08f0ba24a2184c171"
+    },
+    "metal4-routes-2.json": {
+      "bytes": 14885,
+      "sha256": "589d876fb2916c2993375bf1ca4309190dd2aeb901d8662740ae861bf1fef6b1"
+    },
+    "metal4-stable-ledger.json": {
+      "bytes": 56196,
+      "sha256": "3729a50f5742e9b8bb58d8801df1e96c2a54f320cd4ae87d6e207ba9ddf6034c"
+    },
+    "ninja-log.txt": {
+      "bytes": 32472,
+      "sha256": "94ef3b326820f53a5604df37f549d62f1c56205b0e57efeb22700d71663cdee5"
+    },
+    "source-commit.txt": {
+      "bytes": 41,
+      "sha256": "cffe2321c7b052f98ba21655c26d97ecfb545674e8e4254a913dd5793bea9c99"
+    },
+    "status.txt": {
+      "bytes": 75,
+      "sha256": "ea323539535a4267b5419d7199c2e1fea9653da22d083fca0a6b10ae6c0a7e75"
+    }
+  },
+  "schema": "tessera.apple.metal4-proof.v1",
+  "sealed_at": "2026-07-18T21:41:02.240055+00:00",
+  "tested_commit": "b1ee87591ec701dd06a156cad8449f6498ae0891",
+  "validation": {
+    "capabilities": {
+      "device": "apple7",
+      "metal4": true
+    },
+    "correctness": [
+      {
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0,
+        "tests": 11
+      },
+      {
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0,
+        "tests": 11
+      }
+    ],
+    "environment": {
+      "available": 2,
+      "unavailable": 1
+    },
+    "files": 12,
+    "ledger": {
+      "decisions": 8,
+      "timing_domains": 2
+    },
+    "routes": [
+      {
+        "device": "apple7",
+        "metal4_rows": 4,
+        "rows": 8
+      },
+      {
+        "device": "apple7",
+        "metal4_rows": 4,
+        "rows": 8
+      }
+    ],
+    "tested_commit": "b1ee87591ec701dd06a156cad8449f6498ae0891"
+  }
+}

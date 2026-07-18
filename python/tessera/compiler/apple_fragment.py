@@ -8,7 +8,7 @@ packing/store implementation.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, Mapping, Sequence
+from typing import Literal, Mapping
 
 from .apple_target import AppleGPUArch, AppleGPUTargetProfile
 

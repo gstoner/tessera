@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 
 
@@ -18,7 +19,9 @@ def test_paired_paged_kv_report_keeps_timing_domains_and_routes_separate():
     report = _module().run_benchmark(
         ["7x8x4x2"], block_size=2, warmup=0, reps=1, runs=2)
     assert report["schema"] == "tessera.apple.resident_paged_kv.v1"
+    assert isinstance(report["device"], str)
     assert len(report["rows"]) == 4
+    assert all(row["device"] == report["device"] for row in report["rows"])
     assert {row["route"] for row in report["rows"]} == {"staged", "direct"}
     assert all(row["correctness"] for row in report["rows"])
     assert all(row["non_identity_page_table"] for row in report["rows"])
@@ -36,3 +39,11 @@ def test_paged_kv_production_promotions_are_exact_shape_and_domain():
     assert production_route_for(
         op="resident_paged_kv", shape="128x64x32x1", dtype="f32",
         device="apple7", incumbent_route="staged") == "staged"
+
+
+def test_committed_paged_kv_corpus_preserves_device_provenance():
+    path = (Path(__file__).resolve().parents[2] / "benchmarks" / "baselines" /
+            "apple7_resident_paged_kv_two_run.json")
+    report = json.loads(path.read_text())
+    assert report["device"] == "apple7"
+    assert all(row["device"] == "apple7" for row in report["rows"])

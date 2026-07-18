@@ -206,6 +206,10 @@ def test_only_documented_waituntilcompleted_sites_remain():
       at ts_enc_begin: MPSGraph's encode may call ``commitAndContinue``
       and rotate the underlying buffer, so the captured handle can be
       stale. (See ``ts_enc_commit_wait`` + MPSCommandBuffer.h.)
+    * The equivalent no-shared-event fallback inside
+      ``ts_enc_wait_destroy``. ``ts_enc_commit_async`` replaces the captured
+      handle with the live root used for its commit before ownership crosses
+      the asynchronous boundary.
 
     Any OTHER site is a regression. This test fires loud."""
     src = _RUNTIME_SRC.read_text()
@@ -214,13 +218,13 @@ def test_only_documented_waituntilcompleted_sites_remain():
         r"\[cb waitUntilCompleted\]", src)]
     session_calls = [m for m in re.finditer(
         r"\[root waitUntilCompleted\]", src)]
-    # One generic-command-buffer fallback and two live-root fallbacks.
+    # One generic-command-buffer fallback and three live-root fallbacks.
     assert len(cb_calls) == 1, (
         f"expected exactly 1 [cb waitUntilCompleted] (the wrapper's "
         f"own fallback), found {len(cb_calls)}")
-    assert len(session_calls) == 2, (
-        f"expected exactly 2 [root waitUntilCompleted] calls (the owned "
-        f"MPSGraph and encode-session fallbacks on their live root command "
+    assert len(session_calls) == 3, (
+        f"expected exactly 3 [root waitUntilCompleted] calls (the owned "
+        f"MPSGraph, synchronous-session, and async-session fallbacks on live root command "
         f"buffers), found {len(session_calls)}")
     # The pre-fix stale-handle wait must be gone (commitAndContinue safety).
     assert "[s->mtlcb waitUntilCompleted]" not in src, (

@@ -65,7 +65,7 @@ def run_benchmark(
     shapes: list[str], *, block_size: int, warmup: int, reps: int, runs: int,
 ) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
-    device = live_apple_device_tag()
+    device_tag = live_apple_device_tag()
     set_dispatch_telemetry_enabled(True)
     try:
         for run in range(runs):
@@ -79,8 +79,8 @@ def run_benchmark(
                                 "measured", query, causal=True, route=route)
                             if hasattr(out, "free"):
                                 out.free()
-                        wall: list[int] = []
-                        device: list[int] = []
+                        wall_times: list[int] = []
+                        device_times: list[int] = []
                         valid = True
                         native = True
                         telemetry: dict[str, Any] = {}
@@ -91,7 +91,7 @@ def run_benchmark(
                                 "measured", query, causal=True, route=route)
                             got = (out.copy_to_host() if hasattr(out, "copy_to_host")
                                    else np.asarray(out).copy())
-                            wall.append(time.perf_counter_ns() - start)
+                            wall_times.append(time.perf_counter_ns() - start)
                             if hasattr(out, "free"):
                                 out.free()
                             valid = valid and bool(np.allclose(
@@ -100,16 +100,17 @@ def run_benchmark(
                             telemetry = cache.last_attention_telemetry or {}
                             dt = telemetry.get("device_time_ns")
                             if isinstance(dt, int):
-                                device.append(dt)
+                                device_times.append(dt)
                         rows.append({
                             "run": run + 1,
-                            "device": device,
+                            "device": device_tag,
                             "shape": spec,
                             "route": route,
-                            "timing_domain_end_to_end_ns": _median(wall),
+                            "timing_domain_end_to_end_ns": _median(wall_times),
                             "timing_domain_device_ns": (
-                                _median(device) if len(device) == reps else None),
-                            "device_time_coverage": len(device) / reps,
+                                _median(device_times)
+                                if len(device_times) == reps else None),
+                            "device_time_coverage": len(device_times) / reps,
                             "native_proof": native,
                             "correctness": valid,
                             "page_table": cache.block_table("measured"),
@@ -146,7 +147,7 @@ def run_benchmark(
             })
     return {
         "schema": "tessera.apple.resident_paged_kv.v1",
-        "device": device, "os": platform.platform(),
+        "device": device_tag, "os": platform.platform(),
         "runs": runs, "warmup": warmup, "reps": reps,
         "block_size": block_size, "rows": rows, "decisions": decisions,
     }

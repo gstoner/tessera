@@ -21234,7 +21234,9 @@ extern "C" void ts_enc_commit_wait(TsEncodeSession *s) {
 // calls split the existing commit+wait lifecycle while retaining ownership in
 // the opaque session until the consumer waits and destroys it.
 extern "C" int32_t ts_enc_commit_async(TsEncodeSession *s) {
-  if (!s || !s->mtlcb) return 0;
+  if (!s || !s->cb) return 0;
+  id<MTLCommandBuffer> root = s->cb.rootCommandBuffer;
+  if (!root) return 0;
   MetalDeviceContext &ctx = deviceContext();
   if (ctx.ok) {
     std::lock_guard<std::mutex> lock(ctx.legacy_event_mu);
@@ -21242,29 +21244,34 @@ extern "C" int32_t ts_enc_commit_async(TsEncodeSession *s) {
     s->asyncEvent = (id<MTLSharedEvent>)ctx.legacy_event;
     if (s->asyncEvent) {
       s->asyncSignal = ++ctx.legacy_event_val;
-      [s->mtlcb encodeSignalEvent:s->asyncEvent value:s->asyncSignal];
+      [root encodeSignalEvent:s->asyncEvent value:s->asyncSignal];
     }
   }
-  [s->mtlcb commit];
+  [s->cb commit];
+  // MPSCommandBuffer may rotate its underlying Metal buffer while encoding.
+  // Retain the live root used for this commit so the later wait/status/timing
+  // operations never consult the stale handle captured by ts_enc_begin.
+  s->mtlcb = root;
   s->cb = nil;
   return 1;
 }
 
 extern "C" int32_t ts_enc_wait_destroy(TsEncodeSession *s) {
   if (!s || !s->mtlcb) return 0;
+  id<MTLCommandBuffer> root = s->mtlcb;
   bool completed = true;
   if (s->asyncEvent && s->asyncSignal) {
     completed = [s->asyncEvent waitUntilSignaledValue:s->asyncSignal
                                             timeoutMS:30000];
   } else {
-    [s->mtlcb waitUntilCompleted];
+    [root waitUntilCompleted];
   }
   // The shared-event signal is ordered after every encoded kernel. Metal may
   // publish it a few microseconds before the host-visible status advances from
   // Scheduled to Completed, so the signal itself is the completion proof;
   // only an explicit command-buffer error overrides it.
-  bool ok = completed && s->mtlcb.status != MTLCommandBufferStatusError;
-  ts_record_dispatch_gpu_elapsed(s->mtlcb);
+  bool ok = completed && root.status != MTLCommandBufferStatusError;
+  ts_record_dispatch_gpu_elapsed(root);
   s->asyncEvent = nil;
   s->asyncSignal = 0;
   s->mtlcb = nil;

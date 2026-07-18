@@ -39,7 +39,7 @@ def _inputs(seed: int, tokens: int, B: int, D: int, N: int):
 def run_benchmark(shapes: list[str], *, tokens: int, warmup: int,
                   reps: int, runs: int) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
-    device = live_apple_device_tag()
+    device_tag = live_apple_device_tag()
     set_dispatch_telemetry_enabled(True)
     try:
         for run in range(1, runs + 1):
@@ -49,8 +49,10 @@ def run_benchmark(shapes: list[str], *, tokens: int, warmup: int,
                                              tokens, B, D, N)
                 oracle = SSMStateHandle(B, D, N, a).decode_block(delta, x, b, c)
                 for route in ("fused_block", "resident_ring"):
-                    wall: list[int] = []
-                    device: list[int] = []
+                    wall_times: list[int] = []
+                    device_times: list[int] = []
+                    available = True
+                    unavailable_reason: str | None = None
                     native = True
                     correct = True
                     resources: Any = None
@@ -67,11 +69,18 @@ def run_benchmark(shapes: list[str], *, tokens: int, warmup: int,
                         else:
                             handle = rt.apple_gpu_resident_ssm_replay_state_handle(
                                 B, D, N, a, capacity=tokens + 4, async_slots=2)
-                            future = handle.submit_block_async(delta, x, b, c)
-                            got = future.wait()
-                            provenance = "native_gpu" if handle.resident_inputs else "reference_cpu"
-                            telemetry = handle.last_submission_telemetry or {}
-                            handle.close()
+                            if not handle.resident_inputs:
+                                handle.close()
+                                available = False
+                                unavailable_reason = "resident_inputs_unavailable"
+                                break
+                            try:
+                                future = handle.submit_block_async(delta, x, b, c)
+                                got = future.wait()
+                                provenance = "native_gpu"
+                                telemetry = handle.last_submission_telemetry or {}
+                            finally:
+                                handle.close()
                         elapsed = time.perf_counter_ns() - start
                         native = native and provenance == "native_gpu"
                         correct = correct and bool(np.allclose(
@@ -81,17 +90,31 @@ def run_benchmark(shapes: list[str], *, tokens: int, warmup: int,
                             "ordered_async_command_buffer" if route == "resident_ring"
                             else "single_block_dispatch")
                         if iteration >= warmup:
-                            wall.append(elapsed)
+                            wall_times.append(elapsed)
                             value = telemetry.get("device_time_ns")
                             if isinstance(value, int):
-                                device.append(value)
+                                device_times.append(value)
+                    if not available:
+                        rows.append({
+                            "run": run, "device": device_tag, "shape": spec,
+                            "tokens": tokens, "route": route, "available": False,
+                            "unavailable_reason": unavailable_reason,
+                            "timing_domain_end_to_end_ns": None,
+                            "timing_domain_device_ns": None,
+                            "device_time_coverage": 0.0,
+                            "native_proof": False, "correctness": None,
+                            "device_time_scope": None, "resources": None,
+                        })
+                        continue
                     rows.append({
-                        "run": run, "device": device, "shape": spec, "tokens": tokens,
-                        "route": route,
-                        "timing_domain_end_to_end_ns": int(statistics.median(wall)),
+                        "run": run, "device": device_tag, "shape": spec,
+                        "tokens": tokens, "route": route, "available": True,
+                        "unavailable_reason": None,
+                        "timing_domain_end_to_end_ns": int(statistics.median(wall_times)),
                         "timing_domain_device_ns": (
-                            int(statistics.median(device)) if len(device) == reps else None),
-                        "device_time_coverage": len(device) / reps,
+                            int(statistics.median(device_times))
+                            if len(device_times) == reps else None),
+                        "device_time_coverage": len(device_times) / reps,
                         "native_proof": native, "correctness": correct,
                         "device_time_scope": scope, "resources": resources,
                     })
@@ -118,7 +141,7 @@ def run_benchmark(shapes: list[str], *, tokens: int, warmup: int,
                 and winners[0] is not None else None,
             })
     return {
-        "schema": "tessera.apple.resident_replay.v1", "device": device,
+        "schema": "tessera.apple.resident_replay.v1", "device": device_tag,
         "os": platform.platform(), "runs": runs,
         "warmup": warmup, "reps": reps, "rows": rows,
         "decisions": decisions,

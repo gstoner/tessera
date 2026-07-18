@@ -9,6 +9,7 @@
 #ifndef TESSERA_TARGET_APPLE_DIALECT_H
 #define TESSERA_TARGET_APPLE_DIALECT_H
 
+#include "mlir/Bytecode/BytecodeOpInterface.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"

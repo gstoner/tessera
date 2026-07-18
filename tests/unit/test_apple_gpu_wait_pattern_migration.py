@@ -188,13 +188,16 @@ def test_tri_solve_still_correct_after_migration():
 # ---- Source-level drift gate (the migrated sites stay migrated) --------
 
 def test_only_documented_waituntilcompleted_sites_remain():
-    """After batches 1-5, only two ``waitUntilCompleted`` invocations
-    should remain in the runtime, both intentional:
+    """Only three ``waitUntilCompleted`` invocations should remain.
 
     * The fallback path INSIDE ``commit_and_wait_with_timeout`` itself
       (around the helper's lazy event init). Recursing into the
       wrapper there would deadlock; the legacy path is the correct
       fallback.
+    * The equivalent fallback inside
+      ``commit_mpsgraph_and_wait_with_timeout``. The MPSGraph wrapper must
+      commit its live root itself because ``commitAndContinue`` may rotate
+      the originally supplied command buffer.
     * The fallback INSIDE ``ts_enc_commit_wait`` for the case where
       shared-event init failed (the encode-session path also keeps a
       legacy synchronous wait as a no-crash fallback, mirroring the
@@ -211,14 +214,14 @@ def test_only_documented_waituntilcompleted_sites_remain():
         r"\[cb waitUntilCompleted\]", src)]
     session_calls = [m for m in re.finditer(
         r"\[root waitUntilCompleted\]", src)]
-    # Exactly 1 each — both fallbacks inside Pattern-4 paths.
+    # One generic-command-buffer fallback and two live-root fallbacks.
     assert len(cb_calls) == 1, (
         f"expected exactly 1 [cb waitUntilCompleted] (the wrapper's "
         f"own fallback), found {len(cb_calls)}")
-    assert len(session_calls) == 1, (
-        f"expected exactly 1 [root waitUntilCompleted] (the "
-        f"ts_enc_commit_wait fallback on the live root command buffer "
-        f"for shared-event init failure), found {len(session_calls)}")
+    assert len(session_calls) == 2, (
+        f"expected exactly 2 [root waitUntilCompleted] calls (the owned "
+        f"MPSGraph and encode-session fallbacks on their live root command "
+        f"buffers), found {len(session_calls)}")
     # The pre-fix stale-handle wait must be gone (commitAndContinue safety).
     assert "[s->mtlcb waitUntilCompleted]" not in src, (
         "stale [s->mtlcb waitUntilCompleted] reintroduced — must wait on "

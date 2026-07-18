@@ -87,7 +87,8 @@ def _replay_state_bytes_per_token(D: int, N: int, L: int, elem: int = 4) -> floa
 
 # ── Decode timers ───────────────────────────────────────────────────────
 
-def _bench_summary(B: int, D: int, N: int, T: int, reps: int) -> tuple[float, float]:
+def _bench_summary(B: int, D: int, N: int, T: int, reps: int
+                   ) -> tuple[float, float, dict[str, Any]]:
     """Baseline full-state decode: update + read the (D, N) state every token."""
     x, a, b, c, dt = _inputs(B, D, N, T)
     a2 = np.broadcast_to(a[:, None], (D, N))
@@ -100,35 +101,110 @@ def _bench_summary(B: int, D: int, N: int, T: int, reps: int) -> tuple[float, fl
             _ = np.einsum("bdn,bn->bd", S, c[t])
 
     samples = _time(run, reps)
-    return statistics.median(samples), _stdev(samples)
+    return statistics.median(samples), _stdev(samples), {
+        "native_dispatched": False, "numerically_validated": True,
+        "device_time_median_ns": None, "device_time_coverage": 0.0,
+        "device_loop_time_median_ns": None,
+        "device_time_scope": None, "resources": None,
+    }
 
 
 def _bench_replay(handle_factory, B: int, D: int, N: int, T: int, L: int,
-                  reps: int) -> tuple[float, float]:
+                  reps: int) -> tuple[float, float, dict[str, Any]]:
     x, a, b, c, dt = _inputs(B, D, N, T)
 
-    def run() -> None:
+    def run():
         h = handle_factory(a, L)
+        outputs = []
         for t in range(T):
-            h.step(dt[t], x[t], b[t], c[t])
+            outputs.append(h.step(dt[t], x[t], b[t], c[t]))
+        return h, np.asarray(outputs)
 
-    # Warm up (compiles the Metal runtime on first fused call).
-    run()
-    samples = _time(run, reps)
-    return statistics.median(samples), _stdev(samples)
+    # Warm up + independent eager oracle before any timing can become evidence.
+    warm_handle, warm_output = run()
+    ref = SSMStateHandle(batch=B, num_channels=D, state_dim=N, a=a, capacity=L)
+    reference = np.asarray([ref.step(dt[t], x[t], b[t], c[t]) for t in range(T)])
+    validated = bool(np.allclose(warm_output, reference, rtol=5e-4, atol=5e-4))
+    from tessera._apple_gpu_dispatch import (
+        clear_dispatch_telemetry, read_dispatch_telemetry,
+        set_dispatch_telemetry_enabled,
+    )
+    set_dispatch_telemetry_enabled(True)
+    samples: list[float] = []
+    device: list[int] = []
+    resources: list[Any] = []
+    native: list[bool] = []
+    try:
+        for _ in range(reps):
+            clear_dispatch_telemetry()
+            t0 = time.perf_counter_ns()
+            handle, _ = run()
+            samples.append((time.perf_counter_ns() - t0) / 1e6)
+            record = read_dispatch_telemetry()
+            native.append(handle.last_decode_execution == "native_gpu")
+            if isinstance(record.get("device_time_ns"), int):
+                device.append(int(record["device_time_ns"]))
+            resources.append(record.get("resources"))
+    finally:
+        set_dispatch_telemetry_enabled(False)
+    resource = resources[0] if resources and all(r == resources[0] for r in resources) else None
+    return statistics.median(samples), _stdev(samples), {
+        "native_dispatched": bool(native) and all(native),
+        "numerically_validated": validated,
+        "device_time_median_ns": (
+            int(statistics.median(device)) if len(device) == reps else None),
+        "device_time_coverage": len(device) / reps,
+        "device_loop_time_median_ns": None,
+        "device_time_scope": "last_native_decode_dispatch",
+        "resources": resource,
+    }
 
 
-def _bench_block(B: int, D: int, N: int, T: int, reps: int) -> tuple[float, float]:
+def _bench_block(B: int, D: int, N: int, T: int, reps: int
+                 ) -> tuple[float, float, dict[str, Any]]:
     """All T tokens in ONE block dispatch — the dispatch-overhead fix."""
     x, a, b, c, dt = _inputs(B, D, N, T)
     h = rt.apple_gpu_fused_ssm_state_handle(B, D, N, a, capacity=8)
 
-    def run() -> None:
-        h.decode_block(dt, x, b, c)
+    def run():
+        return h.decode_block(dt, x, b, c)
 
-    run()
-    samples = _time(run, reps)
-    return statistics.median(samples), _stdev(samples)
+    reference = SSMStateHandle(B, D, N, a).decode_block(dt, x, b, c)
+    validated = bool(np.allclose(run(), reference, rtol=5e-4, atol=5e-4))
+    from tessera._apple_gpu_dispatch import (
+        clear_dispatch_telemetry, read_dispatch_telemetry,
+        set_dispatch_telemetry_enabled,
+    )
+    set_dispatch_telemetry_enabled(True)
+    samples: list[float] = []
+    device: list[int] = []
+    resources: list[Any] = []
+    native: list[bool] = []
+    try:
+        for _ in range(reps):
+            clear_dispatch_telemetry()
+            t0 = time.perf_counter_ns()
+            run()
+            samples.append((time.perf_counter_ns() - t0) / 1e6)
+            record = read_dispatch_telemetry()
+            native.append(h.last_block_execution == "native_gpu")
+            if isinstance(record.get("device_time_ns"), int):
+                device.append(int(record["device_time_ns"]))
+            resources.append(record.get("resources"))
+    finally:
+        set_dispatch_telemetry_enabled(False)
+    resource = resources[0] if resources and all(r == resources[0] for r in resources) else None
+    device_loop = int(statistics.median(device)) if len(device) == reps else None
+    return statistics.median(samples), _stdev(samples), {
+        "native_dispatched": bool(native) and all(native),
+        "numerically_validated": validated,
+        "device_time_median_ns": (
+            int(device_loop / T) if device_loop is not None else None),
+        "device_time_coverage": len(device) / reps,
+        "device_loop_time_median_ns": device_loop,
+        "device_time_scope": "single_block_dispatch_amortized_per_token",
+        "resources": resource,
+    }
 
 
 def _time(fn, reps: int) -> list[float]:
@@ -187,7 +263,7 @@ def run_benchmark(shapes: list[str], tokens: int, capacity: int,
              lambda: _bench_block(B, D, N, tokens, reps), repl_bytes),
         ]
         for mode, timer, state_bytes in timers:
-            loop_ms, stdev_ms = timer()
+            loop_ms, stdev_ms, evidence = timer()
             ms_per_token = loop_ms / max(tokens, 1)
             sec = ms_per_token / 1000.0
             # memory_bw from the analytical per-token state traffic.
@@ -211,6 +287,7 @@ def run_benchmark(shapes: list[str], tokens: int, capacity: int,
                 "state_traffic_ratio": ratio if mode != "summary" else 1.0,
                 "device": device,
                 "tessera_version": version,
+                **evidence,
             })
     return rows
 

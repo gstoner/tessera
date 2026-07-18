@@ -35,9 +35,19 @@ situation as ``ptxas`` on the arm64 dev Mac). So:
 
 from __future__ import annotations
 
+import ctypes
+import hashlib
 import shutil
 import subprocess
 from dataclasses import dataclass
+
+from .apple_fragment import (
+    AppleFragmentError,
+    AppleSimdgroupFragment,
+    AppleTileResourceRecord,
+    select_apple_simdgroup_fragment,
+)
+from .apple_target import AppleGPUTargetProfile
 
 # Apple GPU SIMD-scoped matrix multiply uses 8×8 fragments (the simdgroup_matrix
 # fragment size). GEMM tile dims must be whole multiples of the fragment.
@@ -73,6 +83,36 @@ class MslGemmShape:
     def is_valid(self) -> bool:
         f = SIMDGROUP_FRAG
         return all(d > 0 and d % f == 0 for d in (self.m, self.n, self.k))
+
+
+@dataclass(frozen=True)
+class AppleTileMslArtifact:
+    """A target-selected Tile fragment and its materialized MSL source.
+
+    This is an artifact-level handoff, not a runtime-dispatch claim. The
+    eventual Apple Tile lowering must carry this descriptor into a stable
+    runtime ABI and retain its resource record before it can claim native
+    execution.
+    """
+
+    fragment: AppleSimdgroupFragment
+    shape: MslGemmShape
+    resources: AppleTileResourceRecord
+    entry: str
+    msl: str
+
+
+@dataclass(frozen=True)
+class AppleTileDispatchRecord:
+    symbol: str
+    source_sha256: str
+    native_gpu: bool
+    execution_mode: str
+    resources: dict[str, object]
+    msl_pipeline_cache_size: int | None
+    device_time_ns: int | None
+    counter_sampling_supported: bool | None
+    counter_timestamp_delta: int | None
 
 
 def _scalar(dtype: str) -> str:
@@ -337,11 +377,13 @@ kernel void {name}(
     constant uint& M [[buffer(3)]],
     constant uint& N [[buffer(4)]],
     constant uint& K [[buffer(5)]],
-    uint2 tgid   [[threadgroup_position_in_grid]],
-    uint  tid    [[thread_index_in_threadgroup]],
-    uint  tcount [[threads_per_threadgroup]])
+    uint3 tgid3  [[threadgroup_position_in_grid]],
+    uint3 tid3   [[thread_position_in_threadgroup]],
+    uint3 tcount3 [[threads_per_threadgroup]])
 {{
   const uint BM = {bm}u, BN = {bn}u, BK = {bk}u, F = {f}u;
+  const uint2 tgid = tgid3.xy;
+  const uint tid = tid3.x, tcount = tcount3.x;
   const uint m0 = tgid.y * BM;
   const uint n0 = tgid.x * BN;
 
@@ -357,6 +399,165 @@ kernel void {name}(
 {store}
 }}
 """
+
+
+def materialize_apple_simdgroup_tile_msl(
+    target: AppleGPUTargetProfile,
+    storage_dtype: str,
+    bm: int = 32,
+    bn: int = 32,
+    bk: int = 16,
+    *,
+    partial_edge: bool = True,
+    double_buffer: bool = True,
+    entry: str | None = None,
+) -> AppleTileMslArtifact:
+    """Materialize an Apple-owned Tile MMA artifact for ``target``.
+
+    The selected physical fragment fixes the supported storage/accumulator
+    pair, 8x8x8 MMA shape, and 32-lane threadgroup contract. The generated
+    steel MSL owns cooperative packing, bounds-zero-padding, and the ragged
+    store. This function intentionally returns source plus metadata only: no
+    runtime ABI accepts this artifact yet, so materialization is not a native
+    execution result.
+    """
+    fragment = select_apple_simdgroup_fragment(target, storage_dtype)
+    shape = MslGemmShape(bm, bn, bk)
+    if not shape.is_valid():
+        raise ValueError(
+            f"Apple Tile shape ({bm},{bn},{bk}) must be positive multiples of "
+            f"the selected {fragment.m}x{fragment.n}x{fragment.k} fragment")
+    storage_bytes = 2  # The selected simdgroup path currently admits fp16/bf16 only.
+    buffer_count = 2 if double_buffer else 1
+    staged_a_bytes = buffer_count * bm * bk * storage_bytes
+    staged_b_bytes = buffer_count * bk * bn * storage_bytes
+    edge_scratch_bytes = fragment.m * fragment.n * 4 if partial_edge else 0
+    total_threadgroup_bytes = staged_a_bytes + staged_b_bytes + edge_scratch_bytes
+    capacity = target.threadgroup_memory_capacity_bytes
+    if total_threadgroup_bytes > capacity:
+        raise AppleFragmentError(
+            "APPLE_FRAGMENT_THREADGROUP_MEMORY_EXCEEDED: "
+            f"{total_threadgroup_bytes} bytes exceeds {capacity} bytes on "
+            f"{target.arch.name.lower()}")
+    resources = AppleTileResourceRecord(
+        threadgroup=fragment.threadgroup,
+        simdgroup_lanes=fragment.lanes,
+        staged_a_bytes=staged_a_bytes,
+        staged_b_bytes=staged_b_bytes,
+        edge_scratch_bytes=edge_scratch_bytes,
+        total_threadgroup_bytes=total_threadgroup_bytes,
+        target_threadgroup_capacity_bytes=capacity,
+        double_buffered=double_buffer,
+        partial_edge_store=partial_edge,
+    )
+    return AppleTileMslArtifact(
+        fragment=fragment,
+        shape=shape,
+        resources=resources,
+        entry=entry or f"tessera_steel_gemm_{fragment.storage_dtype}",
+        msl=emit_steel_gemm_msl(
+            fragment.storage_dtype,
+            bm,
+            bn,
+            bk,
+            accum=fragment.accumulator_dtype,
+            entry=entry,
+            partial_edge=partial_edge,
+            double_buffer=double_buffer,
+        ),
+    )
+
+
+def dispatch_apple_simdgroup_tile_f16(
+    artifact: AppleTileMslArtifact, a, b, *, return_provenance: bool = False,
+):
+    """Attempt the narrow TILE-1 source-backed runtime ABI.
+
+    Returns ``(output, native_gpu)``. A false dispatch bit is deliberately not
+    replaced with NumPy here: the caller must choose and record any fallback.
+    The ABI is fp16 inputs / fp32 output and exactly one 32-lane simdgroup.
+    """
+    import numpy as np
+    from tessera._apple_gpu_dispatch import bind_registered
+
+    if artifact.fragment.storage_dtype not in {"fp16", "bf16"}:
+        raise ValueError("TILE-1 runtime ABI accepts fp16 or bf16 storage only")
+    if artifact.fragment.storage_dtype == "fp16":
+        a = np.ascontiguousarray(a, dtype=np.float16)
+        b = np.ascontiguousarray(b, dtype=np.float16)
+        a_bits, b_bits = a.view(np.uint16), b.view(np.uint16)
+    else:
+        a = np.ascontiguousarray(a)
+        b = np.ascontiguousarray(b)
+        if a.dtype == np.uint16 and b.dtype == np.uint16:
+            a_bits, b_bits = a, b
+        elif a.dtype.itemsize == 2 and b.dtype.itemsize == 2:
+            a_bits, b_bits = a.view(np.uint16), b.view(np.uint16)
+        else:
+            raise ValueError("bf16 TILE-1 ABI requires uint16 lanes or a 16-bit bf16 array")
+    if a.ndim != 2 or b.ndim != 2 or a.shape[1] != b.shape[0]:
+        raise ValueError("TILE-1 runtime ABI requires rank-2 A[M,K] and B[K,N]")
+    if artifact.resources.threadgroup != (32, 1, 1):
+        raise ValueError("TILE-1 runtime ABI requires the selected 32x1x1 threadgroup")
+    symbol_dtype = "f16" if artifact.fragment.storage_dtype == "fp16" else "bf16"
+    symbol = f"tessera_apple_gpu_tile_simdgroup_gemm_{symbol_dtype}"
+    def result(out, native):
+        if not return_provenance:
+            return out, native
+        cache_size = None
+        device_time_ns = None
+        counter_sampling_supported = None
+        counter_timestamp_delta = None
+        try:
+            from tessera._apple_gpu_dispatch import apple_gpu_runtime
+            runtime = apple_gpu_runtime()
+            probe = getattr(runtime, "tessera_apple_gpu_runtime_msl_cache_size", None)
+            if probe is not None:
+                probe.restype = ctypes.c_int32
+                cache_size = int(probe())
+            timing = getattr(runtime, "tessera_apple_gpu_tile_last_device_time_ns", None)
+            if timing is not None:
+                timing.restype = ctypes.c_int64
+                observed = int(timing())
+                device_time_ns = observed if observed >= 0 else None
+            counter_capability = getattr(
+                runtime, "tessera_apple_gpu_tile_counter_sampling_supported", None)
+            counter_delta = getattr(runtime, "tessera_apple_gpu_tile_last_counter_delta", None)
+            if counter_capability is not None:
+                counter_capability.restype = ctypes.c_int32
+                counter_sampling_supported = bool(counter_capability())
+            if counter_delta is not None:
+                counter_delta.restype = ctypes.c_int64
+                observed = int(counter_delta())
+                counter_timestamp_delta = observed if observed >= 0 else None
+        except Exception:
+            pass
+        return out, native, AppleTileDispatchRecord(
+            symbol=symbol,
+            source_sha256=hashlib.sha256(artifact.msl.encode()).hexdigest(),
+            native_gpu=native,
+            execution_mode="metal_runtime" if native else "reference_cpu",
+            resources=artifact.resources.as_metadata_dict(),
+            msl_pipeline_cache_size=cache_size,
+            device_time_ns=device_time_ns,
+            counter_sampling_supported=counter_sampling_supported,
+            counter_timestamp_delta=counter_timestamp_delta,
+        )
+
+    sym = bind_registered(symbol)
+    if sym is None:
+        return result(None, False)
+    out = np.empty((a.shape[0], b.shape[1]), dtype=np.float32)
+    rc = sym(
+        artifact.msl.encode(), artifact.entry.encode(),
+        a_bits.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+        b_bits.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+        out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        ctypes.c_int32(a.shape[0]), ctypes.c_int32(b.shape[1]), ctypes.c_int32(a.shape[1]),
+        ctypes.c_int32(artifact.shape.m), ctypes.c_int32(artifact.shape.n),
+        ctypes.c_int32(artifact.resources.threadgroup[0]),
+    )
+    return result(out, True) if rc == 1 else result(None, False)
 
 
 # Structural tokens every emitted simdgroup_matrix GEMM must carry (host-free check).
@@ -496,10 +697,14 @@ def metal_compile(msl: str, *, dtype: str = "bf16") -> MetalCompileResult:
 __all__ = [
     "SIMDGROUP_FRAG",
     "MslGemmShape",
+    "AppleTileMslArtifact",
+    "AppleTileDispatchRecord",
     "MslValidation",
     "MetalCompileResult",
     "emit_simdgroup_gemm_msl",
     "emit_steel_gemm_msl",
+    "materialize_apple_simdgroup_tile_msl",
+    "dispatch_apple_simdgroup_tile_f16",
     "validate_msl_gemm_structure",
     "validate_steel_gemm_structure",
     "min_metal_std",

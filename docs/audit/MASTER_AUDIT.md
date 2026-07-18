@@ -206,6 +206,7 @@ consumer Blackwell.
 | Verifiers | 11 ops have no verifier | Add a verifier only where the op has structural or semantic invariants |
 | Direct proof | Structural-only and family-covered rows remain | Prioritize high-use/native rows for direct compare; use differential generation for the long tail |
 | Benchmarks | Evidence is intentionally sparse | Attach benchmarks first to native and hardware-promoted hot paths |
+| Sequence mixers (linear/hybrid attention) | KDA/GDN/Mamba/sliding-window/short-conv/MLA are scattered ops (`kimi_delta_attention`, `gated_deltanet`, `selective_ssm`, `attn_sliding_window`); `kimi_delta_attention` is registered but its reference is scalar/additive, not faithful channel-wise KDA | Land the [Sequence Mixer](compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md) track: faithful channel-wise KDA + `linear_recurrence` normal form + N-way cache planner, host-free oracles first. **Direction** (not status): [theory](compiler/SEQUENCE_MIXER_THEORY.md). Backend execution binds into the live per-target queues — Apple (`backend/apple/todo.md` items 8–14), NVIDIA (NVIDIA-TEST-3/-5 families; NVFP4 already in TEST-4), ROCm (extends completed ROCM-REPLAY-1/ROCM-9; ROCM-6 G6-B/G6-C); ROCm/CUDA are the perf ceiling (Decision #28) |
 
 Live counts and row lists belong to
 [`generated/compiler_progress.md`](generated/compiler_progress.md), not this

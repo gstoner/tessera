@@ -119,6 +119,7 @@ timeout = 300
 markers = [
     "slow: long-running tests excluded from quick local sweeps",
     "compiler_tool: requires a built external compiler tool such as tessera-opt or mlir-opt",
+    "compiler_cpu: compiler-artifact proof owned by the CPU JIT backend",
     "compiler_apple: compiler-artifact proof owned by the Apple backend",
     "compiler_nvidia: compiler-artifact proof owned by the NVIDIA backend",
     "compiler_rocm: compiler-artifact proof owned by the ROCm backend",

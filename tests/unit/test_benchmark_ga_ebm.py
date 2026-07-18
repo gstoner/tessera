@@ -634,7 +634,7 @@ def test_ebt_sweep_emits_pair_per_shape(tmp_path, report: dict) -> None:
                           include_ebt_sweep=True,
                           ebt_sweep_points=((4, 8, 6, 4), (8, 16, 32, 4)))
     sweep_rows = [row for row in r["runs"] if row["op"] == "ebt_tiny_sweep"]
-    if _apple_gpu_available(report):
+    if _apple_gpu_available(r):
         assert len(sweep_rows) == 4   # 2 shapes × {apple_gpu, python_ref}
     else:
         assert len(sweep_rows) == 2   # 2 shapes × python_ref only
@@ -1092,7 +1092,7 @@ def test_jit_bridge_rows_emitted_when_runtime_available(native_report: dict) -> 
     rows = _jit_bridge_rows(native_report)
     ops = {r["op"] for r in rows}
     assert ops == {"clifford_inner", "ebm_inner_step"}
-    assert report["jit_bridge_count"] == len(rows)
+    assert native_report["jit_bridge_count"] == len(rows)
 
 
 @pytest.mark.performance

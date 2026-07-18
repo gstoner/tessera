@@ -42,6 +42,8 @@ static bool producesOperandOf(Operation *prev, Operation *op) {
 
 struct AsyncPrefetch
     : public PassWrapper<AsyncPrefetch, OperationPass<ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(AsyncPrefetch)
+
   static constexpr int kNumStages = 2;
 
   StringRef getArgument() const final { return "tpp-async-prefetch"; }

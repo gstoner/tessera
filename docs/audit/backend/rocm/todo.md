@@ -673,6 +673,23 @@ round trips affect registration and allocation. Before automatic selection:
 
 ## Accepted-deferred work
 
+Consumer plan `SEQUENCE-MIXER-2026-07-17`: the compiler-direction Sequence Mixer
+track ([`../../compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md`](../../compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md))
+consumes ROCm as a **lead performance target** (Decision #28 — its WMMA/MFMA
+candidates set the ceiling, never capped by the shared mixer framework). It
+**extends already-complete vehicles** rather than opening new items: channel-wise
+KDA/GDN decode → **ROCM-REPLAY-1** (add the channel-diagonal transition to the
+proven persistent/flush/rollback/async-ring path); `windowed_kv` mixer state →
+**ROCM-9** (window ring on the proven direct + gather paged-KV routes);
+chunkwise-scan inner GEMMs → **ROCM-TILE-1** WMMA f16/bf16/int8/int4 fragments;
+`sliding_window`/full mixer forward → **ROCM-6 G6-B**; mixer backward → **ROCM-6
+G6-C** (split/reduced dK/dV). Low-precision mixer GEMMs stay bf16/f16 on gfx1151
+per the standing **FP8/FP4 WMMA guard**; FP8/FP4 forms are the access-gated
+CDNA4/RDNA4 packet (ROCM-1/2/3). Valid paired mixer device timing needs bare-metal
+gfx1151 (ROCM-8). Inherits the exact-device native-provenance + aligned/ragged +
+RDNA↛MFMA-guard contract unchanged. Direction pointer only; no ROCm gate or
+exact-device claim changes here.
+
 Cross-backend sync `EPILOGUE-CONTRACT-2026-07-16` updates only the shared
 `FusedRegion` bias/activation/residual order and registered rejection
 diagnostics. Existing gfx1151 epilogue fixtures already consume this oracle;

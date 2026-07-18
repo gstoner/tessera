@@ -75,6 +75,7 @@
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Config/llvm-config.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/TargetSelect.h"
 
@@ -247,6 +248,20 @@ static int64_t vectorizeMaxDim() {
   return 2048;
 }
 
+static bool vectorizeLaneSupportedByToolchain() {
+  // MLIR 23's transform-vectorized tensor IR aborts inside one-shot
+  // bufferization while querying SubsetInsertionOpInterface instead of
+  // returning pass failure. Keep the opt-in request crash-free by using the
+  // scalar JIT pipeline on that toolchain. LLVM 22 remains the proven
+  // vectorized lane; newer releases are allowed to exercise the compatibility
+  // test rather than inheriting an unbounded version gate.
+#if LLVM_VERSION_MAJOR == 23
+  return false;
+#else
+  return true;
+#endif
+}
+
 static bool withinVectorizeEnvelope(ModuleOp module) {
   int64_t maxDim = vectorizeMaxDim();
   bool ok = true;
@@ -328,7 +343,8 @@ LogicalResult buildAndRunPipeline(ModuleOp module) {
   // Stage 1b (opt-in): tile + vectorize on tensors, before bufferization. Only
   // within the safe size envelope — larger programs stay on the scalar lane.
   bool vectorized = false;
-  if (::getenv("TESSERA_JIT_VECTORIZE") && withinVectorizeEnvelope(module)) {
+  if (vectorizeLaneSupportedByToolchain() && ::getenv("TESSERA_JIT_VECTORIZE") &&
+      withinVectorizeEnvelope(module)) {
     if (failed(tileAndVectorizeLinalg(module)))
       return failure();
     vectorized = true;
@@ -497,9 +513,14 @@ void *tessera_jit_compile(const char *mlir_text) {
   } else {
     llvm::consumeError(tmb.takeError());
   }
-  opts.transformer = makeOptimizingTransformer(/*optLevel=*/3,
-                                               /*sizeLevel=*/0,
-                                               /*targetMachine=*/hostTM.get());
+  // ExecutionEngineOptions stores this as a non-owning function_ref in MLIR
+  // 23. Keep the owning std::function alive through ExecutionEngine::create;
+  // assigning the temporary directly leaves a dangling callback and can crash
+  // on the first JIT compilation.
+  auto optimizingTransformer = makeOptimizingTransformer(/*optLevel=*/3,
+                                                          /*sizeLevel=*/0,
+                                                          /*targetMachine=*/hostTM.get());
+  opts.transformer = optimizingTransformer;
   // The opt-in vectorize lane's DPS out-param copy can lower memref.copy to the
   // generic `memrefCopy` runtime helper (between different-layout memrefs). Load
   // MLIR's C runner utils so that symbol resolves. Default to the Homebrew LLVM
@@ -508,7 +529,7 @@ void *tessera_jit_compile(const char *mlir_text) {
   static const std::string kRunnerUtils = [] {
     if (const char *e = ::getenv("TESSERA_MLIR_RUNNER_UTILS"))
       return std::string(e);
-    return std::string("/opt/homebrew/opt/llvm/lib/libmlir_c_runner_utils.dylib");
+    return std::string("/opt/homebrew/llvm-23.1.0-rc1/lib/libmlir_c_runner_utils.dylib");
   }();
   SmallVector<StringRef> sharedLibs;
   if (::getenv("TESSERA_JIT_VECTORIZE"))

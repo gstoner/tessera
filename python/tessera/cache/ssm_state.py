@@ -125,6 +125,13 @@ class SSMStateHandle:
     _count: int = field(init=False, default=0)
     _scalar_a: bool = field(init=False, default=True)
     _a1d: Optional[np.ndarray] = field(init=False, default=None, repr=False)
+    #: Provenance of the most recent output-only replay read.  Numerical host
+    #: fallback is never eligible for native Apple proof.
+    last_decode_execution: str = field(init=False, default="reference_cpu")
+    #: Provenance of the most recent block decode. A status-returning backend
+    #: must confirm its dispatch; fallback-capable numerical output is not
+    #: sufficient to earn this marker.
+    last_block_execution: str = field(init=False, default="reference_cpu")
 
     def __post_init__(self) -> None:
         from ..dtype import canonicalize_dtype
@@ -229,6 +236,12 @@ class SSMStateHandle:
         )
         if res is None:
             return None
+        if isinstance(res, tuple):
+            res, native = res
+            self.last_decode_execution = "native_gpu" if native else "reference_cpu"
+        else:
+            # Preserve legacy/custom callback compatibility without promoting it.
+            self.last_decode_execution = "reference_cpu"
         return np.asarray(res, dtype=np.float64).reshape(
             self.batch, self.num_channels
         )
@@ -331,6 +344,7 @@ class SSMStateHandle:
         ``y_t *= gate_t`` (matching ``selective_ssm``'s output gate).
         """
         c = _to_array(c_t).astype(np.float64).reshape(self.batch, self.state_dim)
+        self.last_decode_execution = "reference_cpu"
         m = self._count
         if m == 0:
             # No replay tokens: y = c · S0  → bmm (B,1,N)@(B,N,D).
@@ -408,6 +422,7 @@ class SSMStateHandle:
         Returns ``(T, B, D)``.  Pure — does not mutate the handle (commit
         accepted tokens via :meth:`step`/:meth:`append`).  Scalar-A only.
         """
+        self.last_block_execution = "reference_cpu"
         if not self._scalar_a:
             raise ValueError("decode_block requires scalar-state A")
         deltas = _to_array(deltas).astype(np.float64)
@@ -420,7 +435,13 @@ class SSMStateHandle:
             assert self._a1d is not None
             res = self.block_fn(deltas, xs, bs, cs, s0, self._a1d, B, T, D, N)
             if res is not None:
-                return np.asarray(res, dtype=np.float64).reshape(T, B, D)
+                value = res
+                if isinstance(res, tuple) and len(res) == 2:
+                    value, provenance = res
+                    self.last_block_execution = (
+                        "native_gpu" if provenance is True else
+                        "reference_cpu" if provenance is False else str(provenance))
+                return np.asarray(value, dtype=np.float64).reshape(T, B, D)
         # numpy reference block (one sequential pass from S0).
         h = s0.copy()
         out = np.zeros((T, B, D))

@@ -1,0 +1,5070 @@
+{
+  "decisions": [
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "cooperative_tensor": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            true,
+            true
+          ],
+          "counter_timestamp_deltas": [
+            912,
+            904
+          ],
+          "cross_run_speedup_spread": 0.01935348017523591,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.004511163895486936,
+            -0.023864644070722845
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.004511163895486936,
+              0.01765462323181956,
+              -0.0031384575969135363,
+              0.02704338000176309,
+              -0.16830584031499887,
+              -0.015022070070100464,
+              -0.006097035101073543,
+              -0.0329387505434009,
+              0.029957433753882733
+            ],
+            [
+              0.021976772453164577,
+              -0.03286985156986411,
+              0.005845323741007194,
+              0.013458472187587374,
+              -0.04163504670483577,
+              -0.016446195214413664,
+              -0.023864644070722845,
+              -0.07452253253973445,
+              -0.03814809299779861
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              264312,
+              262020,
+              266250,
+              242813,
+              269416,
+              267437,
+              268313,
+              268499,
+              252958
+            ],
+            [
+              249437,
+              255312,
+              258687,
+              261104,
+              262166,
+              253645,
+              260936,
+              262854,
+              257958
+            ]
+          ],
+          "paired_win_fractions": [
+            0.3333333333333333,
+            0.3333333333333333
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MetalPerformancePrimitives.matmul2d",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": [
+                64,
+                64
+              ],
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 576,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  128,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.2222222222222222
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+              "threadgroup": [
+                128,
+                1,
+                1
+              ],
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "MetalPerformancePrimitives.matmul2d",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": [
+                64,
+                64
+              ],
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 576,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  128,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.2222222222222222
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+              "threadgroup": [
+                128,
+                1,
+                1
+              ],
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.029236103862969536,
+          "speedups_vs_incumbent": [
+            -0.011876484560570071,
+            -0.027812322448120087
+          ],
+          "times_ns": [
+            266250,
+            258687
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal4_timestamp_heap",
+            "metal4_timestamp_heap"
+          ]
+        },
+        "mps": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              263125,
+              266729,
+              265417,
+              249562,
+              230604,
+              263479,
+              266687,
+              259937,
+              260770
+            ],
+            [
+              255042,
+              247187,
+              260208,
+              264666,
+              251687,
+              249541,
+              254854,
+              244624,
+              248479
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.04544533488022822,
+          "times_ns": [
+            263125,
+            251687
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "mps",
+      "shape": "128x256x64",
+      "status": "retain_incumbent",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "cooperative_tensor": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            true,
+            true
+          ],
+          "counter_timestamp_deltas": [
+            912,
+            904
+          ],
+          "cross_run_speedup_spread": 0.14616569931719925,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.8451731298594678,
+            -0.991338829176667
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.8904850092597227,
+              -0.8007650324205813,
+              -0.7633509987770077,
+              -1.010266491917868,
+              -1.0539231514368743,
+              -0.8451731298594678,
+              -0.8184344160199291,
+              -0.8034342092780571,
+              -0.9138440330838913
+            ],
+            [
+              -0.9922405950660887,
+              -2.243801652892562,
+              -1.7142520982037808,
+              -0.6682452212846565,
+              -1.0710838317070612,
+              -0.7186530388757072,
+              -0.991338829176667,
+              -0.7144451886581826,
+              -0.7086913086913087
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              37770,
+              38603,
+              34604,
+              36812,
+              38166,
+              38208,
+              37958,
+              38020,
+              38874
+            ],
+            [
+              37229,
+              36895,
+              34604,
+              38750,
+              39479,
+              37666,
+              38166,
+              38395,
+              34208
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MetalPerformancePrimitives.matmul2d",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": [
+                64,
+                64
+              ],
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 576,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  128,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.2222222222222222
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+              "threadgroup": [
+                128,
+                1,
+                1
+              ],
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "MetalPerformancePrimitives.matmul2d",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": [
+                64,
+                64
+              ],
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 576,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  128,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.2222222222222222
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+              "threadgroup": [
+                128,
+                1,
+                1
+              ],
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.009398396431795252,
+          "speedups_vs_incumbent": [
+            -0.8717999212288302,
+            -0.9652509652509652
+          ],
+          "times_ns": [
+            38020,
+            37666
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal4_timestamp_heap",
+            "metal4_timestamp_heap"
+          ]
+        },
+        "mps": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              19979,
+              21437,
+              19624,
+              18312,
+              18582,
+              20707,
+              20874,
+              21082,
+              20312
+            ],
+            [
+              18687,
+              11374,
+              12749,
+              23228,
+              19062,
+              21916,
+              19166,
+              22395,
+              20020
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.059793384117708445,
+          "times_ns": [
+            20312,
+            19166
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "mps",
+      "shape": "128x256x64",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mps": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              262437,
+              273812,
+              274291,
+              273521,
+              266146,
+              267312,
+              269874,
+              268479,
+              275333
+            ],
+            [
+              263146,
+              263625,
+              273020,
+              265083,
+              266104,
+              272604,
+              263375,
+              276791,
+              274083
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.014167393199651265,
+          "times_ns": [
+            269874,
+            266104
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "simdgroup_matrix": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            true,
+            true
+          ],
+          "counter_timestamp_deltas": [
+            648,
+            641
+          ],
+          "cross_run_speedup_spread": 0.024688020322928425,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.014150138196293216,
+            -0.03883815851922164
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.05842545067959167,
+              -0.06079353717148993,
+              -0.0074446482020919386,
+              -0.010357522822744871,
+              -0.03232436331938109,
+              -0.0023380918178009216,
+              -0.02246603970741902,
+              0.05517377523009248,
+              -0.014150138196293216
+            ],
+            [
+              -0.061513380404794295,
+              -0.06069227121858701,
+              -0.012669401509046956,
+              -0.04974668311434532,
+              -0.043528094278928536,
+              -0.003514255109976376,
+              -0.03883815851922164,
+              0.016936966881148593,
+              -0.0015177884071613343
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              277770,
+              290458,
+              276333,
+              276354,
+              274749,
+              267937,
+              275937,
+              253666,
+              279229
+            ],
+            [
+              279333,
+              279625,
+              276479,
+              278270,
+              277687,
+              273562,
+              273604,
+              272103,
+              274499
+            ]
+          ],
+          "paired_win_fractions": [
+            0.1111111111111111,
+            0.1111111111111111
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MTL4ComputeCommandEncoder",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": [
+                64,
+                64
+              ],
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 16384,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  256,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+              "threadgroup": [
+                256,
+                1,
+                1
+              ],
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "MTL4ComputeCommandEncoder",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": [
+                64,
+                64
+              ],
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 16384,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  256,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+              "threadgroup": [
+                256,
+                1,
+                1
+              ],
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.00052834804384565,
+          "speedups_vs_incumbent": [
+            -0.023933391138086662,
+            -0.03898851576827105
+          ],
+          "times_ns": [
+            276333,
+            276479
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal4_timestamp_heap",
+            "metal4_timestamp_heap"
+          ]
+        }
+      },
+      "selected_route": "mps",
+      "shape": "128x256x64",
+      "status": "retain_incumbent",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mps": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              21707,
+              21645,
+              21666,
+              20291,
+              20562,
+              20812,
+              20458,
+              21833,
+              20625
+            ],
+            [
+              20874,
+              20520,
+              19499,
+              21436,
+              21312,
+              20374,
+              21187,
+              21124,
+              19604
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.002979050547760907,
+          "times_ns": [
+            20812,
+            20874
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "simdgroup_matrix": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            true,
+            true
+          ],
+          "counter_timestamp_deltas": [
+            648,
+            641
+          ],
+          "cross_run_speedup_spread": 0.006745865165458775,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.29583698083843984,
+            -0.3025828460038986
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.24379232505643342,
+              -0.23774543774543774,
+              -0.2480845564478907,
+              -0.33576462471046276,
+              -0.29583698083843984,
+              -0.32231404958677684,
+              -0.3034509727246065,
+              -0.2280492831951633,
+              -0.31713939393939394
+            ],
+            [
+              -0.2545271629778672,
+              -0.3025828460038986,
+              -0.5705420790809785,
+              -0.23133980220190334,
+              -0.28838213213213215,
+              -0.3077942475704329,
+              -0.265492990985038,
+              -0.47538345010414695,
+              -0.35809018567639256
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              26999,
+              26791,
+              27041,
+              27104,
+              26645,
+              27520,
+              26666,
+              26812,
+              27166
+            ],
+            [
+              26187,
+              26729,
+              30624,
+              26395,
+              27458,
+              26645,
+              26812,
+              31166,
+              26624
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MTL4ComputeCommandEncoder",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": [
+                64,
+                64
+              ],
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 16384,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  256,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+              "threadgroup": [
+                256,
+                1,
+                1
+              ],
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "MTL4ComputeCommandEncoder",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": [
+                64,
+                64
+              ],
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 16384,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  256,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+              "threadgroup": [
+                256,
+                1,
+                1
+              ],
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.010101388005537056,
+          "speedups_vs_incumbent": [
+            -0.2972804151451086,
+            -0.2804924786816135
+          ],
+          "times_ns": [
+            26999,
+            26729
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal4_timestamp_heap",
+            "metal4_timestamp_heap"
+          ]
+        }
+      },
+      "selected_route": "mps",
+      "shape": "128x256x64",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "cooperative_tensor": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            true,
+            true
+          ],
+          "counter_timestamp_deltas": [
+            1014,
+            1028
+          ],
+          "cross_run_speedup_spread": 0.024566642988828394,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.016589673386400557,
+            -0.007976969602427835
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.042584728235391445,
+              0.05549495843997826,
+              0.01759197822824155,
+              -0.018585541700544685,
+              -0.04840255824844866,
+              -0.07197450722111358,
+              -0.031055123211827157,
+              0.016589673386400557,
+              0.03281857265692176
+            ],
+            [
+              0.05493095636131012,
+              -0.014005229974241008,
+              -0.07496296636542149,
+              -0.015594053288802432,
+              -0.007976969602427835,
+              0.016892672847606753,
+              0.023356652040731847,
+              0.0012059755545495699,
+              -0.008354427506044473
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              277750,
+              262375,
+              276875,
+              283124,
+              286541,
+              271812,
+              280082,
+              279083,
+              281208
+            ],
+            [
+              267395,
+              259416,
+              280833,
+              287666,
+              284312,
+              276437,
+              283125,
+              275792,
+              266499
+            ]
+          ],
+          "paired_win_fractions": [
+            0.5555555555555556,
+            0.4444444444444444
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MetalPerformancePrimitives.matmul2d",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": [
+                64,
+                64
+              ],
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 576,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  128,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.2222222222222222
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+              "threadgroup": [
+                128,
+                1,
+                1
+              ],
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "MetalPerformancePrimitives.matmul2d",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": [
+                64,
+                64
+              ],
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 576,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  128,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.2222222222222222
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+              "threadgroup": [
+                128,
+                1,
+                1
+              ],
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.009571801169886809,
+          "speedups_vs_incumbent": [
+            -0.004047374063707467,
+            0.016892672847606753
+          ],
+          "times_ns": [
+            279083,
+            276437
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal4_timestamp_heap",
+            "metal4_timestamp_heap"
+          ]
+        },
+        "mps": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              290104,
+              277791,
+              281833,
+              277958,
+              273312,
+              253562,
+              271646,
+              283791,
+              290750
+            ],
+            [
+              282937,
+              255833,
+              261249,
+              283249,
+              282062,
+              281187,
+              289896,
+              276125,
+              264291
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.011616862979299031,
+          "times_ns": [
+            277958,
+            281187
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "mps",
+      "shape": "256x256x256",
+      "status": "retain_incumbent",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "cooperative_tensor": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            true,
+            true
+          ],
+          "counter_timestamp_deltas": [
+            1014,
+            1028
+          ],
+          "cross_run_speedup_spread": 0.031906482686269944,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.7873451258474246,
+            -0.8192516085336945
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.6463862004370903,
+              -0.5912095175148712,
+              -0.5366105759292181,
+              -0.9547562351171826,
+              -0.8035584759141529,
+              -0.6565874730021598,
+              -1.119957290747876,
+              -0.8140027091093803,
+              -0.7873451258474246
+            ],
+            [
+              -0.7200975730764461,
+              -1.3753134435289904,
+              -1.3420487999600819,
+              -0.6708668346733869,
+              -0.8187759952465835,
+              -0.9730939773558913,
+              -0.8192516085336945,
+              -0.6429615197272285,
+              -1.019616584930896
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              42187,
+              38520,
+              37166,
+              46791,
+              42270,
+              37583,
+              45666,
+              42854,
+              45874
+            ],
+            [
+              41604,
+              46416,
+              46937,
+              41770,
+              42854,
+              45833,
+              42978,
+              37103,
+              40770
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MetalPerformancePrimitives.matmul2d",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": [
+                64,
+                64
+              ],
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 576,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  128,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.2222222222222222
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+              "threadgroup": [
+                128,
+                1,
+                1
+              ],
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "MetalPerformancePrimitives.matmul2d",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": [
+                64,
+                64
+              ],
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 576,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  128,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.2222222222222222
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+              "threadgroup": [
+                128,
+                1,
+                1
+              ],
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.013815945114738585,
+          "speedups_vs_incumbent": [
+            -0.7658854493044241,
+            -0.8448491110250118
+          ],
+          "times_ns": [
+            42270,
+            42854
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal4_timestamp_heap",
+            "metal4_timestamp_heap"
+          ]
+        },
+        "mps": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              25624,
+              24208,
+              24187,
+              23937,
+              23437,
+              22687,
+              21541,
+              23624,
+              25666
+            ],
+            [
+              24187,
+              19541,
+              20041,
+              24999,
+              23562,
+              23229,
+              23624,
+              22583,
+              20187
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.030479142451246288,
+          "times_ns": [
+            23937,
+            23229
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "mps",
+      "shape": "256x256x256",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mps": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              283895,
+              292166,
+              285437,
+              287812,
+              283707,
+              288707,
+              291437,
+              285666,
+              287229
+            ],
+            [
+              291541,
+              281791,
+              281792,
+              288541,
+              284291,
+              289520,
+              288062,
+              298020,
+              288583
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.004567783893687615,
+          "times_ns": [
+            287229,
+            288541
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "simdgroup_matrix": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            true,
+            true
+          ],
+          "counter_timestamp_deltas": [
+            742,
+            749
+          ],
+          "cross_run_speedup_spread": 0.01954229860819169,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.03233638245917663,
+            -0.012794083850984938
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.014019267686996953,
+              -0.0053496984590951716,
+              -0.03233638245917663,
+              -0.05059900212638806,
+              -0.029082821361475043,
+              -0.027785956003837802,
+              -0.03845771127207596,
+              -0.032601009570617435,
+              -0.04482486099941162
+            ],
+            [
+              -0.012794083850984938,
+              0.010940732670667268,
+              -0.05152736770383829,
+              -0.028231689777189376,
+              -0.010482217164806483,
+              -0.009211798839458414,
+              -0.018804979483583395,
+              0.0016743842695121133,
+              -0.018698260119272444
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              287875,
+              293729,
+              294667,
+              302375,
+              291958,
+              296729,
+              302645,
+              294979,
+              300104
+            ],
+            [
+              295271,
+              278708,
+              296312,
+              296687,
+              287271,
+              292187,
+              293479,
+              297521,
+              293979
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.2222222222222222
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MTL4ComputeCommandEncoder",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": [
+                64,
+                64
+              ],
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 16384,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  256,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+              "threadgroup": [
+                256,
+                1,
+                1
+              ],
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "MTL4ComputeCommandEncoder",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": [
+                64,
+                64
+              ],
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 16384,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  256,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+              "threadgroup": [
+                256,
+                1,
+                1
+              ],
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.003401603515897394,
+          "speedups_vs_incumbent": [
+            -0.02698195516469437,
+            -0.018846541739302215
+          ],
+          "times_ns": [
+            294979,
+            293979
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal4_timestamp_heap",
+            "metal4_timestamp_heap"
+          ]
+        }
+      },
+      "selected_route": "mps",
+      "shape": "256x256x256",
+      "status": "retain_incumbent",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mps": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              23187,
+              23333,
+              22937,
+              23395,
+              23374,
+              22603,
+              23333,
+              20999,
+              22958
+            ],
+            [
+              23791,
+              21624,
+              22041,
+              23333,
+              23124,
+              23395,
+              24249,
+              22770,
+              22353
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.0027244421380384016,
+          "times_ns": [
+            23187,
+            23124
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "simdgroup_matrix": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            true,
+            true
+          ],
+          "counter_timestamp_deltas": [
+            742,
+            749
+          ],
+          "cross_run_speedup_spread": 0.006491461978036017,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.3475476957923164,
+            -0.3410562338142804
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.32345710958726875,
+              -0.2526893241332019,
+              -0.3433317347517112,
+              -0.39807651207522976,
+              -0.29237614443398646,
+              -0.6139008096270406,
+              -0.4026914670209574,
+              -0.6260298109433783,
+              -0.3475476957923164
+            ],
+            [
+              -0.31175654659324953,
+              -0.3410562338142804,
+              -0.5378158885712989,
+              -0.42322033171902457,
+              -0.2730064002767687,
+              -0.5334045736268433,
+              -0.2010804569260588,
+              -0.3787878787878788,
+              -0.32715966536930163
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              30687,
+              29229,
+              30812,
+              32708,
+              30208,
+              36479,
+              32729,
+              34145,
+              30937
+            ],
+            [
+              31208,
+              28999,
+              33895,
+              33208,
+              29437,
+              35874,
+              29125,
+              31395,
+              29666
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MTL4ComputeCommandEncoder",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": [
+                64,
+                64
+              ],
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 16384,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  256,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+              "threadgroup": [
+                256,
+                1,
+                1
+              ],
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "MTL4ComputeCommandEncoder",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": [
+                64,
+                64
+              ],
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 16384,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  256,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+              "threadgroup": [
+                256,
+                1,
+                1
+              ],
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.008759737531111613,
+          "speedups_vs_incumbent": [
+            -0.3342390132401777,
+            -0.34959349593495936
+          ],
+          "times_ns": [
+            30937,
+            31208
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal4_timestamp_heap",
+            "metal4_timestamp_heap"
+          ]
+        }
+      },
+      "selected_route": "mps",
+      "shape": "256x256x256",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "cooperative_tensor": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            true,
+            true
+          ],
+          "counter_timestamp_deltas": [
+            973,
+            1729
+          ],
+          "cross_run_speedup_spread": 0.006304062770900163,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.001602934433745988,
+            0.004701128337154175
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.03596952073913317,
+              -0.001602934433745988,
+              -0.01938989841606805,
+              -0.021056939501779358,
+              0.015499268971200018,
+              0.033507312716311265,
+              0.026102587380844304,
+              0.008489381849679584,
+              -0.0320198877592033
+            ],
+            [
+              -0.17300807180359246,
+              0.004701128337154175,
+              -0.02474675249382473,
+              0.02915736040609137,
+              -0.08901919151747417,
+              0.016089133734029537,
+              0.014506159144512063,
+              0.06949555041865,
+              -0.03901687665525304
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              280208,
+              273062,
+              272750,
+              286917,
+              270020,
+              277020,
+              268187,
+              270145,
+              277312
+            ],
+            [
+              307646,
+              300000,
+              291646,
+              310791,
+              331333,
+              294333,
+              288729,
+              265271,
+              281292
+            ]
+          ],
+          "paired_win_fractions": [
+            0.4444444444444444,
+            0.5555555555555556
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MetalPerformancePrimitives.matmul2d",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": [
+                64,
+                64
+              ],
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 576,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  128,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.2222222222222222
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+              "threadgroup": [
+                128,
+                1,
+                1
+              ],
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "MetalPerformancePrimitives.matmul2d",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": [
+                64,
+                64
+              ],
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 576,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  128,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.2222222222222222
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+              "threadgroup": [
+                128,
+                1,
+                1
+              ],
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.07789805978129509,
+          "speedups_vs_incumbent": [
+            -0.001602934433745988,
+            -0.004621491642745726
+          ],
+          "times_ns": [
+            273062,
+            294333
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal4_timestamp_heap",
+            "metal4_timestamp_heap"
+          ]
+        },
+        "mps": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              270479,
+              272625,
+              267562,
+              281000,
+              274271,
+              286624,
+              275375,
+              272458,
+              268708
+            ],
+            [
+              262271,
+              301417,
+              284603,
+              320125,
+              304249,
+              299146,
+              292979,
+              285083,
+              270729
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.0746593305823017,
+          "times_ns": [
+            272625,
+            292979
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "mps",
+      "shape": "257x129x65",
+      "status": "retain_incumbent",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "cooperative_tensor": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            true,
+            true
+          ],
+          "counter_timestamp_deltas": [
+            973,
+            1729
+          ],
+          "cross_run_speedup_spread": 1.047388010681084,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.8890041493775933,
+            -1.9363921600586773
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -1.4536117477293948,
+              -0.9340792613747506,
+              -0.7296948861194671,
+              -0.5489364952075457,
+              -0.6334630665693668,
+              -1.0101636747624076,
+              -0.9592405930420316,
+              -0.7569312256889845,
+              -0.8890041493775933
+            ],
+            [
+              -1.9363921600586773,
+              -1.7592524734334922,
+              -2.115851558463923,
+              -2.1002533167317847,
+              -3.0560684833273575,
+              -2.147787109969973,
+              -1.0917710802573655,
+              -1.085969387755102,
+              -0.8953347611509451
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              57812,
+              49437,
+              40250,
+              40562,
+              40291,
+              45687,
+              40041,
+              42458,
+              40062
+            ],
+            [
+              72062,
+              67770,
+              72375,
+              72208,
+              90499,
+              72333,
+              49416,
+              49062,
+              40708
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MetalPerformancePrimitives.matmul2d",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": [
+                64,
+                64
+              ],
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 576,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  128,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.2222222222222222
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+              "threadgroup": [
+                128,
+                1,
+                1
+              ],
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "MetalPerformancePrimitives.matmul2d",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": [
+                64,
+                64
+              ],
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 576,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  128,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.2222222222222222
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+              "threadgroup": [
+                128,
+                1,
+                1
+              ],
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.7765889255953848,
+          "speedups_vs_incumbent": [
+            -0.7215007215007215,
+            -2.093984800996093
+          ],
+          "times_ns": [
+            40562,
+            72062
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal4_timestamp_heap",
+            "metal4_timestamp_heap"
+          ]
+        },
+        "mps": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              23562,
+              25561,
+              23270,
+              26187,
+              24666,
+              22728,
+              20437,
+              24166,
+              21208
+            ],
+            [
+              24541,
+              24561,
+              23228,
+              23291,
+              22312,
+              22979,
+              23624,
+              23520,
+              21478
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.011635395646387017,
+          "times_ns": [
+            23562,
+            23291
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "mps",
+      "shape": "257x129x65",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mps": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              273167,
+              284020,
+              281187,
+              277124,
+              285042,
+              271000,
+              263250,
+              296541,
+              308396
+            ],
+            [
+              274166,
+              260896,
+              273979,
+              273375,
+              278313,
+              284979,
+              274000,
+              285854,
+              275979
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.025608572908383972,
+          "times_ns": [
+            281187,
+            274166
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "mps",
+      "shape": "257x129x65",
+      "status": "retain_incumbent",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mps": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              23603,
+              23333,
+              21999,
+              23166,
+              20645,
+              22749,
+              19749,
+              21354,
+              24478
+            ],
+            [
+              20541,
+              19583,
+              22437,
+              22374,
+              22478,
+              23645,
+              23020,
+              23749,
+              26437
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.012056232760921791,
+          "times_ns": [
+            22749,
+            22478
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "mps",
+      "shape": "257x129x65",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "cooperative_tensor": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            true,
+            true
+          ],
+          "counter_timestamp_deltas": [
+            659,
+            616
+          ],
+          "cross_run_speedup_spread": 0.011041523566443199,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.008013508369844265,
+            -0.0030280151965989335
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.041170001643260734,
+              -0.013465369213715698,
+              -0.03616215724689797,
+              0.008013508369844265,
+              0.037450267414557786,
+              0.016649998535436167,
+              0.021683584251216872,
+              0.09794664561463845,
+              -0.04157445793817797
+            ],
+            [
+              -0.0030280151965989335,
+              0.04329302387688507,
+              0.07161682636204146,
+              -0.009405195210520322,
+              -0.006282861896838602,
+              0.0414033453517598,
+              -0.059509309967141294,
+              0.048212672180813876,
+              -0.008200408290370576
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              247104,
+              247771,
+              250687,
+              244979,
+              236125,
+              235000,
+              237771,
+              230812,
+              248979
+            ],
+            [
+              248437,
+              229271,
+              233895,
+              239333,
+              226791,
+              238750,
+              241833,
+              232791,
+              233104
+            ]
+          ],
+          "paired_win_fractions": [
+            0.5555555555555556,
+            0.4444444444444444
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MetalPerformancePrimitives.matmul2d",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": [
+                64,
+                64
+              ],
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 576,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  128,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.2222222222222222
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+              "threadgroup": [
+                128,
+                1,
+                1
+              ],
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "MetalPerformancePrimitives.matmul2d",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": [
+                64,
+                64
+              ],
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 576,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  128,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.2222222222222222
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+              "threadgroup": [
+                128,
+                1,
+                1
+              ],
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.047388785566172854,
+          "speedups_vs_incumbent": [
+            -0.007973963240770076,
+            0.023997896897924437
+          ],
+          "times_ns": [
+            244979,
+            233895
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal4_timestamp_heap",
+            "metal4_timestamp_heap"
+          ]
+        },
+        "mps": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              237333,
+              244479,
+              241938,
+              246958,
+              245312,
+              238979,
+              243041,
+              255874,
+              239041
+            ],
+            [
+              247687,
+              239646,
+              251938,
+              237103,
+              225375,
+              249062,
+              228250,
+              244583,
+              231208
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.014166729258990344,
+          "times_ns": [
+            243041,
+            239646
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "mps",
+      "shape": "64x64x64",
+      "status": "retain_incumbent",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "cooperative_tensor": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            true,
+            true
+          ],
+          "counter_timestamp_deltas": [
+            659,
+            616
+          ],
+          "cross_run_speedup_spread": 0.032685861639793146,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.38160410586696186,
+            -0.3489182442271687
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.3555211815777656,
+              -0.4400120126132439,
+              -0.40186452444708914,
+              -0.2851575495461242,
+              -0.36006974716652135,
+              -0.38160410586696186,
+              -0.4644947823873759,
+              -0.2258568452944518,
+              -0.4031666247800955
+            ],
+            [
+              -0.5631784171145537,
+              -0.2029691378260666,
+              -0.4761240850470547,
+              -0.38228488403379435,
+              -0.4656629994209612,
+              -0.1843286933093848,
+              -0.3489182442271687,
+              -0.3056435947244658,
+              -0.33694514237855944
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              27166,
+              28770,
+              28270,
+              27041,
+              26520,
+              27458,
+              28770,
+              25895,
+              27916
+            ],
+            [
+              29666,
+              25687,
+              29645,
+              25687,
+              25312,
+              26375,
+              25937,
+              25541,
+              25541
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MetalPerformancePrimitives.matmul2d",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": [
+                64,
+                64
+              ],
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 576,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  128,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.2222222222222222
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+              "threadgroup": [
+                128,
+                1,
+                1
+              ],
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "MetalPerformancePrimitives.matmul2d",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": [
+                64,
+                64
+              ],
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 576,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  128,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.2222222222222222
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+              "threadgroup": [
+                128,
+                1,
+                1
+              ],
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.06894538093198894,
+          "speedups_vs_incumbent": [
+            -0.3743430602132239,
+            -0.3359163719575619
+          ],
+          "times_ns": [
+            27458,
+            25687
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal4_timestamp_heap",
+            "metal4_timestamp_heap"
+          ]
+        },
+        "mps": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              20041,
+              19979,
+              20166,
+              21041,
+              19499,
+              19874,
+              19645,
+              21124,
+              19895
+            ],
+            [
+              18978,
+              21353,
+              20083,
+              18583,
+              17270,
+              22270,
+              19228,
+              19562,
+              19104
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.0390576242978989,
+          "times_ns": [
+            19979,
+            19228
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "mps",
+      "shape": "64x64x64",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mps": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              264875,
+              258000,
+              247791,
+              238083,
+              229979,
+              240958,
+              238291,
+              241041,
+              228812
+            ],
+            [
+              267333,
+              250333,
+              245062,
+              241937,
+              240333,
+              240854,
+              226874,
+              241520,
+              236979
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.0023323566762672335,
+          "times_ns": [
+            240958,
+            241520
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "simdgroup_matrix": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            true,
+            true
+          ],
+          "counter_timestamp_deltas": [
+            291,
+            283
+          ],
+          "cross_run_speedup_spread": 0.010697158241317582,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.03474512634779975,
+            -0.024047968106482166
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.03232468145351581,
+              -0.005895348837209303,
+              0.018999882965886575,
+              -0.06457411910972224,
+              -0.049008822544667124,
+              -0.02646104300334498,
+              -0.058839821898435105,
+              -0.03474512634779975,
+              -0.08941401674737338
+            ],
+            [
+              0.025327961755563285,
+              -0.024047968106482166,
+              -0.011817417633088769,
+              -0.017136692610059644,
+              -0.01560335035138745,
+              -0.08589020734552882,
+              -0.10275747771891006,
+              -0.04192613448161643,
+              -0.051515113153486176
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              273437,
+              259521,
+              243083,
+              253457,
+              241250,
+              247334,
+              252312,
+              249416,
+              249271
+            ],
+            [
+              260562,
+              256353,
+              247958,
+              246083,
+              244083,
+              261541,
+              250187,
+              251646,
+              249187
+            ]
+          ],
+          "paired_win_fractions": [
+            0.1111111111111111,
+            0.1111111111111111
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MTL4ComputeCommandEncoder",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": [
+                64,
+                64
+              ],
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 16384,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  256,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+              "threadgroup": [
+                256,
+                1,
+                1
+              ],
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "MTL4ComputeCommandEncoder",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": [
+                64,
+                64
+              ],
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 16384,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  256,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+              "threadgroup": [
+                256,
+                1,
+                1
+              ],
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.0030912210924720148,
+          "speedups_vs_incumbent": [
+            -0.035101552967737114,
+            -0.035885226896323286
+          ],
+          "times_ns": [
+            249416,
+            250187
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal4_timestamp_heap",
+            "metal4_timestamp_heap"
+          ]
+        }
+      },
+      "selected_route": "mps",
+      "shape": "64x64x64",
+      "status": "retain_incumbent",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mps": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              26770,
+              20187,
+              20249,
+              19749,
+              19187,
+              20791,
+              20874,
+              22791,
+              20999
+            ],
+            [
+              27437,
+              19874,
+              19645,
+              20750,
+              20604,
+              19875,
+              19374,
+              20874,
+              19624
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.04608805031446541,
+          "times_ns": [
+            20791,
+            19875
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "simdgroup_matrix": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            true,
+            true
+          ],
+          "counter_timestamp_deltas": [
+            291,
+            283
+          ],
+          "cross_run_speedup_spread": 0.015396031951567246,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.38546932819096263,
+            0.4008653601425299
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.24901008591707136,
+              -0.004111556942586813,
+              0.30762012938910566,
+              0.28057116816041316,
+              0.38546932819096263,
+              0.4348997162233659,
+              0.4361406534444764,
+              0.480803826071695,
+              0.42259155197866566
+            ],
+            [
+              0.2703283886722309,
+              0.2872094193418537,
+              0.4008653601425299,
+              0.4307469879518072,
+              0.42569403999223454,
+              0.39833962264150946,
+              0.39248477340765975,
+              0.43412858100986873,
+              0.40445373012637587
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              20104,
+              20270,
+              14020,
+              14208,
+              11791,
+              11749,
+              11770,
+              11833,
+              12125
+            ],
+            [
+              20020,
+              14166,
+              11770,
+              11812,
+              11833,
+              11958,
+              11770,
+              11812,
+              11687
+            ]
+          ],
+          "paired_win_fractions": [
+            0.8888888888888888,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MTL4ComputeCommandEncoder",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": [
+                64,
+                64
+              ],
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 16384,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  256,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+              "threadgroup": [
+                256,
+                1,
+                1
+              ],
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "MTL4ComputeCommandEncoder",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": [
+                64,
+                64
+              ],
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 16384,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  256,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+              "threadgroup": [
+                256,
+                1,
+                1
+              ],
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.026498476125973586,
+          "speedups_vs_incumbent": [
+            0.4168149680150065,
+            0.405685534591195
+          ],
+          "times_ns": [
+            12125,
+            11812
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal4_timestamp_heap",
+            "metal4_timestamp_heap"
+          ]
+        }
+      },
+      "selected_route": "simdgroup_matrix",
+      "shape": "64x64x64",
+      "status": "promote_candidate",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "msl",
+      "op": "softmax",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mpsgraph": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.03789370802233322,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.2800470479040479,
+            0.24215333988171467
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.29579598730718243,
+              0.2800470479040479,
+              0.1961408386238229,
+              0.2363585136023542,
+              0.2686568965205167,
+              0.2555068652051506,
+              0.3175686511366358,
+              0.2863623188405797,
+              0.294511352953238
+            ],
+            [
+              0.21120104476409118,
+              0.2294009240669396,
+              0.23278175725056757,
+              0.24215333988171467,
+              0.25882130736788383,
+              0.2673350540923793,
+              0.24897841832240383,
+              0.22441166857329628,
+              0.25036076506652755
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              364396,
+              359916,
+              379354,
+              365895,
+              363645,
+              369687,
+              327666,
+              344687,
+              364708
+            ],
+            [
+              381729,
+              383437,
+              374770,
+              365708,
+              368875,
+              367874,
+              368313,
+              379666,
+              367791
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "mpsgraph",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "mpsgraph",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.01229157290420312,
+          "speedups_vs_incumbent": [
+            0.2661621308114596,
+            0.2478324524485335
+          ],
+          "times_ns": [
+            364396,
+            368875
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "msl": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              517458,
+              499916,
+              471916,
+              479145,
+              497229,
+              496562,
+              480145,
+              483000,
+              516958
+            ],
+            [
+              483937,
+              497583,
+              488479,
+              482562,
+              497687,
+              502104,
+              490416,
+              489520,
+              490624
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "msl",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  128,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "msl",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  128,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.012532217545920198,
+          "times_ns": [
+            496562,
+            490416
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "mpsgraph",
+      "shape": "128x257",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "msl",
+      "op": "softmax",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mpsgraph": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.051233401591758376,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.5991471215351812,
+            -0.5479137199434229
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.529621021676232,
+              -0.49243147415791627,
+              -0.9610327132777421,
+              -0.8488480782976852,
+              -0.47419270606667246,
+              -0.650351299099354,
+              -0.5991471215351812,
+              -0.6387863220420613,
+              -0.4575753720900649
+            ],
+            [
+              -0.6035003017501509,
+              -0.48410570662581387,
+              -0.4747189792109717,
+              -0.5958608795630929,
+              -0.515916017609211,
+              -0.6088901857795934,
+              -0.5479137199434229,
+              -0.8107475563305953,
+              -0.5220594723374217
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              32249,
+              32832,
+              36687,
+              33625,
+              33874,
+              34999,
+              29250,
+              30624,
+              34374
+            ],
+            [
+              34541,
+              34875,
+              33979,
+              33312,
+              35812,
+              33082,
+              35020,
+              39458,
+              34499
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "mpsgraph",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "mpsgraph",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.027241635687732343,
+          "speedups_vs_incumbent": [
+            -0.594886875681829,
+            -0.526741513437058
+          ],
+          "times_ns": [
+            33625,
+            34541
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "msl": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              21083,
+              21999,
+              18708,
+              18187,
+              22978,
+              21207,
+              18291,
+              18687,
+              23583
+            ],
+            [
+              21541,
+              23499,
+              23041,
+              20874,
+              23624,
+              20562,
+              22624,
+              21791,
+              22666
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "msl",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  128,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "msl",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  128,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.07309206469667505,
+          "times_ns": [
+            21083,
+            22624
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "msl",
+      "shape": "128x257",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "msl",
+      "op": "softmax",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mpsgraph": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.03278010247341251,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.3692909100771857,
+            0.4020710125505982
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.36654163356709085,
+              0.33695022739470637,
+              0.3909468319540434,
+              0.3692909100771857,
+              0.33545344297871094,
+              0.39287874360350933,
+              0.3747741581310022,
+              0.36616444343067284,
+              0.388957034046701
+            ],
+            [
+              0.3672453227247338,
+              0.38885888704217325,
+              0.44055445685677125,
+              0.41679663023045327,
+              0.4020710125505982,
+              0.3855401358997766,
+              0.3851102426178069,
+              0.41481989492339694,
+              0.44581153427638737
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              361229,
+              375562,
+              357083,
+              360437,
+              385229,
+              357354,
+              359895,
+              364020,
+              354188
+            ],
+            [
+              370438,
+              349687,
+              314000,
+              335062,
+              346687,
+              345979,
+              351166,
+              334479,
+              318312
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "mpsgraph",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "mpsgraph",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.04178866347379465,
+          "speedups_vs_incumbent": [
+            0.3738325712617959,
+            0.39533928593274575
+          ],
+          "times_ns": [
+            360437,
+            345979
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "msl": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              570249,
+              566416,
+              586292,
+              571479,
+              579687,
+              588604,
+              575624,
+              574313,
+              579645
+            ],
+            [
+              585437,
+              572187,
+              561270,
+              574520,
+              579813,
+              563062,
+              571104,
+              571583,
+              574375
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "msl",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  256,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "msl",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  256,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.006006777504557076,
+          "times_ns": [
+            575624,
+            572187
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "mpsgraph",
+      "shape": "256x256",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "msl",
+      "op": "softmax",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mpsgraph": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.015042568968984593,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.5486939975782736,
+            -0.5637365665472582
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.7781292153123401,
+              -0.7507032819825854,
+              -0.47881948861468004,
+              -0.5486939975782736,
+              -0.5745115452930728,
+              -0.5227352068423808,
+              -0.5978882738732034,
+              -0.456419545434942,
+              -0.44797699904162674
+            ],
+            [
+              -0.5093115249566648,
+              -0.42588519428990385,
+              -0.6090133982947625,
+              -0.6185277763607611,
+              -0.691707474573535,
+              -0.7675496309857543,
+              -0.4240284316440506,
+              -0.4710188228264117,
+              -0.5637365665472582
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              38228,
+              39207,
+              34875,
+              35812,
+              35458,
+              34895,
+              34353,
+              33770,
+              34750
+            ],
+            [
+              33958,
+              33062,
+              29062,
+              31728,
+              31437,
+              30895,
+              30853,
+              29541,
+              28374
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "mpsgraph",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "mpsgraph",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.1294707881534229,
+          "speedups_vs_incumbent": [
+            -0.5227352068423808,
+            -0.5760342804672755
+          ],
+          "times_ns": [
+            34895,
+            30895
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "msl": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              21499,
+              22395,
+              23583,
+              23124,
+              22520,
+              22916,
+              21499,
+              23187,
+              23999
+            ],
+            [
+              22499,
+              23187,
+              18062,
+              19603,
+              18583,
+              17479,
+              21666,
+              20082,
+              18145
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "msl",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  256,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "msl",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  256,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.16900474417181044,
+          "times_ns": [
+            22916,
+            19603
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "msl",
+      "shape": "256x256",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "msl",
+      "op": "softmax",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mpsgraph": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.0038333893578026967,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.1842754716981132,
+            -0.1804420823403105
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.2269957937212236,
+              -0.1842754716981132,
+              -0.23952059889147492,
+              -0.2234465518609634,
+              -0.08713018078821004,
+              -0.22104985699504695,
+              -0.1448510512398528,
+              -0.11477243871651535,
+              -0.12172691717625705
+            ],
+            [
+              -0.1804420823403105,
+              -0.20527621945789826,
+              -0.20903127629895207,
+              -0.24947809529635775,
+              -0.12927432104446704,
+              -0.2689342104753081,
+              -0.16407576493443418,
+              -0.14129840978434163,
+              -0.13145157389942372
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              308333,
+              313833,
+              309957,
+              308333,
+              294771,
+              310375,
+              309562,
+              302916,
+              259562
+            ],
+            [
+              310062,
+              311312,
+              314625,
+              326791,
+              304292,
+              327333,
+              299604,
+              307104,
+              304124
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "mpsgraph",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "mpsgraph",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.00560757362980933,
+          "speedups_vs_incumbent": [
+            -0.21301640131084595,
+            -0.18551513714814447
+          ],
+          "times_ns": [
+            308333,
+            310062
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "msl": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              251291,
+              265000,
+              250062,
+              252020,
+              271146,
+              254187,
+              270395,
+              271729,
+              231395
+            ],
+            [
+              262666,
+              258291,
+              260229,
+              261542,
+              269458,
+              257959,
+              257375,
+              269083,
+              268791
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "msl",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 2,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  64,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.0625
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "msl",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 2,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  64,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.0625
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.02893539008682584,
+          "times_ns": [
+            254187,
+            261542
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "msl",
+      "shape": "64x64",
+      "status": "retain_incumbent",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "msl",
+      "op": "softmax",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mpsgraph": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": false,
+          "paired_measurement": false,
+          "paired_trial_times_ns": [
+            null,
+            [
+              32562,
+              32728,
+              35770,
+              33645,
+              33145,
+              35874,
+              32937,
+              34457,
+              34104
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "mpsgraph",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "mpsgraph",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": null,
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": null,
+          "times_ns": [
+            null,
+            33645
+          ],
+          "timing_coverage": [
+            0.9962962962962963,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        },
+        "msl": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              22958,
+              21062,
+              20686,
+              20187,
+              21916,
+              19354,
+              21583,
+              20666,
+              22791
+            ],
+            [
+              23624,
+              21811,
+              21375,
+              20062,
+              21582,
+              23041,
+              20541,
+              20791,
+              20582
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "msl",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 2,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  64,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.0625
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            },
+            {
+              "api": "msl",
+              "occupancy": null,
+              "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+              "output_tile": null,
+              "runtime_pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 2,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  64,
+                  1,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.0625
+              },
+              "spill_evidence": null,
+              "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+              "threadgroup": null,
+              "threadgroup_memory_bytes": null
+            }
+          ],
+          "run_drift_fraction": 0.01486088690532713,
+          "times_ns": [
+            21062,
+            21375
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_route": "msl",
+      "shape": "64x64",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    }
+  ],
+  "promotion_rules": {
+    "absolute_time_drift_is_diagnostic_only": true,
+    "maximum_cross_run_drift_fraction": 0.15,
+    "maximum_cross_run_speedup_spread": 0.05,
+    "minimum_paired_win_fraction_each_run": 0.75,
+    "minimum_speedup_fraction_each_run": 0.05,
+    "requires_interleaved_paired_trials": true,
+    "requires_native_dispatch": true,
+    "requires_numerical_validation": true,
+    "requires_repeated_measurement": true,
+    "requires_resource_evidence": true
+  },
+  "report_count": 2,
+  "schema_version": 1,
+  "source_report_schema_version": 1
+}

@@ -21655,10 +21655,30 @@ def _apple_gpu_clifford_geo_product_cl30_value_available() -> bool:
 
 # Apple GPU value-lane batched-matmul dispatch (Sprint 8). symbol -> (resolver,
 # numpy-dtype-kind). The key set is the GPU value allowlist.
+def _apple_gpu_tile_simdgroup_gemm_available() -> bool:
+    """Probe the TILE-1 source-backed 32-lane fp16 ABI without MPS fallback."""
+    try:
+        import numpy as _np
+        from tessera.compiler.apple_target import AppleGPUArch, AppleGPUTargetProfile
+        from tessera.compiler.msl_gemm_emit import (
+            dispatch_apple_simdgroup_tile_f16, materialize_apple_simdgroup_tile_msl)
+        art = materialize_apple_simdgroup_tile_msl(
+            AppleGPUTargetProfile(AppleGPUArch.APPLE7), "f16", 8, 8, 8)
+        a = _np.eye(8, dtype=_np.float16)
+        out, native = dispatch_apple_simdgroup_tile_f16(art, a, a)
+        return bool(native and _np.allclose(out, _np.eye(8, dtype=_np.float32)))
+    except Exception:
+        return False
+
+
 _APPLE_VALUE_GPU_DISPATCH: dict[str, tuple] = {
     "tessera_apple_gpu_bmm_f32": (_apple_gpu_bmm_f32, "f32"),
     "tessera_apple_gpu_bmm_f16": (_apple_gpu_bmm_f16, "f16"),
     "tessera_apple_gpu_bmm_bf16": (_apple_gpu_bmm_bf16, "bf16"),
+    "tessera_apple_gpu_tile_simdgroup_gemm_f16": (
+        _apple_gpu_tile_simdgroup_gemm_available, "tile_simdgroup_f16"),
+    "tessera_apple_gpu_tile_simdgroup_gemm_bf16": (
+        _apple_gpu_tile_simdgroup_gemm_available, "tile_simdgroup_bf16"),
     "tessera_apple_gpu_native_sparse_attn_f32": (
         _apple_gpu_native_sparse_attn_f32, "native_sparse_attn_f32"),
     "tessera_apple_gpu_ppo_policy_loss_f32": (
@@ -21741,6 +21761,37 @@ def _dispatch_gpu_batched_matmul(inputs, call, np):
         def _fp(arr):
             return arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
         sym(_fp(a), _fp(b), _fp(out), *dims)
+    return out
+
+
+def _dispatch_gpu_tile_simdgroup_gemm(inputs, call, np):
+    """Strict rank-2 TILE-1 source-backed simdgroup GEMM; never falls back."""
+    if len(inputs) != 2:
+        raise ValueError("tile_simdgroup_gemm requires exactly two inputs")
+    symbol = str(call.get("symbol", ""))
+    if symbol not in {"tessera_apple_gpu_tile_simdgroup_gemm_f16",
+                      "tessera_apple_gpu_tile_simdgroup_gemm_bf16"}:
+        raise ValueError(f"unknown TILE-1 simdgroup symbol {symbol!r}")
+    dtype = "f16" if symbol.endswith("_f16") else "bf16"
+    if dtype == "f16":
+        a = np.ascontiguousarray(np.asarray(inputs[0], dtype=np.float16))
+        b = np.ascontiguousarray(np.asarray(inputs[1], dtype=np.float16))
+    else:
+        bf16 = _bfloat16_dtype()
+        if bf16 is None:
+            raise ValueError("bf16 TILE-1 value GEMM requires ml_dtypes")
+        a = np.ascontiguousarray(np.asarray(inputs[0], dtype=bf16))
+        b = np.ascontiguousarray(np.asarray(inputs[1], dtype=bf16))
+    if a.ndim != 2 or b.ndim != 2 or a.shape[1] != b.shape[0]:
+        raise ValueError("tile_simdgroup_gemm requires A[M,K] and B[K,N]")
+    from tessera.compiler.apple_target import AppleGPUArch, AppleGPUTargetProfile
+    from tessera.compiler.msl_gemm_emit import (
+        dispatch_apple_simdgroup_tile_f16, materialize_apple_simdgroup_tile_msl)
+    art = materialize_apple_simdgroup_tile_msl(
+        AppleGPUTargetProfile(AppleGPUArch.APPLE7), dtype, 32, 32, 16)
+    out, native = dispatch_apple_simdgroup_tile_f16(art, a, b)
+    if not native:
+        raise ValueError("TILE-1 simdgroup ABI returned non-native dispatch")
     return out
 
 
@@ -22144,12 +22195,12 @@ def _execute_apple_value_target_ir_gpu_artifact(artifact: "RuntimeArtifact", arg
             f"apple_value_target_ir(gpu): value call status is "
             f"{call.get('status')!r}, not 'executable'")
     op_kind = str(call.get("op_kind"))
-    if op_kind not in {"batched_gemm", "native_sparse_attn_fused",
+    if op_kind not in {"batched_gemm", "tile_simdgroup_gemm", "native_sparse_attn_fused",
                        "ppo_policy_loss", "ebm_energy_quadratic",
                        "ebm_langevin_step", "ebm_refinement",
                        "ebm_partition_exact", "clifford_geometric_product"}:
         raise ValueError(
-            f"apple_value_target_ir(gpu): only batched_gemm, "
+            f"apple_value_target_ir(gpu): only batched_gemm, tile_simdgroup_gemm, "
             f"native_sparse_attn_fused, ppo_policy_loss, EBM value kernels, "
             f"and cl30 clifford_geometric_product execute on the GPU value "
             f"lane today "
@@ -22173,6 +22224,8 @@ def _execute_apple_value_target_ir_gpu_artifact(artifact: "RuntimeArtifact", arg
                 f"apple_value_target_ir(gpu): batched_gemm value-call needs "
                 f"exactly 2 input(s), got {len(inputs)}")
         return _dispatch_gpu_batched_matmul(inputs, call, np)
+    if op_kind == "tile_simdgroup_gemm":
+        return _dispatch_gpu_tile_simdgroup_gemm(inputs, call, np)
     if op_kind == "ppo_policy_loss":
         return _dispatch_gpu_ppo_policy_loss(inputs, call, np)
     if op_kind == "ebm_energy_quadratic":
@@ -22682,15 +22735,8 @@ def apple_gpu_ssm_state_handle(
 
 def _apple_gpu_ssm_replay_decode_f32() -> Any:
     """Bind the fused output-only ReplaySSM decode C ABI symbol (or None)."""
-    runtime = _load_apple_gpu_runtime()
-    sym = getattr(runtime, "tessera_apple_gpu_ssm_replay_decode_f32", None)
-    if sym is None:
-        return None
-    fp = ctypes.POINTER(ctypes.c_float)
-    sym.argtypes = [fp, fp, fp, fp, fp, fp, fp,
-                    ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32]
-    sym.restype = None
-    return sym
+    from ._apple_gpu_dispatch import bind_registered
+    return bind_registered("tessera_apple_gpu_ssm_replay_decode_f32")
 
 
 def apple_gpu_ssm_decode_callable() -> Any:
@@ -22699,9 +22745,9 @@ def apple_gpu_ssm_decode_callable() -> Any:
 
     Signature ``(delta(m,B,D), x(m,B,D), b(m,B,N), s0(B,D,N), c(B,N), a(D,),
     B, D, N, m) -> y(B,D)``.  The single Metal dispatch keeps ``s0`` resident
-    and reads only the small replay inputs; on no-Metal hosts the C ABI symbol
-    runs its own host reference.  Returns ``None`` when the symbol is absent so
-    the handle falls back to its bmm/numpy reconstruction."""
+    and reads only the small replay inputs.  Returns ``(output, native)``;
+    ``native`` is true only when the C ABI confirms an MSL dispatch.  ``None``
+    means the symbol is absent, so the handle falls back to bmm/numpy."""
     import numpy as np
 
     sym = _apple_gpu_ssm_replay_decode_f32()
@@ -22720,10 +22766,11 @@ def apple_gpu_ssm_decode_callable() -> Any:
             a32 = np.ascontiguousarray(a, dtype=np.float32)
             out = np.zeros((B, D), dtype=np.float32)
             fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-            sym(fp(d32), fp(x32), fp(b32), fp(s32), fp(c32), fp(a32), fp(out),
+            native = int(sym(
+                fp(d32), fp(x32), fp(b32), fp(s32), fp(c32), fp(a32), fp(out),
                 ctypes.c_int32(B), ctypes.c_int32(D), ctypes.c_int32(N),
-                ctypes.c_int32(m))
-            return out.astype(np.float64)
+                ctypes.c_int32(m)))
+            return out.astype(np.float64), native == 1
 
         return _run()
 
@@ -22731,27 +22778,13 @@ def apple_gpu_ssm_decode_callable() -> Any:
 
 
 def _apple_gpu_ssm_block_decode_f32() -> Any:
-    runtime = _load_apple_gpu_runtime()
-    sym = getattr(runtime, "tessera_apple_gpu_ssm_block_decode_f32", None)
-    if sym is None:
-        return None
-    fp = ctypes.POINTER(ctypes.c_float)
-    sym.argtypes = [fp, fp, fp, fp, fp, fp, fp,
-                    ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32]
-    sym.restype = None
-    return sym
+    from ._apple_gpu_dispatch import bind_registered
+    return bind_registered("tessera_apple_gpu_ssm_block_decode_f32_status")
 
 
 def _apple_gpu_ssm_block_decode_f16() -> Any:
-    runtime = _load_apple_gpu_runtime()
-    sym = getattr(runtime, "tessera_apple_gpu_ssm_block_decode_f16", None)
-    if sym is None:
-        return None
-    u16 = ctypes.POINTER(ctypes.c_uint16)
-    sym.argtypes = [u16, u16, u16, u16, u16, u16, u16,
-                    ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32]
-    sym.restype = None
-    return sym
+    from ._apple_gpu_dispatch import bind_registered
+    return bind_registered("tessera_apple_gpu_ssm_block_decode_f16_status")
 
 
 def apple_gpu_ssm_block_callable(dtype: str = "fp32") -> Any:
@@ -22778,10 +22811,12 @@ def apple_gpu_ssm_block_callable(dtype: str = "fp32") -> Any:
             d32, x32, b32, c32, s32, a32 = (r(delta), r(x), r(b), r(c), r(s0), r(a))
             out = np.zeros((T, B, D), dtype=np.float32)
             fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-            f32(fp(d32), fp(x32), fp(b32), fp(c32), fp(s32), fp(a32), fp(out),
+            native = bool(f32(
+                fp(d32), fp(x32), fp(b32), fp(c32), fp(s32), fp(a32), fp(out),
                 ctypes.c_int32(B), ctypes.c_int32(T), ctypes.c_int32(D),
-                ctypes.c_int32(N))
-            return out.astype(bf16).astype(np.float64)
+                ctypes.c_int32(N)))
+            return ((out.astype(bf16).astype(np.float64),
+                     "metal_runtime_host_convert") if native else None)
         if dtype == "fp16" and f16 is not None:
             h = lambda arr: np.ascontiguousarray(arr, dtype=np.float16)
             d16, x16, b16, c16 = h(delta), h(x), h(b), h(c)
@@ -22789,10 +22824,11 @@ def apple_gpu_ssm_block_callable(dtype: str = "fp32") -> Any:
             out = np.zeros((T, B, D), dtype=np.float16)
             up = lambda arr: arr.view(np.uint16).ctypes.data_as(
                 ctypes.POINTER(ctypes.c_uint16))
-            f16(up(d16), up(x16), up(b16), up(c16), up(s16), up(a16), up(out),
+            native = bool(f16(
+                up(d16), up(x16), up(b16), up(c16), up(s16), up(a16), up(out),
                 ctypes.c_int32(B), ctypes.c_int32(T), ctypes.c_int32(D),
-                ctypes.c_int32(N))
-            return out.astype(np.float64)
+                ctypes.c_int32(N)))
+            return (out.astype(np.float64), True) if native else None
         if f32 is None:
             return None
         d32 = np.ascontiguousarray(delta, dtype=np.float32)
@@ -22803,10 +22839,11 @@ def apple_gpu_ssm_block_callable(dtype: str = "fp32") -> Any:
         a32 = np.ascontiguousarray(a, dtype=np.float32)
         out = np.zeros((T, B, D), dtype=np.float32)
         fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-        f32(fp(d32), fp(x32), fp(b32), fp(c32), fp(s32), fp(a32), fp(out),
+        native = bool(f32(
+            fp(d32), fp(x32), fp(b32), fp(c32), fp(s32), fp(a32), fp(out),
             ctypes.c_int32(B), ctypes.c_int32(T), ctypes.c_int32(D),
-            ctypes.c_int32(N))
-        return out.astype(np.float64)
+            ctypes.c_int32(N)))
+        return (out.astype(np.float64), True) if native else None
 
     return _block
 
@@ -24894,16 +24931,25 @@ def _apple_gpu_flash_attn_gqa_bf16() -> Any:
     return sym
 
 
+def _apple_gpu_flash_attn_variant_status(suffix: str) -> Any:
+    from ._apple_gpu_dispatch import bind_registered
+    return bind_registered(f"tessera_apple_gpu_flash_attn_variant_{suffix}_status")
+
+
 def _apple_gpu_dispatch_gqa(Q: Any, K: Any, V: Any, num_q_heads: int,
                             num_kv_heads: int, np: Any, scale: float | None = None,
-                            causal: bool = False) -> Any:
+                            causal: bool = False, attn_bias: Any = None,
+                            window_size: int = 0,
+                            logit_softcap: float = 0.0,
+                            route_override: str | None = None) -> Any:
     """Native GQA/MQA flash attention with KV-group indexing (no repeated KV).
     Q is [..., q_heads, Sq, D]; K/V are [..., kv_heads, Sk, D] (kv_heads <
     q_heads). The leading dims fold to the batch; query head h reads KV group
-    h // (q_heads/kv_heads). f32/f16 run natively; bf16 runs natively via a
-    fp32-conversion kernel; any other float dtype upcasts to f32. Returns the
-    attention output shaped like Q, or None (caller falls back) when the shape /
-    dtype is unsupported."""
+    h // (q_heads/kv_heads). The status-returning f32/f16 ABI also owns optional
+    additive bias, causal/sliding-window masking, and logit soft-capping. bf16
+    remains in native device storage and uses GPU-side casts around f32
+    accumulation on the resident command buffer. Returns the attention output shaped like Q, or None when
+    the shape, dtype, runtime symbol, or native dispatch is unsupported."""
     import math as _math
     Q = np.asarray(Q)
     K = np.asarray(K)
@@ -24911,6 +24957,10 @@ def _apple_gpu_dispatch_gqa(Q: Any, K: Any, V: Any, num_q_heads: int,
     if Q.ndim < 3 or K.ndim < 3 or V.ndim < 3:
         return None
     if num_q_heads % max(num_kv_heads, 1) != 0:
+        return None
+    window_size = int(window_size or 0)
+    logit_softcap = float(logit_softcap or 0.0)
+    if window_size < 0 or logit_softcap < 0:
         return None
     Sq, D = int(Q.shape[-2]), int(Q.shape[-1])
     Sk = int(K.shape[-2])
@@ -24923,6 +24973,41 @@ def _apple_gpu_dispatch_gqa(Q: Any, K: Any, V: Any, num_q_heads: int,
         return None
     sc = float(scale) if scale is not None else 1.0 / _math.sqrt(D)
 
+    bias_flat = None
+    if attn_bias is not None:
+        bias_arr = np.asarray(attn_bias)
+        outer = Bq // num_q_heads
+        target = (outer, num_q_heads, Sq, Sk)
+        try:
+            if bias_arr.shape == (Bq, Sq, Sk):
+                bias_arr = bias_arr.reshape(target)
+            elif bias_arr.shape == (outer, Sq, Sk):
+                bias_arr = bias_arr[:, None, :, :]
+            bias_arr = np.broadcast_to(bias_arr, target)
+        except ValueError:
+            return None
+        if bias_arr.dtype != out_dtype:
+            return None
+        bias_flat = np.ascontiguousarray(bias_arr).reshape(Bq, Sq, Sk)
+
+    # APPLE-ATTN-FWD-1: only exact Apple7 plain-MHA shapes with two-run
+    # end-to-end evidence may leave the online-MSL incumbent. Variant semantics
+    # (causal/bias/window/softcap or unequal KV heads) deliberately stay on MSL.
+    if (out_dtype in (np.float32, np.float16)
+            and num_q_heads == num_kv_heads and not causal and bias_flat is None
+            and window_size == 0 and logit_softcap == 0.0):
+        from .compiler.apple_route_selector import production_route_for
+        dtype_tag = "f16" if out_dtype == np.float16 else "f32"
+        outer = Bq // num_q_heads
+        shape_tag = f"b{outer}_h{num_q_heads}_sq{Sq}_sk{Sk}_d{D}"
+        selected = route_override or production_route_for(
+            op="flash_attn_mha", shape=shape_tag, dtype=dtype_tag,
+            incumbent_route="online_msl_variant")
+        if selected == "mpsgraph_bsmm":
+            promoted = _apple_gpu_dispatch_batched_attention(Q, K, V, np, scale=sc)
+            if promoted is not None:
+                return promoted
+
     # ml_dtypes.bfloat16 is the bf16 boundary dtype when available.
     try:
         import ml_dtypes as _ml_dtypes
@@ -24933,24 +25018,64 @@ def _apple_gpu_dispatch_gqa(Q: Any, K: Any, V: Any, num_q_heads: int,
     is_f16 = (out_dtype == np.float16)
     is_bf16 = (_bf16 is not None and out_dtype == _bf16)
 
-    # --- Native half-width paths (uint16 ABI; no f32 round-trip on host) ---
-    if is_f16 or is_bf16:
-        sym = _apple_gpu_flash_attn_gqa_f16() if is_f16 else _apple_gpu_flash_attn_gqa_bf16()
+    # --- Native half-width path (uint16 ABI; no f32 round-trip on host) ---
+    if is_f16:
+        sym = _apple_gpu_flash_attn_variant_status("f16")
         if sym is not None:
             qh = np.ascontiguousarray(Q).reshape(Bq, Sq, D).view(np.uint16)
             kh = np.ascontiguousarray(K).reshape(Gkv, Sk, D).view(np.uint16)
             vh = np.ascontiguousarray(V).reshape(Gkv, Sk, D).view(np.uint16)
             outh = np.zeros((Bq, Sq, D), dtype=np.uint16)
             up = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
-            sym(up(qh), up(kh), up(vh), up(outh),
+            bh = None if bias_flat is None else bias_flat.view(np.uint16)
+            rc = sym(up(qh), up(kh), up(vh), up(bh) if bh is not None else None,
+                up(outh),
                 ctypes.c_int32(Bq), ctypes.c_int32(num_q_heads),
                 ctypes.c_int32(num_kv_heads), ctypes.c_int32(Sq),
                 ctypes.c_int32(Sk), ctypes.c_int32(D), ctypes.c_float(sc),
-                ctypes.c_int32(1 if causal else 0))
-            return outh.reshape(Q.shape).view(out_dtype)
-        # Native symbol unavailable (non-Apple / old runtime) — fall through to f32.
+                ctypes.c_int32(1 if causal else 0), ctypes.c_int32(window_size),
+                ctypes.c_float(logit_softcap))
+            if int(rc) == 1:
+                return outh.reshape(Q.shape).view(out_dtype)
+        return None
 
-    sym = _apple_gpu_flash_attn_gqa_f32()
+    if is_bf16:
+        # Keep bf16 storage on the device. The resident ABI inserts bf16/f32
+        # casts around the fp32-accumulating MSL kernel on one command buffer;
+        # unlike the legacy GQA symbol this never constructs host fp32 copies.
+        try:
+            from . import apple_gpu_batched as _agpu
+            q_store = np.ascontiguousarray(Q).reshape(Bq, Sq, D)
+            k_store = np.ascontiguousarray(K).reshape(Gkv, Sk, D)
+            v_store = np.ascontiguousarray(V).reshape(Gkv, Sk, D)
+            bias_store = (None if bias_flat is None
+                          else np.ascontiguousarray(bias_flat))
+            q_dev = _agpu.device_tensor(q_store)
+            k_dev = _agpu.device_tensor(k_store)
+            v_dev = _agpu.device_tensor(v_store)
+            bias_dev = (_agpu.device_tensor(bias_store)
+                        if bias_store is not None else None)
+            out_dev = None
+            try:
+                with _agpu.batched_session() as session:
+                    out_dev = _agpu.flash_attn_variant_enc(
+                        session, q_dev, k_dev, v_dev, bias_dev, dtype="bf16",
+                        B=Bq, q_heads=num_q_heads, kv_heads=num_kv_heads,
+                        Sq=Sq, Sk=Sk, D=D, scale=sc, causal=causal,
+                        window_size=window_size, logit_softcap=logit_softcap)
+                return out_dev.download(out_dtype, (Bq, Sq, D)).reshape(Q.shape)
+            finally:
+                if out_dev is not None:
+                    out_dev.free()
+                q_dev.free()
+                k_dev.free()
+                v_dev.free()
+                if bias_dev is not None:
+                    bias_dev.free()
+        except (RuntimeError, ValueError):
+            return None
+
+    sym = _apple_gpu_flash_attn_variant_status("f32")
     if sym is None:
         return None
     qf = np.ascontiguousarray(Q.astype(np.float32)).reshape(Bq, Sq, D)
@@ -24958,27 +25083,26 @@ def _apple_gpu_dispatch_gqa(Q: Any, K: Any, V: Any, num_q_heads: int,
     vf = np.ascontiguousarray(V.astype(np.float32)).reshape(Gkv, Sk, D)
     out = np.zeros((Bq, Sq, D), dtype=np.float32)
     fp = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-    sym(fp(qf), fp(kf), fp(vf), fp(out),
+    bf = None if bias_flat is None else np.ascontiguousarray(
+        bias_flat.astype(np.float32))
+    rc = sym(fp(qf), fp(kf), fp(vf), fp(bf) if bf is not None else None, fp(out),
         ctypes.c_int32(Bq), ctypes.c_int32(num_q_heads),
         ctypes.c_int32(num_kv_heads), ctypes.c_int32(Sq), ctypes.c_int32(Sk),
-        ctypes.c_int32(D), ctypes.c_float(sc), ctypes.c_int32(1 if causal else 0))
+        ctypes.c_int32(D), ctypes.c_float(sc), ctypes.c_int32(1 if causal else 0),
+        ctypes.c_int32(window_size), ctypes.c_float(logit_softcap))
+    if int(rc) != 1:
+        return None
     return out.reshape(Q.shape).astype(out_dtype)
 
 
 def _apple_gpu_bsmm_f32() -> Any:
     from ._apple_gpu_dispatch import bind_registered
-    return bind_registered("tessera_apple_gpu_mpsgraph_bsmm_f32")
+    return bind_registered("tessera_apple_gpu_mpsgraph_bsmm_f32_status")
 
 
 def _apple_gpu_bsmm_f16() -> Any:
-    runtime = _load_apple_gpu_runtime()
-    sym = getattr(runtime, "tessera_apple_gpu_mpsgraph_bsmm_f16", None)
-    if sym is None:
-        return None
-    sym.argtypes = [ctypes.POINTER(ctypes.c_uint16)] * 4 + [ctypes.c_int32] * 5 + [
-        ctypes.c_float]
-    sym.restype = None
-    return sym
+    from ._apple_gpu_dispatch import bind_registered
+    return bind_registered("tessera_apple_gpu_mpsgraph_bsmm_f16_status")
 
 
 def _apple_gpu_dispatch_batched_attention(Q: Any, K: Any, V: Any, np: Any,
@@ -25025,10 +25149,12 @@ def _apple_gpu_dispatch_batched_attention(Q: Any, K: Any, V: Any, np: Any,
             ctypes.c_int32(D), ctypes.c_int32(D), ctypes.c_float(sc))
     if half:
         up = lambda arr: arr.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
-        sym(up(a), up(bmat), up(c), up(out), *dims)
+        rc = sym(up(a), up(bmat), up(c), up(out), *dims)
     else:
         fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-        sym(fp(a), fp(bmat), fp(c), fp(out), *dims)
+        rc = sym(fp(a), fp(bmat), fp(c), fp(out), *dims)
+    if int(rc) != 1:
+        return None
     return out.reshape(Q.shape).astype(out_dtype)
 
 
@@ -25044,6 +25170,12 @@ def _apple_gpu_dispatch_attn_wrapper(op_name: str, operands: list[Any],
     short = str(op_name)
     scale = kwargs.get("scale")
     causal = bool(kwargs.get("causal", False))
+    attn_bias = kwargs.get("attn_bias")
+    window_size = int(
+        kwargs.get("window_size", kwargs.get("sliding_window", kwargs.get("window", 0)))
+        or 0
+    )
+    logit_softcap = float(kwargs.get("logit_softcap", 0.0) or 0.0)
     Q = np.asarray(operands[0])
 
     if short == "tessera.multi_head_attention":
@@ -25064,7 +25196,8 @@ def _apple_gpu_dispatch_attn_wrapper(op_name: str, operands: list[Any],
 
         out = _apple_gpu_dispatch_gqa(
             split(Q), split(K), split(V), num_heads, num_heads, np,
-            scale=scale, causal=causal)
+            scale=scale, causal=causal, attn_bias=attn_bias,
+            window_size=window_size, logit_softcap=logit_softcap)
         if out is None:
             return None
         out = np.asarray(out)
@@ -25080,7 +25213,10 @@ def _apple_gpu_dispatch_attn_wrapper(op_name: str, operands: list[Any],
         else:
             nq = int(kwargs["num_query_heads"])
             nkv = int(kwargs["num_kv_heads"])
-        return _apple_gpu_dispatch_gqa(Q, K, V, nq, nkv, np, scale=scale, causal=causal)
+        return _apple_gpu_dispatch_gqa(
+            Q, K, V, nq, nkv, np, scale=scale, causal=causal,
+            attn_bias=attn_bias, window_size=window_size,
+            logit_softcap=logit_softcap)
 
     if short == "tessera.mla_decode":
         K = np.asarray(operands[1])
@@ -26129,6 +26265,24 @@ def _apple_gpu_dispatch_flash_attn(op_name: str, operands: list[Any],
     scale = kwargs.get("scale", None)
     scale = (1.0 / float(np.sqrt(D))) if scale is None else float(scale)
     causal = 1 if bool(kwargs.get("causal", False)) else 0
+    window_size = int(
+        kwargs.get("window_size", kwargs.get("sliding_window", kwargs.get("window", 0)))
+        or 0
+    )
+    logit_softcap = float(kwargs.get("logit_softcap", 0.0) or 0.0)
+
+    # The status-returning variant ABI is the production placement boundary for
+    # f32/f16. It covers the ordinary route too, so a missing/failed symbol
+    # cannot silently return a host-computed value labeled as native.
+    if q.dtype in (np.float32, np.float16):
+        native = _apple_gpu_dispatch_gqa(
+            q, k, v, 1, 1, np, scale=scale, causal=bool(causal),
+            attn_bias=bias, window_size=window_size,
+            logit_softcap=logit_softcap,
+        )
+        if native is not None:
+            return native
+        return _runtime_flash_attn(np, q, k, v, kwargs)
 
     if q.dtype == np.float32:
         if not q.flags.c_contiguous:
@@ -26492,8 +26646,8 @@ def _apple_gpu_flash_attn_bias_bf16() -> Any:
     return sym
 
 
-def _apple_gpu_dispatch_softmax(op_name: str, operands: list[Any],
-                                kwargs: Mapping[str, Any], np: Any) -> Any:
+def _apple_gpu_dispatch_softmax_msl(op_name: str, operands: list[Any],
+                                    kwargs: Mapping[str, Any], np: Any) -> Any:
     """Phase 8.4.2 + 8.4.4.1: dispatch a single rank-2 softmax (axis=-1)
     through the apple_gpu runtime shim's custom MSL kernel. Picks symbol by
     element type (f32, f16, bf16). Inputs outside the supported envelope
@@ -26559,6 +26713,23 @@ def _apple_gpu_dispatch_softmax(op_name: str, operands: list[Any],
 
     e = np.exp(x - np.max(x, axis=axis, keepdims=True))
     return e / np.sum(e, axis=axis, keepdims=True)
+
+
+def _apple_gpu_dispatch_softmax(op_name: str, operands: list[Any],
+                                kwargs: Mapping[str, Any], np: Any) -> Any:
+    """Dispatch the production Apple softmax route for an exact shape/device."""
+    if operands:
+        x = np.asarray(operands[0])
+        axis = int(kwargs.get("axis", -1))
+        if x.ndim == 2 and x.dtype == np.float32 and axis in (-1, 1):
+            from tessera.compiler.apple_route_selector import production_route_for
+            shape = f"{int(x.shape[0])}x{int(x.shape[1])}"
+            route = production_route_for(
+                op="softmax", shape=shape, dtype="f32",
+                incumbent_route="msl")
+            if route == "mpsgraph":
+                return _apple_gpu_dispatch_mpsgraph_softmax(x, np)
+    return _apple_gpu_dispatch_softmax_msl(op_name, operands, kwargs, np)
 
 
 def _apple_gpu_softmax_f32() -> Any:
@@ -30657,6 +30828,27 @@ def _runtime_flash_attn(np: Any, q: Any, k: Any, v: Any, kwargs: Mapping[str, An
     attn_bias = kwargs.get("attn_bias", None)
     if attn_bias is not None:
         scores = scores + np.asarray(attn_bias)
+    softcap = float(kwargs.get("logit_softcap", 0.0) or 0.0)
+    if softcap < 0:
+        raise ValueError("flash_attn logit_softcap must be non-negative")
+    if softcap > 0:
+        scores = softcap * np.tanh(scores / softcap)
+    window_size = int(
+        kwargs.get("window_size", kwargs.get("sliding_window", kwargs.get("window", 0)))
+        or 0
+    )
+    if window_size < 0:
+        raise ValueError("flash_attn window_size must be non-negative")
+    if window_size > 0:
+        q_len, k_len = scores.shape[-2], scores.shape[-1]
+        q_pos = np.arange(q_len)[:, None] + max(k_len - q_len, 0)
+        k_pos = np.arange(k_len)[None, :]
+        if bool(kwargs.get("causal", False)):
+            window_mask = (k_pos > q_pos) | (k_pos <= q_pos - window_size)
+        else:
+            half = window_size // 2
+            window_mask = (k_pos < q_pos - half) | (k_pos > q_pos + half)
+        scores = np.where(window_mask, -np.inf, scores)
     if bool(kwargs.get("causal", False)):
         q_len, k_len = scores.shape[-2], scores.shape[-1]
         mask = np.triu(np.ones((q_len, k_len), dtype=bool), k=1 + max(k_len - q_len, 0))

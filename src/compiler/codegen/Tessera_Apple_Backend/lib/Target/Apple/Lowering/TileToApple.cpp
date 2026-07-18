@@ -877,6 +877,27 @@ struct LowerTileToAppleGPUPass
           ++ordinal;
           continue;
         }
+        // TILE-1: the strict static rank-2 fp16/bf16 Tile form selects the
+        // source-backed 32-lane simdgroup_matrix ABI. This is intentionally
+        // separate from rank-3 tile.batched_gemm, which remains MPS BMM.
+        if (name == "tile.matmul" || name == "tile.gemm") {
+          if (auto rt = llvm::dyn_cast<RankedTensorType>(
+                  op->getResult(0).getType())) {
+            Type et = rt.getElementType();
+            llvm::StringRef symbol;
+            if (et.isF16())
+              symbol = "tessera_apple_gpu_tile_simdgroup_gemm_f16";
+            else if (et.isBF16())
+              symbol = "tessera_apple_gpu_tile_simdgroup_gemm_bf16";
+            if (!symbol.empty()) {
+              emitAppleValueCall(builder, op, "tessera_apple.gpu.kernel_call",
+                                 "tile_simdgroup_gemm", symbol,
+                                 "tile_simdgroup_msl", "executable", "Metal");
+              ++ordinal;
+              continue;
+            }
+          }
+        }
         // Sprint 8: static rank-3 batched matmul executes on the GPU value lane
         // for f32/f16/bf16 via the MPSGraph-backed bmm symbols. Only the vetted
         // tile op (TileBatchedMatmulValue, strict static rank-3 envelope)

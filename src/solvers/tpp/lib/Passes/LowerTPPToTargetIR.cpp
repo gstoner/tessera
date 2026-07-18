@@ -50,6 +50,8 @@ static StringRef primitiveFor(StringRef opName) {
 
 struct LowerTPPToTargetIR
     : public PassWrapper<LowerTPPToTargetIR, OperationPass<ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LowerTPPToTargetIR)
+
   StringRef getArgument() const final { return "lower-tpp-to-target-ir"; }
   StringRef getDescription() const final {
     return "Annotate TPP ops with hardware-free Target-IR call symbols "

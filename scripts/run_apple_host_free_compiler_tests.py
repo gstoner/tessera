@@ -56,6 +56,17 @@ def _collect_nodes(command: list[str], env: dict[str, str]) -> tuple[list[str], 
     return nodes, result.stderr.strip()
 
 
+def _llvm_runner_utils(build_dir: Path) -> Path | None:
+    """Return the MLIR runner-utils dylib from this CMake build's LLVM prefix."""
+
+    cache = build_dir / "CMakeCache.txt"
+    for line in cache.read_text(encoding="utf-8").splitlines():
+        if line.startswith("LLVM_DIR:PATH="):
+            llvm_dir = Path(line.removeprefix("LLVM_DIR:PATH="))
+            return llvm_dir.parents[2] / "lib" / "libmlir_c_runner_utils.dylib"
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build-dir", type=Path, required=True)
@@ -86,7 +97,13 @@ def main(argv: list[str] | None = None) -> int:
     command = [sys.executable, "-m", "pytest", "tests/unit", "-q", "-m", marker]
     env = os.environ.copy()
     env["TESSERA_OPT"] = str(args.tool)
+    env["TESSERA_OPT_BIN"] = str(args.tool)
     env["PATH"] = f"{args.tool.parent}{os.pathsep}{env.get('PATH', '')}"
+    jit_library = args.build_dir / "tools" / "tessera-jit" / "libtessera_jit.dylib"
+    if jit_library.is_file():
+        env["TESSERA_JIT_LIB"] = str(jit_library)
+    if runner_utils := _llvm_runner_utils(args.build_dir):
+        env["TESSERA_MLIR_C_RUNNER_UTILS"] = str(runner_utils)
     try:
         nodes, collection_diagnostic = _collect_nodes(command, env)
     except RuntimeError as error:

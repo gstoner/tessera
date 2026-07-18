@@ -487,31 +487,16 @@ def test_synthesized_kernel_equals_unfused_on_metal(chain, has_bias):
     assert np.allclose(out, region.reference(A, B, bias), atol=1e-4)  # horizontal oracle
 
 
-@pytest.mark.hardware_apple_gpu
-def test_synthesizer_reproduces_the_handwritten_matmul_gelu():
-    # the synthesized matmul->gelu must match the hand-written catalog kernel it
-    # replaces — proving the synthesizer can retire it.
-    import ctypes
-    from tessera.runtime import _load_apple_gpu_runtime
+def test_retired_matmul_gelu_symbol_is_not_an_exact_device_contract():
+    """The generic synthesis proof replaces this former catalog comparison.
 
-    rt = _load_apple_gpu_runtime()
-    hw = getattr(rt, "tessera_apple_gpu_matmul_gelu_f32", None)
-    if hw is None:
-        pytest.skip("hand-written matmul_gelu symbol unavailable")
-    hw.argtypes = [ctypes.POINTER(ctypes.c_float)] * 3 + [ctypes.c_int32] * 3
-    hw.restype = None
+    ``test_synthesized_kernel_equals_unfused_on_metal`` provides the native
+    placement and numerical-oracle coverage.  The retired public ABI must not
+    be put back into the hardware cohort merely to compare against itself.
+    """
+    from tessera._apple_gpu_dispatch import APPLE_ABI
 
-    rng = np.random.default_rng(3)
-    M, K, N = 12, 20, 16
-    A = rng.standard_normal((M, K)).astype(np.float32)
-    B = rng.standard_normal((K, N)).astype(np.float32)
-    hand = np.zeros((M, N), np.float32)
-    fp = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-    hw(fp(np.ascontiguousarray(A)), fp(np.ascontiguousarray(B)), fp(hand), M, N, K)
-
-    synth, execution = run_fused_region(FusedRegion(("gelu",)), A, B)
-    assert execution == "metal_runtime"
-    assert np.allclose(synth, hand, atol=1e-4)         # synthesized == hand-written
+    assert "tessera_apple_gpu_matmul_gelu_f32" not in APPLE_ABI
 
 
 def test_fusion_collapses_dispatch_count():
@@ -579,29 +564,11 @@ def test_synthesized_reduction_equals_unfused_on_metal(chain, red, has_bias):
     assert np.allclose(out, region.reference(A, B, bias), atol=1e-4)
 
 
-@pytest.mark.hardware_apple_gpu
-def test_synthesizer_reproduces_the_handwritten_matmul_rmsnorm():
-    import ctypes
-    from tessera.runtime import _load_apple_gpu_runtime
+def test_retired_matmul_rmsnorm_symbol_is_not_an_exact_device_contract():
+    """Native synthesized-reduction coverage supersedes this retired ABI."""
+    from tessera._apple_gpu_dispatch import APPLE_ABI
 
-    rt = _load_apple_gpu_runtime()
-    hw = getattr(rt, "tessera_apple_gpu_matmul_rmsnorm_f32", None)
-    if hw is None:
-        pytest.skip("hand-written matmul_rmsnorm symbol unavailable")
-    hw.argtypes = [ctypes.POINTER(ctypes.c_float)] * 3 + [ctypes.c_int32] * 3 + [ctypes.c_float]
-    hw.restype = None
-
-    rng = np.random.default_rng(5)
-    M, K, N = 12, 20, 16
-    A = rng.standard_normal((M, K)).astype(np.float32)
-    B = rng.standard_normal((K, N)).astype(np.float32)
-    hand = np.zeros((M, N), np.float32)
-    fp = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-    hw(fp(np.ascontiguousarray(A)), fp(np.ascontiguousarray(B)), fp(hand), M, N, K, 1e-6)
-
-    synth, execution = run_fused_region(FusedRegion((), reduction="rmsnorm", eps=1e-6), A, B)
-    assert execution == "metal_runtime"
-    assert np.allclose(synth, hand, atol=1e-4)
+    assert "tessera_apple_gpu_matmul_rmsnorm_f32" not in APPLE_ABI
 
 
 def test_discovery_captures_terminal_reduction():
@@ -1242,31 +1209,11 @@ def test_bf16_synthesis_converts_and_runs_on_metal():
     assert np.allclose(out.astype(np.float32), ref, atol=3e-2, rtol=3e-2)
 
 
-@pytest.mark.hardware_apple_gpu
-def test_f16_synthesis_reproduces_handwritten_matmul_gelu_f16():
-    import ctypes
-    from tessera.runtime import _load_apple_gpu_runtime
+def test_retired_matmul_gelu_f16_symbol_is_not_an_exact_device_contract():
+    """The parameterized f16 synthesis test is the live native replacement."""
+    from tessera._apple_gpu_dispatch import APPLE_ABI
 
-    rt = _load_apple_gpu_runtime()
-    hw = getattr(rt, "tessera_apple_gpu_matmul_gelu_f16", None)
-    if hw is None:
-        pytest.skip("hand-written matmul_gelu_f16 symbol unavailable")
-    hw.argtypes = [ctypes.POINTER(ctypes.c_uint16)] * 3 + [ctypes.c_int32] * 3
-    hw.restype = None
-
-    rng = np.random.default_rng(13)
-    M, K, N = 8, 16, 32
-    A = rng.standard_normal((M, K)).astype(np.float16)
-    B = rng.standard_normal((K, N)).astype(np.float16)
-    hand = np.zeros((M, N), np.float16)
-    u16 = lambda a: a.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
-    hw(u16(np.ascontiguousarray(A)), u16(np.ascontiguousarray(B)), u16(hand), M, N, K)
-
-    synth, execution = run_fused_region(FusedRegion(("gelu",)), A, B)
-    assert execution == "metal_runtime"
-    # both use half I/O + fp32 accumulators + the same clamped-tanh gelu.
-    assert np.allclose(synth.astype(np.float32), hand.astype(np.float32),
-                       atol=2e-2, rtol=2e-2)
+    assert "tessera_apple_gpu_matmul_gelu_f16" not in APPLE_ABI
 
 
 # ── F2d cooperative-matrix synthesis (simdgroup_matrix MMA + fused epilogue) ──
@@ -1524,28 +1471,40 @@ def test_run_fused_region_prefers_coopmat_for_pointwise():
                        FusedRegion((), reduction="softmax").reference(A, B), atol=3e-2)
 
 
+def test_retired_tiled_matmul_softmax_symbol_is_not_an_exact_device_contract():
+    """The tiled synthesized-reduction coverage supersedes this retired ABI."""
+    from tessera._apple_gpu_dispatch import APPLE_ABI
+
+    assert "tessera_apple_gpu_matmul_softmax_tiled_f32" not in APPLE_ABI
+
+
 @pytest.mark.hardware_apple_gpu
-def test_tiled_synthesis_reproduces_handwritten_matmul_softmax_tiled():
-    # the synthesized tiled softmax must match the hand-written tiled kernel it
-    # will replace — same cooperative online-softmax math.
-    import ctypes
-    from tessera.runtime import _load_apple_gpu_runtime
-
-    rt = _load_apple_gpu_runtime()
-    hw = getattr(rt, "tessera_apple_gpu_matmul_softmax_tiled_f32", None)
-    if hw is None:
-        pytest.skip("hand-written matmul_softmax_tiled symbol unavailable")
-    hw.argtypes = [ctypes.POINTER(ctypes.c_float)] * 3 + [ctypes.c_int32] * 3
-    hw.restype = None
-
+def test_tiled_softmax_synthesis_equals_oracle_on_metal():
+    """Live exact-device proof for the retired tiled-softmax catalog ABI."""
     rng = np.random.default_rng(9)
-    M, K, N = 8, 32, 2048
-    A = rng.standard_normal((M, K)).astype(np.float32)
-    B = rng.standard_normal((K, N)).astype(np.float32)
-    hand = np.zeros((M, N), np.float32)
-    fp = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-    hw(fp(np.ascontiguousarray(A)), fp(np.ascontiguousarray(B)), fp(hand), M, N, K)
+    A = rng.standard_normal((8, 32)).astype(np.float32)
+    B = rng.standard_normal((32, 2048)).astype(np.float32)
+    region = FusedRegion((), reduction="softmax")
 
-    synth, execution = run_fused_region(FusedRegion((), reduction="softmax"), A, B)
+    out, execution = run_fused_region(region, A, B)
+
     assert execution == "metal_runtime"
-    assert np.allclose(synth, hand, atol=1e-4)     # synthesized == hand-written
+    assert np.allclose(out, region.reference(A, B), atol=1e-4)
+
+
+def test_synthesized_region_forced_fallback_is_reference_and_correct(monkeypatch):
+    """A forced synthesized-runtime miss must never retain Metal provenance."""
+    import tessera.compiler.emit.apple_msl as apple_msl
+
+    rng = np.random.default_rng(41)
+    A = rng.standard_normal((8, 16)).astype(np.float32)
+    B = rng.standard_normal((16, 24)).astype(np.float32)
+    region = FusedRegion(("gelu",))
+    monkeypatch.setattr(apple_msl, "_synth_coopmat_symbol", lambda: None)
+    monkeypatch.setattr(apple_msl, "_synth_symbol", lambda: None)
+    monkeypatch.setattr(apple_msl, "_synth_tiled_symbol", lambda: None)
+
+    out, execution = apple_msl.run_fused_region(region, A, B)
+
+    assert execution == "reference"
+    assert np.allclose(out, region.reference(A, B), atol=1e-4)

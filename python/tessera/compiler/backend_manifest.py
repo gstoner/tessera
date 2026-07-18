@@ -913,9 +913,16 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     "flash_attn": {
         "status": _DEVICE_VERIFIED_ABI_STATUS,
         "dtypes": _APPLE_GPU_FUSED,
-        "notes": "Online-softmax MSL kernel; head_dim ≤ 256 (Phase 8.4.1)",
+        "notes": (
+            "Status-returning online-softmax MSL variant kernel covers native "
+            "f32/f16 MHA, GQA, MQA, additive bias, causal/sliding-window "
+            "masking, and logit soft-cap with retained pipeline telemetry. "
+            "Exact Apple7 plain-MHA shapes may select owned-command-buffer "
+            "MPSGraph BSMM from the two-run end-to-end ledger; bf16 remains "
+            "host-conversion plus f32 GPU compute."
+        ),
         "runtime_symbol": "tessera_apple_gpu_flash_attn_dev_f32_enc",
-        "benchmark_json": "benchmarks/baselines/apple_gpu_hot_paths.json",
+        "benchmark_json": "benchmarks/baselines/apple7_attention_route_ledger.json",
         "shape_envelope": "head_dim <= 256 (MSL stack array, Phase 8.4.1)",
     },
     "attn_compressed_blocks": {

@@ -341,20 +341,26 @@ def test_unsupported_op_falls_back_without_jit():
 
 
 # ── opt-in linalg→vector GEMM lane (TESSERA_JIT_VECTORIZE) ────────────────────
-_RUNNER_UTILS = "/opt/homebrew/opt/llvm/lib/libmlir_c_runner_utils.dylib"
+_RUNNER_UTILS = os.environ.get(
+    "TESSERA_MLIR_C_RUNNER_UTILS",
+    "/opt/homebrew/opt/llvm/lib/libmlir_c_runner_utils.dylib",
+)
 
 
 @pytest.mark.integration
 @pytest.mark.compiler_tool
+@pytest.mark.compiler_cpu
 def test_vectorize_lane_correct_in_and_out_of_envelope(monkeypatch):
     from tests._support.apple import require_darwin_host
 
     require_darwin_host()
     assert os.path.exists(_RUNNER_UTILS), "MLIR C runner utils dylib is unavailable"
     # The opt-in transform-interpreter tile+vectorize lane: within the size
-    # envelope (default <=2048) the matmul + elementwise epilogue are register-
-    # tiled + vectorized (fast); outside it stays on the scalar JIT path. BOTH must
-    # be correct + crash-free. To exercise the out-of-envelope guard without
+    # envelope (default <=2048) a supported MLIR toolchain register-tiles and
+    # vectorizes the matmul. MLIR 23 deliberately uses the scalar JIT pipeline
+    # because its one-shot bufferizer aborts on the transformed tensor IR.
+    # Either way, in- and out-of-envelope requests must be correct and
+    # crash-free. To exercise the out-of-envelope guard without
     # compiling a giant matmul, we pin a tiny MAXDIM and check a size just past it.
     monkeypatch.setenv("TESSERA_JIT_VECTORIZE", "1")
 

@@ -33,16 +33,20 @@ _TESSERA_OPT_PATH: Any = "unset"
 
 
 def _find_tessera_opt():
-    """Locate the built `tessera-opt` binary, or None. Honors $TESSERA_OPT_BIN,
-    then the in-repo build dir, then PATH. Cached (used by run_via_target_ir)."""
+    """Locate the built `tessera-opt` binary, or None.
+
+    Honors ``$TESSERA_OPT`` (the project-wide compiler-test variable), then the
+    older ``$TESSERA_OPT_BIN`` spelling, the in-repo build dir, and PATH.
+    Cached (used by ``run_via_target_ir``).
+    """
     global _TESSERA_OPT_PATH
     if _TESSERA_OPT_PATH != "unset":
         return _TESSERA_OPT_PATH
     import shutil
     cands = []
-    env = os.environ.get("TESSERA_OPT_BIN")
-    if env:
-        cands.append(env)
+    for name in ("TESSERA_OPT", "TESSERA_OPT_BIN"):
+        if env := os.environ.get(name):
+            cands.append(env)
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     cands.append(os.path.join(root, "build/tools/tessera-opt/tessera-opt"))
     which = shutil.which("tessera-opt")
@@ -285,10 +289,18 @@ def _build_packed_args(descriptors):
 # (or explicitly via `clear_cache()`). Each invoke still runs (and counts).
 
 import atexit  # noqa: E402  (kept local to the cache section)
+from collections import OrderedDict  # noqa: E402
 import threading  # noqa: E402
 
-_COMPILE_CACHE: dict[str, int] = {}
-_CACHED_HANDLES: set[int] = set()
+# Each MLIR module owns an ExecutionEngine, target machine, and LLVM module.
+# Keeping every shape/op variant for the lifetime of a long test or service
+# process eventually exhausts MLIR/ORC state on Apple. Bound the resident set,
+# while keeping a handle alive until the caller's matching ``destroy`` returns
+# its lease. ``TESSERA_JIT_CACHE_CAPACITY`` is an escape hatch for profiling.
+_COMPILE_CACHE: OrderedDict[str, int] = OrderedDict()
+_HANDLE_LEASES: dict[int, int] = {}
+_EVICTED_HANDLES: set[int] = set()
+_CACHE_CAPACITY = max(1, int(os.environ.get("TESSERA_JIT_CACHE_CAPACITY", "64")))
 _CACHE_LOCK = threading.Lock()
 _CACHE_ENABLED = True
 
@@ -299,6 +311,20 @@ def _raw_compile(mlir_text: str) -> int:
     if not handle:
         raise TesseraJitError(lib.tessera_jit_last_error().decode("utf-8", "replace"))
     return handle
+
+
+def _evict_lru_locked() -> list[int]:
+    """Evict idle LRU engines; leased engines retire after ``destroy``."""
+
+    retired: list[int] = []
+    while len(_COMPILE_CACHE) > _CACHE_CAPACITY:
+        _, handle = _COMPILE_CACHE.popitem(last=False)
+        _EVICTED_HANDLES.add(handle)
+        if _HANDLE_LEASES.get(handle, 0) == 0:
+            _HANDLE_LEASES.pop(handle, None)
+            _EVICTED_HANDLES.discard(handle)
+            retired.append(handle)
+    return retired
 
 
 def compile_module(mlir_text: str) -> int:
@@ -312,28 +338,49 @@ def compile_module(mlir_text: str) -> int:
     with _CACHE_LOCK:
         hit = _COMPILE_CACHE.get(mlir_text)
         if hit is not None:
+            _COMPILE_CACHE.move_to_end(mlir_text)
+            _HANDLE_LEASES[hit] += 1
             return hit
     # Compile outside the lock (slow); double-check on insert.
     handle = _raw_compile(mlir_text)
+    retired: list[int] = []
     with _CACHE_LOCK:
         existing = _COMPILE_CACHE.get(mlir_text)
         if existing is not None:
             # Lost a race; keep the first, drop ours.
-            _load().tessera_jit_destroy(handle)
-            return existing
-        _COMPILE_CACHE[mlir_text] = handle
-        _CACHED_HANDLES.add(handle)
-        return handle
+            _COMPILE_CACHE.move_to_end(mlir_text)
+            _HANDLE_LEASES[existing] += 1
+        else:
+            _COMPILE_CACHE[mlir_text] = handle
+            _HANDLE_LEASES[handle] = 1
+            retired = _evict_lru_locked()
+            existing = handle
+    if existing != handle:
+        _load().tessera_jit_destroy(handle)
+    for retired_handle in retired:
+        _load().tessera_jit_destroy(retired_handle)
+    return existing
 
 
 def destroy(handle: int) -> None:
-    """Destroy a handle. No-op for cache-owned handles (freed at exit)."""
+    """Release a caller lease, destroying a cache-evicted engine when idle."""
     if not handle:
         return
+    retired = False
     with _CACHE_LOCK:
-        if handle in _CACHED_HANDLES:
-            return  # cache owns the lifetime
-    _load().tessera_jit_destroy(handle)
+        leases = _HANDLE_LEASES.get(handle)
+        if leases is not None:
+            assert leases > 0, "JIT handle released more than once"
+            _HANDLE_LEASES[handle] = leases - 1
+            if handle not in _EVICTED_HANDLES:
+                return
+            if leases != 1:
+                return
+            _HANDLE_LEASES.pop(handle, None)
+            _EVICTED_HANDLES.remove(handle)
+            retired = True
+    if retired or handle not in _HANDLE_LEASES:
+        _load().tessera_jit_destroy(handle)
 
 
 def set_cache_enabled(enabled: bool) -> None:
@@ -350,11 +397,15 @@ def cache_size() -> int:
 def clear_cache() -> None:
     """Destroy all cached compiled functions and empty the cache."""
     with _CACHE_LOCK:
-        handles = list(_CACHED_HANDLES)
+        handles = list(_COMPILE_CACHE.values())
         _COMPILE_CACHE.clear()
-        _CACHED_HANDLES.clear()
+        _EVICTED_HANDLES.update(handles)
+        retired = [handle for handle in handles if _HANDLE_LEASES.get(handle, 0) == 0]
+        for handle in retired:
+            _HANDLE_LEASES.pop(handle, None)
+            _EVICTED_HANDLES.discard(handle)
     lib = _load()
-    for h in handles:
+    for h in retired:
         lib.tessera_jit_destroy(h)
 
 

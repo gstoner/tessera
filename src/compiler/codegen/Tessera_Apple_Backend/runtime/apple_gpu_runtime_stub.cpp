@@ -396,6 +396,20 @@ extern "C" void tessera_apple_gpu_mps_matmul_bf16(const uint16_t* A,
   for (std::size_t i = 0; i < Cf.size(); ++i) C[i] = float_to_bfloat16_stub(Cf[i]);
 }
 
+extern "C" int32_t tessera_apple_gpu_mps_matmul_f16_status(
+    const uint16_t* A, const uint16_t* B, uint16_t* C,
+    int32_t M, int32_t N, int32_t K) {
+  tessera_apple_gpu_mps_matmul_f16(A, B, C, M, N, K);
+  return 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_mps_matmul_bf16_status(
+    const uint16_t* A, const uint16_t* B, uint16_t* C,
+    int32_t M, int32_t N, int32_t K) {
+  tessera_apple_gpu_mps_matmul_bf16(A, B, C, M, N, K);
+  return 0;
+}
+
 extern "C" void tessera_apple_gpu_rope_f32(const float* X, const float* Theta,
                                            float* Out, int32_t M, int32_t K) {
   reference_rope_f32(X, Theta, Out, M, K);
@@ -499,6 +513,10 @@ inline void reference_msa_block_sparse_f32(
 
 } // namespace
 
+extern "C" int32_t tessera_apple_gpu_flash_attn_f32_status(
+    const float*, const float*, const float*, float*, int32_t, int32_t,
+    int32_t, int32_t, float, int32_t) { return 0; }
+
 extern "C" void tessera_apple_gpu_flash_attn_f32(const float* Q, const float* K,
                                                  const float* V, float* O,
                                                  int32_t B, int32_t Sq,
@@ -592,6 +610,10 @@ extern "C" void tessera_apple_gpu_msa_select_blocks_f32(
 }
 
 // Phase 8.4.4.2 — fp16 / bf16 stubs for flash_attn (fp32 conversion path).
+
+extern "C" int32_t tessera_apple_gpu_flash_attn_f16_status(
+    const uint16_t*, const uint16_t*, const uint16_t*, uint16_t*, int32_t,
+    int32_t, int32_t, int32_t, float, int32_t) { return 0; }
 
 extern "C" void tessera_apple_gpu_flash_attn_f16(const uint16_t* Q,
                                                  const uint16_t* K_buf,
@@ -1142,6 +1164,32 @@ extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_coopmat(
     void*, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t) {
   return 0;
 }
+
+extern "C" int32_t tessera_apple_gpu_tile_simdgroup_gemm_f16(
+    const char*, const char*, const uint16_t*, const uint16_t*, float*,
+    int32_t, int32_t, int32_t, int32_t, int32_t, int32_t) {
+  return 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_tile_simdgroup_gemm_bf16(
+    const char*, const char*, const uint16_t*, const uint16_t*, float*,
+    int32_t, int32_t, int32_t, int32_t, int32_t, int32_t) {
+  return 0;
+}
+
+extern "C" int64_t tessera_apple_gpu_tile_last_device_time_ns(void) { return -1; }
+extern "C" int64_t tessera_apple_gpu_tile_last_counter_delta(void) { return -1; }
+extern "C" int32_t tessera_apple_gpu_tile_counter_sampling_supported(void) { return 0; }
+extern "C" void tessera_apple_gpu_dispatch_telemetry_set_enabled(int32_t) {}
+extern "C" int32_t tessera_apple_gpu_dispatch_telemetry_enabled(void) { return 0; }
+extern "C" void tessera_apple_gpu_dispatch_telemetry_clear(void) {}
+extern "C" int64_t tessera_apple_gpu_last_dispatch_device_time_ns(void) { return -1; }
+extern "C" int64_t tessera_apple_gpu_last_dispatch_counter_delta(void) { return -1; }
+extern "C" int32_t tessera_apple_gpu_last_dispatch_counter_supported(void) { return -1; }
+extern "C" int32_t tessera_apple_gpu_last_dispatch_timing_source(void) { return 0; }
+extern "C" int32_t tessera_apple_gpu_last_dispatch_resource_record(
+    int32_t*, int32_t*, int32_t*, int32_t*, int32_t*, int64_t*) { return 0; }
+extern "C" int32_t tessera_apple_gpu_profiling_capabilities(void) { return 0; }
 
 extern "C" int32_t tessera_apple_gpu_synth_matmul_reduce_coopmat(
     const char*, const char*, const void*, const void*, const void*,
@@ -1910,6 +1958,10 @@ extern "C" void tessera_apple_gpu_mpsgraph_unary_f16(int32_t, const uint16_t* x,
                                                      uint16_t* out, int64_t n) {
   std::memcpy(out, x, static_cast<std::size_t>(n) * 2);
 }
+extern "C" int32_t tessera_apple_gpu_mpsgraph_unary_f32_status(
+    int32_t, const float*, float*, int64_t) { return 0; }
+extern "C" int32_t tessera_apple_gpu_mpsgraph_unary_f16_status(
+    int32_t, const uint16_t*, uint16_t*, int64_t) { return 0; }
 extern "C" void tessera_apple_gpu_mpsgraph_binary_f32(int32_t op, const float* a,
                                                       const float* b, float* out,
                                                       int64_t n) {
@@ -1929,6 +1981,8 @@ extern "C" void tessera_apple_gpu_mpsgraph_binary_f32(int32_t op, const float* a
     }
   }
 }
+extern "C" int32_t tessera_apple_gpu_mpsgraph_binary_f32_status(
+    int32_t, const float*, const float*, float*, int64_t) { return 0; }
 // Phase-G Rung 0 — control-flow scan, non-Apple reference. Same recurrence the
 // MPSGraph forLoop computes: carry_{i+1} = tanh(carry_i @ Wh + x_i @ Wx).
 extern "C" int32_t tessera_apple_gpu_cf_scan_f32(const float* Wh, const float* Wx,
@@ -3868,7 +3922,19 @@ extern "C" void tessera_apple_gpu_flash_attn_gqa_f32(
   }
 }
 
+extern "C" int32_t tessera_apple_gpu_flash_attn_variant_f32_status(
+    const float *, const float *, const float *, const float *, float *,
+    int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, float, int32_t,
+    int32_t, float) {
+  return 0;
+}
+
 // ---- fused batched matmul->softmax->matmul non-Apple reference -------------
+extern "C" int32_t tessera_apple_gpu_mpsgraph_bsmm_f32_status(
+    const float *, const float *, const float *, float *, int32_t, int32_t,
+    int32_t, int32_t, int32_t, float) {
+  return 0;
+}
 extern "C" void tessera_apple_gpu_mpsgraph_bsmm_f32(const float* A, const float* B,
                                                     const float* C, float* O,
                                                     int32_t batch, int32_t M,
@@ -3897,6 +3963,11 @@ extern "C" void tessera_apple_gpu_mpsgraph_bsmm_f32(const float* A, const float*
     }
   }
 }
+extern "C" int32_t tessera_apple_gpu_mpsgraph_bsmm_f16_status(
+    const uint16_t *, const uint16_t *, const uint16_t *, uint16_t *, int32_t,
+    int32_t, int32_t, int32_t, int32_t, float) {
+  return 0;
+}
 extern "C" void tessera_apple_gpu_mpsgraph_bsmm_f16(const uint16_t* A, const uint16_t* B,
                                                     const uint16_t* C, uint16_t* O,
                                                     int32_t batch, int32_t M, int32_t N,
@@ -3923,6 +3994,49 @@ extern "C" void tessera_apple_gpu_flash_attn_gqa_f16(const uint16_t*, const uint
                                                      int32_t Sq, int32_t, int32_t D,
                                                      float, int32_t) {
   std::memset(O, 0, static_cast<std::size_t>(B) * Sq * D * 2);  // python upcasts on fallback
+}
+
+extern "C" int32_t tessera_apple_gpu_flash_attn_variant_f16_status(
+    const uint16_t *, const uint16_t *, const uint16_t *, const uint16_t *,
+    uint16_t *, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, float,
+    int32_t, int32_t, float) {
+  return 0;
+}
+extern "C" int32_t tessera_apple_gpu_flash_attn_variant_dev_f32_enc(
+    TsEncodeSession *, TsDeviceTensor *, TsDeviceTensor *, TsDeviceTensor *,
+    TsDeviceTensor *, TsDeviceTensor *, int32_t, int32_t, int32_t, int32_t,
+    int32_t, int32_t, float, int32_t, int32_t, float) {
+  return 0;
+}
+extern "C" int32_t tessera_apple_gpu_flash_attn_variant_dev_f16_enc(
+    TsEncodeSession *, TsDeviceTensor *, TsDeviceTensor *, TsDeviceTensor *,
+    TsDeviceTensor *, TsDeviceTensor *, int32_t, int32_t, int32_t, int32_t,
+    int32_t, int32_t, float, int32_t, int32_t, float) {
+  return 0;
+}
+extern "C" int32_t tessera_apple_gpu_flash_attn_variant_dev_bf16_enc(
+    TsEncodeSession *, TsDeviceTensor *, TsDeviceTensor *, TsDeviceTensor *,
+    TsDeviceTensor *, TsDeviceTensor *, int32_t, int32_t, int32_t, int32_t,
+    int32_t, int32_t, float, int32_t, int32_t, float) {
+  return 0;
+}
+extern "C" int32_t tessera_apple_gpu_flash_attn_cooperative_dev_f32_enc(
+    TsEncodeSession *, TsDeviceTensor *, TsDeviceTensor *, TsDeviceTensor *,
+    TsDeviceTensor *, TsDeviceTensor *, int32_t, int32_t, int32_t, int32_t,
+    int32_t, int32_t, float, int32_t, int32_t, float) {
+  return 0;
+}
+extern "C" int32_t tessera_apple_gpu_flash_attn_cooperative_dev_f16_enc(
+    TsEncodeSession *, TsDeviceTensor *, TsDeviceTensor *, TsDeviceTensor *,
+    TsDeviceTensor *, TsDeviceTensor *, int32_t, int32_t, int32_t, int32_t,
+    int32_t, int32_t, float, int32_t, int32_t, float) {
+  return 0;
+}
+extern "C" int32_t tessera_apple_gpu_flash_attn_cooperative_dev_bf16_enc(
+    TsEncodeSession *, TsDeviceTensor *, TsDeviceTensor *, TsDeviceTensor *,
+    TsDeviceTensor *, TsDeviceTensor *, int32_t, int32_t, int32_t, int32_t,
+    int32_t, int32_t, float, int32_t, int32_t, float) {
+  return 0;
 }
 extern "C" void tessera_apple_gpu_flash_attn_gqa_bf16(const uint16_t* Q, const uint16_t* K,
                                                       const uint16_t* V, uint16_t* O,
@@ -4116,7 +4230,9 @@ extern "C" void tessera_apple_gpu_conv3d_f16(
 
 // Track-R (ReplaySSM) Phase 5 — fused output-only SSM decode (scalar-A, f32).
 // Non-Apple reference mirroring the MSL kernel exactly (host-side fallback).
-extern "C" void tessera_apple_gpu_ssm_replay_decode_f32(
+// Match the Apple runtime ABI: zero states that the stub executed only the
+// host reference, never a Metal dispatch.
+extern "C" int32_t tessera_apple_gpu_ssm_replay_decode_f32(
     const float* delta, const float* xin, const float* bin, const float* s0,
     const float* cin, const float* a, float* out,
     int32_t B, int32_t D, int32_t N, int32_t M) {
@@ -4141,6 +4257,7 @@ extern "C" void tessera_apple_gpu_ssm_replay_decode_f32(
       out[b * D + d] = y;
     }
   }
+  return 0;
 }
 
 // Track-R Phase 5 — block SSM decode (scalar-A, f32). Non-Apple reference.
@@ -4167,6 +4284,9 @@ extern "C" void tessera_apple_gpu_ssm_block_decode_f32(
     }
   }
 }
+extern "C" int32_t tessera_apple_gpu_ssm_block_decode_f32_status(
+    const float*, const float*, const float*, const float*, const float*,
+    const float*, float*, int32_t, int32_t, int32_t, int32_t) { return 0; }
 
 // Track-R Phase 6 — gated delta-rule block decode from checkpoint S0 (f32).
 // Non-Apple reference; returns O and final state Sout.
@@ -4245,6 +4365,10 @@ extern "C" void tessera_apple_gpu_ssm_block_decode_f16(
     }
   }
 }
+extern "C" int32_t tessera_apple_gpu_ssm_block_decode_f16_status(
+    const uint16_t*, const uint16_t*, const uint16_t*, const uint16_t*,
+    const uint16_t*, const uint16_t*, uint16_t*, int32_t, int32_t, int32_t,
+    int32_t) { return 0; }
 
 // f16 GDN block decode (half bits via uint16_t).
 extern "C" void tessera_apple_gpu_gated_delta_rule_decode_f16(

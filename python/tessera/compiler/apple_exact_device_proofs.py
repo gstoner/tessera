@@ -22,6 +22,78 @@ class AppleExactDeviceProof:
     cohort: str = "APPLE-TEST-2-C1 / APPLE-REG-1-C1 sparse-and-runtime proofs"
 
 
+@dataclass(frozen=True)
+class AppleSynthesisProof:
+    """Proof-ladder record for native synthesis outside the C1--C3 ABI cohort.
+
+    The synthesis runners report ``metal_runtime``/``reference`` rather than
+    the execution-matrix mapping used by :class:`AppleExactDeviceProof`; keep
+    that distinction explicit instead of pretending a reference result is a
+    native ABI launch.
+    """
+    family: str
+    native_test: str
+    fallback_test: str
+    retired_symbols: tuple[str, ...] = ()
+
+
+SYNTHESIS_PROOFS: tuple[AppleSynthesisProof, ...] = (
+    AppleSynthesisProof(
+        "matmul pointwise and reduction synthesis",
+        "tests/unit/test_fusion_synthesis.py::test_synthesized_kernel_equals_unfused_on_metal",
+        "tests/unit/test_fusion_synthesis.py::test_synthesized_region_forced_fallback_is_reference_and_correct",
+        ("tessera_apple_gpu_matmul_gelu_f32",
+         "tessera_apple_gpu_matmul_rmsnorm_f32"),
+    ),
+    AppleSynthesisProof(
+        "threadgroup-tiled softmax synthesis",
+        "tests/unit/test_fusion_synthesis.py::test_tiled_softmax_synthesis_equals_oracle_on_metal",
+        "tests/unit/test_fusion_synthesis.py::test_synthesized_region_forced_fallback_is_reference_and_correct",
+        ("tessera_apple_gpu_matmul_softmax_tiled_f32",),
+    ),
+)
+
+
+# These comparisons used retired catalog ABIs.  They are deliberately not in
+# the exact-device lane: their live synthesized replacements are registered in
+# SYNTHESIS_PROOFS above.
+RETIRED_SYNTHESIS_COMPARISONS: tuple[tuple[str, str], ...] = (
+    ("tessera_apple_gpu_matmul_gelu_f32",
+     "tests/unit/test_fusion_synthesis.py::test_retired_matmul_gelu_symbol_is_not_an_exact_device_contract"),
+    ("tessera_apple_gpu_matmul_rmsnorm_f32",
+     "tests/unit/test_fusion_synthesis.py::test_retired_matmul_rmsnorm_symbol_is_not_an_exact_device_contract"),
+    ("tessera_apple_gpu_matmul_gelu_f16",
+     "tests/unit/test_fusion_synthesis.py::test_retired_matmul_gelu_f16_symbol_is_not_an_exact_device_contract"),
+    ("tessera_apple_gpu_matmul_softmax_tiled_f32",
+     "tests/unit/test_fusion_synthesis.py::test_retired_tiled_matmul_softmax_symbol_is_not_an_exact_device_contract"),
+)
+
+
+@dataclass(frozen=True)
+class AppleStatefulProof:
+    """Native stateful-family proof, with a distinct forced-fallback negative."""
+    family: str
+    native_test: str
+    fallback_test: str
+    stress_test: str
+
+
+STATEFUL_PROOFS: tuple[AppleStatefulProof, ...] = (
+    AppleStatefulProof(
+        "paged KV attention",
+        "tests/unit/test_paged_kv_native.py::test_native_equivalence_oracle",
+        "tests/unit/test_paged_kv_native.py::test_native_oracle_is_inconclusive_without_metal",
+        "tests/unit/test_apple_gpu_resident_block_paged.py::test_concurrent_sequences",
+    ),
+    AppleStatefulProof(
+        "ReplaySSM fused decode",
+        "tests/unit/test_ssm_apple_gpu_fused.py::test_fused_decode_reports_native_gpu_and_matches_eager",
+        "tests/unit/test_ssm_apple_gpu_fused.py::test_fused_decode_forced_missing_binding_is_reference_and_correct",
+        "tests/unit/test_ssm_apple_gpu_fused.py::test_fused_speculative_rollback_still_exact",
+    ),
+)
+
+
 EXACT_DEVICE_PROOFS: tuple[AppleExactDeviceProof, ...] = (
     AppleExactDeviceProof(
         "apple_gpu_spmm_csr_compiled", ("tessera.spmm_csr",),

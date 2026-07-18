@@ -43,10 +43,9 @@ namespace queue {
 /// the `tessera.queue.*` ops + types.
 ///
 /// Sprint V8 (2026-05-22) — public registration entry; mirrors
-/// `tessera::attn::registerAttnDialect()`.  Includes the same
-/// V7b-style DialectExtension that eager-loads `tessera.queue`
-/// whenever the parent `tessera` Graph IR dialect loads, so dotted-
-/// prefix parsing works in standalone IR fixtures.
+/// `tessera::attn::registerAttnDialect()`. MLIR 23 rejects eager
+/// construction of the legacy dotted `tessera.queue` namespace, so callers
+/// that need queue IR must load the registered dialect explicitly.
 void registerQueueDialect(::mlir::DialectRegistry &registry);
 
 } // namespace queue

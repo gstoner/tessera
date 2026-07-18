@@ -708,11 +708,12 @@ def test_sprint_v8_queue_dialect_registration_header() -> None:
     )
 
 
-def test_sprint_v8_queue_eager_load_extension_present() -> None:
-    """The V7b-style DialectExtension anchored on TesseraDialect must
-    eager-load `tessera.queue` so the dotted-prefix op-name parser
-    routes correctly when programmatic users load only the parent
-    Graph IR dialect."""
+def test_sprint_v8_queue_registration_is_mlir23_compatible() -> None:
+    """Register the queue dialect without constructing it eagerly.
+
+    MLIR 23 rejects the legacy dotted ``tessera.queue`` namespace during
+    eager dialect construction. Tools that need queue IR load it explicitly.
+    """
     cpp = (
         REPO_ROOT / "src" / "compiler" / "tile_opt_fa4"
         / "lib" / "Dialect" / "Queue" / "QueueOps.cpp"
@@ -720,11 +721,12 @@ def test_sprint_v8_queue_eager_load_extension_present() -> None:
     assert "registerQueueDialect" in cpp, (
         "V8 regression: registerQueueDialect body missing in QueueOps.cpp"
     )
-    assert "addExtension" in cpp, (
-        "V8 regression: DialectExtension eager-load missing in QueueOps.cpp"
+    assert "registry.insert<TesseraQueueDialect>()" in cpp, (
+        "V8 regression: Queue dialect is not inserted into the registry"
     )
-    assert "tessera::TesseraDialect" in cpp, (
-        "V8 regression: extension must anchor on the Graph IR TesseraDialect"
+    assert "addExtension" not in cpp, (
+        "MLIR 23 regression: eager construction of the dotted queue dialect "
+        "must remain disabled"
     )
 
 

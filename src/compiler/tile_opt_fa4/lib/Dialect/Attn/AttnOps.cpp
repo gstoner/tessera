@@ -311,29 +311,16 @@ void TesseraAttnDialect::initialize() {
 // Mirrors the canonical Apple backend pattern
 // (`tessera::apple::registerAppleDialect()`).
 //
-// Sprint V7b (2026-05-22): eager-load the dialect when the parent
-// `tessera` Graph IR dialect loads.  Without this extension, MLIR's
-// op-name parser sees `tessera.attn.scaled_dot_product`, splits on
-// the first dot, and routes the op into the `tessera` dialect (which
-// rejects unknown ops).  The longest-prefix fallback against
-// REGISTERED dialects doesn't trigger unless a pass already loaded
-// `tessera.attn` into the context.
+// Do not eagerly load this dialect when the parent `tessera` Graph IR dialect
+// loads.  MLIR 23 validates dialect namespaces at construction time and rejects
+// the legacy dotted namespace `tessera.attn`; eager loading therefore made any
+// ordinary `tessera.*` input abort before the Apple lowering pipeline ran.
 //
-// The extension below ties Attn's load to the Graph IR's load: every
-// time MLIRContext loads `tessera`, the extension callback runs and
-// `getOrLoadDialect<TesseraAttnDialect>()` makes the Attn dialect
-// available for op-name lookup.  This is the canonical MLIR pattern
-// for dotted dialect names that ship together with a parent dialect.
+// Keep the dialect registered for tools that explicitly use it, but isolate its
+// legacy namespace until the attention IR spelling can be migrated as its own
+// compatibility change.
 void registerAttnDialect(::mlir::DialectRegistry &registry) {
   registry.insert<TesseraAttnDialect>();
-  // V7b: eager-load tessera.attn whenever the tessera Graph IR
-  // dialect loads.  This is the canonical MLIR DialectExtension
-  // pattern — the lambda fires once per MLIRContext, immediately
-  // after the parent `tessera` dialect attaches.
-  registry.addExtension(
-      +[](::mlir::MLIRContext *ctx, ::tessera::TesseraDialect *) {
-        ctx->getOrLoadDialect<TesseraAttnDialect>();
-      });
 }
 
 } // namespace attn

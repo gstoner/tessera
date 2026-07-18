@@ -53,6 +53,18 @@ The target model previously mislabelled sm_120 as a "Rubin placeholder / superse
 - **Has no `tcgen05` / `TMEM`** (datacenter sm_100a-only — NVIDIA/cutlass#2800, modular#5707).
 - **Does have FP4 / block-scaled MMA** via warp-level `mma.sync.aligned…block_scale` (E2M1 + block
   scaling) — the consumer Blackwell headline (NVFP4). Compile target **`sm_120a`**.
+  **Productization reality (2026-07-17):** native FP4 **is** available on sm_120 — the gate is a
+  *software kernel-selection gap*, not missing hardware. sm_120 lacks `tcgen05`/`TMEM`, so an SM100
+  CUTLASS grouped-GEMM tactic cannot be retargeted and **fails init**; frameworks (vLLM / FlashInfer /
+  TensorRT-LLM) then fall back to **Marlin W4A16/W4A8-FP8** (dequant — correct, not native-FP4
+  throughput). **TMA exists on sm_120** and feeds a sm_120-specific mainloop — `TMA → 99-KB SMEM →
+  ldmatrix/regs → mma.sync…block_scale` — under CUTLASS schedules
+  `KernelTmaWarpSpecialized{Cooperative,Pingpong}`; constraints are **TN-only**, **cluster 1×1×1** (no
+  multicast), `EpilogueScheduleAuto`, tile `128×128×128` (E2M1 + UE4M3; interleaved scale layout must
+  be exact or ~10% of outputs corrupt). The selector must **prove the native route and report Marlin
+  as an explicit fallback — never label W4A16 as native NVFP4.** Full root cause + refs
+  (`lna-lab/blackwell-geforce-nvfp4-gemm`, `VincentKaufmann/fp4-cuda-kernel`, NVIDIA CUTLASS SM120 doc)
+  in [`SM120_DIFFERENTIATION_DASHBOARD.md`](SM120_DIFFERENTIATION_DASHBOARD.md).
 
 `gpu_target.py` / `capabilities.py` now reflect this (wgmma/tcgen05/tmem → `not_supported` on sm_120,
 block_scaled_mma → `ready`; shared mem → ~100 KB consumer class). Guards in

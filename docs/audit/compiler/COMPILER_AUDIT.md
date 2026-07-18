@@ -1216,6 +1216,53 @@ redundant on these paths already, so the migration is cosmetic flag-removal acro
 opt-in. Verified: ROCm lit 22/22 (double buffer still accepted via the token edge
 with no `depends_on`), tessera-ir phase2/3 + registry/tiling pytest green.
 
+## Sequence Mixer unification — linear/hybrid attention (2026-07-17)
+
+**Direction, not status** (extends Decision #28; MASTER_AUDIT + generated
+dashboards stay status truth). Design pair authored:
+
+- [`SEQUENCE_MIXER_THEORY.md`](SEQUENCE_MIXER_THEORY.md) — the paper.
+- [`SEQUENCE_MIXER_ENGINEERING_PLAN.md`](SEQUENCE_MIXER_ENGINEERING_PLAN.md) — 8
+  workstreams (W1–W8).
+
+**Thesis.** Fold the scattered linear/hybrid sequence mixers (KDA, Gated
+DeltaNet, GLA/RetNet, Mamba-2 SSD, sliding-window attention, short causal conv,
+MLA) into **one Graph-IR `tessera.linear_recurrence` op × four orthogonal
+facets** — (A) transition-structure tag, (B) carried-state/cache type, (C) the
+`(QKᵀ)V→Q(KᵀV)` reassociation normal form, (D) numeric policy incl.
+NVFP4/MXFP8 — so "add a mixer" becomes "register a tag," each a small,
+oracle-gated increment. Grounded in a teardown of Kimi Linear (KDA linear
+recurrence) and Inkling (local/global + `sconv` + GQA-8 + NVFP4), which bracket
+the design space.
+
+**Why now.** The pieces already exist but scattered: `op_catalog` registers
+`kimi_delta_attention`/`gated_deltanet`/`selective_ssm`; `stdlib/delta_rule.py`
+has the scalar-gated delta rule (recurrent + chunked UT-transform);
+`stdlib/hybrid.py` has stringly-typed span mixers + the dual-cache
+streaming≡recompute oracle; `lsa.py`/`attn_sliding_window` do windowed attention;
+`DeltaNetStateHandle`/`SSMStateHandle` are the carried-state handles. The #1
+gap: `kimi_delta_attention`'s reference is scalar/additive, not faithful
+channel-wise `dplr_bound`. So this is **unification + faithful completion**, not
+greenfield.
+
+**Backend binding (all three leads).** W5/W6/W7/W8 open no new backend items on
+any target — they thread mixer candidates + state types into the live per-target
+queues and inherit each queue's evidence contract. **Apple** (fastest oracle
+loop): `apple/todo.md` items 8–14. **NVIDIA** (perf ceiling; sm_120 verified):
+NVIDIA-TEST-3/-5 attention / KV-ReplaySSM / GEMM-Tile families, NVFP4 already in
+the TEST-4 numerical policy (the executing FP4 lane). **ROCm** (perf ceiling;
+gfx1151 verified): extends the **already-complete** ROCM-REPLAY-1 (decode) and
+ROCM-9 (paged-KV), with ROCM-6 G6-B/G6-C as the attention fwd/bwd origin
+methodology; gfx1151 has no FP8/FP4 WMMA so low precision is CDNA4/RDNA4
+access-gated. ROCm and CUDA set the ceiling and are never capped by the shared
+framework (Decision #28). Backward (W8) closes the one gap the first draft
+missed; it composes with APPLE-ATTN-BWD-1 / ROCM-6 G6-C.
+
+**First slice** (host-free, opening PR): `SequenceMixer` protocol in `stdlib/`
++ channel-wise KDA in `stdlib/delta_rule.py` + `chunk≡recurrent` /
+`scalar-reduction` oracles; route `tessera.ops.kimi_delta_attention` to it.
+Everything after is "register another tag," each its own oracle-gated PR.
+
 ## Next Work
 
 > **Open items: #4 (fixture-backed numerical proof before conformance cells go

@@ -78,6 +78,12 @@ _unary_enc_bf16: Any = None
 # Phase 3b (2026-06-01) — MSL-kernel bf16 via on-GPU cast.
 _rope_enc_bf16: Any = None
 _flash_attn_enc_bf16: Any = None
+_flash_attn_variant_enc: Any = None
+_flash_attn_variant_enc_f16: Any = None
+_flash_attn_variant_enc_bf16: Any = None
+_flash_attn_cooperative_enc: Any = None
+_flash_attn_cooperative_enc_f16: Any = None
+_flash_attn_cooperative_enc_bf16: Any = None
 _mpsgraph_bf16_supported: Any = None
 _session_commit_count: Any = None
 _ts_dev_alloc: Any = None
@@ -107,6 +113,10 @@ def _bind_session_symbols() -> bool:
     global _bmm_enc_bf16, _layer_norm_enc_bf16, _rmsnorm_enc_bf16
     global _softmax_enc_bf16, _unary_enc_bf16
     global _rope_enc_bf16, _flash_attn_enc_bf16
+    global _flash_attn_variant_enc, _flash_attn_variant_enc_f16
+    global _flash_attn_variant_enc_bf16
+    global _flash_attn_cooperative_enc, _flash_attn_cooperative_enc_f16
+    global _flash_attn_cooperative_enc_bf16
     global _mpsgraph_bf16_supported
     global _ts_dev_alloc, _ts_dev_upload, _ts_dev_download, _ts_dev_free
     global _ts_dev_nbytes, _ts_dev_upload_at
@@ -243,6 +253,30 @@ def _bind_session_symbols() -> bool:
          ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
          ctypes.c_float, ctypes.c_int32),
         ctypes.c_int32)
+    _variant_args = (
+        ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+        ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+        ctypes.c_float, ctypes.c_int32, ctypes.c_int32, ctypes.c_float)
+    _flash_attn_variant_enc = bind_symbol(
+        "tessera_apple_gpu_flash_attn_variant_dev_f32_enc",
+        _variant_args, ctypes.c_int32)
+    _flash_attn_variant_enc_f16 = bind_symbol(
+        "tessera_apple_gpu_flash_attn_variant_dev_f16_enc",
+        _variant_args, ctypes.c_int32)
+    _flash_attn_variant_enc_bf16 = bind_symbol(
+        "tessera_apple_gpu_flash_attn_variant_dev_bf16_enc",
+        _variant_args, ctypes.c_int32)
+    _flash_attn_cooperative_enc = bind_symbol(
+        "tessera_apple_gpu_flash_attn_cooperative_dev_f32_enc",
+        _variant_args, ctypes.c_int32)
+    _flash_attn_cooperative_enc_f16 = bind_symbol(
+        "tessera_apple_gpu_flash_attn_cooperative_dev_f16_enc",
+        _variant_args, ctypes.c_int32)
+    _flash_attn_cooperative_enc_bf16 = bind_symbol(
+        "tessera_apple_gpu_flash_attn_cooperative_dev_bf16_enc",
+        _variant_args, ctypes.c_int32)
     _mpsgraph_bf16_supported = bind_symbol(
         "tessera_apple_gpu_mpsgraph_bf16_supported", (),
         ctypes.c_int32)
@@ -1169,6 +1203,103 @@ def flash_attn_enc_bf16(session: int, Q: DeviceTensor, K: DeviceTensor,
     return out
 
 
+def flash_attn_variant_enc(
+        session: int, Q: DeviceTensor, K: DeviceTensor, V: DeviceTensor,
+        bias: DeviceTensor | None, *, dtype: str, B: int, q_heads: int,
+        kv_heads: int, Sq: int, Sk: int, D: int,
+        scale: Optional[float] = None, causal: bool = False,
+        window_size: int = 0, logit_softcap: float = 0.0) -> DeviceTensor:
+    """Encode variant-capable resident attention on the session command buffer.
+
+    Storage remains ``f32``, ``f16``, or ``bf16`` in the caller-owned device
+    tensors. The bf16 lane performs bf16-to-f32 compute conversion on the GPU
+    and converts the result back before the session completes; it never stages
+    values through a host fp32 array.
+    """
+    if dtype not in {"f32", "f16", "bf16"}:
+        raise ValueError(f"unsupported attention storage dtype: {dtype!r}")
+    if q_heads <= 0 or kv_heads <= 0 or B % q_heads or q_heads % kv_heads:
+        raise ValueError("B must contain whole query-head groups and q_heads "
+                         "must be divisible by kv_heads")
+    if window_size < 0 or logit_softcap < 0:
+        raise ValueError("window_size and logit_softcap must be non-negative")
+    if not _bind_session_symbols():
+        raise RuntimeError("Apple GPU encode-session runtime unavailable")
+    if scale is None:
+        scale = 1.0 / (float(D) ** 0.5)
+    fn = {
+        "f32": _flash_attn_variant_enc,
+        "f16": _flash_attn_variant_enc_f16,
+        "bf16": _flash_attn_variant_enc_bf16,
+    }[dtype]
+    if fn is None:
+        raise RuntimeError(f"resident {dtype} attention variant symbol unavailable")
+    out = device_empty(B * Sq * D * (4 if dtype == "f32" else 2))
+    rc = fn(
+        ctypes.c_void_p(session), ctypes.c_void_p(Q.handle),
+        ctypes.c_void_p(K.handle), ctypes.c_void_p(V.handle),
+        ctypes.c_void_p(bias.handle if bias is not None else 0),
+        ctypes.c_void_p(out.handle), ctypes.c_int32(B),
+        ctypes.c_int32(q_heads), ctypes.c_int32(kv_heads),
+        ctypes.c_int32(Sq), ctypes.c_int32(Sk), ctypes.c_int32(D),
+        ctypes.c_float(scale), ctypes.c_int32(1 if causal else 0),
+        ctypes.c_int32(window_size), ctypes.c_float(logit_softcap))
+    if int(rc) != 1:
+        out.free()
+        raise RuntimeError(f"flash_attn_variant_enc({dtype!r}) returned {rc}")
+    return out
+
+
+def flash_attn_cooperative_enc(
+        session: int, Q: DeviceTensor, K: DeviceTensor, V: DeviceTensor,
+        bias: DeviceTensor | None, *, dtype: str, B: int, q_heads: int,
+        kv_heads: int, Sq: int, Sk: int, D: int,
+        scale: Optional[float] = None, causal: bool = False,
+        window_size: int = 0, logit_softcap: float = 0.0) -> DeviceTensor:
+    """Encode the SIMD-group cooperative forward-attention candidate.
+
+    One SIMD group cooperates on each query row while preserving caller-owned
+    f32, f16, or bf16 device storage. Half and bf16 values are converted only
+    on the GPU and accumulated in f32.
+    """
+    if dtype not in {"f32", "f16", "bf16"}:
+        raise ValueError(f"unsupported attention storage dtype: {dtype!r}")
+    if q_heads <= 0 or kv_heads <= 0 or B % q_heads or q_heads % kv_heads:
+        raise ValueError("B must contain whole query-head groups and q_heads "
+                         "must be divisible by kv_heads")
+    if D <= 0 or D > 256:
+        raise ValueError("cooperative attention requires 1 <= D <= 256")
+    if window_size < 0 or logit_softcap < 0:
+        raise ValueError("window_size and logit_softcap must be non-negative")
+    if not _bind_session_symbols():
+        raise RuntimeError("Apple GPU encode-session runtime unavailable")
+    if scale is None:
+        scale = 1.0 / (float(D) ** 0.5)
+    fn = {
+        "f32": _flash_attn_cooperative_enc,
+        "f16": _flash_attn_cooperative_enc_f16,
+        "bf16": _flash_attn_cooperative_enc_bf16,
+    }[dtype]
+    if fn is None:
+        raise RuntimeError(
+            f"cooperative {dtype} attention variant symbol unavailable")
+    out = device_empty(B * Sq * D * (4 if dtype == "f32" else 2))
+    rc = fn(
+        ctypes.c_void_p(session), ctypes.c_void_p(Q.handle),
+        ctypes.c_void_p(K.handle), ctypes.c_void_p(V.handle),
+        ctypes.c_void_p(bias.handle if bias is not None else 0),
+        ctypes.c_void_p(out.handle), ctypes.c_int32(B),
+        ctypes.c_int32(q_heads), ctypes.c_int32(kv_heads),
+        ctypes.c_int32(Sq), ctypes.c_int32(Sk), ctypes.c_int32(D),
+        ctypes.c_float(scale), ctypes.c_int32(1 if causal else 0),
+        ctypes.c_int32(window_size), ctypes.c_float(logit_softcap))
+    if int(rc) != 1:
+        out.free()
+        raise RuntimeError(
+            f"flash_attn_cooperative_enc({dtype!r}) returned {rc}")
+    return out
+
+
 __all__ = [
     "DeviceTensor",
     "batched_session",
@@ -1182,6 +1313,8 @@ __all__ = [
     "flash_attn_enc",
     "flash_attn_enc_bf16",
     "flash_attn_enc_f16",
+    "flash_attn_cooperative_enc",
+    "flash_attn_variant_enc",
     "gelu_enc",
     "gelu_enc_bf16",
     "gelu_enc_f16",

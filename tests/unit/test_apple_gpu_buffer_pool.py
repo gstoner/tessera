@@ -90,6 +90,15 @@ def test_no_raw_newbuffer_in_dispatchers(runtime_src: str) -> None:
         # encode-session semantics need.
         _fn_range(r"tessera_apple_gpu_rope_dev_bf16_enc\s*\("),
         _fn_range(r"tessera_apple_gpu_flash_attn_dev_bf16_enc\s*\("),
+        # APPLE-ATTN-FWD-1 — resident attention encoders use tiny dummy-bias
+        # buffers and fp32 cast scratch retained by the command buffer. As for
+        # the older bf16 encoders above, returning these to the host pool
+        # before the deferred command buffer commits would permit aliasing.
+        _fn_range(r"encode_flash_attn_gqa_msl_dev\s*\("),
+        _fn_range(r"encode_flash_attn_gqa_cooperative_msl_dev\s*\("),
+        _fn_range(r"encode_flash_attn_gqa_msl_f16_dev\s*\("),
+        _fn_range(r"tessera_apple_gpu_flash_attn_variant_dev_bf16_enc\s*\("),
+        _fn_range(r"encode_flash_attn_cooperative_cast_storage\s*\("),
         # Project 1 (2026-06-01) — buffer-backed tensor allocation
         # for aligned-strides PK3 path. The buffer is sized via the
         # aligned-nbytes helper and OWNED BY the MTLTensor created

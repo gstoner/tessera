@@ -37,6 +37,8 @@ namespace {
 
 struct FuseStencilTime
     : public PassWrapper<FuseStencilTime, OperationPass<ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(FuseStencilTime)
+
   StringRef getArgument() const final { return "tpp-fuse-stencil-time"; }
   StringRef getDescription() const final {
     return "Group sibling stencils that read the same field so they share one "

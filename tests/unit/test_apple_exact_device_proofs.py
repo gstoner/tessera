@@ -91,3 +91,51 @@ def test_exact_device_proof_registry_connects_runtime_abi_envelope_and_tests() -
         assert _calls(native, "assert_native_apple_gpu"), proof.native_test
         fallback = _test_function(proof.fallback_test)
         assert _calls(fallback, "assert_reference_cpu"), proof.fallback_test
+
+
+def test_synthesis_proof_ledger_has_native_oracle_and_forced_fallback() -> None:
+    from tessera.compiler.apple_exact_device_proofs import SYNTHESIS_PROOFS
+
+    assert SYNTHESIS_PROOFS
+    for proof in SYNTHESIS_PROOFS:
+        native = _test_function(proof.native_test)
+        assert "pytest.mark.hardware_apple_gpu" in _decorator_names(native), proof.native_test
+        assert _calls(native, "allclose"), proof.native_test
+        native_source = ast.unparse(native)
+        assert "metal_runtime" in native_source, proof.native_test
+
+        fallback = _test_function(proof.fallback_test)
+        fallback_source = ast.unparse(fallback)
+        assert "reference" in fallback_source, proof.fallback_test
+        assert _calls(fallback, "allclose"), proof.fallback_test
+
+
+def test_retired_synthesis_comparisons_are_explicitly_non_native() -> None:
+    from tessera._apple_gpu_dispatch import APPLE_ABI
+    from tessera.compiler.apple_exact_device_proofs import RETIRED_SYNTHESIS_COMPARISONS
+
+    assert len(RETIRED_SYNTHESIS_COMPARISONS) == 4
+    for symbol, node_id in RETIRED_SYNTHESIS_COMPARISONS:
+        node = _test_function(node_id)
+        assert "pytest.mark.hardware_apple_gpu" not in _decorator_names(node), node_id
+        assert symbol not in APPLE_ABI, symbol
+
+
+def test_stateful_proof_ledger_has_native_negative_and_stress_nodes() -> None:
+    from tessera.compiler.apple_exact_device_proofs import STATEFUL_PROOFS
+
+    assert STATEFUL_PROOFS
+    for proof in STATEFUL_PROOFS:
+        native = _test_function(proof.native_test)
+        assert "pytest.mark.hardware_apple_gpu" in _decorator_names(native), proof.native_test
+        native_source = ast.unparse(native)
+        assert (_calls(native, "allclose") or "equivalent" in native_source
+                or "native_gpu" in native_source), proof.native_test
+
+        fallback = _test_function(proof.fallback_test)
+        fallback_source = ast.unparse(fallback)
+        assert ("reference" in fallback_source
+                or "inconclusive" in fallback_source), proof.fallback_test
+
+        stress = _test_function(proof.stress_test)
+        assert stress.body, proof.stress_test

@@ -1,0 +1,168 @@
+{
+  "compiler_activity": {
+    "Compile Compute shader": {
+      "duration_ns_max": 1486333,
+      "duration_ns_total": 2355708,
+      "event_count": 4
+    },
+    "Create MTLibrary": {
+      "duration_ns_max": 183667,
+      "duration_ns_total": 258083,
+      "event_count": 2
+    }
+  },
+  "device_family": "apple7",
+  "evidence_source": "xctrace Metal System Trace + Metal GPU Counters",
+  "gpu_counters": {
+    "compute_occupancy": {
+      "attributed_sample_count": 376,
+      "available": true,
+      "capture_count": 2,
+      "counter_ids": [
+        24
+      ],
+      "counter_name": "Compute Occupancy",
+      "first_sample_timestamp_ns": 79344166,
+      "last_sample_timestamp_ns": 1124694333,
+      "sample_count": 32788
+    },
+    "counter_profile": 3,
+    "occupancy": "route_time_correlated_samples",
+    "occupancy_available": true,
+    "occupancy_unavailable_reason": null,
+    "shader_profiler": 1
+  },
+  "process": "python",
+  "routes": {
+    "Command Buffer 0": {
+      "gpu_counters": {
+        "compute_occupancy_percent": {
+          "evidence": "xctrace Metal GPU Counters; samples time-correlated to command-buffer interval",
+          "maximum": 0.0,
+          "median": 0.0,
+          "minimum": 0.0,
+          "nonzero_median": null,
+          "nonzero_sample_count": 0,
+          "p95": 0.0,
+          "sample_count": 12
+        }
+      },
+      "spill_event_count": 0,
+      "spill_evidence": "metal_system_trace_graphics_compiler_spill_events",
+      "spilled_bytes_max_event": 0,
+      "spilled_bytes_total": 0,
+      "submission_count": 20
+    },
+    "tessera.gemm.mps.f16": {
+      "spill_event_count": 0,
+      "spill_evidence": "metal_system_trace_graphics_compiler_spill_events",
+      "spilled_bytes_max_event": 0,
+      "spilled_bytes_total": 0,
+      "submission_count": 10
+    },
+    "tessera.gemm.mps.f32": {
+      "gpu_counters": {
+        "compute_occupancy_percent": {
+          "evidence": "xctrace Metal GPU Counters; samples time-correlated to command-buffer interval",
+          "maximum": 0.281788835,
+          "median": 0.0,
+          "minimum": 0.0,
+          "nonzero_median": 0.281788835,
+          "nonzero_sample_count": 1,
+          "p95": 0.0,
+          "sample_count": 144
+        }
+      },
+      "spill_event_count": 0,
+      "spill_evidence": "metal_system_trace_graphics_compiler_spill_events",
+      "spilled_bytes_max_event": 0,
+      "spilled_bytes_total": 0,
+      "submission_count": 10
+    },
+    "tessera.rowop.mpsgraph": {
+      "gpu_counters": {
+        "compute_occupancy_percent": {
+          "evidence": "xctrace Metal GPU Counters; samples time-correlated to command-buffer interval",
+          "maximum": 0.0,
+          "median": 0.0,
+          "minimum": 0.0,
+          "nonzero_median": null,
+          "nonzero_sample_count": 0,
+          "p95": 0.0,
+          "sample_count": 216
+        }
+      },
+      "spill_event_count": 10,
+      "spill_evidence": "metal_system_trace_graphics_compiler_spill_events",
+      "spilled_bytes_max_event": 64,
+      "spilled_bytes_total": 640,
+      "submission_count": 10
+    },
+    "tessera.softmax.msl.f32": {
+      "gpu_counters": {
+        "compute_occupancy_percent": {
+          "evidence": "xctrace Metal GPU Counters; samples time-correlated to command-buffer interval",
+          "maximum": 0.0,
+          "median": 0.0,
+          "minimum": 0.0,
+          "nonzero_median": null,
+          "nonzero_sample_count": 0,
+          "p95": 0.0,
+          "sample_count": 4
+        }
+      },
+      "spill_event_count": 0,
+      "spill_evidence": "metal_system_trace_graphics_compiler_spill_events",
+      "spilled_bytes_max_event": 0,
+      "spilled_bytes_total": 0,
+      "submission_count": 10
+    }
+  },
+  "schema_version": 1,
+  "shader_inventory": {
+    "available": true,
+    "shader_count": 7,
+    "shaders": [
+      {
+        "name": "MatrixMultiplyNNA14_M32_N128_singlebuffer_all_types (8)",
+        "pipeline": "MatrixMultiplyNNA14_M32_N128_singlebuffer_all_types (8)",
+        "shader_type": "Compute"
+      },
+      {
+        "name": "mtl4_matmul_sg_fast (9)",
+        "pipeline": "mtl4_matmul_sg_fast (9)",
+        "shader_type": "Compute"
+      },
+      {
+        "name": "mtl4_matmul_sg_fast (9)",
+        "pipeline": "MatrixMultiplyNNA14_M32_N128_singlebuffer_all_types",
+        "shader_type": "Compute"
+      },
+      {
+        "name": "MatrixMultiplyNNA14_M32_N128_singlebuffer_all_types (12)",
+        "pipeline": "MatrixMultiplyNNA14_M32_N128_singlebuffer_all_types (12)",
+        "shader_type": "Compute"
+      },
+      {
+        "name": "mtl4_matmul2d_f16 (13)",
+        "pipeline": "mtl4_matmul2d_f16 (13)",
+        "shader_type": "Compute"
+      },
+      {
+        "name": "reduce_stitched (14)",
+        "pipeline": "reduce_stitched (14)",
+        "shader_type": "Compute"
+      },
+      {
+        "name": "softmax_f32 (15)",
+        "pipeline": "softmax_f32 (15)",
+        "shader_type": "Compute"
+      }
+    ]
+  },
+  "spill_summary": {
+    "event_count": 10,
+    "spilled_bytes_total": 640,
+    "unattributed_event_count": 0
+  }
+}

@@ -3,17 +3,53 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from tessera.compiler.apple_route_selector import (
     AppleRouteMeasurement,
+    AppleRouteContext,
     ROUTE_REPORT_SCHEMA_VERSION,
+    STRICT_ROUTE_LEDGER_SCHEMA,
     aggregate_stable_route_reports,
     load_route_measurements,
+    load_strict_route_ledger,
     package_route_selected,
+    production_route_decision,
     production_route_for,
     select_route,
 )
+
+
+_CONTEXT = AppleRouteContext(
+    device="apple7",
+    physical_device="Apple M1 Max",
+    os_version="26.5.2",
+    sdk_version="26.4",
+    compiler_fingerprint="sha256:compiler",
+    runtime_fingerprint="sha256:runtime",
+)
+
+
+def _strict_payload(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "schema": STRICT_ROUTE_LEDGER_SCHEMA,
+        "measured_at": "2026-07-18T12:00:00Z",
+        "expires_at": "2026-08-18T12:00:00Z",
+        "context": _CONTEXT.as_mapping(),
+        "decisions": [{
+            "device": "apple7", "op": "softmax", "shape": "128x257",
+            "dtype": "f32", "timing_domain": "end_to_end",
+            "incumbent_route": "msl", "selected_route": "mpsgraph",
+            "status": "promote_candidate",
+            "selected_evidence": {
+                "provenance": "native_gpu", "correctness": True,
+                "device": "apple7", "timing_domain": "end_to_end",
+            },
+        }],
+    }
+    payload.update(overrides)
+    return payload
 
 
 def _row(route: str, latency_ms: float, **extra: object) -> dict[str, object]:
@@ -139,67 +175,64 @@ def test_paired_comparison_survives_absolute_clock_drift():
                for row in ledger["decisions"])
 
 
-def test_production_promotions_are_exact_device_shape_and_domain():
+def test_production_promotions_are_exact_device_shape_and_domain(tmp_path):
+    ledger = tmp_path / "ledger.json"
+    ledger.write_text(json.dumps(_strict_payload()), encoding="utf-8")
     assert production_route_for(
         op="softmax", shape="128x257", dtype="f32", device="apple7",
-        incumbent_route="msl") == "mpsgraph"
+        incumbent_route="msl", ledger_path=ledger, context=_CONTEXT) == "mpsgraph"
     assert production_route_for(
         op="softmax", shape="128x257", dtype="f32", device="apple8",
-        incumbent_route="msl") == "msl"
+        incumbent_route="msl", ledger_path=ledger, context=_CONTEXT) == "msl"
     assert production_route_for(
         op="softmax", shape="128x257", dtype="f16", device="apple7",
-        incumbent_route="msl") == "msl"
+        incumbent_route="msl", ledger_path=ledger, context=_CONTEXT) == "msl"
     assert production_route_for(
         op="softmax", shape="128x257", dtype="f32", device="apple7",
-        timing_domain="device", incumbent_route="msl") == "msl"
+        timing_domain="device", incumbent_route="msl", ledger_path=ledger,
+        context=_CONTEXT) == "msl"
+    decision = production_route_decision(
+        op="softmax", shape="128x257", dtype="f32", device="apple7",
+        incumbent_route="msl", ledger_path=ledger, context=_CONTEXT)
+    assert decision.selected_from_ledger is True
+    assert decision.citation == f"{ledger}#decision[0]"
+    assert decision.rejected_evidence == ()
 
 
-def test_production_promotions_match_retained_apple7_ledger():
+def test_legacy_ledgers_are_not_admitted_as_production_evidence():
     root = Path(__file__).resolve().parents[2]
-    ledger = json.loads((root / "benchmarks/baselines/apple7_gemm_route_ledger.json")
-                        .read_text(encoding="utf-8"))
-    promoted_e2e = {
-        (row["op"], row["shape"], row["dtype"]): row["selected_route"]
-        for row in ledger["decisions"]
-        if row["timing_domain"] == "end_to_end"
-        and row["status"] == "promote_candidate"
-    }
-    assert promoted_e2e == {
-        ("softmax", "128x257", "f32"): "mpsgraph",
-        ("softmax", "256x256", "f32"): "mpsgraph",
-    }
-    for (op, shape, dtype), route in promoted_e2e.items():
-        assert production_route_for(
-            op=op, shape=shape, dtype=dtype, device="apple7",
-            incumbent_route="msl") == route
+    legacy = root / "benchmarks/baselines/apple7_attention_route_ledger.json"
+    admitted = load_strict_route_ledger(legacy, context=_CONTEXT)
+    assert admitted.routes == {}
+    assert admitted.rejected == ("schema_mismatch",)
 
 
-def test_attention_promotions_match_retained_apple7_ledger():
-    root = Path(__file__).resolve().parents[2]
-    ledger = json.loads(
-        (root / "benchmarks/baselines/apple7_attention_route_ledger.json")
-        .read_text(encoding="utf-8"))
-    promoted_e2e = {
-        (row["op"], row["shape"], row["dtype"]): row["selected_route"]
-        for row in ledger["decisions"]
-        if row["timing_domain"] == "end_to_end"
-        and row["status"] == "promote_candidate"
-    }
-    assert len(promoted_e2e) == 8
-    assert set(promoted_e2e.values()) == {"mpsgraph_bsmm"}
-    for (op, shape, dtype), route in promoted_e2e.items():
-        assert production_route_for(
-            op=op, shape=shape, dtype=dtype, device="apple7",
-            incumbent_route="online_msl_variant") == route
-    promoted_device = {
-        (row["op"], row["shape"], row["dtype"]): row["selected_route"]
-        for row in ledger["decisions"]
-        if row["timing_domain"] == "device"
-        and row["status"] == "promote_candidate"
-    }
-    for (op, shape, dtype), route in promoted_device.items():
-        assert production_route_for(
-            op=op, shape=shape, dtype=dtype, device="apple7",
-            timing_domain="device",
-            incumbent_route="online_msl_variant") == route
-    assert ledger["attention_forward_proof"]["complete"] is True
+def test_strict_loader_rejects_stale_context_reference_and_wrong_domain(tmp_path):
+    now = datetime(2026, 7, 20, tzinfo=timezone.utc)
+    path = tmp_path / "ledger.json"
+    path.write_text(json.dumps(_strict_payload()), encoding="utf-8")
+    assert len(load_strict_route_ledger(path, context=_CONTEXT, now=now).routes) == 1
+
+    stale = _strict_payload(expires_at="2026-07-19T00:00:00Z")
+    path.write_text(json.dumps(stale), encoding="utf-8")
+    assert "stale_evidence" in load_strict_route_ledger(
+        path, context=_CONTEXT, now=now).rejected
+
+    wrong = _CONTEXT.as_mapping() | {"physical_device": "Apple M9"}
+    path.write_text(json.dumps(_strict_payload(context=wrong)), encoding="utf-8")
+    assert "context_mismatch:physical_device" in load_strict_route_ledger(
+        path, context=_CONTEXT, now=now).rejected
+
+    payload = _strict_payload()
+    decision = payload["decisions"][0]  # type: ignore[index]
+    decision["selected_evidence"]["provenance"] = "reference_cpu"  # type: ignore[index]
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    assert any("reference_provenance" in reason for reason in
+               load_strict_route_ledger(path, context=_CONTEXT, now=now).rejected)
+
+    payload = _strict_payload()
+    decision = payload["decisions"][0]  # type: ignore[index]
+    decision["selected_evidence"]["timing_domain"] = "device"  # type: ignore[index]
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    assert any("wrong_evidence_domain" in reason for reason in
+               load_strict_route_ledger(path, context=_CONTEXT, now=now).rejected)

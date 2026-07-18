@@ -1,0 +1,509 @@
+{
+  "device": "apple7",
+  "dispatch_telemetry_capture": true,
+  "paired_trials": 5,
+  "profiling_capabilities": {
+    "capabilities": {
+      "dispatch_boundary_sampling": false,
+      "metal4_timestamp_heap": true,
+      "occupancy": false,
+      "pipeline_limits": true,
+      "register_count": false,
+      "scratch_bytes": false,
+      "spill_count": false,
+      "stage_boundary_sampling": true,
+      "stage_utilization_counter_set": false,
+      "statistic_counter_set": false,
+      "timestamp_counter_set": true
+    },
+    "raw": 99
+  },
+  "runs": [
+    {
+      "backend": "apple_gpu",
+      "device": "apple7",
+      "dtype": "f32",
+      "latency_ms": 0.2642915,
+      "native_dispatched": true,
+      "numerically_validated": true,
+      "op": "matmul",
+      "reps": 50,
+      "route": "mps",
+      "shape": "64x64x64",
+      "stdev_ms": 0.11510525404515644,
+      "telemetry": {
+        "counter_sampling_supported": null,
+        "counter_timestamp_delta_median": null,
+        "device_time_coverage": 0.98,
+        "device_time_median_ns": 22354,
+        "device_time_samples": 49,
+        "end_to_end_median_ns": 264291,
+        "paired_trial_device_medians_ns": [
+          34750,
+          26916,
+          18187,
+          17749,
+          22354
+        ],
+        "paired_trial_end_to_end_medians_ns": [
+          409812,
+          264291,
+          244750,
+          484792,
+          224270
+        ],
+        "resources": {
+          "api": "MPSMatrixMultiplication",
+          "occupancy": null,
+          "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+          "output_tile": null,
+          "runtime_pipeline": null,
+          "spill_evidence": null,
+          "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+          "threadgroup": null,
+          "threadgroup_memory_bytes": null
+        },
+        "timing_source": "metal_kernel_interval",
+        "timing_unavailable_reason": "partial_paired_dispatch_timing"
+      },
+      "trials": 5
+    },
+    {
+      "backend": "apple_gpu",
+      "device": "apple7",
+      "dtype": "f32",
+      "latency_ms": 0.26745850000000004,
+      "native_dispatched": true,
+      "numerically_validated": true,
+      "op": "matmul",
+      "reps": 50,
+      "route": "simdgroup_matrix",
+      "shape": "64x64x64",
+      "stdev_ms": 0.03433237264121139,
+      "telemetry": {
+        "counter_sampling_supported": true,
+        "counter_timestamp_delta_median": 481,
+        "device_time_coverage": 1.0,
+        "device_time_median_ns": 20062,
+        "device_time_samples": 50,
+        "end_to_end_median_ns": 267458,
+        "paired_trial_device_medians_ns": [
+          19958,
+          67249,
+          20916,
+          20062,
+          11875
+        ],
+        "paired_trial_end_to_end_medians_ns": [
+          267458,
+          316479,
+          262750,
+          236229,
+          311917
+        ],
+        "resources": {
+          "api": "MTL4ComputeCommandEncoder",
+          "occupancy": null,
+          "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+          "output_tile": [
+            64,
+            64
+          ],
+          "runtime_pipeline": {
+            "max_total_threads_per_threadgroup": 1024,
+            "occupancy": null,
+            "register_count": null,
+            "scratch_bytes": null,
+            "simdgroups_per_threadgroup": 8,
+            "spill_count": null,
+            "static_threadgroup_memory_bytes": 16384,
+            "thread_execution_width": 32,
+            "threadgroup": [
+              256,
+              1,
+              1
+            ],
+            "threadgroup_capacity_fraction": 0.25,
+            "threadgroup_memory_bytes": 16384
+          },
+          "spill_evidence": null,
+          "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+          "threadgroup": [
+            256,
+            1,
+            1
+          ],
+          "threadgroup_memory_bytes": null
+        },
+        "timing_source": "metal4_timestamp_heap",
+        "timing_unavailable_reason": null
+      },
+      "trials": 5
+    },
+    {
+      "backend": "apple_gpu",
+      "device": "apple7",
+      "dtype": "f16",
+      "latency_ms": 0.2528755,
+      "native_dispatched": true,
+      "numerically_validated": true,
+      "op": "matmul",
+      "reps": 50,
+      "route": "mps",
+      "shape": "64x64x64",
+      "stdev_ms": 0.018811234962782208,
+      "telemetry": {
+        "counter_sampling_supported": null,
+        "counter_timestamp_delta_median": null,
+        "device_time_coverage": 1.0,
+        "device_time_median_ns": 19562,
+        "device_time_samples": 50,
+        "end_to_end_median_ns": 252875,
+        "paired_trial_device_medians_ns": [
+          19562,
+          19541,
+          22854,
+          22186,
+          18207
+        ],
+        "paired_trial_end_to_end_medians_ns": [
+          264958,
+          267666,
+          252875,
+          233125,
+          225646
+        ],
+        "resources": {
+          "api": "MPSMatrixMultiplication",
+          "occupancy": null,
+          "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+          "output_tile": null,
+          "runtime_pipeline": null,
+          "spill_evidence": null,
+          "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+          "threadgroup": null,
+          "threadgroup_memory_bytes": null
+        },
+        "timing_source": "metal_kernel_interval",
+        "timing_unavailable_reason": null
+      },
+      "trials": 5
+    },
+    {
+      "backend": "apple_gpu",
+      "device": "apple7",
+      "dtype": "f16",
+      "latency_ms": 0.2400625,
+      "native_dispatched": true,
+      "numerically_validated": true,
+      "op": "matmul",
+      "reps": 50,
+      "route": "cooperative_tensor",
+      "shape": "64x64x64",
+      "stdev_ms": 0.0538813555422931,
+      "telemetry": {
+        "counter_sampling_supported": true,
+        "counter_timestamp_delta_median": 615,
+        "device_time_coverage": 1.0,
+        "device_time_median_ns": 25645,
+        "device_time_samples": 50,
+        "end_to_end_median_ns": 240062,
+        "paired_trial_device_medians_ns": [
+          25541,
+          25854,
+          25520,
+          25645,
+          32666
+        ],
+        "paired_trial_end_to_end_medians_ns": [
+          355083,
+          226521,
+          240062,
+          227395,
+          265999
+        ],
+        "resources": {
+          "api": "MetalPerformancePrimitives.matmul2d",
+          "occupancy": null,
+          "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+          "output_tile": [
+            64,
+            64
+          ],
+          "runtime_pipeline": {
+            "max_total_threads_per_threadgroup": 576,
+            "occupancy": null,
+            "register_count": null,
+            "scratch_bytes": null,
+            "simdgroups_per_threadgroup": 4,
+            "spill_count": null,
+            "static_threadgroup_memory_bytes": 0,
+            "thread_execution_width": 32,
+            "threadgroup": [
+              128,
+              1,
+              1
+            ],
+            "threadgroup_capacity_fraction": 0.2222222222222222,
+            "threadgroup_memory_bytes": 0
+          },
+          "spill_evidence": null,
+          "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+          "threadgroup": [
+            128,
+            1,
+            1
+          ],
+          "threadgroup_memory_bytes": null
+        },
+        "timing_source": "metal4_timestamp_heap",
+        "timing_unavailable_reason": null
+      },
+      "trials": 5
+    },
+    {
+      "backend": "apple_gpu",
+      "device": "apple7",
+      "dtype": "f32",
+      "latency_ms": 0.28764599999999996,
+      "native_dispatched": true,
+      "numerically_validated": true,
+      "op": "matmul",
+      "reps": 50,
+      "route": "mps",
+      "shape": "256x256x256",
+      "stdev_ms": 0.025326578048070373,
+      "telemetry": {
+        "counter_sampling_supported": null,
+        "counter_timestamp_delta_median": null,
+        "device_time_coverage": 1.0,
+        "device_time_median_ns": 22041,
+        "device_time_samples": 50,
+        "end_to_end_median_ns": 287645,
+        "paired_trial_device_medians_ns": [
+          22625,
+          23500,
+          21145,
+          22020,
+          22041
+        ],
+        "paired_trial_end_to_end_medians_ns": [
+          323166,
+          287645,
+          267687,
+          317957,
+          273792
+        ],
+        "resources": {
+          "api": "MPSMatrixMultiplication",
+          "occupancy": null,
+          "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+          "output_tile": null,
+          "runtime_pipeline": null,
+          "spill_evidence": null,
+          "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+          "threadgroup": null,
+          "threadgroup_memory_bytes": null
+        },
+        "timing_source": "metal_kernel_interval",
+        "timing_unavailable_reason": null
+      },
+      "trials": 5
+    },
+    {
+      "backend": "apple_gpu",
+      "device": "apple7",
+      "dtype": "f32",
+      "latency_ms": 0.2840835,
+      "native_dispatched": true,
+      "numerically_validated": true,
+      "op": "matmul",
+      "reps": 50,
+      "route": "simdgroup_matrix",
+      "shape": "256x256x256",
+      "stdev_ms": 0.0232783020632949,
+      "telemetry": {
+        "counter_sampling_supported": true,
+        "counter_timestamp_delta_median": 675,
+        "device_time_coverage": 1.0,
+        "device_time_median_ns": 28145,
+        "device_time_samples": 50,
+        "end_to_end_median_ns": 284083,
+        "paired_trial_device_medians_ns": [
+          29854,
+          28041,
+          39499,
+          28145,
+          28062
+        ],
+        "paired_trial_end_to_end_medians_ns": [
+          290104,
+          266020,
+          326354,
+          274083,
+          284083
+        ],
+        "resources": {
+          "api": "MTL4ComputeCommandEncoder",
+          "occupancy": null,
+          "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+          "output_tile": [
+            64,
+            64
+          ],
+          "runtime_pipeline": {
+            "max_total_threads_per_threadgroup": 1024,
+            "occupancy": null,
+            "register_count": null,
+            "scratch_bytes": null,
+            "simdgroups_per_threadgroup": 8,
+            "spill_count": null,
+            "static_threadgroup_memory_bytes": 16384,
+            "thread_execution_width": 32,
+            "threadgroup": [
+              256,
+              1,
+              1
+            ],
+            "threadgroup_capacity_fraction": 0.25,
+            "threadgroup_memory_bytes": 16384
+          },
+          "spill_evidence": null,
+          "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+          "threadgroup": [
+            256,
+            1,
+            1
+          ],
+          "threadgroup_memory_bytes": null
+        },
+        "timing_source": "metal4_timestamp_heap",
+        "timing_unavailable_reason": null
+      },
+      "trials": 5
+    },
+    {
+      "backend": "apple_gpu",
+      "device": "apple7",
+      "dtype": "f16",
+      "latency_ms": 0.3732915,
+      "native_dispatched": true,
+      "numerically_validated": true,
+      "op": "matmul",
+      "reps": 50,
+      "route": "mps",
+      "shape": "256x256x256",
+      "stdev_ms": 0.013033441700103622,
+      "telemetry": {
+        "counter_sampling_supported": null,
+        "counter_timestamp_delta_median": null,
+        "device_time_coverage": 1.0,
+        "device_time_median_ns": 21916,
+        "device_time_samples": 50,
+        "end_to_end_median_ns": 373291,
+        "paired_trial_device_medians_ns": [
+          21478,
+          24187,
+          21604,
+          25124,
+          21916
+        ],
+        "paired_trial_end_to_end_medians_ns": [
+          373291,
+          387500,
+          367645,
+          397020,
+          367979
+        ],
+        "resources": {
+          "api": "MPSMatrixMultiplication",
+          "occupancy": null,
+          "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+          "output_tile": null,
+          "runtime_pipeline": null,
+          "spill_evidence": null,
+          "spill_unavailable_reason": "framework_pipeline_or_public_metal_stats_unavailable",
+          "threadgroup": null,
+          "threadgroup_memory_bytes": null
+        },
+        "timing_source": "metal_kernel_interval",
+        "timing_unavailable_reason": null
+      },
+      "trials": 5
+    },
+    {
+      "backend": "apple_gpu",
+      "device": "apple7",
+      "dtype": "f16",
+      "latency_ms": 0.30391650000000003,
+      "native_dispatched": true,
+      "numerically_validated": true,
+      "op": "matmul",
+      "reps": 50,
+      "route": "cooperative_tensor",
+      "shape": "256x256x256",
+      "stdev_ms": 0.02317928206556449,
+      "telemetry": {
+        "counter_sampling_supported": true,
+        "counter_timestamp_delta_median": 1112,
+        "device_time_coverage": 1.0,
+        "device_time_median_ns": 46333,
+        "device_time_samples": 50,
+        "end_to_end_median_ns": 303916,
+        "paired_trial_device_medians_ns": [
+          46853,
+          36270,
+          48479,
+          39791,
+          46333
+        ],
+        "paired_trial_end_to_end_medians_ns": [
+          304687,
+          260083,
+          312979,
+          272125,
+          303916
+        ],
+        "resources": {
+          "api": "MetalPerformancePrimitives.matmul2d",
+          "occupancy": null,
+          "occupancy_unavailable_reason": "public_metal_api_has_no_occupancy_query",
+          "output_tile": [
+            64,
+            64
+          ],
+          "runtime_pipeline": {
+            "max_total_threads_per_threadgroup": 576,
+            "occupancy": null,
+            "register_count": null,
+            "scratch_bytes": null,
+            "simdgroups_per_threadgroup": 4,
+            "spill_count": null,
+            "static_threadgroup_memory_bytes": 0,
+            "thread_execution_width": 32,
+            "threadgroup": [
+              128,
+              1,
+              1
+            ],
+            "threadgroup_capacity_fraction": 0.2222222222222222,
+            "threadgroup_memory_bytes": 0
+          },
+          "spill_evidence": null,
+          "spill_unavailable_reason": "public_metal_api_has_no_register_or_spill_query",
+          "threadgroup": [
+            128,
+            1,
+            1
+          ],
+          "threadgroup_memory_bytes": null
+        },
+        "timing_source": "metal4_timestamp_heap",
+        "timing_unavailable_reason": null
+      },
+      "trials": 5
+    }
+  ],
+  "schema_version": 1,
+  "skipped_candidates": []
+}

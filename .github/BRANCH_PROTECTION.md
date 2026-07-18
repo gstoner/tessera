@@ -30,6 +30,18 @@ aggregator log.
 
 Apply the labels from the PR's right-side sidebar.
 
+## Apple Metal 4 promotion
+
+Apple exact-device promotion is a local backend-host proof, never a registered
+GitHub self-hosted runner. Run `scripts/run_apple_metal4_release_gate.sh` on the
+named Metal 4 Mac and publish its sealed packet under
+`docs/audit/evidence/apple/metal4/` in the coordinating PR. The ordinary
+required `validate-required` fan-in remains portable: its unit and audit lanes
+verify the pushed packet's schema, hashes, commit provenance, two clean
+correctness reports, paired device/end-to-end evidence, fresh LLVM/MLIR 23
+cache, and explicit power/thermal/GPU-contention availability. Metal 3 is a
+non-blocking compatibility surface.
+
 ## Configuration via GitHub CLI
 
 ```sh

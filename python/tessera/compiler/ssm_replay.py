@@ -20,8 +20,10 @@ Gated DeltaNet ``fused_recurrent_gated_delta_rule_replayssm`` /
 ``gdn_replayssm_spec_decode``.  Each entry carries an honest **status**: the
 host numpy ``reference`` lane exists today (``SSMStateHandle``); the fused
 Metal/CUDA/ROCm decode kernels that realize the state-traffic halving are
-``planned`` (Track-R Phase 5 / Phase G–H).  Nothing here registers a runtime
-op — a replay kernel only joins the Apple GPU runtime envelope once it exists.
+``planned`` (Track-R Phase 5 / Phase G–H). The Apple resident Mamba-2 route
+ships both output-only replay and a deterministic checkpoint fold. Nothing here
+registers a runtime op — a replay kernel only joins a backend runtime envelope
+once it exists.
 """
 
 from __future__ import annotations
@@ -119,6 +121,8 @@ _MAMBA2_KERNELS = (
                  "tessera_apple_gpu_ssm_block_decode_f16", "fused"),
     ReplayKernel("mamba2", ROUTE_BLOCK, "metal_resident_ring",
                  "tessera_apple_gpu_ssm_replay_decode_dev_f32_enc", "fused"),
+    ReplayKernel("mamba2", ROUTE_STATE_AND_OUTPUT, "metal_resident_ring",
+                 "tessera_apple_gpu_ssm_replay_flush_dev_f32_enc", "fused"),
 )
 
 _GDN_KERNELS = (

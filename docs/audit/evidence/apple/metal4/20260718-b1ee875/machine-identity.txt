@@ -1,0 +1,38 @@
+[sw_vers]
+ProductName:		macOS
+ProductVersion:		26.5.2
+BuildVersion:		25F84
+[system_profiler SPDisplaysDataType]
+Graphics/Displays:
+
+    Apple M1 Max:
+
+      Chipset Model: Apple M1 Max
+      Type: GPU
+      Bus: Built-In
+      Total Number of Cores: 32
+      Vendor: Apple (0x106b)
+      Metal Support: Metal 4
+      Displays:
+        Color LCD:
+          Display Type: Built-in Liquid Retina XDR Display
+          Resolution: 3456 x 2234 Retina
+          Main Display: Yes
+          Mirror: Off
+          Online: Yes
+          Automatically Adjust Brightness: Yes
+          Connection Type: Internal
+
+[xcodebuild]
+Xcode 26.6
+Build version 17F113
+[macOS SDK]
+26.5
+[metal compiler]
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/metal
+[llvm-config]
+23.1.0git
+[python]
+Python 3.14.6
+[commit]
+b1ee87591ec701dd06a156cad8449f6498ae0891

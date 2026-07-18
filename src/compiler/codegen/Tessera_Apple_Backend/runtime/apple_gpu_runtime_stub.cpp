@@ -4386,6 +4386,40 @@ extern "C" int32_t tessera_apple_gpu_ssm_replay_decode_dev_f32_enc(
   return 0;
 }
 
+extern "C" int32_t tessera_apple_gpu_ssm_replay_flush_dev_f32_enc(
+    TsEncodeSession* s, TsDeviceTensor* delta, TsDeviceTensor* xin,
+    TsDeviceTensor* bin, TsDeviceTensor* cin, TsDeviceTensor* s0,
+    TsDeviceTensor* a, int32_t B, int32_t D, int32_t N, int32_t M,
+    int32_t capacity) {
+  if (!s || !delta || !xin || !bin || !cin || !s0 || !a || B <= 0 || D <= 0 ||
+      N <= 0 || M <= 0 || capacity <= 0 || M > capacity)
+    return 0;
+  auto* dptr = static_cast<float*>(delta->data);
+  auto* xptr = static_cast<float*>(xin->data);
+  auto* bptr = static_cast<float*>(bin->data);
+  auto* cptr = static_cast<float*>(cin->data);
+  auto* sptr = static_cast<float*>(s0->data);
+  auto* aptr = static_cast<float*>(a->data);
+  for (int32_t batch = 0; batch < B; ++batch)
+    for (int32_t channel = 0; channel < D; ++channel)
+      for (int32_t state = 0; state < N; ++state) {
+        std::size_t si = ((std::size_t)batch * D + channel) * N + state;
+        float h = sptr[si];
+        for (int32_t token = 0; token < M; ++token) {
+          std::size_t di = ((std::size_t)token * B + batch) * D + channel;
+          std::size_t bi = ((std::size_t)token * B + batch) * N + state;
+          float dt = dptr[di];
+          h = std::exp(dt * aptr[channel]) * h + dt * xptr[di] * bptr[bi];
+        }
+        sptr[si] = h;
+      }
+  std::fill(dptr, dptr + (std::size_t)capacity * B * D, 0.0f);
+  std::fill(xptr, xptr + (std::size_t)capacity * B * D, 0.0f);
+  std::fill(bptr, bptr + (std::size_t)capacity * B * N, 0.0f);
+  std::fill(cptr, cptr + (std::size_t)capacity * B * N, 0.0f);
+  return 0;
+}
+
 // Track-R Phase 5 — block SSM decode (scalar-A, f32). Non-Apple reference.
 extern "C" void tessera_apple_gpu_ssm_block_decode_f32(
     const float* delta, const float* xin, const float* bin, const float* cin,

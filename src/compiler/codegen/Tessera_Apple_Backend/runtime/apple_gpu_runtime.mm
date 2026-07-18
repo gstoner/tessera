@@ -4316,6 +4316,60 @@ kernel void ssm_replay_decode_output_only_dev_f32(
   }
   out[(out_index * B + b) * D + d] = y;
 }
+
+// Deterministic resident checkpoint fold. One thread exclusively owns one
+// (batch, channel, state) element and replays tokens in submission order, so
+// the update requires neither atomics nor a split workspace.
+kernel void ssm_replay_fold_checkpoint_dev_f32(
+    device const float* delta [[buffer(0)]],
+    device const float* xin [[buffer(1)]],
+    device const float* bin [[buffer(2)]],
+    device float* s0 [[buffer(3)]],
+    device const float* a [[buffer(4)]],
+    constant int& B [[buffer(5)]],
+    constant int& D [[buffer(6)]],
+    constant int& N [[buffer(7)]],
+    constant int& M [[buffer(8)]],
+    uint gid [[thread_position_in_grid]]) {
+  int total = B * D * N;
+  if ((int)gid >= total) return;
+  int n = (int)gid % N;
+  int bd = (int)gid / N;
+  int d = bd % D;
+  int b = bd / D;
+  float h = s0[gid];
+  for (int i = 0; i < M; ++i) {
+    int k = (i * B + b) * D + d;
+    float dt = delta[k];
+    h = exp(dt * a[d]) * h + dt * xin[k] * bin[(i * B + b) * N + n];
+  }
+  s0[gid] = h;
+}
+
+// Runs immediately after the checkpoint fold in the same encoder. Clearing
+// the complete fixed-capacity rings makes reuse and teardown independent of
+// the just-folded logical length.
+kernel void ssm_replay_clear_rings_dev_f32(
+    device float* delta [[buffer(0)]],
+    device float* xin [[buffer(1)]],
+    device float* bin [[buffer(2)]],
+    device float* cin [[buffer(3)]],
+    constant int& B [[buffer(4)]],
+    constant int& D [[buffer(5)]],
+    constant int& N [[buffer(6)]],
+    constant int& capacity [[buffer(7)]],
+    uint gid [[thread_position_in_grid]]) {
+  int bd = capacity * B * D;
+  int bn = capacity * B * N;
+  if ((int)gid < bd) {
+    delta[gid] = 0.0f;
+    xin[gid] = 0.0f;
+  }
+  if ((int)gid < bn) {
+    bin[gid] = 0.0f;
+    cin[gid] = 0.0f;
+  }
+}
 )MSL";
 
 inline void reference_ssm_replay_decode_f32(
@@ -21314,6 +21368,62 @@ extern "C" int32_t tessera_apple_gpu_ssm_replay_decode_dev_f32_enc(
       threadsPerThreadgroup:MTLSizeMake(std::max<NSUInteger>(tg, 1), 1, 1)];
   [enc endEncoding];
   ts_record_pipeline_resources(pso, MTLSizeMake(std::max<NSUInteger>(tg, 1), 1, 1));
+  return 1;
+}
+
+extern "C" int32_t tessera_apple_gpu_ssm_replay_flush_dev_f32_enc(
+    TsEncodeSession *s, TsDeviceTensor *delta, TsDeviceTensor *xin,
+    TsDeviceTensor *bin, TsDeviceTensor *cin, TsDeviceTensor *s0,
+    TsDeviceTensor *a, int32_t B, int32_t D, int32_t N, int32_t M,
+    int32_t capacity) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !s || !s->mtlcb || !delta || !xin || !bin || !cin || !s0 ||
+      !a || B <= 0 || D <= 0 || N <= 0 || M <= 0 || capacity <= 0 ||
+      M > capacity)
+    return 0;
+  id<MTLComputePipelineState> fold = compile_msl_kernel(
+      ctx, kSsmReplayDecodeF32Source,
+      @"ssm_replay_fold_checkpoint_dev_f32");
+  id<MTLComputePipelineState> clear = compile_msl_kernel(
+      ctx, kSsmReplayDecodeF32Source,
+      @"ssm_replay_clear_rings_dev_f32");
+  if (!fold || !clear) return 0;
+
+  id<MTLComputeCommandEncoder> enc = [s->mtlcb computeCommandEncoder];
+  [enc setComputePipelineState:fold];
+  [enc setBuffer:delta->buf offset:0 atIndex:0];
+  [enc setBuffer:xin->buf offset:0 atIndex:1];
+  [enc setBuffer:bin->buf offset:0 atIndex:2];
+  [enc setBuffer:s0->buf offset:0 atIndex:3];
+  [enc setBuffer:a->buf offset:0 atIndex:4];
+  [enc setBytes:&B length:sizeof(int32_t) atIndex:5];
+  [enc setBytes:&D length:sizeof(int32_t) atIndex:6];
+  [enc setBytes:&N length:sizeof(int32_t) atIndex:7];
+  [enc setBytes:&M length:sizeof(int32_t) atIndex:8];
+  NSUInteger state_total = (NSUInteger)B * D * N;
+  NSUInteger fold_tg = std::min<NSUInteger>(
+      state_total, fold.maxTotalThreadsPerThreadgroup);
+  fold_tg = std::max<NSUInteger>(fold_tg, 1);
+  [enc dispatchThreads:MTLSizeMake(state_total, 1, 1)
+      threadsPerThreadgroup:MTLSizeMake(fold_tg, 1, 1)];
+
+  [enc setComputePipelineState:clear];
+  [enc setBuffer:delta->buf offset:0 atIndex:0];
+  [enc setBuffer:xin->buf offset:0 atIndex:1];
+  [enc setBuffer:bin->buf offset:0 atIndex:2];
+  [enc setBuffer:cin->buf offset:0 atIndex:3];
+  [enc setBytes:&B length:sizeof(int32_t) atIndex:4];
+  [enc setBytes:&D length:sizeof(int32_t) atIndex:5];
+  [enc setBytes:&N length:sizeof(int32_t) atIndex:6];
+  [enc setBytes:&capacity length:sizeof(int32_t) atIndex:7];
+  NSUInteger ring_total = (NSUInteger)capacity * B * std::max(D, N);
+  NSUInteger clear_tg = std::min<NSUInteger>(
+      ring_total, clear.maxTotalThreadsPerThreadgroup);
+  clear_tg = std::max<NSUInteger>(clear_tg, 1);
+  [enc dispatchThreads:MTLSizeMake(ring_total, 1, 1)
+      threadsPerThreadgroup:MTLSizeMake(clear_tg, 1, 1)];
+  [enc endEncoding];
+  ts_record_pipeline_resources(fold, MTLSizeMake(fold_tg, 1, 1));
   return 1;
 }
 

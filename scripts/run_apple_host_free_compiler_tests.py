@@ -56,15 +56,25 @@ def _collect_nodes(command: list[str], env: dict[str, str]) -> tuple[list[str], 
     return nodes, result.stderr.strip()
 
 
-def _llvm_runner_utils(build_dir: Path) -> Path | None:
-    """Return the MLIR runner-utils dylib from this CMake build's LLVM prefix."""
+def _llvm_runner_utils(build_dir: Path) -> Path:
+    """Return and validate the runner-utils dylib from this build's LLVM prefix."""
 
     cache = build_dir / "CMakeCache.txt"
     for line in cache.read_text(encoding="utf-8").splitlines():
-        if line.startswith("LLVM_DIR:PATH="):
-            llvm_dir = Path(line.removeprefix("LLVM_DIR:PATH="))
-            return llvm_dir.parents[2] / "lib" / "libmlir_c_runner_utils.dylib"
-    return None
+        if not line.startswith("LLVM_DIR:"):
+            continue
+        _, separator, value = line.partition("=")
+        if not separator or not value.strip():
+            raise ValueError(f"CMake cache has an invalid LLVM_DIR entry: {line!r}")
+        llvm_dir = Path(value.strip())
+        runner_utils = llvm_dir.parents[2] / "lib" / "libmlir_c_runner_utils.dylib"
+        if not runner_utils.is_file():
+            raise FileNotFoundError(
+                f"MLIR runner-utils dylib not found for LLVM_DIR {llvm_dir}: "
+                f"{runner_utils}"
+            )
+        return runner_utils
+    raise ValueError(f"CMake cache does not declare LLVM_DIR: {cache}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -102,8 +112,11 @@ def main(argv: list[str] | None = None) -> int:
     jit_library = args.build_dir / "tools" / "tessera-jit" / "libtessera_jit.dylib"
     if jit_library.is_file():
         env["TESSERA_JIT_LIB"] = str(jit_library)
-    if runner_utils := _llvm_runner_utils(args.build_dir):
-        env["TESSERA_MLIR_C_RUNNER_UTILS"] = str(runner_utils)
+    try:
+        runner_utils = _llvm_runner_utils(args.build_dir)
+    except (OSError, ValueError) as error:
+        parser.error(str(error))
+    env["TESSERA_MLIR_C_RUNNER_UTILS"] = str(runner_utils)
     try:
         nodes, collection_diagnostic = _collect_nodes(command, env)
     except RuntimeError as error:
@@ -112,6 +125,7 @@ def main(argv: list[str] | None = None) -> int:
     report = {
         "build_dir": str(args.build_dir),
         "tool": str(args.tool),
+        "mlir_c_runner_utils": str(runner_utils),
         "capabilities": capabilities.as_dict(),
         "probes": probes,
         "marker_expression": marker,

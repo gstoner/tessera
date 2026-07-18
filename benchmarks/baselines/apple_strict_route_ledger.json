@@ -1,0 +1,1236 @@
+{
+  "schema": "tessera.apple.route-ledger.v2",
+  "measured_at": "2026-07-18T20:02:07.443239Z",
+  "expires_at": "2026-08-17T20:02:07.443239Z",
+  "context": {
+    "device": "apple7",
+    "physical_device": "Apple M1 Max",
+    "os_version": "26.5.2",
+    "sdk_version": "26.5",
+    "compiler_fingerprint": "sha256:50e9925be13062648f0b049fd25bc5a508f6eebf9114dddc151cc11d1c2d9c81",
+    "runtime_fingerprint": "sha256:c2a787397def99c5b15e259cc9751c648876a34ea014cf9496b0fecb03bbd7db"
+  },
+  "source_report_count": 2,
+  "promotion_rules": {
+    "minimum_speedup_fraction_each_run": 0.05,
+    "maximum_cross_run_drift_fraction": 0.15,
+    "absolute_time_drift_is_diagnostic_only": true,
+    "minimum_paired_win_fraction_each_run": 0.75,
+    "maximum_cross_run_speedup_spread": 0.05,
+    "requires_native_dispatch": true,
+    "requires_numerical_validation": true,
+    "requires_repeated_measurement": true,
+    "requires_interleaved_paired_trials": true,
+    "requires_resource_evidence": true
+  },
+  "decisions": [
+    {
+      "op": "retune_grouped_gemm",
+      "shape": "32x64x64_e4",
+      "dtype": "f32",
+      "device": "apple7",
+      "timing_domain": "end_to_end",
+      "incumbent_route": "grouped_fused",
+      "selected_route": "grouped_fused",
+      "status": "retain_incumbent",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "grouped_fused": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MSL.grouped_gemm"
+            },
+            {
+              "api": "MSL.grouped_gemm"
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            313667,
+            262375
+          ],
+          "run_drift_fraction": 0.19549118627918055,
+          "absolute_time_stable": false,
+          "paired_trial_times_ns": [
+            [
+              332875,
+              364917,
+              313667,
+              254833,
+              258834
+            ],
+            [
+              262375,
+              277917,
+              270375,
+              260167,
+              235458
+            ]
+          ],
+          "paired_measurement": true,
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "eligible": true
+        },
+        "per_expert_mps": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPS.matmul_loop"
+            },
+            {
+              "api": "MPS.matmul_loop"
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            1154500,
+            943833
+          ],
+          "run_drift_fraction": 0.2232036811596967,
+          "absolute_time_stable": false,
+          "paired_trial_times_ns": [
+            [
+              1313041,
+              1174792,
+              1154500,
+              910875,
+              935666
+            ],
+            [
+              943833,
+              906875,
+              948416,
+              886291,
+              978000
+            ]
+          ],
+          "paired_measurement": true,
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "eligible": true,
+          "speedups_vs_incumbent": [
+            -2.6806549621094984,
+            -2.597267270128633
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -2.9445467517837027,
+              -2.21934028833954,
+              -2.6806549621094984,
+              -2.574399704904781,
+              -2.6149269415919085
+            ],
+            [
+              -2.597267270128633,
+              -2.2631145269990682,
+              -2.5077799352750807,
+              -2.406623438022501,
+              -3.1536070127156437
+            ]
+          ],
+          "paired_median_speedups": [
+            -2.6149269415919085,
+            -2.5077799352750807
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0
+          ],
+          "cross_run_speedup_spread": 0.10714700631682783
+        }
+      },
+      "selected_evidence": {
+        "provenance": "native_gpu",
+        "correctness": true,
+        "device": "apple7",
+        "timing_domain": "end_to_end"
+      }
+    },
+    {
+      "op": "retune_grouped_gemm",
+      "shape": "32x64x64_e4",
+      "dtype": "f32",
+      "device": "apple7",
+      "timing_domain": "device",
+      "incumbent_route": "grouped_fused",
+      "selected_route": "grouped_fused",
+      "status": "retain_incumbent",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "grouped_fused": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MSL.grouped_gemm"
+            },
+            {
+              "api": "MSL.grouped_gemm"
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            26458,
+            18000
+          ],
+          "run_drift_fraction": 0.4698888888888889,
+          "absolute_time_stable": false,
+          "paired_trial_times_ns": [
+            [
+              29083,
+              26458,
+              28499,
+              20375,
+              20375
+            ],
+            [
+              18000,
+              17500,
+              23958,
+              18041,
+              17791
+            ]
+          ],
+          "paired_measurement": true,
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "eligible": true
+        },
+        "per_expert_mps": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPS.matmul_loop"
+            },
+            {
+              "api": "MPS.matmul_loop"
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            null,
+            null
+          ],
+          "run_drift_fraction": null,
+          "absolute_time_stable": false,
+          "paired_trial_times_ns": [
+            null,
+            null
+          ],
+          "paired_measurement": false,
+          "timing_coverage": [
+            0.0,
+            0.0
+          ],
+          "eligible": false
+        }
+      },
+      "selected_evidence": {
+        "provenance": "native_gpu",
+        "correctness": true,
+        "device": "apple7",
+        "timing_domain": "device"
+      }
+    },
+    {
+      "op": "retune_mla_decode",
+      "shape": "1x4x1x64x16x8x16x32",
+      "dtype": "f32",
+      "device": "apple7",
+      "timing_domain": "end_to_end",
+      "incumbent_route": "explicit",
+      "selected_route": "absorbed",
+      "status": "promote_candidate",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "absorbed": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MSL.mla_absorb_decode"
+            },
+            {
+              "api": "MSL.mla_absorb_decode"
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            457000,
+            483334
+          ],
+          "run_drift_fraction": 0.05762363238512035,
+          "absolute_time_stable": true,
+          "paired_trial_times_ns": [
+            [
+              512792,
+              478291,
+              450583,
+              440542,
+              457000
+            ],
+            [
+              443250,
+              491584,
+              516417,
+              483334,
+              435792
+            ]
+          ],
+          "paired_measurement": true,
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "eligible": true,
+          "speedups_vs_incumbent": [
+            0.5744054714507093,
+            0.5450974117647058
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.5483998238661383,
+              0.5493135453474676,
+              0.5634592076669763,
+              0.5897324621528192,
+              0.6165036037752157
+            ],
+            [
+              0.6096288898400469,
+              0.5286071691248743,
+              0.5139604705882352,
+              0.5507351047978636,
+              0.5552575583620359
+            ]
+          ],
+          "paired_median_speedups": [
+            0.5634592076669763,
+            0.5507351047978636
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "cross_run_speedup_spread": 0.012724102869112741
+        },
+        "explicit": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MSL.mla_decode_rope"
+            },
+            {
+              "api": "MSL.mla_decode_rope"
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            1073792,
+            1062500
+          ],
+          "run_drift_fraction": 0.010627764705882352,
+          "absolute_time_stable": true,
+          "paired_trial_times_ns": [
+            [
+              1135500,
+              1061250,
+              1032167,
+              1073792,
+              1191667
+            ],
+            [
+              1135458,
+              1042833,
+              1062500,
+              1075833,
+              979875
+            ]
+          ],
+          "paired_measurement": true,
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "eligible": true
+        }
+      },
+      "selected_evidence": {
+        "provenance": "native_gpu",
+        "correctness": true,
+        "device": "apple7",
+        "timing_domain": "end_to_end"
+      }
+    },
+    {
+      "op": "retune_mla_decode",
+      "shape": "1x4x1x64x16x8x16x32",
+      "dtype": "f32",
+      "device": "apple7",
+      "timing_domain": "device",
+      "incumbent_route": "explicit",
+      "selected_route": "explicit",
+      "status": "retain_incumbent",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "absorbed": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MSL.mla_absorb_decode"
+            },
+            {
+              "api": "MSL.mla_absorb_decode"
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            null,
+            null
+          ],
+          "run_drift_fraction": null,
+          "absolute_time_stable": false,
+          "paired_trial_times_ns": [
+            null,
+            null
+          ],
+          "paired_measurement": false,
+          "timing_coverage": [
+            0.0,
+            0.0
+          ],
+          "eligible": false
+        },
+        "explicit": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MSL.mla_decode_rope"
+            },
+            {
+              "api": "MSL.mla_decode_rope"
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            598708,
+            550708
+          ],
+          "run_drift_fraction": 0.087160527902264,
+          "absolute_time_stable": true,
+          "paired_trial_times_ns": [
+            [
+              600458,
+              598708,
+              547375,
+              586208,
+              658875
+            ],
+            [
+              617916,
+              535000,
+              550708,
+              589708,
+              531166
+            ]
+          ],
+          "paired_measurement": true,
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "eligible": true
+        }
+      },
+      "selected_evidence": {
+        "provenance": "native_gpu",
+        "correctness": true,
+        "device": "apple7",
+        "timing_domain": "device"
+      }
+    },
+    {
+      "op": "retune_moe_swiglu",
+      "shape": "16x32x64x32_e4",
+      "dtype": "f32",
+      "device": "apple7",
+      "timing_domain": "end_to_end",
+      "incumbent_route": "composed",
+      "selected_route": "single_fused",
+      "status": "promote_candidate",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "composed": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "3xMSL.grouped+MSL.silu"
+            },
+            {
+              "api": "3xMSL.grouped+MSL.silu"
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            2046584,
+            1891167
+          ],
+          "run_drift_fraction": 0.08218047374980633,
+          "absolute_time_stable": true,
+          "paired_trial_times_ns": [
+            [
+              2193666,
+              1902625,
+              1851917,
+              2078666,
+              2046584
+            ],
+            [
+              1791791,
+              1893417,
+              1837750,
+              1944666,
+              1891167
+            ]
+          ],
+          "paired_measurement": true,
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "eligible": true
+        },
+        "single_fused": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MSL.moe_swiglu"
+            },
+            {
+              "api": "MSL.moe_swiglu"
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            982042,
+            976083
+          ],
+          "run_drift_fraction": 0.006105013610522876,
+          "absolute_time_stable": true,
+          "paired_trial_times_ns": [
+            [
+              1014083,
+              975750,
+              982042,
+              993750,
+              960500
+            ],
+            [
+              974625,
+              982291,
+              976083,
+              971584,
+              996041
+            ]
+          ],
+          "paired_measurement": true,
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "eligible": true,
+          "speedups_vs_incumbent": [
+            0.5201555372269108,
+            0.4838726564073929
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.5377222421280177,
+              0.4871559030287103,
+              0.46971597539198573,
+              0.5219289679053778,
+              0.5306813695406589
+            ],
+            [
+              0.4560610026504207,
+              0.4812072565103197,
+              0.4688706298462794,
+              0.5003851561142119,
+              0.47331938427436604
+            ]
+          ],
+          "paired_median_speedups": [
+            0.5219289679053778,
+            0.47331938427436604
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "cross_run_speedup_spread": 0.048609583631011755
+        }
+      },
+      "selected_evidence": {
+        "provenance": "native_gpu",
+        "correctness": true,
+        "device": "apple7",
+        "timing_domain": "end_to_end"
+      }
+    },
+    {
+      "op": "retune_reduce_sum",
+      "shape": "64x257_axis1",
+      "dtype": "f32",
+      "device": "apple7",
+      "timing_domain": "end_to_end",
+      "incumbent_route": "mpsgraph",
+      "selected_route": "mpsgraph",
+      "status": "retain_incumbent",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mpsgraph": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSGraph.reductionSum"
+            },
+            {
+              "api": "MPSGraph.reductionSum"
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            292500,
+            305584
+          ],
+          "run_drift_fraction": 0.04473162393162393,
+          "absolute_time_stable": true,
+          "paired_trial_times_ns": [
+            [
+              317500,
+              323291,
+              291375,
+              287917,
+              292500
+            ],
+            [
+              295625,
+              319834,
+              305584,
+              370042,
+              281417
+            ]
+          ],
+          "paired_measurement": true,
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "eligible": true
+        },
+        "numpy_reference": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": false,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "reference_cpu"
+            },
+            {
+              "api": "reference_cpu"
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            5291,
+            5250
+          ],
+          "run_drift_fraction": 0.00780952380952381,
+          "absolute_time_stable": true,
+          "paired_trial_times_ns": [
+            [
+              5625,
+              5209,
+              5291,
+              5000,
+              5666
+            ],
+            [
+              5250,
+              5083,
+              5375,
+              5166,
+              5666
+            ]
+          ],
+          "paired_measurement": true,
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "eligible": false
+        }
+      },
+      "selected_evidence": {
+        "provenance": "native_gpu",
+        "correctness": true,
+        "device": "apple7",
+        "timing_domain": "end_to_end"
+      }
+    },
+    {
+      "op": "retune_replay_decode",
+      "shape": "1x32x16_t8",
+      "dtype": "f32",
+      "device": "apple7",
+      "timing_domain": "end_to_end",
+      "incumbent_route": "fused_block",
+      "selected_route": "fused_block",
+      "status": "retain_incumbent",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "fused_block": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 1,
+              "threadgroup_capacity_fraction": 0.03125,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
+            },
+            {
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 1,
+              "threadgroup_capacity_fraction": 0.03125,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            316959,
+            295000
+          ],
+          "run_drift_fraction": 0.07443728813559322,
+          "absolute_time_stable": true,
+          "paired_trial_times_ns": [
+            [
+              298375,
+              314209,
+              334625,
+              327209,
+              316959
+            ],
+            [
+              296333,
+              295000,
+              294875,
+              341292,
+              289084
+            ]
+          ],
+          "paired_measurement": true,
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "eligible": true
+        },
+        "token_loop": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 1,
+              "threadgroup_capacity_fraction": 0.03125,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
+            },
+            {
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 1,
+              "threadgroup_capacity_fraction": 0.03125,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            2290334,
+            2312041
+          ],
+          "run_drift_fraction": 0.009477656970555387,
+          "absolute_time_stable": true,
+          "paired_trial_times_ns": [
+            [
+              2339583,
+              2290334,
+              2300083,
+              2233417,
+              2258583
+            ],
+            [
+              2285583,
+              2211750,
+              2436333,
+              2567833,
+              2312041
+            ]
+          ],
+          "paired_measurement": true,
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "eligible": true,
+          "speedups_vs_incumbent": [
+            -6.2259629794389815,
+            -6.837427118644068
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -6.841082530372853,
+              -6.289205592455977,
+              -5.873613746731416,
+              -5.825658829677668,
+              -6.125789139920305
+            ],
+            [
+              -6.7128871910992025,
+              -6.497457627118644,
+              -7.2622568885120815,
+              -6.52385933452879,
+              -6.997817243430975
+            ]
+          ],
+          "paired_median_speedups": [
+            -6.125789139920305,
+            -6.7128871910992025
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0
+          ],
+          "cross_run_speedup_spread": 0.5870980511788977
+        }
+      },
+      "selected_evidence": {
+        "provenance": "native_gpu",
+        "correctness": true,
+        "device": "apple7",
+        "timing_domain": "end_to_end"
+      }
+    },
+    {
+      "op": "retune_replay_decode",
+      "shape": "1x32x16_t8",
+      "dtype": "f32",
+      "device": "apple7",
+      "timing_domain": "device",
+      "incumbent_route": "fused_block",
+      "selected_route": "fused_block",
+      "status": "retain_incumbent",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "fused_block": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 1,
+              "threadgroup_capacity_fraction": 0.03125,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
+            },
+            {
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 1,
+              "threadgroup_capacity_fraction": 0.03125,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            31166,
+            29583
+          ],
+          "run_drift_fraction": 0.05351046208971369,
+          "absolute_time_stable": true,
+          "paired_trial_times_ns": [
+            [
+              28416,
+              31166,
+              29708,
+              37500,
+              33583
+            ],
+            [
+              31541,
+              30375,
+              27999,
+              29583,
+              26958
+            ]
+          ],
+          "paired_measurement": true,
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "eligible": true
+        },
+        "token_loop": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 1,
+              "threadgroup_capacity_fraction": 0.03125,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
+            },
+            {
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 1,
+              "threadgroup_capacity_fraction": 0.03125,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            null,
+            null
+          ],
+          "run_drift_fraction": null,
+          "absolute_time_stable": false,
+          "paired_trial_times_ns": [
+            null,
+            null
+          ],
+          "paired_measurement": false,
+          "timing_coverage": [
+            0.0,
+            0.0
+          ],
+          "eligible": false
+        }
+      },
+      "selected_evidence": {
+        "provenance": "native_gpu",
+        "correctness": true,
+        "device": "apple7",
+        "timing_domain": "device"
+      }
+    }
+  ]
+}

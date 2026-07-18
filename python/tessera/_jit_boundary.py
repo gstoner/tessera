@@ -25,6 +25,7 @@ from __future__ import annotations
 import ctypes
 import glob
 import os
+import sys
 from typing import Any, Sequence
 
 import numpy as np
@@ -47,7 +48,10 @@ def _find_tessera_opt():
     for name in ("TESSERA_OPT", "TESSERA_OPT_BIN"):
         if env := os.environ.get(name):
             cands.append(env)
-    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    root = _repo_root()
+    if sys.platform == "darwin":
+        cands.append(os.path.join(
+            root, "build-apple/tools/tessera-opt/tessera-opt"))
     cands.append(os.path.join(root, "build/tools/tessera-opt/tessera-opt"))
     which = shutil.which("tessera-opt")
     if which:
@@ -84,10 +88,17 @@ def _find_dylib() -> str | None:
     if (env := os.environ.get("TESSERA_JIT_LIB")) and os.path.exists(env):
         return env
     repo = _repo_root()
-    pats = [
+    pats = []
+    if sys.platform == "darwin":
+        # The Apple build carries the configured LLVM/MLIR toolchain. Prefer it
+        # over a generic `build/` dylib that may retain an obsolete Homebrew
+        # install name such as /opt/homebrew/opt/llvm/lib/libLLVM.dylib.
+        pats.append(os.path.join(
+            repo, "build-apple", "tools", "tessera-jit", "libtessera_jit.*"))
+    pats.extend([
         os.path.join(repo, "build", "tools", "tessera-jit", "libtessera_jit.*"),
         os.path.join(repo, "build*", "tools", "tessera-jit", "libtessera_jit.*"),
-    ]
+    ])
     for pat in pats:
         hits = sorted(glob.glob(pat))
         if hits:
@@ -105,7 +116,13 @@ def _load() -> ctypes.CDLL:
             "libtessera_jit not built; run "
             "`ninja -C build tessera_jit` (or set TESSERA_JIT_LIB)"
         )
-    lib = ctypes.CDLL(path)
+    try:
+        lib = ctypes.CDLL(path)
+    except OSError as exc:
+        raise TesseraJitError(
+            f"failed to load libtessera_jit at {path}: {exc}; rebuild the "
+            "configured tree or set TESSERA_JIT_LIB explicitly"
+        ) from exc
     lib.tessera_jit_compile.restype = ctypes.c_void_p
     lib.tessera_jit_compile.argtypes = [ctypes.c_char_p]
     lib.tessera_jit_invoke.restype = ctypes.c_int

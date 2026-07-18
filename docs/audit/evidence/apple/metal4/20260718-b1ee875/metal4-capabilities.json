@@ -1,0 +1,1 @@
+{"device": "apple7", "metal4": {"available": true, "bits": 31, "command_allocator": true, "command_queue": true, "compiler": true, "msl4": true, "tensor": true}}

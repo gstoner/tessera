@@ -1,0 +1,51 @@
+{
+  "captured_at": "2026-07-18T21:34:53.425439+00:00",
+  "host": {
+    "machine": "arm64",
+    "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+    "system": "Darwin"
+  },
+  "probes": {
+    "gpu_contention": {
+      "command": [
+        "/usr/bin/sudo",
+        "-n",
+        "/usr/bin/powermetrics",
+        "--samplers",
+        "gpu_power,tasks",
+        "--show-process-gpu",
+        "--sample-rate",
+        "250",
+        "--sample-count",
+        "1"
+      ],
+      "reason": "probe exited with status 1",
+      "returncode": 1,
+      "status": "unavailable",
+      "stderr": "sudo: a password is required\n",
+      "stdout": ""
+    },
+    "power_mode": {
+      "command": [
+        "/usr/bin/pmset",
+        "-g"
+      ],
+      "returncode": 0,
+      "status": "available",
+      "stderr": "",
+      "stdout": "System-wide power settings:\nCurrently in use:\n standby              1\n Sleep On Power Button 1\n hibernatefile        /var/vm/sleepimage\n powernap             1\n networkoversleep     0\n disksleep            0\n sleep                1 (sleep prevented by powerd, UA Cloud Helper)\n hibernatemode        3\n ttyskeepawake        1\n displaysleep         60\n tcpkeepalive         1\n powermode            0\n womp                 1\n"
+    },
+    "thermal_state": {
+      "command": [
+        "/usr/bin/pmset",
+        "-g",
+        "therm"
+      ],
+      "returncode": 0,
+      "status": "available",
+      "stderr": "",
+      "stdout": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded\n"
+    }
+  },
+  "schema": "tessera.apple.metal4-environment.v1"
+}

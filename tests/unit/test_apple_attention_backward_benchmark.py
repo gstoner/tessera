@@ -83,7 +83,7 @@ def test_backward_ledger_requires_two_complete_dtype_route_runs(monkeypatch):
     assert incomplete["attention_backward_proof"]["complete"] is False
 
 
-def test_committed_backward_ledger_matches_production_promotions():
+def test_legacy_backward_ledger_cannot_bypass_strict_production_ingestion():
     import json
 
     from tessera.compiler.apple_route_selector import production_route_for
@@ -100,7 +100,7 @@ def test_committed_backward_ledger_matches_production_promotions():
             op=row["op"], shape=row["shape"], dtype=row["dtype"],
             device=row["device"], timing_domain=row["timing_domain"],
             incumbent_route=row["incumbent_route"])
-        assert selected == row["selected_route"]
+        assert selected == row["incumbent_route"]
 
 
 @pytest.mark.parametrize("causal", [False, True])

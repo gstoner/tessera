@@ -122,7 +122,7 @@ cmake -S . -B "$BUILD_DIR" -G Ninja \
   -DTESSERA_BUILD_EXAMPLES=ON
 cmake --build "$BUILD_DIR" --target \
   tessera-opt tessera-translate-mlir tessera_jit TesseraAppleRuntime
-cp "$BUILD_DIR/CMakeCache.txt" "$REPORT_DIR/"
+cp "$BUILD_DIR/CMakeCache.txt" "$REPORT_DIR/apple-cmake-cache.txt"
 cp "$BUILD_DIR/.ninja_log" "$REPORT_DIR/ninja-log.txt"
 
 export PYTHONPATH="$ROOT/python:$ROOT${PYTHONPATH:+:$PYTHONPATH}"

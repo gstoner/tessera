@@ -24,7 +24,7 @@ _REQUIRED_BUNDLE_FILES = frozenset({
     "metal4-routes-1.json",
     "metal4-routes-2.json",
     "metal4-stable-ledger.json",
-    "CMakeCache.txt",
+    "apple-cmake-cache.txt",
     "ninja-log.txt",
     "source-commit.txt",
     "status.txt",
@@ -181,7 +181,7 @@ def validate_bundle(path: Path) -> dict[str, Any]:
     if "status=success\n" not in status or f"commit={source_commit}\n" not in status:
         raise ValueError("Metal 4 proof status is not a success for its source commit")
 
-    cmake_cache = (path / "CMakeCache.txt").read_text(encoding="utf-8")
+    cmake_cache = (path / "apple-cmake-cache.txt").read_text(encoding="utf-8")
     cache_paths = {
         "LLVM_DIR": "/opt/homebrew/llvm-23.1.0-rc1/lib/cmake/llvm",
         "MLIR_DIR": "/opt/homebrew/llvm-23.1.0-rc1/lib/cmake/mlir",

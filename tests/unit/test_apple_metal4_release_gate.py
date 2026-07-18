@@ -128,7 +128,7 @@ def _write_bundle(path: Path) -> None:
         ]}),
         encoding="utf-8",
     )
-    (path / "CMakeCache.txt").write_text(
+    (path / "apple-cmake-cache.txt").write_text(
         "LLVM_DIR:PATH=/opt/homebrew/llvm-23.1.0-rc1/lib/cmake/llvm\n"
         "MLIR_DIR:UNINITIALIZED=/opt/homebrew/llvm-23.1.0-rc1/lib/cmake/mlir\n"
         "TESSERA_BUILD_APPLE_BACKEND:BOOL=ON\n",

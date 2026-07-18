@@ -1,6 +1,6 @@
 {
   "files": {
-    "CMakeCache.txt": {
+    "apple-cmake-cache.txt": {
       "bytes": 35840,
       "sha256": "5ed4dd0a8069204fe3562d21f4a8ad3a5c1115ef8b735bc0ecf052071141f6c3"
     },
@@ -50,7 +50,7 @@
     }
   },
   "schema": "tessera.apple.metal4-proof.v1",
-  "sealed_at": "2026-07-18T21:41:02.240055+00:00",
+  "sealed_at": "2026-07-18T21:49:57.848999+00:00",
   "tested_commit": "b1ee87591ec701dd06a156cad8449f6498ae0891",
   "validation": {
     "capabilities": {

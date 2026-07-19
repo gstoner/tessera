@@ -155,6 +155,12 @@ class RuntimeArtifact:
                 "E_LAUNCH_STALE_IMAGE",
                 "runtime metadata target differs from native image",
             )
+        target_ir_digest = hashlib.sha256(self.target_ir.encode("utf-8")).hexdigest()
+        if target_ir_digest != self.native_image.target_ir_digest:
+            raise ArtifactContractError(
+                "E_LAUNCH_STALE_IMAGE",
+                "runtime Target IR differs from native image provenance",
+            )
         if self.launch_descriptor is not None:
             self.launch_descriptor.validate_image(self.native_image)
 

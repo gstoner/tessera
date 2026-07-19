@@ -68,13 +68,15 @@ submission.
 - `artifact_only`: no typed Target IR was produced;
 - `compileable`: Target IR exists, but no native image exists;
 - `packaged`: an image is present and joined to the bundle's exact target,
-  registered pipeline, and Target-IR digest;
+  requested pipeline or target registry's declared producer, and Target-IR
+  digest;
 - `launchable`: a descriptor additionally joins that image, entry symbol, and
   ABI identifier.
 
 `CompileResult.to_runtime_artifact()` transfers the same typed objects; it does
 not reconstruct them from metadata. `RuntimeArtifact` JSON embeds both objects,
-checks their nested hashes and joins, and includes them in the outer artifact
+rejoins the persisted Target IR to the image's Target-IR digest, checks their
+nested hashes and descriptor joins, and includes them in the outer artifact
 hash. The AOT compilation-cache identity includes the image cache key and
 descriptor cache fingerprint. New persistent entries retain a
 `tessera.compilation_cache_entry.v1` manifest joining the lookup key, outer

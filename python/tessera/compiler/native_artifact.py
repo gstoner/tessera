@@ -593,6 +593,7 @@ class OrderingSemantics:
         )
         if any(not isinstance(item, str) for item in raw):
             raise _error("E_LAUNCH_DESCRIPTOR_SCHEMA", "synchronization entries must be strings")
+        synchronization = tuple(item for item in raw if isinstance(item, str))
         return cls(
             ordered_submission=_bool_field(
                 data, "ordered_submission", "E_LAUNCH_DESCRIPTOR_SCHEMA", default=True,
@@ -601,7 +602,7 @@ class OrderingSemantics:
                 _string_field(data, "residency", "E_LAUNCH_DESCRIPTOR_SCHEMA")
                 if "residency" in data else "none"
             ),
-            synchronization=tuple(raw),
+            synchronization=synchronization,
         )
 
 
@@ -668,8 +669,10 @@ class LaunchDescriptor:
             raise _error("E_LAUNCH_DESCRIPTOR_SCHEMA", "workspace must be WorkspaceRequirement")
         if not isinstance(self.ordering, OrderingSemantics):
             raise _error("E_LAUNCH_DESCRIPTOR_SCHEMA", "ordering must be OrderingSemantics")
-        ordinals = [item.ordinal for item in (*self.buffers, *self.scalars)]
-        names = [item.name for item in (*self.buffers, *self.scalars)]
+        ordinals = [item.ordinal for item in self.buffers]
+        ordinals.extend(item.ordinal for item in self.scalars)
+        names = [item.name for item in self.buffers]
+        names.extend(item.name for item in self.scalars)
         if len(ordinals) != len(set(ordinals)):
             raise _error("E_LAUNCH_DESCRIPTOR_SCHEMA", "argument ordinals must be unique")
         if ordinals and sorted(ordinals) != list(range(len(ordinals))):

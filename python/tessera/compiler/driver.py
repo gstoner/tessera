@@ -24,7 +24,7 @@ from typing import Any, Mapping
 from .graph_ir import GraphIRModule
 from .capabilities import CAPABILITY_REGISTRY_VERSION, supports_op
 from .matmul_pipeline import CPUPlan, JitDiagnostic, LoweringArtifact, build_cpu_plan, explain_cpu_plan, normalize_target_kind
-from .pipeline_registry import current_driver_pipeline_map
+from .pipeline_registry import current_driver_pipeline_map, target_pipeline_lookup
 from .native_artifact import LaunchDescriptor, NativeImageArtifact
 
 
@@ -163,7 +163,15 @@ class CompileArtifactBundle:
         if self.native_image.target != self.request.target:
             raise ValueError("native image target does not match compile request")
         if self.native_image.pipeline_name != self.request.pipeline_name:
-            raise ValueError("native image pipeline does not match compile request")
+            resolution = target_pipeline_lookup(self.request.target)
+            declared_producer = (
+                resolution.declared_pipeline
+                if resolution is not None
+                and self.request.pipeline_name == resolution.current_driver_pipeline
+                else None
+            )
+            if self.native_image.pipeline_name != declared_producer:
+                raise ValueError("native image pipeline does not match compile request")
         if self.target_ir is None:
             raise ValueError("a native image requires compiler Target IR")
         if self.native_image.target_ir_digest != stable_hash(self.target_ir.text):

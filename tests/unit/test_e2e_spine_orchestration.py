@@ -34,15 +34,22 @@ def _digest(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
 
-def _image(target_ir: str = "target-ir") -> NativeImageArtifact:
+def _image(
+    target_ir: str = "target-ir",
+    *,
+    target: str = "nvidia_sm120",
+    architecture: str = "sm_120a",
+    pipeline_name: str = "tessera-nvidia-pipeline-sm120",
+    binary_format: str = "ptx",
+) -> NativeImageArtifact:
     return NativeImageArtifact(
-        target="nvidia_sm120",
-        architecture="sm_120a",
-        pipeline_name="tessera-lower-to-gpu",
+        target=target,
+        architecture=architecture,
+        pipeline_name=pipeline_name,
         compiler_fingerprint="tessera-opt:23:test",
         toolchain_fingerprint="cuda:test",
         target_ir_digest=_digest(target_ir),
-        binary_format="ptx",
+        binary_format=binary_format,
         payload=b".version 9.3\n.entry spine() {}\n",
         entry_points=(NativeEntryPoint("spine", "tessera.spine.v1"),),
         compile_state="cold",
@@ -60,10 +67,16 @@ def _descriptor(image: NativeImageArtifact) -> LaunchDescriptor:
     )
 
 
-def _bundle(*, image: NativeImageArtifact | None, descriptor: LaunchDescriptor | None):
+def _bundle(
+    *,
+    image: NativeImageArtifact | None,
+    descriptor: LaunchDescriptor | None,
+    target: str = "nvidia_sm120",
+    pipeline_name: str = "",
+):
     request = CompileRequest(
         source_origin="unit", function_name="spine", graph_ir="graph-ir",
-        target="nvidia_sm120",
+        target=target, pipeline_name=pipeline_name,
     )
     return CompileArtifactBundle(
         request=request,
@@ -117,9 +130,42 @@ def test_bundle_records_packaged_and_launchable_stages() -> None:
 def test_bundle_rejects_image_provenance_drift() -> None:
     with pytest.raises(ValueError, match="Target IR"):
         _bundle(image=_image("different-target-ir"), descriptor=None)
-    wrong_target = replace(_image(), target="nvidia_sm100")
+    wrong_target = _image(
+        target="nvidia_sm100",
+        architecture="sm_100a",
+        pipeline_name="tessera-nvidia-pipeline-sm100",
+    )
     with pytest.raises(ValueError, match="target"):
         _bundle(image=wrong_target, descriptor=None)
+
+
+@pytest.mark.parametrize(
+    "target,architecture,pipeline_name,binary_format",
+    [
+        ("nvidia_sm120", "sm_120a", "tessera-nvidia-pipeline-sm120", "ptx"),
+        ("rocm_gfx1151", "gfx1151", "tessera-lower-to-rocm", "hsaco"),
+    ],
+)
+def test_bundle_accepts_target_registry_declared_producer(
+    target: str,
+    architecture: str,
+    pipeline_name: str,
+    binary_format: str,
+) -> None:
+    image = _image(
+        target=target,
+        architecture=architecture,
+        pipeline_name=pipeline_name,
+        binary_format=binary_format,
+    )
+    bundle = _bundle(image=image, descriptor=None, target=target)
+    assert bundle.native_image is image
+
+
+def test_bundle_rejects_unrelated_registered_target_pipeline() -> None:
+    image = _image(pipeline_name="tessera-pipeline")
+    with pytest.raises(ValueError, match="pipeline"):
+        _bundle(image=image, descriptor=None)
 
 
 def test_compile_result_projects_typed_artifacts_without_reconstruction() -> None:
@@ -146,6 +192,18 @@ def test_runtime_artifact_rejects_descriptor_without_image() -> None:
     image = _image()
     with pytest.raises(ArtifactContractError, match="E_LAUNCH_STALE_IMAGE"):
         RuntimeArtifact(launch_descriptor=_descriptor(image))
+
+
+def test_runtime_artifact_rejects_target_ir_provenance_drift() -> None:
+    with pytest.raises(ArtifactContractError, match="E_LAUNCH_STALE_IMAGE"):
+        replace(_runtime_artifact(), target_ir="different-target-ir")
+
+
+def test_runtime_artifact_deserialization_rejects_target_ir_provenance_drift() -> None:
+    data = _runtime_artifact().to_dict()
+    data["target_ir"] = "different-target-ir"
+    with pytest.raises(ArtifactContractError, match="E_LAUNCH_STALE_IMAGE"):
+        RuntimeArtifact.from_dict(data)
 
 
 def test_generic_runtime_validates_then_submits_exact_descriptor() -> None:

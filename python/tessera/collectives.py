@@ -262,7 +262,11 @@ class CollectiveAdapter:
             return CollectiveBackendStatus(
                 self.backend,
                 "hardware_runtime" if ready else "backend_unavailable",
-                reason=reason,
+                reason=(
+                    ""
+                    if ready
+                    else f"{self.backend} native collective runtime is not wired on this host: {reason}"
+                ),
                 world_size=self.world_size,
             )
         if self.backend in {"rccl", "mpi"}:

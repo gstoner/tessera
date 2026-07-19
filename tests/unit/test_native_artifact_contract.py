@@ -10,6 +10,7 @@ from tessera.compiler.native_artifact import (
     ArtifactContractError,
     BufferArgument,
     BufferBinding,
+    DeviceLibraryRecord,
     LaunchDescriptor,
     LaunchGeometry,
     NativeEntryPoint,
@@ -42,6 +43,10 @@ def _image(**changes) -> NativeImageArtifact:
             provenance="ptxas --verbose",
             metrics={"registers": 40, "spill_bytes": 0},
         ),
+        "device_libraries": (
+            DeviceLibraryRecord("cuda.libdevice", _digest("libdevice"),
+                                "llvm_link_only_needed"),
+        ),
     }
     values.update(changes)
     return NativeImageArtifact(**values)
@@ -64,7 +69,12 @@ def _descriptor(image: NativeImageArtifact, **changes) -> LaunchDescriptor:
         ),
         "geometry": LaunchGeometry(grid=(2, 2, 1), workgroup=(32, 1, 1)),
         "dynamic_local_memory_bytes": 4096,
-        "workspace": WorkspaceRequirement(bytes=8192, alignment=256),
+        "workspace": WorkspaceRequirement(
+            bytes=8192,
+            alignment=256,
+            lifetime="session",
+            initialization="preserve",
+        ),
         "ordering": OrderingSemantics(
             ordered_submission=True,
             residency="inputs",
@@ -97,6 +107,25 @@ def test_native_image_round_trip_is_content_addressed_and_deterministic() -> Non
     assert json.loads(image.to_json())["payload_b64"]
 
 
+def test_workspace_lifecycle_is_round_tripped_and_rejects_invalid_combinations() -> None:
+    image = _image()
+    descriptor = _descriptor(image)
+    restored = LaunchDescriptor.from_json(descriptor.to_json())
+    assert restored.workspace == WorkspaceRequirement(
+        bytes=8192,
+        alignment=256,
+        lifetime="session",
+        initialization="preserve",
+    )
+    assert WorkspaceRequirement.from_dict({"bytes": 64, "alignment": 16}) == (
+        WorkspaceRequirement(bytes=64, alignment=16)
+    )
+    with pytest.raises(ArtifactContractError, match="preserved workspace requires session"):
+        WorkspaceRequirement(bytes=4, lifetime="launch", initialization="preserve")
+    with pytest.raises(ArtifactContractError, match="invalid workspace lifetime"):
+        WorkspaceRequirement(bytes=4, lifetime="process")
+
+
 def test_compile_state_and_resource_measurement_do_not_change_image_identity() -> None:
     cold = _image()
     warm = replace(
@@ -113,6 +142,31 @@ def test_cache_key_changes_for_target_ir_or_toolchain_drift() -> None:
     image = _image()
     assert replace(image, target_ir_digest=_digest("new-ir")).cache_key != image.cache_key
     assert replace(image, toolchain_fingerprint="cuda:13.4").cache_key != image.cache_key
+    changed_library = replace(
+        image,
+        device_libraries=(
+            DeviceLibraryRecord(
+                "cuda.libdevice", _digest("new-libdevice"), "llvm_link_only_needed"
+            ),
+        ),
+    )
+    assert changed_library.cache_key != image.cache_key
+
+
+def test_device_library_records_round_trip_without_host_paths() -> None:
+    image = _image()
+    restored = NativeImageArtifact.from_json(image.to_json())
+    assert restored.device_libraries == image.device_libraries
+    payload = image.to_json()
+    assert "cuda.libdevice" in payload
+    assert "/usr/local/cuda" not in payload
+
+
+def test_v1_native_image_without_device_library_field_remains_readable() -> None:
+    image = _image(device_libraries=())
+    legacy = image.to_dict()
+    legacy.pop("device_libraries")
+    assert NativeImageArtifact.from_dict(legacy) == image
 
 
 @pytest.mark.parametrize("field", ["payload_digest", "image_digest", "cache_key"])

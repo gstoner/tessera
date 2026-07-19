@@ -17,6 +17,8 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Optional
 
+from .nvidia_dtype_contract import sm120_tensor_core_report_names
+
 
 class ISA(IntEnum):
     """NVIDIA SM generation, ordered so comparisons work: SM_90 >= SM_80."""
@@ -90,14 +92,9 @@ _TENSOR_CORE_DTYPES: dict[ISA, frozenset[str]] = {
         "fp64", "tf32", "bf16", "fp16", "fp8_e4m3", "fp8_e5m2",
         "fp6_e2m3", "fp6_e3m2", "fp4_e2m1", "nvfp4", "int8",
     }),
-    ISA.SM_120: frozenset({
-        # CC 12.0 Tensor Core input types (CUDA Programming Guide compute-
-        # capabilities appendix, Table 33): FP64, TF32, BF16, FP16, FP8, FP6,
-        # FP4, INT8, INT4 — all "Yes" for 12.x.  (int4 is planned_gated under
-        # Tessera's dtype policy but the hardware supports it.)
-        "nvfp4", "fp4_e2m1", "fp64", "tf32", "bf16", "fp16",
-        "fp8_e4m3", "fp8_e5m2", "fp6_e2m3", "fp6_e3m2", "int8", "int4",
-    }),
+    # This hardware-reporting set includes TF32 (a math mode) and int4 (a
+    # planned-gated storage type). Compiler/runtime readiness remains separate.
+    ISA.SM_120: sm120_tensor_core_report_names(),
 }
 
 

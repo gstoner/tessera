@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Mapping, Optional
 
+from .nvidia_dtype_contract import sm120_supported_storage_dtypes
 from .op_catalog import GRAPH_OP_TO_SPEC, LEGACY_GRAPH_OP_ALIASES, canonical_graph_op_name
 
 
@@ -399,14 +400,40 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         family="nvidia",
         runtime_backend="cuda",
         default_runtime_status="artifact_only",
-        supported_ops=_ops("artifact_only", _NVIDIA_ARTIFACT, reason="SM120 Blackwell consumer (RTX 50-series / GB20x) artifact under CUDA 13.3; FP4 via mma.sync.block_scale (no tcgen05/TMEM — those are sm_100a); executable smoke is hardware-gated"),
-        supported_dtypes=(
-            "bf16", "fp16", "fp32", "fp64",
-            "fp8_e4m3", "fp8_e5m2",
-            "fp6_e2m3", "fp6_e3m2",
-            "fp4_e2m1", "nvfp4",
-            "int8",
-        ),
+        supported_ops={
+            **_ops("artifact_only", _NVIDIA_ARTIFACT, reason="SM120 Blackwell consumer (RTX 50-series / GB20x) artifact under CUDA 13.3; FP4 via mma.sync.block_scale (no tcgen05/TMEM — those are sm_100a); executable smoke is hardware-gated"),
+            canonical_op("tessera.matmul"): OpCapability(
+                canonical_op("tessera.matmul"),
+                "artifact_only",
+                dtypes=(
+                    "fp64", "fp32", "f32", "bf16", "fp16",
+                    "fp8_e4m3", "fp8_e5m2", "fp6_e2m3", "fp6_e3m2",
+                    "fp4_e2m1", "int8", "nvfp4",
+                ),
+                reason="SM120 matmul has f32 artifacts and compiler-owned "
+                       "TF32-math/bf16/fp16/FP8/FP6/MXFP4/NVFP4 native "
+                       "descriptor paths",
+            ),
+            canonical_op("tessera.flash_attn"): OpCapability(
+                canonical_op("tessera.flash_attn"),
+                "artifact_only",
+                dtypes=("fp32", "f32", "fp16", "f16"),
+                reason="SM120 attention has a compiler-owned f16/f32 canonical "
+                       "descriptor path with f32 accumulation/output; optimized "
+                       "CUDA candidates remain separately selector-gated",
+            ),
+            **{
+                canonical_op(op): OpCapability(
+                    canonical_op(op),
+                    "artifact_only",
+                    dtypes=("fp32", "f32", "fp16", "f16"),
+                    reason="SM120 softmax has compiler-owned f16/f32 storage "
+                           "paths with f32 accumulation",
+                )
+                for op in ("tessera.softmax", "tessera.softmax_safe")
+            },
+        },
+        supported_dtypes=sm120_supported_storage_dtypes(),
         features=(
             # Consumer Blackwell (RTX 50-series / GB20x) is NOT a superset of
             # datacenter sm_100: NO Hopper `wgmma`/`wgmma_sparse`, NO `tcgen05`/

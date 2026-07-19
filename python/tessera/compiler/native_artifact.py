@@ -32,12 +32,17 @@ NATIVE_IMAGE_FORMATS: frozenset[str] = frozenset({
 COMPILE_STATES: frozenset[str] = frozenset({
     "cold", "warm_cache", "prepackaged",
 })
+DEVICE_LIBRARY_LINK_MODES: frozenset[str] = frozenset({
+    "llvm_link_only_needed", "compiler_driver", "embedded",
+})
 
 _DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
 _SYMBOL_RE = re.compile(r"^[A-Za-z_.$][A-Za-z0-9_.$@-]*$")
 _DIRECTIONS = frozenset({"input", "output", "inout"})
 _SHAPE_PREDICATES = frozenset({"eq", "min", "max", "multiple_of"})
 _RESIDENCY = frozenset({"none", "inputs", "outputs", "all"})
+_WORKSPACE_LIFETIMES = frozenset({"launch", "session"})
+_WORKSPACE_INITIALIZATION = frozenset({"undefined", "zero", "preserve"})
 
 
 class ArtifactContractError(ValueError):
@@ -199,6 +204,44 @@ class ResourceRecord:
 
 
 @dataclass(frozen=True)
+class DeviceLibraryRecord:
+    """Content identity for one device library consumed at the LLVM stage."""
+
+    logical_name: str
+    content_digest: str
+    link_mode: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.logical_name, str) or not self.logical_name.strip():
+            raise _error("E_NATIVE_IMAGE_SCHEMA", "device library name must be non-empty")
+        _validate_digest(
+            self.content_digest, "device library content_digest", "E_NATIVE_IMAGE_SCHEMA"
+        )
+        if self.link_mode not in DEVICE_LIBRARY_LINK_MODES:
+            raise _error(
+                "E_NATIVE_IMAGE_SCHEMA",
+                f"device library link mode {self.link_mode!r} is not registered",
+            )
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "logical_name": self.logical_name,
+            "content_digest": self.content_digest,
+            "link_mode": self.link_mode,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, object]) -> "DeviceLibraryRecord":
+        return cls(
+            logical_name=_string_field(data, "logical_name", "E_NATIVE_IMAGE_SCHEMA"),
+            content_digest=_string_field(
+                data, "content_digest", "E_NATIVE_IMAGE_SCHEMA"
+            ),
+            link_mode=_string_field(data, "link_mode", "E_NATIVE_IMAGE_SCHEMA"),
+        )
+
+
+@dataclass(frozen=True)
 class NativeImageArtifact:
     target: str
     architecture: str
@@ -211,6 +254,7 @@ class NativeImageArtifact:
     entry_points: tuple[NativeEntryPoint, ...]
     compile_state: str
     resource_record: ResourceRecord | None = None
+    device_libraries: tuple[DeviceLibraryRecord, ...] = ()
     schema_version: str = NATIVE_IMAGE_SCHEMA_VERSION
 
     def __post_init__(self) -> None:
@@ -258,6 +302,18 @@ class NativeImageArtifact:
             raise _error("E_NATIVE_IMAGE_SCHEMA", "entry_points must contain NativeEntryPoint values")
         if self.resource_record is not None and not isinstance(self.resource_record, ResourceRecord):
             raise _error("E_NATIVE_IMAGE_SCHEMA", "resource_record must be a ResourceRecord")
+        object.__setattr__(self, "device_libraries", tuple(self.device_libraries))
+        if any(
+            not isinstance(library, DeviceLibraryRecord)
+            for library in self.device_libraries
+        ):
+            raise _error(
+                "E_NATIVE_IMAGE_SCHEMA",
+                "device_libraries must contain DeviceLibraryRecord values",
+            )
+        library_names = [library.logical_name for library in self.device_libraries]
+        if len(library_names) != len(set(library_names)):
+            raise _error("E_NATIVE_IMAGE_SCHEMA", "native image has duplicate device libraries")
         symbols = [entry.symbol for entry in self.entry_points]
         if len(symbols) != len(set(symbols)):
             raise _error("E_NATIVE_IMAGE_SCHEMA", "native image has duplicate entry symbols")
@@ -272,7 +328,7 @@ class NativeImageArtifact:
         return _sha256_bytes(self.payload)
 
     def _identity_dict(self) -> dict[str, object]:
-        return {
+        identity: dict[str, object] = {
             "schema_version": self.schema_version,
             "target": self.target,
             "architecture": self.architecture,
@@ -284,6 +340,11 @@ class NativeImageArtifact:
             "payload_digest": self.payload_digest,
             "entry_points": [entry.to_dict() for entry in self.entry_points],
         }
+        if self.device_libraries:
+            identity["device_libraries"] = [
+                library.to_dict() for library in self.device_libraries
+            ]
+        return identity
 
     @property
     def image_digest(self) -> str:
@@ -292,7 +353,7 @@ class NativeImageArtifact:
     @property
     def cache_key(self) -> str:
         """Pre-compilation cache key; compile state and measured resources do not affect it."""
-        return _sha256_json({
+        identity: dict[str, object] = {
             "schema_version": self.schema_version,
             "target": self.target,
             "architecture": self.architecture,
@@ -301,7 +362,12 @@ class NativeImageArtifact:
             "toolchain_fingerprint": self.toolchain_fingerprint,
             "target_ir_digest": self.target_ir_digest,
             "binary_format": self.binary_format,
-        })
+        }
+        if self.device_libraries:
+            identity["device_libraries"] = [
+                library.to_dict() for library in self.device_libraries
+            ]
+        return _sha256_json(identity)
 
     def entry_point(self, symbol: str) -> NativeEntryPoint | None:
         return next((entry for entry in self.entry_points if entry.symbol == symbol), None)
@@ -309,6 +375,9 @@ class NativeImageArtifact:
     def to_dict(self) -> dict[str, object]:
         return {
             **self._identity_dict(),
+            "device_libraries": [
+                library.to_dict() for library in self.device_libraries
+            ],
             "payload_b64": base64.b64encode(self.payload).decode("ascii"),
             "image_digest": self.image_digest,
             "compile_state": self.compile_state,
@@ -332,6 +401,14 @@ class NativeImageArtifact:
                 if not isinstance(entry, Mapping):
                     raise _error("E_NATIVE_IMAGE_SCHEMA", "entry point must be an object")
                 entries_list.append(NativeEntryPoint.from_dict(entry))
+            libraries_raw = _array_field(
+                data, "device_libraries", "E_NATIVE_IMAGE_SCHEMA", required=False
+            )
+            libraries_list: list[DeviceLibraryRecord] = []
+            for library in libraries_raw:
+                if not isinstance(library, Mapping):
+                    raise _error("E_NATIVE_IMAGE_SCHEMA", "device library must be an object")
+                libraries_list.append(DeviceLibraryRecord.from_dict(library))
             resource_raw = data.get("resource_record")
             if resource_raw is not None and not isinstance(resource_raw, Mapping):
                 raise _error("E_NATIVE_IMAGE_SCHEMA", "resource_record must be an object")
@@ -349,6 +426,7 @@ class NativeImageArtifact:
                 entry_points=tuple(entries_list),
                 compile_state=_string_field(data, "compile_state", "E_NATIVE_IMAGE_SCHEMA"),
                 resource_record=resource,
+                device_libraries=tuple(libraries_list),
             )
         except ArtifactContractError:
             raise
@@ -546,6 +624,8 @@ class LaunchGeometry:
 class WorkspaceRequirement:
     bytes: int = 0
     alignment: int = 1
+    lifetime: str = "launch"
+    initialization: str = "undefined"
 
     def __post_init__(self) -> None:
         if not isinstance(self.bytes, int) or isinstance(self.bytes, bool) or self.bytes < 0:
@@ -553,9 +633,29 @@ class WorkspaceRequirement:
         if (not isinstance(self.alignment, int) or isinstance(self.alignment, bool)
                 or self.alignment <= 0 or self.alignment & (self.alignment - 1)):
             raise _error("E_LAUNCH_DESCRIPTOR_SCHEMA", "workspace alignment must be a positive power of two")
+        if self.lifetime not in _WORKSPACE_LIFETIMES:
+            raise _error(
+                "E_LAUNCH_DESCRIPTOR_SCHEMA",
+                f"invalid workspace lifetime {self.lifetime!r}",
+            )
+        if self.initialization not in _WORKSPACE_INITIALIZATION:
+            raise _error(
+                "E_LAUNCH_DESCRIPTOR_SCHEMA",
+                f"invalid workspace initialization {self.initialization!r}",
+            )
+        if self.lifetime == "launch" and self.initialization == "preserve":
+            raise _error(
+                "E_LAUNCH_DESCRIPTOR_SCHEMA",
+                "preserved workspace requires session lifetime",
+            )
 
-    def to_dict(self) -> dict[str, int]:
-        return {"bytes": self.bytes, "alignment": self.alignment}
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "bytes": self.bytes,
+            "alignment": self.alignment,
+            "lifetime": self.lifetime,
+            "initialization": self.initialization,
+        }
 
     @classmethod
     def from_dict(cls, data: Mapping[str, object]) -> "WorkspaceRequirement":
@@ -563,6 +663,14 @@ class WorkspaceRequirement:
             bytes=_int_field(data, "bytes", "E_LAUNCH_DESCRIPTOR_SCHEMA", default=0),
             alignment=_int_field(
                 data, "alignment", "E_LAUNCH_DESCRIPTOR_SCHEMA", default=1,
+            ),
+            lifetime=(
+                _string_field(data, "lifetime", "E_LAUNCH_DESCRIPTOR_SCHEMA")
+                if "lifetime" in data else "launch"
+            ),
+            initialization=(
+                _string_field(data, "initialization", "E_LAUNCH_DESCRIPTOR_SCHEMA")
+                if "initialization" in data else "undefined"
             ),
         )
 
@@ -874,6 +982,8 @@ __all__ = [
     "BufferArgument",
     "BufferBinding",
     "COMPILE_STATES",
+    "DEVICE_LIBRARY_LINK_MODES",
+    "DeviceLibraryRecord",
     "LAUNCH_DESCRIPTOR_SCHEMA_VERSION",
     "LaunchDescriptor",
     "LaunchGeometry",

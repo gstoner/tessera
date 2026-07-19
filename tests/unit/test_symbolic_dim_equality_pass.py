@@ -305,7 +305,7 @@ def test_v2_flow_backward_compatible_with_v1() -> None:
 @pytest.mark.parametrize("pipeline", [
     "lowerToX86",
     "lowerToGPU",
-    "buildCUDA13Pipeline",
+    "addCUDA13PipelineForSM",
 ])
 def test_v6b_pass_wired_into_named_pipelines(pipeline: str) -> None:
     """The 3 named pipelines must each call

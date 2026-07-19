@@ -181,6 +181,7 @@ struct LowerWaitAsync : public RewritePattern {
     Location loc = op->getLoc();
     if (smVersion >= 90) {
       OperationState st(loc, "tile.mbarrier.wait");
+      st.addOperands(op->getOperands());
       st.addAttribute("slot", rewriter.getI64IntegerAttr(0));
       rewriter.create(st);
     } else {
@@ -201,6 +202,7 @@ struct AsyncCopyLoweringPass
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(AsyncCopyLoweringPass)
 
   AsyncCopyLoweringPass() = default;
+  explicit AsyncCopyLoweringPass(int sm) { smVersion = sm; }
   AsyncCopyLoweringPass(const AsyncCopyLoweringPass &other)
       : PassWrapper(other) {}
 
@@ -235,8 +237,8 @@ struct AsyncCopyLoweringPass
 
 } // namespace
 
-std::unique_ptr<mlir::Pass> createAsyncCopyLoweringPass() {
-  return std::make_unique<AsyncCopyLoweringPass>();
+std::unique_ptr<mlir::Pass> createAsyncCopyLoweringPass(int sm) {
+  return std::make_unique<AsyncCopyLoweringPass>(sm);
 }
 
 } // namespace tessera

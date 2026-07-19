@@ -2,7 +2,7 @@
 
 The pass used to be registered only as standalone `--tessera-layout-legality`.
 It now runs inside `tessera-lower-to-x86`, `tessera-lower-to-gpu`, and the
-`buildCUDA13Pipeline` (nvidia-pipeline) builders, so layout violations surface
+`addCUDA13PipelineForSM` (nvidia-pipeline) builders, so layout violations surface
 during real lowering. This source-level guard asserts the wiring in all three
 builders (robust to downstream-pass noise that an end-to-end lit run on every
 pipeline would hit); the x86 firing is proven end-to-end by
@@ -43,7 +43,7 @@ def test_layout_legality_in_all_three_lowering_pipelines():
     assert "createLayoutLegalityPass()" in gpu
 
     # cuda13 / nvidia-pipeline builder
-    cuda13 = _pipeline_body(src, "buildCUDA13Pipeline = ")
+    cuda13 = _pipeline_body(src, "addCUDA13PipelineForSM(")
     assert "createLayoutLegalityPass()" in cuda13
 
 
@@ -52,7 +52,7 @@ def test_layout_legality_runs_before_symbolic_dim_equality():
     surface with the other structural diagnostics."""
     src = _PASSES.read_text(encoding="utf-8")
     for anchor in ('"tessera-lower-to-x86"', '"tessera-lower-to-gpu"',
-                   "buildCUDA13Pipeline = "):
+                   "addCUDA13PipelineForSM("):
         body = _pipeline_body(src, anchor)
         assert "createLayoutLegalityPass()" in body
         assert body.index("createLayoutLegalityPass()") < \
@@ -70,7 +70,7 @@ def test_layout_assignment_is_opt_in_and_runs_before_legality():
     assert 'assign-layouts' in src
     assert 'llvm::cl::init(false)' in src
     for anchor in ('"tessera-lower-to-x86"', '"tessera-lower-to-gpu"',
-                   "buildCUDA13Pipeline = "):
+                   "addCUDA13PipelineForSM("):
         body = _pipeline_body(src, anchor)
         assert "createLayoutAssignmentPass()" in body
         # Gated on the option (never unconditionally added).

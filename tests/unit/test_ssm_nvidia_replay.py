@@ -30,6 +30,12 @@ def test_nvidia_replay_factory_wires_scalar_decode_path():
     h = rt.nvidia_ssm_replay_state_handle(1, 4, 3, -np.ones(4), capacity=8)
     assert isinstance(h, SSMStateHandle)
     assert h.backend == "nvidia_sm120_replay_device"
+    descriptor = h._state_descriptor
+    assert descriptor.workspace.lifetime == "session"
+    assert descriptor.workspace.initialization == "preserve"
+    assert descriptor.ordering.synchronization[-1] == "teardown_drains_pending"
+    assert descriptor.workspace.bytes > descriptor.checkpoint_bytes
+    assert descriptor.pinned_host_bytes > 0
     # The CUDA device state binds only on a CUDA-ready host; off-device the
     # factory declines cleanly to the reference mirror (_device is None).
     if nvidia_cuda_host_ready():
@@ -42,6 +48,13 @@ def test_nvidia_replay_factory_rejects_single_async_slot():
     with pytest.raises(ValueError, match="at least two slots"):
         rt.nvidia_ssm_replay_state_handle(
             1, 4, 3, -np.ones(4), capacity=8, async_slots=1)
+
+
+def test_nvidia_replay_descriptor_rejects_out_of_ring_span_before_submission():
+    h = rt.nvidia_ssm_replay_state_handle(
+        1, 4, 3, -np.ones(4), capacity=8, async_slots=2)
+    with pytest.raises(ValueError, match="contained in the persistent ring"):
+        h._state_descriptor.validate_span(start=7, tokens=2)
 
 
 def test_nvidia_replay_decode_matches_eager_or_falls_back():

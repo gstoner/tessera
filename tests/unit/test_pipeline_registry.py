@@ -330,9 +330,15 @@ def test_declared_target_pipelines_have_registered_pass_ownership() -> None:
         assert resolution.level_c in {"complete", "absent"}
         source = REPO_ROOT / resolution.registration_source
         assert source.is_file(), resolution
+        driver_source = REPO_ROOT / (
+            resolution.driver_registration_source or resolution.registration_source
+        )
+        assert driver_source.is_file(), resolution
         if resolution.current_driver_pipeline != "tessera-target-artifact":
             assert pipeline_lookup(resolution.current_driver_pipeline) is not None
-            assert resolution.current_driver_pipeline in source.read_text(errors="replace")
+            assert resolution.current_driver_pipeline in driver_source.read_text(
+                errors="replace"
+            )
         if not resolution.has_declared_pipeline:
             assert resolution.resolution_state == "unsupported_no_exact_pipeline"
             continue
@@ -343,19 +349,28 @@ def test_declared_target_pipelines_have_registered_pass_ownership() -> None:
         assert resolution.declared_pipeline in source.read_text(errors="replace")
 
 
-def test_shared_nvidia_aliases_report_the_actual_shared_builder_passes() -> None:
-    aliases = [
-        pipeline_lookup("tessera-nvidia-pipeline"),
-        pipeline_lookup("tessera-nvidia-pipeline-sm90"),
-        pipeline_lookup("tessera-nvidia-pipeline-sm100"),
-        pipeline_lookup("tessera-nvidia-pipeline-sm120"),
-    ]
-    assert all(alias is not None for alias in aliases)
-    assert len({alias.passes for alias in aliases if alias is not None}) == 1
-    for target in ("nvidia_sm100", "nvidia_sm120"):
+def test_nvidia_aliases_and_backend_producers_are_exact_sm() -> None:
+    default = pipeline_lookup("tessera-nvidia-pipeline")
+    sm90 = pipeline_lookup("tessera-nvidia-pipeline-sm90")
+    sm100 = pipeline_lookup("tessera-nvidia-pipeline-sm100")
+    sm120 = pipeline_lookup("tessera-nvidia-pipeline-sm120")
+    assert all(item is not None for item in (default, sm90, sm100, sm120))
+    assert default is not None and sm90 is not None
+    assert sm100 is not None and sm120 is not None
+    assert default.passes == sm90.passes
+    for blackwell in (sm100, sm120):
+        assert "tessera-wgmma-lowering" not in blackwell.passes
+        assert "tessera-nv-flash-attn-emitter" not in blackwell.passes
+        assert blackwell.passes != sm90.passes
+    for target, producer in (
+        ("nvidia_sm90", "tessera-lower-to-nvidia-sm90"),
+        ("nvidia_sm100", "tessera-lower-to-nvidia-sm100"),
+        ("nvidia_sm120", "tessera-lower-to-nvidia-sm120"),
+    ):
         resolution = target_pipeline_lookup(target)
         assert resolution is not None
-        assert resolution.resolution_state == "declared_shared_builder"
+        assert resolution.resolution_state == "declared_exact"
+        assert resolution.declared_pipeline == producer
 
 
 def test_compilation_spine_inventory_is_machine_readable_and_truthful() -> None:

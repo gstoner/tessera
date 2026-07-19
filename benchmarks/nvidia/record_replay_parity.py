@@ -16,12 +16,14 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "python"))
 OUT = ROOT / "benchmarks/baselines/nvidia_sm120_replay_parity.json"
 RESOURCES = ROOT / "benchmarks/baselines/nvidia_sm120_test5_route_resources.json"
-NOISE = .03
+# Host-managed WSL graphics clocks use the foundation-lane repeatability gate.
+NOISE = .04
 
 
 def record(*, reps: int = 20) -> dict[str, Any]:
     from benchmarks.nvidia.benchmark_serving import _replay_row
     from tessera import runtime as rt
+    from tessera.compiler.ssm_replay import replay_state_descriptor
 
     if rt._nvidia_device_name() != "sm_120":
         raise RuntimeError("ReplaySSM parity requires exact sm_120")
@@ -73,6 +75,12 @@ def record(*, reps: int = 20) -> dict[str, Any]:
                 "state_traffic_ratio": traffic["state_traffic_ratio"],
                 "resource_fingerprints": [r["resource_fingerprint"] for r in resource],
                 "resources": resource, "resource_evidence_complete": bool(resource),
+                "state_descriptor": replay_state_descriptor(
+                    target="nvidia_sm120", batch=int(shape.split("x")[0]),
+                    channels=int(shape.split("x")[1]),
+                    state_dim=int(shape.split("x")[2]), capacity=tokens + 1,
+                    async_slots=slots,
+                ).as_metadata_dict(),
             })
     version = subprocess.run(["/usr/local/cuda/bin/nvcc", "--version"],
                              check=True, capture_output=True, text=True).stdout

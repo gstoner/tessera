@@ -2,7 +2,7 @@
 status: Normative
 classification: Normative
 authority: Compiler native-image and launch schema
-last_updated: 2026-07-18
+last_updated: 2026-07-19
 ---
 
 # Native image and launch descriptor specification
@@ -29,7 +29,10 @@ orchestration are `python/tessera/compiler/driver.py`,
 A `NativeImageArtifact` records the canonical target, exact architecture,
 registered pipeline, compiler and toolchain fingerprints, Target-IR digest,
 registered binary format, native bytes, entry points, compile state, and an
-optional resource record.
+optional resource record. It also carries the ordered device-library set used
+at the LLVM stage. Each record contains a backend-owned logical name, SHA-256
+content digest, and one registered link mode (`llvm_link_only_needed`,
+`compiler_driver`, or `embedded`); host installation paths are not serialized.
 
 Three SHA-256 identities are distinct:
 
@@ -37,6 +40,11 @@ Three SHA-256 identities are distinct:
 2. `image_digest` hashes immutable image identity plus `payload_digest`.
 3. `cache_key` hashes the pre-compilation inputs used to find a compatible
    image. Cold/warm/prepackaged state and measured resources do not affect it.
+
+Device-library records participate in both image and cache identity. A changed
+CUDA libdevice or ROCm OCML/OCKL/OCLC input therefore cannot reuse an image
+compiled against different device bitcode. The optional empty v1 field keeps
+older serialized artifacts readable; reserialization writes the explicit set.
 
 Deserialization recomputes all three and rejects drift. Supported v1 formats
 are `ptx`, `cubin`, `hsaco`, `elf`, `object`, `shared_object`, `metallib`, and
@@ -51,9 +59,17 @@ and power-of-two alignment. Shape guards support `eq`, `min`, `max`, and
 `multiple_of` predicates.
 
 Launch geometry is either fixed three-dimensional grid/workgroup data or one
-registered runtime-computed policy. Dynamic local memory, workspace bytes and
-alignment, ordered submission, residency, synchronization tokens, and JSON-safe
-provenance are explicit.
+registered runtime-computed policy. Dynamic local memory, workspace bytes,
+alignment, lifetime (`launch` or `session`), initialization (`undefined`,
+`zero`, or session-only `preserve`), ordered submission, residency,
+synchronization tokens, and JSON-safe provenance are explicit. Session
+workspace belongs to a stateful runtime handle and must survive every launch in
+that handle until its teardown protocol drains outstanding work.
+`ordered_submission` describes host queue/stream submission only. It does not
+claim an intra-kernel memory order, atomicity for vector or packed accesses, or
+a backend fence/scope. Those properties belong to typed Target IR and the
+backend memory model; for PTX in particular, packed/vector accesses decompose
+into scalar operations whose element order is unspecified.
 
 `descriptor_digest` fingerprints the full descriptor. `cache_fingerprint`
 binds that descriptor to its image digest. Runtime invocation validation checks

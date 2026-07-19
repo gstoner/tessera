@@ -147,6 +147,18 @@ REGISTERED_DIALECTS: tuple[DialectSpec, ...] = (
         sprint="V8",
     ),
     DialectSpec(
+        name="tessera_nvidia",
+        target="TesseraNVIDIAIR",
+        header="src/compiler/codegen/tessera_gpu_backend_NVIDIA/include/tessera/gpu/BackendRegistration.h",
+        cpp_dir="src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion",
+        register_fn="tessera::registerTesseraNVIDIABackendDialects",
+        cmake_flag=None,
+        eager_load_parent=None,
+        has_typedefs=False,
+        standalone_lit_parseable=True,
+        sprint="NVIDIA-E2E-2",
+    ),
+    DialectSpec(
         name="tessera_rocm",
         target="TesseraROCMDialect",
         header="src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/IR/TesseraROCMDialect.td",

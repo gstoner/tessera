@@ -382,7 +382,7 @@ def build_cpu_plan(
     if output_name is None:
         return None
 
-    graph_text = module.to_mlir()
+    graph_text = module.to_mlir(target=target_kind)
     ops = tuple(fn.body)
     selected_schedule = _select_schedule(fn, ops, tile=tile, target_kind=target_kind)
     schedule = _render_schedule_ir(module, fn, ops, tile=tile, target_kind=target_kind)

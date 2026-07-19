@@ -23,7 +23,14 @@ from typing import Any, Mapping
 
 from .graph_ir import GraphIRModule
 from .capabilities import CAPABILITY_REGISTRY_VERSION, supports_op
-from .matmul_pipeline import CPUPlan, JitDiagnostic, LoweringArtifact, build_cpu_plan, explain_cpu_plan, normalize_target_kind
+from .matmul_pipeline import (
+    CPUPlan,
+    JitDiagnostic,
+    LoweringArtifact,
+    build_cpu_plan,
+    explain_cpu_plan,
+    normalize_target_kind,
+)
 from .pipeline_registry import current_driver_pipeline_map, target_pipeline_lookup
 from .native_artifact import LaunchDescriptor, NativeImageArtifact
 
@@ -166,8 +173,7 @@ class CompileArtifactBundle:
             resolution = target_pipeline_lookup(self.request.target)
             declared_producer = (
                 resolution.declared_pipeline
-                if resolution is not None
-                and self.request.pipeline_name == resolution.current_driver_pipeline
+                if resolution is not None and self.request.pipeline_name == resolution.current_driver_pipeline
                 else None
             )
             if self.native_image.pipeline_name != declared_producer:
@@ -193,7 +199,11 @@ class CompileArtifactBundle:
         return None
 
     def lowering_artifacts(self) -> tuple[LoweringArtifact, ...]:
-        return tuple(artifact for artifact in (self.graph, self.schedule, self.tile, self.target_ir, self.backend) if artifact is not None)
+        return tuple(
+            artifact
+            for artifact in (self.graph, self.schedule, self.tile, self.target_ir, self.backend)
+            if artifact is not None
+        )
 
     @property
     def artifact_hashes(self) -> dict[str, str]:
@@ -217,37 +227,45 @@ class CompileArtifactBundle:
         """Deterministic stage ledger for canonical orchestration consumers."""
         stages: list[dict[str, Any]] = []
         for name, artifact in (
-            ("graph", self.graph), ("schedule", self.schedule),
-            ("tile", self.tile), ("target", self.target_ir),
+            ("graph", self.graph),
+            ("schedule", self.schedule),
+            ("tile", self.tile),
+            ("target", self.target_ir),
             ("backend", self.backend),
         ):
-            stages.append({
-                "stage": name,
-                "status": "complete" if artifact is not None else "not_produced",
-                "digest": stable_hash(artifact.text) if artifact is not None else None,
-            })
-        stages.extend((
-            {
-                "stage": "native_image",
-                "status": "complete" if self.native_image is not None else "not_produced",
-                "digest": self.native_image.image_digest if self.native_image is not None else None,
-            },
-            {
-                "stage": "launch_descriptor",
-                "status": "complete" if self.launch_descriptor is not None else "not_produced",
-                "digest": (
-                    self.launch_descriptor.descriptor_digest
-                    if self.launch_descriptor is not None else None
-                ),
-            },
-        ))
+            stages.append(
+                {
+                    "stage": name,
+                    "status": "complete" if artifact is not None else "not_produced",
+                    "digest": stable_hash(artifact.text) if artifact is not None else None,
+                }
+            )
+        stages.extend(
+            (
+                {
+                    "stage": "native_image",
+                    "status": "complete" if self.native_image is not None else "not_produced",
+                    "digest": self.native_image.image_digest if self.native_image is not None else None,
+                },
+                {
+                    "stage": "launch_descriptor",
+                    "status": "complete" if self.launch_descriptor is not None else "not_produced",
+                    "digest": (
+                        self.launch_descriptor.descriptor_digest if self.launch_descriptor is not None else None
+                    ),
+                },
+            )
+        )
         return tuple(stages)
 
     def trace_json(self) -> str:
         return json.dumps([event.to_dict() for event in self.trace_events], sort_keys=True)
 
     def chrome_trace_json(self) -> str:
-        return json.dumps({"traceEvents": [event.to_chrome_trace_event(tid=i) for i, event in enumerate(self.trace_events)]}, sort_keys=True)
+        return json.dumps(
+            {"traceEvents": [event.to_chrome_trace_event(tid=i) for i, event in enumerate(self.trace_events)]},
+            sort_keys=True,
+        )
 
     def to_metadata(self) -> dict[str, Any]:
         artifact_hashes = self.artifact_hashes
@@ -291,12 +309,9 @@ class CompileArtifactBundle:
             "tool_invocations": [invocation.to_dict() for invocation in self.tool_invocations],
             "orchestration_state": self.orchestration_state,
             "spine_stages": list(self.spine_stages()),
-            "native_image_digest": (
-                self.native_image.image_digest if self.native_image is not None else None
-            ),
+            "native_image_digest": (self.native_image.image_digest if self.native_image is not None else None),
             "launch_descriptor_digest": (
-                self.launch_descriptor.descriptor_digest
-                if self.launch_descriptor is not None else None
+                self.launch_descriptor.descriptor_digest if self.launch_descriptor is not None else None
             ),
         }
 
@@ -322,8 +337,12 @@ def compile_graph_module(
     # driver cycle.
     if target_kind in ("apple_gpu", "apple_cpu"):
         from .canonical_compile import stamp_fusion_intents
+
         stamp_fusion_intents(module)
-    graph_text = module.to_mlir()
+    # Capability legality belongs to the requested compilation target.  The
+    # Graph IR verifier defaults to CPU for standalone callers, so the driver
+    # must carry its normalized target through this pre-lowering verification.
+    graph_text = module.to_mlir(target=target_kind)
     function_name = module.functions[0].name if module.functions else "<unknown>"
     request = CompileRequest(
         source_origin=source_origin,
@@ -347,16 +366,18 @@ def compile_graph_module(
     status = "ok" if cpu_plan is not None else "fallback"
     execution_mode = _execution_mode_for(target_kind, cpu_plan is not None)
     execution_kind = _execution_kind_for(target_kind, cpu_plan)
-    trace_events.append(CompileTraceEvent(
-        pass_name="python-frontend-artifact-builder",
-        target=target_kind,
-        input_hash=stable_hash(graph_text),
-        output_hash=stable_hash(output_text),
-        elapsed_ms=elapsed_ms,
-        status=status,
-        diagnostic_count=len(diagnostics),
-        metadata={"pipeline_name": request.pipeline_name, "execution_mode": execution_mode},
-    ))
+    trace_events.append(
+        CompileTraceEvent(
+            pass_name="python-frontend-artifact-builder",
+            target=target_kind,
+            input_hash=stable_hash(graph_text),
+            output_hash=stable_hash(output_text),
+            elapsed_ms=elapsed_ms,
+            status=status,
+            diagnostic_count=len(diagnostics),
+            metadata={"pipeline_name": request.pipeline_name, "execution_mode": execution_mode},
+        )
+    )
 
     if enable_tool_validation:
         invocation, event = _try_validate_with_tessera_opt(request)
@@ -370,9 +391,7 @@ def compile_graph_module(
     backend_artifact = _backend_artifact_for(target_kind, cpu_plan)
 
     executable = cpu_plan is not None and (
-        target_kind == "cpu"
-        or _is_apple_cpu_accelerate_executable(cpu_plan)
-        or _is_apple_gpu_mps_executable(cpu_plan)
+        target_kind == "cpu" or _is_apple_cpu_accelerate_executable(cpu_plan) or _is_apple_gpu_mps_executable(cpu_plan)
     )
     if executable:
         runtime_status = "ready"
@@ -390,13 +409,13 @@ def compile_graph_module(
     # artifact (so to_runtime_artifact routes to apple_value_target_ir). Default
     # (artifact) behavior is untouched — no opt-in, no change.
     value_mode_error: str | None = None
-    if str((options or {}).get("apple_target_ir_mode", "")) == "value" \
-            and target_kind in ("apple_cpu", "apple_gpu"):
+    if str((options or {}).get("apple_target_ir_mode", "")) == "value" and target_kind in ("apple_cpu", "apple_gpu"):
         # Feed the *canonical* (parseable custom-assembly) Graph IR straight to
         # the value pipeline — no text rewrite. `graph_text` above is the paren
         # form kept for hashing / display; the canonical render is parser-ready.
         value_ir, value_mode_error = _lower_apple_value_target_ir(
-            module.to_mlir(verify=False, canonical=True), target_kind)
+            module.to_mlir(verify=False, canonical=True), target_kind
+        )
         if value_ir:
             target_artifact = LoweringArtifact("target", value_ir)
             # CPU value calls are executable now; the GPU value row stays gated
@@ -409,6 +428,101 @@ def compile_graph_module(
         # Sprint 4 (S4): a failure (value_mode_error set) is recorded on the
         # bundle and surfaced as apple_value_target_ir_error — the artifact IR
         # is preserved but the failure is observable, never silent.
+
+    native_image: NativeImageArtifact | None = None
+    launch_descriptor: LaunchDescriptor | None = None
+    if target_kind == "nvidia_sm120" and bool((options or {}).get("package_native", False)):
+        from .nvidia_native import (
+            package_attention,
+            package_attention_backward,
+            package_paged_kv_read,
+            package_matmul,
+            package_mx_matmul,
+            package_nvfp4_matmul,
+            package_reduction,
+            package_softmax,
+            requests_mx_matmul,
+            requests_attention,
+            requests_attention_backward,
+            requests_paged_kv_read,
+            requests_nvfp4_matmul,
+            requests_reduction,
+            requests_softmax,
+        )
+
+        resolution = target_pipeline_lookup(target_kind)
+        producer = (
+            (resolution.declared_pipeline or request.pipeline_name) if resolution is not None else request.pipeline_name
+        )
+        package_start = time.perf_counter()
+        is_nvfp4 = requests_nvfp4_matmul(module)
+        is_mx = requests_mx_matmul(module)
+        is_attention = requests_attention(module)
+        is_attention_backward = requests_attention_backward(module)
+        is_paged_kv = requests_paged_kv_read(module)
+        is_softmax = requests_softmax(module)
+        is_reduction = requests_reduction(module)
+        if is_attention_backward:
+            package = package_attention_backward(module, pipeline_name=producer)
+            package_dtype = package.descriptor.buffers[0].dtype
+        elif is_paged_kv:
+            package = package_paged_kv_read(module, pipeline_name=producer)
+            package_dtype = package.descriptor.buffers[0].dtype
+        elif is_attention:
+            package = package_attention(module, pipeline_name=producer)
+            package_dtype = package.descriptor.buffers[0].dtype
+        elif is_softmax:
+            package = package_softmax(module, pipeline_name=producer)
+            package_dtype = package.descriptor.buffers[0].dtype
+        elif is_reduction:
+            package = package_reduction(
+                module, pipeline_name=producer,
+                schedule=str((options or {}).get("nvidia_reduction_schedule", "serial")),
+            )
+            package_dtype = package.descriptor.buffers[0].dtype
+        elif is_nvfp4:
+            package = package_nvfp4_matmul(module, pipeline_name=producer)
+            package_dtype = "nvfp4"
+        elif is_mx:
+            package = package_mx_matmul(module, pipeline_name=producer)
+            storage_value = package.descriptor.provenance["storage"]
+            if not isinstance(storage_value, str):
+                raise RuntimeError("SM120 MX package provenance is missing string storage")
+            package_dtype = storage_value
+        else:
+            package = package_matmul(
+                module,
+                pipeline_name=producer,
+                schedule=str((options or {}).get("nvidia_schedule", "auto")),
+            )
+            package_dtype = package.descriptor.buffers[0].dtype
+        tile = LoweringArtifact("tile", package.tile_ir)
+        target_artifact = LoweringArtifact("target", package.target_ir)
+        backend_artifact = LoweringArtifact("backend", package.backend_ir)
+        native_image = package.image
+        launch_descriptor = package.descriptor
+        executable = True
+        runtime_status = "ready"
+        execution_mode = "native_descriptor"
+        execution_kind = "native_gpu"
+        trace_events.append(
+            CompileTraceEvent(
+                pass_name="nvidia-sm120-native-package",
+                target=target_kind,
+                input_hash=stable_hash(package.tile_ir),
+                output_hash=package.image.image_digest,
+                elapsed_ms=(time.perf_counter() - package_start) * 1000.0,
+                status="ok",
+                metadata={
+                    "pipeline_name": producer,
+                    "binary_format": package.image.binary_format,
+                    "compile_state": package.image.compile_state,
+                    "entry_symbol": package.descriptor.entry_symbol,
+                    "dtype": package_dtype,
+                    "op_family": "softmax" if is_softmax else "matmul",
+                },
+            )
+        )
 
     bundle = CompileArtifactBundle(
         request=request,
@@ -426,6 +540,8 @@ def compile_graph_module(
         tool_invocations=tuple(tool_invocations),
         cpu_plan=cpu_plan,
         value_mode_error=value_mode_error,
+        native_image=native_image,
+        launch_descriptor=launch_descriptor,
     )
     _maybe_dump_debug_artifacts(bundle)
     return bundle
@@ -465,10 +581,12 @@ def _is_native_cpu_gemm_plan(cpu_plan: CPUPlan | None) -> bool:
     return cpu_plan.ops[0].op_name in {"tessera.matmul", "tessera.gemm"}
 
 
-_APPLE_CPU_ACCELERATE_OPS: frozenset[str] = frozenset({
-    "tessera.matmul",
-    "tessera.gemm",
-})
+_APPLE_CPU_ACCELERATE_OPS: frozenset[str] = frozenset(
+    {
+        "tessera.matmul",
+        "tessera.gemm",
+    }
+)
 
 
 def is_apple_cpu_accelerate_op(op_name: str) -> bool:
@@ -553,22 +671,22 @@ _APPLE_ATTR_RE = re.compile(r'(\w+)\s*=\s*"((?:\\.|[^"\\])*)"')
 # the extractor must surface them — runtime dispatch must not assume defaults.
 _APPLE_BOOL_ATTR_RE = re.compile(r"(\w+)\s*=\s*(true|false)\b")
 _APPLE_INT_ATTR_RE = re.compile(r"(\w+)\s*=\s*(-?\d+)\b")
-_APPLE_FLOAT_ATTR_RE = re.compile(
-    r"(\w+)\s*=\s*(-?(?:\d+\.\d*|\d*\.\d+)(?:[eE][+-]?\d+)?)\s*:\s*f(?:32|64)\b"
-)
+_APPLE_FLOAT_ATTR_RE = re.compile(r"(\w+)\s*=\s*(-?(?:\d+\.\d*|\d*\.\d+)(?:[eE][+-]?\d+)?)\s*:\s*f(?:32|64)\b")
 
-_APPLE_VALUE_CPU_EXECUTABLE_SYMBOLS: frozenset[str] = frozenset({
-    "tessera_apple_cpu_cholesky_f32",
-    "tessera_apple_cpu_tri_solve_f32",
-    "tessera_apple_cpu_cholesky_solve_f32",
-    "tessera_apple_cpu_lu_f32",
-    "tessera_apple_cpu_qr_f32",
-    "tessera_apple_cpu_svd_f32",
-    "tessera_apple_cpu_gemm_f32",
-    "tessera_apple_cpu_gemm_f32_batched",
-    "tessera_apple_cpu_gemm_f16",
-    "tessera_apple_cpu_gemm_bf16",
-})
+_APPLE_VALUE_CPU_EXECUTABLE_SYMBOLS: frozenset[str] = frozenset(
+    {
+        "tessera_apple_cpu_cholesky_f32",
+        "tessera_apple_cpu_tri_solve_f32",
+        "tessera_apple_cpu_cholesky_solve_f32",
+        "tessera_apple_cpu_lu_f32",
+        "tessera_apple_cpu_qr_f32",
+        "tessera_apple_cpu_svd_f32",
+        "tessera_apple_cpu_gemm_f32",
+        "tessera_apple_cpu_gemm_f32_batched",
+        "tessera_apple_cpu_gemm_f16",
+        "tessera_apple_cpu_gemm_bf16",
+    }
+)
 
 # Stage 16D: Apple GPU value executable truth is per C ABI symbol, not per op
 # family. Symbols with status-returning/probed runtime helpers use those probes;
@@ -583,16 +701,11 @@ _APPLE_VALUE_GPU_SYMBOL_PROBES: Mapping[str, str] = {
     "tessera_apple_gpu_native_sparse_attn_f32": "_apple_gpu_native_sparse_attn_f32",
     "tessera_apple_gpu_ppo_policy_loss_f32": "_apple_gpu_ppo_policy_loss_available",
     "tessera_apple_gpu_ppo_policy_loss_ex_f32": "_apple_gpu_ppo_policy_loss_ex_available",
-    "tessera_apple_gpu_ebm_energy_quadratic_value_f32":
-        "_apple_gpu_ebm_energy_quadratic_value_available",
-    "tessera_apple_gpu_ebm_langevin_step_value_f32":
-        "_apple_gpu_ebm_langevin_step_value_available",
-    "tessera_apple_gpu_ebm_refinement_value_f32":
-        "_apple_gpu_ebm_refinement_value_available",
-    "tessera_apple_gpu_ebm_partition_exact_value_f32":
-        "_apple_gpu_ebm_partition_exact_value_available",
-    "tessera_apple_gpu_clifford_geo_product_cl30_value_f32":
-        "_apple_gpu_clifford_geo_product_cl30_value_available",
+    "tessera_apple_gpu_ebm_energy_quadratic_value_f32": "_apple_gpu_ebm_energy_quadratic_value_available",
+    "tessera_apple_gpu_ebm_langevin_step_value_f32": "_apple_gpu_ebm_langevin_step_value_available",
+    "tessera_apple_gpu_ebm_refinement_value_f32": "_apple_gpu_ebm_refinement_value_available",
+    "tessera_apple_gpu_ebm_partition_exact_value_f32": "_apple_gpu_ebm_partition_exact_value_available",
+    "tessera_apple_gpu_clifford_geo_product_cl30_value_f32": "_apple_gpu_clifford_geo_product_cl30_value_available",
 }
 
 
@@ -666,9 +779,7 @@ def extract_apple_value_calls(ir_text: str) -> list[dict[str, object]]:
     """
     calls: list[dict[str, object]] = []
     for op_name, attr_blob in _scan_value_call_attr_dicts(ir_text):
-        attrs: dict[str, object] = {
-            k: v for k, v in _APPLE_ATTR_RE.findall(attr_blob)
-        }
+        attrs: dict[str, object] = {k: v for k, v in _APPLE_ATTR_RE.findall(attr_blob)}
         # Bool attrs (unquoted) — don't clobber a same-named string attr.
         for k, v in _APPLE_BOOL_ATTR_RE.findall(attr_blob):
             attrs.setdefault(k, v == "true")
@@ -825,8 +936,11 @@ def _apple_gpu_chain_kind(cpu_plan: CPUPlan | None) -> str | None:
             and m_up.op_name in {"tessera.matmul", "tessera.gemm"}
             and sm_op.op_name == "tessera.silu_mul"
             and m_down.op_name in {"tessera.matmul", "tessera.gemm"}
-            and m_gate.result and m_up.result and sm_op.result
-            and len(m_gate.operands) >= 1 and len(m_up.operands) >= 1
+            and m_gate.result
+            and m_up.result
+            and sm_op.result
+            and len(m_gate.operands) >= 1
+            and len(m_up.operands) >= 1
             and m_gate.operands[0] == m_up.operands[0]  # shared %x
             and len(sm_op.operands) == 2
             and _operand_matches(sm_op, m_gate.result)  # silu_mul[0] == gate
@@ -846,24 +960,24 @@ def _apple_gpu_chain_kind(cpu_plan: CPUPlan | None) -> str | None:
     # `swiglu` above (fused silu_mul op + down-projection).
     if len(ops) == 4:
         _MM = {"tessera.matmul", "tessera.gemm"}
-        _ACTS = {"tessera.silu", "tessera.gelu", "tessera.relu",
-                 "tessera.sigmoid", "tessera.tanh"}
+        _ACTS = {"tessera.silu", "tessera.gelu", "tessera.relu", "tessera.sigmoid", "tessera.tanh"}
         _MULS = {"tessera.mul", "tessera.multiply"}
         mm_idx = [k for k in range(4) if ops[k].op_name in _MM]
         act_idx = [k for k in range(4) if ops[k].op_name in _ACTS]
         mul_idx = [k for k in range(4) if ops[k].op_name in _MULS]
         if len(mm_idx) == 2 and len(act_idx) == 1 and len(mul_idx) == 1:
             act, mul = ops[act_idx[0]], ops[mul_idx[0]]
-            if (act.operands and act.result and len(mul.operands) == 2):
+            if act.operands and act.result and len(mul.operands) == 2:
                 act_in = act.operands[0].lstrip("%")
-                gate_mm = next(
-                    (ops[k] for k in mm_idx
-                     if ops[k].result and ops[k].result == act_in), None)
+                gate_mm = next((ops[k] for k in mm_idx if ops[k].result and ops[k].result == act_in), None)
                 if gate_mm is not None:
                     up_mm = next(ops[k] for k in mm_idx if ops[k] is not gate_mm)
-                    if (gate_mm.operands and up_mm.operands and up_mm.result
-                            and gate_mm.operands[0].lstrip("%")
-                            == up_mm.operands[0].lstrip("%")):
+                    if (
+                        gate_mm.operands
+                        and up_mm.operands
+                        and up_mm.result
+                        and gate_mm.operands[0].lstrip("%") == up_mm.operands[0].lstrip("%")
+                    ):
                         mul_ins = {o.lstrip("%") for o in mul.operands}
                         if mul_ins == {act.result, up_mm.result}:
                             return "gated_matmul"
@@ -875,7 +989,8 @@ def _apple_gpu_chain_kind(cpu_plan: CPUPlan | None) -> str | None:
             m1.op_name in {"tessera.matmul", "tessera.gemm"}
             and sm.op_name in {"tessera.softmax", "tessera.softmax_safe"}
             and m2.op_name in {"tessera.matmul", "tessera.gemm"}
-            and m1.result and sm.result
+            and m1.result
+            and sm.result
             and _operand_matches(sm, m1.result)
             and _operand_matches(m2, sm.result)
             and _softmax_axis_ok(sm)
@@ -891,20 +1006,22 @@ def _apple_gpu_chain_kind(cpu_plan: CPUPlan | None) -> str | None:
     # either way correct, and a strict win over the all-numpy eager path these
     # multi-op chains hit today.
     _MM = {"tessera.matmul", "tessera.gemm"}
-    _ACT = {"tessera.gelu": "matmul_bias_gelu", "tessera.relu": "matmul_bias_relu",
-            "tessera.silu": "matmul_bias_silu"}
+    _ACT = {"tessera.gelu": "matmul_bias_gelu", "tessera.relu": "matmul_bias_relu", "tessera.silu": "matmul_bias_silu"}
     if len(ops) == 3:
         m, addop, act = ops[0], ops[1], ops[2]
-        if (m.op_name in _MM and addop.op_name == "tessera.add"
-                and m.result and addop.result
-                and _operand_matches(addop, m.result)
-                and _operand_matches(act, addop.result)
-                and act.op_name in _ACT):
+        if (
+            m.op_name in _MM
+            and addop.op_name == "tessera.add"
+            and m.result
+            and addop.result
+            and _operand_matches(addop, m.result)
+            and _operand_matches(act, addop.result)
+            and act.op_name in _ACT
+        ):
             return _ACT[act.op_name]
     if len(ops) == 2:
         m, addop = ops[0], ops[1]
-        if (m.op_name in _MM and addop.op_name == "tessera.add"
-                and m.result and _operand_matches(addop, m.result)):
+        if m.op_name in _MM and addop.op_name == "tessera.add" and m.result and _operand_matches(addop, m.result):
             return "matmul_bias"
 
     # Phase 8.4.3 + 8.4.7: 2-op fusions. matmul -> {softmax | gelu | rmsnorm}.
@@ -915,8 +1032,7 @@ def _apple_gpu_chain_kind(cpu_plan: CPUPlan | None) -> str | None:
             and first.result
             and _operand_matches(second, first.result)
         ):
-            if second.op_name in {"tessera.softmax", "tessera.softmax_safe"} \
-                    and _softmax_axis_ok(second):
+            if second.op_name in {"tessera.softmax", "tessera.softmax_safe"} and _softmax_axis_ok(second):
                 return "matmul_softmax"
             if second.op_name == "tessera.gelu":
                 return "matmul_gelu"
@@ -932,6 +1048,7 @@ def _apple_gpu_chain_kind(cpu_plan: CPUPlan | None) -> str | None:
     # routing recognizer and the prepass discoverer never drift.
     if len(ops) >= 2:
         from .fusion import is_pointwise_op
+
         if all(is_pointwise_op(op.op_name) for op in ops):
             return "pointwise"
 
@@ -953,17 +1070,19 @@ def _backend_artifact_for(target_kind: str, cpu_plan: CPUPlan | None) -> Lowerin
     if cpu_plan is None:
         return None
     if target_kind == "apple_cpu":
-        text = "\n".join([
-            'module attributes {tessera.ir.level = "backend", target = "apple_cpu", execution_mode = "cpu_accelerate"} {',
-            '  "tessera_apple.cpu.runtime_pipeline"() {',
-            '    pipeline = "tessera-lower-to-apple_cpu-runtime",',
-            '    symbol = "tessera_apple_cpu_gemm_f32",',
-            '    framework = "Accelerate",',
-            '    abi = "cblas_sgemm",',
-            '    dtype = "f32"',
-            '  } : () -> ()',
-            "}",
-        ])
+        text = "\n".join(
+            [
+                'module attributes {tessera.ir.level = "backend", target = "apple_cpu", execution_mode = "cpu_accelerate"} {',
+                '  "tessera_apple.cpu.runtime_pipeline"() {',
+                '    pipeline = "tessera-lower-to-apple_cpu-runtime",',
+                '    symbol = "tessera_apple_cpu_gemm_f32",',
+                '    framework = "Accelerate",',
+                '    abi = "cblas_sgemm",',
+                '    dtype = "f32"',
+                "  } : () -> ()",
+                "}",
+            ]
+        )
         return LoweringArtifact("backend", text)
     if target_kind == "apple_gpu" and _is_apple_gpu_mps_executable(cpu_plan):
         # Pick the runtime symbol/framework pair based on which op (or chain)
@@ -1018,8 +1137,7 @@ def _backend_artifact_for(target_kind: str, cpu_plan: CPUPlan | None) -> Lowerin
             symbol = "tessera_apple_gpu_per_op_metal"
             framework = "Metal"
             abi = "MSLComputePipelineState"
-        elif chain in {"matmul_bias", "matmul_bias_gelu", "matmul_bias_relu",
-                       "matmul_bias_silu"}:
+        elif chain in {"matmul_bias", "matmul_bias_gelu", "matmul_bias_relu", "matmul_bias_silu"}:
             # P6 — linear+bias(+act) fused via the MPP matmul2d epilogue (f16/bf16).
             dtype_suffix = _apple_gpu_matmul_dtype_suffix(cpu_plan)
             symbol = f"tessera_apple_gpu_mtl4_matmul2d_epilogue_{dtype_suffix}"
@@ -1065,20 +1183,23 @@ def _backend_artifact_for(target_kind: str, cpu_plan: CPUPlan | None) -> Lowerin
                 symbol = "tessera_apple_gpu_unknown"
                 framework = "Metal"
                 abi = "unknown"
-        descriptor_line = (f'    fused_epilogue = "{fused_epilogue}",'
-                           if fused_epilogue is not None else None)
-        text = "\n".join(line for line in [
-            'module attributes {tessera.ir.level = "backend", target = "apple_gpu", execution_mode = "metal_runtime"} {',
-            '  "tessera_apple.gpu.runtime_pipeline"() {',
-            '    pipeline = "tessera-lower-to-apple_gpu-runtime",',
-            f'    symbol = "{symbol}",',
-            descriptor_line,
-            f'    framework = "{framework}",',
-            f'    abi = "{abi}",',
-            '    dtype = "f32"',
-            '  } : () -> ()',
-            "}",
-        ] if line is not None)
+        descriptor_line = f'    fused_epilogue = "{fused_epilogue}",' if fused_epilogue is not None else None
+        text = "\n".join(
+            line
+            for line in [
+                'module attributes {tessera.ir.level = "backend", target = "apple_gpu", execution_mode = "metal_runtime"} {',
+                '  "tessera_apple.gpu.runtime_pipeline"() {',
+                '    pipeline = "tessera-lower-to-apple_gpu-runtime",',
+                f'    symbol = "{symbol}",',
+                descriptor_line,
+                f'    framework = "{framework}",',
+                f'    abi = "{abi}",',
+                '    dtype = "f32"',
+                "  } : () -> ()",
+                "}",
+            ]
+            if line is not None
+        )
         return LoweringArtifact("backend", text)
     return None
 
@@ -1205,9 +1326,7 @@ def _resolve_tessera_opt() -> str | None:
     return None
 
 
-def _lower_apple_value_target_ir(
-    graph_text: str, target_kind: str
-) -> tuple[str | None, str | None]:
+def _lower_apple_value_target_ir(graph_text: str, target_kind: str) -> tuple[str | None, str | None]:
     """Run the value-preserving ``tessera-lower-to-apple_{cpu,gpu}-full``
     pipeline; return ``(value_ir, error_reason)``.
 
@@ -1234,9 +1353,7 @@ def _lower_apple_value_target_ir(
         # unregistered, tessera-opt would now fail loudly (the guard test
         # `test_apple_value_lowering_uses_no_unregistered_dialect_flag` enforces
         # this is never reintroduced).
-        proc = subprocess.run(
-            [tool, f"-{pipeline}", "-"],
-            input=parse_text, capture_output=True, text=True, timeout=60)
+        proc = subprocess.run([tool, f"-{pipeline}", "-"], input=parse_text, capture_output=True, text=True, timeout=60)
     except Exception as exc:  # noqa: BLE001 — surface the reason, don't swallow
         return None, f"tessera-opt invocation failed: {exc}"
     if proc.returncode != 0:

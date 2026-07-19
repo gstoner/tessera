@@ -861,6 +861,9 @@ class TargetIRVerifier:
         elif op.op_name == "tessera_nvidia.nvfp4_block_scale_mma":
             self._require(op, diagnostics, "arch", "shape", "dtype_ab", "dtype_c",
                           "scale_a", "scale_b", "scale_dtype", "scale_vector")
+        elif op.op_name == "tessera_nvidia.mx_block_scale_mma":
+            self._require(op, diagnostics, "arch", "shape", "dtype_ab", "dtype_c",
+                          "scale_a", "scale_b", "scale_dtype", "scale_vector")
         elif op.op_name == "tessera_nvidia.tma_async_copy":
             self._require(op, diagnostics, "arch", "src_space", "dst_space", "bytes")
         elif op.op_name == "tessera_nvidia.mbarrier":
@@ -1439,10 +1442,11 @@ def _lower_nvidia_op(op: TileOp, *, target_kind: str) -> list[TargetOp]:
             aliases = {
                 "float16": "f16", "fp16": "f16", "f16": "f16",
                 "bfloat16": "bf16", "bf16": "bf16",
+                "float64": "f64", "fp64": "f64", "f64": "f64",
                 "tf32": "tf32", "fp8_e4m3": "e4m3", "e4m3": "e4m3",
                 "fp8_e5m2": "e5m2", "e5m2": "e5m2",
                 "int8": "s8", "i8": "s8", "s8": "s8",
-                "nvfp4": "nvfp4", "fp4_e2m1": "nvfp4",
+                "nvfp4": "nvfp4", "fp4_e2m1": "mxfp4",
             }
             requested = str(op.attrs.get(
                 "dtype_ab", op.attrs.get("dtype", "bf16"))).lower()
@@ -1460,6 +1464,11 @@ def _lower_nvidia_op(op: TileOp, *, target_kind: str) -> list[TargetOp]:
             if dtype is None:
                 raise ValueError(
                     f"sm_120 has no proven matrix fragment for dtype {requested!r}")
+            if dtype == "mxfp4":
+                raise ValueError(
+                    "sm_120 fp4_e2m1 requires an MXFP4 scale contract; "
+                    "it must not reuse the UE4M3-scaled NVFP4 fragment"
+                )
             if dtype == "nvfp4":
                 scale_a = op.attrs.get("scale_a")
                 scale_b = op.attrs.get("scale_b")
@@ -1474,13 +1483,16 @@ def _lower_nvidia_op(op: TileOp, *, target_kind: str) -> list[TargetOp]:
                     "block_scaled": True,
                 })
             else:
-                shape = {"tf32": "m16n8k8", "e4m3": "m16n8k32",
+                shape = {"f64": "m8n8k4", "tf32": "m16n8k8", "e4m3": "m16n8k32",
                          "e5m2": "m16n8k32", "s8": "m16n8k32"}.get(
                              dtype, "m16n8k16")
                 matrix_op = TargetOp("tessera_nvidia.mma_sync", {
                     **base, "arch": arch, "shape": shape,
                     "dtype_ab": dtype,
-                    "dtype_c": "s32" if dtype == "s8" else "f32",
+                    "dtype_c": (
+                        "s32" if dtype == "s8" else "f64" if dtype == "f64"
+                        else "f32"
+                    ),
                     "block_scaled": False,
                 })
             return [

@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
+from .nvidia_dtype_contract import sm120_dtype_contract
+
 
 class NvidiaFragmentError(ValueError):
     """An unsupported exact-architecture fragment request."""
@@ -22,6 +24,7 @@ class FragmentFamily(str, Enum):
 
 
 class RegisterPacking(str, Enum):
+    SCALAR_F64 = "scalar_f64"
     PAIR_F16 = "pair_f16"
     SCALAR_F32 = "scalar_f32"
     PACKED_X4_I8 = "packed_x4_i8"
@@ -94,13 +97,41 @@ class FragmentLayoutDescriptor:
 
 
 _ALIASES = {
-    "fp16": "f16", "f16": "f16",
+    "fp64": "f64",
+    "f64": "f64",
+    "fp32": "fp32",
+    "f32": "fp32",
+    "fp16": "f16",
+    "f16": "f16",
     "bf16": "bf16",
     "tf32": "tf32",
-    "fp8_e4m3": "e4m3", "e4m3": "e4m3",
-    "fp8_e5m2": "e5m2", "e5m2": "e5m2",
-    "int8": "s8", "s8": "s8",
-    "nvfp4": "nvfp4", "fp4_e2m1": "nvfp4",
+    "fp8_e4m3": "e4m3",
+    "e4m3": "e4m3",
+    "fp8_e5m2": "e5m2",
+    "e5m2": "e5m2",
+    "int8": "s8",
+    "s8": "s8",
+    "nvfp4": "nvfp4",
+    "fp4_e2m1": "mxfp4",
+    "fp6_e2m3": "e2m3",
+    "e2m3": "e2m3",
+    "fp6_e3m2": "e3m2",
+    "e3m2": "e3m2",
+}
+
+_CONTRACT_REQUEST = {
+    "f64": ("fp64", None),
+    "fp32": ("fp32", "ieee"),
+    "f16": ("fp16", None),
+    "bf16": ("bf16", None),
+    "tf32": ("fp32", "tf32"),
+    "e4m3": ("fp8_e4m3", None),
+    "e5m2": ("fp8_e5m2", None),
+    "e2m3": ("fp6_e2m3", None),
+    "e3m2": ("fp6_e3m2", None),
+    "s8": ("int8", None),
+    "nvfp4": ("nvfp4", None),
+    "mxfp4": ("fp4_e2m1", None),
 }
 
 
@@ -117,65 +148,155 @@ def select_sm120_fragment_layout(
     """
     canonical = _ALIASES.get(dtype.lower())
     if canonical is None:
+        raise NvidiaFragmentError(f"no proven sm_120a fragment exists for dtype {dtype!r}")
+    storage, math_mode = _CONTRACT_REQUEST[canonical]
+    contract = sm120_dtype_contract(storage, math_mode=math_mode)
+    if contract.tensor_core == "unsupported":
         raise NvidiaFragmentError(
-            f"no proven sm_120a fragment exists for dtype {dtype!r}")
+            "sm_120a fp32 storage requires an explicit TF32 math-mode request for Tensor Core lowering"
+        )
+    if contract.compiler_state != "ready":
+        raise NvidiaFragmentError(
+            f"sm_120a {contract.key} Tensor Core hardware is known but its Tessera fragment ABI is planned, not proven"
+        )
     m, n, k = shape
+    if canonical == "f64":
+        if shape != (8, 8, 4):
+            raise NvidiaFragmentError("sm_120a f64 fragments require m8n8k4")
+        if acc_dtype not in (None, "f64", "fp64"):
+            raise NvidiaFragmentError("sm_120a f64 fragments require f64 accumulation")
+        return FragmentLayoutDescriptor(
+            "sm_120a",
+            FragmentFamily.MMA_SYNC,
+            shape,
+            canonical,
+            "f64",
+            32,
+            1,
+            1,
+            1,
+            1,
+            2,
+            2,
+            RegisterPacking.SCALAR_F64,
+            "mma_m8n8_f64_two_adjacent_columns_per_lane",
+            "mma.sync.aligned.m8n8k4.row.col.f64.f64.f64.f64",
+        )
     if (m, n) != (16, 8):
-        raise NvidiaFragmentError(
-            "sm_120a warp fragments require "
-            f"m16n8; got {shape}")
+        raise NvidiaFragmentError(f"sm_120a warp fragments require m16n8; got {shape}")
 
     table = {
-        "f16": (16, "f32", RegisterPacking.PAIR_F16, 4, 2,
-                 "mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32"),
-        "bf16": (16, "f32", RegisterPacking.PAIR_F16, 4, 2,
-                  "mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32"),
-        "tf32": (8, "f32", RegisterPacking.SCALAR_F32, 4, 2,
-                  "mma.sync.aligned.m16n8k8.row.col.f32.tf32.tf32.f32"),
-        "e4m3": (32, "f32", RegisterPacking.PACKED_X4_I8, 4, 2,
-                  "mma.sync.aligned.m16n8k32.row.col.f32.e4m3.e4m3.f32"),
-        "e5m2": (32, "f32", RegisterPacking.PACKED_X4_I8, 4, 2,
-                  "mma.sync.aligned.m16n8k32.row.col.f32.e5m2.e5m2.f32"),
-        "s8": (32, "s32", RegisterPacking.PACKED_X4_I8, 4, 2,
-                "mma.sync.aligned.m16n8k32.row.col.s32.s8.s8.s32"),
+        "f16": (16, "f32", RegisterPacking.PAIR_F16, 4, 2, "mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32"),
+        "bf16": (16, "f32", RegisterPacking.PAIR_F16, 4, 2, "mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32"),
+        "tf32": (8, "f32", RegisterPacking.SCALAR_F32, 4, 2, "mma.sync.aligned.m16n8k8.row.col.f32.tf32.tf32.f32"),
+        "e4m3": (32, "f32", RegisterPacking.PACKED_X4_I8, 4, 2, "mma.sync.aligned.m16n8k32.row.col.f32.e4m3.e4m3.f32"),
+        "e5m2": (32, "f32", RegisterPacking.PACKED_X4_I8, 4, 2, "mma.sync.aligned.m16n8k32.row.col.f32.e5m2.e5m2.f32"),
+        "s8": (32, "s32", RegisterPacking.PACKED_X4_I8, 4, 2, "mma.sync.aligned.m16n8k32.row.col.s32.s8.s8.s32"),
     }
     if canonical == "nvfp4":
         if k != 64:
-            raise NvidiaFragmentError(
-                "sm_120a NVFP4 fragments require m16n8k64")
+            raise NvidiaFragmentError("sm_120a NVFP4 fragments require m16n8k64")
         if acc_dtype not in (None, "f32"):
             raise NvidiaFragmentError("sm_120a NVFP4 fragments require f32 accumulation")
         return FragmentLayoutDescriptor(
-            "sm_120a", FragmentFamily.MMA_SYNC_BLOCK_SCALE, shape, canonical,
-            "f32", 32, 32, 16, 4, 2, 4, 4,
+            "sm_120a",
+            FragmentFamily.MMA_SYNC_BLOCK_SCALE,
+            shape,
+            canonical,
+            "f32",
+            32,
+            32,
+            16,
+            4,
+            2,
+            4,
+            4,
             RegisterPacking.PACKED_X8_E2M1,
             "mma_m16n8_f32_four_registers_per_lane",
             "mma.sync.aligned.m16n8k64.row.col.kind::mxf4nvf4.block_scale",
-            scale_dtype="ue4m3", scale_vector="4X",
-            typed_tile_materialization_ready=True)
+            scale_dtype="ue4m3",
+            scale_vector="4X",
+            typed_tile_materialization_ready=True,
+        )
+    if canonical in {"e2m3", "e3m2", "mxfp4"}:
+        expected_k = 64 if canonical == "mxfp4" else 32
+        if k != expected_k:
+            raise NvidiaFragmentError(f"sm_120a {canonical} fragments require m16n8k{expected_k}")
+        if acc_dtype not in (None, "f32"):
+            raise NvidiaFragmentError(f"sm_120a {canonical} fragments require f32 accumulation")
+        is_fp4 = canonical == "mxfp4"
+        return FragmentLayoutDescriptor(
+            "sm_120a",
+            FragmentFamily.MMA_SYNC_BLOCK_SCALE,
+            shape,
+            canonical,
+            "f32",
+            32,
+            expected_k // 2,
+            expected_k // 4,
+            4,
+            2,
+            4,
+            4,
+            RegisterPacking.PACKED_X8_E2M1 if is_fp4 else RegisterPacking.PACKED_X4_I8,
+            "mma_m16n8_f32_four_registers_per_lane",
+            (
+                "mma.sync.aligned.m16n8k64.row.col.kind::mxf4.block_scale"
+                if is_fp4
+                else f"mma.sync.aligned.m16n8k32.row.col.kind::mxf8f6f4.block_scale.{canonical}"
+            ),
+            scale_dtype="ue8m0",
+            scale_vector="2X" if is_fp4 else "1X",
+            typed_tile_materialization_ready=True,
+        )
 
     legal_k, acc, packing, a_regs, b_regs, instruction = table[canonical]
     if k != legal_k:
-        raise NvidiaFragmentError(
-            f"{canonical} fragments require "
-            f"m16n8k{legal_k}; got {shape}")
+        raise NvidiaFragmentError(f"{canonical} fragments require m16n8k{legal_k}; got {shape}")
     requested_acc = acc_dtype or acc
     if canonical == "f16" and requested_acc == "f16":
         return FragmentLayoutDescriptor(
-            "sm_120a", FragmentFamily.MMA_SYNC, shape, canonical, "f16", 32,
-            m * k // 32, k * n // 32, a_regs, b_regs, 4, 2, packing,
+            "sm_120a",
+            FragmentFamily.MMA_SYNC,
+            shape,
+            canonical,
+            "f16",
+            32,
+            m * k // 32,
+            k * n // 32,
+            a_regs,
+            b_regs,
+            4,
+            2,
+            packing,
             "mma_m16n8_f16_four_elements_two_registers_per_lane",
-            "mma.sync.aligned.m16n8k16.row.col.f16.f16.f16.f16")
+            "mma.sync.aligned.m16n8k16.row.col.f16.f16.f16.f16",
+        )
     if requested_acc != acc:
-        raise NvidiaFragmentError(
-            f"{canonical} fragments do not support {requested_acc} accumulation")
+        raise NvidiaFragmentError(f"{canonical} fragments do not support {requested_acc} accumulation")
     return FragmentLayoutDescriptor(
-        "sm_120a", FragmentFamily.MMA_SYNC, shape, canonical, acc, 32,
-        m * k // 32, k * n // 32, a_regs, b_regs, 4, 4, packing,
-        "mma_m16n8_f32_four_registers_per_lane", instruction)
+        "sm_120a",
+        FragmentFamily.MMA_SYNC,
+        shape,
+        canonical,
+        acc,
+        32,
+        m * k // 32,
+        k * n // 32,
+        a_regs,
+        b_regs,
+        4,
+        4,
+        packing,
+        "mma_m16n8_f32_four_registers_per_lane",
+        instruction,
+    )
 
 
 __all__ = [
-    "FragmentFamily", "RegisterPacking", "FragmentLayoutDescriptor",
-    "NvidiaFragmentError", "select_sm120_fragment_layout",
+    "FragmentFamily",
+    "RegisterPacking",
+    "FragmentLayoutDescriptor",
+    "NvidiaFragmentError",
+    "select_sm120_fragment_layout",
 ]

@@ -3,10 +3,28 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-07-18
+last_updated: 2026-07-19
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+Cross-backend sync `STATEFUL-TRANSPORT-FOUNDATION-2026-07-19`: the shared launch
+workspace schema now distinguishes per-launch scratch from session-persistent,
+preserved state. ReplaySSM and MoE metadata contracts are portable, but this
+NVIDIA slice changes no Metal allocation, command-buffer ordering, physical
+schedule, resource claim, timing row, or selector. Apple resident ReplaySSM
+must map its already-proven handle lifecycle to the shared fields in an
+Apple-owned follow-up; local and distributed MoE routes retain their existing
+Apple evidence and cannot inherit CUDA bandwidth.
+
+Cross-backend sync `NVIDIA-E2E2-STATEFUL-REDUCE-2026-07-19` extends the shared
+Tile surface with explicit ReplaySSM decode/flush, MoE dispatch/combine/grouped
+GEMM, and `Outer/AxisExtent/Inner` reduction carriers, plus a backend-neutral
+rank/device topology fingerprint. Apple does not inherit PTX images, CUDA
+workspace residency, the serial/cooperative-128 reduction schedules, NCCL
+submission, resources, timings, or selectors. Mapping these semantics to the
+existing Metal/MPS and distributed-MoE routes is Apple-owned follow-up; FP8
+epilogue execution remains SDK-gated and TF32 is not applicable to Apple.
 
 This plan brings the proof discipline established by the CUDA and ROCm work to
 the Apple backend. It complements [`APPLE_AUDIT.md`](APPLE_AUDIT.md), the
@@ -920,6 +938,109 @@ descriptor-first exact-target launcher registry. It registers no Metal hook and
 does not change value-mode classification, MPSGraph/Metal placement, pipeline
 cache policy, or selectors; APPLE-E2E-1 still owns native package production,
 Apple registration/submission, comparison, cleanup, and Level-C proof.
+The NVIDIA-E2E-1 f16 landing slice was assessed as NVIDIA-only: it adds an
+SM120 PTX package producer and exact CUDA submission hook, with no Metal hook,
+Apple ABI, dtype registration, schedule, placement, or selector change.
+The completed NVIDIA-E2E-1 NVFP4 slice extends the shared `tile.matmul_kernel`
+verifier with an explicit packed-A/packed-B/scale-A/scale-B/output/M/N/K form.
+Apple has no enabled NVFP4 cooperative-matrix execution route, so this is not
+applicable to Metal lowering and requires no Apple ABI or selector change.
+Apple inherits only the shared verifier rejection contract, not CUDA scale-word
+packing, warp geometry, resource values, timings, or exact-device claims.
+
+The first NVIDIA-E2E-2 slice changes the shared Graph→Tile async contract so a
+copy produces `!tile.async_token`, its wait retires that token, and a matrix
+consumer carries the dependency. Apple has no consumer for CUDA TMA/WGMMA
+physical scheduling; its Metal and CPU pipelines, ABI, placement, selectors,
+and execution claims are unchanged. The additive pipeline-registry
+driver-source field and `tessera_nvidia` dialect manifest row are NVIDIA
+bookkeeping. Exact SM builders are not applicable to Apple and transfer no
+CUDA layout or schedule.
+
+The NVIDIA-E2E-2 softmax slice adds the shared semantic
+`tile.softmax_kernel(X, O, Rows, K)` envelope with explicit storage,
+accumulation, and last-axis fields; the envelope now accepts f16/f32 storage
+with f32 accumulation. It is not applicable to the current Apple
+value/Metal/MPS compilation path, which already owns different typed calls and
+physical reduction schedules. Apple does not inherit the SM120 thread-per-row
+schedule, `nvvm.ex2`, PTX ABI, resources, timings, placement, or selector; no
+Apple execution state changes.
+
+The NVIDIA-E2E-2 dtype-totality slice changes the shared MMA selector contract
+so fp32 Tensor Core selection requires an explicit TF32 math mode and bare
+`fp4_e2m1` cannot alias NVIDIA NVFP4. Apple has no TF32 or NVFP4 cooperative
+matrix route, so this is semantic parity only: it receives no CUDA scalar type,
+fragment packing, MX/NV scale layout, PTX ABI, execution, or selector claim.
+APPLE-DTYPE-1 remains SDK-gated for its own FP8/FP4 tensor formats.
+
+The follow-on SM120 dtype slice adds a backend-private
+`tessera_nvidia.mx_block_scale_mma` Target IR op and ptxas-backed FP6/MXFP4
+register contracts. This is not applicable to Apple code generation: it adds
+no shared storage dtype, Metal op, SIMD-group layout, scale ABI, runtime route,
+or selector state. Apple FP8/FP4 proof remains owned by APPLE-DTYPE-1.
+
+The NVIDIA-E2E-2 reduction slice adds a shared launch-level
+`tile.reduce_kernel` semantic carrier. It is not applicable to Apple's current
+value/Metal/MPS compilation path, which owns different typed reduction calls,
+placement, and SIMD-group schedules. Apple inherits no SM120 launch ABI,
+resources, timings, execution state, or selector change.
+
+The NVIDIA-E2E-2 epilogue slice tightens only the shared Tile launch verifier
+for explicit residual operands and order. Apple's existing typed Metal/MPS
+epilogue contracts remain architecture-owned and inherit no CUDA ABI, layout,
+resources, timings, execution state, or selector change.
+
+The NVIDIA-E2E-2 attention slice adds a shared launch-level semantic carrier
+for Q/K/V/O dimensions, storage/accumulation, scale, and causal behavior. It is
+not applicable to Apple's existing MPSGraph/Metal attention executors and
+transfers no CUDA schedule, pointer ABI, resources, timing, readiness, or
+selector state. Any Apple adoption requires its own Metal materializer and
+exact-device proof.
+
+The NVIDIA paged-KV slice adds a shared logical-page gather carrier with
+explicit f32 page storage, i32 page table, dimensions, range, and direct-route
+semantics. Apple's resident Metal page-table attention remains architecture
+owned and inherits no PTX ABI, CUDA schedule, evidence, or selector state.
+
+The NVIDIA backward-attention slice adds a shared launch-level VJP carrier with
+explicit determinism, mask/softcap, route, and workspace semantics. It is not
+applicable to Apple's existing Metal/MPSGraph backward executor without an
+Apple-owned materializer; no CUDA single-owner schedule, pointer ABI,
+atomic/split resources, timing, readiness, or selector state transfers.
+
+Cross-backend sync `E2E-DEVICE-LIBS-2026-07-19` adds logical name, content
+digest, and link mode for LLVM-stage device libraries to the shared native-image
+schema. It is not applicable to the current Metal/MSL/metallib path, which does
+not link CUDA libdevice or ROCm OCML/OCKL/OCLC bitcode. Apple records no device
+library and inherits no CUDA/ROCm discovery paths, symbols, cache keys, or
+linker choices.
+
+Cross-backend sync `CUDA-MATH-CONTRACT-2026-07-19` adds backend-neutral
+`exp_mode` and `ftz` semantics to the shared Tile softmax envelope. The current
+Apple paths do not consume that launch-level op, so the SM120 mapping to PTX
+`ex2.approx.f32`, its 2-ULP bound, and CUDA cache-policy version are not
+applicable. A future Apple lowering must select and prove its own Metal precise
+or fast-math exponential route rather than inherit the CUDA approximation.
+
+Cross-backend sync `CUDA-INTRINSIC-SURFACE-2026-07-19` adds shared canonical
+toward-positive and toward-negative rounding names without changing the
+existing default tuning sweep. CUDA's RN/RD/RU/RZ cast suffixes, integer packed
+dots, and 2x16/4x8 SIMD functions are not Metal execution evidence. Apple must
+map directed conversions and packed operations to its own MSL/Metal semantics
+and device proof; no Apple ABI, route, or selector changes in this landing.
+
+Cross-backend sync `PTX-TYPE-MEMORY-TRUTH-2026-07-19` is NVIDIA-private
+physical truth: PTX bit registers, fragment operands, scopes, proxies, and
+packed-access ordering do not transfer to Metal. Apple retains its own MSL
+storage, SIMD-group/cooperative-tensor formats, address spaces, barriers, and
+memory-order proof. The shared architectural conclusion is only that a language
+dtype wrapper is not evidence of a native register or matrix execution route.
+
+Cross-backend sync `NVIDIA-E2E-DTYPE-EXEC-2026-07-19` adds f64 to the portable
+Tile epilogue output vocabulary for NVIDIA's compiler-owned DMMA path. This is
+not applicable to Metal GPU execution: Apple GPU profiles expose no native
+fp64, so no MSL type, SIMD-group matrix route, ABI, timing, or selector state
+changes. Apple CPU fp64 remains independently owned.
 
 Consumer plan `SEQUENCE-MIXER-2026-07-17`: the compiler-direction Sequence Mixer
 track ([`../../compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md`](../../compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md))

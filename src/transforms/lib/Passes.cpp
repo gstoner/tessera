@@ -63,6 +63,42 @@ static void addGraphIRPreLoweringPasses(OpPassManager &pm) {
   pm.addPass(mlir::createCSEPass());
 }
 
+// NVIDIA-E2E-2: the named exact-SM front pipelines must not inherit SM90 pass
+// options by alias.  SM90 may consume the proven legacy WGMMA/FlashAttention
+// marker lowering.  SM100 and SM120 retain typed tile.mma/attention carriers
+// for their architecture-owned backend passes; treating either as Hopper
+// WGMMA would encode an unsupported physical schedule.
+static void addCUDA13PipelineForSM(
+    OpPassManager &pm, const TesseraLoweringPipelineOptions &opts, int sm,
+    llvm::StringRef target) {
+  addGraphIRPreLoweringPasses(pm);
+  pm.addPass(createLowerControlFlowToSCFPass());
+  pm.addPass(createDistributionLoweringPass());
+  if (opts.assignLayouts)
+    pm.addPass(createLayoutAssignmentPass());
+  pm.addPass(createLayoutLegalityPass());
+  if (opts.legalizeDtypes)
+    pm.addPass(createComputeLegalizePass());
+  pm.addPass(createIRContractLegalityPass());
+  pm.addPass(createSymbolicDimEqualityPass());
+  pm.addPass(createTileIRLoweringPass(sm));
+  pm.addPass(createControlFlowTargetGuardPass(target));
+  pm.addPass(createWarpSpecializationPass());
+  pm.addPass(createTilePipelineLegalityPass());
+  pm.addPass(createWarpSpecLegalityPass());
+  pm.addPass(createTileBarrierReuseLegalityPass());
+  pm.addPass(createAsyncCopyLoweringPass(sm));
+  if (sm == 90)
+    pm.addPass(createNVWGMMALoweringPass(sm));
+  pm.addPass(createNVTMADescriptorPass());
+  pm.addPass(createTilePipelineLegalityPass());
+  pm.addPass(createWarpSpecLegalityPass());
+  if (sm == 90)
+    pm.addPass(createNVFlashAttnKernelEmitterPass(sm));
+  if (opts.legalizeDtypes)
+    pm.addPass(createStorageLegalizePass());
+}
+
 void registerTesseraPasses() {
   // ── Phase 1 passes ────────────────────────────────────────────────────────
   ::mlir::registerPass([]() { return createCanonicalizeTesseraIRPass(); });
@@ -366,82 +402,52 @@ void registerTesseraPasses() {
   //     / Lightning / Delta) so backend lowering sees the fused ops.
   //   * Final NVPTX descriptor + flash-attn kernel emission.
   //
-  // Aliases registered:
+  // Pipelines registered:
   //   - `tessera-nvidia-pipeline-sm90`   → SM_90 (Hopper)  : WGMMA + TMA
   //   - `tessera-nvidia-pipeline-sm100`  → SM_100 (Blackwell): + TCGEN05 + TMEM
-  //   - `tessera-nvidia-pipeline-sm120`  → SM_120 (Rubin)  : same chain
+  //   - `tessera-nvidia-pipeline-sm120`  → SM_120 (consumer Blackwell)
   //   - `tessera-nvidia-pipeline`        → default = SM_90 chain
   //
-  // All four aliases share the same pass list today — the per-SM
-  // dispatching happens inside `createLowerTileToNVIDIAPass(sm)` in the
-  // NVIDIA backend (`tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp`).
-  // When SM_100/SM_120 add post-WGMMA passes (TCGEN05 / TMEM), they go
-  // here under the corresponding alias.
-
-  auto buildCUDA13Pipeline = [](OpPassManager &pm,
-                                const TesseraLoweringPipelineOptions &opts) {
-    addGraphIRPreLoweringPasses(pm);
-    // CF2: region-structured forms become SCF. Executable payload forms remain
-    // Graph ops until TileIRLowering converts them to typed Tile carriers.
-    pm.addPass(createLowerControlFlowToSCFPass());
-    pm.addPass(createDistributionLoweringPass());
-    // 2026-06-22: optional layout assignment (see lowerToX86 / opts).
-    if (opts.assignLayouts)
-      pm.addPass(createLayoutAssignmentPass());
-    // 2026-06-17: layout legality in the named pipeline (see lowerToX86).
-    pm.addPass(createLayoutLegalityPass());
-    // C4 (2026-06-23): compute-legalize before the contract check (gated).
-    if (opts.legalizeDtypes)
-      pm.addPass(createComputeLegalizePass());
-    // 2026-06-19: dtype / aliasing / buffer-binding contracts (Decision #15a).
-    pm.addPass(createIRContractLegalityPass());
-    // Sprint V6b (2026-05-22): symbolic-dim equality recheck.
-    pm.addPass(createSymbolicDimEqualityPass());
-    pm.addPass(createTileIRLoweringPass());
-    // Decision #21 still rejects any Graph control form outside the Tile
-    // envelope, but no longer rejects supported NVIDIA payload contracts.
-    pm.addPass(createControlFlowTargetGuardPass("nvidia_sm90"));
-    pm.addPass(createWarpSpecializationPass());
-    // C2/C3/C6 (2026-06-23): warp-spec legality gates on the WarpSpec markers.
-    pm.addPass(createTilePipelineLegalityPass());
-    pm.addPass(createWarpSpecLegalityPass());
-    pm.addPass(createTileBarrierReuseLegalityPass());
-    pm.addPass(createAsyncCopyLoweringPass());
-    pm.addPass(createNVWGMMALoweringPass());
-    pm.addPass(createNVTMADescriptorPass());
-    // C3/C6 again — over the typed #tile.barrier markers (kind + arrival-count).
-    pm.addPass(createTilePipelineLegalityPass());
-    pm.addPass(createWarpSpecLegalityPass());
-    pm.addPass(createNVFlashAttnKernelEmitterPass());
-    // C4 terminal storage-legalize (gated).
-    if (opts.legalizeDtypes)
-      pm.addPass(createStorageLegalizePass());
-  };
+  // The graph-side builders stop at architecture-appropriate typed carriers.
+  // Exact Tile-to-NVVM pipelines are registered by the NVIDIA backend.
 
   ::mlir::PassPipelineRegistration<TesseraLoweringPipelineOptions>
     nvidiaPipeline("tessera-nvidia-pipeline",
                    "Sprint G-5: NVIDIATargetPipeline (CUDA 13.3, default SM_90) — "
                    "WarpSpec → AsyncCopy → WGMMA → TMA → NVPTXLowering. "
                    "Toolchain pin: nvcc 13.3, PTX ISA 9.3, NCCL 2.22.",
-                   buildCUDA13Pipeline);
+                   [](OpPassManager &pm,
+                      const TesseraLoweringPipelineOptions &opts) {
+                     addCUDA13PipelineForSM(pm, opts, 90, "nvidia_sm90");
+                   });
 
   ::mlir::PassPipelineRegistration<TesseraLoweringPipelineOptions>
     nvidiaPipelineSM90("tessera-nvidia-pipeline-sm90",
                        "Sprint G-5: NVIDIATargetPipeline pinned to SM_90 (Hopper) "
                        "under CUDA 13.3.  Emits WGMMA + TMA + mbarrier paths.",
-                       buildCUDA13Pipeline);
+                       [](OpPassManager &pm,
+                          const TesseraLoweringPipelineOptions &opts) {
+                         addCUDA13PipelineForSM(pm, opts, 90, "nvidia_sm90");
+                       });
 
   ::mlir::PassPipelineRegistration<TesseraLoweringPipelineOptions>
     nvidiaPipelineSM100("tessera-nvidia-pipeline-sm100",
                         "Sprint G-5: NVIDIATargetPipeline pinned to SM_100 (Blackwell) "
-                        "under CUDA 13.3.  Emits TCGEN05 / TMEM / block-scaled MMA "
-                        "paths via the WGMMA lowering's sm=100 mode.",
-                        buildCUDA13Pipeline);
+                        "under CUDA 13.3. Retains typed MMA/attention carriers "
+                        "for the exact TCGEN05/TMEM backend pipeline.",
+                        [](OpPassManager &pm,
+                           const TesseraLoweringPipelineOptions &opts) {
+                          addCUDA13PipelineForSM(pm, opts, 100, "nvidia_sm100");
+                        });
 
   ::mlir::PassPipelineRegistration<TesseraLoweringPipelineOptions>
     nvidiaPipelineSM120("tessera-nvidia-pipeline-sm120",
-                        "Sprint G-5: NVIDIATargetPipeline pinned to SM_120 (Rubin) "
-                        "under CUDA 13.3 (preliminary intrinsic set).",
-                        buildCUDA13Pipeline);
+                        "NVIDIA-E2E-2: pipeline pinned to SM_120 consumer "
+                        "Blackwell under CUDA 13.3; retains typed warp-level "
+                        "MMA carriers for the exact SM120 backend pipeline.",
+                        [](OpPassManager &pm,
+                           const TesseraLoweringPipelineOptions &opts) {
+                          addCUDA13PipelineForSM(pm, opts, 120, "nvidia_sm120");
+                        });
 }
 } // namespace tessera

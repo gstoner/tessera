@@ -83,6 +83,9 @@ def NVIDIA_FpQuantOp : TesseraNVIDIA_Op<"fpquant"> {
 def NVIDIA_Nvfp4BlockScaleMmaOp : TesseraNVIDIA_Op<"nvfp4_block_scale_mma"> {
   let summary = "sm_120a NVFP4 E2M1 MMA with UE4M3 block scales";
 }
+def NVIDIA_MxBlockScaleMmaOp : TesseraNVIDIA_Op<"mx_block_scale_mma"> {
+  let summary = "sm_120a MX FP6/FP4 MMA with UE8M0 block scales";
+}
 def NVIDIA_WgmmaOp : TesseraNVIDIA_Op<"wgmma"> {
   let summary = "Hopper (sm_90a) warpgroup wgmma contract";
 }

@@ -275,7 +275,7 @@ def lower_graph_to_schedule_ir(
     tile: tuple[int, int, int] = (128, 128, 64),
     target_kind: str = "cpu",
 ) -> ScheduleIRModule:
-    graph_result = graph_module.verify()
+    graph_result = graph_module.verify(target=target_kind)
     if not graph_result.ok:
         raise GraphIRVerificationError(graph_result.format())
     schedule_module = ScheduleIRModule(attrs={"tessera.ir.level": "schedule", "target": target_kind})

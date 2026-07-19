@@ -54,14 +54,19 @@ static Operation *emitAsyncCopy(OpBuilder &b, Location loc, Value src,
                   b.getI64IntegerAttr(tileRows));
   st.addAttribute("tile_cols",
                   b.getI64IntegerAttr(tileCols));
-  // Result type: same tensor type as src but tiled dimensions.
-  st.addTypes(src.getType());
+  // The staged tile and its completion token are one contract.  Emitting the
+  // token here (rather than waiting for warp specialization) keeps straight-
+  // line Graph -> Tile lowering legal too: the wait retires this exact copy
+  // and the consumer carries the dependency as SSA.
+  st.addTypes({src.getType(), tile::AsyncTokenType::get(b.getContext())});
   return b.create(st);
 }
 
-// Emit a tile.wait_async op — drains all in-flight async copies before use.
-static Operation *emitWaitAsync(OpBuilder &b, Location loc) {
+// Emit a tile.wait_async op that retires the named in-flight copies.
+static Operation *emitWaitAsync(OpBuilder &b, Location loc,
+                                ValueRange tokens) {
   OperationState st(loc, "tile.wait_async");
+  st.addOperands(tokens);
   return b.create(st);
 }
 
@@ -120,7 +125,8 @@ struct LowerFlashAttnToTileIR : public RewritePattern {
     Operation *cpV = emitAsyncCopy(rewriter, loc, V, tkv, -1);
 
     // Barrier: wait for all async copies to complete before compute.
-    emitWaitAsync(rewriter, loc);
+    emitWaitAsync(rewriter, loc,
+                  {cpQ->getResult(1), cpK->getResult(1), cpV->getResult(1)});
 
     // ── Emit online softmax initialiser constants ────────────────────────────
     // running_m init: -inf  (f32 per row)
@@ -211,11 +217,12 @@ struct LowerMatmulToTileMMA : public RewritePattern {
     // Async copies for A and B tiles.
     Operation *cpA = emitAsyncCopy(rewriter, loc, A, tileM, -1);
     Operation *cpB = emitAsyncCopy(rewriter, loc, B, -1, tileN);
-    emitWaitAsync(rewriter, loc);
+    emitWaitAsync(rewriter, loc, {cpA->getResult(1), cpB->getResult(1)});
 
     // tile.mma — the WGMMA/WMMA selector is resolved by NVWGMMALoweringPass.
     OperationState mmaState(loc, "tile.mma");
-    mmaState.addOperands({cpA->getResult(0), cpB->getResult(0)});
+    mmaState.addOperands({cpA->getResult(0), cpB->getResult(0),
+                          cpA->getResult(1), cpB->getResult(1)});
     mmaState.addTypes(resType);
     mmaState.addAttribute("sm", rewriter.getI32IntegerAttr(smVersion));
     Operation *mma = rewriter.create(mmaState);
@@ -278,6 +285,7 @@ struct TileIRLoweringPass
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TileIRLoweringPass)
 
   TileIRLoweringPass() = default;
+  explicit TileIRLoweringPass(int sm) { smVersion = sm; }
   TileIRLoweringPass(const TileIRLoweringPass &other)
       : PassWrapper(other) {}
 
@@ -352,8 +360,8 @@ struct TileIRLoweringPass
 
 } // namespace
 
-std::unique_ptr<mlir::Pass> createTileIRLoweringPass() {
-  return std::make_unique<TileIRLoweringPass>();
+std::unique_ptr<mlir::Pass> createTileIRLoweringPass(int sm) {
+  return std::make_unique<TileIRLoweringPass>(sm);
 }
 
 } // namespace tessera

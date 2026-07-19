@@ -209,7 +209,8 @@ def test_lower_tile_to_nvidia_sm120_target_ir_maps_mma_to_warp_level_mma_sync():
 
 @pytest.mark.parametrize(
     "dtype,shape,dtype_c",
-    [("f16", "m16n8k16", "f32"), ("fp16", "m16n8k16", "f32"),
+    [("f64", "m8n8k4", "f64"), ("fp64", "m8n8k4", "f64"),
+     ("f16", "m16n8k16", "f32"), ("fp16", "m16n8k16", "f32"),
      ("tf32", "m16n8k8", "f32"),
      ("fp8_e4m3", "m16n8k32", "f32"),
      ("fp8_e5m2", "m16n8k32", "f32"), ("int8", "m16n8k32", "s32")],
@@ -263,6 +264,16 @@ def test_lower_tile_to_nvidia_sm120_nvfp4_requires_and_preserves_scales():
         lower_tile_to_target_ir(missing, target_kind="nvidia_sm120")
     assert "tessera_nvidia.tcgen05_mma" not in text
     assert "tessera_nvidia.tmem_alloc" not in text
+
+
+def test_lower_tile_to_nvidia_sm120_ocp_fp4_cannot_reuse_nvfp4_scales():
+    tile = TileIRModule(functions=[TileFunction(
+        "main", body=[TileOp("tile.mma", {
+            "source": "tessera.matmul", "result": "C", "ordinal": 0,
+            "dtype": "fp4_e2m1", "scale_a": "SFa", "scale_b": "SFb",
+        })], target="nvidia_sm120")])
+    with pytest.raises(ValueError, match="MXFP4 scale contract"):
+        lower_tile_to_target_ir(tile, target_kind="nvidia_sm120")
 
 
 def test_lower_tile_to_apple_gpu_target_ir_maps_fa4_to_msl_runtime_contract():

@@ -81,7 +81,7 @@ std::unique_ptr<mlir::Pass> createTesseraToLinalgPass();
 //   --tile-q   Q tile rows (default 64)
 //   --tile-kv  KV tile cols (default 64)
 //   --sm       target SM version (default 90)
-std::unique_ptr<mlir::Pass> createTileIRLoweringPass();
+std::unique_ptr<mlir::Pass> createTileIRLoweringPass(int sm = 90);
 
 // WarpSpecializationPass — assigns producer/consumer warp roles to tile IR ops
 // inside schedule.mesh.region bodies and inserts tessera.queue barriers.
@@ -91,13 +91,13 @@ std::unique_ptr<mlir::Pass> createWarpSpecializationPass();
 // tile.tma.* (SM≥90) or tile.cp_async.* (SM<90).
 // Options:
 //   --sm  target SM version (default 90)
-std::unique_ptr<mlir::Pass> createAsyncCopyLoweringPass();
+std::unique_ptr<mlir::Pass> createAsyncCopyLoweringPass(int sm = 90);
 
 // NVWGMMALoweringPass — lowers tile.mma to wgmma.mma_async PTX inline asm
 // for SM_90+ or nvgpu.mma.sync WMMA for SM<90.
 // Options:
 //   --sm  target SM version (default 90)
-std::unique_ptr<mlir::Pass> createNVWGMMALoweringPass();
+std::unique_ptr<mlir::Pass> createNVWGMMALoweringPass(int sm = 90);
 
 // NVTMADescriptorPass — hoists tile.tma.descriptor ops to the kernel
 // preamble, deduplicates them, and assigns unique mbarrier slot indices.
@@ -111,7 +111,7 @@ std::unique_ptr<mlir::Pass> createNVTMADescriptorPass();
 //   --tile-q   Q tile rows (default 64)
 //   --tile-kv  KV tile cols (default 64)
 //   --warps    warps per CTA (default 4)
-std::unique_ptr<mlir::Pass> createNVFlashAttnKernelEmitterPass();
+std::unique_ptr<mlir::Pass> createNVFlashAttnKernelEmitterPass(int sm = 90);
 
 // ── Phase 4 passes — Distributed training collectives + pipeline ──────────
 //

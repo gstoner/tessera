@@ -26,6 +26,7 @@ accumulator regs/lane, an Apple simdgroup (32) ``8×8`` costs ``2``, a wave64 CD
 carries ``cooperative=False`` / ``lane_count=None`` and the per-lane footprint is
 ``None`` (honest — the model does not apply).
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -59,24 +60,25 @@ class MmaIsa:
     to, so a dtype selects its shape family from ``shapes``.
     """
 
-    target: str                    # "rocm" | "nvidia" | "apple" | "x86"
-    arch: str                      # "gfx1151" | "sm_120" | "apple7" | "amx"
-    mma_class: str                 # "wmma"|"mfma"|"mma_sync"|"wgmma"|"simdgroup"|"amx"
-    cooperative: bool              # True for wave/warp/simdgroup lane-cooperative MMAs
-    lane_count: Optional[int]      # cooperative width; None if not lane-cooperative
+    target: str  # "rocm" | "nvidia" | "apple" | "x86"
+    arch: str  # "gfx1151" | "sm_120" | "apple7" | "amx"
+    mma_class: str  # "wmma"|"mfma"|"mma_sync"|"wgmma"|"simdgroup"|"amx"
+    cooperative: bool  # True for wave/warp/simdgroup lane-cooperative MMAs
+    lane_count: Optional[int]  # cooperative width; None if not lane-cooperative
     shapes: tuple[tuple[int, int, int], ...]
     k_by_dtype: Mapping[str, int]
     acc_by_dtype: Mapping[str, str] = None  # type: ignore[assignment]
+    required_math_modes: Mapping[str, str] = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
         if self.cooperative and (self.lane_count is None or self.lane_count < 1):
             raise MmaSelectorError(
-                f"{self.target}:{self.arch} is cooperative but lane_count="
-                f"{self.lane_count!r} (must be a positive int)")
+                f"{self.target}:{self.arch} is cooperative but lane_count={self.lane_count!r} (must be a positive int)"
+            )
         if not self.cooperative and self.lane_count is not None:
             raise MmaSelectorError(
-                f"{self.target}:{self.arch} is not lane-cooperative; lane_count "
-                f"must be None, got {self.lane_count!r}")
+                f"{self.target}:{self.arch} is not lane-cooperative; lane_count must be None, got {self.lane_count!r}"
+            )
 
     @property
     def dtypes(self) -> frozenset[str]:
@@ -95,7 +97,7 @@ class MmaSelection:
     in_dtype: str
     acc_dtype: str
     lane_count: Optional[int]
-    accumulator_regs: Optional[int]   # per-lane footprint; None if not cooperative
+    accumulator_regs: Optional[int]  # per-lane footprint; None if not cooperative
     operand_a: MmaOperand
     operand_b: MmaOperand
     accumulator: MmaOperand
@@ -122,17 +124,14 @@ class MmaSelection:
             "acc_dtype": self.acc_dtype,
             "lane_count": self.lane_count,
             "accumulator_regs": self.accumulator_regs,
-            "operands": [op.as_metadata_dict()
-                         for op in (self.operand_a, self.operand_b,
-                                    self.accumulator)],
+            "operands": [op.as_metadata_dict() for op in (self.operand_a, self.operand_b, self.accumulator)],
         }
 
 
 # ── the promoted footprint / cost model ─────────────────────────────────────
 
 
-def accumulator_regs_per_lane(shape: tuple[int, ...],
-                              lane_count: Optional[int]) -> Optional[int]:
+def accumulator_regs_per_lane(shape: tuple[int, ...], lane_count: Optional[int]) -> Optional[int]:
     """Per-lane accumulator registers for ``shape`` (``M * N // lane_count``) — the
     promoted ROCm footprint, generalized by ``lane_count``. ``None`` when the ISA
     is not lane-cooperative (x86 AMX). Delegates to
@@ -143,8 +142,9 @@ def accumulator_regs_per_lane(shape: tuple[int, ...],
     return mfma_accumulator_regs(shape, lanes=lane_count)
 
 
-def rank_shapes_by_footprint(isa: MmaIsa, *, k: Optional[int] = None
-                             ) -> list[tuple[tuple[int, int, int], Optional[int]]]:
+def rank_shapes_by_footprint(
+    isa: MmaIsa, *, k: Optional[int] = None
+) -> list[tuple[tuple[int, int, int], Optional[int]]]:
     """Legal shapes of ``isa`` ranked by accumulator footprint (cheapest first),
     tie-broken by *descending* arithmetic density ``M*N*K`` (prefer the larger
     contraction at equal register cost) — the exact ROCm ordering, generalized. On
@@ -152,8 +152,7 @@ def rank_shapes_by_footprint(isa: MmaIsa, *, k: Optional[int] = None
     density-descending only. ``k`` filters to that contraction width."""
     shapes = [s for s in isa.shapes if k is None or s[2] == k]
     ranked = [(s, accumulator_regs_per_lane(s, isa.lane_count)) for s in shapes]
-    ranked.sort(key=lambda sr: (sr[1] if sr[1] is not None else 0,
-                                -(sr[0][0] * sr[0][1] * sr[0][2])))
+    ranked.sort(key=lambda sr: (sr[1] if sr[1] is not None else 0, -(sr[0][0] * sr[0][1] * sr[0][2])))
     return ranked
 
 
@@ -162,45 +161,65 @@ def cheapest_shape(isa: MmaIsa, dtype: str) -> tuple[int, int, int]:
     Raises if the dtype has no MMA path or its K family is absent."""
     if dtype not in isa.k_by_dtype:
         raise MmaSelectorError(
-            f"dtype {dtype!r} has no MMA path on {isa.target}:{isa.arch} "
-            f"(supported: {sorted(isa.dtypes)})")
+            f"dtype {dtype!r} has no MMA path on {isa.target}:{isa.arch} (supported: {sorted(isa.dtypes)})"
+        )
     k = isa.k_by_dtype[dtype]
     ranked = rank_shapes_by_footprint(isa, k=k)
     if not ranked:
         raise MmaSelectorError(
-            f"{isa.target}:{isa.arch} has no shape at K={k} for {dtype!r} "
-            f"(shapes: {sorted(isa.shapes)})")
+            f"{isa.target}:{isa.arch} has no shape at K={k} for {dtype!r} (shapes: {sorted(isa.shapes)})"
+        )
     return ranked[0][0]
 
 
-def select_mma(isa: MmaIsa, dtype: str, *,
-               prefer_shape: Optional[tuple[int, int, int]] = None,
-               out_dtype: Optional[str] = None) -> MmaSelection:
+def select_mma(
+    isa: MmaIsa,
+    dtype: str,
+    *,
+    math_mode: Optional[str] = None,
+    prefer_shape: Optional[tuple[int, int, int]] = None,
+    out_dtype: Optional[str] = None,
+) -> MmaSelection:
     """Select the cooperative-matrix instruction for ``dtype`` on ``isa`` and derive
     its operands + footprint. Picks the cheapest legal shape unless ``prefer_shape``
     is given (which must be legal). Raises ``MmaSelectorError`` — never a silent
     fallback — when the dtype/shape has no path."""
+    required_mode = (isa.required_math_modes or {}).get(dtype)
+    if required_mode is not None and math_mode != required_mode:
+        raise MmaSelectorError(
+            f"dtype {dtype!r} on {isa.target}:{isa.arch} requires explicit "
+            f"math_mode={required_mode!r}; got {math_mode!r}"
+        )
+    if required_mode is None and math_mode not in (None, "ieee"):
+        raise MmaSelectorError(f"math_mode {math_mode!r} is not valid for dtype {dtype!r} on {isa.target}:{isa.arch}")
     if prefer_shape is not None:
         if prefer_shape not in isa.shapes:
             raise MmaSelectorError(
-                f"prefer_shape {prefer_shape} is not legal on {isa.target}:"
-                f"{isa.arch} (legal: {sorted(isa.shapes)})")
+                f"prefer_shape {prefer_shape} is not legal on {isa.target}:{isa.arch} (legal: {sorted(isa.shapes)})"
+            )
         shape = prefer_shape
     else:
         shape = cheapest_shape(isa, dtype)
 
     acc = out_dtype or (isa.acc_by_dtype or {}).get(dtype) or _accum_dtype(dtype)
-    kw = _k_packing_hint(dtype)
+    kw = 8 if dtype == "nvfp4" else _k_packing_hint(dtype)
     # Default nt formulation: A row-major (K-major), B col-major, C row-major.
     op_a = MmaOperand("matrix_a", dtype, "row_major", kw)
     op_b = MmaOperand("matrix_b", dtype, "col_major", kw)
     op_c = MmaOperand("accumulator", acc, "row_major", 1)
     return MmaSelection(
-        target=isa.target, arch=isa.arch, mma_class=isa.mma_class,
-        shape=shape, in_dtype=dtype, acc_dtype=acc,
+        target=isa.target,
+        arch=isa.arch,
+        mma_class=isa.mma_class,
+        shape=shape,
+        in_dtype=dtype,
+        acc_dtype=acc,
         lane_count=isa.lane_count,
         accumulator_regs=accumulator_regs_per_lane(shape, isa.lane_count),
-        operand_a=op_a, operand_b=op_b, accumulator=op_c)
+        operand_a=op_a,
+        operand_b=op_b,
+        accumulator=op_c,
+    )
 
 
 # ── per-arch ISA records ─────────────────────────────────────────────────────
@@ -228,31 +247,59 @@ def rocm_isa(arch: AMDArch) -> MmaIsa:
     # construction. A dtype the reference rejects is simply absent here.
     from .rocm_mma import _MMA_INPUT_DTYPES
     from .rocm_mma import select_mma as _rocm_select
+
     k_by_dtype: dict[str, int] = {}
     for d in _MMA_INPUT_DTYPES:
         try:
             k_by_dtype[d] = _rocm_select(arch, d).k
         except Exception:
             continue
-    return MmaIsa(target="rocm", arch=arch.name.lower().replace("_", ""),
-                  mma_class=mma_class, cooperative=True, lane_count=lane_count,
-                  shapes=shapes, k_by_dtype=k_by_dtype)
+    return MmaIsa(
+        target="rocm",
+        arch=arch.name.lower().replace("_", ""),
+        mma_class=mma_class,
+        cooperative=True,
+        lane_count=lane_count,
+        shapes=shapes,
+        k_by_dtype=k_by_dtype,
+    )
 
 
 #: NVIDIA tensor-core `mma.sync` fragment shapes (PTX ISA): warp = 32 lanes. Per
-#: dtype family — tf32 m16n8k8, bf16/f16 m16n8k16, fp8/int8 m16n8k32, fp4 m16n8k64.
+#: dtype family — fp32+TF32-mode m16n8k8, bf16/f16 m16n8k16,
+#: fp8/fp6/int8 m16n8k32, and MXFP4/NVFP4 m16n8k64. FP6/MXFP4 use
+#: operation-owned UE8M0 scale descriptors downstream of this shape selector.
 _NVIDIA_MMA_SYNC = MmaIsa(
-    target="nvidia", arch="sm_120", mma_class="mma_sync",
-    cooperative=True, lane_count=32,
-    shapes=((16, 8, 8), (16, 8, 16), (16, 8, 32), (16, 8, 64)),
-    k_by_dtype={"fp32": 8, "bf16": 16, "fp16": 16,
-                "fp8_e4m3": 32, "fp8_e5m2": 32, "int8": 32, "fp4_e2m1": 64},
+    target="nvidia",
+    arch="sm_120",
+    mma_class="mma_sync",
+    cooperative=True,
+    lane_count=32,
+    shapes=((8, 8, 4), (16, 8, 8), (16, 8, 16), (16, 8, 32), (16, 8, 64)),
+    k_by_dtype={
+        "fp32": 8,
+        "bf16": 16,
+        "fp16": 16,
+        "fp8_e4m3": 32,
+        "fp8_e5m2": 32,
+        "int8": 32,
+        "fp6_e2m3": 32,
+        "fp6_e3m2": 32,
+        "fp4_e2m1": 64,
+        "nvfp4": 64,
+        "fp64": 4,
+    },
+    acc_by_dtype={"fp64": "fp64"},
+    required_math_modes={"fp32": "tf32"},
 )
 
 #: Apple `simdgroup_matrix<T,8,8>` (Apple7+): simdgroup = 32 threads, 8×8×8.
 _APPLE_SIMDGROUP = MmaIsa(
-    target="apple", arch="apple7", mma_class="simdgroup",
-    cooperative=True, lane_count=32,
+    target="apple",
+    arch="apple7",
+    mma_class="simdgroup",
+    cooperative=True,
+    lane_count=32,
     shapes=((8, 8, 8),),
     k_by_dtype={"fp16": 8, "bf16": 8, "fp32": 8},
 )
@@ -260,8 +307,11 @@ _APPLE_SIMDGROUP = MmaIsa(
 #: x86 AMX: tile-register, NOT lane-cooperative — the per-lane footprint model does
 #: not apply (cooperative=False, lane_count=None). bf16 tile is 16×16×32.
 _X86_AMX = MmaIsa(
-    target="x86", arch="amx", mma_class="amx",
-    cooperative=False, lane_count=None,
+    target="x86",
+    arch="amx",
+    mma_class="amx",
+    cooperative=False,
+    lane_count=None,
     shapes=((16, 16, 32),),
     k_by_dtype={"bf16": 32, "int8": 64},
 )
@@ -278,8 +328,7 @@ def get_isa(target: str, arch: str) -> MmaIsa:
     :func:`rocm_isa` (from the live `rocm_target` tables); other targets from the
     static grounded records. Raises ``MmaSelectorError`` for an unknown pair."""
     if target == "rocm":
-        key = arch.upper().replace("GFX", "GFX_") if arch.upper().startswith("GFX") \
-            else arch.upper()
+        key = arch.upper().replace("GFX", "GFX_") if arch.upper().startswith("GFX") else arch.upper()
         try:
             return rocm_isa(AMDArch[key])
         except KeyError as e:
@@ -288,7 +337,8 @@ def get_isa(target: str, arch: str) -> MmaIsa:
     if isa is None:
         raise MmaSelectorError(
             f"no MMA ISA record for ({target!r}, {arch!r}); known: "
-            f"{sorted(set(_STATIC_ISAS) | {('rocm', '<gfxNNNN>')})}")
+            f"{sorted(set(_STATIC_ISAS) | {('rocm', '<gfxNNNN>')})}"
+        )
     return isa
 
 

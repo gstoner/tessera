@@ -12,16 +12,20 @@ import pytest
 
 from tessera.compiler.primitive_coverage import NumericPolicy
 from tessera.compiler.rounding import (
+    CUDA_CAST_ROUNDING_MODES,
     IEEE_ROUNDING_SWEEP,
+    RDOWN,
     RTNA,
     RTNE,
     RTZ,
+    RUP,
     STOCHASTIC,
     TesseraRoundingError,
     canonical_rounding_modes,
     is_canonical_rounding_mode,
     normalize_rounding_mode,
     rounding_sweep,
+    rounding_to_cuda_cast_suffix,
     rounding_to_mlir,
 )
 
@@ -30,8 +34,10 @@ from tessera.compiler.rounding import (
 
 
 def test_canonical_set_membership() -> None:
-    assert canonical_rounding_modes() == frozenset({RTNE, RTNA, RTZ, STOCHASTIC})
-    for m in (RTNE, RTNA, RTZ, STOCHASTIC):
+    assert canonical_rounding_modes() == frozenset(
+        {RTNE, RTNA, RTZ, RUP, RDOWN, STOCHASTIC}
+    )
+    for m in (RTNE, RTNA, RTZ, RUP, RDOWN, STOCHASTIC):
         assert is_canonical_rounding_mode(m)
 
 
@@ -49,6 +55,10 @@ def test_canonical_set_membership() -> None:
         ("trunc", RTZ),
         ("truncate", RTZ),
         ("toward_zero", RTZ),
+        ("ru", RUP),
+        ("toward_positive", RUP),
+        ("rd", RDOWN),
+        ("toward_negative", RDOWN),
         ("sr", STOCHASTIC),
         ("  RTZ  ", RTZ),  # whitespace + case tolerated
     ],
@@ -80,6 +90,18 @@ def test_mlir_tokens() -> None:
     assert rounding_to_mlir("nearest_even") == "rtne"
     assert rounding_to_mlir("trunc") == "rtz"
     assert rounding_to_mlir(RTNA) == "rtna"
+    assert rounding_to_mlir(RUP) == "ru"
+    assert rounding_to_mlir(RDOWN) == "rd"
+
+
+def test_cuda_cast_suffixes_cover_exactly_four_directed_modes() -> None:
+    assert CUDA_CAST_ROUNDING_MODES == (RTNE, RDOWN, RUP, RTZ)
+    assert tuple(map(rounding_to_cuda_cast_suffix, CUDA_CAST_ROUNDING_MODES)) == (
+        "rn", "rd", "ru", "rz",
+    )
+    for unsupported in (RTNA, STOCHASTIC):
+        with pytest.raises(TesseraRoundingError, match="no CUDA cast"):
+            rounding_to_cuda_cast_suffix(unsupported)
 
 
 def test_default_sweep_is_the_article_triplet() -> None:

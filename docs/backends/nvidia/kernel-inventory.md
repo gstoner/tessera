@@ -2,7 +2,7 @@
 status: Informative
 classification: Reference / Kernel Inventory
 authority: Companion to Phase G NVIDIA backend pre-work
-last_updated: 2026-07-14
+last_updated: 2026-07-19
 ---
 
 # NVIDIA CUDA 13.3 Kernel Inventory
@@ -323,7 +323,7 @@ Sprint G-6/G-7/G-8 will promote entries to `compileable` once
 - ✅ Schema extension (Sprint G-3)
 - ✅ Lit fixtures with PTX patterns (Sprint G-4)
 - 🔜 `nvcc -ptx -arch=sm_90a` compile-only validation (Sprint G-6/G-7/G-8)
-- ✅ Named pass pipeline `NVIDIATargetPipeline` in `tessera-opt` (Sprint G-5) — registered as `tessera-nvidia-pipeline` (+ `-sm90`/`-sm100`/`-sm120`) via `buildCUDA13Pipeline`
+- ✅ Exact-SM `NVIDIATargetPipeline` routes in `tessera-opt` — registered as `tessera-nvidia-pipeline` (+ `-sm90`/`-sm100`/`-sm120`) via `addCUDA13PipelineForSM`; SM90 marker lowering is not inherited by SM100/SM120
 - 🔜 NCCL 2.22 bindings compile + symbol resolution (Sprint G-9)
 
 ### Blocked on hardware

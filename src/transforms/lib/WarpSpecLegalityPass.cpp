@@ -263,7 +263,7 @@ struct WarpSpecLegality
       llvm::SmallPtrSet<Value, 8> retiredTokens;
       func.walk<WalkOrder::PreOrder>([&](Operation *op) {
         StringRef n = op->getName().getStringRef();
-        if (n == "tile.wait_async") {
+        if (n == "tile.wait_async" || n == "tile.mbarrier.wait") {
           for (Value v : op->getOperands())
             if (isa<tessera::tile::AsyncTokenType>(v.getType()))
               retiredTokens.insert(v);

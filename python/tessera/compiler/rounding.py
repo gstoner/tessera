@@ -27,13 +27,22 @@ RTNE = "round_to_nearest_even"
 RTNA = "round_to_nearest_away"
 #: Round toward zero (truncate).  Article "RTZ".
 RTZ = "round_toward_zero"
+#: Round toward positive infinity. CUDA conversion suffix ``ru``.
+RUP = "round_toward_positive"
+#: Round toward negative infinity. CUDA conversion suffix ``rd``.
+RDOWN = "round_toward_negative"
 #: Stochastic rounding (not an IEEE mode; used by low-precision training paths).
 STOCHASTIC = "stochastic"
 
-_CANONICAL: frozenset[str] = frozenset({RTNE, RTNA, RTZ, STOCHASTIC})
+_CANONICAL: frozenset[str] = frozenset(
+    {RTNE, RTNA, RTZ, RUP, RDOWN, STOCHASTIC}
+)
 
 #: The three IEEE rounding modes the article benchmarks, in its table order.
 IEEE_ROUNDING_SWEEP: tuple[str, ...] = (RTNE, RTNA, RTZ)
+
+#: The four modes encoded by CUDA cast-intrinsic suffixes rn/rd/ru/rz.
+CUDA_CAST_ROUNDING_MODES: tuple[str, ...] = (RTNE, RDOWN, RUP, RTZ)
 
 # ── alias normalization ──────────────────────────────────────────────────────
 # Every legacy / shorthand spelling maps to one canonical mode.  Canonical names
@@ -62,6 +71,20 @@ _ALIASES: dict[str, str] = {
     "toward_zero": RTZ,
     "tz": RTZ,
     "zero": RTZ,
+    # Toward-positive / CUDA RU family.
+    RUP: RUP,
+    "ru": RUP,
+    "rup": RUP,
+    "round_up": RUP,
+    "toward_positive": RUP,
+    "positive_infinity": RUP,
+    # Toward-negative / CUDA RD family.
+    RDOWN: RDOWN,
+    "rd": RDOWN,
+    "rdown": RDOWN,
+    "round_down": RDOWN,
+    "toward_negative": RDOWN,
+    "negative_infinity": RDOWN,
     # stochastic family
     STOCHASTIC: STOCHASTIC,
     "sr": STOCHASTIC,
@@ -73,7 +96,16 @@ _MLIR_TOKEN: dict[str, str] = {
     RTNE: "rtne",
     RTNA: "rtna",
     RTZ: "rtz",
+    RUP: "ru",
+    RDOWN: "rd",
     STOCHASTIC: "sr",
+}
+
+_CUDA_SUFFIX: dict[str, str] = {
+    RTNE: "rn",
+    RDOWN: "rd",
+    RUP: "ru",
+    RTZ: "rz",
 }
 
 
@@ -119,6 +151,21 @@ def rounding_to_mlir(s: str) -> str:
     return _MLIR_TOKEN[normalize_rounding_mode(s)]
 
 
+def rounding_to_cuda_cast_suffix(s: str) -> str:
+    """Return the CUDA numeric-conversion suffix for an IEEE directed mode.
+
+    CUDA casts do not provide nearest-away or stochastic variants; those modes
+    fail closed instead of being silently approximated with another suffix.
+    """
+    mode = normalize_rounding_mode(s)
+    try:
+        return _CUDA_SUFFIX[mode]
+    except KeyError as exc:
+        raise TesseraRoundingError(
+            f"rounding mode {mode!r} has no CUDA cast-intrinsic suffix"
+        ) from exc
+
+
 def rounding_sweep(modes: Iterable[str] | None = None) -> tuple[str, ...]:
     """Canonical, de-duplicated rounding sweep.
 
@@ -139,13 +186,17 @@ __all__ = [
     "RTNE",
     "RTNA",
     "RTZ",
+    "RUP",
+    "RDOWN",
     "STOCHASTIC",
     "IEEE_ROUNDING_SWEEP",
+    "CUDA_CAST_ROUNDING_MODES",
     "TesseraRoundingError",
     "canonical_rounding_modes",
     "rounding_aliases",
     "is_canonical_rounding_mode",
     "normalize_rounding_mode",
     "rounding_to_mlir",
+    "rounding_to_cuda_cast_suffix",
     "rounding_sweep",
 ]

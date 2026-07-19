@@ -113,8 +113,6 @@ def test_launch_trusts_canonical_first_failing_gate_for_nvidia():
     assert response["ok"] is False
     assert response["first_failing_gate"] == result.first_failing_gate.gate
     assert response["first_failing_gate_detail"] == result.first_failing_gate.detail
-    # And the gate name is `toolchain` (nvcc missing on this Mac).
-    assert response["first_failing_gate"] == "toolchain"
 
 
 def test_launch_trusts_canonical_first_failing_gate_for_rocm():
@@ -151,8 +149,13 @@ def test_legacy_artifact_still_uses_b2_rederive():
     assert "canonical_first_failing_gate" not in legacy.metadata
     response = launch(legacy, args={})
     assert response["ok"] is False
-    # The B.2 path still produces the right answer.
-    assert response["first_failing_gate"] == "toolchain"
+    # The B.2 path still produces the host's canonical answer (toolchain on a
+    # Mac without CUDA, link on the CUDA-equipped WSL development host).
+    from tessera.compiler import pipeline_gates as pg
+    direct = pg.first_failing_gate("nvidia_sm90", "matmul")
+    assert direct is not None
+    assert response["first_failing_gate"] == direct.gate
+    assert response["first_failing_gate_detail"] == direct.detail
 
 
 # ---- Trust path is honest: ok==False still ok==False ----

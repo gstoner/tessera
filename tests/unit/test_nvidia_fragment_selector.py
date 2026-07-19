@@ -22,8 +22,12 @@ from tessera.compiler.nvidia_fragment import (
     ],
 )
 def test_sm120_fragment_selector_owns_cuda_physical_abi(
-    dtype: str, shape: tuple[int, int, int], packing: RegisterPacking,
-    a_regs: int, b_regs: int, mnemonic: str,
+    dtype: str,
+    shape: tuple[int, int, int],
+    packing: RegisterPacking,
+    a_regs: int,
+    b_regs: int,
+    mnemonic: str,
 ) -> None:
     desc = select_sm120_fragment_layout(dtype, shape)
     assert desc.arch == "sm_120a"
@@ -47,6 +51,28 @@ def test_sm120_nvfp4_is_block_scaled_and_typed_materialization_ready() -> None:
     assert desc.typed_tile_materialization_ready
 
 
+@pytest.mark.parametrize(
+    ("dtype", "shape", "packing", "scale_vector"),
+    [
+        ("fp6_e2m3", (16, 8, 32), RegisterPacking.PACKED_X4_I8, "1X"),
+        ("fp6_e3m2", (16, 8, 32), RegisterPacking.PACKED_X4_I8, "1X"),
+        ("fp4_e2m1", (16, 8, 64), RegisterPacking.PACKED_X8_E2M1, "2X"),
+    ],
+)
+def test_sm120_mx_fragments_are_block_scaled_and_materialized(
+    dtype,
+    shape,
+    packing,
+    scale_vector,
+) -> None:
+    desc = select_sm120_fragment_layout(dtype, shape)
+    assert desc.family is FragmentFamily.MMA_SYNC_BLOCK_SCALE
+    assert desc.scale_dtype == "ue8m0"
+    assert desc.scale_vector == scale_vector
+    assert desc.input_packing is packing
+    assert desc.typed_tile_materialization_ready
+
+
 def test_sm120_f16_accumulation_has_packed_accumulator_registers() -> None:
     desc = select_sm120_fragment_layout("f16", (16, 8, 16), "f16")
     assert desc.acc_dtype == "f16"
@@ -57,12 +83,9 @@ def test_sm120_f16_accumulation_has_packed_accumulator_registers() -> None:
 
 @pytest.mark.parametrize(
     "dtype,shape",
-    [("f16", (16, 16, 16)), ("tf32", (16, 8, 16)),
-     ("nvfp4", (16, 8, 32)), ("fp6_e3m2", (16, 8, 32))],
+    [("f16", (16, 16, 16)), ("tf32", (16, 8, 16)), ("nvfp4", (16, 8, 32)), ("fp6_e3m2", (16, 8, 64))],
 )
-def test_sm120_fragment_selector_rejects_unproven_contracts(
-    dtype: str, shape: tuple[int, int, int]
-) -> None:
+def test_sm120_fragment_selector_rejects_unproven_contracts(dtype: str, shape: tuple[int, int, int]) -> None:
     with pytest.raises(NvidiaFragmentError, match="sm_120a|fragments"):
         select_sm120_fragment_layout(dtype, shape)
 

@@ -22,12 +22,18 @@ from pathlib import Path
 import pytest
 
 from tessera.compiler.dialects_manifest import REGISTERED_DIALECTS
+from tessera.compiler.capabilities import TARGET_CAPABILITIES
 from tessera.compiler.pipeline_registry import (
     REGISTERED_PIPELINES,
+    TARGET_PIPELINE_RESOLUTIONS,
     PipelineSpec,
     all_pipeline_names,
+    compilation_spine_inventory,
+    current_driver_pipeline_map,
     pipeline_lookup,
     pipelines_for_target,
+    render_compilation_spine_csv,
+    target_pipeline_lookup,
 )
 
 
@@ -290,5 +296,75 @@ def test_pipelines_for_target() -> None:
 def test_pipeline_lookup() -> None:
     p = pipeline_lookup("tessera-lower-to-x86")
     assert p is not None
-    assert p.targets == ("x86_amx", "x86_avx512")
+    assert p.targets == ("cpu", "x86", "x86_amx", "x86_avx512")
     assert pipeline_lookup("does-not-exist") is None
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# E2E-SPINE-0: exact target → declared pipeline → pass ownership totality
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def test_target_pipeline_resolution_is_total_and_alphabetized() -> None:
+    targets = [resolution.target for resolution in TARGET_PIPELINE_RESOLUTIONS]
+    assert targets == sorted(targets)
+    assert len(targets) == len(set(targets))
+    assert set(targets) == set(TARGET_CAPABILITIES)
+
+
+def test_driver_mapping_is_derived_from_target_pipeline_resolution() -> None:
+    from tessera.compiler.driver import PIPELINE_BY_TARGET
+
+    assert PIPELINE_BY_TARGET == current_driver_pipeline_map()
+    assert set(PIPELINE_BY_TARGET) == set(TARGET_CAPABILITIES)
+
+
+def test_declared_target_pipelines_have_registered_pass_ownership() -> None:
+    allowed_states = {
+        "declared_exact", "declared_shared_builder", "family_selector",
+        "unsupported_no_exact_pipeline",
+    }
+    for resolution in TARGET_PIPELINE_RESOLUTIONS:
+        assert resolution.resolution_state in allowed_states
+        assert resolution.level_b in {"partial", "absent"}
+        assert resolution.level_c in {"complete", "absent"}
+        source = REPO_ROOT / resolution.registration_source
+        assert source.is_file(), resolution
+        if resolution.current_driver_pipeline != "tessera-target-artifact":
+            assert pipeline_lookup(resolution.current_driver_pipeline) is not None
+            assert resolution.current_driver_pipeline in source.read_text(errors="replace")
+        if not resolution.has_declared_pipeline:
+            assert resolution.resolution_state == "unsupported_no_exact_pipeline"
+            continue
+        spec = pipeline_lookup(resolution.declared_pipeline or "")
+        assert spec is not None, resolution
+        assert resolution.target in spec.targets, resolution
+        assert spec.passes, resolution
+        assert resolution.declared_pipeline in source.read_text(errors="replace")
+
+
+def test_shared_nvidia_aliases_report_the_actual_shared_builder_passes() -> None:
+    aliases = [
+        pipeline_lookup("tessera-nvidia-pipeline"),
+        pipeline_lookup("tessera-nvidia-pipeline-sm90"),
+        pipeline_lookup("tessera-nvidia-pipeline-sm100"),
+        pipeline_lookup("tessera-nvidia-pipeline-sm120"),
+    ]
+    assert all(alias is not None for alias in aliases)
+    assert len({alias.passes for alias in aliases if alias is not None}) == 1
+    for target in ("nvidia_sm100", "nvidia_sm120"):
+        resolution = target_pipeline_lookup(target)
+        assert resolution is not None
+        assert resolution.resolution_state == "declared_shared_builder"
+
+
+def test_compilation_spine_inventory_is_machine_readable_and_truthful() -> None:
+    rows = compilation_spine_inventory()
+    assert {row.target for row in rows} == set(TARGET_CAPABILITIES)
+    assert all(row.level_c == "absent" for row in rows)
+    assert target_pipeline_lookup("nvidia_sm80").declared_pipeline is None  # type: ignore[union-attr]
+    assert next(row for row in rows if row.target == "nvidia_sm120").level_a == "native"
+    assert next(row for row in rows if row.target == "rocm_gfx1151").level_a == "native"
+    csv_text = render_compilation_spine_csv()
+    assert csv_text.startswith("schema,target,family,runtime_backend,")
+    assert "tessera.target_pipeline.v1,nvidia_sm80," in csv_text

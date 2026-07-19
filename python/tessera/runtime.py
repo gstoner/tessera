@@ -36,11 +36,17 @@ import time
 from dataclasses import dataclass
 from enum import IntEnum
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, cast
+from typing import Any, Callable, Dict, List, Mapping, Optional, cast
 
 from .telemetry import TELEMETRY_SCHEMA_VERSION, make_event, telemetry_report
 from .compiler.capabilities import get_target_capability, normalize_target, runtime_status as compiler_runtime_status
 from .compiler.execution_matrix import executor_for_metadata as _exec_row_for_metadata
+from .compiler.native_artifact import (
+    ArtifactContractError,
+    BufferArgument,
+    LaunchDescriptor,
+    NativeImageArtifact,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -132,6 +138,25 @@ class RuntimeArtifact:
     target_ir: str = ""
     metadata: dict[str, Any] | None = None
     abi_signature: str = ""
+    native_image: NativeImageArtifact | None = None
+    launch_descriptor: LaunchDescriptor | None = None
+
+    def __post_init__(self) -> None:
+        if self.launch_descriptor is not None and self.native_image is None:
+            raise ArtifactContractError(
+                "E_LAUNCH_STALE_IMAGE",
+                "runtime artifact has a descriptor without an image",
+            )
+        if self.native_image is None:
+            return
+        target = (self.metadata or {}).get("target")
+        if target is not None and target != self.native_image.target:
+            raise ArtifactContractError(
+                "E_LAUNCH_STALE_IMAGE",
+                "runtime metadata target differs from native image",
+            )
+        if self.launch_descriptor is not None:
+            self.launch_descriptor.validate_image(self.native_image)
 
     @property
     def artifact_hash(self) -> str:
@@ -146,6 +171,13 @@ class RuntimeArtifact:
             "target_ir": self.target_ir,
             "metadata": self.metadata or {},
             "abi_signature": self.abi_signature,
+            "native_image": (
+                self.native_image.to_dict() if self.native_image is not None else None
+            ),
+            "launch_descriptor": (
+                self.launch_descriptor.to_dict()
+                if self.launch_descriptor is not None else None
+            ),
             "artifact_hash": self.artifact_hash,
         }
 
@@ -157,6 +189,13 @@ class RuntimeArtifact:
             "target_ir": self.target_ir,
             "metadata": self.metadata or {},
             "abi_signature": self.abi_signature,
+            "native_image": (
+                self.native_image.to_dict() if self.native_image is not None else None
+            ),
+            "launch_descriptor": (
+                self.launch_descriptor.to_dict()
+                if self.launch_descriptor is not None else None
+            ),
         }
         if include_hash:
             data["artifact_hash"] = hashlib.sha256(
@@ -165,18 +204,126 @@ class RuntimeArtifact:
         return json.dumps(data, sort_keys=True)
 
     @classmethod
-    def from_json(cls, payload: str | bytes) -> "RuntimeArtifact":
-        if isinstance(payload, bytes):
-            payload = payload.decode("utf-8")
-        data = json.loads(payload)
-        return cls(
+    def from_dict(cls, data: Mapping[str, Any]) -> "RuntimeArtifact":
+        image_data = data.get("native_image")
+        descriptor_data = data.get("launch_descriptor")
+        metadata_data = data.get("metadata") or {}
+        if not isinstance(metadata_data, Mapping):
+            raise ArtifactContractError(
+                "E_NATIVE_IMAGE_SCHEMA", "runtime metadata must be an object"
+            )
+        if image_data is not None and not isinstance(image_data, Mapping):
+            raise ArtifactContractError(
+                "E_NATIVE_IMAGE_SCHEMA", "runtime native_image must be an object"
+            )
+        if descriptor_data is not None and not isinstance(descriptor_data, Mapping):
+            raise ArtifactContractError(
+                "E_LAUNCH_DESCRIPTOR_SCHEMA",
+                "runtime launch_descriptor must be an object",
+            )
+        artifact = cls(
             graph_ir=data.get("graph_ir", ""),
             schedule_ir=data.get("schedule_ir", ""),
             tile_ir=data.get("tile_ir", ""),
             target_ir=data.get("target_ir", ""),
-            metadata=data.get("metadata") or {},
+            metadata=dict(metadata_data),
             abi_signature=data.get("abi_signature", ""),
+            native_image=(
+                NativeImageArtifact.from_dict(image_data)
+                if image_data is not None else None
+            ),
+            launch_descriptor=(
+                LaunchDescriptor.from_dict(descriptor_data)
+                if descriptor_data is not None else None
+            ),
         )
+        persisted_hash = data.get("artifact_hash")
+        legacy_data = {
+            "graph_ir": artifact.graph_ir,
+            "schedule_ir": artifact.schedule_ir,
+            "tile_ir": artifact.tile_ir,
+            "target_ir": artifact.target_ir,
+            "metadata": artifact.metadata or {},
+            "abi_signature": artifact.abi_signature,
+        }
+        legacy_hash = hashlib.sha256(
+            json.dumps(legacy_data, sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        if (persisted_hash is not None
+                and persisted_hash not in {artifact.artifact_hash, legacy_hash}):
+            raise ArtifactContractError(
+                "E_NATIVE_IMAGE_DIGEST_MISMATCH",
+                "runtime artifact hash does not match content",
+            )
+        return artifact
+
+    @classmethod
+    def from_json(cls, payload: str | bytes) -> "RuntimeArtifact":
+        try:
+            if isinstance(payload, bytes):
+                payload = payload.decode("utf-8")
+            data = json.loads(payload)
+        except (UnicodeDecodeError, json.JSONDecodeError, TypeError) as exc:
+            raise ArtifactContractError(
+                "E_NATIVE_IMAGE_SCHEMA", f"invalid runtime-artifact JSON: {exc}"
+            ) from exc
+        if not isinstance(data, Mapping):
+            raise ArtifactContractError(
+                "E_NATIVE_IMAGE_SCHEMA", "runtime artifact must be an object"
+            )
+        return cls.from_dict(data)
+
+
+@dataclass(frozen=True)
+class NativeBufferValue:
+    """A runtime buffer value paired with explicit portable binding metadata."""
+
+    value: Any
+    argument: BufferArgument
+
+
+@dataclass(frozen=True)
+class NativeLauncherRegistration:
+    target: str
+    binary_formats: tuple[str, ...]
+    submit: Callable[
+        [NativeImageArtifact, LaunchDescriptor, Mapping[str, Any],
+         Mapping[str, object], Any], Any
+    ]
+
+
+_native_launchers: dict[str, NativeLauncherRegistration] = {}
+
+
+def register_native_launcher(
+    target: str,
+    *,
+    binary_formats: tuple[str, ...],
+    submit: Callable[
+        [NativeImageArtifact, LaunchDescriptor, Mapping[str, Any],
+         Mapping[str, object], Any], Any
+    ],
+    replace: bool = False,
+) -> None:
+    """Register one exact-target submission hook for typed native artifacts."""
+    from .compiler.capabilities import normalize_target
+
+    exact_target = normalize_target(target)
+    if exact_target in _native_launchers and not replace:
+        raise ValueError(f"native launcher already registered for {exact_target}")
+    formats = tuple(binary_formats)
+    if not formats or any(not isinstance(item, str) or not item for item in formats):
+        raise ValueError("binary_formats must contain at least one non-empty format")
+    _native_launchers[exact_target] = NativeLauncherRegistration(
+        target=exact_target, binary_formats=formats, submit=submit,
+    )
+
+
+def unregister_native_launcher(target: str) -> None:
+    """Remove an exact-target hook; primarily useful for isolated tests."""
+    from .compiler.capabilities import normalize_target
+
+    _native_launchers.pop(normalize_target(target), None)
 
 
 _last_profile = RuntimeProfile()
@@ -1092,6 +1239,8 @@ def compile(module_ir: str | RuntimeArtifact, target: str | None = None, options
             target_ir=module_ir.target_ir,
             metadata=metadata,
             abi_signature=module_ir.abi_signature,
+            native_image=module_ir.native_image,
+            launch_descriptor=module_ir.launch_descriptor,
         )
     meta: dict[str, Any] = {
         "target": target or "cpu",
@@ -18843,13 +18992,170 @@ def _first_failing_gate_for_metadata(metadata: dict, target: str):
         return None
 
 
+def _native_buffer_value(value: Any) -> tuple[Any, BufferArgument]:
+    if isinstance(value, NativeBufferValue):
+        return value.value, value.argument
+    dtype = getattr(value, "dtype", None)
+    shape = getattr(value, "shape", None)
+    if dtype is None or shape is None:
+        raise ArtifactContractError(
+            "E_LAUNCH_BINDING_MISMATCH",
+            "native buffers need dtype/shape metadata or NativeBufferValue",
+        )
+    explicit_layout = getattr(value, "tessera_layout", None)
+    if isinstance(explicit_layout, str) and explicit_layout:
+        layout = explicit_layout
+    else:
+        flags = getattr(value, "flags", None)
+        c_contiguous = bool(getattr(flags, "c_contiguous", False))
+        f_contiguous = bool(getattr(flags, "f_contiguous", False))
+        if c_contiguous:
+            layout = "row_major"
+        elif f_contiguous:
+            layout = "col_major"
+        else:
+            layout = "strided"
+    address = 0
+    array_interface = getattr(value, "__array_interface__", None)
+    if isinstance(array_interface, Mapping):
+        data = array_interface.get("data")
+        if isinstance(data, tuple) and data and isinstance(data[0], int):
+            address = data[0]
+    if not address:
+        data_ptr = getattr(value, "data_ptr", None)
+        if callable(data_ptr):
+            address = int(data_ptr())
+    alignment = address & -address if address > 0 else 1
+    return value, BufferArgument(
+        dtype=str(dtype), shape=tuple(int(dim) for dim in shape),
+        layout=layout, address_alignment=alignment,
+    )
+
+
+def _split_native_arguments(
+    descriptor: LaunchDescriptor, args: Any,
+) -> tuple[dict[str, Any], dict[str, BufferArgument], dict[str, object]]:
+    if not isinstance(args, Mapping):
+        raise ArtifactContractError(
+            "E_LAUNCH_BINDING_MISMATCH",
+            "descriptor launches require a name-to-value argument mapping",
+        )
+    if "buffers" in args or "scalars" in args:
+        unknown_groups = set(args) - {"buffers", "scalars"}
+        if unknown_groups:
+            raise ArtifactContractError(
+                "E_LAUNCH_BINDING_MISMATCH",
+                f"unknown launch argument groups: {sorted(unknown_groups)}",
+            )
+        buffer_source = args.get("buffers", {})
+        scalar_source = args.get("scalars", {})
+        if not isinstance(buffer_source, Mapping) or not isinstance(scalar_source, Mapping):
+            raise ArtifactContractError(
+                "E_LAUNCH_BINDING_MISMATCH", "buffers and scalars must be mappings",
+            )
+    else:
+        buffer_names = {binding.name for binding in descriptor.buffers}
+        scalar_names = {scalar.name for scalar in descriptor.scalars}
+        unknown = set(args) - buffer_names - scalar_names
+        if unknown:
+            raise ArtifactContractError(
+                "E_LAUNCH_BINDING_MISMATCH",
+                f"unknown launch arguments: {sorted(unknown)}",
+            )
+        buffer_source = {name: args[name] for name in buffer_names if name in args}
+        scalar_source = {name: args[name] for name in scalar_names if name in args}
+    values: dict[str, Any] = {}
+    contracts: dict[str, BufferArgument] = {}
+    for name, value in buffer_source.items():
+        raw, contract = _native_buffer_value(value)
+        values[str(name)] = raw
+        contracts[str(name)] = contract
+    return values, contracts, {str(name): value for name, value in scalar_source.items()}
+
+
+def _launch_native_descriptor(
+    artifact: RuntimeArtifact, args: Any, stream: Any, start_ns: int,
+) -> dict[str, Any]:
+    """Validate and submit one compiler-owned descriptor without route discovery."""
+    global _last_profile
+
+    image = artifact.native_image
+    descriptor = artifact.launch_descriptor
+    assert image is not None and descriptor is not None
+    compiler_path = str((artifact.metadata or {}).get(
+        "compiler_path", "canonical_native_descriptor",
+    ))
+    try:
+        values, contracts, scalars = _split_native_arguments(descriptor, args)
+        descriptor.validate_invocation(image, contracts, scalars)
+    except ArtifactContractError as exc:
+        _last_profile = RuntimeProfile(launch_overhead_ms=0.0)
+        return {
+            "ok": False, "runtime_status": "invalid_artifact",
+            "compiler_path": compiler_path, "execution_kind": "artifact_only",
+            "artifact_hash": artifact.artifact_hash,
+            "diagnostic_code": exc.code, "reason": str(exc),
+        }
+    registration = _native_launchers.get(image.target)
+    if registration is None or image.binary_format not in registration.binary_formats:
+        _last_profile = RuntimeProfile(launch_overhead_ms=0.0)
+        return {
+            "ok": False, "runtime_status": "unimplemented",
+            "compiler_path": compiler_path, "execution_kind": "artifact_only",
+            "artifact_hash": artifact.artifact_hash,
+            "image_digest": image.image_digest,
+            "launch_descriptor_digest": descriptor.descriptor_digest,
+            "reason": (
+                f"no exact-target launcher accepts {image.binary_format!r} "
+                f"for {image.target}; legacy fallback is disabled"
+            ),
+        }
+    try:
+        output = registration.submit(image, descriptor, values, scalars, stream)
+    except Exception as exc:
+        _last_profile = RuntimeProfile(launch_overhead_ms=0.0)
+        return {
+            "ok": False, "runtime_status": "device_error",
+            "compiler_path": compiler_path, "execution_kind": "native",
+            "artifact_hash": artifact.artifact_hash,
+            "image_digest": image.image_digest,
+            "launch_descriptor_digest": descriptor.descriptor_digest,
+            "reason": str(exc),
+        }
+    elapsed_ms = (time.perf_counter_ns() - start_ns) / 1_000_000.0
+    _last_profile = RuntimeProfile(
+        launch_overhead_ms=elapsed_ms,
+        kernel_elapsed_ms=elapsed_ms if image.target != "cpu" else None,
+        cpu_wall_ms=elapsed_ms if image.target == "cpu" else None,
+    )
+    return {
+        "ok": True, "runtime_status": "success",
+        "compiler_path": compiler_path,
+        "execution_kind": "native_cpu" if image.target == "cpu" else "native_gpu",
+        "execution_mode": "descriptor",
+        "artifact_hash": artifact.artifact_hash,
+        "image_digest": image.image_digest,
+        "launch_descriptor_digest": descriptor.descriptor_digest,
+        "output": output,
+        "profile": {
+            "launch_overhead_ms": elapsed_ms,
+            "kernel_elapsed_ms": elapsed_ms if image.target != "cpu" else None,
+            "cpu_wall_ms": elapsed_ms if image.target == "cpu" else None,
+        },
+    }
 def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, Any]:
     """Launch executable CPU artifacts or return a structured non-success result."""
     global _last_profile
     start_ns = time.perf_counter_ns()
     artifact = load_artifact(kernel)
     metadata = artifact.metadata or {}
-    target = str(metadata.get("target", "cpu"))
+    target = (
+        artifact.native_image.target
+        if artifact.native_image is not None
+        else str(metadata.get("target", "cpu"))
+    )
+    if artifact.launch_descriptor is not None:
+        return _launch_native_descriptor(artifact, args, stream, start_ns)
     cap = backend_capabilities(target)
     # G6 + G6.1 — matrix-driven dispatch for **every** executable row (Apple
     # CPU/GPU + the CPU native_cpu/jit_cpu_numpy rows). The matrix lookup

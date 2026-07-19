@@ -784,6 +784,8 @@ implementation/proof work; `blocked` names an external prerequisite.
 | 13 | APPLE-ROUTE-1 | **active** | Strict v2 ingestion replaces the literal table and rejects stale, reference, wrong-context, and wrong-domain rows with citations. Re-measure/migrate every legacy family ledger and separate package-subgraph evidence before closure. |
 | 14 | APPLE-DTYPE-1 | **blocked — SDK** | FP8/FP4/MX native execution awaits the public macOS 27 Metal tensor path. Keep older-host int4/int8/f16/bf16 regression coverage. |
 | 15 | APPLE-CI-1 | **closed** | The local Metal 4 release gate serializes the physical Mac without registering a GitHub runner, builds fresh LLVM/MLIR 23 compiler/JIT/runtime artifacts, records power/thermal/GPU-contention availability, rejects incomplete or skipped evidence, runs correctness twice, and seals paired device/end-to-end evidence. The retained `docs/audit/evidence/apple/metal4/20260718-b1ee875/` packet proves two clean 11-test Apple7 runs under Xcode 26.6, two 8-row route reports with four Metal 4 rows each, and an 8-decision two-domain ledger against commit `b1ee87591ec701dd06a156cad8449f6498ae0891`. Portable CI validates its hashes and contents. Metal 3 remains non-blocking compatibility coverage. |
+| 16 | APPLE-E2E-1 | **queued** | After the shared `E2E-SPINE-1/-2` contracts land, make canonical compilation select the executable typed Apple GPU pipeline, package its native-library/function contract in the shared image and launch-descriptor schema, and give GA/EBM/linalg/PPO value-mode lanes an executable or explicit terminal state. Preserve Metal-owned schedules, placement policy, and selectors. |
+| 17 | APPLE-CPU-E2E-1 | **queued** | Extend the canonical Apple CPU executable pipeline beyond rank-2 f32 matmul where stable Accelerate/LAPACK ABIs exist; classify every remaining lane explicitly rather than implying execution from artifact IR. |
 
 ## Canonical validation lanes
 
@@ -898,6 +900,26 @@ HMMA/QMMA/OMMA kernels, CUDA-event evidence, and device-keyed NVIDIA selector
 rows. It changes no portable dtype spelling, ScaleLayout, epilogue order, or
 autotune schema. Apple remains SDK-gated for FP8/FP4 tensor execution and does
 not inherit CUDA fragments, resource values, timings, or promotions.
+
+Cross-backend sync `E2E-SPINE-2026-07-18`: Apple participates in the shared
+native-image and launch-descriptor contract through **APPLE-E2E-1** and
+**APPLE-CPU-E2E-1**. The shared work may select and package an existing typed
+Apple pipeline, but it does not transfer CUDA/ROCm schedules, change Metal
+placement, promote a route, or convert host-free compilation into exact-device
+proof. Existing runtime and artifact routes remain available until their
+canonical replacements meet all four proof layers on the named Apple host.
+The behavior-neutral E2E-SPINE-0 foundation is complete: Apple CPU/GPU exact
+targets now have total declared-pipeline ownership and truthful partial-B/
+absent-C inventory rows; Apple runtime selection is unchanged. E2E-SPINE-1 is
+also complete: Apple will consume the shared image/descriptor identity,
+bindings, generic geometry, workspace, ordering, and diagnostics, while Metal
+threadgroup schedules and placement remain Apple-owned. No Apple route or
+exact-device status changes until APPLE-E2E-1.
+E2E-SPINE-2 completes the shared typed carriers, stage ledger, cache join, and
+descriptor-first exact-target launcher registry. It registers no Metal hook and
+does not change value-mode classification, MPSGraph/Metal placement, pipeline
+cache policy, or selectors; APPLE-E2E-1 still owns native package production,
+Apple registration/submission, comparison, cleanup, and Level-C proof.
 
 Consumer plan `SEQUENCE-MIXER-2026-07-17`: the compiler-direction Sequence Mixer
 track ([`../../compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md`](../../compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md))

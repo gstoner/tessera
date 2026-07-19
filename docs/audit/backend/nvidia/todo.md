@@ -332,6 +332,8 @@ host. No CUDA execution status was inferred or promoted from the ROCm run.
 | 5 | NVIDIA-TEST-5 | Measured performance | Run `hardware_nvidia and performance` serially. Warm up compilation and caches; use repeated medians; measure kernel-only and end-to-end separately; record registers, shared memory, occupancy, spills, and selected route. | Stable baselines cover square/rectangular/ragged GEMM, fused epilogues, attention, paged KV, ReplaySSM, reductions, and transport. Each ratchet identifies the selected implementation. |
 | 6 | NVIDIA-TEST-6 | Refactor and deduplicate | Move mature families toward `tests/compiler/`, `tests/device/nvidia/`, `tests/integration/`, and `tests/performance/nvidia/`. Consolidate repeated CUDA availability, compilation, launch, oracle, and cleanup code. | No central filename allowlist; no duplicated private CUDA probe/loader; process trees and device allocations clean up on failure. |
 | 7 | NVIDIA-TEST-7 | Local release ownership | Own the NVIDIA-box release gate locally in WSL with a host concurrency lock and retained artifacts; GitHub runners are intentionally not used. Keep two-run device correctness required for NVIDIA promotion and performance serial. | A clean branch run reports NVIDIA host-free/shared registries, compiler artifact, device correctness, and performance independently and retains the fail-closed evidence bundle. |
+| 8 | NVIDIA-E2E-1 | Canonical SM120 compiler spine | Under sync `E2E-SPINE-2026-07-18`, compose Graph/Schedule/Tile lowering with `LowerTileToNVIDIA(sm=120)`, NVVM/PTX/native-image packaging, and the existing register/invoke launch bridge. Prove f16 and NVFP4 first, including non-origin scale tiles and general-shape dispatch. | One canonical driver request returns a typed image artifact plus launch descriptor, registers and launches on `sm_120`, compares numerically, and retains compiler/ABI/device/resource evidence without a selector change. |
+| 9 | NVIDIA-E2E-2 | Per-SM and operation breadth | Replace shared-alias/hardcoded target behavior with architecture-specific pipelines, then move supported CUDA families through the same typed image/launch seam. | Every enabled SM/family has the four-layer proof on its exact device or an explicit unsupported/planned terminal state; `sm_90` and `sm_100` are never inferred from `sm_120`. |
 
 ### High-risk NVIDIA-TEST-6 migration
 
@@ -652,6 +654,25 @@ shared dtype spelling, portable Tile scale layout, backend-neutral epilogue
 order, or generic autotune schema. Apple has no enabled NVFP4 cooperative-matrix
 route and ROCm gfx1151 has no FP8/FP4 WMMA instruction; neither inherits CUDA
 packing, HMMA/QMMA/OMMA schedules, resource values, timings, or selector rows.
+
+Cross-backend sync `E2E-SPINE-2026-07-18`: NVIDIA owns **NVIDIA-E2E-1** and
+**NVIDIA-E2E-2**. Shared code owns only the image/launch schemas and canonical
+orchestration; NVIDIA retains PTX/SASS generation, physical fragments, launch
+geometry, resources, and route selection. Existing NVRTC, shipped-library, and
+PTX-register/invoke paths remain valid candidates while the typed spine lands.
+Host-free IR/object evidence cannot promote an SM or selector, and exact-device
+proof for `sm_90`, `sm_100`, and `sm_120` remains architecture-specific. The
+completed E2E-SPINE-0 foundation records SM80 as lacking an exact registered
+pipeline and SM100/SM120 as shared-builder aliases; it also corrects the Python
+pass inventory to match that builder without changing CUDA runtime selection.
+E2E-SPINE-1 adds the portable image/descriptor and rejection contract only;
+PTX/cubin contents, warp schedules, launch geometry policy, resources, and CUDA
+selectors remain NVIDIA-owned and unchanged until NVIDIA-E2E-1.
+E2E-SPINE-2 completes the shared typed carriers, stage ledger, cache join, and
+descriptor-first exact-target launcher registry. It registers no CUDA hook and
+does not reinterpret `nvidia_mma` or any shipped/NVRTC candidate; NVIDIA-E2E-1
+still owns PTX packaging, `sm_120` registration/submission, numerical proof,
+resources, cleanup, and the first Level-C row.
 
 The first focused CUDA parity proof on the NVIDIA box is:
 

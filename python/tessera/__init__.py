@@ -5017,6 +5017,7 @@ from . import models  # noqa: E402
 from . import distributions  # noqa: E402
 
 from .runtime import (  # noqa: E402
+    NativeBufferValue,
     RuntimeArtifact,
     RuntimeProfile,
     available_backends,
@@ -5026,6 +5027,8 @@ from .runtime import (  # noqa: E402
     launch,
     load_artifact,
     query_backend,
+    register_native_launcher,
+    unregister_native_launcher,
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -5217,9 +5220,10 @@ __all__ = [
     # Error types
     "TesseraJitError", "TesseraConstraintError", "TesseraEffectError",
     # Ops namespace + runtime
-    "ops", "RuntimeArtifact", "RuntimeProfile", "available_backends",
+    "ops", "NativeBufferValue", "RuntimeArtifact", "RuntimeProfile", "available_backends",
     "backend_capabilities", "compile_artifact", "get_last_profile", "launch",
-    "load_artifact", "query_backend",
+    "load_artifact", "query_backend", "register_native_launcher",
+    "unregister_native_launcher",
     # S15 data, S14 AOT, S13 custom primitives, S11 losses, S10 optimizers /
     # schedules, and S9 quantization / numerics
     "data",

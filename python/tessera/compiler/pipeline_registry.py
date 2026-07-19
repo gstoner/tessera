@@ -75,6 +75,35 @@ class PipelineSpec:
     sprint: str = ""
 
 
+TARGET_PIPELINE_SCHEMA_VERSION = "tessera.target_pipeline.v1"
+
+
+@dataclass(frozen=True)
+class TargetPipelineResolution:
+    """Truthful compiler-pipeline ownership for one canonical target.
+
+    ``current_driver_pipeline`` preserves the behavior of the existing Python
+    driver. ``declared_pipeline`` names the best matching registered C++
+    pipeline when one exists; keeping the two fields separate makes legacy
+    family routing visible without silently changing compilation behavior.
+    """
+
+    target: str
+    current_driver_pipeline: str
+    declared_pipeline: str | None
+    resolution_state: str
+    target_scope: str
+    owner: str
+    registration_source: str
+    level_b: str
+    level_c: str
+    reason: str
+
+    @property
+    def has_declared_pipeline(self) -> bool:
+        return self.declared_pipeline is not None
+
+
 # ─────────────────────────────────────────────────────────────────────────
 # Registry — alphabetised by pipeline name.
 # ─────────────────────────────────────────────────────────────────────────
@@ -241,6 +270,7 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
         ),
         required_dialects=("tessera", "tile", "tessera_rocm", "func", "scf", "arith"),
         targets=(
+            "rocm",
             "rocm_gfx90a",
             "rocm_gfx940",
             "rocm_gfx942",
@@ -249,6 +279,7 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             "rocm_gfx1151",
             "rocm_gfx1200",
             "rocm_gfx1201",
+            "rocm_gfx1250",
         ),
         verifier_passes=("rocm-wave-lds-legality",),
         lit_fixtures=(),
@@ -268,8 +299,8 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             "tessera-tile",
             "tessera-tile-to-x86",
         ),
-        required_dialects=("tessera", "func", "scf", "arith"),
-        targets=("x86_amx", "x86_avx512"),
+        required_dialects=("tessera", "tile", "func", "scf", "arith"),
+        targets=("cpu", "x86", "x86_amx", "x86_avx512"),
         verifier_passes=("tessera-symdim-equality",),
         lit_fixtures=("tests/tessera-ir/phase2/tile_to_x86.mlir",),
         phase="lowering",
@@ -307,7 +338,7 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             "tessera-warpspec-legality",
             "tessera-nv-flash-attn-emitter",
         ),
-        required_dialects=("tessera", "func", "scf", "arith"),
+        required_dialects=("tessera", "tile", "func", "scf", "arith"),
         targets=("nvidia_sm90",),  # default SM_90 chain
         verifier_passes=(
             "tessera-layout-legality",
@@ -329,24 +360,30 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             "canonicalize",
             "tessera-swiglu-fusion",
             "tessera-mla-fusion",
+            "tessera-nsa-fusion",
+            "tessera-hybrid-attention-fusion",
+            "tessera-lightning-attention-fusion",
+            "tessera-delta-attention-fusion",
             "tessera-distribution-lower",
             "tessera-layout-legality",
             "tessera-ir-contracts",
             "tessera-symdim-equality",
             "tessera-tile-ir-lowering",
             "tessera-warp-specialize",
-            # C2/C3/C6 (TIRx): warp-spec legality gates (shared buildCUDA13Pipeline).
+            # All aliases currently share buildCUDA13Pipeline.  Architecture-
+            # specific branching is an E2E-SPINE follow-up, not present here.
             "tessera-tile-pipeline-legality",
             "tessera-warpspec-legality",
             "tessera-tile-barrier-reuse-legality",
             "tessera-async-copy-lowering",
-            "tessera-tcgen05-lowering",  # Blackwell-specific
+            "tessera-wgmma-lowering",
             "tessera-tma-descriptor",
             # Second placement — over the typed #tile.barrier markers.
             "tessera-tile-pipeline-legality",
             "tessera-warpspec-legality",
+            "tessera-nv-flash-attn-emitter",
         ),
-        required_dialects=("tessera", "func", "scf", "arith"),
+        required_dialects=("tessera", "tile", "func", "scf", "arith"),
         targets=("nvidia_sm100",),
         verifier_passes=(
             "tessera-layout-legality",
@@ -368,24 +405,30 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             "canonicalize",
             "tessera-swiglu-fusion",
             "tessera-mla-fusion",
+            "tessera-nsa-fusion",
+            "tessera-hybrid-attention-fusion",
+            "tessera-lightning-attention-fusion",
+            "tessera-delta-attention-fusion",
             "tessera-distribution-lower",
             "tessera-layout-legality",
             "tessera-ir-contracts",
             "tessera-symdim-equality",
             "tessera-tile-ir-lowering",
             "tessera-warp-specialize",
-            # C2/C3/C6 (TIRx): warp-spec legality gates (shared buildCUDA13Pipeline).
+            # All aliases currently share buildCUDA13Pipeline.  Architecture-
+            # specific branching is an E2E-SPINE follow-up, not present here.
             "tessera-tile-pipeline-legality",
             "tessera-warpspec-legality",
             "tessera-tile-barrier-reuse-legality",
             "tessera-async-copy-lowering",
-            "tessera-tcgen05-lowering",
+            "tessera-wgmma-lowering",
             "tessera-tma-descriptor",
             # Second placement — over the typed #tile.barrier markers.
             "tessera-tile-pipeline-legality",
             "tessera-warpspec-legality",
+            "tessera-nv-flash-attn-emitter",
         ),
-        required_dialects=("tessera", "func", "scf", "arith"),
+        required_dialects=("tessera", "tile", "func", "scf", "arith"),
         targets=("nvidia_sm120",),
         verifier_passes=(
             "tessera-layout-legality",
@@ -431,7 +474,7 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             "tessera-warpspec-legality",
             "tessera-nv-flash-attn-emitter",
         ),
-        required_dialects=("tessera", "func", "scf", "arith"),
+        required_dialects=("tessera", "tile", "func", "scf", "arith"),
         targets=("nvidia_sm90",),
         verifier_passes=(
             "tessera-layout-legality",
@@ -467,6 +510,144 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
 )
 
 
+# Exact-target ownership is intentionally separate from ``PipelineSpec.targets``.
+# A target may have a registered C++ pipeline while the current Python driver
+# still uses a legacy family alias or artifact-only sentinel.  E2E-SPINE-0 makes
+# that mismatch data instead of changing behavior while auditing it.
+TARGET_PIPELINE_RESOLUTIONS: tuple[TargetPipelineResolution, ...] = (
+    TargetPipelineResolution(
+        "apple_cpu", "tessera-lower-to-apple_cpu",
+        "tessera-lower-to-apple_cpu", "declared_exact", "host",
+        "apple", "src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Passes.cpp",
+        "partial", "absent",
+        "Canonical driver selects the artifact pipeline; the executable runtime pipeline is not yet canonical.",
+    ),
+    TargetPipelineResolution(
+        "apple_gpu", "tessera-lower-to-apple_gpu",
+        "tessera-lower-to-apple_gpu", "declared_exact", "exact_architecture",
+        "apple", "src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Passes.cpp",
+        "partial", "absent",
+        "Canonical driver selects the artifact pipeline; executable Metal lowering remains a separate registered pipeline.",
+    ),
+    TargetPipelineResolution(
+        "cpu", "tessera-lower-to-x86", "tessera-lower-to-x86",
+        "family_selector", "host", "shared_x86", "src/transforms/lib/Passes.cpp",
+        "partial", "absent",
+        "The generic CPU frontend records the x86 lowering alias while runtime execution may remain reference-backed.",
+    ),
+    TargetPipelineResolution(
+        "nvidia_sm100", "tessera-lower-to-gpu",
+        "tessera-nvidia-pipeline-sm100", "declared_shared_builder",
+        "exact_architecture", "nvidia", "src/transforms/lib/Passes.cpp",
+        "partial", "absent",
+        "The exact alias is registered but shares the CUDA13 builder, including its SM90 control-flow guard.",
+    ),
+    TargetPipelineResolution(
+        "nvidia_sm120", "tessera-lower-to-gpu",
+        "tessera-nvidia-pipeline-sm120", "declared_shared_builder",
+        "exact_architecture", "nvidia", "src/transforms/lib/Passes.cpp",
+        "partial", "absent",
+        "The exact alias is registered but shares the CUDA13 builder; the real SM120 Tile lowering is not composed here.",
+    ),
+    TargetPipelineResolution(
+        "nvidia_sm80", "tessera-lower-to-gpu", None,
+        "unsupported_no_exact_pipeline", "exact_architecture", "nvidia",
+        "src/transforms/lib/Passes.cpp", "absent", "absent",
+        "No exact SM80 C++ pipeline is registered; the current driver retains its legacy artifact alias.",
+    ),
+    TargetPipelineResolution(
+        "nvidia_sm90", "tessera-lower-to-gpu",
+        "tessera-nvidia-pipeline-sm90", "declared_exact",
+        "exact_architecture", "nvidia", "src/transforms/lib/Passes.cpp",
+        "partial", "absent",
+        "The exact alias matches the shared builder's current SM90 guard, but canonical native-image packaging is absent.",
+    ),
+    TargetPipelineResolution(
+        "rocm", "tessera-lower-to-rocm", "tessera-lower-to-rocm",
+        "family_selector", "family_selector", "rocm",
+        "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/Passes.cpp",
+        "partial", "absent",
+        "The family pipeline lowers the typed GEMM subset; other native lanes still use runtime-authored directives.",
+    ),
+    TargetPipelineResolution(
+        "rocm_gfx1100", "tessera-target-artifact", "tessera-lower-to-rocm",
+        "declared_shared_builder", "exact_architecture", "rocm",
+        "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/Passes.cpp",
+        "partial", "absent", "The ROCm pipeline is family-shared; the exact driver route remains artifact-only.",
+    ),
+    TargetPipelineResolution(
+        "rocm_gfx1151", "tessera-target-artifact", "tessera-lower-to-rocm",
+        "declared_shared_builder", "exact_architecture", "rocm",
+        "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/Passes.cpp",
+        "partial", "absent", "The ROCm pipeline is family-shared; broad native execution is joined through the generic runtime route.",
+    ),
+    TargetPipelineResolution(
+        "rocm_gfx1200", "tessera-target-artifact", "tessera-lower-to-rocm",
+        "declared_shared_builder", "exact_architecture", "rocm",
+        "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/Passes.cpp",
+        "partial", "absent", "The ROCm pipeline is family-shared and exact-device execution remains gated.",
+    ),
+    TargetPipelineResolution(
+        "rocm_gfx1201", "tessera-target-artifact", "tessera-lower-to-rocm",
+        "declared_shared_builder", "exact_architecture", "rocm",
+        "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/Passes.cpp",
+        "partial", "absent", "The ROCm pipeline is family-shared and exact-device execution remains gated.",
+    ),
+    TargetPipelineResolution(
+        "rocm_gfx1250", "tessera-target-artifact", "tessera-lower-to-rocm",
+        "declared_shared_builder", "exact_architecture", "rocm",
+        "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/Passes.cpp",
+        "partial", "absent", "The ROCm pipeline is family-shared and exact-device execution remains gated.",
+    ),
+    TargetPipelineResolution(
+        "rocm_gfx90a", "tessera-target-artifact", "tessera-lower-to-rocm",
+        "declared_shared_builder", "exact_architecture", "rocm",
+        "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/Passes.cpp",
+        "partial", "absent", "The ROCm pipeline is family-shared and exact-device execution remains gated.",
+    ),
+    TargetPipelineResolution(
+        "rocm_gfx940", "tessera-target-artifact", "tessera-lower-to-rocm",
+        "declared_shared_builder", "exact_architecture", "rocm",
+        "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/Passes.cpp",
+        "partial", "absent", "The ROCm pipeline is family-shared and exact-device execution remains gated.",
+    ),
+    TargetPipelineResolution(
+        "rocm_gfx942", "tessera-target-artifact", "tessera-lower-to-rocm",
+        "declared_shared_builder", "exact_architecture", "rocm",
+        "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/Passes.cpp",
+        "partial", "absent", "The ROCm pipeline is family-shared and exact-device execution remains gated.",
+    ),
+    TargetPipelineResolution(
+        "rocm_gfx950", "tessera-target-artifact", "tessera-lower-to-rocm",
+        "declared_shared_builder", "exact_architecture", "rocm",
+        "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/Passes.cpp",
+        "partial", "absent", "The ROCm pipeline is family-shared and exact-device execution remains gated.",
+    ),
+    TargetPipelineResolution(
+        "x86", "tessera-lower-to-x86", "tessera-lower-to-x86",
+        "declared_exact", "host", "x86", "src/transforms/lib/Passes.cpp",
+        "partial", "absent",
+        "Graph-to-C-ABI lowering exists for a subset; a typed x86 Target dialect and canonical native image are absent.",
+    ),
+)
+
+
+@dataclass(frozen=True)
+class CompilationSpineInventoryRow:
+    target: str
+    family: str
+    runtime_backend: str
+    current_driver_pipeline: str
+    declared_pipeline: str
+    resolution_state: str
+    target_scope: str
+    level_a: str
+    level_b: str
+    level_c: str
+    owner: str
+    reason: str
+
+
 # ─────────────────────────────────────────────────────────────────────────
 # Public helpers
 # ─────────────────────────────────────────────────────────────────────────
@@ -488,10 +669,133 @@ def pipelines_for_target(target: str) -> tuple[PipelineSpec, ...]:
     return tuple(p for p in REGISTERED_PIPELINES if target in p.targets)
 
 
+def target_pipeline_lookup(target: str) -> TargetPipelineResolution | None:
+    for resolution in TARGET_PIPELINE_RESOLUTIONS:
+        if resolution.target == target:
+            return resolution
+    return None
+
+
+def current_driver_pipeline_map() -> dict[str, str]:
+    """Return the behavior-preserving driver map from the ownership registry."""
+    return {
+        resolution.target: resolution.current_driver_pipeline
+        for resolution in TARGET_PIPELINE_RESOLUTIONS
+    }
+
+
+def _level_a_status(target: str) -> str:
+    """Derive Level-A runtime truth from the canonical execution matrix."""
+    from .execution_matrix import all_rows
+
+    rows = [
+        row for row in all_rows()
+        if row.executable and (row.target == target or row.evidence_target == target)
+    ]
+    native_kinds = {"native_cpu", "native_gpu", "cpu_accelerate"}
+    if any(row.execution_kind in native_kinds for row in rows):
+        return "native"
+    if rows:
+        return "reference"
+    return "absent"
+
+
+def compilation_spine_inventory() -> tuple[CompilationSpineInventoryRow, ...]:
+    """Join target, pipeline, and runtime registries into Level-A/B/C truth."""
+    from .capabilities import TARGET_CAPABILITIES
+
+    rows: list[CompilationSpineInventoryRow] = []
+    for resolution in TARGET_PIPELINE_RESOLUTIONS:
+        capability = TARGET_CAPABILITIES[resolution.target]
+        rows.append(CompilationSpineInventoryRow(
+            target=resolution.target,
+            family=capability.family,
+            runtime_backend=capability.runtime_backend,
+            current_driver_pipeline=resolution.current_driver_pipeline,
+            declared_pipeline=resolution.declared_pipeline or "",
+            resolution_state=resolution.resolution_state,
+            target_scope=resolution.target_scope,
+            level_a=_level_a_status(resolution.target),
+            level_b=resolution.level_b,
+            level_c=resolution.level_c,
+            owner=resolution.owner,
+            reason=resolution.reason,
+        ))
+    return tuple(rows)
+
+
+COMPILATION_SPINE_CSV_COLUMNS: tuple[str, ...] = (
+    "schema", "target", "family", "runtime_backend",
+    "current_driver_pipeline", "declared_pipeline", "resolution_state",
+    "target_scope", "level_a", "level_b", "level_c", "owner", "reason",
+)
+
+
+def render_compilation_spine_csv() -> str:
+    import csv
+    import io
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator="\n")
+    writer.writerow(COMPILATION_SPINE_CSV_COLUMNS)
+    for row in compilation_spine_inventory():
+        writer.writerow((
+            TARGET_PIPELINE_SCHEMA_VERSION,
+            row.target,
+            row.family,
+            row.runtime_backend,
+            row.current_driver_pipeline,
+            row.declared_pipeline,
+            row.resolution_state,
+            row.target_scope,
+            row.level_a,
+            row.level_b,
+            row.level_c,
+            row.owner,
+            row.reason,
+        ))
+    return buffer.getvalue()
+
+
+def render_compilation_spine_markdown() -> str:
+    lines = [
+        "# Canonical compilation spine inventory",
+        "",
+        "**Generated from target capabilities, pipeline ownership, and the runtime execution matrix. Do not hand-edit.**",
+        "",
+        "Level A is native/reference runtime execution, Level B is a typed compiler seam, and Level C is the canonical Graph→native-image→launch path. `partial` never implies fleet closure.",
+        "",
+        "| Target | Driver pipeline | Declared pipeline | Resolution | A | B | C | Owner |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    for row in compilation_spine_inventory():
+        lines.append(
+            f"| `{row.target}` | `{row.current_driver_pipeline}` | "
+            f"`{row.declared_pipeline or '-'}` | `{row.resolution_state}` | "
+            f"`{row.level_a}` | `{row.level_b}` | `{row.level_c}` | `{row.owner}` |"
+        )
+    lines.extend((
+        "",
+        "The canonical CSV companion retains target scope, runtime backend, and the complete resolution reason.",
+        "",
+    ))
+    return "\n".join(lines)
+
+
 __all__ = [
+    "COMPILATION_SPINE_CSV_COLUMNS",
+    "CompilationSpineInventoryRow",
     "PipelineSpec",
     "REGISTERED_PIPELINES",
+    "TARGET_PIPELINE_RESOLUTIONS",
+    "TARGET_PIPELINE_SCHEMA_VERSION",
+    "TargetPipelineResolution",
     "all_pipeline_names",
+    "compilation_spine_inventory",
+    "current_driver_pipeline_map",
     "pipeline_lookup",
     "pipelines_for_target",
+    "render_compilation_spine_csv",
+    "render_compilation_spine_markdown",
+    "target_pipeline_lookup",
 ]

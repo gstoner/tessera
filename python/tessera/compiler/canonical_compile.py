@@ -120,6 +120,16 @@ class CompileResult:
     backward: Optional[Any] = None
 
     @property
+    def native_image(self):
+        """Compiler-produced native image, when packaging reached that stage."""
+        return self.bundle.native_image
+
+    @property
+    def launch_descriptor(self):
+        """Compiler-produced launch contract, never reconstructed by runtime."""
+        return self.bundle.launch_descriptor
+
+    @property
     def is_single_op(self) -> bool:
         """True when the program is a single distinct op (component-op
         gating is then identical to the primary-op answer)."""
@@ -289,6 +299,8 @@ class CompileResult:
             target_ir=self.target_ir,
             metadata=meta,
             abi_signature=f"tessera.canonical.v1.{self.target}",
+            native_image=self.native_image,
+            launch_descriptor=self.launch_descriptor,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -332,6 +344,15 @@ class CompileResult:
                 for r in self.gate_results
             ],
             "artifact_hashes": self.bundle.artifact_hashes,
+            "orchestration_state": self.bundle.orchestration_state,
+            "spine_stages": list(self.bundle.spine_stages()),
+            "native_image": (
+                self.native_image.to_dict() if self.native_image is not None else None
+            ),
+            "launch_descriptor": (
+                self.launch_descriptor.to_dict()
+                if self.launch_descriptor is not None else None
+            ),
         }
         # Apple-sample Actions 1 + 6 — capability + archive telemetry on
         # Apple targets. The compile result is the natural carrier: a

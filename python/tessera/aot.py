@@ -13,6 +13,7 @@ from typing import Any, Callable, Mapping
 import numpy as np
 
 from .runtime import RuntimeArtifact
+from .compiler.native_artifact import ArtifactContractError
 
 
 def _json_hash(data: Mapping[str, Any]) -> str:
@@ -112,14 +113,7 @@ def load(path: str | os.PathLike, *, allow_pickle: bool = False) -> AOTArtifact:
     root = Path(path)
     data = json.loads((root / "artifact.json").read_text())
     rt_data = data["runtime_artifact"]
-    runtime_artifact = RuntimeArtifact(
-        graph_ir=rt_data.get("graph_ir", ""),
-        schedule_ir=rt_data.get("schedule_ir", ""),
-        tile_ir=rt_data.get("tile_ir", ""),
-        target_ir=rt_data.get("target_ir", ""),
-        metadata=rt_data.get("metadata") or {},
-        abi_signature=rt_data.get("abi_signature", ""),
-    )
+    runtime_artifact = RuntimeArtifact.from_dict(rt_data)
     fn = None
     callable_path = root / "callable.pkl"
     if callable_path.exists() and allow_pickle:
@@ -179,6 +173,14 @@ def compilation_cache_key(runtime_artifact: RuntimeArtifact, *, target: str, inp
             "mesh_spec": mesh_spec,
             "input_meta": input_meta,
             "tessera_version": "reference",
+            "native_image_cache_key": (
+                runtime_artifact.native_image.cache_key
+                if runtime_artifact.native_image is not None else None
+            ),
+            "launch_cache_fingerprint": (
+                runtime_artifact.launch_descriptor.cache_fingerprint
+                if runtime_artifact.launch_descriptor is not None else None
+            ),
         }
     )
 
@@ -206,13 +208,59 @@ class CompilationCache:
         return path
 
     def put(self, key: str, artifact: AOTArtifact) -> Path:
-        return artifact.save(self._resolve(key))
+        path = artifact.save(self._resolve(key))
+        runtime = artifact.runtime_artifact
+        manifest = {
+            "schema": "tessera.compilation_cache_entry.v1",
+            "lookup_key": key,
+            "artifact_hash": runtime.artifact_hash,
+            "native_image_cache_key": (
+                runtime.native_image.cache_key if runtime.native_image is not None else None
+            ),
+            "launch_cache_fingerprint": (
+                runtime.launch_descriptor.cache_fingerprint
+                if runtime.launch_descriptor is not None else None
+            ),
+        }
+        (path / "cache_manifest.json").write_text(
+            json.dumps(manifest, indent=2, sort_keys=True)
+        )
+        return path
 
     def get(self, key: str) -> AOTArtifact | None:
         path = self._resolve(key)
         if not (path / "artifact.json").exists():
             return None
-        return load(path)
+        artifact = load(path)
+        manifest_path = path / "cache_manifest.json"
+        if not manifest_path.exists():
+            return artifact
+        try:
+            manifest = json.loads(manifest_path.read_text())
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ArtifactContractError(
+                "E_NATIVE_IMAGE_DIGEST_MISMATCH",
+                f"compilation-cache manifest is unreadable: {exc}",
+            ) from exc
+        runtime = artifact.runtime_artifact
+        actual = {
+            "schema": "tessera.compilation_cache_entry.v1",
+            "lookup_key": key,
+            "artifact_hash": runtime.artifact_hash,
+            "native_image_cache_key": (
+                runtime.native_image.cache_key if runtime.native_image is not None else None
+            ),
+            "launch_cache_fingerprint": (
+                runtime.launch_descriptor.cache_fingerprint
+                if runtime.launch_descriptor is not None else None
+            ),
+        }
+        if manifest != actual:
+            raise ArtifactContractError(
+                "E_NATIVE_IMAGE_DIGEST_MISMATCH",
+                "compilation-cache manifest does not match lookup key or artifact",
+            )
+        return artifact
 
     def invalidate(self, key: str) -> None:
         path = self._resolve(key)

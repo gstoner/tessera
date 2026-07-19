@@ -143,6 +143,16 @@ def _r_exec_matrix_csv() -> str:
     return execution_matrix.render_csv()
 
 
+def _r_compilation_spine() -> str:
+    from . import pipeline_registry
+    return pipeline_registry.render_compilation_spine_markdown()
+
+
+def _r_compilation_spine_csv() -> str:
+    from . import pipeline_registry
+    return pipeline_registry.render_compilation_spine_csv()
+
+
 def _r_verifier_md() -> str:
     from . import verifier_coverage
     return verifier_coverage.render_dashboard()
@@ -479,6 +489,12 @@ REGISTRY: tuple[GeneratedDoc, ...] = (
         "runtime_execution_matrix", "runtime",
         _GEN / "runtime_execution_matrix.md", _r_exec_matrix,
         csv_path=_GEN / "runtime_execution_matrix.csv", render_csv=_r_exec_matrix_csv,
+    ),
+    GeneratedDoc(
+        "compilation_spine_inventory", "runtime",
+        _GEN / "compilation_spine_inventory.md", _r_compilation_spine,
+        csv_path=_GEN / "compilation_spine_inventory.csv",
+        render_csv=_r_compilation_spine_csv,
     ),
     # ── Verifier ──
     GeneratedDoc(

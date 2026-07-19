@@ -120,6 +120,8 @@ evidence and not evidence for any sibling architecture.
 | ROCM-1/2/3 | open, access-gated | P0 exact-device execution on gfx950, gfx1201, and gfx1250 is the active release frontier. |
 | ROCM-4a/4b | open, access-gated | P1 compatibility execution on gfx1200 and gfx942 follows the P0 packet. |
 | ROCM-5 | landing, exact-device closure open | Architecture-owned descriptors and cross-assembly exist; numerical and performance closure depends on ROCM-1 through ROCM-4b. |
+| ROCM-E2E-1 | queued, software-actionable | After the shared `E2E-SPINE-1/-2` contracts land, use softmax as the typed-directive pilot from frontend/Tile IR through the existing generator, ROCDL, HSACO packaging, and launch descriptor. |
+| ROCM-E2E-2 | queued | Move the remaining supported gfx1151 families through the typed image/launch seam after the pilot; retain runtime text synthesis until each lane has parity proof. |
 
 ## Recommended open-work order
 
@@ -129,15 +131,17 @@ named exact device can satisfy an execution gate.
 
 | Order | ID | Work | Access state | Completion gate |
 |---:|---|---|---|---|
-| 1 | ROCM-2 | Run the common P0 packet on Radeon AI PRO R9700 `gfx1201` | owner and reservation required | RDNA 4 WMMA-v2 f16/bf16 plus enabled FP8/integer forms assemble, launch, match aligned/ragged oracles, and record resources and timing. |
-| 2 | ROCM-1 | Run the common P0 packet on MI350-series `gfx950` | owner and reservation required | CDNA 4 matmul, flash attention, softmax, and GELU launch and compare; low-precision breadth advances only with physical-layout proof. |
-| 3 | ROCM-3 | Run the common P0 packet on MI455X `gfx1250` | owner and reservation required | The upstream-LLVM artifact joins to a launch/numerical proof; WMMA-v2 properties and fragment layout match the device. |
-| 4 | ROCM-6 | Revalidate G6-A/B/C with valid paired device timing | bare-metal gfx1151 or repaired event timing required | Original correctness, resource, aligned/ragged, dtype, device-time, and E2E gates are rerun under LLVM/MLIR 23 + ROCm 7.14 before reaffirming or changing production. |
-| 5 | ROCM-8 | Measure copy versus mapped-host memory on bare-metal `gfx1151` | bare-metal owner and reservation required | Repeated kernel-only and end-to-end measurements establish a stable crossover without using WSL evidence. |
-| 6 | ROCM-4b | Retain compatibility proof on MI300X/MI325X `gfx942` | owner and reservation required | f16/bf16 MFMA plus retained matmul/attention/softmax/GELU paths launch and compare. |
-| 7 | ROCM-4a | Add Radeon RX 9000 `gfx1200` exact-device proof | owner and reservation required | Matmul launches and compares; unsupported forms reject stably. |
-| 8 | ROCM-5 | Close the architecture-owned fragment umbrella | depends on ROCM-1 through ROCM-4b | Every enabled family/dtype has exact-device packing, numerical, resource, and timing evidence, or an explicit unsupported/deferred state. |
-| 9 | ROCM-TEST-1 | Validate ROCm host-free compiler ownership | available on the ROCm build host | Build the declared ROCm compiler capability set, explicitly select or exclude foreign-backend compiler tests, and retain command, build flags, tool path, node IDs, and diagnostics; no CUDA/Apple-only build assumption blocks the ROCm lane. |
+| 1 | ROCM-E2E-1 | Land the typed softmax directive pilot | available on the gfx1151 WSL/compiler host | A canonical request lowers frontend/Tile IR to a typed ROCm directive, runs the existing generator and ROCDL path, returns HSACO plus a launch descriptor, launches on gfx1151, and matches the established oracle without runtime-authored directive text. |
+| 2 | ROCM-2 | Run the common P0 packet on Radeon AI PRO R9700 `gfx1201` | owner and reservation required | RDNA 4 WMMA-v2 f16/bf16 plus enabled FP8/integer forms assemble, launch, match aligned/ragged oracles, and record resources and timing. |
+| 3 | ROCM-1 | Run the common P0 packet on MI350-series `gfx950` | owner and reservation required | CDNA 4 matmul, flash attention, softmax, and GELU launch and compare; low-precision breadth advances only with physical-layout proof. |
+| 4 | ROCM-3 | Run the common P0 packet on MI455X `gfx1250` | owner and reservation required | The upstream-LLVM artifact joins to a launch/numerical proof; WMMA-v2 properties and fragment layout match the device. |
+| 5 | ROCM-6 | Revalidate G6-A/B/C with valid paired device timing | bare-metal gfx1151 or repaired event timing required | Original correctness, resource, aligned/ragged, dtype, device-time, and E2E gates are rerun under LLVM/MLIR 23 + ROCm 7.14 before reaffirming or changing production. |
+| 6 | ROCM-8 | Measure copy versus mapped-host memory on bare-metal `gfx1151` | bare-metal owner and reservation required | Repeated kernel-only and end-to-end measurements establish a stable crossover without using WSL evidence. |
+| 7 | ROCM-4b | Retain compatibility proof on MI300X/MI325X `gfx942` | owner and reservation required | f16/bf16 MFMA plus retained matmul/attention/softmax/GELU paths launch and compare. |
+| 8 | ROCM-4a | Add Radeon RX 9000 `gfx1200` exact-device proof | owner and reservation required | Matmul launches and compares; unsupported forms reject stably. |
+| 9 | ROCM-5 | Close the architecture-owned fragment umbrella | depends on ROCM-1 through ROCM-4b | Every enabled family/dtype has exact-device packing, numerical, resource, and timing evidence, or an explicit unsupported/deferred state. |
+| 10 | ROCM-TEST-1 | Validate ROCm host-free compiler ownership | available on the ROCm build host | Build the declared ROCm compiler capability set, explicitly select or exclude foreign-backend compiler tests, and retain command, build flags, tool path, node IDs, and diagnostics; no CUDA/Apple-only build assumption blocks the ROCm lane. |
+| 11 | ROCM-E2E-2 | Expand the typed spine beyond the pilot | follows ROCM-E2E-1; exact-device proof per family | Each supported family consumes typed IR, produces the shared image/launch contract, and matches the incumbent route before runtime text synthesis is retired for that lane. |
 
 ## ROCM-TILE-1: portable Tile fragments
 
@@ -705,6 +709,25 @@ autotune schema. gfx1151 supports neither FP8/BF8 WMMA nor NVIDIA NVFP4 OMMA;
 ROCm therefore inherits no CUDA nibble packing, scale selector, wave schedule,
 resource value, timing, or selector promotion. RDNA4/CDNA4 low-precision work
 remains behind its architecture-specific exact-device queues.
+
+Cross-backend sync `E2E-SPINE-2026-07-18`: ROCm owns **ROCM-E2E-1** and
+**ROCM-E2E-2**. The shared contract standardizes native-image metadata and
+launch descriptors only; ROCm continues to own directives, generators, AMDGPU
+ISA selection, wave/LDS schedules, HSACO production, and selectors. The softmax
+pilot must match the existing gfx1151 route before its runtime-authored text
+bridge is removed. NVIDIA physical schedules do not transfer, and later
+architecture breadth still requires the exact-device queues above. The
+completed E2E-SPINE-0 foundation gives every registered ROCm family/exact target
+a total family-shared pipeline row, including gfx1250, while preserving the
+exact-target artifact fallback and generic runtime route. E2E-SPINE-1 adds the
+portable HSACO image/descriptor envelope and registered validation diagnostics
+without encoding AMD wave/LDS schedules or changing any HIP route. ROCM-E2E-1
+remains responsible for the first typed softmax producer and exact gfx1151 join.
+E2E-SPINE-2 completes the shared typed carriers, stage ledger, cache join, and
+descriptor-first exact-target launcher registry. It registers no HIP hook and
+does not replace runtime-authored directives or existing gfx1151 executors;
+ROCM-E2E-1 still owns HSACO production, `gfx1151` registration/submission,
+softmax comparison, cleanup, and the first ROCm Level-C row.
 
 Do not schedule these without new evidence:
 

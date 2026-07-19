@@ -195,6 +195,16 @@ This is primarily an sm_120 adjacency/breadth program today. Hopper sm_90 and
 datacenter sm_100 require architecture-specific proof; they are not aliases for
 consumer Blackwell.
 
+The cross-backend canonical compiler spine is tracked separately by
+[`backend/E2E_COMPILATION_AUDIT.md`](backend/E2E_COMPILATION_AUDIT.md) under
+sync key `E2E-SPINE-2026-07-18`. Its Level-A native routes do not imply the
+Level-C Graph→typed target→native-image→launch contract. **E2E-SPINE-0** first
+freezes truthful ownership, and **E2E-SPINE-1** supplies the portable versioned
+image/descriptor schemas and rejection diagnostics. **E2E-SPINE-2** now joins
+those typed objects through compile results, runtime artifacts, cache identity,
+and descriptor-first exact-target launcher hooks. Backend vertical slices remain
+responsible for architecture-owned image production and device proof.
+
 ### P1 — Promote the broader compiler surface
 
 | Workstream | Current open signal | Required closure evidence |

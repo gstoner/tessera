@@ -2,7 +2,7 @@
 status: Normative
 classification: Normative
 authority: Runtime C ABI
-last_updated: 2026-07-14
+last_updated: 2026-07-18
 ---
 
 # Tessera Runtime ABI Specification
@@ -95,6 +95,13 @@ increment `MAJOR`. The current version is **0.1.0** (see `tsr_version.h`).
 All public functions are declared `extern "C"`, making the ABI callable from both C and C++.
 Python bindings wrap the runtime surface through `tessera.runtime.TesseraRuntime`
 and related helpers. Backend coverage remains validation-gated.
+
+The compiler-side native-image and launch-descriptor envelope is specified in
+[`NATIVE_ARTIFACT_SPEC.md`](NATIVE_ARTIFACT_SPEC.md). It remains additive to
+this C ABI. `CompileResult` and `RuntimeArtifact` now carry the typed objects,
+and Python generic launch orchestration validates them before invoking an
+exact-target registered submission hook. Backend hooks may adapt that validated
+contract to the existing C ABI; no new public C function is introduced.
 
 ---
 

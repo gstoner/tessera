@@ -24,21 +24,13 @@ from typing import Any, Mapping
 from .graph_ir import GraphIRModule
 from .capabilities import CAPABILITY_REGISTRY_VERSION, supports_op
 from .matmul_pipeline import CPUPlan, JitDiagnostic, LoweringArtifact, build_cpu_plan, explain_cpu_plan, normalize_target_kind
+from .pipeline_registry import current_driver_pipeline_map, target_pipeline_lookup
+from .native_artifact import LaunchDescriptor, NativeImageArtifact
 
 
 COMPILER_TRACE_SCHEMA_VERSION = "tessera.compiler.trace.v1"
 
-PIPELINE_BY_TARGET = {
-    "cpu": "tessera-lower-to-x86",
-    "x86": "tessera-lower-to-x86",
-    "nvidia_sm80": "tessera-lower-to-gpu",
-    "nvidia_sm90": "tessera-lower-to-gpu",
-    "nvidia_sm100": "tessera-lower-to-gpu",
-    "nvidia_sm120": "tessera-lower-to-gpu",
-    "rocm": "tessera-lower-to-rocm",
-    "apple_cpu": "tessera-lower-to-apple_cpu",
-    "apple_gpu": "tessera-lower-to-apple_gpu",
-}
+PIPELINE_BY_TARGET = current_driver_pipeline_map()
 
 
 def stable_hash(text: str) -> str:
@@ -157,6 +149,35 @@ class CompileArtifactBundle:
     # `apple_value_target_ir_error` — the front door keeps the artifact IR but
     # the failure is observable, not silent.
     value_mode_error: str | None = None
+    # E2E-SPINE-2: backend packaging attaches compiler-produced native bytes
+    # and, once ABI lowering is complete, the descriptor that launches them.
+    # Both fields remain empty for today's artifact-only and legacy routes.
+    native_image: NativeImageArtifact | None = None
+    launch_descriptor: LaunchDescriptor | None = None
+
+    def __post_init__(self) -> None:
+        if self.launch_descriptor is not None and self.native_image is None:
+            raise ValueError("a launch descriptor requires a native image")
+        if self.native_image is None:
+            return
+        if self.native_image.target != self.request.target:
+            raise ValueError("native image target does not match compile request")
+        if self.native_image.pipeline_name != self.request.pipeline_name:
+            resolution = target_pipeline_lookup(self.request.target)
+            declared_producer = (
+                resolution.declared_pipeline
+                if resolution is not None
+                and self.request.pipeline_name == resolution.current_driver_pipeline
+                else None
+            )
+            if self.native_image.pipeline_name != declared_producer:
+                raise ValueError("native image pipeline does not match compile request")
+        if self.target_ir is None:
+            raise ValueError("a native image requires compiler Target IR")
+        if self.native_image.target_ir_digest != stable_hash(self.target_ir.text):
+            raise ValueError("native image was not produced from this bundle's Target IR")
+        if self.launch_descriptor is not None:
+            self.launch_descriptor.validate_image(self.native_image)
 
     def artifact(self, level: str) -> LoweringArtifact | None:
         if level == "graph":
@@ -180,6 +201,47 @@ class CompileArtifactBundle:
 
     def diagnostics_text(self) -> tuple[str, ...]:
         return tuple(d.format() for d in self.diagnostics)
+
+    @property
+    def orchestration_state(self) -> str:
+        """Highest compiler-spine state reached without inferring execution."""
+        if self.launch_descriptor is not None:
+            return "launchable"
+        if self.native_image is not None:
+            return "packaged"
+        if self.target_ir is not None:
+            return "compileable"
+        return "artifact_only"
+
+    def spine_stages(self) -> tuple[dict[str, Any], ...]:
+        """Deterministic stage ledger for canonical orchestration consumers."""
+        stages: list[dict[str, Any]] = []
+        for name, artifact in (
+            ("graph", self.graph), ("schedule", self.schedule),
+            ("tile", self.tile), ("target", self.target_ir),
+            ("backend", self.backend),
+        ):
+            stages.append({
+                "stage": name,
+                "status": "complete" if artifact is not None else "not_produced",
+                "digest": stable_hash(artifact.text) if artifact is not None else None,
+            })
+        stages.extend((
+            {
+                "stage": "native_image",
+                "status": "complete" if self.native_image is not None else "not_produced",
+                "digest": self.native_image.image_digest if self.native_image is not None else None,
+            },
+            {
+                "stage": "launch_descriptor",
+                "status": "complete" if self.launch_descriptor is not None else "not_produced",
+                "digest": (
+                    self.launch_descriptor.descriptor_digest
+                    if self.launch_descriptor is not None else None
+                ),
+            },
+        ))
+        return tuple(stages)
 
     def trace_json(self) -> str:
         return json.dumps([event.to_dict() for event in self.trace_events], sort_keys=True)
@@ -227,6 +289,15 @@ class CompileArtifactBundle:
             "diagnostics": list(self.diagnostics_text()),
             "trace": [event.to_dict() for event in self.trace_events],
             "tool_invocations": [invocation.to_dict() for invocation in self.tool_invocations],
+            "orchestration_state": self.orchestration_state,
+            "spine_stages": list(self.spine_stages()),
+            "native_image_digest": (
+                self.native_image.image_digest if self.native_image is not None else None
+            ),
+            "launch_descriptor_digest": (
+                self.launch_descriptor.descriptor_digest
+                if self.launch_descriptor is not None else None
+            ),
         }
 
 

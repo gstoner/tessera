@@ -27,6 +27,38 @@ def test_compile_request_preserves_exact_x86_and_selects_pipeline():
     assert normalize_target_kind("x86_64") == "cpu"
 
 
+def test_spine_foundation_preserves_existing_driver_pipeline_selection():
+    expected = {
+        "apple_cpu": "tessera-lower-to-apple_cpu",
+        "apple_gpu": "tessera-lower-to-apple_gpu",
+        "cpu": "tessera-lower-to-x86",
+        "nvidia_sm100": "tessera-lower-to-gpu",
+        "nvidia_sm120": "tessera-lower-to-gpu",
+        "nvidia_sm80": "tessera-lower-to-gpu",
+        "nvidia_sm90": "tessera-lower-to-gpu",
+        "rocm": "tessera-lower-to-rocm",
+        "rocm_gfx1100": "tessera-target-artifact",
+        "rocm_gfx1151": "tessera-target-artifact",
+        "rocm_gfx1200": "tessera-target-artifact",
+        "rocm_gfx1201": "tessera-target-artifact",
+        "rocm_gfx1250": "tessera-target-artifact",
+        "rocm_gfx90a": "tessera-target-artifact",
+        "rocm_gfx940": "tessera-target-artifact",
+        "rocm_gfx942": "tessera-target-artifact",
+        "rocm_gfx950": "tessera-target-artifact",
+        "x86": "tessera-lower-to-x86",
+    }
+    assert PIPELINE_BY_TARGET == expected
+    for target, pipeline in expected.items():
+        request = CompileRequest(
+            source_origin="unit",
+            function_name="mm",
+            graph_ir='module { "tessera.matmul"() : () -> () }',
+            target=target,
+        )
+        assert request.pipeline_name == pipeline
+
+
 def test_compile_trace_event_serializes_json_and_chrome_trace():
     event = CompileTraceEvent(
         pass_name="tessera-lower-to-x86",

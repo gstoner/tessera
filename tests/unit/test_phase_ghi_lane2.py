@@ -48,7 +48,7 @@ class TestG5PipelineAlias:
 
     def test_pipeline_includes_warpspec_to_nvptx_chain(self):
         body = (REPO / "src" / "transforms" / "lib" / "Passes.cpp").read_text()
-        # All pipeline stages should appear in buildCUDA13Pipeline.
+        # The exact-SM builder contains the proven NVIDIA stage vocabulary.
         for stage in (
             "createWarpSpecializationPass",
             "createAsyncCopyLoweringPass",

@@ -569,12 +569,18 @@ class GraphIRModule:
     type_aliases: List[GraphIRTypeAlias] = field(default_factory=list)
     constants: List[GraphIRConstant] = field(default_factory=list)
 
-    def verify(self) -> "GraphIRVerificationResult":
-        return GraphIRVerifier().verify_module(self)
+    def verify(self, *, target: object = "cpu") -> "GraphIRVerificationResult":
+        return GraphIRVerifier().verify_module(self, target=target)
 
-    def to_mlir(self, *, verify: bool = True, canonical: bool = False) -> str:
+    def to_mlir(
+        self,
+        *,
+        verify: bool = True,
+        canonical: bool = False,
+        target: object = "cpu",
+    ) -> str:
         if verify:
-            result = self.verify()
+            result = self.verify(target=target)
             if not result.ok:
                 raise GraphIRVerificationError(result.format())
         attrs = self._emitted_module_attrs()
@@ -676,7 +682,12 @@ class GraphIRVerifier:
     use `construct_mlir_module` for a parse-backed object as well.
     """
 
-    def verify_module(self, module: GraphIRModule) -> GraphIRVerificationResult:
+    def verify_module(
+        self,
+        module: GraphIRModule,
+        *,
+        target: object = "cpu",
+    ) -> GraphIRVerificationResult:
         diagnostics: List[GraphIRDiagnostic] = []
         diagnostics.extend(self._verify_named_declarations(
             "mesh",
@@ -706,10 +717,15 @@ class GraphIRVerifier:
             if fn.name in seen:
                 diagnostics.append(GraphIRDiagnostic("error", f"duplicate function {fn.name!r}", code="GRAPH_IR_DUP_FUNC"))
             seen.add(fn.name)
-            diagnostics.extend(self.verify_function(fn).diagnostics)
+            diagnostics.extend(self.verify_function(fn, target=target).diagnostics)
         return GraphIRVerificationResult(tuple(diagnostics))
 
-    def verify_function(self, fn: GraphIRFunction) -> GraphIRVerificationResult:
+    def verify_function(
+        self,
+        fn: GraphIRFunction,
+        *,
+        target: object = "cpu",
+    ) -> GraphIRVerificationResult:
         diagnostics: List[GraphIRDiagnostic] = []
         arg_names = set()
         for arg in fn.args:
@@ -768,7 +784,7 @@ class GraphIRVerifier:
                         span=op.source_span,
                         code="GRAPH_IR_UNDEFINED_OPERAND",
                     ))
-            self._verify_op_types(op, value_types, diagnostics)
+            self._verify_op_types(op, value_types, diagnostics, target=target)
         if control_stack:
             diagnostics.append(GraphIRDiagnostic(
                 "error",
@@ -847,13 +863,15 @@ class GraphIRVerifier:
         op: IROp,
         value_types: Dict[str, IRType],
         diagnostics: List[GraphIRDiagnostic],
+        *,
+        target: object = "cpu",
     ) -> None:
         operand_contracts = [
             _tensor_contract_for(value_types.get(operand))
             for operand in op.operands
             if value_types.get(operand) is not None
         ]
-        legality = check_op_legality(op.op_name, operand_contracts)
+        legality = check_op_legality(op.op_name, operand_contracts, target=target)
         for diag in legality.diagnostics:
             if diag.code in {
                 "LEGALITY_COLLECTIVE_EFFECT",

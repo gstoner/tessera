@@ -37,6 +37,7 @@ from .native_artifact import (
     ArtifactContractError,
     BufferArgument,
     BufferBinding,
+    DeviceLibraryRecord,
     LaunchDescriptor,
     LaunchGeometry,
     NativeEntryPoint,
@@ -46,6 +47,24 @@ from .native_artifact import (
     ScalarArgument,
     ShapeGuard,
     WorkspaceRequirement,
+)
+from .nvidia_math_contract import (
+    CUDA_MATH_CONTRACT_VERSION,
+    CudaMathContract,
+    MathRoute,
+    cuda_math_contract,
+)
+from .nvidia_intrinsic_contract import (
+    SM120IntrinsicContract,
+    SM120_INTRINSIC_CONTRACTS,
+    sm120_intrinsic_contract,
+)
+from .nvidia_ptx_memory_contract import (
+    PTX_ATOMIC_SEMANTICS,
+    PTX_MEMORY_MODEL,
+    PTX_MEMORY_SCOPES,
+    PtxMemoryModelContract,
+    validate_ptx_memory_claim,
 )
 from .capabilities import (
     CAPABILITY_REGISTRY_VERSION,
@@ -242,6 +261,7 @@ __all__ = [
     "ArtifactContractError",
     "BufferArgument",
     "BufferBinding",
+    "DeviceLibraryRecord",
     "LaunchDescriptor",
     "LaunchGeometry",
     "NativeEntryPoint",
@@ -251,6 +271,18 @@ __all__ = [
     "ScalarArgument",
     "ShapeGuard",
     "WorkspaceRequirement",
+    "CUDA_MATH_CONTRACT_VERSION",
+    "CudaMathContract",
+    "MathRoute",
+    "cuda_math_contract",
+    "SM120IntrinsicContract",
+    "SM120_INTRINSIC_CONTRACTS",
+    "sm120_intrinsic_contract",
+    "PTX_ATOMIC_SEMANTICS",
+    "PTX_MEMORY_MODEL",
+    "PTX_MEMORY_SCOPES",
+    "PtxMemoryModelContract",
+    "validate_ptx_memory_claim",
     "CAPABILITY_REGISTRY_VERSION",
     "CapabilityResult",
     "TargetCapability",

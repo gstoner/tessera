@@ -646,18 +646,32 @@ LogicalResult MatmulKernelOp::verify() {
     return emitOpError("requires a #tile.mma_desc mma attribute");
   if (!epilogue)
     return emitOpError("requires a #tile.epilogue epilogue attribute");
-  unsigned expected = epilogue.getBias() ? 7 : 6;
+  bool blockScaled = desc.getAType() == "nvfp4" ||
+                     desc.getAType() == "fp4_e2m1" ||
+                     desc.getAType() == "e2m3" ||
+                     desc.getAType() == "e3m2";
+  bool residual = false;
+  if (auto attr = getOperation()->getAttrOfType<BoolAttr>("residual"))
+    residual = attr.getValue();
+  if (blockScaled && (epilogue.getBias() || residual))
+    return emitOpError("block-scaled launch-level matmul does not support fused bias/residual yet");
+  if (residual) {
+    auto order = getOperation()->getAttrOfType<StringAttr>("epilogue_order");
+    if (!order || order.getValue() != "matmul_bias_activation_residual")
+      return emitOpError("residual requires epilogue_order=matmul_bias_activation_residual");
+  }
+  unsigned expected = blockScaled ? 8 : 6 + unsigned(epilogue.getBias()) + unsigned(residual);
   if (getInputs().size() != expected)
-    return emitOpError() << "expects A, B, "
-                         << (epilogue.getBias() ? "bias, " : "")
-                         << "D, M, N, K operands";
+    return emitOpError() << (blockScaled
+        ? "expects packed A, packed B, scale A, scale B, D, M, N, K operands"
+        : "expects A, B, optional bias, optional residual, D, M, N, K operands");
   unsigned dimStart = expected - 3;
   for (Value dim : getInputs().drop_front(dimStart))
     if (!dim.getType().isInteger(64))
       return emitOpError("M, N, and K must be i64");
   for (Value pointer : getInputs().take_front(dimStart))
     if (!isa<LLVM::LLVMPointerType>(pointer.getType()))
-      return emitOpError("A, B, optional bias, and D must be !llvm.ptr");
+    return emitOpError("matrix, scale, optional bias, and D operands must be !llvm.ptr");
   int64_t warps = 1;
   if (auto attr = getOperation()->getAttrOfType<IntegerAttr>("warps"))
     warps = attr.getInt();
@@ -670,6 +684,276 @@ LogicalResult MatmulKernelOp::verify() {
     return emitOpError("staging must be global or shared");
   if (staging == "shared" && warps != 4)
     return emitOpError("shared staging currently requires four warps");
+  return success();
+}
+
+LogicalResult SoftmaxKernelOp::verify() {
+  if (getInputs().size() != 4)
+    return emitOpError("expects source, destination, rows, and columns operands");
+  if (!isa<LLVM::LLVMPointerType>(getInputs()[0].getType()) ||
+      !isa<LLVM::LLVMPointerType>(getInputs()[1].getType()))
+    return emitOpError("source and destination operands must be !llvm.ptr");
+  if (!getInputs()[2].getType().isInteger(64) ||
+      !getInputs()[3].getType().isInteger(64))
+    return emitOpError("rows and columns must be i64");
+  auto storage = getOperation()->getAttrOfType<StringAttr>("storage");
+  auto accum = getOperation()->getAttrOfType<StringAttr>("accum");
+  if (!storage || (storage.getValue() != "f16" && storage.getValue() != "f32"))
+    return emitOpError("requires storage=\"f16\" or storage=\"f32\"");
+  if (!accum || accum.getValue() != "f32")
+    return emitOpError("requires accum=\"f32\"");
+  auto axis = getOperation()->getAttrOfType<IntegerAttr>("axis");
+  if (!axis || axis.getInt() != -1)
+    return emitOpError("currently requires axis=-1");
+  auto expMode = getOperation()->getAttrOfType<StringAttr>("exp_mode");
+  if (!expMode || expMode.getValue().empty())
+    return emitOpError("requires an explicit exp_mode");
+  if (!getOperation()->getAttrOfType<BoolAttr>("ftz"))
+    return emitOpError("requires an explicit ftz boolean");
+  return success();
+}
+
+LogicalResult ReduceKernelOp::verify() {
+  if (getInputs().size() != 5)
+    return emitOpError("expects source, destination, outer, axis extent, and inner operands");
+  if (!isa<LLVM::LLVMPointerType>(getInputs()[0].getType()) ||
+      !isa<LLVM::LLVMPointerType>(getInputs()[1].getType()))
+    return emitOpError("source and destination operands must be !llvm.ptr");
+  for (Value dim : getInputs().drop_front(2))
+    if (!dim.getType().isInteger(64))
+      return emitOpError("reduction dimensions must be i64");
+  auto storage = getOperation()->getAttrOfType<StringAttr>("storage");
+  auto accum = getOperation()->getAttrOfType<StringAttr>("accum");
+  auto kind = getOperation()->getAttrOfType<StringAttr>("kind");
+  auto axis = getOperation()->getAttrOfType<IntegerAttr>("axis");
+  auto keepdims = getOperation()->getAttrOfType<BoolAttr>("keepdims");
+  auto schedule = getOperation()->getAttrOfType<StringAttr>("schedule");
+  auto nanMode = getOperation()->getAttrOfType<StringAttr>("nan_mode");
+  if (!storage || (storage.getValue() != "f16" && storage.getValue() != "f32"))
+    return emitOpError("requires storage=\"f16\" or storage=\"f32\"");
+  if (!accum || accum.getValue() != "f32")
+    return emitOpError("requires accum=\"f32\"");
+  if (!kind || (kind.getValue() != "sum" && kind.getValue() != "mean" &&
+                kind.getValue() != "max"))
+    return emitOpError("requires kind in {sum, mean, max}");
+  if (!axis || axis.getInt() < 0)
+    return emitOpError("requires a normalized nonnegative axis");
+  if (!keepdims)
+    return emitOpError("requires an explicit keepdims boolean");
+  if (!schedule || (schedule.getValue() != "serial" &&
+                    schedule.getValue() != "cooperative_128"))
+    return emitOpError("requires schedule=serial|cooperative_128");
+  if (!nanMode || nanMode.getValue() != "propagate")
+    return emitOpError("currently requires nan_mode=\"propagate\"");
+  return success();
+}
+
+LogicalResult AttentionKernelOp::verify() {
+  auto bias = getOperation()->getAttrOfType<BoolAttr>("bias");
+  bool hasBias = bias && bias.getValue();
+  if (!bias)
+    return emitOpError("requires an explicit bias boolean");
+  if (getInputs().size() != 11 + unsigned(hasBias))
+    return emitOpError(
+        "expects Q, K, V, optional bias, O, B, Hq, Hkv, Sq, Sk, D, and Dv operands");
+  unsigned pointerCount = 4 + unsigned(hasBias);
+  for (Value pointer : getInputs().take_front(pointerCount))
+    if (!isa<LLVM::LLVMPointerType>(pointer.getType()))
+      return emitOpError("Q, K, V, optional bias, and O operands must be !llvm.ptr");
+  for (Value dim : getInputs().drop_front(pointerCount))
+    if (!dim.getType().isInteger(64))
+      return emitOpError("attention dimensions must be i64");
+  auto storage = getOperation()->getAttrOfType<StringAttr>("storage");
+  auto accum = getOperation()->getAttrOfType<StringAttr>("accum");
+  auto scale = getOperation()->getAttrOfType<FloatAttr>("scale");
+  auto causal = getOperation()->getAttrOfType<BoolAttr>("causal");
+  auto windowLeft = getOperation()->getAttrOfType<IntegerAttr>("window_left");
+  auto windowRight = getOperation()->getAttrOfType<IntegerAttr>("window_right");
+  auto softcap = getOperation()->getAttrOfType<FloatAttr>("softcap");
+  auto dropout = getOperation()->getAttrOfType<FloatAttr>("dropout_p");
+  auto dropoutSeed = getOperation()->getAttrOfType<IntegerAttr>("dropout_seed");
+  if (!storage || (storage.getValue() != "f16" && storage.getValue() != "f32"))
+    return emitOpError("requires storage=\"f16\" or storage=\"f32\"");
+  if (!accum || accum.getValue() != "f32")
+    return emitOpError("requires accum=\"f32\"");
+  if (!scale || !scale.getValue().isFinite() || scale.getValueAsDouble() <= 0.0)
+    return emitOpError("requires a finite positive f32 scale");
+  if (!causal)
+    return emitOpError("requires an explicit causal boolean");
+  if (!windowLeft || !windowRight || windowLeft.getInt() < -1 ||
+      windowRight.getInt() < -1)
+    return emitOpError("requires window_left/window_right >= -1");
+  if (!softcap || !softcap.getValue().isFinite() ||
+      softcap.getValueAsDouble() < 0.0)
+    return emitOpError("requires finite softcap >= 0");
+  if (!dropout || !dropout.getValue().isFinite() ||
+      dropout.getValueAsDouble() < 0.0 || dropout.getValueAsDouble() >= 1.0)
+    return emitOpError("requires finite dropout_p in [0, 1)");
+  if (!dropoutSeed)
+    return emitOpError("requires an explicit dropout_seed");
+  return success();
+}
+
+LogicalResult AttentionBackwardKernelOp::verify() {
+  auto bias = getOperation()->getAttrOfType<BoolAttr>("bias");
+  bool hasBias = bias && bias.getValue();
+  if (!bias)
+    return emitOpError("requires an explicit bias boolean");
+  if (getInputs().size() != 14 + unsigned(hasBias))
+    return emitOpError(
+        "expects dO, Q, K, V, optional bias, dQ, dK, dV, B, Hq, Hkv, Sq, Sk, D, and Dv operands");
+  unsigned pointerCount = 7 + unsigned(hasBias);
+  for (Value pointer : getInputs().take_front(pointerCount))
+    if (!isa<LLVM::LLVMPointerType>(pointer.getType()))
+      return emitOpError(
+          "dO, Q, K, V, optional bias, dQ, dK, and dV operands must be !llvm.ptr");
+  for (Value dim : getInputs().drop_front(pointerCount))
+    if (!dim.getType().isInteger(64))
+      return emitOpError("attention backward dimensions must be i64");
+  auto storage = getOperation()->getAttrOfType<StringAttr>("storage");
+  auto accum = getOperation()->getAttrOfType<StringAttr>("accum");
+  auto scale = getOperation()->getAttrOfType<FloatAttr>("scale");
+  auto causal = getOperation()->getAttrOfType<BoolAttr>("causal");
+  auto windowLeft = getOperation()->getAttrOfType<IntegerAttr>("window_left");
+  auto windowRight = getOperation()->getAttrOfType<IntegerAttr>("window_right");
+  auto softcap = getOperation()->getAttrOfType<FloatAttr>("softcap");
+  auto route = getOperation()->getAttrOfType<StringAttr>("route");
+  auto deterministic = getOperation()->getAttrOfType<BoolAttr>("deterministic");
+  auto workspace = getOperation()->getAttrOfType<IntegerAttr>("workspace_bytes");
+  if (!storage || storage.getValue() != "f32")
+    return emitOpError("deterministic reference route currently requires storage=\"f32\"");
+  if (!accum || accum.getValue() != "f32")
+    return emitOpError("requires accum=\"f32\"");
+  if (!scale || !scale.getValue().isFinite() || scale.getValueAsDouble() <= 0.0)
+    return emitOpError("requires a finite positive f32 scale");
+  if (!causal)
+    return emitOpError("requires an explicit causal boolean");
+  if (!windowLeft || !windowRight || windowLeft.getInt() < -1 ||
+      windowRight.getInt() < -1)
+    return emitOpError("requires window_left/window_right >= -1");
+  if (!softcap || !softcap.getValue().isFinite() ||
+      softcap.getValueAsDouble() < 0.0)
+    return emitOpError("requires finite softcap >= 0");
+  if (!route || route.getValue() != "deterministic_direct")
+    return emitOpError("canonical materializer requires route=\"deterministic_direct\"");
+  if (!deterministic || !deterministic.getValue())
+    return emitOpError("deterministic_direct requires deterministic=true");
+  if (!workspace || workspace.getInt() != 0)
+    return emitOpError("deterministic_direct requires workspace_bytes=0");
+  return success();
+}
+
+LogicalResult PagedKVReadKernelOp::verify() {
+  if (getInputs().size() != 10)
+    return emitOpError(
+        "expects pages, page table, output, P, LP, page size, H, D, start, and tokens");
+  for (Value pointer : getInputs().take_front(3))
+    if (!isa<LLVM::LLVMPointerType>(pointer.getType()))
+      return emitOpError("pages, page table, and output must be !llvm.ptr");
+  for (Value dim : getInputs().drop_front(3))
+    if (!dim.getType().isInteger(64))
+      return emitOpError("paged-KV dimensions must be i64");
+  auto storage = getOperation()->getAttrOfType<StringAttr>("storage");
+  auto table = getOperation()->getAttrOfType<StringAttr>("table_storage");
+  auto route = getOperation()->getAttrOfType<StringAttr>("route");
+  if (!storage || storage.getValue() != "f32")
+    return emitOpError("currently requires storage=\"f32\"");
+  if (!table || table.getValue() != "i32")
+    return emitOpError("requires table_storage=\"i32\"");
+  if (!route || route.getValue() != "direct")
+    return emitOpError("canonical materializer currently requires route=\"direct\"");
+  return success();
+}
+
+LogicalResult ReplaySSMDecodeKernelOp::verify() {
+  if (getInputs().size() != 11)
+    return emitOpError("expects delta, x, B, S0, C, A, Y, batch, channels, state, and tokens");
+  for (Value pointer : getInputs().take_front(7))
+    if (!isa<LLVM::LLVMPointerType>(pointer.getType()))
+      return emitOpError("ReplaySSM buffers must be !llvm.ptr");
+  for (Value dim : getInputs().drop_front(7))
+    if (!dim.getType().isInteger(64))
+      return emitOpError("ReplaySSM dimensions must be i64");
+  auto storage = getOperation()->getAttrOfType<StringAttr>("storage");
+  auto route = getOperation()->getAttrOfType<StringAttr>("route");
+  if (!storage || storage.getValue() != "f32")
+    return emitOpError("currently requires storage=\"f32\"");
+  if (!route || route.getValue() != "output_only")
+    return emitOpError("decode requires route=\"output_only\"");
+  return success();
+}
+
+LogicalResult ReplaySSMFlushKernelOp::verify() {
+  if (getInputs().size() != 9)
+    return emitOpError("expects delta, x, B, S0, A, batch, channels, state, and tokens");
+  for (Value pointer : getInputs().take_front(5))
+    if (!isa<LLVM::LLVMPointerType>(pointer.getType()))
+      return emitOpError("ReplaySSM buffers must be !llvm.ptr");
+  for (Value dim : getInputs().drop_front(5))
+    if (!dim.getType().isInteger(64))
+      return emitOpError("ReplaySSM dimensions must be i64");
+  auto storage = getOperation()->getAttrOfType<StringAttr>("storage");
+  auto route = getOperation()->getAttrOfType<StringAttr>("route");
+  auto deterministic = getOperation()->getAttrOfType<BoolAttr>("deterministic");
+  if (!storage || storage.getValue() != "f32")
+    return emitOpError("currently requires storage=\"f32\"");
+  if (!route || route.getValue() != "state_and_output")
+    return emitOpError("flush requires route=\"state_and_output\"");
+  if (!deterministic || !deterministic.getValue())
+    return emitOpError("checkpoint fold requires deterministic=true");
+  return success();
+}
+
+LogicalResult MoEDispatchKernelOp::verify() {
+  if (getInputs().size() != 6)
+    return emitOpError("expects X, token indices, O, T, S, and H");
+  for (Value pointer : getInputs().take_front(3))
+    if (!isa<LLVM::LLVMPointerType>(pointer.getType()))
+      return emitOpError("MoE buffers must be !llvm.ptr");
+  for (Value dim : getInputs().drop_front(3))
+    if (!dim.getType().isInteger(64))
+      return emitOpError("MoE dimensions must be i64");
+  auto storage = getOperation()->getAttrOfType<StringAttr>("storage");
+  auto index = getOperation()->getAttrOfType<StringAttr>("index_storage");
+  if (!storage || storage.getValue() != "f32" || !index || index.getValue() != "i32")
+    return emitOpError("requires storage=\"f32\" and index_storage=\"i32\"");
+  return success();
+}
+
+LogicalResult MoECombineKernelOp::verify() {
+  if (getInputs().size() != 7)
+    return emitOpError("expects partials, token indices, weights, O, T, S, and H");
+  for (Value pointer : getInputs().take_front(4))
+    if (!isa<LLVM::LLVMPointerType>(pointer.getType()))
+      return emitOpError("MoE buffers must be !llvm.ptr");
+  for (Value dim : getInputs().drop_front(4))
+    if (!dim.getType().isInteger(64))
+      return emitOpError("MoE dimensions must be i64");
+  auto storage = getOperation()->getAttrOfType<StringAttr>("storage");
+  auto index = getOperation()->getAttrOfType<StringAttr>("index_storage");
+  auto deterministic = getOperation()->getAttrOfType<BoolAttr>("deterministic");
+  if (!storage || storage.getValue() != "f32" || !index || index.getValue() != "i32")
+    return emitOpError("requires storage=\"f32\" and index_storage=\"i32\"");
+  if (!deterministic || !deterministic.getValue())
+    return emitOpError("canonical combine requires deterministic=true");
+  return success();
+}
+
+LogicalResult GroupedGemmKernelOp::verify() {
+  if (getInputs().size() != 8)
+    return emitOpError("expects X, expert weights, group offsets, O, T, K, N, and E");
+  for (Value pointer : getInputs().take_front(4))
+    if (!isa<LLVM::LLVMPointerType>(pointer.getType()))
+      return emitOpError("grouped GEMM buffers must be !llvm.ptr");
+  for (Value dim : getInputs().drop_front(4))
+    if (!dim.getType().isInteger(64))
+      return emitOpError("grouped GEMM dimensions must be i64");
+  auto storage = getOperation()->getAttrOfType<StringAttr>("storage");
+  auto accum = getOperation()->getAttrOfType<StringAttr>("accum");
+  auto index = getOperation()->getAttrOfType<StringAttr>("index_storage");
+  if (!storage || storage.getValue() != "f32" || !accum || accum.getValue() != "f32" ||
+      !index || index.getValue() != "i32")
+    return emitOpError("requires f32 storage/accum and index_storage=\"i32\"");
   return success();
 }
 

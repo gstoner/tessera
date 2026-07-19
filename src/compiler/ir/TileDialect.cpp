@@ -286,7 +286,7 @@ LogicalResult TileEpilogueAttr::verify(
     return emitError() << "TILE_EPILOGUE_BAD_ACTIVATION: activation must be "
                           "none, relu, gelu, or silu";
   if (!isSupportedOutputType(outputType))
-    return emitError() << "TILE_EPILOGUE_BAD_OUTPUT: output must be f32, f16, or i32";
+    return emitError() << "TILE_EPILOGUE_BAD_OUTPUT: output must be f64, f32, f16, or i32";
   return success();
 }
 

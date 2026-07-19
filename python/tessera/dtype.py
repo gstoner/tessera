@@ -126,7 +126,9 @@ _DTYPE_ALIASES: dict[str, str] = {
     # 8-bit float encodings; AMD docs often abbreviate E4M3 as FP8/F8
     # and E5M2-style bfloat8 as BF8.
     "f8": "fp8_e4m3", "fp8": "fp8_e4m3", "float8": "fp8_e4m3",
+    "float8_e4m3fn": "fp8_e4m3",
     "bf8": "fp8_e5m2", "bfloat8": "fp8_e5m2",
+    "float8_e5m2": "fp8_e5m2",
     # Integer family (MLIR-style + numpy-style)
     "i8": "int8",
     "i16": "int16",

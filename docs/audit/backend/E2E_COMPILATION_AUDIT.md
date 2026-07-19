@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-18
+last_updated: 2026-07-19
 audit_role: plan
 plan_state: open
 owner: shared compiler and backend owners
@@ -59,15 +59,19 @@ remaining target, packaging, or launch decision.
 
 ### 2.2 NVIDIA
 
-NVIDIA currently has two registered but disconnected families:
+NVIDIA started this plan with two registered but disconnected families. The
+NVIDIA-E2E-1 vertical slice and the first NVIDIA-E2E-2 landing have now joined
+the SM120 lane and split target ownership:
 
-1. `src/transforms/lib/Passes.cpp::buildCUDA13Pipeline` owns the shared
-   Graph→Tile path. Its sm90/sm100/sm120 aliases use the same builder, hardcode
-   the `nvidia_sm90` control-flow guard, run WGMMA/TMA marker-oriented passes,
-   and never call `LowerTileToNVIDIA(sm)`.
-2. `NVIDIALowering.cpp` registers Tile→`tessera_nvidia`→NVVM pipelines. The
-   Blackwell alias passes `sm=100`; no registered full pipeline passes
-   consumer Blackwell `sm=120` even though the raw lowering supports it.
+1. `src/transforms/lib/Passes.cpp::addCUDA13PipelineForSM` owns the exact-SM
+   Graph→Tile front pipelines. SM90 alone consumes the proven Hopper
+   WGMMA/FlashAttention marker passes; SM100 and SM120 retain typed carriers for
+   their target-owned backends. Async copies carry explicit completion tokens
+   through waits and matrix consumers.
+2. `NVIDIALowering.cpp` registers separate
+   `tessera-lower-to-nvidia-sm90`, `-sm100`, and `-sm120` Tile→
+   `tessera_nvidia`→NVVM pipelines. Exact execution remains gated to the named
+   device; the split does not infer SM90/SM100 correctness from SM120.
 
 Actual sm120 execution is broad through NVRTC/PTX and shipped CUDA ABIs, but
 those routes are selected from Python rather than consuming compiler-produced
@@ -191,12 +195,12 @@ Statuses in this table describe this plan, not generated execution counts.
 | 1 | **E2E-SPINE-0** | P0 | closed | Truth and ownership foundation | `tessera.target_pipeline.v1` makes every capability target total, derives the behavior-preserving driver map, records declared/shared/unsupported ownership, reconciles shared NVIDIA builder metadata, and generates Level-A/B/C inventory. |
 | 2 | **E2E-SPINE-1** | P0 | closed | Native-image and launch-descriptor schema | `tessera.native_image.v1` and `tessera.launch_descriptor.v1` provide deterministic serialization, payload/image/descriptor hashes, cache fingerprints, ordered ABI validation, shape/workspace/ordering contracts, and registered stale/malformed diagnostics without backend schedules. |
 | 3 | **E2E-SPINE-2** | P0 | closed | Canonical orchestration | `CompileResult`/`RuntimeArtifact` carry compiler-produced image and launch data; the driver records each stage and a generic runtime executor validates and consumes the descriptor through exact-target hooks. Artifact-only and legacy candidates remain explicit and descriptor routes never fall back. |
-| 4 | **NVIDIA-E2E-1** | P0 | queued | sm120 vertical slice | A registered exact-sm120 Graph→Tile→`tessera_nvidia`→NVVM→PTX pipeline packages and launches f16 plus NVFP4 matmul through `tessera_nvidia_ptx_register/invoke`, with no Python kernel synthesis or ABI rediscovery. |
+| 4 | **NVIDIA-E2E-1** | P0 | closed | sm120 vertical slice | A registered exact-sm120 Graph→Tile→`tessera_nvidia`→NVVM→PTX pipeline packages and launches f16 plus NVFP4 matmul through `tessera_nvidia_ptx_register/invoke`, with no Python kernel synthesis or ABI rediscovery. |
 | 5 | **ROCM-E2E-1** | P0 | queued | Typed directive pilot | One non-GEMM lane (softmax first) lowers from typed frontend/Tile IR to a typed `tessera_rocm.*` directive, existing generator, ROCDL, HSACO, and launch descriptor. Runtime text synthesis is removed for that lane only after parity. |
 | 6 | **APPLE-E2E-1** | P1 | queued | Canonical Apple GPU spine | Canonical compilation selects the executable Apple GPU pipeline; GA/EBM/linalg/PPO value-mode families receive registered typed lowering or explicit unsupported states. Existing Metal selectors and schedules do not change without Apple evidence. |
 | 7 | **X86-E2E-1** | P1 | queued | Typed x86 breadth | Introduce the hardware-free x86 Target contract and migrate softmax/reduction first, followed by existing stable-ABI families. Direct executor-only routing retires per lane after equivalence. |
 | 8 | **ROCM-E2E-2** | P1 | queued | Directive/generator breadth | Expand the proven emitter pattern by semantic families; wire only generators whose typed producers, legality, ABI, and exact-device proof exist. Do not append all generators blindly to one pass list. |
-| 9 | **NVIDIA-E2E-2** | P1 | queued | Native lowering breadth and per-SM split | Promote real NVVM/PTX lowering by family, separate sm90/sm100/sm120 builders, and replace marker operations only with matching ISA/toolchain proof. sm90/sm100 execution remains exact-device gated. |
+| 9 | **NVIDIA-E2E-2** | P1 | landing | Native lowering breadth and per-SM split | Promote real NVVM/PTX lowering by family, separate sm90/sm100/sm120 builders, and replace marker operations only with matching ISA/toolchain proof. sm90/sm100 execution remains exact-device gated. |
 | 10 | **APPLE-CPU-E2E-1** | P2 | queued | Apple CPU breadth | Extend the executable Accelerate/LAPACK pipeline beyond rank-2 f32 matmul and make canonical selection honest per supported family. |
 | 11 | **E2E-SPINE-3** | P2 | queued | Fleet proof and closeout | Cross-backend differential fixtures, generated Level-A/B/C dashboard truth, cache reproducibility, and per-backend release packets demonstrate the completed migrated scope. |
 
@@ -412,8 +416,146 @@ claiming a backend vertical slice:
 - no CUDA, HIP, Metal, or x86 launcher is registered by this item, so Level-C
   inventory remains absent until the architecture-owned vertical slices land.
 
-The next software-actionable items are **NVIDIA-E2E-1**, **ROCM-E2E-1**,
-**APPLE-E2E-1**, and **X86-E2E-1**, each with its own proof requirements.
+### NVIDIA-E2E-1 and NVIDIA-E2E-2 landing record
+
+**NVIDIA-E2E-1 is complete (2026-07-19).** Canonical SM120 compilation owns
+typed f16 and general-shape NVFP4 matmul images and launch descriptors, lowers
+through the registered NVIDIA/NVVM/PTX path, validates with `ptxas`, and
+registers/submits through the shipped PTX bridge. Exact RTX 5070 Ti aligned,
+ragged, boundary, and non-origin scale rows compare to their numerical oracles;
+image identity, cold/warm state, and resource evidence are retained without a
+selector change.
+
+**NVIDIA-E2E-2 is landing (2026-07-19).** The first slice replaces the shared
+SM90 alias behavior with distinct SM90/SM100/SM120 front and target pipelines.
+SM90 alone selects the proven WGMMA/Hopper marker lowering; SM100 and consumer
+Blackwell SM120 retain target-tagged typed matrix carriers. Straight-line
+Graph→Tile copies now mint `!tile.async_token`, waits retire the exact tokens,
+and matrix consumers retain the dependency through TMA lowering. Direct
+FileCheck proof covers all three builders, but SM90 and SM100 native execution
+remain explicitly exact-device gated. Operation-family breadth beyond the
+completed SM120 matmul lane remains open, so this item is not closed.
+
+The exact-architecture evidence boundary is explicit:
+
+| Target | Level-C state | Reason |
+|---|---|---|
+| `nvidia_sm90` | planned / exact-device required | The SM120 host cannot validate Hopper WGMMA/TMA execution, resources, or timing. Compile-only artifacts remain Level B. |
+| `nvidia_sm100` | planned / exact-device required | Consumer Blackwell has no tcgen05/TMEM and cannot close datacenter Blackwell execution. Compile-only artifacts remain Level B. |
+| `nvidia_sm120` | landing / partial Level C | Canonical matmul, f16/f32 softmax and arbitrary-axis reduction, f16/bf16/TF32/FP8 epilogue, forward/backward attention, paged-KV, ReplaySSM, and local MoE descriptors execute on the RTX 5070 Ti; exact multi-device transport and the family boundaries below remain open. |
+
+The family migration order preserves one typed producer and one launch ABI per
+semantic family rather than routing marker operations through a generic CUDA
+kernel:
+
+| Family | SM120 canonical state | Next proof boundary |
+|---|---|---|
+| matmul | f64, TF32, bf16, f16, FP8, FP6, MXFP4, INT8, NVFP4 ready on SM120 | higher-amortization timing stability; no selector promotion |
+| softmax | f16/f32 ready | measured comparison against the cooperative route |
+| reductions | f16/f32 arbitrary-axis sum/mean/max with keepdims and serial/cooperative-128 schedules ready on SM120 | stable two-domain comparison and any selector decision |
+| fused epilogues | f16/bf16/TF32/FP8 E4M3/E5M2 bias × activation × residual matrix ready on SM120 | stable two-domain comparison and any selector decision |
+| attention | f16/f32 forward MHA/GQA/MQA plus bias/window/softcap/deterministic-dropout and an f32 deterministic zero-workspace backward reference descriptor ready on SM120 | f16/dropout backward canonical breadth; optimized atomic/split production comparison remains separately measured |
+| paged-KV | f32 direct page-table gather descriptor and direct/staged resource-linked corpus ready on SM120; 6/6 rows accepted under the WSL 4% policy, with one explicit selector-ineligible 4.02% clock-margin row | fused causal-offset descriptor; controlled-host evidence before selector promotion |
+| ReplaySSM | resident state/ring context loads compiler-owned Tile→PTX decode/flush images; session workspace, transition, ordering, and numerical proof are ready on SM120 | controlled-host timing stability |
+| MoE | canonical int32/fp32 metadata plus compiler-owned Tile→PTX dispatch/combine/ragged-grouped-GEMM descriptors are consumed by CUDA execution | broader dtype families and stable comparative evidence |
+| transport | local-device dispatch → expert compute → combine evidence plus explicit rank/device topology and one-process multi-device NCCL all-reduce/gather/reduce-scatter/all-to-all execution are implemented | exact two-or-more-GPU numerical, topology, resource, and timing proof; the one-GPU SM120 host records an honest unavailable terminal for that evidence |
+
+The stateful image landing keeps host-owned session machinery where it belongs
+while moving device code ownership across the canonical seam. ReplaySSM's
+resident CUDA context loads compiler-produced decode/flush PTX and preserves
+its allocations, ring slots, events, and stream ordering. Compiler-owned MoE
+dispatch/combine/grouped-GEMM candidates execute over the canonical grouped
+metadata, while the production selector remains unchanged pending stable
+comparative evidence. An explicit NCCL topology and
+executor now exist, but exact multi-rank Level-C evidence remains open because
+the RTX 5070 Ti WSL host exposes only one device; a rejected two-device binding
+is contract proof, not collective execution proof.
+
+The paired remaining-dtype/reduction corpus now covers production-sized TF32
+and FP8 fused epilogues and serial/cooperative f16/f32 reductions against the
+existing production CUDA routes. First-use compilation/cache fill is outside
+steady-state timing; every sample discards one launch and amortizes each timing
+domain over the next ten. Across two disjoint time-interleaved 100-sample
+cohorts, 29/30 candidates satisfy the strict WSL 4% rule. The sole 4.099%
+fp16-mean production end-to-end row is accepted under the explicitly approved
+4.15% WSL rounding margin and cannot promote a selector. Resources, spills,
+image/resource fingerprints, and cold/warm or first/second-use cache state are
+retained; no selector changes.
+
+The second landing slice moves static f16/f32 last-axis softmax through the same
+canonical seam. A registered `tile.softmax_kernel` carries X/O/Rows/K plus
+explicit f16/f32 storage, f32 accumulation, and axis semantics; the SM120
+backend extends f16 loads to f32, emits stable max-shifted loops and typed
+`nvvm.ex2`, and truncates only at the f16 output boundary. LLVM 23 produces
+`sm_120a` PTX and the storage-keyed descriptor launches through the shipped
+CUDA-driver bridge. Exact RTX 5070 Ti rows cover both storage types,
+rank-2/rank-3 flattening, `K=16/48/64/300`, extreme logits, invalid output shape
+rejection, cold/warm identity, and ptxas resource fields. The correctness-first
+thread-per-row candidate does not replace the existing cooperative CUDA
+softmax selector; device-event/end-to-end comparison remains open.
+The operation now carries backend-neutral `exp_mode="approx_exp2"` and an
+explicit `ftz=false` bit. The SM120 lowering maps that choice to
+`ex2.approx.f32`; the CUDA math contract records PTX's full-range 2-ULP bound
+and keeps this route distinct from both IEEE arithmetic and function-specific
+CUDA libdevice calls. The contract version participates in native cache
+identity, so changing FTZ, approximation, or rounding semantics cannot reuse a
+stale image merely because the optimization level stayed at `-O3`.
+CUDA Math API totality now also has a compile-only SM120 inventory for scalar
+integer math, bit operations, packed integer dot products, numeric/bit casts,
+and 2x16/4x8 SIMD. The shared rounding registry adds the missing toward-positive
+and toward-negative modes and maps the exact CUDA cast suffix set
+RN/RD/RU/RZ; nearest-away and stochastic modes fail closed for CUDA casts. The
+inventory deliberately leaves every new Target-IR and runtime state `planned`:
+successful `nvcc -arch=sm_120a` header compilation is not Level-B or Level-C
+proof.
+The PTX 9.3 audit adds a fourth, lower layer beneath CUDA language types. Every
+SM120 dtype row now names its physical PTX storage register, fundamental versus
+alternate/sub-byte format class, and Tensor Core operand register. BF16 is
+corrected from scalar/vector `native` to `conversion_only`: PTX stores scalar
+BF16 in `.b16`, while packed BF16 matrix operands use `.b32`. TF32 similarly
+remains fp32 storage but is an alternate instruction format carried in `.b32`;
+FP8/FP6/FP4 formats use bit-size registers and never become fundamental PTX
+types. A companion memory contract rejects packed/vector accesses as one atomic
+unit, mixed-size-race guarantees, reduction-as-acquire, texture coherence, and
+the inference that ordered host submission creates intra-kernel ordering.
+Direct `ptxas -arch=sm_120a` fixtures assemble the fundamental register set and
+prove that `bf16`, `tf32`, `e4m3`, and `u8x4` declarations reject as
+non-fundamental formats.
+
+The dtype-totality slice adds one SM120 contract across canonical storage,
+math mode, scalar/vector CUDA types, Tensor Core formats, compiler fragments,
+and runtime readiness. CUDA 13.3 compiles the fp64/fp32/fp16/bf16/FP8/FP6/FP4
+scalar-vector surface. TF32 is guarded as an fp32-only math mode. Tensor Core
+Target IR/PTX covers TF32/bf16/fp16/FP8/FP6/FP4/int8. The canonical descriptor
+lane now executes general-shape BF16, explicit fp32-storage TF32 math, FP8
+E4M3/E5M2, and INT8 with int32 accumulation, in addition to f16/NVFP4. FP64
+m8n8k4 DMMA now has its distinct Tile lane map, f64 descriptor/bridge ABI,
+masked ragged materialization, and aligned/ragged RTX 5070 Ti numerical proof.
+FP6 E2M3/E3M2 use the
+ptxas-validated m16n8k32 `kind::mxf8f6f4` UE8M0/1X contract; OCP/MXFP4 uses
+m16n8k64 `kind::mxf4` UE8M0/2X. Their packed-memory Tile materializers, runtime
+ABIs, numerical execution, and exact-device comparisons remain open. The
+checked-in dtype-matrix recorder retains cold/warm image identity, ptxas
+resources, CUDA-event batches, allocation/copy-inclusive timing, and disjoint
+sample-interleaved two-run stability without promoting a selector. This slice
+also removes a
+wrong OCP-FP4→NVFP4 alias and requires the shared MMA selector to distinguish
+MXFP4 UE8M0 scales from NVFP4 UE4M3 scales. It changes no production selector.
+
+Device libraries are part of the LLVM-stage spine contract. The native-image
+schema now records each linked library by logical name, SHA-256 content digest,
+and link mode; absolute installation paths are deliberately excluded. NVIDIA's
+direct LLVM→NVPTX path discovers CUDA `libdevice.10.bc`, fingerprints it as a
+toolchain input, and runs `llvm-link --only-needed` only when translated LLVM
+IR retains `__nv_*` declarations. ROCm must populate the same record from the
+matching compiler-driver-selected OCML/OCKL/OCLC set: the ROCm driver and
+`--rocm-path` remain authoritative because the selected control bitcode must
+match target flags. Device-library identity therefore invalidates stale caches
+without imposing one backend's physical library set on another.
+
+The next software-actionable items are the remaining **NVIDIA-E2E-2** family
+breadth, **ROCM-E2E-1**, **APPLE-E2E-1**, and **X86-E2E-1**, each with its own
+proof requirements.
 
 ## 12. Evidence routing
 

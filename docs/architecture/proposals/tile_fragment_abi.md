@@ -1,7 +1,7 @@
 ---
 status: Proposal
 classification: Architecture / Tile IR
-last_updated: 2026-07-14
+last_updated: 2026-07-19
 ---
 
 # Portable Tile Fragment ABI
@@ -258,6 +258,27 @@ ReLU/GELU/SiLU, and f32-to-f16 conversion reuse the accumulator mapping
 immediately before stores. NVIDIA and ROCm call the same inline Tile activation
 emitter; address-space-specific bias loads and masked stores remain backend
 owned.
+
+`tile.softmax_kernel` is the launch-level stable row-reduction sibling. Its
+portable semantic ABI is source pointer, destination pointer, flattened row
+count, and last-axis width, with explicit storage, accumulation, and axis
+attributes. The first materializer is the NVIDIA-E2E-2 f16/f32 pilot: one SM120
+thread owns one row, extends f16 storage to f32 when needed, computes a
+max-shifted f32 sum, uses typed `nvvm.ex2` for the target exponential, and
+converts only at the output storage boundary. This is a
+correctness-first candidate, not a portable physical schedule or a selector
+promotion. ROCm's existing cooperative softmax generator and Apple's Metal/MPS
+routes retain their architecture-owned scheduling until their E2E items choose
+whether to consume this launch envelope.
+
+Consumer-Blackwell dtype selection uses a separate storage/compute contract.
+TF32 is `fp32` storage plus explicit `math_mode="tf32"`; IEEE fp32 remains a
+CUDA-core contract and cannot silently enter an MMA. Scalar/vector availability
+does not prove a complete matrix route. FP6 E2M3/E3M2 and OCP/MXFP4 now have
+typed SM120 register-level Target IR whose exact block-scaled `mma.sync` PTX
+assembles with ptxas. Their packed-memory Tile materializers and logical scale
+view ABI remain gated. OCP/MXFP4 (`fp4_e2m1`, UE8M0/2X scale contract) and
+NVIDIA NVFP4 (E2M1 data with UE4M3/4X scales) are distinct Tile contracts.
 
 ### Shared epilogue order and rejection contract
 

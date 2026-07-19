@@ -3,7 +3,7 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-07-18
+last_updated: 2026-07-19
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
@@ -580,15 +580,22 @@ winner. An AMD wave shape, LDS strategy, or VGPR result is never a CUDA default.
   selector change. Repeated event batches now remain inside one warmed resident
   session; all eight fused/staged rows pass the 3% two-run policy, with maximum
   device and end-to-end deltas of 1.89% and 1.85% respectively.
-- **NVIDIA-PARITY-REPLAY — correctness and timing complete.** Exact-device
+- **NVIDIA-PARITY-REPLAY — canonical state contract and correctness complete;
+  timing characterization retained.** Exact-device
   tests cover long decode across flushes, rollback, speculative rejection,
   block submit, reset, ordered ring backpressure, rejected-submit immutability,
   and teardown over wider B/D/N shapes. The 10-row replay corpus spans five
   geometries and 16/64 tokens with traffic, resources, and both timing domains.
-  The CPU oracle is outside the end-to-end interval; each retained run has 100
-  disjoint four-route batch medians with recorded out-of-band clock conditioning.
-  All errors are below `1.5e-8`; maximum device and end-to-end two-run deltas are
-  0.93% and 1.58%.
+  Each runtime handle now carries the shared `tessera.replayssm.state.v1`
+  descriptor: exact persistent device and pinned-host byte formulas, session
+  lifetime with preserved initialization, ordered stream/event slot ownership,
+  consumer-wait-before-release, and teardown draining. Span checks reject before
+  CUDA submission. The CPU oracle is outside the end-to-end interval; each
+  retained run has disjoint four-route batch medians with recorded out-of-band
+  clock conditioning. All errors remain below `1.5e-8`. Under the WSL 4%
+  foundation policy 5/10 refreshed rows satisfy both domains; the remaining
+  small/multi-batch rows range from 4.05% to 8.75%. No selector decision consumes
+  these unstable rows.
 - **NVIDIA-PARITY-EPILOGUE — execution matrix complete.** `FusedRegion` is the
   backend-neutral bias/activation/residual/order oracle and now emits registered
   `E_FUSED_EPILOGUE_*` diagnostics for unsupported dtype/op/order and missing
@@ -606,10 +613,15 @@ winner. An AMD wave shape, LDS strategy, or VGPR result is never a CUDA default.
 - **NVIDIA-PARITY-TRANSPORT — correctness, evidence, and timing complete.**
   The consolidated 13-row paged-KV/MoE/grouped corpus retains auditable traffic
   formulas, achieved bandwidth, launch-amortization keys, exact resources, and
-  independent timing domains. Maximum oracle error is below `3e-7`; all 13 rows
-  pass the 3% two-run policy. MoE CUDA-event samples retain one native allocation
-  set across repeated batches, and the tiny routes use 101 medians per run. No
-  selector or legacy-retune winner is promoted by this evidence.
+  independent timing domains. MoE dispatch/combine now consume one canonical
+  `tessera.moe_transport.v1` int32/fp32 descriptor with stable expert grouping,
+  capacity/drop semantics, and dispatch-before-compute-before-combine ordering;
+  grouped GEMM consumes canonical ragged sizes/offsets and retains empty experts.
+  Local-device scope is explicit; multi-rank collective execution remains a
+  separate backend/runtime item. Maximum oracle error is below `3e-7`; all 13
+  rows pass the WSL 4% foundation policy. MoE CUDA-event samples retain one
+  native allocation set across repeated batches, and the tiny routes use 101
+  medians per run. No selector or legacy-retune winner is promoted.
 
 - **NVIDIA-SM120-LOWP-PRODUCTIZATION — complete (2026-07-18).** The shipped
   CUDA ABI adds general-shape block-scaled NVFP4: packed E2M1 A/B, raw UE4M3
@@ -673,6 +685,257 @@ descriptor-first exact-target launcher registry. It registers no CUDA hook and
 does not reinterpret `nvidia_mma` or any shipped/NVRTC candidate; NVIDIA-E2E-1
 still owns PTX packaging, `sm_120` registration/submission, numerical proof,
 resources, cleanup, and the first Level-C row.
+
+NVIDIA-E2E-1 is **complete**. The f16 slice makes an explicit canonical
+driver request own the typed `tile.matmul_kernel`, runs the production
+`LowerTileToNVIDIA(sm=120)` and NVVM/LLVM/PTX pipeline, validates the image with
+`ptxas`, and returns the shared native-image plus exact A/B/D/M/N/K descriptor.
+The descriptor registers and launches through the shipped PTX bridge on the RTX
+5070 Ti; aligned `16x8x16` and ragged `37x29x23` rows match the f32 NumPy oracle.
+The image retains compiler/toolchain fingerprints, cold/warm state, and ptxas
+register/shared-memory/spill fields. This slice changes no production selector.
+The same driver now selects a CUDA-owned general-shape NVFP4 descriptor with
+packed E2M1 A/B, logical UE4M3 `scale_a`/`scale_b`, f32 output, and M/N/K. The
+typed lowering owns M16/N8 origins, K64 accumulation, ragged zero fill, scale
+word materialization, and guarded stores before LLVM 23 emits `sm_120a` PTX.
+Exact RTX 5070 Ti rows `16x8x64`, `33x19x129`, and `7x5x31` match the block-scale
+oracle; the multi-tile row uses nonuniform row/column scales to prove non-origin
+scale views. Missing/malformed scales, wrong scale storage, bias, and malformed
+launch shapes reject before CUDA submission. Both f16 and NVFP4 retain stable
+cold/warm image identity and ptxas register/shared-memory/spill evidence. The
+shared Tile verifier change is limited to the explicit eight-operand NVFP4
+launch ABI; it transfers no CUDA schedule, layout, resources, or selector.
+
+NVIDIA-E2E-2 is **landing**. Its first dependency slice replaces the former
+shared SM90 alias with exact SM90/SM100/SM120 Graph→Tile builders and registered
+Tile→`tessera_nvidia`→NVVM producers. The exact target now reaches Tile IR,
+the control-flow guard, async-copy lowering, and the target producer without
+being rewritten to SM90. Hopper alone consumes the proven WGMMA and Hopper
+FlashAttention markers; SM100 and SM120 retain target-tagged typed carriers for
+architecture-owned lowering. Straight-line async copies mint typed completion
+tokens, the matching wait retires them, and matrix consumers preserve those
+edges through TMA lowering. Host WSL FileCheck proves the three distinct IR
+routes; native SM90 and SM100 remain unsupported-by-evidence until exact-device
+runs exist. No selector changes. Family breadth beyond the completed SM120 f16
+and NVFP4 matmul path remains open, so NVIDIA-E2E-2 is not closed.
+
+The next NVIDIA-E2E-2 family slice now gives static f16/f32 last-axis softmax a
+canonical Level-C path. `tile.softmax_kernel` carries source/destination,
+flattened Rows/K, `storage="f16"|"f32"`, `accum="f32"`, and `axis=-1`; the SM120
+materializer emits a stable max-shifted row loop and target-native `nvvm.ex2`
+instead of an unavailable NVPTX `fexp` libcall. LLVM 23 emits and ptxas
+validates `sm_120a` PTX, while the typed descriptor registers and launches it
+through the shipped CUDA-driver bridge. Exact RTX 5070 Ti proof covers shapes
+`1x16`, `8x64`, `4x300`, and `2x3x48`, extreme logits, malformed output shape
+rejection, stable cold/warm image identity, and resource/spill fields for both
+storage types. f16 loads extend before the max/sum/normalization loops and
+truncate only at output storage. This is a correctness-first 128-thread,
+one-thread-per-row candidate. The existing
+cooperative CUDA-C route remains selectable; no promotion is justified until
+device-event and end-to-end comparisons are stable.
+
+The following NVIDIA-E2E-2 dtype-totality slice centralizes consumer-Blackwell
+storage, math-mode, scalar/vector, Tensor Core, compiler, and runtime states in
+`nvidia_dtype_contract.py`. Every canonical float storage type now has an
+explicit row. CUDA 13.3 compile proof covers scalar/vector forms for fp64,
+fp32, fp16, bf16, FP8 E4M3/E5M2, FP6 E2M3/E3M2, and packed FP4; TF32 remains
+strictly an fp32 `math_mode`, never storage. Tensor Core Target IR/PTX rows now
+cover the required TF32, bf16, fp16, FP8, FP6, FP4, and int8 families. The
+canonical descriptor lane now executes BF16, explicit fp32-storage TF32 math,
+FP8 E4M3/E5M2, and INT8 with int32 accumulation. FP64 m8n8k4 DMMA now owns a
+distinct Tile lane map and f64 descriptor/bridge ABI; aligned and ragged RTX
+5070 Ti rows match the f64 oracle with masked tails.
+FP6 E2M3/E3M2 now assemble as `kind::mxf8f6f4`, m16n8k32,
+UE8M0/`scale_vec::1X`; OCP/MXFP4 assembles as `kind::mxf4`, m16n8k64,
+UE8M0/`scale_vec::2X`. Compiler-owned packed-memory Tile materializers,
+five-buffer descriptors, CUDA-driver launch ABIs, and aligned/ragged numerical
+proof now cover both FP6 encodings and MXFP4. In particular,
+`fp4_e2m1` does not alias NVFP4: MXFP4's UE8M0 scale contract cannot reuse
+NVFP4's UE4M3/`scale_vec::4X` scale words.
+The shared MMA selector now requires explicit `math_mode="tf32"` for fp32 and
+retains distinct `nvfp4` and `fp4_e2m1` K64 identities. No selector promotion
+or production route changes.
+
+The canonical dtype execution matrix records two disjoint, sample-interleaved
+runs for square and ragged fp64/fp16/bf16/TF32/FP8/FP6/MXFP4/INT8 routes, with separate
+CUDA-event and allocation/copy-inclusive timing, cold/warm image identity, and
+ptxas register/shared-memory/spill fields. The retained 20-row collection
+changes no selector. Its latest short-kernel run has only 3/20 rows stable in
+both timing domains; the raw cohorts are retained, but the record cannot support
+promotion and requires a higher-amortization rerun.
+
+The broader-family NVIDIA-E2E-2 reduction slice now carries
+`tile.reduce_kernel(X,O,Outer,AxisExtent,Inner)` and an SM120-owned v2
+materializer/descriptor ABI for f16/f32 sum, mean, and NaN-propagating max.
+Normalized arbitrary axes and keepdims shape contracts execute through both a
+single-owner serial schedule and a 128-thread cooperative shared-memory
+candidate. Exact RTX 5070 Ti proof covers axes 0/1/2, keepdims on/off,
+rectangular/ragged rank-3 inputs, f32 accumulation, non-finite values,
+image/resource retention, and 42 numerical rows. The earlier last-axis record
+remains historical evidence; the new comparative record applies the WSL 4%
+foundation policy in both timing domains and changes no selector.
+
+The canonical epilogue slice carries f16/bf16/TF32/FP8 E4M3/E5M2 bias,
+ReLU/GELU/SiLU, optional f32
+residual, and the explicit `matmul -> bias -> activation -> residual` order in
+the Tile kernel plus launch descriptor. The CUDA materializer consumes distinct
+bias/residual buffers and rejects unsupported dtype/order/shape contracts
+instead of silently dropping epilogue semantics. The original 32 f16/bf16 rows
+and the 48-case TF32/FP8 matrix pass exact-device execution. The comparative
+record measures canonical single-kernel images against the existing production
+composed routes, retaining both timing domains, cold/warm state,
+image/resource fingerprints, spills, and raw disjoint cohorts. Production
+selectors remain unchanged unless both domains select the same stable winner.
+
+The first canonical attention slice adds a shared typed
+`tile.attention_kernel(Q,K,V,O,B,Hq,Hkv,Sq,Sk,D,Dv)` carrier with explicit
+f16/f32 storage, f32 accumulation/output, positive scale, and causal semantics.
+The SM120 correctness-first materializer and four-buffer descriptor launch
+through the shipped PTX bridge; exact RTX 5070 Ti proof passes 8/8
+MHA/MQA, rectangular/ragged, causal/non-causal cases with zero spills. The
+entry symbol includes the scale/causal semantic digest so incompatible images
+cannot alias in the driver cache. Bias, window, softcap, dropout, backward, and
+the production optimized comparison remain open. The retained eight-row
+two-cohort baseline records CUDA-event and allocation/copy-inclusive timings,
+cold/warm image identity, resources, and raw samples. A higher-amortization
+rerun now has 8/8 rows within 3% in both domains. It remains evidence-only
+because the canonical correctness-first route has not completed a stable
+comparison against the optimized production candidates.
+
+The forward carrier now also owns optional dense f32 bias, signed left/right
+window bounds, arithmetic softcap, and deterministic `lcg32_counter_v1`
+dropout. These semantics participate in the image digest and descriptor
+provenance. An exact-device advanced row proves causal+window+bias+softcap,
+bitwise dropout replay, and malformed-bias rejection; the earlier 8-row
+MHA/MQA matrix remains green. The f32 backward reference now also crosses the
+compiler-owned seam through `tile.attention_backward_kernel` and a seven/eight-
+buffer native descriptor. It assigns one dQ/dK/dV element to one thread,
+performs fixed-order single-owner dK/dV reduction, requires
+`deterministic=true`, and declares zero workspace. The exact-device GQA row
+proves causal+window+bias+softcap derivatives, bitwise replay, descriptor-shape
+rejection, and agreement with the shared Pade-softcap oracle. Dropout backward
+and f16 storage remain explicit limitations of this canonical reference route.
+
+The refreshed backward candidate matrix passes 6/6 exact-device oracle,
+determinism, and workspace cases. All six atomic/split rows are stable in both
+timing domains. Atomic wins both domains for MHA D64, causal MHA D128, and
+ragged GQA; split/reduced remains the bitwise-repeatable option with one extra
+dK+dV f32 workspace (134,144--524,288 bytes in the retained shapes). Production
+already selects atomic, so the evidence retains that selector. The canonical
+deterministic reference carrier is now landed; production selection continues
+to be governed by the stable atomic/split corpus rather than the intentionally
+serial reference materializer.
+
+The paged-KV landing slice adds `tile.paged_kv_read_kernel` and a compiler-owned
+f32-pages/i32-table direct descriptor ABI. Four exact-device boundary ranges,
+two non-identity physical-page permutations, remap/reuse, and invalid-table
+rejection pass. The existing 12-case fused/staged suite also remains green,
+including causal offsets and page boundaries. The committed
+`nvidia_sm120_e2e_spine_paged_kv.json` corpus compares canonical Tile-direct
+against legacy CUDA staged gather at 128, 512-ragged, and 2048-ragged tokens.
+It retains two repeated medians in both timing domains, cold/warm image and
+cache state, registers, shared memory, occupancy, spills, and resource
+fingerprints. This WSL foundation lane uses a 4% repeatability policy because
+its graphics clocks are host-managed. All six candidate rows are accepted; the
+legacy 2048 device-event row uses an explicit five-basis-point WSL margin at
+4.02%, and margin-accepted rows are selector-ineligible. Timing-domain winners
+also disagree at 512/2048, so the selector
+remains unchanged; foundation migration may proceed, but performance promotion
+still requires consensus and more controlled exact-device evidence.
+
+The stateful/MoE image slice adds compiler-owned Tile→NVIDIA→PTX packages for
+ReplaySSM decode/flush and local f32 MoE dispatch/combine/ragged grouped GEMM.
+The resident Replay handle no longer embeds those device kernels in its CUDA
+host bridge: it loads the compiler-produced PTX functions while retaining the
+session-persistent allocations, asynchronous ring, events, and ordering
+contract. Compiler-owned MoE candidates launch through the generic descriptor
+submission path; the existing production MoE selector remains unchanged until
+stable comparative evidence justifies promotion. Exact RTX 5070 Ti tests cover
+dispatch/combine numerical order,
+zero-sized expert groups, ragged grouped GEMM, Replay transitions, persistent
+workspace metadata, image identity, and resource retention.
+
+The collective follow-on adds an explicit content-addressed rank/device
+topology and a one-process/multiple-device NCCL executor for all-reduce,
+all-gather, reduce-scatter, and grouped send/receive all-to-all. This host
+exposes one CUDA device, so it proves deterministic topology/rejection and
+records the two-device request as unavailable; it cannot supply the required
+two-or-more-GPU numerical, topology, resource, or timing evidence. RCCL and
+Apple mappings remain architecture-owned follow-ups. No collective or MoE
+selector changes.
+
+The remaining-dtype/reduction performance corpus uses production-sized square
+and ragged TF32/FP8 fused epilogues plus f16/f32 arbitrary-axis reductions.
+For every candidate it records first-use compilation/cache fill separately,
+discards the first launch, and amortizes each device-event and end-to-end sample
+over the next ten launches. Two disjoint time-interleaved 100-sample cohorts
+retain raw samples, cold/warm or first/second-use state, image/resource
+fingerprints, registers, shared memory, and spill fields. All 30 rows are
+accepted under the WSL foundation rule: 29 pass the strict 4% gate and the
+production fp16-mean reduction end-to-end row is explicitly margin-accepted at
+4.099% under the user-approved 4.15% rounding bound. That row is
+selector-ineligible. Seven strict rows have cross-domain winner consensus, but
+the record changes no selector because stable consensus alone does not establish
+a promotion policy or required material benefit.
+
+The LLVM-stage device-library follow-on makes CUDA `libdevice` an explicit
+compiler dependency rather than accidental driver behavior. Native-image
+identity now retains logical device-library name, content digest, and link mode
+without serializing host paths. The SM120 packager fingerprints
+`nvvm/libdevice/libdevice.10.bc` and uses `llvm-link --only-needed` whenever
+translated LLVM IR retains an unresolved `__nv_*` call. A real `__nv_sinf`
+fixture links through CUDA 13.3 libdevice, lowers with LLVM 23 `llc`, and
+assembles with `ptxas -arch=sm_120a`. Intrinsic-only kernels retain an empty
+linked-library set, while the available libdevice digest still participates in
+the toolchain/cache fingerprint. This changes no runtime selector.
+
+The CUDA floating-point follow-on separates three semantic routes: IEEE
+arithmetic operators, function-specific CUDA libdevice calls, and explicit PTX
+approximations. The shared softmax envelope now carries
+`exp_mode="approx_exp2"` and `ftz=false`; SM120 accepts only that proven mode
+and lowers it to `ex2.approx.f32`. The contract records PTX's full-range 2-ULP
+bound, requires a nonzero near-zero comparison budget, and versions native
+cache identity independently of `-O3`. It does not reuse the `__expf` accuracy
+table for a different instruction and does not enable global fast math.
+The semantic authority is NVIDIA's
+[floating-point computation appendix](https://docs.nvidia.com/cuda/cuda-programming-guide/05-appendices/mathematical-functions.html);
+instruction-specific accuracy comes from the
+[PTX `ex2` specification](https://docs.nvidia.com/cuda/parallel-thread-execution/#floating-point-instructions-ex2).
+
+The CUDA Math API scalar/integer follow-on records representative integer math,
+bit, packed-dot, numeric/bit-cast, and 2x16/4x8 packed-SIMD families. A CUDA
+13.3 `nvcc -arch=sm_120a` fixture proves the documented symbols compile, while
+the SM120 contract keeps their Tessera Target-IR and runtime states `planned`.
+The shared rounding vocabulary now represents CUDA's four conversion suffixes
+RN/RD/RU/RZ exactly; nearest-away and stochastic modes cannot silently map to a
+CUDA cast. Undefined signed-min absolute value, out-of-range float-to-integer
+conversion, funnel-shift wrap/clamp, signedness, lane width, and saturation are
+retained as contract boundaries. No public op, runtime route, or selector is
+added. Sources: [CUDA Math API](https://docs.nvidia.com/cuda/cuda-math-api/index.html),
+[integer intrinsics](https://docs.nvidia.com/cuda/cuda-math-api/cuda_math_api/group__CUDA__MATH__INTRINSIC__INT.html),
+[integer math](https://docs.nvidia.com/cuda/cuda-math-api/cuda_math_api/group__CUDA__MATH__INT.html),
+[casts](https://docs.nvidia.com/cuda/cuda-math-api/cuda_math_api/group__CUDA__MATH__INTRINSIC__CAST.html),
+and [packed SIMD](https://docs.nvidia.com/cuda/cuda-math-api/cuda_math_api/group__CUDA__MATH__INTRINSIC__SIMD.html).
+
+The PTX 9.3 truth audit now separates CUDA C++ storage spelling from physical
+PTX typing. Fundamental storage rows are fp64 `.f64`, fp32 `.f32`, fp16 `.f16`,
+and int8 `.s8`; BF16, TF32, FP8, FP6, FP4, and NVFP4 are alternate instruction
+formats carried in same-width bit registers. Tensor fragments explicitly name
+`.f64` or packed `.b32` operands. This corrects BF16 scalar/vector status to
+`conversion_only` and prevents CUDA header types from implying fundamental PTX
+types. PTX operand compatibility never performs automatic numeric conversion.
+Direct `ptxas -arch=sm_120a` proof assembles the fundamental register surface
+and rejects `bf16`, `tf32`, `e4m3`, and `u8x4` as register declarations.
+
+The accompanying PTX memory contract records CTA/cluster/GPU/system scopes and
+relaxed/acquire/release/acq_rel atomic semantics. Vector and packed memory
+accesses are sets of scalar accesses in unspecified element order, not one
+atomic unit; mixed-size races fall outside the model; `red` does not form an
+acquire pattern; texture/`ld.global.nc` accesses are excluded; ordered CUDA
+submission does not establish intra-kernel memory order. Sources:
+[types and state spaces](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#state-spaces-types-and-variables),
+[instruction operands](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#instruction-operands),
+and [memory consistency](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#memory-consistency-model).
 
 The first focused CUDA parity proof on the NVIDIA box is:
 

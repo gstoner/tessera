@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-10
+last_updated: 2026-07-19
 audit_role: theme
 ---
 
@@ -700,7 +700,7 @@ the A–E kernel spine — each PR test-gated:
   `tests/tessera-ir/phase2/layout_conv_flashattn_accept_set.mlir`; Python:
   `tests/unit/test_layout_legality_extended.py`. **Pipeline wiring landed
   (2026-06-17):** `LayoutLegalityPass` now runs inside `tessera-lower-to-x86`,
-  `tessera-lower-to-gpu`, and `buildCUDA13Pipeline` (the nvidia-pipeline aliases)
+  `tessera-lower-to-gpu`, and `addCUDA13PipelineForSM` (the exact-SM NVIDIA pipelines)
   — early, after distribution lowering and before `SymbolicDimEqualityPass`, so
   unknown-layout / producer-consumer-mismatch / scale-without-layout violations
   surface with the other structural diagnostics during real lowering (was
@@ -721,7 +721,7 @@ the A–E kernel spine — each PR test-gated:
   `tests/tessera-ir/phase2/ir_contract_legality.mlir` (13 cases); Python:
   `tests/unit/test_ir_contract_legality.py` (12). **Wired into all three named
   lowering pipelines** (`tessera-lower-to-x86`, `tessera-lower-to-gpu`,
-  `buildCUDA13Pipeline`) right after `LayoutLegalityPass`, so the contracts fire
+  `addCUDA13PipelineForSM`) right after `LayoutLegalityPass`, so the contracts fire
   during real lowering — full tessera-ir lit sweep 148 PASS / 19 UNSUPPORTED /
   0 FAIL confirms no existing fixture violates them. The earlier-open
   **Phase 1** of the closure plan

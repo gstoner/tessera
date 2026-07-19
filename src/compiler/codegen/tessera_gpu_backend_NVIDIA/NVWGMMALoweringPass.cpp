@@ -131,6 +131,7 @@ struct NVWGMMALoweringPass
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(NVWGMMALoweringPass)
 
   NVWGMMALoweringPass() = default;
+  explicit NVWGMMALoweringPass(int sm) { smVersion = sm; }
   NVWGMMALoweringPass(const NVWGMMALoweringPass &other)
       : PassWrapper(other) {}
 
@@ -161,17 +162,17 @@ struct NVWGMMALoweringPass
 
 } // namespace
 
-std::unique_ptr<mlir::Pass> createNVWGMMALoweringPass() {
-  return std::make_unique<NVWGMMALoweringPass>();
+std::unique_ptr<mlir::Pass> createNVWGMMALoweringPass(int sm) {
+  return std::make_unique<NVWGMMALoweringPass>(sm);
 }
 
 std::unique_ptr<mlir::Pass> createNVTMADescriptorPass();
-std::unique_ptr<mlir::Pass> createNVFlashAttnKernelEmitterPass();
+std::unique_ptr<mlir::Pass> createNVFlashAttnKernelEmitterPass(int sm);
 
 void buildTesseraNVIDIALegacyBackendPipeline(OpPassManager &pm) {
-  pm.addPass(createNVWGMMALoweringPass());
+  pm.addPass(createNVWGMMALoweringPass(90));
   pm.addPass(createNVTMADescriptorPass());
-  pm.addPass(createNVFlashAttnKernelEmitterPass());
+  pm.addPass(createNVFlashAttnKernelEmitterPass(90));
 }
 
 void registerTesseraNVIDIALegacyBackendPasses() {

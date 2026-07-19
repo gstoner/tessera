@@ -346,6 +346,110 @@ def Tile_MatmulKernelOp : Tile_Op<"matmul_kernel"> {
   let hasVerifier = 1;
 }
 
+// Launch-level stable row-softmax envelope. Inputs are source, destination,
+// flattened row count, and last-axis width. The storage/accumulation contract
+// is explicit so target lowering never infers precision from a host array.
+def Tile_SoftmaxKernelOp : Tile_Op<"softmax_kernel"> {
+  let summary = "Launch-level stable row softmax";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
+// Launch-level arbitrary-axis reduction envelope. Inputs are source,
+// destination, and the canonical contiguous outer/axis/inner decomposition.
+// Kind, shape retention, schedule, and non-finite behavior are explicit.
+def Tile_ReduceKernelOp : Tile_Op<"reduce_kernel"> {
+  let summary = "Launch-level typed arbitrary-axis reduction";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
+// Launch-level scaled dot-product attention envelope. Inputs are Q, K, V, O
+// followed by B, Hq, Hkv, Sq, Sk, D, and Dv. Storage, accumulation, scale, and
+// masking are explicit; target lowering must not infer them from host buffers.
+def Tile_AttentionKernelOp : Tile_Op<"attention_kernel"> {
+  let summary = "Launch-level typed scaled dot-product attention";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
+// Launch-level scaled dot-product attention VJP envelope. Inputs are dO, Q,
+// K, V, optional dense f32 bias, dQ, dK, dV, followed by B, Hq, Hkv, Sq, Sk,
+// D, and Dv.  The deterministic-direct reference route assigns one output
+// gradient element to one thread and therefore requires no atomics/workspace.
+def Tile_AttentionBackwardKernelOp : Tile_Op<"attention_backward_kernel"> {
+  let summary = "Launch-level deterministic scaled dot-product attention VJP";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
+// Canonical logical-page gather. Inputs are physical pages, i32 page table,
+// output, and P/LP/page-size/H/D/start/token-count dimensions.
+def Tile_PagedKVReadKernelOp : Tile_Op<"paged_kv_read_kernel"> {
+  let summary = "Launch-level typed paged-KV logical-to-physical gather";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
+// ReplaySSM output reconstruction from a session-resident checkpoint and ring.
+// Inputs are delta, x, B, S0, C, A, Y, followed by B/D/N/M dimensions.
+def Tile_ReplaySSMDecodeKernelOp : Tile_Op<"replay_ssm_decode_kernel"> {
+  let summary = "Launch-level ReplaySSM output-only reconstruction";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
+// Deterministic checkpoint fold. Inputs are delta, x, B, S0, A, followed by
+// B/D/N/M. S0 is the only written persistent buffer.
+def Tile_ReplaySSMFlushKernelOp : Tile_Op<"replay_ssm_flush_kernel"> {
+  let summary = "Launch-level deterministic ReplaySSM checkpoint fold";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
+// Canonical local-device MoE gather. Inputs are X, token-of-slot, O, T, S, H.
+def Tile_MoEDispatchKernelOp : Tile_Op<"moe_dispatch_kernel"> {
+  let summary = "Launch-level canonical MoE token gather";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
+// Canonical deterministic weighted combine. Inputs are partials,
+// token-of-slot, weights, O, T, S, H.
+def Tile_MoECombineKernelOp : Tile_Op<"moe_combine_kernel"> {
+  let summary = "Launch-level deterministic MoE weighted combine";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
+// Canonical contiguous/ragged grouped expert GEMM. Inputs are X, expert
+// weights, int32 group offsets, O, T, K, N, E.
+def Tile_GroupedGemmKernelOp : Tile_Op<"grouped_gemm_kernel"> {
+  let summary = "Launch-level ragged grouped expert GEMM";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
 // Workgroup / wave barrier (s_barrier / bar.sync) — drains all outstanding work.
 def Tile_SBarrierOp : Tile_Op<"s_barrier"> {
   let summary = "Workgroup/wave barrier (drains outstanding async work)";

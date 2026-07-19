@@ -98,6 +98,7 @@ class TargetPipelineResolution:
     level_b: str
     level_c: str
     reason: str
+    driver_registration_source: str | None = None
 
     @property
     def has_declared_pipeline(self) -> bool:
@@ -235,13 +236,11 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             "tessera-warpspec-legality",
             "tessera-tile-barrier-reuse-legality",
             "tessera-async-copy-lowering",
-            "tessera-wgmma-lowering",
             "tessera-tma-descriptor",
             # Second placement — over the typed #tile.barrier markers
             # NVTMADescriptor emits (kind consistency + arrival-count).
             "tessera-tile-pipeline-legality",
             "tessera-warpspec-legality",
-            "tessera-nv-flash-attn-emitter",
         ),
         required_dialects=("tessera", "tile", "func", "scf", "arith"),
         targets=("nvidia_sm90", "nvidia_sm100", "nvidia_sm120"),
@@ -257,6 +256,48 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
         phase="lowering",
         status="wired",
         sprint="Phase 3 + C2/C3/C4/C6 (TIRx)",
+    ),
+    PipelineSpec(
+        name="tessera-lower-to-nvidia-sm100",
+        passes=("lower-tile-to-nvidia", "lower-tessera-nvidia-to-nvvm"),
+        required_dialects=(
+            "tile", "tessera_nvidia", "llvm", "nvvm", "func", "scf", "arith",
+        ),
+        targets=("nvidia_sm100",),
+        lit_fixtures=(
+            "src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia/blackwell_to_nvvm_contract.mlir",
+        ),
+        phase="target",
+        status="lit_verified",
+        sprint="NVIDIA-E2E-2",
+    ),
+    PipelineSpec(
+        name="tessera-lower-to-nvidia-sm120",
+        passes=("lower-tile-to-nvidia", "lower-tessera-nvidia-to-nvvm"),
+        required_dialects=(
+            "tile", "tessera_nvidia", "llvm", "nvvm", "func", "scf", "arith",
+        ),
+        targets=("nvidia_sm120",),
+        lit_fixtures=(
+            "src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia/sm120_nvfp4_matmul_kernel.mlir",
+        ),
+        phase="target",
+        status="lit_verified",
+        sprint="NVIDIA-E2E-2",
+    ),
+    PipelineSpec(
+        name="tessera-lower-to-nvidia-sm90",
+        passes=("lower-tile-to-nvidia", "lower-tessera-nvidia-to-nvvm"),
+        required_dialects=(
+            "tile", "tessera_nvidia", "llvm", "nvvm", "func", "scf", "arith",
+        ),
+        targets=("nvidia_sm90",),
+        lit_fixtures=(
+            "src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia/hopper_to_nvvm_contract.mlir",
+        ),
+        phase="target",
+        status="lit_verified",
+        sprint="NVIDIA-E2E-2",
     ),
     PipelineSpec(
         name="tessera-lower-to-rocm",
@@ -370,18 +411,16 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             "tessera-symdim-equality",
             "tessera-tile-ir-lowering",
             "tessera-warp-specialize",
-            # All aliases currently share buildCUDA13Pipeline.  Architecture-
-            # specific branching is an E2E-SPINE follow-up, not present here.
+            # Datacenter Blackwell retains typed MMA/attention carriers until
+            # the exact TCGEN05/TMEM backend pipeline consumes them.
             "tessera-tile-pipeline-legality",
             "tessera-warpspec-legality",
             "tessera-tile-barrier-reuse-legality",
             "tessera-async-copy-lowering",
-            "tessera-wgmma-lowering",
             "tessera-tma-descriptor",
             # Second placement — over the typed #tile.barrier markers.
             "tessera-tile-pipeline-legality",
             "tessera-warpspec-legality",
-            "tessera-nv-flash-attn-emitter",
         ),
         required_dialects=("tessera", "tile", "func", "scf", "arith"),
         targets=("nvidia_sm100",),
@@ -415,18 +454,16 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             "tessera-symdim-equality",
             "tessera-tile-ir-lowering",
             "tessera-warp-specialize",
-            # All aliases currently share buildCUDA13Pipeline.  Architecture-
-            # specific branching is an E2E-SPINE follow-up, not present here.
+            # Consumer Blackwell retains typed warp-MMA/attention carriers
+            # until the exact SM120 backend pipeline consumes them.
             "tessera-tile-pipeline-legality",
             "tessera-warpspec-legality",
             "tessera-tile-barrier-reuse-legality",
             "tessera-async-copy-lowering",
-            "tessera-wgmma-lowering",
             "tessera-tma-descriptor",
             # Second placement — over the typed #tile.barrier markers.
             "tessera-tile-pipeline-legality",
             "tessera-warpspec-legality",
-            "tessera-nv-flash-attn-emitter",
         ),
         required_dialects=("tessera", "tile", "func", "scf", "arith"),
         targets=("nvidia_sm120",),
@@ -537,17 +574,19 @@ TARGET_PIPELINE_RESOLUTIONS: tuple[TargetPipelineResolution, ...] = (
     ),
     TargetPipelineResolution(
         "nvidia_sm100", "tessera-lower-to-gpu",
-        "tessera-nvidia-pipeline-sm100", "declared_shared_builder",
-        "exact_architecture", "nvidia", "src/transforms/lib/Passes.cpp",
+        "tessera-lower-to-nvidia-sm100", "declared_exact",
+        "exact_architecture", "nvidia", "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp",
         "partial", "absent",
-        "The exact alias is registered but shares the CUDA13 builder, including its SM90 control-flow guard.",
+        "The exact SM100 Tile-to-NVVM builder is registered; native packaging and exact-device execution remain gated.",
+        driver_registration_source="src/transforms/lib/Passes.cpp",
     ),
     TargetPipelineResolution(
         "nvidia_sm120", "tessera-lower-to-gpu",
-        "tessera-nvidia-pipeline-sm120", "declared_shared_builder",
-        "exact_architecture", "nvidia", "src/transforms/lib/Passes.cpp",
+        "tessera-lower-to-nvidia-sm120", "declared_exact",
+        "exact_architecture", "nvidia", "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp",
         "partial", "absent",
-        "The exact alias is registered but shares the CUDA13 builder; the real SM120 Tile lowering is not composed here.",
+        "The exact SM120 Tile-to-NVVM builder produces the compiler-owned f16/NVFP4 native-image slice.",
+        driver_registration_source="src/transforms/lib/Passes.cpp",
     ),
     TargetPipelineResolution(
         "nvidia_sm80", "tessera-lower-to-gpu", None,
@@ -557,10 +596,11 @@ TARGET_PIPELINE_RESOLUTIONS: tuple[TargetPipelineResolution, ...] = (
     ),
     TargetPipelineResolution(
         "nvidia_sm90", "tessera-lower-to-gpu",
-        "tessera-nvidia-pipeline-sm90", "declared_exact",
-        "exact_architecture", "nvidia", "src/transforms/lib/Passes.cpp",
+        "tessera-lower-to-nvidia-sm90", "declared_exact",
+        "exact_architecture", "nvidia", "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp",
         "partial", "absent",
-        "The exact alias matches the shared builder's current SM90 guard, but canonical native-image packaging is absent.",
+        "The exact SM90 Tile-to-NVVM builder is registered; canonical native-image packaging and exact-device proof are absent.",
+        driver_registration_source="src/transforms/lib/Passes.cpp",
     ),
     TargetPipelineResolution(
         "rocm", "tessera-lower-to-rocm", "tessera-lower-to-rocm",

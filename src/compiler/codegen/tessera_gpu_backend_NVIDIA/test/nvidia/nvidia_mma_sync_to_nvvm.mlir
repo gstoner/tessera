@@ -9,6 +9,18 @@
 // #21). Parses without --allow-unregistered-dialect (the ops are registered).
 
 module {
+  func.func @mma_f64(%a: f64, %b: f64, %c0: f64, %c1: f64)
+      -> !llvm.struct<(f64, f64)> {
+    %d = tessera_nvidia.mma_sync %a, %b, %c0, %c1
+        {arch = "sm_120", shape = "m8n8k4", dtype_ab = "f64", dtype_c = "f64"}
+        : (f64, f64, f64, f64) -> !llvm.struct<(f64, f64)>
+    return %d : !llvm.struct<(f64, f64)>
+  }
+  // CHECK-LABEL: func.func @mma_f64
+  // CHECK: nvvm.mma.sync A[
+  // CHECK-SAME: shape = #nvvm.shape<m = 8, n = 8, k = 4>
+  // CHECK-SAME: -> !llvm.struct<(f64, f64)>
+
   func.func @mma_f16(
       %a0: vector<2xf16>, %a1: vector<2xf16>, %a2: vector<2xf16>, %a3: vector<2xf16>,
       %b0: vector<2xf16>, %b1: vector<2xf16>,

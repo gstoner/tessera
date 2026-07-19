@@ -12,6 +12,7 @@ Three things this must hold:
 3. **Honesty.** x86 AMX is tile-register, not lane-cooperative → no per-lane
    footprint (``None``); an unknown dtype/arch raises, never a silent fallback.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -25,6 +26,7 @@ from tessera.compiler.rocm_mma import select_mma as rocm_select_mma
 
 
 # ── 1. Lead-safety: ROCm equivalence ─────────────────────────────────────────
+
 
 @pytest.mark.parametrize("arch", [AMDArch.GFX_942, AMDArch.GFX_950])
 def test_shared_ranking_matches_rocm_reference(arch):
@@ -47,8 +49,7 @@ def test_rocm_isa_dtypes_match_reference_selector():
     # feature gates are inherited by construction, not re-encoded.
     for arch in (AMDArch.GFX_1151, AMDArch.GFX_1200, AMDArch.GFX_942):
         isa = M.get_isa("rocm", arch.name.lower().replace("_", ""))
-        for d in ("fp16", "bf16", "int8", "fp8_e4m3", "fp8_e5m2", "fp4_e2m1",
-                  "fp32"):
+        for d in ("fp16", "bf16", "int8", "fp8_e4m3", "fp8_e5m2", "fp4_e2m1", "fp32"):
             try:
                 rocm_select_mma(arch, d)
                 accepted = True
@@ -69,19 +70,22 @@ def test_gfx1151_has_no_fp8_wmma():
 def test_gfx1151_bf16_footprint():
     sel = M.select_mma(M.get_isa("rocm", "gfx1151"), "bf16")
     assert sel.shape == (16, 16, 16)
-    assert sel.accumulator_regs == 16 * 16 // 32            # 8 regs/lane
+    assert sel.accumulator_regs == 16 * 16 // 32  # 8 regs/lane
 
 
 # ── 2. The lift: NVIDIA + Apple cost-aware selection ──────────────────────────
 
-@pytest.mark.parametrize("dtype,shape", [
-    ("fp32", (16, 8, 8)),          # tf32 fragment
-    ("bf16", (16, 8, 16)),
-    ("fp16", (16, 8, 16)),
-    ("fp8_e4m3", (16, 8, 32)),
-    ("int8", (16, 8, 32)),
-    ("fp4_e2m1", (16, 8, 64)),
-])
+
+@pytest.mark.parametrize(
+    "dtype,shape",
+    [
+        ("bf16", (16, 8, 16)),
+        ("fp16", (16, 8, 16)),
+        ("fp8_e4m3", (16, 8, 32)),
+        ("int8", (16, 8, 32)),
+        ("nvfp4", (16, 8, 64)),
+    ],
+)
 def test_nvidia_mma_sync_shapes_and_footprint(dtype, shape):
     sel = M.select_mma(M.get_isa("nvidia", "sm_120"), dtype)
     assert sel.mma_class == "mma_sync" and sel.shape == shape
@@ -89,18 +93,35 @@ def test_nvidia_mma_sync_shapes_and_footprint(dtype, shape):
     assert sel.accumulator_regs == 16 * 8 // 32 == 4
 
 
+def test_nvidia_fp32_tensor_core_requires_explicit_tf32_math_mode():
+    isa = M.get_isa("nvidia", "sm_120")
+    with pytest.raises(M.MmaSelectorError, match="math_mode='tf32'"):
+        M.select_mma(isa, "fp32")
+    sel = M.select_mma(isa, "fp32", math_mode="tf32")
+    assert sel.shape == (16, 8, 8)
+
+
+def test_nvidia_ocp_fp4_does_not_alias_nvfp4():
+    isa = M.get_isa("nvidia", "sm_120")
+    mx = M.select_mma(isa, "fp4_e2m1")
+    nv = M.select_mma(isa, "nvfp4")
+    assert mx.shape == nv.shape == (16, 8, 64)
+    assert mx.in_dtype == "fp4_e2m1"
+    assert nv.in_dtype == "nvfp4"
+
+
 def test_apple_simdgroup_matrix():
     sel = M.select_mma(M.get_isa("apple", "apple7"), "fp16")
     assert sel.mma_class == "simdgroup" and sel.shape == (8, 8, 8)
-    assert sel.accumulator_regs == 8 * 8 // 32              # 2 regs/thread
+    assert sel.accumulator_regs == 8 * 8 // 32  # 2 regs/thread
 
 
 def test_operands_are_derived_nt():
     sel = M.select_mma(M.get_isa("nvidia", "sm_120"), "bf16")
-    assert sel.operand_a.layout == "row_major"      # A K-major
-    assert sel.operand_b.layout == "col_major"      # B col-major (nt)
+    assert sel.operand_a.layout == "row_major"  # A K-major
+    assert sel.operand_b.layout == "col_major"  # B col-major (nt)
     assert sel.accumulator.dtype == "fp32"
-    assert sel.operand_a.k_width == 2               # 32 // 16 for bf16
+    assert sel.operand_a.k_width == 2  # 32 // 16 for bf16
 
 
 def test_metadata_dict_is_json_shaped():
@@ -111,12 +132,13 @@ def test_metadata_dict_is_json_shaped():
 
 # ── 3. Honesty: x86 AMX, preferences, errors ─────────────────────────────────
 
+
 def test_x86_amx_is_not_lane_cooperative():
     isa = M.get_isa("x86", "amx")
     assert isa.cooperative is False and isa.lane_count is None
     sel = M.select_mma(isa, "bf16")
     assert sel.shape == (16, 16, 32)
-    assert sel.accumulator_regs is None            # per-lane model does not apply
+    assert sel.accumulator_regs is None  # per-lane model does not apply
 
 
 def test_prefer_shape_must_be_legal():
@@ -128,7 +150,7 @@ def test_prefer_shape_must_be_legal():
 
 def test_unknown_dtype_and_arch_raise():
     with pytest.raises(M.MmaSelectorError):
-        M.select_mma(M.get_isa("apple", "apple7"), "int8")   # no int8 simdgroup
+        M.select_mma(M.get_isa("apple", "apple7"), "int8")  # no int8 simdgroup
     with pytest.raises(M.MmaSelectorError):
         M.get_isa("nvidia", "sm_999")
     with pytest.raises(M.MmaSelectorError):
@@ -137,15 +159,29 @@ def test_unknown_dtype_and_arch_raise():
 
 def test_cooperative_isa_requires_lane_count():
     with pytest.raises(M.MmaSelectorError):
-        M.MmaIsa(target="t", arch="a", mma_class="wmma", cooperative=True,
-                 lane_count=None, shapes=((16, 16, 16),), k_by_dtype={"bf16": 16})
+        M.MmaIsa(
+            target="t",
+            arch="a",
+            mma_class="wmma",
+            cooperative=True,
+            lane_count=None,
+            shapes=((16, 16, 16),),
+            k_by_dtype={"bf16": 16},
+        )
     with pytest.raises(M.MmaSelectorError):
-        M.MmaIsa(target="t", arch="a", mma_class="amx", cooperative=False,
-                 lane_count=32, shapes=((16, 16, 32),), k_by_dtype={"bf16": 32})
+        M.MmaIsa(
+            target="t",
+            arch="a",
+            mma_class="amx",
+            cooperative=False,
+            lane_count=32,
+            shapes=((16, 16, 32),),
+            k_by_dtype={"bf16": 32},
+        )
 
 
 def test_out_dtype_override():
     sel = M.select_mma(M.get_isa("nvidia", "sm_120"), "int8")
-    assert sel.acc_dtype == "int32"                # int8 → i32 accumulate
+    assert sel.acc_dtype == "int32"  # int8 → i32 accumulate
     sel2 = M.select_mma(M.get_isa("nvidia", "sm_120"), "bf16", out_dtype="fp16")
     assert sel2.acc_dtype == "fp16"

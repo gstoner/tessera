@@ -1086,7 +1086,7 @@ def _nvidia_cuda_compile_fn(source: KernelSource) -> str:
         f.write(source.source)
     subprocess.run(
         [_nvcc(), f"-arch={_nvidia_arch()}", "-O3", "--shared",
-         "-Xcompiler", "-fPIC", src, "-o", so],
+         "-Xcompiler", "-fPIC", src, "-lcuda", "-o", so],
         check=True, capture_output=True, text=True)
     return so
 
@@ -1825,7 +1825,10 @@ def _synthesize_paged_kv_read_cuda() -> str:
     """Paged KV gather: logical page table -> physical CUDA page storage."""
     return r'''#include <cuda_runtime.h>
 __global__ void kvread(const float*pages,const int*table,float*out,long start,long tokens,int page_size,int H,int D){long z=(long)blockIdx.x*blockDim.x+threadIdx.x,n=tokens*(long)H*D;if(z>=n)return;int d=z%D,h=(z/D)%H;long t=z/(D*H),logical=start+t,lp=logical/page_size,off=logical%page_size,pp=table[lp];out[z]=pages[(((long)pp*page_size+off)*H+h)*D+d];}
-extern "C" int tessera_nvidia_paged_kv_read_f32(const float*hp,const int*ht,float*ho,int P,int LP,int PS,int H,int D,long start,long end){if(!hp||!ht||!ho||P<1||LP<1||PS<1||H<1||D<1||start<0||end<=start||end>(long)LP*PS)return 2;size_t pb=(size_t)P*PS*H*D*4,tb=(size_t)LP*4,ob=(size_t)(end-start)*H*D*4;float *p=0,*o=0;int*t=0;if(cudaMalloc(&p,pb)||cudaMalloc(&t,tb)||cudaMalloc(&o,ob))return 3;if(cudaMemcpy(p,hp,pb,cudaMemcpyHostToDevice)||cudaMemcpy(t,ht,tb,cudaMemcpyHostToDevice)){cudaFree(p);cudaFree(t);cudaFree(o);return 3;}long n=(end-start)*(long)H*D;kvread<<<(n+255)/256,256>>>(p,t,o,start,end-start,PS,H,D);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(ho,o,ob,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(p);cudaFree(t);cudaFree(o);return ok?1:3;}'''
+static int alloc_copy(const float*hp,const int*ht,float**p,int**t,float**o,int P,int LP,int PS,int H,int D,long tokens){size_t pb=(size_t)P*PS*H*D*4,tb=(size_t)LP*4,ob=(size_t)tokens*H*D*4;if(cudaMalloc(p,pb)||cudaMalloc(t,tb)||cudaMalloc(o,ob))return 3;if(cudaMemcpy(*p,hp,pb,cudaMemcpyHostToDevice)||cudaMemcpy(*t,ht,tb,cudaMemcpyHostToDevice))return 3;return 1;}
+extern "C" int tessera_nvidia_paged_kv_read_f32(const float*hp,const int*ht,float*ho,int P,int LP,int PS,int H,int D,long start,long end){if(!hp||!ht||!ho||P<1||LP<1||PS<1||H<1||D<1||start<0||end<=start||end>(long)LP*PS)return 2;long tokens=end-start;size_t ob=(size_t)tokens*H*D*4;float *p=0,*o=0;int*t=0;int ok=alloc_copy(hp,ht,&p,&t,&o,P,LP,PS,H,D,tokens);if(ok==1){long n=tokens*(long)H*D;kvread<<<(n+255)/256,256>>>(p,t,o,start,tokens,PS,H,D);ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(ho,o,ob,cudaMemcpyDeviceToHost)==cudaSuccess?1:3;}cudaFree(p);cudaFree(t);cudaFree(o);return ok;}
+extern "C" int tessera_nvidia_paged_kv_read_f32_timed(const float*hp,const int*ht,float*ho,int P,int LP,int PS,int H,int D,long start,long end,int reps,float*ms){if(!ms||reps<1||start<0||end<=start||end>(long)LP*PS)return 2;long tokens=end-start;size_t ob=(size_t)tokens*H*D*4;float*p=0,*o=0;int*t=0;int ok=alloc_copy(hp,ht,&p,&t,&o,P,LP,PS,H,D,tokens);cudaEvent_t a=0,b=0;long n=tokens*(long)H*D;if(ok==1){for(int i=0;i<20000;i++)kvread<<<(n+255)/256,256>>>(p,t,o,start,tokens,PS,H,D);if(cudaDeviceSynchronize()!=cudaSuccess||cudaEventCreate(&a)!=cudaSuccess||cudaEventCreate(&b)!=cudaSuccess)ok=3;}if(ok==1){cudaEventRecord(a);for(int i=0;i<reps;i++)kvread<<<(n+255)/256,256>>>(p,t,o,start,tokens,PS,H,D);cudaEventRecord(b);cudaEventSynchronize(b);float total=0;if(cudaEventElapsedTime(&total,a,b)!=cudaSuccess)ok=3;else *ms=total/reps;}if(ok==1&&cudaMemcpy(ho,o,ob,cudaMemcpyDeviceToHost)!=cudaSuccess)ok=3;if(a)cudaEventDestroy(a);if(b)cudaEventDestroy(b);cudaFree(p);cudaFree(t);cudaFree(o);return ok;}
+'''
 
 
 def run_paged_kv_cache_read_f32(
@@ -1861,6 +1864,40 @@ def run_paged_kv_cache_read_f32(
     if rc != 1:
         raise RuntimeError(f"NVIDIA paged KV read launch failed (rc={rc})")
     return out
+
+
+def measure_paged_kv_cache_read_device_f32(
+    pages: Any, page_table: Any, start: int, end: int, *, reps: int = 100,
+) -> float:
+    """CUDA-event latency for the legacy staged paged-KV gather candidate."""
+    import numpy as np
+    p = np.ascontiguousarray(pages)
+    table = np.ascontiguousarray(page_table, dtype=np.int32)
+    if p.dtype != np.float32 or p.ndim != 4 or table.ndim != 1:
+        raise ValueError("NVIDIA paged KV timing requires rank-4 f32 pages and rank-1 table")
+    P, page_size, H, D = (int(x) for x in p.shape)
+    if np.any(table < 0) or np.any(table >= P) or start < 0 or end <= start \
+            or end > table.size * page_size or reps < 1:
+        raise ValueError("invalid NVIDIA paged KV timing contract")
+    global _paged_kv_artifact
+    if _paged_kv_artifact is None:
+        _paged_kv_artifact = _nvidia_cuda_compile_fn(KernelSource(
+            source=_synthesize_paged_kv_read_cuda(),
+            entry="tessera_nvidia_paged_kv_read_f32", lang=_LANG,
+            spec=SpecPolicy.DYNAMIC, shape_key=("paged-kv-read-f32",)))
+    out = np.empty((end - start, H, D), dtype=np.float32)
+    fn = getattr(_load_lib(_paged_kv_artifact),
+                 "tessera_nvidia_paged_kv_read_f32_timed")
+    fn.restype = ctypes.c_int
+    fn.argtypes = ([ctypes.c_void_p] * 3 + [ctypes.c_int] * 5
+                   + [ctypes.c_long] * 2 + [ctypes.c_int,
+                      ctypes.POINTER(ctypes.c_float)])
+    ms = ctypes.c_float()
+    rc = fn(_ptr(p), _ptr(table), _ptr(out), P, int(table.size), page_size,
+            H, D, start, end, reps, ctypes.byref(ms))
+    if rc != 1:
+        raise RuntimeError(f"NVIDIA paged KV event timing failed (rc={rc})")
+    return float(ms.value)
 
 
 _conv2d_artifact: str | None = None
@@ -2073,25 +2110,27 @@ def run_conv2d_nhwc_f32(
 
 
 _ssm_replay_device_artifact: str | None = None
+_ssm_replay_native_packages: dict[tuple[int, int, int, int, int], tuple[Any, Any]] = {}
 
 
 def _synthesize_ssm_replay_device_cuda() -> str:
     """Persistent scalar-A ReplaySSM context; inputs stay in CUDA allocations."""
     return r'''#include <cuda_runtime.h>
+#include <cuda.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
 struct S{float*pd,*px,*pb,*pc,*py,*dy;cudaEvent_t beg,ev;int state,tokens;};
-struct Q{float*d,*x,*b,*s,*c,*a,*y;cudaStream_t st;S*slots;int B,D,N,L,ns,next;};
-__global__ void out(Q q,int M){int z=blockIdx.x*blockDim.x+threadIdx.x;if(z>=q.B*q.D)return;int bi=z/q.D,di=z%q.D;float t=0,v=0,p=0;for(int i=0;i<M;i++)t+=q.d[((long)i*q.B+bi)*q.D+di]*q.a[di];for(int n=0;n<q.N;n++)v+=q.c[(long)bi*q.N+n]*q.s[((long)bi*q.D+di)*q.N+n];v*=expf(t);for(int i=0;i<M;i++){long k=((long)i*q.B+bi)*q.D+di;p+=q.d[k]*q.a[di];float g=0;for(int n=0;n<q.N;n++)g+=q.c[(long)bi*q.N+n]*q.b[((long)i*q.B+bi)*q.N+n];v+=expf(t-p)*q.d[k]*q.x[k]*g;}q.y[(long)bi*q.D+di]=v;}
-__global__ void fl(Q q,int M){long z=(long)blockIdx.x*blockDim.x+threadIdx.x,n=(long)q.B*q.D*q.N;if(z>=n)return;int ni=z%q.N,di=(z/q.N)%q.D,bi=z/(q.N*q.D);float v=q.s[z];for(int i=0;i<M;i++){long k=((long)i*q.B+bi)*q.D+di;v=expf(q.d[k]*q.a[di])*v+q.d[k]*q.x[k]*q.b[((long)i*q.B+bi)*q.N+ni];}q.s[z]=v;}
-extern "C" int cr(void**o,const float*s,const float*a,int B,int D,int N,int L,int ns){Q*q=(Q*)calloc(1,sizeof(Q));if(!q||B<1||D<1||N<1||L<1||ns<2)return 2;q->B=B;q->D=D;q->N=N;q->L=L;q->ns=ns;q->slots=(S*)calloc(ns,sizeof(S));size_t bd=(size_t)L*B*D*4,bn=(size_t)L*B*N*4,st=(size_t)B*D*N*4,c=(size_t)B*N*4,aa=(size_t)D*4,y=(size_t)B*D*4;if(!q->slots||cudaMalloc(&q->d,bd)||cudaMalloc(&q->x,bd)||cudaMalloc(&q->b,bn)||cudaMalloc(&q->s,st)||cudaMalloc(&q->c,c)||cudaMalloc(&q->a,aa)||cudaMalloc(&q->y,y)||cudaStreamCreate(&q->st)||cudaMemcpy(q->s,s,st,cudaMemcpyHostToDevice)||cudaMemcpy(q->a,a,aa,cudaMemcpyHostToDevice))return 3;for(int i=0;i<ns;i++){S&z=q->slots[i];if(cudaMalloc(&z.dy,bd)||cudaHostAlloc(&z.pd,bd,cudaHostAllocDefault)||cudaHostAlloc(&z.px,bd,cudaHostAllocDefault)||cudaHostAlloc(&z.pb,bn,cudaHostAllocDefault)||cudaHostAlloc(&z.pc,bn,cudaHostAllocDefault)||cudaHostAlloc(&z.py,bd,cudaHostAllocDefault)||cudaEventCreate(&z.beg)||cudaEventCreate(&z.ev))return 3;}*o=q;return 1;}
+struct Q{float*d,*x,*b,*s,*c,*a,*y;cudaStream_t st;S*slots;CUmodule md,mf;CUfunction kd,kf;int B,D,N,L,ns,next;};
+static int out(Q*q,int M,cudaStream_t st){long long B=q->B,D=q->D,N=q->N,MM=M;void*args[]={&q->d,&q->x,&q->b,&q->s,&q->c,&q->a,&q->y,&B,&D,&N,&MM};return cuLaunchKernel(q->kd,(q->B*q->D+127)/128,1,1,128,1,1,0,(CUstream)st,args,0)==CUDA_SUCCESS?0:1;}
+static int fl(Q*q,int M,cudaStream_t st){long long B=q->B,D=q->D,N=q->N,MM=M;void*args[]={&q->d,&q->x,&q->b,&q->s,&q->a,&B,&D,&N,&MM};long n=(long)q->B*q->D*q->N;return cuLaunchKernel(q->kf,(n+127)/128,1,1,128,1,1,0,(CUstream)st,args,0)==CUDA_SUCCESS?0:1;}
+extern "C" int cr(void**o,const float*s,const float*a,int B,int D,int N,int L,int ns,const char*dptx,const char*dentry,const char*fptx,const char*fentry){Q*q=(Q*)calloc(1,sizeof(Q));if(!q||B<1||D<1||N<1||L<1||ns<2||!dptx||!dentry||!fptx||!fentry)return 2;q->B=B;q->D=D;q->N=N;q->L=L;q->ns=ns;q->slots=(S*)calloc(ns,sizeof(S));size_t bd=(size_t)L*B*D*4,bn=(size_t)L*B*N*4,st=(size_t)B*D*N*4,c=(size_t)B*N*4,aa=(size_t)D*4,y=(size_t)B*D*4;if(!q->slots||cudaMalloc(&q->d,bd)||cudaMalloc(&q->x,bd)||cudaMalloc(&q->b,bn)||cudaMalloc(&q->s,st)||cudaMalloc(&q->c,c)||cudaMalloc(&q->a,aa)||cudaMalloc(&q->y,y)||cudaStreamCreate(&q->st)||cudaMemcpy(q->s,s,st,cudaMemcpyHostToDevice)||cudaMemcpy(q->a,a,aa,cudaMemcpyHostToDevice)||cuModuleLoadData(&q->md,dptx)!=CUDA_SUCCESS||cuModuleGetFunction(&q->kd,q->md,dentry)!=CUDA_SUCCESS||cuModuleLoadData(&q->mf,fptx)!=CUDA_SUCCESS||cuModuleGetFunction(&q->kf,q->mf,fentry)!=CUDA_SUCCESS)return 3;for(int i=0;i<ns;i++){S&z=q->slots[i];if(cudaMalloc(&z.dy,bd)||cudaHostAlloc(&z.pd,bd,cudaHostAllocDefault)||cudaHostAlloc(&z.px,bd,cudaHostAllocDefault)||cudaHostAlloc(&z.pb,bn,cudaHostAllocDefault)||cudaHostAlloc(&z.pc,bn,cudaHostAllocDefault)||cudaHostAlloc(&z.py,bd,cudaHostAllocDefault)||cudaEventCreate(&z.beg)||cudaEventCreate(&z.ev))return 3;}*o=q;return 1;}
 extern "C" int ap(void*v,const float*d,const float*x,const float*b,int i){Q*q=(Q*)v;if(!q||i<0||i>=q->L)return 2;size_t bd=(size_t)q->B*q->D*4,bn=(size_t)q->B*q->N*4;return cudaMemcpy(q->d+(size_t)i*q->B*q->D,d,bd,cudaMemcpyHostToDevice)||cudaMemcpy(q->x+(size_t)i*q->B*q->D,x,bd,cudaMemcpyHostToDevice)||cudaMemcpy(q->b+(size_t)i*q->B*q->N,b,bn,cudaMemcpyHostToDevice)?3:1;}
-extern "C" int de(void*v,const float*c,float*y,int M){Q*q=(Q*)v;if(!q||M<1||M>q->L)return 2;if(cudaMemcpy(q->c,c,(size_t)q->B*q->N*4,cudaMemcpyHostToDevice))return 3;out<<<(q->B*q->D+127)/128,128>>>(*q,M);return cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(y,q->y,(size_t)q->B*q->D*4,cudaMemcpyDeviceToHost)==cudaSuccess?1:3;}
-extern "C" int fu(void*v,int M){Q*q=(Q*)v;if(!q||M<1||M>q->L)return 2;long n=(long)q->B*q->D*q->N;fl<<<(n+127)/128,128>>>(*q,M);return cudaDeviceSynchronize()==cudaSuccess?1:3;}
-extern "C" int bl(void*v,const float*d,const float*x,const float*b,const float*c,float*y,int T,int start){Q*q=(Q*)v;if(!q||!d||!x||!b||!c||!y||T<1||start<0||start+T>q->L)return 2;size_t bd=(size_t)q->B*q->D*4,bn=(size_t)q->B*q->N*4,yo=(size_t)q->B*q->D;for(int i=0;i<T;i++){int p=start+i;if(cudaMemcpy(q->d+(size_t)p*q->B*q->D,d+(size_t)i*q->B*q->D,bd,cudaMemcpyHostToDevice)||cudaMemcpy(q->x+(size_t)p*q->B*q->D,x+(size_t)i*q->B*q->D,bd,cudaMemcpyHostToDevice)||cudaMemcpy(q->b+(size_t)p*q->B*q->N,b+(size_t)i*q->B*q->N,bn,cudaMemcpyHostToDevice)||cudaMemcpy(q->c,c+(size_t)i*q->B*q->N,bn,cudaMemcpyHostToDevice))return 3;out<<<(q->B*q->D+127)/128,128>>>(*q,p+1);if(cudaGetLastError()!=cudaSuccess||cudaMemcpy(y+(size_t)i*yo,q->y,bd,cudaMemcpyDeviceToHost)!=cudaSuccess)return 3;}return 1;}
+extern "C" int de(void*v,const float*c,float*y,int M){Q*q=(Q*)v;if(!q||M<1||M>q->L)return 2;if(cudaMemcpy(q->c,c,(size_t)q->B*q->N*4,cudaMemcpyHostToDevice)||out(q,M,0))return 3;return cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(y,q->y,(size_t)q->B*q->D*4,cudaMemcpyDeviceToHost)==cudaSuccess?1:3;}
+extern "C" int fu(void*v,int M){Q*q=(Q*)v;if(!q||M<1||M>q->L)return 2;return !fl(q,M,0)&&cudaDeviceSynchronize()==cudaSuccess?1:3;}
+extern "C" int bl(void*v,const float*d,const float*x,const float*b,const float*c,float*y,int T,int start){Q*q=(Q*)v;if(!q||!d||!x||!b||!c||!y||T<1||start<0||start+T>q->L)return 2;size_t bd=(size_t)q->B*q->D*4,bn=(size_t)q->B*q->N*4,yo=(size_t)q->B*q->D;for(int i=0;i<T;i++){int p=start+i;if(cudaMemcpy(q->d+(size_t)p*q->B*q->D,d+(size_t)i*q->B*q->D,bd,cudaMemcpyHostToDevice)||cudaMemcpy(q->x+(size_t)p*q->B*q->D,x+(size_t)i*q->B*q->D,bd,cudaMemcpyHostToDevice)||cudaMemcpy(q->b+(size_t)p*q->B*q->N,b+(size_t)i*q->B*q->N,bn,cudaMemcpyHostToDevice)||cudaMemcpy(q->c,c+(size_t)i*q->B*q->N,bn,cudaMemcpyHostToDevice)||out(q,p+1,0)||cudaMemcpy(y+(size_t)i*yo,q->y,bd,cudaMemcpyDeviceToHost)!=cudaSuccess)return 3;}return 1;}
 static int take(Q*q){for(int n=0;n<q->ns;n++){int i=(q->next+n)%q->ns;S&z=q->slots[i];if(z.state==2&&cudaEventQuery(z.ev)==cudaSuccess)z.state=0;if(z.state==0){z.state=1;q->next=(i+1)%q->ns;return i;}}return -1;}
-extern "C" int as(void*v,const float*d,const float*x,const float*b,const float*c,int T,int start,int*slot){Q*q=(Q*)v;if(!q||!slot||T<1||start<0||start+T>q->L)return 2;int si=take(q);if(si<0)return 4;S&z=q->slots[si];size_t bd=(size_t)q->B*q->D*4,bn=(size_t)q->B*q->N*4,yo=(size_t)q->B*q->D;memcpy(z.pd,d,(size_t)T*bd);memcpy(z.px,x,(size_t)T*bd);memcpy(z.pb,b,(size_t)T*bn);memcpy(z.pc,c,(size_t)T*bn);if(cudaEventRecord(z.beg,q->st)!=cudaSuccess)return 3;for(int i=0;i<T;i++){int p=start+i;if(cudaMemcpyAsync(q->d+(size_t)p*yo,z.pd+(size_t)i*yo,bd,cudaMemcpyHostToDevice,q->st)||cudaMemcpyAsync(q->x+(size_t)p*yo,z.px+(size_t)i*yo,bd,cudaMemcpyHostToDevice,q->st)||cudaMemcpyAsync(q->b+(size_t)p*q->B*q->N,z.pb+(size_t)i*q->B*q->N,bn,cudaMemcpyHostToDevice,q->st)||cudaMemcpyAsync(q->c,z.pc+(size_t)i*q->B*q->N,bn,cudaMemcpyHostToDevice,q->st))return 3;out<<<(q->B*q->D+127)/128,128,0,q->st>>>(*q,p+1);if(cudaMemcpyAsync(z.dy+(size_t)i*yo,q->y,bd,cudaMemcpyDeviceToDevice,q->st)||cudaMemcpyAsync(z.py+(size_t)i*yo,q->y,bd,cudaMemcpyDeviceToHost,q->st))return 3;}z.tokens=T;if(cudaEventRecord(z.ev,q->st)!=cudaSuccess)return 3;*slot=si;return 1;}
+extern "C" int as(void*v,const float*d,const float*x,const float*b,const float*c,int T,int start,int*slot){Q*q=(Q*)v;if(!q||!slot||T<1||start<0||start+T>q->L)return 2;int si=take(q);if(si<0)return 4;S&z=q->slots[si];size_t bd=(size_t)q->B*q->D*4,bn=(size_t)q->B*q->N*4,yo=(size_t)q->B*q->D;memcpy(z.pd,d,(size_t)T*bd);memcpy(z.px,x,(size_t)T*bd);memcpy(z.pb,b,(size_t)T*bn);memcpy(z.pc,c,(size_t)T*bn);if(cudaEventRecord(z.beg,q->st)!=cudaSuccess)return 3;for(int i=0;i<T;i++){int p=start+i;if(cudaMemcpyAsync(q->d+(size_t)p*yo,z.pd+(size_t)i*yo,bd,cudaMemcpyHostToDevice,q->st)||cudaMemcpyAsync(q->x+(size_t)p*yo,z.px+(size_t)i*yo,bd,cudaMemcpyHostToDevice,q->st)||cudaMemcpyAsync(q->b+(size_t)p*q->B*q->N,z.pb+(size_t)i*q->B*q->N,bn,cudaMemcpyHostToDevice,q->st)||cudaMemcpyAsync(q->c,z.pc+(size_t)i*q->B*q->N,bn,cudaMemcpyHostToDevice,q->st)||out(q,p+1,q->st))return 3;if(cudaMemcpyAsync(z.dy+(size_t)i*yo,q->y,bd,cudaMemcpyDeviceToDevice,q->st)||cudaMemcpyAsync(z.py+(size_t)i*yo,q->y,bd,cudaMemcpyDeviceToHost,q->st))return 3;}z.tokens=T;if(cudaEventRecord(z.ev,q->st)!=cudaSuccess)return 3;*slot=si;return 1;}
 extern "C" int aw(void*v,int si,float*y,int T){Q*q=(Q*)v;if(!q||si<0||si>=q->ns||!y)return 2;S&z=q->slots[si];if(z.state!=1||T!=z.tokens)return 2;if(cudaEventSynchronize(z.ev)!=cudaSuccess)return 3;memcpy(y,z.py,(size_t)T*q->B*q->D*4);z.state=0;return 1;}
 extern "C" int ew(void*v,int si){Q*q=(Q*)v;if(!q||si<0||si>=q->ns||q->slots[si].state!=1)return 2;return cudaEventSynchronize(q->slots[si].ev)==cudaSuccess?1:3;}
 extern "C" int et(void*v,int si,float*ms){Q*q=(Q*)v;if(!q||si<0||si>=q->ns||q->slots[si].state!=1||!ms)return 2;S&z=q->slots[si];if(cudaEventSynchronize(z.ev)!=cudaSuccess)return 3;return cudaEventElapsedTime(ms,z.beg,z.ev)==cudaSuccess?1:3;}
@@ -2099,8 +2138,7 @@ extern "C" int ws(void*v,int si,void*stream){Q*q=(Q*)v;if(!q||si<0||si>=q->ns||q
 extern "C" int rs(void*v,int si,void*stream){Q*q=(Q*)v;if(!q||si<0||si>=q->ns||q->slots[si].state!=1)return 2;S&z=q->slots[si];cudaStream_t st=stream?(cudaStream_t)stream:q->st;if(cudaEventRecord(z.ev,st)!=cudaSuccess)return 3;z.state=2;return 1;}
 extern "C" void* dp(void*v,int si){Q*q=(Q*)v;if(!q||si<0||si>=q->ns||q->slots[si].state!=1)return 0;return q->slots[si].dy;}
 extern "C" void* ps(void*v){Q*q=(Q*)v;return q?(void*)q->st:0;}
-extern "C" int rp(int B,int D,int N){Q q={};q.B=B;q.D=D;q.N=N;q.L=1;if(B<1||D<1||N<1)return 2;size_t bd=(size_t)B*D*4,bn=(size_t)B*N*4,st=(size_t)B*D*N*4;if(cudaMalloc(&q.d,bd)||cudaMalloc(&q.x,bd)||cudaMalloc(&q.b,bn)||cudaMalloc(&q.s,st)||cudaMalloc(&q.c,bn)||cudaMalloc(&q.a,(size_t)D*4)||cudaMalloc(&q.y,bd))return 3;cudaMemset(q.d,0,bd);cudaMemset(q.x,0,bd);cudaMemset(q.b,0,bn);cudaMemset(q.s,0,st);cudaMemset(q.c,0,bn);cudaMemset(q.a,0,(size_t)D*4);out<<<(B*D+127)/128,128>>>(q,1);int ok=cudaDeviceSynchronize()==cudaSuccess?1:3;cudaFree(q.d);cudaFree(q.x);cudaFree(q.b);cudaFree(q.s);cudaFree(q.c);cudaFree(q.a);cudaFree(q.y);return ok;}
-extern "C" void dl(void*v){Q*q=(Q*)v;if(!q)return;cudaStreamSynchronize(q->st);cudaFree(q->d);cudaFree(q->x);cudaFree(q->b);cudaFree(q->s);cudaFree(q->c);cudaFree(q->a);cudaFree(q->y);for(int i=0;i<q->ns;i++){S&z=q->slots[i];if(z.state&&z.ev)cudaEventSynchronize(z.ev);if(z.dy)cudaFree(z.dy);if(z.pd)cudaFreeHost(z.pd);if(z.px)cudaFreeHost(z.px);if(z.pb)cudaFreeHost(z.pb);if(z.pc)cudaFreeHost(z.pc);if(z.py)cudaFreeHost(z.py);if(z.beg)cudaEventDestroy(z.beg);if(z.ev)cudaEventDestroy(z.ev);}free(q->slots);if(q->st)cudaStreamDestroy(q->st);free(q);}'''
+extern "C" void dl(void*v){Q*q=(Q*)v;if(!q)return;cudaStreamSynchronize(q->st);cudaFree(q->d);cudaFree(q->x);cudaFree(q->b);cudaFree(q->s);cudaFree(q->c);cudaFree(q->a);cudaFree(q->y);for(int i=0;i<q->ns;i++){S&z=q->slots[i];if(z.state&&z.ev)cudaEventSynchronize(z.ev);if(z.dy)cudaFree(z.dy);if(z.pd)cudaFreeHost(z.pd);if(z.px)cudaFreeHost(z.px);if(z.pb)cudaFreeHost(z.pb);if(z.pc)cudaFreeHost(z.pc);if(z.py)cudaFreeHost(z.py);if(z.beg)cudaEventDestroy(z.beg);if(z.ev)cudaEventDestroy(z.ev);}free(q->slots);if(q->md)cuModuleUnload(q->md);if(q->mf)cuModuleUnload(q->mf);if(q->st)cudaStreamDestroy(q->st);free(q);}'''
 
 
 class NvidiaReplayDeviceState:
@@ -2108,13 +2146,26 @@ class NvidiaReplayDeviceState:
     def __init__(self, s0: Any, a: Any, capacity: int, async_slots: int = 3):
         import numpy as np
         global _ssm_replay_device_artifact
+        from ..nvidia_native import package_replay_ssm_kernels
         s0=np.ascontiguousarray(s0,np.float32); a=np.ascontiguousarray(a,np.float32)
         self.B,self.D,self.N=s0.shape; self.capacity=capacity
         if async_slots < 2: raise ValueError("ReplaySSM async ring requires at least two slots")
         if _ssm_replay_device_artifact is None: _ssm_replay_device_artifact=_nvidia_cuda_compile_fn(KernelSource(source=_synthesize_ssm_replay_device_cuda(),entry="cr",lang=_LANG,spec=SpecPolicy.DYNAMIC,shape_key=("ssm-replay-device",)))
+        key=(self.B,self.D,self.N,capacity,async_slots)
+        packages=_ssm_replay_native_packages.get(key)
+        if packages is None:
+            packages=package_replay_ssm_kernels(batch=self.B,channels=self.D,state_dim=self.N,capacity=capacity,async_slots=async_slots,pipeline_name="tessera-nvidia-pipeline-sm120")
+            _ssm_replay_native_packages[key]=packages
+        self.decode_package: Any
+        self.flush_package: Any
+        self.decode_package,self.flush_package=packages
         self.lib=_load_lib(_ssm_replay_device_artifact); self.ctx=ctypes.c_void_p(); f=self.lib.cr; f.restype=ctypes.c_int
         self.async_slots=async_slots
-        if f(ctypes.byref(self.ctx),_ptr(s0),_ptr(a),self.B,self.D,self.N,capacity,async_slots)!=1: raise RuntimeError("ReplaySSM CUDA allocation failed")
+        decode_ptx=self.decode_package.image.payload
+        flush_ptx=self.flush_package.image.payload
+        if f(ctypes.byref(self.ctx),_ptr(s0),_ptr(a),self.B,self.D,self.N,capacity,async_slots,
+             decode_ptx,self.decode_package.descriptor.entry_symbol.encode(),
+             flush_ptx,self.flush_package.descriptor.entry_symbol.encode())!=1: raise RuntimeError("ReplaySSM CUDA allocation or compiler-image load failed")
     def append(self,d: Any,x: Any,b: Any,i:int)->None:
         import numpy as np
         f=self.lib.ap; f.restype=ctypes.c_int; vs=[np.ascontiguousarray(v,np.float32) for v in(d,x,b)]
@@ -2149,17 +2200,21 @@ class NvidiaReplayDeviceState:
 
 def profile_replay_out_resources(batch: int = 1, dim: int = 128,
                                  state_dim: int = 64) -> None:
-    """Launch the exact ReplaySSM ``out`` kernel with isolated probe lifetime."""
-    global _ssm_replay_device_artifact
-    if _ssm_replay_device_artifact is None:
-        _ssm_replay_device_artifact = _nvidia_cuda_compile_fn(KernelSource(
-            source=_synthesize_ssm_replay_device_cuda(), entry="cr", lang=_LANG,
-            spec=SpecPolicy.DYNAMIC, shape_key=("ssm-replay-device",)))
-    fn = getattr(_load_lib(_ssm_replay_device_artifact), "rp")
-    fn.restype = ctypes.c_int
-    fn.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_int]
-    if fn(batch, dim, state_dim) != 1:
-        raise RuntimeError("ReplaySSM isolated resource probe failed")
+    """Launch the compiler-owned ReplaySSM image with isolated probe lifetime."""
+    import numpy as np
+    state = NvidiaReplayDeviceState(
+        np.zeros((batch, dim, state_dim), np.float32),
+        np.zeros((dim,), np.float32), capacity=1, async_slots=2,
+    )
+    try:
+        state.append(
+            np.zeros((batch, dim), np.float32),
+            np.zeros((batch, dim), np.float32),
+            np.zeros((batch, state_dim), np.float32), 0,
+        )
+        state.decode(np.zeros((batch, state_dim), np.float32), 1)
+    finally:
+        state.close()
 
 
 class CudaEvent:

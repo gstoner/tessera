@@ -116,18 +116,22 @@ def test_cpu_matmul_is_executable_with_empty_reason():
     assert result.first_failing_gate is None
 
 
-def test_nvidia_matmul_is_not_executable_and_names_toolchain_gate():
-    """On a developer Mac without CUDA installed, the audit-named first
-    failing gate is ``toolchain``. The canonical wrapper surfaces it
-    directly — no parsing of the bundle's reason string required."""
+def test_nvidia_matmul_is_not_executable_and_names_first_failing_gate():
+    """Surface the evaluator's host-specific first failure.
+
+    A developer Mac normally fails ``toolchain``; a CUDA-equipped WSL host can
+    pass that gate and fail the later ``link`` gate.
+    """
     result = cn.canonical_compile(_tiny_matmul_module(), target="nvidia_sm90")
     assert result.executable is False
     assert result.first_failing_gate is not None
-    assert result.first_failing_gate.gate == pg.GATE_TOOLCHAIN
-    assert "nvcc" in result.first_failing_gate.detail
+    direct = pg.first_failing_gate("nvidia_sm90", "matmul")
+    assert direct is not None
+    assert result.first_failing_gate.gate == direct.gate
+    assert result.first_failing_gate.detail == direct.detail
     # The reason string mirrors the gate.
-    assert result.reason.startswith("first failing gate `toolchain`")
-    assert "nvcc" in result.reason
+    assert result.reason.startswith(f"first failing gate `{direct.gate}`")
+    assert direct.detail in result.reason
     # Cross-link to the conformance dashboard.
     assert "op_target_conformance.md" in result.reason
 

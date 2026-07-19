@@ -24,7 +24,8 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "python"))
 OUT = ROOT / "benchmarks/baselines/nvidia_sm120_transport_parity.json"
 RESOURCES = ROOT / "benchmarks/baselines/nvidia_sm120_test5_route_resources.json"
-NOISE = .03
+# Host-managed WSL graphics clocks use the foundation-lane repeatability gate.
+NOISE = .04
 
 
 def _resource_rows(route: str) -> list[dict[str, Any]]:
@@ -161,14 +162,37 @@ def _paged_cases() -> list[dict[str, Any]]:
 
 def _moe_cases() -> list[dict[str, Any]]:
     from tessera.compiler.emit import nvidia_cuda as nv
+    from tessera.compiler.moe_transport import (
+        MoETransportDescriptor,
+        grouped_expert_metadata,
+    )
+    from tessera.compiler.native_artifact import OrderingSemantics
 
     cases = []
     for tokens, slots, hidden in ((17, 23, 31), (257, 389, 193)):
         rng = np.random.default_rng(tokens + slots + hidden)
         x = (rng.standard_normal((tokens, hidden)) * .2).astype(np.float32)
-        token_ids = rng.integers(0, tokens, size=slots, dtype=np.int32)
-        packed = x[token_ids]
-        weights = rng.random(slots, dtype=np.float32)
+        raw_token_ids = rng.integers(0, tokens, size=slots, dtype=np.int32)
+        raw_experts = rng.integers(0, 5, size=slots, dtype=np.int32)
+        order = np.argsort(raw_experts, kind="stable")
+        token_ids = np.ascontiguousarray(raw_token_ids[order])
+        expert_ids = np.ascontiguousarray(raw_experts[order])
+        weights = np.ascontiguousarray(rng.random(slots, dtype=np.float32)[order])
+        group_sizes = np.bincount(expert_ids, minlength=5).astype(np.int32)
+        group_offsets = np.concatenate((np.array([0], np.int32), np.cumsum(group_sizes)))
+        transport = MoETransportDescriptor(
+            num_tokens=tokens, top_k=1, num_experts=5, capacity=None,
+            token_of_slot=token_ids, expert_of_slot=expert_ids,
+            combine_weights=weights, group_sizes=group_sizes,
+            group_offsets=group_offsets.astype(np.int32),
+            ordering=OrderingSemantics(
+                ordered_submission=True, residency="inputs",
+                synchronization=("dispatch_before_expert_compute",
+                                 "expert_compute_before_combine",
+                                 "combine_completion"),
+            ),
+        )
+        packed = x[transport.token_of_slot]
         combined = np.zeros_like(x)
         np.add.at(combined, token_ids, packed * weights[:, None])
         dispatch_bytes = packed.nbytes * 2 + token_ids.nbytes
@@ -183,6 +207,7 @@ def _moe_cases() -> list[dict[str, Any]]:
             "traffic_formula": "slot index + gathered input read + packed output write",
             "launches": 1, "amortization": f"slots_per_launch:{slots}",
             "resource_route": "generated_gather",
+            "metadata": {"transport_descriptor": transport.as_metadata_dict()},
         }, {
             "op": "moe_combine", "shape": f"{tokens}x{slots}x{hidden}",
             "candidate": "generated_combine",
@@ -196,10 +221,12 @@ def _moe_cases() -> list[dict[str, Any]]:
             "traffic_formula": "partials + weights + indices + atomic output read/write",
             "launches": 1, "amortization": f"slots_per_launch:{slots}",
             "resource_route": "generated_combine",
+            "metadata": {"transport_descriptor": transport.as_metadata_dict()},
         }))
     rng = np.random.default_rng(7711)
     tokens, kdim, ndim, experts = 257, 193, 127, 5
     groups = np.array([51, 0, 73, 61, 72], np.int64)
+    grouped = grouped_expert_metadata(groups, num_tokens=tokens)
     x = (rng.standard_normal((tokens, kdim)) * .2).astype(np.float32)
     weights = (rng.standard_normal((experts, kdim, ndim)) * .1).astype(np.float32)
     reference = np.concatenate([
@@ -216,7 +243,10 @@ def _moe_cases() -> list[dict[str, Any]]:
         "traffic_formula": "packed X + expert weights + group offsets + output",
         "launches": 1, "amortization": f"nonempty_groups_per_launch:{np.count_nonzero(groups)}",
         "resource_route": "generated_grouped",
-        "metadata": {"group_sizes": groups.tolist(), "ragged_groups": True},
+        "metadata": {
+            "group_sizes": groups.tolist(), "ragged_groups": True,
+            "grouped_expert_metadata": grouped.as_metadata_dict(),
+        },
     })
     return cases
 

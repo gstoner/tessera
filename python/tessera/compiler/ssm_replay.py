@@ -30,6 +30,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .native_artifact import OrderingSemantics, WorkspaceRequirement
+
 # ── Routes ──────────────────────────────────────────────────────────────
 
 #: Baseline: eager summary recurrence, full state write every token (no replay).
@@ -42,6 +44,115 @@ ROUTE_STATE_AND_OUTPUT = "state_and_output"
 #: The two replay routes a decode step chooses between (summary is the
 #: non-replay baseline and is never *selected* by the flush rule).
 REPLAY_ROUTES = (ROUTE_OUTPUT_ONLY, ROUTE_STATE_AND_OUTPUT)
+
+
+@dataclass(frozen=True)
+class ReplayStateDescriptor:
+    """Canonical persistent-state and ordered async-ring contract.
+
+    The descriptor records the storage owned for the lifetime of one serving
+    session.  It deliberately excludes transient driver objects (streams and
+    events) whose byte size is implementation-specific, while retaining their
+    ordering protocol as synchronization tokens.
+    """
+
+    target: str
+    batch: int
+    channels: int
+    state_dim: int
+    capacity: int
+    async_slots: int
+    dtype: str
+    workspace: WorkspaceRequirement
+    pinned_host_bytes: int
+    ordering: OrderingSemantics
+
+    def __post_init__(self) -> None:
+        if min(self.batch, self.channels, self.state_dim, self.capacity) <= 0:
+            raise ValueError("ReplaySSM state geometry must be positive")
+        if self.async_slots < 2:
+            raise ValueError("ReplaySSM async ring requires at least two slots")
+        if self.dtype != "fp32":
+            raise ValueError("ReplaySSM persistent descriptor currently requires fp32")
+        if self.workspace.lifetime != "session" or self.workspace.initialization != "preserve":
+            raise ValueError("ReplaySSM workspace must be session-persistent")
+
+    @property
+    def checkpoint_bytes(self) -> int:
+        return self.batch * self.channels * self.state_dim * 4
+
+    @property
+    def replay_bytes(self) -> int:
+        return self.capacity * self.batch * (2 * self.channels + self.state_dim) * 4
+
+    def validate_span(self, *, start: int, tokens: int) -> None:
+        if start < 0 or tokens <= 0 or start + tokens > self.capacity:
+            raise ValueError(
+                "ReplaySSM submission must be a positive span contained in the persistent ring"
+            )
+
+    def as_metadata_dict(self) -> dict[str, object]:
+        return {
+            "schema": "tessera.replayssm.state.v1",
+            "target": self.target,
+            "shape": [self.batch, self.channels, self.state_dim],
+            "capacity": self.capacity,
+            "async_slots": self.async_slots,
+            "dtype": self.dtype,
+            "workspace": self.workspace.to_dict(),
+            "pinned_host_bytes": self.pinned_host_bytes,
+            "checkpoint_bytes": self.checkpoint_bytes,
+            "replay_bytes": self.replay_bytes,
+            "ordering": self.ordering.to_dict(),
+        }
+
+
+def replay_state_descriptor(
+    *, target: str, batch: int, channels: int, state_dim: int,
+    capacity: int, async_slots: int, dtype: str = "fp32",
+) -> ReplayStateDescriptor:
+    """Build the shared state/ring descriptor used by backend resident handles."""
+    if min(batch, channels, state_dim, capacity) <= 0:
+        raise ValueError("ReplaySSM state geometry must be positive")
+    if async_slots < 2:
+        raise ValueError("ReplaySSM async ring requires at least two slots")
+    if dtype != "fp32":
+        raise ValueError("ReplaySSM persistent descriptor currently requires fp32")
+    # Device allocations: replay delta/x/B, checkpoint, current C/A/Y, plus
+    # one device output span per async slot. Streams/events are opaque handles.
+    replay = capacity * batch * (2 * channels + state_dim) * 4
+    resident = batch * channels * state_dim * 4
+    resident += (batch * state_dim + channels + batch * channels) * 4
+    async_device = async_slots * capacity * batch * channels * 4
+    device_bytes = replay + resident + async_device
+    # Each slot pins delta, x, B, C and Y for the maximum ring span.
+    pinned_per_slot = capacity * batch * (3 * channels + 2 * state_dim) * 4
+    return ReplayStateDescriptor(
+        target=target,
+        batch=batch,
+        channels=channels,
+        state_dim=state_dim,
+        capacity=capacity,
+        async_slots=async_slots,
+        dtype=dtype,
+        workspace=WorkspaceRequirement(
+            bytes=device_bytes,
+            alignment=256,
+            lifetime="session",
+            initialization="preserve",
+        ),
+        pinned_host_bytes=async_slots * pinned_per_slot,
+        ordering=OrderingSemantics(
+            ordered_submission=True,
+            residency="all",
+            synchronization=(
+                "stream_ordered",
+                "slot_completion_event",
+                "consumer_wait_before_release",
+                "teardown_drains_pending",
+            ),
+        ),
+    )
 
 
 def should_flush(count: int, capacity: int, spec_window: int = 0, n_new: int = 1) -> bool:
@@ -123,6 +234,12 @@ _MAMBA2_KERNELS = (
                  "tessera_apple_gpu_ssm_replay_decode_dev_f32_enc", "fused"),
     ReplayKernel("mamba2", ROUTE_STATE_AND_OUTPUT, "metal_resident_ring",
                  "tessera_apple_gpu_ssm_replay_flush_dev_f32_enc", "fused"),
+    ReplayKernel("mamba2", ROUTE_OUTPUT_ONLY, "cuda_resident_ring",
+                 "tessera_nvidia_ssm_replay_decode_device_f32", "fused"),
+    ReplayKernel("mamba2", ROUTE_STATE_AND_OUTPUT, "cuda_resident_ring",
+                 "tessera_nvidia_ssm_replay_flush_device_f32", "fused"),
+    ReplayKernel("mamba2", ROUTE_BLOCK, "cuda_resident_ring",
+                 "tessera_nvidia_ssm_replay_block_device_f32", "fused"),
 )
 
 _GDN_KERNELS = (
@@ -180,6 +297,8 @@ __all__ = [
     "ROUTE_SPEC",
     "ROUTE_BLOCK",
     "REPLAY_ROUTES",
+    "ReplayStateDescriptor",
+    "replay_state_descriptor",
     "should_flush",
     "select_route",
     "ReplayKernel",

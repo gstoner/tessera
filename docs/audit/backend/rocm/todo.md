@@ -1,11 +1,27 @@
 ---
-last_updated: 2026-07-18
+last_updated: 2026-07-19
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+Cross-backend sync `STATEFUL-TRANSPORT-FOUNDATION-2026-07-19`: the shared launch
+workspace schema now distinguishes per-launch scratch from session-persistent,
+preserved state. ReplaySSM and MoE metadata contracts are portable, but this
+NVIDIA slice changes no HIP allocation, wave schedule, event/ring protocol,
+resource claim, timing row, or selector. ROCm's proven gfx1151 resident handle
+must map its lifecycle to the shared descriptor in a ROCm-owned follow-up;
+CUDA local-device bandwidth supplies no gfx1151 or multi-rank evidence.
+
+Cross-backend sync `NVIDIA-E2E2-STATEFUL-REDUCE-2026-07-19` extends the shared
+Tile surface with explicit ReplaySSM decode/flush, MoE dispatch/combine/grouped
+GEMM, and `Outer/AxisExtent/Inner` reduction carriers, plus a backend-neutral
+rank/device topology fingerprint. ROCM-E2E-2 must assess mapping these carriers
+to the existing HIP generators and RCCL execution; this is follow-up required,
+not CUDA parity evidence. ROCm inherits no warp schedule, PTX ABI, NCCL call,
+resources, timing, or selector, and gfx1151 remains unsupported for FP8 WMMA.
 
 This is the working ROCm implementation queue. It consolidates the open actions
 from [`ROCM_AUDIT.md`](ROCM_AUDIT.md), the portable Tile fragment work in
@@ -728,6 +744,124 @@ descriptor-first exact-target launcher registry. It registers no HIP hook and
 does not replace runtime-authored directives or existing gfx1151 executors;
 ROCM-E2E-1 still owns HSACO production, `gfx1151` registration/submission,
 softmax comparison, cleanup, and the first ROCm Level-C row.
+The NVIDIA-E2E-1 f16 landing slice was assessed as NVIDIA-only: it adds an
+SM120 PTX package producer and exact CUDA submission hook, with no HIP hook,
+ROCm directive/ABI, wave/LDS schedule, dtype registration, or selector change.
+The completed NVIDIA-E2E-1 NVFP4 slice extends the shared `tile.matmul_kernel`
+verifier with an explicit packed-A/packed-B/scale-A/scale-B/output/M/N/K form.
+This is not applicable to the gfx1151 WMMA lowering because that ISA has no
+NVFP4 block-scaled matrix instruction. ROCm inherits only shared verifier
+rejection behavior; it does not inherit CUDA scale-word packing, warp geometry,
+resources, timings, ABI registration, or selector evidence. RDNA4/CDNA4 work
+remains in its architecture-owned exact-device queue.
+
+The first NVIDIA-E2E-2 slice changes the shared Graph→Tile async contract so a
+copy produces `!tile.async_token`, its wait retires that token, and a matrix
+consumer carries the dependency. This is parity validated with ROCm's existing
+token/retirement legality model and adds no ROCm directive, AMDGPU instruction,
+wave/LDS schedule, HSACO ABI, selector, or execution claim. The additive
+pipeline-registry driver-source field and `tessera_nvidia` dialect manifest row
+are NVIDIA bookkeeping; ROCm pipeline ownership and runtime routing are
+unchanged. Exact SM builders and CUDA TMA/WGMMA behavior are not applicable to
+ROCm.
+
+The NVIDIA-E2E-2 softmax slice adds the shared semantic
+`tile.softmax_kernel(X, O, Rows, K)` envelope with explicit storage,
+accumulation, and last-axis fields; the envelope now accepts f16/f32 storage
+with f32 accumulation. ROCM-E2E-1 must assess producing or adapting
+this envelope into the existing typed ROCm softmax directive/generator; that is
+follow-up required, not parity inferred. ROCm does not inherit the SM120
+thread-per-row schedule, `nvvm.ex2`, PTX ABI, resources, timings, or selector.
+The existing cooperative HIP softmax execution path is unchanged.
+
+The NVIDIA-E2E-2 dtype-totality slice changes the shared MMA selector contract:
+fp32 Tensor Core selection now requires an explicit TF32 math mode, and bare
+`fp4_e2m1` no longer aliases NVIDIA NVFP4. This semantic separation is parity
+validated for ROCm: AMD xf32 continues to require its architecture-owned math
+mode, and RDNA/CDNA FP4/MX scale formats remain distinct from UE4M3-scaled
+NVFP4. The new SM120 scalar/vector and fragment table transfers no AMD ISA,
+wave/VGPR layout, scale encoding, HSACO ABI, runtime readiness, or selector.
+
+The follow-on SM120 dtype slice adds a backend-private
+`tessera_nvidia.mx_block_scale_mma` Target IR op and ptxas-backed FP6/MXFP4
+register contracts. This is not applicable to ROCm code generation and changes
+no AMD dtype registry, MFMA/WMMA descriptor, scale encoding, HSACO ABI, runtime
+route, or selector state. Exact CDNA/RDNA low-precision evidence remains owned
+by the corresponding ROCm items.
+
+The NVIDIA-E2E-2 reduction slice adds the shared semantic
+`tile.reduce_kernel(X, O, Outer, AxisExtent, Inner)` envelope with explicit
+kind, storage, accumulation, normalized axis/keepdims, schedule, and NaN
+policy. ROCM-E2E-2 must assess adapting that
+carrier to the existing HIP reduction generator; this is follow-up required,
+not parity inferred. ROCm inherits neither the CUDA serial nor cooperative-128
+schedule, PTX ABI, resource/timing evidence, runtime readiness, or selector
+change.
+
+The NVIDIA-E2E-2 epilogue slice tightens the shared `tile.matmul_kernel`
+verifier around optional residual operands and the portable
+matmul/bias/activation/residual order. ROCm semantic parity is preserved, but
+its materializer must opt into that launch form explicitly; no CUDA buffer
+layout, warp schedule, PTX ABI, resources, timing, or readiness transfers.
+
+The NVIDIA-E2E-2 attention slice adds the shared semantic
+`tile.attention_kernel(Q,K,V,O,B,Hq,Hkv,Sq,Sk,D,Dv)` carrier with explicit
+storage, f32 accumulation/output, scale, and causal policy. ROCM-E2E-2 must
+assess adapting it to the existing HIP/MFMA forward routes; this is follow-up
+required, not parity inferred. ROCm inherits no CUDA thread-per-output
+schedule, PTX ABI, resource/timing evidence, readiness, or selector change.
+
+The NVIDIA paged-KV slice adds a shared logical-page gather carrier with f32
+pages, i32 table, explicit dimensions/range, and a direct-route semantic tag.
+ROCM-E2E-2 must map it to the existing HIP paged movement lane under its own
+ISA and exact-device proof; no PTX ABI, CUDA schedule, timing, or selector
+state transfers.
+
+The NVIDIA backward-attention slice adds a shared
+`tile.attention_backward_kernel` semantic carrier with explicit mask, softcap,
+determinism, route, and workspace fields. ROCM-E2E-2 must assess mapping it to
+the existing compiler-generated HIP/WMMA backward sequence. The CUDA
+single-owner schedule, zero-workspace reference ABI, atomic/split resources,
+timings, and selector evidence do not transfer to gfx1151.
+
+Cross-backend sync `E2E-DEVICE-LIBS-2026-07-19` extends the shared native-image
+contract with content-addressed LLVM-stage device-library provenance. ROCm must
+populate it from the matching clang/ROCm-driver-selected OCML, OCKL, and OCLC
+set under `--rocm-path`; it must not copy NVIDIA's explicit single-libdevice
+link rule or hand-assemble an OCLC set independently of architecture, wavefront,
+and math-mode flags. This is follow-up required under ROCM-E2E-1. The existing
+LLVM 23/TheRock 7.14 compatibility rule remains mandatory, and no gfx execution
+or selector state changes in the NVIDIA-owned landing.
+
+Cross-backend sync `CUDA-MATH-CONTRACT-2026-07-19` makes the shared Tile softmax
+envelope state its exponential mode and FTZ behavior instead of deriving either
+from compiler optimization flags. ROCm must map that semantic choice to an
+architecture-owned OCML/intrinsic route and validate its own accuracy and
+denormal behavior under ROCM-E2E-1; PTX's `ex2.approx.f32` bound is not AMD
+evidence and no gfx selector changes here.
+
+Cross-backend sync `CUDA-INTRINSIC-SURFACE-2026-07-19` extends the shared
+rounding vocabulary with toward-positive and toward-negative while preserving
+the existing default RTNE/RTNA/RTZ tuning sweep. This is shared semantic parity;
+ROCm must map directed conversions to AMDGPU/OCML behavior under its own typed
+lowering and exact-device proof. CUDA integer, DP2A/DP4A, cast-suffix, and packed
+SIMD symbols transfer no AMD instruction, wave layout, runtime route, or
+selector. The NVIDIA inventory marks all Tessera Target-IR/runtime rows planned.
+
+Cross-backend sync `PTX-TYPE-MEMORY-TRUTH-2026-07-19` adds physical PTX register
+and format-kind fields to the NVIDIA dtype contract and a backend-private PTX
+memory-model guard. This is not AMD ISA evidence. ROCm must continue deriving
+VGPR packing, alternate formats, scopes, atomics, and cache/coherence behavior
+from the applicable RDNA/CDNA ISA and ROCm device-library contract. The only
+shared outcome is the architectural rule that language dtype availability does
+not imply a native register type or executable matrix route.
+
+Cross-backend sync `NVIDIA-E2E-DTYPE-EXEC-2026-07-19` extends the shared Tile
+epilogue output vocabulary with f64 for NVIDIA's architecture-owned m8n8k4
+DMMA route. ROCm records parity at the shared semantic layer only: AMD
+MFMA/WMMA lane maps, packed formats, code-object ABI, timings, and selectors do
+not inherit CUDA evidence. Existing ROCm f64 states still require exact-gfx
+proof.
 
 Do not schedule these without new evidence:
 

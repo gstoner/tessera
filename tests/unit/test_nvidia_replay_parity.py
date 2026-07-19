@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_committed_replay_parity_has_wide_transition_and_resource_proof():
     data = json.loads((ROOT / "benchmarks/baselines/nvidia_sm120_replay_parity.json").read_text())
     assert data["schema"] == "tessera.nvidia.replay-parity.v1"
+    assert data["noise_policy"] == 0.04
     assert len(data["rows"]) == 10
     assert {row["shape"] for row in data["rows"]} == {
         "1x32x16", "1x64x64", "1x128x64", "1x128x128", "4x64x64"}
@@ -28,3 +29,7 @@ def test_committed_replay_parity_has_wide_transition_and_resource_proof():
         assert row["state_traffic_ratio"] > 1
         assert row["resource_evidence_complete"]
         assert row["resource_fingerprints"]
+        descriptor = row["state_descriptor"]
+        assert descriptor["workspace"]["lifetime"] == "session"
+        assert descriptor["workspace"]["initialization"] == "preserve"
+        assert descriptor["ordering"]["ordered_submission"] is True

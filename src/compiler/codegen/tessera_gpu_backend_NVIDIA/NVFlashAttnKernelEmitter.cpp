@@ -126,6 +126,7 @@ struct NVFlashAttnKernelEmitterPass
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(NVFlashAttnKernelEmitterPass)
 
   NVFlashAttnKernelEmitterPass() = default;
+  explicit NVFlashAttnKernelEmitterPass(int sm) { smVersion = sm; }
   NVFlashAttnKernelEmitterPass(const NVFlashAttnKernelEmitterPass &other)
       : PassWrapper(other) {}
 
@@ -215,8 +216,8 @@ struct NVFlashAttnKernelEmitterPass
 
 } // namespace
 
-std::unique_ptr<mlir::Pass> createNVFlashAttnKernelEmitterPass() {
-  return std::make_unique<NVFlashAttnKernelEmitterPass>();
+std::unique_ptr<mlir::Pass> createNVFlashAttnKernelEmitterPass(int sm) {
+  return std::make_unique<NVFlashAttnKernelEmitterPass>(sm);
 }
 
 } // namespace tessera

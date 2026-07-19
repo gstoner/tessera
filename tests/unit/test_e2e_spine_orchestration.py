@@ -21,6 +21,7 @@ from tessera.compiler.native_artifact import (
     NativeImageArtifact,
     ScalarArgument,
 )
+from tessera.compiler.pipeline_registry import target_pipeline_lookup
 from tessera.runtime import (
     NativeBufferValue,
     RuntimeArtifact,
@@ -39,7 +40,7 @@ def _image(
     *,
     target: str = "nvidia_sm120",
     architecture: str = "sm_120a",
-    pipeline_name: str = "tessera-nvidia-pipeline-sm120",
+    pipeline_name: str = "tessera-lower-to-nvidia-sm120",
     binary_format: str = "ptx",
 ) -> NativeImageArtifact:
     return NativeImageArtifact(
@@ -74,6 +75,9 @@ def _bundle(
     target: str = "nvidia_sm120",
     pipeline_name: str = "",
 ):
+    resolution = target_pipeline_lookup(target)
+    if not pipeline_name and resolution is not None:
+        pipeline_name = resolution.current_driver_pipeline
     request = CompileRequest(
         source_origin="unit", function_name="spine", graph_ir="graph-ir",
         target=target, pipeline_name=pipeline_name,
@@ -142,7 +146,7 @@ def test_bundle_rejects_image_provenance_drift() -> None:
 @pytest.mark.parametrize(
     "target,architecture,pipeline_name,binary_format",
     [
-        ("nvidia_sm120", "sm_120a", "tessera-nvidia-pipeline-sm120", "ptx"),
+        ("nvidia_sm120", "sm_120a", "tessera-lower-to-nvidia-sm120", "ptx"),
         ("rocm_gfx1151", "gfx1151", "tessera-lower-to-rocm", "hsaco"),
     ],
 )

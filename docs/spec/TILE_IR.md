@@ -29,7 +29,7 @@ question. Resolution:
   `tshared.alloc` is a documentation alias; the implementation accepts
   the canonical form only.
 - **TilingInterface methods on `MatmulOp` are real** as of Sprint B3-v2
-  (2026-05): the matmul tiling interface follows MLIR 22 signatures
+  (2026-05): the matmul tiling interface follows MLIR 23 signatures
   with a lit fixture under `tests/tessera-ir/phase2/` + Python guard.
   `Conv2DNHWCOp` has an honest `failure()` scaffold and is explicitly
   marked scaffolded.
@@ -55,7 +55,7 @@ ROCm, Apple).
 Schedule IR  (schedule.* dialect)
      │
      ▼  TileIRLoweringPass
-Tile IR      (tile.* + tessera.attn.* + tessera.queue.* + tessera.tcgen05.*)
+Tile IR      (tile.* + tessera_attn.* + tessera.queue.* + tessera.tcgen05.*)
      │
      ▼  NVWGMMALoweringPass / TileToX86Pass / ...
 Target IR    (tessera.nvgpu.wgmma.*, tessera.tma.*, x86 intrinsics)
@@ -67,7 +67,7 @@ Tile IR is the layer at which:
 - Async copy stages are made explicit (`tile.async_copy {stage=N}`)
 - MMA operations are expressed (`tile.mma`)
 - Producer/consumer ordering tokens are introduced (`tessera.queue.*`)
-- FlashAttention sub-operations appear (`tessera.attn.*`)
+- FlashAttention sub-operations appear (`tessera_attn.*`)
 
 Tile IR is **backend-agnostic**. Target-specific intrinsics are in Target IR.
 
@@ -212,7 +212,7 @@ tile.barrier
 
 ---
 
-## 4. `tessera.attn.*` — FA-4 Attention Dialect
+## 4. `tessera_attn.*` — FA-4 Attention Dialect
 
 The `tessera.attn` dialect implements the **FA-4 FlashAttention algorithm** at Tile IR
 level. It is produced by `TileIRLoweringPass` when lowering `tessera.flash_attn` Graph IR
@@ -226,25 +226,25 @@ C++ namespace: ::tessera::attn
 Source: src/compiler/tile_opt_fa4/dialects/tessera_attn/Attn.td
 ```
 
-### 4.2 `tessera.attn.scaled_dot_product`
+### 4.2 `tessera_attn.scaled_dot_product`
 
 Computes QK^T / sqrt(d) for a single tile of Q against a tile of K.
 
 ```mlir
-%scores = tessera.attn.scaled_dot_product %Q_tile, %K_tile {tile_q = 64, tile_kv = 64}
+%scores = tessera_attn.scaled_dot_product %Q_tile, %K_tile {tile_q = 64, tile_kv = 64}
     : memref<64x64xf16, 1>, memref<64x64xf16, 1> -> memref<64x64xf32, 1>
 ```
 
 The scale `1/sqrt(d)` is applied as a sentinel attribute resolved by
 `NVFlashAttnKernelEmitter`. The result is the raw (unmasked, unsoftmaxed) attention score.
 
-### 4.3 `tessera.attn.online_softmax`
+### 4.3 `tessera_attn.online_softmax`
 
 Applies the FA-2 online softmax update: running max correction + exponential rescaling.
 Must follow `scaled_dot_product` in program order.
 
 ```mlir
-%scores_out, %lse_out = tessera.attn.online_softmax %scores, %lse_prev
+%scores_out, %lse_out = tessera_attn.online_softmax %scores, %lse_prev
     : memref<64x64xf32, 1>, memref<64xf32, 3>
     -> memref<64x64xf32, 1>, memref<64xf32, 3>
 ```
@@ -258,45 +258,45 @@ Running max `m_new = max(m_prev, rowmax(scores))`. Rescale factor
 - `%lse_prev` must have shape `[seq_len]` matching the Q-tile row count
 - Score tensor must be F32 (not F16 — online softmax requires F32 precision)
 
-### 4.4 `tessera.attn.lse_accumulate`
+### 4.4 `tessera_attn.lse_accumulate`
 
 Accumulates the output tile weighted by the running LSE correction factor. This is the
 accumulation step of FlashAttention: `O_new = alpha * O_prev + softmax(scores) * V`.
 
 ```mlir
-%O_out = tessera.attn.lse_accumulate %O_prev, %scores_norm, %V_tile, %lse_correction
+%O_out = tessera_attn.lse_accumulate %O_prev, %scores_norm, %V_tile, %lse_correction
     : memref<64x64xf32, 1>, memref<64x64xf32, 1>,
       memref<64x64xf16, 1>, memref<64xf32, 3>
     -> memref<64x64xf32, 1>
 ```
 
-### 4.5 `tessera.attn.causal_mask`
+### 4.5 `tessera_attn.causal_mask`
 
 Applies causal masking (upper triangular zeroing) to an attention score tile. Only tiles
 that may contain both causal and non-causal entries need this op — fully causal or fully
 non-causal tiles are handled statically by the emitter.
 
 ```mlir
-%masked = tessera.attn.causal_mask %scores, %q_offset, %kv_offset
+%masked = tessera_attn.causal_mask %scores, %q_offset, %kv_offset
     : memref<64x64xf32, 1>, index, index -> memref<64x64xf32, 1>
 ```
 
-### 4.6 `tessera.attn.dropout_mask`
+### 4.6 `tessera_attn.dropout_mask`
 
 Applies stochastic attention dropout. Only emitted when `FlashAttnLoweringConfig.dropout_p > 0`.
 
 ```mlir
-%dropped = tessera.attn.dropout_mask %scores, %rng_state {dropout_p = 0.1}
+%dropped = tessera_attn.dropout_mask %scores, %rng_state {dropout_p = 0.1}
     : memref<64x64xf32, 1>, i64 -> memref<64x64xf32, 1>
 ```
 
-### 4.7 `tessera.attn.lse.save` / `tessera.attn.lse.load`
+### 4.7 `tessera_attn.lse.save` / `tessera_attn.lse.load`
 
 Save and load the per-row log-sum-exp tensor for use in backward passes (Phase 5+).
 
 ```mlir
-%lse_saved = tessera.attn.lse.save %scores : memref<?xf32, 3> -> memref<?xf32, 0>
-%lse       = tessera.attn.lse.load         : -> memref<?xf32, 0>
+%lse_saved = tessera_attn.lse.save %scores : memref<?xf32, 3> -> memref<?xf32, 0>
+%lse       = tessera_attn.lse.load         : -> memref<?xf32, 0>
 ```
 
 **`lse.save` verifier:** Input must be register-file tensor (space 3); output must be global (space 0).
@@ -447,7 +447,7 @@ The Tile IR verifier enforces the following (normative):
 | All `tessera.tcgen05.*` ops only appear when module `tessera.isa >= SM_100` | Module level |
 | `tessera.queue.*` ops only appear inside `tessera.schedule.warp` regions | Op level |
 | `tile.mma` input dimensions match hardware alignment requirements | Op level |
-| `tessera.attn.online_softmax` LSE shape matches Q-tile row count | Op level |
+| `tessera_attn.online_softmax` LSE shape matches Q-tile row count | Op level |
 | Producer and consumer warp regions are not nested | Region level |
 
 ---
@@ -474,7 +474,7 @@ metadata cannot represent the same information.
 | `tile.mbarrier.*` | Phase 3 | implemented / lit-testable |
 | `tile.barrier` | legacy note | planned alias only; prefer `tile.mbarrier.*` or queue tokens |
 | `tile.debug_artifact` / `tile.debug_barrier` | developer tooling | metadata-only markers; elided before Target IR |
-| `tessera.attn.*` (FA-4 ops) | Phase 3 | ✅ Complete |
+| `tessera_attn.*` (FA-4 ops) | Phase 3 | ✅ Complete |
 | `tessera.queue.*` (warp specialization) | Phase 3 | ✅ Complete |
 | `tessera.tcgen05.*` (TMEM / SM_100) | Phase 3 (ODS defined) | stubbed / lit-testable until real Blackwell PTX operands land |
 | Collective ops (`tile.comm`) | distributed extension | planned / adapter-gated; see collective lowering and validation docs |
@@ -488,6 +488,6 @@ metadata cannot represent the same information.
 |----------|--------------|
 | What Schedule IR ops produce Tile IR? | `LOWERING_PIPELINE_SPEC.md §2.2` (TileIRLoweringPass) |
 | What Target IR ops does Tile IR lower to? | `TARGET_IR_SPEC.md §4–5` |
-| What Python ops trigger `tessera.attn.*` emission? | `PYTHON_API_SPEC.md §15` (`flash_attn`) |
+| What Python ops trigger `tessera_attn.*` emission? | `PYTHON_API_SPEC.md §15` (`flash_attn`) |
 | What are the FlashAttention tile size defaults? | `PYTHON_API_SPEC.md §14` (`FlashAttnLoweringConfig`) |
 | What are warp role counts per SM target? | `TARGET_IR_SPEC.md §2.2` |

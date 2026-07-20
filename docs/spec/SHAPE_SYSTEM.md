@@ -571,7 +571,7 @@ items:**
    exercised by `tests/tessera-ir/phase3/sprint_v3_flash_attn_target_aware.mlir`
    (positive: sm_90 at 256; negative: sm_90 at 257; negative: sm_80 at
    256).  Generalizing this pattern to `tile.mma` / `tile.wgmma` /
-   `tessera.attn.scaled_dot_product` for tile-shape legality is the
+   `tessera_attn.scaled_dot_product` for tile-shape legality is the
    next slice.  **Status: head_dim ceiling closed; tile-shape legality
    planned.**
 

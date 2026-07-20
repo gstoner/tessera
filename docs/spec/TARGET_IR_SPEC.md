@@ -104,7 +104,7 @@ The Target IR layer sits at the bottom of the four-layer IR stack, immediately a
 Schedule IR  (schedule dialect — mesh regions, pipeline stages)
      │  [TileIRLoweringPass, WarpSpecializationPass]
      ▼
-Tile IR      (tile.* ops — async copy, MMA, barriers; tessera.attn.* FA-4 ops)
+Tile IR      (tile.* ops — async copy, MMA, barriers; tessera_attn.* FA-4 ops)
      │  [AsyncCopyLoweringPass, NVWGMMALoweringPass, NVTMADescriptorPass]
      ▼
 Target IR    (tessera.cpu.*, tessera_nvidia.*, tessera_rocm.*, tessera_apple.*, tessera.tma.*, mbarrier ops)
@@ -325,19 +325,19 @@ The FA-2 algorithm structure in Tile IR:
 Outer loop over Q tiles:
   init running_m = -inf, running_l = 0, acc_out = 0
   Inner loop over KV tiles:
-    %scores = tessera.attn.scaled_dot_product Q_tile, K_tile
-    [%masked = tessera.attn.causal_mask %scores ...]       ← if causal=true
-    [%masked = tessera.attn.dropout_mask %masked ...]      ← if dropout_p > 0
-    %new_acc, %new_m, %new_l = tessera.attn.online_softmax %masked, %running_m, %running_l, %acc_out
+    %scores = tessera_attn.scaled_dot_product Q_tile, K_tile
+    [%masked = tessera_attn.causal_mask %scores ...]       ← if causal=true
+    [%masked = tessera_attn.dropout_mask %masked ...]      ← if dropout_p > 0
+    %new_acc, %new_m, %new_l = tessera_attn.online_softmax %masked, %running_m, %running_l, %acc_out
     update running_m, running_l, acc_out
   End inner loop
-  %output, %lse = tessera.attn.lse_accumulate %acc_out, %running_m, %running_l
-  tessera.attn.lse.save %scores → %lse_saved   ← for backward pass
+  %output, %lse = tessera_attn.lse_accumulate %acc_out, %running_m, %running_l
+  tessera_attn.lse.save %scores → %lse_saved   ← for backward pass
 ```
 
 ---
 
-### 3.1 `tessera.attn.lse.save`
+### 3.1 `tessera_attn.lse.save`
 
 Saves the per-row log-sum-exp (LSE) values from the forward attention pass. LSE values are consumed by the backward pass.
 
@@ -358,12 +358,12 @@ Saves the per-row log-sum-exp (LSE) values from the forward attention pass. LSE 
 
 **MLIR text:**
 ```mlir
-%lse = tessera.attn.lse.save %scores : tensor<64x64xf32> -> tensor<64xf32>
+%lse = tessera_attn.lse.save %scores : tensor<64x64xf32> -> tensor<64xf32>
 ```
 
 ---
 
-### 3.2 `tessera.attn.lse.load`
+### 3.2 `tessera_attn.lse.load`
 
 Loads saved LSE values for the backward pass.
 
@@ -377,12 +377,12 @@ Loads saved LSE values for the backward pass.
 
 **MLIR text:**
 ```mlir
-%lse = tessera.attn.lse.load : tensor<64xf32>
+%lse = tessera_attn.lse.load : tensor<64xf32>
 ```
 
 ---
 
-### 3.3 `tessera.attn.scaled_dot_product`
+### 3.3 `tessera_attn.scaled_dot_product`
 
 Computes `Q_tile · K_tile^T * scale` for one (Q-tile, K-tile) pair. This is the innermost operation of the flash attention inner loop.
 
@@ -412,13 +412,13 @@ $query , $key scale = $scale attr-dict : type($query) , type($key) -> type($scor
 
 **MLIR text:**
 ```mlir
-%scores = tessera.attn.scaled_dot_product %q_tile, %k_tile scale = 0.125 : f32
+%scores = tessera_attn.scaled_dot_product %q_tile, %k_tile scale = 0.125 : f32
     : tensor<64x64xbf16>, tensor<64x64xbf16> -> tensor<64x64xf32>
 ```
 
 ---
 
-### 3.4 `tessera.attn.online_softmax`
+### 3.4 `tessera_attn.online_softmax`
 
 Implements the FA-2 online (incremental) softmax. Processes one score tile and updates the running statistics needed to correctly normalise the accumulated output.
 
@@ -450,14 +450,14 @@ The two-pass online algorithm:
 
 **MLIR text:**
 ```mlir
-%new_acc, %new_m, %new_l = tessera.attn.online_softmax
+%new_acc, %new_m, %new_l = tessera_attn.online_softmax
     %scores, %running_m, %running_l, %acc_out
     : tensor<64x64xf32>, tensor<64xf32>, tensor<64xf32>, tensor<64x64xf32>
 ```
 
 ---
 
-### 3.5 `tessera.attn.lse_accumulate`
+### 3.5 `tessera_attn.lse_accumulate`
 
 Finalises the FA-2 two-pass algorithm after all KV tiles have been processed. Divides the accumulated output by the final running sum and computes the true LSE value.
 
@@ -482,13 +482,13 @@ Operations: `output = acc / running_l`,  `lse = log(running_l) + running_m`
 
 **MLIR text:**
 ```mlir
-%output, %lse = tessera.attn.lse_accumulate %acc, %final_m, %final_l
+%output, %lse = tessera_attn.lse_accumulate %acc, %final_m, %final_l
     : tensor<64x64xf32>, tensor<64xf32>, tensor<64xf32>
 ```
 
 ---
 
-### 3.6 `tessera.attn.dropout_mask`
+### 3.6 `tessera_attn.dropout_mask`
 
 Generates a stochastic binary dropout mask for attention scores. Only emitted when `@jit` has `seed` set and the parent `tessera.flash_attn` has `dropout_p > 0`. On SM_90 WGMMA kernels, dropout is handled in the fused epilogue instead.
 
@@ -515,12 +515,12 @@ $scores p = $dropout_p seed = $seed attr-dict
 
 **MLIR text:**
 ```mlir
-%masked = tessera.attn.dropout_mask %scores p = 0.100000 seed = 42 : tensor<64x64xf32>
+%masked = tessera_attn.dropout_mask %scores p = 0.100000 seed = 42 : tensor<64x64xf32>
 ```
 
 ---
 
-### 3.7 `tessera.attn.causal_mask`
+### 3.7 `tessera_attn.causal_mask`
 
 Applies a lower-triangular causal mask to the score tile. Emitted when `tessera.flash_attn(..., causal=True)`. The mask is structurally zero cost: it becomes a scalar comparison in the tiling loop and is folded into the WGMMA epilogue on SM_90.
 
@@ -547,7 +547,7 @@ $scores q_off = $q_offset kv_off = $kv_offset attr-dict
 
 **MLIR text:**
 ```mlir
-%masked = tessera.attn.causal_mask %scores q_off = 0 kv_off = 64
+%masked = tessera_attn.causal_mask %scores q_off = 0 kv_off = 64
     : tensor<64x64xf32>
 ```
 
@@ -756,23 +756,23 @@ module @flash_attn_sm90 attributes {tessera.version = "1.0", tessera.target_sm =
                   : !tessera.queue.type, !tessera.queue.token -> tensor<64x64xbf16>
 
       // Scaled dot product
-      %scores = tessera.attn.scaled_dot_product %q_tile, %k_tile scale = 0.125 : f32
+      %scores = tessera_attn.scaled_dot_product %q_tile, %k_tile scale = 0.125 : f32
                   : tensor<64x64xbf16>, tensor<64x64xbf16> -> tensor<64x64xf32>
 
       // Causal mask (causal=true)
-      %masked = tessera.attn.causal_mask %scores q_off = 0 kv_off = 0 : tensor<64x64xf32>
+      %masked = tessera_attn.causal_mask %scores q_off = 0 kv_off = 0 : tensor<64x64xf32>
 
       // Online softmax update
-      %new_acc, %new_m, %new_l = tessera.attn.online_softmax
+      %new_acc, %new_m, %new_l = tessera_attn.online_softmax
           %masked, %running_m, %running_l, %acc_out
           : tensor<64x64xf32>, tensor<64xf32>, tensor<64xf32>, tensor<64x64xf32>
 
       // LSE finalisation (after inner loop)
-      %output, %lse = tessera.attn.lse_accumulate %new_acc, %new_m, %new_l
+      %output, %lse = tessera_attn.lse_accumulate %new_acc, %new_m, %new_l
                         : tensor<64x64xf32>, tensor<64xf32>, tensor<64xf32>
 
       // Save LSE for backward
-      %lse_saved = tessera.attn.lse.save %scores : tensor<64x64xf32> -> tensor<64xf32>
+      %lse_saved = tessera_attn.lse.save %scores : tensor<64x64xf32> -> tensor<64xf32>
     }
 
     return %output : tensor<2x8x512x64xbf16>
@@ -796,13 +796,13 @@ runtime readiness label. Native execution is established only by an exact
 | `schedule.pipeline.region` | Phase 4 | implemented / verifier-backed / lit-tested | Pipeline scheduling container; multi-rank execution remains separately validated. |
 | `schedule.stage` | Phase 4 | implemented / verifier-backed / lit-tested | Stage metadata/container; not a standalone runtime dispatch. |
 | `schedule.yield` | Phase 2 | implemented / verifier-backed / lit-tested | Region terminator only; no independent runtime meaning. |
-| `tessera.attn.lse.save` | Phase 1 (v1.3) | implemented / dialect + lit-tested | Intermediate attention state; native behavior is part of a selected backend attention composite. |
-| `tessera.attn.lse.load` | Phase 1 (v1.3) | implemented / dialect + lit-tested | Intermediate attention state; native behavior is part of a selected backend attention composite. |
-| `tessera.attn.scaled_dot_product` | Phase 3 (v2.0) | implemented / dialect + Tile-IR lowering + lit-tested | Reaches native execution only through a proven target-specific attention route. |
-| `tessera.attn.online_softmax` | Phase 3 (v2.0) | implemented / dialect + Tile-IR lowering + lit-tested | Stateless forms may reuse a backend softmax lane; streaming-state support remains envelope-specific. |
-| `tessera.attn.lse_accumulate` | Phase 3 (v2.0) | implemented / dialect + Tile-IR lowering + lit-tested | Attention-composite intermediate; not a standalone native ABI claim. |
-| `tessera.attn.dropout_mask` | Phase 3 (v2.0) | implemented / dialect + lit-tested | Native use depends on the target attention/RNG envelope and its proof row. |
-| `tessera.attn.causal_mask` | Phase 3 (v2.0) | implemented / dialect + Tile-IR lowering + lit-tested | Usually folded into a selected attention kernel; no universal standalone dispatch claim. |
+| `tessera_attn.lse.save` | Phase 1 (v1.3) | implemented / dialect + lit-tested | Intermediate attention state; native behavior is part of a selected backend attention composite. |
+| `tessera_attn.lse.load` | Phase 1 (v1.3) | implemented / dialect + lit-tested | Intermediate attention state; native behavior is part of a selected backend attention composite. |
+| `tessera_attn.scaled_dot_product` | Phase 3 (v2.0) | implemented / dialect + Tile-IR lowering + lit-tested | Reaches native execution only through a proven target-specific attention route. |
+| `tessera_attn.online_softmax` | Phase 3 (v2.0) | implemented / dialect + Tile-IR lowering + lit-tested | Stateless forms may reuse a backend softmax lane; streaming-state support remains envelope-specific. |
+| `tessera_attn.lse_accumulate` | Phase 3 (v2.0) | implemented / dialect + Tile-IR lowering + lit-tested | Attention-composite intermediate; not a standalone native ABI claim. |
+| `tessera_attn.dropout_mask` | Phase 3 (v2.0) | implemented / dialect + lit-tested | Native use depends on the target attention/RNG envelope and its proof row. |
+| `tessera_attn.causal_mask` | Phase 3 (v2.0) | implemented / dialect + Tile-IR lowering + lit-tested | Usually folded into a selected attention kernel; no universal standalone dispatch claim. |
 | `tessera.queue.create/push/pop` | Phase 3 | implemented / verifier-backed / lit-tested | Compiler synchronization contracts; physical queue/barrier realization is target-specific. |
 | `tile.async_copy` | Phase 3 | implemented / verifier-backed / lit-tested | Lowers to a target-specific movement primitive (for example TMA, cp.async, or ROCm LDS flow) only within its legal target envelope. |
 | `tile.wait_async` | Phase 3 | implemented / verifier-backed / lit-tested | Synchronizes a target-specific async-copy contract; not itself a device-runtime proof. |

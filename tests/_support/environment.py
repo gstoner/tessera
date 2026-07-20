@@ -76,7 +76,7 @@ class CompilerToolchain:
                 "MLIR_OPT",
                 "/usr/lib/llvm-23/bin/mlir-opt",
                 "/opt/rocm/core/lib/llvm/bin/mlir-opt",
-                "/opt/homebrew/opt/llvm/bin/mlir-opt",
+                "/opt/homebrew/opt/llvm@23/bin/mlir-opt",
             ),
             nvidia_opt=_tool_path(
                 "TESSERA_NVIDIA_OPT",

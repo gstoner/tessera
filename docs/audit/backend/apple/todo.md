@@ -699,7 +699,7 @@ generalize a winner across Apple GPU families without a matching record.
 ### Use the dedicated LLVM/MLIR 23 prefix
 
 The generic Homebrew `llvm` symlink is not this lane: it may resolve to a
-different keg (currently LLVM 22) or be absent. Apple validation and
+different keg (currently LLVM 23) or be absent. Apple validation and
 `build-apple` use the dedicated, pinned upstream `release/23.x` build at
 `/opt/homebrew/llvm-23.1.0-rc1`; it must be built with
 `LLVM_ENABLE_RTTI=ON`, or Tessera's pass and dialect typeinfo cannot link.
@@ -744,7 +744,7 @@ export CMAKE_PREFIX_PATH="$TESSERA_LLVM23_PREFIX${CMAKE_PREFIX_PATH:+:$CMAKE_PRE
 "$(brew --prefix lit)/bin/lit" --version
 ```
 
-Do not use AppleClang's system LLVM libraries or mix the stable LLVM 22 keg
+Do not use AppleClang's system LLVM libraries or mix the stable LLVM 23 keg
 with this LLVM/MLIR 23 prefix. Record the upstream commit plus
 `LLVM_ENABLE_RTTI=ON` in the build evidence.
 
@@ -1041,6 +1041,104 @@ Tile epilogue output vocabulary for NVIDIA's compiler-owned DMMA path. This is
 not applicable to Metal GPU execution: Apple GPU profiles expose no native
 fp64, so no MSL type, SIMD-group matrix route, ABI, timing, or selector state
 changes. Apple CPU fp64 remains independently owned.
+
+Cross-backend sync `ROCM-E2E1-SOFTMAX-2026-07-19` is ROCm-owned. It maps the
+already-shared `tile.softmax_kernel` envelope to `tessera_rocm.softmax`, adds an
+HSACO package producer, and registers a gfx1151 HIP descriptor consumer. Apple
+inherits no AMD exponential implementation, wave/LDS schedule, HSACO ABI,
+resource value, timing, execution state, or selector change. The only shared
+surface remains the previously assessed semantic Tile envelope and portable
+native-image/launch schema. ROCm's content-addressed OCML/OCKL/OCLC population
+is not applicable to Metal; Apple inherits no device-library record or cache
+change.
+
+Cross-backend sync `ROCM-DTYPE-TOTALITY-2026-07-19` is ROCm-owned and not
+applicable to Apple target state. It introduces no shared dtype spelling or
+alias and transfers no RDNA scalar, packed-dot, WMMA, accumulator, storage,
+runtime, or selector claim to Metal or Apple CPU.
+
+Cross-backend sync `E2E-FROZEN-IDENTITY-CACHE-2026-07-19`: ROCM-E2E-1 memoizes
+deterministic hashes for frozen runtime artifacts, native images, and launch
+descriptors. Serialized identity values and required launch validation are
+unchanged, so Metal schema parity is validated; no Apple ABI, schedule,
+runtime route, performance claim, or selector changes.
+
+Cross-backend sync `ROCM-E2E2-REDUCE-2026-07-19` is ROCm-owned. It consumes the
+already-shared `tile.reduce_kernel` carrier and widens only its portable storage
+verifier to admit bf16; the op registry and `Outer/AxisExtent/Inner` schema are
+unchanged. Apple mappings are unchanged, and Metal/MPS reduction ABIs,
+threadgroup schedules, exact-device evidence, runtime routes, and selectors are
+unchanged; the ROCm five-argument HSACO ABI transfers no Apple claim.
+
+Cross-backend sync `ROCM-E2E2-PAGED-KV-2026-07-19` is ROCm-owned. It consumes
+the existing shared paged-KV carrier without changing its verifier or public op
+schema. The ROCm directive, 256-thread gather, HSACO ABI, page-table validation,
+and gfx1151 evidence transfer no Metal/MPS schedule, ABI, readiness, timing, or
+selector claim; Apple's paged-cache routes remain independently owned.
+
+Cross-backend sync `ROCM-E2E2-MOE-DISPATCH-2026-07-19` is ROCm-owned. It
+consumes the existing shared MoE dispatch carrier and public operation without
+changing their verifier or dtype registry. The AMD direct-gather schedule,
+HSACO ABI, index validation, and gfx1151 evidence are not applicable to Metal;
+Apple retains its independent MoE transport implementation and selector.
+
+Cross-backend sync `X86-E2E1-NATIVE-CPU-2026-07-19` classifies shared native
+descriptor results for host x86 targets as `native_cpu` with CPU-wall timing.
+Apple GPU remains `native_gpu`, Apple CPU retains its independently owned
+runtime routes, and no Metal/MPS ABI, schedule, device evidence, timing,
+readiness, or selector state transfers. The x86 pilot consumes existing Tile
+softmax/reduction carriers without changing their shared dtype or operation
+registration.
+
+Cross-backend sync `X86-E2E1-BREADTH-2026-07-19` consumes the existing shared
+matmul and attention carriers for f32 AVX-512 descriptors. Apple inherits no
+x86 ABI, host vector schedule, timing, readiness, or selector state. Metal/MPS
+matmul and attention remain independently selected, and x86's equal-head and
+zero-dropout descriptor restrictions change no Apple capability or verifier.
+
+Cross-backend sync `E2E-SPINE-2026-07-18` records the 2026-07-20 scoped x86
+selector retirement: eligible static X86-E2E-1 modules now use their canonical
+descriptor by default. Apple parity is not applicable; no Apple pipeline, ABI,
+schedule, capability, or selector changes. X86-E2E-2 owns the remaining
+AVX-512 inventory and must reassess Apple only when a shared contract changes.
+
+Cross-backend sync `X86-E2E2-ELEMENTWISE-2026-07-20` adds the internal shared
+`tile.elementwise_kernel` semantic carrier for f32 unary/binary and f32-to-bool
+predicate requests. Apple parity is assessed at the carrier boundary only;
+the AVX-512 ABIs, host-vector schedule, CPU-wall evidence, 16K binary selector
+threshold, and runtime readiness do not transfer to Metal or Accelerate. No
+Apple target, dtype, operation, ABI, execution, or selector row changes.
+
+Cross-backend sync `X86-E2E2-TYPED-LOGIC-2026-07-20` widens that internal
+carrier with compare, logical, and bitwise semantics plus explicit f32/i8/i32
+physical storage. The only capability change is x86-owned bool/int32 truth for
+already-shipped AVX-512 ABIs. Apple inherits no host-vector ABI, null-operand
+convention, 32K selector threshold, CPU timing, or execution claim; Metal and
+Accelerate rows remain unchanged.
+
+Cross-backend sync `X86-E2E2-FLAT-FOLLOWON-2026-07-20` extends the shared
+elementwise carrier with where, transcendental, and binary-math semantics.
+Apple parity is assessed at the carrier boundary: no AVX-512 polynomial,
+CPU-wall threshold, C ABI, Metal schedule, execution row, or selector transfers.
+Existing Apple operations and routes remain independently owned.
+
+Cross-backend sync `X86-E2E2-DTYPE-2026-07-20` adds an x86-only datatype/CPUID
+contract and BF16, VNNI U8/S8, and FP64 descriptor ABIs. Apple parity is not
+applicable: no Accelerate/Metal dtype capability, ABI, schedule, evidence, or
+selector changes, and future ACE planning transfers no Apple execution claim.
+
+Cross-backend sync `ATTN-DIALECT-MLIR23-2026-07-20` corrects the internal MLIR
+attention dialect namespace from the nested `tessera.attn` spelling to the
+MLIR-23-compatible `tessera_attn` spelling. Public Graph IR operation names,
+attention semantics, Apple target capabilities, Metal/MPS ABIs, schedules, and
+selector state are unchanged; the Apple outcome is parity validated by the
+shared attention lit coverage.
+
+Cross-backend sync `LLVM23-BACKBONE-2026-07-20` makes LLVM/MLIR 23.x the sole
+accepted compiler build environment. Top-level and standalone CMake entry
+points reject every other major and mixed installations; Apple uses the
+versioned Homebrew `llvm@23` keg. Apple target semantics and Metal/MPS runtime
+contracts are unchanged, and the LLVM 23 compiler/lit build validates parity.
 
 Consumer plan `SEQUENCE-MIXER-2026-07-17`: the compiler-direction Sequence Mixer
 track ([`../../compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md`](../../compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md))

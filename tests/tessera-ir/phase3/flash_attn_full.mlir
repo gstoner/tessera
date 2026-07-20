@@ -2,7 +2,7 @@
 // Runs the full Phase 3 GPU lowering chain on a BF16 causal flash_attn.
 //
 // 2026-06: un-XFAIL'd after fixing the two real IR-correctness bugs that made
-// the chain crash end-to-end (it had never run since the MLIR-22 bump):
+// the chain crash end-to-end (it had never run since the MLIR-23 bump):
 //   1. WarpSpecializationPass produced SSA-invalid IR — it split ops into
 //      producer/consumer schedule.warp regions without rewiring the cross-region
 //      value flow.  It now yields the cross-boundary values as warp-region
@@ -50,11 +50,11 @@
 // CHECK:          tile.tma.copy_async
 // CHECK:          role = "producer"
 // CHECK:          schedule.warp
-// CHECK:          tessera.attn.scaled_dot_product
-// CHECK:          tessera.attn.causal_mask
-// CHECK:          tessera.attn.online_softmax
-// CHECK:          tessera.attn.lse_accumulate
-// CHECK:          tessera.attn.lse.save
+// CHECK:          tessera_attn.scaled_dot_product
+// CHECK:          tessera_attn.causal_mask
+// CHECK:          tessera_attn.online_softmax
+// CHECK:          tessera_attn.lse_accumulate
+// CHECK:          tessera_attn.lse.save
 // CHECK:          role = "consumer"
 // CHECK-NOT:      tessera.flash_attn
 // CHECK-NOT:      tile.mma
@@ -62,7 +62,7 @@
 // PIPE:           func.func @flash_attn_fwd
 // PIPE-SAME:      nvvm.kernel
 // PIPE:           tile.tma.copy_async
-// PIPE:           tessera.attn.scaled_dot_product
+// PIPE:           tessera_attn.scaled_dot_product
 
 module attributes {tessera.ir.version = "1.0",
                    tessera.target = {sm = 90 : i32, warps = 4 : i32,

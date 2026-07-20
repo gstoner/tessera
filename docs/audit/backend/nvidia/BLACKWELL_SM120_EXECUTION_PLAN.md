@@ -171,7 +171,8 @@ The target system loads **CUDA 13.3** (release notes 27-May-2026). Tessera's pin
   of the Tile IR / cuTile path above; the **NVRTC** half is a *runtime* tile-compile lane that drops
   straight onto Tessera's `tsrRegisterGpuLauncher` bridge (emit tile program → NVRTC → load → launch).
 - **Full Blackwell compiler support** (SM_100/101/120); **libNVVM** Blackwell codegen on an
-  **LLVM 18.1.8**-based NVVM IR dialect (relevant to a future MLIR→NVVM path).
+  bundled NVVM IR dialect (relevant to a future MLIR→NVVM path); Tessera's
+  compiler-facing MLIR/LLVM contract remains pinned to major 23.
 - Perf: ~5% FP4 GEMM (Blackwell Ultra), ~27% TF32 GEMM (Blackwell/Ultra). CompileIQ (AI compiler
   autotuning — compare Tessera's flywheel/autotuner). CUDA Python 1.0.
 - **Tile coverage is sm_80 and later** (CUDA Toolkit 13.3 release notes, "CUDA TILE Supported

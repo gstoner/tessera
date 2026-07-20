@@ -45,13 +45,13 @@ add the flash-attn family. Counts/rows are owned by the generated dashboards
 ([`runtime_execution_matrix.md`](../../../../docs/audit/generated/runtime_execution_matrix.md));
 see [`NVIDIA_AUDIT.md`](../../../../docs/audit/backend/nvidia/NVIDIA_AUDIT.md).
 
-## LLVM/MLIR 22 Artifact Build
+## LLVM/MLIR 23 Artifact Build
 
 ```bash
 cmake -S . -B build-nvidia \
   -DCMAKE_PREFIX_PATH=/opt/homebrew/opt/llvm \
-  -DLLVM_DIR=/opt/homebrew/opt/llvm/lib/cmake/llvm \
-  -DMLIR_DIR=/opt/homebrew/opt/llvm/lib/cmake/mlir \
+  -DLLVM_DIR=/opt/homebrew/opt/llvm@23/lib/cmake/llvm \
+  -DMLIR_DIR=/opt/homebrew/opt/llvm@23/lib/cmake/mlir \
   -DTESSERA_BUILD_NVIDIA_BACKEND=ON \
   -DTESSERA_ENABLE_CUDA=OFF \
   -DTESSERA_BUILD_EXAMPLES=OFF

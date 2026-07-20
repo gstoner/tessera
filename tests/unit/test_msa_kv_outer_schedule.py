@@ -48,7 +48,7 @@ def test_msa_graph_lowers_to_kv_outer_sparse_schedule_contract():
     assert schedule.verify().ok
     text = schedule.to_mlir()
     assert "schedule.attn.kv_outer_sparse" in text
-    assert 'target_op = "tessera.attn.msa_kv_outer_sparse"' in text
+    assert 'target_op = "tessera_attn.msa_kv_outer_sparse"' in text
     assert 'block_ids_layout = "B,Hkv,Sq,top_k"' in text
     assert 'kv_traversal = "kv_outer"' in text
     assert 'mode = "decode"' in text
@@ -75,7 +75,7 @@ def test_msa_kv_outer_sparse_reaches_tile_and_nvidia_target_ir():
 
     assert tile.verify().ok
     tile_text = tile.to_mlir()
-    assert "tessera.attn.msa_kv_outer_sparse" in tile_text
+    assert "tessera_attn.msa_kv_outer_sparse" in tile_text
     assert 'selected_block_layout = "B,Hkv,Sq,top_k"' in tile_text
 
     target = lower_tile_to_target_ir(tile, target_kind="nvidia_sm90")
@@ -105,7 +105,7 @@ def test_msa_kv_outer_sparse_reaches_rocm_target_ir():
     )
     tile = lower_schedule_to_tile_ir(schedule, target_kind="rocm")
     assert tile.verify().ok
-    assert "tessera.attn.msa_kv_outer_sparse" in tile.to_mlir()
+    assert "tessera_attn.msa_kv_outer_sparse" in tile.to_mlir()
 
     target = lower_tile_to_target_ir(tile, target_kind="rocm")
     assert target.verify().ok
@@ -135,7 +135,7 @@ def test_msa_kv_outer_sparse_reaches_x86_target_ir():
     )
     tile = lower_schedule_to_tile_ir(schedule, target_kind="cpu")
     assert tile.verify().ok
-    assert "tessera.attn.msa_kv_outer_sparse" in tile.to_mlir()
+    assert "tessera_attn.msa_kv_outer_sparse" in tile.to_mlir()
 
     target = lower_tile_to_target_ir(tile, target_kind="cpu")
     assert target.verify().ok

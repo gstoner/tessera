@@ -12,6 +12,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/ADT/Twine.h"
@@ -330,6 +331,9 @@ struct LowerTileToROCMPass
     getOperation().walk([&](Operation *op) {
       StringRef name = op->getName().getStringRef();
       if (name == "tile.mma" || name == "tile.matmul_kernel" ||
+          name == "tile.softmax_kernel" || name == "tile.reduce_kernel" ||
+          name == "tile.paged_kv_read_kernel" ||
+          name == "tile.moe_dispatch_kernel" ||
           name == "tile.async_copy" ||
           name == "tile.wait_async" || name == "tile.kv_cache" ||
           name.starts_with("tile.tmem."))
@@ -345,6 +349,196 @@ struct LowerTileToROCMPass
     for (Operation *op : worklist) {
       OpBuilder builder(op);
       StringRef name = op->getName().getStringRef();
+
+      if (name == "tile.softmax_kernel") {
+        auto storage = op->getAttrOfType<StringAttr>("storage");
+        auto accum = op->getAttrOfType<StringAttr>("accum");
+        auto axis = op->getAttrOfType<IntegerAttr>("axis");
+        auto expMode = op->getAttrOfType<StringAttr>("exp_mode");
+        auto ftz = op->getAttrOfType<BoolAttr>("ftz");
+        if (!storage || !accum || !axis || !expMode || !ftz) {
+          op->emitError("ROCm softmax lowering requires explicit storage, "
+                        "accum, axis, exp_mode, and ftz fields");
+          signalPassFailure();
+          return;
+        }
+        if ((storage.getValue() != "f16" && storage.getValue() != "f32") ||
+            accum.getValue() != "f32" || axis.getInt() != -1) {
+          op->emitError("ROCm softmax pilot requires f16/f32 storage, f32 "
+                        "accumulation, and axis=-1");
+          signalPassFailure();
+          return;
+        }
+        Operation *symbolOwner = op->getParentOp();
+        while (symbolOwner &&
+               !symbolOwner->hasAttr(SymbolTable::getSymbolAttrName()))
+          symbolOwner = symbolOwner->getParentOp();
+        auto symbol = symbolOwner
+                          ? symbolOwner->getAttrOfType<StringAttr>(
+                                SymbolTable::getSymbolAttrName())
+                          : StringAttr();
+        if (!symbol) {
+          op->emitError("ROCm softmax lowering requires a symbol-owned "
+                        "launch envelope");
+          signalPassFailure();
+          return;
+        }
+
+        OperationState state(op->getLoc(), "tessera_rocm.softmax");
+        state.addAttribute("name", symbol);
+        state.addAttribute("dtype", storage);
+        state.addAttribute("accum", accum);
+        state.addAttribute("axis", axis);
+        state.addAttribute("exp_mode", expMode);
+        state.addAttribute("ftz", ftz);
+        state.addAttribute("arch", builder.getStringAttr(arch));
+        state.addAttribute("source",
+                           builder.getStringAttr("tile.softmax_kernel"));
+        builder.create(state);
+        op->erase();
+        continue;
+      }
+
+      if (name == "tile.reduce_kernel") {
+        auto storage = op->getAttrOfType<StringAttr>("storage");
+        auto accum = op->getAttrOfType<StringAttr>("accum");
+        auto kind = op->getAttrOfType<StringAttr>("kind");
+        auto axis = op->getAttrOfType<IntegerAttr>("axis");
+        auto keepdims = op->getAttrOfType<BoolAttr>("keepdims");
+        auto schedule = op->getAttrOfType<StringAttr>("schedule");
+        auto nanMode = op->getAttrOfType<StringAttr>("nan_mode");
+        auto innerIsOne = op->getAttrOfType<BoolAttr>("inner_is_one");
+        if (!storage || !accum || !kind || !axis || !keepdims || !schedule ||
+            !nanMode) {
+          op->emitError("ROCm reduction lowering requires explicit storage, "
+                        "accum, kind, axis, keepdims, schedule, and nan_mode");
+          signalPassFailure();
+          return;
+        }
+        if ((storage.getValue() != "f16" && storage.getValue() != "bf16" &&
+             storage.getValue() != "f32") ||
+            accum.getValue() != "f32" ||
+            (kind.getValue() != "sum" && kind.getValue() != "mean" &&
+             kind.getValue() != "max") ||
+            axis.getInt() < 0 || schedule.getValue() != "serial" ||
+            nanMode.getValue() != "propagate") {
+          op->emitError("ROCM-E2E-2 reduction slice requires f16/bf16/f32 "
+                        "storage, f32 accumulation/output, sum|mean|max, a normalized axis, "
+                        "the serial semantic schedule, and nan_mode=propagate");
+          signalPassFailure();
+          return;
+        }
+        Operation *symbolOwner = op->getParentOp();
+        while (symbolOwner &&
+               !symbolOwner->hasAttr(SymbolTable::getSymbolAttrName()))
+          symbolOwner = symbolOwner->getParentOp();
+        auto symbol = symbolOwner
+                          ? symbolOwner->getAttrOfType<StringAttr>(
+                                SymbolTable::getSymbolAttrName())
+                          : StringAttr();
+        if (!symbol) {
+          op->emitError("ROCm reduction lowering requires a symbol-owned "
+                        "launch envelope");
+          signalPassFailure();
+          return;
+        }
+        OperationState state(op->getLoc(), "tessera_rocm.reduce");
+        state.addAttribute("name", symbol);
+        state.addAttribute("dtype", storage);
+        state.addAttribute("output_dtype", builder.getStringAttr("f32"));
+        state.addAttribute("accum", accum);
+        state.addAttribute("kind", kind);
+        state.addAttribute("axis", axis);
+        state.addAttribute("keepdims", keepdims);
+        state.addAttribute("schedule",
+                           builder.getStringAttr("workgroup_256"));
+        state.addAttribute("nan_mode", nanMode);
+        state.addAttribute("layout",
+                           builder.getStringAttr("outer_axis_inner"));
+        if (innerIsOne && innerIsOne.getValue())
+          state.addAttribute("inner_is_one", innerIsOne);
+        state.addAttribute("arch", builder.getStringAttr(arch));
+        state.addAttribute("source",
+                           builder.getStringAttr("tile.reduce_kernel"));
+        builder.create(state);
+        op->erase();
+        continue;
+      }
+
+      if (name == "tile.paged_kv_read_kernel") {
+        auto storage = op->getAttrOfType<StringAttr>("storage");
+        auto tableStorage = op->getAttrOfType<StringAttr>("table_storage");
+        auto route = op->getAttrOfType<StringAttr>("route");
+        if (op->getNumOperands() != 10 || !storage ||
+            storage.getValue() != "f32" || !tableStorage ||
+            tableStorage.getValue() != "i32" || !route ||
+            route.getValue() != "direct") {
+          op->emitError("ROCm paged_kv_read_kernel requires f32 pages, i32 "
+                        "table, route=direct, and the canonical ten-operand ABI");
+          signalPassFailure();
+          return;
+        }
+        Operation *symbolOwner = op->getParentOp();
+        while (symbolOwner &&
+               !symbolOwner->hasAttr(SymbolTable::getSymbolAttrName()))
+          symbolOwner = symbolOwner->getParentOp();
+        auto symbol = symbolOwner
+                          ? symbolOwner->getAttrOfType<StringAttr>(
+                                SymbolTable::getSymbolAttrName())
+                          : StringAttr();
+        if (!symbol) {
+          op->emitError("ROCm paged-KV lowering requires a symbol-owned launch envelope");
+          signalPassFailure();
+          return;
+        }
+        OperationState state(op->getLoc(), "tessera_rocm.paged_kv_read");
+        state.addAttribute("name", symbol);
+        state.addAttribute("storage", storage);
+        state.addAttribute("table_storage", tableStorage);
+        state.addAttribute("route", route);
+        state.addAttribute("arch", builder.getStringAttr(arch));
+        state.addAttribute("source",
+                           builder.getStringAttr("tile.paged_kv_read_kernel"));
+        builder.create(state);
+        op->erase();
+        continue;
+      }
+
+      if (name == "tile.moe_dispatch_kernel") {
+        auto storage = op->getAttrOfType<StringAttr>("storage");
+        auto indexStorage = op->getAttrOfType<StringAttr>("index_storage");
+        if (op->getNumOperands() != 6 || !storage ||
+            storage.getValue() != "f32" || !indexStorage ||
+            indexStorage.getValue() != "i32") {
+          op->emitError("ROCm moe_dispatch_kernel requires f32 payloads, i32 "
+                        "indices, and the canonical six-operand ABI");
+          signalPassFailure();
+          return;
+        }
+        Operation *symbolOwner = op->getParentOp();
+        while (symbolOwner &&
+               !symbolOwner->hasAttr(SymbolTable::getSymbolAttrName()))
+          symbolOwner = symbolOwner->getParentOp();
+        auto symbol = symbolOwner
+                          ? symbolOwner->getAttrOfType<StringAttr>(
+                                SymbolTable::getSymbolAttrName())
+                          : StringAttr();
+        if (!symbol) {
+          op->emitError("ROCm MoE dispatch lowering requires a symbol-owned launch envelope");
+          signalPassFailure();
+          return;
+        }
+        OperationState state(op->getLoc(), "tessera_rocm.moe_dispatch");
+        state.addAttribute("name", symbol);
+        state.addAttribute("storage", storage);
+        state.addAttribute("index_storage", indexStorage);
+        state.addAttribute("route", builder.getStringAttr("direct_gather"));
+        state.addAttribute("arch", builder.getStringAttr(arch));
+        state.addAttribute("source", builder.getStringAttr("tile.moe_dispatch_kernel"));
+        builder.create(state);
+        op->erase();
+        continue;
+      }
 
       if (name == "tile.matmul_kernel") {
         op->emitError("ROCm tile.matmul_kernel pack/loop/epilogue materializer "

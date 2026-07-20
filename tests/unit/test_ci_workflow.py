@@ -129,7 +129,7 @@ class TestWorkflowStructure:
 
         ``tessera-opt`` runs FileCheck against the in-tree MLIR
         fixtures; ``tessera-translate-mlir`` does the MLIR ↔ LLVM
-        IR + SPIR-V round-trips.  Both depend on MLIR/LLVM 22.  If
+        IR + SPIR-V round-trips.  Both depend on MLIR/LLVM 23.  If
         either target drops out of the lane, the matching unit
         coverage (``test_tessera_opt_build.py`` /
         ``test_cli_translate.py``) loses its execution-side proof

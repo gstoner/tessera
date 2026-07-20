@@ -22,7 +22,7 @@ work.
 ## Target Contract
 
 Lower `tessera.msa_sparse_attention` to a CUDA Tile IR target shaped as
-`tessera.attn.msa_kv_outer_sparse`.
+`tessera_attn.msa_kv_outer_sparse`.
 
 Inputs:
 
@@ -75,7 +75,7 @@ micro-batch. The lowering should avoid prefill-sized staging:
 `schedule.attn.kv_outer_sparse` with explicit `block_ids_layout =
 "B,Hkv,Sq,top_k"`, `gqa_group_size`, `tile_q`, `tile_kv`, `head_dim`, `mode`,
 and `kv_traversal = "kv_outer"` metadata. `lower_schedule_to_tile_ir` preserves
-that contract as `tessera.attn.msa_kv_outer_sparse`, and NVIDIA Target IR emits
+that contract as `tessera_attn.msa_kv_outer_sparse`, and NVIDIA Target IR emits
 an `artifact_only` `tessera_nvidia.cuda_kernel` with `kernel =
 "msa_kv_outer_sparse"`.
 

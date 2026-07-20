@@ -252,7 +252,7 @@ static bool vectorizeLaneSupportedByToolchain() {
   // MLIR 23's transform-vectorized tensor IR aborts inside one-shot
   // bufferization while querying SubsetInsertionOpInterface instead of
   // returning pass failure. Keep the opt-in request crash-free by using the
-  // scalar JIT pipeline on that toolchain. LLVM 22 remains the proven
+  // scalar JIT pipeline on that toolchain. LLVM 23 remains the proven
   // vectorized lane; newer releases are allowed to exercise the compatibility
   // test rather than inheriting an unbounded version gate.
 #if LLVM_VERSION_MAJOR == 23

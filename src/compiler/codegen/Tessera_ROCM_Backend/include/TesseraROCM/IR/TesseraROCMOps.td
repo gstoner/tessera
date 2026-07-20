@@ -815,6 +815,36 @@ def ROCM_ReduceKernelOp : TesseraROCM_Op<"reduce"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_PagedKVReadKernelOp : TesseraROCM_Op<"paged_kv_read"> {
+  let summary = "Direct paged-KV cache gather";
+  let description = [{
+    The directive `generate-rocm-paged-kv-read-kernel` expands the shared
+    ten-operand paged-KV launch contract into a direct f32 gather. The rank-1
+    i32 logical-to-physical page table is bounds-validated by the descriptor
+    launcher before device submission.
+  }];
+  let arguments = (ins StrAttr:$name,
+                       DefaultValuedAttr<StrAttr, "\"f32\"">:$storage,
+                       DefaultValuedAttr<StrAttr, "\"i32\"">:$table_storage,
+                       DefaultValuedAttr<StrAttr, "\"direct\"">:$route);
+  let assemblyFormat = "attr-dict";
+}
+
+def ROCM_MoEDispatchKernelOp : TesseraROCM_Op<"moe_dispatch"> {
+  let summary = "Direct local-device MoE token gather";
+  let description = [{
+    The `generate-rocm-moe-kernel` pass expands the canonical six-operand
+    `tile.moe_dispatch_kernel` envelope into an f32 gather indexed by an i32
+    token-of-slot vector. Descriptor validation rejects invalid token indices
+    before device submission.
+  }];
+  let arguments = (ins StrAttr:$name,
+                       DefaultValuedAttr<StrAttr, "\"f32\"">:$storage,
+                       DefaultValuedAttr<StrAttr, "\"i32\"">:$index_storage,
+                       DefaultValuedAttr<StrAttr, "\"direct_gather\"">:$route);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_ArgReduceKernelOp : TesseraROCM_Op<"argreduce"> {
   let summary = "Row arg-reduction (argmax / argmin) over the last axis";
   let description = [{

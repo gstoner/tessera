@@ -90,7 +90,7 @@ _BWD_IR_ORACLE_CPU: frozenset[str] = frozenset({"matmul", "tanh", "sigmoid"})
 # that validates a claim, not the host directory in which somebody happened to
 # build it.
 _PYTHON_REFERENCE_BUILD = "python-unit-registry"
-_CORE_ADJOINT_BUILD = "llvm22-core"
+_CORE_ADJOINT_BUILD = "llvm23-core"
 
 
 class LedgerError(RuntimeError):
@@ -391,7 +391,7 @@ def render_markdown() -> str:
         "per-target residual contract and whether it is a dedicated backward "
         "kernel or a composition of existing native lanes.",
         "- **build_evidence** — the stable build configuration that validates "
-        "each populated claim. `llvm22-core` owns compiler adjoint/paired-IR "
+        "each populated claim. `llvm23-core` owns compiler adjoint/paired-IR "
         "claims; exact device rows carry their build from the execution matrix.",
         "",
         "## Summary",

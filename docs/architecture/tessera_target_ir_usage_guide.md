@@ -28,7 +28,7 @@ Graph IR    (tessera.flash_attn, tessera.matmul, ...)
 Schedule IR (schedule.mesh.region, schedule.pipeline, ...)
      │  [TileIRLoweringPass → WarpSpecializationPass → AsyncCopyLoweringPass]
      ▼
-Tile IR     (tile.async_copy, tile.mma, tile.mbarrier.*, tessera.attn.*)
+Tile IR     (tile.async_copy, tile.mma, tile.mbarrier.*, tessera_attn.*)
      │  [NVWGMMALoweringPass → NVTMADescriptorPass → NVFlashAttnKernelEmitter]  ← NVIDIA
      │  [TileToX86Pass]                                                           ← x86
      ▼

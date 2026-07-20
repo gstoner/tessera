@@ -2,7 +2,7 @@
 // RUN: tessera-opt --tessera-tiling='tile-m=32 tile-n=32' %s | FileCheck %s --check-prefix=T32
 // 2026-06: un-XFAIL'd — TilingPass now builds tensor.extract_slice/insert_slice
 // with static OpFoldResult sizes (matching the static tile result type) instead
-// of dynamic Values, which the MLIR-22 slice verifier rejected.
+// of dynamic Values, which the MLIR-23 slice verifier rejected.
 
 // (T16 path) matmul 64x128 @ 128x64 tiled into 16x16 blocks
 // T16-LABEL: func.func @matmul_64x128x64

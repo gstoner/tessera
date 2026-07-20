@@ -18,13 +18,13 @@ What V7 closes:
     TESSERA_HAVE_FA4_ATTN compile definition.
 
 What V7 does NOT close (tracked as V7b):
-  - End-to-end lit-exercise of `tessera.attn.*` ops.  The dialect
+  - End-to-end lit-exercise of `tessera_attn.*` ops.  The dialect
     appears in `--show-dialects` and its symbols are linked into
     the binary, but MLIR's parser does not lazy-load it for
     standalone IR fixtures (no pass references it).  Loading
     happens correctly when a pass that uses the dialect runs,
     which is why existing Phase 3 fixtures using
-    `tessera.attn.scaled_dot_product` carry `XFAIL: *`.
+    `tessera_attn.scaled_dot_product` carry `XFAIL: *`.
 """
 from __future__ import annotations
 

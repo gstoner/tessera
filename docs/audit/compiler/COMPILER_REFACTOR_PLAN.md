@@ -556,9 +556,9 @@ Mac-authored change stays honest about the leads without a GPU present.
 
 ### 7.4 Per-system setup pins (from `docs/GETTING_STARTED.md`)
 
-- **Mac:** Homebrew LLVM/MLIR **22.1.6** at `/opt/homebrew/opt/llvm`; off-venv
+- **Mac:** Homebrew LLVM/MLIR **23.x** from the `llvm@23` keg; off-venv
   `python3` 3.14.5.
-- **Strix Halo:** Ubuntu 24.04 + `scripts/setup_ubuntu.sh` (LLVM/MLIR 22 from
+- **Strix Halo:** Ubuntu 24.04 + `scripts/setup_ubuntu.sh` (LLVM/MLIR 23 from
   apt.llvm.org — ROCm's bundled LLVM has no MLIR); ROCm **7.2.4** at `/opt/rocm`;
   `-DTESSERA_ENABLE_HIP=ON -DTESSERA_BUILD_ROCM_BACKEND=ON`; `.venv` numpy<2.2.
   gfx1151 = RDNA 3.5, WMMA 16×16×16, **no FP8 WMMA**.

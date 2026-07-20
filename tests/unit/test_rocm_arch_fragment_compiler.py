@@ -212,7 +212,7 @@ def test_gfx125x_wmma_v2_lowers_modifiers_and_assembles(
 
 
 def test_gfx940_descriptor_path_lowers_to_real_mfma(compiler_toolchain):
-    # Debian LLVM 22 does not recognize gfx940 as a serialization processor;
+    # Debian LLVM 23 does not recognize gfx940 as a serialization processor;
     # retain the real lowering proof while gfx942 covers the same CDNA3 ISA
     # family through object generation.
     lowered = _lower(compiler_toolchain, "gfx940")

@@ -202,7 +202,7 @@ def _find_tessera_translate_mlir() -> str | None:
         [path_candidate, "--version"],
         capture_output=True, text=True, timeout=10,
     ).stdout
-    if "22." not in out:
+    if "23." not in out:
         return None
     return path_candidate
 
@@ -223,7 +223,7 @@ def test_tessera_translate_mlir_runs_and_reports_version() -> None:
         [_TRANSLATE_MLIR, "--version"],
         capture_output=True, text=True, timeout=10,
     ).stdout
-    assert "22." in out, f"unexpected --version output: {out!r}"
+    assert "23." in out, f"unexpected --version output: {out!r}"
 
 
 @_REQUIRES_TRANSLATE

@@ -1032,7 +1032,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         execution_mode="mlir_llvm_jit", direction="backward", op_family="matmul",
         device_proof="device_verified_jit", evidence_target="cpu_x86_64",
         numerical_fixture="tests/unit/test_autodiff_native_cpu_vertical.py",
-        proof_build="llvm22-core+x86_64-jit"),
+        proof_build="llvm23-core+x86_64-jit"),
     ("cpu", "cpu_autodiff_tanh_llvm_jit"): ExecutionRow(
         target="cpu", compiler_path="cpu_autodiff_tanh_llvm_jit",
         execution_kind="native_cpu", executable=True,
@@ -1042,7 +1042,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         execution_mode="mlir_llvm_jit", direction="backward", op_family="tanh",
         device_proof="device_verified_jit", evidence_target="cpu_x86_64",
         numerical_fixture="tests/unit/test_autodiff_native_cpu_vertical.py",
-        proof_build="llvm22-core+x86_64-jit"),
+        proof_build="llvm23-core+x86_64-jit"),
     ("cpu", "cpu_autodiff_sigmoid_llvm_jit"): ExecutionRow(
         target="cpu", compiler_path="cpu_autodiff_sigmoid_llvm_jit",
         execution_kind="native_cpu", executable=True,
@@ -1052,7 +1052,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         execution_mode="mlir_llvm_jit", direction="backward", op_family="sigmoid",
         device_proof="device_verified_jit", evidence_target="cpu_x86_64",
         numerical_fixture="tests/unit/test_autodiff_native_cpu_vertical.py",
-        proof_build="llvm22-core+x86_64-jit"),
+        proof_build="llvm23-core+x86_64-jit"),
     # --- Apple Silicon CPU (Accelerate) ---
     ("apple_cpu", "apple_cpu_accelerate"): ExecutionRow(
         target="apple_cpu", compiler_path="apple_cpu_accelerate",
@@ -2084,7 +2084,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         residual_tradeoff="save no forward tensors; recompute softmax statistics",
         device_proof="device_verified_jit", evidence_target="rocm_gfx1151",
         numerical_fixture="tests/unit/test_rocm_flash_attn_bwd_compiled.py",
-        proof_build="llvm22-core+rocm-gfx1151"),
+        proof_build="llvm23-core+rocm-gfx1151"),
     # Mamba2 selective_ssm BACKWARD (generate-rocm-selective-ssm-bwd-kernel):
     # operands (dout, x, A, B, C, delta[, gate[, state]]) -> (dx, dA, dB, dC,
     # ddelta). The reverse-mode analog of rocm_selective_ssm_compiled; the second
@@ -2106,7 +2106,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         residual_tradeoff="save no forward intermediates; recompute recurrence state",
         device_proof="device_verified_jit", evidence_target="rocm_gfx1151",
         numerical_fixture="tests/unit/test_rocm_ssm_bwd_launch_execute.py",
-        proof_build="llvm22-core+rocm-gfx1151"),
+        proof_build="llvm23-core+rocm-gfx1151"),
     # Linear-attention family (quadratic-parallel form, no softmax; a distinct
     # algorithm from flash_attn): tessera.linear_attn + the decay-masked siblings
     # tessera.lightning_attention / tessera.retention, dispatched by op name.
@@ -3135,7 +3135,7 @@ _BACKWARD_COMPOSITIONS: tuple[BackwardComposition, ...] = (
         residual_policy="save_inputs",
         residual_tradeoff="retain A and B; launch two generated forward GEMMs",
         numerical_fixture="tests/unit/test_autodiff_rocm_matmul_composed.py",
-        proof_build="llvm22-core+rocm-gfx1151",
+        proof_build="llvm23-core+rocm-gfx1151",
     ),
 )
 

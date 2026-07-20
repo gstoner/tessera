@@ -64,11 +64,11 @@ At a high level, the supported GPU path expands the single Graph IR operation in
 ```text
 tessera.ops.flash_attn
   -> tessera.flash_attn in Graph IR
-  -> tessera.attn.scaled_dot_product
-  -> tessera.attn.causal_mask        when causal=True
-  -> tessera.attn.dropout_mask       when dropout is present
-  -> tessera.attn.online_softmax
-  -> tessera.attn.lse_accumulate
+  -> tessera_attn.scaled_dot_product
+  -> tessera_attn.causal_mask        when causal=True
+  -> tessera_attn.dropout_mask       when dropout is present
+  -> tessera_attn.online_softmax
+  -> tessera_attn.lse_accumulate
   -> tile.mma / async copy / queue synchronization
   -> NVIDIA TMA / WGMMA / mbarrier Target IR
 ```

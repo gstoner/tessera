@@ -1,0 +1,773 @@
+{
+  "schema": "tessera.rocm.e2e_softmax_comparison.v1",
+  "work_item": "ROCM-E2E-1",
+  "created_at": "2026-07-20T00:20:31.051945+00:00",
+  "evidence_arch": "gfx1151",
+  "host": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "python": "3.12.3",
+  "trials": 9,
+  "event_iterations": 100,
+  "timing_policy": "serial alternating retained/compiler; HIP event and allocation/copy-inclusive runtime.launch wall time are separate",
+  "non_regression_threshold": "compiler median <= retained median * 1.10 in both timing domains",
+  "compile": {
+    "fp32": {
+      "compiler": {
+        "cold_ms": 175.247774,
+        "warm_ms": 56.213209,
+        "cold_state": "cold",
+        "warm_state": "warm_cache",
+        "image_digest": "086e9a63d65af18432cef23e3d988c15e0b6bb83a95d2e7d11f748f997b133e4",
+        "toolchain_fingerprint": "ef67d9396a2a9ce61fbff2e06a448ba28844bd640da2849a1571131ee93384fc",
+        "device_libraries": [
+          {
+            "logical_name": "rocm.ocml",
+            "content_digest": "7b4d3f1057c38d23e12f7bb9ae66a406d0f6e99383e7bb6b4d83bca891bb56af",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.ockl",
+            "content_digest": "65145f2847c536a27ae328e4b4eb99d62ca80b78ff196c75260bbad4dbe0c7be",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_unsafe_math_off",
+            "content_digest": "5df6ad2a201a6bbefedbf18e4467402da98512e19e0db7f6ce2c5f9c706465a9",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_finite_only_off",
+            "content_digest": "872368d5c54a2e8ead07c10f48af50462469096d09da8291831c43a91dda2dd2",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_wavefrontsize64_off",
+            "content_digest": "423087e3b64107f03b995f6417ace9998885f9e03c0187968e03f889f45394be",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_isa_version_1151",
+            "content_digest": "3b93c57b385c9cb849a87972c3f27aeb71610a903f085d13954d1c814370ec66",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_abi_version_600",
+            "content_digest": "1e791caa4e73225528a8a2966772d697f0e482d52c1a651ebfdd22e9a7251402",
+            "link_mode": "compiler_driver"
+          }
+        ]
+      },
+      "retained": {
+        "cold_ms": 59.469709,
+        "warm_ms": 0.017901,
+        "cold_state": "cold",
+        "warm_state": "warm_cache",
+        "hsaco_sha256": "8f95c7ad02056d30a7ef654427cf4c249447b4d722c65bc58473ce6334d8ca05"
+      }
+    },
+    "fp16": {
+      "compiler": {
+        "cold_ms": 172.163946,
+        "warm_ms": 54.234151,
+        "cold_state": "cold",
+        "warm_state": "warm_cache",
+        "image_digest": "22e7a6d126b633ff5d7b6b3293d6e9dd00667618a57938d6f90b84ec0ee786a3",
+        "toolchain_fingerprint": "ef67d9396a2a9ce61fbff2e06a448ba28844bd640da2849a1571131ee93384fc",
+        "device_libraries": [
+          {
+            "logical_name": "rocm.ocml",
+            "content_digest": "7b4d3f1057c38d23e12f7bb9ae66a406d0f6e99383e7bb6b4d83bca891bb56af",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.ockl",
+            "content_digest": "65145f2847c536a27ae328e4b4eb99d62ca80b78ff196c75260bbad4dbe0c7be",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_unsafe_math_off",
+            "content_digest": "5df6ad2a201a6bbefedbf18e4467402da98512e19e0db7f6ce2c5f9c706465a9",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_finite_only_off",
+            "content_digest": "872368d5c54a2e8ead07c10f48af50462469096d09da8291831c43a91dda2dd2",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_wavefrontsize64_off",
+            "content_digest": "423087e3b64107f03b995f6417ace9998885f9e03c0187968e03f889f45394be",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_isa_version_1151",
+            "content_digest": "3b93c57b385c9cb849a87972c3f27aeb71610a903f085d13954d1c814370ec66",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_abi_version_600",
+            "content_digest": "1e791caa4e73225528a8a2966772d697f0e482d52c1a651ebfdd22e9a7251402",
+            "link_mode": "compiler_driver"
+          }
+        ]
+      },
+      "retained": {
+        "cold_ms": 58.059208,
+        "warm_ms": 0.017488,
+        "cold_state": "cold",
+        "warm_state": "warm_cache",
+        "hsaco_sha256": "b93cc6dd0dad28acc34c80abebbde7ebb860a45d39bc6d909a6beb04b8df998a"
+      }
+    }
+  },
+  "resources": {
+    "fp32": {
+      "compiler": {
+        "hsaco_bytes": 5808,
+        "hsaco_sha256": "55960cd075715d06cf6bcdc79b97878cef6d274308c21324bab2c8ad9b24fa13",
+        "vgpr_count": 16,
+        "sgpr_count": 14,
+        "lds_bytes": 32,
+        "private_segment_bytes": 0,
+        "vgpr_spill_count": 0,
+        "sgpr_spill_count": 0
+      },
+      "retained": {
+        "hsaco_bytes": 5512,
+        "hsaco_sha256": "8f95c7ad02056d30a7ef654427cf4c249447b4d722c65bc58473ce6334d8ca05",
+        "vgpr_count": 16,
+        "sgpr_count": 14,
+        "lds_bytes": 32,
+        "private_segment_bytes": 0,
+        "vgpr_spill_count": 0,
+        "sgpr_spill_count": 0
+      }
+    },
+    "fp16": {
+      "compiler": {
+        "hsaco_bytes": 5808,
+        "hsaco_sha256": "b1e2f8d69757e1dc07d1be68405a6ff68831fc2117d234d9fce7688d99a7030c",
+        "vgpr_count": 16,
+        "sgpr_count": 14,
+        "lds_bytes": 32,
+        "private_segment_bytes": 0,
+        "vgpr_spill_count": 0,
+        "sgpr_spill_count": 0
+      },
+      "retained": {
+        "hsaco_bytes": 5512,
+        "hsaco_sha256": "b93cc6dd0dad28acc34c80abebbde7ebb860a45d39bc6d909a6beb04b8df998a",
+        "vgpr_count": 16,
+        "sgpr_count": 14,
+        "lds_bytes": 32,
+        "private_segment_bytes": 0,
+        "vgpr_spill_count": 0,
+        "sgpr_spill_count": 0
+      }
+    }
+  },
+  "rows": [
+    {
+      "dtype": "fp32",
+      "shape": [
+        32,
+        17
+      ],
+      "correctness": {
+        "compiler_max_abs": 2.9802322387695312e-08,
+        "retained_max_abs": 2.9802322387695312e-08,
+        "route_parity_max_abs": 0.0,
+        "tolerance": 1e-05,
+        "passed": true
+      },
+      "device": {
+        "retained_samples_ms": [
+          0.0024303700029850005,
+          0.00221234992146492,
+          0.0022302499413490297,
+          0.002274550050497055,
+          0.0021281500160694124,
+          0.0022670499980449676,
+          0.0022660599648952483,
+          0.00225394994020462,
+          0.002281460016965866
+        ],
+        "compiler_samples_ms": [
+          0.0022236500680446625,
+          0.0022626499831676482,
+          0.002213049978017807,
+          0.0023744599521160125,
+          0.0022273500263690947,
+          0.0022145499289035796,
+          0.002454770058393478,
+          0.0022511500120162963,
+          0.0022777499258518218
+        ],
+        "retained_median_ms": 0.0022660599648952483,
+        "compiler_median_ms": 0.0022511500120162963,
+        "median_speedup": 1.0066232604665903,
+        "paired_speedup_median": 1.0012437768133524,
+        "compiler_win_rate": 0.5555555555555556,
+        "non_regression_10pct": true
+      },
+      "end_to_end": {
+        "retained_samples_ms": [
+          2.248791,
+          2.146719,
+          2.128353,
+          2.132223,
+          2.128547,
+          2.052339,
+          2.341034,
+          2.0445,
+          2.035666
+        ],
+        "compiler_samples_ms": [
+          4.269794,
+          2.004583,
+          2.34412,
+          2.101654,
+          2.083253,
+          2.078376,
+          2.012909,
+          2.089262,
+          2.058232
+        ],
+        "retained_median_ms": 2.128547,
+        "compiler_median_ms": 2.083253,
+        "median_speedup": 1.0217419583699148,
+        "paired_speedup_median": 0.9890362213783481,
+        "compiler_win_rate": 0.4444444444444444,
+        "non_regression_10pct": true
+      },
+      "non_regression": true
+    },
+    {
+      "dtype": "fp32",
+      "shape": [
+        128,
+        256
+      ],
+      "correctness": {
+        "compiler_max_abs": 1.4901161193847656e-08,
+        "retained_max_abs": 1.4901161193847656e-08,
+        "route_parity_max_abs": 0.0,
+        "tolerance": 1e-05,
+        "passed": true
+      },
+      "device": {
+        "retained_samples_ms": [
+          0.002713190019130707,
+          0.002646079957485199,
+          0.0026395800709724426,
+          0.0026732799410820007,
+          0.0026847898960113527,
+          0.00272038996219635,
+          0.0027129900455474852,
+          0.0027101799845695496,
+          0.002714889943599701
+        ],
+        "compiler_samples_ms": [
+          0.0026535898447036742,
+          0.0035060399770736692,
+          0.0027366900444030762,
+          0.0026479798555374147,
+          0.0026996898651123046,
+          0.0033437299728393557,
+          0.0028133898973464965,
+          0.0027029800415039064,
+          0.002711690068244934
+        ],
+        "retained_median_ms": 0.0027101799845695496,
+        "compiler_median_ms": 0.002711690068244934,
+        "median_speedup": 0.9994431208444253,
+        "paired_speedup_median": 0.9944808589706907,
+        "compiler_win_rate": 0.4444444444444444,
+        "non_regression_10pct": true
+      },
+      "end_to_end": {
+        "retained_samples_ms": [
+          2.104277,
+          2.073509,
+          2.035666,
+          2.023203,
+          2.028324,
+          2.11004,
+          2.003885,
+          2.111384,
+          2.169212
+        ],
+        "compiler_samples_ms": [
+          2.095228,
+          2.293024,
+          2.090299,
+          2.006435,
+          2.238582,
+          2.066547,
+          2.138136,
+          2.038737,
+          1.999705
+        ],
+        "retained_median_ms": 2.073509,
+        "compiler_median_ms": 2.090299,
+        "median_speedup": 0.9919676563018018,
+        "paired_speedup_median": 1.004318861718152,
+        "compiler_win_rate": 0.5555555555555556,
+        "non_regression_10pct": true
+      },
+      "non_regression": true
+    },
+    {
+      "dtype": "fp32",
+      "shape": [
+        64,
+        1024
+      ],
+      "correctness": {
+        "compiler_max_abs": 3.725290298461914e-09,
+        "retained_max_abs": 3.725290298461914e-09,
+        "route_parity_max_abs": 0.0,
+        "tolerance": 1e-05,
+        "passed": true
+      },
+      "device": {
+        "retained_samples_ms": [
+          0.003911579847335815,
+          0.0037943699955940245,
+          0.0036787599325180053,
+          0.0035963600873947146,
+          0.003623560070991516,
+          0.0037736698985099794,
+          0.003964479863643646,
+          0.0038885799050331115,
+          0.003758769929409027
+        ],
+        "compiler_samples_ms": [
+          0.003889879882335663,
+          0.0037885698676109313,
+          0.003601059913635254,
+          0.0037913700938224794,
+          0.0036238598823547363,
+          0.003883369863033295,
+          0.004071779847145081,
+          0.00389286994934082,
+          0.0038256698846817015
+        ],
+        "retained_median_ms": 0.0037736698985099794,
+        "compiler_median_ms": 0.0038256698846817015,
+        "median_speedup": 0.986407612852344,
+        "paired_speedup_median": 0.9988979738949576,
+        "compiler_win_rate": 0.3333333333333333,
+        "non_regression_10pct": true
+      },
+      "end_to_end": {
+        "retained_samples_ms": [
+          2.110125,
+          2.144945,
+          2.431225,
+          2.109838,
+          2.097228,
+          2.073816,
+          2.075212,
+          2.07464,
+          2.099143
+        ],
+        "compiler_samples_ms": [
+          2.092478,
+          2.139694,
+          2.173401,
+          2.069245,
+          1.9788,
+          2.088077,
+          2.082396,
+          2.075498,
+          2.111733
+        ],
+        "retained_median_ms": 2.099143,
+        "compiler_median_ms": 2.088077,
+        "median_speedup": 1.005299612993199,
+        "paired_speedup_median": 1.0024540892295815,
+        "compiler_win_rate": 0.5555555555555556,
+        "non_regression_10pct": true
+      },
+      "non_regression": true
+    },
+    {
+      "dtype": "fp32",
+      "shape": [
+        16,
+        4096
+      ],
+      "correctness": {
+        "compiler_max_abs": 9.313225746154785e-10,
+        "retained_max_abs": 9.313225746154785e-10,
+        "route_parity_max_abs": 0.0,
+        "tolerance": 1e-05,
+        "passed": true
+      },
+      "device": {
+        "retained_samples_ms": [
+          0.00821546971797943,
+          0.008203480243682861,
+          0.008308780193328858,
+          0.007900450229644775,
+          0.00785984992980957,
+          0.008579099774360657,
+          0.008116869926452637,
+          0.008134170174598694,
+          0.008256880044937133
+        ],
+        "compiler_samples_ms": [
+          0.008150370121002197,
+          0.008145170211791992,
+          0.0078670597076416,
+          0.007981560230255126,
+          0.008053770065307617,
+          0.008122270107269286,
+          0.008138870000839233,
+          0.008238580226898193,
+          0.008248770236968994
+        ],
+        "retained_median_ms": 0.008203480243682861,
+        "compiler_median_ms": 0.008138870000839233,
+        "median_speedup": 1.0079384782945258,
+        "paired_speedup_median": 1.0009831535774623,
+        "compiler_win_rate": 0.5555555555555556,
+        "non_regression_10pct": true
+      },
+      "end_to_end": {
+        "retained_samples_ms": [
+          2.338948,
+          2.17065,
+          2.207428,
+          2.099506,
+          2.10785,
+          2.120017,
+          2.028578,
+          2.081919,
+          2.330528
+        ],
+        "compiler_samples_ms": [
+          2.211963,
+          2.22593,
+          2.28774,
+          2.16441,
+          2.070176,
+          2.115944,
+          2.052942,
+          2.171793,
+          2.072949
+        ],
+        "retained_median_ms": 2.120017,
+        "compiler_median_ms": 2.16441,
+        "median_speedup": 0.979489560665493,
+        "paired_speedup_median": 0.9881321537578753,
+        "compiler_win_rate": 0.4444444444444444,
+        "non_regression_10pct": true
+      },
+      "non_regression": true
+    },
+    {
+      "dtype": "fp16",
+      "shape": [
+        32,
+        17
+      ],
+      "correctness": {
+        "compiler_max_abs": 0.00011342763900756836,
+        "retained_max_abs": 0.00011342763900756836,
+        "route_parity_max_abs": 0.0,
+        "tolerance": 0.003,
+        "passed": true
+      },
+      "device": {
+        "retained_samples_ms": [
+          0.002312549948692322,
+          0.0022276400029659273,
+          0.0021212400496006013,
+          0.0022772400081157683,
+          0.002322250008583069,
+          0.0024249500036239626,
+          0.002206750065088272,
+          0.0022650499641895293,
+          0.002223439961671829
+        ],
+        "compiler_samples_ms": [
+          0.002261050045490265,
+          0.0022705499827861786,
+          0.0022425399720668792,
+          0.002299250066280365,
+          0.0022238500416278837,
+          0.0025051599740982056,
+          0.002329549938440323,
+          0.002408359944820404,
+          0.0022707499563694
+        ],
+        "retained_median_ms": 0.0022650499641895293,
+        "compiler_median_ms": 0.0022707499563694,
+        "median_speedup": 0.9974898195356637,
+        "paired_speedup_median": 0.9791654758971292,
+        "compiler_win_rate": 0.2222222222222222,
+        "non_regression_10pct": true
+      },
+      "end_to_end": {
+        "retained_samples_ms": [
+          2.099534,
+          2.057079,
+          2.391509,
+          2.117266,
+          2.068356,
+          2.253404,
+          2.065045,
+          2.039971,
+          1.994765
+        ],
+        "compiler_samples_ms": [
+          2.068261,
+          2.062591,
+          2.046393,
+          2.107998,
+          2.042458,
+          2.027541,
+          2.09205,
+          2.06942,
+          2.050794
+        ],
+        "retained_median_ms": 2.068356,
+        "compiler_median_ms": 2.062591,
+        "median_speedup": 1.0027950281951197,
+        "paired_speedup_median": 1.0043965886115642,
+        "compiler_win_rate": 0.5555555555555556,
+        "non_regression_10pct": true
+      },
+      "non_regression": true
+    },
+    {
+      "dtype": "fp16",
+      "shape": [
+        128,
+        256
+      ],
+      "correctness": {
+        "compiler_max_abs": 2.3446977138519287e-05,
+        "retained_max_abs": 2.3446977138519287e-05,
+        "route_parity_max_abs": 0.0,
+        "tolerance": 0.003,
+        "passed": true
+      },
+      "device": {
+        "retained_samples_ms": [
+          0.0027146801352500916,
+          0.002870579957962036,
+          0.002623580098152161,
+          0.002529670000076294,
+          0.0026065701246261595,
+          0.002543169856071472,
+          0.002610870003700256,
+          0.002539159953594208,
+          0.002716580033302307
+        ],
+        "compiler_samples_ms": [
+          0.0026436799764633177,
+          0.0027572798728942873,
+          0.0026304700970649717,
+          0.0026629799604415893,
+          0.002661469876766205,
+          0.002555769979953766,
+          0.0027126801013946534,
+          0.002527369856834412,
+          0.002661469876766205
+        ],
+        "retained_median_ms": 0.002610870003700256,
+        "compiler_median_ms": 0.002661469876766205,
+        "median_speedup": 0.9809879970809854,
+        "paired_speedup_median": 0.9973806967353483,
+        "compiler_win_rate": 0.4444444444444444,
+        "non_regression_10pct": true
+      },
+      "end_to_end": {
+        "retained_samples_ms": [
+          2.107385,
+          2.175718,
+          2.044658,
+          1.999605,
+          2.296155,
+          1.745469,
+          1.910276,
+          1.736195,
+          2.040258
+        ],
+        "compiler_samples_ms": [
+          2.409113,
+          2.496937,
+          2.142604,
+          2.02224,
+          1.783338,
+          1.873534,
+          1.7446,
+          1.900936,
+          2.224516
+        ],
+        "retained_median_ms": 2.040258,
+        "compiler_median_ms": 2.02224,
+        "median_speedup": 1.0089099216710182,
+        "paired_speedup_median": 0.9316452223445104,
+        "compiler_win_rate": 0.2222222222222222,
+        "non_regression_10pct": true
+      },
+      "non_regression": true
+    },
+    {
+      "dtype": "fp16",
+      "shape": [
+        64,
+        1024
+      ],
+      "correctness": {
+        "compiler_max_abs": 1.4610588550567627e-05,
+        "retained_max_abs": 1.4610588550567627e-05,
+        "route_parity_max_abs": 0.0,
+        "tolerance": 0.003,
+        "passed": true
+      },
+      "device": {
+        "retained_samples_ms": [
+          0.003463830053806305,
+          0.003463529944419861,
+          0.0034681299328804018,
+          0.0038804599642753602,
+          0.003705050051212311,
+          0.003809159994125366,
+          0.0037476500868797303,
+          0.0036058399081230165,
+          0.003632639944553375
+        ],
+        "compiler_samples_ms": [
+          0.003510630130767822,
+          0.0035034298896789553,
+          0.0036641401052474975,
+          0.0035008299350738526,
+          0.0036453399062156677,
+          0.0036724498867988587,
+          0.003606339991092682,
+          0.0036387500166893006,
+          0.003609040081501007
+        ],
+        "retained_median_ms": 0.003632639944553375,
+        "compiler_median_ms": 0.003609040081501007,
+        "median_speedup": 1.0065390969674555,
+        "paired_speedup_median": 1.0065390969674555,
+        "compiler_win_rate": 0.5555555555555556,
+        "non_regression_10pct": true
+      },
+      "end_to_end": {
+        "retained_samples_ms": [
+          2.145929,
+          2.182087,
+          1.99979,
+          2.091452,
+          2.044965,
+          2.251795,
+          2.052075,
+          2.117699,
+          2.149449
+        ],
+        "compiler_samples_ms": [
+          2.172554,
+          2.296081,
+          2.183409,
+          2.099937,
+          2.380115,
+          2.111023,
+          2.057471,
+          2.01184,
+          2.123688
+        ],
+        "retained_median_ms": 2.117699,
+        "compiler_median_ms": 2.123688,
+        "median_speedup": 0.9971799058995483,
+        "paired_speedup_median": 0.9959594025916014,
+        "compiler_win_rate": 0.3333333333333333,
+        "non_regression_10pct": true
+      },
+      "non_regression": true
+    },
+    {
+      "dtype": "fp16",
+      "shape": [
+        16,
+        4096
+      ],
+      "correctness": {
+        "compiler_max_abs": 2.2100284695625305e-06,
+        "retained_max_abs": 2.2100284695625305e-06,
+        "route_parity_max_abs": 0.0,
+        "tolerance": 0.003,
+        "passed": true
+      },
+      "device": {
+        "retained_samples_ms": [
+          0.008198609948158265,
+          0.007977399826049805,
+          0.008269010186195374,
+          0.007753779888153076,
+          0.007770079970359802,
+          0.00796310007572174,
+          0.007979000210762024,
+          0.007997499704360962,
+          0.008106200098991394
+        ],
+        "compiler_samples_ms": [
+          0.008032500147819518,
+          0.008058400154113769,
+          0.007761780023574829,
+          0.007745280265808106,
+          0.008005899786949157,
+          0.008499339818954468,
+          0.008109909892082214,
+          0.00800029993057251,
+          0.007987300157546997
+        ],
+        "retained_median_ms": 0.007979000210762024,
+        "compiler_median_ms": 0.008005899786949157,
+        "median_speedup": 0.9966400308643654,
+        "paired_speedup_median": 0.9996499848460871,
+        "compiler_win_rate": 0.4444444444444444,
+        "non_regression_10pct": true
+      },
+      "end_to_end": {
+        "retained_samples_ms": [
+          2.210633,
+          2.135497,
+          2.082924,
+          2.164081,
+          2.129643,
+          2.088839,
+          2.028556,
+          2.652073,
+          2.000362
+        ],
+        "compiler_samples_ms": [
+          2.156865,
+          2.260587,
+          2.11769,
+          2.162483,
+          2.018929,
+          2.098974,
+          2.039897,
+          2.075265,
+          2.045938
+        ],
+        "retained_median_ms": 2.129643,
+        "compiler_median_ms": 2.098974,
+        "median_speedup": 1.0146114244387974,
+        "paired_speedup_median": 0.9951714504324494,
+        "compiler_win_rate": 0.4444444444444444,
+        "non_regression_10pct": true
+      },
+      "non_regression": true
+    }
+  ],
+  "all_correct": true,
+  "all_non_regression": true,
+  "selector_changed": false
+}

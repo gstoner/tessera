@@ -12,7 +12,7 @@ module attributes {tessera.target = "nvidia_sm90"} {
       %V : memref<1x32x1024x64xbf16, 1>,
       %S0 : memref<1x32x64x64xbf16, 1>,    // initial state
       %O : memref<1x32x1024x64xbf16, 1>) {
-    "tessera.attn.lightning"(%Q, %K, %V, %S0, %O) {
+    "tessera_attn.lightning"(%Q, %K, %V, %S0, %O) {
       tile_q = 32 : i64,
       tile_kv = 32 : i64,
       tile_k = 16 : i64,
@@ -29,7 +29,7 @@ module attributes {tessera.target = "nvidia_sm90"} {
   }
 }
 
-// CHECK: tessera.attn.lightning
+// CHECK: tessera_attn.lightning
 // CHECK-SAME: tile_q = 32
 // CHECK-SAME: tile_kv = 32
 //

@@ -76,16 +76,13 @@ run_one() {
   echo " Tessera sanitizer build: $label (CMake: $cmake_val)"
   echo "=========================================================="
 
-  # Honor an existing LLVM_DIR/MLIR_DIR if the caller set one; else probe
-  # the canonical Homebrew ``llvm`` keg (22.x — the current MLIR build
-  # pin), falling back to the legacy ``llvm@21`` keg if that's all that's
-  # installed.
+  # Honor an existing LLVM_DIR/MLIR_DIR if the caller set one; otherwise use
+  # the canonical, versioned Homebrew LLVM 23 keg. CMake rejects every other
+  # major, including mixed LLVM/MLIR installations.
   local llvm_flags=()
   local llvm_prefix=""
-  if [[ -d "/opt/homebrew/opt/llvm/lib/cmake/llvm" ]]; then
-    llvm_prefix="/opt/homebrew/opt/llvm"
-  elif [[ -d "/opt/homebrew/opt/llvm@21/lib/cmake/llvm" ]]; then
-    llvm_prefix="/opt/homebrew/opt/llvm@21"
+  if [[ -d "/opt/homebrew/opt/llvm@23/lib/cmake/llvm" ]]; then
+    llvm_prefix="/opt/homebrew/opt/llvm@23"
   fi
   if [[ -n "${LLVM_DIR:-}" ]]; then
     llvm_flags+=(-DLLVM_DIR="$LLVM_DIR")

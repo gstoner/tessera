@@ -208,7 +208,7 @@ verified below). All structural guards green. C++ build clean.
   the dialect for standalone IR fixtures (no pass references it,
   so the longest-prefix dialect lookup never triggers
   `getOrLoadDialect<TesseraAttnDialect>`).  The 3 lit fixtures
-  using `tessera.attn.scaled_dot_product`
+  using `tessera_attn.scaled_dot_product`
   (`flash_attn_full.mlir`, `tile_ir_lowering.mlir`, V6c) remain
   XFAIL'd.  V7b will investigate eager-load via `MlirOptMainConfig`
   or migrate the dialect class from tablegen to hand-written
@@ -244,7 +244,7 @@ fixtures: V2-flow propagation + V7's intent doc (V6c).
   `tessera::TesseraDialect` so that whenever a context loads the
   Graph IR dialect, the extension callback eagerly calls
   `ctx->getOrLoadDialect<TesseraAttnDialect>()`.  The MLIR parser
-  now recognises `tessera.attn.scaled_dot_product` in standalone
+  now recognises `tessera_attn.scaled_dot_product` in standalone
   IR fixtures with no pass referencing the dialect.  V6c lit
   fixture was recreated without `XFAIL`/`REQUIRES` and now passes
   end-to-end through the real `tessera-opt` binary.  Linkage:

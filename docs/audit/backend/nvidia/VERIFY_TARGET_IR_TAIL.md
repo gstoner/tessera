@@ -39,7 +39,7 @@ Ran on the Strix Halo dev box. Results:
   GEMM + `flash_attn`/rocm — the complete-cell fixtures that use the runtime-symbol
   lane; device reported `gfx1151`).
 
-Reproduce (from repo root, with the LLVM-22 apt toolchain):
+Reproduce (from repo root, with the LLVM-23 apt toolchain):
 
 ```bash
 # One-time: build tessera-opt with the (hardware-free) NVIDIA backend enabled.
@@ -48,7 +48,7 @@ ninja -C build tessera-opt
 
 export PYTHONPATH=python
 OPT=build/tools/tessera-opt/tessera-opt
-FC=/usr/lib/llvm-22/bin/FileCheck
+FC=/usr/lib/llvm-23/bin/FileCheck
 T=src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia
 
 # [1] the two NEW Target IR fixtures (registration + real nvvm.mma.sync)
@@ -76,7 +76,7 @@ python3 -m pytest -q tests/unit/test_rocm_wmma_runtime_symbol.py \
 
 ## 🍎 Apple system (macOS, Apple Silicon) — VERIFIED 2026-07-11
 
-Ran on macOS / Apple Silicon (Homebrew LLVM/MLIR 22.1.6, Python 3.14.6, no GPU
+Ran on macOS / Apple Silicon (Homebrew LLVM/MLIR 23, Python 3.14.6, no GPU
 needed for the Target IR path). Results:
 
 - **Build:** `tessera-opt` configured + built clean with
@@ -95,21 +95,21 @@ needed for the Target IR path). Results:
   `test_complete_cells_are_evaluator_corroborated_on_darwin` ran (not skipped):
   Apple CPU/GPU complete cells re-derived to HARDWARE_VERIFIED.
 
-The NVIDIA Target IR dialect builds on macOS (Homebrew LLVM/MLIR 22, no GPU needed).
+The NVIDIA Target IR dialect builds on macOS (Homebrew LLVM/MLIR 23, no GPU needed).
 Run from repo root:
 
 ```bash
-# Build tessera-opt with the NVIDIA backend on, against Homebrew LLVM/MLIR 22.
+# Build tessera-opt with the NVIDIA backend on, against Homebrew LLVM/MLIR 23.
 cmake -S . -B build -G Ninja \
-  -DLLVM_DIR=/opt/homebrew/opt/llvm/lib/cmake/llvm \
-  -DMLIR_DIR=/opt/homebrew/opt/llvm/lib/cmake/mlir \
+  -DLLVM_DIR=/opt/homebrew/opt/llvm@23/lib/cmake/llvm \
+  -DMLIR_DIR=/opt/homebrew/opt/llvm@23/lib/cmake/mlir \
   -DTESSERA_CPU_ONLY=ON -DTESSERA_BUILD_APPLE_BACKEND=ON \
   -DTESSERA_BUILD_NVIDIA_BACKEND=ON
 ninja -C build tessera-opt
 
 export PYTHONPATH=python
 OPT=build/tools/tessera-opt/tessera-opt
-FC=/opt/homebrew/opt/llvm/bin/FileCheck        # Homebrew FileCheck path
+FC=/opt/homebrew/opt/llvm@23/bin/FileCheck        # Homebrew FileCheck path
 T=src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia
 
 # [1] the two NEW Target IR fixtures — expect PASS (hardware-free)
@@ -164,7 +164,7 @@ ninja -C build tessera-opt
 
 export PYTHONPATH=python
 OPT=build/tools/tessera-opt/tessera-opt
-FC=$(command -v FileCheck || echo /usr/lib/llvm-22/bin/FileCheck)
+FC=$(command -v FileCheck || echo /usr/lib/llvm-23/bin/FileCheck)
 T=src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia
 
 # [1] the two NEW Target IR fixtures — expect PASS (structural; no GPU needed)

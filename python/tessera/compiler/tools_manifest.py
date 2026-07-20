@@ -53,7 +53,7 @@ _ENTRIES: tuple[SurfaceEntry, ...] = (
             "MLIR opt-style driver — registers 5 dialects (tessera, "
             "tessera.neighbors, tessera.solver, tessera_apple, tpp) "
             "+ 70+ passes + 6 named lowering pipelines.  Requires "
-            "MLIR/LLVM 22 — proof tests live in "
+            "MLIR/LLVM 23 — proof tests live in "
             "``tests/unit/test_tessera_opt_build.py`` and the "
             "real cmake-build/lit smoke is owned by the opt-in "
             "``lit`` CI lane."

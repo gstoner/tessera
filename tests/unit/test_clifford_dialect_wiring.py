@@ -359,7 +359,7 @@ def test_cpp_cayley_shadow_matches_python_signature_table_byte_for_byte(signatur
 
 def test_expand_product_table_emits_arith_and_tensor_ops() -> None:
     body = (REPO_ROOT / "src/solvers/clifford/lib/Passes/ExpandProductTable.cpp").read_text()
-    # Builder calls for the lowered IR shape (MLIR 22 uses
+    # Builder calls for the lowered IR shape (MLIR 23 uses
     # `rewriter.create<>` template form).
     assert "rewriter.create<tensor::ExtractOp>" in body
     assert "rewriter.create<arith::MulFOp>" in body

@@ -44,7 +44,7 @@ def _find(tool: str, *cands: str):
 
 def _mlir_translate():
     return _find("mlir-translate", "/usr/lib/llvm-23/bin/mlir-translate",
-                 "/opt/homebrew/opt/llvm/bin/mlir-translate")
+                 "/opt/homebrew/opt/llvm@23/bin/mlir-translate")
 
 
 def _need_opt():

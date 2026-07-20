@@ -2,7 +2,7 @@
 # TilingInterface — Status & Deferred Work
 
 > **B3 v2 (2026-05-20):** the matmul TilingInterface implementation
-> shipped against the current MLIR 21 signatures.  Conv2DNHWCOp has
+> shipped against the current MLIR 23 signatures.  Conv2DNHWCOp has
 > a real iteration domain + identity result-tile-position but its
 > `getTiledImplementation` continues to return `failure()` until the
 > stride/pad-aware window reconstruction lands (deferred v3 work).
@@ -12,8 +12,8 @@
 ### ODS — `TesseraOps.td`
 
 Both ops declare `TilingInterface` via the **explicit method-list**
-form (required by the MLIR 22 ODS generator — see "Why explicit method
-list" below for the MLIR 21 transition that introduced this):
+form (required by the MLIR 23 ODS generator — see "Why explicit method
+list" below for the MLIR 23 transition that introduced this):
 
 ```tablegen
 DeclareOpInterfaceMethods<TilingInterface, [
@@ -29,7 +29,7 @@ The generated `TesseraOps.h.inc` now declares all four methods on the
 
 ### C++ impl — `TesseraTiling.cpp`
 
-The four MLIR 22 method signatures the impl satisfies are:
+The four MLIR 23 method signatures the impl satisfies are:
 
 ```cpp
 SmallVector<utils::IteratorType> getLoopIteratorTypes();
@@ -45,7 +45,7 @@ LogicalResult                     getResultTilePosition(
     SmallVector<OpFoldResult> &resultSizes);
 ```
 
-* **MatmulOp** — full v1 implementation against MLIR 22 signatures:
+* **MatmulOp** — full v1 implementation against MLIR 23 signatures:
   - `getLoopIteratorTypes()` → `{parallel, parallel}` (M, N).  The
     K-axis reduction lives inside the cloned op, not in the iteration
     domain.
@@ -91,7 +91,7 @@ the cloned op that a tile driver can FileCheck against:
 
 Under MLIR ≤16, `DeclareOpInterfaceMethods<Interface>` (no method
 list) auto-emitted per-Op declarations for every method on the
-interface.  In MLIR 21 that auto-emission was tightened — for
+interface.  In MLIR 23 that auto-emission was tightened — for
 multi-method interfaces with default implementations like
 `TilingInterface`, the ODS generator now requires an explicit method
 list so it knows which decls the user intends to override (vs. which
@@ -100,7 +100,7 @@ should fall through to MLIR's default-failure trait impls).
 The earlier B3-v1 attempt at flipping the build flag failed precisely
 because the ODS without an explicit method list produced no per-Op
 decls, so the out-of-line C++ defs couldn't bind.  The B3-v2 fix
-(this commit) lists every method explicitly, which is the MLIR 21
+(this commit) lists every method explicitly, which is the MLIR 23
 canonical form.
 
 ## Deferred work (v3)

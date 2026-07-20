@@ -261,9 +261,9 @@ jobs:
   # Lane 5 — lit  (MLIR FileCheck)   ~30s once MLIR is available
   # Opt-in.  Not required.
   #
-  # Stock GitHub-hosted Ubuntu doesn't carry MLIR 22, so the lane
+  # Stock GitHub-hosted Ubuntu doesn't carry MLIR 23, so the lane
   # installs it via apt.llvm.org and gracefully skips if the install
-  # fails.  When MLIR 22 lands in the runner image, drop the install
+  # fails.  When MLIR 23 lands in the runner image, drop the install
   # guard.
   # ────────────────────────────────────────────────────────────────────
   lit:

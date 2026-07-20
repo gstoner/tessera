@@ -52,7 +52,7 @@ namespace {
 
 static void resolveScaleAttrs(ModuleOp mod, OpBuilder &b) {
   mod.walk([&](Operation *op) {
-    if (op->getName().getStringRef() != "tessera.attn.scaled_dot_product")
+    if (op->getName().getStringRef() != "tessera_attn.scaled_dot_product")
       return;
 
     auto scaleAttr = op->getAttrOfType<FloatAttr>("scale");
@@ -171,7 +171,7 @@ struct NVFlashAttnKernelEmitterPass
       // A function is a flash attn kernel if it contains a ScaledDotProduct op.
       bool hasSDPOp = false;
       funcOp.walk([&](Operation *op) {
-        if (op->getName().getStringRef() == "tessera.attn.scaled_dot_product")
+        if (op->getName().getStringRef() == "tessera_attn.scaled_dot_product")
           hasSDPOp = true;
       });
       if (!hasSDPOp)

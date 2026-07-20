@@ -43,7 +43,7 @@ struct ExportDeploymentManifestPass : public PassWrapper<ExportDeploymentManifes
     });
 
     // Write a dependency-free JSON summary. This keeps the pass usable in
-    // minimal MLIR 22 builds where nlohmann/json is not installed.
+    // minimal MLIR 23 builds where nlohmann/json is not installed.
     std::ofstream out("manifest.json");
     out << "{\n"
         << "  \"version\": \"v1.1\",\n"

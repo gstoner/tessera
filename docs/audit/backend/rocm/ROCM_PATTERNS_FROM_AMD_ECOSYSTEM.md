@@ -395,7 +395,7 @@ The follow-on pass that the 2.5 batch had deferred is now landed.
   operand element type, FNUZ/OCP suffix from a C++ semantics table that mirrors
   `rocm_target._FP8_SEMANTICS`). FP8 on a no-FP8 arch (gfx1151) is a hard, named
   error (Decision #21), not a silent guess. `tessera-rocm-opt` rebuilt against
-  MLIR 22.1.6.
+  MLIR 23.
 - Lit fixtures: `test/rocm/fp8_flavor_arch_keyed.mlir` (FNUZ vs OCP) and
   `fp8_unsupported_arch.mlir` (error path) — verified via FileCheck; the existing
   `tile_matmul_to_rocm.mlir` (gfx90a default) still passes (backward compatible).

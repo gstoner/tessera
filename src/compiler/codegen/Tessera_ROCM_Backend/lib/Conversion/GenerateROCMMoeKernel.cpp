@@ -78,6 +78,31 @@ void emitMoeBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f) {
   b.create<gpu::ReturnOp>(loc);
 }
 
+void emitMoeDispatchBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f) {
+  b.setInsertionPointToStart(&f.getBody().front());
+  Value x = f.getArgument(0), token = f.getArgument(1), out = f.getArgument(2);
+  Value slots = f.getArgument(4), hidden = f.getArgument(5);
+  Value bid = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
+  Value tid = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
+  Value gid = b.create<arith::AddIOp>(
+      loc, b.create<arith::MulIOp>(loc, bid,
+              b.create<arith::ConstantIndexOp>(loc, BD)), tid);
+  Value total = b.create<arith::MulIOp>(loc, slots, hidden);
+  Value inb = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt, gid, total);
+  auto guard = b.create<scf::IfOp>(loc, inb, /*withElse=*/false);
+  b.setInsertionPointToStart(guard.thenBlock());
+  Value slot = b.create<arith::DivUIOp>(loc, gid, hidden);
+  Value column = b.create<arith::RemUIOp>(loc, gid, hidden);
+  Value source = b.create<arith::IndexCastOp>(
+      loc, b.getIndexType(), b.create<memref::LoadOp>(loc, token, ValueRange{slot}));
+  Value offset = b.create<arith::AddIOp>(
+      loc, b.create<arith::MulIOp>(loc, source, hidden), column);
+  Value value = b.create<memref::LoadOp>(loc, x, ValueRange{offset});
+  b.create<memref::StoreOp>(loc, value, out, ValueRange{gid});
+  b.setInsertionPointToEnd(&f.getBody().front());
+  b.create<gpu::ReturnOp>(loc);
+}
+
 // Contiguous grouped GEMM consumes the native device argument directly:
 // OFFSETS[E+1] identifies the expert owning token t.  This is one GPU launch
 // over all groups; there is no host per-expert dispatch and no expanded route
@@ -188,6 +213,7 @@ struct GenerateROCMMoeKernelPass
     SmallVector<Operation *> directives;
     module.walk([&](Operation *op) {
       if (op->getName().getStringRef() == "tessera_rocm.moe" ||
+          op->getName().getStringRef() == "tessera_rocm.moe_dispatch" ||
           op->getName().getStringRef() == "tessera_rocm.grouped_gemm")
         directives.push_back(op);
     });
@@ -202,6 +228,7 @@ struct GenerateROCMMoeKernelPass
       Location loc = op->getLoc();
       std::string kname = nameAttr.getValue().str();
       bool grouped = op->getName().getStringRef() == "tessera_rocm.grouped_gemm";
+      bool dispatch = op->getName().getStringRef() == "tessera_rocm.moe_dispatch";
       int64_t tileN = 1;
       if (grouped) {
         if (auto attr = op->getAttrOfType<IntegerAttr>("tn"))
@@ -216,8 +243,11 @@ struct GenerateROCMMoeKernelPass
       Type idxTy = b.getIndexType();
       auto memF32 = MemRefType::get({ShapedType::kDynamic}, f32);
       auto memI32 = MemRefType::get({ShapedType::kDynamic}, i32);
-      SmallVector<Type> args =
-          {memF32, memF32, memI32, memF32, idxTy, idxTy, idxTy};
+      SmallVector<Type> args;
+      if (dispatch)
+        args = {memF32, memI32, memF32, idxTy, idxTy, idxTy};
+      else
+        args = {memF32, memF32, memI32, memF32, idxTy, idxTy, idxTy};
       if (grouped)
         args.push_back(idxTy);
       auto fnTy = b.getFunctionType(args, {});
@@ -226,7 +256,9 @@ struct GenerateROCMMoeKernelPass
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
       gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(), b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
-      if (grouped)
+      if (dispatch)
+        emitMoeDispatchBody(body, loc, gpuFunc);
+      else if (grouped)
         emitGroupedGemmBody(body, loc, gpuFunc, tileN);
       else
         emitMoeBody(body, loc, gpuFunc);

@@ -83,7 +83,7 @@ _RDNA3_CLASS_ARCHES: frozenset[str] = frozenset({"gfx1100", "gfx1151"})
 _A_LEN = _B_LEN = 16
 _ACC_LEN = 8
 
-# RDNA 4 (gfx1200/gfx1201) WMMA — grounded by `llc` on this host (LLVM 22 AMDGPU):
+# RDNA 4 (gfx1200/gfx1201) WMMA — grounded by `llc` on this host (LLVM 23 AMDGPU):
 # the plain (A,B,C) 3-arg ABI is preserved, but A/B fragments are DENSER (<8 x elem>
 # — half the width of gfx11's <16 x elem> — because RDNA 4 drops the wave32 lane
 # 0-15 → 16-31 duplication). New: native FP8/BF8 (16×16×16). dtype → (intrinsic
@@ -100,7 +100,7 @@ _RDNA4_INPUT: dict[str, tuple[str, str, str]] = {
 }
 
 # gfx1250/gfx1251 WMMA — the "v2" mods/reuse ABI (grounded by `llc` on this host,
-# LLVM 22 AMDGPU; distinct from RDNA 4). Two differences from every prior AMD WMMA:
+# LLVM 23 AMDGPU; distinct from RDNA 4). Two differences from every prior AMD WMMA:
 #   1. K is DOUBLED — the f16/bf16 tile is 16×16×**32** (A/B = <16 x elem>).
 #   2. The intrinsic takes 5 extra IMMEDIATE operands: per-operand negate modifiers
 #      (i1 A_mod / i1 B_mod / i16 C_mod) + two operand-reuse flags (i1 a_reuse /
@@ -149,7 +149,7 @@ def emit_wmma_rdna4_llvmir(
     dtype: str = "f16", *, arch: str = "gfx1200", entry: str | None = None,
 ) -> str:
     """Emit the **RDNA 4** (gfx1200/gfx1201) WMMA intrinsic — the gfx12 path, grounded
-    by `llc` on this host (LLVM 22 AMDGPU backend).
+    by `llc` on this host (LLVM 23 AMDGPU backend).
 
     Establishes the RDNA 4 ABI the way :func:`emit_wmma_llvmir` did for gfx11: a
     single ``wmma`` in a minimal ``amdgpu_kernel``. The RDNA 4 differences from gfx11,
@@ -207,7 +207,7 @@ def emit_wmma_gfx1250_llvmir(
     dtype: str = "bf16", *, arch: str = "gfx1250", entry: str | None = None,
 ) -> str:
     """Emit the **gfx1250/gfx1251** WMMA intrinsic — the "v2" mods/reuse ABI,
-    grounded by `llc` on this host (LLVM 22 AMDGPU).
+    grounded by `llc` on this host (LLVM 23 AMDGPU).
 
     Differs from every prior AMD WMMA slice (gfx11 / RDNA 4), all `llc`-verified:
       * **K is doubled** — the f16/bf16 tile is 16×16×**32** (A/B = ``<16 x elem>``).
@@ -1045,17 +1045,16 @@ class LlcResult:
 
 
 def _find_llc() -> str | None:
-    # macOS Homebrew keg, the apt.llvm.org keg on Ubuntu (newest first),
-    # the versioned console script, then a bare ``llc`` on PATH.
+    # Canonical LLVM 23 locations only. A different AMDGPU backend would
+    # invalidate the repository's single-major build and proof contract.
     fixed = (
-        "/opt/homebrew/opt/llvm/bin/llc",
-        "/usr/lib/llvm-24/bin/llc",
+        "/opt/homebrew/opt/llvm@23/bin/llc",
         "/usr/lib/llvm-23/bin/llc",
     )
     for cand in fixed:
         if Path(cand).exists():
             return cand
-    for cand in ("llc-24", "llc-23", "llc"):
+    for cand in ("llc-23",):
         p = shutil.which(cand)
         if p:
             return p
@@ -1066,7 +1065,7 @@ def llc_assemble(ir: str, *, arch: str = "gfx1151") -> LlcResult:
     """Rung 3: lower the emitted LLVM IR to AMDGCN with ``llc -mcpu=<arch>`` and
     confirm a real ``v_wmma_*`` instruction appears.
 
-    **Runs on this host** (Homebrew LLVM 22 has the AMDGPU backend); skip-cleans
+    **Runs on this host** (Homebrew LLVM 23 has the AMDGPU backend); skip-cleans
     (``status="skipped"``) only if no ``llc`` is found."""
     if not _LLC_ARCH_RE.match(arch):
         raise ValueError(
@@ -1113,7 +1112,7 @@ def llc_object(ir: str, *, arch: str = "gfx1100") -> LlcObjectResult:
     object** with ``llc -filetype=obj -mcpu=<arch>`` and confirm it is an AMD GPU
     ELF (``EM_AMDGPU``) — the plan's "compiles A to a real object" gate.
 
-    Runs on this host (LLVM 22 AMDGPU backend); skip-cleans only if no ``llc``."""
+    Runs on this host (LLVM 23 AMDGPU backend); skip-cleans only if no ``llc``."""
     if not _LLC_ARCH_RE.match(arch):
         raise ValueError(
             f"invalid arch {arch!r} — must match {_LLC_ARCH_RE.pattern} (e.g. gfx1100)")

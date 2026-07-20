@@ -1285,7 +1285,7 @@ def _lower_rocm_op(op: TileOp) -> list[TargetOp]:
             "argument_layout": "device_offsets[E+1]",
             "dispatches": 1,
         })]
-    if op.op_name == "tessera.attn.msa_kv_outer_sparse" or source == "tessera.msa_sparse_attention":
+    if op.op_name == "tessera_attn.msa_kv_outer_sparse" or source == "tessera.msa_sparse_attention":
         # MSA KV-outer sparse — the ROCm IR-visible mirror of the CUDA
         # `msa_kv_outer_sparse` contract. Unlike NVIDIA's `artifact_only`
         # cuda_kernel, ROCm has a REAL executing lane: `rocm_sparse_attn_compiled`
@@ -1305,7 +1305,7 @@ def _lower_rocm_op(op: TileOp) -> list[TargetOp]:
             "tile_kv": int(op.attrs.get("tile_kv", 128)),
             "kv_traversal": "kv_outer",
         })]
-    if source == "tessera.flash_attn" or op.op_name.startswith("tessera.attn."):
+    if source == "tessera.flash_attn" or op.op_name.startswith("tessera_attn."):
         return [TargetOp("tessera.target.diagnostic", {
             **base,
             "target": "rocm",
@@ -1349,7 +1349,7 @@ def _lower_cpu_op(op: TileOp) -> list[TargetOp]:
         return []
     source = str(op.attrs.get("source", _source_from_tile_op(op)))
     base = _base_attrs(op)
-    if op.op_name == "tessera.attn.msa_kv_outer_sparse" or source == "tessera.msa_sparse_attention":
+    if op.op_name == "tessera_attn.msa_kv_outer_sparse" or source == "tessera.msa_sparse_attention":
         # MSA KV-outer sparse — the x86 IR-visible mirror of the CUDA
         # `msa_kv_outer_sparse` contract, parity with the ROCm
         # (`tessera_rocm.msa_block_sparse`) and NVIDIA (`cuda_kernel`) mirrors.
@@ -1524,7 +1524,7 @@ def _lower_nvidia_op(op: TileOp, *, target_kind: str) -> list[TargetOp]:
             }),
             TargetOp("tessera_nvidia.mbarrier", {"ordinal": base["ordinal"], "arch": arch, "scope": "cta"}),
         ]
-    if op.op_name == "tessera.attn.msa_kv_outer_sparse" or source == "tessera.msa_sparse_attention":
+    if op.op_name == "tessera_attn.msa_kv_outer_sparse" or source == "tessera.msa_sparse_attention":
         return [TargetOp("tessera_nvidia.cuda_kernel", {
             **base,
             "arch": arch,
@@ -1583,7 +1583,7 @@ def _lower_nvidia_op(op: TileOp, *, target_kind: str) -> list[TargetOp]:
             "latent_space": op.attrs.get("latent_space", "continuous"),
             **preserved,
         })]
-    kernel = "flash_attn_contract" if source == "tessera.flash_attn" or op.op_name.startswith("tessera.attn.") else "elementwise_contract"
+    kernel = "flash_attn_contract" if source == "tessera.flash_attn" or op.op_name.startswith("tessera_attn.") else "elementwise_contract"
     return [TargetOp("tessera_nvidia.cuda_kernel", {**base, "arch": arch, "kernel": kernel, "status": "artifact_only"})]
 
 
@@ -1929,9 +1929,9 @@ def _copy_target_op(op: TargetOp) -> TargetOp:
 def _source_from_tile_op(op: TileOp) -> str:
     if op.op_name == "tile.mma":
         return "tessera.matmul"
-    if op.op_name == "tessera.attn.msa_kv_outer_sparse":
+    if op.op_name == "tessera_attn.msa_kv_outer_sparse":
         return "tessera.msa_sparse_attention"
-    if op.op_name.startswith("tessera.attn."):
+    if op.op_name.startswith("tessera_attn."):
         return "tessera.flash_attn"
     if op.op_name.startswith("tile."):
         return "tessera." + op.op_name.removeprefix("tile.")

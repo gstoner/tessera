@@ -16,6 +16,10 @@ if(NOT MLIR_FOUND)
   include(TableGen)
   include(AddMLIR)
 endif()
+if(NOT DEFINED MLIR_VERSION_MAJOR OR NOT MLIR_VERSION_MAJOR EQUAL 23)
+  message(FATAL_ERROR
+    "Tessera Apple requires MLIR 23.x exactly; found ${MLIR_PACKAGE_VERSION}")
+endif()
 
 # ------------------------------------------------------------------
 # Tablegen: dialect + op declarations / definitions.
@@ -140,4 +144,3 @@ endif()
 target_include_directories(TesseraAppleRuntime PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/runtime
 )
-

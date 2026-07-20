@@ -11,7 +11,7 @@
 func.func @scalar_m_masks_bad_l(%acc: tensor<64x64xf32>, %m: f32, %l: tensor<32xf32>)
     -> (tensor<64x64xf32>, f32) {
   // expected-error @+1 {{running_l length must match acc tile_q}}
-  %out, %lse = "tessera.attn.lse_accumulate"(%acc, %m, %l)
+  %out, %lse = "tessera_attn.lse_accumulate"(%acc, %m, %l)
       : (tensor<64x64xf32>, f32, tensor<32xf32>) -> (tensor<64x64xf32>, f32)
   return %out, %lse : tensor<64x64xf32>, f32
 }
@@ -23,7 +23,7 @@ func.func @scalar_m_masks_bad_l(%acc: tensor<64x64xf32>, %m: f32, %l: tensor<32x
 func.func @scalar_m_masks_bad_lse(%acc: tensor<64x64xf32>, %m: f32, %l: tensor<64xf32>)
     -> (tensor<64x64xf32>, tensor<32xf32>) {
   // expected-error @+1 {{lse length must match acc tile_q}}
-  %out, %lse = "tessera.attn.lse_accumulate"(%acc, %m, %l)
+  %out, %lse = "tessera_attn.lse_accumulate"(%acc, %m, %l)
       : (tensor<64x64xf32>, f32, tensor<64xf32>) -> (tensor<64x64xf32>, tensor<32xf32>)
   return %out, %lse : tensor<64x64xf32>, tensor<32xf32>
 }
@@ -35,7 +35,7 @@ func.func @scalar_m_masks_bad_lse(%acc: tensor<64x64xf32>, %m: f32, %l: tensor<6
 func.func @rank1_stats_element_type_mismatch(%acc: tensor<64x64xf32>, %m: tensor<64xf32>, %l: tensor<64xf16>)
     -> (tensor<64x64xf32>, f32) {
   // expected-error @+1 {{running_m/running_l element types must match}}
-  %out, %lse = "tessera.attn.lse_accumulate"(%acc, %m, %l)
+  %out, %lse = "tessera_attn.lse_accumulate"(%acc, %m, %l)
       : (tensor<64x64xf32>, tensor<64xf32>, tensor<64xf16>) -> (tensor<64x64xf32>, f32)
   return %out, %lse : tensor<64x64xf32>, f32
 }
@@ -46,7 +46,7 @@ func.func @rank1_stats_element_type_mismatch(%acc: tensor<64x64xf32>, %m: tensor
 // emits in the reduced-loop form, and must verify clean.
 func.func @all_scalar_stats_ok(%acc: tensor<64x64xf32>, %m: f32, %l: f32)
     -> (tensor<64x64xf32>, f32) {
-  %out, %lse = "tessera.attn.lse_accumulate"(%acc, %m, %l)
+  %out, %lse = "tessera_attn.lse_accumulate"(%acc, %m, %l)
       : (tensor<64x64xf32>, f32, f32) -> (tensor<64x64xf32>, f32)
   return %out, %lse : tensor<64x64xf32>, f32
 }
@@ -57,7 +57,7 @@ func.func @all_scalar_stats_ok(%acc: tensor<64x64xf32>, %m: f32, %l: f32)
 // the acc tile_q [64] verifies clean.
 func.func @mixed_scalar_and_rank1_ok(%acc: tensor<64x64xf32>, %m: f32, %l: tensor<64xf32>)
     -> (tensor<64x64xf32>, tensor<64xf32>) {
-  %out, %lse = "tessera.attn.lse_accumulate"(%acc, %m, %l)
+  %out, %lse = "tessera_attn.lse_accumulate"(%acc, %m, %l)
       : (tensor<64x64xf32>, f32, tensor<64xf32>) -> (tensor<64x64xf32>, tensor<64xf32>)
   return %out, %lse : tensor<64x64xf32>, tensor<64xf32>
 }

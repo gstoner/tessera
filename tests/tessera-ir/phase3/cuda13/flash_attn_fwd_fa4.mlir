@@ -15,7 +15,7 @@ module attributes {tessera.target = "nvidia_sm90"} {
       %K : memref<1x32x1024x128xbf16, 1>,
       %V : memref<1x32x1024x128xbf16, 1>,
       %O : memref<1x32x1024x128xbf16, 1>) {
-    "tessera.attn.flash_fwd"(%Q, %K, %V, %O) {
+    "tessera_attn.flash_fwd"(%Q, %K, %V, %O) {
       tile_q = 128 : i64,
       tile_kv = 128 : i64,
       head_dim = 128 : i64,
@@ -31,7 +31,7 @@ module attributes {tessera.target = "nvidia_sm90"} {
   }
 }
 
-// CHECK: tessera.attn.flash_fwd
+// CHECK: tessera_attn.flash_fwd
 // CHECK-SAME: tile_q = 128
 // CHECK-SAME: tile_kv = 128
 // CHECK-SAME: pipeline_stages = 2

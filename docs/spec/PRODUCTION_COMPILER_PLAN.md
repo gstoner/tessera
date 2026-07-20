@@ -317,7 +317,7 @@ last_updated: 2026-06-05
 >   greedy driver, whose region-simplification would DCE unrelated result-less
 >   artifact ops like an unlowered `tile.cholesky`) wired into the
 >   `tessera-lower-to-apple_gpu` pipeline + registered standalone. Builds clean
->   under MLIR 22; lit fixture `tests/tessera-ir/phase8/apple_gpu_control_for.mlir`
+>   under MLIR 23; lit fixture `tests/tessera-ir/phase8/apple_gpu_control_for.mlir`
 >   (phase8 lit 55 PASS / 7 UNSUPPORTED / 0 FAIL); `verifier_coverage` dashboard
 >   regenerated. So `@jit`-emitted IR (not just the Python `GraphFn`) can now carry
 >   a control-flow op that lowers through the Apple pipeline. MLIR-driven execution

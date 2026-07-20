@@ -7,7 +7,7 @@ Thank you for your interest in contributing to Tessera!
 ### Prerequisites
 - Python 3.8+
 - CUDA 11.8+ (optional)
-- LLVM/MLIR 21+ (Homebrew `llvm@21` on macOS)
+- LLVM/MLIR 23.x exactly (Homebrew `llvm@23` on macOS)
 - CMake 3.20+
 
 ### Setup Instructions
@@ -19,11 +19,11 @@ cd tessera
 # Install dependencies
 pip install -r requirements.txt
 
-# Configure the C++/MLIR build with Homebrew LLVM/MLIR 21 on macOS
+# Configure the C++/MLIR build with Homebrew LLVM/MLIR 23 on macOS
 cmake -S . -B build \
-  -DCMAKE_PREFIX_PATH=/opt/homebrew/opt/llvm@21 \
-  -DLLVM_DIR=/opt/homebrew/opt/llvm@21/lib/cmake/llvm \
-  -DMLIR_DIR=/opt/homebrew/opt/llvm@21/lib/cmake/mlir
+  -DCMAKE_PREFIX_PATH=/opt/homebrew/opt/llvm@23 \
+  -DLLVM_DIR=/opt/homebrew/opt/llvm@23/lib/cmake/llvm \
+  -DMLIR_DIR=/opt/homebrew/opt/llvm@23/lib/cmake/mlir
 
 # Build the project
 cmake --build build

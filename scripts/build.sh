@@ -27,25 +27,25 @@ else
     jobs="4"
 fi
 
-# --- Locate LLVM/MLIR 22 -----------------------------------------------------
+# --- Locate LLVM/MLIR 23 -----------------------------------------------------
 # find_package(LLVM CONFIG) needs a hint on most setups. Resolve a prefix from
 # (1) an explicit LLVM_DIR/LLVM_PREFIX env, (2) Homebrew (macOS), (3) the
-# apt.llvm.org keg at /usr/lib/llvm-NN (Ubuntu, newest major first), or
+# apt.llvm.org LLVM 23 prefix at /usr/lib/llvm-23 (Ubuntu), or
 # (4) llvm-config on PATH.
 llvm_dir="${LLVM_DIR:-}"
 mlir_dir="${MLIR_DIR:-}"
 if [[ -z "${llvm_dir}" ]]; then
     llvm_prefix="${LLVM_PREFIX:-}"
     if [[ -z "${llvm_prefix}" ]] && command -v brew >/dev/null 2>&1; then
-        llvm_prefix="$(brew --prefix llvm 2>/dev/null || true)"
+        llvm_prefix="$(brew --prefix llvm@23 2>/dev/null || true)"
     fi
     if [[ -z "${llvm_prefix}" ]]; then
-        for d in /usr/lib/llvm-24 /usr/lib/llvm-23 /usr/lib/llvm-22; do
-            [[ -d "${d}/lib/cmake/llvm" ]] && { llvm_prefix="${d}"; break; }
-        done
+        d=/usr/lib/llvm-23
+        [[ -d "${d}/lib/cmake/llvm" ]] && llvm_prefix="${d}"
     fi
     if [[ -z "${llvm_prefix}" ]] && command -v llvm-config >/dev/null 2>&1; then
-        llvm_prefix="$(llvm-config --prefix)"
+        llvm_major="$(llvm-config --version | cut -d. -f1)"
+        [[ "${llvm_major}" == "23" ]] && llvm_prefix="$(llvm-config --prefix)"
     fi
     if [[ -n "${llvm_prefix}" ]]; then
         llvm_dir="${llvm_prefix}/lib/cmake/llvm"

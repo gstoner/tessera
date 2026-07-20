@@ -71,9 +71,9 @@ def test_rows_are_consistent() -> None:
         if r.python_reference == "yes":
             assert "python_reference=python-unit-registry" in evidence
         if r.ir_adjoint != "none":
-            assert "ir_adjoint=llvm22-core" in evidence
+            assert "ir_adjoint=llvm23-core" in evidence
         if r.bwd_cpu_ir_oracle:
-            assert "bwd_cpu_ir_oracle=llvm22-core" in evidence
+            assert "bwd_cpu_ir_oracle=llvm23-core" in evidence
         for target in verified:
             assert any(item.startswith(f"device[{target}=") for item in evidence)
 

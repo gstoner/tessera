@@ -19,7 +19,7 @@ that executes was produced by the compiler's lowering pipeline.
 Division of labour: `tessera-opt` owns the Tessera-specific lowering
 (`--tessera-emit-rocdl`); the generic `gpu.module → hsaco` serialization
 (`convert-gpu-to-rocdl` finish, `rocdl-attach-target`, `gpu-module-to-binary`)
-rides the upstream `mlir-opt` (apt LLVM 22, a documented platform dependency).
+rides the upstream `mlir-opt` (apt LLVM 23, a documented platform dependency).
 In-process serialization (no mlir-opt shell-out, for the runtime launch path) is
 a later-stage concern; Stage I proves the offline compile chain.
 
@@ -53,7 +53,7 @@ _KERNELS = {
 def _find_mlir_opt():
     if env := os.environ.get("TESSERA_MLIR_OPT"):
         return env if Path(env).is_file() else None
-    for c in ("/usr/lib/llvm-23/bin/mlir-opt", "/opt/homebrew/opt/llvm/bin/mlir-opt"):
+    for c in ("/usr/lib/llvm-23/bin/mlir-opt", "/opt/homebrew/opt/llvm@23/bin/mlir-opt"):
         if Path(c).is_file():
             return c
     return shutil.which("mlir-opt")

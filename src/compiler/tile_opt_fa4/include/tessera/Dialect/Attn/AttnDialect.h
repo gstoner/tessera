@@ -13,7 +13,7 @@
 //
 // Prior to V7 the dialect class was only reachable from inside
 // `AttnOps.cpp` — `tessera-opt` could not load it, which is why the
-// two `tessera.attn.scaled_dot_product` lit fixtures
+// two `tessera_attn.scaled_dot_product` lit fixtures
 // (`flash_attn_full.mlir`, `tile_ir_lowering.mlir`) carried
 // `// XFAIL: *` and the V6c verifier could not be exercised
 // end-to-end.  V7 closes that gap.
@@ -44,7 +44,7 @@ namespace attn {
 
 /// Insert the FA-4 attention dialect into a DialectRegistry. Call from
 /// `tessera-opt` and any other tool that needs to parse/verify the
-/// `tessera.attn.*` ops.
+/// `tessera_attn.*` ops.
 ///
 /// Sprint V7 (2026-05-22) — public registration entry; mirrors
 /// `tessera::apple::registerAppleDialect()`.

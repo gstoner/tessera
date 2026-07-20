@@ -7,7 +7,7 @@
 - Warp‑specialized pipeline with explicit roles (`load`, `mma`, `softmax`, `correction`, `epilogue`) and a persistent scheduler policy.
 - Numerics policy for fast softmax (`exp=poly3`, `rescale_threshold`).
 - Blackwell TMEM memory space + `tcgen05.mma` op with `cta_group` control.
-- LSE carry ops: `tessera.attn.lse.save/load` to bridge fwd/bwd.
+- LSE carry ops: `tessera_attn.lse.save/load` to bridge fwd/bwd.
 - Lowering that emits async tokens and (for SM_100) a PTX inline‑asm hook for `tcgen05`.
 
 ## 2) How to write the IR
@@ -23,7 +23,7 @@ tessera.schedule @fa4 {
 }
 tessera.numerics.softmax "poly3", 2.0e-3
 %acc = "tessera.tile.mma.tcgen05"(%q, %k -> %buf, 2)
-%lse = "tessera.attn.lse.save"(%acc)
+%lse = "tessera_attn.lse.save"(%acc)
 ```
 
 **Rules enforced by verifiers**

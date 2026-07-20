@@ -3,7 +3,7 @@
 // Test: ResilienceRestartPass marks the module + functions with resilience
 // metadata and inserts tessera_sr.restore_hook / save_hook ABI annotations.
 //
-// 2026-06: un-XFAIL'd.  Value-semantics tensor matmul (MLIR-22 verifier) +
+// 2026-06: un-XFAIL'd.  Value-semantics tensor matmul (MLIR-23 verifier) +
 // --allow-unregistered-dialect for the tessera_sr.* annotation markers.
 
 // CHECK: tessera_sr.restart_policy

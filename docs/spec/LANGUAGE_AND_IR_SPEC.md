@@ -263,7 +263,7 @@ tile.wait_async {stage = 0}
 %tok = tile.mbarrier.arrive_expect_tx %bar {bytes = 16384, semantics = "release", scope = "block"}
 %ok = tile.mbarrier.try_wait %bar, %tok
 %mm = tile.mma %a, %b, %c {accum = "fp32"}
-tessera.attn.online_softmax %scores {policy = "safe"}
+tessera_attn.online_softmax %scores {policy = "safe"}
 tessera.queue.create {queue_id = 0, depth = 2}
 tessera.queue.push {queue_id = 0, stage = 0}
 tessera.queue.pop {queue_id = 0, stage = 0}

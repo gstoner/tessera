@@ -26,9 +26,7 @@ import os, shutil, subprocess, lit.formats
 # Common Homebrew / system LLVM install locations to probe when
 # the binary isn't on PATH. Pinned to MLIR 23.
 _LLVM_BIN_HINTS = (
-    "/opt/homebrew/opt/llvm/bin",
     "/opt/homebrew/opt/llvm@23/bin",
-    "/usr/local/opt/llvm/bin",
     "/usr/local/opt/llvm@23/bin",
     "/opt/rocm/core/lib/llvm/bin",
     "/usr/lib/llvm-23/bin",

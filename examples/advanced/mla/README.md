@@ -45,7 +45,7 @@ From the repository root:
 PYTHONPATH=python /Users/gregorystoner/venv/bin/python \
   examples/advanced/mla/tests/smoke_random.py
 
-PATH="$PWD/build/tools/tessera-opt:/opt/homebrew/Cellar/llvm@21/21.1.8/bin:$PATH" \
+PATH="$PWD/build/tools/tessera-opt:/opt/homebrew/opt/llvm@23/bin:$PATH" \
   tessera-opt examples/advanced/mla/ir/flash_mla_tiny.mlir >/tmp/flash_mla_tiny.mlir
 ```
 

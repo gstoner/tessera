@@ -455,7 +455,7 @@ def _msa_kv_outer_sparse(op: IROp, ordinal: int) -> ScheduleOp:
         "schedule.attn.kv_outer_sparse",
         {
             **attrs,
-            "target_op": "tessera.attn.msa_kv_outer_sparse",
+            "target_op": "tessera_attn.msa_kv_outer_sparse",
             "block_ids_layout": "B,Hkv,Sq,top_k",
             "block_size": block_size,
             "top_k": top_k,

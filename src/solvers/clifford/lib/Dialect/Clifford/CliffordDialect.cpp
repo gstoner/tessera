@@ -5,7 +5,7 @@
 using namespace mlir;
 using namespace tessera::clifford;
 
-// Generated dialect-defs must be at file scope (MLIR 22): the generated
+// Generated dialect-defs must be at file scope (MLIR 23): the generated
 // code references `mlir::detail::TypeIDResolver<...>` which requires the
 // `mlir::detail::` qualifier resolve from file scope.
 #include "CliffordDialect.cpp.inc"

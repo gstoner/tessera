@@ -52,6 +52,7 @@ from typing import Any, Mapping, Optional
 from tessera.compiler import pipeline_gates as _pg
 from tessera.compiler.driver import (
     CompileArtifactBundle,
+    canonical_compile_options,
     compile_graph_module as _compile_graph_module,
 )
 from tessera.compiler.graph_ir import GraphIRModule
@@ -1152,12 +1153,16 @@ def canonical_compile(
     existing surfaces. Audit recommendation C's whole point: one place to
     look for the answer.
     """
+    resolved_options = canonical_compile_options(
+        module, target=target, options=options,
+    )
+
     bundle = _compile_graph_module(
         module,
         source_origin=source_origin,
         target=target,
         cpu_tile=cpu_tile,
-        options=options or {},
+        options=resolved_options,
         enable_tool_validation=enable_tool_validation,
     )
     return _result_from_bundle(

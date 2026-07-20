@@ -36,7 +36,7 @@ Layer 2 — Schedule IR  (schedule.mesh.* dialect)
      │  x86:  [TilingPass → TileToX86Pass]
      │  GPU:  [TileIRLoweringPass → WarpSpecializationPass → AsyncCopyLoweringPass]
      ▼
-Layer 3 — Tile IR      (tile.* + tessera.attn.* + tessera.queue.*)
+Layer 3 — Tile IR      (tile.* + tessera_attn.* + tessera.queue.*)
      │  GPU:  [NVWGMMALoweringPass → NVTMADescriptorPass → NVFlashAttnKernelEmitter]
      │  x86:  (produced directly by TileToX86Pass as func.call stubs)
      ▼
@@ -162,7 +162,7 @@ warps, fragments, shared memory, transaction barriers, and MMA instructions.
 All tensor ranks must be known and all symbolic dimensions resolved. Produced
 by `TileIRLoweringPass` for the GPU path.
 
-**Dialects:** `tile.*`, `tessera.attn.*`, `tessera.queue.*`
+**Dialects:** `tile.*`, `tessera_attn.*`, `tessera.queue.*`
 
 **Key ops:**
 
@@ -184,10 +184,10 @@ tile.async_copy %A_global, %A_shared {stage = 0, vector = 16}
            {m = 64, n = 256, k = 32, accum = "fp32"}
 
 // FA-4 online softmax ops (Flash Attention 2 algorithm)
-%sdp  = tessera.attn.scaled_dot_product %Q_frag, %K_frag
+%sdp  = tessera_attn.scaled_dot_product %Q_frag, %K_frag
           {scale = 0.125, causal = true}
-%max  = tessera.attn.online_softmax %sdp {axis = -1}
-%lse  = tessera.attn.lse_accumulate %max, %lse_prev
+%max  = tessera_attn.online_softmax %sdp {axis = -1}
+%lse  = tessera_attn.lse_accumulate %max, %lse_prev
 ```
 
 **Warp roles (produced by WarpSpecializationPass):**
@@ -220,7 +220,7 @@ tessera.schedule.warp {role = "consumer", id = 1} {
 
 | Pass | Role |
 |------|------|
-| `TileIRLoweringPass` | `schedule.mesh.region { tessera.flash_attn }` → `tile.*` + `tessera.attn.*` |
+| `TileIRLoweringPass` | `schedule.mesh.region { tessera.flash_attn }` → `tile.*` + `tessera_attn.*` |
 | `WarpSpecializationPass` | Assigns producer/consumer roles; inserts `tessera.queue.*` barriers |
 | `AsyncCopyLoweringPass` | `tile.async_copy` → TMA descriptor ops (SM_90+) or `cp.async` |
 
@@ -314,7 +314,7 @@ All pointers are address-space-qualified global pointers. Scalar uniforms are
 |----------|--------------|----------------|
 | Python/textual DSL → Graph IR | Decorated function or canonical DSL source | `tessera.*` ops with effect attrs, shape/dtype/layout metadata, diagnostics |
 | Graph IR → Schedule IR | Verified graph object; optional mesh and schedule directives | `schedule.mesh.define`, `schedule.mesh.region`, `schedule.pipeline.region`, `schedule.stage`, `schedule.yield` |
-| Schedule IR → Tile IR | Verified schedule object; movement plans explicit | `tile.*`, `tessera.attn.*`, `tessera.queue.*` |
+| Schedule IR → Tile IR | Verified schedule object; movement plans explicit | `tile.*`, `tessera_attn.*`, `tessera.queue.*` |
 | Tile IR → Target IR | Verified tile object and target selection | Backend artifacts; Apple/ROCm are object-backed in Python, other targets vary by backend |
 
 ---

@@ -74,7 +74,7 @@ Milestone sections below may mention context, but closure should be tracked here
 | ID | Status | Area | Open item / closure evidence | Close condition / acceptance |
 |----|--------|------|------------------------------|------------------------------|
 | O1 | Open | Attention kernels | Fused MSL attention kernels for MLA absorb / DSA block-sparse paths remain open; current Apple GPU support is composed over existing matmul lanes. | Single fused Apple GPU kernel path lands with parity vs numpy/reference and a perf ratchet that beats the composed path on representative scaled configs. |
-| O2 | Open | MiniMax-M3 MSA backend | Native NVIDIA CUDA/H800/Blackwell KV-outer sparse MSA kernel is still artifact-only. Current Target IR intentionally emits `status = "artifact_only"`. | `tessera.attn.msa_kv_outer_sparse` lowers to a native executable backend kernel with dense-equivalence oracle, decode/prefill coverage, and target-specific lit/runtime gates. |
+| O2 | Open | MiniMax-M3 MSA backend | Native NVIDIA CUDA/H800/Blackwell KV-outer sparse MSA kernel is still artifact-only. Current Target IR intentionally emits `status = "artifact_only"`. | `tessera_attn.msa_kv_outer_sparse` lowers to a native executable backend kernel with dense-equivalence oracle, decode/prefill coverage, and target-specific lit/runtime gates. |
 | O3 | Closed | Full text checkpoint materialization | `load_text_runtime_weights(_from_safetensors)` maps full scaled text-tower HF tensor names into typed `ModelWeights`; `test_full_scaled_text_safetensors_materialize_runtime_weights` covers realistic sharded HF-style fixtures and selected runtime layout parity. | Full text-tower tensor-name map loads at least one realistic sharded HF-style fixture into typed runtime weights; selected layer outputs match the synthetic/reference loader layout expectations. |
 | O4 | Closed | Tokenizer parity | `HFTokenizerAdapter` wraps `tokenizers.Tokenizer`, preserves image/video specials and chat templates, and `test_hf_tokenizer_roundtrips_specials_and_chat_template` checks token IDs against upstream tokenizer output. | HF tokenizer path can round-trip fixture prompts, special image/video tokens, and chat templates with token IDs matching upstream tokenizer output. |
 | O5 | Closed | HF processor fixture parity | `test_processor_fixture_reproduces_pixels_and_video_frame_sampling` imports an HF-style processor fixture and verifies resize/rescale/normalize plus deterministic frame sampling against exact expected arrays. | `processor_config.json` / image processor fixtures reproduce resize/rescale/normalize/frame-sampling outputs within a defined numeric tolerance. |
@@ -295,7 +295,7 @@ The attention pillars already have catalog anchors (`mla_decode_fused`,
   backend worklist contract and bounds-checked.
 - **Backend artifact path**: Graph IR `tessera.msa_sparse_attention` lowers to
   `schedule.attn.kv_outer_sparse`, then Tile IR
-  `tessera.attn.msa_kv_outer_sparse`, then NVIDIA Target IR
+  `tessera_attn.msa_kv_outer_sparse`, then NVIDIA Target IR
   `kernel = "msa_kv_outer_sparse"` with `status = "artifact_only"`,
   `block_ids_layout = "B,Hkv,Sq,top_k"`, `gqa_group_size`, `tile_q`, `tile_kv`,
   `mode`, and `kv_traversal = "kv_outer"`.
@@ -659,7 +659,7 @@ MoE/MTP composition into the hybrid stack (`stdlib.moe` exists; wiring is additi
 (`TesseraOps.cpp`) — `tessera.selective_ssm` is now a genuine Graph IR op
 (rank-checked: rank-3 x / shape-equal delta / matching b,c / A rank-1|2 / optional
 `gate` shape-equal x / `init` state rank-3). `tessera-opt` rebuilds clean (MLIR
-22.1.6); lit fixture `tests/tessera-ir/model_class/selective_ssm.mlir` passes
+23.0.0); lit fixture `tests/tessera-ir/model_class/selective_ssm.mlir` passes
 (model_class sweep 5/5). The **drift is closed**: the coverage registry's
 `graph_ir_lowering="registered"` for `selective_ssm` is now backed by a real op
 (comment corrected in `primitive_coverage.py`). The chunked-parallel SSD lowering

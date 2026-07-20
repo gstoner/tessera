@@ -41,7 +41,7 @@ ecosystems independently converged on.
 | Apple7 (M1 Max) | 8×8 simdgroup_matrix | f16/bf16; FP8/FP4/MX = **macOS-27.0 toolchain-gated**, not hardware |
 | gfx1151 (RDNA 3.5) | 16×16×16 | f16/bf16/int8/int4 — **no FP8** |
 | gfx1200 (RDNA 4) | 16×16×16 + 16×16×32 | + **FP8/BF8** + SWMMAC sparse — **no FP4** |
-| gfx1250/1251 (v2 ABI) | 16×16×**32** + fp8 16×16×64/128 | f16/bf16 (**native `bfloat`**) + FP8/BF8; **K doubled**; mods/reuse immediate operands. `llc`-grounded (LLVM 22), distinct from RDNA 4. |
+| gfx1250/1251 (v2 ABI) | 16×16×**32** + fp8 16×16×64/128 | f16/bf16 (**native `bfloat`**) + FP8/BF8; **K doubled**; mods/reuse immediate operands. `llc`-grounded (LLVM 23), distinct from RDNA 4. |
 | sm_120 (Blackwell consumer) | 16×16×16 (mma.sync) | + **FP8 + FP4** (no tcgen05/TMEM/wgmma — those are datacenter sm_100) |
 
 So NVIDIA consumer goes one precision tier lower (FP4) than AMD consumer (FP8-only); Apple has the
@@ -67,9 +67,9 @@ assemble (skip-clean when absent), rungs 6–7 = launch + execute-and-compare on
 |---|---|---|---|---|---|
 | **NVIDIA** | `ptx_emit.py` (sm_90a WGMMA PTX) | `validate_ptx_structure` | `ptxas_assemble` | skip (no ptxas) | landed |
 | **Apple** | `msl_gemm_emit.py` (simdgroup_matrix + steel) | `validate_{msl,steel}_gemm_structure` | `metal_compile` | skip (no metal) | landed |
-| **AMD** | `rocdl_emit.py` (`llvm.amdgcn.wmma` LLVM-IR) | `validate_wmma_llvmir_structure` | `llc -mcpu=gfx1151` | **RUNS** (Homebrew LLVM 22) | **landed** |
+| **AMD** | `rocdl_emit.py` (`llvm.amdgcn.wmma` LLVM-IR) | `validate_wmma_llvmir_structure` | `llc -mcpu=gfx1151` | **RUNS** (Homebrew LLVM 23) | **landed** |
 
-**AMD is special: its rung 3 actually runs on the dev Mac.** Homebrew LLVM 22 carries the AMDGPU
+**AMD is special: its rung 3 actually runs on the dev Mac.** Homebrew LLVM 23 carries the AMDGPU
 backend, so `llc -mcpu=gfx1151` lowers the emitted `llvm.amdgcn.wmma.*` to a real `v_wmma_*` *here* —
 3 of the AMD tests are genuine rung-3 (not skip-clean). This already paid off: the host-free validator
 passed bf16 emitting `<16 x bfloat>`, but **rung-3 `llc` rejected it** — the RDNA bf16 wmma intrinsic

@@ -162,7 +162,7 @@ def test_flash_attention_apple_gpu_gets_msl_runtime_contract():
 
     assert "tessera.flash_attn" in flash.ir_text()
     assert "schedule.pipeline.region" in flash.schedule_ir
-    assert "tessera.attn.online_softmax" in flash.tile_ir
+    assert "tessera_attn.online_softmax" in flash.tile_ir
     assert "tessera_apple.gpu.msl_kernel" in flash.target_ir
     assert 'entry_point = "flash_attn_f32"' in flash.target_ir
     assert "kernel void flash_attn_f32" in flash.target_ir

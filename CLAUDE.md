@@ -259,11 +259,11 @@ Heavy SuperBench / benchmark-contract tests are marked `slow` and excluded by de
 Everything needed for build / lint / typecheck / lit / unit-test is on Homebrew
 on this Mac under `/opt/homebrew/bin/`: `python3` (3.14.5), `ninja`, `cmake`,
 `pytest`, `mypy`, `ruff`, `black`, `isort`, `flake8`, `lit`. **LLVM/MLIR 23**
-is `/opt/homebrew/opt/llvm/` (`brew install llvm`). Run the Python flow directly
+is `/opt/homebrew/opt/llvm@23/` (`brew install llvm@23`). Run the Python flow directly
 with `python3 -m …` — no venv. `numpy`, `scipy`, `torch`, `transformers`,
 `ml_dtypes` are installed under `/opt/homebrew/lib/python3.14/site-packages/`.
 
-When pointing CMake at LLVM, use `/opt/homebrew/opt/llvm/lib/cmake/{llvm,mlir}`
+When pointing CMake at LLVM, use `/opt/homebrew/opt/llvm@23/lib/cmake/{llvm,mlir}`
 (NOT an older versioned keg that stale `build/` caches reference).
 
 ### Ubuntu 24.04 (x86 + AMD ROCm 7.14)
@@ -287,8 +287,8 @@ for the full cross-platform matrix.
 ```bash
 # Canonical local configure — CPU + Apple backend against Homebrew LLVM/MLIR 23 (Ninja)
 cmake -S . -B build -G Ninja \
-  -DLLVM_DIR=/opt/homebrew/opt/llvm/lib/cmake/llvm \
-  -DMLIR_DIR=/opt/homebrew/opt/llvm/lib/cmake/mlir \
+  -DLLVM_DIR=/opt/homebrew/opt/llvm@23/lib/cmake/llvm \
+  -DMLIR_DIR=/opt/homebrew/opt/llvm@23/lib/cmake/mlir \
   -DTESSERA_CPU_ONLY=ON -DTESSERA_BUILD_APPLE_BACKEND=ON
 ninja -C build tessera-opt        # ~150 targets, ~1-2 min cold
 
@@ -296,7 +296,7 @@ ninja -C build tessera-opt        # ~150 targets, ~1-2 min cold
 ninja -C build tessera-opt
 ./build/tools/tessera-opt/tessera-opt tests/tessera-ir/phase8/apple_gpu_lowering.mlir \
   -tessera-lower-to-apple_gpu --allow-unregistered-dialect | \
-  /opt/homebrew/opt/llvm/bin/FileCheck tests/tessera-ir/phase8/apple_gpu_lowering.mlir
+  /opt/homebrew/opt/llvm@23/bin/FileCheck tests/tessera-ir/phase8/apple_gpu_lowering.mlir
 
 # Other backend toggles (additive)
 cmake .. -DTESSERA_ENABLE_CUDA=ON -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda   # CUDA

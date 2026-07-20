@@ -20,7 +20,7 @@ From the repository root:
 PYTHONPATH=python /Users/gregorystoner/venv/bin/python \
   examples/advanced/Fast_dLLM_v2/tests/smoke_random.py
 
-PATH="$PWD/build/tools/tessera-opt:/opt/homebrew/Cellar/llvm@21/21.1.8/bin:$PATH" \
+PATH="$PWD/build/tools/tessera-opt:/opt/homebrew/opt/llvm@23/bin:$PATH" \
   tessera-opt examples/advanced/Fast_dLLM_v2/ir/fast_dllm_ops.mlir >/tmp/fast_dllm_graph.mlir
 ```
 

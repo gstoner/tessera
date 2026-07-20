@@ -18,7 +18,7 @@ plan_state: landing
 ## Bring-up status — box landed (2026-06-22)
 
 The Strix Halo box is here (Ubuntu 24.04 LTS under **WSL2**, ROCm **7.2.4**,
-LLVM/MLIR **22.1.8** from apt.llvm.org). Findings that update this plan:
+LLVM/MLIR **23.0.0** from apt.llvm.org). Findings that update this plan:
 
 > **Update (2026-06-23): the WSL transient is resolved — `rocminfo` now reports
 > the native `Name: gfx1151`.** AMD's WSL enablement landed, so the device
@@ -48,7 +48,7 @@ LLVM/MLIR **22.1.8** from apt.llvm.org). Findings that update this plan:
   `rocminfo` enumerates the GPU **without** any `HSA_OVERRIDE_GFX_VERSION`;
   `hipcc --offload-arch=gfx1100` compiles a WMMA kernel (374 lines of AMDGCN
   `.s`); the ROCm backend lit suite is **11/11**; `tessera-opt` +
-  `tessera-rocm-opt` build clean against LLVM/MLIR 22.1.8. So **Stages A and B
+  `tessera-rocm-opt` build clean against LLVM/MLIR 23. So **Stages A and B
   are fully unblocked**, and the box presence unblocks C/D.
 - **Build-state findings (verified in-tree):**
   - The `--tessera-emit-rocdl` pipeline (linalg→scf.parallel→gpu→ROCDL) scaffold
@@ -91,7 +91,7 @@ On the box this now runs for real (not skip-clean):
 - **rung 3 object:** new `llc_object()` lowers the GEMM to a real relocatable
   **AMD GPU ELF** (`EM_AMDGPU`) — the plan's "compiles A to a real object" gate,
   confirmed for gfx1100/gfx1151 (`test_rung3_gemm_assembles_to_amdgpu_elf_object`).
-- `_find_llc()` now finds the apt.llvm.org `llc` (`/usr/lib/llvm-22/bin/llc`), so
+- `_find_llc()` now finds the apt.llvm.org `llc` (`/usr/lib/llvm-23/bin/llc`), so
   the rung-3 tests run by default on the box. `tests/unit/test_rocdl_emit.py`:
   **96 passed, 0 skipped.**
 
@@ -390,7 +390,7 @@ kernel that ran was produced by lowering, not hand-written.
 
 Fixture: `tests/unit/test_rocm_mlir_to_hsaco.py` (skip-clean without tools/GPU).
 Division: `tessera-opt` owns the Tessera lowering; the generic `gpu→hsaco`
-serialization rides the platform `mlir-opt` (apt LLVM 22). Scope: **scalar
+serialization rides the platform `mlir-opt` (apt LLVM 23). Scope: **scalar
 element-wise only** — proves the pipeline reaches silicon (smallest closed loop).
 Real WMMA through the full stack (`tessera_rocm.wmma` → real `amdgcn.wmma`, not
 the current contract *marker*) is Stage J; a full GEMM through the stack validated
@@ -438,7 +438,7 @@ regardless of build flags. CMake already auto-adds `-mavx512bf16` / `-mavx512vnn
 - RNE-only floats. **wave32.** A is column-major in VGPRs; B/C/D row-major; lanes 0-15
   replicated into 16-31. Back-to-back dependent WMMA needs a `V_NOP` if D overlaps next A/B.
 - rocdl/LLVM intrinsic surface: `llvm.amdgcn.wmma.f32.16x16x16.f16` (and `.bf16`, `.f16.f16`,
-  `.bf16.bf16`, `.i32.16x16x16.iu8`, `.iu4`). Present in LLVM 16+; fully in the box's LLVM 22.
+  `.bf16.bf16`, `.i32.16x16x16.iu8`, `.iu4`). Present in LLVM 16+; fully in the box's LLVM 23.
 
 ### Target model — grounded (this work, 2026-06-17)
 

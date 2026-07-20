@@ -206,7 +206,7 @@ def test_lowering_spec_documents_python_object_model_path_and_debug_dumps():
 
 def test_backend_mvp_source_contracts_are_not_placeholders():
     tiling = TILING_INTERFACE.read_text(encoding="utf-8")
-    # B3 v2 (2026-05-20): the file ships the real MLIR 22
+    # B3 v2 (2026-05-20): the file ships the real MLIR 23
     # ``TilingInterface`` implementation for MatmulOp + Conv2DNHWCOp.
     # Lock the canonical v2 sentinels — they prove (a) all four
     # methods are defined on each op, (b) the v1 annotation
@@ -214,11 +214,11 @@ def test_backend_mvp_source_contracts_are_not_placeholders():
     # (c) the build flag defaults to ON.
     for term in (
         "matmul_conservative_ranked_tensor",   # v1 driver-observable annotation
-        "MatmulOp::getTiledImplementation",    # MLIR-21 sig on MatmulOp
+        "MatmulOp::getTiledImplementation",    # MLIR-23 sig on MatmulOp
         "MatmulOp::getLoopIteratorTypes",
         "Conv2DNHWCOp::getTiledImplementation",
         "Conv2DNHWCOp::getLoopIteratorTypes",
-        "FailureOr<TilingResult>",              # MLIR-21 return type signature
+        "FailureOr<TilingResult>",              # MLIR-23 return type signature
         "TESSERA_ENABLE_TILING_INTERFACE",      # build guard
     ):
         assert term in tiling, (
@@ -243,8 +243,8 @@ def test_backend_mvp_source_contracts_are_not_placeholders():
         encoding="utf-8"
     )
     for term in (
-        "explicit method-list",                  # describes the MLIR-21 ODS fix
-        "FailureOr<TilingResult>",               # locks the MLIR-21 signature
+        "explicit method-list",                  # describes the MLIR-23 ODS fix
+        "FailureOr<TilingResult>",               # locks the MLIR-23 signature
         "matmul_conservative_ranked_tensor",     # locks the v1 sentinel chain
         "stride/pad",                            # documents the conv2d v3 deferred work
     ):

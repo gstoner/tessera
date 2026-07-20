@@ -141,7 +141,7 @@ NVIDIA/ROCm backend-kernel axis. With the Strix Halo (gfx1151) + Blackwell
 
 - **AMD — rung 4 (ASSEMBLES), on this Mac.** `rocdl_emit` already emits
   `llvm.amdgcn.wmma` IR for gfx1100 / **gfx1151** / RDNA4 / gfx1250 + a full
-  K-loop GEMM; the LLVM 22 AMDGPU backend means `llc -mcpu=gfx1151` lowers it to
+  K-loop GEMM; the LLVM 23 AMDGPU backend means `llc -mcpu=gfx1151` lowers it to
   real `v_wmma_f32_16x16x16_f16 …` AMDGCN **here, no GPU**. New
   `evaluator.rocm_emission_verdict` scores this at rung 4 (parallel to
   `nvidia_emission_verdict`), provenance-honest (never claims execution / rungs

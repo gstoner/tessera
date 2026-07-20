@@ -10,6 +10,12 @@ option(TESSERA_ROCM_ENABLE_CK "Enable Composable Kernels integration" OFF)
 
 find_package(LLVM REQUIRED CONFIG)
 find_package(MLIR REQUIRED CONFIG)
+if(NOT LLVM_VERSION_MAJOR EQUAL 23 OR
+   NOT DEFINED MLIR_VERSION_MAJOR OR NOT MLIR_VERSION_MAJOR EQUAL 23)
+  message(FATAL_ERROR
+    "Tessera ROCm requires LLVM/MLIR 23.x exactly; found LLVM "
+    "${LLVM_PACKAGE_VERSION}, MLIR ${MLIR_PACKAGE_VERSION}")
+endif()
 
 list(APPEND CMAKE_MODULE_PATH "${MLIR_CMAKE_DIR}")
 include(TableGen)

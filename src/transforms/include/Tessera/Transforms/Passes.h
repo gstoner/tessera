@@ -76,7 +76,7 @@ std::unique_ptr<mlir::Pass> createTesseraToLinalgPass();
 
 // TileIRLoweringPass — lowers tessera.flash_attn / tessera.matmul (inside
 // schedule.mesh.region) to FA-4 Tile IR ops: tile.async_copy, tile.mma,
-// tessera.attn.scaled_dot_product, tessera.attn.online_softmax, etc.
+// tessera_attn.scaled_dot_product, tessera_attn.online_softmax, etc.
 // Options:
 //   --tile-q   Q tile rows (default 64)
 //   --tile-kv  KV tile cols (default 64)

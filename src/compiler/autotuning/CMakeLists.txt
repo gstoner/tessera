@@ -3,6 +3,10 @@ cmake_minimum_required(VERSION 3.20)
 project(TesseraAutotunePass LANGUAGES CXX)
 
 find_package(MLIR REQUIRED CONFIG)
+if(NOT DEFINED MLIR_VERSION_MAJOR OR NOT MLIR_VERSION_MAJOR EQUAL 23)
+  message(FATAL_ERROR
+    "Tessera autotuning requires MLIR 23.x exactly; found ${MLIR_PACKAGE_VERSION}")
+endif()
 message(STATUS "Found MLIR: ${MLIR_DIR}")
 
 set(CMAKE_CXX_STANDARD 17 CACHE STRING "C++ standard required by MLIR" FORCE)

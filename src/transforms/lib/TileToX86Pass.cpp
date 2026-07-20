@@ -32,11 +32,13 @@
 //                 emit the AVX-512 call.
 
 #include "Tessera/Common/Lowering.h"
+#include "Tessera/Dialect/Tile/TileDialect.h"
 #include "Tessera/Transforms/Passes.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/PatternMatch.h"
@@ -44,6 +46,7 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/Casting.h"
 
 using namespace mlir;
@@ -358,7 +361,8 @@ struct TileToX86PassImpl
 
   void getDependentDialects(DialectRegistry &registry) const override {
     registry.insert<arith::ArithDialect, bufferization::BufferizationDialect,
-                    func::FuncDialect, memref::MemRefDialect>();
+                    func::FuncDialect, LLVM::LLVMDialect,
+                    memref::MemRefDialect>();
   }
 
   void runOnOperation() override {
@@ -375,7 +379,346 @@ struct TileToX86PassImpl
     patterns.add<LowerKVCacheToX86>(&getContext(), "tessera.kv_cache.read");
     FrozenRewritePatternSet frozenPatterns(std::move(patterns));
     if (failed(applyPatternsGreedily(getOperation(), frozenPatterns)))
-      signalPassFailure();
+      return signalPassFailure();
+
+    // X86-E2E-1 launch envelopes already carry raw pointers and dimensions.
+    // Adapt them to the stable x86 shared-library ABI here so Python never
+    // synthesizes backend Target IR or rediscovers a symbol signature.
+    SmallVector<Operation *> launchEnvelopes;
+    getOperation().walk([&](Operation *op) {
+      StringRef name = op->getName().getStringRef();
+      if (name == "tile.matmul_kernel" || name == "tile.softmax_kernel" ||
+          name == "tile.reduce_kernel" || name == "tile.attention_kernel" ||
+          name == "tile.elementwise_kernel")
+        launchEnvelopes.push_back(op);
+    });
+    ModuleOp module = getOperation();
+    for (Operation *op : launchEnvelopes) {
+      OpBuilder builder(op);
+      Location loc = op->getLoc();
+      MLIRContext *ctx = op->getContext();
+      Type ptrTy = LLVM::LLVMPointerType::get(ctx);
+      Type i64Ty = builder.getI64Type();
+      Type i32Ty = builder.getI32Type();
+      Type f32Ty = builder.getF32Type();
+      if (op->getName().getStringRef() == "tile.elementwise_kernel") {
+        auto family = op->getAttrOfType<StringAttr>("family");
+        auto kind = op->getAttrOfType<StringAttr>("kind");
+        auto storage = op->getAttrOfType<StringAttr>("storage");
+        auto outputStorage = op->getAttrOfType<StringAttr>("output_storage");
+        if (!family || !kind || !storage || !outputStorage) {
+          op->emitError("X86-E2E-2 elementwise requires an explicit family/kind/storage/output contract");
+          return signalPassFailure();
+        }
+        int32_t kindValue = -1;
+        StringRef symbol;
+        if (family.getValue() == "unary") {
+          kindValue = llvm::StringSwitch<int32_t>(kind.getValue())
+              .Case("sqrt", 0).Case("rsqrt", 1).Case("reciprocal", 2)
+              .Case("abs", 3).Case("sign", 5).Case("floor", 6)
+              .Case("ceil", 7).Case("trunc", 8).Case("round", 9)
+              .Default(-1);
+          symbol = "tessera_x86_avx512_unary_f32";
+        } else if (family.getValue() == "binary") {
+          kindValue = llvm::StringSwitch<int32_t>(kind.getValue())
+              .Case("sub", 0).Case("div", 1).Case("maximum", 2)
+              .Case("minimum", 3).Case("add", 4).Case("mul", 5)
+              .Case("mod", 6).Case("floor_div", 7).Default(-1);
+          symbol = "tessera_x86_avx512_binary_f32";
+        } else if (family.getValue() == "predicate") {
+          kindValue = llvm::StringSwitch<int32_t>(kind.getValue())
+              .Case("isnan", 0).Case("isinf", 1).Case("isfinite", 2)
+              .Default(-1);
+          symbol = "tessera_x86_avx512_predicate_f32";
+        } else if (family.getValue() == "compare") {
+          kindValue = llvm::StringSwitch<int32_t>(kind.getValue())
+              .Case("eq", 0).Case("ne", 1).Case("lt", 2)
+              .Case("le", 3).Case("gt", 4).Case("ge", 5).Default(-1);
+          symbol = "tessera_x86_avx512_compare_f32";
+        } else if (family.getValue() == "logical") {
+          kindValue = llvm::StringSwitch<int32_t>(kind.getValue())
+              .Case("and", 0).Case("or", 1).Case("xor", 2)
+              .Case("not", 3).Default(-1);
+          symbol = "tessera_x86_avx512_logical_i8";
+        } else if (family.getValue() == "bitwise") {
+          kindValue = llvm::StringSwitch<int32_t>(kind.getValue())
+              .Case("and", 0).Case("or", 1).Case("xor", 2)
+              .Case("not", 3).Case("popcount", 4).Default(-1);
+          symbol = "tessera_x86_avx512_bitwise_i32";
+        } else if (family.getValue() == "where") {
+          kindValue = kind.getValue() == "where" ? 0 : -1;
+          symbol = "tessera_x86_avx512_where_f32";
+        } else if (family.getValue() == "transcendental") {
+          kindValue = llvm::StringSwitch<int32_t>(kind.getValue())
+              .Case("exp", 0).Case("log", 1).Case("tanh", 2)
+              .Case("sigmoid", 3).Case("silu", 4).Case("gelu", 5)
+              .Case("erf", 6).Case("softplus", 7).Case("expm1", 8)
+              .Case("log1p", 9).Case("cos", 10).Case("tan", 11)
+              .Case("sinh", 12).Case("cosh", 13).Case("asin", 14)
+              .Case("acos", 15).Case("atan", 16).Case("erfc", 17)
+              .Case("sin", 18).Case("lgamma", 19).Case("digamma", 20)
+              .Default(-1);
+          symbol = "tessera_x86_avx512_transcendental_f32";
+        } else if (family.getValue() == "binary_math") {
+          if (kind.getValue() == "pow") {
+            kindValue = 0;
+            symbol = "tessera_x86_avx512_pow_f32";
+          } else if (kind.getValue() == "silu_mul") {
+            kindValue = 1;
+            symbol = "tessera_x86_avx512_silu_mul_f32";
+          }
+        }
+        if (kindValue < 0 || symbol.empty()) {
+          op->emitError("X86-E2E-2 elementwise family/kind has no stable ABI mapping");
+          return signalPassFailure();
+        }
+        Value kindConstant = builder.create<arith::ConstantIntOp>(loc, kindValue, 32);
+        if (family.getValue() == "where") {
+          ensureExternalDecl(
+              module, symbol,
+              FunctionType::get(ctx, {ptrTy, ptrTy, ptrTy, i64Ty, ptrTy}, {}));
+          builder.create<func::CallOp>(
+              loc, symbol, TypeRange{},
+              ValueRange{op->getOperand(0), op->getOperand(1),
+                         op->getOperand(2), op->getOperand(4),
+                         op->getOperand(3)});
+          op->erase();
+          continue;
+        }
+        if (family.getValue() == "binary_math") {
+          ensureExternalDecl(
+              module, symbol,
+              FunctionType::get(ctx, {ptrTy, ptrTy, i64Ty, ptrTy}, {}));
+          builder.create<func::CallOp>(
+              loc, symbol, TypeRange{},
+              ValueRange{op->getOperand(0), op->getOperand(1),
+                         op->getOperand(3), op->getOperand(2)});
+          op->erase();
+          continue;
+        }
+        bool fixedBinaryABI = family.getValue() == "binary" ||
+                              family.getValue() == "compare" ||
+                              family.getValue() == "logical" ||
+                              family.getValue() == "bitwise";
+        if (fixedBinaryABI) {
+          bool hasB = op->getNumOperands() == 4;
+          Value b = hasB ? op->getOperand(1)
+                         : builder.create<LLVM::ZeroOp>(loc, ptrTy).getResult();
+          unsigned outputIndex = hasB ? 2 : 1;
+          unsigned nIndex = hasB ? 3 : 2;
+          ensureExternalDecl(
+              module, symbol,
+              FunctionType::get(ctx, {ptrTy, ptrTy, i64Ty, ptrTy, i32Ty}, {}));
+          builder.create<func::CallOp>(
+              loc, symbol, TypeRange{},
+              ValueRange{op->getOperand(0), b, op->getOperand(nIndex),
+                         op->getOperand(outputIndex), kindConstant});
+        } else {
+          ensureExternalDecl(
+              module, symbol,
+              FunctionType::get(ctx, {ptrTy, i64Ty, ptrTy, i32Ty}, {}));
+          builder.create<func::CallOp>(
+              loc, symbol, TypeRange{},
+              ValueRange{op->getOperand(0), op->getOperand(2),
+                         op->getOperand(1), kindConstant});
+        }
+        op->erase();
+        continue;
+      }
+      if (op->getName().getStringRef() == "tile.matmul_kernel") {
+        auto mma = op->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma");
+        auto epilogue =
+            op->getAttrOfType<tessera::tile::TileEpilogueAttr>("epilogue");
+        auto residual = op->getAttrOfType<BoolAttr>("residual");
+        if (op->getNumOperands() != 6 || !mma || !epilogue || epilogue.getBias() ||
+            epilogue.getActivation() != "none" ||
+            (residual && residual.getValue())) {
+          op->emitError("x86 matmul requires a supported plain A/B/acc/output contract and A/B/D/M/N/K");
+          return signalPassFailure();
+        }
+        StringRef aType = mma.getAType(), bType = mma.getBType();
+        StringRef accType = mma.getAccType(), outputType = epilogue.getOutputType();
+        if (aType == "f32" && bType == "f32" && accType == "f32" && outputType == "f32") {
+          StringRef symbol = "tessera_x86_avx512_gemm_f32";
+          ensureExternalDecl(module, symbol,
+                             FunctionType::get(ctx, {ptrTy, ptrTy, i64Ty, i64Ty,
+                                                     i64Ty, ptrTy}, {}));
+          builder.create<func::CallOp>(
+              loc, symbol, TypeRange{},
+              ValueRange{op->getOperand(0), op->getOperand(1),
+                         op->getOperand(3), op->getOperand(4),
+                         op->getOperand(5), op->getOperand(2)});
+        } else if (aType == "f64" && bType == "f64" && accType == "f64" && outputType == "f64") {
+          StringRef symbol = "tessera_x86_avx512_gemm_f64";
+          ensureExternalDecl(module, symbol,
+                             FunctionType::get(ctx, {ptrTy, ptrTy, i64Ty, i64Ty,
+                                                     i64Ty, ptrTy}, {}));
+          builder.create<func::CallOp>(
+              loc, symbol, TypeRange{},
+              ValueRange{op->getOperand(0), op->getOperand(1),
+                         op->getOperand(3), op->getOperand(4),
+                         op->getOperand(5), op->getOperand(2)});
+        } else if ((aType == "bf16" && bType == "bf16" && accType == "f32" && outputType == "f32") ||
+                   (aType == "u8" && bType == "i8" && accType == "i32" && outputType == "i32")) {
+          Value m32 = builder.create<arith::TruncIOp>(loc, i32Ty, op->getOperand(3));
+          Value n32 = builder.create<arith::TruncIOp>(loc, i32Ty, op->getOperand(4));
+          Value k32 = builder.create<arith::TruncIOp>(loc, i32Ty, op->getOperand(5));
+          if (aType == "bf16") {
+            StringRef symbol = "tessera_x86_avx512_gemm_bf16";
+            Value beta = builder.create<arith::ConstantFloatOp>(
+                loc, cast<FloatType>(f32Ty), APFloat(0.0f));
+            ensureExternalDecl(module, symbol,
+                               FunctionType::get(ctx, {ptrTy, ptrTy, ptrTy, i32Ty,
+                                                       i32Ty, i32Ty, f32Ty}, {}));
+            builder.create<func::CallOp>(
+                loc, symbol, TypeRange{},
+                ValueRange{op->getOperand(0), op->getOperand(1), op->getOperand(2),
+                           m32, n32, k32, beta});
+          } else {
+            StringRef symbol = "tessera_x86_avx512_vnni_gemm_u8s8_s32";
+            Value beta = builder.create<arith::ConstantIntOp>(loc, 0, 32);
+            ensureExternalDecl(module, symbol,
+                               FunctionType::get(ctx, {ptrTy, ptrTy, ptrTy, i32Ty,
+                                                       i32Ty, i32Ty, i32Ty}, {}));
+            builder.create<func::CallOp>(
+                loc, symbol, TypeRange{},
+                ValueRange{op->getOperand(0), op->getOperand(1), op->getOperand(2),
+                           m32, n32, k32, beta});
+          }
+        } else {
+          op->emitError("x86 matmul dtype contract is not supported");
+          return signalPassFailure();
+        }
+        op->erase();
+        continue;
+      }
+      if (op->getName().getStringRef() == "tile.softmax_kernel") {
+        auto storage = op->getAttrOfType<StringAttr>("storage");
+        auto accum = op->getAttrOfType<StringAttr>("accum");
+        auto axis = op->getAttrOfType<IntegerAttr>("axis");
+        if (op->getNumOperands() != 4 || !storage || storage.getValue() != "f32" ||
+            !accum || accum.getValue() != "f32" || !axis || axis.getInt() != -1) {
+          op->emitError("X86-E2E-1 softmax requires f32 storage/accumulation, axis=-1, and X/O/Rows/K");
+          return signalPassFailure();
+        }
+        StringRef symbol = "tessera_x86_avx512_softmax_f32";
+        ensureExternalDecl(module, symbol,
+                           FunctionType::get(ctx, {ptrTy, i64Ty, i64Ty, ptrTy}, {}));
+        builder.create<func::CallOp>(
+            loc, symbol, TypeRange{},
+            ValueRange{op->getOperand(0), op->getOperand(2),
+                       op->getOperand(3), op->getOperand(1)});
+        op->erase();
+        continue;
+      }
+
+      if (op->getName().getStringRef() == "tile.attention_kernel") {
+        auto storage = op->getAttrOfType<StringAttr>("storage");
+        auto accum = op->getAttrOfType<StringAttr>("accum");
+        auto scale = op->getAttrOfType<FloatAttr>("scale");
+        auto causal = op->getAttrOfType<BoolAttr>("causal");
+        auto bias = op->getAttrOfType<BoolAttr>("bias");
+        auto left = op->getAttrOfType<IntegerAttr>("window_left");
+        auto right = op->getAttrOfType<IntegerAttr>("window_right");
+        auto softcap = op->getAttrOfType<FloatAttr>("softcap");
+        auto dropout = op->getAttrOfType<FloatAttr>("dropout_p");
+        bool hasBias = bias && bias.getValue();
+        unsigned pointerCount = 4 + unsigned(hasBias);
+        if (op->getNumOperands() != 11 + unsigned(hasBias) || !storage ||
+            storage.getValue() != "f32" || !accum ||
+            accum.getValue() != "f32" || !scale || !causal || !bias ||
+            !left || !right || left.getInt() != right.getInt() || !softcap ||
+            !dropout || dropout.getValueAsDouble() != 0.0) {
+          op->emitError("X86-E2E-1 attention requires f32 MHA, symmetric windows, and dropout_p=0");
+          return signalPassFailure();
+        }
+        Value bh = builder.create<arith::MulIOp>(
+            loc, op->getOperand(pointerCount), op->getOperand(pointerCount + 1));
+        Value scaleValue = builder.create<arith::ConstantFloatOp>(
+            loc, cast<FloatType>(f32Ty),
+            APFloat(float(scale.getValueAsDouble())));
+        Value causalValue = builder.create<arith::ConstantIntOp>(
+            loc, causal.getValue() ? 1 : 0, 32);
+        bool extended = hasBias || left.getInt() >= 0 ||
+                        softcap.getValueAsDouble() > 0.0;
+        if (!extended) {
+          StringRef symbol = "tessera_x86_flash_attn_f32";
+          ensureExternalDecl(
+              module, symbol,
+              FunctionType::get(ctx, {ptrTy, ptrTy, ptrTy, i64Ty, i64Ty,
+                                      i64Ty, i64Ty, i64Ty, f32Ty, i32Ty, ptrTy},
+                                {}));
+          builder.create<func::CallOp>(
+              loc, symbol, TypeRange{},
+              ValueRange{op->getOperand(0), op->getOperand(1),
+                         op->getOperand(2), bh, op->getOperand(pointerCount + 3),
+                         op->getOperand(pointerCount + 4),
+                         op->getOperand(pointerCount + 5),
+                         op->getOperand(pointerCount + 6), scaleValue,
+                         causalValue, op->getOperand(pointerCount - 1)});
+        } else {
+          StringRef symbol = "tessera_x86_flash_attn_ext_f32";
+          ensureExternalDecl(
+              module, symbol,
+              FunctionType::get(ctx, {ptrTy, ptrTy, ptrTy, ptrTy, i64Ty,
+                                      i64Ty, i64Ty, i64Ty, i64Ty, i64Ty,
+                                      f32Ty, i32Ty, i64Ty, f32Ty, ptrTy}, {}));
+          Value biasPointer = hasBias
+              ? op->getOperand(3)
+              : builder.create<LLVM::ZeroOp>(loc, ptrTy).getResult();
+          Value biasStride = hasBias
+              ? builder.create<arith::MulIOp>(
+                    loc, op->getOperand(pointerCount + 3),
+                    op->getOperand(pointerCount + 4)).getResult()
+              : builder.create<arith::ConstantIntOp>(loc, 0, 64).getResult();
+          Value window = builder.create<arith::ConstantIntOp>(
+              loc, left.getInt() < 0 ? 0 : left.getInt(), 64);
+          Value softcapValue = builder.create<arith::ConstantFloatOp>(
+              loc, cast<FloatType>(f32Ty),
+              APFloat(float(softcap.getValueAsDouble())));
+          builder.create<func::CallOp>(
+              loc, symbol, TypeRange{},
+              ValueRange{op->getOperand(0), op->getOperand(1),
+                         op->getOperand(2), biasPointer, biasStride, bh,
+                         op->getOperand(pointerCount + 3),
+                         op->getOperand(pointerCount + 4),
+                         op->getOperand(pointerCount + 5),
+                         op->getOperand(pointerCount + 6), scaleValue,
+                         causalValue, window, softcapValue,
+                         op->getOperand(pointerCount - 1)});
+        }
+        op->erase();
+        continue;
+      }
+
+      auto storage = op->getAttrOfType<StringAttr>("storage");
+      auto accum = op->getAttrOfType<StringAttr>("accum");
+      auto kind = op->getAttrOfType<StringAttr>("kind");
+      auto innerIsOne = op->getAttrOfType<BoolAttr>("inner_is_one");
+      if (op->getNumOperands() != 5 || !storage || storage.getValue() != "f32" ||
+          !accum || accum.getValue() != "f32" || !kind || !innerIsOne ||
+          !innerIsOne.getValue()) {
+        op->emitError("X86-E2E-1 reduction requires f32 storage/accumulation, last-axis inner_is_one=true, and X/O/Outer/AxisExtent/Inner");
+        return signalPassFailure();
+      }
+      int32_t kindValue;
+      if (kind.getValue() == "sum") kindValue = 0;
+      else if (kind.getValue() == "max") kindValue = 1;
+      else if (kind.getValue() == "mean") kindValue = 2;
+      else {
+        op->emitError("X86-E2E-1 reduction kind must be sum|max|mean");
+        return signalPassFailure();
+      }
+      StringRef symbol = "tessera_x86_avx512_reduce_f32";
+      ensureExternalDecl(module, symbol,
+                         FunctionType::get(ctx, {ptrTy, i64Ty, i64Ty, ptrTy, i32Ty}, {}));
+      Value kindConstant = builder.create<arith::ConstantIntOp>(loc, kindValue, 32);
+      builder.create<func::CallOp>(
+          loc, symbol, TypeRange{},
+          ValueRange{op->getOperand(0), op->getOperand(2),
+                     op->getOperand(3), op->getOperand(1), kindConstant});
+      op->erase();
+    }
   }
 };
 

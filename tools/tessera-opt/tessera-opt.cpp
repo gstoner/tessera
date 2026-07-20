@@ -451,7 +451,7 @@ int main(int argc, char **argv) {
 
 #ifdef TESSERA_HAVE_FA4_ATTN
   // Sprint V7 (2026-05-22) — FA-4 attention dialect.  Unblocks the
-  // three `tessera.attn.scaled_dot_product` lit fixtures
+  // three `tessera_attn.scaled_dot_product` lit fixtures
   // (flash_attn_full.mlir, tile_ir_lowering.mlir, V6c) that were
   // XFAIL'd because tessera-opt could not load this dialect.
   tessera::attn::registerAttnDialect(registry);

@@ -53,10 +53,10 @@ Schedule IR  (schedule dialect — mesh.define, mesh.region, pipeline.region, st
     │                tessera.matmul → scf.for loops → func.call @tessera_x86_amx_gemm_bf16
     │
     └── [GPU path]  TileIRLoweringPass
-                    flash_attn → tile.async_copy + tessera.attn.* + tile.mma
+                    flash_attn → tile.async_copy + tessera_attn.* + tile.mma
     │
     ▼
-Tile IR  (tile.* ops + tessera.attn.* FA-4 ops + tessera.queue.* barriers)
+Tile IR  (tile.* ops + tessera_attn.* FA-4 ops + tessera.queue.* barriers)
     │
     ├── WarpSpecializationPass    (producer/consumer warp roles + queue barriers)
     ├── AsyncCopyLoweringPass     (tile.async_copy → tessera.tma.* or cp.async)
@@ -240,12 +240,12 @@ The FA-2 online softmax algorithm in Tile IR:
 Outer loop over Q tiles:
   init running_m = -inf, running_l = 0, acc_out = 0
   Inner loop over KV tiles:
-    %scores = tessera.attn.scaled_dot_product Q_tile, K_tile, scale
-    [%masked = tessera.attn.causal_mask %scores ...]      ← if causal=true
-    [%masked = tessera.attn.dropout_mask %masked ...]     ← if dropout_p > 0
-    %new_acc, %new_m, %new_l = tessera.attn.online_softmax %masked, ...
+    %scores = tessera_attn.scaled_dot_product Q_tile, K_tile, scale
+    [%masked = tessera_attn.causal_mask %scores ...]      ← if causal=true
+    [%masked = tessera_attn.dropout_mask %masked ...]     ← if dropout_p > 0
+    %new_acc, %new_m, %new_l = tessera_attn.online_softmax %masked, ...
   End inner loop
-  %output, %lse = tessera.attn.lse_accumulate %acc_out, %final_m, %final_l
+  %output, %lse = tessera_attn.lse_accumulate %acc_out, %final_m, %final_l
 ```
 
 Key design decisions:
@@ -257,7 +257,7 @@ Key design decisions:
 `WarpSpecializationPass` splits the kernel body into `tessera.schedule.warp {role="producer"}` and `role="consumer"` regions. This is a **structural separation** — the backend allocates separate register files and mbarrier slots per role.
 
 - **Producer** warps: run `tile.async_copy` + `tile.wait_async` (TMA prefetch)
-- **Consumer** warps: run `tessera.attn.*` compute ops + `tile.mma`
+- **Consumer** warps: run `tessera_attn.*` compute ops + `tile.mma`
 - `tessera.queue.push/pop` ops at the boundary express the handoff ordering
 
 Tile IR spec: `docs/spec/TARGET_IR_SPEC.md §3–5`.

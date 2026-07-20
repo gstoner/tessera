@@ -100,7 +100,7 @@ preserved while completing this queue:
 The project-wide compiler floor is now a matched LLVM/MLIR 23 toolchain. On the
 gfx1151 WSL host, the validated configuration uses upstream Ubuntu LLVM/MLIR
 23.0.0 for Tessera's C++ compiler and TheRock Core SDK 7.14 for HIP, HIPRTC,
-device libraries, and the HIP compiler. Mixing the former LLVM/MLIR 22 build
+device libraries, and the HIP compiler. Mixing the former LLVM/MLIR 23 build
 with TheRock's LLVM 23 `ocml.bc` was rejected after the reader reported an
 LLVM-bitcode attribute-version mismatch.
 
@@ -127,7 +127,7 @@ evidence and not evidence for any sibling architecture.
 
 | ID | State | Current outcome |
 |---|---|---|
-| LLVM23/ROCm 7.14 | complete on gfx1151 WSL | Clean build, 32/32 ROCm lit, 1280/1280 compiled correctness, and 21/21 valid performance ratchets pass; the combined sweep is 86/90 with four zero-event-only failures. |
+| LLVM23/ROCm 7.14 | complete on gfx1151 WSL | Clean build, 36/36 ROCm lit, 1280/1280 compiled correctness, and 21/21 valid performance ratchets pass; the combined sweep is 86/90 with four zero-event-only failures. |
 | ROCM-TILE-1 | complete on gfx1151 | Portable f16/bf16/int8/int4 fragments execute and compare on gfx1151. Other architectures are owned by ROCM-1 through ROCM-5. |
 | ROCM-9 | complete on gfx1151 | Non-identity paged-KV direct and gather routes execute, compare, and have a measured serving decision. |
 | ROCM-REPLAY-1 | complete on gfx1151 | Persistent state, flush/rollback, block submission, asynchronous ring, lifetime proof, and the wider performance matrix are committed. |
@@ -136,8 +136,9 @@ evidence and not evidence for any sibling architecture.
 | ROCM-1/2/3 | open, access-gated | P0 exact-device execution on gfx950, gfx1201, and gfx1250 is the active release frontier. |
 | ROCM-4a/4b | open, access-gated | P1 compatibility execution on gfx1200 and gfx942 follows the P0 packet. |
 | ROCM-5 | landing, exact-device closure open | Architecture-owned descriptors and cross-assembly exist; numerical and performance closure depends on ROCM-1 through ROCM-4b. |
-| ROCM-E2E-1 | queued, software-actionable | After the shared `E2E-SPINE-1/-2` contracts land, use softmax as the typed-directive pilot from frontend/Tile IR through the existing generator, ROCDL, HSACO packaging, and launch descriptor. |
-| ROCM-E2E-2 | queued | Move the remaining supported gfx1151 families through the typed image/launch seam after the pilot; retain runtime text synthesis until each lane has parity proof. |
+| ROCM-E2E-1 | complete on gfx1151 | The f16/f32 pilot lowers typed Tile IR to `tessera_rocm.softmax`, packages an ELF HSACO and descriptor, executes across the exact-device boundary/aligned/ragged matrix, rejects invalid contracts, retains driver-selected device-library plus cold/warm identity, and passes isolated device and end-to-end non-regression. |
+| ROCM-E2E-2 | complete on gfx1151 | Reduction covers f16/bf16/f32 input with f32 output and passes all paired gates. Direct f32/i32 paged-KV and MoE dispatch have typed artifact/descriptor, negative, exact-device, and retained-route evidence; both movement descriptors are measured non-winners, so production routes remain selected. |
+| ROCM-DTYPE-1 | landing on gfx1151 | The RDNA3.5 contract now totals every canonical and planned dtype across scalar/vector, WMMA input, accumulator, and Tessera readiness roles with archived-opcode evidence; registration gaps remain explicit. |
 
 ## Recommended open-work order
 
@@ -147,17 +148,203 @@ named exact device can satisfy an execution gate.
 
 | Order | ID | Work | Access state | Completion gate |
 |---:|---|---|---|---|
-| 1 | ROCM-E2E-1 | Land the typed softmax directive pilot | available on the gfx1151 WSL/compiler host | A canonical request lowers frontend/Tile IR to a typed ROCm directive, runs the existing generator and ROCDL path, returns HSACO plus a launch descriptor, launches on gfx1151, and matches the established oracle without runtime-authored directive text. |
-| 2 | ROCM-2 | Run the common P0 packet on Radeon AI PRO R9700 `gfx1201` | owner and reservation required | RDNA 4 WMMA-v2 f16/bf16 plus enabled FP8/integer forms assemble, launch, match aligned/ragged oracles, and record resources and timing. |
-| 3 | ROCM-1 | Run the common P0 packet on MI350-series `gfx950` | owner and reservation required | CDNA 4 matmul, flash attention, softmax, and GELU launch and compare; low-precision breadth advances only with physical-layout proof. |
-| 4 | ROCM-3 | Run the common P0 packet on MI455X `gfx1250` | owner and reservation required | The upstream-LLVM artifact joins to a launch/numerical proof; WMMA-v2 properties and fragment layout match the device. |
+| 1 | ROCM-2 | Run the common P0 packet on Radeon AI PRO R9700 `gfx1201` | owner and reservation required | RDNA 4 WMMA-v2 f16/bf16 plus enabled FP8/integer forms assemble, launch, match aligned/ragged oracles, and record resources and timing. |
+| 2 | ROCM-1 | Run the common P0 packet on MI350-series `gfx950` | owner and reservation required | CDNA 4 matmul, flash attention, softmax, and GELU launch and compare; low-precision breadth advances only with physical-layout proof. |
+| 3 | ROCM-3 | Run the common P0 packet on MI455X `gfx1250` | owner and reservation required | The upstream-LLVM artifact joins to a launch/numerical proof; WMMA-v2 properties and fragment layout match the device. |
 | 5 | ROCM-6 | Revalidate G6-A/B/C with valid paired device timing | bare-metal gfx1151 or repaired event timing required | Original correctness, resource, aligned/ragged, dtype, device-time, and E2E gates are rerun under LLVM/MLIR 23 + ROCm 7.14 before reaffirming or changing production. |
 | 6 | ROCM-8 | Measure copy versus mapped-host memory on bare-metal `gfx1151` | bare-metal owner and reservation required | Repeated kernel-only and end-to-end measurements establish a stable crossover without using WSL evidence. |
 | 7 | ROCM-4b | Retain compatibility proof on MI300X/MI325X `gfx942` | owner and reservation required | f16/bf16 MFMA plus retained matmul/attention/softmax/GELU paths launch and compare. |
 | 8 | ROCM-4a | Add Radeon RX 9000 `gfx1200` exact-device proof | owner and reservation required | Matmul launches and compares; unsupported forms reject stably. |
 | 9 | ROCM-5 | Close the architecture-owned fragment umbrella | depends on ROCM-1 through ROCM-4b | Every enabled family/dtype has exact-device packing, numerical, resource, and timing evidence, or an explicit unsupported/deferred state. |
 | 10 | ROCM-TEST-1 | Validate ROCm host-free compiler ownership | available on the ROCm build host | Build the declared ROCm compiler capability set, explicitly select or exclude foreign-backend compiler tests, and retain command, build flags, tool path, node IDs, and diagnostics; no CUDA/Apple-only build assumption blocks the ROCm lane. |
-| 11 | ROCM-E2E-2 | Expand the typed spine beyond the pilot | follows ROCM-E2E-1; exact-device proof per family | Each supported family consumes typed IR, produces the shared image/launch contract, and matches the incumbent route before runtime text synthesis is retired for that lane. |
+
+## ROCM-E2E-1: typed softmax compilation spine
+
+**Status: complete on `gfx1151` (2026-07-19).**
+
+The first slice consumes the shared `tile.softmax_kernel(X, O, Rows, K)`
+semantic envelope and emits `tessera_rocm.softmax` from the architecture-owned
+`lower-tile-to-rocm` pass. The canonical ROCm pipeline invokes the existing
+softmax generator after that adaptation; no other standalone ROCm generator
+was appended. Python supplies the typed Tile request and packages the resulting
+Target IR, ROCDL-produced ELF HSACO, ordered f16/f32 ABI, shape guards, gfx1151
+workgroup policy, and launch descriptor. The generic runtime validates that
+descriptor before the exact `rocm_gfx1151` hook allocates, submits, copies back,
+and cleans up the HIP resources.
+
+Host WSL validation used LLVM/MLIR 23 with the ROCm 7.14 build and a visible
+Radeon 8060S `gfx1151`. The focused lit fixture passed, the Python/registry
+slice passed 154 tests, real packaging produced a 5,808-byte ELF HSACO, and the
+expanded focused slice passed 24 tests. Eight exact descriptor launches cover
+f16/f32 at boundary `(1,1)`, aligned `(4,256)`, ragged `(3,17)`, and
+multi-stride `(2,257)` shapes and match the stable-softmax oracle. Host-free
+negatives reject unsupported dtype, dynamic shape, mismatched result, runtime
+dtype/shape binding, and scalar contracts before submission.
+
+AMD clang is authoritative for the `gfx1151` `--rocm-path` selection. The
+native image records content digests for OCML, OCKL,
+`oclc_unsafe_math_off`, `oclc_finite_only_off`,
+`oclc_wavefrontsize64_off`, `oclc_isa_version_1151`, and
+`oclc_abi_version_600` with `compiler_driver` link mode and no installation
+paths. Those records enter both cache and toolchain identity. An exact cold then
+warm package retained identical image, payload, and library identities. The
+legacy runtime-authored `rocm_softmax_compiled` path remains intact and no
+selector changed.
+
+The isolated serial performance gate is recorded in
+`benchmarks/baselines/rocm_gfx1151_e2e_softmax_comparison.json`. Nine
+alternating paired trials per row keep 100-launch HIP-event timing separate
+from allocation/copy-inclusive `runtime.launch` wall time. All eight f16/f32
+aligned, ragged, and multi-stride rows remain numerically correct with exact
+route parity. Compiler/retained resources match at 16 VGPR, 14 SGPR, 32 bytes
+LDS, zero private segment, and zero spills. Device speedups span
+0.981--1.008x and pass the 10% non-regression gate on every row.
+
+The first A/B run exposed that the retained `rocm_softmax_compiled` executor
+freed device buffers but did not unload its HIP module and leaked resources on
+several failures. That lifecycle defect is fixed before accepting comparison
+evidence. With both routes cleanup-complete, the first A/B run isolated the two
+fp16 misses to repeated deterministic identity work on the descriptor route:
+`RuntimeArtifact.artifact_hash` cost about 84.8 us, the image and descriptor
+digests about 22 us together, and required per-launch validation about 24 us.
+The immutable artifact, image, and descriptor identities are now memoized;
+contract validation still runs on every launch. The unchanged serial gate then
+passes all eight rows: device speedups span 0.981--1.008x and end-to-end
+speedups span 0.979--1.022x, including fp16 `(128,256)` at 1.009x and
+`(64,1024)` at 0.997x. Resources and numerical results remain identical.
+ROCM-E2E-1 is complete. The incumbent route and production selector remain
+unchanged; retiring runtime text synthesis is an explicit ROCM-E2E-2 route
+decision, not an implication of this measurement.
+
+Cross-backend sync `E2E-FROZEN-IDENTITY-CACHE-2026-07-19`: deterministic hashes
+for frozen runtime artifacts, native images, and launch descriptors are cached
+without changing their serialized values or validation rules. CUDA and Metal
+schema parity is validated; no sibling ABI, schedule, runtime route, timing
+claim, or selector changes.
+
+## ROCM-E2E-2: typed directive and generator breadth
+
+**Status: complete on `gfx1151` (2026-07-19).**
+
+The reduction breadth slices consume the already-shared
+`tile.reduce_kernel(X, O, Outer, AxisExtent, Inner)` carrier. ROCm lowering
+requires explicit f16/bf16/f32 storage, f32 accumulation/output, normalized
+axis, keepdims, sum/mean/max semantics, NaN propagation, and the portable
+serial schedule, then selects its own 256-thread workgroup-per-output
+implementation. The existing legacy four-argument row-reduction directive
+remains valid; only the typed carrier selects the five-argument
+`outer_axis_inner` ABI.
+
+Canonical packaging retains Tile IR and typed `tessera_rocm.reduce` Target IR,
+builds an ELF HSACO, records the driver-selected device-library identities, and
+emits shape guards plus `Outer/AxisExtent/Inner` scalars. The exact gfx1151 WSL
+host passes f16 sum on axis 0, bf16 mean on a middle axis with `keepdims`, and
+f32 max on the last axis against NumPy. The shared Tile verifier now admits
+bf16 reduction storage; NVIDIA keeps its backend-specific f16/f32 boundary and
+Apple mappings are unchanged.
+
+The isolated serial comparison is recorded in
+`benchmarks/baselines/rocm_gfx1151_e2e_reduce_comparison.json`. Nine alternating
+paired trials per row separate resident HIP-event timing from full
+`runtime.launch` wall time across f16/bf16/f32 sum/mean/max and axis-0/middle/
+last layouts. The kernel hoists arbitrary-axis base/stride calculations and
+specializes the last-axis case. All nine comparison rows pass: end-to-end
+speedups span 0.934--1.020x and the layout-equivalent last-axis device rows span
+0.935--1.011x. Device-event values for axis-0/middle rows remain diagnostic,
+not a promotion gate, because the incumbent performs an untimed host transpose
+before launching a contiguous row kernel while the typed route directly reads
+the original strided layout. Descriptor-minus-retained host overhead spans
+-0.041 through +0.155 ms. The selector and retained route remain unchanged.
+
+The next family consumes shared
+`tile.paged_kv_read_kernel(Pages, Table, O, P, LP, PageSize, H, D, Start,
+Tokens)`, lowers to typed `tessera_rocm.paged_kv_read`, emits a direct 256-thread
+f32 gather with an i32 page table, and packages the three-buffer/seven-scalar
+descriptor. The runtime validates shapes, range, dtypes, and every physical
+page index before submission. Exact gfx1151 execution matches a non-identity
+permuted-page oracle bit-for-bit at single-token, page-crossing, short-ragged,
+and full-capacity ranges. Static contract and pre-HIP negatives cover bounds,
+result shape, table dtype, and invalid physical pages. This adds no selector
+promotion and does not replace the existing ROCM-9 HIP movement route.
+
+The third family consumes shared `tile.moe_dispatch_kernel(X, Token, O, T, S,
+H)`, lowers to typed `tessera_rocm.moe_dispatch`, and generates a direct
+256-thread f32 gather from an i32 token-of-slot vector. Its three-buffer/
+three-scalar descriptor rejects out-of-range indices before HIP. Exact gfx1151
+execution is bit-exact at tiny `(1,1,1)`, ragged `(7,9,13)`, and wide
+`(17,5,257)` shapes.
+
+The final paired movement record is
+`benchmarks/baselines/rocm_gfx1151_e2e_movement_comparison.json`. Typed
+paged-KV is device-competitive at 0.960x but only 0.282x end-to-end versus the
+retained HIP route; typed MoE dispatch is 0.826x end-to-end versus the retained
+row gather. Both remain numerically exact. These measured non-winning results
+close the route disposition without weakening the 10% promotion threshold:
+ROCM-9 paged movement and the retained MoE transport stay selected, and no
+runtime-authored route is retired. Future attention, backward, ReplaySSM, or
+additional transport carriers are separately scoped breadth work rather than
+silently extending ROCM-E2E-2. The item is complete for its reduction plus two
+movement-family scope.
+
+Cross-backend sync `ROCM-E2E2-REDUCE-2026-07-19`: this slice consumes the
+existing shared reduction carrier and widens its storage verifier to bf16; the
+scalar schema and public op registry are unchanged. NVIDIA retains an explicit
+backend f16/f32 boundary, and Apple has no mapping change. The ROCm lowering,
+five-argument ABI, HSACO, measurements, and selector state transfer no sibling
+backend claim.
+
+Cross-backend sync `ROCM-E2E2-PAGED-KV-2026-07-19`: ROCm consumes the existing
+shared paged-KV carrier and public operation without changing either verifier
+or schema. The new ROCm target directive, gather schedule, HSACO ABI, runtime
+validation, and exact-device evidence are architecture-owned. NVIDIA's PTX
+mapping remains parity validated at the carrier boundary; Apple retains its
+independent Metal/MPS paged-cache routes.
+
+Cross-backend sync `ROCM-E2E2-MOE-DISPATCH-2026-07-19`: ROCm consumes the
+existing shared MoE dispatch carrier and public operation without changing
+their verifier, dtype registry, or scalar ABI. The ROCm directive, direct
+gather schedule, HSACO descriptor, pre-launch index validation, and gfx1151
+evidence are architecture-owned. NVIDIA and Apple retain their independently
+scheduled transport routes; no AMD timing, readiness, or selector claim
+transfers.
+
+## ROCM-DTYPE-1: gfx1151 datatype totality
+
+**Status: landing on `gfx1151` (2026-07-19).**
+
+`python/tessera/compiler/rocm_dtype_contract.py` separates ISA support from
+Tessera execution readiness. Every canonical and planned/gated dtype has one
+row; every positive architecture claim names an opcode present in the
+AMD-PDF-derived `rdna35/instructions.json`. The community RDNA3.5 Markdown is
+retained as a human-readable cross-check, not substituted for the checked-in
+JSON source and hash.
+
+| Format group | RDNA3.5 scalar/vector role | gfx1151 WMMA role | ROCm/LLVM state | Tessera target state |
+|---|---|---|---|---|
+| fp64 | native vector arithmetic and conversion | unsupported | available, focused validation open | unregistered |
+| fp32 | native | accumulator only | validated | ready |
+| fp16 | native | input; fp16/fp32 accumulator | validated | ready |
+| bf16 | packed dot/WMMA | input; bf16/fp32 accumulator | validated | ready |
+| int8 / uint8 | packed dot | IU8 input; int32 accumulator | int8 validated; uint8 validation open | int8 ready; uint8 planned-gated |
+| int4 / uint4 physical IU4 | packed dot | IU4 input; int32 accumulator | validated | canonical int4 planned-gated; no first-class uint4 spelling |
+| int16 / uint16 | packed/native vector arithmetic | unsupported | available, focused validation open | int16 unregistered; uint16 planned-gated |
+| int32 / uint32 | native vector arithmetic | int32 accumulator only | available, focused validation open | int32 unregistered; uint32 planned-gated |
+| int64 / uint64 | expanded instruction sequences | unsupported | available, focused validation open | int64 unregistered; uint64 planned-gated |
+| bool | compare/mask logic | unsupported | available, focused validation open | unregistered |
+| FP8/BF8, FP6, FP4, MX formats, NVFP4 | unsupported | unsupported | unsupported | not applicable or planned-gated negative |
+| complex formats | no native complex datatype | unsupported | no native datatype | planned-gated |
+
+The existing `ROCmTargetProfile.dtype_set` and target capability remain the
+registered executable storage set `{fp32, fp16, bf16, int8}` and are checked
+for exact equality with the new contract. Hardware support therefore cannot
+silently promote fp64, packed int4, unsigned, or accumulator-only types.
+
+Closure work is deliberately split: assess fp64 and int16/int32/int64 per-op
+Target IR/runtime registration; finish the first-class packed-int4 physical
+storage and signedness contract; retain named FP8/BF8 and smaller-float
+rejection on gfx1151. No shared dtype spelling, backend selector, or production
+state changes in this landing. Cross-backend sync
+`ROCM-DTYPE-TOTALITY-2026-07-19` is ROCm-owned.
 
 ## ROCM-TILE-1: portable Tile fragments
 
@@ -477,7 +664,7 @@ Evidence is recorded in
 ### Phase 0: rebaseline older kernels with the current compiler
 
 The 2026-07-14 exact-device survey reran the older compiler-generated GEMM and
-flash-attention ladders with ROCm 7.2 and LLVM 22. This changes the premise of
+flash-attention ladders with ROCm 7.2 and LLVM 23. This changes the premise of
 G6-A but not G6-B or G6-C.
 
 Generated f16 GEMM now reaches 12.23, 12.99, 23.51, and 26.29 TFLOP/s at
@@ -829,9 +1016,11 @@ contract with content-addressed LLVM-stage device-library provenance. ROCm must
 populate it from the matching clang/ROCm-driver-selected OCML, OCKL, and OCLC
 set under `--rocm-path`; it must not copy NVIDIA's explicit single-libdevice
 link rule or hand-assemble an OCLC set independently of architecture, wavefront,
-and math-mode flags. This is follow-up required under ROCM-E2E-1. The existing
-LLVM 23/TheRock 7.14 compatibility rule remains mandatory, and no gfx execution
-or selector state changes in the NVIDIA-owned landing.
+and math-mode flags. ROCM-E2E-1 now closes that follow-up for the gfx1151
+softmax pilot: AMD clang selects the seven records, their content digests enter
+cache/toolchain identity, and absolute paths stay out of the artifact. The
+existing LLVM 23/TheRock 7.14 compatibility rule remains mandatory, and no gfx
+execution or selector state changes in the NVIDIA-owned landing.
 
 Cross-backend sync `CUDA-MATH-CONTRACT-2026-07-19` makes the shared Tile softmax
 envelope state its exponential mode and FTZ behavior instead of deriving either
@@ -862,6 +1051,20 @@ DMMA route. ROCm records parity at the shared semantic layer only: AMD
 MFMA/WMMA lane maps, packed formats, code-object ABI, timings, and selectors do
 not inherit CUDA evidence. Existing ROCm f64 states still require exact-gfx
 proof.
+
+Cross-backend sync `X86-E2E1-NATIVE-CPU-2026-07-19` classifies shared native
+descriptor results for `cpu`, `x86`, `x86_amx`, and `x86_avx512` as
+`native_cpu` with CPU-wall timing rather than GPU-event timing. ROCm artifact,
+ABI, stream, event, HSACO, device-library, exact-gfx, and selector contracts are
+unchanged. The x86 pilot consumes existing Tile softmax/reduction carriers and
+adds no shared dtype, operation, or verifier state that ROCm must implement.
+
+Cross-backend sync `X86-E2E1-BREADTH-2026-07-19` consumes the already-shared
+matmul and attention launch carriers for x86 f32 GEMM and MHA descriptors.
+ROCm inherits no AVX-512 ABI, host schedule, timing, readiness, or selector
+state; its WMMA/MFMA and attention routes remain architecture-owned. The x86
+restriction to equal query/KV head counts and zero dropout is not a shared
+semantic restriction and changes no ROCm verifier or capability row.
 
 Do not schedule these without new evidence:
 
@@ -906,3 +1109,50 @@ coverage. Closure requires:
   gfx1151 proof;
 - generated target, runtime, and conformance dashboards agreeing with the
   checked-in evidence.
+
+Cross-backend sync `E2E-SPINE-2026-07-18` records the 2026-07-20 scoped x86
+selector retirement: eligible static X86-E2E-1 modules now use their canonical
+descriptor by default. ROCm parity is not applicable; no ROCm pipeline, HSACO
+ABI, schedule, dtype capability, or selector changes. X86-E2E-2 owns the
+remaining AVX-512 inventory and must reassess ROCm only when a shared contract
+changes.
+
+Cross-backend sync `X86-E2E2-ELEMENTWISE-2026-07-20` adds the internal shared
+`tile.elementwise_kernel` semantic carrier for f32 unary/binary and f32-to-bool
+predicate requests. ROCm parity is assessed at the carrier boundary only;
+AVX-512 ABIs, host schedules, CPU-wall evidence, and the 16K binary selector
+threshold transfer no RDNA instruction, HSACO ABI, exact-gfx evidence, runtime
+readiness, or selector claim. Existing ROCm elementwise routes remain
+architecture-owned and unchanged.
+
+Cross-backend sync `X86-E2E2-TYPED-LOGIC-2026-07-20` widens that internal
+carrier with compare, logical, and bitwise semantics plus explicit f32/i8/i32
+physical storage. The capability repair is x86-owned bool/int32 truth for
+already-shipped AVX-512 ABIs. ROCm inherits no x86 C ABI, null-operand
+convention, 32K selector threshold, CPU timing, RDNA instruction, HSACO route,
+or selector claim; ROCm target and execution rows remain unchanged.
+
+Cross-backend sync `X86-E2E2-FLAT-FOLLOWON-2026-07-20` extends the shared
+elementwise carrier with where, transcendental, and binary-math semantics.
+ROCm parity is assessed at the carrier boundary only; AVX-512 approximations,
+C ABIs, CPU-wall thresholds, exact-host evidence, RDNA instructions, HSACO
+routes, and ROCm selectors do not transfer.
+
+Cross-backend sync `X86-E2E2-DTYPE-2026-07-20` adds an x86-only datatype/CPUID
+contract and BF16, VNNI U8/S8, and FP64 descriptor ABIs. ROCM-DTYPE-1 remains
+the independent AMD GPU authority; no gfx capability, packing, accumulator,
+execution, or selector row changes.
+
+Cross-backend sync `ATTN-DIALECT-MLIR23-2026-07-20` corrects the internal MLIR
+attention dialect namespace from the nested `tessera.attn` spelling to the
+MLIR-23-compatible `tessera_attn` spelling. Public Graph IR operation names,
+attention semantics, ROCm target capabilities, HSACO ABIs, schedules, and
+selector state are unchanged; ROCm parity is validated by the shared attention
+lit coverage.
+
+Cross-backend sync `LLVM23-BACKBONE-2026-07-20` makes LLVM/MLIR 23.x the sole
+accepted compiler build environment. Top-level and standalone CMake entry
+points reject every other major and mixed installations; ROCm uses the
+versioned apt LLVM 23 packages with ROCm 7.14. ROCm target semantics, HSACO
+ABIs, and selectors are unchanged; host-free compiler/lit and gfx1151 unit
+proofs validate parity without transferring evidence to another AMD target.

@@ -167,7 +167,7 @@ def Tessera_ArchRelaxAttr : EnumAttr<Tessera_Dialect, Tessera_ArchRelax, "arch_r
 def Tessera_MatmulOp : Op<
   Tessera_Dialect, "matmul",
   [Pure,
-   // B3 v2 (2026-05-20): explicit method list — required under MLIR 21
+   // B3 v2 (2026-05-20): explicit method list — required under MLIR 23
    // for TilingInterface to emit per-Op method declarations on the
    // generated header.  See src/compiler/ir/TilingInterface_NOTES.md.
    DeclareOpInterfaceMethods<TilingInterface, [

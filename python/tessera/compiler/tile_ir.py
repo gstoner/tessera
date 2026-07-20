@@ -2,7 +2,7 @@
 
 Tile IR binds scheduled graph computation to tile-level movement and execution
 ops. This model covers the current compiler surface: tile.* execution/movement
-ops, tessera.attn.* FA-4 helpers, and tessera.queue.* producer/consumer
+ops, tessera_attn.* FA-4 helpers, and tessera.queue.* producer/consumer
 barriers used by warp-specialized pipelines.
 """
 
@@ -24,9 +24,9 @@ QUEUE_OPS = {"tessera.queue.create", "tessera.queue.push", "tessera.queue.pop", 
 TILE_METADATA_OPS = {"tile.mesh.define", "tile.layout", "tile.placement",
                      "tile.artifact", "tile.mesh.region", "tile.debug_artifact"}
 ATTN_OPS = {
-    "tessera.attn.scaled_dot_product", "tessera.attn.online_softmax",
-    "tessera.attn.lse_save", "tessera.attn.attend_v",
-    "tessera.attn.msa_kv_outer_sparse",
+    "tessera_attn.scaled_dot_product", "tessera_attn.online_softmax",
+    "tessera_attn.lse_save", "tessera_attn.attend_v",
+    "tessera_attn.msa_kv_outer_sparse",
 }
 
 
@@ -173,7 +173,7 @@ class TileIRVerifier:
                 self._require_attrs(
                     op, diagnostics, "source", "result", "ordinal",
                     "effect", "access", "storage")
-            elif op.op_name == "tessera.attn.online_softmax":
+            elif op.op_name == "tessera_attn.online_softmax":
                 if not op.attrs.get("policy"):
                     diagnostics.append(TileIRDiagnostic("error", "online_softmax requires policy", "TILE_IR_ATTN_POLICY"))
             elif op.op_name == "tessera.queue.create":
@@ -250,7 +250,7 @@ def _lower_schedule_ops(ops: list[ScheduleOp]) -> list[TileOp]:
             lowered.append(_tile_compute_op(op))
             continue
         if op.op_name == "schedule.attn.kv_outer_sparse":
-            lowered.append(TileOp("tessera.attn.msa_kv_outer_sparse", {
+            lowered.append(TileOp("tessera_attn.msa_kv_outer_sparse", {
                 **dict(op.attrs),
                 "lowering": "attention",
                 "selected_block_layout": op.attrs.get("block_ids_layout", "B,Hkv,Sq,top_k"),
@@ -334,10 +334,10 @@ def _lower_pipeline_region(op: ScheduleOp) -> list[TileOp]:
     ]
     if source == "tessera.flash_attn" or attrs.get("schedule") == "fa4":
         lowered.extend([
-            TileOp("tessera.attn.scaled_dot_product", {"source": source, "result": result, "ordinal": attrs.get("ordinal", 0), "causal": bool(attrs.get("causal", True))}),
-            TileOp("tessera.attn.online_softmax", {"source": source, "result": result, "ordinal": attrs.get("ordinal", 0), "policy": "safe"}),
-            TileOp("tessera.attn.lse_save", {"source": source, "result": result, "ordinal": attrs.get("ordinal", 0)}),
-            TileOp("tessera.attn.attend_v", {"source": source, "result": result, "ordinal": attrs.get("ordinal", 0)}),
+            TileOp("tessera_attn.scaled_dot_product", {"source": source, "result": result, "ordinal": attrs.get("ordinal", 0), "causal": bool(attrs.get("causal", True))}),
+            TileOp("tessera_attn.online_softmax", {"source": source, "result": result, "ordinal": attrs.get("ordinal", 0), "policy": "safe"}),
+            TileOp("tessera_attn.lse_save", {"source": source, "result": result, "ordinal": attrs.get("ordinal", 0)}),
+            TileOp("tessera_attn.attend_v", {"source": source, "result": result, "ordinal": attrs.get("ordinal", 0)}),
         ])
     lowered.extend([
         TileOp("tile.wait_async", {"stage": 0}),

@@ -368,6 +368,18 @@ def Tile_ReduceKernelOp : Tile_Op<"reduce_kernel"> {
   let hasVerifier = 1;
 }
 
+// Launch-level flat elementwise envelope. Inputs are one or two source
+// pointers, destination, and the flattened element count. Family and kind are
+// semantic strings; storage/output_storage make mixed predicate output
+// explicit instead of inferring it from a backend symbol.
+def Tile_ElementwiseKernelOp : Tile_Op<"elementwise_kernel"> {
+  let summary = "Launch-level typed flat elementwise operation";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
 // Launch-level scaled dot-product attention envelope. Inputs are Q, K, V, O
 // followed by B, Hq, Hkv, Sq, Sk, D, and Dv. Storage, accumulation, scale, and
 // masking are explicit; target lowering must not infer them from host buffers.

@@ -477,7 +477,7 @@ Phase 4 is HF; only GPU launch + silicon-perf is gated.
   `gpu.module` with an `llvm.func` kernel (`nvvm.kernel`) reading
   `nvvm.read.ptx.sreg.ctaid.x` etc. Required registering the GPU dialect + the
   bufferization external models + the conversion passes in `tessera-opt` and
-  linking the MLIR GPU/NVVM libs (Homebrew LLVM 22 ships `nvptx64` + the libs).
+  linking the MLIR GPU/NVVM libs (Homebrew LLVM 23 ships `nvptx64` + the libs).
   Guards: `tests/tessera-ir/phase8/gpu_emit_nvvm.mlir` +
   `tests/unit/test_gpu_emit_nvvm.py`. **EMISSION ONLY** — the kernel is produced
   for inspection/codegen; the host `gpu.launch_func` stub remains and GPU launch
@@ -490,8 +490,8 @@ Phase 4 is HF; only GPU launch + silicon-perf is gated.
   `nvvm-attach-target{chip=sm_90}` + `gpu-module-to-binary{format=isa}` (with
   NVPTX target init + the LLVM-IR translation interfaces) as `--tessera-emit-ptx`,
   but it **segfaults inside `mlir::gpu::transformGpuModulesToBinaries`** (the NVVM
-  target serialization) on this macOS / Homebrew LLVM 22 build — likely a
-  libdevice/toolkit lookup or an LLVM-22 serialization quirk even for `format=isa`.
+  target serialization) on this macOS / Homebrew LLVM 23 build — likely a
+  libdevice/toolkit lookup or an LLVM-23 serialization quirk even for `format=isa`.
   Reverted (won't ship a crashing pipeline); the NVVM/ROCDL emission is the proven
   layer. *Next on this thread:* debug the `gpu-module-to-binary` serialization
   (target options / toolkit path) — or chain `tessera-emit-nvvm` → isolate the

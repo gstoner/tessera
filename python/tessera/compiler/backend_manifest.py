@@ -3030,16 +3030,19 @@ _ROCM_KERNEL_MFU: dict[tuple[str, str], float] = {
 _X86_KERNELS: dict[str, dict[str, Any]] = {
     "matmul": {
         "status": _DEVICE_VERIFIED_JIT_STATUS,
-        "dtypes": ("bf16", "fp32"),
+        "dtypes": ("bf16", "fp32", "fp64", "int8"),
+        "feature_flags": ("avx512", "avx512_bf16", "avx512_vnni"),
         "notes": (
-            "AMX BF16 GEMM plus the runtime-loaded AVX-512 f32 GEMM "
-            "microkernel used by the exact-target conformance lane"
+            "Runtime-loaded AVX-512 f32/f64, BF16-to-f32, and VNNI "
+            "u8*s8-to-s32 stable descriptor kernels; AMX remains an optional "
+            "compatibility implementation rather than a target requirement"
         ),
     },
     "gemm": {
         "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("bf16",),
-        "notes": "AMX BF16 GEMM",
+        "dtypes": ("bf16", "fp32", "fp64", "int8"),
+        "feature_flags": ("avx512", "avx512_bf16", "avx512_vnni"),
+        "notes": "AVX-512 stable descriptor GEMM family; optional AMX compatibility is not required",
     },
     "relu": {
         "status": _FUSED_KERNEL_STATUS,
@@ -5291,14 +5294,17 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
     if x86 is not None:
         x86_fixture = _NUMERICAL_FIXTURES.get((op_name, "x86"))
         x86_status = str(x86["status"])
-        is_amx_gemm = op_name in {"matmul", "gemm"}
-        if x86_fixture is not None and not is_amx_gemm:
+        is_gemm = op_name in {"matmul", "gemm"}
+        if x86_fixture is not None and not is_gemm:
             x86_status = _DEVICE_VERIFIED_JIT_STATUS
         entries.append(BackendKernelEntry(
             target="x86",
             status=x86_status,
             dtypes=tuple(x86["dtypes"]),
-            feature_flags=("amx", "avx512") if is_amx_gemm else ("avx512",),
+            feature_flags=(
+                tuple(x86.get("feature_flags", ("avx512",)))
+                if is_gemm else ("avx512",)
+            ),
             notes=str(x86.get("notes", "")),
             execute_compare_fixture=x86_fixture,
         ))

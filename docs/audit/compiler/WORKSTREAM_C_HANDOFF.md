@@ -254,7 +254,7 @@ the floor and must **never cap their ceiling** (Theory §1, Decision #28):
 Setup pins are in [`COMPILER_REFACTOR_PLAN.md`](COMPILER_REFACTOR_PLAN.md) §7.4
 and [`../../GETTING_STARTED.md`](../../GETTING_STARTED.md):
 
-- **Strix Halo:** Ubuntu 24.04 → `bash scripts/setup_ubuntu.sh` (LLVM/MLIR 22 from
+- **Strix Halo:** Ubuntu 24.04 → `bash scripts/setup_ubuntu.sh` (LLVM/MLIR 23 from
   apt.llvm.org — ROCm's bundled LLVM has no MLIR); ROCm 7.2.4 at `/opt/rocm`;
   `-DTESSERA_ENABLE_HIP=ON -DTESSERA_BUILD_ROCM_BACKEND=ON`; `.venv` caps
   numpy<2.2. gfx1151 execution needs a GPU + `/dev/kfd`.

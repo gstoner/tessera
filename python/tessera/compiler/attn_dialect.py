@@ -4,9 +4,9 @@ attn_dialect.py — Python bindings for the Tessera Attention (Attn) dialect.
 Provides a high-level Python API for constructing flash-attention IR nodes
 that map to the ops defined in the tile_opt_fa4 Attn dialect:
 
-    tessera.attn.scaled_dot_product  (QK^T / sqrt(d_k), online softmax)
-    tessera.attn.lse_save            (log-sum-exp accumulator save)
-    tessera.attn.online_softmax      (online numerically-stable softmax)
+    tessera_attn.scaled_dot_product  (QK^T / sqrt(d_k), online softmax)
+    tessera_attn.lse_save            (log-sum-exp accumulator save)
+    tessera_attn.online_softmax      (online numerically-stable softmax)
 
 Each builder function returns an ``AttnNode`` describing the op and its
 attributes.  AttnNode instances can be serialised to MLIR text or passed to
@@ -51,7 +51,7 @@ def _bpe(dtype: str) -> int:
 @dataclass
 class ScaledDotProductNode:
     """
-    tessera.attn.scaled_dot_product
+    tessera_attn.scaled_dot_product
 
     Computes Q·K^T / sqrt(d_k) (optionally causal-masked).
 
@@ -96,7 +96,7 @@ class ScaledDotProductNode:
         _, _, Sk, _ = self.k_shape
         causal = "true" if self.causal else "false"
         lines = [
-            f'%scores = "tessera.attn.scaled_dot_product"({q_val}, {k_val}) {{',
+            f'%scores = "tessera_attn.scaled_dot_product"({q_val}, {k_val}) {{',
             f'  causal = {causal},',
             f'  scale = {self.scale:.6f} : f32,',
             f'  dropout_p = {self.dropout_p:.4f} : f32,',
@@ -120,7 +120,7 @@ class ScaledDotProductNode:
 @dataclass
 class LSESaveNode:
     """
-    tessera.attn.lse_save
+    tessera_attn.lse_save
 
     Saves the log-sum-exp normaliser for the backward pass.
 
@@ -141,7 +141,7 @@ class LSESaveNode:
     def to_mlir(self, scores_val: str = "%scores") -> str:
         B, H, S = self.lse_shape
         lines = [
-            f'%lse = "tessera.attn.lse_save"({scores_val}) {{',
+            f'%lse = "tessera_attn.lse_save"({scores_val}) {{',
             f'  lse_shape = [{B}, {H}, {S}]',
             f'}} : (tensor<{B}x{H}x{S}x?x{self.dtype}>) -> tensor<{B}x{H}x{S}x{self.dtype}>',
         ]
@@ -151,7 +151,7 @@ class LSESaveNode:
 @dataclass
 class OnlineSoftmaxNode:
     """
-    tessera.attn.online_softmax
+    tessera_attn.online_softmax
 
     Numerically-stable online softmax over the score dimension.
 
@@ -173,7 +173,7 @@ class OnlineSoftmaxNode:
         B, H, Sq, Sk = self.score_shape
         save = "true" if self.save_lse else "false"
         lines = [
-            f'%softmax, %lse = "tessera.attn.online_softmax"({score_val}) {{',
+            f'%softmax, %lse = "tessera_attn.online_softmax"({score_val}) {{',
             f'  save_lse = {save},',
             f'  block_size = {min(Sk, 128)} : i64',
             f'}} : (tensor<{B}x{H}x{Sq}x{Sk}x{self.dtype}>)',
@@ -219,7 +219,7 @@ class FlashAttnGraph:
             _, _, Sk, Dv = self.v_shape
             dt = self.scaled_dot.dtype
             lines.append(
-                f'%out = "tessera.attn.attend_v"(%softmax, %v) : '
+                f'%out = "tessera_attn.attend_v"(%softmax, %v) : '
                 f'(tensor<{B}x{H}x{Sq}x{Sk}xf32>, '
                 f'tensor<{B}x{H}x{Sk}x{Dv}x{dt}>) '
                 f'-> tensor<{B}x{H}x{Sq}x{Dv}x{dt}>'
@@ -260,7 +260,7 @@ class FlashAttnBuilder:
     causal     : use causal masking
     head_dim   : model head dimension D (default 64)
     dtype      : compute dtype (default "bf16")
-    save_lse   : emit tessera.attn.lse_save for backward (default True)
+    save_lse   : emit tessera_attn.lse_save for backward (default True)
     dropout_p  : attention dropout (default 0.0)
     """
 

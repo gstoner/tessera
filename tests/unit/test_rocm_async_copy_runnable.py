@@ -56,7 +56,7 @@ def _find_mlir_opt():
     if env := os.environ.get("TESSERA_MLIR_OPT"):
         return env if Path(env).is_file() else None
     for c in ("/usr/lib/llvm-23/bin/mlir-opt",
-              "/opt/homebrew/opt/llvm/bin/mlir-opt"):
+              "/opt/homebrew/opt/llvm@23/bin/mlir-opt"):
         if Path(c).is_file():
             return c
     import shutil

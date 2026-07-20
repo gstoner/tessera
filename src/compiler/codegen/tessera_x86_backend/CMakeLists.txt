@@ -38,6 +38,7 @@ endif()
 add_library(tessera_x86_backend
   src/backend_x86.cpp
   src/kernels/avx512_gemm_bf16.cpp
+  src/kernels/avx512_gemm_f64.cpp
   src/kernels/amx_gemm_bf16.cpp
   src/kernels/amx_gemm_int8.cpp
   src/kernels/avx512_vnni_gemm_int8.cpp
@@ -157,6 +158,9 @@ target_link_libraries(test_fft PRIVATE tessera_x86_backend)
 # on toolchains without AMX intrinsics (e.g. gcc on this box); these kernels are
 # pure AVX-512 + scalar reference.
 add_library(tessera_x86_elementwise SHARED
+  src/kernels/avx512_gemm_bf16.cpp
+  src/kernels/avx512_vnni_gemm_int8.cpp
+  src/kernels/avx512_gemm_f64.cpp
   src/kernels/avx512_reduce_f32.cpp
   src/kernels/avx512_unary_f32.cpp
   src/kernels/avx512_binary_f32.cpp

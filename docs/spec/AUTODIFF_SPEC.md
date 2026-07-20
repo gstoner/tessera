@@ -27,7 +27,7 @@ last_updated: 2026-07-14
 
 | Item | Status |
 |------|--------|
-| Graph/Tile IR adjoint ops | **✅ Phase F4 landed at the IR level** — `AdjointInterface` ODS + `AutodiffPass.cpp` produce valid backward IR, lit-verified on MLIR 22. *Not* an execution claim: no target executes backward natively yet — see [`autodiff_connection_ledger.md`](../audit/generated/autodiff_connection_ledger.md) + [`AUTODIFF_UNIFICATION_PLAN.md`](../audit/compiler/AUTODIFF_UNIFICATION_PLAN.md). |
+| Graph/Tile IR adjoint ops | **✅ Phase F4 landed at the IR level** — `AdjointInterface` ODS + `AutodiffPass.cpp` produce valid backward IR, lit-verified on MLIR 23. *Not* an execution claim: no target executes backward natively yet — see [`autodiff_connection_ledger.md`](../audit/generated/autodiff_connection_ledger.md) + [`AUTODIFF_UNIFICATION_PLAN.md`](../audit/compiler/AUTODIFF_UNIFICATION_PLAN.md). |
 | Effect-aware adjoint collective insertion | **✅ Phase F5 landed** — Python: `tessera.distributed.DDP` / `FSDP` validate against `mock_collective`. IR: `AdjointCollectiveInsertionPass` (`--tessera-adjoint-collective-insertion`) gates on per-arg `tessera.effect` (memory-class) and inserts `reduce_scatter`/`all_gather`/`all_reduce` by sharding kind; lit `tests/tessera-ir/phase_f5/`. |
 | Activation checkpointing / rematerialization | **✅ Phase F2 landed** — Python: `tessera.autodiff.rematerialize` (alias `checkpoint`). IR: `ActivationRematerializationPass` (`--tessera-activation-rematerialization`) clones `tessera.recompute`-tagged pure ops to their backward consumers; lit `tests/tessera-ir/phase_f2/`. |
 | Mixed-precision autocast + loss scaling | **✅ Phase F1 landed** — `tessera.autodiff.autocast(dtype)` + `GradScaler`. fp8 backend lowering still pending Phase G. |
@@ -284,7 +284,7 @@ custom_rule(name)` unchanged at the Python boundary.
 
 > **Scope of "landed" (reconciled 2026-07-11).** F4 is landed at the **IR
 > level**: the tablegen is wired, `AutodiffPass` runs, and the lit smoke test
-> passes on MLIR 22 — the pass produces valid *backward IR*. It is **not** an
+> passes on MLIR 23 — the pass produces valid *backward IR*. It is **not** an
 > end-to-end *execution* claim: no op family binds a compiled backward entry
 > point or is oracle-proven for gradients on any target yet. The per-op-family ×
 > per-target truth (which ops have a native vs. placeholder IR adjoint, and

@@ -104,7 +104,7 @@ add_mlir_library(TesseraFA4Conversions
         MLIRTransforms
 )
 # MLIRConversionPassIncGen is an in-tree-only tablegen aggregate; not exported
-# by installed MLIR distributions (Homebrew llvm@21 etc.). Re-attach only when
+# by installed MLIR distributions (Homebrew llvm@23 etc.). Re-attach only when
 # present so the build keeps working both ways.
 if(TARGET MLIRConversionPassIncGen)
     target_link_libraries(TesseraFA4Conversions PUBLIC MLIRConversionPassIncGen)

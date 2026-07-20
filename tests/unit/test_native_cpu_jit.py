@@ -343,7 +343,7 @@ def test_unsupported_op_falls_back_without_jit():
 # ── opt-in linalg→vector GEMM lane (TESSERA_JIT_VECTORIZE) ────────────────────
 _RUNNER_UTILS = os.environ.get(
     "TESSERA_MLIR_C_RUNNER_UTILS",
-    "/opt/homebrew/opt/llvm/lib/libmlir_c_runner_utils.dylib",
+    "/opt/homebrew/opt/llvm@23/lib/libmlir_c_runner_utils.dylib",
 )
 
 

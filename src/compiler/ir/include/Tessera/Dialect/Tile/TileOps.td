@@ -380,6 +380,69 @@ def Tile_ElementwiseKernelOp : Tile_Op<"elementwise_kernel"> {
   let hasVerifier = 1;
 }
 
+// Launch-level index reduction. Inputs are source, i32 destination, flattened
+// row count, and reduction width. The first-occurrence tie policy is explicit.
+def Tile_ArgReduceKernelOp : Tile_Op<"argreduce_kernel"> {
+  let summary = "Launch-level typed argmax or argmin reduction";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
+// Launch-level inclusive row scan. Inputs are source, destination, flattened
+// row count, and scan width.
+def Tile_ScanKernelOp : Tile_Op<"scan_kernel"> {
+  let summary = "Launch-level typed inclusive prefix scan";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
+// Launch-level unweighted row normalization. Inputs are source, destination,
+// flattened row count, row width, and epsilon.
+def Tile_NormKernelOp : Tile_Op<"norm_kernel"> {
+  let summary = "Launch-level typed RMSNorm or LayerNorm";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
+// Launch-level interleaved-pair rotary embedding. Inputs are X, theta,
+// destination, flattened row count, and even feature width.
+def Tile_RopeKernelOp : Tile_Op<"rope_kernel"> {
+  let summary = "Launch-level typed interleaved-pair rotary embedding";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
+// Launch-level ALiBi bias construction. Inputs are slopes, destination, head
+// count, and sequence length; output is [H,S,S].
+def Tile_AlibiKernelOp : Tile_Op<"alibi_kernel"> {
+  let summary = "Launch-level typed ALiBi positional bias";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
+// Target-owned escape hatch for the broad x86 stable-ABI inventory.  Unlike
+// portable semantic Tile carriers, operands are already ordered exactly as the
+// C ABI expects.  The required `effects` attribute makes mutation/state
+// ownership explicit for FFT, sort, cache, optimizer, and other non-pure
+// entries; this op is deliberately not marked Pure.
+def Tile_X86ABIKernelOp : Tile_Op<"x86_abi_kernel"> {
+  let summary = "Typed launch of a versioned x86 stable ABI";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
 // Launch-level scaled dot-product attention envelope. Inputs are Q, K, V, O
 // followed by B, Hq, Hkv, Sq, Sk, D, and Dv. Storage, accumulation, scale, and
 // masking are explicit; target lowering must not infer them from host buffers.

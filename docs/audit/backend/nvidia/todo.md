@@ -1021,9 +1021,9 @@ exact-device evidence; x86's narrower descriptor contract changes no CUDA row.
 Cross-backend sync `E2E-SPINE-2026-07-18` records the 2026-07-20 scoped x86
 selector retirement: eligible static X86-E2E-1 modules now use their canonical
 descriptor by default. NVIDIA parity is not applicable; no NVIDIA pipeline,
-PTX ABI, schedule, capability, or selector changes. X86-E2E-2 owns the
-remaining AVX-512 inventory and must reassess NVIDIA only when a shared
-contract changes.
+PTX ABI, schedule, capability, or selector changes. X86-E2E-2 subsequently
+closed the remaining inventory and reassessed NVIDIA at each shared-contract
+boundary.
 
 Cross-backend sync `X86-E2E2-ELEMENTWISE-2026-07-20` adds the internal shared
 `tile.elementwise_kernel` semantic carrier for f32 unary/binary and f32-to-bool
@@ -1084,3 +1084,21 @@ sm_120, preferably via the NVIDIA Tile IR lowering target); NVFP4/MXFP8 mixer GE
 `mma.sync`, not `tcgen05`). Inherits the TEST-3 native-provenance / TEST-5
 kernel-vs-E2E evidence contract unchanged. Direction pointer only; no NVIDIA gate,
 route, or exact-device claim changes here.
+
+Cross-backend sync `X86-E2E2-COHORT2-2026-07-20` adds shared typed Tile
+carriers for argreduce, inclusive scan, unweighted row normalization,
+interleaved-pair RoPE, and ALiBi. NVIDIA parity is assessed at the semantic
+carrier boundary only. AVX-512 ABIs, CPU schedules, Ryzen timing, and route
+disposition transfer no PTX/CUDA implementation, device evidence, or selector.
+
+Cross-backend sync `X86-E2E2-BREADTH-2026-07-20` adds an explicitly x86-owned
+`tile.x86_abi_kernel` and cohort-3/4 C-ABI registry. It changes no portable
+semantic Tile carrier, PTX/CUDA ABI, NVIDIA schedule, dtype capability,
+execution row, or selector. NVIDIA parity is therefore not applicable.
+X86-E2E-2 is now closed with measured x86-only selector thresholds; this does
+not change the NVIDIA not-applicable disposition or transfer device proof.
+
+Cross-backend sync `LLVM23-LOCAL-CLEANUP-2026-07-20` hardens the LLVM 23 and
+Linux TSAN host environment and repairs an Apple-only capability row. NVIDIA
+parity is not applicable: no CUDA dtype, PTX ABI, schedule, execution row,
+selector, or exact-device evidence changes.

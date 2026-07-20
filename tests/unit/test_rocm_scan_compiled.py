@@ -109,7 +109,7 @@ def test_scan_codegen_and_lowers(kind):
          f'kind = "{kind}", dtype = "f32"}} : () -> ()\n}}\n')
     ir = _opt(d, "--generate-rocm-scan-kernel")
     assert ir.returncode == 0, ir.stderr
-    assert "gpu.shuffle  up" in ir.stdout
+    assert "gpu.shuffle up" in ir.stdout
     low = _opt(d, "--pass-pipeline=builtin.module(generate-rocm-scan-kernel,"
                "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
                "reconcile-unrealized-casts))")

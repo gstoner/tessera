@@ -31,6 +31,7 @@ kernel is comfortably within it.
 from __future__ import annotations
 
 import ctypes
+import math
 import os
 import shutil
 import subprocess
@@ -219,7 +220,13 @@ def run_paged_kv_cache_read_f32(
     pages: Any, page_table: Any, token_indices: Any, *, return_device_ms: bool = False,
     reps: int = 1,
 ) -> Any:
-    """Gather arbitrary logical tokens from stable physical f32 pages on ROCm."""
+    """Gather arbitrary logical tokens from stable physical f32 pages on ROCm.
+
+    The optional device-event measurement is ``None`` when the HIP runtime
+    reports a zero, negative, or non-finite interval. Some WSL ROCm runtimes
+    execute correctly while exposing no usable HIP event timer; callers must
+    not turn that absence into fabricated positive device evidence.
+    """
     import numpy as np
     p = np.ascontiguousarray(pages)
     table = np.ascontiguousarray(page_table, dtype=np.int32)
@@ -249,7 +256,9 @@ def run_paged_kv_cache_read_f32(
             page_size, H, D, int(idx.size), int(reps), ctypes.byref(device_ms))
     if rc != 1:
         raise RuntimeError(f"ROCm paged KV read launch failed (rc={rc})")
-    return (out, float(device_ms.value)) if return_device_ms else out
+    raw_ms = float(device_ms.value)
+    measured_ms: float | None = raw_ms if math.isfinite(raw_ms) and raw_ms > 0 else None
+    return (out, measured_ms) if return_device_ms else out
 
 
 def _synthesize_paged_attention_direct_hip() -> str:
@@ -269,8 +278,12 @@ extern "C" int {_PAGED_ATTN_ENTRY}(const float*hq,const float*hkp,const float*hv
 def run_paged_attention_direct_f32(
     q: Any, k_pages: Any, v_pages: Any, page_table: Any, token_indices: Any,
     *, scale: float, causal: bool, reps: int = 20,
-) -> tuple[Any, float, float]:
-    """Run direct page-table attention; return output, device ms, wall ms."""
+) -> tuple[Any, float | None, float]:
+    """Run direct page-table attention; return output, device-event ms, wall ms.
+
+    ``device-event ms`` is ``None`` when HIP event timing is unavailable or
+    invalid. The end-to-end wall interval remains independently usable.
+    """
     import numpy as np
     qq = np.ascontiguousarray(q, np.float32)
     kp = np.ascontiguousarray(k_pages, np.float32)
@@ -306,7 +319,9 @@ def run_paged_attention_direct_f32(
     wall_ms = (time.perf_counter() - start) * 1e3
     if rc != 1:
         raise RuntimeError(f"ROCm direct paged attention launch failed (rc={rc})")
-    return out, float(device_ms.value), wall_ms
+    raw_ms = float(device_ms.value)
+    measured_ms: float | None = raw_ms if math.isfinite(raw_ms) and raw_ms > 0 else None
+    return out, measured_ms, wall_ms
 
 
 # ── Persistent ReplaySSM serving context ───────────────────────────────────

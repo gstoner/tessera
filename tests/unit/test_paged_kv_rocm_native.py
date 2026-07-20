@@ -76,7 +76,13 @@ def test_rocm_routes_record_device_and_end_to_end_winners(monkeypatch):
     evidence = next(iter(pk._rocm_paged_attention_route_evidence.values()))
     assert set(evidence["device_ms"]) == {"gather_fa", "direct"}
     assert set(evidence["end_to_end_ms"]) == {"gather_fa", "direct"}
-    assert all(v > 0 for v in evidence["device_ms"].values())
+    device_values = tuple(evidence["device_ms"].values())
+    if evidence["device_timing_status"] == "available":
+        assert all(v is not None and v > 0 for v in device_values)
+        assert evidence["device_winner"] in {"gather_fa", "direct"}
+    else:
+        assert evidence["device_winner"] is None
+        assert any(v is None for v in device_values)
     assert all(v > 0 for v in evidence["end_to_end_ms"].values())
     assert evidence["selected"] == evidence["end_to_end_winner"]
 
@@ -102,7 +108,8 @@ def test_rocm_direct_paged_attention_permutation_crossing_and_mqa():
     expected = _reference_attention(
         q, np.transpose(dense_k[idx], (1, 0, 2)),
         np.transpose(dense_v[idx], (1, 0, 2)), D ** -.5, True)
-    assert device_ms > 0 and wall_ms > 0
+    assert device_ms is None or device_ms > 0
+    assert wall_ms > 0
     np.testing.assert_allclose(out, expected, rtol=3e-5, atol=3e-5)
 
 

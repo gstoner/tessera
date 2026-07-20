@@ -585,17 +585,20 @@ def compile_graph_module(
             )
         )
     elif target_kind == "x86" and bool((options or {}).get("package_native", False)):
-        from . import x86_native
+        from . import x86_breadth, x86_native
 
         is_softmax = x86_native.requests_softmax(module)
         is_reduction = x86_native.requests_reduction(module)
         is_matmul = x86_native.requests_matmul(module)
         is_attention = x86_native.requests_attention(module)
         is_elementwise = x86_native.requests_elementwise(module)
-        if not (is_softmax or is_reduction or is_matmul or is_attention or is_elementwise):
+        is_cohort2 = x86_native.requests_cohort2(module)
+        is_breadth = x86_breadth.requests_graph_breadth(module)
+        if not (is_softmax or is_reduction or is_matmul or is_attention or is_elementwise or is_cohort2 or is_breadth):
             raise ValueError(
                 "X86 native packaging currently supports one softmax, reduction, "
-                "rank-2 matmul, f32 MHA, or typed elementwise request"
+                "rank-2 matmul, f32 MHA, typed elementwise, cohort-2, or "
+                "isomorphic cohort-3/4 request"
             )
         resolution = target_pipeline_lookup(target_kind)
         producer = (
@@ -613,6 +616,10 @@ def compile_graph_module(
             if is_matmul
             else x86_native.package_attention(module, pipeline_name=producer)
             if is_attention
+            else x86_native.package_cohort2(module, pipeline_name=producer)
+            if is_cohort2
+            else x86_breadth.package_graph_breadth(module, pipeline_name=producer)
+            if is_breadth
             else x86_native.package_elementwise(module, pipeline_name=producer)
         )
         tile = LoweringArtifact("tile", x86_package.tile_ir)
@@ -641,9 +648,11 @@ def compile_graph_module(
                     "op_family": (
                         "softmax" if is_softmax else "reduction" if is_reduction
                         else "matmul" if is_matmul else "attention" if is_attention
+                        else "cohort2" if is_cohort2
+                        else "breadth" if is_breadth
                         else "elementwise"
                     ),
-                    "work_item": "X86-E2E-2" if is_elementwise else "X86-E2E-1",
+                    "work_item": "X86-E2E-2" if (is_elementwise or is_cohort2) else "X86-E2E-1",
                 },
             )
         )

@@ -389,7 +389,10 @@ struct TileToX86PassImpl
       StringRef name = op->getName().getStringRef();
       if (name == "tile.matmul_kernel" || name == "tile.softmax_kernel" ||
           name == "tile.reduce_kernel" || name == "tile.attention_kernel" ||
-          name == "tile.elementwise_kernel")
+          name == "tile.elementwise_kernel" ||
+          name == "tile.argreduce_kernel" || name == "tile.scan_kernel" ||
+          name == "tile.norm_kernel" || name == "tile.rope_kernel" ||
+          name == "tile.alibi_kernel" || name == "tile.x86_abi_kernel")
         launchEnvelopes.push_back(op);
     });
     ModuleOp module = getOperation();
@@ -401,6 +404,92 @@ struct TileToX86PassImpl
       Type i64Ty = builder.getI64Type();
       Type i32Ty = builder.getI32Type();
       Type f32Ty = builder.getF32Type();
+      StringRef opName = op->getName().getStringRef();
+      if (opName == "tile.x86_abi_kernel") {
+        auto symbol = op->getAttrOfType<StringAttr>("symbol");
+        if (!symbol) {
+          op->emitError("x86 stable-ABI carrier requires symbol");
+          return signalPassFailure();
+        }
+        SmallVector<Type> argumentTypes;
+        argumentTypes.reserve(op->getNumOperands());
+        for (Value operand : op->getOperands())
+          argumentTypes.push_back(operand.getType());
+        auto returnsStatus = op->getAttrOfType<BoolAttr>("returns_status");
+        SmallVector<Type> resultTypes;
+        if (returnsStatus && returnsStatus.getValue())
+          resultTypes.push_back(i32Ty);
+        ensureExternalDecl(module, symbol.getValue(),
+                           FunctionType::get(ctx, argumentTypes, resultTypes));
+        builder.create<func::CallOp>(loc, symbol.getValue(), resultTypes,
+                                     op->getOperands());
+        op->erase();
+        continue;
+      }
+      if (opName == "tile.argreduce_kernel" || opName == "tile.scan_kernel") {
+        auto kind = op->getAttrOfType<StringAttr>("kind");
+        int32_t kindValue = -1;
+        StringRef symbol;
+        if (opName == "tile.argreduce_kernel") {
+          kindValue = llvm::StringSwitch<int32_t>(kind.getValue())
+                          .Case("argmax", 0).Case("argmin", 1).Default(-1);
+          symbol = "tessera_x86_avx512_argreduce_f32";
+        } else {
+          kindValue = llvm::StringSwitch<int32_t>(kind.getValue())
+                          .Case("sum", 0).Case("product", 1)
+                          .Case("max", 2).Case("min", 3).Default(-1);
+          symbol = "tessera_x86_avx512_scan_f32";
+        }
+        if (kindValue < 0) {
+          op->emitError("X86-E2E-2 reduction/scan kind has no stable ABI mapping");
+          return signalPassFailure();
+        }
+        ensureExternalDecl(module, symbol,
+                           FunctionType::get(ctx, {ptrTy, i64Ty, i64Ty, ptrTy, i32Ty}, {}));
+        Value kindConstant = builder.create<arith::ConstantIntOp>(loc, kindValue, 32);
+        builder.create<func::CallOp>(
+            loc, symbol, TypeRange{},
+            ValueRange{op->getOperand(0), op->getOperand(2), op->getOperand(3),
+                       op->getOperand(1), kindConstant});
+        op->erase();
+        continue;
+      }
+      if (opName == "tile.norm_kernel") {
+        auto kind = op->getAttrOfType<StringAttr>("kind");
+        StringRef symbol = kind.getValue() == "rmsnorm"
+                               ? "tessera_x86_avx512_rmsnorm_f32"
+                               : "tessera_x86_avx512_layernorm_f32";
+        ensureExternalDecl(module, symbol,
+                           FunctionType::get(ctx, {ptrTy, i64Ty, i64Ty, f32Ty, ptrTy}, {}));
+        builder.create<func::CallOp>(
+            loc, symbol, TypeRange{},
+            ValueRange{op->getOperand(0), op->getOperand(2), op->getOperand(3),
+                       op->getOperand(4), op->getOperand(1)});
+        op->erase();
+        continue;
+      }
+      if (opName == "tile.rope_kernel") {
+        StringRef symbol = "tessera_x86_avx512_rope_f32";
+        ensureExternalDecl(module, symbol,
+                           FunctionType::get(ctx, {ptrTy, ptrTy, i64Ty, i64Ty, ptrTy}, {}));
+        builder.create<func::CallOp>(
+            loc, symbol, TypeRange{},
+            ValueRange{op->getOperand(0), op->getOperand(1), op->getOperand(3),
+                       op->getOperand(4), op->getOperand(2)});
+        op->erase();
+        continue;
+      }
+      if (opName == "tile.alibi_kernel") {
+        StringRef symbol = "tessera_x86_avx512_alibi_f32";
+        ensureExternalDecl(module, symbol,
+                           FunctionType::get(ctx, {ptrTy, i64Ty, i64Ty, ptrTy}, {}));
+        builder.create<func::CallOp>(
+            loc, symbol, TypeRange{},
+            ValueRange{op->getOperand(0), op->getOperand(2), op->getOperand(3),
+                       op->getOperand(1)});
+        op->erase();
+        continue;
+      }
       if (op->getName().getStringRef() == "tile.elementwise_kernel") {
         auto family = op->getAttrOfType<StringAttr>("family");
         auto kind = op->getAttrOfType<StringAttr>("kind");

@@ -862,6 +862,136 @@ LogicalResult ElementwiseKernelOp::verify() {
   return success();
 }
 
+static LogicalResult verifyPointerAndI64Tail(Operation *op, ValueRange inputs,
+                                             unsigned pointerCount,
+                                             unsigned i64Count) {
+  if (inputs.size() != pointerCount + i64Count)
+    return op->emitOpError() << "expects " << pointerCount << " pointer and "
+                             << i64Count << " i64 operands";
+  for (Value value : inputs.take_front(pointerCount))
+    if (!isa<LLVM::LLVMPointerType>(value.getType()))
+      return op->emitOpError("buffer operands must be !llvm.ptr");
+  for (Value value : inputs.drop_front(pointerCount))
+    if (!value.getType().isInteger(64))
+      return op->emitOpError("dimension operands must be i64");
+  return success();
+}
+
+LogicalResult ArgReduceKernelOp::verify() {
+  if (failed(verifyPointerAndI64Tail(getOperation(), getInputs(), 2, 2)))
+    return failure();
+  auto kind = getOperation()->getAttrOfType<StringAttr>("kind");
+  auto storage = getOperation()->getAttrOfType<StringAttr>("storage");
+  auto output = getOperation()->getAttrOfType<StringAttr>("output_storage");
+  auto tie = getOperation()->getAttrOfType<StringAttr>("tie_break");
+  if (!kind || (kind.getValue() != "argmax" && kind.getValue() != "argmin"))
+    return emitOpError("requires kind=argmax|argmin");
+  if (!storage || storage.getValue() != "f32" || !output ||
+      output.getValue() != "i32")
+    return emitOpError("requires f32 input and i32 output storage");
+  if (!tie || tie.getValue() != "first")
+    return emitOpError("requires tie_break=first");
+  return success();
+}
+
+LogicalResult ScanKernelOp::verify() {
+  if (failed(verifyPointerAndI64Tail(getOperation(), getInputs(), 2, 2)))
+    return failure();
+  auto kind = getOperation()->getAttrOfType<StringAttr>("kind");
+  auto storage = getOperation()->getAttrOfType<StringAttr>("storage");
+  auto inclusive = getOperation()->getAttrOfType<BoolAttr>("inclusive");
+  if (!kind || (kind.getValue() != "sum" && kind.getValue() != "product" &&
+                kind.getValue() != "max" && kind.getValue() != "min"))
+    return emitOpError("requires kind=sum|product|max|min");
+  if (!storage || storage.getValue() != "f32")
+    return emitOpError("requires storage=f32");
+  if (!inclusive || !inclusive.getValue())
+    return emitOpError("currently requires inclusive=true");
+  return success();
+}
+
+LogicalResult NormKernelOp::verify() {
+  if (getInputs().size() != 5)
+    return emitOpError("expects source, destination, rows, columns, and epsilon");
+  if (!isa<LLVM::LLVMPointerType>(getInputs()[0].getType()) ||
+      !isa<LLVM::LLVMPointerType>(getInputs()[1].getType()) ||
+      !getInputs()[2].getType().isInteger(64) ||
+      !getInputs()[3].getType().isInteger(64) ||
+      !getInputs()[4].getType().isF32())
+    return emitOpError("requires ptr, ptr, i64, i64, f32 operands");
+  auto kind = getOperation()->getAttrOfType<StringAttr>("kind");
+  auto storage = getOperation()->getAttrOfType<StringAttr>("storage");
+  auto accum = getOperation()->getAttrOfType<StringAttr>("accum");
+  auto axis = getOperation()->getAttrOfType<IntegerAttr>("axis");
+  auto affine = getOperation()->getAttrOfType<BoolAttr>("affine");
+  if (!kind || (kind.getValue() != "rmsnorm" && kind.getValue() != "layernorm"))
+    return emitOpError("requires kind=rmsnorm|layernorm");
+  if (!storage || storage.getValue() != "f32" || !accum ||
+      accum.getValue() != "f32")
+    return emitOpError("requires f32 storage and accumulation");
+  if (!axis || axis.getInt() != -1 || !affine || affine.getValue())
+    return emitOpError("requires axis=-1 and affine=false");
+  return success();
+}
+
+LogicalResult RopeKernelOp::verify() {
+  if (failed(verifyPointerAndI64Tail(getOperation(), getInputs(), 3, 2)))
+    return failure();
+  auto storage = getOperation()->getAttrOfType<StringAttr>("storage");
+  auto layout = getOperation()->getAttrOfType<StringAttr>("layout");
+  if (!storage || storage.getValue() != "f32")
+    return emitOpError("requires storage=f32");
+  if (!layout || layout.getValue() != "interleaved_pairs")
+    return emitOpError("requires layout=interleaved_pairs");
+  return success();
+}
+
+LogicalResult AlibiKernelOp::verify() {
+  if (failed(verifyPointerAndI64Tail(getOperation(), getInputs(), 2, 2)))
+    return failure();
+  auto storage = getOperation()->getAttrOfType<StringAttr>("storage");
+  auto formula = getOperation()->getAttrOfType<StringAttr>("formula");
+  if (!storage || storage.getValue() != "f32")
+    return emitOpError("requires storage=f32");
+  if (!formula || formula.getValue() != "slope_times_j_minus_i")
+    return emitOpError("requires formula=slope_times_j_minus_i");
+  return success();
+}
+
+LogicalResult X86ABIKernelOp::verify() {
+  auto symbol = getOperation()->getAttrOfType<StringAttr>("symbol");
+  auto abi = getOperation()->getAttrOfType<StringAttr>("abi");
+  auto family = getOperation()->getAttrOfType<StringAttr>("family");
+  auto effects = getOperation()->getAttrOfType<StringAttr>("effects");
+  auto returnsStatus =
+      getOperation()->getAttrOfType<BoolAttr>("returns_status");
+  if (!symbol || !symbol.getValue().starts_with("tessera_x86_"))
+    return emitOpError("requires symbol with tessera_x86_ prefix");
+  if (!abi || !abi.getValue().starts_with("tessera.x86.") ||
+      !abi.getValue().ends_with(".v1"))
+    return emitOpError("requires a tessera.x86.*.v1 ABI identifier");
+  if (!family || family.getValue().empty())
+    return emitOpError("requires a non-empty family attribute");
+  if (!returnsStatus)
+    return emitOpError("requires an explicit returns_status boolean");
+  if (!effects || (effects.getValue() != "readonly" &&
+                   effects.getValue() != "writeonly" &&
+                   effects.getValue() != "readwrite" &&
+                   effects.getValue() != "stateful"))
+    return emitOpError(
+        "requires effects=readonly|writeonly|readwrite|stateful");
+  if (getInputs().empty())
+    return emitOpError("requires at least one typed ABI operand");
+  for (Value value : getInputs()) {
+    Type type = value.getType();
+    if (!isa<LLVM::LLVMPointerType>(type) && !type.isInteger(64) &&
+        !type.isInteger(32) && !type.isF32() && !type.isF64())
+      return emitOpError(
+          "operands must be !llvm.ptr, i64, i32, f32, or f64");
+  }
+  return success();
+}
+
 LogicalResult AttentionKernelOp::verify() {
   auto bias = getOperation()->getAttrOfType<BoolAttr>("bias");
   bool hasBias = bias && bias.getValue();

@@ -646,7 +646,7 @@ def _paged_attention_rocm(
             run_paged_kv_cache_read_f32,
         )
 
-        def execute(route: str) -> tuple[np.ndarray, float, float]:
+        def execute(route: str) -> tuple[np.ndarray, float | None, float]:
             if route == "direct":
                 _, device_ms, _ = run_paged_attention_direct_f32(
                     Q, abi.k_pages, abi.v_pages, abi.page_table, idx,
@@ -656,7 +656,7 @@ def _paged_attention_rocm(
                     scale=float(scale), causal=causal, reps=1)
                 return out, device_ms, wall_ms
 
-            def gather_fa(reps: int) -> tuple[np.ndarray, float, float]:
+            def gather_fa(reps: int) -> tuple[np.ndarray, float | None, float]:
                 start = time.perf_counter()
                 gk, k_ms = run_paged_kv_cache_read_f32(
                     abi.k_pages, abi.page_table, idx, return_device_ms=True,
@@ -680,7 +680,11 @@ def _paged_attention_rocm(
                     V.astype(np.float16), float(scale), 0, bias=bias,
                     _timed_reps=reps)
                 out = np.asarray(result, np.float32).reshape(Q.shape)
-                return out, k_ms + v_ms + float(fa_ms), \
+                device_parts = (k_ms, v_ms, fa_ms)
+                device_ms = (sum(float(part) for part in device_parts)
+                             if all(part is not None and float(part) > 0
+                                    for part in device_parts) else None)
+                return out, device_ms, \
                     (time.perf_counter() - start) * 1e3
 
             _, device_ms, _ = gather_fa(20)  # also warms code + allocations
@@ -737,7 +741,12 @@ def _paged_attention_rocm(
             raise RuntimeError("ROCm paged-attention routes disagree")
         device = {name: value[1] for name, value in results.items()}
         end_to_end = {name: value[2] for name, value in results.items()}
-        device_winner = min(device, key=device.__getitem__)
+        available_device: dict[str, float] = {
+            name: value for name, value in device.items() if value is not None
+        }
+        device_winner = (min(available_device, key=available_device.__getitem__)
+                         if len(available_device) == len(device)
+                         else None)
         end_to_end_winner = min(end_to_end, key=end_to_end.__getitem__)
         # Serving chooses full-call latency. Keep the device winner beside it so
         # a future resident ABI can make a deliberate, evidence-backed switch.
@@ -746,6 +755,8 @@ def _paged_attention_rocm(
         _rocm_paged_attention_route_evidence[key] = {
             "device_ms": device, "end_to_end_ms": end_to_end,
             "device_winner": device_winner,
+            "device_timing_status": ("available" if device_winner is not None
+                                     else "unavailable"),
             "end_to_end_winner": end_to_end_winner,
             "selected": selected,
         }

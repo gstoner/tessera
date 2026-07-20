@@ -193,7 +193,11 @@ def test_portable_tile_epilogue_preserves_abi_and_output_conversion():
             "%arg1: memref<?xf16>, %arg2: memref<?xf32>, "
             "%arg3: memref<?xf16>") in out
     assert "arith.addf" in out       # bias
-    assert "math.exp" in out         # SiLU
+    # SiLU uses the shared bounded-tanh arithmetic form, avoiding a target
+    # device-math libcall while preserving the portable epilogue contract.
+    assert "arith.maximumf" in out
+    assert "arith.minimumf" in out
+    assert "arith.divf" in out
     assert "arith.truncf" in out     # f32 accumulator -> f16 output
     # One hoisted bias load in each mutually exclusive fast/edge branch. Before
     # the cleanup this was emitted once per accumulator element (16 total).

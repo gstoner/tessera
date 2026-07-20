@@ -1113,9 +1113,9 @@ coverage. Closure requires:
 Cross-backend sync `E2E-SPINE-2026-07-18` records the 2026-07-20 scoped x86
 selector retirement: eligible static X86-E2E-1 modules now use their canonical
 descriptor by default. ROCm parity is not applicable; no ROCm pipeline, HSACO
-ABI, schedule, dtype capability, or selector changes. X86-E2E-2 owns the
-remaining AVX-512 inventory and must reassess ROCm only when a shared contract
-changes.
+ABI, schedule, dtype capability, or selector changes. X86-E2E-2 subsequently
+closed the remaining inventory and reassessed ROCm at each shared-contract
+boundary.
 
 Cross-backend sync `X86-E2E2-ELEMENTWISE-2026-07-20` adds the internal shared
 `tile.elementwise_kernel` semantic carrier for f32 unary/binary and f32-to-bool
@@ -1156,3 +1156,23 @@ points reject every other major and mixed installations; ROCm uses the
 versioned apt LLVM 23 packages with ROCm 7.14. ROCm target semantics, HSACO
 ABIs, and selectors are unchanged; host-free compiler/lit and gfx1151 unit
 proofs validate parity without transferring evidence to another AMD target.
+
+Cross-backend sync `X86-E2E2-COHORT2-2026-07-20` adds shared typed Tile
+carriers for argreduce, inclusive scan, unweighted row normalization,
+interleaved-pair RoPE, and ALiBi. ROCm parity is assessed at the semantic
+carrier boundary only. AVX-512 ABIs, CPU schedules, Ryzen timing, and route
+disposition transfer no RDNA/HSACO implementation, device evidence, or selector.
+
+Cross-backend sync `X86-E2E2-BREADTH-2026-07-20` adds an explicitly x86-owned
+`tile.x86_abi_kernel` and cohort-3/4 C-ABI registry. It changes no portable
+semantic Tile carrier, RDNA/HSACO ABI, GPU schedule, dtype capability,
+execution row, or selector. ROCm parity is therefore not applicable.
+X86-E2E-2 is now closed with measured x86-only selector thresholds; this does
+not change the ROCm not-applicable disposition or transfer device proof.
+
+Cross-backend sync `LLVM23-LOCAL-CLEANUP-2026-07-20` rebuilds the generic host
+compiler against LLVM/MLIR 23 and makes Linux TSAN use the LLVM 23 Clang
+runtime. The gfx1151 paged-attention recorder now represents an invalid HIP
+event interval as unavailable instead of fabricating positive device evidence;
+end-to-end route timing and selection remain valid. No RDNA schedule, HSACO ABI,
+dtype capability, or selector threshold changes.

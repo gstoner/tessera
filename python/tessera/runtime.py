@@ -28,6 +28,7 @@ import ctypes.util
 import functools
 import hashlib
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -2858,6 +2859,67 @@ def _load_x86_native_image(image: NativeImageArtifact) -> ctypes.CDLL:
     return library
 
 
+def _submit_x86_breadth(
+    image: NativeImageArtifact,
+    descriptor: LaunchDescriptor,
+    buffers: Mapping[str, Any],
+    scalars: Mapping[str, object],
+) -> Any:
+    """Invoke an explicitly registered X86-E2E-2 cohort 3/4 C ABI."""
+    import numpy as np
+
+    raw_arguments = descriptor.provenance.get("abi_arguments")
+    if not isinstance(raw_arguments, list):
+        raise RuntimeError("x86 breadth descriptor is missing ABI argument metadata")
+    library = _load_x86_native_image(image)
+    function = getattr(library, descriptor.entry_symbol, None)
+    if function is None:
+        raise RuntimeError(f"x86 native symbol {descriptor.entry_symbol!r} not found")
+    scalar_types = {
+        "int64": ctypes.c_int64, "uint64": ctypes.c_uint64,
+        "int32": ctypes.c_int32, "uint32": ctypes.c_uint32,
+        "float32": ctypes.c_float, "float64": ctypes.c_double,
+    }
+    ctypes_args: list[Any] = []
+    argtypes: list[Any] = []
+    write_buffers: list[Any] = []
+    for raw in raw_arguments:
+        if not isinstance(raw, Mapping):
+            raise RuntimeError("x86 breadth ABI argument metadata is malformed")
+        name, kind = str(raw.get("name", "")), str(raw.get("kind", ""))
+        binding = str(raw.get("binding", name))
+        if kind == "buffer":
+            if binding not in buffers:
+                raise RuntimeError(f"x86 breadth descriptor is missing buffer {binding!r}")
+            array = np.asarray(buffers[binding])
+            if not array.flags.c_contiguous:
+                raise RuntimeError(f"x86 breadth buffer {binding!r} must be contiguous")
+            argtypes.append(ctypes.c_void_p)
+            ctypes_args.append(array.ctypes.data_as(ctypes.c_void_p))
+            if str(raw.get("direction")) != "input":
+                write_buffers.append(array)
+            continue
+        if kind != "scalar" or name not in scalars:
+            raise RuntimeError(f"x86 breadth descriptor is missing scalar {name!r}")
+        dtype = str(raw.get("dtype", ""))
+        ctype = scalar_types.get(dtype)
+        if ctype is None:
+            raise RuntimeError(f"unsupported x86 breadth scalar dtype {dtype!r}")
+        argtypes.append(ctype)
+        ctypes_args.append(ctype(cast(Any, scalars[name])))
+    function.argtypes = argtypes
+    returns_status = bool(descriptor.provenance.get("returns_status", False))
+    function.restype = ctypes.c_int if returns_status else None
+    status = function(*ctypes_args)
+    if returns_status and status != 0:
+        raise RuntimeError(
+            f"x86 native symbol {descriptor.entry_symbol!r} returned status {status}"
+        )
+    if not write_buffers:
+        return None
+    return write_buffers[0] if len(write_buffers) == 1 else tuple(write_buffers)
+
+
 def _submit_x86_native(
     image: NativeImageArtifact,
     descriptor: LaunchDescriptor,
@@ -2870,6 +2932,8 @@ def _submit_x86_native(
     import numpy as np
 
     from tessera.compiler.x86_native import (
+        X86_ALIBI_F32_ABI,
+        X86_ARGREDUCE_F32_ABI,
         X86_ATTENTION_EXT_F32_ABI,
         X86_ATTENTION_F32_ABI,
         X86_BINARY_F32_ABI,
@@ -2883,11 +2947,19 @@ def _submit_x86_native(
         X86_MATMUL_U8S8_S32_ABI,
         X86_PREDICATE_F32_ABI,
         X86_REDUCE_F32_ABI,
+        X86_NORM_F32_ABI,
+        X86_ROPE_F32_ABI,
+        X86_SCAN_F32_ABI,
         X86_SOFTMAX_F32_ABI,
         X86_UNARY_F32_ABI,
         X86_TRANSCENDENTAL_F32_ABI,
         X86_WHERE_F32_ABI,
     )
+    from tessera.compiler.x86_breadth import X86_BREADTH_ABIS
+
+    breadth_abis = {spec.abi_id for spec in X86_BREADTH_ABIS.values()}
+    if descriptor.abi_id in breadth_abis:
+        return _submit_x86_breadth(image, descriptor, buffers, scalars)
 
     supported = {
         X86_SOFTMAX_F32_ABI, X86_REDUCE_F32_ABI, X86_MATMUL_F32_ABI,
@@ -2897,6 +2969,8 @@ def _submit_x86_native(
         X86_COMPARE_F32_ABI, X86_LOGICAL_I8_ABI, X86_BITWISE_I32_ABI,
         X86_WHERE_F32_ABI, X86_TRANSCENDENTAL_F32_ABI,
         X86_BINARY_MATH_F32_ABI,
+        X86_ARGREDUCE_F32_ABI, X86_SCAN_F32_ABI, X86_NORM_F32_ABI,
+        X86_ROPE_F32_ABI, X86_ALIBI_F32_ABI,
     }
     if descriptor.abi_id not in supported:
         raise RuntimeError(f"unsupported x86 descriptor ABI {descriptor.abi_id!r}")
@@ -3126,6 +3200,74 @@ def _submit_x86_native(
                      ctypes.c_int64(m), ctypes.c_int64(n), ctypes.c_int64(k),
                      output.ctypes.data_as(f64p))
         return output
+    cohort2_abis = {
+        X86_ARGREDUCE_F32_ABI, X86_SCAN_F32_ABI, X86_NORM_F32_ABI,
+        X86_ROPE_F32_ABI, X86_ALIBI_F32_ABI,
+    }
+    if descriptor.abi_id in cohort2_abis:
+        expected = 3 if descriptor.abi_id == X86_ROPE_F32_ABI else 2
+        if len(arrays) != expected:
+            raise RuntimeError(f"x86 cohort-2 descriptor requires {expected} buffers")
+        inputs, output = arrays[:-1], arrays[-1]
+        if any(array.dtype != np.float32 for array in inputs):
+            raise RuntimeError("x86 cohort-2 descriptor requires f32 inputs")
+        if descriptor.abi_id == X86_ARGREDUCE_F32_ABI:
+            if output.dtype != np.int32:
+                raise RuntimeError("x86 argreduce descriptor requires i32 output")
+        elif output.dtype != np.float32:
+            raise RuntimeError("x86 cohort-2 descriptor requires f32 output")
+        if not output.flags.c_contiguous:
+            raise RuntimeError("x86 cohort-2 output must be contiguous")
+        function.restype = None
+        f32p = ctypes.POINTER(ctypes.c_float)
+        primary = np.ascontiguousarray(inputs[0], dtype=np.float32)
+        rows = int(cast(int, descriptor.provenance["rows"]))
+        cols = int(cast(int, descriptor.provenance["cols"]))
+        if descriptor.abi_id in {X86_ARGREDUCE_F32_ABI, X86_SCAN_F32_ABI}:
+            if int(cast(int, scalars["Rows"])) != rows or int(cast(int, scalars["Cols"])) != cols:
+                raise RuntimeError("x86 reduction/scan scalar dimensions disagree with descriptor")
+            if primary.size != rows * cols:
+                raise RuntimeError("x86 reduction/scan input disagrees with Rows/Cols")
+            kind_name = str(descriptor.provenance["kind"])
+            kinds = ({"argmax": 0, "argmin": 1} if descriptor.abi_id == X86_ARGREDUCE_F32_ABI
+                     else {"sum": 0, "product": 1, "max": 2, "min": 3})
+            out_pointer = ctypes.c_void_p if descriptor.abi_id == X86_ARGREDUCE_F32_ABI else f32p
+            function.argtypes = [f32p, ctypes.c_int64, ctypes.c_int64, out_pointer, ctypes.c_int]
+            function(
+                primary.ctypes.data_as(f32p), ctypes.c_int64(rows), ctypes.c_int64(cols),
+                output.ctypes.data_as(out_pointer), ctypes.c_int(kinds[kind_name]),
+            )
+            return output
+        if descriptor.abi_id == X86_NORM_F32_ABI:
+            if int(cast(int, scalars["Rows"])) != rows or int(cast(int, scalars["Cols"])) != cols:
+                raise RuntimeError("x86 norm scalar dimensions disagree with descriptor")
+            epsilon = float(cast(float, scalars["Epsilon"]))
+            if not math.isclose(epsilon, float(cast(Any, descriptor.provenance["eps"])), rel_tol=0.0, abs_tol=1e-12):
+                raise RuntimeError("x86 norm epsilon disagrees with descriptor")
+            if primary.size != rows * cols or output.size != primary.size:
+                raise RuntimeError("x86 norm buffers disagree with Rows/Cols")
+            function.argtypes = [f32p, ctypes.c_int64, ctypes.c_int64, ctypes.c_float, f32p]
+            function(primary.ctypes.data_as(f32p), ctypes.c_int64(rows), ctypes.c_int64(cols),
+                     ctypes.c_float(epsilon), output.ctypes.data_as(f32p))
+            return output
+        if descriptor.abi_id == X86_ROPE_F32_ABI:
+            theta = np.ascontiguousarray(inputs[1], dtype=np.float32)
+            if int(cast(int, scalars["Rows"])) != rows or int(cast(int, scalars["Cols"])) != cols:
+                raise RuntimeError("x86 RoPE scalar dimensions disagree with descriptor")
+            if primary.shape != theta.shape or primary.size != rows * cols or cols % 2:
+                raise RuntimeError("x86 RoPE buffers require equal shapes and even Cols")
+            function.argtypes = [f32p, f32p, ctypes.c_int64, ctypes.c_int64, f32p]
+            function(primary.ctypes.data_as(f32p), theta.ctypes.data_as(f32p),
+                     ctypes.c_int64(rows), ctypes.c_int64(cols), output.ctypes.data_as(f32p))
+            return output
+        if int(cast(int, scalars["H"])) != rows or int(cast(int, scalars["S"])) != cols:
+            raise RuntimeError("x86 ALiBi scalar dimensions disagree with descriptor")
+        if primary.size != rows or tuple(output.shape) != (rows, cols, cols):
+            raise RuntimeError("x86 ALiBi buffers disagree with H/S")
+        function.argtypes = [f32p, ctypes.c_int64, ctypes.c_int64, f32p]
+        function(primary.ctypes.data_as(f32p), ctypes.c_int64(rows), ctypes.c_int64(cols),
+                 output.ctypes.data_as(f32p))
+        return output
     if any(array.dtype != np.float32 for array in arrays):
         raise RuntimeError("x86 native descriptor requires f32 buffers")
     if descriptor.abi_id in {X86_ATTENTION_F32_ABI, X86_ATTENTION_EXT_F32_ABI}:
@@ -3238,6 +3380,8 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         return
 
     from tessera.compiler.x86_native import (
+        X86_ALIBI_F32_ABI,
+        X86_ARGREDUCE_F32_ABI,
         X86_ATTENTION_EXT_F32_ABI,
         X86_ATTENTION_F32_ABI,
         X86_BINARY_F32_ABI,
@@ -3251,15 +3395,20 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         X86_MATMUL_U8S8_S32_ABI,
         X86_PREDICATE_F32_ABI,
         X86_REDUCE_F32_ABI,
+        X86_NORM_F32_ABI,
+        X86_ROPE_F32_ABI,
+        X86_SCAN_F32_ABI,
         X86_SOFTMAX_F32_ABI,
         X86_UNARY_F32_ABI,
         X86_TRANSCENDENTAL_F32_ABI,
         X86_WHERE_F32_ABI,
     )
 
+    from tessera.compiler.x86_breadth import X86_BREADTH_ABIS
+
     if (
         target == "x86"
-        and abi_id in {
+        and abi_id in ({
             X86_SOFTMAX_F32_ABI, X86_REDUCE_F32_ABI, X86_MATMUL_F32_ABI,
             X86_MATMUL_BF16_F32_ABI, X86_MATMUL_U8S8_S32_ABI,
             X86_MATMUL_F64_ABI,
@@ -3268,7 +3417,9 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
             X86_COMPARE_F32_ABI, X86_LOGICAL_I8_ABI, X86_BITWISE_I32_ABI,
             X86_WHERE_F32_ABI, X86_TRANSCENDENTAL_F32_ABI,
             X86_BINARY_MATH_F32_ABI,
-        }
+            X86_ARGREDUCE_F32_ABI, X86_SCAN_F32_ABI, X86_NORM_F32_ABI,
+            X86_ROPE_F32_ABI, X86_ALIBI_F32_ABI,
+        } | {spec.abi_id for spec in X86_BREADTH_ABIS.values()})
         and target not in _native_launchers
     ):
         register_native_launcher(

@@ -1,5 +1,5 @@
-// RUN: tessera-rocm-opt %s --pass-pipeline='builtin.module(lower-tile-to-rocm{arch=gfx1151})' | FileCheck %s --check-prefix=TARGET
-// RUN: tessera-rocm-opt %s --pass-pipeline='builtin.module(lower-tile-to-rocm{arch=gfx1151},generate-rocm-reduce-kernel)' | FileCheck %s --check-prefix=KERNEL
+// RUN: %trop %s --pass-pipeline='builtin.module(lower-tile-to-rocm{arch=gfx1151})' | FileCheck %s --check-prefix=TARGET
+// RUN: %trop %s --pass-pipeline='builtin.module(lower-tile-to-rocm{arch=gfx1151},generate-rocm-reduce-kernel)' | FileCheck %s --check-prefix=KERNEL
 
 module {
   llvm.func @tessera_tile_reduce_sum_f32(%x: !llvm.ptr, %o: !llvm.ptr,

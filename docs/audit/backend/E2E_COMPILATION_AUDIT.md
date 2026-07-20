@@ -202,7 +202,7 @@ Statuses in this table describe this plan, not generated execution counts.
 | 7 | **X86-E2E-1** | P1 | closed | Typed x86 pilot and selector closure | Typed C-ABI Target IR and canonical descriptors cover f32 softmax, last-axis sum/mean/max, rank-2 matmul, plain MHA, and bias/window/softcap MHA. Exact-host correctness and retained-route performance gates pass. Canonical compilation defaults eligible static modules to the descriptor route; explicit opt-out and unsupported contracts remain on retained routes. |
 | 8 | **X86-E2E-2** | P1 | closed | AVX-512 stable-ABI breadth | All 76 exports are inventoried. The 33 cohort-3/4 ABIs have total typed/effect/status contracts and selector dispositions. Exact-host Graph descriptors promote measured flat gather, unreduced pointwise loss, Cholesky, and triangular solve domains; 29 non-isomorphic, composite, stateful, multi-output, or specialized entries retain their explicit routes. |
 | 9 | **ROCM-E2E-2** | P1 | closed | Directive/generator breadth | Reduction f16/bf16/f32 input to f32 output passes all nine comparable-device/E2E gates. Direct paged-KV and MoE dispatch have typed f32/i32 descriptors, negative/exact-gfx1151 evidence, and measured non-winning dispositions that retain their production routes. |
-| 10 | **NVIDIA-E2E-2** | P1 | landing | Native lowering breadth and per-SM split | Promote real NVVM/PTX lowering by family, separate sm90/sm100/sm120 builders, and replace marker operations only with matching ISA/toolchain proof. sm90/sm100 execution remains exact-device gated. |
+| 10 | **NVIDIA-E2E-2** | P1 | closed | Native lowering breadth and per-SM split | SM120 semantic breadth and measured route dispositions are complete. SM90/SM100 and exact multi-GPU proof have formal hardware-deferred terminals and must reopen as separate exact-device follow-ups. |
 | 11 | **APPLE-CPU-E2E-1** | P2 | queued | Apple CPU breadth | Extend the executable Accelerate/LAPACK pipeline beyond rank-2 f32 matmul and make canonical selection honest per supported family. |
 | 12 | **E2E-SPINE-3** | P2 | queued | Fleet proof and closeout | Cross-backend differential fixtures, generated Level-A/B/C dashboard truth, cache reproducibility, and per-backend release packets demonstrate the completed migrated scope. |
 
@@ -631,23 +631,26 @@ does not imply FP64 WMMA or current Tessera target registration; IU4 hardware
 does not imply first-class packed-int4 storage; and FP8/BF8 remains a named
 gfx1151 negative.
 
-**NVIDIA-E2E-2 is landing (2026-07-19).** The first slice replaces the shared
+**NVIDIA-E2E-2 is closed for the available SM120 host (2026-07-20).** The first slice replaces the shared
 SM90 alias behavior with distinct SM90/SM100/SM120 front and target pipelines.
 SM90 alone selects the proven WGMMA/Hopper marker lowering; SM100 and consumer
 Blackwell SM120 retain target-tagged typed matrix carriers. Straight-line
 Graph→Tile copies now mint `!tile.async_token`, waits retire the exact tokens,
 and matrix consumers retain the dependency through TMA lowering. Direct
 FileCheck proof covers all three builders, but SM90 and SM100 native execution
-remain explicitly exact-device gated. Operation-family breadth beyond the
-completed SM120 matmul lane remains open, so this item is not closed.
+remain explicitly exact-device gated. That early breadth statement is now
+superseded by the expanded SM120 record below. Remaining NVIDIA-E2E-2 work is
+limited to measured route dispositions; unavailable multi-GPU, SM90, and SM100
+proof has an explicit hardware-deferred terminal instead of an ambiguous open
+state.
 
 The exact-architecture evidence boundary is explicit:
 
 | Target | Level-C state | Reason |
 |---|---|---|
-| `nvidia_sm90` | planned / exact-device required | The SM120 host cannot validate Hopper WGMMA/TMA execution, resources, or timing. Compile-only artifacts remain Level B. |
-| `nvidia_sm100` | planned / exact-device required | Consumer Blackwell has no tcgen05/TMEM and cannot close datacenter Blackwell execution. Compile-only artifacts remain Level B. |
-| `nvidia_sm120` | landing / partial Level C | Canonical matmul, f16/f32 softmax and arbitrary-axis reduction, f16/bf16/TF32/FP8 epilogue, forward/backward attention, paged-KV, ReplaySSM, and local MoE descriptors execute on the RTX 5070 Ti; exact multi-device transport and the family boundaries below remain open. |
+| `nvidia_sm90` | deferred / exact-device unavailable | The SM120 host cannot validate Hopper WGMMA/TMA execution, resources, or timing. Compile-only artifacts remain Level B; a Hopper host must reopen a separate follow-up. |
+| `nvidia_sm100` | deferred / exact-device unavailable | Consumer Blackwell has no tcgen05/TMEM and cannot close datacenter Blackwell execution. Compile-only artifacts remain Level B; an SM100 host must reopen a separate follow-up. |
+| `nvidia_sm120` | ready / Level C for recorded families | Canonical matmul, f16/f32 softmax and arbitrary-axis reduction, f16/bf16/TF32/FP8 epilogue, forward/backward attention, paged-KV, ReplaySSM, and f16/bf16/f32 local MoE descriptors execute on the RTX 5070 Ti. Exact multi-device transport is a formal hardware-deferred terminal. |
 
 The family migration order preserves one typed producer and one launch ABI per
 semantic family rather than routing marker operations through a generic CUDA
@@ -655,24 +658,25 @@ kernel:
 
 | Family | SM120 canonical state | Next proof boundary |
 |---|---|---|
-| matmul | f64, TF32, bf16, f16, FP8, FP6, MXFP4, INT8, NVFP4 ready on SM120 | higher-amortization timing stability; no selector promotion |
-| softmax | f16/f32 ready | measured comparison against the cooperative route |
-| reductions | f16/f32 arbitrary-axis sum/mean/max with keepdims and serial/cooperative-128 schedules ready on SM120 | stable two-domain comparison and any selector decision |
-| fused epilogues | f16/bf16/TF32/FP8 E4M3/E5M2 bias × activation × residual matrix ready on SM120 | stable two-domain comparison and any selector decision |
-| attention | f16/f32 forward MHA/GQA/MQA plus bias/window/softcap/deterministic-dropout and an f32 deterministic zero-workspace backward reference descriptor ready on SM120 | f16/dropout backward canonical breadth; optimized atomic/split production comparison remains separately measured |
-| paged-KV | f32 direct page-table gather descriptor and direct/staged resource-linked corpus ready on SM120; 6/6 rows accepted under the WSL 4% policy, with one explicit selector-ineligible 4.02% clock-margin row | fused causal-offset descriptor; controlled-host evidence before selector promotion |
-| ReplaySSM | resident state/ring context loads compiler-owned Tile→PTX decode/flush images; session workspace, transition, ordering, and numerical proof are ready on SM120 | controlled-host timing stability |
-| MoE | canonical int32/fp32 metadata plus compiler-owned Tile→PTX dispatch/combine/ragged-grouped-GEMM descriptors are consumed by CUDA execution | broader dtype families and stable comparative evidence |
-| transport | local-device dispatch → expert compute → combine evidence plus explicit rank/device topology and one-process multi-device NCCL all-reduce/gather/reduce-scatter/all-to-all execution are implemented | exact two-or-more-GPU numerical, topology, resource, and timing proof; the one-GPU SM120 host records an honest unavailable terminal for that evidence |
+| matmul | f64, TF32, bf16, f16, FP8, FP6, MXFP4, INT8, NVFP4 ready on SM120 | 19/20 higher-amortization rows strict-stable; bimodal TF32 row is terminal non-promoting; retain selectors |
+| softmax | f16/f32 ready | four canonical/production rows strict-stable; cooperative production route wins both domains and is retained |
+| reductions | f16/f32 arbitrary-axis sum/mean/max with keepdims and serial/cooperative-128 schedules ready on SM120 | stable two-domain corpus; production selector retained under the no-unregistered-promotion rule |
+| fused epilogues | f16/bf16/TF32/FP8 E4M3/E5M2 bias × activation × residual matrix ready on SM120 | stable accepted corpus; no selector promotion without a registered material-benefit threshold |
+| attention | f16/f32 forward MHA/GQA/MQA plus bias/window/softcap/deterministic dropout; deterministic f16/f32 backward replays the same counter mask with f32 accumulation and zero workspace | four forward comparison rows strict-stable and production wins both domains; atomic/split backward production evidence remains authoritative |
+| paged-KV | f32 direct gather plus compiler-owned fused page-table/token-index/causal-offset attention descriptor; remap, boundary, malformed-table, direct/staged evidence ready on SM120 | timing-domain disagreement retains the selector; controlled native-Linux evidence is a future promotion prerequisite |
+| ReplaySSM | resident state/ring context loads compiler-owned Tile→PTX decode/flush images; session workspace, transition, ordering, numerical proof, and all 10 two-domain timing rows are ready on SM120 | closed; retain existing route |
+| MoE | canonical int32 metadata plus f16/bf16/f32 compiler-owned Tile→PTX dispatch/combine/ragged-grouped-GEMM execution with f32 accumulation | six local comparison rows strict-stable; timing domains do not agree across all routes, so retain existing selector |
+| transport | local-device dispatch → expert compute → combine evidence plus explicit rank/device topology and one-process multi-device NCCL all-reduce/gather/reduce-scatter/all-to-all execution are implemented | exact two-or-more-GPU proof is hardware-deferred on the one-GPU SM120 host and must be reopened on a multi-GPU system |
 
 The stateful image landing keeps host-owned session machinery where it belongs
 while moving device code ownership across the canonical seam. ReplaySSM's
 resident CUDA context loads compiler-produced decode/flush PTX and preserves
 its allocations, ring slots, events, and stream ordering. Compiler-owned MoE
 dispatch/combine/grouped-GEMM candidates execute over the canonical grouped
-metadata, while the production selector remains unchanged pending stable
-comparative evidence. An explicit NCCL topology and
-executor now exist, but exact multi-rank Level-C evidence remains open because
+metadata. The final strict-stable comparison retains the production selector
+because the timing domains do not agree across all three routes. An explicit
+NCCL topology and executor now exist, but exact multi-rank Level-C evidence is
+hardware-deferred because
 the RTX 5070 Ti WSL host exposes only one device; a rejected two-device binding
 is contract proof, not collective execution proof.
 
@@ -687,6 +691,22 @@ fp16-mean production end-to-end row is accepted under the explicitly approved
 image/resource fingerprints, and cold/warm or first/second-use cache state are
 retained; no selector changes.
 
+The final SM120 comparative corpus has 14/14 strict-stable rows under the WSL
+4% rule. It compares canonical Tile descriptors against production CUDA for
+softmax, forward attention, and local MoE dispatch/combine/grouped GEMM in both
+timing domains, with first-launch discard, 100-launch end-to-end amortization,
+per-candidate clock conditioning, cold/warm image state, and resource
+fingerprints. Production softmax and attention win both domains; MoE lacks
+cross-domain consensus across all three routes. All existing selectors are
+therefore retained. ReplaySSM's higher-amortization record is also 10/10 stable.
+
+The final dtype matrix uses 31 samples, 10,000 resident launches, and 50
+allocation/copy-inclusive launches per sample. Nineteen of twenty rows are
+strict-stable. TF32 `256x256x256` remains bimodal at 7.02% device-event delta
+with stable end-to-end timing and is assigned an explicit non-promoting
+terminal; it does not block SM120 semantic closure or authorize a selector
+change.
+
 The second landing slice moves static f16/f32 last-axis softmax through the same
 canonical seam. A registered `tile.softmax_kernel` carries X/O/Rows/K plus
 explicit f16/f32 storage, f32 accumulation, and axis semantics; the SM120
@@ -697,7 +717,8 @@ CUDA-driver bridge. Exact RTX 5070 Ti rows cover both storage types,
 rank-2/rank-3 flattening, `K=16/48/64/300`, extreme logits, invalid output shape
 rejection, cold/warm identity, and ptxas resource fields. The correctness-first
 thread-per-row candidate does not replace the existing cooperative CUDA
-softmax selector; device-event/end-to-end comparison remains open.
+softmax selector. The final four-row comparison is strict-stable in both timing
+domains and retains that route because it wins both domains.
 The operation now carries backend-neutral `exp_mode="approx_exp2"` and an
 explicit `ftz=false` bit. The SM120 lowering maps that choice to
 `ex2.approx.f32`; the CUDA math contract records PTX's full-range 2-ULP bound
@@ -739,7 +760,7 @@ masked ragged materialization, and aligned/ragged RTX 5070 Ti numerical proof.
 FP6 E2M3/E3M2 use the
 ptxas-validated m16n8k32 `kind::mxf8f6f4` UE8M0/1X contract; OCP/MXFP4 uses
 m16n8k64 `kind::mxf4` UE8M0/2X. Their packed-memory Tile materializers, runtime
-ABIs, numerical execution, and exact-device comparisons remain open. The
+ABIs, numerical execution, and exact-device comparisons are complete. The
 checked-in dtype-matrix recorder retains cold/warm image identity, ptxas
 resources, CUDA-event batches, allocation/copy-inclusive timing, and disjoint
 sample-interleaved two-run stability without promoting a selector. This slice
@@ -758,10 +779,9 @@ matching compiler-driver-selected OCML/OCKL/OCLC set: the ROCm driver and
 match target flags. Device-library identity therefore invalidates stale caches
 without imposing one backend's physical library set on another.
 
-The next software-actionable items are the remaining **NVIDIA-E2E-2** family
-breadth and **APPLE-E2E-1**,
-each with its own proof
-requirements.
+The next software-actionable backend item is **APPLE-E2E-1**. Any future SM90,
+SM100, native-Linux SM120 promotion, or multi-GPU NVIDIA evidence must reopen a
+separate exact-hardware follow-up rather than changing this closed record.
 
 ## 12. Evidence routing
 

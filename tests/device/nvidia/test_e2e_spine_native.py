@@ -8,6 +8,8 @@ from tessera.compiler.driver import compile_graph_module
 from tessera.compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IROp, IRType
 from tessera.compiler.primitive_coverage import NumericPolicy
 from tessera.runtime import launch
+from tessera.runtime import _submit_nvidia_sm120_native
+from tessera.compiler.nvidia_native import package_paged_attention
 from tests._support.nvidia import nvidia_cuda_host_ready
 
 
@@ -198,11 +200,13 @@ def _attention_module(
     )])
 
 
-def _attention_backward_module(*, bias: bool = False) -> GraphIRModule:
-    q = IRType("tensor<1x2x3x4xf32>", ("1", "2", "3", "4"), "fp32")
-    k = IRType("tensor<1x1x4x4xf32>", ("1", "1", "4", "4"), "fp32")
-    v = IRType("tensor<1x1x4x3xf32>", ("1", "1", "4", "3"), "fp32")
-    do = IRType("tensor<1x2x3x3xf32>", ("1", "2", "3", "3"), "fp32")
+def _attention_backward_module(*, bias: bool = False, dtype: str = "fp32",
+                               dropout_p: float = 0.0, dropout_seed: int = 0) -> GraphIRModule:
+    ir = "f16" if dtype == "fp16" else "f32"
+    q = IRType(f"tensor<1x2x3x4x{ir}>", ("1", "2", "3", "4"), dtype)
+    k = IRType(f"tensor<1x1x4x4x{ir}>", ("1", "1", "4", "4"), dtype)
+    v = IRType(f"tensor<1x1x4x3x{ir}>", ("1", "1", "4", "3"), dtype)
+    do = IRType(f"tensor<1x2x3x3x{ir}>", ("1", "2", "3", "3"), dtype)
     bias_type = IRType("tensor<1x2x3x4xf32>", ("1", "2", "3", "4"), "fp32")
     args = [IRArg("do", do), IRArg("q", q), IRArg("k", k), IRArg("v", v)]
     operands = ["%do", "%q", "%k", "%v"]
@@ -219,7 +223,8 @@ def _attention_backward_module(*, bias: bool = False) -> GraphIRModule:
             result_type=f"({q}, {k}, {v})",
             kwargs={"scale": 0.5, "causal": True, "window": (2, 1),
                     "softcap": 1.7, "route": "deterministic_direct",
-                    "deterministic": True, "workspace_limit_bytes": 0},
+                    "deterministic": True, "workspace_limit_bytes": 0,
+                    "dropout_p": dropout_p, "dropout_seed": dropout_seed},
         )], return_values=["%dq", "%dk", "%dv"],
     )])
 
@@ -1213,6 +1218,119 @@ def test_canonical_sm120_attention_backward_is_deterministic_and_oracle_proven()
     malformed = launch(artifact, {**launch_args, "dk": dk[..., :-1]})
     assert malformed["ok"] is False
     assert malformed["diagnostic_code"] == "E_LAUNCH_BINDING_MISMATCH"
+
+
+@pytest.mark.hardware_nvidia
+def test_canonical_sm120_fp16_attention_dropout_backward_replays_mask() -> None:
+    if not nvidia_cuda_host_ready():
+        pytest.skip("host WSL CUDA device/toolchain unavailable")
+    dropout_p, seed = 0.25, 771
+    module = _attention_backward_module(
+        dtype="fp16", dropout_p=dropout_p, dropout_seed=seed
+    )
+    bundle = compile_graph_module(
+        module, source_origin="NVIDIA-E2E-2", target="nvidia_sm120",
+        options={"package_native": True}, enable_tool_validation=False,
+    )
+    assert bundle.native_image and bundle.launch_descriptor
+    assert bundle.launch_descriptor.provenance["storage"] == "f16"
+    assert bundle.launch_descriptor.provenance["dropout_rng"] == "lcg32_counter_v1"
+    rng = np.random.default_rng(121_771)
+    q = (rng.standard_normal((1, 2, 3, 4)) * 0.2).astype(np.float16)
+    k = (rng.standard_normal((1, 1, 4, 4)) * 0.2).astype(np.float16)
+    v = (rng.standard_normal((1, 1, 4, 3)) * 0.2).astype(np.float16)
+    do = (rng.standard_normal((1, 2, 3, 3)) * 0.2).astype(np.float16)
+    dq = np.zeros_like(q); dk = np.zeros_like(k); dv = np.zeros_like(v)
+    scalars = {"B": 1, "Hq": 2, "Hkv": 1, "Sq": 3, "Sk": 4, "D": 4, "Dv": 3}
+    artifact = compile_result_from_bundle(bundle, module=module).to_runtime_artifact()
+    args = {"do": do, "q": q, "k": k, "v": v,
+            "dq": dq, "dk": dk, "dv": dv, **scalars}
+    first = launch(artifact, args); assert first["ok"], first.get("reason")
+    observed = tuple(value.copy() for value in first["output"])
+    dq.fill(0); dk.fill(0); dv.fill(0)
+    second = launch(artifact, args); assert second["ok"], second.get("reason")
+    for lhs, rhs in zip(observed, second["output"]):
+        np.testing.assert_array_equal(lhs, rhs)
+
+    def pade_tanh(x):
+        z = np.clip(x, -5.0, 5.0); z2 = z * z
+        return z * (135135.0 + 17325.0*z2 + 378.0*z2*z2 + z2*z2*z2) / (
+            135135.0 + 62370.0*z2 + 3150.0*z2*z2 + 28.0*z2*z2*z2)
+
+    qf, kf, vf, dof = (value.astype(np.float32) for value in (q, k, v, do))
+    refs = [np.zeros_like(qf), np.zeros_like(kf), np.zeros_like(vf)]
+    keys = np.arange(4); threshold = int(dropout_p * 4294967296.0)
+    for head in range(2):
+        for query in range(3):
+            raw = qf[0, head, query] @ kf[0, 0].T * 0.5
+            t = pade_tanh(raw / 1.7); scores = 1.7 * t
+            legal = (keys <= query) & (keys >= query - 2) & (keys <= query + 1)
+            scores = np.where(legal, scores, -np.inf)
+            p = np.exp(scores - np.max(scores)); p /= p.sum()
+            counter = ((head * 3 + query) * 4 + keys)
+            hashes = (counter * 1664525 + seed + 1013904223) & 0xFFFFFFFF
+            dropout_scale = (hashes >= threshold).astype(np.float32) / (1.0 - dropout_p)
+            dp = dropout_scale * (vf[0, 0] @ dof[0, head, query])
+            delta = np.sum(p * dp)
+            ds = p * (dp - delta) * (1.0 - t*t)
+            ds = np.where(legal, ds, 0.0)
+            refs[0][0, head, query] += (ds[:, None] * 0.5 * kf[0, 0]).sum(0)
+            refs[1][0, 0] += ds[:, None] * 0.5 * qf[0, head, query]
+            refs[2][0, 0] += (p * dropout_scale)[:, None] * dof[0, head, query]
+    for actual, expected in zip(observed, refs):
+        np.testing.assert_allclose(actual.astype(np.float32), expected, rtol=3e-3, atol=3e-3)
+
+
+@pytest.mark.hardware_nvidia
+def test_canonical_sm120_fused_paged_attention_owns_causal_offset() -> None:
+    if not nvidia_cuda_host_ready():
+        pytest.skip("host WSL CUDA device/toolchain unavailable")
+    rng = np.random.default_rng(120_712)
+    p, lp, ps, h, qlen, tokens, d = 4, 4, 4, 2, 3, 13, 8
+    offset = tokens - qlen
+    table = np.array([2, 0, 3, 1], np.int32)
+    indices = np.arange(tokens, dtype=np.int64)
+    logical_k = (rng.standard_normal((lp * ps, h, d)) * 0.1).astype(np.float32)
+    logical_v = (rng.standard_normal((lp * ps, h, d)) * 0.1).astype(np.float32)
+    kp = np.empty((p, ps, h, d), np.float32); vp = np.empty_like(kp)
+    for logical, physical in enumerate(table):
+        kp[physical] = logical_k[logical * ps:(logical + 1) * ps]
+        vp[physical] = logical_v[logical * ps:(logical + 1) * ps]
+    q = (rng.standard_normal((h, qlen, d)) * 0.1).astype(np.float32)
+    o = np.zeros_like(q)
+    package = package_paged_attention(
+        physical_pages=p, logical_pages=lp, page_size=ps, heads=h,
+        query_length=qlen, tokens=tokens, dim=d, scale=d ** -0.5,
+        causal=True, causal_offset=offset,
+        pipeline_name="tessera-nvidia-pipeline-sm120",
+    )
+    got = _submit_nvidia_sm120_native(
+        package.image, package.descriptor,
+        {"Q": q, "K_pages": kp, "V_pages": vp, "page_table": table,
+         "token_indices": indices, "O": o},
+        {"P": p, "LP": lp, "PageSize": ps, "H": h, "QueryLength": qlen,
+         "Tokens": tokens, "D": d, "CausalOffset": offset}, None,
+    )
+    expected = np.zeros_like(q)
+    for head in range(h):
+        for query in range(qlen):
+            scores = q[head, query] @ logical_k[indices, head].T * d ** -0.5
+            scores[np.arange(tokens) > query + offset] = -np.inf
+            probs = np.exp(scores - np.max(scores)); probs /= probs.sum()
+            expected[head, query] = probs @ logical_v[indices, head]
+    np.testing.assert_allclose(got, expected, rtol=3e-5, atol=3e-5)
+    assert package.descriptor.provenance["causal_offset"] == offset
+    assert package.descriptor.provenance["route"] == "fused_direct"
+
+    bad = table.copy(); bad[1] = p
+    with pytest.raises((ValueError, RuntimeError)):
+        _submit_nvidia_sm120_native(
+            package.image, package.descriptor,
+            {"Q": q, "K_pages": kp, "V_pages": vp, "page_table": bad,
+             "token_indices": indices, "O": o},
+            {"P": p, "LP": lp, "PageSize": ps, "H": h, "QueryLength": qlen,
+             "Tokens": tokens, "D": d, "CausalOffset": offset}, None,
+        )
 
 
 @pytest.mark.hardware_nvidia

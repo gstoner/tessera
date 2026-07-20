@@ -58,12 +58,25 @@ SM120_ATTN_BIAS_F16_ABI = "tessera.nvidia.attention.q_k_v_bias_o_dims.f16_f32acc
 SM120_ATTN_BIAS_F32_ABI = "tessera.nvidia.attention.q_k_v_bias_o_dims.f32_f32acc.v1"
 SM120_ATTN_BWD_F32_ABI = "tessera.nvidia.attention_backward.do_q_k_v_dq_dk_dv_dims.f32.v1"
 SM120_ATTN_BWD_BIAS_F32_ABI = "tessera.nvidia.attention_backward.do_q_k_v_bias_dq_dk_dv_dims.f32.v1"
+SM120_ATTN_BWD_F16_ABI = "tessera.nvidia.attention_backward.do_q_k_v_dq_dk_dv_dims.f16_f32acc.v2"
+SM120_ATTN_BWD_BIAS_F16_ABI = "tessera.nvidia.attention_backward.do_q_k_v_bias_dq_dk_dv_dims.f16_f32acc.v2"
 SM120_PAGED_KV_F32_ABI = "tessera.nvidia.paged_kv.pages_table_o_dims.f32_i32.v1"
+SM120_PAGED_ATTN_F32_ABI = "tessera.nvidia.paged_attention.q_kp_vp_table_indices_o_dims.f32_i32_i64.v1"
 SM120_REPLAY_DECODE_F32_ABI = "tessera.nvidia.replay_ssm.delta_x_b_s0_c_a_y_dims.f32.v1"
 SM120_REPLAY_FLUSH_F32_ABI = "tessera.nvidia.replay_ssm.delta_x_b_s0_a_dims.f32.v1"
 SM120_MOE_DISPATCH_F32_ABI = "tessera.nvidia.moe.dispatch.x_token_o_dims.f32_i32.v1"
 SM120_MOE_COMBINE_F32_ABI = "tessera.nvidia.moe.combine.partials_token_weight_o_dims.f32_i32.v1"
 SM120_GROUPED_GEMM_F32_ABI = "tessera.nvidia.moe.grouped_gemm.x_w_offsets_o_dims.f32_i32.v1"
+SM120_MOE_DTYPES = ("fp16", "bf16", "fp32")
+SM120_MOE_ABIS = tuple(
+    f"tessera.nvidia.moe.{route}.{suffix}.{storage_ir}{tail}"
+    for storage_ir in ("f16", "bf16")
+    for route, suffix, tail in (
+        ("dispatch", "x_token_o_dims", "_i32.v2"),
+        ("combine", "partials_token_weight_o_dims", "_i32.v2"),
+        ("grouped_gemm", "x_w_offsets_o_dims", "_f32acc_i32.v2"),
+    )
+) + (SM120_MOE_DISPATCH_F32_ABI, SM120_MOE_COMBINE_F32_ABI, SM120_GROUPED_GEMM_F32_ABI)
 SM120_EPILOGUE_ABIS = tuple(
     f"tessera.nvidia.matmul.a_b_{suffix}_d_m_n_k.{storage}.v1"
     for storage in ("f16", "bf16", "tf32", "e4m3", "e5m2")
@@ -409,6 +422,29 @@ def emit_paged_kv_read_tile_ir(*, entry: str) -> str:
 '''
 
 
+def emit_paged_attention_tile_ir(*, entry: str, scale: float, causal: bool) -> str:
+    """Emit the compiler-owned fused causal-offset paged-attention envelope."""
+    if not math.isfinite(scale) or scale <= 0.0:
+        raise ValueError("SM120 paged attention scale must be finite and positive")
+    return f'''module {{
+  llvm.func @{entry}(%q: !llvm.ptr, %kp: !llvm.ptr, %vp: !llvm.ptr,
+                     %table: !llvm.ptr, %indices: !llvm.ptr, %o: !llvm.ptr,
+                     %p: i64, %lp: i64, %ps: i64, %h: i64, %qlen: i64,
+                     %tokens: i64, %d: i64, %causal_offset: i64)
+      attributes {{nvvm.kernel}} {{
+    tile.paged_attention_kernel %q, %kp, %vp, %table, %indices, %o,
+        %p, %lp, %ps, %h, %qlen, %tokens, %d, %causal_offset {{
+      storage = "f32", accum = "f32", table_storage = "i32",
+      token_index_storage = "i64", scale = {scale:.17g} : f32,
+      causal = {str(causal).lower()}, route = "fused_direct"
+    }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr,
+        i64, i64, i64, i64, i64, i64, i64, i64
+    llvm.return
+  }}
+}}
+'''
+
+
 def emit_replay_ssm_tile_ir(*, decode_entry: str, flush_entry: str) -> tuple[str, str]:
     """Emit the two compiler-owned kernels behind one resident ReplaySSM ring."""
     decode = f'''module {{
@@ -440,23 +476,25 @@ def emit_replay_ssm_tile_ir(*, decode_entry: str, flush_entry: str) -> tuple[str
     return decode, flush
 
 
-def emit_moe_tile_ir(*, entry: str, route: str) -> str:
+def emit_moe_tile_ir(*, entry: str, route: str, storage: str = "f32") -> str:
     """Emit one canonical local-device MoE transport/compute kernel."""
+    if storage not in {"f16", "bf16", "f32"}:
+        raise ValueError(f"unsupported canonical MoE storage {storage!r}")
     if route == "dispatch":
         signature = "%x: !llvm.ptr, %token: !llvm.ptr, %o: !llvm.ptr, %t: i64, %s: i64, %h: i64"
-        body = '''tile.moe_dispatch_kernel %x, %token, %o, %t, %s, %h {
-      storage = "f32", index_storage = "i32"
-    } : !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64'''
+        body = f'''tile.moe_dispatch_kernel %x, %token, %o, %t, %s, %h {{
+      storage = "{storage}", index_storage = "i32"
+    }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64'''
     elif route == "combine":
         signature = "%partials: !llvm.ptr, %token: !llvm.ptr, %weights: !llvm.ptr, %o: !llvm.ptr, %t: i64, %s: i64, %h: i64"
-        body = '''tile.moe_combine_kernel %partials, %token, %weights, %o, %t, %s, %h {
-      storage = "f32", index_storage = "i32", deterministic = true
-    } : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64'''
+        body = f'''tile.moe_combine_kernel %partials, %token, %weights, %o, %t, %s, %h {{
+      storage = "{storage}", index_storage = "i32", deterministic = true
+    }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64'''
     elif route == "grouped_gemm":
         signature = "%x: !llvm.ptr, %w: !llvm.ptr, %offsets: !llvm.ptr, %o: !llvm.ptr, %t: i64, %k: i64, %n: i64, %e: i64"
-        body = '''tile.grouped_gemm_kernel %x, %w, %offsets, %o, %t, %k, %n, %e {
-      storage = "f32", accum = "f32", index_storage = "i32"
-    } : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64, i64'''
+        body = f'''tile.grouped_gemm_kernel %x, %w, %offsets, %o, %t, %k, %n, %e {{
+      storage = "{storage}", accum = "f32", index_storage = "i32"
+    }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64, i64'''
     else:
         raise ValueError(f"unsupported canonical MoE route {route!r}")
     return f'''module {{
@@ -469,16 +507,21 @@ def emit_moe_tile_ir(*, entry: str, route: str) -> str:
 
 
 def emit_attention_backward_tile_ir(
-    *, entry: str, scale: float, causal: bool, bias: bool = False,
+    *, entry: str, scale: float, causal: bool, storage: str = "f32", bias: bool = False,
     window_left: int = -1, window_right: int = -1, softcap: float = 0.0,
+    dropout_p: float = 0.0, dropout_seed: int = 0,
 ) -> str:
-    """Emit the deterministic f32 reference VJP through canonical Tile IR."""
+    """Emit the deterministic f16/f32 reference VJP through canonical Tile IR."""
+    if storage not in {"f16", "f32"}:
+        raise ValueError(f"unsupported SM120 attention backward storage {storage!r}")
     if not math.isfinite(scale) or scale <= 0.0:
         raise ValueError("SM120 attention backward scale must be finite and positive")
     if window_left < -1 or window_right < -1:
         raise ValueError("SM120 attention backward windows must be >= -1")
     if not math.isfinite(softcap) or softcap < 0.0:
         raise ValueError("SM120 attention backward softcap must be finite and nonnegative")
+    if not math.isfinite(dropout_p) or not 0.0 <= dropout_p < 1.0:
+        raise ValueError("SM120 attention backward dropout_p must be in [0, 1)")
     optional_arg = "%bias: !llvm.ptr, " if bias else ""
     optional_operand = "%bias, " if bias else ""
     return f'''module {{
@@ -489,10 +532,12 @@ def emit_attention_backward_tile_ir(
       attributes {{nvvm.kernel}} {{
     tile.attention_backward_kernel %do, %q, %key, %v, {optional_operand}%dq, %dk, %dv,
         %b, %hq, %hkv, %sq, %sk, %d, %dv_dim {{
-      storage = "f32", accum = "f32", scale = {scale:.17g} : f32,
+      storage = "{storage}", accum = "f32", scale = {scale:.17g} : f32,
       causal = {str(causal).lower()}, bias = {str(bias).lower()},
       window_left = {window_left} : i64, window_right = {window_right} : i64,
-      softcap = {float(softcap)!r} : f32, route = "deterministic_direct",
+      softcap = {float(softcap)!r} : f32,
+      dropout_p = {float(dropout_p)!r} : f32, dropout_seed = {dropout_seed} : i64,
+      route = "deterministic_direct",
       deterministic = true, workspace_bytes = 0 : i64
     }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, {"!llvm.ptr, " * (3 + int(bias))}i64, i64, i64, i64, i64, i64, i64
     llvm.return
@@ -639,6 +684,8 @@ def _attention_contract(
     if len(storages) != 1 or storages.isdisjoint({"fp16", "fp32"}):
         return None
     storage = storages.pop()
+    if storage is None:
+        return None
     if storage not in {"fp16", "fp32"}:
         return None
     shapes = tuple(_shape(module, name) for name in names)
@@ -698,8 +745,8 @@ def supports_attention(module: GraphIRModule) -> bool:
 def _attention_backward_contract(
     module: GraphIRModule,
 ) -> tuple[
-    tuple[str, ...], tuple[int, int, int, int, int, int, int], float, bool,
-    str | None, int, int, float,
+    str, tuple[str, ...], tuple[int, int, int, int, int, int, int], float, bool,
+    str | None, int, int, float, float, int,
 ] | None:
     if not requests_attention_backward(module):
         return None
@@ -709,7 +756,13 @@ def _attention_backward_contract(
         return None
     names = tuple(value.removeprefix("%") for value in op.operands[:4])
     args = {arg.name: arg for arg in fn.args}
-    if any(name not in args or args[name].ir_type.dtype != "fp32" for name in names):
+    if any(name not in args for name in names):
+        return None
+    storages = {args[name].ir_type.dtype for name in names}
+    if len(storages) != 1 or not storages <= {"fp16", "fp32"}:
+        return None
+    storage = storages.pop()
+    if storage is None:
         return None
     shapes = tuple(_shape(module, name) for name in names)
     if any(shape is None or len(shape) != 4 for shape in shapes):
@@ -731,7 +784,7 @@ def _attention_backward_contract(
             result_shape = tuple(int(dim) for dim in result.shape)
         except (TypeError, ValueError):
             return None
-        if result.dtype != "fp32" or result_shape != expected:
+        if result.dtype != storage or result_shape != expected:
             return None
     bias_name = op.operands[4].removeprefix("%") if len(op.operands) == 5 else None
     if bias_name is not None:
@@ -754,18 +807,20 @@ def _attention_backward_contract(
     route = str(op.kwargs.get("route", "deterministic_direct"))
     deterministic = bool(op.kwargs.get("deterministic", True))
     workspace_limit = int(op.kwargs.get("workspace_limit_bytes", 0))
-    dropout = float(op.kwargs.get("dropout_p", 0.0) or 0.0)
+    dropout = float(op.kwargs.get("dropout_p", op.kwargs.get("dropout", 0.0)) or 0.0)
+    dropout_seed = int(op.kwargs.get("dropout_seed", op.kwargs.get("seed", 0)))
     if (
         window_left < -1 or window_right < -1 or not math.isfinite(softcap)
         or softcap < 0.0 or not math.isfinite(scale) or scale <= 0.0
         or route != "deterministic_direct" or not deterministic
-        or workspace_limit < 0 or dropout != 0.0
+        or workspace_limit < 0 or not math.isfinite(dropout)
+        or not 0.0 <= dropout < 1.0
     ):
         return None
     return (
-        names, (b, hq, hkv, sq, sk, d, dv), scale,
+        storage, names, (b, hq, hkv, sq, sk, d, dv), scale,
         bool(op.kwargs.get("causal", False)), bias_name,
-        window_left, window_right, softcap,
+        window_left, window_right, softcap, dropout, dropout_seed,
     )
 
 
@@ -1772,22 +1827,28 @@ def package_attention_backward(
     contract = _attention_backward_contract(module)
     if contract is None:
         raise ValueError(
-            "SM120 canonical attention backward requires static rank-4 f32 dO/Q/K/V, "
-            "three f32 gradient results, deterministic_direct, zero dropout, and a "
+            "SM120 canonical attention backward requires static rank-4 matching f16/f32 "
+            "dO/Q/K/V and gradients, deterministic_direct, valid dropout, and a "
             "nonnegative workspace limit"
         )
-    names, dims, scale, causal, bias_name, window_left, window_right, softcap = contract
+    (storage, names, dims, scale, causal, bias_name, window_left, window_right,
+     softcap, dropout_p, dropout_seed) = contract
+    storage_ir = "f16" if storage == "fp16" else "f32"
     do_name, q_name, k_name, v_name = names
     b, hq, hkv, sq, sk, d, dv = dims
     semantic_key = hashlib.sha256(
         f"{scale:.17g}:{causal}:{bool(bias_name)}:{window_left}:{window_right}:"
-        f"{softcap:.17g}:deterministic_direct".encode()
+        f"{softcap:.17g}:{dropout_p:.17g}:{dropout_seed}:deterministic_direct".encode()
     ).hexdigest()[:10]
-    entry = f"tessera_tile_attention_backward_f32_deterministic_{semantic_key}"
-    abi_id = SM120_ATTN_BWD_BIAS_F32_ABI if bias_name else SM120_ATTN_BWD_F32_ABI
+    entry = f"tessera_tile_attention_backward_{storage_ir}_deterministic_{semantic_key}"
+    if storage == "fp16":
+        abi_id = SM120_ATTN_BWD_BIAS_F16_ABI if bias_name else SM120_ATTN_BWD_F16_ABI
+    else:
+        abi_id = SM120_ATTN_BWD_BIAS_F32_ABI if bias_name else SM120_ATTN_BWD_F32_ABI
     tile_ir = emit_attention_backward_tile_ir(
-        entry=entry, scale=scale, causal=causal, bias=bias_name is not None,
+        entry=entry, storage=storage_ir, scale=scale, causal=causal, bias=bias_name is not None,
         window_left=window_left, window_right=window_right, softcap=softcap,
+        dropout_p=dropout_p, dropout_seed=dropout_seed,
     )
     (lowered, ptx, metrics, compiler_fp, toolchain_fp, device_libraries, compile_state) = _compile_tile_ir(
         tile_ir, entry
@@ -1806,10 +1867,10 @@ def package_attention_backward(
         raise ValueError("SM120 attention backward needs dQ,dK,dV SSA result names")
     dq_name, dk_name, dv_name = result_names
     input_bindings = [
-        BufferBinding(0, do_name, "input", "fp32", 4, "row_major", 4),
-        BufferBinding(1, q_name, "input", "fp32", 4, "row_major", 4),
-        BufferBinding(2, k_name, "input", "fp32", 4, "row_major", 4),
-        BufferBinding(3, v_name, "input", "fp32", 4, "row_major", 4),
+        BufferBinding(0, do_name, "input", storage, 4, "row_major", 2 if storage == "fp16" else 4),
+        BufferBinding(1, q_name, "input", storage, 4, "row_major", 2 if storage == "fp16" else 4),
+        BufferBinding(2, k_name, "input", storage, 4, "row_major", 2 if storage == "fp16" else 4),
+        BufferBinding(3, v_name, "input", storage, 4, "row_major", 2 if storage == "fp16" else 4),
     ]
     if bias_name:
         input_bindings.append(
@@ -1817,9 +1878,9 @@ def package_attention_backward(
         )
     output_base = 4 + int(bias_name is not None)
     buffers = tuple(input_bindings + [
-        BufferBinding(output_base, dq_name, "output", "fp32", 4, "row_major", 4),
-        BufferBinding(output_base + 1, dk_name, "output", "fp32", 4, "row_major", 4),
-        BufferBinding(output_base + 2, dv_name, "output", "fp32", 4, "row_major", 4),
+        BufferBinding(output_base, dq_name, "output", storage, 4, "row_major", 2 if storage == "fp16" else 4),
+        BufferBinding(output_base + 1, dk_name, "output", storage, 4, "row_major", 2 if storage == "fp16" else 4),
+        BufferBinding(output_base + 2, dv_name, "output", storage, 4, "row_major", 2 if storage == "fp16" else 4),
     ])
     scalar_base = output_base + 3
     guards = [
@@ -1858,11 +1919,12 @@ def package_attention_backward(
             "work_item": "NVIDIA-PARITY-ATTN-BWD", "sync_key": "E2E-SPINE-2026-07-18",
             "route": "deterministic_direct", "candidate_role": "canonical_reference",
             "deterministic": True, "dk_dv_reduction": "single_owner_fixed_order",
-            "workspace_bytes": 0, "storage": "f32", "accum": "f32",
+            "workspace_bytes": 0, "storage": storage_ir, "accum": "f32",
             "shape": list(dims), "scale": scale, "causal": causal,
             "bias": bias_name is not None, "window_left": window_left,
             "window_right": window_right, "softcap": softcap,
-            "limitations": ["dropout_backward", "f16_storage"],
+            "dropout_p": dropout_p, "dropout_seed": dropout_seed,
+            "dropout_rng": "lcg32_counter_v1", "limitations": [],
             "comparison_candidates": ["atomic", "split_reduced"],
             "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
         },
@@ -1921,6 +1983,68 @@ def package_paged_kv_read(
             "work_item": "NVIDIA-E2E-2", "sync_key": "E2E-SPINE-2026-07-18",
             "route": "direct", "shape": list(dims), "storage": "f32",
             "table_storage": "i32", "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
+        },
+    )
+    return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
+
+
+def package_paged_attention(
+    *, physical_pages: int, logical_pages: int, page_size: int, heads: int,
+    query_length: int, tokens: int, dim: int, scale: float,
+    causal: bool, causal_offset: int, pipeline_name: str,
+) -> NVIDIANativePackage:
+    """Package a true fused page-table/causal-offset attention image."""
+    if min(physical_pages, logical_pages, page_size, heads, query_length, tokens, dim) <= 0:
+        raise ValueError("SM120 paged attention dimensions must be positive")
+    if tokens > logical_pages * page_size:
+        raise ValueError("SM120 paged attention tokens exceed logical page capacity")
+    if causal_offset < 0 or (causal and causal_offset + query_length > tokens):
+        raise ValueError("SM120 paged attention causal offset is outside the logical token range")
+    semantic_key = hashlib.sha256(
+        f"{scale:.17g}:{causal}:{causal_offset}".encode()
+    ).hexdigest()[:10]
+    entry = f"tessera_tile_paged_attention_f32_fused_{semantic_key}"
+    tile_ir = emit_paged_attention_tile_ir(entry=entry, scale=scale, causal=causal)
+    lowered, ptx, image = _package_direct_image(
+        tile_ir, entry=entry, abi_id=SM120_PAGED_ATTN_F32_ABI,
+        pipeline_name=pipeline_name,
+    )
+    dims = (physical_pages, logical_pages, page_size, heads, query_length,
+            tokens, dim, causal_offset)
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest, entry_symbol=entry,
+        abi_id=SM120_PAGED_ATTN_F32_ABI,
+        buffers=(
+            BufferBinding(0, "Q", "input", "fp32", 3, "row_major", 4),
+            BufferBinding(1, "K_pages", "input", "fp32", 4, "row_major", 4),
+            BufferBinding(2, "V_pages", "input", "fp32", 4, "row_major", 4),
+            BufferBinding(3, "page_table", "input", "int32", 1, "row_major", 4),
+            BufferBinding(4, "token_indices", "input", "int64", 1, "row_major", 8),
+            BufferBinding(5, "O", "output", "fp32", 3, "row_major", 4),
+        ),
+        scalars=tuple(ScalarArgument(6 + index, name, "int64") for index, name in enumerate(
+            ("P", "LP", "PageSize", "H", "QueryLength", "Tokens", "D", "CausalOffset")
+        )),
+        shape_guards=(
+            ShapeGuard("Q", 0, "eq", heads), ShapeGuard("Q", 1, "eq", query_length),
+            ShapeGuard("Q", 2, "eq", dim), ShapeGuard("K_pages", 0, "eq", physical_pages),
+            ShapeGuard("K_pages", 1, "eq", page_size), ShapeGuard("K_pages", 2, "eq", heads),
+            ShapeGuard("K_pages", 3, "eq", dim), ShapeGuard("V_pages", 0, "eq", physical_pages),
+            ShapeGuard("V_pages", 1, "eq", page_size), ShapeGuard("V_pages", 2, "eq", heads),
+            ShapeGuard("V_pages", 3, "eq", dim), ShapeGuard("page_table", 0, "eq", logical_pages),
+            ShapeGuard("token_indices", 0, "eq", tokens), ShapeGuard("O", 0, "eq", heads),
+            ShapeGuard("O", 1, "eq", query_length), ShapeGuard("O", 2, "eq", dim),
+        ),
+        geometry=LaunchGeometry(policy="sm120_paged_attention_fused_direct_128"),
+        ordering=OrderingSemantics(
+            ordered_submission=True, residency="inputs", synchronization=("completion",)
+        ),
+        provenance={
+            "work_item": "NVIDIA-E2E-2", "sync_key": "E2E-SPINE-2026-07-18",
+            "route": "fused_direct", "shape": list(dims), "scale": scale,
+            "causal": causal, "causal_offset": causal_offset,
+            "table_storage": "i32", "token_index_storage": "i64",
+            "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
         },
     )
     return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
@@ -2012,23 +2136,33 @@ def package_replay_ssm_kernels(
 def package_moe_kernels(
     *, num_tokens: int, num_slots: int, hidden: int, expert_count: int,
     expert_k: int, expert_n: int, group_offsets: tuple[int, ...],
-    pipeline_name: str,
+    pipeline_name: str, storage: str = "fp32",
 ) -> tuple[NVIDIANativePackage, NVIDIANativePackage, NVIDIANativePackage]:
     """Package local dispatch/combine/grouped-GEMM images over canonical metadata."""
     if min(num_tokens, hidden, expert_count, expert_k, expert_n) <= 0 or num_slots < 0:
         raise ValueError("canonical MoE package dimensions are invalid")
+    if storage not in SM120_MOE_DTYPES:
+        raise ValueError(f"canonical MoE storage must be one of {SM120_MOE_DTYPES}")
     if len(group_offsets) != expert_count + 1 or group_offsets[0] != 0:
         raise ValueError("canonical MoE group offsets must contain E+1 entries starting at zero")
     if any(a > b for a, b in zip(group_offsets, group_offsets[1:])) or group_offsets[-1] != num_slots:
         raise ValueError("canonical MoE group offsets must monotonically partition all kept slots")
+    storage_ir = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[storage]
+    alignment = 2 if storage != "fp32" else 4
     entries = (
-        ("dispatch", "tessera_tile_moe_dispatch_f32", SM120_MOE_DISPATCH_F32_ABI),
-        ("combine", "tessera_tile_moe_combine_f32", SM120_MOE_COMBINE_F32_ABI),
-        ("grouped_gemm", "tessera_tile_grouped_gemm_f32", SM120_GROUPED_GEMM_F32_ABI),
+        ("dispatch", f"tessera_tile_moe_dispatch_{storage_ir}",
+         SM120_MOE_DISPATCH_F32_ABI if storage == "fp32" else
+         f"tessera.nvidia.moe.dispatch.x_token_o_dims.{storage_ir}_i32.v2"),
+        ("combine", f"tessera_tile_moe_combine_{storage_ir}",
+         SM120_MOE_COMBINE_F32_ABI if storage == "fp32" else
+         f"tessera.nvidia.moe.combine.partials_token_weight_o_dims.{storage_ir}_i32.v2"),
+        ("grouped_gemm", f"tessera_tile_grouped_gemm_{storage_ir}",
+         SM120_GROUPED_GEMM_F32_ABI if storage == "fp32" else
+         f"tessera.nvidia.moe.grouped_gemm.x_w_offsets_o_dims.{storage_ir}_f32acc_i32.v2"),
     )
     packages: list[NVIDIANativePackage] = []
     for route, entry, abi_id in entries:
-        tile_ir = emit_moe_tile_ir(entry=entry, route=route)
+        tile_ir = emit_moe_tile_ir(entry=entry, route=route, storage=storage_ir)
         lowered, ptx, image = _package_direct_image(
             tile_ir, entry=entry, abi_id=abi_id, pipeline_name=pipeline_name
         )
@@ -2036,25 +2170,25 @@ def package_moe_kernels(
         dims: tuple[str, ...]
         if route == "dispatch":
             buffers = (
-                BufferBinding(0, "X", "input", "fp32", 2, "row_major", 4),
+                BufferBinding(0, "X", "input", storage, 2, "row_major", alignment),
                 BufferBinding(1, "token_of_slot", "input", "int32", 1, "row_major", 4),
-                BufferBinding(2, "dispatched", "output", "fp32", 2, "row_major", 4),
+                BufferBinding(2, "dispatched", "output", storage, 2, "row_major", alignment),
             )
             dims = ("Tokens", "Slots", "Hidden")
         elif route == "combine":
             buffers = (
-                BufferBinding(0, "partials", "input", "fp32", 2, "row_major", 4),
+                BufferBinding(0, "partials", "input", storage, 2, "row_major", alignment),
                 BufferBinding(1, "token_of_slot", "input", "int32", 1, "row_major", 4),
                 BufferBinding(2, "combine_weights", "input", "fp32", 1, "row_major", 4),
-                BufferBinding(3, "O", "output", "fp32", 2, "row_major", 4),
+                BufferBinding(3, "O", "output", storage, 2, "row_major", alignment),
             )
             dims = ("Tokens", "Slots", "Hidden")
         else:
             buffers = (
-                BufferBinding(0, "X", "input", "fp32", 2, "row_major", 4),
-                BufferBinding(1, "W", "input", "fp32", 3, "row_major", 4),
+                BufferBinding(0, "X", "input", storage, 2, "row_major", alignment),
+                BufferBinding(1, "W", "input", storage, 3, "row_major", alignment),
                 BufferBinding(2, "group_offsets", "input", "int32", 1, "row_major", 4),
-                BufferBinding(3, "O", "output", "fp32", 2, "row_major", 4),
+                BufferBinding(3, "O", "output", storage, 2, "row_major", alignment),
             )
             dims = ("GroupedTokens", "K", "N", "Experts")
         base = len(buffers)
@@ -2072,6 +2206,7 @@ def package_moe_kernels(
                 "route": route, "num_tokens": num_tokens, "num_slots": num_slots,
                 "hidden": hidden, "expert_count": expert_count, "expert_k": expert_k,
                 "expert_n": expert_n, "group_offsets": list(group_offsets),
+                "storage": storage_ir, "accum": "f32",
                 "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
             },
         )
@@ -2185,6 +2320,8 @@ __all__ = [
     "SM120_ATTN_BIAS_F32_ABI",
     "SM120_ATTN_BWD_F32_ABI",
     "SM120_ATTN_BWD_BIAS_F32_ABI",
+    "SM120_ATTN_BWD_F16_ABI",
+    "SM120_ATTN_BWD_BIAS_F16_ABI",
     "SM120_BF16_ABI",
     "SM120_EPILOGUE_ABIS",
     "SM120_F16_ABI",
@@ -2196,11 +2333,13 @@ __all__ = [
     "SM120_FP6_E3M2_ABI",
     "SM120_MXFP4_ABI",
     "SM120_PAGED_KV_F32_ABI",
+    "SM120_PAGED_ATTN_F32_ABI",
     "SM120_REPLAY_DECODE_F32_ABI",
     "SM120_REPLAY_FLUSH_F32_ABI",
     "SM120_MOE_DISPATCH_F32_ABI",
     "SM120_MOE_COMBINE_F32_ABI",
     "SM120_GROUPED_GEMM_F32_ABI",
+    "SM120_MOE_ABIS",
     "SM120_REDUCE_F16_ABI",
     "SM120_REDUCE_F32_ABI",
     "SM120_INT8_ABI",
@@ -2217,6 +2356,7 @@ __all__ = [
     "emit_f32_softmax_tile_ir",
     "emit_nvfp4_matmul_tile_ir",
     "emit_paged_kv_read_tile_ir",
+    "emit_paged_attention_tile_ir",
     "emit_replay_ssm_tile_ir",
     "emit_moe_tile_ir",
     "emit_softmax_tile_ir",
@@ -2231,6 +2371,7 @@ __all__ = [
     "package_f32_softmax",
     "package_nvfp4_matmul",
     "package_paged_kv_read",
+    "package_paged_attention",
     "package_replay_ssm_kernels",
     "package_moe_kernels",
     "package_softmax",

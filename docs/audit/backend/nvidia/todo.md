@@ -706,7 +706,9 @@ cold/warm image identity and ptxas register/shared-memory/spill evidence. The
 shared Tile verifier change is limited to the explicit eight-operand NVFP4
 launch ABI; it transfers no CUDA schedule, layout, resources, or selector.
 
-NVIDIA-E2E-2 is **landing**. Its first dependency slice replaces the former
+NVIDIA-E2E-2 is **closed for the available SM120 host**, with the unavailable
+multi-GPU, SM90, and SM100 boundaries assigned the deferred terminal states
+below. Its first dependency slice replaces the former
 shared SM90 alias with exact SM90/SM100/SM120 Graph→Tile builders and registered
 Tile→`tessera_nvidia`→NVVM producers. The exact target now reaches Tile IR,
 the control-flow guard, async-copy lowering, and the target producer without
@@ -716,8 +718,10 @@ architecture-owned lowering. Straight-line async copies mint typed completion
 tokens, the matching wait retires them, and matrix consumers preserve those
 edges through TMA lowering. Host WSL FileCheck proves the three distinct IR
 routes; native SM90 and SM100 remain unsupported-by-evidence until exact-device
-runs exist. No selector changes. Family breadth beyond the completed SM120 f16
-and NVFP4 matmul path remains open, so NVIDIA-E2E-2 is not closed.
+runs exist. No selector changes. That breadth statement described the first
+landing slice and is now superseded by the implementation record below: SM120
+canonical execution covers the complete matmul dtype matrix plus softmax,
+reductions, fused epilogues, attention, paged-KV, ReplaySSM, and local MoE.
 
 The next NVIDIA-E2E-2 family slice now gives static f16/f32 last-axis softmax a
 canonical Level-C path. `tile.softmax_kernel` carries source/destination,
@@ -730,9 +734,10 @@ through the shipped CUDA-driver bridge. Exact RTX 5070 Ti proof covers shapes
 rejection, stable cold/warm image identity, and resource/spill fields for both
 storage types. f16 loads extend before the max/sum/normalization loops and
 truncate only at output storage. This is a correctness-first 128-thread,
-one-thread-per-row candidate. The existing
-cooperative CUDA-C route remains selectable; no promotion is justified until
-device-event and end-to-end comparisons are stable.
+one-thread-per-row candidate. The existing cooperative CUDA-C route remains
+selected. All four final canonical/production rows are stable in both timing
+domains, and production wins both domains for the production-sized and ragged
+cases.
 
 The following NVIDIA-E2E-2 dtype-totality slice centralizes consumer-Blackwell
 storage, math-mode, scalar/vector, Tensor Core, compiler, and runtime states in
@@ -760,9 +765,11 @@ The canonical dtype execution matrix records two disjoint, sample-interleaved
 runs for square and ragged fp64/fp16/bf16/TF32/FP8/FP6/MXFP4/INT8 routes, with separate
 CUDA-event and allocation/copy-inclusive timing, cold/warm image identity, and
 ptxas register/shared-memory/spill fields. The retained 20-row collection
-changes no selector. Its latest short-kernel run has only 3/20 rows stable in
-both timing domains; the raw cohorts are retained, but the record cannot support
-promotion and requires a higher-amortization rerun.
+changes no selector. The final 31-sample, 10,000-device-launch and
+50-end-to-end-launch run has 19/20 rows stable in both timing domains. The only
+terminal miss is TF32 `256x256x256`: its device cohorts remain bimodal at 7.02%
+while end-to-end is stable at 0.59%. That row is explicitly non-promoting; the
+existing selector is retained rather than hiding the exact-device result.
 
 The broader-family NVIDIA-E2E-2 reduction slice now carries
 `tile.reduce_kernel(X,O,Outer,AxisExtent,Inner)` and an SM120-owned v2
@@ -794,13 +801,12 @@ The SM120 correctness-first materializer and four-buffer descriptor launch
 through the shipped PTX bridge; exact RTX 5070 Ti proof passes 8/8
 MHA/MQA, rectangular/ragged, causal/non-causal cases with zero spills. The
 entry symbol includes the scale/causal semantic digest so incompatible images
-cannot alias in the driver cache. Bias, window, softcap, dropout, backward, and
-the production optimized comparison remain open. The retained eight-row
+cannot alias in the driver cache. Bias, window, softcap, dropout, and backward
+are completed below. The retained eight-row
 two-cohort baseline records CUDA-event and allocation/copy-inclusive timings,
 cold/warm image identity, resources, and raw samples. A higher-amortization
-rerun now has 8/8 rows within 3% in both domains. It remains evidence-only
-because the canonical correctness-first route has not completed a stable
-comparison against the optimized production candidates.
+rerun now has 8/8 rows within 3% in both domains. It remains historical
+evidence; the final comparison below owns the production disposition.
 
 The forward carrier now also owns optional dense f32 bias, signed left/right
 window bounds, arithmetic softcap, and deterministic `lcg32_counter_v1`
@@ -813,8 +819,8 @@ buffer native descriptor. It assigns one dQ/dK/dV element to one thread,
 performs fixed-order single-owner dK/dV reduction, requires
 `deterministic=true`, and declares zero workspace. The exact-device GQA row
 proves causal+window+bias+softcap derivatives, bitwise replay, descriptor-shape
-rejection, and agreement with the shared Pade-softcap oracle. Dropout backward
-and f16 storage remain explicit limitations of this canonical reference route.
+rejection, and agreement with the shared Pade-softcap oracle. The final semantic
+slice below adds matching f16 storage and dropout-mask replay.
 
 The refreshed backward candidate matrix passes 6/6 exact-device oracle,
 determinism, and workspace cases. All six atomic/split rows are stable in both
@@ -840,20 +846,31 @@ its graphics clocks are host-managed. All six candidate rows are accepted; the
 legacy 2048 device-event row uses an explicit five-basis-point WSL margin at
 4.02%, and margin-accepted rows are selector-ineligible. Timing-domain winners
 also disagree at 512/2048, so the selector
-remains unchanged; foundation migration may proceed, but performance promotion
-still requires consensus and more controlled exact-device evidence.
+remains unchanged. The SM120 foundation disposition is closed as retain-existing;
+a future native-Linux controlled-host promotion attempt is a separate
+hardware-environment follow-up, not an open migration dependency.
 
 The stateful/MoE image slice adds compiler-owned Tile→NVIDIA→PTX packages for
-ReplaySSM decode/flush and local f32 MoE dispatch/combine/ragged grouped GEMM.
+ReplaySSM decode/flush and local f16/bf16/f32 MoE dispatch/combine/ragged
+grouped GEMM.
 The resident Replay handle no longer embeds those device kernels in its CUDA
 host bridge: it loads the compiler-produced PTX functions while retaining the
 session-persistent allocations, asynchronous ring, events, and ordering
 contract. Compiler-owned MoE candidates launch through the generic descriptor
-submission path; the existing production MoE selector remains unchanged until
-stable comparative evidence justifies promotion. Exact RTX 5070 Ti tests cover
+submission path. Exact RTX 5070 Ti tests cover
 dispatch/combine numerical order,
 zero-sized expert groups, ragged grouped GEMM, Replay transitions, persistent
 workspace metadata, image identity, and resource retention.
+
+The final comparative record contains 14 strict-stable rows for cooperative
+softmax, four-warp forward attention, and local MoE dispatch/combine/grouped
+GEMM. Every row retains two CUDA-event and allocation/copy-inclusive cohorts,
+the discarded first lifecycle launch, 100-launch end-to-end amortization,
+per-candidate clock conditioning, cold/warm image state, and exact resource
+fingerprints. Production softmax and attention win both domains. MoE does not
+produce cross-domain consensus across all three routes, so the existing MoE
+selector is retained. ReplaySSM's higher-amortization 10-row matrix is now
+10/10 stable in both timing domains. No selector changes.
 
 The collective follow-on adds an explicit content-addressed rank/device
 topology and a one-process/multiple-device NCCL executor for all-reduce,
@@ -877,6 +894,35 @@ production fp16-mean reduction end-to-end row is explicitly margin-accepted at
 selector-ineligible. Seven strict rows have cross-domain winner consensus, but
 the record changes no selector because stable consensus alone does not establish
 a promotion policy or required material benefit.
+
+The final SM120 semantic slice removes the remaining execution limitations.
+The deterministic attention VJP now accepts matching f16 or f32 dO/Q/K/V and
+gradient storage, accumulates in f32, and replays the forward
+`lcg32_counter_v1` dropout mask from the semantic seed without a saved-mask
+workspace. A compiler-owned `tile.paged_attention_kernel` consumes Q, K/V
+pages, the i32 remap table, i64 logical token indices, and an explicit causal
+offset in one fused descriptor; the offset is never inferred from allocation
+capacity. MoE dispatch, deterministic combine, and ragged grouped GEMM now
+accept f16, bf16, or f32 storage with int32 metadata, f32 combine weights, and
+f32 grouped accumulation. Exact RTX 5070 Ti tests prove numerical agreement,
+dropout bitwise replay, page remapping/causal boundaries, malformed metadata
+rejection, and low-precision MoE execution. This shared Tile-carrier extension
+transfers no CUDA schedule: Apple is not applicable because it owns a separate
+resident paged-attention ABI and mature low-precision dispatch paths; ROCm
+requires architecture-owned lowering before claiming these carrier variants.
+
+Two hardware boundaries now have formal **deferred terminal** states for this
+work item:
+
+- exact two-or-more-GPU NCCL topology, numerical, resource, and timing proof is
+  deferred because the available SM120 WSL host exposes one GPU;
+- exact SM90 Hopper and SM100 datacenter-Blackwell Level-C evidence is deferred
+  because neither exact target is available. Their compile-only Level-B
+  artifacts do not inherit SM120 execution evidence.
+
+Deferred hardware terminals do not authorize selector changes and do not hide
+missing evidence. A future hardware follow-up must reopen its own exact-device
+item under synchronization key `E2E-SPINE-2026-07-18`.
 
 The LLVM-stage device-library follow-on makes CUDA `libdevice` an explicit
 compiler dependency rather than accidental driver behavior. Native-image

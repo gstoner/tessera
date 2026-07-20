@@ -19,6 +19,9 @@ def test_committed_replay_parity_has_wide_transition_and_resource_proof():
         "long_decode", "flush", "rollback", "speculative_rejection",
         "block_submit", "ordered_ring", "backpressure", "teardown"}
     for row in data["rows"]:
+        assert row["stable"] is True
+        assert row["device_stable"] is True
+        assert row["end_to_end_stable"] is True
         assert len(row["runs"]) == 2
         assert all(len(run["device_batch_medians_ms_per_token"]) >= 20
                    and len(run["device_batch_medians_ms_per_token"])

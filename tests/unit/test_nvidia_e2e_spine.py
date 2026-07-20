@@ -16,7 +16,9 @@ from tessera.compiler.nvidia_native import (
     emit_nvfp4_matmul_tile_ir,
     emit_reduce_tile_ir,
     emit_matmul_tile_ir,
+    emit_moe_tile_ir,
     emit_mx_matmul_tile_ir,
+    emit_paged_attention_tile_ir,
     emit_paged_kv_read_tile_ir,
     package_nvfp4_matmul,
     requests_mx_matmul,
@@ -300,11 +302,13 @@ def test_sm120_attention_owns_bias_window_softcap_and_dropout_contract() -> None
         )
 
 
-def _attention_backward_module(*, bias: bool = False) -> GraphIRModule:
-    q = IRType("tensor<1x2x3x4xf32>", ("1", "2", "3", "4"), "fp32")
-    k = IRType("tensor<1x1x4x4xf32>", ("1", "1", "4", "4"), "fp32")
-    v = IRType("tensor<1x1x4x3xf32>", ("1", "1", "4", "3"), "fp32")
-    do = IRType("tensor<1x2x3x3xf32>", ("1", "2", "3", "3"), "fp32")
+def _attention_backward_module(*, bias: bool = False, dtype: str = "fp32",
+                               dropout_p: float = 0.0) -> GraphIRModule:
+    ir = "f16" if dtype == "fp16" else "f32"
+    q = IRType(f"tensor<1x2x3x4x{ir}>", ("1", "2", "3", "4"), dtype)
+    k = IRType(f"tensor<1x1x4x4x{ir}>", ("1", "1", "4", "4"), dtype)
+    v = IRType(f"tensor<1x1x4x3x{ir}>", ("1", "1", "4", "3"), dtype)
+    do = IRType(f"tensor<1x2x3x3x{ir}>", ("1", "2", "3", "3"), dtype)
     bias_type = IRType("tensor<1x2x3x4xf32>", ("1", "2", "3", "4"), "fp32")
     args = [IRArg("do", do), IRArg("q", q), IRArg("k", k), IRArg("v", v)]
     operands = ["%do", "%q", "%k", "%v"]
@@ -321,7 +325,8 @@ def _attention_backward_module(*, bias: bool = False) -> GraphIRModule:
             result_type=f"({q}, {k}, {v})",
             kwargs={"scale": 0.5, "causal": True, "window": (2, 1),
                     "softcap": 1.7, "route": "deterministic_direct",
-                    "deterministic": True, "workspace_limit_bytes": 0},
+                    "deterministic": True, "workspace_limit_bytes": 0,
+                    "dropout_p": dropout_p, "dropout_seed": 91},
         )], return_values=["%dq", "%dk", "%dv"],
     )])
 
@@ -341,6 +346,20 @@ def test_sm120_attention_backward_owns_determinism_and_workspace_contract() -> N
     bad = _attention_backward_module()
     bad.functions[0].body[0].kwargs["route"] = "atomic"
     assert not supports_attention_backward(bad)
+
+
+@pytest.mark.parametrize("dtype", ["fp16", "fp32"])
+def test_sm120_attention_backward_owns_storage_and_dropout_replay(dtype) -> None:
+    module = _attention_backward_module(dtype=dtype, dropout_p=0.25)
+    assert supports_attention_backward(module)
+    storage = "f16" if dtype == "fp16" else "f32"
+    source = emit_attention_backward_tile_ir(
+        entry="attention_backward_dropout", storage=storage,
+        scale=0.5, causal=True, dropout_p=0.25, dropout_seed=91,
+    )
+    assert f'storage = "{storage}"' in source
+    assert "dropout_p = 0.25" in source
+    assert "dropout_seed = 91" in source
 
 
 def _paged_kv_module(*, start: int = 3, end: int = 10) -> GraphIRModule:
@@ -366,6 +385,27 @@ def test_sm120_paged_kv_owns_typed_direct_descriptor_contract() -> None:
     assert "tile.paged_kv_read_kernel" in source
     assert 'table_storage = "i32"' in source
     assert 'route = "direct"' in source
+
+
+def test_sm120_paged_attention_owns_fused_causal_offset_descriptor() -> None:
+    source = emit_paged_attention_tile_ir(entry="paged_attention", scale=0.125, causal=True)
+    assert "tile.paged_attention_kernel" in source
+    assert 'route = "fused_direct"' in source
+    assert "%causal_offset: i64" in source
+    assert "token_index_storage = \"i64\"" in source
+    with pytest.raises(ValueError, match="scale"):
+        emit_paged_attention_tile_ir(entry="bad", scale=0.0, causal=True)
+
+
+@pytest.mark.parametrize("storage", ["f16", "bf16", "f32"])
+def test_sm120_moe_carriers_own_storage_and_f32_accumulation(storage) -> None:
+    for route in ("dispatch", "combine", "grouped_gemm"):
+        source = emit_moe_tile_ir(entry=f"moe_{route}_{storage}", route=route, storage=storage)
+        assert f'storage = "{storage}"' in source
+        if route == "grouped_gemm":
+            assert 'accum = "f32"' in source
+    with pytest.raises(ValueError, match="storage"):
+        emit_moe_tile_ir(entry="bad", route="dispatch", storage="fp8")
 
 
 def _reduction_module(

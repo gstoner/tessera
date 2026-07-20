@@ -1176,3 +1176,12 @@ runtime. The gfx1151 paged-attention recorder now represents an invalid HIP
 event interval as unavailable instead of fabricating positive device evidence;
 end-to-end route timing and selection remain valid. No RDNA schedule, HSACO ABI,
 dtype capability, or selector threshold changes.
+
+Cross-backend sync `E2E-SPINE-2026-07-18` extends shared launch-level Tile
+carriers for deterministic f16/f32 attention-backward dropout replay, fused
+paged-attention with an explicit causal offset, and f16/bf16/f32 MoE storage.
+This is **follow-up required** only if ROCm selects those portable carriers:
+CUDA materializers, PTX ABIs, SM120 schedules, resources, and evidence do not
+transfer to RDNA. Existing ROCm attention, paged-KV, and MoE capability rows
+remain unchanged until gfx-owned lowering, HSACO launch, numerical, and exact
+device proof land.

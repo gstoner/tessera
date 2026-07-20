@@ -1109,7 +1109,7 @@ def _synthesize_softmax_cuda() -> str:
         "#include <float.h>\n"
         "#include <math.h>\n"
         "#define TSR_SM_BLOCK 256\n"
-        "__global__ void tsr_softmax_kernel(const float* x, float* o, long K) {\n"
+        "extern \"C\" __global__ void tsr_softmax_kernel(const float* x, float* o, long K) {\n"
         "  const long row = (long)blockIdx.x; const int tid = threadIdx.x;\n"
         "  __shared__ float scratch[TSR_SM_BLOCK];\n"
         "  float mx = -FLT_MAX;\n"
@@ -1140,6 +1140,13 @@ def _synthesize_softmax_cuda() -> str:
         "  if (ok == 1 && cudaMemcpy(ho, dout, bytes, cudaMemcpyDeviceToHost) != cudaSuccess) ok = 3;\n"
         "  cudaFree(dx); cudaFree(dout); return ok;\n"
         "}\n"
+        'extern "C" int tessera_nvidia_softmax_benchmark(const float*hx,long M,long K,int warmup,int reps,float*ms){\n'
+        " if(!hx||M<=0||K<=0||warmup<0||reps<=0||!ms)return 2;size_t n=(size_t)M*K*sizeof(float);float *dx=0,*o=0;cudaEvent_t a=0,b=0;\n"
+        " if(cudaMalloc(&dx,n)!=cudaSuccess||cudaMalloc(&o,n)!=cudaSuccess)return 2;if(cudaMemcpy(dx,hx,n,cudaMemcpyHostToDevice)!=cudaSuccess)return 3;\n"
+        " for(int i=0;i<warmup;i++)tsr_softmax_kernel<<<(unsigned)M,TSR_SM_BLOCK>>>(dx,o,K);if(cudaDeviceSynchronize()!=cudaSuccess)return 3;\n"
+        " if(cudaEventCreate(&a)!=cudaSuccess||cudaEventCreate(&b)!=cudaSuccess||cudaEventRecord(a)!=cudaSuccess)return 3;\n"
+        " for(int i=0;i<reps;i++)tsr_softmax_kernel<<<(unsigned)M,TSR_SM_BLOCK>>>(dx,o,K);if(cudaEventRecord(b)!=cudaSuccess||cudaEventSynchronize(b)!=cudaSuccess||cudaEventElapsedTime(ms,a,b)!=cudaSuccess)return 3;\n"
+        " *ms/=reps;cudaEventDestroy(a);cudaEventDestroy(b);cudaFree(dx);cudaFree(o);return 1;}\n"
     )
 
 
@@ -1148,7 +1155,7 @@ def _synthesize_softmax_f16_cuda() -> str:
     return (
         "#include <cuda_runtime.h>\n#include <cuda_fp16.h>\n#include <float.h>\n#include <math.h>\n"
         "#define TSR_SM_BLOCK 256\n"
-        "__global__ void tsr_softmax_kernel(const __half*x,__half*o,long K){\n"
+        "extern \"C\" __global__ void tsr_softmax_kernel(const __half*x,__half*o,long K){\n"
         " long r=(long)blockIdx.x;int t=threadIdx.x;__shared__ float s[TSR_SM_BLOCK];float mx=-FLT_MAX;\n"
         " for(long j=t;j<K;j+=blockDim.x)mx=fmaxf(mx,__half2float(x[r*K+j]));s[t]=mx;__syncthreads();\n"
         " for(int d=blockDim.x/2;d;d>>=1){if(t<d)s[t]=fmaxf(s[t],s[t+d]);__syncthreads();}mx=s[0];float sum=0.f;\n"
@@ -1161,6 +1168,13 @@ def _synthesize_softmax_f16_cuda() -> str:
         " if(cudaMemcpy(dx,hx,n,cudaMemcpyHostToDevice)!=cudaSuccess){cudaFree(dx);cudaFree(dout);return 3;}\n"
         " tsr_softmax_kernel<<<(unsigned)M,TSR_SM_BLOCK>>>(dx,dout,K);int ok=cudaDeviceSynchronize()==cudaSuccess?1:3;\n"
         " if(ok==1&&cudaMemcpy(ho,dout,n,cudaMemcpyDeviceToHost)!=cudaSuccess)ok=3;cudaFree(dx);cudaFree(dout);return ok;}\n"
+        'extern "C" int tessera_nvidia_softmax_benchmark(const __half*hx,long M,long K,int warmup,int reps,float*ms){\n'
+        " if(!hx||M<=0||K<=0||warmup<0||reps<=0||!ms)return 2;size_t n=(size_t)M*K*sizeof(__half);__half *dx=0,*o=0;cudaEvent_t a=0,b=0;\n"
+        " if(cudaMalloc(&dx,n)!=cudaSuccess||cudaMalloc(&o,n)!=cudaSuccess)return 2;if(cudaMemcpy(dx,hx,n,cudaMemcpyHostToDevice)!=cudaSuccess)return 3;\n"
+        " for(int i=0;i<warmup;i++)tsr_softmax_kernel<<<(unsigned)M,TSR_SM_BLOCK>>>(dx,o,K);if(cudaDeviceSynchronize()!=cudaSuccess)return 3;\n"
+        " if(cudaEventCreate(&a)!=cudaSuccess||cudaEventCreate(&b)!=cudaSuccess||cudaEventRecord(a)!=cudaSuccess)return 3;\n"
+        " for(int i=0;i<reps;i++)tsr_softmax_kernel<<<(unsigned)M,TSR_SM_BLOCK>>>(dx,o,K);if(cudaEventRecord(b)!=cudaSuccess||cudaEventSynchronize(b)!=cudaSuccess||cudaEventElapsedTime(ms,a,b)!=cudaSuccess)return 3;\n"
+        " *ms/=reps;cudaEventDestroy(a);cudaEventDestroy(b);cudaFree(dx);cudaFree(o);return 1;}\n"
     )
 
 
@@ -1196,6 +1210,37 @@ def run_row_softmax(x: Any) -> Any:
     if fn(_ptr(xf), _ptr(out), m, k) != 1:
         raise RuntimeError("NVIDIA row-softmax CUDA launch failed")
     return out
+
+
+def measure_row_softmax_device(x: Any, *, reps: int = 1000, warmup: int = 100) -> float:
+    """CUDA-event timing for the production cooperative row-softmax kernel."""
+    import numpy as np
+    xf = np.ascontiguousarray(x)
+    if xf.dtype == np.float32:
+        dtype, source = "f32", _synthesize_softmax_cuda()
+    elif xf.dtype == np.float16:
+        dtype, source = "f16", _synthesize_softmax_f16_cuda()
+    else:
+        raise ValueError(f"NVIDIA softmax supports f32/f16 storage, got {xf.dtype}")
+    if xf.ndim < 1 or xf.shape[-1] <= 0 or reps <= 0 or warmup < 0:
+        raise ValueError("softmax benchmark geometry/repetitions are invalid")
+    m = int(np.prod(xf.shape[:-1])) if xf.ndim > 1 else 1
+    k = int(xf.shape[-1])
+    artifact = _softmax_artifact.get(dtype)
+    if artifact is None:
+        artifact = _nvidia_cuda_compile_fn(KernelSource(
+            source=source, entry=_SOFTMAX_ENTRY, lang=_LANG,
+            spec=SpecPolicy.DYNAMIC, shape_key=(f"row-softmax-{dtype}",)))
+        _softmax_artifact[dtype] = artifact
+    fn = getattr(_load_lib(artifact), "tessera_nvidia_softmax_benchmark")
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p, ctypes.c_long, ctypes.c_long,
+                   ctypes.c_int, ctypes.c_int, ctypes.POINTER(ctypes.c_float)]
+    latency = ctypes.c_float()
+    rc = fn(xf.ctypes.data, m, k, warmup, reps, ctypes.byref(latency))
+    if rc != 1:
+        raise RuntimeError(f"NVIDIA softmax device benchmark failed rc={rc}")
+    return float(latency.value)
 
 
 # ── standalone row norms (CUDA parity P1) ────────────────────────────────────
@@ -1469,9 +1514,9 @@ def run_dequant_grouped_gemm_f32(x: Any, packed_experts: Any,
 
 def _synthesize_moe_cuda() -> str:
     source = r'''#include <cuda_runtime.h>
-__global__ void gather_k(const float*x,const int*tok,float*o,int S,int H){long z=(long)blockIdx.x*blockDim.x+threadIdx.x,n=(long)S*H;if(z<n){int s=z/H,h=z%H;o[z]=x[(long)tok[s]*H+h];}}
-__global__ void combine_k(const float*x,const int*tok,const float*w,float*o,int S,int H){long z=(long)blockIdx.x*blockDim.x+threadIdx.x,n=(long)S*H;if(z<n){int s=z/H,h=z%H;atomicAdd(&o[(long)tok[s]*H+h],w[s]*x[z]);}}
-__global__ void gg_k(const float*x,const float*w,const int*off,float*o,int T,int K,int N,int E){long z=(long)blockIdx.x*blockDim.x+threadIdx.x,n=(long)T*N;if(z<n){int r=z/N,c=z%N,e=0;while(e+1<E&&r>=off[e+1])++e;float a=0;for(int k=0;k<K;++k)a+=x[(long)r*K+k]*w[((long)e*K+k)*N+c];o[z]=a;}}
+extern "C" __global__ void gather_k(const float*x,const int*tok,float*o,int S,int H){long z=(long)blockIdx.x*blockDim.x+threadIdx.x,n=(long)S*H;if(z<n){int s=z/H,h=z%H;o[z]=x[(long)tok[s]*H+h];}}
+extern "C" __global__ void combine_k(const float*x,const int*tok,const float*w,float*o,int S,int H){long z=(long)blockIdx.x*blockDim.x+threadIdx.x,n=(long)S*H;if(z<n){int s=z/H,h=z%H;atomicAdd(&o[(long)tok[s]*H+h],w[s]*x[z]);}}
+extern "C" __global__ void gg_k(const float*x,const float*w,const int*off,float*o,int T,int K,int N,int E){long z=(long)blockIdx.x*blockDim.x+threadIdx.x,n=(long)T*N;if(z<n){int r=z/N,c=z%N,e=0;while(e+1<E&&r>=off[e+1])++e;float a=0;for(int k=0;k<K;++k)a+=x[(long)r*K+k]*w[((long)e*K+k)*N+c];o[z]=a;}}
 static int ac(void**d,const void*h,size_t z){return cudaMalloc(d,z)==cudaSuccess&&cudaMemcpy(*d,h,z,cudaMemcpyHostToDevice)==cudaSuccess;}
 extern "C" int tessera_nvidia_moe_dispatch_f32(const float*x,const int*tok,float*o,int T,int S,int H){float *dx=0,*dout=0;int*dt=0;size_t nx=(size_t)T*H*4,no=(size_t)S*H*4;if(!ac((void**)&dx,x,nx)||!ac((void**)&dt,tok,S*4)||cudaMalloc(&dout,no)!=cudaSuccess)return 3;gather_k<<<(S*H+255)/256,256>>>(dx,dt,dout,S,H);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,dout,no,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(dt);cudaFree(dout);return ok?1:3;}
 extern "C" int tessera_nvidia_moe_combine_f32(const float*x,const int*tok,const float*w,float*o,int T,int S,int H){float *dx=0,*dw=0,*dout=0;int*dt=0;size_t ni=(size_t)S*H*4,no=(size_t)T*H*4;if(!ac((void**)&dx,x,ni)||!ac((void**)&dt,tok,S*4)||!ac((void**)&dw,w,S*4)||cudaMalloc(&dout,no)!=cudaSuccess)return 3;cudaMemset(dout,0,no);combine_k<<<(S*H+255)/256,256>>>(dx,dt,dw,dout,S,H);int ok=cudaDeviceSynchronize()==cudaSuccess&&cudaMemcpy(o,dout,no,cudaMemcpyDeviceToHost)==cudaSuccess;cudaFree(dx);cudaFree(dt);cudaFree(dw);cudaFree(dout);return ok?1:3;}

@@ -73,9 +73,10 @@ constexpr const char* kTileAttentionPrefix = "tessera_tile_attention_";
 constexpr const char* kTileAttentionBackwardPrefix =
     "tessera_tile_attention_backward_";
 constexpr const char* kTilePagedKV = "tessera_tile_paged_kv_read_f32_direct";
-constexpr const char* kTileMoEDispatch = "tessera_tile_moe_dispatch_f32";
-constexpr const char* kTileMoECombine = "tessera_tile_moe_combine_f32";
-constexpr const char* kTileGroupedGemm = "tessera_tile_grouped_gemm_f32";
+constexpr const char* kTilePagedAttentionPrefix = "tessera_tile_paged_attention_f32_fused_";
+constexpr const char* kTileMoEDispatch = "tessera_tile_moe_dispatch_";
+constexpr const char* kTileMoECombine = "tessera_tile_moe_combine_";
+constexpr const char* kTileGroupedGemm = "tessera_tile_grouped_gemm_";
 
 std::mutex g_mu;
 std::map<std::string, std::string> g_ptx;           // kernel name -> PTX text
@@ -451,9 +452,11 @@ int invokeReduce(CUfunction fn, void** buffers, size_t nbuf,
 
 int invokeMoe(CUfunction fn, const char* name, void** buffers, size_t nbuf,
               const int64_t* dims, size_t ndim) {
-    const bool dispatch = std::strcmp(name, kTileMoEDispatch) == 0;
-    const bool combine = std::strcmp(name, kTileMoECombine) == 0;
-    const bool grouped = std::strcmp(name, kTileGroupedGemm) == 0;
+    const bool dispatch = std::strncmp(name,kTileMoEDispatch,std::strlen(kTileMoEDispatch)) == 0;
+    const bool combine = std::strncmp(name,kTileMoECombine,std::strlen(kTileMoECombine)) == 0;
+    const bool grouped = std::strncmp(name,kTileGroupedGemm,std::strlen(kTileGroupedGemm)) == 0;
+    const size_t elementBytes = (std::strstr(name,"_f16") ||
+                                 std::strstr(name,"_bf16")) ? 2 : 4;
     if ((!dispatch && !combine && !grouped) ||
         (grouped ? (nbuf != 4 || ndim != 4)
                  : (nbuf != (dispatch ? 3u : 4u) || ndim != 3))) return 5;
@@ -463,19 +466,20 @@ int invokeMoe(CUfunction fn, const char* name, void** buffers, size_t nbuf,
     unsigned threads = 256, grid = 0;
     if (dispatch) {
         const size_t T=dims[0], S=dims[1], H=dims[2];
-        if (T > SIZE_MAX/H/4 || S > SIZE_MAX/H/4) return 5;
-        sizes[0]=T*H*4; sizes[1]=S*4; sizes[2]=S*H*4;
+        if (T > SIZE_MAX/H/elementBytes || S > SIZE_MAX/H/elementBytes) return 5;
+        sizes[0]=T*H*elementBytes; sizes[1]=S*4; sizes[2]=S*H*elementBytes;
         grid=(unsigned)((S*H+threads-1)/threads);
     } else if (combine) {
         const size_t T=dims[0], S=dims[1], H=dims[2];
-        if (T > SIZE_MAX/H/4 || S > SIZE_MAX/H/4) return 5;
-        sizes[0]=S*H*4; sizes[1]=S*4; sizes[2]=S*4; sizes[3]=T*H*4;
+        if (T > SIZE_MAX/H/elementBytes || S > SIZE_MAX/H/elementBytes) return 5;
+        sizes[0]=S*H*elementBytes; sizes[1]=S*4; sizes[2]=S*4; sizes[3]=T*H*elementBytes;
         grid=(unsigned)((T*H+threads-1)/threads);
     } else {
         const size_t T=dims[0], K=dims[1], N=dims[2], E=dims[3];
-        if (T > SIZE_MAX/K/4 || E > SIZE_MAX/K || E*K > SIZE_MAX/N/4 ||
-            T > SIZE_MAX/N/4 || E == SIZE_MAX) return 5;
-        sizes[0]=T*K*4; sizes[1]=E*K*N*4; sizes[2]=(E+1)*4; sizes[3]=T*N*4;
+        if (T > SIZE_MAX/K/elementBytes || E > SIZE_MAX/K ||
+            E*K > SIZE_MAX/N/elementBytes || T > SIZE_MAX/N/elementBytes || E == SIZE_MAX) return 5;
+        sizes[0]=T*K*elementBytes; sizes[1]=E*K*N*elementBytes;
+        sizes[2]=(E+1)*4; sizes[3]=T*N*elementBytes;
         grid=(unsigned)((T*N+threads-1)/threads);
     }
     CUdeviceptr device[4]={}; int rc=0;
@@ -584,7 +588,48 @@ int invokePagedKV(CUfunction fn, void** buffers, size_t nbuf,
     return rc;
 }
 
-int invokeAttentionBackward(CUfunction fn, void** buffers, size_t nbuf,
+int invokePagedAttention(CUfunction fn, void** buffers, size_t nbuf,
+                         const int64_t* dims, size_t ndim) {
+    if (nbuf != 6 || ndim != 8) return 5;
+    const long long P=dims[0], LP=dims[1], PS=dims[2], H=dims[3];
+    const long long Q=dims[4], T=dims[5], D=dims[6], offset=dims[7];
+    if (P<=0 || LP<=0 || PS<=0 || H<=0 || Q<=0 || T<=0 || D<=0 ||
+        offset<0 || T>LP*PS || offset+Q>T) return 5;
+    const int* table = static_cast<const int*>(buffers[3]);
+    const long long* indices = static_cast<const long long*>(buffers[4]);
+    for (long long i=0;i<LP;++i) if (table[i]<0 || table[i]>=P) return 5;
+    for (long long i=0;i<T;++i) if (indices[i]<0 || indices[i]>=LP*PS) return 5;
+    auto checkedBytes=[](std::initializer_list<size_t> extents,size_t width,size_t& out) {
+        out=width; for(size_t extent:extents){if(extent && out>SIZE_MAX/extent)return false;out*=extent;} return true;
+    };
+    size_t qBytes=0,pageBytes=0,tableBytes=0,indexBytes=0,outBytes=0;
+    if(!checkedBytes({(size_t)H,(size_t)Q,(size_t)D},4,qBytes) ||
+       !checkedBytes({(size_t)P,(size_t)PS,(size_t)H,(size_t)D},4,pageBytes) ||
+       !checkedBytes({(size_t)LP},4,tableBytes) ||
+       !checkedBytes({(size_t)T},8,indexBytes) ||
+       !checkedBytes({(size_t)H,(size_t)Q,(size_t)D},4,outBytes)) return 5;
+    size_t sizes[6]={qBytes,pageBytes,pageBytes,tableBytes,indexBytes,outBytes};
+    CUdeviceptr device[6]={}; int rc=0;
+    for(int i=0;i<6;++i) if(cuMemAlloc(&device[i],sizes[i])!=CUDA_SUCCESS){rc=3;break;}
+    if(!rc) for(int i=0;i<5;++i)
+        if(cuMemcpyHtoD(device[i],buffers[i],sizes[i])!=CUDA_SUCCESS){rc=3;break;}
+    if(!rc){
+        long long args64[8]; for(int i=0;i<8;++i)args64[i]=dims[i];
+        void* args[14]; size_t arg=0;
+        for(int i=0;i<6;++i)args[arg++]=&device[i];
+        for(int i=0;i<8;++i)args[arg++]=&args64[i];
+        size_t count=(size_t)H*Q*D;
+        if(count==0 || count>(size_t)0x7fffffffU*128 ||
+           cuLaunchKernel(fn,(unsigned)((count+127)/128),1,1,128,1,1,0,0,args,0)!=CUDA_SUCCESS ||
+           cuCtxSynchronize()!=CUDA_SUCCESS ||
+           cuMemcpyDtoH(buffers[5],device[5],outBytes)!=CUDA_SUCCESS) rc=3;
+    }
+    for(CUdeviceptr ptr:device)if(ptr)cuMemFree(ptr);
+    return rc;
+}
+
+int invokeAttentionBackward(CUfunction fn, const char* kernelName,
+                            void** buffers, size_t nbuf,
                             const int64_t* dims, size_t ndim) {
     if ((nbuf != 7 && nbuf != 8) || ndim != 7) return 5;
     const bool hasBias = nbuf == 8;
@@ -593,8 +638,10 @@ int invokeAttentionBackward(CUfunction fn, void** buffers, size_t nbuf,
     const long long Sk=dims[4], D=dims[5], Dv=dims[6];
     if (B<=0 || Hq<=0 || Hkv<=0 || Sq<=0 || Sk<=0 || D<=0 || Dv<=0 ||
         Hq%Hkv) return 5;
-    auto bytes = [](std::initializer_list<size_t> values, size_t& out) {
-        out = sizeof(float);
+    const bool f16 = std::strstr(kernelName, "attention_backward_f16_") != nullptr;
+    const size_t elementBytes = f16 ? 2 : 4;
+    auto bytes = [](std::initializer_list<size_t> values, size_t width, size_t& out) {
+        out = width;
         for (size_t value : values) {
             if (value && out > SIZE_MAX / value) return false;
             out *= value;
@@ -602,11 +649,11 @@ int invokeAttentionBackward(CUfunction fn, void** buffers, size_t nbuf,
         return true;
     };
     size_t doBytes=0, qBytes=0, kBytes=0, vBytes=0, biasBytes=0;
-    if (!bytes({(size_t)B,(size_t)Hq,(size_t)Sq,(size_t)Dv},doBytes) ||
-        !bytes({(size_t)B,(size_t)Hq,(size_t)Sq,(size_t)D},qBytes) ||
-        !bytes({(size_t)B,(size_t)Hkv,(size_t)Sk,(size_t)D},kBytes) ||
-        !bytes({(size_t)B,(size_t)Hkv,(size_t)Sk,(size_t)Dv},vBytes) ||
-        (hasBias && !bytes({(size_t)B,(size_t)Hq,(size_t)Sq,(size_t)Sk},biasBytes)))
+    if (!bytes({(size_t)B,(size_t)Hq,(size_t)Sq,(size_t)Dv},elementBytes,doBytes) ||
+        !bytes({(size_t)B,(size_t)Hq,(size_t)Sq,(size_t)D},elementBytes,qBytes) ||
+        !bytes({(size_t)B,(size_t)Hkv,(size_t)Sk,(size_t)D},elementBytes,kBytes) ||
+        !bytes({(size_t)B,(size_t)Hkv,(size_t)Sk,(size_t)Dv},elementBytes,vBytes) ||
+        (hasBias && !bytes({(size_t)B,(size_t)Hq,(size_t)Sq,(size_t)Sk},4,biasBytes)))
         return 5;
     size_t sizes[8] = {doBytes,qBytes,kBytes,vBytes,0,0,0,0};
     if (hasBias) sizes[4] = biasBytes;
@@ -626,7 +673,7 @@ int invokeAttentionBackward(CUfunction fn, void** buffers, size_t nbuf,
         size_t arg=0;
         for(size_t i=0;i<nbuf;++i) args[arg++]=&device[i];
         for(int i=0;i<7;++i) args[arg++]=&args64[i];
-        size_t elements=qBytes/4+kBytes/4+vBytes/4;
+        size_t elements=qBytes/elementBytes+kBytes/elementBytes+vBytes/elementBytes;
         if (elements==0 || elements > (size_t)0x7fffffffU*128 ||
             cuLaunchKernel(fn,(unsigned)((elements+127)/128),1,1,128,1,1,0,0,args,0)!=CUDA_SUCCESS ||
             cuCtxSynchronize()!=CUDA_SUCCESS) rc=3;
@@ -1042,6 +1089,66 @@ int benchmarkPagedKV(CUfunction fn, void** buffers, size_t nbuf,
     return rc;
 }
 
+int benchmarkMoe(CUfunction fn, const char* name, void** buffers, size_t nbuf,
+                 const int64_t* dims, size_t ndim, int warmup,
+                 int repetitions, float* latencyMs) {
+    const bool dispatch = std::strncmp(name,kTileMoEDispatch,std::strlen(kTileMoEDispatch)) == 0;
+    const bool combine = std::strncmp(name,kTileMoECombine,std::strlen(kTileMoECombine)) == 0;
+    const bool grouped = std::strncmp(name,kTileGroupedGemm,std::strlen(kTileGroupedGemm)) == 0;
+    const size_t elementBytes = (std::strstr(name,"_f16") ||
+                                 std::strstr(name,"_bf16")) ? 2 : 4;
+    if (!latencyMs || warmup < 0 || repetitions <= 0 ||
+        (!dispatch && !combine && !grouped) ||
+        (grouped ? (nbuf != 4 || ndim != 4)
+                 : (nbuf != (dispatch ? 3u : 4u) || ndim != 3))) return 5;
+    for (size_t i=0;i<ndim;++i)
+        if (dims[i] <= 0 || dims[i] >= (1LL << 31)) return 5;
+    size_t sizes[4]={}; unsigned threads=256,grid=0;
+    if (dispatch) {
+        const size_t T=dims[0],S=dims[1],H=dims[2];
+        if(T>SIZE_MAX/H/elementBytes||S>SIZE_MAX/H/elementBytes)return 5;
+        sizes[0]=T*H*elementBytes;sizes[1]=S*4;sizes[2]=S*H*elementBytes;
+        grid=(unsigned)((S*H+threads-1)/threads);
+    } else if (combine) {
+        const size_t T=dims[0],S=dims[1],H=dims[2];
+        if(T>SIZE_MAX/H/elementBytes||S>SIZE_MAX/H/elementBytes)return 5;
+        sizes[0]=S*H*elementBytes;sizes[1]=S*4;sizes[2]=S*4;sizes[3]=T*H*elementBytes;
+        grid=(unsigned)((T*H+threads-1)/threads);
+    } else {
+        const size_t T=dims[0],K=dims[1],N=dims[2],E=dims[3];
+        if(T>SIZE_MAX/K/elementBytes||E>SIZE_MAX/K||
+           E*K>SIZE_MAX/N/elementBytes||T>SIZE_MAX/N/elementBytes||E==SIZE_MAX)return 5;
+        sizes[0]=T*K*elementBytes;sizes[1]=E*K*N*elementBytes;
+        sizes[2]=(E+1)*4;sizes[3]=T*N*elementBytes;
+        grid=(unsigned)((T*N+threads-1)/threads);
+    }
+    CUdeviceptr device[4]={}; CUevent start=nullptr,stop=nullptr; int rc=0;
+    for(size_t i=0;i<nbuf;++i)
+        if(cuMemAlloc(&device[i],sizes[i])!=CUDA_SUCCESS){rc=3;break;}
+    const size_t outputIndex=nbuf-1;
+    for(size_t i=0;!rc&&i<outputIndex;++i)
+        if(cuMemcpyHtoD(device[i],buffers[i],sizes[i])!=CUDA_SUCCESS)rc=3;
+    long long args64[4]={};for(size_t i=0;i<ndim;++i)args64[i]=dims[i];
+    void* args[8]={};size_t arg=0;
+    for(size_t i=0;i<nbuf;++i)args[arg++]=&device[i];
+    for(size_t i=0;i<ndim;++i)args[arg++]=&args64[i];
+    for(int i=0;!rc&&i<warmup;++i)
+        if(cuLaunchKernel(fn,grid,1,1,threads,1,1,0,0,args,0)!=CUDA_SUCCESS)rc=3;
+    if(!rc&&(cuCtxSynchronize()!=CUDA_SUCCESS||cuEventCreate(&start,0)!=CUDA_SUCCESS||
+             cuEventCreate(&stop,0)!=CUDA_SUCCESS))rc=3;
+    if(!rc&&cuEventRecord(start,0)!=CUDA_SUCCESS)rc=3;
+    for(int i=0;!rc&&i<repetitions;++i)
+        if(cuLaunchKernel(fn,grid,1,1,threads,1,1,0,0,args,0)!=CUDA_SUCCESS)rc=3;
+    if(!rc&&(cuEventRecord(stop,0)!=CUDA_SUCCESS||cuEventSynchronize(stop)!=CUDA_SUCCESS))rc=3;
+    float total=0.0f;
+    if(!rc&&(cuEventElapsedTime(&total,start,stop)!=CUDA_SUCCESS||
+             cuMemcpyDtoH(buffers[outputIndex],device[outputIndex],sizes[outputIndex])!=CUDA_SUCCESS))rc=3;
+    if(!rc)*latencyMs=total/(float)repetitions;
+    if(start)cuEventDestroy(start);if(stop)cuEventDestroy(stop);
+    for(CUdeviceptr ptr:device)if(ptr)cuMemFree(ptr);
+    return rc;
+}
+
 // Shared launch body behind both the direct C-ABI and the tsrGpuLauncherFn.
 int invokeImpl(const char* kernel_name, void** buffers, size_t nbuf,
                const int64_t* dims, size_t ndim) {
@@ -1098,15 +1205,18 @@ int invokeImpl(const char* kernel_name, void** buffers, size_t nbuf,
         return invokeReduce(fn,buffers,nbuf,dims,ndim,4,std::strstr(kernel_name,"_cooperative_128")!=nullptr);
     if (std::strncmp(kernel_name, kTileAttentionBackwardPrefix,
                      std::strlen(kTileAttentionBackwardPrefix)) == 0)
-        return invokeAttentionBackward(fn, buffers, nbuf, dims, ndim);
+        return invokeAttentionBackward(fn, kernel_name, buffers, nbuf, dims, ndim);
     if (std::strncmp(kernel_name, kTileAttentionPrefix,
                      std::strlen(kTileAttentionPrefix)) == 0)
         return invokeAttention(fn, kernel_name, buffers, nbuf, dims, ndim);
     if (std::strcmp(kernel_name, kTilePagedKV) == 0)
         return invokePagedKV(fn, buffers, nbuf, dims, ndim);
-    if (std::strcmp(kernel_name, kTileMoEDispatch) == 0 ||
-        std::strcmp(kernel_name, kTileMoECombine) == 0 ||
-        std::strcmp(kernel_name, kTileGroupedGemm) == 0)
+    if (std::strncmp(kernel_name, kTilePagedAttentionPrefix,
+                     std::strlen(kTilePagedAttentionPrefix)) == 0)
+        return invokePagedAttention(fn, buffers, nbuf, dims, ndim);
+    if (std::strncmp(kernel_name,kTileMoEDispatch,std::strlen(kTileMoEDispatch)) == 0 ||
+        std::strncmp(kernel_name,kTileMoECombine,std::strlen(kTileMoECombine)) == 0 ||
+        std::strncmp(kernel_name,kTileGroupedGemm,std::strlen(kTileGroupedGemm)) == 0)
         return invokeMoe(fn, kernel_name, buffers, nbuf, dims, ndim);
     return 5;                                        // unknown kernel ABI
 }
@@ -1188,6 +1298,11 @@ int tessera_nvidia_ptx_benchmark(const char* kernel_name, void** buffers,
     if (std::strcmp(kernel_name, kTilePagedKV) == 0)
         return benchmarkPagedKV(fn, buffers, num_buffers, dims, num_dims,
                                 warmup, repetitions, latency_ms);
+    if (std::strncmp(kernel_name,kTileMoEDispatch,std::strlen(kTileMoEDispatch)) == 0 ||
+        std::strncmp(kernel_name,kTileMoECombine,std::strlen(kTileMoECombine)) == 0 ||
+        std::strncmp(kernel_name,kTileGroupedGemm,std::strlen(kTileGroupedGemm)) == 0)
+        return benchmarkMoe(fn, kernel_name, buffers, num_buffers, dims,
+                            num_dims, warmup, repetitions, latency_ms);
     return benchmarkTileGemm16(fn, kernel_name, buffers, num_buffers, dims,
                                num_dims, warmup, repetitions, latency_ms);
 }

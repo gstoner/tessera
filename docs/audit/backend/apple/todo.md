@@ -1183,3 +1183,13 @@ sanitizer lanes after the LLVM/MLIR 23 migration. The shared capability audit
 also corrects the existing Apple GPU matmul row to admit the already-shipped
 f32/f16/bf16 MPS and Tile-simdgroup value ABIs. This is parity repair for an
 existing Apple contract, not a new Metal schedule or exact-device claim.
+
+Cross-backend sync `E2E-SPINE-2026-07-18` extends the shared launch-level Tile
+carrier inventory with deterministic f16/f32 attention-backward dropout replay,
+an explicit fused paged-attention causal-offset descriptor, and typed
+f16/bf16/f32 MoE storage. The NVIDIA materializers, PTX ABIs, SM120 schedules,
+and exact-device evidence do not transfer. Apple already owns separate Metal
+attention/paged-cache and low-precision dispatch contracts, so no Apple runtime
+mapping is required by this NVIDIA slice; future use of the new portable
+carrier spellings must be proven through an Apple-owned lowering and exact
+Apple device evidence.

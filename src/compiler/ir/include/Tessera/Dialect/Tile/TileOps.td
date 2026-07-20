@@ -476,6 +476,18 @@ def Tile_PagedKVReadKernelOp : Tile_Op<"paged_kv_read_kernel"> {
   let hasVerifier = 1;
 }
 
+// Compiler-owned fused paged attention. Inputs are Q, K pages, V pages, i32
+// logical-to-physical page table, i64 logical token indices, O, followed by
+// P/LP/page-size/H/Q/T/D/causal-offset. The offset is an explicit absolute
+// query-position contract; no runtime route may infer it from allocation size.
+def Tile_PagedAttentionKernelOp : Tile_Op<"paged_attention_kernel"> {
+  let summary = "Launch-level fused paged-KV causal attention";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
 // ReplaySSM output reconstruction from a session-resident checkpoint and ring.
 // Inputs are delta, x, B, S0, C, A, Y, followed by B/D/N/M dimensions.
 def Tile_ReplaySSMDecodeKernelOp : Tile_Op<"replay_ssm_decode_kernel"> {

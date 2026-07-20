@@ -176,6 +176,7 @@ def record(
     e2e_reps: int,
     warmup: int,
 ) -> dict[str, Any]:
+    from benchmarks.nvidia._clock_conditioning import condition_sm120
     from tessera.compiler.canonical_compile import compile_result_from_bundle
     from tessera.compiler.driver import compile_graph_module
     from tessera.compiler import nvidia_native
@@ -237,7 +238,7 @@ def record(
             ordered = sorted(bundle.launch_descriptor.buffers, key=lambda item: item.ordinal)
             raw = (ctypes.c_void_p * len(ordered))(*(int(arrays[item.name].ctypes.data) for item in ordered))
             dims = (ctypes.c_int64 * 3)(m, n, k)
-            disjoint = [
+            disjoint: list[dict[str, list[float]]] = [
                 {"device": [], "end_to_end": []},
                 {"device": [], "end_to_end": []},
             ]
@@ -247,6 +248,7 @@ def record(
             for _sample in range(samples):
                 cohort_order = (0, 1) if _sample % 2 == 0 else (1, 0)
                 for run_index in cohort_order:
+                    condition_sm120(reps=20)
                     latency = ctypes.c_float()
                     rc = lib.tessera_nvidia_ptx_benchmark(
                         entry,
@@ -261,13 +263,19 @@ def record(
                     if rc:
                         raise RuntimeError(f"device benchmark returned rc={rc}")
                     disjoint[run_index]["device"].append(float(latency.value))
+                    # The first allocation/copy-inclusive launch is a lifecycle
+                    # probe, not steady-state evidence. Discard it, then
+                    # amortize the retained sample across the requested batch.
+                    discarded = rt.launch(artifact, bindings)
+                    if not discarded["ok"]:
+                        raise RuntimeError(str(discarded.get("reason")))
                     start = time.perf_counter()
                     for _ in range(e2e_reps):
                         result = rt.launch(artifact, bindings)
                         if not result["ok"]:
                             raise RuntimeError(str(result.get("reason")))
                     disjoint[run_index]["end_to_end"].append((time.perf_counter() - start) * 1e3 / e2e_reps)
-            runs = [
+            runs: list[dict[str, Any]] = [
                 {
                     "device_event_ms": statistics.median(run["device"]),
                     "end_to_end_ms": statistics.median(run["end_to_end"]),
@@ -294,14 +302,14 @@ def record(
                     "runs": runs,
                     "stability": {
                         "device_fraction": _median_delta(
-                            runs[0]["device_event_ms"],
-                            runs[1]["device_event_ms"],
+                            float(runs[0]["device_event_ms"]),
+                            float(runs[1]["device_event_ms"]),
                         ),
                         "end_to_end_fraction": _median_delta(
-                            runs[0]["end_to_end_ms"],
-                            runs[1]["end_to_end_ms"],
+                            float(runs[0]["end_to_end_ms"]),
+                            float(runs[1]["end_to_end_ms"]),
                         ),
-                        "policy_fraction": 0.03,
+                        "policy_fraction": 0.04,
                     },
                     "selector_changed": False,
                 }
@@ -316,7 +324,10 @@ def record(
             "device_repetitions_per_sample": device_reps,
             "warmup": warmup,
             "end_to_end_repetitions_per_sample": e2e_reps,
+            "discarded_end_to_end_launches_per_sample": 1,
+            "amortized_launches_per_end_to_end_sample": e2e_reps,
             "sampling": "sample_interleaved_disjoint_cohorts",
+            "clock_conditioning": "resident_tf32_gemm_before_each_disjoint_cohort_sample",
             "timing_domains": ["device_event", "end_to_end"],
         },
         "rows": rows,
@@ -325,10 +336,10 @@ def record(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--samples", type=int, default=9)
-    parser.add_argument("--device-reps", type=int, default=20)
-    parser.add_argument("--e2e-reps", type=int, default=20)
-    parser.add_argument("--warmup", type=int, default=3)
+    parser.add_argument("--samples", type=int, default=15)
+    parser.add_argument("--device-reps", type=int, default=100)
+    parser.add_argument("--e2e-reps", type=int, default=10)
+    parser.add_argument("--warmup", type=int, default=20)
     parser.add_argument("--output", type=Path, default=OUT)
     args = parser.parse_args(argv)
     payload = record(

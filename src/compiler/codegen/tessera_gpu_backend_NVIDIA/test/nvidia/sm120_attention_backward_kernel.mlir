@@ -11,6 +11,7 @@ module {
       storage = "f32", accum = "f32", scale = 0.5 : f32,
       causal = true, bias = false, window_left = 2 : i64,
       window_right = 1 : i64, softcap = 1.7 : f32,
+      dropout_p = 0.0 : f32, dropout_seed = 0 : i64,
       route = "deterministic_direct", deterministic = true,
       workspace_bytes = 0 : i64
     } : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr,

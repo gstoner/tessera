@@ -2354,6 +2354,8 @@ def _submit_nvidia_sm120_native(
         SM120_ATTN_BIAS_F32_ABI,
         SM120_ATTN_BWD_F32_ABI,
         SM120_ATTN_BWD_BIAS_F32_ABI,
+        SM120_ATTN_BWD_F16_ABI,
+        SM120_ATTN_BWD_BIAS_F16_ABI,
         SM120_BF16_ABI,
         SM120_EPILOGUE_ABIS,
         SM120_F16_ABI,
@@ -2367,6 +2369,8 @@ def _submit_nvidia_sm120_native(
         SM120_MOE_DISPATCH_F32_ABI,
         SM120_MOE_COMBINE_F32_ABI,
         SM120_GROUPED_GEMM_F32_ABI,
+        SM120_MOE_ABIS,
+        SM120_PAGED_ATTN_F32_ABI,
         SM120_PAGED_KV_F32_ABI,
         SM120_NVFP4_ABI,
         SM120_REDUCE_F16_ABI,
@@ -2381,8 +2385,10 @@ def _submit_nvidia_sm120_native(
         SM120_ATTN_F32_ABI,
         SM120_ATTN_BIAS_F16_ABI,
         SM120_ATTN_BIAS_F32_ABI,
-        SM120_ATTN_BWD_F32_ABI,
-        SM120_ATTN_BWD_BIAS_F32_ABI,
+            SM120_ATTN_BWD_F32_ABI,
+            SM120_ATTN_BWD_BIAS_F32_ABI,
+            SM120_ATTN_BWD_F16_ABI,
+            SM120_ATTN_BWD_BIAS_F16_ABI,
         SM120_BF16_ABI,
         SM120_F16_ABI,
         SM120_NVFP4_ABI,
@@ -2394,7 +2400,8 @@ def _submit_nvidia_sm120_native(
         SM120_FP6_E3M2_ABI,
         SM120_INT8_ABI,
         SM120_MXFP4_ABI,
-        SM120_PAGED_KV_F32_ABI,
+            SM120_PAGED_KV_F32_ABI,
+            SM120_PAGED_ATTN_F32_ABI,
         SM120_REDUCE_F16_ABI,
         SM120_REDUCE_F32_ABI,
         SM120_SOFTMAX_F16_ABI,
@@ -2402,7 +2409,7 @@ def _submit_nvidia_sm120_native(
         SM120_MOE_DISPATCH_F32_ABI,
         SM120_MOE_COMBINE_F32_ABI,
         SM120_GROUPED_GEMM_F32_ABI,
-    } | set(SM120_EPILOGUE_ABIS):
+        } | set(SM120_EPILOGUE_ABIS) | set(SM120_MOE_ABIS):
         raise RuntimeError(f"unsupported SM120 descriptor ABI {descriptor.abi_id!r}")
     lib = _load_nvidia_ptx_launch()
     if lib is None:
@@ -2432,17 +2439,17 @@ def _submit_nvidia_sm120_native(
     attention_backward_abis = {
         SM120_ATTN_BWD_F32_ABI,
         SM120_ATTN_BWD_BIAS_F32_ABI,
+        SM120_ATTN_BWD_F16_ABI,
+        SM120_ATTN_BWD_BIAS_F16_ABI,
     }
     unary_abis = softmax_abis | reduction_abis
-    moe_abis = {
-        SM120_MOE_DISPATCH_F32_ABI,
-        SM120_MOE_COMBINE_F32_ABI,
-        SM120_GROUPED_GEMM_F32_ABI,
-    }
+    moe_abis = set(SM120_MOE_ABIS)
     if descriptor.abi_id in attention_backward_abis:
         dimensions = tuple(int(cast(int, scalars[name])) for name in ("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv"))
         b, hq, hkv, sq, sk, d, dv = dimensions
-        has_bias = descriptor.abi_id == SM120_ATTN_BWD_BIAS_F32_ABI
+        has_bias = descriptor.abi_id in {
+            SM120_ATTN_BWD_BIAS_F32_ABI, SM120_ATTN_BWD_BIAS_F16_ABI
+        }
         do, q, key, value = raw[:4]
         bias = raw[4] if has_bias else None
         output_base = 5 if has_bias else 4
@@ -2459,6 +2466,26 @@ def _submit_nvidia_sm120_native(
         ):
             raise RuntimeError("SM120 attention backward shapes disagree with descriptor scalars")
         output = (dq, dk, dvalue)
+    elif descriptor.abi_id == SM120_PAGED_ATTN_F32_ABI:
+        dimensions = tuple(int(cast(int, scalars[name])) for name in (
+            "P", "LP", "PageSize", "H", "QueryLength", "Tokens", "D", "CausalOffset"
+        ))
+        p, logical_pages, page_size, heads, qlen, tokens, dim, offset = dimensions
+        q, kp, vp, page_table, indices, output = raw
+        if (
+            tuple(q.shape) != (heads, qlen, dim)
+            or tuple(kp.shape) != (p, page_size, heads, dim)
+            or tuple(vp.shape) != tuple(kp.shape)
+            or tuple(page_table.shape) != (logical_pages,)
+            or tuple(indices.shape) != (tokens,)
+            or tuple(output.shape) != (heads, qlen, dim)
+            or offset < 0 or offset + qlen > tokens
+        ):
+            raise RuntimeError("SM120 paged-attention shapes/bounds disagree with descriptor scalars")
+        if bool((page_table < 0).any()) or bool((page_table >= p).any()):
+            raise RuntimeError("SM120 paged-attention table contains an invalid physical page")
+        if bool((indices < 0).any()) or bool((indices >= logical_pages * page_size).any()):
+            raise RuntimeError("SM120 paged-attention token indices are outside logical capacity")
     elif descriptor.abi_id == SM120_PAGED_KV_F32_ABI:
         dimensions = tuple(
             int(cast(int, scalars[name])) for name in ("P", "LP", "PageSize", "H", "D", "Start", "Tokens")
@@ -2493,7 +2520,7 @@ def _submit_nvidia_sm120_native(
             or (bias is not None and tuple(bias.shape) != (b, hq, sq, sk))
         ):
             raise RuntimeError("SM120 attention shapes disagree with descriptor scalars")
-    elif descriptor.abi_id == SM120_MOE_DISPATCH_F32_ABI:
+    elif descriptor.abi_id in SM120_MOE_ABIS and descriptor.provenance.get("route") == "dispatch":
         dimensions = tuple(int(cast(int, scalars[name])) for name in ("Tokens", "Slots", "Hidden"))
         tokens, slots, hidden = dimensions
         x, token_of_slot, output = raw
@@ -2505,7 +2532,7 @@ def _submit_nvidia_sm120_native(
             raise RuntimeError("SM120 MoE dispatch shapes disagree with descriptor scalars")
         if slots and (int(token_of_slot.min()) < 0 or int(token_of_slot.max()) >= tokens):
             raise RuntimeError("SM120 MoE dispatch token metadata is out of range")
-    elif descriptor.abi_id == SM120_MOE_COMBINE_F32_ABI:
+    elif descriptor.abi_id in SM120_MOE_ABIS and descriptor.provenance.get("route") == "combine":
         dimensions = tuple(int(cast(int, scalars[name])) for name in ("Tokens", "Slots", "Hidden"))
         tokens, slots, hidden = dimensions
         partials, token_of_slot, weights, output = raw
@@ -2518,7 +2545,7 @@ def _submit_nvidia_sm120_native(
             raise RuntimeError("SM120 MoE combine shapes disagree with descriptor scalars")
         if slots and (int(token_of_slot.min()) < 0 or int(token_of_slot.max()) >= tokens):
             raise RuntimeError("SM120 MoE combine token metadata is out of range")
-    elif descriptor.abi_id == SM120_GROUPED_GEMM_F32_ABI:
+    elif descriptor.abi_id in SM120_MOE_ABIS and descriptor.provenance.get("route") == "grouped_gemm":
         dimensions = tuple(int(cast(int, scalars[name])) for name in ("GroupedTokens", "K", "N", "Experts"))
         tokens, k, n, experts = dimensions
         x, weights, offsets, output = raw
@@ -2625,7 +2652,7 @@ def _submit_nvidia_sm120_native(
     return (
         output
         if descriptor.abi_id in unary_abis | attention_abis | attention_backward_abis | moe_abis
-        or descriptor.abi_id == SM120_PAGED_KV_F32_ABI
+        or descriptor.abi_id in {SM120_PAGED_KV_F32_ABI, SM120_PAGED_ATTN_F32_ABI}
         else d
     )
 
@@ -3436,6 +3463,8 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         SM120_ATTN_BIAS_F32_ABI,
         SM120_ATTN_BWD_F32_ABI,
         SM120_ATTN_BWD_BIAS_F32_ABI,
+        SM120_ATTN_BWD_F16_ABI,
+        SM120_ATTN_BWD_BIAS_F16_ABI,
         SM120_BF16_ABI,
         SM120_EPILOGUE_ABIS,
         SM120_F16_ABI,
@@ -3449,6 +3478,8 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         SM120_MOE_DISPATCH_F32_ABI,
         SM120_MOE_COMBINE_F32_ABI,
         SM120_GROUPED_GEMM_F32_ABI,
+        SM120_MOE_ABIS,
+        SM120_PAGED_ATTN_F32_ABI,
         SM120_PAGED_KV_F32_ABI,
         SM120_NVFP4_ABI,
         SM120_REDUCE_F16_ABI,
@@ -3469,6 +3500,8 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
                 SM120_ATTN_BIAS_F32_ABI,
                 SM120_ATTN_BWD_F32_ABI,
                 SM120_ATTN_BWD_BIAS_F32_ABI,
+                SM120_ATTN_BWD_F16_ABI,
+                SM120_ATTN_BWD_BIAS_F16_ABI,
                 SM120_BF16_ABI,
                 SM120_F16_ABI,
                 SM120_NVFP4_ABI,
@@ -3481,6 +3514,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
                 SM120_INT8_ABI,
                 SM120_MXFP4_ABI,
                 SM120_PAGED_KV_F32_ABI,
+                SM120_PAGED_ATTN_F32_ABI,
                 SM120_REDUCE_F16_ABI,
                 SM120_REDUCE_F32_ABI,
                 SM120_SOFTMAX_F16_ABI,
@@ -3490,6 +3524,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
                 SM120_GROUPED_GEMM_F32_ABI,
             }
             | set(SM120_EPILOGUE_ABIS)
+            | set(SM120_MOE_ABIS)
         )
         and target not in _native_launchers
     ):
@@ -3751,6 +3786,42 @@ def _nvidia_paged_kv_descriptor_device_latency(
     )
     if rc:
         raise RuntimeError(f"canonical paged-KV benchmark rc={rc}")
+    return float(latency.value)
+
+
+def _nvidia_native_descriptor_device_latency(
+    image: Any,
+    descriptor: Any,
+    args: Mapping[str, Any],
+    *,
+    reps: int = 100,
+    warmup: int = 10,
+) -> float:
+    """CUDA-event latency for a benchmark-enabled compiler-owned descriptor."""
+    values, contracts, scalars = _split_native_arguments(descriptor, args)
+    descriptor.validate_invocation(image, contracts, scalars)
+    lib = _load_nvidia_ptx_launch()
+    if lib is None:
+        raise RuntimeError("libtessera_nvidia_ptx_launch.so not loadable")
+    entry = descriptor.entry_symbol
+    ptx = image.payload.decode("ascii")
+    if lib.tessera_nvidia_ptx_register(entry.encode(), ptx.encode()) != 0:
+        raise RuntimeError(f"PTX register failed for {entry}")
+    ordered_buffers = sorted(descriptor.buffers, key=lambda item: item.ordinal)
+    raw = [values[item.name] for item in ordered_buffers]
+    addresses = (ctypes.c_void_p * len(raw))(
+        *(int(value.ctypes.data) for value in raw)
+    )
+    ordered_scalars = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+    dimensions = tuple(int(cast(int, scalars[item.name])) for item in ordered_scalars)
+    dims = (ctypes.c_int64 * len(dimensions))(*dimensions)
+    latency = ctypes.c_float()
+    rc = lib.tessera_nvidia_ptx_benchmark(
+        entry.encode(), addresses, len(raw), dims, len(dimensions),
+        int(warmup), int(reps), ctypes.byref(latency),
+    )
+    if rc:
+        raise RuntimeError(f"canonical NVIDIA descriptor benchmark rc={rc}")
     return float(latency.value)
 
 

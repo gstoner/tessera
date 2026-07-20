@@ -1859,18 +1859,22 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
   auto windowLeftAttr = op->getAttrOfType<IntegerAttr>("window_left");
   auto windowRightAttr = op->getAttrOfType<IntegerAttr>("window_right");
   auto softcapAttr = op->getAttrOfType<FloatAttr>("softcap");
+  auto dropoutAttr = op->getAttrOfType<FloatAttr>("dropout_p");
+  auto dropoutSeedAttr = op->getAttrOfType<IntegerAttr>("dropout_seed");
   auto route = op->getAttrOfType<StringAttr>("route");
   auto deterministic = op->getAttrOfType<BoolAttr>("deterministic");
   auto workspace = op->getAttrOfType<IntegerAttr>("workspace_bytes");
   const bool hasBias = biasAttr && biasAttr.getValue();
+  const bool f16Storage = storage && storage.getValue() == "f16";
   if (in.size() != 14 + unsigned(hasBias) || !storage ||
-      storage.getValue() != "f32" || !accum || accum.getValue() != "f32" ||
+      (!f16Storage && storage.getValue() != "f32") || !accum || accum.getValue() != "f32" ||
       !scaleAttr || !causalAttr || !windowLeftAttr || !windowRightAttr ||
-      !softcapAttr || !route || route.getValue() != "deterministic_direct" ||
+      !softcapAttr || !dropoutAttr || !dropoutSeedAttr || !route ||
+      route.getValue() != "deterministic_direct" ||
       !deterministic || !deterministic.getValue() || !workspace ||
       workspace.getInt() != 0) {
     op->emitError("sm_120 attention_backward_kernel requires the canonical "
-                  "deterministic-direct f32 ABI");
+                  "deterministic-direct f16/f32 ABI with dropout replay attrs");
     return failure();
   }
 
@@ -1878,6 +1882,8 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
   Type i32 = builder.getI32Type();
   Type i64 = builder.getI64Type();
   auto f32 = builder.getF32Type();
+  Type storageType = f16Storage ? Type(builder.getF16Type()) : Type(f32);
+  unsigned storageAlignment = f16Storage ? 2 : 4;
   const unsigned biasIndex = 4;
   const unsigned dqIndex = 4 + unsigned(hasBias);
   const unsigned dkIndex = dqIndex + 1;
@@ -1895,9 +1901,23 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
   Value ratio = arith::DivUIOp::create(builder, loc, Hq, Hkv);
 
   auto load = [&](unsigned pointer, Value index) -> Value {
-    Value ptr = LLVM::GEPOp::create(builder, loc, in[pointer].getType(), f32,
+    bool biasPointer = hasBias && pointer == biasIndex;
+    Type type = biasPointer ? Type(f32) : storageType;
+    unsigned alignment = biasPointer ? 4 : storageAlignment;
+    Value ptr = LLVM::GEPOp::create(builder, loc, in[pointer].getType(), type,
                                     in[pointer], ValueRange{index});
-    return LLVM::LoadOp::create(builder, loc, f32, ptr, 4);
+    Value loaded = LLVM::LoadOp::create(builder, loc, type, ptr, alignment);
+    return !biasPointer && f16Storage
+        ? Value(LLVM::FPExtOp::create(builder, loc, f32, loaded))
+        : loaded;
+  };
+  auto store = [&](unsigned pointer, Value index, Value value) {
+    Value stored = f16Storage
+        ? Value(LLVM::FPTruncOp::create(builder, loc, storageType, value))
+        : value;
+    Value ptr = LLVM::GEPOp::create(builder, loc, in[pointer].getType(),
+                                    storageType, in[pointer], ValueRange{index});
+    LLVM::StoreOp::create(builder, loc, stored, ptr, storageAlignment);
   };
   auto qIndex = [&](Value b, Value h, Value q, Value d) -> Value {
     return addI64(builder, loc,
@@ -2010,6 +2030,31 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
     builder.setInsertionPointAfter(dot);
     return dot.getResult(0);
   };
+  auto dropoutScale = [&](Value b, Value hq, Value q, Value key) -> Value {
+    Value onef = arith::ConstantFloatOp::create(builder, loc, f32, APFloat(1.0f));
+    if (dropoutAttr.getValueAsDouble() <= 0.0)
+      return onef;
+    Value counter = addI64(builder, loc,
+        mulI64(builder, loc,
+            addI64(builder, loc, mulI64(builder, loc,
+                addI64(builder, loc, mulI64(builder, loc, b, Hq), hq), Sq), q), Sk),
+        key);
+    Value hash = addI64(builder, loc,
+        mulI64(builder, loc, counter, i64Constant(builder, loc, 1664525)),
+        i64Constant(builder, loc, dropoutSeedAttr.getInt() + 1013904223));
+    hash = arith::AndIOp::create(
+        builder, loc, hash, i64Constant(builder, loc, 0xffffffffULL));
+    uint64_t threshold = static_cast<uint64_t>(
+        dropoutAttr.getValueAsDouble() * 4294967296.0);
+    Value keep = arith::CmpIOp::create(
+        builder, loc, arith::CmpIPredicate::uge, hash,
+        i64Constant(builder, loc, threshold));
+    Value invKeep = arith::ConstantFloatOp::create(
+        builder, loc, f32,
+        APFloat(static_cast<float>(1.0 / (1.0 - dropoutAttr.getValueAsDouble()))));
+    Value zerof = arith::ConstantFloatOp::create(builder, loc, f32, APFloat(0.0f));
+    return arith::SelectOp::create(builder, loc, keep, invKeep, zerof);
+  };
   // Return the row maximum, softmax denominator, and dO dot O delta.
   auto rowStats = [&](Value b, Value hq, Value hkv, Value q) -> SmallVector<Value, 3> {
     Value negInf = arith::ConstantFloatOp::create(
@@ -2037,7 +2082,9 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
           builder, loc, sums.getRegionIterArgs()[0], weight);
       Value numer = arith::AddFOp::create(
           builder, loc, sums.getRegionIterArgs()[1],
-          arith::MulFOp::create(builder, loc, weight, doDotV(b, hq, hkv, q, key)));
+          arith::MulFOp::create(builder, loc, weight,
+              arith::MulFOp::create(builder, loc,
+                  dropoutScale(b, hq, q, key), doDotV(b, hq, hkv, q, key))));
       scf::YieldOp::create(builder, loc, ValueRange{denom, numer});
     }
     builder.setInsertionPointAfter(sums);
@@ -2089,7 +2136,10 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
       Value raw = rawScore(b, hq, hkv, q, key);
       Value p = probability(b, hq, hkv, q, key, stats[0], stats[1]);
       Value ds = arith::MulFOp::create(builder, loc, p,
-          arith::SubFOp::create(builder, loc, doDotV(b, hq, hkv, q, key), stats[2]));
+          arith::SubFOp::create(builder, loc,
+              arith::MulFOp::create(builder, loc,
+                  dropoutScale(b, hq, q, key), doDotV(b, hq, hkv, q, key)),
+              stats[2]));
       ds = arith::MulFOp::create(builder, loc, ds, softcapDerivative(raw));
       Value term = arith::MulFOp::create(builder, loc,
           arith::MulFOp::create(builder, loc, ds, scale),
@@ -2098,9 +2148,7 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
           arith::AddFOp::create(builder, loc, sum.getRegionIterArgs()[0], term)});
     }
     builder.setInsertionPointAfter(sum);
-    Value ptr = LLVM::GEPOp::create(builder, loc, in[dqIndex].getType(), f32,
-                                    in[dqIndex], ValueRange{linear});
-    LLVM::StoreOp::create(builder, loc, sum.getResult(0), ptr, 4);
+    store(dqIndex, linear, sum.getResult(0));
   }
   builder.setInsertionPointAfter(dqGuard);
 
@@ -2136,7 +2184,10 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
         Value raw = rawScore(b, hq, hkv, q, key);
         Value p = probability(b, hq, hkv, q, key, stats[0], stats[1]);
         Value ds = arith::MulFOp::create(builder, loc, p,
-            arith::SubFOp::create(builder, loc, doDotV(b, hq, hkv, q, key), stats[2]));
+            arith::SubFOp::create(builder, loc,
+                arith::MulFOp::create(builder, loc,
+                    dropoutScale(b, hq, q, key), doDotV(b, hq, hkv, q, key)),
+                stats[2]));
         ds = arith::MulFOp::create(builder, loc, ds, softcapDerivative(raw));
         Value term = arith::MulFOp::create(builder, loc,
             arith::MulFOp::create(builder, loc, ds, scale),
@@ -2148,9 +2199,7 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
       scf::YieldOp::create(builder, loc, ValueRange{qLoop.getResult(0)});
     }
     builder.setInsertionPointAfter(headLoop);
-    Value ptr = LLVM::GEPOp::create(builder, loc, in[dkIndex].getType(), f32,
-                                    in[dkIndex], ValueRange{dkLinear});
-    LLVM::StoreOp::create(builder, loc, headLoop.getResult(0), ptr, 4);
+    store(dkIndex, dkLinear, headLoop.getResult(0));
   }
   builder.setInsertionPointAfter(dkGuard);
 
@@ -2185,8 +2234,10 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
         Value q = qLoop.getInductionVar();
         SmallVector<Value, 3> stats = rowStats(b, hq, hkv, q);
         Value p = probability(b, hq, hkv, q, key, stats[0], stats[1]);
-        Value term = arith::MulFOp::create(
-            builder, loc, p, load(0, outputIndex(b, hq, q, d)));
+        Value term = arith::MulFOp::create(builder, loc,
+            arith::MulFOp::create(builder, loc, p,
+                dropoutScale(b, hq, q, key)),
+            load(0, outputIndex(b, hq, q, d)));
         scf::YieldOp::create(builder, loc, ValueRange{
             arith::AddFOp::create(builder, loc, qLoop.getRegionIterArgs()[0], term)});
       }
@@ -2194,9 +2245,7 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
       scf::YieldOp::create(builder, loc, ValueRange{qLoop.getResult(0)});
     }
     builder.setInsertionPointAfter(headLoop);
-    Value ptr = LLVM::GEPOp::create(builder, loc, in[dvIndex].getType(), f32,
-                                    in[dvIndex], ValueRange{dvLinear});
-    LLVM::StoreOp::create(builder, loc, headLoop.getResult(0), ptr, 4);
+    store(dvIndex, dvLinear, headLoop.getResult(0));
   }
   builder.setInsertionPointAfter(dvGuard);
   op->erase();
@@ -2220,7 +2269,7 @@ static LogicalResult materializeSm120PagedKVReadKernel(
   Location loc = op->getLoc();
   Type i32 = builder.getI32Type();
   Type i64 = builder.getI64Type();
-  Type f32 = builder.getF32Type();
+  auto f32 = builder.getF32Type();
   Value pageSize = in[5], heads = in[6], dim = in[7];
   Value start = in[8], tokens = in[9];
   Value block = arith::ExtUIOp::create(
@@ -2264,6 +2313,107 @@ static LogicalResult materializeSm120PagedKVReadKernel(
   return success();
 }
 
+static LogicalResult materializeSm120PagedAttentionKernel(
+    tessera::tile::PagedAttentionKernelOp kernel, OpBuilder &builder) {
+  Operation *op = kernel.getOperation();
+  ValueRange in = kernel.getInputs();
+  auto storage = op->getAttrOfType<StringAttr>("storage");
+  auto accum = op->getAttrOfType<StringAttr>("accum");
+  auto tableStorage = op->getAttrOfType<StringAttr>("table_storage");
+  auto indexStorage = op->getAttrOfType<StringAttr>("token_index_storage");
+  auto scaleAttr = op->getAttrOfType<FloatAttr>("scale");
+  auto causalAttr = op->getAttrOfType<BoolAttr>("causal");
+  auto route = op->getAttrOfType<StringAttr>("route");
+  if (in.size() != 14 || !storage || storage.getValue() != "f32" ||
+      !accum || accum.getValue() != "f32" || !tableStorage ||
+      tableStorage.getValue() != "i32" || !indexStorage ||
+      indexStorage.getValue() != "i64" || !scaleAttr || !causalAttr ||
+      !route || route.getValue() != "fused_direct") {
+    op->emitError("sm_120 paged_attention_kernel requires the canonical "
+                  "f32/i32/i64 fused-direct ABI");
+    return failure();
+  }
+  Location loc = op->getLoc();
+  Type i32 = builder.getI32Type(), i64 = builder.getI64Type();
+  auto f32 = builder.getF32Type();
+  Value pageSize=in[8], H=in[9], Q=in[10], T=in[11], D=in[12];
+  Value causalOffset=in[13], zero=i64Constant(builder,loc,0), one=i64Constant(builder,loc,1);
+  Value scale=arith::ConstantFloatOp::create(builder,loc,f32,scaleAttr.getValue());
+  Value log2e=arith::ConstantFloatOp::create(builder,loc,f32,APFloat(1.4426950408889634f));
+  auto loadF32 = [&](Value base, Value index) -> Value {
+    Value ptr=LLVM::GEPOp::create(builder,loc,base.getType(),f32,base,ValueRange{index});
+    return LLVM::LoadOp::create(builder,loc,f32,ptr,4);
+  };
+  auto pageValue = [&](unsigned pageBuffer, Value tokenOrdinal, Value h, Value d) -> Value {
+    Value indexPtr=LLVM::GEPOp::create(builder,loc,in[4].getType(),i64,in[4],ValueRange{tokenOrdinal});
+    Value logical=LLVM::LoadOp::create(builder,loc,i64,indexPtr,8);
+    Value logicalPage=arith::DivUIOp::create(builder,loc,logical,pageSize);
+    Value pageOffset=arith::RemUIOp::create(builder,loc,logical,pageSize);
+    Value tablePtr=LLVM::GEPOp::create(builder,loc,in[3].getType(),i32,in[3],ValueRange{logicalPage});
+    Value physical=arith::ExtUIOp::create(builder,loc,i64,
+        LLVM::LoadOp::create(builder,loc,i32,tablePtr,4));
+    Value pageIndex=addI64(builder,loc,
+        mulI64(builder,loc,
+            addI64(builder,loc,
+                mulI64(builder,loc,
+                    addI64(builder,loc,mulI64(builder,loc,physical,pageSize),pageOffset),H),h),D),d);
+    return loadF32(in[pageBuffer],pageIndex);
+  };
+  auto score = [&](Value h, Value q, Value token) -> Value {
+    Value zf=arith::ConstantFloatOp::create(builder,loc,f32,APFloat(0.0f));
+    auto dot=scf::ForOp::create(builder,loc,zero,D,one,ValueRange{zf});
+    {
+      OpBuilder::InsertionGuard guard(builder); builder.setInsertionPointToStart(dot.getBody());
+      Value d=dot.getInductionVar();
+      Value qIndex=addI64(builder,loc,mulI64(builder,loc,addI64(builder,loc,mulI64(builder,loc,h,Q),q),D),d);
+      Value product=arith::MulFOp::create(builder,loc,loadF32(in[0],qIndex),pageValue(1,token,h,d));
+      scf::YieldOp::create(builder,loc,ValueRange{arith::AddFOp::create(builder,loc,dot.getRegionIterArgs()[0],product)});
+    }
+    builder.setInsertionPointAfter(dot);
+    Value value=arith::MulFOp::create(builder,loc,dot.getResult(0),scale);
+    if (causalAttr.getValue()) {
+      Value limit=addI64(builder,loc,q,causalOffset);
+      Value legal=arith::CmpIOp::create(builder,loc,arith::CmpIPredicate::ule,token,limit);
+      Value negInf=arith::ConstantFloatOp::create(builder,loc,f32,
+          APFloat::getInf(APFloat::IEEEsingle(),true));
+      value=arith::SelectOp::create(builder,loc,legal,value,negInf);
+    }
+    return value;
+  };
+  Value z=addI64(builder,loc,
+      mulI64(builder,loc,arith::ExtUIOp::create(builder,loc,i64,NVVM::BlockIdXOp::create(builder,loc,i32)),
+             i64Constant(builder,loc,128)),
+      arith::ExtUIOp::create(builder,loc,i64,NVVM::ThreadIdXOp::create(builder,loc,i32)));
+  Value total=mulI64(builder,loc,mulI64(builder,loc,H,Q),D);
+  auto guarded=scf::IfOp::create(builder,loc,lessI64(builder,loc,z,total),false);
+  {
+    OpBuilder::InsertionGuard guard(builder); builder.setInsertionPointToStart(guarded.thenBlock());
+    Value d=arith::RemUIOp::create(builder,loc,z,D), t0=arith::DivUIOp::create(builder,loc,z,D);
+    Value q=arith::RemUIOp::create(builder,loc,t0,Q), h=arith::DivUIOp::create(builder,loc,t0,Q);
+    Value negInf=arith::ConstantFloatOp::create(builder,loc,f32,APFloat::getInf(APFloat::IEEEsingle(),true));
+    auto maxLoop=scf::ForOp::create(builder,loc,zero,T,one,ValueRange{negInf});
+    { OpBuilder::InsertionGuard g(builder); builder.setInsertionPointToStart(maxLoop.getBody());
+      Value s=score(h,q,maxLoop.getInductionVar());
+      scf::YieldOp::create(builder,loc,ValueRange{arith::MaximumFOp::create(builder,loc,maxLoop.getRegionIterArgs()[0],s)}); }
+    builder.setInsertionPointAfter(maxLoop);
+    Value zf=arith::ConstantFloatOp::create(builder,loc,f32,APFloat(0.0f));
+    auto sums=scf::ForOp::create(builder,loc,zero,T,one,ValueRange{zf,zf});
+    { OpBuilder::InsertionGuard g(builder); builder.setInsertionPointToStart(sums.getBody());
+      Value token=sums.getInductionVar();
+      Value shifted=arith::SubFOp::create(builder,loc,score(h,q,token),maxLoop.getResult(0));
+      Value weight=NVVM::Ex2Op::create(builder,loc,arith::MulFOp::create(builder,loc,shifted,log2e),false);
+      Value denom=arith::AddFOp::create(builder,loc,sums.getRegionIterArgs()[0],weight);
+      Value numer=arith::AddFOp::create(builder,loc,sums.getRegionIterArgs()[1],
+          arith::MulFOp::create(builder,loc,weight,pageValue(2,token,h,d)));
+      scf::YieldOp::create(builder,loc,ValueRange{denom,numer}); }
+    builder.setInsertionPointAfter(sums);
+    Value out=arith::DivFOp::create(builder,loc,sums.getResult(1),sums.getResult(0));
+    Value outPtr=LLVM::GEPOp::create(builder,loc,in[5].getType(),f32,in[5],ValueRange{z});
+    LLVM::StoreOp::create(builder,loc,out,outPtr,4);
+  }
+  builder.setInsertionPointAfter(guarded); op->erase(); return success();
+}
+
 static Value sm120LinearThread(OpBuilder &builder, Location loc,
                                int64_t threads) {
   Type i32 = builder.getI32Type();
@@ -2299,6 +2449,32 @@ static void sm120StoreF32(OpBuilder &builder, Location loc, Value base,
   Value ptr = LLVM::GEPOp::create(builder, loc, base.getType(), f32, base,
                                   ValueRange{index});
   LLVM::StoreOp::create(builder, loc, value, ptr, 4);
+}
+
+static Value sm120LoadStorageF32(OpBuilder &builder, Location loc, Value base,
+                                 Value index, StringRef storage) {
+  Type f32 = builder.getF32Type();
+  Type type = storage == "f16" ? Type(builder.getF16Type())
+            : storage == "bf16" ? Type(builder.getBF16Type()) : f32;
+  unsigned alignment = storage == "f32" ? 4 : 2;
+  Value ptr = LLVM::GEPOp::create(builder, loc, base.getType(), type, base,
+                                  ValueRange{index});
+  Value loaded = LLVM::LoadOp::create(builder, loc, type, ptr, alignment);
+  return storage == "f32" ? loaded
+                           : Value(LLVM::FPExtOp::create(builder, loc, f32, loaded));
+}
+
+static void sm120StoreStorageF32(OpBuilder &builder, Location loc, Value base,
+                                 Value index, Value value, StringRef storage) {
+  Type type = storage == "f16" ? Type(builder.getF16Type())
+            : storage == "bf16" ? Type(builder.getBF16Type())
+                                  : Type(builder.getF32Type());
+  unsigned alignment = storage == "f32" ? 4 : 2;
+  Value stored = storage == "f32"
+      ? value : Value(LLVM::FPTruncOp::create(builder, loc, type, value));
+  Value ptr = LLVM::GEPOp::create(builder, loc, base.getType(), type, base,
+                                  ValueRange{index});
+  LLVM::StoreOp::create(builder, loc, stored, ptr, alignment);
 }
 
 static Value sm120ExpF32(OpBuilder &builder, Location loc, Value value) {
@@ -2448,19 +2624,22 @@ static LogicalResult materializeSm120ReplaySSMFlushKernel(
 static LogicalResult materializeSm120MoEDispatchKernel(
     tessera::tile::MoEDispatchKernelOp kernel, OpBuilder &builder) {
   Operation *op=kernel.getOperation(); ValueRange in=kernel.getInputs(); Location loc=op->getLoc();
+  StringRef storage=op->getAttrOfType<StringAttr>("storage").getValue();
   Value T=in[3], S=in[4], H=in[5], z=sm120LinearThread(builder,loc,256);
   auto guarded=scf::IfOp::create(builder,loc,lessI64(builder,loc,z,mulI64(builder,loc,S,H)),false);
   { OpBuilder::InsertionGuard guard(builder); builder.setInsertionPointToStart(guarded.thenBlock());
     Value slot=arith::DivUIOp::create(builder,loc,z,H), h=arith::RemUIOp::create(builder,loc,z,H);
     Value token=arith::ExtUIOp::create(builder,loc,builder.getI64Type(),sm120LoadI32(builder,loc,in[1],slot));
     Value idx=addI64(builder,loc,mulI64(builder,loc,token,H),h);
-    sm120StoreF32(builder,loc,in[2],z,sm120LoadF32(builder,loc,in[0],idx)); }
+    sm120StoreStorageF32(builder,loc,in[2],z,
+        sm120LoadStorageF32(builder,loc,in[0],idx,storage),storage); }
   builder.setInsertionPointAfter(guarded); (void)T; op->erase(); return success();
 }
 
 static LogicalResult materializeSm120MoECombineKernel(
     tessera::tile::MoECombineKernelOp kernel, OpBuilder &builder) {
   Operation *op=kernel.getOperation(); ValueRange in=kernel.getInputs(); Location loc=op->getLoc();
+  StringRef storage=op->getAttrOfType<StringAttr>("storage").getValue();
   FloatType f32=builder.getF32Type(); Value T=in[4],S=in[5],H=in[6],z=sm120LinearThread(builder,loc,256);
   auto guarded=scf::IfOp::create(builder,loc,lessI64(builder,loc,z,mulI64(builder,loc,T,H)),false);
   { OpBuilder::InsertionGuard guard(builder); builder.setInsertionPointToStart(guarded.thenBlock());
@@ -2473,17 +2652,18 @@ static LogicalResult materializeSm120MoECombineKernel(
       Value token=arith::ExtUIOp::create(builder,loc,builder.getI64Type(),sm120LoadI32(builder,loc,in[1],slot));
       Value match=arith::CmpIOp::create(builder,loc,arith::CmpIPredicate::eq,token,tokenOut);
       Value idx=addI64(builder,loc,mulI64(builder,loc,slot,H),h);
-      Value term=arith::MulFOp::create(builder,loc,sm120LoadF32(builder,loc,in[0],idx),
+      Value term=arith::MulFOp::create(builder,loc,sm120LoadStorageF32(builder,loc,in[0],idx,storage),
                                       sm120LoadF32(builder,loc,in[2],slot));
       Value selected=arith::SelectOp::create(builder,loc,match,term,zf);
       scf::YieldOp::create(builder,loc,ValueRange{arith::AddFOp::create(builder,loc,loop.getRegionIterArgs()[0],selected)}); }
-    builder.setInsertionPointAfter(loop); sm120StoreF32(builder,loc,in[3],z,loop.getResult(0)); }
+    builder.setInsertionPointAfter(loop); sm120StoreStorageF32(builder,loc,in[3],z,loop.getResult(0),storage); }
   builder.setInsertionPointAfter(guarded); op->erase(); return success();
 }
 
 static LogicalResult materializeSm120GroupedGemmKernel(
     tessera::tile::GroupedGemmKernelOp kernel, OpBuilder &builder) {
   Operation *op=kernel.getOperation(); ValueRange in=kernel.getInputs(); Location loc=op->getLoc();
+  StringRef storage=op->getAttrOfType<StringAttr>("storage").getValue();
   FloatType f32=builder.getF32Type(); Value T=in[4],K=in[5],N=in[6],E=in[7];
   Value z=sm120LinearThread(builder,loc,256);
   auto guarded=scf::IfOp::create(builder,loc,lessI64(builder,loc,z,mulI64(builder,loc,T,N)),false);
@@ -2507,10 +2687,10 @@ static LogicalResult materializeSm120GroupedGemmKernel(
       Value xIdx=addI64(builder,loc,mulI64(builder,loc,row,K),k);
       Value wIdx=addI64(builder,loc,mulI64(builder,loc,
           addI64(builder,loc,mulI64(builder,loc,expertLoop.getResult(0),K),k),N),col);
-      Value term=arith::MulFOp::create(builder,loc,sm120LoadF32(builder,loc,in[0],xIdx),
-                                      sm120LoadF32(builder,loc,in[1],wIdx));
+      Value term=arith::MulFOp::create(builder,loc,sm120LoadStorageF32(builder,loc,in[0],xIdx,storage),
+                                      sm120LoadStorageF32(builder,loc,in[1],wIdx,storage));
       scf::YieldOp::create(builder,loc,ValueRange{arith::AddFOp::create(builder,loc,kLoop.getRegionIterArgs()[0],term)}); }
-    builder.setInsertionPointAfter(kLoop); sm120StoreF32(builder,loc,in[3],z,kLoop.getResult(0)); }
+    builder.setInsertionPointAfter(kLoop); sm120StoreStorageF32(builder,loc,in[3],z,kLoop.getResult(0),storage); }
   builder.setInsertionPointAfter(guarded); op->erase(); return success();
 }
 
@@ -2865,6 +3045,7 @@ struct LowerTileToNVIDIAPass
           name == "tile.reduce_kernel" || name == "tile.attention_kernel" ||
           name == "tile.attention_backward_kernel" ||
           name == "tile.paged_kv_read_kernel" ||
+          name == "tile.paged_attention_kernel" ||
           name == "tile.replay_ssm_decode_kernel" ||
           name == "tile.replay_ssm_flush_kernel" ||
           name == "tile.moe_dispatch_kernel" ||
@@ -2962,6 +3143,17 @@ struct LowerTileToNVIDIAPass
                 cast<tessera::tile::PagedKVReadKernelOp>(op), builder))) {
           if (smVersion < kConsumerBlackwellSM)
             op->emitError("tile.paged_kv_read_kernel currently requires sm_120");
+          signalPassFailure();
+          return;
+        }
+        continue;
+      }
+      if (isTileOp(op, "tile.paged_attention_kernel")) {
+        if (smVersion < kConsumerBlackwellSM ||
+            failed(materializeSm120PagedAttentionKernel(
+                cast<tessera::tile::PagedAttentionKernelOp>(op), builder))) {
+          if (smVersion < kConsumerBlackwellSM)
+            op->emitError("tile.paged_attention_kernel currently requires sm_120");
           signalPassFailure();
           return;
         }

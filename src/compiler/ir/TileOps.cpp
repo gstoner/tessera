@@ -1061,11 +1061,13 @@ LogicalResult AttentionBackwardKernelOp::verify() {
   auto windowLeft = getOperation()->getAttrOfType<IntegerAttr>("window_left");
   auto windowRight = getOperation()->getAttrOfType<IntegerAttr>("window_right");
   auto softcap = getOperation()->getAttrOfType<FloatAttr>("softcap");
+  auto dropout = getOperation()->getAttrOfType<FloatAttr>("dropout_p");
+  auto dropoutSeed = getOperation()->getAttrOfType<IntegerAttr>("dropout_seed");
   auto route = getOperation()->getAttrOfType<StringAttr>("route");
   auto deterministic = getOperation()->getAttrOfType<BoolAttr>("deterministic");
   auto workspace = getOperation()->getAttrOfType<IntegerAttr>("workspace_bytes");
-  if (!storage || storage.getValue() != "f32")
-    return emitOpError("deterministic reference route currently requires storage=\"f32\"");
+  if (!storage || (storage.getValue() != "f16" && storage.getValue() != "f32"))
+    return emitOpError("deterministic reference route requires storage=\"f16\" or storage=\"f32\"");
   if (!accum || accum.getValue() != "f32")
     return emitOpError("requires accum=\"f32\"");
   if (!scale || !scale.getValue().isFinite() || scale.getValueAsDouble() <= 0.0)
@@ -1078,6 +1080,11 @@ LogicalResult AttentionBackwardKernelOp::verify() {
   if (!softcap || !softcap.getValue().isFinite() ||
       softcap.getValueAsDouble() < 0.0)
     return emitOpError("requires finite softcap >= 0");
+  if (!dropout || !dropout.getValue().isFinite() ||
+      dropout.getValueAsDouble() < 0.0 || dropout.getValueAsDouble() >= 1.0)
+    return emitOpError("requires finite dropout_p in [0, 1)");
+  if (!dropoutSeed)
+    return emitOpError("requires an explicit dropout_seed");
   if (!route || route.getValue() != "deterministic_direct")
     return emitOpError("canonical materializer requires route=\"deterministic_direct\"");
   if (!deterministic || !deterministic.getValue())
@@ -1106,6 +1113,38 @@ LogicalResult PagedKVReadKernelOp::verify() {
     return emitOpError("requires table_storage=\"i32\"");
   if (!route || route.getValue() != "direct")
     return emitOpError("canonical materializer currently requires route=\"direct\"");
+  return success();
+}
+
+LogicalResult PagedAttentionKernelOp::verify() {
+  if (getInputs().size() != 14)
+    return emitOpError(
+        "expects Q, K pages, V pages, page table, token indices, O, P, LP, page size, H, Q length, token count, D, and causal offset");
+  for (Value pointer : getInputs().take_front(6))
+    if (!isa<LLVM::LLVMPointerType>(pointer.getType()))
+      return emitOpError("paged-attention buffers must be !llvm.ptr");
+  for (Value dim : getInputs().drop_front(6))
+    if (!dim.getType().isInteger(64))
+      return emitOpError("paged-attention dimensions and causal offset must be i64");
+  auto storage = getOperation()->getAttrOfType<StringAttr>("storage");
+  auto accum = getOperation()->getAttrOfType<StringAttr>("accum");
+  auto table = getOperation()->getAttrOfType<StringAttr>("table_storage");
+  auto index = getOperation()->getAttrOfType<StringAttr>("token_index_storage");
+  auto scale = getOperation()->getAttrOfType<FloatAttr>("scale");
+  auto causal = getOperation()->getAttrOfType<BoolAttr>("causal");
+  auto route = getOperation()->getAttrOfType<StringAttr>("route");
+  if (!storage || storage.getValue() != "f32" || !accum ||
+      accum.getValue() != "f32")
+    return emitOpError("requires f32 storage and accumulation");
+  if (!table || table.getValue() != "i32" || !index ||
+      index.getValue() != "i64")
+    return emitOpError("requires i32 page-table and i64 token-index storage");
+  if (!scale || !scale.getValue().isFinite() || scale.getValueAsDouble() <= 0.0)
+    return emitOpError("requires a finite positive f32 scale");
+  if (!causal)
+    return emitOpError("requires an explicit causal boolean");
+  if (!route || route.getValue() != "fused_direct")
+    return emitOpError("requires route=\"fused_direct\"");
   return success();
 }
 
@@ -1159,8 +1198,10 @@ LogicalResult MoEDispatchKernelOp::verify() {
       return emitOpError("MoE dimensions must be i64");
   auto storage = getOperation()->getAttrOfType<StringAttr>("storage");
   auto index = getOperation()->getAttrOfType<StringAttr>("index_storage");
-  if (!storage || storage.getValue() != "f32" || !index || index.getValue() != "i32")
-    return emitOpError("requires storage=\"f32\" and index_storage=\"i32\"");
+  if (!storage || (storage.getValue() != "f16" && storage.getValue() != "bf16" &&
+                   storage.getValue() != "f32") ||
+      !index || index.getValue() != "i32")
+    return emitOpError("requires f16/bf16/f32 storage and index_storage=\"i32\"");
   return success();
 }
 
@@ -1176,8 +1217,10 @@ LogicalResult MoECombineKernelOp::verify() {
   auto storage = getOperation()->getAttrOfType<StringAttr>("storage");
   auto index = getOperation()->getAttrOfType<StringAttr>("index_storage");
   auto deterministic = getOperation()->getAttrOfType<BoolAttr>("deterministic");
-  if (!storage || storage.getValue() != "f32" || !index || index.getValue() != "i32")
-    return emitOpError("requires storage=\"f32\" and index_storage=\"i32\"");
+  if (!storage || (storage.getValue() != "f16" && storage.getValue() != "bf16" &&
+                   storage.getValue() != "f32") ||
+      !index || index.getValue() != "i32")
+    return emitOpError("requires f16/bf16/f32 storage and index_storage=\"i32\"");
   if (!deterministic || !deterministic.getValue())
     return emitOpError("canonical combine requires deterministic=true");
   return success();
@@ -1195,9 +1238,10 @@ LogicalResult GroupedGemmKernelOp::verify() {
   auto storage = getOperation()->getAttrOfType<StringAttr>("storage");
   auto accum = getOperation()->getAttrOfType<StringAttr>("accum");
   auto index = getOperation()->getAttrOfType<StringAttr>("index_storage");
-  if (!storage || storage.getValue() != "f32" || !accum || accum.getValue() != "f32" ||
+  if (!storage || (storage.getValue() != "f16" && storage.getValue() != "bf16" &&
+                   storage.getValue() != "f32") || !accum || accum.getValue() != "f32" ||
       !index || index.getValue() != "i32")
-    return emitOpError("requires f32 storage/accum and index_storage=\"i32\"");
+    return emitOpError("requires f16/bf16/f32 storage, f32 accumulation, and index_storage=\"i32\"");
   return success();
 }
 

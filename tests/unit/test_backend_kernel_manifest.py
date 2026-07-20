@@ -102,13 +102,15 @@ class TestBackendKernelEntry:
 class TestMatmulManifest:
     """matmul is the highest-coverage op; touches every backend."""
 
-    def test_x86_matmul_is_device_verified_with_amx_and_avx512(self):
+    def test_x86_matmul_is_device_verified_with_avx512_dtype_subsets(self):
         entries = {e.target: e for e in manifest_for("matmul")}
         assert "x86" in entries
         x = entries["x86"]
         assert x.status == "device_verified_jit"
         assert "bf16" in x.dtypes
-        assert "amx" in x.feature_flags
+        assert "avx512_bf16" in x.feature_flags
+        assert "avx512_vnni" in x.feature_flags
+        assert "amx" not in x.feature_flags
 
     def test_apple_cpu_ships_fused_accelerate(self):
         entries = {e.target: e for e in manifest_for("matmul")}
@@ -250,10 +252,10 @@ class TestX86AVX512Manifest:
                     assert entry.execute_compare_fixture, op_name
                     assert "avx512" in entry.feature_flags, op_name
 
-    def test_amx_matmul_is_device_verified_jit(self):
+    def test_x86_matmul_does_not_require_optional_amx(self):
         x86 = {e.target: e for e in manifest_for("matmul")}["x86"]
         assert x86.status == "device_verified_jit"
-        assert x86.feature_flags == ("amx", "avx512")
+        assert x86.feature_flags == ("avx512", "avx512_bf16", "avx512_vnni")
 
 
 class TestROCmCompiledManifest:

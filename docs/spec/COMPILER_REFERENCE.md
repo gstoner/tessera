@@ -29,7 +29,7 @@ Graph IR    (tessera.* ops, effects, shape/dtype/layout metadata, diagnostics)
 Schedule IR (schedule.mesh.*, pipeline regions, stages, tiling structure)
      |
      v  [python/tessera/compiler/tile_ir.py, tile lowering, backend lowering]
-Tile IR     (tile.*, tessera.attn.* FA-4 ops, tessera.queue.* barriers)
+Tile IR     (tile.*, tessera_attn.* FA-4 ops, tessera.queue.* barriers)
      |
      v  [python/tessera/compiler/target_ir.py — per-backend lowering: CPU/NVIDIA/Apple/ROCm]
 Target IR   (backend-specific artifacts: x86, NVIDIA, ROCm, Apple, ...)

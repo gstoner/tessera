@@ -5,7 +5,7 @@
 //
 // Structural rules:
 //   1. tile.async_copy ops → emitted in the PRODUCER warp region.
-//   2. tile.mma + tessera.attn.* ops → emitted in the CONSUMER warp region.
+//   2. tile.mma + tessera_attn.* ops → emitted in the CONSUMER warp region.
 //   3. A tessera.queue.create / push / pop triple separates the two regions.
 //
 // This models the SM_90 Hopper warp-specialization programming model where:
@@ -99,7 +99,7 @@ static bool isProducerOp(Operation *op) {
 
 static bool isConsumerOp(Operation *op) {
   StringRef name = op->getName().getStringRef();
-  return name.starts_with("tessera.attn.") || name == "tile.mma";
+  return name.starts_with("tessera_attn.") || name == "tile.mma";
 }
 
 // C3 join (2026-06-23): stamp the typed PipelineState + warp-role markers that

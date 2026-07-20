@@ -24,7 +24,7 @@ flowchart TD
   A["Python API<br/>@tessera.jit, @tessera.kernel,<br/>Region, Domain, DistributedArray"] --> B["Graph IR<br/>tessera dialect<br/>math ops, effects, shapes, shard attrs"]
   B --> C["Schedule IR<br/>schedule dialect<br/>mesh regions and pipeline structure"]
   C --> D1["x86 Path<br/>TilingPass -> TileToX86Pass<br/>AMX/AVX-512 backend calls"]
-  C --> D2["GPU Path<br/>TileIRLoweringPass<br/>tile.*, tessera.attn.*, tessera.queue.*"]
+  C --> D2["GPU Path<br/>TileIRLoweringPass<br/>tile.*, tessera_attn.*, tessera.queue.*"]
   D2 --> E["Target IR<br/>NVIDIA TMA, WGMMA, mbarrier<br/>LLVM NVPTX / PTX"]
   D1 --> F["Runtime / Host Integration<br/>C ABI + Python wrapper; target-gated execution"]
   E --> F

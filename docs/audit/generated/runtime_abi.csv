@@ -682,6 +682,7 @@ x86,tessera_x86_avx512_compare_f32,avx512_compare,f32,src/compiler/codegen/tesse
 x86,tessera_x86_avx512_fpquant_f32,avx512_fpquant,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fpquant_f32.cpp
 x86,tessera_x86_avx512_gemm_bf16,avx512_gemm,bf16,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_gemm_bf16.cpp
 x86,tessera_x86_avx512_gemm_f32,avx512_gemm,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_gemm_f32.cpp
+x86,tessera_x86_avx512_gemm_f64,avx512_gemm,f64,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_gemm_f64.cpp
 x86,tessera_x86_avx512_layernorm_f32,avx512_layernorm,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_norm_f32.cpp
 x86,tessera_x86_avx512_logical_i8,avx512_logical,i8,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_logical_i8.cpp
 x86,tessera_x86_avx512_pointwise_loss_f32,avx512_pointwise_loss,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_loss_f32.cpp
@@ -732,6 +733,8 @@ x86,tessera_x86_reference_binary_f32,reference_binary,f32,src/compiler/codegen/t
 x86,tessera_x86_reference_bitwise_i32,reference_bitwise,i32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_bitwise_i32.cpp
 x86,tessera_x86_reference_compare_f32,reference_compare,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_compare_f32.cpp
 x86,tessera_x86_reference_gemm_bf16,reference_gemm,bf16,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_gemm_bf16.cpp
+x86,tessera_x86_reference_gemm_f64,reference_gemm,f64,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_gemm_f64.cpp
+x86,tessera_x86_reference_gemm_u8s8_s32,reference_gemm_u8s8_s32,,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_vnni_gemm_int8.cpp
 x86,tessera_x86_reference_logical_i8,reference_logical,i8,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_logical_i8.cpp
 x86,tessera_x86_reference_moe_f32,reference_moe,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_moe_f32.cpp
 x86,tessera_x86_reference_optimizer_f32,reference_optimizer,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_optimizer_f32.cpp

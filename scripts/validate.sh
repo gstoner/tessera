@@ -179,7 +179,7 @@ else
 fi
 
 # Opt-in MLIR lit smoke.  Skipped by default because lit only works
-# once `tessera-opt` has been built against MLIR 21 and the lit
+# once `tessera-opt` has been built against MLIR 23 and the lit
 # binary is on PATH (lit's package has no `__main__`, so `python -m lit`
 # is NOT a valid invocation — only the console script form works).
 #

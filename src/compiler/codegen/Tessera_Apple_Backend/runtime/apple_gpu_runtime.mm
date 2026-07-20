@@ -5076,7 +5076,7 @@ bool dispatch_flash_attn_msl(MetalDeviceContext &ctx, const float* Q,
     if (!bufQ || !bufK || !bufV || !bufO) return false;
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
-    cb.label = @"tessera.attn.flash.f32";
+    cb.label = @"tessera_attn.flash.f32";
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
     [enc setComputePipelineState:pso];
     [enc setBuffer:bufQ offset:0 atIndex:0];
@@ -5691,9 +5691,9 @@ static bool dispatch_flash_attn_bwd_msl(MetalDeviceContext &ctx,
                               causal_offset, bias ? 1 : 0, window_size,
                               logit_softcap};
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
-    cb.label = route == 0 ? @"tessera.attn.backward.serial_recompute.f32" :
-        (route == 1 ? @"tessera.attn.backward.atomic.f32" :
-                      @"tessera.attn.backward.split_reduced.f32");
+    cb.label = route == 0 ? @"tessera_attn.backward.serial_recompute.f32" :
+        (route == 1 ? @"tessera_attn.backward.atomic.f32" :
+                      @"tessera_attn.backward.split_reduced.f32");
     if (route == 1) {
       id<MTLBlitCommandEncoder> clear = [cb blitCommandEncoder];
       [clear fillBuffer:bufDK range:NSMakeRange(0, kv_bytes) value:0];
@@ -7211,7 +7211,7 @@ bool dispatch_flash_attn_msl_f16(MetalDeviceContext &ctx, const uint16_t* Q,
     if (!bufQ || !bufK || !bufV || !bufO) return false;
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
-    cb.label = @"tessera.attn.flash.f16";
+    cb.label = @"tessera_attn.flash.f16";
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
     [enc setComputePipelineState:pso];
     [enc setBuffer:bufQ offset:0 atIndex:0];
@@ -24656,7 +24656,7 @@ bool dispatch_flash_attn_gqa_msl(MetalDeviceContext &ctx, const float *Q,
                                     biasBytes);
     if (!bufQ || !bufK || !bufV || !bufO || !bufBias) return false;
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
-    cb.label = @"tessera.attn.variant.gqa.f32";
+    cb.label = @"tessera_attn.variant.gqa.f32";
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
     [enc setComputePipelineState:pso];
     [enc setBuffer:bufQ offset:0 atIndex:0];
@@ -25005,7 +25005,7 @@ static bool mpsg_run_bsmm(MetalDeviceContext &ctx, const void *A, const void *B,
         initWithMTLBuffer:bufO shape:@[ @(batch), @(M), @(P) ] dataType:ioType];
     id<MTLCommandBuffer> metal_cb = [ctx.queue commandBuffer];
     if (!metal_cb) return false;
-    metal_cb.label = @"tessera.attn.bsmm.mpsgraph";
+    metal_cb.label = @"tessera_attn.bsmm.mpsgraph";
     MPSCommandBuffer *mps_cb =
         [MPSCommandBuffer commandBufferWithCommandBuffer:metal_cb];
     if (!mps_cb) return false;
@@ -25312,7 +25312,7 @@ bool dispatch_flash_attn_gqa_msl_f16(MetalDeviceContext &ctx, const uint16_t *Q,
                                     biasBytes);
     if (!bufQ || !bufK || !bufV || !bufO || !bufBias) return false;
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
-    cb.label = @"tessera.attn.variant.gqa.f16";
+    cb.label = @"tessera_attn.variant.gqa.f16";
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
     [enc setComputePipelineState:pso];
     [enc setBuffer:bufQ offset:0 atIndex:0];

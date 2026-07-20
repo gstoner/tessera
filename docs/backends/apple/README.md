@@ -164,7 +164,7 @@ Python boundary:
 512³ 780 µs → 193 µs (**4×**). At 512³ Tessera launch overhead is ~1.3× numpy
 (was ~5×).
 
-End-to-end verified on this Mac (LLVM/MLIR 22.1.6, Accelerate active): single
+End-to-end verified on this Mac (LLVM/MLIR 23, Accelerate active): single
 GEMM bitwise-matches numpy; multi-op tiny decode bitwise-matches the numpy
 reference; rank-3 batched GEMM bitwise-matches numpy; fp16 matmul matches an
 f32-converted reference at fp16 tolerance. Tests:

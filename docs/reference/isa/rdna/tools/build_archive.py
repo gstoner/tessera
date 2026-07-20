@@ -26,13 +26,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
 from dataclasses import dataclass, asdict, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from pypdf import PdfReader
+if TYPE_CHECKING:
+    from pypdf import PdfReader
 
 # --- configuration ---------------------------------------------------------
 
@@ -64,7 +67,17 @@ SOURCES = {
     },
 }
 
-SRC_DIR = Path.home() / "Downloads"
+SOURCE_DIRS = tuple(
+    path
+    for path in (
+        Path(os.environ["TESSERA_RDNA_ISA_SOURCE_DIR"]).expanduser()
+        if os.environ.get("TESSERA_RDNA_ISA_SOURCE_DIR")
+        else None,
+        Path.home() / "projects/AMD_GPU_ISA_DOCS",
+        Path.home() / "Downloads",
+    )
+    if path is not None
+)
 OUT_DIR = Path(__file__).resolve().parents[1]  # docs/reference/isa/rdna
 
 # --- text extraction helpers ----------------------------------------------
@@ -394,10 +407,24 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def find_source_pdf(filename: str, source_dirs=None) -> Path:
+    """Resolve one source independently so partial preferred mirrors work."""
+    directories = SOURCE_DIRS if source_dirs is None else tuple(source_dirs)
+    for directory in directories:
+        candidate = Path(directory) / filename
+        if candidate.is_file():
+            return candidate
+    searched = ", ".join(str(Path(directory)) for directory in directories)
+    raise FileNotFoundError(f"{filename} not found in: {searched}")
+
+
 def build_doc(key: str, cfg: dict) -> dict:
-    pdf = SRC_DIR / cfg["pdf"]
-    if not pdf.exists():
-        print(f"  !! missing source: {pdf}", file=sys.stderr)
+    from pypdf import PdfReader
+
+    try:
+        pdf = find_source_pdf(cfg["pdf"])
+    except FileNotFoundError as exc:
+        print(f"  !! missing source: {exc}", file=sys.stderr)
         return {}
     reader = PdfReader(str(pdf))
     sections = read_outline(reader)

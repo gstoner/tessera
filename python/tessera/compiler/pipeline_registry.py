@@ -308,6 +308,9 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             "rocm-wave-lds-pipeline",
             "rocm-wave-lds-legality",
             "tessera-lower-to-rocm",
+            "generate-rocm-softmax-kernel",
+            "generate-rocm-reduce-kernel",
+            "generate-rocm-paged-kv-read-kernel",
         ),
         required_dialects=("tessera", "tile", "tessera_rocm", "func", "scf", "arith"),
         targets=(
@@ -323,10 +326,14 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             "rocm_gfx1250",
         ),
         verifier_passes=("rocm-wave-lds-legality",),
-        lit_fixtures=(),
+        lit_fixtures=(
+            "src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/gfx1151_tile_softmax_kernel.mlir",
+            "src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/gfx1151_tile_reduce_kernel.mlir",
+            "src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/gfx1151_tile_paged_kv_read_kernel.mlir",
+        ),
         phase="lowering",
-        status="wired",
-        sprint="Phase 8 + ROCm Tile-IR convergence",
+        status="lit_verified",
+        sprint="Phase 8 + ROCm Tile-IR convergence + ROCM-E2E-1/-2",
     ),
     PipelineSpec(
         name="tessera-lower-to-x86",
@@ -343,10 +350,13 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
         required_dialects=("tessera", "tile", "func", "scf", "arith"),
         targets=("cpu", "x86", "x86_amx", "x86_avx512"),
         verifier_passes=("tessera-symdim-equality",),
-        lit_fixtures=("tests/tessera-ir/phase2/tile_to_x86.mlir",),
+        lit_fixtures=(
+            "tests/tessera-ir/phase2/tile_to_x86.mlir",
+            "tests/tessera-ir/phase2/tile_x86_e2e.mlir",
+        ),
         phase="lowering",
         status="lit_verified",
-        sprint="Phase 2",
+        sprint="Phase 2 + X86-E2E-1",
     ),
     PipelineSpec(
         name="tessera-nvidia-pipeline",
@@ -619,7 +629,7 @@ TARGET_PIPELINE_RESOLUTIONS: tuple[TargetPipelineResolution, ...] = (
         "rocm_gfx1151", "tessera-target-artifact", "tessera-lower-to-rocm",
         "declared_shared_builder", "exact_architecture", "rocm",
         "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/Passes.cpp",
-        "partial", "absent", "The ROCm pipeline is family-shared; broad native execution is joined through the generic runtime route.",
+        "partial", "absent", "The family-shared pipeline now owns typed gfx1151 softmax and f32 arbitrary-axis reduction producers and HSACO packages; target-wide Level C remains absent while other families use legacy routes.",
     ),
     TargetPipelineResolution(
         "rocm_gfx1200", "tessera-target-artifact", "tessera-lower-to-rocm",
@@ -667,7 +677,7 @@ TARGET_PIPELINE_RESOLUTIONS: tuple[TargetPipelineResolution, ...] = (
         "x86", "tessera-lower-to-x86", "tessera-lower-to-x86",
         "declared_exact", "host", "x86", "src/transforms/lib/Passes.cpp",
         "partial", "absent",
-        "Graph-to-C-ABI lowering exists for a subset; a typed x86 Target dialect and canonical native image are absent.",
+        "X86-E2E-1 emits typed softmax, reduction, rank-2 f32 matmul, and basic/extended f32 MHA C-ABI calls, then packages the stable AVX-512 shared object with canonical launch descriptors; other families remain executor-owned.",
     ),
 )
 

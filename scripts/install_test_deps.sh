@@ -96,18 +96,18 @@ say "Checking LLVM lit helpers (FileCheck / not) for the MLIR fixtures"
 if command -v FileCheck >/dev/null 2>&1 && command -v not >/dev/null 2>&1; then
   say "  ok: FileCheck + not on PATH ($(command -v FileCheck))"
 else
-  # Common case on a dev box: they ARE installed (apt llvm-NN-tools / Homebrew
-  # llvm) but the LLVM bin/ isn't on PATH. Find a bindir that has BOTH and print
+  # Common case on a dev box: LLVM 23 is installed but its bin/ is not on PATH.
+  # Find a canonical bindir that has BOTH tools and print
   # the exact export — far more useful than "reinstall LLVM".
   FOUND_BIN=""
   # Prefer an llvm-config's own bindir (matches the version we build against).
-  for cfg in llvm-config-${LLVM_VERSION:-23} llvm-config; do
+  for cfg in llvm-config-23; do
     command -v "$cfg" >/dev/null 2>&1 || continue
     d="$("$cfg" --bindir 2>/dev/null || true)"
     if [[ -x "$d/FileCheck" && -x "$d/not" ]]; then FOUND_BIN="$d"; break; fi
   done
   if [[ -z "$FOUND_BIN" ]]; then
-    for d in /usr/lib/llvm-*/bin /usr/local/opt/llvm/bin /opt/homebrew/opt/llvm/bin; do
+    for d in /usr/lib/llvm-23/bin /usr/local/opt/llvm@23/bin /opt/homebrew/opt/llvm@23/bin; do
       if [[ -x "$d/FileCheck" && -x "$d/not" ]]; then FOUND_BIN="$d"; break; fi
     done
   fi

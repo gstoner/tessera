@@ -15,7 +15,7 @@ module attributes {tessera.target = "nvidia_sm90"} {
       %C_kv : memref<1x32x4096x32xbf16, 1>,   // compressed latent KV (rank=32)
       %W_kv_expand : memref<32x128xbf16, 1>,  // expansion projection
       %O : memref<1x32x1x128xbf16, 1>) {
-    "tessera.attn.mla_decode"(%Q, %C_kv, %W_kv_expand, %O) {
+    "tessera_attn.mla_decode"(%Q, %C_kv, %W_kv_expand, %O) {
       tile_q = 64 : i64,
       tile_kv = 128 : i64,
       head_dim = 128 : i64,
@@ -32,7 +32,7 @@ module attributes {tessera.target = "nvidia_sm90"} {
   }
 }
 
-// CHECK: tessera.attn.mla_decode
+// CHECK: tessera_attn.mla_decode
 // CHECK-SAME: latent_rank = 32
 // CHECK-SAME: tile_q = 64
 // CHECK-SAME: tile_kv = 128

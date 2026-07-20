@@ -51,7 +51,7 @@ class AMDArch(IntEnum):
     GFX_1201 = 1201    # RDNA 4 / Radeon AI PRO R9700
     # gfx1250/1251 — the "v2" mods/reuse WMMA ABI (K-doubled 16x16x32, native
     # bfloat).  Family designation NOT asserted (no public ISA consulted); grounded
-    # only by `llc` (LLVM 22 AMDGPU) + LLVM IntrinsicsAMDGPU.td.  See rocdl_emit.py.
+    # only by `llc` (LLVM 23 AMDGPU) + LLVM IntrinsicsAMDGPU.td.  See rocdl_emit.py.
     GFX_1250 = 1250
     GFX_1251 = 1251
 
@@ -108,8 +108,12 @@ _MAX_WAVES: dict[AMDArch, int] = {
 }
 
 
-# Per-arch dtype matrix accepted by the ROCm 7.2.4 backend.  Canonical
-# Tessera dtype spellings only (validated by `tessera.dtype.canonicalize_dtype`).
+# Per-arch Tessera-registered executable storage matrix accepted by the ROCm
+# 7.2.4 backend. This is deliberately not an exhaustive ISA datatype list:
+# scalar/vector, packed-dot, matrix-input, accumulator, planned-gated, and
+# unsupported roles differ. The layered gfx1151 truth is in
+# `rocm_dtype_contract.py`. Canonical Tessera dtype spellings only (validated
+# by `tessera.dtype.canonicalize_dtype`).
 _ROCM_DTYPES: dict[AMDArch, frozenset[str]] = {
     AMDArch.GFX_90A: frozenset({
         "fp64", "fp32", "bf16", "fp16", "int8",
@@ -523,7 +527,7 @@ _ROCM_ARCH_STRINGS: dict[AMDArch, str] = {
     AMDArch.GFX_1151: "gfx1151",
     AMDArch.GFX_1200: "gfx1200",
     AMDArch.GFX_1201: "gfx1201",
-    AMDArch.GFX_1250: "gfx1250",   # `llc`-accepted target string (LLVM 22 AMDGPU)
+    AMDArch.GFX_1250: "gfx1250",   # `llc`-accepted target string (LLVM 23 AMDGPU)
     AMDArch.GFX_1251: "gfx1251",
 }
 

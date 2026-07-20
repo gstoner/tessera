@@ -5,7 +5,7 @@
 // 2026-06: un-XFAIL'd.  flash_attn now carries the required head_dim attr, and
 // the pass lowers to FA-4 Tile IR ops in the unregistered `tile.*` dialect
 // (tile.async_copy / tile.mma) — so --allow-unregistered-dialect is required,
-// but the result VERIFIES (the registered tessera.attn.* ops are valid after the
+// but the result VERIFIES (the registered tessera_attn.* ops are valid after the
 // LseSaveOp per-row-LSE verifier fix), so no --verify-each=false is needed.  The
 // func.func prints pretty; the unregistered tile.* ops print generically inline.
 //
@@ -18,17 +18,17 @@
 // CHECK:       func.func @flash_attn_step
 // CHECK:       tile.async_copy
 // CHECK:       tile.wait_async
-// CHECK:       tessera.attn.scaled_dot_product
-// CHECK:       tessera.attn.causal_mask
-// CHECK:       tessera.attn.online_softmax
-// CHECK:       tessera.attn.lse_accumulate
+// CHECK:       tessera_attn.scaled_dot_product
+// CHECK:       tessera_attn.causal_mask
+// CHECK:       tessera_attn.online_softmax
+// CHECK:       tessera_attn.lse_accumulate
 // CHECK-NOT:   tessera.flash_attn
 
 // The flash_attn lowering is FA-4-shaped on every SM target (the online-softmax
 // attn pipeline), so sm=80 produces the same async-copy + attn op sequence.
 // SM80:        func.func @flash_attn_step
 // SM80:        tile.async_copy
-// SM80:        tessera.attn.scaled_dot_product
+// SM80:        tessera_attn.scaled_dot_product
 
 module attributes {tessera.ir.version = "1.0",
                    tessera.target = {sm = 90 : i32, warps = 4 : i32,

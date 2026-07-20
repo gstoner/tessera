@@ -167,7 +167,7 @@ class RuntimeArtifact:
         if self.launch_descriptor is not None:
             self.launch_descriptor.validate_image(self.native_image)
 
-    @property
+    @functools.cached_property
     def artifact_hash(self) -> str:
         payload = self.to_json(include_hash=False)
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
@@ -2423,11 +2423,14 @@ def _submit_nvidia_sm120_native(
     softmax_abis = {SM120_SOFTMAX_F16_ABI, SM120_SOFTMAX_F32_ABI}
     reduction_abis = {SM120_REDUCE_F16_ABI, SM120_REDUCE_F32_ABI}
     attention_abis = {
-        SM120_ATTN_F16_ABI, SM120_ATTN_F32_ABI,
-        SM120_ATTN_BIAS_F16_ABI, SM120_ATTN_BIAS_F32_ABI,
+        SM120_ATTN_F16_ABI,
+        SM120_ATTN_F32_ABI,
+        SM120_ATTN_BIAS_F16_ABI,
+        SM120_ATTN_BIAS_F32_ABI,
     }
     attention_backward_abis = {
-        SM120_ATTN_BWD_F32_ABI, SM120_ATTN_BWD_BIAS_F32_ABI,
+        SM120_ATTN_BWD_F32_ABI,
+        SM120_ATTN_BWD_BIAS_F32_ABI,
     }
     unary_abis = softmax_abis | reduction_abis
     moe_abis = {
@@ -2436,16 +2439,13 @@ def _submit_nvidia_sm120_native(
         SM120_GROUPED_GEMM_F32_ABI,
     }
     if descriptor.abi_id in attention_backward_abis:
-        dimensions = tuple(
-            int(cast(int, scalars[name]))
-            for name in ("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv")
-        )
+        dimensions = tuple(int(cast(int, scalars[name])) for name in ("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv"))
         b, hq, hkv, sq, sk, d, dv = dimensions
         has_bias = descriptor.abi_id == SM120_ATTN_BWD_BIAS_F32_ABI
         do, q, key, value = raw[:4]
         bias = raw[4] if has_bias else None
         output_base = 5 if has_bias else 4
-        dq, dk, dvalue = raw[output_base:output_base + 3]
+        dq, dk, dvalue = raw[output_base : output_base + 3]
         if (
             tuple(do.shape) != (b, hq, sq, dv)
             or tuple(q.shape) != (b, hq, sq, d)
@@ -2460,8 +2460,7 @@ def _submit_nvidia_sm120_native(
         output = (dq, dk, dvalue)
     elif descriptor.abi_id == SM120_PAGED_KV_F32_ABI:
         dimensions = tuple(
-            int(cast(int, scalars[name]))
-            for name in ("P", "LP", "PageSize", "H", "D", "Start", "Tokens")
+            int(cast(int, scalars[name])) for name in ("P", "LP", "PageSize", "H", "D", "Start", "Tokens")
         )
         p, logical_pages, page_size, heads, dim, start, tokens = dimensions
         pages, page_table, output = raw
@@ -2469,7 +2468,8 @@ def _submit_nvidia_sm120_native(
             tuple(pages.shape) != (p, page_size, heads, dim)
             or tuple(page_table.shape) != (logical_pages,)
             or tuple(output.shape) != (tokens, heads, dim)
-            or start < 0 or start + tokens > logical_pages * page_size
+            or start < 0
+            or start + tokens > logical_pages * page_size
         ):
             raise RuntimeError("SM120 paged-KV shapes/bounds disagree with descriptor scalars")
         try:
@@ -2478,10 +2478,7 @@ def _submit_nvidia_sm120_native(
         except AttributeError as exc:
             raise RuntimeError("SM120 paged-KV table must support array validation") from exc
     elif descriptor.abi_id in attention_abis:
-        dimensions = tuple(
-            int(cast(int, scalars[name]))
-            for name in ("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv")
-        )
+        dimensions = tuple(int(cast(int, scalars[name])) for name in ("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv"))
         b, hq, hkv, sq, sk, d, dv = dimensions
         has_bias = descriptor.abi_id in {SM120_ATTN_BIAS_F16_ABI, SM120_ATTN_BIAS_F32_ABI}
         q, key, value = raw[:3]
@@ -2499,7 +2496,11 @@ def _submit_nvidia_sm120_native(
         dimensions = tuple(int(cast(int, scalars[name])) for name in ("Tokens", "Slots", "Hidden"))
         tokens, slots, hidden = dimensions
         x, token_of_slot, output = raw
-        if tuple(x.shape) != (tokens, hidden) or tuple(token_of_slot.shape) != (slots,) or tuple(output.shape) != (slots, hidden):
+        if (
+            tuple(x.shape) != (tokens, hidden)
+            or tuple(token_of_slot.shape) != (slots,)
+            or tuple(output.shape) != (slots, hidden)
+        ):
             raise RuntimeError("SM120 MoE dispatch shapes disagree with descriptor scalars")
         if slots and (int(token_of_slot.min()) < 0 or int(token_of_slot.max()) >= tokens):
             raise RuntimeError("SM120 MoE dispatch token metadata is out of range")
@@ -2507,8 +2508,12 @@ def _submit_nvidia_sm120_native(
         dimensions = tuple(int(cast(int, scalars[name])) for name in ("Tokens", "Slots", "Hidden"))
         tokens, slots, hidden = dimensions
         partials, token_of_slot, weights, output = raw
-        if (tuple(partials.shape) != (slots, hidden) or tuple(token_of_slot.shape) != (slots,)
-                or tuple(weights.shape) != (slots,) or tuple(output.shape) != (tokens, hidden)):
+        if (
+            tuple(partials.shape) != (slots, hidden)
+            or tuple(token_of_slot.shape) != (slots,)
+            or tuple(weights.shape) != (slots,)
+            or tuple(output.shape) != (tokens, hidden)
+        ):
             raise RuntimeError("SM120 MoE combine shapes disagree with descriptor scalars")
         if slots and (int(token_of_slot.min()) < 0 or int(token_of_slot.max()) >= tokens):
             raise RuntimeError("SM120 MoE combine token metadata is out of range")
@@ -2516,8 +2521,12 @@ def _submit_nvidia_sm120_native(
         dimensions = tuple(int(cast(int, scalars[name])) for name in ("GroupedTokens", "K", "N", "Experts"))
         tokens, k, n, experts = dimensions
         x, weights, offsets, output = raw
-        if (tuple(x.shape) != (tokens, k) or tuple(weights.shape) != (experts, k, n)
-                or tuple(offsets.shape) != (experts + 1,) or tuple(output.shape) != (tokens, n)):
+        if (
+            tuple(x.shape) != (tokens, k)
+            or tuple(weights.shape) != (experts, k, n)
+            or tuple(offsets.shape) != (experts + 1,)
+            or tuple(output.shape) != (tokens, n)
+        ):
             raise RuntimeError("SM120 grouped GEMM shapes disagree with descriptor scalars")
         if int(offsets[0]) != 0 or int(offsets[-1]) != tokens or bool((offsets[1:] < offsets[:-1]).any()):
             raise RuntimeError("SM120 grouped GEMM offsets do not partition grouped tokens")
@@ -2530,12 +2539,10 @@ def _submit_nvidia_sm120_native(
                 raise RuntimeError("SM120 softmax X/O shapes disagree with Rows/K scalars")
             dimensions = (rows, k)
         else:
-            outer, axis_extent, inner = (
-                int(cast(int, scalars[name])) for name in ("Outer", "AxisExtent", "Inner")
-            )
+            outer, axis_extent, inner = (int(cast(int, scalars[name])) for name in ("Outer", "AxisExtent", "Inner"))
             axis = int(cast(Any, descriptor.provenance["axis"]))
             keepdims = bool(descriptor.provenance["keepdims"])
-            expected_output = tuple(x.shape[:axis]) + ((1,) if keepdims else ()) + tuple(x.shape[axis + 1:])
+            expected_output = tuple(x.shape[:axis]) + ((1,) if keepdims else ()) + tuple(x.shape[axis + 1 :])
             if x.size != outer * axis_extent * inner or tuple(output.shape) != expected_output:
                 raise RuntimeError("SM120 reduction shapes disagree with Outer/AxisExtent/Inner scalars")
             dimensions = (outer, axis_extent, inner)
@@ -2614,10 +2621,663 @@ def _submit_nvidia_sm120_native(
     )
     if rc:
         raise RuntimeError(f"SM120 descriptor invoke returned rc={rc}")
-    return output if descriptor.abi_id in unary_abis | attention_abis | attention_backward_abis | moe_abis or descriptor.abi_id == SM120_PAGED_KV_F32_ABI else d
+    return (
+        output
+        if descriptor.abi_id in unary_abis | attention_abis | attention_backward_abis | moe_abis
+        or descriptor.abi_id == SM120_PAGED_KV_F32_ABI
+        else d
+    )
+
+
+def _submit_rocm_gfx1151_native(
+    image: NativeImageArtifact,
+    descriptor: LaunchDescriptor,
+    buffers: Mapping[str, Any],
+    scalars: Mapping[str, object],
+    stream: Any,
+) -> Any:
+    """Submit compiler-owned gfx1151 typed softmax/reduction/movement HSACOs."""
+    del stream  # The pilot uses the HIP default stream and synchronizes completion.
+    import numpy as np
+
+    from tessera.compiler.rocm_native import (
+        GFX1151_MOE_DISPATCH_F32_ABI,
+        GFX1151_PAGED_KV_F32_ABI,
+        GFX1151_REDUCE_BF16_ABI,
+        GFX1151_REDUCE_F16_ABI,
+        GFX1151_REDUCE_F32_ABI,
+        GFX1151_SOFTMAX_F16_ABI,
+        GFX1151_SOFTMAX_F32_ABI,
+    )
+
+    if descriptor.abi_id not in {
+        GFX1151_SOFTMAX_F16_ABI,
+        GFX1151_SOFTMAX_F32_ABI,
+        GFX1151_REDUCE_F16_ABI,
+        GFX1151_REDUCE_BF16_ABI,
+        GFX1151_REDUCE_F32_ABI,
+        GFX1151_PAGED_KV_F32_ABI,
+        GFX1151_MOE_DISPATCH_F32_ABI,
+    }:
+        raise RuntimeError(f"unsupported gfx1151 descriptor ABI {descriptor.abi_id!r}")
+    ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
+    paged_kv = descriptor.abi_id == GFX1151_PAGED_KV_F32_ABI
+    moe_dispatch = descriptor.abi_id == GFX1151_MOE_DISPATCH_F32_ABI
+    expected_buffers = 3 if paged_kv or moe_dispatch else 2
+    if len(ordered) != expected_buffers:
+        raise RuntimeError(f"gfx1151 descriptor requires {expected_buffers} buffers")
+    reduction_abis = {
+        GFX1151_REDUCE_F16_ABI,
+        GFX1151_REDUCE_BF16_ABI,
+        GFX1151_REDUCE_F32_ABI,
+    }
+    reduction = descriptor.abi_id in reduction_abis
+    dimensions: tuple[int, ...] = ()
+    expected_dtype: Any = None
+    if paged_kv:
+        pages = buffers[ordered[0].name]
+        table = buffers[ordered[1].name]
+        output = buffers[ordered[2].name]
+        p = int(cast(int, scalars["P"]))
+        logical_pages = int(cast(int, scalars["LP"]))
+        page_size = int(cast(int, scalars["PageSize"]))
+        heads = int(cast(int, scalars["H"]))
+        dim = int(cast(int, scalars["D"]))
+        start = int(cast(int, scalars["Start"]))
+        tokens = int(cast(int, scalars["Tokens"]))
+        if (
+            tuple(pages.shape) != (p, page_size, heads, dim)
+            or tuple(table.shape) != (logical_pages,)
+            or tuple(output.shape) != (tokens, heads, dim)
+            or start < 0
+            or tokens <= 0
+            or start + tokens > logical_pages * page_size
+            or np.any(table < 0)
+            or np.any(table >= p)
+        ):
+            raise RuntimeError("gfx1151 paged-KV arrays disagree with descriptor scalars")
+        if pages.dtype != np.float32 or table.dtype != np.int32 or output.dtype != np.float32:
+            raise RuntimeError("gfx1151 paged-KV requires f32 pages/output and i32 table")
+        input_arrays = [np.ascontiguousarray(pages), np.ascontiguousarray(table)]
+        dimensions = (p, logical_pages, page_size, heads, dim, start, tokens)
+        grid_x = (tokens * heads * dim + 255) // 256
+    elif moe_dispatch:
+        x = buffers[ordered[0].name]
+        token = buffers[ordered[1].name]
+        output = buffers[ordered[2].name]
+        tokens = int(cast(int, scalars["T"]))
+        slots = int(cast(int, scalars["S"]))
+        hidden = int(cast(int, scalars["H"]))
+        if (
+            tuple(x.shape) != (tokens, hidden)
+            or tuple(token.shape) != (slots,)
+            or tuple(output.shape) != (slots, hidden)
+            or tokens <= 0
+            or slots <= 0
+            or hidden <= 0
+            or np.any(token < 0)
+            or np.any(token >= tokens)
+        ):
+            raise RuntimeError("gfx1151 MoE dispatch arrays disagree with descriptor scalars")
+        if x.dtype != np.float32 or token.dtype != np.int32 or output.dtype != np.float32:
+            raise RuntimeError("gfx1151 MoE dispatch requires f32 input/output and i32 indices")
+        input_arrays = [np.ascontiguousarray(x), np.ascontiguousarray(token)]
+        dimensions = (tokens, slots, hidden)
+        grid_x = (slots * hidden + 255) // 256
+    else:
+        x = buffers[ordered[0].name]
+        output = buffers[ordered[1].name]
+        input_arrays = [np.ascontiguousarray(x)]
+    if reduction:
+        outer = int(cast(int, scalars["Outer"]))
+        axis_extent = int(cast(int, scalars["AxisExtent"]))
+        inner = int(cast(int, scalars["Inner"]))
+        axis = int(cast(Any, descriptor.provenance["axis"]))
+        keepdims = bool(descriptor.provenance["keepdims"])
+        expected_output_shape = tuple(x.shape[:axis]) + ((1,) if keepdims else ()) + tuple(x.shape[axis + 1 :])
+        if (
+            x.size != outer * axis_extent * inner
+            or output.size != outer * inner
+            or tuple(output.shape) != expected_output_shape
+        ):
+            raise RuntimeError("gfx1151 reduction shapes disagree with Outer/AxisExtent/Inner scalars")
+        dimensions = (outer, axis_extent, inner)
+        grid_x = outer * inner
+        if descriptor.abi_id == GFX1151_REDUCE_F16_ABI:
+            expected_dtype = np.float16
+        elif descriptor.abi_id == GFX1151_REDUCE_BF16_ABI:
+            expected_dtype = _bfloat16_dtype()
+            if expected_dtype is None:
+                raise RuntimeError("gfx1151 bf16 reduction requires ml_dtypes")
+        else:
+            expected_dtype = np.float32
+    elif not paged_kv and not moe_dispatch:
+        rows = int(cast(int, scalars["Rows"]))
+        columns = int(cast(int, scalars["K"]))
+        if x.size != rows * columns or tuple(output.shape) != tuple(x.shape):
+            raise RuntimeError("gfx1151 softmax X/O shapes disagree with Rows/K scalars")
+        dimensions = (rows, columns)
+        grid_x = rows
+        expected_dtype = np.float16 if descriptor.abi_id == GFX1151_SOFTMAX_F16_ABI else np.float32
+    if not paged_kv and not moe_dispatch:
+        expected_output_dtype = np.float32 if reduction else expected_dtype
+        if x.dtype != expected_dtype or output.dtype != expected_output_dtype:
+            raise RuntimeError("gfx1151 native array dtype disagrees with descriptor ABI")
+    if not output.flags.c_contiguous:
+        raise RuntimeError("gfx1151 native output must be contiguous")
+
+    hip = _load_hip_for_launch()
+    if hip is None or hip.hipInit(0) != 0:
+        raise RuntimeError("libamdhip64.so or a usable gfx1151 device is unavailable")
+    module = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(module), image.payload) != 0:
+        raise RuntimeError("gfx1151 native HSACO module load failed")
+    device_buffers: list[ctypes.c_void_p] = []
+    try:
+        function = ctypes.c_void_p()
+        if hip.hipModuleGetFunction(ctypes.byref(function), module, descriptor.entry_symbol.encode()) != 0:
+            raise RuntimeError(f"gfx1151 native symbol {descriptor.entry_symbol!r} not found")
+        output_byte_count = int(output.nbytes)
+        device_o = ctypes.c_void_p()
+        device_inputs = [ctypes.c_void_p() for _ in input_arrays]
+        for device, byte_count in [
+            *((device, int(array.nbytes)) for device, array in zip(device_inputs, input_arrays, strict=True)),
+            (device_o, output_byte_count),
+        ]:
+            if hip.hipMalloc(ctypes.byref(device), byte_count) != 0:
+                raise RuntimeError("gfx1151 native hipMalloc failed")
+            device_buffers.append(device)
+        for device, array in zip(device_inputs, input_arrays, strict=True):
+            if hip.hipMemcpy(device, array.ctypes.data_as(ctypes.c_void_p), int(array.nbytes), 1) != 0:
+                raise RuntimeError("gfx1151 native host-to-device copy failed")
+
+        def memref_args(pointer: ctypes.c_void_p, size: int) -> list[Any]:
+            return [
+                ctypes.c_void_p(pointer.value),
+                ctypes.c_void_p(pointer.value),
+                ctypes.c_int64(0),
+                ctypes.c_int64(size),
+                ctypes.c_int64(1),
+            ]
+
+        arguments = []
+        for device, array in zip(device_inputs, input_arrays, strict=True):
+            arguments.extend(memref_args(device, int(array.size)))
+        arguments.extend(memref_args(device_o, int(output.size)))
+        arguments.extend(ctypes.c_int64(value) for value in dimensions)
+        argument_array = (ctypes.c_void_p * len(arguments))()
+        for index, value in enumerate(arguments):
+            argument_array[index] = ctypes.cast(ctypes.byref(value), ctypes.c_void_p)
+        rc = hip.hipModuleLaunchKernel(
+            function,
+            grid_x,
+            1,
+            1,
+            _SOFTMAX_BLOCKDIM,
+            1,
+            1,
+            0,
+            None,
+            argument_array,
+            None,
+        )
+        if rc != 0:
+            raise RuntimeError(f"gfx1151 native kernel launch failed rc={rc}")
+        if hip.hipDeviceSynchronize() != 0:
+            raise RuntimeError("gfx1151 native device synchronization failed")
+        if hip.hipMemcpy(output.ctypes.data_as(ctypes.c_void_p), device_o, output_byte_count, 2) != 0:
+            raise RuntimeError("gfx1151 native device-to-host copy failed")
+        return output
+    finally:
+        for device in reversed(device_buffers):
+            hip.hipFree(device)
+        unload = getattr(hip, "hipModuleUnload", None)
+        if unload is not None and module.value:
+            unload(module)
+
+
+_x86_native_image_libraries: dict[str, ctypes.CDLL] = {}
+
+
+def _load_x86_native_image(image: NativeImageArtifact) -> ctypes.CDLL:
+    cached = _x86_native_image_libraries.get(image.image_digest)
+    if cached is not None:
+        return cached
+    if not hasattr(os, "memfd_create"):
+        raise RuntimeError("x86 shared-object descriptors require Linux memfd_create")
+    fd = os.memfd_create(f"tessera-x86-{image.image_digest[:12]}", flags=0)
+    try:
+        view = memoryview(image.payload)
+        written = 0
+        while written < len(view):
+            written += os.write(fd, view[written:])
+        library = ctypes.CDLL(f"/proc/self/fd/{fd}")
+    finally:
+        os.close(fd)
+    _x86_native_image_libraries[image.image_digest] = library
+    return library
+
+
+def _submit_x86_native(
+    image: NativeImageArtifact,
+    descriptor: LaunchDescriptor,
+    buffers: Mapping[str, Any],
+    scalars: Mapping[str, object],
+    stream: Any,
+) -> Any:
+    """Invoke compiler-owned x86 descriptors through their embedded ELF DSO."""
+    del stream
+    import numpy as np
+
+    from tessera.compiler.x86_native import (
+        X86_ATTENTION_EXT_F32_ABI,
+        X86_ATTENTION_F32_ABI,
+        X86_BINARY_F32_ABI,
+        X86_BINARY_MATH_F32_ABI,
+        X86_BITWISE_I32_ABI,
+        X86_COMPARE_F32_ABI,
+        X86_LOGICAL_I8_ABI,
+        X86_MATMUL_F32_ABI,
+        X86_MATMUL_BF16_F32_ABI,
+        X86_MATMUL_F64_ABI,
+        X86_MATMUL_U8S8_S32_ABI,
+        X86_PREDICATE_F32_ABI,
+        X86_REDUCE_F32_ABI,
+        X86_SOFTMAX_F32_ABI,
+        X86_UNARY_F32_ABI,
+        X86_TRANSCENDENTAL_F32_ABI,
+        X86_WHERE_F32_ABI,
+    )
+
+    supported = {
+        X86_SOFTMAX_F32_ABI, X86_REDUCE_F32_ABI, X86_MATMUL_F32_ABI,
+        X86_MATMUL_BF16_F32_ABI, X86_MATMUL_U8S8_S32_ABI, X86_MATMUL_F64_ABI,
+        X86_ATTENTION_F32_ABI, X86_ATTENTION_EXT_F32_ABI,
+        X86_UNARY_F32_ABI, X86_BINARY_F32_ABI, X86_PREDICATE_F32_ABI,
+        X86_COMPARE_F32_ABI, X86_LOGICAL_I8_ABI, X86_BITWISE_I32_ABI,
+        X86_WHERE_F32_ABI, X86_TRANSCENDENTAL_F32_ABI,
+        X86_BINARY_MATH_F32_ABI,
+    }
+    if descriptor.abi_id not in supported:
+        raise RuntimeError(f"unsupported x86 descriptor ABI {descriptor.abi_id!r}")
+    ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
+    arrays = [buffers[item.name] for item in ordered]
+    elementwise_abis = {
+        X86_UNARY_F32_ABI, X86_BINARY_F32_ABI, X86_PREDICATE_F32_ABI,
+        X86_COMPARE_F32_ABI, X86_LOGICAL_I8_ABI, X86_BITWISE_I32_ABI,
+        X86_WHERE_F32_ABI, X86_TRANSCENDENTAL_F32_ABI,
+        X86_BINARY_MATH_F32_ABI,
+    }
+    if descriptor.abi_id in elementwise_abis:
+        expected = len(descriptor.buffers)
+        if len(arrays) != expected:
+            raise RuntimeError(
+                f"x86 elementwise descriptor requires {expected} buffers"
+            )
+        inputs, output = arrays[:-1], arrays[-1]
+        if descriptor.abi_id == X86_WHERE_F32_ABI:
+            if len(inputs) != 3 or inputs[0].dtype != np.bool_ or any(
+                array.dtype != np.float32 for array in inputs[1:]
+            ):
+                raise RuntimeError("x86 where descriptor requires bool/f32/f32 inputs")
+        elif descriptor.abi_id in {X86_LOGICAL_I8_ABI}:
+            if any(array.dtype != np.bool_ for array in inputs):
+                raise RuntimeError("x86 logical descriptor requires bool inputs")
+        elif descriptor.abi_id == X86_BITWISE_I32_ABI:
+            if any(array.dtype != np.int32 for array in inputs):
+                raise RuntimeError("x86 bitwise descriptor requires i32 inputs")
+        elif any(array.dtype != np.float32 for array in inputs):
+            raise RuntimeError("x86 float elementwise descriptor requires f32 inputs")
+        if descriptor.abi_id in {
+            X86_PREDICATE_F32_ABI, X86_COMPARE_F32_ABI, X86_LOGICAL_I8_ABI,
+        }:
+            if output.dtype != np.bool_:
+                raise RuntimeError("x86 predicate/compare/logical descriptor requires bool output")
+        elif descriptor.abi_id == X86_BITWISE_I32_ABI:
+            if output.dtype != np.int32:
+                raise RuntimeError("x86 bitwise descriptor requires i32 output")
+        elif output.dtype != np.float32:
+            raise RuntimeError("x86 floating elementwise descriptor requires f32 output")
+        if not output.flags.c_contiguous:
+            raise RuntimeError("x86 elementwise descriptor output must be contiguous")
+        n = int(cast(int, scalars["N"]))
+        if n <= 0 or any(array.size != n for array in arrays):
+            raise RuntimeError("x86 elementwise arrays disagree with N")
+        shape = tuple(output.shape)
+        if any(tuple(array.shape) != shape for array in arrays):
+            raise RuntimeError("x86 elementwise arrays must have identical shapes")
+        library = _load_x86_native_image(image)
+        function = getattr(library, descriptor.entry_symbol, None)
+        if function is None:
+            raise RuntimeError(
+                f"x86 native symbol {descriptor.entry_symbol!r} not found"
+            )
+        pointer = ctypes.POINTER(ctypes.c_float)
+        kind_name = str(descriptor.provenance["kind"])
+        if descriptor.abi_id == X86_WHERE_F32_ABI:
+            byte_pointer = ctypes.POINTER(ctypes.c_uint8)
+            cc = np.ascontiguousarray(inputs[0], dtype=np.bool_)
+            ac = np.ascontiguousarray(inputs[1], dtype=np.float32)
+            bc = np.ascontiguousarray(inputs[2], dtype=np.float32)
+            function.argtypes = [byte_pointer, pointer, pointer, ctypes.c_int64, pointer]
+            function.restype = None
+            function(
+                cc.ctypes.data_as(byte_pointer), ac.ctypes.data_as(pointer),
+                bc.ctypes.data_as(pointer), ctypes.c_int64(n),
+                output.ctypes.data_as(pointer),
+            )
+        elif descriptor.abi_id == X86_TRANSCENDENTAL_F32_ABI:
+            kinds = {
+                "exp": 0, "log": 1, "tanh": 2, "sigmoid": 3, "silu": 4,
+                "gelu": 5, "erf": 6, "softplus": 7, "expm1": 8,
+                "log1p": 9, "cos": 10, "tan": 11, "sinh": 12,
+                "cosh": 13, "asin": 14, "acos": 15, "atan": 16,
+                "erfc": 17, "sin": 18, "lgamma": 19, "digamma": 20,
+            }
+            xc = np.ascontiguousarray(inputs[0], dtype=np.float32)
+            function.argtypes = [pointer, ctypes.c_int64, pointer, ctypes.c_int]
+            function.restype = None
+            function(
+                xc.ctypes.data_as(pointer), ctypes.c_int64(n),
+                output.ctypes.data_as(pointer), ctypes.c_int(kinds[kind_name]),
+            )
+        elif descriptor.abi_id == X86_BINARY_MATH_F32_ABI:
+            ac = np.ascontiguousarray(inputs[0], dtype=np.float32)
+            bc = np.ascontiguousarray(inputs[1], dtype=np.float32)
+            function.argtypes = [pointer, pointer, ctypes.c_int64, pointer]
+            function.restype = None
+            function(
+                ac.ctypes.data_as(pointer), bc.ctypes.data_as(pointer),
+                ctypes.c_int64(n), output.ctypes.data_as(pointer),
+            )
+        elif descriptor.abi_id == X86_UNARY_F32_ABI:
+            kinds = {
+                "sqrt": 0, "rsqrt": 1, "reciprocal": 2, "abs": 3,
+                "sign": 5, "floor": 6, "ceil": 7, "trunc": 8, "round": 9,
+            }
+            xc = np.ascontiguousarray(inputs[0], dtype=np.float32)
+            function.argtypes = [pointer, ctypes.c_int64, pointer, ctypes.c_int]
+            function.restype = None
+            function(
+                xc.ctypes.data_as(pointer), ctypes.c_int64(n),
+                output.ctypes.data_as(pointer), ctypes.c_int(kinds[kind_name]),
+            )
+        elif descriptor.abi_id == X86_BINARY_F32_ABI:
+            kinds = {
+                "sub": 0, "div": 1, "maximum": 2, "minimum": 3,
+                "add": 4, "mul": 5, "mod": 6, "floor_div": 7,
+            }
+            ac = np.ascontiguousarray(inputs[0], dtype=np.float32)
+            bc = np.ascontiguousarray(inputs[1], dtype=np.float32)
+            function.argtypes = [
+                pointer, pointer, ctypes.c_int64, pointer, ctypes.c_int,
+            ]
+            function.restype = None
+            function(
+                ac.ctypes.data_as(pointer), bc.ctypes.data_as(pointer),
+                ctypes.c_int64(n), output.ctypes.data_as(pointer),
+                ctypes.c_int(kinds[kind_name]),
+            )
+        elif descriptor.abi_id == X86_PREDICATE_F32_ABI:
+            kinds = {"isnan": 0, "isinf": 1, "isfinite": 2}
+            xc = np.ascontiguousarray(inputs[0], dtype=np.float32)
+            predicate_pointer = ctypes.c_void_p
+            function.argtypes = [
+                pointer, ctypes.c_int64, predicate_pointer, ctypes.c_int,
+            ]
+            function.restype = None
+            function(
+                xc.ctypes.data_as(pointer), ctypes.c_int64(n),
+                output.ctypes.data_as(predicate_pointer), ctypes.c_int(kinds[kind_name]),
+            )
+        elif descriptor.abi_id == X86_COMPARE_F32_ABI:
+            kinds = {"eq": 0, "ne": 1, "lt": 2, "le": 3, "gt": 4, "ge": 5}
+            ac = np.ascontiguousarray(inputs[0], dtype=np.float32)
+            bc = np.ascontiguousarray(inputs[1], dtype=np.float32)
+            compare_pointer = ctypes.c_void_p
+            function.argtypes = [pointer, pointer, ctypes.c_int64, compare_pointer, ctypes.c_int]
+            function.restype = None
+            function(
+                ac.ctypes.data_as(pointer), bc.ctypes.data_as(pointer),
+                ctypes.c_int64(n), output.ctypes.data_as(compare_pointer),
+                ctypes.c_int(kinds[kind_name]),
+            )
+        elif descriptor.abi_id == X86_LOGICAL_I8_ABI:
+            kinds = {"and": 0, "or": 1, "xor": 2, "not": 3}
+            void_pointer = ctypes.c_void_p
+            logical_a = np.ascontiguousarray(inputs[0], dtype=np.bool_)
+            logical_b = np.ascontiguousarray(inputs[1], dtype=np.bool_) if len(inputs) == 2 else None
+            function.argtypes = [void_pointer, void_pointer, ctypes.c_int64, void_pointer, ctypes.c_int]
+            function.restype = None
+            function(
+                logical_a.ctypes.data_as(void_pointer),
+                logical_b.ctypes.data_as(void_pointer) if logical_b is not None else void_pointer(None),
+                ctypes.c_int64(n), output.ctypes.data_as(void_pointer),
+                ctypes.c_int(kinds[kind_name]),
+            )
+        else:
+            kinds = {"and": 0, "or": 1, "xor": 2, "not": 3, "popcount": 4}
+            int_pointer = ctypes.POINTER(ctypes.c_int32)
+            bitwise_a = np.ascontiguousarray(inputs[0], dtype=np.int32)
+            bitwise_b = np.ascontiguousarray(inputs[1], dtype=np.int32) if len(inputs) == 2 else None
+            function.argtypes = [int_pointer, int_pointer, ctypes.c_int64, int_pointer, ctypes.c_int]
+            function.restype = None
+            function(
+                bitwise_a.ctypes.data_as(int_pointer),
+                bitwise_b.ctypes.data_as(int_pointer) if bitwise_b is not None else int_pointer(),
+                ctypes.c_int64(n), output.ctypes.data_as(int_pointer),
+                ctypes.c_int(kinds[kind_name]),
+            )
+        return output
+    output = arrays[-1]
+    if not output.flags.c_contiguous:
+        raise RuntimeError("x86 native descriptor output must be contiguous")
+    library = _load_x86_native_image(image)
+    function = getattr(library, descriptor.entry_symbol, None)
+    if function is None:
+        raise RuntimeError(f"x86 native symbol {descriptor.entry_symbol!r} not found")
+    pointer = ctypes.POINTER(ctypes.c_float)
+    matmul_abis = {
+        X86_MATMUL_F32_ABI, X86_MATMUL_BF16_F32_ABI,
+        X86_MATMUL_U8S8_S32_ABI, X86_MATMUL_F64_ABI,
+    }
+    if descriptor.abi_id in matmul_abis:
+        if len(arrays) != 3:
+            raise RuntimeError("x86 matmul descriptor requires A/B/O buffers")
+        a, b, output = arrays
+        m, n, k = (int(cast(int, scalars[name])) for name in ("M", "N", "K"))
+        if tuple(a.shape) != (m, k) or tuple(b.shape) != (k, n) or tuple(output.shape) != (m, n):
+            raise RuntimeError("x86 matmul arrays disagree with M/N/K")
+        function.restype = None
+        if descriptor.abi_id == X86_MATMUL_F32_ABI:
+            if any(array.dtype != np.float32 for array in arrays):
+                raise RuntimeError("x86 f32 matmul descriptor requires f32 A/B/O")
+            ac, bc = np.ascontiguousarray(a), np.ascontiguousarray(b)
+            function.argtypes = [pointer, pointer, ctypes.c_int64, ctypes.c_int64, ctypes.c_int64, pointer]
+            function(ac.ctypes.data_as(pointer), bc.ctypes.data_as(pointer),
+                     ctypes.c_int64(m), ctypes.c_int64(n), ctypes.c_int64(k),
+                     output.ctypes.data_as(pointer))
+        elif descriptor.abi_id == X86_MATMUL_BF16_F32_ABI:
+            if str(a.dtype) != "bfloat16" or str(b.dtype) != "bfloat16" or output.dtype != np.float32:
+                raise RuntimeError("x86 BF16 matmul descriptor requires bf16 A/B and f32 O")
+            u16p = ctypes.POINTER(ctypes.c_uint16)
+            ac = np.ascontiguousarray(a).view(np.uint16)
+            bc = np.ascontiguousarray(b).view(np.uint16)
+            function.argtypes = [u16p, u16p, pointer, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_float]
+            function(ac.ctypes.data_as(u16p), bc.ctypes.data_as(u16p),
+                     output.ctypes.data_as(pointer), ctypes.c_int(m), ctypes.c_int(n),
+                     ctypes.c_int(k), ctypes.c_float(0.0))
+        elif descriptor.abi_id == X86_MATMUL_U8S8_S32_ABI:
+            if a.dtype != np.uint8 or b.dtype != np.int8 or output.dtype != np.int32:
+                raise RuntimeError("x86 VNNI matmul descriptor requires u8 A, s8 B, and s32 O")
+            u8p, s8p, s32p = (ctypes.POINTER(ctypes.c_uint8), ctypes.POINTER(ctypes.c_int8), ctypes.POINTER(ctypes.c_int32))
+            ac, bc = np.ascontiguousarray(a), np.ascontiguousarray(b)
+            function.argtypes = [u8p, s8p, s32p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int]
+            function(ac.ctypes.data_as(u8p), bc.ctypes.data_as(s8p),
+                     output.ctypes.data_as(s32p), ctypes.c_int(m), ctypes.c_int(n),
+                     ctypes.c_int(k), ctypes.c_int(0))
+        else:
+            if any(array.dtype != np.float64 for array in arrays):
+                raise RuntimeError("x86 f64 matmul descriptor requires f64 A/B/O")
+            f64p = ctypes.POINTER(ctypes.c_double)
+            ac, bc = np.ascontiguousarray(a), np.ascontiguousarray(b)
+            function.argtypes = [f64p, f64p, ctypes.c_int64, ctypes.c_int64, ctypes.c_int64, f64p]
+            function(ac.ctypes.data_as(f64p), bc.ctypes.data_as(f64p),
+                     ctypes.c_int64(m), ctypes.c_int64(n), ctypes.c_int64(k),
+                     output.ctypes.data_as(f64p))
+        return output
+    if any(array.dtype != np.float32 for array in arrays):
+        raise RuntimeError("x86 native descriptor requires f32 buffers")
+    if descriptor.abi_id in {X86_ATTENTION_F32_ABI, X86_ATTENTION_EXT_F32_ABI}:
+        expected = 5 if bool(descriptor.provenance["bias"]) else 4
+        if len(arrays) != expected:
+            raise RuntimeError(f"x86 attention descriptor requires {expected} buffers")
+        q, key, value = (np.ascontiguousarray(array) for array in arrays[:3])
+        bias = np.ascontiguousarray(arrays[3]) if expected == 5 else None
+        b, hq, hkv, sq, sk, d, dv = (
+            int(cast(int, scalars[name])) for name in ("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv")
+        )
+        if (
+            hq != hkv or tuple(q.shape) != (b, hq, sq, d)
+            or tuple(key.shape) != (b, hkv, sk, d)
+            or tuple(value.shape) != (b, hkv, sk, dv)
+            or tuple(output.shape) != (b, hq, sq, dv)
+            or (bias is not None and tuple(bias.shape) != (b, hq, sq, sk))
+        ):
+            raise RuntimeError("x86 attention arrays disagree with MHA dimensions")
+        bh = b * hq
+        scale = ctypes.c_float(float(cast(Any, descriptor.provenance["scale"])))
+        causal = ctypes.c_int(1 if descriptor.provenance["causal"] else 0)
+        if descriptor.abi_id == X86_ATTENTION_F32_ABI:
+            function.argtypes = [pointer, pointer, pointer] + [ctypes.c_int64] * 5 + [ctypes.c_float, ctypes.c_int, pointer]
+            function.restype = None
+            function(
+                q.ctypes.data_as(pointer), key.ctypes.data_as(pointer), value.ctypes.data_as(pointer),
+                ctypes.c_int64(bh), ctypes.c_int64(sq), ctypes.c_int64(sk),
+                ctypes.c_int64(d), ctypes.c_int64(dv), scale, causal,
+                output.ctypes.data_as(pointer),
+            )
+            return output
+        function.argtypes = (
+            [pointer, pointer, pointer, pointer] + [ctypes.c_int64] * 6
+            + [ctypes.c_float, ctypes.c_int, ctypes.c_int64, ctypes.c_float, pointer]
+        )
+        function.restype = None
+        bias_pointer = bias.ctypes.data_as(pointer) if bias is not None else pointer()
+        function(
+            q.ctypes.data_as(pointer), key.ctypes.data_as(pointer), value.ctypes.data_as(pointer),
+            bias_pointer, ctypes.c_int64(sq * sk if bias is not None else 0),
+            ctypes.c_int64(bh), ctypes.c_int64(sq), ctypes.c_int64(sk),
+            ctypes.c_int64(d), ctypes.c_int64(dv), scale, causal,
+            ctypes.c_int64(max(0, int(cast(Any, descriptor.provenance["window"])))),
+            ctypes.c_float(float(cast(Any, descriptor.provenance["softcap"]))),
+            output.ctypes.data_as(pointer),
+        )
+        return output
+    if len(arrays) != 2:
+        raise RuntimeError("x86 softmax/reduction descriptors require two buffers")
+    x, output = arrays
+    xc = np.ascontiguousarray(x, dtype=np.float32)
+    if descriptor.abi_id == X86_SOFTMAX_F32_ABI:
+        rows, columns = int(cast(int, scalars["Rows"])), int(cast(int, scalars["K"]))
+        if xc.size != rows * columns or tuple(output.shape) != tuple(x.shape):
+            raise RuntimeError("x86 softmax arrays disagree with Rows/K")
+        function.argtypes = [pointer, ctypes.c_int64, ctypes.c_int64, pointer]
+        function.restype = None
+        function(
+            xc.ctypes.data_as(pointer), ctypes.c_int64(rows), ctypes.c_int64(columns),
+            output.ctypes.data_as(pointer),
+        )
+        return output
+    outer = int(cast(int, scalars["Outer"]))
+    extent = int(cast(int, scalars["AxisExtent"]))
+    inner = int(cast(int, scalars["Inner"]))
+    expected_shape = tuple(x.shape[:-1]) + ((1,) if descriptor.provenance["keepdims"] else ())
+    if inner != 1 or xc.size != outer * extent or output.size != outer or tuple(output.shape) != expected_shape:
+        raise RuntimeError("x86 reduction arrays disagree with Outer/AxisExtent/Inner")
+    kind = {"sum": 0, "max": 1, "mean": 2, "min": 3}[str(descriptor.provenance["kind"])]
+    function.argtypes = [pointer, ctypes.c_int64, ctypes.c_int64, pointer, ctypes.c_int]
+    function.restype = None
+    function(
+        xc.ctypes.data_as(pointer), ctypes.c_int64(outer), ctypes.c_int64(extent),
+        output.ctypes.data_as(pointer), ctypes.c_int(kind),
+    )
+    return output
 
 
 def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
+    from tessera.compiler.rocm_native import (
+        GFX1151_MOE_DISPATCH_F32_ABI,
+        GFX1151_PAGED_KV_F32_ABI,
+        GFX1151_REDUCE_BF16_ABI,
+        GFX1151_REDUCE_F16_ABI,
+        GFX1151_REDUCE_F32_ABI,
+        GFX1151_SOFTMAX_F16_ABI,
+        GFX1151_SOFTMAX_F32_ABI,
+    )
+
+    if (
+        target == "rocm_gfx1151"
+        and abi_id
+        in {
+            GFX1151_SOFTMAX_F16_ABI,
+            GFX1151_SOFTMAX_F32_ABI,
+            GFX1151_REDUCE_F16_ABI,
+            GFX1151_REDUCE_BF16_ABI,
+            GFX1151_REDUCE_F32_ABI,
+            GFX1151_PAGED_KV_F32_ABI,
+            GFX1151_MOE_DISPATCH_F32_ABI,
+        }
+        and target not in _native_launchers
+    ):
+        register_native_launcher(
+            target,
+            binary_formats=("hsaco",),
+            submit=_submit_rocm_gfx1151_native,
+        )
+        return
+
+    from tessera.compiler.x86_native import (
+        X86_ATTENTION_EXT_F32_ABI,
+        X86_ATTENTION_F32_ABI,
+        X86_BINARY_F32_ABI,
+        X86_BINARY_MATH_F32_ABI,
+        X86_BITWISE_I32_ABI,
+        X86_COMPARE_F32_ABI,
+        X86_LOGICAL_I8_ABI,
+        X86_MATMUL_F32_ABI,
+        X86_MATMUL_BF16_F32_ABI,
+        X86_MATMUL_F64_ABI,
+        X86_MATMUL_U8S8_S32_ABI,
+        X86_PREDICATE_F32_ABI,
+        X86_REDUCE_F32_ABI,
+        X86_SOFTMAX_F32_ABI,
+        X86_UNARY_F32_ABI,
+        X86_TRANSCENDENTAL_F32_ABI,
+        X86_WHERE_F32_ABI,
+    )
+
+    if (
+        target == "x86"
+        and abi_id in {
+            X86_SOFTMAX_F32_ABI, X86_REDUCE_F32_ABI, X86_MATMUL_F32_ABI,
+            X86_MATMUL_BF16_F32_ABI, X86_MATMUL_U8S8_S32_ABI,
+            X86_MATMUL_F64_ABI,
+            X86_ATTENTION_F32_ABI, X86_ATTENTION_EXT_F32_ABI,
+            X86_UNARY_F32_ABI, X86_BINARY_F32_ABI, X86_PREDICATE_F32_ABI,
+            X86_COMPARE_F32_ABI, X86_LOGICAL_I8_ABI, X86_BITWISE_I32_ABI,
+            X86_WHERE_F32_ABI, X86_TRANSCENDENTAL_F32_ABI,
+            X86_BINARY_MATH_F32_ABI,
+        }
+        and target not in _native_launchers
+    ):
+        register_native_launcher(
+            target,
+            binary_formats=("shared_object",),
+            submit=_submit_x86_native,
+        )
+        return
+
     from tessera.compiler.nvidia_native import (
         SM120_ATTN_F16_ABI,
         SM120_ATTN_F32_ABI,
@@ -2901,7 +3561,11 @@ def _nvidia_tile_matmul_device_latency(
 
 
 def _nvidia_paged_kv_descriptor_device_latency(
-    image: Any, descriptor: Any, args: Mapping[str, Any], *, reps: int = 100,
+    image: Any,
+    descriptor: Any,
+    args: Mapping[str, Any],
+    *,
+    reps: int = 100,
     warmup: int = 10,
 ) -> float:
     """CUDA-event latency for the canonical paged-KV descriptor with resident buffers."""
@@ -2921,13 +3585,18 @@ def _nvidia_paged_kv_descriptor_device_latency(
     ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
     raw = [values[item.name] for item in ordered]
     addresses = (ctypes.c_void_p * len(raw))(*(int(value.ctypes.data) for value in raw))
-    dimensions = tuple(int(cast(int, scalars[name])) for name in
-                       ("P", "LP", "PageSize", "H", "D", "Start", "Tokens"))
+    dimensions = tuple(int(cast(int, scalars[name])) for name in ("P", "LP", "PageSize", "H", "D", "Start", "Tokens"))
     dims = (ctypes.c_int64 * len(dimensions))(*dimensions)
     latency = ctypes.c_float()
     rc = lib.tessera_nvidia_ptx_benchmark(
-        entry.encode(), addresses, len(raw), dims, len(dimensions), int(warmup),
-        int(reps), ctypes.byref(latency),
+        entry.encode(),
+        addresses,
+        len(raw),
+        dims,
+        len(dimensions),
+        int(warmup),
+        int(reps),
+        ctypes.byref(latency),
     )
     if rc:
         raise RuntimeError(f"canonical paged-KV benchmark rc={rc}")
@@ -6125,42 +6794,57 @@ def _execute_rocm_compiled_softmax(artifact: RuntimeArtifact, args: Any) -> Any:
     mod = ctypes.c_void_p()
     if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
         raise _RocmCompiledUnavailable("rocm softmax: no usable AMD GPU (module load failed)")
-    fn = ctypes.c_void_p()
-    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"sm") != 0:
-        raise RuntimeError("rocm softmax: kernel symbol 'sm' not found")
+    device_buffers: list[ctypes.c_void_p] = []
+    try:
+        fn = ctypes.c_void_p()
+        if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"sm") != 0:
+            raise RuntimeError("rocm softmax: kernel symbol 'sm' not found")
 
-    xc = np.ascontiguousarray(x, dtype=store)
-    o = np.zeros((m, k), dtype=store)
-    n = m * k
-    dx, do = ctypes.c_void_p(), ctypes.c_void_p()
-    for dev in (dx, do):
-        if hip.hipMalloc(ctypes.byref(dev), esz * n) != 0:
-            raise RuntimeError("rocm softmax: hipMalloc failed")
-    hip.hipMemcpy(dx, xc.ctypes.data_as(ctypes.c_void_p), esz * n, 1)
-
-    def _mr(p, size):
-        return [
-            ctypes.c_void_p(p.value),
-            ctypes.c_void_p(p.value),
-            ctypes.c_int64(0),
-            ctypes.c_int64(size),
-            ctypes.c_int64(1),
-        ]
-
-    launch_args = _mr(dx, n) + _mr(do, n) + [ctypes.c_int64(m), ctypes.c_int64(k)]
-    arr = (ctypes.c_void_p * len(launch_args))()
-    for i, val in enumerate(launch_args):
-        arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
-    rc = hip.hipModuleLaunchKernel(fn, m, 1, 1, _SOFTMAX_BLOCKDIM, 1, 1, 0, None, arr, None)
-    if rc != 0:
+        xc = np.ascontiguousarray(x, dtype=store)
+        o = np.zeros((m, k), dtype=store)
+        n = m * k
+        dx, do = ctypes.c_void_p(), ctypes.c_void_p()
         for dev in (dx, do):
+            if hip.hipMalloc(ctypes.byref(dev), esz * n) != 0:
+                raise RuntimeError("rocm softmax: hipMalloc failed")
+            device_buffers.append(dev)
+        if hip.hipMemcpy(dx, xc.ctypes.data_as(ctypes.c_void_p), esz * n, 1) != 0:
+            raise RuntimeError("rocm softmax: host-to-device copy failed")
+
+        def _mr(p, size):
+            return [
+                ctypes.c_void_p(p.value),
+                ctypes.c_void_p(p.value),
+                ctypes.c_int64(0),
+                ctypes.c_int64(size),
+                ctypes.c_int64(1),
+            ]
+
+        launch_args = (
+            _mr(dx, n)
+            + _mr(do, n)
+            + [
+                ctypes.c_int64(m),
+                ctypes.c_int64(k),
+            ]
+        )
+        arr = (ctypes.c_void_p * len(launch_args))()
+        for i, val in enumerate(launch_args):
+            arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
+        rc = hip.hipModuleLaunchKernel(fn, m, 1, 1, _SOFTMAX_BLOCKDIM, 1, 1, 0, None, arr, None)
+        if rc != 0:
+            raise RuntimeError(f"rocm softmax: kernel launch failed rc={rc}")
+        if hip.hipDeviceSynchronize() != 0:
+            raise RuntimeError("rocm softmax: device synchronization failed")
+        if hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, esz * n, 2) != 0:
+            raise RuntimeError("rocm softmax: device-to-host copy failed")
+        return o.reshape(x.shape)
+    finally:
+        for dev in reversed(device_buffers):
             hip.hipFree(dev)
-        raise RuntimeError(f"rocm softmax: kernel launch failed rc={rc}")
-    hip.hipDeviceSynchronize()
-    hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, esz * n, 2)
-    for dev in (dx, do):
-        hip.hipFree(dev)
-    return o.reshape(x.shape)
+        unload = getattr(hip, "hipModuleUnload", None)
+        if unload is not None and mod.value:
+            unload(mod)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -14214,6 +14898,9 @@ def _execute_rocm_compiled_reduce(artifact: RuntimeArtifact, args: Any) -> Any:
     hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, esz * max(outer, 1), 2)
     for dev in (dx, do):
         hip.hipFree(dev)
+    unload = getattr(hip, "hipModuleUnload", None)
+    if unload is not None and mod.value:
+        unload(mod)
 
     res = o.reshape(kept_shape)
     if keepdims:
@@ -20189,16 +20876,17 @@ def _launch_native_descriptor(
             "reason": str(exc),
         }
     elapsed_ms = (time.perf_counter_ns() - start_ns) / 1_000_000.0
+    native_cpu_target = image.target in {"cpu", "x86", "x86_amx", "x86_avx512"}
     _last_profile = RuntimeProfile(
         launch_overhead_ms=elapsed_ms,
-        kernel_elapsed_ms=elapsed_ms if image.target != "cpu" else None,
-        cpu_wall_ms=elapsed_ms if image.target == "cpu" else None,
+        kernel_elapsed_ms=None if native_cpu_target else elapsed_ms,
+        cpu_wall_ms=elapsed_ms if native_cpu_target else None,
     )
     return {
         "ok": True,
         "runtime_status": "success",
         "compiler_path": compiler_path,
-        "execution_kind": "native_cpu" if image.target == "cpu" else "native_gpu",
+        "execution_kind": "native_cpu" if native_cpu_target else "native_gpu",
         "execution_mode": "descriptor",
         "artifact_hash": artifact.artifact_hash,
         "image_digest": image.image_digest,
@@ -20206,8 +20894,8 @@ def _launch_native_descriptor(
         "output": output,
         "profile": {
             "launch_overhead_ms": elapsed_ms,
-            "kernel_elapsed_ms": elapsed_ms if image.target != "cpu" else None,
-            "cpu_wall_ms": elapsed_ms if image.target == "cpu" else None,
+            "kernel_elapsed_ms": None if native_cpu_target else elapsed_ms,
+            "cpu_wall_ms": elapsed_ms if native_cpu_target else None,
         },
     }
 

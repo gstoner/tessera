@@ -71,7 +71,7 @@ source?* Today it cannot. Every phase moves one concrete step toward "yes."
 The repo reports autodiff status two incompatible ways:
 
 - The non-goals table (§ near line 30) of [`AUTODIFF_SPEC.md`](../../spec/AUTODIFF_SPEC.md)
-  says **"✅ Phase F4 landed — verified end-to-end on MLIR 22."**
+  says **"✅ Phase F4 landed — verified end-to-end on MLIR 23."**
 - The §F4 prose (near line 278) of [`AUTODIFF_SPEC.md`](../../spec/AUTODIFF_SPEC.md) still
   says **"design landed, build follow-up,"** the pass **"registers as a no-op,"**
   and the smoke test is **XFAIL**.
@@ -159,10 +159,10 @@ bridge (`custom_adjoint_call`), structured control flow, residual saving,
 Python-JIT differentiation selection, and the backend backward-launch ABI.
 
 **Build-claim standardization.** Core MLIR fixtures are validated by
-`build-llvm22-ninja` (LLVM/MLIR 22.1.6); lean/artifact-only builds must not claim
+`build-llvm23-ninja` (LLVM/MLIR 23); lean/artifact-only builds must not claim
 core-pass coverage. The ledger records *which build proved each axis* using
 stable configuration identifiers rather than host-local build directories:
-`python-unit-registry`, `llvm22-core`, `llvm22-core+rocm-gfx1151`, and
+`python-unit-registry`, `llvm23-core`, `llvm23-core+rocm-gfx1151`, and
 `x86-runtime-avx512`. Exact-target device claims source their build identifier
 from the same execution-matrix row as their fixture and proof status.
 
@@ -373,7 +373,7 @@ a multi-result function through `runtime.launch()` + `libtessera_jit`, with no
 NumPy fallback. `tests/unit/test_autodiff_native_cpu_vertical.py` proves tanh and
 sigmoid matmul gradients against independent formulas and asserts the native JIT
 invocation counter advances. The execution matrix and ledger credit only
-`cpu_x86_64`, with build `llvm22-core+x86_64-jit`.
+`cpu_x86_64`, with build `llvm23-core+x86_64-jit`.
 
 Original scope notes (retained):
 

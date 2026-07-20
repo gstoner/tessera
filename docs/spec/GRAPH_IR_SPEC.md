@@ -250,7 +250,7 @@ tessera.flash_attn %q, %k, %v {head_dim, dropout_p?, causal?}
 | `$v` | `TensorType` | Yes | Value tensor. Shape: `[B, H, S, D]`. |
 | `$head_dim` | `I64Attr` | Yes | Head dimension `D`. Used to compute the attention scale `1/sqrt(D)`. |
 | `$dropout_p` | `OptionalAttr<F64Attr>` | No | Dropout probability. If `0.0` or absent, `DropoutZeroSimplify` canonicalization removes it. Sets effect to `random` when non-zero. |
-| `$causal` | `BoolAttr` | No (default `false`) | If `true`, `TileIRLoweringPass` emits `tessera.attn.causal_mask` in the inner loop. |
+| `$causal` | `BoolAttr` | No (default `false`) | If `true`, `TileIRLoweringPass` emits `tessera_attn.causal_mask` in the inner loop. |
 
 **Results:**
 

@@ -201,7 +201,7 @@ and dense-equivalence (`top_k == num_blocks`).
 The CUDA/NVIDIA artifact path lowers the selected-block layout to a KV-outer
 sparse attention target, not to a monolithic opaque model op. Graph IR
 `tessera.msa_sparse_attention` becomes `schedule.attn.kv_outer_sparse`, then
-Tile IR `tessera.attn.msa_kv_outer_sparse`, then an `artifact_only` NVIDIA
+Tile IR `tessera_attn.msa_kv_outer_sparse`, then an `artifact_only` NVIDIA
 Target IR kernel contract named `msa_kv_outer_sparse`. The contract carries
 `block_ids` shaped `(B,Hkv,Sq,top_k)`, `gqa_group_size = Hq / Hkv`, explicit
 `mode = "prefill" | "decode"` metadata, and `kv_traversal = "kv_outer"`.

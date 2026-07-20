@@ -25,7 +25,7 @@ WMMA + sparse SWMMAC are RDNA4-only). These artifacts are covered by
 
 ## Hardware execution — gfx1151 (Strix Halo, RDNA 3.5) is live
 
-A real Strix Halo box (Ryzen AI Max+ 395, ROCm 7.2.4, LLVM/MLIR 22) executes a
+A real Strix Halo box (Ryzen AI Max+ 395, ROCm 7.2.4, LLVM/MLIR 23) executes a
 **compiler-generated matmul + flash-attention family** on the `gfx1151` iGPU via
 `runtime.launch(target="rocm")` — the first non-Apple `backend_kernel` proof:
 

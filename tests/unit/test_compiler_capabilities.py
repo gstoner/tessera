@@ -92,3 +92,18 @@ def test_target_capability_shape_is_shared_metadata():
     assert cap.runtime_backend == "cuda"
     assert cap.default_runtime_status == "artifact_only"
     assert "wgmma" in cap.features
+
+
+def test_x86_logical_and_bitwise_dtypes_match_native_stable_abis():
+    assert supports_op("x86", "tessera.logical_and", dtype="bool").supported
+    assert not supports_op("x86", "tessera.logical_and", dtype="int8").supported
+    assert supports_op("x86", "tessera.bitwise_xor", dtype="int32").supported
+    assert supports_op("x86", "tessera.popcount", dtype="int32").supported
+    assert not supports_op("x86", "tessera.bitwise_xor", dtype="int64").supported
+
+
+def test_x86_matmul_dtype_contract_matches_vertical_slices():
+    for dtype in ("fp32", "fp64", "bf16", "int8"):
+        assert supports_op("x86", "tessera.matmul", dtype=dtype).supported
+    assert not supports_op("x86", "tessera.matmul", dtype="uint8").supported
+    assert not supports_op("x86", "tessera.matmul", dtype="fp8_e4m3").supported

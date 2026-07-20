@@ -22,7 +22,7 @@
     {"arch": "gfx950", "family": "cdna4_mfma", "dtype": "f16/bf16", "wave": 64, "vgpr": 14, "sgpr": 14, "lds": 0, "scratch": 0, "spills": 0}
   ],
   "toolchain_gates": [
-    {"arch": "gfx940", "status": "real MFMA lowering passes; installed Debian LLVM 22 serializer does not recognize the processor; gfx942 supplies CDNA3 object proof"}
+    {"arch": "gfx940", "status": "real MFMA lowering passes; installed Debian LLVM 23 serializer does not recognize the processor; gfx942 supplies CDNA3 object proof"}
   ],
   "exact_device": {
     "arch": "gfx1151",

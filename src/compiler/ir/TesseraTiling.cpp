@@ -1,6 +1,6 @@
 //===- TesseraTiling.cpp — TilingInterface impls for tessera ops -*- C++ -*-===//
 //
-// MLIR 22-compatible TilingInterface implementations for
+// MLIR 23-compatible TilingInterface implementations for
 // ``tessera.matmul`` and ``tessera.conv2d_nhwc``.  ODS declares the
 // interface methods via an explicit method list on
 // ``DeclareOpInterfaceMethods<TilingInterface, [...]>`` (see

@@ -36,7 +36,7 @@ def test_cpu_artifacts_use_graph_schedule_tile_target_spine_names():
     assert "schedule.pipeline.region" in artifacts["schedule"]
     assert "schedule.prefetch" in artifacts["schedule"]
     assert "tile.async_copy" in artifacts["tile"]
-    assert "tessera.attn.online_softmax" in artifacts["tile"]
+    assert "tessera_attn.online_softmax" in artifacts["tile"]
     assert "tile.wait_async" in artifacts["tile"]
     assert "tessera.cpu.flash_attn" in artifacts["target"]
 

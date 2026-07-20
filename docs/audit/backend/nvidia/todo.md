@@ -26,7 +26,7 @@ Baseline state on the NVIDIA box (2026-07-15, commit `ecf9483f`):
   `performance`; compiler/toolchain crossings carry `compiler_tool`.
 - The WSL NVIDIA host is an RTX 5070 Ti (UUID
   `GPU-5072cda5-509a-008c-93c8-dc06e105f307`, CC 12.0), driver 610.62, CUDA
-  13.3.73, LLVM/MLIR 22.1.8, and Python 3.14.4. At collection it was idle;
+  13.3.73, LLVM/MLIR 23, and Python 3.14.4. At collection it was idle;
   observed graphics clock/power were 375 MHz / 23.18 W with a 300 W limit.
 - The compiler-artifact lit suite passed **19/19**. The exact-device
   non-performance lane passed twice: **224 selected, 0 failed, 0 errored, 1
@@ -283,7 +283,7 @@ FileCheck --version
 ```
 
 All four commands must report major version 23. Remove or disable any stale
-`llvm-toolchain-noble-22` source selection from the build environment; keeping
+pre-23 toolchain source selection from the build environment; keeping
 multiple apt repositories installed is acceptable, but Tessera's CMake cache,
 compiler executables, MLIR tools, and CMake package directories must all resolve
 to `/usr/lib/llvm-23`.
@@ -927,6 +927,47 @@ types. PTX operand compatibility never performs automatic numeric conversion.
 Direct `ptxas -arch=sm_120a` proof assembles the fundamental register surface
 and rejects `bf16`, `tf32`, `e4m3`, and `u8x4` as register declarations.
 
+Cross-backend sync `ROCM-E2E1-SOFTMAX-2026-07-19` is ROCm-owned. It adapts the
+shared `tile.softmax_kernel` envelope to `tessera_rocm.softmax`, packages
+HSACO, and submits through an exact gfx1151 HIP descriptor hook. NVIDIA's
+`tessera_nvidia` lowering, `ex2.approx.f32` math contract, PTX ABI, SM120
+schedule, resource/timing evidence, and selectors are unchanged. No AMD
+wave/LDS or OCML behavior transfers to CUDA. ROCm's subsequent use of the
+shared device-library record for its driver-selected OCML/OCKL/OCLC set is
+parity validated at the schema boundary and requires no CUDA record or cache
+change.
+
+Cross-backend sync `ROCM-DTYPE-TOTALITY-2026-07-19` is ROCm-owned and not
+applicable to NVIDIA target state. It adds no canonical dtype or alias and does
+not change the SM120 PTX storage/Tensor Core contract, fragment ABI, runtime
+readiness, or selector; it only prevents RDNA3.5 ISA formats from being
+conflated with Tessera gfx1151 execution support.
+
+Cross-backend sync `E2E-FROZEN-IDENTITY-CACHE-2026-07-19`: ROCM-E2E-1 memoizes
+deterministic hashes for frozen runtime artifacts, native images, and launch
+descriptors. Serialized identity values and required launch validation are
+unchanged, so CUDA schema parity is validated; no NVIDIA ABI, schedule,
+runtime route, performance claim, or selector changes.
+
+Cross-backend sync `ROCM-E2E2-REDUCE-2026-07-19` is ROCm-owned. It consumes the
+already-shared `tile.reduce_kernel` carrier and widens its portable verifier to
+admit bf16. NVIDIA's backend-specific materializer still explicitly accepts
+only f16/f32, so its op registry, `Outer/AxisExtent/Inner` schema, serial/cooperative-128
+lowerings, PTX ABI, resources, exact-device evidence, routes, and selectors are
+unchanged; the ROCm five-argument HSACO ABI transfers no CUDA claim.
+
+Cross-backend sync `ROCM-E2E2-PAGED-KV-2026-07-19` is ROCm-owned. It consumes
+the existing shared paged-KV carrier without changing its verifier or public op
+schema. NVIDIA's existing direct PTX mapping remains parity validated; no ROCm
+gather schedule, HSACO ABI, page-table validation evidence, timing, readiness,
+or selector state transfers to CUDA.
+
+Cross-backend sync `ROCM-E2E2-MOE-DISPATCH-2026-07-19` is ROCm-owned. It
+consumes the existing shared MoE dispatch carrier and public operation without
+changing their verifier or dtype registry. NVIDIA's typed PTX mapping remains
+parity validated at the carrier boundary; no AMD gather schedule, HSACO ABI,
+gfx1151 evidence, timing, readiness, or selector state transfers to CUDA.
+
 The accompanying PTX memory contract records CTA/cluster/GPU/system scopes and
 relaxed/acquire/release/acq_rel atomic semantics. Vector and packed memory
 accesses are sets of scalar accesses in unspecified element order, not one
@@ -963,6 +1004,65 @@ review artifacts only; update committed baselines or autotune corpora only
 after two stable runs and an explicit before/after review.
 
 ## Next update
+
+Cross-backend sync `X86-E2E1-NATIVE-CPU-2026-07-19` classifies shared native
+descriptor results for host x86 targets as `native_cpu` with CPU-wall timing.
+CUDA remains `native_gpu` with its existing event and end-to-end timing domains;
+no PTX ABI, SM schedule, device evidence, readiness, or selector state transfers.
+The x86 pilot consumes existing Tile softmax/reduction carriers without changing
+their shared dtype or operation registration.
+
+Cross-backend sync `X86-E2E1-BREADTH-2026-07-19` consumes the existing shared
+matmul and attention carriers for f32 AVX-512 descriptors. NVIDIA inherits no
+x86 ABI, vector schedule, host timing, readiness, or selector state. SM120
+GQA/dropout and dtype breadth remain governed by NVIDIA-owned Target IR and
+exact-device evidence; x86's narrower descriptor contract changes no CUDA row.
+
+Cross-backend sync `E2E-SPINE-2026-07-18` records the 2026-07-20 scoped x86
+selector retirement: eligible static X86-E2E-1 modules now use their canonical
+descriptor by default. NVIDIA parity is not applicable; no NVIDIA pipeline,
+PTX ABI, schedule, capability, or selector changes. X86-E2E-2 owns the
+remaining AVX-512 inventory and must reassess NVIDIA only when a shared
+contract changes.
+
+Cross-backend sync `X86-E2E2-ELEMENTWISE-2026-07-20` adds the internal shared
+`tile.elementwise_kernel` semantic carrier for f32 unary/binary and f32-to-bool
+predicate requests. NVIDIA parity is assessed at the carrier boundary only;
+the AVX-512 ABI, CPU schedule/timing, 16K binary selector threshold, and exact
+x86 evidence transfer no PTX implementation or CUDA selector claim. Existing
+NVIDIA elementwise target and execution rows are unchanged.
+
+Cross-backend sync `X86-E2E2-TYPED-LOGIC-2026-07-20` widens that internal
+carrier with compare, logical, and bitwise semantics plus explicit f32/i8/i32
+physical storage. The capability repair is x86-owned bool/int32 truth for
+already-shipped AVX-512 ABIs. NVIDIA inherits no C ABI, null-operand convention,
+32K selector threshold, CPU timing, PTX implementation, or CUDA selector
+claim; NVIDIA target and execution rows remain unchanged.
+
+Cross-backend sync `X86-E2E2-FLAT-FOLLOWON-2026-07-20` extends the shared
+elementwise carrier with where, transcendental, and binary-math semantics.
+NVIDIA parity is assessed at the carrier boundary only; AVX-512 approximations,
+C ABIs, CPU-wall thresholds, exact-host evidence, PTX routes, and CUDA selectors
+do not transfer. Existing NVIDIA rows remain unchanged.
+
+Cross-backend sync `X86-E2E2-DTYPE-2026-07-20` adds an x86-only datatype/CPUID
+contract and BF16, VNNI U8/S8, and FP64 descriptor ABIs. NVIDIA already owns
+independent dtype, MMA, accumulator, PTX, and runtime contracts; no CUDA target,
+execution, or selector row changes.
+
+Cross-backend sync `ATTN-DIALECT-MLIR23-2026-07-20` corrects the internal MLIR
+attention dialect namespace from the nested `tessera.attn` spelling to the
+MLIR-23-compatible `tessera_attn` spelling. Public Graph IR operation names,
+attention semantics, NVIDIA target capabilities, PTX ABIs, schedules, and
+selector state are unchanged; NVIDIA parity is validated by the shared
+attention lit coverage.
+
+Cross-backend sync `LLVM23-BACKBONE-2026-07-20` makes LLVM/MLIR 23.x the sole
+accepted compiler build environment. Top-level and standalone CMake entry
+points reject every other major and mixed installations; NVIDIA uses the
+versioned apt LLVM 23 packages alongside CUDA 13. NVIDIA target semantics, PTX
+ABIs, and selectors are unchanged, and the LLVM 23 compiler/lit build validates
+host-free parity; exact-device claims remain NVIDIA-owned.
 
 The collection contract, compiler-artifact, exact-device correctness, and
 serial measured lanes now have recorded baselines. NVIDIA-TEST-5 and

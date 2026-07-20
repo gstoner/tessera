@@ -194,7 +194,7 @@ same family and intrinsic-ABI names, with a unit ratchet preventing drift.
 The shared architecture fixture cross-assembles without spills for gfx1100,
 gfx1151, gfx1200, gfx1201, gfx1250, gfx1251, gfx90a, gfx942, and gfx950. gfx940
 real-MFMA lowering is covered but object serialization is toolchain-gated in the
-installed Debian LLVM 22 build. These object results prove instruction legality
+installed Debian LLVM 23 build. These object results prove instruction legality
 and resource use, not remote-device numerical behavior or performance; those
 claims remain exact-device gated.
 

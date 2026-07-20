@@ -172,7 +172,7 @@ def test_artifact_only_must_not_claim_runtime_contract():
 def _apple_gpu_runtime_tile():
     return TileIRModule(functions=[
         TileFunction("flash", body=[
-            TileOp("tessera.attn.online_softmax", {
+            TileOp("tessera_attn.online_softmax", {
                 "source": "tessera.flash_attn", "result": "O",
                 "ordinal": 0, "policy": "safe",
             })

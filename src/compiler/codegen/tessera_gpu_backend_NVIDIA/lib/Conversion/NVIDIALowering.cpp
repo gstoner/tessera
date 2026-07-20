@@ -3642,7 +3642,7 @@ static bool tryLowerMmaSyncToNVVM(Operation *op, OpBuilder &builder) {
                        operands.begin() + aCount + bCount);
   SmallVector<Value> c(operands.begin() + aCount + bCount, operands.end());
   builder.setInsertionPoint(op);
-  // LLVM 22 exposes FP8 MMA enums but its NVVM MmaOp verifier does not yet
+  // LLVM 23 exposes FP8 MMA enums but its NVVM MmaOp verifier does not yet
   // admit the m16n8k32 FP8 shapes accepted by CUDA 13.3 and sm_120. Keep the
   // same typed i32/f32 contract and legalize only that gap through inline PTX.
   if (isFP8) {

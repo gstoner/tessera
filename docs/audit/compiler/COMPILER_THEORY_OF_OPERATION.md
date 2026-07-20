@@ -237,8 +237,8 @@ back.
 
 | System | Hardware | Toolchain | Can ONLY be done here |
 |---|---|---|---|
-| **Mac** (dev/authoring hub) | Apple M1 Max (Apple7) GPU + CPU | Homebrew LLVM/MLIR 22.1.6, macOS, off-venv `python3` 3.14.5 | Apple MSL/`metallib` compile + execute; Metal 4 / MPSGraph; **all hardware-free work** (lit, mypy, unit tests, IR, **golden-IR generation**) |
-| **Strix Halo** (AMD box) | Ryzen AI Max+ 395 — Zen 5 (AVX-512 VNNI/BF16, **no AMX**) + Radeon 8060S **gfx1151** RDNA 3.5 | Ubuntu 24.04 + ROCm 7.2.4, LLVM/MLIR 22 (apt.llvm.org), `.venv` numpy<2.2 | ROCm gfx1151 WMMA **execute-and-compare**; **x86 AVX-512 native execute** (Zen 5); AMDGCN codegen via open LLVM AMDGPU; measured autotune on gfx1151 |
+| **Mac** (dev/authoring hub) | Apple M1 Max (Apple7) GPU + CPU | Homebrew LLVM/MLIR 23, macOS, off-venv `python3` 3.14.5 | Apple MSL/`metallib` compile + execute; Metal 4 / MPSGraph; **all hardware-free work** (lit, mypy, unit tests, IR, **golden-IR generation**) |
+| **Strix Halo** (AMD box) | Ryzen AI Max+ 395 — Zen 5 (AVX-512 VNNI/BF16, **no AMX**) + Radeon 8060S **gfx1151** RDNA 3.5 | Ubuntu 24.04 + ROCm 7.2.4, LLVM/MLIR 23 (apt.llvm.org), `.venv` numpy<2.2 | ROCm gfx1151 WMMA **execute-and-compare**; **x86 AVX-512 native execute** (Zen 5); AMDGCN codegen via open LLVM AMDGPU; measured autotune on gfx1151 |
 | **NR2 Pro** (NVIDIA box) | RTX 5070 Ti **sm_120** Blackwell; Core Ultra 7 265F (**no AVX-512, no AMX**) | Linux + CUDA 13.3, `ptxas`, PTX ISA 9.3 | `ptxas` assemble (rung 3); CUDA **execute-and-compare** (rung 7); sm_120 `mma.sync` / FP4; measured autotune on sm_120 |
 
 **Known hardware gap:** Intel **AMX** has no home in this fleet (Intel-Xeon-only;

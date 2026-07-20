@@ -463,44 +463,45 @@ def compile_graph_module(
         is_softmax = requests_softmax(module)
         is_reduction = requests_reduction(module)
         if is_attention_backward:
-            package = package_attention_backward(module, pipeline_name=producer)
-            package_dtype = package.descriptor.buffers[0].dtype
+            nvidia_package = package_attention_backward(module, pipeline_name=producer)
+            package_dtype = nvidia_package.descriptor.buffers[0].dtype
         elif is_paged_kv:
-            package = package_paged_kv_read(module, pipeline_name=producer)
-            package_dtype = package.descriptor.buffers[0].dtype
+            nvidia_package = package_paged_kv_read(module, pipeline_name=producer)
+            package_dtype = nvidia_package.descriptor.buffers[0].dtype
         elif is_attention:
-            package = package_attention(module, pipeline_name=producer)
-            package_dtype = package.descriptor.buffers[0].dtype
+            nvidia_package = package_attention(module, pipeline_name=producer)
+            package_dtype = nvidia_package.descriptor.buffers[0].dtype
         elif is_softmax:
-            package = package_softmax(module, pipeline_name=producer)
-            package_dtype = package.descriptor.buffers[0].dtype
+            nvidia_package = package_softmax(module, pipeline_name=producer)
+            package_dtype = nvidia_package.descriptor.buffers[0].dtype
         elif is_reduction:
-            package = package_reduction(
-                module, pipeline_name=producer,
+            nvidia_package = package_reduction(
+                module,
+                pipeline_name=producer,
                 schedule=str((options or {}).get("nvidia_reduction_schedule", "serial")),
             )
-            package_dtype = package.descriptor.buffers[0].dtype
+            package_dtype = nvidia_package.descriptor.buffers[0].dtype
         elif is_nvfp4:
-            package = package_nvfp4_matmul(module, pipeline_name=producer)
+            nvidia_package = package_nvfp4_matmul(module, pipeline_name=producer)
             package_dtype = "nvfp4"
         elif is_mx:
-            package = package_mx_matmul(module, pipeline_name=producer)
-            storage_value = package.descriptor.provenance["storage"]
+            nvidia_package = package_mx_matmul(module, pipeline_name=producer)
+            storage_value = nvidia_package.descriptor.provenance["storage"]
             if not isinstance(storage_value, str):
                 raise RuntimeError("SM120 MX package provenance is missing string storage")
             package_dtype = storage_value
         else:
-            package = package_matmul(
+            nvidia_package = package_matmul(
                 module,
                 pipeline_name=producer,
                 schedule=str((options or {}).get("nvidia_schedule", "auto")),
             )
-            package_dtype = package.descriptor.buffers[0].dtype
-        tile = LoweringArtifact("tile", package.tile_ir)
-        target_artifact = LoweringArtifact("target", package.target_ir)
-        backend_artifact = LoweringArtifact("backend", package.backend_ir)
-        native_image = package.image
-        launch_descriptor = package.descriptor
+            package_dtype = nvidia_package.descriptor.buffers[0].dtype
+        tile = LoweringArtifact("tile", nvidia_package.tile_ir)
+        target_artifact = LoweringArtifact("target", nvidia_package.target_ir)
+        backend_artifact = LoweringArtifact("backend", nvidia_package.backend_ir)
+        native_image = nvidia_package.image
+        launch_descriptor = nvidia_package.descriptor
         executable = True
         runtime_status = "ready"
         execution_mode = "native_descriptor"
@@ -509,17 +510,140 @@ def compile_graph_module(
             CompileTraceEvent(
                 pass_name="nvidia-sm120-native-package",
                 target=target_kind,
-                input_hash=stable_hash(package.tile_ir),
-                output_hash=package.image.image_digest,
+                input_hash=stable_hash(nvidia_package.tile_ir),
+                output_hash=nvidia_package.image.image_digest,
                 elapsed_ms=(time.perf_counter() - package_start) * 1000.0,
                 status="ok",
                 metadata={
                     "pipeline_name": producer,
-                    "binary_format": package.image.binary_format,
-                    "compile_state": package.image.compile_state,
-                    "entry_symbol": package.descriptor.entry_symbol,
+                    "binary_format": nvidia_package.image.binary_format,
+                    "compile_state": nvidia_package.image.compile_state,
+                    "entry_symbol": nvidia_package.descriptor.entry_symbol,
                     "dtype": package_dtype,
                     "op_family": "softmax" if is_softmax else "matmul",
+                },
+            )
+        )
+    elif target_kind == "rocm_gfx1151" and bool((options or {}).get("package_native", False)):
+        from . import rocm_native
+
+        is_softmax = rocm_native.requests_softmax(module)
+        is_reduction = rocm_native.requests_reduction(module)
+        is_paged_kv = rocm_native.requests_paged_kv_read(module)
+        is_moe_dispatch = rocm_native.requests_moe_dispatch(module)
+        if not (is_softmax or is_reduction or is_paged_kv or is_moe_dispatch):
+            raise ValueError(
+                "ROCM native packaging currently supports one softmax, reduction, paged-KV read, or MoE dispatch request"
+            )
+        resolution = target_pipeline_lookup(target_kind)
+        producer = (
+            (resolution.declared_pipeline or request.pipeline_name) if resolution is not None else request.pipeline_name
+        )
+        package_start = time.perf_counter()
+        if is_softmax:
+            rocm_package = rocm_native.package_softmax(module, pipeline_name=producer)
+        elif is_reduction:
+            rocm_package = rocm_native.package_reduction(module, pipeline_name=producer)
+        elif is_paged_kv:
+            rocm_package = rocm_native.package_paged_kv_read(module, pipeline_name=producer)
+        else:
+            rocm_package = rocm_native.package_moe_dispatch(module, pipeline_name=producer)
+        tile = LoweringArtifact("tile", rocm_package.tile_ir)
+        target_artifact = LoweringArtifact("target", rocm_package.target_ir)
+        backend_artifact = LoweringArtifact("backend", rocm_package.backend_ir)
+        native_image = rocm_package.image
+        launch_descriptor = rocm_package.descriptor
+        executable = True
+        runtime_status = "ready"
+        execution_mode = "native_descriptor"
+        execution_kind = "native_gpu"
+        trace_events.append(
+            CompileTraceEvent(
+                pass_name="rocm-gfx1151-native-package",
+                target=target_kind,
+                input_hash=stable_hash(rocm_package.tile_ir),
+                output_hash=rocm_package.image.image_digest,
+                elapsed_ms=(time.perf_counter() - package_start) * 1000.0,
+                status="ok",
+                metadata={
+                    "pipeline_name": producer,
+                    "binary_format": rocm_package.image.binary_format,
+                    "compile_state": rocm_package.image.compile_state,
+                    "entry_symbol": rocm_package.descriptor.entry_symbol,
+                    "dtype": rocm_package.descriptor.buffers[0].dtype,
+                    "op_family": (
+                        "softmax"
+                        if is_softmax
+                        else "reduction"
+                        if is_reduction
+                        else "paged_kv"
+                        if is_paged_kv
+                        else "moe_dispatch"
+                    ),
+                    "work_item": "ROCM-E2E-1" if is_softmax else "ROCM-E2E-2",
+                },
+            )
+        )
+    elif target_kind == "x86" and bool((options or {}).get("package_native", False)):
+        from . import x86_native
+
+        is_softmax = x86_native.requests_softmax(module)
+        is_reduction = x86_native.requests_reduction(module)
+        is_matmul = x86_native.requests_matmul(module)
+        is_attention = x86_native.requests_attention(module)
+        is_elementwise = x86_native.requests_elementwise(module)
+        if not (is_softmax or is_reduction or is_matmul or is_attention or is_elementwise):
+            raise ValueError(
+                "X86 native packaging currently supports one softmax, reduction, "
+                "rank-2 matmul, f32 MHA, or typed elementwise request"
+            )
+        resolution = target_pipeline_lookup(target_kind)
+        producer = (
+            (resolution.declared_pipeline or request.pipeline_name)
+            if resolution is not None
+            else request.pipeline_name
+        )
+        package_start = time.perf_counter()
+        x86_package = (
+            x86_native.package_softmax(module, pipeline_name=producer)
+            if is_softmax
+            else x86_native.package_reduction(module, pipeline_name=producer)
+            if is_reduction
+            else x86_native.package_matmul(module, pipeline_name=producer)
+            if is_matmul
+            else x86_native.package_attention(module, pipeline_name=producer)
+            if is_attention
+            else x86_native.package_elementwise(module, pipeline_name=producer)
+        )
+        tile = LoweringArtifact("tile", x86_package.tile_ir)
+        target_artifact = LoweringArtifact("target", x86_package.target_ir)
+        backend_artifact = LoweringArtifact("backend", x86_package.backend_ir)
+        native_image = x86_package.image
+        launch_descriptor = x86_package.descriptor
+        executable = True
+        runtime_status = "ready"
+        execution_mode = "native_descriptor"
+        execution_kind = "native_cpu"
+        trace_events.append(
+            CompileTraceEvent(
+                pass_name="x86-native-package",
+                target=target_kind,
+                input_hash=stable_hash(x86_package.tile_ir),
+                output_hash=x86_package.image.image_digest,
+                elapsed_ms=(time.perf_counter() - package_start) * 1000.0,
+                status="ok",
+                metadata={
+                    "pipeline_name": producer,
+                    "binary_format": x86_package.image.binary_format,
+                    "compile_state": x86_package.image.compile_state,
+                    "entry_symbol": x86_package.descriptor.entry_symbol,
+                    "dtype": x86_package.descriptor.buffers[0].dtype,
+                    "op_family": (
+                        "softmax" if is_softmax else "reduction" if is_reduction
+                        else "matmul" if is_matmul else "attention" if is_attention
+                        else "elementwise"
+                    ),
+                    "work_item": "X86-E2E-2" if is_elementwise else "X86-E2E-1",
                 },
             )
         )
@@ -545,6 +669,30 @@ def compile_graph_module(
     )
     _maybe_dump_debug_artifacts(bundle)
     return bundle
+
+
+def canonical_compile_options(
+    module: GraphIRModule,
+    *,
+    target: object,
+    options: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Resolve target-owned defaults used by the canonical compiler wrapper.
+
+    Direct ``compile_graph_module`` callers remain behavior-compatible and may
+    request packaging explicitly.  Canonical compilation promotes only a
+    complete, host-available X86-E2E-1 descriptor contract; unsupported or
+    dynamic modules keep the retained route.
+    """
+
+    resolved = dict(options or {})
+    if normalize_target_kind(target) == "x86" and "package_native" not in resolved:
+        from .x86_native import supports_native_package, tools_available
+
+        resolved["package_native"] = (
+            supports_native_package(module) and tools_available()
+        )
+    return resolved
 
 
 def _capability_reason(bundle: CompileArtifactBundle) -> str:

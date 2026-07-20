@@ -6,9 +6,9 @@
 //   tessera.flash_attn(Q, K, V) {causal, tile_q, tile_kv}
 //   tessera.flash_attn(Q, KVCache) {causal, tile_q, tile_kv}
 //   →
-//   tile.async_copy(Q_tile) + tessera.attn.scaled_dot_product
-//   + tessera.attn.causal_mask? + tessera.attn.online_softmax
-//   + tessera.attn.lse_accumulate + tile.wait_async
+//   tile.async_copy(Q_tile) + tessera_attn.scaled_dot_product
+//   + tessera_attn.causal_mask? + tessera_attn.online_softmax
+//   + tessera_attn.lse_accumulate + tile.wait_async
 //
 // The pass also handles tessera.matmul inside mesh.region bodies by emitting
 // tile.async_copy + tile.mma + tile.wait_async for the GPU tiling path.
@@ -149,7 +149,7 @@ struct LowerFlashAttnToTileIR : public RewritePattern {
         rewriter.getNamedAttr("scale",
                               rewriter.getF32FloatAttr(-1.0f))};
     Operation *sdp = emitAttnOp(
-        rewriter, loc, "tessera.attn.scaled_dot_product",
+        rewriter, loc, "tessera_attn.scaled_dot_product",
         {cpQ->getResult(0), cpK->getResult(0)}, {outType}, sdpAttrs);
 
     Value scores = sdp->getResult(0);
@@ -159,7 +159,7 @@ struct LowerFlashAttnToTileIR : public RewritePattern {
       SmallVector<NamedAttribute> cmAttrs = {
           rewriter.getNamedAttr("q_offset", rewriter.getI64IntegerAttr(0)),
           rewriter.getNamedAttr("kv_offset", rewriter.getI64IntegerAttr(0))};
-      Operation *cm = emitAttnOp(rewriter, loc, "tessera.attn.causal_mask",
+      Operation *cm = emitAttnOp(rewriter, loc, "tessera_attn.causal_mask",
                                   {scores}, {outType}, cmAttrs);
       scores = cm->getResult(0);
     }
@@ -167,18 +167,18 @@ struct LowerFlashAttnToTileIR : public RewritePattern {
     // ── Online softmax ───────────────────────────────────────────────────────
     // Emit with sentinel init values; the actual init is in the loop preamble.
     Operation *osm = emitAttnOp(
-        rewriter, loc, "tessera.attn.online_softmax",
+        rewriter, loc, "tessera_attn.online_softmax",
         {scores, negInf, zero, zero /* acc placeholder */},
         {outType, rewriter.getF32Type(), rewriter.getF32Type()});
 
     // ── LSE accumulate (finalisation) ────────────────────────────────────────
     Operation *lseAcc = emitAttnOp(
-        rewriter, loc, "tessera.attn.lse_accumulate",
+        rewriter, loc, "tessera_attn.lse_accumulate",
         {osm->getResult(0), osm->getResult(1), osm->getResult(2)},
         {outType, rewriter.getF32Type()});
 
     // Store LSE for backward pass.
-    emitAttnOp(rewriter, loc, "tessera.attn.lse.save",
+    emitAttnOp(rewriter, loc, "tessera_attn.lse.save",
                {lseAcc->getResult(1)}, {rewriter.getF32Type()});
 
     // Replace flash_attn result with normalised output.

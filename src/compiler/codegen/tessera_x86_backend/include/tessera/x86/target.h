@@ -60,7 +60,13 @@ void tessera_x86_amx_gemm_s8s8_s32(const int8_t* A, const int8_t* B, int32_t* C,
 
 // AVX-512 VNNI unsigned* signed -> s32
 void tessera_x86_avx512_vnni_gemm_u8s8_s32(const uint8_t* A, const int8_t* B, int32_t* C,
-                                           int M, int N, int K, int beta);
+                                             int M, int N, int K, int beta);
+void tessera_x86_reference_gemm_u8s8_s32(const uint8_t* A, const int8_t* B, int32_t* C,
+                                          int M, int N, int K, int beta);
+void tessera_x86_avx512_gemm_f64(const double* A, const double* B,
+                                 int64_t M, int64_t N, int64_t K, double* C);
+void tessera_x86_reference_gemm_f64(const double* A, const double* B,
+                                    int64_t M, int64_t N, int64_t K, double* C);
 
 // FP32 epilogues for bias/GELU (row-major MxN)
 void tessera_x86_epilogue_bias_fp32(float* C, const float* bias, int M, int N);

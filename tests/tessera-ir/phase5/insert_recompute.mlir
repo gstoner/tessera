@@ -5,7 +5,7 @@
 // the budget, and records the total on the module.
 //
 // 2026-06: un-XFAIL'd.  The fixture moved to value-semantics tensor matmul
-// (the MLIR-22 TesseraMatmulOp verifier now requires one tensor result) and
+// (the MLIR-23 TesseraMatmulOp verifier now requires one tensor result) and
 // adds --allow-unregistered-dialect so the emitted tessera_sr.* markers (a
 // separate, intentionally-unregistered annotation dialect) round-trip.
 

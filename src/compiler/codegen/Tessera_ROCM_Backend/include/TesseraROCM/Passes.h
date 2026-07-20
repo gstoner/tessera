@@ -49,6 +49,7 @@ std::unique_ptr<mlir::Pass> createGenerateROCMBlockSparseTopKKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMSoftmaxKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMNormKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMReduceKernelPass();
+std::unique_ptr<mlir::Pass> createGenerateROCMPagedKVReadKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMArgReduceKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMScanKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMUnaryKernelPass();

@@ -285,7 +285,7 @@ def test_lower_tile_to_apple_gpu_target_ir_maps_fa4_to_msl_runtime_contract():
         TileFunction(
             "flash",
             body=[
-                TileOp("tessera.attn.online_softmax", {
+                TileOp("tessera_attn.online_softmax", {
                     "source": "tessera.flash_attn",
                     "result": "O",
                     "ordinal": 0,

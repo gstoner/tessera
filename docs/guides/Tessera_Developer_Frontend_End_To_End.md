@@ -83,7 +83,7 @@ Python compiler constructs them from verified object models:
   directives, `schedule.mesh.region`, `schedule.pipeline.region`, stages, and
   yields.
 - **Tile IR:** `TileIRModule` lowers scheduled work to `tile.*`,
-  `tessera.attn.*` FA-4 helpers, and `tessera.queue.*` barriers.
+  `tessera_attn.*` FA-4 helpers, and `tessera.queue.*` barriers.
 - **Target IR:** `TargetIRModule` lowers Tile IR into verified CPU/x86,
   NVIDIA/CUDA, Apple CPU/GPU, and ROCm hardware-free target artifacts.
 

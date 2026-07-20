@@ -516,20 +516,20 @@ For `tessera.flash_attn(Q, K, V)`:
 tile.wait_async
 
 // Scaled dot product
-%scores = tessera.attn.scaled_dot_product %q_tile, %k_tile scale = 0.125 : ...
+%scores = tessera_attn.scaled_dot_product %q_tile, %k_tile scale = 0.125 : ...
 
 // Optional causal mask (when causal=true)
-%masked = tessera.attn.causal_mask %scores q_off = %q_offset kv_off = %kv_offset : ...
+%masked = tessera_attn.causal_mask %scores q_off = %q_offset kv_off = %kv_offset : ...
 
 // Online softmax (FA-2 algorithm)
-%new_acc, %new_m, %new_l = tessera.attn.online_softmax %masked, %running_m, %running_l, %acc_out
+%new_acc, %new_m, %new_l = tessera_attn.online_softmax %masked, %running_m, %running_l, %acc_out
 
 // V tile async copy + wait
 %v_tile = tile.async_copy %V {tile_rows = 64, tile_cols = 64}
 tile.wait_async
 
 // LSE accumulation (final step, outside inner loop)
-%output, %lse = tessera.attn.lse_accumulate %acc, %final_m, %final_l
+%output, %lse = tessera_attn.lse_accumulate %acc, %final_m, %final_l
 ```
 
 For `tessera.matmul` inside a mesh region:
@@ -560,14 +560,14 @@ Assigns producer/consumer warp roles to the FA-4 Tile IR ops. Inserts `tessera.q
 
 #### Input IR contract
 
-- FA-4 Tile IR ops (`tile.async_copy`, `tile.wait_async`, `tessera.attn.*`, `tile.mma`) inside function bodies.
+- FA-4 Tile IR ops (`tile.async_copy`, `tile.wait_async`, `tessera_attn.*`, `tile.mma`) inside function bodies.
 
 #### Output IR contract
 
 - Function body split into `tessera.schedule.warp {role="producer"}` and `tessera.schedule.warp {role="consumer"}` regions.
 - `tessera.queue.create`, `tessera.queue.push`, `tessera.queue.pop` ops inserted at producer/consumer boundaries.
 - `tile.async_copy` and `tile.wait_async` ops enclosed in the `producer` region.
-- `tessera.attn.*` compute ops and `tile.mma` ops enclosed in the `consumer` region.
+- `tessera_attn.*` compute ops and `tile.mma` ops enclosed in the `consumer` region.
 
 #### Key design contract
 
@@ -579,7 +579,7 @@ Warp role separation is **structural, not advisory**. The backend allocates sepa
 ```mlir
 %q_tile = tile.async_copy %Q {tile_rows = 64, tile_cols = 64}
 tile.wait_async
-%scores = tessera.attn.scaled_dot_product %q_tile, %k_tile scale = 0.125 : ...
+%scores = tessera_attn.scaled_dot_product %q_tile, %k_tile scale = 0.125 : ...
 ```
 
 **After:**
@@ -592,7 +592,7 @@ tessera.schedule.warp {role = "producer"} {
 }
 tessera.schedule.warp {role = "consumer"} {
   %q_tile = tessera.queue.pop %q, %dep_tok : ...
-  %scores = tessera.attn.scaled_dot_product %q_tile, %k_tile scale = 0.125 : ...
+  %scores = tessera_attn.scaled_dot_product %q_tile, %k_tile scale = 0.125 : ...
 }
 ```
 
@@ -717,7 +717,7 @@ Finalises the FA-4 kernel. Resolves the attention scale sentinel (replaces the `
 
 #### Input IR contract
 
-- Full warp-specialized, descriptor-hoisted FA-4 kernel with `tessera.attn.*` ops.
+- Full warp-specialized, descriptor-hoisted FA-4 kernel with `tessera_attn.*` ops.
 - `tessera.flash_attn` `scale = -1.0` sentinel value indicating "auto-compute from head_dim".
 
 #### Output IR contract
@@ -729,7 +729,7 @@ Finalises the FA-4 kernel. Resolves the attention scale sentinel (replaces the `
 
 #### Invariants
 
-- No `tessera.attn.scaled_dot_product` ops remain with a sentinel scale value.
+- No `tessera_attn.scaled_dot_product` ops remain with a sentinel scale value.
 - All FA-4 attn ops are enclosed in a complete mbarrier synchronisation region.
 - The emitted kernel is directly translatable to PTX by LLVM's NVPTX backend.
 
@@ -760,7 +760,7 @@ The following ordering constraints are hard requirements (violating them produce
 | Graph IR → Schedule IR | `tessera.shard` attrs | `schedule.mesh.*` | `DistributionLoweringPass` |
 | Schedule IR → Tiled Graph IR (x86) | `tessera.matmul` | `scf.for + tensor.*` | `TilingPass` |
 | Tiled Graph IR → x86 calls | `tessera.matmul/fused_epilogue` | `func.call @tessera_x86_*` | `TileToX86Pass` |
-| Schedule IR → Tile IR (GPU) | `schedule.mesh.region + tessera.flash_attn` | `tile.* + tessera.attn.*` | `TileIRLoweringPass` |
+| Schedule IR → Tile IR (GPU) | `schedule.mesh.region + tessera.flash_attn` | `tile.* + tessera_attn.*` | `TileIRLoweringPass` |
 | Tile IR → Warp-specialised IR | `tile.*` | `tessera.schedule.warp + tessera.queue.*` | `WarpSpecializationPass` |
 | Warp IR → TMA/cp.async IR | `tile.async_copy` | `tessera.tma.*` or `tessera.cp_async.*` | `AsyncCopyLoweringPass` |
 | TMA IR → WGMMA PTX IR | `tile.mma` | `tessera.nvgpu.wgmma.*` | `NVWGMMALoweringPass` |

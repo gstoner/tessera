@@ -45,11 +45,13 @@ static constexpr int64_t NGROUPS = BD / SG; // per-subgroup partials (= 8)
 
 enum class Red { Sum, Mean, Max, Min, Prod };
 
-void emitReduceBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
-                    Red red) {
+void emitReduceBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type inputTy,
+                    Type outputTy, Red red, bool outerAxisInner,
+                    bool innerIsOne) {
   MLIRContext *ctx = b.getContext();
   Type f32 = b.getF32Type();
-  bool isF32 = storeTy.isF32();
+  bool inputIsF32 = inputTy.isF32();
+  bool outputIsF32 = outputTy.isF32();
   auto slt = arith::CmpIPredicate::slt;
   bool isMax = red == Red::Max, isMin = red == Red::Min;
   bool isMinMax = isMax || isMin;
@@ -61,7 +63,10 @@ void emitReduceBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
 
   b.setInsertionPointToStart(&f.getBody().front());
   Value X = f.getArgument(0), O = f.getArgument(1);
-  Value M = f.getArgument(2), K = f.getArgument(3);
+  Value outer = f.getArgument(2), K = f.getArgument(3);
+  Value inner = outerAxisInner ? f.getArgument(4) : Value();
+  Value M = outerAxisInner ? b.create<arith::MulIOp>(loc, outer, inner)
+                           : outer;
 
   auto ci = [&](int64_t v) { return b.create<arith::ConstantIndexOp>(loc, v); };
   auto cf = [&](float v) {
@@ -87,10 +92,21 @@ void emitReduceBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
   auto rowIf = b.create<scf::IfOp>(loc, rowInb, /*withElse=*/false);
   b.setInsertionPointToStart(rowIf.thenBlock());
   Value base = b.create<arith::MulIOp>(loc, m, K);
+  Value stride = ci(1);
+  if (outerAxisInner && !innerIsOne) {
+    Value outerIndex = b.create<arith::DivUIOp>(loc, m, inner);
+    Value innerIndex = b.create<arith::RemUIOp>(loc, m, inner);
+    base = b.create<arith::AddIOp>(
+        loc,
+        b.create<arith::MulIOp>(
+            loc, b.create<arith::MulIOp>(loc, outerIndex, K), inner),
+        innerIndex);
+    stride = inner;
+  }
 
   auto loadF32 = [&](Value idx) -> Value {
     Value v = b.create<memref::LoadOp>(loc, X, ValueRange{idx});
-    return isF32 ? v : b.create<arith::ExtFOp>(loc, f32, v);
+    return inputIsF32 ? v : b.create<arith::ExtFOp>(loc, f32, v);
   };
 
   // per-thread strided accumulate over the row (identity-seeded)
@@ -100,7 +116,9 @@ void emitReduceBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
     b.setInsertionPointToStart(lp.getBody());
     Value c = lp.getInductionVar();
     Value acc = lp.getRegionIterArgs()[0];
-    Value v = loadF32(b.create<arith::AddIOp>(loc, base, c));
+    Value linear = b.create<arith::AddIOp>(
+        loc, base, b.create<arith::MulIOp>(loc, c, stride));
+    Value v = loadF32(linear);
     b.create<scf::YieldOp>(loc, ValueRange{combine(acc, v)});
   }
 
@@ -146,7 +164,9 @@ void emitReduceBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
       total = b.create<arith::DivFOp>(loc, total, Kf);
     }
     (void)isMinMax;
-    Value sv = isF32 ? total : b.create<arith::TruncFOp>(loc, storeTy, total);
+    Value sv = outputIsF32
+                   ? total
+                   : b.create<arith::TruncFOp>(loc, outputTy, total);
     b.create<memref::StoreOp>(loc, sv, O, ValueRange{m});
   }
 
@@ -195,16 +215,37 @@ struct GenerateROCMReduceKernelPass
         return signalPassFailure();
       }
       OpBuilder b(module.getBodyRegion());
-      Type storeTy = b.getF32Type();
+      bool outerAxisInner = false;
+      if (auto layout = op->getAttrOfType<StringAttr>("layout")) {
+        if (layout.getValue() != "outer_axis_inner") {
+          op->emitError("generate-rocm-reduce-kernel: layout must be "
+                        "outer_axis_inner when present");
+          return signalPassFailure();
+        }
+        outerAxisInner = true;
+      }
+      bool innerIsOne = false;
+      if (auto attr = op->getAttrOfType<BoolAttr>("inner_is_one"))
+        innerIsOne = attr.getValue();
+      Type inputTy = b.getF32Type();
       if (auto a = op->getAttrOfType<StringAttr>("dtype")) {
         StringRef dt = a.getValue();
-        if (dt == "f16" || dt == "float16") storeTy = b.getF16Type();
-        else if (dt == "bf16" || dt == "bfloat16") storeTy = b.getBF16Type();
+        if (dt == "f16" || dt == "float16") inputTy = b.getF16Type();
+        else if (dt == "bf16" || dt == "bfloat16") inputTy = b.getBF16Type();
         else if (dt != "f32" && dt != "float32") {
           op->emitError("generate-rocm-reduce-kernel: dtype must be f32, f16, "
                         "or bf16 (got '") << dt << "')";
           return signalPassFailure();
         }
+      }
+      Type outputTy = inputTy;
+      if (auto a = op->getAttrOfType<StringAttr>("output_dtype")) {
+        if (!outerAxisInner || a.getValue() != "f32") {
+          op->emitError("generate-rocm-reduce-kernel: typed reduction output "
+                        "must be f32");
+          return signalPassFailure();
+        }
+        outputTy = b.getF32Type();
       }
       b.setInsertionPointToEnd(module.getBody());
       Location loc = op->getLoc();
@@ -212,14 +253,19 @@ struct GenerateROCMReduceKernelPass
       auto gpuMod = b.create<gpu::GPUModuleOp>(loc, kname + "_mod");
       b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
       Type idxTy = b.getIndexType();
-      auto memTy = MemRefType::get({ShapedType::kDynamic}, storeTy);
-      // (X, O : memref<?xstore>, M, K : index)
-      auto fnTy = b.getFunctionType({memTy, memTy, idxTy, idxTy}, {});
+      auto inputMemTy = MemRefType::get({ShapedType::kDynamic}, inputTy);
+      auto outputMemTy = MemRefType::get({ShapedType::kDynamic}, outputTy);
+      // Legacy: (X, O, M, K). Typed carrier: (X, O, Outer, AxisExtent, Inner).
+      SmallVector<Type> arguments{inputMemTy, outputMemTy, idxTy, idxTy};
+      if (outerAxisInner)
+        arguments.push_back(idxTy);
+      auto fnTy = b.getFunctionType(arguments, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
       gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
                        b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
-      emitReduceBody(body, loc, gpuFunc, storeTy, red);
+      emitReduceBody(body, loc, gpuFunc, inputTy, outputTy, red,
+                     outerAxisInner, innerIsOne);
       op->erase();
     }
   }

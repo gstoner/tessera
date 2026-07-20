@@ -355,6 +355,6 @@ For T1, additionally:
 - [ ] `GPUTargetProfile(isa=ISA.SM_90)` accepted without error
 - [ ] `pytest tests/unit/ -v` — all green, excluding explicitly documented hardware/unrelated skips or failures
 - [ ] `lit tests/tessera-ir/phase3/ -v` — all pass
-- [ ] `tessera.flash_attn` in Graph IR lowers to `tessera.attn.scaled_dot_product`
+- [ ] `tessera.flash_attn` in Graph IR lowers to `tessera_attn.scaled_dot_product`
 - [ ] `WarpSpecializationPass` assigns producer/consumer roles
 - [ ] WGMMA fallback path fires for `isa < ISA.SM_90`

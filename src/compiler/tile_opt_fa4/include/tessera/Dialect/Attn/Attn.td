@@ -5,7 +5,7 @@ include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def Tessera_Attn_Dialect : Dialect {
-  let name = "tessera.attn";
+  let name = "tessera_attn";
   let cppNamespace = "::tessera::attn";
 }
 

@@ -445,7 +445,7 @@ def test_rdna4_rejects_unknown_dtype():
     ("fp8_e5m2", "v_wmma_f32_16x16x16_bf8_bf8"),
 ])
 def test_rung3_rdna4_lowers_on_gfx1200(dtype, want):
-    """RDNA 4 lowers on gfx1200 — machine-confirmed here (LLVM 22 AMDGPU). The FP8
+    """RDNA 4 lowers on gfx1200 — machine-confirmed here (LLVM 23 AMDGPU). The FP8
     forms are the RDNA 4 unlock that gfx1151/RDNA 3.5 cannot select."""
     ir = emit_wmma_rdna4_llvmir(dtype, arch="gfx1200")
     r = llc_assemble(ir, arch="gfx1200")

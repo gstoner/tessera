@@ -92,7 +92,7 @@ def _find_dylib() -> str | None:
     if sys.platform == "darwin":
         # The Apple build carries the configured LLVM/MLIR toolchain. Prefer it
         # over a generic `build/` dylib that may retain an obsolete Homebrew
-        # install name such as /opt/homebrew/opt/llvm/lib/libLLVM.dylib.
+        # install name such as /opt/homebrew/opt/llvm@23/lib/libLLVM.dylib.
         pats.append(os.path.join(
             repo, "build-apple", "tools", "tessera-jit", "libtessera_jit.*"))
     pats.extend([

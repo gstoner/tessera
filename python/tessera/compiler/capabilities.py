@@ -7,6 +7,7 @@ from typing import Mapping, Optional
 
 from .nvidia_dtype_contract import sm120_supported_storage_dtypes
 from .op_catalog import GRAPH_OP_TO_SPEC, LEGACY_GRAPH_OP_ALIASES, canonical_graph_op_name
+from .x86_dtype_contract import x86_ready_storage_dtypes
 
 
 CAPABILITY_REGISTRY_VERSION = "tessera.capabilities.v1"
@@ -336,12 +337,40 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         family="x86",
         runtime_backend="native_cpu",
         default_runtime_status="ready",
-        supported_ops=_ops(
-            "ready", _CPU_OPS,
-            reason="x86 target contract is available; per-op native proof is manifest-gated",
+        supported_ops={
+            **_ops(
+                "ready", _CPU_OPS,
+                reason="x86 target contract is available; per-op native proof is manifest-gated",
+            ),
+            **_ops(
+                "ready",
+                ("tessera.logical_and", "tessera.logical_or", "tessera.logical_xor", "tessera.logical_not"),
+                reason="x86 AVX-512 logical stable ABI executes bool storage",
+                dtypes=("bool",),
+            ),
+            **_ops(
+                "ready",
+                ("tessera.bitwise_and", "tessera.bitwise_or", "tessera.bitwise_xor",
+                 "tessera.bitwise_not", "tessera.popcount"),
+                reason="x86 AVX-512 bitwise stable ABI executes int32 storage",
+                dtypes=("int32",),
+            ),
+            **_ops(
+                "ready", ("tessera.matmul", "tessera.gemm"),
+                reason="x86 stable descriptors execute AVX-512 f32/f64, BF16-to-f32, and VNNI u8*s8-to-s32 matmul contracts",
+                dtypes=("fp32", "f32", "fp64", "bf16", "int8"),
+            ),
+            **_ops(
+                "ready", ("tessera.where",),
+                reason="x86 where stable ABI consumes bool condition storage and fp32 values",
+                dtypes=("fp32", "f32", "bool"),
+            ),
+        },
+        supported_dtypes=tuple(sorted(x86_ready_storage_dtypes())) + ("f32",),
+        features=(
+            "avx512f", "avx512dq", "avx512bw", "avx512vl",
+            "avx512_vnni", "avx512_bf16", "fma", "native_cpu",
         ),
-        supported_dtypes=("fp32", "f32", "bf16"),
-        features=("avx512", "amx", "native_cpu"),
     ),
     # Sprint G-1 (2026-05-11): NVIDIA capability matrix pinned to
     # CUDA 13.3.  Each entry's `features` tuple records the

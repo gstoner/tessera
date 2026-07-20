@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-19
+last_updated: 2026-07-20
 audit_role: plan
 plan_state: open
 owner: shared compiler and backend owners
@@ -91,10 +91,11 @@ GEMM is the main Level-B lane.
 ### 2.4 x86
 
 `tessera-lower-to-x86` is a real registered Graph→native-call pipeline, but
-`TileToX86Pass` covers only matmul, fused epilogue, and an artifact-only KV
-shape. The broad AVX-512 runtime library is selected by executor IDs. There is
-no typed x86 Target dialect, so the hardware-free Target-IR contract is missing
-for most native x86 families.
+`TileToX86Pass` still covers only a subset. X86-E2E-1 now lowers the shared
+softmax and reduction Tile envelopes to typed stable-C-ABI calls, packages the
+AVX-512 shared object as the native image, and supplies a canonical launch
+descriptor. Other families remain selected by executor IDs and therefore do
+not yet have the same hardware-free Target-IR contract.
 
 ### 2.5 Apple
 
@@ -196,13 +197,14 @@ Statuses in this table describe this plan, not generated execution counts.
 | 2 | **E2E-SPINE-1** | P0 | closed | Native-image and launch-descriptor schema | `tessera.native_image.v1` and `tessera.launch_descriptor.v1` provide deterministic serialization, payload/image/descriptor hashes, cache fingerprints, ordered ABI validation, shape/workspace/ordering contracts, and registered stale/malformed diagnostics without backend schedules. |
 | 3 | **E2E-SPINE-2** | P0 | closed | Canonical orchestration | `CompileResult`/`RuntimeArtifact` carry compiler-produced image and launch data; the driver records each stage and a generic runtime executor validates and consumes the descriptor through exact-target hooks. Artifact-only and legacy candidates remain explicit and descriptor routes never fall back. |
 | 4 | **NVIDIA-E2E-1** | P0 | closed | sm120 vertical slice | A registered exact-sm120 Graph→Tile→`tessera_nvidia`→NVVM→PTX pipeline packages and launches f16 plus NVFP4 matmul through `tessera_nvidia_ptx_register/invoke`, with no Python kernel synthesis or ABI rediscovery. |
-| 5 | **ROCM-E2E-1** | P0 | queued | Typed directive pilot | One non-GEMM lane (softmax first) lowers from typed frontend/Tile IR to a typed `tessera_rocm.*` directive, existing generator, ROCDL, HSACO, and launch descriptor. Runtime text synthesis is removed for that lane only after parity. |
+| 5 | **ROCM-E2E-1** | P0 | closed | Typed directive pilot | One non-GEMM lane (softmax first) lowers from typed frontend/Tile IR to a typed `tessera_rocm.*` directive, existing generator, ROCDL, HSACO, and launch descriptor, with exact-device correctness and measured parity against the retained route. Runtime text synthesis remains a separate retirement decision. |
 | 6 | **APPLE-E2E-1** | P1 | queued | Canonical Apple GPU spine | Canonical compilation selects the executable Apple GPU pipeline; GA/EBM/linalg/PPO value-mode families receive registered typed lowering or explicit unsupported states. Existing Metal selectors and schedules do not change without Apple evidence. |
-| 7 | **X86-E2E-1** | P1 | queued | Typed x86 breadth | Introduce the hardware-free x86 Target contract and migrate softmax/reduction first, followed by existing stable-ABI families. Direct executor-only routing retires per lane after equivalence. |
-| 8 | **ROCM-E2E-2** | P1 | queued | Directive/generator breadth | Expand the proven emitter pattern by semantic families; wire only generators whose typed producers, legality, ABI, and exact-device proof exist. Do not append all generators blindly to one pass list. |
-| 9 | **NVIDIA-E2E-2** | P1 | landing | Native lowering breadth and per-SM split | Promote real NVVM/PTX lowering by family, separate sm90/sm100/sm120 builders, and replace marker operations only with matching ISA/toolchain proof. sm90/sm100 execution remains exact-device gated. |
-| 10 | **APPLE-CPU-E2E-1** | P2 | queued | Apple CPU breadth | Extend the executable Accelerate/LAPACK pipeline beyond rank-2 f32 matmul and make canonical selection honest per supported family. |
-| 11 | **E2E-SPINE-3** | P2 | queued | Fleet proof and closeout | Cross-backend differential fixtures, generated Level-A/B/C dashboard truth, cache reproducibility, and per-backend release packets demonstrate the completed migrated scope. |
+| 7 | **X86-E2E-1** | P1 | closed | Typed x86 pilot and selector closure | Typed C-ABI Target IR and canonical descriptors cover f32 softmax, last-axis sum/mean/max, rank-2 matmul, plain MHA, and bias/window/softcap MHA. Exact-host correctness and retained-route performance gates pass. Canonical compilation defaults eligible static modules to the descriptor route; explicit opt-out and unsupported contracts remain on retained routes. |
+| 8 | **X86-E2E-2** | P1 | landing | AVX-512 stable-ABI breadth | The 76-symbol inventory is recorded. Typed direct ABIs cover unary, binary, predicate, compare, logical, bitwise, where, transcendental, pow/SiLU-multiply, plus BF16, VNNI U8/S8, and FP64 matmul contracts with exact-host proof and measured decisions. Later normalization, positional, sparse/linalg, and stateful cohorts remain open. |
+| 9 | **ROCM-E2E-2** | P1 | closed | Directive/generator breadth | Reduction f16/bf16/f32 input to f32 output passes all nine comparable-device/E2E gates. Direct paged-KV and MoE dispatch have typed f32/i32 descriptors, negative/exact-gfx1151 evidence, and measured non-winning dispositions that retain their production routes. |
+| 10 | **NVIDIA-E2E-2** | P1 | landing | Native lowering breadth and per-SM split | Promote real NVVM/PTX lowering by family, separate sm90/sm100/sm120 builders, and replace marker operations only with matching ISA/toolchain proof. sm90/sm100 execution remains exact-device gated. |
+| 11 | **APPLE-CPU-E2E-1** | P2 | queued | Apple CPU breadth | Extend the executable Accelerate/LAPACK pipeline beyond rank-2 f32 matmul and make canonical selection honest per supported family. |
+| 12 | **E2E-SPINE-3** | P2 | queued | Fleet proof and closeout | Cross-backend differential fixtures, generated Level-A/B/C dashboard truth, cache reproducibility, and per-backend release packets demonstrate the completed migrated scope. |
 
 ## 5. Dependency and landing strategy
 
@@ -215,7 +217,7 @@ E2E-SPINE-1 ──► E2E-SPINE-2
       ├────► NVIDIA-E2E-1 ──► NVIDIA-E2E-2
       ├────► ROCM-E2E-1   ──► ROCM-E2E-2
       ├────► APPLE-E2E-1  ──► APPLE-CPU-E2E-1
-      └────► X86-E2E-1
+      └────► X86-E2E-1 ──► X86-E2E-2
                        │
                        ▼
                  E2E-SPINE-3
@@ -275,6 +277,109 @@ Use the existing stable AVX-512 C ABIs as implementation vehicles, but create a
 typed Target contract before adding broad `TileToX86` calls. The pilot should
 prove that Target IR carries the selected ABI and bindings and that the generic
 launch descriptor reaches the same native function as the legacy executor.
+
+X86-E2E-1 closed that pilot for static f32 softmax and last-axis f32
+sum/mean/max reduction. The registered pass emits typed `func.call` operations
+for the selected ABI, while the native image owns the shared-object bytes and
+the descriptor owns ordered buffers and scalar dimensions. The generic runtime
+loads the image from an in-memory file and reports CPU wall time. Exact-host
+correctness covers scalar, odd, and vector-width-crossing shapes; the six-row
+alternating comparison is within the 10% non-regression bound against retained
+`x86_softmax_compiled` and `x86_reduce_compiled` routes. Those retained routes
+remain selected until the wider stable-ABI migration and canonical-selector
+decision are complete.
+
+The next three slices consume the existing `tile.matmul_kernel` and
+`tile.attention_kernel` carriers. Static rank-2 f32 matmul maps to
+`tessera_x86_avx512_gemm_f32`; static rank-4 f32 MHA maps to
+`tessera_x86_flash_attn_f32`; and exact-shape bias, symmetric local window, or
+logit softcap selects `tessera_x86_flash_attn_ext_f32`. The descriptor boundary
+deliberately rejects GQA/MQA head expansion and dropout because the shipped C
+ABI does not own those transformations. Three matmul shapes and basic/extended
+attention execute against numerical or retained-route oracles. The paired
+21-trial record passes the unchanged 10% end-to-end bound: matmul spans
+0.930--0.946x, plain attention is 0.996x, and extended attention is 0.985x.
+For these five static contracts, `canonical_compile` now selects native
+packaging automatically when the matching compiler and shared image are
+available. The typed descriptor is therefore the canonical route and the
+runtime does not rediscover `x86_softmax_compiled`,
+`x86_matmul_family_compiled`, or `x86_flash_attn_compiled`. Explicit
+`package_native=false`, dynamic or unsupported contracts, and `@jit` calls
+whose output/scalar bindings have not yet been specialized retain their prior
+route. This is scoped selector retirement, not deletion of the comparison
+executors.
+
+X86-E2E-2 owns the remaining AVX-512 breadth. Its first deliverable is a total
+symbol-to-operation/ABI inventory, because the shared library mixes direct
+one-operation kernels with stateful or host-orchestrated compositions. Direct
+families are migrated in these cohorts:
+
+1. unary, binary, compare, predicate, logical, bitwise, and where;
+2. scan, arg-reduction, normalization, and positional encoding;
+3. gather/scatter/sort, FFT/spectral, sparse, and linalg;
+4. loss, quantization, optimizer, MoE, SSM/DeltaNet, EBM, and RNG/stateful
+   families.
+
+Each cohort needs an operation-total typed producer, stable ABI and descriptor,
+negative contracts, exact-host numerical proof, and two-domain comparison
+before any selector change. Composite host programs remain explicit
+compositions unless one stable native entry point actually owns their complete
+semantics; the existence of an AVX-512 object file alone is not Level C.
+
+The first X86-E2E-2 cohort is landing under sync key
+`X86-E2E2-ELEMENTWISE-2026-07-20`. The total export inventory is
+[`X86_AVX512_ABI_INVENTORY.md`](X86_AVX512_ABI_INVENTORY.md): 76 symbols split
+into 31 AVX-512 direct entries, 19 reference entries, and 26 other direct or
+specialized entries. `tile.elementwise_kernel` now carries the unary, binary,
+and predicate semantics without embedding an x86 symbol; `TileToX86Pass`
+lowers it to three stable C ABIs, native packaging emits typed descriptors, and
+the descriptor launcher executes caller-owned f32/bool outputs. Exact-host
+tests cover all 9 unary, 8 binary, and 3 predicate kinds.
+
+The 41-trial retained comparison records unary speedups of 0.970--3.306x,
+binary 0.836--2.803x, and predicate 0.985--5.837x. The two small binary rows
+miss the 10% bound by 4--6 microseconds of fixed descriptor cost, while the
+focused sweep first passes at 16,384 elements. Canonical compilation therefore
+promotes every valid static unary/predicate request and binary requests at or
+above 16,384 elements. Smaller binary requests retain
+`x86_binary_compiled`; explicit descriptor packaging remains supported. This
+is a measured partial selector promotion, not deletion of comparison routes.
+
+The next three X86-E2E-2 slices land under sync key
+`X86-E2E2-TYPED-LOGIC-2026-07-20`. The same typed carrier now represents six
+f32-to-bool comparisons, four bool logical operations, and five i32 bitwise
+operations including unary `popcount`. Verifier rules pin logical i8 physical
+storage, bitwise i32 storage, result storage, and unary/binary arity. The x86
+capability registry now reflects the already-shipped bool and int32 ABIs rather
+than rejecting their canonical Graph IR requests. Typed lowering supplies a
+null second pointer for the shipped unary logical/bitwise C ABI, and descriptors
+retain the logical bool or int32 binding contract.
+
+All 15 operation kinds pass exact-host numerical comparison, including ordered
+NaN comparison semantics and signed bit-pattern/popcount cases. The committed
+41-trial record uses binary representatives and four sizes per ABI. Compare
+speedups span 0.766--2.229x, logical 0.966--8.221x, and bitwise
+0.835--1.810x. Logical is promoted for every valid static shape. Compare and
+bitwise retain their legacy routes below the conservative 32,768-element floor;
+both descriptor routes pass the 10% bound at that threshold and above. Explicit
+typed packaging remains available below the selector threshold.
+
+The remaining flat cohort lands under sync key
+`X86-E2E2-FLAT-FOLLOWON-2026-07-20`. Typed carriers and descriptors now cover
+where, the 21-kind transcendental family, pow, and SiLU-multiply. The retained
+21-trial comparison promotes transcendental at every valid static extent,
+pow/SiLU-multiply from 8,224 elements, and where only at the directly measured
+1,048,576-element winner. Smaller shapes retain their existing compiled routes.
+
+The datatype slice lands under sync key `X86-E2E2-DTYPE-2026-07-20`.
+`x86_dtype_contract.py` separates storage, CPUID requirements, compute and
+accumulator types, and Tessera readiness. The Ryzen AI Max+ 395 profile no
+longer advertises AMX. BF16-to-FP32 uses AVX512_BF16, U8/S8-to-S32 uses
+AVX512_VNNI, and FP64 uses AVX512F/FMA. Exact-host aligned, ragged, and larger
+rows match references; native kernel speedups span 1.283--12.212x. FP8 remains
+software-emulated/planned, and the three new datatype descriptors remain
+explicit rather than automatically selected until a production-route policy is
+measured.
 
 ## 7. Proof contract for every migrated lane
 
@@ -426,6 +531,74 @@ ragged, boundary, and non-origin scale rows compare to their numerical oracles;
 image identity, cold/warm state, and resource evidence are retained without a
 selector change.
 
+**ROCM-E2E-1 is complete (2026-07-19).** The first slice adapts the shared
+`tile.softmax_kernel(X, O, Rows, K)` envelope to a typed
+`tessera_rocm.softmax` directive in `lower-tile-to-rocm`, then invokes only the
+established softmax generator. The canonical gfx1151 package retains typed
+Tile and Target IR, produces an ELF HSACO plus an ordered f16/f32 launch
+descriptor, and registers an exact `rocm_gfx1151` descriptor consumer. The
+LLVM 23/ROCm 7.14 WSL host compiled a 5,808-byte f32 image and eight f16/f32
+descriptor routes matched the established oracle across boundary `(1,1)`,
+aligned `(4,256)`, ragged `(3,17)`, and multi-stride `(2,257)` shapes on the
+visible gfx1151. Invalid dtype, dynamic-shape, result, binding, shape-guard,
+and scalar contracts reject before submission. The package now asks AMD clang
+for the matching `--rocm-path` selection and records SHA-256 identities for
+OCML, OCKL, and the five selected OCLC math/wave/ISA/ABI controls; those
+identities participate in cache and toolchain fingerprints without retaining
+installation paths. Cold and warm packages retain identical image, payload,
+and library identity. The incumbent `rocm_softmax_compiled` executor and
+production selector remain unchanged.
+
+The isolated serial comparison supplies nine paired trials per row
+with HIP-event and allocation/copy-inclusive timing kept separate. All eight
+f16/f32 rows are correct; both code objects use 16 VGPR, 14 SGPR, 32 bytes LDS,
+and no private segment or spills. After fixing a retained-route HIP-module
+cleanup leak discovered by the comparison, the first run isolated the two fp16
+end-to-end misses to repeated deterministic artifact/image/descriptor hashing
+(about 107 us combined), not device work. Frozen identities are now memoized
+while descriptor validation remains per-launch. The unchanged gate passes all
+eight rows: device speedups span 0.981--1.008x and allocation/copy-inclusive
+end-to-end speedups span 0.979--1.022x. ROCM-E2E-1 is closed with no selector
+change; runtime text-route retirement remains an explicit follow-on decision.
+
+**ROCM-E2E-2 is closed (2026-07-19).** Its reduction slices map the
+existing `tile.reduce_kernel(X, O, Outer, AxisExtent, Inner)` carrier to typed
+`tessera_rocm.reduce` Target IR and an architecture-owned 256-thread
+workgroup-per-output kernel. The legacy four-argument row-reduction directive
+remains ABI-compatible; only the typed carrier selects the five-argument form.
+Canonical packaging covers f16/bf16/f32 input with f32 output. Exact gfx1151
+sum/mean/max rows pass axis 0, middle-axis keepdims, and last-axis oracles.
+Address hoisting plus a last-axis specialization closes all nine applicable
+comparison gates: end-to-end speedups span 0.934--1.020x and layout-equivalent
+last-axis device speedups span 0.935--1.011x. Axis-0/middle device values remain
+diagnostic because the retained route's host transpose is outside its event
+interval; the typed route directly consumes the strided layout. Host delta
+spans -0.041 to +0.155 ms. The selector and runtime-authored route remain
+unchanged.
+
+The next breadth slice maps shared `tile.paged_kv_read_kernel` to typed
+`tessera_rocm.paged_kv_read`, a direct f32/i32 gather HSACO, and a guarded
+three-buffer/seven-scalar descriptor. Runtime validation rejects invalid page
+indices before launch, and four exact gfx1151 ranges cover single-token,
+page-crossing, ragged, and full-capacity permuted-page reads bit-for-bit. The
+third breadth slice maps shared `tile.moe_dispatch_kernel` to typed
+`tessera_rocm.moe_dispatch` and a guarded f32/i32 direct-gather descriptor.
+Three exact-device shapes, including H=257, match indexed NumPy gathers
+bit-for-bit. The paired movement record retains the production routes: typed
+paged-KV is 0.960x device but 0.282x end-to-end, while typed MoE dispatch is
+0.826x end-to-end. These are measured non-winners, not reasons to weaken the
+10% threshold. Reduction plus the two scoped movement families therefore have
+complete artifact, launch, numerical, negative, and route-disposition evidence;
+future family migrations require separately scoped work.
+
+ROCm typed-spine expansion is additionally gated by the gfx1151 datatype
+totality contract. It distinguishes native scalar/vector formats, WMMA inputs,
+accumulator-only formats, planned storage, and architectural negatives across
+every canonical and planned dtype. In particular, RDNA3.5 scalar FP64 support
+does not imply FP64 WMMA or current Tessera target registration; IU4 hardware
+does not imply first-class packed-int4 storage; and FP8/BF8 remains a named
+gfx1151 negative.
+
 **NVIDIA-E2E-2 is landing (2026-07-19).** The first slice replaces the shared
 SM90 alias behavior with distinct SM90/SM100/SM120 front and target pipelines.
 SM90 alone selects the proven WGMMA/Hopper marker lowering; SM100 and consumer
@@ -554,8 +727,9 @@ match target flags. Device-library identity therefore invalidates stale caches
 without imposing one backend's physical library set on another.
 
 The next software-actionable items are the remaining **NVIDIA-E2E-2** family
-breadth, **ROCM-E2E-1**, **APPLE-E2E-1**, and **X86-E2E-1**, each with its own
-proof requirements.
+breadth, **APPLE-E2E-1**, and the remaining **X86-E2E-2** AVX-512 cohorts,
+each with its own proof
+requirements.
 
 ## 12. Evidence routing
 

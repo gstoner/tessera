@@ -31,7 +31,7 @@ def test_rocm_verdict_reaches_assembles_when_llc_present(arch):
     v = rocm_emission_verdict(arch=arch, dtype="f16")
     assert v.target == f"rocm:{arch}"
     if _llc_available():
-        # The LLVM 22 AMDGPU backend assembles WMMA on this host → rung 4.
+        # The LLVM 23 AMDGPU backend assembles WMMA on this host → rung 4.
         assert v.rung == Rung.ASSEMBLES, v.detail
         assert v.execution_kind == "amdgcn_assembled"
         assert v.runtime_status == "assembled"

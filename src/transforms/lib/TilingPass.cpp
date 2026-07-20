@@ -207,7 +207,7 @@ struct TileMatmul : public RewritePattern {
         // Slice sizes/strides are compile-time constants, so pass them as
         // STATIC OpFoldResult attributes — passing them as dynamic SSA Values
         // makes ExtractSliceOp infer a fully-dynamic tensor<?x?> result that
-        // mismatches the static tile result type (MLIR-22 verifier).  Only the
+        // mismatches the static tile result type (MLIR-23 verifier).  Only the
         // tile offsets (the loop induction vars) are dynamic.
         OpFoldResult zeroOfr = rewriter.getIndexAttr(0);
         OpFoldResult oneOfr  = rewriter.getIndexAttr(1);

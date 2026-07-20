@@ -22,7 +22,7 @@ def test_tile_ir_renders_core_tile_attention_and_queue_ops():
                 TileOp("tile.async_copy", {"source": "tessera.flash_attn", "result": "O", "ordinal": 0, "stage": 0, "vector": 16}),
                 TileOp("tessera.queue.push", {"queue_id": 0, "stage": 0}),
                 TileOp("tessera.queue.pop", {"queue_id": 0, "stage": 0}),
-                TileOp("tessera.attn.online_softmax", {"source": "tessera.flash_attn", "result": "O", "ordinal": 0, "policy": "safe"}),
+                TileOp("tessera_attn.online_softmax", {"source": "tessera.flash_attn", "result": "O", "ordinal": 0, "policy": "safe"}),
                 TileOp("tile.wait_async", {"stage": 0}),
                 TileOp("tessera.queue.barrier", {"queue_id": 0, "scope": "warpgroup"}),
             ],
@@ -34,7 +34,7 @@ def test_tile_ir_renders_core_tile_attention_and_queue_ops():
     assert "tile.async_copy" in text
     assert "tessera.queue.push" in text
     assert "tessera.queue.pop" in text
-    assert "tessera.attn.online_softmax" in text
+    assert "tessera_attn.online_softmax" in text
     assert "tile.wait_async" in text
     assert "tessera.queue.barrier" in text
 
@@ -46,7 +46,7 @@ def test_tile_ir_verifier_rejects_bad_async_queue_and_attention_contracts():
             body=[
                 TileOp("tile.async_copy", {"stage": -1, "vector": 0}),
                 TileOp("tessera.queue.pop", {"queue_id": 7}),
-                TileOp("tessera.attn.online_softmax", {"source": "tessera.flash_attn"}),
+                TileOp("tessera_attn.online_softmax", {"source": "tessera.flash_attn"}),
             ],
         )
     ])
@@ -116,10 +116,10 @@ def test_frontend_graph_schedule_tile_pipeline_for_flash_attention_has_fa4_and_q
     assert "tessera.queue.create" in text
     assert "tessera.queue.push" in text
     assert "tessera.queue.pop" in text
-    assert "tessera.attn.scaled_dot_product" in text
-    assert "tessera.attn.online_softmax" in text
-    assert "tessera.attn.lse_save" in text
-    assert "tessera.attn.attend_v" in text
+    assert "tessera_attn.scaled_dot_product" in text
+    assert "tessera_attn.online_softmax" in text
+    assert "tessera_attn.lse_save" in text
+    assert "tessera_attn.attend_v" in text
     assert "tile.wait_async" in text
     assert "tile.debug_barrier" in text
 

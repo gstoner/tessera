@@ -194,7 +194,7 @@ flash-attention execute-compare (C4), and the sm_120 kernel-inventory doc
    `tests/unit/test_nvidia_tile_fragment_compiler_path.py`; explicit bf16 pack
    proof is `sm120_pointer_fragment_store_bf16.mlir`. **Dtype fragment breadth
    landed:** TF32 m16n8k8, E4M3/E5M2 m16n8k32, and s8 m16n8k32 layout-bearing
-   packs lower, assemble, launch, and compare on the RTX 5070 Ti. LLVM 22's NVVM
+   packs lower, assemble, launch, and compare on the RTX 5070 Ti. LLVM 23's NVVM
    verifier handles TF32/int8; FP8 uses narrowly typed inline PTX until the
    dialect accepts those valid encodings. Still open are
    `wgmma`/`tcgen05`/TMEM on their silicon. This converges the MLIR Target IR

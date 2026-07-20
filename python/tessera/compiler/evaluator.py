@@ -652,7 +652,7 @@ def rocm_emission_verdict(arch: str = "gfx1151", dtype: str = "f16") -> BackendV
     """Derive an AMD program's emission rung from `rocdl_emit`.
 
     Unlike NVIDIA (where ``ptxas`` is Linux-CI-only, capping the host at rung 3
-    ``EMITS_ASM_TEXT``), the LLVM 22 **AMDGPU backend ships in the host toolchain**,
+    ``EMITS_ASM_TEXT``), the LLVM 23 **AMDGPU backend ships in the host toolchain**,
     so ``llc -mcpu=<gfx>`` lowers ``llvm.amdgcn.wmma.*`` to a real ``v_wmma_*``
     instruction *here* — a genuine rung-4 ``ASSEMBLES`` with no GPU. Rungs 6–7
     (execute / hardware-verified) still gate on real silicon.

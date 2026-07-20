@@ -26,6 +26,11 @@ void buildTesseraROCMBackendPipeline(OpPassManager &pm) {
   pm.addPass(createROCMWaveLdsPipelinePass());
   pm.addPass(createROCMWaveLdsLegalityPass());
   pm.addPass(createLowerTileToROCMPass());
+  // ROCM-E2E-1/-2 wire only families with typed producers and descriptor
+  // consumers. Unrelated standalone generators remain outside this pipeline.
+  pm.addPass(createGenerateROCMSoftmaxKernelPass());
+  pm.addPass(createGenerateROCMReduceKernelPass());
+  pm.addPass(createGenerateROCMPagedKVReadKernelPass());
   pm.addPass(createLowerKernelABIPass());
   pm.addPass(createLowerTesseraTargetToROCDLPass());
 }
@@ -73,6 +78,7 @@ void registerTesseraROCMPasses() {
   registerPass([]() { return createGenerateROCMSoftmaxKernelPass(); });
   registerPass([]() { return createGenerateROCMNormKernelPass(); });
   registerPass([]() { return createGenerateROCMReduceKernelPass(); });
+  registerPass([]() { return createGenerateROCMPagedKVReadKernelPass(); });
   registerPass([]() { return createGenerateROCMArgReduceKernelPass(); });
   registerPass([]() { return createGenerateROCMScanKernelPass(); });
   registerPass([]() { return createGenerateROCMUnaryKernelPass(); });

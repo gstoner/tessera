@@ -156,10 +156,20 @@ the fastest way to confirm an op exists before emitting it.
 python3 docs/reference/isa/rdna/tools/build_archive.py    # ~20s, needs pdftotext + pypdf
 ```
 
-Source PDFs are read from `~/Downloads/` (paths in `SOURCES` at the top of the
-script). `meta.json` records each source's sha256 so you can detect if an
-upstream PDF changed. The PDFs themselves are **not** committed — only the
-extracted archive.
+Source PDFs are resolved per document from
+`$TESSERA_RDNA_ISA_SOURCE_DIR`, `~/projects/AMD_GPU_ISA_DOCS/`, then
+`~/Downloads/`. Per-document fallback allows the preferred directory to hold
+only RDNA3.5/RDNA4 while older RDNA3 or MES sources remain in Downloads.
+`meta.json` records each source's sha256 so you can detect if an upstream PDF
+changed. The PDFs themselves are **not** committed—only the extracted archive.
+
+The local RDNA3.5 and RDNA4 PDFs under `~/projects/AMD_GPU_ISA_DOCS/` currently
+match the checked-in archive hashes exactly:
+
+| Document | SHA-256 |
+|---|---|
+| RDNA3.5 | `bc42e0f4a1e183521bd419914a0f28d99cdb6363d8c0384e16bd3e44f48e50b8` |
+| RDNA4 | `96dc97df3468a4e63a13095e2540ba13aaa75cf4635a29516b59760695e25e0c` |
 
 ## Provenance
 
@@ -172,3 +182,9 @@ extracted archive.
 
 AMD RDNA ISA Reference Guides © Advanced Micro Devices, Inc. Extracted here for
 engineering reference under fair use; redistribute per AMD's terms.
+
+For human browsing, the community-maintained
+[RDNA3.5 Markdown transcription](https://github.com/woct0rdho/rdna35-isa-markdown/blob/master/rdna35_instruction_set_architecture.md)
+is a useful cross-check. It is not the machine-truth input for Tessera: compiler
+gates continue to use this archive's AMD-PDF-derived `instructions.json`,
+`encodings.json`, and recorded source hash.

@@ -14,6 +14,7 @@ import json
 import math
 import re
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import Mapping, Sequence
 
 from tessera.dtype import TesseraDtypeError, canonicalize_dtype
@@ -323,7 +324,7 @@ class NativeImageArtifact:
                 f"compile state {self.compile_state!r} is not registered",
             )
 
-    @property
+    @cached_property
     def payload_digest(self) -> str:
         return _sha256_bytes(self.payload)
 
@@ -346,11 +347,11 @@ class NativeImageArtifact:
             ]
         return identity
 
-    @property
+    @cached_property
     def image_digest(self) -> str:
         return _sha256_json(self._identity_dict())
 
-    @property
+    @cached_property
     def cache_key(self) -> str:
         """Pre-compilation cache key; compile state and measured resources do not affect it."""
         identity: dict[str, object] = {
@@ -817,11 +818,11 @@ class LaunchDescriptor:
             "provenance": dict(self.provenance),
         }
 
-    @property
+    @cached_property
     def descriptor_digest(self) -> str:
         return _sha256_json(self._content_dict())
 
-    @property
+    @cached_property
     def cache_fingerprint(self) -> str:
         return _sha256_json({
             "schema_version": self.schema_version,

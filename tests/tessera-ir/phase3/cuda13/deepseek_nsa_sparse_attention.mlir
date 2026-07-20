@@ -12,7 +12,7 @@ module attributes {tessera.target = "nvidia_sm90"} {
       %K : memref<1x32x1024x128xbf16, 1>,
       %V : memref<1x32x1024x128xbf16, 1>,
       %O : memref<1x32x1024x128xbf16, 1>) {
-    "tessera.attn.nsa"(%Q, %K, %V, %O) {
+    "tessera_attn.nsa"(%Q, %K, %V, %O) {
       tile_q = 64 : i64,
       tile_kv = 128 : i64,
       top_k = 16 : i64,
@@ -29,7 +29,7 @@ module attributes {tessera.target = "nvidia_sm90"} {
   }
 }
 
-// CHECK: tessera.attn.nsa
+// CHECK: tessera_attn.nsa
 // CHECK-SAME: top_k = 16
 // CHECK-SAME: block_size = 64
 //

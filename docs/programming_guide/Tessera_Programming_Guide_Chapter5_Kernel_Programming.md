@@ -185,10 +185,10 @@ On SM_80/86/89, `tile.mma` falls back to legacy WMMA automatically — no code c
 For `tessera.ops.flash_attn`, `TileIRLoweringPass` expands the single op into the full FA-2 online softmax sequence:
 
 ```mlir
-%scores  = tessera.attn.scaled_dot_product %q_tile, %k_tile scale = 0.125 : f32
-%masked  = tessera.attn.causal_mask %scores q_off = 0 kv_off = 0    // if causal=True
-%new_acc, %new_m, %new_l = tessera.attn.online_softmax %masked, %m, %l, %acc
-%output, %lse = tessera.attn.lse_accumulate %new_acc, %final_m, %final_l
+%scores  = tessera_attn.scaled_dot_product %q_tile, %k_tile scale = 0.125 : f32
+%masked  = tessera_attn.causal_mask %scores q_off = 0 kv_off = 0    // if causal=True
+%new_acc, %new_m, %new_l = tessera_attn.online_softmax %masked, %m, %l, %acc
+%output, %lse = tessera_attn.lse_accumulate %new_acc, %final_m, %final_l
 ```
 
 This implements the FA-2 online softmax algorithm: running max + running sum with a per-tile correction factor. A plain batch softmax would OOM on long sequences — the online algorithm processes one KV tile at a time.
@@ -200,7 +200,7 @@ This implements the FA-2 online softmax algorithm: running max + running sum wit
 On SM_90 (Hopper), `WarpSpecializationPass` splits the kernel into **producer** and **consumer** warp roles:
 
 - **Producer warps** run `tile.async_copy` (TMA prefetch into shared memory).
-- **Consumer warps** run `tessera.attn.*` compute and `tile.mma`.
+- **Consumer warps** run `tessera_attn.*` compute and `tile.mma`.
 - `tessera.queue.push/pop` at the boundary express the handoff ordering.
 
 This is structural — the backend allocates separate register files and mbarrier slots per role. You do not express warp roles in Python; the pass infers them from the Tile IR structure automatically.

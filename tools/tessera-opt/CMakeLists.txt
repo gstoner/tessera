@@ -65,7 +65,7 @@ if(NOT ((TESSERA_BUILD_ROCM_BACKEND AND NOT TESSERA_ENABLE_CUDA AND NOT TESSERA_
 endif()
 
 # Sprint V7 (2026-05-22): link the FA-4 attention dialect into
-# tessera-opt so `tessera.attn.scaled_dot_product` and friends are
+# tessera-opt so `tessera_attn.scaled_dot_product` and friends are
 # recognized at parse time.  The library is exported by
 # src/compiler/tile_opt_fa4/CMakeLists.txt as TesseraAttnDialect.
 if(TARGET TesseraAttnDialect)

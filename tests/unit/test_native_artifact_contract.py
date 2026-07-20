@@ -107,6 +107,22 @@ def test_native_image_round_trip_is_content_addressed_and_deterministic() -> Non
     assert json.loads(image.to_json())["payload_b64"]
 
 
+def test_frozen_native_identity_digests_are_cached_after_first_use() -> None:
+    image = _image()
+    descriptor = _descriptor(image)
+    assert image.payload_digest == image.payload_digest
+    assert image.image_digest == image.image_digest
+    assert image.cache_key == image.cache_key
+    assert descriptor.descriptor_digest == descriptor.descriptor_digest
+    assert descriptor.cache_fingerprint == descriptor.cache_fingerprint
+    assert {
+        "payload_digest",
+        "image_digest",
+        "cache_key",
+    } <= image.__dict__.keys()
+    assert {"descriptor_digest", "cache_fingerprint"} <= descriptor.__dict__.keys()
+
+
 def test_workspace_lifecycle_is_round_tripped_and_rejects_invalid_combinations() -> None:
     image = _image()
     descriptor = _descriptor(image)

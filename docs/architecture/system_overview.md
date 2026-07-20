@@ -54,7 +54,7 @@ Schedule IR (schedule.* dialect — mesh.define, mesh.region, pipeline.region, s
      │  [TilingPass + TileToX86Pass]       ← x86 path
      │  [TileIRLoweringPass]               ← GPU path
      ▼
-Tile IR     (tile.* ops + tessera.attn.* FA-4 ops + tessera.queue.* barriers)
+Tile IR     (tile.* ops + tessera_attn.* FA-4 ops + tessera.queue.* barriers)
      │  [WarpSpecializationPass → AsyncCopyLoweringPass → NVWGMMALoweringPass → NVTMADescriptorPass → NVFlashAttnKernelEmitter]
      ▼
 Target IR   (tessera.nvgpu.wgmma.*, tessera.tma.*, mbarrier ops → LLVM NVPTX → PTX)
@@ -108,7 +108,7 @@ generated support and E2E dashboards.
 |-----------|--------|----------|
 | `GPUTargetProfile` + `ISA` enum (SM_80–SM_100) | ✅ | `python/tessera/compiler/gpu_target.py` |
 | `FlashAttnLoweringConfig` (tile_q, tile_kv, pipeline_stages, causal, dropout) | ✅ | `python/tessera/compiler/attn_lower.py` |
-| `TileIRLoweringPass` — `schedule.mesh.region` → `tile.*` + `tessera.attn.*` | ✅ | `src/transforms/lib/TileIRLoweringPass.cpp` |
+| `TileIRLoweringPass` — `schedule.mesh.region` → `tile.*` + `tessera_attn.*` | ✅ | `src/transforms/lib/TileIRLoweringPass.cpp` |
 | `WarpSpecializationPass` — producer/consumer warp roles + queue barriers | ✅ | `src/compiler/tile_opt_fa4/lib/WarpSpecializationPass.cpp` |
 | `AsyncCopyLoweringPass` — `tile.async_copy` → TMA (SM_90) / `cp.async` (SM_80) | ✅ | `src/compiler/tile_opt_fa4/lib/AsyncCopyLoweringPass.cpp` |
 | `NVWGMMALoweringPass` — `tile.mma` → `wgmma.mma_async` PTX (SM_90+) or WMMA | ✅ | `src/compiler/codegen/tessera_gpu_backend_NVIDIA/` |

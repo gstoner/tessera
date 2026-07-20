@@ -1,6 +1,6 @@
 // RUN: tessera-opt --tessera-tile-to-x86='prefer-amx=true' %s  | FileCheck %s --check-prefix=AMX
 // RUN: tessera-opt --tessera-tile-to-x86='prefer-amx=false' %s | FileCheck %s --check-prefix=AVX
-// 2026-06: un-XFAIL'd.  Two MLIR-22 syntax drifts: bufferization.to_memref →
+// 2026-06: un-XFAIL'd.  Two MLIR-23 syntax drifts: bufferization.to_memref →
 // to_buffer, and func.call now prints in pretty form as `call`.  Also the
 // runtime fn declarations hoist to the top of the module (before the kernels),
 // so the checks match in emitted order rather than via per-func LABEL anchors.

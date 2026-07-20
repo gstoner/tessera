@@ -4,7 +4,7 @@
 // tessera.pipeline.recv at cross-stage boundaries for a 1F1B schedule.
 //
 // 2026-06: un-XFAIL'd.  Two corrections vs the old fixture:
-//   (1) value-semantics tensor matmul (MLIR-22 verifier requires one result);
+//   (1) value-semantics tensor matmul (MLIR-23 verifier requires one result);
 //   (2) the staged ops live in ONE function with real SSA dataflow across the
 //       stage boundary — the pass keys off a stage-k result being *consumed by*
 //       a stage-(k+1) op, which separate per-stage functions never expressed.

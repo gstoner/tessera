@@ -729,8 +729,11 @@ LogicalResult ReduceKernelOp::verify() {
   auto keepdims = getOperation()->getAttrOfType<BoolAttr>("keepdims");
   auto schedule = getOperation()->getAttrOfType<StringAttr>("schedule");
   auto nanMode = getOperation()->getAttrOfType<StringAttr>("nan_mode");
-  if (!storage || (storage.getValue() != "f16" && storage.getValue() != "f32"))
-    return emitOpError("requires storage=\"f16\" or storage=\"f32\"");
+  if (!storage || (storage.getValue() != "f16" &&
+                   storage.getValue() != "bf16" &&
+                   storage.getValue() != "f32"))
+    return emitOpError(
+        "requires storage=\"f16\", storage=\"bf16\", or storage=\"f32\"");
   if (!accum || accum.getValue() != "f32")
     return emitOpError("requires accum=\"f32\"");
   if (!kind || (kind.getValue() != "sum" && kind.getValue() != "mean" &&
@@ -745,6 +748,117 @@ LogicalResult ReduceKernelOp::verify() {
     return emitOpError("requires schedule=serial|cooperative_128");
   if (!nanMode || nanMode.getValue() != "propagate")
     return emitOpError("currently requires nan_mode=\"propagate\"");
+  return success();
+}
+
+LogicalResult ElementwiseKernelOp::verify() {
+  auto family = getOperation()->getAttrOfType<StringAttr>("family");
+  auto kind = getOperation()->getAttrOfType<StringAttr>("kind");
+  auto storage = getOperation()->getAttrOfType<StringAttr>("storage");
+  auto outputStorage =
+      getOperation()->getAttrOfType<StringAttr>("output_storage");
+  if (!family || !kind || !storage || !outputStorage)
+    return emitOpError(
+        "requires family, kind, storage, and output_storage attributes");
+  bool unary = family.getValue() == "unary";
+  bool binary = family.getValue() == "binary";
+  bool predicate = family.getValue() == "predicate";
+  bool compare = family.getValue() == "compare";
+  bool logical = family.getValue() == "logical";
+  bool bitwise = family.getValue() == "bitwise";
+  bool where = family.getValue() == "where";
+  bool transcendental = family.getValue() == "transcendental";
+  bool binaryMath = family.getValue() == "binary_math";
+  if (!unary && !binary && !predicate && !compare && !logical && !bitwise &&
+      !where && !transcendental && !binaryMath)
+    return emitOpError(
+        "requires family in {unary, binary, predicate, compare, logical, bitwise, where, transcendental, binary_math}");
+  bool binaryArity = binary || compare || binaryMath ||
+                     (logical && kind.getValue() != "not") ||
+                     (bitwise && kind.getValue() != "not" &&
+                      kind.getValue() != "popcount");
+  unsigned expected = where ? 5 : binaryArity ? 4 : 3;
+  if (getInputs().size() != expected)
+    return emitOpError() << family.getValue() << " expects " << expected
+                         << " operands including destination and N";
+  for (Value pointer : getInputs().drop_back())
+    if (!isa<LLVM::LLVMPointerType>(pointer.getType()))
+      return emitOpError("source and destination operands must be !llvm.ptr");
+  if (!getInputs().back().getType().isInteger(64))
+    return emitOpError("flattened element count N must be i64");
+  StringRef requiredStorage = logical ? "i8" : bitwise ? "i32" : "f32";
+  if (storage.getValue() != requiredStorage)
+    return emitOpError() << family.getValue() << " requires storage=\""
+                         << requiredStorage << "\"";
+  if (where) {
+    auto conditionStorage =
+        getOperation()->getAttrOfType<StringAttr>("condition_storage");
+    if (!conditionStorage || conditionStorage.getValue() != "i8")
+      return emitOpError("where requires condition_storage=\"i8\"");
+    if (outputStorage.getValue() != "f32" || kind.getValue() != "where")
+      return emitOpError("where requires kind=where and output_storage=\"f32\"");
+  } else if (predicate) {
+    if (outputStorage.getValue() != "i8")
+      return emitOpError("predicate requires output_storage=\"i8\"");
+    if (kind.getValue() != "isnan" && kind.getValue() != "isinf" &&
+        kind.getValue() != "isfinite")
+      return emitOpError("predicate kind must be isnan|isinf|isfinite");
+  } else if (compare) {
+    if (outputStorage.getValue() != "i8")
+      return emitOpError("compare requires output_storage=\"i8\"");
+    if (kind.getValue() != "eq" && kind.getValue() != "ne" &&
+        kind.getValue() != "lt" && kind.getValue() != "le" &&
+        kind.getValue() != "gt" && kind.getValue() != "ge")
+      return emitOpError("compare kind must be eq|ne|lt|le|gt|ge");
+  } else if (logical) {
+    if (outputStorage.getValue() != "i8")
+      return emitOpError("logical requires output_storage=\"i8\"");
+    if (kind.getValue() != "and" && kind.getValue() != "or" &&
+        kind.getValue() != "xor" && kind.getValue() != "not")
+      return emitOpError("logical kind must be and|or|xor|not");
+  } else if (bitwise) {
+    if (outputStorage.getValue() != "i32")
+      return emitOpError("bitwise requires output_storage=\"i32\"");
+    if (kind.getValue() != "and" && kind.getValue() != "or" &&
+        kind.getValue() != "xor" && kind.getValue() != "not" &&
+        kind.getValue() != "popcount")
+      return emitOpError("bitwise kind must be and|or|xor|not|popcount");
+  } else if (transcendental) {
+    if (outputStorage.getValue() != "f32")
+      return emitOpError("transcendental requires output_storage=\"f32\"");
+    if (kind.getValue() != "exp" && kind.getValue() != "log" &&
+        kind.getValue() != "tanh" && kind.getValue() != "sigmoid" &&
+        kind.getValue() != "silu" && kind.getValue() != "gelu" &&
+        kind.getValue() != "erf" && kind.getValue() != "softplus" &&
+        kind.getValue() != "expm1" && kind.getValue() != "log1p" &&
+        kind.getValue() != "cos" && kind.getValue() != "tan" &&
+        kind.getValue() != "sinh" && kind.getValue() != "cosh" &&
+        kind.getValue() != "asin" && kind.getValue() != "acos" &&
+        kind.getValue() != "atan" && kind.getValue() != "erfc" &&
+        kind.getValue() != "sin" && kind.getValue() != "lgamma" &&
+        kind.getValue() != "digamma")
+      return emitOpError("unsupported transcendental kind");
+  } else if (binaryMath) {
+    if (outputStorage.getValue() != "f32" ||
+        (kind.getValue() != "pow" && kind.getValue() != "silu_mul"))
+      return emitOpError("binary_math requires kind=pow|silu_mul and output_storage=\"f32\"");
+  } else {
+    if (outputStorage.getValue() != "f32")
+      return emitOpError("unary/binary requires output_storage=\"f32\"");
+    if (unary && kind.getValue() != "sqrt" && kind.getValue() != "rsqrt" &&
+        kind.getValue() != "reciprocal" && kind.getValue() != "abs" &&
+        kind.getValue() != "sign" && kind.getValue() != "floor" &&
+        kind.getValue() != "ceil" && kind.getValue() != "trunc" &&
+        kind.getValue() != "round")
+      return emitOpError(
+          "unary kind must be sqrt|rsqrt|reciprocal|abs|sign|floor|ceil|trunc|round");
+    if (binary && kind.getValue() != "sub" && kind.getValue() != "div" &&
+        kind.getValue() != "maximum" && kind.getValue() != "minimum" &&
+        kind.getValue() != "add" && kind.getValue() != "mul" &&
+        kind.getValue() != "mod" && kind.getValue() != "floor_div")
+      return emitOpError(
+          "binary kind must be sub|div|maximum|minimum|add|mul|mod|floor_div");
+  }
   return success();
 }
 

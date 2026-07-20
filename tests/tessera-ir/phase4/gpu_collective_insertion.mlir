@@ -5,7 +5,7 @@
 // and all_gather after a row-parallel op.
 //
 // 2026-06: un-XFAIL'd.  The matmuls moved to value-semantics tensor form
-// (the MLIR-22 TesseraMatmulOp verifier requires one tensor result).  The
+// (the MLIR-23 TesseraMatmulOp verifier requires one tensor result).  The
 // pass inserts lightweight `tessera.collective.*` marker ops that downstream
 // collective lowering / runtime adapters consume; they are not yet first-class
 // `tessera` dialect ODS ops, so --allow-unregistered-dialect + --verify-each=false

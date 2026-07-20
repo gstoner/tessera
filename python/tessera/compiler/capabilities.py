@@ -676,6 +676,12 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         # truth for "does this specific op support this dtype today".
         supported_ops={
             **_ops("ready", _APPLE_GPU_READY, reason="Apple GPU runtime shim supports this single-op smoke path"),
+            canonical_op("tessera.matmul"): OpCapability(
+                canonical_op("tessera.matmul"), "ready",
+                dtypes=("fp32", "f32", "fp16", "bf16"),
+                reason=("Apple GPU rank-2 matmul executes f32 through MPS and "
+                        "f16/bf16 through the Tile simdgroup value ABI"),
+            ),
             **_ops(
                 "ready", _APPLE_GPU_OPTIMIZER_READY,
                 reason=("Apple GPU fused Metal f32 optimizer ABI; shares p/g/m/v "

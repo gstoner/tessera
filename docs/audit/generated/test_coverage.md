@@ -7,10 +7,10 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **480** ops in `primitive_coverage` registry.
-- **4346** total Python-test references, **1000** total lit-fixture references.
+- **4371** total Python-test references, **1000** total lit-fixture references.
 - **81** ops have **zero** references in either test surface.
 - **117** ops have ≤1 reference ("thinly tested").
-- **146** ops have ≥10 references ("well tested").
+- **148** ops have ≥10 references ("well tested").
 - **127** ops have at least one associated `pytest.raises` negative test.
 
 ## Top 20 most-tested ops
@@ -23,9 +23,9 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 | `add` |  118 |   29 |  147 |  10 | `bf16`, `f16`, `f32`, `f64` … |
 | `relu` |  109 |   34 |  143 |   9 | `bf16`, `f16`, `f32`, `f64` … |
 | `mul` |   90 |    9 |   99 |   7 | `bf16`, `f16`, `f32`, `f64` … |
+| `rmsnorm` |   80 |   13 |   93 |   4 | `bf16`, `f16`, `f32`, `f64` … |
 | `reduce` |   89 |    2 |   91 |   7 | `bf16`, `f16`, `f32`, `f64` … |
 | `silu` |   85 |    6 |   91 |   5 | `bf16`, `f16`, `f32`, `f64` … |
-| `rmsnorm` |   76 |   13 |   89 |   4 | `bf16`, `f16`, `f32`, `f64` … |
 | `gemm` |   79 |    2 |   81 |   8 | `bf16`, `f16`, `f32`, `fp16` … |
 | `selective_ssm` |   71 |   10 |   81 |   3 | `bf16`, `f16`, `fp16`, `fp32` |
 | `gelu` |   46 |   19 |   65 |   0 | `bf16`, `f16`, `f32`, `f64` … |
@@ -35,8 +35,8 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 | `cast` |   16 |   40 |   56 |   1 | `fp16`, `fp32` |
 | `grouped_gemm` |   31 |   24 |   55 |   2 | `fp32`, `fp4_e2m1`, `fp8_e4m3`, `fp8_e5m2` … |
 | `linear_attn` |   44 |    8 |   52 |   2 |  |
-| `cholesky` |   20 |   30 |   50 |   0 | `bf16`, `f16`, `f32`, `fp16` … |
-| `layer_norm` |   26 |    9 |   35 |   3 | `bf16`, `f16`, `f32`, `fp16` … |
+| `cholesky` |   21 |   30 |   51 |   0 | `bf16`, `f16`, `f32`, `fp16` … |
+| `layer_norm` |   30 |    9 |   39 |   3 | `bf16`, `f16`, `f32`, `fp16` … |
 
 ## Thinly-tested ops (≤1 reference)
 

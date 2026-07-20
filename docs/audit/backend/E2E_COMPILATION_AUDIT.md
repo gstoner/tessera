@@ -1,7 +1,7 @@
 ---
 last_updated: 2026-07-20
 audit_role: plan
-plan_state: open
+plan_state: landing
 owner: shared compiler and backend owners
 sync_key: E2E-SPINE-2026-07-18
 ---
@@ -200,7 +200,7 @@ Statuses in this table describe this plan, not generated execution counts.
 | 5 | **ROCM-E2E-1** | P0 | closed | Typed directive pilot | One non-GEMM lane (softmax first) lowers from typed frontend/Tile IR to a typed `tessera_rocm.*` directive, existing generator, ROCDL, HSACO, and launch descriptor, with exact-device correctness and measured parity against the retained route. Runtime text synthesis remains a separate retirement decision. |
 | 6 | **APPLE-E2E-1** | P1 | queued | Canonical Apple GPU spine | Canonical compilation selects the executable Apple GPU pipeline; GA/EBM/linalg/PPO value-mode families receive registered typed lowering or explicit unsupported states. Existing Metal selectors and schedules do not change without Apple evidence. |
 | 7 | **X86-E2E-1** | P1 | closed | Typed x86 pilot and selector closure | Typed C-ABI Target IR and canonical descriptors cover f32 softmax, last-axis sum/mean/max, rank-2 matmul, plain MHA, and bias/window/softcap MHA. Exact-host correctness and retained-route performance gates pass. Canonical compilation defaults eligible static modules to the descriptor route; explicit opt-out and unsupported contracts remain on retained routes. |
-| 8 | **X86-E2E-2** | P1 | landing | AVX-512 stable-ABI breadth | The 76-symbol inventory is recorded. Typed direct ABIs cover unary, binary, predicate, compare, logical, bitwise, where, transcendental, pow/SiLU-multiply, plus BF16, VNNI U8/S8, and FP64 matmul contracts with exact-host proof and measured decisions. Later normalization, positional, sparse/linalg, and stateful cohorts remain open. |
+| 8 | **X86-E2E-2** | P1 | closed | AVX-512 stable-ABI breadth | All 76 exports are inventoried. The 33 cohort-3/4 ABIs have total typed/effect/status contracts and selector dispositions. Exact-host Graph descriptors promote measured flat gather, unreduced pointwise loss, Cholesky, and triangular solve domains; 29 non-isomorphic, composite, stateful, multi-output, or specialized entries retain their explicit routes. |
 | 9 | **ROCM-E2E-2** | P1 | closed | Directive/generator breadth | Reduction f16/bf16/f32 input to f32 output passes all nine comparable-device/E2E gates. Direct paged-KV and MoE dispatch have typed f32/i32 descriptors, negative/exact-gfx1151 evidence, and measured non-winning dispositions that retain their production routes. |
 | 10 | **NVIDIA-E2E-2** | P1 | landing | Native lowering breadth and per-SM split | Promote real NVVM/PTX lowering by family, separate sm90/sm100/sm120 builders, and replace marker operations only with matching ISA/toolchain proof. sm90/sm100 execution remains exact-device gated. |
 | 11 | **APPLE-CPU-E2E-1** | P2 | queued | Apple CPU breadth | Extend the executable Accelerate/LAPACK pipeline beyond rank-2 f32 matmul and make canonical selection honest per supported family. |
@@ -380,6 +380,38 @@ rows match references; native kernel speedups span 1.283--12.212x. FP8 remains
 software-emulated/planned, and the three new datatype descriptors remain
 explicit rather than automatically selected until a production-route policy is
 measured.
+
+Cohorts 3 and 4 close under sync key
+`X86-E2E2-BREADTH-2026-07-20`. A target-owned, deliberately side-effecting
+`tile.x86_abi_kernel` carries the exact versioned C ABI after any required host
+packing. Its verifier requires the `tessera_x86_` symbol namespace, a
+`tessera.x86.*.v1` ABI ID, explicit family/effect ownership, explicit status
+return policy, and an operand list restricted to the supported C scalar and
+pointer types. `TileToX86Pass` derives the external function declaration from
+those typed operands; Python no longer reconstructs a signature at launch.
+
+The cohort registry is total for 12 cohort-3 and 21 cohort-4 exported entries.
+It records in-place FFT/sort/scatter, multi-output factorization/optimizer/SSM,
+status-returning KV mutation, FP16/BF16 SSM storage, and Philox/EBM state
+inputs without marking them pure. ABI-shaped restrictions stay explicit:
+SDDMM consumes transposed RHS storage, Clifford consumes blade-major storage,
+bitonic sort is host padded, and the direct FFT entry is radix-2 C2C. Exact
+Ryzen-host descriptor tests prove the complete export inventory and exercise
+direct, Graph-level, factorization/solve, and stateful representatives,
+including KV append status and mutation.
+
+`benchmarks/baselines/x86_avx512_e2e_cohort34_comparison.json` records 21
+serial-alternating retained/descriptor trials over three domains for each
+isomorphic Graph family. The first rows meeting the unchanged 10% bound are
+1,048,576 gather outputs, 16,384 unreduced loss elements, 2,048 Cholesky output
+elements, and 512 triangular-solve output elements. Canonical compilation
+promotes exactly those domains. The same record contains one disposition for
+every cohort ABI: the other 29 remain `retain_composite` or
+`retain_specialized` because their public contract needs packing, composition,
+state, multiple results, or semantics narrower than the exported entry. A
+performance comparison is not applicable where there is no semantically
+equivalent descriptor candidate. This operation-total decision closes
+X86-E2E-2 without relabeling composite work as direct Level C.
 
 ## 7. Proof contract for every migrated lane
 
@@ -727,7 +759,7 @@ match target flags. Device-library identity therefore invalidates stale caches
 without imposing one backend's physical library set on another.
 
 The next software-actionable items are the remaining **NVIDIA-E2E-2** family
-breadth, **APPLE-E2E-1**, and the remaining **X86-E2E-2** AVX-512 cohorts,
+breadth and **APPLE-E2E-1**,
 each with its own proof
 requirements.
 

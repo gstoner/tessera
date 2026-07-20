@@ -58,3 +58,13 @@ def test_canonical_build_discovery_has_no_cross_major_fallback() -> None:
     assert "/usr/lib/llvm-24" not in text
     assert "/usr/lib/llvm-22" not in text
     assert "brew --prefix llvm 2>" not in text
+
+
+def test_linux_tsan_uses_llvm23_clang_non_pie_runtime() -> None:
+    text = (REPO_ROOT / "scripts" / "run_sanitizers.sh").read_text(encoding="utf-8")
+    assert 'llvm_prefix="/usr/lib/llvm-23"' in text
+    assert '"$label" == "tsan"' in text
+    assert "-DCMAKE_CXX_COMPILER=\"$llvm_prefix/bin/clang++\"" in text
+    assert "-DCMAKE_CXX_FLAGS=-fno-pie" in text
+    assert "-DCMAKE_EXE_LINKER_FLAGS=-no-pie" in text
+    assert "cmake_fresh=(--fresh)" in text

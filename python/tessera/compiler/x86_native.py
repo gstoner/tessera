@@ -9,7 +9,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from .graph_ir import GraphIRModule
 from .native_artifact import (
@@ -41,6 +41,21 @@ X86_BITWISE_I32_ABI = "tessera.x86.elementwise.bitwise.a_b_o_n_kind.i32.v1"
 X86_WHERE_F32_ABI = "tessera.x86.elementwise.where.c_a_b_o_n.i8_f32.v1"
 X86_TRANSCENDENTAL_F32_ABI = "tessera.x86.elementwise.transcendental.x_o_n_kind.f32.v1"
 X86_BINARY_MATH_F32_ABI = "tessera.x86.elementwise.binary_math.a_b_o_n.f32.v1"
+X86_ARGREDUCE_F32_ABI = "tessera.x86.argreduce.x_o_rows_cols.f32_i32.v1"
+X86_SCAN_F32_ABI = "tessera.x86.scan.x_o_rows_cols.f32.v1"
+X86_NORM_F32_ABI = "tessera.x86.norm.x_o_rows_cols_eps.f32.v1"
+X86_ROPE_F32_ABI = "tessera.x86.rope.x_theta_o_rows_cols.f32.v1"
+X86_ALIBI_F32_ABI = "tessera.x86.alibi.slopes_o_h_s.f32.v1"
+
+X86_ARGREDUCE_KINDS = {"tessera.argmax": "argmax", "tessera.argmin": "argmin"}
+X86_SCAN_KINDS = {
+    "tessera.cumsum": "sum", "tessera.cumprod": "product",
+    "tessera.cummax": "max", "tessera.cummin": "min",
+}
+X86_NORM_KINDS = {
+    "tessera.rmsnorm": "rmsnorm", "tessera.rmsnorm_safe": "rmsnorm",
+    "tessera.layer_norm": "layernorm",
+}
 
 X86_UNARY_KINDS = {
     "tessera.sqrt": "sqrt", "tessera.rsqrt": "rsqrt",
@@ -151,12 +166,15 @@ def supports_native_package(module: GraphIRModule) -> bool:
     packaging error.  Those cases remain on their retained x86 route.
     """
 
+    from .x86_breadth import supports_promoted_graph_breadth
+
     return any((
         supports_softmax(module),
         supports_reduction(module),
         supports_promoted_matmul(module),
         supports_attention(module),
         supports_promoted_elementwise(module),
+        supports_promoted_graph_breadth(module),
     ))
 
 
@@ -295,6 +313,51 @@ def emit_elementwise_tile_ir(*, entry: str, family: str, kind: str) -> str:
 '''
 
 
+def emit_cohort2_tile_ir(*, entry: str, family: str, kind: str = "", eps: float = 0.0) -> str:
+    if family in {"argreduce", "scan"}:
+        op = "argreduce_kernel" if family == "argreduce" else "scan_kernel"
+        attrs = (
+            f'kind = "{kind}", storage = "f32", output_storage = "i32", tie_break = "first"'
+            if family == "argreduce"
+            else f'kind = "{kind}", storage = "f32", inclusive = true'
+        )
+        return f'''module {{
+  llvm.func @{entry}(%x: !llvm.ptr, %o: !llvm.ptr, %rows: i64, %cols: i64) {{
+    tile.{op} %x, %o, %rows, %cols {{ {attrs} }} : !llvm.ptr, !llvm.ptr, i64, i64
+    llvm.return
+  }}
+}}
+'''
+    if family == "norm":
+        return f'''module {{
+  llvm.func @{entry}(%x: !llvm.ptr, %o: !llvm.ptr, %rows: i64, %cols: i64) {{
+    %eps = arith.constant {float(eps):.9e} : f32
+    tile.norm_kernel %x, %o, %rows, %cols, %eps {{
+      kind = "{kind}", storage = "f32", accum = "f32", axis = -1 : i64, affine = false
+    }} : !llvm.ptr, !llvm.ptr, i64, i64, f32
+    llvm.return
+  }}
+}}
+'''
+    if family == "rope":
+        return f'''module {{
+  llvm.func @{entry}(%x: !llvm.ptr, %theta: !llvm.ptr, %o: !llvm.ptr, %rows: i64, %cols: i64) {{
+    tile.rope_kernel %x, %theta, %o, %rows, %cols {{ storage = "f32", layout = "interleaved_pairs" }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64
+    llvm.return
+  }}
+}}
+'''
+    if family == "alibi":
+        return f'''module {{
+  llvm.func @{entry}(%slopes: !llvm.ptr, %o: !llvm.ptr, %h: i64, %s: i64) {{
+    tile.alibi_kernel %slopes, %o, %h, %s {{ storage = "f32", formula = "slope_times_j_minus_i" }} : !llvm.ptr, !llvm.ptr, i64, i64
+    llvm.return
+  }}
+}}
+'''
+    raise ValueError(f"unsupported X86-E2E-2 cohort-2 family {family!r}")
+
+
 def requests_softmax(module: GraphIRModule) -> bool:
     return (
         len(module.functions) == 1 and len(module.functions[0].body) == 1
@@ -333,6 +396,15 @@ def requests_elementwise(module: GraphIRModule) -> bool:
         X86_COMPARE_KINDS, X86_LOGICAL_KINDS, X86_BITWISE_KINDS,
         X86_WHERE_KINDS, X86_TRANSCENDENTAL_KINDS, X86_BINARY_MATH_KINDS,
     ))
+
+
+def requests_cohort2(module: GraphIRModule) -> bool:
+    if len(module.functions) != 1 or len(module.functions[0].body) != 1:
+        return False
+    return module.functions[0].body[0].op_name in {
+        *X86_ARGREDUCE_KINDS, *X86_SCAN_KINDS, *X86_NORM_KINDS,
+        "tessera.rope", "tessera.alibi",
+    }
 
 
 def _shape(module: GraphIRModule, name: str) -> tuple[int, ...] | None:
@@ -565,6 +637,97 @@ def _elementwise_contract(
     return family, kind, names, op.result or "output", shape, input_dtypes, expected_dtype
 
 
+def _cohort2_contract(module: GraphIRModule) -> dict[str, object] | None:
+    if not requests_cohort2(module):
+        return None
+    function, op = module.functions[0], module.functions[0].body[0]
+    args = {arg.name: arg for arg in function.args}
+    names = tuple(value.removeprefix("%") for value in op.operands)
+    if len(function.result_types) != 1:
+        return None
+    result = function.result_types[0]
+    try:
+        output_shape = tuple(int(value) for value in result.shape)
+    except (TypeError, ValueError):
+        return None
+    output_name = op.result or "output"
+    if op.op_name in X86_ARGREDUCE_KINDS or op.op_name in X86_SCAN_KINDS:
+        if len(names) != 1 or names[0] not in args:
+            return None
+        shape = _shape(module, names[0])
+        if shape is None or args[names[0]].ir_type.dtype != "fp32":
+            return None
+        raw_axis = op.kwargs.get("axis", -1)
+        if raw_axis is None:
+            axis = 0
+            shape = (math.prod(shape),)
+        elif isinstance(raw_axis, int) and not isinstance(raw_axis, bool):
+            axis = raw_axis + len(shape) if raw_axis < 0 else raw_axis
+        else:
+            return None
+        if axis != len(shape) - 1:
+            return None
+        rows, cols = (math.prod(shape[:-1]) if len(shape) > 1 else 1), shape[-1]
+        if op.op_name in X86_SCAN_KINDS:
+            if result.dtype != "fp32" or output_shape != shape:
+                return None
+            return {"family": "scan", "kind": X86_SCAN_KINDS[op.op_name],
+                    "inputs": names, "output": output_name, "shape": shape,
+                    "output_shape": output_shape, "rows": rows, "cols": cols}
+        keepdims = bool(op.kwargs.get("keepdims", False))
+        expected = shape[:-1] + ((1,) if keepdims else ())
+        if result.dtype != "int32" or output_shape != expected:
+            return None
+        return {"family": "argreduce", "kind": X86_ARGREDUCE_KINDS[op.op_name],
+                "inputs": names, "output": output_name, "shape": shape,
+                "output_shape": output_shape, "rows": rows, "cols": cols,
+                "keepdims": keepdims}
+    if op.op_name in X86_NORM_KINDS:
+        if len(names) != 1 or names[0] not in args:
+            return None
+        shape = _shape(module, names[0])
+        if (shape is None or args[names[0]].ir_type.dtype != "fp32" or
+                result.dtype != "fp32" or output_shape != shape):
+            return None
+        eps_default = 1e-6 if op.op_name == "tessera.rmsnorm_safe" else 1e-5
+        eps = float(op.kwargs.get("eps", eps_default))
+        if not math.isfinite(eps) or eps <= 0.0:
+            return None
+        return {"family": "norm", "kind": X86_NORM_KINDS[op.op_name],
+                "inputs": names, "output": output_name, "shape": shape,
+                "output_shape": output_shape,
+                "rows": math.prod(shape[:-1]) if len(shape) > 1 else 1,
+                "cols": shape[-1], "eps": eps}
+    if op.op_name == "tessera.rope":
+        if len(names) != 2 or any(name not in args for name in names):
+            return None
+        shape, theta_shape = _shape(module, names[0]), _shape(module, names[1])
+        if (shape is None or theta_shape != shape or shape[-1] % 2 or
+                any(args[name].ir_type.dtype != "fp32" for name in names) or
+                result.dtype != "fp32" or output_shape != shape):
+            return None
+        return {"family": "rope", "kind": "rope", "inputs": names,
+                "output": output_name, "shape": shape, "output_shape": output_shape,
+                "rows": math.prod(shape[:-1]) if len(shape) > 1 else 1,
+                "cols": shape[-1]}
+    if len(names) != 1 or names[0] not in args:
+        return None
+    slopes_shape = _shape(module, names[0])
+    h, s = op.kwargs.get("num_heads"), op.kwargs.get("seq_len")
+    if (not isinstance(h, int) or isinstance(h, bool) or not isinstance(s, int) or
+            isinstance(s, bool) or h <= 0 or s <= 0 or slopes_shape != (h,) or
+            args[names[0]].ir_type.dtype != "fp32" or result.dtype != "fp32" or
+            output_shape != (h, s, s)):
+        return None
+    return {"family": "alibi", "kind": "alibi", "inputs": names,
+            "output": output_name, "shape": slopes_shape, "output_shape": output_shape,
+            "rows": h, "cols": s}
+
+
+def supports_cohort2(module: GraphIRModule) -> bool:
+    return _cohort2_contract(module) is not None
+
+
 def supports_softmax(module: GraphIRModule) -> bool:
     return _softmax_contract(module) is not None
 
@@ -630,6 +793,81 @@ def _image(
         binary_format="shared_object", payload=payload,
         entry_points=(NativeEntryPoint(symbol, abi),), compile_state="prepackaged",
     )
+
+
+def package_cohort2(module: GraphIRModule, *, pipeline_name: str) -> X86NativePackage:
+    contract = _cohort2_contract(module)
+    if contract is None:
+        raise ValueError("x86 native cohort 2 requires one supported static f32 operation")
+    family, kind = str(contract["family"]), str(contract["kind"])
+    variants = {
+        "argreduce": ("tessera_x86_avx512_argreduce_f32", X86_ARGREDUCE_F32_ABI),
+        "scan": ("tessera_x86_avx512_scan_f32", X86_SCAN_F32_ABI),
+        "norm": (
+            "tessera_x86_avx512_rmsnorm_f32" if kind == "rmsnorm"
+            else "tessera_x86_avx512_layernorm_f32",
+            X86_NORM_F32_ABI,
+        ),
+        "rope": ("tessera_x86_avx512_rope_f32", X86_ROPE_F32_ABI),
+        "alibi": ("tessera_x86_avx512_alibi_f32", X86_ALIBI_F32_ABI),
+    }
+    symbol, abi = variants[family]
+    tile_ir = emit_cohort2_tile_ir(
+        entry=f"tessera_tile_x86_{family}_{kind}", family=family, kind=kind,
+        eps=float(cast(Any, contract.get("eps", 0.0))),
+    )
+    target_ir, payload, compiler, toolchain = _lower(tile_ir, symbol)
+    image = _image(
+        target_ir=target_ir, payload=payload, compiler=compiler,
+        toolchain=toolchain, pipeline_name=pipeline_name, symbol=symbol, abi=abi,
+    )
+    input_names = cast(tuple[str, ...], contract["inputs"])
+    output_name = str(contract["output"])
+    shape = cast(tuple[int, ...], contract["shape"])
+    output_shape = cast(tuple[int, ...], contract["output_shape"])
+    output_dtype = "int32" if family == "argreduce" else "fp32"
+    bindings = [
+        BufferBinding(index, name, "input", "fp32", len(shape), "row_major", 4)
+        for index, name in enumerate(input_names)
+    ]
+    bindings.append(BufferBinding(
+        len(bindings), output_name, "output", output_dtype, len(output_shape),
+        "row_major", 4,
+    ))
+    scalar_names = ("H", "S") if family == "alibi" else ("Rows", "Cols")
+    scalars = [
+        ScalarArgument(len(bindings) + index, name, "int64")
+        for index, name in enumerate(scalar_names)
+    ]
+    if family == "norm":
+        scalars.append(ScalarArgument(len(bindings) + 2, "Epsilon", "float32"))
+    shapes = {name: shape for name in input_names}
+    if family == "alibi":
+        shapes[input_names[0]] = (int(cast(Any, contract["rows"])),)
+    shapes[output_name] = output_shape
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi,
+        buffers=tuple(bindings), scalars=tuple(scalars),
+        shape_guards=tuple(
+            ShapeGuard(name, axis, "eq", extent)
+            for name, value_shape in shapes.items()
+            for axis, extent in enumerate(value_shape)
+        ),
+        geometry=LaunchGeometry(policy=f"x86_avx512_{family}"),
+        ordering=OrderingSemantics(
+            ordered_submission=True, residency="all", synchronization=("return",),
+        ),
+        provenance={
+            "work_item": "X86-E2E-2", "route": "avx512_c_abi",
+            "family": family, "kind": kind, "shape": list(shape),
+            "output_shape": list(output_shape), "rows": int(cast(Any, contract["rows"])),
+            "cols": int(cast(Any, contract["cols"])), "storage": "f32",
+            **({"eps": float(cast(Any, contract["eps"]))} if family == "norm" else {}),
+            **({"tie_break": "first"} if family == "argreduce" else {}),
+            **({"inclusive": True} if family == "scan" else {}),
+        },
+    )
+    return X86NativePackage(tile_ir, target_ir, target_ir, image, descriptor)
 
 
 def package_softmax(module: GraphIRModule, *, pipeline_name: str) -> X86NativePackage:
@@ -905,19 +1143,22 @@ def package_elementwise(module: GraphIRModule, *, pipeline_name: str) -> X86Nati
 
 
 __all__ = [
-    "X86NativePackage", "X86_ATTENTION_EXT_F32_ABI", "X86_ATTENTION_F32_ABI",
+    "X86NativePackage", "X86_ALIBI_F32_ABI", "X86_ARGREDUCE_F32_ABI",
+    "X86_ATTENTION_EXT_F32_ABI", "X86_ATTENTION_F32_ABI",
     "X86_BINARY_F32_ABI", "X86_BINARY_MATH_F32_ABI", "X86_BITWISE_I32_ABI", "X86_COMPARE_F32_ABI",
     "X86_LOGICAL_I8_ABI", "X86_MATMUL_BF16_F32_ABI", "X86_MATMUL_F32_ABI",
     "X86_MATMUL_F64_ABI", "X86_MATMUL_U8S8_S32_ABI", "X86_PREDICATE_F32_ABI",
-    "X86_REDUCE_F32_ABI", "X86_SOFTMAX_F32_ABI", "X86_TRANSCENDENTAL_F32_ABI",
+    "X86_NORM_F32_ABI", "X86_REDUCE_F32_ABI", "X86_ROPE_F32_ABI",
+    "X86_SCAN_F32_ABI", "X86_SOFTMAX_F32_ABI", "X86_TRANSCENDENTAL_F32_ABI",
     "X86_UNARY_F32_ABI", "X86_WHERE_F32_ABI",
     "X86_BINARY_MATH_KINDS", "X86_BITWISE_KINDS", "X86_COMPARE_KINDS",
     "X86_LOGICAL_KINDS", "X86_TRANSCENDENTAL_KINDS", "X86_WHERE_KINDS",
-    "emit_attention_tile_ir", "emit_elementwise_tile_ir", "emit_matmul_tile_ir", "emit_reduce_tile_ir",
+    "emit_attention_tile_ir", "emit_cohort2_tile_ir", "emit_elementwise_tile_ir", "emit_matmul_tile_ir", "emit_reduce_tile_ir",
     "emit_softmax_tile_ir", "package_attention", "package_matmul",
-    "package_elementwise", "package_reduction", "package_softmax", "requests_attention",
+    "package_cohort2", "package_elementwise", "package_reduction", "package_softmax", "requests_attention",
+    "requests_cohort2",
     "requests_matmul", "requests_reduction", "requests_softmax",
-    "supports_attention", "supports_elementwise", "supports_promoted_elementwise",
+    "supports_attention", "supports_cohort2", "supports_elementwise", "supports_promoted_elementwise",
     "supports_matmul", "supports_promoted_matmul", "supports_reduction",
     "supports_softmax", "tools_available",
 ]

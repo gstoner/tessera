@@ -153,6 +153,48 @@ module {
     } : !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64
     llvm.return
   }
+
+  llvm.func @argreduce(%x: !llvm.ptr, %o: !llvm.ptr, %rows: i64, %cols: i64) {
+    tile.argreduce_kernel %x, %o, %rows, %cols {kind = "argmax", storage = "f32", output_storage = "i32", tie_break = "first"} : !llvm.ptr, !llvm.ptr, i64, i64
+    llvm.return
+  }
+  llvm.func @scan(%x: !llvm.ptr, %o: !llvm.ptr, %rows: i64, %cols: i64) {
+    tile.scan_kernel %x, %o, %rows, %cols {kind = "sum", storage = "f32", inclusive = true} : !llvm.ptr, !llvm.ptr, i64, i64
+    llvm.return
+  }
+  llvm.func @norm(%x: !llvm.ptr, %o: !llvm.ptr, %rows: i64, %cols: i64, %eps: f32) {
+    tile.norm_kernel %x, %o, %rows, %cols, %eps {kind = "rmsnorm", storage = "f32", accum = "f32", axis = -1 : i64, affine = false} : !llvm.ptr, !llvm.ptr, i64, i64, f32
+    llvm.return
+  }
+  llvm.func @rope(%x: !llvm.ptr, %theta: !llvm.ptr, %o: !llvm.ptr, %rows: i64, %cols: i64) {
+    tile.rope_kernel %x, %theta, %o, %rows, %cols {storage = "f32", layout = "interleaved_pairs"} : !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64
+    llvm.return
+  }
+  llvm.func @alibi(%slopes: !llvm.ptr, %o: !llvm.ptr, %h: i64, %s: i64) {
+    tile.alibi_kernel %slopes, %o, %h, %s {storage = "f32", formula = "slope_times_j_minus_i"} : !llvm.ptr, !llvm.ptr, i64, i64
+    llvm.return
+  }
+
+  llvm.func @breadth_spmm(%indptr: !llvm.ptr, %indices: !llvm.ptr,
+                          %values: !llvm.ptr, %rhs: !llvm.ptr,
+                          %m: i64, %n: i64, %out: !llvm.ptr) {
+    tile.x86_abi_kernel %indptr, %indices, %values, %rhs, %m, %n, %out {
+      symbol = "tessera_x86_avx512_spmm_csr_f32",
+      abi = "tessera.x86.spmm.csr.f32.v1", family = "sparse",
+      effects = "writeonly", returns_status = false
+    } : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, !llvm.ptr
+    llvm.return
+  }
+
+  llvm.func @breadth_kv_append(%cache: !llvm.ptr, %max: i64, %width: i64,
+                               %start: i64, %rows: !llvm.ptr, %count: i64) {
+    tile.x86_abi_kernel %cache, %max, %width, %start, %rows, %count {
+      symbol = "tessera_x86_kv_cache_append_f32",
+      abi = "tessera.x86.kv.cache.append.f32.v1", family = "kv_cache",
+      effects = "stateful", returns_status = true
+    } : !llvm.ptr, i64, i64, i64, !llvm.ptr, i64
+    llvm.return
+  }
 }
 
 // CHECK-DAG: func.func private @tessera_x86_avx512_softmax_f32(!llvm.ptr, i64, i64, !llvm.ptr)
@@ -172,6 +214,13 @@ module {
 // CHECK-DAG: func.func private @tessera_x86_avx512_gemm_bf16(!llvm.ptr, !llvm.ptr, !llvm.ptr, i32, i32, i32, f32)
 // CHECK-DAG: func.func private @tessera_x86_avx512_vnni_gemm_u8s8_s32(!llvm.ptr, !llvm.ptr, !llvm.ptr, i32, i32, i32, i32)
 // CHECK-DAG: func.func private @tessera_x86_avx512_gemm_f64(!llvm.ptr, !llvm.ptr, i64, i64, i64, !llvm.ptr)
+// CHECK-DAG: func.func private @tessera_x86_avx512_argreduce_f32(!llvm.ptr, i64, i64, !llvm.ptr, i32)
+// CHECK-DAG: func.func private @tessera_x86_avx512_scan_f32(!llvm.ptr, i64, i64, !llvm.ptr, i32)
+// CHECK-DAG: func.func private @tessera_x86_avx512_rmsnorm_f32(!llvm.ptr, i64, i64, f32, !llvm.ptr)
+// CHECK-DAG: func.func private @tessera_x86_avx512_rope_f32(!llvm.ptr, !llvm.ptr, i64, i64, !llvm.ptr)
+// CHECK-DAG: func.func private @tessera_x86_avx512_alibi_f32(!llvm.ptr, i64, i64, !llvm.ptr)
+// CHECK-DAG: func.func private @tessera_x86_avx512_spmm_csr_f32(!llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, !llvm.ptr)
+// CHECK-DAG: func.func private @tessera_x86_kv_cache_append_f32(!llvm.ptr, i64, i64, i64, !llvm.ptr, i64) -> i32
 // CHECK-LABEL: llvm.func @softmax
 // CHECK: call @tessera_x86_avx512_softmax_f32
 // CHECK-NOT: tile.softmax_kernel
@@ -237,3 +286,19 @@ module {
 // CHECK-LABEL: llvm.func @matmul_f64
 // CHECK: call @tessera_x86_avx512_gemm_f64
 // CHECK-NOT: tile.matmul_kernel
+// CHECK-LABEL: llvm.func @argreduce
+// CHECK: call @tessera_x86_avx512_argreduce_f32
+// CHECK-LABEL: llvm.func @scan
+// CHECK: call @tessera_x86_avx512_scan_f32
+// CHECK-LABEL: llvm.func @norm
+// CHECK: call @tessera_x86_avx512_rmsnorm_f32
+// CHECK-LABEL: llvm.func @rope
+// CHECK: call @tessera_x86_avx512_rope_f32
+// CHECK-LABEL: llvm.func @alibi
+// CHECK: call @tessera_x86_avx512_alibi_f32
+// CHECK-LABEL: llvm.func @breadth_spmm
+// CHECK: call @tessera_x86_avx512_spmm_csr_f32
+// CHECK-NOT: tile.x86_abi_kernel
+// CHECK-LABEL: llvm.func @breadth_kv_append
+// CHECK: call @tessera_x86_kv_cache_append_f32
+// CHECK-NOT: tile.x86_abi_kernel

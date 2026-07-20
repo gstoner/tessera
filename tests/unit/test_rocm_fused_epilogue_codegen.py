@@ -6,8 +6,10 @@ tessera-opt and check the *structure* — so CI without a GPU still gates the
 epilogue codegen. We assert that:
 
   * ``bias = true`` appends a trailing memref operand to the kernel signature,
-  * each activation emits its arithmetic (relu→maximumf, silu→exp, gelu→tanh),
-  * those transcendentals lower to the ROCm math library (``__ocml_*``), and
+  * each activation emits its portable arithmetic (relu directly; silu/gelu
+    through the shared bounded-tanh polynomial),
+  * the polynomial lowers completely to LLVM arithmetic without unresolved
+    device-math libcalls, and
   * the epilogue on an integer dtype is a named error, never a silent no-op.
 """
 
@@ -66,29 +68,30 @@ def test_bias_appends_trailing_memref_operand():
     assert "memref.load" in body and "arith.addf" in body
 
 
-@pytest.mark.parametrize("activation,op", [
-    ("relu", "arith.maximumf"),
-    ("silu", "math.exp"),
-    ("gelu", "math.tanh"),
-])
-def test_activation_emits_its_arithmetic(activation, op):
+def test_relu_activation_emits_maximum() -> None:
+    assert "arith.maximumf" in _gen(_directive(activation="relu"))
+
+
+@pytest.mark.parametrize("activation", ["silu", "gelu"])
+def test_transcendental_activation_emits_bounded_portable_arithmetic(activation):
     ir = _gen(_directive(activation=activation))
-    assert op in ir, f"{activation} should emit {op}"
+    for op in ("arith.maximumf", "arith.minimumf", "arith.divf"):
+        assert op in ir, f"{activation} should emit {op}"
+    assert "math.exp" not in ir and "math.tanh" not in ir
 
 
-@pytest.mark.parametrize("activation,sym", [
-    ("silu", "llvm.intr.exp"),   # exp → LLVM intrinsic (AMDGPU-native)
-    ("gelu", "__ocml_tanh"),     # tanh → ROCm device math library
-])
-def test_activation_lowers_to_native_transcendental(activation, sym):
-    """The activation transcendentals lower through the same math → ROCDL path
-    the flash_attn softmax uses (LLVM intrinsic / ROCm device math library)."""
+@pytest.mark.parametrize("activation", ["silu", "gelu"])
+def test_activation_lowers_to_native_portable_arithmetic(activation):
+    """The shared bounded approximation reaches native LLVM arithmetic."""
     r = _opt(_directive(activation=activation),
              "--pass-pipeline=builtin.module(generate-wmma-gemm-kernel,"
              "lower-tessera-target-to-rocdl,gpu.module(convert-scf-to-cf,"
              "convert-gpu-to-rocdl,reconcile-unrealized-casts))")
     assert r.returncode == 0, r.stderr
-    assert sym in r.stdout, f"{activation} did not lower to {sym}"
+    for op in ("llvm.fadd", "llvm.fmul", "llvm.fdiv"):
+        assert op in r.stdout, f"{activation} did not lower to {op}"
+    assert "math." not in r.stdout
+    assert "__ocml_" not in r.stdout
 
 
 @pytest.mark.parametrize("dtype", ["int8", "int4"])

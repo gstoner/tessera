@@ -1099,8 +1099,8 @@ zero-dropout descriptor restrictions change no Apple capability or verifier.
 Cross-backend sync `E2E-SPINE-2026-07-18` records the 2026-07-20 scoped x86
 selector retirement: eligible static X86-E2E-1 modules now use their canonical
 descriptor by default. Apple parity is not applicable; no Apple pipeline, ABI,
-schedule, capability, or selector changes. X86-E2E-2 owns the remaining
-AVX-512 inventory and must reassess Apple only when a shared contract changes.
+schedule, capability, or selector changes. X86-E2E-2 subsequently closed the
+remaining inventory and reassessed Apple at each shared-contract boundary.
 
 Cross-backend sync `X86-E2E2-ELEMENTWISE-2026-07-20` adds the internal shared
 `tile.elementwise_kernel` semantic carrier for f32 unary/binary and f32-to-bool
@@ -1163,3 +1163,23 @@ with the migrated exact-device totals and append a failure table by execution
 family and device generation. Set `plan_state: landing` once implementation or
 test migration begins. Move this plan to the Apple archive only after every
 completion gate is met.
+
+Cross-backend sync `X86-E2E2-COHORT2-2026-07-20` adds shared typed Tile
+carriers for argreduce, inclusive scan, unweighted row normalization,
+interleaved-pair RoPE, and ALiBi. Apple parity is assessed at the semantic
+carrier boundary only. AVX-512 ABIs, CPU schedules, Ryzen timing, and route
+disposition transfer no Metal/MPS implementation, device evidence, or selector.
+
+Cross-backend sync `X86-E2E2-BREADTH-2026-07-20` adds an explicitly x86-owned
+`tile.x86_abi_kernel` and cohort-3/4 C-ABI registry. It changes no portable
+semantic Tile carrier, Apple ABI, Metal/MPS schedule, dtype capability,
+execution row, or selector. Apple parity is therefore not applicable; public
+composite semantics continue to be assessed by Apple-owned typed routes.
+X86-E2E-2 is now closed with measured x86-only selector thresholds; this does
+not change the Apple not-applicable disposition or transfer device proof.
+
+Cross-backend sync `LLVM23-LOCAL-CLEANUP-2026-07-20` repairs the host build and
+sanitizer lanes after the LLVM/MLIR 23 migration. The shared capability audit
+also corrects the existing Apple GPU matmul row to admit the already-shipped
+f32/f16/bf16 MPS and Tile-simdgroup value ABIs. This is parity repair for an
+existing Apple contract, not a new Metal schedule or exact-device claim.

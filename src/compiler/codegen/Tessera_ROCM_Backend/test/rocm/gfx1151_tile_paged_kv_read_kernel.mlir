@@ -1,5 +1,5 @@
-// RUN: tessera-rocm-opt %s --pass-pipeline='builtin.module(lower-tile-to-rocm{arch=gfx1151})' | FileCheck %s --check-prefix=TARGET
-// RUN: tessera-rocm-opt %s --pass-pipeline='builtin.module(lower-tile-to-rocm{arch=gfx1151},generate-rocm-paged-kv-read-kernel)' | FileCheck %s --check-prefix=KERNEL
+// RUN: %trop %s --pass-pipeline='builtin.module(lower-tile-to-rocm{arch=gfx1151})' | FileCheck %s --check-prefix=TARGET
+// RUN: %trop %s --pass-pipeline='builtin.module(lower-tile-to-rocm{arch=gfx1151},generate-rocm-paged-kv-read-kernel)' | FileCheck %s --check-prefix=KERNEL
 
 module {
   llvm.func @tessera_tile_paged_kv_read_f32_direct(

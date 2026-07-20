@@ -1116,7 +1116,15 @@ def test_gpu_non_fp32_matmul_value_mode_selects_tile_simdgroup_executor():
         assert not any(c.get("op") == "tessera_apple.cpu.call"
                        and c.get("status") == "executable" for c in calls), (dt, mlir)
         assert art.metadata.get("compiler_path") == "apple_value_target_ir"
-        assert art.metadata.get("executable") is True
+        # The produced value bundle is executable on Apple silicon. A
+        # non-Apple authoring host must keep the final artifact hardware-gated
+        # instead of overclaiming that Metal can launch locally.
+        assert art.metadata.get("bundle_executable") is True
+        if sys.platform == "darwin":
+            assert art.metadata.get("executable") is True
+        else:
+            assert art.metadata.get("executable") is False
+            assert art.metadata.get("canonical_first_failing_gate") == "hardware_smoke"
         assert calls and calls[0]["op"] == "tessera_apple.gpu.kernel_call"
         assert calls[0]["symbol"] == symbol
 

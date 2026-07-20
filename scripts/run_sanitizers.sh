@@ -77,12 +77,14 @@ run_one() {
   echo "=========================================================="
 
   # Honor an existing LLVM_DIR/MLIR_DIR if the caller set one; otherwise use
-  # the canonical, versioned Homebrew LLVM 23 keg. CMake rejects every other
-  # major, including mixed LLVM/MLIR installations.
+  # the canonical LLVM 23 installation. CMake rejects every other major,
+  # including mixed LLVM/MLIR installations.
   local llvm_flags=()
   local llvm_prefix=""
   if [[ -d "/opt/homebrew/opt/llvm@23/lib/cmake/llvm" ]]; then
     llvm_prefix="/opt/homebrew/opt/llvm@23"
+  elif [[ -d "/usr/lib/llvm-23/lib/cmake/llvm" ]]; then
+    llvm_prefix="/usr/lib/llvm-23"
   fi
   if [[ -n "${LLVM_DIR:-}" ]]; then
     llvm_flags+=(-DLLVM_DIR="$LLVM_DIR")
@@ -95,11 +97,36 @@ run_one() {
     llvm_flags+=(-DMLIR_DIR="$llvm_prefix/lib/cmake/mlir")
   fi
 
-  cmake -B "$build_dir" \
+  # GCC's TSAN runtime can abort before main under WSL with
+  # "unexpected memory mapping". Use the LLVM 23 Clang runtime and non-PIE
+  # smoke executables on Linux. --fresh is required when migrating an existing
+  # build-tsan tree that was previously configured with GCC.
+  local cmake_fresh=()
+  local compiler_flags=()
+  if [[ "$label" == "tsan" && "$(uname -s)" == "Linux" ]]; then
+    if [[ -z "$llvm_prefix" && -n "${LLVM_DIR:-}" ]]; then
+      llvm_prefix="${LLVM_DIR%/lib/cmake/llvm}"
+    fi
+    if [[ ! -x "$llvm_prefix/bin/clang" || ! -x "$llvm_prefix/bin/clang++" ]]; then
+      echo "error: Linux TSAN requires the LLVM 23 Clang runtime" >&2
+      return 2
+    fi
+    cmake_fresh=(--fresh)
+    compiler_flags=(
+      -DCMAKE_C_COMPILER="$llvm_prefix/bin/clang"
+      -DCMAKE_CXX_COMPILER="$llvm_prefix/bin/clang++"
+      -DCMAKE_C_FLAGS=-fno-pie
+      -DCMAKE_CXX_FLAGS=-fno-pie
+      -DCMAKE_EXE_LINKER_FLAGS=-no-pie
+    )
+  fi
+
+  cmake "${cmake_fresh[@]}" -B "$build_dir" \
     -DCMAKE_BUILD_TYPE=Debug \
     -DTESSERA_ENABLE_SANITIZERS="$cmake_val" \
     -DTESSERA_BUILD_APPLE_BACKEND=OFF \
     -DTESSERA_BUILD_EXAMPLES=OFF \
+    "${compiler_flags[@]}" \
     "${llvm_flags[@]}" \
     >/dev/null
   # Build every smoke target.

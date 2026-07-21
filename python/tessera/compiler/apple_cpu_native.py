@@ -21,6 +21,8 @@ from .native_artifact import (
 
 
 APPLE_CPU_DESCRIPTOR_STATES: dict[str, str] = {
+    "tessera.matmul": "descriptor_ready",
+    "tessera.gemm": "descriptor_ready",
     "tessera.batched_gemm": "descriptor_ready",
     "tessera.cholesky": "descriptor_ready",
     "tessera.tri_solve": "descriptor_ready",
@@ -31,6 +33,8 @@ APPLE_CPU_DESCRIPTOR_STATES: dict[str, str] = {
 }
 
 _VALUE_SYMBOLS = {
+    "tessera.matmul": ("matmul", "tessera_apple_cpu_gemm_f32"),
+    "tessera.gemm": ("gemm", "tessera_apple_cpu_gemm_f32"),
     "tessera.batched_gemm": ("batched_gemm", "tessera_apple_cpu_gemm_f32_batched"),
     "tessera.cholesky": ("cholesky", "tessera_apple_cpu_cholesky_f32"),
     "tessera.tri_solve": ("tri_solve", "tessera_apple_cpu_tri_solve_f32"),

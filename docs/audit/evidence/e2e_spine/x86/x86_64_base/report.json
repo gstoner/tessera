@@ -1,0 +1,157 @@
+{
+  "architecture": "x86_64_base",
+  "benchmarks": [
+    {
+      "discard_first": true,
+      "family": "softmax",
+      "median_ns": 68057.89,
+      "repetitions": 1500,
+      "resource_fingerprint": "4d80673c2cbe233652a75535936e59651a8d02054d98838f8e1cabdcd2b4cb3d",
+      "route": "x86_64_base_c_abi",
+      "run_medians_ns": [
+        67778.42,
+        68337.36
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "kernel_wall",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "softmax",
+      "median_ns": 96757.85500000001,
+      "repetitions": 1500,
+      "resource_fingerprint": "4d80673c2cbe233652a75535936e59651a8d02054d98838f8e1cabdcd2b4cb3d",
+      "route": "x86_64_base_c_abi",
+      "run_medians_ns": [
+        96622.55,
+        96893.16
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "end_to_end",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "reduction",
+      "median_ns": 31669.015,
+      "repetitions": 1500,
+      "resource_fingerprint": "fc8f71b3f0a56210678b7f04c3fdae97a7345828306eeadb85eefabe76a5ea94",
+      "route": "x86_64_base_c_abi",
+      "run_medians_ns": [
+        31705.89,
+        31632.14
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "kernel_wall",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "reduction",
+      "median_ns": 59079.62,
+      "repetitions": 1500,
+      "resource_fingerprint": "fc8f71b3f0a56210678b7f04c3fdae97a7345828306eeadb85eefabe76a5ea94",
+      "route": "x86_64_base_c_abi",
+      "run_medians_ns": [
+        58800.37,
+        59358.87
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "end_to_end",
+      "warmups": 1
+    }
+  ],
+  "cache_proofs": [
+    {
+      "cold": {
+        "cache_key": "50ec05d8820fe83237c4d9ebf31eb7cefc5f18192556d73ea54257107d36acee",
+        "compile_state": "prepackaged",
+        "descriptor_digest": "69e54e922f42528cc1a91f8e401e81f4919aa7b70228bb6ca481959c071e1f25",
+        "image_digest": "9ecbc0e118d0452dc447bf61cac85888e22fc9de492ba9d8850839141ce4756f"
+      },
+      "fixture_id": "softmax-f32-2x2-extreme-v1",
+      "warm": {
+        "cache_key": "50ec05d8820fe83237c4d9ebf31eb7cefc5f18192556d73ea54257107d36acee",
+        "compile_state": "prepackaged",
+        "descriptor_digest": "69e54e922f42528cc1a91f8e401e81f4919aa7b70228bb6ca481959c071e1f25",
+        "image_digest": "9ecbc0e118d0452dc447bf61cac85888e22fc9de492ba9d8850839141ce4756f"
+      }
+    },
+    {
+      "cold": {
+        "cache_key": "e14d45c5934a88bd2f25a37a3d74a22c40a5b5993ae466ac30e6827e8f7aed13",
+        "compile_state": "prepackaged",
+        "descriptor_digest": "a1bac57967e8dd97183f294d56d605aa0fd45e78376a3e11a6f0590c324442fe",
+        "image_digest": "f782cfd3fbd63287043329415802acef00fb7b81e42a88a31f9248c71068f968"
+      },
+      "fixture_id": "reduce-sum-f32-axis1-v1",
+      "warm": {
+        "cache_key": "e14d45c5934a88bd2f25a37a3d74a22c40a5b5993ae466ac30e6827e8f7aed13",
+        "compile_state": "prepackaged",
+        "descriptor_digest": "a1bac57967e8dd97183f294d56d605aa0fd45e78376a3e11a6f0590c324442fe",
+        "image_digest": "f782cfd3fbd63287043329415802acef00fb7b81e42a88a31f9248c71068f968"
+      }
+    }
+  ],
+  "device": {
+    "exact": true,
+    "identity": "coolrunnings | Intel(R) Core(TM) Ultra 7 265F"
+  },
+  "fixtures": [
+    {
+      "actual": [
+        [
+          0.5,
+          0.5
+        ],
+        [
+          0.5,
+          0.5
+        ]
+      ],
+      "descriptor_digest": "69e54e922f42528cc1a91f8e401e81f4919aa7b70228bb6ca481959c071e1f25",
+      "fixture_id": "softmax-f32-2x2-extreme-v1",
+      "image_digest": "9ecbc0e118d0452dc447bf61cac85888e22fc9de492ba9d8850839141ce4756f",
+      "levels": {
+        "a": "proven",
+        "b": "proven",
+        "c": "proven"
+      }
+    },
+    {
+      "actual": [
+        2.0,
+        3.5
+      ],
+      "descriptor_digest": "a1bac57967e8dd97183f294d56d605aa0fd45e78376a3e11a6f0590c324442fe",
+      "fixture_id": "reduce-sum-f32-axis1-v1",
+      "image_digest": "f782cfd3fbd63287043329415802acef00fb7b81e42a88a31f9248c71068f968",
+      "levels": {
+        "a": "proven",
+        "b": "proven",
+        "c": "proven"
+      }
+    }
+  ],
+  "required_timing_domains": [
+    "kernel_wall",
+    "end_to_end"
+  ],
+  "schema": "tessera.e2e-backend-report.v1",
+  "scope": [
+    "softmax",
+    "reduction"
+  ],
+  "source_commit": "9f3757ef2dda2dd61ff94f1aefe0244f1b80f064",
+  "target": "x86",
+  "toolchain_fingerprint": "8bb84561500a8bbf96d0932ada0303a7aebb4cd9eb9c85dfa0e52e1598dbda9e"
+}

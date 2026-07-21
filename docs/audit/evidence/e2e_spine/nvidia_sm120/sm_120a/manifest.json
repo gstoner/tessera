@@ -1,0 +1,27 @@
+{
+  "architecture": "sm_120a",
+  "files": {
+    "report.json": {
+      "bytes": 4846,
+      "sha256": "c5d991e6983280a30e4ba417dc2a53316154dbaf02e9e1fde0722dd64bdd5bd0"
+    },
+    "resources.json": {
+      "bytes": 1129,
+      "sha256": "dcbbea88c71df24a1c2d4db022650d2875a9772a11d08b7e0fa273688728d5f5"
+    }
+  },
+  "schema": "tessera.e2e-release-packet.v1",
+  "target": "nvidia_sm120",
+  "tested_commit": "9f3757ef2dda2dd61ff94f1aefe0244f1b80f064",
+  "validation": {
+    "architecture": "sm_120a",
+    "benchmark_rows": 4,
+    "cache_proofs": 2,
+    "families": 2,
+    "fixtures": 2,
+    "level_c_fixtures": 2,
+    "maximum_absolute_error": 0.0,
+    "source_commit": "9f3757ef2dda2dd61ff94f1aefe0244f1b80f064",
+    "target": "nvidia_sm120"
+  }
+}

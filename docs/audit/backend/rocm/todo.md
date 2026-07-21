@@ -1131,6 +1131,11 @@ assigned to the Strix Halo host together with the independent
 cannot satisfy either obligation. This shared evidence-key change adds no HIP
 ABI, wave/LDS schedule, capability, or selector behavior. Exact gfx1151
 recording remains a Strix-host follow-up.
+The post-merge NR2 WSL packets now hash-seal base-x86 and bounded SM120
+softmax/reduction evidence against source commit
+`9f3757ef2dda2dd61ff94f1aefe0244f1b80f064`. They transfer no gfx1151 proof;
+the ROCm softmax, reduction, paged-KV, and MoE dashboard rows remain
+`packet_pending` until the assigned Strix Halo run.
 
 Cross-backend sync `X86-E2E2-ELEMENTWISE-2026-07-20` adds the internal shared
 `tile.elementwise_kernel` semantic carrier for f32 unary/binary and f32-to-bool

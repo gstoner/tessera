@@ -1,0 +1,157 @@
+{
+  "architecture": "sm_120a",
+  "benchmarks": [
+    {
+      "discard_first": true,
+      "family": "softmax",
+      "median_ns": 10053.792037069798,
+      "repetitions": 15000,
+      "resource_fingerprint": "f1fef2134cca9a7de794bd9325ccbac9f4acfea84b0e1884963dc48448edc0f4",
+      "route": "thread_per_row_128",
+      "run_medians_ns": [
+        9991.200640797615,
+        10116.38343334198
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "device_event",
+      "warmups": 10
+    },
+    {
+      "discard_first": true,
+      "family": "softmax",
+      "median_ns": 478000.495,
+      "repetitions": 7500,
+      "resource_fingerprint": "f1fef2134cca9a7de794bd9325ccbac9f4acfea84b0e1884963dc48448edc0f4",
+      "route": "thread_per_row_128",
+      "run_medians_ns": [
+        477130.548,
+        478870.442
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "end_to_end",
+      "warmups": 10
+    },
+    {
+      "discard_first": true,
+      "family": "reduction",
+      "median_ns": 10243.535973131657,
+      "repetitions": 15000,
+      "resource_fingerprint": "f53db8d5e47dce18fb1d578d0b197621914b69ff40853d9b87084ff2872a2313",
+      "route": "serial",
+      "run_medians_ns": [
+        10211.263783276081,
+        10275.808162987232
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "device_event",
+      "warmups": 10
+    },
+    {
+      "discard_first": true,
+      "family": "reduction",
+      "median_ns": 461672.881,
+      "repetitions": 7500,
+      "resource_fingerprint": "f53db8d5e47dce18fb1d578d0b197621914b69ff40853d9b87084ff2872a2313",
+      "route": "serial",
+      "run_medians_ns": [
+        463891.686,
+        459454.076
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "end_to_end",
+      "warmups": 10
+    }
+  ],
+  "cache_proofs": [
+    {
+      "cold": {
+        "cache_key": "2dc2c0642b1c4b20f94d87c2feb1238855b10adf2c9aa99340e7e4984bc3436c",
+        "compile_state": "cold",
+        "descriptor_digest": "5d9ab4e524817224395c94f4ad7507e1a430830a8812572d6b728e330f45a34d",
+        "image_digest": "71fab499ccb8434353260333a1d05b81f16d738f49a874ded59489c61174857f"
+      },
+      "fixture_id": "softmax-f32-2x2-extreme-v1",
+      "warm": {
+        "cache_key": "2dc2c0642b1c4b20f94d87c2feb1238855b10adf2c9aa99340e7e4984bc3436c",
+        "compile_state": "warm_cache",
+        "descriptor_digest": "5d9ab4e524817224395c94f4ad7507e1a430830a8812572d6b728e330f45a34d",
+        "image_digest": "71fab499ccb8434353260333a1d05b81f16d738f49a874ded59489c61174857f"
+      }
+    },
+    {
+      "cold": {
+        "cache_key": "22c09e64a38094523d4435e0899bfc160460112274c3eff940e6af1888983486",
+        "compile_state": "cold",
+        "descriptor_digest": "727cce0a8929be19bb5cb6f41052fa7db9035c54e899f203bda23403b26a70a4",
+        "image_digest": "6ed2869404da1defc842600da7436cb2c9042e6cd8a7c90226e3f661c8cff4ce"
+      },
+      "fixture_id": "reduce-sum-f32-axis1-v1",
+      "warm": {
+        "cache_key": "22c09e64a38094523d4435e0899bfc160460112274c3eff940e6af1888983486",
+        "compile_state": "warm_cache",
+        "descriptor_digest": "727cce0a8929be19bb5cb6f41052fa7db9035c54e899f203bda23403b26a70a4",
+        "image_digest": "6ed2869404da1defc842600da7436cb2c9042e6cd8a7c90226e3f661c8cff4ce"
+      }
+    }
+  ],
+  "device": {
+    "exact": true,
+    "identity": "NVIDIA GeForce RTX 5070 Ti, GPU-5072cda5-509a-008c-93c8-dc06e105f307, 610.62, 12.0"
+  },
+  "fixtures": [
+    {
+      "actual": [
+        [
+          0.5,
+          0.5
+        ],
+        [
+          0.5,
+          0.5
+        ]
+      ],
+      "descriptor_digest": "5d9ab4e524817224395c94f4ad7507e1a430830a8812572d6b728e330f45a34d",
+      "fixture_id": "softmax-f32-2x2-extreme-v1",
+      "image_digest": "71fab499ccb8434353260333a1d05b81f16d738f49a874ded59489c61174857f",
+      "levels": {
+        "a": "proven",
+        "b": "proven",
+        "c": "proven"
+      }
+    },
+    {
+      "actual": [
+        2.0,
+        3.5
+      ],
+      "descriptor_digest": "727cce0a8929be19bb5cb6f41052fa7db9035c54e899f203bda23403b26a70a4",
+      "fixture_id": "reduce-sum-f32-axis1-v1",
+      "image_digest": "6ed2869404da1defc842600da7436cb2c9042e6cd8a7c90226e3f661c8cff4ce",
+      "levels": {
+        "a": "proven",
+        "b": "proven",
+        "c": "proven"
+      }
+    }
+  ],
+  "required_timing_domains": [
+    "device_event",
+    "end_to_end"
+  ],
+  "schema": "tessera.e2e-backend-report.v1",
+  "scope": [
+    "softmax",
+    "reduction"
+  ],
+  "source_commit": "9f3757ef2dda2dd61ff94f1aefe0244f1b80f064",
+  "target": "nvidia_sm120",
+  "toolchain_fingerprint": "5b435ce3fbd15b7ed17299048841fdc63adf0c499ebd1daf9d1787c659c3f9d9"
+}

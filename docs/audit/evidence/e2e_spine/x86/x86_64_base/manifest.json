@@ -1,0 +1,27 @@
+{
+  "architecture": "x86_64_base",
+  "files": {
+    "report.json": {
+      "bytes": 4771,
+      "sha256": "8aef13bd939fe9f75c2f04a2bcd1c42760939d44a5a9676b09b3e89fecd2f841"
+    },
+    "resources.json": {
+      "bytes": 2662,
+      "sha256": "b805949721cccd93a5398864769c0bac090b66a4d501ec7baa91c410fb329093"
+    }
+  },
+  "schema": "tessera.e2e-release-packet.v1",
+  "target": "x86",
+  "tested_commit": "9f3757ef2dda2dd61ff94f1aefe0244f1b80f064",
+  "validation": {
+    "architecture": "x86_64_base",
+    "benchmark_rows": 4,
+    "cache_proofs": 2,
+    "families": 2,
+    "fixtures": 2,
+    "level_c_fixtures": 2,
+    "maximum_absolute_error": 0.0,
+    "source_commit": "9f3757ef2dda2dd61ff94f1aefe0244f1b80f064",
+    "target": "x86"
+  }
+}

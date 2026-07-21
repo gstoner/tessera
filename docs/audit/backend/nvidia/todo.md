@@ -924,6 +924,14 @@ Deferred hardware terminals do not authorize selector changes and do not hide
 missing evidence. A future hardware follow-up must reopen its own exact-device
 item under synchronization key `E2E-SPINE-2026-07-18`.
 
+E2E-SPINE-3 is a shared-contract follow-up under the same synchronization key.
+It is applicable to NVIDIA only as a family-granular evidence envelope around
+the existing SM120 results: fixture identity, Level-C provenance, cold/warm
+cache identity, benchmark metadata, and hash-sealed release-packet validation.
+It changes no CUDA schedule, ABI, dtype capability, or selector. SM90, SM100,
+and exact multi-GPU rows remain explicit hardware-deferred terminals and may
+not inherit the SM120 packet.
+
 The LLVM-stage device-library follow-on makes CUDA `libdevice` an explicit
 compiler dependency rather than accidental driver behavior. Native-image
 identity now retains logical device-library name, content digest, and link mode

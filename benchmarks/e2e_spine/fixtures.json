@@ -1,0 +1,38 @@
+{
+  "schema": "tessera.e2e-differential-fixtures.v1",
+  "fixtures": [
+    {
+      "fixture_id": "matmul-f32-2x3x2-v1",
+      "family": "matmul",
+      "dtype": "fp32",
+      "shape": [2, 3, 2],
+      "semantic_contract": "C=A@B; row-major; fp32 storage and accumulation",
+      "inputs": {
+        "a": [[1.0, -2.0, 3.0], [4.0, 0.5, -1.0]],
+        "b": [[2.0, 1.0], [-1.0, 3.0], [0.5, -2.0]]
+      },
+      "oracle": [[5.5, -11.0], [7.0, 7.5]],
+      "tolerance": {"atol": 1e-6, "rtol": 1e-6, "equal_nan": false}
+    },
+    {
+      "fixture_id": "softmax-f32-2x2-extreme-v1",
+      "family": "softmax",
+      "dtype": "fp32",
+      "shape": [2, 2],
+      "semantic_contract": "stable max-shifted softmax over the last axis",
+      "inputs": {"x": [[0.0, 0.0], [1000.0, 1000.0]]},
+      "oracle": [[0.5, 0.5], [0.5, 0.5]],
+      "tolerance": {"atol": 2e-6, "rtol": 2e-6, "equal_nan": false}
+    },
+    {
+      "fixture_id": "reduce-sum-f32-axis1-v1",
+      "family": "reduction",
+      "dtype": "fp32",
+      "shape": [2, 3],
+      "semantic_contract": "sum over axis=1; keepdims=false; fp32 accumulation",
+      "inputs": {"x": [[1.0, -2.0, 3.0], [4.0, 0.5, -1.0]]},
+      "oracle": [2.0, 3.5],
+      "tolerance": {"atol": 1e-6, "rtol": 1e-6, "equal_nan": false}
+    }
+  ]
+}

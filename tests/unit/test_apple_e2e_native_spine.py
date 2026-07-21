@@ -33,6 +33,25 @@ def _softmax_module() -> GraphIRModule:
     )])
 
 
+def _transpose_module(dtype: str, shape: tuple[int, ...], axes: tuple[int, ...]) -> GraphIRModule:
+    spelling = {"fp32": "f32", "fp16": "f16", "bf16": "bf16"}[dtype]
+    input_type = IRType(
+        "tensor<" + "x".join(map(str, shape)) + "x" + spelling + ">",
+        tuple(map(str, shape)), dtype,
+    )
+    output_shape = tuple(shape[axis] for axis in axes)
+    output_type = IRType(
+        "tensor<" + "x".join(map(str, output_shape)) + "x" + spelling + ">",
+        tuple(map(str, output_shape)), dtype,
+    )
+    return GraphIRModule(functions=[GraphIRFunction(
+        name="transpose", args=[IRArg("x", input_type)], result_types=[output_type],
+        body=[IROp(result="out", op_name="tessera.transpose", operands=["%x"],
+                    operand_types=[str(input_type)], result_type=str(output_type),
+                    kwargs={"axes": axes})], return_values=["%out"],
+    )])
+
+
 @pytest.mark.hardware_apple_gpu
 @pytest.mark.parametrize(("dtype", "shape", "axes"), [
     (np.float32, (3, 7), (1, 0)),
@@ -49,14 +68,30 @@ def _softmax_module() -> GraphIRModule:
                       reason="ml_dtypes is required for bf16 transpose coverage"))),
 ])
 def test_native_transpose_execute_compare_on_metal(dtype, shape, axes):
-    """The MPSGraph ABI must allocate the permuted output shape, not input shape."""
-    from tessera.runtime import _apple_gpu_dispatch_transpose
+    """The native descriptor carries the permuted output shape and axes ABI."""
+    from tessera.compiler.driver import compile_graph_module
+    from tessera.runtime import RuntimeArtifact, launch
 
     storage = __import__("ml_dtypes").bfloat16 if dtype == "bf16" else dtype
     x = np.arange(np.prod(shape), dtype=np.float32).reshape(shape).astype(storage)
     expected = np.transpose(x, axes)
+    package_dtype = {np.float32: "fp32", np.float16: "fp16", "bf16": "bf16"}[dtype]
+    bundle = compile_graph_module(
+        _transpose_module(package_dtype, shape, axes), source_origin="apple-e2e-transpose-descriptor-test",
+        target="apple_gpu", options={"package_native": True}, enable_tool_validation=False,
+    )
+    assert bundle.launch_descriptor is not None
+    assert bundle.launch_descriptor.provenance["route"] == "apple_mpsgraph_transpose_native_library"
+    artifact = RuntimeArtifact(
+        metadata={"target": "apple_gpu", "compiler_path": "apple_native_descriptor"},
+        target_ir=bundle.target_ir.text, native_image=bundle.native_image,
+        launch_descriptor=bundle.launch_descriptor,
+    )
     for _ in range(3):
-        actual = _apple_gpu_dispatch_transpose("tessera.transpose", [x], {"axes": axes}, np)
+        actual = launch(artifact, {"x": x, "out": np.empty(expected.shape, dtype=storage)})
+        assert actual["ok"], actual
+        assert actual["execution_kind"] == "native_gpu"
+        actual = actual["output"]
         assert actual.shape == expected.shape
         np.testing.assert_array_equal(actual, expected)
 
@@ -96,6 +131,7 @@ def test_value_family_descriptor_states_are_explicit() -> None:
     assert value_descriptor_state("tessera.clifford.geometric_product") == "descriptor_ready"
     assert value_descriptor_state("tessera.cholesky") == "descriptor_ready"
     assert value_descriptor_state("tessera.cholesky_solve") == "descriptor_ready"
+    assert value_descriptor_state("tessera.transpose") == "descriptor_ready"
     assert value_descriptor_state("tessera.svd") == "unsupported"
 
 
@@ -150,6 +186,29 @@ def _value_module(op_name, arg_shapes, out_shape, *, kwargs=None):
         body=[IROp(result="out", op_name=op_name, operands=operands,
                     operand_types=[str(arg.ir_type) for arg in args], result_type=str(out_type), kwargs=kwargs or {})],
         return_values=["%out"],
+    )])
+
+
+def _tuple_value_module(op_name, input_shape, result_specs):
+    """One static multi-result Graph-IR call for the CPU descriptor ABI."""
+    input_type = IRType(
+        "tensor<" + "x".join(map(str, input_shape)) + "xf32>",
+        tuple(map(str, input_shape)), "fp32",
+    )
+    result_types = [
+        IRType(
+            "tensor<" + "x".join(map(str, shape)) + "x" + dtype + ">",
+            tuple(map(str, shape)), dtype,
+        )
+        for _, shape, dtype in result_specs
+    ]
+    result_names = [name for name, _, _ in result_specs]
+    return GraphIRModule(functions=[GraphIRFunction(
+        name="f", args=[IRArg("a0", input_type)], result_types=result_types,
+        body=[IROp(result=",".join(result_names), op_name=op_name, operands=["%a0"],
+                    operand_types=[str(input_type)],
+                    result_type="(" + ", ".join(map(str, result_types)) + ")")],
+        return_values=["%" + name for name in result_names],
     )])
 
 
@@ -280,6 +339,70 @@ def test_apple_cpu_descriptor_execute_compare(op, shapes, out_shape, kwargs, ref
     replay = launch(artifact, args)
     assert replay["ok"], replay
     np.testing.assert_allclose(replay["output"], reference(values), rtol=2e-4, atol=2e-5)
+
+
+def test_apple_cpu_tuple_descriptor_states_are_explicit():
+    from tessera.compiler.apple_cpu_native import value_descriptor_state
+
+    assert value_descriptor_state("tessera.lu") == "descriptor_ready"
+    assert value_descriptor_state("tessera.qr") == "descriptor_ready"
+    assert value_descriptor_state("tessera.svd") == "descriptor_ready"
+
+
+@pytest.mark.parametrize(("op", "shape", "results"), [
+    ("tessera.lu", (4, 4), (("lu", (4, 4), "fp32"), ("piv", (4,), "int32"))),
+    ("tessera.qr", (6, 4), (("q", (6, 4), "fp32"), ("r", (4, 4), "fp32"))),
+    ("tessera.svd", (6, 4), (("u", (6, 4), "fp32"), ("s", (4,), "fp32"), ("vh", (4, 4), "fp32"))),
+])
+def test_apple_cpu_tuple_descriptor_execute_compare(op, shape, results):
+    """Tuple outputs preserve SSA order and replay through one descriptor."""
+    from tests._support.apple import require_apple_chip_identity
+
+    require_apple_chip_identity()
+    from tessera.compiler.driver import compile_graph_module
+    from tessera.runtime import RuntimeArtifact, launch
+
+    rng = np.random.default_rng(53)
+    a = rng.standard_normal(shape).astype(np.float32)
+    bundle = compile_graph_module(
+        _tuple_value_module(op, shape, results),
+        source_origin="apple-cpu-e2e-tuple-descriptor-test", target="apple_cpu",
+        options={"package_native": True}, enable_tool_validation=False,
+    )
+    assert bundle.launch_descriptor is not None
+    assert [binding.name for binding in bundle.launch_descriptor.buffers if binding.direction == "output"] == [
+        name for name, _, _ in results
+    ]
+    artifact = RuntimeArtifact(
+        metadata={"target": "apple_cpu", "compiler_path": "apple_cpu_native_descriptor"},
+        target_ir=bundle.target_ir.text, native_image=bundle.native_image,
+        launch_descriptor=bundle.launch_descriptor,
+    )
+    storage_dtype = {"fp32": np.float32, "int32": np.int32}
+    args = {"a0": a}
+    args.update({name: np.empty(shape, dtype=storage_dtype[dtype]) for name, shape, dtype in results})
+    launched = launch(artifact, args)
+    assert launched["ok"], launched
+    output = launched["output"]
+    assert isinstance(output, tuple) and len(output) == len(results)
+    if op == "tessera.lu":
+        lu, pivots = output
+        lower = np.tril(lu, -1) + np.eye(shape[0], dtype=np.float32)
+        upper = np.triu(lu)
+        permuted = a.copy()
+        for index, pivot in enumerate(pivots):
+            permuted[[index, int(pivot) - 1]] = permuted[[int(pivot) - 1, index]]
+        np.testing.assert_allclose(lower @ upper, permuted, rtol=1e-3, atol=1e-3)
+    elif op == "tessera.qr":
+        q, r = output
+        np.testing.assert_allclose(q @ r, a, rtol=1e-3, atol=1e-3)
+    else:
+        u, s, vh = output
+        np.testing.assert_allclose(u @ np.diag(s) @ vh, a, rtol=1e-3, atol=1e-3)
+    for name, _, dtype in results:
+        args[name].fill(0 if dtype == "int32" else np.nan)
+    replay = launch(artifact, args)
+    assert replay["ok"], replay
 
 
 def test_canonical_compile_default_consumes_apple_cpu_bmm_descriptor():

@@ -3,7 +3,7 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-07-19
+last_updated: 2026-07-21
 ---
 
 # Apple compiler, exact-device, and performance plan
@@ -802,8 +802,9 @@ implementation/proof work; `blocked` names an external prerequisite.
 | 13 | APPLE-ROUTE-1 | **active** | Strict v2 ingestion now requires the `runtime_route` scope as well as fresh exact context; package-subgraph ledgers and all legacy schema-v1 ledgers are inventories requiring remeasurement, never production evidence. Re-measure/migrate every legacy family ledger before closure. |
 | 14 | APPLE-DTYPE-1 | **blocked — SDK** | FP8/FP4/MX native execution awaits the public macOS 27 Metal tensor path. Keep older-host int4/int8/f16/bf16 regression coverage. |
 | 15 | APPLE-CI-1 | **closed** | The local Metal 4 release gate serializes the physical Mac without registering a GitHub runner, builds fresh LLVM/MLIR 23 compiler/JIT/runtime artifacts, records power/thermal/GPU-contention availability, rejects incomplete or skipped evidence, runs correctness twice, and seals paired device/end-to-end evidence. The retained `docs/audit/evidence/apple/metal4/20260718-b1ee875/` packet proves two clean 11-test Apple7 runs under Xcode 26.6, two 8-row route reports with four Metal 4 rows each, and an 8-decision two-domain ledger against commit `b1ee87591ec701dd06a156cad8449f6498ae0891`. Portable CI validates its hashes and contents. Metal 3 remains non-blocking compatibility coverage. |
-| 16 | APPLE-E2E-1 | **landing / partial Level C** | Canonical compilation selects `tessera-lower-to-apple_gpu-runtime` and defaults a static supported contract to its hash-bound native image and descriptor; explicit Value Target-IR remains a separate probe surface. Static rank-2 f32 softmax and f32/f16/bf16 rank-3 batched-GEMM; strict and side-tensor PPO; EBM energy/Langevin/refinement/partition; cl30 Clifford geometric product; plus static and batched Cholesky, Cholesky-solve, and triangular-solve descriptors submit through the generic launcher. Every packaged lane has fresh-dylib execute/compare and repeated-launch cleanup coverage. Composite/package-subgraph, unsupported, and multi-result contracts remain explicit retained routes, so fleet closure is not claimed. Metal-owned schedules, placement policy, and selectors are unchanged. NVIDIA and ROCm are not applicable: this changes no shared IR, ABI, schedule, or evidence claim. |
-| 17 | APPLE-CPU-E2E-1 | **landing / partial Level C** | Canonical compilation now packages static f32 rank-3 BMM plus single-result Cholesky, triangular-solve, and Cholesky-solve Accelerate/LAPACK C ABIs as hash-bound Apple CPU descriptors. Host execute/compare and repeated-launch cleanup proof pass. LU/QR/SVD stay on their explicit multi-result Value Target-IR path; dynamic and unsupported contracts remain retained/reference rather than being relabeled native descriptors. |
+| 16 | APPLE-E2E-1 | **landing / bounded Level C** | Closure is limited to static, exact-device-oracle-backed GPU ABI families: rank-2 f32 softmax/transpose; f32/f16/bf16 rank-3 batched-GEMM; strict and side-tensor PPO; EBM energy/Langevin/refinement/partition; cl30 Clifford geometric product; and static/batched Cholesky, Cholesky-solve, and triangular-solve. Every family requires a package contract plus fresh-dylib execute/compare and repeated-launch cleanup proof on the exact device. Composite/package-subgraph, dynamic, stateful, unsupported, and multi-result GPU contracts, plus fleet/second-device proof, are retained follow-on work in APPLE-NATIVE-E2E-2. Metal-owned schedules, placement policy, and selectors are unchanged. NVIDIA and ROCm are not applicable: this changes no shared IR, ABI, schedule, or evidence claim. |
+| 17 | APPLE-CPU-E2E-1 | **landing / bounded Level C** | Closure is limited to static f32 rank-2/rank-3 matmul/BMM; single-result Cholesky, triangular-solve, and Cholesky-solve; and tuple-output LU/QR/SVD Accelerate/LAPACK descriptors. Each family needs host execute/compare plus repeated-launch cleanup proof. Dynamic shapes, other dtypes, and non-linalg contracts remain retained/reference and belong to APPLE-NATIVE-E2E-2. |
+| 18 | APPLE-NATIVE-E2E-2 | **queued** | Begins after bounded E2E-1 exact-device closure. It owns dynamic-shape, composite/package-subgraph, stateful, non-linalg CPU, remaining multi-result GPU migration, and independently sealed second-device/fleet proof. A route may enter this item only with a static ABI or an explicitly designed new ABI family, a shape/dtype contract, and an exact-device numerical oracle; retained/reference status is never relabeled native by inventory breadth alone. |
 
 ## Canonical validation lanes
 
@@ -835,6 +836,7 @@ python3 -m pytest tests/unit -q -n 0 \
 # reference rows, missing device intervals, and incomplete two-domain ledgers.
 bash scripts/run_apple_metal4_release_gate.sh \
   --publish-dir docs/audit/evidence/apple/metal4/<run-id>
+
 ```
 
 The first focused parity and characterization loop is:

@@ -23,6 +23,12 @@ APPLE_SOFTMAX_F16_ABI = "tessera.apple.softmax.x_o_rows_columns.f16.v1"
 APPLE_SOFTMAX_F16_SYMBOL = "tessera_apple_gpu_softmax_f16"
 APPLE_SOFTMAX_BF16_ABI = "tessera.apple.softmax.x_o_rows_columns.bf16.v1"
 APPLE_SOFTMAX_BF16_SYMBOL = "tessera_apple_gpu_softmax_bf16"
+APPLE_TRANSPOSE_F32_ABI = "tessera.apple.mpsgraph.transpose.x_o_dims_perm.f32.v1"
+APPLE_TRANSPOSE_F32_SYMBOL = "tessera_apple_gpu_mpsgraph_transpose_f32"
+APPLE_TRANSPOSE_F16_ABI = "tessera.apple.mpsgraph.transpose.x_o_dims_perm.f16.v1"
+APPLE_TRANSPOSE_F16_SYMBOL = "tessera_apple_gpu_mpsgraph_transpose_f16"
+APPLE_TRANSPOSE_BF16_ABI = "tessera.apple.mpsgraph.transpose.x_o_dims_perm.bf16.v1"
+APPLE_TRANSPOSE_BF16_SYMBOL = APPLE_TRANSPOSE_F16_SYMBOL
 
 _BMM_VARIANTS: dict[str, tuple[str, str]] = {
     "fp32": (APPLE_BMM_F32_SYMBOL, APPLE_BMM_F32_ABI),
@@ -34,12 +40,18 @@ _SOFTMAX_VARIANTS = {
     "fp16": (APPLE_SOFTMAX_F16_SYMBOL, APPLE_SOFTMAX_F16_ABI),
     "bf16": (APPLE_SOFTMAX_BF16_SYMBOL, APPLE_SOFTMAX_BF16_ABI),
 }
+_TRANSPOSE_VARIANTS = {
+    "fp32": (APPLE_TRANSPOSE_F32_SYMBOL, APPLE_TRANSPOSE_F32_ABI),
+    "fp16": (APPLE_TRANSPOSE_F16_SYMBOL, APPLE_TRANSPOSE_F16_ABI),
+    "bf16": (APPLE_TRANSPOSE_BF16_SYMBOL, APPLE_TRANSPOSE_BF16_ABI),
+}
 
 # APPLE-E2E-1 owns an explicit descriptor disposition for every currently
 # value-lowered family.  Only BMM has a descriptor today; the other entries
 # prevent a value-producing Target-IR symbol (or a host-specific probe) from
 # being silently mistaken for descriptor-first execution.
 APPLE_VALUE_DESCRIPTOR_STATES: dict[str, str] = {
+    "tessera.transpose": "descriptor_ready",
     "tessera.rl.ppo_policy_loss": "descriptor_ready",
     "tessera.ebm.energy_quadratic": "descriptor_ready",
     "tessera.ebm.langevin_step": "descriptor_ready",
@@ -138,10 +150,45 @@ def _softmax_contract(module: GraphIRModule):
         return None
     return name, op.result or "output", shape
 
+
+def _transpose_contract(module: GraphIRModule):
+    """Return one static rank-2/rank-3 MPSGraph permute contract."""
+    if len(module.functions) != 1 or len(module.functions[0].body) != 1:
+        return None
+    fn, op = module.functions[0], module.functions[0].body[0]
+    if op.op_name != "tessera.transpose" or len(op.operands) != 1 or len(fn.result_types) != 1:
+        return None
+    name = op.operands[0].removeprefix("%")
+    args = {arg.name: arg for arg in fn.args}
+    if name not in args:
+        return None
+    dtype = args[name].ir_type.dtype
+    if dtype not in _TRANSPOSE_VARIANTS or fn.result_types[0].dtype != dtype:
+        return None
+    try:
+        shape = tuple(int(v) for v in args[name].ir_type.shape)
+        out_shape = tuple(int(v) for v in fn.result_types[0].shape)
+    except (TypeError, ValueError):
+        return None
+    if len(shape) not in {2, 3}:
+        return None
+    raw_axes = op.kwargs.get("axes", tuple(range(len(shape) - 1, -1, -1)))
+    if not isinstance(raw_axes, (list, tuple)):
+        return None
+    try:
+        axes = tuple(int(axis) % len(shape) for axis in raw_axes)
+    except (TypeError, ValueError):
+        return None
+    if len(axes) != len(shape) or set(axes) != set(range(len(shape))) or out_shape != tuple(shape[axis] for axis in axes):
+        return None
+    return name, op.result or "output", shape, axes, dtype
+
 def supports_native_package(module: GraphIRModule) -> bool:
     if _contract(module) is not None:
         return True
     if _softmax_contract(module) is not None:
+        return True
+    if _transpose_contract(module) is not None:
         return True
     if len(module.functions) != 1 or len(module.functions[0].body) != 1:
         return False
@@ -166,6 +213,8 @@ def package_native(module: GraphIRModule, *, pipeline_name: str) -> AppleNativeP
         return package_batched_gemm(module, pipeline_name=pipeline_name)
     if _softmax_contract(module) is not None:
         return package_softmax(module, pipeline_name=pipeline_name)
+    if _transpose_contract(module) is not None:
+        return package_transpose(module, pipeline_name=pipeline_name)
     fn, op = module.functions[0], module.functions[0].body[0]
     entry = _VALUE_SYMBOLS.get(op.op_name)
     if entry is None or len(fn.result_types) != 1:
@@ -275,3 +324,43 @@ def package_softmax(module: GraphIRModule, *, pipeline_name: str) -> AppleNative
                     "shape": [rows, columns], "storage": dtype},
     )
     return AppleNativePackage("tile.softmax_kernel", target_ir, target_ir, image, descriptor)
+
+
+def package_transpose(module: GraphIRModule, *, pipeline_name: str) -> AppleNativePackage:
+    """Package one static rank-2/rank-3 MPSGraph transpose ABI."""
+    contract = _transpose_contract(module)
+    if contract is None:
+        raise ValueError("Apple transpose package requires one static f32/f16/bf16 rank-2/rank-3 permutation")
+    library = _runtime_library_path()
+    if library is None:
+        raise RuntimeError("APPLE-E2E-1 requires a fresh Tessera Apple GPU runtime dylib")
+    x, out, shape, axes, dtype = contract
+    symbol, abi = _TRANSPOSE_VARIANTS[dtype]
+    target_ir = (f'tessera_apple.gpu.kernel_call @{symbol} '
+                 f'{{abi = "{abi}", storage = "{dtype}", rank = {len(shape)}, status = "executable"}}')
+    payload = library.read_bytes()
+    digest = hashlib.sha256(payload).hexdigest()
+    image = NativeImageArtifact(
+        target="apple_gpu", architecture="apple_gpu", pipeline_name=pipeline_name,
+        compiler_fingerprint="apple-runtime-abi-v1",
+        toolchain_fingerprint=hashlib.sha256(("apple_gpu|" + digest).encode()).hexdigest(),
+        target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(), binary_format="shared_object",
+        payload=payload, entry_points=(NativeEntryPoint(symbol, abi),), compile_state="prepackaged",
+    )
+    alignment = 4 if dtype == "fp32" else 2
+    out_shape = tuple(shape[axis] for axis in axes)
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi,
+        buffers=(BufferBinding(0, x, "input", dtype, len(shape), "row_major", alignment),
+                 BufferBinding(1, out, "output", dtype, len(shape), "row_major", alignment)),
+        shape_guards=tuple(
+            ShapeGuard(name, axis, "eq", extent)
+            for name, guarded_shape in ((x, shape), (out, out_shape))
+            for axis, extent in enumerate(guarded_shape)
+        ),
+        geometry=LaunchGeometry(policy="apple_mpsgraph_transpose"),
+        ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("return",)),
+        provenance={"work_item": "APPLE-E2E-1", "route": "apple_mpsgraph_transpose_native_library",
+                    "shape": list(shape), "axes": list(axes), "storage": dtype},
+    )
+    return AppleNativePackage("tile.transpose_kernel", target_ir, target_ir, image, descriptor)

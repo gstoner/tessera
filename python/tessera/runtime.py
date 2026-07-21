@@ -3378,6 +3378,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
     from tessera.compiler.apple_native import (
         APPLE_BMM_BF16_ABI, APPLE_BMM_F16_ABI, APPLE_BMM_F32_ABI,
         APPLE_SOFTMAX_BF16_ABI, APPLE_SOFTMAX_F16_ABI, APPLE_SOFTMAX_F32_ABI,
+        APPLE_TRANSPOSE_BF16_ABI, APPLE_TRANSPOSE_F16_ABI, APPLE_TRANSPOSE_F32_ABI,
     )
 
     if target == "apple_cpu" and abi_id.startswith("tessera.apple.cpu.value.") and target not in _native_launchers:
@@ -3387,7 +3388,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
             submit=_submit_apple_cpu_native,
         )
         return
-    if target == "apple_gpu" and (abi_id in {APPLE_BMM_F32_ABI, APPLE_BMM_F16_ABI, APPLE_BMM_BF16_ABI, APPLE_SOFTMAX_F32_ABI, APPLE_SOFTMAX_F16_ABI, APPLE_SOFTMAX_BF16_ABI} or abi_id.startswith("tessera.apple.value.")) and target not in _native_launchers:
+    if target == "apple_gpu" and (abi_id in {APPLE_BMM_F32_ABI, APPLE_BMM_F16_ABI, APPLE_BMM_BF16_ABI, APPLE_SOFTMAX_F32_ABI, APPLE_SOFTMAX_F16_ABI, APPLE_SOFTMAX_BF16_ABI, APPLE_TRANSPOSE_F32_ABI, APPLE_TRANSPOSE_F16_ABI, APPLE_TRANSPOSE_BF16_ABI} or abi_id.startswith("tessera.apple.value.")) and target not in _native_launchers:
         register_native_launcher(
             target,
             binary_formats=("shared_object",),
@@ -3570,6 +3571,8 @@ def _submit_apple_gpu_native(
         APPLE_BMM_F16_SYMBOL, APPLE_BMM_F32_ABI, APPLE_BMM_F32_SYMBOL,
         APPLE_SOFTMAX_BF16_ABI, APPLE_SOFTMAX_BF16_SYMBOL, APPLE_SOFTMAX_F16_ABI,
         APPLE_SOFTMAX_F16_SYMBOL, APPLE_SOFTMAX_F32_ABI, APPLE_SOFTMAX_F32_SYMBOL,
+        APPLE_TRANSPOSE_BF16_ABI, APPLE_TRANSPOSE_F16_ABI, APPLE_TRANSPOSE_F32_ABI,
+        APPLE_TRANSPOSE_F16_SYMBOL, APPLE_TRANSPOSE_F32_SYMBOL,
         _runtime_library_path,
     )
 
@@ -3630,6 +3633,52 @@ def _submit_apple_gpu_native(
         function(softmax_pointer(x), softmax_pointer(out), *map(int, x.shape))
         return out
 
+    transpose_variants = {
+        APPLE_TRANSPOSE_F32_ABI: (APPLE_TRANSPOSE_F32_SYMBOL, np.float32, ctypes.c_float),
+        APPLE_TRANSPOSE_F16_ABI: (APPLE_TRANSPOSE_F16_SYMBOL, np.float16, ctypes.c_uint16),
+        APPLE_TRANSPOSE_BF16_ABI: (APPLE_TRANSPOSE_F16_SYMBOL, _bfloat16_dtype(), ctypes.c_uint16),
+    }
+    transpose_variant = transpose_variants.get(descriptor.abi_id)
+    if transpose_variant is not None:
+        symbol, dtype, pointer_element = transpose_variant
+        if dtype is None:
+            raise RuntimeError("Apple bf16 transpose descriptor requires ml_dtypes")
+        if descriptor.entry_symbol != symbol or len(ordered) != 2:
+            raise RuntimeError("Apple transpose descriptor ABI or buffer contract is invalid")
+        x, out = (buffers[item.name] for item in ordered)
+        raw_axes = descriptor.provenance.get("axes", ())
+        if not isinstance(raw_axes, (list, tuple)):
+            raise RuntimeError("Apple transpose descriptor lacks a permutation list")
+        axes = tuple(int(axis) for axis in raw_axes)
+        if (not axes or x.ndim not in {2, 3} or len(axes) != x.ndim
+                or set(axes) != set(range(x.ndim)) or out.shape != tuple(x.shape[axis] for axis in axes)):
+            raise RuntimeError("Apple transpose buffers disagree with descriptor static permutation contract")
+        if any(not isinstance(value, np.ndarray) for value in (x, out)):
+            raise RuntimeError("Apple transpose descriptor requires ndarray buffers")
+        if any(value.dtype != dtype or not value.flags.c_contiguous for value in (x, out)):
+            raise RuntimeError("Apple transpose descriptor requires contiguous buffers matching its storage dtype")
+        runtime = _load_apple_gpu_runtime()
+        function = getattr(runtime, symbol, None)
+        if function is None:
+            raise RuntimeError(f"Apple runtime is missing {symbol}")
+        pointer = ctypes.POINTER(cast(Any, pointer_element))
+        function.argtypes = [pointer, pointer, ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32), ctypes.c_int32]
+        function.restype = None
+        dims = (ctypes.c_int32 * x.ndim)(*[int(extent) for extent in x.shape])
+        permutation = (ctypes.c_int32 * x.ndim)(*axes)
+        if pointer_element is ctypes.c_uint16:
+            x_pointer = x.view(np.uint16).ctypes.data_as(pointer)
+            out_pointer = out.view(np.uint16).ctypes.data_as(pointer)
+        else:
+            x_pointer = x.ctypes.data_as(pointer)
+            out_pointer = out.ctypes.data_as(pointer)
+        _apple_gpu_arm_gpu_error()
+        function(x_pointer, out_pointer, dims, permutation, ctypes.c_int32(x.ndim))
+        error = _apple_gpu_consume_gpu_error()
+        if error is not None:
+            raise RuntimeError(f"Apple transpose descriptor GPU dispatch failed: {error}")
+        return out
+
     variants = {
         APPLE_BMM_F32_ABI: (APPLE_BMM_F32_SYMBOL, np.float32, ctypes.c_float),
         APPLE_BMM_F16_ABI: (APPLE_BMM_F16_SYMBOL, np.float16, ctypes.c_uint16),
@@ -3688,8 +3737,8 @@ def _submit_apple_cpu_native(
         raise RuntimeError("unsupported Apple CPU native descriptor route")
     ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
     inputs = [buffers[item.name] for item in ordered if item.direction == "input"]
-    output_binding = next(item for item in ordered if item.direction == "output")
-    output = buffers[output_binding.name]
+    output_bindings = [item for item in ordered if item.direction == "output"]
+    outputs = [buffers[item.name] for item in output_bindings]
     call = descriptor.provenance["value_call"]
     assert isinstance(call, Mapping)
     value_artifact = RuntimeArtifact(
@@ -3698,8 +3747,14 @@ def _submit_apple_cpu_native(
                   "arg_names": [item.name for item in ordered if item.direction == "input"]},
     )
     result = _execute_apple_value_target_ir_artifact(value_artifact, inputs)
-    np.copyto(output, np.asarray(result, dtype=output.dtype).reshape(output.shape))
-    return output
+    result_values: tuple[Any, ...] = result if isinstance(result, tuple) else (result,)
+    if len(result_values) != len(outputs):
+        raise RuntimeError(
+            "Apple CPU descriptor result count disagrees with its ABI contract"
+        )
+    for output, value in zip(outputs, result_values):
+        np.copyto(output, np.asarray(value, dtype=output.dtype).reshape(output.shape))
+    return tuple(outputs) if len(outputs) > 1 else outputs[0]
 
 
 def _nvidia_ptx_gemm_2d(A: Any, B: Any, dtype: str = "bfloat16") -> Any:

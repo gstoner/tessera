@@ -37,6 +37,7 @@ def _report() -> dict:
     return {
         "schema": REPORT_SCHEMA,
         "target": "validation_host",
+        "architecture": "validation_only",
         "device": {"exact": True, "identity": "validation-benchmark-only"},
         "source_commit": "0" * 40,
         "toolchain_fingerprint": "python-validation-benchmark",

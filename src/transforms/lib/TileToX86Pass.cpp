@@ -30,6 +30,7 @@
 // Pass option
 //   --prefer-amx  prefer AMX over AVX-512 (default true); set false to always
 //                 emit the AVX-512 call.
+//   --architecture select "avx512" (default) or the portable "base" ABI.
 
 #include "Tessera/Common/Lowering.h"
 #include "Tessera/Dialect/Tile/TileDialect.h"
@@ -354,6 +355,11 @@ struct TileToX86PassImpl
       llvm::cl::desc("Prefer AMX over AVX-512 GEMM kernels"),
       llvm::cl::init(true)};
 
+  Option<std::string> architectureOpt{
+      *this, "architecture",
+      llvm::cl::desc("Select x86 ABI architecture: avx512 or base"),
+      llvm::cl::init("avx512")};
+
   StringRef getArgument()    const override { return "tessera-tile-to-x86"; }
   StringRef getDescription() const override {
     return "Lower tiled tessera.matmul to tessera_x86_backend C function calls";
@@ -366,10 +372,17 @@ struct TileToX86PassImpl
   }
 
   void runOnOperation() override {
+    if (architectureOpt != "avx512" && architectureOpt != "base") {
+      getOperation().emitError("x86 architecture must be avx512 or base");
+      return signalPassFailure();
+    }
+    bool portableBase = architectureOpt == "base";
     RewritePatternSet patterns(&getContext());
     bool amx = preferAMXOpt;
-    patterns.add<LowerMatmulToX86>(&getContext(), amx);
-    patterns.add<LowerFusedEpilogueToX86>(&getContext(), amx);
+    if (!portableBase) {
+      patterns.add<LowerMatmulToX86>(&getContext(), amx);
+      patterns.add<LowerFusedEpilogueToX86>(&getContext(), amx);
+    }
     // kv_cache_coverage_matrix.md (2026-05-10) — KV-cache artifact
     // lowering on x86. Each op gets its own pattern instance so the
     // GreedyPatternRewriteDriver can match by string name.
@@ -425,6 +438,11 @@ struct TileToX86PassImpl
                                      op->getOperands());
         op->erase();
         continue;
+      }
+      if (portableBase && opName != "tile.softmax_kernel" &&
+          opName != "tile.reduce_kernel") {
+        op->emitError("x86 base architecture currently supports only softmax and reduction launch envelopes");
+        return signalPassFailure();
       }
       if (opName == "tile.argreduce_kernel" || opName == "tile.scan_kernel") {
         auto kind = op->getAttrOfType<StringAttr>("kind");
@@ -690,7 +708,8 @@ struct TileToX86PassImpl
           op->emitError("X86-E2E-1 softmax requires f32 storage/accumulation, axis=-1, and X/O/Rows/K");
           return signalPassFailure();
         }
-        StringRef symbol = "tessera_x86_avx512_softmax_f32";
+        StringRef symbol = portableBase ? "tessera_x86_base_softmax_f32"
+                                        : "tessera_x86_avx512_softmax_f32";
         ensureExternalDecl(module, symbol,
                            FunctionType::get(ctx, {ptrTy, i64Ty, i64Ty, ptrTy}, {}));
         builder.create<func::CallOp>(
@@ -798,7 +817,8 @@ struct TileToX86PassImpl
         op->emitError("X86-E2E-1 reduction kind must be sum|max|mean");
         return signalPassFailure();
       }
-      StringRef symbol = "tessera_x86_avx512_reduce_f32";
+      StringRef symbol = portableBase ? "tessera_x86_base_reduce_f32"
+                                      : "tessera_x86_avx512_reduce_f32";
       ensureExternalDecl(module, symbol,
                          FunctionType::get(ctx, {ptrTy, i64Ty, i64Ty, ptrTy, i32Ty}, {}));
       Value kindConstant = builder.create<arith::ConstantIntOp>(loc, kindValue, 32);

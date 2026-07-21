@@ -1,28 +1,30 @@
-schema,target,backend,family,state,packet,source_commit,reason
-tessera.e2e-release-packet.v1,apple_gpu,apple,matmul,packet_pending,,,Bounded Apple GPU Level-C scope awaits a v1 fleet packet.
-tessera.e2e-release-packet.v1,apple_gpu,apple,softmax,packet_pending,,,Bounded Apple GPU Level-C scope awaits a v1 fleet packet.
-tessera.e2e-release-packet.v1,apple_gpu,apple,linalg,packet_pending,,,Bounded Apple GPU Level-C scope awaits a v1 fleet packet.
-tessera.e2e-release-packet.v1,apple_gpu,apple,ppo,packet_pending,,,Bounded Apple GPU Level-C scope awaits a v1 fleet packet.
-tessera.e2e-release-packet.v1,apple_gpu,apple,ebm,packet_pending,,,Bounded Apple GPU Level-C scope awaits a v1 fleet packet.
-tessera.e2e-release-packet.v1,apple_gpu,apple,clifford,packet_pending,,,Bounded Apple GPU Level-C scope awaits a v1 fleet packet.
-tessera.e2e-release-packet.v1,apple_cpu,apple,matmul,packet_pending,,,Bounded Apple CPU Level-C scope awaits exact-host release evidence.
-tessera.e2e-release-packet.v1,apple_cpu,apple,linalg,packet_pending,,,Bounded Apple CPU Level-C scope awaits exact-host release evidence.
-tessera.e2e-release-packet.v1,x86,x86,matmul,packet_pending,,,Closed x86 E2E scope awaits a v1 fleet packet.
-tessera.e2e-release-packet.v1,x86,x86,softmax,packet_pending,,,Closed x86 E2E scope awaits a v1 fleet packet.
-tessera.e2e-release-packet.v1,x86,x86,reduction,packet_pending,,,Closed x86 E2E scope awaits a v1 fleet packet.
-tessera.e2e-release-packet.v1,x86,x86,attention,packet_pending,,,Closed x86 E2E scope awaits a v1 fleet packet.
-tessera.e2e-release-packet.v1,x86,x86,linalg,packet_pending,,,Closed x86 E2E scope awaits a v1 fleet packet.
-tessera.e2e-release-packet.v1,nvidia_sm120,nvidia,matmul,packet_pending,,,Closed SM120 scope awaits a hash-sealed family packet.
-tessera.e2e-release-packet.v1,nvidia_sm120,nvidia,softmax,packet_pending,,,Closed SM120 scope awaits a hash-sealed family packet.
-tessera.e2e-release-packet.v1,nvidia_sm120,nvidia,reduction,packet_pending,,,Closed SM120 scope awaits a hash-sealed family packet.
-tessera.e2e-release-packet.v1,nvidia_sm120,nvidia,epilogue,packet_pending,,,Closed SM120 scope awaits a hash-sealed family packet.
-tessera.e2e-release-packet.v1,nvidia_sm120,nvidia,attention,packet_pending,,,Closed SM120 scope awaits a hash-sealed family packet.
-tessera.e2e-release-packet.v1,nvidia_sm120,nvidia,paged_kv,packet_pending,,,Closed SM120 scope awaits a hash-sealed family packet.
-tessera.e2e-release-packet.v1,nvidia_sm120,nvidia,replay_ssm,packet_pending,,,Closed SM120 scope awaits a hash-sealed family packet.
-tessera.e2e-release-packet.v1,nvidia_sm120,nvidia,moe,packet_pending,,,Closed SM120 scope awaits a hash-sealed family packet.
-tessera.e2e-release-packet.v1,nvidia_sm90,nvidia,-,hardware_deferred,,,Exact Hopper device unavailable; SM120 evidence does not transfer.
-tessera.e2e-release-packet.v1,nvidia_sm100,nvidia,-,hardware_deferred,,,Exact datacenter Blackwell device unavailable; SM120 evidence does not transfer.
-tessera.e2e-release-packet.v1,rocm_gfx1151,rocm,softmax,packet_pending,,,Closed gfx1151 E2E scope awaits a v1 fleet packet.
-tessera.e2e-release-packet.v1,rocm_gfx1151,rocm,reduction,packet_pending,,,Closed gfx1151 E2E scope awaits a v1 fleet packet.
-tessera.e2e-release-packet.v1,rocm_gfx1151,rocm,paged_kv,packet_pending,,,Closed gfx1151 E2E scope awaits a v1 fleet packet.
-tessera.e2e-release-packet.v1,rocm_gfx1151,rocm,moe,packet_pending,,,Closed gfx1151 E2E scope awaits a v1 fleet packet.
+schema,target,architecture,backend,family,state,packet,source_commit,reason
+tessera.e2e-release-packet.v1,apple_gpu,apple7,apple,matmul,packet_pending,,,Bounded Apple GPU Level-C scope awaits a v1 fleet packet.
+tessera.e2e-release-packet.v1,apple_gpu,apple7,apple,softmax,packet_pending,,,Bounded Apple GPU Level-C scope awaits a v1 fleet packet.
+tessera.e2e-release-packet.v1,apple_gpu,apple7,apple,linalg,packet_pending,,,Bounded Apple GPU Level-C scope awaits a v1 fleet packet.
+tessera.e2e-release-packet.v1,apple_gpu,apple7,apple,ppo,packet_pending,,,Bounded Apple GPU Level-C scope awaits a v1 fleet packet.
+tessera.e2e-release-packet.v1,apple_gpu,apple7,apple,ebm,packet_pending,,,Bounded Apple GPU Level-C scope awaits a v1 fleet packet.
+tessera.e2e-release-packet.v1,apple_gpu,apple7,apple,clifford,packet_pending,,,Bounded Apple GPU Level-C scope awaits a v1 fleet packet.
+tessera.e2e-release-packet.v1,apple_cpu,apple_m1_max,apple,matmul,packet_pending,,,Bounded Apple CPU Level-C scope awaits exact-host release evidence.
+tessera.e2e-release-packet.v1,apple_cpu,apple_m1_max,apple,linalg,packet_pending,,,Bounded Apple CPU Level-C scope awaits exact-host release evidence.
+tessera.e2e-release-packet.v1,x86,x86_64_base,x86,softmax,packet_pending,,,Portable non-AVX512 x86 scope awaits an NR2-host packet.
+tessera.e2e-release-packet.v1,x86,x86_64_base,x86,reduction,packet_pending,,,Portable non-AVX512 x86 scope awaits an NR2-host packet.
+tessera.e2e-release-packet.v1,x86,x86_64_avx512,x86,matmul,packet_pending,,,AVX512 x86 scope awaits a Strix Halo host packet.
+tessera.e2e-release-packet.v1,x86,x86_64_avx512,x86,softmax,packet_pending,,,AVX512 x86 scope awaits a Strix Halo host packet.
+tessera.e2e-release-packet.v1,x86,x86_64_avx512,x86,reduction,packet_pending,,,AVX512 x86 scope awaits a Strix Halo host packet.
+tessera.e2e-release-packet.v1,x86,x86_64_avx512,x86,attention,packet_pending,,,AVX512 x86 scope awaits a Strix Halo host packet.
+tessera.e2e-release-packet.v1,x86,x86_64_avx512,x86,linalg,packet_pending,,,AVX512 x86 scope awaits a Strix Halo host packet.
+tessera.e2e-release-packet.v1,nvidia_sm120,sm_120a,nvidia,matmul,packet_pending,,,Closed SM120 scope awaits a hash-sealed family packet.
+tessera.e2e-release-packet.v1,nvidia_sm120,sm_120a,nvidia,softmax,packet_pending,,,Closed SM120 scope awaits a hash-sealed family packet.
+tessera.e2e-release-packet.v1,nvidia_sm120,sm_120a,nvidia,reduction,packet_pending,,,Closed SM120 scope awaits a hash-sealed family packet.
+tessera.e2e-release-packet.v1,nvidia_sm120,sm_120a,nvidia,epilogue,packet_pending,,,Closed SM120 scope awaits a hash-sealed family packet.
+tessera.e2e-release-packet.v1,nvidia_sm120,sm_120a,nvidia,attention,packet_pending,,,Closed SM120 scope awaits a hash-sealed family packet.
+tessera.e2e-release-packet.v1,nvidia_sm120,sm_120a,nvidia,paged_kv,packet_pending,,,Closed SM120 scope awaits a hash-sealed family packet.
+tessera.e2e-release-packet.v1,nvidia_sm120,sm_120a,nvidia,replay_ssm,packet_pending,,,Closed SM120 scope awaits a hash-sealed family packet.
+tessera.e2e-release-packet.v1,nvidia_sm120,sm_120a,nvidia,moe,packet_pending,,,Closed SM120 scope awaits a hash-sealed family packet.
+tessera.e2e-release-packet.v1,nvidia_sm90,sm_90a,nvidia,-,hardware_deferred,,,Exact Hopper device unavailable; SM120 evidence does not transfer.
+tessera.e2e-release-packet.v1,nvidia_sm100,sm_100a,nvidia,-,hardware_deferred,,,Exact datacenter Blackwell device unavailable; SM120 evidence does not transfer.
+tessera.e2e-release-packet.v1,rocm_gfx1151,gfx1151,rocm,softmax,packet_pending,,,Closed gfx1151 E2E scope awaits a v1 fleet packet.
+tessera.e2e-release-packet.v1,rocm_gfx1151,gfx1151,rocm,reduction,packet_pending,,,Closed gfx1151 E2E scope awaits a v1 fleet packet.
+tessera.e2e-release-packet.v1,rocm_gfx1151,gfx1151,rocm,paged_kv,packet_pending,,,Closed gfx1151 E2E scope awaits a v1 fleet packet.
+tessera.e2e-release-packet.v1,rocm_gfx1151,gfx1151,rocm,moe,packet_pending,,,Closed gfx1151 E2E scope awaits a v1 fleet packet.

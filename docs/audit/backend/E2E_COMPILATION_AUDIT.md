@@ -248,7 +248,15 @@ produces a machine-readable report with:
 - benchmark rows with a declared target-appropriate kernel domain
   (`device_event` or `kernel_wall`) plus end-to-end timing, repetitions,
   warmup/discard policy, selected route, resource fingerprint, and stability
-  disposition.
+disposition.
+
+Packet identity is separately keyed by `(target, architecture)`. This is
+required even when two architecture envelopes share the same compiler target:
+`x86_64_base` and `x86_64_avx512` are independent packets, just as `sm_120a`
+cannot satisfy `sm_90a` or `sm_100a`. The NR2 WSL host owns non-AVX512
+`x86_64_base` plus `sm_120a`; Strix Halo owns `x86_64_avx512` plus `gfx1151`;
+the M1 Max owns Apple CPU plus Apple7 GPU proof. Evidence never transfers
+between those hosts or architectures.
 
 A release packet hash-seals that report and its referenced evidence files.
 Portable CI validates schemas, hashes, registry joins, and generated dashboard
@@ -262,6 +270,19 @@ bounded Level-C family packet; conversely, one family packet cannot promote the
 whole target. A packet is release-ready only when all fixtures in its declared
 scope pass, cold/warm identities reproduce, required benchmark domains are
 present, and every referenced file matches the sealed manifest.
+
+The first exact-host recorder slice implements portable x86 f32 softmax and
+last-axis sum through compiler-selected `x86_64_base` C-ABI symbols in a shared
+image compiled with `-march=x86-64 -mno-avx -mno-avx2 -mno-avx512f`. Unsupported
+base envelopes reject in the Tile-to-x86 pass instead of falling through to an
+AVX512 symbol. Its WSL trial passed shared numerical fixtures, prepackaged
+image/descriptor replay, and production-sized repeated-median `kernel_wall`
+plus end-to-end rows under the 4% gate; disassembly contained no YMM/ZMM use.
+The SM120 recorder passed the same shared softmax/reduction fixtures, cold/warm
+compiler-cache identity, resource fingerprints, and repeated-median
+device-event plus end-to-end rows under the 4% gate on the RTX 5070 Ti. These
+are pre-commit trials; hash-sealed checked-in packets must be recorded against
+the landed source commit so `source_commit` truth is not fabricated.
 
 ## 6. Backend engineering notes
 

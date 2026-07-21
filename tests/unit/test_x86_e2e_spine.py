@@ -30,6 +30,7 @@ from tessera.compiler.x86_native import (
     supports_reduction,
     supports_softmax,
     tools_available,
+    tools_available_for_architecture,
 )
 
 
@@ -205,7 +206,7 @@ def test_x86_packages_own_shared_object_and_typed_descriptor(monkeypatch, family
 
 
 @pytest.mark.skipif(
-    not tools_available(X86_BASE_ARCHITECTURE),
+    not tools_available_for_architecture(X86_BASE_ARCHITECTURE),
     reason="base x86 compiler/shared library unavailable",
 )
 @pytest.mark.parametrize("family", ["softmax", "reduction"])

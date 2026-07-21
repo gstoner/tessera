@@ -168,8 +168,14 @@ def _library_path(architecture: str = X86_AVX512_ARCHITECTURE) -> Path | None:
     return None
 
 
-def tools_available(architecture: str = X86_AVX512_ARCHITECTURE) -> bool:
+def tools_available_for_architecture(architecture: str) -> bool:
     return _tessera_opt() is not None and _library_path(architecture) is not None
+
+
+def tools_available() -> bool:
+    """Whether the default AVX-512 native packaging route is available."""
+
+    return tools_available_for_architecture(X86_AVX512_ARCHITECTURE)
 
 
 def supports_native_package(module: GraphIRModule) -> bool:

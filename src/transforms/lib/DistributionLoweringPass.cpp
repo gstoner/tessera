@@ -32,6 +32,7 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/Dialect.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -43,6 +44,21 @@
 using namespace mlir;
 
 namespace {
+
+// Schedule programming-model ops are deliberately generic until their ODS
+// dialect is fully wired.  Keep that permissiveness scoped to schedule.*;
+// every other dialect remains strict.
+class ScheduleDialect final : public Dialect {
+public:
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ScheduleDialect)
+
+  explicit ScheduleDialect(MLIRContext *context)
+      : Dialect(getDialectNamespace(), context, TypeID::get<ScheduleDialect>()) {
+    allowUnknownOperations(true);
+  }
+
+  static StringRef getDialectNamespace() { return "schedule"; }
+};
 
 struct DistributionLowering
     : public PassWrapper<DistributionLowering, OperationPass<ModuleOp>> {
@@ -66,6 +82,10 @@ struct DistributionLowering
   }
   StringRef getDescription() const override {
     return "Lower tessera.shard attrs to schedule.mesh.define + mesh.region";
+  }
+
+  void getDependentDialects(DialectRegistry &registry) const override {
+    registry.insert<ScheduleDialect>();
   }
 
   // Split a comma-separated string into trimmed tokens.

@@ -327,7 +327,7 @@ def test_declared_target_pipelines_have_registered_pass_ownership() -> None:
     for resolution in TARGET_PIPELINE_RESOLUTIONS:
         assert resolution.resolution_state in allowed_states
         assert resolution.level_b in {"partial", "absent"}
-        assert resolution.level_c in {"complete", "absent"}
+        assert resolution.level_c in {"complete", "partial", "absent"}
         source = REPO_ROOT / resolution.registration_source
         assert source.is_file(), resolution
         driver_source = REPO_ROOT / (
@@ -376,7 +376,13 @@ def test_nvidia_aliases_and_backend_producers_are_exact_sm() -> None:
 def test_compilation_spine_inventory_is_machine_readable_and_truthful() -> None:
     rows = compilation_spine_inventory()
     assert {row.target for row in rows} == set(TARGET_CAPABILITIES)
-    assert all(row.level_c == "absent" for row in rows)
+    assert next(row for row in rows if row.target == "apple_gpu").level_c == "partial"
+    assert next(row for row in rows if row.target == "apple_cpu").level_c == "partial"
+    assert all(
+        row.level_c == "absent"
+        for row in rows
+        if row.target not in {"apple_gpu", "apple_cpu"}
+    )
     assert target_pipeline_lookup("nvidia_sm80").declared_pipeline is None  # type: ignore[union-attr]
     assert next(row for row in rows if row.target == "nvidia_sm120").level_a == "native"
     assert next(row for row in rows if row.target == "rocm_gfx1151").level_a == "native"

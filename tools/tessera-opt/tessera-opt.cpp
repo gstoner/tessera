@@ -13,6 +13,7 @@
 #include "mlir/Dialect/Math/IR/Math.h"  // flash_attn softmax exp
 #include "mlir/Dialect/Bufferization/Transforms/Passes.h"
 #include "mlir/Conversion/Passes.h"  // Phase 4 GPU emission: per-pass register decls
+#include "mlir/InitAllExtensions.h"
 // Phase 4 GPU emission: BufferizableOpInterface external models — without these,
 // one-shot-bufferize reports "op was not bufferized" for linalg/tensor/etc.
 #include "mlir/Dialect/Arith/Transforms/BufferizableOpInterfaceImpl.h"
@@ -86,18 +87,6 @@
 #include "mlir/Target/LLVMIR/Dialect/GPU/GPUToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Dialect/ROCDL/ROCDLToLLVMIRTranslation.h"
-// convert-gpu-to-rocdl gathers cf/arith/func/memref/vector/index/ub -> LLVM
-// patterns through each dialect's ConvertToLLVMPatternInterface external model;
-// those must be registered for the gpu.func body (incl. cf block args) to fully
-// lower (mlir-opt does this via registerAllExtensions).
-#include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"
-#include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
-#include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
-#include "mlir/Conversion/IndexToLLVM/IndexToLLVM.h"
-#include "mlir/Conversion/MathToLLVM/MathToLLVM.h"
-#include "mlir/Conversion/MemRefToLLVM/MemRefToLLVM.h"
-#include "mlir/Conversion/UBToLLVM/UBToLLVM.h"
-#include "mlir/Conversion/VectorToLLVM/ConvertVectorToLLVM.h"
 #include "llvm/Support/TargetSelect.h"
 #endif
 #endif
@@ -442,6 +431,13 @@ int main(int argc, char **argv) {
   mlir::bufferization::func_ext::registerBufferizableOpInterfaceExternalModels(
       registry);
 
+  // LLVM 23's GPU lowering discovers conversion and target interfaces through
+  // the dialect registry.  Keep this aligned with upstream mlir-opt rather
+  // than maintaining a fragile hand-selected subset: NVVM/ROCDL target
+  // attributes and every loaded dialect's ConvertToLLVM interface must be
+  // registered before MlirOptMain creates its context.
+  mlir::registerAllExtensions(registry);
+
 #ifdef TESSERA_HAVE_CORE_TESSERA_IR
   tessera::registerTesseraDialects(registry);
   // Sprint 9 — Tile IR dialect (value-lane lowering spine). Registering it lets
@@ -490,16 +486,6 @@ int main(int argc, char **argv) {
   mlir::registerGPUDialectTranslation(registry);
   mlir::registerROCDLDialectTranslation(registry);
   mlir::ROCDL::registerROCDLTargetInterfaceExternalModels(registry);
-  // ConvertToLLVM external models so convert-gpu-to-rocdl lowers the whole
-  // gpu.func body (cf block args, arith, memref, vector, index, ub, func).
-  mlir::cf::registerConvertControlFlowToLLVMInterface(registry);
-  mlir::arith::registerConvertArithToLLVMInterface(registry);
-  mlir::registerConvertFuncToLLVMInterface(registry);
-  mlir::registerConvertMemRefToLLVMInterface(registry);
-  mlir::vector::registerConvertVectorToLLVMInterface(registry);
-  mlir::index::registerConvertIndexToLLVMInterface(registry);
-  mlir::ub::registerConvertUBToLLVMInterface(registry);
-  mlir::registerConvertMathToLLVMInterface(registry);  // flash_attn softmax exp
 #endif
 #endif
 #ifdef TESSERA_HAVE_NVIDIA_BACKEND

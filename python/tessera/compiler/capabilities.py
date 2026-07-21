@@ -682,6 +682,13 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
                 reason=("Apple GPU rank-2 matmul executes f32 through MPS and "
                         "f16/bf16 through the Tile simdgroup value ABI"),
             ),
+            canonical_op("tessera.batched_gemm"): OpCapability(
+                canonical_op("tessera.batched_gemm"), "ready",
+                dtypes=("fp32", "f32", "fp16", "bf16"),
+                reason=("Apple GPU static rank-3 batched GEMM packages a "
+                        "hash-bound runtime dylib and launches through the "
+                        "canonical descriptor ABI"),
+            ),
             **_ops(
                 "ready", _APPLE_GPU_OPTIMIZER_READY,
                 reason=("Apple GPU fused Metal f32 optimizer ABI; shares p/g/m/v "

@@ -141,11 +141,11 @@ def test_committed_retune_corpus_and_strict_ledger_are_consistent():
     assert admitted.routes[(
         "apple7", "retune_moe_swiglu", "16x32x64x32_e4", "f32",
         "end_to_end",
-    )] == "single_fused"
+    )] == "composed"
     assert admitted.routes[(
         "apple7", "retune_mla_decode", "1x4x1x64x16x8x16x32", "f32",
         "end_to_end",
-    )] == "absorbed"
+    )] == "explicit"
 
 
 @pytest.mark.hardware_apple_gpu
@@ -165,6 +165,6 @@ def test_strict_retune_ledger_admits_on_its_exact_live_apple_host():
     decision = production_route_decision(
         op="retune_moe_swiglu", shape="16x32x64x32_e4", dtype="f32",
         incumbent_route="composed", context=context, ledger_path=path)
-    assert decision.route == "single_fused"
+    assert decision.route == "composed"
     assert decision.selected_from_ledger is True
     assert decision.citation is not None and "#decision[" in decision.citation

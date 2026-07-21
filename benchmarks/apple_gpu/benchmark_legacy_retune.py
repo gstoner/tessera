@@ -61,7 +61,9 @@ def _silu(x: np.ndarray) -> np.ndarray:
     return x / (1.0 + np.exp(-x))
 
 
-def _cases(seed: int = 1701) -> list[Case]:
+def _cases(seed: int = 1701, *, scale: int = 1) -> list[Case]:
+    if scale < 1:
+        raise ValueError("retune shape scale must be positive")
     rng = np.random.default_rng(seed)
 
     def f(shape: tuple[int, ...]) -> np.ndarray:
@@ -69,7 +71,7 @@ def _cases(seed: int = 1701) -> list[Case]:
     cases: list[Case] = []
 
     # Grouped GEMM: one routing-aware MSL dispatch versus per-expert MPS GEMMs.
-    T, K, N, E = 32, 64, 64, 4
+    T, K, N, E = 32 * scale, 64 * scale, 64 * scale, 4
     x, w = f((T, K)), f((E, K, N))
     gs = np.full(E, T // E, np.int64)
     expert_ids = np.repeat(np.arange(E, dtype=np.int32), gs)
@@ -97,7 +99,7 @@ def _cases(seed: int = 1701) -> list[Case]:
     ))
 
     # MoE SwiGLU: shipped composed route versus the opt-in single MSL kernel.
-    T, K, H, M, E = 16, 32, 64, 32, 4
+    T, K, H, M, E = 16 * scale, 32 * scale, 64 * scale, 32 * scale, 4
     x, wg, wu, wd = f((T, K)), f((E, K, H)), f((E, K, H)), f((E, H, M))
     gs = np.full(E, T // E, np.int64)
     expert_ids = np.repeat(np.arange(E, dtype=np.int32), gs)
@@ -123,9 +125,9 @@ def _cases(seed: int = 1701) -> list[Case]:
 
     # Reduction: records the native MPSGraph incumbent and the reference peer;
     # reference evidence can validate numerics but can never select production.
-    reduce_x = f((64, 257))
+    reduce_x = f((64 * scale, 257 * scale))
     cases.append(Case(
-        "reduction", "retune_reduce_sum", "64x257_axis1", "f32",
+        "reduction", "retune_reduce_sum", f"{64 * scale}x{257 * scale}_axis1", "f32",
         Route(
             "mpsgraph", lambda: rt._apple_gpu_dispatch_reduce(
                 "tessera.reduce", [reduce_x], {"axis": 1}, np),
@@ -136,10 +138,11 @@ def _cases(seed: int = 1701) -> list[Case]:
     ))
 
     # Contiguous KV movement is unified-memory residency, not a GPU dispatch.
-    cache = ResidentLatentKVCache(latent_dim=32, rope_dim=8, max_seq=128)
-    cache.append(f((128, 32)), f((128, 8)))
+    kv_seq, kv_latent, kv_rope = 128 * scale, 32 * scale, 8 * scale
+    cache = ResidentLatentKVCache(latent_dim=kv_latent, rope_dim=kv_rope, max_seq=kv_seq)
+    cache.append(f((kv_seq, kv_latent)), f((kv_seq, kv_rope)))
     cases.append(Case(
-        "kv_movement", "retune_resident_kv_read", "128x32x8", "f32",
+        "kv_movement", "retune_resident_kv_read", f"{kv_seq}x{kv_latent}x{kv_rope}", "f32",
         Route("resident_view", lambda: cache.latent_window().numpy(),
               False, False, "Metal.shared_buffer_view"),
         Route("host_copy", lambda: cache.latent_numpy().copy(),
@@ -148,7 +151,7 @@ def _cases(seed: int = 1701) -> list[Case]:
     ))
 
     # MLA: latent absorbed route versus explicit K/V materialization.
-    B, heads, sq, skv, dn, dr, dv, dl = 1, 4, 1, 64, 16, 8, 16, 32
+    B, heads, sq, skv, dn, dr, dv, dl = 1, 4, 1, 64 * scale, 16 * scale, 8 * scale, 16 * scale, 32 * scale
     qn, qr = f((B, heads, sq, dn)), f((B, heads, sq, dr))
     ckv, kr = f((B, skv, dl)), f((B, skv, dr))
     wuk, wuv = f((heads, dl, dn)), f((heads, dl, dv))
@@ -195,7 +198,7 @@ def _cases(seed: int = 1701) -> list[Case]:
     ))
 
     # Replay decode: block dispatch versus token-at-a-time output reconstruction.
-    B, D, N, tokens = 1, 32, 16, 8
+    B, D, N, tokens = 1, 32 * scale, 16 * scale, 8 * scale
     a = -np.abs(f((D,)))
     delta = np.abs(f((tokens, B, D))) * 0.1
     xin, binp, cinp = f((tokens, B, D)), f((tokens, B, N)), f((tokens, B, N))
@@ -286,14 +289,23 @@ def _row(case: Case, route: Route, trials: list[dict[str, Any]], *,
     }
 
 
-def run_report(*, reps: int, trials: int, seed: int = 1701) -> dict[str, Any]:
+def run_report(*, reps: int, trials: int, seed: int = 1701,
+               profile: str = "core") -> dict[str, Any]:
     if reps < 1 or trials < 3:
         raise ValueError("retune requires reps >= 1 and at least three paired trials")
     context = live_apple_route_context()
     rows: list[dict[str, Any]] = []
     set_dispatch_telemetry_enabled(True)
     try:
-        for case in _cases(seed):
+        if profile == "core":
+            cases = _cases(seed)
+        elif profile == "extended":
+            # A second, independently seeded larger-shape pass.  It is not a
+            # dtype claim: f16/bf16 need their own native-oracle contracts.
+            cases = _cases(seed) + _cases(seed + 10_000, scale=2)
+        else:
+            raise ValueError(f"unknown retune profile {profile!r}")
+        for case in cases:
             case.incumbent.call()
             case.candidate.call()
             measured: dict[str, list[dict[str, Any]]] = {
@@ -349,6 +361,7 @@ def build_strict_ledger(reports: list[dict[str, Any]], *, valid_days: int = 30) 
         })
     return {
         "schema": STRICT_ROUTE_LEDGER_SCHEMA,
+        "selection_scope": "runtime_route",
         "measured_at": now.isoformat().replace("+00:00", "Z"),
         "expires_at": (now + timedelta(days=valid_days)).isoformat().replace("+00:00", "Z"),
         "context": reports[0]["context"],
@@ -363,10 +376,12 @@ def main() -> None:
     parser.add_argument("--reps", type=int, default=5)
     parser.add_argument("--trials", type=int, default=3)
     parser.add_argument("--runs", type=int, default=2)
+    parser.add_argument("--profile", choices=("core", "extended"), default="core")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--ledger", type=Path, required=True)
     args = parser.parse_args()
-    reports = [run_report(reps=args.reps, trials=args.trials, seed=1701 + run)
+    reports = [run_report(reps=args.reps, trials=args.trials, seed=1701 + run,
+                          profile=args.profile)
                for run in range(args.runs)]
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps({

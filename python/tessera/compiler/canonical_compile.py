@@ -257,7 +257,14 @@ class CompileResult:
         # the value lane (value-producing call ops) or the artifact lane, and —
         # for the value lane — the dispatch tuples (op_kind/symbol/status) the
         # runtime reads to invoke the named C ABI entry.
-        if self.target in ("apple_cpu", "apple_gpu"):
+        # A compiler-produced native image plus launch descriptor is the
+        # canonical Level-C handoff. Do not reclassify its textual Target IR as
+        # a legacy Apple value call: doing so would make runtime.launch choose
+        # the old executor and silently bypass the descriptor it was given.
+        if self.native_image is not None and self.launch_descriptor is not None:
+            meta["compiler_path"] = "apple_native_descriptor"
+            meta["apple_target_ir_kind"] = "native_descriptor"
+        elif self.target in ("apple_cpu", "apple_gpu"):
             try:
                 from tessera.compiler import driver as _drv
 

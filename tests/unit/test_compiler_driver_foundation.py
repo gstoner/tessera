@@ -30,7 +30,7 @@ def test_compile_request_preserves_exact_x86_and_selects_pipeline():
 def test_spine_foundation_preserves_existing_driver_pipeline_selection():
     expected = {
         "apple_cpu": "tessera-lower-to-apple_cpu",
-        "apple_gpu": "tessera-lower-to-apple_gpu",
+        "apple_gpu": "tessera-lower-to-apple_gpu-runtime",
         "cpu": "tessera-lower-to-x86",
         "nvidia_sm100": "tessera-lower-to-gpu",
         "nvidia_sm120": "tessera-lower-to-gpu",

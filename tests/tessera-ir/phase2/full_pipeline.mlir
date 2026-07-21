@@ -18,7 +18,7 @@
 // RUN: tessera-opt -tessera-lower-to-x86 --allow-unregistered-dialect \
 // RUN:   --verify-each=false %s | FileCheck %s --check-prefix=PIPE
 
-// CHECK:        sym_name = "step"
+// CHECK:        func.func @step
 // CHECK:        schedule.mesh.define
 // CHECK:        schedule.mesh.region
 // CHECK:        scf.for
@@ -26,7 +26,7 @@
 // CHECK:        @tessera_x86_amx_gemm_bf16
 // CHECK-NOT:    tessera.matmul{{.*}}tensor<128x256xbf16>
 
-// PIPE:         sym_name = "step"
+// PIPE:         func.func @step
 // PIPE:         @tessera_x86_amx_gemm_bf16
 
 module attributes {tessera.ir.version = "1.0"} {

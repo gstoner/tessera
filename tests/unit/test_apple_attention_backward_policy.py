@@ -39,6 +39,7 @@ def _strict_ledger(tmp_path, *decisions):
     path = tmp_path / "attention-backward-ledger.json"
     path.write_text(json.dumps({
         "schema": STRICT_ROUTE_LEDGER_SCHEMA,
+        "selection_scope": "runtime_route",
         "measured_at": "2026-07-18T12:00:00Z",
         "expires_at": "2026-08-18T12:00:00Z",
         "context": _CONTEXT.as_mapping(),

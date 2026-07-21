@@ -12538,22 +12538,22 @@ inline void reference_clifford_geo_product_cl30_f32(
     const float* a = A + b * 8;
     const float* x = B + b * 8;
     float* c = C + b * 8;
-    c[0] = a[0]*x[0] + a[1]*x[1] + a[2]*x[2] - a[3]*x[3]
-         + a[4]*x[4] - a[5]*x[5] - a[6]*x[6] - a[7]*x[7];
-    c[1] = a[0]*x[1] + a[1]*x[0] - a[2]*x[3] + a[3]*x[2]
-         - a[4]*x[5] + a[5]*x[4] - a[6]*x[7] - a[7]*x[6];
-    c[2] = a[0]*x[2] + a[1]*x[3] + a[2]*x[0] - a[3]*x[1]
-         - a[4]*x[6] + a[5]*x[7] + a[6]*x[4] + a[7]*x[5];
-    c[3] = a[0]*x[3] + a[1]*x[2] - a[2]*x[1] + a[3]*x[0]
-         + a[4]*x[7] - a[5]*x[6] + a[6]*x[5] + a[7]*x[4];
-    c[4] = a[0]*x[4] + a[1]*x[5] + a[2]*x[6] - a[3]*x[7]
-         + a[4]*x[0] - a[5]*x[1] - a[6]*x[2] - a[7]*x[3];
-    c[5] = a[0]*x[5] + a[1]*x[4] - a[2]*x[7] + a[3]*x[6]
-         - a[4]*x[1] + a[5]*x[0] - a[6]*x[3] - a[7]*x[2];
-    c[6] = a[0]*x[6] + a[1]*x[7] + a[2]*x[4] - a[3]*x[5]
-         - a[4]*x[2] + a[5]*x[3] + a[6]*x[0] + a[7]*x[1];
-    c[7] = a[0]*x[7] + a[1]*x[6] - a[2]*x[5] + a[3]*x[4]
-         + a[4]*x[3] - a[5]*x[2] + a[6]*x[1] + a[7]*x[0];
+    c[0] = a[0]*x[0] + a[1]*x[1] + a[2]*x[2] + a[3]*x[3]
+         - a[4]*x[4] - a[5]*x[5] - a[6]*x[6] - a[7]*x[7];
+    c[1] = a[0]*x[1] + a[1]*x[0] - a[2]*x[4] + a[3]*x[6]
+         + a[4]*x[2] - a[5]*x[7] - a[6]*x[3] - a[7]*x[5];
+    c[2] = a[0]*x[2] + a[1]*x[4] + a[2]*x[0] - a[3]*x[5]
+         - a[4]*x[1] + a[5]*x[3] - a[6]*x[7] - a[7]*x[6];
+    c[3] = a[0]*x[3] - a[1]*x[6] + a[2]*x[5] + a[3]*x[0]
+         - a[4]*x[7] - a[5]*x[2] + a[6]*x[1] - a[7]*x[4];
+    c[4] = a[0]*x[4] + a[1]*x[2] - a[2]*x[1] + a[3]*x[7]
+         + a[4]*x[0] - a[5]*x[6] + a[6]*x[5] + a[7]*x[3];
+    c[5] = a[0]*x[5] + a[1]*x[7] + a[2]*x[3] - a[3]*x[2]
+         + a[4]*x[6] + a[5]*x[0] - a[6]*x[4] + a[7]*x[1];
+    c[6] = a[0]*x[6] - a[1]*x[3] + a[2]*x[7] + a[3]*x[1]
+         - a[4]*x[5] + a[5]*x[4] + a[6]*x[0] + a[7]*x[2];
+    c[7] = a[0]*x[7] + a[1]*x[5] + a[2]*x[6] + a[3]*x[4]
+         + a[4]*x[3] + a[5]*x[1] + a[6]*x[2] + a[7]*x[0];
   }
 }
 
@@ -12578,14 +12578,14 @@ kernel void clifford_geo_product_cl30_f32(
     float b0=B[off+0], b1=B[off+1], b2=B[off+2], b3=B[off+3];
     float b4=B[off+4], b5=B[off+5], b6=B[off+6], b7=B[off+7];
 
-    C[off+0] = a0*b0 + a1*b1 + a2*b2 - a3*b3 + a4*b4 - a5*b5 - a6*b6 - a7*b7;
-    C[off+1] = a0*b1 + a1*b0 - a2*b3 + a3*b2 - a4*b5 + a5*b4 - a6*b7 - a7*b6;
-    C[off+2] = a0*b2 + a1*b3 + a2*b0 - a3*b1 - a4*b6 + a5*b7 + a6*b4 + a7*b5;
-    C[off+3] = a0*b3 + a1*b2 - a2*b1 + a3*b0 + a4*b7 - a5*b6 + a6*b5 + a7*b4;
-    C[off+4] = a0*b4 + a1*b5 + a2*b6 - a3*b7 + a4*b0 - a5*b1 - a6*b2 - a7*b3;
-    C[off+5] = a0*b5 + a1*b4 - a2*b7 + a3*b6 - a4*b1 + a5*b0 - a6*b3 - a7*b2;
-    C[off+6] = a0*b6 + a1*b7 + a2*b4 - a3*b5 - a4*b2 + a5*b3 + a6*b0 + a7*b1;
-    C[off+7] = a0*b7 + a1*b6 - a2*b5 + a3*b4 + a4*b3 - a5*b2 + a6*b1 + a7*b0;
+    C[off+0] = a0*b0 + a1*b1 + a2*b2 + a3*b3 - a4*b4 - a5*b5 - a6*b6 - a7*b7;
+    C[off+1] = a0*b1 + a1*b0 - a2*b4 + a3*b6 + a4*b2 - a5*b7 - a6*b3 - a7*b5;
+    C[off+2] = a0*b2 + a1*b4 + a2*b0 - a3*b5 - a4*b1 + a5*b3 - a6*b7 - a7*b6;
+    C[off+3] = a0*b3 - a1*b6 + a2*b5 + a3*b0 - a4*b7 - a5*b2 + a6*b1 - a7*b4;
+    C[off+4] = a0*b4 + a1*b2 - a2*b1 + a3*b7 + a4*b0 - a5*b6 + a6*b5 + a7*b3;
+    C[off+5] = a0*b5 + a1*b7 + a2*b3 - a3*b2 + a4*b6 + a5*b0 - a6*b4 + a7*b1;
+    C[off+6] = a0*b6 - a1*b3 + a2*b7 + a3*b1 - a4*b5 + a5*b4 + a6*b0 + a7*b2;
+    C[off+7] = a0*b7 + a1*b5 + a2*b6 + a3*b4 + a4*b3 + a5*b1 + a6*b2 + a7*b0;
 }
 )MSL";
 
@@ -16773,11 +16773,13 @@ static bool mpsg_run_transpose(MetalDeviceContext &ctx, const void *x, void *out
   @autoreleasepool {
     int64_t n = 1;
     NSMutableArray<NSNumber *> *shape = [NSMutableArray arrayWithCapacity:rank];
+    NSMutableArray<NSNumber *> *outShape = [NSMutableArray arrayWithCapacity:rank];
     NSMutableArray<NSNumber *> *permA = [NSMutableArray arrayWithCapacity:rank];
     for (int32_t i = 0; i < rank; ++i) {
       n *= dims[i];
       [shape addObject:@(dims[i])];
       [permA addObject:@(perm[i])];
+      [outShape addObject:@(dims[perm[i]])];
     }
     if (n <= 0) return true;
     size_t bytes = (size_t)n * elemSize;
@@ -16792,7 +16794,7 @@ static bool mpsg_run_transpose(MetalDeviceContext &ctx, const void *x, void *out
     TS_METAL_BUF_ACQUIRE(bufO, ctx, bytes);
     if (!bufO) return false;
     MPSGraphTensorData *od = [[MPSGraphTensorData alloc]
-        initWithMTLBuffer:bufO shape:shape dataType:ioType];
+        initWithMTLBuffer:bufO shape:outShape dataType:ioType];
     id<MTLCommandBuffer> metal_cb = [ctx.queue commandBuffer];
     if (!metal_cb) return false;
     metal_cb.label = @"tessera.epilogue.unary.mpsgraph";

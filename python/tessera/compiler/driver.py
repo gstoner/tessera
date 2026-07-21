@@ -656,6 +656,77 @@ def compile_graph_module(
                 },
             )
         )
+    elif target_kind == "apple_cpu" and bool((options or {}).get("package_native", False)):
+        from . import apple_cpu_native
+
+        if not apple_cpu_native.supports_native_package(module):
+            raise ValueError("APPLE-CPU-E2E-1 native packaging requires one static single-result f32 contract")
+        resolution = target_pipeline_lookup(target_kind)
+        producer = (resolution.declared_pipeline or request.pipeline_name) if resolution is not None else request.pipeline_name
+        package_start = time.perf_counter()
+        apple_cpu_package = apple_cpu_native.package_native(module, pipeline_name=producer)
+        tile = LoweringArtifact("tile", apple_cpu_package.tile_ir)
+        target_artifact = LoweringArtifact("target", apple_cpu_package.target_ir)
+        backend_artifact = LoweringArtifact("backend", apple_cpu_package.backend_ir)
+        native_image = apple_cpu_package.image
+        launch_descriptor = apple_cpu_package.descriptor
+        executable = True
+        runtime_status = "ready"
+        execution_mode = "native_descriptor"
+        execution_kind = "native_cpu"
+        trace_events.append(
+            CompileTraceEvent(
+                pass_name="apple-cpu-native-package", target=target_kind,
+                input_hash=stable_hash(apple_cpu_package.tile_ir), output_hash=apple_cpu_package.image.image_digest,
+                elapsed_ms=(time.perf_counter() - package_start) * 1000.0, status="ok",
+                metadata={"pipeline_name": producer, "binary_format": apple_cpu_package.image.binary_format,
+                          "compile_state": apple_cpu_package.image.compile_state,
+                          "entry_symbol": apple_cpu_package.descriptor.entry_symbol,
+                          "dtype": "fp32", "op_family": apple_cpu_package.descriptor.provenance["op_kind"],
+                          "work_item": "APPLE-CPU-E2E-1"},
+            )
+        )
+    elif target_kind == "apple_gpu" and bool((options or {}).get("package_native", False)):
+        from . import apple_native
+
+        if not apple_native.supports_native_package(module):
+            raise ValueError(
+                "APPLE-E2E-1 native packaging currently supports one static f32 rank-3 batched_gemm request"
+            )
+        resolution = target_pipeline_lookup(target_kind)
+        producer = (
+            (resolution.declared_pipeline or request.pipeline_name)
+            if resolution is not None else request.pipeline_name
+        )
+        package_start = time.perf_counter()
+        apple_package = apple_native.package_native(module, pipeline_name=producer)
+        tile = LoweringArtifact("tile", apple_package.tile_ir)
+        target_artifact = LoweringArtifact("target", apple_package.target_ir)
+        backend_artifact = LoweringArtifact("backend", apple_package.backend_ir)
+        native_image = apple_package.image
+        launch_descriptor = apple_package.descriptor
+        executable = True
+        runtime_status = "ready"
+        execution_mode = "native_descriptor"
+        execution_kind = "native_gpu"
+        trace_events.append(
+            CompileTraceEvent(
+                pass_name="apple-gpu-native-package",
+                target=target_kind,
+                input_hash=stable_hash(apple_package.tile_ir),
+                output_hash=apple_package.image.image_digest,
+                elapsed_ms=(time.perf_counter() - package_start) * 1000.0,
+                status="ok",
+                metadata={
+                    "pipeline_name": producer,
+                    "binary_format": apple_package.image.binary_format,
+                    "compile_state": apple_package.image.compile_state,
+                    "entry_symbol": apple_package.descriptor.entry_symbol,
+                    "dtype": "fp32", "op_family": "batched_gemm",
+                    "work_item": "APPLE-E2E-1",
+                },
+            )
+        )
 
     bundle = CompileArtifactBundle(
         request=request,
@@ -689,9 +760,11 @@ def canonical_compile_options(
     """Resolve target-owned defaults used by the canonical compiler wrapper.
 
     Direct ``compile_graph_module`` callers remain behavior-compatible and may
-    request packaging explicitly.  Canonical compilation promotes only a
-    complete, host-available X86-E2E-1 descriptor contract; unsupported or
-    dynamic modules keep the retained route.
+    request packaging explicitly. Canonical compilation promotes only a
+    complete, host-available descriptor contract; unsupported or dynamic
+    modules keep their retained route. Explicit Apple Value Target-IR requests
+    deliberately retain that value-executor surface so its ABI/probe tests can
+    exercise it independently of the descriptor launcher.
     """
 
     resolved = dict(options or {})
@@ -700,6 +773,22 @@ def canonical_compile_options(
 
         resolved["package_native"] = (
             supports_native_package(module) and tools_available()
+        )
+    if normalize_target_kind(target) == "apple_gpu" and "package_native" not in resolved:
+        from .apple_native import supports_native_package, tools_available
+
+        resolved["package_native"] = (
+            str(resolved.get("apple_target_ir_mode", "")) != "value"
+            and supports_native_package(module)
+            and tools_available()
+        )
+    if normalize_target_kind(target) == "apple_cpu" and "package_native" not in resolved:
+        from .apple_cpu_native import supports_native_package, tools_available
+
+        resolved["package_native"] = (
+            str(resolved.get("apple_target_ir_mode", "")) != "value"
+            and supports_native_package(module)
+            and tools_available()
         )
     return resolved
 

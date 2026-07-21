@@ -14,7 +14,7 @@ authoring packages during decoration.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 import hashlib
 import json
@@ -30,6 +30,8 @@ from typing import Any, Iterable, Mapping, Sequence
 ROUTE_REPORT_SCHEMA_VERSION = 1
 STABLE_ROUTE_LEDGER_SCHEMA_VERSION = 1
 STRICT_ROUTE_LEDGER_SCHEMA = "tessera.apple.route-ledger.v2"
+STRICT_RUNTIME_ROUTE_SCOPE = "runtime_route"
+STRICT_PACKAGE_SUBGRAPH_SCOPE = "package_subgraph"
 PACKAGE_ROUTE = "package"
 
 _DEFAULT_STRICT_LEDGER = (
@@ -157,6 +159,21 @@ class ProductionRouteDecision:
     rejected_evidence: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class LegacyRouteLedgerInventory:
+    """One legacy Apple route ledger that must be remeasured, not promoted.
+
+    The inventory intentionally contains no route decision.  Schema-v1 reports
+    do not carry the strict context and scope envelope, so using their selected
+    route here would create a production-evidence bypass.
+    """
+
+    path: Path
+    schema: str | None
+    decision_count: int
+    migration_state: str
+
+
 def _parse_utc(value: Any) -> datetime | None:
     if not isinstance(value, str):
         return None
@@ -181,6 +198,8 @@ def load_strict_route_ledger(
         return StrictRouteLedger({}, {}, (f"ledger_unreadable:{type(exc).__name__}",))
     if payload.get("schema") != STRICT_ROUTE_LEDGER_SCHEMA:
         return StrictRouteLedger({}, {}, ("schema_mismatch",))
+    if payload.get("selection_scope") != STRICT_RUNTIME_ROUTE_SCOPE:
+        return StrictRouteLedger({}, {}, ("wrong_selection_scope",))
     ctx = context or live_apple_route_context()
     retained = payload.get("context")
     if not isinstance(retained, Mapping):
@@ -249,6 +268,29 @@ def load_strict_route_ledger(
         routes[key] = selected
         citations[key] = f"{Path(path)}#decision[{index}]"
     return StrictRouteLedger(routes, citations, tuple(rejected))
+
+
+def legacy_route_ledger_inventory(root: str | Path | None = None) -> tuple[LegacyRouteLedgerInventory, ...]:
+    """Inventory old Apple route ledgers without treating them as v2 evidence."""
+    base = Path(root) if root is not None else _DEFAULT_STRICT_LEDGER.parent
+    records: list[LegacyRouteLedgerInventory] = []
+    for path in sorted(base.glob("apple*route_ledger.json")):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            records.append(LegacyRouteLedgerInventory(path, None, 0, "unreadable"))
+            continue
+        if payload.get("schema") == STRICT_ROUTE_LEDGER_SCHEMA:
+            continue
+        decisions = payload.get("decisions")
+        records.append(LegacyRouteLedgerInventory(
+            path=path,
+            schema=(str(payload.get("schema_version"))
+                    if payload.get("schema_version") is not None else None),
+            decision_count=len(decisions) if isinstance(decisions, list) else 0,
+            migration_state="remeasure_required_strict_v2_context_and_scope",
+        ))
+    return tuple(records)
 
 
 @lru_cache(maxsize=16)
@@ -693,6 +735,41 @@ def aggregate_stable_route_reports(
     }
 
 
+def seal_strict_route_ledger(stable: Mapping[str, Any], reports: Sequence[Mapping[str, Any]], *, valid_days: int = 30) -> dict[str, Any]:
+    """Turn an aggregate into production-readable v2 evidence.
+
+    Context must have been captured by each producer at measurement time; a
+    selector must never synthesize it after the fact.
+    """
+    if len(reports) < 2:
+        raise ValueError("strict sealing requires two independent reports")
+    contexts: list[Mapping[str, Any]] = []
+    for report in reports:
+        context = report.get("context")
+        if not isinstance(context, Mapping):
+            raise ValueError("strict sealing requires producer-captured context")
+        contexts.append(context)
+    if any(dict(context) != dict(contexts[0]) for context in contexts[1:]):
+        raise ValueError("strict sealing requires identical exact contexts")
+    now = datetime.now(timezone.utc)
+    decisions = []
+    for row in stable.get("decisions", []):
+        if not isinstance(row, Mapping) or row.get("selected_route") is None:
+            continue
+        selected = str(row["selected_route"])
+        evidence = row.get("route_evidence", {}).get(selected, {})
+        decisions.append({**row, "selected_evidence": {
+            "provenance": "native_gpu" if evidence.get("placement_and_numerical_proof") else "reference_cpu",
+            "correctness": bool(evidence.get("placement_and_numerical_proof")),
+            "device": row.get("device"), "timing_domain": row.get("timing_domain"),
+        }})
+    return {"schema": STRICT_ROUTE_LEDGER_SCHEMA, "selection_scope": STRICT_RUNTIME_ROUTE_SCOPE,
+            "measured_at": now.isoformat().replace("+00:00", "Z"),
+            "expires_at": (now + timedelta(days=valid_days)).isoformat().replace("+00:00", "Z"),
+            "context": dict(contexts[0]), "source_report_count": len(reports),
+            "promotion_rules": stable.get("promotion_rules", {}), "decisions": decisions}
+
+
 __all__ = [
     "AppleRouteContext",
     "AppleRouteMeasurement",
@@ -701,9 +778,13 @@ __all__ = [
     "ROUTE_REPORT_SCHEMA_VERSION",
     "STABLE_ROUTE_LEDGER_SCHEMA_VERSION",
     "STRICT_ROUTE_LEDGER_SCHEMA",
+    "STRICT_RUNTIME_ROUTE_SCOPE",
+    "STRICT_PACKAGE_SUBGRAPH_SCOPE",
     "StrictRouteLedger",
+    "LegacyRouteLedgerInventory",
     "aggregate_stable_route_reports",
     "live_apple_route_context",
+    "legacy_route_ledger_inventory",
     "load_route_measurements",
     "load_strict_route_ledger",
     "package_route_selected",
@@ -711,4 +792,5 @@ __all__ = [
     "production_route_decision",
     "live_apple_device_tag",
     "select_route",
+    "seal_strict_route_ledger",
 ]

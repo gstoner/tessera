@@ -11,12 +11,15 @@ from tessera.compiler.apple_route_selector import (
     AppleRouteContext,
     ROUTE_REPORT_SCHEMA_VERSION,
     STRICT_ROUTE_LEDGER_SCHEMA,
+    STRICT_PACKAGE_SUBGRAPH_SCOPE,
+    legacy_route_ledger_inventory,
     aggregate_stable_route_reports,
     load_route_measurements,
     load_strict_route_ledger,
     package_route_selected,
     production_route_decision,
     production_route_for,
+    seal_strict_route_ledger,
     select_route,
 )
 
@@ -34,6 +37,7 @@ _CONTEXT = AppleRouteContext(
 def _strict_payload(**overrides: object) -> dict[str, object]:
     payload: dict[str, object] = {
         "schema": STRICT_ROUTE_LEDGER_SCHEMA,
+        "selection_scope": "runtime_route",
         "measured_at": "2026-07-18T12:00:00Z",
         "expires_at": "2026-08-18T12:00:00Z",
         "context": _CONTEXT.as_mapping(),
@@ -133,6 +137,20 @@ def test_stable_aggregation_promotes_only_a_two_run_per_domain_winner():
     assert all(row["status"] == "promote_candidate" for row in decisions.values())
 
 
+def test_strict_sealing_requires_producer_context_and_preserves_native_evidence():
+    reports = [_report(_stable_row("mps", 1000, 800),
+                       _stable_row("simdgroup_matrix", 850, 700)) for _ in range(2)]
+    stable = aggregate_stable_route_reports(reports)
+    with __import__("pytest").raises(ValueError, match="producer-captured context"):
+        seal_strict_route_ledger(stable, reports)
+    reports = [{**report, "context": _CONTEXT.as_mapping()} for report in reports]
+    sealed = seal_strict_route_ledger(stable, reports)
+    assert sealed["schema"] == STRICT_ROUTE_LEDGER_SCHEMA
+    assert sealed["selection_scope"] == "runtime_route"
+    assert all(row["selected_evidence"]["provenance"] == "native_gpu"
+               for row in sealed["decisions"])
+
+
 def test_stable_aggregation_retains_incumbent_for_mixed_or_unstable_wins():
     reports = [
         _report(_stable_row("mps", 1000, 800),
@@ -205,6 +223,29 @@ def test_legacy_ledgers_are_not_admitted_as_production_evidence():
     admitted = load_strict_route_ledger(legacy, context=_CONTEXT)
     assert admitted.routes == {}
     assert admitted.rejected == ("schema_mismatch",)
+
+
+def test_package_subgraph_ledger_cannot_select_a_runtime_route(tmp_path):
+    ledger = tmp_path / "package-ledger.json"
+    ledger.write_text(json.dumps(_strict_payload(
+        selection_scope=STRICT_PACKAGE_SUBGRAPH_SCOPE,
+    )), encoding="utf-8")
+    admitted = load_strict_route_ledger(ledger, context=_CONTEXT)
+    assert admitted.routes == {}
+    assert admitted.rejected == ("wrong_selection_scope",)
+
+
+def test_legacy_route_ledger_inventory_requires_remeasurement():
+    root = Path(__file__).resolve().parents[2] / "benchmarks" / "baselines"
+    records = legacy_route_ledger_inventory(root)
+    assert {record.path.name for record in records} >= {
+        "apple7_attention_route_ledger.json",
+        "apple7_attention_backward_route_ledger.json",
+        "apple7_epilogue_route_ledger.json",
+        "apple7_gemm_route_ledger.json",
+    }
+    assert all(record.migration_state == "remeasure_required_strict_v2_context_and_scope"
+               for record in records)
 
 
 def test_strict_loader_rejects_stale_context_reference_and_wrong_domain(tmp_path):

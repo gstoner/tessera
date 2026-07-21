@@ -133,6 +133,29 @@ if(APPLE)
     "-framework MetalPerformanceShaders"
     "-framework MetalPerformanceShadersGraph"
   )
+  # The static archive serves the compiler link; this owned shared target is
+  # the hash-bound runtime image consumed by descriptor and exact-device tests.
+  # Keep it distinct from the archive so a fresh dylib never depends on an
+  # ad-hoc developer linker invocation.
+  add_library(TesseraAppleRuntimeShared SHARED
+    runtime/apple_cpu_runtime.cpp
+    runtime/apple_gpu_runtime.mm
+  )
+  set_target_properties(TesseraAppleRuntimeShared PROPERTIES
+    OUTPUT_NAME TesseraAppleRuntime
+  )
+  set_source_files_properties(runtime/apple_gpu_runtime.mm
+    PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+  target_link_libraries(TesseraAppleRuntimeShared PUBLIC
+    "-framework Accelerate"
+    "-framework Foundation"
+    "-framework Metal"
+    "-framework MetalPerformanceShaders"
+    "-framework MetalPerformanceShadersGraph"
+  )
+  target_include_directories(TesseraAppleRuntimeShared PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime
+  )
 else()
   # On non-Darwin compile a portable C++ stub that exposes the same C ABI but
   # routes the GPU symbol to a reference kernel.

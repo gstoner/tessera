@@ -593,6 +593,14 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
         "notes": "MPSMatrixMultiplication + bf16 conversion path",
         "benchmark_json": "benchmarks/baselines/apple_gpu_hot_paths.json",
     },
+    "batched_gemm": {
+        "status": _DEVICE_VERIFIED_JIT_STATUS,
+        "dtypes": _APPLE_GPU_FUSED,
+        "notes": ("Static rank-3 BMM through the compiler-owned Apple native "
+                  "image and descriptor ABI (f32/f16/bf16); exact-device "
+                  "execute/compare and repeat-launch evidence is required."),
+        "execute_compare_fixture": "tests/unit/test_apple_e2e_native_spine.py",
+    },
     # Structured-compute convolution family (2026-07-09) — parity with the
     # x86/ROCm structured-compute tails. These reach an executable apple_gpu
     # path via apple_gpu_structured_compute_compiled and match the reference

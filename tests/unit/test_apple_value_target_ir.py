@@ -235,7 +235,7 @@ def test_front_door_records_value_target_ir_in_runtime_metadata():
     import dataclasses
 
     from tessera.compiler.canonical_compile import canonical_compile
-    from tessera.compiler.driver import LoweringArtifact
+    from tessera.compiler.driver import LoweringArtifact, stable_hash
     from tessera.compiler.graph_ir import (
         GraphIRFunction, GraphIRModule, IRArg, IROp, IRType,
     )
@@ -263,8 +263,15 @@ def test_front_door_records_value_target_ir_in_runtime_metadata():
         ": (tensor<8x8xf32>) -> tensor<8x8xf32>\n"
         "    return %0 : tensor<8x8xf32>\n  }\n}\n"
     )
+    # This intentionally swaps in synthetic Target IR.  Keep the synthetic
+    # NativeImageArtifact coherent with that IR so the front-door provenance
+    # check is still exercised, rather than bypassed.
     value_bundle = dataclasses.replace(
-        res.bundle, target_ir=LoweringArtifact("target", value_ir))
+        res.bundle,
+        target_ir=LoweringArtifact("target", value_ir),
+        native_image=dataclasses.replace(
+            res.bundle.native_image, target_ir_digest=stable_hash(value_ir)),
+    )
     value_res = dataclasses.replace(res, bundle=value_bundle)
     meta = value_res.to_runtime_artifact().metadata
     assert meta["apple_target_ir_kind"] == "value_target_ir"
@@ -1991,7 +1998,7 @@ def _inject_value_ir(target, value_ir):
     door's value-call classifier + exactness logic)."""
     import dataclasses
     from tessera.compiler.canonical_compile import canonical_compile
-    from tessera.compiler.driver import LoweringArtifact
+    from tessera.compiler.driver import LoweringArtifact, stable_hash
     from tessera.compiler.graph_ir import (
         GraphIRFunction, GraphIRModule, IRArg, IROp, IRType,
     )
@@ -2002,7 +2009,12 @@ def _inject_value_ir(target, value_ir):
                    operand_types=["tensor<3x3xf32>"], result_type="tensor<3x3xf32>")],
         return_values=["%c"])
     res = canonical_compile(GraphIRModule(functions=[fn]), target=target)
-    bundle = dataclasses.replace(res.bundle, target_ir=LoweringArtifact("target", value_ir))
+    bundle = dataclasses.replace(
+        res.bundle,
+        target_ir=LoweringArtifact("target", value_ir),
+        native_image=dataclasses.replace(
+            res.bundle.native_image, target_ir_digest=stable_hash(value_ir)),
+    )
     return dataclasses.replace(res, bundle=bundle).to_runtime_artifact().metadata
 
 

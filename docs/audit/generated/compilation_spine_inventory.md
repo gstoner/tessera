@@ -6,8 +6,8 @@ Level A is native/reference runtime execution, Level B is a typed compiler seam,
 
 | Target | Driver pipeline | Declared pipeline | Resolution | A | B | C | Owner |
 |---|---|---|---|---|---|---|---|
-| `apple_cpu` | `tessera-lower-to-apple_cpu` | `tessera-lower-to-apple_cpu` | `declared_exact` | `native` | `partial` | `absent` | `apple` |
-| `apple_gpu` | `tessera-lower-to-apple_gpu` | `tessera-lower-to-apple_gpu` | `declared_exact` | `native` | `partial` | `absent` | `apple` |
+| `apple_cpu` | `tessera-lower-to-apple_cpu` | `tessera-lower-to-apple_cpu` | `declared_exact` | `native` | `partial` | `partial` | `apple` |
+| `apple_gpu` | `tessera-lower-to-apple_gpu-runtime` | `tessera-lower-to-apple_gpu-runtime` | `declared_exact` | `native` | `partial` | `partial` | `apple` |
 | `cpu` | `tessera-lower-to-x86` | `tessera-lower-to-x86` | `family_selector` | `native` | `partial` | `absent` | `shared_x86` |
 | `nvidia_sm100` | `tessera-lower-to-gpu` | `tessera-lower-to-nvidia-sm100` | `declared_exact` | `absent` | `partial` | `absent` | `nvidia` |
 | `nvidia_sm120` | `tessera-lower-to-gpu` | `tessera-lower-to-nvidia-sm120` | `declared_exact` | `native` | `partial` | `absent` | `nvidia` |

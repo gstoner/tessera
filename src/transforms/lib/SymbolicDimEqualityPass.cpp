@@ -525,10 +525,13 @@ struct SymbolicDimEquality
       if (op->getNumOperands() < 1 || op->getNumResults() < 1) return false;
       auto it = valueDims.find(op->getOperand(0));
       if (it == valueDims.end()) return false;
-      if (mlir::failed(crossCheck(op, "tessera.dim_names_in", it->second)))
+      // Copy before inserting the result: DenseMap may rehash on insertion,
+      // invalidating `it` under LLVM 23's checked iterators.
+      DimNameList inputNames = it->second;
+      if (mlir::failed(crossCheck(op, "tessera.dim_names_in", inputNames)))
         failed = true;
       auto declared = readDimNames(op, "tessera.dim_names_out");
-      valueDims[op->getResult(0)] = declared ? *declared : it->second;
+      valueDims[op->getResult(0)] = declared ? *declared : inputNames;
 
     } else if (name == "tessera.matmul") {
       if (op->getNumOperands() < 2 || op->getNumResults() < 1) return false;
@@ -602,8 +605,11 @@ struct SymbolicDimEquality
            llvm::zip_equal(iterArgs, initOperands)) {
         auto it = valueDims.find(init);
         if (it != valueDims.end()) {
-          valueDims[iterArg] = it->second;
-          expectedNames.push_back(it->second);
+          // Save the map value before inserting `iterArg`: insertion may
+          // rehash DenseMap and invalidate `it` under LLVM 23.
+          DimNameList initNames = it->second;
+          valueDims[iterArg] = initNames;
+          expectedNames.push_back(initNames);
         } else {
           expectedNames.push_back(std::nullopt);
         }

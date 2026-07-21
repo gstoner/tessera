@@ -3375,6 +3375,26 @@ def _submit_x86_native(
 
 
 def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
+    from tessera.compiler.apple_native import (
+        APPLE_BMM_BF16_ABI, APPLE_BMM_F16_ABI, APPLE_BMM_F32_ABI,
+        APPLE_SOFTMAX_BF16_ABI, APPLE_SOFTMAX_F16_ABI, APPLE_SOFTMAX_F32_ABI,
+    )
+
+    if target == "apple_cpu" and abi_id.startswith("tessera.apple.cpu.value.") and target not in _native_launchers:
+        register_native_launcher(
+            target,
+            binary_formats=("shared_object",),
+            submit=_submit_apple_cpu_native,
+        )
+        return
+    if target == "apple_gpu" and (abi_id in {APPLE_BMM_F32_ABI, APPLE_BMM_F16_ABI, APPLE_BMM_BF16_ABI, APPLE_SOFTMAX_F32_ABI, APPLE_SOFTMAX_F16_ABI, APPLE_SOFTMAX_BF16_ABI} or abi_id.startswith("tessera.apple.value.")) and target not in _native_launchers:
+        register_native_launcher(
+            target,
+            binary_formats=("shared_object",),
+            submit=_submit_apple_gpu_native,
+        )
+        return
+
     from tessera.compiler.rocm_native import (
         GFX1151_MOE_DISPATCH_F32_ABI,
         GFX1151_PAGED_KV_F32_ABI,
@@ -3533,6 +3553,153 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
             binary_formats=("ptx",),
             submit=_submit_nvidia_sm120_native,
         )
+
+
+def _submit_apple_gpu_native(
+    image: NativeImageArtifact,
+    descriptor: LaunchDescriptor,
+    buffers: Mapping[str, Any],
+    scalars: Mapping[str, object],
+    stream: Any,
+) -> Any:
+    """Submit the APPLE-E2E-1 f32 BMM descriptor through its named dylib ABI."""
+    del stream
+    import numpy as np
+    from tessera.compiler.apple_native import (
+        APPLE_BMM_BF16_ABI, APPLE_BMM_BF16_SYMBOL, APPLE_BMM_F16_ABI,
+        APPLE_BMM_F16_SYMBOL, APPLE_BMM_F32_ABI, APPLE_BMM_F32_SYMBOL,
+        APPLE_SOFTMAX_BF16_ABI, APPLE_SOFTMAX_BF16_SYMBOL, APPLE_SOFTMAX_F16_ABI,
+        APPLE_SOFTMAX_F16_SYMBOL, APPLE_SOFTMAX_F32_ABI, APPLE_SOFTMAX_F32_SYMBOL,
+        _runtime_library_path,
+    )
+
+    if descriptor.provenance.get("route") == "apple_value_executor":
+        ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
+        inputs = [buffers[item.name] for item in ordered if item.direction == "input"]
+        output_binding = next(item for item in ordered if item.direction == "output")
+        output = buffers[output_binding.name]
+        call = descriptor.provenance["value_call"]
+        assert isinstance(call, Mapping)
+        if call.get("op_kind") in {"cholesky", "tri_solve", "cholesky_solve"}:
+            if call["op_kind"] == "cholesky":
+                result, ran = apple_gpu_cholesky(inputs[0], np)
+            elif call["op_kind"] == "cholesky_solve":
+                result, ran = apple_gpu_cholesky_solve(inputs[0], inputs[1], np)
+            else:
+                result, ran = apple_gpu_tri_solve(inputs[0], inputs[1], np, lower=bool(call.get("lower", True)), trans=bool(call.get("trans", False)), unit=bool(call.get("unit_diag", False)))
+            if not ran:
+                raise RuntimeError("Apple linalg descriptor did not execute on Metal")
+        else:
+            value_artifact = RuntimeArtifact(metadata={"target":"apple_gpu", "compiler_path":"apple_native_descriptor", "apple_value_calls":[dict(call)], "arg_names":[item.name for item in ordered if item.direction == "input"]})
+            result = _execute_apple_value_target_ir_gpu_artifact(value_artifact, inputs)
+        np.copyto(output, np.asarray(result, dtype=output.dtype).reshape(output.shape))
+        return output
+
+    path = _runtime_library_path()
+    if path is None or hashlib.sha256(path.read_bytes()).hexdigest() != image.payload_digest:
+        raise RuntimeError("Apple runtime dylib identity no longer matches the compiler-produced native image")
+    ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
+    softmax_variants = {
+        APPLE_SOFTMAX_F32_ABI: (APPLE_SOFTMAX_F32_SYMBOL, np.float32, ctypes.c_float),
+        APPLE_SOFTMAX_F16_ABI: (APPLE_SOFTMAX_F16_SYMBOL, np.float16, ctypes.c_uint16),
+        APPLE_SOFTMAX_BF16_ABI: (APPLE_SOFTMAX_BF16_SYMBOL, _bfloat16_dtype(), ctypes.c_uint16),
+    }
+    if descriptor.abi_id in softmax_variants:
+        softmax_symbol, softmax_dtype, softmax_pointer_element = softmax_variants[descriptor.abi_id]
+        if softmax_dtype is None:
+            raise RuntimeError("Apple bf16 softmax descriptor requires ml_dtypes")
+        if descriptor.entry_symbol != softmax_symbol or len(ordered) != 2:
+            raise RuntimeError("Apple softmax descriptor ABI or buffer contract is invalid")
+        x, out = (buffers[item.name] for item in ordered)
+        if any(not isinstance(value, np.ndarray) for value in (x, out)):
+            raise RuntimeError("Apple softmax descriptor requires ndarray buffers")
+        if any(value.dtype != softmax_dtype or not value.flags.c_contiguous for value in (x, out)):
+            raise RuntimeError("Apple softmax descriptor requires contiguous buffers matching its storage dtype")
+        if x.ndim != 2 or out.shape != x.shape:
+            raise RuntimeError("Apple softmax buffers disagree with descriptor static shape contract")
+        runtime = _load_apple_gpu_runtime()
+        function = getattr(runtime, softmax_symbol, None)
+        if function is None:
+            raise RuntimeError(f"Apple runtime is missing {softmax_symbol}")
+        pointer = ctypes.POINTER(cast(Any, softmax_pointer_element))
+        function.argtypes = [pointer, pointer, ctypes.c_int32, ctypes.c_int32]
+        function.restype = None
+        def softmax_pointer(value: Any) -> Any:
+            return (value.ctypes.data_as(pointer) if softmax_pointer_element is ctypes.c_float
+                    else value.view(np.uint16).ctypes.data_as(pointer))
+        function(softmax_pointer(x), softmax_pointer(out), *map(int, x.shape))
+        return out
+
+    variants = {
+        APPLE_BMM_F32_ABI: (APPLE_BMM_F32_SYMBOL, np.float32, ctypes.c_float),
+        APPLE_BMM_F16_ABI: (APPLE_BMM_F16_SYMBOL, np.float16, ctypes.c_uint16),
+        APPLE_BMM_BF16_ABI: (APPLE_BMM_BF16_SYMBOL, _bfloat16_dtype(), ctypes.c_uint16),
+    }
+    variant = variants.get(descriptor.abi_id)
+    if variant is None or descriptor.entry_symbol != variant[0]:
+        raise RuntimeError(f"unsupported Apple native descriptor ABI {descriptor.abi_id!r}")
+    symbol, dtype, pointer_element = variant
+    if dtype is None:
+        raise RuntimeError("Apple bf16 descriptor requires the optional ml_dtypes package")
+    if len(ordered) != 3:
+        raise RuntimeError("Apple BMM descriptor requires A, B, and output buffers")
+    a, b, out = (buffers[item.name] for item in ordered)
+    if any(not isinstance(value, np.ndarray) for value in (a, b, out)):
+        raise RuntimeError("Apple BMM descriptor requires ndarray buffers")
+    if any(value.dtype != dtype or not value.flags.c_contiguous for value in (a, b, out)):
+        raise RuntimeError(f"Apple BMM descriptor requires contiguous {descriptor.buffers[0].dtype} buffers")
+    if a.ndim != 3 or b.ndim != 3 or out.ndim != 3:
+        raise RuntimeError("Apple BMM descriptor requires rank-3 buffers")
+    batch, m, k = (int(v) for v in a.shape)
+    b_batch, bk, n = (int(v) for v in b.shape)
+    b_broadcast = int(b_batch == 1)
+    if bk != k or b_batch not in {1, batch} or out.shape != (batch, m, n):
+        raise RuntimeError("Apple BMM buffers disagree with descriptor static shape contract")
+    runtime = _load_apple_gpu_runtime()
+    function = getattr(runtime, symbol, None)
+    if function is None:
+        raise RuntimeError(f"Apple runtime is missing {symbol}")
+    pointer = ctypes.POINTER(cast(Any, pointer_element))
+    function.argtypes = [pointer, pointer, pointer] + [ctypes.c_int32] * 5
+    function.restype = None
+    def pointer_for(value: Any) -> Any:
+        return value.ctypes.data_as(pointer) if pointer_element is ctypes.c_float else value.view(np.uint16).ctypes.data_as(pointer)
+    function(pointer_for(a), pointer_for(b), pointer_for(out),
+             batch, m, n, k, b_broadcast)
+    return out
+
+
+def _submit_apple_cpu_native(
+    image: NativeImageArtifact,
+    descriptor: LaunchDescriptor,
+    buffers: Mapping[str, Any],
+    scalars: Mapping[str, object],
+    stream: Any,
+) -> Any:
+    """Submit one APPLE-CPU-E2E-1 descriptor through its named C ABI."""
+    del scalars, stream
+    import numpy as np
+    from tessera.compiler.apple_cpu_native import _runtime_library_path
+
+    path = _runtime_library_path()
+    if path is None or hashlib.sha256(path.read_bytes()).hexdigest() != image.payload_digest:
+        raise RuntimeError("Apple CPU runtime dylib identity no longer matches the compiler-produced native image")
+    if descriptor.provenance.get("route") != "apple_cpu_value_executor":
+        raise RuntimeError("unsupported Apple CPU native descriptor route")
+    ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
+    inputs = [buffers[item.name] for item in ordered if item.direction == "input"]
+    output_binding = next(item for item in ordered if item.direction == "output")
+    output = buffers[output_binding.name]
+    call = descriptor.provenance["value_call"]
+    assert isinstance(call, Mapping)
+    value_artifact = RuntimeArtifact(
+        metadata={"target": "apple_cpu", "compiler_path": "apple_cpu_native_descriptor",
+                  "apple_value_calls": [dict(call)],
+                  "arg_names": [item.name for item in ordered if item.direction == "input"]},
+    )
+    result = _execute_apple_value_target_ir_artifact(value_artifact, inputs)
+    np.copyto(output, np.asarray(result, dtype=output.dtype).reshape(output.shape))
+    return output
 
 
 def _nvidia_ptx_gemm_2d(A: Any, B: Any, dtype: str = "bfloat16") -> Any:

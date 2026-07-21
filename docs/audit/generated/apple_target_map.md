@@ -73,7 +73,7 @@ and ``docs/backends/apple/`` (Metal 4 implementation-state review):
 | attn_compressed_blocks | reference | numpy_reference | fp32 | - | numpy_reference | fused | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | attn_local_window_2d | reference | numpy_reference | fp32 | - | numpy_reference | fused | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | attn_top_k_blocks | reference | numpy_reference | fp32 | - | numpy_reference | fused | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
-| batched_gemm | fused | numpy_reference | fp32 | - | numpy_reference | absent | - | - | - | absent | tests/unit/test_apple_*.py |
+| batched_gemm | fused | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32,fp16,bf16 | - | manifest | tests/unit/test_apple_*.py |
 | bidirectional_scan | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | binary_cross_entropy_loss | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | bmm | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_abi | - | fp32,fp16,bf16 | tessera_apple_gpu_bmm_dev_{f32,f16,bf16}_enc | driver | tests/unit/test_apple_*.py |

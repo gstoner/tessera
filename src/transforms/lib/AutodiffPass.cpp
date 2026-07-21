@@ -46,8 +46,9 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 
-// Generated header from AdjointInterface.td via TesseraAdjointInterfaceTableGen.
-#include "Tessera/AdjointInterface.h.inc"
+// TesseraOps includes the generated AdjointInterface declaration and provides
+// CustomAdjointCallOp for the dynamic cotangent seed below.
+#include "Tessera/IR/TesseraOps.h"
 
 namespace tessera {
 
@@ -149,7 +150,8 @@ public:
     // element of the loss tensor (or scalar). For arbitrary loss shapes
     // the user can wrap the call in a sum reduction at the Python boundary.
     mlir::Value seed;
-    if (auto shapedType = mlir::dyn_cast<mlir::ShapedType>(lossValue.getType())) {
+    if (auto shapedType = mlir::dyn_cast<mlir::ShapedType>(lossValue.getType());
+        shapedType.hasStaticShape()) {
       auto elemType = shapedType.getElementType();
       mlir::Attribute oneAttr;
       if (mlir::isa<mlir::FloatType>(elemType)) {
@@ -160,10 +162,19 @@ public:
       auto splatAttr = mlir::DenseElementsAttr::get(shapedType, oneAttr);
       seed = builder.create<mlir::arith::ConstantOp>(
           lossValue.getLoc(), splatAttr);
-    } else {
+    } else if (!mlir::isa<mlir::ShapedType>(lossValue.getType())) {
       auto seedAttr = builder.getF32FloatAttr(1.0f);
       seed = builder.create<mlir::arith::ConstantOp>(
           lossValue.getLoc(), seedAttr);
+    } else {
+      // DenseElementsAttr cannot represent a dynamic-shaped splat. Use the
+      // existing runtime-resolved custom-adjoint bridge to construct the
+      // all-ones cotangent without claiming a static shape.
+      auto seedOp = builder.create<CustomAdjointCallOp>(
+          lossValue.getLoc(),
+          llvm::SmallVector<mlir::Type>{lossValue.getType()},
+          builder.getStringAttr("ones_like"), mlir::ValueRange{lossValue});
+      seed = seedOp.getResult(0);
     }
     cotan[lossValue] = seed;
 

@@ -121,6 +121,10 @@ run_one() {
     )
   fi
 
+  # Bash 3 on macOS treats an empty array expansion as unset under `set -u`.
+  # Keep nounset for the driver, but allow the deliberately empty optional
+  # flag arrays while assembling the common CMake invocation.
+  set +u
   cmake "${cmake_fresh[@]}" -B "$build_dir" \
     -DCMAKE_BUILD_TYPE=Debug \
     -DTESSERA_ENABLE_SANITIZERS="$cmake_val" \
@@ -129,6 +133,7 @@ run_one() {
     "${compiler_flags[@]}" \
     "${llvm_flags[@]}" \
     >/dev/null
+  set -u
   # Build every smoke target.
   local targets=()
   for entry in "${SMOKES[@]}"; do

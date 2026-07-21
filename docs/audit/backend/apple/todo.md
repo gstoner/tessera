@@ -947,6 +947,11 @@ fleet truth without changing Metal/Accelerate ABIs, schedules, placement, or
 selectors. The existing Apple7 packet remains exact-device evidence for its
 declared scope only; second-device/fleet proof remains APPLE-NATIVE-E2E-2 and
 cannot be inferred from Apple7.
+Fleet packet identity is now `(target, architecture)`, and Apple CPU plus
+Apple7 GPU packets remain assigned to the M1 Max host. The NR2 WSL
+`x86_64_base`/`sm_120a` slice and Strix Halo `x86_64_avx512`/`gfx1151` slice
+transfer no Metal/Accelerate ABI, schedule, resource, timing, or readiness
+claim. Apple packet recording remains a Mac-host follow-up.
 The NVIDIA-E2E-1 f16 landing slice was assessed as NVIDIA-only: it adds an
 SM120 PTX package producer and exact CUDA submission hook, with no Metal hook,
 Apple ABI, dtype registration, schedule, placement, or selector change.

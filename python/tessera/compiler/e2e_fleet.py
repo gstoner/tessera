@@ -45,6 +45,7 @@ class FleetEvidenceError(ValueError):
 @dataclass(frozen=True)
 class FleetRegistration:
     target: str
+    architecture: str
     backend: str
     families: tuple[str, ...]
     terminal: str
@@ -55,32 +56,37 @@ class FleetRegistration:
 # Bounded family support continues to live in the backend registries/plans.
 FLEET_REGISTRATIONS: tuple[FleetRegistration, ...] = (
     FleetRegistration(
-        "apple_gpu", "apple", ("matmul", "softmax", "linalg", "ppo", "ebm", "clifford"),
+        "apple_gpu", "apple7", "apple", ("matmul", "softmax", "linalg", "ppo", "ebm", "clifford"),
         "packet_pending", "Bounded Apple GPU Level-C scope awaits a v1 fleet packet.",
     ),
     FleetRegistration(
-        "apple_cpu", "apple", ("matmul", "linalg"), "packet_pending",
+        "apple_cpu", "apple_m1_max", "apple", ("matmul", "linalg"), "packet_pending",
         "Bounded Apple CPU Level-C scope awaits exact-host release evidence.",
     ),
     FleetRegistration(
-        "x86", "x86", ("matmul", "softmax", "reduction", "attention", "linalg"),
-        "packet_pending", "Closed x86 E2E scope awaits a v1 fleet packet.",
+        "x86", "x86_64_base", "x86", ("softmax", "reduction"),
+        "packet_pending", "Portable non-AVX512 x86 scope awaits an NR2-host packet.",
     ),
     FleetRegistration(
-        "nvidia_sm120", "nvidia",
+        "x86", "x86_64_avx512", "x86",
+        ("matmul", "softmax", "reduction", "attention", "linalg"),
+        "packet_pending", "AVX512 x86 scope awaits a Strix Halo host packet.",
+    ),
+    FleetRegistration(
+        "nvidia_sm120", "sm_120a", "nvidia",
         ("matmul", "softmax", "reduction", "epilogue", "attention", "paged_kv", "replay_ssm", "moe"),
         "packet_pending", "Closed SM120 scope awaits a hash-sealed family packet.",
     ),
     FleetRegistration(
-        "nvidia_sm90", "nvidia", (), "hardware_deferred",
+        "nvidia_sm90", "sm_90a", "nvidia", (), "hardware_deferred",
         "Exact Hopper device unavailable; SM120 evidence does not transfer.",
     ),
     FleetRegistration(
-        "nvidia_sm100", "nvidia", (), "hardware_deferred",
+        "nvidia_sm100", "sm_100a", "nvidia", (), "hardware_deferred",
         "Exact datacenter Blackwell device unavailable; SM120 evidence does not transfer.",
     ),
     FleetRegistration(
-        "rocm_gfx1151", "rocm", ("softmax", "reduction", "paged_kv", "moe"),
+        "rocm_gfx1151", "gfx1151", "rocm", ("softmax", "reduction", "paged_kv", "moe"),
         "packet_pending", "Closed gfx1151 E2E scope awaits a v1 fleet packet.",
     ),
 )
@@ -89,6 +95,7 @@ FLEET_REGISTRATIONS: tuple[FleetRegistration, ...] = (
 @dataclass(frozen=True)
 class FleetDashboardRow:
     target: str
+    architecture: str
     backend: str
     family: str
     state: str
@@ -212,6 +219,7 @@ def validate_backend_report(
     if report.get("schema") != REPORT_SCHEMA:
         raise FleetEvidenceError("unsupported backend report schema")
     target = _require_text(report, "target", "report")
+    architecture = _require_text(report, "architecture", "report")
     source_commit = _require_text(report, "source_commit", "report")
     if len(source_commit) != 40 or any(c not in "0123456789abcdef" for c in source_commit):
         raise FleetEvidenceError("report.source_commit must be a lowercase 40-hex commit")
@@ -311,7 +319,11 @@ def validate_backend_report(
         cold, warm = proof.get("cold"), proof.get("warm")
         if not isinstance(cold, dict) or not isinstance(warm, dict):
             raise FleetEvidenceError(f"{where} requires cold and warm records")
-        if cold.get("compile_state") != "cold" or warm.get("compile_state") != "warm_cache":
+        compile_states = (cold.get("compile_state"), warm.get("compile_state"))
+        if compile_states not in {
+            ("cold", "warm_cache"),
+            ("prepackaged", "prepackaged"),
+        }:
             raise FleetEvidenceError(f"{where} has invalid compile states")
         for key in ("cache_key", "image_digest", "descriptor_digest"):
             if not _is_digest(cold.get(key)) or cold.get(key) != warm.get(key):
@@ -387,6 +399,7 @@ def validate_backend_report(
 
     return {
         "target": target,
+        "architecture": architecture,
         "source_commit": source_commit,
         "families": len(scope),
         "fixtures": len(results),
@@ -414,6 +427,7 @@ def seal_packet(packet_dir: Path) -> dict[str, Any]:
     manifest = {
         "schema": MANIFEST_SCHEMA,
         "target": summary["target"],
+        "architecture": summary["architecture"],
         "tested_commit": summary["source_commit"],
         "files": files,
         "validation": summary,
@@ -450,6 +464,8 @@ def validate_packet(packet_dir: Path) -> dict[str, Any]:
     summary = validate_backend_report(report)
     if manifest.get("target") != summary["target"]:
         raise FleetEvidenceError("packet target disagrees with report")
+    if manifest.get("architecture") != summary["architecture"]:
+        raise FleetEvidenceError("packet architecture disagrees with report")
     if manifest.get("tested_commit") != summary["source_commit"]:
         raise FleetEvidenceError("packet commit disagrees with report")
     if manifest.get("validation") != summary:
@@ -465,8 +481,12 @@ def compare_backend_reports(
     corpus = dict(fixtures) if fixtures is not None else load_fixture_corpus()
     left_summary = validate_backend_report(left, fixtures=corpus)
     right_summary = validate_backend_report(right, fixtures=corpus)
-    if left_summary["target"] == right_summary["target"]:
-        raise FleetEvidenceError("differential comparison requires distinct targets")
+    left_identity = (left_summary["target"], left_summary["architecture"])
+    right_identity = (right_summary["target"], right_summary["architecture"])
+    if left_identity == right_identity:
+        raise FleetEvidenceError(
+            "differential comparison requires distinct target/architecture identities"
+        )
     left_rows = {row["fixture_id"]: row for row in left["fixtures"]}
     right_rows = {row["fixture_id"]: row for row in right["fixtures"]}
     common = sorted(set(left_rows) & set(right_rows))
@@ -489,23 +509,29 @@ def compare_backend_reports(
         maximum_error = max(maximum_error, max_abs)
     return {
         "left_target": left_summary["target"],
+        "left_architecture": left_summary["architecture"],
         "right_target": right_summary["target"],
+        "right_architecture": right_summary["architecture"],
         "common_fixtures": len(common),
         "maximum_absolute_error": maximum_error,
     }
 
 
-def discover_packets(root: Path = EVIDENCE_ROOT) -> dict[str, tuple[Path, dict[str, Any]]]:
-    packets: dict[str, tuple[Path, dict[str, Any]]] = {}
+def discover_packets(
+    root: Path = EVIDENCE_ROOT,
+) -> dict[tuple[str, str], tuple[Path, dict[str, Any]]]:
+    packets: dict[tuple[str, str], tuple[Path, dict[str, Any]]] = {}
     if not root.exists():
         return packets
     for manifest in sorted(root.glob("*/*/manifest.json")):
         packet_dir = manifest.parent
         summary = validate_packet(packet_dir)
-        target = str(summary["target"])
-        if target in packets:
-            raise FleetEvidenceError(f"multiple active fleet packets for {target}")
-        packets[target] = (packet_dir, summary)
+        key = (str(summary["target"]), str(summary["architecture"]))
+        if key in packets:
+            raise FleetEvidenceError(
+                f"multiple active fleet packets for {key[0]} architecture {key[1]}"
+            )
+        packets[key] = (packet_dir, summary)
     return packets
 
 
@@ -513,12 +539,13 @@ def fleet_dashboard_rows(root: Path = EVIDENCE_ROOT) -> tuple[FleetDashboardRow,
     packets = discover_packets(root)
     rows: list[FleetDashboardRow] = []
     for registration in FLEET_REGISTRATIONS:
-        packet = packets.get(registration.target)
+        packet = packets.get((registration.target, registration.architecture))
         if packet is None:
             families = registration.families or ("-",)
             for family in families:
                 rows.append(FleetDashboardRow(
-                    registration.target, registration.backend, family,
+                    registration.target, registration.architecture,
+                    registration.backend, family,
                     registration.terminal, "", "", registration.reason,
                 ))
             continue
@@ -534,7 +561,8 @@ def fleet_dashboard_rows(root: Path = EVIDENCE_ROOT) -> tuple[FleetDashboardRow,
         for family in registration.families:
             present = family in packet_families
             rows.append(FleetDashboardRow(
-                registration.target, registration.backend, family,
+                registration.target, registration.architecture,
+                registration.backend, family,
                 "release_ready" if present else "packet_pending",
                 packet_dir.relative_to(_REPO_ROOT).as_posix() if present else "",
                 str(summary["source_commit"]) if present else "",
@@ -544,7 +572,7 @@ def fleet_dashboard_rows(root: Path = EVIDENCE_ROOT) -> tuple[FleetDashboardRow,
 
 
 FLEET_CSV_COLUMNS = (
-    "schema", "target", "backend", "family", "state", "packet",
+    "schema", "target", "architecture", "backend", "family", "state", "packet",
     "source_commit", "reason",
 )
 
@@ -558,7 +586,8 @@ def render_fleet_csv(rows: Iterable[FleetDashboardRow] | None = None) -> str:
     writer.writerow(FLEET_CSV_COLUMNS)
     for row in rows if rows is not None else fleet_dashboard_rows():
         writer.writerow((
-            MANIFEST_SCHEMA, row.target, row.backend, row.family, row.state,
+            MANIFEST_SCHEMA, row.target, row.architecture, row.backend,
+            row.family, row.state,
             row.packet, row.source_commit, row.reason,
         ))
     return buffer.getvalue()
@@ -573,14 +602,14 @@ def render_fleet_markdown(rows: Iterable[FleetDashboardRow] | None = None) -> st
         "",
         "`release_ready` is family-granular. It does not promote a whole target or transfer exact-device evidence.",
         "",
-        "| Target | Backend | Family | State | Tested commit | Packet |",
-        "|---|---|---|---|---|---|",
+        "| Target | Architecture | Backend | Family | State | Tested commit | Packet |",
+        "|---|---|---|---|---|---|---|",
     ]
     for row in values:
         packet = f"`{row.packet}`" if row.packet else "-"
         commit = f"`{row.source_commit[:12]}`" if row.source_commit else "-"
         lines.append(
-            f"| `{row.target}` | `{row.backend}` | `{row.family}` | "
+            f"| `{row.target}` | `{row.architecture}` | `{row.backend}` | `{row.family}` | "
             f"`{row.state}` | {commit} | {packet} |"
         )
     lines.extend(("", "The CSV companion retains the full reason and commit.", ""))

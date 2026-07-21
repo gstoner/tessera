@@ -8,6 +8,15 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 option(TESSERA_ENABLE_AMX "Enable Intel AMX kernels" ON)
 option(TESSERA_ENABLE_AVX512 "Enable AVX-512 kernels" ON)
 
+# This image is intentionally created before architecture-specific directory
+# flags are added below. It must remain executable on baseline x86-64 hosts.
+add_library(tessera_x86_base SHARED
+  src/kernels/base_e2e_f32.cpp
+)
+target_compile_options(tessera_x86_base PRIVATE
+  -march=x86-64 -mno-avx -mno-avx2 -mno-avx512f
+)
+
 # Try to detect and add compiler flags for AVX-512 / AMX
 include(CheckCXXCompilerFlag)
 

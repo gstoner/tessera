@@ -40,7 +40,7 @@ def _fixtures() -> dict[str, dict]:
     }
 
 
-def _report(target: str = "nvidia_sm120") -> dict:
+def _report(target: str = "nvidia_sm120", architecture: str = "sm_120a") -> dict:
     image = _digest(f"{target}:image")
     descriptor = _digest(f"{target}:descriptor")
     cache_key = _digest(f"{target}:cache")
@@ -64,6 +64,7 @@ def _report(target: str = "nvidia_sm120") -> dict:
     return {
         "schema": REPORT_SCHEMA,
         "target": target,
+        "architecture": architecture,
         "device": {"exact": True, "identity": f"test-device:{target}"},
         "source_commit": "a" * 40,
         "toolchain_fingerprint": f"toolchain:{target}",
@@ -115,10 +116,15 @@ def test_report_requires_numerical_level_c_cache_and_both_timing_domains() -> No
     with pytest.raises(FleetEvidenceError, match="lacks its required timing domains"):
         validate_backend_report(bad, fixtures=_fixtures())
 
-    cpu = _report("x86")
+    cpu = _report("x86", "x86_64_base")
     cpu["required_timing_domains"] = ["kernel_wall", "end_to_end"]
     cpu["benchmarks"][0]["timing_domain"] = "kernel_wall"
     assert validate_backend_report(cpu, fixtures=_fixtures())["target"] == "x86"
+
+    packaged = deepcopy(cpu)
+    packaged["cache_proofs"][0]["cold"]["compile_state"] = "prepackaged"
+    packaged["cache_proofs"][0]["warm"]["compile_state"] = "prepackaged"
+    assert validate_backend_report(packaged, fixtures=_fixtures())["architecture"] == "x86_64_base"
 
     bad = deepcopy(report)
     bad["benchmarks"][0]["run_medians_ns"] = [900.0, 1100.0]
@@ -134,14 +140,21 @@ def test_report_requires_numerical_level_c_cache_and_both_timing_domains() -> No
 
 def test_cross_backend_differential_compares_common_actual_values() -> None:
     left = _report("nvidia_sm120")
-    right = _report("rocm_gfx1151")
+    right = _report("rocm_gfx1151", "gfx1151")
     summary = compare_backend_reports(left, right, fixtures=_fixtures())
     assert summary == {
         "left_target": "nvidia_sm120",
+        "left_architecture": "sm_120a",
         "right_target": "rocm_gfx1151",
+        "right_architecture": "gfx1151",
         "common_fixtures": 1,
         "maximum_absolute_error": 0.0,
     }
+    same_target = _report("x86", "x86_64_base")
+    avx512 = _report("x86", "x86_64_avx512")
+    assert compare_backend_reports(
+        same_target, avx512, fixtures=_fixtures(),
+    )["common_fixtures"] == 1
     right["fixtures"][0]["actual"][0][0] = 0.50001
     with pytest.raises(FleetEvidenceError, match="fails its numerical policy"):
         compare_backend_reports(left, right, fixtures=_fixtures())
@@ -195,5 +208,5 @@ def test_dashboard_keeps_missing_packets_and_hardware_terminals_explicit(
     assert ("nvidia_sm90", "hardware_deferred") in states
     assert "release_ready" not in {row.state for row in rows}
     csv_text = render_fleet_csv(rows)
-    assert csv_text.startswith("schema,target,backend,family,state")
-    assert "tessera.e2e-release-packet.v1,nvidia_sm90" in csv_text
+    assert csv_text.startswith("schema,target,architecture,backend,family,state")
+    assert "tessera.e2e-release-packet.v1,nvidia_sm90,sm_90a" in csv_text

@@ -1,4 +1,4 @@
-"""Typed native-image packaging for the X86-E2E-1 AVX-512 pilot."""
+"""Typed native-image packaging for compiler-owned x86 architecture images."""
 
 from __future__ import annotations
 
@@ -46,6 +46,8 @@ X86_SCAN_F32_ABI = "tessera.x86.scan.x_o_rows_cols.f32.v1"
 X86_NORM_F32_ABI = "tessera.x86.norm.x_o_rows_cols_eps.f32.v1"
 X86_ROPE_F32_ABI = "tessera.x86.rope.x_theta_o_rows_cols.f32.v1"
 X86_ALIBI_F32_ABI = "tessera.x86.alibi.slopes_o_h_s.f32.v1"
+X86_BASE_ARCHITECTURE = "x86_64_base"
+X86_AVX512_ARCHITECTURE = "x86_64_avx512"
 
 X86_ARGREDUCE_KINDS = {"tessera.argmax": "argmax", "tessera.argmin": "argmin"}
 X86_SCAN_KINDS = {
@@ -139,22 +141,35 @@ def _tessera_opt() -> Path | None:
     return Path(found) if found else None
 
 
-def _library_path() -> Path | None:
-    if configured := os.environ.get("TESSERA_X86_ELEMENTWISE_LIB"):
+def _library_path(architecture: str = X86_AVX512_ARCHITECTURE) -> Path | None:
+    if architecture not in {X86_BASE_ARCHITECTURE, X86_AVX512_ARCHITECTURE}:
+        raise ValueError(f"unsupported x86 native architecture {architecture!r}")
+    environment = (
+        "TESSERA_X86_BASE_LIB"
+        if architecture == X86_BASE_ARCHITECTURE
+        else "TESSERA_X86_ELEMENTWISE_LIB"
+    )
+    library_name = (
+        "libtessera_x86_base.so"
+        if architecture == X86_BASE_ARCHITECTURE
+        else "libtessera_x86_elementwise.so"
+    )
+    if configured := os.environ.get(environment):
         path = Path(configured).expanduser()
         return path if path.is_file() else None
     root = _repo_root()
     for path in (
-        root / "build-rocm-7.14-llvm23-clean/src/compiler/codegen/tessera_x86_backend/libtessera_x86_elementwise.so",
-        root / "build/src/compiler/codegen/tessera_x86_backend/libtessera_x86_elementwise.so",
+        root / "build-rocm-7.14-llvm23-clean/src/compiler/codegen/tessera_x86_backend" / library_name,
+        root / "build-nvidia-cuda/src/compiler/codegen/tessera_x86_backend" / library_name,
+        root / "build/src/compiler/codegen/tessera_x86_backend" / library_name,
     ):
         if path.is_file():
             return path
     return None
 
 
-def tools_available() -> bool:
-    return _tessera_opt() is not None and _library_path() is not None
+def tools_available(architecture: str = X86_AVX512_ARCHITECTURE) -> bool:
+    return _tessera_opt() is not None and _library_path(architecture) is not None
 
 
 def supports_native_package(module: GraphIRModule) -> bool:
@@ -184,12 +199,18 @@ def _version_fingerprint(tool: Path) -> str:
     return hashlib.sha256((text or str(tool)).encode()).hexdigest()
 
 
-def _lower(tile_ir: str, symbol: str) -> tuple[str, bytes, str, str]:
-    tool, library = _tessera_opt(), _library_path()
+def _lower(
+    tile_ir: str, symbol: str,
+    architecture: str = X86_AVX512_ARCHITECTURE,
+) -> tuple[str, bytes, str, str]:
+    tool, library = _tessera_opt(), _library_path(architecture)
     if tool is None or library is None:
-        raise RuntimeError("X86-E2E-1 requires tessera-opt and libtessera_x86_elementwise.so")
+        raise RuntimeError(
+            f"X86 native packaging requires tessera-opt and the {architecture} shared image"
+        )
+    pass_architecture = "base" if architecture == X86_BASE_ARCHITECTURE else "avx512"
     result = subprocess.run(
-        [str(tool), "-", "--tessera-tile-to-x86=prefer-amx=false"],
+        [str(tool), "-", f"--tessera-tile-to-x86=prefer-amx=false architecture={pass_architecture}"],
         input=tile_ir, capture_output=True, text=True, check=False,
     )
     if result.returncode:
@@ -199,7 +220,9 @@ def _lower(tile_ir: str, symbol: str) -> tuple[str, bytes, str, str]:
         raise RuntimeError(f"x86 typed lowering did not emit {symbol}")
     payload = library.read_bytes()
     compiler = _version_fingerprint(tool)
-    toolchain = hashlib.sha256(f"{compiler}|{hashlib.sha256(payload).hexdigest()}|x86_64_avx512".encode()).hexdigest()
+    toolchain = hashlib.sha256(
+        f"{compiler}|{hashlib.sha256(payload).hexdigest()}|{architecture}".encode()
+    ).hexdigest()
     return target_ir, payload, compiler, toolchain
 
 
@@ -785,9 +808,10 @@ def supports_promoted_elementwise(module: GraphIRModule) -> bool:
 def _image(
     *, target_ir: str, payload: bytes, compiler: str, toolchain: str,
     pipeline_name: str, symbol: str, abi: str,
+    architecture: str = X86_AVX512_ARCHITECTURE,
 ) -> NativeImageArtifact:
     return NativeImageArtifact(
-        target="x86", architecture="x86_64_avx512", pipeline_name=pipeline_name,
+        target="x86", architecture=architecture, pipeline_name=pipeline_name,
         compiler_fingerprint=compiler, toolchain_fingerprint=toolchain,
         target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(),
         binary_format="shared_object", payload=payload,
@@ -870,16 +894,27 @@ def package_cohort2(module: GraphIRModule, *, pipeline_name: str) -> X86NativePa
     return X86NativePackage(tile_ir, target_ir, target_ir, image, descriptor)
 
 
-def package_softmax(module: GraphIRModule, *, pipeline_name: str) -> X86NativePackage:
+def package_softmax(
+    module: GraphIRModule, *, pipeline_name: str,
+    architecture: str = X86_AVX512_ARCHITECTURE,
+) -> X86NativePackage:
     contract = _softmax_contract(module)
     if contract is None:
         raise ValueError("x86 native softmax requires one static f32 last-axis operation")
     input_name, output_name, shape = contract
-    symbol = "tessera_x86_avx512_softmax_f32"
+    symbol = (
+        "tessera_x86_base_softmax_f32"
+        if architecture == X86_BASE_ARCHITECTURE
+        else "tessera_x86_avx512_softmax_f32"
+    )
     tile_ir = emit_softmax_tile_ir(entry="tessera_tile_x86_softmax_f32")
-    target_ir, payload, compiler, toolchain = _lower(tile_ir, symbol)
+    target_ir, payload, compiler, toolchain = (
+        _lower(tile_ir, symbol, architecture)
+        if architecture == X86_BASE_ARCHITECTURE else _lower(tile_ir, symbol)
+    )
     image = _image(target_ir=target_ir, payload=payload, compiler=compiler, toolchain=toolchain,
-                   pipeline_name=pipeline_name, symbol=symbol, abi=X86_SOFTMAX_F32_ABI)
+                   pipeline_name=pipeline_name, symbol=symbol, abi=X86_SOFTMAX_F32_ABI,
+                   architecture=architecture)
     rows, columns = (math.prod(shape[:-1]) if len(shape) > 1 else 1), shape[-1]
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest, entry_symbol=symbol, abi_id=X86_SOFTMAX_F32_ABI,
@@ -892,10 +927,14 @@ def package_softmax(module: GraphIRModule, *, pipeline_name: str) -> X86NativePa
             ShapeGuard(name, axis, "eq", extent)
             for name in (input_name, output_name) for axis, extent in enumerate(shape)
         ),
-        geometry=LaunchGeometry(policy="x86_avx512_rows"),
+        geometry=LaunchGeometry(policy=f"{architecture}_rows"),
         ordering=OrderingSemantics(ordered_submission=True, residency="all", synchronization=("return",)),
         provenance={
-            "work_item": "X86-E2E-1", "route": "avx512_c_abi",
+            "work_item": (
+                "E2E-SPINE-3" if architecture == X86_BASE_ARCHITECTURE
+                else "X86-E2E-1"
+            ),
+            "route": f"{architecture}_c_abi",
             "shape": list(shape), "rows": rows, "columns": columns,
             "storage": "f32", "accum": "f32",
         },
@@ -903,16 +942,27 @@ def package_softmax(module: GraphIRModule, *, pipeline_name: str) -> X86NativePa
     return X86NativePackage(tile_ir, target_ir, target_ir, image, descriptor)
 
 
-def package_reduction(module: GraphIRModule, *, pipeline_name: str) -> X86NativePackage:
+def package_reduction(
+    module: GraphIRModule, *, pipeline_name: str,
+    architecture: str = X86_AVX512_ARCHITECTURE,
+) -> X86NativePackage:
     contract = _reduction_contract(module)
     if contract is None:
         raise ValueError("x86 native reduction requires one static f32 last-axis sum/mean/max")
     input_name, output_name, kind, shape, output_shape, axis, keepdims = contract
-    symbol = "tessera_x86_avx512_reduce_f32"
+    symbol = (
+        "tessera_x86_base_reduce_f32"
+        if architecture == X86_BASE_ARCHITECTURE
+        else "tessera_x86_avx512_reduce_f32"
+    )
     tile_ir = emit_reduce_tile_ir(entry=f"tessera_tile_x86_reduce_{kind}_f32", kind=kind, axis=axis, keepdims=keepdims)
-    target_ir, payload, compiler, toolchain = _lower(tile_ir, symbol)
+    target_ir, payload, compiler, toolchain = (
+        _lower(tile_ir, symbol, architecture)
+        if architecture == X86_BASE_ARCHITECTURE else _lower(tile_ir, symbol)
+    )
     image = _image(target_ir=target_ir, payload=payload, compiler=compiler, toolchain=toolchain,
-                   pipeline_name=pipeline_name, symbol=symbol, abi=X86_REDUCE_F32_ABI)
+                   pipeline_name=pipeline_name, symbol=symbol, abi=X86_REDUCE_F32_ABI,
+                   architecture=architecture)
     outer, extent = (math.prod(shape[:-1]) if len(shape) > 1 else 1), shape[-1]
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest, entry_symbol=symbol, abi_id=X86_REDUCE_F32_ABI,
@@ -928,10 +978,14 @@ def package_reduction(module: GraphIRModule, *, pipeline_name: str) -> X86Native
             [ShapeGuard(input_name, index, "eq", value) for index, value in enumerate(shape)]
             + [ShapeGuard(output_name, index, "eq", value) for index, value in enumerate(output_shape)]
         ),
-        geometry=LaunchGeometry(policy="x86_avx512_rows"),
+        geometry=LaunchGeometry(policy=f"{architecture}_rows"),
         ordering=OrderingSemantics(ordered_submission=True, residency="all", synchronization=("return",)),
         provenance={
-            "work_item": "X86-E2E-1", "route": "avx512_c_abi", "kind": kind,
+            "work_item": (
+                "E2E-SPINE-3" if architecture == X86_BASE_ARCHITECTURE
+                else "X86-E2E-1"
+            ),
+            "route": f"{architecture}_c_abi", "kind": kind,
             "shape": list(shape), "axis": axis, "keepdims": keepdims,
             "outer": outer, "axis_extent": extent, "inner": 1,
             "storage": "f32", "accum": "f32",

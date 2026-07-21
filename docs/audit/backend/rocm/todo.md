@@ -1125,6 +1125,13 @@ hashes. Other gfx targets remain explicit unavailable/deferred rows and cannot
 inherit gfx1151 evidence. No wave/LDS schedule, HSACO ABI, capability, or
 selector changes.
 
+Fleet packet identity is now `(target, architecture)`. The `gfx1151` packet is
+assigned to the Strix Halo host together with the independent
+`x86_64_avx512` packet; the NR2 WSL host's `x86_64_base` and `sm_120a` evidence
+cannot satisfy either obligation. This shared evidence-key change adds no HIP
+ABI, wave/LDS schedule, capability, or selector behavior. Exact gfx1151
+recording remains a Strix-host follow-up.
+
 Cross-backend sync `X86-E2E2-ELEMENTWISE-2026-07-20` adds the internal shared
 `tile.elementwise_kernel` semantic carrier for f32 unary/binary and f32-to-bool
 predicate requests. ROCm parity is assessed at the carrier boundary only;

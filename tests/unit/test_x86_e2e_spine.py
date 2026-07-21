@@ -10,6 +10,7 @@ from tessera.compiler.driver import compile_graph_module
 from tessera.compiler.canonical_compile import canonical_compile
 from tessera.compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IROp, IRType
 from tessera.compiler.x86_native import (
+    X86_BASE_ARCHITECTURE,
     X86_ATTENTION_EXT_F32_ABI,
     X86_ATTENTION_F32_ABI,
     X86_MATMUL_F32_ABI,
@@ -201,6 +202,48 @@ def test_x86_packages_own_shared_object_and_typed_descriptor(monkeypatch, family
     assert package.image.binary_format == "shared_object"
     assert package.descriptor.abi_id == abi
     assert package.descriptor.provenance["work_item"] == "X86-E2E-1"
+
+
+@pytest.mark.skipif(
+    not tools_available(X86_BASE_ARCHITECTURE),
+    reason="base x86 compiler/shared library unavailable",
+)
+@pytest.mark.parametrize("family", ["softmax", "reduction"])
+def test_x86_base_descriptor_executes_without_avx512(family) -> None:
+    module = _softmax_module((2, 2)) if family == "softmax" else _reduction_module(
+        shape=(2, 3), kind="sum", keepdims=False,
+    )
+    package = (
+        package_softmax(
+            module, pipeline_name="tessera-lower-to-x86",
+            architecture=X86_BASE_ARCHITECTURE,
+        )
+        if family == "softmax"
+        else package_reduction(
+            module, pipeline_name="tessera-lower-to-x86",
+            architecture=X86_BASE_ARCHITECTURE,
+        )
+    )
+    artifact = rt.RuntimeArtifact(
+        metadata={"target": "x86"}, native_image=package.image,
+        launch_descriptor=package.descriptor, tile_ir=package.tile_ir,
+        target_ir=package.target_ir,
+    )
+    if family == "softmax":
+        x = np.array([[0.0, 0.0], [1000.0, 1000.0]], dtype=np.float32)
+        output = np.zeros_like(x)
+        scalars = {"Rows": 2, "K": 2}
+        expected = np.full((2, 2), 0.5, dtype=np.float32)
+    else:
+        x = np.array([[1.0, -2.0, 3.0], [4.0, 0.5, -1.0]], dtype=np.float32)
+        output = np.zeros((2,), dtype=np.float32)
+        scalars = {"Outer": 2, "AxisExtent": 3, "Inner": 1}
+        expected = np.array([2.0, 3.5], dtype=np.float32)
+    result = rt.launch(artifact, {"x": x, "o": output, **scalars})
+    assert result["ok"] is True, result.get("reason")
+    assert package.image.architecture == X86_BASE_ARCHITECTURE
+    assert "avx512" not in package.descriptor.entry_symbol
+    np.testing.assert_allclose(output, expected, rtol=2e-6, atol=2e-6)
 
 
 def test_driver_joins_x86_native_package(monkeypatch) -> None:

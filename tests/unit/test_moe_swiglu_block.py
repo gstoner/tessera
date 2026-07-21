@@ -127,6 +127,31 @@ def test_fused_kernel_abi_symbol_present():
     from tessera import _apple_gpu_backend as _agb
     lib = _agb._load()
     assert hasattr(lib, "tessera_apple_gpu_moe_swiglu_f32")
+    assert hasattr(lib, "tessera_apple_gpu_moe_swiglu_f16")
+    assert hasattr(lib, "tessera_apple_gpu_moe_swiglu_bf16")
+
+
+@gpu
+@pytest.mark.parametrize("dtype", [np.float16, pytest.param(
+    pytest.importorskip("ml_dtypes").bfloat16, id="bf16")])
+def test_lowp_moe_composite_execute_compare(dtype):
+    from tessera._apple_gpu_dispatch import (
+        clear_dispatch_telemetry, read_dispatch_telemetry,
+        set_dispatch_telemetry_enabled,
+    )
+    x, wg, wu, wd, gs = _inputs(811, [2, 2], K=8, F=10, N=6)
+    x, wg, wu, wd = (value.astype(dtype) for value in (x, wg, wu, wd))
+    set_dispatch_telemetry_enabled(True)
+    try:
+        clear_dispatch_telemetry()
+        got = np.asarray(R._apple_gpu_dispatch_moe_swiglu_block([x, wg, wu, wd, gs], {}, np))
+        telemetry = read_dispatch_telemetry()
+    finally:
+        set_dispatch_telemetry_enabled(False)
+    np.testing.assert_allclose(got.astype(np.float32), _ref(x, wg, wu, wd, gs),
+                               rtol=6e-2, atol=6e-2)
+    assert telemetry["device_time_ns"] is not None
+    assert telemetry["timing_source"] == "metal_command_buffer_interval"
 
 
 @gpu

@@ -252,6 +252,11 @@ extern "C" int32_t tessera_apple_gpu_svd_batched_f32(const float*, float*, float
 extern "C" int32_t tessera_apple_gpu_svd_bl_batched_f32(const float*, float*, float*,
                                                         float*, int32_t, int32_t,
                                                         int32_t) { return 0; }
+extern "C" int32_t tessera_apple_gpu_svd_reduced_f32(const float*, float*, float*, float*,
+                                                     int32_t, int32_t) { return 0; }
+extern "C" int32_t tessera_apple_gpu_svd_reduced_batched_f32(const float*, float*, float*, float*,
+                                                             int32_t, int32_t,
+                                                             int32_t) { return 0; }
 // Batched factorizations/solves — no Metal off Darwin; Python uses numpy.
 extern "C" int32_t tessera_apple_gpu_cholesky_batched_f32(const float*, float*,
                                                           int32_t*, int32_t,
@@ -2765,6 +2770,47 @@ extern "C" void tessera_apple_gpu_moe_swiglu_f32(
       for (int32_t ko = 0; ko < Kout; ++ko) O[o_off + ko] += hv * Wd[wd_off + ko];
     }
   }
+}
+
+extern "C" void tessera_apple_gpu_moe_swiglu_f16(
+    const uint16_t* X, const uint16_t* Wg, const uint16_t* Wu, const uint16_t* Wd,
+    const int32_t* Eids, uint16_t* O, int32_t T, int32_t K, int32_t H,
+    int32_t Kout, int32_t Ecount) {
+  (void)Ecount;
+  std::vector<float> x((size_t)T*K), wg((size_t)Ecount*K*H), wu((size_t)Ecount*K*H), wd((size_t)Ecount*H*Kout), out((size_t)T*Kout);
+  for(size_t i=0;i<x.size();++i)x[i]=half_to_float_stub(X[i]);
+  for(size_t i=0;i<wg.size();++i){wg[i]=half_to_float_stub(Wg[i]);wu[i]=half_to_float_stub(Wu[i]);}
+  for(size_t i=0;i<wd.size();++i)wd[i]=half_to_float_stub(Wd[i]);
+  tessera_apple_gpu_moe_swiglu_f32(x.data(),wg.data(),wu.data(),wd.data(),Eids,out.data(),T,K,H,Kout,Ecount);
+  for(size_t i=0;i<out.size();++i)O[i]=float_to_half_stub(out[i]);
+}
+
+extern "C" void tessera_apple_gpu_moe_swiglu_bf16(
+    const uint16_t* X, const uint16_t* Wg, const uint16_t* Wu, const uint16_t* Wd,
+    const int32_t* Eids, uint16_t* O, int32_t T, int32_t K, int32_t H,
+    int32_t Kout, int32_t Ecount) {
+  // Non-Darwin parity only: retain bf16 bit storage at the public ABI while
+  // executing the portable f32 reference.  Darwin uses the raw-16-bit MSL
+  // encoder and never reaches this stub.
+  auto load = [](uint16_t value) {
+    uint32_t bits = static_cast<uint32_t>(value) << 16;
+    float result;
+    std::memcpy(&result, &bits, sizeof(result));
+    return result;
+  };
+  auto store = [](float value) {
+    uint32_t bits;
+    std::memcpy(&bits, &value, sizeof(bits));
+    return static_cast<uint16_t>((bits + 0x7fffu + ((bits >> 16) & 1u)) >> 16);
+  };
+  std::vector<float> x((size_t)T*K), wg((size_t)Ecount*K*H),
+      wu((size_t)Ecount*K*H), wd((size_t)Ecount*H*Kout), out((size_t)T*Kout);
+  for (size_t i = 0; i < x.size(); ++i) x[i] = load(X[i]);
+  for (size_t i = 0; i < wg.size(); ++i) { wg[i] = load(Wg[i]); wu[i] = load(Wu[i]); }
+  for (size_t i = 0; i < wd.size(); ++i) wd[i] = load(Wd[i]);
+  tessera_apple_gpu_moe_swiglu_f32(x.data(), wg.data(), wu.data(), wd.data(),
+                                   Eids, out.data(), T, K, H, Kout, Ecount);
+  for (size_t i = 0; i < out.size(); ++i) O[i] = store(out[i]);
 }
 
 // Spectral / FFT lane (non-Darwin reference parity — naive O(n^2) DFT).

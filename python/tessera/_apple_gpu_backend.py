@@ -101,6 +101,10 @@ def _load():
         # Fused ragged SwiGLU MoE block (X, Wg, Wu, Wd, expert_ids, O, T, K, H, Kout, E).
         ("tessera_apple_gpu_moe_swiglu_f32",
          [fp, fp, fp, fp, ip, fp, i32, i32, i32, i32, i32]),
+        ("tessera_apple_gpu_moe_swiglu_f16",
+         [u16, u16, u16, u16, ip, u16, i32, i32, i32, i32, i32]),
+        ("tessera_apple_gpu_moe_swiglu_bf16",
+         [u16, u16, u16, u16, ip, u16, i32, i32, i32, i32, i32]),
         # Spectral / FFT lane (mode, in, out, batch, n). mode 0=fft 1=ifft
         # 2=rfft 3=irfft; complex I/O is interleaved real/imag f32.
         ("tessera_apple_gpu_fft_f32", [i32, fp, fp, i32, i32]),
@@ -234,18 +238,25 @@ def gpu_gated_delta_rule_chunked(Q: np.ndarray, K: np.ndarray, V: np.ndarray,
 def gpu_matmul(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     """C = A @ B on the Apple GPU (MPS), rank-2 f32 or bf16 (native bf16 kernel,
     f32 accumulate)."""
-    a = _arr(a, "a")
-    b = _arr(b, "b")
+    a = np.ascontiguousarray(np.asarray(a))
+    b = np.ascontiguousarray(np.asarray(b))
     if a.ndim != 2 or b.ndim != 2 or a.shape[1] != b.shape[0]:
         raise AppleGpuError(f"gpu_matmul rank-2, K must match: {a.shape} @ {b.shape}")
     M, K = int(a.shape[0]), int(a.shape[1])
     N = int(b.shape[1])
+    if a.dtype == np.float16 and b.dtype == np.float16:
+        out = np.zeros((M, N), np.float16)
+        _load().tessera_apple_gpu_mps_matmul_f16(
+            _u16ptr(a), _u16ptr(b), _u16ptr(out), M, N, K)
+        return out
     if _is_bf16(a) or _is_bf16(b):
         a, b = _to_bf16(a), _to_bf16(b)
         out = np.zeros((M, N), _BF16)
         _load().tessera_apple_gpu_mps_matmul_bf16(
             _u16ptr(a), _u16ptr(b), _u16ptr(out), M, N, K)
         return out
+    if a.dtype != np.float32 or b.dtype != np.float32:
+        raise AppleGpuError("gpu_matmul requires matching f32, f16, or bf16 storage")
     out = np.zeros((M, N), np.float32)
     _load().tessera_apple_gpu_mps_matmul_f32(_ptr(a), _ptr(b), _ptr(out), M, N, K)
     return out
@@ -276,6 +287,32 @@ def gpu_grouped_gemm(x: np.ndarray, w: np.ndarray,
     _load().tessera_apple_gpu_grouped_gemm_f32(
         _ptr(x), _ptr(w), e.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
         _ptr(out), T, K, N, E)
+    return out
+
+
+def gpu_grouped_gemm_lowp(x: np.ndarray, w: np.ndarray,
+                          group_sizes: np.ndarray) -> np.ndarray:
+    """Native f16/bf16 grouped GEMM through the matching MPS C ABI.
+
+    This intentionally keeps storage dtype at the boundary.  It is a composed
+    per-expert route, not evidence for the f32 fused grouped kernel.
+    """
+    x = np.ascontiguousarray(np.asarray(x))
+    w = np.ascontiguousarray(w)
+    groups = np.asarray(group_sizes, dtype=np.int64).reshape(-1)
+    if x.dtype != w.dtype or (x.dtype != np.float16 and not _is_bf16(x)):
+        raise AppleGpuError("lowp grouped GEMM requires matching f16 or bf16 storage")
+    if x.ndim != 2 or w.ndim != 3 or groups.shape != (w.shape[0],):
+        raise AppleGpuError("lowp grouped GEMM requires x(T,K), w(E,K,N), groups(E)")
+    if int(groups.sum()) != x.shape[0] or w.shape[1] != x.shape[1]:
+        raise AppleGpuError("lowp grouped GEMM has incompatible groups or K")
+    out = np.empty((x.shape[0], w.shape[2]), dtype=x.dtype)
+    offset = 0
+    for expert, size in enumerate(groups):
+        stop = offset + int(size)
+        if stop > offset:
+            out[offset:stop] = gpu_matmul(x[offset:stop], w[expert])
+        offset = stop
     return out
 
 
@@ -349,6 +386,30 @@ def gpu_moe_swiglu_block(x: np.ndarray, wg: np.ndarray, wu: np.ndarray,
         _ptr(x), _ptr(wg), _ptr(wu), _ptr(wd),
         e.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
         _ptr(out), T, K, H, Kout, E)
+    return out
+
+
+def gpu_moe_swiglu_block_lowp(x: np.ndarray, wg: np.ndarray, wu: np.ndarray,
+                               wd: np.ndarray, expert_ids: np.ndarray) -> np.ndarray:
+    """One-command-buffer f16/bf16 SwiGLU MoE composite C ABI."""
+    x = np.ascontiguousarray(np.asarray(x)); wg = np.ascontiguousarray(wg)
+    wu = np.ascontiguousarray(wu); wd = np.ascontiguousarray(wd)
+    e = np.ascontiguousarray(expert_ids, dtype=np.int32)
+    if not (x.dtype == wg.dtype == wu.dtype == wd.dtype) or (
+            x.dtype != np.float16 and not _is_bf16(x)):
+        raise AppleGpuError("lowp MoE requires matching f16 or bf16 storage")
+    if x.ndim != 2 or wg.ndim != 3 or wu.shape != wg.shape or wd.ndim != 3:
+        raise AppleGpuError("lowp MoE requires x(T,K), wg/wu(E,K,H), wd(E,H,N)")
+    T, K = x.shape; E, wk, H = wg.shape; Kout = wd.shape[2]
+    if wk != K or wd.shape[:2] != (E, H) or e.shape != (T,):
+        raise AppleGpuError("lowp MoE shape mismatch")
+    out = np.empty((T, Kout), dtype=x.dtype)
+    symbol = ("tessera_apple_gpu_moe_swiglu_f16"
+              if x.dtype == np.float16 else "tessera_apple_gpu_moe_swiglu_bf16")
+    fn = getattr(_load(), symbol)
+    fn(_u16ptr(x), _u16ptr(wg), _u16ptr(wu), _u16ptr(wd),
+       e.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)), _u16ptr(out),
+       T, K, H, Kout, E)
     return out
 
 

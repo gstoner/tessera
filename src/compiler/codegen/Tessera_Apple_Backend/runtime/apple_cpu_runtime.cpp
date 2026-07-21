@@ -20,6 +20,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -122,6 +123,28 @@ extern "C" void tessera_apple_cpu_gemm_f32(const float* A, const float* B,
 #else
   reference_gemm_f32(A, B, C, M, N, K);
 #endif
+}
+
+// Static row-wise f32 softmax.  The descriptor contract is rank-2 contiguous
+// row-major input/output; each row is stabilized independently before exp.
+extern "C" void tessera_apple_cpu_softmax_f32(const float* X, float* Y,
+                                               int32_t rows, int32_t columns) {
+  if (rows <= 0 || columns <= 0)
+    return;
+  for (int32_t row = 0; row < rows; ++row) {
+    const float* x = X + static_cast<std::size_t>(row) * columns;
+    float* y = Y + static_cast<std::size_t>(row) * columns;
+    float maximum = x[0];
+    for (int32_t column = 1; column < columns; ++column)
+      maximum = std::max(maximum, x[column]);
+    float total = 0.0f;
+    for (int32_t column = 0; column < columns; ++column) {
+      y[column] = std::exp(x[column] - maximum);
+      total += y[column];
+    }
+    for (int32_t column = 0; column < columns; ++column)
+      y[column] /= total;
+  }
 }
 
 // Batched f32 GEMM: A is (batch, M, K), B is (batch, K, N), C is (batch, M, N),

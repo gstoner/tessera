@@ -26,6 +26,7 @@ from tessera._apple_gpu_dispatch import (
     set_dispatch_telemetry_enabled,
 )
 from tessera.compiler.apple_route_selector import ROUTE_REPORT_SCHEMA_VERSION
+from tessera.compiler.apple_route_selector import live_apple_route_context
 
 
 MSL_ROUTE = "online_msl_variant"
@@ -337,6 +338,7 @@ def characterize(*, reps: int, trials: int) -> dict[str, Any]:
         set_dispatch_telemetry_enabled(False)
     return {
         "schema_version": ROUTE_REPORT_SCHEMA_VERSION,
+        "context": live_apple_route_context().as_mapping(),
         "device": device,
         "paired_trials": trials,
         "runs": runs,

@@ -38,6 +38,7 @@ from tessera._apple_gpu_dispatch import (
     set_dispatch_telemetry_enabled,
 )
 from tessera.compiler.apple_route_selector import ROUTE_REPORT_SCHEMA_VERSION
+from tessera.compiler.apple_route_selector import live_apple_route_context
 
 
 def _shape(spec: str) -> tuple[int, ...]:
@@ -146,10 +147,10 @@ def _paired_median(incumbent: Callable[[], Any], candidate: Callable[[], Any],
                 resources[0] if resources and all(record == resources[0]
                                                    for record in resources) else None),
             "timing_unavailable_reason": (
-                ("partial_paired_dispatch_timing"
-                 if all_device and any(item["device_time_coverage"] < 1.0
-                                       for item in summaries)
-                 else (None if all_device else "incomplete_paired_dispatch_timing"))),
+                "partial_paired_dispatch_timing"
+                if all_device and any(item["device_time_coverage"] < 1.0
+                                      for item in summaries)
+                else (None if all_device else "incomplete_paired_dispatch_timing")),
             "paired_trial_end_to_end_medians_ns": [
                 int(value * 1e6) for value in medians_ms],
             "paired_trial_device_medians_ns": device_medians,
@@ -362,7 +363,8 @@ def characterize(*, matmul_shapes: list[tuple[int, int, int]],
                 _append_softmax_rows(rows, rt, dims, reps, trials, device)
     finally:
         set_dispatch_telemetry_enabled(False)
-    return {"schema_version": ROUTE_REPORT_SCHEMA_VERSION, "runs": rows,
+    return {"schema_version": ROUTE_REPORT_SCHEMA_VERSION,
+            "context": live_apple_route_context().as_mapping(), "runs": rows,
             "dispatch_telemetry_capture": capture_enabled,
             "device": device,
             "paired_trials": trials,

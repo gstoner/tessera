@@ -3377,6 +3377,11 @@ def _submit_x86_native(
 def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
     from tessera.compiler.apple_native import (
         APPLE_BMM_BF16_ABI, APPLE_BMM_F16_ABI, APPLE_BMM_F32_ABI,
+        APPLE_GELU_BF16_ABI, APPLE_GELU_DYNAMIC_BF16_ABI,
+        APPLE_GELU_DYNAMIC_F16_ABI, APPLE_GELU_DYNAMIC_F32_ABI,
+        APPLE_GELU_F16_ABI, APPLE_GELU_F32_ABI,
+        APPLE_POPCOUNT_DYNAMIC_I32_ABI,
+        APPLE_SVD_REDUCED_BATCHED_F32_ABI, APPLE_SVD_REDUCED_F32_ABI,
         APPLE_SOFTMAX_BF16_ABI, APPLE_SOFTMAX_F16_ABI, APPLE_SOFTMAX_F32_ABI,
         APPLE_TRANSPOSE_BF16_ABI, APPLE_TRANSPOSE_F16_ABI, APPLE_TRANSPOSE_F32_ABI,
     )
@@ -3388,7 +3393,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
             submit=_submit_apple_cpu_native,
         )
         return
-    if target == "apple_gpu" and (abi_id in {APPLE_BMM_F32_ABI, APPLE_BMM_F16_ABI, APPLE_BMM_BF16_ABI, APPLE_SOFTMAX_F32_ABI, APPLE_SOFTMAX_F16_ABI, APPLE_SOFTMAX_BF16_ABI, APPLE_TRANSPOSE_F32_ABI, APPLE_TRANSPOSE_F16_ABI, APPLE_TRANSPOSE_BF16_ABI} or abi_id.startswith("tessera.apple.value.")) and target not in _native_launchers:
+    if target == "apple_gpu" and (abi_id in {APPLE_BMM_F32_ABI, APPLE_BMM_F16_ABI, APPLE_BMM_BF16_ABI, APPLE_GELU_F32_ABI, APPLE_GELU_F16_ABI, APPLE_GELU_BF16_ABI, APPLE_GELU_DYNAMIC_F32_ABI, APPLE_GELU_DYNAMIC_F16_ABI, APPLE_GELU_DYNAMIC_BF16_ABI, APPLE_POPCOUNT_DYNAMIC_I32_ABI, APPLE_SVD_REDUCED_F32_ABI, APPLE_SVD_REDUCED_BATCHED_F32_ABI, APPLE_SOFTMAX_F32_ABI, APPLE_SOFTMAX_F16_ABI, APPLE_SOFTMAX_BF16_ABI, APPLE_TRANSPOSE_F32_ABI, APPLE_TRANSPOSE_F16_ABI, APPLE_TRANSPOSE_BF16_ABI} or abi_id.startswith("tessera.apple.value.")) and target not in _native_launchers:
         register_native_launcher(
             target,
             binary_formats=("shared_object",),
@@ -3569,6 +3574,13 @@ def _submit_apple_gpu_native(
     from tessera.compiler.apple_native import (
         APPLE_BMM_BF16_ABI, APPLE_BMM_BF16_SYMBOL, APPLE_BMM_F16_ABI,
         APPLE_BMM_F16_SYMBOL, APPLE_BMM_F32_ABI, APPLE_BMM_F32_SYMBOL,
+        APPLE_GELU_BF16_ABI, APPLE_GELU_BF16_SYMBOL, APPLE_GELU_DYNAMIC_BF16_ABI,
+        APPLE_GELU_DYNAMIC_F16_ABI, APPLE_GELU_DYNAMIC_F32_ABI,
+        APPLE_GELU_F16_ABI, APPLE_GELU_F16_SYMBOL, APPLE_GELU_F32_ABI,
+        APPLE_GELU_F32_SYMBOL,
+        APPLE_POPCOUNT_DYNAMIC_I32_ABI, APPLE_POPCOUNT_I32_SYMBOL,
+        APPLE_SVD_REDUCED_BATCHED_F32_ABI, APPLE_SVD_REDUCED_BATCHED_F32_SYMBOL,
+        APPLE_SVD_REDUCED_F32_ABI, APPLE_SVD_REDUCED_F32_SYMBOL,
         APPLE_SOFTMAX_BF16_ABI, APPLE_SOFTMAX_BF16_SYMBOL, APPLE_SOFTMAX_F16_ABI,
         APPLE_SOFTMAX_F16_SYMBOL, APPLE_SOFTMAX_F32_ABI, APPLE_SOFTMAX_F32_SYMBOL,
         APPLE_TRANSPOSE_BF16_ABI, APPLE_TRANSPOSE_F16_ABI, APPLE_TRANSPOSE_F32_ABI,
@@ -3602,6 +3614,71 @@ def _submit_apple_gpu_native(
     if path is None or hashlib.sha256(path.read_bytes()).hexdigest() != image.payload_digest:
         raise RuntimeError("Apple runtime dylib identity no longer matches the compiler-produced native image")
     ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
+    if descriptor.abi_id == APPLE_POPCOUNT_DYNAMIC_I32_ABI:
+        if descriptor.entry_symbol != APPLE_POPCOUNT_I32_SYMBOL or len(ordered) != 2:
+            raise RuntimeError("Apple popcount descriptor ABI or buffer contract is invalid")
+        x, out = (buffers[item.name] for item in ordered)
+        if any(not isinstance(value, np.ndarray) for value in (x, out)):
+            raise RuntimeError("Apple popcount descriptor requires ndarray buffers")
+        if (x.dtype != np.int32 or out.dtype != np.int32 or not x.flags.c_contiguous
+                or not out.flags.c_contiguous or x.ndim != 1 or out.shape != x.shape):
+            raise RuntimeError("Apple popcount descriptor requires contiguous rank-1 i32 buffers")
+        elements = int(cast(int, scalars["Elements"]))
+        if elements != x.size or elements <= 0:
+            raise RuntimeError("Apple popcount Elements scalar disagrees with input buffer")
+        runtime = _load_apple_gpu_runtime()
+        function = getattr(runtime, APPLE_POPCOUNT_I32_SYMBOL, None)
+        if function is None:
+            raise RuntimeError(f"Apple runtime is missing {APPLE_POPCOUNT_I32_SYMBOL}")
+        pointer = ctypes.POINTER(ctypes.c_int32)
+        function.argtypes = [pointer, pointer, ctypes.c_int32]
+        function.restype = None
+        function(x.ctypes.data_as(pointer), out.ctypes.data_as(pointer), ctypes.c_int32(elements))
+        return out
+    svd_variants = {
+        APPLE_SVD_REDUCED_F32_ABI: (APPLE_SVD_REDUCED_F32_SYMBOL, False),
+        APPLE_SVD_REDUCED_BATCHED_F32_ABI: (APPLE_SVD_REDUCED_BATCHED_F32_SYMBOL, True),
+    }
+    svd_variant = svd_variants.get(descriptor.abi_id)
+    if svd_variant is not None:
+        symbol, is_batched = svd_variant
+        if descriptor.entry_symbol != symbol or len(ordered) != 4:
+            raise RuntimeError("Apple reduced SVD descriptor ABI or output-binding contract is invalid")
+        a, u, s, vh = (buffers[item.name] for item in ordered)
+        if any(not isinstance(value, np.ndarray) for value in (a, u, s, vh)):
+            raise RuntimeError("Apple reduced SVD descriptor requires ndarray buffers")
+        if any(value.dtype != np.float32 or not value.flags.c_contiguous for value in (a, u, s, vh)):
+            raise RuntimeError("Apple reduced SVD descriptor requires contiguous fp32 buffers")
+        if a.ndim != (3 if is_batched else 2):
+            raise RuntimeError("Apple reduced SVD input rank disagrees with descriptor ABI")
+        batch = int(a.shape[0]) if is_batched else 1
+        m, n = (int(a.shape[-2]), int(a.shape[-1]))
+        expected_u = (batch, m, n) if is_batched else (m, n)
+        expected_s = (batch, n) if is_batched else (n,)
+        expected_vh = (batch, n, n) if is_batched else (n, n)
+        if (m < n or tuple(u.shape) != expected_u or tuple(s.shape) != expected_s
+                or tuple(vh.shape) != expected_vh):
+            raise RuntimeError("Apple reduced SVD result shapes disagree with tall reduced contract")
+        scalar_values = ((int(cast(int, scalars["M"])), int(cast(int, scalars["N"])))
+                         if not is_batched else
+                         (int(cast(int, scalars["Batch"])), int(cast(int, scalars["M"])),
+                          int(cast(int, scalars["N"]))))
+        expected_scalars = (m, n) if not is_batched else (batch, m, n)
+        if scalar_values != expected_scalars:
+            raise RuntimeError("Apple reduced SVD scalars disagree with output-binding shapes")
+        runtime = _load_apple_gpu_runtime()
+        function = getattr(runtime, symbol, None)
+        if function is None:
+            raise RuntimeError(f"Apple runtime is missing {symbol}")
+        pointer = ctypes.POINTER(ctypes.c_float)
+        function.argtypes = [pointer, pointer, pointer, pointer] + [ctypes.c_int32] * (3 if is_batched else 2)
+        function.restype = ctypes.c_int32
+        result = function(*(value.ctypes.data_as(pointer) for value in (a, u, s, vh)),
+                          *(ctypes.c_int32(value) for value in scalar_values))
+        if result != 1:
+            raise RuntimeError("Apple reduced SVD descriptor did not execute on Metal")
+        return (u, s, vh)
+
     softmax_variants = {
         APPLE_SOFTMAX_F32_ABI: (APPLE_SOFTMAX_F32_SYMBOL, np.float32, ctypes.c_float),
         APPLE_SOFTMAX_F16_ABI: (APPLE_SOFTMAX_F16_SYMBOL, np.float16, ctypes.c_uint16),
@@ -3631,6 +3708,47 @@ def _submit_apple_gpu_native(
             return (value.ctypes.data_as(pointer) if softmax_pointer_element is ctypes.c_float
                     else value.view(np.uint16).ctypes.data_as(pointer))
         function(softmax_pointer(x), softmax_pointer(out), *map(int, x.shape))
+        return out
+
+    gelu_variants = {
+        APPLE_GELU_F32_ABI: (APPLE_GELU_F32_SYMBOL, np.float32, ctypes.c_float),
+        APPLE_GELU_DYNAMIC_F32_ABI: (APPLE_GELU_F32_SYMBOL, np.float32, ctypes.c_float),
+        APPLE_GELU_F16_ABI: (APPLE_GELU_F16_SYMBOL, np.float16, ctypes.c_uint16),
+        APPLE_GELU_DYNAMIC_F16_ABI: (APPLE_GELU_F16_SYMBOL, np.float16, ctypes.c_uint16),
+        APPLE_GELU_BF16_ABI: (APPLE_GELU_BF16_SYMBOL, _bfloat16_dtype(), ctypes.c_uint16),
+        APPLE_GELU_DYNAMIC_BF16_ABI: (APPLE_GELU_BF16_SYMBOL, _bfloat16_dtype(), ctypes.c_uint16),
+    }
+    if descriptor.abi_id in gelu_variants:
+        gelu_symbol, gelu_dtype, gelu_pointer_element = gelu_variants[descriptor.abi_id]
+        if gelu_dtype is None:
+            raise RuntimeError("Apple bf16 GELU descriptor requires ml_dtypes")
+        if descriptor.entry_symbol != gelu_symbol or len(ordered) != 2:
+            raise RuntimeError("Apple GELU descriptor ABI or buffer contract is invalid")
+        x, out = (buffers[item.name] for item in ordered)
+        if any(not isinstance(value, np.ndarray) for value in (x, out)):
+            raise RuntimeError("Apple GELU descriptor requires ndarray buffers")
+        if any(value.dtype != gelu_dtype or not value.flags.c_contiguous for value in (x, out)):
+            raise RuntimeError("Apple GELU descriptor requires contiguous buffers matching its storage dtype")
+        if x.ndim != 2 or out.shape != x.shape or any(int(extent) <= 0 for extent in x.shape):
+            raise RuntimeError("Apple GELU buffers disagree with descriptor static shape contract")
+        if descriptor.abi_id in {
+            APPLE_GELU_DYNAMIC_F32_ABI,
+            APPLE_GELU_DYNAMIC_F16_ABI,
+            APPLE_GELU_DYNAMIC_BF16_ABI,
+        }:
+            if int(cast(int, scalars["Elements"])) != int(x.size):
+                raise RuntimeError("Apple dynamic GELU Elements scalar disagrees with input buffer")
+        runtime = _load_apple_gpu_runtime()
+        function = getattr(runtime, gelu_symbol, None)
+        if function is None:
+            raise RuntimeError(f"Apple runtime is missing {gelu_symbol}")
+        pointer = ctypes.POINTER(cast(Any, gelu_pointer_element))
+        function.argtypes = [pointer, pointer, ctypes.c_int32]
+        function.restype = None
+        def gelu_pointer(value: Any) -> Any:
+            return (value.ctypes.data_as(pointer) if gelu_pointer_element is ctypes.c_float
+                    else value.view(np.uint16).ctypes.data_as(pointer))
+        function(gelu_pointer(x), gelu_pointer(out), ctypes.c_int32(int(x.size)))
         return out
 
     transpose_variants = {
@@ -22095,6 +22213,19 @@ def _dispatch_matmul(inputs, call, np):
     return c
 
 
+def _dispatch_apple_cpu_softmax(inputs, call, np):
+    """Static rank-2 f32 row-softmax through the Apple CPU descriptor ABI."""
+    x = _as_f32_2d(inputs[0], np, name="softmax input")
+    rows, columns = map(int, x.shape)
+    out = np.empty_like(x)
+    fn = _apple_cpu_linalg_fn(
+        "tessera_apple_cpu_softmax_f32",
+        [_F32P, _F32P, ctypes.c_int32, ctypes.c_int32], restype=None,
+    )
+    fn(x.ctypes.data_as(_F32P), out.ctypes.data_as(_F32P), rows, columns)
+    return out
+
+
 def _as_2d(x, np, dtype, *, name: str):
     a = np.ascontiguousarray(np.asarray(x, dtype=dtype))
     if a.ndim != 2:
@@ -22222,6 +22353,7 @@ def _dispatch_batched_matmul(inputs, call, np):
 
 # symbol -> (handler, expected operand count). The allowlist is its key set.
 _APPLE_VALUE_CPU_DISPATCH: dict[str, tuple] = {
+    "tessera_apple_cpu_softmax_f32": (_dispatch_apple_cpu_softmax, 1),
     "tessera_apple_cpu_cholesky_f32": (_dispatch_cholesky, 1),
     "tessera_apple_cpu_tri_solve_f32": (_dispatch_tri_solve, 2),
     "tessera_apple_cpu_cholesky_solve_f32": (_dispatch_cholesky_solve, 2),
@@ -24972,8 +25104,8 @@ def _apple_gpu_dispatch_grouped_gemm(operands: Any, kwargs: Any, np: Any) -> Any
     if kind not in gl.APPLE_SUPPORTED_GROUPED_KINDS:
         raise ValueError(gl.grouped_kind_unsupported_message(kind, target="apple_gpu"))
 
-    x = np.asarray(operands[0], dtype=np.float32)
-    w = np.asarray(operands[1], dtype=np.float32)
+    x = np.asarray(operands[0])
+    w = np.asarray(operands[1])
     gs = np.asarray(operands[2]).astype(np.int64).reshape(-1)
     T = int(x.shape[0])
 
@@ -24997,6 +25129,18 @@ def _apple_gpu_dispatch_grouped_gemm(operands: Any, kwargs: Any, np: Any) -> Any
         )
         x = np.ascontiguousarray(x, dtype=np.float32)
         w = np.ascontiguousarray(w, dtype=np.float32)
+
+    bf16 = _bfloat16_dtype()
+    if quant is None and x.dtype == w.dtype and (
+            x.dtype == np.float16 or (bf16 is not None and x.dtype == bf16)):
+        try:
+            return np.ascontiguousarray(agb.gpu_grouped_gemm_lowp(x, w, gs))
+        except Exception as exc:  # noqa: BLE001
+            _note_dispatch_fallback(
+                "tessera.grouped_gemm", "low-precision grouped C ABI raised", exc)
+
+    x = np.asarray(x, dtype=np.float32)
+    w = np.asarray(w, dtype=np.float32)
 
     # Fast path: ONE fused dispatch over the whole (T, N) output via the
     # grouped_gemm MSL kernel (folds routing in, no per-expert dispatch).
@@ -25183,6 +25327,17 @@ def _apple_gpu_dispatch_moe_swiglu_block(operands: Any, kwargs: Any, np: Any) ->
             try:
                 return np.ascontiguousarray(agb.gpu_moe_swiglu_block(xa, wg, wu, wd, expert_ids))
             except Exception:  # noqa: BLE001 — fall to composed
+                pass
+
+    bf16 = _bfloat16_dtype()
+    if kw.get("quant") is None and x.dtype == w_gate.dtype == w_up.dtype == w_down.dtype and (
+            x.dtype == np.float16 or (bf16 is not None and x.dtype == bf16)):
+        if int(g.sum()) == int(x.shape[0]):
+            expert_ids = np.repeat(np.arange(w_gate.shape[0], dtype=np.int32), g)
+            try:
+                return np.ascontiguousarray(
+                    agb.gpu_moe_swiglu_block_lowp(x, w_gate, w_up, w_down, expert_ids))
+            except Exception:  # noqa: BLE001 — retain the generic composed fallback
                 pass
 
     # Composed path — proven grouped-GEMM + silu_mul lanes (and the quant path).
@@ -25700,9 +25855,14 @@ def apple_gpu_resident_ssm_replay_state_handle(
     """
     import numpy as np
     from .cache import SSMStateHandle
+    from .compiler.ssm_replay import replay_lifecycle_descriptor
 
     if async_slots <= 0:
         raise ValueError("async_slots must be positive")
+    lifecycle_descriptor = replay_lifecycle_descriptor(
+        batch=batch, channels=num_channels, state_dim=state_dim, capacity=capacity,
+        async_slots=async_slots, dtype=dtype,
+    )
     api = _apple_gpu_enc_api()
     native_api = bool(
         DeviceTensor.is_metal()
@@ -25744,6 +25904,7 @@ def apple_gpu_resident_ssm_replay_state_handle(
 
     class _Handle(SSMStateHandle):
         _resident_tensors: tuple[Any, ...] = ()
+        _lifecycle_descriptor = lifecycle_descriptor
 
         def __post_init__(self) -> None:
             super().__post_init__()
@@ -26027,6 +26188,7 @@ def apple_gpu_resident_ssm_replay_state_handle(
                 "leased_slots": sum(self._slots),
                 "pending_submissions": len(self._pending),
                 "closed": self._closed,
+                "lifecycle_descriptor": self._lifecycle_descriptor.as_metadata_dict(),
             }
 
         def close(self) -> None:

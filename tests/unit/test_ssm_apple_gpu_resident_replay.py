@@ -30,6 +30,25 @@ def test_resident_replay_symbols_exported():
     assert hasattr(runtime, "tessera_apple_gpu_ssm_replay_flush_dev_f32_enc")
 
 
+def test_resident_replay_lifecycle_descriptor_owns_cache_identity_and_teardown():
+    handle = rt.apple_gpu_resident_ssm_replay_state_handle(
+        1, 4, 3, -np.ones(4), capacity=8, async_slots=2)
+    try:
+        lifecycle = handle.lifecycle_telemetry()["lifecycle_descriptor"]
+        assert lifecycle["schema"] == "tessera.replayssm.lifecycle.v1"
+        assert lifecycle["ownership"] == "session_private"
+        assert lifecycle["teardown"] == "drain_pending_then_release"
+        assert lifecycle["intermediate_bindings"] == [
+            "delta_ring", "x_ring", "b_ring", "c_ring", "checkpoint_s0", "a",
+        ]
+        assert lifecycle["transitions"] == [
+            "create", "submit", "wait", "flush", "rollback", "reset", "close",
+        ]
+        assert len(lifecycle["resource_identity"]) == 64
+    finally:
+        handle.close()
+
+
 @pytest.mark.hardware_apple_gpu
 def test_resident_replay_step_forced_flush_and_rollback_match_oracle():
     from tests._support.apple import require_apple_metal

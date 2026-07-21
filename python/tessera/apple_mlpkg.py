@@ -41,8 +41,10 @@ from __future__ import annotations
 
 import ctypes
 from dataclasses import dataclass
+import hashlib
+import json
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any, Iterable, Mapping, Optional
 
 from tessera._apple_gpu_dispatch import apple_gpu_runtime, bind_symbol
 
@@ -401,6 +403,107 @@ class ArgumentLayout:
                 for e in self.entries
             ],
         }
+
+
+@dataclass(frozen=True)
+class CompositePackageDescriptor:
+    """Ownership contract for one reflected MTL4/MLPKG composite package.
+
+    External bindings belong to the caller and are replayed positionally from
+    reflection. Intermediate tensors are deliberately *not* descriptor buffers:
+    the prepared pipeline owns its heap and may reuse it only for dispatches
+    matching this descriptor's immutable cache identity.  The identity excludes
+    package path and input contents, so relocating an identical sealed package
+    does not fragment the pipeline cache and no session data can be reused as a
+    cache key.
+    """
+
+    package_digest: str
+    layout: ArgumentLayout
+    intermediate_owner: str
+    intermediate_binding: str
+    replay_cache_identity: str
+
+    def __post_init__(self) -> None:
+        if len(self.package_digest) != 64 or any(c not in "0123456789abcdef" for c in self.package_digest):
+            raise ValueError("MLPKG composite descriptor requires a lowercase SHA-256 package digest")
+        if self.intermediate_owner != "prepared_pipeline_private":
+            raise ValueError("MLPKG composite intermediates must remain prepared-pipeline private")
+        if self.intermediate_binding != "intermediates_heap":
+            raise ValueError("MLPKG composite descriptor requires the intermediates heap binding")
+        entries = self.layout.entries
+        if not entries or any(entry.direction not in {"input", "output"} for entry in entries):
+            raise ValueError("MLPKG composite descriptor requires reflected input/output bindings")
+        indices = tuple(entry.buffer_index for entry in entries)
+        if len(indices) != len(set(indices)):
+            raise ValueError("MLPKG composite descriptor cannot alias external binding indices")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "schema": "tessera.apple.mlpkg.composite.v1",
+            "package_digest": self.package_digest,
+            "function_name": self.layout.function_name,
+            "external_bindings": self.layout.to_dict()["entries"],
+            "intermediate_owner": self.intermediate_owner,
+            "intermediate_binding": self.intermediate_binding,
+            "replay_cache_identity": self.replay_cache_identity,
+        }
+
+
+def composite_package_descriptor(
+    package_digest: str, layout: ArgumentLayout,
+) -> CompositePackageDescriptor:
+    """Create the deterministic descriptor for a reflected composite package.
+
+    This is host-free schema work only.  A route may consume it only after an
+    Apple10+/Metal-4 host has reflected and executed the matching package.
+    """
+    identity_fields = {
+        "schema": "tessera.apple.mlpkg.composite.v1",
+        "package_digest": package_digest,
+        "function_name": layout.function_name,
+        "entries": [
+            {
+                "buffer_index": entry.buffer_index, "kind": entry.kind,
+                "dtype": entry.dtype, "rank": entry.rank, "dims": list(entry.dims),
+                "direction": entry.direction, "residency": entry.residency,
+            }
+            for entry in sorted(layout.entries, key=lambda value: value.buffer_index)
+        ],
+        "intermediate_owner": "prepared_pipeline_private",
+        "intermediate_binding": "intermediates_heap",
+    }
+    identity = hashlib.sha256(
+        json.dumps(identity_fields, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    return CompositePackageDescriptor(
+        package_digest=package_digest, layout=layout,
+        intermediate_owner="prepared_pipeline_private", intermediate_binding="intermediates_heap",
+        replay_cache_identity=identity,
+    )
+
+
+def package_tree_digest(path: str | Path) -> str:
+    """Return the relocation-stable digest for a sealed ``.mtlpackage`` tree.
+
+    Package paths are deliberately excluded: a composite descriptor seals the
+    package's contents and reflected ABI, not the directory into which a caller
+    copied it.  Every regular file contributes its normalized relative path and
+    byte digest, preventing both content replacement and manifest reshuffling.
+    """
+    root = Path(path)
+    if not root.is_dir():
+        raise ValueError(f"MLPKG package path is not a directory: {root}")
+    digest = hashlib.sha256()
+    files = sorted(entry for entry in root.rglob("*") if entry.is_file())
+    if not files:
+        raise ValueError(f"MLPKG package has no regular files: {root}")
+    for entry in files:
+        relative = entry.relative_to(root).as_posix().encode("utf-8")
+        digest.update(len(relative).to_bytes(8, "big"))
+        digest.update(relative)
+        digest.update(hashlib.sha256(entry.read_bytes()).digest())
+    return digest.hexdigest()
 
 
 def _infer_direction(name: str) -> str:
@@ -1237,6 +1340,58 @@ def compile_mlpackage(
         return None
     return Pipeline(handle, package_path=path_str,
                     function_name=function_name)
+
+
+def execute_composite_package(
+    descriptor: CompositePackageDescriptor,
+    pipeline: Pipeline,
+    inputs: Mapping[str, bytes],
+    output_byte_counts: Mapping[str, int],
+    *,
+    timeout_ms: int = 30_000,
+) -> dict[str, bytes]:
+    """Execute one sealed composite descriptor through a prepared MTL4 package.
+
+    The descriptor is the authority for external I/O: inputs and outputs must
+    exactly match its reflected binding names and positional indices.  Internal
+    temporaries are never caller buffers; ``Pipeline.dispatch`` allocates the
+    package-owned intermediates heap.  A descriptor may replay against a
+    relocated package only when its content digest and entry function still
+    match, which is the cache-identity boundary promised by the schema.
+    """
+    if timeout_ms <= 0:
+        raise ValueError("MLPKG composite timeout must be positive")
+    if not pipeline.is_compiled:
+        raise RuntimeError("MLPKG composite pipeline is not compiled")
+    if pipeline.function_name != descriptor.layout.function_name:
+        raise RuntimeError("MLPKG composite entry function disagrees with descriptor")
+    actual_digest = package_tree_digest(pipeline.package_path)
+    if actual_digest != descriptor.package_digest:
+        raise RuntimeError("MLPKG composite package digest disagrees with descriptor")
+    expected_inputs = {entry.name: entry for entry in descriptor.layout.inputs()}
+    expected_outputs = {entry.name: entry for entry in descriptor.layout.outputs()}
+    if set(inputs) != set(expected_inputs):
+        raise ValueError("MLPKG composite inputs must exactly match reflected descriptor bindings")
+    if set(output_byte_counts) != set(expected_outputs):
+        raise ValueError("MLPKG composite outputs must exactly match reflected descriptor bindings")
+    if any(not isinstance(value, bytes) for value in inputs.values()):
+        raise TypeError("MLPKG composite inputs must be immutable byte payloads")
+    if any(not isinstance(size, int) or size <= 0 for size in output_byte_counts.values()):
+        raise ValueError("MLPKG composite output byte counts must be positive integers")
+    if not pipeline.prepare_tensors():
+        raise RuntimeError("MLPKG composite could not prepare reflected tensors")
+    for name, entry in sorted(expected_inputs.items(), key=lambda item: item[1].buffer_index):
+        if not pipeline.fill_input_at(entry.buffer_index, inputs[name]):
+            raise RuntimeError(f"MLPKG composite input write failed for {name!r}")
+    if not pipeline.dispatch(timeout_ms=timeout_ms):
+        raise RuntimeError("MLPKG composite dispatch failed")
+    outputs: dict[str, bytes] = {}
+    for name, entry in sorted(expected_outputs.items(), key=lambda item: item[1].buffer_index):
+        payload = pipeline.read_output_at(entry.buffer_index, output_byte_counts[name])
+        if payload is None:
+            raise RuntimeError(f"MLPKG composite output read failed for {name!r}")
+        outputs[name] = payload
+    return outputs
 
 
 # ---- PK8: author a production .mtlpackage from the MPSGraph lane --------
@@ -2164,6 +2319,7 @@ __all__ = [
     "BindingValidation",
     "ArgumentLayoutEntry",
     "ArgumentLayout",
+    "CompositePackageDescriptor",
     "AppleTensorBindingSpec",
     "AppleKernelBindingSpec",
     "compile_mlpackage",
@@ -2189,6 +2345,7 @@ __all__ = [
     "AUTHOR_OP_BINARY",
     "first_function_name",
     "extract_argument_layout",
+    "composite_package_descriptor",
     "last_error_kind",
     "packaged_ml_available",
     "packaged_ml_skip_reason",

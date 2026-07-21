@@ -34,6 +34,7 @@ from tessera.apple_mlpkg import (
     packaged_ml_skip_reason,
     ArgumentLayout,
     ArgumentLayoutEntry,
+    composite_package_descriptor,
     ExpectedBinding,
     Pipeline,
     compile_mlpackage,
@@ -41,6 +42,46 @@ from tessera.apple_mlpkg import (
     last_error_kind,
     validate_bindings,
 )
+
+
+def _composite_layout(path: str = "/tmp/a.mtlpackage") -> ArgumentLayout:
+    return ArgumentLayout(
+        pipeline_path=path,
+        function_name="main",
+        entries=(
+            ArgumentLayoutEntry("input0", 0, "tensor", "fp32", 2, (8, 8), "input", "shared"),
+            ArgumentLayoutEntry("output0", 1, "tensor", "fp32", 2, (8, 8), "output", "shared"),
+        ),
+    )
+
+
+def test_composite_descriptor_owns_intermediates_and_stable_cache_identity():
+    first = composite_package_descriptor("a" * 64, _composite_layout())
+    relocated = composite_package_descriptor("a" * 64, _composite_layout("/other/a.mtlpackage"))
+    assert first.replay_cache_identity == relocated.replay_cache_identity
+    payload = first.to_dict()
+    assert payload["schema"] == "tessera.apple.mlpkg.composite.v1"
+    assert payload["intermediate_owner"] == "prepared_pipeline_private"
+    assert payload["intermediate_binding"] == "intermediates_heap"
+    assert [entry["name"] for entry in payload["external_bindings"]] == ["input0", "output0"]
+
+
+def test_composite_descriptor_rejects_unreflected_or_aliased_external_bindings():
+    unknown = ArgumentLayout(
+        pipeline_path="x", function_name="main",
+        entries=(ArgumentLayoutEntry("x", 0, "tensor", "fp32", 2, (8, 8), "unknown", "shared"),),
+    )
+    with pytest.raises(ValueError, match="input/output"):
+        composite_package_descriptor("a" * 64, unknown)
+    aliased = ArgumentLayout(
+        pipeline_path="x", function_name="main",
+        entries=(
+            ArgumentLayoutEntry("x", 0, "tensor", "fp32", 2, (8, 8), "input", "shared"),
+            ArgumentLayoutEntry("y", 0, "tensor", "fp32", 2, (8, 8), "output", "shared"),
+        ),
+    )
+    with pytest.raises(ValueError, match="alias"):
+        composite_package_descriptor("a" * 64, aliased)
 
 
 _FIXTURES_DIR = (Path(__file__).resolve().parent.parent

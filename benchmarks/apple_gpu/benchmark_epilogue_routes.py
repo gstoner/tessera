@@ -28,6 +28,7 @@ from tessera._apple_gpu_dispatch import (
     set_dispatch_telemetry_enabled,
 )
 from tessera.compiler.apple_route_selector import ROUTE_REPORT_SCHEMA_VERSION
+from tessera.compiler.apple_route_selector import live_apple_route_context
 from tessera.compiler.fusion import FusedRegion, run_fused_region
 
 
@@ -308,6 +309,7 @@ def characterize(*, shapes: list[tuple[int, int, int]], reps: int,
         set_dispatch_telemetry_enabled(False)
     return {
         "schema_version": ROUTE_REPORT_SCHEMA_VERSION,
+        "context": live_apple_route_context().as_mapping(),
         "runs": rows,
         "device": device,
         "paired_trials": trials,

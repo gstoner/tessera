@@ -182,7 +182,7 @@ and ``docs/backends/apple/`` (Metal 4 implementation-state review):
 | simple_rnn_cell | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | slice | reference | numpy_reference | fp32 | - | numpy_reference | fused | - | fp32,fp16,bf16 | tessera_apple_gpu_mpsgraph_slice_{f32,f16} | driver | tests/unit/test_apple_gpu_slice.py |
 | smooth_l1_loss | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
-| softmax | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_abi | Metal (MSL) | fp32,fp16,bf16 | tessera_apple_gpu_softmax_f32 | driver | tests/unit/test_apple_backend_roadmap.py |
+| softmax | fused | numpy_reference | fp32 | - | numpy_reference | device_verified_abi | Metal (MSL) | fp32,fp16,bf16 | tessera_apple_gpu_softmax_f32 | driver | tests/unit/test_apple_backend_roadmap.py |
 | softmax_safe | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_abi | Metal (MSL) | fp32,fp16,bf16 | tessera_apple_gpu_softmax_f32 | driver | tests/unit/test_apple_backend_roadmap.py |
 | sort | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | spec_accept | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |

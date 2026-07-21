@@ -779,15 +779,16 @@ static void ts_record_tile_gpu_elapsed(id<MTLCommandBuffer> cb) {
   }
 }
 
-static void ts_record_dispatch_gpu_elapsed(id<MTLCommandBuffer> cb) {
+static void ts_record_dispatch_gpu_elapsed(id<MTLCommandBuffer> cb,
+                                           bool prefer_command_buffer = false) {
   if (!g_dispatch_telemetry_enabled.load(std::memory_order_relaxed)) return;
-  NSTimeInterval start = cb.kernelStartTime;
-  NSTimeInterval end = cb.kernelEndTime;
-  int32_t source = 1;
+  NSTimeInterval start = prefer_command_buffer ? cb.GPUStartTime : cb.kernelStartTime;
+  NSTimeInterval end = prefer_command_buffer ? cb.GPUEndTime : cb.kernelEndTime;
+  int32_t source = prefer_command_buffer ? 2 : 1;
   if (!(end >= start && end > 0.0)) {
-    start = cb.GPUStartTime;
-    end = cb.GPUEndTime;
-    source = 2;
+    start = prefer_command_buffer ? cb.kernelStartTime : cb.GPUStartTime;
+    end = prefer_command_buffer ? cb.kernelEndTime : cb.GPUEndTime;
+    source = prefer_command_buffer ? 1 : 2;
   }
   g_last_dispatch_device_time_ns = (end >= start && end > 0.0)
       ? static_cast<int64_t>((end - start) * 1.0e9)
@@ -840,7 +841,8 @@ API_AVAILABLE(macos(10.14), ios(12.0))
 static bool commit_and_wait_with_timeout(MetalDeviceContext &ctx,
                                          id<MTLCommandBuffer> cb,
                                          uint64_t timeout_ms,
-                                         const char *op_name) {
+                                         const char *op_name,
+                                         bool prefer_command_buffer = false) {
   if (!cb) return false;
   if (g_dispatch_telemetry_enabled.load(std::memory_order_relaxed))
     ts_clear_dispatch_telemetry();
@@ -857,7 +859,7 @@ static bool commit_and_wait_with_timeout(MetalDeviceContext &ctx,
         // No timeout protection, but at least correct.
         [cb commit];
         [cb waitUntilCompleted];
-        ts_record_dispatch_gpu_elapsed(cb);
+        ts_record_dispatch_gpu_elapsed(cb, prefer_command_buffer);
         return cb.status == MTLCommandBufferStatusCompleted;
       }
     }
@@ -903,7 +905,13 @@ static bool commit_and_wait_with_timeout(MetalDeviceContext &ctx,
                           [[cb.error localizedDescription] UTF8String]);
     return false;
   }
-  ts_record_dispatch_gpu_elapsed(cb);
+  // A shared-event signal proves that preceding GPU work completed, but on
+  // several Apple drivers the command-buffer status/timestamp properties lag
+  // that notification by a scheduler turn.  The complete-command-buffer ABI
+  // needs those timestamps specifically; this is now non-blocking in the
+  // normal case and makes their visibility deterministic before recording.
+  if (prefer_command_buffer) [cb waitUntilCompleted];
+  ts_record_dispatch_gpu_elapsed(cb, prefer_command_buffer);
   return true;
 }
 
@@ -1971,6 +1979,68 @@ extern "C" int32_t tessera_apple_gpu_svd_batched_f32(const float *A, float *U,
                                                      int32_t batch, int32_t M,
                                                      int32_t N) {
   return dispatch_svd_jacobi_f32(deviceContext(), A, U, S, V, batch, M, N) ? 1 : 0;
+}
+
+// Descriptor-facing reduced SVD ABI. The raw Jacobi ABI above intentionally
+// exposes unsorted right vectors as columns, which is useful for experiments
+// but is not the public Graph-IR SVD contract. This adapter owns the semantic
+// boundary: `(U, S, Vh)` has descending S and row-major Vh, one ordered output
+// binding per result. It only reorders/transposes the GPU-produced factors.
+extern "C" int32_t tessera_apple_gpu_svd_reduced_f32(
+    const float *A, float *U, float *S, float *Vh, int32_t M, int32_t N) {
+  if (!A || !U || !S || !Vh || M <= 0 || N <= 0 || M < N) return 0;
+  std::vector<float> raw_u((size_t)M * N);
+  std::vector<float> raw_s(N);
+  std::vector<float> raw_v((size_t)N * N);
+  if (!dispatch_svd_jacobi_f32(deviceContext(), A, raw_u.data(), raw_s.data(),
+                               raw_v.data(), 1, M, N))
+    return 0;
+  std::vector<int32_t> order(N);
+  for (int32_t i = 0; i < N; ++i) order[i] = i;
+  std::stable_sort(order.begin(), order.end(), [&](int32_t lhs, int32_t rhs) {
+    return raw_s[lhs] > raw_s[rhs];
+  });
+  for (int32_t out_col = 0; out_col < N; ++out_col) {
+    const int32_t in_col = order[out_col];
+    S[out_col] = raw_s[in_col];
+    for (int32_t row = 0; row < M; ++row)
+      U[(size_t)row * N + out_col] = raw_u[(size_t)row * N + in_col];
+    for (int32_t col = 0; col < N; ++col)
+      Vh[(size_t)out_col * N + col] = raw_v[(size_t)col * N + in_col];
+  }
+  return 1;
+}
+
+extern "C" int32_t tessera_apple_gpu_svd_reduced_batched_f32(
+    const float *A, float *U, float *S, float *Vh, int32_t batch, int32_t M,
+    int32_t N) {
+  if (!A || !U || !S || !Vh || batch <= 0 || M <= 0 || N <= 0 || M < N)
+    return 0;
+  std::vector<float> raw_u((size_t)batch * M * N);
+  std::vector<float> raw_s((size_t)batch * N);
+  std::vector<float> raw_v((size_t)batch * N * N);
+  if (!dispatch_svd_jacobi_f32(deviceContext(), A, raw_u.data(), raw_s.data(),
+                               raw_v.data(), batch, M, N))
+    return 0;
+  std::vector<int32_t> order(N);
+  for (int32_t b = 0; b < batch; ++b) {
+    for (int32_t i = 0; i < N; ++i) order[i] = i;
+    const float *src_s = raw_s.data() + (size_t)b * N;
+    std::stable_sort(order.begin(), order.end(), [&](int32_t lhs, int32_t rhs) {
+      return src_s[lhs] > src_s[rhs];
+    });
+    for (int32_t out_col = 0; out_col < N; ++out_col) {
+      const int32_t in_col = order[out_col];
+      S[(size_t)b * N + out_col] = src_s[in_col];
+      for (int32_t row = 0; row < M; ++row)
+        U[((size_t)b * M + row) * N + out_col] =
+            raw_u[((size_t)b * M + row) * N + in_col];
+      for (int32_t col = 0; col < N; ++col)
+        Vh[((size_t)b * N + out_col) * N + col] =
+            raw_v[((size_t)b * N + col) * N + in_col];
+    }
+  }
+  return 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -23144,6 +23214,129 @@ kernel void moe_swiglu_f32(
   }
 }
 
+// Raw 16-bit storage version of the fused MoE encoder.  Keeping the inputs and
+// output in their declared device representation is material here: converting
+// on the host then calling the f32 ABI is a different transport contract and
+// cannot establish a native low-precision composite route.  Arithmetic is f32
+// by design; ``mode`` only describes f16 (0) versus bf16 (1) storage.
+bool dispatch_moe_swiglu_lowp_msl(MetalDeviceContext &ctx, const uint16_t *X,
+                                  const uint16_t *Wg, const uint16_t *Wu,
+                                  const uint16_t *Wd, const int32_t *Eids,
+                                  uint16_t *O, int32_t T, int32_t K, int32_t H,
+                                  int32_t Kout, int32_t Ecount, int32_t mode) {
+  static NSString *const kMoeSwigluLowpSource = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+#define TESSERA_APPLE_GPU_MOE_SWIGLU_MAX_H    256
+#define TESSERA_APPLE_GPU_MOE_SWIGLU_MAX_KOUT 256
+
+inline float tessera_load_lowp(ushort value, int mode) {
+    // bf16 is stored as the high sixteen IEEE-f32 bits.  Metal has no
+    // universally available bf16 arithmetic type on the deployed SDK range,
+    // so decode the bit representation explicitly.
+    return mode == 0 ? float(as_type<half>(value))
+                     : as_type<float>(uint(value) << 16);
+}
+
+inline ushort tessera_store_lowp(float value, int mode) {
+    if (mode == 0) return as_type<ushort>(half(value));
+    // Round-to-nearest-even before truncating f32 to bf16 storage.
+    uint bits = as_type<uint>(value);
+    return ushort((bits + 0x7fffu + ((bits >> 16) & 1u)) >> 16);
+}
+
+kernel void moe_swiglu_lowp(
+    device const ushort* X    [[buffer(0)]],
+    device const ushort* Wg   [[buffer(1)]],
+    device const ushort* Wu   [[buffer(2)]],
+    device const ushort* Wd   [[buffer(3)]],
+    device const int*    E    [[buffer(4)]],
+    device ushort*       O    [[buffer(5)]],
+    constant int&        T    [[buffer(6)]],
+    constant int&        K    [[buffer(7)]],
+    constant int&        H    [[buffer(8)]],
+    constant int&        Kout [[buffer(9)]],
+    constant int&        mode [[buffer(10)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)T || H > TESSERA_APPLE_GPU_MOE_SWIGLU_MAX_H ||
+        Kout > TESSERA_APPLE_GPU_MOE_SWIGLU_MAX_KOUT) return;
+    int t = (int)gid;
+    int e = E[t];
+    float gate[TESSERA_APPLE_GPU_MOE_SWIGLU_MAX_H];
+    float up[TESSERA_APPLE_GPU_MOE_SWIGLU_MAX_H];
+    float out_row[TESSERA_APPLE_GPU_MOE_SWIGLU_MAX_KOUT];
+    for (int h = 0; h < H; ++h) { gate[h] = 0.0f; up[h] = 0.0f; }
+    int x_off = t * K;
+    int w_base = (e * K) * H;
+    for (int k = 0; k < K; ++k) {
+        float xv = tessera_load_lowp(X[x_off + k], mode);
+        int wg_off = w_base + k * H;
+        for (int h = 0; h < H; ++h) {
+            gate[h] += xv * tessera_load_lowp(Wg[wg_off + h], mode);
+            up[h] += xv * tessera_load_lowp(Wu[wg_off + h], mode);
+        }
+    }
+    for (int h = 0; h < H; ++h) {
+        float g = gate[h];
+        gate[h] = (g / (1.0f + exp(-g))) * up[h];
+    }
+    for (int ko = 0; ko < Kout; ++ko) out_row[ko] = 0.0f;
+    int wd_base = (e * H) * Kout;
+    for (int h = 0; h < H; ++h) {
+        float hv = gate[h];
+        int wd_off = wd_base + h * Kout;
+        for (int ko = 0; ko < Kout; ++ko)
+            out_row[ko] += hv * tessera_load_lowp(Wd[wd_off + ko], mode);
+    }
+    int o_off = t * Kout;
+    for (int ko = 0; ko < Kout; ++ko)
+        O[o_off + ko] = tessera_store_lowp(out_row[ko], mode);
+}
+)MSL";
+
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kMoeSwigluLowpSource, @"moe_swiglu_lowp");
+    if (!pso) return false;
+    NSUInteger xBytes = sizeof(uint16_t) * (NSUInteger)T * (NSUInteger)K;
+    NSUInteger wgBytes = sizeof(uint16_t) * (NSUInteger)Ecount *
+                         (NSUInteger)K * (NSUInteger)H;
+    NSUInteger wdBytes = sizeof(uint16_t) * (NSUInteger)Ecount *
+                         (NSUInteger)H * (NSUInteger)Kout;
+    NSUInteger eBytes = sizeof(int32_t) * (NSUInteger)T;
+    NSUInteger oBytes = sizeof(uint16_t) * (NSUInteger)T * (NSUInteger)Kout;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, X, xBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufWg, ctx, Wg, wgBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufWu, ctx, Wu, wgBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufWd, ctx, Wd, wdBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufE, ctx, Eids, eBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
+    if (!bufX || !bufWg || !bufWu || !bufWd || !bufE || !bufO) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufX offset:0 atIndex:0]; [enc setBuffer:bufWg offset:0 atIndex:1];
+    [enc setBuffer:bufWu offset:0 atIndex:2]; [enc setBuffer:bufWd offset:0 atIndex:3];
+    [enc setBuffer:bufE offset:0 atIndex:4]; [enc setBuffer:bufO offset:0 atIndex:5];
+    [enc setBytes:&T length:sizeof(T) atIndex:6]; [enc setBytes:&K length:sizeof(K) atIndex:7];
+    [enc setBytes:&H length:sizeof(H) atIndex:8]; [enc setBytes:&Kout length:sizeof(Kout) atIndex:9];
+    [enc setBytes:&mode length:sizeof(mode) atIndex:10];
+    NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)T, pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    [enc dispatchThreads:MTLSizeMake((NSUInteger)T, 1, 1)
+        threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+    [enc endEncoding];
+    // This ABI owns exactly one complete command buffer.  Its telemetry must
+    // therefore report that end-to-end interval rather than only the kernel.
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "moe_swiglu_lowp_msl", true))
+      return false;
+    std::memcpy(O, [bufO contents], oBytes);
+    return true;
+  }
+}
+
 inline void reference_moe_swiglu_f32(const float *X, const float *Wg,
                                      const float *Wu, const float *Wd,
                                      const int32_t *Eids, float *O, int32_t T,
@@ -23187,6 +23380,47 @@ extern "C" void tessera_apple_gpu_moe_swiglu_f32(
       dispatch_moe_swiglu_msl(ctx, X, Wg, Wu, Wd, Eids, O, T, K, H, Kout, Ecount))
     return;
   reference_moe_swiglu_f32(X, Wg, Wu, Wd, Eids, O, T, K, H, Kout);
+}
+
+// Low-precision storage variant of the fused MoE composite.  The kernel owns
+// gate/up/hidden in private memory, accumulates in f32, and commits one command
+// buffer; mode 0 is IEEE f16 and mode 1 is bf16 bit storage.
+extern "C" void tessera_apple_gpu_moe_swiglu_f16(
+    const uint16_t *X, const uint16_t *Wg, const uint16_t *Wu,
+    const uint16_t *Wd, const int32_t *Eids, uint16_t *O, int32_t T,
+    int32_t K, int32_t H, int32_t Kout, int32_t Ecount) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && T > 0 && H > 0 && Kout > 0 && H <= 256 && Kout <= 256 &&
+      dispatch_moe_swiglu_lowp_msl(ctx, X, Wg, Wu, Wd, Eids, O, T, K, H,
+                                   Kout, Ecount, 0))
+    return;
+  std::vector<float> xf((size_t)T*K), wgf((size_t)Ecount*K*H),
+      wuf((size_t)Ecount*K*H), wdf((size_t)Ecount*H*Kout), of((size_t)T*Kout);
+  for (size_t i=0;i<xf.size();++i) xf[i]=half_to_float_gpu(X[i]);
+  for (size_t i=0;i<wgf.size();++i) { wgf[i]=half_to_float_gpu(Wg[i]); wuf[i]=half_to_float_gpu(Wu[i]); }
+  for (size_t i=0;i<wdf.size();++i) wdf[i]=half_to_float_gpu(Wd[i]);
+  tessera_apple_gpu_moe_swiglu_f32(xf.data(),wgf.data(),wuf.data(),wdf.data(),Eids,of.data(),T,K,H,Kout,Ecount);
+  for (size_t i=0;i<of.size();++i) O[i]=float_to_half_gpu(of[i]);
+}
+
+extern "C" void tessera_apple_gpu_moe_swiglu_bf16(
+    const uint16_t *X, const uint16_t *Wg, const uint16_t *Wu,
+    const uint16_t *Wd, const int32_t *Eids, uint16_t *O, int32_t T,
+    int32_t K, int32_t H, int32_t Kout, int32_t Ecount) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && T > 0 && H > 0 && Kout > 0 && H <= 256 && Kout <= 256 &&
+      dispatch_moe_swiglu_lowp_msl(ctx, X, Wg, Wu, Wd, Eids, O, T, K, H,
+                                   Kout, Ecount, 1))
+    return;
+  auto load=[](uint16_t v){ uint32_t b=(uint32_t)v<<16; float f; std::memcpy(&f,&b,4); return f; };
+  auto store=[](float f){ uint32_t b; std::memcpy(&b,&f,4); return (uint16_t)(b>>16); };
+  std::vector<float> xf((size_t)T*K), wgf((size_t)Ecount*K*H),
+      wuf((size_t)Ecount*K*H), wdf((size_t)Ecount*H*Kout), of((size_t)T*Kout);
+  for (size_t i=0;i<xf.size();++i) xf[i]=load(X[i]);
+  for (size_t i=0;i<wgf.size();++i) { wgf[i]=load(Wg[i]); wuf[i]=load(Wu[i]); }
+  for (size_t i=0;i<wdf.size();++i) wdf[i]=load(Wd[i]);
+  tessera_apple_gpu_moe_swiglu_f32(xf.data(),wgf.data(),wuf.data(),wdf.data(),Eids,of.data(),T,K,H,Kout,Ecount);
+  for (size_t i=0;i<of.size();++i) O[i]=store(of[i]);
 }
 
 //===---------------------------------------------------------------------===//

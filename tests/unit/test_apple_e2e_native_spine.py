@@ -1,4 +1,4 @@
-"""Host-free contract tests for the APPLE-E2E-1 native-library slice."""
+"""APPLE-E2E-1 host-free contracts plus explicitly gated exact-device proofs."""
 from __future__ import annotations
 
 import hashlib
@@ -246,6 +246,12 @@ def _clifford_reference(values):
     ("tessera.cholesky_solve", [(3, 3), (3, 2)], (3, 2), {"lower": True}, lambda x: np.linalg.solve(x[0], x[1])),
 ])
 def test_apple_cpu_descriptor_execute_compare(op, shapes, out_shape, kwargs, reference):
+    # This test proves the Apple CPU *native* route.  The portable CI lane may
+    # inspect descriptor construction above, but cannot establish native Apple
+    # execution (and canonical_compile correctly rejects that claim off-host).
+    from tests._support.apple import require_apple_chip_identity
+
+    require_apple_chip_identity()
     from tessera.compiler.driver import compile_graph_module
     from tessera.runtime import RuntimeArtifact, launch
 
@@ -277,6 +283,9 @@ def test_apple_cpu_descriptor_execute_compare(op, shapes, out_shape, kwargs, ref
 
 
 def test_canonical_compile_default_consumes_apple_cpu_bmm_descriptor():
+    from tests._support.apple import require_apple_chip_identity
+
+    require_apple_chip_identity()
     from tessera.compiler.canonical_compile import canonical_compile
     from tessera.runtime import launch
 

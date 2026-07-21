@@ -204,7 +204,7 @@ Statuses in this table describe this plan, not generated execution counts.
 | 9 | **ROCM-E2E-2** | P1 | closed | Directive/generator breadth | Reduction f16/bf16/f32 input to f32 output passes all nine comparable-device/E2E gates. Direct paged-KV and MoE dispatch have typed f32/i32 descriptors, negative/exact-gfx1151 evidence, and measured non-winning dispositions that retain their production routes. |
 | 10 | **NVIDIA-E2E-2** | P1 | closed | Native lowering breadth and per-SM split | SM120 semantic breadth and measured route dispositions are complete. SM90/SM100 and exact multi-GPU proof have formal hardware-deferred terminals and must reopen as separate exact-device follow-ups. |
 | 11 | **APPLE-CPU-E2E-1** | P2 | landing / bounded Level C | Apple CPU static linalg breadth | Closure scope is static f32 rank-2/rank-3 matmul/BMM, single-result Cholesky/triangular-solve/Cholesky-solve, and tuple-output LU/QR/SVD descriptors. Dynamic shapes, other dtypes, and non-linalg contracts are explicitly APPLE-NATIVE-E2E-2 work. |
-| 12 | **E2E-SPINE-3** | P2 | queued | Fleet proof and closeout | Cross-backend differential fixtures, generated Level-A/B/C dashboard truth, cache reproducibility, and per-backend release packets demonstrate the completed migrated scope. |
+| 12 | **E2E-SPINE-3** | P2 | landing | Fleet proof and closeout | Family-granular cross-backend differential fixtures, generated Level-A/B/C dashboard truth, cache reproducibility, and hash-sealed per-backend release packets demonstrate only the completed migrated scope. |
 | 13 | **APPLE-NATIVE-E2E-2** | P3 | queued | Apple native breadth and fleet proof beyond the bounded E2E-1 contracts | Own dynamic-shape, composite/package-subgraph, stateful, non-linalg CPU, remaining multi-result GPU descriptor migration, and independently sealed second-device/fleet evidence after E2E-1's bounded exact-device closure. It must not relabel retained/reference routes as native before a static ABI or a new explicit ABI family plus exact-device oracle exists. |
 
 ## 5. Dependency and landing strategy
@@ -229,6 +229,39 @@ Each backend vertical slice is independently reviewable and retains the current
 Level-A route until Level-C correctness, provenance, and performance
 non-regression are proven. A backend cannot block an unrelated backend's
 vertical slice once the shared schema is stable.
+
+### 5.1 E2E-SPINE-3 proof architecture
+
+Fleet closeout is a join over immutable evidence, not a new portability layer.
+The join key is `(fixture_id, operation_family, dtype, shape, semantic_contract)`;
+the physical schedule and native payload remain backend-owned. Each backend run
+produces a machine-readable report with:
+
+- exact target, device identity, source commit, compiler/toolchain fingerprint,
+  and the bounded operation-family scope being claimed;
+- explicit Level-A/B/C provenance for each fixture, including native-image and
+  launch-descriptor digests for Level C;
+- values or comparison metrics against the shared oracle, using the fixture's
+  registered numerical policy rather than a fleet-wide tolerance;
+- cold and warm cache keys plus image/descriptor digests, so reproducibility is
+  proven without requiring cold and warm compile latency to be equal;
+- benchmark rows with a declared target-appropriate kernel domain
+  (`device_event` or `kernel_wall`) plus end-to-end timing, repetitions,
+  warmup/discard policy, selected route, resource fingerprint, and stability
+  disposition.
+
+A release packet hash-seals that report and its referenced evidence files.
+Portable CI validates schemas, hashes, registry joins, and generated dashboard
+drift. Exact-device hosts produce numerical and timing evidence locally; CI must
+not relabel an unavailable device as passed or inherit evidence between exact
+architectures. Hardware-deferred terminals remain first-class dashboard rows.
+
+The generated fleet dashboard is family-granular. Target-wide `partial` or
+`absent` inventory cells remain useful ownership truth but cannot erase a
+bounded Level-C family packet; conversely, one family packet cannot promote the
+whole target. A packet is release-ready only when all fixtures in its declared
+scope pass, cold/warm identities reproduce, required benchmark domains are
+present, and every referenced file matches the sealed manifest.
 
 ## 6. Backend engineering notes
 

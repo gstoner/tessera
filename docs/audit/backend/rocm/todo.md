@@ -1117,6 +1117,14 @@ ABI, schedule, dtype capability, or selector changes. X86-E2E-2 subsequently
 closed the remaining inventory and reassessed ROCm at each shared-contract
 boundary.
 
+E2E-SPINE-3 is applicable as a proof-envelope contract, not a HIP lowering
+change. The gfx1151 softmax, reduction, paged-KV, and MoE evidence may be
+packaged by family with shared fixture IDs, exact-target Level-C provenance,
+cold/warm cache identity, two-domain benchmark metadata, and sealed attachment
+hashes. Other gfx targets remain explicit unavailable/deferred rows and cannot
+inherit gfx1151 evidence. No wave/LDS schedule, HSACO ABI, capability, or
+selector changes.
+
 Cross-backend sync `X86-E2E2-ELEMENTWISE-2026-07-20` adds the internal shared
 `tile.elementwise_kernel` semantic carrier for f32 unary/binary and f32-to-bool
 predicate requests. ROCm parity is assessed at the carrier boundary only;

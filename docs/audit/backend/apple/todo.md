@@ -940,6 +940,13 @@ descriptor-first exact-target launcher registry. It registers no Metal hook and
 does not change value-mode classification, MPSGraph/Metal placement, pipeline
 cache policy, or selectors; APPLE-E2E-1 still owns native package production,
 Apple registration/submission, comparison, cleanup, and Level-C proof.
+E2E-SPINE-3 is applicable as a family-granular proof envelope around bounded
+Apple GPU/CPU Level-C scope. It standardizes shared fixture identity, cache
+replay fields, benchmark metadata, sealed attachment hashes, and generated
+fleet truth without changing Metal/Accelerate ABIs, schedules, placement, or
+selectors. The existing Apple7 packet remains exact-device evidence for its
+declared scope only; second-device/fleet proof remains APPLE-NATIVE-E2E-2 and
+cannot be inferred from Apple7.
 The NVIDIA-E2E-1 f16 landing slice was assessed as NVIDIA-only: it adds an
 SM120 PTX package producer and exact CUDA submission hook, with no Metal hook,
 Apple ABI, dtype registration, schedule, placement, or selector change.

@@ -153,6 +153,16 @@ def _r_compilation_spine_csv() -> str:
     return pipeline_registry.render_compilation_spine_csv()
 
 
+def _r_e2e_fleet() -> str:
+    from . import e2e_fleet
+    return e2e_fleet.render_fleet_markdown()
+
+
+def _r_e2e_fleet_csv() -> str:
+    from . import e2e_fleet
+    return e2e_fleet.render_fleet_csv()
+
+
 def _r_verifier_md() -> str:
     from . import verifier_coverage
     return verifier_coverage.render_dashboard()
@@ -495,6 +505,10 @@ REGISTRY: tuple[GeneratedDoc, ...] = (
         _GEN / "compilation_spine_inventory.md", _r_compilation_spine,
         csv_path=_GEN / "compilation_spine_inventory.csv",
         render_csv=_r_compilation_spine_csv,
+    ),
+    GeneratedDoc(
+        "e2e_fleet", "runtime", _GEN / "e2e_fleet.md", _r_e2e_fleet,
+        csv_path=_GEN / "e2e_fleet.csv", render_csv=_r_e2e_fleet_csv,
     ),
     # ── Verifier ──
     GeneratedDoc(

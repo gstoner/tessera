@@ -275,14 +275,17 @@ The first exact-host recorder slice implements portable x86 f32 softmax and
 last-axis sum through compiler-selected `x86_64_base` C-ABI symbols in a shared
 image compiled with `-march=x86-64 -mno-avx -mno-avx2 -mno-avx512f`. Unsupported
 base envelopes reject in the Tile-to-x86 pass instead of falling through to an
-AVX512 symbol. Its WSL trial passed shared numerical fixtures, prepackaged
-image/descriptor replay, and production-sized repeated-median `kernel_wall`
-plus end-to-end rows under the 4% gate; disassembly contained no YMM/ZMM use.
-The SM120 recorder passed the same shared softmax/reduction fixtures, cold/warm
-compiler-cache identity, resource fingerprints, and repeated-median
-device-event plus end-to-end rows under the 4% gate on the RTX 5070 Ti. These
-are pre-commit trials; hash-sealed checked-in packets must be recorded against
-the landed source commit so `source_commit` truth is not fabricated.
+AVX512 symbol. The hash-sealed WSL packet now binds its shared numerical
+fixtures, prepackaged image/descriptor replay, resource fingerprints, and
+repeated-median `kernel_wall` plus end-to-end rows to landed source commit
+`9f3757ef2dda2dd61ff94f1aefe0244f1b80f064`; every row passes the 4% gate and
+disassembly contains no YMM/ZMM use. The independent SM120 packet binds the
+same shared softmax/reduction fixtures, cold/warm compiler-cache identity,
+ptxas resource fingerprints, and repeated-median device-event plus end-to-end
+rows to that commit on the RTX 5070 Ti. All four SM120 timing rows pass the
+unchanged 4% gate. The generated dashboard marks only these four bounded
+families release-ready; broader SM120, AVX512, gfx1151, and Apple packet scope
+remains pending.
 
 ## 6. Backend engineering notes
 

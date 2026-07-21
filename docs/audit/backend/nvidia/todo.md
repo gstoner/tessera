@@ -932,14 +932,17 @@ It changes no CUDA schedule, ABI, dtype capability, or selector. SM90, SM100,
 and exact multi-GPU rows remain explicit hardware-deferred terminals and may
 not inherit the SM120 packet.
 
-The E2E-SPINE-3 exact-host recorder now packages shared f32 softmax and
-reduction fixtures through the existing SM120 compiler-owned image/descriptor
-seam, proves cold/warm identity, retains selected route plus ptxas resource
+The E2E-SPINE-3 exact-host recorder packages shared f32 softmax and reduction
+fixtures through the existing SM120 compiler-owned image/descriptor seam,
+proves cold/warm identity, retains selected route plus ptxas resource
 fingerprints, and records interleaved repeated-median device-event and
-end-to-end rows. A WSL RTX 5070 Ti trial passed all rows at the unchanged 4%
-stability gate after increasing device-event amortization. The checked-in
-release packet remains a post-merge run because its `source_commit` must name
-the landed recorder commit. No CUDA selector changed.
+end-to-end rows. The hash-sealed WSL RTX 5070 Ti packet is checked in against
+landed source commit `9f3757ef2dda2dd61ff94f1aefe0244f1b80f064`; all four
+rows pass the unchanged 4% stability gate after increasing short-kernel and
+end-to-end amortization. The fleet dashboard therefore marks only SM120
+softmax and reduction release-ready. Matmul, epilogue, attention, paged-KV,
+ReplaySSM, and MoE packet scope remains explicit `packet_pending`. No CUDA
+selector changed.
 
 The LLVM-stage device-library follow-on makes CUDA `libdevice` an explicit
 compiler dependency rather than accidental driver behavior. Native-image

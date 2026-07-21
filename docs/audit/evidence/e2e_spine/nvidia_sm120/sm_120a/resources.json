@@ -1,0 +1,36 @@
+{
+  "device": "NVIDIA GeForce RTX 5070 Ti, GPU-5072cda5-509a-008c-93c8-dc06e105f307, 610.62, 12.0",
+  "rows": [
+    {
+      "entry": "tessera_tile_softmax_f32",
+      "family": "softmax",
+      "record": {
+        "metrics": {
+          "registers_per_thread": 24,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "provenance": "ptxas --arch=sm_120a -v"
+      },
+      "resource_fingerprint": "f1fef2134cca9a7de794bd9325ccbac9f4acfea84b0e1884963dc48448edc0f4",
+      "selected_route": "thread_per_row_128"
+    },
+    {
+      "entry": "tessera_tile_reduce_sum_f32_serial",
+      "family": "reduction",
+      "record": {
+        "metrics": {
+          "registers_per_thread": 32,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "provenance": "ptxas --arch=sm_120a -v"
+      },
+      "resource_fingerprint": "f53db8d5e47dce18fb1d578d0b197621914b69ff40853d9b87084ff2872a2313",
+      "selected_route": "serial"
+    }
+  ],
+  "schema": "tessera.e2e-sm120-resource-record.v1"
+}

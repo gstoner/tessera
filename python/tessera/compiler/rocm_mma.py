@@ -283,7 +283,7 @@ def select_mma(
                 f"{arch.name} exposes no WMMA shapes")
         if _fp8_unsupported_on_rdna35(arch, dtype):
             raise TesseraROCmTargetError(
-                f"ROCM_TILE_UNSUPPORTED_DTYPE: {arch.name} has no FP8/BF8 WMMA instruction (wmma_f8="
+                f"ROCM_TILE_UNSUPPORTED_DTYPE: {arch.name} has no FP8 WMMA or BF8 WMMA instruction (wmma_f8="
                 f"{rocm_feature_status(arch, 'wmma_f8')!r}); FP8 matmul must "
                 f"decompose. This is the load-bearing distinction from gfx1200.")
         ktab = _wmma_k_table(arch)

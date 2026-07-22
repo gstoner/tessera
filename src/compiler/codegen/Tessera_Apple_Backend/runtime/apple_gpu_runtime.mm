@@ -12608,22 +12608,22 @@ inline void reference_clifford_geo_product_cl30_f32(
     const float* a = A + b * 8;
     const float* x = B + b * 8;
     float* c = C + b * 8;
-    c[0] = a[0]*x[0] + a[1]*x[1] + a[2]*x[2] + a[3]*x[3]
-         - a[4]*x[4] - a[5]*x[5] - a[6]*x[6] - a[7]*x[7];
-    c[1] = a[0]*x[1] + a[1]*x[0] - a[2]*x[4] + a[3]*x[6]
-         + a[4]*x[2] - a[5]*x[7] - a[6]*x[3] - a[7]*x[5];
-    c[2] = a[0]*x[2] + a[1]*x[4] + a[2]*x[0] - a[3]*x[5]
-         - a[4]*x[1] + a[5]*x[3] - a[6]*x[7] - a[7]*x[6];
-    c[3] = a[0]*x[3] - a[1]*x[6] + a[2]*x[5] + a[3]*x[0]
-         - a[4]*x[7] - a[5]*x[2] + a[6]*x[1] - a[7]*x[4];
-    c[4] = a[0]*x[4] + a[1]*x[2] - a[2]*x[1] + a[3]*x[7]
-         + a[4]*x[0] - a[5]*x[6] + a[6]*x[5] + a[7]*x[3];
-    c[5] = a[0]*x[5] + a[1]*x[7] + a[2]*x[3] - a[3]*x[2]
-         + a[4]*x[6] + a[5]*x[0] - a[6]*x[4] + a[7]*x[1];
-    c[6] = a[0]*x[6] - a[1]*x[3] + a[2]*x[7] + a[3]*x[1]
-         - a[4]*x[5] + a[5]*x[4] + a[6]*x[0] + a[7]*x[2];
-    c[7] = a[0]*x[7] + a[1]*x[5] + a[2]*x[6] + a[3]*x[4]
-         + a[4]*x[3] + a[5]*x[1] + a[6]*x[2] + a[7]*x[0];
+    c[0] = a[0]*x[0] + a[1]*x[1] + a[2]*x[2] - a[3]*x[3]
+         + a[4]*x[4] - a[5]*x[5] - a[6]*x[6] - a[7]*x[7];
+    c[1] = a[0]*x[1] + a[1]*x[0] - a[2]*x[3] + a[3]*x[2]
+         - a[4]*x[5] + a[5]*x[4] - a[6]*x[7] - a[7]*x[6];
+    c[2] = a[0]*x[2] + a[1]*x[3] + a[2]*x[0] - a[3]*x[1]
+         - a[4]*x[6] + a[5]*x[7] + a[6]*x[4] + a[7]*x[5];
+    c[3] = a[0]*x[3] + a[1]*x[2] - a[2]*x[1] + a[3]*x[0]
+         + a[4]*x[7] - a[5]*x[6] + a[6]*x[5] + a[7]*x[4];
+    c[4] = a[0]*x[4] + a[1]*x[5] + a[2]*x[6] - a[3]*x[7]
+         + a[4]*x[0] - a[5]*x[1] - a[6]*x[2] - a[7]*x[3];
+    c[5] = a[0]*x[5] + a[1]*x[4] - a[2]*x[7] + a[3]*x[6]
+         - a[4]*x[1] + a[5]*x[0] - a[6]*x[3] - a[7]*x[2];
+    c[6] = a[0]*x[6] + a[1]*x[7] + a[2]*x[4] - a[3]*x[5]
+         - a[4]*x[2] + a[5]*x[3] + a[6]*x[0] + a[7]*x[1];
+    c[7] = a[0]*x[7] + a[1]*x[6] - a[2]*x[5] + a[3]*x[4]
+         + a[4]*x[3] - a[5]*x[2] + a[6]*x[1] + a[7]*x[0];
   }
 }
 
@@ -12648,14 +12648,14 @@ kernel void clifford_geo_product_cl30_f32(
     float b0=B[off+0], b1=B[off+1], b2=B[off+2], b3=B[off+3];
     float b4=B[off+4], b5=B[off+5], b6=B[off+6], b7=B[off+7];
 
-    C[off+0] = a0*b0 + a1*b1 + a2*b2 + a3*b3 - a4*b4 - a5*b5 - a6*b6 - a7*b7;
-    C[off+1] = a0*b1 + a1*b0 - a2*b4 + a3*b6 + a4*b2 - a5*b7 - a6*b3 - a7*b5;
-    C[off+2] = a0*b2 + a1*b4 + a2*b0 - a3*b5 - a4*b1 + a5*b3 - a6*b7 - a7*b6;
-    C[off+3] = a0*b3 - a1*b6 + a2*b5 + a3*b0 - a4*b7 - a5*b2 + a6*b1 - a7*b4;
-    C[off+4] = a0*b4 + a1*b2 - a2*b1 + a3*b7 + a4*b0 - a5*b6 + a6*b5 + a7*b3;
-    C[off+5] = a0*b5 + a1*b7 + a2*b3 - a3*b2 + a4*b6 + a5*b0 - a6*b4 + a7*b1;
-    C[off+6] = a0*b6 - a1*b3 + a2*b7 + a3*b1 - a4*b5 + a5*b4 + a6*b0 + a7*b2;
-    C[off+7] = a0*b7 + a1*b5 + a2*b6 + a3*b4 + a4*b3 + a5*b1 + a6*b2 + a7*b0;
+    C[off+0] = a0*b0 + a1*b1 + a2*b2 - a3*b3 + a4*b4 - a5*b5 - a6*b6 - a7*b7;
+    C[off+1] = a0*b1 + a1*b0 - a2*b3 + a3*b2 - a4*b5 + a5*b4 - a6*b7 - a7*b6;
+    C[off+2] = a0*b2 + a1*b3 + a2*b0 - a3*b1 - a4*b6 + a5*b7 + a6*b4 + a7*b5;
+    C[off+3] = a0*b3 + a1*b2 - a2*b1 + a3*b0 + a4*b7 - a5*b6 + a6*b5 + a7*b4;
+    C[off+4] = a0*b4 + a1*b5 + a2*b6 - a3*b7 + a4*b0 - a5*b1 - a6*b2 - a7*b3;
+    C[off+5] = a0*b5 + a1*b4 - a2*b7 + a3*b6 - a4*b1 + a5*b0 - a6*b3 - a7*b2;
+    C[off+6] = a0*b6 + a1*b7 + a2*b4 - a3*b5 - a4*b2 + a5*b3 + a6*b0 + a7*b1;
+    C[off+7] = a0*b7 + a1*b6 - a2*b5 + a3*b4 + a4*b3 - a5*b2 + a6*b1 + a7*b0;
 }
 )MSL";
 
@@ -24468,6 +24468,99 @@ static bool mpsg_run_topk(MetalDeviceContext &ctx, const float *x,
   }
 }
 
+// Descriptor-grade top-k has stricter semantics than MPSGraph currently
+// guarantees: numeric values descend, NaNs sort last, and equal values choose
+// the lower source index.  One thread owns each row so the selected-index
+// dependency is deterministic across launches and contained in one command
+// buffer.  This intentionally favors a precise ABI contract over throughput;
+// a later parallel kernel may replace the implementation without changing it.
+static bool dispatch_topk_deterministic_msl(MetalDeviceContext &ctx,
+                                             const float *x, float *out_vals,
+                                             int32_t *out_idx, int32_t rows,
+                                             int32_t cols, int32_t k) {
+  static NSString *const kTopKSource = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+kernel void topk_deterministic_f32(
+    device const float* X [[buffer(0)]],
+    device float* V [[buffer(1)]],
+    device int* I [[buffer(2)]],
+    constant int& rows [[buffer(3)]],
+    constant int& cols [[buffer(4)]],
+    constant int& k [[buffer(5)]],
+    uint gid [[thread_position_in_grid]]) {
+  if (gid >= (uint)rows) return;
+  int row = (int)gid;
+  int base = row * cols;
+  int out_base = row * k;
+  for (int slot = 0; slot < k; ++slot) {
+    int best = -1;
+    float best_value = 0.0f;
+    for (int col = 0; col < cols; ++col) {
+      bool selected = false;
+      for (int prior = 0; prior < slot; ++prior)
+        selected = selected || I[out_base + prior] == col;
+      if (selected) continue;
+      float value = X[base + col];
+      if (best < 0) {
+        best = col;
+        best_value = value;
+        continue;
+      }
+      bool value_nan = isnan(value);
+      bool best_nan = isnan(best_value);
+      bool better = (best_nan && !value_nan) ||
+                    (value_nan == best_nan &&
+                     ((value_nan && col < best) ||
+                      (!value_nan &&
+                       (value > best_value ||
+                        (value == best_value && col < best)))));
+      if (better) {
+        best = col;
+        best_value = value;
+      }
+    }
+    I[out_base + slot] = best;
+    V[out_base + slot] = best_value;
+  }
+}
+)MSL";
+  if (rows <= 0 || cols <= 0 || k <= 0 || k > cols) return false;
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kTopKSource, @"topk_deterministic_f32");
+    if (!pso) return false;
+    NSUInteger xBytes = sizeof(float) * (NSUInteger)rows * (NSUInteger)cols;
+    NSUInteger oBytes = sizeof(float) * (NSUInteger)rows * (NSUInteger)k;
+    NSUInteger iBytes = sizeof(int32_t) * (NSUInteger)rows * (NSUInteger)k;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, x, xBytes);
+    TS_METAL_BUF_ACQUIRE(bufV, ctx, oBytes);
+    TS_METAL_BUF_ACQUIRE(bufI, ctx, iBytes);
+    if (!bufX || !bufV || !bufI) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufX offset:0 atIndex:0];
+    [enc setBuffer:bufV offset:0 atIndex:1];
+    [enc setBuffer:bufI offset:0 atIndex:2];
+    [enc setBytes:&rows length:sizeof(int32_t) atIndex:3];
+    [enc setBytes:&cols length:sizeof(int32_t) atIndex:4];
+    [enc setBytes:&k length:sizeof(int32_t) atIndex:5];
+    NSUInteger tg = std::min<NSUInteger>((NSUInteger)rows,
+                                         pso.maxTotalThreadsPerThreadgroup);
+    if (tg == 0) tg = 1;
+    [enc dispatchThreads:MTLSizeMake((NSUInteger)rows, 1, 1)
+        threadsPerThreadgroup:MTLSizeMake(tg, 1, 1)];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000,
+                                      "topk_deterministic_msl"))
+      return false;
+    std::memcpy(out_vals, [bufV contents], oBytes);
+    std::memcpy(out_idx, [bufI contents], iBytes);
+    return true;
+  }
+}
+
 static bool mpsg_run_scan(MetalDeviceContext &ctx, int op, const float *x,
                           float *out, int32_t rows, int32_t cols) {
   if (rows <= 0 || cols <= 0) return true;
@@ -24755,6 +24848,18 @@ extern "C" void tessera_apple_gpu_mpsgraph_topk_f32(const float *x,
       out_idx[(size_t)r * k + j] = order[j];
     }
   }
+}
+
+extern "C" int32_t tessera_apple_gpu_topk_f32(const float *x,
+                                               float *out_vals,
+                                               int32_t *out_idx,
+                                               int32_t rows, int32_t cols,
+                                               int32_t k) {
+  MetalDeviceContext &ctx = deviceContext();
+  return ctx.ok && dispatch_topk_deterministic_msl(
+                       ctx, x, out_vals, out_idx, rows, cols, k)
+             ? 1
+             : 0;
 }
 
 extern "C" void tessera_apple_gpu_mpsgraph_scan_f32(int32_t op, const float *x,

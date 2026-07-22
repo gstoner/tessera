@@ -155,6 +155,24 @@ def test_strict_sealing_requires_producer_context_and_preserves_native_evidence(
     assert len(sealed["source_report_digests"]) == 2
 
 
+def test_strict_sealing_preserves_isolated_package_subgraph_scope():
+    reports = [{
+        **_report(_stable_row("live", 1000, None),
+                  _stable_row("package", 850, None)),
+        "selection_scope": STRICT_PACKAGE_SUBGRAPH_SCOPE,
+        "context": _CONTEXT.as_mapping(),
+    } for _ in range(2)]
+    stable = aggregate_stable_route_reports(
+        reports, incumbent_routes={"matmul": "live"},
+    )
+    sealed = seal_strict_route_ledger(
+        stable, reports, selection_scope=STRICT_PACKAGE_SUBGRAPH_SCOPE,
+    )
+    assert sealed["selection_scope"] == STRICT_PACKAGE_SUBGRAPH_SCOPE
+    with __import__("pytest").raises(ValueError, match="scope must match"):
+        seal_strict_route_ledger(stable, reports)
+
+
 def test_strict_sealing_preserves_unselectable_rows_outside_admitted_decisions():
     reports = [{
         **_report(_stable_row("mps", 1000, None),

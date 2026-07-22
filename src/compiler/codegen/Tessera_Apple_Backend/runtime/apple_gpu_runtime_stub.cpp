@@ -4014,6 +4014,12 @@ extern "C" void tessera_apple_gpu_mpsgraph_topk_f32(const float* x,
     }
   }
 }
+extern "C" int32_t tessera_apple_gpu_topk_f32(const float*, float*, int32_t*,
+                                               int32_t, int32_t, int32_t) {
+  // Exact-device descriptor ABI: a non-Darwin build exposes parity but cannot
+  // claim that the owned Metal command buffer executed.
+  return 0;
+}
 extern "C" void tessera_apple_gpu_gumbel_argmax_f32(const float* logits,
                                                     const float* gumbel,
                                                     int32_t* out, int32_t rows,

@@ -331,6 +331,47 @@ def _dynamic_gelu_module(dtype: str = "fp32") -> GraphIRModule:
     )])
 
 
+def _gelu_contract_module(
+    input_dtype: str,
+    output_dtype: str,
+    input_shape: tuple[str, ...],
+    output_shape: tuple[str, ...],
+) -> GraphIRModule:
+    spelling = {"fp32": "f32", "fp16": "f16", "bf16": "bf16"}
+
+    def tensor_type(shape: tuple[str, ...], dtype: str) -> IRType:
+        return IRType(
+            "tensor<" + "x".join((*shape, spelling[dtype])) + ">",
+            shape,
+            dtype,
+        )
+
+    input_type = tensor_type(input_shape, input_dtype)
+    output_type = tensor_type(output_shape, output_dtype)
+    return GraphIRModule(functions=[GraphIRFunction(
+        name="gelu_contract", args=[IRArg("a0", input_type)],
+        result_types=[output_type],
+        body=[IROp(result="out", op_name="tessera.gelu", operands=["%a0"],
+                    operand_types=[str(input_type)], result_type=str(output_type))],
+        return_values=["%out"],
+    )])
+
+
+@pytest.mark.parametrize("module", [
+    _gelu_contract_module("fp16", "bf16", ("5", "11"), ("5", "11")),
+    _gelu_contract_module("bf16", "fp16", ("?", "?"), ("?", "?")),
+    _gelu_contract_module("fp16", "fp16", ("55",), ("55",)),
+    _gelu_contract_module("bf16", "bf16", ("?", "?", "?"), ("?", "?", "?")),
+    _gelu_contract_module("fp16", "fp16", ("5", "11"), ("11", "5")),
+    _gelu_contract_module("bf16", "bf16", ("?", "?"), ("?", "7")),
+])
+def test_apple_gpu_low_precision_gelu_rejects_malformed_graph_ir(module):
+    """Storage, rank, and result-shape mismatches never reach packaging."""
+    from tessera.compiler import apple_native
+
+    assert not apple_native.supports_native_package(module)
+
+
 @pytest.mark.hardware_apple_gpu
 @pytest.mark.parametrize(
     ("storage", "static_abi", "dynamic_abi", "rtol", "atol"),
@@ -366,6 +407,8 @@ def test_apple_gpu_low_precision_gelu_static_and_dynamic_execute_compare(
         assert bundle.launch_descriptor is not None
         assert bundle.launch_descriptor.abi_id == abi
         assert bundle.launch_descriptor.provenance["storage"] == storage
+        assert bundle.launch_descriptor.provenance["accumulation"] == "fp32"
+        assert 'accumulation = "fp32"' in bundle.target_ir.text
         artifact = RuntimeArtifact(
             metadata={"target": "apple_gpu", "compiler_path": "apple_native_descriptor"},
             target_ir=bundle.target_ir.text, native_image=bundle.native_image,
@@ -400,6 +443,17 @@ def test_apple_gpu_low_precision_gelu_static_and_dynamic_execute_compare(
             assert rejected["ok"] is False
             assert "dtype mismatch" in rejected["reason"]
 
+            wrong_input_dtype = np.float32 if storage == "fp16" else np.float16
+            wrong_input = source.astype(wrong_input_dtype)
+            rejected = launch(
+                artifact,
+                ({"buffers": {"a0": wrong_input, "out": np.empty_like(x)},
+                  "scalars": {"Elements": x.size}}
+                 if dynamic else {"a0": wrong_input, "out": np.empty_like(x)}),
+            )
+            assert rejected["ok"] is False
+            assert "dtype mismatch" in rejected["reason"]
+
             if dynamic:
                 rejected = launch(
                     artifact,
@@ -417,6 +471,52 @@ def _dynamic_popcount_module() -> GraphIRModule:
         body=[IROp(result="out", op_name="tessera.popcount", operands=["%a0"],
                     operand_types=[str(dynamic)], result_type=str(dynamic))],
         return_values=["%out"],
+    )])
+
+
+def _dynamic_count_nonzero_module(
+    *, axis: int = -1, keepdims: bool = False,
+) -> GraphIRModule:
+    input_type = IRType("tensor<?x?xf32>", ("?", "?"), "fp32")
+    output_type = IRType("tensor<?xi32>", ("?",), "int32")
+    return GraphIRModule(functions=[GraphIRFunction(
+        name="dynamic_count_nonzero", args=[IRArg("a0", input_type)],
+        result_types=[output_type],
+        body=[IROp(result="out", op_name="tessera.count_nonzero", operands=["%a0"],
+                    operand_types=[str(input_type)], result_type=str(output_type),
+                    kwargs={"axis": axis, "keepdims": keepdims})],
+        return_values=["%out"],
+    )])
+
+
+def _dynamic_softmax_module(*, axis: int = -1) -> GraphIRModule:
+    dynamic = IRType("tensor<?x?xf32>", ("?", "?"), "fp32")
+    return GraphIRModule(functions=[GraphIRFunction(
+        name="dynamic_softmax", args=[IRArg("a0", dynamic)], result_types=[dynamic],
+        body=[IROp(result="out", op_name="tessera.softmax", operands=["%a0"],
+                    operand_types=[str(dynamic)], result_type=str(dynamic),
+                    kwargs={"axis": axis})],
+        return_values=["%out"],
+    )])
+
+
+def _dynamic_topk_module(
+    *, k: int = 3, axis: int = -1, index_dtype: str = "int32",
+) -> GraphIRModule:
+    input_type = IRType("tensor<?x?xf32>", ("?", "?"), "fp32")
+    values_type = IRType(f"tensor<?x{k}xf32>", ("?", str(k)), "fp32")
+    index_spelling = "i32" if index_dtype == "int32" else "i64"
+    indices_type = IRType(
+        f"tensor<?x{k}x{index_spelling}>", ("?", str(k)), index_dtype,
+    )
+    return GraphIRModule(functions=[GraphIRFunction(
+        name="dynamic_topk", args=[IRArg("a0", input_type)],
+        result_types=[values_type, indices_type],
+        body=[IROp(result="values,indices", op_name="tessera.top_k", operands=["%a0"],
+                    operand_types=[str(input_type)],
+                    result_type=f"({values_type}, {indices_type})",
+                    kwargs={"k": k, "axis": axis})],
+        return_values=["%values", "%indices"],
     )])
 
 
@@ -451,6 +551,200 @@ def test_apple_gpu_dynamic_popcount_descriptor_execute_compare_replay_and_scalar
                                 "scalars": {"Elements": x.size - 1}})
     assert invalid["ok"] is False
     assert "Elements scalar" in invalid["reason"]
+
+
+@pytest.mark.hardware_apple_gpu
+def test_apple_gpu_dynamic_count_nonzero_descriptor_execute_compare_replay_and_rejection():
+    from tests._support.apple import require_apple_chip_identity
+
+    require_apple_chip_identity()
+    from tessera.compiler.driver import compile_graph_module
+    from tessera.runtime import RuntimeArtifact, launch
+
+    bundle = compile_graph_module(
+        _dynamic_count_nonzero_module(),
+        source_origin="apple-native-e2e2-dynamic-count-nonzero-test",
+        target="apple_gpu", options={"package_native": True}, enable_tool_validation=False,
+    )
+    descriptor = bundle.launch_descriptor
+    assert descriptor is not None
+    assert descriptor.abi_id == (
+        "tessera.apple.count_nonzero.x_o_outer_axis_extent.dynamic.f32_i32.v1"
+    )
+    assert [scalar.name for scalar in descriptor.scalars] == ["Outer", "AxisExtent"]
+    artifact = RuntimeArtifact(
+        metadata={"target": "apple_gpu", "compiler_path": "apple_native_descriptor"},
+        target_ir=bundle.target_ir.text, native_image=bundle.native_image,
+        launch_descriptor=descriptor,
+    )
+    for shape in ((3, 7), (5, 11)):
+        rng = np.random.default_rng(sum(shape))
+        x = (rng.standard_normal(shape) * (rng.random(shape) > 0.35)).astype(np.float32)
+        expected = np.count_nonzero(x, axis=-1).astype(np.int32)
+        arguments = {
+            "buffers": {"a0": x, "out": np.empty(shape[0], dtype=np.int32)},
+            "scalars": {"Outer": shape[0], "AxisExtent": shape[1]},
+        }
+        for _ in range(3):
+            launched = launch(artifact, arguments)
+            assert launched["ok"], launched
+            assert launched["execution_kind"] == "native_gpu"
+            np.testing.assert_array_equal(launched["output"], expected)
+
+    wrong_scalar = launch(
+        artifact,
+        {"buffers": {"a0": x, "out": np.empty(shape[0], dtype=np.int32)},
+         "scalars": {"Outer": shape[0], "AxisExtent": shape[1] - 1}},
+    )
+    assert wrong_scalar["ok"] is False
+    assert "Outer/AxisExtent" in wrong_scalar["reason"]
+    wrong_output = launch(
+        artifact,
+        {"buffers": {"a0": x, "out": np.empty(shape[0] + 1, dtype=np.int32)},
+         "scalars": {"Outer": shape[0], "AxisExtent": shape[1]}},
+    )
+    assert wrong_output["ok"] is False
+
+
+@pytest.mark.hardware_apple_gpu
+def test_apple_gpu_dynamic_softmax_descriptor_execute_compare_replay_and_rejection():
+    from tests._support.apple import require_apple_chip_identity
+
+    require_apple_chip_identity()
+    from tessera.compiler.driver import compile_graph_module
+    from tessera.runtime import RuntimeArtifact, launch
+
+    bundle = compile_graph_module(
+        _dynamic_softmax_module(), source_origin="apple-native-e2e2-dynamic-softmax-test",
+        target="apple_gpu", options={"package_native": True}, enable_tool_validation=False,
+    )
+    descriptor = bundle.launch_descriptor
+    assert descriptor is not None
+    assert descriptor.abi_id == "tessera.apple.softmax.x_o_rows_columns.dynamic.f32.v1"
+    assert [scalar.name for scalar in descriptor.scalars] == ["Rows", "Columns"]
+    artifact = RuntimeArtifact(
+        metadata={"target": "apple_gpu", "compiler_path": "apple_native_descriptor"},
+        target_ir=bundle.target_ir.text, native_image=bundle.native_image,
+        launch_descriptor=descriptor,
+    )
+    for shape in ((3, 7), (5, 11)):
+        x = np.random.default_rng(sum(shape)).standard_normal(shape).astype(np.float32)
+        shifted = x - np.max(x, axis=-1, keepdims=True)
+        expected = np.exp(shifted) / np.sum(np.exp(shifted), axis=-1, keepdims=True)
+        arguments = {"buffers": {"a0": x, "out": np.empty_like(x)},
+                     "scalars": {"Rows": shape[0], "Columns": shape[1]}}
+        for _ in range(3):
+            launched = launch(artifact, arguments)
+            assert launched["ok"], launched
+            assert launched["execution_kind"] == "native_gpu"
+            np.testing.assert_allclose(launched["output"], expected, rtol=2e-5, atol=2e-5)
+
+    wrong_scalar = launch(
+        artifact,
+        {"buffers": {"a0": x, "out": np.empty_like(x)},
+         "scalars": {"Rows": shape[0], "Columns": shape[1] - 1}},
+    )
+    assert wrong_scalar["ok"] is False
+    assert "Rows/Columns" in wrong_scalar["reason"]
+
+
+def test_dynamic_count_nonzero_and_softmax_contract_rejections(monkeypatch, tmp_path):
+    from tessera.compiler import apple_native
+
+    dylib = tmp_path / "libTesseraAppleRuntime.dylib"
+    dylib.write_bytes(b"apple-e2e2-test-runtime")
+    monkeypatch.setenv("TESSERA_APPLE_GPU_RUNTIME_LIB", str(dylib))
+    assert apple_native.supports_native_package(_dynamic_count_nonzero_module())
+    assert apple_native.supports_native_package(_dynamic_softmax_module())
+    assert not apple_native.supports_native_package(_dynamic_count_nonzero_module(axis=0))
+    assert not apple_native.supports_native_package(
+        _dynamic_count_nonzero_module(keepdims=True)
+    )
+    assert not apple_native.supports_native_package(_dynamic_softmax_module(axis=0))
+
+
+def test_dynamic_topk_contract_orders_outputs_and_rejects_unsupported_forms(
+    monkeypatch, tmp_path,
+):
+    from tessera.compiler import apple_native
+
+    dylib = tmp_path / "libTesseraAppleRuntime.dylib"
+    dylib.write_bytes(b"apple-e2e2-test-runtime")
+    monkeypatch.setenv("TESSERA_APPLE_GPU_RUNTIME_LIB", str(dylib))
+    package = apple_native.package_native(
+        _dynamic_topk_module(), pipeline_name="tessera-lower-to-apple_gpu-runtime",
+    )
+    descriptor = package.descriptor
+    assert descriptor.abi_id == (
+        "tessera.apple.top_k.x_values_indices_rows_columns_k.dynamic.f32_i32.v1"
+    )
+    assert [(binding.ordinal, binding.name, binding.dtype) for binding in descriptor.buffers] == [
+        (0, "a0", "fp32"), (1, "values", "fp32"), (2, "indices", "int32"),
+    ]
+    assert [scalar.name for scalar in descriptor.scalars] == ["Rows", "Columns", "K"]
+    assert descriptor.provenance["nan_policy"] == "last"
+    assert descriptor.provenance["tie_policy"] == "lower_index"
+    assert not apple_native.supports_native_package(_dynamic_topk_module(axis=0))
+    assert not apple_native.supports_native_package(
+        _dynamic_topk_module(index_dtype="int64")
+    )
+
+
+@pytest.mark.hardware_apple_gpu
+def test_apple_gpu_dynamic_topk_descriptor_policy_execute_compare_replay_and_rejection():
+    from tests._support.apple import require_apple_chip_identity
+
+    require_apple_chip_identity()
+    from tessera.compiler.driver import compile_graph_module
+    from tessera.runtime import RuntimeArtifact, launch
+
+    bundle = compile_graph_module(
+        _dynamic_topk_module(k=3), source_origin="apple-native-e2e2-dynamic-topk-test",
+        target="apple_gpu", options={"package_native": True}, enable_tool_validation=False,
+    )
+    descriptor = bundle.launch_descriptor
+    assert descriptor is not None
+    assert descriptor.entry_symbol == "tessera_apple_gpu_topk_f32"
+    artifact = RuntimeArtifact(
+        metadata={"target": "apple_gpu", "compiler_path": "apple_native_descriptor"},
+        target_ir=bundle.target_ir.text, native_image=bundle.native_image,
+        launch_descriptor=descriptor,
+    )
+    cases = (
+        np.array([[5.0, 5.0, 4.0, 5.0, 3.0],
+                  [np.nan, 7.0, 7.0, -1.0, np.nan]], dtype=np.float32),
+        np.random.default_rng(31).standard_normal((5, 11)).astype(np.float32),
+    )
+    for x in cases:
+        rows, columns = x.shape
+        expected_indices = np.empty((rows, 3), dtype=np.int32)
+        source_indices = np.arange(columns, dtype=np.int32)
+        for row in range(rows):
+            nan_key = np.isnan(x[row]).astype(np.int8)
+            numeric_key = -np.where(nan_key != 0, np.float32(0.0), x[row])
+            expected_indices[row] = np.lexsort(
+                (source_indices, numeric_key, nan_key),
+            )[:3]
+        expected_values = np.take_along_axis(x, expected_indices, axis=-1)
+        buffers = {"a0": x, "values": np.empty((rows, 3), dtype=np.float32),
+                   "indices": np.empty((rows, 3), dtype=np.int32)}
+        scalars = {"Rows": rows, "Columns": columns, "K": 3}
+        for _ in range(3):
+            launched = launch(artifact, {"buffers": buffers, "scalars": scalars})
+            assert launched["ok"], launched
+            assert launched["execution_kind"] == "native_gpu"
+            actual_values, actual_indices = launched["output"]
+            np.testing.assert_array_equal(actual_indices, expected_indices)
+            np.testing.assert_allclose(actual_values, expected_values, equal_nan=True)
+            buffers["values"].fill(np.nan)
+            buffers["indices"].fill(-1)
+
+    wrong_k = launch(
+        artifact,
+        {"buffers": buffers, "scalars": {"Rows": rows, "Columns": columns, "K": 2}},
+    )
+    assert wrong_k["ok"] is False
+    assert "Rows/Columns/K" in wrong_k["reason"]
 
 
 @pytest.mark.hardware_apple_gpu
@@ -673,9 +967,10 @@ def test_apple_cpu_low_precision_matmul_descriptor_execute_compare(op, dtype, rt
         np.testing.assert_allclose(launched["output"].astype(np.float32), reference, rtol=rtol, atol=atol)
 
 
-def test_apple_cpu_tuple_descriptor_states_are_explicit():
+def test_apple_cpu_descriptor_states_are_explicit():
     from tessera.compiler.apple_cpu_native import value_descriptor_state
 
+    assert value_descriptor_state("tessera.softmax") == "descriptor_ready"
     assert value_descriptor_state("tessera.matmul") == "descriptor_ready"
     assert value_descriptor_state("tessera.gemm") == "descriptor_ready"
     assert value_descriptor_state("tessera.lu") == "descriptor_ready"

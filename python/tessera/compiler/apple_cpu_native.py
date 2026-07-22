@@ -22,6 +22,7 @@ from .native_artifact import (
 
 
 APPLE_CPU_DESCRIPTOR_STATES: dict[str, str] = {
+    "tessera.softmax": "descriptor_ready",
     "tessera.matmul": "descriptor_ready",
     "tessera.gemm": "descriptor_ready",
     "tessera.batched_gemm": "descriptor_ready",

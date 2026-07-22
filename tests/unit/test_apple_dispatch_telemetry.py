@@ -93,9 +93,17 @@ def test_capture_gate_records_owned_mps_and_mtl4_command_buffers():
             "tessera.softmax", [promoted_x], {}, np)
         promoted_record = read_dispatch_telemetry()
         assert promoted_record["device_time_ns"] > 0
-        # Apple7's retained end-to-end winner is MPSGraph, whose framework
-        # pipeline does not expose the MSL pipeline-limit record.
-        assert promoted_record["resources"] is None
+        # A matching strict ledger retains MPSGraph, whose framework pipeline
+        # exposes no MSL resource record.  A source change intentionally
+        # invalidates that ledger fingerprint and falls back to the direct MSL
+        # incumbent; in that case the owned pipeline-limit record must be
+        # complete rather than discarded to preserve the older assertion.
+        promoted_resources = promoted_record["resources"]
+        if promoted_resources is not None:
+            assert promoted_resources["thread_execution_width"] > 0
+            assert promoted_resources["simdgroups_per_threadgroup"] > 0
+            assert promoted_resources["occupancy"] is None
+            assert promoted_resources["spill_count"] is None
         np.testing.assert_allclose(promoted, 1.0 / 257.0, rtol=1e-5, atol=1e-6)
 
         clear_dispatch_telemetry()

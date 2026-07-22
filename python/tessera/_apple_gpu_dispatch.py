@@ -424,6 +424,7 @@ APPLE_ABI: dict[str, tuple[tuple, object]] = {
     "tessera_apple_gpu_mpsgraph_unary_f32": ((ctypes.c_int32, ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.c_int64), None),
     "tessera_apple_gpu_mpsgraph_unary_f32_status": ((ctypes.c_int32, ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.c_int64), ctypes.c_int32),
     "tessera_apple_gpu_mpsgraph_unary_f16_status": ((ctypes.c_int32, ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.c_int64), ctypes.c_int32),
+    "tessera_apple_gpu_topk_f32": ((ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_int32), ctypes.c_int32, ctypes.c_int32, ctypes.c_int32), ctypes.c_int32),
     "tessera_apple_gpu_philox_uniform_f32": ((ctypes.c_uint64, ctypes.c_uint64, ctypes.c_float, ctypes.c_float, ctypes.POINTER(ctypes.c_float), ctypes.c_int32), ctypes.c_int32),
     "tessera_apple_gpu_philox_normal_f32": ((ctypes.c_uint64, ctypes.c_uint64, ctypes.c_float, ctypes.c_float, ctypes.POINTER(ctypes.c_float), ctypes.c_int32), ctypes.c_int32),
     "tessera_apple_gpu_philox_dropout_f32": ((ctypes.POINTER(ctypes.c_float), ctypes.c_uint64, ctypes.c_uint64, ctypes.c_float, ctypes.POINTER(ctypes.c_float), ctypes.c_int32), ctypes.c_int32),

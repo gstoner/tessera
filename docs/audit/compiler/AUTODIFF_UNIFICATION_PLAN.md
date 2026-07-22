@@ -78,15 +78,13 @@ The repo reports autodiff status two incompatible ways:
 
 Ground truth sits between the two: the `AdjointInterface` tablegen **is** wired
 ([`src/compiler/ir/CMakeLists.txt:11-14`](../../../src/compiler/ir/CMakeLists.txt)),
-real `buildAdjoint` bodies exist including native (compiler-visible)
-tanh/sigmoid adjoints (W5,
+real `buildAdjoint` bodies exist including native (compiler-visible) tensor
+algebra and activation adjoints (W5,
 [`src/compiler/ir/AdjointInterface.cpp:141-176`](../../../src/compiler/ir/AdjointInterface.cpp)),
-**but** `@jit` emits no differentiation intent
-([`python/tessera/compiler/jit.py`](../../../python/tessera/compiler/jit.py) has
-no `autodiff=` path) and no runtime binds a compiled backward entry point. So
-"forward native" and "gradients native" are conflated, and neither has a
-per-op-family × per-target proof surface. Phase 0 removes that ambiguity before
-any new native adjoint is built.
+The historical ambiguity described here was closed by Phases 0–4: `@jit`
+carries differentiation intent, the paired ABI is runtime-bound, and the
+generated ledger separates compiler-native IR from target execution proof.
+Phase 5 now broadens families only after their emitted IR is oracle-tested.
 
 ---
 
@@ -361,7 +359,7 @@ gradients for both inputs.
   — hand-written defs that *emit a `CustomAdjointCallOp` placeholder* — as
   native. The classifier is now **body-aware**: a `buildAdjoint` whose body
   constructs a `CustomAdjointCallOp` is placeholder, keyed by the runtime VJP
-  string it carries. The ledger now shows **6** native adjoints — all_gather,
+  string it carries. At that Phase-3 milestone the ledger showed **6** native adjoints — all_gather,
   all_reduce, matmul, reduce_scatter, sigmoid, tanh (the 3 collective adjoints
   landed 2026-07-12) — with layernorm/softmax as placeholder round-trips. Read
   the generated ledger for live counts, Decision #26.)
@@ -416,6 +414,14 @@ and the ledger's `runtime_bound` rung is sourced from the matrix, not asserted.
 compiler-generated CPU `@f__bwd` path is runtime-bound and directly
 oracle-proven. Broader families still repeat this template independently;
 existing hand-written ROCm/x86 backward kernels remain separate Tier-3 proofs.
+
+**Tensor-algebra tranche landing (2026-07-22):** same-shape `add` and `mul`
+emit shape-independent native adjoints, and static `broadcast` emits descending
+sum reductions plus a singleton-restoring reshape. The actual paired-pass IR for
+all three is interpreted and matched against independent NumPy VJPs on CPU.
+Dynamic broadcast stays an explicit `custom_adjoint_call` fallback. Generic
+`reduce` is not promoted as one undifferentiated family: sum/mean require a
+kind-aware contract, while max/min require an explicit tie-gradient policy.
 
 Promotion order: (1) core tensor algebra (add/mul/broadcast/reductions/GEMM);
 (2) pointwise + normalization (tanh/sigmoid/GELU/SiLU/RMSNorm/layernorm);
@@ -512,9 +518,10 @@ checkpoint tuning, and fused backward promotion remain gated as ordered above.
 | 4 | 3 | Static CPU `matmul → tanh/sigmoid → loss` oracle proof | Task #4 | ✅ first-call specialization + paired MLIR/LLVM runtime launch + direct oracle proof |
 | 5 | 4 | Runtime ABI binding + backward matrix column + `native_required` enforcement | Task #5 | ✅ A1–A4 |
 
-**Next up: Phase 5 (Task #6)** — expand by closed operation families using the
-dedicated/composed implementation and residual-policy contracts. Then Phase 6
-(Task #7).
+**In progress: Phase 5 (Task #6)** — the first tensor-algebra tranche
+(`add`/`mul`/static `broadcast`) is compiler-native and CPU-IR oracle-proven.
+Next are kind-aware sum/mean, then ReLU/GELU/SiLU and RMSNorm/LayerNorm using the
+same dedicated/composed implementation and residual-policy contracts.
 
 ---
 
@@ -532,16 +539,17 @@ once Phase 0 lands.
 | 2 | Paired fwd/bwd/residual contract (`--tessera-autodiff-paired`, recompute-all) | ✅ first cut landed 2026-07-11 |
 | 3 | matmul→tanh/sigmoid→loss — backward native on CPU | ✅ paired-pass output launches through MLIR/LLVM JIT on `cpu_x86_64`; direct gradient oracle proof landed 2026-07-12 |
 | 4 | Compiled backward bound to runtime ABI (ROCm first) | ✅ **complete** 2026-07-12 via A1–A4; aliases share their dedicated implementation, matmul is an explicit two-GEMM composition, and residual policy is structured per target. |
+| 5 | Closed operation-family expansion | 🟡 add/multiply/static broadcast emit native paired IR and are CPU-interpreter oracle-proven; reductions and activation/normalization cohorts remain open. |
 | 6 | NVIDIA sm_120 Flash Attention backward promotion | ✅ first CUDA family: f32/fp16 storage, f32 VJP accumulation, MHA/GQA/MQA aliases, mask/bias/soft-cap derivatives; exact `nvidia_sm120` `device_verified_jit` proof with recompute-all residual policy. |
 
 Per-family × per-target rung truth is now the **generated ledger**, not a hand
 table — read [`generated/autodiff_connection_ledger.md`](../generated/autodiff_connection_ledger.md)
 for live counts (Decision #26 — don't trust enumerations copied into prose). The
-shape it records: `python_reference` broad; the native `ir_adjoint` set is
-the 6 families all_gather, all_reduce, matmul, reduce_scatter, sigmoid, tanh
-(buildAdjoint bodies that emit real Graph IR),
+shape it records: `python_reference` broad; native `ir_adjoint` now includes
+the established matmul/activation/collective families plus add, multiply, and
+static broadcast inversion (buildAdjoint bodies that emit real Graph IR),
 with layernorm/softmax and the pointwise macro ops as `placeholder` round-trips;
-`bwd_cpu_ir_oracle` on the matmul/tanh/sigmoid slice (backward IR
+`bwd_cpu_ir_oracle` covers matmul/tanh/sigmoid and the new tensor-algebra tranche (backward IR
 interpreted on CPU, oracle-matched). Phase 4's native backward evidence is now
 sourced from explicit runtime-matrix fields: runtime binding is separate from
 exact-target `device_verified_jit` / `device_verified_abi`, and either verified

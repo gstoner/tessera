@@ -1198,3 +1198,13 @@ packed-storage consumer; that consumer is follow-up required before a sub-byte
 default is honest. The executable row-major layout materializer and guarded
 dynamic launch are x86-only and transfer no PTX schedule, CUDA ABI, bucket
 policy, selector, or exact-device evidence.
+
+Cross-backend sync `CORE-COMPILER-NEXT-2026-07-22` tightens shared Graph layout
+propagation through agreed-layout pointwise chains and last-axis reductions,
+preserves packed-storage attributes, and records source-layout provenance on
+inserted casts. NVIDIA remains **follow-up required** for an architecture-owned
+Graph-cast materializer; the pass stays opt-in and transfers no PTX layout,
+schedule, selector, or device proof. The x86 dynamic last-axis reduction guard
+is not applicable to bucketed tensor-core routes. Shared add/multiply/static-
+broadcast adjoints change Graph IR only; no CUDA backward runtime or exact-
+device promotion is claimed.

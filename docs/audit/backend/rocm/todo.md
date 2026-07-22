@@ -1255,3 +1255,12 @@ because ROCm already owns the executable packed INT4/INT8 consumer. Structured
 `#tile.layout` remains executable in ROCm Tile lowering; the new generic
 row-major materializer and guarded dynamic launch are x86-only and transfer no
 RDNA schedule, HSACO ABI, selector, or exact-device claim.
+
+Cross-backend sync `CORE-COMPILER-NEXT-2026-07-22` tightens shared Graph layout
+propagation through agreed-layout pointwise chains and last-axis reductions,
+preserves packed-storage attributes, and records source-layout provenance on
+inserted casts. ROCm continues to consume its independent structured
+`#tile.layout`; no Graph-cast materializer, RDNA schedule, HSACO ABI, selector,
+or device proof transfers. The x86 dynamic last-axis reduction guard is not a
+ROCm execution claim. Shared add/multiply/static-broadcast adjoints change Graph
+IR only; no gfx backward runtime or exact-device promotion is claimed.

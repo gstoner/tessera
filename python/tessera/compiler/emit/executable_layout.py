@@ -36,6 +36,15 @@ class DynamicShapeGuardError(ValueError):
     """A dynamic kernel call lies outside its declared runtime envelope."""
 
 
+@dataclass(frozen=True)
+class DynamicReductionContract:
+    """Runtime dimensions for one contiguous last-axis reduction launch."""
+
+    outer: int
+    axis_extent: int
+    output_shape: tuple[int, ...]
+
+
 def materialize_layout(value: Any, contract: ExecutableLayout) -> Any:
     """Return an array in the contract's physical order.
 
@@ -123,11 +132,42 @@ def guard_dynamic_matmul(
     return m, n, k
 
 
+def guard_dynamic_last_axis_reduction(
+    value: Any, *, keepdims: bool = False
+) -> DynamicReductionContract:
+    """Validate a dynamic last-axis reduction before entering its native ABI."""
+    import numpy as np
+
+    array = np.asarray(value)
+    if array.ndim < 1:
+        raise DynamicShapeGuardError(
+            "dynamic last-axis reduction requires rank >= 1"
+        )
+    shape = tuple(int(dim) for dim in array.shape)
+    if any(dim <= 0 for dim in shape):
+        raise DynamicShapeGuardError(
+            "dynamic last-axis reduction dimensions must be positive"
+        )
+    axis_extent = shape[-1]
+    outer = 1
+    for dim in shape[:-1]:
+        outer *= dim
+    signed_i64_max = 9_223_372_036_854_775_807
+    if outer > signed_i64_max or axis_extent > signed_i64_max:
+        raise DynamicShapeGuardError(
+            "dynamic last-axis reduction dimensions must fit the signed i64 launch ABI"
+        )
+    output_shape = shape[:-1] + ((1,) if keepdims else ())
+    return DynamicReductionContract(outer, axis_extent, output_shape)
+
+
 __all__ = [
     "DynamicShapeGuardError",
+    "DynamicReductionContract",
     "ExecutableLayout",
     "LayoutOrder",
     "guard_dynamic_matmul",
+    "guard_dynamic_last_axis_reduction",
     "materialize_layout",
     "materialize_layouts",
 ]

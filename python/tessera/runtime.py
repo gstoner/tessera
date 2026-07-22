@@ -7819,6 +7819,10 @@ def _execute_x86_compiled_reduce(artifact: RuntimeArtifact, args: Any) -> Any:
     last-axis reduction by transposing the reduced axes to the end; ``keepdims``
     supported. f32 only (the kernel's dtype)."""
     import numpy as np
+    from .compiler.emit.executable_layout import (
+        DynamicShapeGuardError,
+        guard_dynamic_last_axis_reduction,
+    )
 
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
@@ -7841,8 +7845,6 @@ def _execute_x86_compiled_reduce(artifact: RuntimeArtifact, args: Any) -> Any:
     if x.dtype != np.float32:
         raise ValueError(f"x86 reduce lane handles f32 only; got {x.dtype}")
     n = x.ndim
-    if n == 0:
-        return np.array(x, copy=True)
 
     axis = kwargs.get("axis", None)
     if axis is None:
@@ -7850,7 +7852,35 @@ def _execute_x86_compiled_reduce(artifact: RuntimeArtifact, args: Any) -> Any:
     elif isinstance(axis, int):
         axes = (axis if axis >= 0 else n + axis,)
     else:
-        axes = tuple(a if a >= 0 else n + a for a in axis)
+        try:
+            axes = tuple(a if a >= 0 else n + a for a in axis)
+        except TypeError as exc:
+            raise DynamicShapeGuardError(
+                "x86 dynamic reduction axes must be integers"
+            ) from exc
+    # A scalar reduced over axis=None retains the established general route;
+    # it is intentionally outside the rank>=1 dynamic last-axis contract.
+    if (not axes and n > 0) or any(
+        not isinstance(a, int) or isinstance(a, bool) or a < 0 or a >= n
+        for a in axes
+    ):
+        raise DynamicShapeGuardError(
+            f"x86 dynamic reduction axes {axes!r} are invalid for rank {n}"
+        )
+    if len(set(axes)) != len(axes):
+        raise DynamicShapeGuardError(
+            "x86 dynamic reduction axes must be unique"
+        )
+
+    # The first production dynamic reduction contract: a contiguous last-axis
+    # route over one shape-independent precompiled AVX-512 image. Validate its
+    # runtime extents before materialization or native entry. Other supported
+    # axis tuples retain the established transpose-and-fold route below.
+    last_axis_contract = None
+    if axes == (n - 1,):
+        last_axis_contract = guard_dynamic_last_axis_reduction(
+            x, keepdims=keepdims
+        )
     kept = [i for i in range(n) if i not in axes]
     perm = kept + list(axes)
     xt = np.ascontiguousarray(np.transpose(x, perm), dtype=np.float32)
@@ -7861,6 +7891,14 @@ def _execute_x86_compiled_reduce(artifact: RuntimeArtifact, args: Any) -> Any:
     if inner <= 0:
         raise ValueError("x86 reduce: empty reduction axis")
     kept_shape = tuple(int(x.shape[i]) for i in kept)
+    if last_axis_contract is not None:
+        if (outer, inner) != (
+            last_axis_contract.outer,
+            last_axis_contract.axis_extent,
+        ):
+            raise DynamicShapeGuardError(
+                "x86 dynamic reduction launch dimensions disagree with the guarded shape"
+            )
 
     lib = _load_x86_elementwise()
     if lib is None:

@@ -84,7 +84,9 @@ _GETSTRINGATTR_RE = re.compile(r'getStringAttr\(\s*"([^"]+)"\s*\)')
 # tests/unit/test_autodiff_paired_cpu_oracle.py.  This is the CPU IR-execution
 # rung — strictly weaker than native `oracle_proven` (native LLVM/runtime
 # execution, Phase 4) and device verification; it does NOT set those columns.
-_BWD_IR_ORACLE_CPU: frozenset[str] = frozenset({"matmul", "tanh", "sigmoid"})
+_BWD_IR_ORACLE_CPU: frozenset[str] = frozenset(
+    {"add", "broadcast", "mul", "matmul", "tanh", "sigmoid"}
+)
 
 # Stable build identifiers used in the ledger. They describe the configuration
 # that validates a claim, not the host directory in which somebody happened to

@@ -4,9 +4,11 @@ import numpy as np
 import pytest
 
 from tessera.compiler.emit.executable_layout import (
+    DynamicReductionContract,
     DynamicShapeGuardError,
     ExecutableLayout,
     LayoutOrder,
+    guard_dynamic_last_axis_reduction,
     guard_dynamic_matmul,
     materialize_layout,
 )
@@ -68,3 +70,25 @@ def test_dynamic_matmul_guard_rejects_side_buffer_shape():
             np.zeros((4, 5), np.float32),
             bias=np.zeros(4, np.float32),
         )
+
+
+def test_dynamic_last_axis_reduction_contract_is_shape_exact():
+    x = np.arange(2 * 3 * 5, dtype=np.float32).reshape(2, 3, 5)
+    assert guard_dynamic_last_axis_reduction(x) == DynamicReductionContract(
+        outer=6, axis_extent=5, output_shape=(2, 3)
+    )
+    assert guard_dynamic_last_axis_reduction(
+        x, keepdims=True
+    ).output_shape == (2, 3, 1)
+
+
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        (np.array(1.0, dtype=np.float32), "rank >= 1"),
+        (np.empty((2, 0), dtype=np.float32), "must be positive"),
+    ],
+)
+def test_dynamic_last_axis_reduction_rejects_invalid_shapes(value, message):
+    with pytest.raises(DynamicShapeGuardError, match=message):
+        guard_dynamic_last_axis_reduction(value)

@@ -45,6 +45,7 @@ _REFS = {
 @pytest.mark.parametrize("shape,axis", [
     ((8, 64), -1), ((8, 64), 0), ((130,), None),
     ((3, 5, 7), -1), ((3, 5, 7), (1, 2)), ((4, 6), None),
+    ((), None),
 ])
 def test_x86_reduce_matches_numpy(op_name, shape, axis):
     rt = _x86_or_skip()
@@ -93,5 +94,26 @@ def test_x86_reduce_rejects_non_f32():
     rt = _x86_or_skip()
     x = np.zeros((4, 8), np.float64)
     with pytest.raises(ValueError, match="f32 only"):
+        rt._execute_x86_compiled_reduce(
+            _artifact(rt, "tessera.sum", {"axis": -1}), (x,))
+
+
+@pytest.mark.parametrize("axis", [(), (1, 1), 2, -3, (0, "1"), True])
+def test_x86_dynamic_reduce_rejects_invalid_axes_before_native_load(axis):
+    from tessera import runtime as rt
+    from tessera.compiler.emit.executable_layout import DynamicShapeGuardError
+
+    x = np.zeros((4, 8), np.float32)
+    with pytest.raises(DynamicShapeGuardError, match="axes"):
+        rt._execute_x86_compiled_reduce(
+            _artifact(rt, "tessera.sum", {"axis": axis}), (x,))
+
+
+def test_x86_dynamic_last_axis_reduce_rejects_empty_extent_before_native_load():
+    from tessera import runtime as rt
+    from tessera.compiler.emit.executable_layout import DynamicShapeGuardError
+
+    x = np.zeros((4, 0), np.float32)
+    with pytest.raises(DynamicShapeGuardError, match="must be positive"):
         rt._execute_x86_compiled_reduce(
             _artifact(rt, "tessera.sum", {"axis": -1}), (x,))

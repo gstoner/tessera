@@ -54,8 +54,8 @@ _DENSE = re.compile(r"dense<([-0-9.eE+]+)>")
 
 class _Interp:
     """Interprets one `func.func` body over the op subset the tanh/sigmoid/matmul
-    adjoints emit: tessera.matmul (± transposeA/B), tessera.{tanh,sigmoid,mul,sub},
-    arith.constant dense<..>, func.return."""
+    adjoints emit: tessera.matmul (± transposeA/B), tensor algebra and static
+    broadcast inversion, arith.constant dense<..>, func.return."""
 
     def __init__(self, arg_names: list[str], body: list[str], rets: list[str]):
         self.arg_names = arg_names
@@ -92,6 +92,21 @@ class _Interp:
                 env[dst] = (env[operands[0]] - env[operands[1]]).astype(np.float32)
             elif op == "tessera.add":
                 env[dst] = (env[operands[0]] + env[operands[1]]).astype(np.float32)
+            elif op == "tessera.broadcast":
+                dims = tuple(
+                    int(d) for d in _DIMS.findall(rhs)[-1].split("x")
+                )
+                env[dst] = np.broadcast_to(env[operands[0]], dims).copy()
+            elif op == "tessera.reduce":
+                axis = int(re.search(r"axis = (-?\d+)", rhs).group(1))
+                kind = re.search(r'kind = "([^"]+)"', rhs).group(1)
+                assert kind == "sum", f"interpreter only admits sum, got {kind}"
+                env[dst] = np.sum(env[operands[0]], axis=axis).astype(np.float32)
+            elif op == "tessera.reshape":
+                dims = tuple(
+                    int(d) for d in _DIMS.findall(rhs)[-1].split("x")
+                )
+                env[dst] = env[operands[0]].reshape(dims)
             elif op == "arith.addf":
                 env[dst] = (env[operands[0]] + env[operands[1]]).astype(np.float32)
             else:
@@ -164,6 +179,59 @@ def _oracle(act: str, x: np.ndarray, w: np.ndarray):
     dx = dm @ w.T
     dw = x.T @ dm
     return a, dx, dw
+
+
+def _binary_forward_mlir(op: str) -> str:
+    return f"""
+module {{
+  func.func @binary(%x: tensor<3x5xf32>, %y: tensor<3x5xf32>) -> tensor<3x5xf32>
+      attributes {{tessera.autodiff = "reverse"}} {{
+    %z = "tessera.{op}"(%x, %y) : (tensor<3x5xf32>, tensor<3x5xf32>) -> tensor<3x5xf32>
+    return %z : tensor<3x5xf32>
+  }}
+}}
+"""
+
+
+def test_native_broadcast_backward_matches_numpy_oracle():
+    mlir = """
+module {
+  func.func @broadcast(%x: tensor<1x3xf32>) -> tensor<2x4x3xf32>
+      attributes {tessera.autodiff = "reverse"} {
+    %y = "tessera.broadcast"(%x) :
+        (tensor<1x3xf32>) -> tensor<2x4x3xf32>
+    return %y : tensor<2x4x3xf32>
+  }
+}
+"""
+    rng = np.random.default_rng(23)
+    x = rng.standard_normal((1, 3)).astype(np.float32)
+    seed = rng.standard_normal((2, 4, 3)).astype(np.float32)
+    funcs = _run_paired(mlir)
+    (primal,) = funcs["broadcast"].run([x])
+    (dx,) = funcs["broadcast__bwd"].run([x, seed])
+    np.testing.assert_allclose(primal, np.broadcast_to(x, (2, 4, 3)))
+    np.testing.assert_allclose(dx, seed.sum(axis=(0, 1)).reshape(1, 3))
+
+
+@pytest.mark.parametrize("op", ["add", "mul"])
+def test_native_binary_backward_matches_numpy_oracle(op: str):
+    rng = np.random.default_rng(11)
+    x = rng.standard_normal((3, 5)).astype(np.float32)
+    y = rng.standard_normal((3, 5)).astype(np.float32)
+    seed = rng.standard_normal((3, 5)).astype(np.float32)
+    funcs = _run_paired(_binary_forward_mlir(op))
+    assert "binary" in funcs and "binary__bwd" in funcs
+    (primal,) = funcs["binary"].run([x, y])
+    dx, dy = funcs["binary__bwd"].run([x, y, seed])
+    if op == "add":
+        np.testing.assert_allclose(primal, x + y)
+        np.testing.assert_allclose(dx, seed)
+        np.testing.assert_allclose(dy, seed)
+    else:
+        np.testing.assert_allclose(primal, x * y)
+        np.testing.assert_allclose(dx, seed * y)
+        np.testing.assert_allclose(dy, seed * x)
 
 
 @pytest.mark.parametrize("act", ["tanh", "sigmoid"])

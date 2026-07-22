@@ -33,12 +33,13 @@ def test_native_and_placeholder_adjoints_are_disjoint_and_grounded() -> None:
     native, placeholder = autodiff_ledger._ir_adjoint_classes()
     assert not (native & placeholder), "an op cannot be both native and placeholder"
     # The native set is EXACTLY the buildAdjoint bodies that emit real Graph IR:
-    # matmul's transposed matmuls + tanh/sigmoid's W5 closed forms. Nothing else.
+    # matmul's transposed matmuls, native add/multiply tensor algebra, and
+    # tanh/sigmoid's W5 closed forms. Nothing else.
     # This pins the classifier against the regression where LayerNormOp /
     # SoftmaxOp (hand-written defs that emit a `CustomAdjointCallOp` placeholder)
     # were miscounted as native merely because they had explicit definitions.
     assert native == {
-        "matmul", "tanh", "sigmoid",
+        "add", "broadcast", "mul", "matmul", "tanh", "sigmoid",
         "all_reduce", "all_gather", "reduce_scatter",
     }, (
         f"native adjoint set drifted: {sorted(native)} — a buildAdjoint that "

@@ -1282,3 +1282,13 @@ shape-materialized MSL candidates remain bucketed and no x86 row-major
 materializer, CPU guard, or dtype default transfers to Metal/MPS. Apple keeps
 its existing dtype and physical-layout ownership until an Apple-specific
 materializer and exact-device evidence land.
+
+Cross-backend sync `CORE-COMPILER-NEXT-2026-07-22` tightens shared Graph layout
+propagation through agreed-layout pointwise chains and last-axis reductions,
+preserves packed-storage attributes, and records source-layout provenance on
+inserted casts. Apple remains **follow-up required** for an architecture-owned
+Graph-cast materializer; the pass stays opt-in and transfers no Metal layout,
+schedule, selector, or device proof. The x86 dynamic last-axis reduction guard
+is not applicable to Apple’s bucketed MSL routes. Shared add/multiply/static-
+broadcast adjoints change Graph IR only; no Apple backward runtime or exact-
+device promotion is claimed.

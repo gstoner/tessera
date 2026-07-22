@@ -102,11 +102,11 @@ LogicalResult verifyDeclaredShapeConstraint(Operation *op) {
     Type output = op->getResult(constraint->matchingTensorResult).getType();
     auto inputShape = dyn_cast<ShapedType>(input);
     auto outputShape = dyn_cast<ShapedType>(output);
-    // Opaque halo handles remain legal.  If either side is a tensor/memref,
-    // both sides must be shaped and preserve rank, element type, and every
+    // Opaque halo/token handles remain legal on either side of the data seam.
+    // When both sides are shaped data, preserve rank, element type, and every
     // statically-known extent.
-    if ((inputShape || outputShape) &&
-        (!inputShape || !outputShape || !compatibleShape(inputShape, outputShape)))
+    if (inputShape && outputShape &&
+        !compatibleShape(inputShape, outputShape))
       return op->emitOpError(
           "requires the data result shape and element type to match its input");
   }
@@ -2579,13 +2579,17 @@ LogicalResult ReduceOp::verify() {
   if (!inputTy || !resultTy)
     return success();
   int64_t rank = inputTy.getRank();
-  if (failed(verifyAxisInRange(getOperation(), getAxis(), rank, "reduce")))
+  // The generated accessor's storage type is unsigned under MLIR 23 even for
+  // an I64Attr. Read the attribute payload directly so canonical negative
+  // axes remain signed and cannot become an out-of-range shaped-type index.
+  int64_t rawAxis = getAxisAttr().getInt();
+  if (failed(verifyAxisInRange(getOperation(), rawAxis, rank, "reduce")))
     return failure();
   if (resultTy.getElementType() != inputTy.getElementType())
     return emitOpError("result element type must match input");
   if (resultTy.getRank() != rank - 1)
     return emitOpError("result rank must be input rank minus one");
-  int64_t axis = getAxis() < 0 ? getAxis() + rank : getAxis();
+  int64_t axis = rawAxis < 0 ? rawAxis + rank : rawAxis;
   for (int64_t inDim = 0, outDim = 0; inDim < rank; ++inDim) {
     if (inDim == axis)
       continue;

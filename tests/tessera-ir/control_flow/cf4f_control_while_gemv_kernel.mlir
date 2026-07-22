@@ -14,9 +14,9 @@ func.func @b(%h: tensor<1x4xf32>, %w: tensor<4x4xf32>) -> tensor<1x4xf32> {
   %m = "tessera.matmul"(%h, %w) : (tensor<1x4xf32>, tensor<4x4xf32>) -> tensor<1x4xf32>
   return %m : tensor<1x4xf32>
 }
-func.func @c(%h: tensor<1x4xf32>) -> tensor<1x1xf32> {
-  %s = "tessera.reduce"(%h) {kind = "sum", axis = 1 : i64} : (tensor<1x4xf32>) -> tensor<1x1xf32>
-  return %s : tensor<1x1xf32>
+func.func @c(%h: tensor<1x4xf32>) -> tensor<1xf32> {
+  %s = "tessera.reduce"(%h) {kind = "sum", axis = 1 : i64} : (tensor<1x4xf32>) -> tensor<1xf32>
+  return %s : tensor<1xf32>
 }
 
 // CHECK-LABEL: func.func @f
@@ -63,16 +63,16 @@ func.func @g(%init: tensor<1x4xf32>, %W: tensor<4x4xf32>) -> tensor<1x4xf32> {
 }
 
 // -----
-// ─── a reduce over the WRONG axis (axis=0 → 1×K, K predicate elements, not the
+// ─── a reduce over the WRONG axis (axis=0 → K, K predicate elements, not the
 // ─── whole-carry sum the kernel computes) is left untouched — never lowered to
 // ─── a cond that disagrees with the kernel's total-Σ loop ───────────────────
 func.func @b3(%h: tensor<1x4xf32>, %w: tensor<4x4xf32>) -> tensor<1x4xf32> {
   %m = "tessera.matmul"(%h, %w) : (tensor<1x4xf32>, tensor<4x4xf32>) -> tensor<1x4xf32>
   return %m : tensor<1x4xf32>
 }
-func.func @c3(%h: tensor<1x4xf32>) -> tensor<1x4xf32> {
-  %s = "tessera.reduce"(%h) {kind = "sum", axis = 0 : i64} : (tensor<1x4xf32>) -> tensor<1x4xf32>
-  return %s : tensor<1x4xf32>
+func.func @c3(%h: tensor<1x4xf32>) -> tensor<4xf32> {
+  %s = "tessera.reduce"(%h) {kind = "sum", axis = 0 : i64} : (tensor<1x4xf32>) -> tensor<4xf32>
+  return %s : tensor<4xf32>
 }
 
 // CHECK-LABEL: func.func @h

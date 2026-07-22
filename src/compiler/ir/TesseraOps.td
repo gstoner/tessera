@@ -1262,7 +1262,7 @@ def Tessera_SoftplusOp : Tessera_UnaryPureOp<"softplus", "Softplus activation (l
 // custom verifier.
 def Tessera_AddOp : Op<
   Tessera_Dialect, "add",
-  [Pure]
+  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
 > {
   let summary = "Elementwise tensor addition (a + b)";
   let arguments = (ins TensorType:$lhs, TensorType:$rhs);
@@ -1284,7 +1284,10 @@ def Tessera_SubOp : Op<Tessera_Dialect, "sub", [Pure]> {
   let hasVerifier = 1;
   let hasFolder = 1;
 }
-def Tessera_MulOp : Op<Tessera_Dialect, "mul", [Pure]> {
+def Tessera_MulOp : Op<
+  Tessera_Dialect, "mul",
+  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
+> {
   let summary = "Elementwise tensor multiplication (a * b)";
   let arguments = (ins TensorType:$lhs, TensorType:$rhs);
   let results = (outs TensorType:$result);
@@ -1822,7 +1825,11 @@ def Tessera_ExpandOp : Op<Tessera_Dialect, "expand", [Pure, SameOperandsAndResul
   let hasFolder = 1;
 }
 
-def Tessera_BroadcastOp : Op<Tessera_Dialect, "broadcast", [Pure, SameOperandsAndResultElementType]> {
+def Tessera_BroadcastOp : Op<
+  Tessera_Dialect, "broadcast",
+  [Pure, SameOperandsAndResultElementType,
+   DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
+> {
   let summary = "Broadcast to a target shape (stride-0 view, no copy)";
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);

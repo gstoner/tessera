@@ -39,7 +39,8 @@ def test_native_and_placeholder_adjoints_are_disjoint_and_grounded() -> None:
     # SoftmaxOp (hand-written defs that emit a `CustomAdjointCallOp` placeholder)
     # were miscounted as native merely because they had explicit definitions.
     assert native == {
-        "add", "broadcast", "mul", "matmul", "tanh", "sigmoid",
+        "add", "broadcast", "gelu", "mul", "matmul", "reduce", "silu",
+        "softmax", "tanh", "sigmoid",
         "all_reduce", "all_gather", "reduce_scatter",
     }, (
         f"native adjoint set drifted: {sorted(native)} — a buildAdjoint that "
@@ -47,8 +48,8 @@ def test_native_and_placeholder_adjoints_are_disjoint_and_grounded() -> None:
     )
     # LayerNorm/Softmax emit CustomAdjointCallOp → placeholder, keyed by the
     # runtime VJP string ("layer_norm"/"softmax") so they land on the primitive.
-    assert {"layer_norm", "softmax", "gelu", "relu"} <= placeholder
-    assert not ({"layer_norm", "softmax", "gelu", "relu"} & native)
+    assert {"layer_norm", "relu"} <= placeholder
+    assert not ({"layer_norm", "relu"} & native)
     assert {"all_reduce", "all_gather", "reduce_scatter"} <= native
 
 
@@ -57,7 +58,7 @@ def test_rows_are_consistent() -> None:
     assert rows, "ledger produced no rows"
     for r in rows:
         assert r.python_reference in {"yes", "no"}
-        assert r.ir_adjoint in {"native", "placeholder", "none"}
+        assert r.ir_adjoint in {"native", "placeholder", "mixed", "none"}
         # A row exists only if differentiable OR carrying an IR adjoint.
         assert r.python_reference == "yes" or r.ir_adjoint != "none"
         # Phase 4 (A2): the native backward rungs are now SOURCED from the
@@ -152,13 +153,26 @@ def test_cpu_ir_oracle_families_are_proven_backward_capable() -> None:
     an oracle-verified backward. Guards against the set drifting to a claim the
     pass can't back (the numerical proof itself is in
     test_autodiff_paired_cpu_oracle.py)."""
-    native, placeholder = autodiff_ledger._ir_adjoint_classes()
-    have_adjoint = native | placeholder
+    rows = {row.family: row for row in autodiff_ledger.collect_rows()}
     for fam in autodiff_ledger._BWD_IR_ORACLE_CPU:
-        assert fam in have_adjoint, (
-            f"{fam!r} is marked bwd_cpu_ir_oracle but has no IR adjoint")
+        assert fam in rows and rows[fam].ir_adjoint == "native", (
+            f"{fam!r} is marked bwd_cpu_ir_oracle but has no native IR adjoint")
     proven = {r.family for r in autodiff_ledger.collect_rows() if r.bwd_cpu_ir_oracle}
     assert proven == set(autodiff_ledger._BWD_IR_ORACLE_CPU)
+
+
+def test_reduce_adjoint_classification_is_kind_aware() -> None:
+    kinds = autodiff_ledger._ir_adjoint_kind_classes()["reduce"]
+    assert kinds == {
+        "native": frozenset({"sum", "mean"}),
+        "placeholder": frozenset({"max", "min"}),
+    }
+    rows = {row.family: row for row in autodiff_ledger.collect_rows()}
+    assert rows["sum"].ir_adjoint == "native"
+    assert rows["mean"].ir_adjoint == "native"
+    assert rows["reduce"].ir_adjoint == "mixed"
+    for family in ("max", "min", "amax", "amin"):
+        assert rows[family].ir_adjoint == "placeholder"
 
 
 def test_registered_in_generated_docs() -> None:

@@ -1264,3 +1264,12 @@ inserted casts. ROCm continues to consume its independent structured
 or device proof transfers. The x86 dynamic last-axis reduction guard is not a
 ROCm execution claim. Shared add/multiply/static-broadcast adjoints change Graph
 IR only; no gfx backward runtime or exact-device promotion is claimed.
+
+Cross-backend sync `CORE-COMPILER-FOLLOWON-2026-07-22` adds shared kind-aware
+sum/mean, GELU/SiLU, and softmax Graph adjoints with host CPU oracle proof.
+Dynamic mean, max/min, ReLU, and normalization remain explicit fallbacks for
+the documented Graph-contract reasons. Guarded dynamic softmax, attention, and
+growing KV-cache execution are x86-only; no RDNA layout, HSACO ABI, schedule,
+selector, backward runtime, or exact-device claim transfers. Apple/NVIDIA
+Graph-cast materializers likewise do not transfer: ROCm's independent
+structured `#tile.layout` consumer remains unchanged.

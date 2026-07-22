@@ -230,3 +230,35 @@ def test_multi_head_attention_op_rejected():
     res = rt.launch(art, (q, k, v))
     assert res["ok"] is False
     assert "tessera.flash_attn" in res.get("reason", "")
+
+
+def test_one_attention_artifact_accepts_multiple_sequence_lengths():
+    rt = _rt_or_skip()
+    artifact = _art(rt, {"causal": True})
+    for sq, sk in ((3, 5), (11, 17)):
+        q = _RNG.standard_normal((2, sq, 8)).astype(np.float32)
+        k = _RNG.standard_normal((2, sk, 8)).astype(np.float32)
+        v = _RNG.standard_normal((2, sk, 12)).astype(np.float32)
+        result = rt.launch(artifact, (q, k, v))
+        assert result["ok"] is True, result.get("reason")
+        np.testing.assert_allclose(
+            np.asarray(result["output"]),
+            _ref(q, k, v, causal=True),
+            rtol=1e-4,
+            atol=1e-4,
+        )
+
+
+def test_dynamic_attention_guard_runs_before_native_load(monkeypatch):
+    from tessera import runtime as rt
+
+    monkeypatch.setattr(
+        rt,
+        "_load_x86_elementwise",
+        lambda: pytest.fail("native library loaded before dynamic guard"),
+    )
+    q = np.zeros((2, 0, 8), np.float32)
+    k = np.zeros((2, 4, 8), np.float32)
+    v = np.zeros((2, 4, 8), np.float32)
+    with pytest.raises(ValueError, match="must be positive"):
+        rt._execute_x86_compiled_flash_attn(_art(rt, {}), (q, k, v))

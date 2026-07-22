@@ -38,6 +38,7 @@ add_library(TesseraApple STATIC
   lib/Target/Apple/TesseraAppleDialect.cpp
   lib/Target/Apple/Passes.cpp
   lib/Target/Apple/Lowering/TileToApple.cpp
+  lib/Target/Apple/Lowering/GraphLayoutToApple.cpp
   lib/Target/Apple/Lowering/ControlForToAppleGPU.cpp
   lib/Target/Apple/Lowering/ControlIfToAppleGPU.cpp
   lib/Target/Apple/Lowering/ControlWhileToAppleGPU.cpp

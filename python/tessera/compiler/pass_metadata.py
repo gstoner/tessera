@@ -131,6 +131,22 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         sprint="ROCm Tile-IR convergence",
     ),
     PassMetadata(
+        name="tessera-apple-materialize-layout-casts",
+        cpp_class="MaterializeGraphLayoutToApplePass",
+        summary=(
+            "Consumes row-major/BHSD/NHWC Graph layout casts as indexed "
+            "Apple runtime operand-binding contracts and rejects unsupported "
+            "physical reinterpretation."
+        ),
+        input_dialects=("tessera", "func"),
+        output_dialects=("tessera", "func"),
+        required_attrs=("tessera.layout",),
+        preserved_attrs=("tessera.source_layout",),
+        diagnostic_codes=(),
+        pass_kind="lowering",
+        sprint="CORE-COMPILER-FOLLOWON",
+    ),
+    PassMetadata(
         name="tessera-compute-legalize",
         cpp_class="ComputeLegalize",
         summary=(
@@ -197,6 +213,22 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         ),
         pass_kind="verifier",
         sprint="V2 + V4a",
+    ),
+    PassMetadata(
+        name="tessera-nvidia-materialize-layout-casts",
+        cpp_class="NVIDIAGraphLayoutMaterializationPass",
+        summary=(
+            "Consumes legal Graph layout casts as indexed NVIDIA binding "
+            "contracts carried into Tile async-copy staging."
+        ),
+        input_dialects=("tessera", "func"),
+        output_dialects=("tessera", "func"),
+        required_attrs=("tessera.layout",),
+        preserved_attrs=("tessera.source_layout",),
+        diagnostic_codes=(),
+        must_run_after=("tessera-layout-legality",),
+        pass_kind="lowering",
+        sprint="CORE-COMPILER-FOLLOWON",
     ),
     PassMetadata(
         name="tessera-pipeline-partition",

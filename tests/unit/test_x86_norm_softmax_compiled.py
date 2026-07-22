@@ -123,3 +123,26 @@ def test_x86_softmax_axis_rejected():
         rt._execute_x86_compiled_softmax(
             _artifact(rt, "tessera.softmax", "x86_softmax_compiled",
                       {"axis": 0}), (x,))
+
+
+def test_x86_dynamic_softmax_materializes_noncontiguous_input():
+    rt = _x86_or_skip()
+    base = np.random.default_rng(67).standard_normal((4, 16)).astype(np.float32)
+    x = base[:, ::2]
+    assert not x.flags.c_contiguous
+    out = rt._execute_x86_compiled_softmax(
+        _artifact(rt, "tessera.softmax", "x86_softmax_compiled"), (x,)
+    )
+    np.testing.assert_allclose(out, _softmax(x), atol=2e-5, rtol=2e-5)
+
+
+@pytest.mark.parametrize("shape", [(), (2, 0), (0, 4)])
+def test_x86_dynamic_softmax_rejects_invalid_shape_before_native_load(shape):
+    from tessera import runtime as rt
+    from tessera.compiler.emit.executable_layout import DynamicShapeGuardError
+
+    x = np.empty(shape, np.float32)
+    with pytest.raises(DynamicShapeGuardError):
+        rt._execute_x86_compiled_softmax(
+            _artifact(rt, "tessera.softmax", "x86_softmax_compiled"), (x,)
+        )

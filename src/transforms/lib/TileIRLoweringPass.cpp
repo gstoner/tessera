@@ -47,19 +47,31 @@ namespace {
 // Emit a tile.async_copy op (string-based to avoid depending on tile_opt_fa4
 // dialect headers in the transforms library).
 static Operation *emitAsyncCopy(OpBuilder &b, Location loc, Value src,
-                                 int64_t tileRows, int64_t tileCols) {
+                                int64_t tileRows, int64_t tileCols,
+                                StringRef nvidiaLayout = {}) {
   OperationState st(loc, "tile.async_copy");
   st.addOperands({src});
   st.addAttribute("tile_rows",
                   b.getI64IntegerAttr(tileRows));
   st.addAttribute("tile_cols",
                   b.getI64IntegerAttr(tileCols));
+  if (!nvidiaLayout.empty())
+    st.addAttribute("tessera.nvidia.layout",
+                    b.getStringAttr(nvidiaLayout));
   // The staged tile and its completion token are one contract.  Emitting the
   // token here (rather than waiting for warp specialization) keeps straight-
   // line Graph -> Tile lowering legal too: the wait retires this exact copy
   // and the consumer carries the dependency as SSA.
   st.addTypes({src.getType(), tile::AsyncTokenType::get(b.getContext())});
   return b.create(st);
+}
+
+static StringRef nvidiaOperandLayout(Operation *op, unsigned operand) {
+  std::string name = "tessera.nvidia.operand_layout_" +
+                     std::to_string(operand);
+  if (auto attr = op->getAttrOfType<StringAttr>(name))
+    return attr.getValue();
+  return {};
 }
 
 // Emit a tile.wait_async op that retires the named in-flight copies.
@@ -120,9 +132,13 @@ struct LowerFlashAttnToTileIR : public RewritePattern {
       tkv = a.getInt();
 
     // ── Emit tile.async_copy for Q and either K/V tensors or a staged cache ──
-    Operation *cpQ = emitAsyncCopy(rewriter, loc, Q, tq, /*d_k inferred*/ -1);
-    Operation *cpK = emitAsyncCopy(rewriter, loc, K, tkv, -1);
-    Operation *cpV = emitAsyncCopy(rewriter, loc, V, tkv, -1);
+    Operation *cpQ = emitAsyncCopy(rewriter, loc, Q, tq,
+                                   /*d_k inferred*/ -1,
+                                   nvidiaOperandLayout(op, 0));
+    Operation *cpK = emitAsyncCopy(rewriter, loc, K, tkv, -1,
+                                   nvidiaOperandLayout(op, 1));
+    Operation *cpV = emitAsyncCopy(rewriter, loc, V, tkv, -1,
+                                   nvidiaOperandLayout(op, 2));
 
     // Barrier: wait for all async copies to complete before compute.
     emitWaitAsync(rewriter, loc,
@@ -215,8 +231,10 @@ struct LowerMatmulToTileMMA : public RewritePattern {
                                              : op->getResult(0).getType();
 
     // Async copies for A and B tiles.
-    Operation *cpA = emitAsyncCopy(rewriter, loc, A, tileM, -1);
-    Operation *cpB = emitAsyncCopy(rewriter, loc, B, -1, tileN);
+    Operation *cpA = emitAsyncCopy(rewriter, loc, A, tileM, -1,
+                                   nvidiaOperandLayout(op, 0));
+    Operation *cpB = emitAsyncCopy(rewriter, loc, B, -1, tileN,
+                                   nvidiaOperandLayout(op, 1));
     emitWaitAsync(rewriter, loc, {cpA->getResult(1), cpB->getResult(1)});
 
     // tile.mma — the WGMMA/WMMA selector is resolved by NVWGMMALoweringPass.

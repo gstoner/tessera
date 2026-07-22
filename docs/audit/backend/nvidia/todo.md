@@ -1208,3 +1208,14 @@ schedule, selector, or device proof. The x86 dynamic last-axis reduction guard
 is not applicable to bucketed tensor-core routes. Shared add/multiply/static-
 broadcast adjoints change Graph IR only; no CUDA backward runtime or exact-
 device promotion is claimed.
+
+Cross-backend sync `CORE-COMPILER-FOLLOWON-2026-07-22` adds shared kind-aware
+sum/mean, GELU/SiLU, and softmax Graph adjoints with host CPU oracle proof.
+Dynamic mean, max/min, ReLU, and normalization remain explicit fallbacks for
+the documented Graph-contract reasons. Guarded dynamic softmax, attention, and
+growing KV-cache execution are x86-only and are not applicable to bucketed
+tensor-core routes; no CUDA ABI, schedule, selector, backward runtime, or
+exact-device claim transfers. NVIDIA's architecture-owned Graph-cast consumer
+is host-validated: after shared legality it accepts row/column-major/BHSD/NHWC,
+removes the Graph marker, and carries the binding into `tile.async_copy`.
+This changes staging metadata only and claims no PTX schedule or device proof.

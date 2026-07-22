@@ -77,6 +77,16 @@ _EXPLICIT_BUILDADJOINT_RE = re.compile(r'(\w+)Op::buildAdjoint\b')
 # on the right primitive instead of falling through to `none`.
 _GETSTRINGATTR_RE = re.compile(r'getStringAttr\(\s*"([^"]+)"\s*\)')
 
+# Kind-aware Graph ops expose their native/fallback variants through constexpr
+# StringLiteral tables in AdjointInterface.cpp. This keeps the compiler source,
+# not the audit renderer, as the policy owner.
+_ADJOINT_KIND_TABLE_RE = re.compile(
+    r"k(\w+)(Native|Placeholder)AdjointKinds\[\]\s*=\s*\{([^}]*)\}",
+    re.DOTALL,
+)
+_STRING_LITERAL_RE = re.compile(r'"([^"]+)"')
+_REDUCTION_KIND_ALIASES = {"amax": "max", "amin": "min"}
+
 # Phase 3 (2026-07-11) — families whose compiler-emitted backward IR is
 # **oracle-verified on CPU by interpretation**: the actual
 # `--tessera-autodiff-paired` output is numerically interpreted and its gradients
@@ -85,7 +95,10 @@ _GETSTRINGATTR_RE = re.compile(r'getStringAttr\(\s*"([^"]+)"\s*\)')
 # rung — strictly weaker than native `oracle_proven` (native LLVM/runtime
 # execution, Phase 4) and device verification; it does NOT set those columns.
 _BWD_IR_ORACLE_CPU: frozenset[str] = frozenset(
-    {"add", "broadcast", "mul", "matmul", "tanh", "sigmoid"}
+    {
+        "add", "broadcast", "gelu", "mean", "mul", "matmul", "silu",
+        "softmax", "sum", "tanh", "sigmoid",
+    }
 )
 
 # Stable build identifiers used in the ledger. They describe the configuration
@@ -173,6 +186,19 @@ def _ir_adjoint_classes() -> tuple[frozenset[str], frozenset[str]]:
     return frozenset(native), frozenset(placeholder)
 
 
+def _ir_adjoint_kind_classes() -> dict[str, dict[str, frozenset[str]]]:
+    """Parse kind-aware native/placeholder policy from the C++ source."""
+    text = _read_adjoint_source()
+    result: dict[str, dict[str, frozenset[str]]] = {}
+    for op_stem, disposition, body in _ADJOINT_KIND_TABLE_RE.findall(text):
+        op_name = _cpp_op_family(op_stem)
+        key = disposition.lower()
+        result.setdefault(op_name, {})[key] = frozenset(
+            _STRING_LITERAL_RE.findall(body)
+        )
+    return result
+
+
 def _is_differentiable(cov: "primitive_coverage.PrimitiveCoverage") -> bool:
     cs = cov.contract_status
     return cs.get("vjp") == "complete" or cs.get("jvp") == "complete"
@@ -222,6 +248,7 @@ def collect_rows() -> list[LedgerRow]:
     ledger cross-references.
     """
     native, placeholder = _ir_adjoint_classes()
+    kind_classes = _ir_adjoint_kind_classes()
     covs = primitive_coverage.all_primitive_coverages()
     # Phase 4 (A2): the native backward-execution rungs are sourced from the
     # runtime execution matrix's backward rows, never asserted here.
@@ -231,7 +258,27 @@ def collect_rows() -> list[LedgerRow]:
     for name in sorted(covs):
         cov = covs[name]
         keys = _match_keys(cov)
-        if keys & native:
+        semantic_kind = _REDUCTION_KIND_ALIASES.get(name, name)
+        reduce_kinds = kind_classes.get("reduce", {})
+        if name == "reduce" and "reduce" in native and reduce_kinds:
+            ir_adjoint = "mixed"
+            native_kinds = ",".join(sorted(reduce_kinds.get("native", ())))
+            placeholder_kinds = ",".join(
+                sorted(reduce_kinds.get("placeholder", ()))
+            )
+            notes = (
+                f"kind-aware Graph adjoint: native={native_kinds}; "
+                f"placeholder={placeholder_kinds}"
+            )
+        elif semantic_kind in reduce_kinds.get("native", ()):
+            ir_adjoint = "native"
+            notes = (
+                "native compiler adjoint (static extent required for mean)"
+            )
+        elif semantic_kind in reduce_kinds.get("placeholder", ()):
+            ir_adjoint = "placeholder"
+            notes = "tie-policy custom_adjoint_call → Python VJP"
+        elif keys & native:
             ir_adjoint = "native"
             notes = (
                 "native static-shape adjoint (W5); dynamic → placeholder"
@@ -307,6 +354,7 @@ def _summary(rows: list[LedgerRow]) -> dict[str, int]:
         "python_reference": sum(1 for r in rows if r.python_reference == "yes"),
         "ir_adjoint_native": sum(1 for r in rows if r.ir_adjoint == "native"),
         "ir_adjoint_placeholder": sum(1 for r in rows if r.ir_adjoint == "placeholder"),
+        "ir_adjoint_mixed": sum(1 for r in rows if r.ir_adjoint == "mixed"),
         "backward_cpu_ir_oracle": sum(1 for r in rows if r.bwd_cpu_ir_oracle),
         "backward_target_lowered": sum(1 for r in rows if r.bwd_target_lowered),
         "backward_runtime_bound": sum(1 for r in rows if r.bwd_runtime_bound),
@@ -404,6 +452,8 @@ def render_markdown() -> str:
         f"({', '.join(sorted(native)) or '—'})",
         f"- `ir_adjoint = placeholder` (Python round-trip, not native): "
         f"**{s['ir_adjoint_placeholder']}** ({', '.join(sorted(placeholder)) or '—'})",
+        f"- `ir_adjoint = mixed` (kind-aware native + placeholder): "
+        f"**{s['ir_adjoint_mixed']}**",
         f"- backward IR **oracle-verified on CPU** (interpreted): "
         f"**{s['backward_cpu_ir_oracle']}** ({', '.join(sorted(_BWD_IR_ORACLE_CPU)) or '—'})",
         f"- backward `target_lowered` on any exact target: "

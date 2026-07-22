@@ -5877,12 +5877,6 @@ def _execute_x86_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> An
     Q/K/V are ``[..., S, D]`` (leading dims = B*H). f32, scale + causal."""
     import numpy as np
 
-    lib = _load_x86_elementwise()
-    if lib is None:
-        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
-    fn = getattr(lib, "tessera_x86_flash_attn_f32", None)
-    if fn is None:
-        raise _RocmCompiledUnavailable("tessera_x86_flash_attn_f32 missing")
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
     ops = list(metadata.get("ops") or [])
@@ -5896,9 +5890,17 @@ def _execute_x86_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> An
     if len(operand_names) < 3:
         raise ValueError("flash_attn requires Q, K, V operands")
     values = _bind_launch_args(args, arg_names)
-    q = np.ascontiguousarray(_as_numpy(values[operand_names[0]]), np.float32)
-    k = np.ascontiguousarray(_as_numpy(values[operand_names[1]]), np.float32)
-    v = np.ascontiguousarray(_as_numpy(values[operand_names[2]]), np.float32)
+    raw_q = _as_numpy(values[operand_names[0]])
+    raw_k = _as_numpy(values[operand_names[1]])
+    raw_v = _as_numpy(values[operand_names[2]])
+    if any(array.dtype != np.float32 for array in (raw_q, raw_k, raw_v)):
+        raise ValueError("x86 flash_attn lane handles f32 only")
+    from .compiler.emit.executable_layout import guard_dynamic_attention
+
+    guard_dynamic_attention(raw_q, raw_k, raw_v)
+    q = np.ascontiguousarray(raw_q, np.float32)
+    k = np.ascontiguousarray(raw_k, np.float32)
+    v = np.ascontiguousarray(raw_v, np.float32)
     # A 4th operand is the additive attn_bias / mask (the Graph IR + Apple path
     # normalize flash_attn(..., attn_bias=…) into a 4th operand).
     bias = np.ascontiguousarray(_as_numpy(values[operand_names[3]]), np.float32) if len(operand_names) > 3 else None
@@ -5987,12 +5989,6 @@ def _x86_flash_attn_run(
     """The extended AVX-512 FA forward (sliding window / logit-softcap / additive
     bias). Operands are already MHA-matched (GQA expanded). bias is None or
     broadcastable to [bh, Sq, Sk]. Returns O shaped q.shape[:-1] + (dv,)."""
-    lib = _load_x86_elementwise()
-    if lib is None:
-        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
-    fn = getattr(lib, "tessera_x86_flash_attn_ext_f32", None)
-    if fn is None:
-        raise _RocmCompiledUnavailable("tessera_x86_flash_attn_ext_f32 missing")
     d, sq, sk = int(q.shape[-1]), int(q.shape[-2]), int(k.shape[-2])
     dv = int(v.shape[-1])
     bh = int(np.prod(q.shape[:-2])) if q.ndim > 2 else 1
@@ -6018,6 +6014,12 @@ def _x86_flash_attn_run(
     else:
         bptr = cf()  # NULL
         bstride = 0
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    fn = getattr(lib, "tessera_x86_flash_attn_ext_f32", None)
+    if fn is None:
+        raise _RocmCompiledUnavailable("tessera_x86_flash_attn_ext_f32 missing")
     fn(
         qc.ctypes.data_as(cf),
         kc.ctypes.data_as(cf),
@@ -8472,6 +8474,9 @@ def _execute_x86_compiled_softmax(artifact: RuntimeArtifact, args: Any) -> Any:
     reduction kernel — numerically-stable softmax over the last axis, from
     libtessera_x86_elementwise.so. f32. axis=-1 only."""
     import numpy as np
+    from .compiler.emit.executable_layout import (
+        guard_dynamic_last_axis_softmax,
+    )
 
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
@@ -8498,14 +8503,10 @@ def _execute_x86_compiled_softmax(artifact: RuntimeArtifact, args: Any) -> Any:
         raise ValueError(f"x86 softmax lane only supports axis=-1 (last); got {axis}")
     values = _bind_launch_args(args, arg_names)
     x = _as_numpy(values[operand_names[0]])
-    if x.ndim < 1:
-        raise ValueError("softmax operand must have rank >= 1")
     if x.dtype != np.float32:
         raise ValueError(f"x86 softmax lane handles f32 only; got {x.dtype}")
-    k = int(x.shape[-1])
-    m = int(np.prod(x.shape[:-1])) if x.ndim > 1 else 1
-    if k <= 0:
-        raise ValueError(f"softmax last dim must be positive; got {k}")
+    contract = guard_dynamic_last_axis_softmax(x)
+    m, k = contract.outer, contract.axis_extent
 
     lib = _load_x86_elementwise()
     if lib is None:
@@ -8516,7 +8517,7 @@ def _execute_x86_compiled_softmax(artifact: RuntimeArtifact, args: Any) -> Any:
     lib.tessera_x86_avx512_softmax_f32(
         xc.ctypes.data_as(cf), ctypes.c_int64(m), ctypes.c_int64(k), out.ctypes.data_as(cf)
     )
-    return out.reshape(x.shape)
+    return out.reshape(contract.output_shape)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -8829,6 +8830,9 @@ def _x86_sdpa(Q: Any, K: Any, V: Any, nq: int, nkv: int, np: Any, scale: Any = N
     [.., nkv, Sk, D]; query head h reads KV group h // (nq/nkv). f32."""
     import math
 
+    from .compiler.emit.executable_layout import guard_dynamic_attention
+
+    guard_dynamic_attention(Q, K, V)
     Q = np.ascontiguousarray(Q, np.float32)
     K = np.ascontiguousarray(K, np.float32)
     V = np.ascontiguousarray(V, np.float32)
@@ -14544,9 +14548,6 @@ def _execute_x86_compiled_kv_cache(artifact: RuntimeArtifact, args: Any) -> Any:
     """Execute KV-cache movement through the native x86 f32 C ABI."""
     import numpy as np
 
-    lib = _load_x86_elementwise()
-    if lib is None:
-        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
     ops = list(metadata.get("ops") or [])
@@ -14557,35 +14558,53 @@ def _execute_x86_compiled_kv_cache(artifact: RuntimeArtifact, args: Any) -> Any:
         )
     operand_names = [str(n) for n in ops[0].get("operands", [])]
     values = _bind_launch_args(args, arg_names)
-    operands = [np.ascontiguousarray(_as_numpy(values[n]), np.float32) for n in operand_names]
+    raw_operands = [_as_numpy(values[n]) for n in operand_names]
+    if any(array.dtype != np.float32 for array in raw_operands):
+        raise ValueError("x86 KV-cache lane handles f32 only")
+    operands = [np.ascontiguousarray(array, np.float32) for array in raw_operands]
     if not operands or operands[0].ndim < 2:
         raise ValueError("x86 KV-cache buffer must have shape (max_seq, ...)")
     cache = operands[0]
     max_seq = int(cache.shape[0])
     row_len = int(np.prod(cache.shape[1:]))
     kwargs = ops[0].get("kwargs") or {}
-    c_f32 = ctypes.POINTER(ctypes.c_float)
-    ptr = lambda a: a.ctypes.data_as(c_f32)
+    from .compiler.emit.executable_layout import guard_dynamic_kv_cache
 
     if op_name == "tessera.kv_cache.read":
         start = int(kwargs.get("start", 0))
         end_value = kwargs.get("end", None)
         end = start + 1 if end_value is None else int(end_value)
-        if not (0 <= start <= end <= max_seq):
-            raise ValueError(f"x86 KV-cache read [{start}, {end}) is out of bounds")
-        out = np.empty((end - start,) + cache.shape[1:], np.float32)
-        rc = lib.tessera_x86_kv_cache_read_f32(ptr(cache), max_seq, row_len, start, end, ptr(out))
+        contract = guard_dynamic_kv_cache(cache, start=start, end=end)
     elif op_name == "tessera.kv_cache.append":
         if len(operands) != 2:
             raise ValueError("x86 KV-cache append requires cache and rows")
-        rows = operands[1]
         start = int(kwargs.get("start", 0))
+        contract = guard_dynamic_kv_cache(
+            cache, rows=operands[1], start=start
+        )
+    else:
+        current_sequence = int(kwargs.get("current_seq", max_seq))
+        limit = int(kwargs["limit"])
+        contract = guard_dynamic_kv_cache(
+            cache, current_sequence=current_sequence, limit=limit
+        )
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    c_f32 = ctypes.POINTER(ctypes.c_float)
+    ptr = lambda a: a.ctypes.data_as(c_f32)
+
+    if op_name == "tessera.kv_cache.read":
+        out = np.empty(contract.output_shape, np.float32)
+        rc = lib.tessera_x86_kv_cache_read_f32(ptr(cache), max_seq, row_len, start, end, ptr(out))
+    elif op_name == "tessera.kv_cache.append":
+        rows = operands[1]
         out = cache.copy()
         rc = lib.tessera_x86_kv_cache_append_f32(ptr(out), max_seq, row_len, start, ptr(rows), int(rows.shape[0]))
     else:
         out = cache.copy()
         rc = lib.tessera_x86_kv_cache_prune_f32(
-            ptr(out), max_seq, row_len, int(kwargs.get("current_seq", max_seq)), int(kwargs["limit"])
+            ptr(out), max_seq, row_len, current_sequence, limit
         )
     if rc != 0:
         raise ValueError(f"native x86 KV-cache ABI rejected {op_name} arguments")

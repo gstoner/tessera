@@ -45,6 +45,36 @@ class DynamicReductionContract:
     output_shape: tuple[int, ...]
 
 
+@dataclass(frozen=True)
+class DynamicSoftmaxContract:
+    """Runtime dimensions for one contiguous last-axis softmax launch."""
+
+    outer: int
+    axis_extent: int
+    output_shape: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class DynamicAttentionContract:
+    """Runtime dimensions for one dense/streaming attention launch."""
+
+    batch_heads: int
+    query_extent: int
+    key_extent: int
+    query_key_width: int
+    value_width: int
+    output_shape: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class DynamicKVCacheContract:
+    """Runtime dimensions for one growing KV-cache movement launch."""
+
+    max_sequence: int
+    row_extent: int
+    output_shape: tuple[int, ...]
+
+
 def materialize_layout(value: Any, contract: ExecutableLayout) -> Any:
     """Return an array in the contract's physical order.
 
@@ -161,13 +191,155 @@ def guard_dynamic_last_axis_reduction(
     return DynamicReductionContract(outer, axis_extent, output_shape)
 
 
+def guard_dynamic_last_axis_softmax(value: Any) -> DynamicSoftmaxContract:
+    """Validate a dynamic last-axis softmax before entering its native ABI."""
+    reduction = guard_dynamic_last_axis_reduction(value, keepdims=False)
+    import numpy as np
+
+    output_shape = tuple(int(dim) for dim in np.asarray(value).shape)
+    return DynamicSoftmaxContract(
+        reduction.outer, reduction.axis_extent, output_shape
+    )
+
+
+def guard_dynamic_attention(
+    query: Any, key: Any, value: Any
+) -> DynamicAttentionContract:
+    """Validate runtime-sized ``[..., S, D]`` attention operands.
+
+    Query heads may be a divisible multiple of KV heads (GQA/MQA).  All launch
+    dimensions use signed i64 in the native x86 ABI.
+    """
+    import numpy as np
+
+    q = np.asarray(query)
+    k = np.asarray(key)
+    v = np.asarray(value)
+    if min(q.ndim, k.ndim, v.ndim) < 2:
+        raise DynamicShapeGuardError(
+            "dynamic attention requires rank >= 2 Q/K/V"
+        )
+    if q.ndim != k.ndim or k.ndim != v.ndim:
+        raise DynamicShapeGuardError(
+            "dynamic attention requires equal Q/K/V ranks"
+        )
+    if any(int(dim) <= 0 for array in (q, k, v) for dim in array.shape):
+        raise DynamicShapeGuardError(
+            "dynamic attention dimensions must be positive"
+        )
+    d = int(q.shape[-1])
+    sq = int(q.shape[-2])
+    sk = int(k.shape[-2])
+    dv = int(v.shape[-1])
+    if int(k.shape[-1]) != d:
+        raise DynamicShapeGuardError(
+            "dynamic attention Q/K widths must match"
+        )
+    if int(v.shape[-2]) != sk or v.shape[:-2] != k.shape[:-2]:
+        raise DynamicShapeGuardError(
+            "dynamic attention K/V leading dimensions and key extents must match"
+        )
+    if q.shape[:-2] != k.shape[:-2]:
+        q_heads = int(q.shape[-3]) if q.ndim >= 3 else 1
+        kv_heads = int(k.shape[-3]) if k.ndim >= 3 else 1
+        if (
+            q.shape[:-3] != k.shape[:-3]
+            or kv_heads <= 0
+            or q_heads % kv_heads != 0
+        ):
+            raise DynamicShapeGuardError(
+                "dynamic attention requires matching leading dimensions or "
+                "divisible GQA query/KV heads"
+            )
+    batch_heads = 1
+    for dim in q.shape[:-2]:
+        batch_heads *= int(dim)
+    signed_i64_max = 9_223_372_036_854_775_807
+    dimensions = (batch_heads, sq, sk, d, dv)
+    if any(dim > signed_i64_max for dim in dimensions):
+        raise DynamicShapeGuardError(
+            "dynamic attention dimensions must fit the signed i64 launch ABI"
+        )
+    return DynamicAttentionContract(
+        batch_heads, sq, sk, d, dv, tuple(q.shape[:-1]) + (dv,)
+    )
+
+
+def guard_dynamic_kv_cache(
+    cache: Any,
+    *,
+    rows: Any = None,
+    start: int = 0,
+    end: int | None = None,
+    current_sequence: int | None = None,
+    limit: int | None = None,
+) -> DynamicKVCacheContract:
+    """Validate a runtime-sized KV-cache movement call before native entry."""
+    import numpy as np
+
+    array = np.asarray(cache)
+    if array.ndim < 2:
+        raise DynamicShapeGuardError(
+            "dynamic KV-cache requires shape (max_sequence, ...)"
+        )
+    shape = tuple(int(dim) for dim in array.shape)
+    if any(dim <= 0 for dim in shape):
+        raise DynamicShapeGuardError(
+            "dynamic KV-cache dimensions must be positive"
+        )
+    max_sequence = shape[0]
+    row_extent = 1
+    for dim in shape[1:]:
+        row_extent *= dim
+    signed_i64_max = 9_223_372_036_854_775_807
+    if max_sequence > signed_i64_max or row_extent > signed_i64_max:
+        raise DynamicShapeGuardError(
+            "dynamic KV-cache dimensions must fit the signed i64 launch ABI"
+        )
+    if rows is not None:
+        appended = np.asarray(rows)
+        if appended.ndim != array.ndim or appended.shape[1:] != array.shape[1:]:
+            raise DynamicShapeGuardError(
+                "dynamic KV-cache appended rows must match the cache tail shape"
+            )
+        count = int(appended.shape[0])
+        if start < 0 or start + count > max_sequence:
+            raise DynamicShapeGuardError(
+                "dynamic KV-cache append range is out of bounds"
+            )
+    if end is not None and not (0 <= start <= end <= max_sequence):
+        raise DynamicShapeGuardError(
+            "dynamic KV-cache read range is out of bounds"
+        )
+    if current_sequence is not None and not (
+        0 <= current_sequence <= max_sequence
+    ):
+        raise DynamicShapeGuardError(
+            "dynamic KV-cache current sequence is out of bounds"
+        )
+    if limit is not None and limit < 0:
+        raise DynamicShapeGuardError(
+            "dynamic KV-cache prune limit must be non-negative"
+        )
+    output_shape = shape
+    if end is not None:
+        output_shape = (end - start,) + shape[1:]
+    return DynamicKVCacheContract(max_sequence, row_extent, output_shape)
+
+
 __all__ = [
     "DynamicShapeGuardError",
     "DynamicReductionContract",
+    "DynamicSoftmaxContract",
+    "DynamicAttentionContract",
+    "DynamicKVCacheContract",
     "ExecutableLayout",
     "LayoutOrder",
     "guard_dynamic_matmul",
     "guard_dynamic_last_axis_reduction",
+    "guard_dynamic_last_axis_softmax",
+    "guard_dynamic_attention",
+    "guard_dynamic_kv_cache",
     "materialize_layout",
     "materialize_layouts",
 ]

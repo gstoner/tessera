@@ -1,6 +1,6 @@
 """Apple GPU pipeline pass-order matrix.
 
-The ``tessera-lower-to-apple_gpu-runtime`` pipeline composes 11 lowering
+The ``tessera-lower-to-apple_gpu-runtime`` pipeline composes 12 lowering
 passes that *must* run in a specific order. CORE-COMPILER-1 replaces seven
 fusion pass shells with one declarative fusion pass; that pass still has to
 fire before the per-op lowerings that could steal pieces of a fused chain.
@@ -27,11 +27,14 @@ APPLE_PASSES_CPP = (
 )
 
 
-# Canonical order of the 11 lowering passes in tessera-lower-to-apple_gpu-
+# Canonical order of the 12 lowering passes in tessera-lower-to-apple_gpu-
 # runtime.  This list is the source of truth — any reorder requires an
 # explicit edit *and* the docstring on Passes.cpp must update to explain
 # why.  Comments before each pass capture the ordering contract:
 APPLE_GPU_CANONICAL_ORDER = [
+    # Consume Graph layout markers before fusion/per-op patterns inspect their
+    # operands; the pass validates Apple-supported physical bindings.
+    "createMaterializeGraphLayoutToApplePass",
     # One table owns all 2/3/4-op fusion rows and uses pattern benefit to
     # preserve longest-chain-first matching.
     "createLowerDeclarativeFusionsToAppleGPUPass",

@@ -20,6 +20,9 @@ namespace apple {
 /// Table-driven runtime fusion lowering used by the production Apple pipeline.
 std::unique_ptr<::mlir::Pass> createLowerDeclarativeFusionsToAppleGPUPass();
 
+/// Consume legal Graph layout casts as Apple runtime binding contracts.
+std::unique_ptr<::mlir::Pass> createMaterializeGraphLayoutToApplePass();
+
 /// Tile IR → Apple CPU Target IR. `valueMode = false` (default) emits the
 /// attribute-only artifact/inspection ops; `valueMode = true` emits
 /// value-producing `tessera_apple.cpu.call` ops (the `-full` pipeline).

@@ -85,3 +85,40 @@ def test_x86_kv_cache_read_rejects_invalid_bounds() -> None:
         (cache,),
     )
     assert result["ok"] is False
+
+
+def test_one_kv_artifact_accepts_growing_cache_capacities() -> None:
+    rt = _runtime_or_skip()
+    artifact = _artifact(
+        rt, "tessera.kv_cache.append", ["cache", "rows"], {"start": 3}
+    )
+    rows = np.arange(2 * 2 * 4, dtype=np.float32).reshape(2, 2, 4)
+    for capacity in (8, 23):
+        cache = np.zeros((capacity, 2, 4), np.float32)
+        result = rt.launch(artifact, (cache, rows))
+        assert result["ok"] is True, result.get("reason")
+        expected = cache.copy()
+        expected[3:5] = rows
+        np.testing.assert_array_equal(result["output"], expected)
+
+
+def test_dynamic_kv_guard_runs_before_native_load(monkeypatch) -> None:
+    from tessera import runtime as rt
+
+    monkeypatch.setattr(
+        rt,
+        "_load_x86_elementwise",
+        lambda: pytest.fail("native library loaded before dynamic guard"),
+    )
+    cache = np.zeros((8, 2, 4), np.float32)
+    rows = np.zeros((2, 3, 4), np.float32)
+    with pytest.raises(ValueError, match="tail shape"):
+        rt._execute_x86_compiled_kv_cache(
+            _artifact(
+                rt,
+                "tessera.kv_cache.append",
+                ["cache", "rows"],
+                {"start": 0},
+            ),
+            (cache, rows),
+        )

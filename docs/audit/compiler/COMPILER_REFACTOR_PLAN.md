@@ -631,8 +631,16 @@ priority (highest DL leverage first):
   landed (2026-07-22):** x86 contiguous last-axis reduction validates rank,
   positive extents, unique/in-range axes, and signed-i64 launch dimensions
   before its shape-independent AVX-512 image; malformed calls are rejected
-  before native library loading. Softmax, attention sequence length, and growing
-  paged-KV remain open. Mostly `[MAC]`.
+  before native library loading. **The last-axis softmax route now shares that
+  guarded runtime-dimension contract (2026-07-22):** it preserves arbitrary
+  leading dimensions, materializes non-contiguous inputs, and rejects scalar,
+  empty, overflowed, and invalid-dtype calls before native library loading.
+  **Dynamic attention and growing KV-cache movement now close the x86 cohort
+  (2026-07-22):** one runtime-sized attention artifact spans unequal query/key
+  lengths, and one KV artifact spans cache capacities; shared guards validate
+  rank, positive extents, GQA divisibility, widths, tail shapes, ranges, and i64
+  ABI bounds before native loading. Architecture-specialized Apple MSL and
+  tensor-core policies remain bucketed. Mostly `[MAC]`.
 - **H · Memory planning + layout (W3+W4)** — global buffer assignment/reuse +
   wire `LayoutAssignmentPass` to a backend consumer + transpose elimination.
   Unblocks the deferred attention-dispatch orientation bug. Mostly `[MAC]`.
@@ -666,15 +674,21 @@ priority (highest DL leverage first):
   shared-memory backend emits (`__shared__ char arena[N]; buf = arena + offset`).
   SMEM/TMEM get separate arenas. lit-gated
   (`tests/tessera-ir/phase3/tile_buffer_arena.mlir`). **Still open:** the
-  Graph-level `LayoutAssignmentPass` casts remain opt-in outside the first x86
-  emitter materializer; ROCm independently consumes structured `#tile.layout`.
+  Graph-level `LayoutAssignmentPass` casts remain opt-in; ROCm independently
+  consumes structured `#tile.layout`.
   **Propagation follow-on (2026-07-22):** pointwise propagation now requires all
   tagged operands to agree, last-axis reductions carry the row-major result
   contract, inserted casts name their source layout, and packed-storage attrs
   survive the matmul → epilogue → reduction rewrite. This intentionally does not
-  turn the pass on by default: Apple/NVIDIA still require architecture-owned
-  Graph-cast materializers. Also open: a HIP/PTX emitter that allocates from the
-  arena offsets and broader packed-storage/transpose rewrite coverage.
+  turn the pass on by default. **Architecture-owned consumers landed
+  (2026-07-22):** Apple validates and consumes row-major/BHSD/NHWC casts before
+  runtime fusion/per-op lowering; NVIDIA consumes row/column-major/BHSD/NHWC
+  casts after legality and carries the binding into `tile.async_copy` staging.
+  Unsupported Apple column-major input fails instead of being reinterpreted.
+  Also open: the full matmul → epilogue → reduction envelope, a HIP/PTX emitter
+  that allocates from arena offsets, broader packed-storage/transpose rewrite
+  coverage, and default enablement only after every enabled family has a real
+  consumer.
 
 - **CORE-COMPILER-2 · Target dtype defaults (2026-07-22).** Compute
   legalization is now the named-pipeline default for x86 and NVIDIA. Terminal
@@ -685,10 +699,12 @@ priority (highest DL leverage first):
 - **I · Training-graph + distributed optimization (W5+W6)** — apply the middle-end
   to backward graphs; promote comm/compute overlap from runtime machinery to a
   scheduled pass. **Phase-5 tensor algebra follow-on (2026-07-22):** same-shape
-  add/multiply and static broadcast now emit native Graph adjoints, with emitted
-  paired IR directly oracle-matched on CPU; dynamic broadcast remains an explicit
-  placeholder. Sum/mean need a kind-aware promotion contract before the shared
-  `reduce` family can be credited, while max/min tie semantics remain separate.
+  add/multiply, static broadcast, kind-aware sum/mean reduction, GELU/SiLU, and
+  softmax now emit native Graph adjoints, with emitted paired IR directly
+  oracle-matched on CPU. Dynamic broadcast and dynamic mean remain explicit
+  placeholders; max/min tie semantics remain separate. ReLU is held until a
+  registered comparison primitive exists, and RMSNorm/LayerNorm remain held on
+  a stable statistics/reciprocal-square-root carrier.
   Multi-rank still needs non-mock collectives.
 - **J · Absolute roofline attainment (W7)** — make `% of peak` (not "beats
   per-op") the hot-path success bar; add attainment targets to the E2 ratchets.

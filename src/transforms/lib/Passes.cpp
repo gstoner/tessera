@@ -97,6 +97,8 @@ static void addCUDA13PipelineForSM(
   if (opts.assignLayouts)
     pm.addPass(createLayoutAssignmentPass());
   pm.addPass(createLayoutLegalityPass());
+  if (opts.assignLayouts)
+    pm.addPass(createNVIDIAGraphLayoutMaterializationPass());
   if (computeLegalizationEnabled(opts, target))
     pm.addPass(createComputeLegalizePass());
   pm.addPass(createIRContractLegalityPass());
@@ -284,6 +286,8 @@ void registerTesseraPasses() {
   // consumer are separate executable contracts. Registered standalone as
   // --tessera-layout-assignment.
   ::mlir::registerPass([]() { return createLayoutAssignmentPass(); });
+  ::mlir::registerPass(
+      []() { return createNVIDIAGraphLayoutMaterializationPass(); });
   // 2026-07-08: Tile IR global buffer assignment/reuse (Workstream H / W3) —
   // disjoint-live-range shared buffers share a reuse group (tile.buffer_group).
   // Assignment half of shared-memory planning; verified by
@@ -378,6 +382,8 @@ void registerTesseraPasses() {
           pm.addPass(createLayoutAssignmentPass());
         // 2026-06-17: layout legality in the named pipeline (see lowerToX86).
         pm.addPass(createLayoutLegalityPass());
+        if (opts.assignLayouts)
+          pm.addPass(createNVIDIAGraphLayoutMaterializationPass());
         // C4 (2026-06-23): compute-legalize before the contract check (gated).
         if (computeLegalizationEnabled(opts, "nvidia_sm90"))
           pm.addPass(createComputeLegalizePass());

@@ -188,12 +188,15 @@ def test_tri_solve_still_correct_after_migration():
 # ---- Source-level drift gate (the migrated sites stay migrated) --------
 
 def test_only_documented_waituntilcompleted_sites_remain():
-    """Only three ``waitUntilCompleted`` invocations should remain.
+    """Only the documented ``waitUntilCompleted`` invocations should remain.
 
     * The fallback path INSIDE ``commit_and_wait_with_timeout`` itself
       (around the helper's lazy event init). Recursing into the
       wrapper there would deadlock; the legacy path is the correct
       fallback.
+    * The completed-command-buffer telemetry mode in the same helper. It is
+      enabled only for an ABI that owns the full command buffer and requires
+      completed timestamp properties before telemetry is recorded.
     * The equivalent fallback inside
       ``commit_mpsgraph_and_wait_with_timeout``. The MPSGraph wrapper must
       commit its live root itself because ``commitAndContinue`` may rotate
@@ -218,10 +221,11 @@ def test_only_documented_waituntilcompleted_sites_remain():
         r"\[cb waitUntilCompleted\]", src)]
     session_calls = [m for m in re.finditer(
         r"\[root waitUntilCompleted\]", src)]
-    # One generic-command-buffer fallback and three live-root fallbacks.
-    assert len(cb_calls) == 1, (
-        f"expected exactly 1 [cb waitUntilCompleted] (the wrapper's "
-        f"own fallback), found {len(cb_calls)}")
+    # One generic-command-buffer fallback plus the explicit completed-buffer
+    # telemetry mode used only when an ABI owns the entire command buffer.
+    assert len(cb_calls) == 2, (
+        f"expected exactly 2 [cb waitUntilCompleted] calls (the wrapper's "
+        f"fallback and complete-command-buffer telemetry mode), found {len(cb_calls)}")
     assert len(session_calls) == 3, (
         f"expected exactly 3 [root waitUntilCompleted] calls (the owned "
         f"MPSGraph, synchronous-session, and async-session fallbacks on live root command "

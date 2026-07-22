@@ -3670,10 +3670,12 @@ def _submit_apple_gpu_native(
         function = getattr(runtime, symbol, None)
         if function is None:
             raise RuntimeError(f"Apple runtime is missing {symbol}")
-        pointer = ctypes.POINTER(ctypes.c_float)
-        function.argtypes = [pointer, pointer, pointer, pointer] + [ctypes.c_int32] * (3 if is_batched else 2)
+        svd_pointer = ctypes.POINTER(ctypes.c_float)
+        function.argtypes = [svd_pointer, svd_pointer, svd_pointer, svd_pointer] + [
+            ctypes.c_int32
+        ] * (3 if is_batched else 2)
         function.restype = ctypes.c_int32
-        result = function(*(value.ctypes.data_as(pointer) for value in (a, u, s, vh)),
+        result = function(*(value.ctypes.data_as(svd_pointer) for value in (a, u, s, vh)),
                           *(ctypes.c_int32(value) for value in scalar_values))
         if result != 1:
             raise RuntimeError("Apple reduced SVD descriptor did not execute on Metal")

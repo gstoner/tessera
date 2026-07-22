@@ -689,11 +689,16 @@ def test_apple_gpu_tuple_svd_descriptor_states_are_explicit():
     assert value_descriptor_state("tessera.svd") == "descriptor_ready"
 
 
-def test_apple_gpu_reduced_svd_target_ir_and_serialized_descriptor_contract():
+def test_apple_gpu_reduced_svd_target_ir_and_serialized_descriptor_contract(
+    monkeypatch, tmp_path,
+):
     """Ratchet target IR, ordered binding/scalar ABI, and excluded SVD forms."""
     from tessera.compiler import apple_native
     from tessera.compiler.driver import compile_graph_module
 
+    dylib = tmp_path / "libTesseraAppleRuntime.dylib"
+    dylib.write_bytes(b"apple-e2e2-svd-serialization-runtime")
+    monkeypatch.setenv("TESSERA_APPLE_GPU_RUNTIME_LIB", str(dylib))
     results = (("u", (6, 4), "fp32"), ("s", (4,), "fp32"), ("vh", (4, 4), "fp32"))
     module = _tuple_value_module("tessera.svd", (6, 4), results)
     bundle = compile_graph_module(

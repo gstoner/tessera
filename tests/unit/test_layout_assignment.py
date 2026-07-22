@@ -91,3 +91,43 @@ func.func @f(%a: tensor<4x8xf32>, %b: tensor<8x16xf32>) -> tensor<4x16xf32> {
         [_OPT, str(f), "--tessera-layout-assignment", "--tessera-layout-legality"],
         capture_output=True, text=True)
     assert legal.returncode == 0, legal.stderr
+
+
+@_needs_opt
+def test_matmul_epilogue_last_axis_reduce_propagates_and_preserves_packing(tmp_path):
+    fixture = '''
+func.func @f(%a: tensor<4x8xf32>, %b: tensor<8x16xf32>) -> tensor<4xf32> {
+  %0 = "tessera.matmul"(%a, %b) {tessera.storage_packed = true, tessera.storage_container = "int8"} : (tensor<4x8xf32>, tensor<8x16xf32>) -> tensor<4x16xf32>
+  %1 = "tessera.gelu"(%0) : (tensor<4x16xf32>) -> tensor<4x16xf32>
+  %2 = "tessera.reduce"(%1) {kind = "sum", axis = -1 : i64} : (tensor<4x16xf32>) -> tensor<4xf32>
+  return %2 : tensor<4xf32>
+}
+'''
+    f = tmp_path / "matmul_epilogue_reduce.mlir"
+    f.write_text(fixture)
+    out = subprocess.run(
+        [_OPT, str(f), "--tessera-layout-assignment"],
+        capture_output=True, text=True, check=True,
+    ).stdout
+    assert out.count('tessera.layout = "row_major"') == 3
+    assert "tessera.storage_packed = true" in out
+    assert 'tessera.storage_container = "int8"' in out
+
+
+@_needs_opt
+def test_inserted_cast_records_source_layout(tmp_path):
+    fixture = '''
+func.func @f(%x: tensor<4x16xf32>) -> tensor<4xf32> {
+  %p = "tessera.cast"(%x) {tessera.layout = "packed"} : (tensor<4x16xf32>) -> tensor<4x16xf32>
+  %r = "tessera.reduce"(%p) {kind = "sum", axis = -1 : i64} : (tensor<4x16xf32>) -> tensor<4xf32>
+  return %r : tensor<4xf32>
+}
+'''
+    f = tmp_path / "packed_reduce.mlir"
+    f.write_text(fixture)
+    out = subprocess.run(
+        [_OPT, str(f), "--tessera-layout-assignment"],
+        capture_output=True, text=True, check=True,
+    ).stdout
+    assert 'tessera.source_layout = "packed"' in out
+    assert 'tessera.layout = "row_major"' in out

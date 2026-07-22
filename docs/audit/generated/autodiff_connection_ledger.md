@@ -17,9 +17,9 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 
 - Differentiable families tracked: **287**
 - `python_reference` (Python VJP/JVP): **287**
-- `ir_adjoint = native`: **6** (all_gather, all_reduce, matmul, reduce_scatter, sigmoid, tanh)
+- `ir_adjoint = native`: **9** (add, all_gather, all_reduce, broadcast, matmul, mul, reduce_scatter, sigmoid, tanh)
 - `ir_adjoint = placeholder` (Python round-trip, not native): **9** (gelu, layer_norm, log_softmax, relu, rmsnorm, silu, sin, softmax, softplus)
-- backward IR **oracle-verified on CPU** (interpreted): **3** (matmul, sigmoid, tanh)
+- backward IR **oracle-verified on CPU** (interpreted): **6** (add, broadcast, matmul, mul, sigmoid, tanh)
 - backward `target_lowered` on any exact target: **11**
 - backward `runtime_bound` (native) on any target: **11**
 - backward `oracle_proven` (native) on any target: **11**
@@ -53,7 +53,7 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 | `adam` | functional_optimizer_step | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `adamw` | functional_optimizer_step | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `adaptive_pool` | pooling | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
-| `add` | elementwise | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
+| `add` | elementwise | yes | native | cpu | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core; bwd_cpu_ir_oracle=llvm23-core | native compiler adjoint |
 | `alibi` | position_encoding | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `all_gather` | collective | yes | native | — | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core | native compiler adjoint |
 | `all_reduce` | collective | yes | native | — | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core | native compiler adjoint |
@@ -72,7 +72,7 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 | `batched_gemm` | loop_nest | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `bidirectional_scan` | recurrent | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `binary_cross_entropy_loss` | loss | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
-| `broadcast` | tensor_algebra | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
+| `broadcast` | tensor_algebra | yes | native | cpu | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core; bwd_cpu_ir_oracle=llvm23-core | native compiler adjoint |
 | `broadcast_to_axis` | collective | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `bsmm` | sparse | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `calibration_observer` | quantization | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
@@ -232,7 +232,7 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 | `msa_index_scores` | attention | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `msa_sparse_attention` | attention | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `mse_loss` | loss | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
-| `mul` | elementwise | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
+| `mul` | elementwise | yes | native | cpu | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core; bwd_cpu_ir_oracle=llvm23-core | native compiler adjoint |
 | `multi_head_attention` | attention | yes | none | — | nvidia_sm120,rocm_gfx1151 | nvidia_sm120,rocm_gfx1151 | nvidia_sm120,rocm_gfx1151 | nvidia_sm120,rocm_gfx1151 | — | nvidia_sm120=recompute_all; rocm_gfx1151=recompute_all | nvidia_sm120=dedicated; rocm_gfx1151=dedicated | python_reference=python-unit-registry; device[nvidia_sm120=cuda13.3+sm120]; device[rocm_gfx1151=llvm23-core+rocm-gfx1151] | native backward executes on nvidia_sm120, rocm_gfx1151 (Phase 4) |
 | `muon` | optimizer | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `nesterov` | optimizer | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |

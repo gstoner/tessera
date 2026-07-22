@@ -7,9 +7,10 @@
 //   1. SEED      — stamp `tessera.layout` on kernel-producer ops with a natural
 //                  output layout (matmul/batched_gemm → row_major, flash_attn →
 //                  bhsd, conv2d_nhwc → nhwc) when they don't already carry one.
-//   2. PROPAGATE — flow the producer's layout forward through single-result
-//                  pointwise ops (which preserve layout), to a fixpoint, so each
-//                  pointwise result becomes a layout-tagged producer.
+//   2. PROPAGATE — flow a compatible producer layout through single-result
+//                  pointwise ops, then carry a row-major result through a
+//                  last-axis reduction. Conflicting binary layouts are left
+//                  unassigned rather than choosing the first operand.
 //   3. INSERT    — at a consumer op with a known accept-set (matmul/conv2d_nhwc/
 //                  flash_attn), if an operand's producer carries a layout outside
 //                  that accept-set, splice in a `tessera.cast {tessera.layout=...}`
@@ -17,13 +18,10 @@
 //                  CastOp-fold / EraseIdentityCast guards (2026-06-17) keep these
 //                  same-type markers from being canonicalized away.
 //
-// v1 scope honesty: the assignments are IR metadata. No backend consumes them
-// yet (the rank-2 CPU JIT is layout-agnostic; Apple GPU is hand-MSL), so this is
-// an IR-completeness milestone — it makes the layout contract two-sided (assign +
-// verify) and is validated structurally + by running LayoutLegalityPass after it
-// (the assignments + inserted casts must be legal). When a layout-sensitive
-// backend lands, it reads these attrs to pick a kernel; the cast markers become
-// real memory reorders.
+// Scope honesty: the assignments are Graph IR metadata. Generic x86 emitter
+// bindings consume row-major layout contracts, while Graph cast materializers
+// remain target-owned follow-up for Apple/NVIDIA. The pass therefore stays
+// opt-in in named Graph pipelines until each inserted cast has a real consumer.
 
 #include "Tessera/Transforms/Passes.h"
 
@@ -58,6 +56,7 @@ static StringRef producerLayout(StringRef opName) {
 // contract are encoded in `contractOperands`.
 static ArrayRef<StringRef> consumerAcceptSet(StringRef opName) {
   static const StringRef matmul[] = {"row_major", "col_major"};
+  static const StringRef rowMajor[] = {"row_major"};
   static const StringRef nhwc[] = {"nhwc"};
   static const StringRef bhsd[] = {"bhsd"};
   if (opName == "tessera.matmul" || opName == "tessera.batched_gemm")
@@ -66,6 +65,8 @@ static ArrayRef<StringRef> consumerAcceptSet(StringRef opName) {
     return nhwc;
   if (opName == "tessera.flash_attn")
     return bhsd;
+  if (opName == "tessera.reduce")
+    return rowMajor;
   return {};
 }
 
@@ -80,6 +81,8 @@ static SmallVector<unsigned> contractOperands(StringRef opName, unsigned n) {
     for (unsigned i = 0; i < std::min(n, 3u); ++i) qkv.push_back(i);
     return qkv;
   }
+  if (opName == "tessera.reduce")
+    return {0u};
   return {};
 }
 
@@ -102,6 +105,36 @@ static StringRef layoutOf(Value v) {
   if (auto a = def->getAttrOfType<StringAttr>(kLayoutAttr))
     return a.getValue();
   return {};
+}
+
+static bool isLastAxisReduction(Operation *op) {
+  if (op->getName().getStringRef() != "tessera.reduce" ||
+      op->getNumOperands() != 1 || op->getNumResults() != 1)
+    return false;
+  auto inputTy = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+  auto axis = op->getAttrOfType<IntegerAttr>("axis");
+  if (!inputTy || !axis || inputTy.getRank() < 1)
+    return false;
+  int64_t normalized = axis.getInt();
+  if (normalized < 0)
+    normalized += inputTy.getRank();
+  return normalized == inputTy.getRank() - 1;
+}
+
+static StringRef propagatedPointwiseLayout(Operation *op) {
+  StringRef resolved;
+  for (Value operand : op->getOperands()) {
+    StringRef candidate = layoutOf(operand);
+    if (candidate.empty())
+      continue;
+    if (resolved.empty()) {
+      resolved = candidate;
+      continue;
+    }
+    if (resolved != candidate)
+      return {};
+  }
+  return resolved;
 }
 
 struct LayoutAssignment
@@ -142,16 +175,22 @@ struct LayoutAssignment
           return;
         if (!isPointwise(op->getName().getStringRef()))
           return;
-        for (Value operand : op->getOperands()) {
-          StringRef l = layoutOf(operand);
-          if (!l.empty()) {
-            stamp(op, l);
-            changed = true;
-            break;
-          }
+        StringRef l = propagatedPointwiseLayout(op);
+        if (!l.empty()) {
+          stamp(op, l);
+          changed = true;
         }
       });
     }
+
+    // A last-axis reduction consumes contiguous rows and emits a contiguous
+    // lower-rank row-major tensor. This closes the first complete propagation
+    // chain: matmul -> pointwise epilogue -> reduction.
+    module.walk([&](Operation *op) {
+      if (!op->hasAttr(kLayoutAttr) && isLastAxisReduction(op) &&
+          !layoutOf(op->getOperand(0)).empty())
+        stamp(op, "row_major");
+    });
 
     // ── Phase 3: insert cast{layout} at consumer accept-set boundaries. ──
     // Collect first (don't mutate operands mid-walk).
@@ -164,6 +203,9 @@ struct LayoutAssignment
     module.walk([&](Operation *op) {
       ArrayRef<StringRef> accept = consumerAcceptSet(op->getName().getStringRef());
       if (accept.empty())
+        return;
+      if (op->getName().getStringRef() == "tessera.reduce" &&
+          !isLastAxisReduction(op))
         return;
       llvm::StringSet<> acceptSet;
       for (StringRef a : accept)
@@ -189,6 +231,9 @@ struct LayoutAssignment
       st.addOperands(operand);
       st.addTypes(operand.getType());
       st.addAttribute(kLayoutAttr, StringAttr::get(ctx, f.wanted));
+      StringRef source = layoutOf(operand);
+      if (!source.empty())
+        st.addAttribute("tessera.source_layout", StringAttr::get(ctx, source));
       Operation *marker = builder.create(st);
       f.consumer->setOperand(f.operandIdx, marker->getResult(0));
     }

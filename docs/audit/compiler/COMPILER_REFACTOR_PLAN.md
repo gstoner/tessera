@@ -627,7 +627,12 @@ priority (highest DL leverage first):
   launch and layout participates in the cache key. The bucket-specialized
   tensor-core lanes (WMMA / `mma.sync`) legitimately stay BUCKET. **Still open:** a `dynamic`
   path for the *shape-specialized* lanes (Apple MSL materialized-score kernels,
-  tiled tensor-core) that bake dims into codegen. Mostly `[MAC]`.
+  tiled tensor-core) that bake dims into codegen. **The next bounded route also
+  landed (2026-07-22):** x86 contiguous last-axis reduction validates rank,
+  positive extents, unique/in-range axes, and signed-i64 launch dimensions
+  before its shape-independent AVX-512 image; malformed calls are rejected
+  before native library loading. Softmax, attention sequence length, and growing
+  paged-KV remain open. Mostly `[MAC]`.
 - **H · Memory planning + layout (W3+W4)** — global buffer assignment/reuse +
   wire `LayoutAssignmentPass` to a backend consumer + transpose elimination.
   Unblocks the deferred attention-dispatch orientation bug. Mostly `[MAC]`.
@@ -663,8 +668,13 @@ priority (highest DL leverage first):
   (`tests/tessera-ir/phase3/tile_buffer_arena.mlir`). **Still open:** the
   Graph-level `LayoutAssignmentPass` casts remain opt-in outside the first x86
   emitter materializer; ROCm independently consumes structured `#tile.layout`.
-  Still open: Apple/NVIDIA Graph-cast materializers, a HIP/PTX emitter that
-  actually allocates from the arena offsets, and transpose-through-pointwise.
+  **Propagation follow-on (2026-07-22):** pointwise propagation now requires all
+  tagged operands to agree, last-axis reductions carry the row-major result
+  contract, inserted casts name their source layout, and packed-storage attrs
+  survive the matmul → epilogue → reduction rewrite. This intentionally does not
+  turn the pass on by default: Apple/NVIDIA still require architecture-owned
+  Graph-cast materializers. Also open: a HIP/PTX emitter that allocates from the
+  arena offsets and broader packed-storage/transpose rewrite coverage.
 
 - **CORE-COMPILER-2 · Target dtype defaults (2026-07-22).** Compute
   legalization is now the named-pipeline default for x86 and NVIDIA. Terminal
@@ -674,7 +684,12 @@ priority (highest DL leverage first):
   `legalize-dtypes` option remains an explicit compatibility override.
 - **I · Training-graph + distributed optimization (W5+W6)** — apply the middle-end
   to backward graphs; promote comm/compute overlap from runtime machinery to a
-  scheduled pass. Needs multi-rank (mock-collective today).
+  scheduled pass. **Phase-5 tensor algebra follow-on (2026-07-22):** same-shape
+  add/multiply and static broadcast now emit native Graph adjoints, with emitted
+  paired IR directly oracle-matched on CPU; dynamic broadcast remains an explicit
+  placeholder. Sum/mean need a kind-aware promotion contract before the shared
+  `reduce` family can be credited, while max/min tie semantics remain separate.
+  Multi-rank still needs non-mock collectives.
 - **J · Absolute roofline attainment (W7)** — make `% of peak` (not "beats
   per-op") the hot-path success bar; add attainment targets to the E2 ratchets.
   **First slice landed (2026-07-08):** `benchmarks/roofline.py` — a grounded

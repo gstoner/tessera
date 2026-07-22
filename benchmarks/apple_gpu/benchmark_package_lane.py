@@ -23,7 +23,11 @@ Usage:
         --shapes 8x16x32 64x64x64 256x256x256 --reps 50 \\
         --output apple_gpu_package_lane.json
 
-Output schema (also consumed by ``apple_route_selector``):
+Output uses the strict-v2 source-report schema consumed by
+``apple_route_selector``.  Every route row retains interleaved paired-trial
+medians, exact producer context, numerical/native proof, and resource evidence;
+the complete-call timing domain is selectable while unavailable device timing
+is preserved as explicitly ineligible by the sealer.
 
     {"backend": "apple_gpu", "op": "matmul" | "matmul_softmax",
      "shape": "MxKxN", "dtype": "f32", "mode": "package" | "live",
@@ -49,6 +53,7 @@ from typing import Any, Callable
 import numpy as np
 
 import tessera as ts
+from tessera.compiler.apple_route_selector import live_apple_route_context
 
 
 def _parse_shape(spec: str) -> tuple[int, int, int]:
@@ -58,16 +63,13 @@ def _parse_shape(spec: str) -> tuple[int, int, int]:
     return tuple(int(p) for p in parts)  # type: ignore[return-value]
 
 
-def _time_reps(call: Callable[[], Any], reps: int) -> tuple[float, float]:
-    samples_ms = []
+def _trial_median_ns(call: Callable[[], Any], reps: int) -> int:
+    samples = []
     for _ in range(reps):
-        t0 = time.perf_counter_ns()
+        start = time.perf_counter_ns()
         call()
-        samples_ms.append((time.perf_counter_ns() - t0) / 1e6)
-    return (
-        statistics.median(samples_ms),
-        statistics.stdev(samples_ms) if reps > 1 else 0.0,
-    )
+        samples.append(time.perf_counter_ns() - start)
+    return int(statistics.median(samples))
 
 
 # ── op factories: each returns (live_fn, package_fn) jitted the same way ──
@@ -103,7 +105,7 @@ _OPS = {
 }
 
 
-def _bench_op(op: str, M: int, K: int, N: int, reps: int) -> list[dict]:
+def _bench_op(op: str, M: int, K: int, N: int, reps: int, trials: int) -> list[dict]:
     live, pkg = _OPS[op][0]()
     rng = np.random.RandomState(0)
     A = (rng.randn(M, K).astype(np.float32) * 0.5)
@@ -114,14 +116,18 @@ def _bench_op(op: str, M: int, K: int, N: int, reps: int) -> list[dict]:
 
     # Live lane: warm up (compile + pipeline), then time.
     live_out = live(A, B)
-    live_ms, live_sd = _time_reps(lambda: live(A, B), reps)
 
     # Package lane: time the COLD first call (author + compile + prepare),
     # then warm steady-state.
     t0 = time.perf_counter_ns()
     pkg_out = pkg(A, B)
     cold_ms = (time.perf_counter_ns() - t0) / 1e6
-    pkg_ms, pkg_sd = _time_reps(lambda: pkg(A, B), reps)
+    paired: dict[str, list[int]] = {"live": [], "package": []}
+    calls = {"live": lambda: live(A, B), "package": lambda: pkg(A, B)}
+    for trial in range(trials):
+        order = ("live", "package") if trial % 2 == 0 else ("package", "live")
+        for route in order:
+            paired[route].append(_trial_median_ns(calls[route], reps))
 
     shape = f"{M}x{K}x{N}"
     rows = []
@@ -131,11 +137,27 @@ def _bench_op(op: str, M: int, K: int, N: int, reps: int) -> list[dict]:
     package_native = bool(getattr(pkg, "_package_pipeline_cache", {}))
     package_ok = bool(np.allclose(pkg_out, live_out, rtol=1e-4, atol=1e-5))
     live_ok = bool(np.allclose(live_out, pkg_out, rtol=1e-4, atol=1e-5))
-    for mode, ms, sd, cold, native, correct in (
-        ("live", live_ms, live_sd, None, True, live_ok),
-        ("package", pkg_ms, pkg_sd, cold_ms, package_native, package_ok),
+    device = live_apple_route_context().device
+    for mode, cold, native, correct in (
+        ("live", None, True, live_ok),
+        ("package", cold_ms, package_native, package_ok),
     ):
+        samples_ns = paired[mode]
+        median_ns = int(statistics.median(samples_ns))
+        ms = median_ns / 1e6
+        sd = statistics.stdev(samples_ns) / 1e6 if len(samples_ns) > 1 else 0.0
         sec = ms / 1000.0
+        resources = ({
+            "api": "MTL4MachineLearningCommandEncoder",
+            "package_pipeline_cache_key": [op, [M, K, N]],
+            "package_pipeline_prepared": package_native,
+            "private_intermediates": op == "matmul_softmax",
+        } if mode == "package" else {
+            "api": "apple_gpu_live_runtime",
+            "package_pipeline_cache_key": None,
+            "package_pipeline_prepared": False,
+            "private_intermediates": False,
+        })
         rows.append({
             "backend": "apple_gpu",
             "op": op,
@@ -145,21 +167,28 @@ def _bench_op(op: str, M: int, K: int, N: int, reps: int) -> list[dict]:
             "route": mode,
             "native_dispatched": native,
             "numerically_validated": correct,
-            "reps": reps,
+            "reps": reps * trials,
             "latency_ms": ms,
             "stdev_ms": sd,
             "cold_author_ms": cold,
             "tflops": (flops / sec) / 1e12 if sec > 0 else 0.0,
             "memory_bw_gb_s": (rw_bytes / sec) / 1e9 if sec > 0 else 0.0,
-            "device": _device_name(),
+            "device": device,
             "tessera_version": _tessera_version(),
+            "telemetry": {
+                "end_to_end_median_ns": median_ns,
+                "device_time_median_ns": None,
+                "device_time_samples": 0,
+                "device_time_coverage": 0.0,
+                "paired_trial_end_to_end_medians_ns": samples_ns,
+                "paired_trial_device_medians_ns": None,
+                "timing_source": "host_steady_state_complete_call",
+                "counter_sampling_supported": False,
+                "counter_timestamp_delta_median": None,
+                "resources": resources,
+            },
         })
     return rows
-
-
-def _device_name() -> str:
-    return "apple_silicon_metal" if sys.platform == "darwin" \
-        else "non-darwin-fallback"
 
 
 def _tessera_version() -> str:
@@ -194,6 +223,7 @@ def main(argv: list[str] | None = None) -> int:
         "--ops", nargs="+", default=["matmul", "matmul_softmax"],
         choices=sorted(_OPS.keys()))
     parser.add_argument("--reps", type=int, default=50)
+    parser.add_argument("--trials", type=int, default=5)
     parser.add_argument("--output", type=Path, default=None)
     args = parser.parse_args(argv)
 
@@ -212,9 +242,12 @@ def main(argv: list[str] | None = None) -> int:
     for op in args.ops:
         for shape in args.shapes:
             M, K, N = _parse_shape(shape)
-            rows.extend(_bench_op(op, M, K, N, args.reps))
+            rows.extend(_bench_op(op, M, K, N, args.reps, args.trials))
 
-    payload = {"schema_version": 1, "runs": rows}
+    payload = {"schema_version": 1,
+               "selection_scope": "package_subgraph",
+               "context": live_apple_route_context().as_mapping(),
+               "runs": rows}
     output = json.dumps(payload, indent=2, sort_keys=True)
     if args.output is not None:
         args.output.write_text(output)

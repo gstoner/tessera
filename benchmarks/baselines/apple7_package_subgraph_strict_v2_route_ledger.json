@@ -1,0 +1,419 @@
+{
+  "context": {
+    "compiler_fingerprint": "sha256:50e9925be13062648f0b049fd25bc5a508f6eebf9114dddc151cc11d1c2d9c81",
+    "device": "apple7",
+    "os_version": "26.5.2",
+    "physical_device": "Apple M1 Max",
+    "runtime_fingerprint": "sha256:3f8a3c210ac1176be3a9a2bad9f5f7b2d4f503c2d2a16d4c5b983f9febc83cff",
+    "sdk_version": "26.5"
+  },
+  "decisions": [
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "live",
+      "op": "matmul_softmax",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "live": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              793542,
+              693917,
+              680792,
+              643646,
+              695521
+            ],
+            [
+              771125,
+              688416,
+              694166,
+              680208,
+              692916
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "apple_gpu_live_runtime",
+              "package_pipeline_cache_key": null,
+              "package_pipeline_prepared": false,
+              "private_intermediates": false
+            },
+            {
+              "api": "apple_gpu_live_runtime",
+              "package_pipeline_cache_key": null,
+              "package_pipeline_prepared": false,
+              "private_intermediates": false
+            }
+          ],
+          "run_drift_fraction": 0.0014446195498444255,
+          "times_ns": [
+            693917,
+            692916
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "host_steady_state_complete_call",
+            "host_steady_state_complete_call"
+          ]
+        },
+        "package": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.039407962744598846,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.5168597750854886,
+            -0.4774518123408898
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.3178773146222884,
+              -0.5379490630723848,
+              -0.5168597750854886,
+              -0.6049831739807285,
+              -0.5075030085360471
+            ],
+            [
+              -0.31871745825903713,
+              -0.49231424022683956,
+              -0.47049841104289175,
+              -0.49712146872721286,
+              -0.4774518123408898
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              1045791,
+              1067209,
+              1032666,
+              1033041,
+              1048500
+            ],
+            [
+              1016896,
+              1027333,
+              1020770,
+              1018354,
+              1023750
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MTL4MachineLearningCommandEncoder",
+              "package_pipeline_cache_key": [
+                "matmul_softmax",
+                [
+                  256,
+                  256,
+                  256
+                ]
+              ],
+              "package_pipeline_prepared": true,
+              "private_intermediates": true
+            },
+            {
+              "api": "MTL4MachineLearningCommandEncoder",
+              "package_pipeline_cache_key": [
+                "matmul_softmax",
+                [
+                  256,
+                  256,
+                  256
+                ]
+              ],
+              "package_pipeline_prepared": true,
+              "private_intermediates": true
+            }
+          ],
+          "run_drift_fraction": 0.02451188808448524,
+          "speedups_vs_incumbent": [
+            -0.507083700211985,
+            -0.47315114674794634
+          ],
+          "times_ns": [
+            1045791,
+            1020770
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "host_steady_state_complete_call",
+            "host_steady_state_complete_call"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "end_to_end"
+      },
+      "selected_route": "live",
+      "shape": "256x256x256",
+      "status": "retain_incumbent",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "live",
+      "op": "matmul_softmax",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "live": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              1084250,
+              1091166,
+              1099437,
+              1088229,
+              1092708
+            ],
+            [
+              1197875,
+              1091500,
+              1141813,
+              1093708,
+              1086771
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "apple_gpu_live_runtime",
+              "package_pipeline_cache_key": null,
+              "package_pipeline_prepared": false,
+              "private_intermediates": false
+            },
+            {
+              "api": "apple_gpu_live_runtime",
+              "package_pipeline_cache_key": null,
+              "package_pipeline_prepared": false,
+              "private_intermediates": false
+            }
+          ],
+          "run_drift_fraction": 0.0023296180416178657,
+          "times_ns": [
+            1091166,
+            1093708
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "host_steady_state_complete_call",
+            "host_steady_state_complete_call"
+          ]
+        },
+        "package": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.007359089087151993,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.6132493267008478,
+            0.6058902376136958
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.5778575051879179,
+              0.6158925406400126,
+              0.6132493267008478,
+              0.6344785886058909,
+              0.6031840162239135
+            ],
+            [
+              0.6228913701346134,
+              0.5999010535959689,
+              0.6143195076601861,
+              0.6058902376136958,
+              0.5906451313110122
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              457708,
+              419125,
+              425208,
+              397771,
+              433604
+            ],
+            [
+              451729,
+              436708,
+              440375,
+              431041,
+              444875
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MTL4MachineLearningCommandEncoder",
+              "package_pipeline_cache_key": [
+                "matmul_softmax",
+                [
+                  64,
+                  64,
+                  64
+                ]
+              ],
+              "package_pipeline_prepared": true,
+              "private_intermediates": true
+            },
+            {
+              "api": "MTL4MachineLearningCommandEncoder",
+              "package_pipeline_cache_key": [
+                "matmul_softmax",
+                [
+                  64,
+                  64,
+                  64
+                ]
+              ],
+              "package_pipeline_prepared": true,
+              "private_intermediates": true
+            }
+          ],
+          "run_drift_fraction": 0.03566960170081466,
+          "speedups_vs_incumbent": [
+            0.6103177701651261,
+            0.5973559670405629
+          ],
+          "times_ns": [
+            425208,
+            440375
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "host_steady_state_complete_call",
+            "host_steady_state_complete_call"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "end_to_end"
+      },
+      "selected_route": "package",
+      "shape": "64x64x64",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    }
+  ],
+  "expires_at": "2026-08-21T14:57:22.013145Z",
+  "ineligible_decisions": [
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "live",
+      "op": "matmul_softmax",
+      "reason": "incumbent paired evidence is incomplete",
+      "shape": "256x256x256",
+      "status": "ineligible",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "live",
+      "op": "matmul_softmax",
+      "reason": "incumbent paired evidence is incomplete",
+      "shape": "64x64x64",
+      "status": "ineligible",
+      "timing_domain": "device"
+    }
+  ],
+  "measured_at": "2026-07-22T14:57:22.013145Z",
+  "promotion_rules": {
+    "absolute_time_drift_is_diagnostic_only": true,
+    "maximum_cross_run_drift_fraction": 0.15,
+    "maximum_cross_run_speedup_spread": 0.05,
+    "minimum_paired_win_fraction_each_run": 0.75,
+    "minimum_speedup_fraction_each_run": 0.05,
+    "requires_interleaved_paired_trials": true,
+    "requires_native_dispatch": true,
+    "requires_numerical_validation": true,
+    "requires_repeated_measurement": true,
+    "requires_resource_evidence": true
+  },
+  "schema": "tessera.apple.route-ledger.v2",
+  "selection_scope": "package_subgraph",
+  "source_report_count": 2,
+  "source_report_digests": [
+    "sha256:51f4aef701c3fc2e01df91d0d3a4937cc61b412b6ab2c657d1c6a443d30b60b0",
+    "sha256:33dd9b6b525ec72c0f67e80d7270799d7f2b2aad6b6d1dd272e9a74cab4b45e3"
+  ]
+}

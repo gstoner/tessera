@@ -1,4 +1,4 @@
-"""Compiler-owned Apple GPU native-library descriptors for APPLE-E2E-1."""
+"""Compiler-owned Apple GPU native-library descriptors for Apple E2E work."""
 from __future__ import annotations
 
 import hashlib
@@ -19,6 +19,7 @@ APPLE_BMM_BF16_ABI = "tessera.apple.bmm.a_b_o_batch_m_n_k.bf16.v1"
 APPLE_BMM_BF16_SYMBOL = "tessera_apple_gpu_bmm_bf16"
 APPLE_SOFTMAX_F32_ABI = "tessera.apple.softmax.x_o_rows_columns.f32.v1"
 APPLE_SOFTMAX_F32_SYMBOL = "tessera_apple_gpu_softmax_f32"
+APPLE_SOFTMAX_DYNAMIC_F32_ABI = "tessera.apple.softmax.x_o_rows_columns.dynamic.f32.v1"
 APPLE_SOFTMAX_F16_ABI = "tessera.apple.softmax.x_o_rows_columns.f16.v1"
 APPLE_SOFTMAX_F16_SYMBOL = "tessera_apple_gpu_softmax_f16"
 APPLE_SOFTMAX_BF16_ABI = "tessera.apple.softmax.x_o_rows_columns.bf16.v1"
@@ -34,6 +35,14 @@ APPLE_GELU_BF16_SYMBOL = "tessera_apple_gpu_gelu_bf16"
 APPLE_GELU_DYNAMIC_BF16_ABI = "tessera.apple.gelu.x_o_elements.dynamic.bf16.v1"
 APPLE_POPCOUNT_DYNAMIC_I32_ABI = "tessera.apple.popcount.x_o_elements.dynamic.i32.v1"
 APPLE_POPCOUNT_I32_SYMBOL = "tessera_apple_gpu_popcount_i32"
+APPLE_COUNT_NONZERO_DYNAMIC_F32_I32_ABI = (
+    "tessera.apple.count_nonzero.x_o_outer_axis_extent.dynamic.f32_i32.v1"
+)
+APPLE_COUNT_NONZERO_F32_SYMBOL = "tessera_apple_gpu_count_nonzero_lastaxis_f32"
+APPLE_TOPK_DYNAMIC_F32_I32_ABI = (
+    "tessera.apple.top_k.x_values_indices_rows_columns_k.dynamic.f32_i32.v1"
+)
+APPLE_TOPK_F32_SYMBOL = "tessera_apple_gpu_topk_f32"
 APPLE_SVD_REDUCED_F32_ABI = "tessera.apple.svd.a_u_s_vh_m_n.f32.v1"
 APPLE_SVD_REDUCED_F32_SYMBOL = "tessera_apple_gpu_svd_reduced_f32"
 APPLE_SVD_REDUCED_BATCHED_F32_ABI = "tessera.apple.svd.a_u_s_vh_batch_m_n.f32.v1"
@@ -71,10 +80,9 @@ _TRANSPOSE_VARIANTS = {
     "bf16": (APPLE_TRANSPOSE_BF16_SYMBOL, APPLE_TRANSPOSE_BF16_ABI),
 }
 
-# APPLE-E2E-1 owns an explicit descriptor disposition for every currently
-# value-lowered family.  Only BMM has a descriptor today; the other entries
-# prevent a value-producing Target-IR symbol (or a host-specific probe) from
-# being silently mistaken for descriptor-first execution.
+# Apple E2E work owns an explicit descriptor disposition for every admitted
+# value-lowered family.  Dedicated dynamic and multi-result contracts are
+# checked before this table so a generic value symbol cannot broaden them.
 APPLE_VALUE_DESCRIPTOR_STATES: dict[str, str] = {
     "tessera.transpose": "descriptor_ready",
     "tessera.rl.ppo_policy_loss": "descriptor_ready",
@@ -88,6 +96,8 @@ APPLE_VALUE_DESCRIPTOR_STATES: dict[str, str] = {
     "tessera.cholesky_solve": "descriptor_ready",
     "tessera.svd": "descriptor_ready",
     "tessera.popcount": "descriptor_ready",
+    "tessera.count_nonzero": "descriptor_ready",
+    "tessera.top_k": "descriptor_ready",
 }
 
 
@@ -176,6 +186,25 @@ def _softmax_contract(module: GraphIRModule):
     if len(shape) != 2 or out_shape != shape:
         return None
     return name, op.result or "output", shape
+
+
+def _dynamic_softmax_contract(module: GraphIRModule):
+    """Rank-2 dynamic f32 last-axis softmax with explicit row/column scalars."""
+    if len(module.functions) != 1 or len(module.functions[0].body) != 1:
+        return None
+    fn, op = module.functions[0], module.functions[0].body[0]
+    if (op.op_name != "tessera.softmax" or len(op.operands) != 1
+            or len(fn.result_types) != 1 or op.kwargs.get("axis", -1) not in {-1, 1}):
+        return None
+    name = op.operands[0].removeprefix("%")
+    args = {arg.name: arg for arg in fn.args}
+    if (name not in args or args[name].ir_type.dtype != "fp32"
+            or fn.result_types[0].dtype != "fp32"):
+        return None
+    shape = tuple(args[name].ir_type.shape)
+    if shape != ("?", "?") or tuple(fn.result_types[0].shape) != shape:
+        return None
+    return name, op.result or "output"
 
 
 def _transpose_contract(module: GraphIRModule):
@@ -285,6 +314,55 @@ def _dynamic_popcount_contract(module: GraphIRModule):
     return name, op.result or "output"
 
 
+def _dynamic_count_nonzero_contract(module: GraphIRModule):
+    """Rank-2 dynamic f32 last-axis reduction with explicit shape scalars."""
+    if len(module.functions) != 1 or len(module.functions[0].body) != 1:
+        return None
+    fn, op = module.functions[0], module.functions[0].body[0]
+    if (op.op_name != "tessera.count_nonzero" or len(op.operands) != 1
+            or len(fn.result_types) != 1 or op.kwargs.get("axis", -1) not in {-1, 1}
+            or bool(op.kwargs.get("keepdims", False))):
+        return None
+    name = op.operands[0].removeprefix("%")
+    args = {arg.name: arg for arg in fn.args}
+    if (name not in args or args[name].ir_type.dtype != "fp32"
+            or fn.result_types[0].dtype != "int32"):
+        return None
+    if (tuple(args[name].ir_type.shape) != ("?", "?")
+            or tuple(fn.result_types[0].shape) != ("?",)):
+        return None
+    return name, op.result or "output"
+
+
+def _dynamic_topk_contract(module: GraphIRModule):
+    """Ordered rank-2 f32 top-k with static K and dynamic row/axis extents."""
+    if len(module.functions) != 1 or len(module.functions[0].body) != 1:
+        return None
+    fn, op = module.functions[0], module.functions[0].body[0]
+    if (op.op_name != "tessera.top_k" or len(op.operands) != 1
+            or len(fn.result_types) != 2 or len(fn.return_values) != 2
+            or op.kwargs.get("axis", -1) not in {-1, 1}):
+        return None
+    try:
+        k = int(op.kwargs["k"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    name = op.operands[0].removeprefix("%")
+    args = {arg.name: arg for arg in fn.args}
+    if (name not in args or args[name].ir_type.dtype != "fp32" or k <= 0
+            or tuple(args[name].ir_type.shape) != ("?", "?")
+            or fn.result_types[0].dtype != "fp32"
+            or fn.result_types[1].dtype != "int32"):
+        return None
+    expected_shape = ("?", str(k))
+    if any(tuple(result.shape) != expected_shape for result in fn.result_types):
+        return None
+    outputs = tuple(value.removeprefix("%") for value in fn.return_values)
+    if len(set(outputs)) != 2:
+        return None
+    return name, outputs, k
+
+
 def _svd_contract(module: GraphIRModule):
     """Return one reduced f32 SVD contract with explicitly ordered outputs.
 
@@ -329,6 +407,8 @@ def supports_native_package(module: GraphIRModule) -> bool:
         return True
     if _softmax_contract(module) is not None:
         return True
+    if _dynamic_softmax_contract(module) is not None:
+        return True
     if _transpose_contract(module) is not None:
         return True
     if _gelu_contract(module) is not None:
@@ -337,11 +417,21 @@ def supports_native_package(module: GraphIRModule) -> bool:
         return True
     if _dynamic_popcount_contract(module) is not None:
         return True
+    if _dynamic_count_nonzero_contract(module) is not None:
+        return True
+    if _dynamic_topk_contract(module) is not None:
+        return True
     if _svd_contract(module) is not None:
         return True
     if len(module.functions) != 1 or len(module.functions[0].body) != 1:
         return False
     fn, op = module.functions[0], module.functions[0].body[0]
+    if op.op_name in {
+        "tessera.batched_gemm", "tessera.matmul", "tessera.gemm", "tessera.softmax",
+        "tessera.transpose", "tessera.gelu", "tessera.popcount",
+        "tessera.count_nonzero", "tessera.top_k", "tessera.svd",
+    }:
+        return False
     # Multi-result families are descriptor-supported only through a dedicated
     # ordered-binding contract above; the generic value path has one output.
     return len(fn.result_types) == 1 and value_descriptor_state(op.op_name) == "descriptor_ready"
@@ -365,6 +455,8 @@ def package_native(module: GraphIRModule, *, pipeline_name: str) -> AppleNativeP
         return package_batched_gemm(module, pipeline_name=pipeline_name)
     if _softmax_contract(module) is not None:
         return package_softmax(module, pipeline_name=pipeline_name)
+    if _dynamic_softmax_contract(module) is not None:
+        return package_dynamic_softmax(module, pipeline_name=pipeline_name)
     if _transpose_contract(module) is not None:
         return package_transpose(module, pipeline_name=pipeline_name)
     if _gelu_contract(module) is not None:
@@ -373,6 +465,10 @@ def package_native(module: GraphIRModule, *, pipeline_name: str) -> AppleNativeP
         return package_dynamic_gelu(module, pipeline_name=pipeline_name)
     if _dynamic_popcount_contract(module) is not None:
         return package_dynamic_popcount(module, pipeline_name=pipeline_name)
+    if _dynamic_count_nonzero_contract(module) is not None:
+        return package_dynamic_count_nonzero(module, pipeline_name=pipeline_name)
+    if _dynamic_topk_contract(module) is not None:
+        return package_dynamic_topk(module, pipeline_name=pipeline_name)
     if _svd_contract(module) is not None:
         return package_svd(module, pipeline_name=pipeline_name)
     fn, op = module.functions[0], module.functions[0].body[0]
@@ -488,6 +584,48 @@ def package_softmax(module: GraphIRModule, *, pipeline_name: str) -> AppleNative
     return AppleNativePackage("tile.softmax_kernel", target_ir, target_ir, image, descriptor)
 
 
+def package_dynamic_softmax(module: GraphIRModule, *, pipeline_name: str) -> AppleNativePackage:
+    """Package dynamic rank-2 f32 row-softmax with verified shape scalars."""
+    contract = _dynamic_softmax_contract(module)
+    if contract is None:
+        raise ValueError("Apple dynamic softmax requires rank-2 ?x? f32 last-axis input and output")
+    library = _runtime_library_path()
+    if library is None:
+        raise RuntimeError("APPLE-NATIVE-E2E-2 requires a fresh Tessera Apple GPU runtime dylib")
+    x, out = contract
+    target_ir = (f'tessera_apple.gpu.kernel_call @{APPLE_SOFTMAX_F32_SYMBOL} '
+                 f'{{abi = "{APPLE_SOFTMAX_DYNAMIC_F32_ABI}", '
+                 'scalars = "Rows,Columns", status = "executable"}}')
+    payload = library.read_bytes()
+    digest = hashlib.sha256(payload).hexdigest()
+    image = NativeImageArtifact(
+        target="apple_gpu", architecture="apple_gpu", pipeline_name=pipeline_name,
+        compiler_fingerprint="apple-runtime-abi-v1",
+        toolchain_fingerprint=hashlib.sha256(("apple_gpu|" + digest).encode()).hexdigest(),
+        target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(), binary_format="shared_object",
+        payload=payload,
+        entry_points=(NativeEntryPoint(APPLE_SOFTMAX_F32_SYMBOL, APPLE_SOFTMAX_DYNAMIC_F32_ABI),),
+        compile_state="prepackaged",
+    )
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest, entry_symbol=APPLE_SOFTMAX_F32_SYMBOL,
+        abi_id=APPLE_SOFTMAX_DYNAMIC_F32_ABI,
+        buffers=(BufferBinding(0, x, "input", "fp32", 2, "row_major", 4),
+                 BufferBinding(1, out, "output", "fp32", 2, "row_major", 4)),
+        scalars=(ScalarArgument(2, "Rows", "int32"), ScalarArgument(3, "Columns", "int32")),
+        geometry=LaunchGeometry(policy="apple_msl_softmax_dynamic"),
+        ordering=OrderingSemantics(
+            ordered_submission=True, residency="none", synchronization=("return",),
+        ),
+        provenance={"work_item": "APPLE-NATIVE-E2E-2",
+                    "route": "apple_softmax_native_library", "op_kind": "softmax",
+                    "dynamic_shape": True,
+                    "scalar_contract": "Rows=x.shape[0],Columns=x.shape[1]",
+                    "storage": "fp32"},
+    )
+    return AppleNativePackage("tile.softmax_kernel", target_ir, target_ir, image, descriptor)
+
+
 def package_transpose(module: GraphIRModule, *, pipeline_name: str) -> AppleNativePackage:
     """Package one static rank-2/rank-3 MPSGraph transpose ABI."""
     contract = _transpose_contract(module)
@@ -540,7 +678,8 @@ def package_gelu(module: GraphIRModule, *, pipeline_name: str) -> AppleNativePac
     x, out, shape, dtype = contract
     symbol, abi = _GELU_VARIANTS[dtype]
     target_ir = (f'tessera_apple.gpu.kernel_call @{symbol} '
-                 f'{{abi = "{abi}", storage = "{dtype}", status = "executable"}}')
+                 f'{{abi = "{abi}", storage = "{dtype}", accumulation = "fp32", '
+                 'status = "executable"}}')
     payload = library.read_bytes()
     digest = hashlib.sha256(payload).hexdigest()
     image = NativeImageArtifact(
@@ -563,7 +702,8 @@ def package_gelu(module: GraphIRModule, *, pipeline_name: str) -> AppleNativePac
         geometry=LaunchGeometry(policy="apple_msl_gelu"),
         ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("return",)),
         provenance={"work_item": "APPLE-NATIVE-E2E-2", "route": "apple_gelu_native_library",
-                    "op_kind": "gelu", "shape": list(shape), "storage": dtype},
+                    "op_kind": "gelu", "shape": list(shape), "storage": dtype,
+                    "accumulation": "fp32"},
     )
     return AppleNativePackage("tile.gelu_kernel", target_ir, target_ir, image, descriptor)
 
@@ -579,7 +719,8 @@ def package_dynamic_gelu(module: GraphIRModule, *, pipeline_name: str) -> AppleN
     x, out, dtype = contract
     symbol, abi = _GELU_DYNAMIC_VARIANTS[dtype]
     target_ir = (f'tessera_apple.gpu.kernel_call @{symbol} '
-                 f'{{abi = "{abi}", storage = "{dtype}", scalar = "Elements", status = "executable"}}')
+                 f'{{abi = "{abi}", storage = "{dtype}", accumulation = "fp32", '
+                 'scalar = "Elements", status = "executable"}}')
     payload = library.read_bytes()
     digest = hashlib.sha256(payload).hexdigest()
     image = NativeImageArtifact(
@@ -599,7 +740,7 @@ def package_dynamic_gelu(module: GraphIRModule, *, pipeline_name: str) -> AppleN
         ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("return",)),
         provenance={"work_item": "APPLE-NATIVE-E2E-2", "route": "apple_gelu_native_library",
                     "op_kind": "gelu", "dynamic_shape": True, "scalar_contract": "Elements=x.size",
-                    "storage": dtype},
+                    "storage": dtype, "accumulation": "fp32"},
     )
     return AppleNativePackage("tile.gelu_kernel", target_ir, target_ir, image, descriptor)
 
@@ -637,6 +778,108 @@ def package_dynamic_popcount(module: GraphIRModule, *, pipeline_name: str) -> Ap
                     "op_kind": "popcount", "dynamic_shape": True, "scalar_contract": "Elements=x.size"},
     )
     return AppleNativePackage("tile.popcount_kernel", target_ir, target_ir, image, descriptor)
+
+
+def package_dynamic_count_nonzero(
+    module: GraphIRModule, *, pipeline_name: str,
+) -> AppleNativePackage:
+    """Package dynamic rank-2 f32 last-axis count-nonzero reduction."""
+    contract = _dynamic_count_nonzero_contract(module)
+    if contract is None:
+        raise ValueError(
+            "Apple dynamic count_nonzero requires rank-2 ?x? f32 input, rank-1 ? i32 "
+            "output, axis=-1, and keepdims=False"
+        )
+    library = _runtime_library_path()
+    if library is None:
+        raise RuntimeError("APPLE-NATIVE-E2E-2 requires a fresh Tessera Apple GPU runtime dylib")
+    x, out = contract
+    target_ir = (f'tessera_apple.gpu.kernel_call @{APPLE_COUNT_NONZERO_F32_SYMBOL} '
+                 f'{{abi = "{APPLE_COUNT_NONZERO_DYNAMIC_F32_I32_ABI}", '
+                 'scalars = "Outer,AxisExtent", status = "executable"}}')
+    payload = library.read_bytes()
+    digest = hashlib.sha256(payload).hexdigest()
+    image = NativeImageArtifact(
+        target="apple_gpu", architecture="apple_gpu", pipeline_name=pipeline_name,
+        compiler_fingerprint="apple-runtime-abi-v1",
+        toolchain_fingerprint=hashlib.sha256(("apple_gpu|" + digest).encode()).hexdigest(),
+        target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(), binary_format="shared_object",
+        payload=payload,
+        entry_points=(NativeEntryPoint(
+            APPLE_COUNT_NONZERO_F32_SYMBOL, APPLE_COUNT_NONZERO_DYNAMIC_F32_I32_ABI,
+        ),),
+        compile_state="prepackaged",
+    )
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest, entry_symbol=APPLE_COUNT_NONZERO_F32_SYMBOL,
+        abi_id=APPLE_COUNT_NONZERO_DYNAMIC_F32_I32_ABI,
+        buffers=(BufferBinding(0, x, "input", "fp32", 2, "row_major", 4),
+                 BufferBinding(1, out, "output", "int32", 1, "row_major", 4)),
+        scalars=(ScalarArgument(2, "Outer", "int32"),
+                 ScalarArgument(3, "AxisExtent", "int32")),
+        geometry=LaunchGeometry(policy="apple_msl_count_nonzero_lastaxis_dynamic"),
+        ordering=OrderingSemantics(
+            ordered_submission=True, residency="none", synchronization=("return",),
+        ),
+        provenance={"work_item": "APPLE-NATIVE-E2E-2",
+                    "route": "apple_count_nonzero_native_library",
+                    "op_kind": "count_nonzero", "axis": -1, "keepdims": False,
+                    "dynamic_shape": True,
+                    "scalar_contract": "Outer=x.shape[0],AxisExtent=x.shape[1]"},
+    )
+    return AppleNativePackage("tile.count_nonzero_kernel", target_ir, target_ir, image, descriptor)
+
+
+def package_dynamic_topk(module: GraphIRModule, *, pipeline_name: str) -> AppleNativePackage:
+    """Package deterministic ordered top-k with explicit output bindings."""
+    contract = _dynamic_topk_contract(module)
+    if contract is None:
+        raise ValueError(
+            "Apple dynamic top_k requires rank-2 ?x? f32 input, ordered rank-2 "
+            "f32/i32 outputs with static K, and last-axis selection"
+        )
+    library = _runtime_library_path()
+    if library is None:
+        raise RuntimeError("APPLE-NATIVE-E2E-2 requires a fresh Tessera Apple GPU runtime dylib")
+    x, (values, indices), k = contract
+    target_ir = (f'tessera_apple.gpu.kernel_call @{APPLE_TOPK_F32_SYMBOL} '
+                 f'{{abi = "{APPLE_TOPK_DYNAMIC_F32_I32_ABI}", '
+                 'result_order = "values,indices", scalars = "Rows,Columns,K", '
+                 'ordering = "descending,nan_last,lower_index_ties", '
+                 'status = "executable"}}')
+    payload = library.read_bytes()
+    digest = hashlib.sha256(payload).hexdigest()
+    image = NativeImageArtifact(
+        target="apple_gpu", architecture="apple_gpu", pipeline_name=pipeline_name,
+        compiler_fingerprint="apple-runtime-abi-v1",
+        toolchain_fingerprint=hashlib.sha256(("apple_gpu|" + digest).encode()).hexdigest(),
+        target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(), binary_format="shared_object",
+        payload=payload,
+        entry_points=(NativeEntryPoint(APPLE_TOPK_F32_SYMBOL, APPLE_TOPK_DYNAMIC_F32_I32_ABI),),
+        compile_state="prepackaged",
+    )
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest, entry_symbol=APPLE_TOPK_F32_SYMBOL,
+        abi_id=APPLE_TOPK_DYNAMIC_F32_I32_ABI,
+        buffers=(BufferBinding(0, x, "input", "fp32", 2, "row_major", 4),
+                 BufferBinding(1, values, "output", "fp32", 2, "row_major", 4),
+                 BufferBinding(2, indices, "output", "int32", 2, "row_major", 4)),
+        scalars=(ScalarArgument(3, "Rows", "int32"),
+                 ScalarArgument(4, "Columns", "int32"),
+                 ScalarArgument(5, "K", "int32")),
+        geometry=LaunchGeometry(policy="apple_msl_topk_deterministic_dynamic"),
+        ordering=OrderingSemantics(
+            ordered_submission=True, residency="none", synchronization=("return",),
+        ),
+        provenance={"work_item": "APPLE-NATIVE-E2E-2",
+                    "route": "apple_topk_deterministic_native_library",
+                    "op_kind": "top_k", "dynamic_shape": True, "axis": -1,
+                    "result_order": ["values", "indices"], "k": k,
+                    "value_order": "descending", "nan_policy": "last",
+                    "tie_policy": "lower_index",
+                    "scalar_contract": "Rows=x.shape[0],Columns=x.shape[1],K=graph.k"},
+    )
+    return AppleNativePackage("tile.top_k_kernel", target_ir, target_ir, image, descriptor)
 
 
 def package_svd(module: GraphIRModule, *, pipeline_name: str) -> AppleNativePackage:

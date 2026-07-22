@@ -3380,10 +3380,13 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         APPLE_GELU_BF16_ABI, APPLE_GELU_DYNAMIC_BF16_ABI,
         APPLE_GELU_DYNAMIC_F16_ABI, APPLE_GELU_DYNAMIC_F32_ABI,
         APPLE_GELU_F16_ABI, APPLE_GELU_F32_ABI,
+        APPLE_COUNT_NONZERO_DYNAMIC_F32_I32_ABI,
         APPLE_POPCOUNT_DYNAMIC_I32_ABI,
         APPLE_SVD_REDUCED_BATCHED_F32_ABI, APPLE_SVD_REDUCED_F32_ABI,
-        APPLE_SOFTMAX_BF16_ABI, APPLE_SOFTMAX_F16_ABI, APPLE_SOFTMAX_F32_ABI,
+        APPLE_SOFTMAX_BF16_ABI, APPLE_SOFTMAX_DYNAMIC_F32_ABI,
+        APPLE_SOFTMAX_F16_ABI, APPLE_SOFTMAX_F32_ABI,
         APPLE_TRANSPOSE_BF16_ABI, APPLE_TRANSPOSE_F16_ABI, APPLE_TRANSPOSE_F32_ABI,
+        APPLE_TOPK_DYNAMIC_F32_I32_ABI,
     )
 
     if target == "apple_cpu" and abi_id.startswith("tessera.apple.cpu.value.") and target not in _native_launchers:
@@ -3393,7 +3396,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
             submit=_submit_apple_cpu_native,
         )
         return
-    if target == "apple_gpu" and (abi_id in {APPLE_BMM_F32_ABI, APPLE_BMM_F16_ABI, APPLE_BMM_BF16_ABI, APPLE_GELU_F32_ABI, APPLE_GELU_F16_ABI, APPLE_GELU_BF16_ABI, APPLE_GELU_DYNAMIC_F32_ABI, APPLE_GELU_DYNAMIC_F16_ABI, APPLE_GELU_DYNAMIC_BF16_ABI, APPLE_POPCOUNT_DYNAMIC_I32_ABI, APPLE_SVD_REDUCED_F32_ABI, APPLE_SVD_REDUCED_BATCHED_F32_ABI, APPLE_SOFTMAX_F32_ABI, APPLE_SOFTMAX_F16_ABI, APPLE_SOFTMAX_BF16_ABI, APPLE_TRANSPOSE_F32_ABI, APPLE_TRANSPOSE_F16_ABI, APPLE_TRANSPOSE_BF16_ABI} or abi_id.startswith("tessera.apple.value.")) and target not in _native_launchers:
+    if target == "apple_gpu" and (abi_id in {APPLE_BMM_F32_ABI, APPLE_BMM_F16_ABI, APPLE_BMM_BF16_ABI, APPLE_GELU_F32_ABI, APPLE_GELU_F16_ABI, APPLE_GELU_BF16_ABI, APPLE_GELU_DYNAMIC_F32_ABI, APPLE_GELU_DYNAMIC_F16_ABI, APPLE_GELU_DYNAMIC_BF16_ABI, APPLE_COUNT_NONZERO_DYNAMIC_F32_I32_ABI, APPLE_POPCOUNT_DYNAMIC_I32_ABI, APPLE_SVD_REDUCED_F32_ABI, APPLE_SVD_REDUCED_BATCHED_F32_ABI, APPLE_SOFTMAX_F32_ABI, APPLE_SOFTMAX_DYNAMIC_F32_ABI, APPLE_SOFTMAX_F16_ABI, APPLE_SOFTMAX_BF16_ABI, APPLE_TOPK_DYNAMIC_F32_I32_ABI, APPLE_TRANSPOSE_F32_ABI, APPLE_TRANSPOSE_F16_ABI, APPLE_TRANSPOSE_BF16_ABI} or abi_id.startswith("tessera.apple.value.")) and target not in _native_launchers:
         register_native_launcher(
             target,
             binary_formats=("shared_object",),
@@ -3568,7 +3571,7 @@ def _submit_apple_gpu_native(
     scalars: Mapping[str, object],
     stream: Any,
 ) -> Any:
-    """Submit the APPLE-E2E-1 f32 BMM descriptor through its named dylib ABI."""
+    """Submit a compiler-owned Apple GPU descriptor through its named dylib ABI."""
     del stream
     import numpy as np
     from tessera.compiler.apple_native import (
@@ -3578,13 +3581,16 @@ def _submit_apple_gpu_native(
         APPLE_GELU_DYNAMIC_F16_ABI, APPLE_GELU_DYNAMIC_F32_ABI,
         APPLE_GELU_F16_ABI, APPLE_GELU_F16_SYMBOL, APPLE_GELU_F32_ABI,
         APPLE_GELU_F32_SYMBOL,
+        APPLE_COUNT_NONZERO_DYNAMIC_F32_I32_ABI, APPLE_COUNT_NONZERO_F32_SYMBOL,
         APPLE_POPCOUNT_DYNAMIC_I32_ABI, APPLE_POPCOUNT_I32_SYMBOL,
         APPLE_SVD_REDUCED_BATCHED_F32_ABI, APPLE_SVD_REDUCED_BATCHED_F32_SYMBOL,
         APPLE_SVD_REDUCED_F32_ABI, APPLE_SVD_REDUCED_F32_SYMBOL,
-        APPLE_SOFTMAX_BF16_ABI, APPLE_SOFTMAX_BF16_SYMBOL, APPLE_SOFTMAX_F16_ABI,
+        APPLE_SOFTMAX_BF16_ABI, APPLE_SOFTMAX_BF16_SYMBOL, APPLE_SOFTMAX_DYNAMIC_F32_ABI,
+        APPLE_SOFTMAX_F16_ABI,
         APPLE_SOFTMAX_F16_SYMBOL, APPLE_SOFTMAX_F32_ABI, APPLE_SOFTMAX_F32_SYMBOL,
         APPLE_TRANSPOSE_BF16_ABI, APPLE_TRANSPOSE_F16_ABI, APPLE_TRANSPOSE_F32_ABI,
         APPLE_TRANSPOSE_F16_SYMBOL, APPLE_TRANSPOSE_F32_SYMBOL,
+        APPLE_TOPK_DYNAMIC_F32_I32_ABI, APPLE_TOPK_F32_SYMBOL,
         _runtime_library_path,
     )
 
@@ -3614,6 +3620,74 @@ def _submit_apple_gpu_native(
     if path is None or hashlib.sha256(path.read_bytes()).hexdigest() != image.payload_digest:
         raise RuntimeError("Apple runtime dylib identity no longer matches the compiler-produced native image")
     ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
+    if descriptor.abi_id == APPLE_TOPK_DYNAMIC_F32_I32_ABI:
+        if descriptor.entry_symbol != APPLE_TOPK_F32_SYMBOL or len(ordered) != 3:
+            raise RuntimeError("Apple top_k descriptor ABI or ordered output contract is invalid")
+        x, values, indices = (buffers[item.name] for item in ordered)
+        if any(not isinstance(value, np.ndarray) for value in (x, values, indices)):
+            raise RuntimeError("Apple top_k descriptor requires ndarray buffers")
+        if (x.dtype != np.float32 or values.dtype != np.float32 or indices.dtype != np.int32
+                or any(not value.flags.c_contiguous for value in (x, values, indices))
+                or x.ndim != 2 or values.ndim != 2 or indices.ndim != 2):
+            raise RuntimeError(
+                "Apple top_k descriptor requires contiguous rank-2 f32 values and i32 indices"
+            )
+        rows = int(cast(int, scalars["Rows"]))
+        columns = int(cast(int, scalars["Columns"]))
+        k = int(cast(int, scalars["K"]))
+        expected_k = int(cast(int, descriptor.provenance.get("k", -1)))
+        if ((rows, columns) != tuple(x.shape) or not 1 <= k <= columns
+                or k != expected_k or values.shape != (rows, k)
+                or indices.shape != (rows, k)):
+            raise RuntimeError(
+                "Apple top_k Rows/Columns/K scalars disagree with graph and buffer shapes"
+            )
+        runtime = _load_apple_gpu_runtime()
+        function = getattr(runtime, APPLE_TOPK_F32_SYMBOL, None)
+        if function is None:
+            raise RuntimeError(f"Apple runtime is missing {APPLE_TOPK_F32_SYMBOL}")
+        f32_pointer = ctypes.POINTER(ctypes.c_float)
+        i32_pointer = ctypes.POINTER(ctypes.c_int32)
+        function.argtypes = [f32_pointer, f32_pointer, i32_pointer,
+                             ctypes.c_int32, ctypes.c_int32, ctypes.c_int32]
+        function.restype = ctypes.c_int32
+        executed = function(
+            x.ctypes.data_as(f32_pointer), values.ctypes.data_as(f32_pointer),
+            indices.ctypes.data_as(i32_pointer), ctypes.c_int32(rows),
+            ctypes.c_int32(columns), ctypes.c_int32(k),
+        )
+        if executed != 1:
+            raise RuntimeError("Apple deterministic top_k ABI did not execute on Metal")
+        return values, indices
+    if descriptor.abi_id == APPLE_COUNT_NONZERO_DYNAMIC_F32_I32_ABI:
+        if descriptor.entry_symbol != APPLE_COUNT_NONZERO_F32_SYMBOL or len(ordered) != 2:
+            raise RuntimeError("Apple count_nonzero descriptor ABI or buffer contract is invalid")
+        x, out = (buffers[item.name] for item in ordered)
+        if any(not isinstance(value, np.ndarray) for value in (x, out)):
+            raise RuntimeError("Apple count_nonzero descriptor requires ndarray buffers")
+        if (x.dtype != np.float32 or out.dtype != np.int32 or not x.flags.c_contiguous
+                or not out.flags.c_contiguous or x.ndim != 2):
+            raise RuntimeError(
+                "Apple count_nonzero descriptor requires contiguous rank-2 f32 input and i32 output"
+            )
+        outer = int(cast(int, scalars["Outer"]))
+        axis_extent = int(cast(int, scalars["AxisExtent"]))
+        if ((outer, axis_extent) != tuple(x.shape) or outer <= 0 or axis_extent <= 0
+                or out.shape != (outer,)):
+            raise RuntimeError(
+                "Apple count_nonzero Outer/AxisExtent scalars disagree with buffer shapes"
+            )
+        runtime = _load_apple_gpu_runtime()
+        function = getattr(runtime, APPLE_COUNT_NONZERO_F32_SYMBOL, None)
+        if function is None:
+            raise RuntimeError(f"Apple runtime is missing {APPLE_COUNT_NONZERO_F32_SYMBOL}")
+        f32_pointer = ctypes.POINTER(ctypes.c_float)
+        i32_pointer = ctypes.POINTER(ctypes.c_int32)
+        function.argtypes = [f32_pointer, i32_pointer, ctypes.c_int32, ctypes.c_int32]
+        function.restype = None
+        function(x.ctypes.data_as(f32_pointer), out.ctypes.data_as(i32_pointer),
+                 ctypes.c_int32(outer), ctypes.c_int32(axis_extent))
+        return out
     if descriptor.abi_id == APPLE_POPCOUNT_DYNAMIC_I32_ABI:
         if descriptor.entry_symbol != APPLE_POPCOUNT_I32_SYMBOL or len(ordered) != 2:
             raise RuntimeError("Apple popcount descriptor ABI or buffer contract is invalid")
@@ -3683,6 +3757,7 @@ def _submit_apple_gpu_native(
 
     softmax_variants = {
         APPLE_SOFTMAX_F32_ABI: (APPLE_SOFTMAX_F32_SYMBOL, np.float32, ctypes.c_float),
+        APPLE_SOFTMAX_DYNAMIC_F32_ABI: (APPLE_SOFTMAX_F32_SYMBOL, np.float32, ctypes.c_float),
         APPLE_SOFTMAX_F16_ABI: (APPLE_SOFTMAX_F16_SYMBOL, np.float16, ctypes.c_uint16),
         APPLE_SOFTMAX_BF16_ABI: (APPLE_SOFTMAX_BF16_SYMBOL, _bfloat16_dtype(), ctypes.c_uint16),
     }
@@ -3699,6 +3774,13 @@ def _submit_apple_gpu_native(
             raise RuntimeError("Apple softmax descriptor requires contiguous buffers matching its storage dtype")
         if x.ndim != 2 or out.shape != x.shape:
             raise RuntimeError("Apple softmax buffers disagree with descriptor static shape contract")
+        if descriptor.abi_id == APPLE_SOFTMAX_DYNAMIC_F32_ABI:
+            rows = int(cast(int, scalars["Rows"]))
+            columns = int(cast(int, scalars["Columns"]))
+            if (rows, columns) != tuple(x.shape) or rows <= 0 or columns <= 0:
+                raise RuntimeError(
+                    "Apple dynamic softmax Rows/Columns scalars disagree with buffer shapes"
+                )
         runtime = _load_apple_gpu_runtime()
         function = getattr(runtime, softmax_symbol, None)
         if function is None:
@@ -24336,8 +24418,8 @@ def _clifford_geo_product_cl30_np(np, a, b):
         a[..., 0] * b[..., 0]
         + a[..., 1] * b[..., 1]
         + a[..., 2] * b[..., 2]
-        + a[..., 3] * b[..., 3]
-        - a[..., 4] * b[..., 4]
+        - a[..., 3] * b[..., 3]
+        + a[..., 4] * b[..., 4]
         - a[..., 5] * b[..., 5]
         - a[..., 6] * b[..., 6]
         - a[..., 7] * b[..., 7]
@@ -24345,71 +24427,71 @@ def _clifford_geo_product_cl30_np(np, a, b):
     c[..., 1] = (
         a[..., 0] * b[..., 1]
         + a[..., 1] * b[..., 0]
-        - a[..., 2] * b[..., 4]
-        + a[..., 3] * b[..., 6]
-        + a[..., 4] * b[..., 2]
-        - a[..., 5] * b[..., 7]
-        - a[..., 6] * b[..., 3]
-        - a[..., 7] * b[..., 5]
-    )
-    c[..., 2] = (
-        a[..., 0] * b[..., 2]
-        + a[..., 1] * b[..., 4]
-        + a[..., 2] * b[..., 0]
-        - a[..., 3] * b[..., 5]
-        - a[..., 4] * b[..., 1]
-        + a[..., 5] * b[..., 3]
+        - a[..., 2] * b[..., 3]
+        + a[..., 3] * b[..., 2]
+        - a[..., 4] * b[..., 5]
+        + a[..., 5] * b[..., 4]
         - a[..., 6] * b[..., 7]
         - a[..., 7] * b[..., 6]
     )
+    c[..., 2] = (
+        a[..., 0] * b[..., 2]
+        + a[..., 1] * b[..., 3]
+        + a[..., 2] * b[..., 0]
+        - a[..., 3] * b[..., 1]
+        - a[..., 4] * b[..., 6]
+        + a[..., 5] * b[..., 7]
+        + a[..., 6] * b[..., 4]
+        + a[..., 7] * b[..., 5]
+    )
     c[..., 3] = (
         a[..., 0] * b[..., 3]
-        - a[..., 1] * b[..., 6]
-        + a[..., 2] * b[..., 5]
+        + a[..., 1] * b[..., 2]
+        - a[..., 2] * b[..., 1]
         + a[..., 3] * b[..., 0]
-        - a[..., 4] * b[..., 7]
-        - a[..., 5] * b[..., 2]
-        + a[..., 6] * b[..., 1]
-        - a[..., 7] * b[..., 4]
+        + a[..., 4] * b[..., 7]
+        - a[..., 5] * b[..., 6]
+        + a[..., 6] * b[..., 5]
+        + a[..., 7] * b[..., 4]
     )
     c[..., 4] = (
         a[..., 0] * b[..., 4]
-        + a[..., 1] * b[..., 2]
-        - a[..., 2] * b[..., 1]
-        + a[..., 3] * b[..., 7]
+        + a[..., 1] * b[..., 5]
+        + a[..., 2] * b[..., 6]
+        - a[..., 3] * b[..., 7]
         + a[..., 4] * b[..., 0]
-        - a[..., 5] * b[..., 6]
-        + a[..., 6] * b[..., 5]
-        + a[..., 7] * b[..., 3]
+        - a[..., 5] * b[..., 1]
+        - a[..., 6] * b[..., 2]
+        - a[..., 7] * b[..., 3]
     )
     c[..., 5] = (
         a[..., 0] * b[..., 5]
-        + a[..., 1] * b[..., 7]
-        + a[..., 2] * b[..., 3]
-        - a[..., 3] * b[..., 2]
-        + a[..., 4] * b[..., 6]
+        + a[..., 1] * b[..., 4]
+        - a[..., 2] * b[..., 7]
+        + a[..., 3] * b[..., 6]
+        - a[..., 4] * b[..., 1]
         + a[..., 5] * b[..., 0]
-        - a[..., 6] * b[..., 4]
-        + a[..., 7] * b[..., 1]
+        - a[..., 6] * b[..., 3]
+        - a[..., 7] * b[..., 2]
     )
     c[..., 6] = (
         a[..., 0] * b[..., 6]
-        - a[..., 1] * b[..., 3]
-        + a[..., 2] * b[..., 7]
-        + a[..., 3] * b[..., 1]
-        - a[..., 4] * b[..., 5]
-        + a[..., 5] * b[..., 4]
+        + a[..., 1] * b[..., 7]
+        + a[..., 2] * b[..., 4]
+        - a[..., 3] * b[..., 5]
+        - a[..., 4] * b[..., 2]
+        + a[..., 5] * b[..., 3]
         + a[..., 6] * b[..., 0]
-        + a[..., 7] * b[..., 2]
+        + a[..., 7] * b[..., 1]
     )
     c[..., 7] = (
         a[..., 0] * b[..., 7]
-        + a[..., 1] * b[..., 5]
-        + a[..., 2] * b[..., 6]
+        + a[..., 1] * b[..., 6]
+        - a[..., 2] * b[..., 5]
         + a[..., 3] * b[..., 4]
         + a[..., 4] * b[..., 3]
-        + a[..., 5] * b[..., 1]
-        + a[..., 6] * b[..., 2]
+        - a[..., 5] * b[..., 2]
+        + a[..., 6] * b[..., 1]
         + a[..., 7] * b[..., 0]
     )
     return c
@@ -27021,6 +27103,36 @@ def _apple_gpu_mpsgraph_topk_f32() -> Any:
     return sym
 
 
+def _apple_gpu_topk_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_topk_f32", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_int32),
+        ctypes.c_int32,
+        ctypes.c_int32,
+        ctypes.c_int32,
+    ]
+    sym.restype = ctypes.c_int32
+    return sym
+
+
+def _topk_ordered_reference(x2: Any, k: int, np: Any) -> tuple[Any, Any]:
+    """Numeric descending, NaNs last, lower source index on all ties."""
+    rows, cols = x2.shape
+    indices = np.arange(cols, dtype=np.int64)
+    out_idx = np.empty((rows, k), dtype=np.int64)
+    for row in range(rows):
+        values = x2[row]
+        nan_key = np.isnan(values).astype(np.int8)
+        numeric_key = -np.where(nan_key != 0, np.float32(0.0), values)
+        out_idx[row] = np.lexsort((indices, numeric_key, nan_key))[:k]
+    return np.take_along_axis(x2, out_idx, axis=-1), out_idx
+
+
 def _apple_gpu_dispatch_topk(op_name: str, operands: list[Any], kwargs: dict, np: Any) -> Any:
     """Hard top-k (k>1) per row via the MPSGraph TopK lane. Returns
     ``(values, indices)`` descending — the eager ``top_k`` semantics. Arbitrary
@@ -27039,18 +27151,20 @@ def _apple_gpu_dispatch_topk(op_name: str, operands: list[Any], kwargs: dict, np
     lead = xm.shape[:-1]
     cols = int(xm.shape[-1])
     rows = int(np.prod(lead)) if lead else 1
-    sym = _apple_gpu_mpsgraph_topk_f32()
+    sym = _apple_gpu_topk_f32()
     can_gpu = sym is not None and x.dtype == np.float32 and 1 <= k <= cols
     if not can_gpu:
-        idx2 = np.argsort(np.ascontiguousarray(xm.reshape(rows, cols)), axis=-1)[:, ::-1][:, :k]
-        vals2 = np.take_along_axis(xm.reshape(rows, cols), idx2, axis=-1)
+        vals2, idx2 = _topk_ordered_reference(
+            np.ascontiguousarray(xm.reshape(rows, cols)), k, np,
+        )
     else:
         x2 = np.ascontiguousarray(xm.reshape(rows, cols), dtype=np.float32)
         vals2 = np.zeros((rows, k), np.float32)
         idx2 = np.zeros((rows, k), np.int32)
         fp = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
         ip = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_int32))
-        sym(fp(x2), fp(vals2), ip(idx2), rows, cols, k)
+        if sym(fp(x2), fp(vals2), ip(idx2), rows, cols, k) != 1:
+            vals2, idx2 = _topk_ordered_reference(x2, k, np)
 
     out_shape = (*lead, k)
     vals = np.moveaxis(vals2.reshape(out_shape), -1, axis) if lead else vals2.reshape(k)

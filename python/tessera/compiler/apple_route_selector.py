@@ -763,7 +763,10 @@ def aggregate_stable_route_reports(
     }
 
 
-def seal_strict_route_ledger(stable: Mapping[str, Any], reports: Sequence[Mapping[str, Any]], *, valid_days: int = 30) -> dict[str, Any]:
+def seal_strict_route_ledger(
+    stable: Mapping[str, Any], reports: Sequence[Mapping[str, Any]], *,
+    valid_days: int = 30, selection_scope: str = STRICT_RUNTIME_ROUTE_SCOPE,
+) -> dict[str, Any]:
     """Turn an aggregate into production-readable v2 evidence.
 
     Context must have been captured by each producer at measurement time; a
@@ -771,6 +774,12 @@ def seal_strict_route_ledger(stable: Mapping[str, Any], reports: Sequence[Mappin
     """
     if len(reports) < 2:
         raise ValueError("strict sealing requires two independent reports")
+    if selection_scope not in {STRICT_RUNTIME_ROUTE_SCOPE, STRICT_PACKAGE_SUBGRAPH_SCOPE}:
+        raise ValueError(f"unsupported strict route selection scope: {selection_scope!r}")
+    report_scopes = {report.get("selection_scope", STRICT_RUNTIME_ROUTE_SCOPE)
+                     for report in reports}
+    if report_scopes != {selection_scope}:
+        raise ValueError("strict sealing scope must match every producer report")
     contexts: list[Mapping[str, Any]] = []
     for report in reports:
         context = report.get("context")
@@ -811,7 +820,7 @@ def seal_strict_route_ledger(stable: Mapping[str, Any], reports: Sequence[Mappin
         ).hexdigest()
         for report in reports
     ]
-    return {"schema": STRICT_ROUTE_LEDGER_SCHEMA, "selection_scope": STRICT_RUNTIME_ROUTE_SCOPE,
+    return {"schema": STRICT_ROUTE_LEDGER_SCHEMA, "selection_scope": selection_scope,
             "measured_at": now.isoformat().replace("+00:00", "Z"),
             "expires_at": (now + timedelta(days=valid_days)).isoformat().replace("+00:00", "Z"),
             "context": dict(contexts[0]), "source_report_count": len(reports),

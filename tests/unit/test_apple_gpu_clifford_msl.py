@@ -99,6 +99,24 @@ def _np_to_ptr(arr):
     return arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
 
 
+def _cl30_cayley_reference(lhs: np.ndarray, rhs: np.ndarray) -> np.ndarray:
+    """Independent blade-mask-order oracle for the native Cl(3,0) ABI."""
+    from tessera.ga import Cl
+
+    table = Cl(3, 0).product_table()
+    out = np.zeros_like(lhs, dtype=np.float32)
+    for batch_index in range(lhs.shape[0]):
+        for left_blade in range(8):
+            for right_blade in range(8):
+                result_blade, sign = table[left_blade][right_blade]
+                out[batch_index, result_blade] += (
+                    sign
+                    * lhs[batch_index, left_blade]
+                    * rhs[batch_index, right_blade]
+                )
+    return out
+
+
 def test_clifford_geo_product_cl30_f32_runtime_symbol_exists(apple_gpu_runtime):
     """The kernel C ABI symbol must be exported from the runtime."""
     assert hasattr(apple_gpu_runtime, "tessera_apple_gpu_clifford_geo_product_cl30_f32")
@@ -108,9 +126,6 @@ def test_clifford_geo_product_cl30_f32_runtime_symbol_exists(apple_gpu_runtime):
 def test_clifford_geo_product_cl30_f32_matches_python_reference(apple_gpu_runtime):
     """The MSL kernel result must match `tessera.ga.geometric_product` on
     randomly generated Cl(3,0) multivectors to fp32 tolerance."""
-    from tessera.ga import Cl, Multivector, geometric_product
-
-    a = Cl(3, 0)
     rng = np.random.RandomState(0)
     batch = 64
     A_np = rng.randn(batch, 8).astype(np.float32)
@@ -125,15 +140,32 @@ def test_clifford_geo_product_cl30_f32_matches_python_reference(apple_gpu_runtim
         ctypes.c_int32(batch),
     )
 
-    # Reference via Python GA ops.
-    C_ref = np.zeros((batch, 8), dtype=np.float32)
-    for i in range(batch):
-        lhs = Multivector(A_np[i], a, grades=None)
-        rhs = Multivector(B_np[i], a, grades=None)
-        C_ref[i] = geometric_product(lhs, rhs).coefficients
+    # Do not call geometric_product here: on Apple it deliberately routes to
+    # this same native symbol and would make the comparison self-referential.
+    C_ref = _cl30_cayley_reference(A_np, B_np)
 
     # fp32 mul-add rounding: tighter than 1e-5.
     np.testing.assert_allclose(C_np, C_ref, atol=2e-5, rtol=2e-5)
+
+
+def test_clifford_geo_product_cl30_f32_uses_blade_mask_order(apple_gpu_runtime):
+    """The C ABI order is 1,e1,e2,e12,e3,e13,e23,e123, not grade order."""
+    A_np = np.zeros((1, 8), dtype=np.float32)
+    B_np = np.zeros((1, 8), dtype=np.float32)
+    C_np = np.zeros((1, 8), dtype=np.float32)
+    A_np[0, 1] = 1.0
+    B_np[0, 2] = 1.0
+
+    _bind_geo_product(apple_gpu_runtime)(
+        _np_to_ptr(A_np),
+        _np_to_ptr(B_np),
+        _np_to_ptr(C_np),
+        ctypes.c_int32(1),
+    )
+
+    expected = np.zeros((1, 8), dtype=np.float32)
+    expected[0, 3] = 1.0
+    np.testing.assert_array_equal(C_np, expected)
 
 
 def test_clifford_rotor_sandwich_cl30_f32_matches_python_reference(apple_gpu_runtime):

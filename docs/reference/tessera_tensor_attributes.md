@@ -98,7 +98,7 @@ canonical spelling.
 | --- | --- | --- |
 | Unsigned integers | `uint8`, `uint16`, `uint32`, `uint64` | Planned Graph IR mappings; storage legality should be separate from acceleration legality |
 | Complex | `complex64`, `complex128`; possible future `complex32` | Planned; no canonical Graph IR complex dtype family today |
-| Direct packed INT4 | `int4` | Planned/gated; current quantized paths should not imply a first-class packed int4 tensor type. AMD GFX12 `IU4` WMMA/SWMMAC instructions are tracked against this planned-gated dtype until Tessera grows a separate unsigned packed-4 policy. |
+| Direct packed INT4 | `int4` | First-class signed logical storage. Physical storage is two two's-complement nibbles per `int8` byte, low logical element in the low nibble. Unsigned packed-4 remains a separate, unregistered policy. |
 | AMD MX formats | `mxfp8`, `mxfp6`, `mxfp4` | Planned/gated; needs block-scale metadata and ROCm/CDNA target gates |
 | TF32 | Not a storage dtype | Model as `math_mode="tf32"` on `fp32` tensors or numeric policy, not as `dtype="tf32"` |
 

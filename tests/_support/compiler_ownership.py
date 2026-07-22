@@ -4,7 +4,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from tests._support.policy import APPLE_HOST_FREE_COMPILER_EXPRESSION
+from tests._support.policy import (
+    APPLE_HOST_FREE_COMPILER_EXPRESSION,
+    ROCM_HOST_FREE_COMPILER_EXPRESSION,
+)
 
 
 _BACKEND_CACHE_KEYS = {
@@ -48,3 +51,9 @@ def apple_host_free_compiler_expression() -> str:
     """Select compiler proofs supplied by an Apple-only compiler build."""
 
     return APPLE_HOST_FREE_COMPILER_EXPRESSION
+
+
+def rocm_host_free_compiler_expression() -> str:
+    """Select generic and ROCm-owned proofs supported by a ROCm-only build."""
+
+    return ROCM_HOST_FREE_COMPILER_EXPRESSION

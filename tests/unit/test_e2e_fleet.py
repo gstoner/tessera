@@ -94,9 +94,9 @@ def _report(target: str = "nvidia_sm120", architecture: str = "sm_120a") -> dict
 
 def test_checked_in_differential_fixture_corpus_is_valid() -> None:
     corpus = load_fixture_corpus()
-    assert len(corpus) >= 3
+    assert len(corpus) >= 5
     assert {row["family"] for row in corpus.values()} >= {
-        "matmul", "softmax", "reduction",
+        "matmul", "softmax", "reduction", "paged_kv", "moe",
     }
 
 

@@ -1197,18 +1197,20 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
 # the device_verified_abi row below — there is exactly one ``rocm`` entry per op.
 #
 # Honesty (Decision #25): ``dtypes``/``shape_envelope`` describe ONLY what the
-# shipped symbol actually proves. matmul is a general tiled/K-looped RDNA
-# **WMMA** GEMM, f32<-{f16,bf16} (ragged M/N/K zero-padded), and carries no MFMA
-# shape (WMMA, not the CDNA matrix-core path). It also backs the
-# runtime.launch() ``rocm_wmma`` execution lane.
+# shipped runtime routes actually prove. matmul is a general tiled/K-looped
+# RDNA **WMMA** GEMM, f32<-{f16,bf16} or i32<-{int8,int4} (ragged M/N/K
+# zero-padded), and carries no MFMA shape (WMMA, not the CDNA matrix-core path).
+# It also backs the runtime.launch() ``rocm_wmma`` execution lane. The stable C
+# symbol remains the f16 oracle; the generated route owns the other dtype proofs.
 # ─────────────────────────────────────────────────────────────────────────────
 _ROCM_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
     "matmul": {
         "runtime_symbol": "tessera_rocm_wmma_gemm_f16",
-        "dtypes": ("fp16", "bf16"),
+        "dtypes": ("fp16", "bf16", "int8", "int4"),
         "feature_flags": ("wmma",),
         "shape_envelope": (
-            "general tiled/K-looped GEMM, f32<-{f16,bf16}, any positive M/N/K "
+            "general tiled/K-looped GEMM, f32<-{f16,bf16} or "
+            "i32<-{int8,signed packed-int4}, any positive M/N/K "
             "(ragged edges zero-padded), 16x16x16 WMMA tiles, size-adaptive "
             "register macro-tile (2x4 small / 3x4 large — the occupancy lever) "
             "(gfx1151 Strix Halo / gfx1100 WSL enumeration)"
@@ -1217,7 +1219,8 @@ _ROCM_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
         # gfx1151 box (real medians, repo Decision #26).
         "benchmark_json": "benchmarks/baselines/rocm_gfx1151_hot_paths.json",
         "notes": (
-            "RDNA 3.5 WMMA matrix-core GEMM, f32<-{f16,bf16}, ROCm 7.2.4. "
+            "RDNA 3.5 WMMA matrix-core GEMM, f32<-{f16,bf16} or "
+            "i32<-{int8,signed packed-int4}, ROCm 7.2.4. "
             "DEFAULT execution lane (Stage L4): @jit(target='rocm') matmul runs "
             "the COMPILER-GENERATED WMMA kernel — tessera-opt generates + "
             "serializes it to hsaco in-process (no mlir-opt), then HIP launches "
@@ -1594,11 +1597,16 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "Executes via runtime.launch() (rocm_fpquant_compiled).",
     } for op in ("quantize_fp8", "dequantize_fp8", "quantize_fp6",
                  "dequantize_fp6", "quantize_fp4", "dequantize_fp4")},
-    # Integer quantization — scalar qparam selection + int8 container conversion
-    # around generated ROCm unary/binary kernels. int4 is signed int4 values
-    # stored in int8 containers (not packed weights).
+    # Integer quantization — scalar qparam selection + logical-value staging
+    # around generated ROCm unary/binary kernels. The composite API stages
+    # signed int4 in int8 arrays because NumPy has no int4 dtype; this is
+    # distinct from the packed two-nibbles-per-byte gfx1151 WMMA memory ABI.
     **{op: {
-        "dtypes": ("fp32", "int8") if "int8" in op else ("fp32",),
+        "dtypes": (
+            ("fp32", "int8") if "int8" in op
+            else ("fp32", "int4") if "int4" in op
+            else ("fp32",)
+        ),
         "feature_flags": ("elementwise", "hip_runtime"),
         "notes": f"Integer quantization {op} — round/max/min/mul on generated "
                  "ROCm unary/binary kernels + host qparam structure. Executes "

@@ -25,12 +25,14 @@ Tessera supports a wide range of datatypes, aligned with NVIDIA Blackwell hardwa
 - **FP32**: full precision float, default accumulation type.  
 - **INT8 / INT4**: quantized integer types for inference and embedding tables.  
 
-The **canonical storage-dtype set** (15 names, enforced by
+The **canonical storage-dtype set** (16 names, enforced by
 `tessera.dtype.canonicalize_dtype`) is: `fp64`, `fp32`, `fp16`, `bf16`,
 `fp8_e4m3`, `fp8_e5m2`, `fp6_e2m3`, `fp6_e3m2`, `fp4_e2m1`, `nvfp4`,
-`int8`, `int16`, `int32`, `int64`, `bool`. Aliases (`f32`, `bfloat16`,
-`half`, `i8`, …) normalize to these. A further planned/gated set
-(`uint*`, `complex*`, packed `int4`, AMD `mxfp*`) requires
+`int4`, `int8`, `int16`, `int32`, `int64`, `bool`. Aliases (`f32`, `bfloat16`,
+`half`, `i4`, `i8`, …) normalize to these. Canonical `int4` is signed and its
+packed physical ABI stores two two's-complement nibbles per `int8` byte, with
+the lower logical index in the low nibble. A further planned/gated set
+(`uint*`, `complex*`, AMD `mxfp*`) requires
 `allow_planned_gated=True`.
 
 > **TF32 is not a storage dtype.** `canonicalize_dtype("tf32")` is

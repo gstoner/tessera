@@ -129,7 +129,7 @@ The rollup reports where proof exists; it does not promote the family alias.
 | factorized_matmul | device_verified_jit | complete | complete | complete | rocm_matmul_family_compiled | gfx1151 | fp16,bf16 |
 | fused_epilogue | device_verified_jit | complete | complete | complete | rocm_compiled | gfx1151 | fp16,bf16,fp32,fp8_e4m3,fp8_e5m2 |
 | linear_general | device_verified_jit | complete | complete | complete | rocm_matmul_family_compiled | gfx1151 | fp16,bf16 |
-| matmul | device_verified_abi | complete | complete | complete | rocm_compiled | gfx1151 | fp16,bf16 |
+| matmul | device_verified_abi | complete | complete | complete | rocm_compiled | gfx1151 | fp16,bf16,int8,int4 |
 | qkv_projection | device_verified_jit | complete | complete | complete | rocm_matmul_family_compiled | gfx1151 | fp16,bf16 |
 
 ### `rocm_gfx1152` — development ISA

@@ -26,6 +26,9 @@ TesseraTargetState = Literal[
     "ready", "planned_gated", "unregistered", "not_applicable"
 ]
 ROCmToolchainState = Literal["validated", "available_unvalidated", "unsupported"]
+OperationReadinessState = Literal[
+    "ready", "abi_only", "assessed_unavailable", "planned_gated", "rejected"
+]
 
 
 @dataclass(frozen=True)
@@ -65,6 +68,35 @@ class GFX1151DtypeContract:
         return self.matrix == "native_input" and self.tessera_target_state == "ready"
 
 
+@dataclass(frozen=True)
+class GFX1151OperationDtypeReadiness:
+    storage: str
+    state: OperationReadinessState
+    target_ir_operations: tuple[str, ...]
+    runtime_operations: tuple[str, ...]
+    note: str
+
+
+@dataclass(frozen=True)
+class GFX1151PackedStorageContract:
+    logical: str
+    container: str
+    logical_bits: int
+    factor: int
+    signedness: str
+    nibble_order: str
+
+
+GFX1151_INT4_STORAGE = GFX1151PackedStorageContract(
+    logical="int4",
+    container="int8",
+    logical_bits=4,
+    factor=2,
+    signedness="signed_twos_complement",
+    nibble_order="low_logical_index_in_low_nibble",
+)
+
+
 # Every canonical Tessera dtype and every planned/gated dtype has exactly one
 # row.  Unsupported rows are intentional negatives, not missing information.
 GFX1151_DTYPE_CONTRACTS: tuple[GFX1151DtypeContract, ...] = (
@@ -72,7 +104,7 @@ GFX1151_DTYPE_CONTRACTS: tuple[GFX1151DtypeContract, ...] = (
         "fp64", "native", "unsupported", None, (), "unregistered",
         ("V_ADD_F64", "V_MUL_F64", "V_FMA_F64"),
         "RDNA3.5 has scalar/vector FP64, but gfx1151 has no FP64 WMMA and the Tessera target row is not registered.",
-        rocm_toolchain_state="available_unvalidated",
+        rocm_toolchain_state="validated",
     ),
     GFX1151DtypeContract(
         "fp32", "native", "accumulator_only", None, ("fp32",), "ready",
@@ -115,18 +147,18 @@ GFX1151_DTYPE_CONTRACTS: tuple[GFX1151DtypeContract, ...] = (
     GFX1151DtypeContract(
         "int16", "packed_native", "unsupported", None, (), "unregistered",
         ("V_PK_ADD_I16", "V_MAD_I16", "GLOBAL_LOAD_I16"),
-        rocm_toolchain_state="available_unvalidated",
+        rocm_toolchain_state="validated",
     ),
     GFX1151DtypeContract(
         "int32", "native", "accumulator_only", None, ("int32",), "unregistered",
         ("V_ADD_NC_U32", "V_MUL_I32_I24", "V_WMMA_I32_16X16X16_IU8"),
-        rocm_toolchain_state="available_unvalidated",
+        rocm_toolchain_state="validated",
     ),
     GFX1151DtypeContract(
         "int64", "expanded_native", "unsupported", None, (), "unregistered",
         ("V_CMP_EQ_I64", "S_ASHR_I64"),
         "64-bit integer handling is instruction-sequence based; there is no gfx1151 integer-64 WMMA.",
-        rocm_toolchain_state="available_unvalidated",
+        rocm_toolchain_state="validated",
     ),
     GFX1151DtypeContract(
         "bool", "logical", "unsupported", None, (), "unregistered",
@@ -137,27 +169,27 @@ GFX1151_DTYPE_CONTRACTS: tuple[GFX1151DtypeContract, ...] = (
     GFX1151DtypeContract(
         "uint8", "packed_native", "native_input", "iu8", ("int32",), "planned_gated",
         ("V_DOT4_U32_U8", "V_WMMA_I32_16X16X16_IU8"),
-        rocm_toolchain_state="available_unvalidated",
+        rocm_toolchain_state="validated",
     ),
     GFX1151DtypeContract(
         "uint16", "packed_native", "unsupported", None, (), "planned_gated",
         ("V_PK_ADD_U16", "V_MAD_U16", "GLOBAL_LOAD_U16"),
-        rocm_toolchain_state="available_unvalidated",
+        rocm_toolchain_state="validated",
     ),
     GFX1151DtypeContract(
         "uint32", "native", "unsupported", None, (), "planned_gated",
         ("V_ADD_NC_U32", "V_MUL_U32_U24"),
-        rocm_toolchain_state="available_unvalidated",
+        rocm_toolchain_state="validated",
     ),
     GFX1151DtypeContract(
         "uint64", "expanded_native", "unsupported", None, (), "planned_gated",
         ("V_CMP_EQ_U64", "S_LSHL_B64"),
-        rocm_toolchain_state="available_unvalidated",
+        rocm_toolchain_state="validated",
     ),
     GFX1151DtypeContract(
-        "int4", "packed_native", "native_input", "iu4", ("int32",), "planned_gated",
+        "int4", "packed_native", "native_input", "iu4", ("int32",), "ready",
         ("V_DOT8_I32_IU4", "V_DOT8_U32_U4", "V_WMMA_I32_16X16X16_IU4"),
-        "IU4 exists in hardware and executes in the ROCm fragment lane, but first-class packed int4 storage remains gated.",
+        "Signed logical int4 uses two's-complement nibbles, two values per int8 byte container; IU4 signedness controls select signed accumulation.",
         rocm_toolchain_state="validated",
     ),
     GFX1151DtypeContract("complex32", "unsupported", "unsupported", None, (), "planned_gated", ()),
@@ -170,6 +202,51 @@ GFX1151_DTYPE_CONTRACTS: tuple[GFX1151DtypeContract, ...] = (
 
 
 _BY_STORAGE = {row.storage: row for row in GFX1151_DTYPE_CONTRACTS}
+
+
+GFX1151_OPERATION_DTYPE_READINESS: tuple[GFX1151OperationDtypeReadiness, ...] = (
+    GFX1151OperationDtypeReadiness(
+        "fp64", "assessed_unavailable", (), (),
+        "gfx1151 scalar/vector FP64 exists, but no Tessera ROCm Target-IR generator or runtime ABI accepts fp64; WMMA is unsupported.",
+    ),
+    GFX1151OperationDtypeReadiness(
+        "int16", "assessed_unavailable", (), (),
+        "i16 loads and packed arithmetic assemble, but no numeric tensor Target-IR generator or runtime ABI is registered.",
+    ),
+    GFX1151OperationDtypeReadiness(
+        "int32", "abi_only",
+        ("spec_accept", "argreduce_index", "paged_kv_index", "moe_index", "wmma_accumulator"),
+        ("spec_accept", "argreduce_index", "paged_kv_index", "moe_index", "wmma_accumulator"),
+        "int32 is validated only as control/index/result ABI storage and the IU8/IU4 accumulator; it is not a general numeric tensor lane.",
+    ),
+    GFX1151OperationDtypeReadiness(
+        "int64", "abi_only", ("shape_scalar",), ("shape_scalar",),
+        "i64 is validated for launch dimensions and expanded scalar arithmetic, not tensor buffers or matrix inputs.",
+    ),
+    *(
+        GFX1151OperationDtypeReadiness(
+            storage, "planned_gated", (), (),
+            "Unsigned scalar/vector instructions assemble, but Graph storage and runtime ABIs remain intentionally unregistered.",
+        )
+        for storage in ("uint8", "uint16", "uint32", "uint64")
+    ),
+    GFX1151OperationDtypeReadiness(
+        "int4", "ready", ("matmul",), ("matmul",),
+        "gfx1151 WMMA matmul consumes the signed packed-storage descriptor and accumulates exactly into int32.",
+    ),
+    GFX1151OperationDtypeReadiness(
+        "fp8_e4m3", "rejected", (), (),
+        "gfx1151 has no FP8 WMMA or scalar conversion route; Target IR and runtime must reject it.",
+    ),
+    GFX1151OperationDtypeReadiness(
+        "fp8_e5m2", "rejected", (), (),
+        "gfx1151 has no BF8 WMMA or scalar conversion route; Target IR and runtime must reject it.",
+    ),
+)
+
+_OP_READINESS_BY_STORAGE = {
+    row.storage: row for row in GFX1151_OPERATION_DTYPE_READINESS
+}
 
 
 def gfx1151_dtype_contract(storage: str) -> GFX1151DtypeContract:
@@ -187,9 +264,19 @@ def gfx1151_ready_storage_dtypes() -> frozenset[str]:
     )
 
 
+def gfx1151_operation_dtype_readiness(storage: str) -> GFX1151OperationDtypeReadiness:
+    try:
+        return _OP_READINESS_BY_STORAGE[storage]
+    except KeyError as exc:
+        raise ValueError(f"no gfx1151 operation readiness assessment for {storage!r}") from exc
+
+
 __all__ = [
     "GFX1151DtypeContract",
     "GFX1151_DTYPE_CONTRACTS",
+    "GFX1151_INT4_STORAGE",
+    "GFX1151_OPERATION_DTYPE_READINESS",
     "gfx1151_dtype_contract",
+    "gfx1151_operation_dtype_readiness",
     "gfx1151_ready_storage_dtypes",
 ]

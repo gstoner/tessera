@@ -1116,6 +1116,13 @@ applicable to Apple target state. It introduces no shared dtype spelling or
 alias and transfers no RDNA scalar, packed-dot, WMMA, accumulator, storage,
 runtime, or selector claim to Metal or Apple CPU.
 
+Cross-backend sync `ROCM-DTYPE1-CLOSE-2026-07-21` promotes signed `int4` and
+alias `i4` into the shared canonical/Graph-IR vocabulary and adds signedness to
+the shared packed-storage descriptor. Apple parity is validated at the logical
+signed-int4 boundary; existing Metal packed-weight ABIs remain backend-owned.
+No Apple target capability, physical schedule, runtime route, or selector is
+promoted by the gfx1151 proof, and unsigned packed-4 remains unregistered.
+
 Cross-backend sync `E2E-FROZEN-IDENTITY-CACHE-2026-07-19`: ROCM-E2E-1 memoizes
 deterministic hashes for frozen runtime artifacts, native images, and launch
 descriptors. Serialized identity values and required launch validation are
@@ -1252,3 +1259,10 @@ attention/paged-cache and low-precision dispatch contracts, so no Apple runtime
 mapping is required by this NVIDIA slice; future use of the new portable
 carrier spellings must be proven through an Apple-owned lowering and exact
 Apple device evidence.
+
+Cross-backend sync `ROCM-E2E-SPINE3-TEST1-2026-07-21` adds shared paged-KV and
+MoE fixture identities to the E2E-SPINE-3 corpus and correctly marks nine
+Metal-only compiler nodes as `compiler_apple`. Apple fixture-schema parity and
+compiler ownership are validated; the gfx1151 HSACO, HIP launch contract,
+resource fingerprints, timing, and exact-device packet do not transfer to
+Metal. No Apple capability, schedule, execution row, or selector changes.

@@ -49,3 +49,10 @@ APPLE_HOST_FREE_COMPILER_EXPRESSION = (
     "compiler_tool and not hardware_apple_gpu and not performance "
     "and not compiler_cpu and not compiler_nvidia and not compiler_rocm"
 )
+
+
+ROCM_HOST_FREE_COMPILER_EXPRESSION = (
+    "compiler_tool and not performance and not hardware_apple_gpu "
+    "and not hardware_nvidia and not hardware_rocm and not compiler_apple "
+    "and not compiler_cpu and not compiler_nvidia"
+)

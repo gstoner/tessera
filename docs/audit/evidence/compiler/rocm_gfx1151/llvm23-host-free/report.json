@@ -1,0 +1,133 @@
+{
+  "build_command": [
+    "cmake",
+    "--build",
+    "/home/gstoner/projects/tessera/build-rocm-7.14-llvm23-clean",
+    "--target",
+    "tessera-opt",
+    "tessera-rocm-opt"
+  ],
+  "build_dir": "/home/gstoner/projects/tessera/build-rocm-7.14-llvm23-clean",
+  "capabilities": {
+    "apple": false,
+    "nvidia": false,
+    "rocm": true
+  },
+  "cmake_cache": {
+    "CMAKE_BUILD_TYPE": "Release",
+    "CMAKE_CXX_COMPILER": "/usr/lib/llvm-23/bin/clang++",
+    "LLVM_DIR": "/usr/lib/llvm-23/lib/cmake/llvm",
+    "MLIR_DIR": "/usr/lib/llvm-23/lib/cmake/mlir",
+    "TESSERA_BUILD_APPLE_BACKEND": "OFF",
+    "TESSERA_BUILD_NVIDIA_BACKEND": "OFF",
+    "TESSERA_BUILD_ROCM_BACKEND": "ON",
+    "TESSERA_ENABLE_CUDA": "OFF",
+    "TESSERA_ENABLE_HIP": "ON"
+  },
+  "collected_node_ids": [
+    "tests/unit/test_rocm_arch_fragment_compiler.py::test_same_tile_fixture_selects_and_assembles_exact_family[gfx1100-vector<16xf16>-rocdl.wmma.f32.16x16x16.f16-32]",
+    "tests/unit/test_rocm_arch_fragment_compiler.py::test_same_tile_fixture_selects_and_assembles_exact_family[gfx1151-vector<16xf16>-rocdl.wmma.f32.16x16x16.f16-32]",
+    "tests/unit/test_rocm_arch_fragment_compiler.py::test_same_tile_fixture_selects_and_assembles_exact_family[gfx1200-vector<8xf16>-rocdl.wmma.f32.16x16x16.f16-32]",
+    "tests/unit/test_rocm_arch_fragment_compiler.py::test_same_tile_fixture_selects_and_assembles_exact_family[gfx1201-vector<8xf16>-rocdl.wmma.f32.16x16x16.f16-32]",
+    "tests/unit/test_rocm_arch_fragment_compiler.py::test_same_tile_fixture_selects_and_assembles_exact_family[gfx90a-vector<4xf16>-rocdl.mfma.f32.16x16x16f16-64]",
+    "tests/unit/test_rocm_arch_fragment_compiler.py::test_same_tile_fixture_selects_and_assembles_exact_family[gfx942-vector<4xf16>-rocdl.mfma.f32.16x16x16f16-64]",
+    "tests/unit/test_rocm_arch_fragment_compiler.py::test_same_tile_fixture_selects_and_assembles_exact_family[gfx950-vector<4xf16>-rocdl.mfma.f32.16x16x16f16-64]",
+    "tests/unit/test_rocm_arch_fragment_compiler.py::test_fragment_resource_ratchet_keeps_family_proofs_compact",
+    "tests/unit/test_rocm_arch_fragment_compiler.py::test_rdna4_dtype_fragment_forms_lower_and_assemble[bf16-rocdl.wmma.f32.16x16x16.bf16]",
+    "tests/unit/test_rocm_arch_fragment_compiler.py::test_rdna4_dtype_fragment_forms_lower_and_assemble[e4m3-rocdl.wmma.f32.16x16x16.fp8_fp8]",
+    "tests/unit/test_rocm_arch_fragment_compiler.py::test_rdna4_dtype_fragment_forms_lower_and_assemble[e5m2-rocdl.wmma.f32.16x16x16.bf8_bf8]",
+    "tests/unit/test_rocm_arch_fragment_compiler.py::test_rdna4_dtype_fragment_forms_lower_and_assemble[int8-rocdl.wmma.i32.16x16x16.iu8]",
+    "tests/unit/test_rocm_arch_fragment_compiler.py::test_rdna4_dtype_fragment_forms_lower_and_assemble[int4-rocdl.wmma.i32.16x16x32.iu4]",
+    "tests/unit/test_rocm_arch_fragment_compiler.py::test_cdna_bf16_fragment_form_lowers_and_assembles[gfx90a]",
+    "tests/unit/test_rocm_arch_fragment_compiler.py::test_cdna_bf16_fragment_form_lowers_and_assembles[gfx942]",
+    "tests/unit/test_rocm_arch_fragment_compiler.py::test_cdna_bf16_fragment_form_lowers_and_assembles[gfx950]",
+    "tests/unit/test_rocm_arch_fragment_compiler.py::test_gfx125x_wmma_v2_lowers_modifiers_and_assembles[fp16-gfx1250]",
+    "tests/unit/test_rocm_arch_fragment_compiler.py::test_gfx125x_wmma_v2_lowers_modifiers_and_assembles[fp16-gfx1251]",
+    "tests/unit/test_rocm_arch_fragment_compiler.py::test_gfx125x_wmma_v2_lowers_modifiers_and_assembles[bf16-gfx1250]",
+    "tests/unit/test_rocm_arch_fragment_compiler.py::test_gfx125x_wmma_v2_lowers_modifiers_and_assembles[bf16-gfx1251]",
+    "tests/unit/test_rocm_arch_fragment_compiler.py::test_gfx940_descriptor_path_lowers_to_real_mfma",
+    "tests/unit/test_rocm_arch_fragment_compiler.py::test_family_mismatch_is_a_named_error",
+    "tests/unit/test_rocm_dequant_gemm_compiled.py::test_rocm_dequant_gemm_codegen_lowers",
+    "tests/unit/test_rocm_mla_decode_step_compiled.py::test_rocm_mla_absorb_decode_codegen_lowers",
+    "tests/unit/test_rocm_sparse_attn_compiled.py::test_rocm_block_sparse_attention_codegen_lowers",
+    "tests/unit/test_rocm_sparse_attn_compiled.py::test_rocm_block_sparse_attention_tiled_codegen_lowers",
+    "tests/unit/test_rocm_sparse_attn_compiled.py::test_rocm_block_sparse_topk_codegen_lowers"
+  ],
+  "collection_diagnostic": "",
+  "excluded_owner_markers": [
+    "compiler_apple",
+    "compiler_cpu",
+    "compiler_nvidia"
+  ],
+  "execution": {
+    "returncode": 0,
+    "status": "passed",
+    "stderr": "",
+    "stdout": "...........................                                              [100%]\n27 passed, 15866 deselected in 25.08s"
+  },
+  "marker_expression": "compiler_tool and not performance and not hardware_apple_gpu and not hardware_nvidia and not hardware_rocm and not compiler_apple and not compiler_cpu and not compiler_nvidia",
+  "mlir_c_runner_utils": "/usr/lib/llvm-23/lib/libmlir_c_runner_utils.so",
+  "probes": {
+    "apple": {
+      "available": false,
+      "command": [
+        "build-rocm-7.14-llvm23-clean/tools/tessera-opt/tessera-opt",
+        "--pass-pipeline=builtin.module(tessera-lower-to-apple_gpu)",
+        "-"
+      ],
+      "diagnostic": "<unknown>:0: error: MLIR Textual PassPipeline Parser:1:1: error: 'tessera-lower-to-apple_gpu' does not refer to a registered pass or pass pipeline\ntessera-lower-to-apple_gpu\n^",
+      "returncode": 1
+    },
+    "nvidia": {
+      "available": false,
+      "command": [
+        "build-rocm-7.14-llvm23-clean/tools/tessera-opt/tessera-opt",
+        "--pass-pipeline=builtin.module(lower-tile-to-nvidia)",
+        "-"
+      ],
+      "diagnostic": "<unknown>:0: error: MLIR Textual PassPipeline Parser:1:1: error: 'lower-tile-to-nvidia' does not refer to a registered pass or pass pipeline\nlower-tile-to-nvidia\n^",
+      "returncode": 1
+    },
+    "rocm": {
+      "available": true,
+      "command": [
+        "build-rocm-7.14-llvm23-clean/tools/tessera-opt/tessera-opt",
+        "--pass-pipeline=builtin.module(lower-tile-to-rocm)",
+        "-"
+      ],
+      "diagnostic": "",
+      "returncode": 0
+    }
+  },
+  "pytest_command": [
+    "/home/gstoner/projects/tessera/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/unit",
+    "-q",
+    "-m",
+    "compiler_tool and not performance and not hardware_apple_gpu and not hardware_nvidia and not hardware_rocm and not compiler_apple and not compiler_cpu and not compiler_nvidia"
+  ],
+  "schema": "tessera.rocm.host-free-compiler-ownership.v1",
+  "source_commit": "a5243d14a4039a3fa6ddcdb0276eb803ff567d19",
+  "tool": "/home/gstoner/projects/tessera/build-rocm-7.14-llvm23-clean/tools/tessera-opt/tessera-opt",
+  "tool_versions": {
+    "mlir_opt": {
+      "command": [
+        "/usr/lib/llvm-23/bin/mlir-opt",
+        "--version"
+      ],
+      "output": "Ubuntu LLVM version 23.0.0\n  Optimized build.",
+      "returncode": 0
+    },
+    "tessera_opt": {
+      "command": [
+        "build-rocm-7.14-llvm23-clean/tools/tessera-opt/tessera-opt",
+        "--version"
+      ],
+      "output": "Ubuntu LLVM version 23.0.0\n  Optimized build.",
+      "returncode": 0
+    }
+  },
+  "work_item": "ROCM-TEST-1"
+}

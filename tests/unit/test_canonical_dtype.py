@@ -58,7 +58,7 @@ class TestCanonicalSet:
 
     def test_canonical_ints_present(self):
         c = canonical_dtypes()
-        for name in ("int8", "int16", "int32", "int64"):
+        for name in ("int4", "int8", "int16", "int32", "int64"):
             assert name in c
 
     def test_canonical_bool_present(self):
@@ -84,8 +84,9 @@ class TestPlannedGatedSet:
         for n in ("complex32", "complex64", "complex128"):
             assert is_planned_gated_dtype(n), n
 
-    def test_packed_int4_planned_gated(self):
-        assert is_planned_gated_dtype("int4")
+    def test_packed_int4_is_first_class(self):
+        assert "int4" in canonical_dtypes()
+        assert not is_planned_gated_dtype("int4")
 
     def test_amd_mx_planned_gated(self):
         for n in ("mxfp8", "mxfp6", "mxfp4"):
@@ -119,6 +120,7 @@ class TestAliasNormalization:
         ("double", "fp64"),
         ("float", "fp32"),
         ("i8", "int8"),
+        ("i4", "int4"),
         ("i16", "int16"),
         ("i32", "int32"),
         ("i64", "int64"),
@@ -166,7 +168,6 @@ class TestPlannedGatedGate:
     @pytest.mark.parametrize("name", [
         "uint8", "uint16", "uint32", "uint64",
         "complex64", "complex128",
-        "int4",
         "mxfp8", "mxfp6", "mxfp4",
     ])
     def test_planned_gated_rejected_without_flag(self, name):
@@ -174,7 +175,7 @@ class TestPlannedGatedGate:
             canonicalize_dtype(name)
 
     @pytest.mark.parametrize("name", [
-        "uint8", "complex64", "int4", "mxfp8",
+        "uint8", "complex64", "mxfp8",
     ])
     def test_planned_gated_accepted_with_flag(self, name):
         assert canonicalize_dtype(name, allow_planned_gated=True) == name
@@ -356,7 +357,7 @@ class TestDtypeClass:
         ("fp8_e4m3", 8), ("fp8_e5m2", 8),
         ("fp6_e2m3", 6), ("fp6_e3m2", 6),
         ("fp4_e2m1", 4), ("nvfp4", 4),
-        ("int8", 8), ("int16", 16), ("int32", 32), ("int64", 64),
+        ("int4", 4), ("int8", 8), ("int16", 16), ("int32", 32), ("int64", 64),
         ("bool", 1),
     ])
     def test_dtype_bits(self, name, expected):

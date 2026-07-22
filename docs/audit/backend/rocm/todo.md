@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-19
+last_updated: 2026-07-21
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
@@ -138,7 +138,9 @@ evidence and not evidence for any sibling architecture.
 | ROCM-5 | landing, exact-device closure open | Architecture-owned descriptors and cross-assembly exist; numerical and performance closure depends on ROCM-1 through ROCM-4b. |
 | ROCM-E2E-1 | complete on gfx1151 | The f16/f32 pilot lowers typed Tile IR to `tessera_rocm.softmax`, packages an ELF HSACO and descriptor, executes across the exact-device boundary/aligned/ragged matrix, rejects invalid contracts, retains driver-selected device-library plus cold/warm identity, and passes isolated device and end-to-end non-regression. |
 | ROCM-E2E-2 | complete on gfx1151 | Reduction covers f16/bf16/f32 input with f32 output and passes all paired gates. Direct f32/i32 paged-KV and MoE dispatch have typed artifact/descriptor, negative, exact-device, and retained-route evidence; both movement descriptors are measured non-winners, so production routes remain selected. |
-| ROCM-DTYPE-1 | landing on gfx1151 | The RDNA3.5 contract now totals every canonical and planned dtype across scalar/vector, WMMA input, accumulator, and Tessera readiness roles with archived-opcode evidence; registration gaps remain explicit. |
+| E2E-SPINE-3 | complete on gfx1151 | The hash-sealed four-family release packet records exact-device Level-C results, cold/warm identity, resources, and stable kernel-wall/end-to-end timing for softmax, reduction, paged-KV, and MoE. All four fleet rows are `release_ready`; no production selector changed. |
+| ROCM-TEST-1 | complete | The ROCm-only LLVM/MLIR 23 build owns a 27-node host-free compiler lane; 27/27 pass with Apple/NVIDIA/CPU ownership excluded and foreign pipeline absence retained in the report. |
+| ROCM-DTYPE-1 | complete on gfx1151 | FP64 and integer widths have per-operation Target-IR/runtime assessments; unsigned LLVM probes pass without inventing unsigned storage ABIs; signed int4 is canonical and physically packed; gfx1151 FP8/BF8 is rejected by name. |
 
 ## Recommended open-work order
 
@@ -156,7 +158,25 @@ named exact device can satisfy an execution gate.
 | 7 | ROCM-4b | Retain compatibility proof on MI300X/MI325X `gfx942` | owner and reservation required | f16/bf16 MFMA plus retained matmul/attention/softmax/GELU paths launch and compare. |
 | 8 | ROCM-4a | Add Radeon RX 9000 `gfx1200` exact-device proof | owner and reservation required | Matmul launches and compares; unsupported forms reject stably. |
 | 9 | ROCM-5 | Close the architecture-owned fragment umbrella | depends on ROCM-1 through ROCM-4b | Every enabled family/dtype has exact-device packing, numerical, resource, and timing evidence, or an explicit unsupported/deferred state. |
-| 10 | ROCM-TEST-1 | Validate ROCm host-free compiler ownership | available on the ROCm build host | Build the declared ROCm compiler capability set, explicitly select or exclude foreign-backend compiler tests, and retain command, build flags, tool path, node IDs, and diagnostics; no CUDA/Apple-only build assumption blocks the ROCm lane. |
+
+## ROCM-TEST-1: host-free compiler ownership
+
+**Status: complete (2026-07-21).**
+
+The clean `build-rocm-7.14-llvm23-clean` capability set declares ROCm and HIP
+enabled with Apple, NVIDIA, and CUDA disabled. The owned marker expression
+explicitly excludes Apple, CPU, NVIDIA, performance, and every hardware lane;
+it collects 27 ROCm compiler nodes and passes **27/27** with 15,866 tests
+deselected. The ROCm pipeline probe is available, while the Apple and NVIDIA
+pipeline probes retain their expected unregistered-pipeline diagnostics. The
+report also retains the build command, CMake flags, LLVM/MLIR 23 tool and runner
+paths, exact node IDs, collection diagnostics, and final pytest output at
+`docs/audit/evidence/compiler/rocm_gfx1151/llvm23-host-free/report.json`.
+
+Nine parametrized Metal-only compiler nodes discovered during ownership
+collection now carry the existing `compiler_apple` owner marker and are listed
+in the Apple inventory. This is an ownership correction, not a compiler
+semantic or backend capability change.
 
 ## ROCM-E2E-1: typed softmax compilation spine
 
@@ -310,7 +330,7 @@ transfers.
 
 ## ROCM-DTYPE-1: gfx1151 datatype totality
 
-**Status: landing on `gfx1151` (2026-07-19).**
+**Status: complete on `gfx1151` (2026-07-21).**
 
 `python/tessera/compiler/rocm_dtype_contract.py` separates ISA support from
 Tessera execution readiness. Every canonical and planned/gated dtype has one
@@ -321,30 +341,39 @@ JSON source and hash.
 
 | Format group | RDNA3.5 scalar/vector role | gfx1151 WMMA role | ROCm/LLVM state | Tessera target state |
 |---|---|---|---|---|
-| fp64 | native vector arithmetic and conversion | unsupported | available, focused validation open | unregistered |
+| fp64 | native vector arithmetic and conversion | unsupported | validated | assessed unavailable: no numeric Target-IR generator/runtime ABI |
 | fp32 | native | accumulator only | validated | ready |
 | fp16 | native | input; fp16/fp32 accumulator | validated | ready |
 | bf16 | packed dot/WMMA | input; bf16/fp32 accumulator | validated | ready |
-| int8 / uint8 | packed dot | IU8 input; int32 accumulator | int8 validated; uint8 validation open | int8 ready; uint8 planned-gated |
-| int4 / uint4 physical IU4 | packed dot | IU4 input; int32 accumulator | validated | canonical int4 planned-gated; no first-class uint4 spelling |
-| int16 / uint16 | packed/native vector arithmetic | unsupported | available, focused validation open | int16 unregistered; uint16 planned-gated |
-| int32 / uint32 | native vector arithmetic | int32 accumulator only | available, focused validation open | int32 unregistered; uint32 planned-gated |
-| int64 / uint64 | expanded instruction sequences | unsupported | available, focused validation open | int64 unregistered; uint64 planned-gated |
+| int8 / uint8 | packed dot | IU8 input; int32 accumulator | validated | int8 ready; uint8 compiler-validated but planned-gated |
+| int4 / uint4 physical IU4 | packed dot | IU4 input; int32 accumulator | validated | signed int4 ready for matmul; no first-class uint4 spelling |
+| int16 / uint16 | packed/native vector arithmetic | unsupported | validated | int16 assessed unavailable; uint16 planned-gated |
+| int32 / uint32 | native vector arithmetic | int32 accumulator only | validated | int32 ABI-only for indices/results/WMMA accumulator; uint32 planned-gated |
+| int64 / uint64 | expanded instruction sequences | unsupported | validated | int64 ABI-only for shape scalars; uint64 planned-gated |
 | bool | compare/mask logic | unsupported | available, focused validation open | unregistered |
 | FP8/BF8, FP6, FP4, MX formats, NVFP4 | unsupported | unsupported | unsupported | not applicable or planned-gated negative |
 | complex formats | no native complex datatype | unsupported | no native datatype | planned-gated |
 
-The existing `ROCmTargetProfile.dtype_set` and target capability remain the
-registered executable storage set `{fp32, fp16, bf16, int8}` and are checked
-for exact equality with the new contract. Hardware support therefore cannot
-silently promote fp64, packed int4, unsigned, or accumulator-only types.
+The exact `gfx1151` target capability is `{fp32, fp16, bf16, int8, int4}`.
+Canonical signed `int4` maps to Graph IR `i4`; its physical runtime ABI packs
+two two's-complement nibbles per int8 byte, lower logical index in the low
+nibble. The storage descriptor carries `signedness`, and the ROCm consumer
+rejects contradictory unsigned metadata with
+`DTYPE_PACK_SIGNEDNESS_MISMATCH`. Unsigned LLVM/ROCm instructions were probed
+for u8/u16/u32/u64, but no unsigned Graph storage or runtime ABI was inferred.
 
-Closure work is deliberately split: assess fp64 and int16/int32/int64 per-op
-Target IR/runtime registration; finish the first-class packed-int4 physical
-storage and signedness contract; retain named FP8/BF8 and smaller-float
-rejection on gfx1151. No shared dtype spelling, backend selector, or production
-state changes in this landing. Cross-backend sync
-`ROCM-DTYPE-TOTALITY-2026-07-19` is ROCm-owned.
+FP64 and signed integer widths are closed by per-operation assessment rather
+than blanket promotion: fp64 and int16 have no numeric tensor route; int32 is
+ABI-only for indices, control results, and WMMA accumulation; int64 is ABI-only
+for launch shape scalars. Both FP8 encodings are explicitly rejected on
+gfx1151 by `ROCM_TILE_UNSUPPORTED_DTYPE` in selection, Target IR, and runtime.
+
+Closure evidence on the gfx1151 host: LLVM 23 compile probes cover fp64,
+signed i16/i32/i64, and unsigned u8/u16/u32/u64; ROCm backend lit is 36/36;
+the focused registry/target/audit suite is 512/512; and four aligned/ragged packed-int4
+launch comparisons pass exactly against NumPy int32 accumulation. Cross-backend
+sync `ROCM-DTYPE1-CLOSE-2026-07-21` owns the additive canonical-int4 and storage
+descriptor changes; no production selector changes.
 
 ## ROCM-TILE-1: portable Tile fragments
 
@@ -1117,25 +1146,31 @@ ABI, schedule, dtype capability, or selector changes. X86-E2E-2 subsequently
 closed the remaining inventory and reassessed ROCm at each shared-contract
 boundary.
 
-E2E-SPINE-3 is applicable as a proof-envelope contract, not a HIP lowering
-change. The gfx1151 softmax, reduction, paged-KV, and MoE evidence may be
-packaged by family with shared fixture IDs, exact-target Level-C provenance,
-cold/warm cache identity, two-domain benchmark metadata, and sealed attachment
-hashes. Other gfx targets remain explicit unavailable/deferred rows and cannot
-inherit gfx1151 evidence. No wave/LDS schedule, HSACO ABI, capability, or
-selector changes.
+E2E-SPINE-3 is complete on the assigned Strix Halo host under synchronization
+key `ROCM-E2E-SPINE3-TEST1-2026-07-21`. The hash-sealed packet at
+`docs/audit/evidence/e2e_spine/rocm_gfx1151/gfx1151` packages shared f32
+softmax, reduction, non-identity paged-KV, and permuted MoE fixtures against
+source commit `a5243d14a4039a3fa6ddcdb0276eb803ff567d19`. All four fixtures have
+exact-target Level-C provenance and zero maximum absolute error; four
+cold/warm proofs retain identical image, payload, descriptor, and toolchain
+identity.
 
-Fleet packet identity is now `(target, architecture)`. The `gfx1151` packet is
-assigned to the Strix Halo host together with the independent
-`x86_64_avx512` packet; the NR2 WSL host's `x86_64_base` and `sm_120a` evidence
-cannot satisfy either obligation. This shared evidence-key change adds no HIP
-ABI, wave/LDS schedule, capability, or selector behavior. Exact gfx1151
-recording remains a Strix-host follow-up.
-The post-merge NR2 WSL packets now hash-seal base-x86 and bounded SM120
-softmax/reduction evidence against source commit
-`9f3757ef2dda2dd61ff94f1aefe0244f1b80f064`. They transfer no gfx1151 proof;
-the ROCm softmax, reduction, paged-KV, and MoE dashboard rows remain
-`packet_pending` until the assigned Strix Halo run.
+The packet contains eight selected benchmark rows: kernel-wall and
+allocation/copy-inclusive end-to-end timing for each family. Each row uses two
+interleaved 101-sample cohorts, passes the 5% stability limit, and records its
+resource fingerprint. Kernel-wall timing batches resident HIP launches and a
+single synchronization because WSL HIP event intervals are invalid on this
+host; the timing domain is named honestly and is not presented as a device
+event. The packet is release-evidence selection only. ROCM-E2E-1/-2 retained
+production routes remain selected and `production_selector_changed` is false.
+Other gfx targets remain explicit unavailable/deferred rows and cannot inherit
+gfx1151 evidence.
+
+Fleet packet identity remains `(target, architecture)`. The assigned Strix Halo
+host now satisfies the `rocm_gfx1151/gfx1151` obligation independently of the
+NR2 WSL host's `x86_64_base` and `sm_120a` evidence. The four gfx1151 dashboard
+rows are therefore `release_ready`; no sibling packet or architecture inherits
+that proof.
 
 Cross-backend sync `X86-E2E2-ELEMENTWISE-2026-07-20` adds the internal shared
 `tile.elementwise_kernel` semantic carrier for f32 unary/binary and f32-to-bool

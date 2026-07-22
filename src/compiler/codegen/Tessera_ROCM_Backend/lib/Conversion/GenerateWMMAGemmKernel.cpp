@@ -111,7 +111,8 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                      int64_t mt, int64_t nt, const WmmaTypes &T,
                      Type outputType, bool portableABI = false,
                      bool viaTile = false, bool hasBias = false,
-                     StringRef activation = "none") {
+                     StringRef activation = "none",
+                     bool packedInt4Memory = false) {
   b.setInsertionPointToStart(&gpuFunc.getBody().front());
   Value A = gpuFunc.getArgument(0);
   Value B = gpuFunc.getArgument(1);
@@ -134,6 +135,7 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   auto slt = arith::CmpIPredicate::slt;
 
   Value c0 = b.create<arith::ConstantIndexOp>(loc, 0);
+  Value c2 = b.create<arith::ConstantIndexOp>(loc, 2);
   Value c4 = b.create<arith::ConstantIndexOp>(loc, 4);
   Value c15 = b.create<arith::ConstantIndexOp>(loc, 15);
   Value c16 = b.create<arith::ConstantIndexOp>(loc, 16);
@@ -232,6 +234,34 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
     return frag;
   };
 
+  // First-class signed int4 memory is physically nibble packed: logical index
+  // 2q occupies the low nibble and 2q+1 the high nibble of one i8 container.
+  // Decode to the legacy vector<16xi8> staging form; `toFrag` then reconstructs
+  // the exact IU4 register payload consumed by WMMA.
+  auto loadLogical = [&](OpBuilder &bb, Location l, Value memref,
+                         Value logicalIndex) -> Value {
+    if (!packedInt4Memory)
+      return bb.create<memref::LoadOp>(l, memref, ValueRange{logicalIndex});
+    Value byteIndex = bb.create<arith::DivUIOp>(l, logicalIndex, c2);
+    Value parity = bb.create<arith::RemUIOp>(l, logicalIndex, c2);
+    Value raw8 = bb.create<memref::LoadOp>(l, memref, ValueRange{byteIndex});
+    Value raw = bb.create<arith::ExtUIOp>(l, i32Ty, raw8);
+    Value c4i = bb.create<arith::ConstantIntOp>(l, 4, 32);
+    Value high = bb.create<arith::ShRUIOp>(l, raw, c4i);
+    Value lowHalf = bb.create<arith::CmpIOp>(
+        l, arith::CmpIPredicate::eq, parity, c0);
+    Value selected = bb.create<arith::SelectOp>(l, lowHalf, raw, high);
+    Value cF = bb.create<arith::ConstantIntOp>(l, 0xF, 32);
+    Value nibble = bb.create<arith::AndIOp>(l, selected, cF);
+    Value c8 = bb.create<arith::ConstantIntOp>(l, 8, 32);
+    Value c16i = bb.create<arith::ConstantIntOp>(l, 16, 32);
+    Value negative = bb.create<arith::CmpIOp>(
+        l, arith::CmpIPredicate::sge, nibble, c8);
+    Value signedValue = bb.create<arith::SelectOp>(
+        l, negative, bb.create<arith::SubIOp>(l, nibble, c16i), nibble);
+    return bb.create<arith::TruncIOp>(l, T.store, signedValue);
+  };
+
   // WMMA accumulation over mt*nt fragments, reusing each loaded fragment.
   auto wmmaAll = [&](OpBuilder &bb, Location l, ArrayRef<Value> aFrag,
                      ArrayRef<Value> bFrag, ValueRange acc) {
@@ -262,7 +292,18 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
     SmallVector<Value> aFrag(mt), bFrag(nt, loadZero);
     for (int64_t mi = 0; mi < mt; ++mi) {
       Value base = bb.create<arith::AddIOp>(l, arK[mi], k0);
-      aFrag[mi] = bb.create<vector::LoadOp>(l, loadTy, A, ValueRange{base});
+      if (!packedInt4Memory) {
+        aFrag[mi] = bb.create<vector::LoadOp>(l, loadTy, A, ValueRange{base});
+      } else {
+        aFrag[mi] = loadZero;
+        for (int64_t i = 0; i < 16; ++i) {
+          Value ci = bb.create<arith::ConstantIndexOp>(l, i);
+          Value logical = bb.create<arith::AddIOp>(l, base, ci);
+          Value v = loadLogical(bb, l, A, logical);
+          aFrag[mi] = bb.create<vector::InsertOp>(
+              l, v, aFrag[mi], ArrayRef<int64_t>{i});
+        }
+      }
     }
     for (int64_t i = 0; i < 16; ++i) {
       Value ci = bb.create<arith::ConstantIndexOp>(l, i);
@@ -270,7 +311,7 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
       Value akN = bb.create<arith::MulIOp>(l, ak, N);
       for (int64_t ni = 0; ni < nt; ++ni) {
         Value lin = bb.create<arith::AddIOp>(l, akN, colN[ni]);
-        Value v = bb.create<memref::LoadOp>(l, B, ValueRange{lin});
+        Value v = loadLogical(bb, l, B, lin);
         bFrag[ni] =
             bb.create<vector::InsertOp>(l, v, bFrag[ni], ArrayRef<int64_t>{i});
       }
@@ -284,8 +325,20 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
     SmallVector<Value> aFrag(mt), bFrag(nt, loadZero);
     for (int64_t mi = 0; mi < mt; ++mi) {
       Value base = bb.create<arith::AddIOp>(l, arKsafe[mi], k0);
-      Value v = bb.create<vector::LoadOp>(l, loadTy, A, ValueRange{base});
-      aFrag[mi] = bb.create<arith::SelectOp>(l, arInb[mi], v, loadZero);
+      if (!packedInt4Memory) {
+        Value v = bb.create<vector::LoadOp>(l, loadTy, A, ValueRange{base});
+        aFrag[mi] = bb.create<arith::SelectOp>(l, arInb[mi], v, loadZero);
+      } else {
+        aFrag[mi] = loadZero;
+        for (int64_t i = 0; i < 16; ++i) {
+          Value ci = bb.create<arith::ConstantIndexOp>(l, i);
+          Value logical = bb.create<arith::AddIOp>(l, base, ci);
+          Value v = loadLogical(bb, l, A, logical);
+          Value vm = bb.create<arith::SelectOp>(l, arInb[mi], v, storeZero);
+          aFrag[mi] = bb.create<vector::InsertOp>(
+              l, vm, aFrag[mi], ArrayRef<int64_t>{i});
+        }
+      }
     }
     for (int64_t i = 0; i < 16; ++i) {
       Value ci = bb.create<arith::ConstantIndexOp>(l, i);
@@ -293,7 +346,7 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
       Value akN = bb.create<arith::MulIOp>(l, ak, N);
       for (int64_t ni = 0; ni < nt; ++ni) {
         Value lin = bb.create<arith::AddIOp>(l, akN, colSafe[ni]);
-        Value v = bb.create<memref::LoadOp>(l, B, ValueRange{lin});
+        Value v = loadLogical(bb, l, B, lin);
         bFrag[ni] =
             bb.create<vector::InsertOp>(l, v, bFrag[ni], ArrayRef<int64_t>{i});
       }
@@ -317,7 +370,7 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
         Value inb = bb.create<arith::AndIOp>(l, arInb[mi], akInb);
         Value lin = bb.create<arith::AddIOp>(l, arK[mi], ak);
         Value safe = bb.create<arith::SelectOp>(l, inb, lin, c0);
-        Value v = bb.create<memref::LoadOp>(l, A, ValueRange{safe});
+        Value v = loadLogical(bb, l, A, safe);
         Value vm = bb.create<arith::SelectOp>(l, inb, v, storeZero);
         aFrag[mi] =
             bb.create<vector::InsertOp>(l, vm, aFrag[mi], ArrayRef<int64_t>{i});
@@ -327,7 +380,7 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
         Value lin = bb.create<arith::AddIOp>(
             l, bb.create<arith::MulIOp>(l, ak, N), colN[ni]);
         Value safe = bb.create<arith::SelectOp>(l, inb, lin, c0);
-        Value v = bb.create<memref::LoadOp>(l, B, ValueRange{safe});
+        Value v = loadLogical(bb, l, B, safe);
         Value vm = bb.create<arith::SelectOp>(l, inb, v, storeZero);
         bFrag[ni] =
             bb.create<vector::InsertOp>(l, vm, bFrag[ni], ArrayRef<int64_t>{i});
@@ -697,6 +750,14 @@ struct GenerateWMMAGemmKernelPass
             return signalPassFailure();
           }
         }
+        if (dt == "int4") {
+          auto signedness = packDesc.getAs<StringAttr>("signedness");
+          if (!signedness || signedness.getValue() != "signed_twos_complement") {
+            op->emitError("DTYPE_PACK_SIGNEDNESS_MISMATCH: gfx1151 int4 WMMA "
+                          "requires signed_twos_complement packed storage");
+            return signalPassFailure();
+          }
+        }
       }
 
       // Fused epilogue: optional per-column bias add + pointwise activation,
@@ -757,7 +818,8 @@ struct GenerateWMMAGemmKernelPass
 
       OpBuilder bodyB(gpuFunc.getContext());
       emitGeneralBody(bodyB, loc, gpuFunc, mt, nt, T, outputTy,
-                      portableContract, viaTile, hasBias, activation);
+                      portableContract, viaTile, hasBias, activation,
+                      packDesc && dt == "int4");
 
       if (!llvm::is_contained(generatedOwners, request.eraseOwner))
         generatedOwners.push_back(request.eraseOwner);

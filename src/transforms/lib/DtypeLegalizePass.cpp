@@ -161,7 +161,8 @@ struct StorageLegalize
 // Target-IR step (Decision #19: HF Target IR before hardware lowering): it reads
 // the logical sub-byte storage + the byte container, computes how many logical
 // elements pack into one container element (factor = container_bits /
-// storage_bits), and emits `tessera.storage_pack = {logical, container, factor}`
+// storage_bits), and emits `tessera.storage_pack = {logical, container, factor,
+// signedness}`
 // — the concrete descriptor a backend's packed load/store reads. Once a backend
 // consumes this, `legalize-dtypes` can flip from opt-in to default on that
 // target (the real packed memory codegen + the flip are the hardware-gated tail).
@@ -175,7 +176,7 @@ struct StoragePackConsume
   StringRef getDescription() const override {
     return "C4 storage-pack consumer — turn tessera.storage_packed/"
            "storage_container into a concrete tessera.storage_pack descriptor "
-           "{logical, container, factor} for a backend's packed load/store.";
+           "{logical, container, factor, signedness} for a backend's packed load/store.";
   }
 
   void runOnOperation() override {
@@ -212,6 +213,8 @@ struct StoragePackConsume
       pack.set("logical", storageAttr);
       pack.set("container", container);
       pack.set("factor", IntegerAttr::get(IntegerType::get(ctx, 64), factor));
+      pack.set("signedness", StringAttr::get(
+          ctx, storage == "int4" ? "signed_twos_complement" : "format_defined"));
       op->setAttr("tessera.storage_pack", DictionaryAttr::get(ctx, pack));
     });
     if (anyError)

@@ -225,7 +225,9 @@ class TestROCmFeatureMatrix:
         # The ISA-grounded distinction: NO FP8 WMMA on RDNA 3.5.
         assert rocm_feature_status(AMDArch.GFX_1151, "wmma_f8") == "not_supported"
         assert "fp8_e4m3" not in p.dtype_set and "fp8_e5m2" not in p.dtype_set
-        assert p.dtype_set == frozenset({"fp32", "bf16", "fp16", "int8"})
+        assert p.dtype_set == frozenset(
+            {"fp32", "bf16", "fp16", "int8", "int4"}
+        )
         assert p.lds_capacity_bytes == 65536
 
     def test_gfx1200_rdna4_wmma_f8(self):

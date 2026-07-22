@@ -2053,12 +2053,12 @@ _NUMERIC_POLICY_BY_NAME_FACTORIES: dict[str, "Callable[[], NumericPolicy]"] = {
     "quantize_int8":     lambda: _quant_int8_policy(),
     "dequantize_int8":   lambda: _quant_int8_policy(),
     "quantize_int4":     lambda: NumericPolicy(
-        storage="int8",  # int4 packed into int8 today (per Decision #23)
+        storage="int4",  # signed logical int4; terminal storage packs 2/int8
         accum="fp32",
         scale="per_tensor_symmetric",
     ),
     "dequantize_int4":   lambda: NumericPolicy(
-        storage="int8", accum="fp32", scale="per_tensor_symmetric",
+        storage="int4", accum="fp32", scale="per_tensor_symmetric",
     ),
     "quantize_fp8":      lambda: _quant_low_fp_policy("fp8_e4m3"),
     "dequantize_fp8":    lambda: _quant_low_fp_policy("fp8_e4m3"),
@@ -2782,8 +2782,8 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         # S9 — quantization + mixed precision references (python/tessera/quantization.py)
         "quantize_int8": ("quantization", "int8 reference quantizer — S9 landed 2026-05-10"),
         "dequantize_int8": ("quantization", "int8 reference dequantizer — S9 landed 2026-05-10"),
-        "quantize_int4": ("quantization", "int4-in-int8 reference quantizer — S9 landed 2026-05-10"),
-        "dequantize_int4": ("quantization", "int4-in-int8 reference dequantizer — S9 landed 2026-05-10"),
+        "quantize_int4": ("quantization", "signed packed-int4 reference quantizer — two two's-complement nibbles per byte"),
+        "dequantize_int4": ("quantization", "signed packed-int4 reference dequantizer — two two's-complement nibbles per byte"),
         "fake_quantize": ("quantization", "QAT fake quantization reference — S9 landed 2026-05-10"),
         "calibration_observer": ("quantization", "min/max calibration observer — S9 landed 2026-05-10"),
         "grad_scaler_step": ("numerics", "loss-scale update helper — S9 landed 2026-05-10"),
@@ -3932,7 +3932,7 @@ def coverage_summary() -> dict[str, int]:
 #      slot is a dtype string that must be canonical.
 #
 #   3. Sprint A0+ planned-gated track: entries that reference
-#      uint*/complex*/int4/mxfp*/bfp* must carry
+#      uint*/complex*/mxfp*/bfp* must carry
 #      ``metadata.dtype_status = "planned_gated"``.  This walker is the
 #      gate.
 #

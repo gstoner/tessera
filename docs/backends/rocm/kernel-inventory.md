@@ -85,7 +85,7 @@ Summary:
 | `wmma_f16` | — | — | — | — | ✅ | ✅ | ✅ |
 | `wmma_bf16` | — | — | — | — | ✅ | ✅ | ✅ |
 | `wmma_f8` | — | — | — | — | 🟡 | — | ✅ |
-| `wmma_i4` | — | — | — | — | — | 🟡 | ✅ |
+| `wmma_i4` | — | — | — | — | — | ✅ | ✅ |
 | `scalar_load_u8_u16_i8_i16` | — | — | — | — | — | — | ✅ |
 | `lds_async_copy` | — | ✅ | ✅ | ✅ | — | — | — |
 | `buffer_load_lds` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -98,14 +98,16 @@ Summary:
 `gfx1200` is tracked as an RDNA4 / GFX12 WMMA-class artifact-planning target,
 not a CDNA MFMA target.  AMD instruction spelling maps as follows:
 `FP8`/`F8` → Tessera `fp8_e4m3`; `BF8` → Tessera `fp8_e5m2`;
-`IU4` → planned-gated Tessera `int4` until a distinct unsigned
-packed-4 storage policy exists.
+`IU4` → canonical signed Tessera `int4` when the storage descriptor selects
+two's-complement nibbles. A distinct unsigned packed-4 dtype remains gated.
 
 **`gfx1151` (RDNA 3.5) — the load-bearing distinction from RDNA 4.** RDNA 3.5
 shares RDNA 3's matrix surface: **only 16×16×16 WMMA, `f16`/`bf16` (+ `IU8`/`IU4`
 per ISA §7.9 Table 33), with an `fp32` accumulator — and crucially _no FP8 WMMA_**
-(that arrives with `gfx1200`/RDNA 4). `wmma_i4` is marked 🟡 because the ISA
-exposes the `IU4`/`IU8` combos but Tessera keeps `int4` planned-gated. `xnack`/
+(that arrives with `gfx1200`/RDNA 4). Signed `wmma_i4` is ready: the runtime
+packs two logical two's-complement nibbles per byte, the generated kernel
+decodes that physical ABI, and aligned/ragged exact-device comparisons pass.
+Unsigned packed-4 remains unregistered. `xnack`/
 `sram_ecc` are left `not_supported` (conservative): the Strix Halo APU has truly
 unified LPDDR5x, but managed-memory/XNACK behaviour is not asserted until
 validated on shipping silicon. This `gfx1151` WMMA `matmul` path is the one
@@ -154,13 +156,15 @@ lower to (`_MFMA_VARIANTS` in `rocm_target.py`):
 | `fp4_e2m1` | — | — | ✅ | — | — | — |
 | `int8` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `int32` | — | — | — | — | — | ✅ |
-| `int4` | — | — | — | — | 🟡 | 🟡 |
+| `int4` | — | — | — | — | ✅ | 🟡 |
 
 `gfx1151` (RDNA 3.5) carries the RDNA-3 matrix dtype set — `fp16`/`bf16`/`int8`
 WMMA with `fp32` accumulate — and, like every RDNA arch, no `fp64` matrix path.
 The **`fp8` columns are empty** for it: RDNA 3.5 has no FP8 WMMA instruction.
-The runnable today is `{fp16, bf16}` (storage) → `fp32` (accumulate); `int8`/
-`int4` are ISA-listed but Tessera-gated.
+The runnable gfx1151 matrix set today is `{fp16, bf16}` storage → `fp32`
+accumulate and `{int8, signed packed-int4}` storage → `int32` accumulate.
+The packed-int4 claim is gfx1151-specific; gfx1200 remains artifact-only until
+its required exact-device proof lands.
 
 `gfx1200` also exposes scalar load instructions for unsigned/signed
 8-bit and 16-bit values (`s_load_u8`, `s_load_u16`, `s_load_i8`,

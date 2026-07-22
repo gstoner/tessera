@@ -2021,6 +2021,7 @@ def _inject_value_ir(target, value_ir):
     from tessera.compiler.graph_ir import (
         GraphIRFunction, GraphIRModule, IRArg, IROp, IRType,
     )
+    from tessera.compiler.native_artifact import NativeEntryPoint, NativeImageArtifact
     t = IRType("tensor<3x3xf32>", ("3", "3"), "fp32")
     fn = GraphIRFunction(
         name="f", args=[IRArg("a", t)], result_types=[t],
@@ -2028,11 +2029,25 @@ def _inject_value_ir(target, value_ir):
                    operand_types=["tensor<3x3xf32>"], result_type="tensor<3x3xf32>")],
         return_values=["%c"])
     res = canonical_compile(GraphIRModule(functions=[fn]), target=target)
+    # The classifier needs native-image provenance, but must not require a
+    # host Apple runtime merely to inspect synthetic Value Target IR.  Build a
+    # minimal contract-valid carrier rather than borrowing a device package.
+    image = NativeImageArtifact(
+        target=target,
+        architecture=f"{target}-unit-test",
+        pipeline_name=res.bundle.request.pipeline_name,
+        compiler_fingerprint="unit-test",
+        toolchain_fingerprint="unit-test",
+        target_ir_digest=stable_hash(value_ir),
+        binary_format="shared_object",
+        payload=b"unit-test",
+        entry_points=(NativeEntryPoint("unit_test_entry", "unit.test.v1"),),
+        compile_state="prepackaged",
+    )
     bundle = dataclasses.replace(
         res.bundle,
         target_ir=LoweringArtifact("target", value_ir),
-        native_image=dataclasses.replace(
-            res.bundle.native_image, target_ir_digest=stable_hash(value_ir)),
+        native_image=image,
         # Synthetic IR has no corresponding descriptor image.  Dropping the
         # old descriptor keeps this classifier fixture provenance-correct.
         launch_descriptor=None,

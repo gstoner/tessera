@@ -146,6 +146,8 @@ def test_prefer_shape_must_be_legal():
     assert M.select_mma(isa, "bf16", prefer_shape=(16, 8, 16)).shape == (16, 8, 16)
     with pytest.raises(M.MmaSelectorError):
         M.select_mma(isa, "bf16", prefer_shape=(64, 64, 64))
+    with pytest.raises(M.MmaSelectorError, match="K=16"):
+        M.select_mma(isa, "bf16", prefer_shape=(16, 8, 32))
 
 
 def test_unknown_dtype_and_arch_raise():

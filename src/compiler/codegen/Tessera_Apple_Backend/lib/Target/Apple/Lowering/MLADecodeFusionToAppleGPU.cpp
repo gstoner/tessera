@@ -169,6 +169,12 @@ struct LowerMLADecodeFusionToAppleGPUPass
 
 } // namespace
 
+LogicalResult rewriteMLADecodeFusion(Operation *op,
+                                     PatternRewriter &rewriter) {
+  LowerMLADecodeFusionToAppleGPU pattern(op->getContext());
+  return pattern.matchAndRewrite(op, rewriter);
+}
+
 std::unique_ptr<Pass> createLowerMLADecodeFusionToAppleGPUPass() {
   return std::make_unique<LowerMLADecodeFusionToAppleGPUPass>();
 }

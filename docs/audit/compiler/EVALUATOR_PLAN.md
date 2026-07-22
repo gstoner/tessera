@@ -2,7 +2,7 @@
 status: Ratified (direction locked 2026-06-11); implementation phased below
 classification: Design / Roadmap
 authority: Compiler evaluator architecture — supersedes ad-hoc benchmark/conformance framing
-last_updated: 2026-07-11
+last_updated: 2026-07-22
 audit_role: plan
 plan_state: landing
 ---
@@ -310,13 +310,13 @@ count authority; this is a structural map, not a count.
 | **Oracles** | ✅ landed | vertical (`evaluate`), horizontal/PolyJuice (`horizontal_equivalence`), metamorphic (`metamorphic_equivalence`), **DESIL cross-path** (`cross_path_equivalence`) |
 | **Legal-by-construction inputs** (E2) | ✅ landed | `safe_input` (DESIL UB-elim / NNSmith) |
 | **Conformance corroboration** (E1c) | ✅ landed | `conformance_evaluator.py` — all complete cells re-derived at rung 7 ("derive validates declare") |
-| **NVIDIA emission** | 🟡 rung 2.5 | `ptx_emit.py` + `matmul_pipeline.emit_nvidia_ptx` + `evaluator.nvidia_emission_verdict` (WGMMA PTX text, wired into `@jit`). Rung 3 (`ptxas`)/4+/hardware **open** |
+| **NVIDIA emission/execution** | ✅ `sm_120` reaches rung 7 | The host-free PTX emitter remains covered, while the exact RTX 5070 Ti lane now packages, launches, and numerically verifies compiler-produced `sm_120a` images. Other SM generations remain compile-only or hardware-deferred and do not inherit this proof. |
 | **Flywheel** (E3) | ✅ landed | `flywheel.py` (records, roofline, sweep, per-chip calibration, persist/distill) + `flywheel_autotune.py` (autotune_v2 bridge, `autotune_matmul`) |
 | **Scored environment / grader** (E5) | ✅ landed | `compiler_grader.py` (TensorBench-style, hidden inputs, anti-cheat) + `attention_tasks.py` (LongCA mask×seqlen) |
 | **Search layers** (E5) | ✅ landed | `magellan.py` (gated heuristic evolution) + `alphaevolve.py` (evaluator-driven search; reward-hack rejection proven) |
 | **Opt-level checksum** (E2) | ✅ landed | `evaluator.opt_level_checksum` + `opt_level_equivalence` (DESIL checksum-across-opt-levels; tolerance-rounded so benign float reordering doesn't false-alarm; `inconclusive` unless ≥2 variants run natively). MLIRod grammar-generator coverage remains a larger generator-hardening follow-on. |
 | **AMD emission rung** (E4, hardware-free) | ✅ landed | `evaluator.rocm_emission_verdict` — `llc -mcpu=gfx1151` assembles real `v_wmma` AMDGCN on-host → rung 4 (ASSEMBLES); parallel to `nvidia_emission_verdict` (rung 3, PTX text). |
-| **NVIDIA/ROCm hardware window** (E4) | ⬜ open | Linux/CUDA + Strix Halo / Blackwell silicon: `ptxas` rung 4, rungs 6–7 |
+| **NVIDIA/ROCm hardware window** (E4) | 🟡 architecture-partial | Exact `sm_120a` and `gfx1151` hosts have reached launch + numerical proof and sealed family packets. `sm_90a`, `sm_100a`, RDNA4, and CDNA exact-target windows remain explicitly hardware-deferred. |
 
 Guards: `tests/unit/test_{evaluator,evaluator_e2,conformance_evaluator,ptx_emit,
 flywheel,flywheel_autotune,compiler_grader,attention_tasks,magellan,alphaevolve}.py`
@@ -327,7 +327,8 @@ flywheel,flywheel_autotune,compiler_grader,attention_tasks,magellan,alphaevolve}
 ## 10. Phasing — original plan (annotated with landed status)
 
 > ✅ landed · 🟡 partial · ⬜ open. The scored environment (E5) shipped ahead of
-> sequence; the NVIDIA hardware window (E4) remains the gate.
+> sequence; E4 is closed for the recorded `sm_120a`/`gfx1151` families and
+> remains the gate for every untested exact architecture.
 
 **Phase E1 — Evaluator spine + first two rungs (the concrete first slice). ✅**
 One engine, one generated program set, a per-backend `Verdict`:
@@ -352,9 +353,11 @@ op-dependency coverage to steer generation toward novel adjacencies.
 `autotune_v2`; ROFT roofline baseline; offline microbench harness; the §7 record
 corpus; decision-tree distillation for O(1) dispatch.
 
-**Phase E4 — NVIDIA/ROCm hardware window. ⬜** (the remaining gate — needs Linux/CUDA + silicon.) Register a CUDA/HIP launcher into G7;
-run the assembly-validated batch on a rented/CI GPU; promote rungs 6–7; fine-tune
-the pre-trained cost model with the ~7% target data.
+**Phase E4 — NVIDIA/ROCm hardware window. 🟡 architecture-partial.** CUDA and
+HIP launchers now reach rungs 6–7 on exact `sm_120a` and `gfx1151` hosts, with
+hash-sealed release packets for the recorded families. Continue the same gate on
+`sm_90a`, `sm_100a`, RDNA4, and CDNA hardware; never transfer proof between
+architectures. Fine-tune cost models only from the matching target's evidence.
 
 **Phase E5 — Scored environment. ✅** (landed ahead of sequence — grader + Magellan + AlphaEvolve.) Wrap E1–E3 as `evaluate()→reward` behind a
 CompilerGym-style interface; only then layer Magellan/AlphaEvolve-style search,

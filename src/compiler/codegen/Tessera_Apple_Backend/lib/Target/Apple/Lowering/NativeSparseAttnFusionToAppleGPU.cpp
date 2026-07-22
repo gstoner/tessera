@@ -150,6 +150,12 @@ struct LowerNSAFusionToAppleGPUPass
 
 } // namespace
 
+LogicalResult rewriteNativeSparseAttnFusion(Operation *op,
+                                            PatternRewriter &rewriter) {
+  LowerNSAFusionToAppleGPU pattern(op->getContext());
+  return pattern.matchAndRewrite(op, rewriter);
+}
+
 std::unique_ptr<Pass> createLowerNSAFusionToAppleGPUPass() {
   return std::make_unique<LowerNSAFusionToAppleGPUPass>();
 }

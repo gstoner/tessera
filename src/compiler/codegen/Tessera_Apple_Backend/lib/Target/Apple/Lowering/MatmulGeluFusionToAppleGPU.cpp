@@ -89,6 +89,12 @@ struct LowerMatmulGeluFusionToAppleGPUPass
 
 } // namespace
 
+LogicalResult rewriteMatmulGeluFusion(Operation *op,
+                                      PatternRewriter &rewriter) {
+  LowerMatmulGeluFusionToAppleGPU pattern(op->getContext());
+  return pattern.matchAndRewrite(op, rewriter);
+}
+
 std::unique_ptr<Pass> createLowerMatmulGeluFusionToAppleGPUPass() {
   return std::make_unique<LowerMatmulGeluFusionToAppleGPUPass>();
 }

@@ -133,7 +133,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 
 | Path | status | last_updated | days stale | frontmatter |
 |------|--------|--------------|-----------:|--|
-| `MASTER_AUDIT.md` | - | 2026-07-12 | 10 | ✓ |
+| `MASTER_AUDIT.md` | - | 2026-07-22 | 0 | ✓ |
 | `README.md` | - | 2026-07-11 | 11 | ✓ |
 | `backend/BACKEND_AUDIT.md` | - | 2026-07-12 | 10 | ✓ |
 | `backend/E2E_COMPILATION_AUDIT.md` | - | 2026-07-20 | 2 | ✓ |
@@ -142,22 +142,22 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `backend/apple/APPLE_GPU_CODEGEN_PLAN.md` | - | 2026-07-13 | 9 | ✓ |
 | `backend/apple/MPSGRAPH_RUNTIME_GLASS_JAWS.md` | - | 2026-07-13 | 9 | ✓ |
 | `backend/apple/README.md` | - | 2026-07-13 | 9 | ✓ |
-| `backend/apple/todo.md` | - | 2026-07-21 | 1 | ✓ |
+| `backend/apple/todo.md` | - | 2026-07-22 | 0 | ✓ |
 | `backend/nvidia/BLACKWELL_SM120_EXECUTION_PLAN.md` | - | 2026-06-24 | 28 | ✓ |
 | `backend/nvidia/NVIDIA_AUDIT.md` | - | 2026-07-18 | 4 | ✓ |
 | `backend/nvidia/SM120_DIFFERENTIATION_DASHBOARD.md` | - | 2026-07-19 | 3 | ✓ |
 | `backend/nvidia/VERIFY_TARGET_IR_TAIL.md` | - | 2026-07-13 | 9 | ✓ |
 | `backend/nvidia/spikes/sm120_mma_sync/README.md` | - | 2026-06-24 | 28 | ✓ |
-| `backend/nvidia/todo.md` | - | 2026-07-21 | 1 | ✓ |
+| `backend/nvidia/todo.md` | - | 2026-07-22 | 0 | ✓ |
 | `backend/rocm/ROCM_AUDIT.md` | - | 2026-07-16 | 6 | ✓ |
 | `backend/rocm/ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md` | - | 2026-07-13 | 9 | ✓ |
 | `backend/rocm/STRIX_HALO_EXECUTION_PLAN.md` | - | 2026-06-23 | 29 | ✓ |
-| `backend/rocm/todo.md` | - | 2026-07-21 | 1 | ✓ |
+| `backend/rocm/todo.md` | - | 2026-07-22 | 0 | ✓ |
 | `compiler/AUTODIFF_UNIFICATION_PLAN.md` | - | 2026-07-14 | 8 | ✓ |
-| `compiler/COMPILER_AUDIT.md` | - | 2026-07-19 | 3 | ✓ |
-| `compiler/COMPILER_REFACTOR_PLAN.md` | - | 2026-07-11 | 11 | ✓ |
+| `compiler/COMPILER_AUDIT.md` | - | 2026-07-22 | 0 | ✓ |
+| `compiler/COMPILER_REFACTOR_PLAN.md` | - | 2026-07-22 | 0 | ✓ |
 | `compiler/COMPILER_THEORY_OF_OPERATION.md` | - | 2026-07-02 | 20 | ✓ |
-| `compiler/EVALUATOR_PLAN.md` | - | 2026-07-11 | 11 | ✓ |
+| `compiler/EVALUATOR_PLAN.md` | - | 2026-07-22 | 0 | ✓ |
 | `compiler/OPTIMIZING_COMPILER_PLAN.md` | - | 2026-07-14 | 8 | ✓ |
 | `compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md` | - | 2026-07-17 | 5 | ✓ |
 | `compiler/SEQUENCE_MIXER_THEORY.md` | - | 2026-07-17 | 5 | ✓ |

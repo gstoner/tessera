@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-19
+last_updated: 2026-07-22
 audit_role: theme
 ---
 
@@ -94,11 +94,11 @@ Two facts make the transition cheaper than it looks:
 | IR level | Real today | Dispatcher / stub | Primary gap to close |
 |---|---|---|---|
 | **Python `@jit`** | Decoration-time constraint + effect analysis; honest fallback gating (won't let eager Python masquerade as compiled). | Effect/constraint analysis is single-function, AST-only. A general IR-optimization step (folders/effects) between emission and execution is still thin. | Component-aware multi-op metadata **landed** (carried to the `@jit` artifact); fusion dispatch is **authoritative** (Phase 0 seam closed). Remaining: effect interfaces + broader folding. |
-| **Graph IR** | 132 ops, 107 real verifiers; 5 canon patterns; real fusion passes (SwiGLU/MLA/NSA). 101/109 ops are `[Pure]` (CSE/DCE-eligible *today*). | **Folders/canonicalizers landed (2026-06-22):** `add`/`sub`/`mul`/`div`/`cast`/`reshape` folders + `matmul`/`transpose`/`reshape` canonicalizers (8 ops — `reshape` carries an identity fold + a `reshape(reshape(x))` chain-collapse, both guarding the optional `dim_names` symbolic-dim annotations), wired into the `tessera_jit` CPU `canonicalize→cse` pipeline (`graph_ir_folders.mlir`); `LayoutAssignmentPass` landed (seed→propagate→insert `cast{layout}`, `test_layout_assignment.py`). **Per-op effect interfaces landed (2026-06-22):** all 23 non-pure ops carry an explicit `MemoryEffectsOpInterface` — deterministic value ops (`adam`/`adamw`/`momentum`/`adafactor`/`lion`, `arch.ste_one_hot`/`weighted_sum`/`switch`/`mixed`) are `[Pure]`; random (`dropout`/`arch.gumbel_softmax`/`arch.hard_concrete`), stateful (`kv_cache.*`/`ring.create`/`arch.parameter`), collective (`all_reduce`/`reduce_scatter`/`all_gather`) and MoE-transport ops carry `MemWrite`/`MemRead`, so generic CSE/DCE is sound and precise across them (`graph_ir_op_effects.mlir`). `LayoutAssignmentPass` is now **wired into the named x86/GPU/CUDA-13 pipelines behind the opt-in `assign-layouts` option (2026-06-22)** — default off (the inserted `cast{layout}` markers have no backend consumer yet, so the executing path is byte-identical; proven by `layout_assignment_pipeline.mlir`), on when a layout-sensitive backend lands. **Phase 1 closed (2026-06-22)** — effect interfaces, opt-in LayoutAssignment wiring, and reshape folder coverage all landed. ~5 passes are attribute-stamp-only. | Add folders opportunistically as new algebraic identities surface; ~5 attribute-stamp-only passes could gain real bodies. |
+| **Graph IR** | 132 ops, 107 real verifiers; 5 canon patterns; real fusion passes (SwiGLU/MLA/NSA). 101/109 ops are `[Pure]` (CSE/DCE-eligible *today*). | **Folders/canonicalizers landed (2026-06-22):** `add`/`sub`/`mul`/`div`/`cast`/`reshape` folders + `matmul`/`transpose`/`reshape` canonicalizers (8 ops — `reshape` carries an identity fold + a `reshape(reshape(x))` chain-collapse, both guarding the optional `dim_names` symbolic-dim annotations), wired into the `tessera_jit` CPU `canonicalize→cse` pipeline (`graph_ir_folders.mlir`); `LayoutAssignmentPass` landed (seed→propagate→insert `cast{layout}`, `test_layout_assignment.py`). **Per-op effect interfaces landed (2026-06-22):** all 23 non-pure ops carry an explicit `MemoryEffectsOpInterface` — deterministic value ops (`adam`/`adamw`/`momentum`/`adafactor`/`lion`, `arch.ste_one_hot`/`weighted_sum`/`switch`/`mixed`) are `[Pure]`; random (`dropout`/`arch.gumbel_softmax`/`arch.hard_concrete`), stateful (`kv_cache.*`/`ring.create`/`arch.parameter`), collective (`all_reduce`/`reduce_scatter`/`all_gather`) and MoE-transport ops carry `MemWrite`/`MemRead`, so generic CSE/DCE is sound and precise across them (`graph_ir_op_effects.mlir`). `LayoutAssignmentPass` is **wired into the named x86/GPU/CUDA-13 pipelines behind the opt-in `assign-layouts` option**. CORE-COMPILER-2 makes the generic x86 binding layout executable and recognizes ROCm's independent structured `#tile.layout` consumer, but Graph `cast{layout}` materializers are not yet complete across targets, so assignment stays opt-in. **Phase 1 closed (2026-06-22)** — effect interfaces, opt-in LayoutAssignment wiring, and reshape folder coverage all landed. ~5 passes are attribute-stamp-only. | Add folders opportunistically as new algebraic identities surface; ~5 attribute-stamp-only passes could gain real bodies. |
 | **Schedule IR** | DistributionLowering (real structural wiring + escaping-value fix); collective *insertion*. **Real pipeline partitioning + 1F1B proof landed (2026-06-23)** — `PipelineStagePartition` does a cost-balanced, program-order-monotonic partition (emits `tessera.pp_stage`, no longer external-tag-only), the insertion pass does the genuine send/recv SSA rewire, and `PipelineScheduleLegality` proves the 1F1B schedule (`PP_MICRO_BATCHES_TOO_FEW` per Decision #17, `PP_EMPTY_STAGE`, send/recv pairing, and `PP_UNROUTED_CROSS_STAGE_VALUE` = value-rewrite completeness). Chained as `tessera-pipeline` (partition → insert → legality); lit `tests/tessera-ir/phase4/pipeline_{partition,schedule_legality}.mlir`. | Still annotation-level: the explicit warmup/steady/cooldown *step order* isn't emitted (the proof verifies the structural 1F1B contract, not an emitted step sequence); OptimizerShard is pure attrs; no collective overlap (`ChunkPlanner`/`CollectiveScheduler` never invoked). | Emit the explicit 1F1B step schedule; wire the collective planners. |
 | **Tile IR (FA-4)** | `TilingPass` emits real `scf.for` M/N nests; `NVTMADescriptorPass` is a genuine hoist/dedup. | M/N blocking only — **no K-reduction loop**, fixed 16×16. **Flash-attn is straight-line** (no `scf.for` over KV; online-softmax is whole-tensor ops). WarpSpec emits no queues/mbarriers. WGMMA → hardcoded `m64n64k16`. | Converge GEMM to linalg K-loop; streaming flash-attn loop; autotuner→IR. |
 | **Autotuner** | `BayesianAutotuner` tunes `{tile_m/n/k, num_warps, num_stages}`. | Scores via `_mock_latency` (roofline); `on_device` returns "unmeasured". **Output reaches no lowering pass** (read path exists at `TileIRLoweringPass.cpp` ~`:111`; write path absent). `flywheel` measurement lane not in compile path. | Write-path (stamp tile attrs); measured-latency scoring on Apple/CPU. |
-| **Target IR / runtime** | x86 AMX real end-to-end. Apple GPU executes via MPS/MPSGraph + ~30 hand-written fused MSL. `fusion.py` synthesizer is **real runtime MSL codegen** for matmul-epilogue regions. `tessera_jit` is a real MLIR→LLVM CPU JIT (~17 op classes). | Apple lane is a name→lane→ctypes **dispatcher** (`apple_gpu_envelope.py`; longest-chain cascade in `runtime.py` ~`:2471`). ~87% of ops execute via the numpy reference interpreter. NVIDIA/ROCm emit artifacts only. | Close the seam; generalize the synthesizer; grow `tessera_jit` to default CPU, then retarget its spine to GPU. |
+| **Target IR / runtime** | x86 AMX/AVX-512, Apple GPU, NVIDIA `sm_120`, and ROCm `gfx1151` all have checked-in native execution rows. The generated runtime matrix currently records 24 NVIDIA and 69 ROCm rows; the E2E fleet additionally seals release packets for NVIDIA softmax/reduction and ROCm softmax/reduction/paged-KV/MoE. `fusion.py` remains real runtime MSL codegen for matmul-epilogue regions, and `tessera_jit` is a real MLIR→LLVM CPU JIT. | Native breadth is architecture-specific, not backend-wide: NVIDIA `sm_80`/`sm_90`/`sm_100` and the ROCm target-map tail remain artifact-only or exact-device gated. Apple still has a name→lane→ctypes dispatcher seam, and reference execution remains explicit for unsupported rows. | Close the dispatcher seam and promote the remaining target-map tails only with exact-device execute-and-compare evidence. |
 
 ### The phased plan
 
@@ -196,10 +196,14 @@ Phase 4 is HF; only GPU launch + silicon-perf is gated.
   LayoutLegalityPass as its verifier — `tests/tessera-ir/phase2/layout_assignment.mlir`
   proves the assignment output runs clean through `--tessera-layout-legality`
   (assign + verify). Guards: that lit fixture + `tests/unit/test_layout_assignment.py`.
-  *Honest scope:* v1 assignments are IR metadata — no backend consumes them yet
-  (the rank-2 CPU JIT is layout-agnostic; Apple GPU is hand-MSL), so this is an
-  IR-completeness milestone; when a layout-sensitive backend lands it reads these
-  attrs to pick kernels and the cast markers become real memory reorders.
+  *Executable-layout slice (CORE-COMPILER-2, 2026-07-22):* the generic x86
+  emitter now publishes an operand binding/order/rank contract and the runner
+  materializes A/B into that physical order before launch. The contract is part
+  of the kernel-cache identity, so two physical layouts cannot alias one
+  executable. ROCm also consumes structured `#tile.layout` in its owned Tile
+  lowering. The Graph-level `tessera.cast{layout}` insertion remains opt-in:
+  Apple and NVIDIA still need architecture-owned reorder/materialization routes
+  before that shared marker may become default everywhere.
   *Flash-attn streaming is NOT a CPU-lane item* — the CPU JIT is a rank-2 simple-op
   lane; flash-attn (rank-4, batched) belongs to the Apple GPU work, where the
   streaming online-softmax kernel already exists as hand-written MSL
@@ -597,6 +601,12 @@ the A–E kernel spine — each PR test-gated:
 - **G — dynamic-shape emitter for the generic lanes (#312).** One compiled kernel
   now serves all shapes (the `static | bucket | dynamic` policy from Decision #28),
   so dynamic shapes no longer force a per-shape recompile or an API break.
+  **First guarded execution route (CORE-COMPILER-2, 2026-07-22):** the x86
+  runner now requests `SpecPolicy.DYNAMIC`, passes M/N/K as runtime dimensions,
+  and rejects non-rank-2, non-positive, contraction-mismatched, side-buffer-
+  mismatched, or signed-i32-overflow shapes before native launch. Ragged valid
+  shapes and non-contiguous inputs execute through the materialized row-major
+  ABI; unsupported shape-specialized GPU routes remain bucketed.
 - **H — Tile-buffer reuse + arena (W3, #311 + #314).** `TileBufferReusePass` does
   global shared-memory buffer assignment/reuse; `TileBufferArenaPass` realizes the
   reuse plan into a concrete SMEM/TMEM arena. Plus the **MatmulRegion transpose
@@ -925,9 +935,13 @@ row "Tile IR (FA-4)") can pull from it. Cross-refs noted; reference memory
   builds the MLIR passes against Homebrew LLVM/ROCDL — no HIP/`/opt/rocm`
   needed): ROCm lit 13/13 incl. `wmma_gemm_storage_pack.mlir` (descriptor drives
   signed int4 → packed-memory `vector<2xi32>` IU4 ABI; factor/signedness
-  mismatches caught). *Still open:* flip
-  `legalize-dtypes` opt-in → default per target now that the marker is consumed;
-  the NVIDIA sub-byte emitter is the symmetric future consumer.
+  mismatches caught). **Per-target defaults landed (CORE-COMPILER-2,
+  2026-07-22):** x86 and NVIDIA named pipelines run compute legalization by
+  default, while terminal storage legalization remains opt-in because neither
+  generic route owns a packed-storage consumer. The ROCm backend pipeline runs
+  the complete compute → storage → consume chain by default before its WMMA
+  generator. The legacy `legalize-dtypes` option remains as an explicit force-on
+  compatibility switch; a NVIDIA sub-byte consumer is still follow-up work.
 
 - **C5 — Independent per-stream pipeline depths (HF plan / HG perf).** FA-4 runs
   three *independent* rings (Q depth 2, KV depth 3, TMEM depth 2), not one global
@@ -1016,9 +1030,10 @@ between "standalone convention-checkers" and "live lowering gates":
    **158 passed / 19 unsupported / 0 failed** — the gates pass on every existing
    GPU-pipeline fixture incl. `flash_attn_full`). C4's compute-legalize (before
    `IRContractLegality`) + storage-legalize (terminal) are wired into all three
-   pipelines (x86/gpu/CUDA13) behind a new **opt-in `legalize-dtypes` option**
-   (default off → byte-identical executing path, mirroring `assign-layouts`;
-   confirmed scheduled only when on).
+  pipelines (x86/gpu/CUDA13) behind a `legalize-dtypes` force-on option.
+  CORE-COMPILER-2 makes compute legalization default for x86/NVIDIA and the
+  full compute/storage/consumer chain default in the ROCm-owned pipeline;
+  terminal packed storage remains opt-in on targets without a consumer.
 
 **Buffer-marker emission LANDED (2026-06-23) — C1/C2 markers now on real output.**
 `WarpSpecializationPass` also stamps the staged-buffer writes it moves into the

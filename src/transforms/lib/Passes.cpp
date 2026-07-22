@@ -1,5 +1,6 @@
 
 #include "Tessera/Transforms/Passes.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Pass/PassOptions.h"
@@ -14,33 +15,52 @@ namespace tessera {
 // `tessera.cast{layout}` markers) immediately before LayoutLegalityPass, so the
 // two-sided layout contract (assign + verify) executes inside the pipeline.
 //
-// Default OFF on purpose. The assignment inserts same-type `tessera.cast`
-// markers that are deliberately preserved from canonicalization, and no backend
-// consumes them yet (rank-2 CPU JIT is layout-agnostic; Apple GPU is hand-MSL).
-// Leaving it off keeps the *executing* x86/GPU lowering byte-identical; turning
-// it on (e.g. `tessera-lower-to-x86{assign-layouts=true}`) exercises and
-// verifies the assignment half end-to-end. When a layout-sensitive backend
-// lands, this flips to default-on and the markers become real reorders.
+// Layout assignment remains opt-in for these Graph pipelines. CORE-COMPILER-2
+// makes the generic x86 emitter's declared row-major binding layout executable;
+// structured #tile.layout is already consumed by the ROCm backend. Graph-level
+// cast{layout} insertion stays opt-in until its full producer/consumer set has
+// target materializers rather than pretending every marker is executable.
 struct TesseraLoweringPipelineOptions
     : public PassPipelineOptions<TesseraLoweringPipelineOptions> {
   Option<bool> assignLayouts{
       *this, "assign-layouts",
       llvm::cl::desc("Run LayoutAssignmentPass before layout legality "
-                     "(default false; no backend consumes the cast{layout} "
-                     "markers yet, so the default lowering path is unchanged)."),
+                     "(default false; Graph cast{layout} materializers are "
+                     "not yet complete across targets)."),
       llvm::cl::init(false)};
-  // C4 (2026-06-23): the compute/storage dtype legalize split. Opt-in (default
-  // false) so the executing path stays byte-identical until a low-precision
-  // backend consumes the storage_packed marker; compute-legalize runs before
-  // IRContractLegality (so reduced-precision ops gain a wide accum and pass the
-  // contract), storage-legalize runs terminally.
+  // Legacy force-on switch retained for command-line compatibility. The normal
+  // path now uses per-target defaults: x86/NVIDIA enable compute legalization;
+  // terminal packing remains off there because neither generic pipeline owns a
+  // packed-storage consumer. ROCm defaults both stages on in its backend
+  // pipeline, immediately followed by StoragePackConsume.
   Option<bool> legalizeDtypes{
       *this, "legalize-dtypes",
       llvm::cl::desc("Run compute-legalize (early) + storage-legalize "
-                     "(terminal) — Decision #15a as pass ordering (default "
-                     "false; additive annotations, executing path unchanged)."),
+                     "(terminal), overriding per-target defaults."),
       llvm::cl::init(false)};
 };
+
+struct TargetDtypeLegalizationDefaults {
+  bool compute;
+  bool storage;
+};
+
+static TargetDtypeLegalizationDefaults
+dtypeLegalizationDefaults(llvm::StringRef target) {
+  if (target == "x86" || target.starts_with("nvidia_"))
+    return {/*compute=*/true, /*storage=*/false};
+  return {/*compute=*/false, /*storage=*/false};
+}
+
+static bool computeLegalizationEnabled(
+    const TesseraLoweringPipelineOptions &opts, llvm::StringRef target) {
+  return opts.legalizeDtypes || dtypeLegalizationDefaults(target).compute;
+}
+
+static bool storageLegalizationEnabled(
+    const TesseraLoweringPipelineOptions &opts, llvm::StringRef target) {
+  return opts.legalizeDtypes || dtypeLegalizationDefaults(target).storage;
+}
 
 // Shared Graph IR pre-lowering stage (audit 2026-06-10). Previously this
 // sequence was copy-pasted into tessera-lower-to-x86, tessera-lower-to-gpu,
@@ -77,7 +97,7 @@ static void addCUDA13PipelineForSM(
   if (opts.assignLayouts)
     pm.addPass(createLayoutAssignmentPass());
   pm.addPass(createLayoutLegalityPass());
-  if (opts.legalizeDtypes)
+  if (computeLegalizationEnabled(opts, target))
     pm.addPass(createComputeLegalizePass());
   pm.addPass(createIRContractLegalityPass());
   pm.addPass(createSymbolicDimEqualityPass());
@@ -90,12 +110,12 @@ static void addCUDA13PipelineForSM(
   pm.addPass(createAsyncCopyLoweringPass(sm));
   if (sm == 90)
     pm.addPass(createNVWGMMALoweringPass(sm));
-  pm.addPass(createNVTMADescriptorPass());
+  pm.addNestedPass<func::FuncOp>(createNVTMADescriptorPass());
   pm.addPass(createTilePipelineLegalityPass());
   pm.addPass(createWarpSpecLegalityPass());
   if (sm == 90)
     pm.addPass(createNVFlashAttnKernelEmitterPass(sm));
-  if (opts.legalizeDtypes)
+  if (storageLegalizationEnabled(opts, target))
     pm.addPass(createStorageLegalizePass());
 }
 
@@ -165,7 +185,7 @@ void registerTesseraPasses() {
         pm.addPass(createLayoutLegalityPass());
         // C4 (2026-06-23): compute-legalize before the contract check so
         // reduced-precision storage gains a wide accum and passes #15a (gated).
-        if (opts.legalizeDtypes)
+        if (computeLegalizationEnabled(opts, "x86"))
           pm.addPass(createComputeLegalizePass());
         // 2026-06-19: dtype / aliasing / buffer-binding contracts (Decision
         // #15a) alongside layout legality — same early placement.
@@ -179,7 +199,7 @@ void registerTesseraPasses() {
         pm.addPass(createTilingPass());
         pm.addPass(createTileToX86Pass());
         // C4 terminal storage-legalize — pack sub-byte storage last (gated).
-        if (opts.legalizeDtypes)
+        if (storageLegalizationEnabled(opts, "x86"))
           pm.addPass(createStorageLegalizePass());
       });
 
@@ -259,8 +279,10 @@ void registerTesseraPasses() {
   // x86 / GPU pipelines in a follow-up sprint.
   ::mlir::registerPass([]() { return createLayoutLegalityPass(); });
   // 2026-06-17: layout assignment (seed → propagate → insert cast{layout}),
-  // verified by LayoutLegalityPass. Standalone for now (no backend consumes the
-  // assignments yet); registered as --tessera-layout-assignment.
+  // verified by LayoutLegalityPass. Graph-cast materializers are still
+  // incomplete across targets; the x86 emitter layout and ROCm #tile.layout
+  // consumer are separate executable contracts. Registered standalone as
+  // --tessera-layout-assignment.
   ::mlir::registerPass([]() { return createLayoutAssignmentPass(); });
   // 2026-07-08: Tile IR global buffer assignment/reuse (Workstream H / W3) —
   // disjoint-live-range shared buffers share a reuse group (tile.buffer_group).
@@ -357,7 +379,7 @@ void registerTesseraPasses() {
         // 2026-06-17: layout legality in the named pipeline (see lowerToX86).
         pm.addPass(createLayoutLegalityPass());
         // C4 (2026-06-23): compute-legalize before the contract check (gated).
-        if (opts.legalizeDtypes)
+        if (computeLegalizationEnabled(opts, "nvidia_sm90"))
           pm.addPass(createComputeLegalizePass());
         // 2026-06-19: dtype / aliasing / buffer-binding contracts (Decision
         // #15a) alongside layout legality — matches lowerToX86 / CUDA13.
@@ -376,14 +398,14 @@ void registerTesseraPasses() {
         pm.addPass(createTileBarrierReuseLegalityPass());
         pm.addPass(createAsyncCopyLoweringPass());
         pm.addPass(createNVWGMMALoweringPass());
-        pm.addPass(createNVTMADescriptorPass());
+        pm.addNestedPass<func::FuncOp>(createNVTMADescriptorPass());
         // C3/C6 again — now over the typed #tile.barrier markers
         // NVTMADescriptor emits (kind consistency + arrival-count == init-count).
         pm.addPass(createTilePipelineLegalityPass());
         pm.addPass(createWarpSpecLegalityPass());
         pm.addPass(createNVFlashAttnKernelEmitterPass());
         // C4 terminal storage-legalize (gated).
-        if (opts.legalizeDtypes)
+        if (storageLegalizationEnabled(opts, "nvidia_sm90"))
           pm.addPass(createStorageLegalizePass());
       });
 

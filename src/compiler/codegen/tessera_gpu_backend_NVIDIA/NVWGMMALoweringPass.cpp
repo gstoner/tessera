@@ -171,7 +171,7 @@ std::unique_ptr<mlir::Pass> createNVFlashAttnKernelEmitterPass(int sm);
 
 void buildTesseraNVIDIALegacyBackendPipeline(OpPassManager &pm) {
   pm.addPass(createNVWGMMALoweringPass(90));
-  pm.addPass(createNVTMADescriptorPass());
+  pm.addNestedPass<func::FuncOp>(createNVTMADescriptorPass());
   pm.addPass(createNVFlashAttnKernelEmitterPass(90));
 }
 

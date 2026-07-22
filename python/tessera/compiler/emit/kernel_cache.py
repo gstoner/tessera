@@ -46,7 +46,8 @@ _SEP = "\x1f"  # unit separator — matches apple_gpu_runtime.mm's cache-key joi
 def cache_key(source: KernelSource, *, dtype: str, target: str) -> str:
     """Content-addressed key for a compiled kernel: sha256 over the source text +
     entry point + the specialization metadata that makes two *sources-equal*
-    kernels genuinely distinct (dtype, shape bucket, target, policy).
+    kernels genuinely distinct (dtype, shape bucket, target, policy, executable
+    binding layouts).
 
     Mirrors ``apple_gpu_runtime.mm``'s ``source + '\\x1f' + entry`` map key, so
     the Python cache and the runtime's internal pipeline cache agree on identity,
@@ -58,6 +59,7 @@ def cache_key(source: KernelSource, *, dtype: str, target: str) -> str:
         source.lang,
         source.spec.value,
         repr(source.shape_key),
+        repr(source.layouts),
         dtype,
         target,
     ):

@@ -136,9 +136,10 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         summary=(
             "C4 (TIRx): stamps `numeric_policy.accum` (fp32, or int32 for "
             "int4/int8) on any op whose storage is reduced-precision and lacks "
-            "an accumulator — Decision #15a as an early rewrite. Opt-in via the "
-            "named pipelines' `legalize-dtypes` option; runs before "
-            "IRContractLegality so the stamped accum passes the contract."
+            "an accumulator — Decision #15a as an early rewrite. Default-on "
+            "for x86/NVIDIA and forced on by ROCm's owned backend pipeline; "
+            "runs before IRContractLegality so the stamped accum passes the "
+            "contract."
         ),
         input_dialects=("tessera",),
         output_dialects=("tessera",),
@@ -258,7 +259,8 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         summary=(
             "C4 (TIRx): terminal packing — stamps `tessera.storage_packed` + "
             "`tessera.storage_container` on sub-byte / block-scaled storage "
-            "(fp4 / nvfp4 / fp6 / int4). Opt-in via `legalize-dtypes`; runs last."
+            "(fp4 / nvfp4 / fp6 / int4). Default-on only where a target owns a "
+            "real packed-storage consumer (currently ROCm); runs last."
         ),
         input_dialects=("tessera",),
         output_dialects=("tessera",),

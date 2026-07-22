@@ -1,17 +1,16 @@
 """Apple GPU pipeline pass-order matrix.
 
-The ``tessera-lower-to-apple_gpu-runtime`` pipeline composes 17 lowering
-passes that *must* run in a specific order: every fusion lowering has to
-fire before the per-op lowering it competes with, or the per-op lowering
-will steal pieces of an op chain that should have been fused into a
-single MSL kernel dispatch.
+The ``tessera-lower-to-apple_gpu-runtime`` pipeline composes 11 lowering
+passes that *must* run in a specific order. CORE-COMPILER-1 replaces seven
+fusion pass shells with one declarative fusion pass; that pass still has to
+fire before the per-op lowerings that could steal pieces of a fused chain.
 
 The contract surface is documented in
 ``docs/audit/compiler/COMPILER_AUDIT.md`` § "Coverage matrix —
 pass-order matrices".  This file pins:
 
   1. The exact canonical order in ``Passes.cpp``.
-  2. The dependency-pair contracts (longest fusion → 3-op → 2-op → per-op).
+  2. The dependency contract (declarative fusion table → per-op).
   3. The pipeline alias name (other tooling calls it by name).
 """
 from __future__ import annotations
@@ -28,20 +27,14 @@ APPLE_PASSES_CPP = (
 )
 
 
-# Canonical order of the 17 lowering passes in tessera-lower-to-apple_gpu-
+# Canonical order of the 11 lowering passes in tessera-lower-to-apple_gpu-
 # runtime.  This list is the source of truth — any reorder requires an
 # explicit edit *and* the docstring on Passes.cpp must update to explain
 # why.  Comments before each pass capture the ordering contract:
 APPLE_GPU_CANONICAL_ORDER = [
-    # ── Longest fusions first (4-op / 3-op + branch combinators) ─────
-    "createLowerNSAFusionToAppleGPUPass",                  # NSA-5 (4-op sparse attention)
-    "createLowerMLADecodeFusionToAppleGPUPass",            # MLA-2 (4-op decode)
-    "createLowerSwigluFusionToAppleGPUPass",               # 4-op MLP
-    "createLowerMatmulSoftmaxMatmulFusionToAppleGPUPass",  # 3-op attention block
-    # ── 2-op fusions ─────────────────────────────────────────────────
-    "createLowerMatmulSoftmaxFusionToAppleGPUPass",
-    "createLowerMatmulGeluFusionToAppleGPUPass",
-    "createLowerMatmulRMSNormFusionToAppleGPUPass",
+    # One table owns all 2/3/4-op fusion rows and uses pattern benefit to
+    # preserve longest-chain-first matching.
+    "createLowerDeclarativeFusionsToAppleGPUPass",
     # ── Per-op matmul ────────────────────────────────────────────────
     "createLowerMatmulToAppleGPUPass",
     # ── Per-op attention family (each owns a distinct op name) ───────
@@ -90,7 +83,7 @@ def test_apple_gpu_runtime_pipeline_alias_is_documented() -> None:
     assert '"tessera-lower-to-apple_gpu-runtime"' in src
 
 
-def test_apple_gpu_pipeline_has_exactly_seventeen_passes() -> None:
+def test_apple_gpu_pipeline_has_exactly_eleven_passes() -> None:
     """Lock the count.  Adding another pass must update this file +
     APPLE_GPU_CANONICAL_ORDER + the architecture doc — a deliberate
     three-step change rather than a silent slip-in."""
@@ -120,55 +113,20 @@ def test_apple_gpu_canonical_order_matches_source() -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-# (longer_fusion_pass, shorter_or_per_op_pass, rationale)
+# (declarative_fusion_pass, competing_per_op_pass, rationale)
 APPLE_GPU_FUSION_DEPENDENCIES: list[tuple[str, str, str]] = [
-    # 3-op MUST precede each 2-op fusion (the 3-op is a superset of the
-    # 2-op chains; if a 2-op runs first it steals the inner matmul).
-    ("createLowerMatmulSoftmaxMatmulFusionToAppleGPUPass",
-     "createLowerMatmulSoftmaxFusionToAppleGPUPass",
-     "3-op matmul→softmax→matmul superset"),
-    ("createLowerMatmulSoftmaxMatmulFusionToAppleGPUPass",
+    ("createLowerDeclarativeFusionsToAppleGPUPass",
      "createLowerMatmulToAppleGPUPass",
-     "3-op chain contains two matmuls"),
-    # All 2-op matmul fusions MUST precede the per-op matmul lowering.
-    ("createLowerMatmulSoftmaxFusionToAppleGPUPass",
-     "createLowerMatmulToAppleGPUPass",
-     "2-op matmul→softmax owns its inner matmul"),
-    ("createLowerMatmulGeluFusionToAppleGPUPass",
-     "createLowerMatmulToAppleGPUPass",
-     "2-op matmul→gelu owns its inner matmul"),
-    ("createLowerMatmulRMSNormFusionToAppleGPUPass",
-     "createLowerMatmulToAppleGPUPass",
-     "2-op matmul→rmsnorm owns its inner matmul"),
-    # NSA + MLA + Swiglu fusions arrive as already-fused single ops
-    # (created by Schedule IR fusion passes), but they MUST still run
-    # before the per-op matmul lowering since they decompose into
-    # matmul-shaped operands internally.
-    ("createLowerNSAFusionToAppleGPUPass",
-     "createLowerMatmulToAppleGPUPass",
-     "NSA fused chain expands to matmul-shaped operands"),
-    ("createLowerMLADecodeFusionToAppleGPUPass",
-     "createLowerMatmulToAppleGPUPass",
-     "MLA fused decode expands to matmul-shaped operands"),
-    ("createLowerSwigluFusionToAppleGPUPass",
-     "createLowerMatmulToAppleGPUPass",
-     "SwiGLU fused MLP expands to matmul-shaped operands"),
-    # The per-op softmax + gelu lowerings must run AFTER their fusion
-    # passes, otherwise the fusion can't find its matmul operand.
-    ("createLowerMatmulSoftmaxFusionToAppleGPUPass",
+     "declarative fusion rows own their inner matmuls"),
+    ("createLowerDeclarativeFusionsToAppleGPUPass",
      "createLowerSoftmaxToAppleGPUPass",
      "per-op softmax steals fusion candidate"),
-    ("createLowerMatmulGeluFusionToAppleGPUPass",
+    ("createLowerDeclarativeFusionsToAppleGPUPass",
      "createLowerGeluToAppleGPUPass",
      "per-op gelu steals fusion candidate"),
-    # Sub-2 attn_local_window_2d ordering: must run AFTER the 3-op
-    # matmul→softmax→matmul fusion (a 2D-window attention block IS a
-    # matmul→softmax→matmul pattern in disguise; the more general
-    # fusion should win on that pattern, leaving the per-op lowering
-    # for actual 2D-window ops).
-    ("createLowerMatmulSoftmaxMatmulFusionToAppleGPUPass",
+    ("createLowerDeclarativeFusionsToAppleGPUPass",
      "createLowerAttnLocalWindow2DToAppleGPUPass",
-     "matmul→softmax→matmul superset of inner 2D-window dot pattern"),
+     "fusion table precedes the per-op 2D-window route"),
 ]
 
 
@@ -228,13 +186,10 @@ def test_all_fusion_passes_precede_all_per_op_passes() -> None:
 def test_passes_cpp_documents_longest_fusion_first_invariant() -> None:
     """The architectural invariant must be documented in source so a
     future reader knows *why* the order matters.  The phrase 'longest'
-    appears at least 3× in the pipeline body (NSA, MLA/SwiGLU, 3-op
-    chain) — each tagging a fusion that runs first."""
+    is retained in the pipeline comment after collapsing seven shells."""
     text = APPLE_PASSES_CPP.read_text().lower()
-    # Count of 'longest' in the file — must be ≥3 (one per ordered
-    # comment block in the apple_gpu pipeline).
-    assert text.count("longest") >= 3, (
-        f"expected >= 3 'longest' mentions documenting the fusion-first "
+    assert text.count("longest") >= 2, (
+        f"expected >= 2 'longest' mentions documenting the fusion-first "
         f"contract; found {text.count('longest')}"
     )
 

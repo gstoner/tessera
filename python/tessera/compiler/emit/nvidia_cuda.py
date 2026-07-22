@@ -4502,6 +4502,8 @@ class NvidiaMmaGemmShippedCandidate(Candidate):
     target = _TARGET
     op = OP_MATMUL
     accuracy_atol = _GEMM_F16_ATOL
+    mma_target = "nvidia"
+    mma_arch = "sm_120"
 
     def available(self) -> bool:
         try:
@@ -4536,6 +4538,8 @@ class NvidiaMmaGemmEmittedCandidate(Candidate):
     target = _TARGET
     op = OP_MATMUL
     accuracy_atol = _GEMM_F16_ATOL
+    mma_target = "nvidia"
+    mma_arch = "sm_120"
 
     def available(self) -> bool:
         try:
@@ -4575,6 +4579,8 @@ class NvidiaTileMatmulCandidate(Candidate):
     target = _TARGET
     op = OP_MATMUL
     accuracy_atol = _GEMM_F16_ATOL
+    mma_target = "nvidia"
+    mma_arch = "sm_120"
 
     def __init__(self, schedule: str) -> None:
         if schedule not in ("direct", "shared"):

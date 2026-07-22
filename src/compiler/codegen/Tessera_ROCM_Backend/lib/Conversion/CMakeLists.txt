@@ -80,6 +80,7 @@ add_mlir_library(TesseraROCMConversion
     MLIRGPUDialect MLIRSCFDialect MLIRVectorDialect MLIRArithDialect
     MLIRMemRefDialect MLIRMathDialect
     TesseraIR
+    TesseraPasses
     TesseraROCMIR)
 target_include_directories(TesseraROCMConversion PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/../../include

@@ -227,6 +227,12 @@ struct LowerMatmulSoftmaxMatmulFusionToAppleGPUPass
 
 } // namespace
 
+LogicalResult rewriteMatmulSoftmaxMatmulFusion(Operation *op,
+                                               PatternRewriter &rewriter) {
+  LowerMatmulSoftmaxMatmulFusionToAppleGPU pattern(op->getContext());
+  return pattern.matchAndRewrite(op, rewriter);
+}
+
 std::unique_ptr<Pass> createLowerMatmulSoftmaxMatmulFusionToAppleGPUPass() {
   return std::make_unique<LowerMatmulSoftmaxMatmulFusionToAppleGPUPass>();
 }

@@ -4215,8 +4215,9 @@ def _nvidia_device_name() -> str | None:
 # on a capable host (jit.py stamps ``compiler_path = "rocm_compiled"``).
 #
 # WMMA dtypes (all verified on gfx1151): f16/bf16 -> f32 accumulate; int8 -> i32
-# (rocdl iu8); int4 -> i32 (rocdl iu4, int4 values in int8 containers [-8,7],
-# opt-in via metadata["wmma_dtype"]="int4"). f32/tf32/fp8 WMMA do not exist on
+# (rocdl iu8); int4 -> i32 (rocdl iu4, signed logical values physically packed
+# two two's-complement nibbles per byte, opt-in via metadata["wmma_dtype"]="int4").
+# f32/tf32/fp8 WMMA do not exist on
 # RDNA 3.5.
 #
 # The hand-written ``rocm_wmma`` HIPRTC kernel is now the reference oracle + the
@@ -4345,6 +4346,11 @@ def _build_compiled_gemm_hsaco(
     set, the kernel adds a per-column bias and/or applies relu/gelu/silu on the
     f32 accumulator before the store (float dtypes only)."""
     chip = _rocm_chip()
+    if chip == "gfx1151" and dtype in ("fp8_e4m3", "fp8_e5m2", "fp8", "bf8"):
+        raise ValueError(
+            "ROCM_TILE_UNSUPPORTED_DTYPE: gfx1151 RDNA 3.5 has no FP8/BF8 "
+            "WMMA matrix form or registered scalar runtime route"
+        )
     # The compiled GEMM emits the RDNA WMMA 16x16x16 f16/bf16 fragment layout,
     # which the backend selects only on the gfx11 family (RDNA3/RDNA3.5 —
     # hardware-verified on gfx1151). RDNA4 gfx12xx uses a 16x16x32 WMMA layout
@@ -4391,12 +4397,18 @@ def _build_compiled_gemm_hsaco(
             f", schedule_vgpr_estimate = {sa['schedule_vgpr_estimate']} : i64"
             f', schedule_source = "{sa["schedule_source"]}"'
         )
+    storage_pack = ""
+    if dtype in ("int4", "i4"):
+        storage_pack = (
+            ', tessera.storage_pack = {logical = "int4", container = "int8", '
+            'factor = 2 : i64, signedness = "signed_twos_complement"}'
+        )
     directive = (
         "module {\n"
         '  "tessera_rocm.wmma_gemm"() {name = "gemm", m = 16 : i64, '
         "n = 16 : i64, k = 16 : i64, "
         f'mt = {mt} : i64, nt = {nt} : i64, dtype = "{dtype}"'
-        f"{schedule_attrs}{epi}}} : () -> ()\n"
+        f"{schedule_attrs}{storage_pack}{epi}}} : () -> ()\n"
         "}\n"
     )
     pipeline = (
@@ -4437,6 +4449,19 @@ def _rocm_compiled_dtype(a, b):
     if a.dtype == np.int8 and b.dtype == np.int8:
         return "int8", np.int8, np.int32
     return None, None, None
+
+
+def _pack_signed_int4(values):
+    """Pack contiguous signed logical int4 values, low index in low nibble."""
+    import numpy as np
+
+    logical = np.ascontiguousarray(values, dtype=np.int8).reshape(-1)
+    if np.any(logical < -8) or np.any(logical > 7):
+        raise ValueError("signed int4 storage requires every value in [-8, 7]")
+    padded = np.zeros((logical.size + 1) & ~1, dtype=np.uint8)
+    padded[: logical.size] = logical.view(np.uint8) & np.uint8(0xF)
+    packed = padded[0::2] | (padded[1::2] << np.uint8(4))
+    return np.ascontiguousarray(packed).view(np.int8)
 
 
 def _load_hip_for_launch() -> ctypes.CDLL | None:
@@ -4532,12 +4557,12 @@ def _rocm_compiled_gemm_impl(artifact: RuntimeArtifact, args: Any) -> Any:
         raise ValueError(
             f"rocm_compiled lane handles f16/bf16 (f32 acc) or int8 (i32 acc) storage; got {a.dtype} @ {b.dtype}"
         )
-    # int4 shares the int8 container (np.int8, values in [-8,7]); it is opt-in via
-    # an explicit metadata hint since the numpy dtype can't distinguish it.
+    # int4 is a first-class logical dtype with an int8 physical container; the
+    # numpy boundary uses logical int8 values because numpy has no int4 dtype.
     if str(metadata.get("wmma_dtype") or "") in ("int4", "i4"):
         if a.dtype != np.int8 or b.dtype != np.int8:
             raise ValueError(
-                f"rocm_compiled int4 lane needs int8 containers (int4 values in [-8,7]); got {a.dtype} @ {b.dtype}"
+                f"rocm_compiled int4 lane needs logical int8 inputs (values in [-8,7]); got {a.dtype} @ {b.dtype}"
             )
         dtype_tag, store, out_dt = "int4", np.int8, np.int32
 
@@ -4572,12 +4597,15 @@ def _rocm_compiled_gemm_impl(artifact: RuntimeArtifact, args: Any) -> Any:
     if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"gemm") != 0:
         raise RuntimeError("rocm_compiled: kernel symbol 'gemm' not found")
 
-    a_c = np.ascontiguousarray(a, dtype=store)
-    b_c = np.ascontiguousarray(b, dtype=store)
+    if dtype_tag == "int4":
+        a_c = _pack_signed_int4(a)
+        b_c = _pack_signed_int4(b)
+    else:
+        a_c = np.ascontiguousarray(a, dtype=store)
+        b_c = np.ascontiguousarray(b, dtype=store)
     d = np.zeros((m, n), dtype=out_dt)
     da, db, dd = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
-    ab = a_c.itemsize  # 1 (int8) or 2 (f16/bf16); D element is always 4 bytes
-    nb = (ab * m * k, ab * k * n, 4 * m * n)
+    nb = (a_c.nbytes, b_c.nbytes, 4 * m * n)
     for dev, size in ((da, nb[0]), (db, nb[1]), (dd, nb[2])):
         if hip.hipMalloc(ctypes.byref(dev), size) != 0:
             raise RuntimeError("rocm_compiled: hipMalloc failed")
@@ -4608,7 +4636,7 @@ def _rocm_compiled_gemm_impl(artifact: RuntimeArtifact, args: Any) -> Any:
         ]
 
     launch_args = (
-        _mr(da, m * k) + _mr(db, k * n) + _mr(dd, m * n) + [ctypes.c_int64(m), ctypes.c_int64(n), ctypes.c_int64(k)]
+        _mr(da, a_c.size) + _mr(db, b_c.size) + _mr(dd, m * n) + [ctypes.c_int64(m), ctypes.c_int64(n), ctypes.c_int64(k)]
     )
     if has_bias:
         launch_args += _mr(dbias, n)

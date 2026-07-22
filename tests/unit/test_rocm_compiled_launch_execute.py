@@ -142,17 +142,23 @@ def test_launch_rocm_compiled_int8_matches_numpy(m, n, k):
 def _int4_artifact(rt):
     art = _artifact(rt, "rocm_compiled")
     md = dict(art.metadata)
-    md["wmma_dtype"] = "int4"      # opt into iu4 (int4 values in int8 containers)
+    # NumPy has no int4 array dtype. The runtime range-checks these logical int8
+    # values, packs two signed nibbles per byte, and transfers that physical
+    # buffer to the IU4 kernel.
+    md["wmma_dtype"] = "int4"
     return rt.RuntimeArtifact(metadata=md)
 
 
 @pytest.mark.parametrize("m,n,k", [(16, 16, 16), (64, 48, 32), (40, 24, 48),
                                    (33, 17, 31)])
 def test_launch_rocm_compiled_int4_matches_numpy(m, n, k):
-    """int4 WMMA (rocdl iu4, signed, i32 accumulate). int4 values are supplied in
-    int8 containers (range [-8,7]) and nibble-packed in-kernel to vector<2xi32>.
-    Exact integer arithmetic -> must match numpy's int32 matmul exactly, across
-    aligned / ragged-M/N / ragged-K shapes."""
+    """Signed int4 WMMA (rocdl IU4, i32 accumulate).
+
+    Host logical values use NumPy int8, then the runtime physically packs two
+    two's-complement nibbles per byte before H2D. The kernel decodes packed
+    memory and forms the vector<2xi32> IU4 operand. Exact integer arithmetic
+    must match NumPy across aligned and ragged M/N/K shapes.
+    """
     rt = _compiled_or_skip()
     rng = np.random.default_rng(17 + m + n + k)
     a = rng.integers(-8, 8, size=(m, k)).astype(np.int8)   # int4 range [-8,7]

@@ -21,7 +21,7 @@ Rules locked here:
    math_mode="tf32")`` instead.
 
 3. **Planned/gated dtypes are not first-class today.** ``uint8/16/32/64``,
-   ``complex64/128``, packed ``int4``, and AMD ``mxfp8/6/4`` are recognized by ``is_planned_gated_dtype``
+   ``complex64/128``, and AMD ``mxfp8/6/4`` are recognized by ``is_planned_gated_dtype``
    but ``canonicalize_dtype()`` will raise unless ``allow_planned_gated=True``
    is passed. Registry entries that reference these must declare
    ``metadata.dtype_status = "planned_gated"``.
@@ -70,7 +70,7 @@ _CANONICAL_LOW_PRECISION: frozenset[str] = frozenset({
 })
 
 _CANONICAL_INTS: frozenset[str] = frozenset({
-    "int8", "int16", "int32", "int64",
+    "int4", "int8", "int16", "int32", "int64",
 })
 
 _CANONICAL_BOOL: frozenset[str] = frozenset({"bool"})
@@ -96,10 +96,6 @@ _PLANNED_COMPLEX: frozenset[str] = frozenset({
     "complex64", "complex128",
 })
 
-_PLANNED_PACKED_INT: frozenset[str] = frozenset({
-    "int4",          # packed direct int4 — distinct from int4 quantization
-})
-
 _PLANNED_AMD_MX: frozenset[str] = frozenset({
     "mxfp8", "mxfp6", "mxfp4",
 })
@@ -107,7 +103,6 @@ _PLANNED_AMD_MX: frozenset[str] = frozenset({
 _PLANNED_GATED_DTYPES: frozenset[str] = (
     _PLANNED_UNSIGNED
     | _PLANNED_COMPLEX
-    | _PLANNED_PACKED_INT
     | _PLANNED_AMD_MX
 )
 
@@ -131,6 +126,7 @@ _DTYPE_ALIASES: dict[str, str] = {
     "float8_e5m2": "fp8_e5m2",
     # Integer family (MLIR-style + numpy-style)
     "i8": "int8",
+    "i4": "int4",
     "i16": "int16",
     "i32": "int32",
     "i64": "int64",
@@ -226,7 +222,7 @@ def canonicalize_dtype(
         ``"fp32"``).
     allow_planned_gated : bool, default False
         If True, allow names from the planned/gated set
-        (``uint*``/``complex*``/``int4``/``mxfp*``).  The caller
+        (``uint*``/``complex*``/``mxfp*``).  The caller
         accepts responsibility for declaring ``dtype_status="planned_gated"``
         in any registry metadata.
     """
@@ -328,7 +324,7 @@ def assert_canonical_dtype(
 # wider mantissa+exponent.  bf16 and fp16 are deliberately incomparable
 # (different exponent ranges) — mixing them promotes to fp32 for safety.
 _FLOAT_ORDER: tuple[str, ...] = ("fp16", "bf16", "fp32", "fp64")
-_INT_ORDER:   tuple[str, ...] = ("bool", "int8", "int16", "int32", "int64")
+_INT_ORDER:   tuple[str, ...] = ("bool", "int4", "int8", "int16", "int32", "int64")
 _LOW_PRECISION: frozenset[str] = _CANONICAL_LOW_PRECISION
 
 

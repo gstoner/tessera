@@ -161,6 +161,7 @@ def test_steel_validator_catches_dropped_staging():
 # ── Metal-CI rung-3 lane: actually compile when a Metal toolchain is present ──
 
 @pytest.mark.compiler_tool
+@pytest.mark.compiler_apple
 @pytest.mark.parametrize("dtype", ["f16", "bf16", "f32"])
 def test_rung3_simdgroup_gemm_compiles_on_metal_host(dtype):
     """On a Metal-capable runner, the emitted minimal kernel must actually compile
@@ -174,6 +175,7 @@ def test_rung3_simdgroup_gemm_compiles_on_metal_host(dtype):
 
 
 @pytest.mark.compiler_tool
+@pytest.mark.compiler_apple
 @pytest.mark.parametrize("dtype", ["f16", "bf16", "f32"])
 def test_rung3_steel_gemm_compiles_on_metal_host(dtype):
     from tests._support.apple import require_metal_compiler
@@ -239,6 +241,7 @@ def test_steel_validator_catches_missing_partial_scratch():
 
 
 @pytest.mark.compiler_tool
+@pytest.mark.compiler_apple
 @pytest.mark.parametrize("partial_edge,double_buffer", [(True, False), (False, True), (True, True)])
 def test_rung3_steel_refinements_compile_on_metal_host(partial_edge, double_buffer):
     """B3: the B1/B2 refinements compile to AIR on a Metal-capable runner — the

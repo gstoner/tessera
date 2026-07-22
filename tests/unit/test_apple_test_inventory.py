@@ -94,6 +94,7 @@ def test_apple_host_free_compiler_selection_excludes_foreign_owners() -> None:
 def test_compiler_owner_markers_cover_the_apple_lane_and_known_foreign_proofs() -> None:
     expected = {
         "tests/unit/test_apple_compiler_artifacts.py": "compiler_apple",
+        "tests/unit/test_msl_gemm_emit.py": "compiler_apple",
         "tests/unit/test_nvidia_compiler_artifacts.py": "compiler_nvidia",
         "tests/unit/test_rocm_arch_fragment_compiler.py": "compiler_rocm",
         "tests/unit/test_rocm_dequant_gemm_compiled.py": "compiler_rocm",

@@ -3,7 +3,7 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-07-19
+last_updated: 2026-07-21
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
@@ -1009,6 +1009,14 @@ not change the SM120 PTX storage/Tensor Core contract, fragment ABI, runtime
 readiness, or selector; it only prevents RDNA3.5 ISA formats from being
 conflated with Tessera gfx1151 execution support.
 
+Cross-backend sync `ROCM-DTYPE1-CLOSE-2026-07-21` promotes signed `int4` and
+alias `i4` into the shared canonical/Graph-IR vocabulary and adds signedness to
+the shared packed-storage descriptor. NVIDIA parity is validated at that
+logical contract; NVFP4 and NVIDIA packed-weight/Tensor Core ABIs remain
+distinct and backend-owned. No PTX capability, fragment ABI, runtime route, or
+selector is promoted by the gfx1151 proof, and unsigned packed-4 remains
+unregistered.
+
 Cross-backend sync `E2E-FROZEN-IDENTITY-CACHE-2026-07-19`: ROCM-E2E-1 memoizes
 deterministic hashes for frozen runtime artifacts, native images, and launch
 descriptors. Serialized identity values and required launch validation are
@@ -1168,3 +1176,10 @@ Cross-backend sync `LLVM23-LOCAL-CLEANUP-2026-07-20` hardens the LLVM 23 and
 Linux TSAN host environment and repairs an Apple-only capability row. NVIDIA
 parity is not applicable: no CUDA dtype, PTX ABI, schedule, execution row,
 selector, or exact-device evidence changes.
+
+Cross-backend sync `ROCM-E2E-SPINE3-TEST1-2026-07-21` adds shared paged-KV and
+MoE fixture identities to the E2E-SPINE-3 corpus. NVIDIA fixture-schema parity
+is validated, but the gfx1151 HSACO, HIP ABI, resources, timing, and
+exact-device evidence do not transfer to CUDA. The ROCm-owned compiler lane
+explicitly excludes `compiler_nvidia`; no NVIDIA capability, test ownership,
+schedule, execution row, or selector changes.

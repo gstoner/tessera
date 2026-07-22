@@ -1451,6 +1451,14 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         fix_hint="Make the storage-pack factor (container_bits/storage_bits) match the WMMA ABI pack mode; they describe the same packing.",
         spec="docs/audit/compiler/COMPILER_AUDIT.md §C4", sprint="C4 (TIRx)",
     ),
+    DiagnosticCode(
+        code="DTYPE_PACK_SIGNEDNESS_MISMATCH", pass_origin="GenerateWMMAGemmKernel",
+        severity="error",
+        summary="A gfx1151 int4 WMMA request does not declare signed two's-complement packed storage.",
+        fix_hint="Set tessera.storage_pack.signedness to signed_twos_complement; unsigned IU4 requires a distinct dtype and ABI contract.",
+        spec="docs/reference/tessera_tensor_attributes.md#canonical-dtypes",
+        sprint="ROCM-DTYPE-1",
+    ),
     # C4 part 1 (2026-06-23) — the storage-pack consumer (StoragePackConsume).
     DiagnosticCode(
         code="DTYPE_PACK_BAD_WIDTHS", pass_origin="StoragePackConsume",

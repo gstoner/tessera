@@ -31,9 +31,9 @@
 | `nvidia_sm120` | `sm_120a` | `nvidia` | `moe` | `packet_pending` | - | - |
 | `nvidia_sm90` | `sm_90a` | `nvidia` | `-` | `hardware_deferred` | - | - |
 | `nvidia_sm100` | `sm_100a` | `nvidia` | `-` | `hardware_deferred` | - | - |
-| `rocm_gfx1151` | `gfx1151` | `rocm` | `softmax` | `packet_pending` | - | - |
-| `rocm_gfx1151` | `gfx1151` | `rocm` | `reduction` | `packet_pending` | - | - |
-| `rocm_gfx1151` | `gfx1151` | `rocm` | `paged_kv` | `packet_pending` | - | - |
-| `rocm_gfx1151` | `gfx1151` | `rocm` | `moe` | `packet_pending` | - | - |
+| `rocm_gfx1151` | `gfx1151` | `rocm` | `softmax` | `release_ready` | `a5243d14a403` | `docs/audit/evidence/e2e_spine/rocm_gfx1151/gfx1151` |
+| `rocm_gfx1151` | `gfx1151` | `rocm` | `reduction` | `release_ready` | `a5243d14a403` | `docs/audit/evidence/e2e_spine/rocm_gfx1151/gfx1151` |
+| `rocm_gfx1151` | `gfx1151` | `rocm` | `paged_kv` | `release_ready` | `a5243d14a403` | `docs/audit/evidence/e2e_spine/rocm_gfx1151/gfx1151` |
+| `rocm_gfx1151` | `gfx1151` | `rocm` | `moe` | `release_ready` | `a5243d14a403` | `docs/audit/evidence/e2e_spine/rocm_gfx1151/gfx1151` |
 
 The CSV companion retains the full reason and commit.

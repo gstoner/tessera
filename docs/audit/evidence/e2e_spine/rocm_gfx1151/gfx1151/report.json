@@ -1,0 +1,301 @@
+{
+  "architecture": "gfx1151",
+  "benchmarks": [
+    {
+      "discard_first": true,
+      "family": "softmax",
+      "median_ns": 8242.571,
+      "repetitions": 101000,
+      "resource_fingerprint": "1c0b0957507109148955946222bb9806efea78050cdae6ccf05cec50d7b2dc6d",
+      "route": "workgroup_per_row_256",
+      "run_medians_ns": [
+        8095.337,
+        8389.805
+      ],
+      "selected": true,
+      "stability_limit_pct": 5.0,
+      "stable": true,
+      "timing_domain": "kernel_wall",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "softmax",
+      "median_ns": 2354261.31,
+      "repetitions": 5050,
+      "resource_fingerprint": "1c0b0957507109148955946222bb9806efea78050cdae6ccf05cec50d7b2dc6d",
+      "route": "workgroup_per_row_256",
+      "run_medians_ns": [
+        2366101.96,
+        2342420.66
+      ],
+      "selected": true,
+      "stability_limit_pct": 5.0,
+      "stable": true,
+      "timing_domain": "end_to_end",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "reduction",
+      "median_ns": 8348.554,
+      "repetitions": 101000,
+      "resource_fingerprint": "0906630b3589470cf1516ad77749ea932c746b3fe621f77eda94f1d457a481c1",
+      "route": "workgroup_per_output_256",
+      "run_medians_ns": [
+        8425.372,
+        8271.736
+      ],
+      "selected": true,
+      "stability_limit_pct": 5.0,
+      "stable": true,
+      "timing_domain": "kernel_wall",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "reduction",
+      "median_ns": 2365067.31,
+      "repetitions": 5050,
+      "resource_fingerprint": "0906630b3589470cf1516ad77749ea932c746b3fe621f77eda94f1d457a481c1",
+      "route": "workgroup_per_output_256",
+      "run_medians_ns": [
+        2367397.62,
+        2362737.0
+      ],
+      "selected": true,
+      "stability_limit_pct": 5.0,
+      "stable": true,
+      "timing_domain": "end_to_end",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "paged_kv",
+      "median_ns": 11975.645499999999,
+      "repetitions": 101000,
+      "resource_fingerprint": "70428647a3034f655eafd610c4e19e579b439a7517792006652e12c81b0ecc4e",
+      "route": "gfx1151_paged_kv_direct_256",
+      "run_medians_ns": [
+        11996.837,
+        11954.454
+      ],
+      "selected": true,
+      "stability_limit_pct": 5.0,
+      "stable": true,
+      "timing_domain": "kernel_wall",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "paged_kv",
+      "median_ns": 2543732.82,
+      "repetitions": 5050,
+      "resource_fingerprint": "70428647a3034f655eafd610c4e19e579b439a7517792006652e12c81b0ecc4e",
+      "route": "gfx1151_paged_kv_direct_256",
+      "run_medians_ns": [
+        2538679.84,
+        2548785.8
+      ],
+      "selected": true,
+      "stability_limit_pct": 5.0,
+      "stable": true,
+      "timing_domain": "end_to_end",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "moe",
+      "median_ns": 19931.7275,
+      "repetitions": 101000,
+      "resource_fingerprint": "c8bf4cf9c39403a96788e9e7cec94268e2772d074d926444d7b779b7c631b4e1",
+      "route": "gfx1151_moe_dispatch_direct_256",
+      "run_medians_ns": [
+        19970.627,
+        19892.828
+      ],
+      "selected": true,
+      "stability_limit_pct": 5.0,
+      "stable": true,
+      "timing_domain": "kernel_wall",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "moe",
+      "median_ns": 2534690.7199999997,
+      "repetitions": 5050,
+      "resource_fingerprint": "c8bf4cf9c39403a96788e9e7cec94268e2772d074d926444d7b779b7c631b4e1",
+      "route": "gfx1151_moe_dispatch_direct_256",
+      "run_medians_ns": [
+        2526857.04,
+        2542524.4
+      ],
+      "selected": true,
+      "stability_limit_pct": 5.0,
+      "stable": true,
+      "timing_domain": "end_to_end",
+      "warmups": 1
+    }
+  ],
+  "cache_proofs": [
+    {
+      "cold": {
+        "cache_key": "d6a674ea8e1b93e357ca7c30075dbf3a53b14f73d1414fbea8942530639d7437",
+        "compile_state": "cold",
+        "descriptor_digest": "accf644079b441e4aaef608e93b2287f75fd431d783f334ae5abd9c4864415df",
+        "image_digest": "086e9a63d65af18432cef23e3d988c15e0b6bb83a95d2e7d11f748f997b133e4"
+      },
+      "fixture_id": "softmax-f32-2x2-extreme-v1",
+      "warm": {
+        "cache_key": "d6a674ea8e1b93e357ca7c30075dbf3a53b14f73d1414fbea8942530639d7437",
+        "compile_state": "warm_cache",
+        "descriptor_digest": "accf644079b441e4aaef608e93b2287f75fd431d783f334ae5abd9c4864415df",
+        "image_digest": "086e9a63d65af18432cef23e3d988c15e0b6bb83a95d2e7d11f748f997b133e4"
+      }
+    },
+    {
+      "cold": {
+        "cache_key": "de9ae0675fbdc7334dd24b757297ec5bc48d0d62bec5f6223eec310b988f5e91",
+        "compile_state": "cold",
+        "descriptor_digest": "1dd4d4defcce594bb2fe06e8b3bb91c0292717894d5c99cc7b958261d7f538be",
+        "image_digest": "779a32db951765119e1b5bd57138d1c768bbfd0e170546b532f7b8b0f5eae681"
+      },
+      "fixture_id": "reduce-sum-f32-axis1-v1",
+      "warm": {
+        "cache_key": "de9ae0675fbdc7334dd24b757297ec5bc48d0d62bec5f6223eec310b988f5e91",
+        "compile_state": "warm_cache",
+        "descriptor_digest": "1dd4d4defcce594bb2fe06e8b3bb91c0292717894d5c99cc7b958261d7f538be",
+        "image_digest": "779a32db951765119e1b5bd57138d1c768bbfd0e170546b532f7b8b0f5eae681"
+      }
+    },
+    {
+      "cold": {
+        "cache_key": "07d2ceb7ae5328548abaf3b633d524ef5bad9a74e867855b58761365aeaaf423",
+        "compile_state": "cold",
+        "descriptor_digest": "67c146ed4e92aec16bfbee4a368dad732d3ea899ffa147382f6e09e33090e785",
+        "image_digest": "4c1db8ee29710678b86defe1cd302c55e9d2138623702149ed62665438f0323a"
+      },
+      "fixture_id": "paged-kv-f32-permuted-2x2-v1",
+      "warm": {
+        "cache_key": "07d2ceb7ae5328548abaf3b633d524ef5bad9a74e867855b58761365aeaaf423",
+        "compile_state": "warm_cache",
+        "descriptor_digest": "67c146ed4e92aec16bfbee4a368dad732d3ea899ffa147382f6e09e33090e785",
+        "image_digest": "4c1db8ee29710678b86defe1cd302c55e9d2138623702149ed62665438f0323a"
+      }
+    },
+    {
+      "cold": {
+        "cache_key": "88400276e00ea8f89952b9350c0f544092c3630c23af6873d8125847c2320dda",
+        "compile_state": "cold",
+        "descriptor_digest": "ccd075ea211b57e1c57f5a98ec889efb8328a317043c6ae6428ab10c94945700",
+        "image_digest": "6c2b63585b684ae71b13e9b0769c035f9e535f66693cf105b8f388d30cedd60b"
+      },
+      "fixture_id": "moe-dispatch-f32-permuted-3x2-v1",
+      "warm": {
+        "cache_key": "88400276e00ea8f89952b9350c0f544092c3630c23af6873d8125847c2320dda",
+        "compile_state": "warm_cache",
+        "descriptor_digest": "ccd075ea211b57e1c57f5a98ec889efb8328a317043c6ae6428ab10c94945700",
+        "image_digest": "6c2b63585b684ae71b13e9b0769c035f9e535f66693cf105b8f388d30cedd60b"
+      }
+    }
+  ],
+  "device": {
+    "exact": true,
+    "identity": "NucBoxEVO-X2 | Name:                    gfx1151 | Marketing Name:          AMD Radeon(TM) 8060S Graphics"
+  },
+  "fixtures": [
+    {
+      "actual": [
+        [
+          0.5,
+          0.5
+        ],
+        [
+          0.5,
+          0.5
+        ]
+      ],
+      "descriptor_digest": "accf644079b441e4aaef608e93b2287f75fd431d783f334ae5abd9c4864415df",
+      "fixture_id": "softmax-f32-2x2-extreme-v1",
+      "image_digest": "086e9a63d65af18432cef23e3d988c15e0b6bb83a95d2e7d11f748f997b133e4",
+      "levels": {
+        "a": "proven",
+        "b": "proven",
+        "c": "proven"
+      }
+    },
+    {
+      "actual": [
+        2.0,
+        3.5
+      ],
+      "descriptor_digest": "1dd4d4defcce594bb2fe06e8b3bb91c0292717894d5c99cc7b958261d7f538be",
+      "fixture_id": "reduce-sum-f32-axis1-v1",
+      "image_digest": "779a32db951765119e1b5bd57138d1c768bbfd0e170546b532f7b8b0f5eae681",
+      "levels": {
+        "a": "proven",
+        "b": "proven",
+        "c": "proven"
+      }
+    },
+    {
+      "actual": [
+        [
+          [
+            7.0,
+            8.0
+          ]
+        ],
+        [
+          [
+            1.0,
+            2.0
+          ]
+        ]
+      ],
+      "descriptor_digest": "67c146ed4e92aec16bfbee4a368dad732d3ea899ffa147382f6e09e33090e785",
+      "fixture_id": "paged-kv-f32-permuted-2x2-v1",
+      "image_digest": "4c1db8ee29710678b86defe1cd302c55e9d2138623702149ed62665438f0323a",
+      "levels": {
+        "a": "proven",
+        "b": "proven",
+        "c": "proven"
+      }
+    },
+    {
+      "actual": [
+        [
+          5.0,
+          6.0
+        ],
+        [
+          1.0,
+          2.0
+        ]
+      ],
+      "descriptor_digest": "ccd075ea211b57e1c57f5a98ec889efb8328a317043c6ae6428ab10c94945700",
+      "fixture_id": "moe-dispatch-f32-permuted-3x2-v1",
+      "image_digest": "6c2b63585b684ae71b13e9b0769c035f9e535f66693cf105b8f388d30cedd60b",
+      "levels": {
+        "a": "proven",
+        "b": "proven",
+        "c": "proven"
+      }
+    }
+  ],
+  "required_timing_domains": [
+    "kernel_wall",
+    "end_to_end"
+  ],
+  "schema": "tessera.e2e-backend-report.v1",
+  "scope": [
+    "softmax",
+    "reduction",
+    "paged_kv",
+    "moe"
+  ],
+  "source_commit": "a5243d14a4039a3fa6ddcdb0276eb803ff567d19",
+  "target": "rocm_gfx1151",
+  "toolchain_fingerprint": "90f2f58d8953d4d9a4331d3dc1f8855d92dea080d28af511c6ef03cd9fb11230"
+}

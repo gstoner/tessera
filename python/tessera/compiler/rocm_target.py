@@ -144,10 +144,9 @@ _ROCM_DTYPES: dict[AMDArch, frozenset[str]] = {
     AMDArch.GFX_1151: frozenset({
         # RDNA 3.5 (Strix Halo).  WMMA executable surface per the ISA §7.9
         # Table 33: F16, BF16, IU8 (int8).  IU4 (int4) is architecturally
-        # present but stays planned-gated (no first-class packed-4 storage
-        # policy yet — same stance as gfx1200), so it is omitted from the
-        # executable dtype set.  Notably NO FP8 here (unlike gfx1200).
-        "fp32", "bf16", "fp16", "int8",
+        # present with first-class signed two's-complement packed storage:
+        # two logical int4 values per int8 byte container. Notably NO FP8 here.
+        "fp32", "bf16", "fp16", "int8", "int4",
     }),
     AMDArch.GFX_1200: frozenset({
         # GFX12 / RDNA 4 rocWMMA-class surface.  Keep this as an
@@ -298,9 +297,9 @@ _ROCM_7_2_FEATURES: dict[AMDArch, dict[str, str]] = {
         # RDNA 4 / GFX12 — WMMA/rocWMMA-class target.  Public ROCm docs
         # list GFX12 matrix datatypes/instructions including FP8/BF8 WMMA
         # variants, FP16/BF16 SWMMAC, and I32 IU8/IU4 accumulators.
-        # Tessera maps FP8/BF8 to fp8_e4m3/fp8_e5m2 and keeps IU4 as
-        # planned-gated int4 until a first-class unsigned packed-4 storage
-        # policy exists.  Tessera models the executable
+        # Tessera maps FP8/BF8 to fp8_e4m3/fp8_e5m2. IU4 can carry canonical
+        # signed int4 under its explicit two's-complement packing contract;
+        # unsigned packed-4 remains unregistered. Tessera models the executable
         # compiler surface conservatively: WMMA-class features are ready
         # for artifact planning, MFMA/CDNA features stay unavailable.
         "mfma":                "not_supported",

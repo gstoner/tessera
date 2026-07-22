@@ -904,24 +904,28 @@ row "Tile IR (FA-4)") can pull from it. Cross-refs noted; reference memory
   (`--tessera-storage-pack-consume`) is the first real consumer of the packing
   markers (previously inert): it reads `tessera.storage_packed` /
   `storage_container` + `numeric_policy.storage` and emits a concrete
-  `tessera.storage_pack = {logical, container, factor}` descriptor —
+  `tessera.storage_pack = {logical, container, factor, signedness}` descriptor —
   `factor = container_bits / storage_bits` (fp4/nvfp4/int4 → 2 per int8, fp6 →
-  1) — the form a backend's packed load/store reads; bad widths emit
+  1), with `signed_twos_complement` for int4 and `format_defined` for floating
+  formats — the form a backend's packed load/store reads; bad widths emit
   `DTYPE_PACK_BAD_WIDTHS`. HF Target-IR step (Decision #19). Lit:
   `storage_pack_consume.mlir`. **The real consumer ships on AMD today, not a
-  future NVIDIA emitter** — `GenerateWMMAGemmKernel` already nibble-packs 16 int4
-  into `vector<2xi32>` (iu4 ABI) and bitcasts int8 to `vector<4xi32>` (iu8).
+  future NVIDIA emitter** — `GenerateWMMAGemmKernel` decodes physically packed
+  signed int4 memory into `vector<2xi32>` (IU4 ABI) and bitcasts int8 to
+  `vector<4xi32>` (IU8).
   **Reconciliation LANDED (2026-06-23).** `GenerateWMMAGemmKernel` now *consumes*
   `tessera.storage_pack`: the descriptor's `logical` selects the WMMA dtype and
-  its `factor` is checked against the WMMA integer pack mode (int4 → 2 nibble-
-  pack, int8 → 1), `DTYPE_PACK_FACTOR_MISMATCH` on drift — so the abstract C4
+  its `factor` and signedness are checked against the WMMA integer pack mode
+  (int4 → 2 signed nibbles, int8 → 1), `DTYPE_PACK_FACTOR_MISMATCH` or
+  `DTYPE_PACK_SIGNEDNESS_MISMATCH` on drift — so the abstract C4
   descriptor drives the real, shipping AMD int4/int8 codegen (one packing
   contract for both backends). Additive: falls back to the legacy `dtype` attr
   when no descriptor, so the existing ROCm tests are unchanged. Verified on a
   ROCm-backend build (`-DTESSERA_BUILD_ROCM_BACKEND=ON -DTESSERA_ENABLE_HIP=OFF`
   builds the MLIR passes against Homebrew LLVM/ROCDL — no HIP/`/opt/rocm`
   needed): ROCm lit 13/13 incl. `wmma_gemm_storage_pack.mlir` (descriptor drives
-  int4 → `vector<2xi32>` iu4 ABI; factor-mismatch caught). *Still open:* flip
+  signed int4 → packed-memory `vector<2xi32>` IU4 ABI; factor/signedness
+  mismatches caught). *Still open:* flip
   `legalize-dtypes` opt-in → default per target now that the marker is consumed;
   the NVIDIA sub-byte emitter is the symmetric future consumer.
 

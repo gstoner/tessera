@@ -273,7 +273,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "C4 part 1 (TIRx): the first real consumer of the packing markers — "
             "reads tessera.storage_packed / storage_container + "
             "numeric_policy.storage and emits tessera.storage_pack = {logical, "
-            "container, factor} (factor = container_bits / storage_bits) for a "
+            "container, factor, signedness} (factor = container_bits / storage_bits) for a "
             "backend's packed load/store."
         ),
         input_dialects=("tessera",),

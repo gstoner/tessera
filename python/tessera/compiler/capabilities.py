@@ -576,7 +576,7 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         ),
         # ISA §7.9 Table 33: F16/BF16/IU8 executable surface; no FP8 WMMA on
         # RDNA 3.5 (the load-bearing difference from gfx1200).
-        supported_dtypes=("bf16", "fp16", "fp32", "int8"),
+        supported_dtypes=("bf16", "fp16", "fp32", "int8", "int4"),
         features=("wmma_f16", "wmma_bf16", "buffer_load_lds", "rocm_7_2_3"),
     ),
     "rocm_gfx1200": TargetCapability(

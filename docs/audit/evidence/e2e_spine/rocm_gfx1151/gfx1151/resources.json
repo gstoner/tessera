@@ -1,0 +1,202 @@
+{
+  "device": {
+    "exact": true,
+    "identity": "NucBoxEVO-X2 | Name:                    gfx1151 | Marketing Name:          AMD Radeon(TM) 8060S Graphics"
+  },
+  "measurement_cpu": 0,
+  "production_disposition": "ROCM-E2E-1/-2 retained production routes remain selected; this packet does not promote the typed descriptor routes",
+  "production_selector_changed": false,
+  "rows": [
+    {
+      "descriptor_digest": "accf644079b441e4aaef608e93b2287f75fd431d783f334ae5abd9c4864415df",
+      "device_libraries": [
+        {
+          "content_digest": "7b4d3f1057c38d23e12f7bb9ae66a406d0f6e99383e7bb6b4d83bca891bb56af",
+          "link_mode": "compiler_driver",
+          "logical_name": "rocm.ocml"
+        },
+        {
+          "content_digest": "65145f2847c536a27ae328e4b4eb99d62ca80b78ff196c75260bbad4dbe0c7be",
+          "link_mode": "compiler_driver",
+          "logical_name": "rocm.ockl"
+        },
+        {
+          "content_digest": "5df6ad2a201a6bbefedbf18e4467402da98512e19e0db7f6ce2c5f9c706465a9",
+          "link_mode": "compiler_driver",
+          "logical_name": "rocm.oclc_unsafe_math_off"
+        },
+        {
+          "content_digest": "872368d5c54a2e8ead07c10f48af50462469096d09da8291831c43a91dda2dd2",
+          "link_mode": "compiler_driver",
+          "logical_name": "rocm.oclc_finite_only_off"
+        },
+        {
+          "content_digest": "423087e3b64107f03b995f6417ace9998885f9e03c0187968e03f889f45394be",
+          "link_mode": "compiler_driver",
+          "logical_name": "rocm.oclc_wavefrontsize64_off"
+        },
+        {
+          "content_digest": "3b93c57b385c9cb849a87972c3f27aeb71610a903f085d13954d1c814370ec66",
+          "link_mode": "compiler_driver",
+          "logical_name": "rocm.oclc_isa_version_1151"
+        },
+        {
+          "content_digest": "1e791caa4e73225528a8a2966772d697f0e482d52c1a651ebfdd22e9a7251402",
+          "link_mode": "compiler_driver",
+          "logical_name": "rocm.oclc_abi_version_600"
+        }
+      ],
+      "entry": "tessera_tile_softmax_f32",
+      "family": "softmax",
+      "image_digest": "086e9a63d65af18432cef23e3d988c15e0b6bb83a95d2e7d11f748f997b133e4",
+      "payload_digest": "55960cd075715d06cf6bcdc79b97878cef6d274308c21324bab2c8ad9b24fa13",
+      "resource_fingerprint": "1c0b0957507109148955946222bb9806efea78050cdae6ccf05cec50d7b2dc6d",
+      "resource_record": null,
+      "route": "workgroup_per_row_256"
+    },
+    {
+      "descriptor_digest": "1dd4d4defcce594bb2fe06e8b3bb91c0292717894d5c99cc7b958261d7f538be",
+      "device_libraries": [
+        {
+          "content_digest": "7b4d3f1057c38d23e12f7bb9ae66a406d0f6e99383e7bb6b4d83bca891bb56af",
+          "link_mode": "compiler_driver",
+          "logical_name": "rocm.ocml"
+        },
+        {
+          "content_digest": "65145f2847c536a27ae328e4b4eb99d62ca80b78ff196c75260bbad4dbe0c7be",
+          "link_mode": "compiler_driver",
+          "logical_name": "rocm.ockl"
+        },
+        {
+          "content_digest": "5df6ad2a201a6bbefedbf18e4467402da98512e19e0db7f6ce2c5f9c706465a9",
+          "link_mode": "compiler_driver",
+          "logical_name": "rocm.oclc_unsafe_math_off"
+        },
+        {
+          "content_digest": "872368d5c54a2e8ead07c10f48af50462469096d09da8291831c43a91dda2dd2",
+          "link_mode": "compiler_driver",
+          "logical_name": "rocm.oclc_finite_only_off"
+        },
+        {
+          "content_digest": "423087e3b64107f03b995f6417ace9998885f9e03c0187968e03f889f45394be",
+          "link_mode": "compiler_driver",
+          "logical_name": "rocm.oclc_wavefrontsize64_off"
+        },
+        {
+          "content_digest": "3b93c57b385c9cb849a87972c3f27aeb71610a903f085d13954d1c814370ec66",
+          "link_mode": "compiler_driver",
+          "logical_name": "rocm.oclc_isa_version_1151"
+        },
+        {
+          "content_digest": "1e791caa4e73225528a8a2966772d697f0e482d52c1a651ebfdd22e9a7251402",
+          "link_mode": "compiler_driver",
+          "logical_name": "rocm.oclc_abi_version_600"
+        }
+      ],
+      "entry": "tessera_tile_reduce_sum_f32",
+      "family": "reduction",
+      "image_digest": "779a32db951765119e1b5bd57138d1c768bbfd0e170546b532f7b8b0f5eae681",
+      "payload_digest": "1ea142807917565c34f3a4e7d3cb7de03cda44cb5a70fd65516d0c8e66de1e1b",
+      "resource_fingerprint": "0906630b3589470cf1516ad77749ea932c746b3fe621f77eda94f1d457a481c1",
+      "resource_record": null,
+      "route": "workgroup_per_output_256"
+    },
+    {
+      "descriptor_digest": "67c146ed4e92aec16bfbee4a368dad732d3ea899ffa147382f6e09e33090e785",
+      "device_libraries": [
+        {
+          "content_digest": "7b4d3f1057c38d23e12f7bb9ae66a406d0f6e99383e7bb6b4d83bca891bb56af",
+          "link_mode": "compiler_driver",
+          "logical_name": "rocm.ocml"
+        },
+        {
+          "content_digest": "65145f2847c536a27ae328e4b4eb99d62ca80b78ff196c75260bbad4dbe0c7be",
+          "link_mode": "compiler_driver",
+          "logical_name": "rocm.ockl"
+        },
+        {
+          "content_digest": "5df6ad2a201a6bbefedbf18e4467402da98512e19e0db7f6ce2c5f9c706465a9",
+          "link_mode": "compiler_driver",
+          "logical_name": "rocm.oclc_unsafe_math_off"
+        },
+        {
+          "content_digest": "872368d5c54a2e8ead07c10f48af50462469096d09da8291831c43a91dda2dd2",
+          "link_mode": "compiler_driver",
+          "logical_name": "rocm.oclc_finite_only_off"
+        },
+        {
+          "content_digest": "423087e3b64107f03b995f6417ace9998885f9e03c0187968e03f889f45394be",
+          "link_mode": "compiler_driver",
+          "logical_name": "rocm.oclc_wavefrontsize64_off"
+        },
+        {
+          "content_digest": "3b93c57b385c9cb849a87972c3f27aeb71610a903f085d13954d1c814370ec66",
+          "link_mode": "compiler_driver",
+          "logical_name": "rocm.oclc_isa_version_1151"
+        },
+        {
+          "content_digest": "1e791caa4e73225528a8a2966772d697f0e482d52c1a651ebfdd22e9a7251402",
+          "link_mode": "compiler_driver",
+          "logical_name": "rocm.oclc_abi_version_600"
+        }
+      ],
+      "entry": "tessera_tile_paged_kv_read_f32_direct",
+      "family": "paged_kv",
+      "image_digest": "4c1db8ee29710678b86defe1cd302c55e9d2138623702149ed62665438f0323a",
+      "payload_digest": "efb25fee541c0f5df3a18d94ebb60e7154848f06eb3111d8e77e773133af4657",
+      "resource_fingerprint": "70428647a3034f655eafd610c4e19e579b439a7517792006652e12c81b0ecc4e",
+      "resource_record": null,
+      "route": "gfx1151_paged_kv_direct_256"
+    },
+    {
+      "descriptor_digest": "ccd075ea211b57e1c57f5a98ec889efb8328a317043c6ae6428ab10c94945700",
+      "device_libraries": [
+        {
+          "content_digest": "7b4d3f1057c38d23e12f7bb9ae66a406d0f6e99383e7bb6b4d83bca891bb56af",
+          "link_mode": "compiler_driver",
+          "logical_name": "rocm.ocml"
+        },
+        {
+          "content_digest": "65145f2847c536a27ae328e4b4eb99d62ca80b78ff196c75260bbad4dbe0c7be",
+          "link_mode": "compiler_driver",
+          "logical_name": "rocm.ockl"
+        },
+        {
+          "content_digest": "5df6ad2a201a6bbefedbf18e4467402da98512e19e0db7f6ce2c5f9c706465a9",
+          "link_mode": "compiler_driver",
+          "logical_name": "rocm.oclc_unsafe_math_off"
+        },
+        {
+          "content_digest": "872368d5c54a2e8ead07c10f48af50462469096d09da8291831c43a91dda2dd2",
+          "link_mode": "compiler_driver",
+          "logical_name": "rocm.oclc_finite_only_off"
+        },
+        {
+          "content_digest": "423087e3b64107f03b995f6417ace9998885f9e03c0187968e03f889f45394be",
+          "link_mode": "compiler_driver",
+          "logical_name": "rocm.oclc_wavefrontsize64_off"
+        },
+        {
+          "content_digest": "3b93c57b385c9cb849a87972c3f27aeb71610a903f085d13954d1c814370ec66",
+          "link_mode": "compiler_driver",
+          "logical_name": "rocm.oclc_isa_version_1151"
+        },
+        {
+          "content_digest": "1e791caa4e73225528a8a2966772d697f0e482d52c1a651ebfdd22e9a7251402",
+          "link_mode": "compiler_driver",
+          "logical_name": "rocm.oclc_abi_version_600"
+        }
+      ],
+      "entry": "tessera_tile_moe_dispatch_f32_direct",
+      "family": "moe",
+      "image_digest": "6c2b63585b684ae71b13e9b0769c035f9e535f66693cf105b8f388d30cedd60b",
+      "payload_digest": "9ba7d436cd2ee4418787d0843d1f6674d91be9f5cda286605dcb244924f24438",
+      "resource_fingerprint": "c8bf4cf9c39403a96788e9e7cec94268e2772d074d926444d7b779b7c631b4e1",
+      "resource_record": null,
+      "route": "gfx1151_moe_dispatch_direct_256"
+    }
+  ],
+  "schema": "tessera.e2e-rocm-resource-record.v1",
+  "selection_scope": "release evidence only",
+  "timing_note": "kernel_wall is resident launch-plus-synchronize wall time because WSL HIP events can return invalid zero intervals; end_to_end uses runtime.launch"
+}

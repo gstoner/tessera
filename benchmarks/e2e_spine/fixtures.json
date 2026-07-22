@@ -33,6 +33,34 @@
       "inputs": {"x": [[1.0, -2.0, 3.0], [4.0, 0.5, -1.0]]},
       "oracle": [2.0, 3.5],
       "tolerance": {"atol": 1e-6, "rtol": 1e-6, "equal_nan": false}
+    },
+    {
+      "fixture_id": "paged-kv-f32-permuted-2x2-v1",
+      "family": "paged_kv",
+      "dtype": "fp32",
+      "shape": [2, 2, 1, 2],
+      "semantic_contract": "logical-page gather with an i32 logical-to-physical table; start=1; tokens=2",
+      "inputs": {
+        "pages": [[[[1.0, 2.0]], [[3.0, 4.0]]], [[[5.0, 6.0]], [[7.0, 8.0]]]],
+        "page_table": [1, 0],
+        "start": 1,
+        "tokens": 2
+      },
+      "oracle": [[[7.0, 8.0]], [[1.0, 2.0]]],
+      "tolerance": {"atol": 0.0, "rtol": 0.0, "equal_nan": false}
+    },
+    {
+      "fixture_id": "moe-dispatch-f32-permuted-3x2-v1",
+      "family": "moe",
+      "dtype": "fp32",
+      "shape": [3, 2],
+      "semantic_contract": "direct MoE token gather with an i32 token-of-slot vector",
+      "inputs": {
+        "x": [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]],
+        "token": [2, 0]
+      },
+      "oracle": [[5.0, 6.0], [1.0, 2.0]],
+      "tolerance": {"atol": 0.0, "rtol": 0.0, "equal_nan": false}
     }
   ]
 }

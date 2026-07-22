@@ -1,0 +1,27 @@
+{
+  "architecture": "gfx1151",
+  "files": {
+    "report.json": {
+      "bytes": 9299,
+      "sha256": "4b19855701a6790b2264e3131366c218b1f4163b504dfe0aa946caa31d83f636"
+    },
+    "resources.json": {
+      "bytes": 8812,
+      "sha256": "ab253099743a4cce9f2b847e2a89f087a1da59e13c0b225da05c4d753fc07d89"
+    }
+  },
+  "schema": "tessera.e2e-release-packet.v1",
+  "target": "rocm_gfx1151",
+  "tested_commit": "a5243d14a4039a3fa6ddcdb0276eb803ff567d19",
+  "validation": {
+    "architecture": "gfx1151",
+    "benchmark_rows": 8,
+    "cache_proofs": 4,
+    "families": 4,
+    "fixtures": 4,
+    "level_c_fixtures": 4,
+    "maximum_absolute_error": 0.0,
+    "source_commit": "a5243d14a4039a3fa6ddcdb0276eb803ff567d19",
+    "target": "rocm_gfx1151"
+  }
+}

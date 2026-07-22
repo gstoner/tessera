@@ -24,7 +24,7 @@ tessera.e2e-release-packet.v1,nvidia_sm120,sm_120a,nvidia,replay_ssm,packet_pend
 tessera.e2e-release-packet.v1,nvidia_sm120,sm_120a,nvidia,moe,packet_pending,,,Family absent from active packet.
 tessera.e2e-release-packet.v1,nvidia_sm90,sm_90a,nvidia,-,hardware_deferred,,,Exact Hopper device unavailable; SM120 evidence does not transfer.
 tessera.e2e-release-packet.v1,nvidia_sm100,sm_100a,nvidia,-,hardware_deferred,,,Exact datacenter Blackwell device unavailable; SM120 evidence does not transfer.
-tessera.e2e-release-packet.v1,rocm_gfx1151,gfx1151,rocm,softmax,packet_pending,,,Closed gfx1151 E2E scope awaits a v1 fleet packet.
-tessera.e2e-release-packet.v1,rocm_gfx1151,gfx1151,rocm,reduction,packet_pending,,,Closed gfx1151 E2E scope awaits a v1 fleet packet.
-tessera.e2e-release-packet.v1,rocm_gfx1151,gfx1151,rocm,paged_kv,packet_pending,,,Closed gfx1151 E2E scope awaits a v1 fleet packet.
-tessera.e2e-release-packet.v1,rocm_gfx1151,gfx1151,rocm,moe,packet_pending,,,Closed gfx1151 E2E scope awaits a v1 fleet packet.
+tessera.e2e-release-packet.v1,rocm_gfx1151,gfx1151,rocm,softmax,release_ready,docs/audit/evidence/e2e_spine/rocm_gfx1151/gfx1151,a5243d14a4039a3fa6ddcdb0276eb803ff567d19,Validated hash-sealed packet.
+tessera.e2e-release-packet.v1,rocm_gfx1151,gfx1151,rocm,reduction,release_ready,docs/audit/evidence/e2e_spine/rocm_gfx1151/gfx1151,a5243d14a4039a3fa6ddcdb0276eb803ff567d19,Validated hash-sealed packet.
+tessera.e2e-release-packet.v1,rocm_gfx1151,gfx1151,rocm,paged_kv,release_ready,docs/audit/evidence/e2e_spine/rocm_gfx1151/gfx1151,a5243d14a4039a3fa6ddcdb0276eb803ff567d19,Validated hash-sealed packet.
+tessera.e2e-release-packet.v1,rocm_gfx1151,gfx1151,rocm,moe,release_ready,docs/audit/evidence/e2e_spine/rocm_gfx1151/gfx1151,a5243d14a4039a3fa6ddcdb0276eb803ff567d19,Validated hash-sealed packet.

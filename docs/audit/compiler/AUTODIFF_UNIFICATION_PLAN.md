@@ -419,9 +419,20 @@ existing hand-written ROCm/x86 backward kernels remain separate Tier-3 proofs.
 emit shape-independent native adjoints, and static `broadcast` emits descending
 sum reductions plus a singleton-restoring reshape. The actual paired-pass IR for
 all three is interpreted and matched against independent NumPy VJPs on CPU.
-Dynamic broadcast stays an explicit `custom_adjoint_call` fallback. Generic
-`reduce` is not promoted as one undifferentiated family: sum/mean require a
-kind-aware contract, while max/min require an explicit tie-gradient policy.
+Dynamic broadcast stays an explicit `custom_adjoint_call` fallback.
+
+**Kind-aware/activation follow-on (2026-07-22):** `reduce(sum)` and static
+`reduce(mean)` now rebuild the removed axis and broadcast the cotangent;
+dynamic `sum` is native while dynamic `mean` remains an explicit fallback
+because the reciprocal extent is not yet a first-class runtime scalar. The
+shared family is therefore reported as mixed: max/min remain placeholders until
+their tie-gradient policy is explicit. Static GELU and SiLU use formulas aligned
+with the Python VJP oracle, and softmax uses the rank-generic
+`s * (dy - broadcast(sum(dy * s)))` adjoint for both static and dynamic shapes.
+The paired IR is directly interpreted and NumPy-oracle matched. ReLU remains a
+placeholder until Graph IR has a registered comparison primitive; RMSNorm and
+LayerNorm remain placeholders until a stable statistics/reciprocal-square-root
+carrier is available.
 
 Promotion order: (1) core tensor algebra (add/mul/broadcast/reductions/GEMM);
 (2) pointwise + normalization (tanh/sigmoid/GELU/SiLU/RMSNorm/layernorm);

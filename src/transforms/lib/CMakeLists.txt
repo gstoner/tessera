@@ -62,6 +62,7 @@ add_library(TesseraPasses
   # Sprint V2 (2026-05-22) — layout legality skeleton (SHAPE_SYSTEM §11.2 closure).
   LayoutLegalityPass.cpp
   LayoutAssignmentPass.cpp
+  NVIDIAGraphLayoutMaterializationPass.cpp
   # 2026-07-08 — Tile IR global buffer assignment/reuse (Workstream H / W3).
   TileBufferReusePass.cpp
   # 2026-07-08 — realize the reuse plan into a concrete SMEM/TMEM arena (consumer).

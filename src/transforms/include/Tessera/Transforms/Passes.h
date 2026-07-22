@@ -276,6 +276,11 @@ std::unique_ptr<mlir::Pass> createLayoutLegalityPass();
 // consumes them yet (an IR-completeness milestone).
 std::unique_ptr<mlir::Pass> createLayoutAssignmentPass();
 
+// Consume legal Graph layout casts at the NVIDIA boundary. The requested
+// physical layout is attached to the corresponding Tile staging copy before
+// the same-type Graph marker is removed.
+std::unique_ptr<mlir::Pass> createNVIDIAGraphLayoutMaterializationPass();
+
 // ── 2026-07-08 — TileBufferReusePass (Workstream H / W3) ─────────────────
 // Global buffer assignment/reuse for Tile IR: assign disjoint-live-range
 // `tile.alloc_shared` / `tile.tmem.alloc` buffers of identical memref type to

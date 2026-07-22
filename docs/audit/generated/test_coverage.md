@@ -7,32 +7,32 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **480** ops in `primitive_coverage` registry.
-- **4439** total Python-test references, **1007** total lit-fixture references.
+- **4447** total Python-test references, **1046** total lit-fixture references.
 - **81** ops have **zero** references in either test surface.
 - **117** ops have ≤1 reference ("thinly tested").
-- **151** ops have ≥10 references ("well tested").
+- **152** ops have ≥10 references ("well tested").
 - **127** ops have at least one associated `pytest.raises` negative test.
 
 ## Top 20 most-tested ops
 
 | Op | py refs | lit refs | total | neg | dtypes |
 |----|--------:|---------:|------:|----:|--------|
-| `matmul` |  441 |  230 |  671 |  19 | `bf16`, `f16`, `f32`, `f64` … |
-| `softmax` |  136 |   38 |  174 |  31 | `bf16`, `f16`, `f32`, `f64` … |
-| `flash_attn` |  112 |   57 |  169 |   9 | `bf16`, `f16`, `f32`, `f64` … |
+| `matmul` |  441 |  233 |  674 |  19 | `bf16`, `f16`, `f32`, `f64` … |
+| `softmax` |  140 |   41 |  181 |  31 | `bf16`, `f16`, `f32`, `f64` … |
+| `flash_attn` |  112 |   60 |  172 |   9 | `bf16`, `f16`, `f32`, `f64` … |
 | `add` |  118 |   30 |  148 |  10 | `bf16`, `f16`, `f32`, `f64` … |
-| `relu` |  109 |   34 |  143 |   9 | `bf16`, `f16`, `f32`, `f64` … |
-| `mul` |   90 |   11 |  101 |   7 | `bf16`, `f16`, `f32`, `f64` … |
-| `reduce` |   92 |    4 |   96 |   7 | `bf16`, `f16`, `f32`, `f64` … |
+| `relu` |  109 |   35 |  144 |   9 | `bf16`, `f16`, `f32`, `f64` … |
+| `mul` |   90 |   14 |  104 |   7 | `bf16`, `f16`, `f32`, `f64` … |
+| `reduce` |   93 |   10 |  103 |   7 | `bf16`, `f16`, `f32`, `f64` … |
+| `silu` |   86 |    8 |   94 |   5 | `bf16`, `f16`, `f32`, `f64` … |
 | `rmsnorm` |   80 |   13 |   93 |   4 | `bf16`, `f16`, `f32`, `f64` … |
-| `silu` |   85 |    6 |   91 |   5 | `bf16`, `f16`, `f32`, `f64` … |
 | `gemm` |   83 |    2 |   85 |   8 | `bf16`, `f16`, `f32`, `fp16` … |
 | `selective_ssm` |   71 |   10 |   81 |   3 | `bf16`, `f16`, `fp16`, `fp32` |
-| `gelu` |   51 |   19 |   70 |   0 | `bf16`, `f16`, `f32`, `f64` … |
+| `gelu` |   52 |   20 |   72 |   0 | `bf16`, `f16`, `f32`, `f64` … |
+| `cast` |   17 |   47 |   64 |   1 | `fp16`, `fp32`, `int8` |
 | `transpose` |   29 |   35 |   64 |   0 | `bf16`, `f16`, `f32`, `fp16` … |
 | `attn_local_window_2d` |   36 |   25 |   61 |   1 | `fp16`, `fp32` |
 | `msa_sparse_attention` |   47 |   11 |   58 |   1 |  |
-| `cast` |   17 |   40 |   57 |   1 | `fp16`, `fp32`, `int8` |
 | `cholesky` |   27 |   30 |   57 |   0 | `bf16`, `f16`, `f32`, `fp16` … |
 | `grouped_gemm` |   31 |   24 |   55 |   2 | `bf16`, `fp32`, `fp4_e2m1`, `fp8_e4m3` … |
 | `linear_attn` |   44 |    8 |   52 |   2 |  |

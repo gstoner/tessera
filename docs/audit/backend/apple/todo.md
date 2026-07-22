@@ -1292,3 +1292,14 @@ schedule, selector, or device proof. The x86 dynamic last-axis reduction guard
 is not applicable to Apple’s bucketed MSL routes. Shared add/multiply/static-
 broadcast adjoints change Graph IR only; no Apple backward runtime or exact-
 device promotion is claimed.
+
+Cross-backend sync `CORE-COMPILER-FOLLOWON-2026-07-22` adds shared kind-aware
+sum/mean, GELU/SiLU, and softmax Graph adjoints with host CPU oracle proof.
+Dynamic mean, max/min, ReLU, and normalization remain explicit fallbacks for
+the documented Graph-contract reasons. Guarded dynamic softmax, attention, and
+growing KV-cache execution are x86-only and are not applicable to Apple's
+bucketed MSL routes; no Metal ABI, schedule, selector, backward runtime, or
+exact-device claim transfers. Apple's architecture-owned Graph-cast consumer
+is host-validated: it accepts row-major/BHSD/NHWC before runtime fusion/per-op
+lowering and rejects unsupported column-major bindings. This changes binding
+metadata only and claims no exact-device proof.

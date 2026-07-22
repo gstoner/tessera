@@ -1368,7 +1368,10 @@ def Tessera_WriteRowOp : Op<Tessera_Dialect, "write_row", [Pure]> {
 // identity-fill init, mirroring how linalg.reduce is itself parameterized
 // (dimensions + combiner region). This is the first production-lane op whose
 // result rank differs from its input rank.
-def Tessera_ReduceOp : Op<Tessera_Dialect, "reduce", [Pure]> {
+def Tessera_ReduceOp : Op<
+  Tessera_Dialect, "reduce",
+  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
+> {
   let summary = "Reduction over a single axis (sum/max/min/mean)";
   let arguments = (ins TensorType:$input, StrAttr:$kind, I64Attr:$axis);
   let results = (outs TensorType:$result);

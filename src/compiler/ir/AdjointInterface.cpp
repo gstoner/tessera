@@ -106,6 +106,24 @@ llvm::SmallVector<mlir::Value> MatmulOp::buildAdjoint(
 static llvm::SmallVector<mlir::Value>
 placeholderAdjoint(mlir::OpBuilder &builder, mlir::Location loc, mlir::Type ty,
                    llvm::StringRef key, mlir::Value dy, mlir::Value x);
+static mlir::Value splatConst(mlir::OpBuilder &builder, mlir::Location loc,
+                              mlir::Type ty, double value);
+
+// These tables are both implementation policy and the generated ledger's
+// source for kind-aware `tessera.reduce` classification. Keep their spelling
+// stable unless autodiff_ledger.py is updated in the same change.
+static constexpr llvm::StringLiteral kReduceNativeAdjointKinds[] = {
+    "sum", "mean"};
+static constexpr llvm::StringLiteral kReducePlaceholderAdjointKinds[] = {
+    "max", "min"};
+
+static bool containsKind(llvm::ArrayRef<llvm::StringLiteral> kinds,
+                         llvm::StringRef kind) {
+  for (llvm::StringLiteral candidate : kinds)
+    if (candidate == kind)
+      return true;
+  return false;
+}
 
 // Elementwise tensor algebra. Add is self-linear; multiply applies the product
 // rule. These formulas contain no shape-dependent constants, so they are valid
@@ -173,6 +191,54 @@ llvm::SmallVector<mlir::Value> BroadcastOp::buildAdjoint(
   return {grad};
 }
 
+// Single-axis sum/mean reduction. The output cotangent first regains the
+// removed singleton axis and then broadcasts to the input shape. Mean adds the
+// reciprocal static extent. Dynamic mean retains the reference fallback until
+// Graph IR owns a runtime scalar-from-dim primitive; sum is shape-polymorphic.
+// Max/min retain the Python VJP because their equal-tie distribution policy
+// requires comparisons and a second reduction.
+llvm::SmallVector<mlir::Value> ReduceOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  if (outputCotangents.size() != 1 || !outputCotangents[0])
+    return {mlir::Value()};
+
+  auto inTy = mlir::dyn_cast<mlir::RankedTensorType>(getInput().getType());
+  mlir::Value dy = outputCotangents[0];
+  llvm::StringRef kind = getKind();
+  if (!inTy || !containsKind(kReduceNativeAdjointKinds, kind))
+    return placeholderAdjoint(builder, getLoc(), getInput().getType(), kind,
+                              dy, getInput());
+
+  int64_t axis = getAxisAttr().getInt();
+  if (axis < 0)
+    axis += inTy.getRank();
+  if (axis < 0 || axis >= inTy.getRank())
+    return {mlir::Value()}; // The op verifier diagnoses this before autodiff.
+
+  if (kind == "mean" &&
+      (!inTy.hasStaticShape() ||
+       mlir::ShapedType::isDynamic(inTy.getDimSize(axis))))
+    return placeholderAdjoint(builder, getLoc(), getInput().getType(), kind,
+                              dy, getInput());
+
+  llvm::SmallVector<int64_t> expandedShape(inTy.getShape());
+  expandedShape[axis] = 1;
+  auto expandedTy = mlir::RankedTensorType::get(
+      expandedShape, inTy.getElementType(), inTy.getEncoding());
+  auto expanded = builder.create<UnsqueezeOp>(getLoc(), expandedTy, dy);
+  expanded->setAttr(
+      "axes", builder.getArrayAttr({builder.getI64IntegerAttr(axis)}));
+  mlir::Value grad =
+      builder.create<BroadcastOp>(getLoc(), inTy, expanded.getY()).getY();
+
+  if (kind == "mean") {
+    double reciprocal = 1.0 / static_cast<double>(inTy.getDimSize(axis));
+    mlir::Value scale = splatConst(builder, getLoc(), inTy, reciprocal);
+    grad = builder.create<MulOp>(getLoc(), inTy, grad, scale).getResult();
+  }
+  return {grad};
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Unary ops — adjoints follow the standard chain rule on a scalar function.
 //
@@ -203,12 +269,49 @@ llvm::SmallVector<mlir::Value> SoftmaxOp::buildAdjoint(
     mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
   if (outputCotangents.size() != 1 || !outputCotangents[0])
     return {mlir::Value()};
+  auto inTy = mlir::dyn_cast<mlir::RankedTensorType>(getX().getType());
+  if (!inTy || inTy.getRank() < 1)
+    return placeholderAdjoint(builder, getLoc(), getX().getType(), "softmax",
+                              outputCotangents[0], getX());
+
+  int64_t axis = -1;
+  if (auto axisAttr = getAxisAttr())
+    axis = axisAttr.getInt();
+  if (axis < 0)
+    axis += inTy.getRank();
+  if (axis < 0 || axis >= inTy.getRank())
+    return {mlir::Value()}; // Diagnosed by SoftmaxOp::verify.
+
   auto loc = getLoc();
-  auto callOp = builder.create<CustomAdjointCallOp>(
-      loc, llvm::SmallVector<mlir::Type>{getX().getType()},
-      builder.getStringAttr("softmax"),
-      mlir::ValueRange{outputCotangents[0], getX()});
-  return {callOp.getResult(0)};
+  mlir::Value dy = outputCotangents[0];
+  mlir::Value s = builder
+                      .create<SoftmaxOp>(loc, inTy, getX(), getAxisAttr(),
+                                         getNumericPolicyAttr())
+                      .getY();
+  mlir::Value weighted =
+      builder.create<MulOp>(loc, inTy, dy, s).getResult();
+  llvm::SmallVector<int64_t> reducedShape(inTy.getShape());
+  reducedShape.erase(reducedShape.begin() + axis);
+  auto reducedTy = mlir::RankedTensorType::get(
+      reducedShape, inTy.getElementType(), inTy.getEncoding());
+  mlir::Value dot =
+      builder
+          .create<ReduceOp>(loc, reducedTy, weighted,
+                            builder.getStringAttr("sum"),
+                            builder.getI64IntegerAttr(axis))
+          .getResult();
+  llvm::SmallVector<int64_t> expandedShape(inTy.getShape());
+  expandedShape[axis] = 1;
+  auto expandedTy = mlir::RankedTensorType::get(
+      expandedShape, inTy.getElementType(), inTy.getEncoding());
+  auto expanded = builder.create<UnsqueezeOp>(loc, expandedTy, dot);
+  expanded->setAttr(
+      "axes", builder.getArrayAttr({builder.getI64IntegerAttr(axis)}));
+  mlir::Value dotBroadcast =
+      builder.create<BroadcastOp>(loc, inTy, expanded.getY()).getY();
+  mlir::Value centered =
+      builder.create<SubOp>(loc, inTy, dy, dotBroadcast).getResult();
+  return {builder.create<MulOp>(loc, inTy, centered, s).getResult()};
 }
 
 // Pointwise activations (relu, gelu, sigmoid, sin) — each has a closed-form
@@ -230,12 +333,10 @@ llvm::SmallVector<mlir::Value> SoftmaxOp::buildAdjoint(
     return {callOp.getResult(0)};                                             \
   }
 
-POINTWISE_BUILD_ADJOINT(GeluOp, "gelu")
 POINTWISE_BUILD_ADJOINT(ReluOp, "relu")
 POINTWISE_BUILD_ADJOINT(SinOp, "sin")
 // Tier-1 MPSGraph-lane ops (2026-05-29). Each has a Python VJP the runtime
 // resolves via the custom_adjoint_call placeholder keyed by name.
-POINTWISE_BUILD_ADJOINT(SiluOp, "silu")
 POINTWISE_BUILD_ADJOINT(SoftplusOp, "softplus")
 POINTWISE_BUILD_ADJOINT(RmsNormOp, "rmsnorm")
 POINTWISE_BUILD_ADJOINT(LogSoftmaxOp, "log_softmax")
@@ -318,6 +419,78 @@ llvm::SmallVector<mlir::Value> SigmoidOp::buildAdjoint(
   mlir::Value sPrime = builder.create<MulOp>(loc, ty, s, oneMinusS).getResult();
   mlir::Value dx = builder.create<MulOp>(loc, ty, dy, sPrime).getResult();
   return {dx};
+}
+
+// silu: dx = dy · (s + x·s·(1−s)), s = sigmoid(x)
+llvm::SmallVector<mlir::Value> SiluOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  if (outputCotangents.size() != 1 || !outputCotangents[0])
+    return {mlir::Value()};
+  auto loc = getLoc();
+  mlir::Type ty = getResult().getType();
+  mlir::Value dy = outputCotangents[0];
+  if (!isStaticShaped(ty))
+    return placeholderAdjoint(builder, loc, ty, "silu", dy, getX());
+  mlir::Value s = builder.create<SigmoidOp>(loc, ty, getX()).getResult();
+  mlir::Value one = splatConst(builder, loc, ty, 1.0);
+  mlir::Value oneMinusS = builder.create<SubOp>(loc, ty, one, s).getResult();
+  mlir::Value xs = builder.create<MulOp>(loc, ty, getX(), s).getResult();
+  mlir::Value correction =
+      builder.create<MulOp>(loc, ty, xs, oneMinusS).getResult();
+  mlir::Value derivative =
+      builder.create<AddOp>(loc, ty, s, correction).getResult();
+  return {builder.create<MulOp>(loc, ty, dy, derivative).getResult()};
+}
+
+// tanh-approx GELU, matching python/tessera/autodiff/vjp.py::vjp_gelu.
+llvm::SmallVector<mlir::Value> GeluOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  if (outputCotangents.size() != 1 || !outputCotangents[0])
+    return {mlir::Value()};
+  auto loc = getLoc();
+  mlir::Type ty = getResult().getType();
+  mlir::Value dy = outputCotangents[0];
+  if (!isStaticShaped(ty))
+    return placeholderAdjoint(builder, loc, ty, "gelu", dy, getX());
+
+  constexpr double k = 0.7978845608028654; // sqrt(2 / pi)
+  mlir::Value one = splatConst(builder, loc, ty, 1.0);
+  mlir::Value half = splatConst(builder, loc, ty, 0.5);
+  mlir::Value cubicCoeff = splatConst(builder, loc, ty, 0.044715);
+  mlir::Value threeCubicCoeff = splatConst(builder, loc, ty, 0.134145);
+  mlir::Value kConst = splatConst(builder, loc, ty, k);
+
+  mlir::Value x2 = builder.create<MulOp>(loc, ty, getX(), getX()).getResult();
+  mlir::Value x3 = builder.create<MulOp>(loc, ty, x2, getX()).getResult();
+  mlir::Value cubic =
+      builder.create<MulOp>(loc, ty, cubicCoeff, x3).getResult();
+  mlir::Value innerBase =
+      builder.create<AddOp>(loc, ty, getX(), cubic).getResult();
+  mlir::Value inner =
+      builder.create<MulOp>(loc, ty, kConst, innerBase).getResult();
+  mlir::Value t = builder.create<TanhOp>(loc, ty, inner).getResult();
+
+  mlir::Value onePlusT = builder.create<AddOp>(loc, ty, one, t).getResult();
+  mlir::Value first =
+      builder.create<MulOp>(loc, ty, half, onePlusT).getResult();
+  mlir::Value t2 = builder.create<MulOp>(loc, ty, t, t).getResult();
+  mlir::Value oneMinusT2 =
+      builder.create<SubOp>(loc, ty, one, t2).getResult();
+  mlir::Value scaledX2 =
+      builder.create<MulOp>(loc, ty, threeCubicCoeff, x2).getResult();
+  mlir::Value slopeBase =
+      builder.create<AddOp>(loc, ty, one, scaledX2).getResult();
+  mlir::Value innerSlope =
+      builder.create<MulOp>(loc, ty, kConst, slopeBase).getResult();
+  mlir::Value halfX =
+      builder.create<MulOp>(loc, ty, half, getX()).getResult();
+  mlir::Value gatedX =
+      builder.create<MulOp>(loc, ty, halfX, oneMinusT2).getResult();
+  mlir::Value second =
+      builder.create<MulOp>(loc, ty, gatedX, innerSlope).getResult();
+  mlir::Value derivative =
+      builder.create<AddOp>(loc, ty, first, second).getResult();
+  return {builder.create<MulOp>(loc, ty, dy, derivative).getResult()};
 }
 
 }  // namespace tessera

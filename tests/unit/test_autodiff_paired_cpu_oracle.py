@@ -86,6 +86,20 @@ class _Interp:
                 env[dst] = np.tanh(env[operands[0]]).astype(np.float32)
             elif op == "tessera.sigmoid":
                 env[dst] = (1.0 / (1.0 + np.exp(-env[operands[0]]))).astype(np.float32)
+            elif op == "tessera.silu":
+                x = env[operands[0]]
+                env[dst] = (x / (1.0 + np.exp(-x))).astype(np.float32)
+            elif op == "tessera.gelu":
+                x = env[operands[0]]
+                inner = np.sqrt(2.0 / np.pi) * (x + 0.044715 * x**3)
+                env[dst] = (0.5 * x * (1.0 + np.tanh(inner))).astype(np.float32)
+            elif op == "tessera.softmax":
+                x = env[operands[0]]
+                axis_match = re.search(r"axis = (-?\d+)", rhs)
+                axis = int(axis_match.group(1)) if axis_match else -1
+                z = x - np.max(x, axis=axis, keepdims=True)
+                e = np.exp(z)
+                env[dst] = (e / np.sum(e, axis=axis, keepdims=True)).astype(np.float32)
             elif op == "tessera.mul":
                 env[dst] = (env[operands[0]] * env[operands[1]]).astype(np.float32)
             elif op == "tessera.sub":
@@ -100,8 +114,15 @@ class _Interp:
             elif op == "tessera.reduce":
                 axis = int(re.search(r"axis = (-?\d+)", rhs).group(1))
                 kind = re.search(r'kind = "([^"]+)"', rhs).group(1)
-                assert kind == "sum", f"interpreter only admits sum, got {kind}"
-                env[dst] = np.sum(env[operands[0]], axis=axis).astype(np.float32)
+                assert kind in {"sum", "mean"}, (
+                    f"interpreter only admits sum/mean, got {kind}"
+                )
+                reducer = np.sum if kind == "sum" else np.mean
+                env[dst] = reducer(env[operands[0]], axis=axis).astype(np.float32)
+            elif op == "tessera.unsqueeze":
+                axes_text = rhs.split("axes =", 1)[1].split("}", 1)[0]
+                axis = int(re.search(r"\[\s*(-?\d+)", axes_text).group(1))
+                env[dst] = np.expand_dims(env[operands[0]], axis=axis)
             elif op == "tessera.reshape":
                 dims = tuple(
                     int(d) for d in _DIMS.findall(rhs)[-1].split("x")
@@ -214,6 +235,30 @@ module {
     np.testing.assert_allclose(dx, seed.sum(axis=(0, 1)).reshape(1, 3))
 
 
+@pytest.mark.parametrize("kind", ["sum", "mean"])
+def test_native_reduction_backward_matches_numpy_oracle(kind: str):
+    mlir = f"""
+module {{
+  func.func @reduce(%x: tensor<2x3xf32>) -> tensor<2xf32>
+      attributes {{tessera.autodiff = "reverse"}} {{
+    %y = "tessera.reduce"(%x) {{kind = "{kind}", axis = 1 : i64}} :
+        (tensor<2x3xf32>) -> tensor<2xf32>
+    return %y : tensor<2xf32>
+  }}
+}}
+"""
+    rng = np.random.default_rng(31)
+    x = rng.standard_normal((2, 3)).astype(np.float32)
+    seed = rng.standard_normal((2,)).astype(np.float32)
+    funcs = _run_paired(mlir)
+    (primal,) = funcs["reduce"].run([x])
+    (dx,) = funcs["reduce__bwd"].run([x, seed])
+    reducer = np.sum if kind == "sum" else np.mean
+    np.testing.assert_allclose(primal, reducer(x, axis=1))
+    scale = 1.0 if kind == "sum" else 1.0 / x.shape[1]
+    np.testing.assert_allclose(dx, np.broadcast_to(seed[:, None], x.shape) * scale)
+
+
 @pytest.mark.parametrize("op", ["add", "mul"])
 def test_native_binary_backward_matches_numpy_oracle(op: str):
     rng = np.random.default_rng(11)
@@ -232,6 +277,60 @@ def test_native_binary_backward_matches_numpy_oracle(op: str):
         np.testing.assert_allclose(primal, x * y)
         np.testing.assert_allclose(dx, seed * y)
         np.testing.assert_allclose(dy, seed * x)
+
+
+@pytest.mark.parametrize("op", ["silu", "gelu"])
+def test_native_activation_backward_matches_numpy_oracle(op: str):
+    mlir = f"""
+module {{
+  func.func @activation(%x: tensor<3x5xf32>) -> tensor<3x5xf32>
+      attributes {{tessera.autodiff = "reverse"}} {{
+    %y = "tessera.{op}"(%x) : (tensor<3x5xf32>) -> tensor<3x5xf32>
+    return %y : tensor<3x5xf32>
+  }}
+}}
+"""
+    rng = np.random.default_rng(41)
+    x = rng.standard_normal((3, 5)).astype(np.float32)
+    seed = rng.standard_normal((3, 5)).astype(np.float32)
+    funcs = _run_paired(mlir)
+    (primal,) = funcs["activation"].run([x])
+    (dx,) = funcs["activation__bwd"].run([x, seed])
+    s = 1.0 / (1.0 + np.exp(-x))
+    if op == "silu":
+        expected = x * s
+        derivative = s + x * s * (1.0 - s)
+    else:
+        k = np.sqrt(2.0 / np.pi)
+        inner = k * (x + 0.044715 * x**3)
+        t = np.tanh(inner)
+        expected = 0.5 * x * (1.0 + t)
+        derivative = 0.5 * (1.0 + t) + (
+            0.5 * x * (1.0 - t * t) * k * (1.0 + 3.0 * 0.044715 * x * x)
+        )
+    np.testing.assert_allclose(primal, expected, rtol=2e-6, atol=2e-6)
+    np.testing.assert_allclose(dx, seed * derivative, rtol=3e-6, atol=3e-6)
+
+
+def test_native_softmax_backward_matches_numpy_oracle():
+    mlir = """
+module {
+  func.func @softmax(%x: tensor<3x5xf32>) -> tensor<3x5xf32>
+      attributes {tessera.autodiff = "reverse"} {
+    %y = "tessera.softmax"(%x) {axis = 1 : i64} :
+        (tensor<3x5xf32>) -> tensor<3x5xf32>
+    return %y : tensor<3x5xf32>
+  }
+}
+"""
+    rng = np.random.default_rng(53)
+    x = rng.standard_normal((3, 5)).astype(np.float32)
+    seed = rng.standard_normal((3, 5)).astype(np.float32)
+    funcs = _run_paired(mlir)
+    (s,) = funcs["softmax"].run([x])
+    (dx,) = funcs["softmax__bwd"].run([x, seed])
+    expected = (seed - np.sum(seed * s, axis=1, keepdims=True)) * s
+    np.testing.assert_allclose(dx, expected, rtol=3e-6, atol=3e-6)
 
 
 @pytest.mark.parametrize("act", ["tanh", "sigmoid"])

@@ -92,6 +92,10 @@ PassPipelineRegistration<> gAppleGPURuntimePipeline(
     "fusions, matmul, rope, flash_attn, softmax, gelu) to Apple GPU runtime "
     "calls (MPS + custom MSL kernels)",
     [](OpPassManager &pm) {
+      // Architecture-owned Graph layout boundary. Legal row-major/BHSD/NHWC
+      // casts become explicit Apple operand-binding attrs before fusion or
+      // per-op runtime lowering consumes their users.
+      pm.addPass(createMaterializeGraphLayoutToApplePass());
       // CORE-COMPILER-1: all fusion families are rows in one declarative
       // registry and run through one generic RewritePattern. Pattern benefit
       // preserves the longest-chain-first policy.
@@ -115,6 +119,7 @@ PassPipelineRegistration<> gAppleGPURuntimePipeline(
 } // namespace
 
 void registerTesseraAppleBackendPipelines() {
+  registerPass([]() { return createMaterializeGraphLayoutToApplePass(); });
   // Touch the static registration objects so the linker keeps them.
   (void)&gAppleCPUPipeline;
   (void)&gAppleGPUPipeline;

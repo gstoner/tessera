@@ -1,0 +1,3811 @@
+{
+  "context": {
+    "compiler_fingerprint": "sha256:50e9925be13062648f0b049fd25bc5a508f6eebf9114dddc151cc11d1c2d9c81",
+    "device": "apple7",
+    "os_version": "26.5.2",
+    "physical_device": "Apple M1 Max",
+    "runtime_fingerprint": "sha256:fe58b7c65d79354baa1218dc473708c93880213ec4e2911247f4c287ac3b6e95",
+    "sdk_version": "26.5"
+  },
+  "decisions": [
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "mps_mpsgraph_unfused",
+      "op": "matmul_bias_silu",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mps_mpsgraph_unfused": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              2414041,
+              2427334,
+              2364250
+            ],
+            [
+              2257167,
+              2325083,
+              2277042
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 3,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                },
+                {
+                  "index": 2,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            },
+            {
+              "dispatch_count": 3,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                },
+                {
+                  "index": 2,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            }
+          ],
+          "run_drift_fraction": 0.06016533731042291,
+          "times_ns": [
+            2414041,
+            2277042
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval+metal4_mpsgraph_envelope+metal4_mpsgraph_envelope",
+            "metal_kernel_interval+metal4_mpsgraph_envelope+metal4_mpsgraph_envelope"
+          ]
+        },
+        "synthesized_fused": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.012117639055941432,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.857983356537855,
+            0.8458657174819135
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.857983356537855,
+              0.8668638102543779,
+              0.8509747277149201
+            ],
+            [
+              0.8403972767633056,
+              0.8458657174819135,
+              0.8513971195963886
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              342834,
+              323166,
+              352333
+            ],
+            [
+              360250,
+              358375,
+              338375
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 8192,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 8192
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            },
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 8192,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 8192
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            }
+          ],
+          "run_drift_fraction": 0.04533097650758093,
+          "speedups_vs_incumbent": [
+            0.857983356537855,
+            0.8426137945632974
+          ],
+          "times_ns": [
+            342834,
+            358375
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "end_to_end"
+      },
+      "selected_route": "synthesized_fused",
+      "shape": "256x256x256",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "mps_mpsgraph_unfused",
+      "op": "matmul_bias_silu",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mps_mpsgraph_unfused": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              1190249,
+              1053290,
+              1119083
+            ],
+            [
+              1028040,
+              1062582,
+              1016499
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 3,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                },
+                {
+                  "index": 2,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            },
+            {
+              "dispatch_count": 3,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                },
+                {
+                  "index": 2,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            }
+          ],
+          "run_drift_fraction": 0.08855978366600521,
+          "times_ns": [
+            1119083,
+            1028040
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval+metal4_mpsgraph_envelope+metal4_mpsgraph_envelope",
+            "metal_kernel_interval+metal4_mpsgraph_envelope+metal4_mpsgraph_envelope"
+          ]
+        },
+        "synthesized_fused": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.002832587758659466,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.9798369920915707,
+            0.9770044043329112
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.9798369920915707,
+              0.9747230107567716,
+              0.9798576155656015
+            ],
+            [
+              0.9768977860783628,
+              0.978119335731266,
+              0.9770044043329112
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              23999,
+              26624,
+              22541
+            ],
+            [
+              23750,
+              23250,
+              23375
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 8192,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 8192
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            },
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 8192,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 8192
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            }
+          ],
+          "run_drift_fraction": 0.026695187165775403,
+          "speedups_vs_incumbent": [
+            0.9785547631408931,
+            0.9772625578771253
+          ],
+          "times_ns": [
+            23999,
+            23375
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "device"
+      },
+      "selected_route": "synthesized_fused",
+      "shape": "256x256x256",
+      "status": "promote_candidate",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "mps_mpsgraph_unfused",
+      "op": "matmul_bias_silu",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mps_mpsgraph_unfused": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              2883083,
+              3345875,
+              2242042
+            ],
+            [
+              2270333,
+              3854250,
+              4606208
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 3,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                },
+                {
+                  "index": 2,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            },
+            {
+              "dispatch_count": 3,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                },
+                {
+                  "index": 2,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            }
+          ],
+          "run_drift_fraction": 0.3368501704598862,
+          "times_ns": [
+            2883083,
+            3854250
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval+metal4_mpsgraph_envelope+metal4_mpsgraph_envelope",
+            "metal_kernel_interval+metal4_mpsgraph_envelope+metal4_mpsgraph_envelope"
+          ]
+        },
+        "synthesized_fused": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.04916359077990917,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.894788668935303,
+            0.8456250781553938
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.894788668935303,
+              0.9235374901931482,
+              0.8739800592495591
+            ],
+            [
+              0.7415026782414739,
+              0.9251908931698775,
+              0.8456250781553938
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              303333,
+              255834,
+              282542
+            ],
+            [
+              586875,
+              288333,
+              711083
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 8192,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 8192
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            },
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 8192,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 8192
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            }
+          ],
+          "run_drift_fraction": 1.07712481684139,
+          "speedups_vs_incumbent": [
+            0.9020000464780237,
+            0.8477330219887138
+          ],
+          "times_ns": [
+            282542,
+            586875
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "end_to_end"
+      },
+      "selected_route": "synthesized_fused",
+      "shape": "64x64x64",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "mps_mpsgraph_unfused",
+      "op": "matmul_bias_silu",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mps_mpsgraph_unfused": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              1301874,
+              1279082,
+              1179499
+            ],
+            [
+              1019790,
+              1740665,
+              2365582
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 3,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                },
+                {
+                  "index": 2,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            },
+            {
+              "dispatch_count": 3,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                },
+                {
+                  "index": 2,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            }
+          ],
+          "run_drift_fraction": 0.360870530583653,
+          "times_ns": [
+            1279082,
+            1740665
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval+metal4_mpsgraph_envelope+metal4_mpsgraph_envelope",
+            "metal_kernel_interval+metal4_mpsgraph_envelope+metal4_mpsgraph_envelope"
+          ]
+        },
+        "synthesized_fused": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.006544125835146963,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.9821096358019286,
+            0.9886537616370755
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.9821096358019286,
+              0.9806509668652987,
+              0.9846689145137045
+            ],
+            [
+              0.9802655448670805,
+              0.9886537616370755,
+              0.9907528041725039
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              23291,
+              24749,
+              18083
+            ],
+            [
+              20125,
+              19750,
+              21875
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 8192,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 8192
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            },
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 8192,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 8192
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            }
+          ],
+          "run_drift_fraction": 0.15731677018633541,
+          "speedups_vs_incumbent": [
+            0.9817908468729917,
+            0.9884383267314504
+          ],
+          "times_ns": [
+            23291,
+            20125
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "device"
+      },
+      "selected_route": "synthesized_fused",
+      "shape": "64x64x64",
+      "status": "promote_candidate",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "mps_mpsgraph_unfused",
+      "op": "matmul_bias_silu",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mps_mpsgraph_unfused": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              2283625,
+              2255334,
+              2460000
+            ],
+            [
+              2303916,
+              2388417,
+              2392417
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 3,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                },
+                {
+                  "index": 2,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            },
+            {
+              "dispatch_count": 3,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                },
+                {
+                  "index": 2,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            }
+          ],
+          "run_drift_fraction": 0.04588844490667251,
+          "times_ns": [
+            2283625,
+            2388417
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval+metal4_mpsgraph_envelope+metal4_mpsgraph_envelope",
+            "metal_kernel_interval+metal4_mpsgraph_envelope+metal4_mpsgraph_envelope"
+          ]
+        },
+        "synthesized_fused": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.0167660892402951,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.8838285620449943,
+            0.8670624728046992
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.8838285620449943,
+              0.8522391805382262,
+              0.8947154471544716
+            ],
+            [
+              0.8807100606098486,
+              0.8212552498160915,
+              0.8670624728046992
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              265292,
+              333250,
+              259000
+            ],
+            [
+              274834,
+              426917,
+              318042
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 8192,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 8192
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            },
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 8192,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 8192
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            }
+          ],
+          "run_drift_fraction": 0.19883750735039127,
+          "speedups_vs_incumbent": [
+            0.8838285620449943,
+            0.8668398357573238
+          ],
+          "times_ns": [
+            265292,
+            318042
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "end_to_end"
+      },
+      "selected_route": "synthesized_fused",
+      "shape": "65x63x67",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "mps_mpsgraph_unfused",
+      "op": "matmul_bias_silu",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mps_mpsgraph_unfused": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              1011291,
+              1019832,
+              1106249
+            ],
+            [
+              1028291,
+              1069040,
+              997457
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 3,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                },
+                {
+                  "index": 2,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            },
+            {
+              "dispatch_count": 3,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                },
+                {
+                  "index": 2,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            }
+          ],
+          "run_drift_fraction": 0.008294503408404522,
+          "times_ns": [
+            1019832,
+            1028291
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval+metal4_mpsgraph_envelope+metal4_mpsgraph_envelope",
+            "metal_kernel_interval+metal4_mpsgraph_envelope+metal4_mpsgraph_envelope"
+          ]
+        },
+        "synthesized_fused": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.0038020466382132634,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.9799770788032327,
+            0.9761750321650194
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.9799770788032327,
+              0.9814518469708736,
+              0.9786069863114001
+            ],
+            [
+              0.9761750321650194,
+              0.9792655092419367,
+              0.9751879028369143
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              20249,
+              18916,
+              23666
+            ],
+            [
+              24499,
+              22166,
+              24749
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 8192,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 8192
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            },
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 8192,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 8192
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            }
+          ],
+          "run_drift_fraction": 0.20988690799545656,
+          "speedups_vs_incumbent": [
+            0.9801447689423356,
+            0.9761750321650194
+          ],
+          "times_ns": [
+            20249,
+            24499
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "device"
+      },
+      "selected_route": "synthesized_fused",
+      "shape": "65x63x67",
+      "status": "promote_candidate",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "mps_mpsgraph_unfused",
+      "op": "matmul_relu",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mps_mpsgraph_unfused": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              1417083,
+              1433708,
+              1233708
+            ],
+            [
+              1271583,
+              1442750,
+              1238875
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 2,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            },
+            {
+              "dispatch_count": 2,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            }
+          ],
+          "run_drift_fraction": 0.11442430419406362,
+          "times_ns": [
+            1417083,
+            1271583
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval+metal4_mpsgraph_envelope",
+            "metal_kernel_interval+metal4_mpsgraph_envelope"
+          ]
+        },
+        "synthesized_fused": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.0251941947200216,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.766746785258923,
+            0.7415525905389014
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.7734197644033554,
+              0.766746785258923,
+              0.747779863630616
+            ],
+            [
+              0.7659743799657592,
+              0.7415525905389014,
+              0.7384054081323782
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              321083,
+              334417,
+              311166
+            ],
+            [
+              297583,
+              372875,
+              324083
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 6144,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 6144
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            },
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 6144,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 6144
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            }
+          ],
+          "run_drift_fraction": 0.00934337850337763,
+          "speedups_vs_incumbent": [
+            0.7734197644033554,
+            0.745134214597081
+          ],
+          "times_ns": [
+            321083,
+            324083
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "end_to_end"
+      },
+      "selected_route": "synthesized_fused",
+      "shape": "256x256x256",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "mps_mpsgraph_unfused",
+      "op": "matmul_relu",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mps_mpsgraph_unfused": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              594541,
+              572165,
+              519499
+            ],
+            [
+              524416,
+              717624,
+              517166
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 2,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            },
+            {
+              "dispatch_count": 2,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            }
+          ],
+          "run_drift_fraction": 0.09105176043446424,
+          "times_ns": [
+            572165,
+            524416
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval+metal4_mpsgraph_envelope",
+            "metal_kernel_interval+metal4_mpsgraph_envelope"
+          ]
+        },
+        "synthesized_fused": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.002144303415038684,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.9578111517960914,
+            0.9599554552111301
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.9578111517960914,
+              0.9588562739769122,
+              0.9520384062336983
+            ],
+            [
+              0.9599554552111301,
+              0.9689377724267861,
+              0.957381189018613
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              25083,
+              23541,
+              24916
+            ],
+            [
+              21000,
+              22291,
+              22041
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 6144,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 6144
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            },
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 6144,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 6144
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            }
+          ],
+          "run_drift_fraction": 0.13043872782541627,
+          "speedups_vs_incumbent": [
+            0.9564531210402594,
+            0.9579703899194533
+          ],
+          "times_ns": [
+            24916,
+            22041
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "device"
+      },
+      "selected_route": "synthesized_fused",
+      "shape": "256x256x256",
+      "status": "promote_candidate",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "mps_mpsgraph_unfused",
+      "op": "matmul_relu",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mps_mpsgraph_unfused": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              1338750,
+              1338416,
+              1433583
+            ],
+            [
+              1307041,
+              1294083,
+              1292917
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 2,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            },
+            {
+              "dispatch_count": 2,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            }
+          ],
+          "run_drift_fraction": 0.03451633318728397,
+          "times_ns": [
+            1338750,
+            1294083
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval+metal4_mpsgraph_envelope",
+            "metal_kernel_interval+metal4_mpsgraph_envelope"
+          ]
+        },
+        "synthesized_fused": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.027927477433516867,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.7635264372213123,
+            0.7355989597877954
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.7718954248366013,
+              0.7635264372213123,
+              0.7280122601900274
+            ],
+            [
+              0.7355989597877954,
+              0.7470533188365815,
+              0.7189494762618173
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              305375,
+              316500,
+              389917
+            ],
+            [
+              345583,
+              327334,
+              363375
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 8192,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 8192
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            },
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 8192,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 8192
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            }
+          ],
+          "run_drift_fraction": 0.09188941548183255,
+          "speedups_vs_incumbent": [
+            0.7635854341736694,
+            0.73295144129086
+          ],
+          "times_ns": [
+            316500,
+            345583
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "end_to_end"
+      },
+      "selected_route": "synthesized_fused",
+      "shape": "256x256x256",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "mps_mpsgraph_unfused",
+      "op": "matmul_relu",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mps_mpsgraph_unfused": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              537041,
+              532541,
+              664290
+            ],
+            [
+              545333,
+              517541,
+              542083
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 2,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            },
+            {
+              "dispatch_count": 2,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            }
+          ],
+          "run_drift_fraction": 0.009388482443612312,
+          "times_ns": [
+            537041,
+            542083
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval+metal4_mpsgraph_envelope",
+            "metal_kernel_interval+metal4_mpsgraph_envelope"
+          ]
+        },
+        "synthesized_fused": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.005958630401991516,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.9586116374138329,
+            0.9526530070118414
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.953992339504805,
+              0.9586116374138329,
+              0.9696427764982162
+            ],
+            [
+              0.9549981387519185,
+              0.9492793807640361,
+              0.9526530070118414
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              24708,
+              22041,
+              20166
+            ],
+            [
+              24541,
+              26250,
+              25666
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 8192,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 8192
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            },
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 8192,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 8192
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            }
+          ],
+          "run_drift_fraction": 0.16446622204074227,
+          "speedups_vs_incumbent": [
+            0.9589584407894369,
+            0.9526530070118414
+          ],
+          "times_ns": [
+            22041,
+            25666
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "device"
+      },
+      "selected_route": "synthesized_fused",
+      "shape": "256x256x256",
+      "status": "promote_candidate",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "mps_mpsgraph_unfused",
+      "op": "matmul_relu",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mps_mpsgraph_unfused": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              1404208,
+              1344833,
+              1279750
+            ],
+            [
+              2026583,
+              1391333,
+              1453792
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 2,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            },
+            {
+              "dispatch_count": 2,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            }
+          ],
+          "run_drift_fraction": 0.08102046871247211,
+          "times_ns": [
+            1344833,
+            1453792
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval+metal4_mpsgraph_envelope",
+            "metal_kernel_interval+metal4_mpsgraph_envelope"
+          ]
+        },
+        "synthesized_fused": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.07011030555153996,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.799667903887478,
+            0.729557598335938
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.8031217597392979,
+              0.7890697209244568,
+              0.799667903887478
+            ],
+            [
+              0.8455321099604606,
+              0.6323964140863474,
+              0.729557598335938
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              276458,
+              283666,
+              256375
+            ],
+            [
+              313042,
+              511459,
+              393167
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 6144,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 6144
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            },
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 6144,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 6144
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            }
+          ],
+          "run_drift_fraction": 0.42215815783952715,
+          "speedups_vs_incumbent": [
+            0.7944294942197284,
+            0.729557598335938
+          ],
+          "times_ns": [
+            276458,
+            393167
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "end_to_end"
+      },
+      "selected_route": "mps_mpsgraph_unfused",
+      "shape": "64x64x64",
+      "status": "retain_incumbent",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "mps_mpsgraph_unfused",
+      "op": "matmul_relu",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mps_mpsgraph_unfused": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              544333,
+              608791,
+              529666
+            ],
+            [
+              607416,
+              549457,
+              587957
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 2,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            },
+            {
+              "dispatch_count": 2,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            }
+          ],
+          "run_drift_fraction": 0.08014211888678438,
+          "times_ns": [
+            544333,
+            587957
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval+metal4_mpsgraph_envelope",
+            "metal_kernel_interval+metal4_mpsgraph_envelope"
+          ]
+        },
+        "synthesized_fused": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.0021330102651496707,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.9601669538478722,
+            0.9622999641130219
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.9572871753136407,
+              0.9601669538478722,
+              0.9622422432249758
+            ],
+            [
+              0.9662504774322704,
+              0.9585954860889934,
+              0.9622999641130219
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              23250,
+              24250,
+              19999
+            ],
+            [
+              20500,
+              22750,
+              22166
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 6144,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 6144
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            },
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 6144,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 6144
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            }
+          ],
+          "run_drift_fraction": 0.04890372642786249,
+          "speedups_vs_incumbent": [
+            0.9572871753136407,
+            0.9622999641130219
+          ],
+          "times_ns": [
+            23250,
+            22166
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "device"
+      },
+      "selected_route": "synthesized_fused",
+      "shape": "64x64x64",
+      "status": "promote_candidate",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "mps_mpsgraph_unfused",
+      "op": "matmul_relu",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mps_mpsgraph_unfused": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              1472250,
+              1375000,
+              1357833
+            ],
+            [
+              1326333,
+              1571709,
+              1339416
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 2,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            },
+            {
+              "dispatch_count": 2,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            }
+          ],
+          "run_drift_fraction": 0.026566802248143968,
+          "times_ns": [
+            1375000,
+            1339416
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval+metal4_mpsgraph_envelope",
+            "metal_kernel_interval+metal4_mpsgraph_envelope"
+          ]
+        },
+        "synthesized_fused": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.04952140665886828,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.7838769568864506,
+            0.7343555502275824
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.7866361012056377,
+              0.771090909090909,
+              0.7838769568864506
+            ],
+            [
+              0.7343555502275824,
+              0.7199971495995761,
+              0.804765659063353
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              314125,
+              314750,
+              293459
+            ],
+            [
+              352333,
+              440083,
+              261500
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 8192,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 8192
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            },
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 8192,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 8192
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            }
+          ],
+          "run_drift_fraction": 0.12163310783923598,
+          "speedups_vs_incumbent": [
+            0.7715454545454545,
+            0.7369502828098216
+          ],
+          "times_ns": [
+            314125,
+            352333
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "end_to_end"
+      },
+      "selected_route": "synthesized_fused",
+      "shape": "64x64x64",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "mps_mpsgraph_unfused",
+      "op": "matmul_relu",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mps_mpsgraph_unfused": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              1208292,
+              1271416,
+              1277250
+            ],
+            [
+              1262250,
+              1292875,
+              1313459
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 2,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            },
+            {
+              "dispatch_count": 2,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            }
+          ],
+          "run_drift_fraction": 0.016878032052451756,
+          "times_ns": [
+            1271416,
+            1292875
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval+metal4_mpsgraph_envelope",
+            "metal_kernel_interval+metal4_mpsgraph_envelope"
+          ]
+        },
+        "synthesized_fused": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.009532382210419521,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.8106932863574084,
+            0.8011609041469889
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.768612222873279,
+              0.811496001308777,
+              0.8106932863574084
+            ],
+            [
+              0.8018752228163993,
+              0.7948046021463792,
+              0.8011609041469889
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              279584,
+              239667,
+              241792
+            ],
+            [
+              250083,
+              265292,
+              261167
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 6144,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 6144
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            },
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 6144,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 6144
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            }
+          ],
+          "run_drift_fraction": 0.0801308562731604,
+          "speedups_vs_incumbent": [
+            0.8098246364683156,
+            0.7979951658126269
+          ],
+          "times_ns": [
+            241792,
+            261167
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "end_to_end"
+      },
+      "selected_route": "synthesized_fused",
+      "shape": "65x63x67",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "mps_mpsgraph_unfused",
+      "op": "matmul_relu",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mps_mpsgraph_unfused": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              515999,
+              543333,
+              530499
+            ],
+            [
+              528374,
+              521791,
+              561166
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 2,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            },
+            {
+              "dispatch_count": 2,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            }
+          ],
+          "run_drift_fraction": 0.004021772456631098,
+          "times_ns": [
+            530499,
+            528374
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval+metal4_mpsgraph_envelope",
+            "metal_kernel_interval+metal4_mpsgraph_envelope"
+          ]
+        },
+        "synthesized_fused": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.0016016608492777085,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.9569785012138045,
+            0.9553768403645267
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.956637512863397,
+              0.9569785012138045,
+              0.9613590223544248
+            ],
+            [
+              0.9583647189301517,
+              0.9540064891881999,
+              0.9553768403645267
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              22375,
+              23375,
+              20499
+            ],
+            [
+              21999,
+              23999,
+              25041
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 6144,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 6144
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            },
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 6144,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 6144
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            }
+          ],
+          "run_drift_fraction": 0.07258100558659218,
+          "speedups_vs_incumbent": [
+            0.9578227291663133,
+            0.9545795213239107
+          ],
+          "times_ns": [
+            22375,
+            23999
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "device"
+      },
+      "selected_route": "synthesized_fused",
+      "shape": "65x63x67",
+      "status": "promote_candidate",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "mps_mpsgraph_unfused",
+      "op": "matmul_relu",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mps_mpsgraph_unfused": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              1363084,
+              1245209,
+              1271875
+            ],
+            [
+              1555750,
+              1319958,
+              1284958
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 2,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            },
+            {
+              "dispatch_count": 2,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            }
+          ],
+          "run_drift_fraction": 0.03780481572481573,
+          "times_ns": [
+            1271875,
+            1319958
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval+metal4_mpsgraph_envelope",
+            "metal_kernel_interval+metal4_mpsgraph_envelope"
+          ]
+        },
+        "synthesized_fused": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.005989332897903044,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.7996579814596899,
+            0.7936686485617869
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.7996579814596899,
+              0.8044842271458045,
+              0.7601313022113022
+            ],
+            [
+              0.7936686485617869,
+              0.7944692179599654,
+              0.7912383128475795
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              273083,
+              243458,
+              305083
+            ],
+            [
+              321000,
+              271292,
+              268250
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 8192,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 8192
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            },
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 8192,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 8192
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            }
+          ],
+          "run_drift_fraction": 0.006601742771626145,
+          "speedups_vs_incumbent": [
+            0.7852910073710073,
+            0.7944692179599654
+          ],
+          "times_ns": [
+            273083,
+            271292
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "end_to_end"
+      },
+      "selected_route": "synthesized_fused",
+      "shape": "65x63x67",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "mps_mpsgraph_unfused",
+      "op": "matmul_relu",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mps_mpsgraph_unfused": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              550665,
+              520500,
+              543957
+            ],
+            [
+              784041,
+              554707,
+              509833
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 2,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            },
+            {
+              "dispatch_count": 2,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": null,
+                  "timing_source": "metal_kernel_interval"
+                },
+                {
+                  "index": 1,
+                  "pipeline": null,
+                  "timing_source": "metal4_mpsgraph_envelope"
+                }
+              ],
+              "route": "mps_mpsgraph_unfused"
+            }
+          ],
+          "run_drift_fraction": 0.019762591528374486,
+          "times_ns": [
+            543957,
+            554707
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval+metal4_mpsgraph_envelope",
+            "metal_kernel_interval+metal4_mpsgraph_envelope"
+          ]
+        },
+        "synthesized_fused": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.004234073743505262,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.9550543433848165,
+            0.9592884171283218
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.9550543433848165,
+              0.9555734870317003,
+              0.9548070895309739
+            ],
+            [
+              0.9701865081035304,
+              0.9592884171283218,
+              0.9508839168904327
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              24750,
+              23124,
+              24583
+            ],
+            [
+              23375,
+              22583,
+              25041
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 8192,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 8192
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            },
+            {
+              "dispatch_count": 1,
+              "dispatches": [
+                {
+                  "index": 0,
+                  "pipeline": {
+                    "max_total_threads_per_threadgroup": 1024,
+                    "occupancy": null,
+                    "register_count": null,
+                    "scratch_bytes": null,
+                    "simdgroups_per_threadgroup": 4,
+                    "spill_count": null,
+                    "static_threadgroup_memory_bytes": 8192,
+                    "thread_execution_width": 32,
+                    "threadgroup": [
+                      128,
+                      1,
+                      1
+                    ],
+                    "threadgroup_capacity_fraction": 0.125,
+                    "threadgroup_memory_bytes": 8192
+                  },
+                  "timing_source": "metal_kernel_interval"
+                }
+              ],
+              "route": "synthesized_fused"
+            }
+          ],
+          "run_drift_fraction": 0.051679144385026736,
+          "speedups_vs_incumbent": [
+            0.9548070895309739,
+            0.9578606363359395
+          ],
+          "times_ns": [
+            24583,
+            23375
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "device"
+      },
+      "selected_route": "synthesized_fused",
+      "shape": "65x63x67",
+      "status": "promote_candidate",
+      "timing_domain": "device"
+    }
+  ],
+  "expires_at": "2026-08-20T20:39:12.888871Z",
+  "ineligible_decisions": [
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "mps_mpsgraph_unfused",
+      "op": "matmul_relu",
+      "reason": "incumbent paired evidence is incomplete",
+      "shape": "64x64x64",
+      "status": "ineligible",
+      "timing_domain": "device"
+    }
+  ],
+  "measured_at": "2026-07-21T20:39:12.888871Z",
+  "promotion_rules": {
+    "absolute_time_drift_is_diagnostic_only": true,
+    "maximum_cross_run_drift_fraction": 0.15,
+    "maximum_cross_run_speedup_spread": 0.05,
+    "minimum_paired_win_fraction_each_run": 0.75,
+    "minimum_speedup_fraction_each_run": 0.05,
+    "requires_interleaved_paired_trials": true,
+    "requires_native_dispatch": true,
+    "requires_numerical_validation": true,
+    "requires_repeated_measurement": true,
+    "requires_resource_evidence": true
+  },
+  "schema": "tessera.apple.route-ledger.v2",
+  "selection_scope": "runtime_route",
+  "source_report_count": 2,
+  "source_report_digests": [
+    "sha256:1be5ea07a5df62a25941a433acced06d21578aeda6a20d9cc732155af1f0581a",
+    "sha256:ea903aa605bca5e94f2941061b31be89a7783922333141a8634e95ef34d53899"
+  ]
+}

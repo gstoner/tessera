@@ -172,6 +172,7 @@ class LegacyRouteLedgerInventory:
     schema: str | None
     decision_count: int
     migration_state: str
+    strict_ledger_path: Path | None = None
 
 
 def _parse_utc(value: Any) -> datetime | None:
@@ -217,6 +218,15 @@ def load_strict_route_ledger(
         rejected.append("stale_evidence")
     if rejected:
         return StrictRouteLedger({}, {}, tuple(rejected))
+    report_count = payload.get("source_report_count")
+    report_digests = payload.get("source_report_digests")
+    if (not isinstance(report_count, int) or report_count < 2
+            or not isinstance(report_digests, list)
+            or len(report_digests) != report_count
+            or any(not isinstance(digest, str)
+                   or re.fullmatch(r"sha256:[0-9a-f]{64}", digest) is None
+                   for digest in report_digests)):
+        return StrictRouteLedger({}, {}, ("missing_or_invalid_source_reports",))
     decisions = payload.get("decisions")
     if not isinstance(decisions, list):
         return StrictRouteLedger({}, {}, ("missing_decisions",))
@@ -283,12 +293,30 @@ def legacy_route_ledger_inventory(root: str | Path | None = None) -> tuple[Legac
         if payload.get("schema") == STRICT_ROUTE_LEDGER_SCHEMA:
             continue
         decisions = payload.get("decisions")
+        strict_path = path.with_name(
+            path.name.replace("_route_ledger.json", "_strict_v2_route_ledger.json"))
+        try:
+            strict_payload = json.loads(strict_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            strict_payload = None
+        strict_valid = (
+            isinstance(strict_payload, Mapping)
+            and strict_payload.get("schema") == STRICT_ROUTE_LEDGER_SCHEMA
+            and strict_payload.get("selection_scope") == STRICT_RUNTIME_ROUTE_SCOPE
+            and isinstance(strict_payload.get("source_report_count"), int)
+            and strict_payload["source_report_count"] >= 2
+            and isinstance(strict_payload.get("source_report_digests"), list)
+            and len(strict_payload["source_report_digests"])
+                == strict_payload["source_report_count"]
+        )
         records.append(LegacyRouteLedgerInventory(
             path=path,
             schema=(str(payload.get("schema_version"))
                     if payload.get("schema_version") is not None else None),
             decision_count=len(decisions) if isinstance(decisions, list) else 0,
-            migration_state="remeasure_required_strict_v2_context_and_scope",
+            migration_state=("remeasured_strict_v2" if strict_valid
+                             else "remeasure_required_strict_v2_context_and_scope"),
+            strict_ledger_path=strict_path if strict_valid else None,
         ))
     return tuple(records)
 
@@ -753,8 +781,22 @@ def seal_strict_route_ledger(stable: Mapping[str, Any], reports: Sequence[Mappin
         raise ValueError("strict sealing requires identical exact contexts")
     now = datetime.now(timezone.utc)
     decisions = []
+    ineligible_decisions = []
     for row in stable.get("decisions", []):
-        if not isinstance(row, Mapping) or row.get("selected_route") is None:
+        if not isinstance(row, Mapping):
+            continue
+        if row.get("selected_route") is None:
+            # Preserve the aggregate's negative result for audit and future
+            # remeasurement, but deliberately keep it out of ``decisions``:
+            # the loader only sees admissible production rows.
+            ineligible_decisions.append({
+                "op": row.get("op"), "shape": row.get("shape"),
+                "dtype": row.get("dtype"), "device": row.get("device"),
+                "timing_domain": row.get("timing_domain"),
+                "incumbent_route": row.get("incumbent_route"),
+                "status": "ineligible",
+                "reason": row.get("reason", "no selectable route"),
+            })
             continue
         selected = str(row["selected_route"])
         evidence = row.get("route_evidence", {}).get(selected, {})
@@ -763,11 +805,19 @@ def seal_strict_route_ledger(stable: Mapping[str, Any], reports: Sequence[Mappin
             "correctness": bool(evidence.get("placement_and_numerical_proof")),
             "device": row.get("device"), "timing_domain": row.get("timing_domain"),
         }})
+    report_digests = [
+        "sha256:" + hashlib.sha256(
+            json.dumps(report, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        for report in reports
+    ]
     return {"schema": STRICT_ROUTE_LEDGER_SCHEMA, "selection_scope": STRICT_RUNTIME_ROUTE_SCOPE,
             "measured_at": now.isoformat().replace("+00:00", "Z"),
             "expires_at": (now + timedelta(days=valid_days)).isoformat().replace("+00:00", "Z"),
             "context": dict(contexts[0]), "source_report_count": len(reports),
-            "promotion_rules": stable.get("promotion_rules", {}), "decisions": decisions}
+            "source_report_digests": report_digests,
+            "promotion_rules": stable.get("promotion_rules", {}),
+            "decisions": decisions, "ineligible_decisions": ineligible_decisions}
 
 
 __all__ = [

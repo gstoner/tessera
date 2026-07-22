@@ -689,6 +689,16 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
                         "hash-bound runtime dylib and launches through the "
                         "canonical descriptor ABI"),
             ),
+            canonical_op("tessera.gelu"): OpCapability(
+                canonical_op("tessera.gelu"), "ready",
+                dtypes=("fp32", "f32", "fp16", "bf16"),
+                reason=("Apple GPU static and dynamic rank-2 GELU descriptors "
+                        "use raw f16/bf16 storage with fp32 evaluation"),
+            ),
+            canonical_op("tessera.popcount"): OpCapability(
+                canonical_op("tessera.popcount"), "ready", dtypes=("int32",),
+                reason="Apple GPU MSL popcount i32 ABI with dynamic Elements descriptor contract",
+            ),
             **_ops(
                 "ready", _APPLE_GPU_OPTIMIZER_READY,
                 reason=("Apple GPU fused Metal f32 optimizer ABI; shares p/g/m/v "
@@ -733,7 +743,7 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
             # benchmarked end-to-end by ``benchmarks/apple_gpu/benchmark_ga_ebm.py``.
             **_apple_gpu_fused_caps(),
         },
-        supported_dtypes=("fp32", "f32", "fp16", "bf16"),
+        supported_dtypes=("fp32", "f32", "fp16", "bf16", "int32"),
         features=("metal", "mps", "msl"),
     ),
 }

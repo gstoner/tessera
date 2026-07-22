@@ -28,6 +28,7 @@ from tessera._apple_gpu_dispatch import (
 from tessera.compiler.apple_attention_backward import (
     ROUTE_IDS, ROUTES, resolve_route, selector_shape_key)
 from tessera.compiler.apple_route_selector import ROUTE_REPORT_SCHEMA_VERSION
+from tessera.compiler.apple_route_selector import live_apple_route_context
 
 
 def _shape(spec: str) -> tuple[int, int, int, int]:
@@ -283,7 +284,8 @@ def characterize(*, shapes: list[tuple[int, int, int, int]] | None = None,
                 device=device, rng=rng))
     finally:
         set_dispatch_telemetry_enabled(False)
-    return {"schema_version": ROUTE_REPORT_SCHEMA_VERSION, "device": device,
+    return {"schema_version": ROUTE_REPORT_SCHEMA_VERSION,
+            "context": live_apple_route_context().as_mapping(), "device": device,
             "runs": rows, "profiling_capabilities": read_profiling_capabilities(),
             "paired_route_order_rotated": True}
 

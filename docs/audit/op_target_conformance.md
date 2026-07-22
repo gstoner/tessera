@@ -32,7 +32,7 @@ Audit response to [docs/audit/compiler/COMPILER_AUDIT.md](compiler/COMPILER_AUDI
 |---|---:|---|
 | `host_reference` | 7 | reference=7 |
 | `x86` | 7 | complete=7 |
-| `apple` | 14 | complete=8, reference=6 |
+| `apple` | 14 | complete=10, reference=4 |
 | `rocm` | 7 | complete=7 |
 | `nvidia` | 28 | complete=7, missing=21 |
 
@@ -40,8 +40,8 @@ Audit response to [docs/audit/compiler/COMPILER_AUDIT.md](compiler/COMPILER_AUDI
 
 | Overall (weakest column wins) | Count |
 |---|---:|
-| ✅ `complete` | 29 |
-| 🧪 `reference` | 13 |
+| ✅ `complete` | 31 |
+| 🧪 `reference` | 11 |
 | 🔧 `compileable` | 0 |
 | ⚙️ `partial` | 0 |
 | ⚠️ `artifact_only` | 0 |
@@ -87,7 +87,7 @@ _fused Tile accumulator epilogue on nvidia_sm120; composes elsewhere_
 |--------|---------|-------|----------|------|--------------|-----------------|---------|-----------|------------------------|-------|
 | `cpu` | 🧪 | ✅ | ✅ | ✅ | ✅ | 🧪 | 🧪 | ✅ | `backend_compile` — backend_compile=reference; components=softmax |  |
 | `x86` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |  |
-| `apple_cpu` | 🧪 | ✅ | ✅ | ✅ | ✅ | 🧪 | 🧪 | ✅ | `backend_compile` — backend_compile=reference; components=softmax |  |
+| `apple_cpu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |  |
 | `apple_gpu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |  |
 | `rocm` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |  |
 | `nvidia_sm80` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ❌ | `backend_compile` — backend_compile=artifact_only; components=softmax |  |
@@ -105,7 +105,7 @@ _fused MSL kernel on apple_gpu (single-kernel scores); compose elsewhere_
 |--------|---------|-------|----------|------|--------------|-----------------|---------|-----------|------------------------|-------|
 | `cpu` | 🧪 | ✅ | ✅ | ✅ | ✅ | 🧪 | 🧪 | ✅ | `backend_compile` — backend_compile=reference; components=matmul,softmax | composes from per-op kernels (no fusion pass on this target) |
 | `x86` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | composes from per-op kernels (no fusion pass on this target) |
-| `apple_cpu` | 🧪 | ✅ | ✅ | ✅ | ✅ | 🧪 | 🧪 | ✅ | `backend_compile` — backend_compile=reference; components=matmul,softmax | composes from per-op kernels (no fusion pass on this target) |
+| `apple_cpu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | composes from per-op kernels (no fusion pass on this target) |
 | `apple_gpu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | fused single-kernel on this target |
 | `rocm` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | composes from per-op kernels (no fusion pass on this target) |
 | `nvidia_sm80` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ❌ | `backend_compile` — backend_compile=artifact_only; components=matmul,softmax | composes from per-op kernels (no fusion pass on this target) |

@@ -1,9 +1,10 @@
-"""Compiler-owned Apple CPU descriptor packages for APPLE-CPU-E2E-1.
+"""Compiler-owned Apple CPU descriptor packages for Apple native E2E work.
 
 Static f32 C-ABI calls live here.  LU/QR/SVD use the same descriptor schema as
 the single-result families, with one explicit output binding per SSA result.
 That preserves the C ABI's result ordering without inventing a packed tuple
-buffer or routing a descriptor package back through a legacy artifact.
+buffer or routing a descriptor package back through a legacy artifact.  E2E-2
+extends the same static rank-2 contract to BNNS f16/bf16 matmul.
 """
 from __future__ import annotations
 
@@ -33,6 +34,7 @@ APPLE_CPU_DESCRIPTOR_STATES: dict[str, str] = {
 }
 
 _VALUE_SYMBOLS = {
+    "tessera.softmax": ("softmax", "tessera_apple_cpu_softmax_f32"),
     "tessera.matmul": ("matmul", "tessera_apple_cpu_gemm_f32"),
     "tessera.gemm": ("gemm", "tessera_apple_cpu_gemm_f32"),
     "tessera.batched_gemm": ("batched_gemm", "tessera_apple_cpu_gemm_f32_batched"),
@@ -42,6 +44,13 @@ _VALUE_SYMBOLS = {
     "tessera.lu": ("lu", "tessera_apple_cpu_lu_f32"),
     "tessera.qr": ("qr", "tessera_apple_cpu_qr_f32"),
     "tessera.svd": ("svd", "tessera_apple_cpu_svd_f32"),
+}
+
+_LOW_PRECISION_MATMUL_SYMBOLS = {
+    ("tessera.matmul", "fp16"): ("matmul", "tessera_apple_cpu_gemm_f16"),
+    ("tessera.gemm", "fp16"): ("gemm", "tessera_apple_cpu_gemm_f16"),
+    ("tessera.matmul", "bf16"): ("matmul", "tessera_apple_cpu_gemm_bf16"),
+    ("tessera.gemm", "bf16"): ("gemm", "tessera_apple_cpu_gemm_bf16"),
 }
 
 _TUPLE_RESULT_DTYPES: dict[str, tuple[str, ...]] = {
@@ -83,40 +92,69 @@ def value_descriptor_state(op_name: str) -> str:
     return APPLE_CPU_DESCRIPTOR_STATES.get(op_name, "unsupported")
 
 
+def _entry_for(op_name: str, dtype: str) -> tuple[str, str] | None:
+    if dtype == "fp32":
+        return _VALUE_SYMBOLS.get(op_name)
+    return _LOW_PRECISION_MATMUL_SYMBOLS.get((op_name, dtype))
+
+
 def supports_native_package(module: GraphIRModule) -> bool:
     if len(module.functions) != 1 or len(module.functions[0].body) != 1:
         return False
     fn, op = module.functions[0], module.functions[0].body[0]
-    if op.op_name not in _VALUE_SYMBOLS:
-        return False
     names = tuple(value.removeprefix("%") for value in op.operands)
     args = {arg.name: arg for arg in fn.args}
-    if not names or any(name not in args or args[name].ir_type.dtype != "fp32" for name in names):
+    if not names or any(name not in args for name in names):
         return False
-    expected_result_dtypes = _TUPLE_RESULT_DTYPES.get(op.op_name, ("fp32",))
+    input_dtypes = {args[name].ir_type.dtype for name in names}
+    if len(input_dtypes) != 1:
+        return False
+    dtype = input_dtypes.pop()
+    if dtype is None or _entry_for(op.op_name, dtype) is None:
+        return False
+    expected_result_dtypes = _TUPLE_RESULT_DTYPES.get(op.op_name, (dtype,))
     if (len(fn.result_types) != len(expected_result_dtypes)
             or tuple(result.dtype for result in fn.result_types) != expected_result_dtypes
             or len(fn.return_values) != len(expected_result_dtypes)):
         return False
     try:
-        [tuple(int(v) for v in args[name].ir_type.shape) for name in names]
-        [tuple(int(v) for v in result.shape) for result in fn.result_types]
+        input_shapes = [tuple(int(v) for v in args[name].ir_type.shape) for name in names]
+        output_shapes = [tuple(int(v) for v in result.shape) for result in fn.result_types]
     except (TypeError, ValueError):
         return False
+    if any(dimension <= 0 for shape in input_shapes + output_shapes for dimension in shape):
+        return False
+    if dtype in {"fp16", "bf16"}:
+        if (len(names) != 2 or any(len(shape) != 2 for shape in input_shapes)
+                or len(output_shapes) != 1 or output_shapes[0] != (input_shapes[0][0], input_shapes[1][1])
+                or input_shapes[0][1] != input_shapes[1][0]):
+            return False
+    if op.op_name == "tessera.softmax":
+        try:
+            axis = int(op.kwargs.get("axis", -1))
+        except (TypeError, ValueError):
+            return False
+        if (len(names) != 1 or len(input_shapes[0]) != 2 or output_shapes != [input_shapes[0]]
+                or axis % 2 != 1):
+            return False
     return True
 
 
 def package_native(module: GraphIRModule, *, pipeline_name: str) -> AppleCPUNativePackage:
     if not supports_native_package(module):
-        raise ValueError("APPLE-CPU-E2E-1 requires one static f32 descriptor contract with declared result bindings")
+        raise ValueError("Apple CPU native packaging requires one static supported descriptor contract")
     fn, op = module.functions[0], module.functions[0].body[0]
-    kind, symbol = _VALUE_SYMBOLS[op.op_name]
     names = tuple(value.removeprefix("%") for value in op.operands)
     args = {arg.name: arg for arg in fn.args}
+    dtype = args[names[0]].ir_type.dtype
+    assert dtype is not None
+    entry = _entry_for(op.op_name, dtype)
+    assert entry is not None
+    kind, symbol = entry
     shapes = {name: tuple(int(v) for v in args[name].ir_type.shape) for name in names}
     output_names = tuple(name.removeprefix("%") for name in fn.return_values)
     output_shapes = tuple(tuple(int(v) for v in result.shape) for result in fn.result_types)
-    abi = f"tessera.apple.cpu.value.{kind}.f32.v1"
+    abi = f"tessera.apple.cpu.value.{kind}.{dtype}.v1"
     target_ir = f'tessera_apple.cpu.call @{symbol} {{abi = "{abi}", status = "executable"}}'
     library = _runtime_library_path()
     if library is None:
@@ -131,12 +169,12 @@ def package_native(module: GraphIRModule, *, pipeline_name: str) -> AppleCPUNati
         payload=payload, entry_points=(NativeEntryPoint(symbol, abi),), compile_state="prepackaged",
     )
     input_buffers = tuple(
-        BufferBinding(i, name, "input", "fp32", len(shapes[name]), "row_major", 4)
+        BufferBinding(i, name, "input", dtype, len(shapes[name]), "row_major", 2 if dtype != "fp32" else 4)
         for i, name in enumerate(names)
     )
     output_buffers = tuple(
         BufferBinding(len(names) + index, name, "output", cast(str, result.dtype),
-                      len(output_shapes[index]), "row_major", 4)
+                      len(output_shapes[index]), "row_major", 2 if result.dtype != "fp32" else 4)
         for index, (name, result) in enumerate(zip(output_names, fn.result_types))
     )
     buffers = input_buffers + output_buffers
@@ -154,7 +192,10 @@ def package_native(module: GraphIRModule, *, pipeline_name: str) -> AppleCPUNati
         buffers=buffers, shape_guards=guards,
         geometry=LaunchGeometry(policy="apple_cpu_value_executor"),
         ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("return",)),
-        provenance={"work_item": "APPLE-CPU-E2E-1", "route": "apple_cpu_value_executor", "op_kind": kind,
+        provenance={"work_item": ("APPLE-NATIVE-E2E-2"
+                                    if dtype != "fp32" or op.op_name == "tessera.softmax"
+                                    else "APPLE-CPU-E2E-1"),
+                    "route": "apple_cpu_value_executor", "op_kind": kind,
                     "value_call": call, "result_count": len(output_names)},
     )
     return AppleCPUNativePackage("apple.cpu.value", target_ir, target_ir, image, descriptor)

@@ -44,7 +44,7 @@ matmul_relu,nvidia_sm80,missing,complete,complete,complete,complete,missing,miss
 matmul_relu,nvidia_sm90,missing,complete,complete,complete,complete,missing,missing,missing,backend_compile,"backend_compile=missing; components=matmul,relu"
 matmul_relu,rocm,complete,complete,complete,complete,complete,complete,complete,complete,,
 matmul_relu,x86,complete,complete,complete,complete,complete,complete,complete,complete,,
-matmul_softmax,apple_cpu,reference,complete,complete,complete,complete,reference,reference,complete,backend_compile,"backend_compile=reference; components=matmul,softmax"
+matmul_softmax,apple_cpu,complete,complete,complete,complete,complete,complete,complete,complete,,
 matmul_softmax,apple_gpu,complete,complete,complete,complete,complete,complete,complete,complete,,
 matmul_softmax,cpu,reference,complete,complete,complete,complete,reference,reference,complete,backend_compile,"backend_compile=reference; components=matmul,softmax"
 matmul_softmax,nvidia_sm100,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,"backend_compile=artifact_only; components=matmul,softmax"
@@ -53,7 +53,7 @@ matmul_softmax,nvidia_sm80,missing,complete,complete,complete,complete,artifact_
 matmul_softmax,nvidia_sm90,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,"backend_compile=artifact_only; components=matmul,softmax"
 matmul_softmax,rocm,complete,complete,complete,complete,complete,complete,complete,complete,,
 matmul_softmax,x86,complete,complete,complete,complete,complete,complete,complete,complete,,
-softmax,apple_cpu,reference,complete,complete,complete,complete,reference,reference,complete,backend_compile,backend_compile=reference; components=softmax
+softmax,apple_cpu,complete,complete,complete,complete,complete,complete,complete,complete,,
 softmax,apple_gpu,complete,complete,complete,complete,complete,complete,complete,complete,,
 softmax,cpu,reference,complete,complete,complete,complete,reference,reference,complete,backend_compile,backend_compile=reference; components=softmax
 softmax,nvidia_sm100,missing,complete,complete,complete,complete,artifact_only,missing,missing,backend_compile,backend_compile=artifact_only; components=softmax

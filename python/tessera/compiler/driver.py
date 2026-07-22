@@ -660,7 +660,7 @@ def compile_graph_module(
         from . import apple_cpu_native
 
         if not apple_cpu_native.supports_native_package(module):
-            raise ValueError("APPLE-CPU-E2E-1 native packaging requires one static single-result f32 contract")
+            raise ValueError("Apple CPU native packaging requires one static supported descriptor contract")
         resolution = target_pipeline_lookup(target_kind)
         producer = (resolution.declared_pipeline or request.pipeline_name) if resolution is not None else request.pipeline_name
         package_start = time.perf_counter()
@@ -682,17 +682,16 @@ def compile_graph_module(
                 metadata={"pipeline_name": producer, "binary_format": apple_cpu_package.image.binary_format,
                           "compile_state": apple_cpu_package.image.compile_state,
                           "entry_symbol": apple_cpu_package.descriptor.entry_symbol,
-                          "dtype": "fp32", "op_family": apple_cpu_package.descriptor.provenance["op_kind"],
-                          "work_item": "APPLE-CPU-E2E-1"},
+                          "dtype": apple_cpu_package.descriptor.buffers[0].dtype,
+                          "op_family": apple_cpu_package.descriptor.provenance["op_kind"],
+                          "work_item": apple_cpu_package.descriptor.provenance["work_item"]},
             )
         )
     elif target_kind == "apple_gpu" and bool((options or {}).get("package_native", False)):
         from . import apple_native
 
         if not apple_native.supports_native_package(module):
-            raise ValueError(
-                "APPLE-E2E-1 native packaging currently supports one static f32 rank-3 batched_gemm request"
-            )
+            raise ValueError("Apple GPU native packaging requires one static supported descriptor contract")
         resolution = target_pipeline_lookup(target_kind)
         producer = (
             (resolution.declared_pipeline or request.pipeline_name)
@@ -722,8 +721,9 @@ def compile_graph_module(
                     "binary_format": apple_package.image.binary_format,
                     "compile_state": apple_package.image.compile_state,
                     "entry_symbol": apple_package.descriptor.entry_symbol,
-                    "dtype": "fp32", "op_family": "batched_gemm",
-                    "work_item": "APPLE-E2E-1",
+                    "dtype": apple_package.descriptor.buffers[0].dtype,
+                    "op_family": apple_package.descriptor.provenance["op_kind"],
+                    "work_item": apple_package.descriptor.provenance["work_item"],
                 },
             )
         )
@@ -931,6 +931,7 @@ _APPLE_VALUE_CPU_EXECUTABLE_SYMBOLS: frozenset[str] = frozenset(
         "tessera_apple_cpu_gemm_f32_batched",
         "tessera_apple_cpu_gemm_f16",
         "tessera_apple_cpu_gemm_bf16",
+        "tessera_apple_cpu_softmax_f32",
     }
 )
 

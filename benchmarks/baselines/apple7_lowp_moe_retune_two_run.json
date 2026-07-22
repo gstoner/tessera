@@ -1,0 +1,675 @@
+{
+  "schema": "tessera.apple.legacy-retune.v1",
+  "reports": [
+    {
+      "schema_version": 1,
+      "context": {
+        "device": "apple7",
+        "physical_device": "Apple M1 Max",
+        "os_version": "26.5.2",
+        "sdk_version": "26.5",
+        "compiler_fingerprint": "sha256:50e9925be13062648f0b049fd25bc5a508f6eebf9114dddc151cc11d1c2d9c81",
+        "runtime_fingerprint": "sha256:74eb6e951d8ec7f4b1c453060878ca8239ed39bc37d3c11d4c0b50402bc5bc7a"
+      },
+      "runs": [
+        {
+          "family": "moe",
+          "op": "retune_moe_swiglu_lowp",
+          "shape": "16x32x64x32_e4",
+          "dtype": "f16",
+          "device": "apple7",
+          "route": "single_fused_lowp",
+          "reps": 5,
+          "native_dispatched": true,
+          "numerically_validated": true,
+          "execution_kind": "native_gpu",
+          "telemetry": {
+            "end_to_end_median_ns": 1424459,
+            "device_time_median_ns": 1075500,
+            "paired_trial_end_to_end_medians_ns": [
+              2205958,
+              1424459,
+              1359500
+            ],
+            "paired_trial_device_medians_ns": [
+              1393791,
+              1072833,
+              1075500
+            ],
+            "device_time_coverage": 1.0,
+            "device_time_scope": "complete_route_command_buffer",
+            "resources": {
+              "api": "MSL.moe_swiglu.raw16.complete_command_buffer"
+            },
+            "transport": {
+              "class": "grouped_swiglu_logical_io",
+              "logical_input_bytes": 50208,
+              "logical_output_bytes": 1024,
+              "logical_total_bytes": 51232,
+              "end_to_end_logical_bandwidth_gb_s": 0.03596593513748027,
+              "scope": "logical_host_visible_io_not_device_bandwidth"
+            }
+          }
+        },
+        {
+          "family": "moe",
+          "op": "retune_moe_swiglu_lowp",
+          "shape": "16x32x64x32_e4",
+          "dtype": "f16",
+          "device": "apple7",
+          "route": "reference_cpu",
+          "reps": 5,
+          "native_dispatched": false,
+          "numerically_validated": true,
+          "execution_kind": "reference_cpu",
+          "telemetry": {
+            "end_to_end_median_ns": 38125,
+            "device_time_median_ns": null,
+            "paired_trial_end_to_end_medians_ns": [
+              38125,
+              42500,
+              36917
+            ],
+            "paired_trial_device_medians_ns": null,
+            "device_time_coverage": 0.0,
+            "device_time_scope": "unavailable_multi_dispatch_or_mapped_memory",
+            "resources": {
+              "api": "reference_cpu.storage_faithful"
+            },
+            "transport": {
+              "class": "grouped_swiglu_logical_io",
+              "logical_input_bytes": 50208,
+              "logical_output_bytes": 1024,
+              "logical_total_bytes": 51232,
+              "end_to_end_logical_bandwidth_gb_s": 1.3437901639344263,
+              "scope": "logical_host_visible_io_not_device_bandwidth"
+            }
+          }
+        },
+        {
+          "family": "moe",
+          "op": "retune_moe_swiglu_lowp",
+          "shape": "16x32x64x32_e4",
+          "dtype": "bf16",
+          "device": "apple7",
+          "route": "single_fused_lowp",
+          "reps": 5,
+          "native_dispatched": true,
+          "numerically_validated": true,
+          "execution_kind": "native_gpu",
+          "telemetry": {
+            "end_to_end_median_ns": 1148459,
+            "device_time_median_ns": 827874,
+            "paired_trial_end_to_end_medians_ns": [
+              1642209,
+              1148459,
+              1085375
+            ],
+            "paired_trial_device_medians_ns": [
+              827874,
+              893166,
+              815916
+            ],
+            "device_time_coverage": 1.0,
+            "device_time_scope": "complete_route_command_buffer",
+            "resources": {
+              "api": "MSL.moe_swiglu.raw16.complete_command_buffer"
+            },
+            "transport": {
+              "class": "grouped_swiglu_logical_io",
+              "logical_input_bytes": 50208,
+              "logical_output_bytes": 1024,
+              "logical_total_bytes": 51232,
+              "end_to_end_logical_bandwidth_gb_s": 0.04460934173531663,
+              "scope": "logical_host_visible_io_not_device_bandwidth"
+            }
+          }
+        },
+        {
+          "family": "moe",
+          "op": "retune_moe_swiglu_lowp",
+          "shape": "16x32x64x32_e4",
+          "dtype": "bf16",
+          "device": "apple7",
+          "route": "reference_cpu",
+          "reps": 5,
+          "native_dispatched": false,
+          "numerically_validated": true,
+          "execution_kind": "reference_cpu",
+          "telemetry": {
+            "end_to_end_median_ns": 39333,
+            "device_time_median_ns": null,
+            "paired_trial_end_to_end_medians_ns": [
+              39333,
+              38584,
+              40166
+            ],
+            "paired_trial_device_medians_ns": null,
+            "device_time_coverage": 0.0,
+            "device_time_scope": "unavailable_multi_dispatch_or_mapped_memory",
+            "resources": {
+              "api": "reference_cpu.storage_faithful"
+            },
+            "transport": {
+              "class": "grouped_swiglu_logical_io",
+              "logical_input_bytes": 50208,
+              "logical_output_bytes": 1024,
+              "logical_total_bytes": 51232,
+              "end_to_end_logical_bandwidth_gb_s": 1.3025195128772278,
+              "scope": "logical_host_visible_io_not_device_bandwidth"
+            }
+          }
+        },
+        {
+          "family": "moe",
+          "op": "retune_moe_swiglu_lowp",
+          "shape": "32x64x128x64_e4",
+          "dtype": "f16",
+          "device": "apple7",
+          "route": "single_fused_lowp",
+          "reps": 5,
+          "native_dispatched": true,
+          "numerically_validated": true,
+          "execution_kind": "native_gpu",
+          "telemetry": {
+            "end_to_end_median_ns": 4429500,
+            "device_time_median_ns": 3972749,
+            "paired_trial_end_to_end_medians_ns": [
+              4380542,
+              4473375,
+              4429500
+            ],
+            "paired_trial_device_medians_ns": [
+              3972749,
+              3700875,
+              4052374
+            ],
+            "device_time_coverage": 1.0,
+            "device_time_scope": "complete_route_command_buffer",
+            "resources": {
+              "api": "MSL.moe_swiglu.raw16.complete_command_buffer"
+            },
+            "transport": {
+              "class": "grouped_swiglu_logical_io",
+              "logical_input_bytes": 200736,
+              "logical_output_bytes": 4096,
+              "logical_total_bytes": 204832,
+              "end_to_end_logical_bandwidth_gb_s": 0.04624269104865109,
+              "scope": "logical_host_visible_io_not_device_bandwidth"
+            }
+          }
+        },
+        {
+          "family": "moe",
+          "op": "retune_moe_swiglu_lowp",
+          "shape": "32x64x128x64_e4",
+          "dtype": "f16",
+          "device": "apple7",
+          "route": "reference_cpu",
+          "reps": 5,
+          "native_dispatched": false,
+          "numerically_validated": true,
+          "execution_kind": "reference_cpu",
+          "telemetry": {
+            "end_to_end_median_ns": 54167,
+            "device_time_median_ns": null,
+            "paired_trial_end_to_end_medians_ns": [
+              55917,
+              54167,
+              52625
+            ],
+            "paired_trial_device_medians_ns": null,
+            "device_time_coverage": 0.0,
+            "device_time_scope": "unavailable_multi_dispatch_or_mapped_memory",
+            "resources": {
+              "api": "reference_cpu.storage_faithful"
+            },
+            "transport": {
+              "class": "grouped_swiglu_logical_io",
+              "logical_input_bytes": 200736,
+              "logical_output_bytes": 4096,
+              "logical_total_bytes": 204832,
+              "end_to_end_logical_bandwidth_gb_s": 3.7814905754426125,
+              "scope": "logical_host_visible_io_not_device_bandwidth"
+            }
+          }
+        },
+        {
+          "family": "moe",
+          "op": "retune_moe_swiglu_lowp",
+          "shape": "32x64x128x64_e4",
+          "dtype": "bf16",
+          "device": "apple7",
+          "route": "single_fused_lowp",
+          "reps": 5,
+          "native_dispatched": true,
+          "numerically_validated": true,
+          "execution_kind": "native_gpu",
+          "telemetry": {
+            "end_to_end_median_ns": 4529334,
+            "device_time_median_ns": 4201416,
+            "paired_trial_end_to_end_medians_ns": [
+              4595583,
+              4529334,
+              3920542
+            ],
+            "paired_trial_device_medians_ns": [
+              4293875,
+              4201416,
+              3599875
+            ],
+            "device_time_coverage": 1.0,
+            "device_time_scope": "complete_route_command_buffer",
+            "resources": {
+              "api": "MSL.moe_swiglu.raw16.complete_command_buffer"
+            },
+            "transport": {
+              "class": "grouped_swiglu_logical_io",
+              "logical_input_bytes": 200736,
+              "logical_output_bytes": 4096,
+              "logical_total_bytes": 204832,
+              "end_to_end_logical_bandwidth_gb_s": 0.04522342578401151,
+              "scope": "logical_host_visible_io_not_device_bandwidth"
+            }
+          }
+        },
+        {
+          "family": "moe",
+          "op": "retune_moe_swiglu_lowp",
+          "shape": "32x64x128x64_e4",
+          "dtype": "bf16",
+          "device": "apple7",
+          "route": "reference_cpu",
+          "reps": 5,
+          "native_dispatched": false,
+          "numerically_validated": true,
+          "execution_kind": "reference_cpu",
+          "telemetry": {
+            "end_to_end_median_ns": 58500,
+            "device_time_median_ns": null,
+            "paired_trial_end_to_end_medians_ns": [
+              61042,
+              58500,
+              56458
+            ],
+            "paired_trial_device_medians_ns": null,
+            "device_time_coverage": 0.0,
+            "device_time_scope": "unavailable_multi_dispatch_or_mapped_memory",
+            "resources": {
+              "api": "reference_cpu.storage_faithful"
+            },
+            "transport": {
+              "class": "grouped_swiglu_logical_io",
+              "logical_input_bytes": 200736,
+              "logical_output_bytes": 4096,
+              "logical_total_bytes": 204832,
+              "end_to_end_logical_bandwidth_gb_s": 3.5014017094017094,
+              "scope": "logical_host_visible_io_not_device_bandwidth"
+            }
+          }
+        }
+      ],
+      "low_precision_candidates": [
+        {
+          "family": "grouped_gemm",
+          "dtype": "f16",
+          "status": "unsupported_no_owned_same_abi",
+          "reason": "only tessera_apple_gpu_grouped_gemm_f32 is registered"
+        },
+        {
+          "family": "grouped_gemm",
+          "dtype": "bf16",
+          "status": "unsupported_no_owned_same_abi",
+          "reason": "only tessera_apple_gpu_grouped_gemm_f32 is registered"
+        },
+        {
+          "family": "moe_swiglu",
+          "dtype": "f16",
+          "status": "owned_same_abi_ready_for_measurement",
+          "reason": "tessera_apple_gpu_moe_swiglu_f16 owns raw 16-bit storage and one complete command buffer"
+        },
+        {
+          "family": "moe_swiglu",
+          "dtype": "bf16",
+          "status": "owned_same_abi_ready_for_measurement",
+          "reason": "tessera_apple_gpu_moe_swiglu_bf16 owns raw 16-bit storage and one complete command buffer"
+        }
+      ]
+    },
+    {
+      "schema_version": 1,
+      "context": {
+        "device": "apple7",
+        "physical_device": "Apple M1 Max",
+        "os_version": "26.5.2",
+        "sdk_version": "26.5",
+        "compiler_fingerprint": "sha256:50e9925be13062648f0b049fd25bc5a508f6eebf9114dddc151cc11d1c2d9c81",
+        "runtime_fingerprint": "sha256:74eb6e951d8ec7f4b1c453060878ca8239ed39bc37d3c11d4c0b50402bc5bc7a"
+      },
+      "runs": [
+        {
+          "family": "moe",
+          "op": "retune_moe_swiglu_lowp",
+          "shape": "16x32x64x32_e4",
+          "dtype": "f16",
+          "device": "apple7",
+          "route": "single_fused_lowp",
+          "reps": 5,
+          "native_dispatched": true,
+          "numerically_validated": true,
+          "execution_kind": "native_gpu",
+          "telemetry": {
+            "end_to_end_median_ns": 1100250,
+            "device_time_median_ns": 816958,
+            "paired_trial_end_to_end_medians_ns": [
+              1100250,
+              1081542,
+              1104417
+            ],
+            "paired_trial_device_medians_ns": [
+              816458,
+              816958,
+              817291
+            ],
+            "device_time_coverage": 1.0,
+            "device_time_scope": "complete_route_command_buffer",
+            "resources": {
+              "api": "MSL.moe_swiglu.raw16.complete_command_buffer"
+            },
+            "transport": {
+              "class": "grouped_swiglu_logical_io",
+              "logical_input_bytes": 50208,
+              "logical_output_bytes": 1024,
+              "logical_total_bytes": 51232,
+              "end_to_end_logical_bandwidth_gb_s": 0.04656396273574188,
+              "scope": "logical_host_visible_io_not_device_bandwidth"
+            }
+          }
+        },
+        {
+          "family": "moe",
+          "op": "retune_moe_swiglu_lowp",
+          "shape": "16x32x64x32_e4",
+          "dtype": "f16",
+          "device": "apple7",
+          "route": "reference_cpu",
+          "reps": 5,
+          "native_dispatched": false,
+          "numerically_validated": true,
+          "execution_kind": "reference_cpu",
+          "telemetry": {
+            "end_to_end_median_ns": 36458,
+            "device_time_median_ns": null,
+            "paired_trial_end_to_end_medians_ns": [
+              37792,
+              35333,
+              36458
+            ],
+            "paired_trial_device_medians_ns": null,
+            "device_time_coverage": 0.0,
+            "device_time_scope": "unavailable_multi_dispatch_or_mapped_memory",
+            "resources": {
+              "api": "reference_cpu.storage_faithful"
+            },
+            "transport": {
+              "class": "grouped_swiglu_logical_io",
+              "logical_input_bytes": 50208,
+              "logical_output_bytes": 1024,
+              "logical_total_bytes": 51232,
+              "end_to_end_logical_bandwidth_gb_s": 1.4052334192769762,
+              "scope": "logical_host_visible_io_not_device_bandwidth"
+            }
+          }
+        },
+        {
+          "family": "moe",
+          "op": "retune_moe_swiglu_lowp",
+          "shape": "16x32x64x32_e4",
+          "dtype": "bf16",
+          "device": "apple7",
+          "route": "single_fused_lowp",
+          "reps": 5,
+          "native_dispatched": true,
+          "numerically_validated": true,
+          "execution_kind": "native_gpu",
+          "telemetry": {
+            "end_to_end_median_ns": 1095333,
+            "device_time_median_ns": 819833,
+            "paired_trial_end_to_end_medians_ns": [
+              1095333,
+              1064708,
+              1096375
+            ],
+            "paired_trial_device_medians_ns": [
+              820291,
+              819833,
+              819250
+            ],
+            "device_time_coverage": 1.0,
+            "device_time_scope": "complete_route_command_buffer",
+            "resources": {
+              "api": "MSL.moe_swiglu.raw16.complete_command_buffer"
+            },
+            "transport": {
+              "class": "grouped_swiglu_logical_io",
+              "logical_input_bytes": 50208,
+              "logical_output_bytes": 1024,
+              "logical_total_bytes": 51232,
+              "end_to_end_logical_bandwidth_gb_s": 0.046772990496953895,
+              "scope": "logical_host_visible_io_not_device_bandwidth"
+            }
+          }
+        },
+        {
+          "family": "moe",
+          "op": "retune_moe_swiglu_lowp",
+          "shape": "16x32x64x32_e4",
+          "dtype": "bf16",
+          "device": "apple7",
+          "route": "reference_cpu",
+          "reps": 5,
+          "native_dispatched": false,
+          "numerically_validated": true,
+          "execution_kind": "reference_cpu",
+          "telemetry": {
+            "end_to_end_median_ns": 39875,
+            "device_time_median_ns": null,
+            "paired_trial_end_to_end_medians_ns": [
+              40000,
+              38625,
+              39875
+            ],
+            "paired_trial_device_medians_ns": null,
+            "device_time_coverage": 0.0,
+            "device_time_scope": "unavailable_multi_dispatch_or_mapped_memory",
+            "resources": {
+              "api": "reference_cpu.storage_faithful"
+            },
+            "transport": {
+              "class": "grouped_swiglu_logical_io",
+              "logical_input_bytes": 50208,
+              "logical_output_bytes": 1024,
+              "logical_total_bytes": 51232,
+              "end_to_end_logical_bandwidth_gb_s": 1.2848150470219435,
+              "scope": "logical_host_visible_io_not_device_bandwidth"
+            }
+          }
+        },
+        {
+          "family": "moe",
+          "op": "retune_moe_swiglu_lowp",
+          "shape": "32x64x128x64_e4",
+          "dtype": "f16",
+          "device": "apple7",
+          "route": "single_fused_lowp",
+          "reps": 5,
+          "native_dispatched": true,
+          "numerically_validated": true,
+          "execution_kind": "native_gpu",
+          "telemetry": {
+            "end_to_end_median_ns": 4341416,
+            "device_time_median_ns": 3994874,
+            "paired_trial_end_to_end_medians_ns": [
+              4548209,
+              4341416,
+              3951042
+            ],
+            "paired_trial_device_medians_ns": [
+              4232124,
+              3994874,
+              3590249
+            ],
+            "device_time_coverage": 1.0,
+            "device_time_scope": "complete_route_command_buffer",
+            "resources": {
+              "api": "MSL.moe_swiglu.raw16.complete_command_buffer"
+            },
+            "transport": {
+              "class": "grouped_swiglu_logical_io",
+              "logical_input_bytes": 200736,
+              "logical_output_bytes": 4096,
+              "logical_total_bytes": 204832,
+              "end_to_end_logical_bandwidth_gb_s": 0.047180919773640674,
+              "scope": "logical_host_visible_io_not_device_bandwidth"
+            }
+          }
+        },
+        {
+          "family": "moe",
+          "op": "retune_moe_swiglu_lowp",
+          "shape": "32x64x128x64_e4",
+          "dtype": "f16",
+          "device": "apple7",
+          "route": "reference_cpu",
+          "reps": 5,
+          "native_dispatched": false,
+          "numerically_validated": true,
+          "execution_kind": "reference_cpu",
+          "telemetry": {
+            "end_to_end_median_ns": 54209,
+            "device_time_median_ns": null,
+            "paired_trial_end_to_end_medians_ns": [
+              54209,
+              53417,
+              54417
+            ],
+            "paired_trial_device_medians_ns": null,
+            "device_time_coverage": 0.0,
+            "device_time_scope": "unavailable_multi_dispatch_or_mapped_memory",
+            "resources": {
+              "api": "reference_cpu.storage_faithful"
+            },
+            "transport": {
+              "class": "grouped_swiglu_logical_io",
+              "logical_input_bytes": 200736,
+              "logical_output_bytes": 4096,
+              "logical_total_bytes": 204832,
+              "end_to_end_logical_bandwidth_gb_s": 3.7785607555940897,
+              "scope": "logical_host_visible_io_not_device_bandwidth"
+            }
+          }
+        },
+        {
+          "family": "moe",
+          "op": "retune_moe_swiglu_lowp",
+          "shape": "32x64x128x64_e4",
+          "dtype": "bf16",
+          "device": "apple7",
+          "route": "single_fused_lowp",
+          "reps": 5,
+          "native_dispatched": true,
+          "numerically_validated": true,
+          "execution_kind": "native_gpu",
+          "telemetry": {
+            "end_to_end_median_ns": 4456375,
+            "device_time_median_ns": 3937958,
+            "paired_trial_end_to_end_medians_ns": [
+              3936458,
+              4456375,
+              4528292
+            ],
+            "paired_trial_device_medians_ns": [
+              3600500,
+              3937958,
+              4201208
+            ],
+            "device_time_coverage": 1.0,
+            "device_time_scope": "complete_route_command_buffer",
+            "resources": {
+              "api": "MSL.moe_swiglu.raw16.complete_command_buffer"
+            },
+            "transport": {
+              "class": "grouped_swiglu_logical_io",
+              "logical_input_bytes": 200736,
+              "logical_output_bytes": 4096,
+              "logical_total_bytes": 204832,
+              "end_to_end_logical_bandwidth_gb_s": 0.04596381588174245,
+              "scope": "logical_host_visible_io_not_device_bandwidth"
+            }
+          }
+        },
+        {
+          "family": "moe",
+          "op": "retune_moe_swiglu_lowp",
+          "shape": "32x64x128x64_e4",
+          "dtype": "bf16",
+          "device": "apple7",
+          "route": "reference_cpu",
+          "reps": 5,
+          "native_dispatched": false,
+          "numerically_validated": true,
+          "execution_kind": "reference_cpu",
+          "telemetry": {
+            "end_to_end_median_ns": 58292,
+            "device_time_median_ns": null,
+            "paired_trial_end_to_end_medians_ns": [
+              59333,
+              57042,
+              58292
+            ],
+            "paired_trial_device_medians_ns": null,
+            "device_time_coverage": 0.0,
+            "device_time_scope": "unavailable_multi_dispatch_or_mapped_memory",
+            "resources": {
+              "api": "reference_cpu.storage_faithful"
+            },
+            "transport": {
+              "class": "grouped_swiglu_logical_io",
+              "logical_input_bytes": 200736,
+              "logical_output_bytes": 4096,
+              "logical_total_bytes": 204832,
+              "end_to_end_logical_bandwidth_gb_s": 3.5138955602827147,
+              "scope": "logical_host_visible_io_not_device_bandwidth"
+            }
+          }
+        }
+      ],
+      "low_precision_candidates": [
+        {
+          "family": "grouped_gemm",
+          "dtype": "f16",
+          "status": "unsupported_no_owned_same_abi",
+          "reason": "only tessera_apple_gpu_grouped_gemm_f32 is registered"
+        },
+        {
+          "family": "grouped_gemm",
+          "dtype": "bf16",
+          "status": "unsupported_no_owned_same_abi",
+          "reason": "only tessera_apple_gpu_grouped_gemm_f32 is registered"
+        },
+        {
+          "family": "moe_swiglu",
+          "dtype": "f16",
+          "status": "owned_same_abi_ready_for_measurement",
+          "reason": "tessera_apple_gpu_moe_swiglu_f16 owns raw 16-bit storage and one complete command buffer"
+        },
+        {
+          "family": "moe_swiglu",
+          "dtype": "bf16",
+          "status": "owned_same_abi_ready_for_measurement",
+          "reason": "tessera_apple_gpu_moe_swiglu_bf16 owns raw 16-bit storage and one complete command buffer"
+        }
+      ]
+    }
+  ]
+}

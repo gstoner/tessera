@@ -271,6 +271,10 @@ def test_front_door_records_value_target_ir_in_runtime_metadata():
         target_ir=LoweringArtifact("target", value_ir),
         native_image=dataclasses.replace(
             res.bundle.native_image, target_ir_digest=stable_hash(value_ir)),
+        # This fixture validates Target-IR classification.  It does not model a
+        # new compiler package, so it must not retain the descriptor whose
+        # image digest belongs to the replaced IR.
+        launch_descriptor=None,
     )
     value_res = dataclasses.replace(res, bundle=value_bundle)
     meta = value_res.to_runtime_artifact().metadata
@@ -852,7 +856,6 @@ def _front_door_gpu(module):
 #   NOTE (Sprint 5): tessera.matmul is no longer in this list — fp32 rank-2
 #   matmul is now an executable CPU value call (see TestSprint5Matmul below).
 _NON_LINALG_PROBES = [
-    ("tessera.softmax", "o", [("a", "tensor<4x4xf32>", (4, 4))], "tensor<4x4xf32>"),
     ("tessera.gelu", "o", [("a", "tensor<4x4xf32>", (4, 4))], "tensor<4x4xf32>"),
     ("tessera.conv2d", "o",
      [("a", "tensor<1x8x8x3xf32>", (1, 8, 8, 3)),
@@ -1468,7 +1471,8 @@ def test_batched_gemm_in_runtime_accelerate_op_set():
 def test_value_envelope_executable_allowlist_exact():
     """The CPU value-dispatch allowlist is exactly the Sprint 2–7 executable
     surface: 6 linalg + f32 rank-2 matmul + f32 rank-3 batched + f16/bf16 rank-2
-    matmul. Adding/removing an executable symbol must update this lock."""
+    matmul + static f32 row-softmax. Adding/removing an executable symbol must
+    update this lock."""
     from tessera.runtime import _APPLE_VALUE_CPU_SYMBOLS
     assert _APPLE_VALUE_CPU_SYMBOLS == frozenset({
         # Sprint 3 — CPU linalg family
@@ -1485,7 +1489,22 @@ def test_value_envelope_executable_allowlist_exact():
         # Sprint 7 — f16 / bf16 rank-2 matmul
         "tessera_apple_cpu_gemm_f16",
         "tessera_apple_cpu_gemm_bf16",
+        # E2E-2 — static rank-2 f32 last-axis softmax
+        "tessera_apple_cpu_softmax_f32",
     })
+
+
+def test_value_envelope_static_f32_softmax_routes_to_cpu_abi():
+    """E2E-2 lowers only the static rank-2 f32 last-axis softmax envelope."""
+    body = '''func.func @f(%a: tensor<4x8xf32>) -> tensor<4x8xf32> {
+  %0 = tessera.softmax %a : (tensor<4x8xf32>) -> tensor<4x8xf32>
+  return %0 : tensor<4x8xf32>
+}'''
+    p = _run("tessera-lower-to-apple_cpu-full", body)
+    assert p.returncode == 0, p.stderr
+    assert 'tessera_apple.cpu.call' in p.stdout
+    assert 'symbol = "tessera_apple_cpu_softmax_f32"' in p.stdout
+    assert 'abi = "row_softmax_f32"' in p.stdout
 
 
 @pytest.mark.parametrize("name,lower_body,expect", [
@@ -2014,6 +2033,9 @@ def _inject_value_ir(target, value_ir):
         target_ir=LoweringArtifact("target", value_ir),
         native_image=dataclasses.replace(
             res.bundle.native_image, target_ir_digest=stable_hash(value_ir)),
+        # Synthetic IR has no corresponding descriptor image.  Dropping the
+        # old descriptor keeps this classifier fixture provenance-correct.
+        launch_descriptor=None,
     )
     return dataclasses.replace(res, bundle=bundle).to_runtime_artifact().metadata
 

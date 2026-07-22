@@ -37,6 +37,8 @@ import numpy as np
 import pytest
 
 from tessera.apple_mlpkg import (
+    ArgumentLayout,
+    ArgumentLayoutEntry,
     AUTHOR_CHAINS,
     AUTHOR_OP_BINARY,
     AUTHOR_OP_ROWOP,
@@ -45,11 +47,14 @@ from tessera.apple_mlpkg import (
     author_chain_package,
     author_matmul_package,
     author_op_package,
+    composite_package_descriptor,
     compile_mlpackage,
+    execute_composite_package,
     first_function_name,
     last_error_kind,
     packaged_ml_available,
     packaged_ml_skip_reason,
+    package_tree_digest,
 )
 
 
@@ -335,6 +340,50 @@ def test_pk8b_chain_attention_block_matches_numpy():
         "matmul_softmax_matmul", [M, K, N, P], [a, b, c], (M, P)
     )
     assert np.allclose(out, _softmax(a @ b) @ c, rtol=1e-4, atol=2e-4)
+
+
+def test_pk8b_composite_descriptor_executes_and_replays_matmul_softmax():
+    """Descriptor-gated package execution owns intermediates and permits replay.
+
+    This is the E2E2 seam: a descriptor seals a reflected external ABI and
+    package identity, then drives an authored multi-op MTL4 package twice.
+    """
+    _require_packaged_ml()
+    rng = np.random.default_rng(0xC0A5)
+    M, K, N = 4, 6, 5
+    a = rng.standard_normal((M, K)).astype(np.float32)
+    b = rng.standard_normal((K, N)).astype(np.float32)
+    with tempfile.TemporaryDirectory() as directory:
+        package = Path(directory) / "matmul_softmax.mtlpackage"
+        assert author_chain_package(package, "matmul_softmax", [M, K, N])
+        function = first_function_name(package) or "main"
+        layout = ArgumentLayout(
+            pipeline_path=str(package), function_name=function,
+            entries=(
+                ArgumentLayoutEntry("lhs", 0, "tensor", "fp32", 2,
+                                    (M, K), "input", "shared"),
+                ArgumentLayoutEntry("rhs", 1, "tensor", "fp32", 2,
+                                    (K, N), "input", "shared"),
+                ArgumentLayoutEntry("output", 2, "tensor", "fp32", 2,
+                                    (M, N), "output", "shared"),
+            ),
+        )
+        descriptor = composite_package_descriptor(package_tree_digest(package), layout)
+        pipeline = compile_mlpackage(package, function_name=function)
+        assert pipeline is not None
+        try:
+            inputs = {"lhs": a.tobytes(), "rhs": b.tobytes()}
+            first = execute_composite_package(
+                descriptor, pipeline, inputs, {"output": M * N * 4})
+            second = execute_composite_package(
+                descriptor, pipeline, inputs, {"output": M * N * 4})
+            expected = _softmax(a @ b)
+            for result in (first, second):
+                output = np.frombuffer(result["output"], dtype=np.float32).reshape(M, N)
+                assert np.allclose(output, expected, rtol=1e-4, atol=2e-4)
+            assert pipeline.intermediates_heap_size() > 0
+        finally:
+            pipeline.destroy()
 
 
 def test_pk8b_chain_rmsnorm_matmul_matches_numpy():

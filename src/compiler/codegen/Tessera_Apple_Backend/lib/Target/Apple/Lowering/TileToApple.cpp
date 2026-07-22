@@ -601,8 +601,8 @@ void emitAppleValueCall(OpBuilder &b, Operation *op,
   // solves; full_matrices for qr/svd).  Copied verbatim when present.
   for (llvm::StringRef name :
        {"lower", "trans", "unit_diag", "full_matrices", "window_size",
-        "block_size", "top_k", "causal", "clip_epsilon", "kl_coef",
-        "entropy_coef", "has_mask", "has_ref_kl", "has_entropy",
+       "block_size", "top_k", "causal", "clip_epsilon", "kl_coef",
+        "entropy_coef", "has_mask", "has_ref_kl", "has_entropy", "axis",
         "reduction", "eta", "temperature", "noise_scale", "has_noise",
         "steps", "p", "q", "coefficient_layout", "has_signature",
         "has_grade_mask"}) {
@@ -725,10 +725,36 @@ struct LowerTileToAppleCPUPass
           }
           // non-f32 batched on CPU → gated (fall through to diagnostic).
         }
+        // E2E-2: static, non-empty rank-2 f32 last-axis softmax is the first
+        // Apple CPU non-linalg value ABI.  Other reductions, dynamic shapes,
+        // non-f32 storage, and non-last axes deliberately remain gated until
+        // they have distinct ABI and numerical-oracle contracts.
+        if (name == "tessera.softmax" || src == "tessera.softmax") {
+          bool isStaticF32Rank2 = false;
+          if (auto rt = llvm::dyn_cast<RankedTensorType>(
+                  op->getResult(0).getType())) {
+            isStaticF32Rank2 = rt.getRank() == 2 && rt.hasStaticShape() &&
+                               rt.getElementType().isF32() &&
+                               rt.getDimSize(0) > 0 && rt.getDimSize(1) > 0;
+          }
+          bool isLastAxis = true;
+          if (auto axis = op->getAttrOfType<IntegerAttr>("axis")) {
+            int64_t value = axis.getInt();
+            isLastAxis = value == -1 || value == 1;
+          }
+          if (isStaticF32Rank2 && isLastAxis) {
+            emitAppleValueCall(builder, op, "tessera_apple.cpu.call",
+                               "softmax", "tessera_apple_cpu_softmax_f32",
+                               "row_softmax_f32", "executable", "Accelerate");
+            ++ordinal;
+            continue;
+          }
+        }
         op->emitError("apple_cpu value lowering: no value-producing CPU "
                       "target op for '")
             << src << "' (executable envelope: linalg family + static rank-2 "
-                      "f32 matmul + static rank-3 f32 batched_gemm)";
+                      "f32 matmul + static rank-3 f32 batched_gemm + static "
+                      "rank-2 f32 last-axis softmax)";
         signalPassFailure();
         return;
       }

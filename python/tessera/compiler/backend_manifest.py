@@ -3732,6 +3732,13 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
 # Apple CPU — Accelerate cblas_sgemm + BNNS fp16/bf16
 # ─────────────────────────────────────────────────────────────────────────────
 _APPLE_CPU_KERNELS: dict[str, dict[str, Any]] = {
+    "softmax": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "feature_flags": ("reduction",),
+        "notes": "Static rank-2 f32 stable row-softmax "
+                 "(tessera_apple_cpu_softmax_f32; owned Apple native E2E-2 ABI)",
+    },
     "matmul": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32", "fp16", "bf16"),

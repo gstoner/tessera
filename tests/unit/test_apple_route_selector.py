@@ -41,6 +41,9 @@ def _strict_payload(**overrides: object) -> dict[str, object]:
         "measured_at": "2026-07-18T12:00:00Z",
         "expires_at": "2026-08-18T12:00:00Z",
         "context": _CONTEXT.as_mapping(),
+        "source_report_count": 2,
+        "source_report_digests": ["sha256:" + "a" * 64,
+                                  "sha256:" + "b" * 64],
         "decisions": [{
             "device": "apple7", "op": "softmax", "shape": "128x257",
             "dtype": "f32", "timing_domain": "end_to_end",
@@ -149,6 +152,23 @@ def test_strict_sealing_requires_producer_context_and_preserves_native_evidence(
     assert sealed["selection_scope"] == "runtime_route"
     assert all(row["selected_evidence"]["provenance"] == "native_gpu"
                for row in sealed["decisions"])
+    assert len(sealed["source_report_digests"]) == 2
+
+
+def test_strict_sealing_preserves_unselectable_rows_outside_admitted_decisions():
+    reports = [{
+        **_report(_stable_row("mps", 1000, None),
+                   _stable_row("simdgroup_matrix", 850, None)),
+        "context": _CONTEXT.as_mapping(),
+    } for _ in range(2)]
+    sealed = seal_strict_route_ledger(aggregate_stable_route_reports(reports), reports)
+    assert len(sealed["decisions"]) == 1
+    assert sealed["ineligible_decisions"] == [{
+        "op": "matmul", "shape": "64x64x64", "dtype": "f32",
+        "device": "apple7", "timing_domain": "device",
+        "incumbent_route": "mps", "status": "ineligible",
+        "reason": "incumbent paired evidence is incomplete",
+    }]
 
 
 def test_stable_aggregation_retains_incumbent_for_mixed_or_unstable_wins():
@@ -244,8 +264,15 @@ def test_legacy_route_ledger_inventory_requires_remeasurement():
         "apple7_epilogue_route_ledger.json",
         "apple7_gemm_route_ledger.json",
     }
-    assert all(record.migration_state == "remeasure_required_strict_v2_context_and_scope"
-               for record in records)
+    by_name = {record.path.name: record for record in records}
+    for name in ("apple7_gemm_route_ledger.json",
+                 "apple7_attention_route_ledger.json",
+                 "apple7_attention_backward_route_ledger.json",
+                 "apple7_epilogue_route_ledger.json"):
+        assert by_name[name].migration_state == "remeasured_strict_v2"
+        assert by_name[name].strict_ledger_path is not None
+    assert all(record.migration_state == "remeasured_strict_v2"
+               for record in by_name.values())
 
 
 def test_strict_loader_rejects_stale_context_reference_and_wrong_domain(tmp_path):
@@ -277,3 +304,12 @@ def test_strict_loader_rejects_stale_context_reference_and_wrong_domain(tmp_path
     path.write_text(json.dumps(payload), encoding="utf-8")
     assert any("wrong_evidence_domain" in reason for reason in
                load_strict_route_ledger(path, context=_CONTEXT, now=now).rejected)
+
+
+def test_strict_loader_rejects_missing_independent_source_digests(tmp_path):
+    path = tmp_path / "ledger.json"
+    payload = _strict_payload(source_report_digests=["sha256:" + "a" * 64])
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    assert load_strict_route_ledger(
+        path, context=_CONTEXT, now=datetime(2026, 7, 20, tzinfo=timezone.utc),
+    ).rejected == ("missing_or_invalid_source_reports",)

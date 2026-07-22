@@ -43,6 +43,9 @@ def _strict_ledger(tmp_path, *decisions):
         "measured_at": "2026-07-18T12:00:00Z",
         "expires_at": "2026-08-18T12:00:00Z",
         "context": _CONTEXT.as_mapping(),
+        "source_report_count": 2,
+        "source_report_digests": ["sha256:" + "a" * 64,
+                                  "sha256:" + "b" * 64],
         "decisions": [{
             "device": "apple7",
             "op": "flash_attn_bwd",

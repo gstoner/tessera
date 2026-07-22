@@ -1,0 +1,954 @@
+{
+  "schema": "tessera.apple.route-ledger.v2",
+  "selection_scope": "runtime_route",
+  "measured_at": "2026-07-21T21:27:02.370544Z",
+  "expires_at": "2026-08-20T21:27:02.370544Z",
+  "context": {
+    "device": "apple7",
+    "physical_device": "Apple M1 Max",
+    "os_version": "26.5.2",
+    "sdk_version": "26.5",
+    "compiler_fingerprint": "sha256:50e9925be13062648f0b049fd25bc5a508f6eebf9114dddc151cc11d1c2d9c81",
+    "runtime_fingerprint": "sha256:74eb6e951d8ec7f4b1c453060878ca8239ed39bc37d3c11d4c0b50402bc5bc7a"
+  },
+  "source_report_count": 2,
+  "source_report_digests": [
+    "sha256:acb492766d724b41bd805bbd9cbc7df6b30022f3927be46a021bbe620de8bb3b",
+    "sha256:d0039ec081f69f668106c112fe4f525158c3ae118d11c85653d2759a19c074a1"
+  ],
+  "promotion_rules": {
+    "minimum_speedup_fraction_each_run": 0.05,
+    "maximum_cross_run_drift_fraction": 0.15,
+    "absolute_time_drift_is_diagnostic_only": true,
+    "minimum_paired_win_fraction_each_run": 0.75,
+    "maximum_cross_run_speedup_spread": 0.05,
+    "requires_native_dispatch": true,
+    "requires_numerical_validation": true,
+    "requires_repeated_measurement": true,
+    "requires_interleaved_paired_trials": true,
+    "requires_resource_evidence": true
+  },
+  "decisions": [
+    {
+      "op": "retune_moe_swiglu_lowp",
+      "shape": "16x32x64x32_e4",
+      "dtype": "bf16",
+      "device": "apple7",
+      "timing_domain": "end_to_end",
+      "incumbent_route": "single_fused_lowp",
+      "selected_route": "single_fused_lowp",
+      "status": "retain_incumbent",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "reference_cpu": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": false,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "reference_cpu.storage_faithful"
+            },
+            {
+              "api": "reference_cpu.storage_faithful"
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            39333,
+            39875
+          ],
+          "run_drift_fraction": 0.013779777794727074,
+          "absolute_time_stable": true,
+          "paired_trial_times_ns": [
+            [
+              39333,
+              38584,
+              40166
+            ],
+            [
+              40000,
+              38625,
+              39875
+            ]
+          ],
+          "paired_measurement": true,
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "eligible": false
+        },
+        "single_fused_lowp": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MSL.moe_swiglu.raw16.complete_command_buffer"
+            },
+            {
+              "api": "MSL.moe_swiglu.raw16.complete_command_buffer"
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            1148459,
+            1095333
+          ],
+          "run_drift_fraction": 0.048502145009782414,
+          "absolute_time_stable": true,
+          "paired_trial_times_ns": [
+            [
+              1642209,
+              1148459,
+              1085375
+            ],
+            [
+              1095333,
+              1064708,
+              1096375
+            ]
+          ],
+          "paired_measurement": true,
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "eligible": true
+        }
+      },
+      "selected_evidence": {
+        "provenance": "native_gpu",
+        "correctness": true,
+        "device": "apple7",
+        "timing_domain": "end_to_end"
+      }
+    },
+    {
+      "op": "retune_moe_swiglu_lowp",
+      "shape": "16x32x64x32_e4",
+      "dtype": "bf16",
+      "device": "apple7",
+      "timing_domain": "device",
+      "incumbent_route": "single_fused_lowp",
+      "selected_route": "single_fused_lowp",
+      "status": "retain_incumbent",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "reference_cpu": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": false,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "reference_cpu.storage_faithful"
+            },
+            {
+              "api": "reference_cpu.storage_faithful"
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            null,
+            null
+          ],
+          "run_drift_fraction": null,
+          "absolute_time_stable": false,
+          "paired_trial_times_ns": [
+            null,
+            null
+          ],
+          "paired_measurement": false,
+          "timing_coverage": [
+            0.0,
+            0.0
+          ],
+          "eligible": false
+        },
+        "single_fused_lowp": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MSL.moe_swiglu.raw16.complete_command_buffer"
+            },
+            {
+              "api": "MSL.moe_swiglu.raw16.complete_command_buffer"
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            827874,
+            819833
+          ],
+          "run_drift_fraction": 0.009808095063262884,
+          "absolute_time_stable": true,
+          "paired_trial_times_ns": [
+            [
+              827874,
+              893166,
+              815916
+            ],
+            [
+              820291,
+              819833,
+              819250
+            ]
+          ],
+          "paired_measurement": true,
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "eligible": true
+        }
+      },
+      "selected_evidence": {
+        "provenance": "native_gpu",
+        "correctness": true,
+        "device": "apple7",
+        "timing_domain": "device"
+      }
+    },
+    {
+      "op": "retune_moe_swiglu_lowp",
+      "shape": "16x32x64x32_e4",
+      "dtype": "f16",
+      "device": "apple7",
+      "timing_domain": "end_to_end",
+      "incumbent_route": "single_fused_lowp",
+      "selected_route": "single_fused_lowp",
+      "status": "retain_incumbent",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "reference_cpu": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": false,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "reference_cpu.storage_faithful"
+            },
+            {
+              "api": "reference_cpu.storage_faithful"
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            38125,
+            36458
+          ],
+          "run_drift_fraction": 0.04572384661802622,
+          "absolute_time_stable": true,
+          "paired_trial_times_ns": [
+            [
+              38125,
+              42500,
+              36917
+            ],
+            [
+              37792,
+              35333,
+              36458
+            ]
+          ],
+          "paired_measurement": true,
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "eligible": false
+        },
+        "single_fused_lowp": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MSL.moe_swiglu.raw16.complete_command_buffer"
+            },
+            {
+              "api": "MSL.moe_swiglu.raw16.complete_command_buffer"
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            1424459,
+            1100250
+          ],
+          "run_drift_fraction": 0.2946684844353556,
+          "absolute_time_stable": false,
+          "paired_trial_times_ns": [
+            [
+              2205958,
+              1424459,
+              1359500
+            ],
+            [
+              1100250,
+              1081542,
+              1104417
+            ]
+          ],
+          "paired_measurement": true,
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "eligible": true
+        }
+      },
+      "selected_evidence": {
+        "provenance": "native_gpu",
+        "correctness": true,
+        "device": "apple7",
+        "timing_domain": "end_to_end"
+      }
+    },
+    {
+      "op": "retune_moe_swiglu_lowp",
+      "shape": "16x32x64x32_e4",
+      "dtype": "f16",
+      "device": "apple7",
+      "timing_domain": "device",
+      "incumbent_route": "single_fused_lowp",
+      "selected_route": "single_fused_lowp",
+      "status": "retain_incumbent",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "reference_cpu": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": false,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "reference_cpu.storage_faithful"
+            },
+            {
+              "api": "reference_cpu.storage_faithful"
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            null,
+            null
+          ],
+          "run_drift_fraction": null,
+          "absolute_time_stable": false,
+          "paired_trial_times_ns": [
+            null,
+            null
+          ],
+          "paired_measurement": false,
+          "timing_coverage": [
+            0.0,
+            0.0
+          ],
+          "eligible": false
+        },
+        "single_fused_lowp": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MSL.moe_swiglu.raw16.complete_command_buffer"
+            },
+            {
+              "api": "MSL.moe_swiglu.raw16.complete_command_buffer"
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            1075500,
+            816958
+          ],
+          "run_drift_fraction": 0.31646914529265885,
+          "absolute_time_stable": false,
+          "paired_trial_times_ns": [
+            [
+              1393791,
+              1072833,
+              1075500
+            ],
+            [
+              816458,
+              816958,
+              817291
+            ]
+          ],
+          "paired_measurement": true,
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "eligible": true
+        }
+      },
+      "selected_evidence": {
+        "provenance": "native_gpu",
+        "correctness": true,
+        "device": "apple7",
+        "timing_domain": "device"
+      }
+    },
+    {
+      "op": "retune_moe_swiglu_lowp",
+      "shape": "32x64x128x64_e4",
+      "dtype": "bf16",
+      "device": "apple7",
+      "timing_domain": "end_to_end",
+      "incumbent_route": "single_fused_lowp",
+      "selected_route": "single_fused_lowp",
+      "status": "retain_incumbent",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "reference_cpu": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": false,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "reference_cpu.storage_faithful"
+            },
+            {
+              "api": "reference_cpu.storage_faithful"
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            58500,
+            58292
+          ],
+          "run_drift_fraction": 0.003568242640499554,
+          "absolute_time_stable": true,
+          "paired_trial_times_ns": [
+            [
+              61042,
+              58500,
+              56458
+            ],
+            [
+              59333,
+              57042,
+              58292
+            ]
+          ],
+          "paired_measurement": true,
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "eligible": false
+        },
+        "single_fused_lowp": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MSL.moe_swiglu.raw16.complete_command_buffer"
+            },
+            {
+              "api": "MSL.moe_swiglu.raw16.complete_command_buffer"
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            4529334,
+            4456375
+          ],
+          "run_drift_fraction": 0.016371826877226447,
+          "absolute_time_stable": true,
+          "paired_trial_times_ns": [
+            [
+              4595583,
+              4529334,
+              3920542
+            ],
+            [
+              3936458,
+              4456375,
+              4528292
+            ]
+          ],
+          "paired_measurement": true,
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "eligible": true
+        }
+      },
+      "selected_evidence": {
+        "provenance": "native_gpu",
+        "correctness": true,
+        "device": "apple7",
+        "timing_domain": "end_to_end"
+      }
+    },
+    {
+      "op": "retune_moe_swiglu_lowp",
+      "shape": "32x64x128x64_e4",
+      "dtype": "bf16",
+      "device": "apple7",
+      "timing_domain": "device",
+      "incumbent_route": "single_fused_lowp",
+      "selected_route": "single_fused_lowp",
+      "status": "retain_incumbent",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "reference_cpu": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": false,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "reference_cpu.storage_faithful"
+            },
+            {
+              "api": "reference_cpu.storage_faithful"
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            null,
+            null
+          ],
+          "run_drift_fraction": null,
+          "absolute_time_stable": false,
+          "paired_trial_times_ns": [
+            null,
+            null
+          ],
+          "paired_measurement": false,
+          "timing_coverage": [
+            0.0,
+            0.0
+          ],
+          "eligible": false
+        },
+        "single_fused_lowp": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MSL.moe_swiglu.raw16.complete_command_buffer"
+            },
+            {
+              "api": "MSL.moe_swiglu.raw16.complete_command_buffer"
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            4201416,
+            3937958
+          ],
+          "run_drift_fraction": 0.06690218636156099,
+          "absolute_time_stable": true,
+          "paired_trial_times_ns": [
+            [
+              4293875,
+              4201416,
+              3599875
+            ],
+            [
+              3600500,
+              3937958,
+              4201208
+            ]
+          ],
+          "paired_measurement": true,
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "eligible": true
+        }
+      },
+      "selected_evidence": {
+        "provenance": "native_gpu",
+        "correctness": true,
+        "device": "apple7",
+        "timing_domain": "device"
+      }
+    },
+    {
+      "op": "retune_moe_swiglu_lowp",
+      "shape": "32x64x128x64_e4",
+      "dtype": "f16",
+      "device": "apple7",
+      "timing_domain": "end_to_end",
+      "incumbent_route": "single_fused_lowp",
+      "selected_route": "single_fused_lowp",
+      "status": "retain_incumbent",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "reference_cpu": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": false,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "reference_cpu.storage_faithful"
+            },
+            {
+              "api": "reference_cpu.storage_faithful"
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            54167,
+            54209
+          ],
+          "run_drift_fraction": 0.0007753798438163458,
+          "absolute_time_stable": true,
+          "paired_trial_times_ns": [
+            [
+              55917,
+              54167,
+              52625
+            ],
+            [
+              54209,
+              53417,
+              54417
+            ]
+          ],
+          "paired_measurement": true,
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "eligible": false
+        },
+        "single_fused_lowp": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MSL.moe_swiglu.raw16.complete_command_buffer"
+            },
+            {
+              "api": "MSL.moe_swiglu.raw16.complete_command_buffer"
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            4429500,
+            4341416
+          ],
+          "run_drift_fraction": 0.020289232821733737,
+          "absolute_time_stable": true,
+          "paired_trial_times_ns": [
+            [
+              4380542,
+              4473375,
+              4429500
+            ],
+            [
+              4548209,
+              4341416,
+              3951042
+            ]
+          ],
+          "paired_measurement": true,
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "eligible": true
+        }
+      },
+      "selected_evidence": {
+        "provenance": "native_gpu",
+        "correctness": true,
+        "device": "apple7",
+        "timing_domain": "end_to_end"
+      }
+    },
+    {
+      "op": "retune_moe_swiglu_lowp",
+      "shape": "32x64x128x64_e4",
+      "dtype": "f16",
+      "device": "apple7",
+      "timing_domain": "device",
+      "incumbent_route": "single_fused_lowp",
+      "selected_route": "single_fused_lowp",
+      "status": "retain_incumbent",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "reference_cpu": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": false,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "reference_cpu.storage_faithful"
+            },
+            {
+              "api": "reference_cpu.storage_faithful"
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            null,
+            null
+          ],
+          "run_drift_fraction": null,
+          "absolute_time_stable": false,
+          "paired_trial_times_ns": [
+            null,
+            null
+          ],
+          "paired_measurement": false,
+          "timing_coverage": [
+            0.0,
+            0.0
+          ],
+          "eligible": false
+        },
+        "single_fused_lowp": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MSL.moe_swiglu.raw16.complete_command_buffer"
+            },
+            {
+              "api": "MSL.moe_swiglu.raw16.complete_command_buffer"
+            }
+          ],
+          "timing_sources": [
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "times_ns": [
+            3972749,
+            3994874
+          ],
+          "run_drift_fraction": 0.005569191509456047,
+          "absolute_time_stable": true,
+          "paired_trial_times_ns": [
+            [
+              3972749,
+              3700875,
+              4052374
+            ],
+            [
+              4232124,
+              3994874,
+              3590249
+            ]
+          ],
+          "paired_measurement": true,
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "eligible": true
+        }
+      },
+      "selected_evidence": {
+        "provenance": "native_gpu",
+        "correctness": true,
+        "device": "apple7",
+        "timing_domain": "device"
+      }
+    }
+  ],
+  "ineligible_decisions": []
+}

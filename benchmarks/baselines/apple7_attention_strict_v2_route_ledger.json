@@ -1,0 +1,2914 @@
+{
+  "context": {
+    "compiler_fingerprint": "sha256:50e9925be13062648f0b049fd25bc5a508f6eebf9114dddc151cc11d1c2d9c81",
+    "device": "apple7",
+    "os_version": "26.5.2",
+    "physical_device": "Apple M1 Max",
+    "runtime_fingerprint": "sha256:fe58b7c65d79354baa1218dc473708c93880213ec4e2911247f4c287ac3b6e95",
+    "sdk_version": "26.5"
+  },
+  "decisions": [
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.000918553452171067,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.9310373009084767,
+            0.9319558543606478
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.9310373009084767,
+              0.9309863198787527,
+              0.9331542684345913
+            ],
+            [
+              0.9319558543606478,
+              0.9311514256051645,
+              0.9350560488585611
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              8254292,
+              8236291,
+              7994042
+            ],
+            [
+              8163792,
+              8327542,
+              7765792
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": 0.008880554526621943,
+          "speedups_vs_incumbent": [
+            0.9311285958616939,
+            0.9319558543606478
+          ],
+          "times_ns": [
+            8236291,
+            8163792
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal4_mpsgraph_envelope",
+            "metal4_mpsgraph_envelope"
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              119692125,
+              119342875,
+              119589416
+            ],
+            [
+              119977875,
+              120954458,
+              119576833
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  16,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  16,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.0032482724056449946,
+          "times_ns": [
+            119589416,
+            119977875
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "end_to_end"
+      },
+      "selected_route": "mpsgraph_bsmm",
+      "shape": "b1_h16_sq16_sk1025_d256",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.33797418487981723,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -4.726181545386346,
+            -4.388207360506529
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -5.31984234745186,
+              -4.726181545386346,
+              -3.947940319211302
+            ],
+            [
+              -4.35689862390877,
+              -4.848256417094039,
+              -4.388207360506529
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              1866458,
+              1908250,
+              1797750
+            ],
+            [
+              1724916,
+              1798333,
+              1702000
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": 0.08205732916849284,
+          "speedups_vs_incumbent": [
+            -4.6007741935483875,
+            -4.460755045508508
+          ],
+          "times_ns": [
+            1866458,
+            1724916
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal4_mpsgraph_envelope",
+            "metal4_mpsgraph_envelope"
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              295333,
+              333250,
+              363333
+            ],
+            [
+              321999,
+              307499,
+              315875
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  16,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  16,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.05500593589236249,
+          "times_ns": [
+            333250,
+            315875
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "device"
+      },
+      "selected_route": "online_msl_variant",
+      "shape": "b1_h16_sq16_sk1025_d256",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.002274992859481295,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.9243438763052331,
+            0.9266188691647144
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.9243438763052331,
+              0.9254926743697306,
+              0.9242329472146191
+            ],
+            [
+              0.9266188691647144,
+              0.9285705086940628,
+              0.9183168575039569
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              9977000,
+              9779875,
+              9975708
+            ],
+            [
+              9768542,
+              9501167,
+              10852875
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": 0.02120746371362277,
+          "speedups_vs_incumbent": [
+            0.9242329472146191,
+            0.9265603913855337
+          ],
+          "times_ns": [
+            9975708,
+            9768542
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal4_mpsgraph_envelope",
+            "metal4_mpsgraph_envelope"
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              131873000,
+              131260583,
+              131662875
+            ],
+            [
+              133120625,
+              133014625,
+              132865542
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  16,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  16,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.010266751352649713,
+          "times_ns": [
+            131662875,
+            133014625
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "end_to_end"
+      },
+      "selected_route": "mpsgraph_bsmm",
+      "shape": "b1_h16_sq16_sk1025_d256",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.10100315701200846,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -1.6395290157210158,
+            -1.7405321727330243
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -1.6898575953120922,
+              -1.6395290157210158,
+              -1.632964824120603
+            ],
+            [
+              -1.1829262558226024,
+              -1.7405321727330243,
+              -1.754360004890604
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              1814083,
+              1715583,
+              1637375
+            ],
+            [
+              1531958,
+              1793333,
+              1757166
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": 0.024238407585060007,
+          "speedups_vs_incumbent": [
+            -1.6395290157210158,
+            -1.6852625562751575
+          ],
+          "times_ns": [
+            1715583,
+            1757166
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal4_mpsgraph_envelope",
+            "metal4_mpsgraph_envelope"
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              674416,
+              649958,
+              621875
+            ],
+            [
+              701791,
+              654374,
+              637958
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  16,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 8,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  16,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.25,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.006794285169195548,
+          "times_ns": [
+            649958,
+            654374
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "device"
+      },
+      "selected_route": "online_msl_variant",
+      "shape": "b1_h16_sq16_sk1025_d256",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.016473714114407234,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.2549424544920728,
+            0.27141616860648005
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.21111194085579868,
+              0.29715821812596005,
+              0.2549424544920728
+            ],
+            [
+              0.27141616860648005,
+              0.3178468857880537,
+              0.20109119796631714
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              1320500,
+              1143875,
+              1268833
+            ],
+            [
+              1158084,
+              1081667,
+              1257083
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": 0.09563123227676058,
+          "speedups_vs_incumbent": [
+            0.24197864237174221,
+            0.26965451740782737
+          ],
+          "times_ns": [
+            1268833,
+            1158084
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal4_mpsgraph_envelope",
+            "metal4_mpsgraph_envelope"
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              1673875,
+              1627500,
+              1703000
+            ],
+            [
+              1589500,
+              1585666,
+              1573500
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.05562899122513821,
+          "times_ns": [
+            1673875,
+            1585666
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "end_to_end"
+      },
+      "selected_route": "mpsgraph_bsmm",
+      "shape": "b1_h4_sq64_sk64_d64",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 2.6242843392945847,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -14.553125,
+            -17.177409339294584
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -14.553125,
+              -15.278809456724982,
+              -10.664866012000077
+            ],
+            [
+              -15.560089219330855,
+              -17.177409339294584,
+              -18.495629500133337
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              622125,
+              635541,
+              604625
+            ],
+            [
+              556833,
+              585458,
+              657958
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": 0.0626295993905626,
+          "speedups_vs_incumbent": [
+            -14.553125,
+            -16.41139033457249
+          ],
+          "times_ns": [
+            622125,
+            585458
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal4_mpsgraph_envelope",
+            "metal4_mpsgraph_envelope"
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              40000,
+              39041,
+              51833
+            ],
+            [
+              33625,
+              32208,
+              33749
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.1895910780669145,
+          "times_ns": [
+            40000,
+            33625
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "device"
+      },
+      "selected_route": "online_msl_variant",
+      "shape": "b1_h4_sq64_sk64_d64",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.11227564181195693,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.4877964318698814,
+            0.6000720736818383
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.6285630459709504,
+              0.4877964318698814,
+              0.43861922767785466
+            ],
+            [
+              0.6620051915569857,
+              0.6000720736818383,
+              0.5297183361744483
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              1324250,
+              1448042,
+              1115417
+            ],
+            [
+              1249750,
+              1199667,
+              1261041
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": 0.05961192238447689,
+          "speedups_vs_incumbent": [
+            0.5315843220733173,
+            0.5833761152752202
+          ],
+          "times_ns": [
+            1324250,
+            1249750
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal4_mpsgraph_envelope",
+            "metal4_mpsgraph_envelope"
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              3565208,
+              2827083,
+              1986917
+            ],
+            [
+              3697542,
+              2999708,
+              2681459
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.06106117153263629,
+          "times_ns": [
+            2827083,
+            2999708
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "end_to_end"
+      },
+      "selected_route": "online_msl_variant",
+      "shape": "b1_h4_sq64_sk64_d64",
+      "status": "retain_incumbent",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.032457601024857397,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -13.224568045039797,
+            -13.257025646064655
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -12.00332135728543,
+              -17.121102157265128,
+              -13.224568045039797
+            ],
+            [
+              -10.029879142300194,
+              -13.257025646064655,
+              -14.99520916905444
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              814333,
+              724083,
+              586166
+            ],
+            [
+              707291,
+              580375,
+              697791
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": 0.0376789038551658,
+          "speedups_vs_incumbent": [
+            -16.57141817122889,
+            -14.99520916905444
+          ],
+          "times_ns": [
+            724083,
+            697791
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal4_mpsgraph_envelope",
+            "metal4_mpsgraph_envelope"
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              62625,
+              39958,
+              41208
+            ],
+            [
+              64125,
+              40708,
+              43625
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.05865365948359542,
+          "times_ns": [
+            41208,
+            43625
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "device"
+      },
+      "selected_route": "online_msl_variant",
+      "shape": "b1_h4_sq64_sk64_d64",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.018396449407714233,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.5598317610853523,
+            0.5782282104930665
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.4955811183675761,
+              0.5598317610853523,
+              0.6388212346398106
+            ],
+            [
+              0.5782282104930665,
+              0.6803948242299325,
+              0.5729883495822761
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              1491209,
+              1304292,
+              1230250
+            ],
+            [
+              1260500,
+              1046667,
+              1236750
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": 0.05461249241964827,
+          "speedups_vs_incumbent": [
+            0.5598317610853523,
+            0.5861751204500595
+          ],
+          "times_ns": [
+            1304292,
+            1236750
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal4_mpsgraph_envelope",
+            "metal4_mpsgraph_envelope"
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              2956291,
+              2963167,
+              3406208
+            ],
+            [
+              2988583,
+              3274875,
+              2896291
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.008577309345035228,
+          "times_ns": [
+            2963167,
+            2988583
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "end_to_end"
+      },
+      "selected_route": "mpsgraph_bsmm",
+      "shape": "b1_h4_sq65_sk67_d128",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 1.9636250533384523,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -13.673387673387673,
+            -15.637012726726125
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -13.721761399691777,
+              -13.240070669756557,
+              -13.673387673387673
+            ],
+            [
+              -16.54514712443933,
+              -13.976262533224558,
+              -15.637012726726125
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              649583,
+              620625,
+              615666
+            ],
+            [
+              747125,
+              569083,
+              664083
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": 0.07002296072507552,
+          "speedups_vs_incumbent": [
+            -13.240070669756557,
+            -15.637012726726125
+          ],
+          "times_ns": [
+            620625,
+            664083
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal4_mpsgraph_envelope",
+            "metal4_mpsgraph_envelope"
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              44124,
+              43583,
+              41958
+            ],
+            [
+              42583,
+              37999,
+              39916
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.09186792263753883,
+          "times_ns": [
+            43583,
+            39916
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "device"
+      },
+      "selected_route": "online_msl_variant",
+      "shape": "b1_h4_sq65_sk67_d128",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.003422989156832923,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.6469992835589079,
+            0.6504222727157408
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.6273445378920823,
+              0.6959275645227042,
+              0.6469992835589079
+            ],
+            [
+              0.6887619345750509,
+              0.6504222727157408,
+              0.6128988797834749
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              1302167,
+              1114375,
+              1132750
+            ],
+            [
+              1491375,
+              1226333,
+              1287208
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": 0.13635665416022952,
+          "speedups_vs_incumbent": [
+            0.6758284653944204,
+            0.6330692828276523
+          ],
+          "times_ns": [
+            1132750,
+            1287208
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal4_mpsgraph_envelope",
+            "metal4_mpsgraph_envelope"
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              3494292,
+              3664834,
+              3208917
+            ],
+            [
+              4791750,
+              3508041,
+              3325250
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.0039347026522110915,
+          "times_ns": [
+            3494292,
+            3508041
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "end_to_end"
+      },
+      "selected_route": "mpsgraph_bsmm",
+      "shape": "b1_h4_sq65_sk67_d128",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 2.072821266366004,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -12.059576651127518,
+            -14.132397917493522
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -15.372135380642781,
+              -12.059576651127518,
+              -10.487699519603286
+            ],
+            [
+              -18.03049374391249,
+              -14.132397917493522,
+              -9.882254836557705
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              710125,
+              585500,
+              593041
+            ],
+            [
+              762000,
+              648166,
+              685125
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": 0.15527425591147997,
+          "speedups_vs_incumbent": [
+            -12.227778645194388,
+            -14.995260663507109
+          ],
+          "times_ns": [
+            593041,
+            685125
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal4_mpsgraph_envelope",
+            "metal4_mpsgraph_envelope"
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              43374,
+              44833,
+              51624
+            ],
+            [
+              40041,
+              42833,
+              62958
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 4,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  4,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.125,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.0466929703733103,
+          "times_ns": [
+            44833,
+            42833
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "device"
+      },
+      "selected_route": "online_msl_variant",
+      "shape": "b1_h4_sq65_sk67_d128",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.0035857080727431656,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.9281102027199084,
+            0.9316959107926516
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.9229999064798464,
+              0.9290935604357902,
+              0.9281102027199084
+            ],
+            [
+              0.9278247730386513,
+              0.9326493809835414,
+              0.9316959107926516
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              1749625,
+              1619834,
+              1643916
+            ],
+            [
+              1673542,
+              1594916,
+              1597792
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": 0.028867336924956438,
+          "speedups_vs_incumbent": [
+            0.9280393975539236,
+            0.9316959107926516
+          ],
+          "times_ns": [
+            1643916,
+            1597792
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal4_mpsgraph_envelope",
+            "metal4_mpsgraph_envelope"
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              22722375,
+              22844667,
+              22867167
+            ],
+            [
+              23187208,
+              23680792,
+              23392333
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 16,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.5,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 16,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.5,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.023973472670886384,
+          "times_ns": [
+            22844667,
+            23392333
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "end_to_end"
+      },
+      "selected_route": "mpsgraph_bsmm",
+      "shape": "b2_h8_sq64_sk257_d128",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.596526014541281,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -15.774076726342711,
+            -15.17755071180143
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -14.480651213696595,
+              -16.00106617063267,
+              -15.774076726342711
+            ],
+            [
+              -15.17755071180143,
+              -14.536927835051547,
+              -16.624754285714285
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              792083,
+              749458,
+              819833
+            ],
+            [
+              748875,
+              753541,
+              771083
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": 0.051147847296961944,
+          "speedups_vs_incumbent": [
+            -15.20630179028133,
+            -15.278347842993238
+          ],
+          "times_ns": [
+            792083,
+            753541
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal4_mpsgraph_envelope",
+            "metal4_mpsgraph_envelope"
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              51166,
+              44083,
+              48875
+            ],
+            [
+              46291,
+              48500,
+              43750
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 16,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.5,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 16,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.5,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.05582078589790672,
+          "times_ns": [
+            48875,
+            46291
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "device"
+      },
+      "selected_route": "online_msl_variant",
+      "shape": "b2_h8_sq64_sk257_d128",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.000559065818277027,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.9203930315632299,
+            0.9198339657449529
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.9203930315632299,
+              0.9275923665621187,
+              0.919621101181771
+            ],
+            [
+              0.9285081170877717,
+              0.9173397731364908,
+              0.9198339657449529
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              1876459,
+              1702750,
+              1915667
+            ],
+            [
+              1764792,
+              2009167,
+              1912000
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            1.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": 0.01894046179532833,
+          "speedups_vs_incumbent": [
+            0.9203930315632299,
+            0.9213373732681108
+          ],
+          "times_ns": [
+            1876459,
+            1912000
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal4_mpsgraph_envelope",
+            "metal4_mpsgraph_envelope"
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              23571542,
+              23516167,
+              23832959
+            ],
+            [
+              24685208,
+              24306333,
+              23850500
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 16,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.5,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 16,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.5,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.03117280150785214,
+          "times_ns": [
+            23571542,
+            24306333
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "end_to_end"
+      },
+      "selected_route": "mpsgraph_bsmm",
+      "shape": "b2_h8_sq64_sk257_d128",
+      "status": "promote_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f32",
+      "incumbent_route": "online_msl_variant",
+      "op": "flash_attn_mha",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mpsgraph_bsmm": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 1.505639642145976,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -14.093677377995032,
+            -12.588037735849056
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -14.093677377995032,
+              -14.039223799982578,
+              -16.10176245559705
+            ],
+            [
+              -11.654580220879946,
+              -14.10498687664042,
+              -12.588037735849056
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              753416,
+              690541,
+              751041
+            ],
+            [
+              708125,
+              719375,
+              720166
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            },
+            {
+              "pipeline": null,
+              "route": "mpsgraph_bsmm"
+            }
+          ],
+          "run_drift_fraction": 0.04401876629018245,
+          "speedups_vs_incumbent": [
+            -15.356847286348986,
+            -12.57311320754717
+          ],
+          "times_ns": [
+            751041,
+            719375
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal4_mpsgraph_envelope",
+            "metal4_mpsgraph_envelope"
+          ]
+        },
+        "online_msl_variant": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              49916,
+              45916,
+              43916
+            ],
+            [
+              55958,
+              47625,
+              53000
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 16,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.5,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            },
+            {
+              "pipeline": {
+                "max_total_threads_per_threadgroup": 1024,
+                "occupancy": null,
+                "register_count": null,
+                "scratch_bytes": null,
+                "simdgroups_per_threadgroup": 16,
+                "spill_count": null,
+                "static_threadgroup_memory_bytes": 0,
+                "thread_execution_width": 32,
+                "threadgroup": [
+                  32,
+                  16,
+                  1
+                ],
+                "threadgroup_capacity_fraction": 0.5,
+                "threadgroup_memory_bytes": 0
+              },
+              "route": "online_msl_variant"
+            }
+          ],
+          "run_drift_fraction": 0.15428173185817579,
+          "times_ns": [
+            45916,
+            53000
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "metal_kernel_interval",
+            "metal_kernel_interval"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "device"
+      },
+      "selected_route": "online_msl_variant",
+      "shape": "b2_h8_sq64_sk257_d128",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    }
+  ],
+  "expires_at": "2026-08-20T20:36:37.334307Z",
+  "ineligible_decisions": [],
+  "measured_at": "2026-07-21T20:36:37.334307Z",
+  "promotion_rules": {
+    "absolute_time_drift_is_diagnostic_only": true,
+    "maximum_cross_run_drift_fraction": 0.15,
+    "maximum_cross_run_speedup_spread": 0.05,
+    "minimum_paired_win_fraction_each_run": 0.75,
+    "minimum_speedup_fraction_each_run": 0.05,
+    "requires_interleaved_paired_trials": true,
+    "requires_native_dispatch": true,
+    "requires_numerical_validation": true,
+    "requires_repeated_measurement": true,
+    "requires_resource_evidence": true
+  },
+  "schema": "tessera.apple.route-ledger.v2",
+  "selection_scope": "runtime_route",
+  "source_report_count": 2,
+  "source_report_digests": [
+    "sha256:a1c4e2dd28037ad15e01ba253786417e6f6c8082c9a57488f61abdc5e17477e6",
+    "sha256:ac94359dbdbcaa51571e0fd70781e997671ec4b5e509b3601b088daf4b0766fd"
+  ]
+}

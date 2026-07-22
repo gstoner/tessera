@@ -31,7 +31,7 @@ def test_retune_report_keeps_reference_and_missing_device_intervals_explicit(
         module.Route("native", lambda: oracle.copy(), True, True, "fake.native"),
         module.Route("reference", lambda: oracle.copy(), False, False,
                      "reference_cpu"),
-        oracle,
+        oracle, 16, 16, "test_logical_io",
     )
     monkeypatch.setattr(module, "_cases", lambda seed: [case])
     monkeypatch.setattr(module.rt.DeviceTensor, "is_metal", staticmethod(lambda: False))
@@ -50,6 +50,37 @@ def test_retune_report_keeps_reference_and_missing_device_intervals_explicit(
     assert native["telemetry"]["device_time_median_ns"] is None
     assert reference["telemetry"]["device_time_scope"] == \
         "unavailable_multi_dispatch_or_mapped_memory"
+    assert native["telemetry"]["transport"]["scope"] == \
+        "logical_host_visible_io_not_device_bandwidth"
+    assert native["telemetry"]["transport"]["logical_total_bytes"] > 0
+
+
+def test_retune_distinguishes_grouped_gap_from_owned_low_precision_moe_abi():
+    module = _module()
+    candidates = module.low_precision_candidate_status()
+    assert {(row["family"], row["dtype"]) for row in candidates} == {
+        ("grouped_gemm", "f16"), ("grouped_gemm", "bf16"),
+        ("moe_swiglu", "f16"), ("moe_swiglu", "bf16"),
+    }
+    grouped = [row for row in candidates if row["family"] == "grouped_gemm"]
+    moe = [row for row in candidates if row["family"] == "moe_swiglu"]
+    assert all(row["status"] == "unsupported_no_owned_same_abi" for row in grouped)
+    assert all(row["status"] == "owned_same_abi_ready_for_measurement" for row in moe)
+
+
+def test_low_precision_profile_uses_native_moe_incumbent_and_reference_oracle():
+    module = _module()
+    cases = module._low_precision_moe_cases(seed=7)
+    assert {(case.op, case.dtype) for case in cases} == {
+        ("retune_moe_swiglu_lowp", "f16"),
+        ("retune_moe_swiglu_lowp", "bf16"),
+    }
+    assert all(case.incumbent.name == "single_fused_lowp" for case in cases)
+    assert all(case.incumbent.native and case.incumbent.complete_device_scope
+               for case in cases)
+    assert all(not case.candidate.native for case in cases)
+    assert all(case.rtol == pytest.approx(6e-2) and case.atol == pytest.approx(6e-2)
+               for case in cases)
 
 
 def test_retune_ledger_does_not_promote_reference_evidence(monkeypatch):
@@ -85,6 +116,7 @@ def test_retune_ledger_does_not_promote_reference_evidence(monkeypatch):
                     if row["timing_domain"] == "end_to_end")
     assert decision["selected_route"] == "mpsgraph"
     assert decision["selected_evidence"]["provenance"] == "native_gpu"
+    assert len(ledger["source_report_digests"]) == 2
 
 
 def test_moe_dispatch_consumes_the_strict_exact_row(monkeypatch):
@@ -137,7 +169,7 @@ def test_committed_retune_corpus_and_strict_ledger_are_consistent():
     admitted = load_strict_route_ledger(
         ledger_path, context=context, now=measured + timedelta(days=1))
     assert admitted.rejected == ()
-    assert len(admitted.routes) == 8
+    assert len(admitted.routes) == 16
     assert admitted.routes[(
         "apple7", "retune_moe_swiglu", "16x32x64x32_e4", "f32",
         "end_to_end",
@@ -146,6 +178,33 @@ def test_committed_retune_corpus_and_strict_ledger_are_consistent():
         "apple7", "retune_mla_decode", "1x4x1x64x16x8x16x32", "f32",
         "end_to_end",
     )] == "explicit"
+
+
+def test_committed_low_precision_moe_corpus_has_complete_native_intervals():
+    root = Path(__file__).resolve().parents[2]
+    corpus = json.loads((root / "benchmarks/baselines/apple7_lowp_moe_retune_two_run.json")
+                        .read_text(encoding="utf-8"))
+    assert len(corpus["reports"]) == 2
+    native_rows = [
+        row for report in corpus["reports"] for row in report["runs"]
+        if row["route"] == "single_fused_lowp"
+    ]
+    assert {(row["dtype"], row["shape"]) for row in native_rows} == {
+        ("f16", "16x32x64x32_e4"), ("bf16", "16x32x64x32_e4"),
+        ("f16", "32x64x128x64_e4"), ("bf16", "32x64x128x64_e4"),
+    }
+    assert all(row["native_dispatched"] and row["numerically_validated"]
+               for row in native_rows)
+    assert all(row["telemetry"]["device_time_scope"] ==
+               "complete_route_command_buffer" and
+               row["telemetry"]["device_time_coverage"] == 1.0
+               for row in native_rows)
+    ledger = json.loads((root / "benchmarks/baselines/apple7_lowp_moe_strict_v2_route_ledger.json")
+                        .read_text(encoding="utf-8"))
+    assert len(ledger["decisions"]) == 8
+    assert not ledger["ineligible_decisions"]
+    assert {row["selected_route"] for row in ledger["decisions"]} == {
+        "single_fused_lowp"}
 
 
 @pytest.mark.hardware_apple_gpu
@@ -161,7 +220,7 @@ def test_strict_retune_ledger_admits_on_its_exact_live_apple_host():
     context = live_apple_route_context()
     admitted = load_strict_route_ledger(path, context=context)
     assert admitted.rejected == ()
-    assert len(admitted.routes) == 8
+    assert len(admitted.routes) == 16
     decision = production_route_decision(
         op="retune_moe_swiglu", shape="16x32x64x32_e4", dtype="f32",
         incumbent_route="composed", context=context, ledger_path=path)

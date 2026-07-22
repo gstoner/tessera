@@ -555,6 +555,37 @@ remain Apple-owned.
   selection. APPLE-RETUNE-1 stays active for wider shapes/dtypes, grouped
   SwiGLU/transport byte-bandwidth rows, and complete command-buffer intervals
   for the remaining composed routes.
+- **2026-07-21 APPLE-RETUNE-1 extended exact-host renewal:** the owned fresh
+  dylib produced two committed-strength (`5 reps`, `3` interleaved trials) runs
+  over both the original and 2x geometry rows: 48 route rows across grouped
+  GEMM, MoE SwiGLU, reduction, resident-KV, MLA, and Replay decode. The fresh
+  strict-v2 ledger admits 16 exact Apple7 f32 decisions and retains eight
+  negative rows as explicit ineligible evidence: mapped resident-KV in both
+  domains plus composed MoE and MPSGraph reduction in the device domain. The
+  corpus does not claim f16/bf16 because the committed rows predate their
+  owned same-storage ABI/oracle pair. Low-precision retuning remains separate
+  until fresh committed-strength rows measure that pair; it must not convert
+  inputs or borrow another route's proof.
+- **2026-07-21 APPLE-RETUNE-1 transport/low-precision ratchet:** every renewed
+  row now retains logical host-visible input/output bytes and its end-to-end
+  logical bandwidth, explicitly labeled as distinct from device bandwidth. The
+  grouped-SwiGLU small and 2x rows carry 102,432 and 409,632 logical bytes per
+  call. The historic f16/bf16 rejection rows remain sealed evidence for the
+  then-f32-only corpus. MoE now owns raw-storage f16/bf16 ABI symbols with an
+  exact-device oracle and one complete command-buffer interval; it needs fresh
+  committed-strength retune rows before selector admission. Grouped GEMM keeps
+  its same-storage composed C-ABI route but has no fused low-precision package.
+  Complete device intervals for composed SwiGLU, mapped resident-KV, and
+  MPSGraph reduction remain absent: they need an owned complete-route ABI, not
+  telemetry summation.
+- **2026-07-21 APPLE-RETUNE-1 low-precision MoE admission:** two fresh exact
+  Apple7 reports at five repetitions and three interleaved trials seal
+  `apple7_lowp_moe_retune_two_run.json` and its strict-v2 sibling ledger. Raw
+  f16/bf16 MoE storage at the base and 2x shapes is numerically valid, native,
+  and has complete command-buffer intervals in every sample; all eight
+  shape/dtype/timing-domain decisions retain `single_fused_lowp`. The remaining
+  low-precision gap is grouped GEMM: its C ABI remains composed-per-expert, not
+  an owned fused low-precision package.
 - **2026-07-18 APPLE-ROUTE-1 strict-ingestion foundation:** production lookup
   no longer reads a literal exact-row table. The v2 ledger gate matches the live
   Apple family and physical-device model, OS, SDK, configured LLVM/compiler
@@ -568,6 +599,15 @@ remain Apple-owned.
   is separated into its own strict ledger namespace. NVIDIA and ROCm are not
   applicable to this Apple-only corpus/selector change; their physical-device
   probes, retained ledgers, and production selectors are unchanged.
+- **2026-07-21 APPLE-ROUTE-1 remeasurement rail:** every owning benchmark now
+  captures the live exact-device context in its raw report, and
+  `seal_strict_route_ledger.py` accepts only two independently produced reports
+  to create a `runtime_route` v2 ledger. Sealing retains SHA-256 source-report
+  digests and places rows without a selectable full-domain result in
+  `ineligible_decisions`, outside selector-visible `decisions`. The renewed
+  paired corpus plus GEMM/softmax, forward-attention, backward-attention, and
+  epilogue owner lanes are migrated. Each historical schema-v1 file remains an
+  inventory only; its sibling v2 ledger is the sole selector evidence.
 - A fallback result can prove semantics, but it cannot prove `native_gpu`, GPU
   residency, Metal ordering, resource lifetime, or performance. Device tests
   must assert their execution state and provenance explicitly.
@@ -798,13 +838,13 @@ implementation/proof work; `blocked` names an external prerequisite.
 | 9 | APPLE-ATTN-BWD-1 | **closed** | Native f32/f16/bf16 MHA/GQA/MQA serial, atomic, and split-reduce routes share one oracle and explicit workspace/determinism policy. The stable two-run Apple7 ledger selects end-to-end routes per exact row and retains serial for every device-domain row. |
 | 10 | APPLE-PAGED-KV-1 | **closed** | Direct resident page-table MLA attention and the staged peer share a non-identity oracle, causal/window boundary proof, transactional exhaustion/leak telemetry, and a paired two-domain Apple7 corpus. The legacy corpus records direct wins; strict production ingestion retains staged until those rows are re-recorded with the v2 context envelope. |
 | 11 | APPLE-REPLAY-1 | **closed** | Resident inputs, ordered asynchronous ring submissions, native deterministic checkpoint folding plus same-command-buffer ring clearing, forced flush/rollback/partial-rejection ordering, backpressure/cleanup stress, and paired selector evidence are complete. Unstable device-domain evidence retains the fused-block incumbent. |
-| 12 | APPLE-RETUNE-1 | **active** | The current-runtime Apple7 paired corpus (5 repetitions, 3 interleaved trials, 2 runs) covers grouped GEMM, MoE, reduction, resident KV, MLA, and Replay decode with honest timing scopes; it retains composed MoE and explicit MLA on this runtime. Expand shapes/dtypes/transport bandwidth and obtain complete device intervals for composed/mapped routes. |
-| 13 | APPLE-ROUTE-1 | **active** | Strict v2 ingestion now requires the `runtime_route` scope as well as fresh exact context; package-subgraph ledgers and all legacy schema-v1 ledgers are inventories requiring remeasurement, never production evidence. Re-measure/migrate every legacy family ledger before closure. |
+| 12 | APPLE-RETUNE-1 | **active** | Fresh Apple7 f32 corpus has 16 selector-admissible decisions and eight explicit partial-domain negatives; the separate two-run f16/bf16 MoE corpus adds eight `single_fused_lowp` retain decisions with complete command-buffer proof. Grouped-SwiGLU logical byte/bandwidth accounting is retained. The remaining low-precision route gap is a fused grouped-GEMM package; complete-route ABIs remain required for composed/mapped device intervals. |
+| 13 | APPLE-ROUTE-1 | **active** | Strict v2 sealing now binds producer context and source-report digests and retains only explicit negative rows outside selector decisions. The paired corpus and every legacy runtime-route owner (GEMM/softmax, forward/backward attention, epilogue) have fresh sibling v2 evidence; schema-v1 files are inventories only. Package subgraphs remain a separate namespace. |
 | 14 | APPLE-DTYPE-1 | **blocked — SDK** | FP8/FP4/MX native execution awaits the public macOS 27 Metal tensor path. Keep older-host int4/int8/f16/bf16 regression coverage. |
 | 15 | APPLE-CI-1 | **closed** | The local Metal 4 release gate serializes the physical Mac without registering a GitHub runner, builds fresh LLVM/MLIR 23 compiler/JIT/runtime artifacts, records power/thermal/GPU-contention availability, rejects incomplete or skipped evidence, runs correctness twice, and seals paired device/end-to-end evidence. The retained `docs/audit/evidence/apple/metal4/20260718-b1ee875/` packet proves two clean 11-test Apple7 runs under Xcode 26.6, two 8-row route reports with four Metal 4 rows each, and an 8-decision two-domain ledger against commit `b1ee87591ec701dd06a156cad8449f6498ae0891`. Portable CI validates its hashes and contents. Metal 3 remains non-blocking compatibility coverage. |
 | 16 | APPLE-E2E-1 | **closed / bounded Level C** | Static, exact-device-oracle-backed GPU ABI families are closed: rank-2 f32 softmax/transpose; f32/f16/bf16 rank-3 batched-GEMM; strict and side-tensor PPO; EBM energy/Langevin/refinement/partition; cl30 Clifford geometric product; and static/batched Cholesky, Cholesky-solve, and triangular-solve. Every family has package, owned-fresh-dylib execute/compare, and repeated-launch cleanup proof on the exact device. Composite/package-subgraph, dynamic, stateful, unsupported, and multi-result GPU contracts, plus fleet/second-device proof, are retained follow-on work in APPLE-NATIVE-E2E-2. Metal-owned schedules, placement policy, and selectors are unchanged. NVIDIA and ROCm are not applicable: this changed no shared IR, ABI, schedule, or evidence claim. |
 | 17 | APPLE-CPU-E2E-1 | **closed / bounded Level C** | Static f32 rank-2 matmul/gemm and rank-3 BMM; single-result Cholesky, triangular-solve, and Cholesky-solve; and tuple-output LU/QR/SVD Accelerate/LAPACK descriptors have exact-host execute/compare and repeated-launch cleanup proof through the owned rebuilt dylib. Dynamic shapes, other dtypes, and non-linalg contracts remain retained/reference and belong to APPLE-NATIVE-E2E-2. |
-| 18 | APPLE-NATIVE-E2E-2 | **queued** | Begins after the closed bounded E2E-1 records. It owns dynamic-shape, composite/package-subgraph, stateful, non-linalg CPU, remaining multi-result GPU migration, and independently sealed second-device/fleet proof. A route may enter this item only with a static ABI or an explicitly designed new ABI family, a shape/dtype contract, and an exact-device numerical oracle; retained/reference status is never relabeled native by inventory breadth alone. |
+| 18 | APPLE-NATIVE-E2E-2 | **landing** | Completed slices promote static rank-2 f16/bf16 Apple CPU matmul/gemm through existing BNNS ABIs, static rank-2 f32 last-axis softmax through an owned CPU stable row-softmax ABI, and f32/f16/bf16 GPU GELU through static and rank-2 dynamic `Elements:int64` descriptor forms. The low-precision GELU slice admits the canonical Graph-IR dtype contract, binds raw 16-bit storage, proves exact-device execute/compare/replay and dtype/scalar rejection, and records a numerically validated 50-repetition corpus for `64x256` and `256x1024`. GPU reduced SVD packages ordered `(U,S,Vh)` output bindings for static tall rank-2 and batched rank-3 contracts through a semantic adapter ABI; resident ReplaySSM has a session-private lifecycle descriptor with cache identity, complete intermediate ring bindings, ordered transitions, and drain-before-release teardown. Metal-4 composite execution gates an authored multi-op package on its sealed tree digest, reflected positional external bindings, private intermediates heap, and replay-safe cache identity, with exact-device execute/compare/replay proof. The local ABI audit finds no further owned static CPU non-linalg candidate. Further non-linalg CPU, broader dynamic families beyond the explicit GELU and popcount scalar/shape ABIs, and independently sealed second-device/fleet proof remain open. A route may enter this item only with a static ABI or an explicitly designed new ABI family, a shape/dtype contract, and an exact-device numerical oracle; retained/reference status is never relabeled native by inventory breadth alone. NVIDIA and ROCm are not applicable: this changes no shared IR, ABI, schedule, or evidence claim. |
 
 ## Canonical validation lanes
 

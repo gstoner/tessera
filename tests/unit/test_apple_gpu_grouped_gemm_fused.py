@@ -63,6 +63,23 @@ def test_gpu_grouped_gemm_shape_guards():
 
 
 @gpu
+@pytest.mark.parametrize("dtype", [np.float16, pytest.param(
+    pytest.importorskip("ml_dtypes").bfloat16, id="bf16")])
+def test_low_precision_grouped_c_abi_matches_storage_oracle(dtype):
+    rng = np.random.default_rng(41)
+    gs = np.array([3, 2], dtype=np.int64)
+    x = (rng.standard_normal((5, 8)) * .1).astype(dtype)
+    w = (rng.standard_normal((2, 8, 6)) * .1).astype(dtype)
+    got = agb.gpu_grouped_gemm_lowp(x, w, gs)
+    expected = np.concatenate([
+        (x[:3].astype(np.float32) @ w[0].astype(np.float32)),
+        (x[3:].astype(np.float32) @ w[1].astype(np.float32)),
+    ]).astype(dtype)
+    np.testing.assert_allclose(got.astype(np.float32), expected.astype(np.float32),
+                               rtol=5e-2, atol=5e-2)
+
+
+@gpu
 def test_jit_grouped_gemm_uses_fused_path(monkeypatch):
     # Proof the single fused dispatch is taken: break the per-group fallback
     # (agb.gpu_matmul) — the @jit path must STILL work, which it only can via the

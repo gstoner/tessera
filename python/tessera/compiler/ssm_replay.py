@@ -29,6 +29,8 @@ once it exists.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
+import json
 
 from .native_artifact import OrderingSemantics, WorkspaceRequirement
 
@@ -107,6 +109,47 @@ class ReplayStateDescriptor:
         }
 
 
+@dataclass(frozen=True)
+class ReplayLifecycleDescriptor:
+    """Descriptor-first ownership and transition contract for resident ReplaySSM.
+
+    A launch descriptor is insufficient for an operation whose rings and
+    checkpoint survive multiple submissions.  This schema separates the stable
+    allocation/cache identity from the per-session mutable state: a matching
+    identity may reuse compiled pipelines, but never another session's S0 or
+    replay buffers.  Runtime handles must follow the listed transitions and
+    drain pending work before ``close`` releases session-owned storage.
+    """
+
+    state: ReplayStateDescriptor
+    abi_id: str
+    resource_identity: str
+    intermediate_bindings: tuple[str, ...]
+    transitions: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if self.abi_id != "tessera.apple.replay_ssm.resident.f32.v1":
+            raise ValueError("ReplaySSM lifecycle descriptor requires the Apple resident ABI")
+        if self.state.target != "apple_gpu":
+            raise ValueError("ReplaySSM resident lifecycle is currently Apple GPU only")
+        if self.intermediate_bindings != ("delta_ring", "x_ring", "b_ring", "c_ring", "checkpoint_s0", "a"):
+            raise ValueError("ReplaySSM lifecycle bindings must name the complete resident state")
+        if self.transitions != ("create", "submit", "wait", "flush", "rollback", "reset", "close"):
+            raise ValueError("ReplaySSM lifecycle transitions are ordered ABI surface")
+
+    def as_metadata_dict(self) -> dict[str, object]:
+        return {
+            "schema": "tessera.replayssm.lifecycle.v1",
+            "abi_id": self.abi_id,
+            "resource_identity": self.resource_identity,
+            "ownership": "session_private",
+            "intermediate_bindings": list(self.intermediate_bindings),
+            "transitions": list(self.transitions),
+            "teardown": "drain_pending_then_release",
+            "state": self.state.as_metadata_dict(),
+        }
+
+
 def replay_state_descriptor(
     *, target: str, batch: int, channels: int, state_dim: int,
     capacity: int, async_slots: int, dtype: str = "fp32",
@@ -152,6 +195,30 @@ def replay_state_descriptor(
                 "teardown_drains_pending",
             ),
         ),
+    )
+
+
+def replay_lifecycle_descriptor(
+    *, batch: int, channels: int, state_dim: int, capacity: int, async_slots: int,
+    dtype: str = "fp32",
+) -> ReplayLifecycleDescriptor:
+    """Build the Apple resident replay lifecycle schema and stable cache key."""
+    state = replay_state_descriptor(
+        target="apple_gpu", batch=batch, channels=channels, state_dim=state_dim,
+        capacity=capacity, async_slots=async_slots, dtype=dtype,
+    )
+    cache_fields = {
+        "abi_id": "tessera.apple.replay_ssm.resident.f32.v1",
+        "state": state.as_metadata_dict(),
+        "intermediate_bindings": ["delta_ring", "x_ring", "b_ring", "c_ring", "checkpoint_s0", "a"],
+    }
+    identity = hashlib.sha256(json.dumps(cache_fields, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return ReplayLifecycleDescriptor(
+        state=state,
+        abi_id="tessera.apple.replay_ssm.resident.f32.v1",
+        resource_identity=identity,
+        intermediate_bindings=("delta_ring", "x_ring", "b_ring", "c_ring", "checkpoint_s0", "a"),
+        transitions=("create", "submit", "wait", "flush", "rollback", "reset", "close"),
     )
 
 

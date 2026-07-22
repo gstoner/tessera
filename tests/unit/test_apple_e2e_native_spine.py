@@ -132,7 +132,7 @@ def test_value_family_descriptor_states_are_explicit() -> None:
     assert value_descriptor_state("tessera.cholesky") == "descriptor_ready"
     assert value_descriptor_state("tessera.cholesky_solve") == "descriptor_ready"
     assert value_descriptor_state("tessera.transpose") == "descriptor_ready"
-    assert value_descriptor_state("tessera.svd") == "unsupported"
+    assert value_descriptor_state("tessera.svd") == "descriptor_ready"
 
 
 @pytest.mark.parametrize(("dtype", "symbol", "abi"), [
@@ -172,15 +172,35 @@ def test_apple_softmax_package_hashes_dylib_and_names_abi(monkeypatch, tmp_path)
     assert package.descriptor.provenance["route"] == "apple_softmax_native_library"
 
 
-def _value_module(op_name, arg_shapes, out_shape, *, kwargs=None):
+def test_apple_gpu_package_trace_uses_descriptor_provenance(monkeypatch, tmp_path) -> None:
+    """Trace metadata must name the package actually selected, not BMM by default."""
+    from tessera.compiler.driver import compile_graph_module
+
+    dylib = tmp_path / "libTesseraAppleRuntime.dylib"
+    dylib.write_bytes(b"apple-e2e-test-runtime")
+    monkeypatch.setenv("TESSERA_APPLE_GPU_RUNTIME_LIB", str(dylib))
+    bundle = compile_graph_module(
+        _softmax_module(), source_origin="apple-gpu-trace-provenance-test",
+        target="apple_gpu", options={"package_native": True},
+        enable_tool_validation=False,
+    )
+    event = next(event for event in bundle.trace_events
+                 if event.pass_name == "apple-gpu-native-package")
+    assert event.metadata["dtype"] == "fp32"
+    assert event.metadata["op_family"] == "softmax"
+    assert event.metadata["work_item"] == "APPLE-E2E-1"
+
+
+def _value_module(op_name, arg_shapes, out_shape, *, kwargs=None, dtype="fp32"):
     args = []
     operands = []
+    spelling = {"fp32": "f32", "fp16": "f16", "bf16": "bf16"}[dtype]
     for index, shape in enumerate(arg_shapes):
-        text = "tensor<" + "x".join(map(str, shape)) + "xf32>" if shape else "tensor<f32>"
-        args.append(IRArg(f"a{index}", IRType(text, tuple(map(str, shape)), "fp32")))
+        text = "tensor<" + "x".join(map(str, shape)) + "x" + spelling + ">" if shape else f"tensor<{spelling}>"
+        args.append(IRArg(f"a{index}", IRType(text, tuple(map(str, shape)), dtype)))
         operands.append(f"%a{index}")
-    out_text = "tensor<" + "x".join(map(str, out_shape)) + "xf32>" if out_shape else "tensor<f32>"
-    out_type = IRType(out_text, tuple(map(str, out_shape)), "fp32")
+    out_text = "tensor<" + "x".join(map(str, out_shape)) + "x" + spelling + ">" if out_shape else f"tensor<{spelling}>"
+    out_type = IRType(out_text, tuple(map(str, out_shape)), dtype)
     return GraphIRModule(functions=[GraphIRFunction(
         name="f", args=args, result_types=[out_type],
         body=[IROp(result="out", op_name=op_name, operands=operands,
@@ -189,7 +209,94 @@ def _value_module(op_name, arg_shapes, out_shape, *, kwargs=None):
     )])
 
 
-def _tuple_value_module(op_name, input_shape, result_specs):
+def test_apple_cpu_low_precision_package_trace_uses_descriptor_provenance(monkeypatch, tmp_path) -> None:
+    """E2E-2 BNNS packaging must retain its low-precision trace identity."""
+    from tessera.compiler.driver import compile_graph_module
+
+    dylib = tmp_path / "libTesseraAppleRuntime.dylib"
+    dylib.write_bytes(b"apple-e2e-test-runtime")
+    monkeypatch.setenv("TESSERA_APPLE_CPU_RUNTIME_LIB", str(dylib))
+    bundle = compile_graph_module(
+        _value_module("tessera.matmul", [(3, 4), (4, 5)], (3, 5), dtype="fp16"),
+        source_origin="apple-cpu-trace-provenance-test", target="apple_cpu",
+        options={"package_native": True}, enable_tool_validation=False,
+    )
+    event = next(event for event in bundle.trace_events
+                 if event.pass_name == "apple-cpu-native-package")
+    assert event.metadata["dtype"] == "fp16"
+    assert event.metadata["op_family"] == "matmul"
+    assert event.metadata["work_item"] == "APPLE-NATIVE-E2E-2"
+
+
+@pytest.mark.hardware_apple_gpu
+def test_apple_gpu_gelu_descriptor_execute_compare():
+    """E2E-2 packages the owned static rank-2 GELU ABI without fallback."""
+    from tests._support.apple import require_apple_chip_identity
+
+    require_apple_chip_identity()
+    from tessera.compiler.driver import compile_graph_module
+    from tessera.runtime import RuntimeArtifact, launch
+
+    x = (np.random.default_rng(89).standard_normal((5, 11)) * 1.5).astype(np.float32)
+    bundle = compile_graph_module(
+        _value_module("tessera.gelu", [(5, 11)], (5, 11)),
+        source_origin="apple-native-e2e2-gelu-descriptor-test", target="apple_gpu",
+        options={"package_native": True}, enable_tool_validation=False,
+    )
+    assert bundle.launch_descriptor is not None
+    assert bundle.launch_descriptor.abi_id == "tessera.apple.gelu.x_o_elements.f32.v1"
+    assert bundle.launch_descriptor.provenance["work_item"] == "APPLE-NATIVE-E2E-2"
+    artifact = RuntimeArtifact(
+        metadata={"target": "apple_gpu", "compiler_path": "apple_native_descriptor"},
+        target_ir=bundle.target_ir.text, native_image=bundle.native_image,
+        launch_descriptor=bundle.launch_descriptor,
+    )
+    x32 = x.astype(np.float32)
+    expected = .5 * x32 * (1.0 + np.tanh(np.sqrt(2.0 / np.pi) * (x32 + .044715 * x32**3)))
+    for _ in range(3):
+        launched = launch(artifact, {"a0": x, "out": np.empty_like(x)})
+        assert launched["ok"], launched
+        assert launched["execution_kind"] == "native_gpu"
+        np.testing.assert_allclose(launched["output"], expected, rtol=2e-5, atol=2e-5)
+
+
+@pytest.mark.hardware_apple_gpu
+def test_apple_gpu_dynamic_gelu_descriptor_execute_compare_and_scalar_rejection():
+    """The dynamic GELU ABI binds and verifies Elements for each launch shape."""
+    from tests._support.apple import require_apple_chip_identity
+
+    require_apple_chip_identity()
+    from tessera.compiler.driver import compile_graph_module
+    from tessera.runtime import RuntimeArtifact, launch
+
+    bundle = compile_graph_module(
+        _dynamic_gelu_module(), source_origin="apple-native-e2e2-dynamic-gelu-test",
+        target="apple_gpu", options={"package_native": True}, enable_tool_validation=False,
+    )
+    assert bundle.launch_descriptor is not None
+    assert bundle.launch_descriptor.abi_id == "tessera.apple.gelu.x_o_elements.dynamic.f32.v1"
+    assert bundle.launch_descriptor.scalars[0].name == "Elements"
+    artifact = RuntimeArtifact(
+        metadata={"target": "apple_gpu", "compiler_path": "apple_native_descriptor"},
+        target_ir=bundle.target_ir.text, native_image=bundle.native_image,
+        launch_descriptor=bundle.launch_descriptor,
+    )
+    for shape in ((3, 7), (5, 11)):
+        x = (np.random.default_rng(sum(shape)).standard_normal(shape) * 1.25).astype(np.float32)
+        expected = .5 * x * (1.0 + np.tanh(np.sqrt(2.0 / np.pi) * (x + .044715 * x**3)))
+        for _ in range(3):
+            launched = launch(artifact, {"buffers": {"a0": x, "out": np.empty_like(x)},
+                                         "scalars": {"Elements": x.size}})
+            assert launched["ok"], launched
+            assert launched["execution_kind"] == "native_gpu"
+            np.testing.assert_allclose(launched["output"], expected, rtol=2e-5, atol=2e-5)
+    invalid = launch(artifact, {"buffers": {"a0": x, "out": np.empty_like(x)},
+                                "scalars": {"Elements": x.size - 1}})
+    assert invalid["ok"] is False
+    assert "Elements scalar" in invalid["reason"]
+
+
+def _tuple_value_module(op_name, input_shape, result_specs, *, kwargs=None):
     """One static multi-result Graph-IR call for the CPU descriptor ABI."""
     input_type = IRType(
         "tensor<" + "x".join(map(str, input_shape)) + "xf32>",
@@ -207,9 +314,143 @@ def _tuple_value_module(op_name, input_shape, result_specs):
         name="f", args=[IRArg("a0", input_type)], result_types=result_types,
         body=[IROp(result=",".join(result_names), op_name=op_name, operands=["%a0"],
                     operand_types=[str(input_type)],
-                    result_type="(" + ", ".join(map(str, result_types)) + ")")],
+                    result_type="(" + ", ".join(map(str, result_types)) + ")",
+                    kwargs=kwargs or {})],
         return_values=["%" + name for name in result_names],
     )])
+
+
+def _dynamic_gelu_module(dtype: str = "fp32") -> GraphIRModule:
+    spelling = {"fp32": "f32", "fp16": "f16", "bf16": "bf16"}[dtype]
+    dynamic = IRType(f"tensor<?x?x{spelling}>", ("?", "?"), dtype)
+    return GraphIRModule(functions=[GraphIRFunction(
+        name="dynamic_gelu", args=[IRArg("a0", dynamic)], result_types=[dynamic],
+        body=[IROp(result="out", op_name="tessera.gelu", operands=["%a0"],
+                    operand_types=[str(dynamic)], result_type=str(dynamic))],
+        return_values=["%out"],
+    )])
+
+
+@pytest.mark.hardware_apple_gpu
+@pytest.mark.parametrize(
+    ("storage", "static_abi", "dynamic_abi", "rtol", "atol"),
+    (
+        ("fp16", "tessera.apple.gelu.x_o_elements.f16.v1",
+         "tessera.apple.gelu.x_o_elements.dynamic.f16.v1", 4e-3, 4e-3),
+        ("bf16", "tessera.apple.gelu.x_o_elements.bf16.v1",
+         "tessera.apple.gelu.x_o_elements.dynamic.bf16.v1", 2e-2, 2e-2),
+    ),
+)
+def test_apple_gpu_low_precision_gelu_static_and_dynamic_execute_compare(
+    storage, static_abi, dynamic_abi, rtol, atol,
+):
+    """Low-precision GELU packages raw storage and preserves the Elements ABI."""
+    from tests._support.apple import require_apple_chip_identity
+
+    require_apple_chip_identity()
+    from tessera.compiler.driver import compile_graph_module
+    from tessera.runtime import RuntimeArtifact, launch
+
+    storage_dtype = np.float16
+    if storage == "bf16":
+        storage_dtype = pytest.importorskip("ml_dtypes").bfloat16
+
+    for dynamic, abi in ((False, static_abi), (True, dynamic_abi)):
+        module = (_dynamic_gelu_module(storage) if dynamic else
+                  _value_module("tessera.gelu", [(5, 11)], (5, 11), dtype=storage))
+        bundle = compile_graph_module(
+            module, source_origin=f"apple-native-e2e2-{storage}-gelu-test",
+            target="apple_gpu", options={"package_native": True},
+            enable_tool_validation=False,
+        )
+        assert bundle.launch_descriptor is not None
+        assert bundle.launch_descriptor.abi_id == abi
+        assert bundle.launch_descriptor.provenance["storage"] == storage
+        artifact = RuntimeArtifact(
+            metadata={"target": "apple_gpu", "compiler_path": "apple_native_descriptor"},
+            target_ir=bundle.target_ir.text, native_image=bundle.native_image,
+            launch_descriptor=bundle.launch_descriptor,
+        )
+        for shape in ((3, 7), (5, 11)) if dynamic else ((5, 11),):
+            source = np.random.default_rng(sum(shape)).standard_normal(shape).astype(np.float32)
+            x = source.astype(storage_dtype)
+            x32 = x.astype(np.float32)
+            expected32 = .5 * x32 * (
+                1.0 + np.tanh(np.sqrt(2.0 / np.pi) * (x32 + .044715 * x32**3))
+            )
+            expected = expected32.astype(storage_dtype).astype(np.float32)
+            arguments = {"a0": x, "out": np.empty_like(x)}
+            if dynamic:
+                arguments = {"buffers": arguments, "scalars": {"Elements": x.size}}
+            for _ in range(3):
+                launched = launch(artifact, arguments)
+                assert launched["ok"], launched
+                assert launched["execution_kind"] == "native_gpu"
+                np.testing.assert_allclose(
+                    launched["output"].astype(np.float32), expected, rtol=rtol, atol=atol,
+                )
+
+            wrong_output = np.empty(shape, dtype=np.float32)
+            rejected = launch(
+                artifact,
+                ({"buffers": {"a0": x, "out": wrong_output},
+                  "scalars": {"Elements": x.size}}
+                 if dynamic else {"a0": x, "out": wrong_output}),
+            )
+            assert rejected["ok"] is False
+            assert "dtype mismatch" in rejected["reason"]
+
+            if dynamic:
+                rejected = launch(
+                    artifact,
+                    {"buffers": {"a0": x, "out": np.empty_like(x)},
+                     "scalars": {"Elements": x.size - 1}},
+                )
+                assert rejected["ok"] is False
+                assert "Elements scalar" in rejected["reason"]
+
+
+def _dynamic_popcount_module() -> GraphIRModule:
+    dynamic = IRType("tensor<?xi32>", ("?",), "int32")
+    return GraphIRModule(functions=[GraphIRFunction(
+        name="dynamic_popcount", args=[IRArg("a0", dynamic)], result_types=[dynamic],
+        body=[IROp(result="out", op_name="tessera.popcount", operands=["%a0"],
+                    operand_types=[str(dynamic)], result_type=str(dynamic))],
+        return_values=["%out"],
+    )])
+
+
+@pytest.mark.hardware_apple_gpu
+def test_apple_gpu_dynamic_popcount_descriptor_execute_compare_replay_and_scalar_rejection():
+    from tests._support.apple import require_apple_chip_identity
+
+    require_apple_chip_identity()
+    from tessera.compiler.driver import compile_graph_module
+    from tessera.runtime import RuntimeArtifact, launch
+
+    bundle = compile_graph_module(
+        _dynamic_popcount_module(), source_origin="apple-native-e2e2-dynamic-popcount-test",
+        target="apple_gpu", options={"package_native": True}, enable_tool_validation=False,
+    )
+    assert bundle.launch_descriptor is not None
+    assert bundle.launch_descriptor.abi_id == "tessera.apple.popcount.x_o_elements.dynamic.i32.v1"
+    assert bundle.launch_descriptor.scalars[0].name == "Elements"
+    artifact = RuntimeArtifact(metadata={"target": "apple_gpu", "compiler_path": "apple_native_descriptor"},
+                               target_ir=bundle.target_ir.text, native_image=bundle.native_image,
+                               launch_descriptor=bundle.launch_descriptor)
+    for x in (np.array([0, 1, -1, 0x55AA55AA], dtype=np.int32),
+              np.arange(37, dtype=np.int32) * np.int32(0x10201)):
+        expected = np.array([(int(value) & 0xFFFFFFFF).bit_count() for value in x], dtype=np.int32)
+        for _ in range(3):
+            launched = launch(artifact, {"buffers": {"a0": x, "out": np.empty_like(x)},
+                                         "scalars": {"Elements": x.size}})
+            assert launched["ok"], launched
+            assert launched["execution_kind"] == "native_gpu"
+            np.testing.assert_array_equal(launched["output"], expected)
+    invalid = launch(artifact, {"buffers": {"a0": x, "out": np.empty_like(x)},
+                                "scalars": {"Elements": x.size - 1}})
+    assert invalid["ok"] is False
+    assert "Elements scalar" in invalid["reason"]
 
 
 @pytest.mark.hardware_apple_gpu
@@ -359,6 +600,79 @@ def test_apple_cpu_descriptor_execute_compare(op, shapes, out_shape, kwargs, ref
     np.testing.assert_allclose(replay["output"], reference(values), rtol=2e-4, atol=2e-5)
 
 
+def test_apple_cpu_softmax_descriptor_execute_compare():
+    """E2E-2's first non-linalg CPU ABI is a static f32 row-softmax."""
+    from tests._support.apple import require_apple_chip_identity
+
+    require_apple_chip_identity()
+    from tessera.compiler.driver import compile_graph_module
+    from tessera.runtime import RuntimeArtifact, launch
+
+    x = np.random.default_rng(71).standard_normal((3, 7)).astype(np.float32)
+    bundle = compile_graph_module(
+        _value_module("tessera.softmax", [(3, 7)], (3, 7), kwargs={"axis": -1}),
+        source_origin="apple-native-e2e2-softmax-descriptor-test", target="apple_cpu",
+        options={"package_native": True}, enable_tool_validation=False,
+    )
+    assert bundle.launch_descriptor is not None
+    assert bundle.launch_descriptor.abi_id == "tessera.apple.cpu.value.softmax.fp32.v1"
+    assert bundle.launch_descriptor.provenance["work_item"] == "APPLE-NATIVE-E2E-2"
+    artifact = RuntimeArtifact(
+        metadata={"target": "apple_cpu", "compiler_path": "apple_cpu_native_descriptor"},
+        target_ir=bundle.target_ir.text, native_image=bundle.native_image,
+        launch_descriptor=bundle.launch_descriptor,
+    )
+    expected = np.exp(x - x.max(axis=1, keepdims=True))
+    expected /= expected.sum(axis=1, keepdims=True)
+    for _ in range(3):
+        launched = launch(artifact, {"a0": x, "out": np.empty_like(x)})
+        assert launched["ok"], launched
+        np.testing.assert_allclose(launched["output"], expected, rtol=2e-4, atol=2e-5)
+
+
+@pytest.mark.parametrize(("op", "dtype", "rtol", "atol"), [
+    ("tessera.matmul", "fp16", 3e-2, 3e-2),
+    ("tessera.gemm", "fp16", 3e-2, 3e-2),
+    pytest.param("tessera.matmul", "bf16", 5e-2, 5e-2, marks=pytest.mark.skipif(
+        __import__("importlib").util.find_spec("ml_dtypes") is None,
+        reason="ml_dtypes is required for bf16 CPU descriptor coverage")),
+    pytest.param("tessera.gemm", "bf16", 5e-2, 5e-2, marks=pytest.mark.skipif(
+        __import__("importlib").util.find_spec("ml_dtypes") is None,
+        reason="ml_dtypes is required for bf16 CPU descriptor coverage")),
+])
+def test_apple_cpu_low_precision_matmul_descriptor_execute_compare(op, dtype, rtol, atol):
+    """E2E-2 BNNS descriptors preserve f16/bf16 storage and replay safely."""
+    from tests._support.apple import require_apple_chip_identity
+
+    require_apple_chip_identity()
+    from tessera.compiler.driver import compile_graph_module
+    from tessera.runtime import RuntimeArtifact, launch
+
+    storage = (__import__("ml_dtypes").bfloat16 if dtype == "bf16" else np.float16)
+    rng = np.random.default_rng(61)
+    a = rng.standard_normal((3, 4)).astype(storage)
+    b = rng.standard_normal((4, 5)).astype(storage)
+    bundle = compile_graph_module(
+        _value_module(op, [(3, 4), (4, 5)], (3, 5), dtype=dtype),
+        source_origin="apple-native-e2e2-low-precision-descriptor-test", target="apple_cpu",
+        options={"package_native": True}, enable_tool_validation=False,
+    )
+    assert bundle.launch_descriptor is not None
+    assert bundle.launch_descriptor.abi_id == f"tessera.apple.cpu.value.{op.removeprefix('tessera.')}.{dtype}.v1"
+    assert bundle.launch_descriptor.provenance["work_item"] == "APPLE-NATIVE-E2E-2"
+    artifact = RuntimeArtifact(
+        metadata={"target": "apple_cpu", "compiler_path": "apple_cpu_native_descriptor"},
+        target_ir=bundle.target_ir.text, native_image=bundle.native_image,
+        launch_descriptor=bundle.launch_descriptor,
+    )
+    reference = a.astype(np.float32) @ b.astype(np.float32)
+    for _ in range(3):
+        launched = launch(artifact, {"a0": a, "a1": b, "out": np.empty((3, 5), dtype=storage)})
+        assert launched["ok"], launched
+        assert launched["output"].dtype == storage
+        np.testing.assert_allclose(launched["output"].astype(np.float32), reference, rtol=rtol, atol=atol)
+
+
 def test_apple_cpu_tuple_descriptor_states_are_explicit():
     from tessera.compiler.apple_cpu_native import value_descriptor_state
 
@@ -367,6 +681,94 @@ def test_apple_cpu_tuple_descriptor_states_are_explicit():
     assert value_descriptor_state("tessera.lu") == "descriptor_ready"
     assert value_descriptor_state("tessera.qr") == "descriptor_ready"
     assert value_descriptor_state("tessera.svd") == "descriptor_ready"
+
+
+def test_apple_gpu_tuple_svd_descriptor_states_are_explicit():
+    from tessera.compiler.apple_native import value_descriptor_state
+
+    assert value_descriptor_state("tessera.svd") == "descriptor_ready"
+
+
+def test_apple_gpu_reduced_svd_target_ir_and_serialized_descriptor_contract(
+    monkeypatch, tmp_path,
+):
+    """Ratchet target IR, ordered binding/scalar ABI, and excluded SVD forms."""
+    from tessera.compiler import apple_native
+    from tessera.compiler.driver import compile_graph_module
+
+    dylib = tmp_path / "libTesseraAppleRuntime.dylib"
+    dylib.write_bytes(b"apple-e2e2-svd-serialization-runtime")
+    monkeypatch.setenv("TESSERA_APPLE_GPU_RUNTIME_LIB", str(dylib))
+    results = (("u", (6, 4), "fp32"), ("s", (4,), "fp32"), ("vh", (4, 4), "fp32"))
+    module = _tuple_value_module("tessera.svd", (6, 4), results)
+    bundle = compile_graph_module(
+        module, source_origin="apple-native-e2e2-svd-serialization-test", target="apple_gpu",
+        options={"package_native": True}, enable_tool_validation=False,
+    )
+    assert apple_native.supports_native_package(module)
+    assert bundle.launch_descriptor is not None and bundle.native_image is not None
+    assert apple_native.APPLE_SVD_REDUCED_F32_ABI in bundle.target_ir.text
+    assert "result_order = \"u,s,vh\"" in bundle.target_ir.text
+    descriptor = bundle.launch_descriptor.to_dict()
+    assert [item["name"] for item in descriptor["buffers"]] == ["a0", "u", "s", "vh"]
+    assert [(item["ordinal"], item["name"], item["dtype"])
+            for item in descriptor["scalars"]] == [(4, "M", "int32"), (5, "N", "int32")]
+    assert bundle.native_image.to_dict()["entry_points"][0]["abi_id"] == apple_native.APPLE_SVD_REDUCED_F32_ABI
+
+    wide = _tuple_value_module(
+        "tessera.svd", (4, 6),
+        (("u", (4, 4), "fp32"), ("s", (4,), "fp32"), ("vh", (4, 6), "fp32")),
+    )
+    full = _tuple_value_module("tessera.svd", (6, 4), results, kwargs={"full_matrices": True})
+    assert not apple_native.supports_native_package(wide)
+    assert not apple_native.supports_native_package(full)
+
+
+@pytest.mark.hardware_apple_gpu
+@pytest.mark.parametrize(("shape", "results"), [
+    ((6, 4), (("u", (6, 4), "fp32"), ("s", (4,), "fp32"), ("vh", (4, 4), "fp32"))),
+    ((2, 6, 4), (("u", (2, 6, 4), "fp32"), ("s", (2, 4), "fp32"), ("vh", (2, 4, 4), "fp32"))),
+])
+def test_apple_gpu_reduced_svd_descriptor_execute_compare_and_replay(shape, results):
+    """The ordered GPU adapter exposes Graph-IR `(U, S, Vh)`, not raw V columns."""
+    from tests._support.apple import require_apple_chip_identity
+
+    require_apple_chip_identity()
+    from tessera.compiler.driver import compile_graph_module
+    from tessera.runtime import RuntimeArtifact, launch
+
+    rng = np.random.default_rng(67)
+    a = rng.standard_normal(shape).astype(np.float32)
+    bundle = compile_graph_module(
+        _tuple_value_module("tessera.svd", shape, results),
+        source_origin="apple-native-e2e2-gpu-svd-descriptor-test", target="apple_gpu",
+        options={"package_native": True}, enable_tool_validation=False,
+    )
+    assert bundle.launch_descriptor is not None
+    assert bundle.launch_descriptor.provenance["result_order"] == ["u", "s", "vh"]
+    assert [binding.name for binding in bundle.launch_descriptor.buffers if binding.direction == "output"] == [
+        name for name, _, _ in results
+    ]
+    artifact = RuntimeArtifact(
+        metadata={"target": "apple_gpu", "compiler_path": "apple_gpu_svd_descriptor"},
+        target_ir=bundle.target_ir.text, native_image=bundle.native_image,
+        launch_descriptor=bundle.launch_descriptor,
+    )
+    buffers = {"a0": a}
+    buffers.update({name: np.empty(result_shape, dtype=np.float32) for name, result_shape, _ in results})
+    scalars = ({"M": shape[-2], "N": shape[-1]} if a.ndim == 2 else
+               {"Batch": shape[0], "M": shape[-2], "N": shape[-1]})
+    for _ in range(3):
+        launched = launch(artifact, {"buffers": buffers, "scalars": scalars})
+        assert launched["ok"], launched
+        u, s, vh = launched["output"]
+        assert np.all(s[..., :-1] >= s[..., 1:])
+        if a.ndim == 2:
+            np.testing.assert_allclose((u * s) @ vh, a, rtol=1e-3, atol=1e-3)
+        else:
+            np.testing.assert_allclose((u * s[..., None, :]) @ vh, a, rtol=1e-3, atol=1e-3)
+        for name, _, _ in results:
+            buffers[name].fill(np.nan)
 
 
 @pytest.mark.parametrize(("op", "shape", "results"), [

@@ -19,6 +19,149 @@ using namespace mlir;
 
 namespace tessera {
 
+namespace {
+
+// CORE-COMPILER-1: the long-lived shape contract is data, not eleven copies of
+// ad-hoc operand counting.  These ops intentionally keep Variadic<AnyType> ODS
+// shells because the standalone Neighbors passes also accept legacy `index`
+// handles.  The table captures the invariants that are stable across both the
+// legacy and typed forms; the generic verifier below applies them uniformly.
+struct DeclarativeShapeConstraint {
+  llvm::StringLiteral opName;
+  unsigned minOperands;
+  unsigned maxOperands;
+  unsigned minResults;
+  unsigned maxResults;
+  int primaryTensorOperand;
+  int matchingTensorResult;
+};
+
+constexpr DeclarativeShapeConstraint kDeclarativeShapeConstraints[] = {
+    {"tessera.arch.ste_one_hot", 1, 1, 1, 1, -1, -1},
+    {"tessera.neighbors.topology.create", 0, 0, 1, 1, -1, -1},
+    {"tessera.neighbors.halo.region", 1, 2, 1, 1, 0, 0},
+    {"tessera.neighbors.halo.exchange", 1, 1, 0, 1, 0, 0},
+    {"tessera.neighbors.halo.pack", 1, 1, 1, 1, 0, 0},
+    {"tessera.neighbors.halo.transport", 1, 1, 1, 1, 0, 0},
+    // unpack threads the destination field and the received halo slab.
+    {"tessera.neighbors.halo.unpack", 2, 2, 1, 1, 0, 0},
+    // Legacy neighbor.read carries (field, topology, delta); lowered dynamic
+    // forms may carry only the already-resolved halo handle.
+    {"tessera.neighbors.neighbor.read", 1, 3, 1, 1, -1, -1},
+    {"tessera.neighbors.stencil.define", 0, 0, 1, 1, -1, -1},
+    {"tessera.neighbors.stencil.apply", 3, 3, 1, 1, 1, 0},
+    {"tessera.neighbors.pipeline.config", 0, 0, 0, 0, -1, -1},
+};
+
+const DeclarativeShapeConstraint *shapeConstraintFor(Operation *op) {
+  StringRef name = op->getName().getStringRef();
+  for (const auto &constraint : kDeclarativeShapeConstraints)
+    if (constraint.opName == name)
+      return &constraint;
+  return nullptr;
+}
+
+bool compatibleShape(ShapedType lhs, ShapedType rhs) {
+  if (!lhs.hasRank() || !rhs.hasRank() || lhs.getRank() != rhs.getRank() ||
+      lhs.getElementType() != rhs.getElementType())
+    return false;
+  for (int64_t i = 0; i < lhs.getRank(); ++i) {
+    int64_t a = lhs.getDimSize(i), b = rhs.getDimSize(i);
+    if (!ShapedType::isDynamic(a) && !ShapedType::isDynamic(b) && a != b)
+      return false;
+  }
+  return true;
+}
+
+LogicalResult verifyDeclaredShapeConstraint(Operation *op) {
+  const auto *constraint = shapeConstraintFor(op);
+  if (!constraint)
+    return op->emitOpError("has no registered declarative shape constraint");
+  unsigned operands = op->getNumOperands(), results = op->getNumResults();
+  if (operands < constraint->minOperands || operands > constraint->maxOperands)
+    return op->emitOpError("expects ")
+           << constraint->minOperands
+           << (constraint->minOperands == constraint->maxOperands
+                   ? " operand(s)"
+                   : (".." + llvm::Twine(constraint->maxOperands) +
+                      " operand(s)").str())
+           << "; got " << operands;
+  if (results < constraint->minResults || results > constraint->maxResults)
+    return op->emitOpError("expects ")
+           << constraint->minResults
+           << (constraint->minResults == constraint->maxResults
+                   ? " result(s)"
+                   : (".." + llvm::Twine(constraint->maxResults) +
+                      " result(s)").str())
+           << "; got " << results;
+
+  if (constraint->primaryTensorOperand >= 0 &&
+      constraint->matchingTensorResult >= 0 &&
+      static_cast<unsigned>(constraint->matchingTensorResult) < results) {
+    Type input = op->getOperand(constraint->primaryTensorOperand).getType();
+    Type output = op->getResult(constraint->matchingTensorResult).getType();
+    auto inputShape = dyn_cast<ShapedType>(input);
+    auto outputShape = dyn_cast<ShapedType>(output);
+    // Opaque halo handles remain legal.  If either side is a tensor/memref,
+    // both sides must be shaped and preserve rank, element type, and every
+    // statically-known extent.
+    if ((inputShape || outputShape) &&
+        (!inputShape || !outputShape || !compatibleShape(inputShape, outputShape)))
+      return op->emitOpError(
+          "requires the data result shape and element type to match its input");
+  }
+
+  if (auto widths = op->getAttrOfType<ArrayAttr>("halo.width")) {
+    for (Attribute attr : widths) {
+      auto width = dyn_cast<IntegerAttr>(attr);
+      if (!width || width.getInt() < 0)
+        return op->emitOpError(
+            "requires halo.width to contain non-negative integers");
+    }
+  }
+  if (auto kind = op->getAttrOfType<StringAttr>("kind");
+      kind && kind.getValue().empty())
+    return op->emitOpError("requires a non-empty topology kind");
+  return success();
+}
+
+} // namespace
+
+LogicalResult ArchSTEOneHotOp::verify() {
+  return verifyDeclaredShapeConstraint(getOperation());
+}
+
+LogicalResult NeighborsTopologyCreateOp::verify() {
+  return verifyDeclaredShapeConstraint(getOperation());
+}
+LogicalResult NeighborsHaloRegionOp::verify() {
+  return verifyDeclaredShapeConstraint(getOperation());
+}
+LogicalResult NeighborsHaloExchangeOp::verify() {
+  return verifyDeclaredShapeConstraint(getOperation());
+}
+LogicalResult NeighborsHaloPackOp::verify() {
+  return verifyDeclaredShapeConstraint(getOperation());
+}
+LogicalResult NeighborsHaloTransportOp::verify() {
+  return verifyDeclaredShapeConstraint(getOperation());
+}
+LogicalResult NeighborsHaloUnpackOp::verify() {
+  return verifyDeclaredShapeConstraint(getOperation());
+}
+LogicalResult NeighborsNeighborReadOp::verify() {
+  return verifyDeclaredShapeConstraint(getOperation());
+}
+LogicalResult NeighborsStencilDefineOp::verify() {
+  return verifyDeclaredShapeConstraint(getOperation());
+}
+LogicalResult NeighborsStencilApplyOp::verify() {
+  return verifyDeclaredShapeConstraint(getOperation());
+}
+LogicalResult NeighborsPipelineConfigOp::verify() {
+  return verifyDeclaredShapeConstraint(getOperation());
+}
+
 LogicalResult MatmulOp::verify() {
   auto lhsType = dyn_cast<RankedTensorType>(getLhs().getType());
   auto rhsType = dyn_cast<RankedTensorType>(getRhs().getType());

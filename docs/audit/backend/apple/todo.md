@@ -3,7 +3,7 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-07-21
+last_updated: 2026-07-22
 ---
 
 # Apple compiler, exact-device, and performance plan
@@ -1266,3 +1266,19 @@ Metal-only compiler nodes as `compiler_apple`. Apple fixture-schema parity and
 compiler ownership are validated; the gfx1151 HSACO, HIP launch contract,
 resource fingerprints, timing, and exact-device packet do not transfer to
 Metal. No Apple capability, schedule, execution row, or selector changes.
+
+Cross-backend sync `CORE-COMPILER-1-2026-07-22` lands the Apple-owned
+declarative fusion table/generic rewrite and declarative value-envelope shape
+constraints, and closes 11 shared dialect verifier holes. The shared MMA
+selection is now recorded in Apple manifest rows and is available as an
+equal-tier arbiter cost tie-break. Existing Metal/MPS ABIs and physical
+schedules are unchanged; the LLVM 23 build validates compiler parity, while
+exact-device performance evidence remains Apple-owned.
+
+Cross-backend sync `CORE-COMPILER-2-2026-07-22` adds an executable physical
+layout contract to the generic emitter/cache and lands the first guarded
+dynamic-shape execution route on x86. Apple is **follow-up required**: its
+shape-materialized MSL candidates remain bucketed and no x86 row-major
+materializer, CPU guard, or dtype default transfers to Metal/MPS. Apple keeps
+its existing dtype and physical-layout ownership until an Apple-specific
+materializer and exact-device evidence land.

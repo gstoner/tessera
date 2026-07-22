@@ -180,6 +180,28 @@ def test_x86_residual_path_matches_numpy():
     assert np.allclose(out, region.reference(A, B, None, R), atol=1e-3)
 
 
+@pytest.mark.skipif(not _HAVE_CC, reason="no C compiler (clang/cc/gcc) on host")
+def test_x86_dynamic_route_materializes_strided_layout_and_records_guards():
+    runner = x86.X86CRunner()
+    region = F.FusedRegion(epilogue=("relu",))
+    rng = np.random.default_rng(7)
+    # Both logical inputs are deliberately non-contiguous views. The executable
+    # layout contract must materialize row-major buffers before native launch.
+    A = rng.standard_normal((13, 14)).astype(np.float32)[:, ::2]
+    B = rng.standard_normal((14, 11)).astype(np.float32)[::2, :]
+    assert not A.flags.c_contiguous and not B.flags.c_contiguous
+    out, execution = runner.run_fused_region(region, A, B)
+    assert execution == "x86_native"
+    np.testing.assert_allclose(out, region.reference(A, B), rtol=1e-4, atol=1e-4)
+    assert runner.last_launch_contract == {
+        "spec": "dynamic",
+        "dims": (13, 11, 7),
+        "layouts": (("A", "row_major"), ("B", "row_major")),
+        "a_contiguous": True,
+        "b_contiguous": True,
+    }
+
+
 # ── D1 candidates + C1b AOCL-DLP (host-free) ──────────────────────────────────
 #
 # The generic C lane is the x86 Tier-1 candidate; AOCL-DLP (C1b) is the opt-in

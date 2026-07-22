@@ -140,6 +140,13 @@ class TestMatmulManifest:
         assert "cpu" in entries
         assert entries["cpu"].status == "reference"
 
+    def test_shared_mma_selector_metadata_is_cross_target(self):
+        entries = {e.target: e for e in manifest_for("matmul")}
+        assert entries["apple_gpu"].mma_selection.target == "apple"
+        assert entries["nvidia_sm120"].mma_selection.target == "nvidia"
+        assert entries["rocm"].mma_selection.target == "rocm"
+        assert "mma_selection" in entries["nvidia_sm120"].as_dict()
+
 
 class TestAppleGPUMSLKernels:
     """The Apple GPU MSL kernel inventory ships fused kernels for a

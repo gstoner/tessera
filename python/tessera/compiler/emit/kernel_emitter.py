@@ -14,7 +14,8 @@ Three pieces, all target-independent:
   ``dynamic`` (runtime-arg + guards) is the endgame. First impls emit ``bucket``;
   the *interface* is dynamic-ready now so ``dynamic`` drops in with no API break.
 * :class:`KernelSource` — an emitted kernel: source text + entry-point name +
-  language tag + the policy it was specialized under.
+    language tag + the policy it was specialized under. ``layouts`` is the
+    executable physical-order contract for named runtime bindings.
 * :class:`KernelEmitter` — the plugin ABC. Each backend registers one
   target-bound emitter; :func:`emit_kernel` is the ``emit(region, target, spec)``
   entry point named in the plan, backed by the registry.
@@ -65,6 +66,7 @@ class KernelSource:
     lang: str
     spec: SpecPolicy = SpecPolicy.STATIC
     shape_key: tuple[Any, ...] | None = None
+    layouts: tuple[Any, ...] = ()
 
 
 def _dim_bucket(n: int) -> int:

@@ -3,7 +3,8 @@
 // Operationalizes Decision #15a (storage dtype ≠ accumulator) as *pass
 // ordering*, the way TIRx splits BF16/FP8 ComputeLegalize (early, rewrite math
 // to wide-accumulate form) from …StorageLegalize (terminal, pack sub-byte
-// values into a container). Two complementary rewrite passes:
+// values into a container). Two complementary rewrite passes plus a target
+// descriptor consumer:
 //
 //   --tessera-compute-legalize  (EARLY)
 //     For any op whose `numeric_policy.storage` is reduced-precision and which
@@ -18,9 +19,10 @@
 //     `tessera.storage_container` recording the byte container the packed values
 //     live in. This is the late packing step, run after all compute rewrites.
 //
-// Both are idempotent and additive (a value-preserving annotation today; the
-// container marker becomes a real repack when a low-precision backend consumes
-// it). Decision: never silently skip — an op with a reduced-precision storage
+// Both are idempotent and additive. Target defaults are capability-driven:
+// x86/NVIDIA run compute legalization, while ROCm runs compute + storage +
+// descriptor consumption because its WMMA generator consumes that descriptor.
+// Decision: never silently skip — an op with a reduced-precision storage
 // and no recognizable policy is left untouched for IRContractLegalityPass to
 // flag, not quietly "legalized".
 
@@ -164,8 +166,9 @@ struct StorageLegalize
 // storage_bits), and emits `tessera.storage_pack = {logical, container, factor,
 // signedness}`
 // — the concrete descriptor a backend's packed load/store reads. Once a backend
-// consumes this, `legalize-dtypes` can flip from opt-in to default on that
-// target (the real packed memory codegen + the flip are the hardware-gated tail).
+// consumes this, storage legalization may be a target default. ROCm is the first
+// such target; targets without a packed-memory consumer keep this terminal step
+// opt-in.
 struct StoragePackConsume
     : public PassWrapper<StoragePackConsume, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(StoragePackConsume)

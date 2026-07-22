@@ -218,9 +218,9 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
     ),
     PipelineSpec(
         name="tessera-lower-to-gpu",
-        # C4 (TIRx): the optional `legalize-dtypes` pipeline option inserts
-        # tessera-compute-legalize before the contract check and
-        # tessera-storage-legalize terminally (default off → byte-identical).
+        # CORE-COMPILER-2: compute legalization defaults on for NVIDIA; terminal
+        # storage legalization remains off because this generic pipeline has no
+        # packed-storage consumer. `legalize-dtypes` remains a force-on override.
         # C2/C3/C6 (TIRx): the warp-spec legality gates run after
         # WarpSpecialization (which emits the #tile.* markers).
         passes=(
@@ -228,6 +228,7 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             "canonicalize",
             "tessera-distribution-lower",
             "tessera-layout-legality",
+            "tessera-compute-legalize",
             "tessera-ir-contracts",
             "tessera-symdim-equality",
             "tessera-tile-ir-lowering",
@@ -305,6 +306,9 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             "tessera-effect-annotate",
             "canonicalize",
             "tessera-distribution-lower",
+            "tessera-compute-legalize",
+            "tessera-storage-legalize",
+            "tessera-storage-pack-consume",
             "rocm-wave-lds-pipeline",
             "rocm-wave-lds-legality",
             "tessera-lower-to-rocm",
@@ -342,6 +346,7 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             "canonicalize",
             "tessera-distribution-lower",
             "tessera-layout-legality",
+            "tessera-compute-legalize",
             "tessera-ir-contracts",
             "tessera-symdim-equality",
             "tessera-tile",
@@ -371,6 +376,7 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             "tessera-delta-attention-fusion",
             "tessera-distribution-lower",
             "tessera-layout-legality",
+            "tessera-compute-legalize",
             "tessera-ir-contracts",
             "tessera-symdim-equality",
             "tessera-tile-ir-lowering",
@@ -417,6 +423,7 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             "tessera-delta-attention-fusion",
             "tessera-distribution-lower",
             "tessera-layout-legality",
+            "tessera-compute-legalize",
             "tessera-ir-contracts",
             "tessera-symdim-equality",
             "tessera-tile-ir-lowering",
@@ -460,6 +467,7 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             "tessera-delta-attention-fusion",
             "tessera-distribution-lower",
             "tessera-layout-legality",
+            "tessera-compute-legalize",
             "tessera-ir-contracts",
             "tessera-symdim-equality",
             "tessera-tile-ir-lowering",
@@ -503,6 +511,7 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             "tessera-delta-attention-fusion",
             "tessera-distribution-lower",
             "tessera-layout-legality",
+            "tessera-compute-legalize",
             "tessera-ir-contracts",
             "tessera-symdim-equality",
             "tessera-tile-ir-lowering",

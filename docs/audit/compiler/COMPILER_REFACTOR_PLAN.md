@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-11
+last_updated: 2026-07-22
 audit_role: plan
 plan_state: landing
 ---
@@ -52,7 +52,7 @@ regression-gated on real silicon.
 
 ---
 
-## 2a. Status at a glance (updated 2026-07-07)
+## 2a. Status at a glance (updated 2026-07-22)
 
 Landed state per §4 phase. Inline **landed** notes in §3 carry the detail; this
 table is the single skim surface. `✅` done · `🟡` partial · `⬜` not started.
@@ -64,7 +64,7 @@ table is the single skim surface. `✅` done · `🟡` partial · `⬜` not star
 | **0** | E3 escape-hatch test | ✅ (landed in D1 `force` + PR #298 test) | ✅ gfx1151 | ✅ sm_120 |
 | **1** | A1 shared `extractPtr`/`ensureExternalDecl` | ✅ | — | — |
 | **1** | A2a–c shared fusion helpers (emit/chain-walk/epilogue trio) | ✅ | — | — |
-| **1** | A2 single declarative `FusionPattern` · A3 verifiers | ⬜ | — | — |
+| **1** | A2 single declarative `FusionPattern` · A3 verifiers | ✅ | — | — |
 | **1** | A4 shared cost-aware MMA selector (`mma_selector.py`) | ✅ | — | — |
 | **2** | B1 split `fusion.py` | ✅ | — | — |
 | **2** | B2a–c `KernelEmitter`/`Runner`/`SpecPolicy` | ✅ | — | — |
@@ -132,12 +132,16 @@ Pure mechanical dedup; zero behavior change; golden-IR-gated.
   Decision-#21 descriptor hook (`FusionChainUtils.h`: `fusionDescriptorDriven`,
   `walkChainProducer`), and the data-driven epilogue body collapsing the
   Softmax/Gelu/RMSNorm trio (`EpilogueFusion.h`: `lowerMatmulEpilogueFusion`), all
-  lit byte-identical. **Still open:** the *single* declarative `FusionPattern` table +
-  one generic `RewritePattern` that would retire the 7 separate pass files entirely
-  (the passes still exist, they just share bodies now).
-- **A3 · Declarative shape/constraint verifiers** `[MAC]` — ⬜ **open.** Replace the
-  hand-written `verify*()` (7 today) in the 1219-line `TileToApple.cpp` with a
-  declarative spec.
+  lit byte-identical. **Landed 2026-07-22:** one `FusionPattern` table and one
+  generic `RewritePattern` now drive the production Apple fusion pipeline. The
+  former pass factories remain as compatibility entry points, but production no
+  longer composes seven separate fusion passes.
+- **A3 · Declarative shape/constraint verifiers** `[MAC]` — ✅ **landed
+  2026-07-22.** A single value-envelope constraint table replaces the repeated
+  structural checks in the seven Apple `verify*()` helpers; operation-specific
+  semantic attributes remain explicit. At the dialect boundary, declarative ODS
+  verifier hooks plus one shared shape verifier close the 11 generated-inventory
+  holes (`arch_ste_onehot` and the ten Neighbors operations).
 - **A4 · Promote ROCm's `MmaDescriptor` + `M×N//lanes` footprint model** `[MAC]`
   to the shared MMA selector, parameterized by per-arch lane count + shape table.
   The one place a *lead* abstraction lifts upward: Apple/x86/NVIDIA gain a
@@ -154,10 +158,13 @@ Pure mechanical dedup; zero behavior change; golden-IR-gated.
   The lift: grounded ISA records for NVIDIA (`mma.sync` m16n8k{8,16,32,64} warp-32),
   Apple (`simdgroup_matrix<8,8>` simdgroup-32), x86 AMX (tile-register — honestly
   `cooperative=False`/`lane_count=None`, per-lane footprint N/A). No emit path
-  changed (hardware-free selector, Decision #19). **Follow-on (own PR — touches
-  drift-gated dashboards):** wire `get_isa`/`select_mma` as `backend_manifest`'s
-  cross-target MMA-metadata source (today ROCm-only via `_rocm_mma_descriptor_for`)
-  and as the D1 arbiter's `cost_model`.
+  changed (hardware-free selector, Decision #19). **Manifest/arbiter wiring
+  landed 2026-07-22:** `backend_manifest` now publishes the shared selection for
+  cooperative MMA families on Apple, NVIDIA, and ROCm, while retaining the
+  ROCm descriptor compatibility field. Equal-tier arbiter candidates use the
+  shared accumulator-footprint score after tier precedence, so the cost model
+  cannot demote a higher-tier retained route. x86 remains unselected until an
+  AMX/ACE cooperative candidate is explicitly registered.
 
 **Lead safety:** A1–A3 are Apple/x86-facing; ROCm adopts only the match/verifier
 shell with byte-identical emit (golden-IR gated). No NVIDIA emit change.
@@ -613,8 +620,12 @@ priority (highest DL leverage first):
   serving) vs BUCKET's one-compile-per-bucket. Proven: host-free (DYNAMIC source ==
   BUCKET source, cache key shape-independent, across all three lanes) + live
   gfx1151 (one DYNAMIC compile serves 64³/256×128×96/512³, all F4-correct, one
-  cache entry — `test_dynamic_shape_emit.py`). The bucket-specialized tensor-core
-  lanes (WMMA / `mma.sync`) legitimately stay BUCKET. **Still open:** a `dynamic`
+  cache entry — `test_dynamic_shape_emit.py`). **CORE-COMPILER-2 first guarded
+  route (2026-07-22):** x86 now executes that dynamic policy through strict
+  rank/contraction/side-buffer/i32 guards and an executable row-major operand
+  layout contract. Non-contiguous host inputs are physically materialized before
+  launch and layout participates in the cache key. The bucket-specialized
+  tensor-core lanes (WMMA / `mma.sync`) legitimately stay BUCKET. **Still open:** a `dynamic`
   path for the *shape-specialized* lanes (Apple MSL materialized-score kernels,
   tiled tensor-core) that bake dims into codegen. Mostly `[MAC]`.
 - **H · Memory planning + layout (W3+W4)** — global buffer assignment/reuse +
@@ -650,8 +661,17 @@ priority (highest DL leverage first):
   shared-memory backend emits (`__shared__ char arena[N]; buf = arena + offset`).
   SMEM/TMEM get separate arenas. lit-gated
   (`tests/tessera-ir/phase3/tile_buffer_arena.mlir`). **Still open:** the
-  `LayoutAssignmentPass` `tessera.layout` attrs are still unconsumed; a HIP/PTX
-  emitter that actually allocates from the arena offsets; transpose-through-pointwise.
+  Graph-level `LayoutAssignmentPass` casts remain opt-in outside the first x86
+  emitter materializer; ROCm independently consumes structured `#tile.layout`.
+  Still open: Apple/NVIDIA Graph-cast materializers, a HIP/PTX emitter that
+  actually allocates from the arena offsets, and transpose-through-pointwise.
+
+- **CORE-COMPILER-2 · Target dtype defaults (2026-07-22).** Compute
+  legalization is now the named-pipeline default for x86 and NVIDIA. Terminal
+  storage legalization is deliberately not default there until a packed-storage
+  consumer exists. ROCm owns the first complete default chain — compute,
+  storage, consume — ahead of its descriptor-aware WMMA generator. The existing
+  `legalize-dtypes` option remains an explicit compatibility override.
 - **I · Training-graph + distributed optimization (W5+W6)** — apply the middle-end
   to backward graphs; promote comm/compute overlap from runtime machinery to a
   scheduled pass. Needs multi-rank (mock-collective today).

@@ -120,6 +120,16 @@ struct LowerMatmulRMSNormFusionToAppleGPUPass
 
 } // namespace
 
+LogicalResult rewriteMatmulRMSNormFusion(Operation *op,
+                                         PatternRewriter &rewriter) {
+  if (op->getName().getStringRef() == kRMSNormSafeMnemonic) {
+    LowerMatmulRMSNormSafePattern pattern(op->getContext());
+    return pattern.matchAndRewrite(op, rewriter);
+  }
+  LowerMatmulRMSNormPattern pattern(op->getContext());
+  return pattern.matchAndRewrite(op, rewriter);
+}
+
 std::unique_ptr<Pass> createLowerMatmulRMSNormFusionToAppleGPUPass() {
   return std::make_unique<LowerMatmulRMSNormFusionToAppleGPUPass>();
 }

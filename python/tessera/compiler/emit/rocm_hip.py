@@ -705,6 +705,11 @@ class RocmWmmaGemmCandidate(Candidate):
     target = _TARGET
     op = OP_FUSED_REGION
     accuracy_atol = _F16_ATOL              # f16 storage budget (Decision #28)
+    mma_target = "rocm"
+    mma_arch = "gfx1151"
+
+    def mma_dtype(self, region: Any) -> str | None:
+        return "fp16"
 
     def available(self) -> bool:
         # Probe the ACTUAL fused path (tessera-opt + generated kernel), not just

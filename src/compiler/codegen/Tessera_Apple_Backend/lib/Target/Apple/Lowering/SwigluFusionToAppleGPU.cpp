@@ -186,6 +186,12 @@ struct LowerSwigluFusionToAppleGPUPass
 
 } // namespace
 
+LogicalResult rewriteSwigluFusion(Operation *op,
+                                  PatternRewriter &rewriter) {
+  LowerSwigluFusedToAppleGPU pattern(op->getContext());
+  return pattern.matchAndRewrite(op, rewriter);
+}
+
 std::unique_ptr<Pass> createLowerSwigluFusionToAppleGPUPass() {
   return std::make_unique<LowerSwigluFusionToAppleGPUPass>();
 }

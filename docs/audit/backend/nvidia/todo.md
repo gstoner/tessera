@@ -3,7 +3,7 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-07-21
+last_updated: 2026-07-22
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
@@ -1183,3 +1183,18 @@ is validated, but the gfx1151 HSACO, HIP ABI, resources, timing, and
 exact-device evidence do not transfer to CUDA. The ROCm-owned compiler lane
 explicitly excludes `compiler_nvidia`; no NVIDIA capability, test ownership,
 schedule, execution row, or selector changes.
+
+Cross-backend sync `CORE-COMPILER-1-2026-07-22` closes shared Graph/Neighbors
+verifier gaps and records the shared `sm_120` MMA selection in NVIDIA manifest
+rows. Equal-tier candidates may use its analytical accumulator footprint only
+after route-tier precedence. This is parity validated at the host-free
+compiler/manifest boundary; it changes no PTX instruction schedule, automatic
+selector promotion, CUDA ABI, or exact-device evidence.
+
+Cross-backend sync `CORE-COMPILER-2-2026-07-22` makes compute dtype
+legalization the default in NVIDIA named pipelines. Terminal storage
+legalization remains intentionally opt-in because the generic CUDA route has no
+packed-storage consumer; that consumer is follow-up required before a sub-byte
+default is honest. The executable row-major layout materializer and guarded
+dynamic launch are x86-only and transfer no PTX schedule, CUDA ABI, bucket
+policy, selector, or exact-device evidence.

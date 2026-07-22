@@ -6,6 +6,8 @@ are all exercised with fake candidates + a real ``FusedRegion`` oracle — no de
 """
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
@@ -136,6 +138,35 @@ def test_measure_hook_overrides_tier():
     win = C.arbitrate(_region(), OP_FUSED_REGION, _TGT,
                       measure=lambda c: latency[c.name])
     assert win is not None and win.name == "synth"
+
+
+def test_default_uses_shared_mma_footprint_within_equal_tier():
+    from tessera.compiler.mma_selector import get_isa, rank_shapes_by_footprint
+
+    shapes = [
+        shape
+        for shape, _ in rank_shapes_by_footprint(
+            get_isa("rocm", "gfx942"), k=16
+        )
+    ]
+    assert len(shapes) >= 2
+
+    class _Mma(_Correct):
+        mma_target = "rocm"
+        mma_arch = "gfx942"
+
+        def __init__(self, name, shape):
+            super().__init__(name, Tier.EMITTED)
+            self.mma_prefer_shape = shape
+
+    # Registration order favors the expensive row; the shared analytical
+    # cost must select the smaller accumulator footprint without crossing tiers.
+    C.register_candidate(_Mma("expensive", shapes[-1]))
+    C.register_candidate(_Mma("cheap", shapes[0]))
+    win = C.arbitrate(
+        SimpleNamespace(dtype="bf16"), OP_FUSED_REGION, _TGT, verify=False
+    )
+    assert win is not None and win.name == "cheap"
 
 
 def test_run_arbitrated_falls_back_to_reference():

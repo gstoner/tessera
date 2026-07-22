@@ -197,6 +197,16 @@ def select_mma(
             raise MmaSelectorError(
                 f"prefer_shape {prefer_shape} is not legal on {isa.target}:{isa.arch} (legal: {sorted(isa.shapes)})"
             )
+        expected_k = isa.k_by_dtype.get(dtype)
+        if expected_k is None:
+            raise MmaSelectorError(
+                f"dtype {dtype!r} has no MMA path on {isa.target}:{isa.arch}"
+            )
+        if prefer_shape[2] != expected_k:
+            raise MmaSelectorError(
+                f"prefer_shape {prefer_shape} is not in the K={expected_k} "
+                f"family required by dtype {dtype!r} on {isa.target}:{isa.arch}"
+            )
         shape = prefer_shape
     else:
         shape = cheapest_shape(isa, dtype)

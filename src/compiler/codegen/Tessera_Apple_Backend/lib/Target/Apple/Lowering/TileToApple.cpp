@@ -292,22 +292,113 @@ bool isStaticRank4F32Tensor(Type ty) {
          rt.getElementType().isF32();
 }
 
+enum class ValueEnvelopeShapeKind : unsigned {
+  NativeSparse,
+  PPOPolicyLoss,
+  EBMEnergyQuadratic,
+  EBMLangevinStep,
+  EBMRefinement,
+  EBMPartitionExact,
+  CliffordGeometricProduct,
+};
+
+enum class ShapeRelation {
+  NativeSparseGate,
+  OperandsSameResultScalar,
+  MatrixPairResultLeadingDim,
+  AllSame,
+  ScalarResult,
+  Clifford3D,
+};
+
+struct ValueEnvelopeShapeConstraint {
+  llvm::StringLiteral family;
+  unsigned minOperands;
+  unsigned maxOperands;
+  unsigned results;
+  ShapeRelation relation;
+};
+
+constexpr ValueEnvelopeShapeConstraint kValueEnvelopeShapeConstraints[] = {
+    {"native_sparse_attn", 4, 4, 1, ShapeRelation::NativeSparseGate},
+    {"ppo_policy_loss", 3, 6, 1,
+     ShapeRelation::OperandsSameResultScalar},
+    {"ebm_energy_quadratic", 2, 2, 1,
+     ShapeRelation::MatrixPairResultLeadingDim},
+    {"ebm_langevin_step", 3, 3, 1, ShapeRelation::AllSame},
+    {"ebm_refinement", 2, 2, 1, ShapeRelation::AllSame},
+    {"ebm_partition_exact", 1, 1, 1, ShapeRelation::ScalarResult},
+    {"clifford_geometric_product", 2, 2, 1,
+     ShapeRelation::Clifford3D},
+};
+
+bool verifyDeclaredValueEnvelopeShape(Operation *op,
+                                      ValueEnvelopeShapeKind kind) {
+  const auto &constraint =
+      kValueEnvelopeShapeConstraints[static_cast<unsigned>(kind)];
+  if (op->getNumOperands() < constraint.minOperands ||
+      op->getNumOperands() > constraint.maxOperands ||
+      op->getNumResults() != constraint.results)
+    return false;
+
+  llvm::SmallVector<RankedTensorType> operands;
+  for (Value operand : op->getOperands()) {
+    auto type = llvm::dyn_cast<RankedTensorType>(operand.getType());
+    if (!type || !type.hasStaticShape() || !type.getElementType().isF32())
+      return false;
+    operands.push_back(type);
+  }
+  auto result = llvm::dyn_cast<RankedTensorType>(op->getResult(0).getType());
+  if (!result || !result.hasStaticShape() ||
+      !result.getElementType().isF32())
+    return false;
+
+  const auto sameAsFirst = [&](RankedTensorType type) {
+    return type.getShape() == operands.front().getShape();
+  };
+  llvm::ArrayRef<RankedTensorType> operandTypes(operands);
+  switch (constraint.relation) {
+  case ShapeRelation::NativeSparseGate: {
+    if (!isStaticRank4F32Tensor(operands[0]) ||
+        !isStaticRank4F32Tensor(operands[1]) ||
+        !isStaticRank4F32Tensor(operands[2]) ||
+        !isStaticRank4F32Tensor(operands[3]) ||
+        !isStaticRank4F32Tensor(result) || !sameAsFirst(operands[1]) ||
+        !sameAsFirst(operands[2]) || !sameAsFirst(result))
+      return false;
+    auto block = op->getAttrOfType<IntegerAttr>("block_size");
+    if (!block || block.getInt() <= 0 ||
+        operands[0].getDimSize(2) % block.getInt() != 0)
+      return false;
+    int64_t numBlocks = operands[0].getDimSize(2) / block.getInt();
+    return operands[3].getDimSize(0) == operands[0].getDimSize(0) &&
+           operands[3].getDimSize(1) == operands[0].getDimSize(1) &&
+           operands[3].getDimSize(2) == operands[0].getDimSize(2) &&
+           operands[3].getDimSize(3) == numBlocks;
+  }
+  case ShapeRelation::OperandsSameResultScalar:
+    return llvm::all_of(operandTypes.drop_front(), sameAsFirst) &&
+           result.getRank() == 0;
+  case ShapeRelation::MatrixPairResultLeadingDim:
+    return operands[0].getRank() == 2 && operands[1].getRank() == 2 &&
+           result.getRank() == 1 && sameAsFirst(operands[1]) &&
+           result.getDimSize(0) == operands[0].getDimSize(0);
+  case ShapeRelation::AllSame:
+    return llvm::all_of(operandTypes.drop_front(), sameAsFirst) &&
+           sameAsFirst(result);
+  case ShapeRelation::ScalarResult:
+    return result.getRank() == 0;
+  case ShapeRelation::Clifford3D:
+    return operands[0].getRank() >= 1 && sameAsFirst(operands[1]) &&
+           sameAsFirst(result) &&
+           operands[0].getDimSize(operands[0].getRank() - 1) == 8;
+  }
+  llvm_unreachable("unknown declarative value-envelope shape relation");
+}
+
 bool verifyNativeSparseValueEnvelope(Operation *op) {
-  if (op->getNumOperands() != 4 || op->getNumResults() != 1)
-    return false;
-  auto qTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(0).getType());
-  auto kTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(1).getType());
-  auto vTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(2).getType());
-  auto gateTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(3).getType());
-  auto outTy = llvm::dyn_cast<RankedTensorType>(op->getResult(0).getType());
-  if (!qTy || !kTy || !vTy || !gateTy || !outTy)
-    return false;
-  if (!isStaticRank4F32Tensor(qTy) || !isStaticRank4F32Tensor(kTy) ||
-      !isStaticRank4F32Tensor(vTy) || !isStaticRank4F32Tensor(gateTy) ||
-      !isStaticRank4F32Tensor(outTy))
-    return false;
-  if (qTy.getShape() != kTy.getShape() || qTy.getShape() != vTy.getShape() ||
-      qTy.getShape() != outTy.getShape())
+  if (!verifyDeclaredValueEnvelopeShape(
+          op, ValueEnvelopeShapeKind::NativeSparse))
     return false;
   auto blockAttr = op->getAttrOfType<IntegerAttr>("block_size");
   auto windowAttr = op->getAttrOfType<IntegerAttr>("window_size");
@@ -317,45 +408,17 @@ bool verifyNativeSparseValueEnvelope(Operation *op) {
   int64_t block = blockAttr.getInt();
   int64_t window = windowAttr.getInt();
   int64_t topK = topKAttr.getInt();
+  auto qTy = llvm::cast<RankedTensorType>(op->getOperand(0).getType());
   int64_t seq = qTy.getDimSize(2);
   if (block <= 0 || window <= 0 || topK <= 0 || seq % block != 0)
     return false;
   int64_t numBlocks = seq / block;
-  if (topK > numBlocks)
-    return false;
-  return gateTy.getDimSize(0) == qTy.getDimSize(0) &&
-         gateTy.getDimSize(1) == qTy.getDimSize(1) &&
-         gateTy.getDimSize(2) == qTy.getDimSize(2) &&
-         gateTy.getDimSize(3) == numBlocks;
+  return topK <= numBlocks;
 }
 
 bool verifyPPOPolicyLossValueEnvelope(Operation *op) {
-  if (op->getNumOperands() < 3 || op->getNumOperands() > 6 ||
-      op->getNumResults() != 1)
-    return false;
-  auto nextTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(0).getType());
-  auto oldTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(1).getType());
-  auto advTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(2).getType());
-  auto outTy = llvm::dyn_cast<RankedTensorType>(op->getResult(0).getType());
-  if (!nextTy || !oldTy || !advTy || !outTy)
-    return false;
-  if (!nextTy.hasStaticShape() || !oldTy.hasStaticShape() ||
-      !advTy.hasStaticShape() || !outTy.hasStaticShape())
-    return false;
-  if (!nextTy.getElementType().isF32() || !oldTy.getElementType().isF32() ||
-      !advTy.getElementType().isF32() || !outTy.getElementType().isF32())
-    return false;
-  if (nextTy.getShape() != oldTy.getShape() ||
-      nextTy.getShape() != advTy.getShape())
-    return false;
-  for (Value side : op->getOperands().drop_front(3)) {
-    auto sideTy = llvm::dyn_cast<RankedTensorType>(side.getType());
-    if (!sideTy || !sideTy.hasStaticShape() ||
-        !sideTy.getElementType().isF32() ||
-        sideTy.getShape() != nextTy.getShape())
-      return false;
-  }
-  if (outTy.getRank() != 0)
+  if (!verifyDeclaredValueEnvelopeShape(
+          op, ValueEnvelopeShapeKind::PPOPolicyLoss))
     return false;
   if (auto reduction = op->getAttrOfType<StringAttr>("reduction");
       reduction && reduction.getValue() != "mean")
@@ -385,41 +448,13 @@ bool verifyPPOPolicyLossValueEnvelope(Operation *op) {
 }
 
 bool verifyEBMEnergyQuadraticValueEnvelope(Operation *op) {
-  if (op->getNumOperands() != 2 || op->getNumResults() != 1)
-    return false;
-  auto xTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(0).getType());
-  auto yTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(1).getType());
-  auto eTy = llvm::dyn_cast<RankedTensorType>(op->getResult(0).getType());
-  if (!xTy || !yTy || !eTy)
-    return false;
-  if (!xTy.hasStaticShape() || !yTy.hasStaticShape() || !eTy.hasStaticShape())
-    return false;
-  if (!xTy.getElementType().isF32() || !yTy.getElementType().isF32() ||
-      !eTy.getElementType().isF32())
-    return false;
-  if (xTy.getRank() != 2 || yTy.getRank() != 2 || eTy.getRank() != 1)
-    return false;
-  return xTy.getShape() == yTy.getShape() &&
-         eTy.getDimSize(0) == xTy.getDimSize(0);
+  return verifyDeclaredValueEnvelopeShape(
+      op, ValueEnvelopeShapeKind::EBMEnergyQuadratic);
 }
 
 bool verifyEBMLangevinStepValueEnvelope(Operation *op) {
-  if (op->getNumOperands() != 3 || op->getNumResults() != 1)
-    return false;
-  auto yTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(0).getType());
-  auto gTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(1).getType());
-  auto nTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(2).getType());
-  auto oTy = llvm::dyn_cast<RankedTensorType>(op->getResult(0).getType());
-  if (!yTy || !gTy || !nTy || !oTy)
-    return false;
-  if (!yTy.hasStaticShape() || !gTy.hasStaticShape() ||
-      !nTy.hasStaticShape() || !oTy.hasStaticShape())
-    return false;
-  if (!yTy.getElementType().isF32() || !gTy.getElementType().isF32() ||
-      !nTy.getElementType().isF32() || !oTy.getElementType().isF32())
-    return false;
-  if (yTy.getShape() != gTy.getShape() || yTy.getShape() != nTy.getShape() ||
-      yTy.getShape() != oTy.getShape())
+  if (!verifyDeclaredValueEnvelopeShape(
+          op, ValueEnvelopeShapeKind::EBMLangevinStep))
     return false;
   auto eta = op->getAttrOfType<FloatAttr>("eta");
   if (!eta || eta.getValueAsDouble() <= 0.0)
@@ -431,19 +466,8 @@ bool verifyEBMLangevinStepValueEnvelope(Operation *op) {
 }
 
 bool verifyEBMRefinementValueEnvelope(Operation *op) {
-  if (op->getNumOperands() != 2 || op->getNumResults() != 1)
-    return false;
-  auto yTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(0).getType());
-  auto gTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(1).getType());
-  auto oTy = llvm::dyn_cast<RankedTensorType>(op->getResult(0).getType());
-  if (!yTy || !gTy || !oTy)
-    return false;
-  if (!yTy.hasStaticShape() || !gTy.hasStaticShape() || !oTy.hasStaticShape())
-    return false;
-  if (!yTy.getElementType().isF32() || !gTy.getElementType().isF32() ||
-      !oTy.getElementType().isF32())
-    return false;
-  if (yTy.getShape() != gTy.getShape() || yTy.getShape() != oTy.getShape())
+  if (!verifyDeclaredValueEnvelopeShape(
+          op, ValueEnvelopeShapeKind::EBMRefinement))
     return false;
   auto eta = op->getAttrOfType<FloatAttr>("eta");
   auto steps = op->getAttrOfType<IntegerAttr>("steps");
@@ -452,17 +476,8 @@ bool verifyEBMRefinementValueEnvelope(Operation *op) {
 }
 
 bool verifyEBMPartitionExactValueEnvelope(Operation *op) {
-  if (op->getNumOperands() != 1 || op->getNumResults() != 1)
-    return false;
-  auto eTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(0).getType());
-  auto oTy = llvm::dyn_cast<RankedTensorType>(op->getResult(0).getType());
-  if (!eTy || !oTy)
-    return false;
-  if (!eTy.hasStaticShape() || !oTy.hasStaticShape())
-    return false;
-  if (!eTy.getElementType().isF32() || !oTy.getElementType().isF32())
-    return false;
-  if (oTy.getRank() != 0)
+  if (!verifyDeclaredValueEnvelopeShape(
+          op, ValueEnvelopeShapeKind::EBMPartitionExact))
     return false;
   if (auto temperature = op->getAttrOfType<FloatAttr>("temperature");
       temperature && temperature.getValueAsDouble() <= 0.0)
@@ -474,28 +489,8 @@ bool verifyEBMPartitionExactValueEnvelope(Operation *op) {
 }
 
 bool verifyCliffordGeometricProductValueEnvelope(Operation *op) {
-  if (op->getNumOperands() != 2 || op->getNumResults() != 1)
-    return false;
-  auto lhsTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(0).getType());
-  auto rhsTy = llvm::dyn_cast<RankedTensorType>(op->getOperand(1).getType());
-  auto resTy = llvm::dyn_cast<RankedTensorType>(op->getResult(0).getType());
-  if (!lhsTy || !rhsTy || !resTy)
-    return false;
-  if (!lhsTy.hasStaticShape() || !rhsTy.hasStaticShape() ||
-      !resTy.hasStaticShape())
-    return false;
-  if (!lhsTy.getElementType().isF32() || !rhsTy.getElementType().isF32() ||
-      !resTy.getElementType().isF32())
-    return false;
-  if (lhsTy.getRank() < 1 || rhsTy.getRank() != lhsTy.getRank() ||
-      resTy.getRank() != lhsTy.getRank())
-    return false;
-  if (lhsTy.getDimSize(lhsTy.getRank() - 1) != 8 ||
-      rhsTy.getDimSize(rhsTy.getRank() - 1) != 8 ||
-      resTy.getDimSize(resTy.getRank() - 1) != 8)
-    return false;
-  if (lhsTy.getShape() != rhsTy.getShape() ||
-      lhsTy.getShape() != resTy.getShape())
+  if (!verifyDeclaredValueEnvelopeShape(
+          op, ValueEnvelopeShapeKind::CliffordGeometricProduct))
     return false;
   auto p = op->getAttrOfType<IntegerAttr>("p");
   auto q = op->getAttrOfType<IntegerAttr>("q");

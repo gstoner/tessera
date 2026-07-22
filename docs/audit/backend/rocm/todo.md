@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-21
+last_updated: 2026-07-22
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
@@ -1240,3 +1240,18 @@ CUDA materializers, PTX ABIs, SM120 schedules, resources, and evidence do not
 transfer to RDNA. Existing ROCm attention, paged-KV, and MoE capability rows
 remain unchanged until gfx-owned lowering, HSACO launch, numerical, and exact
 device proof land.
+
+Cross-backend sync `CORE-COMPILER-1-2026-07-22` closes shared Graph/Neighbors
+verifier gaps and makes ROCm's live MMA/WMMA tables the source for manifest MMA
+metadata and equal-tier arbiter footprint cost. The existing ROCm descriptor
+field remains for compatibility, gfx1151 FP8/BF8 rejection stays inherited
+from the ISA tables, and no RDNA schedule, HSACO ABI, selector promotion, or
+exact-device claim changes. LLVM 23 ROCm compiler parity is validated.
+
+Cross-backend sync `CORE-COMPILER-2-2026-07-22` makes the ROCm-owned backend
+pipeline the first complete default dtype chain: compute legalization, storage
+legalization, then descriptor consumption before WMMA generation. This is safe
+because ROCm already owns the executable packed INT4/INT8 consumer. Structured
+`#tile.layout` remains executable in ROCm Tile lowering; the new generic
+row-major materializer and guarded dynamic launch are x86-only and transfer no
+RDNA schedule, HSACO ABI, selector, or exact-device claim.

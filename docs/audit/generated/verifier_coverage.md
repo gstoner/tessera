@@ -6,10 +6,10 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 
 | Status | Count | Meaning |
 |--------|-------|---------|
-| `real` | 163 | `hasVerifier = 1;` + substantive `verify()` body. |
+| `real` | 174 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` | 0 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent` | 0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
-| `no_verifier` | 11 | No verifier declared.  TD constraints suffice — fine for many ops. |
+| `no_verifier` | 0 | No verifier declared.  TD constraints suffice — fine for many ops. |
 | **Total** | 174 | |
 
 ## Per-dialect details
@@ -29,7 +29,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `ArchHardConcreteOp` | `real` |
 | `ArchMixedOp` | `real` |
 | `ArchParameterOp` | `real` |
-| `ArchSTEOneHotOp` | `no_verifier` |
+| `ArchSTEOneHotOp` | `real` |
 | `ArchSwitchOp` | `real` |
 | `ArchWeightedSumOp` | `real` |
 | `AttnCompressedBlocksOp` | `real` |
@@ -125,16 +125,16 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `MultiHeadAttentionOp` | `real` |
 | `NTKRopeOp` | `real` |
 | `NativeSparseAttnFusedOp` | `real` |
-| `NeighborsHaloExchangeOp` | `no_verifier` |
-| `NeighborsHaloPackOp` | `no_verifier` |
-| `NeighborsHaloRegionOp` | `no_verifier` |
-| `NeighborsHaloTransportOp` | `no_verifier` |
-| `NeighborsHaloUnpackOp` | `no_verifier` |
-| `NeighborsNeighborReadOp` | `no_verifier` |
-| `NeighborsPipelineConfigOp` | `no_verifier` |
-| `NeighborsStencilApplyOp` | `no_verifier` |
-| `NeighborsStencilDefineOp` | `no_verifier` |
-| `NeighborsTopologyCreateOp` | `no_verifier` |
+| `NeighborsHaloExchangeOp` | `real` |
+| `NeighborsHaloPackOp` | `real` |
+| `NeighborsHaloRegionOp` | `real` |
+| `NeighborsHaloTransportOp` | `real` |
+| `NeighborsHaloUnpackOp` | `real` |
+| `NeighborsNeighborReadOp` | `real` |
+| `NeighborsPipelineConfigOp` | `real` |
+| `NeighborsStencilApplyOp` | `real` |
+| `NeighborsStencilDefineOp` | `real` |
+| `NeighborsTopologyCreateOp` | `real` |
 | `PermuteOp` | `real` |
 | `PowerAttnOp` | `real` |
 | `QROp` | `real` |

@@ -40,6 +40,13 @@ from tessera.compiler.emit.candidate import (
     register_candidate,
 )
 from tessera.compiler.emit.kernel_cache import build, register_compiler
+from tessera.compiler.emit.executable_layout import (
+    DynamicShapeGuardError,
+    ExecutableLayout,
+    LayoutOrder,
+    guard_dynamic_matmul,
+    materialize_layouts,
+)
 from tessera.compiler.emit.kernel_emitter import (
     EmitError,
     KernelEmitter,
@@ -56,6 +63,10 @@ _TARGET = "x86"
 _LANG = "c"
 _ENTRY = "tessera_x86_fused"
 _REAL_TAG = "x86_native"
+_LAYOUTS = (
+    ExecutableLayout("A", LayoutOrder.ROW_MAJOR, 2),
+    ExecutableLayout("B", LayoutOrder.ROW_MAJOR, 2),
+)
 
 
 def _synthesize_fused_c(region: FusedRegion) -> str:
@@ -102,7 +113,7 @@ class X86CEmitter(KernelEmitter):
         source = _synthesize_fused_c(region)
         key = bucket_key(dims, spec, dim_names=getattr(region, "dim_names", None))
         return KernelSource(source=source, entry=_ENTRY, lang=self.lang,
-                            spec=spec, shape_key=key)
+                            spec=spec, shape_key=key, layouts=_LAYOUTS)
 
 
 # ── Seam 2: compile_fn (source → .so) ─────────────────────────────────────────
@@ -156,27 +167,49 @@ def _ptr(arr):
 class X86CRunner(KernelRunner):
     target = _TARGET
 
+    def __init__(self) -> None:
+        self.last_launch_contract: dict[str, Any] | None = None
+
     def run_fused_region(self, region: Any, A: Any, B: Any, bias: Any = None,
                          *args: Any, residual: Any = None,
                          **kwargs: Any) -> tuple[Any, str]:
         import numpy as np
-        # Required-buffer guard BEFORE any launch: the emitted C dereferences
-        # bias[n] / residual[...] whenever the region declares them, so a missing
-        # buffer would pass a NULL pointer and segfault PAST Python's ``except``
-        # (an uncatchable SIGSEGV). Route such an ill-formed call through the numpy
-        # reference instead, which raises a clean, catchable ValueError naming the
-        # missing operand — never launch the kernel with a null it will deref.
-        if (region.has_bias and bias is None) or \
-                (region.has_residual and residual is None):
-            return region.reference(A, B, bias, residual), "reference"
         try:
-            Af = np.ascontiguousarray(A, np.float32)
-            Bf = np.ascontiguousarray(B, np.float32)
-            M, K = Af.shape
-            _, N = Bf.shape
-            # Shape-anonymous build: the C kernel takes M/N/K at runtime, so one
-            # compiled artifact serves every shape (dims=None → no shape key).
-            compiled = build(region, _TARGET, dtype="f32", dims=None)
+            M, N, K = guard_dynamic_matmul(
+                A,
+                B,
+                bias=bias,
+                residual=residual,
+                require_bias=region.has_bias,
+                require_residual=region.has_residual,
+            )
+            # CORE-COMPILER-2's first guarded dynamic route.  The symbolic cache
+            # identity is shape-independent, while M/N/K are validated above and
+            # passed through the runtime ABI below.
+            compiled = build(
+                region,
+                _TARGET,
+                spec=SpecPolicy.DYNAMIC,
+                dtype="f32",
+                dims=(M, N, K),
+            )
+            laid_out = materialize_layouts(
+                {"A": np.asarray(A, dtype=np.float32),
+                 "B": np.asarray(B, dtype=np.float32)},
+                compiled.source.layouts,
+            )
+            Af = laid_out["A"]
+            Bf = laid_out["B"]
+            self.last_launch_contract = {
+                "spec": compiled.source.spec.value,
+                "dims": (M, N, K),
+                "layouts": tuple(
+                    (layout.binding, layout.order.value)
+                    for layout in compiled.source.layouts
+                ),
+                "a_contiguous": bool(Af.flags.c_contiguous),
+                "b_contiguous": bool(Bf.flags.c_contiguous),
+            }
             fn = _load_entry(compiled.artifact)
             bias_arr = (np.ascontiguousarray(bias, np.float32)
                         if bias is not None else None)
@@ -187,6 +220,8 @@ class X86CRunner(KernelRunner):
                     _ptr(out), M, N, K)
             if rc == 1:
                 return out, _REAL_TAG
+        except DynamicShapeGuardError:
+            raise
         except Exception:
             pass
         return region.reference(A, B, bias, residual), "reference"

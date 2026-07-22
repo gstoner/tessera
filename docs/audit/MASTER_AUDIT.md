@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-12
+last_updated: 2026-07-22
 audit_role: root
 ---
 
@@ -80,14 +80,14 @@ benchmark, or ABI work.
 | Area | Current result | Remaining frontier | Authority |
 |---|---|---|---|
 | Curated conformance | 63 exact-target cells: 23 complete, 13 reference, 27 missing | NVIDIA architecture-specific compile and execution breadth | [`op_target_conformance.md`](op_target_conformance.md) |
-| Compiler phases | API, frontend, Graph IR, Schedule IR, and runtime readiness closed | 13 Tile IR rows and 14 Target IR rows remain mixed | [`generated/compiler_progress.md`](generated/compiler_progress.md) |
+| Compiler phases | API, frontend, Graph IR, Schedule IR, and runtime readiness closed | 11 Tile IR rows and 12 Target IR rows remain mixed | [`generated/compiler_progress.md`](generated/compiler_progress.md) |
 | Primitive contracts | Batching, transpose, and lowering closed across 480 primitives | Sharding has 43 open rows; registry-level backend promotion remains broad | [`generated/s_series_status.md`](generated/s_series_status.md) |
 | Runtime execution | Checked-in executable rows are explicit and drift-gated | Add rows only after a real launch path exists | [`generated/runtime_execution_matrix.md`](generated/runtime_execution_matrix.md) |
-| Verifiers | No trivial verifier stubs | Manually triage 11 no-verifier ops; add verifiers only where invariants exist | [`generated/verifier_coverage.md`](generated/verifier_coverage.md) |
+| Verifiers | All 174 registered operations now have real verifier coverage; no trivial stubs or uncovered rows remain | Keep new operation constraints declarative where possible and preserve the totality drift gate | [`generated/verifier_coverage.md`](generated/verifier_coverage.md) |
 | Test evidence | No `needs_direct_test` debt | Convert high-value structural-only evidence to direct or differential proof | [`generated/test_coverage.md`](generated/test_coverage.md) |
 | Apple | Curated CPU/GPU conformance closed; Apple GPU proof is provenance-gated | Performance, precision, and the small target-map tail | [`backend/apple/APPLE_AUDIT.md`](backend/apple/APPLE_AUDIT.md) |
 | ROCm | Curated conformance closed on the exact gfx1151 RDNA lane | Prioritize gfx950 MI350-series, gfx1201 Radeon AI PRO R9700, and gfx1250 MI455X exact-target proof; retain gfx942 as compatibility | [`generated/rocm_target_map.md`](generated/rocm_target_map.md) |
-| NVIDIA | One sm_120 runtime row exists; target artifacts cover a wider surface | Promote CUDA artifacts into compile/link/launch/numerical proof | [`backend/nvidia/NVIDIA_AUDIT.md`](backend/nvidia/NVIDIA_AUDIT.md) |
+| NVIDIA | The runtime matrix records 24 live `sm_120` rows; sealed softmax/reduction packets are release-ready while other SMs remain compile-only or deferred | Promote remaining `sm_120` families and other exact architectures only through matching compile/link/launch/numerical proof | [`backend/nvidia/NVIDIA_AUDIT.md`](backend/nvidia/NVIDIA_AUDIT.md) |
 | Distributed | Single-device and mock-collective development paths exist | Real multi-rank NCCL/RCCL or equivalent execution | [`backend/BACKEND_AUDIT.md`](backend/BACKEND_AUDIT.md) |
 
 ## Conformance Result After The 2026-07-12 Evidence Redesign

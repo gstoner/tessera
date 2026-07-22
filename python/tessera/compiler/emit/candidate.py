@@ -135,6 +135,24 @@ class Candidate(ABC):
     #: Optional relative precision budget for numerically amplifying regions
     #: such as gated matmul. Exact/f32 candidates leave this unset.
     accuracy_rtol: float | None = None
+    #: Optional shared-MMA selector identity. Matrix candidates set both fields;
+    #: scalar/reference candidates leave them unset and receive no matrix cost.
+    mma_target: str | None = None
+    mma_arch: str | None = None
+    mma_prefer_shape: tuple[int, int, int] | None = None
+
+    def mma_dtype(self, region: Any) -> str | None:
+        """Canonical storage dtype used by the shared MMA footprint model."""
+        raw = getattr(region, "dtype", None)
+        if not isinstance(raw, str):
+            return None
+        return {
+            "float16": "fp16",
+            "f16": "fp16",
+            "bfloat16": "bf16",
+            "float32": "fp32",
+            "f32": "fp32",
+        }.get(raw, raw)
 
     def available(self) -> bool:
         """Whether this candidate can execute here *right now* (device/toolchain/
@@ -316,7 +334,46 @@ def arbitrate(region: Any, op: str, target: str, *, verify: bool = True,
         return min(cands, key=measure)
     # Default: highest tier wins (Decision #28 lead-safety) — a hand-tuned lane is
     # only displaced once D2's measured loop proves a lower tier faster + in budget.
-    return max(cands, key=lambda c: (int(c.tier), -_reg_index(c)))
+    return max(
+        cands,
+        key=lambda c: (
+            int(c.tier),
+            -_mma_footprint_cost(c, region),
+            -_reg_index(c),
+        ),
+    )
+
+
+def _mma_footprint_cost(candidate: Candidate, region: Any) -> float:
+    """D1 analytical tie-break from the shared A4 selector.
+
+    Tier remains authoritative, so this cannot displace a proven lead kernel.
+    Among equal-tier matrix candidates, fewer accumulator registers per lane
+    wins; candidates without shared MMA metadata retain registration order.
+    """
+    if candidate.mma_target is None or candidate.mma_arch is None:
+        return float("inf")
+    dtype = candidate.mma_dtype(region)
+    if dtype is None:
+        return float("inf")
+    try:
+        from tessera.compiler.mma_selector import get_isa, select_mma
+
+        isa = get_isa(candidate.mma_target, candidate.mma_arch)
+        math_mode = (isa.required_math_modes or {}).get(dtype)
+        selected = select_mma(
+            isa,
+            dtype,
+            math_mode=math_mode,
+            prefer_shape=candidate.mma_prefer_shape,
+        )
+    except (ValueError, KeyError):
+        return float("inf")
+    # Non-lane-cooperative units (AMX) have no comparable per-lane register
+    # footprint. Keep them deterministic without pretending the cost is known.
+    if selected.accumulator_regs is None:
+        return float("inf")
+    return float(selected.accumulator_regs)
 
 
 def _reg_index(candidate: Candidate) -> int:

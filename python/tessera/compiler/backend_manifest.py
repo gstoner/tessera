@@ -24,8 +24,8 @@ Status semantics:
                        (e.g., Apple GPU matmul→softmax MSL kernel; x86 AMX GEMM)
     "reference"      : backend can execute via numpy reference / cblas /
                        Accelerate.cblas_sgemm (correct but not perf-tuned)
-    "artifact_only"  : Target IR artifact lit-testable; execution gated
-                       on hardware availability (NVIDIA/ROCm without GPU)
+    "artifact_only"  : Target IR artifact lit-testable; execution remains
+                       unproven for this exact target/operation row
     "planned"        : no implementation today; intended for the target
 
 The manifest does NOT change any axis values in the primitive coverage
@@ -37,7 +37,7 @@ dashboard to surface.  The ``backend_kernel`` contract axis stays at
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Mapping, Optional, Tuple
 
 from .capabilities import TARGET_CAPABILITIES, canonical_op
@@ -268,6 +268,10 @@ class BackendKernelEntry:
     operand-layout/packing detail.  Type-erased to ``object`` to keep this a
     leaf-importable module; validated structurally in ``__post_init__`` (ROCm
     targets only).  ``None`` for non-GEMM / non-ROCm entries."""
+    mma_selection: Optional[object] = None
+    """CORE-COMPILER-1 cross-target :class:`mma_selector.MmaSelection`.
+    Unlike the compatibility ``mma_descriptor`` field, this is populated for
+    every matrix-capable target represented by the shared selector."""
     # Arch-3 (2026-05-22) — execute-and-compare hooks.  All optional so
     # existing constructors continue to work.  When ``status ==
     # "device_verified_abi"`` the validator below requires
@@ -402,6 +406,13 @@ class BackendKernelEntry:
                     f"mma_descriptor only applies to ROCm targets, got "
                     f"target={self.target!r}")
 
+        if self.mma_selection is not None:
+            from .mma_selector import MmaSelection
+            if not isinstance(self.mma_selection, MmaSelection):
+                raise TypeError(
+                    "mma_selection must be an mma_selector.MmaSelection, got "
+                    f"{type(self.mma_selection).__name__}")
+
         # Arch-3 (2026-05-22) — device_verified_abi contract.  This is
         # the top rung of the readiness ladder; an entry only qualifies
         # when it carries both an executable runtime entry point AND a
@@ -520,6 +531,10 @@ class BackendKernelEntry:
             from .rocm_mma import MmaDescriptor
             if isinstance(self.mma_descriptor, MmaDescriptor):
                 out["mma_descriptor"] = self.mma_descriptor.as_metadata_dict()
+        if self.mma_selection is not None:
+            from .mma_selector import MmaSelection
+            if isinstance(self.mma_selection, MmaSelection):
+                out["mma_selection"] = self.mma_selection.as_metadata_dict()
         # Arch-3 (2026-05-22) — execute-and-compare hooks.
         if self.shape_envelope is not None:
             out["shape_envelope"] = self.shape_envelope
@@ -5277,6 +5292,63 @@ def _rocm_mma_descriptor_for(op_name: str, dtypes: tuple[str, ...]):
     return None
 
 
+def _shared_mma_selection_for(
+    op_name: str, entry: BackendKernelEntry
+) -> object | None:
+    """Resolve one representative matrix instruction through the shared A4
+    selector.  Unsupported dtype/architecture combinations remain absent; the
+    manifest never fabricates a fallback MMA claim."""
+    if op_name not in _ROCM_MMA_OP_NAMES:
+        return None
+    from .mma_selector import MmaSelectorError, get_isa, select_mma
+
+    target_arch: tuple[str, str] | None = None
+    if entry.target == "nvidia_sm120":
+        target_arch = ("nvidia", "sm_120")
+    elif entry.target == "apple_gpu":
+        target_arch = ("apple", "apple7")
+    elif entry.target == "x86" and "amx" in entry.feature_flags:
+        target_arch = ("x86", "amx")
+    elif entry.target == "rocm":
+        # Executing WMMA rows are gfx1151; generic MFMA artifact rows retain
+        # their historical gfx942 representative until an exact-target entry
+        # replaces the family alias.
+        target_arch = (
+            "rocm",
+            "gfx1151" if "wmma" in entry.feature_flags else "gfx942",
+        )
+    if target_arch is None:
+        return None
+
+    try:
+        isa = get_isa(*target_arch)
+    except MmaSelectorError:
+        return None
+    for dtype in entry.dtypes:
+        if dtype not in isa.dtypes:
+            continue
+        math_mode = (isa.required_math_modes or {}).get(dtype)
+        try:
+            return select_mma(isa, dtype, math_mode=math_mode)
+        except MmaSelectorError:
+            continue
+    return None
+
+
+def _attach_shared_mma_selections(
+    op_name: str, entries: list[BackendKernelEntry]
+) -> list[BackendKernelEntry]:
+    # Manifest generation visits hundreds of non-matrix families. Preserve
+    # their existing immutable rows without rebuilding every dataclass; besides
+    # being semantically exact, this keeps audit/dashboard generation linear.
+    if op_name not in _ROCM_MMA_OP_NAMES:
+        return entries
+    return [
+        replace(entry, mma_selection=_shared_mma_selection_for(op_name, entry))
+        for entry in entries
+    ]
+
+
 def manifest_for(op_name: str) -> list[BackendKernelEntry]:
     """Return the backend manifest entries for ``op_name``.
 
@@ -5591,6 +5663,7 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
     # numerical-correctness test. Replaces the conformance matrix's
     # filename/content heuristic with first-class manifest data.
     entries = _overlay_structured_compute_entries(op_name, entries)
+    entries = _attach_shared_mma_selections(op_name, entries)
     entries = _attach_numerical_fixtures(op_name, entries)
 
     return entries

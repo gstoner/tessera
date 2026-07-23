@@ -622,6 +622,12 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "(tessera_x86_avx512_binary_loss_f32, stable "
                             "softplus form) + none/mean/sum reduction on the "
                             "reduce kernel. f32, matches numpy 2e-5",
+    "x86_binary_loss_bwd_compiled": "x86 CPU AVX-512 paired BCE-with-logits "
+                            "backward; one stable-sigmoid launch writes logits "
+                            "and target gradients for dynamic f32 tensors",
+    "x86_class_loss_bwd_compiled": "x86 CPU AVX-512 class-index cross-entropy "
+                            "backward with label smoothing, ignore-index, and "
+                            "explicit reduction scaling",
     "x86_fft_compiled": "x86 CPU spectral FFT (fft / ifft / rfft / irfft) over "
                             "ANY axis length — AVX-512 radix-2 Cooley-Tukey C2C "
                             "kernel (tessera_x86_fft_c2c_f32; deinterleave-permute "
@@ -647,6 +653,17 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "adamw / lion) — AVX-512 fused per-parameter update "
                             "kernel (kind-selected; m/v state in-place; host "
                             "computes the 1-β^t bias correction). f32",
+    "x86_training_loss_sgd_compiled": "AVX-512 one-loop loss backward to SGD "
+                            "training fusion with no prediction-gradient "
+                            "materialization. f32",
+    "x86_training_loss_adamw_compiled": "AVX-512 one-loop loss backward to "
+                            "AdamW parameter and moment-state update with no "
+                            "prediction-gradient materialization. f32",
+    "x86_sgd_bwd_compiled": "x86 CPU AVX-512 paired SGD backward; one launch "
+                            "writes dParameter and dGradient. f32",
+    "x86_momentum_bwd_compiled": "x86 CPU AVX-512 paired Momentum/Nesterov "
+                            "backward; one launch writes parameter, gradient, "
+                            "and velocity gradients. f32",
     "x86_normcompose_compiled": "x86 CPU group/instance/weight norm — composed "
                             "on the AVX-512 layer_norm + reduce kernels (host "
                             "reshape/divide). f32",
@@ -729,6 +746,9 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "x86_norm_bwd_compiled": "x86 CPU AVX-512 paired RMSNorm / LayerNorm "
                             "backward launch with dynamic rows/width and "
                             "deterministic f32 dx/dGamma/dBeta reductions",
+    "x86_regression_loss_bwd_compiled": "x86 CPU AVX-512 paired regression-loss "
+                            "backward for MSE, MAE, Huber, and SmoothL1 with "
+                            "dynamic extents and none/sum/mean cotangents",
     "x86_softmax_compiled": "x86 CPU row-reduction softmax kernel — "
                             "numerically-stable softmax over the last axis "
                             "(tessera_x86_avx512_softmax_f32 from "
@@ -758,10 +778,18 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "f32/f16/bf16 storage, f32 compute",
     "rocm_loss_compiled": "AMD GPU RDNA pointwise regression loss (mse / mae / "
                             "huber / smooth_l1 / log_cosh) the Tessera compiler "
-                            "GENERATES (generate-rocm-pointwise-loss-kernel -> "
-                            "ROCDL -> hsaco), then HIP launches it; per-element "
-                            "loss on gfx1151 + none/mean/sum reduction. The CPU "
+                            "GENERATES (pointwise + reduce -> ROCDL -> hsaco), "
+                            "then HIP composes with a retained device "
+                            "intermediate; scalar sum/mean copy one value and "
+                            "none copies the tensor. Cached HIP modules. The CPU "
                             "analog is the x86_loss lane. f32/f16/bf16",
+    "rocm_mse_bwd_compiled": "AMD GPU compiler-generated paired MSE backward "
+                            "with runtime extent and reduction-aware cotangent; "
+                            "one HIP launch writes both input gradients",
+    "rocm_regression_loss_bwd_compiled": "AMD GPU compiler-generated paired "
+                            "regression-loss backward for MSE, MAE, Huber, and "
+                            "SmoothL1; one runtime-sized HIP launch writes both "
+                            "input gradients",
     "rocm_fft_compiled": "AMD GPU RDNA spectral FFT (fft / ifft / rfft / irfft) "
                             "the Tessera compiler GENERATES (generate-rocm-dft-"
                             "kernel -> ROCDL -> hsaco; one thread per output bin, "
@@ -797,6 +825,17 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "fused per-parameter update kernel (generate-rocm-"
                             "optimizer-kernel, kind StrAttr-selected; host "
                             "computes the 1-β^t bias correction). f32",
+    "rocm_training_loss_sgd_compiled": "Compiler-generated gfx1151 one-launch "
+                            "loss backward to SGD training fusion with dynamic "
+                            "extent and no prediction-gradient allocation",
+    "rocm_training_loss_adamw_compiled": "Compiler-generated gfx1151 one-launch "
+                            "loss backward to AdamW parameter and moment-state "
+                            "update with dynamic extent",
+    "rocm_sgd_bwd_compiled": "AMD GPU compiler-generated paired SGD backward; "
+                            "one runtime-sized HIP launch writes both gradients",
+    "rocm_momentum_bwd_compiled": "AMD GPU compiler-generated paired "
+                            "Momentum/Nesterov backward; one runtime-sized HIP "
+                            "launch writes all three input gradients",
     "rocm_lamb_compiled": "AMD GPU RDNA LAMB — COMPILER-GENERATED gfx1151 adam "
                             "kernel (lr=1/wd=0) + host per-tensor trust ratio "
                             "‖p‖/‖update‖. f32",
@@ -894,6 +933,12 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "hsaco), then HIP launches it; per-element on gfx1151 "
                             "+ reduction. ROCm mirror of x86_binary_loss. "
                             "f32/f16/bf16",
+    "rocm_binary_loss_bwd_compiled": "AMD GPU compiler-generated paired "
+                            "BCE-with-logits backward; one gfx1151 launch writes "
+                            "logits and target gradients for dynamic tensors",
+    "rocm_class_loss_bwd_compiled": "AMD GPU compiler-generated class-index "
+                            "cross-entropy backward with smoothing, ignore-index, "
+                            "and valid-count mean scaling",
     "rocm_rl_loss_compiled": "AMD GPU RDNA RL policy loss (ppo / cispo / grpo "
                             "surrogate on generate-rocm-policy-loss-kernel + "
                             "normalize_group_advantages on the norm lane) the "
@@ -1533,6 +1578,34 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "form) + none/mean/sum reduction on the reduce kernel. f32, "
                "numpy 2e-5.",
         execution_mode="cpu_avx512"),
+    ("x86", "x86_binary_loss_bwd_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_binary_loss_bwd_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_binary_loss_bwd_compiled", runtime_status="success",
+        reason="One AVX-512 stable-sigmoid launch writes BCE-with-logits "
+               "dLogits and dTarget with runtime none/sum/mean scaling.",
+        execution_mode="cpu_avx512", direction="backward",
+        op_family="binary_cross_entropy_loss",
+        device_proof="device_verified_abi", evidence_target="x86_avx512",
+        numerical_fixture=(
+            "tests/unit/test_autodiff_training_series_target_binding.py"),
+        proof_build="LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512",
+        residual_policy="save_inputs",
+        residual_tradeoff="Backward retains logits and targets; sigmoid is recomputed."),
+    ("x86", "x86_class_loss_bwd_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_class_loss_bwd_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_class_loss_bwd_compiled", runtime_status="success",
+        reason="One AVX-512 class-axis ABI computes stable softmax and indexed "
+               "or label-smoothed dLogits with ignore-index masking.",
+        execution_mode="cpu_avx512", direction="backward",
+        op_family="cross_entropy_loss",
+        device_proof="device_verified_abi", evidence_target="x86_avx512",
+        numerical_fixture=(
+            "tests/unit/test_autodiff_training_series_target_binding.py"),
+        proof_build="LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512",
+        residual_policy="save_inputs",
+        residual_tradeoff="Backward retains logits and integer targets."),
     ("x86", "x86_fft_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_fft_compiled",
         execution_kind="native_cpu", executable=True,
@@ -1582,6 +1655,34 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "m/v state updated in place; the 1-β^t bias correction computed on "
                "host from the step). f32, matches the optim.py reference.",
         execution_mode="cpu_avx512"),
+    ("x86", "x86_sgd_bwd_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_sgd_bwd_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_sgd_bwd_compiled", runtime_status="success",
+        reason="One AVX-512 launch writes dParameter=dY and "
+               "dGradient=-lr*dY for runtime-sized f32 tensors.",
+        execution_mode="cpu_avx512", direction="backward",
+        op_family="sgd", device_proof="device_verified_abi",
+        evidence_target="x86_avx512",
+        numerical_fixture=(
+            "tests/unit/test_autodiff_regression_loss_target_binding.py"),
+        proof_build="LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512",
+        residual_policy="recompute_all",
+        residual_tradeoff="No forward values are required by the SGD VJP."),
+    ("x86", "x86_momentum_bwd_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_momentum_bwd_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_momentum_bwd_compiled", runtime_status="success",
+        reason="One AVX-512 launch writes parameter, gradient, and velocity "
+               "VJPs for runtime-sized Momentum/Nesterov tensors.",
+        execution_mode="cpu_avx512", direction="backward",
+        op_family="momentum_nesterov", device_proof="device_verified_abi",
+        evidence_target="x86_avx512",
+        numerical_fixture=(
+            "tests/unit/test_autodiff_training_series_target_binding.py"),
+        proof_build="LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512",
+        residual_policy="none",
+        residual_tradeoff="The affine VJP requires no forward residuals."),
     ("x86", "x86_normcompose_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_normcompose_compiled",
         execution_kind="native_cpu", executable=True,
@@ -1687,6 +1788,54 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "(tessera_x86_avx512_pointwise_loss_f32) + none/mean/sum "
                "reduction on the AVX-512 reduce kernel. f32, numpy 2e-5.",
         execution_mode="cpu_avx512"),
+    ("x86", "x86_regression_loss_bwd_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_regression_loss_bwd_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_regression_loss_bwd_compiled",
+        runtime_status="success",
+        reason="AVX-512 paired regression-loss backward computes both input "
+               "gradients for MSE, MAE, Huber, and SmoothL1 with exact "
+               "tie/boundary semantics and runtime none/sum/mean cotangents.",
+        execution_mode="cpu_avx512", direction="backward",
+        op_family="mse_loss",
+        backward_aliases=("mae_loss", "huber_loss", "smooth_l1_loss"),
+        device_proof="device_verified_abi", evidence_target="x86_avx512",
+        numerical_fixture="tests/unit/test_x86_loss_compiled.py",
+        proof_build="LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512",
+        residual_policy="save_inputs",
+        residual_tradeoff="Save prediction and target; no forward loss tensor."),
+    ("x86", "x86_training_loss_sgd_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_training_loss_sgd_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_training_loss_sgd_compiled",
+        runtime_status="success",
+        reason="One AVX-512 loop consumes the regression-loss prediction "
+               "gradient directly in SGD and writes only updated parameters "
+               "and the observable target gradient.",
+        execution_mode="cpu_avx512", direction="backward",
+        op_family="training.loss_sgd",
+        device_proof="device_verified_abi", evidence_target="x86_avx512",
+        numerical_fixture="tests/unit/test_training_loss_sgd_compiled.py",
+        proof_build="LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512",
+        residual_policy="save_inputs",
+        residual_tradeoff="Prediction/target are saved; dPrediction is "
+                          "internalized and never materialized."),
+    ("x86", "x86_training_loss_adamw_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_training_loss_adamw_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_training_loss_adamw_compiled",
+        runtime_status="success",
+        reason="One AVX-512 loop consumes the loss prediction gradient in "
+               "AdamW and writes parameter, first moment, second moment, and "
+               "the observable target gradient.",
+        execution_mode="cpu_avx512", direction="backward",
+        op_family="training.loss_adamw",
+        device_proof="device_verified_abi", evidence_target="x86_avx512",
+        numerical_fixture="tests/unit/test_training_loss_adamw_compiled.py",
+        proof_build="LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512",
+        residual_policy="save_inputs_and_optimizer_state",
+        residual_tradeoff="Prediction/target and both moments are saved; "
+                          "dPrediction is internalized and never materialized."),
     ("x86", "x86_attention_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_attention_compiled",
         execution_kind="native_cpu", executable=True,
@@ -2518,6 +2667,34 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "one thread per element; the 1-β^t bias correction computed on "
                "host) HIP-launched. f32, matches the optim.py reference.",
         execution_mode="hip_runtime"),
+    ("rocm", "rocm_sgd_bwd_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_sgd_bwd_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_sgd_bwd_compiled", runtime_status="success",
+        reason="One compiler-generated runtime-sized HIP launch writes "
+               "dParameter=dY and dGradient=-lr*dY.",
+        execution_mode="hip_runtime", direction="backward",
+        op_family="sgd", device_proof="device_verified_jit",
+        evidence_target="rocm_gfx1151",
+        numerical_fixture=(
+            "tests/unit/test_autodiff_regression_loss_target_binding.py"),
+        proof_build="LLVM/MLIR 23; ROCm 7.14; gfx1151",
+        residual_policy="recompute_all",
+        residual_tradeoff="No forward values are required by the SGD VJP."),
+    ("rocm", "rocm_momentum_bwd_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_momentum_bwd_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_momentum_bwd_compiled", runtime_status="success",
+        reason="One compiler-generated runtime-sized HIP launch writes "
+               "parameter, gradient, and velocity VJPs for Momentum/Nesterov.",
+        execution_mode="hip_runtime", direction="backward",
+        op_family="momentum_nesterov", device_proof="device_verified_jit",
+        evidence_target="rocm_gfx1151",
+        numerical_fixture=(
+            "tests/unit/test_autodiff_training_series_target_binding.py"),
+        proof_build="LLVM/MLIR 23; ROCm 7.14; gfx1151",
+        residual_policy="none",
+        residual_tradeoff="The affine VJP requires no forward residuals."),
     ("rocm", "rocm_lamb_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_lamb_compiled",
         execution_kind="native_gpu", executable=True,
@@ -2740,6 +2917,34 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "softplus) + reduction. ROCm mirror of x86_binary_loss. "
                "f32/f16/bf16.",
         execution_mode="hip_runtime"),
+    ("rocm", "rocm_binary_loss_bwd_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_binary_loss_bwd_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_binary_loss_bwd_compiled", runtime_status="success",
+        reason="One compiler-generated gfx1151 stable-sigmoid kernel writes "
+               "BCE-with-logits dLogits and dTarget with runtime scaling.",
+        execution_mode="hip_runtime", direction="backward",
+        op_family="binary_cross_entropy_loss",
+        device_proof="device_verified_jit", evidence_target="rocm_gfx1151",
+        numerical_fixture=(
+            "tests/unit/test_autodiff_training_series_target_binding.py"),
+        proof_build="LLVM/MLIR 23; ROCm 7.14; gfx1151",
+        residual_policy="save_inputs",
+        residual_tradeoff="Backward retains logits and targets; sigmoid is recomputed."),
+    ("rocm", "rocm_class_loss_bwd_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_class_loss_bwd_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_class_loss_bwd_compiled", runtime_status="success",
+        reason="One compiler-generated gfx1151 kernel computes stable class-axis "
+               "softmax and indexed/label-smoothed dLogits with ignore masking.",
+        execution_mode="hip_runtime", direction="backward",
+        op_family="cross_entropy_loss",
+        device_proof="device_verified_jit", evidence_target="rocm_gfx1151",
+        numerical_fixture=(
+            "tests/unit/test_autodiff_training_series_target_binding.py"),
+        proof_build="LLVM/MLIR 23; ROCm 7.14; gfx1151",
+        residual_policy="save_inputs",
+        residual_tradeoff="Backward retains logits and integer targets."),
     ("rocm", "rocm_rl_loss_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_rl_loss_compiled",
         execution_kind="native_gpu", executable=True,
@@ -2757,9 +2962,74 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         reason="ROCm loss artifact runs the COMPILER-GENERATED per-element "
                "regression loss (mse/mae/huber/smooth_l1/log_cosh) over "
                "(pred, target) on gfx1151 (generate-rocm-pointwise-loss-kernel "
-               "-> ROCDL, exp/log1p via math->rocdl), then the none/mean/sum "
-               "reduction. The CPU analog of the x86_loss lane. f32/f16/bf16.",
+               "-> ROCDL, exp/log1p via math->rocdl). Scalar sum/mean feed the "
+               "retained device allocation into the generated reduce kernel; "
+               "none copies the tensor. HIP module/function handles are cached. "
+               "The CPU analog of the x86_loss lane. f32/f16/bf16.",
         execution_mode="hip_runtime"),
+    ("rocm", "rocm_mse_bwd_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_mse_bwd_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_mse_bwd_compiled", runtime_status="success",
+        reason="Compiler-generated paired MSE backward writes dPrediction and "
+               "dTarget in one runtime-sized HIP launch. none consumes a tensor "
+               "cotangent; sum/mean consume a scalar cotangent; f32/f16/bf16 "
+               "storage computes in f32.",
+        execution_mode="hip_runtime", direction="backward",
+        op_family="mse_loss",
+        device_proof="device_verified_jit", evidence_target="rocm_gfx1151",
+        numerical_fixture="tests/unit/test_rocm_loss_compiled.py",
+        proof_build="LLVM/MLIR 23; ROCm 7.14; gfx1151",
+        residual_policy="save_inputs",
+        residual_tradeoff="Save prediction and target; no forward loss tensor."),
+    ("rocm", "rocm_regression_loss_bwd_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_regression_loss_bwd_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_regression_loss_bwd_compiled",
+        runtime_status="success",
+        reason="Compiler-generated paired regression-loss backward computes "
+               "MSE, MAE, Huber, and SmoothL1 input gradients in one "
+               "runtime-sized HIP launch with exact tie/boundary semantics.",
+        execution_mode="hip_runtime", direction="backward",
+        op_family="mse_loss",
+        backward_aliases=("mae_loss", "huber_loss", "smooth_l1_loss"),
+        device_proof="device_verified_jit", evidence_target="rocm_gfx1151",
+        numerical_fixture="tests/unit/test_rocm_loss_compiled.py",
+        proof_build="LLVM/MLIR 23; ROCm 7.14; gfx1151",
+        residual_policy="save_inputs",
+        residual_tradeoff="Save prediction and target; no forward loss tensor."),
+    ("rocm", "rocm_training_loss_sgd_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_training_loss_sgd_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_training_loss_sgd_compiled",
+        runtime_status="success",
+        reason="One compiler-generated runtime-sized HIP launch consumes the "
+               "regression-loss prediction gradient in SGD and writes updated "
+               "parameters plus the observable target gradient.",
+        execution_mode="hip_runtime", direction="backward",
+        op_family="training.loss_sgd",
+        device_proof="device_verified_jit", evidence_target="rocm_gfx1151",
+        numerical_fixture="tests/unit/test_training_loss_sgd_compiled.py",
+        proof_build="LLVM/MLIR 23; ROCm 7.14; gfx1151",
+        residual_policy="save_inputs",
+        residual_tradeoff="Prediction/target are saved; dPrediction is "
+                          "internalized and never materialized."),
+    ("rocm", "rocm_training_loss_adamw_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_training_loss_adamw_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_training_loss_adamw_compiled",
+        runtime_status="success",
+        reason="One compiler-generated runtime-sized HIP launch consumes the "
+               "loss prediction gradient in AdamW and writes parameter, both "
+               "moment states, and the observable target gradient.",
+        execution_mode="hip_runtime", direction="backward",
+        op_family="training.loss_adamw",
+        device_proof="device_verified_jit", evidence_target="rocm_gfx1151",
+        numerical_fixture="tests/unit/test_training_loss_adamw_compiled.py",
+        proof_build="LLVM/MLIR 23; ROCm 7.14; gfx1151",
+        residual_policy="save_inputs_and_optimizer_state",
+        residual_tradeoff="Prediction/target and both moments are saved; "
+                          "dPrediction is internalized and never materialized."),
     ("rocm", "rocm_silu_mul_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_silu_mul_compiled",
         execution_kind="native_gpu", executable=True,
@@ -3191,9 +3461,8 @@ _DEVICE_PROOFS: frozenset[str] = frozenset(
 )
 
 
-# Matmul's VJP has no distinct backward kernel. The paired ABI launches the
-# already device-verified generated GEMM twice with transposed operands. Keeping
-# this as a composition prevents the audit from double-counting a fake kernel.
+# Matmul's VJP has no distinct backward kernel. Its paired ABI composes two
+# already device-verified generated GEMMs.
 _BACKWARD_COMPOSITIONS: tuple[BackwardComposition, ...] = (
     BackwardComposition(
         op_family="matmul", target="rocm", evidence_target="rocm_gfx1151",

@@ -51,6 +51,7 @@ void buildTesseraROCMBackendPipeline(OpPassManager &pm) {
 void registerTesseraROCMPasses() {
   registerPass([]() { return createROCMWaveLdsPipelinePass(); });
   registerPass([]() { return createROCMWaveLdsLegalityPass(); });
+  registerPass([]() { return createROCMDynamicLDSPass(); });
   registerPass([]() { return createLowerTileToROCMPass(); });
   registerPass([]() { return createLowerKernelABIPass(); });
   registerPass([]() { return createLowerTesseraTargetToROCDLPass(); });
@@ -64,6 +65,7 @@ void registerTesseraROCMPasses() {
   registerPass([]() { return createGenerateROCMBinaryLossKernelPass(); });
   registerPass([]() { return createGenerateROCMPolicyLossKernelPass(); });
   registerPass([]() { return createGenerateROCMFpQuantKernelPass(); });
+  registerPass([]() { return createGenerateROCMInt4PackKernelPass(); });
   registerPass([]() { return createGenerateROCMDequantGemmKernelPass(); });
   registerPass([]() { return createGenerateROCMDftKernelPass(); });
   registerPass([]() { return createGenerateROCMSpmmKernelPass(); });

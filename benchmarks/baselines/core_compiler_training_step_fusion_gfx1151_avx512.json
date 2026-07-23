@@ -1,0 +1,505 @@
+{
+  "rows": [
+    {
+      "cache_identity": "runtime_loaded_avx512_abi",
+      "elements": 65536,
+      "family": "mse",
+      "fused": {
+        "compiler_path": "x86_training_loss_sgd_compiled",
+        "launches": 1,
+        "median_ms": 0.044912,
+        "p95_ms": 0.086759
+      },
+      "optimizer": "sgd",
+      "selector_decision": "fused_when_dprediction_has_one_sgd_use",
+      "speedup": 2.040779747060919,
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total",
+      "unfused": {
+        "compiler_paths": [
+          "x86_regression_loss_bwd_compiled",
+          "x86_optimizer_compiled"
+        ],
+        "launches": 2,
+        "median_ms": 0.0916555,
+        "p95_ms": 0.159259
+      }
+    },
+    {
+      "cache_identity": "runtime_loaded_avx512_abi",
+      "elements": 65536,
+      "family": "mse",
+      "fused": {
+        "compiler_path": "x86_training_loss_adamw_compiled",
+        "launches": 1,
+        "median_ms": 0.066168,
+        "p95_ms": 0.11848
+      },
+      "optimizer": "adamw",
+      "selector_decision": "fused_when_dprediction_has_one_adamw_use",
+      "speedup": 1.474186918147745,
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total",
+      "unfused": {
+        "compiler_paths": [
+          "x86_regression_loss_bwd_compiled",
+          "x86_optimizer_compiled"
+        ],
+        "launches": 2,
+        "median_ms": 0.09754399999999999,
+        "p95_ms": 0.175088
+      }
+    },
+    {
+      "cache_identity": "runtime_loaded_avx512_abi",
+      "elements": 65536,
+      "family": "mae",
+      "fused": {
+        "compiler_path": "x86_training_loss_sgd_compiled",
+        "launches": 1,
+        "median_ms": 0.039663000000000004,
+        "p95_ms": 0.08781
+      },
+      "optimizer": "sgd",
+      "selector_decision": "fused_when_dprediction_has_one_sgd_use",
+      "speedup": 2.290497440939919,
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total",
+      "unfused": {
+        "compiler_paths": [
+          "x86_regression_loss_bwd_compiled",
+          "x86_optimizer_compiled"
+        ],
+        "launches": 2,
+        "median_ms": 0.09084800000000001,
+        "p95_ms": 0.153669
+      }
+    },
+    {
+      "cache_identity": "runtime_loaded_avx512_abi",
+      "elements": 65536,
+      "family": "mae",
+      "fused": {
+        "compiler_path": "x86_training_loss_adamw_compiled",
+        "launches": 1,
+        "median_ms": 0.0664395,
+        "p95_ms": 0.111709
+      },
+      "optimizer": "adamw",
+      "selector_decision": "fused_when_dprediction_has_one_adamw_use",
+      "speedup": 1.457882735420947,
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total",
+      "unfused": {
+        "compiler_paths": [
+          "x86_regression_loss_bwd_compiled",
+          "x86_optimizer_compiled"
+        ],
+        "launches": 2,
+        "median_ms": 0.096861,
+        "p95_ms": 0.1681
+      }
+    },
+    {
+      "cache_identity": "runtime_loaded_avx512_abi",
+      "elements": 65536,
+      "family": "huber",
+      "fused": {
+        "compiler_path": "x86_training_loss_sgd_compiled",
+        "launches": 1,
+        "median_ms": 0.039262000000000005,
+        "p95_ms": 0.081753
+      },
+      "optimizer": "sgd",
+      "selector_decision": "fused_when_dprediction_has_one_sgd_use",
+      "speedup": 2.326307880393255,
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total",
+      "unfused": {
+        "compiler_paths": [
+          "x86_regression_loss_bwd_compiled",
+          "x86_optimizer_compiled"
+        ],
+        "launches": 2,
+        "median_ms": 0.0913355,
+        "p95_ms": 0.155728
+      }
+    },
+    {
+      "cache_identity": "runtime_loaded_avx512_abi",
+      "elements": 65536,
+      "family": "huber",
+      "fused": {
+        "compiler_path": "x86_training_loss_adamw_compiled",
+        "launches": 1,
+        "median_ms": 0.0659305,
+        "p95_ms": 0.118058
+      },
+      "optimizer": "adamw",
+      "selector_decision": "fused_when_dprediction_has_one_adamw_use",
+      "speedup": 1.4689786972645438,
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total",
+      "unfused": {
+        "compiler_paths": [
+          "x86_regression_loss_bwd_compiled",
+          "x86_optimizer_compiled"
+        ],
+        "launches": 2,
+        "median_ms": 0.0968505,
+        "p95_ms": 0.224296
+      }
+    },
+    {
+      "cache_identity": "runtime_loaded_avx512_abi",
+      "elements": 65536,
+      "family": "smooth_l1",
+      "fused": {
+        "compiler_path": "x86_training_loss_sgd_compiled",
+        "launches": 1,
+        "median_ms": 0.0400535,
+        "p95_ms": 0.080833
+      },
+      "optimizer": "sgd",
+      "selector_decision": "fused_when_dprediction_has_one_sgd_use",
+      "speedup": 2.1898710474740035,
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total",
+      "unfused": {
+        "compiler_paths": [
+          "x86_regression_loss_bwd_compiled",
+          "x86_optimizer_compiled"
+        ],
+        "launches": 2,
+        "median_ms": 0.087712,
+        "p95_ms": 0.134244
+      }
+    },
+    {
+      "cache_identity": "runtime_loaded_avx512_abi",
+      "elements": 65536,
+      "family": "smooth_l1",
+      "fused": {
+        "compiler_path": "x86_training_loss_adamw_compiled",
+        "launches": 1,
+        "median_ms": 0.0651175,
+        "p95_ms": 0.103497
+      },
+      "optimizer": "adamw",
+      "selector_decision": "fused_when_dprediction_has_one_adamw_use",
+      "speedup": 1.5665988405574538,
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total",
+      "unfused": {
+        "compiler_paths": [
+          "x86_regression_loss_bwd_compiled",
+          "x86_optimizer_compiled"
+        ],
+        "launches": 2,
+        "median_ms": 0.10201299999999999,
+        "p95_ms": 0.164536
+      }
+    },
+    {
+      "cache_identity": "runtime_loaded_avx512_abi",
+      "elements": 65536,
+      "family": "bce",
+      "fused": {
+        "compiler_path": "x86_training_loss_sgd_compiled",
+        "launches": 1,
+        "median_ms": 0.050974500000000006,
+        "p95_ms": 0.096476
+      },
+      "optimizer": "sgd",
+      "selector_decision": "fused_when_dprediction_has_one_sgd_use",
+      "speedup": 1.9520446497758681,
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total",
+      "unfused": {
+        "compiler_paths": [
+          "x86_binary_loss_bwd_compiled",
+          "x86_optimizer_compiled"
+        ],
+        "launches": 2,
+        "median_ms": 0.0995045,
+        "p95_ms": 0.1655
+      }
+    },
+    {
+      "cache_identity": "runtime_loaded_avx512_abi",
+      "elements": 65536,
+      "family": "bce",
+      "fused": {
+        "compiler_path": "x86_training_loss_adamw_compiled",
+        "launches": 1,
+        "median_ms": 0.07747899999999999,
+        "p95_ms": 0.112977
+      },
+      "optimizer": "adamw",
+      "selector_decision": "fused_when_dprediction_has_one_adamw_use",
+      "speedup": 1.3191703558383563,
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total",
+      "unfused": {
+        "compiler_paths": [
+          "x86_binary_loss_bwd_compiled",
+          "x86_optimizer_compiled"
+        ],
+        "launches": 2,
+        "median_ms": 0.102208,
+        "p95_ms": 0.146183
+      }
+    },
+    {
+      "cache_identity": "chip,dtype,kind,parameter,reduction",
+      "elements": 65536,
+      "family": "mse",
+      "fused": {
+        "compiler_path": "rocm_training_loss_sgd_compiled",
+        "launches": 1,
+        "median_ms": 1.0200144999999998,
+        "p95_ms": 1.154025
+      },
+      "optimizer": "sgd",
+      "selector_decision": "fused_when_dprediction_has_one_sgd_use",
+      "speedup": 3.722082382162215,
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total",
+      "unfused": {
+        "compiler_paths": [
+          "rocm_regression_loss_bwd_compiled",
+          "rocm_optimizer_compiled"
+        ],
+        "launches": 2,
+        "median_ms": 3.7965780000000002,
+        "p95_ms": 3.966962
+      }
+    },
+    {
+      "cache_identity": "chip,dtype,kind,parameter,reduction",
+      "elements": 65536,
+      "family": "mse",
+      "fused": {
+        "compiler_path": "rocm_training_loss_adamw_compiled",
+        "launches": 1,
+        "median_ms": 2.176373,
+        "p95_ms": 2.370876
+      },
+      "optimizer": "adamw",
+      "selector_decision": "fused_when_dprediction_has_one_adamw_use",
+      "speedup": 1.7838378347829162,
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total",
+      "unfused": {
+        "compiler_paths": [
+          "rocm_regression_loss_bwd_compiled",
+          "rocm_optimizer_compiled"
+        ],
+        "launches": 2,
+        "median_ms": 3.8822965,
+        "p95_ms": 4.476883
+      }
+    },
+    {
+      "cache_identity": "chip,dtype,kind,parameter,reduction",
+      "elements": 65536,
+      "family": "mae",
+      "fused": {
+        "compiler_path": "rocm_training_loss_sgd_compiled",
+        "launches": 1,
+        "median_ms": 1.0845574999999998,
+        "p95_ms": 1.16838
+      },
+      "optimizer": "sgd",
+      "selector_decision": "fused_when_dprediction_has_one_sgd_use",
+      "speedup": 3.4479057126984975,
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total",
+      "unfused": {
+        "compiler_paths": [
+          "rocm_regression_loss_bwd_compiled",
+          "rocm_optimizer_compiled"
+        ],
+        "launches": 2,
+        "median_ms": 3.739452,
+        "p95_ms": 4.050739
+      }
+    },
+    {
+      "cache_identity": "chip,dtype,kind,parameter,reduction",
+      "elements": 65536,
+      "family": "mae",
+      "fused": {
+        "compiler_path": "rocm_training_loss_adamw_compiled",
+        "launches": 1,
+        "median_ms": 2.1657895,
+        "p95_ms": 2.27646
+      },
+      "optimizer": "adamw",
+      "selector_decision": "fused_when_dprediction_has_one_adamw_use",
+      "speedup": 1.7960972199745175,
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total",
+      "unfused": {
+        "compiler_paths": [
+          "rocm_regression_loss_bwd_compiled",
+          "rocm_optimizer_compiled"
+        ],
+        "launches": 2,
+        "median_ms": 3.8899685,
+        "p95_ms": 4.754135
+      }
+    },
+    {
+      "cache_identity": "chip,dtype,kind,parameter,reduction",
+      "elements": 65536,
+      "family": "huber",
+      "fused": {
+        "compiler_path": "rocm_training_loss_sgd_compiled",
+        "launches": 1,
+        "median_ms": 1.086118,
+        "p95_ms": 1.274174
+      },
+      "optimizer": "sgd",
+      "selector_decision": "fused_when_dprediction_has_one_sgd_use",
+      "speedup": 3.7039262768870413,
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total",
+      "unfused": {
+        "compiler_paths": [
+          "rocm_regression_loss_bwd_compiled",
+          "rocm_optimizer_compiled"
+        ],
+        "launches": 2,
+        "median_ms": 4.022900999999999,
+        "p95_ms": 4.754915
+      }
+    },
+    {
+      "cache_identity": "chip,dtype,kind,parameter,reduction",
+      "elements": 65536,
+      "family": "huber",
+      "fused": {
+        "compiler_path": "rocm_training_loss_adamw_compiled",
+        "launches": 1,
+        "median_ms": 2.2849315,
+        "p95_ms": 2.51993
+      },
+      "optimizer": "adamw",
+      "selector_decision": "fused_when_dprediction_has_one_adamw_use",
+      "speedup": 1.7693460394764569,
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total",
+      "unfused": {
+        "compiler_paths": [
+          "rocm_regression_loss_bwd_compiled",
+          "rocm_optimizer_compiled"
+        ],
+        "launches": 2,
+        "median_ms": 4.0428345,
+        "p95_ms": 4.302373
+      }
+    },
+    {
+      "cache_identity": "chip,dtype,kind,parameter,reduction",
+      "elements": 65536,
+      "family": "smooth_l1",
+      "fused": {
+        "compiler_path": "rocm_training_loss_sgd_compiled",
+        "launches": 1,
+        "median_ms": 1.090727,
+        "p95_ms": 1.184479
+      },
+      "optimizer": "sgd",
+      "selector_decision": "fused_when_dprediction_has_one_sgd_use",
+      "speedup": 3.6804736657293713,
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total",
+      "unfused": {
+        "compiler_paths": [
+          "rocm_regression_loss_bwd_compiled",
+          "rocm_optimizer_compiled"
+        ],
+        "launches": 2,
+        "median_ms": 4.014392,
+        "p95_ms": 4.385315
+      }
+    },
+    {
+      "cache_identity": "chip,dtype,kind,parameter,reduction",
+      "elements": 65536,
+      "family": "smooth_l1",
+      "fused": {
+        "compiler_path": "rocm_training_loss_adamw_compiled",
+        "launches": 1,
+        "median_ms": 2.1668434999999997,
+        "p95_ms": 2.297497
+      },
+      "optimizer": "adamw",
+      "selector_decision": "fused_when_dprediction_has_one_adamw_use",
+      "speedup": 1.7463769303136107,
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total",
+      "unfused": {
+        "compiler_paths": [
+          "rocm_regression_loss_bwd_compiled",
+          "rocm_optimizer_compiled"
+        ],
+        "launches": 2,
+        "median_ms": 3.7841255,
+        "p95_ms": 3.970925
+      }
+    },
+    {
+      "cache_identity": "chip,dtype,kind,parameter,reduction",
+      "elements": 65536,
+      "family": "bce",
+      "fused": {
+        "compiler_path": "rocm_training_loss_sgd_compiled",
+        "launches": 1,
+        "median_ms": 1.1139605000000001,
+        "p95_ms": 1.227046
+      },
+      "optimizer": "sgd",
+      "selector_decision": "fused_when_dprediction_has_one_sgd_use",
+      "speedup": 3.5543289012491908,
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total",
+      "unfused": {
+        "compiler_paths": [
+          "rocm_binary_loss_bwd_compiled",
+          "rocm_optimizer_compiled"
+        ],
+        "launches": 2,
+        "median_ms": 3.9593819999999997,
+        "p95_ms": 4.178095
+      }
+    },
+    {
+      "cache_identity": "chip,dtype,kind,parameter,reduction",
+      "elements": 65536,
+      "family": "bce",
+      "fused": {
+        "compiler_path": "rocm_training_loss_adamw_compiled",
+        "launches": 1,
+        "median_ms": 2.2625235,
+        "p95_ms": 2.417755
+      },
+      "optimizer": "adamw",
+      "selector_decision": "fused_when_dprediction_has_one_adamw_use",
+      "speedup": 1.7150464956496587,
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total",
+      "unfused": {
+        "compiler_paths": [
+          "rocm_binary_loss_bwd_compiled",
+          "rocm_optimizer_compiled"
+        ],
+        "launches": 2,
+        "median_ms": 3.8803330000000003,
+        "p95_ms": 4.173069
+      }
+    }
+  ],
+  "schema": "tessera.training_step_fusion_cross_target.v2"
+}

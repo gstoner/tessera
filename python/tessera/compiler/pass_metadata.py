@@ -96,6 +96,20 @@ class PassMetadata:
 
 REGISTERED_PASSES: tuple[PassMetadata, ...] = (
     PassMetadata(
+        name="rocm-materialize-dynamic-lds",
+        cpp_class="ROCMDynamicLDS",
+        summary=(
+            "Replaces the single runtime-sized LLVM addrspace(3) alloca in a "
+            "ROCm kernel with the external zero-length LDS symbol whose bytes "
+            "are supplied by hipModuleLaunchKernel."
+        ),
+        input_dialects=("llvm",),
+        output_dialects=("llvm",),
+        diagnostic_codes=("ROCM_DYNAMIC_LDS_MULTIPLE_ARENAS",),
+        pass_kind="lowering",
+        sprint="CORE-COMPILER-MEMORY-LAYOUT-CLOSEOUT-2026-07-23",
+    ),
+    PassMetadata(
         name="rocm-wave-lds-legality",
         cpp_class="ROCMWaveLdsLegalityPass",
         summary=(
@@ -417,6 +431,23 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         ),
         pass_kind="verifier",
         sprint="C6 (TIRx)",
+    ),
+    PassMetadata(
+        name="tessera-x86-materialize-layout-casts",
+        cpp_class="X86GraphLayoutMaterializationPass",
+        summary=(
+            "Consumes row-major/BHSD/NHWC Graph layout casts as indexed x86 "
+            "binding contracts backed by the generic emitter's physical "
+            "C-order materializer."
+        ),
+        input_dialects=("tessera", "func"),
+        output_dialects=("tessera", "func"),
+        required_attrs=("tessera.layout",),
+        preserved_attrs=("tessera.source_layout",),
+        diagnostic_codes=(),
+        must_run_after=("tessera-layout-legality",),
+        pass_kind="lowering",
+        sprint="CORE-COMPILER-TRAINING-SPINE",
     ),
 )
 

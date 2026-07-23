@@ -134,6 +134,75 @@ void emitOptBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, StringRef kind) {
   b.create<gpu::ReturnOp>(loc);
 }
 
+void emitSgdBackwardBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f) {
+  b.setInsertionPointToStart(&f.getBody().front());
+  Value dy = f.getArgument(0), dParam = f.getArgument(1);
+  Value dGrad = f.getArgument(2), n = f.getArgument(3);
+  Value lr = f.getArgument(4);
+  Value bid = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
+  Value tid = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
+  Value block = b.create<arith::ConstantIndexOp>(loc, BD);
+  Value gid = b.create<arith::AddIOp>(
+      loc, b.create<arith::MulIOp>(loc, bid, block), tid);
+  Value inBounds =
+      b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt, gid, n);
+  auto guard = b.create<scf::IfOp>(loc, inBounds, /*withElse=*/false);
+  b.setInsertionPointToStart(guard.thenBlock());
+  Value incoming = b.create<memref::LoadOp>(loc, dy, ValueRange{gid});
+  b.create<memref::StoreOp>(loc, incoming, dParam, ValueRange{gid});
+  Value zero = b.create<arith::ConstantOp>(
+      loc, b.getF32Type(), b.getF32FloatAttr(0.0f));
+  Value scaled = b.create<arith::MulFOp>(loc, lr, incoming);
+  b.create<memref::StoreOp>(
+      loc, b.create<arith::SubFOp>(loc, zero, scaled), dGrad,
+      ValueRange{gid});
+  b.setInsertionPointToEnd(&f.getBody().front());
+  b.create<gpu::ReturnOp>(loc);
+}
+
+void emitMomentumBackwardBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f,
+                              bool nesterov) {
+  b.setInsertionPointToStart(&f.getBody().front());
+  Value dParamOut = f.getArgument(0), dVelocityOut = f.getArgument(1);
+  Value dParam = f.getArgument(2), dGrad = f.getArgument(3);
+  Value dVelocity = f.getArgument(4), n = f.getArgument(5);
+  Value lr = f.getArgument(6), mu = f.getArgument(7);
+  Value bid = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
+  Value tid = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
+  Value block = b.create<arith::ConstantIndexOp>(loc, BD);
+  Value gid = b.create<arith::AddIOp>(
+      loc, b.create<arith::MulIOp>(loc, bid, block), tid);
+  Value inBounds =
+      b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt, gid, n);
+  auto guard = b.create<scf::IfOp>(loc, inBounds, /*withElse=*/false);
+  b.setInsertionPointToStart(guard.thenBlock());
+  Value dp =
+      b.create<memref::LoadOp>(loc, dParamOut, ValueRange{gid});
+  Value dv =
+      b.create<memref::LoadOp>(loc, dVelocityOut, ValueRange{gid});
+  Value zero = b.create<arith::ConstantOp>(
+      loc, b.getF32Type(), b.getF32FloatAttr(0.0f));
+  Value one = b.create<arith::ConstantOp>(
+      loc, b.getF32Type(), b.getF32FloatAttr(1.0f));
+  Value fromParam = b.create<arith::MulFOp>(
+      loc, b.create<arith::SubFOp>(loc, zero, lr), dp);
+  Value gradFactor =
+      nesterov ? b.create<arith::AddFOp>(loc, one, mu).getResult() : one;
+  Value dg = b.create<arith::AddFOp>(
+      loc, b.create<arith::MulFOp>(loc, gradFactor, fromParam), dv);
+  Value velocityFactor = nesterov ? mu : one;
+  Value velocityBase = b.create<arith::AddFOp>(
+      loc, b.create<arith::MulFOp>(loc, velocityFactor, fromParam), dv);
+  Value oldVelocityGrad =
+      b.create<arith::MulFOp>(loc, mu, velocityBase);
+  b.create<memref::StoreOp>(loc, dp, dParam, ValueRange{gid});
+  b.create<memref::StoreOp>(loc, dg, dGrad, ValueRange{gid});
+  b.create<memref::StoreOp>(
+      loc, oldVelocityGrad, dVelocity, ValueRange{gid});
+  b.setInsertionPointToEnd(&f.getBody().front());
+  b.create<gpu::ReturnOp>(loc);
+}
+
 struct GenerateROCMOptimizerKernelPass
     : PassWrapper<GenerateROCMOptimizerKernelPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(GenerateROCMOptimizerKernelPass)
@@ -169,15 +238,43 @@ struct GenerateROCMOptimizerKernelPass
       Type f32 = b.getF32Type();
       Type idxTy = b.getIndexType();
       auto memF32 = MemRefType::get({ShapedType::kDynamic}, f32);
-      auto fnTy = b.getFunctionType(
-          {memF32, memF32, memF32, memF32, memF32, memF32, memF32, idxTy,
-           f32, f32, f32, f32, f32, f32, f32}, {});
+      bool backward = false;
+      if (auto attr = op->getAttrOfType<BoolAttr>("backward"))
+        backward = attr.getValue();
+      bool momentumBackward =
+          backward && (kindAttr.getValue() == "momentum" ||
+                       kindAttr.getValue() == "nesterov");
+      auto fnTy = backward
+                      ? (momentumBackward
+                             ? b.getFunctionType(
+                                   {memF32, memF32, memF32, memF32, memF32,
+                                    idxTy, f32, f32},
+                                   {})
+                             : b.getFunctionType(
+                                   {memF32, memF32, memF32, idxTy, f32}, {}))
+                      : b.getFunctionType(
+                            {memF32, memF32, memF32, memF32, memF32, memF32,
+                             memF32, idxTy, f32, f32, f32, f32, f32, f32,
+                             f32},
+                            {});
       auto gpuMod = b.create<gpu::GPUModuleOp>(loc, kname + "_mod");
       b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
       gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(), b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
-      emitOptBody(body, loc, gpuFunc, kindAttr.getValue());
+      if (backward) {
+        if (momentumBackward)
+          emitMomentumBackwardBody(body, loc, gpuFunc,
+                                   kindAttr.getValue() == "nesterov");
+        else if (kindAttr.getValue() == "sgd")
+          emitSgdBackwardBody(body, loc, gpuFunc);
+        else {
+          op->emitError("optimizer backward supports sgd, momentum, nesterov");
+          return signalPassFailure();
+        }
+      } else {
+        emitOptBody(body, loc, gpuFunc, kindAttr.getValue());
+      }
       op->erase();
     }
   }

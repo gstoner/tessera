@@ -151,6 +151,7 @@ kl_divergence,pure,,1,0,0
 kv_cache_append,state,,1,0,0
 kv_cache_prune,state,,1,0,0
 kv_cache_read,state,,1,0,0
+label_smoothed_cross_entropy,pure,,1,0,0
 laplacian_2d,pure,,1,0,0
 latent_kv_compress,pure,,1,0,0
 latent_kv_expand_k,pure,,1,0,0
@@ -210,6 +211,7 @@ mse_loss,pure,,1,0,0
 mul,pure,,1,0,0
 multi_head_attention,state,,1,1,1
 ne,pure,,1,0,0
+nesterov,pure,,1,0,0
 nonzero,pure,,1,0,0
 normalize_group_advantages,pure,,1,0,0
 ntk_rope,pure,,1,0,0
@@ -296,6 +298,8 @@ target_verify,pure,,1,0,0
 tile,pure,,1,0,0
 tile_view,pure,,1,0,0
 top_k,pure,,1,0,0
+training.loss_adamw,pure,,1,0,0
+training.loss_sgd,pure,,1,0,0
 transpose,pure,pure,1,0,0
 tri_solve,pure,,1,0,0
 trunc,pure,,1,0,0

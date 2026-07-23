@@ -89,6 +89,20 @@ def test_reduce_unknown_op_rejected():
             _artifact(rt, "tessera.softmax", {"axis": -1}), (x,))
 
 
+def test_dynamic_last_axis_shapes_share_reduce_hsaco_identity():
+    rt = _reduce_or_skip()
+    rt._rocm_reduce_hsaco_cache.clear()
+    for shape in ((7, 19), (3, 5, 11)):
+        x = np.linspace(
+            -1.0, 1.0, int(np.prod(shape)), dtype=np.float32
+        ).reshape(shape)
+        result = rt.launch(
+            _artifact(rt, "tessera.sum", {"axis": -1}), (x,)
+        )
+        assert result["ok"] is True, result.get("reason")
+    assert len(rt._rocm_reduce_hsaco_cache) == 1
+
+
 # ── GPU-free codegen gate (needs only tessera-opt, not a GPU) ────────────────
 import subprocess  # noqa: E402
 from pathlib import Path  # noqa: E402

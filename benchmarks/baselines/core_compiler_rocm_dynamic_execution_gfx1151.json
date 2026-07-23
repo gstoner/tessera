@@ -1,0 +1,123 @@
+{
+  "rows": [
+    {
+      "cache_identity": "chip,kind,dtype",
+      "compiler_path": "rocm_reduce_compiled",
+      "family": "last_axis_reduction",
+      "guard_contract": "shared_executable_layout_prelaunch",
+      "median_ms": 2.204738,
+      "p95_ms": 2.494536,
+      "runtime_shapes": {
+        "input": [
+          129,
+          511
+        ]
+      },
+      "specialization_policy": "fully_dynamic",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "cache_identity": "chip,dtype",
+      "compiler_path": "rocm_softmax_compiled",
+      "family": "softmax",
+      "guard_contract": "shared_executable_layout_prelaunch",
+      "median_ms": 2.1893255,
+      "p95_ms": 2.407322,
+      "runtime_shapes": {
+        "input": [
+          129,
+          511
+        ]
+      },
+      "specialization_policy": "fully_dynamic",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "cache_identity": "chip,head_dim,dtype,gqa,window,softcap,bias,two_wave",
+      "compiler_path": "rocm_flash_attn_compiled",
+      "family": "attention",
+      "guard_contract": "shared_executable_layout_prelaunch",
+      "median_ms": 2.061624,
+      "p95_ms": 2.337971,
+      "runtime_shapes": {
+        "k": [
+          1,
+          2,
+          79,
+          64
+        ],
+        "q": [
+          1,
+          2,
+          33,
+          64
+        ],
+        "v": [
+          1,
+          2,
+          79,
+          64
+        ]
+      },
+      "specialization_policy": "dynamic_sequence_bucket_head_dim_dtype_features",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "cache_identity": "component_gather_scatter_chip_dtype",
+      "compiler_path": "rocm_kv_cache_compiled",
+      "family": "growing_kv_cache",
+      "guard_contract": "shared_executable_layout_prelaunch",
+      "median_ms": 2.0260464999999996,
+      "p95_ms": 3.062636,
+      "runtime_shapes": {
+        "cache": [
+          256,
+          2,
+          64
+        ],
+        "rows": [
+          17,
+          2,
+          64
+        ],
+        "start": 113
+      },
+      "specialization_policy": "fully_dynamic_capacity_and_logical_length",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "cache_identity": "chip,kind,dtype,epilogue",
+      "compiler_path": "rocm_norm_compiled",
+      "family": "rmsnorm_relu_consumer_fusion",
+      "guard_contract": "shared_executable_layout_prelaunch",
+      "median_ms": 2.1495865,
+      "p95_ms": 2.430019,
+      "runtime_shapes": {
+        "input": [
+          7,
+          300
+        ]
+      },
+      "specialization_policy": "fully_dynamic_single_kernel",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "cache_identity": "chip,kind,dtype,epilogue",
+      "compiler_path": "rocm_norm_compiled",
+      "family": "layer_norm_silu_consumer_fusion",
+      "guard_contract": "shared_executable_layout_prelaunch",
+      "median_ms": 2.2020394999999997,
+      "p95_ms": 2.400456,
+      "runtime_shapes": {
+        "input": [
+          7,
+          300
+        ]
+      },
+      "specialization_policy": "fully_dynamic_single_kernel",
+      "timing_domain": "host_wall_operation_total"
+    }
+  ],
+  "schema": "tessera.rocm_dynamic_execution.v1",
+  "target": "gfx1151"
+}

@@ -15,18 +15,16 @@ namespace tessera {
 // `tessera.cast{layout}` markers) immediately before LayoutLegalityPass, so the
 // two-sided layout contract (assign + verify) executes inside the pipeline.
 //
-// Layout assignment remains opt-in for these Graph pipelines. CORE-COMPILER-2
-// makes the generic x86 emitter's declared row-major binding layout executable;
-// structured #tile.layout is already consumed by the ROCm backend. Graph-level
-// cast{layout} insertion stays opt-in until its full producer/consumer set has
-// target materializers rather than pretending every marker is executable.
+// Layout assignment defaults on for x86, whose Graph materializer connects
+// row-major/BHSD/NHWC markers to the generic emitter's executable C-order
+// binding ABI. NVIDIA remains opt-in; structured #tile.layout is independently
+// consumed by the ROCm backend.
 struct TesseraLoweringPipelineOptions
     : public PassPipelineOptions<TesseraLoweringPipelineOptions> {
   Option<bool> assignLayouts{
       *this, "assign-layouts",
       llvm::cl::desc("Run LayoutAssignmentPass before layout legality "
-                     "(default false; Graph cast{layout} materializers are "
-                     "not yet complete across targets)."),
+                     "(default on for x86, opt-in for GPU targets)."),
       llvm::cl::init(false)};
   // Legacy force-on switch retained for command-line compatibility. The normal
   // path now uses per-target defaults: x86/NVIDIA enable compute legalization;
@@ -62,6 +60,11 @@ static bool storageLegalizationEnabled(
   return opts.legalizeDtypes || dtypeLegalizationDefaults(target).storage;
 }
 
+static bool layoutAssignmentEnabled(
+    const TesseraLoweringPipelineOptions &opts, llvm::StringRef target) {
+  return opts.assignLayouts || target == "x86";
+}
+
 // Shared Graph IR pre-lowering stage (audit 2026-06-10). Previously this
 // sequence was copy-pasted into tessera-lower-to-x86, tessera-lower-to-gpu,
 // and the CUDA-13 pipeline builder — adding a fusion pass required three
@@ -79,6 +82,7 @@ static void addGraphIRPreLoweringPasses(OpPassManager &pm) {
   pm.addPass(createLightningAttnFusionPass());
   pm.addPass(createDeltaAttnChunkingPass());
   pm.addPass(createLookaheadSparseAttnExpandPass());
+  pm.addPass(createTrainingStepFusionPass());
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(mlir::createCSEPass());
 }
@@ -142,6 +146,7 @@ void registerTesseraPasses() {
 
   // ── Phase 0 production spine — Graph IR → upstream linalg ──────────────────
   ::mlir::registerPass([]() { return createTesseraToLinalgPass(); });
+  ::mlir::registerPass([]() { return createTrainingStepFusionPass(); });
 
   // ── CF0 — control-flow target guard (standalone + wired into the non-Apple
   // pipelines below). Standalone form names the target via the `target` option.
@@ -175,16 +180,18 @@ void registerTesseraPasses() {
         // downstream failure.
         pm.addPass(createControlFlowTargetGuardPass("x86"));
         pm.addPass(createDistributionLoweringPass());
-        // 2026-06-22: optional layout *assignment* runs just before legality so
+        // Layout assignment runs just before legality so
         // the verifier validates the assignment + inserted cast{layout} markers.
-        // Opt-in (default off) — see TesseraLoweringPipelineOptions.
-        if (opts.assignLayouts)
+        // x86 defaults on and consumes markers immediately after legality.
+        if (layoutAssignmentEnabled(opts, "x86"))
           pm.addPass(createLayoutAssignmentPass());
         // 2026-06-17: layout legality now runs in the named pipelines (was
         // standalone) — early, so unknown-layout / producer-consumer-mismatch /
         // scale-without-layout violations surface with the other structural
         // diagnostics before lowering.
         pm.addPass(createLayoutLegalityPass());
+        if (layoutAssignmentEnabled(opts, "x86"))
+          pm.addPass(createX86GraphLayoutMaterializationPass());
         // C4 (2026-06-23): compute-legalize before the contract check so
         // reduced-precision storage gains a wide accum and passes #15a (gated).
         if (computeLegalizationEnabled(opts, "x86"))
@@ -286,6 +293,8 @@ void registerTesseraPasses() {
   // consumer are separate executable contracts. Registered standalone as
   // --tessera-layout-assignment.
   ::mlir::registerPass([]() { return createLayoutAssignmentPass(); });
+  ::mlir::registerPass(
+      []() { return createX86GraphLayoutMaterializationPass(); });
   ::mlir::registerPass(
       []() { return createNVIDIAGraphLayoutMaterializationPass(); });
   // 2026-07-08: Tile IR global buffer assignment/reuse (Workstream H / W3) —

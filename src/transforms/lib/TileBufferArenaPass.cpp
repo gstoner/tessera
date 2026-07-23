@@ -74,6 +74,11 @@ static int64_t elementAlign(Value v) {
   return bits > 0 ? (bits + 7) / 8 : 1;
 }
 
+static bool hasDynamicShape(Operation *op) {
+  auto mr = dyn_cast<MemRefType>(op->getOperand(0).getType());
+  return mr && !mr.hasStaticShape();
+}
+
 struct TileBufferArena
     : public PassWrapper<TileBufferArena, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TileBufferArena)
@@ -157,21 +162,190 @@ struct TileBufferArena
     });
     if (smem.empty() && tmem.empty())
       return;
+    bool dynamicSmem = llvm::any_of(smem, hasDynamicShape);
+    if (dynamicSmem) {
+      auto func = dyn_cast<func::FuncOp>(fn);
+      DominanceInfo dominance(func);
+      llvm::DenseMap<Block *, SmallVector<Operation *>> byBlock;
+      for (Operation *alloc : smem)
+        byBlock[alloc->getBlock()].push_back(alloc);
+
+      int64_t arenaRegions = 0;
+      bool unresolved = !func;
+      for (auto &entry : byBlock) {
+        auto &blockAllocs = entry.second;
+        llvm::sort(blockAllocs, [](Operation *lhs, Operation *rhs) {
+          return lhs->isBeforeInBlock(rhs);
+        });
+
+        // A descriptor introduced after an earlier marker cannot size that
+        // marker's arena. Start a new cohort at that descriptor's first marker.
+        // This also makes mutually-exclusive branch-local descriptors legal:
+        // each branch receives an arena in its own dominance region.
+        SmallVector<Operation *> cohort;
+        Operation *insertionPoint = nullptr;
+        auto flushCohort = [&]() {
+          if (cohort.empty())
+            return;
+          materializeDynamicSharedArena(func, cohort, insertionPoint, b);
+          ++arenaRegions;
+          cohort.clear();
+        };
+        for (Operation *alloc : blockAllocs) {
+          if (!insertionPoint) {
+            insertionPoint = alloc;
+            cohort.push_back(alloc);
+            continue;
+          }
+          if (!dominance.dominates(alloc->getOperand(0), insertionPoint)) {
+            flushCohort();
+            insertionPoint = alloc;
+          }
+          cohort.push_back(alloc);
+        }
+        flushCohort();
+      }
+      if (unresolved)
+        fn->setAttr("tile.smem_arena_dynamic_unresolved", b.getUnitAttr());
+      else
+        fn->removeAttr("tile.smem_arena_dynamic_unresolved");
+      if (arenaRegions > 0)
+        fn->setAttr("tile.smem_arena_regions",
+                    b.getI64IntegerAttr(arenaRegions));
+      int64_t tmemBytes = layoutSpace(tmem, "tile.tmem_offset", b);
+      if (!tmem.empty())
+        fn->setAttr("tile.tmem_arena_bytes",
+                    b.getI64IntegerAttr(tmemBytes));
+      return;
+    }
     int64_t smemBytes = layoutSpace(smem, "tile.smem_offset", b);
     int64_t tmemBytes = layoutSpace(tmem, "tile.tmem_offset", b);
-    if (!smem.empty())
+    if (!smem.empty() && !dynamicSmem)
       fn->setAttr("tile.smem_arena_bytes", b.getI64IntegerAttr(smemBytes));
     if (!tmem.empty())
       fn->setAttr("tile.tmem_arena_bytes", b.getI64IntegerAttr(tmemBytes));
-    if (!smem.empty() && smemBytes > 0)
+    if (!smem.empty() && !dynamicSmem && smemBytes > 0)
       materializeSharedArena(fn, smem, smemBytes, b);
   }
 
-  // Realize the offset plan as one address-space-3 byte arena plus typed
-  // memref.view slices. Address space 3 is shared/LDS in both NVPTX and AMDGPU,
-  // so the ordinary downstream memref-to-LLVM conversion emits a real PTX
-  // `.shared` or HIP/ROCDL LDS allocation. The old alloc marker is erased: its
-  // users now consume the offset-derived view, making reuse executable.
+  // Runtime-sized shared/LDS arena for one dominance cohort. Reuse groups keep
+  // the maximum member size, just like the static planner; offsets are runtime
+  // index expressions with natural alignment. The caller chooses the earliest
+  // legal insertion point, so descriptors created in nested regions can own a
+  // scoped arena rather than being illegally hoisted to function entry.
+  void materializeDynamicSharedArena(
+      func::FuncOp func, const SmallVector<Operation *> &allocs,
+      Operation *insertionPoint, OpBuilder &b) {
+    if (!func || func.empty() || allocs.empty() || !insertionPoint)
+      return;
+    Location loc = insertionPoint->getLoc();
+    b.setInsertionPoint(insertionPoint);
+    Value zero = arith::ConstantIndexOp::create(b, loc, 0);
+    Value one = arith::ConstantIndexOp::create(b, loc, 1);
+
+    auto byteSize = [&](Value value) {
+      auto type = cast<MemRefType>(value.getType());
+      Value elements = one;
+      for (auto [index, extent] : llvm::enumerate(type.getShape())) {
+        Value dim;
+        if (extent == ShapedType::kDynamic)
+          dim = memref::DimOp::create(b, loc, value, index).getResult();
+        else
+          dim = arith::ConstantIndexOp::create(b, loc, extent);
+        elements = arith::MulIOp::create(b, loc, elements, dim);
+      }
+      int64_t bits = type.getElementType().getIntOrFloatBitWidth();
+      Value elementBytes =
+          arith::ConstantIndexOp::create(b, loc, std::max<int64_t>((bits + 7) / 8, 1));
+      return arith::MulIOp::create(b, loc, elements, elementBytes).getResult();
+    };
+
+    llvm::DenseMap<int64_t, Value> groupBytes;
+    llvm::DenseMap<int64_t, int64_t> groupAlign;
+    SmallVector<int64_t> order;
+    for (Operation *op : allocs) {
+      int64_t group =
+          op->getAttrOfType<IntegerAttr>(kGroupAttr).getInt();
+      Value size = byteSize(op->getOperand(0));
+      auto found = groupBytes.find(group);
+      if (found == groupBytes.end()) {
+        groupBytes[group] = size;
+        groupAlign[group] = elementAlign(op->getOperand(0));
+        order.push_back(group);
+      } else {
+        found->second =
+            arith::MaxUIOp::create(b, loc, found->second, size).getResult();
+        groupAlign[group] =
+            std::max(groupAlign[group], elementAlign(op->getOperand(0)));
+      }
+    }
+    llvm::sort(order);
+
+    llvm::DenseMap<int64_t, Value> offsets;
+    Value cursor = zero;
+    for (int64_t group : order) {
+      int64_t align = std::max<int64_t>(groupAlign[group], 1);
+      if (align > 1) {
+        Value alignValue = arith::ConstantIndexOp::create(b, loc, align);
+        Value alignMinusOne =
+            arith::ConstantIndexOp::create(b, loc, align - 1);
+        cursor = arith::AddIOp::create(b, loc, cursor, alignMinusOne);
+        cursor = arith::DivUIOp::create(b, loc, cursor, alignValue);
+        cursor = arith::MulIOp::create(b, loc, cursor, alignValue);
+      }
+      offsets[group] = cursor;
+      cursor = arith::AddIOp::create(b, loc, cursor, groupBytes[group]);
+    }
+
+    auto memorySpace = b.getI64IntegerAttr(3);
+    auto arenaType = MemRefType::get(
+        {ShapedType::kDynamic}, b.getI8Type(), MemRefLayoutAttrInterface(),
+        memorySpace);
+    auto arena = memref::AllocaOp::create(
+        b, loc, arenaType, ValueRange{cursor}, ValueRange{},
+        b.getI64IntegerAttr(16));
+    DominanceInfo dominance(func);
+
+    for (Operation *alloc : allocs) {
+      auto originalType = dyn_cast<MemRefType>(alloc->getOperand(0).getType());
+      if (!originalType)
+        continue;
+      int64_t group =
+          alloc->getAttrOfType<IntegerAttr>(kGroupAttr).getInt();
+      auto viewType = MemRefType::get(
+          originalType.getShape(), originalType.getElementType(),
+          originalType.getLayout(), memorySpace);
+      b.setInsertionPoint(alloc);
+      SmallVector<Value> dynamicSizes;
+      for (auto [index, extent] : llvm::enumerate(originalType.getShape()))
+        if (extent == ShapedType::kDynamic)
+          dynamicSizes.push_back(
+              memref::DimOp::create(b, alloc->getLoc(),
+                                    alloc->getOperand(0), index).getResult());
+      OperationState viewState(alloc->getLoc(), "memref.view");
+      viewState.addOperands(arena.getResult());
+      viewState.addOperands(offsets[group]);
+      viewState.addOperands(dynamicSizes);
+      viewState.addTypes(viewType);
+      Operation *view = b.create(viewState);
+      Value original = alloc->getOperand(0);
+      for (OpOperand &use :
+           llvm::make_early_inc_range(original.getUses())) {
+        if (use.getOwner() != alloc &&
+            dominance.properlyDominates(alloc, use.getOwner()))
+          use.set(view->getResult(0));
+      }
+      alloc->erase();
+    }
+    func->setAttr("tile.smem_arena_dynamic", b.getUnitAttr());
+    func->setAttr("tile.smem_arena_materialized", b.getUnitAttr());
+  }
+
+  // Realize the offset plan as one address-space-3 workgroup global plus typed
+  // memref.view slices. A memref.alloca would lower to llvm.alloca even with an
+  // address-space-3 pointer; AMDGPU does not account that object as statically
+  // reserved LDS. A module-level memref.global lowers to the real addrspace(3)
+  // workgroup object consumed by both ROCDL and NVPTX resource accounting.
   void materializeSharedArena(Operation *fn,
                               const SmallVector<Operation *> &allocs,
                               int64_t arenaBytes, OpBuilder &b) {
@@ -182,11 +356,16 @@ struct TileBufferArena
     auto memorySpace = b.getI64IntegerAttr(3);
     auto arenaType = MemRefType::get(
         {arenaBytes}, b.getI8Type(), MemRefLayoutAttrInterface(), memorySpace);
+    auto functionName = func.getSymName();
+    std::string arenaName =
+        ("__tessera_smem_arena_" + functionName).str();
+    b.setInsertionPoint(fn);
+    memref::GlobalOp::create(
+        b, loc, arenaName, b.getStringAttr("private"), arenaType,
+        b.getUnitAttr(), false, b.getI64IntegerAttr(16));
     b.setInsertionPointToStart(&func.front());
-    OperationState arenaState(loc, "memref.alloca");
-    arenaState.addTypes(arenaType);
-    arenaState.addAttribute("alignment", b.getI64IntegerAttr(16));
-    Operation *arena = b.create(arenaState);
+    auto arena =
+        memref::GetGlobalOp::create(b, loc, arenaType, arenaName);
     DominanceInfo dominance(func);
 
     for (Operation *alloc : allocs) {
@@ -202,7 +381,7 @@ struct TileBufferArena
       Value byteShift = arith::ConstantIndexOp::create(
           b, alloc->getLoc(), offset.getInt());
       OperationState viewState(alloc->getLoc(), "memref.view");
-      viewState.addOperands({arena->getResult(0), byteShift});
+      viewState.addOperands({arena.getResult(), byteShift});
       viewState.addTypes(viewType);
       Operation *view = b.create(viewState);
       Value original = alloc->getOperand(0);

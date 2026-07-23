@@ -134,3 +134,50 @@ extern "C" void tessera_x86_optimizer_f32(
             p + i, g + i, m + i, v + i, n - i, kind, lr, beta1, beta2, eps, wd,
             b1c, b2c, p_out + i, m_out + i, v_out + i);
 }
+
+extern "C" void tessera_x86_avx512_sgd_bwd_f32(
+    const float* dy, int64_t n, float lr, float* dparam, float* dgrad) {
+    const __m512 neg_lr = _mm512_set1_ps(-lr);
+    int64_t i = 0;
+    for (; i + 16 <= n; i += 16) {
+        const __m512 incoming = _mm512_loadu_ps(dy + i);
+        _mm512_storeu_ps(dparam + i, incoming);
+        _mm512_storeu_ps(dgrad + i, _mm512_mul_ps(neg_lr, incoming));
+    }
+    for (; i < n; ++i) {
+        dparam[i] = dy[i];
+        dgrad[i] = -lr * dy[i];
+    }
+}
+
+extern "C" void tessera_x86_avx512_momentum_bwd_f32(
+    const float* dparam_out, const float* dvelocity_out, int64_t n,
+    float lr, float momentum, int nesterov, float* dparam, float* dgrad,
+    float* dvelocity) {
+    const __m512 neg_lr = _mm512_set1_ps(-lr);
+    const __m512 mu = _mm512_set1_ps(momentum);
+    const __m512 grad_factor =
+        _mm512_set1_ps(nesterov ? 1.0f + momentum : 1.0f);
+    const __m512 velocity_factor =
+        _mm512_set1_ps(nesterov ? momentum : 1.0f);
+    int64_t i = 0;
+    for (; i + 16 <= n; i += 16) {
+        const __m512 dp = _mm512_loadu_ps(dparam_out + i);
+        const __m512 dv = _mm512_loadu_ps(dvelocity_out + i);
+        const __m512 from_param = _mm512_mul_ps(neg_lr, dp);
+        _mm512_storeu_ps(dparam + i, dp);
+        _mm512_storeu_ps(
+            dgrad + i, _mm512_fmadd_ps(grad_factor, from_param, dv));
+        const __m512 velocity_base =
+            _mm512_fmadd_ps(velocity_factor, from_param, dv);
+        _mm512_storeu_ps(dvelocity + i, _mm512_mul_ps(mu, velocity_base));
+    }
+    for (; i < n; ++i) {
+        const float from_param = -lr * dparam_out[i];
+        dparam[i] = dparam_out[i];
+        dgrad[i] = (nesterov ? 1.0f + momentum : 1.0f) * from_param
+                   + dvelocity_out[i];
+        dvelocity[i] = momentum *
+            ((nesterov ? momentum : 1.0f) * from_param + dvelocity_out[i]);
+    }
+}

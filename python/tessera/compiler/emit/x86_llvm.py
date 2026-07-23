@@ -63,10 +63,11 @@ _TARGET = "x86"
 _LANG = "c"
 _ENTRY = "tessera_x86_fused"
 _REAL_TAG = "x86_native"
-_LAYOUTS = (
-    ExecutableLayout("A", LayoutOrder.ROW_MAJOR, 2),
-    ExecutableLayout("B", LayoutOrder.ROW_MAJOR, 2),
-)
+def _region_layouts(region: FusedRegion) -> tuple[ExecutableLayout, ...]:
+    return (
+        ExecutableLayout("A", LayoutOrder(region.a_layout), 2),
+        ExecutableLayout("B", LayoutOrder(region.b_layout), 2),
+    )
 
 
 def _synthesize_fused_c(region: FusedRegion) -> str:
@@ -82,7 +83,7 @@ def _synthesize_fused_c(region: FusedRegion) -> str:
         "               int M, int N, int K) {\n"
         "    for (int m = 0; m < M; ++m) {\n"
         "        float* row = out + (long)m * N;\n"
-        f"{row_compute_body(region)}"
+        f"{row_compute_body(region, a_layout=region.a_layout, b_layout=region.b_layout)}"
         "    }\n"
         "    return 1;\n"
         "}\n"
@@ -113,7 +114,8 @@ class X86CEmitter(KernelEmitter):
         source = _synthesize_fused_c(region)
         key = bucket_key(dims, spec, dim_names=getattr(region, "dim_names", None))
         return KernelSource(source=source, entry=_ENTRY, lang=self.lang,
-                            spec=spec, shape_key=key, layouts=_LAYOUTS)
+                            spec=spec, shape_key=key,
+                            layouts=_region_layouts(region))
 
 
 # ── Seam 2: compile_fn (source → .so) ─────────────────────────────────────────

@@ -1,6 +1,7 @@
 td_file,op_class,has_verifier_declared,verify_impl_present,impl_status
 src/compiler/ir/TesseraOps.td,ALiBiOp,1,1,real
 src/compiler/ir/TesseraOps.td,AdafactorOp,1,1,real
+src/compiler/ir/TesseraOps.td,AdamBackwardOp,1,1,real
 src/compiler/ir/TesseraOps.td,AdamOp,1,1,real
 src/compiler/ir/TesseraOps.td,AdamWOp,1,1,real
 src/compiler/ir/TesseraOps.td,AddOp,1,1,real
@@ -18,6 +19,8 @@ src/compiler/ir/TesseraOps.td,AttnLocalWindow2DOp,1,1,real
 src/compiler/ir/TesseraOps.td,AttnSlidingWindowOp,1,1,real
 src/compiler/ir/TesseraOps.td,AttnTopKBlocksOp,1,1,real
 src/compiler/ir/TesseraOps.td,BatchedGemmOp,1,1,real
+src/compiler/ir/TesseraOps.td,BinaryCrossEntropyLossBackwardOp,1,1,real
+src/compiler/ir/TesseraOps.td,BinaryCrossEntropyLossOp,1,1,real
 src/compiler/ir/TesseraOps.td,BroadcastInDimOp,1,1,real
 src/compiler/ir/TesseraOps.td,BroadcastOp,1,1,real
 src/compiler/ir/TesseraOps.td,CacheCommitOp,1,1,real
@@ -39,6 +42,8 @@ src/compiler/ir/TesseraOps.td,ControlIfOp,1,1,real
 src/compiler/ir/TesseraOps.td,ControlScanOp,1,1,real
 src/compiler/ir/TesseraOps.td,ControlWhileOp,1,1,real
 src/compiler/ir/TesseraOps.td,Conv2DNHWCOp,1,1,real
+src/compiler/ir/TesseraOps.td,CrossEntropyLossBackwardOp,1,1,real
+src/compiler/ir/TesseraOps.td,CrossEntropyLossOp,1,1,real
 src/compiler/ir/TesseraOps.td,CustomAdjointCallOp,1,1,real
 src/compiler/ir/TesseraOps.td,DCTOp,1,1,real
 src/compiler/ir/TesseraOps.td,DeepSeekSparseAttentionOp,1,1,real
@@ -47,6 +52,7 @@ src/compiler/ir/TesseraOps.td,DequantMatmulOp,1,1,real
 src/compiler/ir/TesseraOps.td,DequantizeFP4Op,1,1,real
 src/compiler/ir/TesseraOps.td,DequantizeFP8Op,1,1,real
 src/compiler/ir/TesseraOps.td,DiffusionBlockStepOp,1,1,real
+src/compiler/ir/TesseraOps.td,DistributionLossBackwardOp,1,1,real
 src/compiler/ir/TesseraOps.td,DivOp,1,1,real
 src/compiler/ir/TesseraOps.td,DropoutOp,1,1,real
 src/compiler/ir/TesseraOps.td,EBMBivectorLangevinStepOp,1,1,real
@@ -73,9 +79,12 @@ src/compiler/ir/TesseraOps.td,GeluOp,1,1,real
 src/compiler/ir/TesseraOps.td,GroupedGemmOp,1,1,real
 src/compiler/ir/TesseraOps.td,GtOp,1,1,real
 src/compiler/ir/TesseraOps.td,GuidedDenoiseRegionOp,1,1,real
+src/compiler/ir/TesseraOps.td,HuberLossOp,1,1,real
 src/compiler/ir/TesseraOps.td,HybridAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,IFFTOp,1,1,real
 src/compiler/ir/TesseraOps.td,IRFFTOp,1,1,real
+src/compiler/ir/TesseraOps.td,JSDivergenceLossOp,1,1,real
+src/compiler/ir/TesseraOps.td,KLDivergenceLossOp,1,1,real
 src/compiler/ir/TesseraOps.td,KVCacheAppendOp,1,1,real
 src/compiler/ir/TesseraOps.td,KVCacheCreateOp,1,1,real
 src/compiler/ir/TesseraOps.td,KVCachePruneOp,1,1,real
@@ -93,18 +102,22 @@ src/compiler/ir/TesseraOps.td,LionOp,1,1,real
 src/compiler/ir/TesseraOps.td,LogSoftmaxOp,1,1,real
 src/compiler/ir/TesseraOps.td,LookaheadSparseAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,LtOp,1,1,real
+src/compiler/ir/TesseraOps.td,MAELossOp,1,1,real
 src/compiler/ir/TesseraOps.td,MLADecodeFusedOp,1,1,real
 src/compiler/ir/TesseraOps.td,MLADecodeOp,1,1,real
 src/compiler/ir/TesseraOps.td,MQAAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,MSAIndexScoresOp,1,1,real
 src/compiler/ir/TesseraOps.td,MSASelectBlocksOp,1,1,real
 src/compiler/ir/TesseraOps.td,MSASparseAttentionOp,1,1,real
+src/compiler/ir/TesseraOps.td,MSELossBackwardOp,1,1,real
+src/compiler/ir/TesseraOps.td,MSELossOp,1,1,real
 src/compiler/ir/TesseraOps.td,MaskedFillOp,1,1,real
 src/compiler/ir/TesseraOps.td,MatmulOp,1,1,real
 src/compiler/ir/TesseraOps.td,ModifiedDeltaAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,MoeCombineOp,1,1,real
 src/compiler/ir/TesseraOps.td,MoeDispatchOp,1,1,real
 src/compiler/ir/TesseraOps.td,MoeSwigluBlockOp,1,1,real
+src/compiler/ir/TesseraOps.td,MomentumBackwardOp,1,1,real
 src/compiler/ir/TesseraOps.td,MomentumOp,1,1,real
 src/compiler/ir/TesseraOps.td,MorPartitionOp,1,1,real
 src/compiler/ir/TesseraOps.td,MorRouterOp,1,1,real
@@ -124,6 +137,7 @@ src/compiler/ir/TesseraOps.td,NeighborsPipelineConfigOp,1,1,real
 src/compiler/ir/TesseraOps.td,NeighborsStencilApplyOp,1,1,real
 src/compiler/ir/TesseraOps.td,NeighborsStencilDefineOp,1,1,real
 src/compiler/ir/TesseraOps.td,NeighborsTopologyCreateOp,1,1,real
+src/compiler/ir/TesseraOps.td,NesterovOp,1,1,real
 src/compiler/ir/TesseraOps.td,NormalizationStatsOp,1,1,real
 src/compiler/ir/TesseraOps.td,PermuteOp,1,1,real
 src/compiler/ir/TesseraOps.td,PowerAttnOp,1,1,real
@@ -139,6 +153,7 @@ src/compiler/ir/TesseraOps.td,RMSNormSafeOp,1,1,real
 src/compiler/ir/TesseraOps.td,ReduceBackwardOp,1,1,real
 src/compiler/ir/TesseraOps.td,ReduceOp,1,1,real
 src/compiler/ir/TesseraOps.td,ReduceScatterOp,1,1,real
+src/compiler/ir/TesseraOps.td,RegressionLossBackwardOp,1,1,real
 src/compiler/ir/TesseraOps.td,ReluOp,1,1,real
 src/compiler/ir/TesseraOps.td,ReshapeOp,1,1,real
 src/compiler/ir/TesseraOps.td,RetentionOp,1,1,real
@@ -147,6 +162,8 @@ src/compiler/ir/TesseraOps.td,RmsNormOp,1,1,real
 src/compiler/ir/TesseraOps.td,RopeMergeOp,1,1,real
 src/compiler/ir/TesseraOps.td,RopeOp,1,1,real
 src/compiler/ir/TesseraOps.td,RopeSplitOp,1,1,real
+src/compiler/ir/TesseraOps.td,SGDBackwardOp,1,1,real
+src/compiler/ir/TesseraOps.td,SGDOp,1,1,real
 src/compiler/ir/TesseraOps.td,SVDOp,1,1,real
 src/compiler/ir/TesseraOps.td,ScoreCombineOp,1,1,real
 src/compiler/ir/TesseraOps.td,SelectOp,1,1,real
@@ -155,6 +172,7 @@ src/compiler/ir/TesseraOps.td,SigmoidOp,1,1,real
 src/compiler/ir/TesseraOps.td,SiluMulOp,1,1,real
 src/compiler/ir/TesseraOps.td,SiluOp,1,1,real
 src/compiler/ir/TesseraOps.td,SinOp,1,1,real
+src/compiler/ir/TesseraOps.td,SmoothL1LossOp,1,1,real
 src/compiler/ir/TesseraOps.td,SoftmaxOp,1,1,real
 src/compiler/ir/TesseraOps.td,SoftmaxSafeOp,1,1,real
 src/compiler/ir/TesseraOps.td,SoftplusOp,1,1,real
@@ -167,6 +185,8 @@ src/compiler/ir/TesseraOps.td,SubOp,1,1,real
 src/compiler/ir/TesseraOps.td,SwigluFusedOp,1,1,real
 src/compiler/ir/TesseraOps.td,TanhOp,1,1,real
 src/compiler/ir/TesseraOps.td,TargetVerifyOp,1,1,real
+src/compiler/ir/TesseraOps.td,TrainingLossAdamWOp,1,1,real
+src/compiler/ir/TesseraOps.td,TrainingLossSGDOp,1,1,real
 src/compiler/ir/TesseraOps.td,TransposeOp,1,1,real
 src/compiler/ir/TesseraOps.td,TriSolveOp,1,1,real
 src/compiler/ir/TesseraOps.td,UnsqueezeOp,1,1,real

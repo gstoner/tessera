@@ -316,13 +316,24 @@ def ROCM_PointwiseLossKernelOp : TesseraROCM_Op<"pointwise_loss"> {
       kind 0 mse  (p−t)²; 1 mae |p−t|; 2 huber(δ); 3 smooth_l1(β);
       4 log_cosh  e + log1p(exp(−2e)) − log2
 
-    `kind` and `param` (δ/β) are compile-time attrs. Computes in f32; exp/log1p
-    lower through `math` → ROCDL. The CPU analog is `avx512_loss_f32.cpp`.
+    `kind` and `param` (δ/β) are compile-time attrs. With `backward = true`,
+    kinds 0..3 emit paired prediction/target gradients and retain the exact
+    MAE-zero, Huber-closed, and Smooth-L1-open transition semantics. Computes
+    in f32. With `training_sgd = true`, the prediction gradient is consumed
+    directly by a runtime-learning-rate SGD update, so only the updated
+    parameter and target gradient are written. With `training_adamw = true`,
+    parameter and both moment states are updated in the same kernel with
+    runtime hyperparameters and bias-correction denominators. exp/log1p lower
+    through `math` → ROCDL. The CPU analog is `avx512_loss_f32.cpp`.
   }];
   let arguments = (ins StrAttr:$name,
                        DefaultValuedAttr<StrAttr, "\"f32\"">:$dtype,
                        DefaultValuedAttr<I64Attr, "0">:$kind,
-                       DefaultValuedAttr<F32Attr, "1.0">:$param);
+                       DefaultValuedAttr<F32Attr, "1.0">:$param,
+                       DefaultValuedAttr<BoolAttr, "false">:$backward,
+                       DefaultValuedAttr<BoolAttr, "false">:$training_sgd,
+                       DefaultValuedAttr<BoolAttr, "false">:$training_adamw,
+                       DefaultValuedAttr<StrAttr, "\"mean\"">:$reduction);
   let assemblyFormat = "attr-dict";
 }
 
@@ -333,13 +344,33 @@ def ROCM_BinaryLossKernelOp : TesseraROCM_Op<"binary_loss"> {
     per-element BCE-with-logits kernel over (z=logits, t=target):
     kind 0 bce `max(z,0) − z·t + log1p(exp(−|z|))`; kind 1 asymmetric_bce
     `pw·t·softplus(−z) + nw·(1−t)·softplus(z)`. `kind`/`pos_weight`/`neg_weight`
-    are compile-time attrs; the runtime reduces. CPU analog: avx512_loss_f32.
+    are compile-time attrs; the runtime reduces. With `backward`, kind 0 emits
+    paired logits/target gradients using a stable sigmoid and explicit
+    none/sum/mean scaling. CPU analog: avx512_loss_f32.
   }];
   let arguments = (ins StrAttr:$name,
                        DefaultValuedAttr<StrAttr, "\"f32\"">:$dtype,
                        DefaultValuedAttr<I64Attr, "0">:$kind,
                        DefaultValuedAttr<F32Attr, "1.0">:$pos_weight,
-                       DefaultValuedAttr<F32Attr, "1.0">:$neg_weight);
+                       DefaultValuedAttr<F32Attr, "1.0">:$neg_weight,
+                       DefaultValuedAttr<BoolAttr, "false">:$backward,
+                       DefaultValuedAttr<StrAttr, "\"mean\"">:$reduction);
+  let assemblyFormat = "attr-dict";
+}
+
+def ROCM_ClassLossBackwardKernelOp :
+    TesseraROCM_Op<"class_loss_backward"> {
+  let summary = "Class-index cross entropy backward kernel";
+  let description = [{
+    One workitem owns one logical sample row, computes a stable class-axis
+    softmax, applies target-index scatter, label smoothing, ignore-index, and
+    explicit none/sum/valid-mean cotangent scaling, then writes dLogits.
+  }];
+  let arguments = (ins StrAttr:$name,
+                       DefaultValuedAttr<StrAttr, "\"f32\"">:$dtype,
+                       DefaultValuedAttr<F32Attr, "0.0">:$label_smoothing,
+                       DefaultValuedAttr<I64Attr, "-100">:$ignore_index,
+                       DefaultValuedAttr<StrAttr, "\"mean\"">:$reduction);
   let assemblyFormat = "attr-dict";
 }
 
@@ -799,6 +830,20 @@ def ROCM_NormKernelOp : TesseraROCM_Op<"norm"> {
                        DefaultValuedAttr<StrAttr, "\"rmsnorm\"">:$kind,
                        DefaultValuedAttr<StrAttr, "\"f32\"">:$dtype,
                        DefaultValuedAttr<BoolAttr, "false">:$backward);
+  let assemblyFormat = "attr-dict";
+}
+
+def ROCM_Int4PackKernelOp : TesseraROCM_Op<"int4_pack"> {
+  let summary = "Pack or unpack signed terminal INT4 storage on the device";
+  let description = [{
+    The directive `generate-rocm-int4-pack-kernel` expands this operation into
+    a runtime-sized GPU kernel. `kind = "pack"` stores two signed two's
+    complement nibbles per byte, with the lower logical index in the low
+    nibble; `kind = "unpack"` sign-extends those nibbles into i8 containers.
+    The logical element count is a runtime kernel argument, so one generated
+    binary covers static, ragged, and odd-sized tensors.
+  }];
+  let arguments = (ins StrAttr:$name, StrAttr:$kind);
   let assemblyFormat = "attr-dict";
 }
 

@@ -171,6 +171,27 @@ def test_launch_rocm_compiled_int4_matches_numpy(m, n, k):
     assert np.array_equal(out, ref), f"int4 GEMM != numpy at {m}x{n}x{k}"
 
 
+@pytest.mark.parametrize("m,n,k", [(16, 16, 16), (33, 17, 31)])
+def test_compiled_terminal_packed_int4_feeds_wmma_without_host_repack(m, n, k):
+    rt = _compiled_or_skip()
+    rng = np.random.default_rng(29 + m + n + k)
+    a = rng.integers(-8, 8, size=(m, k)).astype(np.int8)
+    b = rng.integers(-8, 8, size=(k, n)).astype(np.int8)
+    a_packed = rt._rocm_int4_storage_convert(a, a.size, "pack", np)
+    b_packed = rt._rocm_int4_storage_convert(b, b.size, "pack", np)
+    artifact = _int4_artifact(rt)
+    metadata = dict(artifact.metadata)
+    metadata["wmma_inputs_packed"] = True
+    metadata["logical_mnk"] = (m, n, k)
+    result = rt.launch(
+        rt.RuntimeArtifact(metadata=metadata), (a_packed, b_packed)
+    )
+    assert result["ok"] is True, result.get("reason")
+    np.testing.assert_array_equal(
+        result["output"], a.astype(np.int32) @ b.astype(np.int32)
+    )
+
+
 def test_launch_rocm_compiled_rejects_f32():
     """f32 in is not a WMMA storage dtype — structured invalid_artifact, never a
     silent miscompute."""

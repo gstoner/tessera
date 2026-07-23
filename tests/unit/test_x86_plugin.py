@@ -53,6 +53,19 @@ def test_emit_produces_c_source():
     assert "bias[n]" in src.source and "tanhf" in src.source  # bias + gelu emitted
 
 
+def test_emit_column_major_uses_physical_stride_contract():
+    region = F.FusedRegion(
+        epilogue=("relu",), a_layout="col_major", b_layout="col_major"
+    )
+    src = get_emitter("x86").emit(region, dtype="f32")
+    assert "A[(long)k*M + m]" in src.source
+    assert "B[(long)n*K + k]" in src.source
+    assert tuple(layout.order.value for layout in src.layouts) == (
+        "col_major",
+        "col_major",
+    )
+
+
 def test_emit_rejects_non_fused_region():
     with pytest.raises(EmitError, match="cannot emit"):
         get_emitter("x86").emit(F.AttentionRegion())
@@ -200,6 +213,34 @@ def test_x86_dynamic_route_materializes_strided_layout_and_records_guards():
         "a_contiguous": True,
         "b_contiguous": True,
     }
+
+
+@pytest.mark.skipif(not _HAVE_CC, reason="no C compiler (clang/cc/gcc) on host")
+@pytest.mark.parametrize(
+    ("a_layout", "b_layout"),
+    [
+        ("col_major", "row_major"),
+        ("row_major", "col_major"),
+        ("col_major", "col_major"),
+    ],
+)
+def test_x86_column_major_physical_abi_matches_numpy(a_layout, b_layout):
+    runner = x86.X86CRunner()
+    region = F.FusedRegion(
+        epilogue=("silu",), a_layout=a_layout, b_layout=b_layout
+    )
+    rng = np.random.default_rng(19)
+    a = rng.standard_normal((17, 13)).astype(np.float32)
+    b = rng.standard_normal((13, 11)).astype(np.float32)
+    out, execution = runner.run_fused_region(region, a, b)
+    assert execution == "x86_native"
+    np.testing.assert_allclose(
+        out, region.reference(a, b), rtol=2e-4, atol=2e-4
+    )
+    assert runner.last_launch_contract["layouts"] == (
+        ("A", a_layout),
+        ("B", b_layout),
+    )
 
 
 # ── D1 candidates + C1b AOCL-DLP (host-free) ──────────────────────────────────

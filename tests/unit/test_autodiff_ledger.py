@@ -37,9 +37,13 @@ def test_native_and_placeholder_adjoints_are_disjoint_and_grounded() -> None:
     # tanh/sigmoid's W5 closed forms, comparison-backed ReLU, and the shared
     # normalization-statistics formulas. Nothing else.
     assert native == {
-        "add", "broadcast", "gelu", "mul", "matmul", "reduce", "silu",
-        "softmax", "tanh", "sigmoid", "relu", "rmsnorm", "layer_norm",
-        "all_reduce", "all_gather", "reduce_scatter",
+            "add", "broadcast", "gelu", "huber_loss", "mae_loss", "mse_loss",
+            "mul", "matmul", "reduce", "sgd", "silu", "smooth_l1_loss",
+            "softmax", "tanh", "sigmoid", "relu", "rmsnorm", "layer_norm",
+            "all_reduce", "all_gather", "reduce_scatter",
+            "binary_cross_entropy_loss", "cross_entropy_loss",
+            "k_l_divergence_loss", "j_s_divergence_loss",
+            "momentum", "nesterov", "adam", "adam_w",
     }, (
         f"native adjoint set drifted: {sorted(native)} — a buildAdjoint that "
         "emits a CustomAdjointCallOp is a Python round-trip, not native"
@@ -105,8 +109,10 @@ def test_rocm_aliases_composition_and_residual_policy_are_structured() -> None:
     assert matmul["policy"] == "save_inputs"
     assert matmul["implementation"] == "composition"
     compositions = em.backward_compositions()
-    assert len(compositions) == 1
-    assert compositions[0].component_paths == ("rocm_compiled", "rocm_compiled")
+    by_key = {(c.op_family, c.target): c for c in compositions}
+    assert by_key[("matmul", "rocm")].component_paths == (
+        "rocm_compiled", "rocm_compiled")
+    assert set(by_key) == {("matmul", "rocm")}
 
 
 def test_device_verified_leaders_are_derived_from_rows() -> None:

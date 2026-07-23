@@ -59,22 +59,23 @@ def test_layout_legality_runs_before_symbolic_dim_equality():
             body.index("createSymbolicDimEqualityPass()")
 
 
-def test_layout_assignment_is_opt_in_and_runs_before_legality():
+def test_layout_assignment_defaults_on_for_x86_and_runs_before_legality():
     """LayoutAssignmentPass (2026-06-22) is wired into the same three builders
-    behind the `assign-layouts` option (default off, so the executing lowering
-    path is unchanged), and runs before LayoutLegalityPass so the legality pass
-    verifies the assignment."""
+    behind the `assign-layouts` option for GPU targets and by default on x86,
+    where its architecture-owned materializer runs after legality."""
     src = _PASSES.read_text(encoding="utf-8")
-    # The opt-in option struct + flag exist.
+    # The explicit force-on option remains for GPU targets.
     assert "struct TesseraLoweringPipelineOptions" in src
     assert 'assign-layouts' in src
-    assert 'llvm::cl::init(false)' in src
+    assert 'target == "x86"' in src
     for anchor in ('"tessera-lower-to-x86"', '"tessera-lower-to-gpu"',
                    "addCUDA13PipelineForSM("):
         body = _pipeline_body(src, anchor)
         assert "createLayoutAssignmentPass()" in body
-        # Gated on the option (never unconditionally added).
-        assert "opts.assignLayouts" in body
         # Assignment is scheduled before its verifier.
         assert body.index("createLayoutAssignmentPass()") < \
             body.index("createLayoutLegalityPass()")
+    x86 = _pipeline_body(src, '"tessera-lower-to-x86"')
+    assert "createX86GraphLayoutMaterializationPass()" in x86
+    assert x86.index("createLayoutLegalityPass()") < \
+        x86.index("createX86GraphLayoutMaterializationPass()")

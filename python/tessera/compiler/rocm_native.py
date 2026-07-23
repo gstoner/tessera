@@ -532,7 +532,8 @@ def _compile_native_tile_ir(
         "builtin.module(rocm-wave-lds-pipeline,rocm-wave-lds-legality,"
         f"lower-tile-to-rocm{{arch=gfx1151}},{generator},"
         "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
-        "reconcile-unrealized-casts),rocdl-attach-target{chip=gfx1151},"
+        "reconcile-unrealized-casts,rocm-materialize-dynamic-lds),"
+        "rocdl-attach-target{chip=gfx1151},"
         "gpu-module-to-binary)"
     )
     target_ir = _run_opt(tool, tile_ir, target_pipeline)

@@ -20,10 +20,9 @@
 //                  CastOp-fold / EraseIdentityCast guards (2026-06-17) keep these
 //                  same-type markers from being canonicalized away.
 //
-// Scope honesty: the assignments are Graph IR metadata. Generic x86 emitter
-// bindings consume row-major layout contracts, while Graph cast materializers
-// remain target-owned follow-up for Apple/NVIDIA. The pass therefore stays
-// opt-in in named Graph pipelines until each inserted cast has a real consumer.
+// Scope honesty: assignments are Graph IR metadata until an architecture-owned
+// materializer consumes them. x86 defaults the pass on for its executable
+// C-order binding ABI; Apple/NVIDIA retain target-owned policy.
 
 #include "Tessera/Transforms/Passes.h"
 
@@ -96,6 +95,15 @@ static bool isPointwise(StringRef opName) {
       "tessera.abs",  "tessera.sqrt",    "tessera.rsqrt", "tessera.softplus",
   };
   return kSet.contains(opName);
+}
+
+static bool isShapePreservingPointwise(Operation *op) {
+  if (isPointwise(op->getName().getStringRef()))
+    return true;
+  if (op->getName().getStringRef() != "tessera.loss.mse")
+    return false;
+  auto reduction = op->getAttrOfType<StringAttr>("reduction");
+  return reduction && reduction.getValue() == "none";
 }
 
 static ArrayRef<StringRef> physicalStorageAttrs() {
@@ -249,7 +257,7 @@ struct LayoutAssignment
         StringRef l;
         if (op->getName().getStringRef() == "tessera.transpose")
           l = propagatedTransposeLayout(op);
-        else if (isPointwise(op->getName().getStringRef()))
+        else if (isShapePreservingPointwise(op))
           l = propagatedPointwiseLayout(op);
         else
           return;

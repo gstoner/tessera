@@ -6,11 +6,11 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 
 | Status | Count | Meaning |
 |--------|-------|---------|
-| `real` | 184 | `hasVerifier = 1;` + substantive `verify()` body. |
+| `real` | 204 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` | 0 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent` | 0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
 | `no_verifier` | 0 | No verifier declared.  TD constraints suffice — fine for many ops. |
-| **Total** | 184 | |
+| **Total** | 204 | |
 
 ## Per-dialect details
 
@@ -20,6 +20,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 |----|--------|
 | `ALiBiOp` | `real` |
 | `AdafactorOp` | `real` |
+| `AdamBackwardOp` | `real` |
 | `AdamOp` | `real` |
 | `AdamWOp` | `real` |
 | `AddOp` | `real` |
@@ -37,6 +38,8 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `AttnSlidingWindowOp` | `real` |
 | `AttnTopKBlocksOp` | `real` |
 | `BatchedGemmOp` | `real` |
+| `BinaryCrossEntropyLossBackwardOp` | `real` |
+| `BinaryCrossEntropyLossOp` | `real` |
 | `BroadcastInDimOp` | `real` |
 | `BroadcastOp` | `real` |
 | `CacheCommitOp` | `real` |
@@ -58,6 +61,8 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `ControlScanOp` | `real` |
 | `ControlWhileOp` | `real` |
 | `Conv2DNHWCOp` | `real` |
+| `CrossEntropyLossBackwardOp` | `real` |
+| `CrossEntropyLossOp` | `real` |
 | `CustomAdjointCallOp` | `real` |
 | `DCTOp` | `real` |
 | `DeepSeekSparseAttentionOp` | `real` |
@@ -66,6 +71,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `DequantizeFP4Op` | `real` |
 | `DequantizeFP8Op` | `real` |
 | `DiffusionBlockStepOp` | `real` |
+| `DistributionLossBackwardOp` | `real` |
 | `DivOp` | `real` |
 | `DropoutOp` | `real` |
 | `EBMBivectorLangevinStepOp` | `real` |
@@ -92,9 +98,12 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `GroupedGemmOp` | `real` |
 | `GtOp` | `real` |
 | `GuidedDenoiseRegionOp` | `real` |
+| `HuberLossOp` | `real` |
 | `HybridAttentionOp` | `real` |
 | `IFFTOp` | `real` |
 | `IRFFTOp` | `real` |
+| `JSDivergenceLossOp` | `real` |
+| `KLDivergenceLossOp` | `real` |
 | `KVCacheAppendOp` | `real` |
 | `KVCacheCreateOp` | `real` |
 | `KVCachePruneOp` | `real` |
@@ -112,18 +121,22 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `LogSoftmaxOp` | `real` |
 | `LookaheadSparseAttentionOp` | `real` |
 | `LtOp` | `real` |
+| `MAELossOp` | `real` |
 | `MLADecodeFusedOp` | `real` |
 | `MLADecodeOp` | `real` |
 | `MQAAttentionOp` | `real` |
 | `MSAIndexScoresOp` | `real` |
 | `MSASelectBlocksOp` | `real` |
 | `MSASparseAttentionOp` | `real` |
+| `MSELossBackwardOp` | `real` |
+| `MSELossOp` | `real` |
 | `MaskedFillOp` | `real` |
 | `MatmulOp` | `real` |
 | `ModifiedDeltaAttentionOp` | `real` |
 | `MoeCombineOp` | `real` |
 | `MoeDispatchOp` | `real` |
 | `MoeSwigluBlockOp` | `real` |
+| `MomentumBackwardOp` | `real` |
 | `MomentumOp` | `real` |
 | `MorPartitionOp` | `real` |
 | `MorRouterOp` | `real` |
@@ -143,6 +156,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `NeighborsStencilApplyOp` | `real` |
 | `NeighborsStencilDefineOp` | `real` |
 | `NeighborsTopologyCreateOp` | `real` |
+| `NesterovOp` | `real` |
 | `NormalizationStatsOp` | `real` |
 | `PermuteOp` | `real` |
 | `PowerAttnOp` | `real` |
@@ -158,6 +172,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `ReduceBackwardOp` | `real` |
 | `ReduceOp` | `real` |
 | `ReduceScatterOp` | `real` |
+| `RegressionLossBackwardOp` | `real` |
 | `ReluOp` | `real` |
 | `ReshapeOp` | `real` |
 | `RetentionOp` | `real` |
@@ -166,6 +181,8 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `RopeMergeOp` | `real` |
 | `RopeOp` | `real` |
 | `RopeSplitOp` | `real` |
+| `SGDBackwardOp` | `real` |
+| `SGDOp` | `real` |
 | `SVDOp` | `real` |
 | `ScoreCombineOp` | `real` |
 | `SelectOp` | `real` |
@@ -174,6 +191,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `SiluMulOp` | `real` |
 | `SiluOp` | `real` |
 | `SinOp` | `real` |
+| `SmoothL1LossOp` | `real` |
 | `SoftmaxOp` | `real` |
 | `SoftmaxSafeOp` | `real` |
 | `SoftplusOp` | `real` |
@@ -186,6 +204,8 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `SwigluFusedOp` | `real` |
 | `TanhOp` | `real` |
 | `TargetVerifyOp` | `real` |
+| `TrainingLossAdamWOp` | `real` |
+| `TrainingLossSGDOp` | `real` |
 | `TransposeOp` | `real` |
 | `TriSolveOp` | `real` |
 | `UnsqueezeOp` | `real` |

@@ -32,19 +32,23 @@ def _norm_or_skip():
     return rt
 
 
-def _artifact(rt, op_name, eps=None, *, affine=False):
+def _artifact(rt, op_name, eps=None, *, affine=False, epilogue=None):
     kwargs = {} if eps is None else {"eps": float(eps)}
     operands = ["x"]
     if affine:
         operands.append("gamma")
         if op_name == "tessera.layer_norm":
             operands.append("beta")
+    ops = [{"op_name": op_name, "result": "norm",
+            "operands": operands, "kwargs": kwargs}]
+    if epilogue is not None:
+        ops.append({"op_name": f"tessera.{epilogue}", "result": "o",
+                    "operands": ["norm"], "kwargs": {}})
     return rt.RuntimeArtifact(metadata={
         "target": "rocm", "compiler_path": "rocm_norm_compiled",
         "executable": True, "execution_kind": "native_gpu",
         "arg_names": operands, "output_name": "o",
-        "ops": [{"op_name": op_name, "result": "o",
-                 "operands": operands, "kwargs": kwargs}],
+        "ops": ops,
     })
 
 
@@ -128,6 +132,35 @@ def test_norm_hsaco_cache_identity_is_shape_and_affine_independent():
     assert len(rt._rocm_norm_hsaco_cache) == 1
 
 
+@pytest.mark.parametrize("op_name", ["tessera.rmsnorm", "tessera.layer_norm"])
+@pytest.mark.parametrize("epilogue", ["relu", "silu"])
+@pytest.mark.parametrize("shape", [(3, 17), (2, 5, 64), (7, 300)])
+def test_dynamic_norm_activation_consumer_is_one_compiled_launch(
+        op_name, epilogue, shape):
+    rt = _norm_or_skip()
+    rng = np.random.default_rng(173 + shape[-1])
+    x = rng.standard_normal(shape).astype(np.float32)
+    result = rt.launch(_artifact(rt, op_name, epilogue=epilogue), (x,))
+    out = result["output"]
+    ref = _ref(x, op_name, 1e-5)
+    if epilogue == "relu":
+        ref = np.maximum(ref, 0.0)
+    else:
+        ref = ref / (1.0 + np.exp(-ref))
+    assert result["compiler_path"] == "rocm_norm_compiled"
+    np.testing.assert_allclose(out, ref, atol=4e-4, rtol=0)
+
+
+def test_norm_activation_cache_identity_keeps_shapes_dynamic():
+    rt = _norm_or_skip()
+    rt._rocm_norm_hsaco_cache.clear()
+    rng = np.random.default_rng(181)
+    for shape in ((2, 17), (7, 64), (3, 5, 300)):
+        x = rng.standard_normal(shape).astype(np.float32)
+        rt.launch(_artifact(rt, "tessera.rmsnorm", epilogue="relu"), (x,))
+    assert len(rt._rocm_norm_hsaco_cache) == 1
+
+
 @pytest.mark.parametrize("offset,scale", [(1e4, 1.0), (1e3, 0.1), (-5e3, 2.0)])
 def test_layer_norm_large_offset_small_variance(offset, scale):
     """PR#123 review: a large common offset with small variance (e.g. ~1e4 ± 1)
@@ -147,5 +180,14 @@ def test_unknown_op_name_rejected():
     """A non-norm op routed here is a clean error (GPU-free validation)."""
     from tessera import runtime as rt
     x = np.zeros((4, 8), np.float32)
-    with pytest.raises(ValueError, match="handles exactly one"):
+    with pytest.raises(ValueError, match="handles one normalization"):
         rt._execute_rocm_compiled_norm(_artifact(rt, "tessera.softmax"), (x,))
+
+
+def test_norm_rejects_non_unary_or_unknown_consumer_without_gpu():
+    from tessera import runtime as rt
+    x = np.zeros((4, 8), np.float32)
+    artifact = _artifact(rt, "tessera.rmsnorm", epilogue="relu")
+    artifact.metadata["ops"][1]["operands"] = ["x"]
+    with pytest.raises(ValueError, match="must be unary relu/silu"):
+        rt._execute_rocm_compiled_norm(artifact, (x,))

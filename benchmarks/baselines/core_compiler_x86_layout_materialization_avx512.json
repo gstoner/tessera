@@ -1,0 +1,37 @@
+{
+  "column_major_speedup_vs_repack": 1.0053539571545056,
+  "default_policy": "enable_column_major_for_existing_fortran_inputs",
+  "device": "Ryzen AI MAX+ 395 AVX-512",
+  "packed_storage_policy": "preserve_metadata_but_keep_terminal_packing_opt_in_until_a_compiled_packed_consumer_exists",
+  "rows": [
+    {
+      "abi_order": "row_major",
+      "correct": true,
+      "input_order": "fortran",
+      "median_ms": 1.017192,
+      "p95_ms": 1.203558,
+      "route": "repack_row_major",
+      "shape": [
+        128,
+        128,
+        128
+      ],
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "abi_order": "col_major",
+      "correct": true,
+      "input_order": "fortran",
+      "median_ms": 1.011775,
+      "p95_ms": 1.123592,
+      "route": "preserve_column_major",
+      "shape": [
+        128,
+        128,
+        128
+      ],
+      "timing_domain": "host_wall_operation_total"
+    }
+  ],
+  "schema": "tessera.x86.layout-materialization.v1"
+}

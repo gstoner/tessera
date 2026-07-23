@@ -673,9 +673,7 @@ priority (highest DL leverage first):
   promised aliasing) + `tile.{smem,tmem}_arena_bytes` on the func, the exact form a
   shared-memory backend emits (`__shared__ char arena[N]; buf = arena + offset`).
   SMEM/TMEM get separate arenas. lit-gated
-  (`tests/tessera-ir/phase3/tile_buffer_arena.mlir`). **Still open:** the
-  Graph-level `LayoutAssignmentPass` casts remain opt-in; ROCm independently
-  consumes structured `#tile.layout`.
+  (`tests/tessera-ir/phase3/tile_buffer_arena.mlir`).
   **Propagation follow-on (2026-07-22):** pointwise propagation now requires all
   tagged operands to agree, last-axis reductions carry the row-major result
   contract, inserted casts name their source layout, and packed-storage attrs
@@ -690,12 +688,32 @@ priority (highest DL leverage first):
   physical packed-storage attributes, GEMM accept sets cover matmul and
   batched-GEMM, and last-axis reduction legality requires row-major input.
   Tile arena planning is no longer metadata-only: one aligned address-space-3
-  byte allocation backs typed `memref.view` slices at the planned offsets, and
+  workgroup global backs typed `memref.view` slices at the planned offsets, and
   the ROCm and NVIDIA backend pipelines run reuse+arena materialization before
   architecture lowering. This is the shared MLIR form that lowers to AMDGPU LDS
   and NVPTX shared memory; exact-device occupancy/performance proof remains
-  architecture-owned. Graph layout assignment remains opt-in until the whole
-  enabled producer/consumer set has a materializer.
+  architecture-owned. **Dynamic/cost follow-on (2026-07-23):** runtime-sized
+  buffers now form dominance-scoped arenas, including branch-local descriptors
+  and later-defined sequential cohorts; group size uses a runtime maximum and
+  offsets retain natural alignment. Global rematerialization consumes measured
+  `tessera.remat_cost_ns` values when present, otherwise stable analytical work
+  units, and selects memory-pressure relief per recompute cost while recording
+  before/after peaks. Exact gfx1151 driver evidence confirms 16/32 KiB globals
+  reserve 16/32 KiB LDS and that reuse doubles active blocks/CU from 2 to 4.
+  x86 now consumes row/column-major/BHSD/NHWC Graph casts through executable
+  C/Fortran binding contracts; a retained 128³ operation-total row favors
+  preserving existing Fortran inputs by 1.005x. NVIDIA remains opt-in; ROCm
+  continues to own structured `#tile.layout`. **Honest-boundary follow-on
+  (2026-07-23):** ROCm RMSNorm/LayerNorm now fuse ReLU/SiLU consumers in the
+  generated runtime-sized kernel, keyed by chip/kind/dtype/epilogue. A
+  post-ROCDL pass converts the one runtime-sized address-space-3 arena to the
+  external dynamic-LDS launch symbol; exact 16/32 KiB launches execute and
+  report 4/2 active blocks per CU. Multiple dynamic arenas remain a named
+  diagnostic rather than silently aliasing. The measured rematerialization
+  corpus now distinguishes ReLU/GELU/SiLU consumer chains at 64³/128³/192³
+  across gfx1151 and AVX-512. ROCm also owns the first compiled terminal
+  storage consumer: device pack/unpack uses signed two's-complement nibbles,
+  and direct packed-memory IU4 WMMA consumes them without host repacking.
 
 - **CORE-COMPILER-2 · Target dtype defaults (2026-07-22).** Compute
   legalization is now the named-pipeline default for x86 and NVIDIA. Terminal
@@ -717,8 +735,24 @@ priority (highest DL leverage first):
   lowers to linalg. Max/min distribute the incoming gradient equally across
   every finite tied extremum. A function-level rematerialization budget now
   selects the largest long-lived pure activation intervals inside the
-  production post-autodiff pass and sinks their recomputation. Remaining
-  compiler-owned breadth starts with loss adjoints and optimizer-step fusion;
+  production post-autodiff pass and sinks their recomputation. **MSE follow-on
+  (2026-07-23):** `tessera.loss.mse` and its paired backward carrier are
+  verifier-checked Graph IR; none/sum/dynamic-mean lower through shared Linalg,
+  with FP16/BF16 arithmetic and accumulation widened to FP32. Autodiff labels
+  emitted backward IR so global rematerialization selects saved forward
+  activations and rewrites only backward uses; softmax saves forward
+  probabilities unless the function budget selects recomputation. The paired
+  MSE carrier now also reaches one compiler-generated gfx1151 backward launch
+  for none/sum/mean, writing both input gradients under a saved-input residual
+  policy. **Training-breadth follow-on (2026-07-23):** MAE, Huber, SmoothL1,
+  and SGD are now verifier-checked Graph-native adjoints with dynamic Linalg
+  lowering and CPU oracle proof. Exact target-specific paired execution is live
+  on gfx1151 and AVX-512: each regression loss writes both input gradients in
+  one launch, and a dedicated SGD VJP replaces the measured two-launch
+  composition. The 65,536-element operation-total packet records 0.035--0.037
+  ms loss / 0.027 ms SGD medians on AVX-512 and 0.84--0.88 ms loss / 0.82 ms
+  SGD medians on gfx1151. Remaining compiler-owned breadth starts with
+  classification/distribution losses and stateful optimizer adjoints;
   aligned `? -> static non-unit` broadcast remains an explicit fallback because
   its equality-versus-singleton expansion is runtime-ambiguous.
   Multi-rank still needs non-mock collectives.

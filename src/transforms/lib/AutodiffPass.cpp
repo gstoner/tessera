@@ -44,6 +44,7 @@
 #include "mlir/IR/TypeUtilities.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 
 // TesseraOps includes the generated AdjointInterface declaration and provides
@@ -56,6 +57,7 @@ namespace {
 
 /// Marker attribute on `func.func` to opt into autodiff transformation.
 constexpr const char *kAutodiffMarker = "tessera.autodiff";
+constexpr const char *kAutodiffPhase = "tessera.autodiff.phase";
 
 /// Track per-Value cotangents. Map keys are forward Values; map values are
 /// the Value of the cotangent emitted into the backward IR.
@@ -240,6 +242,19 @@ public:
            llvm::zip(op->getOperands(), inCotans)) {
         accumulateCotangent(builder, cotan, operand, g);
       }
+    }
+
+    // Make the forward/backward boundary executable compiler metadata. The
+    // production rematerialization pass runs next and must distinguish saved
+    // forward activations from temporaries it just emitted for the VJP.
+    llvm::SmallPtrSet<mlir::Operation *, 32> originalForwardOps;
+    for (mlir::Operation *op : forwardOps)
+      originalForwardOps.insert(op);
+    for (mlir::Operation &opRef : func.getBody().front()) {
+      mlir::Operation *op = &opRef;
+      if (!mlir::isa<mlir::func::ReturnOp>(op) &&
+          !originalForwardOps.contains(op))
+        op->setAttr(kAutodiffPhase, builder.getStringAttr("backward"));
     }
 
     // Step 5 — multi-output rewrite. Expose argument cotangents as

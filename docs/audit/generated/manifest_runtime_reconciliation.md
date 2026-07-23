@@ -6,7 +6,7 @@ Ops the **runtime** dispatches to a native device lane (parsed from the `op_name
 
 ## Summary
 
-- Runtime native-dispatch lanes parsed: rocm=134, x86=142, apple_gpu=7, apple_cpu=3.
+- Runtime native-dispatch lanes parsed: rocm=139, x86=147, apple_gpu=8, apple_cpu=3.
 - **Reconciliation gaps (runtime native, manifest not): 0**.
 
 ## `rocm` — 0 gap(s)

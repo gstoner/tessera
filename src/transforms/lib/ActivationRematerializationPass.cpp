@@ -71,6 +71,17 @@ constexpr const char *kRecomputeAttr = "tessera.recompute";
 constexpr const char *kRematerializedCountAttr = "tessera.rematerialized";
 constexpr const char *kRematBudgetAttr = "tessera.remat_budget_mb";
 constexpr const char *kRematAutoSelectedAttr = "tessera.remat_auto_selected";
+constexpr const char *kRecomputeScopeAttr = "tessera.recompute_scope";
+constexpr const char *kAutodiffPhaseAttr = "tessera.autodiff.phase";
+constexpr const char *kMeasuredCostAttr = "tessera.remat_cost_ns";
+constexpr const char *kPeakBeforeAttr = "tessera.remat_peak_before_bytes";
+constexpr const char *kPeakAfterAttr = "tessera.remat_peak_after_bytes";
+constexpr const char *kSelectedCostAttr = "tessera.remat_selected_cost_ns";
+
+static bool isBackwardOperation(mlir::Operation *op) {
+  auto phase = op->getAttrOfType<mlir::StringAttr>(kAutodiffPhaseAttr);
+  return phase && phase.getValue() == "backward";
+}
 
 static int64_t estimateResultBytes(mlir::Operation *op) {
   int64_t bytes = 0;
@@ -99,11 +110,56 @@ static int64_t estimateResultBytes(mlir::Operation *op) {
   return bytes;
 }
 
+// Target benchmark ingestion is deliberately an attribute contract rather than
+// a target lookup in this shared Graph pass. A benchmark/selector may stamp
+// `tessera.remat_cost_ns` on a producer; host-free compilation falls back to a
+// stable operation-work estimate. The fallback is only a ranking unit, not a
+// latency claim.
+static int64_t estimateRecomputeCost(mlir::Operation *op) {
+  if (auto measured = op->getAttrOfType<mlir::IntegerAttr>(kMeasuredCostAttr))
+    return std::max<int64_t>(measured.getInt(), 1);
+
+  int64_t resultBytes = estimateResultBytes(op);
+  int64_t resultElements = 1;
+  if (auto shaped = mlir::dyn_cast<mlir::ShapedType>(
+          op->getNumResults() ? op->getResult(0).getType() : mlir::Type{})) {
+    if (shaped.hasStaticShape()) {
+      resultElements = 1;
+      for (int64_t extent : shaped.getShape()) {
+        if (extent <= 0 ||
+            resultElements > std::numeric_limits<int64_t>::max() / extent) {
+          resultElements = std::max<int64_t>(resultBytes, 1);
+          break;
+        }
+        resultElements *= extent;
+      }
+    } else {
+      resultElements = std::max<int64_t>(resultBytes, 1);
+    }
+  }
+
+  llvm::StringRef name = op->getName().getStringRef();
+  int64_t multiplier = 1;
+  if (name == "tessera.matmul" || name == "tessera.batched_gemm")
+    multiplier = 32;
+  else if (name == "tessera.softmax" || name == "tessera.layer_norm" ||
+           name == "tessera.rms_norm")
+    multiplier = 8;
+  else if (name == "tessera.exp" || name == "tessera.log" ||
+           name == "tessera.gelu" || name == "tessera.silu")
+    multiplier = 4;
+  if (resultElements >
+      std::numeric_limits<int64_t>::max() / multiplier)
+    return std::numeric_limits<int64_t>::max();
+  return std::max<int64_t>(resultElements * multiplier, 1);
+}
+
 struct RematCandidate {
   mlir::Operation *op;
   int64_t begin;
   int64_t end;
   int64_t bytes;
+  int64_t recomputeCost;
 };
 
 class ActivationRematerializationPass
@@ -170,20 +226,30 @@ public:
       llvm::DenseMap<mlir::Operation *, int64_t> ordinal;
       for (auto [index, op] : llvm::enumerate(ordered))
         ordinal[op] = static_cast<int64_t>(index);
+      bool hasAutodiffPhases =
+          llvm::any_of(ordered, [](mlir::Operation *op) {
+            return isBackwardOperation(op);
+          });
 
       llvm::SmallVector<RematCandidate> candidates;
       for (mlir::Operation *op : ordered) {
-        if (op->getNumRegions() != 0 || !mlir::isMemoryEffectFree(op))
+        if (op->getNumRegions() != 0 || !mlir::isMemoryEffectFree(op) ||
+            (hasAutodiffPhases && isBackwardOperation(op)))
           continue;
         int64_t begin = ordinal[op], end = begin;
+        bool hasBackwardUse = false;
         for (mlir::Operation *user : op->getUsers()) {
           auto it = ordinal.find(user);
-          if (it != ordinal.end())
+          if (it != ordinal.end()) {
             end = std::max(end, it->second);
+            hasBackwardUse |= isBackwardOperation(user);
+          }
         }
         int64_t bytes = estimateResultBytes(op);
-        if (bytes > 0 && end > begin)
-          candidates.push_back({op, begin, end, bytes});
+        if (bytes > 0 && end > begin &&
+            (!hasAutodiffPhases || hasBackwardUse))
+          candidates.push_back(
+              {op, begin, end, bytes, estimateRecomputeCost(op)});
       }
 
       int64_t budgetBytes =
@@ -207,23 +273,50 @@ public:
       };
       llvm::SmallVector<RematCandidate> active(candidates);
       llvm::SmallVector<mlir::Operation *> selected;
+      int64_t peakBefore = estimatedPeak(active);
+      int64_t selectedCost = 0;
       while (!active.empty() && estimatedPeak(active) > budgetBytes) {
         auto best = std::max_element(
             active.begin(), active.end(),
             [](const RematCandidate &lhs, const RematCandidate &rhs) {
-              __int128 lhsScore =
+              // Maximize memory-pressure relief per nanosecond/work unit.
+              // Cross multiplication avoids floating-point instability.
+              __int128 lhsBenefit =
                   static_cast<__int128>(lhs.bytes) * (lhs.end - lhs.begin);
-              __int128 rhsScore =
+              __int128 rhsBenefit =
                   static_cast<__int128>(rhs.bytes) * (rhs.end - rhs.begin);
-              if (lhsScore != rhsScore)
-                return lhsScore < rhsScore;
+              __int128 lhsWeighted =
+                  lhsBenefit * std::max<int64_t>(rhs.recomputeCost, 1);
+              __int128 rhsWeighted =
+                  rhsBenefit * std::max<int64_t>(lhs.recomputeCost, 1);
+              if (lhsWeighted != rhsWeighted)
+                return lhsWeighted < rhsWeighted;
               return lhs.begin > rhs.begin;
             });
         selected.push_back(best->op);
+        if (best->recomputeCost >
+            std::numeric_limits<int64_t>::max() - selectedCost)
+          selectedCost = std::numeric_limits<int64_t>::max();
+        else
+          selectedCost += best->recomputeCost;
         active.erase(best);
       }
+      func->setAttr(kPeakBeforeAttr,
+                    mlir::IntegerAttr::get(
+                        mlir::IntegerType::get(&getContext(), 64), peakBefore));
+      func->setAttr(kPeakAfterAttr,
+                    mlir::IntegerAttr::get(
+                        mlir::IntegerType::get(&getContext(), 64),
+                        estimatedPeak(active)));
+      func->setAttr(kSelectedCostAttr,
+                    mlir::IntegerAttr::get(
+                        mlir::IntegerType::get(&getContext(), 64),
+                        selectedCost));
       for (mlir::Operation *op : selected) {
         op->setAttr(kRecomputeAttr, mlir::UnitAttr::get(&getContext()));
+        if (hasAutodiffPhases)
+          op->setAttr(kRecomputeScopeAttr,
+                      mlir::StringAttr::get(&getContext(), "backward"));
         recomputeOps.push_back(op);
       }
       if (!selected.empty())
@@ -247,6 +340,10 @@ public:
     // instead leave %a's clone stranded next to %b in the forward block, still
     // live across to the backward, defeating the checkpoint.
     for (mlir::Operation *op : llvm::reverse(recomputeOps)) {
+      bool backwardOnly = false;
+      if (auto scope =
+              op->getAttrOfType<mlir::StringAttr>(kRecomputeScopeAttr))
+        backwardOnly = scope.getValue() == "backward";
       // Gate 1: region-free. Cloning a control-flow op is out of scope.
       if (op->getNumRegions() != 0) {
         op->emitError()
@@ -282,6 +379,8 @@ public:
       for (mlir::Operation *u : users) {
         if (u == op)
           continue;
+        if (backwardOnly && !isBackwardOperation(u))
+          continue;
         if (!llvm::is_contained(uniqueUsers, u))
           uniqueUsers.push_back(u);
       }
@@ -295,6 +394,7 @@ public:
         builder.setInsertionPoint(user);
         mlir::Operation *clone = builder.clone(*op);
         clone->removeAttr(kRecomputeAttr);  // the clone is the materialized use
+        clone->removeAttr(kRecomputeScopeAttr);
 
         // Rewrite this user's operands that reference op's results to the clone.
         for (mlir::OpOperand &use : user->getOpOperands()) {
@@ -309,8 +409,10 @@ public:
       // If the original is now fully rematerialized away, erase it.
       if (op->use_empty())
         op->erase();
-      else
+      else {
         op->removeAttr(kRecomputeAttr);  // partial — clear the marker regardless
+        op->removeAttr(kRecomputeScopeAttr);
+      }
     }
 
     if (failed)

@@ -1028,6 +1028,1335 @@ struct ReduceBackwardLowering : public RewritePattern {
   }
 };
 
+static Value buildElementCountReciprocal(PatternRewriter &rewriter,
+                                         Location loc,
+                                         RankedTensorType inputTy,
+                                         Value input, Type computeElementType) {
+  Value count = arith::ConstantIndexOp::create(rewriter, loc, 1);
+  for (int64_t dim = 0; dim < inputTy.getRank(); ++dim) {
+    Value extent = inputTy.isDynamicDim(dim)
+                       ? tensor::DimOp::create(rewriter, loc, input, dim)
+                             .getResult()
+                       : arith::ConstantIndexOp::create(
+                             rewriter, loc, inputTy.getDimSize(dim))
+                             .getResult();
+    count = arith::MulIOp::create(rewriter, loc, count, extent);
+  }
+  Value countI64 =
+      arith::IndexCastOp::create(rewriter, loc, rewriter.getI64Type(), count);
+  Value countFloat =
+      arith::SIToFPOp::create(rewriter, loc, computeElementType, countI64);
+  Value one = arith::ConstantOp::create(
+      rewriter, loc, computeElementType,
+      rewriter.getFloatAttr(computeElementType, 1.0));
+  return arith::DivFOp::create(rewriter, loc, one, countFloat);
+}
+
+static Type lossComputeElementType(PatternRewriter &rewriter, Type storage) {
+  if (storage.isF16() || storage.isBF16())
+    return rewriter.getF32Type();
+  return storage;
+}
+
+static Value extendLossScalar(OpBuilder &builder, Location loc, Value value,
+                              Type computeElementType) {
+  if (value.getType() == computeElementType)
+    return value;
+  return arith::ExtFOp::create(builder, loc, computeElementType, value);
+}
+
+static Value truncateLossScalar(OpBuilder &builder, Location loc, Value value,
+                                Type storageElementType) {
+  if (value.getType() == storageElementType)
+    return value;
+  return arith::TruncFOp::create(builder, loc, storageElementType, value);
+}
+
+// First-class MSE forward lowering. `none` is a shape-preserving elementwise
+// square; `sum` and `mean` reduce every logical dimension. Dynamic extents are
+// read from the input, so one lowering handles changing batch/sequence sizes.
+struct MSELossLowering : public RewritePattern {
+  MSELossLowering(MLIRContext *ctx)
+      : RewritePattern("tessera.loss.mse", /*benefit=*/1, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 2 || op->getNumResults() != 1)
+      return failure();
+    auto inputTy = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto targetTy = dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+    auto resultTy = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!inputTy || inputTy != targetTy || !resultTy ||
+        !isa<FloatType>(inputTy.getElementType()))
+      return rewriter.notifyMatchFailure(
+          op, "matching ranked floating prediction/target required");
+    StringRef reduction = "mean";
+    if (auto attr = op->getAttrOfType<StringAttr>("reduction"))
+      reduction = attr.getValue();
+    if (reduction != "none" && reduction != "sum" && reduction != "mean")
+      return rewriter.notifyMatchFailure(op, "unsupported reduction");
+
+    Location loc = op->getLoc();
+    int64_t rank = inputTy.getRank();
+    Type storageElem = inputTy.getElementType();
+    Type computeElem = lossComputeElementType(rewriter, storageElem);
+    auto computeTy = RankedTensorType::get(
+        inputTy.getShape(), computeElem, inputTy.getEncoding());
+    Value init = createEmptyFromSource(rewriter, loc, computeTy,
+                                       op->getOperand(0),
+                                       identityDimensions(rank));
+    AffineMap id = rewriter.getMultiDimIdentityMap(rank);
+    SmallVector<utils::IteratorType> iterators(
+        rank, utils::IteratorType::parallel);
+    auto square = linalg::GenericOp::create(
+        rewriter, loc, TypeRange{computeTy},
+        ValueRange{op->getOperand(0), op->getOperand(1)}, ValueRange{init},
+        SmallVector<AffineMap>{id, id, id}, iterators,
+        [&](OpBuilder &b, Location l, ValueRange args) {
+          Value prediction =
+              extendLossScalar(b, l, args[0], computeElem);
+          Value target = extendLossScalar(b, l, args[1], computeElem);
+          Value difference =
+              arith::SubFOp::create(b, l, prediction, target);
+          Value squared =
+              arith::MulFOp::create(b, l, difference, difference);
+          linalg::YieldOp::create(b, l, squared);
+        });
+    Value value = square.getResult(0);
+    if (reduction == "none") {
+      if (computeElem != storageElem)
+        value = emitUnaryElementwise(
+            rewriter, loc, resultTy, value,
+            [&](OpBuilder &b, Location l, Value scalar) -> Value {
+              return truncateLossScalar(b, l, scalar, storageElem);
+            });
+      rewriter.replaceOp(op, value);
+      return success();
+    }
+
+    RankedTensorType currentTy = computeTy;
+    for (int64_t remaining = rank; remaining > 0; --remaining) {
+      value = emitReduceCore(rewriter, loc, currentTy, value,
+                             /*axis=*/0, "sum");
+      SmallVector<int64_t> shape(currentTy.getShape());
+      shape.erase(shape.begin());
+      currentTy =
+          RankedTensorType::get(shape, currentTy.getElementType());
+    }
+    if (reduction == "mean")
+      value = buildUnaryScale(
+          rewriter, loc, currentTy, value,
+          buildElementCountReciprocal(rewriter, loc, inputTy,
+                                      op->getOperand(0), computeElem));
+    if (computeElem != storageElem)
+      value = emitUnaryElementwise(
+          rewriter, loc, resultTy, value,
+          [&](OpBuilder &b, Location l, Value scalar) -> Value {
+            return truncateLossScalar(b, l, scalar, storageElem);
+          });
+    rewriter.replaceOp(op, value);
+    return success();
+  }
+};
+
+// Native MSE adjoint lowering. A rank-0 cotangent is broadcast by an empty
+// affine map for sum/mean; `none` consumes an elementwise cotangent. Prediction
+// and target gradients are emitted together so they share the dynamic extent
+// and scaling computation.
+struct MSELossBackwardLowering : public RewritePattern {
+  MSELossBackwardLowering(MLIRContext *ctx)
+      : RewritePattern("tessera.loss.mse_backward", /*benefit=*/1, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 3 || op->getNumResults() != 2)
+      return failure();
+    auto inputTy = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto targetTy = dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+    auto cotangentTy =
+        dyn_cast<RankedTensorType>(op->getOperand(2).getType());
+    if (!inputTy || inputTy != targetTy || !cotangentTy ||
+        op->getResult(0).getType() != inputTy ||
+        op->getResult(1).getType() != inputTy ||
+        !isa<FloatType>(inputTy.getElementType()))
+      return rewriter.notifyMatchFailure(
+          op, "matching ranked floating MSE gradient types required");
+    StringRef reduction = "mean";
+    if (auto attr = op->getAttrOfType<StringAttr>("reduction"))
+      reduction = attr.getValue();
+    if (reduction != "none" && reduction != "sum" && reduction != "mean")
+      return rewriter.notifyMatchFailure(op, "unsupported reduction");
+
+    Location loc = op->getLoc();
+    int64_t rank = inputTy.getRank();
+    Value predictionInit = createEmptyFromSource(
+        rewriter, loc, inputTy, op->getOperand(0), identityDimensions(rank));
+    Value targetInit = createEmptyFromSource(
+        rewriter, loc, inputTy, op->getOperand(1), identityDimensions(rank));
+    AffineMap fullMap = rewriter.getMultiDimIdentityMap(rank);
+    AffineMap cotangentMap =
+        reduction == "none"
+            ? fullMap
+            : AffineMap::get(rank, /*symbolCount=*/0, {},
+                             rewriter.getContext());
+    SmallVector<AffineMap> maps = {
+        fullMap, fullMap, cotangentMap, fullMap, fullMap};
+    SmallVector<utils::IteratorType> iterators(
+        rank, utils::IteratorType::parallel);
+    Value reciprocal;
+    if (reduction == "mean")
+      reciprocal = buildElementCountReciprocal(
+          rewriter, loc, inputTy, op->getOperand(0),
+          lossComputeElementType(rewriter, inputTy.getElementType()));
+    Type elem = inputTy.getElementType();
+    Type computeElem = lossComputeElementType(rewriter, elem);
+    auto generic = linalg::GenericOp::create(
+        rewriter, loc, TypeRange{inputTy, inputTy},
+        ValueRange{op->getOperand(0), op->getOperand(1), op->getOperand(2)},
+        ValueRange{predictionInit, targetInit}, maps, iterators,
+        [&](OpBuilder &b, Location l, ValueRange args) {
+          Value prediction =
+              extendLossScalar(b, l, args[0], computeElem);
+          Value target = extendLossScalar(b, l, args[1], computeElem);
+          Value cotangent =
+              extendLossScalar(b, l, args[2], computeElem);
+          Value difference =
+              arith::SubFOp::create(b, l, prediction, target);
+          Value two = arith::ConstantOp::create(
+              b, l, computeElem, b.getFloatAttr(computeElem, 2.0));
+          Value gradient =
+              arith::MulFOp::create(b, l, difference, two);
+          gradient = arith::MulFOp::create(b, l, gradient, cotangent);
+          if (reciprocal)
+            gradient =
+                arith::MulFOp::create(b, l, gradient, reciprocal);
+          Value targetGradient = arith::NegFOp::create(b, l, gradient);
+          gradient = truncateLossScalar(b, l, gradient, elem);
+          targetGradient =
+              truncateLossScalar(b, l, targetGradient, elem);
+          linalg::YieldOp::create(b, l,
+                                  ValueRange{gradient, targetGradient});
+        });
+    rewriter.replaceOp(op, generic.getResults());
+    return success();
+  }
+};
+
+// BCE-with-logits uses the same stable softplus identity as the target kernels:
+// max(z, 0) - z*t + log1p(exp(-abs(z))).  This avoids overflow for large
+// logits and keeps dynamic none/sum/mean behavior aligned with MSE.
+struct BinaryCrossEntropyLossLowering : public RewritePattern {
+  BinaryCrossEntropyLossLowering(MLIRContext *ctx)
+      : RewritePattern("tessera.loss.binary_cross_entropy", 1, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 2 || op->getNumResults() != 1)
+      return failure();
+    auto inputTy = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto targetTy = dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+    auto resultTy = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!inputTy || inputTy != targetTy || !resultTy ||
+        !isa<FloatType>(inputTy.getElementType()))
+      return rewriter.notifyMatchFailure(
+          op, "matching ranked floating logits/target required");
+    StringRef reduction =
+        op->getAttrOfType<StringAttr>("reduction").getValue();
+    if (reduction != "none" && reduction != "sum" && reduction != "mean")
+      return rewriter.notifyMatchFailure(op, "unsupported reduction");
+
+    Location loc = op->getLoc();
+    int64_t rank = inputTy.getRank();
+    Type storageElem = inputTy.getElementType();
+    Type computeElem = lossComputeElementType(rewriter, storageElem);
+    auto computeTy = RankedTensorType::get(
+        inputTy.getShape(), computeElem, inputTy.getEncoding());
+    Value init = createEmptyFromSource(
+        rewriter, loc, computeTy, op->getOperand(0), identityDimensions(rank));
+    AffineMap id = rewriter.getMultiDimIdentityMap(rank);
+    auto pointwise = linalg::GenericOp::create(
+        rewriter, loc, TypeRange{computeTy},
+        ValueRange{op->getOperand(0), op->getOperand(1)}, ValueRange{init},
+        SmallVector<AffineMap>{id, id, id},
+        SmallVector<utils::IteratorType>(
+            rank, utils::IteratorType::parallel),
+        [&](OpBuilder &b, Location l, ValueRange args) {
+          Value z = extendLossScalar(b, l, args[0], computeElem);
+          Value target = extendLossScalar(b, l, args[1], computeElem);
+          Value zero = arith::ConstantOp::create(
+              b, l, computeElem, b.getFloatAttr(computeElem, 0.0));
+          Value positive = arith::MaximumFOp::create(b, l, z, zero);
+          Value absZ = math::AbsFOp::create(b, l, z);
+          Value tail = math::Log1pOp::create(
+              b, l, math::ExpOp::create(
+                        b, l, arith::NegFOp::create(b, l, absZ)));
+          Value product = arith::MulFOp::create(b, l, z, target);
+          Value loss = arith::SubFOp::create(
+              b, l, arith::AddFOp::create(b, l, positive, tail), product);
+          linalg::YieldOp::create(b, l, loss);
+        });
+    Value value = pointwise.getResult(0);
+    if (reduction == "none") {
+      if (computeElem != storageElem)
+        value = emitUnaryElementwise(
+            rewriter, loc, resultTy, value,
+            [&](OpBuilder &b, Location l, Value scalar) -> Value {
+              return truncateLossScalar(b, l, scalar, storageElem);
+            });
+      rewriter.replaceOp(op, value);
+      return success();
+    }
+    RankedTensorType currentTy = computeTy;
+    for (int64_t remaining = rank; remaining > 0; --remaining) {
+      value = emitReduceCore(rewriter, loc, currentTy, value, 0, "sum");
+      SmallVector<int64_t> shape(currentTy.getShape());
+      shape.erase(shape.begin());
+      currentTy = RankedTensorType::get(shape, computeElem);
+    }
+    if (reduction == "mean")
+      value = buildUnaryScale(
+          rewriter, loc, currentTy, value,
+          buildElementCountReciprocal(
+              rewriter, loc, inputTy, op->getOperand(0), computeElem));
+    if (computeElem != storageElem)
+      value = emitUnaryElementwise(
+          rewriter, loc, resultTy, value,
+          [&](OpBuilder &b, Location l, Value scalar) -> Value {
+            return truncateLossScalar(b, l, scalar, storageElem);
+          });
+    rewriter.replaceOp(op, value);
+    return success();
+  }
+};
+
+struct BinaryCrossEntropyLossBackwardLowering : public RewritePattern {
+  BinaryCrossEntropyLossBackwardLowering(MLIRContext *ctx)
+      : RewritePattern("tessera.loss.binary_cross_entropy_backward", 1, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 3 || op->getNumResults() != 2)
+      return failure();
+    auto inputTy = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto targetTy = dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+    auto cotangentTy = dyn_cast<RankedTensorType>(op->getOperand(2).getType());
+    if (!inputTy || inputTy != targetTy || !cotangentTy ||
+        op->getResult(0).getType() != inputTy ||
+        op->getResult(1).getType() != inputTy ||
+        !isa<FloatType>(inputTy.getElementType()))
+      return rewriter.notifyMatchFailure(
+          op, "matching ranked floating BCE gradient types required");
+    StringRef reduction =
+        op->getAttrOfType<StringAttr>("reduction").getValue();
+    int64_t rank = inputTy.getRank();
+    AffineMap full = rewriter.getMultiDimIdentityMap(rank);
+    AffineMap cotangentMap =
+        reduction == "none"
+            ? full
+            : AffineMap::get(rank, 0, {}, rewriter.getContext());
+    Location loc = op->getLoc();
+    Value logitsInit = createEmptyFromSource(
+        rewriter, loc, inputTy, op->getOperand(0), identityDimensions(rank));
+    Value targetInit = createEmptyFromSource(
+        rewriter, loc, inputTy, op->getOperand(1), identityDimensions(rank));
+    Type elem = inputTy.getElementType();
+    Type computeElem = lossComputeElementType(rewriter, elem);
+    Value reciprocal;
+    if (reduction == "mean")
+      reciprocal = buildElementCountReciprocal(
+          rewriter, loc, inputTy, op->getOperand(0), computeElem);
+    auto generic = linalg::GenericOp::create(
+        rewriter, loc, TypeRange{inputTy, inputTy},
+        ValueRange{op->getOperand(0), op->getOperand(1), op->getOperand(2)},
+        ValueRange{logitsInit, targetInit},
+        SmallVector<AffineMap>{full, full, cotangentMap, full, full},
+        SmallVector<utils::IteratorType>(
+            rank, utils::IteratorType::parallel),
+        [&](OpBuilder &b, Location l, ValueRange args) {
+          Value z = extendLossScalar(b, l, args[0], computeElem);
+          Value target = extendLossScalar(b, l, args[1], computeElem);
+          Value dy = extendLossScalar(b, l, args[2], computeElem);
+          Value zero = arith::ConstantOp::create(
+              b, l, computeElem, b.getFloatAttr(computeElem, 0.0));
+          Value one = arith::ConstantOp::create(
+              b, l, computeElem, b.getFloatAttr(computeElem, 1.0));
+          Value positive = arith::CmpFOp::create(
+              b, l, arith::CmpFPredicate::OGE, z, zero);
+          Value expNegative =
+              math::ExpOp::create(b, l, arith::NegFOp::create(b, l, z));
+          Value expPositive = math::ExpOp::create(b, l, z);
+          Value sigmoidPositive = arith::DivFOp::create(
+              b, l, one, arith::AddFOp::create(b, l, one, expNegative));
+          Value sigmoidNegative = arith::DivFOp::create(
+              b, l, expPositive,
+              arith::AddFOp::create(b, l, one, expPositive));
+          Value sigmoid = arith::SelectOp::create(
+              b, l, positive, sigmoidPositive, sigmoidNegative);
+          Value logitsGrad =
+              arith::MulFOp::create(
+                  b, l, arith::SubFOp::create(b, l, sigmoid, target), dy);
+          Value targetGrad = arith::MulFOp::create(
+              b, l, arith::NegFOp::create(b, l, z), dy);
+          if (reciprocal) {
+            logitsGrad =
+                arith::MulFOp::create(b, l, logitsGrad, reciprocal);
+            targetGrad =
+                arith::MulFOp::create(b, l, targetGrad, reciprocal);
+          }
+          linalg::YieldOp::create(
+              b, l,
+              ValueRange{truncateLossScalar(b, l, logitsGrad, elem),
+                         truncateLossScalar(b, l, targetGrad, elem)});
+        });
+    rewriter.replaceOp(op, generic.getResults());
+    return success();
+  }
+};
+
+enum class RegressionLossKind { MAE, Huber, SmoothL1 };
+
+static Value buildRegressionLossScalar(OpBuilder &b, Location loc,
+                                       RegressionLossKind kind, Value error,
+                                       Type elem, double parameter) {
+  Value zero = arith::ConstantOp::create(
+      b, loc, elem, b.getFloatAttr(elem, 0.0));
+  Value half = arith::ConstantOp::create(
+      b, loc, elem, b.getFloatAttr(elem, 0.5));
+  Value transition = arith::ConstantOp::create(
+      b, loc, elem, b.getFloatAttr(elem, parameter));
+  Value absError = math::AbsFOp::create(b, loc, error);
+  if (kind == RegressionLossKind::MAE)
+    return absError;
+
+  Value quadratic =
+      arith::MulFOp::create(b, loc, error, error);
+  quadratic = arith::MulFOp::create(b, loc, quadratic, half);
+  Value halfTransition =
+      arith::MulFOp::create(b, loc, transition, half);
+  if (kind == RegressionLossKind::Huber) {
+    Value linearOffset =
+        arith::SubFOp::create(b, loc, absError, halfTransition);
+    Value linear =
+        arith::MulFOp::create(b, loc, transition, linearOffset);
+    Value inside = arith::CmpFOp::create(
+        b, loc, arith::CmpFPredicate::OLE, absError, transition);
+    return arith::SelectOp::create(b, loc, inside, quadratic, linear);
+  }
+
+  Value scaledQuadratic =
+      arith::DivFOp::create(b, loc, quadratic, transition);
+  Value linear =
+      arith::SubFOp::create(b, loc, absError, halfTransition);
+  Value inside = arith::CmpFOp::create(
+      b, loc, arith::CmpFPredicate::OLT, absError, transition);
+  (void)zero;
+  return arith::SelectOp::create(b, loc, inside, scaledQuadratic, linear);
+}
+
+static Value buildRegressionGradientScalar(OpBuilder &b, Location loc,
+                                           RegressionLossKind kind,
+                                           Value error, Type elem,
+                                           double parameter) {
+  Value zero = arith::ConstantOp::create(
+      b, loc, elem, b.getFloatAttr(elem, 0.0));
+  Value one = arith::ConstantOp::create(
+      b, loc, elem, b.getFloatAttr(elem, 1.0));
+  Value negativeOne = arith::ConstantOp::create(
+      b, loc, elem, b.getFloatAttr(elem, -1.0));
+  Value positive = arith::CmpFOp::create(
+      b, loc, arith::CmpFPredicate::OGT, error, zero);
+  Value negative = arith::CmpFOp::create(
+      b, loc, arith::CmpFPredicate::OLT, error, zero);
+  Value negativeOrZero =
+      arith::SelectOp::create(b, loc, negative, negativeOne, zero);
+  Value sign =
+      arith::SelectOp::create(b, loc, positive, one, negativeOrZero);
+  if (kind == RegressionLossKind::MAE)
+    return sign;
+
+  Value transition = arith::ConstantOp::create(
+      b, loc, elem, b.getFloatAttr(elem, parameter));
+  Value absError = math::AbsFOp::create(b, loc, error);
+  if (kind == RegressionLossKind::Huber) {
+    Value outside =
+        arith::MulFOp::create(b, loc, transition, sign);
+    Value inside = arith::CmpFOp::create(
+        b, loc, arith::CmpFPredicate::OLE, absError, transition);
+    return arith::SelectOp::create(b, loc, inside, error, outside);
+  }
+
+  Value insideGradient =
+      arith::DivFOp::create(b, loc, error, transition);
+  Value inside = arith::CmpFOp::create(
+      b, loc, arith::CmpFPredicate::OLT, absError, transition);
+  return arith::SelectOp::create(b, loc, inside, insideGradient, sign);
+}
+
+// MAE, Huber, and Smooth-L1 share the same dynamic reduction envelope. Their
+// only distinction is the scalar piecewise function, including an explicit
+// zero MAE subgradient and documented Huber/Smooth-L1 transition predicates.
+struct RegressionLossLowering : public RewritePattern {
+  RegressionLossKind kind;
+  RegressionLossLowering(MLIRContext *ctx, StringRef opName,
+                         RegressionLossKind kind)
+      : RewritePattern(opName, /*benefit=*/1, ctx), kind(kind) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 2 || op->getNumResults() != 1)
+      return failure();
+    auto inputTy = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto targetTy = dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+    auto resultTy = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!inputTy || inputTy != targetTy || !resultTy ||
+        !isa<FloatType>(inputTy.getElementType()))
+      return rewriter.notifyMatchFailure(
+          op, "matching ranked floating prediction/target required");
+    StringRef reduction = "mean";
+    if (auto attr = op->getAttrOfType<StringAttr>("reduction"))
+      reduction = attr.getValue();
+    if (reduction != "none" && reduction != "sum" && reduction != "mean")
+      return rewriter.notifyMatchFailure(op, "unsupported reduction");
+    double parameter = 1.0;
+    if (kind == RegressionLossKind::Huber)
+      parameter = op->getAttrOfType<FloatAttr>("delta").getValueAsDouble();
+    else if (kind == RegressionLossKind::SmoothL1)
+      parameter = op->getAttrOfType<FloatAttr>("beta").getValueAsDouble();
+
+    Location loc = op->getLoc();
+    int64_t rank = inputTy.getRank();
+    Type storageElem = inputTy.getElementType();
+    Type computeElem = lossComputeElementType(rewriter, storageElem);
+    auto computeTy = RankedTensorType::get(
+        inputTy.getShape(), computeElem, inputTy.getEncoding());
+    Value init = createEmptyFromSource(rewriter, loc, computeTy,
+                                       op->getOperand(0),
+                                       identityDimensions(rank));
+    AffineMap id = rewriter.getMultiDimIdentityMap(rank);
+    SmallVector<utils::IteratorType> iterators(
+        rank, utils::IteratorType::parallel);
+    RegressionLossKind scalarKind = kind;
+    auto elementwise = linalg::GenericOp::create(
+        rewriter, loc, TypeRange{computeTy},
+        ValueRange{op->getOperand(0), op->getOperand(1)}, ValueRange{init},
+        SmallVector<AffineMap>{id, id, id}, iterators,
+        [&](OpBuilder &b, Location l, ValueRange args) {
+          Value prediction =
+              extendLossScalar(b, l, args[0], computeElem);
+          Value target = extendLossScalar(b, l, args[1], computeElem);
+          Value error = arith::SubFOp::create(b, l, prediction, target);
+          linalg::YieldOp::create(
+              b, l, buildRegressionLossScalar(
+                        b, l, scalarKind, error, computeElem, parameter));
+        });
+    Value value = elementwise.getResult(0);
+    if (reduction == "none") {
+      if (computeElem != storageElem)
+        value = emitUnaryElementwise(
+            rewriter, loc, resultTy, value,
+            [&](OpBuilder &b, Location l, Value scalar) -> Value {
+              return truncateLossScalar(b, l, scalar, storageElem);
+            });
+      rewriter.replaceOp(op, value);
+      return success();
+    }
+
+    RankedTensorType currentTy = computeTy;
+    for (int64_t remaining = rank; remaining > 0; --remaining) {
+      value = emitReduceCore(rewriter, loc, currentTy, value,
+                             /*axis=*/0, "sum");
+      SmallVector<int64_t> shape(currentTy.getShape());
+      shape.erase(shape.begin());
+      currentTy =
+          RankedTensorType::get(shape, currentTy.getElementType());
+    }
+    if (reduction == "mean")
+      value = buildUnaryScale(
+          rewriter, loc, currentTy, value,
+          buildElementCountReciprocal(rewriter, loc, inputTy,
+                                      op->getOperand(0), computeElem));
+    if (computeElem != storageElem)
+      value = emitUnaryElementwise(
+          rewriter, loc, resultTy, value,
+          [&](OpBuilder &b, Location l, Value scalar) -> Value {
+            return truncateLossScalar(b, l, scalar, storageElem);
+          });
+    rewriter.replaceOp(op, value);
+    return success();
+  }
+};
+
+struct RegressionLossBackwardLowering : public RewritePattern {
+  RegressionLossBackwardLowering(MLIRContext *ctx)
+      : RewritePattern("tessera.loss.regression_backward", /*benefit=*/1, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 3 || op->getNumResults() != 2)
+      return failure();
+    auto inputTy = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto targetTy = dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+    auto cotangentTy =
+        dyn_cast<RankedTensorType>(op->getOperand(2).getType());
+    if (!inputTy || inputTy != targetTy || !cotangentTy ||
+        op->getResult(0).getType() != inputTy ||
+        op->getResult(1).getType() != inputTy ||
+        !isa<FloatType>(inputTy.getElementType()))
+      return rewriter.notifyMatchFailure(
+          op, "matching ranked floating regression gradient types required");
+    StringRef reduction =
+        op->getAttrOfType<StringAttr>("reduction").getValue();
+    StringRef kindName = op->getAttrOfType<StringAttr>("kind").getValue();
+    RegressionLossKind kind;
+    if (kindName == "mae")
+      kind = RegressionLossKind::MAE;
+    else if (kindName == "huber")
+      kind = RegressionLossKind::Huber;
+    else if (kindName == "smooth_l1")
+      kind = RegressionLossKind::SmoothL1;
+    else
+      return rewriter.notifyMatchFailure(op, "unsupported regression kind");
+    double parameter =
+        op->getAttrOfType<FloatAttr>("parameter").getValueAsDouble();
+
+    Location loc = op->getLoc();
+    int64_t rank = inputTy.getRank();
+    AffineMap fullMap = rewriter.getMultiDimIdentityMap(rank);
+    AffineMap cotangentMap =
+        reduction == "none"
+            ? fullMap
+            : AffineMap::get(rank, /*symbolCount=*/0, {},
+                             rewriter.getContext());
+    Value predictionInit = createEmptyFromSource(
+        rewriter, loc, inputTy, op->getOperand(0), identityDimensions(rank));
+    Value targetInit = createEmptyFromSource(
+        rewriter, loc, inputTy, op->getOperand(1), identityDimensions(rank));
+    Value reciprocal;
+    Type elem = inputTy.getElementType();
+    Type computeElem = lossComputeElementType(rewriter, elem);
+    if (reduction == "mean")
+      reciprocal = buildElementCountReciprocal(
+          rewriter, loc, inputTy, op->getOperand(0), computeElem);
+    RegressionLossKind scalarKind = kind;
+    auto generic = linalg::GenericOp::create(
+        rewriter, loc, TypeRange{inputTy, inputTy},
+        ValueRange{op->getOperand(0), op->getOperand(1), op->getOperand(2)},
+        ValueRange{predictionInit, targetInit},
+        SmallVector<AffineMap>{fullMap, fullMap, cotangentMap, fullMap,
+                               fullMap},
+        SmallVector<utils::IteratorType>(
+            rank, utils::IteratorType::parallel),
+        [&](OpBuilder &b, Location l, ValueRange args) {
+          Value prediction =
+              extendLossScalar(b, l, args[0], computeElem);
+          Value target = extendLossScalar(b, l, args[1], computeElem);
+          Value cotangent =
+              extendLossScalar(b, l, args[2], computeElem);
+          Value error = arith::SubFOp::create(b, l, prediction, target);
+          Value gradient = buildRegressionGradientScalar(
+              b, l, scalarKind, error, computeElem, parameter);
+          gradient = arith::MulFOp::create(b, l, gradient, cotangent);
+          if (reciprocal)
+            gradient =
+                arith::MulFOp::create(b, l, gradient, reciprocal);
+          Value targetGradient = arith::NegFOp::create(b, l, gradient);
+          linalg::YieldOp::create(
+              b, l,
+              ValueRange{truncateLossScalar(b, l, gradient, elem),
+                         truncateLossScalar(b, l, targetGradient, elem)});
+        });
+    rewriter.replaceOp(op, generic.getResults());
+    return success();
+  }
+};
+
+struct TrainingLossGradients {
+  Value prediction;
+  Value target;
+};
+
+static TrainingLossGradients buildTrainingLossGradients(
+    OpBuilder &builder, Location loc, Value prediction, Value target,
+    Value cotangent, Value reciprocal, Type computeElem, StringRef kind,
+    double parameter) {
+  Value error = arith::SubFOp::create(builder, loc, prediction, target);
+  Value predictionGradient;
+  if (kind == "mse") {
+    Value two = arith::ConstantOp::create(
+        builder, loc, computeElem,
+        builder.getFloatAttr(computeElem, 2.0));
+    predictionGradient =
+        arith::MulFOp::create(builder, loc, error, two);
+  } else if (kind == "bce") {
+    Value zero = arith::ConstantOp::create(
+        builder, loc, computeElem,
+        builder.getFloatAttr(computeElem, 0.0));
+    Value one = arith::ConstantOp::create(
+        builder, loc, computeElem,
+        builder.getFloatAttr(computeElem, 1.0));
+    Value positive = arith::CmpFOp::create(
+        builder, loc, arith::CmpFPredicate::OGE, prediction, zero);
+    Value expNegative = math::ExpOp::create(
+        builder, loc, arith::NegFOp::create(builder, loc, prediction));
+    Value expPositive = math::ExpOp::create(builder, loc, prediction);
+    Value sigmoidPositive = arith::DivFOp::create(
+        builder, loc, one,
+        arith::AddFOp::create(builder, loc, one, expNegative));
+    Value sigmoidNegative = arith::DivFOp::create(
+        builder, loc, expPositive,
+        arith::AddFOp::create(builder, loc, one, expPositive));
+    Value sigmoid = arith::SelectOp::create(
+        builder, loc, positive, sigmoidPositive, sigmoidNegative);
+    predictionGradient =
+        arith::SubFOp::create(builder, loc, sigmoid, target);
+  } else {
+    RegressionLossKind regressionKind = RegressionLossKind::MAE;
+    if (kind == "huber")
+      regressionKind = RegressionLossKind::Huber;
+    else if (kind == "smooth_l1")
+      regressionKind = RegressionLossKind::SmoothL1;
+    predictionGradient = buildRegressionGradientScalar(
+        builder, loc, regressionKind, error, computeElem, parameter);
+  }
+  predictionGradient = arith::MulFOp::create(
+      builder, loc, predictionGradient, cotangent);
+  if (reciprocal)
+    predictionGradient = arith::MulFOp::create(
+        builder, loc, predictionGradient, reciprocal);
+
+  Value targetGradient;
+  if (kind == "bce") {
+    targetGradient = arith::MulFOp::create(
+        builder, loc,
+        arith::NegFOp::create(builder, loc, prediction), cotangent);
+    if (reciprocal)
+      targetGradient = arith::MulFOp::create(
+          builder, loc, targetGradient, reciprocal);
+  } else {
+    targetGradient =
+        arith::NegFOp::create(builder, loc, predictionGradient);
+  }
+  return {predictionGradient, targetGradient};
+}
+
+// The fused carrier keeps the prediction gradient inside one loop. This avoids
+// materializing and rereading the full gradient tensor between the loss VJP and
+// SGD while preserving the independently observable target gradient.
+struct TrainingLossSGDLowering : public RewritePattern {
+  TrainingLossSGDLowering(MLIRContext *ctx)
+      : RewritePattern("tessera.training.loss_sgd", /*benefit=*/1, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 4 || op->getNumResults() != 2)
+      return failure();
+    auto inputTy = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto targetTy = dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+    auto cotangentTy =
+        dyn_cast<RankedTensorType>(op->getOperand(2).getType());
+    auto paramTy = dyn_cast<RankedTensorType>(op->getOperand(3).getType());
+    if (!inputTy || inputTy != targetTy || inputTy != paramTy ||
+        !cotangentTy || op->getResult(0).getType() != inputTy ||
+        op->getResult(1).getType() != inputTy ||
+        !isa<FloatType>(inputTy.getElementType()))
+      return rewriter.notifyMatchFailure(
+          op, "matching ranked floating training tensors required");
+
+    auto kindAttr = op->getAttrOfType<StringAttr>("kind");
+    auto reductionAttr = op->getAttrOfType<StringAttr>("reduction");
+    auto lrAttr = op->getAttrOfType<FloatAttr>("lr");
+    auto parameterAttr = op->getAttrOfType<FloatAttr>("parameter");
+    if (!kindAttr || !reductionAttr || !lrAttr || !parameterAttr)
+      return rewriter.notifyMatchFailure(op, "missing fusion attributes");
+    StringRef reduction = reductionAttr.getValue();
+    if (reduction != "none" && reduction != "sum" && reduction != "mean")
+      return rewriter.notifyMatchFailure(op, "unsupported reduction");
+
+    StringRef kind = kindAttr.getValue();
+    if (kind != "mse" && kind != "bce" && kind != "mae" &&
+        kind != "huber" && kind != "smooth_l1")
+      return rewriter.notifyMatchFailure(op, "unsupported loss kind");
+
+    Location loc = op->getLoc();
+    int64_t rank = inputTy.getRank();
+    AffineMap fullMap = rewriter.getMultiDimIdentityMap(rank);
+    AffineMap cotangentMap =
+        reduction == "none"
+            ? fullMap
+            : AffineMap::get(rank, /*symbolCount=*/0, {},
+                             rewriter.getContext());
+    Value paramInit = createEmptyFromSource(
+        rewriter, loc, inputTy, op->getOperand(3), identityDimensions(rank));
+    Value targetInit = createEmptyFromSource(
+        rewriter, loc, inputTy, op->getOperand(1), identityDimensions(rank));
+    Type elem = inputTy.getElementType();
+    Type computeElem = lossComputeElementType(rewriter, elem);
+    Value reciprocal;
+    if (reduction == "mean")
+      reciprocal = buildElementCountReciprocal(
+          rewriter, loc, inputTy, op->getOperand(0), computeElem);
+    double parameter = parameterAttr.getValueAsDouble();
+    double lr = lrAttr.getValueAsDouble();
+    auto generic = linalg::GenericOp::create(
+        rewriter, loc, TypeRange{inputTy, inputTy},
+        ValueRange{op->getOperand(0), op->getOperand(1), op->getOperand(2),
+                   op->getOperand(3)},
+        ValueRange{paramInit, targetInit},
+        SmallVector<AffineMap>{fullMap, fullMap, cotangentMap, fullMap,
+                               fullMap, fullMap},
+        SmallVector<utils::IteratorType>(
+            rank, utils::IteratorType::parallel),
+        [&](OpBuilder &b, Location l, ValueRange args) {
+          Value prediction =
+              extendLossScalar(b, l, args[0], computeElem);
+          Value target = extendLossScalar(b, l, args[1], computeElem);
+          Value cotangent =
+              extendLossScalar(b, l, args[2], computeElem);
+          Value param = extendLossScalar(b, l, args[3], computeElem);
+          TrainingLossGradients gradients = buildTrainingLossGradients(
+              b, l, prediction, target, cotangent, reciprocal, computeElem,
+              kind, parameter);
+          Value learningRate = arith::ConstantOp::create(
+              b, l, computeElem, b.getFloatAttr(computeElem, lr));
+          Value update =
+              arith::MulFOp::create(
+                  b, l, learningRate, gradients.prediction);
+          Value newParam = arith::SubFOp::create(b, l, param, update);
+          linalg::YieldOp::create(
+              b, l,
+              ValueRange{truncateLossScalar(b, l, newParam, elem),
+                         truncateLossScalar(
+                             b, l, gradients.target, elem)});
+        });
+    rewriter.replaceOp(op, generic.getResults());
+    return success();
+  }
+};
+
+// AdamW is fused in the same scalar loop as the loss VJP. Bias-correction
+// factors are compile-time attributes while state tensors remain explicit SSA
+// values, so dynamic shapes do not affect cache identity.
+struct TrainingLossAdamWLowering : public RewritePattern {
+  TrainingLossAdamWLowering(MLIRContext *ctx)
+      : RewritePattern("tessera.training.loss_adamw", /*benefit=*/1, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 6 || op->getNumResults() != 4)
+      return failure();
+    auto inputTy = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto cotangentTy =
+        dyn_cast<RankedTensorType>(op->getOperand(2).getType());
+    if (!inputTy || !cotangentTy ||
+        llvm::any_of(op->getOperands().drop_front(),
+                     [&](Value value) {
+                       return value.getType() != inputTy &&
+                              value != op->getOperand(2);
+                     }) ||
+        llvm::any_of(op->getResults(),
+                     [&](Value value) { return value.getType() != inputTy; }) ||
+        !isa<FloatType>(inputTy.getElementType()))
+      return rewriter.notifyMatchFailure(
+          op, "matching ranked floating training tensors required");
+
+    auto kindAttr = op->getAttrOfType<StringAttr>("kind");
+    auto reductionAttr = op->getAttrOfType<StringAttr>("reduction");
+    auto parameterAttr = op->getAttrOfType<FloatAttr>("parameter");
+    auto lrAttr = op->getAttrOfType<FloatAttr>("lr");
+    auto beta1Attr = op->getAttrOfType<FloatAttr>("beta1");
+    auto beta2Attr = op->getAttrOfType<FloatAttr>("beta2");
+    auto epsAttr = op->getAttrOfType<FloatAttr>("eps");
+    auto weightDecayAttr = op->getAttrOfType<FloatAttr>("weight_decay");
+    auto stepAttr = op->getAttrOfType<IntegerAttr>("step");
+    if (!kindAttr || !reductionAttr || !parameterAttr || !lrAttr ||
+        !beta1Attr || !beta2Attr || !epsAttr || !weightDecayAttr ||
+        !stepAttr)
+      return rewriter.notifyMatchFailure(op, "missing fusion attributes");
+    StringRef kind = kindAttr.getValue();
+    StringRef reduction = reductionAttr.getValue();
+    if ((kind != "mse" && kind != "bce" && kind != "mae" &&
+         kind != "huber" && kind != "smooth_l1") ||
+        (reduction != "none" && reduction != "sum" &&
+         reduction != "mean"))
+      return rewriter.notifyMatchFailure(op, "unsupported loss contract");
+
+    Location loc = op->getLoc();
+    int64_t rank = inputTy.getRank();
+    AffineMap fullMap = rewriter.getMultiDimIdentityMap(rank);
+    AffineMap cotangentMap =
+        reduction == "none"
+            ? fullMap
+            : AffineMap::get(rank, /*symbolCount=*/0, {},
+                             rewriter.getContext());
+    SmallVector<Value> outputs;
+    for (unsigned index : {3u, 4u, 5u, 1u})
+      outputs.push_back(createEmptyFromSource(
+          rewriter, loc, inputTy, op->getOperand(index),
+          identityDimensions(rank)));
+    Type elem = inputTy.getElementType();
+    Type computeElem = lossComputeElementType(rewriter, elem);
+    Value reciprocal;
+    if (reduction == "mean")
+      reciprocal = buildElementCountReciprocal(
+          rewriter, loc, inputTy, op->getOperand(0), computeElem);
+
+    double parameter = parameterAttr.getValueAsDouble();
+    double lr = lrAttr.getValueAsDouble();
+    double beta1 = beta1Attr.getValueAsDouble();
+    double beta2 = beta2Attr.getValueAsDouble();
+    double eps = epsAttr.getValueAsDouble();
+    double weightDecay = weightDecayAttr.getValueAsDouble();
+    int64_t step = stepAttr.getInt();
+    double correction1 = 1.0 - std::pow(beta1, step);
+    double correction2 = 1.0 - std::pow(beta2, step);
+    auto constant = [&](OpBuilder &b, Location l, double value) {
+      return arith::ConstantOp::create(
+          b, l, computeElem, b.getFloatAttr(computeElem, value));
+    };
+
+    auto generic = linalg::GenericOp::create(
+        rewriter, loc,
+        TypeRange{inputTy, inputTy, inputTy, inputTy},
+        op->getOperands(), outputs,
+        SmallVector<AffineMap>{fullMap, fullMap, cotangentMap, fullMap,
+                               fullMap, fullMap, fullMap, fullMap, fullMap,
+                               fullMap},
+        SmallVector<utils::IteratorType>(
+            rank, utils::IteratorType::parallel),
+        [&](OpBuilder &b, Location l, ValueRange args) {
+          Value prediction =
+              extendLossScalar(b, l, args[0], computeElem);
+          Value target = extendLossScalar(b, l, args[1], computeElem);
+          Value cotangent =
+              extendLossScalar(b, l, args[2], computeElem);
+          Value param = extendLossScalar(b, l, args[3], computeElem);
+          Value moment1 = extendLossScalar(b, l, args[4], computeElem);
+          Value moment2 = extendLossScalar(b, l, args[5], computeElem);
+          TrainingLossGradients gradients = buildTrainingLossGradients(
+              b, l, prediction, target, cotangent, reciprocal, computeElem,
+              kind, parameter);
+          Value oneMinusBeta1 = constant(b, l, 1.0 - beta1);
+          Value oneMinusBeta2 = constant(b, l, 1.0 - beta2);
+          Value newMoment1 = arith::AddFOp::create(
+              b, l,
+              arith::MulFOp::create(b, l, constant(b, l, beta1), moment1),
+              arith::MulFOp::create(
+                  b, l, oneMinusBeta1, gradients.prediction));
+          Value gradientSquare = arith::MulFOp::create(
+              b, l, gradients.prediction, gradients.prediction);
+          Value newMoment2 = arith::AddFOp::create(
+              b, l,
+              arith::MulFOp::create(b, l, constant(b, l, beta2), moment2),
+              arith::MulFOp::create(
+                  b, l, oneMinusBeta2, gradientSquare));
+          Value correctedMoment1 = arith::DivFOp::create(
+              b, l, newMoment1, constant(b, l, correction1));
+          Value correctedMoment2 = arith::DivFOp::create(
+              b, l, newMoment2, constant(b, l, correction2));
+          Value denominator = arith::AddFOp::create(
+              b, l, math::SqrtOp::create(b, l, correctedMoment2),
+              constant(b, l, eps));
+          Value update = arith::AddFOp::create(
+              b, l,
+              arith::DivFOp::create(
+                  b, l, correctedMoment1, denominator),
+              arith::MulFOp::create(
+                  b, l, constant(b, l, weightDecay), param));
+          Value newParam = arith::SubFOp::create(
+              b, l, param,
+              arith::MulFOp::create(
+                  b, l, constant(b, l, lr), update));
+          linalg::YieldOp::create(
+              b, l,
+              ValueRange{
+                  truncateLossScalar(b, l, newParam, elem),
+                  truncateLossScalar(b, l, newMoment1, elem),
+                  truncateLossScalar(b, l, newMoment2, elem),
+                  truncateLossScalar(b, l, gradients.target, elem)});
+        });
+    rewriter.replaceOp(op, generic.getResults());
+    return success();
+  }
+};
+
+struct SGDLowering : public RewritePattern {
+  SGDLowering(MLIRContext *ctx)
+      : RewritePattern("tessera.sgd", /*benefit=*/1, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 2 || op->getNumResults() != 1)
+      return failure();
+    auto ty = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!ty || op->getOperand(0).getType() != ty ||
+        op->getOperand(1).getType() != ty ||
+        !isa<FloatType>(ty.getElementType()))
+      return rewriter.notifyMatchFailure(op, "matching floating tensors required");
+    double lr = op->getAttrOfType<FloatAttr>("lr").getValueAsDouble();
+    Type elem = ty.getElementType();
+    int64_t rank = ty.getRank();
+    Value init = createEmptyFromSource(
+        rewriter, op->getLoc(), ty, op->getOperand(0),
+        identityDimensions(rank));
+    AffineMap id = rewriter.getMultiDimIdentityMap(rank);
+    auto generic = linalg::GenericOp::create(
+        rewriter, op->getLoc(), TypeRange{ty},
+        ValueRange{op->getOperand(0), op->getOperand(1)}, ValueRange{init},
+        SmallVector<AffineMap>{id, id, id},
+        SmallVector<utils::IteratorType>(
+            rank, utils::IteratorType::parallel),
+        [&](OpBuilder &b, Location l, ValueRange args) {
+          Value rate = arith::ConstantOp::create(
+              b, l, elem, b.getFloatAttr(elem, lr));
+          Value update = arith::MulFOp::create(b, l, rate, args[1]);
+          Value result = arith::SubFOp::create(b, l, args[0], update);
+          linalg::YieldOp::create(b, l, result);
+        });
+    rewriter.replaceOp(op, generic.getResult(0));
+    return success();
+  }
+};
+
+struct SGDBackwardLowering : public RewritePattern {
+  SGDBackwardLowering(MLIRContext *ctx)
+      : RewritePattern("tessera.sgd_backward", /*benefit=*/1, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 1 || op->getNumResults() != 2)
+      return failure();
+    auto ty = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    if (!ty || op->getResult(0).getType() != ty ||
+        op->getResult(1).getType() != ty ||
+        !isa<FloatType>(ty.getElementType()))
+      return rewriter.notifyMatchFailure(op, "matching floating tensors required");
+    double lr = op->getAttrOfType<FloatAttr>("lr").getValueAsDouble();
+    Location loc = op->getLoc();
+    Value paramGrad = emitUnaryElementwise(
+        rewriter, loc, ty, op->getOperand(0),
+        [&](OpBuilder &, Location, Value cotangent) { return cotangent; });
+    Value gradGrad = emitUnaryElementwise(
+        rewriter, loc, ty, op->getOperand(0),
+        [&](OpBuilder &b, Location l, Value cotangent) -> Value {
+          Value negativeRate = arith::ConstantOp::create(
+              b, l, ty.getElementType(),
+              b.getFloatAttr(ty.getElementType(), -lr));
+          return arith::MulFOp::create(b, l, negativeRate, cotangent);
+        });
+    rewriter.replaceOp(op, ValueRange{paramGrad, gradGrad});
+    return success();
+  }
+};
+
+struct MomentumLowering : public RewritePattern {
+  bool nesterov;
+  MomentumLowering(MLIRContext *ctx, StringRef opName, bool nesterov)
+      : RewritePattern(opName, /*benefit=*/1, ctx), nesterov(nesterov) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 3 || op->getNumResults() != 2)
+      return failure();
+    auto ty = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    if (!ty || !isa<FloatType>(ty.getElementType()))
+      return rewriter.notifyMatchFailure(op, "floating tensor required");
+    for (Value value : op->getOperands())
+      if (value.getType() != ty)
+        return rewriter.notifyMatchFailure(op, "matching operand types required");
+    for (Value value : op->getResults())
+      if (value.getType() != ty)
+        return rewriter.notifyMatchFailure(op, "matching result types required");
+    double lr = op->getAttrOfType<FloatAttr>("lr").getValueAsDouble();
+    double momentum =
+        op->getAttrOfType<FloatAttr>("momentum").getValueAsDouble();
+    int64_t rank = ty.getRank();
+    AffineMap id = rewriter.getMultiDimIdentityMap(rank);
+    Value paramInit = createEmptyFromSource(
+        rewriter, op->getLoc(), ty, op->getOperand(0),
+        identityDimensions(rank));
+    Value velocityInit = createEmptyFromSource(
+        rewriter, op->getLoc(), ty, op->getOperand(0),
+        identityDimensions(rank));
+    auto generic = linalg::GenericOp::create(
+        rewriter, op->getLoc(), TypeRange{ty, ty}, op->getOperands(),
+        ValueRange{paramInit, velocityInit},
+        SmallVector<AffineMap>{id, id, id, id, id},
+        SmallVector<utils::IteratorType>(
+            rank, utils::IteratorType::parallel),
+        [&](OpBuilder &b, Location l, ValueRange args) {
+          Type elem = ty.getElementType();
+          Value rate = arith::ConstantOp::create(
+              b, l, elem, b.getFloatAttr(elem, lr));
+          Value mu = arith::ConstantOp::create(
+              b, l, elem, b.getFloatAttr(elem, momentum));
+          Value newVelocity = arith::AddFOp::create(
+              b, l, arith::MulFOp::create(b, l, mu, args[2]), args[1]);
+          Value update = newVelocity;
+          if (nesterov)
+            update = arith::AddFOp::create(
+                b, l, args[1],
+                arith::MulFOp::create(b, l, mu, newVelocity));
+          Value newParam = arith::SubFOp::create(
+              b, l, args[0], arith::MulFOp::create(b, l, rate, update));
+          linalg::YieldOp::create(
+              b, l, ValueRange{newParam, newVelocity});
+        });
+    rewriter.replaceOp(op, generic.getResults());
+    return success();
+  }
+};
+
+struct MomentumBackwardLowering : public RewritePattern {
+  MomentumBackwardLowering(MLIRContext *ctx)
+      : RewritePattern("tessera.momentum_backward", /*benefit=*/1, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 2 || op->getNumResults() != 3)
+      return failure();
+    auto ty = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    if (!ty || !isa<FloatType>(ty.getElementType()) ||
+        op->getOperand(1).getType() != ty)
+      return rewriter.notifyMatchFailure(op, "matching floating tensors required");
+    for (Value result : op->getResults())
+      if (result.getType() != ty)
+        return rewriter.notifyMatchFailure(op, "matching result types required");
+    double lr = op->getAttrOfType<FloatAttr>("lr").getValueAsDouble();
+    double momentum =
+        op->getAttrOfType<FloatAttr>("momentum").getValueAsDouble();
+    bool nesterov =
+        op->getAttrOfType<BoolAttr>("nesterov").getValue();
+    int64_t rank = ty.getRank();
+    AffineMap id = rewriter.getMultiDimIdentityMap(rank);
+    SmallVector<Value> inits;
+    for (int i = 0; i < 3; ++i)
+      inits.push_back(createEmptyFromSource(
+          rewriter, op->getLoc(), ty, op->getOperand(0),
+          identityDimensions(rank)));
+    auto generic = linalg::GenericOp::create(
+        rewriter, op->getLoc(), TypeRange{ty, ty, ty}, op->getOperands(),
+        inits, SmallVector<AffineMap>{id, id, id, id, id},
+        SmallVector<utils::IteratorType>(
+            rank, utils::IteratorType::parallel),
+        [&](OpBuilder &b, Location l, ValueRange args) {
+          Type elem = ty.getElementType();
+          Value rate = arith::ConstantOp::create(
+              b, l, elem, b.getFloatAttr(elem, lr));
+          Value mu = arith::ConstantOp::create(
+              b, l, elem, b.getFloatAttr(elem, momentum));
+          Value one = arith::ConstantOp::create(
+              b, l, elem, b.getFloatAttr(elem, 1.0));
+          Value gradFactor = one;
+          if (nesterov)
+            gradFactor = arith::AddFOp::create(b, l, one, mu);
+          Value fromParam = arith::MulFOp::create(
+              b, l, arith::NegFOp::create(b, l, rate), args[0]);
+          Value gradGrad = arith::AddFOp::create(
+              b, l,
+              arith::MulFOp::create(b, l, gradFactor, fromParam), args[1]);
+          Value velocityBase = arith::AddFOp::create(
+              b, l,
+              arith::MulFOp::create(
+                  b, l, nesterov ? mu : one, fromParam),
+              args[1]);
+          Value velocityGrad =
+              arith::MulFOp::create(b, l, mu, velocityBase);
+          linalg::YieldOp::create(
+              b, l, ValueRange{args[0], gradGrad, velocityGrad});
+        });
+    rewriter.replaceOp(op, generic.getResults());
+    return success();
+  }
+};
+
+struct AdamLowering : public RewritePattern {
+  bool adamw;
+  AdamLowering(MLIRContext *ctx, StringRef opName, bool adamw)
+      : RewritePattern(opName, /*benefit=*/1, ctx), adamw(adamw) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 4 || op->getNumResults() != 3)
+      return failure();
+    auto ty = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    if (!ty || !isa<FloatType>(ty.getElementType()))
+      return rewriter.notifyMatchFailure(op, "floating tensor required");
+    for (Value value : op->getOperands())
+      if (value.getType() != ty)
+        return rewriter.notifyMatchFailure(op, "matching operand types required");
+    for (Value value : op->getResults())
+      if (value.getType() != ty)
+        return rewriter.notifyMatchFailure(op, "matching result types required");
+    auto getF64 = [&](StringRef name, double fallback) {
+      if (auto attr = op->getAttrOfType<FloatAttr>(name))
+        return attr.getValueAsDouble();
+      return fallback;
+    };
+    double lr = getF64("lr", 1.0e-3);
+    double b1 = getF64("beta1", 0.9);
+    double b2 = getF64("beta2", 0.999);
+    double eps = getF64("eps", 1.0e-8);
+    double wd = getF64("weight_decay", 0.0);
+    int64_t step = 1;
+    if (auto attr = op->getAttrOfType<IntegerAttr>("step"))
+      step = attr.getInt();
+    double b1c = 1.0 - std::pow(b1, step);
+    double b2c = 1.0 - std::pow(b2, step);
+    int64_t rank = ty.getRank();
+    AffineMap id = rewriter.getMultiDimIdentityMap(rank);
+    SmallVector<Value> inits;
+    for (int i = 0; i < 3; ++i)
+      inits.push_back(createEmptyFromSource(
+          rewriter, op->getLoc(), ty, op->getOperand(0),
+          identityDimensions(rank)));
+    auto generic = linalg::GenericOp::create(
+        rewriter, op->getLoc(), TypeRange{ty, ty, ty}, op->getOperands(),
+        inits, SmallVector<AffineMap>{id, id, id, id, id, id, id},
+        SmallVector<utils::IteratorType>(
+            rank, utils::IteratorType::parallel),
+        [&](OpBuilder &b, Location l, ValueRange args) {
+          Type elem = ty.getElementType();
+          auto constant = [&](double value) -> Value {
+            return arith::ConstantOp::create(
+                b, l, elem, b.getFloatAttr(elem, value));
+          };
+          Value one = constant(1.0);
+          Value beta1 = constant(b1), beta2 = constant(b2);
+          Value mNew = arith::AddFOp::create(
+              b, l, arith::MulFOp::create(b, l, beta1, args[2]),
+              arith::MulFOp::create(
+                  b, l, arith::SubFOp::create(b, l, one, beta1), args[1]));
+          Value vNew = arith::AddFOp::create(
+              b, l, arith::MulFOp::create(b, l, beta2, args[3]),
+              arith::MulFOp::create(
+                  b, l, arith::SubFOp::create(b, l, one, beta2),
+                  arith::MulFOp::create(b, l, args[1], args[1])));
+          Value denom = arith::AddFOp::create(
+              b, l,
+              math::SqrtOp::create(
+                  b, l, arith::DivFOp::create(b, l, vNew, constant(b2c))),
+              constant(eps));
+          Value update = arith::DivFOp::create(
+              b, l, arith::DivFOp::create(b, l, mNew, constant(b1c)),
+              denom);
+          Value paramBase = args[0];
+          if (adamw)
+            paramBase = arith::MulFOp::create(
+                b, l, paramBase, constant(1.0 - lr * wd));
+          Value paramNew = arith::SubFOp::create(
+              b, l, paramBase,
+              arith::MulFOp::create(b, l, constant(lr), update));
+          linalg::YieldOp::create(
+              b, l, ValueRange{paramNew, mNew, vNew});
+        });
+    rewriter.replaceOp(op, generic.getResults());
+    return success();
+  }
+};
+
+struct AdamBackwardLowering : public RewritePattern {
+  AdamBackwardLowering(MLIRContext *ctx)
+      : RewritePattern("tessera.adam_backward", /*benefit=*/1, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 7 || op->getNumResults() != 4)
+      return failure();
+    auto ty = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    if (!ty || !isa<FloatType>(ty.getElementType()))
+      return rewriter.notifyMatchFailure(op, "floating tensor required");
+    for (Value value : op->getOperands())
+      if (value.getType() != ty)
+        return rewriter.notifyMatchFailure(op, "matching operand types required");
+    auto getF64 = [&](StringRef name, double fallback) {
+      if (auto attr = op->getAttrOfType<FloatAttr>(name))
+        return attr.getValueAsDouble();
+      return fallback;
+    };
+    double lr = getF64("lr", 1.0e-3), b1 = getF64("beta1", 0.9);
+    double b2 = getF64("beta2", 0.999), eps = getF64("eps", 1.0e-8);
+    double wd = getF64("weight_decay", 0.0);
+    int64_t step = op->getAttrOfType<IntegerAttr>("step").getInt();
+    bool adamw = op->getAttrOfType<BoolAttr>("adamw").getValue();
+    double b1c = 1.0 - std::pow(b1, step);
+    double b2c = 1.0 - std::pow(b2, step);
+    int64_t rank = ty.getRank();
+    AffineMap id = rewriter.getMultiDimIdentityMap(rank);
+    SmallVector<Value> inits;
+    for (int i = 0; i < 4; ++i)
+      inits.push_back(createEmptyFromSource(
+          rewriter, op->getLoc(), ty, op->getOperand(0),
+          identityDimensions(rank)));
+    SmallVector<AffineMap> maps(11, id);
+    auto generic = linalg::GenericOp::create(
+        rewriter, op->getLoc(), TypeRange{ty, ty, ty, ty}, op->getOperands(),
+        inits, maps,
+        SmallVector<utils::IteratorType>(
+            rank, utils::IteratorType::parallel),
+        [&](OpBuilder &b, Location l, ValueRange a) {
+          Type elem = ty.getElementType();
+          auto c = [&](double value) -> Value {
+            return arith::ConstantOp::create(
+                b, l, elem, b.getFloatAttr(elem, value));
+          };
+          Value one = c(1.0), beta1 = c(b1), beta2 = c(b2);
+          Value mNew = arith::AddFOp::create(
+              b, l, arith::MulFOp::create(b, l, beta1, a[2]),
+              arith::MulFOp::create(
+                  b, l, arith::SubFOp::create(b, l, one, beta1), a[1]));
+          Value vNew = arith::AddFOp::create(
+              b, l, arith::MulFOp::create(b, l, beta2, a[3]),
+              arith::MulFOp::create(
+                  b, l, arith::SubFOp::create(b, l, one, beta2),
+                  arith::MulFOp::create(b, l, a[1], a[1])));
+          Value normalizedV =
+              arith::DivFOp::create(b, l, vNew, c(b2c));
+          Value root = math::SqrtOp::create(b, l, normalizedV);
+          Value denom = arith::AddFOp::create(b, l, root, c(eps));
+          Value dMFromParam = arith::MulFOp::create(
+              b, l, a[4],
+              c(-lr / b1c));
+          dMFromParam =
+              arith::DivFOp::create(b, l, dMFromParam, denom);
+          Value dMNew = arith::AddFOp::create(b, l, a[5], dMFromParam);
+          Value numerator =
+              arith::DivFOp::create(b, l, mNew, c(b1c));
+          Value positive = arith::CmpFOp::create(
+              b, l, arith::CmpFPredicate::OGT, normalizedV, c(0.0));
+          Value dDenom = arith::SelectOp::create(
+              b, l, positive,
+              arith::DivFOp::create(
+                  b, l, c(0.5 / b2c), root),
+              c(0.0));
+          Value denomSquared =
+              arith::MulFOp::create(b, l, denom, denom);
+          Value dVFromParam = arith::MulFOp::create(
+              b, l, a[4],
+              arith::MulFOp::create(
+                  b, l, c(lr),
+                  arith::DivFOp::create(
+                      b, l,
+                      arith::MulFOp::create(b, l, numerator, dDenom),
+                      denomSquared)));
+          Value dVNew = arith::AddFOp::create(b, l, a[6], dVFromParam);
+          Value dParam = arith::MulFOp::create(
+              b, l, a[4], c(adamw ? 1.0 - lr * wd : 1.0));
+          Value dGrad = arith::AddFOp::create(
+              b, l,
+              arith::MulFOp::create(b, l, c(1.0 - b1), dMNew),
+              arith::MulFOp::create(
+                  b, l, c(2.0 * (1.0 - b2)),
+                  arith::MulFOp::create(b, l, a[1], dVNew)));
+          Value dM = arith::MulFOp::create(b, l, beta1, dMNew);
+          Value dV = arith::MulFOp::create(b, l, beta2, dVNew);
+          linalg::YieldOp::create(
+              b, l, ValueRange{dParam, dGrad, dM, dV});
+        });
+    rewriter.replaceOp(op, generic.getResults());
+    return success();
+  }
+};
+
 // tessera.softmax (over `axis`, default innermost) → numerically-stable
 // decomposition:  m = max(x); e = exp(x - m); y = e / sum(e).  Composes the
 // reduction machinery (emitReduceCore) with broadcast-binary (emitBroadcastBinary)
@@ -1410,6 +2739,27 @@ public:
     patterns.add<TransposeLowering>(ctx);
     patterns.add<ReduceLowering>(ctx);
     patterns.add<ReduceBackwardLowering>(ctx);
+    patterns.add<MSELossLowering>(ctx);
+    patterns.add<MSELossBackwardLowering>(ctx);
+    patterns.add<BinaryCrossEntropyLossLowering>(ctx);
+    patterns.add<BinaryCrossEntropyLossBackwardLowering>(ctx);
+    patterns.add<RegressionLossLowering>(
+        ctx, "tessera.loss.mae", RegressionLossKind::MAE);
+    patterns.add<RegressionLossLowering>(
+        ctx, "tessera.loss.huber", RegressionLossKind::Huber);
+    patterns.add<RegressionLossLowering>(
+        ctx, "tessera.loss.smooth_l1", RegressionLossKind::SmoothL1);
+    patterns.add<RegressionLossBackwardLowering>(ctx);
+    patterns.add<TrainingLossSGDLowering>(ctx);
+    patterns.add<TrainingLossAdamWLowering>(ctx);
+    patterns.add<SGDLowering>(ctx);
+    patterns.add<SGDBackwardLowering>(ctx);
+    patterns.add<MomentumLowering>(ctx, "tessera.momentum", false);
+    patterns.add<MomentumLowering>(ctx, "tessera.nesterov", true);
+    patterns.add<MomentumBackwardLowering>(ctx);
+    patterns.add<AdamLowering>(ctx, "tessera.adam", false);
+    patterns.add<AdamLowering>(ctx, "tessera.adamw", true);
+    patterns.add<AdamBackwardLowering>(ctx);
     patterns.add<SoftmaxLowering>(ctx);
     patterns.add<RmsNormLowering>(ctx);
     patterns.add<LayerNormLowering>(ctx);

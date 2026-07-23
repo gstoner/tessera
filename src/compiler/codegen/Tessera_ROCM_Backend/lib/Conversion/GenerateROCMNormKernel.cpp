@@ -43,7 +43,7 @@ static constexpr int64_t SG = 32;           // shuffle subgroup width
 static constexpr int64_t NGROUPS = BD / SG; // per-subgroup partials (= 8)
 
 void emitNormBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
-                  bool isLayerNorm) {
+                  bool isLayerNorm, StringRef epilogue) {
   MLIRContext *ctx = b.getContext();
   Type f32 = b.getF32Type();
   bool isF32 = storeTy.isF32();
@@ -190,7 +190,22 @@ void emitNormBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
       b.setInsertionPointToStart(betaIf.elseBlock());
       b.create<scf::YieldOp>(loc, ValueRange{v});
     }
-    storeFromF32(betaIf.getResult(0), idx);
+    v = betaIf.getResult(0);
+    if (epilogue == "relu") {
+      Value zero =
+          b.create<arith::ConstantOp>(loc, f32, b.getF32FloatAttr(0.0));
+      Value positive = b.create<arith::CmpFOp>(
+          loc, arith::CmpFPredicate::OGT, v, zero);
+      v = b.create<arith::SelectOp>(loc, positive, v, zero);
+    } else if (epilogue == "silu") {
+      Value one =
+          b.create<arith::ConstantOp>(loc, f32, b.getF32FloatAttr(1.0));
+      Value neg = b.create<arith::NegFOp>(loc, v);
+      Value denom =
+          b.create<arith::AddFOp>(loc, one, b.create<math::ExpOp>(loc, neg));
+      v = b.create<arith::DivFOp>(loc, v, denom);
+    }
+    storeFromF32(v, idx);
   }
 
   b.setInsertionPointToEnd(&f.getBody().front());
@@ -491,6 +506,20 @@ struct GenerateROCMNormKernelPass
       bool backward = false;
       if (auto a = op->getAttrOfType<BoolAttr>("backward"))
         backward = a.getValue();
+      StringRef epilogue = "none";
+      if (auto a = op->getAttrOfType<StringAttr>("epilogue"))
+        epilogue = a.getValue();
+      if (epilogue != "none" && epilogue != "relu" && epilogue != "silu") {
+        op->emitError("generate-rocm-norm-kernel: epilogue must be none, relu, "
+                      "or silu (got '")
+            << epilogue << "')";
+        return signalPassFailure();
+      }
+      if (backward && epilogue != "none") {
+        op->emitError("generate-rocm-norm-kernel: backward normalization does "
+                      "not accept a forward epilogue");
+        return signalPassFailure();
+      }
 
       Type storeTy = b.getF32Type();
       if (auto a = op->getAttrOfType<StringAttr>("dtype")) {
@@ -538,7 +567,8 @@ struct GenerateROCMNormKernelPass
         emitNormBackwardBody(body, loc, gpuFunc, storeTy,
                              kind == "layer_norm");
       else
-        emitNormBody(body, loc, gpuFunc, storeTy, kind == "layer_norm");
+        emitNormBody(body, loc, gpuFunc, storeTy, kind == "layer_norm",
+                     epilogue);
       if (backward) {
         auto accumTy = MemRefType::get({ShapedType::kDynamic}, f32);
         auto finalizeTy = b.getFunctionType(

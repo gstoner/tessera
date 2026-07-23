@@ -1,6 +1,7 @@
 add_mlir_library(TesseraROCMConversion
   TileToROCM.cpp
   ROCMWaveLdsPipeline.cpp
+  ROCMDynamicLDS.cpp
   TesseraTargetToROCDL.cpp
   KernelABI.cpp
   GenerateWMMAGemmKernel.cpp
@@ -13,6 +14,7 @@ add_mlir_library(TesseraROCMConversion
   GenerateROCMBinaryLossKernel.cpp
   GenerateROCMPolicyLossKernel.cpp
   GenerateROCMFpQuantKernel.cpp
+  GenerateROCMInt4PackKernel.cpp
   GenerateROCMDequantGemmKernel.cpp
   GenerateROCMDftKernel.cpp
   GenerateROCMSpmmKernel.cpp

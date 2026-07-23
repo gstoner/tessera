@@ -401,6 +401,184 @@ def Tessera_DiffusionBlockStepOp : Op<
 // envelope is promoted to Apple GPU value execution in this stage; GRPO/CISPO
 // remain compiler-visible / non-executable until they either decompose cleanly
 // or gain their own runtime proof.
+def Tessera_MSELossOp : Op<
+  Tessera_Dialect, "loss.mse",
+  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
+> {
+  let summary = "Mean-squared-error loss with explicit reduction semantics";
+  let arguments = (ins TensorType:$prediction, TensorType:$target,
+                        DefaultValuedAttr<StrAttr, "\"mean\"">:$reduction);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+// Compiler-owned backward carrier for MSE. Keeping the runtime extent and
+// reduction policy explicit avoids materializing dynamic dense splat constants
+// in the adjoint builder; the shared Linalg lowering computes the element count.
+def Tessera_MSELossBackwardOp : Op<
+  Tessera_Dialect, "loss.mse_backward", [Pure]
+> {
+  let summary = "MSE gradients for prediction and target";
+  let arguments = (ins TensorType:$prediction, TensorType:$target,
+                        TensorType:$cotangent,
+                        DefaultValuedAttr<StrAttr, "\"mean\"">:$reduction);
+  let results = (outs TensorType:$prediction_grad, TensorType:$target_grad);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_BinaryCrossEntropyLossOp : Op<
+  Tessera_Dialect, "loss.binary_cross_entropy",
+  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
+> {
+  let summary = "Numerically stable binary cross entropy with logits";
+  let arguments = (ins TensorType:$logits, TensorType:$target,
+                        DefaultValuedAttr<StrAttr, "\"mean\"">:$reduction);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+// The target input is mathematically differentiable, even though most training
+// graphs treat labels as stop-gradient. Keeping both results explicit makes
+// that policy a caller choice and gives the paired pass a total tensor VJP.
+def Tessera_BinaryCrossEntropyLossBackwardOp : Op<
+  Tessera_Dialect, "loss.binary_cross_entropy_backward", [Pure]
+> {
+  let summary = "Stable BCE-with-logits gradients for logits and target";
+  let arguments = (ins TensorType:$logits, TensorType:$target,
+                        TensorType:$cotangent,
+                        DefaultValuedAttr<StrAttr, "\"mean\"">:$reduction);
+  let results = (outs TensorType:$logits_grad, TensorType:$target_grad);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_CrossEntropyLossOp : Op<
+  Tessera_Dialect, "loss.cross_entropy",
+  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
+> {
+  let summary = "Class-index cross entropy with explicit class axis";
+  let arguments = (ins TensorType:$logits, TensorType:$target,
+                        DefaultValuedAttr<I64Attr, "-1">:$axis,
+                        DefaultValuedAttr<I64Attr, "-100">:$ignore_index,
+                        DefaultValuedAttr<F64Attr, "0.0">:$label_smoothing,
+                        DefaultValuedAttr<StrAttr, "\"mean\"">:$reduction);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+// Integer class indices are explicitly nondifferentiable. The paired carrier
+// therefore returns only dLogits; AutodiffPass leaves the target cotangent
+// absent instead of manufacturing a floating gradient for signless index IR.
+def Tessera_CrossEntropyLossBackwardOp : Op<
+  Tessera_Dialect, "loss.cross_entropy_backward", [Pure]
+> {
+  let summary = "Class-index cross entropy gradient for logits";
+  let arguments = (ins TensorType:$logits, TensorType:$target,
+                        TensorType:$cotangent,
+                        DefaultValuedAttr<I64Attr, "-1">:$axis,
+                        DefaultValuedAttr<I64Attr, "-100">:$ignore_index,
+                        DefaultValuedAttr<F64Attr, "0.0">:$label_smoothing,
+                        DefaultValuedAttr<StrAttr, "\"mean\"">:$reduction);
+  let results = (outs TensorType:$logits_grad);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+class Tessera_DistributionLossOp<string mnemonic, string summaryText> : Op<
+  Tessera_Dialect, mnemonic,
+  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
+> {
+  let summary = summaryText;
+  let arguments = (ins TensorType:$lhs, TensorType:$rhs,
+                        DefaultValuedAttr<I64Attr, "-1">:$axis,
+                        DefaultValuedAttr<F64Attr, "1.0e-12">:$epsilon,
+                        DefaultValuedAttr<StrAttr, "\"mean\"">:$reduction);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_KLDivergenceLossOp : Tessera_DistributionLossOp<
+  "loss.kl_divergence",
+  "KL divergence from log-probabilities to probabilities">;
+def Tessera_JSDivergenceLossOp : Tessera_DistributionLossOp<
+  "loss.js_divergence",
+  "Jensen-Shannon divergence between probability tensors">;
+
+// Clamp derivatives use the explicit strict policy x > epsilon. Values at or
+// below the carrier floor have zero log-clamp derivative, including the tie.
+def Tessera_DistributionLossBackwardOp : Op<
+  Tessera_Dialect, "loss.distribution_backward", [Pure]
+> {
+  let summary = "KL/JS gradients with explicit stable-log clamp semantics";
+  let arguments = (ins TensorType:$lhs, TensorType:$rhs,
+                        TensorType:$cotangent, StrAttr:$kind,
+                        DefaultValuedAttr<I64Attr, "-1">:$axis,
+                        DefaultValuedAttr<F64Attr, "1.0e-12">:$epsilon,
+                        DefaultValuedAttr<StrAttr, "\"mean\"">:$reduction);
+  let results = (outs TensorType:$lhs_grad, TensorType:$rhs_grad);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_MAELossOp : Op<
+  Tessera_Dialect, "loss.mae",
+  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
+> {
+  let summary = "Mean-absolute-error loss with zero-valued tie subgradient";
+  let arguments = (ins TensorType:$prediction, TensorType:$target,
+                        DefaultValuedAttr<StrAttr, "\"mean\"">:$reduction);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_HuberLossOp : Op<
+  Tessera_Dialect, "loss.huber",
+  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
+> {
+  let summary = "Huber loss with explicit positive delta";
+  let arguments = (ins TensorType:$prediction, TensorType:$target,
+                        DefaultValuedAttr<F64Attr, "1.0">:$delta,
+                        DefaultValuedAttr<StrAttr, "\"mean\"">:$reduction);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_SmoothL1LossOp : Op<
+  Tessera_Dialect, "loss.smooth_l1",
+  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
+> {
+  let summary = "Smooth-L1 loss with explicit positive beta";
+  let arguments = (ins TensorType:$prediction, TensorType:$target,
+                        DefaultValuedAttr<F64Attr, "1.0">:$beta,
+                        DefaultValuedAttr<StrAttr, "\"mean\"">:$reduction);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+// Shared compiler-owned carrier for MAE, Huber, and Smooth-L1 adjoints. The
+// kind and positive transition parameter remain explicit so every target
+// inherits identical boundary and tie semantics.
+def Tessera_RegressionLossBackwardOp : Op<
+  Tessera_Dialect, "loss.regression_backward", [Pure]
+> {
+  let summary = "Piecewise regression-loss gradients for prediction and target";
+  let arguments = (ins TensorType:$prediction, TensorType:$target,
+                        TensorType:$cotangent, StrAttr:$kind,
+                        DefaultValuedAttr<F64Attr, "1.0">:$parameter,
+                        DefaultValuedAttr<StrAttr, "\"mean\"">:$reduction);
+  let results = (outs TensorType:$prediction_grad, TensorType:$target_grad);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
 def Tessera_RLNormalizeGroupAdvantagesOp : Op<
   Tessera_Dialect, "rl.normalize_group_advantages",
   [Pure]
@@ -2017,7 +2195,10 @@ def Tessera_SpectralConvOp : Op<Tessera_Dialect, "spectral_conv", [Pure]> {
   let hasVerifier = 1;
 }
 
-def Tessera_AdamOp : Op<Tessera_Dialect, "adam", [Pure]> {
+def Tessera_AdamOp : Op<
+  Tessera_Dialect, "adam",
+  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
+> {
   let summary = "Functional Adam optimizer step";
   let arguments = (ins TensorType:$param, TensorType:$grad,
                        TensorType:$moment1, TensorType:$moment2,
@@ -2031,6 +2212,120 @@ def Tessera_AdamOp : Op<Tessera_Dialect, "adam", [Pure]> {
                        OptionalAttr<StrAttr>:$master_dtype,
                        OptionalAttr<BoolAttr>:$cast_updates_to_param_dtype);
   let results = (outs TensorType:$new_param, TensorType:$new_moment1, TensorType:$new_moment2);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_AdamWOp : Op<
+  Tessera_Dialect, "adamw",
+  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
+> {
+  let summary = "Functional AdamW optimizer step with explicit moment state";
+  let arguments = (ins TensorType:$param, TensorType:$grad,
+                       TensorType:$moment1, TensorType:$moment2,
+                       OptionalAttr<F64Attr>:$lr,
+                       OptionalAttr<F64Attr>:$beta1,
+                       OptionalAttr<F64Attr>:$beta2,
+                       OptionalAttr<F64Attr>:$eps,
+                       OptionalAttr<F64Attr>:$weight_decay,
+                       OptionalAttr<I64Attr>:$step,
+                       OptionalAttr<StrAttr>:$compute_dtype,
+                       OptionalAttr<StrAttr>:$state_dtype,
+                       OptionalAttr<StrAttr>:$master_dtype,
+                       OptionalAttr<BoolAttr>:$cast_updates_to_param_dtype);
+  let results = (outs TensorType:$new_param, TensorType:$new_moment1,
+                      TensorType:$new_moment2);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+// The step and hyperparameters are attributes and therefore intentionally
+// nondifferentiable. At v'=0 the sqrt-chain derivative is defined as zero;
+// this explicit boundary avoids manufacturing infinities for an all-zero
+// initial gradient while preserving the exact derivative for v'>0.
+def Tessera_AdamBackwardOp : Op<
+  Tessera_Dialect, "adam_backward", [Pure]
+> {
+  let summary = "Adam/AdamW gradients for parameter, gradient, and moments";
+  let arguments = (ins TensorType:$param, TensorType:$grad,
+                       TensorType:$moment1, TensorType:$moment2,
+                       TensorType:$param_cotangent,
+                       TensorType:$moment1_cotangent,
+                       TensorType:$moment2_cotangent,
+                       DefaultValuedAttr<F64Attr, "1.0e-3">:$lr,
+                       DefaultValuedAttr<F64Attr, "0.9">:$beta1,
+                       DefaultValuedAttr<F64Attr, "0.999">:$beta2,
+                       DefaultValuedAttr<F64Attr, "1.0e-8">:$eps,
+                       DefaultValuedAttr<F64Attr, "0.0">:$weight_decay,
+                       DefaultValuedAttr<I64Attr, "1">:$step,
+                       DefaultValuedAttr<BoolAttr, "false">:$adamw);
+  let results = (outs TensorType:$param_grad, TensorType:$grad_grad,
+                      TensorType:$moment1_grad, TensorType:$moment2_grad);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+// Fused training leaf for a loss VJP immediately consumed by SGD.
+// The prediction gradient is internalized into the parameter update while the
+// target gradient remains observable. `parameter` is delta/beta for piecewise
+// regression losses and ignored for mse/mae/bce.
+def Tessera_TrainingLossSGDOp : Op<
+  Tessera_Dialect, "training.loss_sgd", [Pure]
+> {
+  let summary = "Fused loss backward and SGD parameter update";
+  let arguments = (ins TensorType:$prediction, TensorType:$target,
+                       TensorType:$cotangent, TensorType:$param,
+                       StrAttr:$kind,
+                       DefaultValuedAttr<F64Attr, "1.0">:$parameter,
+                       DefaultValuedAttr<StrAttr, "\"mean\"">:$reduction,
+                       F64Attr:$lr);
+  let results = (outs TensorType:$new_param, TensorType:$target_grad);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+// Fused loss-VJP → AdamW training leaf. Optimizer hyperparameters and step are
+// attributes (nondifferentiable policy); parameter/moment state remains
+// explicit SSA data. The loss prediction gradient is internalized.
+def Tessera_TrainingLossAdamWOp : Op<
+  Tessera_Dialect, "training.loss_adamw", [Pure]
+> {
+  let summary = "Fused loss backward and AdamW state update";
+  let arguments = (ins TensorType:$prediction, TensorType:$target,
+                       TensorType:$cotangent, TensorType:$param,
+                       TensorType:$moment1, TensorType:$moment2,
+                       StrAttr:$kind,
+                       DefaultValuedAttr<F64Attr, "1.0">:$parameter,
+                       DefaultValuedAttr<StrAttr, "\"mean\"">:$reduction,
+                       DefaultValuedAttr<F64Attr, "1.0e-3">:$lr,
+                       DefaultValuedAttr<F64Attr, "0.9">:$beta1,
+                       DefaultValuedAttr<F64Attr, "0.999">:$beta2,
+                       DefaultValuedAttr<F64Attr, "1.0e-8">:$eps,
+                       DefaultValuedAttr<F64Attr, "0.01">:$weight_decay,
+                       DefaultValuedAttr<I64Attr, "1">:$step);
+  let results = (outs TensorType:$new_param, TensorType:$new_moment1,
+                      TensorType:$new_moment2, TensorType:$target_grad);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_SGDOp : Op<
+  Tessera_Dialect, "sgd",
+  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
+> {
+  let summary = "Functional SGD parameter update";
+  let arguments = (ins TensorType:$param, TensorType:$grad, F64Attr:$lr);
+  let results = (outs TensorType:$new_param);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_SGDBackwardOp : Op<
+  Tessera_Dialect, "sgd_backward", [Pure]
+> {
+  let summary = "Functional SGD gradients for parameter and input gradient";
+  let arguments = (ins TensorType:$cotangent, F64Attr:$lr);
+  let results = (outs TensorType:$param_grad, TensorType:$grad_grad);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
 }
@@ -2055,10 +2350,40 @@ class Tessera_OptimizerTreeOp<string mnemonic, string summaryText>
   let hasVerifier = 1;
 }
 
-def Tessera_AdamWOp : Tessera_OptimizerTreeOp<"adamw", "Functional AdamW optimizer tree step">;
-def Tessera_MomentumOp : Tessera_OptimizerTreeOp<"momentum", "Functional SGD-with-momentum optimizer tree step">;
 def Tessera_AdafactorOp : Tessera_OptimizerTreeOp<"adafactor", "Functional Adafactor optimizer tree step">;
 def Tessera_LionOp : Tessera_OptimizerTreeOp<"lion", "Functional Lion optimizer tree step">;
+
+class Tessera_MomentumStepOp<string mnemonic, string summaryText> : Op<
+  Tessera_Dialect, mnemonic,
+  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
+> {
+  let summary = summaryText;
+  let arguments = (ins TensorType:$param, TensorType:$grad,
+                       TensorType:$velocity, F64Attr:$lr,
+                       DefaultValuedAttr<F64Attr, "0.9">:$momentum);
+  let results = (outs TensorType:$new_param, TensorType:$new_velocity);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_MomentumOp : Tessera_MomentumStepOp<
+  "momentum", "Functional classical-momentum tensor step">;
+def Tessera_NesterovOp : Tessera_MomentumStepOp<
+  "nesterov", "Functional Nesterov look-ahead momentum tensor step">;
+
+def Tessera_MomentumBackwardOp : Op<
+  Tessera_Dialect, "momentum_backward", [Pure]
+> {
+  let summary = "Momentum/Nesterov gradients for parameter, gradient, velocity";
+  let arguments = (ins TensorType:$param_cotangent,
+                       TensorType:$velocity_cotangent, F64Attr:$lr,
+                       DefaultValuedAttr<F64Attr, "0.9">:$momentum,
+                       DefaultValuedAttr<BoolAttr, "false">:$nesterov);
+  let results = (outs TensorType:$param_grad, TensorType:$grad_grad,
+                      TensorType:$velocity_grad);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
 
 def Tessera_RMSNormSafeOp : Op<
   Tessera_Dialect, "rmsnorm_safe",

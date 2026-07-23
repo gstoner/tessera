@@ -64,16 +64,51 @@ def log_cosh_loss(pred, target, reduction: str = "mean"):
     return _reduce(loss, reduction)
 
 
-def cross_entropy_loss(logits, targets, reduction: str = "mean"):
+def cross_entropy_loss(
+    logits,
+    targets,
+    reduction: str = "mean",
+    *,
+    axis: int = -1,
+    ignore_index: int = -100,
+    label_smoothing: float = 0.0,
+):
     logits = _asarray(logits).astype(np.float64, copy=False)
     targets = _asarray(targets)
-    log_probs = _log_softmax(logits, axis=-1)
+    axis = int(axis)
+    if axis < 0:
+        axis += logits.ndim
+    if axis < 0 or axis >= logits.ndim:
+        raise ValueError("axis out of range")
+    log_probs = _log_softmax(logits, axis=axis)
     if targets.dtype.kind in "iu":
-        flat = log_probs.reshape(-1, log_probs.shape[-1])
+        moved = np.moveaxis(log_probs, axis, -1)
+        if targets.shape != moved.shape[:-1]:
+            raise ValueError(
+                "integer targets must match logits with class axis removed")
+        flat = moved.reshape(-1, moved.shape[-1])
         idx = targets.reshape(-1).astype(np.int64)
-        loss = -flat[np.arange(idx.size), idx].reshape(targets.shape)
+        valid = idx != int(ignore_index)
+        if np.any(valid & ((idx < 0) | (idx >= flat.shape[-1]))):
+            raise ValueError("target class index out of range")
+        safe_idx = np.where(valid, idx, 0)
+        nll = -flat[np.arange(idx.size), safe_idx]
+        smooth = float(label_smoothing)
+        if not 0.0 <= smooth < 1.0:
+            raise ValueError("label_smoothing must be in [0, 1)")
+        if smooth:
+            if flat.shape[-1] <= 1:
+                raise ValueError("label smoothing requires at least 2 classes")
+            off_sum = -np.sum(flat, axis=-1) - nll
+            nll = (1.0 - smooth) * nll + (
+                smooth / (flat.shape[-1] - 1)) * off_sum
+        loss = np.where(valid, nll, 0.0).reshape(targets.shape)
+        if reduction == "mean":
+            return np.sum(loss) / max(int(np.count_nonzero(valid)), 1)
     else:
-        loss = -np.sum(targets * log_probs, axis=-1)
+        if targets.shape != logits.shape:
+            raise ValueError("probability targets must match logits")
+        loss = -np.sum(targets * log_probs, axis=axis)
     return _reduce(loss, reduction)
 
 
@@ -179,30 +214,54 @@ def focal_loss(logits, targets, gamma: float = 2.0, alpha: float | None = None, 
     return _reduce(loss, reduction)
 
 
-def label_smoothed_cross_entropy(logits, targets, smoothing: float = 0.1, reduction: str = "mean"):
-    logits = _asarray(logits).astype(np.float64, copy=False)
-    targets = _asarray(targets).astype(np.int64)
-    n_classes = logits.shape[-1]
-    smooth = float(smoothing)
-    one_hot = np.full(targets.shape + (n_classes,), smooth / max(1, n_classes - 1), dtype=np.float64)
-    np.put_along_axis(one_hot, targets[..., None], 1.0 - smooth, axis=-1)
-    return cross_entropy_loss(logits, one_hot, reduction=reduction)
+def label_smoothed_cross_entropy(
+    logits,
+    targets,
+    smoothing: float = 0.1,
+    reduction: str = "mean",
+    *,
+    axis: int = -1,
+    ignore_index: int = -100,
+):
+    return cross_entropy_loss(
+        logits, targets, reduction=reduction, axis=axis,
+        ignore_index=ignore_index, label_smoothing=smoothing)
 
 
-def kl_divergence(p_log_probs, q_probs, reduction: str = "mean"):
+def kl_divergence(
+    p_log_probs, q_probs, reduction: str = "mean", *,
+    axis: int = -1, epsilon: float = 1e-12,
+):
     p_log = _asarray(p_log_probs).astype(np.float64, copy=False)
     q = _asarray(q_probs).astype(np.float64, copy=False)
+    if p_log.shape != q.shape:
+        raise ValueError("KL operands must have identical shapes")
+    if not np.isfinite(epsilon) or epsilon <= 0.0:
+        raise ValueError("epsilon must be finite and greater than zero")
     p = np.exp(p_log)
-    loss = p * (p_log - np.log(np.maximum(q, 1e-12)))
-    return _reduce(np.sum(loss, axis=-1), reduction)
+    loss = p * (p_log - np.log(np.maximum(q, float(epsilon))))
+    return _reduce(np.sum(loss, axis=int(axis)), reduction)
 
 
-def js_divergence(p_probs, q_probs, reduction: str = "mean"):
+def js_divergence(
+    p_probs, q_probs, reduction: str = "mean", *,
+    axis: int = -1, epsilon: float = 1e-12,
+):
     p = _asarray(p_probs).astype(np.float64, copy=False)
     q = _asarray(q_probs).astype(np.float64, copy=False)
+    if p.shape != q.shape:
+        raise ValueError("JS operands must have identical shapes")
+    if not np.isfinite(epsilon) or epsilon <= 0.0:
+        raise ValueError("epsilon must be finite and greater than zero")
     m = 0.5 * (p + q)
-    kl_pm = np.sum(p * (np.log(np.maximum(p, 1e-12)) - np.log(np.maximum(m, 1e-12))), axis=-1)
-    kl_qm = np.sum(q * (np.log(np.maximum(q, 1e-12)) - np.log(np.maximum(m, 1e-12))), axis=-1)
+    axis = int(axis)
+    floor = float(epsilon)
+    kl_pm = np.sum(
+        p * (np.log(np.maximum(p, floor)) - np.log(np.maximum(m, floor))),
+        axis=axis)
+    kl_qm = np.sum(
+        q * (np.log(np.maximum(q, floor)) - np.log(np.maximum(m, floor))),
+        axis=axis)
     return _reduce(0.5 * (kl_pm + kl_qm), reduction)
 
 

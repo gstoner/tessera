@@ -58,6 +58,10 @@ std::unique_ptr<mlir::Pass> createTileToX86Pass();
 // target inherits. See docs/spec/PRODUCTION_COMPILER_PLAN.md.
 std::unique_ptr<mlir::Pass> createTesseraToLinalgPass();
 
+// Fuse an eligible loss backward carrier whose prediction gradient has one SGD
+// consumer into tessera.training.loss_sgd.
+std::unique_ptr<mlir::Pass> createTrainingStepFusionPass();
+
 // ── Phase 3 passes — GPU backend + FA-4 Tile IR ───────────────────────────
 //
 // Full GPU lowering pipeline (SM_90 FlashAttention)
@@ -272,9 +276,13 @@ std::unique_ptr<mlir::Pass> createLayoutLegalityPass();
 // conv2d_nhwc→nhwc), propagate through pointwise ops, and insert
 // `tessera.cast{tessera.layout=...}` markers at consumer accept-set boundaries.
 // Paired with LayoutLegalityPass as its verifier. Registered standalone as
-// `--tessera-layout-assignment`. v1 assignments are IR metadata; no backend
-// consumes them yet (an IR-completeness milestone).
+// `--tessera-layout-assignment`. Architecture-owned materializers consume the
+// inserted markers; x86 enables its supported C-order envelope by default.
 std::unique_ptr<mlir::Pass> createLayoutAssignmentPass();
+
+// Consume row-major Graph layout casts as x86 executable binding contracts
+// before tiling removes Graph-level operand identity.
+std::unique_ptr<mlir::Pass> createX86GraphLayoutMaterializationPass();
 
 // Consume legal Graph layout casts at the NVIDIA boundary. The requested
 // physical layout is attached to the corresponding Tile staging copy before

@@ -2674,6 +2674,49 @@ LogicalResult BroadcastInDimOp::verify() {
   return success();
 }
 
+LogicalResult ReduceBackwardOp::verify() {
+  auto inputTy = dyn_cast<RankedTensorType>(getInput().getType());
+  auto reducedTy = dyn_cast<RankedTensorType>(getReduced().getType());
+  auto cotangentTy = dyn_cast<RankedTensorType>(getCotangent().getType());
+  auto gradTy = dyn_cast<RankedTensorType>(getGrad().getType());
+  if (!inputTy || !reducedTy || !cotangentTy || !gradTy)
+    return success();
+  if (!isa<FloatType>(inputTy.getElementType()))
+    return emitOpError("input must be a floating tensor");
+  if (gradTy != inputTy)
+    return emitOpError("grad type must exactly match input type");
+  if (reducedTy != cotangentTy)
+    return emitOpError("reduced and cotangent types must match");
+  if (reducedTy.getElementType() != inputTy.getElementType())
+    return emitOpError("all operands must preserve the input element type");
+  if (reducedTy.getRank() != inputTy.getRank() - 1)
+    return emitOpError("reduced rank must be input rank minus one");
+
+  int64_t axis = getAxis();
+  if (axis < 0)
+    axis += inputTy.getRank();
+  if (axis < 0 || axis >= inputTy.getRank())
+    return emitOpError("axis is out of range for input rank");
+  for (int64_t i = 0, j = 0; i < inputTy.getRank(); ++i) {
+    if (i == axis)
+      continue;
+    int64_t inputDim = inputTy.getDimSize(i);
+    int64_t reducedDim = reducedTy.getDimSize(j++);
+    if (!ShapedType::isDynamic(inputDim) &&
+        !ShapedType::isDynamic(reducedDim) && inputDim != reducedDim)
+      return emitOpError(
+          "reduced shape must equal input shape with axis removed");
+  }
+
+  StringRef kind = getKind();
+  if (kind != "sum" && kind != "mean" && kind != "max" && kind != "min")
+    return emitOpError("kind must be one of sum/mean/max/min");
+  if ((kind == "max" || kind == "min") && getTiePolicy() != "equal")
+    return emitOpError(
+        "max/min tie_policy must be \"equal\" (equal-share gradient)");
+  return success();
+}
+
 LogicalResult MaskedFillOp::verify() {
   auto xTy = dyn_cast<RankedTensorType>(getX().getType());
   auto maskTy = dyn_cast<RankedTensorType>(getMask().getType());

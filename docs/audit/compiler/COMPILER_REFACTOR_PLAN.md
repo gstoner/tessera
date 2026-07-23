@@ -685,10 +685,17 @@ priority (highest DL leverage first):
   runtime fusion/per-op lowering; NVIDIA consumes row/column-major/BHSD/NHWC
   casts after legality and carries the binding into `tile.async_copy` staging.
   Unsupported Apple column-major input fails instead of being reinterpreted.
-  Also open: the full matmul → epilogue → reduction envelope, a HIP/PTX emitter
-  that allocates from arena offsets, broader packed-storage/transpose rewrite
-  coverage, and default enablement only after every enabled family has a real
-  consumer.
+  **Executable envelope follow-on (2026-07-23):** rank-2 transpose now flips
+  row/column-major contracts, agreed-layout pointwise epilogues preserve
+  physical packed-storage attributes, GEMM accept sets cover matmul and
+  batched-GEMM, and last-axis reduction legality requires row-major input.
+  Tile arena planning is no longer metadata-only: one aligned address-space-3
+  byte allocation backs typed `memref.view` slices at the planned offsets, and
+  the ROCm and NVIDIA backend pipelines run reuse+arena materialization before
+  architecture lowering. This is the shared MLIR form that lowers to AMDGPU LDS
+  and NVPTX shared memory; exact-device occupancy/performance proof remains
+  architecture-owned. Graph layout assignment remains opt-in until the whole
+  enabled producer/consumer set has a materializer.
 
 - **CORE-COMPILER-2 · Target dtype defaults (2026-07-22).** Compute
   legalization is now the named-pipeline default for x86 and NVIDIA. Terminal
@@ -701,10 +708,19 @@ priority (highest DL leverage first):
   scheduled pass. **Phase-5 tensor algebra follow-on (2026-07-22):** same-shape
   add/multiply, static broadcast, kind-aware sum/mean reduction, GELU/SiLU, and
   softmax now emit native Graph adjoints, with emitted paired IR directly
-  oracle-matched on CPU. Dynamic broadcast and dynamic mean remain explicit
-  placeholders; max/min tie semantics remain separate. ReLU is held until a
-  registered comparison primitive exists, and RMSNorm/LayerNorm remain held on
-  a stable statistics/reciprocal-square-root carrier.
+  oracle-matched on CPU. ReLU and unary/affine RMSNorm/LayerNorm are now
+  Graph-native and CPU-oracle proven (PR #448); comparison masks,
+  rank-reduced statistics, and explicit broadcast-in-dimension carriers are
+  registered. **Follow-on (2026-07-23):** broadcasts with dynamic shape-equal
+  dimensions plus statically-known singleton expansion invert natively;
+  runtime-extent mean and max/min use a shared `reduce_backward` carrier that
+  lowers to linalg. Max/min distribute the incoming gradient equally across
+  every finite tied extremum. A function-level rematerialization budget now
+  selects the largest long-lived pure activation intervals inside the
+  production post-autodiff pass and sinks their recomputation. Remaining
+  compiler-owned breadth starts with loss adjoints and optimizer-step fusion;
+  aligned `? -> static non-unit` broadcast remains an explicit fallback because
+  its equality-versus-singleton expansion is runtime-ambiguous.
   Multi-rank still needs non-mock collectives.
 - **J · Absolute roofline attainment (W7)** — make `% of peak` (not "beats
   per-op") the hot-path success bar; add attainment targets to the E2 ratchets.

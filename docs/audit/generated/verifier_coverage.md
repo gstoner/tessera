@@ -6,11 +6,11 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 
 | Status | Count | Meaning |
 |--------|-------|---------|
-| `real` | 183 | `hasVerifier = 1;` + substantive `verify()` body. |
+| `real` | 184 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` | 0 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent` | 0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
 | `no_verifier` | 0 | No verifier declared.  TD constraints suffice — fine for many ops. |
-| **Total** | 183 | |
+| **Total** | 184 | |
 
 ## Per-dialect details
 
@@ -155,6 +155,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `RLNormalizeGroupAdvantagesOp` | `real` |
 | `RLPPOPolicyLossOp` | `real` |
 | `RMSNormSafeOp` | `real` |
+| `ReduceBackwardOp` | `real` |
 | `ReduceOp` | `real` |
 | `ReduceScatterOp` | `real` |
 | `ReluOp` | `real` |

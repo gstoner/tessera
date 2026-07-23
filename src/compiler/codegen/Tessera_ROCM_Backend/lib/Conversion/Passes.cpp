@@ -31,6 +31,11 @@ void buildTesseraROCMBackendPipeline(OpPassManager &pm) {
   // Tile pass materializes individual typed fragments. The generator is a no-op
   // when neither a portable kernel nor a wmma_gemm directive is present.
   pm.addPass(createGenerateWMMAGemmKernelPass());
+  // Make Tile shared-memory planning executable before architecture lowering:
+  // disjoint buffers alias one address-space-3 LDS arena through byte-offset
+  // memref views, which the ordinary ROCDL conversion consumes directly.
+  pm.addPass(::tessera::createTileBufferReusePass());
+  pm.addPass(::tessera::createTileBufferArenaPass());
   pm.addPass(createROCMWaveLdsPipelinePass());
   pm.addPass(createROCMWaveLdsLegalityPass());
   pm.addPass(createLowerTileToROCMPass());

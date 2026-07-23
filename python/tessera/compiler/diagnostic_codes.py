@@ -641,13 +641,14 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         pass_origin="LayoutLegalityPass",
         severity="error",
         summary=(
-            "A `tessera.matmul` operand's producer carries a `tessera.layout` "
-            "attribute outside matmul's accept-set {row_major, col_major}, "
-            "and no intervening cast converts it."
+            "A GEMM, convolution, attention, or last-axis reduction operand's "
+            "producer carries a `tessera.layout` attribute outside that "
+            "consumer's architecture-neutral accept-set, and no intervening "
+            "cast converts it."
         ),
         fix_hint=(
             "Insert a `tessera.cast` that converts the producer's layout to "
-            "either row_major or col_major before the matmul."
+            "one of the consumer's accepted layouts before the operation."
         ),
         spec="docs/spec/SHAPE_SYSTEM.md §11.2",
         sprint="V4a",

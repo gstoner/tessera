@@ -1427,6 +1427,24 @@ def Tessera_ReduceOp : Op<
   let hasVerifier = 1;
 }
 
+// Compiler-internal reduction adjoint carrier.  It keeps runtime-extent mean
+// scaling and extrema tie handling explicit instead of hiding either policy in
+// a host callback.  `reduced` is the corresponding forward result and
+// `cotangent` has that same rank-reduced shape.  For max/min, `tie_policy =
+// "equal"` divides the cotangent equally among every finite input equal to the
+// selected extremum.
+def Tessera_ReduceBackwardOp : Op<
+  Tessera_Dialect, "reduce_backward", [Pure]
+> {
+  let summary = "Runtime-aware single-axis reduction adjoint";
+  let arguments = (ins TensorType:$input, TensorType:$reduced,
+                       TensorType:$cotangent, StrAttr:$kind, I64Attr:$axis,
+                       DefaultValuedAttr<StrAttr, "\"equal\"">:$tie_policy);
+  let results = (outs TensorType:$grad);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
 // RMSNorm (unweighted) over the innermost dimension; eps optional.
 def Tessera_RmsNormOp : Tessera_UnaryPureOp<"rmsnorm", "RMSNorm over the innermost dimension"> {
   let arguments = (ins TensorType:$x, Variadic<TensorType>:$affine,

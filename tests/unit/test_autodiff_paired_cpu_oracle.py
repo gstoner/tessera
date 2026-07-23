@@ -76,9 +76,13 @@ class _Interp:
             for value in env.values():
                 if value.ndim != len(tokens):
                     continue
-                if all(t == "?" or int(t) == value.shape[i]
-                       for i, t in enumerate(tokens)):
-                    return value.shape
+                # Dynamic result dimensions are shape-carried by a same-rank
+                # operand. Static result dimensions may intentionally differ
+                # from that operand for broadcast expansion.
+                return tuple(
+                    value.shape[i] if t == "?" else int(t)
+                    for i, t in enumerate(tokens)
+                )
             raise AssertionError(f"cannot resolve dynamic result shape {tokens}")
 
         for line in self.body:
@@ -191,19 +195,35 @@ class _Interp:
             elif op == "tessera.reduce":
                 axis = int(re.search(r"axis = (-?\d+)", rhs).group(1))
                 kind = re.search(r'kind = "([^"]+)"', rhs).group(1)
-                assert kind in {"sum", "mean"}, (
-                    f"interpreter only admits sum/mean, got {kind}"
-                )
-                reducer = np.sum if kind == "sum" else np.mean
+                reducers = {
+                    "sum": np.sum, "mean": np.mean,
+                    "max": np.max, "min": np.min,
+                }
+                assert kind in reducers, f"unknown reduction kind {kind}"
+                reducer = reducers[kind]
                 env[dst] = reducer(env[operands[0]], axis=axis).astype(np.float32)
+            elif op == "tessera.reduce_backward":
+                axis = int(re.search(r"axis = (-?\d+)", rhs).group(1))
+                kind = re.search(r'kind = "([^"]+)"', rhs).group(1)
+                x, reduced, incoming = (env[name] for name in operands)
+                expanded_reduced = np.expand_dims(reduced, axis=axis)
+                expanded_incoming = np.expand_dims(incoming, axis=axis)
+                if kind == "sum":
+                    grad = np.broadcast_to(expanded_incoming, x.shape)
+                elif kind == "mean":
+                    grad = np.broadcast_to(
+                        expanded_incoming / x.shape[axis], x.shape)
+                else:
+                    mask = x == expanded_reduced
+                    ties = np.sum(mask, axis=axis, keepdims=True)
+                    grad = np.where(mask, expanded_incoming / ties, 0.0)
+                env[dst] = grad.astype(np.float32)
             elif op == "tessera.unsqueeze":
                 axes_text = rhs.split("axes =", 1)[1].split("}", 1)[0]
                 axis = int(re.search(r"\[\s*(-?\d+)", axes_text).group(1))
                 env[dst] = np.expand_dims(env[operands[0]], axis=axis)
             elif op == "tessera.reshape":
-                dims = tuple(
-                    int(d) for d in _DIMS.findall(rhs)[-1].split("x")
-                )
+                dims = result_shape(rhs)
                 env[dst] = env[operands[0]].reshape(dims)
             elif op == "arith.addf":
                 env[dst] = (env[operands[0]] + env[operands[1]]).astype(np.float32)
@@ -312,28 +332,68 @@ module {
     np.testing.assert_allclose(dx, seed.sum(axis=(0, 1)).reshape(1, 3))
 
 
-@pytest.mark.parametrize("kind", ["sum", "mean"])
-def test_native_reduction_backward_matches_numpy_oracle(kind: str):
+def test_native_dynamic_broadcast_backward_matches_numpy_oracle():
+    mlir = """
+module {
+  func.func @broadcast(%x: tensor<?x1x3xf32>) -> tensor<?x4x3xf32>
+      attributes {tessera.autodiff = "reverse"} {
+    %y = "tessera.broadcast"(%x) :
+        (tensor<?x1x3xf32>) -> tensor<?x4x3xf32>
+    return %y : tensor<?x4x3xf32>
+  }
+}
+"""
+    rng = np.random.default_rng(29)
+    x = rng.standard_normal((5, 1, 3)).astype(np.float32)
+    seed = rng.standard_normal((5, 4, 3)).astype(np.float32)
+    funcs = _run_paired(mlir)
+    (primal,) = funcs["broadcast"].run([x])
+    (dx,) = funcs["broadcast__bwd"].run([x, seed])
+    np.testing.assert_allclose(primal, np.broadcast_to(x, seed.shape))
+    np.testing.assert_allclose(dx, seed.sum(axis=1, keepdims=True))
+
+
+@pytest.mark.parametrize("kind", ["sum", "mean", "max", "min"])
+@pytest.mark.parametrize("shape_type,shape", [
+    ("2x3", (2, 3)),
+    ("2x?", (2, 5)),
+])
+def test_native_reduction_backward_matches_numpy_oracle(
+        kind: str, shape_type: str, shape: tuple[int, int]):
     mlir = f"""
 module {{
-  func.func @reduce(%x: tensor<2x3xf32>) -> tensor<2xf32>
+  func.func @reduce(%x: tensor<{shape_type}xf32>) -> tensor<2xf32>
       attributes {{tessera.autodiff = "reverse"}} {{
     %y = "tessera.reduce"(%x) {{kind = "{kind}", axis = 1 : i64}} :
-        (tensor<2x3xf32>) -> tensor<2xf32>
+        (tensor<{shape_type}xf32>) -> tensor<2xf32>
     return %y : tensor<2xf32>
   }}
 }}
 """
     rng = np.random.default_rng(31)
-    x = rng.standard_normal((2, 3)).astype(np.float32)
+    x = rng.standard_normal(shape).astype(np.float32)
+    if kind in {"max", "min"}:
+        # Pin two extrema in each row so the equal-share tie contract is proven.
+        tied = 9.0 if kind == "max" else -9.0
+        x[:, 0] = tied
+        x[:, 1] = tied
     seed = rng.standard_normal((2,)).astype(np.float32)
     funcs = _run_paired(mlir)
     (primal,) = funcs["reduce"].run([x])
     (dx,) = funcs["reduce__bwd"].run([x, seed])
-    reducer = np.sum if kind == "sum" else np.mean
+    reducer = {
+        "sum": np.sum, "mean": np.mean, "max": np.max, "min": np.min,
+    }[kind]
     np.testing.assert_allclose(primal, reducer(x, axis=1))
-    scale = 1.0 if kind == "sum" else 1.0 / x.shape[1]
-    np.testing.assert_allclose(dx, np.broadcast_to(seed[:, None], x.shape) * scale)
+    if kind == "sum":
+        expected = np.broadcast_to(seed[:, None], x.shape)
+    elif kind == "mean":
+        expected = np.broadcast_to(seed[:, None] / x.shape[1], x.shape)
+    else:
+        mask = x == reducer(x, axis=1)[:, None]
+        expected = np.where(
+            mask, seed[:, None] / np.sum(mask, axis=1, keepdims=True), 0.0)
+    np.testing.assert_allclose(dx, expected, rtol=2e-7, atol=1e-7)
 
 
 @pytest.mark.parametrize("op", ["add", "mul"])

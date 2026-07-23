@@ -349,7 +349,8 @@ struct BroadcastInDimLowering : public RewritePattern {
       : RewritePattern("tessera.broadcast_in_dim", /*benefit=*/1, ctx) {}
   LogicalResult matchAndRewrite(Operation *op,
                                 PatternRewriter &rewriter) const override {
-    if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+    if ((op->getNumOperands() != 1 && op->getNumOperands() != 2) ||
+        op->getNumResults() != 1)
       return failure();
     auto inTy = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
     auto outTy = dyn_cast<RankedTensorType>(op->getResult(0).getType());
@@ -905,6 +906,128 @@ struct ReduceLowering : public RewritePattern {
   }
 };
 
+// Runtime-aware reduction adjoint.  The reduced forward value supplies the
+// selected extremum for max/min; a second sum reduction counts ties and the
+// final generic divides the incoming cotangent equally among them.  Mean reads
+// a dynamic axis extent directly from the original input.
+struct ReduceBackwardLowering : public RewritePattern {
+  ReduceBackwardLowering(MLIRContext *ctx)
+      : RewritePattern("tessera.reduce_backward", /*benefit=*/1, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 3 || op->getNumResults() != 1)
+      return failure();
+    auto inputTy = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto reducedTy = dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+    auto cotangentTy = dyn_cast<RankedTensorType>(op->getOperand(2).getType());
+    auto gradTy = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!inputTy || !reducedTy || reducedTy != cotangentTy ||
+        inputTy != gradTy || !isa<FloatType>(inputTy.getElementType()))
+      return rewriter.notifyMatchFailure(
+          op, "matching ranked floating reduction types required");
+    auto kindAttr = op->getAttrOfType<StringAttr>("kind");
+    auto axisAttr = op->getAttrOfType<IntegerAttr>("axis");
+    if (!kindAttr || !axisAttr)
+      return rewriter.notifyMatchFailure(op, "missing kind/axis attrs");
+    StringRef kind = kindAttr.getValue();
+    int64_t axis = axisAttr.getInt();
+    if (axis < 0)
+      axis += inputTy.getRank();
+    if (axis < 0 || axis >= inputTy.getRank())
+      return rewriter.notifyMatchFailure(op, "axis out of range");
+
+    Location loc = op->getLoc();
+    Type elem = inputTy.getElementType();
+    Value tieCount;
+    if (kind == "max" || kind == "min") {
+      Value mask = emitBroadcastBinary(
+          rewriter, loc, inputTy, op->getOperand(0), op->getOperand(1), axis,
+          [&](OpBuilder &b, Location l, Value input, Value selected) -> Value {
+            Value equal = arith::CmpFOp::create(
+                b, l, arith::CmpFPredicate::OEQ, input, selected);
+            Value one = arith::ConstantOp::create(
+                b, l, elem, b.getFloatAttr(elem, 1.0));
+            Value zero = arith::ConstantOp::create(
+                b, l, elem, b.getFloatAttr(elem, 0.0));
+            return arith::SelectOp::create(b, l, equal, one, zero).getResult();
+          });
+      tieCount =
+          emitReduceCore(rewriter, loc, inputTy, mask, axis, "sum");
+    } else if (kind != "sum" && kind != "mean") {
+      return rewriter.notifyMatchFailure(op, "unsupported reduction kind");
+    }
+
+    Value reciprocalExtent;
+    if (kind == "mean") {
+      if (inputTy.isDynamicDim(axis)) {
+        Value extent =
+            tensor::DimOp::create(rewriter, loc, op->getOperand(0), axis);
+        Value extentI64 = arith::IndexCastOp::create(
+            rewriter, loc, rewriter.getI64Type(), extent);
+        Value extentFloat =
+            arith::SIToFPOp::create(rewriter, loc, elem, extentI64);
+        Value one = arith::ConstantOp::create(
+            rewriter, loc, elem, rewriter.getFloatAttr(elem, 1.0));
+        reciprocalExtent =
+            arith::DivFOp::create(rewriter, loc, one, extentFloat);
+      } else {
+        reciprocalExtent = arith::ConstantOp::create(
+            rewriter, loc, elem,
+            rewriter.getFloatAttr(
+                elem, 1.0 / static_cast<double>(inputTy.getDimSize(axis))));
+      }
+    }
+
+    int64_t rank = inputTy.getRank();
+    Value init = createEmptyFromSource(rewriter, loc, inputTy,
+                                       op->getOperand(0),
+                                       identityDimensions(rank));
+    AffineMap fullMap = rewriter.getMultiDimIdentityMap(rank);
+    SmallVector<AffineExpr> reducedExprs;
+    for (int64_t dim = 0; dim < rank; ++dim)
+      if (dim != axis)
+        reducedExprs.push_back(
+            getAffineDimExpr(dim, rewriter.getContext()));
+    AffineMap reducedMap = AffineMap::get(
+        rank, /*symbolCount=*/0, reducedExprs, rewriter.getContext());
+    SmallVector<Value> inputs = {op->getOperand(0), op->getOperand(1),
+                                 op->getOperand(2)};
+    SmallVector<AffineMap> maps = {fullMap, reducedMap, reducedMap};
+    if (tieCount) {
+      inputs.push_back(tieCount);
+      maps.push_back(reducedMap);
+    }
+    maps.push_back(fullMap);
+    SmallVector<utils::IteratorType> iterators(
+        rank, utils::IteratorType::parallel);
+    auto generic = linalg::GenericOp::create(
+        rewriter, loc, TypeRange{inputTy}, inputs, ValueRange{init}, maps,
+        iterators, [&](OpBuilder &b, Location l, ValueRange args) {
+          Value incoming = args[2];
+          Value grad;
+          if (kind == "sum") {
+            grad = incoming;
+          } else if (kind == "mean") {
+            grad =
+                arith::MulFOp::create(b, l, incoming, reciprocalExtent);
+          } else {
+            Value equal = arith::CmpFOp::create(
+                b, l, arith::CmpFPredicate::OEQ, args[0], args[1]);
+            Value shared =
+                arith::DivFOp::create(b, l, incoming, args[3]);
+            Value zero = arith::ConstantOp::create(
+                b, l, elem, b.getFloatAttr(elem, 0.0));
+            grad =
+                arith::SelectOp::create(b, l, equal, shared, zero);
+          }
+          linalg::YieldOp::create(b, l, grad);
+        });
+    rewriter.replaceOp(op, generic.getResult(0));
+    return success();
+  }
+};
+
 // tessera.softmax (over `axis`, default innermost) → numerically-stable
 // decomposition:  m = max(x); e = exp(x - m); y = e / sum(e).  Composes the
 // reduction machinery (emitReduceCore) with broadcast-binary (emitBroadcastBinary)
@@ -1286,6 +1409,7 @@ public:
     patterns.add<BatchedGemmLowering>(ctx);
     patterns.add<TransposeLowering>(ctx);
     patterns.add<ReduceLowering>(ctx);
+    patterns.add<ReduceBackwardLowering>(ctx);
     patterns.add<SoftmaxLowering>(ctx);
     patterns.add<RmsNormLowering>(ctx);
     patterns.add<LayerNormLowering>(ctx);

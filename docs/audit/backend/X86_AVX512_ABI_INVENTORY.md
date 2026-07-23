@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-20
+last_updated: 2026-07-22
 audit_role: reference
 owner: X86-E2E-2
 sync_key: X86-E2E2-COHORT2-2026-07-20
@@ -12,20 +12,20 @@ This is the first X86-E2E-2 inventory snapshot. It was extracted with `nm -D
 `libtessera_x86_elementwise.so` on an AMD Ryzen AI MAX+ 395 host with AVX-512F,
 DQ, BW, VL, VNNI, BF16, VBMI/VBMI2, BITALG, VPOPCNTDQ, and VP2INTERSECT.
 
-The image exports 76 `tessera_x86_*` symbols: 31 AVX-512 direct entries, 19
+The image exports 82 `tessera_x86_*` symbols: 37 AVX-512 direct entries, 19
 portable reference entries, and 26 other direct/specialized entries. A symbol
 is evidence that a native ABI exists, not that canonical compiler E2E exists.
 Only rows with a typed Tile producer, typed lowering, image/descriptor package,
 exact-host proof, and measured selector decision reach Level C.
 
-## Direct AVX-512 entries (31)
+## Direct AVX-512 entries (37)
 
 | Cohort | Symbols | X86-E2E-2 disposition |
 |---|---|---|
 | Flat elementwise | `avx512_unary_f32`, `avx512_binary_f32`, `avx512_predicate_f32` | First cohort landing: 20 operation kinds, three stable ABIs, typed `tile.elementwise_kernel`, exact-host proof, measured size-aware selection. |
-| Typed logic | `avx512_compare_f32`, `avx512_logical_i8`, `avx512_bitwise_i32` | Three follow-on slices landing: 15 operation kinds, typed f32/bool/i32 contracts, exact-host proof, and measured family-specific selectors. |
+| Typed logic | `avx512_compare_f32`, `avx512_compare_i32`, `avx512_compare_u32`, `avx512_logical_i8`, `avx512_bitwise_i32` | Comparison now has distinct f32, signed-i32, and unsigned-u32 ABIs; exact-host edge-value proof prevents signless integer semantics from being guessed. Existing family selector policy is unchanged. |
 | Remaining flat elementwise | `avx512_where_f32`, `avx512_transcendental_f32`, `avx512_pow_f32`, `avx512_silu_mul_f32` | Three follow-on slices landed with typed ABIs, exact-host correctness, and measured selectors. Transcendental promotes at every valid static size, pow/SiLU-multiply at 8,224 elements, and where at 1,048,576 elements. |
-| Reduction/normalization/position | `avx512_reduce_f32`, `avx512_argreduce_f32`, `avx512_scan_f32`, `avx512_rmsnorm_f32`, `avx512_layernorm_f32`, `avx512_softmax_f32`, `avx512_rope_f32`, `avx512_alibi_f32` | Reduction and softmax are X86-E2E-1. Cohort 2 now has typed argreduce, scan, normalization, RoPE, and ALiBi carriers, descriptors, exact-host proof, and retained-route measurements. |
+| Reduction/normalization/position | `avx512_reduce_f32`, `avx512_argreduce_f32`, `avx512_scan_f32`, `avx512_rmsnorm_f32`, `avx512_rmsnorm_affine_f32`, `avx512_rmsnorm_bwd_f32`, `avx512_layernorm_f32`, `avx512_layernorm_affine_f32`, `avx512_layernorm_bwd_f32`, `avx512_softmax_f32`, `avx512_rope_f32`, `avx512_alibi_f32` | Runtime-shaped unary/affine normalization and recompute-all paired backward execute through stable f32 ABIs. LayerNorm uses stable two-pass variance, including large-offset forward/backward proof. Public `native_backward` and operation-total benchmarks cover aligned and ragged rows; selector policy is unchanged. |
 | Dense/sparse compute | `avx512_gemm_f32`, `avx512_spmm_csr_f32`, `avx512_sddmm_f32` | GEMM is X86-E2E-1; sparse rows are cohort 3. |
 | Loss/quantization/state | `avx512_pointwise_loss_f32`, `avx512_binary_loss_f32`, `avx512_policy_loss_f32`, `avx512_fpquant_f32`, `avx512_selective_ssm_f32`, `avx512_selective_ssm_f16`, `avx512_selective_ssm_bf16` | Cohort 4; half/BF16 storage remains a separate dtype/ABI proof. |
 | Datatype matmul | `avx512_gemm_bf16`, `avx512_vnni_gemm_u8s8_s32`, `avx512_gemm_f64` | BF16→FP32, U8×S8→S32, and FP64 typed descriptors execute on the Ryzen AI Max+ 395. Kernel/reference and descriptor timing is recorded; automatic selector promotion remains unchanged. |

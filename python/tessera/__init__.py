@@ -384,20 +384,26 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         lu_packed, piv = lu_factor(np.asarray(A))
         return lu_packed, piv
 
-    def layer_norm(x, eps: float = 1e-5):
+    def layer_norm(x, gamma=None, beta=None, eps: float = 1e-5):
         if hasattr(x, "_data"):
             x = x._data
         mean = x.mean(axis=-1, keepdims=True)
         var = x.var(axis=-1, keepdims=True)
-        return (x - mean) / np.sqrt(var + eps)
+        y = (x - mean) / np.sqrt(var + eps)
+        if gamma is not None:
+            y = y * np.asarray(gamma)
+        if beta is not None:
+            y = y + np.asarray(beta)
+        return y
 
     def _rmsnorm(x, eps: float):
         if hasattr(x, "_data"):
             x = x._data
         return x / np.sqrt(np.mean(x * x, axis=-1, keepdims=True) + eps)
 
-    def rmsnorm(x, eps: float = 1e-5):
-        return _rmsnorm(x, eps=eps)
+    def rmsnorm(x, gamma=None, eps: float = 1e-5):
+        y = _rmsnorm(x, eps=eps)
+        return y if gamma is None else y * np.asarray(gamma)
 
     def rmsnorm_safe(x, eps: float = 1e-6):
         return _rmsnorm(x, eps=eps)

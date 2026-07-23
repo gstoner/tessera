@@ -305,11 +305,15 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "rocm_norm_compiled":   "AMD GPU RDNA row-reduction rmsnorm / layer_norm the "
                             "Tessera compiler GENERATES (generate-rocm-norm-kernel "
                             "-> ROCDL -> hsaco, in-process via tessera-opt), then "
-                            "HIP loads + launches it. Unweighted row normalize "
+                            "HIP loads + launches it. Unary/affine row normalize "
                             "over the last axis (one workgroup per row, LDS "
                             "tree-reduce of Σx and Σx²); handles "
                             "tessera.rmsnorm(_safe) + tessera.layer_norm by op "
                             "name. f32/f16/bf16 storage, f32 reduce",
+    "rocm_norm_bwd_compiled": "AMD GPU compiler-generated paired RMSNorm / "
+                            "LayerNorm backward launch. Dynamic rows/width, "
+                            "f32/f16/bf16 X/dY/dX storage, stable f32 row "
+                            "statistics and f32 dGamma/dBeta accumulation",
     "rocm_reduce_compiled": "AMD GPU RDNA row reduction (sum/mean/max/min) the "
                             "Tessera compiler GENERATES (generate-rocm-reduce-"
                             "kernel -> ROCDL -> hsaco, in-process via "
@@ -716,12 +720,15 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "(tessera_x86_avx512_gemm_f32) with the "
                             "reshape/batch/einsum logic in Python; the CPU "
                             "analog of the ROCm WMMA matmul-family lane. f32",
-    "x86_norm_compiled": "x86 CPU row-reduction norm kernel — unweighted "
+    "x86_norm_compiled": "x86 CPU row-reduction norm kernel — unary/affine "
                             "rmsnorm / layer_norm over the last axis "
                             "(tessera_x86_avx512_{rmsnorm,layernorm}_f32 from "
                             "libtessera_x86_elementwise.so; AVX-512 horizontal "
                             "reduce); the CPU analog of the ROCm norm lane. f32, "
                             "matches numpy 2e-5",
+    "x86_norm_bwd_compiled": "x86 CPU AVX-512 paired RMSNorm / LayerNorm "
+                            "backward launch with dynamic rows/width and "
+                            "deterministic f32 dx/dGamma/dBeta reductions",
     "x86_softmax_compiled": "x86 CPU row-reduction softmax kernel — "
                             "numerically-stable softmax over the last axis "
                             "(tessera_x86_avx512_softmax_f32 from "
@@ -1734,12 +1741,40 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         target="x86", compiler_path="x86_norm_compiled",
         execution_kind="native_cpu", executable=True,
         executor_id="x86_norm_compiled", runtime_status="success",
-        reason="x86 norm artifact runs the unweighted rmsnorm / layer_norm "
+        reason="x86 norm artifact runs unary/affine rmsnorm / layer_norm "
                "row-reduction over the last axis from "
                "libtessera_x86_elementwise.so (tessera_x86_avx512_rmsnorm_f32 / "
                "_layernorm_f32; AVX-512 horizontal reduce, eps from kwargs). The "
                "CPU analog of the ROCm warp-shuffle norm lane. f32, numpy 2e-5.",
         execution_mode="cpu_avx512"),
+    ("x86", "x86_rmsnorm_bwd_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_rmsnorm_bwd_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_norm_bwd_compiled", runtime_status="success",
+        reason="Generated paired RMSNorm backward artifacts launch the "
+               "deterministic AVX-512 f32 ABI and return dx plus dgamma when "
+               "the forward graph is affine.",
+        execution_mode="cpu_avx512", direction="backward",
+        op_family="rmsnorm", backward_aliases=("rmsnorm_safe",),
+        device_proof="device_verified_abi", evidence_target="x86_avx512",
+        numerical_fixture="tests/unit/test_norm_backward_compiled.py",
+        proof_build="LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512",
+        residual_policy="recompute_all",
+        residual_tradeoff="Recompute inverse RMS from X; no saved-stat ABI."),
+    ("x86", "x86_layer_norm_bwd_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_layer_norm_bwd_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_norm_bwd_compiled", runtime_status="success",
+        reason="Generated paired LayerNorm backward artifacts launch the "
+               "deterministic AVX-512 f32 ABI and return dx/dgamma/dbeta "
+               "according to the forward operand list.",
+        execution_mode="cpu_avx512", direction="backward",
+        op_family="layer_norm", device_proof="device_verified_abi",
+        evidence_target="x86_avx512",
+        numerical_fixture="tests/unit/test_norm_backward_compiled.py",
+        proof_build="LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512",
+        residual_policy="recompute_all",
+        residual_tradeoff="Recompute stable mean/variance from X; no saved-stat ABI."),
     ("x86", "x86_softmax_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_softmax_compiled",
         execution_kind="native_cpu", executable=True,
@@ -2149,18 +2184,50 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "launches it. The first non-matmul/non-WMMA compiled ROCm kernel.",
         execution_mode="hip_runtime"),
     # Row-reduction rmsnorm / layer_norm — siblings of the softmax kernel.
-    # Unweighted row normalize over the last axis; f32/f16/bf16; vs numpy.
+    # Unary/affine row normalize over the last axis; f32/f16/bf16; vs numpy.
     ("rocm", "rocm_norm_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_norm_compiled",
         execution_kind="native_gpu", executable=True,
         executor_id="rocm_norm_compiled", runtime_status="success",
         reason="ROCm norm artifact runs the COMPILER-GENERATED RDNA row-reduction "
-               "kernel (unweighted rmsnorm / layer_norm over the last axis, one "
+               "kernel (unary/affine rmsnorm / layer_norm over the last axis, one "
                "workgroup per row, LDS tree-reduce of Σx and Σx²): tessera-opt "
                "generates + serializes the kernel to hsaco in-process, then HIP "
                "loads + launches it. Handles tessera.rmsnorm(_safe) + "
                "tessera.layer_norm by op name.",
         execution_mode="hip_runtime"),
+    ("rocm", "rocm_rmsnorm_bwd_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_rmsnorm_bwd_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_norm_bwd_compiled", runtime_status="success",
+        reason="Generated paired RMSNorm backward artifacts compile to one "
+               "runtime-shaped gfx HSACO per storage dtype. dX preserves "
+               "f32/f16/bf16 storage; a second kernel deterministically folds "
+               "private row/channel contributions into f32 dgamma without "
+               "global atomics.",
+        execution_mode="hip_runtime", direction="backward",
+        op_family="rmsnorm", backward_aliases=("rmsnorm_safe",),
+        device_proof="device_verified_abi", evidence_target="rocm_gfx1151",
+        numerical_fixture="tests/unit/test_norm_backward_compiled.py",
+        proof_build="LLVM/MLIR 23; ROCm 7.14; gfx1151",
+        residual_policy="recompute_all",
+        residual_tradeoff="Recompute inverse RMS from X; no saved-stat ABI."),
+    ("rocm", "rocm_layer_norm_bwd_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_layer_norm_bwd_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_norm_bwd_compiled", runtime_status="success",
+        reason="Generated paired LayerNorm backward artifacts compile to one "
+               "runtime-shaped gfx HSACO per storage dtype. dX preserves "
+               "f32/f16/bf16 storage; a second kernel deterministically folds "
+               "private row/channel contributions into f32 dgamma/dbeta without "
+               "global atomics.",
+        execution_mode="hip_runtime", direction="backward",
+        op_family="layer_norm", device_proof="device_verified_abi",
+        evidence_target="rocm_gfx1151",
+        numerical_fixture="tests/unit/test_norm_backward_compiled.py",
+        proof_build="LLVM/MLIR 23; ROCm 7.14; gfx1151",
+        residual_policy="recompute_all",
+        residual_tradeoff="Recompute stable mean/variance from X; no saved-stat ABI."),
     # Row reduction (sum/mean/max/min) over the last axis — the ROCm analog of
     # the x86 AVX-512 reduction lane. vs numpy.
     ("rocm", "rocm_reduce_compiled"): ExecutionRow(

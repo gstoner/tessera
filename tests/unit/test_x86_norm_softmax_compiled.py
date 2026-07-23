@@ -1,7 +1,7 @@
 """x86 row-reduction norm/softmax lanes — the CPU analog of the ROCm
 warp-shuffle norm/softmax kernels, loaded from libtessera_x86_elementwise.so.
 
-Unweighted (no γ/β) rmsnorm / layer_norm and numerically-stable softmax over the
+Unary and affine rmsnorm / layer_norm and numerically-stable softmax over the
 last axis, matching the ROCm lanes' op signatures. Reachable through
 `runtime.launch()` via `compiler_path="x86_norm_compiled"` (rmsnorm /
 rmsnorm_safe / layer_norm) and `"x86_softmax_compiled"` (softmax / softmax_safe).
@@ -24,12 +24,17 @@ def _x86_or_skip():
     return rt
 
 
-def _artifact(rt, op_name, path, kwargs=None):
+def _artifact(rt, op_name, path, kwargs=None, *, affine=False):
+    operands = ["x"]
+    if affine:
+        operands.append("gamma")
+        if op_name == "tessera.layer_norm":
+            operands.append("beta")
     return rt.RuntimeArtifact(metadata={
         "target": "x86", "compiler_path": path,
         "executable": True, "execution_kind": "native_cpu",
-        "arg_names": ["x"], "output_name": "o",
-        "ops": [{"op_name": op_name, "result": "o", "operands": ["x"],
+        "arg_names": operands, "output_name": "o",
+        "ops": [{"op_name": op_name, "result": "o", "operands": operands,
                  "kwargs": kwargs or {}}],
     })
 
@@ -76,6 +81,31 @@ def test_x86_layernorm_matches_numpy(shape):
     out = np.asarray(res["output"]).astype(np.float32)
     np.testing.assert_allclose(out, _layernorm(x).astype(np.float32),
                                atol=2e-5, rtol=2e-5)
+
+
+@pytest.mark.parametrize("op_name", ["tessera.rmsnorm", "tessera.layer_norm"])
+@pytest.mark.parametrize("shape", [(3, 17), (2, 5, 64), (7, 257)])
+def test_x86_dynamic_affine_norm_matches_numpy(op_name, shape):
+    rt = _x86_or_skip()
+    rng = np.random.default_rng(131 + len(shape) + shape[-1])
+    x = rng.standard_normal(shape).astype(np.float32)
+    gamma = rng.uniform(0.5, 1.5, shape[-1]).astype(np.float32)
+    beta = rng.standard_normal(shape[-1]).astype(np.float32)
+    args = (x, gamma, beta) if op_name == "tessera.layer_norm" else (x, gamma)
+    out = rt.launch(
+        _artifact(rt, op_name, "x86_norm_compiled", affine=True), args)["output"]
+    ref = (_layernorm(x) if op_name == "tessera.layer_norm" else _rmsnorm(x))
+    ref = ref * gamma + (beta if op_name == "tessera.layer_norm" else 0.0)
+    np.testing.assert_allclose(out, ref, atol=3e-5, rtol=3e-5)
+
+
+def test_x86_layernorm_large_offset_uses_stable_variance():
+    rt = _x86_or_skip()
+    rng = np.random.default_rng(137)
+    x = (1.0e4 + rng.standard_normal((4, 128))).astype(np.float32)
+    out = rt.launch(
+        _artifact(rt, "tessera.layer_norm", "x86_norm_compiled"), (x,))["output"]
+    np.testing.assert_allclose(out, _layernorm(x), atol=2e-3, rtol=0)
 
 
 @pytest.mark.parametrize("shape", [(4, 16), (8, 64), (3, 5, 33), (2, 257),

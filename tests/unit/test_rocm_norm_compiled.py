@@ -3,16 +3,15 @@ siblings of the softmax reduction kernel.
 
 The `tessera_rocm.norm` directive expands (via `generate-rocm-norm-kernel`) into
 a row-reduction kernel: one workgroup per row, a single X-pass reduces the row
-sum and sum-of-squares (LDS tree-reduce), then a write pass applies the
-unweighted normalize over the last axis:
+sum and centered sum-of-squares (LDS tree-reduce), then a write pass applies
+the normalize and optional channel affine transform over the last axis:
 
   * rmsnorm    — `O = X / sqrt(mean(X²) + eps)`
-  * layer_norm — `O = (X − μ) / sqrt(var + eps)`,  var = mean(X²) − μ²
+  * layer_norm — `O = (X − μ) / sqrt(mean((X − μ)²) + eps)`
 
 Reachable through `runtime.launch()` via `compiler_path="rocm_norm_compiled"` —
 op names `tessera.rmsnorm` / `tessera.rmsnorm_safe` / `tessera.layer_norm`,
-f32/f16/bf16. Validated vs the unweighted numpy reference
-(`_apple_gpu_rowop_numpy`).
+f32/f16/bf16. Validated against NumPy for unary and affine forms.
 
 Skip-clean: tessera-opt not built, or no usable AMD GPU.
 """
@@ -33,14 +32,19 @@ def _norm_or_skip():
     return rt
 
 
-def _artifact(rt, op_name, eps=None):
+def _artifact(rt, op_name, eps=None, *, affine=False):
     kwargs = {} if eps is None else {"eps": float(eps)}
+    operands = ["x"]
+    if affine:
+        operands.append("gamma")
+        if op_name == "tessera.layer_norm":
+            operands.append("beta")
     return rt.RuntimeArtifact(metadata={
         "target": "rocm", "compiler_path": "rocm_norm_compiled",
         "executable": True, "execution_kind": "native_gpu",
-        "arg_names": ["x"], "output_name": "o",
+        "arg_names": operands, "output_name": "o",
         "ops": [{"op_name": op_name, "result": "o",
-                 "operands": ["x"], "kwargs": kwargs}],
+                 "operands": operands, "kwargs": kwargs}],
     })
 
 
@@ -88,6 +92,40 @@ def test_explicit_eps_is_honored():
     out = rt.launch(_artifact(rt, "tessera.rmsnorm", eps=0.1), (x,))["output"]
     np.testing.assert_allclose(out, _ref(x, "tessera.rmsnorm", 0.1),
                                atol=2e-4, rtol=0)
+
+
+@pytest.mark.parametrize("op_name", ["tessera.rmsnorm", "tessera.layer_norm"])
+@pytest.mark.parametrize("dtype,tol", [
+    (np.float32, 3e-4), (np.float16, 5e-3), ("bf16", 3e-2),
+])
+@pytest.mark.parametrize("shape", [(3, 17), (2, 5, 64), (7, 300)])
+def test_dynamic_affine_norm_matches_numpy(op_name, dtype, tol, shape):
+    rt = _norm_or_skip()
+    if dtype == "bf16":
+        dtype = pytest.importorskip("ml_dtypes").bfloat16
+    rng = np.random.default_rng(101 + len(shape) + shape[-1])
+    x = rng.standard_normal(shape).astype(dtype)
+    gamma = rng.uniform(0.5, 1.5, shape[-1]).astype(dtype)
+    beta = rng.standard_normal(shape[-1]).astype(dtype)
+    args = (x, gamma, beta) if op_name == "tessera.layer_norm" else (x, gamma)
+    out = rt.launch(_artifact(rt, op_name, affine=True), args)["output"]
+    ref = _ref(x, op_name, 1e-5) * gamma
+    if op_name == "tessera.layer_norm":
+        ref = ref + beta
+    np.testing.assert_allclose(np.asarray(out, np.float32), ref,
+                               atol=tol, rtol=0)
+
+
+def test_norm_hsaco_cache_identity_is_shape_and_affine_independent():
+    rt = _norm_or_skip()
+    rt._rocm_norm_hsaco_cache.clear()
+    rng = np.random.default_rng(113)
+    for shape, affine in [((2, 17), False), ((7, 64), True), ((3, 5, 300), True)]:
+        x = rng.standard_normal(shape).astype(np.float32)
+        gamma = np.ones(shape[-1], np.float32)
+        args = (x, gamma) if affine else (x,)
+        rt.launch(_artifact(rt, "tessera.rmsnorm", affine=affine), args)
+    assert len(rt._rocm_norm_hsaco_cache) == 1
 
 
 @pytest.mark.parametrize("offset,scale", [(1e4, 1.0), (1e3, 0.1), (-5e3, 2.0)])

@@ -18,6 +18,7 @@ src/compiler/ir/TesseraOps.td,AttnLocalWindow2DOp,1,1,real
 src/compiler/ir/TesseraOps.td,AttnSlidingWindowOp,1,1,real
 src/compiler/ir/TesseraOps.td,AttnTopKBlocksOp,1,1,real
 src/compiler/ir/TesseraOps.td,BatchedGemmOp,1,1,real
+src/compiler/ir/TesseraOps.td,BroadcastInDimOp,1,1,real
 src/compiler/ir/TesseraOps.td,BroadcastOp,1,1,real
 src/compiler/ir/TesseraOps.td,CacheCommitOp,1,1,real
 src/compiler/ir/TesseraOps.td,CachePageLookupOp,1,1,real
@@ -32,6 +33,7 @@ src/compiler/ir/TesseraOps.td,CliffordNormOp,1,1,real
 src/compiler/ir/TesseraOps.td,CliffordOuterProductOp,1,1,real
 src/compiler/ir/TesseraOps.td,CliffordReverseOp,1,1,real
 src/compiler/ir/TesseraOps.td,CliffordRotorSandwichOp,1,1,real
+src/compiler/ir/TesseraOps.td,CompareScalarOp,1,1,real
 src/compiler/ir/TesseraOps.td,ControlForOp,1,1,real
 src/compiler/ir/TesseraOps.td,ControlIfOp,1,1,real
 src/compiler/ir/TesseraOps.td,ControlScanOp,1,1,real
@@ -57,6 +59,7 @@ src/compiler/ir/TesseraOps.td,EBMPartitionExactOp,1,1,real
 src/compiler/ir/TesseraOps.td,EBMRefinementOp,1,1,real
 src/compiler/ir/TesseraOps.td,EBMSelfVerifyOp,1,1,real
 src/compiler/ir/TesseraOps.td,EBMSphereLangevinStepOp,1,1,real
+src/compiler/ir/TesseraOps.td,EqOp,1,1,real
 src/compiler/ir/TesseraOps.td,ExpandOp,1,1,real
 src/compiler/ir/TesseraOps.td,FFTOp,1,1,real
 src/compiler/ir/TesseraOps.td,FlashAttnOp,1,1,real
@@ -65,8 +68,10 @@ src/compiler/ir/TesseraOps.td,FusedEpilogueOp,1,1,real
 src/compiler/ir/TesseraOps.td,GQAAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,GatedAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,GatedDeltaNetOp,1,1,real
+src/compiler/ir/TesseraOps.td,GeOp,1,1,real
 src/compiler/ir/TesseraOps.td,GeluOp,1,1,real
 src/compiler/ir/TesseraOps.td,GroupedGemmOp,1,1,real
+src/compiler/ir/TesseraOps.td,GtOp,1,1,real
 src/compiler/ir/TesseraOps.td,GuidedDenoiseRegionOp,1,1,real
 src/compiler/ir/TesseraOps.td,HybridAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,IFFTOp,1,1,real
@@ -80,12 +85,14 @@ src/compiler/ir/TesseraOps.td,LatentKVCompressOp,1,1,real
 src/compiler/ir/TesseraOps.td,LatentKVExpandKOp,1,1,real
 src/compiler/ir/TesseraOps.td,LatentKVExpandVOp,1,1,real
 src/compiler/ir/TesseraOps.td,LayerNormOp,1,1,real
+src/compiler/ir/TesseraOps.td,LeOp,1,1,real
 src/compiler/ir/TesseraOps.td,LightningAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,LinearAttnOp,1,1,real
 src/compiler/ir/TesseraOps.td,LinearAttnStateOp,1,1,real
 src/compiler/ir/TesseraOps.td,LionOp,1,1,real
 src/compiler/ir/TesseraOps.td,LogSoftmaxOp,1,1,real
 src/compiler/ir/TesseraOps.td,LookaheadSparseAttentionOp,1,1,real
+src/compiler/ir/TesseraOps.td,LtOp,1,1,real
 src/compiler/ir/TesseraOps.td,MLADecodeFusedOp,1,1,real
 src/compiler/ir/TesseraOps.td,MLADecodeOp,1,1,real
 src/compiler/ir/TesseraOps.td,MQAAttentionOp,1,1,real
@@ -106,6 +113,7 @@ src/compiler/ir/TesseraOps.td,MulOp,1,1,real
 src/compiler/ir/TesseraOps.td,MultiHeadAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,NTKRopeOp,1,1,real
 src/compiler/ir/TesseraOps.td,NativeSparseAttnFusedOp,1,1,real
+src/compiler/ir/TesseraOps.td,NeOp,1,1,real
 src/compiler/ir/TesseraOps.td,NeighborsHaloExchangeOp,1,1,real
 src/compiler/ir/TesseraOps.td,NeighborsHaloPackOp,1,1,real
 src/compiler/ir/TesseraOps.td,NeighborsHaloRegionOp,1,1,real
@@ -116,6 +124,7 @@ src/compiler/ir/TesseraOps.td,NeighborsPipelineConfigOp,1,1,real
 src/compiler/ir/TesseraOps.td,NeighborsStencilApplyOp,1,1,real
 src/compiler/ir/TesseraOps.td,NeighborsStencilDefineOp,1,1,real
 src/compiler/ir/TesseraOps.td,NeighborsTopologyCreateOp,1,1,real
+src/compiler/ir/TesseraOps.td,NormalizationStatsOp,1,1,real
 src/compiler/ir/TesseraOps.td,PermuteOp,1,1,real
 src/compiler/ir/TesseraOps.td,PowerAttnOp,1,1,real
 src/compiler/ir/TesseraOps.td,QROp,1,1,real

@@ -14,8 +14,9 @@
 //                            first op whose result rank != input rank)
 //            tessera.softmax (stable max→sub→exp→sum→div over one axis; first
 //                             use of broadcast affine maps + the math dialect)
-//            tessera.{rmsnorm,layer_norm} (mean-reduce + broadcast + math.sqrt;
-//                             unweighted, innermost axis, eps default 1e-5)
+//            tessera.{rmsnorm,layer_norm} (dynamic mean-reduce + broadcast +
+//                             math.sqrt; optional channel affine operands,
+//                             innermost axis, eps default 1e-5)
 //            tessera.{relu,sigmoid,tanh,silu,gelu} (unary math family; gelu is
 //                             the tanh approximation; bf16/f16-aware)
 //   bf16: matmul accumulates in f32 then truncf to storage dtype (ABI §12.5)
@@ -46,6 +47,9 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringSwitch.h"
+
+#include <optional>
 
 using namespace mlir;
 
@@ -56,6 +60,11 @@ namespace {
 static Value emitUnaryElementwise(
     PatternRewriter &rewriter, Location loc, RankedTensorType ty, Value input,
     function_ref<Value(OpBuilder &, Location, Value)> fn);
+static Value createEmptyFromSource(PatternRewriter &rewriter, Location loc,
+                                   RankedTensorType outputType,
+                                   Value shapeSource,
+                                   ArrayRef<int64_t> sourceDimensions);
+static SmallVector<int64_t> identityDimensions(int64_t rank);
 
 // ── Binary elementwise ─────────────────────────────────────────────────────
 
@@ -211,6 +220,186 @@ struct SelectLowering : public RewritePattern {
   }
 };
 
+static std::optional<arith::CmpFPredicate>
+orderedFloatPredicate(StringRef predicate) {
+  return llvm::StringSwitch<std::optional<arith::CmpFPredicate>>(predicate)
+      .Case("eq", arith::CmpFPredicate::OEQ)
+      .Case("ne", arith::CmpFPredicate::ONE)
+      .Case("lt", arith::CmpFPredicate::OLT)
+      .Case("le", arith::CmpFPredicate::OLE)
+      .Case("gt", arith::CmpFPredicate::OGT)
+      .Case("ge", arith::CmpFPredicate::OGE)
+      .Default(std::nullopt);
+}
+
+static std::optional<arith::CmpIPredicate>
+integerPredicate(StringRef predicate, bool isUnsigned) {
+  if (predicate == "eq")
+    return arith::CmpIPredicate::eq;
+  if (predicate == "ne")
+    return arith::CmpIPredicate::ne;
+  if (predicate == "lt")
+    return isUnsigned ? arith::CmpIPredicate::ult : arith::CmpIPredicate::slt;
+  if (predicate == "le")
+    return isUnsigned ? arith::CmpIPredicate::ule : arith::CmpIPredicate::sle;
+  if (predicate == "gt")
+    return isUnsigned ? arith::CmpIPredicate::ugt : arith::CmpIPredicate::sgt;
+  if (predicate == "ge")
+    return isUnsigned ? arith::CmpIPredicate::uge : arith::CmpIPredicate::sge;
+  return std::nullopt;
+}
+
+// Public tessera.{eq,ne,lt,le,gt,ge} tensor comparisons.  Floating ordered
+// semantics are executable here. Signless integers require the Graph op's
+// explicit signedness carrier; signed/unsigned builtin integer types remain
+// self-describing. This prevents target-dependent interpretation of iN.
+struct BinaryComparisonLowering : public RewritePattern {
+  BinaryComparisonLowering(MLIRContext *ctx)
+      : RewritePattern(MatchAnyOpTypeTag(), /*benefit=*/1, ctx) {}
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    StringRef name = op->getName().getStringRef();
+    if (!name.consume_front("tessera."))
+      return failure();
+    auto floatPredicate = orderedFloatPredicate(name);
+    if (!floatPredicate)
+      return failure();
+    if (op->getNumOperands() != 2 || op->getNumResults() != 1)
+      return failure();
+    auto lhsTy = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto maskTy = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!lhsTy || !maskTy || !lhsTy.hasStaticShape() ||
+        !maskTy.hasStaticShape() || !maskTy.getElementType().isInteger(1))
+      return rewriter.notifyMatchFailure(
+          op, "static-shape numeric operands and i1 result required");
+    Type elementType = lhsTy.getElementType();
+    auto integerType = dyn_cast<IntegerType>(elementType);
+    std::optional<arith::CmpIPredicate> intPredicate;
+    if (integerType) {
+      bool isUnsigned = integerType.isUnsigned();
+      if (integerType.isSignless()) {
+        auto signedness = op->getAttrOfType<StringAttr>("signedness");
+        if (!signedness)
+          return rewriter.notifyMatchFailure(
+              op, "signless integer comparison requires signedness");
+        isUnsigned = signedness.getValue() == "unsigned";
+      }
+      intPredicate = integerPredicate(name, isUnsigned);
+    } else if (!isa<FloatType>(elementType)) {
+      return rewriter.notifyMatchFailure(op, "numeric operands required");
+    }
+    Value out = buildElementwiseNary(
+        rewriter, op->getLoc(), maskTy,
+        {op->getOperand(0), op->getOperand(1)},
+        [&](OpBuilder &b, Location l, ValueRange args) -> Value {
+          if (intPredicate)
+            return arith::CmpIOp::create(b, l, *intPredicate, args[0], args[1])
+                .getResult();
+          return arith::CmpFOp::create(b, l, *floatPredicate, args[0], args[1])
+              .getResult();
+        });
+    rewriter.replaceOp(op, out);
+    return success();
+  }
+};
+
+// tessera.compare_scalar(x, {rhs, predicate}) -> tensor<...xi1>.
+// This is the mask-producing Graph carrier used by compiler-generated
+// adjoints.  The scalar attribute keeps it legal for dynamic Graph shapes;
+// this linalg materializer currently handles the production static envelope.
+struct CompareScalarLowering : public RewritePattern {
+  CompareScalarLowering(MLIRContext *ctx)
+      : RewritePattern("tessera.compare_scalar", /*benefit=*/1, ctx) {}
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if ((op->getNumOperands() != 1 && op->getNumOperands() != 2) ||
+        op->getNumResults() != 1)
+      return failure();
+    auto inTy = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto maskTy = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!inTy || !maskTy || !inTy.hasStaticShape() || !maskTy.hasStaticShape() ||
+        !isa<FloatType>(inTy.getElementType()) ||
+        !maskTy.getElementType().isInteger(1))
+      return rewriter.notifyMatchFailure(op, "static-shape float-to-i1 tensor");
+    auto rhsAttr = op->getAttrOfType<FloatAttr>("rhs");
+    auto predicateAttr = op->getAttrOfType<StringAttr>("predicate");
+    if (!rhsAttr || !predicateAttr)
+      return rewriter.notifyMatchFailure(op, "missing rhs/predicate attribute");
+    auto predicate = orderedFloatPredicate(predicateAttr.getValue());
+    if (!predicate)
+      return rewriter.notifyMatchFailure(op, "unsupported predicate");
+    Type elem = inTy.getElementType();
+    Value out = buildElementwiseNary(
+        rewriter, op->getLoc(), maskTy, {op->getOperand(0)},
+        [&](OpBuilder &b, Location l, ValueRange args) -> Value {
+          Value rhs = arith::ConstantOp::create(
+              b, l, elem, b.getFloatAttr(elem, rhsAttr.getValueAsDouble()));
+          return arith::CmpFOp::create(b, l, *predicate, args[0], rhs)
+              .getResult();
+        });
+    rewriter.replaceOp(op, out);
+    return success();
+  }
+};
+
+// Explicit input-dimension to result-dimension broadcast. Static materializer;
+// the Graph contract itself remains shape-polymorphic.
+struct BroadcastInDimLowering : public RewritePattern {
+  BroadcastInDimLowering(MLIRContext *ctx)
+      : RewritePattern("tessera.broadcast_in_dim", /*benefit=*/1, ctx) {}
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+      return failure();
+    auto inTy = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto outTy = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    auto dimensions = op->getAttrOfType<ArrayAttr>("broadcast_dimensions");
+    if (!inTy || !outTy || !dimensions ||
+        inTy.getElementType() != outTy.getElementType())
+      return rewriter.notifyMatchFailure(op, "ranked matching-element tensors");
+    int64_t outRank = outTy.getRank();
+    SmallVector<AffineExpr> inputExprs;
+    inputExprs.reserve(inTy.getRank());
+    for (int64_t inputDim = 0; inputDim < inTy.getRank(); ++inputDim) {
+      auto outputDim = cast<IntegerAttr>(dimensions[inputDim]).getInt();
+      if (inTy.getDimSize(inputDim) == 1 && outTy.getDimSize(outputDim) != 1)
+        inputExprs.push_back(getAffineConstantExpr(0, rewriter.getContext()));
+      else
+        inputExprs.push_back(
+            getAffineDimExpr(outputDim, rewriter.getContext()));
+    }
+    AffineMap inputMap = AffineMap::get(
+        outRank, /*symbolCount=*/0, inputExprs, rewriter.getContext());
+    AffineMap outputMap = rewriter.getMultiDimIdentityMap(outRank);
+    Value init;
+    if (op->getNumOperands() == 2) {
+      auto shapeTy = dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+      if (!shapeTy || shapeTy.getRank() != outRank)
+        return rewriter.notifyMatchFailure(op, "invalid shape_like operand");
+      init = createEmptyFromSource(rewriter, op->getLoc(), outTy,
+                                   op->getOperand(1),
+                                   identityDimensions(outRank));
+    } else {
+      if (!outTy.hasStaticShape())
+        return rewriter.notifyMatchFailure(
+            op, "dynamic result requires shape_like operand");
+      init = tensor::EmptyOp::create(rewriter, op->getLoc(), outTy.getShape(),
+                                     outTy.getElementType());
+    }
+    SmallVector<utils::IteratorType> iterators(
+        outRank, utils::IteratorType::parallel);
+    auto generic = linalg::GenericOp::create(
+        rewriter, op->getLoc(), TypeRange{outTy},
+        ValueRange{op->getOperand(0)}, ValueRange{init},
+        ArrayRef<AffineMap>{inputMap, outputMap}, iterators,
+        [&](OpBuilder &b, Location loc, ValueRange args) {
+          linalg::YieldOp::create(b, loc, args[0]);
+        });
+    rewriter.replaceOp(op, generic.getResult(0));
+    return success();
+  }
+};
+
 // tessera.masked_fill(x, mask, {value}): elementwise `mask != 0 ? x : value`.
 struct MaskedFillLowering : public RewritePattern {
   MaskedFillLowering(MLIRContext *ctx)
@@ -230,12 +419,17 @@ struct MaskedFillLowering : public RewritePattern {
     Value out = buildElementwiseNary(
         rewriter, op->getLoc(), ty, {op->getOperand(0), op->getOperand(1)},
         [&](OpBuilder &b, Location l, ValueRange a) -> Value {
-          Value zero = arith::ConstantOp::create(b, l, elem,
-                                                 b.getFloatAttr(elem, 0.0));
           Value v = arith::ConstantOp::create(b, l, elem,
                                               b.getFloatAttr(elem, value));
-          Value p = arith::CmpFOp::create(b, l, arith::CmpFPredicate::ONE,
-                                          a[1], zero);
+          Value p;
+          if (a[1].getType().isInteger(1)) {
+            p = a[1];
+          } else {
+            Value zero = arith::ConstantOp::create(
+                b, l, a[1].getType(), b.getFloatAttr(a[1].getType(), 0.0));
+            p = arith::CmpFOp::create(b, l, arith::CmpFPredicate::ONE,
+                                      a[1], zero);
+          }
           return arith::SelectOp::create(b, l, p, a[0], v).getResult();
         });
     rewriter.replaceOp(op, out);
@@ -450,14 +644,37 @@ struct BatchedGemmLowering : public RewritePattern {
 
 // ── tessera.reduce ─────────────────────────────────────────────────────────
 
+static Value createEmptyFromSource(PatternRewriter &rewriter, Location loc,
+                                   RankedTensorType outputType,
+                                   Value shapeSource,
+                                   ArrayRef<int64_t> sourceDimensions) {
+  SmallVector<Value> dynamicSizes;
+  for (int64_t outputDim = 0; outputDim < outputType.getRank(); ++outputDim) {
+    if (!outputType.isDynamicDim(outputDim))
+      continue;
+    dynamicSizes.push_back(tensor::DimOp::create(
+        rewriter, loc, shapeSource, sourceDimensions[outputDim]));
+  }
+  return tensor::EmptyOp::create(rewriter, loc, outputType.getShape(),
+                                 outputType.getElementType(), dynamicSizes);
+}
+
+static SmallVector<int64_t> identityDimensions(int64_t rank) {
+  SmallVector<int64_t> dimensions;
+  dimensions.reserve(rank);
+  for (int64_t dim = 0; dim < rank; ++dim)
+    dimensions.push_back(dim);
+  return dimensions;
+}
+
 // Elementwise scale `input * scalar` into a fresh DPS init of `ty`. Used by the
 // `mean` reduction (sum then multiply by 1/N). The scalar is captured into the
 // linalg.generic body directly (allowed — it's an outer SSA value).
 static Value buildUnaryScale(PatternRewriter &rewriter, Location loc,
                              RankedTensorType ty, Value input, Value scalar) {
   int64_t rank = ty.getRank();
-  Value init = tensor::EmptyOp::create(rewriter, loc, ty.getShape(),
-                                       ty.getElementType());
+  Value init = createEmptyFromSource(rewriter, loc, ty, input,
+                                     identityDimensions(rank));
   AffineMap id = rewriter.getMultiDimIdentityMap(rank);
   SmallVector<AffineMap, 2> maps = {id, id};
   SmallVector<utils::IteratorType> iters(rank, utils::IteratorType::parallel);
@@ -476,8 +693,8 @@ static Value emitUnaryElementwise(
     PatternRewriter &rewriter, Location loc, RankedTensorType ty, Value input,
     function_ref<Value(OpBuilder &, Location, Value)> fn) {
   int64_t rank = ty.getRank();
-  Value init = tensor::EmptyOp::create(rewriter, loc, ty.getShape(),
-                                       ty.getElementType());
+  Value init = createEmptyFromSource(rewriter, loc, ty, input,
+                                     identityDimensions(rank));
   AffineMap id = rewriter.getMultiDimIdentityMap(rank);
   SmallVector<AffineMap, 2> maps = {id, id};
   SmallVector<utils::IteratorType> iters(rank, utils::IteratorType::parallel);
@@ -499,9 +716,12 @@ static Value emitReduceCore(PatternRewriter &rewriter, Location loc,
   auto fty = cast<FloatType>(elem);
   int64_t rank = inTy.getRank();
   SmallVector<int64_t> outShape;
+  SmallVector<int64_t> sourceDimensions;
   for (int64_t i = 0; i < rank; ++i)
-    if (i != axis)
+    if (i != axis) {
       outShape.push_back(inTy.getDimSize(i));
+      sourceDimensions.push_back(i);
+    }
 
   const llvm::fltSemantics &sem = fty.getFloatSemantics();
   APFloat ident = APFloat::getZero(sem);
@@ -510,7 +730,9 @@ static Value emitReduceCore(PatternRewriter &rewriter, Location loc,
   else if (kind == "min")
     ident = APFloat::getInf(sem, /*Negative=*/false);
 
-  Value empty = tensor::EmptyOp::create(rewriter, loc, outShape, elem);
+  auto outTy = RankedTensorType::get(outShape, elem, inTy.getEncoding());
+  Value empty = createEmptyFromSource(rewriter, loc, outTy, input,
+                                      sourceDimensions);
   Value identC = arith::ConstantOp::create(rewriter, loc, elem,
                                            rewriter.getFloatAttr(elem, ident));
   Value filled = linalg::FillOp::create(rewriter, loc, ValueRange{identC},
@@ -542,8 +764,8 @@ static Value emitBroadcastBinary(
     function_ref<Value(OpBuilder &, Location, Value, Value)> fn) {
   MLIRContext *ctx = fullTy.getContext();
   int64_t rank = fullTy.getRank();
-  Value init = tensor::EmptyOp::create(rewriter, loc, fullTy.getShape(),
-                                       fullTy.getElementType());
+  Value init = createEmptyFromSource(rewriter, loc, fullTy, full,
+                                     identityDimensions(rank));
   AffineMap idFull = rewriter.getMultiDimIdentityMap(rank);
   SmallVector<AffineExpr> exprs;
   for (int64_t d = 0; d < rank; ++d)
@@ -561,6 +783,29 @@ static Value emitBroadcastBinary(
   return generic.getResult(0);
 }
 
+static Value emitChannelBinary(
+    PatternRewriter &rewriter, Location loc, RankedTensorType fullTy, Value full,
+    Value channel, int64_t axis,
+    function_ref<Value(OpBuilder &, Location, Value, Value)> fn) {
+  int64_t rank = fullTy.getRank();
+  Value init = createEmptyFromSource(rewriter, loc, fullTy, full,
+                                     identityDimensions(rank));
+  AffineMap id = rewriter.getMultiDimIdentityMap(rank);
+  AffineMap channelMap = AffineMap::get(
+      rank, 0, {getAffineDimExpr(axis, rewriter.getContext())},
+      rewriter.getContext());
+  SmallVector<AffineMap, 3> maps = {id, channelMap, id};
+  SmallVector<utils::IteratorType> iters(rank,
+                                        utils::IteratorType::parallel);
+  auto generic = linalg::GenericOp::create(
+      rewriter, loc, TypeRange{fullTy}, ValueRange{full, channel},
+      ValueRange{init}, maps, iters,
+      [&](OpBuilder &b, Location l, ValueRange args) {
+        linalg::YieldOp::create(b, l, fn(b, l, args[0], args[1]));
+      });
+  return generic.getResult(0);
+}
+
 // Mean of `input` over `axis`: sum reduction scaled by 1/N. Returns the
 // rank-(R-1) reduced tensor. Used by both norms (rmsnorm: mean(x²);
 // layer_norm: mean(x) and mean((x-mu)²)).
@@ -569,9 +814,21 @@ static Value emitMean(PatternRewriter &rewriter, Location loc,
   Value summed = emitReduceCore(rewriter, loc, inTy, input, axis, "sum");
   auto redTy = cast<RankedTensorType>(summed.getType());
   Type elem = inTy.getElementType();
-  double n = static_cast<double>(inTy.getDimSize(axis));
-  Value recip = arith::ConstantOp::create(rewriter, loc, elem,
-                                          rewriter.getFloatAttr(elem, 1.0 / n));
+  Value recip;
+  if (inTy.isDynamicDim(axis)) {
+    Value extent = tensor::DimOp::create(rewriter, loc, input, axis);
+    Value extentI64 = arith::IndexCastOp::create(
+        rewriter, loc, rewriter.getI64Type(), extent);
+    Value extentFloat =
+        arith::SIToFPOp::create(rewriter, loc, elem, extentI64);
+    Value one = arith::ConstantOp::create(
+        rewriter, loc, elem, rewriter.getFloatAttr(elem, 1.0));
+    recip = arith::DivFOp::create(rewriter, loc, one, extentFloat);
+  } else {
+    double n = static_cast<double>(inTy.getDimSize(axis));
+    recip = arith::ConstantOp::create(
+        rewriter, loc, elem, rewriter.getFloatAttr(elem, 1.0 / n));
+  }
   return buildUnaryScale(rewriter, loc, redTy, summed, recip);
 }
 
@@ -588,8 +845,8 @@ struct ReduceLowering : public RewritePattern {
       return failure();
     auto inTy = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
     auto outTy = dyn_cast<RankedTensorType>(op->getResult(0).getType());
-    if (!inTy || !outTy || !inTy.hasStaticShape() || !outTy.hasStaticShape())
-      return rewriter.notifyMatchFailure(op, "static-shape tensors required");
+    if (!inTy || !outTy)
+      return rewriter.notifyMatchFailure(op, "ranked tensors required");
     Type elem = inTy.getElementType();
     auto fty = dyn_cast<FloatType>(elem);
     if (!fty || elem != outTy.getElementType())
@@ -625,9 +882,22 @@ struct ReduceLowering : public RewritePattern {
         emitReduceCore(rewriter, loc, inTy, op->getOperand(0), axis, redKind);
 
     if (isMean) {
-      double n = static_cast<double>(inTy.getDimSize(axis));
-      Value recip = arith::ConstantOp::create(
-          rewriter, loc, elem, rewriter.getFloatAttr(elem, 1.0 / n));
+      Value recip;
+      if (inTy.isDynamicDim(axis)) {
+        Value extent = tensor::DimOp::create(
+            rewriter, loc, op->getOperand(0), axis);
+        Value extentI64 = arith::IndexCastOp::create(
+            rewriter, loc, rewriter.getI64Type(), extent);
+        Value extentFloat =
+            arith::SIToFPOp::create(rewriter, loc, elem, extentI64);
+        Value one = arith::ConstantOp::create(
+            rewriter, loc, elem, rewriter.getFloatAttr(elem, 1.0));
+        recip = arith::DivFOp::create(rewriter, loc, one, extentFloat);
+      } else {
+        double n = static_cast<double>(inTy.getDimSize(axis));
+        recip = arith::ConstantOp::create(
+            rewriter, loc, elem, rewriter.getFloatAttr(elem, 1.0 / n));
+      }
       reduced = buildUnaryScale(rewriter, loc, outTy, reduced, recip);
     }
     rewriter.replaceOp(op, reduced);
@@ -729,19 +999,80 @@ static Value emitDivBroadcast(PatternRewriter &r, Location loc,
       });
 }
 
-// rmsnorm(x) = x / sqrt(mean(x²) + eps), over the innermost axis (unweighted).
+// Internal normalization statistics carrier.  It deliberately materializes
+// rank-reduced center/inverse-scale values so backward graphs can reuse them
+// without treating normalization as an opaque host callback.
+struct NormalizationStatsLowering : public RewritePattern {
+  NormalizationStatsLowering(MLIRContext *ctx)
+      : RewritePattern("tessera.normalization_stats", /*benefit=*/1, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 1 || op->getNumResults() != 2)
+      return failure();
+    auto inTy = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto centerTy = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    auto inverseTy = dyn_cast<RankedTensorType>(op->getResult(1).getType());
+    if (!inTy || !centerTy || !inverseTy || centerTy != inverseTy ||
+        inTy.getRank() < 1)
+      return rewriter.notifyMatchFailure(
+          op, "rank>=1 input and matching rank-reduced results required");
+    if (!isa<FloatType>(inTy.getElementType()))
+      return rewriter.notifyMatchFailure(op, "float-only");
+    int64_t axis = inTy.getRank() - 1;
+    if (auto axisAttr = op->getAttrOfType<IntegerAttr>("axis")) {
+      axis = axisAttr.getInt();
+      if (axis < 0)
+        axis += inTy.getRank();
+    }
+    if (axis < 0 || axis >= inTy.getRank())
+      return rewriter.notifyMatchFailure(op, "axis out of range");
+
+    Location loc = op->getLoc();
+    Value x = op->getOperand(0);
+    Value center = emitMean(rewriter, loc, inTy, x, axis);
+    bool centered = true;
+    if (auto centeredAttr = op->getAttrOfType<BoolAttr>("centered"))
+      centered = centeredAttr.getValue();
+    Value base = x;
+    if (centered) {
+      base = emitBroadcastBinary(
+          rewriter, loc, inTy, x, center, axis,
+          [](OpBuilder &b, Location l, Value a, Value c) -> Value {
+            return arith::SubFOp::create(b, l, a, c).getResult();
+          });
+    }
+    Value moment = emitMean(rewriter, loc, inTy,
+                            emitSquare(rewriter, loc, inTy, base), axis);
+    Value denom = emitAddEpsThenSqrt(rewriter, loc, centerTy, moment,
+                                     inTy.getElementType(), readEps(op));
+    Value inverse = emitUnaryElementwise(
+        rewriter, loc, inverseTy, denom,
+        [](OpBuilder &b, Location l, Value value) -> Value {
+          Value one = arith::ConstantOp::create(
+              b, l, value.getType(), b.getFloatAttr(value.getType(), 1.0));
+          return arith::DivFOp::create(b, l, one, value).getResult();
+        });
+    rewriter.replaceOp(op, {center, inverse});
+    return success();
+  }
+};
+
+// rmsnorm(x[, gamma]) = x / sqrt(mean(x²) + eps) [* gamma], over the
+// innermost axis.
 struct RmsNormLowering : public RewritePattern {
   RmsNormLowering(MLIRContext *ctx)
       : RewritePattern("tessera.rmsnorm", /*benefit=*/1, ctx) {}
 
   LogicalResult matchAndRewrite(Operation *op,
                                 PatternRewriter &rewriter) const override {
-    if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+    if (op->getNumOperands() < 1 || op->getNumOperands() > 2 ||
+        op->getNumResults() != 1)
       return failure();
     auto ty = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
     auto outTy = dyn_cast<RankedTensorType>(op->getResult(0).getType());
-    if (!ty || !outTy || ty != outTy || !ty.hasStaticShape() || ty.getRank() < 1)
-      return rewriter.notifyMatchFailure(op, "static same-shape rank>=1 tensor");
+    if (!ty || !outTy || ty != outTy || ty.getRank() < 1)
+      return rewriter.notifyMatchFailure(op, "same-shape rank>=1 tensor");
     if (!isa<FloatType>(ty.getElementType()))
       return rewriter.notifyMatchFailure(op, "float-only");
 
@@ -755,25 +1086,32 @@ struct RmsNormLowering : public RewritePattern {
     auto redTy = cast<RankedTensorType>(ms.getType());
     Value denom = emitAddEpsThenSqrt(rewriter, loc, redTy, ms, elem, eps);
     Value y = emitDivBroadcast(rewriter, loc, ty, x, denom, axis);
+    if (op->getNumOperands() == 2)
+      y = emitChannelBinary(
+          rewriter, loc, ty, y, op->getOperand(1), axis,
+          [](OpBuilder &b, Location l, Value value, Value gamma) -> Value {
+            return arith::MulFOp::create(b, l, value, gamma).getResult();
+          });
     rewriter.replaceOp(op, y);
     return success();
   }
 };
 
-// layer_norm(x) = (x - mean) / sqrt(var + eps), over the innermost axis
-// (unweighted; no gamma/beta).
+// layer_norm(x[, gamma, beta]) = normalized(x) [* gamma + beta], over the
+// innermost axis.
 struct LayerNormLowering : public RewritePattern {
   LayerNormLowering(MLIRContext *ctx)
       : RewritePattern("tessera.layer_norm", /*benefit=*/1, ctx) {}
 
   LogicalResult matchAndRewrite(Operation *op,
                                 PatternRewriter &rewriter) const override {
-    if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+    if (op->getNumOperands() < 1 || op->getNumOperands() > 3 ||
+        op->getNumResults() != 1)
       return failure();
     auto ty = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
     auto outTy = dyn_cast<RankedTensorType>(op->getResult(0).getType());
-    if (!ty || !outTy || ty != outTy || !ty.hasStaticShape() || ty.getRank() < 1)
-      return rewriter.notifyMatchFailure(op, "static same-shape rank>=1 tensor");
+    if (!ty || !outTy || ty != outTy || ty.getRank() < 1)
+      return rewriter.notifyMatchFailure(op, "same-shape rank>=1 tensor");
     if (!isa<FloatType>(ty.getElementType()))
       return rewriter.notifyMatchFailure(op, "float-only");
 
@@ -794,6 +1132,18 @@ struct LayerNormLowering : public RewritePattern {
     auto redTy = cast<RankedTensorType>(var.getType());
     Value denom = emitAddEpsThenSqrt(rewriter, loc, redTy, var, elem, eps);
     Value y = emitDivBroadcast(rewriter, loc, ty, centered, denom, axis);
+    if (op->getNumOperands() >= 2)
+      y = emitChannelBinary(
+          rewriter, loc, ty, y, op->getOperand(1), axis,
+          [](OpBuilder &b, Location l, Value value, Value gamma) -> Value {
+            return arith::MulFOp::create(b, l, value, gamma).getResult();
+          });
+    if (op->getNumOperands() == 3)
+      y = emitChannelBinary(
+          rewriter, loc, ty, y, op->getOperand(2), axis,
+          [](OpBuilder &b, Location l, Value value, Value beta) -> Value {
+            return arith::AddFOp::create(b, l, value, beta).getResult();
+          });
     rewriter.replaceOp(op, y);
     return success();
   }
@@ -927,6 +1277,9 @@ public:
     patterns.add<BinaryEltwiseLowering>(ctx, "tessera.div", BinaryKind::Div);
     patterns.add<ScoreCombineLowering>(ctx);
     patterns.add<SelectLowering>(ctx);
+    patterns.add<BinaryComparisonLowering>(ctx);
+    patterns.add<CompareScalarLowering>(ctx);
+    patterns.add<BroadcastInDimLowering>(ctx);
     patterns.add<MaskedFillLowering>(ctx);
     patterns.add<WriteRowLowering>(ctx);
     patterns.add<MatmulLowering>(ctx);
@@ -936,6 +1289,7 @@ public:
     patterns.add<SoftmaxLowering>(ctx);
     patterns.add<RmsNormLowering>(ctx);
     patterns.add<LayerNormLowering>(ctx);
+    patterns.add<NormalizationStatsLowering>(ctx);
     patterns.add<UnaryActLowering>(ctx, "tessera.relu", ActKind::Relu);
     patterns.add<UnaryActLowering>(ctx, "tessera.sigmoid", ActKind::Sigmoid);
     patterns.add<UnaryActLowering>(ctx, "tessera.tanh", ActKind::Tanh);

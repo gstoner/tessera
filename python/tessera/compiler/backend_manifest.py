@@ -1466,16 +1466,19 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
     "rmsnorm": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("reduction",),
-        "notes": "Unweighted row rmsnorm over the last axis (row-reduction "
-                 "kernel, generate-rocm-norm-kernel): x / sqrt(mean(x²) + eps). "
-                 "Executes via runtime.launch() (rocm_norm_compiled).",
+        "notes": "Unary/affine row rmsnorm plus paired backward over the last "
+                 "axis (generate-rocm-norm-kernel). Forward and recompute-all "
+                 "backward execute through runtime.launch(); backward preserves "
+                 "storage dX and deterministically folds dGamma in f32 without "
+                 "global atomics.",
     },
     "layer_norm": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("reduction",),
-        "notes": "Unweighted row layer_norm over the last axis (row-reduction "
-                 "kernel, generate-rocm-norm-kernel): (x − μ) / sqrt(var + eps). "
-                 "Executes via runtime.launch() (rocm_norm_compiled).",
+        "notes": "Unary/affine stable two-pass layer_norm plus paired backward "
+                 "over the last axis (generate-rocm-norm-kernel). Backward "
+                 "preserves storage dX and deterministically folds dGamma/dBeta "
+                 "in f32 without global atomics.",
     },
     "rmsnorm_safe": {
         "dtypes": ("fp32", "fp16", "bf16"),
@@ -3348,16 +3351,17 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "(tessera_x86_avx512_{pow,silu_mul}_f32, runtime-loaded; "
                  "x86_binary_math_compiled lane; f32, matches numpy 2e-5)",
     } for op in ("pow", "silu_mul")},
-    # Row-reduction norm / softmax — unweighted rmsnorm / layer_norm and stable
+    # Row-reduction norm / softmax — unary/affine rmsnorm / layer_norm, their
+    # paired backward ABIs, and stable
     # softmax over the last axis (AVX-512 horizontal reduce). The CPU analog of
     # the ROCm warp-shuffle norm/softmax lanes (x86_norm_compiled /
     # x86_softmax_compiled).
     "rmsnorm": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
-        "notes": "AVX-512 unweighted rmsnorm row-reduction "
-                 "(tessera_x86_avx512_rmsnorm_f32, runtime-loaded; "
-                 "x86_norm_compiled lane; f32, matches numpy 2e-5)",
+        "notes": "AVX-512 unary/affine rmsnorm forward and deterministic "
+                 "paired backward (runtime-loaded f32 ABIs; exact-host oracle "
+                 "and public native_backward proof)",
     },
     "rmsnorm_safe": {
         "status": _FUSED_KERNEL_STATUS,
@@ -3369,9 +3373,9 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
     "layer_norm": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
-        "notes": "AVX-512 unweighted layer_norm row-reduction "
-                 "(tessera_x86_avx512_layernorm_f32, runtime-loaded; "
-                 "x86_norm_compiled lane; f32, matches numpy 2e-5)",
+        "notes": "AVX-512 unary/affine stable two-pass layer_norm forward and "
+                 "deterministic paired backward (runtime-loaded f32 ABIs; "
+                 "exact-host oracle and public native_backward proof)",
     },
     # P5 — group/instance/weight norm composed on the AVX-512 layer_norm (row
     # mean/var) + reduce (sum-of-squares) lanes; host does the reshape / divide.

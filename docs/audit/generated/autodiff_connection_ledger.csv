@@ -140,7 +140,7 @@ lamb,optimizer,yes,none,,,,,,,python_reference=python-unit-registry,,,
 latent_kv_compress,loop_nest,yes,none,,,,,,,python_reference=python-unit-registry,,,
 latent_kv_expand_k,loop_nest,yes,none,,,,,,,python_reference=python-unit-registry,,,
 latent_kv_expand_v,loop_nest,yes,none,,,,,,,python_reference=python-unit-registry,,,
-layer_norm,normalization,yes,placeholder,,,,,,,python_reference=python-unit-registry;ir_adjoint=llvm23-core,custom_adjoint_call → Python VJP (not native IR),,
+layer_norm,normalization,yes,native,cpu,,"rocm_gfx1151,x86_avx512","rocm_gfx1151,x86_avx512",,"rocm_gfx1151,x86_avx512",python_reference=python-unit-registry;ir_adjoint=llvm23-core;bwd_cpu_ir_oracle=llvm23-core;device[rocm_gfx1151=LLVM/MLIR 23; ROCm 7.14; gfx1151];device[x86_avx512=LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512],"native compiler adjoint; native backward executes on rocm_gfx1151, x86_avx512 (Phase 4)",rocm_gfx1151=recompute_all;x86_avx512=recompute_all,rocm_gfx1151=dedicated;x86_avx512=dedicated
 lgamma,elementwise,yes,none,,,,,,,python_reference=python-unit-registry,,,
 lightning_attention,attention,yes,none,,nvidia_sm120,nvidia_sm120,nvidia_sm120,nvidia_sm120,,python_reference=python-unit-registry;device[nvidia_sm120=cuda13.3+sm120],native backward executes on nvidia_sm120 (Phase 4),nvidia_sm120=recompute_all,nvidia_sm120=dedicated
 linear_attn,attention,yes,none,,nvidia_sm120,nvidia_sm120,nvidia_sm120,nvidia_sm120,,python_reference=python-unit-registry;device[nvidia_sm120=cuda13.3+sm120],native backward executes on nvidia_sm120 (Phase 4),nvidia_sm120=recompute_all,nvidia_sm120=dedicated
@@ -221,13 +221,13 @@ quantized_matmul,loop_nest,yes,none,,,,,,,python_reference=python-unit-registry,
 reciprocal,numeric_helper,yes,none,,,,,,,python_reference=python-unit-registry,,,
 reduce,stable_reduction,yes,mixed,,,,,,,python_reference=python-unit-registry;ir_adjoint=llvm23-core,"kind-aware Graph adjoint: native=mean,sum; placeholder=max,min",,
 reduce_scatter,collective,yes,native,,,,,,,python_reference=python-unit-registry;ir_adjoint=llvm23-core,native compiler adjoint,,
-relu,elementwise,yes,placeholder,,,,,,,python_reference=python-unit-registry;ir_adjoint=llvm23-core,custom_adjoint_call → Python VJP (not native IR),,
+relu,elementwise,yes,native,cpu,,,,,,python_reference=python-unit-registry;ir_adjoint=llvm23-core;bwd_cpu_ir_oracle=llvm23-core,native compiler adjoint,,
 repeat,tensor_algebra,yes,none,,,,,,,python_reference=python-unit-registry,,,
 reshape,tensor_algebra,yes,none,,,,,,,python_reference=python-unit-registry,,,
 retention,attention,yes,none,,nvidia_sm120,nvidia_sm120,nvidia_sm120,nvidia_sm120,,python_reference=python-unit-registry;device[nvidia_sm120=cuda13.3+sm120],native backward executes on nvidia_sm120 (Phase 4),nvidia_sm120=recompute_all,nvidia_sm120=dedicated
 rfft,spectral,yes,none,,,,,,,python_reference=python-unit-registry,,,
-rmsnorm,normalization,yes,placeholder,,,,,,,python_reference=python-unit-registry;ir_adjoint=llvm23-core,custom_adjoint_call → Python VJP (not native IR),,
-rmsnorm_safe,normalization,yes,none,,,,,,,python_reference=python-unit-registry,,,
+rmsnorm,normalization,yes,native,cpu,,"rocm_gfx1151,x86_avx512","rocm_gfx1151,x86_avx512",,"rocm_gfx1151,x86_avx512",python_reference=python-unit-registry;ir_adjoint=llvm23-core;bwd_cpu_ir_oracle=llvm23-core;device[rocm_gfx1151=LLVM/MLIR 23; ROCm 7.14; gfx1151];device[x86_avx512=LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512],"native compiler adjoint; native backward executes on rocm_gfx1151, x86_avx512 (Phase 4)",rocm_gfx1151=recompute_all;x86_avx512=recompute_all,rocm_gfx1151=dedicated;x86_avx512=dedicated
+rmsnorm_safe,normalization,yes,none,,,"rocm_gfx1151,x86_avx512","rocm_gfx1151,x86_avx512",,"rocm_gfx1151,x86_avx512",python_reference=python-unit-registry;device[rocm_gfx1151=LLVM/MLIR 23; ROCm 7.14; gfx1151];device[x86_avx512=LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512],"native backward executes on rocm_gfx1151, x86_avx512 (Phase 4)",rocm_gfx1151=recompute_all;x86_avx512=recompute_all,rocm_gfx1151=dedicated;x86_avx512=dedicated
 roll,tensor_algebra,yes,none,,,,,,,python_reference=python-unit-registry,,,
 rope,rotary_embedding,yes,none,,,,,,,python_reference=python-unit-registry,,,
 rope_merge,layout_transform,yes,none,,,,,,,python_reference=python-unit-registry,,,

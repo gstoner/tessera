@@ -17,15 +17,15 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 
 - Differentiable families tracked: **287**
 - `python_reference` (Python VJP/JVP): **287**
-- `ir_adjoint = native`: **14** (add, all_gather, all_reduce, broadcast, gelu, matmul, mul, reduce, reduce_scatter, sigmoid, silu, softmax, tanh)
-- `ir_adjoint = placeholder` (Python round-trip, not native): **10** (layer_norm, log_softmax, relu, rmsnorm, sin, softplus)
+- `ir_adjoint = native`: **17** (add, all_gather, all_reduce, broadcast, gelu, layer_norm, matmul, mul, reduce, reduce_scatter, relu, rmsnorm, sigmoid, silu, softmax, tanh)
+- `ir_adjoint = placeholder` (Python round-trip, not native): **7** (log_softmax, sin, softplus)
 - `ir_adjoint = mixed` (kind-aware native + placeholder): **1**
-- backward IR **oracle-verified on CPU** (interpreted): **11** (add, broadcast, gelu, matmul, mean, mul, sigmoid, silu, softmax, sum, tanh)
+- backward IR **oracle-verified on CPU** (interpreted): **14** (add, broadcast, gelu, layer_norm, matmul, mean, mul, relu, rmsnorm, sigmoid, silu, softmax, sum, tanh)
 - backward `target_lowered` on any exact target: **11**
-- backward `runtime_bound` (native) on any target: **11**
-- backward `oracle_proven` (native) on any target: **11**
+- backward `runtime_bound` (native) on any target: **14**
+- backward `oracle_proven` (native) on any target: **14**
 - backward `device_verified_jit` on any exact target: **11**
-- backward `device_verified_abi` on any exact target: **1**
+- backward `device_verified_abi` on any exact target: **4**
 
 > **Headline:** the Python reference/oracle is broad, a handful of ops have a native IR adjoint, several more only *look* differentiable in IR but actually call back into Python. The `matmul`/`tanh`/`sigmoid` backward **IR is oracle-verified on CPU** (Phase 3). **Phase 4 A1–A4 have landed native backward proof, alias/composition identity, and per-target residual policy**. The leaders listed below are derived from the exact-target proof columns; no family or architecture is hard-coded into this headline. Remaining families are Phase 4/5 work.
 
@@ -33,12 +33,15 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 
 - `flash_attn` — device_verified_jit: nvidia_sm120,rocm_gfx1151
 - `gqa_attention` — device_verified_jit: nvidia_sm120,rocm_gfx1151
+- `layer_norm` — device_verified_abi: rocm_gfx1151,x86_avx512
 - `lightning_attention` — device_verified_jit: nvidia_sm120
 - `linear_attn` — device_verified_jit: nvidia_sm120
 - `matmul` — device_verified_jit: cpu_x86_64,rocm_gfx1151
 - `mqa_attention` — device_verified_jit: nvidia_sm120,rocm_gfx1151
 - `multi_head_attention` — device_verified_jit: nvidia_sm120,rocm_gfx1151
 - `retention` — device_verified_jit: nvidia_sm120
+- `rmsnorm` — device_verified_abi: rocm_gfx1151,x86_avx512
+- `rmsnorm_safe` — device_verified_abi: rocm_gfx1151,x86_avx512
 - `selective_ssm` — device_verified_jit: rocm_gfx1151; device_verified_abi: x86_avx512
 - `sigmoid` — device_verified_jit: cpu_x86_64
 - `tanh` — device_verified_jit: cpu_x86_64
@@ -188,7 +191,7 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 | `latent_kv_compress` | loop_nest | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `latent_kv_expand_k` | loop_nest | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `latent_kv_expand_v` | loop_nest | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
-| `layer_norm` | normalization | yes | placeholder | — | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core | custom_adjoint_call → Python VJP (not native IR) |
+| `layer_norm` | normalization | yes | native | cpu | — | rocm_gfx1151,x86_avx512 | rocm_gfx1151,x86_avx512 | — | rocm_gfx1151,x86_avx512 | rocm_gfx1151=recompute_all; x86_avx512=recompute_all | rocm_gfx1151=dedicated; x86_avx512=dedicated | python_reference=python-unit-registry; ir_adjoint=llvm23-core; bwd_cpu_ir_oracle=llvm23-core; device[rocm_gfx1151=LLVM/MLIR 23; ROCm 7.14; gfx1151]; device[x86_avx512=LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512] | native compiler adjoint; native backward executes on rocm_gfx1151, x86_avx512 (Phase 4) |
 | `lgamma` | elementwise | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `lightning_attention` | attention | yes | none | — | nvidia_sm120 | nvidia_sm120 | nvidia_sm120 | nvidia_sm120 | — | nvidia_sm120=recompute_all | nvidia_sm120=dedicated | python_reference=python-unit-registry; device[nvidia_sm120=cuda13.3+sm120] | native backward executes on nvidia_sm120 (Phase 4) |
 | `linear_attn` | attention | yes | none | — | nvidia_sm120 | nvidia_sm120 | nvidia_sm120 | nvidia_sm120 | — | nvidia_sm120=recompute_all | nvidia_sm120=dedicated | python_reference=python-unit-registry; device[nvidia_sm120=cuda13.3+sm120] | native backward executes on nvidia_sm120 (Phase 4) |
@@ -269,13 +272,13 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 | `reciprocal` | numeric_helper | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `reduce` | stable_reduction | yes | mixed | — | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core | kind-aware Graph adjoint: native=mean,sum; placeholder=max,min |
 | `reduce_scatter` | collective | yes | native | — | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core | native compiler adjoint |
-| `relu` | elementwise | yes | placeholder | — | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core | custom_adjoint_call → Python VJP (not native IR) |
+| `relu` | elementwise | yes | native | cpu | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core; bwd_cpu_ir_oracle=llvm23-core | native compiler adjoint |
 | `repeat` | tensor_algebra | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `reshape` | tensor_algebra | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `retention` | attention | yes | none | — | nvidia_sm120 | nvidia_sm120 | nvidia_sm120 | nvidia_sm120 | — | nvidia_sm120=recompute_all | nvidia_sm120=dedicated | python_reference=python-unit-registry; device[nvidia_sm120=cuda13.3+sm120] | native backward executes on nvidia_sm120 (Phase 4) |
 | `rfft` | spectral | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
-| `rmsnorm` | normalization | yes | placeholder | — | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core | custom_adjoint_call → Python VJP (not native IR) |
-| `rmsnorm_safe` | normalization | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
+| `rmsnorm` | normalization | yes | native | cpu | — | rocm_gfx1151,x86_avx512 | rocm_gfx1151,x86_avx512 | — | rocm_gfx1151,x86_avx512 | rocm_gfx1151=recompute_all; x86_avx512=recompute_all | rocm_gfx1151=dedicated; x86_avx512=dedicated | python_reference=python-unit-registry; ir_adjoint=llvm23-core; bwd_cpu_ir_oracle=llvm23-core; device[rocm_gfx1151=LLVM/MLIR 23; ROCm 7.14; gfx1151]; device[x86_avx512=LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512] | native compiler adjoint; native backward executes on rocm_gfx1151, x86_avx512 (Phase 4) |
+| `rmsnorm_safe` | normalization | yes | none | — | — | rocm_gfx1151,x86_avx512 | rocm_gfx1151,x86_avx512 | — | rocm_gfx1151,x86_avx512 | rocm_gfx1151=recompute_all; x86_avx512=recompute_all | rocm_gfx1151=dedicated; x86_avx512=dedicated | python_reference=python-unit-registry; device[rocm_gfx1151=LLVM/MLIR 23; ROCm 7.14; gfx1151]; device[x86_avx512=LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512] | native backward executes on rocm_gfx1151, x86_avx512 (Phase 4) |
 | `roll` | tensor_algebra | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `rope` | rotary_embedding | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `rope_merge` | layout_transform | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |

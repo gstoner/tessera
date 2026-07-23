@@ -771,7 +771,7 @@ def ROCM_NormKernelOp : TesseraROCM_Op<"norm"> {
   let summary = "Row-wise normalization (rmsnorm / layer_norm) as a reduction kernel";
   let description = [{
     The directive `generate-rocm-norm-kernel` expands into a row-reduction gpu
-    kernel realizing the **unweighted** row normalizations over the last axis
+    kernel realizing row normalizations over the last axis
     (one workgroup per row, the lanes stride K and tree-reduce through LDS):
 
       * `kind = "rmsnorm"`    — `O[m,:] = X[m,:] / sqrt(mean_k X[m,k]² + eps)`.
@@ -779,15 +779,26 @@ def ROCM_NormKernelOp : TesseraROCM_Op<"norm"> {
         `μ = mean_k X`, `var = mean_k (X − μ)²` (the stable squared-deviation
         reduction — not `E[x²] − E[x]²`, which cancels for large-offset rows).
 
-    Matches the unweighted reference (`_apple_gpu_rowop_numpy`; the per-channel
-    affine, when present, is a separate mul/add). rmsnorm is one row reduction;
+    Optional runtime gamma/beta channel vectors are fused into the write pass;
+    RMSNorm permits gamma and LayerNorm permits gamma plus beta. rmsnorm is one row reduction;
     layer_norm is two (mean, then variance). Reductions run in **f32** regardless
     of storage dtype. `eps` is a trailing f32 runtime arg; `M`/`K` are runtime
-    `index` args. `dtype` is the f16/bf16/f32 storage.
+    `index` args. `dtype` is the f16/bf16/f32 storage. Uniform affine-presence
+    flags keep one HSACO valid for both unary and affine calls.
+
+    With `backward = true`, the same generator emits the paired backward ABI:
+    X/gamma/dY inputs, dX in storage dtype, f32 dGamma/dBeta buffers, runtime
+    M/K/eps, and uniform affine-presence flags. The row kernel recomputes stable
+    statistics and writes private row/channel dGamma contributions; a second
+    kernel folds those contributions and dY-for-dBeta in ascending row order.
+    This fixed two-pass order is bitwise reproducible on one target/toolchain
+    and contains no global atomic accumulation. Exactly the gradients
+    represented by the forward operand list are returned.
   }];
   let arguments = (ins StrAttr:$name,
                        DefaultValuedAttr<StrAttr, "\"rmsnorm\"">:$kind,
-                       DefaultValuedAttr<StrAttr, "\"f32\"">:$dtype);
+                       DefaultValuedAttr<StrAttr, "\"f32\"">:$dtype,
+                       DefaultValuedAttr<BoolAttr, "false">:$backward);
   let assemblyFormat = "attr-dict";
 }
 
@@ -942,8 +953,9 @@ def ROCM_CompareKernelOp : TesseraROCM_Op<"compare"> {
     The directive `generate-rocm-compare-kernel` expands into a flat 2-operand
     elementwise gpu kernel applying a pointwise comparison over N elements (one
     thread per element, strided grid) — the standalone S2 comparison family,
-    producing a boolean (`i8` 0/1) result. The two operands share a float
-    storage `dtype` (f16/bf16/f32); the comparison runs in **f32**:
+    producing a boolean (`i8` 0/1) result. The operands share f16/bf16/f32,
+    signed i32, or unsigned u32 storage. Float comparison runs in **f32**;
+    integer order is selected explicitly by the dtype:
 
       * `eq` = a == b, `ne` = a != b, `lt` = a < b
       * `le` = a <= b, `gt` = a > b, `ge` = a >= b

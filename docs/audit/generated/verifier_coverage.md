@@ -6,11 +6,11 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 
 | Status | Count | Meaning |
 |--------|-------|---------|
-| `real` | 174 | `hasVerifier = 1;` + substantive `verify()` body. |
+| `real` | 183 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` | 0 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent` | 0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
 | `no_verifier` | 0 | No verifier declared.  TD constraints suffice — fine for many ops. |
-| **Total** | 174 | |
+| **Total** | 183 | |
 
 ## Per-dialect details
 
@@ -37,6 +37,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `AttnSlidingWindowOp` | `real` |
 | `AttnTopKBlocksOp` | `real` |
 | `BatchedGemmOp` | `real` |
+| `BroadcastInDimOp` | `real` |
 | `BroadcastOp` | `real` |
 | `CacheCommitOp` | `real` |
 | `CachePageLookupOp` | `real` |
@@ -51,6 +52,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `CliffordOuterProductOp` | `real` |
 | `CliffordReverseOp` | `real` |
 | `CliffordRotorSandwichOp` | `real` |
+| `CompareScalarOp` | `real` |
 | `ControlForOp` | `real` |
 | `ControlIfOp` | `real` |
 | `ControlScanOp` | `real` |
@@ -76,6 +78,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `EBMRefinementOp` | `real` |
 | `EBMSelfVerifyOp` | `real` |
 | `EBMSphereLangevinStepOp` | `real` |
+| `EqOp` | `real` |
 | `ExpandOp` | `real` |
 | `FFTOp` | `real` |
 | `FlashAttnOp` | `real` |
@@ -84,8 +87,10 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `GQAAttentionOp` | `real` |
 | `GatedAttentionOp` | `real` |
 | `GatedDeltaNetOp` | `real` |
+| `GeOp` | `real` |
 | `GeluOp` | `real` |
 | `GroupedGemmOp` | `real` |
+| `GtOp` | `real` |
 | `GuidedDenoiseRegionOp` | `real` |
 | `HybridAttentionOp` | `real` |
 | `IFFTOp` | `real` |
@@ -99,12 +104,14 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `LatentKVExpandKOp` | `real` |
 | `LatentKVExpandVOp` | `real` |
 | `LayerNormOp` | `real` |
+| `LeOp` | `real` |
 | `LightningAttentionOp` | `real` |
 | `LinearAttnOp` | `real` |
 | `LinearAttnStateOp` | `real` |
 | `LionOp` | `real` |
 | `LogSoftmaxOp` | `real` |
 | `LookaheadSparseAttentionOp` | `real` |
+| `LtOp` | `real` |
 | `MLADecodeFusedOp` | `real` |
 | `MLADecodeOp` | `real` |
 | `MQAAttentionOp` | `real` |
@@ -125,6 +132,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `MultiHeadAttentionOp` | `real` |
 | `NTKRopeOp` | `real` |
 | `NativeSparseAttnFusedOp` | `real` |
+| `NeOp` | `real` |
 | `NeighborsHaloExchangeOp` | `real` |
 | `NeighborsHaloPackOp` | `real` |
 | `NeighborsHaloRegionOp` | `real` |
@@ -135,6 +143,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `NeighborsStencilApplyOp` | `real` |
 | `NeighborsStencilDefineOp` | `real` |
 | `NeighborsTopologyCreateOp` | `real` |
+| `NormalizationStatsOp` | `real` |
 | `PermuteOp` | `real` |
 | `PowerAttnOp` | `real` |
 | `QROp` | `real` |

@@ -14,7 +14,9 @@
 //   rmsnorm is one reduction (Σx²). layer_norm is TWO reductions — Σx for the
 //   mean, then Σ(x−μ)² for the variance (the stable squared-deviation form,
 //   NOT E[x²]−E[x]², which cancels for large-offset/small-variance rows). Then
-//   a write pass applies the per-row normalize.
+//   a write pass applies the per-row normalize plus optional channel-affine
+//   gamma/beta vectors. The affine-presence flags are uniform runtime values,
+//   so one shape-independent HSACO serves unary and affine Graph contracts.
 //   Reductions run in f32 regardless of storage dtype; `sqrt` lowers through
 //   convert-math-to-rocdl. eps is a trailing f32 runtime arg; M/K are runtime
 //   index args. Validated vs the numpy reference (`_apple_gpu_rowop_numpy`).
@@ -53,8 +55,10 @@ void emitNormBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
   Value red = f.addWorkgroupAttribution(ldsT, loc);
 
   b.setInsertionPointToStart(&f.getBody().front());
-  Value X = f.getArgument(0), O = f.getArgument(1);
-  Value M = f.getArgument(2), K = f.getArgument(3), eps = f.getArgument(4);
+  Value X = f.getArgument(0), gamma = f.getArgument(1);
+  Value beta = f.getArgument(2), O = f.getArgument(3);
+  Value M = f.getArgument(4), K = f.getArgument(5), eps = f.getArgument(6);
+  Value hasGamma = f.getArgument(7), hasBeta = f.getArgument(8);
 
   auto ci = [&](int64_t v) { return b.create<arith::ConstantIndexOp>(loc, v); };
   Value c0 = ci(0), cBD = ci(BD);
@@ -84,6 +88,10 @@ void emitNormBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
   auto storeFromF32 = [&](Value val, Value idx) {
     Value sv = isF32 ? val : b.create<arith::TruncFOp>(loc, storeTy, val);
     b.create<memref::StoreOp>(loc, sv, O, ValueRange{idx});
+  };
+  auto loadAffineF32 = [&](Value buffer, Value channel) -> Value {
+    Value v = b.create<memref::LoadOp>(loc, buffer, ValueRange{channel});
+    return isF32 ? v : b.create<arith::ExtFOp>(loc, f32, v);
   };
   // One full row reduction (sum), CUB/rocPRIM warp-shuffle style: accumulate a
   // per-element f32 value over the strided cols in-register, butterfly-reduce
@@ -147,7 +155,8 @@ void emitNormBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
     denom = b.create<math::SqrtOp>(loc, b.create<arith::AddFOp>(loc, ms, eps));
   }
 
-  // write pass — O = (x [− μ]) / denom.
+  // write pass — O = ((x [− μ]) / denom) * gamma + beta. Missing affine
+  // vectors are represented by uniform flags and never dereferenced.
   {
     auto lp = b.create<scf::ForOp>(loc, tid, K, cBD);
     OpBuilder::InsertionGuard g(b);
@@ -157,7 +166,281 @@ void emitNormBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
     Value v = loadF32(idx);
     if (isLayerNorm)
       v = b.create<arith::SubFOp>(loc, v, mean);
-    storeFromF32(b.create<arith::DivFOp>(loc, v, denom), idx);
+    v = b.create<arith::DivFOp>(loc, v, denom);
+    auto gammaIf = b.create<scf::IfOp>(loc, TypeRange{f32}, hasGamma,
+                                       /*withElse=*/true);
+    {
+      OpBuilder::InsertionGuard affineGuard(b);
+      b.setInsertionPointToStart(gammaIf.thenBlock());
+      Value scaled =
+          b.create<arith::MulFOp>(loc, v, loadAffineF32(gamma, c));
+      b.create<scf::YieldOp>(loc, ValueRange{scaled});
+      b.setInsertionPointToStart(gammaIf.elseBlock());
+      b.create<scf::YieldOp>(loc, ValueRange{v});
+    }
+    v = gammaIf.getResult(0);
+    auto betaIf = b.create<scf::IfOp>(loc, TypeRange{f32}, hasBeta,
+                                      /*withElse=*/true);
+    {
+      OpBuilder::InsertionGuard affineGuard(b);
+      b.setInsertionPointToStart(betaIf.thenBlock());
+      Value shifted =
+          b.create<arith::AddFOp>(loc, v, loadAffineF32(beta, c));
+      b.create<scf::YieldOp>(loc, ValueRange{shifted});
+      b.setInsertionPointToStart(betaIf.elseBlock());
+      b.create<scf::YieldOp>(loc, ValueRange{v});
+    }
+    storeFromF32(betaIf.getResult(0), idx);
+  }
+
+  b.setInsertionPointToEnd(&f.getBody().front());
+  b.create<gpu::ReturnOp>(loc);
+}
+
+void emitNormBackwardBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f,
+                          Type storeTy, bool isLayerNorm) {
+  MLIRContext *ctx = b.getContext();
+  Type f32 = b.getF32Type();
+  bool isF32 = storeTy.isF32();
+  auto ws = gpu::AddressSpaceAttr::get(ctx, gpu::AddressSpace::Workgroup);
+  auto ldsT = MemRefType::get({NGROUPS}, f32, MemRefLayoutAttrInterface(), ws);
+  Value red = f.addWorkgroupAttribution(ldsT, loc);
+
+  b.setInsertionPointToStart(&f.getBody().front());
+  Value X = f.getArgument(0), gamma = f.getArgument(1);
+  Value dY = f.getArgument(2), dX = f.getArgument(3);
+  // dGamma contributions are written row-major into private slots. A second
+  // kernel folds those slots—and dY directly for dBeta—in ascending row order,
+  // so no cross-workgroup atomic ordering can affect either affine gradient.
+  Value dGammaPartials = f.getArgument(4);
+  Value M = f.getArgument(5), K = f.getArgument(6), eps = f.getArgument(7);
+  Value hasGamma = f.getArgument(8);
+
+  auto ci = [&](int64_t v) { return b.create<arith::ConstantIndexOp>(loc, v); };
+  Value c0 = ci(0), cBD = ci(BD);
+  Value zerof = b.create<arith::ConstantOp>(loc, f32, b.getF32FloatAttr(0.0));
+  Value m = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
+  Value tid = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
+  Type i32 = b.getI32Type();
+  Value wSG = b.create<arith::ConstantIntOp>(loc, i32, SG);
+  Value cSG = ci(SG);
+  Value group = b.create<arith::DivUIOp>(loc, tid, cSG);
+  Value laneInSg = b.create<arith::RemUIOp>(loc, tid, cSG);
+  Value isLeader =
+      b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, laneInSg, c0);
+  Value rowInb =
+      b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt, m, M);
+  auto rowIf = b.create<scf::IfOp>(loc, rowInb, /*withElse=*/false);
+  b.setInsertionPointToStart(rowIf.thenBlock());
+  Value base = b.create<arith::MulIOp>(loc, m, K);
+  Value Kf = b.create<arith::SIToFPOp>(
+      loc, f32, b.create<arith::IndexCastOp>(loc, b.getI64Type(), K));
+
+  auto loadF32 = [&](Value buffer, Value idx) -> Value {
+    Value v = b.create<memref::LoadOp>(loc, buffer, ValueRange{idx});
+    return isF32 ? v : b.create<arith::ExtFOp>(loc, f32, v);
+  };
+  auto storeDX = [&](Value value, Value idx) {
+    Value stored = isF32 ? value : b.create<arith::TruncFOp>(loc, storeTy, value);
+    b.create<memref::StoreOp>(loc, stored, dX, ValueRange{idx});
+  };
+  auto loadGamma = [&](Value channel) -> Value {
+    return loadF32(gamma, channel);
+  };
+  auto reduceRow = [&](function_ref<Value(Value)> localOf) -> Value {
+    auto lp = b.create<scf::ForOp>(loc, tid, K, cBD, ValueRange{zerof});
+    {
+      OpBuilder::InsertionGuard guard(b);
+      b.setInsertionPointToStart(lp.getBody());
+      Value idx = b.create<arith::AddIOp>(loc, base, lp.getInductionVar());
+      Value value = localOf(idx);
+      Value accum = b.create<arith::AddFOp>(
+          loc, lp.getRegionIterArgs()[0], value);
+      b.create<scf::YieldOp>(loc, ValueRange{accum});
+    }
+    Value accum = lp.getResult(0);
+    for (int64_t off = SG / 2; off > 0; off >>= 1) {
+      Value offset = b.create<arith::ConstantIntOp>(loc, i32, off);
+      auto shuffled = b.create<gpu::ShuffleOp>(
+          loc, accum, offset, wSG, gpu::ShuffleMode::XOR);
+      accum = b.create<arith::AddFOp>(loc, accum,
+                                      shuffled.getShuffleResult());
+    }
+    auto leaderIf = b.create<scf::IfOp>(loc, isLeader, /*withElse=*/false);
+    {
+      OpBuilder::InsertionGuard guard(b);
+      b.setInsertionPointToStart(leaderIf.thenBlock());
+      b.create<memref::StoreOp>(loc, accum, red, ValueRange{group});
+    }
+    b.create<gpu::BarrierOp>(loc);
+    Value total = b.create<memref::LoadOp>(loc, red, ValueRange{c0});
+    for (int64_t gi = 1; gi < NGROUPS; ++gi)
+      total = b.create<arith::AddFOp>(
+          loc, total, b.create<memref::LoadOp>(loc, red, ValueRange{ci(gi)}));
+    b.create<gpu::BarrierOp>(loc);
+    return total;
+  };
+
+  Value mean = zerof;
+  Value inverse;
+  if (isLayerNorm) {
+    mean = b.create<arith::DivFOp>(
+        loc, reduceRow([&](Value idx) { return loadF32(X, idx); }), Kf);
+    Value varianceSum = reduceRow([&](Value idx) {
+      Value centered = b.create<arith::SubFOp>(loc, loadF32(X, idx), mean);
+      return b.create<arith::MulFOp>(loc, centered, centered).getResult();
+    });
+    Value variance = b.create<arith::DivFOp>(loc, varianceSum, Kf);
+    Value denom = b.create<math::SqrtOp>(
+        loc, b.create<arith::AddFOp>(loc, variance, eps));
+    inverse = b.create<arith::DivFOp>(
+        loc, b.create<arith::ConstantOp>(loc, f32, b.getF32FloatAttr(1.0)),
+        denom);
+  } else {
+    Value squareSum = reduceRow([&](Value idx) {
+      Value x = loadF32(X, idx);
+      return b.create<arith::MulFOp>(loc, x, x).getResult();
+    });
+    Value meanSquare = b.create<arith::DivFOp>(loc, squareSum, Kf);
+    Value denom = b.create<math::SqrtOp>(
+        loc, b.create<arith::AddFOp>(loc, meanSquare, eps));
+    inverse = b.create<arith::DivFOp>(
+        loc, b.create<arith::ConstantOp>(loc, f32, b.getF32FloatAttr(1.0)),
+        denom);
+  }
+
+  auto normalizedAt = [&](Value idx) -> Value {
+    Value x = loadF32(X, idx);
+    if (isLayerNorm)
+      x = b.create<arith::SubFOp>(loc, x, mean);
+    return b.create<arith::MulFOp>(loc, x, inverse);
+  };
+  auto dzAt = [&](Value idx) -> Value {
+    Value dy = loadF32(dY, idx);
+    Value channel = b.create<arith::RemUIOp>(loc, idx, K);
+    auto gammaIf = b.create<scf::IfOp>(loc, TypeRange{f32}, hasGamma,
+                                       /*withElse=*/true);
+    {
+      OpBuilder::InsertionGuard guard(b);
+      b.setInsertionPointToStart(gammaIf.thenBlock());
+      Value scaled = b.create<arith::MulFOp>(loc, dy, loadGamma(channel));
+      b.create<scf::YieldOp>(loc, ValueRange{scaled});
+      b.setInsertionPointToStart(gammaIf.elseBlock());
+      b.create<scf::YieldOp>(loc, ValueRange{dy});
+    }
+    return gammaIf.getResult(0);
+  };
+
+  Value meanDz = zerof;
+  if (isLayerNorm)
+    meanDz = b.create<arith::DivFOp>(loc, reduceRow(dzAt), Kf);
+  Value meanDzZ = b.create<arith::DivFOp>(
+      loc,
+      reduceRow([&](Value idx) {
+        return b.create<arith::MulFOp>(loc, dzAt(idx), normalizedAt(idx))
+            .getResult();
+      }),
+      Kf);
+
+  auto write = b.create<scf::ForOp>(loc, tid, K, cBD);
+  {
+    OpBuilder::InsertionGuard guard(b);
+    b.setInsertionPointToStart(write.getBody());
+    Value channel = write.getInductionVar();
+    Value idx = b.create<arith::AddIOp>(loc, base, channel);
+    Value dy = loadF32(dY, idx);
+    Value z = normalizedAt(idx);
+    Value inner = b.create<arith::SubFOp>(loc, dzAt(idx), meanDz);
+    inner = b.create<arith::SubFOp>(
+        loc, inner, b.create<arith::MulFOp>(loc, z, meanDzZ));
+    storeDX(b.create<arith::MulFOp>(loc, inverse, inner), idx);
+
+    auto gammaIf = b.create<scf::IfOp>(loc, hasGamma, /*withElse=*/false);
+    {
+      OpBuilder::InsertionGuard affineGuard(b);
+      b.setInsertionPointToStart(gammaIf.thenBlock());
+      Value contribution = b.create<arith::MulFOp>(loc, dy, z);
+      b.create<memref::StoreOp>(loc, contribution, dGammaPartials,
+                                ValueRange{idx});
+    }
+  }
+
+  b.setInsertionPointToEnd(&f.getBody().front());
+  b.create<gpu::ReturnOp>(loc);
+}
+
+void emitNormBackwardFinalizeBody(OpBuilder &b, Location loc,
+                                  gpu::GPUFuncOp f, Type storeTy) {
+  Type f32 = b.getF32Type();
+  b.setInsertionPointToStart(&f.getBody().front());
+  Value dGammaPartials = f.getArgument(0);
+  Value dY = f.getArgument(1);
+  Value dGamma = f.getArgument(2), dBeta = f.getArgument(3);
+  Value M = f.getArgument(4), K = f.getArgument(5);
+  Value hasGamma = f.getArgument(6), hasBeta = f.getArgument(7);
+
+  auto ci = [&](int64_t value) {
+    return b.create<arith::ConstantIndexOp>(loc, value);
+  };
+  Value c0 = ci(0), c1 = ci(1), cBD = ci(BD);
+  Value block = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
+  Value tid = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
+  Value channel = b.create<arith::AddIOp>(
+      loc, b.create<arith::MulIOp>(loc, block, cBD), tid);
+  Value inBounds =
+      b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt, channel, K);
+  auto channelIf = b.create<scf::IfOp>(loc, inBounds, /*withElse=*/false);
+  b.setInsertionPointToStart(channelIf.thenBlock());
+  Value zero = b.create<arith::ConstantOp>(loc, f32, b.getF32FloatAttr(0.0));
+
+  auto foldRows = [&](Value partials) -> Value {
+    auto loop = b.create<scf::ForOp>(loc, c0, M, c1, ValueRange{zero});
+    {
+      OpBuilder::InsertionGuard guard(b);
+      b.setInsertionPointToStart(loop.getBody());
+      Value index = b.create<arith::AddIOp>(
+          loc, b.create<arith::MulIOp>(loc, loop.getInductionVar(), K),
+          channel);
+      Value contribution =
+          b.create<memref::LoadOp>(loc, partials, ValueRange{index});
+      Value sum = b.create<arith::AddFOp>(
+          loc, loop.getRegionIterArgs()[0], contribution);
+      b.create<scf::YieldOp>(loc, ValueRange{sum});
+    }
+    return loop.getResult(0);
+  };
+  auto foldDY = [&]() -> Value {
+    auto loop = b.create<scf::ForOp>(loc, c0, M, c1, ValueRange{zero});
+    {
+      OpBuilder::InsertionGuard guard(b);
+      b.setInsertionPointToStart(loop.getBody());
+      Value index = b.create<arith::AddIOp>(
+          loc, b.create<arith::MulIOp>(loc, loop.getInductionVar(), K),
+          channel);
+      Value contribution =
+          b.create<memref::LoadOp>(loc, dY, ValueRange{index});
+      if (!storeTy.isF32())
+        contribution = b.create<arith::ExtFOp>(loc, f32, contribution);
+      Value sum = b.create<arith::AddFOp>(
+          loc, loop.getRegionIterArgs()[0], contribution);
+      b.create<scf::YieldOp>(loc, ValueRange{sum});
+    }
+    return loop.getResult(0);
+  };
+
+  auto gammaIf = b.create<scf::IfOp>(loc, hasGamma, /*withElse=*/false);
+  {
+    OpBuilder::InsertionGuard guard(b);
+    b.setInsertionPointToStart(gammaIf.thenBlock());
+    b.create<memref::StoreOp>(loc, foldRows(dGammaPartials), dGamma,
+                              ValueRange{channel});
+  }
+  auto betaIf = b.create<scf::IfOp>(loc, hasBeta, /*withElse=*/false);
+  {
+    OpBuilder::InsertionGuard guard(b);
+    b.setInsertionPointToStart(betaIf.thenBlock());
+    b.create<memref::StoreOp>(loc, foldDY(), dBeta,
+                              ValueRange{channel});
   }
 
   b.setInsertionPointToEnd(&f.getBody().front());
@@ -205,6 +488,9 @@ struct GenerateROCMNormKernelPass
       b.setInsertionPointToEnd(module.getBody());
       Location loc = op->getLoc();
       std::string kname = nameAttr.getValue().str();
+      bool backward = false;
+      if (auto a = op->getAttrOfType<BoolAttr>("backward"))
+        backward = a.getValue();
 
       Type storeTy = b.getF32Type();
       if (auto a = op->getAttrOfType<StringAttr>("dtype")) {
@@ -226,13 +512,46 @@ struct GenerateROCMNormKernelPass
       Type f32 = b.getF32Type();
       Type idxTy = b.getIndexType();
       auto memTy = MemRefType::get({ShapedType::kDynamic}, storeTy);
-      // (X, O : memref<?xstore>, M, K : index, eps : f32)
-      auto fnTy = b.getFunctionType({memTy, memTy, idxTy, idxTy, f32}, {});
+      FunctionType fnTy;
+      if (backward) {
+        auto accumTy = MemRefType::get({ShapedType::kDynamic}, f32);
+        // X, gamma, dY, dX use storage dtype. The row kernel writes f32
+        // dGamma partials; dBeta is folded directly from dY by the finalize
+        // kernel. Beta values are absent because its derivative is independent
+        // of beta.
+        fnTy = b.getFunctionType(
+            {memTy, memTy, memTy, memTy, accumTy, idxTy, idxTy, f32,
+             b.getI1Type()},
+            {});
+      } else {
+        // X, gamma, beta, O plus runtime shape/epsilon and uniform flags.
+        fnTy = b.getFunctionType(
+            {memTy, memTy, memTy, memTy, idxTy, idxTy, f32, b.getI1Type(),
+             b.getI1Type()},
+            {});
+      }
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
       gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
                        b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
-      emitNormBody(body, loc, gpuFunc, storeTy, kind == "layer_norm");
+      if (backward)
+        emitNormBackwardBody(body, loc, gpuFunc, storeTy,
+                             kind == "layer_norm");
+      else
+        emitNormBody(body, loc, gpuFunc, storeTy, kind == "layer_norm");
+      if (backward) {
+        auto accumTy = MemRefType::get({ShapedType::kDynamic}, f32);
+        auto finalizeTy = b.getFunctionType(
+            {accumTy, memTy, accumTy, accumTy, idxTy, idxTy,
+             b.getI1Type(), b.getI1Type()},
+            {});
+        auto finalize =
+            b.create<gpu::GPUFuncOp>(loc, kname + "_reduce", finalizeTy);
+        finalize->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
+                          b.getUnitAttr());
+        OpBuilder finalizeBody(finalize.getContext());
+        emitNormBackwardFinalizeBody(finalizeBody, loc, finalize, storeTy);
+      }
       op->erase();
     }
   }

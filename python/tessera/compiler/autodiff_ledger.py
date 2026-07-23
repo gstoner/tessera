@@ -96,8 +96,8 @@ _REDUCTION_KIND_ALIASES = {"amax": "max", "amin": "min"}
 # execution, Phase 4) and device verification; it does NOT set those columns.
 _BWD_IR_ORACLE_CPU: frozenset[str] = frozenset(
     {
-        "add", "broadcast", "gelu", "mean", "mul", "matmul", "silu",
-        "softmax", "sum", "tanh", "sigmoid",
+        "add", "broadcast", "gelu", "layer_norm", "mean", "mul", "matmul",
+        "relu", "rmsnorm", "silu", "softmax", "sum", "tanh", "sigmoid",
     }
 )
 
@@ -145,7 +145,11 @@ def _buildadjoint_body(text: str, sig_start: int) -> str:
 
 def _cpp_op_family(name: str) -> str:
     """Convert an ODS C++ op stem (``AllReduce``) to ``all_reduce``."""
-    return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
+    family = re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
+    # Public TSOL spelling predates the C++ class's acronym boundary. Keep the
+    # generated ledger keyed to the canonical op catalog, not an incidental
+    # CamelCase split.
+    return {"rms_norm": "rmsnorm"}.get(family, family)
 
 
 def _ir_adjoint_classes() -> tuple[frozenset[str], frozenset[str]]:

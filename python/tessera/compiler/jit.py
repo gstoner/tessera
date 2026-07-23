@@ -828,9 +828,13 @@ class JitFn:
         if target_kind == "rocm":
             return self._native_rocm_backward(
                 args, kwargs, out_cotangents=out_cotangents)
+        if target_kind == "x86":
+            return self._native_norm_backward(
+                "x86", args, kwargs, out_cotangents=out_cotangents)
         if target_kind != "cpu":
             raise TesseraJitError(
-                "native_backward currently supports target='cpu' or verified ROCm lanes")
+                "native_backward currently supports target='cpu'/'x86' or "
+                "verified ROCm lanes")
 
         import numpy as np
         import re
@@ -891,6 +895,87 @@ class JitFn:
         }
         return tuple(result["output"])
 
+    def _native_norm_backward(
+        self,
+        target: str,
+        args: Tuple[Any, ...],
+        kwargs: Dict[str, Any],
+        *,
+        out_cotangents: Any,
+    ) -> tuple[Any, ...]:
+        """Package one registered normalization op into its target VJP ABI."""
+        import numpy as np
+        from tessera.runtime import RuntimeArtifact, launch
+
+        ordered = self._ordered_inputs(args, kwargs)
+        if ordered is None:
+            raise TesseraJitError(
+                f"{target} normalization backward requires every forward argument"
+            )
+        inputs = [np.ascontiguousarray(np.asarray(value)) for value in ordered]
+        cotangents = (out_cotangents if isinstance(out_cotangents, (tuple, list))
+                      else (out_cotangents,))
+        if len(cotangents) != 1:
+            raise TesseraJitError("normalization backward requires one output cotangent")
+        dy = np.ascontiguousarray(np.asarray(cotangents[0]))
+        graph_ops = [op for fn in self.graph_ir.functions for op in fn.body]
+        if len(graph_ops) != 1:
+            raise TesseraJitError(
+                "compiled normalization backward requires a single-op graph"
+            )
+        source_op = graph_ops[0]
+        bare = source_op.op_name.removeprefix("tessera.")
+        if bare not in {"rmsnorm", "rmsnorm_safe", "layer_norm"}:
+            raise TesseraJitError(
+                f"no {target} normalization backward candidate for {bare!r}"
+            )
+        family = "layer_norm" if bare == "layer_norm" else "rmsnorm"
+        operand_names = list(self.arg_names)
+        gradient_names = [f"d_{name}" for name in operand_names]
+        path = f"{target}_{family}_bwd_compiled"
+        artifact = RuntimeArtifact(metadata={
+            "target": target,
+            "compiler_path": path,
+            "executable": True,
+            "execution_kind": "native_gpu" if target == "rocm" else "native_cpu",
+            "execution_mode": "hip_runtime" if target == "rocm" else "cpu_avx512",
+            "autodiff_phase": "backward",
+            "out_cotangent": "dy",
+            "arg_names": operand_names + ["dy"],
+            "output_names": gradient_names,
+            "ops": [{
+                "op_name": source_op.op_name,
+                "result": source_op.result,
+                "operands": operand_names,
+                "kwargs": dict(source_op.kwargs),
+            }],
+        })
+        result = launch(artifact, tuple([*inputs, dy]))
+        expected_mode = "hip_runtime" if target == "rocm" else "cpu_avx512"
+        if not result.get("ok") or result.get("execution_mode") != expected_mode:
+            raise TesseraJitError(
+                f"verified {target} normalization backward launch failed: "
+                + str(result.get("reason"))
+            )
+        evidence_target = "rocm_gfx1151" if target == "rocm" else "x86_avx512"
+        self.last_backward_execution = {
+            "compiler_path": path,
+            "execution_kind": "native_gpu" if target == "rocm" else "native_cpu",
+            "execution_mode": expected_mode,
+            "evidence_target": evidence_target,
+            "implementation": "dedicated",
+            "residual_policy": "recompute_all",
+        }
+        output = result["output"]
+        all_gradients = (tuple(output)
+                         if isinstance(output, (tuple, list)) else (output,))
+        by_name = dict(zip(operand_names, all_gradients))
+        request = self.differentiation_request
+        if request is None:
+            raise TesseraJitError("native backward requires a differentiation request")
+        requested = request.wrt
+        return tuple(by_name[name] for name in requested)
+
     def _native_rocm_backward(
         self,
         args: Tuple[Any, ...],
@@ -911,6 +996,10 @@ class JitFn:
         cotangents = [np.ascontiguousarray(np.asarray(value)) for value in cots]
         graph_ops = [op for fn in self.graph_ir.functions for op in fn.body]
         ops = {op.op_name.removeprefix("tessera.") for op in graph_ops}
+
+        if len(graph_ops) == 1 and ops <= {"rmsnorm", "rmsnorm_safe", "layer_norm"}:
+            return self._native_norm_backward(
+                "rocm", args, kwargs, out_cotangents=out_cotangents)
 
         if ops == {"matmul"} and len(inputs) == 2 and len(cotangents) == 1:
             # Matmul has no standalone backward kernel. Its paired ABI is the

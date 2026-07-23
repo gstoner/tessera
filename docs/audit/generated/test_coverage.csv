@@ -203,7 +203,7 @@ group_norm,9,0,0,9,0,,directly_tested,9 direct test references
 grouped_gemm,31,24,2,55,0,bf16 fp32 fp4_e2m1 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,55 direct test references
 grpo_policy_loss,10,3,0,13,0,,directly_tested,13 direct test references
 gru_cell,7,0,1,7,0,bf16 f16 f32 fp16,directly_tested,7 direct test references
-gt,4,0,0,4,0,bf16 f32 fp32 int32 int64 int8,directly_tested,4 direct test references
+gt,4,3,0,7,0,bf16 f32 fp32 int32 int64 int8,directly_tested,7 direct test references
 huber_loss,10,0,0,10,0,f32,directly_tested,10 direct test references
 hybrid_attention,17,2,1,19,0,,directly_tested,19 direct test references
 ifft,6,0,0,6,0,fp32,directly_tested,6 direct test references
@@ -237,7 +237,7 @@ laplacian_2d,5,0,0,5,0,,directly_tested,5 direct test references
 latent_kv_compress,9,19,0,28,0,fp16 fp32,directly_tested,28 direct test references
 latent_kv_expand_k,6,8,0,14,0,fp16 fp32,directly_tested,14 direct test references
 latent_kv_expand_v,5,7,0,12,0,fp16 fp32,directly_tested,12 direct test references
-layer_norm,30,9,3,39,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 int32 nvfp4,directly_tested,39 direct test references
+layer_norm,57,16,3,73,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 int32 nvfp4,directly_tested,73 direct test references
 le,3,0,0,3,0,bf16 f32 fp32 int32 int64 int8,directly_tested,3 direct test references
 lgamma,4,0,0,4,0,,directly_tested,4 direct test references
 lightning_attention,14,2,0,16,0,,directly_tested,16 direct test references
@@ -260,12 +260,12 @@ logical_xor,4,0,0,4,0,f32 fp32 int32 int64 int8,directly_tested,4 direct test re
 logsumexp,6,3,0,9,0,,directly_tested,9 direct test references
 lookahead_sparse_attention,19,4,1,23,0,fp16,directly_tested,23 direct test references
 lora_linear,8,0,0,8,0,fp16,directly_tested,8 direct test references
-lt,8,0,2,8,0,bf16 f32 fp32 int32 int64 int8,directly_tested,8 direct test references
+lt,8,5,2,13,0,bf16 f32 fp32 int32 int64 int8,directly_tested,13 direct test references
 lu,9,1,0,10,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,10 direct test references
 mae_loss,11,0,0,11,0,f32,directly_tested,11 direct test references
 map,0,0,0,0,1,,structural_only,category default for 'control_flow'
 masked_categorical,10,0,0,10,0,,directly_tested,10 direct test references
-masked_fill,10,0,0,10,0,fp16 fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,10 direct test references
+masked_fill,11,4,0,15,0,fp16 fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,15 direct test references
 masked_scatter,14,0,1,14,0,fp16,directly_tested,14 direct test references
 matmul,441,233,19,674,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,674 direct test references
 max,7,0,2,7,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,7 direct test references
@@ -348,15 +348,15 @@ quantize_nvfp4,18,0,3,18,0,f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int
 quantized_matmul,5,0,0,5,0,f16,directly_tested,5 direct test references
 rearrange,8,0,0,8,0,fp16,directly_tested,8 direct test references
 reciprocal,4,0,0,4,0,bf16 f32 fp16 fp32,directly_tested,4 direct test references
-reduce,93,10,7,103,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int8 nvfp4,directly_tested,103 direct test references
+reduce,93,12,7,105,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int8 nvfp4,directly_tested,105 direct test references
 reduce_scatter,1,10,0,11,0,,directly_tested,11 direct test references
-relu,109,35,9,144,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,144 direct test references
+relu,111,36,9,147,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,147 direct test references
 remat,0,0,0,0,1,,structural_only,category default for 'transform'
 repeat,4,0,0,4,0,,directly_tested,4 direct test references
 reshape,12,16,1,28,0,,directly_tested,28 direct test references
 retention,12,0,2,12,0,,directly_tested,12 direct test references
 rfft,6,0,1,6,0,fp32,directly_tested,6 direct test references
-rmsnorm,80,13,4,93,0,bf16 f16 f32 f64 fp32 int32 int8,directly_tested,93 direct test references
+rmsnorm,94,18,5,112,0,bf16 f16 f32 f64 fp32 int32 int8,directly_tested,112 direct test references
 rmsnorm_safe,8,5,1,13,0,bf16 f16 f32,directly_tested,13 direct test references
 rng_bernoulli,4,0,0,4,0,,directly_tested,4 direct test references
 rng_beta,3,0,0,3,0,,directly_tested,3 direct test references

@@ -1273,3 +1273,49 @@ growing KV-cache execution are x86-only; no RDNA layout, HSACO ABI, schedule,
 selector, backward runtime, or exact-device claim transfers. Apple/NVIDIA
 Graph-cast materializers likewise do not transfer: ROCm's independent
 structured `#tile.layout` consumer remains unchanged.
+
+Cross-backend sync `CORE-COMPILER-ADJOINTS-2026-07-22` registers shared
+tensor-to-i1 comparison contracts plus internal scalar-threshold,
+rank-reduced normalization-statistics, and explicit broadcast-in-dimension
+Graph carriers. ReLU and unweighted RMSNorm/LayerNorm paired adjoints are
+static/dynamic Graph-native and CPU-IR oracle-proven; the static shared path
+lowers through linalg. ROCm is **follow-up required** for backward execution:
+no HSACO/HIP ABI, affine gamma/beta contract, RDNA schedule, selector, runtime
+binding, performance result, or gfx1151 device proof is added here. Dynamic
+statistics remain Graph IR until a ROCm-owned materializer lands; existing
+forward norm kernels transfer no backward claim.
+
+Cross-backend sync `CORE-COMPILER-NORM-AFFINE-2026-07-22` makes integer
+comparison signedness explicit in shared Graph IR and adds dynamic-dimension
+carriers plus channel-affine RMSNorm/LayerNorm adjoints. ROCm owns the first
+runtime-shaped affine forward materializer: one shape-independent gfx1151
+HSACO ABI executes unary/affine RMSNorm and LayerNorm for f32/f16/bf16, while
+signed-i32 and unsigned-u32 comparisons use distinct semantic routes over
+signless physical storage. Exact gfx1151 numerical tests and operation-total
+host-wall measurements are recorded. Backward HSACO launch is **follow-up
+required**; Graph-native `dx`/`dgamma`/`dbeta` and forward device execution do
+not imply compiled GPU backward execution or selector promotion.
+
+Cross-backend sync `CORE-COMPILER-NORM-BWD-2026-07-22` closes the ROCm
+normalization-backward follow-up. Family-specific RMSNorm and LayerNorm rows
+now bind the public paired `native_backward` seam to compiler-generated,
+runtime-shaped gfx HSACO. f32/f16/bf16 X/dY/dX storage is exact-device proven
+on gfx1151; dGamma/dBeta accumulate and return in f32, and stable statistics
+are recomputed from X under the recorded `recompute_all` residual policy.
+Unary/affine, ragged/rank-3, large-offset, cache-identity, ROCDL, and
+operation-total evidence are green. The atomic affine accumulation is not
+claimed bitwise deterministic, and no selector promotion or sibling-device
+proof transfers.
+
+Cross-backend sync `CORE-COMPILER-NORM-BWD-DETERMINISM-2026-07-22` replaces
+that atomic boundary with a deterministic two-kernel gfx1151 route. The row
+kernel writes private f32 dGamma contributions and the channel kernel folds
+those plus dY-for-dBeta in ascending row order, eliminating global atomics and
+cross-workgroup write races. Repeated f32/f16/bf16 RMSNorm and LayerNorm launches are bitwise
+identical on the LLVM/MLIR 23 + ROCm 7.14 gfx1151 host; exact numerical and
+operation-total affine medians are 2.28--2.40 ms for the retained 32x128 and
+7x300 packet shapes (maximum f32 error 3.82e-6), improving on the former
+2.37--2.61 ms atomic-route range. Affine calls temporarily consume one
+`M*K*sizeof(f32)` dGamma-partial buffer; dBeta needs no extra partial storage. This is a ROCm
+schedule/temporary-storage change only; no selector promotion or sibling proof
+transfers.

@@ -1890,6 +1890,26 @@ LogicalResult LayerNormOp::verify() {
         return emitOpError("layer_norm must preserve dim ") << i;
     }
   }
+  if (getAffine().size() > 2)
+    return emitOpError("accepts at most gamma and beta affine operands");
+  if (inTy) {
+    for (auto [index, affine] : llvm::enumerate(getAffine())) {
+      auto affineTy = dyn_cast<RankedTensorType>(affine.getType());
+      StringRef role = index == 0 ? "gamma" : "beta";
+      if (!affineTy || affineTy.getRank() != 1)
+        return emitOpError() << role << " must be a rank-1 channel tensor";
+      if (affineTy.getElementType() != inTy.getElementType())
+        return emitOpError() << role << " must match the input element type";
+      if (inTy.getRank() < 1)
+        return emitOpError("requires input rank at least one");
+      int64_t channels = inTy.getDimSize(inTy.getRank() - 1);
+      int64_t affineChannels = affineTy.getDimSize(0);
+      if (!ShapedType::isDynamic(channels) &&
+          !ShapedType::isDynamic(affineChannels) &&
+          channels != affineChannels)
+        return emitOpError() << role << " length must match the last input dim";
+    }
+  }
   if (auto eps = getEps()) {
     double v = eps->convertToDouble();
     if (!(v > 0.0))
@@ -2513,6 +2533,69 @@ LogicalResult DivOp::verify() {
                                "div");
 }
 
+static LogicalResult verifyBinaryComparison(Operation *op, Value lhs, Value rhs,
+                                            Value mask, StringRef name) {
+  auto lhsTy = dyn_cast<RankedTensorType>(lhs.getType());
+  auto rhsTy = dyn_cast<RankedTensorType>(rhs.getType());
+  auto maskTy = dyn_cast<RankedTensorType>(mask.getType());
+  if (!lhsTy || !rhsTy || !maskTy)
+    return success();
+  if (!isa<FloatType, IntegerType>(lhsTy.getElementType()))
+    return op->emitOpError() << name << " operands must be numeric tensors";
+  if (failed(verifySameRankedShapeAndElementType(op, lhsTy, rhsTy, name)))
+    return failure();
+  auto signedness = op->getAttrOfType<StringAttr>("signedness");
+  if (auto intTy = dyn_cast<IntegerType>(lhsTy.getElementType())) {
+    StringRef required;
+    if (intTy.isSigned())
+      required = "signed";
+    else if (intTy.isUnsigned())
+      required = "unsigned";
+    if (!signedness && intTy.isSignless())
+      return op->emitOpError()
+             << name << " with signless integer operands requires "
+             << "signedness=\"signed\" or signedness=\"unsigned\"";
+    if (signedness && signedness.getValue() != "signed" &&
+        signedness.getValue() != "unsigned")
+      return op->emitOpError()
+             << name << " signedness must be signed or unsigned";
+    if (!required.empty() && signedness && signedness.getValue() != required)
+      return op->emitOpError()
+             << name << " signedness conflicts with the operand integer type";
+  } else if (signedness) {
+    return op->emitOpError()
+           << name << " signedness is only valid for integer operands";
+  }
+  if (!maskTy.getElementType().isInteger(1))
+    return op->emitOpError() << name << " result must have i1 element type";
+  return verifySameRankedShape(op, lhsTy, maskTy, name);
+}
+
+LogicalResult EqOp::verify() {
+  return verifyBinaryComparison(getOperation(), getLhs(), getRhs(), getMask(),
+                                "eq");
+}
+LogicalResult NeOp::verify() {
+  return verifyBinaryComparison(getOperation(), getLhs(), getRhs(), getMask(),
+                                "ne");
+}
+LogicalResult LtOp::verify() {
+  return verifyBinaryComparison(getOperation(), getLhs(), getRhs(), getMask(),
+                                "lt");
+}
+LogicalResult LeOp::verify() {
+  return verifyBinaryComparison(getOperation(), getLhs(), getRhs(), getMask(),
+                                "le");
+}
+LogicalResult GtOp::verify() {
+  return verifyBinaryComparison(getOperation(), getLhs(), getRhs(), getMask(),
+                                "gt");
+}
+LogicalResult GeOp::verify() {
+  return verifyBinaryComparison(getOperation(), getLhs(), getRhs(), getMask(),
+                                "ge");
+}
+
 LogicalResult SelectOp::verify() {
   auto condTy = dyn_cast<RankedTensorType>(getCond().getType());
   auto aTy = dyn_cast<RankedTensorType>(getA().getType());
@@ -2527,6 +2610,68 @@ LogicalResult SelectOp::verify() {
     return failure();
   return verifySameRankedShapeAndElementType(getOperation(), aTy, resultTy,
                                              "select");
+}
+
+LogicalResult CompareScalarOp::verify() {
+  auto inTy = dyn_cast<RankedTensorType>(getX().getType());
+  auto maskTy = dyn_cast<RankedTensorType>(getMask().getType());
+  if (!inTy || !maskTy)
+    return success();
+  if (!isa<FloatType>(inTy.getElementType()))
+    return emitOpError("input must be a floating tensor");
+  if (!maskTy.getElementType().isInteger(1))
+    return emitOpError("mask must have i1 element type");
+  if (failed(verifySameRankedShape(getOperation(), inTy, maskTy,
+                                   "compare_scalar")))
+    return failure();
+  StringRef predicate = getPredicate();
+  if (predicate != "eq" && predicate != "ne" && predicate != "lt" &&
+      predicate != "le" && predicate != "gt" && predicate != "ge")
+    return emitOpError("predicate must be one of eq/ne/lt/le/gt/ge");
+  return success();
+}
+
+LogicalResult BroadcastInDimOp::verify() {
+  auto inTy = dyn_cast<RankedTensorType>(getX().getType());
+  auto outTy = dyn_cast<RankedTensorType>(getY().getType());
+  if (!inTy || !outTy)
+    return success();
+  if (getShapeLike()) {
+    auto shapeTy = dyn_cast<RankedTensorType>(getShapeLike().getType());
+    if (!shapeTy || shapeTy.getRank() != outTy.getRank())
+      return emitOpError("shape_like must have the result rank");
+    for (int64_t dim = 0; dim < outTy.getRank(); ++dim) {
+      int64_t shaped = shapeTy.getDimSize(dim);
+      int64_t result = outTy.getDimSize(dim);
+      if (!ShapedType::isDynamic(shaped) && !ShapedType::isDynamic(result) &&
+          shaped != result)
+        return emitOpError("shape_like dimensions must match the result");
+    }
+  } else if (!outTy.hasStaticShape()) {
+    return emitOpError("dynamic result requires a shape_like operand");
+  }
+  if (inTy.getElementType() != outTy.getElementType())
+    return emitOpError("must preserve element type");
+  ArrayAttr dimensions = getBroadcastDimensions();
+  if (dimensions.size() != static_cast<size_t>(inTy.getRank()))
+    return emitOpError("broadcast_dimensions length must equal input rank");
+  int64_t previous = -1;
+  for (int64_t inputDim = 0; inputDim < inTy.getRank(); ++inputDim) {
+    auto dimension = dyn_cast<IntegerAttr>(dimensions[inputDim]);
+    if (!dimension)
+      return emitOpError("broadcast_dimensions entries must be integers");
+    int64_t outputDim = dimension.getInt();
+    if (outputDim <= previous || outputDim >= outTy.getRank())
+      return emitOpError(
+          "broadcast_dimensions must be strictly increasing and in result range");
+    int64_t inExtent = inTy.getDimSize(inputDim);
+    int64_t outExtent = outTy.getDimSize(outputDim);
+    if (!ShapedType::isDynamic(inExtent) && !ShapedType::isDynamic(outExtent) &&
+        inExtent != 1 && inExtent != outExtent)
+      return emitOpError("mapped input extent must be one or match result extent");
+    previous = outputDim;
+  }
+  return success();
 }
 
 LogicalResult MaskedFillOp::verify() {
@@ -3431,10 +3576,62 @@ LogicalResult RmsNormOp::verify() {
   if (failed(verifyShapeDtypePreserving(getOperation(), getX(), getY(),
                                         "rmsnorm")))
     return failure();
+  if (getAffine().size() > 1)
+    return emitOpError("accepts at most one gamma affine operand");
+  auto inTy = dyn_cast<RankedTensorType>(getX().getType());
+  if (inTy && !getAffine().empty()) {
+    auto gammaTy = dyn_cast<RankedTensorType>(getAffine().front().getType());
+    if (!gammaTy || gammaTy.getRank() != 1)
+      return emitOpError("gamma must be a rank-1 channel tensor");
+    if (gammaTy.getElementType() != inTy.getElementType())
+      return emitOpError("gamma must match the input element type");
+    if (inTy.getRank() < 1)
+      return emitOpError("requires input rank at least one");
+    int64_t channels = inTy.getDimSize(inTy.getRank() - 1);
+    int64_t gammaChannels = gammaTy.getDimSize(0);
+    if (!ShapedType::isDynamic(channels) &&
+        !ShapedType::isDynamic(gammaChannels) && channels != gammaChannels)
+      return emitOpError("gamma length must match the last input dim");
+  }
   if (auto eps = getEps()) {
     double v = eps->convertToDouble();
     if (!(v > 0.0))
       return emitOpError("eps must be positive for stable rsqrt; got ") << v;
+  }
+  return success();
+}
+
+LogicalResult NormalizationStatsOp::verify() {
+  auto inTy = dyn_cast<RankedTensorType>(getX().getType());
+  auto centerTy = dyn_cast<RankedTensorType>(getCenter().getType());
+  auto invTy = dyn_cast<RankedTensorType>(getInverseScale().getType());
+  if (!inTy || !centerTy || !invTy)
+    return success();
+  if (!isa<FloatType>(inTy.getElementType()))
+    return emitOpError("input must be a floating tensor");
+  if (inTy.getRank() < 1)
+    return emitOpError("input must have rank at least one");
+  int64_t axis = getAxis();
+  if (axis < 0)
+    axis += inTy.getRank();
+  if (axis < 0 || axis >= inTy.getRank())
+    return emitOpError("axis is out of range for input rank");
+  if (!(getEps().convertToDouble() > 0.0))
+    return emitOpError("eps must be positive for stable rsqrt");
+  if (centerTy != invTy)
+    return emitOpError("center and inverse_scale must have identical types");
+  if (centerTy.getElementType() != inTy.getElementType())
+    return emitOpError("statistics must preserve input element type");
+  if (centerTy.getRank() != inTy.getRank() - 1)
+    return emitOpError("statistics rank must be input rank minus one");
+  for (int64_t i = 0, j = 0; i < inTy.getRank(); ++i) {
+    if (i == axis)
+      continue;
+    int64_t inDim = inTy.getDimSize(i);
+    int64_t outDim = centerTy.getDimSize(j++);
+    if (!ShapedType::isDynamic(inDim) && !ShapedType::isDynamic(outDim) &&
+        inDim != outDim)
+      return emitOpError("statistics shape must equal input shape with axis removed");
   }
   return success();
 }

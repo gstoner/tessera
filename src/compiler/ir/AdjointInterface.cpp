@@ -109,6 +109,88 @@ placeholderAdjoint(mlir::OpBuilder &builder, mlir::Location loc, mlir::Type ty,
 static mlir::Value splatConst(mlir::OpBuilder &builder, mlir::Location loc,
                               mlir::Type ty, double value);
 
+static mlir::RankedTensorType
+lastAxisReducedType(mlir::RankedTensorType inputType) {
+  llvm::SmallVector<int64_t> shape(inputType.getShape());
+  shape.pop_back();
+  return mlir::RankedTensorType::get(shape, inputType.getElementType(),
+                                     inputType.getEncoding());
+}
+
+static std::pair<mlir::Value, mlir::Value> buildNormalizationStats(
+    mlir::OpBuilder &builder, mlir::Location loc, mlir::Value x,
+    mlir::RankedTensorType inputType, mlir::FloatAttr eps, bool centered) {
+  mlir::RankedTensorType statsType = lastAxisReducedType(inputType);
+  mlir::OperationState state(loc, "tessera.normalization_stats");
+  state.addOperands(x);
+  state.addTypes({statsType, statsType});
+  state.addAttribute("axis", builder.getI64IntegerAttr(-1));
+  state.addAttribute("eps", eps ? eps : builder.getF64FloatAttr(1.0e-5));
+  state.addAttribute("centered", builder.getBoolAttr(centered));
+  mlir::Operation *stats = builder.create(state);
+  return {stats->getResult(0), stats->getResult(1)};
+}
+
+static mlir::Value broadcastLastAxisStat(mlir::OpBuilder &builder,
+                                         mlir::Location loc,
+                                         mlir::RankedTensorType inputType,
+                                         mlir::Value stat,
+                                         mlir::Value shapeLike) {
+  llvm::SmallVector<mlir::Attribute> dimensions;
+  dimensions.reserve(inputType.getRank() - 1);
+  for (int64_t dim = 0; dim + 1 < inputType.getRank(); ++dim)
+    dimensions.push_back(builder.getI64IntegerAttr(dim));
+  return builder
+      .create<BroadcastInDimOp>(loc, inputType, stat, shapeLike,
+                                builder.getArrayAttr(dimensions))
+      .getY();
+}
+
+static mlir::Value reduceMeanLastAxis(mlir::OpBuilder &builder,
+                                      mlir::Location loc,
+                                      mlir::RankedTensorType inputType,
+                                      mlir::Value value) {
+  return builder
+      .create<ReduceOp>(loc, lastAxisReducedType(inputType), value,
+                        builder.getStringAttr("mean"),
+                        builder.getI64IntegerAttr(inputType.getRank() - 1))
+      .getResult();
+}
+
+static mlir::Value broadcastChannelVector(mlir::OpBuilder &builder,
+                                          mlir::Location loc,
+                                          mlir::RankedTensorType inputType,
+                                          mlir::Value channel,
+                                          mlir::Value shapeLike) {
+  auto mapping = builder.getArrayAttr(
+      {builder.getI64IntegerAttr(inputType.getRank() - 1)});
+  return builder
+      .create<BroadcastInDimOp>(loc, inputType, channel, shapeLike, mapping)
+      .getY();
+}
+
+// Reduce every leading dimension, leaving the final channel dimension. Since
+// each reduction removes axis zero, repeating axis zero is valid for all ranks.
+static mlir::Value reduceLeadingSum(mlir::OpBuilder &builder,
+                                    mlir::Location loc,
+                                    mlir::RankedTensorType inputType,
+                                    mlir::Value value) {
+  mlir::RankedTensorType currentType = inputType;
+  for (int64_t remaining = inputType.getRank() - 1; remaining > 0; --remaining) {
+    llvm::SmallVector<int64_t> shape(currentType.getShape());
+    shape.erase(shape.begin());
+    auto reducedType = mlir::RankedTensorType::get(
+        shape, currentType.getElementType(), currentType.getEncoding());
+    value = builder
+                .create<ReduceOp>(loc, reducedType, value,
+                                  builder.getStringAttr("sum"),
+                                  builder.getI64IntegerAttr(0))
+                .getResult();
+    currentType = reducedType;
+  }
+  return value;
+}
+
 // These tables are both implementation policy and the generated ledger's
 // source for kind-aware `tessera.reduce` classification. Keep their spelling
 // stable unless autodiff_ledger.py is updated in the same change.
@@ -253,16 +335,64 @@ llvm::SmallVector<mlir::Value> LayerNormOp::buildAdjoint(
     mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
   if (outputCotangents.size() != 1 || !outputCotangents[0])
     return {mlir::Value()};
-  // Emit a custom_adjoint_call placeholder — the closed-form layernorm
-  // adjoint requires several reductions that are awkward in pure ODS.
-  // Routing through the runtime's Python VJP keeps semantics identical to
-  // the numpy tape and avoids a second source of truth.
+  auto inputType = mlir::dyn_cast<mlir::RankedTensorType>(getX().getType());
+  if (!inputType || inputType.getRank() < 1)
+    return placeholderAdjoint(builder, getLoc(), getX().getType(),
+                              "layer_norm", outputCotangents[0], getX());
   auto loc = getLoc();
-  auto callOp = builder.create<CustomAdjointCallOp>(
-      loc, llvm::SmallVector<mlir::Type>{getX().getType()},
-      builder.getStringAttr("layer_norm"),
-      mlir::ValueRange{outputCotangents[0], getX()});
-  return {callOp.getResult(0)};
+  mlir::Value dy = outputCotangents[0];
+  auto [center, inverseScale] = buildNormalizationStats(
+      builder, loc, getX(), inputType,
+      (*this)->getAttrOfType<mlir::FloatAttr>("eps"), /*centered=*/true);
+  mlir::Value centerBroadcast =
+      broadcastLastAxisStat(builder, loc, inputType, center, getX());
+  mlir::Value inverseBroadcast =
+      broadcastLastAxisStat(builder, loc, inputType, inverseScale, getX());
+  mlir::Value centered =
+      builder.create<SubOp>(loc, inputType, getX(), centerBroadcast).getResult();
+  mlir::Value normalized =
+      builder.create<MulOp>(loc, inputType, centered, inverseBroadcast).getResult();
+  mlir::Value projectedDy = dy;
+  if (!getAffine().empty()) {
+    mlir::Value gamma = getAffine().front();
+    projectedDy = builder
+                      .create<MulOp>(loc, inputType, dy,
+                                     broadcastChannelVector(builder, loc,
+                                                            inputType, gamma,
+                                                            getX()))
+                      .getResult();
+  }
+  mlir::Value meanDy =
+      reduceMeanLastAxis(builder, loc, inputType, projectedDy);
+  mlir::Value meanDyBroadcast =
+      broadcastLastAxisStat(builder, loc, inputType, meanDy, getX());
+  mlir::Value dyNormalized =
+      builder.create<MulOp>(loc, inputType, projectedDy, normalized).getResult();
+  mlir::Value meanDyNormalized =
+      reduceMeanLastAxis(builder, loc, inputType, dyNormalized);
+  mlir::Value meanDyNormalizedBroadcast =
+      broadcastLastAxisStat(builder, loc, inputType, meanDyNormalized, getX());
+  mlir::Value centeredDy =
+      builder.create<SubOp>(loc, inputType, projectedDy, meanDyBroadcast).getResult();
+  mlir::Value correction = builder
+                               .create<MulOp>(loc, inputType, normalized,
+                                              meanDyNormalizedBroadcast)
+                               .getResult();
+  mlir::Value projected =
+      builder.create<SubOp>(loc, inputType, centeredDy, correction).getResult();
+  llvm::SmallVector<mlir::Value> gradients;
+  gradients.push_back(
+      builder.create<MulOp>(loc, inputType, projected, inverseBroadcast)
+          .getResult());
+  if (!getAffine().empty()) {
+    mlir::Value gammaProduct =
+        builder.create<MulOp>(loc, inputType, dy, normalized).getResult();
+    gradients.push_back(
+        reduceLeadingSum(builder, loc, inputType, gammaProduct));
+  }
+  if (getAffine().size() > 1)
+    gradients.push_back(reduceLeadingSum(builder, loc, inputType, dy));
+  return gradients;
 }
 
 llvm::SmallVector<mlir::Value> SoftmaxOp::buildAdjoint(
@@ -333,15 +463,95 @@ llvm::SmallVector<mlir::Value> SoftmaxOp::buildAdjoint(
     return {callOp.getResult(0)};                                             \
   }
 
-POINTWISE_BUILD_ADJOINT(ReluOp, "relu")
 POINTWISE_BUILD_ADJOINT(SinOp, "sin")
 // Tier-1 MPSGraph-lane ops (2026-05-29). Each has a Python VJP the runtime
 // resolves via the custom_adjoint_call placeholder keyed by name.
 POINTWISE_BUILD_ADJOINT(SoftplusOp, "softplus")
-POINTWISE_BUILD_ADJOINT(RmsNormOp, "rmsnorm")
 POINTWISE_BUILD_ADJOINT(LogSoftmaxOp, "log_softmax")
 
 #undef POINTWISE_BUILD_ADJOINT
+
+// relu: dx = x > 0 ? dy : 0.  compare_scalar produces a genuine i1 tensor
+// mask even for dynamic shapes; masked_fill supplies the scalar-zero branch
+// without requiring a statically-shaped dense constant.
+llvm::SmallVector<mlir::Value> ReluOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  if (outputCotangents.size() != 1 || !outputCotangents[0])
+    return {mlir::Value()};
+  auto inputType = mlir::dyn_cast<mlir::RankedTensorType>(getX().getType());
+  if (!inputType)
+    return placeholderAdjoint(builder, getLoc(), getX().getType(), "relu",
+                              outputCotangents[0], getX());
+  auto maskType = mlir::RankedTensorType::get(
+      inputType.getShape(), builder.getI1Type(), inputType.getEncoding());
+  auto mask = builder.create<CompareScalarOp>(
+      getLoc(), maskType, getX(), builder.getF64FloatAttr(0.0),
+      builder.getStringAttr("gt"));
+  auto dx = builder.create<MaskedFillOp>(
+      getLoc(), inputType, outputCotangents[0], mask.getMask(),
+      builder.getF64FloatAttr(0.0));
+  return {dx.getResult()};
+}
+
+// rmsnorm: r = rsqrt(mean(x^2)+eps)
+//          dx = dy*r - x*r^3*mean(dy*x)
+llvm::SmallVector<mlir::Value> RmsNormOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  if (outputCotangents.size() != 1 || !outputCotangents[0])
+    return {mlir::Value()};
+  auto inputType = mlir::dyn_cast<mlir::RankedTensorType>(getX().getType());
+  if (!inputType || inputType.getRank() < 1)
+    return placeholderAdjoint(builder, getLoc(), getX().getType(), "rmsnorm",
+                              outputCotangents[0], getX());
+  auto loc = getLoc();
+  mlir::Value dy = outputCotangents[0];
+  auto [unusedCenter, inverseScale] = buildNormalizationStats(
+      builder, loc, getX(), inputType,
+      (*this)->getAttrOfType<mlir::FloatAttr>("eps"), /*centered=*/false);
+  (void)unusedCenter;
+  mlir::Value inverseBroadcast =
+      broadcastLastAxisStat(builder, loc, inputType, inverseScale, getX());
+  mlir::Value projectedDy = dy;
+  if (!getAffine().empty()) {
+    projectedDy = builder
+                      .create<MulOp>(
+                          loc, inputType, dy,
+                          broadcastChannelVector(builder, loc, inputType,
+                                                 getAffine().front(), getX()))
+                      .getResult();
+  }
+  mlir::Value leading = builder
+                            .create<MulOp>(loc, inputType, projectedDy,
+                                           inverseBroadcast)
+                            .getResult();
+  mlir::Value dyX =
+      builder.create<MulOp>(loc, inputType, projectedDy, getX()).getResult();
+  mlir::Value meanDyX = reduceMeanLastAxis(builder, loc, inputType, dyX);
+  mlir::Value meanDyXBroadcast =
+      broadcastLastAxisStat(builder, loc, inputType, meanDyX, getX());
+  mlir::Value inverseSquared =
+      builder.create<MulOp>(loc, inputType, inverseBroadcast, inverseBroadcast)
+          .getResult();
+  mlir::Value inverseCubed =
+      builder.create<MulOp>(loc, inputType, inverseSquared, inverseBroadcast)
+          .getResult();
+  mlir::Value scaledX =
+      builder.create<MulOp>(loc, inputType, getX(), inverseCubed).getResult();
+  mlir::Value correction =
+      builder.create<MulOp>(loc, inputType, scaledX, meanDyXBroadcast)
+          .getResult();
+  llvm::SmallVector<mlir::Value> gradients;
+  gradients.push_back(
+      builder.create<SubOp>(loc, inputType, leading, correction).getResult());
+  if (!getAffine().empty()) {
+    mlir::Value normalized =
+        builder.create<MulOp>(loc, inputType, getX(), inverseBroadcast).getResult();
+    gradients.push_back(reduceLeadingSum(
+        builder, loc, inputType,
+        builder.create<MulOp>(loc, inputType, dy, normalized).getResult()));
+  }
+  return gradients;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Native (compiler-visible) pointwise adjoints (W5).

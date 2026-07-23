@@ -40,10 +40,10 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 
 | Item | Status | Ready | Total | Open | Detail | Next |
 |---|---|---:|---:|---:|---|---|
-| `Verifier coverage` | closed | 174 | 174 | 0 | real=174 | Add real verifier implementations for no_verifier ops, prioritizing native codegen lanes. |
+| `Verifier coverage` | closed | 183 | 183 | 0 | real=183 | Add real verifier implementations for no_verifier ops, prioritizing native codegen lanes. |
 | `Direct test evidence` | mixed | 363 | 480 | 117 | covered_by_family=26, directly_tested=363, hardware_gated=4, structural_only=87 | Convert structural_only and needs_direct_test rows into direct compare fixtures; keep hardware_gated tied to backend proof. |
-| `Runtime execution matrix` | closed | 187 | 187 | 0 | apple_cpu=2, apple_gpu=22, cpu=5, nvidia_sm120=24, rocm=69, x86=65 | Add rows only when a launch path actually executes. |
-| `Runtime ABI symbols` | mixed | 465 | 765 | 300 | apple=661, nvidia=7, rocm=12, x86=85 | Reduce stub-only ABI rows where a backend claims native execution. |
+| `Runtime execution matrix` | closed | 191 | 191 | 0 | apple_cpu=2, apple_gpu=22, cpu=5, nvidia_sm120=24, rocm=71, x86=67 | Add rows only when a launch path actually executes. |
+| `Runtime ABI symbols` | mixed | 471 | 771 | 300 | apple=661, nvidia=7, rocm=12, x86=91 | Reduce stub-only ABI rows where a backend claims native execution. |
 | `Audited repo surfaces` | mixed | 31 | 58 | 27 | archived=4, compile_only=12, runnable=31, runnable_optional=1, scaffold=10 | Graduate compile_only/scaffold entries that exercise compiler pathways; archive dead surfaces. |
 
 ## Code Generation Pathways
@@ -53,7 +53,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 | `Apple CPU` | closed | 177 | 177 | 0 | runtime: apple_cpu=2; target_map: fused=4, reference=171 | Keep as regression baseline for CPU value-call/runtime ABI. |
 | `Apple GPU` | mixed | 196 | 197 | 1 | runtime: apple_gpu=22; target_map: absent=1, device_verified_abi=11, device_verified_jit=105, fused=58 | Close the remaining absent target-map lane or document why it is host-only. |
 | `x86 / CPU` | closed | 5 | 5 | 0 | runtime: cpu=5 | Keep native CPU and numpy reference lanes separate in runtime proofs. |
-| `ROCm / HIP` | mixed | 105 | 116 | 11 | runtime: rocm=69; target_map: artifact_only=11, device_verified_abi=2, device_verified_jit=34 | Close the artifact-only target-map tail and preserve CDNA as hardware-gated. |
+| `ROCm / HIP` | mixed | 107 | 118 | 11 | runtime: rocm=71; target_map: artifact_only=11, device_verified_abi=2, device_verified_jit=34 | Close the artifact-only target-map tail and preserve CDNA as hardware-gated. |
 | `CUDA / NVIDIA` | mixed | 24 | 65 | 41 | runtime: nvidia_sm120=24; target_map: artifact_only=41 | Promote artifact-only rows with execute-and-compare, starting from sm_120 matmul adjacency and attention. |
 
 ## Open Work Summary
@@ -66,7 +66,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 | `Audited repo surfaces` | mixed | 27 | archived=4, compile_only=12, runnable=31, runnable_optional=1, scaffold=10 | Graduate compile_only/scaffold entries that exercise compiler pathways; archive dead surfaces. | `docs/audit/generated/surface_status.csv` |
 | `Target IR native/fused codegen` | mixed | 12 | device_verified_abi=13, device_verified_jit=197, fused=72, no_kernel_required=8, not_applicable=21, reference=4 | Promote high-use reference rows into native/fused Target IR or mark intentional reference-only lanes. | `docs/audit/generated/support_table.csv` |
 | `ROCm target-map native promotion` | mixed | 11 | artifact_only=11, device_verified_abi=2, device_verified_jit=34 | Promote artifact_only rows with hardware execute-and-compare or move them to an explicit hardware-gated bucket. | `docs/audit/generated/rocm_target_map.csv` |
-| `Verifier coverage` | closed | 0 | real=174 | Add real verifier implementations for no_verifier ops, prioritizing native codegen lanes. | `docs/audit/generated/verifier_coverage.csv` |
+| `Verifier coverage` | closed | 0 | real=183 | Add real verifier implementations for no_verifier ops, prioritizing native codegen lanes. | `docs/audit/generated/verifier_coverage.csv` |
 
 ## Dashboard Map
 

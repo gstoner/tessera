@@ -80,6 +80,20 @@ def test_compare_nan_semantics():
                                       err_msg=f"{op_name} NaN mismatch")
 
 
+@pytest.mark.parametrize("dtype", [np.int32, np.uint32])
+@pytest.mark.parametrize("op_name", list(_CASES))
+def test_integer_compare_signedness_matches_numpy(dtype, op_name):
+    rt = _compare_or_skip()
+    if dtype == np.int32:
+        a = np.array([-2**31, -7, -1, 0, 1, 7, 2**31 - 1], dtype=dtype)
+        b = np.array([0, -8, 1, 0, -1, 8, 2**31 - 1], dtype=dtype)
+    else:
+        a = np.array([0, 1, 7, 2**31, 2**32 - 1], dtype=dtype)
+        b = np.array([1, 0, 8, 2**31 - 1, 2**32 - 1], dtype=dtype)
+    out = rt.launch(_artifact(rt, op_name), (a, b))["output"]
+    np.testing.assert_array_equal(out, _CASES[op_name](a, b))
+
+
 def test_compare_shape_mismatch_rejected():
     from tessera import runtime as rt
     a = np.zeros((4, 8), np.float32)
@@ -127,6 +141,15 @@ def test_compare_codegen_and_lowers(kind):
                "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
                "reconcile-unrealized-casts))")
     assert low.returncode == 0 and "llvm." in low.stdout
+
+
+@pytest.mark.parametrize("dtype,predicate", [("i32", "slt"), ("u32", "ult")])
+def test_integer_compare_codegen_has_explicit_order(dtype, predicate):
+    d = ('module {\n  "tessera_rocm.compare"() {name = "c", kind = "lt", '
+         f'dtype = "{dtype}"}} : () -> ()\n}}\n')
+    ir = _opt(d, "--generate-rocm-compare-kernel")
+    assert ir.returncode == 0, ir.stderr
+    assert f"arith.cmpi {predicate}" in ir.stdout
 
 
 def test_compare_codegen_bad_kind_rejected():

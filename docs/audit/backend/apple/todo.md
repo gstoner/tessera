@@ -1303,3 +1303,35 @@ exact-device claim transfers. Apple's architecture-owned Graph-cast consumer
 is host-validated: it accepts row-major/BHSD/NHWC before runtime fusion/per-op
 lowering and rejects unsupported column-major bindings. This changes binding
 metadata only and claims no exact-device proof.
+
+Cross-backend sync `CORE-COMPILER-ADJOINTS-2026-07-22` registers shared
+tensor-to-i1 comparison contracts plus internal scalar-threshold,
+rank-reduced normalization-statistics, and explicit broadcast-in-dimension
+Graph carriers. ReLU and unweighted RMSNorm/LayerNorm paired adjoints are
+static/dynamic Graph-native and CPU-IR oracle-proven; the static shared path
+lowers through linalg. Apple is **follow-up required** for backward execution:
+no Metal/MPS ABI, affine gamma/beta contract, schedule, selector, runtime
+binding, performance result, or exact-device proof is added here. Dynamic
+statistics remain Graph IR until an Apple-owned materializer is implemented.
+
+Cross-backend sync `CORE-COMPILER-NORM-AFFINE-2026-07-22` makes integer
+comparison signedness explicit in shared Graph IR and adds dynamic-dimension
+carriers plus channel-affine RMSNorm/LayerNorm adjoints. Apple is **follow-up
+required** for an architecture-owned dynamic affine normalization materializer
+and backward runtime: the gfx1151 HSACO and AVX-512 ABIs, schedules, timing,
+and exact-device evidence do not transfer to Metal/MPS. Shared static/dynamic
+linalg and CPU-oracle proof validate the Graph contract only; no Apple
+selector, execution row, or device claim changes.
+
+Cross-backend sync `CORE-COMPILER-NORM-BWD-DETERMINISM-2026-07-22` changes only
+the ROCm architecture-owned backward schedule and temporary-buffer ABI. The
+shared affine adjoint and f32 accumulation contract are unchanged. Apple still
+requires its own Metal/MPS backward materializer and exact-device proof; the
+gfx1151 two-kernel schedule, bitwise evidence, and timing do not transfer.
+
+Cross-backend sync `CORE-COMPILER-NORM-BWD-2026-07-22` adds family-specific
+RMSNorm/LayerNorm backward execution rows and public JIT binding for ROCm and
+x86. Apple remains **follow-up required**: neither the gfx1151 HSACO ABI nor
+the AVX-512 f32 ABI, schedule, dtype-accumulation contract, timing, or device
+evidence transfers to Metal/MPS. The shared Graph adjoint and dynamic Linalg
+contract remain parity validated; no Apple execution row or selector changes.

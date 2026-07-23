@@ -7,8 +7,9 @@
 //
 //   eq = a == b   ne = a != b   lt = a < b   le = a <= b   gt = a > b   ge = a >= b
 //
-// The two operands share a float storage dtype (f16/bf16/f32); the comparison
-// runs in **f32**. The result is an `i8` mask (0/1), matching numpy's bool
+// The operands share f16/bf16/f32, signed i32, or unsigned u32 storage. Float
+// comparisons run in f32; integer order is selected explicitly by dtype rather
+// than inferred from signless LLVM storage. The result is an `i8` mask (0/1), matching numpy's bool
 // output (1 byte/element). NaN semantics follow numpy: every predicate is
 // ORDERED (NaN → false) EXCEPT `ne`, which is UNORDERED-or-not-equal (NaN →
 // true), so `np.not_equal(nan, x)` and `np.equal(nan, x)` both match. N is a
@@ -37,9 +38,10 @@ static constexpr int64_t BD = 256;
 enum class Cmp { Eq, Ne, Lt, Le, Gt, Ge };
 
 void emitCompareBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
-                     Cmp cmp) {
+                     Cmp cmp, bool isUnsignedInteger) {
   Type f32 = b.getF32Type();
   Type i8 = b.getIntegerType(8);
+  bool isFloat = isa<FloatType>(storeTy);
   bool isF32 = storeTy.isF32();
   auto slt = arith::CmpIPredicate::slt;
   // numpy NaN semantics: ordered everywhere except `ne` (unordered-or-ne).
@@ -68,9 +70,23 @@ void emitCompareBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
 
   Value ra = b.create<memref::LoadOp>(loc, A, ValueRange{gid});
   Value rb = b.create<memref::LoadOp>(loc, B, ValueRange{gid});
-  Value a = isF32 ? ra : b.create<arith::ExtFOp>(loc, f32, ra);
-  Value bb = isF32 ? rb : b.create<arith::ExtFOp>(loc, f32, rb);
-  Value bit = b.create<arith::CmpFOp>(loc, pred, a, bb);   // i1
+  Value bit;
+  if (isFloat) {
+    Value a = isF32 ? ra : b.create<arith::ExtFOp>(loc, f32, ra);
+    Value bb = isF32 ? rb : b.create<arith::ExtFOp>(loc, f32, rb);
+    bit = b.create<arith::CmpFOp>(loc, pred, a, bb);
+  } else {
+    arith::CmpIPredicate intPred;
+    switch (cmp) {
+    case Cmp::Eq: intPred = arith::CmpIPredicate::eq; break;
+    case Cmp::Ne: intPred = arith::CmpIPredicate::ne; break;
+    case Cmp::Lt: intPred = isUnsignedInteger ? arith::CmpIPredicate::ult : arith::CmpIPredicate::slt; break;
+    case Cmp::Le: intPred = isUnsignedInteger ? arith::CmpIPredicate::ule : arith::CmpIPredicate::sle; break;
+    case Cmp::Gt: intPred = isUnsignedInteger ? arith::CmpIPredicate::ugt : arith::CmpIPredicate::sgt; break;
+    case Cmp::Ge: intPred = isUnsignedInteger ? arith::CmpIPredicate::uge : arith::CmpIPredicate::sge; break;
+    }
+    bit = b.create<arith::CmpIOp>(loc, intPred, ra, rb);
+  }
   Value sv = b.create<arith::ExtUIOp>(loc, i8, bit);       // 0/1 byte
   b.create<memref::StoreOp>(loc, sv, O, ValueRange{gid});
 
@@ -130,15 +146,22 @@ struct GenerateROCMCompareKernelPass
       std::string kname = nameAttr.getValue().str();
 
       Type storeTy = b.getF32Type();
+      bool isUnsignedInteger = false;
       if (auto a = op->getAttrOfType<StringAttr>("dtype")) {
         StringRef dt = a.getValue();
         if (dt == "f16" || dt == "float16")
           storeTy = b.getF16Type();
         else if (dt == "bf16" || dt == "bfloat16")
           storeTy = b.getBF16Type();
+        else if (dt == "i32" || dt == "int32")
+          storeTy = b.getI32Type();
+        else if (dt == "u32" || dt == "uint32") {
+          storeTy = b.getI32Type();
+          isUnsignedInteger = true;
+        }
         else if (dt != "f32" && dt != "float32") {
           op->emitError("generate-rocm-compare-kernel: dtype must be f32, f16, "
-                        "or bf16 (got '")
+                        "bf16, i32, or u32 (got '")
               << dt << "')";
           return signalPassFailure();
         }
@@ -156,7 +179,7 @@ struct GenerateROCMCompareKernelPass
       gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
                        b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
-      emitCompareBody(body, loc, gpuFunc, storeTy, cmp);
+      emitCompareBody(body, loc, gpuFunc, storeTy, cmp, isUnsignedInteger);
       op->erase();
     }
   }

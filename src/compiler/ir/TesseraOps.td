@@ -1211,7 +1211,7 @@ class Tessera_UnaryPureOp<string mnemonic, string summaryText> : Op<
 }
 
 def Tessera_LayerNormOp : Tessera_UnaryPureOp<"layer_norm", "LayerNorm over the innermost dimension"> {
-  let arguments = (ins TensorType:$x,
+  let arguments = (ins TensorType:$x, Variadic<TensorType>:$affine,
                        OptionalAttr<F64Attr>:$eps,
                        OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy);
   // Sprint V1 (2026-05-22): shape-preserving normalization.  Input
@@ -1333,6 +1333,27 @@ def Tessera_DivOp : Op<Tessera_Dialect, "div", [Pure]> {
   let hasFolder = 1;
 }
 
+// Public tensor/tensor comparisons.  These spellings have long existed in the
+// canonical Python op catalog; registering them here closes the Graph dialect
+// gap and gives generated masks a first-class tensor<i1> contract.
+class Tessera_BinaryComparisonOp<string mnemonic, string summaryText> : Op<
+  Tessera_Dialect, mnemonic, [Pure]
+> {
+  let summary = summaryText;
+  let arguments = (ins TensorType:$lhs, TensorType:$rhs,
+                       OptionalAttr<StrAttr>:$signedness);
+  let results = (outs TensorType:$mask);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_EqOp : Tessera_BinaryComparisonOp<"eq", "Elementwise ordered equality">;
+def Tessera_NeOp : Tessera_BinaryComparisonOp<"ne", "Elementwise ordered inequality">;
+def Tessera_LtOp : Tessera_BinaryComparisonOp<"lt", "Elementwise ordered less-than">;
+def Tessera_LeOp : Tessera_BinaryComparisonOp<"le", "Elementwise ordered less-or-equal">;
+def Tessera_GtOp : Tessera_BinaryComparisonOp<"gt", "Elementwise ordered greater-than">;
+def Tessera_GeOp : Tessera_BinaryComparisonOp<"ge", "Elementwise ordered greater-or-equal">;
+
 // Phase 2 Sprint 2.1 — data-parallel conditional (attention masking). select is
 // the general elementwise ternary (cond != 0 ? a : b); masked_fill is the
 // attention-masking form (mask != 0 ? x : value), with `value` a scalar attr
@@ -1344,6 +1365,33 @@ def Tessera_SelectOp : Op<Tessera_Dialect, "select", [Pure]> {
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
 }
+
+// Compiler-internal elementwise comparison against a scalar threshold.  The
+// public tensor/tensor comparison surface remains tessera.{eq,ne,lt,le,gt,ge};
+// this carrier exists so generated Graph adjoints can materialize a real i1
+// mask without manufacturing a dense tensor constant (which is impossible for
+// a dynamically-shaped result).  `predicate` is one of eq/ne/lt/le/gt/ge.
+def Tessera_CompareScalarOp : Op<Tessera_Dialect, "compare_scalar", [Pure]> {
+  let summary = "Elementwise comparison against a scalar threshold";
+  let arguments = (ins TensorType:$x, F64Attr:$rhs, StrAttr:$predicate);
+  let results = (outs TensorType:$mask);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+// Compiler-internal explicit-rank broadcast. `broadcast_dimensions[i]` names
+// the result dimension corresponding to input dimension i. This avoids the
+// ambiguity of implicit trailing-dimension broadcasting for rank-reduced
+// normalization statistics.
+def Tessera_BroadcastInDimOp : Op<Tessera_Dialect, "broadcast_in_dim", [Pure]> {
+  let summary = "Broadcast a tensor through an explicit input-to-result dimension map";
+  let arguments = (ins TensorType:$x, Optional<TensorType>:$shape_like,
+                       ArrayAttr:$broadcast_dimensions);
+  let results = (outs TensorType:$y);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
 def Tessera_MaskedFillOp : Op<Tessera_Dialect, "masked_fill", [Pure]> {
   let summary = "Elementwise masked fill (mask != 0 ? x : value)";
   let arguments = (ins TensorType:$x, TensorType:$mask, F64Attr:$value);
@@ -1381,9 +1429,27 @@ def Tessera_ReduceOp : Op<
 
 // RMSNorm (unweighted) over the innermost dimension; eps optional.
 def Tessera_RmsNormOp : Tessera_UnaryPureOp<"rmsnorm", "RMSNorm over the innermost dimension"> {
-  let arguments = (ins TensorType:$x,
+  let arguments = (ins TensorType:$x, Variadic<TensorType>:$affine,
                        OptionalAttr<F64Attr>:$eps,
                        OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy);
+  let hasVerifier = 1;
+}
+
+// Compiler-internal statistics carrier shared by normalization adjoints.
+// Results remove `axis`: `center` is mean(x), while `inverse_scale` is
+// rsqrt(mean((x-center)^2)+eps) when centered and
+// rsqrt(mean(x^2)+eps) otherwise.  Keeping statistics rank-reduced makes the
+// data contract explicit and lets consumers choose where to broadcast them.
+def Tessera_NormalizationStatsOp : Op<
+  Tessera_Dialect, "normalization_stats", [Pure]
+> {
+  let summary = "Rank-reduced normalization center and inverse scale";
+  let arguments = (ins TensorType:$x,
+                       DefaultValuedAttr<I64Attr, "-1">:$axis,
+                       DefaultValuedAttr<F64Attr, "1.0e-5">:$eps,
+                       DefaultValuedAttr<BoolAttr, "true">:$centered);
+  let results = (outs TensorType:$center, TensorType:$inverse_scale);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
 }
 

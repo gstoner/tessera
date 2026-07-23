@@ -7527,13 +7527,16 @@ def _execute_rocm_compiled_softmax(artifact: RuntimeArtifact, args: Any) -> Any:
 # ROCm COMPILED norm lane (2026-06-25) — rmsnorm / layer_norm as row-reduction
 # kernels (siblings of the softmax kernel). ``compiler_path = "rocm_norm_compiled"``
 # builds the COMPILER-GENERATED kernel (the ``generate-rocm-norm-kernel`` pipeline
-# → hsaco; no WMMA) and launches it via HIP. Unweighted row normalize over the
-# last axis; f32/f16/bf16 storage, f32 reduce. ONE hsaco per (chip, kind, dtype),
-# cached. (Re-added after a main-merge conflict dropped it; see PR#123.)
+# → hsaco; no WMMA) and launches it via HIP. Runtime-shaped row normalize over
+# the last axis; f32/f16/bf16 storage, f32 reduce. Uniform affine-presence flags
+# let one hsaco per (chip, kind, dtype) serve unary and gamma/beta calls.
 # ─────────────────────────────────────────────────────────────────────────────
 _NORM_BLOCKDIM = 256  # must match BD in GenerateROCMNormKernel.cpp
 #: hsaco bytes keyed by (chip, kind, dtype).
 _rocm_norm_hsaco_cache: dict[tuple[str, str, str], bytes] = {}
+#: Backward hsaco bytes keyed by (chip, kind, dtype). Kept separate from the
+#: forward cache because the stable buffer ABI differs.
+_rocm_norm_bwd_hsaco_cache: dict[tuple[str, str, str], bytes] = {}
 
 
 def _build_compiled_norm_hsaco(kind: str, dtype: str = "f32") -> bytes:
@@ -7573,6 +7576,56 @@ def _build_compiled_norm_hsaco(kind: str, dtype: str = "f32") -> bytes:
     return hsaco
 
 
+def _build_compiled_norm_backward_hsaco(kind: str, dtype: str = "f32") -> bytes:
+    """Generate the paired RMSNorm/LayerNorm backward kernel.
+
+    The image is runtime-shaped and independent of affine presence. Channel
+    gradients accumulate in f32 even when X/dY/dX use f16 or bf16 storage.
+    """
+    chip = _rocm_chip()
+    key = (chip, kind, dtype)
+    cached = _rocm_norm_bwd_hsaco_cache.get(key)
+    if cached is not None:
+        return cached
+    opt = _tessera_opt_path()
+    if opt is None:
+        raise _RocmCompiledUnavailable(
+            "tessera-opt not built — no compiled ROCm norm backward lane"
+        )
+    directive = (
+        "module {\n"
+        '  "tessera_rocm.norm"() {name = "nmb", '
+        f'kind = "{kind}", dtype = "{dtype}", backward = true}} : () -> ()\n'
+        "}\n"
+    )
+    pipeline = (
+        "builtin.module("
+        "generate-rocm-norm-kernel,"
+        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+        "reconcile-unrealized-casts),"
+        f"rocdl-attach-target{{chip={chip}}},"
+        "gpu-module-to-binary)"
+    )
+    import subprocess
+
+    result = subprocess.run(
+        [str(opt), "-", f"--pass-pipeline={pipeline}"], input=directive,
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0 or "gpu.binary" not in result.stdout:
+        raise _RocmCompiledUnavailable(
+            "tessera-opt did not serialize compiled norm backward "
+            f"(rc={result.returncode}): {result.stderr[:400]}"
+        )
+    hsaco = _extract_hsaco_blob(result.stdout)
+    if hsaco[:4] != b"\x7fELF":
+        raise _RocmCompiledUnavailable(
+            "compiled ROCm norm backward lane: gpu.binary was not ELF"
+        )
+    _rocm_norm_bwd_hsaco_cache[key] = hsaco
+    return hsaco
+
+
 #: op_name → (norm kind, default eps). rmsnorm_safe uses a tighter eps default.
 _ROCM_NORM_OPS: dict[str, tuple[str, float]] = {
     "tessera.rmsnorm": ("rmsnorm", 1e-5),
@@ -7583,10 +7636,11 @@ _ROCM_NORM_OPS: dict[str, tuple[str, float]] = {
 
 def _execute_rocm_compiled_norm(artifact: RuntimeArtifact, args: Any) -> Any:
     """The ``target="rocm"`` norm lane: run the COMPILER-GENERATED row-reduction
-    kernel — unweighted rmsnorm / layer_norm over the last axis (one workgroup
+    kernel — rmsnorm / layer_norm over the last axis (one workgroup
     per row). Handles ``tessera.rmsnorm`` / ``tessera.rmsnorm_safe`` /
     ``tessera.layer_norm``; ``eps`` from kwargs (per-op default). f32/f16/bf16
-    storage, f32 reduce."""
+    storage, f32 reduce. RMSNorm accepts optional gamma; LayerNorm accepts
+    optional gamma and beta channel vectors."""
     import numpy as np
 
     metadata = artifact.metadata or {}
@@ -7603,8 +7657,15 @@ def _execute_rocm_compiled_norm(artifact: RuntimeArtifact, args: Any) -> Any:
     operand_names = [str(n) for n in op.get("operands", [])]
     if len(operand_names) < 1:
         raise ValueError("norm requires one operand")
+    max_operands = 2 if kind == "rmsnorm" else 3
+    if len(operand_names) > max_operands:
+        raise ValueError(
+            f"{op_name} accepts at most {max_operands} operands; got {len(operand_names)}"
+        )
     kwargs = op.get("kwargs") or {}
     eps = float(kwargs.get("eps", eps_default))
+    if not np.isfinite(eps) or eps <= 0.0:
+        raise ValueError(f"norm eps must be finite and positive; got {eps}")
     values = _bind_launch_args(args, arg_names)
     x = _as_numpy(values[operand_names[0]])
     if x.ndim < 1:
@@ -7613,6 +7674,18 @@ def _execute_rocm_compiled_norm(artifact: RuntimeArtifact, args: Any) -> Any:
     m = int(np.prod(x.shape[:-1])) if x.ndim > 1 else 1
     if k <= 0:
         raise ValueError(f"norm last dim must be positive; got {k}")
+
+    gamma = _as_numpy(values[operand_names[1]]) if len(operand_names) >= 2 else None
+    beta = _as_numpy(values[operand_names[2]]) if len(operand_names) >= 3 else None
+    for role, affine in (("gamma", gamma), ("beta", beta)):
+        if affine is None:
+            continue
+        if affine.shape != (k,):
+            raise ValueError(f"norm {role} must have shape ({k},); got {affine.shape}")
+        if affine.dtype != x.dtype:
+            raise ValueError(
+                f"norm {role} dtype must match input dtype {x.dtype}; got {affine.dtype}"
+            )
 
     store: Any  # numpy dtype varies per branch (f32 / f16 / bf16)
     if x.dtype == np.float32:
@@ -7647,6 +7720,23 @@ def _execute_rocm_compiled_norm(artifact: RuntimeArtifact, args: Any) -> Any:
         if hip.hipMalloc(ctypes.byref(dev), esz * n) != 0:
             raise RuntimeError("rocm norm: hipMalloc failed")
     hip.hipMemcpy(dx, xc.ctypes.data_as(ctypes.c_void_p), esz * n, 1)
+    owned = [dx, do]
+    dgamma = dx
+    dbeta = dx
+    if gamma is not None:
+        dgamma = ctypes.c_void_p()
+        if hip.hipMalloc(ctypes.byref(dgamma), esz * k) != 0:
+            raise RuntimeError("rocm norm: gamma hipMalloc failed")
+        owned.append(dgamma)
+        gamma_c = np.ascontiguousarray(gamma, dtype=store)
+        hip.hipMemcpy(dgamma, gamma_c.ctypes.data_as(ctypes.c_void_p), esz * k, 1)
+    if beta is not None:
+        dbeta = ctypes.c_void_p()
+        if hip.hipMalloc(ctypes.byref(dbeta), esz * k) != 0:
+            raise RuntimeError("rocm norm: beta hipMalloc failed")
+        owned.append(dbeta)
+        beta_c = np.ascontiguousarray(beta, dtype=store)
+        hip.hipMemcpy(dbeta, beta_c.ctypes.data_as(ctypes.c_void_p), esz * k, 1)
 
     def _mr(p, size):
         return [
@@ -7657,20 +7747,193 @@ def _execute_rocm_compiled_norm(artifact: RuntimeArtifact, args: Any) -> Any:
             ctypes.c_int64(1),
         ]
 
-    launch_args = _mr(dx, n) + _mr(do, n) + [ctypes.c_int64(m), ctypes.c_int64(k), ctypes.c_float(eps)]
+    launch_args = (
+        _mr(dx, n)
+        + _mr(dgamma, k)
+        + _mr(dbeta, k)
+        + _mr(do, n)
+        + [
+            ctypes.c_int64(m), ctypes.c_int64(k), ctypes.c_float(eps),
+            ctypes.c_bool(gamma is not None), ctypes.c_bool(beta is not None),
+        ]
+    )
     arr = (ctypes.c_void_p * len(launch_args))()
     for i, val in enumerate(launch_args):
         arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
     rc = hip.hipModuleLaunchKernel(fn, m, 1, 1, _NORM_BLOCKDIM, 1, 1, 0, None, arr, None)
     if rc != 0:
-        for dev in (dx, do):
+        for dev in owned:
             hip.hipFree(dev)
         raise RuntimeError(f"rocm norm: kernel launch failed rc={rc}")
     hip.hipDeviceSynchronize()
     hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, esz * n, 2)
-    for dev in (dx, do):
+    for dev in owned:
         hip.hipFree(dev)
+    unload = getattr(hip, "hipModuleUnload", None)
+    if unload is not None and mod.value:
+        unload(mod)
     return o.reshape(x.shape)
+
+
+def _execute_rocm_compiled_norm_backward(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Launch compiler-generated dynamic RMSNorm/LayerNorm backward on ROCm.
+
+    dX preserves input storage (f32/f16/bf16); dGamma/dBeta are returned in f32.
+    Affine gradients use a deterministic two-pass route: the row kernel writes
+    private dGamma contributions and a channel kernel folds those contributions
+    plus dY-for-dBeta in ascending row order.
+    """
+    import numpy as np
+
+    _, kind, x, gamma, beta, dy, eps = _parse_compiled_norm_backward(artifact, args)
+    store: Any
+    if x.dtype == np.float32:
+        dtype_tag, store, esz = "f32", np.float32, 4
+    elif x.dtype == np.float16:
+        dtype_tag, store, esz = "f16", np.float16, 2
+    else:
+        bf16 = _bfloat16_dtype()
+        if bf16 is not None and x.dtype == bf16:
+            dtype_tag, store, esz = "bf16", bf16, 2
+        else:
+            raise ValueError(
+                f"rocm norm backward handles f32/f16/bf16 storage; got {x.dtype}"
+            )
+    m = int(np.prod(x.shape[:-1])) if x.ndim > 1 else 1
+    k = int(x.shape[-1])
+    n = m * k
+    hsaco = _build_compiled_norm_backward_hsaco(kind, dtype_tag)
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm norm backward: hipInit failed")
+    module = ctypes.c_void_p()
+    device_buffers: list[Any] = []
+    try:
+        if hip.hipModuleLoadData(ctypes.byref(module), hsaco) != 0:
+            raise _RocmCompiledUnavailable(
+                "rocm norm backward: no usable AMD GPU (module load failed)"
+            )
+        function = ctypes.c_void_p()
+        if hip.hipModuleGetFunction(ctypes.byref(function), module, b"nmb") != 0:
+            raise RuntimeError("rocm norm backward: kernel symbol 'nmb' not found")
+        reduce_function = ctypes.c_void_p()
+        has_affine = gamma is not None or beta is not None
+        if has_affine and hip.hipModuleGetFunction(
+                ctypes.byref(reduce_function), module, b"nmb_reduce") != 0:
+            raise RuntimeError(
+                "rocm norm backward: kernel symbol 'nmb_reduce' not found"
+            )
+
+        xc = np.ascontiguousarray(x, dtype=store).reshape(-1)
+        dyc = np.ascontiguousarray(dy, dtype=store).reshape(-1)
+        gamma_c = (np.ascontiguousarray(gamma, dtype=store)
+                   if gamma is not None else xc[:k])
+        dx_host = np.empty(n, dtype=store)
+        dg_host = np.empty(k, dtype=np.float32)
+        db_host = np.empty(k, dtype=np.float32)
+
+        def allocate(size: int, label: str) -> Any:
+            pointer = ctypes.c_void_p()
+            if hip.hipMalloc(ctypes.byref(pointer), size) != 0:
+                raise RuntimeError(f"rocm norm backward: {label} hipMalloc failed")
+            device_buffers.append(pointer)
+            return pointer
+
+        d_x = allocate(esz * n, "X")
+        d_gamma = allocate(esz * k, "gamma")
+        d_dy = allocate(esz * n, "dY")
+        d_dx = allocate(esz * n, "dX")
+        # Absent affine operands still need non-null ABI placeholders, but the
+        # uniform flags guarantee that neither kernel dereferences them.
+        d_dgamma_partials = allocate(4 * n if gamma is not None else 4,
+                                     "dGamma partials")
+        d_dgamma = allocate(4 * k if gamma is not None else 4, "dGamma")
+        d_dbeta = allocate(4 * k if beta is not None else 4, "dBeta")
+        copies = (
+            (d_x, xc, esz * n, "X"),
+            (d_gamma, gamma_c, esz * k, "gamma"),
+            (d_dy, dyc, esz * n, "dY"),
+        )
+        for destination, source, size, label in copies:
+            if hip.hipMemcpy(
+                    destination, source.ctypes.data_as(ctypes.c_void_p), size, 1) != 0:
+                raise RuntimeError(
+                    f"rocm norm backward: {label} host-to-device copy failed"
+                )
+        def memref(pointer: Any, size: int) -> list[Any]:
+            return [
+                ctypes.c_void_p(pointer.value), ctypes.c_void_p(pointer.value),
+                ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1),
+            ]
+
+        launch_args = (
+            memref(d_x, n) + memref(d_gamma, k) + memref(d_dy, n)
+            + memref(d_dx, n) + memref(d_dgamma_partials, n)
+            + [
+                ctypes.c_int64(m), ctypes.c_int64(k), ctypes.c_float(eps),
+                ctypes.c_bool(gamma is not None),
+            ]
+        )
+        packed = (ctypes.c_void_p * len(launch_args))()
+        for index, value in enumerate(launch_args):
+            packed[index] = ctypes.cast(ctypes.byref(value), ctypes.c_void_p)
+        rc = hip.hipModuleLaunchKernel(
+            function, m, 1, 1, _NORM_BLOCKDIM, 1, 1, 0, None, packed, None,
+        )
+        if rc != 0:
+            raise RuntimeError(f"rocm norm backward: kernel launch failed rc={rc}")
+        if has_affine:
+            reduce_args = (
+                memref(d_dgamma_partials, n) + memref(d_dy, n)
+                + memref(d_dgamma, k) + memref(d_dbeta, k)
+                + [
+                    ctypes.c_int64(m), ctypes.c_int64(k),
+                    ctypes.c_bool(gamma is not None),
+                    ctypes.c_bool(beta is not None),
+                ]
+            )
+            reduce_packed = (ctypes.c_void_p * len(reduce_args))()
+            for index, value in enumerate(reduce_args):
+                reduce_packed[index] = ctypes.cast(
+                    ctypes.byref(value), ctypes.c_void_p,
+                )
+            reduce_grid = (k + _NORM_BLOCKDIM - 1) // _NORM_BLOCKDIM
+            rc = hip.hipModuleLaunchKernel(
+                reduce_function, reduce_grid, 1, 1, _NORM_BLOCKDIM, 1, 1,
+                0, None, reduce_packed, None,
+            )
+            if rc != 0:
+                raise RuntimeError(
+                    "rocm norm backward: deterministic reduction launch "
+                    f"failed rc={rc}"
+                )
+        if hip.hipDeviceSynchronize() != 0:
+            raise RuntimeError("rocm norm backward: device synchronization failed")
+        outputs = [(dx_host, d_dx, esz * n, "dX")]
+        if gamma is not None:
+            outputs.append((dg_host, d_dgamma, 4 * k, "dGamma"))
+        if beta is not None:
+            outputs.append((db_host, d_dbeta, 4 * k, "dBeta"))
+        for destination, source, size, label in outputs:
+            if hip.hipMemcpy(
+                    destination.ctypes.data_as(ctypes.c_void_p), source, size, 2) != 0:
+                raise RuntimeError(
+                    f"rocm norm backward: {label} device-to-host copy failed"
+                )
+        gradients = [dx_host.reshape(x.shape)]
+        if gamma is not None:
+            gradients.append(dg_host)
+        if beta is not None:
+            gradients.append(db_host)
+        return tuple(gradients)
+    finally:
+        for pointer in reversed(device_buffers):
+            hip.hipFree(pointer)
+        unload = getattr(hip, "hipModuleUnload", None)
+        if unload is not None and module.value:
+            unload(module)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -7725,7 +7988,9 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
         "tessera_x86_avx512_reduce_f32": [c_f32, i64, i64, c_f32, ctypes.c_int],
         "tessera_x86_avx512_unary_f32": [c_f32, i64, c_f32, ctypes.c_int],
         "tessera_x86_avx512_binary_f32": [c_f32, c_f32, i64, c_f32, ctypes.c_int],
-        "tessera_x86_avx512_compare_f32": [c_f32, c_f32, i64, c_i8, ctypes.c_int],
+        "tessera_x86_avx512_compare_f32": [c_i8, c_i8, i64, c_i8, ctypes.c_int],
+        "tessera_x86_avx512_compare_i32": [c_i32, c_i32, i64, c_i8, ctypes.c_int],
+        "tessera_x86_avx512_compare_u32": [c_i32, c_i32, i64, c_i8, ctypes.c_int],
         "tessera_x86_avx512_predicate_f32": [c_f32, i64, c_i8, ctypes.c_int],
         "tessera_x86_avx512_logical_i8": [c_i8, c_i8, i64, c_i8, ctypes.c_int],
         "tessera_x86_avx512_bitwise_i32": [c_i32, c_i32, i64, c_i32, ctypes.c_int],
@@ -7737,6 +8002,10 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
         "tessera_x86_avx512_silu_mul_f32": [c_f32, c_f32, i64, c_f32],
         "tessera_x86_avx512_rmsnorm_f32": [c_f32, i64, i64, ctypes.c_float, c_f32],
         "tessera_x86_avx512_layernorm_f32": [c_f32, i64, i64, ctypes.c_float, c_f32],
+        "tessera_x86_avx512_rmsnorm_affine_f32": [c_f32, c_f32, i64, i64, ctypes.c_float, c_f32],
+        "tessera_x86_avx512_layernorm_affine_f32": [c_f32, c_f32, c_f32, i64, i64, ctypes.c_float, c_f32],
+        "tessera_x86_avx512_rmsnorm_bwd_f32": [c_f32, c_f32, c_f32, i64, i64, ctypes.c_float, ctypes.c_int, c_f32, c_f32],
+        "tessera_x86_avx512_layernorm_bwd_f32": [c_f32, c_f32, c_f32, i64, i64, ctypes.c_float, ctypes.c_int, ctypes.c_int, c_f32, c_f32, c_f32],
         "tessera_x86_avx512_softmax_f32": [c_f32, i64, i64, c_f32],
         "tessera_x86_avx512_gemm_f32": [c_f32, c_f32, i64, i64, i64, c_f32],
         "tessera_x86_avx512_rope_f32": [c_f32, c_f32, i64, i64, c_f32],
@@ -8240,9 +8509,8 @@ def _execute_x86_compiled_binary_math(artifact: RuntimeArtifact, args: Any) -> A
     return out.reshape(a.shape)
 
 
-#: op_name -> (.so symbol, default eps) for the x86 norm lane. UNWEIGHTED
-#: rmsnorm / layer_norm over the last axis (matching the ROCm norm lane's op
-#: signature — no γ/β operands).
+#: op_name -> (.so unary symbol, default eps) for the x86 norm lane. Affine
+#: calls select the corresponding ABI-stable ``*_affine_f32`` entry point.
 _X86_NORM_OPS = {
     "tessera.rmsnorm": ("tessera_x86_avx512_rmsnorm_f32", 1e-5),
     "tessera.rmsnorm_safe": ("tessera_x86_avx512_rmsnorm_f32", 1e-6),
@@ -8252,8 +8520,9 @@ _X86_NORM_OPS = {
 
 def _execute_x86_compiled_norm(artifact: RuntimeArtifact, args: Any) -> Any:
     """The ``target="x86"`` norm lane: run the hand-written AVX-512 row-reduction
-    kernel — unweighted rmsnorm / layer_norm over the last axis, from
-    libtessera_x86_elementwise.so. ``eps`` from kwargs (per-op default). f32."""
+    kernel — rmsnorm / layer_norm over the last axis, from
+    libtessera_x86_elementwise.so. ``eps`` from kwargs (per-op default), with
+    optional channel gamma/beta vectors. f32."""
     import numpy as np
 
     metadata = artifact.metadata or {}
@@ -8270,8 +8539,14 @@ def _execute_x86_compiled_norm(artifact: RuntimeArtifact, args: Any) -> Any:
     operand_names = [str(n) for n in op.get("operands", [])]
     if len(operand_names) < 1:
         raise ValueError("norm requires one operand")
+    kind = "rmsnorm" if op_name != "tessera.layer_norm" else "layer_norm"
+    max_operands = 2 if kind == "rmsnorm" else 3
+    if len(operand_names) > max_operands:
+        raise ValueError(f"{op_name} accepts at most {max_operands} operands")
     kwargs = op.get("kwargs") or {}
     eps = float(kwargs.get("eps", eps_default))
+    if not np.isfinite(eps) or eps <= 0.0:
+        raise ValueError(f"norm eps must be finite and positive; got {eps}")
     values = _bind_launch_args(args, arg_names)
     x = _as_numpy(values[operand_names[0]])
     if x.ndim < 1:
@@ -8282,6 +8557,13 @@ def _execute_x86_compiled_norm(artifact: RuntimeArtifact, args: Any) -> Any:
     m = int(np.prod(x.shape[:-1])) if x.ndim > 1 else 1
     if k <= 0:
         raise ValueError(f"norm last dim must be positive; got {k}")
+    gamma = _as_numpy(values[operand_names[1]]) if len(operand_names) >= 2 else None
+    beta = _as_numpy(values[operand_names[2]]) if len(operand_names) >= 3 else None
+    for role, affine in (("gamma", gamma), ("beta", beta)):
+        if affine is None:
+            continue
+        if affine.shape != (k,) or affine.dtype != np.float32:
+            raise ValueError(f"x86 norm {role} must be f32 with shape ({k},)")
 
     lib = _load_x86_elementwise()
     if lib is None:
@@ -8289,10 +8571,129 @@ def _execute_x86_compiled_norm(artifact: RuntimeArtifact, args: Any) -> Any:
     xc = np.ascontiguousarray(x, dtype=np.float32).reshape(-1)
     out = np.zeros(m * k, dtype=np.float32)
     cf = ctypes.POINTER(ctypes.c_float)
-    getattr(lib, sym)(
-        xc.ctypes.data_as(cf), ctypes.c_int64(m), ctypes.c_int64(k), ctypes.c_float(eps), out.ctypes.data_as(cf)
-    )
+    xptr = xc.ctypes.data_as(cf)
+    outptr = out.ctypes.data_as(cf)
+    if gamma is None:
+        getattr(lib, sym)(xptr, ctypes.c_int64(m), ctypes.c_int64(k),
+                          ctypes.c_float(eps), outptr)
+    else:
+        gc = np.ascontiguousarray(gamma, dtype=np.float32)
+        gptr = gc.ctypes.data_as(cf)
+        if kind == "rmsnorm":
+            lib.tessera_x86_avx512_rmsnorm_affine_f32(
+                xptr, gptr, ctypes.c_int64(m), ctypes.c_int64(k),
+                ctypes.c_float(eps), outptr)
+        else:
+            if beta is None:
+                bc = np.zeros(k, dtype=np.float32)
+            else:
+                bc = np.ascontiguousarray(beta, dtype=np.float32)
+            lib.tessera_x86_avx512_layernorm_affine_f32(
+                xptr, gptr, bc.ctypes.data_as(cf), ctypes.c_int64(m),
+                ctypes.c_int64(k), ctypes.c_float(eps), outptr)
     return out.reshape(x.shape)
+
+
+def _parse_compiled_norm_backward(artifact: RuntimeArtifact, args: Any) -> tuple[Any, ...]:
+    """Validate the shared normalization-backward artifact contract.
+
+    The operation remains the registered forward RMSNorm/LayerNorm operation;
+    ``autodiff_phase=backward`` plus ``out_cotangent`` identifies the generated
+    paired-function ABI. Forward operands retain their canonical order and the
+    cotangent is an additional named launch argument.
+    """
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    if metadata.get("autodiff_phase") != "backward":
+        raise ValueError("compiled norm backward requires autodiff_phase='backward'")
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _ROCM_NORM_OPS:
+        raise ValueError(
+            "compiled norm backward handles exactly one registered norm op; "
+            f"got {[o.get('op_name') for o in ops]!r}"
+        )
+    kind, eps_default = _ROCM_NORM_OPS[op_name]
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    max_operands = 2 if kind == "rmsnorm" else 3
+    if not operand_names or len(operand_names) > max_operands:
+        raise ValueError(
+            f"{op_name} backward expects 1..{max_operands} forward operands"
+        )
+    cotangent_name = metadata.get("out_cotangent")
+    if not isinstance(cotangent_name, str) or not cotangent_name:
+        raise ValueError("compiled norm backward requires a named out_cotangent")
+    values = _bind_launch_args(args, arg_names)
+    if cotangent_name not in values:
+        raise ValueError(f"compiled norm backward is missing cotangent {cotangent_name!r}")
+    x = _as_numpy(values[operand_names[0]])
+    gamma = _as_numpy(values[operand_names[1]]) if len(operand_names) >= 2 else None
+    beta = _as_numpy(values[operand_names[2]]) if len(operand_names) >= 3 else None
+    dy = _as_numpy(values[cotangent_name])
+    if x.ndim < 1 or int(x.shape[-1]) <= 0:
+        raise ValueError("compiled norm backward input must have rank >= 1 and positive last dim")
+    if dy.shape != x.shape or dy.dtype != x.dtype:
+        raise ValueError(
+            "compiled norm backward cotangent must match input shape/dtype; "
+            f"got x{x.shape}/{x.dtype}, dy{dy.shape}/{dy.dtype}"
+        )
+    k = int(x.shape[-1])
+    for role, affine in (("gamma", gamma), ("beta", beta)):
+        if affine is None:
+            continue
+        if affine.shape != (k,) or affine.dtype != x.dtype:
+            raise ValueError(
+                f"compiled norm backward {role} must match input dtype and shape ({k},)"
+            )
+    eps = float((op.get("kwargs") or {}).get("eps", eps_default))
+    if not np.isfinite(eps) or eps <= 0.0:
+        raise ValueError(f"norm eps must be finite and positive; got {eps}")
+    return op_name, kind, x, gamma, beta, dy, eps
+
+
+def _execute_x86_compiled_norm_backward(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Launch deterministic AVX-512 RMSNorm/LayerNorm backward over dynamic
+    row counts and widths. Returns ``dx`` and the affine gradients represented
+    by the forward operand list."""
+    import numpy as np
+
+    _, kind, x, gamma, beta, dy, eps = _parse_compiled_norm_backward(artifact, args)
+    if x.dtype != np.float32:
+        raise ValueError(f"x86 norm backward handles f32 only; got {x.dtype}")
+    m = int(np.prod(x.shape[:-1])) if x.ndim > 1 else 1
+    k = int(x.shape[-1])
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    xc = np.ascontiguousarray(x, dtype=np.float32).reshape(-1)
+    dyc = np.ascontiguousarray(dy, dtype=np.float32).reshape(-1)
+    gc = (np.ascontiguousarray(gamma, dtype=np.float32)
+          if gamma is not None else xc[:k])
+    dx = np.empty(m * k, dtype=np.float32)
+    dg = np.empty(k, dtype=np.float32)
+    db = np.empty(k, dtype=np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    common = (
+        xc.ctypes.data_as(cf), gc.ctypes.data_as(cf), dyc.ctypes.data_as(cf),
+        ctypes.c_int64(m), ctypes.c_int64(k), ctypes.c_float(eps),
+        ctypes.c_int(gamma is not None),
+    )
+    if kind == "rmsnorm":
+        lib.tessera_x86_avx512_rmsnorm_bwd_f32(
+            *common, dx.ctypes.data_as(cf), dg.ctypes.data_as(cf))
+    else:
+        lib.tessera_x86_avx512_layernorm_bwd_f32(
+            *common, ctypes.c_int(beta is not None), dx.ctypes.data_as(cf),
+            dg.ctypes.data_as(cf), db.ctypes.data_as(cf))
+    grads = [dx.reshape(x.shape)]
+    if gamma is not None:
+        grads.append(dg)
+    if beta is not None:
+        grads.append(db)
+    return tuple(grads)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -15289,8 +15690,9 @@ _X86_COMPARE_OPS = {
 def _execute_x86_compiled_compare(artifact: RuntimeArtifact, args: Any) -> Any:
     """The ``target="x86"`` compare lane: run the hand-written AVX-512 2-operand
     comparison kernel (eq/ne/lt/le/gt/ge) loaded from
-    libtessera_x86_elementwise.so over any-shape f32 inputs, producing a numpy
-    ``bool_`` result. NaN semantics match numpy (ordered except ne)."""
+    libtessera_x86_elementwise.so over any-shape f32, signed i32, or unsigned
+    u32 inputs, producing a numpy ``bool_`` result. NaN semantics match numpy
+    for f32 (ordered except ne)."""
     import numpy as np
 
     metadata = artifact.metadata or {}
@@ -15312,8 +15714,8 @@ def _execute_x86_compiled_compare(artifact: RuntimeArtifact, args: Any) -> Any:
     b = _as_numpy(values[operand_names[1]])
     if a.shape != b.shape:
         raise ValueError(f"x86 compare lane requires matching operand shapes; got a{a.shape} b{b.shape}")
-    if a.dtype != np.float32:
-        raise ValueError(f"x86 compare lane handles f32 only; got {a.dtype}")
+    if a.dtype != b.dtype or a.dtype not in (np.float32, np.int32, np.uint32):
+        raise ValueError(f"x86 compare lane handles matching f32/i32/u32; got {a.dtype} and {b.dtype}")
     n = int(np.prod(a.shape)) if a.ndim else 1
     if n <= 0:
         return np.zeros(a.shape, dtype=np.bool_)
@@ -15321,13 +15723,17 @@ def _execute_x86_compiled_compare(artifact: RuntimeArtifact, args: Any) -> Any:
     lib = _load_x86_elementwise()
     if lib is None:
         raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
-    ac = np.ascontiguousarray(a, dtype=np.float32).reshape(-1)
-    bc = np.ascontiguousarray(b, dtype=np.float32).reshape(-1)
+    ac = np.ascontiguousarray(a).reshape(-1)
+    bc = np.ascontiguousarray(b).reshape(-1)
     out = np.zeros(n, dtype=np.uint8)
-    cf = ctypes.POINTER(ctypes.c_float)
-    lib.tessera_x86_avx512_compare_f32(
-        ac.ctypes.data_as(cf),
-        bc.ctypes.data_as(cf),
+    symbol = {
+        np.dtype(np.float32): "tessera_x86_avx512_compare_f32",
+        np.dtype(np.int32): "tessera_x86_avx512_compare_i32",
+        np.dtype(np.uint32): "tessera_x86_avx512_compare_u32",
+    }[a.dtype]
+    getattr(lib, symbol)(
+        ac.ctypes.data_as(ctypes.c_void_p),
+        bc.ctypes.data_as(ctypes.c_void_p),
         ctypes.c_int64(n),
         out.ctypes.data_as(ctypes.c_void_p),
         ctypes.c_int(kind),
@@ -16508,9 +16914,9 @@ def _execute_rocm_compiled_where(artifact: RuntimeArtifact, args: Any) -> Any:
 # ─────────────────────────────────────────────────────────────────────────────
 # ROCm COMPILED comparison lane (2026-06-26) — S2 comparison family
 # A flat 2-operand per-element kernel applying a pointwise comparison
-# (eq/ne/lt/le/gt/ge) over any-shape float inputs, producing a boolean (i8 0/1)
-# result. ``compiler_path = "rocm_compare_compiled"``. f32/f16/bf16 input
-# storage, f32 compare, bool output. ONE hsaco per (chip, kind, dtype), cached.
+# (eq/ne/lt/le/gt/ge) over any-shape float or 32-bit integer inputs, producing
+# a boolean result. Signed i32 and unsigned u32 remain distinct cache/ISA
+# contracts even though both lower to 32-bit registers.
 # ─────────────────────────────────────────────────────────────────────────────
 _rocm_compare_hsaco_cache: dict[tuple[str, str, str], bytes] = {}
 
@@ -16606,8 +17012,8 @@ def _execute_rocm_compiled_predicate(artifact: RuntimeArtifact, args: Any) -> An
 def _execute_rocm_compiled_compare(artifact: RuntimeArtifact, args: Any) -> Any:
     """The ``target="rocm"`` comparison lane: run the COMPILER-GENERATED flat
     2-operand elementwise comparison kernel (eq/ne/lt/le/gt/ge) over any-shape
-    float inputs, producing a numpy ``bool_`` result (one thread per element).
-    f32/f16/bf16 input storage, f32 compare, i8/bool output."""
+    numeric inputs, producing a numpy ``bool_`` result (one thread per element).
+    f32/f16/bf16, signed i32, and unsigned u32 input storage; i8/bool output."""
     import numpy as np
 
     metadata = artifact.metadata or {}
@@ -16629,6 +17035,8 @@ def _execute_rocm_compiled_compare(artifact: RuntimeArtifact, args: Any) -> Any:
     b = _as_numpy(values[operand_names[1]])
     if a.shape != b.shape:
         raise ValueError(f"rocm compare lane requires matching operand shapes; got a{a.shape} b{b.shape}")
+    if a.dtype != b.dtype:
+        raise ValueError(f"rocm compare lane requires matching operand dtypes; got {a.dtype} and {b.dtype}")
     n = int(np.prod(a.shape)) if a.ndim else 1
     if n <= 0:
         return np.zeros(a.shape, dtype=np.bool_)
@@ -16638,12 +17046,16 @@ def _execute_rocm_compiled_compare(artifact: RuntimeArtifact, args: Any) -> Any:
         dtype_tag, store, esz = "f32", np.float32, 4
     elif a.dtype == np.float16:
         dtype_tag, store, esz = "f16", np.float16, 2
+    elif a.dtype == np.int32:
+        dtype_tag, store, esz = "i32", np.int32, 4
+    elif a.dtype == np.uint32:
+        dtype_tag, store, esz = "u32", np.uint32, 4
     else:
         bf16 = _bfloat16_dtype()
         if bf16 is not None and a.dtype == bf16:
             dtype_tag, store, esz = "bf16", bf16, 2
         else:
-            raise ValueError(f"rocm compare lane handles f32/f16/bf16; got {a.dtype}")
+            raise ValueError(f"rocm compare lane handles f32/f16/bf16/i32/u32; got {a.dtype}")
 
     hsaco = _build_compiled_compare_hsaco(kind, dtype_tag)
     hip = _load_hip_for_launch()
@@ -16694,6 +17106,9 @@ def _execute_rocm_compiled_compare(artifact: RuntimeArtifact, args: Any) -> Any:
     hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, n, 2)
     for dev in (da, db, do):
         hip.hipFree(dev)
+    unload = getattr(hip, "hipModuleUnload", None)
+    if unload is not None and mod.value:
+        unload(mod)
     return o.reshape(a.shape).astype(np.bool_)
 
 
@@ -21284,6 +21699,7 @@ def _executor_table():
         "nvidia_mla_decode_fused_compiled": _execute_nvidia_mla_decode_fused_compiled,
         "rocm_softmax_compiled": _execute_rocm_compiled_softmax,
         "rocm_norm_compiled": _execute_rocm_compiled_norm,
+        "rocm_norm_bwd_compiled": _execute_rocm_compiled_norm_backward,
         "rocm_reduce_compiled": _execute_rocm_compiled_reduce,
         "rocm_argreduce_compiled": _execute_rocm_compiled_argreduce,
         "rocm_scan_compiled": _execute_rocm_compiled_scan,
@@ -21306,6 +21722,7 @@ def _executor_table():
         "x86_transcendental_compiled": _execute_x86_compiled_transcendental,
         "x86_binary_math_compiled": _execute_x86_compiled_binary_math,
         "x86_norm_compiled": _execute_x86_compiled_norm,
+        "x86_norm_bwd_compiled": _execute_x86_compiled_norm_backward,
         "x86_softmax_compiled": _execute_x86_compiled_softmax,
         "x86_matmul_family_compiled": _execute_x86_compiled_matmul_family,
         "x86_rope_compiled": _execute_x86_compiled_rope,

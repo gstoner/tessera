@@ -7,10 +7,10 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **480** ops in `primitive_coverage` registry.
-- **4447** total Python-test references, **1046** total lit-fixture references.
+- **4491** total Python-test references, **1073** total lit-fixture references.
 - **81** ops have **zero** references in either test surface.
 - **117** ops have ≤1 reference ("thinly tested").
-- **152** ops have ≥10 references ("well tested").
+- **153** ops have ≥10 references ("well tested").
 - **127** ops have at least one associated `pytest.raises` negative test.
 
 ## Top 20 most-tested ops
@@ -21,13 +21,14 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 | `softmax` |  140 |   41 |  181 |  31 | `bf16`, `f16`, `f32`, `f64` … |
 | `flash_attn` |  112 |   60 |  172 |   9 | `bf16`, `f16`, `f32`, `f64` … |
 | `add` |  118 |   30 |  148 |  10 | `bf16`, `f16`, `f32`, `f64` … |
-| `relu` |  109 |   35 |  144 |   9 | `bf16`, `f16`, `f32`, `f64` … |
+| `relu` |  111 |   36 |  147 |   9 | `bf16`, `f16`, `f32`, `f64` … |
+| `rmsnorm` |   94 |   18 |  112 |   5 | `bf16`, `f16`, `f32`, `f64` … |
+| `reduce` |   93 |   12 |  105 |   7 | `bf16`, `f16`, `f32`, `f64` … |
 | `mul` |   90 |   14 |  104 |   7 | `bf16`, `f16`, `f32`, `f64` … |
-| `reduce` |   93 |   10 |  103 |   7 | `bf16`, `f16`, `f32`, `f64` … |
 | `silu` |   86 |    8 |   94 |   5 | `bf16`, `f16`, `f32`, `f64` … |
-| `rmsnorm` |   80 |   13 |   93 |   4 | `bf16`, `f16`, `f32`, `f64` … |
 | `gemm` |   83 |    2 |   85 |   8 | `bf16`, `f16`, `f32`, `fp16` … |
 | `selective_ssm` |   71 |   10 |   81 |   3 | `bf16`, `f16`, `fp16`, `fp32` |
+| `layer_norm` |   57 |   16 |   73 |   3 | `bf16`, `f16`, `f32`, `fp16` … |
 | `gelu` |   52 |   20 |   72 |   0 | `bf16`, `f16`, `f32`, `f64` … |
 | `cast` |   17 |   47 |   64 |   1 | `fp16`, `fp32`, `int8` |
 | `transpose` |   29 |   35 |   64 |   0 | `bf16`, `f16`, `f32`, `fp16` … |
@@ -36,7 +37,6 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 | `cholesky` |   27 |   30 |   57 |   0 | `bf16`, `f16`, `f32`, `fp16` … |
 | `grouped_gemm` |   31 |   24 |   55 |   2 | `bf16`, `fp32`, `fp4_e2m1`, `fp8_e4m3` … |
 | `linear_attn` |   44 |    8 |   52 |   2 |  |
-| `layer_norm` |   30 |    9 |   39 |   3 | `bf16`, `f16`, `f32`, `fp16` … |
 
 ## Thinly-tested ops (≤1 reference)
 

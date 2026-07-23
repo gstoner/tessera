@@ -690,10 +690,14 @@ x86,tessera_x86_avx512_binary_f32,avx512_binary,f32,src/compiler/codegen/tessera
 x86,tessera_x86_avx512_binary_loss_f32,avx512_binary_loss,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_loss_f32.cpp
 x86,tessera_x86_avx512_bitwise_i32,avx512_bitwise,i32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_bitwise_i32.cpp
 x86,tessera_x86_avx512_compare_f32,avx512_compare,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_compare_f32.cpp
+x86,tessera_x86_avx512_compare_i32,avx512_compare,i32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_compare_f32.cpp
+x86,tessera_x86_avx512_compare_u32,avx512_compare_u32,,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_compare_f32.cpp
 x86,tessera_x86_avx512_fpquant_f32,avx512_fpquant,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fpquant_f32.cpp
 x86,tessera_x86_avx512_gemm_bf16,avx512_gemm,bf16,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_gemm_bf16.cpp
 x86,tessera_x86_avx512_gemm_f32,avx512_gemm,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_gemm_f32.cpp
 x86,tessera_x86_avx512_gemm_f64,avx512_gemm,f64,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_gemm_f64.cpp
+x86,tessera_x86_avx512_layernorm_affine_f32,avx512_layernorm_affine,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_norm_f32.cpp
+x86,tessera_x86_avx512_layernorm_bwd_f32,avx512_layernorm_bwd,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_norm_f32.cpp
 x86,tessera_x86_avx512_layernorm_f32,avx512_layernorm,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_norm_f32.cpp
 x86,tessera_x86_avx512_logical_i8,avx512_logical,i8,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_logical_i8.cpp
 x86,tessera_x86_avx512_pointwise_loss_f32,avx512_pointwise_loss,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_loss_f32.cpp
@@ -701,6 +705,8 @@ x86,tessera_x86_avx512_policy_loss_f32,avx512_policy_loss,f32,src/compiler/codeg
 x86,tessera_x86_avx512_pow_f32,avx512_pow,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_transcendental_f32.cpp
 x86,tessera_x86_avx512_predicate_f32,avx512_predicate,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_predicate_f32.cpp
 x86,tessera_x86_avx512_reduce_f32,avx512_reduce,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_reduce_f32.cpp
+x86,tessera_x86_avx512_rmsnorm_affine_f32,avx512_rmsnorm_affine,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_norm_f32.cpp
+x86,tessera_x86_avx512_rmsnorm_bwd_f32,avx512_rmsnorm_bwd,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_norm_f32.cpp
 x86,tessera_x86_avx512_rmsnorm_f32,avx512_rmsnorm,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_norm_f32.cpp
 x86,tessera_x86_avx512_rope_f32,avx512_rope,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_posenc_f32.cpp
 x86,tessera_x86_avx512_scan_f32,avx512_scan,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_scan_f32.cpp

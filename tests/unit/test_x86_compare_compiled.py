@@ -1,9 +1,9 @@
 """Hand-written AVX-512 comparison kernel on x86 — the CPU analog of the ROCm
 compiled compare lane.
 
-`tessera_x86_avx512_compare_f32` is exported by libtessera_x86_elementwise.so;
+The f32/i32/u32 comparison entry points are exported by libtessera_x86_elementwise.so;
 the Python runtime ctypes-loads it and calls it from `runtime.launch()` via
-`compiler_path="x86_compare_compiled"`. Covers eq/ne/lt/le/gt/ge; f32 inputs,
+`compiler_path="x86_compare_compiled"`. Covers eq/ne/lt/le/gt/ge; f32/i32/u32 inputs,
 bool output. NaN semantics match numpy (ordered everywhere except ne).
 
 Validated vs numpy. Skip-clean: libtessera_x86_elementwise.so not built.
@@ -67,6 +67,20 @@ def test_x86_compare_nan_semantics():
             np.asarray(res["output"]), ref(a, b), err_msg=f"{op_name} NaN")
 
 
+@pytest.mark.parametrize("dtype", [np.int32, np.uint32])
+@pytest.mark.parametrize("op_name", list(_CASES))
+def test_x86_integer_compare_signedness_matches_numpy(dtype, op_name):
+    rt = _x86_or_skip()
+    if dtype == np.int32:
+        a = np.array([-2**31, -7, -1, 0, 1, 7, 2**31 - 1], dtype=dtype)
+        b = np.array([0, -8, 1, 0, -1, 8, 2**31 - 1], dtype=dtype)
+    else:
+        a = np.array([0, 1, 7, 2**31, 2**32 - 1], dtype=dtype)
+        b = np.array([1, 0, 8, 2**31 - 1, 2**32 - 1], dtype=dtype)
+    out = rt.launch(_artifact(rt, op_name), (a, b))["output"]
+    np.testing.assert_array_equal(out, _CASES[op_name](a, b))
+
+
 def test_x86_compare_shape_mismatch_rejected():
     from tessera import runtime as rt
     a = np.zeros((4, 8), np.float32)
@@ -87,5 +101,5 @@ def test_x86_compare_rejects_non_f32():
     rt = _x86_or_skip()
     a = np.zeros((4, 8), np.float64)
     b = np.zeros((4, 8), np.float64)
-    with pytest.raises(ValueError, match="f32 only"):
+    with pytest.raises(ValueError, match="matching f32/i32/u32"):
         rt._execute_x86_compiled_compare(_artifact(rt, "tessera.eq"), (a, b))

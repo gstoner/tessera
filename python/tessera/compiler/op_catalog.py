@@ -50,7 +50,9 @@ _SPECS = [
     OpSpec("lu", "tessera.lu", 1, 1, lowering="linalg_decomposition"),
     OpSpec("conv2d", "tessera.conv2d_nhwc", 2, 4, lowering="stencil"),
     OpSpec("conv3d", "tessera.conv3d_ndhwc", 2, 4, lowering="stencil"),
-    OpSpec("layer_norm", "tessera.layer_norm", 1, 1, lowering="normalization"),
+    # Optional affine operands are gamma and beta, in that order. RMSNorm has
+    # gamma only. Their Graph ABI remains backward-compatible with unary calls.
+    OpSpec("layer_norm", "tessera.layer_norm", 1, 3, lowering="normalization"),
     OpSpec("softmax", "tessera.softmax", 1, 1, lowering="stable_reduction"),
     OpSpec("softmax_safe", "tessera.softmax_safe", 1, 1, lowering="stable_reduction"),
     OpSpec("reduce", "tessera.reduce", 1, 1, lowering="stable_reduction"),
@@ -178,7 +180,7 @@ _SPECS = [
     OpSpec("pack", "tessera.pack", 1, 1, effect="movement", lowering="layout_transform"),
     OpSpec("unpack", "tessera.unpack", 1, 1, effect="movement", lowering="layout_transform"),
     OpSpec("tile_view", "tessera.tile_view", 1, 1, lowering="layout_transform"),
-    OpSpec("rmsnorm", "tessera.rmsnorm", 1, 1, lowering="normalization"),
+    OpSpec("rmsnorm", "tessera.rmsnorm", 1, 2, lowering="normalization"),
     OpSpec("rmsnorm_safe", "tessera.rmsnorm_safe", 1, 1, lowering="normalization"),
     # Group/instance/weight norm — reduce-then-normalize over a reshaped view, so
     # apple_gpu composes them from the rowop (layer_norm) + reduce opcode lanes.

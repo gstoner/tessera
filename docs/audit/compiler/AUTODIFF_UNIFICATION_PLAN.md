@@ -429,10 +429,26 @@ shared family is therefore reported as mixed: max/min remain placeholders until
 their tie-gradient policy is explicit. Static GELU and SiLU use formulas aligned
 with the Python VJP oracle, and softmax uses the rank-generic
 `s * (dy - broadcast(sum(dy * s)))` adjoint for both static and dynamic shapes.
-The paired IR is directly interpreted and NumPy-oracle matched. ReLU remains a
-placeholder until Graph IR has a registered comparison primitive; RMSNorm and
-LayerNorm remain placeholders until a stable statistics/reciprocal-square-root
-carrier is available.
+The paired IR is directly interpreted and NumPy-oracle matched.
+
+**Comparison/normalization follow-on (2026-07-22):** ReLU now emits an explicit
+`compare_scalar(x, 0, gt)` i1 mask and `masked_fill(dy, mask, 0)`; no dynamic
+dense constant is required, so both static and dynamic shapes are native Graph
+adjoints. The public `eq/ne/lt/le/gt/ge` catalog spellings are now registered
+Graph ODS operations with verified tensor-to-i1 contracts and shared
+float/integer linalg lowering. Signless integer comparisons must carry the
+explicit `signedness = "signed"|"unsigned"` semantic contract; the verifier
+rejects omission and conflicts instead of guessing from storage. RMSNorm and
+LayerNorm share a rank-reduced
+`normalization_stats` carrier (center plus inverse scale) and explicit
+`broadcast_in_dim` mappings. Unary and channel-affine paired backward graphs
+produce native `dx`, `dgamma`, and (for LayerNorm) `dbeta`; static and dynamic
+forms lower through linalg and are directly interpreted against independent
+NumPy formulas. Runtime-shaped forward and recompute-all paired backward
+normalization now execute through the public `native_backward` seam on gfx1151
+(f32/f16/bf16 storage, f32 affine-gradient accumulation) and AVX-512 (f32).
+Family-specific execution-matrix rows retain separate RMSNorm/LayerNorm proof;
+no selector or sibling-architecture claim is inferred.
 
 Promotion order: (1) core tensor algebra (add/mul/broadcast/reductions/GEMM);
 (2) pointwise + normalization (tanh/sigmoid/GELU/SiLU/RMSNorm/layernorm);
@@ -529,10 +545,11 @@ checkpoint tuning, and fused backward promotion remain gated as ordered above.
 | 4 | 3 | Static CPU `matmul → tanh/sigmoid → loss` oracle proof | Task #4 | ✅ first-call specialization + paired MLIR/LLVM runtime launch + direct oracle proof |
 | 5 | 4 | Runtime ABI binding + backward matrix column + `native_required` enforcement | Task #5 | ✅ A1–A4 |
 
-**In progress: Phase 5 (Task #6)** — the first tensor-algebra tranche
-(`add`/`mul`/static `broadcast`) is compiler-native and CPU-IR oracle-proven.
-Next are kind-aware sum/mean, then ReLU/GELU/SiLU and RMSNorm/LayerNorm using the
-same dedicated/composed implementation and residual-policy contracts.
+**In progress: Phase 5 (Task #6)** — tensor algebra, kind-aware sum/mean,
+GELU/SiLU/ReLU, softmax, and unary/affine RMSNorm/LayerNorm are compiler-native
+and CPU-IR oracle-proven; normalization backward additionally has compiled
+gfx1151 and AVX-512 launches. Remaining family work begins with
+losses/optimizers, fused epilogues, and Apple/NVIDIA normalization promotion.
 
 ---
 
@@ -550,18 +567,18 @@ once Phase 0 lands.
 | 2 | Paired fwd/bwd/residual contract (`--tessera-autodiff-paired`, recompute-all) | ✅ first cut landed 2026-07-11 |
 | 3 | matmul→tanh/sigmoid→loss — backward native on CPU | ✅ paired-pass output launches through MLIR/LLVM JIT on `cpu_x86_64`; direct gradient oracle proof landed 2026-07-12 |
 | 4 | Compiled backward bound to runtime ABI (ROCm first) | ✅ **complete** 2026-07-12 via A1–A4; aliases share their dedicated implementation, matmul is an explicit two-GEMM composition, and residual policy is structured per target. |
-| 5 | Closed operation-family expansion | 🟡 add/multiply/static broadcast emit native paired IR and are CPU-interpreter oracle-proven; reductions and activation/normalization cohorts remain open. |
+| 5 | Closed operation-family expansion | 🟡 tensor algebra, kind-aware sum/mean, GELU/SiLU/ReLU, softmax, and unary/affine RMSNorm/LayerNorm emit native paired IR and are CPU-interpreter oracle-proven; normalization backward also launches compiled on gfx1151 and AVX-512. Losses/optimizers, fused epilogues, and Apple/NVIDIA target promotion remain open. |
 | 6 | NVIDIA sm_120 Flash Attention backward promotion | ✅ first CUDA family: f32/fp16 storage, f32 VJP accumulation, MHA/GQA/MQA aliases, mask/bias/soft-cap derivatives; exact `nvidia_sm120` `device_verified_jit` proof with recompute-all residual policy. |
 
 Per-family × per-target rung truth is now the **generated ledger**, not a hand
 table — read [`generated/autodiff_connection_ledger.md`](../generated/autodiff_connection_ledger.md)
 for live counts (Decision #26 — don't trust enumerations copied into prose). The
 shape it records: `python_reference` broad; native `ir_adjoint` now includes
-the established matmul/activation/collective families plus add, multiply, and
-static broadcast inversion (buildAdjoint bodies that emit real Graph IR),
-with layernorm/softmax and the pointwise macro ops as `placeholder` round-trips;
-`bwd_cpu_ir_oracle` covers matmul/tanh/sigmoid and the new tensor-algebra tranche (backward IR
-interpreted on CPU, oracle-matched). Phase 4's native backward evidence is now
+the established matmul/activation/collective families, tensor algebra,
+kind-aware reductions, softmax, ReLU, and unary/affine RMSNorm/LayerNorm
+(buildAdjoint bodies that emit real Graph IR). `bwd_cpu_ir_oracle` covers those
+closed shared families whose emitted backward IR is interpreted on CPU and
+oracle-matched. Phase 4's native backward evidence is now
 sourced from explicit runtime-matrix fields: runtime binding is separate from
 exact-target `device_verified_jit` / `device_verified_abi`, and either verified
 status requires a numerical fixture. The generated ledger derives both its

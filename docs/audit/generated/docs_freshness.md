@@ -137,7 +137,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `README.md` | - | 2026-07-11 | 11 | ✓ |
 | `backend/BACKEND_AUDIT.md` | - | 2026-07-12 | 10 | ✓ |
 | `backend/E2E_COMPILATION_AUDIT.md` | - | 2026-07-20 | 2 | ✓ |
-| `backend/X86_AVX512_ABI_INVENTORY.md` | - | 2026-07-20 | 2 | ✓ |
+| `backend/X86_AVX512_ABI_INVENTORY.md` | - | 2026-07-22 | 0 | ✓ |
 | `backend/apple/APPLE_AUDIT.md` | - | 2026-07-13 | 9 | ✓ |
 | `backend/apple/APPLE_GPU_CODEGEN_PLAN.md` | - | 2026-07-13 | 9 | ✓ |
 | `backend/apple/MPSGRAPH_RUNTIME_GLASS_JAWS.md` | - | 2026-07-13 | 9 | ✓ |

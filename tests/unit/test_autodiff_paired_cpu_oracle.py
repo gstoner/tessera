@@ -49,6 +49,7 @@ pytestmark = pytest.mark.skipif(
 
 _SSA = re.compile(r"%[A-Za-z0-9_]+")
 _DIMS = re.compile(r"tensor<([0-9x]+)x[a-z0-9]+>")
+_SHAPE = re.compile(r"tensor<((?:[?0-9]+x)*)(?:bf16|f16|f32|f64|i1)>")
 _DENSE = re.compile(r"dense<([-0-9.eE+]+)>")
 
 
@@ -64,9 +65,26 @@ class _Interp:
 
     def run(self, inputs: list[np.ndarray]) -> list[np.ndarray]:
         env: dict[str, np.ndarray] = dict(zip(self.arg_names, inputs))
+
+        def result_shape(text: str) -> tuple[int, ...]:
+            matches = _SHAPE.findall(text)
+            assert matches, f"no tensor result shape in {text!r}"
+            raw = matches[-1].removesuffix("x")
+            tokens = raw.split("x") if raw else []
+            if "?" not in tokens:
+                return tuple(int(d) for d in tokens)
+            for value in env.values():
+                if value.ndim != len(tokens):
+                    continue
+                if all(t == "?" or int(t) == value.shape[i]
+                       for i, t in enumerate(tokens)):
+                    return value.shape
+            raise AssertionError(f"cannot resolve dynamic result shape {tokens}")
+
         for line in self.body:
             lhs, rhs = line.split(" = ", 1)
-            dst = lhs.strip()
+            destinations = _SSA.findall(lhs)
+            dst = destinations[0]
             head = rhs.split(" : ", 1)[0]
             op = head.split()[0]
             operands = _SSA.findall(head)
@@ -93,6 +111,57 @@ class _Interp:
                 x = env[operands[0]]
                 inner = np.sqrt(2.0 / np.pi) * (x + 0.044715 * x**3)
                 env[dst] = (0.5 * x * (1.0 + np.tanh(inner))).astype(np.float32)
+            elif op == "tessera.relu":
+                env[dst] = np.maximum(env[operands[0]], 0).astype(np.float32)
+            elif op == "tessera.rmsnorm":
+                x = env[operands[0]]
+                eps_match = re.search(r"eps = ([-0-9.eE+]+)", rhs)
+                eps = float(eps_match.group(1)) if eps_match else 1.0e-5
+                y = x / np.sqrt(np.mean(x * x, axis=-1, keepdims=True) + eps)
+                if len(operands) > 1:
+                    y = y * env[operands[1]]
+                env[dst] = y.astype(np.float32)
+            elif op == "tessera.layer_norm":
+                x = env[operands[0]]
+                eps_match = re.search(r"eps = ([-0-9.eE+]+)", rhs)
+                eps = float(eps_match.group(1)) if eps_match else 1.0e-5
+                center = np.mean(x, axis=-1, keepdims=True)
+                variance = np.mean((x - center) ** 2, axis=-1, keepdims=True)
+                y = (x - center) / np.sqrt(variance + eps)
+                if len(operands) > 1:
+                    y = y * env[operands[1]]
+                if len(operands) > 2:
+                    y = y + env[operands[2]]
+                env[dst] = y.astype(np.float32)
+            elif op == "tessera.compare_scalar":
+                x = env[operands[0]]
+                rhs_value = float(re.search(r"rhs = ([-0-9.eE+]+)", rhs).group(1))
+                predicate = re.search(r'predicate = "([a-z]+)"', rhs).group(1)
+                comparisons = {
+                    "eq": np.equal, "ne": np.not_equal,
+                    "lt": np.less, "le": np.less_equal,
+                    "gt": np.greater, "ge": np.greater_equal,
+                }
+                env[dst] = comparisons[predicate](x, rhs_value)
+            elif op == "tessera.masked_fill":
+                value = float(re.search(r"value = ([-0-9.eE+]+)", rhs).group(1))
+                env[dst] = np.where(env[operands[1]], env[operands[0]], value).astype(
+                    np.float32)
+            elif op == "tessera.normalization_stats":
+                assert len(destinations) == 2
+                x = env[operands[0]]
+                axis_match = re.search(r"axis = (-?\d+)", rhs)
+                axis = int(axis_match.group(1)) if axis_match else -1
+                eps_match = re.search(r"eps = ([-0-9.eE+]+)", rhs)
+                eps = float(eps_match.group(1)) if eps_match else 1.0e-5
+                # ODS elides the default `centered = true`; only the RMSNorm
+                # specialization prints an explicit false value.
+                centered = "centered = false" not in rhs
+                center = np.mean(x, axis=axis)
+                base = x - np.expand_dims(center, axis) if centered else x
+                inv = 1.0 / np.sqrt(np.mean(base * base, axis=axis) + eps)
+                env[destinations[0]] = center.astype(np.float32)
+                env[destinations[1]] = inv.astype(np.float32)
             elif op == "tessera.softmax":
                 x = env[operands[0]]
                 axis_match = re.search(r"axis = (-?\d+)", rhs)
@@ -107,10 +176,18 @@ class _Interp:
             elif op == "tessera.add":
                 env[dst] = (env[operands[0]] + env[operands[1]]).astype(np.float32)
             elif op == "tessera.broadcast":
-                dims = tuple(
-                    int(d) for d in _DIMS.findall(rhs)[-1].split("x")
-                )
+                dims = result_shape(rhs)
                 env[dst] = np.broadcast_to(env[operands[0]], dims).copy()
+            elif op == "tessera.broadcast_in_dim":
+                dims = result_shape(rhs)
+                mapping_text = rhs.split("broadcast_dimensions =", 1)[1]
+                mapping = [int(v) for v in re.findall(
+                    r"-?\d+", mapping_text.split("]", 1)[0])]
+                reshape = [1] * len(dims)
+                for input_dim, output_dim in enumerate(mapping):
+                    reshape[output_dim] = env[operands[0]].shape[input_dim]
+                env[dst] = np.broadcast_to(
+                    env[operands[0]].reshape(reshape), dims).copy()
             elif op == "tessera.reduce":
                 axis = int(re.search(r"axis = (-?\d+)", rhs).group(1))
                 kind = re.search(r'kind = "([^"]+)"', rhs).group(1)
@@ -310,6 +387,126 @@ module {{
         )
     np.testing.assert_allclose(primal, expected, rtol=2e-6, atol=2e-6)
     np.testing.assert_allclose(dx, seed * derivative, rtol=3e-6, atol=3e-6)
+
+
+@pytest.mark.parametrize("shape_type,shape", [
+    ("3x5", (3, 5)),
+    ("?x5", (7, 5)),
+])
+def test_native_relu_backward_matches_numpy_oracle(shape_type, shape):
+    mlir = f"""
+module {{
+  func.func @relu(%x: tensor<{shape_type}xf32>) -> tensor<{shape_type}xf32>
+      attributes {{tessera.autodiff = "reverse"}} {{
+    %y = "tessera.relu"(%x) :
+        (tensor<{shape_type}xf32>) -> tensor<{shape_type}xf32>
+    return %y : tensor<{shape_type}xf32>
+  }}
+}}
+"""
+    rng = np.random.default_rng(67)
+    x = rng.standard_normal(shape).astype(np.float32)
+    x.flat[0] = 0.0  # pin the derivative convention at the nondifferentiable point
+    seed = rng.standard_normal(shape).astype(np.float32)
+    funcs = _run_paired(mlir)
+    (primal,) = funcs["relu"].run([x])
+    (dx,) = funcs["relu__bwd"].run([x, seed])
+    np.testing.assert_array_equal(primal, np.maximum(x, 0.0))
+    np.testing.assert_array_equal(dx, np.where(x > 0.0, seed, 0.0))
+
+
+@pytest.mark.parametrize("op", ["rmsnorm", "layer_norm"])
+@pytest.mark.parametrize("shape_type,shape", [
+    ("3x5", (3, 5)),
+    ("?x5", (7, 5)),
+])
+def test_native_normalization_backward_matches_numpy_oracle(
+        op: str, shape_type: str, shape: tuple[int, int]):
+    mlir = f"""
+module {{
+  func.func @normalization(%x: tensor<{shape_type}xf32>)
+      -> tensor<{shape_type}xf32>
+      attributes {{tessera.autodiff = "reverse"}} {{
+    %y = "tessera.{op}"(%x) {{eps = 1.0e-5 : f64}} :
+        (tensor<{shape_type}xf32>) -> tensor<{shape_type}xf32>
+    return %y : tensor<{shape_type}xf32>
+  }}
+}}
+"""
+    rng = np.random.default_rng(71)
+    x = rng.standard_normal(shape).astype(np.float32)
+    seed = rng.standard_normal(shape).astype(np.float32)
+    funcs = _run_paired(mlir)
+    (primal,) = funcs["normalization"].run([x])
+    (dx,) = funcs["normalization__bwd"].run([x, seed])
+    if op == "rmsnorm":
+        inv = 1.0 / np.sqrt(np.mean(x * x, axis=-1, keepdims=True) + 1.0e-5)
+        expected = x * inv
+        dx_expected = seed * inv - x * inv**3 * np.mean(
+            seed * x, axis=-1, keepdims=True)
+    else:
+        center = np.mean(x, axis=-1, keepdims=True)
+        inv = 1.0 / np.sqrt(
+            np.mean((x - center) ** 2, axis=-1, keepdims=True) + 1.0e-5)
+        expected = (x - center) * inv
+        dx_expected = inv * (
+            seed - np.mean(seed, axis=-1, keepdims=True)
+            - expected * np.mean(seed * expected, axis=-1, keepdims=True))
+    np.testing.assert_allclose(primal, expected, rtol=3e-6, atol=3e-6)
+    np.testing.assert_allclose(dx, dx_expected, rtol=5e-6, atol=5e-6)
+
+
+@pytest.mark.parametrize("op", ["rmsnorm", "layer_norm"])
+@pytest.mark.parametrize("shape_type,shape", [("3x5", (3, 5)), ("?x5", (7, 5))])
+def test_native_affine_normalization_gradients_match_numpy_oracle(
+        op: str, shape_type: str, shape: tuple[int, int]):
+    affine_args = "%gamma: tensor<5xf32>"
+    affine_operands = "%x, %gamma"
+    affine_types = f"tensor<{shape_type}xf32>, tensor<5xf32>"
+    if op == "layer_norm":
+        affine_args += ", %beta: tensor<5xf32>"
+        affine_operands += ", %beta"
+        affine_types += ", tensor<5xf32>"
+    mlir = f"""
+module {{
+  func.func @normalization(%x: tensor<{shape_type}xf32>, {affine_args})
+      -> tensor<{shape_type}xf32>
+      attributes {{tessera.autodiff = "reverse"}} {{
+    %y = "tessera.{op}"({affine_operands}) {{eps = 1.0e-5 : f64}} :
+        ({affine_types}) -> tensor<{shape_type}xf32>
+    return %y : tensor<{shape_type}xf32>
+  }}
+}}
+"""
+    rng = np.random.default_rng(79 + len(shape))
+    x = rng.standard_normal(shape).astype(np.float32)
+    gamma = rng.uniform(0.5, 1.5, (shape[-1],)).astype(np.float32)
+    beta = rng.standard_normal((shape[-1],)).astype(np.float32)
+    seed = rng.standard_normal(shape).astype(np.float32)
+    inputs = [x, gamma] + ([beta] if op == "layer_norm" else [])
+    funcs = _run_paired(mlir)
+    (primal,) = funcs["normalization"].run(inputs)
+    grads = funcs["normalization__bwd"].run(inputs + [seed])
+    if op == "rmsnorm":
+        inv = 1.0 / np.sqrt(np.mean(x * x, axis=-1, keepdims=True) + 1.0e-5)
+        normalized = x * inv
+        dz = seed * gamma
+        dx = dz * inv - x * inv**3 * np.mean(dz * x, axis=-1, keepdims=True)
+        expected = normalized * gamma
+        expected_grads = [dx, np.sum(seed * normalized, axis=0)]
+    else:
+        center = np.mean(x, axis=-1, keepdims=True)
+        inv = 1.0 / np.sqrt(np.mean((x - center) ** 2, axis=-1, keepdims=True)
+                               + 1.0e-5)
+        normalized = (x - center) * inv
+        dz = seed * gamma
+        dx = inv * (dz - np.mean(dz, axis=-1, keepdims=True)
+                    - normalized * np.mean(dz * normalized, axis=-1, keepdims=True))
+        expected = normalized * gamma + beta
+        expected_grads = [dx, np.sum(seed * normalized, axis=0), np.sum(seed, axis=0)]
+    np.testing.assert_allclose(primal, expected, rtol=4e-6, atol=4e-6)
+    for actual, wanted in zip(grads, expected_grads):
+        np.testing.assert_allclose(actual, wanted, rtol=7e-6, atol=7e-6)
 
 
 def test_native_softmax_backward_matches_numpy_oracle():

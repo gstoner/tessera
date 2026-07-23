@@ -1219,3 +1219,35 @@ exact-device claim transfers. NVIDIA's architecture-owned Graph-cast consumer
 is host-validated: after shared legality it accepts row/column-major/BHSD/NHWC,
 removes the Graph marker, and carries the binding into `tile.async_copy`.
 This changes staging metadata only and claims no PTX schedule or device proof.
+
+Cross-backend sync `CORE-COMPILER-ADJOINTS-2026-07-22` registers shared
+tensor-to-i1 comparison contracts plus internal scalar-threshold,
+rank-reduced normalization-statistics, and explicit broadcast-in-dimension
+Graph carriers. ReLU and unweighted RMSNorm/LayerNorm paired adjoints are
+static/dynamic Graph-native and CPU-IR oracle-proven; the static shared path
+lowers through linalg. NVIDIA is **follow-up required** for backward execution:
+no PTX/CUDA ABI, affine gamma/beta contract, tensor-core schedule, selector,
+runtime binding, performance result, or exact-device proof is added here.
+Dynamic statistics remain Graph IR until an NVIDIA-owned materializer lands.
+
+Cross-backend sync `CORE-COMPILER-NORM-AFFINE-2026-07-22` makes integer
+comparison signedness explicit in shared Graph IR and adds dynamic-dimension
+carriers plus channel-affine RMSNorm/LayerNorm adjoints. NVIDIA is **follow-up
+required** for an architecture-owned dynamic affine normalization materializer
+and backward runtime: the gfx1151 HSACO and AVX-512 ABIs, schedules, timing,
+and exact-device evidence do not transfer to CUDA/PTX. Shared static/dynamic
+linalg and CPU-oracle proof validate the Graph contract only; no NVIDIA
+selector, execution row, or device claim changes.
+
+Cross-backend sync `CORE-COMPILER-NORM-BWD-DETERMINISM-2026-07-22` changes only
+the ROCm architecture-owned backward schedule and temporary-buffer ABI. The
+shared affine adjoint and f32 accumulation contract are unchanged. NVIDIA still
+requires its own CUDA/PTX backward materializer and exact-device proof; the
+gfx1151 two-kernel schedule, bitwise evidence, and timing do not transfer.
+
+Cross-backend sync `CORE-COMPILER-NORM-BWD-2026-07-22` adds family-specific
+RMSNorm/LayerNorm backward execution rows and public JIT binding for ROCm and
+x86. NVIDIA remains **follow-up required**: neither the gfx1151 HSACO ABI nor
+the AVX-512 f32 ABI, schedule, dtype-accumulation contract, timing, or device
+evidence transfers to CUDA/PTX. The shared Graph adjoint and dynamic Linalg
+contract remain parity validated; no NVIDIA execution row or selector changes.

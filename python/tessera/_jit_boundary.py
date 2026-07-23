@@ -1094,15 +1094,23 @@ class GraphFn:
             meta={"axis": ax, "rank": len(a.shape)},
         )
 
-    def rmsnorm(self, a, eps: float = 1e-5):
+    def rmsnorm(self, a, gamma=None, eps: float = 1e-5):
+        operands = [a] + ([gamma] if gamma is not None else [])
         return self._emit(
-            "tessera.rmsnorm", [a], a.shape, [f"eps = {eps:.9e} : f64"],
+            "tessera.rmsnorm", operands, a.shape, [f"eps = {eps:.9e} : f64"],
             meta={"eps": float(eps)},
         )
 
-    def layer_norm(self, a, eps: float = 1e-5):
+    def layer_norm(self, a, gamma=None, beta=None, eps: float = 1e-5):
+        if beta is not None and gamma is None:
+            raise TesseraJitError("layer_norm beta requires gamma")
+        operands = [a]
+        if gamma is not None:
+            operands.append(gamma)
+        if beta is not None:
+            operands.append(beta)
         return self._emit(
-            "tessera.layer_norm", [a], a.shape, [f"eps = {eps:.9e} : f64"],
+            "tessera.layer_norm", operands, a.shape, [f"eps = {eps:.9e} : f64"],
             meta={"eps": float(eps)},
         )
 

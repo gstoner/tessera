@@ -53,6 +53,43 @@ inline __mmask16 vec_compare(__m512 a, __m512 b, int kind) {
     default: return 0;
     }
 }
+
+template <typename T>
+inline uint8_t scalar_compare_integer(T a, T b, int kind) {
+    switch (kind) {
+    case kEq: return a == b;
+    case kNe: return a != b;
+    case kLt: return a < b;
+    case kLe: return a <= b;
+    case kGt: return a > b;
+    case kGe: return a >= b;
+    default: return 0;
+    }
+}
+
+inline __mmask16 vec_compare_i32(__m512i a, __m512i b, int kind) {
+    switch (kind) {
+    case kEq: return _mm512_cmp_epi32_mask(a, b, _MM_CMPINT_EQ);
+    case kNe: return _mm512_cmp_epi32_mask(a, b, _MM_CMPINT_NE);
+    case kLt: return _mm512_cmp_epi32_mask(a, b, _MM_CMPINT_LT);
+    case kLe: return _mm512_cmp_epi32_mask(a, b, _MM_CMPINT_LE);
+    case kGt: return _mm512_cmp_epi32_mask(a, b, _MM_CMPINT_NLE);
+    case kGe: return _mm512_cmp_epi32_mask(a, b, _MM_CMPINT_NLT);
+    default: return 0;
+    }
+}
+
+inline __mmask16 vec_compare_u32(__m512i a, __m512i b, int kind) {
+    switch (kind) {
+    case kEq: return _mm512_cmp_epu32_mask(a, b, _MM_CMPINT_EQ);
+    case kNe: return _mm512_cmp_epu32_mask(a, b, _MM_CMPINT_NE);
+    case kLt: return _mm512_cmp_epu32_mask(a, b, _MM_CMPINT_LT);
+    case kLe: return _mm512_cmp_epu32_mask(a, b, _MM_CMPINT_LE);
+    case kGt: return _mm512_cmp_epu32_mask(a, b, _MM_CMPINT_NLE);
+    case kGe: return _mm512_cmp_epu32_mask(a, b, _MM_CMPINT_NLT);
+    default: return 0;
+    }
+}
 }  // namespace
 
 extern "C" void tessera_x86_reference_compare_f32(const float* A, const float* B,
@@ -74,4 +111,32 @@ extern "C" void tessera_x86_avx512_compare_f32(const float* A, const float* B,
         _mm_storeu_si128(reinterpret_cast<__m128i*>(out + i), bytes);
     }
     for (; i < n; ++i) out[i] = scalar_compare(A[i], B[i], kind);
+}
+
+extern "C" void tessera_x86_avx512_compare_i32(const int32_t* A,
+                                               const int32_t* B, int64_t n,
+                                               uint8_t* out, int kind) {
+    int64_t i = 0;
+    for (; i + 16 <= n; i += 16) {
+        __m512i a = _mm512_loadu_si512(A + i);
+        __m512i b = _mm512_loadu_si512(B + i);
+        __mmask16 m = vec_compare_i32(a, b, kind);
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(out + i),
+                         _mm_maskz_set1_epi8(m, 1));
+    }
+    for (; i < n; ++i) out[i] = scalar_compare_integer(A[i], B[i], kind);
+}
+
+extern "C" void tessera_x86_avx512_compare_u32(const uint32_t* A,
+                                               const uint32_t* B, int64_t n,
+                                               uint8_t* out, int kind) {
+    int64_t i = 0;
+    for (; i + 16 <= n; i += 16) {
+        __m512i a = _mm512_loadu_si512(A + i);
+        __m512i b = _mm512_loadu_si512(B + i);
+        __mmask16 m = vec_compare_u32(a, b, kind);
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(out + i),
+                         _mm_maskz_set1_epi8(m, 1));
+    }
+    for (; i < n; ++i) out[i] = scalar_compare_integer(A[i], B[i], kind);
 }

@@ -12,9 +12,14 @@
 // bytes_after: two live tiles, not three).
 // CHECK-LABEL: func.func @arena_disjoint
 // CHECK-SAME: tile.smem_arena_bytes = 1024
-// CHECK: "tile.alloc_shared"(%arg0) {tile.buffer_group = 0 : i64, tile.smem_offset = 0 : i64}
-// CHECK: "tile.alloc_shared"(%arg1) {tile.buffer_group = 1 : i64, tile.smem_offset = 512 : i64}
-// CHECK: "tile.alloc_shared"(%arg2) {tile.buffer_group = 0 : i64, tile.smem_offset = 0 : i64}
+// CHECK: memref.alloca() {alignment = 16 : i64} : memref<1024xi8, 3>
+// CHECK: arith.constant 0 : index
+// CHECK: memref.view{{.*}}to memref<16x16xf16, 3>
+// CHECK: arith.constant 512 : index
+// CHECK: memref.view{{.*}}to memref<16x16xf16, 3>
+// CHECK: arith.constant 0 : index
+// CHECK: memref.view{{.*}}to memref<16x16xf16, 3>
+// CHECK-NOT: tile.alloc_shared
 func.func @arena_disjoint(%arg0: memref<16x16xf16>, %arg1: memref<16x16xf16>,
                           %arg2: memref<16x16xf16>) {
   "tile.alloc_shared"(%arg0) : (memref<16x16xf16>) -> ()
@@ -34,7 +39,8 @@ func.func @arena_disjoint(%arg0: memref<16x16xf16>, %arg1: memref<16x16xf16>,
 // CHECK-LABEL: func.func @arena_smem_tmem_separate
 // CHECK-SAME: tile.smem_arena_bytes = 512
 // CHECK-SAME: tile.tmem_arena_bytes = 512
-// CHECK: "tile.alloc_shared"(%arg0) {tile.buffer_group = 0 : i64, tile.smem_offset = 0 : i64}
+// CHECK: memref.alloca() {alignment = 16 : i64} : memref<512xi8, 3>
+// CHECK: memref.view{{.*}}to memref<16x16xf16, 3>
 // CHECK: "tile.tmem.alloc"(%arg1) {tile.buffer_group = 1 : i64, tile.tmem_offset = 0 : i64}
 func.func @arena_smem_tmem_separate(%arg0: memref<16x16xf16>,
                                     %arg1: memref<16x16xf16>) {
@@ -50,9 +56,8 @@ func.func @arena_smem_tmem_separate(%arg0: memref<16x16xf16>,
 // arena slot (512 B), every alloc at offset 0.
 // CHECK-LABEL: func.func @arena_chain_collapses
 // CHECK-SAME: tile.smem_arena_bytes = 512
-// CHECK: "tile.alloc_shared"(%arg0) {tile.buffer_group = 0 : i64, tile.smem_offset = 0 : i64}
-// CHECK: "tile.alloc_shared"(%arg1) {tile.buffer_group = 0 : i64, tile.smem_offset = 0 : i64}
-// CHECK: "tile.alloc_shared"(%arg2) {tile.buffer_group = 0 : i64, tile.smem_offset = 0 : i64}
+// CHECK: memref.alloca() {alignment = 16 : i64} : memref<512xi8, 3>
+// CHECK-COUNT-3: memref.view{{.*}}to memref<16x16xf16, 3>
 func.func @arena_chain_collapses(%arg0: memref<16x16xf16>,
                                  %arg1: memref<16x16xf16>,
                                  %arg2: memref<16x16xf16>) {
@@ -70,8 +75,11 @@ func.func @arena_chain_collapses(%arg0: memref<16x16xf16>,
 // the arena size (8) includes the padding.
 // CHECK-LABEL: func.func @arena_alignment_padding
 // CHECK-SAME: tile.smem_arena_bytes = 8
-// CHECK: "tile.alloc_shared"(%arg0) {tile.buffer_group = 0 : i64, tile.smem_offset = 0 : i64}
-// CHECK: "tile.alloc_shared"(%arg1) {tile.buffer_group = 1 : i64, tile.smem_offset = 4 : i64}
+// CHECK: memref.alloca() {alignment = 16 : i64} : memref<8xi8, 3>
+// CHECK: arith.constant 0 : index
+// CHECK: memref.view{{.*}}to memref<1xi8, 3>
+// CHECK: arith.constant 4 : index
+// CHECK: memref.view{{.*}}to memref<1xf32, 3>
 func.func @arena_alignment_padding(%arg0: memref<1xi8>, %arg1: memref<1xf32>) {
   "tile.alloc_shared"(%arg0) : (memref<1xi8>) -> ()
   "tile.alloc_shared"(%arg1) : (memref<1xf32>) -> ()

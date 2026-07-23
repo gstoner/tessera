@@ -4,6 +4,7 @@ add_mlir_library(TesseraNVIDIAConversion
   LINK_LIBS PUBLIC
     TesseraIR
     TesseraNVIDIAIR
+    TesseraPasses
     MLIRArithDialect
     MLIRFuncDialect
     MLIRGPUDialect

@@ -1,6 +1,7 @@
 #include "tessera/gpu/BackendRegistration.h"
 #include "Tessera/Dialect/Tile/TileDialect.h"
 #include "Tessera/Dialect/Tile/TileEpilogue.h"
+#include "Tessera/Transforms/Passes.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -3939,21 +3940,29 @@ std::unique_ptr<Pass> createLowerNVIDIAToNVVMPass() {
 }
 
 void buildTesseraNVIDIABackendPipeline(OpPassManager &pm) {
+  pm.addPass(createTileBufferReusePass());
+  pm.addPass(createTileBufferArenaPass());
   pm.addPass(createLowerTileToNVIDIAPass(kHopperSM));
   pm.addPass(createLowerNVIDIAToNVVMPass());
 }
 
 void buildTesseraHopperBackendPipeline(OpPassManager &pm) {
+  pm.addPass(createTileBufferReusePass());
+  pm.addPass(createTileBufferArenaPass());
   pm.addPass(createLowerTileToNVIDIAPass(kHopperSM));
   pm.addPass(createLowerNVIDIAToNVVMPass());
 }
 
 void buildTesseraBlackwellBackendPipeline(OpPassManager &pm) {
+  pm.addPass(createTileBufferReusePass());
+  pm.addPass(createTileBufferArenaPass());
   pm.addPass(createLowerTileToNVIDIAPass(kBlackwellSM));
   pm.addPass(createLowerNVIDIAToNVVMPass());
 }
 
 void buildTesseraConsumerBlackwellBackendPipeline(OpPassManager &pm) {
+  pm.addPass(createTileBufferReusePass());
+  pm.addPass(createTileBufferArenaPass());
   pm.addPass(createLowerTileToNVIDIAPass(kConsumerBlackwellSM));
   pm.addPass(createLowerNVIDIAToNVVMPass());
 }

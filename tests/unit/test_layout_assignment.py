@@ -131,3 +131,53 @@ func.func @f(%x: tensor<4x16xf32>) -> tensor<4xf32> {
     ).stdout
     assert 'tessera.source_layout = "packed"' in out
     assert 'tessera.layout = "row_major"' in out
+
+
+@_needs_opt
+def test_rank2_transpose_flips_layout_without_redundant_cast(tmp_path):
+    fixture = '''
+func.func @f(%a: tensor<8x4xf32>, %b: tensor<8x16xf32>) -> tensor<4x16xf32> {
+  %seed = "tessera.cast"(%a) {tessera.layout = "row_major"} : (tensor<8x4xf32>) -> tensor<8x4xf32>
+  %at = "tessera.transpose"(%seed) {permutation = array<i64: 1, 0>} : (tensor<8x4xf32>) -> tensor<4x8xf32>
+  %0 = "tessera.matmul"(%at, %b) : (tensor<4x8xf32>, tensor<8x16xf32>) -> tensor<4x16xf32>
+  return %0 : tensor<4x16xf32>
+}
+'''
+    f = tmp_path / "transpose_layout.mlir"
+    f.write_text(fixture)
+    result = subprocess.run(
+        [_OPT, str(f), "--tessera-layout-assignment",
+         "--tessera-layout-legality"],
+        capture_output=True, text=True, check=True,
+    )
+    assert 'tessera.transpose' in result.stdout
+    assert 'tessera.layout = "col_major"' in result.stdout
+    # The transpose result is already in matmul's accept-set.
+    assert result.stdout.count("tessera.cast") == 1
+
+
+@_needs_opt
+def test_pointwise_and_layout_cast_preserve_agreed_storage_contract(tmp_path):
+    fixture = '''
+func.func @f(%x: tensor<4x16xf32>) -> tensor<4xf32> {
+  %packed = "tessera.cast"(%x) {
+    tessera.layout = "packed",
+    tessera.storage_container = "int8",
+    tessera.storage_pack = {container = "int8", factor = 2 : i64, logical = "int4", signedness = "signed_twos_complement"},
+    tessera.storage_packed = true
+  } : (tensor<4x16xf32>) -> tensor<4x16xf32>
+  %gelu = "tessera.gelu"(%packed) : (tensor<4x16xf32>) -> tensor<4x16xf32>
+  %sum = "tessera.reduce"(%gelu) {kind = "sum", axis = -1 : i64} : (tensor<4x16xf32>) -> tensor<4xf32>
+  return %sum : tensor<4xf32>
+}
+'''
+    f = tmp_path / "packed_chain.mlir"
+    f.write_text(fixture)
+    out = subprocess.run(
+        [_OPT, str(f), "--tessera-layout-assignment"],
+        capture_output=True, text=True, check=True,
+    ).stdout
+    # Original producer + GELU + inserted packed->row-major cast.
+    assert out.count("tessera.storage_pack =") == 3
+    assert out.count("tessera.storage_packed = true") == 3
+    assert 'tessera.source_layout = "packed"' in out

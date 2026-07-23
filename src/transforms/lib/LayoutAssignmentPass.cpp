@@ -7,10 +7,12 @@
 //   1. SEED      — stamp `tessera.layout` on kernel-producer ops with a natural
 //                  output layout (matmul/batched_gemm → row_major, flash_attn →
 //                  bhsd, conv2d_nhwc → nhwc) when they don't already carry one.
-//   2. PROPAGATE — flow a compatible producer layout through single-result
-//                  pointwise ops, then carry a row-major result through a
-//                  last-axis reduction. Conflicting binary layouts are left
-//                  unassigned rather than choosing the first operand.
+//   2. PROPAGATE — flow a compatible producer layout and physical-storage
+//                  contract through single-result pointwise ops, transpose
+//                  row/column-major rank-2 values explicitly, then carry a
+//                  row-major result through a last-axis reduction. Conflicting
+//                  binary layouts/storage contracts are left unassigned rather
+//                  than choosing the first operand.
 //   3. INSERT    — at a consumer op with a known accept-set (matmul/conv2d_nhwc/
 //                  flash_attn), if an operand's producer carries a layout outside
 //                  that accept-set, splice in a `tessera.cast {tessera.layout=...}`
@@ -96,6 +98,49 @@ static bool isPointwise(StringRef opName) {
   return kSet.contains(opName);
 }
 
+static ArrayRef<StringRef> physicalStorageAttrs() {
+  static const StringRef attrs[] = {
+      "tessera.storage_packed",
+      "tessera.storage_container",
+      "tessera.storage_pack",
+  };
+  return attrs;
+}
+
+// Preserve a physical storage contract only when every layout-bearing operand
+// agrees. Untagged scalar/bias operands do not veto propagation, but two tagged
+// operands with different packing contracts do.
+static void propagatePhysicalStorage(Operation *op) {
+  for (StringRef name : physicalStorageAttrs()) {
+    Attribute resolved;
+    bool sawLayoutOperand = false;
+    bool conflict = false;
+    for (Value operand : op->getOperands()) {
+      Operation *def = operand.getDefiningOp();
+      if (!def || !def->hasAttr(kLayoutAttr))
+        continue;
+      Attribute candidate = def->getAttr(name);
+      if (!sawLayoutOperand) {
+        resolved = candidate;
+        sawLayoutOperand = true;
+      } else if (resolved != candidate) {
+        conflict = true;
+        break;
+      }
+    }
+    if (!conflict && resolved)
+      op->setAttr(name, resolved);
+  }
+}
+
+static void copyPhysicalStorage(Operation *from, Operation *to) {
+  if (!from)
+    return;
+  for (StringRef name : physicalStorageAttrs())
+    if (Attribute attr = from->getAttr(name))
+      to->setAttr(name, attr);
+}
+
 // The layout a value's defining op advertises (its `tessera.layout` attr), or
 // empty for a block argument / untagged producer.
 static StringRef layoutOf(Value v) {
@@ -104,6 +149,34 @@ static StringRef layoutOf(Value v) {
     return {};
   if (auto a = def->getAttrOfType<StringAttr>(kLayoutAttr))
     return a.getValue();
+  return {};
+}
+
+static StringRef propagatedTransposeLayout(Operation *op) {
+  if (op->getName().getStringRef() != "tessera.transpose" ||
+      op->getNumOperands() != 1 || op->getNumResults() != 1)
+    return {};
+  auto inputTy = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+  auto outputTy = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+  if (!inputTy || !outputTy || inputTy.getRank() != 2 ||
+      outputTy.getRank() != 2)
+    return {};
+  bool swapsAxes = true; // Attribute-free transpose reverses dimensions.
+  if (auto permutation =
+          op->getAttrOfType<DenseI64ArrayAttr>("permutation")) {
+    ArrayRef<int64_t> values = permutation.asArrayRef();
+    if (values.size() == 2 && values[0] == 0 && values[1] == 1)
+      swapsAxes = false;
+    else if (values.size() != 2 || values[0] != 1 || values[1] != 0)
+      return {};
+  }
+  StringRef input = layoutOf(op->getOperand(0));
+  if (!swapsAxes)
+    return input;
+  if (input == "row_major")
+    return "col_major";
+  if (input == "col_major")
+    return "row_major";
   return {};
 }
 
@@ -166,18 +239,23 @@ struct LayoutAssignment
         stamp(op, l);
     });
 
-    // ── Phase 2: propagate through pointwise ops to a fixpoint. ──────────
+    // ── Phase 2: propagate through transpose/pointwise to a fixpoint. ────
     bool changed = true;
     while (changed) {
       changed = false;
       module.walk([&](Operation *op) {
         if (op->getNumResults() != 1 || op->hasAttr(kLayoutAttr))
           return;
-        if (!isPointwise(op->getName().getStringRef()))
+        StringRef l;
+        if (op->getName().getStringRef() == "tessera.transpose")
+          l = propagatedTransposeLayout(op);
+        else if (isPointwise(op->getName().getStringRef()))
+          l = propagatedPointwiseLayout(op);
+        else
           return;
-        StringRef l = propagatedPointwiseLayout(op);
         if (!l.empty()) {
           stamp(op, l);
+          propagatePhysicalStorage(op);
           changed = true;
         }
       });
@@ -235,6 +313,7 @@ struct LayoutAssignment
       if (!source.empty())
         st.addAttribute("tessera.source_layout", StringAttr::get(ctx, source));
       Operation *marker = builder.create(st);
+      copyPhysicalStorage(operand.getDefiningOp(), marker);
       f.consumer->setOperand(f.operandIdx, marker->getResult(0));
     }
   }

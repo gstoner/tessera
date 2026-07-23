@@ -24,6 +24,10 @@
 
 #include "Tessera/Transforms/Passes.h"
 
+#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/IR/Dominance.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Builders.h"
@@ -80,6 +84,10 @@ struct TileBufferArena
            "shared-memory arena: stamp tile.smem_offset / tile.tmem_offset on each "
            "alloc (same-group buffers share an offset) + the arena byte size on "
            "the func. The first consumer of TileBufferReusePass's metadata.";
+  }
+
+  void getDependentDialects(DialectRegistry &registry) const override {
+    registry.insert<arith::ArithDialect, memref::MemRefDialect>();
   }
 
   void runOnOperation() override {
@@ -155,6 +163,58 @@ struct TileBufferArena
       fn->setAttr("tile.smem_arena_bytes", b.getI64IntegerAttr(smemBytes));
     if (!tmem.empty())
       fn->setAttr("tile.tmem_arena_bytes", b.getI64IntegerAttr(tmemBytes));
+    if (!smem.empty() && smemBytes > 0)
+      materializeSharedArena(fn, smem, smemBytes, b);
+  }
+
+  // Realize the offset plan as one address-space-3 byte arena plus typed
+  // memref.view slices. Address space 3 is shared/LDS in both NVPTX and AMDGPU,
+  // so the ordinary downstream memref-to-LLVM conversion emits a real PTX
+  // `.shared` or HIP/ROCDL LDS allocation. The old alloc marker is erased: its
+  // users now consume the offset-derived view, making reuse executable.
+  void materializeSharedArena(Operation *fn,
+                              const SmallVector<Operation *> &allocs,
+                              int64_t arenaBytes, OpBuilder &b) {
+    auto func = dyn_cast<func::FuncOp>(fn);
+    if (!func || func.empty())
+      return;
+    Location loc = func.getLoc();
+    auto memorySpace = b.getI64IntegerAttr(3);
+    auto arenaType = MemRefType::get(
+        {arenaBytes}, b.getI8Type(), MemRefLayoutAttrInterface(), memorySpace);
+    b.setInsertionPointToStart(&func.front());
+    OperationState arenaState(loc, "memref.alloca");
+    arenaState.addTypes(arenaType);
+    arenaState.addAttribute("alignment", b.getI64IntegerAttr(16));
+    Operation *arena = b.create(arenaState);
+    DominanceInfo dominance(func);
+
+    for (Operation *alloc : allocs) {
+      auto offset = alloc->getAttrOfType<IntegerAttr>("tile.smem_offset");
+      auto originalType =
+          dyn_cast<MemRefType>(alloc->getOperand(0).getType());
+      if (!offset || !originalType)
+        continue;
+      auto viewType = MemRefType::get(
+          originalType.getShape(), originalType.getElementType(),
+          originalType.getLayout(), memorySpace);
+      b.setInsertionPoint(alloc);
+      Value byteShift = arith::ConstantIndexOp::create(
+          b, alloc->getLoc(), offset.getInt());
+      OperationState viewState(alloc->getLoc(), "memref.view");
+      viewState.addOperands({arena->getResult(0), byteShift});
+      viewState.addTypes(viewType);
+      Operation *view = b.create(viewState);
+      Value original = alloc->getOperand(0);
+      for (OpOperand &use :
+           llvm::make_early_inc_range(original.getUses())) {
+        if (use.getOwner() != alloc &&
+            dominance.properlyDominates(alloc, use.getOwner()))
+          use.set(view->getResult(0));
+      }
+      alloc->erase();
+    }
+    fn->setAttr("tile.smem_arena_materialized", b.getUnitAttr());
   }
 };
 

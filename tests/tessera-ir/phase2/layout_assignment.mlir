@@ -39,3 +39,43 @@ func.func @insert_cast_at_boundary(%a: tensor<4x8xf32>, %b: tensor<8x16xf32>) ->
   %0 = "tessera.matmul"(%at, %b) : (tensor<4x8xf32>, tensor<8x16xf32>) -> tensor<4x16xf32>
   return %0 : tensor<4x16xf32>
 }
+
+// -----
+
+// Complete envelope: rank-2 transpose flips row-major to column-major, the
+// pointwise epilogue retains its agreed storage descriptor, and the last-axis
+// reduction receives one descriptor-preserving row-major materialization.
+// CHECK-LABEL: func.func @transpose_packed_epilogue_reduce
+// CHECK: tessera.transpose
+// CHECK-SAME: tessera.layout = "col_major"
+// CHECK-SAME: tessera.storage_packed = true
+// CHECK: tessera.gelu
+// CHECK-SAME: tessera.layout = "col_major"
+// CHECK-SAME: tessera.storage_packed = true
+// CHECK: tessera.cast
+// CHECK-SAME: tessera.layout = "row_major"
+// CHECK-SAME: tessera.source_layout = "col_major"
+// CHECK-SAME: tessera.storage_packed = true
+// CHECK: tessera.reduce
+// CHECK-SAME: tessera.layout = "row_major"
+// LEGAL-LABEL: func.func @transpose_packed_epilogue_reduce
+func.func @transpose_packed_epilogue_reduce(
+    %a: tensor<8x4xf32>) -> tensor<4xf32> {
+  %seed = "tessera.cast"(%a) {
+    tessera.layout = "row_major",
+    tessera.storage_container = "int8",
+    tessera.storage_pack = {
+      container = "int8", factor = 2 : i64, logical = "int4",
+      signedness = "signed_twos_complement"
+    },
+    tessera.storage_packed = true
+  } : (tensor<8x4xf32>) -> tensor<8x4xf32>
+  %transpose = "tessera.transpose"(%seed) {
+    permutation = array<i64: 1, 0>
+  } : (tensor<8x4xf32>) -> tensor<4x8xf32>
+  %gelu = "tessera.gelu"(%transpose)
+      : (tensor<4x8xf32>) -> tensor<4x8xf32>
+  %sum = "tessera.reduce"(%gelu) {axis = -1 : i64, kind = "sum"}
+      : (tensor<4x8xf32>) -> tensor<4xf32>
+  return %sum : tensor<4xf32>
+}

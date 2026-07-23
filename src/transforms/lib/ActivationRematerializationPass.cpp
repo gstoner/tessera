@@ -39,11 +39,10 @@
 //     reverse program order (consumers before producers), so a whole tagged
 //     chain rematerializes together at the final consumer instead of leaving
 //     the earlier producer's clone live from the forward block.
-//   * `--memory-budget-mb` is accepted for parity with the InsertRecompute
-//     spelling; in the explicit-marker path it is recorded on the function as
-//     `tessera.remat_budget_mb` for downstream planners but does not itself
-//     drive selection (budget-guided auto-selection is future work — the
-//     explicit `tessera.recompute` marker is authoritative today).
+//   * `--memory-budget-mb` or a function's `tessera.remat_budget_mb` drives a
+//     deterministic liveness-aware global selection when no explicit marker is
+//     present. The largest long-lived pure activation intervals are selected
+//     until the estimated peak fits. Explicit markers remain authoritative.
 //
 // Cross-references:
 //   * python/tessera/autodiff/rematerialize.py — the Python F2 surface.
@@ -57,8 +56,12 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
+
+#include <algorithm>
+#include <limits>
 
 namespace tessera {
 
@@ -67,6 +70,41 @@ namespace {
 constexpr const char *kRecomputeAttr = "tessera.recompute";
 constexpr const char *kRematerializedCountAttr = "tessera.rematerialized";
 constexpr const char *kRematBudgetAttr = "tessera.remat_budget_mb";
+constexpr const char *kRematAutoSelectedAttr = "tessera.remat_auto_selected";
+
+static int64_t estimateResultBytes(mlir::Operation *op) {
+  int64_t bytes = 0;
+  for (mlir::Value result : op->getResults()) {
+    auto shaped = mlir::dyn_cast<mlir::ShapedType>(result.getType());
+    if (!shaped)
+      continue;
+    if (!shaped.hasStaticShape()) {
+      bytes += 4096; // explicit conservative dynamic-shape planning unit
+      continue;
+    }
+    int64_t elements = 1;
+    for (int64_t extent : shaped.getShape()) {
+      if (extent > 0 &&
+          elements > std::numeric_limits<int64_t>::max() / extent)
+        return std::numeric_limits<int64_t>::max();
+      elements *= extent;
+    }
+    int64_t bits = shaped.getElementType().getIntOrFloatBitWidth();
+    int64_t elementBytes = bits > 0 ? (bits + 7) / 8 : 1;
+    if (elements >
+        (std::numeric_limits<int64_t>::max() - bytes) / elementBytes)
+      return std::numeric_limits<int64_t>::max();
+    bytes += elements * elementBytes;
+  }
+  return bytes;
+}
+
+struct RematCandidate {
+  mlir::Operation *op;
+  int64_t begin;
+  int64_t end;
+  int64_t bytes;
+};
 
 class ActivationRematerializationPass
     : public mlir::PassWrapper<ActivationRematerializationPass,
@@ -91,18 +129,22 @@ public:
 
   Option<int> memoryBudgetMb{
       *this, "memory-budget-mb",
-      llvm::cl::desc("advisory recompute memory budget (MB); recorded on the "
-                     "function for downstream planners"),
+      llvm::cl::desc("recompute memory budget (MB); selects long-lived pure "
+                     "activations when explicit markers are absent"),
       llvm::cl::init(0)};
 
   void runOnOperation() override {
     auto func = getOperation();
 
-    if (memoryBudgetMb.getValue() > 0) {
+    int64_t effectiveBudgetMb = memoryBudgetMb.getValue();
+    if (effectiveBudgetMb <= 0)
+      if (auto attr = func->getAttrOfType<mlir::IntegerAttr>(kRematBudgetAttr))
+        effectiveBudgetMb = attr.getInt();
+    if (effectiveBudgetMb > 0) {
       func->setAttr(kRematBudgetAttr,
                     mlir::IntegerAttr::get(
                         mlir::IntegerType::get(&getContext(), 32),
-                        memoryBudgetMb.getValue()));
+                        effectiveBudgetMb));
     }
 
     // Collect the recompute-tagged ops up-front — we mutate uses / erase ops
@@ -112,6 +154,84 @@ public:
       if (op->hasAttr(kRecomputeAttr))
         recomputeOps.push_back(op);
     });
+
+    // Production-path global selection: the named autodiff pipeline invokes
+    // this pass after building the backward graph. A function-level budget now
+    // drives a deterministic liveness-aware choice when the frontend did not
+    // provide explicit markers. We remove the longest, largest pure activation
+    // intervals until the estimated peak fits; the existing clone/sink logic
+    // below then realizes those choices.
+    if (recomputeOps.empty() && effectiveBudgetMb > 0) {
+      llvm::SmallVector<mlir::Operation *> ordered;
+      func.walk([&](mlir::Operation *op) {
+        if (op != func.getOperation() && op->getNumResults() > 0)
+          ordered.push_back(op);
+      });
+      llvm::DenseMap<mlir::Operation *, int64_t> ordinal;
+      for (auto [index, op] : llvm::enumerate(ordered))
+        ordinal[op] = static_cast<int64_t>(index);
+
+      llvm::SmallVector<RematCandidate> candidates;
+      for (mlir::Operation *op : ordered) {
+        if (op->getNumRegions() != 0 || !mlir::isMemoryEffectFree(op))
+          continue;
+        int64_t begin = ordinal[op], end = begin;
+        for (mlir::Operation *user : op->getUsers()) {
+          auto it = ordinal.find(user);
+          if (it != ordinal.end())
+            end = std::max(end, it->second);
+        }
+        int64_t bytes = estimateResultBytes(op);
+        if (bytes > 0 && end > begin)
+          candidates.push_back({op, begin, end, bytes});
+      }
+
+      int64_t budgetBytes =
+          effectiveBudgetMb * 1024LL * 1024LL;
+      auto estimatedPeak = [&](llvm::ArrayRef<RematCandidate> active) {
+        int64_t peak = 0;
+        for (int64_t point = 0;
+             point < static_cast<int64_t>(ordered.size()); ++point) {
+          int64_t live = 0;
+          for (const RematCandidate &candidate : active)
+            if (candidate.begin <= point && point <= candidate.end) {
+              if (candidate.bytes >
+                  std::numeric_limits<int64_t>::max() - live)
+                live = std::numeric_limits<int64_t>::max();
+              else
+                live += candidate.bytes;
+            }
+          peak = std::max(peak, live);
+        }
+        return peak;
+      };
+      llvm::SmallVector<RematCandidate> active(candidates);
+      llvm::SmallVector<mlir::Operation *> selected;
+      while (!active.empty() && estimatedPeak(active) > budgetBytes) {
+        auto best = std::max_element(
+            active.begin(), active.end(),
+            [](const RematCandidate &lhs, const RematCandidate &rhs) {
+              __int128 lhsScore =
+                  static_cast<__int128>(lhs.bytes) * (lhs.end - lhs.begin);
+              __int128 rhsScore =
+                  static_cast<__int128>(rhs.bytes) * (rhs.end - rhs.begin);
+              if (lhsScore != rhsScore)
+                return lhsScore < rhsScore;
+              return lhs.begin > rhs.begin;
+            });
+        selected.push_back(best->op);
+        active.erase(best);
+      }
+      for (mlir::Operation *op : selected) {
+        op->setAttr(kRecomputeAttr, mlir::UnitAttr::get(&getContext()));
+        recomputeOps.push_back(op);
+      }
+      if (!selected.empty())
+        func->setAttr(
+            kRematAutoSelectedAttr,
+            mlir::IntegerAttr::get(
+                mlir::IntegerType::get(&getContext(), 64), selected.size()));
+    }
     if (recomputeOps.empty())
       return;
 

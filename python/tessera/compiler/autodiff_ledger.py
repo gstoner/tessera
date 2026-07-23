@@ -96,8 +96,9 @@ _REDUCTION_KIND_ALIASES = {"amax": "max", "amin": "min"}
 # execution, Phase 4) and device verification; it does NOT set those columns.
 _BWD_IR_ORACLE_CPU: frozenset[str] = frozenset(
     {
-        "add", "broadcast", "gelu", "layer_norm", "mean", "mul", "matmul",
-        "relu", "rmsnorm", "silu", "softmax", "sum", "tanh", "sigmoid",
+        "add", "amax", "amin", "broadcast", "gelu", "layer_norm", "max",
+        "mean", "min", "mul", "matmul", "relu", "rmsnorm", "silu",
+        "softmax", "sum", "tanh", "sigmoid",
     }
 )
 
@@ -265,14 +266,14 @@ def collect_rows() -> list[LedgerRow]:
         semantic_kind = _REDUCTION_KIND_ALIASES.get(name, name)
         reduce_kinds = kind_classes.get("reduce", {})
         if name == "reduce" and "reduce" in native and reduce_kinds:
-            ir_adjoint = "mixed"
             native_kinds = ",".join(sorted(reduce_kinds.get("native", ())))
             placeholder_kinds = ",".join(
                 sorted(reduce_kinds.get("placeholder", ()))
             )
+            ir_adjoint = "mixed" if placeholder_kinds else "native"
             notes = (
                 f"kind-aware Graph adjoint: native={native_kinds}; "
-                f"placeholder={placeholder_kinds}"
+                f"placeholder={placeholder_kinds or 'none'}"
             )
         elif semantic_kind in reduce_kinds.get("native", ()):
             ir_adjoint = "native"

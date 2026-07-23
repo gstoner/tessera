@@ -201,9 +201,9 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         cpp_class="LayoutLegalityPass",
         summary=(
             "Verifies `tessera.layout` string attributes are in the "
-            "canonical 8-name accept-set and that matmul operand "
-            "layouts are within matmul's stricter {row_major, col_major} "
-            "accept-set."
+            "canonical 8-name accept-set and that GEMM, convolution, "
+            "attention, and last-axis reduction operands are within their "
+            "consumer-specific accept-sets."
         ),
         input_dialects=("tessera",),
         output_dialects=("tessera",),

@@ -93,9 +93,11 @@ struct LayoutLegality
   }
   StringRef getDescription() const override {
     return "Layout legality pass — cast-layout accept-set + producer/consumer "
-           "accept-set rule for tessera.matmul (row_major/col_major), "
+           "accept-set rule for tessera.matmul/batched_gemm "
+           "(row_major/col_major), "
            "tessera.conv2d_nhwc (nhwc, data operand), tessera.flash_attn "
-           "(bhsd, Q/K/V), and scale-layout legality for tessera.grouped_gemm / "
+           "(bhsd, Q/K/V), last-axis tessera.reduce (row_major), and "
+           "scale-layout legality for tessera.grouped_gemm / "
            "tessera.moe_swiglu_block (scale operand requires scale_layout).";
   }
 
@@ -134,7 +136,9 @@ struct LayoutLegality
   }
 
   static LogicalResult checkMatmulOperandLayouts(Operation *op) {
-    if (op->getName().getStringRef() != "tessera.matmul") return success();
+    StringRef opName = op->getName().getStringRef();
+    if (opName != "tessera.matmul" && opName != "tessera.batched_gemm")
+      return success();
     if (op->getNumOperands() < 2) return success();
     // Reach back through the def-use chain to find a `tessera.layout`
     // attribute on the producer.  V4a only walks 1 step (the
@@ -147,6 +151,8 @@ struct LayoutLegality
     };
     bool failed = false;
     const char *names[] = {"lhs", "rhs"};
+    StringRef acceptSetOwner =
+        opName == "tessera.matmul" ? "matmul's" : "batched_gemm's";
     for (int i = 0; i < 2; ++i) {
       StringRef layout = operandLayout(op->getOperand(i));
       if (layout.empty()) continue;  // no layout attr → no enforcement
@@ -156,10 +162,11 @@ struct LayoutLegality
       // any other op.  matmul rejects.  The user must insert another
       // cast that converts to row_major or col_major.
       op->emitOpError(
-          "LAYOUT_LEGALITY_PRODUCER_CONSUMER_MISMATCH: tessera.matmul "
-          "operand '")
+          "LAYOUT_LEGALITY_PRODUCER_CONSUMER_MISMATCH: ")
+          << opName << " operand '"
           << names[i] << "' has layout \"" << layout
-          << "\" but matmul's accept-set is {row_major, col_major}. "
+          << "\" but " << acceptSetOwner
+          << " accept-set is {row_major, col_major}. "
           << "Insert a `tessera.cast` to convert.";
       failed = true;
     }
@@ -195,12 +202,24 @@ struct LayoutLegality
     StringRef opName = op->getName().getStringRef();
     static const llvm::StringSet<> kConv = {"nhwc"};
     static const llvm::StringSet<> kAttn = {"bhsd"};
+    static const llvm::StringSet<> kRowMajor = {"row_major"};
     bool anyFail = false;
     if (opName == "tessera.conv2d_nhwc") {
       if (failed(checkOneOperand(op, 0, kConv, "{nhwc}"))) anyFail = true;
     } else if (opName == "tessera.flash_attn") {
       for (unsigned i = 0; i < 3; ++i)
         if (failed(checkOneOperand(op, i, kAttn, "{bhsd}"))) anyFail = true;
+    } else if (opName == "tessera.reduce" && op->getNumOperands() == 1) {
+      auto inputTy = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+      auto axis = op->getAttrOfType<IntegerAttr>("axis");
+      if (inputTy && axis && inputTy.getRank() > 0) {
+        int64_t normalized = axis.getInt();
+        if (normalized < 0)
+          normalized += inputTy.getRank();
+        if (normalized == inputTy.getRank() - 1 &&
+            failed(checkOneOperand(op, 0, kRowMajor, "{row_major}")))
+          anyFail = true;
+      }
     }
     return anyFail ? failure() : success();
   }

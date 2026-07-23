@@ -195,9 +195,8 @@ static mlir::Value reduceLeadingSum(mlir::OpBuilder &builder,
 // source for kind-aware `tessera.reduce` classification. Keep their spelling
 // stable unless autodiff_ledger.py is updated in the same change.
 static constexpr llvm::StringLiteral kReduceNativeAdjointKinds[] = {
-    "sum", "mean"};
-static constexpr llvm::StringLiteral kReducePlaceholderAdjointKinds[] = {
-    "max", "min"};
+    "sum", "mean", "max", "min"};
+static constexpr llvm::StringLiteral kReducePlaceholderAdjointKinds[] = {};
 
 static bool containsKind(llvm::ArrayRef<llvm::StringLiteral> kinds,
                          llvm::StringRef kind) {
@@ -229,9 +228,11 @@ llvm::SmallVector<mlir::Value> MulOp::buildAdjoint(
 
 // Broadcast is inverted by summing every expanded dimension. Reduce in
 // descending axis order so each remaining axis keeps its original index, then
-// reshape to restore the input's explicit singleton dimensions. Dynamic shapes
-// cannot prove which dimensions expanded at compile time and retain the Python
-// VJP fallback.
+// reshape to restore the input's explicit singleton dimensions. Leading axes
+// and statically-singleton aligned axes remain known under dynamic shapes.
+// An aligned `? -> static non-unit` dimension is genuinely ambiguous (runtime
+// equality versus runtime singleton expansion), so only that case retains the
+// reference fallback.
 llvm::SmallVector<mlir::Value> BroadcastOp::buildAdjoint(
     mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
   if (outputCotangents.size() != 1 || !outputCotangents[0])
@@ -240,7 +241,7 @@ llvm::SmallVector<mlir::Value> BroadcastOp::buildAdjoint(
   auto inTy = mlir::dyn_cast<mlir::RankedTensorType>(getX().getType());
   auto outTy = mlir::dyn_cast<mlir::RankedTensorType>(getY().getType());
   mlir::Value dy = outputCotangents[0];
-  if (!inTy || !outTy || !inTy.hasStaticShape() || !outTy.hasStaticShape())
+  if (!inTy || !outTy)
     return placeholderAdjoint(builder, getLoc(), getX().getType(), "broadcast",
                               dy, getX());
 
@@ -250,7 +251,13 @@ llvm::SmallVector<mlir::Value> BroadcastOp::buildAdjoint(
     reduceAxes.push_back(axis);
   for (int64_t axis = 0; axis < inTy.getRank(); ++axis) {
     int64_t outAxis = axis + offset;
-    if (inTy.getDimSize(axis) == 1 && outTy.getDimSize(outAxis) != 1)
+    int64_t inputExtent = inTy.getDimSize(axis);
+    int64_t outputExtent = outTy.getDimSize(outAxis);
+    if (mlir::ShapedType::isDynamic(inputExtent) &&
+        !mlir::ShapedType::isDynamic(outputExtent) && outputExtent != 1)
+      return placeholderAdjoint(builder, getLoc(), getX().getType(),
+                                "broadcast", dy, getX());
+    if (inputExtent == 1 && outputExtent != 1)
       reduceAxes.push_back(outAxis);
   }
 
@@ -273,12 +280,10 @@ llvm::SmallVector<mlir::Value> BroadcastOp::buildAdjoint(
   return {grad};
 }
 
-// Single-axis sum/mean reduction. The output cotangent first regains the
-// removed singleton axis and then broadcasts to the input shape. Mean adds the
-// reciprocal static extent. Dynamic mean retains the reference fallback until
-// Graph IR owns a runtime scalar-from-dim primitive; sum is shape-polymorphic.
-// Max/min retain the Python VJP because their equal-tie distribution policy
-// requires comparisons and a second reduction.
+// Single-axis reductions. Sum and static-extent mean retain the small
+// decomposition into unsqueeze/broadcast/scale. Dynamic mean and max/min use a
+// compiler-internal carrier whose lowering owns runtime extent and explicit
+// equal-share tie semantics.
 llvm::SmallVector<mlir::Value> ReduceOp::buildAdjoint(
     mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
   if (outputCotangents.size() != 1 || !outputCotangents[0])
@@ -297,11 +302,14 @@ llvm::SmallVector<mlir::Value> ReduceOp::buildAdjoint(
   if (axis < 0 || axis >= inTy.getRank())
     return {mlir::Value()}; // The op verifier diagnoses this before autodiff.
 
-  if (kind == "mean" &&
-      (!inTy.hasStaticShape() ||
-       mlir::ShapedType::isDynamic(inTy.getDimSize(axis))))
-    return placeholderAdjoint(builder, getLoc(), getInput().getType(), kind,
-                              dy, getInput());
+  if (kind == "max" || kind == "min" ||
+      (kind == "mean" &&
+       mlir::ShapedType::isDynamic(inTy.getDimSize(axis)))) {
+    auto backward = builder.create<ReduceBackwardOp>(
+        getLoc(), inTy, getInput(), getResult(), dy, getKindAttr(),
+        builder.getI64IntegerAttr(axis), builder.getStringAttr("equal"));
+    return {backward.getGrad()};
+  }
 
   llvm::SmallVector<int64_t> expandedShape(inTy.getShape());
   expandedShape[axis] = 1;

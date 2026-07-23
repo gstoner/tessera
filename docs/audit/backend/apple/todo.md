@@ -1335,3 +1335,13 @@ x86. Apple remains **follow-up required**: neither the gfx1151 HSACO ABI nor
 the AVX-512 f32 ABI, schedule, dtype-accumulation contract, timing, or device
 evidence transfers to Metal/MPS. The shared Graph adjoint and dynamic Linalg
 contract remain parity validated; no Apple execution row or selector changes.
+
+Cross-backend sync `CORE-COMPILER-LAYOUT-AUTODIFF-MEMORY-2026-07-23` completes
+the shared transpose/packed epilogue/reduction layout envelope and adds native
+guarded-dynamic broadcast, runtime-extent mean, and equal-share max/min Graph
+adjoints. Apple parity is host-validated at Graph/linalg level, and
+function-budgeted liveness-aware rematerialization is shared. The
+address-space-3 Tile arena pipeline change is not applicable to Metal, whose
+threadgroup allocation is architecture-owned; no MSL allocation, backward
+runtime, performance, selector, or exact-device claim changes. An Apple
+threadgroup-arena materializer remains follow-up required.

@@ -160,15 +160,15 @@ def test_cpu_ir_oracle_families_are_proven_backward_capable() -> None:
 def test_reduce_adjoint_classification_is_kind_aware() -> None:
     kinds = autodiff_ledger._ir_adjoint_kind_classes()["reduce"]
     assert kinds == {
-        "native": frozenset({"sum", "mean"}),
-        "placeholder": frozenset({"max", "min"}),
+        "native": frozenset({"sum", "mean", "max", "min"}),
+        "placeholder": frozenset(),
     }
     rows = {row.family: row for row in autodiff_ledger.collect_rows()}
     assert rows["sum"].ir_adjoint == "native"
     assert rows["mean"].ir_adjoint == "native"
-    assert rows["reduce"].ir_adjoint == "mixed"
+    assert rows["reduce"].ir_adjoint == "native"
     for family in ("max", "min", "amax", "amin"):
-        assert rows[family].ir_adjoint == "placeholder"
+        assert rows[family].ir_adjoint == "native"
 
 
 def test_registered_in_generated_docs() -> None:

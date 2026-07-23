@@ -1,7 +1,7 @@
 // RUN: tessera-opt --tessera-autodiff-paired %s | FileCheck %s
 //
-// Phase 5 reduction cohort: sum/mean own native Graph adjoints, while max/min
-// and a dynamic-extent mean retain explicit reference fallbacks.
+// Phase 5 reduction cohort: sum/static mean decompose into ordinary Graph ops;
+// max/min and dynamic mean use the explicit runtime-aware backward carrier.
 
 module {
   func.func @sum(%x: tensor<2x3xf32>) -> tensor<2xf32>
@@ -38,7 +38,8 @@ module {
   }
 
   // CHECK-LABEL: func.func @max__bwd
-  // CHECK: tessera.custom_adjoint_call "max"
+  // CHECK-NOT: tessera.custom_adjoint_call
+  // CHECK: tessera.reduce_backward{{.*}}axis = 1{{.*}}kind = "max"
 
   func.func @dynamic_mean(%x: tensor<2x?xf32>) -> tensor<2xf32>
       attributes {tessera.autodiff = "reverse"} {
@@ -48,5 +49,6 @@ module {
   }
 
   // CHECK-LABEL: func.func @dynamic_mean__bwd
-  // CHECK: tessera.custom_adjoint_call "mean"
+  // CHECK-NOT: tessera.custom_adjoint_call
+  // CHECK: tessera.reduce_backward{{.*}}axis = 1{{.*}}kind = "mean"
 }

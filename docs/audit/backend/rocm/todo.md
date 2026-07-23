@@ -1319,3 +1319,14 @@ operation-total affine medians are 2.28--2.40 ms for the retained 32x128 and
 `M*K*sizeof(f32)` dGamma-partial buffer; dBeta needs no extra partial storage. This is a ROCm
 schedule/temporary-storage change only; no selector promotion or sibling proof
 transfers.
+
+Cross-backend sync `CORE-COMPILER-LAYOUT-AUTODIFF-MEMORY-2026-07-23` completes
+the shared transpose/packed epilogue/reduction layout envelope and adds native
+guarded-dynamic broadcast, runtime-extent mean, and equal-share max/min Graph
+adjoints. ROCm parity is host-validated through the shared linalg contract.
+The ROCm backend pipeline now executes Tile buffer reuse and materializes one
+address-space-3 LDS arena with typed planned-offset views before wave/Tile
+lowering. Function-budgeted liveness-aware rematerialization also runs in the
+shared production post-autodiff pipeline. Exact gfx1151 arena occupancy,
+backward reduction launch, and performance evidence remain follow-up required;
+no selector or device claim is transferred from host-free validation.

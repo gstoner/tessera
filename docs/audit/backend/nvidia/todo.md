@@ -1251,3 +1251,15 @@ x86. NVIDIA remains **follow-up required**: neither the gfx1151 HSACO ABI nor
 the AVX-512 f32 ABI, schedule, dtype-accumulation contract, timing, or device
 evidence transfers to CUDA/PTX. The shared Graph adjoint and dynamic Linalg
 contract remain parity validated; no NVIDIA execution row or selector changes.
+
+Cross-backend sync `CORE-COMPILER-LAYOUT-AUTODIFF-MEMORY-2026-07-23` completes
+the shared transpose/packed epilogue/reduction layout envelope and adds native
+guarded-dynamic broadcast, runtime-extent mean, and equal-share max/min Graph
+adjoints. NVIDIA parity is host-validated through the shared linalg contract.
+All NVIDIA backend variants now execute Tile buffer reuse and materialize one
+address-space-3 shared-memory arena with typed planned-offset views before
+Tile-to-NVIDIA/NVVM lowering. Function-budgeted liveness-aware
+rematerialization also runs in the shared production post-autodiff pipeline.
+Exact CUDA/PTX shared-allocation assembly, occupancy, backward reduction
+launch, and performance evidence remain follow-up required; no device or
+selector promotion is claimed.

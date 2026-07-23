@@ -1,12 +1,12 @@
 ---
 status: Normative
 classification: Normative
-last_updated: 2026-07-14
+last_updated: 2026-07-23
 ---
 
 # Tessera Python API Specification
 **Status:** Normative — grounded in `python/tessera/` Phase 1–3 implementation plus S-series standalone compiler updates
-**Last updated:** June 16, 2026
+**Last updated:** July 23, 2026
 **Authority:** This document specifies every public Python symbol in Tessera Phases 1–3. For naming disputes, `docs/CANONICAL_API.md` is the final arbiter. For compiler internals (pass pipeline, IR layers), see `docs/spec/COMPILER_REFERENCE.md`.
 
 ---
@@ -1446,10 +1446,13 @@ uses the clipped weight as a detached multiplier on the log-prob objective.
 | `adam(param, grad, moment1, moment2, lr=1e-3, beta1=0.9, beta2=0.999, eps=1e-8, step=1)` | `(array,array,array,array) → tuple` | `pure` | Functional NumPy Adam step; math/state default to fp32 and outputs cast back to param dtype |
 | `adamw(params, grads, state=None, ...)` | `(tree,tree,dict?) → tuple` | `pure` | Tree-structured AdamW optimizer step from `tessera.optim` |
 | `momentum(params, grads, state=None, lr, momentum=0.9, ...)` | `(tree,tree,dict?) → tuple` | `pure` | Tree-structured SGD with momentum |
+| `nesterov(params, grads, state=None, lr, momentum=0.9, ...)` | `(tree,tree,dict?) → tuple` | `pure` | Nesterov momentum step with explicit velocity state; Graph IR op `tessera.nesterov` |
 | `adafactor(params, grads, state=None, ...)` | `(tree,tree,dict?) → tuple` | `pure` | Memory-efficient Adafactor with factored fp32 accumulator slots for matrix leaves |
 | `lion(params, grads, state=None, ...)` | `(tree,tree,dict?) → tuple` | `pure` | Lion optimizer with stop-gradient sign update and fp32 momentum slots |
 | `linear_general(x, W, bias=None, axis=-1)` | `(array,array,array?) → array` | `pure` | S7 axis-flexible linear projection; Graph IR op `tessera.linear_general` |
 | `sgd(params, grads, lr)` | `(array,array) → array` | `pure` | S10 functional SGD reference; Graph IR op `tessera.sgd` |
+| `training.loss_sgd(pred, target, dy, param, *, kind, reduction, lr, ...)` | `(array,array,scalar,array) → tuple` | `pure` | Compiler-internal/publicly registered one-step carrier that fuses loss backward into SGD, returns updated parameters plus `dTarget`, and does not materialize `dPrediction`; Graph IR op `tessera.training.loss_sgd` |
+| `training.loss_adamw(pred, target, dy, param, m, v, *, kind, reduction, lr, ...)` | `(array,array,scalar,array,array,array) → tuple` | `pure` | Compiler-internal/publicly registered one-step carrier that fuses loss backward into AdamW, returns parameter/moment state plus `dTarget`, and does not materialize `dPrediction`; Graph IR op `tessera.training.loss_adamw` |
 | `mse_loss(pred, target, reduction="mean")` | `(array,array) → scalar/array` | `pure` | S11 MSE criterion; Graph IR op `tessera.loss.mse` |
 | `mae_loss(pred, target, reduction="mean")` | `(array,array) → scalar/array` | `pure` | S11 MAE criterion; Graph IR op `tessera.loss.mae` |
 | `huber_loss(pred, target, delta=1.0, reduction="mean")` | `(array,array) → scalar/array` | `pure` | S11 Huber criterion; Graph IR op `tessera.loss.huber` |

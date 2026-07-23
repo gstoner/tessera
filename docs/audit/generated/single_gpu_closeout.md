@@ -13,7 +13,7 @@ test, ABI, and surface dashboards.
 
 | Area | Rows | Buckets | Owners |
 |---|---:|---|---|
-| `backend_kernel` | 381 | backend_pathway_owned=366, multi_gpu_deferred=15 | backend_codegen=366, distributed_validation=15 |
+| `backend_kernel` | 383 | backend_pathway_owned=368, multi_gpu_deferred=15 | backend_codegen=368, distributed_validation=15 |
 | `benchmark_evidence` | 1 | benchmark_required=1 | benchmarks=1 |
 | `sharding_rule` | 43 | local_layout_transform=1, multi_gpu_deferred=2, needs_mesh_or_domain_proof=40 | compiler_middle_end=1, distributed_validation=2, primitive_registry=40 |
 | `target_ir` | 4 | multi_gpu_deferred=4 | distributed_validation=4 |
@@ -144,6 +144,7 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `adamw` | functional_optimizer_step | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `lion` | functional_optimizer_step | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `momentum` | functional_optimizer_step | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `nesterov` | functional_optimizer_step | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `sgd` | functional_optimizer_step | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `fused_epilogue` | fused_epilogue | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `clifford_codiff` | geometric_algebra | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
@@ -278,7 +279,8 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `where` | numeric_helper | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `lamb` | optimizer | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `muon` | optimizer | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
-| `backend_kernel` | `nesterov` | optimizer | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `training.loss_adamw` | optimizer | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `training.loss_sgd` | optimizer | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `adaptive_pool` | pooling | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `avg_pool` | pooling | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `max_pool` | pooling | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |

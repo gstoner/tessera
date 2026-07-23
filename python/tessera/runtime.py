@@ -4630,18 +4630,45 @@ def _rocm_compiled_gemm_impl(artifact: RuntimeArtifact, args: Any) -> Any:
     has_bias = len(operand_names) == 3
     a = _as_numpy(values[operand_names[0]])
     b = _as_numpy(values[operand_names[1]])
-    if a.ndim != 2 or b.ndim != 2 or a.shape[1] != b.shape[0]:
-        raise ValueError(f"rocm_compiled matmul needs rank-2 operands with matching K; got {a.shape} @ {b.shape}")
-    dtype_tag, store, out_dt = _rocm_compiled_dtype(a, b)
-    if dtype_tag is None:
-        # gfx1151 WMMA storage is f16/bf16 (f32 acc) or int8 (i32 acc). f32 in is
-        # not a WMMA storage dtype — be explicit, don't silently miscompute.
-        raise ValueError(
-            f"rocm_compiled lane handles f16/bf16 (f32 acc) or int8 (i32 acc) storage; got {a.dtype} @ {b.dtype}"
-        )
+    packed_inputs = bool(metadata.get("wmma_inputs_packed", False))
+    if packed_inputs:
+        logical_mnk = tuple(metadata.get("logical_mnk") or ())
+        if (
+            str(metadata.get("wmma_dtype") or "") not in ("int4", "i4")
+            or len(logical_mnk) != 3
+            or any(int(extent) <= 0 for extent in logical_mnk)
+        ):
+            raise ValueError(
+                "packed ROCm WMMA inputs require wmma_dtype=int4 and positive "
+                "metadata logical_mnk=(M,N,K)"
+            )
+        m, n, k = (int(extent) for extent in logical_mnk)
+        if a.dtype not in (np.int8, np.uint8) or b.dtype not in (
+            np.int8, np.uint8
+        ):
+            raise ValueError("packed ROCm INT4 WMMA inputs must use byte arrays")
+        if a.size != (m * k + 1) // 2 or b.size != (k * n + 1) // 2:
+            raise ValueError(
+                "packed ROCm INT4 WMMA byte counts do not match logical_mnk"
+            )
+        dtype_tag, store, out_dt = "int4", np.int8, np.int32
+    else:
+        if a.ndim != 2 or b.ndim != 2 or a.shape[1] != b.shape[0]:
+            raise ValueError(
+                "rocm_compiled matmul needs rank-2 operands with matching K; "
+                f"got {a.shape} @ {b.shape}"
+            )
+        dtype_tag, store, out_dt = _rocm_compiled_dtype(a, b)
+        if dtype_tag is None:
+            # gfx1151 WMMA storage is f16/bf16 (f32 acc) or int8 (i32 acc). f32 in is
+            # not a WMMA storage dtype — be explicit, don't silently miscompute.
+            raise ValueError(
+                "rocm_compiled lane handles f16/bf16 (f32 acc) or int8 "
+                f"(i32 acc) storage; got {a.dtype} @ {b.dtype}"
+            )
     # int4 is a first-class logical dtype with an int8 physical container; the
     # numpy boundary uses logical int8 values because numpy has no int4 dtype.
-    if str(metadata.get("wmma_dtype") or "") in ("int4", "i4"):
+    if not packed_inputs and str(metadata.get("wmma_dtype") or "") in ("int4", "i4"):
         if a.dtype != np.int8 or b.dtype != np.int8:
             raise ValueError(
                 f"rocm_compiled int4 lane needs logical int8 inputs (values in [-8,7]); got {a.dtype} @ {b.dtype}"
@@ -4654,8 +4681,9 @@ def _rocm_compiled_gemm_impl(artifact: RuntimeArtifact, args: Any) -> Any:
     if dtype_tag in ("int8", "int4") and (has_bias or activation != "none"):
         raise ValueError(f"rocm_compiled fused epilogue (bias/activation) is float-only; got integer dtype {dtype_tag}")
 
-    m, k = a.shape
-    n = b.shape[1]
+    if not packed_inputs:
+        m, k = a.shape
+        n = b.shape[1]
     bias_arr = None
     if has_bias:
         bias_arr = np.ascontiguousarray(_as_numpy(values[operand_names[2]]), dtype=np.float32)
@@ -4679,7 +4707,10 @@ def _rocm_compiled_gemm_impl(artifact: RuntimeArtifact, args: Any) -> Any:
     if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"gemm") != 0:
         raise RuntimeError("rocm_compiled: kernel symbol 'gemm' not found")
 
-    if dtype_tag == "int4":
+    if dtype_tag == "int4" and packed_inputs:
+        a_c = np.ascontiguousarray(a, dtype=np.int8).reshape(-1)
+        b_c = np.ascontiguousarray(b, dtype=np.int8).reshape(-1)
+    elif dtype_tag == "int4":
         a_c = _pack_signed_int4(a)
         b_c = _pack_signed_int4(b)
     else:
@@ -5254,6 +5285,9 @@ def _execute_rocm_compiled_flash_attn(
     if gqa and (n_kvh <= 0 or n_qh % n_kvh != 0):
         raise ValueError(f"rocm GQA lane needs query-heads ({n_qh}) divisible by kv-heads ({n_kvh})")
     kv_ratio = n_qh // n_kvh if gqa else 1
+    from .compiler.emit.executable_layout import guard_dynamic_attention
+
+    guard_dynamic_attention(q, k, v)
 
     if q.dtype == np.float16:
         dtype_tag, store = "f16", np.float16
@@ -7415,6 +7449,9 @@ def _execute_rocm_compiled_softmax(artifact: RuntimeArtifact, args: Any) -> Any:
     ``_RocmCompiledUnavailable`` when the lane can't run here; ``ValueError`` on
     a bad op/dtype."""
     import numpy as np
+    from .compiler.emit.executable_layout import (
+        guard_dynamic_last_axis_softmax,
+    )
 
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
@@ -7442,12 +7479,8 @@ def _execute_rocm_compiled_softmax(artifact: RuntimeArtifact, args: Any) -> Any:
         raise ValueError(f"rocm softmax lane only supports axis=-1 (last); got {axis}")
     values = _bind_launch_args(args, arg_names)
     x = _as_numpy(values[operand_names[0]])
-    if x.ndim < 1:
-        raise ValueError("softmax operand must have rank >= 1")
-    k = int(x.shape[-1])
-    m = int(np.prod(x.shape[:-1])) if x.ndim > 1 else 1
-    if k <= 0:
-        raise ValueError(f"softmax last dim must be positive; got {k}")
+    contract = guard_dynamic_last_axis_softmax(x)
+    m, k = contract.outer, contract.axis_extent
 
     store: Any  # numpy dtype varies per branch (f32 / f16 / bf16)
     if x.dtype == np.float32:
@@ -7514,7 +7547,7 @@ def _execute_rocm_compiled_softmax(artifact: RuntimeArtifact, args: Any) -> Any:
             raise RuntimeError("rocm softmax: device synchronization failed")
         if hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, esz * n, 2) != 0:
             raise RuntimeError("rocm softmax: device-to-host copy failed")
-        return o.reshape(x.shape)
+        return o.reshape(contract.output_shape)
     finally:
         for dev in reversed(device_buffers):
             hip.hipFree(dev)
@@ -7532,19 +7565,23 @@ def _execute_rocm_compiled_softmax(artifact: RuntimeArtifact, args: Any) -> Any:
 # let one hsaco per (chip, kind, dtype) serve unary and gamma/beta calls.
 # ─────────────────────────────────────────────────────────────────────────────
 _NORM_BLOCKDIM = 256  # must match BD in GenerateROCMNormKernel.cpp
-#: hsaco bytes keyed by (chip, kind, dtype).
-_rocm_norm_hsaco_cache: dict[tuple[str, str, str], bytes] = {}
+#: hsaco bytes keyed by (chip, kind, dtype, fused write epilogue).
+_rocm_norm_hsaco_cache: dict[tuple[str, str, str, str], bytes] = {}
 #: Backward hsaco bytes keyed by (chip, kind, dtype). Kept separate from the
 #: forward cache because the stable buffer ABI differs.
 _rocm_norm_bwd_hsaco_cache: dict[tuple[str, str, str], bytes] = {}
 
 
-def _build_compiled_norm_hsaco(kind: str, dtype: str = "f32") -> bytes:
+def _build_compiled_norm_hsaco(
+    kind: str, dtype: str = "f32", epilogue: str = "none"
+) -> bytes:
     """Generate + serialize the compiler's row-reduction norm kernel to hsaco,
     in-process via tessera-opt. Cached per (chip, kind, dtype). No WMMA → plain
     gpu→ROCDL pipeline."""
     chip = _rocm_chip()
-    key = (chip, kind, dtype)
+    if epilogue not in ("none", "relu", "silu"):
+        raise ValueError(f"unsupported ROCm norm epilogue {epilogue!r}")
+    key = (chip, kind, dtype, epilogue)
     cached = _rocm_norm_hsaco_cache.get(key)
     if cached is not None:
         return cached
@@ -7552,7 +7589,8 @@ def _build_compiled_norm_hsaco(kind: str, dtype: str = "f32") -> bytes:
     if opt is None:
         raise _RocmCompiledUnavailable("tessera-opt not built — no compiled ROCm norm lane")
     directive = (
-        f'module {{\n  "tessera_rocm.norm"() {{name = "nm", kind = "{kind}", dtype = "{dtype}"}} : () -> ()\n}}\n'
+        f'module {{\n  "tessera_rocm.norm"() {{name = "nm", kind = "{kind}", '
+        f'dtype = "{dtype}", epilogue = "{epilogue}"}} : () -> ()\n}}\n'
     )
     pipeline = (
         "builtin.module("
@@ -7646,12 +7684,29 @@ def _execute_rocm_compiled_norm(artifact: RuntimeArtifact, args: Any) -> Any:
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
     ops = list(metadata.get("ops") or [])
-    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
-    if len(ops) != 1 or op_name not in _ROCM_NORM_OPS:
+    op_name = str(ops[0].get("op_name", "")) if ops else ""
+    if not 1 <= len(ops) <= 2 or op_name not in _ROCM_NORM_OPS:
         raise ValueError(
-            "rocm_norm_compiled executor handles exactly one of "
+            "rocm_norm_compiled executor handles one normalization, optionally "
+            "followed by relu/silu; normalization must be one of "
             f"{tuple(_ROCM_NORM_OPS)}; got {[o.get('op_name') for o in ops]!r}"
         )
+    epilogue = "none"
+    if len(ops) == 2:
+        consumer = ops[1]
+        consumer_name = str(consumer.get("op_name", ""))
+        epilogue_by_op = {
+            "tessera.relu": "relu",
+            "tessera.silu": "silu",
+        }
+        epilogue = epilogue_by_op.get(consumer_name, "")
+        producer_result = str(ops[0].get("result", ""))
+        consumer_operands = [str(n) for n in consumer.get("operands", [])]
+        if epilogue == "" or consumer_operands != [producer_result]:
+            raise ValueError(
+                "rocm_norm_compiled fused consumer must be unary relu/silu "
+                "and consume only the normalization result"
+            )
     kind, eps_default = _ROCM_NORM_OPS[op_name]
     op = ops[0]
     operand_names = [str(n) for n in op.get("operands", [])]
@@ -7699,7 +7754,7 @@ def _execute_rocm_compiled_norm(artifact: RuntimeArtifact, args: Any) -> Any:
         else:
             raise ValueError(f"rocm norm lane handles f32/f16/bf16 storage; got {x.dtype}")
 
-    hsaco = _build_compiled_norm_hsaco(kind, dtype_tag)
+    hsaco = _build_compiled_norm_hsaco(kind, dtype_tag, epilogue)
     hip = _load_hip_for_launch()
     if hip is None:
         raise _RocmCompiledUnavailable("libamdhip64.so not loadable — no ROCm execution lane on this host")
@@ -8011,7 +8066,31 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
         "tessera_x86_avx512_rope_f32": [c_f32, c_f32, i64, i64, c_f32],
         "tessera_x86_avx512_alibi_f32": [c_f32, i64, i64, c_f32],
         "tessera_x86_avx512_pointwise_loss_f32": [c_f32, c_f32, i64, ctypes.c_int, ctypes.c_float, c_f32],
+        "tessera_x86_avx512_pointwise_loss_bwd_f32": [
+            c_f32, c_f32, c_f32, i64, ctypes.c_int, ctypes.c_float,
+            ctypes.c_float, ctypes.c_int, c_f32, c_f32,
+        ],
+        "tessera_x86_avx512_training_loss_sgd_f32": [
+            c_f32, c_f32, c_f32, c_f32, i64, ctypes.c_int,
+            ctypes.c_float, ctypes.c_float, ctypes.c_int, ctypes.c_float,
+            c_f32, c_f32,
+        ],
+        "tessera_x86_avx512_training_loss_adamw_f32": [
+            c_f32, c_f32, c_f32, c_f32, c_f32, c_f32, i64,
+            ctypes.c_int, ctypes.c_float, ctypes.c_float, ctypes.c_int,
+            ctypes.c_float, ctypes.c_float, ctypes.c_float, ctypes.c_float,
+            ctypes.c_float, ctypes.c_float, ctypes.c_float,
+            c_f32, c_f32, c_f32, c_f32,
+        ],
         "tessera_x86_avx512_binary_loss_f32": [c_f32, c_f32, i64, ctypes.c_int, ctypes.c_float, ctypes.c_float, c_f32],
+        "tessera_x86_avx512_binary_loss_bwd_f32": [
+            c_f32, c_f32, c_f32, i64, ctypes.c_float, ctypes.c_int,
+            c_f32, c_f32,
+        ],
+        "tessera_x86_avx512_cross_entropy_bwd_f32": [
+            c_f32, ctypes.POINTER(ctypes.c_int64), c_f32, i64, i64,
+            ctypes.c_float, i64, ctypes.c_float, ctypes.c_int, c_f32,
+        ],
         "tessera_x86_avx512_policy_loss_f32": [c_f32, c_f32, c_f32, i64, ctypes.c_int, ctypes.c_float, c_f32],
         "tessera_x86_avx512_fpquant_f32": [c_f32, i64, ctypes.c_float, ctypes.c_int, ctypes.c_int, c_f32],
         "tessera_x86_fft_c2c_f32": [c_f32, i64, i64, ctypes.c_int],
@@ -8048,6 +8127,13 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
             c_f32,
             c_f32,
             c_f32,
+        ],
+        "tessera_x86_avx512_sgd_bwd_f32": [
+            c_f32, i64, ctypes.c_float, c_f32, c_f32,
+        ],
+        "tessera_x86_avx512_momentum_bwd_f32": [
+            c_f32, c_f32, i64, ctypes.c_float, ctypes.c_float,
+            ctypes.c_int, c_f32, c_f32, c_f32,
         ],
         "tessera_x86_kv_cache_append_f32": [c_f32, i64, i64, i64, c_f32, i64],
         "tessera_x86_kv_cache_read_f32": [c_f32, i64, i64, i64, i64, c_f32],
@@ -9336,9 +9422,13 @@ def _execute_x86_compiled_attention(artifact: RuntimeArtifact, args: Any) -> Any
 #: op_name -> (loss kind, param-kwarg name or None). Matches avx512_loss_f32.cpp.
 _X86_LOSS_OPS = {
     "tessera.mse_loss": (0, None),
+    "tessera.loss.mse": (0, None),
     "tessera.mae_loss": (1, None),
+    "tessera.loss.mae": (1, None),
     "tessera.huber_loss": (2, "delta"),
+    "tessera.loss.huber": (2, "delta"),
     "tessera.smooth_l1_loss": (3, "beta"),
+    "tessera.loss.smooth_l1": (3, "beta"),
     "tessera.log_cosh_loss": (4, None),
 }
 
@@ -9424,10 +9514,248 @@ def _execute_x86_compiled_loss(artifact: RuntimeArtifact, args: Any) -> Any:
     return _x86_reduce_scalar(per, 0 if reduction == "sum" else 2, np)
 
 
+def _execute_x86_compiled_regression_loss_backward(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """AVX-512 paired VJP for MSE/MAE/Huber/Smooth-L1."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name")) if len(ops) == 1 else ""
+    if op_name not in _X86_LOSS_OPS:
+        raise ValueError(
+            "x86_regression_loss_bwd_compiled requires one pointwise loss"
+        )
+    kind, param_kw = _X86_LOSS_OPS[op_name]
+    if kind > 3:
+        raise ValueError(
+            "x86 regression backward supports MSE/MAE/Huber/Smooth-L1 only"
+        )
+    values = _bind_launch_args(args, names)
+    operand_names = [str(name) for name in ops[0].get("operands", [])]
+    if len(operand_names) != 2:
+        raise ValueError(
+            "x86 regression backward requires prediction and target"
+        )
+    prediction = _as_numpy(values[operand_names[0]])
+    target = _as_numpy(values[operand_names[1]])
+    if prediction.dtype != np.float32 or target.dtype != np.float32:
+        raise ValueError("x86 regression backward handles f32 only")
+    if prediction.shape != target.shape:
+        raise ValueError(
+            "x86 regression backward requires matching Graph operand shapes"
+        )
+    kwargs = ops[0].get("kwargs") or {}
+    reduction = str(kwargs.get("reduction", "mean"))
+    if reduction not in {"none", "sum", "mean"}:
+        raise ValueError("x86 regression backward reduction must be none/sum/mean")
+    param = float(kwargs.get(param_kw, 1.0)) if param_kw else 1.0
+    if kind in {2, 3} and param <= 0.0:
+        raise ValueError("x86 regression transition parameter must be > 0")
+    dy_name = str(metadata.get("out_cotangent", "dy"))
+    if dy_name not in values:
+        raise ValueError("x86 regression backward requires output cotangent")
+    dy = _as_numpy(values[dy_name])
+    if reduction == "none" and dy.shape != prediction.shape:
+        raise ValueError("unreduced x86 regression cotangent shape must match")
+    if reduction != "none" and dy.size != 1:
+        raise ValueError("reduced x86 regression cotangent must be scalar")
+    n = int(prediction.size)
+    if n <= 0:
+        raise ValueError("x86 regression backward requires positive extent")
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable(
+            "libtessera_x86_elementwise.so not loadable"
+        )
+    pc = np.ascontiguousarray(prediction, np.float32).reshape(-1)
+    tc = np.ascontiguousarray(target, np.float32).reshape(-1)
+    dyc = np.ascontiguousarray(dy, np.float32).reshape(-1)
+    dp = np.empty(n, np.float32)
+    dt = np.empty(n, np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_pointwise_loss_bwd_f32(
+        pc.ctypes.data_as(cf), tc.ctypes.data_as(cf), dyc.ctypes.data_as(cf),
+        ctypes.c_int64(n), ctypes.c_int(kind), ctypes.c_float(param),
+        ctypes.c_float(1.0 / n if reduction == "mean" else 1.0),
+        ctypes.c_int(reduction == "none"), dp.ctypes.data_as(cf),
+        dt.ctypes.data_as(cf),
+    )
+    return dp.reshape(prediction.shape), dt.reshape(prediction.shape)
+
+
+_TRAINING_LOSS_KIND = {
+    "mse": 0,
+    "mae": 1,
+    "huber": 2,
+    "smooth_l1": 3,
+    "bce": 4,
+}
+
+
+def _execute_x86_compiled_training_loss_sgd(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """One AVX-512 loop for regression-loss VJP followed by SGD."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    if len(ops) != 1 or str(ops[0].get("op_name")) != (
+        "tessera.training.loss_sgd"
+    ):
+        raise ValueError(
+            "x86_training_loss_sgd_compiled requires one "
+            "tessera.training.loss_sgd op"
+        )
+    operands = [str(name) for name in ops[0].get("operands", [])]
+    if len(operands) != 4:
+        raise ValueError(
+            "training loss SGD requires prediction, target, cotangent, param"
+        )
+    values = _bind_launch_args(args, names)
+    prediction, target, dy, parameter = (
+        _as_numpy(values[name]) for name in operands
+    )
+    if any(value.dtype != np.float32 for value in (
+        prediction, target, dy, parameter
+    )):
+        raise ValueError("x86 training loss SGD handles f32 only")
+    if prediction.shape != target.shape or prediction.shape != parameter.shape:
+        raise ValueError("x86 training loss SGD tensor shapes must match")
+    kwargs = ops[0].get("kwargs") or {}
+    kind_name = str(kwargs.get("kind", ""))
+    if kind_name not in _TRAINING_LOSS_KIND:
+        raise ValueError(f"unsupported training loss kind {kind_name!r}")
+    kind = _TRAINING_LOSS_KIND[kind_name]
+    transition = float(kwargs.get("parameter", 1.0))
+    if kind in {2, 3} and transition <= 0.0:
+        raise ValueError("training loss transition parameter must be > 0")
+    reduction = str(kwargs.get("reduction", "mean"))
+    if reduction not in {"none", "sum", "mean"}:
+        raise ValueError("training loss reduction must be none/sum/mean")
+    if reduction == "none" and dy.shape != prediction.shape:
+        raise ValueError("unreduced training loss cotangent shape must match")
+    if reduction != "none" and dy.size != 1:
+        raise ValueError("reduced training loss cotangent must be scalar")
+    n = int(prediction.size)
+    if n <= 0:
+        raise ValueError("training loss SGD requires positive extent")
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable(
+            "libtessera_x86_elementwise.so not loadable"
+        )
+    pc = np.ascontiguousarray(prediction, np.float32).reshape(-1)
+    tc = np.ascontiguousarray(target, np.float32).reshape(-1)
+    dyc = np.ascontiguousarray(dy, np.float32).reshape(-1)
+    params = np.ascontiguousarray(parameter, np.float32).reshape(-1)
+    updated = np.empty(n, np.float32)
+    target_grad = np.empty(n, np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_training_loss_sgd_f32(
+        pc.ctypes.data_as(cf), tc.ctypes.data_as(cf),
+        dyc.ctypes.data_as(cf), params.ctypes.data_as(cf),
+        ctypes.c_int64(n), ctypes.c_int(kind), ctypes.c_float(transition),
+        ctypes.c_float(1.0 / n if reduction == "mean" else 1.0),
+        ctypes.c_int(reduction == "none"),
+        ctypes.c_float(float(kwargs.get("lr", 0.0))),
+        updated.ctypes.data_as(cf), target_grad.ctypes.data_as(cf),
+    )
+    return updated.reshape(prediction.shape), target_grad.reshape(
+        prediction.shape
+    )
+
+
+def _execute_x86_compiled_training_loss_adamw(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """One AVX-512 loop for loss VJP and the complete AdamW state update."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    if len(ops) != 1 or str(ops[0].get("op_name")) != (
+        "tessera.training.loss_adamw"
+    ):
+        raise ValueError(
+            "x86_training_loss_adamw_compiled requires one "
+            "tessera.training.loss_adamw op"
+        )
+    operands = [str(name) for name in ops[0].get("operands", [])]
+    if len(operands) != 6:
+        raise ValueError(
+            "training loss AdamW requires prediction, target, cotangent, "
+            "parameter, moment1, moment2"
+        )
+    values = _bind_launch_args(args, names)
+    prediction, target, dy, parameter, moment1, moment2 = (
+        _as_numpy(values[name]) for name in operands
+    )
+    tensors = (prediction, target, parameter, moment1, moment2)
+    if any(value.dtype != np.float32 for value in (*tensors, dy)):
+        raise ValueError("x86 training loss AdamW handles f32 only")
+    if any(value.shape != prediction.shape for value in tensors[1:]):
+        raise ValueError("x86 training loss AdamW tensor shapes must match")
+    kwargs = ops[0].get("kwargs") or {}
+    kind_name = str(kwargs.get("kind", ""))
+    if kind_name not in _TRAINING_LOSS_KIND:
+        raise ValueError(f"unsupported training loss kind {kind_name!r}")
+    kind = _TRAINING_LOSS_KIND[kind_name]
+    transition = float(kwargs.get("parameter", 1.0))
+    if kind in {2, 3} and transition <= 0.0:
+        raise ValueError("training loss transition parameter must be > 0")
+    reduction = str(kwargs.get("reduction", "mean"))
+    if reduction not in {"none", "sum", "mean"}:
+        raise ValueError("training loss reduction must be none/sum/mean")
+    if reduction == "none" and dy.shape != prediction.shape:
+        raise ValueError("unreduced training loss cotangent shape must match")
+    if reduction != "none" and dy.size != 1:
+        raise ValueError("reduced training loss cotangent must be scalar")
+    n = int(prediction.size)
+    if n <= 0:
+        raise ValueError("training loss AdamW requires positive extent")
+    lr = float(kwargs.get("lr", 1.0e-3))
+    beta1 = float(kwargs.get("beta1", 0.9))
+    beta2 = float(kwargs.get("beta2", 0.999))
+    eps = float(kwargs.get("eps", 1.0e-8))
+    weight_decay = float(kwargs.get("weight_decay", 0.01))
+    step = int(kwargs.get("step", 1))
+    correction1 = 1.0 - beta1**step
+    correction2 = 1.0 - beta2**step
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable(
+            "libtessera_x86_elementwise.so not loadable"
+        )
+    arrays = [
+        np.ascontiguousarray(value, np.float32).reshape(-1)
+        for value in (prediction, target, dy, parameter, moment1, moment2)
+    ]
+    outputs = [np.empty(n, np.float32) for _ in range(4)]
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_training_loss_adamw_f32(
+        *(value.ctypes.data_as(cf) for value in arrays),
+        ctypes.c_int64(n), ctypes.c_int(kind), ctypes.c_float(transition),
+        ctypes.c_float(1.0 / n if reduction == "mean" else 1.0),
+        ctypes.c_int(reduction == "none"), ctypes.c_float(lr),
+        ctypes.c_float(beta1), ctypes.c_float(beta2), ctypes.c_float(eps),
+        ctypes.c_float(weight_decay), ctypes.c_float(correction1),
+        ctypes.c_float(correction2),
+        *(value.ctypes.data_as(cf) for value in outputs),
+    )
+    return tuple(value.reshape(prediction.shape) for value in outputs)
+
+
 #: op_name -> (binary-loss kind, (pos_weight kw, neg_weight kw) or None). Matches
 #: avx512_loss_f32.cpp. bce has no weights; asymmetric_bce has pos/neg weights.
 _X86_BINARY_LOSS_OPS = {
     "tessera.binary_cross_entropy_loss": (0, None),
+    "tessera.loss.binary_cross_entropy": (0, None),
     "tessera.asymmetric_bce": (1, ("pos_weight", "neg_weight")),
 }
 
@@ -9496,6 +9824,153 @@ def _execute_x86_compiled_binary_loss(artifact: RuntimeArtifact, args: Any) -> A
     if reduction == "none":
         return per.reshape(z.shape)
     return _x86_reduce_scalar(per, 0 if reduction == "sum" else 2, np)
+
+
+def _execute_x86_compiled_binary_loss_backward(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """One AVX-512 launch for stable BCE-with-logits dLogits and dTarget."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if op_name not in {
+        "tessera.binary_cross_entropy_loss",
+        "tessera.loss.binary_cross_entropy",
+    }:
+        raise ValueError(
+            "x86_binary_loss_bwd_compiled requires one BCE-with-logits op"
+        )
+    values = _bind_launch_args(args, names)
+    operands = [str(name) for name in ops[0].get("operands", [])]
+    if len(operands) != 2:
+        raise ValueError("BCE backward requires logits and target")
+    logits = np.asarray(_as_numpy(values[operands[0]]))
+    target = np.asarray(_as_numpy(values[operands[1]]))
+    if logits.dtype != np.float32 or target.dtype != np.float32:
+        raise ValueError("x86 BCE backward handles matching f32 inputs")
+    if logits.shape != target.shape:
+        raise ValueError("Graph-native BCE backward requires equal input shapes")
+    reduction = str((ops[0].get("kwargs") or {}).get("reduction", "mean"))
+    dy = np.asarray(_as_numpy(values[str(metadata.get("out_cotangent", "dy"))]))
+    if reduction == "none" and dy.shape != logits.shape:
+        raise ValueError("unreduced BCE cotangent must match logits")
+    if reduction != "none" and dy.size != 1:
+        raise ValueError("reduced BCE cotangent must be scalar")
+    n = int(logits.size)
+    if n <= 0:
+        raise ValueError("BCE backward requires a positive runtime extent")
+    z = np.ascontiguousarray(logits).reshape(-1)
+    t = np.ascontiguousarray(target).reshape(-1)
+    dyc = np.ascontiguousarray(dy, np.float32).reshape(-1)
+    dz = np.empty_like(z)
+    dt = np.empty_like(t)
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable(
+            "libtessera_x86_elementwise.so not loadable"
+        )
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_binary_loss_bwd_f32(
+        z.ctypes.data_as(cf), t.ctypes.data_as(cf), dyc.ctypes.data_as(cf),
+        ctypes.c_int64(n),
+        ctypes.c_float(1.0 / n if reduction == "mean" else 1.0),
+        ctypes.c_int(reduction == "none"),
+        dz.ctypes.data_as(cf), dt.ctypes.data_as(cf),
+    )
+    return dz.reshape(logits.shape), dt.reshape(target.shape)
+
+
+def _class_loss_backward_contract(
+    op: dict[str, Any], values: dict[str, Any], metadata: dict[str, Any],
+    np: Any,
+) -> tuple[Any, Any, Any, tuple[int, ...], int, int, float, int, str, float]:
+    operands = [str(name) for name in op.get("operands", [])]
+    if len(operands) != 2:
+        raise ValueError("class loss backward requires logits and targets")
+    logits = np.asarray(_as_numpy(values[operands[0]]))
+    targets = np.asarray(_as_numpy(values[operands[1]]))
+    kwargs = op.get("kwargs") or {}
+    axis = int(kwargs.get("axis", -1))
+    if axis < 0:
+        axis += logits.ndim
+    if axis < 0 or axis >= logits.ndim:
+        raise ValueError("class loss axis is out of range")
+    moved = np.ascontiguousarray(np.moveaxis(logits, axis, -1))
+    expected = moved.shape[:-1]
+    if targets.shape != expected or targets.dtype.kind not in "iu":
+        raise ValueError(
+            "class-index targets must be integer logits shape without class axis"
+        )
+    classes = int(moved.shape[-1])
+    smoothing = float(
+        kwargs.get("label_smoothing", kwargs.get("smoothing", 0.0))
+    )
+    if not 0.0 <= smoothing < 1.0 or (smoothing and classes <= 1):
+        raise ValueError("label smoothing requires 0 <= value < 1 and C > 1")
+    ignore_index = int(kwargs.get("ignore_index", -100))
+    flat_targets = np.ascontiguousarray(targets, np.int64).reshape(-1)
+    invalid = (
+        (flat_targets != ignore_index)
+        & ((flat_targets < 0) | (flat_targets >= classes))
+    )
+    if np.any(invalid):
+        raise ValueError("class target index is outside [0, classes)")
+    reduction = str(kwargs.get("reduction", "mean"))
+    if reduction not in {"none", "sum", "mean"}:
+        raise ValueError("class loss reduction must be none, sum, or mean")
+    dy = np.asarray(
+        _as_numpy(values[str(metadata.get("out_cotangent", "dy"))]),
+        dtype=np.float32,
+    )
+    if reduction == "none" and dy.shape != expected:
+        raise ValueError("unreduced class loss cotangent must match targets")
+    if reduction != "none" and dy.size != 1:
+        raise ValueError("reduced class loss cotangent must be scalar")
+    rows = int(flat_targets.size)
+    valid = int(np.count_nonzero(flat_targets != ignore_index))
+    scale = 1.0 / max(valid, 1) if reduction == "mean" else 1.0
+    return (
+        moved, flat_targets, np.ascontiguousarray(dy).reshape(-1),
+        logits.shape, axis, classes, smoothing, ignore_index, reduction,
+    ) + (scale,)
+
+
+def _execute_x86_compiled_class_loss_backward(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """One AVX-512 ABI call for indexed/label-smoothed cross-entropy dLogits."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    if len(ops) != 1:
+        raise ValueError("x86 class-loss backward requires one operation")
+    values = _bind_launch_args(args, names)
+    (moved, targets, dy, original_shape, axis, classes, smoothing,
+     ignore_index, reduction, scale) = _class_loss_backward_contract(
+         ops[0], values, metadata, np)
+    if moved.dtype != np.float32:
+        raise ValueError("x86 class-loss backward requires float32 logits")
+    rows = int(targets.size)
+    output = np.empty_like(moved)
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("AVX-512 runtime unavailable")
+    cf = ctypes.POINTER(ctypes.c_float)
+    ci64 = ctypes.POINTER(ctypes.c_int64)
+    lib.tessera_x86_avx512_cross_entropy_bwd_f32(
+        moved.reshape(-1).ctypes.data_as(cf),
+        targets.ctypes.data_as(ci64), dy.ctypes.data_as(cf),
+        ctypes.c_int64(rows), ctypes.c_int64(classes),
+        ctypes.c_float(smoothing), ctypes.c_int64(ignore_index),
+        ctypes.c_float(scale), ctypes.c_int(reduction == "none"),
+        output.reshape(-1).ctypes.data_as(cf),
+    )
+    return np.moveaxis(output, -1, axis).reshape(original_shape)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -10401,6 +10876,71 @@ def _execute_x86_compiled_optimizer(artifact: RuntimeArtifact, args: Any) -> Any
     values = _bind_launch_args(args, arg_names)
     p, g, m, v = _optimizer_bind(ops[0], values)
     return _optimizer_compute(op_name, p, g, m, v, ops[0].get("kwargs") or {}, _x86_optimizer_kernel, np)
+
+
+def _execute_x86_compiled_sgd_backward(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """One AVX-512 launch for dParameter=dY and dGradient=-lr*dY."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    if len(ops) != 1 or str(ops[0].get("op_name", "")) != "tessera.sgd":
+        raise ValueError("x86_sgd_bwd_compiled requires one tessera.sgd op")
+    values = _bind_launch_args(args, arg_names)
+    dy_name = str(metadata.get("out_cotangent", "dy"))
+    dy = np.ascontiguousarray(_as_numpy(values[dy_name]), np.float32)
+    lr = float((ops[0].get("kwargs") or {}).get("lr", 0.0))
+    dparam = np.empty_like(dy)
+    dgrad = np.empty_like(dy)
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_sgd_bwd_f32(
+        dy.ctypes.data_as(cf), ctypes.c_int64(dy.size), ctypes.c_float(lr),
+        dparam.ctypes.data_as(cf), dgrad.ctypes.data_as(cf),
+    )
+    return dparam, dgrad
+
+
+def _execute_x86_compiled_momentum_backward(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """One AVX-512 launch for Momentum/Nesterov's three input gradients."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if op_name not in {"tessera.momentum", "tessera.nesterov"}:
+        raise ValueError("x86 momentum backward requires momentum or nesterov")
+    values = _bind_launch_args(args, names)
+    cotangent_names = list(
+        metadata.get("out_cotangents") or ["dparam_out", "dvelocity_out"])
+    dp = np.ascontiguousarray(
+        _as_numpy(values[cotangent_names[0]]), np.float32)
+    dv = np.ascontiguousarray(
+        _as_numpy(values[cotangent_names[1]]), np.float32)
+    if dp.shape != dv.shape:
+        raise ValueError("momentum output cotangents must have matching shapes")
+    kwargs = ops[0].get("kwargs") or {}
+    outputs = [np.empty_like(dp) for _ in range(3)]
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("AVX-512 runtime unavailable")
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_momentum_bwd_f32(
+        dp.ctypes.data_as(cf), dv.ctypes.data_as(cf), ctypes.c_int64(dp.size),
+        ctypes.c_float(float(kwargs.get("lr", 0.0))),
+        ctypes.c_float(float(kwargs.get("momentum", 0.9))),
+        ctypes.c_int(op_name == "tessera.nesterov"),
+        *(output.ctypes.data_as(cf) for output in outputs),
+    )
+    return tuple(outputs)
 
 
 def _apple_optimizer_kernel(
@@ -12325,6 +12865,109 @@ _INTQUANT_OPS = (
     "tessera.fake_quantize",
 )
 
+_rocm_int4_pack_hsaco_cache: dict[tuple[str, str], bytes] = {}
+
+
+def _build_rocm_int4_pack_hsaco(kind: str) -> bytes:
+    if kind not in ("pack", "unpack"):
+        raise ValueError(f"INT4 storage conversion kind must be pack/unpack; got {kind!r}")
+    chip = _rocm_chip()
+    directive = (
+        'module {\n  "tessera_rocm.int4_pack"() '
+        f'{{name = "int4_{kind}", kind = "{kind}"}} : () -> ()\n}}\n'
+    )
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-int4-pack-kernel",
+        directive,
+        _rocm_int4_pack_hsaco_cache,
+        (chip, kind),
+    )
+
+
+def _rocm_int4_storage_convert(
+    values: Any, logical_elements: int, kind: str, np: Any
+) -> Any:
+    """Run the compiled signed INT4 terminal pack/unpack ABI on gfx1151."""
+    if logical_elements < 0:
+        raise ValueError("logical INT4 element count must be non-negative")
+    source = np.ascontiguousarray(values, dtype=np.int8).reshape(-1)
+    if kind == "pack":
+        if source.size != logical_elements:
+            raise ValueError("INT4 pack source length does not match logical elements")
+        if np.any(source < -8) or np.any(source > 7):
+            raise ValueError("signed INT4 pack values must be in [-8, 7]")
+        output_elements = (logical_elements + 1) // 2
+    elif kind == "unpack":
+        if source.size != (logical_elements + 1) // 2:
+            raise ValueError("INT4 packed byte count does not match logical elements")
+        output_elements = logical_elements
+    else:
+        raise ValueError(f"INT4 storage conversion kind must be pack/unpack; got {kind!r}")
+    if logical_elements == 0:
+        return np.empty(output_elements, dtype=np.int8)
+
+    hsaco = _build_rocm_int4_pack_hsaco(kind)
+    hip = _load_hip_for_launch()
+    if hip is None or hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("live ROCm device required for INT4 storage conversion")
+    module = ctypes.c_void_p()
+    function = ctypes.c_void_p()
+    d_source = ctypes.c_void_p()
+    d_output = ctypes.c_void_p()
+    try:
+        if hip.hipModuleLoadData(ctypes.byref(module), hsaco) != 0:
+            raise _RocmCompiledUnavailable("ROCm could not load INT4 pack kernel")
+        symbol = f"int4_{kind}".encode()
+        if hip.hipModuleGetFunction(ctypes.byref(function), module, symbol) != 0:
+            raise RuntimeError(f"ROCm INT4 storage symbol {symbol!r} missing")
+        if (
+            hip.hipMalloc(ctypes.byref(d_source), max(source.nbytes, 1)) != 0
+            or hip.hipMalloc(ctypes.byref(d_output), max(output_elements, 1)) != 0
+        ):
+            raise RuntimeError("ROCm INT4 storage allocation failed")
+        if hip.hipMemcpy(
+            d_source, source.ctypes.data_as(ctypes.c_void_p), source.nbytes, 1
+        ) != 0:
+            raise RuntimeError("ROCm INT4 storage input copy failed")
+
+        def memref(pointer: Any, size: int) -> list[Any]:
+            return [
+                ctypes.c_void_p(pointer.value), ctypes.c_void_p(pointer.value),
+                ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1),
+            ]
+
+        launch_args = (
+            memref(d_source, source.size)
+            + memref(d_output, output_elements)
+            + [ctypes.c_int64(logical_elements)]
+        )
+        packed_args = (ctypes.c_void_p * len(launch_args))()
+        for index, value in enumerate(launch_args):
+            packed_args[index] = ctypes.cast(
+                ctypes.byref(value), ctypes.c_void_p
+            )
+        work_items = output_elements if kind == "pack" else logical_elements
+        grid = (work_items + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+        rc = hip.hipModuleLaunchKernel(
+            function, max(grid, 1), 1, 1, _GRID_BLOCKDIM, 1, 1,
+            0, None, packed_args, None,
+        )
+        if rc != 0 or hip.hipDeviceSynchronize() != 0:
+            raise RuntimeError(f"ROCm INT4 {kind} launch failed rc={rc}")
+        output = np.empty(output_elements, dtype=np.int8)
+        if hip.hipMemcpy(
+            output.ctypes.data_as(ctypes.c_void_p), d_output,
+            output.nbytes, 2,
+        ) != 0:
+            raise RuntimeError("ROCm INT4 storage result copy failed")
+        return output
+    finally:
+        for pointer in (d_source, d_output):
+            if pointer.value:
+                hip.hipFree(pointer)
+        if module.value:
+            hip.hipModuleUnload(module)
+
 
 def _intquant_params(x: Any, bits: int, kwargs: dict, np: Any) -> tuple[Any, int, int, int]:
     symmetric = bool(kwargs.get("symmetric", True))
@@ -12404,11 +13047,35 @@ def _execute_intquant_composite(
     if op_name == "tessera.quantize_int8":
         return quant(x, 8)
     if op_name == "tessera.quantize_int4":
-        return quant(x, 4)
+        logical, scale, zero_point = quant(x, 4)
+        if bool(metadata.get("terminal_packed", False)):
+            if target != "rocm":
+                raise ValueError(
+                    "terminal packed INT4 execution is currently ROCm-owned"
+                )
+            packed = _rocm_int4_storage_convert(
+                logical, int(logical.size), "pack", np
+            )
+            return packed, scale, zero_point, tuple(logical.shape)
+        return logical, scale, zero_point
     if op_name == "tessera.dequantize_int8":
         return dequant(x, float(kwargs["scale"]), int(kwargs.get("zero_point", 0)))
     if op_name == "tessera.dequantize_int4":
         q = _as_numpy(x)
+        if bool(metadata.get("terminal_packed", False)):
+            if target != "rocm":
+                raise ValueError(
+                    "terminal packed INT4 execution is currently ROCm-owned"
+                )
+            logical_shape = tuple(metadata.get("logical_shape") or ())
+            if not logical_shape or any(int(extent) < 0 for extent in logical_shape):
+                raise ValueError(
+                    "packed INT4 dequantize requires metadata logical_shape"
+                )
+            logical_elements = int(np.prod(logical_shape))
+            q = _rocm_int4_storage_convert(
+                q, logical_elements, "unpack", np
+            ).reshape(logical_shape)
         if np.any(q < -8) or np.any(q > 7):
             raise ValueError("int4 containers must hold values in [-8, 7]")
         return dequant(q, float(kwargs["scale"]), int(kwargs.get("zero_point", 0)))
@@ -15090,7 +15757,32 @@ def _execute_rocm_compiled_kv_cache(artifact: RuntimeArtifact, args: Any) -> Any
     operand_names = [str(n) for n in ops[0].get("operands", [])]
     values = _bind_launch_args(args, arg_names)
     operands = [_as_numpy(values[n]) for n in operand_names]
-    return _kv_cache_compute(op_name, operands, ops[0].get("kwargs") or {}, np)
+    if not operands:
+        raise ValueError("ROCm KV-cache operation requires a cache operand")
+    kwargs = ops[0].get("kwargs") or {}
+    from .compiler.emit.executable_layout import guard_dynamic_kv_cache
+
+    if op_name == "tessera.kv_cache.read":
+        start = int(kwargs.get("start", 0))
+        end_value = kwargs.get("end", None)
+        end = start + 1 if end_value is None else int(end_value)
+        guard_dynamic_kv_cache(operands[0], start=start, end=end)
+    elif op_name == "tessera.kv_cache.append":
+        if len(operands) != 2:
+            raise ValueError("ROCm KV-cache append requires cache and rows")
+        guard_dynamic_kv_cache(
+            operands[0], rows=operands[1],
+            start=int(kwargs.get("start", 0)),
+        )
+    else:
+        guard_dynamic_kv_cache(
+            operands[0],
+            current_sequence=int(
+                kwargs.get("current_seq", operands[0].shape[0])
+            ),
+            limit=int(kwargs["limit"]),
+        )
+    return _kv_cache_compute(op_name, operands, kwargs, np)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -15937,6 +16629,10 @@ def _execute_rocm_compiled_reduce(artifact: RuntimeArtifact, args: Any) -> Any:
     is folded to a [outer, inner] last-axis reduction by transposing the reduced
     axes to the end; ``keepdims`` supported. f16/bf16/f32 storage, f32 reduce."""
     import numpy as np
+    from .compiler.emit.executable_layout import (
+        DynamicShapeGuardError,
+        guard_dynamic_last_axis_reduction,
+    )
 
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
@@ -15978,7 +16674,28 @@ def _execute_rocm_compiled_reduce(artifact: RuntimeArtifact, args: Any) -> Any:
     elif isinstance(axis, int):
         axes = (axis if axis >= 0 else n + axis,)
     else:
-        axes = tuple(a if a >= 0 else n + a for a in axis)
+        try:
+            axes = tuple(a if a >= 0 else n + a for a in axis)
+        except TypeError as exc:
+            raise DynamicShapeGuardError(
+                "ROCm dynamic reduction axes must be integers"
+            ) from exc
+    if (not axes and n > 0) or any(
+        not isinstance(a, int) or isinstance(a, bool) or a < 0 or a >= n
+        for a in axes
+    ):
+        raise DynamicShapeGuardError(
+            f"ROCm dynamic reduction axes {axes!r} are invalid for rank {n}"
+        )
+    if len(set(axes)) != len(axes):
+        raise DynamicShapeGuardError(
+            "ROCm dynamic reduction axes must be unique"
+        )
+    last_axis_contract = None
+    if axes == (n - 1,):
+        last_axis_contract = guard_dynamic_last_axis_reduction(
+            x, keepdims=keepdims
+        )
     kept = [i for i in range(n) if i not in axes]
     perm = kept + list(axes)
     xt = np.ascontiguousarray(np.transpose(x, perm), dtype=store)
@@ -15989,6 +16706,13 @@ def _execute_rocm_compiled_reduce(artifact: RuntimeArtifact, args: Any) -> Any:
     if inner <= 0:
         raise ValueError("rocm reduce: empty reduction axis")
     kept_shape = tuple(int(x.shape[i]) for i in kept)
+    if last_axis_contract is not None and (outer, inner) != (
+        last_axis_contract.outer, last_axis_contract.axis_extent
+    ):
+        raise DynamicShapeGuardError(
+            "ROCm dynamic reduction launch dimensions disagree with "
+            "the guarded shape"
+        )
 
     hsaco = _build_compiled_reduce_hsaco(kind, dtype_tag)
     hip = _load_hip_for_launch()
@@ -16331,10 +17055,10 @@ def _build_rocm_elementwise_hsaco(pass_name: str, directive: str, cache: dict, k
     chip = _rocm_chip()
     pipeline = (
         "builtin.module("
-        f"{pass_name},"
-        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
-        "reconcile-unrealized-casts),"
-        f"rocdl-attach-target{{chip={chip}}},"
+            f"{pass_name},"
+            "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+            "reconcile-unrealized-casts,rocm-materialize-dynamic-lds),"
+            f"rocdl-attach-target{{chip={chip}}},"
         "gpu-module-to-binary)"
     )
     import subprocess
@@ -17461,21 +18185,67 @@ def _execute_rocm_compiled_silu_mul(artifact: RuntimeArtifact, args: Any) -> Any
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ROCm COMPILED pointwise-loss lane — mse / mae / huber / smooth_l1 / log_cosh.
-# The per-element loss runs on the COMPILER-GENERATED gpu kernel
-# (generate-rocm-pointwise-loss-kernel); the reduction (none/mean/sum) is a host
-# epilogue on the GPU-computed array. The CPU analog is the x86_loss lane.
+# The per-element loss and scalar sum/mean epilogue run on COMPILER-GENERATED
+# GPU kernels (generate-rocm-pointwise-loss-kernel + generate-rocm-reduce-kernel)
+# without materializing the intermediate through host memory. The CPU analog is
+# the x86_loss lane.
 # ``compiler_path = "rocm_loss_compiled"``. ONE hsaco per (chip, dtype, kind).
 # ─────────────────────────────────────────────────────────────────────────────
 #: op_name -> (loss kind, param-kwarg name or None). Matches the x86 lane and
 #: GenerateROCMPointwiseLossKernel.cpp.
 _ROCM_POINTWISE_LOSS_OPS = {
     "tessera.mse_loss": (0, None),
+    "tessera.loss.mse": (0, None),
     "tessera.mae_loss": (1, None),
+    "tessera.loss.mae": (1, None),
     "tessera.huber_loss": (2, "delta"),
+    "tessera.loss.huber": (2, "delta"),
     "tessera.smooth_l1_loss": (3, "beta"),
+    "tessera.loss.smooth_l1": (3, "beta"),
     "tessera.log_cosh_loss": (4, None),
 }
 _rocm_pointwise_loss_hsaco_cache: dict[tuple[str, str, int], bytes] = {}
+_rocm_mse_backward_hsaco_cache: dict[tuple[str, str, str], bytes] = {}
+_rocm_training_loss_sgd_hsaco_cache: dict[
+    tuple[str, str, str], bytes
+] = {}
+_rocm_training_loss_adamw_hsaco_cache: dict[
+    tuple[str, str, str], bytes
+] = {}
+_rocm_loss_module_cache: dict[
+    tuple[str, ...], tuple[ctypes.c_void_p, ctypes.c_void_p]
+] = {}
+
+
+def _rocm_loss_cached_function(
+    hip: Any, hsaco: bytes, symbol: bytes, key: tuple[str, ...]
+) -> tuple[ctypes.c_void_p, ctypes.c_void_p]:
+    """Load one loss-composition kernel per process/device contract.
+
+    HSACO generation was already cached, but repeatedly loading the pointwise
+    and reduction modules dominated small dynamic loss launches. HIP modules
+    are context-owned and remain valid for the process lifetime; retaining the
+    handles matches the runtime's compiled-artifact cache lifetime.
+    """
+    cached = _rocm_loss_module_cache.get(key)
+    if cached is not None:
+        return cached
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable(
+            f"rocm loss: no usable AMD GPU for cached module {key!r}"
+        )
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, symbol) != 0:
+        unload = getattr(hip, "hipModuleUnload", None)
+        if unload is not None and mod.value:
+            unload(mod)
+        raise RuntimeError(
+            f"rocm loss: kernel symbol {symbol.decode(errors='replace')!r} "
+            "not found"
+        )
+    _rocm_loss_module_cache[key] = (mod, fn)
+    return mod, fn
 
 
 def _build_compiled_pointwise_loss_hsaco(kind: int, param: float, dtype: str = "f32") -> bytes:
@@ -17493,11 +18263,84 @@ def _build_compiled_pointwise_loss_hsaco(kind: int, param: float, dtype: str = "
     )
 
 
+def _build_compiled_regression_loss_backward_hsaco(
+    kind: int, param: float, reduction: str, dtype: str = "f32"
+) -> bytes:
+    chip = _rocm_chip()
+    directive = (
+        "module {\n"
+        f'  "tessera_rocm.pointwise_loss"() {{name = "pl_bwd", '
+        f'dtype = "{dtype}", kind = {int(kind)} : i64, '
+        f'param = {float(param):e} : f32, backward = true, '
+        f'reduction = "{reduction}"}} : () -> ()\n'
+        "}\n"
+    )
+    key = (chip, f"{dtype}:{kind}:{float(param):e}", reduction)
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-pointwise-loss-kernel",
+        directive,
+        _rocm_mse_backward_hsaco_cache,
+        key,
+    )
+
+
+def _build_compiled_mse_backward_hsaco(
+    reduction: str, dtype: str = "f32"
+) -> bytes:
+    """Compatibility wrapper for the original MSE-only proof surface."""
+    return _build_compiled_regression_loss_backward_hsaco(
+        0, 1.0, reduction, dtype
+    )
+
+
+def _build_compiled_training_loss_sgd_hsaco(
+    kind: int, param: float, reduction: str, dtype: str = "f32"
+) -> bytes:
+    chip = _rocm_chip()
+    directive = (
+        "module {\n"
+        '  "tessera_rocm.pointwise_loss"() {name = "training_sgd", '
+        f'dtype = "{dtype}", kind = {int(kind)} : i64, '
+        f'param = {float(param):e} : f32, training_sgd = true, '
+        f'reduction = "{reduction}"}} : () -> ()\n'
+        "}\n"
+    )
+    key = (chip, f"{dtype}:{kind}:{float(param):e}", reduction)
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-pointwise-loss-kernel",
+        directive,
+        _rocm_training_loss_sgd_hsaco_cache,
+        key,
+    )
+
+
+def _build_compiled_training_loss_adamw_hsaco(
+    kind: int, param: float, reduction: str, dtype: str = "f32"
+) -> bytes:
+    chip = _rocm_chip()
+    directive = (
+        "module {\n"
+        '  "tessera_rocm.pointwise_loss"() {name = "training_adamw", '
+        f'dtype = "{dtype}", kind = {int(kind)} : i64, '
+        f'param = {float(param):e} : f32, training_adamw = true, '
+        f'reduction = "{reduction}"}} : () -> ()\n'
+        "}\n"
+    )
+    key = (chip, f"{dtype}:{kind}:{float(param):e}", reduction)
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-pointwise-loss-kernel",
+        directive,
+        _rocm_training_loss_adamw_hsaco_cache,
+        key,
+    )
+
+
 def _execute_rocm_compiled_pointwise_loss(artifact: RuntimeArtifact, args: Any) -> Any:
     """The ``target="rocm"`` pointwise-loss lane: run the COMPILER-GENERATED
     per-element regression loss (mse/mae/huber/smooth_l1/log_cosh) over
-    (pred, target) on gfx1151, then apply the none/mean/sum reduction. f32/f16/
-    bf16 storage, f32 compute."""
+    (pred, target) on gfx1151. ``sum`` and ``mean`` feed the device allocation
+    directly into the compiled reduction kernel; ``none`` copies the elementwise
+    result. f32/f16/bf16 storage, f32 compute."""
     import numpy as np
 
     metadata = artifact.metadata or {}
@@ -17551,20 +18394,23 @@ def _execute_rocm_compiled_pointwise_loss(artifact: RuntimeArtifact, args: Any) 
         raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
     if hip.hipInit(0) != 0:
         raise _RocmCompiledUnavailable("rocm loss: hipInit failed")
-    mod = ctypes.c_void_p()
-    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
-        raise _RocmCompiledUnavailable("rocm loss: no usable AMD GPU")
-    fn = ctypes.c_void_p()
-    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"pl") != 0:
-        raise RuntimeError("rocm loss: kernel symbol 'pl' not found")
+    chip = _rocm_chip()
+    param_key = f"{param:e}" if kind in (2, 3) else "-"
+    _, fn = _rocm_loss_cached_function(
+        hip, hsaco, b"pl",
+        ("pointwise", chip, dtype_tag, str(kind), param_key),
+    )
 
     ac = np.ascontiguousarray(a, dtype=store).reshape(-1)
     bc = np.ascontiguousarray(b, dtype=store).reshape(-1)
-    o = np.zeros(n, dtype=store)
     da, db, do = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
+    allocated: list[ctypes.c_void_p] = []
     for dev in (da, db, do):
         if hip.hipMalloc(ctypes.byref(dev), esz * n) != 0:
+            for prior in allocated:
+                hip.hipFree(prior)
             raise RuntimeError("rocm loss: hipMalloc failed")
+        allocated.append(dev)
     hip.hipMemcpy(da, ac.ctypes.data_as(ctypes.c_void_p), esz * n, 1)
     hip.hipMemcpy(db, bc.ctypes.data_as(ctypes.c_void_p), esz * n, 1)
 
@@ -17584,17 +18430,500 @@ def _execute_rocm_compiled_pointwise_loss(artifact: RuntimeArtifact, args: Any) 
     gx = (n + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
     rc = hip.hipModuleLaunchKernel(fn, gx, 1, 1, _GRID_BLOCKDIM, 1, 1, 0, None, arr, None)
     if rc != 0:
-        for dev in (da, db, do):
+        for dev in allocated:
             hip.hipFree(dev)
         raise RuntimeError(f"rocm loss: kernel launch failed rc={rc}")
-    hip.hipDeviceSynchronize()
-    hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, esz * n, 2)
-    for dev in (da, db, do):
-        hip.hipFree(dev)
-    per = o.reshape(bshape).astype(np.float32)
+
     if reduction == "none":
-        return per
-    return np.float32(per.sum() if reduction == "sum" else per.mean())
+        o = np.zeros(n, dtype=store)
+        hip.hipDeviceSynchronize()
+        hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, esz * n, 2)
+        result: Any = o.reshape(bshape).astype(np.float32)
+    else:
+        reduce_hsaco = _build_compiled_reduce_hsaco(reduction, dtype_tag)
+        _, reduce_fn = _rocm_loss_cached_function(
+            hip, reduce_hsaco, b"rd",
+            ("reduce", chip, dtype_tag, reduction),
+        )
+        # One-block full reduction is safe in-place: every lane consumes its
+        # input before the final barrier and only lane zero stores the scalar.
+        # Reusing element zero avoids a fourth hipMalloc/hipFree pair.
+        reduce_args = _mr(do, n) + _mr(do, 1) + [
+            ctypes.c_int64(1),
+            ctypes.c_int64(n),
+        ]
+        reduce_arr = (ctypes.c_void_p * len(reduce_args))()
+        for i, val in enumerate(reduce_args):
+            reduce_arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
+        rc = hip.hipModuleLaunchKernel(
+            reduce_fn, 1, 1, 1, _REDUCE_BLOCKDIM, 1, 1, 0, None, reduce_arr, None
+        )
+        if rc != 0:
+            for dev in allocated:
+                hip.hipFree(dev)
+            raise RuntimeError(f"rocm loss reduction: kernel launch failed rc={rc}")
+        scalar = np.zeros(1, dtype=store)
+        hip.hipDeviceSynchronize()
+        hip.hipMemcpy(scalar.ctypes.data_as(ctypes.c_void_p), do, esz, 2)
+        result = np.float32(scalar.astype(np.float32)[0])
+
+    for dev in allocated:
+        hip.hipFree(dev)
+    return result
+
+
+def _execute_rocm_compiled_regression_loss_backward(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """Compiler-generated ROCm MSE/MAE/Huber/Smooth-L1 VJP.
+
+    The kernel consumes prediction, target, and either a tensor cotangent
+    (reduction=none) or scalar cotangent (sum/mean), then writes dPrediction and
+    dTarget in one launch. Runtime N and a host-computed scale keep one
+    shape-independent HSACO per dtype/reduction.
+    """
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name")) if len(ops) == 1 else ""
+    if op_name not in _ROCM_POINTWISE_LOSS_OPS:
+        raise ValueError(
+            "rocm_regression_loss_bwd_compiled requires one pointwise "
+            "regression-loss operation"
+        )
+    kind, param_kw = _ROCM_POINTWISE_LOSS_OPS[op_name]
+    if kind > 3:
+        raise ValueError(
+            "ROCm compiled regression backward supports MSE/MAE/Huber/"
+            "Smooth-L1 only"
+        )
+    values = _bind_launch_args(args, names)
+    operands = [str(name) for name in ops[0].get("operands", [])]
+    if len(operands) != 2:
+        raise ValueError(
+            "ROCm regression-loss backward requires prediction and target"
+        )
+    prediction = _as_numpy(values[operands[0]])
+    target = _as_numpy(values[operands[1]])
+    try:
+        shape = np.broadcast_shapes(prediction.shape, target.shape)
+    except ValueError as exc:
+        raise ValueError(
+            "regression-loss prediction"
+            f"{prediction.shape} and target{target.shape} do not broadcast"
+        ) from exc
+    prediction = np.broadcast_to(prediction, shape)
+    target = np.broadcast_to(target, shape)
+    reduction = str((ops[0].get("kwargs") or {}).get("reduction", "mean"))
+    if reduction not in {"none", "sum", "mean"}:
+        raise ValueError(
+            "ROCm regression-loss backward reduction must be none/sum/mean"
+        )
+    dy_name = str(metadata.get("out_cotangent", "dy"))
+    if dy_name not in values:
+        raise ValueError(
+            "ROCm regression-loss backward requires output cotangent 'dy'"
+        )
+    dy = _as_numpy(values[dy_name])
+    if reduction == "none" and tuple(dy.shape) != tuple(shape):
+        raise ValueError(
+            "unreduced regression-loss cotangent must have shape "
+            f"{shape}, got {dy.shape}"
+        )
+    if reduction != "none" and dy.size != 1:
+        raise ValueError("reduced regression-loss cotangent must be scalar")
+    n = int(np.prod(shape)) if shape else 1
+    if n <= 0:
+        raise ValueError(
+            "ROCm regression-loss backward requires a positive runtime extent"
+        )
+
+    store: Any
+    if prediction.dtype == np.float32:
+        dtype_tag, store, element_bytes = "f32", np.float32, 4
+    elif prediction.dtype == np.float16:
+        dtype_tag, store, element_bytes = "f16", np.float16, 2
+    else:
+        bf16 = _bfloat16_dtype()
+        if bf16 is None or prediction.dtype != bf16:
+            raise ValueError(
+                "ROCm regression-loss backward handles f32/f16/bf16; "
+                f"got {prediction.dtype}"
+            )
+        dtype_tag, store, element_bytes = "bf16", bf16, 2
+    if target.dtype != prediction.dtype:
+        raise ValueError(
+            "ROCm regression-loss backward requires matching input dtypes"
+        )
+
+    kwargs = ops[0].get("kwargs") or {}
+    param = float(kwargs.get(param_kw, 1.0)) if param_kw else 1.0
+    if kind in {2, 3} and param <= 0.0:
+        raise ValueError("ROCm regression-loss transition parameter must be > 0")
+    hsaco = _build_compiled_regression_loss_backward_hsaco(
+        kind, param, reduction, dtype_tag
+    )
+    hip = _load_hip_for_launch()
+    if hip is None or hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable(
+            "ROCm regression-loss backward HIP runtime unavailable"
+        )
+    chip = _rocm_chip()
+    _, fn = _rocm_loss_cached_function(
+        hip, hsaco, b"pl_bwd",
+        ("regression_backward", chip, dtype_tag, str(kind),
+         f"{param:e}", reduction),
+    )
+    pc = np.ascontiguousarray(prediction, dtype=store).reshape(-1)
+    tc = np.ascontiguousarray(target, dtype=store).reshape(-1)
+    dyc = np.ascontiguousarray(dy, dtype=store).reshape(-1)
+    dy_count = n if reduction == "none" else 1
+    devices = [ctypes.c_void_p() for _ in range(5)]
+    sizes = [n, n, dy_count, n, n]
+    allocated: list[ctypes.c_void_p] = []
+    for device, count in zip(devices, sizes):
+        if hip.hipMalloc(ctypes.byref(device), element_bytes * count) != 0:
+            for prior in allocated:
+                hip.hipFree(prior)
+            raise RuntimeError("ROCm regression-loss backward hipMalloc failed")
+        allocated.append(device)
+    for device, host, count in zip(devices[:3], (pc, tc, dyc), sizes[:3]):
+        hip.hipMemcpy(
+            device, host.ctypes.data_as(ctypes.c_void_p),
+            element_bytes * count, 1
+        )
+
+    def _mr(pointer: ctypes.c_void_p, count: int) -> list[Any]:
+        return [
+            ctypes.c_void_p(pointer.value), ctypes.c_void_p(pointer.value),
+            ctypes.c_int64(0), ctypes.c_int64(count), ctypes.c_int64(1),
+        ]
+
+    launch_args: list[Any] = []
+    for device, count in zip(devices, sizes):
+        launch_args.extend(_mr(device, count))
+    launch_args.extend([
+        ctypes.c_int64(n),
+        ctypes.c_float(1.0 / n if reduction == "mean" else 1.0),
+    ])
+    launch_array = (ctypes.c_void_p * len(launch_args))()
+    for index, value in enumerate(launch_args):
+        launch_array[index] = ctypes.cast(ctypes.byref(value), ctypes.c_void_p)
+    grid = (n + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+    rc = hip.hipModuleLaunchKernel(
+        fn, grid, 1, 1, _GRID_BLOCKDIM, 1, 1, 0, None, launch_array, None
+    )
+    if rc != 0:
+        for device in allocated:
+            hip.hipFree(device)
+        raise RuntimeError(
+            f"ROCm regression-loss backward launch failed rc={rc}"
+        )
+    dp = np.empty(n, dtype=store)
+    dt = np.empty(n, dtype=store)
+    hip.hipDeviceSynchronize()
+    hip.hipMemcpy(
+        dp.ctypes.data_as(ctypes.c_void_p), devices[3],
+        element_bytes * n, 2
+    )
+    hip.hipMemcpy(
+        dt.ctypes.data_as(ctypes.c_void_p), devices[4],
+        element_bytes * n, 2
+    )
+    for device in allocated:
+        hip.hipFree(device)
+    return dp.reshape(shape), dt.reshape(shape)
+
+
+def _execute_rocm_compiled_mse_backward(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """Compatibility entrypoint retained for the original execution row."""
+    return _execute_rocm_compiled_regression_loss_backward(artifact, args)
+
+
+def _execute_rocm_compiled_training_loss_sgd(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """One compiler-generated gfx1151 launch for loss VJP → SGD."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    if len(ops) != 1 or str(ops[0].get("op_name")) != (
+        "tessera.training.loss_sgd"
+    ):
+        raise ValueError(
+            "rocm_training_loss_sgd_compiled requires one "
+            "tessera.training.loss_sgd op"
+        )
+    operands = [str(name) for name in ops[0].get("operands", [])]
+    if len(operands) != 4:
+        raise ValueError(
+            "training loss SGD requires prediction, target, cotangent, param"
+        )
+    values = _bind_launch_args(args, names)
+    prediction, target, dy, parameter = (
+        _as_numpy(values[name]) for name in operands
+    )
+    if prediction.shape != target.shape or prediction.shape != parameter.shape:
+        raise ValueError("ROCm training loss SGD tensor shapes must match")
+    if target.dtype != prediction.dtype or parameter.dtype != prediction.dtype:
+        raise ValueError("ROCm training loss SGD input dtypes must match")
+    kwargs = ops[0].get("kwargs") or {}
+    kind_name = str(kwargs.get("kind", ""))
+    if kind_name not in _TRAINING_LOSS_KIND:
+        raise ValueError(f"unsupported training loss kind {kind_name!r}")
+    kind = _TRAINING_LOSS_KIND[kind_name]
+    transition = float(kwargs.get("parameter", 1.0))
+    if kind in {2, 3} and transition <= 0.0:
+        raise ValueError("training loss transition parameter must be > 0")
+    reduction = str(kwargs.get("reduction", "mean"))
+    if reduction not in {"none", "sum", "mean"}:
+        raise ValueError("training loss reduction must be none/sum/mean")
+    if reduction == "none" and dy.shape != prediction.shape:
+        raise ValueError("unreduced training loss cotangent shape must match")
+    if reduction != "none" and dy.size != 1:
+        raise ValueError("reduced training loss cotangent must be scalar")
+    n = int(prediction.size)
+    if n <= 0:
+        raise ValueError("training loss SGD requires positive extent")
+
+    store: Any
+    if prediction.dtype == np.float32:
+        dtype_tag, store, element_bytes = "f32", np.float32, 4
+    elif prediction.dtype == np.float16:
+        dtype_tag, store, element_bytes = "f16", np.float16, 2
+    else:
+        bf16 = _bfloat16_dtype()
+        if bf16 is None or prediction.dtype != bf16:
+            raise ValueError(
+                "ROCm training loss SGD handles f32/f16/bf16; "
+                f"got {prediction.dtype}"
+            )
+        dtype_tag, store, element_bytes = "bf16", bf16, 2
+    hsaco = _build_compiled_training_loss_sgd_hsaco(
+        kind, transition, reduction, dtype_tag
+    )
+    hip = _load_hip_for_launch()
+    if hip is None or hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable(
+            "ROCm training loss SGD HIP runtime unavailable"
+        )
+    chip = _rocm_chip()
+    _, fn = _rocm_loss_cached_function(
+        hip, hsaco, b"training_sgd",
+        ("training_loss_sgd", chip, dtype_tag, str(kind),
+         f"{transition:e}", reduction),
+    )
+    pc = np.ascontiguousarray(prediction, dtype=store).reshape(-1)
+    tc = np.ascontiguousarray(target, dtype=store).reshape(-1)
+    dyc = np.ascontiguousarray(dy, dtype=store).reshape(-1)
+    params = np.ascontiguousarray(parameter, dtype=store).reshape(-1)
+    dy_count = n if reduction == "none" else 1
+    devices = [ctypes.c_void_p() for _ in range(6)]
+    sizes = [n, n, dy_count, n, n, n]
+    allocated: list[ctypes.c_void_p] = []
+    for device, count in zip(devices, sizes):
+        if hip.hipMalloc(ctypes.byref(device), element_bytes * count) != 0:
+            for prior in allocated:
+                hip.hipFree(prior)
+            raise RuntimeError("ROCm training loss SGD hipMalloc failed")
+        allocated.append(device)
+    for device, host, count in zip(
+        devices[:4], (pc, tc, dyc, params), sizes[:4]
+    ):
+        hip.hipMemcpy(
+            device, host.ctypes.data_as(ctypes.c_void_p),
+            element_bytes * count, 1
+        )
+
+    def _mr(pointer: ctypes.c_void_p, count: int) -> list[Any]:
+        return [
+            ctypes.c_void_p(pointer.value), ctypes.c_void_p(pointer.value),
+            ctypes.c_int64(0), ctypes.c_int64(count), ctypes.c_int64(1),
+        ]
+
+    launch_args: list[Any] = []
+    for device, count in zip(devices, sizes):
+        launch_args.extend(_mr(device, count))
+    launch_args.extend([
+        ctypes.c_int64(n),
+        ctypes.c_float(1.0 / n if reduction == "mean" else 1.0),
+        ctypes.c_float(float(kwargs.get("lr", 0.0))),
+    ])
+    launch_array = (ctypes.c_void_p * len(launch_args))()
+    for index, value in enumerate(launch_args):
+        launch_array[index] = ctypes.cast(ctypes.byref(value), ctypes.c_void_p)
+    grid = (n + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+    rc = hip.hipModuleLaunchKernel(
+        fn, grid, 1, 1, _GRID_BLOCKDIM, 1, 1, 0, None, launch_array, None
+    )
+    if rc != 0:
+        for device in allocated:
+            hip.hipFree(device)
+        raise RuntimeError(f"ROCm training loss SGD launch failed rc={rc}")
+    updated = np.empty(n, dtype=store)
+    target_grad = np.empty(n, dtype=store)
+    hip.hipDeviceSynchronize()
+    hip.hipMemcpy(
+        updated.ctypes.data_as(ctypes.c_void_p), devices[4],
+        element_bytes * n, 2
+    )
+    hip.hipMemcpy(
+        target_grad.ctypes.data_as(ctypes.c_void_p), devices[5],
+        element_bytes * n, 2
+    )
+    for device in allocated:
+        hip.hipFree(device)
+    return updated.reshape(prediction.shape), target_grad.reshape(
+        prediction.shape
+    )
+
+
+def _execute_rocm_compiled_training_loss_adamw(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """One compiler-generated gfx1151 launch for loss VJP → AdamW."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    if len(ops) != 1 or str(ops[0].get("op_name")) != (
+        "tessera.training.loss_adamw"
+    ):
+        raise ValueError(
+            "rocm_training_loss_adamw_compiled requires one "
+            "tessera.training.loss_adamw op"
+        )
+    operands = [str(name) for name in ops[0].get("operands", [])]
+    if len(operands) != 6:
+        raise ValueError(
+            "training loss AdamW requires prediction, target, cotangent, "
+            "parameter, moment1, moment2"
+        )
+    values = _bind_launch_args(args, names)
+    prediction, target, dy, parameter, moment1, moment2 = (
+        _as_numpy(values[name]) for name in operands
+    )
+    tensors = (prediction, target, parameter, moment1, moment2)
+    if any(value.shape != prediction.shape for value in tensors[1:]):
+        raise ValueError("ROCm training loss AdamW tensor shapes must match")
+    if any(value.dtype != prediction.dtype for value in tensors[1:]):
+        raise ValueError("ROCm training loss AdamW input dtypes must match")
+    kwargs = ops[0].get("kwargs") or {}
+    kind_name = str(kwargs.get("kind", ""))
+    if kind_name not in _TRAINING_LOSS_KIND:
+        raise ValueError(f"unsupported training loss kind {kind_name!r}")
+    kind = _TRAINING_LOSS_KIND[kind_name]
+    transition = float(kwargs.get("parameter", 1.0))
+    if kind in {2, 3} and transition <= 0.0:
+        raise ValueError("training loss transition parameter must be > 0")
+    reduction = str(kwargs.get("reduction", "mean"))
+    if reduction not in {"none", "sum", "mean"}:
+        raise ValueError("training loss reduction must be none/sum/mean")
+    if reduction == "none" and dy.shape != prediction.shape:
+        raise ValueError("unreduced training loss cotangent shape must match")
+    if reduction != "none" and dy.size != 1:
+        raise ValueError("reduced training loss cotangent must be scalar")
+    n = int(prediction.size)
+    if n <= 0:
+        raise ValueError("training loss AdamW requires positive extent")
+    store: Any
+    if prediction.dtype == np.float32:
+        dtype_tag, store, element_bytes = "f32", np.float32, 4
+    elif prediction.dtype == np.float16:
+        dtype_tag, store, element_bytes = "f16", np.float16, 2
+    else:
+        bf16 = _bfloat16_dtype()
+        if bf16 is None or prediction.dtype != bf16:
+            raise ValueError(
+                "ROCm training loss AdamW handles f32/f16/bf16; "
+                f"got {prediction.dtype}"
+            )
+        dtype_tag, store, element_bytes = "bf16", bf16, 2
+    hsaco = _build_compiled_training_loss_adamw_hsaco(
+        kind, transition, reduction, dtype_tag
+    )
+    hip = _load_hip_for_launch()
+    if hip is None or hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable(
+            "ROCm training loss AdamW HIP runtime unavailable"
+        )
+    chip = _rocm_chip()
+    _, fn = _rocm_loss_cached_function(
+        hip, hsaco, b"training_adamw",
+        ("training_loss_adamw", chip, dtype_tag, str(kind),
+         f"{transition:e}", reduction),
+    )
+    hosts = [
+        np.ascontiguousarray(value, dtype=store).reshape(-1)
+        for value in (prediction, target, dy, parameter, moment1, moment2)
+    ]
+    dy_count = n if reduction == "none" else 1
+    sizes = [n, n, dy_count, n, n, n, n, n, n, n]
+    devices = [ctypes.c_void_p() for _ in sizes]
+    allocated: list[ctypes.c_void_p] = []
+    for device, count in zip(devices, sizes):
+        if hip.hipMalloc(ctypes.byref(device), element_bytes * count) != 0:
+            for prior in allocated:
+                hip.hipFree(prior)
+            raise RuntimeError("ROCm training loss AdamW hipMalloc failed")
+        allocated.append(device)
+    for device, host, count in zip(devices[:6], hosts, sizes[:6]):
+        hip.hipMemcpy(
+            device, host.ctypes.data_as(ctypes.c_void_p),
+            element_bytes * count, 1
+        )
+
+    def _mr(pointer: ctypes.c_void_p, count: int) -> list[Any]:
+        return [
+            ctypes.c_void_p(pointer.value), ctypes.c_void_p(pointer.value),
+            ctypes.c_int64(0), ctypes.c_int64(count), ctypes.c_int64(1),
+        ]
+
+    launch_args: list[Any] = []
+    for device, count in zip(devices, sizes):
+        launch_args.extend(_mr(device, count))
+    lr = float(kwargs.get("lr", 1.0e-3))
+    beta1 = float(kwargs.get("beta1", 0.9))
+    beta2 = float(kwargs.get("beta2", 0.999))
+    eps = float(kwargs.get("eps", 1.0e-8))
+    weight_decay = float(kwargs.get("weight_decay", 0.01))
+    step = int(kwargs.get("step", 1))
+    launch_args.extend([
+        ctypes.c_int64(n),
+        ctypes.c_float(1.0 / n if reduction == "mean" else 1.0),
+        ctypes.c_float(lr), ctypes.c_float(beta1), ctypes.c_float(beta2),
+        ctypes.c_float(eps), ctypes.c_float(weight_decay),
+        ctypes.c_float(1.0 - beta1**step),
+        ctypes.c_float(1.0 - beta2**step),
+    ])
+    launch_array = (ctypes.c_void_p * len(launch_args))()
+    for index, value in enumerate(launch_args):
+        launch_array[index] = ctypes.cast(ctypes.byref(value), ctypes.c_void_p)
+    grid = (n + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+    rc = hip.hipModuleLaunchKernel(
+        fn, grid, 1, 1, _GRID_BLOCKDIM, 1, 1, 0, None, launch_array, None
+    )
+    if rc != 0:
+        for device in allocated:
+            hip.hipFree(device)
+        raise RuntimeError(f"ROCm training loss AdamW launch failed rc={rc}")
+    outputs = [np.empty(n, dtype=store) for _ in range(4)]
+    hip.hipDeviceSynchronize()
+    for output, device in zip(outputs, devices[6:]):
+        hip.hipMemcpy(
+            output.ctypes.data_as(ctypes.c_void_p), device,
+            element_bytes * n, 2
+        )
+    for device in allocated:
+        hip.hipFree(device)
+    return tuple(value.reshape(prediction.shape) for value in outputs)
 
 
 def _rocm_launch_nary_elementwise(
@@ -17672,9 +19001,12 @@ def _rocm_loss_store(a: Any, np: Any) -> tuple:
 # ─────────────────────────────────────────────────────────────────────────────
 _ROCM_BINARY_LOSS_OPS = {
     "tessera.binary_cross_entropy_loss": (0, None),
+    "tessera.loss.binary_cross_entropy": (0, None),
     "tessera.asymmetric_bce": (1, ("pos_weight", "neg_weight")),
 }
 _rocm_binary_loss_hsaco_cache: dict[tuple, bytes] = {}
+_rocm_binary_loss_backward_hsaco_cache: dict[tuple, bytes] = {}
+_rocm_class_loss_backward_hsaco_cache: dict[tuple, bytes] = {}
 
 
 def _build_compiled_binary_loss_hsaco(kind: int, pw: float, nw: float, dtype: str = "f32") -> bytes:
@@ -17688,6 +19020,42 @@ def _build_compiled_binary_loss_hsaco(kind: int, pw: float, nw: float, dtype: st
     key = (chip, dtype, int(kind), float(pw), float(nw))
     return _build_rocm_elementwise_hsaco(
         "generate-rocm-binary-loss-kernel", directive, _rocm_binary_loss_hsaco_cache, key
+    )
+
+
+def _build_compiled_binary_loss_backward_hsaco(
+    reduction: str, dtype: str = "f32"
+) -> bytes:
+    chip = _rocm_chip()
+    directive = (
+        "module {\n"
+        f'  "tessera_rocm.binary_loss"() {{name = "bl_bwd", '
+        f'dtype = "{dtype}", kind = 0 : i64, backward = true, '
+        f'reduction = "{reduction}"}} : () -> ()\n'
+        "}\n"
+    )
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-binary-loss-kernel", directive,
+        _rocm_binary_loss_backward_hsaco_cache,
+        (chip, dtype, reduction),
+    )
+
+
+def _build_compiled_class_loss_backward_hsaco(
+    smoothing: float, ignore_index: int, reduction: str, dtype: str = "f32"
+) -> bytes:
+    chip = _rocm_chip()
+    directive = (
+        "module {\n"
+        f'  "tessera_rocm.class_loss_backward"() {{name = "ce_bwd", '
+        f'dtype = "{dtype}", label_smoothing = {smoothing:e} : f32, '
+        f'ignore_index = {ignore_index} : i64, reduction = "{reduction}"}} '
+        ": () -> ()\n}\n"
+    )
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-binary-loss-kernel", directive,
+        _rocm_class_loss_backward_hsaco_cache,
+        (chip, dtype, smoothing, ignore_index, reduction),
     )
 
 
@@ -17738,6 +19106,208 @@ def _execute_rocm_compiled_binary_loss(artifact: RuntimeArtifact, args: Any) -> 
     if reduction == "none":
         return per
     return np.float32(per.sum() if reduction == "sum" else per.mean())
+
+
+def _execute_rocm_compiled_binary_loss_backward(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """One compiler-generated gfx1151 launch for BCE dLogits and dTarget."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if op_name not in {
+        "tessera.binary_cross_entropy_loss",
+        "tessera.loss.binary_cross_entropy",
+    }:
+        raise ValueError(
+            "rocm_binary_loss_bwd_compiled requires one BCE-with-logits op"
+        )
+    values = _bind_launch_args(args, names)
+    operands = [str(name) for name in ops[0].get("operands", [])]
+    if len(operands) != 2:
+        raise ValueError("ROCm BCE backward requires logits and target")
+    logits = np.asarray(_as_numpy(values[operands[0]]))
+    target = np.asarray(_as_numpy(values[operands[1]]))
+    if logits.shape != target.shape or logits.dtype != target.dtype:
+        raise ValueError(
+            "Graph-native ROCm BCE backward requires equal shape and dtype"
+        )
+    reduction = str((ops[0].get("kwargs") or {}).get("reduction", "mean"))
+    if reduction not in {"none", "sum", "mean"}:
+        raise ValueError("ROCm BCE backward reduction must be none/sum/mean")
+    dy = np.asarray(
+        _as_numpy(values[str(metadata.get("out_cotangent", "dy"))])
+    )
+    if reduction == "none" and dy.shape != logits.shape:
+        raise ValueError("unreduced BCE cotangent must match logits")
+    if reduction != "none" and dy.size != 1:
+        raise ValueError("reduced BCE cotangent must be scalar")
+    n = int(logits.size)
+    if n <= 0:
+        raise ValueError("ROCm BCE backward requires a positive extent")
+    dtype_tag, store, element_bytes = _rocm_loss_store(logits, np)
+    hsaco = _build_compiled_binary_loss_backward_hsaco(reduction, dtype_tag)
+    hip = _load_hip_for_launch()
+    if hip is None or hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("ROCm BCE backward runtime unavailable")
+    chip = _rocm_chip()
+    _, function = _rocm_loss_cached_function(
+        hip, hsaco, b"bl_bwd",
+        ("binary_backward", chip, dtype_tag, reduction),
+    )
+    z = np.ascontiguousarray(logits, dtype=store).reshape(-1)
+    t = np.ascontiguousarray(target, dtype=store).reshape(-1)
+    dyc = np.ascontiguousarray(dy, dtype=store).reshape(-1)
+    dy_count = n if reduction == "none" else 1
+    devices = [ctypes.c_void_p() for _ in range(5)]
+    sizes = [n, n, dy_count, n, n]
+    allocated: list[ctypes.c_void_p] = []
+    try:
+        for device, count in zip(devices, sizes):
+            if hip.hipMalloc(
+                ctypes.byref(device), element_bytes * count
+            ) != 0:
+                raise RuntimeError("ROCm BCE backward hipMalloc failed")
+            allocated.append(device)
+        for host, device, count in (
+            (z, devices[0], n), (t, devices[1], n),
+            (dyc, devices[2], dy_count),
+        ):
+            hip.hipMemcpy(
+                device, host.ctypes.data_as(ctypes.c_void_p),
+                element_bytes * count, 1,
+            )
+
+        def memref(device: ctypes.c_void_p, count: int) -> list[Any]:
+            return [
+                ctypes.c_void_p(device.value), ctypes.c_void_p(device.value),
+                ctypes.c_int64(0), ctypes.c_int64(count), ctypes.c_int64(1),
+            ]
+
+        launch_args: list[Any] = []
+        for device, count in zip(devices, sizes):
+            launch_args += memref(device, count)
+        launch_args += [
+            ctypes.c_int64(n),
+            ctypes.c_float(1.0 / n if reduction == "mean" else 1.0),
+        ]
+        packed = (ctypes.c_void_p * len(launch_args))()
+        for index, value in enumerate(launch_args):
+            packed[index] = ctypes.cast(ctypes.byref(value), ctypes.c_void_p)
+        grid = (n + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+        rc = hip.hipModuleLaunchKernel(
+            function, grid, 1, 1, _GRID_BLOCKDIM, 1, 1,
+            0, None, packed, None,
+        )
+        if rc != 0:
+            raise RuntimeError(f"ROCm BCE backward launch failed rc={rc}")
+        hip.hipDeviceSynchronize()
+        dz = np.empty(n, dtype=store)
+        dt = np.empty(n, dtype=store)
+        for host, device in ((dz, devices[3]), (dt, devices[4])):
+            hip.hipMemcpy(
+                host.ctypes.data_as(ctypes.c_void_p), device,
+                element_bytes * n, 2,
+            )
+    finally:
+        for device in allocated:
+            hip.hipFree(device)
+    return (
+        dz.reshape(logits.shape).astype(np.float32),
+        dt.reshape(target.shape).astype(np.float32),
+    )
+
+
+def _execute_rocm_compiled_class_loss_backward(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """One compiler-generated gfx1151 class-index cross-entropy VJP."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    if len(ops) != 1:
+        raise ValueError("ROCm class-loss backward requires one operation")
+    values = _bind_launch_args(args, names)
+    (moved, targets, dy, original_shape, axis, classes, smoothing,
+     ignore_index, reduction, scale) = _class_loss_backward_contract(
+         ops[0], values, metadata, np)
+    rows = int(targets.size)
+    dtype_tag, store, element_bytes = _rocm_loss_store(moved, np)
+    logits = np.ascontiguousarray(moved, dtype=store).reshape(-1)
+    dy_store = np.ascontiguousarray(dy, dtype=store).reshape(-1)
+    dy_count = rows if reduction == "none" else 1
+    hsaco = _build_compiled_class_loss_backward_hsaco(
+        smoothing, ignore_index, reduction, dtype_tag)
+    hip = _load_hip_for_launch()
+    if hip is None or hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable(
+            "ROCm class-loss backward runtime unavailable")
+    _, function = _rocm_loss_cached_function(
+        hip, hsaco, b"ce_bwd",
+        ("class_backward", _rocm_chip(), dtype_tag, f"{smoothing:e}",
+         str(ignore_index), reduction),
+    )
+    devices = [ctypes.c_void_p() for _ in range(4)]
+    byte_sizes = [
+        element_bytes * logits.size, 8 * rows,
+        element_bytes * dy_count, element_bytes * logits.size,
+    ]
+    allocated: list[ctypes.c_void_p] = []
+    try:
+        for device, byte_size in zip(devices, byte_sizes):
+            if hip.hipMalloc(ctypes.byref(device), byte_size) != 0:
+                raise RuntimeError("ROCm class-loss backward hipMalloc failed")
+            allocated.append(device)
+        for host, device, byte_size in (
+            (logits, devices[0], byte_sizes[0]),
+            (targets, devices[1], byte_sizes[1]),
+            (dy_store, devices[2], byte_sizes[2]),
+        ):
+            hip.hipMemcpy(
+                device, host.ctypes.data_as(ctypes.c_void_p), byte_size, 1)
+
+        def memref(device: ctypes.c_void_p, count: int) -> list[Any]:
+            return [
+                ctypes.c_void_p(device.value), ctypes.c_void_p(device.value),
+                ctypes.c_int64(0), ctypes.c_int64(count), ctypes.c_int64(1),
+            ]
+
+        launch_args: list[Any] = []
+        for device, count in zip(
+            devices, (logits.size, rows, dy_count, logits.size)
+        ):
+            launch_args += memref(device, count)
+        launch_args += [
+            ctypes.c_int64(rows), ctypes.c_int64(classes),
+            ctypes.c_float(scale),
+        ]
+        packed = (ctypes.c_void_p * len(launch_args))()
+        for index, value in enumerate(launch_args):
+            packed[index] = ctypes.cast(ctypes.byref(value), ctypes.c_void_p)
+        grid = (rows + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+        rc = hip.hipModuleLaunchKernel(
+            function, grid, 1, 1, _GRID_BLOCKDIM, 1, 1,
+            0, None, packed, None,
+        )
+        if rc != 0:
+            raise RuntimeError(
+                f"ROCm class-loss backward launch failed rc={rc}")
+        hip.hipDeviceSynchronize()
+        output = np.empty(logits.size, dtype=store)
+        hip.hipMemcpy(
+            output.ctypes.data_as(ctypes.c_void_p), devices[3],
+            byte_sizes[3], 2,
+        )
+    finally:
+        for device in allocated:
+            hip.hipFree(device)
+    moved_output = output.reshape(moved.shape).astype(np.float32)
+    return np.moveaxis(moved_output, -1, axis).reshape(original_shape)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -18557,6 +20127,7 @@ def _execute_apple_gpu_structured_compute_compiled(
 #: lane. All GPU dispatchers fall back to numpy when Metal is unavailable.
 _APPLE_GPU_LOSS_OPS = {
     "tessera.mse_loss": (0, None),
+    "tessera.loss.mse": (0, None),
     "tessera.mae_loss": (1, None),
     "tessera.huber_loss": (2, "delta"),
     "tessera.smooth_l1_loss": (3, "beta"),
@@ -20213,6 +21784,8 @@ def _execute_rocm_compiled_moe(artifact: RuntimeArtifact, args: Any) -> Any:
 
 
 _rocm_opt_hsaco_cache: dict[tuple[str, str], bytes] = {}
+_rocm_sgd_bwd_hsaco_cache: dict[tuple[str], bytes] = {}
+_rocm_momentum_bwd_hsaco_cache: dict[tuple[str, str], bytes] = {}
 _OPTIMIZER_KIND_STR = {0: "sgd", 1: "momentum", 2: "adam", 3: "adamw", 4: "lion", 5: "nesterov"}
 
 
@@ -20315,6 +21888,152 @@ def _execute_rocm_compiled_optimizer(artifact: RuntimeArtifact, args: Any) -> An
     values = _bind_launch_args(args, arg_names)
     p, g, m, v = _optimizer_bind(ops[0], values)
     return _optimizer_compute(op_name, p, g, m, v, ops[0].get("kwargs") or {}, _rocm_optimizer_kernel, np)
+
+
+def _execute_rocm_compiled_sgd_backward(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """One compiler-generated gfx1151 launch for SGD's two input gradients."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    if len(ops) != 1 or str(ops[0].get("op_name", "")) != "tessera.sgd":
+        raise ValueError("rocm_sgd_bwd_compiled requires one tessera.sgd op")
+    values = _bind_launch_args(args, arg_names)
+    dy_name = str(metadata.get("out_cotangent", "dy"))
+    dy = np.ascontiguousarray(_as_numpy(values[dy_name]), np.float32)
+    lr = float((ops[0].get("kwargs") or {}).get("lr", 0.0))
+    n = int(dy.size)
+    chip = _rocm_chip()
+    directive = (
+        'module {\n  "tessera_rocm.optimizer"() {name = "sgd_bwd", '
+        'kind = "sgd", backward = true} : () -> ()\n}\n'
+    )
+    hsaco = _build_rocm_elementwise_hsaco(
+        "generate-rocm-optimizer-kernel", directive,
+        _rocm_sgd_bwd_hsaco_cache, (chip,),
+    )
+    hip = _load_hip_for_launch()
+    if hip is None or hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("ROCm SGD backward runtime unavailable")
+    _, function = _rocm_loss_cached_function(
+        hip, hsaco, b"sgd_bwd", ("sgd_backward", chip))
+    dparam = np.empty_like(dy)
+    dgrad = np.empty_like(dy)
+    d_dy = _rocm_dev_in(hip, dy.reshape(-1), 4 * n)
+    d_dp = _rocm_dev_in(hip, dparam.reshape(-1), 4 * n)
+    d_dg = _rocm_dev_in(hip, dgrad.reshape(-1), 4 * n)
+
+    def memref(dev):
+        return [
+            ctypes.c_void_p(dev.value), ctypes.c_void_p(dev.value),
+            ctypes.c_int64(0), ctypes.c_int64(n), ctypes.c_int64(1),
+        ]
+
+    launch_args: list[Any] = []
+    for dev in (d_dy, d_dp, d_dg):
+        launch_args += memref(dev)
+    launch_args += [ctypes.c_int64(n), ctypes.c_float(lr)]
+    packed = (ctypes.c_void_p * len(launch_args))()
+    for index, value in enumerate(launch_args):
+        packed[index] = ctypes.cast(ctypes.byref(value), ctypes.c_void_p)
+    grid = (n + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+    try:
+        rc = hip.hipModuleLaunchKernel(
+            function, grid, 1, 1, _GRID_BLOCKDIM, 1, 1,
+            0, None, packed, None,
+        )
+        if rc != 0:
+            raise RuntimeError(f"ROCm SGD backward launch failed rc={rc}")
+        hip.hipDeviceSynchronize()
+        hip.hipMemcpy(
+            dparam.ctypes.data_as(ctypes.c_void_p), d_dp, 4 * n, 2)
+        hip.hipMemcpy(
+            dgrad.ctypes.data_as(ctypes.c_void_p), d_dg, 4 * n, 2)
+    finally:
+        for dev in (d_dy, d_dp, d_dg):
+            hip.hipFree(dev)
+    return dparam, dgrad
+
+
+def _execute_rocm_compiled_momentum_backward(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """One compiler-generated gfx1151 Momentum/Nesterov VJP launch."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if op_name not in {"tessera.momentum", "tessera.nesterov"}:
+        raise ValueError("ROCm momentum backward requires momentum or nesterov")
+    values = _bind_launch_args(args, names)
+    cotangent_names = list(
+        metadata.get("out_cotangents") or ["dparam_out", "dvelocity_out"])
+    dp = np.ascontiguousarray(
+        _as_numpy(values[cotangent_names[0]]), np.float32)
+    dv = np.ascontiguousarray(
+        _as_numpy(values[cotangent_names[1]]), np.float32)
+    if dp.shape != dv.shape:
+        raise ValueError("momentum output cotangents must have matching shapes")
+    n = int(dp.size)
+    kind = "nesterov" if op_name.endswith("nesterov") else "momentum"
+    kwargs = ops[0].get("kwargs") or {}
+    lr = float(kwargs.get("lr", 0.0))
+    momentum = float(kwargs.get("momentum", 0.9))
+    chip = _rocm_chip()
+    directive = (
+        'module {\n  "tessera_rocm.optimizer"() {name = "momentum_bwd", '
+        f'kind = "{kind}", backward = true}} : () -> ()\n}}\n'
+    )
+    hsaco = _build_rocm_elementwise_hsaco(
+        "generate-rocm-optimizer-kernel", directive,
+        _rocm_momentum_bwd_hsaco_cache, (chip, kind),
+    )
+    hip = _load_hip_for_launch()
+    if hip is None or hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable(
+            "ROCm momentum backward runtime unavailable")
+    _, function = _rocm_loss_cached_function(
+        hip, hsaco, b"momentum_bwd", ("momentum_backward", chip, kind))
+    outputs = [np.empty_like(dp) for _ in range(3)]
+    devices = [
+        _rocm_dev_in(hip, host.reshape(-1), 4 * n)
+        for host in (dp, dv, *outputs)
+    ]
+
+    def memref(dev):
+        return [
+            ctypes.c_void_p(dev.value), ctypes.c_void_p(dev.value),
+            ctypes.c_int64(0), ctypes.c_int64(n), ctypes.c_int64(1),
+        ]
+
+    launch_args: list[Any] = []
+    for dev in devices:
+        launch_args += memref(dev)
+    launch_args += [
+        ctypes.c_int64(n), ctypes.c_float(lr), ctypes.c_float(momentum)]
+    packed = (ctypes.c_void_p * len(launch_args))()
+    for index, value in enumerate(launch_args):
+        packed[index] = ctypes.cast(ctypes.byref(value), ctypes.c_void_p)
+    try:
+        rc = hip.hipModuleLaunchKernel(
+            function, (n + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM, 1, 1,
+            _GRID_BLOCKDIM, 1, 1, 0, None, packed, None)
+        if rc != 0:
+            raise RuntimeError(
+                f"ROCm momentum backward launch failed rc={rc}")
+        hip.hipDeviceSynchronize()
+        for host, device in zip(outputs, devices[2:]):
+            hip.hipMemcpy(
+                host.ctypes.data_as(ctypes.c_void_p), device, 4 * n, 2)
+    finally:
+        for device in devices:
+            hip.hipFree(device)
+    return tuple(outputs)
 
 
 def _execute_rocm_compiled_lamb(artifact: RuntimeArtifact, args: Any) -> Any:
@@ -21736,6 +23455,9 @@ def _executor_table():
         "x86_sparse_compiled": _execute_x86_compiled_sparse,
         "x86_moe_compiled": _execute_x86_compiled_moe,
         "x86_optimizer_compiled": _execute_x86_compiled_optimizer,
+        "x86_sgd_bwd_compiled": _execute_x86_compiled_sgd_backward,
+        "x86_momentum_bwd_compiled":
+            _execute_x86_compiled_momentum_backward,
         "x86_complex_compiled": _execute_x86_compiled_complex,
         "x86_conformal_compiled": _execute_x86_compiled_conformal,
         "x86_rng_compiled": _execute_x86_compiled_rng,
@@ -21754,8 +23476,18 @@ def _executor_table():
         "x86_lamb_compiled": _execute_x86_compiled_lamb,
         "x86_muon_compiled": _execute_x86_compiled_muon,
         "x86_selective_ssm_compiled": _execute_x86_compiled_state_space,
+        "x86_regression_loss_bwd_compiled":
+            _execute_x86_compiled_regression_loss_backward,
+        "x86_training_loss_sgd_compiled":
+            _execute_x86_compiled_training_loss_sgd,
+        "x86_training_loss_adamw_compiled":
+            _execute_x86_compiled_training_loss_adamw,
         "x86_linalg_compiled": _execute_x86_compiled_linalg,
         "x86_binary_loss_compiled": _execute_x86_compiled_binary_loss,
+        "x86_binary_loss_bwd_compiled":
+            _execute_x86_compiled_binary_loss_backward,
+        "x86_class_loss_bwd_compiled":
+            _execute_x86_compiled_class_loss_backward,
         "x86_rl_loss_compiled": _execute_x86_compiled_rl_loss,
         "x86_class_loss_compiled": _execute_x86_compiled_class_loss,
         "x86_metric_loss_compiled": _execute_x86_compiled_metric_loss,
@@ -21780,7 +23512,18 @@ def _executor_table():
         "x86_composite_helper_compiled": _execute_x86_composite_helper_compiled,
         "rocm_silu_mul_compiled": _execute_rocm_compiled_silu_mul,
         "rocm_loss_compiled": _execute_rocm_compiled_pointwise_loss,
+        "rocm_mse_bwd_compiled": _execute_rocm_compiled_mse_backward,
+        "rocm_regression_loss_bwd_compiled":
+            _execute_rocm_compiled_regression_loss_backward,
+        "rocm_training_loss_sgd_compiled":
+            _execute_rocm_compiled_training_loss_sgd,
+        "rocm_training_loss_adamw_compiled":
+            _execute_rocm_compiled_training_loss_adamw,
         "rocm_binary_loss_compiled": _execute_rocm_compiled_binary_loss,
+        "rocm_binary_loss_bwd_compiled":
+            _execute_rocm_compiled_binary_loss_backward,
+        "rocm_class_loss_bwd_compiled":
+            _execute_rocm_compiled_class_loss_backward,
         "rocm_rl_loss_compiled": _execute_rocm_compiled_rl_loss,
         "rocm_class_loss_compiled": _execute_rocm_compiled_class_loss,
         "rocm_metric_loss_compiled": _execute_rocm_compiled_metric_loss,
@@ -21803,6 +23546,9 @@ def _executor_table():
         "rocm_moe_compiled": _execute_rocm_compiled_moe,
         "rocm_moe_transport_compiled": _execute_rocm_moe_transport,
         "rocm_optimizer_compiled": _execute_rocm_compiled_optimizer,
+        "rocm_sgd_bwd_compiled": _execute_rocm_compiled_sgd_backward,
+        "rocm_momentum_bwd_compiled":
+            _execute_rocm_compiled_momentum_backward,
         "rocm_complex_compiled": _execute_rocm_compiled_complex,
         "rocm_conformal_compiled": _execute_rocm_compiled_conformal,
         "rocm_rng_compiled": _execute_rocm_compiled_rng,
@@ -21868,7 +23614,21 @@ def _first_failing_gate_for_metadata(metadata: dict, target: str):
         if isinstance(head, dict):
             raw = head.get("op_name") or head.get("name")
             if isinstance(raw, str) and raw:
-                op_name = raw.removeprefix("tessera.")
+                # Runtime artifacts may carry either the public registry name
+                # (``mae_loss``) or its ODS Graph spelling
+                # (``tessera.loss.mae``).  Pipeline gates are keyed by the
+                # public name, so resolve through the canonical op catalog
+                # instead of mechanically stripping ``tessera.``.
+                try:
+                    from .compiler.op_catalog import get_op_spec
+                    spec = get_op_spec(raw)
+                except Exception:  # noqa: BLE001 — audit lookup stays optional
+                    spec = None
+                op_name = (
+                    spec.public_name
+                    if spec is not None
+                    else raw.removeprefix("tessera.")
+                )
     try:
         return _ffg(target, op_name)
     except Exception:

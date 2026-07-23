@@ -1,0 +1,53 @@
+{
+  "device": "gfx1151",
+  "dynamic_rows": [
+    {
+      "active_blocks_per_cu": 4,
+      "arena_bytes_requested": 16384,
+      "execution_verified": true,
+      "hsaco_bytes": 3736,
+      "launch_shared_bytes": 16384
+    },
+    {
+      "active_blocks_per_cu": 2,
+      "arena_bytes_requested": 32768,
+      "execution_verified": true,
+      "hsaco_bytes": 3736,
+      "launch_shared_bytes": 32768
+    }
+  ],
+  "evidence": "exact_device_hip_driver",
+  "occupancy_effect": {
+    "active_block_ratio": 2.0,
+    "active_blocks_per_cu_after": 4,
+    "active_blocks_per_cu_before": 2
+  },
+  "planner_case": {
+    "buffer_bytes": 16384,
+    "buffers": 2,
+    "bytes_after_reuse": 16384,
+    "bytes_before_reuse": 32768,
+    "peak_reduction_ratio": 2.0
+  },
+  "rows": [
+    {
+      "active_blocks_per_cu": 4,
+      "arena_bytes_requested": 16384,
+      "block_threads": 256,
+      "hsaco_bytes": 3736,
+      "lds_bytes_driver": 16384,
+      "registers_per_thread": 2,
+      "resident_wave32_workgroups_per_cu": 32
+    },
+    {
+      "active_blocks_per_cu": 2,
+      "arena_bytes_requested": 32768,
+      "block_threads": 256,
+      "hsaco_bytes": 3736,
+      "lds_bytes_driver": 32768,
+      "registers_per_thread": 2,
+      "resident_wave32_workgroups_per_cu": 16
+    }
+  ],
+  "schema": "tessera.rocm.lds-arena-occupancy.v1"
+}

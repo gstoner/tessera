@@ -1535,9 +1535,10 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "of the fused SwiGLU gate-multiply. Executes via "
                  "runtime.launch() (rocm_silu_mul_compiled).",
     },
-    # S11 pointwise regression losses — per-element loss kernel
-    # (generate-rocm-pointwise-loss-kernel) + host none/mean/sum reduction. The
-    # ROCm mirror of the x86_loss lane. Executes via rocm_loss_compiled.
+    # S11 pointwise regression losses — per-element loss kernel plus a
+    # device-resident generated reduction for scalar sum/mean. The intermediate
+    # allocation is retained across both launches; `none` copies the tensor.
+    # The ROCm mirror of the x86_loss lane. Executes via rocm_loss_compiled.
     **{op: {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("elementwise",),
@@ -1547,6 +1548,22 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "(rocm_loss_compiled).",
     } for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss",
                  "log_cosh_loss")},
+    "training.loss_sgd": {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("elementwise", "training_fusion"),
+        "notes": "Compiler-generated one-launch regression-loss VJP to SGD "
+                 "kernel; prediction gradient remains in-register and only "
+                 "updated parameters plus target gradients are written. "
+                 "Runtime N/lr/mean scale; shape-independent gfx1151 HSACO.",
+    },
+    "training.loss_adamw": {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("elementwise", "training_fusion"),
+        "notes": "Compiler-generated one-launch loss-VJP to AdamW kernel; "
+                 "parameter and both moment states update without a prediction "
+                 "gradient allocation. Runtime N/hyperparameters/mean scale; "
+                 "shape-independent gfx1151 HSACO.",
+    },
     # S11 binary-cross-entropy losses (generate-rocm-binary-loss-kernel) — ROCm
     # mirror of x86_binary_loss. Executes via rocm_binary_loss_compiled.
     **{op: {
@@ -2503,6 +2520,10 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     **{(op, "x86"): "tests/unit/test_x86_loss_compiled.py"
        for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss",
                   "log_cosh_loss")},
+    ("training.loss_sgd", "x86"):
+        "tests/unit/test_training_loss_sgd_compiled.py",
+    ("training.loss_adamw", "x86"):
+        "tests/unit/test_training_loss_adamw_compiled.py",
     **{(op, "x86"): "tests/unit/test_x86_binary_loss_compiled.py"
        for op in ("binary_cross_entropy_loss", "asymmetric_bce")},
     **{(op, "x86"): "tests/unit/test_x86_rl_loss_compiled.py"
@@ -2599,6 +2620,10 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     **{(op, "rocm"): "tests/unit/test_rocm_loss_compiled.py"
        for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss",
                   "log_cosh_loss")},
+    ("training.loss_sgd", "rocm"):
+        "tests/unit/test_training_loss_sgd_compiled.py",
+    ("training.loss_adamw", "rocm"):
+        "tests/unit/test_training_loss_adamw_compiled.py",
     **{(op, "rocm"): "tests/unit/test_rocm_binary_loss_compiled.py"
        for op in ("binary_cross_entropy_loss", "asymmetric_bce")},
     **{(op, "rocm"): "tests/unit/test_rocm_rl_loss_compiled.py"
@@ -3513,6 +3538,22 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "kernel; x86_loss_compiled lane; f32, matches numpy 2e-5)",
     } for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss",
                  "log_cosh_loss")},
+    "training.loss_sgd": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "feature_flags": ("avx512", "training_fusion"),
+        "notes": "One AVX-512 loop fuses regression-loss VJP into SGD; "
+                 "prediction gradient is not materialized and target gradient "
+                 "remains observable.",
+    },
+    "training.loss_adamw": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "feature_flags": ("avx512", "training_fusion"),
+        "notes": "One AVX-512 loop fuses loss VJP into the complete AdamW "
+                 "parameter/first-moment/second-moment state transition; "
+                 "prediction gradient is not materialized.",
+    },
     # Binary-cross-entropy losses — per-element on the AVX-512 binary-loss kernel
     # (stable softplus) + reduce kernel (x86_binary_loss_compiled).
     **{op: {

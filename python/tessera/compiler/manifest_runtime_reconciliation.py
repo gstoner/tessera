@@ -168,8 +168,14 @@ def runtime_dispatch_map() -> dict[str, set[str]]:
 
 
 def _manifest_status(op: str, target: str) -> str | None:
+    # Runtime gates use canonical Graph spellings (`loss.mse`), while the
+    # backend manifest is keyed by public API primitive (`mse_loss`). Resolve
+    # through the canonical op catalog before joining the two registries.
+    from .op_catalog import GRAPH_OP_TO_SPEC
+    spec = GRAPH_OP_TO_SPEC.get(f"tessera.{op}")
+    manifest_op = spec.public_name if spec is not None else op
     try:
-        rows = backend_manifest.manifest_for(op)
+        rows = backend_manifest.manifest_for(manifest_op)
     except Exception:
         return None
     for e in rows:

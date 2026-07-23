@@ -226,6 +226,215 @@ llvm::SmallVector<mlir::Value> MulOp::buildAdjoint(
   return {dLhs.getResult(), dRhs.getResult()};
 }
 
+// MSE keeps reduction semantics in a dedicated compiler carrier so dynamic
+// element counts remain runtime values instead of becoming dense constants.
+// d(pred) = 2 * (pred - target) * dy / N for mean reduction; d(target) is the
+// exact negative. The shared Linalg lowering owns N and scalar broadcasting.
+llvm::SmallVector<mlir::Value> MSELossOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  if (outputCotangents.size() != 1 || !outputCotangents[0])
+    return {mlir::Value(), mlir::Value()};
+  mlir::OperationState state(getLoc(), "tessera.loss.mse_backward");
+  state.addOperands({getPrediction(), getTarget(), outputCotangents[0]});
+  state.addTypes({getPrediction().getType(), getTarget().getType()});
+  state.addAttribute("reduction", getReductionAttr());
+  mlir::Operation *backward = builder.create(state);
+  return {backward->getResult(0), backward->getResult(1)};
+}
+
+llvm::SmallVector<mlir::Value> BinaryCrossEntropyLossOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  if (outputCotangents.size() != 1 || !outputCotangents[0])
+    return {mlir::Value(), mlir::Value()};
+  mlir::OperationState state(
+      getLoc(), "tessera.loss.binary_cross_entropy_backward");
+  state.addOperands({getLogits(), getTarget(), outputCotangents[0]});
+  state.addTypes({getLogits().getType(), getTarget().getType()});
+  state.addAttribute("reduction", getReductionAttr());
+  mlir::Operation *backward = builder.create(state);
+  return {backward->getResult(0), backward->getResult(1)};
+}
+
+llvm::SmallVector<mlir::Value> CrossEntropyLossOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  if (outputCotangents.size() != 1 || !outputCotangents[0])
+    return {mlir::Value(), mlir::Value()};
+  mlir::OperationState state(getLoc(), "tessera.loss.cross_entropy_backward");
+  state.addOperands({getLogits(), getTarget(), outputCotangents[0]});
+  state.addTypes(getLogits().getType());
+  state.addAttribute("axis", getAxisAttr());
+  state.addAttribute("ignore_index", getIgnoreIndexAttr());
+  state.addAttribute("label_smoothing", getLabelSmoothingAttr());
+  state.addAttribute("reduction", getReductionAttr());
+  mlir::Operation *backward = builder.create(state);
+  return {backward->getResult(0), mlir::Value()};
+}
+
+static llvm::SmallVector<mlir::Value> buildDistributionLossAdjoint(
+    mlir::Operation *op, mlir::OpBuilder &builder,
+    mlir::ValueRange outputCotangents, llvm::StringRef kind,
+    mlir::IntegerAttr axis, mlir::FloatAttr epsilon,
+    mlir::StringAttr reduction) {
+  if (outputCotangents.size() != 1 || !outputCotangents[0])
+    return {mlir::Value(), mlir::Value()};
+  mlir::OperationState state(op->getLoc(),
+                             "tessera.loss.distribution_backward");
+  state.addOperands(
+      {op->getOperand(0), op->getOperand(1), outputCotangents[0]});
+  state.addTypes({op->getOperand(0).getType(), op->getOperand(1).getType()});
+  state.addAttribute("kind", builder.getStringAttr(kind));
+  state.addAttribute("axis", axis);
+  state.addAttribute("epsilon", epsilon);
+  state.addAttribute("reduction", reduction);
+  mlir::Operation *backward = builder.create(state);
+  return {backward->getResult(0), backward->getResult(1)};
+}
+
+llvm::SmallVector<mlir::Value> KLDivergenceLossOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  return buildDistributionLossAdjoint(
+      getOperation(), builder, outputCotangents, "kl", getAxisAttr(),
+      getEpsilonAttr(), getReductionAttr());
+}
+
+llvm::SmallVector<mlir::Value> JSDivergenceLossOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  return buildDistributionLossAdjoint(
+      getOperation(), builder, outputCotangents, "js", getAxisAttr(),
+      getEpsilonAttr(), getReductionAttr());
+}
+
+static llvm::SmallVector<mlir::Value> buildRegressionLossAdjoint(
+    mlir::Operation *op, mlir::OpBuilder &builder,
+    mlir::ValueRange outputCotangents, llvm::StringRef kind,
+    mlir::FloatAttr parameter, mlir::StringAttr reduction) {
+  if (outputCotangents.size() != 1 || !outputCotangents[0])
+    return {mlir::Value(), mlir::Value()};
+  mlir::OperationState state(op->getLoc(), "tessera.loss.regression_backward");
+  state.addOperands(
+      {op->getOperand(0), op->getOperand(1), outputCotangents[0]});
+  state.addTypes({op->getOperand(0).getType(), op->getOperand(1).getType()});
+  state.addAttribute("kind", builder.getStringAttr(kind));
+  state.addAttribute("parameter",
+                     parameter ? parameter : builder.getF64FloatAttr(1.0));
+  state.addAttribute("reduction", reduction);
+  mlir::Operation *backward = builder.create(state);
+  return {backward->getResult(0), backward->getResult(1)};
+}
+
+llvm::SmallVector<mlir::Value> MAELossOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  return buildRegressionLossAdjoint(getOperation(), builder, outputCotangents,
+                                    "mae", mlir::FloatAttr(),
+                                    getReductionAttr());
+}
+
+llvm::SmallVector<mlir::Value> HuberLossOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  return buildRegressionLossAdjoint(getOperation(), builder, outputCotangents,
+                                    "huber", getDeltaAttr(),
+                                    getReductionAttr());
+}
+
+llvm::SmallVector<mlir::Value> SmoothL1LossOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  return buildRegressionLossAdjoint(getOperation(), builder, outputCotangents,
+                                    "smooth_l1", getBetaAttr(),
+                                    getReductionAttr());
+}
+
+llvm::SmallVector<mlir::Value> SGDOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  if (outputCotangents.size() != 1 || !outputCotangents[0])
+    return {mlir::Value(), mlir::Value()};
+  mlir::OperationState state(getLoc(), "tessera.sgd_backward");
+  state.addOperands(outputCotangents[0]);
+  state.addTypes({getParam().getType(), getGrad().getType()});
+  state.addAttribute("lr", getLrAttr());
+  mlir::Operation *backward = builder.create(state);
+  return {backward->getResult(0), backward->getResult(1)};
+}
+
+static llvm::SmallVector<mlir::Value> buildMomentumAdjoint(
+    mlir::Operation *op, mlir::OpBuilder &builder,
+    mlir::ValueRange outputCotangents, mlir::FloatAttr lr,
+    mlir::FloatAttr momentum, bool nesterov) {
+  if (outputCotangents.size() != 2 || !outputCotangents[0] ||
+      !outputCotangents[1])
+    return {mlir::Value(), mlir::Value(), mlir::Value()};
+  mlir::OperationState state(op->getLoc(), "tessera.momentum_backward");
+  state.addOperands({outputCotangents[0], outputCotangents[1]});
+  state.addTypes(
+      {op->getOperand(0).getType(), op->getOperand(1).getType(),
+       op->getOperand(2).getType()});
+  state.addAttribute("lr", lr);
+  state.addAttribute("momentum", momentum);
+  state.addAttribute("nesterov", builder.getBoolAttr(nesterov));
+  mlir::Operation *backward = builder.create(state);
+  return {backward->getResult(0), backward->getResult(1),
+          backward->getResult(2)};
+}
+
+llvm::SmallVector<mlir::Value> MomentumOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  return buildMomentumAdjoint(getOperation(), builder, outputCotangents,
+                              getLrAttr(), getMomentumAttr(), false);
+}
+
+llvm::SmallVector<mlir::Value> NesterovOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  return buildMomentumAdjoint(getOperation(), builder, outputCotangents,
+                              getLrAttr(), getMomentumAttr(), true);
+}
+
+static llvm::SmallVector<mlir::Value> buildAdamAdjoint(
+    mlir::Operation *op, mlir::OpBuilder &builder,
+    mlir::ValueRange outputCotangents, bool adamw) {
+  if (outputCotangents.size() != 3 || !outputCotangents[0] ||
+      !outputCotangents[1] || !outputCotangents[2])
+    return {mlir::Value(), mlir::Value(), mlir::Value(), mlir::Value()};
+  auto f64 = [&](llvm::StringRef name, double fallback) -> mlir::FloatAttr {
+    if (auto attr = op->getAttrOfType<mlir::FloatAttr>(name))
+      return attr;
+    return builder.getF64FloatAttr(fallback);
+  };
+  auto i64 = [&](llvm::StringRef name, int64_t fallback) -> mlir::IntegerAttr {
+    if (auto attr = op->getAttrOfType<mlir::IntegerAttr>(name))
+      return attr;
+    return builder.getI64IntegerAttr(fallback);
+  };
+  mlir::OperationState state(op->getLoc(), "tessera.adam_backward");
+  state.addOperands(
+      {op->getOperand(0), op->getOperand(1), op->getOperand(2),
+       op->getOperand(3), outputCotangents[0], outputCotangents[1],
+       outputCotangents[2]});
+  state.addTypes(
+      {op->getOperand(0).getType(), op->getOperand(1).getType(),
+       op->getOperand(2).getType(), op->getOperand(3).getType()});
+  state.addAttribute("lr", f64("lr", 1.0e-3));
+  state.addAttribute("beta1", f64("beta1", 0.9));
+  state.addAttribute("beta2", f64("beta2", 0.999));
+  state.addAttribute("eps", f64("eps", 1.0e-8));
+  state.addAttribute("weight_decay", f64("weight_decay", 0.0));
+  state.addAttribute("step", i64("step", 1));
+  state.addAttribute("adamw", builder.getBoolAttr(adamw));
+  mlir::Operation *backward = builder.create(state);
+  return {backward->getResult(0), backward->getResult(1),
+          backward->getResult(2), backward->getResult(3)};
+}
+
+llvm::SmallVector<mlir::Value> AdamOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  return buildAdamAdjoint(
+      getOperation(), builder, outputCotangents, false);
+}
+
+llvm::SmallVector<mlir::Value> AdamWOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  return buildAdamAdjoint(
+      getOperation(), builder, outputCotangents, true);
+}
+
 // Broadcast is inverted by summing every expanded dimension. Reduce in
 // descending axis order so each remaining axis keeps its original index, then
 // reshape to restore the input's explicit singleton dimensions. Leading axes
@@ -422,10 +631,10 @@ llvm::SmallVector<mlir::Value> SoftmaxOp::buildAdjoint(
 
   auto loc = getLoc();
   mlir::Value dy = outputCotangents[0];
-  mlir::Value s = builder
-                      .create<SoftmaxOp>(loc, inTy, getX(), getAxisAttr(),
-                                         getNumericPolicyAttr())
-                      .getY();
+  // Use the saved forward probabilities in the normal latency-oriented path.
+  // The production rematerialization pass can choose to recompute this op when
+  // a function memory budget makes the activation too expensive to retain.
+  mlir::Value s = getY();
   mlir::Value weighted =
       builder.create<MulOp>(loc, inTy, dy, s).getResult();
   llvm::SmallVector<int64_t> reducedShape(inTy.getShape());
@@ -613,7 +822,9 @@ llvm::SmallVector<mlir::Value> TanhOp::buildAdjoint(
   mlir::Value dy = outputCotangents[0];
   if (!isStaticShaped(ty))
     return placeholderAdjoint(builder, loc, ty, "tanh", dy, getX());
-  mlir::Value t = builder.create<TanhOp>(loc, ty, getX()).getResult();
+  // Save the forward activation on the latency path; function-budgeted
+  // rematerialization may replace backward uses with recomputation.
+  mlir::Value t = getResult();
   mlir::Value t2 = builder.create<MulOp>(loc, ty, t, t).getResult();
   mlir::Value one = splatConst(builder, loc, ty, 1.0);
   mlir::Value d = builder.create<SubOp>(loc, ty, one, t2).getResult();
@@ -631,7 +842,9 @@ llvm::SmallVector<mlir::Value> SigmoidOp::buildAdjoint(
   mlir::Value dy = outputCotangents[0];
   if (!isStaticShaped(ty))
     return placeholderAdjoint(builder, loc, ty, "sigmoid", dy, getX());
-  mlir::Value s = builder.create<SigmoidOp>(loc, ty, getX()).getResult();
+  // Save the forward activation on the latency path; function-budgeted
+  // rematerialization may replace backward uses with recomputation.
+  mlir::Value s = getResult();
   mlir::Value one = splatConst(builder, loc, ty, 1.0);
   mlir::Value oneMinusS = builder.create<SubOp>(loc, ty, one, s).getResult();
   mlir::Value sPrime = builder.create<MulOp>(loc, ty, s, oneMinusS).getResult();

@@ -1263,3 +1263,61 @@ rematerialization also runs in the shared production post-autodiff pipeline.
 Exact CUDA/PTX shared-allocation assembly, occupancy, backward reduction
 launch, and performance evidence remain follow-up required; no device or
 selector promotion is claimed.
+
+Cross-backend sync `CORE-COMPILER-TRAINING-SPINE-2026-07-23` registers
+`tessera.loss.mse` and its paired backward carrier as verifier-checked shared
+Graph IR, with dynamic none/sum/mean Linalg lowering and FP32 compute for
+FP16/BF16 storage. Shape-preserving MSE participates in shared layout
+propagation, and post-autodiff rematerialization now distinguishes saved
+forward activations from backward temporaries. NVIDIA parity is host-validated
+at the shared IR boundary. The gfx1151 HIP composition/module cache and
+AVX-512 execution do not transfer to CUDA/PTX; an NVIDIA-owned compiled MSE
+backward launch, tensor-core policy, and exact-device evidence remain
+follow-up required.
+
+Cross-backend sync `CORE-COMPILER-DEEPENING-2026-07-23` adds shared
+runtime-sized address-space-3 arena planning and a benchmark-fed
+rematerialization cost contract. NVIDIA retains opt-in Graph layout assignment
+through its existing materializer. The new MSE backward launch and numerical
+proof are ROCm gfx1151-only; CUDA/PTX still needs an architecture-owned VJP,
+dynamic shared-allocation assembly/occupancy proof, and selector evidence.
+
+Cross-backend sync `CORE-COMPILER-TRAINING-BREADTH-2026-07-23` adds shared
+Graph-native MAE, Huber, SmoothL1, and SGD adjoints with dynamic Linalg and CPU
+oracle proof. NVIDIA is **follow-up required** for architecture-owned CUDA/PTX
+backward materialization and exact-device evidence. The gfx1151 generated HIP
+kernel, AVX-512 C ABI, boundary timing, caches, and selector state do not
+transfer.
+
+Cross-backend sync `CORE-COMPILER-TRAINING-SERIES-2026-07-23` adds shared
+Graph-native stable BCE-with-logits, class-index/label-smoothed cross entropy,
+KL/JS, explicit Momentum/Nesterov state, and explicit Adam/AdamW moment-state
+adjoints. Dynamic shared Linalg contracts are live for BCE, Momentum/Nesterov,
+and Adam/AdamW. NVIDIA is **follow-up required** for CUDA/PTX backward
+materializers and exact-device evidence; the gfx1151 and AVX-512 loss and
+optimizer ABIs do not transfer. No NVIDIA selector or support claim changes.
+
+Cross-backend sync `CORE-COMPILER-TRAINING-FUSION-2026-07-23` adds shared
+single-use loss-backward to SGD/AdamW fusion carriers and one-loop dynamic
+Linalg lowering for MSE, MAE, Huber, SmoothL1, and BCE-with-logits. NVIDIA
+parity is validated only at the shared Graph/Linalg contract. NVIDIA remains
+**follow-up required** for an architecture-owned CUDA/PTX fused training
+materializer and exact-device evidence; gfx1151 HIP and AVX-512 ABIs, cache
+identities, timings, and selector decisions do not transfer.
+
+Cross-backend sync `CORE-COMPILER-MEMORY-LAYOUT-CLOSEOUT-2026-07-23` replaces
+the shared static address-space-3 alloca with a workgroup global and supports
+dominance-scoped dynamic arena cohorts. NVPTX is expected to lower this form to
+shared memory, but exact CUDA assembly, resource, occupancy, and performance
+evidence remain follow-up required and are not inferred from gfx1151. The
+measured rematerialization corpus has gfx1151 and AVX-512 rows only; no NVIDIA
+selector or default policy changes.
+
+Cross-backend sync `CORE-COMPILER-HONEST-BOUNDARIES-2026-07-23` broadens the
+shared measured-rematerialization schema to exact consumer chains and
+64/128/192 matmul shapes with ReLU/GELU/SiLU. NVIDIA remains **follow-up
+required** for CUDA measurements and policy selection. ROCm dynamic
+normalization epilogues, HIP launch-sized LDS materialization, and packed IU4
+WMMA are architecture-owned and transfer no PTX ABI, shared-memory allocation,
+packed consumer, performance, or selector claim. The existing NVIDIA
+architecture-owned layout consumer remains unchanged.

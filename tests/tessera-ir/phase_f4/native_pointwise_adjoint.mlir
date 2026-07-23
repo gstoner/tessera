@@ -4,9 +4,9 @@
 // emits their backward NATIVELY (their forward op + mul/sub + a constant) instead
 // of an opaque `tessera.custom_adjoint_call` placeholder that round-trips to the
 // Python VJP. A native backward is first-class compiler IR: the middle-end can
-// CSE / canonicalize / fuse it. The recomputed forward activation deliberately
-// duplicates the forward value — CSE then collapses it (the concrete W5 win: the
-// middle-end optimizing the backward graph, impossible through an opaque call).
+// CSE / canonicalize / fuse it. The latency path directly reuses the saved
+// forward activation; a function memory budget may instead rematerialize it
+// next to backward consumers.
 // Numerics match the numpy-tape VJP exactly (dy·(1−tanh²) / dy·s·(1−s)) — see
 // python/tessera/autodiff/vjp.py vjp_tanh / vjp_sigmoid.
 //
@@ -23,8 +23,7 @@ module {
   // NATIVE:         tessera.sub
   // NATIVE:         tessera.mul
   //
-  // Under CSE the recomputed tanh(x) collapses into the forward — exactly ONE
-  // tanh survives for the whole (forward + backward) graph.
+  // Exactly one tanh serves the whole forward + backward graph.
   // CSE-LABEL:   func.func @tanh_bwd
   // CSE:         tessera.tanh
   // CSE-NOT:     tessera.tanh

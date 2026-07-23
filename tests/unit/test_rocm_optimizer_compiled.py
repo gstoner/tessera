@@ -8,6 +8,7 @@ gfx1151. Skip-clean: tessera-opt not built / no GPU.
 
 from __future__ import annotations
 
+import os
 import numpy as np
 import pytest
 
@@ -134,7 +135,10 @@ def test_adam_and_lion():
 def test_optimizer_codegen_lowers(kind):
     import subprocess
     from pathlib import Path
-    opt = Path(__file__).resolve().parents[2] / "build/tools/tessera-opt/tessera-opt"
+    opt = Path(os.environ.get(
+        "TESSERA_OPT",
+        Path(__file__).resolve().parents[2] / "build/tools/tessera-opt/tessera-opt",
+    ))
     if not opt.is_file():
         pytest.skip("build tessera-opt")
     d = (f'module {{\n  "tessera_rocm.optimizer"() {{name = "o", kind = "{kind}"}} '
@@ -146,3 +150,34 @@ def test_optimizer_codegen_lowers(kind):
          "reconcile-unrealized-casts))"],
         input=d, capture_output=True, text=True)
     assert low.returncode == 0 and "llvm." in low.stdout
+
+
+def test_sgd_backward_codegen_lowers():
+    import subprocess
+    from pathlib import Path
+    opt = Path(os.environ.get(
+        "TESSERA_OPT",
+        Path(__file__).resolve().parents[2] / "build/tools/tessera-opt/tessera-opt",
+    ))
+    if not opt.is_file():
+        pytest.skip("build tessera-opt")
+    directive = (
+        'module {\n  "tessera_rocm.optimizer"() {name = "sgd_bwd", '
+        'kind = "sgd", backward = true} : () -> ()\n}\n'
+    )
+    generated = subprocess.run(
+        [str(opt), "-", "--generate-rocm-optimizer-kernel"],
+        input=directive, capture_output=True, text=True,
+    )
+    assert generated.returncode == 0, generated.stderr
+    assert "gpu.func @sgd_bwd" in generated.stdout
+    assert generated.stdout.count("memref.store") == 2
+    lowered = subprocess.run(
+        [str(opt), "-",
+         "--pass-pipeline=builtin.module(generate-rocm-optimizer-kernel,"
+         "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+         "reconcile-unrealized-casts))"],
+        input=directive, capture_output=True, text=True,
+    )
+    assert lowered.returncode == 0, lowered.stderr
+    assert "llvm." in lowered.stdout

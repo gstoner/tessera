@@ -36,9 +36,13 @@ def _artifact(rt, op_name, kwargs):
 
 _REF = {
     "tessera.mse_loss": (losses.mse_loss, {}),
+    "tessera.loss.mse": (losses.mse_loss, {}),
     "tessera.mae_loss": (losses.mae_loss, {}),
+    "tessera.loss.mae": (losses.mae_loss, {}),
     "tessera.huber_loss": (losses.huber_loss, {"delta": 1.0}),
+    "tessera.loss.huber": (losses.huber_loss, {"delta": 1.0}),
     "tessera.smooth_l1_loss": (losses.smooth_l1_loss, {"beta": 1.0}),
+    "tessera.loss.smooth_l1": (losses.smooth_l1_loss, {"beta": 1.0}),
     "tessera.log_cosh_loss": (losses.log_cosh_loss, {}),
 }
 
@@ -107,3 +111,61 @@ def test_loss_unknown_op_rejected():
     with pytest.raises(ValueError, match="x86_loss_compiled executor"):
         rt._execute_x86_compiled_loss(
             _artifact(rt, "tessera.softmax", {}), (a, a))
+
+
+@pytest.mark.parametrize("op_name,param_kw,param", [
+    ("tessera.loss.mse", None, 1.0),
+    ("tessera.loss.mae", None, 1.0),
+    ("tessera.loss.huber", "delta", 0.75),
+    ("tessera.loss.smooth_l1", "beta", 0.5),
+])
+@pytest.mark.parametrize("reduction", ["none", "sum", "mean"])
+def test_regression_backward_matches_reference(
+        op_name, param_kw, param, reduction):
+    rt = _x86_or_skip()
+    errors = np.asarray([
+        -2 * param, -param, -0.25 * param, 0.0, 0.25 * param,
+        param, 2 * param, -0.0, 0.1, -0.1, 0.3, -0.3,
+    ], np.float32).reshape(3, 4)
+    target = np.zeros((3, 4), dtype=np.float32)
+    prediction = target + errors
+    dy = (
+        np.linspace(0.5, 1.6, 12, dtype=np.float32).reshape(3, 4)
+        if reduction == "none" else np.asarray(1.25, np.float32))
+    kwargs = {
+        "reduction": reduction,
+        **({param_kw: param} if param_kw else {}),
+    }
+    artifact = rt.RuntimeArtifact(metadata={
+        "target": "x86",
+        "compiler_path": "x86_regression_loss_bwd_compiled",
+        "executable": True,
+        "execution_kind": "native_cpu",
+        "autodiff_phase": "backward",
+        "out_cotangent": "dy",
+        "arg_names": ["prediction", "target", "dy"],
+        "output_names": ["d_prediction", "d_target"],
+        "ops": [{
+            "op_name": op_name,
+            "result": "loss",
+            "operands": ["prediction", "target"],
+            "kwargs": kwargs,
+        }],
+    })
+    result = rt.launch(artifact, (prediction, target, dy))
+    assert result["ok"] is True, result.get("reason")
+    dp, dt = result["output"]
+    if op_name.endswith(".mse"):
+        local = 2.0 * errors
+    elif op_name.endswith(".mae"):
+        local = np.sign(errors)
+    elif op_name.endswith(".huber"):
+        local = np.where(
+            np.abs(errors) <= param, errors, param * np.sign(errors))
+    else:
+        local = np.where(
+            np.abs(errors) < param, errors / param, np.sign(errors))
+    scale = 1.0 / errors.size if reduction == "mean" else 1.0
+    expected = local * dy * scale
+    np.testing.assert_allclose(dp, expected, atol=2e-6, rtol=2e-6)
+    np.testing.assert_allclose(dt, -expected, atol=2e-6, rtol=2e-6)

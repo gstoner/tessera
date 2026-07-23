@@ -1345,3 +1345,60 @@ address-space-3 Tile arena pipeline change is not applicable to Metal, whose
 threadgroup allocation is architecture-owned; no MSL allocation, backward
 runtime, performance, selector, or exact-device claim changes. An Apple
 threadgroup-arena materializer remains follow-up required.
+
+Cross-backend sync `CORE-COMPILER-TRAINING-SPINE-2026-07-23` registers
+`tessera.loss.mse` and its paired backward carrier as verifier-checked shared
+Graph IR, with dynamic none/sum/mean Linalg lowering and FP32 compute for
+FP16/BF16 storage. Shape-preserving MSE participates in shared layout
+propagation, and post-autodiff rematerialization now distinguishes saved
+forward activations from backward temporaries. Apple parity is validated at
+the shared IR boundary only. The gfx1151 HIP composition, module cache,
+timings, and AVX-512 execution do not transfer to Metal/MPS; an Apple-owned
+compiled MSE backward launch and exact-device evidence remain follow-up
+required.
+
+Cross-backend sync `CORE-COMPILER-DEEPENING-2026-07-23` adds shared
+runtime-sized arena planning, cost-aware rematerialization metadata, and the
+x86-owned default Graph-layout bridge. The new MSE backward execution proof is
+ROCm gfx1151-only. Apple still requires its own compiled MSE VJP and
+threadgroup-arena materializer; no HIP schedule, address-space-3 allocation,
+x86 binding default, selector, or device claim transfers to Metal/MPS.
+
+Cross-backend sync `CORE-COMPILER-TRAINING-BREADTH-2026-07-23` adds shared
+Graph-native MAE, Huber, SmoothL1, and SGD adjoints with dynamic Linalg and CPU
+oracle proof. Apple is **follow-up required** for an architecture-owned
+Metal/MPS backward materializer and exact-device evidence. The gfx1151 HIP
+kernel, AVX-512 C ABI, module cache, timing, and selector state do not transfer.
+
+Cross-backend sync `CORE-COMPILER-TRAINING-SERIES-2026-07-23` adds shared
+Graph-native stable BCE-with-logits, class-index/label-smoothed cross entropy,
+KL/JS, explicit Momentum/Nesterov state, and explicit Adam/AdamW moment-state
+adjoints. Dynamic shared Linalg contracts are live for BCE, Momentum/Nesterov,
+and Adam/AdamW. Apple is **follow-up required** for Metal/MPS backward
+materializers and exact-device evidence; the gfx1151 and AVX-512 loss and
+optimizer ABIs do not transfer. No Apple selector or support claim changes.
+
+Cross-backend sync `CORE-COMPILER-TRAINING-FUSION-2026-07-23` adds shared
+single-use loss-backward to SGD/AdamW fusion carriers and one-loop dynamic
+Linalg lowering for MSE, MAE, Huber, SmoothL1, and BCE-with-logits. Apple parity
+is validated only at the shared Graph/Linalg contract. Apple remains
+**follow-up required** for an architecture-owned Metal/MPS fused training
+materializer and exact-device evidence; gfx1151 HIP and AVX-512 ABIs, cache
+identities, timings, and selector decisions do not transfer.
+
+Cross-backend sync `CORE-COMPILER-MEMORY-LAYOUT-CLOSEOUT-2026-07-23` replaces
+the shared static address-space-3 alloca with a workgroup global and supports
+dominance-scoped dynamic arena cohorts. This is not an Apple Metal allocation
+claim: Apple still needs its architecture-owned threadgroup materializer and
+exact-device evidence. The measured rematerialization corpus has gfx1151 and
+AVX-512 rows only; no cost, selector, layout-default, or occupancy result
+transfers to Apple.
+
+Cross-backend sync `CORE-COMPILER-HONEST-BOUNDARIES-2026-07-23` broadens the
+shared measured-rematerialization schema to exact consumer chains and
+64/128/192 matmul shapes with ReLU/GELU/SiLU. Apple remains **follow-up
+required** for Metal measurements and policy selection. ROCm dynamic
+normalization epilogues, HIP launch-sized LDS materialization, and packed IU4
+WMMA are architecture-owned and transfer no MSL threadgroup-allocation,
+packed consumer, performance, or selector claim. Apple's threadgroup arena
+and physical packed consumers remain architecture-owned follow-ups.

@@ -38,7 +38,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `MEMORY_MODEL_SPEC.md` | Normative | 2026-05-22 | 62 | ✓ |
 | `NATIVE_ARTIFACT_SPEC.md` | Normative | 2026-07-19 | 4 | ✓ |
 | `PRODUCTION_COMPILER_PLAN.md` | Ratified | 2026-06-05 | 48 | ✓ |
-| `PYTHON_API_SPEC.md` | Normative | 2026-07-14 | 9 | ✓ |
+| `PYTHON_API_SPEC.md` | Normative | 2026-07-23 | 0 | ✓ |
 | `RUNTIME_ABI_SPEC.md` | Normative | 2026-07-18 | 5 | ✓ |
 | `SHAPE_SYSTEM.md` | Normative | 2026-05-22 | 62 | ✓ |
 | `TARGET_IR_SPEC.md` | Normative | 2026-07-13 | 10 | ✓ |

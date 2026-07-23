@@ -113,6 +113,206 @@ void emitLossBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
   b.create<gpu::ReturnOp>(loc);
 }
 
+void emitLossBackwardBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f,
+                          Type storeTy, int64_t kind, double param,
+                          bool tensorCotangent, bool trainingSGD,
+                          bool trainingAdamW) {
+  Type f32 = b.getF32Type();
+  bool isF32 = storeTy.isF32();
+  b.setInsertionPointToStart(&f.getBody().front());
+  Value prediction = f.getArgument(0), target = f.getArgument(1),
+        cotangent = f.getArgument(2);
+  Value parameterBuffer, moment1Buffer, moment2Buffer, predictionGrad,
+      newParameter, newMoment1, newMoment2, targetGrad, n, scale,
+      learningRate, beta1, beta2, epsilon, weightDecay, correction1,
+      correction2;
+  if (trainingAdamW) {
+    parameterBuffer = f.getArgument(3);
+    moment1Buffer = f.getArgument(4);
+    moment2Buffer = f.getArgument(5);
+    newParameter = f.getArgument(6);
+    newMoment1 = f.getArgument(7);
+    newMoment2 = f.getArgument(8);
+    targetGrad = f.getArgument(9);
+    n = f.getArgument(10);
+    scale = f.getArgument(11);
+    learningRate = f.getArgument(12);
+    beta1 = f.getArgument(13);
+    beta2 = f.getArgument(14);
+    epsilon = f.getArgument(15);
+    weightDecay = f.getArgument(16);
+    correction1 = f.getArgument(17);
+    correction2 = f.getArgument(18);
+  } else if (trainingSGD) {
+    parameterBuffer = f.getArgument(3);
+    newParameter = f.getArgument(4);
+    targetGrad = f.getArgument(5);
+    n = f.getArgument(6);
+    scale = f.getArgument(7);
+    learningRate = f.getArgument(8);
+  } else {
+    predictionGrad = f.getArgument(3);
+    targetGrad = f.getArgument(4);
+    n = f.getArgument(5);
+    scale = f.getArgument(6);
+  }
+
+  Value bid = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
+  Value tid = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
+  Value block = b.create<arith::ConstantIndexOp>(loc, BD);
+  Value gid = b.create<arith::AddIOp>(
+      loc, b.create<arith::MulIOp>(loc, bid, block), tid);
+  Value inBounds =
+      b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt, gid, n);
+  auto ifOp = b.create<scf::IfOp>(loc, inBounds, /*withElse=*/false);
+  b.setInsertionPointToStart(ifOp.thenBlock());
+
+  auto loadF32 = [&](Value memref, Value index) {
+    Value raw = b.create<memref::LoadOp>(loc, memref, ValueRange{index});
+    return isF32 ? raw : b.create<arith::ExtFOp>(loc, f32, raw).getResult();
+  };
+  Value p = loadF32(prediction, gid);
+  Value t = loadF32(target, gid);
+  Value dyIndex = tensorCotangent
+                      ? gid
+                      : b.create<arith::ConstantIndexOp>(loc, 0).getResult();
+  Value dy = loadF32(cotangent, dyIndex);
+  Value error = b.create<arith::SubFOp>(loc, p, t);
+  auto cst = [&](double value) {
+    return b.create<arith::ConstantOp>(
+        loc, f32, b.getF32FloatAttr(value)).getResult();
+  };
+  Value zero = cst(0.0);
+  Value one = cst(1.0);
+  Value negativeOne = cst(-1.0);
+  Value positive = b.create<arith::CmpFOp>(
+      loc, arith::CmpFPredicate::OGT, error, zero);
+  Value negative = b.create<arith::CmpFOp>(
+      loc, arith::CmpFPredicate::OLT, error, zero);
+  Value sign = b.create<arith::SelectOp>(
+      loc, positive, one,
+      b.create<arith::SelectOp>(loc, negative, negativeOne, zero));
+  Value localGradient;
+  switch (kind) {
+  case 0:
+    localGradient = b.create<arith::MulFOp>(loc, error, cst(2.0));
+    break;
+  case 1:
+    localGradient = sign;
+    break;
+  case 2: {
+    Value transition = cst(param);
+    Value absError = b.create<math::AbsFOp>(loc, error);
+    Value inside = b.create<arith::CmpFOp>(
+        loc, arith::CmpFPredicate::OLE, absError, transition);
+    Value outside =
+        b.create<arith::MulFOp>(loc, transition, sign);
+    localGradient =
+        b.create<arith::SelectOp>(loc, inside, error, outside);
+    break;
+  }
+  case 3: {
+    Value transition = cst(param);
+    Value absError = b.create<math::AbsFOp>(loc, error);
+    Value inside = b.create<arith::CmpFOp>(
+        loc, arith::CmpFPredicate::OLT, absError, transition);
+    Value insideGradient =
+        b.create<arith::DivFOp>(loc, error, transition);
+    localGradient =
+        b.create<arith::SelectOp>(loc, inside, insideGradient, sign);
+    break;
+  }
+  case 4: {
+    // Training-only kind 4 is BCE-with-logits. The forward pointwise-loss
+    // directive retains kind 4 as log-cosh.
+    Value nonnegative = b.create<arith::CmpFOp>(
+        loc, arith::CmpFPredicate::OGE, p, zero);
+    Value expNegative =
+        b.create<math::ExpOp>(loc, b.create<arith::NegFOp>(loc, p));
+    Value expPositive = b.create<math::ExpOp>(loc, p);
+    Value sigmoidPositive = b.create<arith::DivFOp>(
+        loc, one, b.create<arith::AddFOp>(loc, one, expNegative));
+    Value sigmoidNegative = b.create<arith::DivFOp>(
+        loc, expPositive, b.create<arith::AddFOp>(loc, one, expPositive));
+    Value sigmoid = b.create<arith::SelectOp>(
+        loc, nonnegative, sigmoidPositive, sigmoidNegative);
+    localGradient = b.create<arith::SubFOp>(loc, sigmoid, t);
+    break;
+  }
+  default:
+    localGradient = zero;
+    break;
+  }
+  Value grad = b.create<arith::MulFOp>(
+      loc, b.create<arith::MulFOp>(loc, localGradient, dy), scale);
+  Value targetValue;
+  if ((trainingSGD || trainingAdamW) && kind == 4) {
+    targetValue = b.create<arith::MulFOp>(
+        loc, b.create<arith::NegFOp>(loc, p),
+        b.create<arith::MulFOp>(loc, dy, scale));
+  } else {
+    targetValue = b.create<arith::NegFOp>(loc, grad);
+  }
+  Value storedGrad =
+      isF32 ? grad : b.create<arith::TruncFOp>(loc, storeTy, grad).getResult();
+  Value storedTarget =
+      isF32 ? targetValue
+            : b.create<arith::TruncFOp>(loc, storeTy, targetValue).getResult();
+  if (trainingAdamW) {
+    Value parameterValue = loadF32(parameterBuffer, gid);
+    Value moment1Value = loadF32(moment1Buffer, gid);
+    Value moment2Value = loadF32(moment2Buffer, gid);
+    Value oneMinusBeta1 = b.create<arith::SubFOp>(loc, one, beta1);
+    Value oneMinusBeta2 = b.create<arith::SubFOp>(loc, one, beta2);
+    Value updatedMoment1 = b.create<arith::AddFOp>(
+        loc, b.create<arith::MulFOp>(loc, beta1, moment1Value),
+        b.create<arith::MulFOp>(loc, oneMinusBeta1, grad));
+    Value updatedMoment2 = b.create<arith::AddFOp>(
+        loc, b.create<arith::MulFOp>(loc, beta2, moment2Value),
+        b.create<arith::MulFOp>(
+            loc, oneMinusBeta2, b.create<arith::MulFOp>(loc, grad, grad)));
+    Value correctedMoment1 =
+        b.create<arith::DivFOp>(loc, updatedMoment1, correction1);
+    Value correctedMoment2 =
+        b.create<arith::DivFOp>(loc, updatedMoment2, correction2);
+    Value denominator = b.create<arith::AddFOp>(
+        loc, b.create<math::SqrtOp>(loc, correctedMoment2), epsilon);
+    Value update = b.create<arith::AddFOp>(
+        loc, b.create<arith::DivFOp>(loc, correctedMoment1, denominator),
+        b.create<arith::MulFOp>(loc, weightDecay, parameterValue));
+    Value updatedParameter = b.create<arith::SubFOp>(
+        loc, parameterValue,
+        b.create<arith::MulFOp>(loc, learningRate, update));
+    auto store = [&](Value value, Value buffer) {
+      Value stored =
+          isF32 ? value
+                : b.create<arith::TruncFOp>(loc, storeTy, value).getResult();
+      b.create<memref::StoreOp>(loc, stored, buffer, ValueRange{gid});
+    };
+    store(updatedParameter, newParameter);
+    store(updatedMoment1, newMoment1);
+    store(updatedMoment2, newMoment2);
+  } else if (trainingSGD) {
+    Value parameterValue = loadF32(parameterBuffer, gid);
+    Value updated = b.create<arith::SubFOp>(
+        loc, parameterValue,
+        b.create<arith::MulFOp>(loc, learningRate, grad));
+    Value storedParameter =
+        isF32
+            ? updated
+            : b.create<arith::TruncFOp>(loc, storeTy, updated).getResult();
+    b.create<memref::StoreOp>(
+        loc, storedParameter, newParameter, ValueRange{gid});
+  } else {
+    b.create<memref::StoreOp>(
+        loc, storedGrad, predictionGrad, ValueRange{gid});
+  }
+  b.create<memref::StoreOp>(loc, storedTarget, targetGrad, ValueRange{gid});
+
+  b.setInsertionPointToEnd(&f.getBody().front());
+  b.create<gpu::ReturnOp>(loc);
+}
+
 struct GenerateROCMPointwiseLossKernelPass
     : PassWrapper<GenerateROCMPointwiseLossKernelPass,
                   OperationPass<ModuleOp>> {
@@ -154,6 +354,35 @@ struct GenerateROCMPointwiseLossKernelPass
       double param = 1.0;
       if (auto pp = op->getAttrOfType<FloatAttr>("param"))
         param = pp.getValueAsDouble();
+      bool backward = false;
+      if (auto attr = op->getAttrOfType<BoolAttr>("backward"))
+        backward = attr.getValue();
+      bool trainingSGD = false;
+      if (auto attr = op->getAttrOfType<BoolAttr>("training_sgd"))
+        trainingSGD = attr.getValue();
+      bool trainingAdamW = false;
+      if (auto attr = op->getAttrOfType<BoolAttr>("training_adamw"))
+        trainingAdamW = attr.getValue();
+      if (trainingSGD && trainingAdamW) {
+        op->emitError("generate-rocm-pointwise-loss-kernel: training_sgd and "
+                      "training_adamw are mutually exclusive");
+        return signalPassFailure();
+      }
+      backward = backward || trainingSGD || trainingAdamW;
+      StringRef reduction = "mean";
+      if (auto attr = op->getAttrOfType<StringAttr>("reduction"))
+        reduction = attr.getValue();
+      if (backward && reduction != "none" && reduction != "sum" &&
+          reduction != "mean") {
+        op->emitError("generate-rocm-pointwise-loss-kernel: backward reduction "
+                      "must be none, sum, or mean");
+        return signalPassFailure();
+      }
+      if (backward && kind > 3 && !trainingSGD && !trainingAdamW) {
+        op->emitError("generate-rocm-pointwise-loss-kernel: compiled backward "
+                      "supports MSE/MAE/Huber/Smooth-L1 kinds 0..3");
+        return signalPassFailure();
+      }
 
       OpBuilder b(module.getBodyRegion());
       b.setInsertionPointToEnd(module.getBody());
@@ -176,12 +405,29 @@ struct GenerateROCMPointwiseLossKernelPass
       b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
       Type idxTy = b.getIndexType();
       auto memTy = MemRefType::get({ShapedType::kDynamic}, storeTy);
-      auto fnTy = b.getFunctionType({memTy, memTy, memTy, idxTy}, {});
+      SmallVector<Type> inputs;
+      if (trainingAdamW)
+        inputs = {memTy, memTy, memTy, memTy, memTy, memTy, memTy, memTy,
+                  memTy, memTy, idxTy, b.getF32Type(), b.getF32Type(),
+                  b.getF32Type(), b.getF32Type(), b.getF32Type(),
+                  b.getF32Type(), b.getF32Type(), b.getF32Type()};
+      else if (trainingSGD)
+        inputs = {memTy, memTy, memTy, memTy, memTy, memTy, idxTy,
+                  b.getF32Type(), b.getF32Type()};
+      else if (backward)
+        inputs = {memTy, memTy, memTy, memTy, memTy, idxTy, b.getF32Type()};
+      else
+        inputs = {memTy, memTy, memTy, idxTy};
+      auto fnTy = b.getFunctionType(inputs, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
       gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
                        b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
-      emitLossBody(body, loc, gpuFunc, storeTy, kind, param);
+      if (backward)
+        emitLossBackwardBody(body, loc, gpuFunc, storeTy, kind, param,
+                             reduction == "none", trainingSGD, trainingAdamW);
+      else
+        emitLossBody(body, loc, gpuFunc, storeTy, kind, param);
       op->erase();
     }
   }

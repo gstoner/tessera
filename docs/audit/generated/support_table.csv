@@ -92,6 +92,7 @@ adam,functional_optimizer_step,public,public,registered,complete,fused,device_ve
 adamw,functional_optimizer_step,public,public,registered,complete,fused,device_verified_jit,ready,none
 lion,functional_optimizer_step,public,public,registered,complete,fused,device_verified_jit,ready,none
 momentum,functional_optimizer_step,public,public,registered,complete,fused,device_verified_jit,ready,none
+nesterov,functional_optimizer_step,public,public,registered,complete,fused,device_verified_jit,ready,none
 sgd,functional_optimizer_step,public,public,registered,complete,fused,device_verified_jit,ready,none
 fused_epilogue,fused_epilogue,public,public,registered,complete,fused,device_verified_jit,ready,none
 clifford_codiff,geometric_algebra,public,public,not_applicable,complete,fused,fused,ready,benchmarked
@@ -194,6 +195,7 @@ huber_loss,loss,public,public,registered,complete,fused,device_verified_jit,read
 implicit_score_matching_loss,loss,public,public,registered,complete,fused,device_verified_jit,ready,none
 js_divergence,loss,public,public,registered,complete,fused,device_verified_jit,ready,none
 kl_divergence,loss,public,public,registered,complete,fused,device_verified_jit,ready,none
+label_smoothed_cross_entropy,loss,public,public,registered,complete,fused,device_verified_jit,ready,none
 load_balance_loss,loss,public,public,registered,complete,fused,device_verified_jit,ready,none
 log_cosh_loss,loss,public,public,registered,complete,fused,device_verified_jit,ready,none
 mae_loss,loss,public,public,registered,complete,fused,device_verified_jit,ready,none
@@ -228,6 +230,8 @@ round,numeric_helper,public,public,registered,complete,fused,device_verified_jit
 sign,numeric_helper,public,public,registered,complete,fused,device_verified_jit,ready,none
 trunc,numeric_helper,public,public,registered,complete,fused,device_verified_jit,ready,none
 where,numeric_helper,public,public,registered,complete,fused,device_verified_jit,ready,none
+training.loss_adamw,optimizer,public,public,registered,complete,fused,device_verified_jit,ready,none
+training.loss_sgd,optimizer,public,public,registered,complete,fused,device_verified_jit,ready,none
 alibi,position_encoding,public,public,registered,complete,fused,device_verified_jit,ready,none
 ntk_rope,position_encoding,public,public,registered,complete,fused,device_verified_abi,ready,none
 qkv_projection,projection,public,public,registered,complete,fused,device_verified_jit,ready,none

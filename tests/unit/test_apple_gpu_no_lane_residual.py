@@ -64,7 +64,7 @@ def _t(bare: str) -> str:
 _NO_LANE_BARE: frozenset[str] = frozenset(
     {
         # Optimizer step ops without an Apple GPU lane.
-        "adafactor",
+        "adafactor", "nesterov",
         # Distributed collectives (mock/host today; real NCCL/RCCL is Phase G/H).
         "all_gather", "all_reduce", "all_to_all", "reduce_scatter",
         # RNG / stochastic.
@@ -125,6 +125,9 @@ _NO_LANE_DOTTED: frozenset[str] = frozenset(
         # Apple GPU dispatch lane).
         ("cache", "commit"), ("cache", "rollback"),
         ("ebm", "langevin_step"),
+        # Shared training-step carriers have exact ROCm/x86 ABIs; Apple owns no
+        # Metal materializer yet (cross-backend sync 2026-07-23).
+        ("training", "loss_adamw"), ("training", "loss_sgd"),
         ("rl", "cispo_policy_loss"), ("rl", "grpo_policy_loss"),
         ("rl", "normalize_group_advantages"), ("rl", "ppo_policy_loss"),
     }

@@ -985,6 +985,10 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         from . import optim as _optim
         return _optim.momentum(params, grads, state, **kwargs)
 
+    def nesterov(params, grads, state=None, **kwargs):
+        from . import optim as _optim
+        return _optim.nesterov(params, grads, state, **kwargs)
+
     def adafactor(params, grads, state=None, **kwargs):
         from . import optim as _optim
         return _optim.adafactor(params, grads, state, **kwargs)
@@ -3979,12 +3983,92 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     weight_norm_ref = _lazy_module_fn("nn.functional", "weight_norm")
     fake_quantize_ref = _lazy_module_fn("quantization", "fake_quantize")
     sgd_ref = _lazy_module_fn("optim", "sgd")
+
+    def _training_loss_gradients(
+        prediction, target, cotangent, *, kind, parameter=1.0,
+        reduction="mean",
+    ):
+        p = np.asarray(_unwrap(prediction))
+        t = np.asarray(_unwrap(target))
+        dy = np.asarray(_unwrap(cotangent))
+        error = p - t
+        if kind == "mse":
+            local = 2.0 * error
+            target_local = None
+        elif kind == "bce":
+            sigmoid = np.where(
+                p >= 0.0,
+                1.0 / (1.0 + np.exp(-p)),
+                np.exp(p) / (1.0 + np.exp(p)),
+            )
+            local = sigmoid - t
+            target_local = -p
+        elif kind == "mae":
+            local = np.sign(error)
+            target_local = None
+        elif kind == "huber":
+            local = np.where(
+                np.abs(error) <= parameter, error,
+                parameter * np.sign(error),
+            )
+            target_local = None
+        elif kind == "smooth_l1":
+            local = np.where(
+                np.abs(error) < parameter, error / parameter,
+                np.sign(error),
+            )
+            target_local = None
+        else:
+            raise ValueError(f"unsupported training loss kind {kind!r}")
+        scale = 1.0 / p.size if reduction == "mean" else 1.0
+        gradient = (local * dy * scale).astype(p.dtype)
+        target_gradient = (
+            target_local * dy * scale
+            if target_local is not None else -gradient
+        ).astype(p.dtype)
+        return gradient, target_gradient
+
+    def training_loss_sgd_ref(
+        prediction, target, cotangent, param, *, kind, parameter=1.0,
+        reduction="mean", lr,
+    ):
+        gradient, target_gradient = _training_loss_gradients(
+            prediction, target, cotangent, kind=kind, parameter=parameter,
+            reduction=reduction,
+        )
+        updated = np.asarray(_unwrap(param)) - lr * gradient
+        return updated, target_gradient
+
+    def training_loss_adamw_ref(
+        prediction, target, cotangent, param, moment1, moment2, *, kind,
+        parameter=1.0, reduction="mean", lr=1.0e-3, beta1=0.9,
+        beta2=0.999, eps=1.0e-8, weight_decay=0.01, step=1,
+    ):
+        gradient, target_gradient = _training_loss_gradients(
+            prediction, target, cotangent, kind=kind, parameter=parameter,
+            reduction=reduction,
+        )
+        p = np.asarray(_unwrap(param))
+        m = beta1 * np.asarray(_unwrap(moment1)) + (1.0 - beta1) * gradient
+        v = (
+            beta2 * np.asarray(_unwrap(moment2))
+            + (1.0 - beta2) * gradient * gradient
+        )
+        update = (
+            (m / (1.0 - beta1**step))
+            / (np.sqrt(v / (1.0 - beta2**step)) + eps)
+            + weight_decay * p
+        )
+        return p - lr * update, m, v, target_gradient
+
     mse_loss_ref = _lazy_module_fn("losses", "mse_loss")
     mae_loss_ref = _lazy_module_fn("losses", "mae_loss")
     huber_loss_ref = _lazy_module_fn("losses", "huber_loss")
     smooth_l1_loss_ref = _lazy_module_fn("losses", "smooth_l1_loss")
     log_cosh_loss_ref = _lazy_module_fn("losses", "log_cosh_loss")
     cross_entropy_loss_ref = _lazy_module_fn("losses", "cross_entropy_loss")
+    label_smoothed_cross_entropy_ref = _lazy_module_fn(
+        "losses", "label_smoothed_cross_entropy")
     binary_cross_entropy_loss_ref = _lazy_module_fn("losses", "binary_cross_entropy_loss")
     asymmetric_bce_ref = _lazy_module_fn("losses", "asymmetric_bce")
     z_loss_ref = _lazy_module_fn("losses", "z_loss")
@@ -4251,12 +4335,15 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "argsort": argsort,
         "linear_general": linear_general_ref,
         "sgd": sgd_ref,
+        "training.loss_sgd": training_loss_sgd_ref,
+        "training.loss_adamw": training_loss_adamw_ref,
         "mse_loss": mse_loss_ref,
         "mae_loss": mae_loss_ref,
         "huber_loss": huber_loss_ref,
         "smooth_l1_loss": smooth_l1_loss_ref,
         "log_cosh_loss": log_cosh_loss_ref,
         "cross_entropy_loss": cross_entropy_loss_ref,
+        "label_smoothed_cross_entropy": label_smoothed_cross_entropy_ref,
         "binary_cross_entropy_loss": binary_cross_entropy_loss_ref,
         "kl_divergence": kl_divergence_ref,
         "js_divergence": js_divergence_ref,
@@ -4279,6 +4366,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "cispo_policy_loss": cispo_policy_loss_ref,
         "adamw": adamw,
         "momentum": momentum,
+        "nesterov": nesterov,
         "adafactor": adafactor,
         "lion": lion,
         "gated_attention": gated_attention,
@@ -4875,6 +4963,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         smooth_l1_loss=smooth_l1_loss_ref,
         log_cosh_loss=log_cosh_loss_ref,
         cross_entropy_loss=cross_entropy_loss_ref,
+        label_smoothed_cross_entropy=label_smoothed_cross_entropy_ref,
         binary_cross_entropy_loss=binary_cross_entropy_loss_ref,
         kl_divergence=kl_divergence_ref,
         js_divergence=js_divergence_ref,

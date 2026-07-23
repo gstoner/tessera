@@ -1468,6 +1468,15 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         fix_hint="Mark sub-byte storage (fp4/nvfp4/fp6/int4) with a wider byte container (int8); storage bits must be <= container bits.",
         spec="docs/audit/compiler/COMPILER_AUDIT.md §C4", sprint="C4 (TIRx)",
     ),
+    DiagnosticCode(
+        code="ROCM_DYNAMIC_LDS_MULTIPLE_ARENAS",
+        pass_origin="ROCMDynamicLDS",
+        severity="error",
+        summary="A ROCm kernel contains multiple independent runtime-sized LDS allocations, but one HIP launch exposes only one dynamic-LDS base and byte count.",
+        fix_hint="Coalesce the allocations into one runtime arena with explicit offsets, or keep the route bucketed/static until a packed dynamic-cohort launch expression is available.",
+        spec="docs/audit/compiler/COMPILER_THEORY_OF_OPERATION.md §W3",
+        sprint="CORE-COMPILER-MEMORY-LAYOUT-CLOSEOUT-2026-07-23",
+    ),
 
     # ROCm shared Tile-IR convergence (2026-06-23) — AMD consumes the shared
     # Tile contract but keeps LDS / waitcnt legality target-specific.

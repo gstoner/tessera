@@ -42,6 +42,7 @@ add_library(TesseraPasses
 
   # Phase F2 (IR form) — activation rematerialization (runs after AutodiffPass).
   ActivationRematerializationPass.cpp
+  TrainingStepFusionPass.cpp
 
   # Phase 8.4.8 — SwiGLU fusion (Stage 2b of SwiGLU Performance Plan).
   SwigluFusionPass.cpp
@@ -62,6 +63,7 @@ add_library(TesseraPasses
   # Sprint V2 (2026-05-22) — layout legality skeleton (SHAPE_SYSTEM §11.2 closure).
   LayoutLegalityPass.cpp
   LayoutAssignmentPass.cpp
+  X86GraphLayoutMaterializationPass.cpp
   NVIDIAGraphLayoutMaterializationPass.cpp
   # 2026-07-08 — Tile IR global buffer assignment/reuse (Workstream H / W3).
   TileBufferReusePass.cpp

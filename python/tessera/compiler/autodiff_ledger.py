@@ -97,8 +97,9 @@ _REDUCTION_KIND_ALIASES = {"amax": "max", "amin": "min"}
 _BWD_IR_ORACLE_CPU: frozenset[str] = frozenset(
     {
         "add", "amax", "amin", "broadcast", "gelu", "layer_norm", "max",
-        "mean", "min", "mul", "matmul", "relu", "rmsnorm", "silu",
-        "softmax", "sum", "tanh", "sigmoid",
+        "huber_loss", "mae_loss", "mean", "min", "mse_loss", "mul", "matmul",
+        "relu", "rmsnorm", "sgd", "silu", "smooth_l1_loss", "softmax", "sum",
+        "tanh", "sigmoid",
     }
 )
 
@@ -150,7 +151,12 @@ def _cpp_op_family(name: str) -> str:
     # Public TSOL spelling predates the C++ class's acronym boundary. Keep the
     # generated ledger keyed to the canonical op catalog, not an incidental
     # CamelCase split.
-    return {"rms_norm": "rmsnorm"}.get(family, family)
+    return {
+        "rms_norm": "rmsnorm",
+        "m_s_e_loss": "mse_loss",
+        "m_a_e_loss": "mae_loss",
+        "s_g_d": "sgd",
+    }.get(family, family)
 
 
 def _ir_adjoint_classes() -> tuple[frozenset[str], frozenset[str]]:

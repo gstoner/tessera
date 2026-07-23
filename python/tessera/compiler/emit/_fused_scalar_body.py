@@ -73,7 +73,12 @@ def reduction_snippet(name: str, eps: float) -> str:
     raise ValueError(f"no scalar snippet for reduction op {name!r}")
 
 
-def row_compute_body(region: Any) -> str:
+def row_compute_body(
+    region: Any,
+    *,
+    a_layout: str = "row_major",
+    b_layout: str = "row_major",
+) -> str:
     """The per-row compute body for row ``m`` (``float* row = out + m*N`` in scope):
     matmul + prologue(A) + epilogue chain + optional residual + optional row
     reduction. Shared verbatim by the x86 C function and the ROCm HIP kernel."""
@@ -91,13 +96,15 @@ def row_compute_body(region: Any) -> str:
                 if region.has_residual else "")
     reduction = (reduction_snippet(region.reduction, region.eps)
                  if region.reduction else "")
+    a_index = "(long)m*K + k" if a_layout == "row_major" else "(long)k*M + m"
+    b_index = "(long)k*N + n" if b_layout == "row_major" else "(long)n*K + k"
     return (
         "        for (int n = 0; n < N; ++n) {\n"
         "            float v = 0.0f;\n"
         "            for (int k = 0; k < K; ++k) {\n"
-        "                float a = A[(long)m*K + k];\n"
+        f"                float a = A[{a_index}];\n"
         f"{prologue}"
-        "                v += a * B[(long)k*N + n];\n"
+        f"                v += a * B[{b_index}];\n"
         "            }\n"
         f"{epilogue}\n"
         f"{residual}"

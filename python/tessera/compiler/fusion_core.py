@@ -257,8 +257,17 @@ class FusedRegion:
     # Storage policy for target candidates. The reference remains f32; tensor-
     # core candidates quantize operands at this explicit ABI boundary.
     storage_dtype: str = "f16"
+    # Executable physical input contracts for generic host emitters. Logical
+    # matmul semantics remain A[M,K] @ B[K,N]; these fields only select the
+    # pointer-stride formula and launch-time C/Fortran materialization.
+    a_layout: str = "row_major"
+    b_layout: str = "row_major"
 
     def __post_init__(self) -> None:
+        if self.a_layout not in ("row_major", "col_major"):
+            raise ValueError("a_layout must be row_major or col_major")
+        if self.b_layout not in ("row_major", "col_major"):
+            raise ValueError("b_layout must be row_major or col_major")
         if self.storage_dtype not in (
                 "f16", "bf16", "f32", "fp8_e4m3", "fp8_e5m2"):
             raise ValueError(

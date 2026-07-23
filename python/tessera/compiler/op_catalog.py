@@ -81,6 +81,7 @@ _SPECS = [
     OpSpec("adam", "tessera.adam", 4, 4, lowering="functional_optimizer_step"),
     OpSpec("adamw", "tessera.adamw", 2, 3, lowering="functional_optimizer_step"),
     OpSpec("momentum", "tessera.momentum", 2, 3, lowering="functional_optimizer_step"),
+    OpSpec("nesterov", "tessera.nesterov", 2, 3, lowering="functional_optimizer_step"),
     OpSpec("adafactor", "tessera.adafactor", 2, 3, lowering="functional_optimizer_step"),
     OpSpec("lion", "tessera.lion", 2, 3, lowering="functional_optimizer_step"),
     # `ebm_energy_quadratic` is canonicalized to the flat-lane graph name
@@ -388,12 +389,26 @@ _SPECS = [
     # emit stable op names instead of treating them as opaque calls.
     OpSpec("linear_general", "tessera.linear_general", 2, 3, lowering="model_layer"),
     OpSpec("sgd", "tessera.sgd", 2, 2, lowering="functional_optimizer_step"),
+    # Compiler-generated internal carrier produced only after autodiff. It has
+    # four tensor operands (prediction, target, cotangent, parameter) and two
+    # results (updated parameter, target gradient).
+    OpSpec(
+        "training.loss_sgd", "tessera.training.loss_sgd", 4, 4,
+        lowering="optimizer",
+    ),
+    # Six tensor operands (loss triple plus parameter and two moments); the
+    # prediction gradient is internal to the fused AdamW state transition.
+    OpSpec(
+        "training.loss_adamw", "tessera.training.loss_adamw", 6, 6,
+        lowering="optimizer",
+    ),
     OpSpec("mse_loss", "tessera.loss.mse", 2, 2, lowering="loss"),
     OpSpec("mae_loss", "tessera.loss.mae", 2, 2, lowering="loss"),
     OpSpec("huber_loss", "tessera.loss.huber", 2, 2, lowering="loss"),
     OpSpec("smooth_l1_loss", "tessera.loss.smooth_l1", 2, 2, lowering="loss"),
     OpSpec("log_cosh_loss", "tessera.loss.log_cosh", 2, 2, lowering="loss"),
     OpSpec("cross_entropy_loss", "tessera.loss.cross_entropy", 2, 2, lowering="loss"),
+    OpSpec("label_smoothed_cross_entropy", "tessera.loss.cross_entropy", 2, 2, lowering="loss"),
     OpSpec("binary_cross_entropy_loss", "tessera.loss.binary_cross_entropy", 2, 2, lowering="loss"),
     OpSpec("asymmetric_bce", "tessera.loss.asymmetric_bce", 2, 2, lowering="loss"),
     OpSpec("z_loss", "tessera.loss.z_loss", 1, 1, lowering="loss"),
@@ -459,7 +474,12 @@ _SPECS = [
 ]
 
 OP_SPECS: dict[str, OpSpec] = {spec.public_name: spec for spec in _SPECS}
-GRAPH_OP_TO_SPEC: dict[str, OpSpec] = {spec.graph_name: spec for spec in _SPECS}
+# Multiple public convenience functions may intentionally share one Graph op
+# (for example label_smoothed_cross_entropy is cross_entropy with a non-zero
+# attribute). Preserve the first, canonical public spelling for reverse lookup.
+GRAPH_OP_TO_SPEC: dict[str, OpSpec] = {}
+for _spec in _SPECS:
+    GRAPH_OP_TO_SPEC.setdefault(_spec.graph_name, _spec)
 GRAPH_OP_MAP: dict[str, str] = {spec.public_name: spec.graph_name for spec in _SPECS}
 SUPPORTED_CPU_OPS: frozenset[str] = frozenset(GRAPH_OP_TO_SPEC)
 LEGACY_GRAPH_OP_ALIASES: dict[str, str] = {
@@ -513,6 +533,14 @@ def normalize_op_name(name: str) -> str:
 
 
 def get_op_spec(name: str) -> Optional[OpSpec]:
+    # ODS Graph spellings are canonical identities too.  Check that index
+    # before public-name normalization so dotted names such as
+    # ``tessera.loss.smooth_l1`` resolve to ``smooth_l1_loss`` instead of the
+    # non-existent public key ``loss.smooth_l1``.
+    graph_name = canonical_graph_op_name(name)
+    graph_spec = GRAPH_OP_TO_SPEC.get(graph_name)
+    if graph_spec is not None:
+        return graph_spec
     return OP_SPECS.get(normalize_op_name(name))
 
 

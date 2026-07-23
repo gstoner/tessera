@@ -1,0 +1,105 @@
+{
+  "rows": [
+    {
+      "elements": 65536,
+      "family": "mse",
+      "launches": 1,
+      "median_ms": 0.037106,
+      "p95_ms": 0.06509,
+      "reps": 30,
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "elements": 65536,
+      "family": "mae",
+      "launches": 1,
+      "median_ms": 0.035595,
+      "p95_ms": 0.085816,
+      "reps": 30,
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "elements": 65536,
+      "family": "huber",
+      "launches": 1,
+      "median_ms": 0.03592,
+      "p95_ms": 0.07352,
+      "reps": 30,
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "elements": 65536,
+      "family": "smooth_l1",
+      "launches": 1,
+      "median_ms": 0.0350205,
+      "p95_ms": 0.06521,
+      "reps": 30,
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "elements": 65536,
+      "family": "sgd",
+      "launches": 1,
+      "median_ms": 0.0273825,
+      "p95_ms": 0.030357,
+      "reps": 30,
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "elements": 65536,
+      "family": "mse",
+      "launches": 1,
+      "median_ms": 0.857694,
+      "p95_ms": 1.010074,
+      "reps": 30,
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "elements": 65536,
+      "family": "mae",
+      "launches": 1,
+      "median_ms": 0.8709985,
+      "p95_ms": 1.047191,
+      "reps": 30,
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "elements": 65536,
+      "family": "huber",
+      "launches": 1,
+      "median_ms": 0.8438315000000001,
+      "p95_ms": 1.126236,
+      "reps": 30,
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "elements": 65536,
+      "family": "smooth_l1",
+      "launches": 1,
+      "median_ms": 0.8780669999999999,
+      "p95_ms": 1.063735,
+      "reps": 30,
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "elements": 65536,
+      "family": "sgd",
+      "launches": 1,
+      "median_ms": 0.8159745,
+      "p95_ms": 0.955243,
+      "reps": 30,
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total"
+    }
+  ],
+  "schema": "tessera.training_backward_cross_target.v1"
+}

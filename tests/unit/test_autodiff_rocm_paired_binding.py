@@ -7,6 +7,37 @@ import numpy as np
 import tessera as ts
 
 
+@ts.jit(target="rocm", autodiff="reverse", wrt=("prediction", "target"))
+def _mse(prediction, target):
+    return ts.ops.mse_loss(prediction, target, reduction="mean")
+
+
+def test_rocm_mse_backward_binds_compiled_vjp(monkeypatch):
+    import tessera.runtime as runtime
+
+    seen = {}
+
+    def fake_launch(artifact, args):
+        seen["metadata"] = artifact.metadata
+        seen["args"] = args
+        return {
+            "ok": True,
+            "execution_mode": "hip_runtime",
+            "output": (np.ones_like(args[0]), -np.ones_like(args[1])),
+        }
+
+    monkeypatch.setattr(runtime, "launch", fake_launch)
+    prediction = np.zeros((3, 5), np.float32)
+    target = np.ones_like(prediction)
+    gradients = _mse.native_backward(
+        prediction, target, out_cotangents=np.asarray(1.0, np.float32)
+    )
+    assert len(gradients) == 2
+    assert seen["metadata"]["compiler_path"] == "rocm_regression_loss_bwd_compiled"
+    assert seen["metadata"]["ops"][0]["kwargs"]["reduction"] == "mean"
+    assert _mse.last_backward_execution["implementation"] == "dedicated"
+
+
 @ts.jit(target="rocm", autodiff="reverse", wrt=("q", "k", "v"))
 def _flash(q, k, v):
     return ts.ops.flash_attn(q, k, v, causal=True)

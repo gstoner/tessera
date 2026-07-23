@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 282 |
+| ``complete`` | 286 |
 | ``runnable_reference`` | 4 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 29 |
 | ``planned`` | 0 |
-| **total** | **315** |
+| **total** | **319** |
 
-## complete (282)
+## complete (286)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -122,6 +122,7 @@ each row into a single E2E tier.
 | ``adamw`` | functional_optimizer_step | public | public | registered | fused | device_verified_jit | ready | none |
 | ``lion`` | functional_optimizer_step | public | public | registered | fused | device_verified_jit | ready | none |
 | ``momentum`` | functional_optimizer_step | public | public | registered | fused | device_verified_jit | ready | none |
+| ``nesterov`` | functional_optimizer_step | public | public | registered | fused | device_verified_jit | ready | none |
 | ``sgd`` | functional_optimizer_step | public | public | registered | fused | device_verified_jit | ready | none |
 | ``fused_epilogue`` | fused_epilogue | public | public | registered | fused | device_verified_jit | ready | none |
 | ``clifford_codiff`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
@@ -211,6 +212,7 @@ each row into a single E2E tier.
 | ``implicit_score_matching_loss`` | loss | public | public | registered | fused | device_verified_jit | ready | none |
 | ``js_divergence`` | loss | public | public | registered | fused | device_verified_jit | ready | none |
 | ``kl_divergence`` | loss | public | public | registered | fused | device_verified_jit | ready | none |
+| ``label_smoothed_cross_entropy`` | loss | public | public | registered | fused | device_verified_jit | ready | none |
 | ``load_balance_loss`` | loss | public | public | registered | fused | device_verified_jit | ready | none |
 | ``log_cosh_loss`` | loss | public | public | registered | fused | device_verified_jit | ready | none |
 | ``mae_loss`` | loss | public | public | registered | fused | device_verified_jit | ready | none |
@@ -245,6 +247,8 @@ each row into a single E2E tier.
 | ``sign`` | numeric_helper | public | public | registered | fused | device_verified_jit | ready | none |
 | ``trunc`` | numeric_helper | public | public | registered | fused | device_verified_jit | ready | none |
 | ``where`` | numeric_helper | public | public | registered | fused | device_verified_jit | ready | none |
+| ``training.loss_adamw`` | optimizer | public | public | registered | fused | device_verified_jit | ready | none |
+| ``training.loss_sgd`` | optimizer | public | public | registered | fused | device_verified_jit | ready | none |
 | ``alibi`` | position_encoding | public | public | registered | fused | device_verified_jit | ready | none |
 | ``ntk_rope`` | position_encoding | public | public | registered | fused | device_verified_abi | ready | none |
 | ``qkv_projection`` | projection | public | public | registered | fused | device_verified_jit | ready | none |

@@ -20,6 +20,7 @@ Skips cleanly when ``tessera-opt`` is not built.
 from __future__ import annotations
 
 import re
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -34,6 +35,9 @@ _TESSERA_OPT_CANDIDATES = (
 
 
 def _find_tessera_opt() -> str | None:
+    configured = os.environ.get("TESSERA_OPT")
+    if configured and Path(configured).is_file():
+        return configured
     for c in _TESSERA_OPT_CANDIDATES:
         if c.is_file():
             return str(c)
@@ -173,6 +177,89 @@ class _Interp:
                 z = x - np.max(x, axis=axis, keepdims=True)
                 e = np.exp(z)
                 env[dst] = (e / np.sum(e, axis=axis, keepdims=True)).astype(np.float32)
+            elif op == "tessera.loss.mse":
+                prediction, target = (env[name] for name in operands)
+                reduction_match = re.search(r'reduction = "([^"]+)"', rhs)
+                reduction = reduction_match.group(1) if reduction_match else "mean"
+                squared = (prediction - target) ** 2
+                if reduction == "none":
+                    value = squared
+                elif reduction == "sum":
+                    value = np.asarray(np.sum(squared), dtype=np.float32)
+                else:
+                    value = np.asarray(np.mean(squared), dtype=np.float32)
+                env[dst] = value.astype(np.float32)
+            elif op == "tessera.loss.mse_backward":
+                assert len(destinations) == 2
+                prediction, target, incoming = (env[name] for name in operands)
+                reduction_match = re.search(r'reduction = "([^"]+)"', rhs)
+                reduction = reduction_match.group(1) if reduction_match else "mean"
+                scale = 1.0 / prediction.size if reduction == "mean" else 1.0
+                gradient = 2.0 * (prediction - target) * incoming * scale
+                env[destinations[0]] = gradient.astype(np.float32)
+                env[destinations[1]] = (-gradient).astype(np.float32)
+            elif op in {
+                    "tessera.loss.mae", "tessera.loss.huber",
+                    "tessera.loss.smooth_l1"}:
+                prediction, target = (env[name] for name in operands)
+                reduction_match = re.search(r'reduction = "([^"]+)"', rhs)
+                reduction = reduction_match.group(1) if reduction_match else "mean"
+                error = prediction - target
+                if op == "tessera.loss.mae":
+                    elementwise = np.abs(error)
+                elif op == "tessera.loss.huber":
+                    delta_match = re.search(r"delta = ([-0-9.eE+]+)", rhs)
+                    delta = float(delta_match.group(1)) if delta_match else 1.0
+                    elementwise = np.where(
+                        np.abs(error) <= delta, 0.5 * error * error,
+                        delta * (np.abs(error) - 0.5 * delta))
+                else:
+                    beta_match = re.search(r"beta = ([-0-9.eE+]+)", rhs)
+                    beta = float(beta_match.group(1)) if beta_match else 1.0
+                    elementwise = np.where(
+                        np.abs(error) < beta, 0.5 * error * error / beta,
+                        np.abs(error) - 0.5 * beta)
+                if reduction == "none":
+                    value = elementwise
+                elif reduction == "sum":
+                    value = np.asarray(np.sum(elementwise), dtype=np.float32)
+                else:
+                    value = np.asarray(np.mean(elementwise), dtype=np.float32)
+                env[dst] = value.astype(np.float32)
+            elif op == "tessera.loss.regression_backward":
+                assert len(destinations) == 2
+                prediction, target, incoming = (env[name] for name in operands)
+                reduction_match = re.search(r'reduction = "([^"]+)"', rhs)
+                reduction = reduction_match.group(1) if reduction_match else "mean"
+                kind = re.search(r'kind = "([^"]+)"', rhs).group(1)
+                parameter_match = re.search(r"parameter = ([-0-9.eE+]+)", rhs)
+                parameter = (
+                    float(parameter_match.group(1)) if parameter_match else 1.0)
+                error = prediction - target
+                if kind == "mae":
+                    local = np.sign(error)
+                elif kind == "huber":
+                    local = np.where(
+                        np.abs(error) <= parameter, error,
+                        parameter * np.sign(error))
+                else:
+                    local = np.where(
+                        np.abs(error) < parameter, error / parameter,
+                        np.sign(error))
+                scale = 1.0 / prediction.size if reduction == "mean" else 1.0
+                gradient = local * incoming * scale
+                env[destinations[0]] = gradient.astype(np.float32)
+                env[destinations[1]] = (-gradient).astype(np.float32)
+            elif op == "tessera.sgd":
+                lr = float(re.search(r"lr = ([-0-9.eE+]+)", rhs).group(1))
+                env[dst] = (
+                    env[operands[0]] - lr * env[operands[1]]).astype(np.float32)
+            elif op == "tessera.sgd_backward":
+                assert len(destinations) == 2
+                lr = float(re.search(r"lr = ([-0-9.eE+]+)", rhs).group(1))
+                incoming = env[operands[0]]
+                env[destinations[0]] = incoming.astype(np.float32)
+                env[destinations[1]] = (-lr * incoming).astype(np.float32)
             elif op == "tessera.mul":
                 env[dst] = (env[operands[0]] * env[operands[1]]).astype(np.float32)
             elif op == "tessera.sub":
@@ -394,6 +481,145 @@ module {{
         expected = np.where(
             mask, seed[:, None] / np.sum(mask, axis=1, keepdims=True), 0.0)
     np.testing.assert_allclose(dx, expected, rtol=2e-7, atol=1e-7)
+
+
+@pytest.mark.parametrize("reduction,shape_type,shape", [
+    ("mean", "?x5", (7, 5)),
+    ("sum", "3x5", (3, 5)),
+    ("none", "3x5", (3, 5)),
+])
+def test_native_mse_backward_matches_numpy_oracle(
+        reduction: str, shape_type: str, shape: tuple[int, int]):
+    result_type = f"tensor<{shape_type}xf32>" if reduction == "none" else "tensor<f32>"
+    mlir = f"""
+module {{
+  func.func @mse(%prediction: tensor<{shape_type}xf32>,
+                 %target: tensor<{shape_type}xf32>) -> {result_type}
+      attributes {{tessera.autodiff = "reverse"}} {{
+    %loss = "tessera.loss.mse"(%prediction, %target)
+        {{reduction = "{reduction}"}} :
+        (tensor<{shape_type}xf32>, tensor<{shape_type}xf32>) -> {result_type}
+    return %loss : {result_type}
+  }}
+}}
+"""
+    rng = np.random.default_rng(37 + len(reduction))
+    prediction = rng.standard_normal(shape).astype(np.float32)
+    target = rng.standard_normal(shape).astype(np.float32)
+    seed_shape = shape if reduction == "none" else ()
+    seed = rng.standard_normal(seed_shape).astype(np.float32)
+    funcs = _run_paired(mlir)
+    (primal,) = funcs["mse"].run([prediction, target])
+    prediction_grad, target_grad = funcs["mse__bwd"].run(
+        [prediction, target, seed])
+    squared = (prediction - target) ** 2
+    if reduction == "none":
+        expected_primal = squared
+        scale = 1.0
+    elif reduction == "sum":
+        expected_primal = np.asarray(np.sum(squared), dtype=np.float32)
+        scale = 1.0
+    else:
+        expected_primal = np.asarray(np.mean(squared), dtype=np.float32)
+        scale = 1.0 / prediction.size
+    expected_grad = 2.0 * (prediction - target) * seed * scale
+    np.testing.assert_allclose(primal, expected_primal, rtol=2e-7, atol=1e-7)
+    np.testing.assert_allclose(
+        prediction_grad, expected_grad, rtol=2e-7, atol=1e-7)
+    np.testing.assert_allclose(
+        target_grad, -expected_grad, rtol=2e-7, atol=1e-7)
+
+
+@pytest.mark.parametrize("op,attribute,parameter", [
+    ("mae", "", 1.0),
+    ("huber", "delta = 0.75 : f64, ", 0.75),
+    ("smooth_l1", "beta = 0.5 : f64, ", 0.5),
+])
+@pytest.mark.parametrize("reduction", ["none", "sum", "mean"])
+def test_native_regression_loss_backward_matches_boundary_oracle(
+        op: str, attribute: str, parameter: float, reduction: str):
+    result_type = "tensor<2x5xf32>" if reduction == "none" else "tensor<f32>"
+    mlir = f"""
+module {{
+  func.func @loss(%prediction: tensor<2x5xf32>,
+                  %target: tensor<2x5xf32>) -> {result_type}
+      attributes {{tessera.autodiff = "reverse"}} {{
+    %loss = "tessera.loss.{op}"(%prediction, %target)
+        {{{attribute}reduction = "{reduction}"}} :
+        (tensor<2x5xf32>, tensor<2x5xf32>) -> {result_type}
+    return %loss : {result_type}
+  }}
+}}
+"""
+    # Exact zero and +/- transition points guard the subgradient contract.
+    errors = np.asarray([
+        -2.0 * parameter, -parameter, -0.25 * parameter, 0.0,
+        0.25 * parameter, parameter, 2.0 * parameter, -0.0, 0.1, -0.1,
+    ], dtype=np.float32).reshape(2, 5)
+    target = np.linspace(-0.5, 0.5, 10, dtype=np.float32).reshape(2, 5)
+    prediction = target + errors
+    seed = (
+        np.linspace(0.5, 1.4, 10, dtype=np.float32).reshape(2, 5)
+        if reduction == "none" else np.asarray(1.25, dtype=np.float32))
+    funcs = _run_paired(mlir)
+    (primal,) = funcs["loss"].run([prediction, target])
+    prediction_grad, target_grad = funcs["loss__bwd"].run(
+        [prediction, target, seed])
+    if op == "mae":
+        elementwise = np.abs(errors)
+        local = np.sign(errors)
+    elif op == "huber":
+        elementwise = np.where(
+            np.abs(errors) <= parameter, 0.5 * errors * errors,
+            parameter * (np.abs(errors) - 0.5 * parameter))
+        local = np.where(
+            np.abs(errors) <= parameter, errors,
+            parameter * np.sign(errors))
+    else:
+        elementwise = np.where(
+            np.abs(errors) < parameter, 0.5 * errors * errors / parameter,
+            np.abs(errors) - 0.5 * parameter)
+        local = np.where(
+            np.abs(errors) < parameter, errors / parameter, np.sign(errors))
+    if reduction == "none":
+        expected_primal = elementwise
+        scale = 1.0
+    elif reduction == "sum":
+        expected_primal = np.asarray(np.sum(elementwise), dtype=np.float32)
+        scale = 1.0
+    else:
+        expected_primal = np.asarray(np.mean(elementwise), dtype=np.float32)
+        scale = 1.0 / errors.size
+    expected_grad = local * seed * scale
+    np.testing.assert_allclose(primal, expected_primal, rtol=2e-7, atol=1e-7)
+    np.testing.assert_allclose(
+        prediction_grad, expected_grad, rtol=2e-7, atol=1e-7)
+    np.testing.assert_allclose(
+        target_grad, -expected_grad, rtol=2e-7, atol=1e-7)
+
+
+def test_native_sgd_backward_matches_dynamic_numpy_oracle():
+    mlir = """
+module {
+  func.func @sgd(%param: tensor<?x5xf32>,
+                 %grad: tensor<?x5xf32>) -> tensor<?x5xf32>
+      attributes {tessera.autodiff = "reverse"} {
+    %updated = "tessera.sgd"(%param, %grad) {lr = 0.125 : f64} :
+        (tensor<?x5xf32>, tensor<?x5xf32>) -> tensor<?x5xf32>
+    return %updated : tensor<?x5xf32>
+  }
+}
+"""
+    rng = np.random.default_rng(73)
+    param = rng.standard_normal((7, 5)).astype(np.float32)
+    grad = rng.standard_normal((7, 5)).astype(np.float32)
+    seed = rng.standard_normal((7, 5)).astype(np.float32)
+    funcs = _run_paired(mlir)
+    (updated,) = funcs["sgd"].run([param, grad])
+    param_grad, grad_grad = funcs["sgd__bwd"].run([param, grad, seed])
+    np.testing.assert_allclose(updated, param - 0.125 * grad)
+    np.testing.assert_allclose(param_grad, seed)
+    np.testing.assert_allclose(grad_grad, -0.125 * seed)
 
 
 @pytest.mark.parametrize("op", ["add", "mul"])

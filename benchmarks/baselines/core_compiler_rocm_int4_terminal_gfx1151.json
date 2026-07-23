@@ -1,0 +1,59 @@
+{
+  "nibble_order": "low_logical_index_in_low_nibble",
+  "rows": [
+    {
+      "compression_ratio": 2.0,
+      "consumer_route": "compiled_rocdl_wmma_iu4_packed_memory",
+      "exact_integer_result": true,
+      "host_repack_in_consumer": false,
+      "logical_input_bytes": 512,
+      "median_ms": 1.9387575,
+      "p95_ms": 2.168584,
+      "pack_route": "compiled_gfx1151",
+      "packed_input_bytes": 256,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "timing_domain": "host_wall_operation_total_packed_consumer"
+    },
+    {
+      "compression_ratio": 1.9974226804123711,
+      "consumer_route": "compiled_rocdl_wmma_iu4_packed_memory",
+      "exact_integer_result": true,
+      "host_repack_in_consumer": false,
+      "logical_input_bytes": 1550,
+      "median_ms": 1.9967135,
+      "p95_ms": 2.122496,
+      "pack_route": "compiled_gfx1151",
+      "packed_input_bytes": 776,
+      "shape": [
+        33,
+        17,
+        31
+      ],
+      "timing_domain": "host_wall_operation_total_packed_consumer"
+    },
+    {
+      "compression_ratio": 2.0,
+      "consumer_route": "compiled_rocdl_wmma_iu4_packed_memory",
+      "exact_integer_result": true,
+      "host_repack_in_consumer": false,
+      "logical_input_bytes": 32768,
+      "median_ms": 1.937051,
+      "p95_ms": 2.035304,
+      "pack_route": "compiled_gfx1151",
+      "packed_input_bytes": 16384,
+      "shape": [
+        128,
+        128,
+        128
+      ],
+      "timing_domain": "host_wall_operation_total_packed_consumer"
+    }
+  ],
+  "schema": "tessera.rocm.int4-terminal.v1",
+  "signedness": "signed_twos_complement",
+  "target": "gfx1151"
+}

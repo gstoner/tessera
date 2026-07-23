@@ -1330,3 +1330,110 @@ lowering. Function-budgeted liveness-aware rematerialization also runs in the
 shared production post-autodiff pipeline. Exact gfx1151 arena occupancy,
 backward reduction launch, and performance evidence remain follow-up required;
 no selector or device claim is transferred from host-free validation.
+
+Cross-backend sync `CORE-COMPILER-TRAINING-SPINE-2026-07-23` registers
+`tessera.loss.mse` and its paired backward carrier as verifier-checked shared
+Graph IR, with dynamic none/sum/mean Linalg lowering and FP32 compute for
+FP16/BF16 storage. The canonical Graph spelling now executes on gfx1151 for
+multiple ranks through one shape-independent HSACO identity. Scalar sum/mean
+retain the pointwise device allocation and feed it directly to the generated
+reduction kernel; HIP module/function caching removes the former roughly
+2 ms reload penalty. On this unified-memory gfx1151 host, measured medians over
+263--262144 elements put the device and retained host epilogues within roughly
+10%; the device path avoids the full-tensor D2H transfer and is retained as the
+memory-safe default, without a selector claim. Exact tests cover f32/f16/bf16
+and dynamic shapes. Compiled ROCm MSE backward remains follow-up required; the
+shared Linalg adjoint is not an HSACO launch claim.
+
+Cross-backend sync `CORE-COMPILER-DEEPENING-2026-07-23` closes that gfx1151 MSE
+backward follow-up. One compiler-generated runtime-sized HIP kernel consumes
+prediction, target, and reduction-aware cotangent and writes dPrediction plus
+dTarget for none/sum/mean. Ragged 263-element and rank-2 exact-device rows pass
+the numerical oracle, and the public `native_backward` seam records the
+`save_inputs` residual policy. A 30-sample warmed operation-total mean-reduction
+row at 65,536 f32 elements measures 0.875 ms median / 1.013 ms p95 on this
+gfx1151 host. Shared dynamic address-space-3 arenas and the
+measured rematerialization-cost contract also land, but no LDS occupancy,
+selector, or sibling-device performance claim is inferred.
+
+Cross-backend sync `CORE-COMPILER-TRAINING-BREADTH-2026-07-23` extends the
+shared compiler-owned training graph with verifier-checked MAE, Huber,
+SmoothL1, and SGD forward/adjoint ops plus dynamic Linalg lowering. ROCm owns
+exact gfx1151 backward execution for all four regression losses and SGD.
+Losses use one generated runtime-sized HIP kernel for both input gradients;
+SGD uses a dedicated one-launch VJP after operation-total measurement exposed
+the former two-launch composition at 5.83 ms. The retained 65,536-element
+packet records 0.84--0.88 ms regression-loss medians and 0.82 ms SGD median
+after module/function caching. Boundary semantics are explicit: MAE ties at
+zero, Huber uses the closed `abs(error) <= delta` branch, and SmoothL1 uses the
+open `abs(error) < beta` branch. f32 is exact-device proven; no selector,
+other optimizer adjoint, or sibling AMD-device claim transfers.
+
+Cross-backend sync `CORE-COMPILER-TRAINING-SERIES-2026-07-23` adds stable
+BCE-with-logits and class-index/label-smoothed cross-entropy paired Graph
+contracts plus exact one-launch gfx1151 backward execution. It also registers
+KL/JS paired carriers and upgrades Momentum/Nesterov and Adam/AdamW from
+opaque state to explicit tensor-state adjoints. Momentum/Nesterov have exact
+single-launch gfx1151 VJPs and no-residual cache identities; Adam/AdamW have
+dynamic shared Linalg VJPs but their ROCm compiled backward ABI remains
+**follow-up required**. KL/JS compiled backward, Lion/Adafactor state
+contracts, training-step fusion, selector decisions, and operation-total
+closeout evidence remain open.
+
+Cross-backend sync `CORE-COMPILER-TRAINING-FUSION-2026-07-23` closes the first
+training-step fusion envelope for MSE, MAE, Huber, SmoothL1, and stable
+BCE-with-logits feeding SGD or AdamW. A shared post-autodiff rewrite requires
+the prediction gradient to have exactly one optimizer use, preserves the target
+gradient, and internalizes dPrediction. The fused Graph carriers lower through
+one dynamic Linalg loop. On gfx1151, one compiler-generated runtime-sized HIP
+launch writes updated parameter state (plus both AdamW moments) and dTarget.
+All five families pass exact f32 execution for none/mean cotangents, including
+wave and tail paths; different runtime shapes reuse one
+`chip,dtype,kind,parameter,reduction` HSACO identity. At 65,536 elements, the
+retained operation-total packet records 3.45--3.72x SGD and 1.72--1.80x AdamW
+median speedups over loss backward plus optimizer launches. This does not close
+the standalone Adam/AdamW optimizer-adjoint ABI. Series-2 dynamic
+reduction/softmax/attention/paged-KV execution and exact LDS occupancy remain
+open; no sibling-device selector or schedule claim transfers.
+
+ROCm-owned slice `CORE-COMPILER-ROCM-DYNAMIC-2026-07-23` connects the existing
+runtime-sized gfx1151 reduction, softmax, flash-attention, and KV movement
+kernels to the shared prelaunch dynamic-shape guards. Exact execution covers
+ragged last-axis reductions/softmax, unequal query/key sequence lengths
+(including 33x17 and 33x79 rows), and capacity/logical-length-varying KV
+append/read/prune. Reduction and softmax reuse one HSACO across rank/extent
+changes. The retained 30-sample host-wall packet at 129x511 records 2.17 ms
+reduction and 2.12 ms softmax medians; 33-query/79-key f16 attention records
+2.03 ms, and a 17-row append into a 256-row cache records 1.98 ms. Policy:
+reduction/softmax and KV capacity/logical lengths remain fully dynamic;
+attention sequence lengths remain dynamic while head dimension, dtype, GQA,
+window, softcap, bias, and two-wave features remain compile/cache buckets.
+Dynamic normalization/loss fusion into additional downstream consumers remains
+open; no selector claim transfers to other AMD devices.
+
+Cross-backend sync `CORE-COMPILER-MEMORY-LAYOUT-CLOSEOUT-2026-07-23` corrects
+the shared static arena ABI from an address-space-3 LLVM alloca (which the live
+driver reported as zero LDS) to a real workgroup global. Exact gfx1151 HIP
+queries now report 16,384/32,768 LDS bytes for the corresponding arenas; reuse
+of two 16 KiB buffers halves planner peak and raises active blocks/CU from 2 to
+4. Non-entry dynamic descriptors materialize in dominance-scoped cohorts.
+The measured rematerialization corpus records a 128³ matmul+ReLU recompute at
+1.65 ms operation-total while removing a 65,536-byte saved activation. x86
+column-major ABI evidence is sibling-only. Dynamic arena launch sizing and
+broader cost rows remain follow-up required; no other AMD-device claim
+transfers.
+
+ROCm-owned continuation `CORE-COMPILER-HONEST-BOUNDARIES-2026-07-23` closes
+four previously named boundaries on the local gfx1151 host. Runtime-shaped
+RMSNorm/LayerNorm fuse ReLU or SiLU into their final write pass and reuse one
+HSACO per chip/kind/dtype/epilogue across extents. The post-ROCDL
+`rocm-materialize-dynamic-lds` pass maps one runtime-sized address-space-3
+arena to HIP launch-provided dynamic LDS; exact 16/32 KiB launches execute and
+report 4/2 active blocks per CU. Multiple dynamic arenas are explicitly
+rejected until a packed-offset launch ABI exists. Rematerialization evidence
+now covers 64/128/192 matmul shapes with ReLU/GELU/SiLU and consumer-aware
+lookup. Finally, compiled signed INT4 pack/unpack feeds the packed-memory IU4
+WMMA route without host repacking; aligned and ragged results are exact and
+physical inputs are approximately half the logical i8-container size. This
+does not default-enable terminal packing for operations without a physical
+consumer or transfer evidence to another AMD architecture.

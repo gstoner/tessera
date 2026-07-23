@@ -102,3 +102,15 @@ def test_nonlast_axis_rejected():
     x = np.zeros((4, 8), np.float32)
     with pytest.raises(ValueError, match="axis=-1"):
         rt._execute_rocm_compiled_softmax(art, (x,))
+
+
+def test_dynamic_softmax_shapes_share_hsaco_identity():
+    rt = _sm_or_skip()
+    rt._rocm_softmax_hsaco_cache.clear()
+    for shape in ((7, 19), (3, 5, 11)):
+        x = np.linspace(
+            -2.0, 2.0, int(np.prod(shape)), dtype=np.float32
+        ).reshape(shape)
+        result = rt.launch(_artifact(rt), (x,))
+        assert result["ok"] is True, result.get("reason")
+    assert len(rt._rocm_softmax_hsaco_cache) == 1

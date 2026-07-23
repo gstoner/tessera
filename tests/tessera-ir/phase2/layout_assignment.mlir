@@ -79,3 +79,25 @@ func.func @transpose_packed_epilogue_reduce(
       : (tensor<4x8xf32>) -> tensor<4xf32>
   return %sum : tensor<4xf32>
 }
+
+// -----
+
+// A shape-preserving loss is a valid fused pointwise epilogue and retains the
+// agreed matmul layout. Scalar sum/mean losses intentionally do not advertise a
+// tensor layout.
+// CHECK-LABEL: func.func @mse_none_epilogue
+// CHECK: tessera.matmul
+// CHECK-SAME: tessera.layout = "row_major"
+// CHECK: tessera.loss.mse
+// CHECK-SAME: reduction = "none"
+// CHECK-SAME: tessera.layout = "row_major"
+// LEGAL-LABEL: func.func @mse_none_epilogue
+func.func @mse_none_epilogue(
+    %a: tensor<4x8xf32>, %b: tensor<8x16xf32>,
+    %target: tensor<4x16xf32>) -> tensor<4x16xf32> {
+  %prediction = "tessera.matmul"(%a, %b)
+      : (tensor<4x8xf32>, tensor<8x16xf32>) -> tensor<4x16xf32>
+  %loss = "tessera.loss.mse"(%prediction, %target) {reduction = "none"} :
+      (tensor<4x16xf32>, tensor<4x16xf32>) -> tensor<4x16xf32>
+  return %loss : tensor<4x16xf32>
+}

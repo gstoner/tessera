@@ -21,7 +21,7 @@ def _rocm_or_skip():
     return rt
 
 
-def _artifact(rt, op_name, operands=("x",), kwargs=None):
+def _artifact(rt, op_name, operands=("x",), kwargs=None, **metadata):
     return rt.RuntimeArtifact(metadata={
         "target": "rocm",
         "compiler_path": "rocm_intquant_compiled",
@@ -35,6 +35,7 @@ def _artifact(rt, op_name, operands=("x",), kwargs=None):
             "operands": list(operands),
             "kwargs": dict(kwargs or {}),
         }],
+        **metadata,
     })
 
 
@@ -76,3 +77,34 @@ def test_dequantize_and_fake_quantize_match_reference_on_gpu():
     )
     assert fq["ok"] is True, fq.get("reason")
     np.testing.assert_array_equal(fq["output"], q.fake_quantize(x, num_bits=8))
+
+
+@pytest.mark.parametrize("shape", [(17,), (3, 8), (2, 5, 7)])
+def test_compiled_terminal_int4_pack_roundtrip(shape):
+    rt = _rocm_or_skip()
+    rng = np.random.default_rng(401 + int(np.prod(shape)))
+    x = rng.standard_normal(shape).astype(np.float32)
+    quantized = rt.launch(
+        _artifact(
+            rt, "tessera.quantize_int4", terminal_packed=True
+        ),
+        (x,),
+    )["output"]
+    packed, scale, zero_point, logical_shape = quantized
+    assert packed.dtype == np.int8
+    assert packed.size == (x.size + 1) // 2
+    assert tuple(logical_shape) == shape
+    result = rt.launch(
+        _artifact(
+            rt,
+            "tessera.dequantize_int4",
+            kwargs={"scale": float(scale), "zero_point": int(zero_point)},
+            terminal_packed=True,
+            logical_shape=shape,
+        ),
+        (packed,),
+    )["output"]
+    ref_q, ref_scale, ref_zero = q.quantize_int4(x)
+    np.testing.assert_array_equal(
+        result, q.dequantize_int4(ref_q, ref_scale, ref_zero)
+    )

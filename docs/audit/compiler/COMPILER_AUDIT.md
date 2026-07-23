@@ -750,8 +750,11 @@ the A–E kernel spine — each PR test-gated:
   value ops, `MemWrite`/`MemRead` for random/stateful/collective/MoE-transport
   ops), so generic CSE merges/removes the pure ones and preserves the effectful
   ones (`graph_ir_op_effects.mlir`). `LayoutAssignmentPass` is now **wired into
-  the named x86/GPU/CUDA-13 pipelines behind the opt-in `assign-layouts` option**
-  (2026-06-22, default off so the executing path is byte-identical;
+  the named x86/GPU/CUDA-13 pipelines behind the `assign-layouts` option**
+  (2026-06-22). x86 now defaults assignment on and immediately consumes legal
+  row-major/BHSD/NHWC markers through its executable C-order binding contract;
+  NVIDIA remains opt-in
+  (2026-07-23;
   `layout_assignment_pipeline.mlir` + `test_layout_legality_pipeline_wiring.py`).
   Folder coverage was broadened to `reshape` the same day, so **Phase 1 is
   closed**; further folders land opportunistically as new algebraic identities

@@ -1,5 +1,6 @@
-// Default lowering is unchanged (LayoutAssignmentPass is opt-in, default off):
-// RUN: tessera-opt %s -pass-pipeline='builtin.module(tessera-lower-to-x86)' | FileCheck %s --check-prefix=OFF
+// x86 now defaults layout assignment on and consumes its physical row-major
+// contract before tiling:
+// RUN: tessera-opt %s -pass-pipeline='builtin.module(tessera-lower-to-x86)' | FileCheck %s --check-prefix=ON
 //
 // With assign-layouts=true the assignment half runs inside the named pipeline
 // (just before LayoutLegalityPass, which verifies it), stamping tessera.layout:
@@ -13,8 +14,6 @@
 // layout contract end-to-end. See src/transforms/lib/Passes.cpp
 // (TesseraLoweringPipelineOptions) and docs/audit/compiler/COMPILER_AUDIT.md.
 
-// OFF-LABEL: func.func @mm
-// OFF-NOT: tessera.layout
 // ON-LABEL: func.func @mm
 // ON: tessera.matmul
 // ON-SAME: tessera.layout = "row_major"

@@ -17,7 +17,8 @@ module {
     // Cotangent seed (constant tensor of 1.0 matching the output shape),
     // followed by two transposed matmuls — dA = seed @ B^T and dB = A^T @ seed.
     //
-    // CHECK: arith.constant dense<1.000000e+00>
+    // CHECK: arith.constant
+    // CHECK-SAME: dense<1.000000e+00>
     // CHECK: tessera.matmul {{.*}}transposeB = true
     // CHECK: tessera.matmul {{.*}}transposeA = true
     func.return %C : tensor<4x16xf32>

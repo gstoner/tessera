@@ -962,6 +962,303 @@ LogicalResult GuidedDenoiseRegionOp::verify() {
   return success();
 }
 
+LogicalResult MSELossOp::verify() {
+  auto prediction = dyn_cast<RankedTensorType>(getPrediction().getType());
+  auto target = dyn_cast<RankedTensorType>(getTarget().getType());
+  auto result = dyn_cast<RankedTensorType>(getResult().getType());
+  if (!prediction || !target || !result)
+    return success();
+  if (!isFloatTensor(prediction) ||
+      prediction.getElementType() != target.getElementType() ||
+      prediction.getElementType() != result.getElementType())
+    return emitOpError(
+        "expects floating prediction, target, and result with matching dtype");
+  if (failed(verifySameRankedShape(getOperation(), prediction, target,
+                                   "mse prediction/target")))
+    return failure();
+  return verifyReductionResult(getOperation(), prediction, result,
+                               getReduction());
+}
+
+LogicalResult MSELossBackwardOp::verify() {
+  auto prediction = dyn_cast<RankedTensorType>(getPrediction().getType());
+  auto target = dyn_cast<RankedTensorType>(getTarget().getType());
+  auto cotangent = dyn_cast<RankedTensorType>(getCotangent().getType());
+  auto predictionGrad =
+      dyn_cast<RankedTensorType>(getPredictionGrad().getType());
+  auto targetGrad = dyn_cast<RankedTensorType>(getTargetGrad().getType());
+  if (!prediction || !target || !cotangent || !predictionGrad || !targetGrad)
+    return success();
+  if (!isFloatTensor(prediction) ||
+      prediction.getElementType() != target.getElementType() ||
+      prediction.getElementType() != cotangent.getElementType() ||
+      prediction.getElementType() != predictionGrad.getElementType() ||
+      prediction.getElementType() != targetGrad.getElementType())
+    return emitOpError("expects floating operands/results with matching dtype");
+  if (failed(verifySameRankedShape(getOperation(), prediction, target,
+                                   "mse backward prediction/target")) ||
+      failed(verifySameRankedShape(getOperation(), prediction, predictionGrad,
+                                   "mse backward prediction gradient")) ||
+      failed(verifySameRankedShape(getOperation(), target, targetGrad,
+                                   "mse backward target gradient")))
+    return failure();
+  return verifyReductionResult(getOperation(), prediction, cotangent,
+                               getReduction());
+}
+
+LogicalResult BinaryCrossEntropyLossOp::verify() {
+  auto logits = dyn_cast<RankedTensorType>(getLogits().getType());
+  auto target = dyn_cast<RankedTensorType>(getTarget().getType());
+  auto result = dyn_cast<RankedTensorType>(getResult().getType());
+  if (!logits || !target || !result)
+    return success();
+  if (!isFloatTensor(logits) ||
+      logits.getElementType() != target.getElementType() ||
+      logits.getElementType() != result.getElementType())
+    return emitOpError(
+        "expects floating logits, target, and result with matching dtype");
+  if (failed(verifySameRankedShape(getOperation(), logits, target,
+                                   "binary cross entropy logits/target")))
+    return failure();
+  return verifyReductionResult(getOperation(), logits, result, getReduction());
+}
+
+LogicalResult BinaryCrossEntropyLossBackwardOp::verify() {
+  auto logits = dyn_cast<RankedTensorType>(getLogits().getType());
+  auto target = dyn_cast<RankedTensorType>(getTarget().getType());
+  auto cotangent = dyn_cast<RankedTensorType>(getCotangent().getType());
+  auto logitsGrad = dyn_cast<RankedTensorType>(getLogitsGrad().getType());
+  auto targetGrad = dyn_cast<RankedTensorType>(getTargetGrad().getType());
+  if (!logits || !target || !cotangent || !logitsGrad || !targetGrad)
+    return success();
+  if (!isFloatTensor(logits) ||
+      logits.getElementType() != target.getElementType() ||
+      logits.getElementType() != cotangent.getElementType() ||
+      logits.getElementType() != logitsGrad.getElementType() ||
+      logits.getElementType() != targetGrad.getElementType())
+    return emitOpError("expects floating operands/results with matching dtype");
+  if (failed(verifySameRankedShape(getOperation(), logits, target,
+                                   "binary cross entropy backward inputs")) ||
+      failed(verifySameRankedShape(getOperation(), logits, logitsGrad,
+                                   "binary cross entropy logits gradient")) ||
+      failed(verifySameRankedShape(getOperation(), target, targetGrad,
+                                   "binary cross entropy target gradient")))
+    return failure();
+  return verifyReductionResult(getOperation(), logits, cotangent,
+                               getReduction());
+}
+
+static LogicalResult verifyClassIndexLossEnvelope(
+    Operation *op, RankedTensorType logits, RankedTensorType target,
+    RankedTensorType reduced, int64_t axis, StringRef reduction) {
+  if (!isFloatTensor(logits) ||
+      !isa<IntegerType>(target.getElementType()) ||
+      reduced.getElementType() != logits.getElementType())
+    return op->emitOpError(
+        "expects floating logits/result and integer class indices");
+  if (logits.getRank() < 1)
+    return op->emitOpError("logits must have rank >= 1");
+  if (axis < 0)
+    axis += logits.getRank();
+  if (axis < 0 || axis >= logits.getRank())
+    return op->emitOpError("class axis is out of range");
+  if (target.getRank() != logits.getRank() - 1)
+    return op->emitOpError("target rank must equal logits rank minus one");
+  for (int64_t source = 0, destination = 0; source < logits.getRank();
+       ++source) {
+    if (source == axis)
+      continue;
+    if (!dimsAgree(logits.getDimSize(source),
+                   target.getDimSize(destination++)))
+      return op->emitOpError(
+          "target shape must equal logits shape with class axis removed");
+  }
+  if (reduction == "none")
+    return verifySameRankedShape(op, target, reduced,
+                                 "unreduced class loss result");
+  if (reduction != "sum" && reduction != "mean")
+    return op->emitOpError("reduction must be one of {none, sum, mean}");
+  if (reduced.getRank() != 0)
+    return op->emitOpError("reduced class loss result must be rank-0");
+  return success();
+}
+
+LogicalResult CrossEntropyLossOp::verify() {
+  auto logits = dyn_cast<RankedTensorType>(getLogits().getType());
+  auto target = dyn_cast<RankedTensorType>(getTarget().getType());
+  auto result = dyn_cast<RankedTensorType>(getResult().getType());
+  if (!logits || !target || !result)
+    return success();
+  double smoothing = getLabelSmoothing().convertToDouble();
+  if (smoothing < 0.0 || smoothing >= 1.0)
+    return emitOpError("label_smoothing must be in [0, 1)");
+  return verifyClassIndexLossEnvelope(
+      getOperation(), logits, target, result, getAxis(), getReduction());
+}
+
+LogicalResult CrossEntropyLossBackwardOp::verify() {
+  auto logits = dyn_cast<RankedTensorType>(getLogits().getType());
+  auto target = dyn_cast<RankedTensorType>(getTarget().getType());
+  auto cotangent = dyn_cast<RankedTensorType>(getCotangent().getType());
+  auto gradient = dyn_cast<RankedTensorType>(getLogitsGrad().getType());
+  if (!logits || !target || !cotangent || !gradient)
+    return success();
+  if (failed(verifySameRankedShape(getOperation(), logits, gradient,
+                                   "cross entropy logits gradient")))
+    return failure();
+  double smoothing = getLabelSmoothing().convertToDouble();
+  if (smoothing < 0.0 || smoothing >= 1.0)
+    return emitOpError("label_smoothing must be in [0, 1)");
+  return verifyClassIndexLossEnvelope(
+      getOperation(), logits, target, cotangent, getAxis(), getReduction());
+}
+
+static LogicalResult verifyDistributionLossEnvelope(
+    Operation *op, Value lhsValue, Value rhsValue, Value reducedValue,
+    int64_t axis, double epsilon, StringRef reduction) {
+  auto lhs = dyn_cast<RankedTensorType>(lhsValue.getType());
+  auto rhs = dyn_cast<RankedTensorType>(rhsValue.getType());
+  auto reduced = dyn_cast<RankedTensorType>(reducedValue.getType());
+  if (!lhs || !rhs || !reduced)
+    return success();
+  if (!isFloatTensor(lhs) || lhs.getElementType() != rhs.getElementType() ||
+      lhs.getElementType() != reduced.getElementType())
+    return op->emitOpError("expects floating operands/results with matching dtype");
+  if (failed(verifySameRankedShape(op, lhs, rhs, "distribution operands")))
+    return failure();
+  if (lhs.getRank() < 1)
+    return op->emitOpError("distribution operands must have rank >= 1");
+  if (axis < 0)
+    axis += lhs.getRank();
+  if (axis < 0 || axis >= lhs.getRank())
+    return op->emitOpError("distribution class axis is out of range");
+  if (!(epsilon > 0.0) || !std::isfinite(epsilon))
+    return op->emitOpError("epsilon must be finite and greater than zero");
+  if (reduction == "none") {
+    if (reduced.getRank() != lhs.getRank() - 1)
+      return op->emitOpError(
+          "unreduced distribution result must remove the class axis");
+    for (int64_t source = 0, destination = 0; source < lhs.getRank();
+         ++source) {
+      if (source == axis)
+        continue;
+      if (!dimsAgree(lhs.getDimSize(source),
+                     reduced.getDimSize(destination++)))
+        return op->emitOpError(
+            "unreduced distribution result shape must remove the class axis");
+    }
+    return success();
+  }
+  if (reduction != "sum" && reduction != "mean")
+    return op->emitOpError("reduction must be one of {none, sum, mean}");
+  if (reduced.getRank() != 0)
+    return op->emitOpError("reduced distribution result must be rank-0");
+  return success();
+}
+
+LogicalResult KLDivergenceLossOp::verify() {
+  return verifyDistributionLossEnvelope(
+      getOperation(), getLhs(), getRhs(), getResult(), getAxis(),
+      getEpsilon().convertToDouble(), getReduction());
+}
+
+LogicalResult JSDivergenceLossOp::verify() {
+  return verifyDistributionLossEnvelope(
+      getOperation(), getLhs(), getRhs(), getResult(), getAxis(),
+      getEpsilon().convertToDouble(), getReduction());
+}
+
+LogicalResult DistributionLossBackwardOp::verify() {
+  if (getKind() != "kl" && getKind() != "js")
+    return emitOpError("kind must be one of {kl, js}");
+  auto lhs = dyn_cast<RankedTensorType>(getLhs().getType());
+  auto rhs = dyn_cast<RankedTensorType>(getRhs().getType());
+  auto lhsGrad = dyn_cast<RankedTensorType>(getLhsGrad().getType());
+  auto rhsGrad = dyn_cast<RankedTensorType>(getRhsGrad().getType());
+  if (lhs && lhsGrad &&
+      failed(verifySameRankedShape(getOperation(), lhs, lhsGrad,
+                                   "distribution lhs gradient")))
+    return failure();
+  if (rhs && rhsGrad &&
+      failed(verifySameRankedShape(getOperation(), rhs, rhsGrad,
+                                   "distribution rhs gradient")))
+    return failure();
+  return verifyDistributionLossEnvelope(
+      getOperation(), getLhs(), getRhs(), getCotangent(), getAxis(),
+      getEpsilon().convertToDouble(), getReduction());
+}
+
+static LogicalResult verifyRegressionLoss(Operation *op, Value predictionValue,
+                                          Value targetValue, Value resultValue,
+                                          StringRef reduction,
+                                          StringRef label) {
+  auto prediction = dyn_cast<RankedTensorType>(predictionValue.getType());
+  auto target = dyn_cast<RankedTensorType>(targetValue.getType());
+  auto result = dyn_cast<RankedTensorType>(resultValue.getType());
+  if (!prediction || !target || !result)
+    return success();
+  if (!isFloatTensor(prediction) ||
+      prediction.getElementType() != target.getElementType() ||
+      prediction.getElementType() != result.getElementType())
+    return op->emitOpError(
+        "expects floating prediction, target, and result with matching dtype");
+  if (failed(verifySameRankedShape(op, prediction, target, label)))
+    return failure();
+  return verifyReductionResult(op, prediction, result, reduction);
+}
+
+LogicalResult MAELossOp::verify() {
+  return verifyRegressionLoss(getOperation(), getPrediction(), getTarget(),
+                              getResult(), getReduction(), "mae prediction/target");
+}
+
+LogicalResult HuberLossOp::verify() {
+  if (getDelta().convertToDouble() <= 0.0)
+    return emitOpError("requires delta > 0");
+  return verifyRegressionLoss(getOperation(), getPrediction(), getTarget(),
+                              getResult(), getReduction(),
+                              "huber prediction/target");
+}
+
+LogicalResult SmoothL1LossOp::verify() {
+  if (getBeta().convertToDouble() <= 0.0)
+    return emitOpError("requires beta > 0");
+  return verifyRegressionLoss(getOperation(), getPrediction(), getTarget(),
+                              getResult(), getReduction(),
+                              "smooth_l1 prediction/target");
+}
+
+LogicalResult RegressionLossBackwardOp::verify() {
+  StringRef kind = getKind();
+  if (kind != "mae" && kind != "huber" && kind != "smooth_l1")
+    return emitOpError("kind must be one of {mae, huber, smooth_l1}");
+  if (kind != "mae" && getParameter().convertToDouble() <= 0.0)
+    return emitOpError("requires a positive transition parameter");
+  auto prediction = dyn_cast<RankedTensorType>(getPrediction().getType());
+  auto target = dyn_cast<RankedTensorType>(getTarget().getType());
+  auto cotangent = dyn_cast<RankedTensorType>(getCotangent().getType());
+  auto predictionGrad =
+      dyn_cast<RankedTensorType>(getPredictionGrad().getType());
+  auto targetGrad = dyn_cast<RankedTensorType>(getTargetGrad().getType());
+  if (!prediction || !target || !cotangent || !predictionGrad || !targetGrad)
+    return success();
+  if (!isFloatTensor(prediction) ||
+      prediction.getElementType() != target.getElementType() ||
+      prediction.getElementType() != cotangent.getElementType() ||
+      prediction.getElementType() != predictionGrad.getElementType() ||
+      prediction.getElementType() != targetGrad.getElementType())
+    return emitOpError("expects floating operands/results with matching dtype");
+  if (failed(verifySameRankedShape(getOperation(), prediction, target,
+                                   "regression backward prediction/target")) ||
+      failed(verifySameRankedShape(getOperation(), prediction, predictionGrad,
+                                   "regression backward prediction gradient")) ||
+      failed(verifySameRankedShape(getOperation(), target, targetGrad,
+                                   "regression backward target gradient")))
+    return failure();
+  return verifyReductionResult(getOperation(), prediction, cotangent,
+                               getReduction());
+}
+
 LogicalResult RLNormalizeGroupAdvantagesOp::verify() {
   auto rewards = dyn_cast<RankedTensorType>(getRewards().getType());
   auto result = dyn_cast<RankedTensorType>(getResult().getType());
@@ -2823,45 +3120,77 @@ LogicalResult SwigluFusedOp::verify() {
   return success();
 }
 
-LogicalResult AdamOp::verify() {
-  auto paramTy = dyn_cast<RankedTensorType>(getParam().getType());
-  auto gradTy = dyn_cast<RankedTensorType>(getGrad().getType());
-  auto m1Ty = dyn_cast<RankedTensorType>(getMoment1().getType());
-  auto m2Ty = dyn_cast<RankedTensorType>(getMoment2().getType());
-  auto newParamTy = dyn_cast<RankedTensorType>(getNewParam().getType());
-  auto newM1Ty = dyn_cast<RankedTensorType>(getNewMoment1().getType());
-  auto newM2Ty = dyn_cast<RankedTensorType>(getNewMoment2().getType());
-  if (paramTy && gradTy &&
-      failed(verifySameRankedShapeAndElementType(getOperation(), paramTy,
-                                                 gradTy, "adam grad")))
-    return failure();
-  if (paramTy && m1Ty &&
-      failed(verifySameRankedShapeAndElementType(getOperation(), paramTy,
-                                                 m1Ty, "adam moment1")))
-    return failure();
-  if (paramTy && m2Ty &&
-      failed(verifySameRankedShapeAndElementType(getOperation(), paramTy,
-                                                 m2Ty, "adam moment2")))
-    return failure();
-  if (paramTy && newParamTy &&
-      failed(verifySameRankedShapeAndElementType(getOperation(), paramTy,
-                                                 newParamTy, "adam new_param")))
-    return failure();
-  if (m1Ty && newM1Ty &&
-      failed(verifySameRankedShapeAndElementType(getOperation(), m1Ty, newM1Ty,
-                                                 "adam new_moment1")))
-    return failure();
-  if (m2Ty && newM2Ty &&
-      failed(verifySameRankedShapeAndElementType(getOperation(), m2Ty, newM2Ty,
-                                                 "adam new_moment2")))
-    return failure();
-  if (failed(verifyPositiveOptionalF64(getOperation(), "lr", getLr())) ||
-      failed(verifyUnitIntervalOptionalF64(getOperation(), "beta1", getBeta1())) ||
-      failed(verifyUnitIntervalOptionalF64(getOperation(), "beta2", getBeta2())) ||
-      failed(verifyPositiveOptionalF64(getOperation(), "eps", getEps())) ||
-      failed(verifyPositiveOptionalI64(getOperation(), "step", getStep())))
+static LogicalResult verifyAdamStep(
+    Operation *op, Value paramValue, Value gradValue, Value m1Value,
+    Value m2Value, Value newParamValue, Value newM1Value, Value newM2Value,
+    std::optional<APFloat> lr, std::optional<APFloat> beta1,
+    std::optional<APFloat> beta2, std::optional<APFloat> eps,
+    std::optional<APFloat> weightDecay, std::optional<int64_t> step,
+    StringRef name) {
+  (void)name;
+  auto paramTy = dyn_cast<RankedTensorType>(paramValue.getType());
+  if (paramTy && !isFloatTensor(paramTy))
+    return op->emitOpError("expects floating tensors");
+  const std::pair<Value, StringRef> peers[] = {
+      {gradValue, " gradient"}, {m1Value, " moment1"},
+      {m2Value, " moment2"}, {newParamValue, " new parameter"},
+      {newM1Value, " new moment1"}, {newM2Value, " new moment2"}};
+  for (auto [value, label] : peers) {
+    auto other = dyn_cast<RankedTensorType>(value.getType());
+    if (paramTy && other &&
+        failed(verifySameRankedShapeAndElementType(
+            op, paramTy, other, label)))
+      return failure();
+  }
+  if (failed(verifyPositiveOptionalF64(op, "lr", lr)) ||
+      failed(verifyUnitIntervalOptionalF64(op, "beta1", beta1)) ||
+      failed(verifyUnitIntervalOptionalF64(op, "beta2", beta2)) ||
+      failed(verifyPositiveOptionalF64(op, "eps", eps)) ||
+      failed(verifyPositiveOptionalF64(op, "weight_decay", weightDecay)) ||
+      failed(verifyPositiveOptionalI64(op, "step", step)))
     return failure();
   return success();
+}
+
+LogicalResult AdamOp::verify() {
+  return verifyAdamStep(
+      getOperation(), getParam(), getGrad(), getMoment1(), getMoment2(),
+      getNewParam(), getNewMoment1(), getNewMoment2(), getLr(), getBeta1(),
+      getBeta2(), getEps(), std::nullopt, getStep(), "adam");
+}
+
+LogicalResult SGDOp::verify() {
+  auto param = dyn_cast<RankedTensorType>(getParam().getType());
+  auto grad = dyn_cast<RankedTensorType>(getGrad().getType());
+  auto result = dyn_cast<RankedTensorType>(getNewParam().getType());
+  if (!param || !grad || !result)
+    return success();
+  if (!isFloatTensor(param))
+    return emitOpError("expects floating tensors");
+  if (getLr().convertToDouble() < 0.0)
+    return emitOpError("requires lr >= 0");
+  if (failed(verifySameRankedShapeAndElementType(
+          getOperation(), param, grad, "sgd parameter/gradient")))
+    return failure();
+  return verifySameRankedShapeAndElementType(
+      getOperation(), param, result, "sgd parameter/result");
+}
+
+LogicalResult SGDBackwardOp::verify() {
+  auto cotangent = dyn_cast<RankedTensorType>(getCotangent().getType());
+  auto paramGrad = dyn_cast<RankedTensorType>(getParamGrad().getType());
+  auto gradGrad = dyn_cast<RankedTensorType>(getGradGrad().getType());
+  if (!cotangent || !paramGrad || !gradGrad)
+    return success();
+  if (!isFloatTensor(cotangent))
+    return emitOpError("expects floating tensors");
+  if (getLr().convertToDouble() < 0.0)
+    return emitOpError("requires lr >= 0");
+  if (failed(verifySameRankedShapeAndElementType(
+          getOperation(), cotangent, paramGrad, "sgd backward param gradient")))
+    return failure();
+  return verifySameRankedShapeAndElementType(
+      getOperation(), cotangent, gradGrad, "sgd backward input gradient");
 }
 
 static LogicalResult verifyOptimizerTree(Operation *op, Value params,
@@ -2903,17 +3232,10 @@ static LogicalResult verifyOptimizerTree(Operation *op, Value params,
 }
 
 LogicalResult AdamWOp::verify() {
-  return verifyOptimizerTree(getOperation(), getParams(), getGrads(),
-                             getState(), getNewParams(), getNewState(),
-                             getLr(), getBeta1(), getBeta2(), getEps(),
-                             getMomentum(), getWeightDecay(), "adamw");
-}
-
-LogicalResult MomentumOp::verify() {
-  return verifyOptimizerTree(getOperation(), getParams(), getGrads(),
-                             getState(), getNewParams(), getNewState(),
-                             getLr(), getBeta1(), getBeta2(), getEps(),
-                             getMomentum(), getWeightDecay(), "momentum");
+  return verifyAdamStep(
+      getOperation(), getParam(), getGrad(), getMoment1(), getMoment2(),
+      getNewParam(), getNewMoment1(), getNewMoment2(), getLr(), getBeta1(),
+      getBeta2(), getEps(), getWeightDecay(), getStep(), "adamw");
 }
 
 LogicalResult AdafactorOp::verify() {
@@ -2928,6 +3250,147 @@ LogicalResult LionOp::verify() {
                              getState(), getNewParams(), getNewState(),
                              getLr(), getBeta1(), getBeta2(), getEps(),
                              getMomentum(), getWeightDecay(), "lion");
+}
+
+static LogicalResult verifyMomentumStep(
+    Operation *op, Value paramValue, Value gradValue, Value velocityValue,
+    Value newParamValue, Value newVelocityValue, double lr, double momentum) {
+  auto param = dyn_cast<RankedTensorType>(paramValue.getType());
+  auto grad = dyn_cast<RankedTensorType>(gradValue.getType());
+  auto velocity = dyn_cast<RankedTensorType>(velocityValue.getType());
+  auto newParam = dyn_cast<RankedTensorType>(newParamValue.getType());
+  auto newVelocity = dyn_cast<RankedTensorType>(newVelocityValue.getType());
+  if (lr < 0.0 || !std::isfinite(lr))
+    return op->emitOpError("lr must be finite and non-negative");
+  if (momentum < 0.0 || momentum > 1.0 || !std::isfinite(momentum))
+    return op->emitOpError("momentum must be finite and in [0, 1]");
+  if (!param || !grad || !velocity || !newParam || !newVelocity)
+    return success();
+  if (!isFloatTensor(param))
+    return op->emitOpError("expects floating tensors");
+  if (failed(verifySameRankedShapeAndElementType(
+          op, param, grad, "momentum gradient")) ||
+      failed(verifySameRankedShapeAndElementType(
+          op, param, velocity, "momentum velocity")) ||
+      failed(verifySameRankedShapeAndElementType(
+          op, param, newParam, "momentum new parameter")) ||
+      failed(verifySameRankedShapeAndElementType(
+          op, param, newVelocity, "momentum new velocity")))
+    return failure();
+  return success();
+}
+
+LogicalResult MomentumOp::verify() {
+  return verifyMomentumStep(
+      getOperation(), getParam(), getGrad(), getVelocity(), getNewParam(),
+      getNewVelocity(), getLr().convertToDouble(),
+      getMomentum().convertToDouble());
+}
+
+LogicalResult NesterovOp::verify() {
+  return verifyMomentumStep(
+      getOperation(), getParam(), getGrad(), getVelocity(), getNewParam(),
+      getNewVelocity(), getLr().convertToDouble(),
+      getMomentum().convertToDouble());
+}
+
+LogicalResult MomentumBackwardOp::verify() {
+  if (failed(verifyMomentumStep(
+      getOperation(), getParamCotangent(), getVelocityCotangent(),
+      getVelocityCotangent(), getParamGrad(), getVelocityGrad(),
+      getLr().convertToDouble(), getMomentum().convertToDouble())))
+    return failure();
+  auto param = dyn_cast<RankedTensorType>(getParamCotangent().getType());
+  auto gradGrad = dyn_cast<RankedTensorType>(getGradGrad().getType());
+  if (!param || !gradGrad)
+    return success();
+  return verifySameRankedShapeAndElementType(
+      getOperation(), param, gradGrad, "momentum input-gradient gradient");
+}
+
+LogicalResult AdamBackwardOp::verify() {
+  if (failed(verifyAdamStep(
+          getOperation(), getParam(), getGrad(), getMoment1(), getMoment2(),
+          getParamGrad(), getMoment1Grad(), getMoment2Grad(), getLr(),
+          getBeta1(), getBeta2(), getEps(), getWeightDecay(), getStep(),
+          getAdamw() ? "adamw backward" : "adam backward")))
+    return failure();
+  auto param = dyn_cast<RankedTensorType>(getParam().getType());
+  auto gradGrad = dyn_cast<RankedTensorType>(getGradGrad().getType());
+  if (!param || !gradGrad)
+    return success();
+  return verifySameRankedShapeAndElementType(
+      getOperation(), param, gradGrad, "adam input-gradient gradient");
+}
+
+LogicalResult TrainingLossSGDOp::verify() {
+  if (getKind() != "mse" && getKind() != "bce" && getKind() != "mae" &&
+      getKind() != "huber" && getKind() != "smooth_l1")
+    return emitOpError(
+        "kind must be one of {mse, bce, mae, huber, smooth_l1}");
+  if ((getKind() == "huber" || getKind() == "smooth_l1") &&
+      (!(getParameter().convertToDouble() > 0.0) ||
+       !std::isfinite(getParameter().convertToDouble())))
+    return emitOpError("piecewise loss parameter must be finite and positive");
+  if (getLr().convertToDouble() < 0.0 ||
+      !std::isfinite(getLr().convertToDouble()))
+    return emitOpError("lr must be finite and non-negative");
+  auto prediction = dyn_cast<RankedTensorType>(getPrediction().getType());
+  auto target = dyn_cast<RankedTensorType>(getTarget().getType());
+  auto cotangent = dyn_cast<RankedTensorType>(getCotangent().getType());
+  auto param = dyn_cast<RankedTensorType>(getParam().getType());
+  auto newParam = dyn_cast<RankedTensorType>(getNewParam().getType());
+  auto targetGrad = dyn_cast<RankedTensorType>(getTargetGrad().getType());
+  if (!prediction || !target || !cotangent || !param || !newParam ||
+      !targetGrad)
+    return success();
+  if (!isFloatTensor(prediction))
+    return emitOpError("expects floating tensors");
+  if (failed(verifySameRankedShapeAndElementType(
+          getOperation(), prediction, target, "training loss target")) ||
+      failed(verifySameRankedShapeAndElementType(
+          getOperation(), prediction, param, "training SGD parameter")) ||
+      failed(verifySameRankedShapeAndElementType(
+          getOperation(), param, newParam, "training SGD result")) ||
+      failed(verifySameRankedShapeAndElementType(
+          getOperation(), target, targetGrad, "training target gradient")))
+    return failure();
+  if (prediction.getElementType() != cotangent.getElementType())
+    return emitOpError("cotangent dtype must match the loss inputs");
+  return verifyReductionResult(getOperation(), prediction, cotangent,
+                               getReduction());
+}
+
+LogicalResult TrainingLossAdamWOp::verify() {
+  if (getKind() != "mse" && getKind() != "bce" && getKind() != "mae" &&
+      getKind() != "huber" && getKind() != "smooth_l1")
+    return emitOpError(
+        "kind must be one of {mse, bce, mae, huber, smooth_l1}");
+  if ((getKind() == "huber" || getKind() == "smooth_l1") &&
+      (!(getParameter().convertToDouble() > 0.0) ||
+       !std::isfinite(getParameter().convertToDouble())))
+    return emitOpError("piecewise loss parameter must be finite and positive");
+  if (failed(verifyAdamStep(
+          getOperation(), getParam(), getPrediction(), getMoment1(),
+          getMoment2(), getNewParam(), getNewMoment1(), getNewMoment2(),
+          getLr(), getBeta1(), getBeta2(), getEps(), getWeightDecay(),
+          getStep(), "training loss AdamW")))
+    return failure();
+  auto prediction = dyn_cast<RankedTensorType>(getPrediction().getType());
+  auto target = dyn_cast<RankedTensorType>(getTarget().getType());
+  auto cotangent = dyn_cast<RankedTensorType>(getCotangent().getType());
+  auto targetGrad = dyn_cast<RankedTensorType>(getTargetGrad().getType());
+  if (!prediction || !target || !cotangent || !targetGrad)
+    return success();
+  if (failed(verifySameRankedShapeAndElementType(
+          getOperation(), prediction, target, "training loss target")) ||
+      failed(verifySameRankedShapeAndElementType(
+          getOperation(), target, targetGrad, "training target gradient")))
+    return failure();
+  if (prediction.getElementType() != cotangent.getElementType())
+    return emitOpError("cotangent dtype must match the loss inputs");
+  return verifyReductionResult(getOperation(), prediction, cotangent,
+                               getReduction());
 }
 
 // ── Phase 1 identity folders for the elementwise binary family ───────────────

@@ -2,6 +2,8 @@
 // through the table-driven full Graph→Schedule→Tile→Target Apple spine to a
 // tessera_apple.cpu.call (value op) naming the Accelerate LAPACK C ABI symbol.
 //
+// REQUIRES: tessera-apple-backend
+//
 // RUN: tessera-opt -tessera-lower-to-apple_cpu-full %s \
 // RUN:   | FileCheck %s
 

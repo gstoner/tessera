@@ -1,5 +1,7 @@
 // Stage 12 — standalone Apple value Tile verifier rejects opaque tile.* ops.
 //
+// REQUIRES: tessera-apple-backend
+//
 // RUN: %tessera_strict_opt %s -tessera-verify-apple-value-tile-ir --verify-diagnostics -o /dev/null
 
 func.func @opaque_value_tile(%a: tensor<4x4xf32>) -> tensor<4x4xf32> {

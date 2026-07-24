@@ -1,6 +1,7 @@
 from benchmarks.rocm.benchmark_rocm_lds_arena_occupancy import (
     _arena_module,
     _dynamic_arena_module,
+    _nested_loop_dynamic_arena_module,
     _packed_dynamic_arena_module,
     _path_max_dynamic_arena_module,
 )
@@ -33,4 +34,12 @@ def test_lds_arena_benchmark_emits_mutually_exclusive_path_arenas():
     source = _path_max_dynamic_arena_module()
     assert "gpu.func @arena_dynamic_path_max" in source
     assert source.count("memref.alloca(") == 2
+    assert "scf.if %take_lhs" in source
+
+
+def test_lds_arena_benchmark_emits_nested_loop_lifetime_cohort():
+    source = _nested_loop_dynamic_arena_module()
+    assert "gpu.func @arena_dynamic_nested_loop" in source
+    assert source.count("memref.alloca(") == 4
+    assert "scf.for" in source
     assert "scf.if %take_lhs" in source

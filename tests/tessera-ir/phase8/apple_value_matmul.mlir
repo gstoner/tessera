@@ -19,3 +19,5 @@ func.func @matmul_value(%a: tensor<4x8xf32>, %b: tensor<8x16xf32>) -> tensor<4x1
   %0 = tessera.matmul %a, %b : (tensor<4x8xf32>, tensor<8x16xf32>) -> tensor<4x16xf32>
   return %0 : tensor<4x16xf32>
 }
+// REQUIRES: tessera-apple-backend
+//

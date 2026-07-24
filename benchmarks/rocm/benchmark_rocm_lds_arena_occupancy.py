@@ -20,8 +20,8 @@ from typing import Any
 
 from tessera import runtime as rt
 from tessera.compiler.rocm_dynamic_lds import (
+    interference_slot_layout,
     packed_path_layout,
-    path_max_launch_bytes,
 )
 
 
@@ -128,6 +128,52 @@ def _path_max_dynamic_arena_module() -> str:
         gpu.barrier
         %value = memref.load %rhs[%tid] : memref<?xi8, 3>
         memref.store %value, %out[%tid] : memref<?xi8>
+      }
+      gpu.return
+    }
+  }
+}
+"""
+
+def _nested_loop_dynamic_arena_module() -> str:
+    """Outer-live plus loop/nested-branch arenas exercising slot maxima."""
+    return """module attributes {gpu.container_module} {
+  gpu.module @kernels {
+    gpu.func @arena_dynamic_nested_loop(
+        %out: memref<?xi8>, %take_lhs: i1, %outer_n: index,
+        %loop_n: index, %lhs_n: index, %rhs_n: index,
+        %iterations: index) kernel {
+      %outer = memref.alloca(%outer_n) : memref<?xi8, 3>
+      %tid = gpu.thread_id x
+      %three = arith.constant 3 : i8
+      memref.store %three, %outer[%tid] : memref<?xi8, 3>
+      %c0 = arith.constant 0 : index
+      %c1 = arith.constant 1 : index
+      scf.for %iv = %c0 to %iterations step %c1 {
+        %local = memref.alloca(%loop_n) : memref<?xi8, 3>
+        %four = arith.constant 4 : i8
+        memref.store %four, %local[%tid] : memref<?xi8, 3>
+        gpu.barrier
+        %outer_value = memref.load %outer[%tid] : memref<?xi8, 3>
+        %local_value = memref.load %local[%tid] : memref<?xi8, 3>
+        %base = arith.addi %outer_value, %local_value : i8
+        scf.if %take_lhs {
+          %lhs = memref.alloca(%lhs_n) : memref<?xi8, 3>
+          %five = arith.constant 5 : i8
+          memref.store %five, %lhs[%tid] : memref<?xi8, 3>
+          gpu.barrier
+          %value = memref.load %lhs[%tid] : memref<?xi8, 3>
+          %sum = arith.addi %base, %value : i8
+          memref.store %sum, %out[%tid] : memref<?xi8>
+        } else {
+          %rhs = memref.alloca(%rhs_n) : memref<?xi8, 3>
+          %seven = arith.constant 7 : i8
+          memref.store %seven, %rhs[%tid] : memref<?xi8, 3>
+          gpu.barrier
+          %value = memref.load %rhs[%tid] : memref<?xi8, 3>
+          %sum = arith.addi %base, %value : i8
+          memref.store %sum, %out[%tid] : memref<?xi8>
+        }
       }
       gpu.return
     }
@@ -363,8 +409,9 @@ def _measure_path_max_dynamic(
     function = ctypes.c_void_p()
     output = ctypes.c_void_p()
     paths = ((lhs_bytes,), (rhs_bytes,))
-    launch_bytes = path_max_launch_bytes(paths)
-    summed_bytes = path_max_launch_bytes(((lhs_bytes, rhs_bytes),))
+    slots = ((lhs_bytes, rhs_bytes),)
+    slot_offsets, launch_bytes = interference_slot_layout(slots)
+    summed_bytes = packed_path_layout((lhs_bytes, rhs_bytes))[1]
     if hip.hipModuleLoadData(ctypes.byref(module), hsaco) != 0:
         raise RuntimeError("HIP could not load path-max dynamic LDS HSACO")
     try:
@@ -403,12 +450,80 @@ def _measure_path_max_dynamic(
             raise RuntimeError("path-max dynamic LDS occupancy query failed")
         return {
             "path_arena_bytes": [list(path) for path in paths],
-            "launch_reduction": "max_of_aligned_sums",
+            "interference_slots": [list(slot) for slot in slots],
+            "launch_reduction": "aligned_sum_of_slot_maxima",
             "launch_shared_bytes": launch_bytes,
             "incorrect_summed_bytes": summed_bytes,
             "bytes_avoided_vs_sum": summed_bytes - launch_bytes,
             "branch_results_verified": all(observed),
             "path_offsets": [[0], [0]],
+            "slot_offsets": list(slot_offsets),
+            "active_blocks_per_cu": active_blocks.value,
+            "hsaco_bytes": len(hsaco),
+        }
+    finally:
+        if output.value:
+            hip.hipFree(output)
+        hip.hipModuleUnload(module)
+
+def _measure_nested_loop_dynamic(
+    hip: ctypes.CDLL, chip: str, threads: int
+) -> dict[str, Any]:
+    hsaco = _build_packed_dynamic_hsaco(
+        chip, _nested_loop_dynamic_arena_module()
+    )
+    module = ctypes.c_void_p()
+    function = ctypes.c_void_p()
+    output = ctypes.c_void_p()
+    outer_bytes, loop_bytes = 8_192, 4_097
+    lhs_bytes, rhs_bytes = 12_289, 32_001
+    slots = ((outer_bytes,), (loop_bytes, lhs_bytes, rhs_bytes))
+    offsets, launch_bytes = interference_slot_layout(slots)
+    if hip.hipModuleLoadData(ctypes.byref(module), hsaco) != 0:
+        raise RuntimeError("HIP could not load nested-loop dynamic LDS HSACO")
+    try:
+        if hip.hipModuleGetFunction(
+            ctypes.byref(function), module, b"arena_dynamic_nested_loop"
+        ) != 0:
+            raise RuntimeError("HIP did not find arena_dynamic_nested_loop")
+        if hip.hipMalloc(ctypes.byref(output), threads) != 0:
+            raise RuntimeError("HIP nested-loop output allocation failed")
+        cv = ctypes.c_void_p
+        observed: list[bool] = []
+        for take_lhs, expected in ((True, 12), (False, 14)):
+            args = [
+                cv(output.value), cv(output.value), ctypes.c_int64(0),
+                ctypes.c_int64(threads), ctypes.c_int64(1),
+                ctypes.c_bool(take_lhs), ctypes.c_int64(outer_bytes),
+                ctypes.c_int64(loop_bytes), ctypes.c_int64(lhs_bytes),
+                ctypes.c_int64(rhs_bytes), ctypes.c_int64(2),
+            ]
+            packed = (cv * len(args))()
+            for index, value in enumerate(args):
+                packed[index] = ctypes.cast(ctypes.byref(value), cv)
+            rc = hip.hipModuleLaunchKernel(
+                function, 1, 1, 1, threads, 1, 1, launch_bytes,
+                None, packed, None,
+            )
+            if rc != 0 or hip.hipDeviceSynchronize() != 0:
+                raise RuntimeError(
+                    f"nested-loop dynamic LDS launch failed rc={rc}"
+                )
+            host = (ctypes.c_uint8 * threads)()
+            if hip.hipMemcpy(host, output, threads, 2) != 0:
+                raise RuntimeError("nested-loop LDS result copy failed")
+            observed.append(all(value == expected for value in host))
+        active_blocks = ctypes.c_int()
+        if hip.hipModuleOccupancyMaxActiveBlocksPerMultiprocessor(
+            ctypes.byref(active_blocks), function, threads, launch_bytes
+        ) != 0:
+            raise RuntimeError("nested-loop LDS occupancy query failed")
+        return {
+            "interference_slots": [list(slot) for slot in slots],
+            "slot_offsets": list(offsets),
+            "launch_reduction": "aligned_sum_of_slot_maxima",
+            "launch_shared_bytes": launch_bytes,
+            "branch_and_loop_results_verified": all(observed),
             "active_blocks_per_cu": active_blocks.value,
             "hsaco_bytes": len(hsaco),
         }
@@ -452,6 +567,7 @@ def run(chip: str = "gfx1151", threads: int = 256) -> dict[str, Any]:
     path_max_rows = [
         _measure_path_max_dynamic(hip, 12_289, 32_001, chip, threads)
     ]
+    cfg_lifetime_rows = [_measure_nested_loop_dynamic(hip, chip, threads)]
     return {
         "schema": "tessera.rocm.lds-arena-occupancy.v1",
         "device": chip,
@@ -467,6 +583,7 @@ def run(chip: str = "gfx1151", threads: int = 256) -> dict[str, Any]:
         "dynamic_rows": dynamic_rows,
         "packed_dynamic_rows": packed_dynamic_rows,
         "path_max_rows": path_max_rows,
+        "cfg_lifetime_rows": cfg_lifetime_rows,
         "occupancy_effect": {
             "active_blocks_per_cu_before": rows[1]["active_blocks_per_cu"],
             "active_blocks_per_cu_after": rows[0]["active_blocks_per_cu"],

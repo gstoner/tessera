@@ -1,5 +1,6 @@
 
 # -*- Python -*-
+# ruff: noqa: F821
 """Lit configuration for the Tessera IR phase 2–8 fixtures.
 
 Discovers ``*.mlir`` files and substitutes ``tessera-opt``.  The
@@ -20,7 +21,11 @@ without the caller needing to export ``PATH`` first.  Probe order:
 can pipe into it on a host without LLVM bin on PATH.
 """
 
-import os, shutil, subprocess, lit.formats
+import os
+import shutil
+import subprocess
+
+import lit.formats
 
 
 # Common Homebrew / system LLVM install locations to probe when
@@ -105,6 +110,9 @@ def _opt_help_contains(needle: str) -> bool:
 
 if _opt_help_contains("tessera-lower-to-rocm"):
     config.available_features.add("tessera-rocm-backend")
+
+if _opt_help_contains("tessera-lower-to-apple_gpu"):
+    config.available_features.add("tessera-apple-backend")
 
 # The NVIDIA control-flow fixtures invoke the NVIDIA tile→target pass
 # (`--lower-tile-to-nvidia`, which emits tessera_nvidia.control_*) AND the core

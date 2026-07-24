@@ -28,6 +28,7 @@ MARKERS: dict[str, str] = {
     "compiler_cpu": "compiler-artifact proof owned by the CPU JIT backend",
     "compiler_nvidia": "compiler-artifact proof owned by the NVIDIA backend",
     "compiler_rocm": "compiler-artifact proof owned by the ROCm backend",
+    "native_host": "requires a native OS host and is skipped under WSL",
     "integration": "crosses a process, package, runtime, or component boundary",
     "performance": (
         "measures wall-clock/device performance; excluded from the CPU PR lane"

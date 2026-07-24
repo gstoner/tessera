@@ -1,3 +1,5 @@
+// REQUIRES: tessera-apple-backend
+//
 // RUN: tessera-opt %s --pass-pipeline='builtin.module(tessera-lower-to-apple_gpu-runtime)' --allow-unregistered-dialect | FileCheck %s
 
 // Phase 8.4.7 — MLP-block 2-op fusions: matmul -> gelu and matmul -> rmsnorm.

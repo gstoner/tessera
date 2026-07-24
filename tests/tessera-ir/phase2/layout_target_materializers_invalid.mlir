@@ -1,3 +1,5 @@
+// REQUIRES: tessera-apple-backend
+//
 // RUN: not %tessera_strict_opt --tessera-apple-materialize-layout-casts %s 2>&1 | FileCheck %s
 
 // Apple runtime bindings do not silently reinterpret a column-major tensor as

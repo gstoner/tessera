@@ -34,9 +34,9 @@ question. Resolution:
   `Conv2DNHWCOp` has an honest `failure()` scaffold and is explicitly
   marked scaffolded.
 - **TMEM / tcgen05 path stays scaffolded**: the `LowerTileToPTX.cpp`
-  body emits a schematic Blackwell PTX form. Real PTX operands and
-  target gating remain in the Sprint G-4 NVIDIA lit fixture set under
-  `tests/tessera-ir/phase3/cuda13/`. CLAUDE.md Architecture Decision
+  body emits a schematic Blackwell PTX form. Typed Blackwell target selection
+  and NVVM-contract gating live in the NVIDIA backend lit suite under
+  `src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia/`. Architecture Decision
   #21 (unsupported lowering must emit a stable diagnostic) covers the
   "lower with honest gating" contract for TMEM today.
 - **FA-4 Attn + Queue dialects** are normative Tile IR layers (see

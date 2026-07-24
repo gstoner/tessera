@@ -1,3 +1,5 @@
+// REQUIRES: tessera-apple-backend
+//
 // RUN: tessera-opt %s --tessera-control-if-to-apple_gpu | FileCheck %s
 
 // Phase-G close-out C — lower the Graph-IR divergent if/else `tessera.control_if`

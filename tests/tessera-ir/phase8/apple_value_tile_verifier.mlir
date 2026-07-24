@@ -1,5 +1,7 @@
 // Stage 12 — standalone Apple value Tile verifier accepts registered allowlist.
 //
+// REQUIRES: tessera-apple-backend
+//
 // RUN: %tessera_strict_opt %s -tessera-verify-apple-value-tile-ir | FileCheck %s
 
 func.func @allowed_value_tile(%a: tensor<4x8xf32>, %b: tensor<8x16xf32>)

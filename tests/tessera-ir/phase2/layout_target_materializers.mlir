@@ -1,3 +1,5 @@
+// REQUIRES: tessera-apple-backend
+//
 // RUN: tessera-opt --tessera-apple-materialize-layout-casts %s | FileCheck %s --check-prefix=APPLE
 // RUN: tessera-opt --tessera-x86-materialize-layout-casts %s | FileCheck %s --check-prefix=X86
 // RUN: tessera-opt --tessera-nvidia-materialize-layout-casts %s | FileCheck %s --check-prefix=NVIDIA
@@ -56,17 +58,4 @@ func.func @attention_layout(
       (tensor<1x2x8x4xf32>, tensor<1x2x8x4xf32>, tensor<1x2x8x4xf32>) ->
       tensor<1x2x8x4xf32>
   return %0 : tensor<1x2x8x4xf32>
-}
-
-// X86-LABEL: func.func @x86_column_major
-// X86-NOT: "tessera.cast"
-// X86: tessera.matmul %arg0, %arg1
-// X86-SAME: tessera.x86.operand_layout_0 = "col_major"
-func.func @x86_column_major(
-    %arg0: tensor<4x8xf32>, %arg1: tensor<8x6xf32>) -> tensor<4x6xf32> {
-  %a = "tessera.cast"(%arg0) {tessera.layout = "col_major"} :
-      (tensor<4x8xf32>) -> tensor<4x8xf32>
-  %0 = "tessera.matmul"(%a, %arg1) :
-      (tensor<4x8xf32>, tensor<8x6xf32>) -> tensor<4x6xf32>
-  return %0 : tensor<4x6xf32>
 }

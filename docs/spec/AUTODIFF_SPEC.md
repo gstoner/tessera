@@ -378,7 +378,14 @@ Landed alongside F4 (previously out of scope for the F4 first cut):
   `checkpoint` Python surface: it clones each `tessera.recompute`-tagged pure
   op to its backward consumers, shrinking the forward activation's live range at
   the cost of recompute (Decision #10 — budget-guided, pure region-free ops
-  only; a tagged op with regions is a hard `[REMAT_NON_CLONABLE]` error). Lit:
+  only; a tagged op with regions is a hard `REMAT_NON_CLONABLE` error).
+  Explicit CLI/function MB budgets take precedence. Otherwise, a function with
+  `tessera.device_memory_capacity_bytes` derives a byte budget after its
+  reserve, marked parameter storage, gradient copies, optimizer-state copies,
+  and persistent bytes; dynamic parameters require
+  `tessera.model.parameter_bytes_bound`. The pass records the budget source,
+  parameter/state totals, estimated activation peaks, and selected recompute
+  cost. Lit:
   `tests/tessera-ir/phase_f2/`.
 
 Still out of scope for the F4 first cut:
@@ -386,9 +393,9 @@ Still out of scope for the F4 first cut:
 * Higher-order derivatives in Graph IR (run AutodiffPass twice +
   canonicalize). The Python reference F7 surface is shipped; this bullet only
   tracks lower-level IR support.
-* Budget-guided *automatic* remat selection (greedy live-set scan). The IR pass
-  honours explicit `tessera.recompute` markers today and records
-  `--memory-budget-mb` as advisory; auto-selection under a budget is future.
+* Full-model validation and production device-capacity injection for the
+  model-derived budget. The deterministic greedy live-set selector is landed;
+  explicit `tessera.recompute` markers remain authoritative.
 
 ## Cross-references
 

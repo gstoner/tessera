@@ -734,6 +734,19 @@ priority (highest DL leverage first):
   activations. Finally, the ROCm packed ABI has physical nibblewise ReLU,
   indexed sparse-gather, and packed cache-append consumers in addition to
   matrix consumers; all execute on gfx1151 without host unpack/repack.
+  **CFG-memory-budget follow-on (2026-07-24):** ROCm runtime LDS allocation now
+  uses alias-aware SSA-liveness interference slots instead of enumerated branch
+  paths. Nested branch and loop-local arenas reuse a slot; an outer arena live
+  across the loop receives a distinct aligned slot. CFG block arguments are
+  recursively resolved to their kernel-argument leaves, while arbitrary local
+  size arithmetic remains a named rejection until it has a serializable host
+  expression. Exact gfx1151 execution verifies both nested branches across two
+  loop iterations with an 8,192-byte outer slot plus
+  `max(4,097,12,289,32,001)`, a 40,208-byte launch, and one active block/CU.
+  Shared rematerialization now gives explicit CLI/function budgets precedence
+  and otherwise derives activation bytes from device capacity/reserve, marked
+  parameter storage, gradient/optimizer-state copies, and persistent bytes.
+  Dynamic parameter storage requires an explicit conservative bound.
 
 - **CORE-COMPILER-2 · Target dtype defaults (2026-07-22).** Compute
   legalization is now the named-pipeline default for x86 and NVIDIA. Terminal

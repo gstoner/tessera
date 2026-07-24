@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from tests._support import environment as test_environment
 from tests._support.environment import (
     CompilerToolchain,
     PYTHON_ROOT,
@@ -80,6 +81,23 @@ def test_marker_policy_is_registered_in_pyproject():
     text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     for marker in MARKERS:
         assert f'"{marker}:' in text
+
+
+def test_native_host_boundary_detects_wsl_kernel_and_environment(monkeypatch):
+    monkeypatch.delenv("WSL_INTEROP", raising=False)
+    monkeypatch.setattr(test_environment.platform, "release", lambda: "6.8.0-linux")
+    assert not test_environment.is_wsl()
+
+    monkeypatch.setattr(
+        test_environment.platform,
+        "release",
+        lambda: "6.18.33.1-microsoft-standard-WSL2",
+    )
+    assert test_environment.is_wsl()
+
+    monkeypatch.setattr(test_environment.platform, "release", lambda: "6.8.0-linux")
+    monkeypatch.setenv("WSL_INTEROP", "/run/WSL/1_interop")
+    assert test_environment.is_wsl()
 
 
 def test_marker_bearing_modules_import_pytest_explicitly():

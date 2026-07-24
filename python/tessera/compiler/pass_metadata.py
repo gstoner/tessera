@@ -99,15 +99,15 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         name="rocm-materialize-dynamic-lds",
         cpp_class="ROCMDynamicLDS",
         summary=(
-            "Replaces the single runtime-sized LLVM addrspace(3) alloca in a "
-            "ROCm kernel with the external zero-length LDS symbol whose bytes "
-            "are supplied by hipModuleLaunchKernel."
+            "Colors runtime-sized LLVM addrspace(3) byte arenas into "
+            "SSA-lifetime interference slots backed by one launch-sized "
+            "external ROCm LDS symbol."
         ),
         input_dialects=("llvm",),
         output_dialects=("llvm",),
-        diagnostic_codes=("ROCM_DYNAMIC_LDS_MULTIPLE_ARENAS",),
+        diagnostic_codes=("ROCM_DYNAMIC_LDS_SIZE_NOT_KERNEL_ARGUMENT",),
         pass_kind="lowering",
-        sprint="CORE-COMPILER-MEMORY-LAYOUT-CLOSEOUT-2026-07-23",
+        sprint="CORE-COMPILER-CFG-MEMORY-BUDGETS-2026-07-24",
     ),
     PassMetadata(
         name="rocm-wave-lds-legality",
@@ -143,6 +143,36 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         preserved_attrs=("numeric_policy", "tessera.storage_pack"),
         pass_kind="transform",
         sprint="ROCm Tile-IR convergence",
+    ),
+    PassMetadata(
+        name="tessera-activation-rematerialization",
+        cpp_class="ActivationRematerializationPass",
+        summary=(
+            "Selects and clones pure activation producers at backward "
+            "consumers under an explicit or model/device-derived memory budget."
+        ),
+        input_dialects=("func",),
+        output_dialects=("func",),
+        required_attrs=(
+            "tessera.autodiff.phase",
+            "tessera.device_memory_capacity_bytes",
+            "tessera.device_memory_reserve_basis_points",
+            "tessera.model.parameter",
+            "tessera.model.parameter_bytes_bound",
+            "tessera.model_gradient_copies",
+            "tessera.model_optimizer_state_copies",
+            "tessera.model_persistent_bytes",
+            "tessera.remat_budget_mb",
+            "tessera.remat_cost_ns",
+        ),
+        preserved_attrs=("tessera.autodiff.phase",),
+        diagnostic_codes=(
+            "REMAT_EFFECTFUL",
+            "REMAT_MODEL_BUDGET_INVALID",
+            "REMAT_NON_CLONABLE",
+        ),
+        pass_kind="transform",
+        sprint="CORE-COMPILER-CFG-MEMORY-BUDGETS-2026-07-24",
     ),
     PassMetadata(
         name="tessera-apple-materialize-layout-casts",

@@ -46,7 +46,8 @@ ROCm backend. It captures:
    and RDNA 4 / GFX12 (gfx1200).
 3. The **MFMA instruction shape contract** per kernel
    ((M, N, K, K_blocks)), LDS layout, dtype variant, and expected MFU.
-4. The **AMDGCN intrinsic patterns** lit fixtures (H-4) validate against.
+4. The **AMDGCN intrinsic patterns** used by the architecture inventory,
+   backend lowering contracts, and separate HIP-toolchain probes.
 5. The **execution gates** — `artifact_only` → `compileable` →
    `executable` → `fused`.
 
@@ -320,11 +321,13 @@ No MFMA — LDS-based cooperative reductions.
 
 ---
 
-## 6. AMDGCN intrinsic patterns (Sprint H-4 lit fixtures validate these)
+## 6. AMDGCN intrinsic patterns
 
-Each lit fixture under
-`tests/tessera-ir/phase8/rocm_7_2/` asserts on the
-following AMDGCN intrinsic text patterns:
+The patterns below are inventory contracts. Typed compiler emission is checked
+by the ROCm backend lit suite under
+`src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/`. The separate
+`validate_hipcc_compile.py` catalog compiles handwritten instruction probes and
+therefore proves HIP-toolchain acceptance only, not Tessera emission.
 
 ### CDNA 2 / CDNA 3 / CDNA 4 MFMA (gfx90a / gfx94x / gfx950)
 
@@ -386,7 +389,7 @@ GFX12 scalar prefetch / load notes tracked for future scheduler work:
 
 | Gate | What it means | Status |
 |---|---|---|
-| `artifact_only` | Target IR + AMDGCN intrinsic text are well-formed; lit fixtures pass FileCheck; no execution | CDNA (gfx90a/94x/950) MFMA entries; a few RDNA rows with no execute-compare fixture yet (e.g. KV-cache) |
+| `artifact_only` | Typed Target IR/ROCDL contracts pass backend lit; separate intrinsic probes establish toolchain acceptance; no execution implied | CDNA (gfx90a/94x/950) MFMA entries; a few RDNA rows with no execute-compare fixture yet (e.g. KV-cache) |
 | `compileable` | `hipcc -S --offload-arch=…` (or `llc -mcpu=…`) accepts the kernel; produces a valid object; **without execution** | reachable now on the box (`rocdl_emit.py` + `llc` proven for gfx1100/gfx1151) |
 | `executable` | The kernel loads on a real GPU and produces correct output vs a CPU/numpy reference | ✅ **the majority of §5 on `gfx1151`** — see the generated matrix |
 | `fused` | Performance characterized against the MFU targets in §5 | only `matmul`/`gemm` has a *measured perf ladder*; **no MFU-target sign-off anywhere**; CDNA MFU targets need MI300X/MI325X |
@@ -428,9 +431,9 @@ symbols (not just an in-process compiled lane):
 Honest scope (Decision #25): everything above is **one arch (RDNA 3.5 `gfx1151`) ×
 {fp16, bf16}**, correctness-first. None of it flips the per-primitive
 `backend_kernel` axis (that needs exact-target device verification). **CDNA MFMA
-entries remain hardware-free** pending MI300-class silicon; Sprint H-4 lit fixtures
-validate their IR + MFMA patterns, and `hipcc`/`llc` compile-only validation
-promotes them to `compileable`. See §9 for the concrete done / open / blocked split.
+entries remain hardware-free** pending MI300-class silicon. Backend lit
+validates typed IR/ROCDL contracts, while `hipcc`/`llc` compile-only validation
+is a distinct toolchain gate. See §9 for the concrete done / open / blocked split.
 
 ---
 
@@ -447,7 +450,7 @@ promotes them to `compileable`. See §9 for the concrete done / open / blocked s
 | WMMA LLVM-IR emitter (AMD analog of `ptx_emit.py`) | `python/tessera/compiler/rocdl_emit.py` |
 | Shipped runtime GEMM symbol (HIPRTC at load) | `src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/tessera_rocm_gemm.cpp` |
 | `device_verified_abi` row + runtime lane | `python/tessera/compiler/{backend_manifest,execution_matrix}.py`, `python/tessera/runtime.py` |
-| Lit fixtures (Sprint H-4) | `tests/tessera-ir/phase8/rocm_7_2/` |
+| Typed ROCm backend lit suite | `src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/` |
 | gfx1151 execute-compare + perf ladder | `tests/unit/test_rocm_wmma_runtime_symbol.py`, `benchmarks/rocm/benchmark_rocm_wmma_gemm.py` |
 | Capability tests | `tests/unit/test_target_toolchain_pins.py` |
 

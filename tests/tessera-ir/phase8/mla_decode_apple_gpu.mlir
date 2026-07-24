@@ -1,3 +1,5 @@
+// REQUIRES: tessera-apple-backend
+//
 // RUN: tessera-opt %s --pass-pipeline='builtin.module(tessera-mla-fusion,tessera-lower-to-apple_gpu-runtime)' | FileCheck %s
 
 // attention_variants_plan, MLA-2 — Apple GPU MLA decode lowering.

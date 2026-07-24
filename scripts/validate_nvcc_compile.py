@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
 """Sprint G-8 (2026-05-11) — `nvcc -ptx` compile-only validator.
 
-Walks every G-4 lit fixture under
-`tests/tessera-ir/phase3/cuda13/`, extracts the embedded PTX-pattern
-assertions, and writes a minimal CUDA kernel that exercises each PTX
-intrinsic.  Then invokes `nvcc -arch=sm_90a -ptx -o /dev/null` to
-confirm the toolchain accepts every pattern Tessera's lowering pass
-emits.
+Compiles the explicit PTX instruction-probe catalog below. These probes validate
+CUDA-toolchain acceptance only; emitted-IR coverage belongs to the NVIDIA MLIR
+backend suite and must not be inferred from a handwritten CUDA stub.
 
 Hardware-free: `nvcc -ptx` produces PTX text without requiring a GPU.
 
@@ -16,7 +13,7 @@ Usage:
 Exit codes:
     0 — every fixture compiles cleanly (or nvcc absent → skipped)
     1 — at least one fixture failed to compile
-    2 — bad arguments / missing fixtures
+    2 — bad arguments
 """
 
 from __future__ import annotations
@@ -29,16 +26,14 @@ import sys
 import tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-
 # Minimum nvcc version the validator accepts (matches the Python pin).
 MIN_NVCC_VERSION = (13, 3, 0)
 
 
-# PTX patterns the G-4 fixtures lock — each maps to a minimal CUDA C++
-# stub that uses the intrinsic / inline asm form.  When `nvcc -ptx`
-# accepts the stub, the corresponding lit fixture's `CHECK` directives
-# remain reachable.
+# Explicit CUDA-toolchain probe catalog. Each PTX pattern maps to a minimal
+# CUDA C++ stub using the intrinsic / inline-asm form. This catalog is
+# deliberately independent of MLIR fixtures: compiling a handwritten stub does
+# not prove that Tessera emitted the instruction.
 #
 # This is NOT a runtime test — it's a compile-only well-formedness gate.
 PTX_PATTERN_STUBS: dict[str, str] = {
@@ -155,9 +150,6 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--nvcc", type=Path, default=None,
                     help="Path to nvcc executable (auto-detected if absent)")
-    ap.add_argument("--fixtures", type=Path,
-                    default=ROOT / "tests" / "tessera-ir" / "phase3" / "cuda13",
-                    help="Directory containing G-4 lit fixtures")
     ap.add_argument("--arch", default="sm_90a",
                     help="CUDA arch for compile (default sm_90a)")
     args = ap.parse_args()
@@ -179,31 +171,15 @@ def main() -> int:
         return 1
     print(f"OK: nvcc {'.'.join(map(str, version))} at {nvcc}")
 
-    fixtures = sorted(args.fixtures.glob("*.mlir"))
-    if not fixtures:
-        print(f"ERROR: no fixtures found under {args.fixtures}", file=sys.stderr)
-        return 2
-
     failures: list[tuple[str, str]] = []
-    for fixture in fixtures:
-        body = fixture.read_text()
-        # Find every PTX pattern this fixture asserts on.
-        matched_patterns = [
-            pat for pat in PTX_PATTERN_STUBS
-            if pat in body
-        ]
-        if not matched_patterns:
-            print(f"  {fixture.name}: no PTX pattern requires compile-check")
-            continue
-        for pat in matched_patterns:
-            stub = PTX_PATTERN_STUBS[pat]
-            ok, err = _compile_one(nvcc, stub, arch=args.arch)
-            if ok:
-                print(f"  {fixture.name}: ✓ {pat}")
-            else:
-                print(f"  {fixture.name}: ✗ {pat}")
-                print(f"    nvcc stderr: {err.strip()[:300]}")
-                failures.append((fixture.name, pat))
+    for pattern, stub in PTX_PATTERN_STUBS.items():
+        ok, err = _compile_one(nvcc, stub, arch=args.arch)
+        if ok:
+            print(f"  ✓ {pattern}")
+        else:
+            print(f"  ✗ {pattern}")
+            print(f"    nvcc stderr: {err.strip()[:300]}")
+            failures.append(("toolchain_probe", pattern))
 
     if failures:
         print()
@@ -213,7 +189,7 @@ def main() -> int:
         return 1
 
     print()
-    print(f"OK: all {len(fixtures)} fixtures' PTX patterns accepted by nvcc.")
+    print(f"OK: all {len(PTX_PATTERN_STUBS)} PTX probes accepted by nvcc.")
     return 0
 
 

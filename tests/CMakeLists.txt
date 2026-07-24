@@ -31,6 +31,7 @@ set(TESSERA_LIT_CFGS ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Core test dependencies (add more as components mature)
 set(TESSERA_TEST_DEPENDS
+    tessera-opt
     tessera_runtime
     TesseraIR
     TesseraPasses
@@ -51,6 +52,7 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tessera-ir)
     add_custom_target(check-tessera-ir
         COMMAND ${CMAKE_COMMAND} -E env
             "PATH=$<TARGET_FILE_DIR:tessera-opt>:${LLVM_TOOLS_BINARY_DIR}:/usr/local/bin:/usr/bin:/bin"
+            "TESSERA_OPT=$<TARGET_FILE:tessera-opt>"
             ${LLVM_LIT} -v ${TESSERA_LIT_TEST_DIR}
         DEPENDS ${TESSERA_TEST_DEPENDS}
         COMMENT "Running Tessera IR lit regression tests"

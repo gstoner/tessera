@@ -19,3 +19,5 @@ func.func @batched_matmul_value(%a: tensor<2x4x8xf32>, %b: tensor<2x8x16xf32>) -
   %0 = tessera.batched_gemm %a, %b : (tensor<2x4x8xf32>, tensor<2x8x16xf32>) -> tensor<2x4x16xf32>
   return %0 : tensor<2x4x16xf32>
 }
+// REQUIRES: tessera-apple-backend
+//

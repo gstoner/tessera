@@ -107,19 +107,18 @@ function(tessera_pin_rocm required_version)
 endfunction()
 
 
-# Convenience: register a compile-only target that runs the
-# `nvcc -ptx` validator over every G-4 lit fixture.
+# Convenience: register a compile-only target that runs the explicit
+# `nvcc -ptx` instruction-probe catalog.
 #
 # Usage:
 #     tessera_add_nvcc_compile_check(
 #         NAME tessera_check_nvcc_ptx
-#         FIXTURES ${CMAKE_SOURCE_DIR}/tests/tessera-ir/phase3/cuda13
 #     )
 #
 function(tessera_add_nvcc_compile_check)
-    cmake_parse_arguments(PARSE_ARGV 0 _ARG "" "NAME;FIXTURES" "")
-    if(NOT _ARG_NAME OR NOT _ARG_FIXTURES)
-        message(FATAL_ERROR "tessera_add_nvcc_compile_check requires NAME and FIXTURES")
+    cmake_parse_arguments(PARSE_ARGV 0 _ARG "" "NAME" "")
+    if(NOT _ARG_NAME)
+        message(FATAL_ERROR "tessera_add_nvcc_compile_check requires NAME")
     endif()
     if(NOT TESSERA_NVCC_EXECUTABLE)
         message(STATUS "Skipping ${_ARG_NAME}: nvcc not pinned (call tessera_pin_cuda_toolkit first)")
@@ -131,17 +130,16 @@ function(tessera_add_nvcc_compile_check)
                 ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/scripts/validate_nvcc_compile.py
                 --nvcc ${TESSERA_NVCC_EXECUTABLE}
-                --fixtures ${_ARG_FIXTURES}
-        COMMENT "Sprint G-8: nvcc -ptx compile-only check over G-4 fixtures"
+        COMMENT "Sprint G-8: nvcc -ptx compile-only instruction probes"
         VERBATIM
     )
 endfunction()
 
 
 function(tessera_add_hipcc_compile_check)
-    cmake_parse_arguments(PARSE_ARGV 0 _ARG "" "NAME;FIXTURES" "")
-    if(NOT _ARG_NAME OR NOT _ARG_FIXTURES)
-        message(FATAL_ERROR "tessera_add_hipcc_compile_check requires NAME and FIXTURES")
+    cmake_parse_arguments(PARSE_ARGV 0 _ARG "" "NAME" "")
+    if(NOT _ARG_NAME)
+        message(FATAL_ERROR "tessera_add_hipcc_compile_check requires NAME")
     endif()
     if(NOT TESSERA_HIPCC_EXECUTABLE)
         message(STATUS "Skipping ${_ARG_NAME}: hipcc not pinned (call tessera_pin_rocm first)")
@@ -153,8 +151,7 @@ function(tessera_add_hipcc_compile_check)
                 ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/scripts/validate_hipcc_compile.py
                 --hipcc ${TESSERA_HIPCC_EXECUTABLE}
-                --fixtures ${_ARG_FIXTURES}
-        COMMENT "Sprint H-8: hipcc -S compile-only check over H-4 fixtures"
+        COMMENT "Sprint H-8: hipcc -S compile-only instruction probes"
         VERBATIM
     )
 endfunction()

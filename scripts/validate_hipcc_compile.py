@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
 """Sprint H-8 (2026-05-11) — `hipcc -S` compile-only validator.
 
-Walks every H-4 lit fixture under
-`tests/tessera-ir/phase8/rocm_7_2/`, extracts the embedded AMDGCN
-intrinsic assertions, and writes a minimal HIP kernel that exercises
-each builtin.  Then invokes `hipcc -S --offload-arch=gfx942 -o /dev/null`
-to confirm the toolchain accepts every intrinsic Tessera's lowering
-pass emits.
+Compiles the explicit AMDGCN instruction-probe catalog below. These probes
+validate HIP-toolchain acceptance only; emitted-IR coverage belongs to the ROCm
+MLIR backend suite and must not be inferred from a handwritten HIP stub.
 
 Hardware-free: `hipcc -S` produces AMDGCN assembly without requiring a GPU.
 
@@ -16,7 +13,7 @@ Usage:
 Exit codes:
     0 — every fixture compiles cleanly (or hipcc absent → skipped)
     1 — at least one fixture failed to compile
-    2 — bad arguments / missing fixtures
+    2 — bad arguments
 """
 
 from __future__ import annotations
@@ -29,14 +26,13 @@ import sys
 import tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-
 # Minimum hipcc version the validator accepts (matches the Python pin).
 MIN_HIP_VERSION = (7, 2, 3)
 
 
-# AMDGCN intrinsic patterns the H-4 fixtures lock — each maps to a
-# minimal HIP C++ stub that uses the builtin or LLVM intrinsic name.
+# Explicit HIP-toolchain probe catalog. Each AMDGCN intrinsic pattern maps to a
+# minimal HIP C++ stub using the builtin form. This catalog is deliberately
+# independent of MLIR fixtures.
 #
 # NOTE: The MFMA intrinsic names below use the underscore form
 # (`__builtin_amdgcn_mfma_f32_32x32x8bf16_1k`) that the AMD HIP compiler
@@ -150,9 +146,6 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--hipcc", type=Path, default=None,
                     help="Path to hipcc executable (auto-detected if absent)")
-    ap.add_argument("--fixtures", type=Path,
-                    default=ROOT / "tests" / "tessera-ir" / "phase8" / "rocm_7_2",
-                    help="Directory containing H-4 lit fixtures")
     ap.add_argument("--arch", default="gfx942",
                     help="ROCm offload arch (default gfx942 = MI300X)")
     args = ap.parse_args()
@@ -174,33 +167,21 @@ def main() -> int:
         return 1
     print(f"OK: hipcc {'.'.join(map(str, version))} at {hipcc}")
 
-    fixtures = sorted(args.fixtures.glob("*.mlir"))
-    if not fixtures:
-        print(f"ERROR: no fixtures found under {args.fixtures}", file=sys.stderr)
-        return 2
-
     failures: list[tuple[str, str]] = []
-    for fixture in fixtures:
-        body = fixture.read_text()
-        matched = [p for p in AMDGCN_PATTERN_STUBS if p in body]
-        if not matched:
-            print(f"  {fixture.name}: no AMDGCN pattern requires compile-check")
-            continue
-        for pat in matched:
-            # CDNA 4-specific intrinsics need gfx950; RDNA 3 needs gfx1100.
-            arch_for_pat = args.arch
-            if "f4f4" in pat or "fp4" in pat:
-                arch_for_pat = "gfx950"
-            elif "wmma" in pat:
-                arch_for_pat = "gfx1100"
-            stub = AMDGCN_PATTERN_STUBS[pat]
-            ok, err = _compile_one(hipcc, stub, arch=arch_for_pat)
-            if ok:
-                print(f"  {fixture.name}: ✓ {pat} ({arch_for_pat})")
-            else:
-                print(f"  {fixture.name}: ✗ {pat} ({arch_for_pat})")
-                print(f"    hipcc stderr: {err.strip()[:300]}")
-                failures.append((fixture.name, pat))
+    for pattern, stub in AMDGCN_PATTERN_STUBS.items():
+        # CDNA 4-specific intrinsics need gfx950; RDNA 3 needs gfx1100.
+        arch_for_pattern = args.arch
+        if "f4f4" in pattern or "fp4" in pattern:
+            arch_for_pattern = "gfx950"
+        elif "wmma" in pattern:
+            arch_for_pattern = "gfx1100"
+        ok, err = _compile_one(hipcc, stub, arch=arch_for_pattern)
+        if ok:
+            print(f"  ✓ {pattern} ({arch_for_pattern})")
+        else:
+            print(f"  ✗ {pattern} ({arch_for_pattern})")
+            print(f"    hipcc stderr: {err.strip()[:300]}")
+            failures.append(("toolchain_probe", pattern))
 
     if failures:
         print()
@@ -210,7 +191,9 @@ def main() -> int:
         return 1
 
     print()
-    print(f"OK: all {len(fixtures)} fixtures' AMDGCN intrinsics accepted by hipcc.")
+    print(
+        f"OK: all {len(AMDGCN_PATTERN_STUBS)} AMDGCN probes accepted by hipcc."
+    )
     return 0
 
 

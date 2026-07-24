@@ -8,7 +8,7 @@
 
 module {
   func.func @remat_bad_region(%x: tensor<4xf32>) -> tensor<4xf32> {
-    // expected-error @+1 {{[REMAT_NON_CLONABLE]}}
+    // expected-error @+1 {{REMAT_NON_CLONABLE:}}
     %a = "test.control_region"() ({
       "test.yield"() : () -> ()
     }) {tessera.recompute} : () -> tensor<4xf32>

@@ -2,7 +2,6 @@
 // RUN: tessera-opt --tessera-nvidia-pipeline-sm90 %s | FileCheck %s --check-prefix=SM90
 // RUN: tessera-opt --tessera-nvidia-pipeline-sm100 %s | FileCheck %s --check-prefix=SM100
 // RUN: tessera-opt --tessera-nvidia-pipeline-sm120 %s | FileCheck %s --check-prefix=SM120
-// REQUIRES: tessera-nvidia-backend
 //
 // Sprint G-5 (2026-05-11) — NVIDIATargetPipeline.  Validates the four
 // pipeline aliases registered in `src/transforms/lib/Passes.cpp`:

@@ -29,11 +29,10 @@ module {
       llvm.return
     }
 
-    // Mutually exclusive paths reuse offset zero. The launch descriptor names
-    // max-of-paths rather than summing both branch allocations.
+    // Mutually exclusive pointer lifetimes reuse one interference slot.
     // CHECK-LABEL: llvm.func @path_max_dynamic_lds
-    // CHECK-SAME: tessera.rocm.dynamic_lds_launch_reduction = "max_of_aligned_sums"
-    // CHECK-SAME: tessera.rocm.dynamic_lds_paths
+    // CHECK-SAME: tessera.rocm.dynamic_lds_launch_reduction = "aligned_sum_of_slot_maxima"
+    // CHECK-SAME: tessera.rocm.dynamic_lds_slots
     // CHECK-COUNT-2: llvm.getelementptr
     // CHECK-NOT: llvm.alloca
     llvm.func @path_max_dynamic_lds(

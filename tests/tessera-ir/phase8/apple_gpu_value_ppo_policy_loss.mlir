@@ -1,6 +1,8 @@
 // Stage 13/14 — PPO policy loss lowers to the strict or extended Apple GPU
 // value executor depending on optional mask/ref/entropy operands.
 //
+// REQUIRES: tessera-apple-backend
+//
 // RUN: %tessera_strict_opt %s -tessera-lower-to-apple_gpu-full | FileCheck %s
 
 // CHECK-LABEL: func.func @ppo_value

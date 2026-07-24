@@ -64,10 +64,10 @@ LLVM/MLIR **23.0.0** from apt.llvm.org). Findings that update this plan:
     is NOT wired into the core C-ABI bridge `tsrRegisterGpuLauncher`**, and
     there is **no HIPRTC** path (it loads a prebuilt `.hsaco`). That wiring is
     the bulk of **Stage C**.
-  - The arch knob is `lower-tile-to-rocm{arch=gfxNNNN}` (and the FP8 gate). The
-    `--rocm-target=gfxNNNN` flag referenced by the `tests/tessera-ir/phase8/
-    rocm_7_2/*.mlir` fixtures is **stale — no tool implements it**; those
-    fixtures are not in the run suite. Canonical fixtures live in
+  - The arch knob is `lower-tile-to-rocm{arch=gfxNNNN}` (and the FP8 gate).
+    The legacy fixtures that referenced the nonexistent
+    `--rocm-target=gfxNNNN` flag were retired in
+    `COMPILER-LIT-BACKEND-GATING-2026-07-24`. Canonical fixtures live in
     `src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/`.
   - **The MLIR `--tessera-emit-rocdl` pipeline is broken on this build:** it
     references a pass `tessera-to-linalg` that is **not registered** in

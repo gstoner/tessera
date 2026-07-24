@@ -37,3 +37,5 @@ func.func @art(%a: tensor<6x4xf32>)
       : (tensor<6x4xf32>) -> (tensor<6x4xf32>, tensor<4xf32>, tensor<4x4xf32>)
   return %u, %s, %v : tensor<6x4xf32>, tensor<4xf32>, tensor<4x4xf32>
 }
+// REQUIRES: tessera-apple-backend
+//

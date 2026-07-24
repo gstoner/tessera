@@ -23,3 +23,5 @@
 module {
   "tile.cholesky"() {source = "tessera.cholesky", result = "v0", ordinal = 0 : i64, lower = true} : () -> ()
 }
+// REQUIRES: tessera-apple-backend
+//

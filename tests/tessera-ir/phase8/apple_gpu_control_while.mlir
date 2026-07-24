@@ -1,3 +1,5 @@
+// REQUIRES: tessera-apple-backend
+//
 // RUN: tessera-opt %s --tessera-control-while-to-apple_gpu | FileCheck %s
 
 // Phase-G close-out D — lower the Graph-IR bounded while `tessera.control_while`

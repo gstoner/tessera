@@ -8,6 +8,13 @@ last_updated: 2026-07-24
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `COMPILER-LIT-BACKEND-GATING-2026-07-24`: shared lit feature
+hygiene now rejects undefined requirements and obsolete global GPU target
+flags. The retired fixtures and decoupled CUDA/HIP instruction probes were
+NVIDIA/ROCm-owned; Apple has no unsupported fixtures in the LLVM23 suite, and
+no Metal IR, runtime route, schedule, evidence, or selector changed. This is
+not applicable beyond parity validation of the shared test infrastructure.
+
 Cross-backend sync `STATEFUL-TRANSPORT-FOUNDATION-2026-07-19`: the shared launch
 workspace schema now distinguishes per-launch scratch from session-persistent,
 preserved state. ReplaySSM and MoE metadata contracts are portable, but this
@@ -1419,3 +1426,11 @@ softmax, RMSNorm, MSE, Huber, SmoothL1, and BCE instances. Apple remains
 branch-path dynamic-LDS expression, binary normalization epilogues, and packed
 elementwise/sparse/cache ABIs are architecture-owned; no MSL threadgroup
 expression, packed ABI, timing, selector, or support claim transfers.
+
+Cross-backend sync `CORE-COMPILER-CFG-MEMORY-BUDGETS-2026-07-24` adds a shared
+model/device-derived rematerialization budget contract with explicit override
+precedence and bounded dynamic parameters. Apple is **follow-up required** to
+inject exact device capacity/reserve policy and validate model-level selection
+with Metal measurements. ROCm's alias-aware nested/loop LDS slots and
+40,208-byte gfx1151 packet are architecture-owned; no MSL threadgroup-memory
+expression, occupancy, execution, or selector claim transfers.

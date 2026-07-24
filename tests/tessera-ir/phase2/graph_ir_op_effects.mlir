@@ -34,8 +34,14 @@ func.func @no_cse_random_dropout(%x: tensor<4xf32>) -> (tensor<4xf32>, tensor<4x
 // CHECK-LABEL: func.func @dce_pure_keep_state
 // CHECK-NOT: tessera.adamw
 // CHECK: tessera.kv_cache.append
-func.func @dce_pure_keep_state(%p: tensor<4xf32>, %g: tensor<4xf32>, %c: !tessera.kv_cache, %k: tensor<2x4xf32>, %v: tensor<2x4xf32>) {
-  %u:2 = "tessera.adamw"(%p,%g) : (tensor<4xf32>,tensor<4xf32>) -> (tensor<4xf32>,tensor<4xf32>)
+func.func @dce_pure_keep_state(%p: tensor<4xf32>, %g: tensor<4xf32>,
+                               %m1: tensor<4xf32>, %m2: tensor<4xf32>,
+                               %c: !tessera.kv_cache,
+                               %k: tensor<2x4xf32>,
+                               %v: tensor<2x4xf32>) {
+  %u:3 = "tessera.adamw"(%p,%g,%m1,%m2) :
+      (tensor<4xf32>,tensor<4xf32>,tensor<4xf32>,tensor<4xf32>) ->
+      (tensor<4xf32>,tensor<4xf32>,tensor<4xf32>)
   %w = "tessera.kv_cache.append"(%c,%k,%v) : (!tessera.kv_cache, tensor<2x4xf32>, tensor<2x4xf32>) -> !tessera.kv_cache
   return
 }

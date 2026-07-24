@@ -3,6 +3,8 @@
 // symbol via tessera_apple.gpu.kernel_call. Each stays a single
 // tile.batched_gemm -> gpu.kernel_call (no husk, no scf.for, no tile leftover).
 //
+// REQUIRES: tessera-apple-backend
+//
 // RUN: %tessera_strict_opt %s -tessera-lower-to-apple_gpu-full | FileCheck %s
 
 // CHECK-LABEL: func.func @bmm_f32

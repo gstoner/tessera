@@ -190,7 +190,10 @@ std::unique_ptr<mlir::Pass> createAdjointCollectiveInsertionPass();
 // Records the count as `tessera.rematerialized` on the function.
 //
 // Options:
-//   --memory-budget-mb  (advisory; recorded as tessera.remat_budget_mb)
+//   --memory-budget-mb  (explicit override; recorded in MB and bytes)
+// Without an explicit override, a function may derive its activation budget
+// from tessera.device_memory_capacity_bytes, its reserve policy, marked model
+// parameter arguments, gradient/optimizer-state copies, and persistent bytes.
 // Body: src/transforms/lib/ActivationRematerializationPass.cpp
 std::unique_ptr<mlir::Pass> createActivationRematerializationPass();
 

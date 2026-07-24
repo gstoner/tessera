@@ -7,6 +7,16 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `COMPILER-LIT-BACKEND-GATING-2026-07-24`: retired seven
+never-runnable ROCm 7.2 pseudo-IR fixtures whose undefined
+`tessera_opt_built` feature masked a nonexistent global target flag,
+unregistered operations, and obsolete MFMA/WMMA arity. Canonical
+architecture-keyed Tile→ROCm→ROCDL coverage remains in the ROCm backend lit
+suite and the 17 correctly gated shared-suite ROCm fixtures pass against the
+ROCm-enabled compiler. `validate_hipcc_compile.py` now labels and runs its
+handwritten intrinsic catalog strictly as a HIP-toolchain probe, not Tessera
+emission evidence. No exact-device status or selector changed.
+
 Cross-backend sync `STATEFUL-TRANSPORT-FOUNDATION-2026-07-19`: the shared launch
 workspace schema now distinguishes per-launch scratch from session-persistent,
 preserved state. ReplaySSM and MoE metadata contracts are portable, but this
@@ -1470,3 +1480,17 @@ three additional physical gfx1151 consumers—nibblewise ReLU, indexed sparse
 gather, and packed cache append—with 30-sample medians of 3.88, 2.31, and
 2.26 ms and no host unpack/repack. These are gfx1151-owned ABI/evidence claims;
 no selector default or sibling AMD claim transfers.
+
+ROCm-owned continuation `CORE-COMPILER-CFG-MEMORY-BUDGETS-2026-07-24`
+replaces direct-branch path enumeration with alias-aware SSA-liveness
+interference slots. Nested branch and loop-local runtime LDS arenas reuse one
+slot; an outer arena live across the loop receives a distinct aligned slot.
+CFG-forwarded size arguments resolve to host-visible kernel-argument leaves,
+and arbitrary local size arithmetic remains a named rejection until a
+serializable expression ABI exists. Exact gfx1151 execution verifies both
+branches across two loop iterations with slots `[8192]` and
+`max[4097,12289,32001]`: the launch uses 40,208 bytes, produces exact results,
+and reports one active block/CU. The shared rematerialization pass now derives
+activation budgets from a device/model envelope when no explicit override is
+present. This changes no ROCm selector and transfers no LDS evidence to another
+AMD architecture.

@@ -81,8 +81,9 @@ an `artifact_only` `tessera_nvidia.cuda_kernel` with `kernel =
 
 Guard: `tests/unit/test_msa_kv_outer_schedule.py`.
 
-## Fixture
+## Contract guard
 
-[`msa_kv_outer_sparse_attention.mlir`](../../../tests/tessera-ir/phase3/cuda13/msa_kv_outer_sparse_attention.mlir)
-locks the Tile IR target name and selected-block worklist metadata. It is a
-contract fixture, not proof of a native kernel implementation.
+`tests/unit/test_msa_kv_outer_schedule.py` locks the Python-authored Tile/Target
+IR name and selected-block worklist metadata. No C++ MLIR fixture is claimed
+until that lowering is registered in `tessera-opt`; this remains artifact
+evidence, not proof of a native kernel implementation.

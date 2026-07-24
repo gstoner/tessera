@@ -4,6 +4,7 @@ import pytest
 from tests._support.environment import (
     CompilerToolchain,
     ensure_cuda_bin_on_path,
+    is_wsl,
     python_subprocess_environment,
 )
 from tests._support.policy import MARKERS
@@ -46,13 +47,18 @@ def pytest_ignore_collect(collection_path, config):
 
 
 def pytest_runtest_setup(item):
-    """Keep the Apple device lane honest and out of portable test runs.
+    """Apply centralized host and Apple-device execution boundaries.
 
     ``hardware_apple_gpu`` means that a test requires an actual Metal device;
     it is not a synonym for an Apple-flavoured reference test.  Centralising
     this boundary gives every marked test the same explicit skip reason and
     prevents individual tests from quietly choosing a NumPy fallback.
     """
+    if item.get_closest_marker("native_host") is not None and is_wsl():
+        pytest.skip(
+            "native-host test skipped under WSL; this test deliberately aborts "
+            "a compiler child process"
+        )
     if item.get_closest_marker("metal4") is not None:
         from tests._support.apple import require_apple_metal4
 

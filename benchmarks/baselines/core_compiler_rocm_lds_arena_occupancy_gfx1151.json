@@ -1,4 +1,27 @@
 {
+  "cfg_lifetime_rows": [
+    {
+      "active_blocks_per_cu": 1,
+      "branch_and_loop_results_verified": true,
+      "hsaco_bytes": 5168,
+      "interference_slots": [
+        [
+          8192
+        ],
+        [
+          4097,
+          12289,
+          32001
+        ]
+      ],
+      "launch_reduction": "aligned_sum_of_slot_maxima",
+      "launch_shared_bytes": 40208,
+      "slot_offsets": [
+        0,
+        8192
+      ]
+    }
+  ],
   "device": "gfx1151",
   "dynamic_rows": [
     {
@@ -63,7 +86,13 @@
       "bytes_avoided_vs_sum": 12304,
       "hsaco_bytes": 4016,
       "incorrect_summed_bytes": 44320,
-      "launch_reduction": "max_of_aligned_sums",
+      "interference_slots": [
+        [
+          12289,
+          32001
+        ]
+      ],
+      "launch_reduction": "aligned_sum_of_slot_maxima",
       "launch_shared_bytes": 32016,
       "path_arena_bytes": [
         [
@@ -80,6 +109,9 @@
         [
           0
         ]
+      ],
+      "slot_offsets": [
+        0
       ]
     }
   ],

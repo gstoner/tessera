@@ -1,6 +1,8 @@
 // Stage 16E — only clifford_geometric_product has a promoted Apple GPU value
 // executor. Other registered GA/Clifford value-seam IR remains gated.
 //
+// REQUIRES: tessera-apple-backend
+//
 // RUN: %tessera_strict_opt %s -tessera-lower-to-apple_gpu-full --verify-diagnostics -o /dev/null
 
 func.func @clifford_value_target_gate(%a: tensor<2x8xf32>,

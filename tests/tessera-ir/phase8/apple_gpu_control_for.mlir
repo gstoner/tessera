@@ -1,3 +1,5 @@
+// REQUIRES: tessera-apple-backend
+//
 // RUN: tessera-opt %s --tessera-control-for-to-apple_gpu | FileCheck %s
 
 // Phase-G G-B — lower the Graph-IR bounded loop `tessera.control_for` to the

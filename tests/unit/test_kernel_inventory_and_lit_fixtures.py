@@ -7,15 +7,13 @@ Hardware-free guards for the per-target kernel pre-work:
   G-3: `BackendKernelEntry` schema extended with `cuda_arch_min`,
        `nvcc_version_min`, `wgmma_shape`, `cluster_size`, `mfma_shape`,
        `hipcc_version_min`, `expected_mfu`, `roofline_target`.
-  G-4: NVIDIA lit fixtures under
-       `tests/tessera-ir/phase3/cuda13/` — WGMMA matmul (bf16, fp8),
-       FA-4 forward, MLA decode, DeepSeek NSA, Lightning attention,
-       matmul→softmax fusion, SwiGLU MLP, Blackwell tcgen05, AdamW.
+  G-4: NVIDIA compiler contracts are split by proof layer: core named-pipeline
+       coverage in `tests/tessera-ir/phase3/cuda13/nvidia_pipeline_alias.mlir`,
+       and typed Tile→Target→NVVM coverage in the NVIDIA backend lit suite.
   H-3: `docs/backends/rocm/kernel-inventory.md` — enumerates every planned
        ROCm fused kernel under ROCm 7.2.4.
-  H-4: ROCm lit fixtures under `tests/tessera-ir/phase8/rocm_7_2/`
-       — MFMA matmul (bf16, fp8, fp4-CDNA4), FA fwd, MLA decode,
-       AdamW, RDNA3 WMMA.
+  H-4: ROCm compiler contracts live in the ROCm backend lit suite, including
+       architecture-keyed MFMA/WMMA selection and Target→ROCDL conversion.
 """
 
 from __future__ import annotations
@@ -25,8 +23,15 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[2]
-NVIDIA_FIXTURES = REPO / "tests" / "tessera-ir" / "phase3" / "cuda13"
-ROCM_FIXTURES = REPO / "tests" / "tessera-ir" / "phase8" / "rocm_7_2"
+TESSERA_IR_FIXTURES = REPO / "tests" / "tessera-ir"
+NVIDIA_FIXTURES = (
+    REPO / "src" / "compiler" / "codegen" / "tessera_gpu_backend_NVIDIA"
+    / "test" / "nvidia"
+)
+ROCM_FIXTURES = (
+    REPO / "src" / "compiler" / "codegen" / "Tessera_ROCM_Backend"
+    / "test" / "rocm"
+)
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -384,20 +389,16 @@ class TestH3RocmInventoryExecutionStatus:
 
 
 # ──────────────────────────────────────────────────────────────────────────
-#                  G-4: NVIDIA lit fixtures present + correct
+#                  G-4: NVIDIA compiler contracts
 # ──────────────────────────────────────────────────────────────────────────
 
 NVIDIA_FIXTURE_NAMES = [
-    "wgmma_matmul_bf16.mlir",
-    "wgmma_matmul_fp8.mlir",
-    "flash_attn_fwd_fa4.mlir",
-    "mla_decode_fused.mlir",
-    "deepseek_nsa_sparse_attention.mlir",
-    "lightning_attention.mlir",
-    "matmul_softmax_fused.mlir",
-    "swiglu_mlp_fused.mlir",
-    "tcgen05_blackwell_matmul.mlir",
-    "adamw_step_fused.mlir",
+    "hopper_tile_to_nvidia.mlir",
+    "hopper_to_nvvm_contract.mlir",
+    "blackwell_tile_to_nvidia.mlir",
+    "blackwell_to_nvvm_contract.mlir",
+    "sm120_attention_kernel.mlir",
+    "structured_kernels_tile_to_nvidia.mlir",
 ]
 
 
@@ -409,51 +410,44 @@ class TestG4NvidiaLitFixtures:
     @pytest.mark.parametrize("name", NVIDIA_FIXTURE_NAMES)
     def test_fixture_has_filecheck_run_line(self, name):
         body = (NVIDIA_FIXTURES / name).read_text()
-        assert "RUN: tessera-opt" in body
+        assert "RUN: %tnv" in body
         assert "FileCheck" in body
-        assert "REQUIRES: tessera_opt_built" in body
 
-    @pytest.mark.parametrize("name", [
-        "wgmma_matmul_bf16.mlir",
-        "wgmma_matmul_fp8.mlir",
-        "flash_attn_fwd_fa4.mlir",
-        "mla_decode_fused.mlir",
-        "deepseek_nsa_sparse_attention.mlir",
-        "lightning_attention.mlir",
-        "matmul_softmax_fused.mlir",
-        "swiglu_mlp_fused.mlir",
-    ])
-    def test_fixture_asserts_wgmma_pattern(self, name):
-        body = (NVIDIA_FIXTURES / name).read_text()
-        assert "wgmma.mma_async.sync.aligned" in body, (
-            f"{name} must assert on WGMMA PTX pattern"
+    def test_hopper_and_blackwell_contracts_are_architecture_owned(self):
+        hopper = (NVIDIA_FIXTURES / "hopper_tile_to_nvidia.mlir").read_text()
+        blackwell = (NVIDIA_FIXTURES / "blackwell_tile_to_nvidia.mlir").read_text()
+        assert "tessera_nvidia.wgmma" in hopper
+        assert 'arch = "sm_90a"' in hopper
+        assert "tessera_nvidia.tcgen05_mma" in blackwell
+        assert 'arch = "sm_100a"' in blackwell
+
+    def test_core_pipeline_alias_fixture_runs_without_backend_gate(self):
+        fixture = (
+            TESSERA_IR_FIXTURES / "phase3" / "cuda13"
+            / "nvidia_pipeline_alias.mlir"
         )
-
-    def test_tcgen05_fixture_blackwell_specific(self):
-        body = (NVIDIA_FIXTURES / "tcgen05_blackwell_matmul.mlir").read_text()
-        assert "tcgen05.mma" in body
-        assert "tcgen05.alloc" in body
-        assert "sm_100a" in body
-        assert "nvfp4" in body
-
-    def test_adamw_fixture_no_wgmma(self):
-        body = (NVIDIA_FIXTURES / "adamw_step_fused.mlir").read_text()
-        # AdamW is elementwise — no WGMMA expected.
-        assert "CHECK-NOT: wgmma.mma_async" in body
+        body = fixture.read_text()
+        assert "REQUIRES:" not in body
+        for alias in (
+            "tessera-nvidia-pipeline",
+            "tessera-nvidia-pipeline-sm90",
+            "tessera-nvidia-pipeline-sm100",
+            "tessera-nvidia-pipeline-sm120",
+        ):
+            assert f"--{alias}" in body
 
 
 # ──────────────────────────────────────────────────────────────────────────
-#                  H-4: ROCm lit fixtures present + correct
+#                  H-4: ROCm compiler contracts
 # ──────────────────────────────────────────────────────────────────────────
 
 ROCM_FIXTURE_NAMES = [
-    "mfma_matmul_bf16.mlir",
-    "mfma_matmul_fp8.mlir",
-    "mfma_matmul_fp4_cdna4.mlir",
-    "flash_attn_fwd.mlir",
-    "mla_decode.mlir",
-    "adamw_step_fused.mlir",
     "wmma_rdna3_matmul.mlir",
+    "tile_matmul_to_rocm.mlir",
+    "fp8_flavor_arch_keyed.mlir",
+    "rocm_target_to_rocdl_contract.mlir",
+    "gfx1151_tile_matmul_kernel.mlir",
+    "gfx1151_tile_softmax_kernel.mlir",
 ]
 
 
@@ -463,41 +457,47 @@ class TestH4RocmLitFixtures:
         assert (ROCM_FIXTURES / name).exists()
 
     @pytest.mark.parametrize("name", ROCM_FIXTURE_NAMES)
-    def test_fixture_has_filecheck_run_line(self, name):
+    def test_fixture_has_backend_filecheck_run_line(self, name):
         body = (ROCM_FIXTURES / name).read_text()
-        assert "RUN: tessera-opt" in body
+        assert "RUN: %trop" in body
         assert "FileCheck" in body
-        assert "REQUIRES: tessera_opt_built" in body
 
-    @pytest.mark.parametrize("name", [
-        "mfma_matmul_bf16.mlir",
-        "mfma_matmul_fp8.mlir",
-        "mfma_matmul_fp4_cdna4.mlir",
-        "flash_attn_fwd.mlir",
-        "mla_decode.mlir",
-    ])
-    def test_fixture_asserts_mfma_pattern(self, name):
-        body = (ROCM_FIXTURES / name).read_text()
-        assert "llvm.amdgcn.mfma" in body, (
-            f"{name} must assert on MFMA AMDGCN intrinsic"
-        )
-
-    def test_cdna4_fp4_fixture(self):
-        body = (ROCM_FIXTURES / "mfma_matmul_fp4_cdna4.mlir").read_text()
-        assert "gfx950" in body
-        assert "fp4_e2m1" in body
-        assert "llvm.amdgcn.mfma.f32.32x32x32f4f4" in body
-
-    def test_rdna3_uses_wmma_not_mfma(self):
+    def test_architecture_selection_distinguishes_wmma_and_mfma(self):
         body = (ROCM_FIXTURES / "wmma_rdna3_matmul.mlir").read_text()
         assert "gfx1100" in body
         assert "llvm.amdgcn.wmma" in body
-        # WMMA, not MFMA, on RDNA 3.
-        assert "llvm.amdgcn.mfma" not in body
+        cdna = (ROCM_FIXTURES / "tile_matmul_to_rocm.mlir").read_text()
+        assert "tessera_rocm.mfma" in cdna
 
-    def test_adamw_fixture_no_mfma(self):
-        body = (ROCM_FIXTURES / "adamw_step_fused.mlir").read_text()
-        assert "CHECK-NOT: llvm.amdgcn.mfma" in body
+
+class TestLitFeatureHygiene:
+    def test_every_required_feature_is_declared_by_lit_config(self):
+        import re
+
+        config_body = (TESSERA_IR_FIXTURES / "lit.cfg.py").read_text()
+        declared = set(
+            re.findall(r'available_features\.add\("([^"]+)"\)', config_body)
+        )
+        required: set[str] = set()
+        for fixture in TESSERA_IR_FIXTURES.rglob("*.mlir"):
+            for line in fixture.read_text().splitlines():
+                if line.startswith("// REQUIRES:"):
+                    required.update(
+                        feature.strip()
+                        for feature in line.split(":", 1)[1].split(",")
+                    )
+        assert required <= declared, (
+            f"undefined lit features: {sorted(required - declared)}"
+        )
+
+    def test_obsolete_global_target_flags_do_not_return(self):
+        stale_flags = ("--gpu-target=", "--rocm-target=")
+        offenders: list[str] = []
+        for fixture in TESSERA_IR_FIXTURES.rglob("*.mlir"):
+            body = fixture.read_text()
+            if any(flag in body for flag in stale_flags):
+                offenders.append(str(fixture.relative_to(REPO)))
+        assert not offenders, f"obsolete target flags in lit fixtures: {offenders}"
 
 
 # ──────────────────────────────────────────────────────────────────────────

@@ -1,3 +1,5 @@
+// REQUIRES: tessera-apple-backend
+//
 // RUN: tessera-opt %s --pass-pipeline='builtin.module(tessera-lower-to-apple_gpu-runtime)' --allow-unregistered-dialect | FileCheck %s
 
 // Decision #19 — the Apple Target IR fusion pass emits a first-class fusion

@@ -24,9 +24,9 @@
 //   * Only pure, region-free ops qualify. Two hard gates, each a loud error
 //     rather than a silent skip (which would leave a stale `tessera.recompute`
 //     marker and a wrong memory model):
-//       - nested regions (control flow) → `[REMAT_NON_CLONABLE]`.
+//       - nested regions (control flow) → `REMAT_NON_CLONABLE`.
 //       - not provably side-effect-free (`mlir::isMemoryEffectFree`) →
-//         `[REMAT_EFFECTFUL]`. Re-executing an effectful op (RNG like dropout,
+//         `REMAT_EFFECTFUL`. Re-executing an effectful op (RNG like dropout,
 //         a collective, a store/copy) on the backward path would change program
 //         semantics, not merely trade memory for compute. Tessera Graph IR ops
 //         are `[Pure]`, so this admits the real activation ops and rejects the
@@ -62,6 +62,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <optional>
 
 namespace tessera {
 
@@ -70,6 +71,8 @@ namespace {
 constexpr const char *kRecomputeAttr = "tessera.recompute";
 constexpr const char *kRematerializedCountAttr = "tessera.rematerialized";
 constexpr const char *kRematBudgetAttr = "tessera.remat_budget_mb";
+constexpr const char *kRematBudgetBytesAttr = "tessera.remat_budget_bytes";
+constexpr const char *kRematBudgetSourceAttr = "tessera.remat_budget_source";
 constexpr const char *kRematAutoSelectedAttr = "tessera.remat_auto_selected";
 constexpr const char *kRecomputeScopeAttr = "tessera.recompute_scope";
 constexpr const char *kAutodiffPhaseAttr = "tessera.autodiff.phase";
@@ -77,10 +80,156 @@ constexpr const char *kMeasuredCostAttr = "tessera.remat_cost_ns";
 constexpr const char *kPeakBeforeAttr = "tessera.remat_peak_before_bytes";
 constexpr const char *kPeakAfterAttr = "tessera.remat_peak_after_bytes";
 constexpr const char *kSelectedCostAttr = "tessera.remat_selected_cost_ns";
+constexpr const char *kDeviceCapacityAttr =
+    "tessera.device_memory_capacity_bytes";
+constexpr const char *kDeviceReserveBasisPointsAttr =
+    "tessera.device_memory_reserve_basis_points";
+constexpr const char *kModelParameterAttr = "tessera.model.parameter";
+constexpr const char *kModelParameterBytesBoundAttr =
+    "tessera.model.parameter_bytes_bound";
+constexpr const char *kModelGradientCopiesAttr =
+    "tessera.model_gradient_copies";
+constexpr const char *kModelOptimizerStateCopiesAttr =
+    "tessera.model_optimizer_state_copies";
+constexpr const char *kModelPersistentBytesAttr =
+    "tessera.model_persistent_bytes";
+constexpr const char *kModelParameterBytesAttr =
+    "tessera.model_parameter_bytes";
+constexpr const char *kModelStateBytesAttr = "tessera.model_state_bytes";
 
 static bool isBackwardOperation(mlir::Operation *op) {
   auto phase = op->getAttrOfType<mlir::StringAttr>(kAutodiffPhaseAttr);
   return phase && phase.getValue() == "backward";
+}
+
+static std::optional<int64_t> checkedAdd(int64_t lhs, int64_t rhs) {
+  if (lhs < 0 || rhs < 0 ||
+      lhs > std::numeric_limits<int64_t>::max() - rhs)
+    return std::nullopt;
+  return lhs + rhs;
+}
+
+static std::optional<int64_t> checkedMultiply(int64_t lhs, int64_t rhs) {
+  if (lhs < 0 || rhs < 0 ||
+      (rhs != 0 && lhs > std::numeric_limits<int64_t>::max() / rhs))
+    return std::nullopt;
+  return lhs * rhs;
+}
+
+static std::optional<int64_t> staticShapedBytes(mlir::Type type) {
+  auto shaped = mlir::dyn_cast<mlir::ShapedType>(type);
+  if (!shaped || !shaped.hasStaticShape())
+    return std::nullopt;
+  int64_t elements = 1;
+  for (int64_t extent : shaped.getShape()) {
+    auto product = checkedMultiply(elements, extent);
+    if (!product)
+      return std::nullopt;
+    elements = *product;
+  }
+  int64_t bits = shaped.getElementType().getIntOrFloatBitWidth();
+  if (bits <= 0)
+    return std::nullopt;
+  return checkedMultiply(elements, (bits + 7) / 8);
+}
+
+struct DerivedBudget {
+  int64_t budgetBytes;
+  int64_t parameterBytes;
+  int64_t stateBytes;
+};
+
+static std::optional<DerivedBudget>
+deriveModelMemoryBudget(mlir::func::FuncOp func, bool &invalid) {
+  invalid = false;
+  auto capacity =
+      func->getAttrOfType<mlir::IntegerAttr>(kDeviceCapacityAttr);
+  if (!capacity)
+    return std::nullopt;
+
+  int64_t capacityBytes = capacity.getInt();
+  int64_t reserveBasisPoints = 1000;
+  int64_t gradientCopies = 1;
+  int64_t optimizerStateCopies = 2;
+  int64_t persistentBytes = 0;
+  if (auto attr =
+          func->getAttrOfType<mlir::IntegerAttr>(kDeviceReserveBasisPointsAttr))
+    reserveBasisPoints = attr.getInt();
+  if (auto attr =
+          func->getAttrOfType<mlir::IntegerAttr>(kModelGradientCopiesAttr))
+    gradientCopies = attr.getInt();
+  if (auto attr = func->getAttrOfType<mlir::IntegerAttr>(
+          kModelOptimizerStateCopiesAttr))
+    optimizerStateCopies = attr.getInt();
+  if (auto attr =
+          func->getAttrOfType<mlir::IntegerAttr>(kModelPersistentBytesAttr))
+    persistentBytes = attr.getInt();
+
+  if (capacityBytes < 0 || reserveBasisPoints < 0 ||
+      reserveBasisPoints > 10000 || gradientCopies < 0 ||
+      optimizerStateCopies < 0 || persistentBytes < 0) {
+    func.emitError()
+        << "REMAT_MODEL_BUDGET_INVALID: model-derived memory-budget inputs "
+           "must be non-negative and reserve basis points must be <= 10000";
+    invalid = true;
+    return std::nullopt;
+  }
+
+  int64_t parameterBytes = 0;
+  for (unsigned index = 0; index < func.getNumArguments(); ++index) {
+    if (!func.getArgAttr(index, kModelParameterAttr))
+      continue;
+    std::optional<int64_t> bytes =
+        staticShapedBytes(func.getArgument(index).getType());
+    if (!bytes) {
+      if (auto bound = func.getArgAttrOfType<mlir::IntegerAttr>(
+              index, kModelParameterBytesBoundAttr))
+        if (bound.getInt() >= 0)
+          bytes = bound.getInt();
+    }
+    if (!bytes) {
+      func.emitError()
+          << "REMAT_MODEL_BUDGET_INVALID: model parameter argument " << index
+          << " has a dynamic or unsupported type and requires a non-negative "
+          << kModelParameterBytesBoundAttr;
+      invalid = true;
+      return std::nullopt;
+    }
+    auto total = checkedAdd(parameterBytes, *bytes);
+    if (!total) {
+      func.emitError()
+          << "REMAT_MODEL_BUDGET_INVALID: model parameter byte total "
+             "overflows signed i64";
+      invalid = true;
+      return std::nullopt;
+    }
+    parameterBytes = *total;
+  }
+
+  auto extraCopies = checkedAdd(gradientCopies, optimizerStateCopies);
+  auto stateCopies =
+      extraCopies ? checkedAdd(*extraCopies, 1) : std::nullopt;
+  auto replicatedStateBytes =
+      stateCopies ? checkedMultiply(parameterBytes, *stateCopies)
+                  : std::nullopt;
+  auto stateBytes =
+      replicatedStateBytes
+          ? checkedAdd(*replicatedStateBytes, persistentBytes)
+          : std::nullopt;
+  auto retainedBasisPoints =
+      checkedMultiply(capacityBytes, 10000 - reserveBasisPoints);
+  if (!stateCopies || !stateBytes || !retainedBasisPoints) {
+    func.emitError()
+        << "REMAT_MODEL_BUDGET_INVALID: model-derived memory-budget "
+           "arithmetic overflows signed i64";
+    invalid = true;
+    return std::nullopt;
+  }
+
+  int64_t usableBytes = *retainedBasisPoints / 10000;
+  return DerivedBudget{
+      std::max<int64_t>(usableBytes - *stateBytes, 0), parameterBytes,
+      *stateBytes};
 }
 
 static int64_t estimateResultBytes(mlir::Operation *op) {
@@ -192,15 +341,55 @@ public:
   void runOnOperation() override {
     auto func = getOperation();
 
+    std::optional<int64_t> effectiveBudgetBytes;
+    llvm::StringRef budgetSource;
     int64_t effectiveBudgetMb = memoryBudgetMb.getValue();
-    if (effectiveBudgetMb <= 0)
-      if (auto attr = func->getAttrOfType<mlir::IntegerAttr>(kRematBudgetAttr))
-        effectiveBudgetMb = attr.getInt();
     if (effectiveBudgetMb > 0) {
+      budgetSource = "explicit_cli";
+    } else if (auto attr =
+                   func->getAttrOfType<mlir::IntegerAttr>(kRematBudgetAttr)) {
+      effectiveBudgetMb = attr.getInt();
+      if (effectiveBudgetMb > 0)
+        budgetSource = "explicit_function";
+    }
+    if (effectiveBudgetMb > 0) {
+      auto bytes = checkedMultiply(effectiveBudgetMb, 1024LL * 1024LL);
+      if (!bytes) {
+        func.emitError()
+            << "REMAT_MODEL_BUDGET_INVALID: explicit memory budget "
+               "overflows signed i64 bytes";
+        return signalPassFailure();
+      }
+      effectiveBudgetBytes = bytes;
       func->setAttr(kRematBudgetAttr,
                     mlir::IntegerAttr::get(
                         mlir::IntegerType::get(&getContext(), 32),
                         effectiveBudgetMb));
+    } else {
+      bool invalid = false;
+      if (auto derived = deriveModelMemoryBudget(func, invalid)) {
+        effectiveBudgetBytes = derived->budgetBytes;
+        budgetSource = "model_device_envelope";
+        func->setAttr(
+            kModelParameterBytesAttr,
+            mlir::IntegerAttr::get(
+                mlir::IntegerType::get(&getContext(), 64),
+                derived->parameterBytes));
+        func->setAttr(
+            kModelStateBytesAttr,
+            mlir::IntegerAttr::get(mlir::IntegerType::get(&getContext(), 64),
+                                   derived->stateBytes));
+      } else if (invalid) {
+        return signalPassFailure();
+      }
+    }
+    if (effectiveBudgetBytes) {
+      func->setAttr(
+          kRematBudgetBytesAttr,
+          mlir::IntegerAttr::get(mlir::IntegerType::get(&getContext(), 64),
+                                 *effectiveBudgetBytes));
+      func->setAttr(kRematBudgetSourceAttr,
+                    mlir::StringAttr::get(&getContext(), budgetSource));
     }
 
     // Collect the recompute-tagged ops up-front — we mutate uses / erase ops
@@ -217,7 +406,7 @@ public:
     // provide explicit markers. We remove the longest, largest pure activation
     // intervals until the estimated peak fits; the existing clone/sink logic
     // below then realizes those choices.
-    if (recomputeOps.empty() && effectiveBudgetMb > 0) {
+    if (recomputeOps.empty() && effectiveBudgetBytes) {
       llvm::SmallVector<mlir::Operation *> ordered;
       func.walk([&](mlir::Operation *op) {
         if (op != func.getOperation() && op->getNumResults() > 0)
@@ -252,8 +441,7 @@ public:
               {op, begin, end, bytes, estimateRecomputeCost(op)});
       }
 
-      int64_t budgetBytes =
-          effectiveBudgetMb * 1024LL * 1024LL;
+      int64_t budgetBytes = *effectiveBudgetBytes;
       auto estimatedPeak = [&](llvm::ArrayRef<RematCandidate> active) {
         int64_t peak = 0;
         for (int64_t point = 0;
@@ -323,7 +511,8 @@ public:
         func->setAttr(
             kRematAutoSelectedAttr,
             mlir::IntegerAttr::get(
-                mlir::IntegerType::get(&getContext(), 64), selected.size()));
+                mlir::IntegerType::get(&getContext(), 64),
+                static_cast<int64_t>(selected.size())));
     }
     if (recomputeOps.empty())
       return;
@@ -347,7 +536,7 @@ public:
       // Gate 1: region-free. Cloning a control-flow op is out of scope.
       if (op->getNumRegions() != 0) {
         op->emitError()
-            << "[REMAT_NON_CLONABLE] op '" << op->getName().getStringRef()
+            << "REMAT_NON_CLONABLE: op '" << op->getName().getStringRef()
             << "' is tagged " << kRecomputeAttr
             << " but carries nested regions; only pure region-free ops can be "
                "rematerialized";
@@ -360,7 +549,7 @@ public:
       // that doesn't model its effects is conservatively treated as effectful.
       if (!mlir::isMemoryEffectFree(op)) {
         op->emitError()
-            << "[REMAT_EFFECTFUL] op '" << op->getName().getStringRef()
+            << "REMAT_EFFECTFUL: op '" << op->getName().getStringRef()
             << "' is tagged " << kRecomputeAttr
             << " but is not provably side-effect-free; rematerializing it would "
                "re-execute its effects and change program semantics — only pure "

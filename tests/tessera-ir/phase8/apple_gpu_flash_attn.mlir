@@ -1,3 +1,5 @@
+// REQUIRES: tessera-apple-backend
+//
 // RUN: tessera-opt %s --pass-pipeline='builtin.module(tessera-lower-to-apple_gpu-runtime)' --allow-unregistered-dialect | FileCheck %s
 
 // Phase 8.4.1 — Apple GPU custom MSL flash-attention forward path. Verifies

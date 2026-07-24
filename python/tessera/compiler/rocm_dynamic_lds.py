@@ -1,9 +1,9 @@
-"""Host-side evaluator for ROCm dynamic-LDS launch expressions.
+"""Host-side evaluators for ROCm dynamic-LDS launch expressions.
 
-The compiler records ``max_of_aligned_sums``: arenas on one control-flow path
-are packed, while mutually exclusive paths reuse offset zero.  Keeping this
-small evaluator shared by runtime launchers and benchmarks prevents the host
-from accidentally summing branch-local storage or disagreeing on alignment.
+The current compiler records ``aligned_sum_of_slot_maxima``. SSA-interfering
+arenas occupy distinct aligned slots; arenas with non-overlapping CFG lifetimes
+share a slot sized to their maximum runtime byte count. The older
+``max_of_aligned_sums`` evaluator remains for retained release packets.
 """
 
 from __future__ import annotations
@@ -43,4 +43,33 @@ def path_max_launch_bytes(
     return max(packed_path_layout(path, alignment)[1] for path in paths)
 
 
-__all__ = ["align_up", "packed_path_layout", "path_max_launch_bytes"]
+def interference_slot_layout(
+    slots: Sequence[Sequence[int]], alignment: int = 16
+) -> tuple[tuple[int, ...], int]:
+    """Return slot offsets and ``aligned_sum(max(slot alternatives))``."""
+    slot_sizes: list[int] = []
+    for alternatives in slots:
+        if not alternatives:
+            raise ValueError("dynamic LDS interference slots cannot be empty")
+        if any(size < 0 for size in alternatives):
+            raise ValueError("dynamic LDS byte counts must be non-negative")
+        slot_sizes.append(max(int(size) for size in alternatives))
+    return packed_path_layout(slot_sizes, alignment)
+
+
+def interference_slot_launch_bytes(
+    slots: Sequence[Sequence[int]], alignment: int = 16
+) -> int:
+    """Evaluate the current CFG-lifetime-aware HIP launch expression."""
+    if not slots:
+        return 0
+    return interference_slot_layout(slots, alignment)[1]
+
+
+__all__ = [
+    "align_up",
+    "interference_slot_launch_bytes",
+    "interference_slot_layout",
+    "packed_path_layout",
+    "path_max_launch_bytes",
+]

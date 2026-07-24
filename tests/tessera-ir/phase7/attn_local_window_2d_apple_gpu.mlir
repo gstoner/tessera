@@ -1,3 +1,5 @@
+// REQUIRES: tessera-apple-backend
+//
 // RUN: tessera-opt %s --pass-pipeline='builtin.module(tessera-lower-to-apple_gpu-runtime)' | FileCheck %s
 
 // ============================================================================

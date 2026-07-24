@@ -1,5 +1,7 @@
 // EBM Value Target IR — strict fp32 static Apple GPU envelopes.
 //
+// REQUIRES: tessera-apple-backend
+//
 // RUN: %tessera_strict_opt %s -tessera-lower-to-apple_gpu-full | FileCheck %s
 
 // CHECK-LABEL: func.func @ebm_energy_quadratic_value

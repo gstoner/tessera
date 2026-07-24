@@ -21,6 +21,7 @@ list(APPEND CMAKE_MODULE_PATH "${MLIR_CMAKE_DIR}")
 include(TableGen)
 include(AddMLIR)
 include(AddLLVM)
+separate_arguments(LLVM_DEFINITIONS NATIVE_COMMAND "${LLVM_DEFINITIONS}")
 
 if (MSVC)
   add_compile_options(/W4)

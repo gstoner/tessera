@@ -216,11 +216,13 @@ or single-tile elementwise. Recorded shape is `None`.
 
 ---
 
-## 5. PTX assembly patterns (Sprint G-4 lit fixtures validate these)
+## 5. PTX assembly patterns
 
-Each lit fixture under
-`tests/tessera-ir/phase3/cuda13/` asserts on the
-following PTX text patterns:
+The patterns below are inventory contracts. Typed compiler emission is checked
+by the NVIDIA backend lit suite under
+`src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia/`. The separate
+`validate_nvcc_compile.py` catalog compiles handwritten instruction probes and
+therefore proves CUDA-toolchain acceptance only, not Tessera emission.
 
 ### WGMMA (SM_90+)
 
@@ -286,7 +288,7 @@ cp.async.bulk.wait_group
 
 | Gate | What it means | When it lifts |
 |---|---|---|
-| `artifact_only` (current state) | Target IR + PTX text are well-formed; lit fixtures pass FileCheck; no execution | now |
+| `artifact_only` (current state) | Typed Target IR/NVVM contracts pass backend lit; PTX text has separate structural emitter tests; no execution implied | now |
 | `compileable` | `ptxas -arch=sm_90a` accepts the emitted PTX; produces a valid cubin; **without execution** | once CUDA Toolkit 13.3 is installed on the dev box (no GPU needed) |
 | `executable` | The cubin loads on a real H100/B100 and produces correct output vs CPU reference (fp64) | requires H100/B100/Rubin hardware |
 | `fused` | Performance characterized; achieves the MFU targets in §4 | requires hardware + perf tuning sprint |
@@ -294,7 +296,8 @@ cp.async.bulk.wait_group
 Today the SM_90+ WGMMA/TMA entries in this inventory sit at `artifact_only`.
 (The separate consumer-Blackwell sm_120 `mma.sync` GEMM path is hardware-verified
 on an RTX 5070 Ti and executes — see `sm120-kernel-guide.md`.)
-Sprint G-4 lit fixtures validate the IR + PTX patterns hardware-free.
+The backend lit suite validates typed IR transitions hardware-free; PTX
+structure and CUDA-toolchain instruction probes are separate evidence lanes.
 Sprint G-6/G-7/G-8 will promote entries to `compileable` once
 `nvcc 13.3` runs the compile-only validation.
 
@@ -310,7 +313,8 @@ Sprint G-6/G-7/G-8 will promote entries to `compileable` once
 | BackendKernelEntry schema (G-3) | `python/tessera/compiler/backend_manifest.py` |
 | MLIR pass library | `src/compiler/codegen/tessera_gpu_backend_NVIDIA/` (WGMMA, TMA, NVTMADescriptorPass, WarpSpecializationPass) |
 | Tile IR FA-4 dialect | `src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td` |
-| Lit fixtures (Sprint G-4) | `tests/tessera-ir/phase3/cuda13/` |
+| Core named-pipeline fixture | `tests/tessera-ir/phase3/cuda13/nvidia_pipeline_alias.mlir` |
+| Typed NVIDIA backend lit suite | `src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia/` |
 | Capability tests | `tests/unit/test_target_toolchain_pins.py` (G-1 + H-1) |
 
 ---
@@ -321,7 +325,7 @@ Sprint G-6/G-7/G-8 will promote entries to `compileable` once
 - ✅ Capability matrix (Sprint G-1)
 - ✅ Kernel inventory (this doc — Sprint G-2)
 - ✅ Schema extension (Sprint G-3)
-- ✅ Lit fixtures with PTX patterns (Sprint G-4)
+- ✅ Typed Tile→NVIDIA→NVVM compiler fixtures (backend lit suite)
 - 🔜 `nvcc -ptx -arch=sm_90a` compile-only validation (Sprint G-6/G-7/G-8)
 - ✅ Exact-SM `NVIDIATargetPipeline` routes in `tessera-opt` — registered as `tessera-nvidia-pipeline` (+ `-sm90`/`-sm100`/`-sm120`) via `addCUDA13PipelineForSM`; SM90 marker lowering is not inherited by SM100/SM120
 - 🔜 NCCL 2.22 bindings compile + symbol resolution (Sprint G-9)

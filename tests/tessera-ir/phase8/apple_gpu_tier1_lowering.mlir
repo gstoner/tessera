@@ -1,3 +1,5 @@
+// REQUIRES: tessera-apple-backend
+//
 // RUN: tessera-opt %s --tessera-lower-to-apple_gpu-runtime --allow-unregistered-dialect | FileCheck %s
 
 // 2026-05-29 — Apple GPU MPSGraph Tier-1 lane lowering.

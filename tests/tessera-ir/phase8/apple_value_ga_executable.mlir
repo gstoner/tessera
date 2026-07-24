@@ -1,5 +1,7 @@
 // Stage 16E — cl30 Clifford geometric product emits an Apple GPU value call.
 //
+// REQUIRES: tessera-apple-backend
+//
 // RUN: %tessera_strict_opt %s -tessera-lower-to-apple_gpu-full | FileCheck %s
 
 // CHECK-LABEL: func.func @clifford_geometric_product_value

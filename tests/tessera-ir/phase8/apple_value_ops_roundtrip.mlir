@@ -2,6 +2,8 @@
 // (cpu.call, gpu.kernel_call, gpu.package_call).  Unlike the attribute-only
 // artifact ops, these carry real SSA operands + results.
 //
+// REQUIRES: tessera-apple-backend
+//
 // RUN: tessera-opt %s | FileCheck %s
 
 // CHECK-LABEL: func.func @cpu_call

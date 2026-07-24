@@ -8,6 +8,16 @@ last_updated: 2026-07-24
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `COMPILER-LIT-BACKEND-GATING-2026-07-24`: retired eleven
+never-runnable CUDA13 pseudo-IR fixtures whose undefined `tessera_opt_built`
+feature masked stale CLI options and unregistered operations. Core named
+pipeline aliases now run in the ordinary LLVM lit lane; typed
+Tile→NVIDIA→NVVM contracts remain owned by the NVIDIA backend lit suite.
+`validate_nvcc_compile.py` now labels and runs its handwritten instruction
+catalog strictly as a CUDA-toolchain probe, not evidence of Tessera emission.
+The two integrated core+NVIDIA control-flow fixtures retain their precise
+backend gate and still require the CUDA-enabled build on the NVIDIA host.
+
 This is the execution plan for evaluating, repairing, and then restructuring
 the CUDA compiler tests on the NVIDIA box. It complements
 [`NVIDIA_AUDIT.md`](NVIDIA_AUDIT.md); it does not reopen completed sm_120 feature
@@ -1338,3 +1348,11 @@ softmax, RMSNorm, MSE, Huber, SmoothL1, and BCE instances. NVIDIA remains
 branch-path dynamic-LDS expression, binary normalization epilogues, and packed
 elementwise/sparse/cache ABIs are architecture-owned; no PTX shared-memory
 expression, packed ABI, timing, selector, or support claim transfers.
+
+Cross-backend sync `CORE-COMPILER-CFG-MEMORY-BUDGETS-2026-07-24` adds a shared
+model/device-derived rematerialization budget contract with explicit override
+precedence and bounded dynamic parameters. NVIDIA is **follow-up required** to
+inject exact device capacity/reserve policy and validate model-level selection
+with CUDA measurements. ROCm's alias-aware nested/loop LDS slots and 40,208-byte
+gfx1151 packet are architecture-owned; no PTX shared-memory expression,
+occupancy, execution, or selector claim transfers.

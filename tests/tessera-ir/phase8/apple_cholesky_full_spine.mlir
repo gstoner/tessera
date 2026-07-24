@@ -41,3 +41,5 @@ func.func @chol_e2e(%a: tensor<8x8xf32>) -> tensor<8x8xf32> {
   %0 = tessera.cholesky %a : (tensor<8x8xf32>) -> tensor<8x8xf32>
   return %0 : tensor<8x8xf32>
 }
+// REQUIRES: tessera-apple-backend
+//

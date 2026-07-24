@@ -9,8 +9,8 @@ validation infrastructure landed 2026-05-11:
        `tests/tessera-ir/phase3/cuda13/nvidia_pipeline_alias.mlir`.
   H-2: `mfma_table.inc` generator + content sync check between
        Python `_MFMA_VARIANTS` source and the C++ X-macro file.
-  G-6/G-7/G-8: `cmake/TesseraToolchainPins.cmake` + nvcc validator
-       script (`scripts/validate_nvcc_compile.py`).
+  G-6/G-7/G-8: `cmake/TesseraToolchainPins.cmake` + explicit nvcc
+       instruction-probe validator (`scripts/validate_nvcc_compile.py`).
   H-6/H-7/H-8: same CMake module + hipcc validator
        (`scripts/validate_hipcc_compile.py`).
   G-9 + H-8: NCCL/RCCL version-pin header
@@ -212,9 +212,8 @@ class TestG78NvccCompileValidator:
         assert "PTX_PATTERN_STUBS" in body
         assert "MIN_NVCC_VERSION = (13, 3, 0)" in body
 
-    def test_validator_covers_g4_ptx_patterns(self):
-        """Every PTX pattern asserted by a G-4 fixture should have a
-        compile stub in the validator."""
+    def test_validator_covers_ptx_instruction_probe_catalog(self):
+        """The toolchain validator owns an explicit instruction-probe catalog."""
         body = NVCC_VALIDATOR.read_text()
         for pat in (
             "wgmma.mma_async.sync.aligned.m64n256k16",
@@ -254,7 +253,7 @@ class TestH78HipccCompileValidator:
         body = HIPCC_VALIDATOR.read_text()
         assert "MIN_HIP_VERSION = (7, 2, 3)" in body
 
-    def test_validator_covers_h4_amdgcn_patterns(self):
+    def test_validator_covers_amdgcn_instruction_probe_catalog(self):
         body = HIPCC_VALIDATOR.read_text()
         for pat in (
             "llvm.amdgcn.mfma.f32.32x32x8bf16.1k",
@@ -271,8 +270,8 @@ class TestH78HipccCompileValidator:
     def test_validator_dispatches_to_correct_arch_per_pattern(self):
         """CDNA 4 FP4 patterns route to gfx950; WMMA routes to gfx1100."""
         body = HIPCC_VALIDATOR.read_text()
-        assert 'arch_for_pat = "gfx950"' in body
-        assert 'arch_for_pat = "gfx1100"' in body
+        assert 'arch_for_pattern = "gfx950"' in body
+        assert 'arch_for_pattern = "gfx1100"' in body
 
     def test_validator_skips_gracefully_when_hipcc_absent(self):
         proc = subprocess.run(

@@ -10,7 +10,7 @@
 
 module {
   func.func @remat_bad_effect(%x: tensor<4xf32>) -> tensor<4xf32> {
-    // expected-error @+1 {{[REMAT_EFFECTFUL]}}
+    // expected-error @+1 {{REMAT_EFFECTFUL:}}
     %v = "test.stateful_dropout"(%x) {tessera.recompute} : (tensor<4xf32>) -> tensor<4xf32>
     %w = "test.use"(%v) : (tensor<4xf32>) -> tensor<4xf32>
     return %w : tensor<4xf32>

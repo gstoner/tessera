@@ -3,12 +3,12 @@
 See ``docs/audit/compiler/EVALUATOR_PLAN.md`` §2 (rung ladder) and §5.
 
 **The gap this addresses.** Today Tessera's NVIDIA path stops at Target IR MLIR
-(``tessera.tile.wgmma`` / ``tessera_nvidia.*``); it emits no assembler text, so
+(``tile.mma`` / ``tessera_nvidia.*``); it emits no assembler text, so
 ``ptxas`` (rung 3) has nothing to consume and NVIDIA sits at rung 1. This module
 is the first step of rung **2.5** — emit real PTX assembler text for a narrow
 sm_90a WGMMA bf16 matmul, in the canonical encoding documented in
-``docs/backends/nvidia/kernel-inventory.md`` and asserted by the
-``tests/tessera-ir/phase3/cuda13/`` fixtures.
+``docs/backends/nvidia/kernel-inventory.md``. Typed MLIR lowering is validated
+separately by the NVIDIA backend lit suite.
 
 **Honesty ceiling (read this).** This emits the documented WGMMA *instruction
 encoding* inside a structurally-valid PTX kernel skeleton. It is **not** a

@@ -1,3 +1,5 @@
+// REQUIRES: tessera-apple-backend
+//
 // RUN: tessera-opt %s --pass-pipeline='builtin.module(tessera-lower-to-apple_cpu-runtime)' --allow-unregistered-dialect | FileCheck %s
 
 // Phase 8.2 — Apple CPU native execution path. Verifies that the runtime

@@ -1,3 +1,5 @@
+// REQUIRES: tessera-apple-backend
+//
 // RUN: tessera-opt %s --allow-unregistered-dialect | FileCheck %s
 // RUN: tessera-opt %s -tessera-lower-to-apple_gpu --allow-unregistered-dialect | FileCheck %s --check-prefix=GPU
 

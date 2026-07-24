@@ -454,6 +454,7 @@ def test_rung3_rdna4_lowers_on_gfx1200(dtype, want):
 
 
 @pytest.mark.skipif(not _llc_available(), reason="LLVM `llc` (AMDGPU backend) not found")
+@pytest.mark.native_host
 def test_rung3_rdna4_fp8_is_not_selectable_on_rdna3():
     """Cross-check: the RDNA 4 FP8 intrinsic 'Cannot select' on gfx1151 — the FP8
     unlock is genuinely RDNA-4-only, not a naming nicety."""
@@ -528,6 +529,7 @@ def test_rung3_gfx1250_lowers_with_k32_wmma(arch, dtype, want):
 
 
 @pytest.mark.skipif(not _llc_available(), reason="LLVM `llc` (AMDGPU backend) not found")
+@pytest.mark.native_host
 def test_rung3_gfx1250_k32_not_selectable_on_rdna4():
     """Cross-check: the gfx1250 16x16x32 v2 intrinsic 'Cannot select' on gfx1200 —
     the K-doubled mods/reuse ABI is genuinely gfx1250-class, not RDNA 4."""

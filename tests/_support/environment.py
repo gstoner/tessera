@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import platform
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +15,13 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PYTHON_ROOT = REPO_ROOT / "python"
 CUDA_BIN_DIRS = (Path("/usr/local/cuda/bin"), Path("/usr/local/cuda-13.3/bin"))
+
+
+def is_wsl() -> bool:
+    """Return whether the current process is running under Windows Subsystem for Linux."""
+
+    release = platform.release().casefold()
+    return "microsoft" in release or "wsl" in release or "WSL_INTEROP" in os.environ
 
 
 def ensure_cuda_bin_on_path() -> Path | None:

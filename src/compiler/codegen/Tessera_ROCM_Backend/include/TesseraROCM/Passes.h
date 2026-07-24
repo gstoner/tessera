@@ -1,4 +1,6 @@
-#pragma once
+#ifndef TESSERAROCM_PASSES_H
+#define TESSERAROCM_PASSES_H
+
 #include "mlir/Pass/Pass.h"
 namespace mlir {
 class Pass;
@@ -113,3 +115,5 @@ void registerTesseraROCMDialects(mlir::DialectRegistry &registry);
 void registerTesseraROCMBackendPasses();
 void registerTesseraROCMBackendDialects(mlir::DialectRegistry &registry);
 }}
+
+#endif // TESSERAROCM_PASSES_H

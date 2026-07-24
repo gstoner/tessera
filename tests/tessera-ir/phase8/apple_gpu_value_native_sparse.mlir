@@ -1,5 +1,7 @@
 // Sprint 11 — native sparse attention has one strict Apple GPU value envelope.
 //
+// REQUIRES: tessera-apple-backend
+//
 // RUN: %tessera_strict_opt -tessera-lower-to-apple_gpu-full %s | FileCheck %s
 
 // CHECK-LABEL: func.func @native_sparse_value

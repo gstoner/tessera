@@ -131,6 +131,11 @@ include(AddLLVM)
 include(AddMLIR)
 include(HandleLLVMOptions)
 
+# Some LLVM 23 packages expose LLVM_DEFINITIONS as one space-delimited string
+# instead of a CMake list. HandleLLVMOptions may refresh that value, so
+# normalize it afterwards and before add_definitions() consumes it.
+separate_arguments(LLVM_DEFINITIONS NATIVE_COMMAND "${LLVM_DEFINITIONS}")
+
 # --------------------------------------------------------------------------
 # CUDA / HIP
 # --------------------------------------------------------------------------

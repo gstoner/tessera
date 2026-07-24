@@ -208,9 +208,9 @@ Target IR kernel contract named `msa_kv_outer_sparse`. The contract carries
 Dense-equivalence remains the first oracle: when `top_k == num_blocks`, the
 sparse target must match dense GQA.
 
-See [MSA CUDA detail](msa-cuda-phase3.md) and
-[`msa_kv_outer_sparse_attention.mlir`](../../../tests/tessera-ir/phase3/cuda13/msa_kv_outer_sparse_attention.mlir).
-Guard: `tests/unit/test_msa_kv_outer_schedule.py`.
+See [MSA CUDA detail](msa-cuda-phase3.md). The executable contract guard is
+`tests/unit/test_msa_kv_outer_schedule.py`; there is no C++ MLIR lowering for
+this Python-authored artifact contract yet.
 
 **Execution-mode reality.** The program reports `execution_mode = "metal_runtime"`
 (`compiler_path = apple_gpu_mps`) — identical to the rest of the sparse-attn lane:

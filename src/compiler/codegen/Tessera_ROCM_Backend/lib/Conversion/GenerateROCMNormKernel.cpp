@@ -56,9 +56,10 @@ void emitNormBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
 
   b.setInsertionPointToStart(&f.getBody().front());
   Value X = f.getArgument(0), gamma = f.getArgument(1);
-  Value beta = f.getArgument(2), O = f.getArgument(3);
-  Value M = f.getArgument(4), K = f.getArgument(5), eps = f.getArgument(6);
-  Value hasGamma = f.getArgument(7), hasBeta = f.getArgument(8);
+  Value beta = f.getArgument(2), consumer = f.getArgument(3);
+  Value O = f.getArgument(4);
+  Value M = f.getArgument(5), K = f.getArgument(6), eps = f.getArgument(7);
+  Value hasGamma = f.getArgument(8), hasBeta = f.getArgument(9);
 
   auto ci = [&](int64_t v) { return b.create<arith::ConstantIndexOp>(loc, v); };
   Value c0 = ci(0), cBD = ci(BD);
@@ -204,6 +205,33 @@ void emitNormBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
       Value denom =
           b.create<arith::AddFOp>(loc, one, b.create<math::ExpOp>(loc, neg));
       v = b.create<arith::DivFOp>(loc, v, denom);
+    } else if (epilogue == "gelu") {
+      // Match Tessera's canonical tanh GELU carrier rather than introducing a
+      // target-only approximation.
+      Value half =
+          b.create<arith::ConstantOp>(loc, f32, b.getF32FloatAttr(0.5));
+      Value one =
+          b.create<arith::ConstantOp>(loc, f32, b.getF32FloatAttr(1.0));
+      Value alpha = b.create<arith::ConstantOp>(
+          loc, f32, b.getF32FloatAttr(0.7978845608028654));
+      Value cubicCoeff =
+          b.create<arith::ConstantOp>(loc, f32, b.getF32FloatAttr(0.044715));
+      Value v2 = b.create<arith::MulFOp>(loc, v, v);
+      Value v3 = b.create<arith::MulFOp>(loc, v2, v);
+      Value cubic = b.create<arith::MulFOp>(loc, cubicCoeff, v3);
+      Value inner = b.create<arith::MulFOp>(
+          loc, alpha, b.create<arith::AddFOp>(loc, v, cubic));
+      Value gate = b.create<arith::AddFOp>(
+          loc, one, b.create<math::TanhOp>(loc, inner));
+      v = b.create<arith::MulFOp>(
+          loc, half, b.create<arith::MulFOp>(loc, v, gate));
+    } else if (epilogue == "add" || epilogue == "multiply") {
+      Value rhs = b.create<memref::LoadOp>(loc, consumer, ValueRange{idx});
+      if (!isF32)
+        rhs = b.create<arith::ExtFOp>(loc, f32, rhs);
+      v = epilogue == "add"
+              ? b.create<arith::AddFOp>(loc, v, rhs).getResult()
+              : b.create<arith::MulFOp>(loc, v, rhs).getResult();
     }
     storeFromF32(v, idx);
   }
@@ -509,9 +537,11 @@ struct GenerateROCMNormKernelPass
       StringRef epilogue = "none";
       if (auto a = op->getAttrOfType<StringAttr>("epilogue"))
         epilogue = a.getValue();
-      if (epilogue != "none" && epilogue != "relu" && epilogue != "silu") {
+      if (epilogue != "none" && epilogue != "relu" && epilogue != "silu" &&
+          epilogue != "gelu" && epilogue != "add" &&
+          epilogue != "multiply") {
         op->emitError("generate-rocm-norm-kernel: epilogue must be none, relu, "
-                      "or silu (got '")
+                      "silu, gelu, add, or multiply (got '")
             << epilogue << "')";
         return signalPassFailure();
       }
@@ -553,10 +583,12 @@ struct GenerateROCMNormKernelPass
              b.getI1Type()},
             {});
       } else {
-        // X, gamma, beta, O plus runtime shape/epsilon and uniform flags.
+        // X, gamma, beta, binary-consumer, O plus runtime shape/epsilon and
+        // uniform affine flags. Unary/no-consumer routes alias X into the
+        // unused consumer slot, preserving one stable launch ABI.
         fnTy = b.getFunctionType(
-            {memTy, memTy, memTy, memTy, idxTy, idxTy, f32, b.getI1Type(),
-             b.getI1Type()},
+            {memTy, memTy, memTy, memTy, memTy, idxTy, idxTy, f32,
+             b.getI1Type(), b.getI1Type()},
             {});
       }
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);

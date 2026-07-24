@@ -6,15 +6,15 @@
       "planner_peak_after_bytes": 0,
       "planner_peak_before_bytes": 16384,
       "planner_peak_reduction_bytes": 16384,
-      "recompute_cost_ns": 97029,
-      "recompute_median_ms": 0.097029,
-      "recompute_p95_ms": 0.144623,
+      "recompute_cost_ns": 92977,
+      "recompute_median_ms": 0.092977,
+      "recompute_p95_ms": 0.108297,
       "remat_attribute_operation": "tessera.matmul",
-      "rematerialization_runtime_ratio": 263.66576086956525,
+      "rematerialization_runtime_ratio": 251.97018970189703,
       "residual_policy": "save_inputs_recompute_output",
       "result_bytes": 16384,
-      "retained_consumer_median_ms": 0.000368,
-      "retained_consumer_p95_ms": 0.000411,
+      "retained_consumer_median_ms": 0.000369,
+      "retained_consumer_p95_ms": 0.000412,
       "selector_signal": "measured_cost_ns",
       "shape": [
         64,
@@ -30,38 +30,14 @@
       "planner_peak_after_bytes": 0,
       "planner_peak_before_bytes": 16384,
       "planner_peak_reduction_bytes": 16384,
-      "recompute_cost_ns": 203917,
-      "recompute_median_ms": 0.203917,
-      "recompute_p95_ms": 0.299972,
+      "recompute_cost_ns": 205196,
+      "recompute_median_ms": 0.205196,
+      "recompute_p95_ms": 0.271662,
       "remat_attribute_operation": "tessera.matmul",
-      "rematerialization_runtime_ratio": 508.5211970074813,
+      "rematerialization_runtime_ratio": 473.8937644341801,
       "residual_policy": "save_inputs_recompute_output",
       "result_bytes": 16384,
-      "retained_consumer_median_ms": 0.000401,
-      "retained_consumer_p95_ms": 0.000769,
-      "selector_signal": "measured_cost_ns",
-      "shape": [
-        64,
-        64,
-        64
-      ],
-      "target": "x86",
-      "timing_domain": "host_wall_operation_total"
-    },
-    {
-      "device": "Ryzen AI MAX+ 395 AVX-512",
-      "operation": "tessera.matmul_silu",
-      "planner_peak_after_bytes": 0,
-      "planner_peak_before_bytes": 16384,
-      "planner_peak_reduction_bytes": 16384,
-      "recompute_cost_ns": 125251,
-      "recompute_median_ms": 0.125251,
-      "recompute_p95_ms": 0.187471,
-      "remat_attribute_operation": "tessera.matmul",
-      "rematerialization_runtime_ratio": 312.3466334164589,
-      "residual_policy": "save_inputs_recompute_output",
-      "result_bytes": 16384,
-      "retained_consumer_median_ms": 0.000401,
+      "retained_consumer_median_ms": 0.000433,
       "retained_consumer_p95_ms": 0.000574,
       "selector_signal": "measured_cost_ns",
       "shape": [
@@ -74,19 +50,43 @@
     },
     {
       "device": "Ryzen AI MAX+ 395 AVX-512",
+      "operation": "tessera.matmul_silu",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 16384,
+      "planner_peak_reduction_bytes": 16384,
+      "recompute_cost_ns": 122359,
+      "recompute_median_ms": 0.122359,
+      "recompute_p95_ms": 0.309505,
+      "remat_attribute_operation": "tessera.matmul",
+      "rematerialization_runtime_ratio": 201.57990115321252,
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 16384,
+      "retained_consumer_median_ms": 0.000607,
+      "retained_consumer_p95_ms": 0.000769,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        64,
+        64,
+        64
+      ],
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "Ryzen AI MAX+ 395 AVX-512",
       "operation": "tessera.matmul_relu",
       "planner_peak_after_bytes": 0,
       "planner_peak_before_bytes": 65536,
       "planner_peak_reduction_bytes": 65536,
-      "recompute_cost_ns": 1007018,
-      "recompute_median_ms": 1.007018,
-      "recompute_p95_ms": 1.126204,
+      "recompute_cost_ns": 1411516,
+      "recompute_median_ms": 1.411516,
+      "recompute_p95_ms": 1.450616,
       "remat_attribute_operation": "tessera.matmul",
-      "rematerialization_runtime_ratio": 1146.9453302961276,
+      "rematerialization_runtime_ratio": 1240.3479789103692,
       "residual_policy": "save_inputs_recompute_output",
       "result_bytes": 65536,
-      "retained_consumer_median_ms": 0.000878,
-      "retained_consumer_p95_ms": 0.000953,
+      "retained_consumer_median_ms": 0.001138,
+      "retained_consumer_p95_ms": 0.001159,
       "selector_signal": "measured_cost_ns",
       "shape": [
         128,
@@ -102,15 +102,15 @@
       "planner_peak_after_bytes": 0,
       "planner_peak_before_bytes": 65536,
       "planner_peak_reduction_bytes": 65536,
-      "recompute_cost_ns": 2229590,
-      "recompute_median_ms": 2.22959,
-      "recompute_p95_ms": 2.262146,
+      "recompute_cost_ns": 2098705,
+      "recompute_median_ms": 2.098705,
+      "recompute_p95_ms": 2.217673,
       "remat_attribute_operation": "tessera.matmul",
-      "rematerialization_runtime_ratio": 1853.3582709891934,
+      "rematerialization_runtime_ratio": 2360.7480314960626,
       "residual_policy": "save_inputs_recompute_output",
       "result_bytes": 65536,
-      "retained_consumer_median_ms": 0.001203,
-      "retained_consumer_p95_ms": 0.001235,
+      "retained_consumer_median_ms": 0.000889,
+      "retained_consumer_p95_ms": 0.000964,
       "selector_signal": "measured_cost_ns",
       "shape": [
         128,
@@ -126,15 +126,15 @@
       "planner_peak_after_bytes": 0,
       "planner_peak_before_bytes": 65536,
       "planner_peak_reduction_bytes": 65536,
-      "recompute_cost_ns": 1466401,
-      "recompute_median_ms": 1.466401,
-      "recompute_p95_ms": 1.510398,
+      "recompute_cost_ns": 1182226,
+      "recompute_median_ms": 1.182226,
+      "recompute_p95_ms": 1.225626,
       "remat_attribute_operation": "tessera.matmul",
-      "rematerialization_runtime_ratio": 1187.3692307692309,
+      "rematerialization_runtime_ratio": 957.268016194332,
       "residual_policy": "save_inputs_recompute_output",
       "result_bytes": 65536,
       "retained_consumer_median_ms": 0.001235,
-      "retained_consumer_p95_ms": 0.001257,
+      "retained_consumer_p95_ms": 0.001571,
       "selector_signal": "measured_cost_ns",
       "shape": [
         128,
@@ -150,15 +150,15 @@
       "planner_peak_after_bytes": 0,
       "planner_peak_before_bytes": 147456,
       "planner_peak_reduction_bytes": 147456,
-      "recompute_cost_ns": 4665752,
-      "recompute_median_ms": 4.665752,
-      "recompute_p95_ms": 7.327256,
+      "recompute_cost_ns": 4650855,
+      "recompute_median_ms": 4.650855,
+      "recompute_p95_ms": 4.74189,
       "remat_attribute_operation": "tessera.matmul",
-      "rematerialization_runtime_ratio": 2777.2333333333336,
+      "rematerialization_runtime_ratio": 2319.628428927681,
       "residual_policy": "save_inputs_recompute_output",
       "result_bytes": 147456,
-      "retained_consumer_median_ms": 0.00168,
-      "retained_consumer_p95_ms": 0.001755,
+      "retained_consumer_median_ms": 0.002005,
+      "retained_consumer_p95_ms": 0.018386,
       "selector_signal": "measured_cost_ns",
       "shape": [
         192,
@@ -174,15 +174,15 @@
       "planner_peak_after_bytes": 0,
       "planner_peak_before_bytes": 147456,
       "planner_peak_reduction_bytes": 147456,
-      "recompute_cost_ns": 6870175,
-      "recompute_median_ms": 6.870175,
-      "recompute_p95_ms": 8.267889,
+      "recompute_cost_ns": 6816177,
+      "recompute_median_ms": 6.816177,
+      "recompute_p95_ms": 7.017788,
       "remat_attribute_operation": "tessera.matmul",
-      "rematerialization_runtime_ratio": 4171.3266545233755,
+      "rematerialization_runtime_ratio": 4138.540983606557,
       "residual_policy": "save_inputs_recompute_output",
       "result_bytes": 147456,
       "retained_consumer_median_ms": 0.001647,
-      "retained_consumer_p95_ms": 0.015254,
+      "retained_consumer_p95_ms": 0.003381,
       "selector_signal": "measured_cost_ns",
       "shape": [
         192,
@@ -198,15 +198,15 @@
       "planner_peak_after_bytes": 0,
       "planner_peak_before_bytes": 147456,
       "planner_peak_reduction_bytes": 147456,
-      "recompute_cost_ns": 5008864,
-      "recompute_median_ms": 5.008864,
-      "recompute_p95_ms": 5.248036,
+      "recompute_cost_ns": 5034952,
+      "recompute_median_ms": 5.034952,
+      "recompute_p95_ms": 5.362512,
       "remat_attribute_operation": "tessera.matmul",
-      "rematerialization_runtime_ratio": 2323.220779220779,
+      "rematerialization_runtime_ratio": 2553.2210953346857,
       "residual_policy": "save_inputs_recompute_output",
       "result_bytes": 147456,
-      "retained_consumer_median_ms": 0.002156,
-      "retained_consumer_p95_ms": 0.002264,
+      "retained_consumer_median_ms": 0.001972,
+      "retained_consumer_p95_ms": 0.001994,
       "selector_signal": "measured_cost_ns",
       "shape": [
         192,
@@ -222,15 +222,15 @@
       "planner_peak_after_bytes": 0,
       "planner_peak_before_bytes": 16384,
       "planner_peak_reduction_bytes": 16384,
-      "recompute_cost_ns": 707037,
-      "recompute_median_ms": 0.707037,
-      "recompute_p95_ms": 0.767674,
+      "recompute_cost_ns": 708022,
+      "recompute_median_ms": 0.708022,
+      "recompute_p95_ms": 0.843447,
       "remat_attribute_operation": "tessera.matmul",
-      "rematerialization_runtime_ratio": 1974.9636871508383,
+      "rematerialization_runtime_ratio": 1983.2549019607843,
       "residual_policy": "save_inputs_recompute_output",
       "result_bytes": 16384,
-      "retained_consumer_median_ms": 0.000358,
-      "retained_consumer_p95_ms": 0.000422,
+      "retained_consumer_median_ms": 0.000357,
+      "retained_consumer_p95_ms": 0.000434,
       "selector_signal": "measured_cost_ns",
       "shape": [
         64,
@@ -246,35 +246,11 @@
       "planner_peak_after_bytes": 0,
       "planner_peak_before_bytes": 16384,
       "planner_peak_reduction_bytes": 16384,
-      "recompute_cost_ns": 686560,
-      "recompute_median_ms": 0.68656,
-      "recompute_p95_ms": 0.76437,
+      "recompute_cost_ns": 730536,
+      "recompute_median_ms": 0.730536,
+      "recompute_p95_ms": 0.803242,
       "remat_attribute_operation": "tessera.matmul",
-      "rematerialization_runtime_ratio": 1860.5962059620595,
-      "residual_policy": "save_inputs_recompute_output",
-      "result_bytes": 16384,
-      "retained_consumer_median_ms": 0.000369,
-      "retained_consumer_p95_ms": 0.000552,
-      "selector_signal": "measured_cost_ns",
-      "shape": [
-        64,
-        64,
-        64
-      ],
-      "target": "rocm",
-      "timing_domain": "host_wall_operation_total"
-    },
-    {
-      "device": "gfx1151",
-      "operation": "tessera.matmul_silu",
-      "planner_peak_after_bytes": 0,
-      "planner_peak_before_bytes": 16384,
-      "planner_peak_reduction_bytes": 16384,
-      "recompute_cost_ns": 721170,
-      "recompute_median_ms": 0.72117,
-      "recompute_p95_ms": 0.810198,
-      "remat_attribute_operation": "tessera.matmul",
-      "rematerialization_runtime_ratio": 1959.7010869565217,
+      "rematerialization_runtime_ratio": 1985.1521739130433,
       "residual_policy": "save_inputs_recompute_output",
       "result_bytes": 16384,
       "retained_consumer_median_ms": 0.000368,
@@ -290,19 +266,43 @@
     },
     {
       "device": "gfx1151",
+      "operation": "tessera.matmul_silu",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 16384,
+      "planner_peak_reduction_bytes": 16384,
+      "recompute_cost_ns": 713027,
+      "recompute_median_ms": 0.713027,
+      "recompute_p95_ms": 0.805182,
+      "remat_attribute_operation": "tessera.matmul",
+      "rematerialization_runtime_ratio": 1881.3377308707122,
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 16384,
+      "retained_consumer_median_ms": 0.000379,
+      "retained_consumer_p95_ms": 0.000444,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        64,
+        64,
+        64
+      ],
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "gfx1151",
       "operation": "tessera.matmul_relu",
       "planner_peak_after_bytes": 0,
       "planner_peak_before_bytes": 65536,
       "planner_peak_reduction_bytes": 65536,
-      "recompute_cost_ns": 1685963,
-      "recompute_median_ms": 1.685963,
-      "recompute_p95_ms": 1.76725,
+      "recompute_cost_ns": 1624534,
+      "recompute_median_ms": 1.624534,
+      "recompute_p95_ms": 1.962684,
       "remat_attribute_operation": "tessera.matmul",
-      "rematerialization_runtime_ratio": 1453.4163793103448,
+      "rematerialization_runtime_ratio": 2025.6034912718203,
       "residual_policy": "save_inputs_recompute_output",
       "result_bytes": 65536,
-      "retained_consumer_median_ms": 0.00116,
-      "retained_consumer_p95_ms": 0.001463,
+      "retained_consumer_median_ms": 0.000802,
+      "retained_consumer_p95_ms": 0.001127,
       "selector_signal": "measured_cost_ns",
       "shape": [
         128,
@@ -318,15 +318,15 @@
       "planner_peak_after_bytes": 0,
       "planner_peak_before_bytes": 65536,
       "planner_peak_reduction_bytes": 65536,
-      "recompute_cost_ns": 1698010,
-      "recompute_median_ms": 1.69801,
-      "recompute_p95_ms": 1.876781,
+      "recompute_cost_ns": 1701715,
+      "recompute_median_ms": 1.701715,
+      "recompute_p95_ms": 1.774053,
       "remat_attribute_operation": "tessera.matmul",
-      "rematerialization_runtime_ratio": 1465.0647109577221,
+      "rematerialization_runtime_ratio": 2095.708128078818,
       "residual_policy": "save_inputs_recompute_output",
       "result_bytes": 65536,
-      "retained_consumer_median_ms": 0.001159,
-      "retained_consumer_p95_ms": 0.001214,
+      "retained_consumer_median_ms": 0.000812,
+      "retained_consumer_p95_ms": 0.001398,
       "selector_signal": "measured_cost_ns",
       "shape": [
         128,
@@ -342,15 +342,15 @@
       "planner_peak_after_bytes": 0,
       "planner_peak_before_bytes": 65536,
       "planner_peak_reduction_bytes": 65536,
-      "recompute_cost_ns": 1654013,
-      "recompute_median_ms": 1.654013,
-      "recompute_p95_ms": 1.847032,
+      "recompute_cost_ns": 1619258,
+      "recompute_median_ms": 1.619258,
+      "recompute_p95_ms": 1.739287,
       "remat_attribute_operation": "tessera.matmul",
-      "rematerialization_runtime_ratio": 1425.873275862069,
+      "rematerialization_runtime_ratio": 1410.5034843205576,
       "residual_policy": "save_inputs_recompute_output",
       "result_bytes": 65536,
-      "retained_consumer_median_ms": 0.00116,
-      "retained_consumer_p95_ms": 0.001225,
+      "retained_consumer_median_ms": 0.001148,
+      "retained_consumer_p95_ms": 0.003066,
       "selector_signal": "measured_cost_ns",
       "shape": [
         128,
@@ -366,14 +366,38 @@
       "planner_peak_after_bytes": 0,
       "planner_peak_before_bytes": 147456,
       "planner_peak_reduction_bytes": 147456,
-      "recompute_cost_ns": 3521656,
-      "recompute_median_ms": 3.521656,
-      "recompute_p95_ms": 10.451019,
+      "recompute_cost_ns": 3351416,
+      "recompute_median_ms": 3.351416,
+      "recompute_p95_ms": 13.183039,
       "remat_attribute_operation": "tessera.matmul",
-      "rematerialization_runtime_ratio": 2273.5029051000647,
+      "rematerialization_runtime_ratio": 1996.078618225134,
       "residual_policy": "save_inputs_recompute_output",
       "result_bytes": 147456,
-      "retained_consumer_median_ms": 0.001549,
+      "retained_consumer_median_ms": 0.001679,
+      "retained_consumer_p95_ms": 0.001852,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        192,
+        192,
+        192
+      ],
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "gfx1151",
+      "operation": "tessera.matmul_gelu",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 147456,
+      "planner_peak_reduction_bytes": 147456,
+      "recompute_cost_ns": 3364720,
+      "recompute_median_ms": 3.36472,
+      "recompute_p95_ms": 14.347583,
+      "remat_attribute_operation": "tessera.matmul",
+      "rematerialization_runtime_ratio": 2284.2634080108623,
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 147456,
+      "retained_consumer_median_ms": 0.001473,
       "retained_consumer_p95_ms": 0.001787,
       "selector_signal": "measured_cost_ns",
       "shape": [
@@ -386,19 +410,19 @@
     },
     {
       "device": "gfx1151",
-      "operation": "tessera.matmul_gelu",
+      "operation": "tessera.matmul_silu",
       "planner_peak_after_bytes": 0,
       "planner_peak_before_bytes": 147456,
       "planner_peak_reduction_bytes": 147456,
-      "recompute_cost_ns": 3474557,
-      "recompute_median_ms": 3.474557,
-      "recompute_p95_ms": 11.928517,
+      "recompute_cost_ns": 3823540,
+      "recompute_median_ms": 3.82354,
+      "recompute_p95_ms": 10.278399,
       "remat_attribute_operation": "tessera.matmul",
-      "rematerialization_runtime_ratio": 2243.0968366688185,
+      "rematerialization_runtime_ratio": 1949.79092299847,
       "residual_policy": "save_inputs_recompute_output",
       "result_bytes": 147456,
-      "retained_consumer_median_ms": 0.001549,
-      "retained_consumer_p95_ms": 0.001842,
+      "retained_consumer_median_ms": 0.001961,
+      "retained_consumer_p95_ms": 0.002188,
       "selector_signal": "measured_cost_ns",
       "shape": [
         192,
@@ -409,29 +433,1574 @@
       "timing_domain": "host_wall_operation_total"
     },
     {
-      "device": "gfx1151",
-      "operation": "tessera.matmul_silu",
+      "device": "Ryzen AI MAX+ 395 AVX-512",
+      "layer": 0,
+      "operation": "tessera.softmax_multiply",
       "planner_peak_after_bytes": 0,
-      "planner_peak_before_bytes": 147456,
-      "planner_peak_reduction_bytes": 147456,
-      "recompute_cost_ns": 3702015,
-      "recompute_median_ms": 3.702015,
-      "recompute_p95_ms": 8.448989,
-      "remat_attribute_operation": "tessera.matmul",
-      "rematerialization_runtime_ratio": 1743.7658973151201,
+      "planner_peak_before_bytes": 524288,
+      "planner_peak_reduction_bytes": 524288,
+      "producer_family": "softmax",
+      "recompute_cost_ns": 618361,
+      "recompute_median_ms": 0.618361,
+      "recompute_p95_ms": 0.655792,
+      "remat_attribute_operation": "tessera.softmax",
       "residual_policy": "save_inputs_recompute_output",
-      "result_bytes": 147456,
-      "retained_consumer_median_ms": 0.002123,
-      "retained_consumer_p95_ms": 0.002426,
+      "result_bytes": 524288,
+      "retained_consumer_median_ms": 0.022113,
+      "retained_consumer_p95_ms": 0.023174,
       "selector_signal": "measured_cost_ns",
       "shape": [
-        192,
-        192,
-        192
+        256,
+        512
+      ],
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "Ryzen AI MAX+ 395 AVX-512",
+      "layer": 0,
+      "operation": "tessera.rmsnorm_multiply",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 524288,
+      "planner_peak_reduction_bytes": 524288,
+      "producer_family": "rmsnorm",
+      "recompute_cost_ns": 122142,
+      "recompute_median_ms": 0.122142,
+      "recompute_p95_ms": 0.141167,
+      "remat_attribute_operation": "tessera.rmsnorm",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 524288,
+      "retained_consumer_median_ms": 0.007433,
+      "retained_consumer_p95_ms": 0.008288,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        512
+      ],
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "Ryzen AI MAX+ 395 AVX-512",
+      "layer": 0,
+      "operation": "tessera.loss.mse_sgd",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 524288,
+      "planner_peak_reduction_bytes": 524288,
+      "producer_family": "mse",
+      "recompute_cost_ns": 105437,
+      "recompute_median_ms": 0.105437,
+      "recompute_p95_ms": 0.161329,
+      "remat_attribute_operation": "tessera.loss.mse",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 524288,
+      "retained_consumer_median_ms": 0.006706,
+      "retained_consumer_p95_ms": 0.006902,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        512
+      ],
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "Ryzen AI MAX+ 395 AVX-512",
+      "layer": 0,
+      "operation": "tessera.loss.huber_adamw",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 524288,
+      "planner_peak_reduction_bytes": 524288,
+      "producer_family": "huber",
+      "recompute_cost_ns": 195781,
+      "recompute_median_ms": 0.195781,
+      "recompute_p95_ms": 0.247047,
+      "remat_attribute_operation": "tessera.loss.huber",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 524288,
+      "retained_consumer_median_ms": 0.006858,
+      "retained_consumer_p95_ms": 0.007128,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        512
+      ],
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "Ryzen AI MAX+ 395 AVX-512",
+      "layer": 0,
+      "operation": "tessera.loss.smooth_l1_adamw",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 524288,
+      "planner_peak_reduction_bytes": 524288,
+      "producer_family": "smooth_l1",
+      "recompute_cost_ns": 196160,
+      "recompute_median_ms": 0.19616,
+      "recompute_p95_ms": 0.256169,
+      "remat_attribute_operation": "tessera.loss.smooth_l1",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 524288,
+      "retained_consumer_median_ms": 0.006761,
+      "retained_consumer_p95_ms": 0.00689,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        512
+      ],
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "Ryzen AI MAX+ 395 AVX-512",
+      "layer": 0,
+      "operation": "tessera.loss.bce_adamw",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 524288,
+      "planner_peak_reduction_bytes": 524288,
+      "producer_family": "bce",
+      "recompute_cost_ns": 1743351,
+      "recompute_median_ms": 1.743351,
+      "recompute_p95_ms": 1.862697,
+      "remat_attribute_operation": "tessera.binary_cross_entropy_loss",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 524288,
+      "retained_consumer_median_ms": 0.006738,
+      "retained_consumer_p95_ms": 0.008819,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        512
+      ],
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "Ryzen AI MAX+ 395 AVX-512",
+      "layer": 1,
+      "operation": "tessera.softmax_multiply",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 655360,
+      "planner_peak_reduction_bytes": 655360,
+      "producer_family": "softmax",
+      "recompute_cost_ns": 743254,
+      "recompute_median_ms": 0.743254,
+      "recompute_p95_ms": 0.779624,
+      "remat_attribute_operation": "tessera.softmax",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 655360,
+      "retained_consumer_median_ms": 0.009133,
+      "retained_consumer_p95_ms": 0.009252,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        640
+      ],
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "Ryzen AI MAX+ 395 AVX-512",
+      "layer": 1,
+      "operation": "tessera.rmsnorm_multiply",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 655360,
+      "planner_peak_reduction_bytes": 655360,
+      "producer_family": "rmsnorm",
+      "recompute_cost_ns": 143756,
+      "recompute_median_ms": 0.143756,
+      "recompute_p95_ms": 0.213602,
+      "remat_attribute_operation": "tessera.rmsnorm",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 655360,
+      "retained_consumer_median_ms": 0.009079,
+      "retained_consumer_p95_ms": 0.009241,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        640
+      ],
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "Ryzen AI MAX+ 395 AVX-512",
+      "layer": 1,
+      "operation": "tessera.loss.mse_sgd",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 655360,
+      "planner_peak_reduction_bytes": 655360,
+      "producer_family": "mse",
+      "recompute_cost_ns": 121481,
+      "recompute_median_ms": 0.121481,
+      "recompute_p95_ms": 0.176236,
+      "remat_attribute_operation": "tessera.loss.mse",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 655360,
+      "retained_consumer_median_ms": 0.009101,
+      "retained_consumer_p95_ms": 0.011473,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        640
+      ],
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "Ryzen AI MAX+ 395 AVX-512",
+      "layer": 1,
+      "operation": "tessera.loss.huber_adamw",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 655360,
+      "planner_peak_reduction_bytes": 655360,
+      "producer_family": "huber",
+      "recompute_cost_ns": 204264,
+      "recompute_median_ms": 0.204264,
+      "recompute_p95_ms": 0.315518,
+      "remat_attribute_operation": "tessera.loss.huber",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 655360,
+      "retained_consumer_median_ms": 0.009046,
+      "retained_consumer_p95_ms": 0.009252,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        640
+      ],
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "Ryzen AI MAX+ 395 AVX-512",
+      "layer": 1,
+      "operation": "tessera.loss.smooth_l1_adamw",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 655360,
+      "planner_peak_reduction_bytes": 655360,
+      "producer_family": "smooth_l1",
+      "recompute_cost_ns": 217286,
+      "recompute_median_ms": 0.217286,
+      "recompute_p95_ms": 0.301542,
+      "remat_attribute_operation": "tessera.loss.smooth_l1",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 655360,
+      "retained_consumer_median_ms": 0.009111,
+      "retained_consumer_p95_ms": 0.009252,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        640
+      ],
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "Ryzen AI MAX+ 395 AVX-512",
+      "layer": 1,
+      "operation": "tessera.loss.bce_adamw",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 655360,
+      "planner_peak_reduction_bytes": 655360,
+      "producer_family": "bce",
+      "recompute_cost_ns": 2125540,
+      "recompute_median_ms": 2.12554,
+      "recompute_p95_ms": 2.200805,
+      "remat_attribute_operation": "tessera.binary_cross_entropy_loss",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 655360,
+      "retained_consumer_median_ms": 0.00909,
+      "retained_consumer_p95_ms": 0.009307,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        640
+      ],
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "Ryzen AI MAX+ 395 AVX-512",
+      "layer": 2,
+      "operation": "tessera.softmax_multiply",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 786432,
+      "planner_peak_reduction_bytes": 786432,
+      "producer_family": "softmax",
+      "recompute_cost_ns": 851995,
+      "recompute_median_ms": 0.851995,
+      "recompute_p95_ms": 0.899773,
+      "remat_attribute_operation": "tessera.softmax",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 786432,
+      "retained_consumer_median_ms": 0.011224,
+      "retained_consumer_p95_ms": 0.011333,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        768
+      ],
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "Ryzen AI MAX+ 395 AVX-512",
+      "layer": 2,
+      "operation": "tessera.rmsnorm_multiply",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 786432,
+      "planner_peak_reduction_bytes": 786432,
+      "producer_family": "rmsnorm",
+      "recompute_cost_ns": 170635,
+      "recompute_median_ms": 0.170635,
+      "recompute_p95_ms": 0.245411,
+      "remat_attribute_operation": "tessera.rmsnorm",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 786432,
+      "retained_consumer_median_ms": 0.011332,
+      "retained_consumer_p95_ms": 0.011549,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        768
+      ],
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "Ryzen AI MAX+ 395 AVX-512",
+      "layer": 2,
+      "operation": "tessera.loss.mse_sgd",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 786432,
+      "planner_peak_reduction_bytes": 786432,
+      "producer_family": "mse",
+      "recompute_cost_ns": 142121,
+      "recompute_median_ms": 0.142121,
+      "recompute_p95_ms": 0.190786,
+      "remat_attribute_operation": "tessera.loss.mse",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 786432,
+      "retained_consumer_median_ms": 0.011321,
+      "retained_consumer_p95_ms": 0.011473,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        768
+      ],
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "Ryzen AI MAX+ 395 AVX-512",
+      "layer": 2,
+      "operation": "tessera.loss.huber_adamw",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 786432,
+      "planner_peak_reduction_bytes": 786432,
+      "producer_family": "huber",
+      "recompute_cost_ns": 232985,
+      "recompute_median_ms": 0.232985,
+      "recompute_p95_ms": 0.313558,
+      "remat_attribute_operation": "tessera.loss.huber",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 786432,
+      "retained_consumer_median_ms": 0.011354,
+      "retained_consumer_p95_ms": 0.013921,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        768
+      ],
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "Ryzen AI MAX+ 395 AVX-512",
+      "layer": 2,
+      "operation": "tessera.loss.smooth_l1_adamw",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 786432,
+      "planner_peak_reduction_bytes": 786432,
+      "producer_family": "smooth_l1",
+      "recompute_cost_ns": 261890,
+      "recompute_median_ms": 0.26189,
+      "recompute_p95_ms": 0.306613,
+      "remat_attribute_operation": "tessera.loss.smooth_l1",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 786432,
+      "retained_consumer_median_ms": 0.011289,
+      "retained_consumer_p95_ms": 0.011744,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        768
+      ],
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "Ryzen AI MAX+ 395 AVX-512",
+      "layer": 2,
+      "operation": "tessera.loss.bce_adamw",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 786432,
+      "planner_peak_reduction_bytes": 786432,
+      "producer_family": "bce",
+      "recompute_cost_ns": 2537167,
+      "recompute_median_ms": 2.537167,
+      "recompute_p95_ms": 2.573331,
+      "remat_attribute_operation": "tessera.binary_cross_entropy_loss",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 786432,
+      "retained_consumer_median_ms": 0.011278,
+      "retained_consumer_p95_ms": 0.01143,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        768
+      ],
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "Ryzen AI MAX+ 395 AVX-512",
+      "layer": 3,
+      "operation": "tessera.softmax_multiply",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 917504,
+      "planner_peak_reduction_bytes": 917504,
+      "producer_family": "softmax",
+      "recompute_cost_ns": 990183,
+      "recompute_median_ms": 0.990183,
+      "recompute_p95_ms": 1.551762,
+      "remat_attribute_operation": "tessera.softmax",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 917504,
+      "retained_consumer_median_ms": 0.013445,
+      "retained_consumer_p95_ms": 0.03105,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        896
+      ],
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "Ryzen AI MAX+ 395 AVX-512",
+      "layer": 3,
+      "operation": "tessera.rmsnorm_multiply",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 917504,
+      "planner_peak_reduction_bytes": 917504,
+      "producer_family": "rmsnorm",
+      "recompute_cost_ns": 178024,
+      "recompute_median_ms": 0.178024,
+      "recompute_p95_ms": 0.231782,
+      "remat_attribute_operation": "tessera.rmsnorm",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 917504,
+      "retained_consumer_median_ms": 0.013564,
+      "retained_consumer_p95_ms": 0.013759,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        896
+      ],
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "Ryzen AI MAX+ 395 AVX-512",
+      "layer": 3,
+      "operation": "tessera.loss.mse_sgd",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 917504,
+      "planner_peak_reduction_bytes": 917504,
+      "producer_family": "mse",
+      "recompute_cost_ns": 156031,
+      "recompute_median_ms": 0.156031,
+      "recompute_p95_ms": 0.208998,
+      "remat_attribute_operation": "tessera.loss.mse",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 917504,
+      "retained_consumer_median_ms": 0.013413,
+      "retained_consumer_p95_ms": 0.024777,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        896
+      ],
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "Ryzen AI MAX+ 395 AVX-512",
+      "layer": 3,
+      "operation": "tessera.loss.huber_adamw",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 917504,
+      "planner_peak_reduction_bytes": 917504,
+      "producer_family": "huber",
+      "recompute_cost_ns": 266440,
+      "recompute_median_ms": 0.26644,
+      "recompute_p95_ms": 0.335442,
+      "remat_attribute_operation": "tessera.loss.huber",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 917504,
+      "retained_consumer_median_ms": 0.013629,
+      "retained_consumer_p95_ms": 0.013987,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        896
+      ],
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "Ryzen AI MAX+ 395 AVX-512",
+      "layer": 3,
+      "operation": "tessera.loss.smooth_l1_adamw",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 917504,
+      "planner_peak_reduction_bytes": 917504,
+      "producer_family": "smooth_l1",
+      "recompute_cost_ns": 300903,
+      "recompute_median_ms": 0.300903,
+      "recompute_p95_ms": 0.377012,
+      "remat_attribute_operation": "tessera.loss.smooth_l1",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 917504,
+      "retained_consumer_median_ms": 0.013424,
+      "retained_consumer_p95_ms": 0.013673,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        896
+      ],
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "Ryzen AI MAX+ 395 AVX-512",
+      "layer": 3,
+      "operation": "tessera.loss.bce_adamw",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 917504,
+      "planner_peak_reduction_bytes": 917504,
+      "producer_family": "bce",
+      "recompute_cost_ns": 2951924,
+      "recompute_median_ms": 2.951924,
+      "recompute_p95_ms": 2.985965,
+      "remat_attribute_operation": "tessera.binary_cross_entropy_loss",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 917504,
+      "retained_consumer_median_ms": 0.013597,
+      "retained_consumer_p95_ms": 0.01597,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        896
+      ],
+      "target": "x86",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "gfx1151",
+      "layer": 0,
+      "operation": "tessera.softmax_multiply",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 524288,
+      "planner_peak_reduction_bytes": 524288,
+      "producer_family": "softmax",
+      "recompute_cost_ns": 1910469,
+      "recompute_median_ms": 1.910469,
+      "recompute_p95_ms": 2.167647,
+      "remat_attribute_operation": "tessera.softmax",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 524288,
+      "retained_consumer_median_ms": 0.015243,
+      "retained_consumer_p95_ms": 0.018007,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        512
+      ],
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "gfx1151",
+      "layer": 0,
+      "operation": "tessera.rmsnorm_multiply",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 524288,
+      "planner_peak_reduction_bytes": 524288,
+      "producer_family": "rmsnorm",
+      "recompute_cost_ns": 1981882,
+      "recompute_median_ms": 1.981882,
+      "recompute_p95_ms": 2.382274,
+      "remat_attribute_operation": "tessera.rmsnorm",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 524288,
+      "retained_consumer_median_ms": 0.007594,
+      "retained_consumer_p95_ms": 0.007931,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        512
+      ],
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "gfx1151",
+      "layer": 0,
+      "operation": "tessera.loss.mse_sgd",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 524288,
+      "planner_peak_reduction_bytes": 524288,
+      "producer_family": "mse",
+      "recompute_cost_ns": 705238,
+      "recompute_median_ms": 0.705238,
+      "recompute_p95_ms": 1.033377,
+      "remat_attribute_operation": "tessera.loss.mse",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 524288,
+      "retained_consumer_median_ms": 0.004972,
+      "retained_consumer_p95_ms": 0.005623,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        512
+      ],
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "gfx1151",
+      "layer": 0,
+      "operation": "tessera.loss.huber_adamw",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 524288,
+      "planner_peak_reduction_bytes": 524288,
+      "producer_family": "huber",
+      "recompute_cost_ns": 716527,
+      "recompute_median_ms": 0.716527,
+      "recompute_p95_ms": 0.827353,
+      "remat_attribute_operation": "tessera.loss.huber",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 524288,
+      "retained_consumer_median_ms": 0.009403,
+      "retained_consumer_p95_ms": 0.01611,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        512
+      ],
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "gfx1151",
+      "layer": 0,
+      "operation": "tessera.loss.smooth_l1_adamw",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 524288,
+      "planner_peak_reduction_bytes": 524288,
+      "producer_family": "smooth_l1",
+      "recompute_cost_ns": 711766,
+      "recompute_median_ms": 0.711766,
+      "recompute_p95_ms": 0.827185,
+      "remat_attribute_operation": "tessera.loss.smooth_l1",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 524288,
+      "retained_consumer_median_ms": 0.007876,
+      "retained_consumer_p95_ms": 0.013261,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        512
+      ],
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "gfx1151",
+      "layer": 0,
+      "operation": "tessera.loss.bce_adamw",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 524288,
+      "planner_peak_reduction_bytes": 524288,
+      "producer_family": "bce",
+      "recompute_cost_ns": 1793317,
+      "recompute_median_ms": 1.793317,
+      "recompute_p95_ms": 2.060997,
+      "remat_attribute_operation": "tessera.binary_cross_entropy_loss",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 524288,
+      "retained_consumer_median_ms": 0.009805,
+      "retained_consumer_p95_ms": 0.014918,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        512
+      ],
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "gfx1151",
+      "layer": 1,
+      "operation": "tessera.softmax_multiply",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 655360,
+      "planner_peak_reduction_bytes": 655360,
+      "producer_family": "softmax",
+      "recompute_cost_ns": 1970377,
+      "recompute_median_ms": 1.970377,
+      "recompute_p95_ms": 2.103835,
+      "remat_attribute_operation": "tessera.softmax",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 655360,
+      "retained_consumer_median_ms": 0.010281,
+      "retained_consumer_p95_ms": 0.01065,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        640
+      ],
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "gfx1151",
+      "layer": 1,
+      "operation": "tessera.rmsnorm_multiply",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 655360,
+      "planner_peak_reduction_bytes": 655360,
+      "producer_family": "rmsnorm",
+      "recompute_cost_ns": 1967646,
+      "recompute_median_ms": 1.967646,
+      "recompute_p95_ms": 2.252493,
+      "remat_attribute_operation": "tessera.rmsnorm",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 655360,
+      "retained_consumer_median_ms": 0.010293,
+      "retained_consumer_p95_ms": 0.010563,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        640
+      ],
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "gfx1151",
+      "layer": 1,
+      "operation": "tessera.loss.mse_sgd",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 655360,
+      "planner_peak_reduction_bytes": 655360,
+      "producer_family": "mse",
+      "recompute_cost_ns": 746266,
+      "recompute_median_ms": 0.746266,
+      "recompute_p95_ms": 0.868734,
+      "remat_attribute_operation": "tessera.loss.mse",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 655360,
+      "retained_consumer_median_ms": 0.008429,
+      "retained_consumer_p95_ms": 0.008592,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        640
+      ],
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "gfx1151",
+      "layer": 1,
+      "operation": "tessera.loss.huber_adamw",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 655360,
+      "planner_peak_reduction_bytes": 655360,
+      "producer_family": "huber",
+      "recompute_cost_ns": 757534,
+      "recompute_median_ms": 0.757534,
+      "recompute_p95_ms": 0.824531,
+      "remat_attribute_operation": "tessera.loss.huber",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 655360,
+      "retained_consumer_median_ms": 0.008028,
+      "retained_consumer_p95_ms": 0.008234,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        640
+      ],
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "gfx1151",
+      "layer": 1,
+      "operation": "tessera.loss.smooth_l1_adamw",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 655360,
+      "planner_peak_reduction_bytes": 655360,
+      "producer_family": "smooth_l1",
+      "recompute_cost_ns": 741749,
+      "recompute_median_ms": 0.741749,
+      "recompute_p95_ms": 0.959837,
+      "remat_attribute_operation": "tessera.loss.smooth_l1",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 655360,
+      "retained_consumer_median_ms": 0.00831,
+      "retained_consumer_p95_ms": 0.008635,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        640
+      ],
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "gfx1151",
+      "layer": 1,
+      "operation": "tessera.loss.bce_adamw",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 655360,
+      "planner_peak_reduction_bytes": 655360,
+      "producer_family": "bce",
+      "recompute_cost_ns": 1878277,
+      "recompute_median_ms": 1.878277,
+      "recompute_p95_ms": 2.097351,
+      "remat_attribute_operation": "tessera.binary_cross_entropy_loss",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 655360,
+      "retained_consumer_median_ms": 0.008602,
+      "retained_consumer_p95_ms": 0.009718,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        640
+      ],
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "gfx1151",
+      "layer": 2,
+      "operation": "tessera.softmax_multiply",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 786432,
+      "planner_peak_reduction_bytes": 786432,
+      "producer_family": "softmax",
+      "recompute_cost_ns": 1937658,
+      "recompute_median_ms": 1.937658,
+      "recompute_p95_ms": 2.168833,
+      "remat_attribute_operation": "tessera.softmax",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 786432,
+      "retained_consumer_median_ms": 0.012785,
+      "retained_consumer_p95_ms": 0.013055,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        768
+      ],
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "gfx1151",
+      "layer": 2,
+      "operation": "tessera.rmsnorm_multiply",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 786432,
+      "planner_peak_reduction_bytes": 786432,
+      "producer_family": "rmsnorm",
+      "recompute_cost_ns": 1980127,
+      "recompute_median_ms": 1.980127,
+      "recompute_p95_ms": 2.188979,
+      "remat_attribute_operation": "tessera.rmsnorm",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 786432,
+      "retained_consumer_median_ms": 0.012014,
+      "retained_consumer_p95_ms": 0.012784,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        768
+      ],
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "gfx1151",
+      "layer": 2,
+      "operation": "tessera.loss.mse_sgd",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 786432,
+      "planner_peak_reduction_bytes": 786432,
+      "producer_family": "mse",
+      "recompute_cost_ns": 1266763,
+      "recompute_median_ms": 1.266763,
+      "recompute_p95_ms": 1.45676,
+      "remat_attribute_operation": "tessera.loss.mse",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 786432,
+      "retained_consumer_median_ms": 0.013586,
+      "retained_consumer_p95_ms": 0.024777,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        768
+      ],
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "gfx1151",
+      "layer": 2,
+      "operation": "tessera.loss.huber_adamw",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 786432,
+      "planner_peak_reduction_bytes": 786432,
+      "producer_family": "huber",
+      "recompute_cost_ns": 1269764,
+      "recompute_median_ms": 1.269764,
+      "recompute_p95_ms": 1.642905,
+      "remat_attribute_operation": "tessera.loss.huber",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 786432,
+      "retained_consumer_median_ms": 0.011755,
+      "retained_consumer_p95_ms": 0.012849,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        768
+      ],
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "gfx1151",
+      "layer": 2,
+      "operation": "tessera.loss.smooth_l1_adamw",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 786432,
+      "planner_peak_reduction_bytes": 786432,
+      "producer_family": "smooth_l1",
+      "recompute_cost_ns": 1298301,
+      "recompute_median_ms": 1.298301,
+      "recompute_p95_ms": 1.361123,
+      "remat_attribute_operation": "tessera.loss.smooth_l1",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 786432,
+      "retained_consumer_median_ms": 0.011138,
+      "retained_consumer_p95_ms": 0.012025,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        768
+      ],
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "gfx1151",
+      "layer": 2,
+      "operation": "tessera.loss.bce_adamw",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 786432,
+      "planner_peak_reduction_bytes": 786432,
+      "producer_family": "bce",
+      "recompute_cost_ns": 2410009,
+      "recompute_median_ms": 2.410009,
+      "recompute_p95_ms": 2.573081,
+      "remat_attribute_operation": "tessera.binary_cross_entropy_loss",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 786432,
+      "retained_consumer_median_ms": 0.010878,
+      "retained_consumer_p95_ms": 0.027821,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        768
+      ],
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "gfx1151",
+      "layer": 3,
+      "operation": "tessera.softmax_multiply",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 917504,
+      "planner_peak_reduction_bytes": 917504,
+      "producer_family": "softmax",
+      "recompute_cost_ns": 2018685,
+      "recompute_median_ms": 2.018685,
+      "recompute_p95_ms": 2.171975,
+      "remat_attribute_operation": "tessera.softmax",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 917504,
+      "retained_consumer_median_ms": 0.014496,
+      "retained_consumer_p95_ms": 0.016717,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        896
+      ],
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "gfx1151",
+      "layer": 3,
+      "operation": "tessera.rmsnorm_multiply",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 917504,
+      "planner_peak_reduction_bytes": 917504,
+      "producer_family": "rmsnorm",
+      "recompute_cost_ns": 2092324,
+      "recompute_median_ms": 2.092324,
+      "recompute_p95_ms": 2.200641,
+      "remat_attribute_operation": "tessera.rmsnorm",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 917504,
+      "retained_consumer_median_ms": 0.013846,
+      "retained_consumer_p95_ms": 0.016121,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        896
+      ],
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "gfx1151",
+      "layer": 3,
+      "operation": "tessera.loss.mse_sgd",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 917504,
+      "planner_peak_reduction_bytes": 917504,
+      "producer_family": "mse",
+      "recompute_cost_ns": 1329210,
+      "recompute_median_ms": 1.32921,
+      "recompute_p95_ms": 1.659532,
+      "remat_attribute_operation": "tessera.loss.mse",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 917504,
+      "retained_consumer_median_ms": 0.013489,
+      "retained_consumer_p95_ms": 0.015308,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        896
+      ],
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "gfx1151",
+      "layer": 3,
+      "operation": "tessera.loss.huber_adamw",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 917504,
+      "planner_peak_reduction_bytes": 917504,
+      "producer_family": "huber",
+      "recompute_cost_ns": 1307076,
+      "recompute_median_ms": 1.307076,
+      "recompute_p95_ms": 1.422323,
+      "remat_attribute_operation": "tessera.loss.huber",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 917504,
+      "retained_consumer_median_ms": 0.012936,
+      "retained_consumer_p95_ms": 0.014333,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        896
+      ],
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "gfx1151",
+      "layer": 3,
+      "operation": "tessera.loss.smooth_l1_adamw",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 917504,
+      "planner_peak_reduction_bytes": 917504,
+      "producer_family": "smooth_l1",
+      "recompute_cost_ns": 1347281,
+      "recompute_median_ms": 1.347281,
+      "recompute_p95_ms": 1.65682,
+      "remat_attribute_operation": "tessera.loss.smooth_l1",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 917504,
+      "retained_consumer_median_ms": 0.014365,
+      "retained_consumer_p95_ms": 0.02806,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        896
+      ],
+      "target": "rocm",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "device": "gfx1151",
+      "layer": 3,
+      "operation": "tessera.loss.bce_adamw",
+      "planner_peak_after_bytes": 0,
+      "planner_peak_before_bytes": 917504,
+      "planner_peak_reduction_bytes": 917504,
+      "producer_family": "bce",
+      "recompute_cost_ns": 2705342,
+      "recompute_median_ms": 2.705342,
+      "recompute_p95_ms": 2.936822,
+      "remat_attribute_operation": "tessera.binary_cross_entropy_loss",
+      "residual_policy": "save_inputs_recompute_output",
+      "result_bytes": 917504,
+      "retained_consumer_median_ms": 0.013791,
+      "retained_consumer_p95_ms": 0.014789,
+      "selector_signal": "measured_cost_ns",
+      "shape": [
+        256,
+        896
       ],
       "target": "rocm",
       "timing_domain": "host_wall_operation_total"
     }
   ],
-  "schema": "tessera.rematerialization.cross-target.v1"
+  "schema": "tessera.rematerialization.cross-target.v1",
+  "workload": {
+    "evidence": "each producer instance executed on exact target",
+    "families_per_layer": [
+      "softmax",
+      "rmsnorm",
+      "mse",
+      "huber",
+      "smooth_l1",
+      "bce"
+    ],
+    "layers": 4,
+    "shape_policy": "fixed_rows_width_plus_128_per_layer"
+  },
+  "workload_policy": [
+    {
+      "memory_budget_bytes": 2097152,
+      "peak_after_bytes": 1966080,
+      "peak_before_bytes": 17301504,
+      "policy": "measured_bytes_per_recompute_ns",
+      "selected_instances": [
+        {
+          "layer": 3,
+          "producer_family": "mse",
+          "shape": [
+            256,
+            896
+          ]
+        },
+        {
+          "layer": 2,
+          "producer_family": "mse",
+          "shape": [
+            256,
+            768
+          ]
+        },
+        {
+          "layer": 1,
+          "producer_family": "mse",
+          "shape": [
+            256,
+            640
+          ]
+        },
+        {
+          "layer": 3,
+          "producer_family": "rmsnorm",
+          "shape": [
+            256,
+            896
+          ]
+        },
+        {
+          "layer": 0,
+          "producer_family": "mse",
+          "shape": [
+            256,
+            512
+          ]
+        },
+        {
+          "layer": 2,
+          "producer_family": "rmsnorm",
+          "shape": [
+            256,
+            768
+          ]
+        },
+        {
+          "layer": 1,
+          "producer_family": "rmsnorm",
+          "shape": [
+            256,
+            640
+          ]
+        },
+        {
+          "layer": 0,
+          "producer_family": "rmsnorm",
+          "shape": [
+            256,
+            512
+          ]
+        },
+        {
+          "layer": 3,
+          "producer_family": "huber",
+          "shape": [
+            256,
+            896
+          ]
+        },
+        {
+          "layer": 2,
+          "producer_family": "huber",
+          "shape": [
+            256,
+            768
+          ]
+        },
+        {
+          "layer": 1,
+          "producer_family": "huber",
+          "shape": [
+            256,
+            640
+          ]
+        },
+        {
+          "layer": 3,
+          "producer_family": "smooth_l1",
+          "shape": [
+            256,
+            896
+          ]
+        },
+        {
+          "layer": 1,
+          "producer_family": "smooth_l1",
+          "shape": [
+            256,
+            640
+          ]
+        },
+        {
+          "layer": 2,
+          "producer_family": "smooth_l1",
+          "shape": [
+            256,
+            768
+          ]
+        },
+        {
+          "layer": 0,
+          "producer_family": "huber",
+          "shape": [
+            256,
+            512
+          ]
+        },
+        {
+          "layer": 0,
+          "producer_family": "smooth_l1",
+          "shape": [
+            256,
+            512
+          ]
+        },
+        {
+          "layer": 3,
+          "producer_family": "softmax",
+          "shape": [
+            256,
+            896
+          ]
+        },
+        {
+          "layer": 2,
+          "producer_family": "softmax",
+          "shape": [
+            256,
+            768
+          ]
+        },
+        {
+          "layer": 1,
+          "producer_family": "softmax",
+          "shape": [
+            256,
+            640
+          ]
+        },
+        {
+          "layer": 0,
+          "producer_family": "softmax",
+          "shape": [
+            256,
+            512
+          ]
+        },
+        {
+          "layer": 3,
+          "producer_family": "bce",
+          "shape": [
+            256,
+            896
+          ]
+        }
+      ],
+      "selected_operations": [
+        "tessera.loss.mse_sgd",
+        "tessera.loss.mse_sgd",
+        "tessera.loss.mse_sgd",
+        "tessera.rmsnorm_multiply",
+        "tessera.loss.mse_sgd",
+        "tessera.rmsnorm_multiply",
+        "tessera.rmsnorm_multiply",
+        "tessera.rmsnorm_multiply",
+        "tessera.loss.huber_adamw",
+        "tessera.loss.huber_adamw",
+        "tessera.loss.huber_adamw",
+        "tessera.loss.smooth_l1_adamw",
+        "tessera.loss.smooth_l1_adamw",
+        "tessera.loss.smooth_l1_adamw",
+        "tessera.loss.huber_adamw",
+        "tessera.loss.smooth_l1_adamw",
+        "tessera.softmax_multiply",
+        "tessera.softmax_multiply",
+        "tessera.softmax_multiply",
+        "tessera.softmax_multiply",
+        "tessera.loss.bce_adamw"
+      ],
+      "selected_recompute_cost_ns": 9171053,
+      "target": "x86"
+    },
+    {
+      "memory_budget_bytes": 2097152,
+      "peak_after_bytes": 1572864,
+      "peak_before_bytes": 17301504,
+      "policy": "measured_bytes_per_recompute_ns",
+      "selected_instances": [
+        {
+          "layer": 1,
+          "producer_family": "smooth_l1",
+          "shape": [
+            256,
+            640
+          ]
+        },
+        {
+          "layer": 1,
+          "producer_family": "mse",
+          "shape": [
+            256,
+            640
+          ]
+        },
+        {
+          "layer": 1,
+          "producer_family": "huber",
+          "shape": [
+            256,
+            640
+          ]
+        },
+        {
+          "layer": 0,
+          "producer_family": "mse",
+          "shape": [
+            256,
+            512
+          ]
+        },
+        {
+          "layer": 0,
+          "producer_family": "smooth_l1",
+          "shape": [
+            256,
+            512
+          ]
+        },
+        {
+          "layer": 0,
+          "producer_family": "huber",
+          "shape": [
+            256,
+            512
+          ]
+        },
+        {
+          "layer": 3,
+          "producer_family": "huber",
+          "shape": [
+            256,
+            896
+          ]
+        },
+        {
+          "layer": 3,
+          "producer_family": "mse",
+          "shape": [
+            256,
+            896
+          ]
+        },
+        {
+          "layer": 3,
+          "producer_family": "smooth_l1",
+          "shape": [
+            256,
+            896
+          ]
+        },
+        {
+          "layer": 2,
+          "producer_family": "mse",
+          "shape": [
+            256,
+            768
+          ]
+        },
+        {
+          "layer": 2,
+          "producer_family": "huber",
+          "shape": [
+            256,
+            768
+          ]
+        },
+        {
+          "layer": 2,
+          "producer_family": "smooth_l1",
+          "shape": [
+            256,
+            768
+          ]
+        },
+        {
+          "layer": 3,
+          "producer_family": "softmax",
+          "shape": [
+            256,
+            896
+          ]
+        },
+        {
+          "layer": 3,
+          "producer_family": "rmsnorm",
+          "shape": [
+            256,
+            896
+          ]
+        },
+        {
+          "layer": 2,
+          "producer_family": "softmax",
+          "shape": [
+            256,
+            768
+          ]
+        },
+        {
+          "layer": 2,
+          "producer_family": "rmsnorm",
+          "shape": [
+            256,
+            768
+          ]
+        },
+        {
+          "layer": 1,
+          "producer_family": "bce",
+          "shape": [
+            256,
+            640
+          ]
+        },
+        {
+          "layer": 3,
+          "producer_family": "bce",
+          "shape": [
+            256,
+            896
+          ]
+        },
+        {
+          "layer": 1,
+          "producer_family": "rmsnorm",
+          "shape": [
+            256,
+            640
+          ]
+        },
+        {
+          "layer": 1,
+          "producer_family": "softmax",
+          "shape": [
+            256,
+            640
+          ]
+        },
+        {
+          "layer": 2,
+          "producer_family": "bce",
+          "shape": [
+            256,
+            768
+          ]
+        }
+      ],
+      "selected_operations": [
+        "tessera.loss.smooth_l1_adamw",
+        "tessera.loss.mse_sgd",
+        "tessera.loss.huber_adamw",
+        "tessera.loss.mse_sgd",
+        "tessera.loss.smooth_l1_adamw",
+        "tessera.loss.huber_adamw",
+        "tessera.loss.huber_adamw",
+        "tessera.loss.mse_sgd",
+        "tessera.loss.smooth_l1_adamw",
+        "tessera.loss.mse_sgd",
+        "tessera.loss.huber_adamw",
+        "tessera.loss.smooth_l1_adamw",
+        "tessera.softmax_multiply",
+        "tessera.rmsnorm_multiply",
+        "tessera.softmax_multiply",
+        "tessera.rmsnorm_multiply",
+        "tessera.loss.bce_adamw",
+        "tessera.loss.bce_adamw",
+        "tessera.rmsnorm_multiply",
+        "tessera.softmax_multiply",
+        "tessera.loss.bce_adamw"
+      ],
+      "selected_recompute_cost_ns": 31157920,
+      "target": "rocm"
+    }
+  ]
 }

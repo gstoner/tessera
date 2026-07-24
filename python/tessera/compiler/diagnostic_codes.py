@@ -1472,10 +1472,10 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         code="ROCM_DYNAMIC_LDS_MULTIPLE_ARENAS",
         pass_origin="ROCMDynamicLDS",
         severity="error",
-        summary="A ROCm kernel contains multiple independent runtime-sized LDS allocations, but one HIP launch exposes only one dynamic-LDS base and byte count.",
-        fix_hint="Coalesce the allocations into one runtime arena with explicit offsets, or keep the route bucketed/static until a packed dynamic-cohort launch expression is available.",
+        summary="A ROCm kernel contains runtime-sized LDS arenas in control-flow regions that are not direct mutually-exclusive branch successors.",
+        fix_hint="Coalesce sequential or nested allocations into one arena, or canonicalize the regions to direct mutually-exclusive successors so the launch size is a max of aligned path sums.",
         spec="docs/audit/compiler/COMPILER_THEORY_OF_OPERATION.md §W3",
-        sprint="CORE-COMPILER-MEMORY-LAYOUT-CLOSEOUT-2026-07-23",
+        sprint="CORE-COMPILER-HONEST-BOUNDARIES-3-2026-07-24",
     ),
 
     # ROCm shared Tile-IR convergence (2026-06-23) — AMD consumes the shared

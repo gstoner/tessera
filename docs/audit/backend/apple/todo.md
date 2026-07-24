@@ -3,7 +3,7 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-07-22
+last_updated: 2026-07-24
 ---
 
 # Apple compiler, exact-device, and performance plan
@@ -1402,3 +1402,20 @@ normalization epilogues, HIP launch-sized LDS materialization, and packed IU4
 WMMA are architecture-owned and transfer no MSL threadgroup-allocation,
 packed consumer, performance, or selector claim. Apple's threadgroup arena
 and physical packed consumers remain architecture-owned follow-ups.
+
+Cross-backend sync `CORE-COMPILER-HONEST-BOUNDARIES-2-2026-07-24` extends the
+shared rematerialization corpus schema with softmax, RMSNorm, and MSE producer
+families plus measured workload-budget decisions. Apple remains **follow-up
+required** for Metal measurements and policy selection. ROCm's packed
+multi-arena LDS ABI, GELU normalization epilogue, and terminal-pack
+dequant-GEMM consumer are architecture-owned; no MSL threadgroup allocation,
+packed consumer, timing, selector, or support claim transfers. Apple's
+threadgroup path-max contract and physical packed consumers remain open.
+
+Cross-backend sync `CORE-COMPILER-HONEST-BOUNDARIES-3-2026-07-24` extends the
+shared rematerialization evidence schema to a measured four-layer workload with
+softmax, RMSNorm, MSE, Huber, SmoothL1, and BCE instances. Apple remains
+**follow-up required** for Metal measurements and policy selection. ROCm's
+branch-path dynamic-LDS expression, binary normalization epilogues, and packed
+elementwise/sparse/cache ABIs are architecture-owned; no MSL threadgroup
+expression, packed ABI, timing, selector, or support claim transfers.

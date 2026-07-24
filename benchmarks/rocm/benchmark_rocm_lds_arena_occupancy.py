@@ -19,6 +19,10 @@ from pathlib import Path
 from typing import Any
 
 from tessera import runtime as rt
+from tessera.compiler.rocm_dynamic_lds import (
+    packed_path_layout,
+    path_max_launch_bytes,
+)
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -77,6 +81,61 @@ def _dynamic_arena_module() -> str:
 """
 
 
+def _packed_dynamic_arena_module() -> str:
+    """Two simultaneously-live runtime arenas using the packed launch ABI."""
+    return """module attributes {gpu.container_module} {
+  gpu.module @kernels {
+    gpu.func @arena_dynamic_packed(
+        %out: memref<?xi8>, %lhs_n: index, %rhs_n: index) kernel {
+      %lhs = memref.alloca(%lhs_n) : memref<?xi8, 3>
+      %rhs = memref.alloca(%rhs_n) : memref<?xi8, 3>
+      %tid = gpu.thread_id x
+      %one = arith.constant 1 : i8
+      %two = arith.constant 2 : i8
+      memref.store %one, %lhs[%tid] : memref<?xi8, 3>
+      memref.store %two, %rhs[%tid] : memref<?xi8, 3>
+      gpu.barrier
+      %a = memref.load %lhs[%tid] : memref<?xi8, 3>
+      %b = memref.load %rhs[%tid] : memref<?xi8, 3>
+      %sum = arith.addi %a, %b : i8
+      memref.store %sum, %out[%tid] : memref<?xi8>
+      gpu.return
+    }
+  }
+}
+"""
+
+
+def _path_max_dynamic_arena_module() -> str:
+    """Two mutually-exclusive runtime arenas sharing path-relative offset 0."""
+    return """module attributes {gpu.container_module} {
+  gpu.module @kernels {
+    gpu.func @arena_dynamic_path_max(
+        %out: memref<?xi8>, %take_lhs: i1, %lhs_n: index, %rhs_n: index) kernel {
+      scf.if %take_lhs {
+        %lhs = memref.alloca(%lhs_n) : memref<?xi8, 3>
+        %tid = gpu.thread_id x
+        %five = arith.constant 5 : i8
+        memref.store %five, %lhs[%tid] : memref<?xi8, 3>
+        gpu.barrier
+        %value = memref.load %lhs[%tid] : memref<?xi8, 3>
+        memref.store %value, %out[%tid] : memref<?xi8>
+      } else {
+        %rhs = memref.alloca(%rhs_n) : memref<?xi8, 3>
+        %tid = gpu.thread_id x
+        %seven = arith.constant 7 : i8
+        memref.store %seven, %rhs[%tid] : memref<?xi8, 3>
+        gpu.barrier
+        %value = memref.load %rhs[%tid] : memref<?xi8, 3>
+        memref.store %value, %out[%tid] : memref<?xi8>
+      }
+      gpu.return
+    }
+  }
+}
+"""
+
+
 def _build_hsaco(arena_bytes: int, chip: str) -> bytes:
     pipeline = (
         "builtin.module("
@@ -116,6 +175,30 @@ def _build_dynamic_hsaco(chip: str) -> bytes:
     if result.returncode or "gpu.binary" not in result.stdout:
         raise RuntimeError(
             "failed to serialize launch-sized LDS arena: "
+            f"{result.stderr[:800]}"
+        )
+    return rt._extract_hsaco_blob(result.stdout)
+
+
+def _build_packed_dynamic_hsaco(
+    chip: str, source: str | None = None
+) -> bytes:
+    pipeline = (
+        "builtin.module("
+        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+        "reconcile-unrealized-casts,rocm-materialize-dynamic-lds),"
+        f"rocdl-attach-target{{chip={chip}}},gpu-module-to-binary)"
+    )
+    result = subprocess.run(
+        [str(TESSERA_OPT), "-", f"--pass-pipeline={pipeline}"],
+        input=source or _packed_dynamic_arena_module(),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode or "gpu.binary" not in result.stdout:
+        raise RuntimeError(
+            "failed to serialize packed launch-sized LDS arenas: "
             f"{result.stderr[:800]}"
         )
     return rt._extract_hsaco_blob(result.stdout)
@@ -213,6 +296,128 @@ def _measure_dynamic(
         hip.hipModuleUnload(module)
 
 
+def _measure_packed_dynamic(
+    hip: ctypes.CDLL, lhs_bytes: int, rhs_bytes: int, chip: str, threads: int
+) -> dict[str, Any]:
+    hsaco = _build_packed_dynamic_hsaco(chip)
+    module = ctypes.c_void_p()
+    function = ctypes.c_void_p()
+    output = ctypes.c_void_p()
+    offsets, launch_bytes = packed_path_layout((lhs_bytes, rhs_bytes))
+    rhs_offset = offsets[1]
+    if hip.hipModuleLoadData(ctypes.byref(module), hsaco) != 0:
+        raise RuntimeError("HIP could not load packed launch-sized LDS HSACO")
+    try:
+        if hip.hipModuleGetFunction(
+            ctypes.byref(function), module, b"arena_dynamic_packed"
+        ) != 0:
+            raise RuntimeError("HIP did not find arena_dynamic_packed")
+        if hip.hipMalloc(ctypes.byref(output), threads) != 0:
+            raise RuntimeError("HIP packed-arena output allocation failed")
+        cv = ctypes.c_void_p
+        args = [
+            cv(output.value), cv(output.value), ctypes.c_int64(0),
+            ctypes.c_int64(threads), ctypes.c_int64(1),
+            ctypes.c_int64(lhs_bytes), ctypes.c_int64(rhs_bytes),
+        ]
+        packed = (cv * len(args))()
+        for index, value in enumerate(args):
+            packed[index] = ctypes.cast(ctypes.byref(value), cv)
+        rc = hip.hipModuleLaunchKernel(
+            function, 1, 1, 1, threads, 1, 1, launch_bytes, None, packed, None
+        )
+        if rc != 0 or hip.hipDeviceSynchronize() != 0:
+            raise RuntimeError(f"packed dynamic LDS kernel failed rc={rc}")
+        host = (ctypes.c_uint8 * threads)()
+        if hip.hipMemcpy(host, output, threads, 2) != 0:
+            raise RuntimeError("packed dynamic LDS result copy failed")
+        active_blocks = ctypes.c_int()
+        if hip.hipModuleOccupancyMaxActiveBlocksPerMultiprocessor(
+            ctypes.byref(active_blocks), function, threads, launch_bytes
+        ) != 0:
+            raise RuntimeError("packed dynamic LDS occupancy query failed")
+        exact = all(value == 3 for value in host)
+        return {
+            "arena_bytes_requested": [lhs_bytes, rhs_bytes],
+            "arena_offsets": [0, rhs_offset],
+            "launch_shared_bytes": launch_bytes,
+            "packing_alignment": 16,
+            "active_blocks_per_cu": active_blocks.value,
+            "execution_verified": exact,
+            "non_aliasing_verified": exact,
+            "hsaco_bytes": len(hsaco),
+        }
+    finally:
+        if output.value:
+            hip.hipFree(output)
+        hip.hipModuleUnload(module)
+
+
+def _measure_path_max_dynamic(
+    hip: ctypes.CDLL, lhs_bytes: int, rhs_bytes: int, chip: str, threads: int
+) -> dict[str, Any]:
+    hsaco = _build_packed_dynamic_hsaco(
+        chip, _path_max_dynamic_arena_module()
+    )
+    module = ctypes.c_void_p()
+    function = ctypes.c_void_p()
+    output = ctypes.c_void_p()
+    paths = ((lhs_bytes,), (rhs_bytes,))
+    launch_bytes = path_max_launch_bytes(paths)
+    summed_bytes = path_max_launch_bytes(((lhs_bytes, rhs_bytes),))
+    if hip.hipModuleLoadData(ctypes.byref(module), hsaco) != 0:
+        raise RuntimeError("HIP could not load path-max dynamic LDS HSACO")
+    try:
+        if hip.hipModuleGetFunction(
+            ctypes.byref(function), module, b"arena_dynamic_path_max"
+        ) != 0:
+            raise RuntimeError("HIP did not find arena_dynamic_path_max")
+        if hip.hipMalloc(ctypes.byref(output), threads) != 0:
+            raise RuntimeError("HIP path-max output allocation failed")
+        cv = ctypes.c_void_p
+        observed: list[bool] = []
+        for take_lhs, expected in ((True, 5), (False, 7)):
+            args = [
+                cv(output.value), cv(output.value), ctypes.c_int64(0),
+                ctypes.c_int64(threads), ctypes.c_int64(1),
+                ctypes.c_bool(take_lhs),
+                ctypes.c_int64(lhs_bytes), ctypes.c_int64(rhs_bytes),
+            ]
+            packed = (cv * len(args))()
+            for index, value in enumerate(args):
+                packed[index] = ctypes.cast(ctypes.byref(value), cv)
+            rc = hip.hipModuleLaunchKernel(
+                function, 1, 1, 1, threads, 1, 1, launch_bytes,
+                None, packed, None,
+            )
+            if rc != 0 or hip.hipDeviceSynchronize() != 0:
+                raise RuntimeError(f"path-max dynamic LDS launch failed rc={rc}")
+            host = (ctypes.c_uint8 * threads)()
+            if hip.hipMemcpy(host, output, threads, 2) != 0:
+                raise RuntimeError("path-max dynamic LDS result copy failed")
+            observed.append(all(value == expected for value in host))
+        active_blocks = ctypes.c_int()
+        if hip.hipModuleOccupancyMaxActiveBlocksPerMultiprocessor(
+            ctypes.byref(active_blocks), function, threads, launch_bytes
+        ) != 0:
+            raise RuntimeError("path-max dynamic LDS occupancy query failed")
+        return {
+            "path_arena_bytes": [list(path) for path in paths],
+            "launch_reduction": "max_of_aligned_sums",
+            "launch_shared_bytes": launch_bytes,
+            "incorrect_summed_bytes": summed_bytes,
+            "bytes_avoided_vs_sum": summed_bytes - launch_bytes,
+            "branch_results_verified": all(observed),
+            "path_offsets": [[0], [0]],
+            "active_blocks_per_cu": active_blocks.value,
+            "hsaco_bytes": len(hsaco),
+        }
+    finally:
+        if output.value:
+            hip.hipFree(output)
+        hip.hipModuleUnload(module)
+
+
 def run(chip: str = "gfx1151", threads: int = 256) -> dict[str, Any]:
     if not TESSERA_OPT.is_file():
         raise RuntimeError(f"tessera-opt not found: {TESSERA_OPT}")
@@ -240,6 +445,13 @@ def run(chip: str = "gfx1151", threads: int = 256) -> dict[str, Any]:
     dynamic_rows = [
         _measure_dynamic(hip, size, chip, threads) for size in sizes
     ]
+    packed_dynamic_rows = [
+        _measure_packed_dynamic(hip, 8_192, 8_192, chip, threads),
+        _measure_packed_dynamic(hip, 12_289, 4_111, chip, threads),
+    ]
+    path_max_rows = [
+        _measure_path_max_dynamic(hip, 12_289, 32_001, chip, threads)
+    ]
     return {
         "schema": "tessera.rocm.lds-arena-occupancy.v1",
         "device": chip,
@@ -253,6 +465,8 @@ def run(chip: str = "gfx1151", threads: int = 256) -> dict[str, Any]:
         },
         "rows": rows,
         "dynamic_rows": dynamic_rows,
+        "packed_dynamic_rows": packed_dynamic_rows,
+        "path_max_rows": path_max_rows,
         "occupancy_effect": {
             "active_blocks_per_cu_before": rows[1]["active_blocks_per_cu"],
             "active_blocks_per_cu_after": rows[0]["active_blocks_per_cu"],

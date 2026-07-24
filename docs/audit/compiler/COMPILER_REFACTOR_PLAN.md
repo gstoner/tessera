@@ -714,6 +714,26 @@ priority (highest DL leverage first):
   across gfx1151 and AVX-512. ROCm also owns the first compiled terminal
   storage consumer: device pack/unpack uses signed two's-complement nibbles,
   and direct packed-memory IU4 WMMA consumes them without host repacking.
+  **Second honest-boundary follow-on (2026-07-24):** straight-line runtime LDS
+  cohorts now share one external symbol through a recorded 16-byte prefix-sum
+  launch ABI; two exact multi-arena kernels prove non-aliasing and occupancy.
+  Only control-flow path-max sizing remains rejected. The measured corpus adds
+  softmax, RMSNorm, and MSE producers and makes the retained 512 KiB
+  three-producer decision target-specific. ROCm normalization also fuses GELU,
+  and compiled terminal packing now feeds both IU4 WMMA and group-scaled
+  dequant-GEMM without host repacking.
+  **Third honest-boundary follow-on (2026-07-24):** direct mutually-exclusive
+  ROCm branch successors now reuse dynamic-LDS offset zero and record a
+  `max_of_aligned_sums` host expression. The ragged 12,289/32,001-byte exact
+  branch packet launches with 32,016 bytes, verifies both paths, and avoids
+  12,304 bytes versus summation; unsupported sequential/nested/loop lifetimes
+  remain a named diagnostic. Rematerialization evidence is now a measured
+  four-layer workload with softmax, RMSNorm, MSE, Huber, SmoothL1, and BCE
+  instances at widths 512--896 on both AVX-512 and gfx1151. Dynamic
+  normalization fuses same-shape residual add/multiply as well as unary
+  activations. Finally, the ROCm packed ABI has physical nibblewise ReLU,
+  indexed sparse-gather, and packed cache-append consumers in addition to
+  matrix consumers; all execute on gfx1151 without host unpack/repack.
 
 - **CORE-COMPILER-2 · Target dtype defaults (2026-07-22).** Compute
   legalization is now the named-pipeline default for x86 and NVIDIA. Terminal

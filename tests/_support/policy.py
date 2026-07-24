@@ -26,6 +26,9 @@ MARKERS: dict[str, str] = {
     ),
     "compiler_apple": "compiler-artifact proof owned by the Apple backend",
     "compiler_cpu": "compiler-artifact proof owned by the CPU JIT backend",
+    "compiler_x86": "compiler-artifact proof that requires an x86 system",
+    "compiler_avx512": "compiler-artifact proof that requires AVX-512",
+    "compiler_cuda": "compiler-artifact proof that requires the CUDA system",
     "compiler_nvidia": "compiler-artifact proof owned by the NVIDIA backend",
     "compiler_rocm": "compiler-artifact proof owned by the ROCm backend",
     "native_host": "requires a native OS host and is skipped under WSL",
@@ -48,12 +51,11 @@ PR_MARKER_EXPRESSION = (
 
 APPLE_HOST_FREE_COMPILER_EXPRESSION = (
     "compiler_tool and not hardware_apple_gpu and not performance "
-    "and not compiler_cpu and not compiler_nvidia and not compiler_rocm"
+    "and not hardware_nvidia and not hardware_rocm"
 )
 
 
 ROCM_HOST_FREE_COMPILER_EXPRESSION = (
     "compiler_tool and not performance and not hardware_apple_gpu "
-    "and not hardware_nvidia and not hardware_rocm and not compiler_apple "
-    "and not compiler_cpu and not compiler_nvidia"
+    "and not hardware_nvidia and not hardware_rocm"
 )

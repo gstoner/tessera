@@ -17,6 +17,12 @@ ROCm-enabled compiler. `validate_hipcc_compile.py` now labels and runs its
 handwritten intrinsic catalog strictly as a HIP-toolchain probe, not Tessera
 emission evidence. No exact-device status or selector changed.
 
+Cross-backend sync `COMPILER-PYTEST-PLATFORM-SKIPS-2026-07-24`: shared
+compiler-owner markers now report foreign compiler proofs as skipped with the
+required Apple, CUDA, ROCm, X86, or AVX512 system and a per-system count. This
+is test-harness observability only; ROCm compiler ownership, HIP evidence, and
+selector state are unchanged.
+
 Cross-backend sync `STATEFUL-TRANSPORT-FOUNDATION-2026-07-19`: the shared launch
 workspace schema now distinguishes per-launch scratch from session-persistent,
 preserved state. ReplaySSM and MoE metadata contracts are portable, but this

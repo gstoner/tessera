@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-22
+last_updated: 2026-07-24
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
@@ -1437,3 +1437,36 @@ WMMA route without host repacking; aligned and ragged results are exact and
 physical inputs are approximately half the logical i8-container size. This
 does not default-enable terminal packing for operations without a physical
 consumer or transfer evidence to another AMD architecture.
+
+ROCm-owned continuation `CORE-COMPILER-HONEST-BOUNDARIES-2-2026-07-24`
+replaces the straight-line multi-arena rejection with an executable packed
+launch ABI. Runtime byte arenas share one HIP dynamic-LDS symbol and use
+16-byte-aligned prefix-sum offsets; the host supplies the matching aligned
+total. Exact 8+8 KiB and ragged 12,289+4,111 byte launches are non-aliasing and
+report 4/3 active blocks per CU. Control-flow-disjoint arenas remain honestly
+rejected until a path-max launch expression exists. The measured
+rematerialization corpus adds softmax, RMSNorm, and MSE producer families plus
+a 512 KiB workload policy; gfx1151 selects MSE+softmax for the retained
+three-producer workload. Dynamic RMSNorm/LayerNorm add canonical tanh-GELU as
+a one-launch consumer. Finally, compiled terminal INT4 packing feeds the
+existing group-scaled dequant-GEMM physical ABI with no host unpack/repack;
+the exact 33x64x29 row halves code bytes and measures 2.15 ms operation-total.
+No selector/default changes or evidence transfer to another AMD architecture.
+
+ROCm-owned continuation `CORE-COMPILER-HONEST-BOUNDARIES-3-2026-07-24`
+closes the four remaining packet boundaries on gfx1151. Direct mutually
+exclusive branch successors reuse dynamic-LDS offset zero under a recorded
+`max_of_aligned_sums` launch expression; the exact ragged 12,289/32,001-byte
+case launches with 32,016 bytes, verifies both paths, avoids 12,304 bytes versus
+summation, and reports two active blocks/CU. Sequential, nested, looping, and
+escaping lifetimes remain deliberately rejected until a general lifetime
+expression exists. The rematerialization packet is now four layers and six
+producer families (softmax, RMSNorm, MSE, Huber, SmoothL1, BCE), with every
+instance measured on gfx1151 and AVX-512; both reduce a 17,301,504-byte
+activation set below a 2 MiB budget using target-specific costs. Dynamic
+RMSNorm/LayerNorm now fuse same-shape residual add/multiply; the retained
+7x300 LayerNorm+add row is 2.23 ms operation-total. Packed signed INT4 now has
+three additional physical gfx1151 consumers—nibblewise ReLU, indexed sparse
+gather, and packed cache append—with 30-sample medians of 3.88, 2.31, and
+2.26 ms and no host unpack/repack. These are gfx1151-owned ABI/evidence claims;
+no selector default or sibling AMD claim transfers.

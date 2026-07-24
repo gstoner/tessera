@@ -32,7 +32,9 @@ def _norm_or_skip():
     return rt
 
 
-def _artifact(rt, op_name, eps=None, *, affine=False, epilogue=None):
+def _artifact(
+    rt, op_name, eps=None, *, affine=False, epilogue=None, binary=False
+):
     kwargs = {} if eps is None else {"eps": float(eps)}
     operands = ["x"]
     if affine:
@@ -40,10 +42,13 @@ def _artifact(rt, op_name, eps=None, *, affine=False, epilogue=None):
         if op_name == "tessera.layer_norm":
             operands.append("beta")
     ops = [{"op_name": op_name, "result": "norm",
-            "operands": operands, "kwargs": kwargs}]
+            "operands": list(operands), "kwargs": kwargs}]
     if epilogue is not None:
+        consumer_operands = ["norm", "residual"] if binary else ["norm"]
         ops.append({"op_name": f"tessera.{epilogue}", "result": "o",
-                    "operands": ["norm"], "kwargs": {}})
+                    "operands": consumer_operands, "kwargs": {}})
+        if binary:
+            operands.append("residual")
     return rt.RuntimeArtifact(metadata={
         "target": "rocm", "compiler_path": "rocm_norm_compiled",
         "executable": True, "execution_kind": "native_gpu",
@@ -133,7 +138,7 @@ def test_norm_hsaco_cache_identity_is_shape_and_affine_independent():
 
 
 @pytest.mark.parametrize("op_name", ["tessera.rmsnorm", "tessera.layer_norm"])
-@pytest.mark.parametrize("epilogue", ["relu", "silu"])
+@pytest.mark.parametrize("epilogue", ["relu", "silu", "gelu"])
 @pytest.mark.parametrize("shape", [(3, 17), (2, 5, 64), (7, 300)])
 def test_dynamic_norm_activation_consumer_is_one_compiled_launch(
         op_name, epilogue, shape):
@@ -145,8 +150,15 @@ def test_dynamic_norm_activation_consumer_is_one_compiled_launch(
     ref = _ref(x, op_name, 1e-5)
     if epilogue == "relu":
         ref = np.maximum(ref, 0.0)
-    else:
+    elif epilogue == "silu":
         ref = ref / (1.0 + np.exp(-ref))
+    else:
+        ref = 0.5 * ref * (
+            1.0 + np.tanh(
+                np.float32(0.7978845608028654)
+                * (ref + np.float32(0.044715) * ref * ref * ref)
+            )
+        )
     assert result["compiler_path"] == "rocm_norm_compiled"
     np.testing.assert_allclose(out, ref, atol=4e-4, rtol=0)
 
@@ -159,6 +171,38 @@ def test_norm_activation_cache_identity_keeps_shapes_dynamic():
         x = rng.standard_normal(shape).astype(np.float32)
         rt.launch(_artifact(rt, "tessera.rmsnorm", epilogue="relu"), (x,))
     assert len(rt._rocm_norm_hsaco_cache) == 1
+
+
+@pytest.mark.parametrize("op_name", ["tessera.rmsnorm", "tessera.layer_norm"])
+@pytest.mark.parametrize("epilogue", ["add", "multiply"])
+@pytest.mark.parametrize("shape", [(3, 17), (2, 5, 64), (7, 300)])
+def test_dynamic_norm_binary_consumer_is_one_compiled_launch(
+        op_name, epilogue, shape):
+    rt = _norm_or_skip()
+    rng = np.random.default_rng(191 + shape[-1])
+    x = rng.standard_normal(shape).astype(np.float32)
+    residual = rng.standard_normal(shape).astype(np.float32)
+    result = rt.launch(
+        _artifact(rt, op_name, epilogue=epilogue, binary=True),
+        (x, residual),
+    )
+    ref = _ref(x, op_name, 1e-5)
+    ref = ref + residual if epilogue == "add" else ref * residual
+    assert result["execution_kind"] == "native_gpu"
+    np.testing.assert_allclose(result["output"], ref, atol=4e-4, rtol=0)
+
+
+def test_norm_binary_consumer_rejects_shape_mismatch_before_launch():
+    from tessera import runtime as rt
+    x = np.zeros((4, 8), np.float32)
+    residual = np.zeros((4, 7), np.float32)
+    with pytest.raises(ValueError, match="shape must match"):
+        rt._execute_rocm_compiled_norm(
+            _artifact(
+                rt, "tessera.rmsnorm", epilogue="add", binary=True
+            ),
+            (x, residual),
+        )
 
 
 @pytest.mark.parametrize("offset,scale", [(1e4, 1.0), (1e3, 0.1), (-5e3, 2.0)])
@@ -189,5 +233,5 @@ def test_norm_rejects_non_unary_or_unknown_consumer_without_gpu():
     x = np.zeros((4, 8), np.float32)
     artifact = _artifact(rt, "tessera.rmsnorm", epilogue="relu")
     artifact.metadata["ops"][1]["operands"] = ["x"]
-    with pytest.raises(ValueError, match="must be unary relu/silu"):
+    with pytest.raises(ValueError, match="must be unary relu/silu/gelu"):
         rt._execute_rocm_compiled_norm(artifact, (x,))

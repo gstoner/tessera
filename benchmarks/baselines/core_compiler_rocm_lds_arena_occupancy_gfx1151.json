@@ -22,6 +22,67 @@
     "active_blocks_per_cu_after": 4,
     "active_blocks_per_cu_before": 2
   },
+  "packed_dynamic_rows": [
+    {
+      "active_blocks_per_cu": 4,
+      "arena_bytes_requested": [
+        8192,
+        8192
+      ],
+      "arena_offsets": [
+        0,
+        8192
+      ],
+      "execution_verified": true,
+      "hsaco_bytes": 4008,
+      "launch_shared_bytes": 16384,
+      "non_aliasing_verified": true,
+      "packing_alignment": 16
+    },
+    {
+      "active_blocks_per_cu": 3,
+      "arena_bytes_requested": [
+        12289,
+        4111
+      ],
+      "arena_offsets": [
+        0,
+        12304
+      ],
+      "execution_verified": true,
+      "hsaco_bytes": 4008,
+      "launch_shared_bytes": 16416,
+      "non_aliasing_verified": true,
+      "packing_alignment": 16
+    }
+  ],
+  "path_max_rows": [
+    {
+      "active_blocks_per_cu": 2,
+      "branch_results_verified": true,
+      "bytes_avoided_vs_sum": 12304,
+      "hsaco_bytes": 4016,
+      "incorrect_summed_bytes": 44320,
+      "launch_reduction": "max_of_aligned_sums",
+      "launch_shared_bytes": 32016,
+      "path_arena_bytes": [
+        [
+          12289
+        ],
+        [
+          32001
+        ]
+      ],
+      "path_offsets": [
+        [
+          0
+        ],
+        [
+          0
+        ]
+      ]
+    }
+  ],
   "planner_case": {
     "buffer_bytes": 16384,
     "buffers": 2,

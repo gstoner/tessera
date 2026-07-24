@@ -5,8 +5,8 @@
       "compiler_path": "rocm_reduce_compiled",
       "family": "last_axis_reduction",
       "guard_contract": "shared_executable_layout_prelaunch",
-      "median_ms": 2.204738,
-      "p95_ms": 2.494536,
+      "median_ms": 2.1630965,
+      "p95_ms": 2.251811,
       "runtime_shapes": {
         "input": [
           129,
@@ -21,8 +21,8 @@
       "compiler_path": "rocm_softmax_compiled",
       "family": "softmax",
       "guard_contract": "shared_executable_layout_prelaunch",
-      "median_ms": 2.1893255,
-      "p95_ms": 2.407322,
+      "median_ms": 2.080604,
+      "p95_ms": 2.285076,
       "runtime_shapes": {
         "input": [
           129,
@@ -37,8 +37,8 @@
       "compiler_path": "rocm_flash_attn_compiled",
       "family": "attention",
       "guard_contract": "shared_executable_layout_prelaunch",
-      "median_ms": 2.061624,
-      "p95_ms": 2.337971,
+      "median_ms": 2.105758,
+      "p95_ms": 2.258495,
       "runtime_shapes": {
         "k": [
           1,
@@ -67,8 +67,8 @@
       "compiler_path": "rocm_kv_cache_compiled",
       "family": "growing_kv_cache",
       "guard_contract": "shared_executable_layout_prelaunch",
-      "median_ms": 2.0260464999999996,
-      "p95_ms": 3.062636,
+      "median_ms": 2.0092654999999997,
+      "p95_ms": 2.278403,
       "runtime_shapes": {
         "cache": [
           256,
@@ -90,8 +90,8 @@
       "compiler_path": "rocm_norm_compiled",
       "family": "rmsnorm_relu_consumer_fusion",
       "guard_contract": "shared_executable_layout_prelaunch",
-      "median_ms": 2.1495865,
-      "p95_ms": 2.430019,
+      "median_ms": 2.1080275000000004,
+      "p95_ms": 2.368503,
       "runtime_shapes": {
         "input": [
           7,
@@ -106,10 +106,46 @@
       "compiler_path": "rocm_norm_compiled",
       "family": "layer_norm_silu_consumer_fusion",
       "guard_contract": "shared_executable_layout_prelaunch",
-      "median_ms": 2.2020394999999997,
-      "p95_ms": 2.400456,
+      "median_ms": 2.1319485,
+      "p95_ms": 2.349609,
       "runtime_shapes": {
         "input": [
+          7,
+          300
+        ]
+      },
+      "specialization_policy": "fully_dynamic_single_kernel",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "cache_identity": "chip,kind,dtype,epilogue",
+      "compiler_path": "rocm_norm_compiled",
+      "family": "rmsnorm_gelu_consumer_fusion",
+      "guard_contract": "shared_executable_layout_prelaunch",
+      "median_ms": 2.086939,
+      "p95_ms": 2.402078,
+      "runtime_shapes": {
+        "input": [
+          7,
+          300
+        ]
+      },
+      "specialization_policy": "fully_dynamic_single_kernel",
+      "timing_domain": "host_wall_operation_total"
+    },
+    {
+      "cache_identity": "chip,kind,dtype,epilogue",
+      "compiler_path": "rocm_norm_compiled",
+      "family": "layernorm_residual_add_consumer_fusion",
+      "guard_contract": "shared_executable_layout_prelaunch",
+      "median_ms": 2.2252454999999998,
+      "p95_ms": 2.424927,
+      "runtime_shapes": {
+        "input": [
+          7,
+          300
+        ],
+        "residual": [
           7,
           300
         ]

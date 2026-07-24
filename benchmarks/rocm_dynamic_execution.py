@@ -26,13 +26,19 @@ def _artifact(path: str, names: list[str], op: str, kwargs: dict):
     })
 
 
-def _norm_consumer_artifact(norm: str, consumer: str):
+def _norm_consumer_artifact(
+    norm: str, consumer: str, *, binary: bool = False
+):
+    arg_names = ["x", "residual"] if binary else ["x"]
+    consumer_operands = (
+        ["normalized", "residual"] if binary else ["normalized"]
+    )
     return rt.RuntimeArtifact(metadata={
         "target": "rocm",
         "compiler_path": "rocm_norm_compiled",
         "executable": True,
         "execution_kind": "native_gpu",
-        "arg_names": ["x"],
+        "arg_names": arg_names,
         "output_name": "output",
         "ops": [
             {
@@ -44,7 +50,7 @@ def _norm_consumer_artifact(norm: str, consumer: str):
             {
                 "op_name": consumer,
                 "result": "output",
-                "operands": ["normalized"],
+                "operands": consumer_operands,
                 "kwargs": {},
             },
         ],
@@ -112,6 +118,11 @@ def record(warmup: int = 5, reps: int = 30) -> dict:
     layer_silu_art = _norm_consumer_artifact(
         "tessera.layer_norm", "tessera.silu"
     )
+    rms_gelu_art = _norm_consumer_artifact("tessera.rmsnorm", "tessera.gelu")
+    residual = rng.standard_normal(norm_x.shape).astype(np.float32)
+    layer_add_art = _norm_consumer_artifact(
+        "tessera.layer_norm", "tessera.add", binary=True
+    )
 
     calls = [
         (
@@ -151,6 +162,18 @@ def record(warmup: int = 5, reps: int = 30) -> dict:
             {"input": list(norm_x.shape)},
             "fully_dynamic_single_kernel", "chip,kind,dtype,epilogue",
             lambda: rt.launch(layer_silu_art, (norm_x,)),
+        ),
+        (
+            "rmsnorm_gelu_consumer_fusion", "rocm_norm_compiled",
+            {"input": list(norm_x.shape)},
+            "fully_dynamic_single_kernel", "chip,kind,dtype,epilogue",
+            lambda: rt.launch(rms_gelu_art, (norm_x,)),
+        ),
+        (
+            "layernorm_residual_add_consumer_fusion", "rocm_norm_compiled",
+            {"input": list(norm_x.shape), "residual": list(residual.shape)},
+            "fully_dynamic_single_kernel", "chip,kind,dtype,epilogue",
+            lambda: rt.launch(layer_add_art, (norm_x, residual)),
         ),
     ]
     return {

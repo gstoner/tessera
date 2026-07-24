@@ -1,0 +1,61 @@
+{
+  "packing": "signed_twos_complement_low_nibble_first",
+  "rows": [
+    {
+      "consumer_family": "dequant_matmul",
+      "consumer_route": "compiled_rocdl_int4_dequant_gemm",
+      "execution_kind": "native_gpu",
+      "host_unpack_or_repack": false,
+      "logical_code_bytes": 1856,
+      "median_ms": 1.9307940000000001,
+      "numerical_oracle": "groupwise_dequant_then_f32_matmul",
+      "p95_ms": 2.330314,
+      "packed_code_bytes": 928,
+      "producer_route": "compiled_gfx1151_int4_pack",
+      "shape": [
+        33,
+        64,
+        29
+      ],
+      "timing_domain": "host_wall_operation_total_packed_consumer"
+    },
+    {
+      "consumer_family": "elementwise",
+      "consumer_route": "compiled_rocdl_packed_int4_relu",
+      "host_unpack_or_repack": false,
+      "logical_elements": 65537,
+      "median_ms": 3.883381,
+      "numerical_oracle": "signed_nibblewise_max_zero",
+      "p95_ms": 4.737993,
+      "producer_route": "compiled_gfx1151_int4_pack",
+      "timing_domain": "host_wall_operation_total_packed_consumer"
+    },
+    {
+      "consumer_family": "sparse",
+      "consumer_route": "compiled_rocdl_packed_int4_sparse_gather",
+      "host_unpack_or_repack": false,
+      "logical_elements": 131071,
+      "median_ms": 2.3095505,
+      "numerical_oracle": "logical_index_signed_nibble_gather",
+      "p95_ms": 2.506474,
+      "producer_route": "compiled_gfx1151_int4_pack",
+      "selected_elements": 16384,
+      "timing_domain": "host_wall_operation_total_packed_consumer"
+    },
+    {
+      "byte_offset": 37000,
+      "consumer_family": "cache",
+      "consumer_route": "compiled_rocdl_packed_int4_cache_append",
+      "host_unpack_or_repack": false,
+      "median_ms": 2.2602444999999998,
+      "numerical_oracle": "packed_byte_range_replace",
+      "p95_ms": 2.524278,
+      "packed_cache_bytes": 131072,
+      "packed_update_bytes": 8192,
+      "producer_route": "compiled_gfx1151_int4_pack",
+      "timing_domain": "host_wall_operation_total_packed_consumer"
+    }
+  ],
+  "schema": "tessera.rocm.packed-consumers.v1",
+  "target": "gfx1151"
+}

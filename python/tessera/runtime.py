@@ -7579,7 +7579,7 @@ def _build_compiled_norm_hsaco(
     in-process via tessera-opt. Cached per (chip, kind, dtype). No WMMA → plain
     gpu→ROCDL pipeline."""
     chip = _rocm_chip()
-    if epilogue not in ("none", "relu", "silu"):
+    if epilogue not in ("none", "relu", "silu", "gelu", "add", "multiply"):
         raise ValueError(f"unsupported ROCm norm epilogue {epilogue!r}")
     key = (chip, kind, dtype, epilogue)
     cached = _rocm_norm_hsaco_cache.get(key)
@@ -7688,7 +7688,7 @@ def _execute_rocm_compiled_norm(artifact: RuntimeArtifact, args: Any) -> Any:
     if not 1 <= len(ops) <= 2 or op_name not in _ROCM_NORM_OPS:
         raise ValueError(
             "rocm_norm_compiled executor handles one normalization, optionally "
-            "followed by relu/silu; normalization must be one of "
+            "followed by relu/silu/gelu/add/multiply; normalization must be one of "
             f"{tuple(_ROCM_NORM_OPS)}; got {[o.get('op_name') for o in ops]!r}"
         )
     epilogue = "none"
@@ -7698,14 +7698,25 @@ def _execute_rocm_compiled_norm(artifact: RuntimeArtifact, args: Any) -> Any:
         epilogue_by_op = {
             "tessera.relu": "relu",
             "tessera.silu": "silu",
+            "tessera.gelu": "gelu",
+            "tessera.add": "add",
+            "tessera.multiply": "multiply",
         }
         epilogue = epilogue_by_op.get(consumer_name, "")
         producer_result = str(ops[0].get("result", ""))
         consumer_operands = [str(n) for n in consumer.get("operands", [])]
-        if epilogue == "" or consumer_operands != [producer_result]:
+        unary = epilogue in ("relu", "silu", "gelu")
+        valid_unary = unary and consumer_operands == [producer_result]
+        valid_binary = (
+            epilogue in ("add", "multiply")
+            and len(consumer_operands) == 2
+            and producer_result in consumer_operands
+            and consumer_operands[0] != consumer_operands[1]
+        )
+        if epilogue == "" or not (valid_unary or valid_binary):
             raise ValueError(
-                "rocm_norm_compiled fused consumer must be unary relu/silu "
-                "and consume only the normalization result"
+                "rocm_norm_compiled fused consumer must be unary relu/silu/gelu "
+                "or binary add/multiply with exactly one normalization result"
             )
     kind, eps_default = _ROCM_NORM_OPS[op_name]
     op = ops[0]
@@ -7723,6 +7734,22 @@ def _execute_rocm_compiled_norm(artifact: RuntimeArtifact, args: Any) -> Any:
         raise ValueError(f"norm eps must be finite and positive; got {eps}")
     values = _bind_launch_args(args, arg_names)
     x = _as_numpy(values[operand_names[0]])
+    residual = None
+    if epilogue in ("add", "multiply"):
+        residual_name = next(
+            name for name in consumer_operands if name != producer_result
+        )
+        residual = _as_numpy(values[residual_name])
+        if residual.shape != x.shape:
+            raise ValueError(
+                f"norm binary consumer shape must match {x.shape}; "
+                f"got {residual.shape}"
+            )
+        if residual.dtype != x.dtype:
+            raise ValueError(
+                f"norm binary consumer dtype must match {x.dtype}; "
+                f"got {residual.dtype}"
+            )
     if x.ndim < 1:
         raise ValueError("norm operand must have rank >= 1")
     k = int(x.shape[-1])
@@ -7776,6 +7803,16 @@ def _execute_rocm_compiled_norm(artifact: RuntimeArtifact, args: Any) -> Any:
             raise RuntimeError("rocm norm: hipMalloc failed")
     hip.hipMemcpy(dx, xc.ctypes.data_as(ctypes.c_void_p), esz * n, 1)
     owned = [dx, do]
+    dconsumer = dx
+    if residual is not None:
+        dconsumer = ctypes.c_void_p()
+        if hip.hipMalloc(ctypes.byref(dconsumer), esz * n) != 0:
+            raise RuntimeError("rocm norm: binary consumer hipMalloc failed")
+        owned.append(dconsumer)
+        residual_c = np.ascontiguousarray(residual, dtype=store)
+        hip.hipMemcpy(
+            dconsumer, residual_c.ctypes.data_as(ctypes.c_void_p), esz * n, 1
+        )
     dgamma = dx
     dbeta = dx
     if gamma is not None:
@@ -7806,6 +7843,7 @@ def _execute_rocm_compiled_norm(artifact: RuntimeArtifact, args: Any) -> Any:
         _mr(dx, n)
         + _mr(dgamma, k)
         + _mr(dbeta, k)
+        + _mr(dconsumer, n)
         + _mr(do, n)
         + [
             ctypes.c_int64(m), ctypes.c_int64(k), ctypes.c_float(eps),

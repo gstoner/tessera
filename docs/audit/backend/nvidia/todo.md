@@ -3,7 +3,7 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-07-22
+last_updated: 2026-07-24
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
@@ -1321,3 +1321,20 @@ normalization epilogues, HIP launch-sized LDS materialization, and packed IU4
 WMMA are architecture-owned and transfer no PTX ABI, shared-memory allocation,
 packed consumer, performance, or selector claim. The existing NVIDIA
 architecture-owned layout consumer remains unchanged.
+
+Cross-backend sync `CORE-COMPILER-HONEST-BOUNDARIES-2-2026-07-24` extends the
+shared rematerialization corpus schema with softmax, RMSNorm, and MSE producer
+families plus measured workload-budget decisions. NVIDIA remains **follow-up
+required** for CUDA measurements and policy selection. ROCm's packed
+multi-arena LDS ABI, GELU normalization epilogue, and terminal-pack
+dequant-GEMM consumer are architecture-owned; no PTX shared-memory ABI, packed
+consumer, timing, selector, or support claim transfers. CUDA path-max launch
+expressions and exact physical packed-consumer evidence remain open.
+
+Cross-backend sync `CORE-COMPILER-HONEST-BOUNDARIES-3-2026-07-24` extends the
+shared rematerialization evidence schema to a measured four-layer workload with
+softmax, RMSNorm, MSE, Huber, SmoothL1, and BCE instances. NVIDIA remains
+**follow-up required** for CUDA measurements and policy selection. ROCm's
+branch-path dynamic-LDS expression, binary normalization epilogues, and packed
+elementwise/sparse/cache ABIs are architecture-owned; no PTX shared-memory
+expression, packed ABI, timing, selector, or support claim transfers.

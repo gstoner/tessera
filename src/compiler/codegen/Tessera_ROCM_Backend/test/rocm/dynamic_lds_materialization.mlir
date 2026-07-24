@@ -11,5 +11,43 @@ module {
       %arena = llvm.alloca %n x i8 : (i64) -> !llvm.ptr<3>
       llvm.return
     }
+
+    // CHECK-LABEL: llvm.func @packed_dynamic_lds
+    // CHECK-SAME: tessera.rocm.dynamic_lds_launch_bytes
+    // CHECK-SAME: tessera.rocm.dynamic_lds_packed_arenas
+    // CHECK-DAG: llvm.mlir.addressof @__tessera_dynamic_lds
+    // CHECK-DAG: llvm.mlir.addressof @__tessera_dynamic_lds
+    // CHECK-DAG: llvm.getelementptr
+    // CHECK-DAG: llvm.getelementptr
+    // CHECK-DAG: llvm.and
+    // CHECK-DAG: llvm.and
+    // CHECK-NOT: llvm.alloca
+    llvm.func @packed_dynamic_lds(%lhs_bytes: i64, %rhs_bytes: i64)
+        attributes {gpu.kernel, rocdl.kernel} {
+      %lhs = llvm.alloca %lhs_bytes x i8 : (i64) -> !llvm.ptr<3>
+      %rhs = llvm.alloca %rhs_bytes x i8 : (i64) -> !llvm.ptr<3>
+      llvm.return
+    }
+
+    // Mutually exclusive paths reuse offset zero. The launch descriptor names
+    // max-of-paths rather than summing both branch allocations.
+    // CHECK-LABEL: llvm.func @path_max_dynamic_lds
+    // CHECK-SAME: tessera.rocm.dynamic_lds_launch_reduction = "max_of_aligned_sums"
+    // CHECK-SAME: tessera.rocm.dynamic_lds_paths
+    // CHECK-COUNT-2: llvm.getelementptr
+    // CHECK-NOT: llvm.alloca
+    llvm.func @path_max_dynamic_lds(
+        %cond: i1, %then_bytes: i64, %else_bytes: i64)
+        attributes {gpu.kernel, rocdl.kernel} {
+      llvm.cond_br %cond, ^then, ^else
+    ^then:
+      %then_arena = llvm.alloca %then_bytes x i8 : (i64) -> !llvm.ptr<3>
+      llvm.br ^exit
+    ^else:
+      %else_arena = llvm.alloca %else_bytes x i8 : (i64) -> !llvm.ptr<3>
+      llvm.br ^exit
+    ^exit:
+      llvm.return
+    }
   }
 }

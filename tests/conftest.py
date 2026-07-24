@@ -1,3 +1,4 @@
+from collections import Counter
 from pathlib import Path
 import pytest
 
@@ -8,6 +9,11 @@ from tests._support.environment import (
     python_subprocess_environment,
 )
 from tests._support.policy import MARKERS
+from tests._support.compiler_ownership import (
+    compiler_platform_skip_reason,
+    compiler_test_required_platform,
+    selected_compiler_test_platform,
+)
 
 
 def pytest_configure(config):
@@ -44,6 +50,53 @@ def apple_accelerate() -> None:
 def pytest_ignore_collect(collection_path, config):
     path = Path(str(collection_path))
     return "archive" in path.parts
+
+
+def pytest_collection_modifyitems(config, items):
+    """Skip compiler proofs whose declared owner is a different system."""
+
+    try:
+        selected = selected_compiler_test_platform()
+    except ValueError as error:
+        raise pytest.UsageError(str(error)) from error
+    if selected is None:
+        return
+    for item in items:
+        if item.get_closest_marker("compiler_tool") is None:
+            continue
+        required = compiler_test_required_platform(item)
+        if required is None or required[0] == selected:
+            continue
+        item.add_marker(
+            pytest.mark.skip(reason=compiler_platform_skip_reason(required[1]))
+        )
+
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config):
+    """Make cross-platform compiler skips visible without treating them as passes."""
+
+    counts: Counter[str] = Counter()
+    prefix = "compiler-test platform mismatch: requires "
+    for report in terminalreporter.stats.get("skipped", ()):
+        longrepr = getattr(report, "longrepr", None)
+        reason = (
+            longrepr[2]
+            if isinstance(longrepr, tuple) and len(longrepr) == 3
+            else str(longrepr)
+        )
+        reason = reason.removeprefix("Skipped: ")
+        if not reason.startswith(prefix):
+            continue
+        required = reason.removeprefix(prefix).split(";", maxsplit=1)[0]
+        counts[required] += 1
+    if not counts:
+        return
+    terminalreporter.write_sep("-", "compiler tests skipped for other systems")
+    for platform, count in sorted(counts.items()):
+        noun = "test" if count == 1 else "tests"
+        terminalreporter.write_line(
+            f"{count} {noun} skipped: requires {platform}; run on a {platform} system"
+        )
 
 
 def pytest_runtest_setup(item):

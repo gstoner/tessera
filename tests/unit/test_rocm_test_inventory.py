@@ -12,9 +12,9 @@ from tests._support.compiler_ownership import rocm_host_free_compiler_expression
 def test_rocm_host_free_compiler_selection_excludes_foreign_owners() -> None:
     expression = rocm_host_free_compiler_expression()
     assert "compiler_tool" in expression
-    assert "not compiler_apple" in expression
-    assert "not compiler_cpu" in expression
-    assert "not compiler_nvidia" in expression
+    assert "not compiler_apple" not in expression
+    assert "not compiler_cpu" not in expression
+    assert "not compiler_nvidia" not in expression
     assert "not hardware_rocm" in expression
     assert "not performance" in expression
     assert "not compiler_rocm" not in expression

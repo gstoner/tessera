@@ -43,7 +43,10 @@ Declared in `pyproject.toml` `[tool.pytest.ini_options]`:
 |---|---|
 | `slow` | Legacy runtime/cost partition. Heavy benchmark modules use it module-wide; some device tests retain it during migration. It is not an environment marker. |
 | `compiler_tool` | Requires a built external compiler tool such as `tessera-opt`, `tessera-nvidia-opt`, or `mlir-opt`. |
+| `compiler_apple` | Apple-owned compiler proof. A differently selected compiler platform skips it and reports `Apple` in the summary. |
 | `compiler_nvidia` | NVIDIA-owned compiler-artifact proof; selects the CUDA compiler lane without a filename allowlist. |
+| `compiler_rocm` | ROCm-owned compiler-artifact proof. |
+| `compiler_x86` / `compiler_avx512` | Compiler proof requiring an X86 or AVX512 system. |
 | `native_host` | Requires a native OS host; skipped under WSL. Used for tests that deliberately provoke compiler-process aborts. |
 | `integration` | Crosses a child-process, package, runtime, or component boundary. |
 | `performance` | Uses measured wall-clock/device timing; excluded from the parallel CPU PR lane and run serially. |

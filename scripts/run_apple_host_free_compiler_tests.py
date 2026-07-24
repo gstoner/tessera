@@ -20,6 +20,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from tests._support.compiler_ownership import (  # noqa: E402
+    COMPILER_TEST_PLATFORM_ENV,
     CompilerBuildCapabilities,
     apple_host_free_compiler_expression,
 )
@@ -106,6 +107,7 @@ def main(argv: list[str] | None = None) -> int:
     marker = apple_host_free_compiler_expression()
     command = [sys.executable, "-m", "pytest", "tests/unit", "-q", "-m", marker]
     env = os.environ.copy()
+    env[COMPILER_TEST_PLATFORM_ENV] = "apple"
     env["TESSERA_OPT"] = str(args.tool)
     env["TESSERA_OPT_BIN"] = str(args.tool)
     env["PATH"] = f"{args.tool.parent}{os.pathsep}{env.get('PATH', '')}"
@@ -129,6 +131,11 @@ def main(argv: list[str] | None = None) -> int:
         "capabilities": capabilities.as_dict(),
         "probes": probes,
         "marker_expression": marker,
+        "selected_platform": "Apple",
+        "foreign_owner_behavior": (
+            "foreign compiler tests are skipped with their required system in "
+            "the pytest terminal summary"
+        ),
         "pytest_command": command,
         "collected_node_ids": nodes,
         "collection_diagnostic": collection_diagnostic,

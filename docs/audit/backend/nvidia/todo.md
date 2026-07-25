@@ -18,6 +18,12 @@ catalog strictly as a CUDA-toolchain probe, not evidence of Tessera emission.
 The two integrated core+NVIDIA control-flow fixtures retain their precise
 backend gate and still require the CUDA-enabled build on the NVIDIA host.
 
+Cross-backend sync `COMPILER-PYTEST-PLATFORM-SKIPS-2026-07-24`: shared
+compiler-owner markers now report foreign compiler proofs as skipped with the
+required Apple, CUDA, ROCm, X86, or AVX512 system and a per-system count. This
+is test-harness observability only; NVIDIA compiler ownership, CUDA evidence,
+and selector state are unchanged.
+
 This is the execution plan for evaluating, repairing, and then restructuring
 the CUDA compiler tests on the NVIDIA box. It complements
 [`NVIDIA_AUDIT.md`](NVIDIA_AUDIT.md); it does not reopen completed sm_120 feature

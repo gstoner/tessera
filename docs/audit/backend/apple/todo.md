@@ -15,6 +15,12 @@ NVIDIA/ROCm-owned; Apple has no unsupported fixtures in the LLVM23 suite, and
 no Metal IR, runtime route, schedule, evidence, or selector changed. This is
 not applicable beyond parity validation of the shared test infrastructure.
 
+Cross-backend sync `COMPILER-PYTEST-PLATFORM-SKIPS-2026-07-24`: compiler-owner
+markers now skip a foreign compiler proof with its required system named in the
+pytest summary (Apple, CUDA, ROCm, X86, or AVX512), including a per-system
+count. Apple owns the host-free gate integration; this changes no Metal IR,
+runtime route, schedule, evidence, or selector.
+
 Cross-backend sync `STATEFUL-TRANSPORT-FOUNDATION-2026-07-19`: the shared launch
 workspace schema now distinguishes per-launch scratch from session-persistent,
 preserved state. ReplaySSM and MoE metadata contracts are portable, but this
@@ -36,9 +42,11 @@ epilogue execution remains SDK-gated and TF32 is not applicable to Apple.
 This plan brings the proof discipline established by the CUDA and ROCm work to
 the Apple backend. It complements [`APPLE_AUDIT.md`](APPLE_AUDIT.md), the
 generated execution inventory, and the durable architecture under
-[`docs/backends/apple/`](../../../backends/apple/). Those documents remain the
-status and architecture authorities; this file owns the active execution order
-and completion gates.
+[`docs/backends/apple/`](../../../backends/apple/). The generated execution
+inventory is the authority for exact-target execution state (including
+`native_gpu` versus `reference_cpu`); the durable backend documents are the
+architecture authority. This file owns only the active execution order and
+completion gates.
 
 The goal is not to transplant CUDA warps or AMD waves into Metal. Apple route
 selection must be measured across MPS, MPSGraph, synthesized MSL,
@@ -863,9 +871,11 @@ run these as independent commands:
 python3 -m pytest tests/unit -q \
   -m "not hardware_apple_gpu and not performance"
 
-# Apple compiler artifacts; this lane does not claim device execution.
-python3 -m pytest tests/unit -q \
-  -m "compiler_tool and not hardware_apple_gpu" --durations=50
+# Apple compiler artifacts; this lane does not claim device execution. It
+# reports foreign compiler proofs as explicit per-platform skips.
+python3 scripts/run_apple_host_free_compiler_tests.py \
+  --build-dir build-apple \
+  --tool build-apple/tools/tessera-opt/tessera-opt
 
 # Native Metal correctness, twice from the same fresh build/runtime image.
 python3 -m pytest tests/unit -q \
@@ -1209,9 +1219,12 @@ shared attention lit coverage.
 
 Cross-backend sync `LLVM23-BACKBONE-2026-07-20` makes LLVM/MLIR 23.x the sole
 accepted compiler build environment. Top-level and standalone CMake entry
-points reject every other major and mixed installations; Apple uses the
-versioned Homebrew `llvm@23` keg. Apple target semantics and Metal/MPS runtime
-contracts are unchanged, and the LLVM 23 compiler/lit build validates parity.
+points reject every other major and mixed installations. The Apple Metal
+evidence lane continues to use the pinned
+`/opt/homebrew/llvm-23.1.0-rc1` prefix described above; a versioned Homebrew
+`llvm@23` keg does not substitute for that evidence-producing toolchain.
+Apple target semantics and Metal/MPS runtime contracts are unchanged, and the
+LLVM 23 compiler/lit build validates parity.
 
 Consumer plan `SEQUENCE-MIXER-2026-07-17`: the compiler-direction Sequence Mixer
 track ([`../../compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md`](../../compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md))
@@ -1231,11 +1244,11 @@ Apple, so the executing FP4 proof is on NR2 Pro sm_120); mixer backward →
 **APPLE-ATTN-BWD-1**. This is a direction pointer; it changes no Apple gate,
 route, or exact-device claim here.
 
-After the first Apple-host collection, replace the provisional marker count
-with the migrated exact-device totals and append a failure table by execution
-family and device generation. Set `plan_state: landing` once implementation or
-test migration begins. Move this plan to the Apple archive only after every
-completion gate is met.
+On a subsequent Apple-host collection, refresh the recorded marker totals and
+append any new failure table by execution family and device generation without
+discarding the current exact-device evidence. This plan is already in
+`landing`; move it to the Apple archive only after every completion gate is
+met.
 
 Cross-backend sync `X86-E2E2-COHORT2-2026-07-20` adds shared typed Tile
 carriers for argreduce, inclusive scan, unweighted row normalization,

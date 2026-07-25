@@ -15,8 +15,11 @@ from tests._support.apple_inventory import (
     inline_apple_capability_gates,
 )
 from tests._support.compiler_ownership import (
+    COMPILER_TEST_PLATFORM_ENV,
     CompilerBuildCapabilities,
     apple_host_free_compiler_expression,
+    compiler_platform_skip_reason,
+    selected_compiler_test_platform,
 )
 
 
@@ -86,9 +89,19 @@ def test_offline_metal_compiler_cohort_uses_the_compiler_tool_boundary() -> None
 def test_apple_host_free_compiler_selection_excludes_foreign_owners() -> None:
     expression = apple_host_free_compiler_expression()
     assert "compiler_tool" in expression
-    assert "not compiler_nvidia" in expression
-    assert "not compiler_rocm" in expression
+    assert "not compiler_nvidia" not in expression
+    assert "not compiler_rocm" not in expression
     assert "not hardware_apple_gpu" in expression
+
+
+def test_apple_compiler_platform_skips_foreign_proofs_with_actionable_reason(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(COMPILER_TEST_PLATFORM_ENV, "Apple")
+    assert selected_compiler_test_platform() == "apple"
+    assert compiler_platform_skip_reason("ROCm") == (
+        "compiler-test platform mismatch: requires ROCm; run on a ROCm system"
+    )
 
 
 def test_compiler_owner_markers_cover_the_apple_lane_and_known_foreign_proofs() -> None:

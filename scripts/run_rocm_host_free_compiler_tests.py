@@ -21,6 +21,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from tests._support.compiler_ownership import (  # noqa: E402
+    COMPILER_TEST_PLATFORM_ENV,
     CompilerBuildCapabilities,
     rocm_host_free_compiler_expression,
 )
@@ -138,6 +139,7 @@ def main(argv: list[str] | None = None) -> int:
     marker = rocm_host_free_compiler_expression()
     command = [sys.executable, "-m", "pytest", "tests/unit", "-q", "-m", marker]
     env = os.environ.copy()
+    env[COMPILER_TEST_PLATFORM_ENV] = "rocm"
     env["TESSERA_OPT"] = str(args.tool.resolve())
     env["TESSERA_OPT_BIN"] = str(args.tool.resolve())
     env["TESSERA_MLIR_C_RUNNER_UTILS"] = str(runner_utils)
@@ -173,7 +175,11 @@ def main(argv: list[str] | None = None) -> int:
             "mlir_opt": _tool_version(["/usr/lib/llvm-23/bin/mlir-opt", "--version"]),
         },
         "marker_expression": marker,
-        "excluded_owner_markers": ["compiler_apple", "compiler_cpu", "compiler_nvidia"],
+        "selected_platform": "ROCm",
+        "foreign_owner_behavior": (
+            "foreign compiler tests are skipped with their required system in "
+            "the pytest terminal summary"
+        ),
         "pytest_command": command,
         "collected_node_ids": nodes,
         "collection_diagnostic": collection_diagnostic,

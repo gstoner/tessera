@@ -7,9 +7,12 @@ from tessera.compiler.canonical_compile import compile_result_from_bundle
 from tessera.compiler.driver import compile_graph_module
 from tessera.compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IROp, IRType
 from tessera.compiler.primitive_coverage import NumericPolicy
-from tessera.runtime import launch
+from tessera.runtime import RuntimeArtifact, launch
 from tessera.runtime import _submit_nvidia_sm120_native
-from tessera.compiler.nvidia_native import package_paged_attention
+from tessera.compiler.nvidia_native import (
+    package_cuda_intrinsic,
+    package_paged_attention,
+)
 from tests._support.nvidia import nvidia_cuda_host_ready
 
 
@@ -96,6 +99,31 @@ def _nvfp4_module(m: int, n: int, k: int) -> GraphIRModule:
     )
 
 
+def _int4_module(m: int, n: int, k: int) -> GraphIRModule:
+    a = IRType(f"tensor<{m}x{k}x!tessera.int4>", (str(m), str(k)), "int4")
+    b = IRType(f"tensor<{k}x{n}x!tessera.int4>", (str(k), str(n)), "int4")
+    c = IRType(f"tensor<{m}x{n}xi32>", (str(m), str(n)), "int32")
+    return GraphIRModule(
+        functions=[
+            GraphIRFunction(
+                name="canonical_sm120_int4",
+                args=[IRArg("a", a), IRArg("b", b)],
+                result_types=[c],
+                body=[
+                    IROp(
+                        result="c",
+                        op_name="tessera.matmul",
+                        operands=["%a", "%b"],
+                        operand_types=[str(a), str(b)],
+                        result_type=str(c),
+                    )
+                ],
+                return_values=["%c"],
+            )
+        ]
+    )
+
+
 def _mx_module(m: int, n: int, k: int, storage: str) -> GraphIRModule:
     sk = (k + 31) // 32
     mlir_dtype = {
@@ -137,7 +165,7 @@ def _mx_module(m: int, n: int, k: int, storage: str) -> GraphIRModule:
 
 def _softmax_module(shape: tuple[int, ...], dtype: str) -> GraphIRModule:
     dims = "x".join(str(dim) for dim in shape)
-    mlir_dtype = "f16" if dtype == "fp16" else "f32"
+    mlir_dtype = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[dtype]
     x = IRType(f"tensor<{dims}x{mlir_dtype}>", tuple(map(str, shape)), dtype)
     return GraphIRModule(
         functions=[
@@ -161,6 +189,38 @@ def _softmax_module(shape: tuple[int, ...], dtype: str) -> GraphIRModule:
     )
 
 
+def _norm_module(
+    shape: tuple[int, ...],
+    dtype: str,
+    kind: str,
+    epsilon: float,
+) -> GraphIRModule:
+    dims = "x".join(str(dim) for dim in shape)
+    mlir_dtype = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[dtype]
+    x = IRType(f"tensor<{dims}x{mlir_dtype}>", tuple(map(str, shape)), dtype)
+    op_name = "tessera.layer_norm" if kind == "layernorm" else "tessera.rmsnorm"
+    return GraphIRModule(
+        functions=[
+            GraphIRFunction(
+                name=f"canonical_sm120_{kind}_{dtype}",
+                args=[IRArg("x", x)],
+                result_types=[x],
+                body=[
+                    IROp(
+                        result="o",
+                        op_name=op_name,
+                        operands=["%x"],
+                        operand_types=[str(x)],
+                        result_type=str(x),
+                        kwargs={"axis": -1, "eps": epsilon},
+                    )
+                ],
+                return_values=["%o"],
+            )
+        ]
+    )
+
+
 def _attention_module(
     shape: tuple[int, int, int, int, int, int, int],
     storage: str,
@@ -173,8 +233,8 @@ def _attention_module(
     dropout_seed: int = 0,
 ) -> GraphIRModule:
     b, hq, hkv, sq, sk, d, dv = shape
-    graph_storage = "fp16" if storage == "fp16" else "fp32"
-    ir_storage = "f16" if storage == "fp16" else "f32"
+    graph_storage = storage
+    ir_storage = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[storage]
     q = IRType(f"tensor<{b}x{hq}x{sq}x{d}x{ir_storage}>", tuple(map(str, (b, hq, sq, d))), graph_storage)
     k = IRType(f"tensor<{b}x{hkv}x{sk}x{d}x{ir_storage}>", tuple(map(str, (b, hkv, sk, d))), graph_storage)
     v = IRType(f"tensor<{b}x{hkv}x{sk}x{dv}x{ir_storage}>", tuple(map(str, (b, hkv, sk, dv))), graph_storage)
@@ -202,7 +262,7 @@ def _attention_module(
 
 def _attention_backward_module(*, bias: bool = False, dtype: str = "fp32",
                                dropout_p: float = 0.0, dropout_seed: int = 0) -> GraphIRModule:
-    ir = "f16" if dtype == "fp16" else "f32"
+    ir = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[dtype]
     q = IRType(f"tensor<1x2x3x4x{ir}>", ("1", "2", "3", "4"), dtype)
     k = IRType(f"tensor<1x1x4x4x{ir}>", ("1", "1", "4", "4"), dtype)
     v = IRType(f"tensor<1x1x4x3x{ir}>", ("1", "1", "4", "3"), dtype)
@@ -249,7 +309,7 @@ def _paged_kv_module(p: int, page_size: int, heads: int, dim: int, logical_pages
 def _reduction_module(shape: tuple[int, ...], dtype: str, kind: str, *,
                       axis: int = -1, keepdims: bool = False) -> GraphIRModule:
     dims = "x".join(str(dim) for dim in shape)
-    mlir_dtype = "f16" if dtype == "fp16" else "f32"
+    mlir_dtype = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[dtype]
     x = IRType(f"tensor<{dims}x{mlir_dtype}>", tuple(map(str, shape)), dtype)
     normalized_axis = axis + len(shape) if axis < 0 else axis
     output_shape = shape[:normalized_axis] + ((1,) if keepdims else ()) + shape[normalized_axis + 1:]
@@ -339,6 +399,12 @@ def _pack_nvfp4(codes: np.ndarray, axis: int) -> np.ndarray:
     lo = np.take(codes, np.arange(0, codes.shape[axis], 2), axis=axis)
     hi = np.take(codes, np.arange(1, codes.shape[axis], 2), axis=axis)
     return np.ascontiguousarray(lo | (hi << np.uint8(4)))
+
+
+def _pack_int4(values: np.ndarray, axis: int) -> np.ndarray:
+    if np.any(values < -8) or np.any(values > 7):
+        raise ValueError("signed int4 values must lie in [-8, 7]")
+    return _pack_nvfp4((values.astype(np.int8) & 0xF).astype(np.uint8), axis)
 
 
 def _decode_e2m1(codes: np.ndarray) -> np.ndarray:
@@ -560,13 +626,12 @@ def test_canonical_sm120_tf32_fp8_packages_launches_and_compares(
 @pytest.mark.hardware_nvidia
 @pytest.mark.parametrize("shape", [(1, 16), (8, 64), (4, 300), (2, 3, 48)])
 @pytest.mark.parametrize(
-    ("storage", "numpy_dtype", "atol"),
-    [("fp32", np.float32, 3e-6), ("fp16", np.float16, 5e-4)],
+    ("storage", "atol"),
+    [("fp32", 3e-6), ("fp16", 5e-4), ("bf16", 5e-3)],
 )
 def test_canonical_sm120_softmax_packages_launches_and_compares(
     shape,
     storage,
-    numpy_dtype,
     atol,
 ) -> None:
     if not nvidia_cuda_host_ready():
@@ -585,7 +650,8 @@ def test_canonical_sm120_softmax_packages_launches_and_compares(
     assert bundle.native_image.resource_record.metrics["spill_store_bytes"] == 0
     assert bundle.native_image.resource_record.metrics["spill_load_bytes"] == 0
     assert bundle.launch_descriptor is not None
-    storage_ir = "f16" if storage == "fp16" else "f32"
+    ml_dtypes = pytest.importorskip("ml_dtypes")
+    storage_ir = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[storage]
     assert bundle.launch_descriptor.provenance["storage"] == storage_ir
     assert bundle.launch_descriptor.provenance["accum"] == "f32"
     assert "tile.softmax_kernel" in bundle.tile.text
@@ -604,6 +670,11 @@ def test_canonical_sm120_softmax_packages_launches_and_compares(
     assert warm.launch_descriptor == bundle.launch_descriptor
 
     rng = np.random.default_rng(120_700 + shape[-1])
+    numpy_dtype = {
+        "fp16": np.float16,
+        "bf16": ml_dtypes.bfloat16,
+        "fp32": np.float32,
+    }[storage]
     x = np.ascontiguousarray((rng.standard_normal(shape) * 5.0).astype(numpy_dtype))
     if shape == (1, 16):
         x[0] = np.linspace(-1000.0, 1000.0, shape[-1], dtype=numpy_dtype)
@@ -640,9 +711,91 @@ def test_canonical_sm120_softmax_packages_launches_and_compares(
 
 
 @pytest.mark.hardware_nvidia
+@pytest.mark.parametrize("shape", [(1, 17), (4, 130), (2, 3, 48)])
+@pytest.mark.parametrize("kind", ["rmsnorm", "layernorm"])
+@pytest.mark.parametrize("storage", ["fp16", "bf16", "fp32"])
+def test_canonical_sm120_norm_packages_launches_and_compares(
+    shape,
+    kind,
+    storage,
+) -> None:
+    if not nvidia_cuda_host_ready():
+        pytest.skip("host WSL CUDA device/toolchain unavailable")
+    epsilon = 1e-5
+    module = _norm_module(shape, storage, kind, epsilon)
+    bundle = compile_graph_module(
+        module,
+        source_origin="NVIDIA-BF16-CANONICAL-BREADTH",
+        target="nvidia_sm120",
+        options={"package_native": True},
+        enable_tool_validation=False,
+    )
+    assert bundle.orchestration_state == "launchable"
+    assert bundle.native_image is not None
+    assert bundle.native_image.resource_record is not None
+    assert bundle.launch_descriptor is not None
+    assert bundle.native_image.resource_record.metrics["spill_store_bytes"] == 0
+    assert bundle.native_image.resource_record.metrics["spill_load_bytes"] == 0
+    assert bundle.launch_descriptor.provenance["kind"] == kind
+    assert bundle.launch_descriptor.provenance["accum"] == "f32"
+    assert bundle.launch_descriptor.provenance["epsilon"] == epsilon
+    assert "tile.norm_kernel" in bundle.tile.text
+
+    warm = compile_graph_module(
+        module,
+        source_origin="NVIDIA-BF16-CANONICAL-BREADTH",
+        target="nvidia_sm120",
+        options={"package_native": True},
+        enable_tool_validation=False,
+    )
+    assert warm.native_image is not None
+    assert warm.native_image.compile_state == "warm_cache"
+    assert warm.native_image.image_digest == bundle.native_image.image_digest
+    assert warm.launch_descriptor == bundle.launch_descriptor
+
+    ml_dtypes = pytest.importorskip("ml_dtypes")
+    numpy_dtype = {
+        "fp16": np.float16,
+        "bf16": ml_dtypes.bfloat16,
+        "fp32": np.float32,
+    }[storage]
+    rng = np.random.default_rng(120_900 + shape[-1])
+    x = np.ascontiguousarray(
+        (rng.standard_normal(shape) * 1.5 + 0.25).astype(numpy_dtype)
+    )
+    output = np.zeros_like(x)
+    rows = int(np.prod(shape[:-1])) if len(shape) > 1 else 1
+    artifact = compile_result_from_bundle(bundle, module=module).to_runtime_artifact()
+    result = launch(
+        artifact,
+        {
+            "x": x,
+            "o": output,
+            "Rows": rows,
+            "Columns": shape[-1],
+        },
+    )
+    assert result["ok"] is True, result.get("reason")
+    x32 = x.astype(np.float32)
+    if kind == "layernorm":
+        centered = x32 - x32.mean(axis=-1, keepdims=True)
+        reference = centered / np.sqrt(
+            np.mean(centered * centered, axis=-1, keepdims=True) + epsilon
+        )
+    else:
+        reference = x32 / np.sqrt(
+            np.mean(x32 * x32, axis=-1, keepdims=True) + epsilon
+        )
+    atol = {"fp16": 5e-3, "bf16": 3e-2, "fp32": 2e-5}[storage]
+    np.testing.assert_allclose(
+        output.astype(np.float32), reference, atol=atol, rtol=0
+    )
+
+
+@pytest.mark.hardware_nvidia
 @pytest.mark.parametrize("shape", [(8, 64), (4, 130), (2, 3, 17)])
-@pytest.mark.parametrize("storage", ["fp16", "fp32"])
-@pytest.mark.parametrize("kind", ["sum", "mean", "max"])
+@pytest.mark.parametrize("storage", ["fp16", "bf16", "fp32"])
+@pytest.mark.parametrize("kind", ["sum", "mean", "max", "min", "amax", "amin"])
 def test_canonical_sm120_reduction_packages_launches_and_compares(
     shape,
     storage,
@@ -664,14 +817,23 @@ def test_canonical_sm120_reduction_packages_launches_and_compares(
     assert bundle.native_image.resource_record.metrics["spill_store_bytes"] == 0
     assert bundle.native_image.resource_record.metrics["spill_load_bytes"] == 0
     assert bundle.launch_descriptor is not None
-    assert bundle.launch_descriptor.provenance["kind"] == kind
+    canonical_kind = {
+        "amax": "max",
+        "amin": "min",
+    }.get(kind, kind)
+    assert bundle.launch_descriptor.provenance["kind"] == canonical_kind
     assert bundle.launch_descriptor.provenance["nan_mode"] == "propagate"
-    assert f"tessera_tile_reduce_{kind}_" in bundle.backend.text
+    assert f"tessera_tile_reduce_{canonical_kind}_" in bundle.backend.text
 
     rng = np.random.default_rng(120_900 + shape[-1])
-    numpy_dtype = np.float16 if storage == "fp16" else np.float32
+    ml_dtypes = pytest.importorskip("ml_dtypes")
+    numpy_dtype = {
+        "fp16": np.float16,
+        "bf16": ml_dtypes.bfloat16,
+        "fp32": np.float32,
+    }[storage]
     x = np.ascontiguousarray((rng.standard_normal(shape) * 1.5).astype(numpy_dtype))
-    if kind == "max" and shape == (8, 64):
+    if canonical_kind in {"max", "min"} and shape == (8, 64):
         x[0, 3] = np.nan
         x[1, 4] = np.inf
     output = np.zeros(shape[:-1], np.float32)
@@ -684,19 +846,24 @@ def test_canonical_sm120_reduction_packages_launches_and_compares(
         "sum": np.sum,
         "mean": np.mean,
         "max": np.max,
+        "min": np.min,
+        "amax": np.max,
+        "amin": np.min,
     }[kind](x.astype(np.float32), axis=-1)
     np.testing.assert_allclose(
         output,
         reference,
         rtol=0,
-        atol=2e-5 if storage == "fp32" else 2e-3,
+        atol=2e-5 if storage == "fp32" else 2e-3 if storage == "fp16" else 2e-2,
         equal_nan=True,
     )
 
 
 @pytest.mark.hardware_nvidia
-@pytest.mark.parametrize("storage", ["fp16", "fp32"])
-@pytest.mark.parametrize("kind,axis", [("sum", 0), ("mean", 1), ("max", 2)])
+@pytest.mark.parametrize("storage", ["fp16", "bf16", "fp32"])
+@pytest.mark.parametrize(
+    "kind,axis", [("sum", 0), ("mean", 1), ("max", 2), ("min", 1)]
+)
 @pytest.mark.parametrize("keepdims", [False, True])
 @pytest.mark.parametrize("schedule", ["serial", "cooperative_128"])
 def test_canonical_sm120_reduction_axis_keepdims_and_cooperative_candidate(
@@ -720,7 +887,12 @@ def test_canonical_sm120_reduction_axis_keepdims_and_cooperative_candidate(
     assert bundle.native_image.resource_record is not None
     assert bundle.native_image.resource_record.metrics["spill_store_bytes"] == 0
     rng = np.random.default_rng(121_700 + axis + int(keepdims))
-    dtype = np.float16 if storage == "fp16" else np.float32
+    ml_dtypes = pytest.importorskip("ml_dtypes")
+    dtype = {
+        "fp16": np.float16,
+        "bf16": ml_dtypes.bfloat16,
+        "fp32": np.float32,
+    }[storage]
     x = np.ascontiguousarray((rng.standard_normal(shape) * 0.5).astype(dtype))
     output_shape = shape[:axis] + ((1,) if keepdims else ()) + shape[axis + 1:]
     output = np.zeros(output_shape, np.float32)
@@ -730,11 +902,13 @@ def test_canonical_sm120_reduction_axis_keepdims_and_cooperative_candidate(
     result = launch(artifact, {"x": x, "o": output, "Outer": outer,
         "AxisExtent": shape[axis], "Inner": inner})
     assert result["ok"], result.get("reason")
-    reference = {"sum": np.sum, "mean": np.mean, "max": np.max}[kind](
+    reference = {
+        "sum": np.sum, "mean": np.mean, "max": np.max, "min": np.min,
+    }[kind](
         x.astype(np.float32), axis=axis, keepdims=keepdims,
     )
     np.testing.assert_allclose(output, reference, rtol=0,
-        atol=2e-3 if storage == "fp16" else 2e-5)
+        atol=2e-5 if storage == "fp32" else 2e-3 if storage == "fp16" else 2e-2)
 
 
 @pytest.mark.hardware_nvidia
@@ -870,6 +1044,153 @@ def test_canonical_sm120_low_precision_fused_epilogue_matrix(
 
 
 @pytest.mark.hardware_nvidia
+@pytest.mark.parametrize("shape", [(8, 32, 32), (11, 19, 37)])
+def test_canonical_sm120_int4_storage_pack_consumer(shape) -> None:
+    if not nvidia_cuda_host_ready():
+        pytest.skip("host WSL CUDA device/toolchain unavailable")
+    m, n, k = shape
+    module = _int4_module(m, n, k)
+    bundle = compile_graph_module(
+        module,
+        source_origin="NVIDIA-PACKED-STORAGE-CONSUMER",
+        target="nvidia_sm120",
+        options={"package_native": True},
+        enable_tool_validation=False,
+    )
+    assert bundle.native_image is not None
+    assert bundle.launch_descriptor is not None
+    assert bundle.native_image.resource_record is not None
+    assert bundle.native_image.resource_record.metrics["spill_store_bytes"] == 0
+    assert bundle.native_image.resource_record.metrics["spill_load_bytes"] == 0
+    assert bundle.launch_descriptor.provenance["storage_pack"] == {
+        "logical": "int4",
+        "container": "int8",
+        "factor": 2,
+        "signedness": "signed_twos_complement",
+    }
+    warm = compile_graph_module(
+        module,
+        source_origin="NVIDIA-PACKED-STORAGE-CONSUMER",
+        target="nvidia_sm120",
+        options={"package_native": True},
+        enable_tool_validation=False,
+    )
+    assert warm.native_image is not None
+    assert warm.native_image.compile_state == "warm_cache"
+    assert warm.native_image.image_digest == bundle.native_image.image_digest
+    assert warm.launch_descriptor == bundle.launch_descriptor
+
+    rng = np.random.default_rng(120_400 + m + n + k)
+    a = rng.integers(-8, 8, size=(m, k), dtype=np.int8)
+    b = rng.integers(-8, 8, size=(k, n), dtype=np.int8)
+    output = np.zeros((m, n), np.int32)
+    artifact = compile_result_from_bundle(bundle, module=module).to_runtime_artifact()
+    result = launch(
+        artifact,
+        {
+            "a": _pack_int4(a, 1),
+            "b": _pack_int4(b, 0),
+            "c": output,
+            "M": m,
+            "N": n,
+            "K": k,
+        },
+    )
+    assert result["ok"] is True, result.get("reason")
+    np.testing.assert_array_equal(output, a.astype(np.int32) @ b.astype(np.int32))
+
+
+@pytest.mark.hardware_nvidia
+@pytest.mark.parametrize(
+    "kind",
+    [
+        "abs_i32",
+        "min_i32",
+        "max_i32",
+        "funnelshift_l_wrap_u32",
+        "dp2a_lo_s32",
+        "dp4a_s32",
+        "cvt_f32_i32_rn",
+        "cvt_f32_i32_rd",
+        "cvt_f32_i32_ru",
+        "cvt_f32_i32_rz",
+        "vadd2_u16x2",
+    ],
+)
+def test_canonical_sm120_cuda_math_intrinsic_execution(kind) -> None:
+    if not nvidia_cuda_host_ready():
+        pytest.skip("host WSL CUDA device/toolchain unavailable")
+    count = 37
+    rng = np.random.default_rng(120_930)
+    a = rng.integers(-(1 << 30), 1 << 30, size=count, dtype=np.int32)
+    b = rng.integers(-(1 << 30), 1 << 30, size=count, dtype=np.int32)
+    c = rng.integers(-100, 100, size=count, dtype=np.int32)
+    if kind.startswith("cvt_f32_i32_"):
+        a_input = np.linspace(-23.75, 31.5, count, dtype=np.float32)
+        mode = kind.rsplit("_", 1)[-1]
+        expected = {
+            "rn": np.rint,
+            "rd": np.floor,
+            "ru": np.ceil,
+            "rz": np.trunc,
+        }[mode](a_input).astype(np.int32)
+    else:
+        a_input = a
+        if kind == "abs_i32":
+            expected = np.abs(a)
+        elif kind == "min_i32":
+            expected = np.minimum(a, b)
+        elif kind == "max_i32":
+            expected = np.maximum(a, b)
+        elif kind == "funnelshift_l_wrap_u32":
+            shift = c.astype(np.uint32) & np.uint32(31)
+            au = a.astype(np.uint32)
+            bu = b.astype(np.uint32)
+            expected_u = np.where(
+                shift == 0,
+                bu,
+                (bu << shift) | (au >> (np.uint32(32) - shift)),
+            )
+            expected = expected_u.astype(np.int32)
+        elif kind == "dp2a_lo_s32":
+            a_words = a.view(np.int16).reshape(count, 2).astype(np.int32)
+            b_bytes = b.view(np.int8).reshape(count, 4)[:, :2].astype(np.int32)
+            expected = (np.sum(a_words * b_bytes, axis=1) + c).astype(np.int32)
+        elif kind == "dp4a_s32":
+            a_bytes = a.view(np.int8).reshape(count, 4).astype(np.int32)
+            b_bytes = b.view(np.int8).reshape(count, 4).astype(np.int32)
+            expected = (np.sum(a_bytes * b_bytes, axis=1) + c).astype(np.int32)
+        else:
+            au = a.astype(np.uint32)
+            bu = b.astype(np.uint32)
+            lo = ((au & 0xFFFF) + (bu & 0xFFFF)) & 0xFFFF
+            hi = (((au >> 16) + (bu >> 16)) & 0xFFFF) << 16
+            expected = (lo | hi).astype(np.int32)
+    output = np.zeros(count, np.int32)
+    package = package_cuda_intrinsic(kind=kind, count=count)
+    assert package.image.resource_record is not None
+    assert package.image.resource_record.metrics["spill_load_bytes"] == 0
+    assert package.image.resource_record.metrics["spill_store_bytes"] == 0
+    warm = package_cuda_intrinsic(kind=kind, count=count)
+    assert warm.image.compile_state == "warm_cache"
+    assert warm.image.image_digest == package.image.image_digest
+    assert warm.descriptor == package.descriptor
+    artifact = RuntimeArtifact(
+        tile_ir=package.tile_ir,
+        target_ir=package.target_ir,
+        metadata={"target": "nvidia_sm120"},
+        native_image=package.image,
+        launch_descriptor=package.descriptor,
+    )
+    result = launch(
+        artifact,
+        {"a": a_input, "b": b, "c": c, "o": output, "N": count},
+    )
+    assert result["ok"] is True, result.get("reason")
+    np.testing.assert_array_equal(output, expected)
+
+
+@pytest.mark.hardware_nvidia
 @pytest.mark.parametrize("shape", [(16, 8, 64), (33, 19, 129), (7, 5, 31)])
 def test_canonical_sm120_nvfp4_general_shape_scales_and_ragged(shape) -> None:
     if not nvidia_cuda_host_ready():
@@ -892,6 +1213,12 @@ def test_canonical_sm120_nvfp4_general_shape_scales_and_ragged(shape) -> None:
     assert "static_shared_memory_bytes" in bundle.native_image.resource_record.metrics
     assert bundle.launch_descriptor is not None
     assert bundle.launch_descriptor.provenance["scale_vector_size"] == 16
+    assert bundle.launch_descriptor.provenance["storage_pack"] == {
+        "logical": "nvfp4",
+        "container": "int8",
+        "factor": 2,
+        "signedness": "format_defined",
+    }
     assert "scale_a" in bundle.tile.text and "scale_b" in bundle.tile.text
     assert "mxf4nvf4.block_scale" in bundle.target_ir.text
 
@@ -979,6 +1306,12 @@ def test_canonical_sm120_mx_general_shape_scales_and_ragged(storage, shape) -> N
     assert bundle.launch_descriptor is not None
     assert bundle.launch_descriptor.provenance["scale_dtype"] == "ue8m0"
     assert bundle.launch_descriptor.provenance["scale_vector_size"] == 32
+    assert bundle.launch_descriptor.provenance["storage_pack"] == {
+        "logical": storage,
+        "container": "int8",
+        "factor": 2 if storage == "fp4_e2m1" else 1,
+        "signedness": "format_defined",
+    }
     assert "mma.sync.aligned" in bundle.backend.text
     assert "block_scale" in bundle.backend.text
 
@@ -1024,7 +1357,7 @@ def test_canonical_sm120_mx_general_shape_scales_and_ragged(storage, shape) -> N
 
 
 @pytest.mark.hardware_nvidia
-@pytest.mark.parametrize("storage", ["fp16", "fp32"])
+@pytest.mark.parametrize("storage", ["fp16", "bf16", "fp32"])
 @pytest.mark.parametrize("causal", [False, True])
 @pytest.mark.parametrize(
     "shape",
@@ -1057,7 +1390,12 @@ def test_canonical_sm120_attention_packages_launches_and_compares(
 
     b, hq, hkv, sq, sk, d, dv = shape
     rng = np.random.default_rng(121_100 + sum(shape) + int(causal))
-    numpy_dtype = np.float16 if storage == "fp16" else np.float32
+    ml_dtypes = pytest.importorskip("ml_dtypes")
+    numpy_dtype = {
+        "fp16": np.float16,
+        "bf16": ml_dtypes.bfloat16,
+        "fp32": np.float32,
+    }[storage]
     q = np.ascontiguousarray((rng.standard_normal((b, hq, sq, d)) * 0.5).astype(numpy_dtype))
     k = np.ascontiguousarray((rng.standard_normal((b, hkv, sk, d)) * 0.5).astype(numpy_dtype))
     v = np.ascontiguousarray((rng.standard_normal((b, hkv, sk, dv)) * 0.5).astype(numpy_dtype))
@@ -1082,17 +1420,24 @@ def test_canonical_sm120_attention_packages_launches_and_compares(
             weights = np.exp(scores - scores.max(axis=-1, keepdims=True))
             weights /= weights.sum(axis=-1, keepdims=True)
             reference[batch, query_head] = weights @ v[batch, kv_head].astype(np.float32)
-    tolerance = 2e-3 if storage == "fp16" else 2e-5
+    tolerance = {
+        "fp16": 2e-3,
+        "bf16": 2e-2,
+        "fp32": 2e-5,
+    }[storage]
     np.testing.assert_allclose(output, reference, atol=tolerance, rtol=tolerance)
 
 
 @pytest.mark.hardware_nvidia
-def test_canonical_sm120_attention_advanced_forward_contract_and_dropout_replay() -> None:
+@pytest.mark.parametrize("storage", ["fp32", "bf16"])
+def test_canonical_sm120_attention_advanced_forward_contract_and_dropout_replay(
+    storage,
+) -> None:
     if not nvidia_cuda_host_ready():
         pytest.skip("host WSL CUDA device/toolchain unavailable")
     shape = (1, 2, 1, 5, 7, 8, 6)
     module = _attention_module(
-        shape, "fp32", True, bias=True, window=(2, 1), softcap=1.7,
+        shape, storage, True, bias=True, window=(2, 1), softcap=1.7,
         dropout_p=0.25, dropout_seed=12345,
     )
     bundle = compile_graph_module(
@@ -1103,9 +1448,11 @@ def test_canonical_sm120_attention_advanced_forward_contract_and_dropout_replay(
     assert bundle.launch_descriptor.provenance["dropout_rng"] == "lcg32_counter_v1"
     b, hq, hkv, sq, sk, d, dv = shape
     rng = np.random.default_rng(121_303)
-    q = np.ascontiguousarray(rng.standard_normal((b, hq, sq, d)).astype(np.float32) * 0.4)
-    k = np.ascontiguousarray(rng.standard_normal((b, hkv, sk, d)).astype(np.float32) * 0.4)
-    v = np.ascontiguousarray(rng.standard_normal((b, hkv, sk, dv)).astype(np.float32) * 0.4)
+    ml_dtypes = pytest.importorskip("ml_dtypes")
+    dtype = ml_dtypes.bfloat16 if storage == "bf16" else np.float32
+    q = np.ascontiguousarray((rng.standard_normal((b, hq, sq, d)) * 0.4).astype(dtype))
+    k = np.ascontiguousarray((rng.standard_normal((b, hkv, sk, d)) * 0.4).astype(dtype))
+    v = np.ascontiguousarray((rng.standard_normal((b, hkv, sk, dv)) * 0.4).astype(dtype))
     bias = np.ascontiguousarray(rng.standard_normal((b, hq, sq, sk)).astype(np.float32) * 0.1)
     first = np.zeros((b, hq, sq, dv), np.float32)
     second = np.zeros_like(first)
@@ -1132,7 +1479,10 @@ def test_canonical_sm120_attention_advanced_forward_contract_and_dropout_replay(
         for head in range(hq):
             kv_head = head // ratio
             for query in range(sq):
-                scores = q[batch, head, query] @ k[batch, kv_head].T
+                scores = (
+                    q[batch, head, query].astype(np.float32)
+                    @ k[batch, kv_head].astype(np.float32).T
+                )
                 scores = scores / np.sqrt(float(d)) + bias[batch, head, query]
                 scores = 1.7 * pade_tanh(scores / 1.7)
                 keys = np.arange(sk)
@@ -1143,8 +1493,11 @@ def test_canonical_sm120_attention_advanced_forward_contract_and_dropout_replay(
                 counter = (((batch * hq + head) * sq + query) * sk + keys)
                 hashes = (counter * 1664525 + 12345 + 1013904223) & 0xFFFFFFFF
                 weights = weights * (hashes >= threshold) / 0.75
-                reference[batch, head, query] = weights @ v[batch, kv_head]
-    np.testing.assert_allclose(first, reference, atol=4e-4, rtol=4e-4)
+                reference[batch, head, query] = (
+                    weights @ v[batch, kv_head].astype(np.float32)
+                )
+    tolerance = 2e-2 if storage == "bf16" else 4e-4
+    np.testing.assert_allclose(first, reference, atol=tolerance, rtol=tolerance)
 
     malformed = launch(
         artifact,
@@ -1221,25 +1574,31 @@ def test_canonical_sm120_attention_backward_is_deterministic_and_oracle_proven()
 
 
 @pytest.mark.hardware_nvidia
-def test_canonical_sm120_fp16_attention_dropout_backward_replays_mask() -> None:
+@pytest.mark.parametrize("storage", ["fp16", "bf16"])
+def test_canonical_sm120_lowp_attention_dropout_backward_replays_mask(
+    storage,
+) -> None:
     if not nvidia_cuda_host_ready():
         pytest.skip("host WSL CUDA device/toolchain unavailable")
     dropout_p, seed = 0.25, 771
     module = _attention_backward_module(
-        dtype="fp16", dropout_p=dropout_p, dropout_seed=seed
+        dtype=storage, dropout_p=dropout_p, dropout_seed=seed
     )
     bundle = compile_graph_module(
         module, source_origin="NVIDIA-E2E-2", target="nvidia_sm120",
         options={"package_native": True}, enable_tool_validation=False,
     )
     assert bundle.native_image and bundle.launch_descriptor
-    assert bundle.launch_descriptor.provenance["storage"] == "f16"
+    storage_ir = "f16" if storage == "fp16" else "bf16"
+    assert bundle.launch_descriptor.provenance["storage"] == storage_ir
     assert bundle.launch_descriptor.provenance["dropout_rng"] == "lcg32_counter_v1"
     rng = np.random.default_rng(121_771)
-    q = (rng.standard_normal((1, 2, 3, 4)) * 0.2).astype(np.float16)
-    k = (rng.standard_normal((1, 1, 4, 4)) * 0.2).astype(np.float16)
-    v = (rng.standard_normal((1, 1, 4, 3)) * 0.2).astype(np.float16)
-    do = (rng.standard_normal((1, 2, 3, 3)) * 0.2).astype(np.float16)
+    ml_dtypes = pytest.importorskip("ml_dtypes")
+    dtype = np.float16 if storage == "fp16" else ml_dtypes.bfloat16
+    q = (rng.standard_normal((1, 2, 3, 4)) * 0.2).astype(dtype)
+    k = (rng.standard_normal((1, 1, 4, 4)) * 0.2).astype(dtype)
+    v = (rng.standard_normal((1, 1, 4, 3)) * 0.2).astype(dtype)
+    do = (rng.standard_normal((1, 2, 3, 3)) * 0.2).astype(dtype)
     dq = np.zeros_like(q); dk = np.zeros_like(k); dv = np.zeros_like(v)
     scalars = {"B": 1, "Hq": 2, "Hkv": 1, "Sq": 3, "Sk": 4, "D": 4, "Dv": 3}
     artifact = compile_result_from_bundle(bundle, module=module).to_runtime_artifact()
@@ -1278,7 +1637,10 @@ def test_canonical_sm120_fp16_attention_dropout_backward_replays_mask() -> None:
             refs[1][0, 0] += ds[:, None] * 0.5 * qf[0, head, query]
             refs[2][0, 0] += (p * dropout_scale)[:, None] * dof[0, head, query]
     for actual, expected in zip(observed, refs):
-        np.testing.assert_allclose(actual.astype(np.float32), expected, rtol=3e-3, atol=3e-3)
+        tolerance = 3e-3 if storage == "fp16" else 3e-2
+        np.testing.assert_allclose(
+            actual.astype(np.float32), expected, rtol=tolerance, atol=tolerance
+        )
 
 
 @pytest.mark.hardware_nvidia

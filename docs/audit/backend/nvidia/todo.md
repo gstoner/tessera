@@ -3,7 +3,7 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-07-24
+last_updated: 2026-07-25
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
@@ -988,13 +988,16 @@ instruction-specific accuracy comes from the
 The CUDA Math API scalar/integer follow-on records representative integer math,
 bit, packed-dot, numeric/bit-cast, and 2x16/4x8 packed-SIMD families. A CUDA
 13.3 `nvcc -arch=sm_120a` fixture proves the documented symbols compile, while
-the SM120 contract keeps their Tessera Target-IR and runtime states `planned`.
+this original synchronization point kept every Tessera Target-IR/runtime state
+`planned`. `NVIDIA-PACKED-MATH-2026-07-25` later supersedes that blanket state
+for the exact-device subset recorded in the closeout below; unexecuted
+bit/bit-cast and broader packed-SIMD families remain planned.
 The shared rounding vocabulary now represents CUDA's four conversion suffixes
 RN/RD/RU/RZ exactly; nearest-away and stochastic modes cannot silently map to a
 CUDA cast. Undefined signed-min absolute value, out-of-range float-to-integer
 conversion, funnel-shift wrap/clamp, signedness, lane width, and saturation are
-retained as contract boundaries. No public op, runtime route, or selector is
-added. Sources: [CUDA Math API](https://docs.nvidia.com/cuda/cuda-math-api/index.html),
+retained as contract boundaries. The later internal Tile route adds no public
+Graph op or selector. Sources: [CUDA Math API](https://docs.nvidia.com/cuda/cuda-math-api/index.html),
 [integer intrinsics](https://docs.nvidia.com/cuda/cuda-math-api/cuda_math_api/group__CUDA__MATH__INTRINSIC__INT.html),
 [integer math](https://docs.nvidia.com/cuda/cuda-math-api/cuda_math_api/group__CUDA__MATH__INT.html),
 [casts](https://docs.nvidia.com/cuda/cuda-math-api/cuda_math_api/group__CUDA__MATH__INTRINSIC__CAST.html),
@@ -1042,10 +1045,12 @@ runtime route, performance claim, or selector changes.
 
 Cross-backend sync `ROCM-E2E2-REDUCE-2026-07-19` is ROCm-owned. It consumes the
 already-shared `tile.reduce_kernel` carrier and widens its portable verifier to
-admit bf16. NVIDIA's backend-specific materializer still explicitly accepts
-only f16/f32, so its op registry, `Outer/AxisExtent/Inner` schema, serial/cooperative-128
-lowerings, PTX ABI, resources, exact-device evidence, routes, and selectors are
-unchanged; the ROCm five-argument HSACO ABI transfers no CUDA claim.
+admit bf16. At that synchronization point NVIDIA's backend-specific
+materializer still accepted only f16/f32, so the ROCm five-argument HSACO ABI
+transferred no CUDA claim. That historical NVIDIA boundary is superseded by
+`NVIDIA-BF16-CANONICAL-BREADTH-2026-07-25`, which owns its independent
+`Outer/AxisExtent/Inner` PTX ABI, serial/cooperative-128 lowering, resources,
+and exact-SM120 evidence without inheriting the ROCm schedule or selector.
 
 Cross-backend sync `ROCM-E2E2-PAGED-KV-2026-07-19` is ROCm-owned. It consumes
 the existing shared paged-KV carrier without changing its verifier or public op
@@ -1210,9 +1215,13 @@ selector promotion, CUDA ABI, or exact-device evidence.
 
 Cross-backend sync `CORE-COMPILER-2-2026-07-22` makes compute dtype
 legalization the default in NVIDIA named pipelines. Terminal storage
-legalization remains intentionally opt-in because the generic CUDA route has no
-packed-storage consumer; that consumer is follow-up required before a sub-byte
-default is honest. The executable row-major layout materializer and guarded
+legalization remains intentionally opt-in for the generic value-level CUDA
+route because it has no block-scale operand ABI. The later
+`NVIDIA-BF16-CANONICAL-BREADTH-2026-07-25` continuation closes the physical
+consumer gap for the scale-bearing NVFP4/MXFP4/FP6 launch envelopes and wires
+StoragePackConsume after opt-in terminal legalization; at that point generic
+INT4 and a sub-byte default remained unsupported. The executable row-major layout
+materializer and guarded
 dynamic launch are x86-only and transfer no PTX schedule, CUDA ABI, bucket
 policy, selector, or exact-device evidence.
 
@@ -1425,3 +1434,84 @@ beat their composed references in both timing domains, but their references
 are not stable and WSL is not the controlled native-Linux promotion host.
 Therefore no production selector changes. Rerunning this exact packet on
 controlled native Linux is the remaining performance/selector boundary.
+
+NVIDIA-owned closeout `NVIDIA-BF16-CANONICAL-BREADTH-2026-07-25` extends the
+compiler-owned SM120 Tile-image seam from FP16/FP32 to BF16 input storage with
+FP32 accumulation and output for reduction, stable row softmax, and attention
+forward/backward. The reduction contract covers sum, mean, max/min and
+amax/amin aliases, arbitrary static axes, keepdims true/false, ragged extents,
+NaN propagation, and both serial and cooperative-128 physical schedules.
+Every BF16 descriptor carries a distinct typed ABI and two-byte input binding;
+the CUDA-driver bridge retains four-byte FP32 result bindings. The canonical
+Graph verifier, target capability, backend manifest, execution matrix, Tile
+verifier, NVIDIA lowering, runtime registration, and launch bridge agree on
+that boundary.
+
+Exact RTX 5070 Ti SM120 execution proves 44 focused BF16 softmax, reduction,
+and attention cases through MLIR to NVVM, immutable PTX image, descriptor, and
+CUDA-driver launch. Compiler lit proves BF16 extension into FP32 arithmetic,
+serial/cooperative reduction assembly, min lowering, and attention
+forward/backward materialization. The checked-in 12-row reduction packet
+compares both schedules across all six public kind spellings, discards the
+first launch, amortizes 500 resident launches and 10 complete calls, and
+retains two disjoint repeated-median cohorts, cold/warm image and entry-symbol
+identity, numerical error, ptxas registers/shared-memory/spills, and live
+driver local-memory/occupancy. WSL timing remains an explicit non-promotion
+result: only 3/12 candidates meet the 4% gate in both timing domains and no
+candidate has stable cross-domain winner consensus. Production selectors are
+therefore unchanged; controlled native-Linux comparison remains required
+before any schedule promotion.
+
+The continuation of `NVIDIA-BF16-CANONICAL-BREADTH-2026-07-25` closes the
+remaining normalization envelope. Compiler-owned immutable PTX images now
+execute unweighted RMSNorm/RMSNorm-safe and LayerNorm with f32, f16, or bf16
+storage, f32 row statistics/accumulation, immutable nonnegative epsilon, and
+same-storage output. Eighteen exact SM120 cases cover ragged/non-power-of-two
+rows, multiple ranks, both normalization kinds, all three storage types,
+resource/no-spill inspection, warm image/cache/descriptor identity, and FP32
+oracles. Dynamic affine BF16 backward remains on the previously proven
+training descriptor, so forward and backward now share the BF16 storage
+boundary without claiming an affine forward fusion in this unweighted kernel.
+
+The same synchronization point lands NVIDIA's first physical consumer of the
+shared terminal packing descriptor. Canonical NVFP4, MXFP4, FP6-E2M3, and
+FP6-E3M2 launch images carry `tessera.storage_pack`; NVIDIA lowering requires
+the logical format, int8 container, packing factor (2 for four-bit, 1 for
+six-bit), and format-defined signedness to agree with the selected
+scale-bearing fragment ABI before generating packed byte/nibble loads.
+Descriptor drift rejects in compiler lit, while exact general-shape/ragged
+SM120 tests traverse the descriptor-driven loaders. Opt-in terminal storage
+legalization now runs `StoragePackConsume` in the NVIDIA named pipeline.
+Generic value-level sub-byte lowering stays opt-in because it lacks the scale
+ABI; this does not make terminal packing the default beyond the proven launch
+envelopes.
+
+NVIDIA-owned continuation `NVIDIA-PACKED-MATH-2026-07-25` adds the missing
+canonical signed-INT4 consumer. Its compiler-owned Tile image and typed CUDA
+launch ABI accept only an int8 container, factor two, signed two's-complement
+nibbles, low logical index in the low nibble, i32 accumulation/output, and no
+scale or fused-epilogue operands. The correctness-first general-shape schedule
+decodes packed A rows and packed B columns, guards ragged M/N/K edges, and
+rejects container, factor, signedness, scale/operand, and epilogue disagreement
+before PTX materialization. Exact aligned and ragged RTX 5070 Ti execution
+matches an integer oracle, retains zero ptxas spills, and proves cold/warm
+image and descriptor identity. NVFP4/MXFP4/FP6 keep their distinct
+scale-bearing fragment semantics; no physical schedule is transferred between
+those formats or from ROCm.
+
+The same continuation promotes a deliberately bounded CUDA Math API subset
+through the typed `tile.cuda_intrinsic_kernel` carrier, immutable PTX image,
+five-operand launch descriptor, CUDA-driver bridge, and exact SM120 execution:
+signed i32 abs/min/max, wrapping left funnel shift, signed `dp2a.lo` and
+`dp4a`, f32-to-i32 RN/RD/RU/RZ conversions, and unsigned wrapping `vadd2`.
+Eleven exact-device cases retain numerical/bit-exact oracles, ptxas no-spill
+records, and warm-cache image/descriptor identity. Broader bit operations,
+bit-reinterpret directions, and packed byte-lane saturation/compare families
+remain `planned` and fail closed at the runtime packager. This is an internal
+Tile/Target-IR execution surface, not a new public Graph operation.
+
+Terminal storage legalization remains opt-in after this slice. The canonical
+launch envelopes now consume FP4/NVFP4/FP6/INT4 descriptors, but the generic
+value-level CUDA route still has no universal scale-operand ABI for
+block-scaled formats. Enabling the default before that ABI exists would turn a
+legalization setting into an unsupported execution claim.

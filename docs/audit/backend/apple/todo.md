@@ -3,7 +3,7 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-07-24
+last_updated: 2026-07-25
 ---
 
 # Apple compiler, exact-device, and performance plan
@@ -1471,3 +1471,29 @@ parameter storage. NVIDIA owns the CUDA-context capacity/free-memory query,
 FP16/BF16 PTX training ABIs, serialized dynamic-shared launch expressions, and
 SM120 measurements. None transfers to Metal or closes Apple training,
 threadgroup-memory, capacity-policy, or exact-device evidence.
+
+Cross-backend sync `NVIDIA-BF16-CANONICAL-BREADTH-2026-07-25` widens the
+shared Tile softmax and attention verifier envelope to BF16 storage with FP32
+accumulation and preserves the already-shared BF16 reduction contract,
+including min. Apple parity is validated at that semantic boundary: the
+existing Apple capability and execution records already own independent BF16
+softmax, attention, and reduction routes. NVIDIA's typed PTX descriptors,
+serial/cooperative-128 schedules, CUDA-driver ABI, ptxas resources, SM120
+numerics, and WSL timings do not transfer to Metal or Apple CPU. No Apple
+manifest, schedule, execution state, or selector changes are required.
+
+The NVIDIA continuation adds an architecture-owned compiler/PTX normalization
+image and consumes the already-shared `tessera.storage_pack` descriptor in
+scale-bearing NVFP4/MXFP4/FP6 CUDA materializers. Apple semantic parity is
+unchanged: its independent BF16 normalization routes remain authoritative,
+and CUDA packing factors, scale ABIs, PTX byte loads, rejection fixtures,
+resources, and SM120 evidence do not transfer to Metal. No Apple storage
+legalization default, packed dtype, capability, or selector changes.
+
+Cross-backend sync `NVIDIA-PACKED-MATH-2026-07-25` adds a CUDA-owned signed
+INT4 descriptor consumer and a typed internal Tile carrier for a bounded CUDA
+integer/cast/packed-SIMD subset. The shared `tessera.storage_pack` schema is
+unchanged. NVIDIA's nibble layout, PTX instructions, CUDA launch ABI,
+resources, cache evidence, and SM120 numerics do not transfer to Metal or
+Apple CPU. Apple retains its own packed INT4 and math execution contracts; no
+Apple capability, storage-legalization default, schedule, or selector changes.

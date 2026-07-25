@@ -57,19 +57,18 @@ constexpr const char* kTileDirectTf32 = "tessera_tile_matmul_direct_tf32";
 constexpr const char* kTileDirectE4m3 = "tessera_tile_matmul_direct_e4m3";
 constexpr const char* kTileDirectE5m2 = "tessera_tile_matmul_direct_e5m2";
 constexpr const char* kTileDirectS8 = "tessera_tile_matmul_direct_s8";
+constexpr const char* kTileInt4 = "tessera_tile_matmul_int4";
+constexpr const char* kTileCudaIntrinsic = "tessera_tile_cuda_intrinsic_";
 constexpr const char* kTileDirectF64 = "tessera_tile_matmul_direct_f64";
 constexpr const char* kTileNvfp4 = "tessera_tile_matmul_nvfp4";
 constexpr const char* kTileMxE2m3 = "tessera_tile_matmul_mx_e2m3";
 constexpr const char* kTileMxE3m2 = "tessera_tile_matmul_mx_e3m2";
 constexpr const char* kTileMxFp4 = "tessera_tile_matmul_mx_fp4_e2m1";
 constexpr const char* kTileSoftmaxF16 = "tessera_tile_softmax_f16";
+constexpr const char* kTileSoftmaxBf16 = "tessera_tile_softmax_bf16";
 constexpr const char* kTileSoftmaxF32 = "tessera_tile_softmax_f32";
-constexpr const char* kTileReduceSumF16 = "tessera_tile_reduce_sum_f16";
-constexpr const char* kTileReduceMeanF16 = "tessera_tile_reduce_mean_f16";
-constexpr const char* kTileReduceMaxF16 = "tessera_tile_reduce_max_f16";
-constexpr const char* kTileReduceSumF32 = "tessera_tile_reduce_sum_f32";
-constexpr const char* kTileReduceMeanF32 = "tessera_tile_reduce_mean_f32";
-constexpr const char* kTileReduceMaxF32 = "tessera_tile_reduce_max_f32";
+constexpr const char* kTileReducePrefix = "tessera_tile_reduce_";
+constexpr const char* kTileNormPrefix = "tessera_tile_norm_";
 constexpr const char* kTileAttentionPrefix = "tessera_tile_attention_";
 constexpr const char* kTileAttentionBackwardPrefix =
     "tessera_tile_attention_backward_";
@@ -271,6 +270,83 @@ int invokeNvfp4(CUfunction fn, void** buffers, size_t nbuf,
     return rc;
 }
 
+int invokeInt4(CUfunction fn, void** buffers, size_t nbuf,
+               const int64_t* dims, size_t ndim) {
+    if (nbuf != 3 || ndim != 3) return 5;
+    const long long M = dims[0], N = dims[1], K = dims[2];
+    if (M <= 0 || N <= 0 || K <= 0 || M >= (1LL << 31) ||
+        N >= (1LL << 31) || K >= (1LL << 31)) return 5;
+    const size_t packedK = ((size_t)K + 1) / 2;
+    if ((size_t)M > SIZE_MAX / packedK ||
+        packedK > SIZE_MAX / (size_t)N ||
+        (size_t)M > SIZE_MAX / (size_t)N / sizeof(int32_t)) return 5;
+    const size_t sizes[] = {
+        (size_t)M * packedK,
+        packedK * (size_t)N,
+        (size_t)M * (size_t)N * sizeof(int32_t),
+    };
+    CUdeviceptr device[3] = {};
+    int rc = 0;
+    for (int i = 0; i < 3; ++i)
+        if (cuMemAlloc(&device[i], sizes[i]) != CUDA_SUCCESS) {
+            rc = 3; break;
+        }
+    if (!rc &&
+        (cuMemcpyHtoD(device[0], buffers[0], sizes[0]) != CUDA_SUCCESS ||
+         cuMemcpyHtoD(device[1], buffers[1], sizes[1]) != CUDA_SUCCESS))
+        rc = 3;
+    if (!rc) {
+        long long MArg = M, NArg = N, KArg = K;
+        void* args[] = {
+            &device[0], &device[1], &device[2], &MArg, &NArg, &KArg,
+        };
+        const unsigned gx = (unsigned)((N + 31) / 32);
+        const unsigned gy = (unsigned)((M + 7) / 8);
+        if (cuLaunchKernel(fn, gx, gy, 1, 32, 8, 1, 0, 0, args, 0) !=
+                CUDA_SUCCESS ||
+            cuCtxSynchronize() != CUDA_SUCCESS ||
+            cuMemcpyDtoH(buffers[2], device[2], sizes[2]) != CUDA_SUCCESS)
+            rc = 3;
+    }
+    for (CUdeviceptr ptr : device)
+        if (ptr) cuMemFree(ptr);
+    return rc;
+}
+
+int invokeCudaIntrinsic(CUfunction fn, void** buffers, size_t nbuf,
+                        const int64_t* dims, size_t ndim) {
+    if (nbuf != 4 || ndim != 1 || dims[0] <= 0) return 5;
+    const size_t n = (size_t)dims[0];
+    if (n > SIZE_MAX / sizeof(int32_t)) return 5;
+    const size_t bytes = n * sizeof(int32_t);
+    CUdeviceptr device[4] = {};
+    int rc = 0;
+    for (int i = 0; i < 4; ++i)
+        if (cuMemAlloc(&device[i], bytes) != CUDA_SUCCESS) {
+            rc = 3; break;
+        }
+    if (!rc)
+        for (int i = 0; i < 3; ++i)
+            if (cuMemcpyHtoD(device[i], buffers[i], bytes) != CUDA_SUCCESS) {
+                rc = 3; break;
+            }
+    if (!rc) {
+        long long nArg = (long long)n;
+        void* args[] = {
+            &device[0], &device[1], &device[2], &device[3], &nArg,
+        };
+        const unsigned grid = (unsigned)((n + 127) / 128);
+        if (cuLaunchKernel(fn, grid, 1, 1, 128, 1, 1, 0, 0, args, 0) !=
+                CUDA_SUCCESS ||
+            cuCtxSynchronize() != CUDA_SUCCESS ||
+            cuMemcpyDtoH(buffers[3], device[3], bytes) != CUDA_SUCCESS)
+            rc = 3;
+    }
+    for (CUdeviceptr ptr : device)
+        if (ptr) cuMemFree(ptr);
+    return rc;
+}
+
 // OCP MX block-scaled ABI. FP6 uses one byte per logical value; MXFP4 packs
 // two E2M1 nibbles per byte. Both use one UE8M0 scale per 32 logical values.
 int invokeMx(CUfunction fn, void** buffers, size_t nbuf,
@@ -382,7 +458,7 @@ int invokeFusedMatmul16(CUfunction fn, const char* name, void** buffers,
     return rc;
 }
 
-// Compiler-owned stable row-softmax ABI: host f16/f32 X/O and flattened
+// Compiler-owned stable row-softmax ABI: host f16/bf16/f32 X/O and flattened
 // {rows, K}. The kernel maps 128 independent rows per CTA; each thread owns a
 // complete row, matching the typed Tile schedule recorded in the descriptor.
 int invokeSoftmax(CUfunction fn, void** buffers, size_t nbuf,
@@ -529,8 +605,10 @@ int invokeAttention(CUfunction fn, const char* name, void** buffers,
         !product({B, Hkv, Sk, Dv}, vElements) ||
         !product({B, Hq, Sq, Dv}, oElements) ||
         (hasBias && !product({B, Hq, Sq, Sk}, biasElements))) return 5;
-    const bool f16 = std::strncmp(name, "tessera_tile_attention_f16_", 27) == 0;
-    const size_t elementBytes = f16 ? 2 : 4;
+    const bool narrow =
+        std::strncmp(name, "tessera_tile_attention_f16_", 27) == 0 ||
+        std::strncmp(name, "tessera_tile_attention_bf16_", 28) == 0;
+    const size_t elementBytes = narrow ? 2 : 4;
     if (qElements > SIZE_MAX / elementBytes || kElements > SIZE_MAX / elementBytes ||
         vElements > SIZE_MAX / elementBytes || oElements > SIZE_MAX / sizeof(float) ||
         (hasBias && biasElements > SIZE_MAX / sizeof(float))) return 5;
@@ -642,8 +720,10 @@ int invokeAttentionBackward(CUfunction fn, const char* kernelName,
     const long long Sk=dims[4], D=dims[5], Dv=dims[6];
     if (B<=0 || Hq<=0 || Hkv<=0 || Sq<=0 || Sk<=0 || D<=0 || Dv<=0 ||
         Hq%Hkv) return 5;
-    const bool f16 = std::strstr(kernelName, "attention_backward_f16_") != nullptr;
-    const size_t elementBytes = f16 ? 2 : 4;
+    const bool narrow =
+        std::strstr(kernelName, "attention_backward_f16_") != nullptr ||
+        std::strstr(kernelName, "attention_backward_bf16_") != nullptr;
+    const size_t elementBytes = narrow ? 2 : 4;
     auto bytes = [](std::initializer_list<size_t> values, size_t width, size_t& out) {
         out = width;
         for (size_t value : values) {
@@ -854,16 +934,22 @@ int benchmarkUnary(CUfunction fn, const char* name, void** buffers,
     if (nbuf != 2 || !latencyMs || warmup < 0 || repetitions <= 0)
         return 5;
     const bool softmax = std::strcmp(name, kTileSoftmaxF16) == 0 ||
+        std::strcmp(name, kTileSoftmaxBf16) == 0 ||
         std::strcmp(name, kTileSoftmaxF32) == 0;
-    if ((softmax && ndim != 2) || (!softmax && ndim != 3)) return 5;
-    const bool f16 = std::strcmp(name, kTileSoftmaxF16) == 0 ||
-        std::strstr(name, "_f16_") != nullptr;
-    long long outer=dims[0],axis=dims[1],inner=softmax?1:dims[2];
+    const bool norm =
+        std::strncmp(name, kTileNormPrefix, std::strlen(kTileNormPrefix)) == 0;
+    const bool rowwise = softmax || norm;
+    if ((rowwise && ndim != 2) || (!rowwise && ndim != 3)) return 5;
+    const bool narrow = std::strcmp(name, kTileSoftmaxF16) == 0 ||
+        std::strcmp(name, kTileSoftmaxBf16) == 0 ||
+        std::strstr(name, "_f16_") != nullptr ||
+        std::strstr(name, "_bf16_") != nullptr;
+    long long outer=dims[0],axis=dims[1],inner=rowwise?1:dims[2];
     if(outer<=0||axis<=0||inner<=0||outer>=(1LL<<31)||axis>=(1LL<<31)||
        inner>=(1LL<<31)||outer>(1LL<<31)/axis||outer*axis>(1LL<<31)/inner) return 5;
     const size_t outputs=(size_t)outer*(size_t)inner;
-    const size_t inputBytes=outputs*(size_t)axis*(f16?2:4);
-    const size_t outputBytes=softmax?inputBytes:outputs*4;
+    const size_t inputBytes=outputs*(size_t)axis*(narrow?2:4);
+    const size_t outputBytes=rowwise?inputBytes:outputs*4;
     CUdeviceptr dx = 0, dout = 0;
     CUevent start = nullptr, stop = nullptr;
     int rc = 0;
@@ -880,8 +966,8 @@ int benchmarkUnary(CUfunction fn, const char* name, void** buffers,
         long long outerArg=outer,axisArg=axis,innerArg=inner;
         void* softmaxArgs[]={&dx,&dout,&outerArg,&axisArg};
         void* reduceArgs[]={&dx,&dout,&outerArg,&axisArg,&innerArg};
-        void** args=softmax?softmaxArgs:reduceArgs;
-        const bool cooperative=!softmax&&std::strstr(name,"_cooperative_128")!=nullptr;
+        void** args=rowwise?softmaxArgs:reduceArgs;
+        const bool cooperative=!rowwise&&std::strstr(name,"_cooperative_128")!=nullptr;
         const unsigned grid=cooperative?(unsigned)outputs:(unsigned)((outputs+127)/128);
         auto launch = [&]() {
             return cuLaunchKernel(fn, grid, 1, 1, 128, 1, 1, 0, 0, args, 0);
@@ -939,8 +1025,10 @@ int benchmarkAttention(CUfunction fn, const char* name, void** buffers,
         !product({B, Hkv, Sk, Dv}, counts[2]) ||
         !product({B, Hq, Sq, Dv}, counts[outputIndex]) ||
         (hasBias && !product({B, Hq, Sq, Sk}, counts[3]))) return 5;
-    const bool f16 = std::strncmp(name, "tessera_tile_attention_f16_", 27) == 0;
-    const size_t elementBytes = f16 ? 2 : 4;
+    const bool narrow =
+        std::strncmp(name, "tessera_tile_attention_f16_", 27) == 0 ||
+        std::strncmp(name, "tessera_tile_attention_bf16_", 28) == 0;
+    const size_t elementBytes = narrow ? 2 : 4;
     size_t sizes[5] = {};
     for (int i = 0; i < 3; ++i) {
         if (counts[i] > SIZE_MAX / elementBytes) return 5;
@@ -1530,6 +1618,11 @@ int invokeImpl(const char* kernel_name, void** buffers, size_t nbuf,
         return invokeFusedMatmul16(fn, kernel_name, buffers, nbuf, dims, ndim);
     if (std::strcmp(kernel_name, kTileNvfp4) == 0)
         return invokeNvfp4(fn, buffers, nbuf, dims, ndim);
+    if (std::strcmp(kernel_name, kTileInt4) == 0)
+        return invokeInt4(fn, buffers, nbuf, dims, ndim);
+    if (std::strncmp(kernel_name, kTileCudaIntrinsic,
+                     std::strlen(kTileCudaIntrinsic)) == 0)
+        return invokeCudaIntrinsic(fn, buffers, nbuf, dims, ndim);
     if (std::strcmp(kernel_name, kTileMxE2m3) == 0 ||
         std::strcmp(kernel_name, kTileMxE3m2) == 0)
         return invokeMx(fn, buffers, nbuf, dims, ndim, false);
@@ -1537,16 +1630,24 @@ int invokeImpl(const char* kernel_name, void** buffers, size_t nbuf,
         return invokeMx(fn, buffers, nbuf, dims, ndim, true);
     if (std::strcmp(kernel_name, kTileSoftmaxF16) == 0)
         return invokeSoftmax(fn, buffers, nbuf, dims, ndim, 2);
+    if (std::strcmp(kernel_name, kTileSoftmaxBf16) == 0)
+        return invokeSoftmax(fn, buffers, nbuf, dims, ndim, 2);
     if (std::strcmp(kernel_name, kTileSoftmaxF32) == 0)
         return invokeSoftmax(fn, buffers, nbuf, dims, ndim, 4);
-    if (std::strncmp(kernel_name, kTileReduceSumF16, std::strlen(kTileReduceSumF16)) == 0 ||
-        std::strncmp(kernel_name, kTileReduceMeanF16, std::strlen(kTileReduceMeanF16)) == 0 ||
-        std::strncmp(kernel_name, kTileReduceMaxF16, std::strlen(kTileReduceMaxF16)) == 0)
-        return invokeReduce(fn,buffers,nbuf,dims,ndim,2,std::strstr(kernel_name,"_cooperative_128")!=nullptr);
-    if (std::strncmp(kernel_name, kTileReduceSumF32, std::strlen(kTileReduceSumF32)) == 0 ||
-        std::strncmp(kernel_name, kTileReduceMeanF32, std::strlen(kTileReduceMeanF32)) == 0 ||
-        std::strncmp(kernel_name, kTileReduceMaxF32, std::strlen(kTileReduceMaxF32)) == 0)
-        return invokeReduce(fn,buffers,nbuf,dims,ndim,4,std::strstr(kernel_name,"_cooperative_128")!=nullptr);
+    if (std::strncmp(kernel_name, kTileReducePrefix,
+                     std::strlen(kTileReducePrefix)) == 0) {
+        const bool narrow = std::strstr(kernel_name, "_f16_") != nullptr ||
+                            std::strstr(kernel_name, "_bf16_") != nullptr;
+        return invokeReduce(
+            fn, buffers, nbuf, dims, ndim, narrow ? 2 : 4,
+            std::strstr(kernel_name, "_cooperative_128") != nullptr);
+    }
+    if (std::strncmp(kernel_name, kTileNormPrefix,
+                     std::strlen(kTileNormPrefix)) == 0) {
+        const bool narrow = std::strstr(kernel_name, "_f16_") != nullptr ||
+                            std::strstr(kernel_name, "_bf16_") != nullptr;
+        return invokeSoftmax(fn, buffers, nbuf, dims, ndim, narrow ? 2 : 4);
+    }
     if (std::strncmp(kernel_name, kTileAttentionBackwardPrefix,
                      std::strlen(kTileAttentionBackwardPrefix)) == 0)
         return invokeAttentionBackward(fn, kernel_name, buffers, nbuf, dims, ndim);
@@ -1652,7 +1753,9 @@ int tessera_nvidia_ptx_benchmark(const char* kernel_name, void** buffers,
         return benchmarkMx(fn, kernel_name, buffers, num_buffers, dims,
                            num_dims, warmup, repetitions, latency_ms);
     if (std::strncmp(kernel_name, "tessera_tile_softmax_", 21) == 0 ||
-        std::strncmp(kernel_name, "tessera_tile_reduce_", 20) == 0)
+        std::strncmp(kernel_name, "tessera_tile_reduce_", 20) == 0 ||
+        std::strncmp(kernel_name, kTileNormPrefix,
+                     std::strlen(kTileNormPrefix)) == 0)
         return benchmarkUnary(fn, kernel_name, buffers, num_buffers, dims,
                               num_dims, warmup, repetitions, latency_ms);
     if (std::strncmp(kernel_name, kTileAttentionPrefix,

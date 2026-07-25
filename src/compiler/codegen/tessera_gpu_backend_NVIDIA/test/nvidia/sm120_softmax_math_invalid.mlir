@@ -11,4 +11,4 @@ module {
   }
 }
 
-// CHECK: sm_120 softmax_kernel requires f16/f32 storage, f32 accum, axis=-1, exp_mode=approx_exp2, and ftz=false
+// CHECK: sm_120 softmax_kernel requires f16/bf16/f32 storage, f32 accum, axis=-1, exp_mode=approx_exp2, and ftz=false

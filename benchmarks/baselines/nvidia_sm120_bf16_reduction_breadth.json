@@ -1,0 +1,1551 @@
+{
+  "contract": {
+    "accumulation": "fp32",
+    "arbitrary_axes": true,
+    "keepdims": [
+      false,
+      true
+    ],
+    "kinds": [
+      "sum",
+      "mean",
+      "max",
+      "min",
+      "amax",
+      "amin"
+    ],
+    "nonfinite_proof": "tests/device/nvidia/test_e2e_spine_native.py",
+    "output": "fp32",
+    "ragged_boundaries": true,
+    "schedules": [
+      "serial",
+      "cooperative_128"
+    ],
+    "storage": "bf16"
+  },
+  "device": "NVIDIA GeForce RTX 5070 Ti, GPU-5072cda5-509a-008c-93c8-dc06e105f307, 610.62, 12.0",
+  "method": {
+    "candidate_order": "rotated_interleaved",
+    "clock_conditioning": "sm120 resident 1024^3 TF32 GEMM before every paired cohort sample",
+    "device_repetitions_per_sample": 500,
+    "discarded_launches_per_candidate_sample": 1,
+    "end_to_end_repetitions_per_sample": 10,
+    "samples_per_run": 9,
+    "sampling": "two_disjoint_time_interleaved_cohorts",
+    "timing_domains": {
+      "device_event_ms": "resident CUDA-event interval",
+      "end_to_end_ms": "runtime.launch including allocation/copies"
+    }
+  },
+  "rows": [
+    {
+      "accumulation": "fp32",
+      "axis": 1,
+      "candidate": "canonical_serial",
+      "clock_conditioning_ms": [
+        0.3938142395019531,
+        0.39317920684814456,
+        0.392825927734375,
+        0.3932969665527344,
+        0.3946435165405273,
+        0.3939487838745117,
+        0.39345535278320315,
+        0.3954167938232422,
+        0.39498111724853513
+      ],
+      "compile": {
+        "cold_ms": 133.79854999948293,
+        "cold_state": "cold",
+        "entry_symbol_reproducible": true,
+        "image_digest_reproducible": true,
+        "warm_ms": 68.92711899854476,
+        "warm_state": "warm_cache"
+      },
+      "image_digest": "700fb166254531b31c976649f715ae36e6da1b4fc1633de02271eb6fb4c02865",
+      "keepdims": false,
+      "kind": "sum",
+      "normalized_kind": "sum",
+      "numerical": {
+        "atol": 0.02,
+        "max_abs_error": 0.0,
+        "passed": true,
+        "rtol": 0.02
+      },
+      "op": "reduction",
+      "output": "fp32",
+      "resource_fingerprint": "a11d46e41dda875af4915e37f4f8ebec9b6f1fa068afe9552696c68ce329af06",
+      "resources": {
+        "assembly": {
+          "metrics": {
+            "registers_per_thread": 32,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 0
+          },
+          "provenance": "ptxas --arch=sm_120a -v"
+        },
+        "live_driver": {
+          "active_blocks_per_sm": 12,
+          "dynamic_shared_memory_bytes": 0,
+          "local_memory_bytes": 0,
+          "registers_per_thread": 32,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "runs": [
+        {
+          "device_event_ms": 0.01039692759513855,
+          "device_samples_ms": [
+            0.010285183787345886,
+            0.010121343657374382,
+            0.01108723133802414,
+            0.010245183482766151,
+            0.01039692759513855,
+            0.010645183734595776,
+            0.010821760632097721,
+            0.010425408370792866,
+            0.009838080033659935
+          ],
+          "end_to_end_ms": 0.4546892003418179,
+          "end_to_end_samples_ms": [
+            0.5193205000978196,
+            0.47598450000805315,
+            0.5151090001163539,
+            0.4546892003418179,
+            0.5426022999017732,
+            0.43682140021701343,
+            0.4520483998931013,
+            0.4447662999155,
+            0.45355339971138164
+          ],
+          "run": 1
+        },
+        {
+          "device_event_ms": 0.010309120640158653,
+          "device_samples_ms": [
+            0.010108736343681812,
+            0.009224575944244862,
+            0.010277439840137959,
+            0.011717503890395164,
+            0.010499839670956135,
+            0.010468799620866776,
+            0.010309120640158653,
+            0.010605376213788986,
+            0.01000006403774023
+          ],
+          "end_to_end_ms": 0.46534989996871445,
+          "end_to_end_samples_ms": [
+            0.6501373998617055,
+            0.4810612001165282,
+            0.566328399872873,
+            0.4487694000999909,
+            0.46534989996871445,
+            0.43940709983871784,
+            0.44269709978834726,
+            0.44281970003794413,
+            0.46988760004751384
+          ],
+          "run": 2
+        }
+      ],
+      "selector_changed": false,
+      "selector_eligible": false,
+      "shape": [
+        1,
+        257
+      ],
+      "stability_fraction": {
+        "device_event_ms": 0.008517404931498137,
+        "end_to_end_ms": 0.023446124559110323
+      },
+      "stable": true,
+      "storage": "bf16",
+      "winner_consensus": false
+    },
+    {
+      "accumulation": "fp32",
+      "axis": 1,
+      "candidate": "canonical_cooperative_128",
+      "clock_conditioning_ms": [
+        0.3938142395019531,
+        0.39317920684814456,
+        0.392825927734375,
+        0.3932969665527344,
+        0.3946435165405273,
+        0.3939487838745117,
+        0.39345535278320315,
+        0.3954167938232422,
+        0.39498111724853513
+      ],
+      "compile": {
+        "cold_ms": 142.8137639995839,
+        "cold_state": "cold",
+        "entry_symbol_reproducible": true,
+        "image_digest_reproducible": true,
+        "warm_ms": 68.07040400235564,
+        "warm_state": "warm_cache"
+      },
+      "image_digest": "fac74717f21cd5b541d3ac8a6859496bf8e297adcf94070a5d57893e76b97639",
+      "keepdims": false,
+      "kind": "sum",
+      "normalized_kind": "sum",
+      "numerical": {
+        "atol": 0.02,
+        "max_abs_error": 0.0,
+        "passed": true,
+        "rtol": 0.02
+      },
+      "op": "reduction",
+      "output": "fp32",
+      "resource_fingerprint": "c18bfd2056f3c7be84642b3aa0463b01b11a4bfb730a46c6e2ee5b12204e3b38",
+      "resources": {
+        "assembly": {
+          "metrics": {
+            "registers_per_thread": 32,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 512
+          },
+          "provenance": "ptxas --arch=sm_120a -v"
+        },
+        "live_driver": {
+          "active_blocks_per_sm": 12,
+          "dynamic_shared_memory_bytes": 0,
+          "local_memory_bytes": 0,
+          "registers_per_thread": 32,
+          "static_shared_memory_bytes": 512
+        }
+      },
+      "runs": [
+        {
+          "device_event_ms": 0.00696697598323226,
+          "device_samples_ms": [
+            0.00696697598323226,
+            0.008748415857553482,
+            0.008419967256486416,
+            0.006823359988629818,
+            0.0070670717395842075,
+            0.010188544169068336,
+            0.0069402242079377174,
+            0.006812544073909521,
+            0.0065821437165141106
+          ],
+          "end_to_end_ms": 0.49086540020653047,
+          "end_to_end_samples_ms": [
+            0.5042284999944968,
+            0.4788813999766717,
+            0.5539144000067608,
+            0.48039180001069326,
+            0.45339629978116136,
+            0.5013443998905132,
+            0.49086540020653047,
+            0.46306920012284536,
+            0.5822120001539588
+          ],
+          "run": 1
+        },
+        {
+          "device_event_ms": 0.007626495789736509,
+          "device_samples_ms": [
+            0.006703999824821949,
+            0.009814208373427391,
+            0.008435647934675217,
+            0.008654080331325531,
+            0.00812812801450491,
+            0.006968704052269459,
+            0.007626495789736509,
+            0.006808639969676733,
+            0.006719999946653843
+          ],
+          "end_to_end_ms": 0.49399250019632746,
+          "end_to_end_samples_ms": [
+            0.5803259999083821,
+            0.5477771999721881,
+            0.5399589997978183,
+            0.47617060008633416,
+            0.49015000004146714,
+            0.4663094998250017,
+            0.47815379984967876,
+            0.4949940001097275,
+            0.49399250019632746
+          ],
+          "run": 2
+        }
+      ],
+      "selector_changed": false,
+      "selector_eligible": false,
+      "shape": [
+        1,
+        257
+      ],
+      "stability_fraction": {
+        "device_event_ms": 0.09466371178708612,
+        "end_to_end_ms": 0.0063705854771619035
+      },
+      "stable": false,
+      "storage": "bf16",
+      "winner_consensus": false
+    },
+    {
+      "accumulation": "fp32",
+      "axis": 1,
+      "candidate": "canonical_serial",
+      "clock_conditioning_ms": [
+        0.3937270355224609,
+        0.3936857604980469,
+        0.39452079772949217,
+        0.39390689849853516,
+        0.39356273651123047,
+        0.3935740661621094,
+        0.3947304153442383,
+        0.3940488052368164,
+        0.3941105651855469
+      ],
+      "compile": {
+        "cold_ms": 143.76886999889393,
+        "cold_state": "cold",
+        "entry_symbol_reproducible": true,
+        "image_digest_reproducible": true,
+        "warm_ms": 67.29012800133205,
+        "warm_state": "warm_cache"
+      },
+      "image_digest": "eb6164581956697a508f69eeca91013b1260fc3307b7694f6c3a859839d591d0",
+      "keepdims": true,
+      "kind": "mean",
+      "normalized_kind": "mean",
+      "numerical": {
+        "atol": 0.02,
+        "max_abs_error": 0.0,
+        "passed": true,
+        "rtol": 0.02
+      },
+      "op": "reduction",
+      "output": "fp32",
+      "resource_fingerprint": "cdc435b371c0b621bb4eea1345ad64be1be6ac622a254bb08213e05ed892f58b",
+      "resources": {
+        "assembly": {
+          "metrics": {
+            "registers_per_thread": 34,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 0
+          },
+          "provenance": "ptxas --arch=sm_120a -v"
+        },
+        "live_driver": {
+          "active_blocks_per_sm": 12,
+          "dynamic_shared_memory_bytes": 0,
+          "local_memory_bytes": 0,
+          "registers_per_thread": 34,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "runs": [
+        {
+          "device_event_ms": 0.00693472009152174,
+          "device_samples_ms": [
+            0.006796224042773247,
+            0.00693472009152174,
+            0.006774591747671366,
+            0.008059583604335785,
+            0.0066245123744010925,
+            0.007120128255337477,
+            0.008433024398982525,
+            0.006558783818036318,
+            0.007582271937280893
+          ],
+          "end_to_end_ms": 0.6234870001208037,
+          "end_to_end_samples_ms": [
+            0.6005945000651991,
+            0.7572950999019668,
+            0.6826308999734465,
+            0.5494802997418446,
+            0.6351321997499326,
+            0.5966787000943441,
+            0.636331500209053,
+            0.5005989001801936,
+            0.6234870001208037
+          ],
+          "run": 1
+        },
+        {
+          "device_event_ms": 0.00707929627969861,
+          "device_samples_ms": [
+            0.008771136403083801,
+            0.00707929627969861,
+            0.0077489279210567474,
+            0.008009599521756172,
+            0.007077568210661411,
+            0.00796697661280632,
+            0.007039039861410856,
+            0.006883903872221708,
+            0.0069393920712172985
+          ],
+          "end_to_end_ms": 0.5483491000632057,
+          "end_to_end_samples_ms": [
+            0.5150739001692273,
+            0.7440053999744123,
+            0.5818354999064468,
+            0.5377450997912092,
+            0.5483491000632057,
+            0.6397468001523521,
+            0.5117508997500408,
+            0.5196902999159647,
+            0.6068008002330316
+          ],
+          "run": 2
+        }
+      ],
+      "selector_changed": false,
+      "selector_eligible": false,
+      "shape": [
+        3,
+        17,
+        5
+      ],
+      "stability_fraction": {
+        "device_event_ms": 0.02084816492501644,
+        "end_to_end_ms": 0.1370256649439877
+      },
+      "stable": false,
+      "storage": "bf16",
+      "winner_consensus": false
+    },
+    {
+      "accumulation": "fp32",
+      "axis": 1,
+      "candidate": "canonical_cooperative_128",
+      "clock_conditioning_ms": [
+        0.3937270355224609,
+        0.3936857604980469,
+        0.39452079772949217,
+        0.39390689849853516,
+        0.39356273651123047,
+        0.3935740661621094,
+        0.3947304153442383,
+        0.3940488052368164,
+        0.3941105651855469
+      ],
+      "compile": {
+        "cold_ms": 143.26399999845307,
+        "cold_state": "cold",
+        "entry_symbol_reproducible": true,
+        "image_digest_reproducible": true,
+        "warm_ms": 71.25749899932998,
+        "warm_state": "warm_cache"
+      },
+      "image_digest": "dc740e8b23c4ec33774d86522237af385f0c479772be43be3b74bbc24e8d3550",
+      "keepdims": true,
+      "kind": "mean",
+      "normalized_kind": "mean",
+      "numerical": {
+        "atol": 0.02,
+        "max_abs_error": 0.0,
+        "passed": true,
+        "rtol": 0.02
+      },
+      "op": "reduction",
+      "output": "fp32",
+      "resource_fingerprint": "c18bfd2056f3c7be84642b3aa0463b01b11a4bfb730a46c6e2ee5b12204e3b38",
+      "resources": {
+        "assembly": {
+          "metrics": {
+            "registers_per_thread": 32,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 512
+          },
+          "provenance": "ptxas --arch=sm_120a -v"
+        },
+        "live_driver": {
+          "active_blocks_per_sm": 12,
+          "dynamic_shared_memory_bytes": 0,
+          "local_memory_bytes": 0,
+          "registers_per_thread": 32,
+          "static_shared_memory_bytes": 512
+        }
+      },
+      "runs": [
+        {
+          "device_event_ms": 0.007287424057722092,
+          "device_samples_ms": [
+            0.008623744361102581,
+            0.007287424057722092,
+            0.006908864248543978,
+            0.008507967926561832,
+            0.008754752576351166,
+            0.006899968255311251,
+            0.006590527947992086,
+            0.008807680569589138,
+            0.0067607038654387
+          ],
+          "end_to_end_ms": 0.5428955999377649,
+          "end_to_end_samples_ms": [
+            0.5179468000278575,
+            0.7751875000394648,
+            0.597147200096515,
+            0.5428955999377649,
+            0.51139269999112,
+            0.6045188998541562,
+            0.5271956000797218,
+            0.5402290997153614,
+            0.6538244997500442
+          ],
+          "run": 1
+        },
+        {
+          "device_event_ms": 0.0069729918614029884,
+          "device_samples_ms": [
+            0.006920832209289074,
+            0.009652095846831799,
+            0.0069073280319571495,
+            0.006661375984549522,
+            0.007172927726060152,
+            0.007584767881780863,
+            0.006811392027884722,
+            0.007099840324372053,
+            0.0069729918614029884
+          ],
+          "end_to_end_ms": 0.5665508997481083,
+          "end_to_end_samples_ms": [
+            0.5451902998174774,
+            0.780502799898386,
+            0.6245977001526626,
+            0.6472733999544289,
+            0.5238137000560528,
+            0.5972404000203824,
+            0.5665508997481083,
+            0.5245732998446329,
+            0.5107226003019605
+          ],
+          "run": 2
+        }
+      ],
+      "selector_changed": false,
+      "selector_eligible": false,
+      "shape": [
+        3,
+        17,
+        5
+      ],
+      "stability_fraction": {
+        "device_event_ms": 0.04509286724677726,
+        "end_to_end_ms": 0.04357246552201778
+      },
+      "stable": false,
+      "storage": "bf16",
+      "winner_consensus": false
+    },
+    {
+      "accumulation": "fp32",
+      "axis": 2,
+      "candidate": "canonical_serial",
+      "clock_conditioning_ms": [
+        0.392711181640625,
+        0.3934283065795898,
+        0.3937830352783203,
+        0.39313808441162107,
+        0.3946382522583008,
+        0.3930388641357422,
+        0.3935732650756836,
+        0.39382415771484375,
+        0.395023193359375
+      ],
+      "compile": {
+        "cold_ms": 131.03943599708145,
+        "cold_state": "cold",
+        "entry_symbol_reproducible": true,
+        "image_digest_reproducible": true,
+        "warm_ms": 68.6681890001637,
+        "warm_state": "warm_cache"
+      },
+      "image_digest": "c352887aa7c7078e0aff1752382b736c0190e4fe2385576595b5c315bdaf1a54",
+      "keepdims": false,
+      "kind": "max",
+      "normalized_kind": "max",
+      "numerical": {
+        "atol": 0.02,
+        "max_abs_error": 0.0,
+        "passed": true,
+        "rtol": 0.02
+      },
+      "op": "reduction",
+      "output": "fp32",
+      "resource_fingerprint": "a11d46e41dda875af4915e37f4f8ebec9b6f1fa068afe9552696c68ce329af06",
+      "resources": {
+        "assembly": {
+          "metrics": {
+            "registers_per_thread": 32,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 0
+          },
+          "provenance": "ptxas --arch=sm_120a -v"
+        },
+        "live_driver": {
+          "active_blocks_per_sm": 12,
+          "dynamic_shared_memory_bytes": 0,
+          "local_memory_bytes": 0,
+          "registers_per_thread": 32,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "runs": [
+        {
+          "device_event_ms": 0.006713408045470715,
+          "device_samples_ms": [
+            0.006713408045470715,
+            0.006656511686742306,
+            0.006434752140194178,
+            0.00669574411585927,
+            0.006852224003523588,
+            0.006284351926296949,
+            0.010653568431735039,
+            0.006971392314881086,
+            0.008480447344481945
+          ],
+          "end_to_end_ms": 0.5690795998816611,
+          "end_to_end_samples_ms": [
+            0.6698027002130402,
+            0.5654967997543281,
+            0.532784800088848,
+            0.4793566000444116,
+            0.5769960000179708,
+            0.5690795998816611,
+            0.6122247999883257,
+            0.501956500011147,
+            0.7700479000050109
+          ],
+          "run": 1
+        },
+        {
+          "device_event_ms": 0.007605568040162325,
+          "device_samples_ms": [
+            0.007605568040162325,
+            0.006854784209281206,
+            0.008464127779006958,
+            0.006611519958823919,
+            0.00816454365849495,
+            0.006260479800403118,
+            0.0063595520332455635,
+            0.008253696374595165,
+            0.009667648002505302
+          ],
+          "end_to_end_ms": 0.576803799776826,
+          "end_to_end_samples_ms": [
+            0.7876757001213264,
+            0.6371752999257296,
+            0.605206900218036,
+            0.5562908001593314,
+            0.5400630001531681,
+            0.576803799776826,
+            0.49467900025774725,
+            0.5094404001283692,
+            0.6151390000013635
+          ],
+          "run": 2
+        }
+      ],
+      "selector_changed": false,
+      "selector_eligible": false,
+      "shape": [
+        2,
+        5,
+        19
+      ],
+      "stability_fraction": {
+        "device_event_ms": 0.13289226405558907,
+        "end_to_end_ms": 0.013573144946280204
+      },
+      "stable": false,
+      "storage": "bf16",
+      "winner_consensus": false
+    },
+    {
+      "accumulation": "fp32",
+      "axis": 2,
+      "candidate": "canonical_cooperative_128",
+      "clock_conditioning_ms": [
+        0.392711181640625,
+        0.3934283065795898,
+        0.3937830352783203,
+        0.39313808441162107,
+        0.3946382522583008,
+        0.3930388641357422,
+        0.3935732650756836,
+        0.39382415771484375,
+        0.395023193359375
+      ],
+      "compile": {
+        "cold_ms": 135.01692700083368,
+        "cold_state": "cold",
+        "entry_symbol_reproducible": true,
+        "image_digest_reproducible": true,
+        "warm_ms": 69.19008600016241,
+        "warm_state": "warm_cache"
+      },
+      "image_digest": "97a9acbc11a329d79c26efb473da550a84c5dae05882e5021fc6308a9b76c342",
+      "keepdims": false,
+      "kind": "max",
+      "normalized_kind": "max",
+      "numerical": {
+        "atol": 0.02,
+        "max_abs_error": 0.0,
+        "passed": true,
+        "rtol": 0.02
+      },
+      "op": "reduction",
+      "output": "fp32",
+      "resource_fingerprint": "c18bfd2056f3c7be84642b3aa0463b01b11a4bfb730a46c6e2ee5b12204e3b38",
+      "resources": {
+        "assembly": {
+          "metrics": {
+            "registers_per_thread": 32,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 512
+          },
+          "provenance": "ptxas --arch=sm_120a -v"
+        },
+        "live_driver": {
+          "active_blocks_per_sm": 12,
+          "dynamic_shared_memory_bytes": 0,
+          "local_memory_bytes": 0,
+          "registers_per_thread": 32,
+          "static_shared_memory_bytes": 512
+        }
+      },
+      "runs": [
+        {
+          "device_event_ms": 0.006916351616382599,
+          "device_samples_ms": [
+            0.007396416272968054,
+            0.008239487186074257,
+            0.006717311684042215,
+            0.006730176042765379,
+            0.006535551976412535,
+            0.006916351616382599,
+            0.006888575851917267,
+            0.006928576156497002,
+            0.007700096350163221
+          ],
+          "end_to_end_ms": 0.5960906000836985,
+          "end_to_end_samples_ms": [
+            0.7793714001309127,
+            0.6544941003085114,
+            0.7244934000482317,
+            0.5199708000873215,
+            0.5162448996998137,
+            0.5565953000768786,
+            0.5960906000836985,
+            0.5236647000856465,
+            0.6400800997653278
+          ],
+          "run": 1
+        },
+        {
+          "device_event_ms": 0.007110911887139082,
+          "device_samples_ms": [
+            0.008297855965793133,
+            0.006784192286431789,
+            0.006889792159199715,
+            0.006892416160553694,
+            0.005944064352661371,
+            0.009591488167643547,
+            0.007110911887139082,
+            0.008561599999666214,
+            0.0077068801037967205
+          ],
+          "end_to_end_ms": 0.5541036000067834,
+          "end_to_end_samples_ms": [
+            0.789287699808483,
+            0.6021356999553973,
+            0.5541036000067834,
+            0.5485113000759156,
+            0.5596966999291908,
+            0.5217900001298403,
+            0.5204040997341508,
+            0.49118249989987817,
+            0.5989232999127125
+          ],
+          "run": 2
+        }
+      ],
+      "selector_changed": false,
+      "selector_eligible": false,
+      "shape": [
+        2,
+        5,
+        19
+      ],
+      "stability_fraction": {
+        "device_event_ms": 0.02813047709946278,
+        "end_to_end_ms": 0.07577463867118193
+      },
+      "stable": false,
+      "storage": "bf16",
+      "winner_consensus": false
+    },
+    {
+      "accumulation": "fp32",
+      "axis": 0,
+      "candidate": "canonical_serial",
+      "clock_conditioning_ms": [
+        0.3936449432373047,
+        0.3941009521484375,
+        0.39422672271728515,
+        0.3934414291381836,
+        0.39362464904785155,
+        0.39397262573242187,
+        0.39365345001220703,
+        0.3931108856201172,
+        0.39408031463623044
+      ],
+      "compile": {
+        "cold_ms": 132.45298100082437,
+        "cold_state": "cold",
+        "entry_symbol_reproducible": true,
+        "image_digest_reproducible": true,
+        "warm_ms": 68.01760199959972,
+        "warm_state": "warm_cache"
+      },
+      "image_digest": "fbb7e52b0b2348be2fba47b29d46c5483014cb0bf9ee87b6defb4c6040121e5f",
+      "keepdims": true,
+      "kind": "min",
+      "normalized_kind": "min",
+      "numerical": {
+        "atol": 0.02,
+        "max_abs_error": 0.0,
+        "passed": true,
+        "rtol": 0.02
+      },
+      "op": "reduction",
+      "output": "fp32",
+      "resource_fingerprint": "a11d46e41dda875af4915e37f4f8ebec9b6f1fa068afe9552696c68ce329af06",
+      "resources": {
+        "assembly": {
+          "metrics": {
+            "registers_per_thread": 32,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 0
+          },
+          "provenance": "ptxas --arch=sm_120a -v"
+        },
+        "live_driver": {
+          "active_blocks_per_sm": 12,
+          "dynamic_shared_memory_bytes": 0,
+          "local_memory_bytes": 0,
+          "registers_per_thread": 32,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "runs": [
+        {
+          "device_event_ms": 0.007565120235085487,
+          "device_samples_ms": [
+            0.00880582444369793,
+            0.0068477438762784,
+            0.007565120235085487,
+            0.007405952084809542,
+            0.009160447865724564,
+            0.009767680428922176,
+            0.006837440188974142,
+            0.006828095763921738,
+            0.00834655947983265
+          ],
+          "end_to_end_ms": 0.5420461002358934,
+          "end_to_end_samples_ms": [
+            0.5827054999826942,
+            0.5225151999184163,
+            0.6613923000259092,
+            0.5266418000246631,
+            0.5384250001952751,
+            0.49808020012278575,
+            0.5511765000846935,
+            0.5420461002358934,
+            0.5573242000536993
+          ],
+          "run": 1
+        },
+        {
+          "device_event_ms": 0.00741151999682188,
+          "device_samples_ms": [
+            0.00741151999682188,
+            0.007299456279724836,
+            0.009349184110760689,
+            0.008656639605760574,
+            0.00888198334723711,
+            0.007300416007637978,
+            0.009371328167617321,
+            0.006931839976459742,
+            0.007121151778846979
+          ],
+          "end_to_end_ms": 0.5630908999592066,
+          "end_to_end_samples_ms": [
+            0.4852238002058584,
+            0.5028186998970341,
+            0.6141138001112267,
+            0.5659344002197031,
+            0.52827020008408,
+            0.5630908999592066,
+            0.6234053998923628,
+            0.5799651000415906,
+            0.5397580000135349
+          ],
+          "run": 2
+        }
+      ],
+      "selector_changed": false,
+      "selector_eligible": false,
+      "shape": [
+        5,
+        7,
+        3
+      ],
+      "stability_fraction": {
+        "device_event_ms": 0.020724525917689224,
+        "end_to_end_ms": 0.03882474150105441
+      },
+      "stable": true,
+      "storage": "bf16",
+      "winner_consensus": false
+    },
+    {
+      "accumulation": "fp32",
+      "axis": 0,
+      "candidate": "canonical_cooperative_128",
+      "clock_conditioning_ms": [
+        0.3936449432373047,
+        0.3941009521484375,
+        0.39422672271728515,
+        0.3934414291381836,
+        0.39362464904785155,
+        0.39397262573242187,
+        0.39365345001220703,
+        0.3931108856201172,
+        0.39408031463623044
+      ],
+      "compile": {
+        "cold_ms": 135.0999429996591,
+        "cold_state": "cold",
+        "entry_symbol_reproducible": true,
+        "image_digest_reproducible": true,
+        "warm_ms": 68.26752399865654,
+        "warm_state": "warm_cache"
+      },
+      "image_digest": "6cbf64f336334be6cb7476a1c6bba835b031dc7c5631c8b2e29bedb74aa10dba",
+      "keepdims": true,
+      "kind": "min",
+      "normalized_kind": "min",
+      "numerical": {
+        "atol": 0.02,
+        "max_abs_error": 0.0,
+        "passed": true,
+        "rtol": 0.02
+      },
+      "op": "reduction",
+      "output": "fp32",
+      "resource_fingerprint": "c18bfd2056f3c7be84642b3aa0463b01b11a4bfb730a46c6e2ee5b12204e3b38",
+      "resources": {
+        "assembly": {
+          "metrics": {
+            "registers_per_thread": 32,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 512
+          },
+          "provenance": "ptxas --arch=sm_120a -v"
+        },
+        "live_driver": {
+          "active_blocks_per_sm": 12,
+          "dynamic_shared_memory_bytes": 0,
+          "local_memory_bytes": 0,
+          "registers_per_thread": 32,
+          "static_shared_memory_bytes": 512
+        }
+      },
+      "runs": [
+        {
+          "device_event_ms": 0.008934848010540009,
+          "device_samples_ms": [
+            0.010693184100091457,
+            0.0071148802526295185,
+            0.007108543999493122,
+            0.008962367661297321,
+            0.0070165120996534824,
+            0.009078016504645348,
+            0.008934848010540009,
+            0.007061311975121498,
+            0.009815296158194542
+          ],
+          "end_to_end_ms": 0.531070899887709,
+          "end_to_end_samples_ms": [
+            0.5270662000839366,
+            0.553604800006724,
+            0.7124281000869814,
+            0.523946899920702,
+            0.5188082999666221,
+            0.552926299860701,
+            0.5484297998918919,
+            0.531070899887709,
+            0.5080819999420783
+          ],
+          "run": 1
+        },
+        {
+          "device_event_ms": 0.007314047776162624,
+          "device_samples_ms": [
+            0.007314047776162624,
+            0.006508927792310715,
+            0.006795263849198818,
+            0.008624447509646416,
+            0.009838336147367954,
+            0.00877478439360857,
+            0.007107967976480722,
+            0.008621184155344963,
+            0.007294720038771629
+          ],
+          "end_to_end_ms": 0.5572969999775523,
+          "end_to_end_samples_ms": [
+            0.5232358998910058,
+            0.5695092000678414,
+            0.578961900100694,
+            0.5572969999775523,
+            0.5469204999826616,
+            0.5254477000562474,
+            0.6140673998743296,
+            0.5568274998950073,
+            0.7335105001402553
+          ],
+          "run": 2
+        }
+      ],
+      "selector_changed": false,
+      "selector_eligible": false,
+      "shape": [
+        5,
+        7,
+        3
+      ],
+      "stability_fraction": {
+        "device_event_ms": 0.2216009908575892,
+        "end_to_end_ms": 0.04938342525525067
+      },
+      "stable": false,
+      "storage": "bf16",
+      "winner_consensus": false
+    },
+    {
+      "accumulation": "fp32",
+      "axis": 1,
+      "candidate": "canonical_serial",
+      "clock_conditioning_ms": [
+        0.39466415405273436,
+        0.39297439575195314,
+        0.39373729705810545,
+        0.3946638488769531,
+        0.3942302322387695,
+        0.39393680572509765,
+        0.3938702392578125,
+        0.3927384185791016,
+        0.39402385711669924
+      ],
+      "compile": {
+        "cold_ms": 132.56009799806634,
+        "cold_state": "cold",
+        "entry_symbol_reproducible": true,
+        "image_digest_reproducible": true,
+        "warm_ms": 68.12071600143099,
+        "warm_state": "warm_cache"
+      },
+      "image_digest": "c352887aa7c7078e0aff1752382b736c0190e4fe2385576595b5c315bdaf1a54",
+      "keepdims": true,
+      "kind": "amax",
+      "normalized_kind": "max",
+      "numerical": {
+        "atol": 0.02,
+        "max_abs_error": 0.0,
+        "passed": true,
+        "rtol": 0.02
+      },
+      "op": "reduction",
+      "output": "fp32",
+      "resource_fingerprint": "a11d46e41dda875af4915e37f4f8ebec9b6f1fa068afe9552696c68ce329af06",
+      "resources": {
+        "assembly": {
+          "metrics": {
+            "registers_per_thread": 32,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 0
+          },
+          "provenance": "ptxas --arch=sm_120a -v"
+        },
+        "live_driver": {
+          "active_blocks_per_sm": 12,
+          "dynamic_shared_memory_bytes": 0,
+          "local_memory_bytes": 0,
+          "registers_per_thread": 32,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "runs": [
+        {
+          "device_event_ms": 0.007149056065827608,
+          "device_samples_ms": [
+            0.007007359992712736,
+            0.006836288142949343,
+            0.007030591834336519,
+            0.009074623696506023,
+            0.007830208167433739,
+            0.00640364782884717,
+            0.008422528393566608,
+            0.007149056065827608,
+            0.008123519830405712
+          ],
+          "end_to_end_ms": 0.5404458999691997,
+          "end_to_end_samples_ms": [
+            0.5210283998167142,
+            0.5146259998582536,
+            0.5858233998878859,
+            0.5267268999887165,
+            0.5606038001133129,
+            0.5420094999863068,
+            0.5404458999691997,
+            0.5289990000164835,
+            0.6595792001462542
+          ],
+          "run": 1
+        },
+        {
+          "device_event_ms": 0.009040064178407192,
+          "device_samples_ms": [
+            0.006610688287764788,
+            0.010222080163657665,
+            0.007828287780284882,
+            0.009979263879358768,
+            0.009173312224447727,
+            0.009174271486699581,
+            0.009040064178407192,
+            0.006657536141574383,
+            0.008200448006391525
+          ],
+          "end_to_end_ms": 0.5311824999807868,
+          "end_to_end_samples_ms": [
+            0.5293195998092415,
+            0.5311824999807868,
+            0.5373854997742455,
+            0.5102089999127202,
+            0.513013499949011,
+            0.5321923999872524,
+            0.5791883999336278,
+            0.527946199872531,
+            0.5677165998349665
+          ],
+          "run": 2
+        }
+      ],
+      "selector_changed": false,
+      "selector_eligible": false,
+      "shape": [
+        2,
+        9,
+        17
+      ],
+      "stability_fraction": {
+        "device_event_ms": 0.2645115795942037,
+        "end_to_end_ms": 0.017439204018859657
+      },
+      "stable": false,
+      "storage": "bf16",
+      "winner_consensus": false
+    },
+    {
+      "accumulation": "fp32",
+      "axis": 1,
+      "candidate": "canonical_cooperative_128",
+      "clock_conditioning_ms": [
+        0.39466415405273436,
+        0.39297439575195314,
+        0.39373729705810545,
+        0.3946638488769531,
+        0.3942302322387695,
+        0.39393680572509765,
+        0.3938702392578125,
+        0.3927384185791016,
+        0.39402385711669924
+      ],
+      "compile": {
+        "cold_ms": 135.0424379998003,
+        "cold_state": "cold",
+        "entry_symbol_reproducible": true,
+        "image_digest_reproducible": true,
+        "warm_ms": 68.99283999882755,
+        "warm_state": "warm_cache"
+      },
+      "image_digest": "97a9acbc11a329d79c26efb473da550a84c5dae05882e5021fc6308a9b76c342",
+      "keepdims": true,
+      "kind": "amax",
+      "normalized_kind": "max",
+      "numerical": {
+        "atol": 0.02,
+        "max_abs_error": 0.0,
+        "passed": true,
+        "rtol": 0.02
+      },
+      "op": "reduction",
+      "output": "fp32",
+      "resource_fingerprint": "c18bfd2056f3c7be84642b3aa0463b01b11a4bfb730a46c6e2ee5b12204e3b38",
+      "resources": {
+        "assembly": {
+          "metrics": {
+            "registers_per_thread": 32,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 512
+          },
+          "provenance": "ptxas --arch=sm_120a -v"
+        },
+        "live_driver": {
+          "active_blocks_per_sm": 12,
+          "dynamic_shared_memory_bytes": 0,
+          "local_memory_bytes": 0,
+          "registers_per_thread": 32,
+          "static_shared_memory_bytes": 512
+        }
+      },
+      "runs": [
+        {
+          "device_event_ms": 0.008219072595238686,
+          "device_samples_ms": [
+            0.00720256008207798,
+            0.007018816191703081,
+            0.009055743925273418,
+            0.011716480366885662,
+            0.007215743884444237,
+            0.006788799539208412,
+            0.00857753586024046,
+            0.008434368297457695,
+            0.008219072595238686
+          ],
+          "end_to_end_ms": 0.5433493002783507,
+          "end_to_end_samples_ms": [
+            0.5177284998353571,
+            0.5311452998284949,
+            0.5038333001721185,
+            0.5470980999234598,
+            0.5695652998838341,
+            0.5527677003556164,
+            0.5433493002783507,
+            0.5035330999817234,
+            0.6566168998688227
+          ],
+          "run": 1
+        },
+        {
+          "device_event_ms": 0.008466367609798908,
+          "device_samples_ms": [
+            0.009420479647815228,
+            0.007883711718022823,
+            0.008466367609798908,
+            0.007129792124032974,
+            0.009652223438024521,
+            0.008999488316476345,
+            0.0075023360550403595,
+            0.007316991686820984,
+            0.009746496565639973
+          ],
+          "end_to_end_ms": 0.5252936000033515,
+          "end_to_end_samples_ms": [
+            0.5233839998254552,
+            0.5252936000033515,
+            0.5548793000343721,
+            0.5131172998517286,
+            0.5086054999992484,
+            0.5415809999249177,
+            0.5167090999748325,
+            0.5364087002817541,
+            0.5381276998377871
+          ],
+          "run": 2
+        }
+      ],
+      "selector_changed": false,
+      "selector_eligible": false,
+      "shape": [
+        2,
+        9,
+        17
+      ],
+      "stability_fraction": {
+        "device_event_ms": 0.030087946260929827,
+        "end_to_end_ms": 0.03437258758698765
+      },
+      "stable": true,
+      "storage": "bf16",
+      "winner_consensus": false
+    },
+    {
+      "accumulation": "fp32",
+      "axis": 1,
+      "candidate": "canonical_serial",
+      "clock_conditioning_ms": [
+        0.39405471801757813,
+        0.3951657485961914,
+        0.39437313079833985,
+        0.39420318603515625,
+        0.39509632110595705,
+        0.3938854217529297,
+        0.3941262435913086,
+        0.39382911682128907,
+        0.3937675094604492
+      ],
+      "compile": {
+        "cold_ms": 131.53368499843054,
+        "cold_state": "cold",
+        "entry_symbol_reproducible": true,
+        "image_digest_reproducible": true,
+        "warm_ms": 69.32377500197617,
+        "warm_state": "warm_cache"
+      },
+      "image_digest": "fbb7e52b0b2348be2fba47b29d46c5483014cb0bf9ee87b6defb4c6040121e5f",
+      "keepdims": false,
+      "kind": "amin",
+      "normalized_kind": "min",
+      "numerical": {
+        "atol": 0.02,
+        "max_abs_error": 0.0,
+        "passed": true,
+        "rtol": 0.02
+      },
+      "op": "reduction",
+      "output": "fp32",
+      "resource_fingerprint": "a11d46e41dda875af4915e37f4f8ebec9b6f1fa068afe9552696c68ce329af06",
+      "resources": {
+        "assembly": {
+          "metrics": {
+            "registers_per_thread": 32,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 0
+          },
+          "provenance": "ptxas --arch=sm_120a -v"
+        },
+        "live_driver": {
+          "active_blocks_per_sm": 12,
+          "dynamic_shared_memory_bytes": 0,
+          "local_memory_bytes": 0,
+          "registers_per_thread": 32,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "runs": [
+        {
+          "device_event_ms": 0.006692927796393633,
+          "device_samples_ms": [
+            0.007099520415067673,
+            0.0064510079100728035,
+            0.006192448083311319,
+            0.009022784419357777,
+            0.006773248314857483,
+            0.007123968098312616,
+            0.006692927796393633,
+            0.006688320077955723,
+            0.0065071359276771545
+          ],
+          "end_to_end_ms": 0.5939871000009589,
+          "end_to_end_samples_ms": [
+            0.5392547998781083,
+            0.6371165000018664,
+            0.5338298000424402,
+            0.5512914998689666,
+            0.6493230001069605,
+            0.5047793001722312,
+            0.6693586998153478,
+            0.5939871000009589,
+            0.6495362002169713
+          ],
+          "run": 1
+        },
+        {
+          "device_event_ms": 0.007078271824866533,
+          "device_samples_ms": [
+            0.006898303981870413,
+            0.007078271824866533,
+            0.009035136550664902,
+            0.008582464419305325,
+            0.006741248071193695,
+            0.006531263701617718,
+            0.00873324740678072,
+            0.006294911727309227,
+            0.008431104011833668
+          ],
+          "end_to_end_ms": 0.5315040001732996,
+          "end_to_end_samples_ms": [
+            0.5291346999001689,
+            0.5184514997381484,
+            0.5138903001352446,
+            0.532961299904855,
+            0.6181521999678807,
+            0.5160311000508955,
+            0.5315040001732996,
+            0.6300200999248773,
+            0.5366519999370212
+          ],
+          "run": 2
+        }
+      ],
+      "selector_changed": false,
+      "selector_eligible": false,
+      "shape": [
+        2,
+        9,
+        17
+      ],
+      "stability_fraction": {
+        "device_event_ms": 0.05757480734821856,
+        "end_to_end_ms": 0.11755903964464309
+      },
+      "stable": false,
+      "storage": "bf16",
+      "winner_consensus": false
+    },
+    {
+      "accumulation": "fp32",
+      "axis": 1,
+      "candidate": "canonical_cooperative_128",
+      "clock_conditioning_ms": [
+        0.39405471801757813,
+        0.3951657485961914,
+        0.39437313079833985,
+        0.39420318603515625,
+        0.39509632110595705,
+        0.3938854217529297,
+        0.3941262435913086,
+        0.39382911682128907,
+        0.3937675094604492
+      ],
+      "compile": {
+        "cold_ms": 138.331473001017,
+        "cold_state": "cold",
+        "entry_symbol_reproducible": true,
+        "image_digest_reproducible": true,
+        "warm_ms": 68.14233199838782,
+        "warm_state": "warm_cache"
+      },
+      "image_digest": "6cbf64f336334be6cb7476a1c6bba835b031dc7c5631c8b2e29bedb74aa10dba",
+      "keepdims": false,
+      "kind": "amin",
+      "normalized_kind": "min",
+      "numerical": {
+        "atol": 0.02,
+        "max_abs_error": 0.0,
+        "passed": true,
+        "rtol": 0.02
+      },
+      "op": "reduction",
+      "output": "fp32",
+      "resource_fingerprint": "c18bfd2056f3c7be84642b3aa0463b01b11a4bfb730a46c6e2ee5b12204e3b38",
+      "resources": {
+        "assembly": {
+          "metrics": {
+            "registers_per_thread": 32,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 512
+          },
+          "provenance": "ptxas --arch=sm_120a -v"
+        },
+        "live_driver": {
+          "active_blocks_per_sm": 12,
+          "dynamic_shared_memory_bytes": 0,
+          "local_memory_bytes": 0,
+          "registers_per_thread": 32,
+          "static_shared_memory_bytes": 512
+        }
+      },
+      "runs": [
+        {
+          "device_event_ms": 0.007486336398869753,
+          "device_samples_ms": [
+            0.009143296629190445,
+            0.00918617658317089,
+            0.006754047702997923,
+            0.007486336398869753,
+            0.007286208216100931,
+            0.007180031854659319,
+            0.007042431738227606,
+            0.008527487516403198,
+            0.00814854446798563
+          ],
+          "end_to_end_ms": 0.5547769997065188,
+          "end_to_end_samples_ms": [
+            0.5543687999306712,
+            0.555525699746795,
+            0.5646923997119302,
+            0.5547769997065188,
+            0.6141490001027705,
+            0.4685518000769662,
+            0.5239262998657068,
+            0.621572900126921,
+            0.515442100004293
+          ],
+          "run": 1
+        },
+        {
+          "device_event_ms": 0.007018303964287043,
+          "device_samples_ms": [
+            0.00809235218912363,
+            0.006942399777472019,
+            0.00786207988858223,
+            0.006864064373075962,
+            0.010447359643876553,
+            0.006805120036005974,
+            0.009294976480305195,
+            0.0069435518234968185,
+            0.007018303964287043
+          ],
+          "end_to_end_ms": 0.5420288998720935,
+          "end_to_end_samples_ms": [
+            0.5479305000335444,
+            0.5172910998226143,
+            0.5113570998219075,
+            0.54525499981537,
+            0.6103386000177125,
+            0.5379066999012139,
+            0.5420288998720935,
+            0.6528407997393515,
+            0.5196084002818679
+          ],
+          "run": 2
+        }
+      ],
+      "selector_changed": false,
+      "selector_eligible": false,
+      "shape": [
+        2,
+        9,
+        17
+      ],
+      "stability_fraction": {
+        "device_event_ms": 0.06668739868838888,
+        "end_to_end_ms": 0.023519225335463915
+      },
+      "stable": false,
+      "storage": "bf16",
+      "winner_consensus": false
+    }
+  ],
+  "schema": "tessera.nvidia.bf16-reduction-breadth.v1",
+  "selector_promotions": [],
+  "stability_policy": {
+    "relative_fraction": 0.04,
+    "required_domains": [
+      "device_event_ms",
+      "end_to_end_ms"
+    ],
+    "runs": 2
+  },
+  "work_item": "NVIDIA-BF16-CANONICAL-BREADTH"
+}

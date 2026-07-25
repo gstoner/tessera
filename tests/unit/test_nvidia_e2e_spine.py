@@ -13,6 +13,7 @@ from tessera.compiler.nvidia_native import (
     emit_attention_tile_ir,
     emit_f16_softmax_tile_ir,
     emit_f32_softmax_tile_ir,
+    emit_softmax_tile_ir,
     emit_nvfp4_matmul_tile_ir,
     emit_reduce_tile_ir,
     emit_matmul_tile_ir,
@@ -29,6 +30,7 @@ from tessera.compiler.nvidia_native import (
     requests_nvfp4_matmul,
     requests_paged_kv_read,
     supports_bf16_matmul,
+    supports_bf16_softmax,
     supports_attention,
     supports_attention_backward,
     supports_f16_matmul,
@@ -186,7 +188,7 @@ def _softmax_module(
     dtype: str = "fp32",
     axis: int = -1,
 ) -> GraphIRModule:
-    mlir_dtype = "f32" if dtype == "fp32" else "f16"
+    mlir_dtype = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[dtype]
     dims = "x".join(str(dim) for dim in shape)
     x = IRType(f"tensor<{dims}x{mlir_dtype}>", tuple(map(str, shape)), dtype)
     return GraphIRModule(
@@ -218,6 +220,7 @@ def test_sm120_softmax_packager_owns_typed_precision_and_axis_contract() -> None
     assert supports_op("nvidia_sm120", "tessera.softmax_safe", dtype="fp16").supported
     assert supports_f32_softmax(module)
     assert supports_f16_softmax(_softmax_module(dtype="fp16"))
+    assert supports_bf16_softmax(_softmax_module(dtype="bf16"))
     assert not supports_f32_softmax(_softmax_module(dtype="fp16"))
     assert not supports_f16_softmax(module)
     assert not supports_f32_softmax(_softmax_module(axis=0))
@@ -230,6 +233,10 @@ def test_sm120_softmax_packager_owns_typed_precision_and_axis_contract() -> None
     f16_source = emit_f16_softmax_tile_ir(entry="tessera_tile_softmax_f16")
     assert 'storage = "f16", accum = "f32", axis = -1' in f16_source
     assert "llvm.func @tessera_tile_softmax_f16" in f16_source
+    bf16_source = emit_softmax_tile_ir(
+        entry="tessera_tile_softmax_bf16", storage="bf16"
+    )
+    assert 'storage = "bf16", accum = "f32", axis = -1' in bf16_source
 
 
 def _attention_module(
@@ -237,7 +244,7 @@ def _attention_module(
     bias: bool = False, window: tuple[int, int] | None = None,
     softcap: float = 0.0, dropout_p: float = 0.0,
 ) -> GraphIRModule:
-    storage_ir = "f16" if dtype == "fp16" else "f32"
+    storage_ir = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[dtype]
     q = IRType(f"tensor<1x{hq}x5x8x{storage_ir}>", ("1", str(hq), "5", "8"), dtype)
     k = IRType(f"tensor<1x{hkv}x7x8x{storage_ir}>", ("1", str(hkv), "7", "8"), dtype)
     v = IRType(f"tensor<1x{hkv}x7x6x{storage_ir}>", ("1", str(hkv), "7", "6"), dtype)
@@ -262,14 +269,15 @@ def _attention_module(
     )])
 
 
-@pytest.mark.parametrize("dtype", ["fp16", "fp32"])
+@pytest.mark.parametrize("dtype", ["fp16", "bf16", "fp32"])
 @pytest.mark.parametrize("causal", [False, True])
 def test_sm120_attention_owns_storage_accum_scale_causal_and_gqa(dtype, causal) -> None:
     module = _attention_module(dtype=dtype, causal=causal)
     assert requests_attention(module)
     assert supports_attention(module)
     source = emit_attention_tile_ir(
-        entry="attention", storage="f16" if dtype == "fp16" else "f32",
+        entry="attention",
+        storage={"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[dtype],
         scale=0.3535533905932738, causal=causal,
     )
     assert "tile.attention_kernel" in source
@@ -304,7 +312,7 @@ def test_sm120_attention_owns_bias_window_softcap_and_dropout_contract() -> None
 
 def _attention_backward_module(*, bias: bool = False, dtype: str = "fp32",
                                dropout_p: float = 0.0) -> GraphIRModule:
-    ir = "f16" if dtype == "fp16" else "f32"
+    ir = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[dtype]
     q = IRType(f"tensor<1x2x3x4x{ir}>", ("1", "2", "3", "4"), dtype)
     k = IRType(f"tensor<1x1x4x4x{ir}>", ("1", "1", "4", "4"), dtype)
     v = IRType(f"tensor<1x1x4x3x{ir}>", ("1", "1", "4", "3"), dtype)
@@ -348,11 +356,11 @@ def test_sm120_attention_backward_owns_determinism_and_workspace_contract() -> N
     assert not supports_attention_backward(bad)
 
 
-@pytest.mark.parametrize("dtype", ["fp16", "fp32"])
+@pytest.mark.parametrize("dtype", ["fp16", "bf16", "fp32"])
 def test_sm120_attention_backward_owns_storage_and_dropout_replay(dtype) -> None:
     module = _attention_backward_module(dtype=dtype, dropout_p=0.25)
     assert supports_attention_backward(module)
-    storage = "f16" if dtype == "fp16" else "f32"
+    storage = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[dtype]
     source = emit_attention_backward_tile_ir(
         entry="attention_backward_dropout", storage=storage,
         scale=0.5, causal=True, dropout_p=0.25, dropout_seed=91,
@@ -415,7 +423,7 @@ def _reduction_module(
     axis: int = -1,
     keepdims: bool = False,
 ) -> GraphIRModule:
-    storage_ir = "f16" if dtype == "fp16" else "f32"
+    storage_ir = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[dtype]
     x = IRType(f"tensor<3x5x17x{storage_ir}>", ("3", "5", "17"), dtype)
     normalized_axis = axis % 3
     input_shape = ("3", "5", "17")
@@ -448,16 +456,16 @@ def _reduction_module(
     )
 
 
-@pytest.mark.parametrize("kind", ["sum", "mean", "max", "amax"])
-@pytest.mark.parametrize("dtype", ["fp16", "fp32"])
+@pytest.mark.parametrize("kind", ["sum", "mean", "max", "min", "amax", "amin"])
+@pytest.mark.parametrize("dtype", ["fp16", "bf16", "fp32"])
 def test_sm120_reduction_owns_kind_precision_axis_and_nan_contract(kind, dtype) -> None:
     module = _reduction_module(dtype=dtype, kind=kind)
     assert requests_reduction(module)
     assert supports_reduction(module)
-    physical_kind = "max" if kind == "amax" else kind
+    physical_kind = {"amax": "max", "amin": "min"}.get(kind, kind)
     source = emit_reduce_tile_ir(
         entry=f"reduce_{physical_kind}",
-        storage="f16" if dtype == "fp16" else "f32",
+        storage={"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[dtype],
         kind=physical_kind,
     )
     assert "tile.reduce_kernel" in source
@@ -509,6 +517,9 @@ def test_sm120_nvfp4_native_packager_owns_scales_and_k64_contract() -> None:
     assert "tile.matmul_kernel %a, %b, %scale_a, %scale_b, %d" in source
     assert 'm = 16, n = 8, k = 64, a = "nvfp4", b = "nvfp4"' in source
     assert 'warps = 1 : i64, staging = "global"' in source
+    assert "tessera.storage_packed = true" in source
+    assert 'logical = "nvfp4"' in source
+    assert 'container = "int8", factor = 2 : i64' in source
 
 
 def _mx_matmul_module(dtype: str, *, scale_k: int = 2) -> GraphIRModule:
@@ -569,6 +580,9 @@ def test_sm120_mx_packager_contract_is_distinct_from_nvfp4(
     assert 'family = "mma_sync"' in source
     assert f'k = {fragment_k}, a = "{physical}", b = "{physical}"' in source
     assert "scale_a" in source and "scale_b" in source
+    factor = 2 if dtype == "fp4_e2m1" else 1
+    assert f'logical = "{dtype}"' in source
+    assert f'container = "int8", factor = {factor} : i64' in source
     assert not requests_nvfp4_matmul(module)
     assert not supports_mx_matmul(_mx_matmul_module(dtype, scale_k=3))
 

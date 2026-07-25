@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-24
+last_updated: 2026-07-25
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
@@ -1524,3 +1524,29 @@ parameter storage. NVIDIA owns the CUDA-context capacity/free-memory query,
 FP16/BF16 PTX training ABIs, serialized dynamic-shared launch expressions, and
 SM120 measurements. None transfers to HIP/AMDGPU or changes ROCm execution,
 LDS sizing, rematerialization policy, selectors, or exact-device claims.
+
+Cross-backend sync `NVIDIA-BF16-CANONICAL-BREADTH-2026-07-25` widens the
+shared Tile softmax and attention verifier envelope to BF16 storage with FP32
+accumulation and preserves the shared BF16 reduction/min contract. ROCm parity
+is validated at the semantic boundary: gfx1151 already owns exact-device
+f16/bf16/f32 reduction proof, while any use of the widened softmax or attention
+carrier remains architecture-owned and must pass through ROCDL/HSACO with
+gfx1151 evidence. NVIDIA's PTX descriptors, serial/cooperative-128 schedules,
+CUDA launch ABI, SM120 resource packet, timing, and selector disposition do
+not transfer. No ROCm capability, execution row, schedule, or selector changes.
+
+The NVIDIA continuation adds its architecture-owned compiler/PTX BF16
+normalization image and a physical CUDA consumer of the shared
+`tessera.storage_pack` descriptor for scale-bearing NVFP4/MXFP4/FP6. ROCm
+descriptor-schema parity remains validated by its existing WMMA int4/int8
+consumer; NVIDIA's format-defined signedness, scale ABI, packing loads,
+resources, and SM120 evidence do not transfer to RDNA. No ROCm pipeline,
+capability, execution row, schedule, or selector changes.
+
+Cross-backend sync `NVIDIA-PACKED-MATH-2026-07-25` consumes the existing shared
+signed-INT4 `tessera.storage_pack` schema in a CUDA-owned correctness schedule
+and adds a typed internal Tile carrier for a bounded CUDA Math subset. Shared
+descriptor semantics are parity validated, but NVIDIA's packed A/B layout,
+PTX instructions, CUDA launch ABI, resources, cache proof, and SM120 execution
+do not transfer to HIP/AMDGPU. ROCm's independent WMMA INT4 consumer remains
+authoritative; no ROCm pipeline, capability, schedule, or selector changes.

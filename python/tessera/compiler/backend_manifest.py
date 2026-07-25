@@ -2240,29 +2240,28 @@ _NVIDIA_DEVICE_VERIFIED_JIT: dict[str, dict[str, Any]] = {
         "notes": "Dedicated fused MLA CUDA kernel on sm_120. The down-projection and K/V up-projections are evaluated inside the online-softmax key loop without materializing expanded K/V buffers.",
     },
     "flash_attn": {
-        "dtypes": ("fp32",),
-        "feature_flags": ("flash_attention", "flash_attention_backward", "gqa", "mqa", "causal", "sliding_window", "attn_bias", "logit_softcap", "cuda"),
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("flash_attention", "flash_attention_backward", "gqa", "mqa", "causal", "sliding_window", "attn_bias", "logit_softcap", "dropout", "compiler_owned_ptx", "cuda"),
         "shape_envelope": "Q[B,Hq,Sq,D], K[B,Hkv,Sk,D], V[B,Hkv,Sk,Dv]; Hq % Hkv == 0; Dv <= 256; optional dense [B,Hq,Sq,Sk] bias",
-        "notes": "Compiler-emitted CUDA online-softmax Flash Attention forward and VJP with f32/fp16 storage, f32 softmax/accumulation, explicit MHA/GQA/MQA KV-head mapping, causal or sliding-window masking, dense additive bias, and logit soft-cap. Backward recomputes softmax statistics and produces dQ/dK/dV with atomic shared-KV accumulation. Executes via runtime.launch() on consumer Blackwell sm_120.",
+        "notes": "Compiler-owned SM120 PTX image/descriptor forward and deterministic VJP with f32/fp16/bf16 storage and f32 softmax/accumulation; explicit MHA/GQA/MQA mapping, causal/sliding-window masks, dense bias, logit soft-cap, and reproducible dropout replay.",
     },
     "softmax": {
-        "dtypes": ("fp32",),
-        "feature_flags": ("reduction", "cuda"),
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("reduction", "compiler_owned_ptx", "cuda"),
         "shape_envelope": "rank >= 1, last axis > 0; flattened rows with any K",
         "notes": (
-            "Stable row-softmax emitted as CUDA (f32/f16 storage, f32 max/sum "
-            "reduction; one block per flattened row), nvcc-compiled and launched via runtime.launch() "
-            "on consumer Blackwell sm_120."
+            "Stable row-softmax emitted through the compiler-owned SM120 PTX "
+            "image/descriptor seam with f32/f16/bf16 storage and f32 max/sum."
         ),
     },
     **{op: {
-        "dtypes": ("fp32", "fp16"),
-        "feature_flags": ("reduction", "cuda"),
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("reduction", "compiler_owned_ptx", "cuda"),
         "shape_envelope": "rank >= 1, last axis > 0; flattened rows with any K",
         "notes": (
-            "f32/f16-storage row-wise " + kind + " emitted as CUDA (one block per "
-            "flattened row; f32 accumulation; LayerNorm uses a stable two-pass variance), "
-            "nvcc-compiled and launched via runtime.launch() on consumer Blackwell sm_120. "
+            "Compiler-owned SM120 PTX row-wise " + kind + " with "
+            "f32/f16/bf16 storage and f32 statistics/accumulation; LayerNorm "
+            "uses a stable two-pass variance. "
             "Dynamic affine f32/f16/bf16 backward uses the compiler-owned PTX "
             "descriptor seam with f32 accumulation."
         ),
@@ -2295,10 +2294,12 @@ _NVIDIA_DEVICE_VERIFIED_JIT: dict[str, dict[str, Any]] = {
                  "with the parameter/state update; selector remains unchanged.",
     } for op in ("training.loss_sgd", "training.loss_adamw")},
     **{op: {
-        "dtypes": ("fp32", "fp16"), "feature_flags": ("reduction", "cuda"),
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("reduction", "compiler_owned_ptx", "cuda"),
         "shape_envelope": "rank >= 1, non-empty reduced axis; arbitrary axis folded to rows",
-        "notes": "f32/f16-storage, f32-accumulating " + kind + " reduction emitted as CUDA (one block per folded row), "
-                 "nvcc-compiled and launched via runtime.launch() on consumer Blackwell sm_120.",
+        "notes": "f32/f16/bf16-storage, f32-accumulating " + kind
+                 + " reduction emitted through compiler-owned SM120 PTX; serial "
+                 "and cooperative-128 schedules cover arbitrary axes/keepdims.",
     } for op, kind in (("sum", "sum"), ("mean", "mean"), ("max", "max"),
                        ("min", "min"), ("amax", "max"), ("amin", "min"))},
 }

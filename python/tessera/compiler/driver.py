@@ -439,6 +439,8 @@ def compile_graph_module(
             package_matmul,
             package_mx_matmul,
             package_nvfp4_matmul,
+            package_int4_matmul,
+            package_norm,
             package_reduction,
             package_softmax,
             requests_mx_matmul,
@@ -446,6 +448,8 @@ def compile_graph_module(
             requests_attention_backward,
             requests_paged_kv_read,
             requests_nvfp4_matmul,
+            requests_int4_matmul,
+            requests_norm,
             requests_reduction,
             requests_softmax,
         )
@@ -456,11 +460,13 @@ def compile_graph_module(
         )
         package_start = time.perf_counter()
         is_nvfp4 = requests_nvfp4_matmul(module)
+        is_int4 = requests_int4_matmul(module)
         is_mx = requests_mx_matmul(module)
         is_attention = requests_attention(module)
         is_attention_backward = requests_attention_backward(module)
         is_paged_kv = requests_paged_kv_read(module)
         is_softmax = requests_softmax(module)
+        is_norm = requests_norm(module)
         is_reduction = requests_reduction(module)
         if is_attention_backward:
             nvidia_package = package_attention_backward(module, pipeline_name=producer)
@@ -474,6 +480,9 @@ def compile_graph_module(
         elif is_softmax:
             nvidia_package = package_softmax(module, pipeline_name=producer)
             package_dtype = nvidia_package.descriptor.buffers[0].dtype
+        elif is_norm:
+            nvidia_package = package_norm(module, pipeline_name=producer)
+            package_dtype = nvidia_package.descriptor.buffers[0].dtype
         elif is_reduction:
             nvidia_package = package_reduction(
                 module,
@@ -484,6 +493,9 @@ def compile_graph_module(
         elif is_nvfp4:
             nvidia_package = package_nvfp4_matmul(module, pipeline_name=producer)
             package_dtype = "nvfp4"
+        elif is_int4:
+            nvidia_package = package_int4_matmul(module, pipeline_name=producer)
+            package_dtype = "int4"
         elif is_mx:
             nvidia_package = package_mx_matmul(module, pipeline_name=producer)
             storage_value = nvidia_package.descriptor.provenance["storage"]

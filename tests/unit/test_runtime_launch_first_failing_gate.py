@@ -53,9 +53,13 @@ def _unsupported_artifact(target: str, op: str = "matmul") -> RuntimeArtifact:
 
 # ---- audit-named cases ----
 
+
 def test_nvidia_unsupported_launch_names_toolchain_gate():
+    from tessera.compiler import pipeline_gates as pg
+
     art = _unsupported_artifact("nvidia_sm90", "matmul")
-    result = launch(art, args={})
+    with pg.deterministic_host_for_dashboard():
+        result = launch(art, args={})
     assert result["ok"] is False
     # The named gate appears as a structured key…
     assert result["first_failing_gate"] == "toolchain", result
@@ -73,6 +77,7 @@ def test_rocm_unsupported_launch_names_toolchain_gate():
     # both the Apple dev box and the Ubuntu ROCm 7.2.4 box (where hipcc is
     # live-present, so the live named blocker is instead `link`).
     from tessera.compiler import pipeline_gates as pg
+
     art = _unsupported_artifact("rocm", "matmul")
     with pg.deterministic_host_for_dashboard():
         result = launch(art, args={})
@@ -83,6 +88,7 @@ def test_rocm_unsupported_launch_names_toolchain_gate():
 
 
 # ---- shape guards ----
+
 
 def test_unsupported_response_carries_structured_gate_fields():
     """Every unsupported response must carry the two structured keys —
@@ -108,7 +114,8 @@ def test_unsupported_status_stays_honest():
         result = launch(art, args={})
         assert result["ok"] is False
         assert result["runtime_status"] in ("unimplemented", "missing_backend"), (
-            f"{target}: status {result['runtime_status']!r}")
+            f"{target}: status {result['runtime_status']!r}"
+        )
 
 
 def test_reason_string_points_at_conformance_dashboard():
@@ -127,7 +134,10 @@ def test_op_name_extracted_from_ops_metadata():
     is `ready`/`fused` on apple_gpu) than matmul, but on NVIDIA both fail at
     toolchain — so the gate name should be stable across these ops while the
     detail string remains anchored to nvcc."""
+    from tessera.compiler import pipeline_gates as pg
+
     art = _unsupported_artifact("nvidia_sm90", "softmax")
-    result = launch(art, args={})
+    with pg.deterministic_host_for_dashboard():
+        result = launch(art, args={})
     assert result["first_failing_gate"] == "toolchain"
     assert "nvcc" in result["first_failing_gate_detail"]

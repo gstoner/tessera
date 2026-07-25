@@ -47,20 +47,22 @@ def _report(target: str = "nvidia_sm120", architecture: str = "sm_120a") -> dict
     benchmarks = []
     for domain in ("device_event", "end_to_end"):
         run_medians = [990.0, 1010.0] if domain == "device_event" else [1980.0, 2020.0]
-        benchmarks.append({
-            "family": "softmax",
-            "route": "canonical_descriptor",
-            "timing_domain": domain,
-            "median_ns": 1000.0 if domain == "device_event" else 2000.0,
-            "run_medians_ns": run_medians,
-            "stability_limit_pct": 5.0,
-            "stable": True,
-            "selected": True,
-            "repetitions": 20,
-            "warmups": 2,
-            "discard_first": True,
-            "resource_fingerprint": _digest(f"{target}:resources"),
-        })
+        benchmarks.append(
+            {
+                "family": "softmax",
+                "route": "canonical_descriptor",
+                "timing_domain": domain,
+                "median_ns": 1000.0 if domain == "device_event" else 2000.0,
+                "run_medians_ns": run_medians,
+                "stability_limit_pct": 5.0,
+                "stable": True,
+                "selected": True,
+                "repetitions": 20,
+                "warmups": 2,
+                "discard_first": True,
+                "resource_fingerprint": _digest(f"{target}:resources"),
+            }
+        )
     return {
         "schema": REPORT_SCHEMA,
         "target": target,
@@ -70,33 +72,48 @@ def _report(target: str = "nvidia_sm120", architecture: str = "sm_120a") -> dict
         "toolchain_fingerprint": f"toolchain:{target}",
         "scope": ["softmax"],
         "required_timing_domains": ["device_event", "end_to_end"],
-        "fixtures": [{
-            "fixture_id": "softmax",
-            "levels": {"a": "proven", "b": "proven", "c": "proven"},
-            "actual": [[0.5, 0.5], [0.5, 0.5]],
-            "image_digest": image,
-            "descriptor_digest": descriptor,
-        }],
-        "cache_proofs": [{
-            "fixture_id": "softmax",
-            "cold": {
-                "compile_state": "cold", "cache_key": cache_key,
-                "image_digest": image, "descriptor_digest": descriptor,
-            },
-            "warm": {
-                "compile_state": "warm_cache", "cache_key": cache_key,
-                "image_digest": image, "descriptor_digest": descriptor,
-            },
-        }],
+        "fixtures": [
+            {
+                "fixture_id": "softmax",
+                "levels": {"a": "proven", "b": "proven", "c": "proven"},
+                "actual": [[0.5, 0.5], [0.5, 0.5]],
+                "image_digest": image,
+                "descriptor_digest": descriptor,
+            }
+        ],
+        "cache_proofs": [
+            {
+                "fixture_id": "softmax",
+                "cold": {
+                    "compile_state": "cold",
+                    "cache_key": cache_key,
+                    "image_digest": image,
+                    "descriptor_digest": descriptor,
+                },
+                "warm": {
+                    "compile_state": "warm_cache",
+                    "cache_key": cache_key,
+                    "image_digest": image,
+                    "descriptor_digest": descriptor,
+                },
+            }
+        ],
         "benchmarks": benchmarks,
     }
 
 
 def test_checked_in_differential_fixture_corpus_is_valid() -> None:
     corpus = load_fixture_corpus()
-    assert len(corpus) >= 5
+    assert len(corpus) >= 8
     assert {row["family"] for row in corpus.values()} >= {
-        "matmul", "softmax", "reduction", "paged_kv", "moe",
+        "matmul",
+        "softmax",
+        "reduction",
+        "epilogue",
+        "attention",
+        "paged_kv",
+        "replay_ssm",
+        "moe",
     }
 
 
@@ -152,21 +169,32 @@ def test_cross_backend_differential_compares_common_actual_values() -> None:
     }
     same_target = _report("x86", "x86_64_base")
     avx512 = _report("x86", "x86_64_avx512")
-    assert compare_backend_reports(
-        same_target, avx512, fixtures=_fixtures(),
-    )["common_fixtures"] == 1
+    assert (
+        compare_backend_reports(
+            same_target,
+            avx512,
+            fixtures=_fixtures(),
+        )["common_fixtures"]
+        == 1
+    )
     right["fixtures"][0]["actual"][0][0] = 0.50001
     with pytest.raises(FleetEvidenceError, match="fails its numerical policy"):
         compare_backend_reports(left, right, fixtures=_fixtures())
 
 
 def test_packet_seal_is_deterministic_and_tamper_evident(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fixture_path = tmp_path / "fixtures.json"
-    fixture_path.write_text(json.dumps({
-        "schema": FIXTURE_SCHEMA, "fixtures": list(_fixtures().values()),
-    }))
+    fixture_path.write_text(
+        json.dumps(
+            {
+                "schema": FIXTURE_SCHEMA,
+                "fixtures": list(_fixtures().values()),
+            }
+        )
+    )
     monkeypatch.setattr("tessera.compiler.e2e_fleet.FIXTURE_PATH", fixture_path)
     packet = tmp_path / "packet"
     packet.mkdir()
@@ -184,12 +212,18 @@ def test_packet_seal_is_deterministic_and_tamper_evident(
 
 
 def test_packet_rejects_symlinked_attachments(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fixture_path = tmp_path / "fixtures.json"
-    fixture_path.write_text(json.dumps({
-        "schema": FIXTURE_SCHEMA, "fixtures": list(_fixtures().values()),
-    }))
+    fixture_path.write_text(
+        json.dumps(
+            {
+                "schema": FIXTURE_SCHEMA,
+                "fixtures": list(_fixtures().values()),
+            }
+        )
+    )
     monkeypatch.setattr("tessera.compiler.e2e_fleet.FIXTURE_PATH", fixture_path)
     packet = tmp_path / "packet"
     packet.mkdir()

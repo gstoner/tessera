@@ -33,6 +33,14 @@ int tessera_nvidia_ptx_invoke(const char* kernel_name,
                               void** buffers, size_t num_buffers,
                               const int64_t* dims, size_t num_dims);
 
+// Dynamic-shared-memory variant. ``dynamic_shared_bytes`` is passed directly
+// to cuLaunchKernel after the kernel ABI validates the compiler-owned launch
+// expression.
+int tessera_nvidia_ptx_invoke_v2(const char* kernel_name,
+                                 void** buffers, size_t num_buffers,
+                                 const int64_t* dims, size_t num_dims,
+                                 size_t dynamic_shared_bytes);
+
 // Benchmark a registered Tile GEMM with device-resident buffers. Host inputs are
 // copied once before warmup; CUDA events time only ``repetitions`` kernel
 // launches. Returns the mean device latency in ``latency_ms``.
@@ -41,6 +49,27 @@ int tessera_nvidia_ptx_benchmark(const char* kernel_name,
                                  const int64_t* dims, size_t num_dims,
                                  int warmup, int repetitions,
                                  float* latency_ms);
+
+int tessera_nvidia_ptx_benchmark_v2(const char* kernel_name,
+                                    void** buffers, size_t num_buffers,
+                                    const int64_t* dims, size_t num_dims,
+                                    size_t dynamic_shared_bytes,
+                                    int warmup, int repetitions,
+                                    float* latency_ms);
+
+// Query live driver/JIT resources for a registered kernel and the descriptor's
+// launch geometry. ``local_bytes`` is per-thread local memory (including
+// spills); ``active_blocks_per_sm`` includes dynamic shared-memory pressure.
+int tessera_nvidia_ptx_resources(const char* kernel_name, int block_size,
+                                 size_t dynamic_shared_bytes,
+                                 int* registers_per_thread,
+                                 int* static_shared_bytes,
+                                 int* local_bytes,
+                                 int* active_blocks_per_sm);
+
+// Query the exact CUDA device memory envelope associated with the bridge's
+// retained primary context. Both outputs are required.
+int tessera_nvidia_ptx_device_memory(size_t* total_bytes, size_t* free_bytes);
 
 // Register this bridge as the process-wide GPU launcher (tsrRegisterGpuLauncher),
 // so tsrLaunchKernel routes ("nvidia*", kernel_name) here. Returns 0 on success.

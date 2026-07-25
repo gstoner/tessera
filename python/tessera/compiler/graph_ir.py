@@ -410,6 +410,8 @@ class IRArg:
     shard_spec: Optional[str] = None    # tessera.shard attribute (Phase 2+)
     dim_names: Tuple[str, ...] = ()
     layout: Optional[str] = None
+    model_parameter: bool = False
+    model_parameter_bytes_bound: Optional[int] = None
 
     def to_mlir(self) -> str:
         attrs = []
@@ -420,6 +422,13 @@ class IRArg:
         if self.dim_names:
             dims = "[" + ", ".join(f'"{name}"' for name in self.dim_names) + "]"
             attrs.append(f"tessera.dim_names = {dims}")
+        if self.model_parameter:
+            attrs.append("tessera.model.parameter")
+        if self.model_parameter_bytes_bound is not None:
+            attrs.append(
+                "tessera.model.parameter_bytes_bound = "
+                f"{self.model_parameter_bytes_bound} : i64"
+            )
         layout = self.layout or self.ir_type.layout
         if layout:
             attrs.append(f'tessera.layout = "{layout}"')

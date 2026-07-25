@@ -62,6 +62,7 @@ def test_compile_result_target_matches_jit_target():
 def test_compile_result_carries_seven_gates():
     """The canonical capability set on JitFn — every gate present."""
     from tessera.compiler import pipeline_gates as pg
+
     r = _cpu_eager_demo.compile_result
     assert len(r.gate_results) == len(pg.GATE_ORDER)
     assert tuple(g.gate for g in r.gate_results) == pg.GATE_ORDER
@@ -75,18 +76,25 @@ def test_jit_target_nvidia_surfaces_toolchain_gate_at_decoration_time(tmp_path):
 
     Uses a temp-file module because @jit needs introspectable source.
     """
-    src = textwrap.dedent("""
+    src = (
+        textwrap.dedent("""
         import tessera
         @tessera.jit(target="nvidia_sm90")
         def f(a, b):
             return a @ b
-    """).strip() + "\n"
+    """).strip()
+        + "\n"
+    )
     mod_dir = tmp_path
     (mod_dir / "c3_mod.py").write_text(src)
+    from tessera.compiler import pipeline_gates as pg
+
     import sys
+
     sys.path.insert(0, str(mod_dir))
     try:
-        import c3_mod
+        with pg.deterministic_host_for_dashboard():
+            import c3_mod
         r = c3_mod.f.compile_result
         assert r is not None
         assert r.target == "nvidia_sm90"

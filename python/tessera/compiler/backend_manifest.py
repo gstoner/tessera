@@ -2262,10 +2262,38 @@ _NVIDIA_DEVICE_VERIFIED_JIT: dict[str, dict[str, Any]] = {
         "notes": (
             "f32/f16-storage row-wise " + kind + " emitted as CUDA (one block per "
             "flattened row; f32 accumulation; LayerNorm uses a stable two-pass variance), "
-            "nvcc-compiled and launched via runtime.launch() on consumer Blackwell sm_120."
+            "nvcc-compiled and launched via runtime.launch() on consumer Blackwell sm_120. "
+            "Dynamic affine f32/f16/bf16 backward uses the compiler-owned PTX "
+            "descriptor seam with f32 accumulation."
         ),
     } for op, kind in (("rmsnorm", "RMSNorm"), ("rmsnorm_safe", "RMSNorm"),
                        ("layer_norm", "LayerNorm"))},
+    **{op: {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("backward", "cuda", "compiler_owned_ptx"),
+        "shape_envelope": "equal-shape non-empty prediction/target; dynamic "
+                          "extent; none/sum/mean cotangent contract",
+        "notes": "Compiler-owned SM120 CUDA/PTX paired backward emits both "
+                 "prediction and target gradients with f32 accumulation.",
+    } for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss",
+                 "binary_cross_entropy_loss", "kl_divergence",
+                 "js_divergence")},
+    **{op: {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("backward", "cuda", "compiler_owned_ptx"),
+        "shape_envelope": "rank-2 [rows,classes] logits and rank-1 i64 labels; "
+                          "none/sum/mean reduction; label smoothing",
+        "notes": "Stable max-subtracted compiler-owned SM120 CUDA/PTX logits "
+                 "gradient; integer labels are nondifferentiable.",
+    } for op in ("cross_entropy_loss", "label_smoothed_cross_entropy")},
+    **{op: {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("training_fusion", "cuda", "compiler_owned_ptx"),
+        "shape_envelope": "equal-shape non-empty loss/parameter buffers with "
+                          "f32 optimizer state; none/sum/mean cotangent contract",
+        "notes": "Compiler-owned single SM120 PTX kernel fuses loss backward "
+                 "with the parameter/state update; selector remains unchanged.",
+    } for op in ("training.loss_sgd", "training.loss_adamw")},
     **{op: {
         "dtypes": ("fp32", "fp16"), "feature_flags": ("reduction", "cuda"),
         "shape_envelope": "rank >= 1, non-empty reduced axis; arbitrary axis folded to rows",
@@ -2717,6 +2745,13 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("softmax", "nvidia_sm120"): "tests/device/nvidia/test_softmax.py",
     **{(op, "nvidia_sm120"): "tests/device/nvidia/test_norm.py"
        for op in ("rmsnorm", "rmsnorm_safe", "layer_norm")},
+    **{(op, "nvidia_sm120"):
+       "tests/device/nvidia/test_training_autodiff_native.py"
+       for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss",
+                  "binary_cross_entropy_loss", "kl_divergence",
+                  "js_divergence", "cross_entropy_loss",
+                  "label_smoothed_cross_entropy", "training.loss_sgd",
+                  "training.loss_adamw")},
     **{(op, "nvidia_sm120"): "tests/device/nvidia/test_reduce.py"
        for op in ("sum", "mean", "max", "min", "amax", "amin")},
     # conv2d on the CPU reference path: @jit conv2d_nhwc executes and is

@@ -461,6 +461,29 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
                 )
                 for op in ("tessera.softmax", "tessera.softmax_safe")
             },
+            **{
+                canonical_op(op): OpCapability(
+                    canonical_op(op),
+                    "artifact_only",
+                    dtypes=("fp32", "f32", "fp16", "f16", "bf16"),
+                    reason="SM120 compiler-owned CUDA/PTX training descriptor "
+                           "with FP32 accumulation and exact-device "
+                           "f32/f16/bf16 storage proof",
+                )
+                for op in (
+                    "tessera.loss.mse", "tessera.loss.mae",
+                    "tessera.loss.huber", "tessera.loss.smooth_l1",
+                    "tessera.loss.binary_cross_entropy",
+                    "tessera.loss.cross_entropy",
+                    "tessera.loss.kl_divergence",
+                    "tessera.loss.js_divergence",
+                    "tessera.label_smoothed_cross_entropy",
+                    "tessera.sgd", "tessera.momentum", "tessera.nesterov",
+                    "tessera.adam", "tessera.adamw",
+                    "tessera.training.loss_sgd",
+                    "tessera.training.loss_adamw",
+                )
+            },
         },
         supported_dtypes=sm120_supported_storage_dtypes(),
         features=(

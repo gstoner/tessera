@@ -1,0 +1,150 @@
+{
+  "device": "NVIDIA GeForce RTX 5070 Ti, GPU-5072cda5-509a-008c-93c8-dc06e105f307, 610.62, 12.0",
+  "llvm_nvptx": {
+    "cubin_sha256": "3db2c9daca5229b82376feec26db3eb4b81106921be8e3b90eae9cbc3ed9a98e",
+    "declared_shared_memory_bytes": 1024,
+    "llvm_ir_sha256": "5f3de23852dddfd6d69e20a1e82188f65b48d3d1e0d59c73348738823c74ee45",
+    "ptx_sha256": "b25c3e9ceb53ff2ca257612444980f07c10eb5c163b2328e7b4af96549b09c3d",
+    "ptxas_stderr": "ptxas info    : 0 bytes gmem\nptxas info    : Compiling entry function 'tessera_nvptx_shared_arena_contract' for 'sm_120a'\nptxas info    : Function properties for tessera_nvptx_shared_arena_contract\n    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads\nptxas info    : Used 8 registers, used 0 barriers, 1024 bytes smem\nptxas info    : Compile time = 1.265 ms\n",
+    "resource_accounting_overhead_bytes": 1024,
+    "resources": {
+      "block_threads": 128,
+      "cubin_sha256": "3db2c9daca5229b82376feec26db3eb4b81106921be8e3b90eae9cbc3ed9a98e",
+      "kernel": "tessera_nvptx_shared_arena_contract",
+      "local_bytes": 0,
+      "max_active_blocks_per_sm": 12,
+      "registers_per_thread": 8,
+      "resource_fingerprint": "sha256:6e07931a52c5391a488c13939fa643138f1beb17b684e4bbe60e226f33d6bbe3",
+      "route": "compiler_address_space_3_contract",
+      "sass_instruction_families": [],
+      "spill_evidence_complete": true,
+      "spills_detected": false,
+      "stack_bytes": 0,
+      "static_shared_memory_bytes": 2048,
+      "theoretical_occupancy_pct": 100.0
+    }
+  },
+  "method": {
+    "discard_first": true,
+    "samples_per_cohort": 21,
+    "selector_policy": "evidence_only_no_promotion",
+    "stability_limit_pct": 4.0,
+    "timing_domains": [
+      "device_event",
+      "end_to_end"
+    ]
+  },
+  "rows": [
+    {
+      "device_repetitions": 20000,
+      "discard_first": true,
+      "end_to_end_repetitions": 100,
+      "numerical_output": 42.0,
+      "resources": {
+        "block_threads": 128,
+        "cubin_sha256": "f9b6872e82c94a7516996276262cc2fabfa61a3c5ee974400ca12f9867a1801d",
+        "kernel": "tessera_retained_shared_arena",
+        "local_bytes": 0,
+        "max_active_blocks_per_sm": 12,
+        "registers_per_thread": 11,
+        "resource_fingerprint": "sha256:655b0504f77c23c61a6186497e47e4284a9f78920efad94e4d33ee7455ecf980",
+        "route": "retained_shared_arena",
+        "sass_instruction_families": [],
+        "spill_evidence_complete": true,
+        "spills_detected": false,
+        "stack_bytes": 0,
+        "static_shared_memory_bytes": 2048,
+        "theoretical_occupancy_pct": 100.0
+      },
+      "route": "retained_shared_arena",
+      "selector_changed": false,
+      "selector_eligible": false,
+      "timings": {
+        "device_event": {
+          "median_ns": 10621.767025440931,
+          "run_medians_ns": [
+            10584.17558670044,
+            10659.358464181423
+          ],
+          "stability_limit_pct": 4.0,
+          "stability_pct": 0.7103328631041881,
+          "stable": true
+        },
+        "end_to_end": {
+          "median_ns": 424605.80500000005,
+          "run_medians_ns": [
+            431292.33,
+            417919.28
+          ],
+          "stability_limit_pct": 4.0,
+          "stability_pct": 3.1999121935700092,
+          "stable": true
+        }
+      },
+      "warmup": 30
+    },
+    {
+      "device_repetitions": 20000,
+      "discard_first": true,
+      "end_to_end_repetitions": 100,
+      "numerical_output": 42.0,
+      "resources": {
+        "block_threads": 128,
+        "cubin_sha256": "f9b6872e82c94a7516996276262cc2fabfa61a3c5ee974400ca12f9867a1801d",
+        "kernel": "tessera_rematerialized_register_expression",
+        "local_bytes": 0,
+        "max_active_blocks_per_sm": 12,
+        "registers_per_thread": 12,
+        "resource_fingerprint": "sha256:e74d140fa87319ba54766c2007c7783dd885266c2a2c5a585c443ab7681080f8",
+        "route": "rematerialized_register_expression",
+        "sass_instruction_families": [],
+        "spill_evidence_complete": true,
+        "spills_detected": false,
+        "stack_bytes": 0,
+        "static_shared_memory_bytes": 0,
+        "theoretical_occupancy_pct": 100.0
+      },
+      "route": "rematerialized_register_expression",
+      "selector_changed": false,
+      "selector_eligible": false,
+      "timings": {
+        "device_event": {
+          "median_ns": 9020.655881613493,
+          "run_medians_ns": [
+            9131.45113736391,
+            8909.860625863075
+          ],
+          "stability_limit_pct": 4.0,
+          "stability_pct": 2.487025564211567,
+          "stable": true
+        },
+        "end_to_end": {
+          "median_ns": 446813.825,
+          "run_medians_ns": [
+            446011.69,
+            447615.96
+          ],
+          "stability_limit_pct": 4.0,
+          "stability_pct": 0.3596923659108618,
+          "stable": true
+        }
+      },
+      "warmup": 30
+    }
+  ],
+  "schema": "tessera.nvidia.shared-arena-rematerialization.v1",
+  "source_commit": "9da32b78c37fc3bebf3f69d575e7b1eb4013a399",
+  "tile_plan": {
+    "arena_bytes": 1024,
+    "bytes_before": 1536,
+    "fixture": "src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia/sm120_shared_arena_materialization.mlir",
+    "fixture_sha256": "ea65296911a4663cab5e6b6b441b89b737632f142ce5ca19a00733100e1e3829",
+    "lowered_sha256": "c586782181dbc024a697e86c7cd18648a01959675c41394909b9985340fc825b",
+    "reuse_offsets": [
+      0,
+      512,
+      0
+    ]
+  },
+  "work_item": "E2E-SPINE-3"
+}

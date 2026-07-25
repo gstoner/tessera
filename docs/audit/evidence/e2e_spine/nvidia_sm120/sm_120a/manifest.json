@@ -2,26 +2,26 @@
   "architecture": "sm_120a",
   "files": {
     "report.json": {
-      "bytes": 4846,
-      "sha256": "c5d991e6983280a30e4ba417dc2a53316154dbaf02e9e1fde0722dd64bdd5bd0"
+      "bytes": 18071,
+      "sha256": "ca5c027e893d770c6e09f5b8fbeaafc8b828c50dca78ec8fe1e3ebed14267ac0"
     },
     "resources.json": {
-      "bytes": 1129,
-      "sha256": "dcbbea88c71df24a1c2d4db022650d2875a9772a11d08b7e0fa273688728d5f5"
+      "bytes": 4033,
+      "sha256": "598e609e5e17ac5a4c23cd58c861702aafc9397f44dbaa2b8919b0dbdf39615e"
     }
   },
   "schema": "tessera.e2e-release-packet.v1",
   "target": "nvidia_sm120",
-  "tested_commit": "9f3757ef2dda2dd61ff94f1aefe0244f1b80f064",
+  "tested_commit": "9da32b78c37fc3bebf3f69d575e7b1eb4013a399",
   "validation": {
     "architecture": "sm_120a",
-    "benchmark_rows": 4,
-    "cache_proofs": 2,
-    "families": 2,
-    "fixtures": 2,
-    "level_c_fixtures": 2,
+    "benchmark_rows": 16,
+    "cache_proofs": 8,
+    "families": 8,
+    "fixtures": 8,
+    "level_c_fixtures": 8,
     "maximum_absolute_error": 0.0,
-    "source_commit": "9f3757ef2dda2dd61ff94f1aefe0244f1b80f064",
+    "source_commit": "9da32b78c37fc3bebf3f69d575e7b1eb4013a399",
     "target": "nvidia_sm120"
   }
 }

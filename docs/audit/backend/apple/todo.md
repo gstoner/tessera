@@ -1447,3 +1447,27 @@ inject exact device capacity/reserve policy and validate model-level selection
 with Metal measurements. ROCm's alias-aware nested/loop LDS slots and
 40,208-byte gfx1151 packet are architecture-owned; no MSL threadgroup-memory
 expression, occupancy, execution, or selector claim transfers.
+
+Cross-backend sync `E2E-SPINE3-SM120-MEMORY-2026-07-24` extends the shared
+fleet fixture corpus with bounded epilogue, attention, and ReplaySSM identities
+and seals the six formerly pending NVIDIA SM120 family rows. Apple can reuse
+only fixture identity and proof-schema structure. CUDA image descriptors,
+NVPTX address-space-3 materialization, ptxas accounting, SM120 resources,
+timings, and release readiness do not transfer to Metal. Apple CPU/Apple7
+packet scope and the architecture-owned threadgroup-arena follow-up are
+unchanged.
+
+Cross-backend sync `CUDA-TRAINING-MEMORY-FOUNDATION-2026-07-24` is
+NVIDIA-owned. It changes no shared Graph/Linalg mathematics and no Apple
+execution row, selector, Metal ABI, or threadgroup-memory policy. The CUDA PTX
+image/descriptor, CUDA-driver launch-v2 entry points, NVPTX external shared
+symbol, ptxas/driver resources, and SM120 timings do not transfer to Apple
+CPU/GPU. Apple retains its architecture-owned training and dynamic
+threadgroup-arena follow-ups.
+
+Cross-backend sync `CUDA-TRAINING-MEMORY-BREADTH-2026-07-24` adds only the
+portable Graph IR carriers for model-parameter marking and bounded dynamic
+parameter storage. NVIDIA owns the CUDA-context capacity/free-memory query,
+FP16/BF16 PTX training ABIs, serialized dynamic-shared launch expressions, and
+SM120 measurements. None transfers to Metal or closes Apple training,
+threadgroup-memory, capacity-policy, or exact-device evidence.

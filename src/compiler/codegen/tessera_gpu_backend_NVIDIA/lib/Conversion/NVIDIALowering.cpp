@@ -3970,6 +3970,7 @@ void buildTesseraConsumerBlackwellBackendPipeline(OpPassManager &pm) {
 void registerTesseraNVIDIABackendPasses() {
   registerPass([]() { return createLowerTileToNVIDIAPass(kHopperSM); });
   registerPass([]() { return createLowerNVIDIAToNVVMPass(); });
+  registerPass([]() { return createNVIDIADynamicSharedPass(); });
 
   PassPipelineRegistration<> nvidiaPipeline(
       "tessera-lower-to-nvidia",
@@ -4000,8 +4001,9 @@ void registerTesseraNVIDIABackendPasses() {
 }
 
 void registerTesseraNVIDIABackendDialects(DialectRegistry &registry) {
-  registry.insert<arith::ArithDialect, func::FuncDialect, LLVM::LLVMDialect,
-                  NVVM::NVVMDialect, tessera::nvidia::TesseraNVIDIADialect,
+  registry.insert<arith::ArithDialect, func::FuncDialect, gpu::GPUDialect,
+                  LLVM::LLVMDialect, NVVM::NVVMDialect,
+                  tessera::nvidia::TesseraNVIDIADialect,
                   tessera::tile::TesseraTileDialect>();
 }
 

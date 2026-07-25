@@ -76,9 +76,9 @@ def _write_safetensors(root, cfg):
     return shapes
 
 
-def _random_tensors_for_shapes(shapes, *, seed=0):
+def _random_tensors_for_shapes(shapes, *, seed=0, dtype=np.float16):
     rng = np.random.default_rng(seed)
-    return {name: rng.standard_normal(shape).astype(np.float16) for name, shape in shapes.items()}
+    return {name: rng.standard_normal(shape).astype(dtype) for name, shape in shapes.items()}
 
 
 def _write_sharded_safetensors(root, tensors):
@@ -237,15 +237,41 @@ def test_full_scaled_text_safetensors_materialize_runtime_weights(tmp_path):
     tensors = _random_tensors_for_shapes(shapes, seed=21)
     _write_sharded_safetensors(tmp_path, tensors)
 
-    direct = imp.load_text_runtime_weights(tensors, cfg)
-    loaded = imp.load_text_runtime_weights_from_safetensors(tmp_path, cfg)
     ids = [1, 2, 3]
+    direct = imp.load_text_runtime_weights(tensors, cfg)
+    direct_w_q = direct.layers[0].attn["w_q"].copy()
+    direct_gate = direct.layers[-1].ffn["gate"].copy()
+    direct_logits = rt.forward(cfg, direct, ids).copy()
 
-    assert loaded.embed.shape == direct.embed.shape == (cfg.vocab_size, cfg.hidden_size)
+    # The source f16 dictionary and direct f64 runtime weights are independent
+    # loader inputs. Do not retain both while the safetensors path materializes
+    # a second f16/f64 model representation.
+    del tensors
+    del direct
+
+    loaded = imp.load_text_runtime_weights_from_safetensors(tmp_path, cfg)
+
+    assert loaded.embed.shape == (cfg.vocab_size, cfg.hidden_size)
     assert len(loaded.layers) == cfg.num_layers
-    np.testing.assert_allclose(loaded.layers[0].attn["w_q"], direct.layers[0].attn["w_q"], rtol=0, atol=0)
-    np.testing.assert_allclose(loaded.layers[-1].ffn["gate"], direct.layers[-1].ffn["gate"], rtol=0, atol=0)
-    np.testing.assert_allclose(rt.forward(cfg, loaded, ids), rt.forward(cfg, direct, ids), rtol=0, atol=0)
+    np.testing.assert_allclose(loaded.layers[0].attn["w_q"], direct_w_q, rtol=0, atol=0)
+    np.testing.assert_allclose(loaded.layers[-1].ffn["gate"], direct_gate, rtol=0, atol=0)
+    np.testing.assert_allclose(rt.forward(cfg, loaded, ids), direct_logits, rtol=0, atol=0)
+
+
+def test_full_scaled_text_bf16_safetensors_materialize_runtime_weights(tmp_path):
+    ml = pytest.importorskip("ml_dtypes")
+    cfg = minimax_m3.scaled_config()
+    tensors = _random_tensors_for_shapes(
+        imp.expected_hf_text_tensor_shapes_all_layers(cfg), seed=22, dtype=ml.bfloat16)
+    _write_sharded_safetensors(tmp_path, tensors)
+    del tensors
+
+    loaded = imp.load_text_runtime_weights_from_safetensors(tmp_path, cfg)
+
+    assert loaded.embed.dtype == np.float64
+    assert len(loaded.layers) == cfg.num_layers
+    raw = imp.load_safetensors_tensors(tmp_path, names=["model.norm.weight"])
+    assert raw["model.norm.weight"].dtype == ml.bfloat16
 
 
 def test_prepare_multimodal_prompt_tracks_image_and_video_spans():

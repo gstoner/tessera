@@ -8,6 +8,8 @@ Covers the work plan's MoE test group:
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 
@@ -18,6 +20,24 @@ from tessera.models import moe_routing as mr
 def _x(T, H, seed=0):
     rng = np.random.default_rng(seed)
     return (rng.standard_normal((T, H)) / np.sqrt(H)).astype(np.float32)
+
+
+def _moe_parity_config() -> DiffusionGemmaConfig:
+    """Keep the 256-token canvas contract without allocating model-scale weights.
+
+    The packing and routing algorithms depend on token/expert shapes, not the
+    26B model's hidden width. Production-size weights belong in an explicitly
+    provisioned performance/integration lane: their routed matrices alone use
+    nearly 3 GiB before the float64 reference materializes its copies.
+    """
+    return replace(
+        DiffusionGemmaConfig(),
+        hidden_size=64,
+        moe_intermediate_size=48,
+        shared_expert_intermediate_size=128,
+        num_experts=8,
+        num_experts_per_tok=2,
+    )
 
 
 # ── Routing ──────────────────────────────────────────────────────────────────
@@ -88,10 +108,10 @@ def test_empty_and_saturated_experts():
 
 @pytest.mark.parametrize("T", [4, 32])
 def test_packed_matches_naive_small(T):
-    cfg = DiffusionGemmaConfig()
+    cfg = _moe_parity_config()
     w = mr.synthetic_moe_weights(cfg, seed=7)
     x = _x(T, cfg.hidden_size, seed=T)
-    y, plan = mr.moe_forward(x, **w, top_k=cfg.num_experts_per_tok)
+    y, plan = mr.moe_forward_reference(x, **w, top_k=cfg.num_experts_per_tok)
     y_naive = mr.moe_forward_naive(x, **w, top_k=cfg.num_experts_per_tok)
     assert y.shape == (T, cfg.hidden_size)
     assert int(plan.group_sizes.sum()) == T * cfg.num_experts_per_tok
@@ -99,27 +119,41 @@ def test_packed_matches_naive_small(T):
 
 
 def test_packed_matches_naive_at_canvas_size():
-    # Production dims at the 256-token canvas.
-    cfg = DiffusionGemmaConfig()
+    # Preserve the production 256-token canvas with compact model dimensions.
+    cfg = _moe_parity_config()
     w = mr.synthetic_moe_weights(cfg, seed=11)
     x = _x(cfg.canvas_size, cfg.hidden_size, seed=123)
-    y, plan = mr.moe_forward(x, **w, top_k=cfg.num_experts_per_tok)
+    y, plan = mr.moe_forward_reference(x, **w, top_k=cfg.num_experts_per_tok)
     y_naive = mr.moe_forward_naive(x, **w, top_k=cfg.num_experts_per_tok)
     assert y.shape == (cfg.canvas_size, cfg.hidden_size)
     np.testing.assert_allclose(y, y_naive, atol=1e-8)
 
 
+def test_bf16_storage_uses_f32_accumulation_and_matches_reference():
+    ml = pytest.importorskip("ml_dtypes")
+    cfg = _moe_parity_config()
+    weights = mr.synthetic_moe_weights(cfg, seed=19, dtype=ml.bfloat16)
+    x = _x(cfg.canvas_size, cfg.hidden_size, seed=29).astype(ml.bfloat16)
+
+    actual, _ = mr.moe_forward(x, **weights, top_k=cfg.num_experts_per_tok)
+    expected, _ = mr.moe_forward_reference(x, **weights, top_k=cfg.num_experts_per_tok)
+
+    assert actual.dtype == np.float32
+    assert all(weight.dtype == ml.bfloat16 for weight in weights.values())
+    np.testing.assert_allclose(actual, expected, rtol=3e-3, atol=3e-3)
+
+
 def test_shared_expert_contributes():
     # Zeroing the routed experts leaves only the shared-expert output → nonzero,
     # and equals a standalone shared SwiGLU. Confirms the combine adds shared.
-    cfg = DiffusionGemmaConfig()
+    cfg = _moe_parity_config()
     w = mr.synthetic_moe_weights(cfg, seed=5)
     x = _x(8, cfg.hidden_size, seed=2)
     w_zero = dict(w)
     w_zero["w_down"] = np.zeros_like(w["w_down"])     # routed experts output 0
     y, _ = mr.moe_forward(x, **w_zero, top_k=cfg.num_experts_per_tok)
-    shared = mr._swiglu(x.astype(np.float64), w["w_shared_gate"].astype(np.float64),
-                        w["w_shared_up"].astype(np.float64),
-                        w["w_shared_down"].astype(np.float64))
-    np.testing.assert_allclose(y, shared, atol=1e-9)
+    shared = mr._swiglu(x.astype(np.float32), w["w_shared_gate"].astype(np.float32),
+                        w["w_shared_up"].astype(np.float32),
+                        w["w_shared_down"].astype(np.float32))
+    np.testing.assert_allclose(y, shared, rtol=1e-6, atol=1e-7)
     assert np.abs(y).sum() > 0

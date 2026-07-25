@@ -942,17 +942,18 @@ It changes no CUDA schedule, ABI, dtype capability, or selector. SM90, SM100,
 and exact multi-GPU rows remain explicit hardware-deferred terminals and may
 not inherit the SM120 packet.
 
-The E2E-SPINE-3 exact-host recorder packages shared f32 softmax and reduction
-fixtures through the existing SM120 compiler-owned image/descriptor seam,
-proves cold/warm identity, retains selected route plus ptxas resource
-fingerprints, and records interleaved repeated-median device-event and
-end-to-end rows. The hash-sealed WSL RTX 5070 Ti packet is checked in against
-landed source commit `9f3757ef2dda2dd61ff94f1aefe0244f1b80f064`; all four
-rows pass the unchanged 4% stability gate after increasing short-kernel and
-end-to-end amortization. The fleet dashboard therefore marks only SM120
-softmax and reduction release-ready. Matmul, epilogue, attention, paged-KV,
-ReplaySSM, and MoE packet scope remains explicit `packet_pending`. No CUDA
-selector changed.
+The E2E-SPINE-3 exact-host recorder now packages all eight bounded SM120
+families through compiler-owned image/descriptor seams: matmul, softmax,
+reduction, fused epilogue, attention, paged-KV, ReplaySSM, and MoE. The six
+formerly pending family rows add shared differential fixtures where needed,
+prove cold/warm image and descriptor identity, retain selected route plus ptxas
+resource fingerprints, and record independently conditioned repeated-median
+device-event and allocation/copy-inclusive end-to-end rows. The hash-sealed
+WSL RTX 5070 Ti packet is checked in against landed source commit
+`9da32b78c37fc3bebf3f69d575e7b1eb4013a399`; all 16 timing rows pass the
+unchanged 4% stability gate. Family-granular recording prevents one noisy
+family from invalidating already-stable evidence while the final manifest
+still seals one `(nvidia_sm120, sm_120a)` packet. No CUDA selector changed.
 
 The LLVM-stage device-library follow-on makes CUDA `libdevice` an explicit
 compiler dependency rather than accidental driver behavior. Native-image
@@ -1212,9 +1213,10 @@ policy, selector, or exact-device evidence.
 Cross-backend sync `CORE-COMPILER-NEXT-2026-07-22` tightens shared Graph layout
 propagation through agreed-layout pointwise chains and last-axis reductions,
 preserves packed-storage attributes, and records source-layout provenance on
-inserted casts. NVIDIA remains **follow-up required** for an architecture-owned
-Graph-cast materializer; the pass stays opt-in and transfers no PTX layout,
-schedule, selector, or device proof. The x86 dynamic last-axis reduction guard
+inserted casts. At that synchronization point the architecture-owned
+Graph-cast materializer was open; it landed in the later NVIDIA continuation
+recorded below. The pass stays opt-in and transfers no PTX layout, schedule,
+selector, or device proof. The x86 dynamic last-axis reduction guard
 is not applicable to bucketed tensor-core routes. Shared add/multiply/static-
 broadcast adjoints change Graph IR only; no CUDA backward runtime or exact-
 device promotion is claimed.
@@ -1235,32 +1237,32 @@ tensor-to-i1 comparison contracts plus internal scalar-threshold,
 rank-reduced normalization-statistics, and explicit broadcast-in-dimension
 Graph carriers. ReLU and unweighted RMSNorm/LayerNorm paired adjoints are
 static/dynamic Graph-native and CPU-IR oracle-proven; the static shared path
-lowers through linalg. NVIDIA is **follow-up required** for backward execution:
-no PTX/CUDA ABI, affine gamma/beta contract, tensor-core schedule, selector,
-runtime binding, performance result, or exact-device proof is added here.
-Dynamic statistics remain Graph IR until an NVIDIA-owned materializer lands.
+lowers through linalg. This shared sync added no PTX/CUDA execution; the
+architecture-owned affine backward ABI, runtime binding, and exact-SM120 proof
+land in `CUDA-TRAINING-MEMORY-FOUNDATION-2026-07-24` below. It does not imply a
+tensor-core schedule or selector promotion.
 
 Cross-backend sync `CORE-COMPILER-NORM-AFFINE-2026-07-22` makes integer
 comparison signedness explicit in shared Graph IR and adds dynamic-dimension
-carriers plus channel-affine RMSNorm/LayerNorm adjoints. NVIDIA is **follow-up
-required** for an architecture-owned dynamic affine normalization materializer
-and backward runtime: the gfx1151 HSACO and AVX-512 ABIs, schedules, timing,
-and exact-device evidence do not transfer to CUDA/PTX. Shared static/dynamic
-linalg and CPU-oracle proof validate the Graph contract only; no NVIDIA
-selector, execution row, or device claim changes.
+carriers plus channel-affine RMSNorm/LayerNorm adjoints. The NVIDIA dynamic
+affine materializer and backward runtime were still open at this sync and are
+closed by the architecture-owned continuation below. The gfx1151 HSACO and
+AVX-512 ABIs, schedules, and timings did not transfer to CUDA/PTX; no selector
+promotion was inferred from sibling evidence.
 
 Cross-backend sync `CORE-COMPILER-NORM-BWD-DETERMINISM-2026-07-22` changes only
 the ROCm architecture-owned backward schedule and temporary-buffer ABI. The
-shared affine adjoint and f32 accumulation contract are unchanged. NVIDIA still
-requires its own CUDA/PTX backward materializer and exact-device proof; the
-gfx1151 two-kernel schedule, bitwise evidence, and timing do not transfer.
+shared affine adjoint and f32 accumulation contract are unchanged. The
+CUDA/PTX backward materializer and exact-device proof were supplied later by
+the NVIDIA-owned continuation below; the gfx1151 two-kernel schedule, bitwise
+evidence, and timing did not transfer.
 
 Cross-backend sync `CORE-COMPILER-NORM-BWD-2026-07-22` adds family-specific
 RMSNorm/LayerNorm backward execution rows and public JIT binding for ROCm and
-x86. NVIDIA remains **follow-up required**: neither the gfx1151 HSACO ABI nor
-the AVX-512 f32 ABI, schedule, dtype-accumulation contract, timing, or device
-evidence transfers to CUDA/PTX. The shared Graph adjoint and dynamic Linalg
-contract remain parity validated; no NVIDIA execution row or selector changes.
+x86. The then-open NVIDIA execution row is now closed by the CUDA/PTX
+continuation below. Neither the gfx1151 HSACO ABI nor the AVX-512 ABI,
+schedule, timing, or device evidence transferred; the NVIDIA implementation
+retains its own descriptor and exact-device proof.
 
 Cross-backend sync `CORE-COMPILER-LAYOUT-AUTODIFF-MEMORY-2026-07-23` completes
 the shared transpose/packed epilogue/reduction layout envelope and adds native
@@ -1270,9 +1272,9 @@ All NVIDIA backend variants now execute Tile buffer reuse and materialize one
 address-space-3 shared-memory arena with typed planned-offset views before
 Tile-to-NVIDIA/NVVM lowering. Function-budgeted liveness-aware
 rematerialization also runs in the shared production post-autodiff pipeline.
-Exact CUDA/PTX shared-allocation assembly, occupancy, backward reduction
-launch, and performance evidence remain follow-up required; no device or
-selector promotion is claimed.
+Exact CUDA/PTX shared-allocation assembly and occupancy were open at this
+shared sync; the static and dynamic CUDA evidence is recorded in the NVIDIA
+closeouts below. No selector promotion is implied.
 
 Cross-backend sync `CORE-COMPILER-TRAINING-SPINE-2026-07-23` registers
 `tessera.loss.mse` and its paired backward carrier as verifier-checked shared
@@ -1281,52 +1283,52 @@ FP16/BF16 storage. Shape-preserving MSE participates in shared layout
 propagation, and post-autodiff rematerialization now distinguishes saved
 forward activations from backward temporaries. NVIDIA parity is host-validated
 at the shared IR boundary. The gfx1151 HIP composition/module cache and
-AVX-512 execution do not transfer to CUDA/PTX; an NVIDIA-owned compiled MSE
-backward launch, tensor-core policy, and exact-device evidence remain
-follow-up required.
+AVX-512 execution do not transfer to CUDA/PTX. The NVIDIA-owned compiled MSE
+backward launch and exact-device evidence land in the continuation below; no
+tensor-core training schedule or selector promotion is claimed.
 
 Cross-backend sync `CORE-COMPILER-DEEPENING-2026-07-23` adds shared
 runtime-sized address-space-3 arena planning and a benchmark-fed
 rematerialization cost contract. NVIDIA retains opt-in Graph layout assignment
 through its existing materializer. The new MSE backward launch and numerical
-proof are ROCm gfx1151-only; CUDA/PTX still needs an architecture-owned VJP,
-dynamic shared-allocation assembly/occupancy proof, and selector evidence.
+proof are ROCm gfx1151-only. The architecture-owned CUDA VJP and dynamic
+shared-allocation/occupancy proof land in the later NVIDIA closeouts; selector
+evidence remains explicitly non-promoting on WSL.
 
 Cross-backend sync `CORE-COMPILER-TRAINING-BREADTH-2026-07-23` adds shared
 Graph-native MAE, Huber, SmoothL1, and SGD adjoints with dynamic Linalg and CPU
-oracle proof. NVIDIA is **follow-up required** for architecture-owned CUDA/PTX
-backward materialization and exact-device evidence. The gfx1151 generated HIP
-kernel, AVX-512 C ABI, boundary timing, caches, and selector state do not
+oracle proof. The architecture-owned CUDA/PTX backward materialization and
+exact-device evidence land in the continuation below. The gfx1151 generated
+HIP kernel, AVX-512 C ABI, boundary timing, caches, and selector state did not
 transfer.
 
 Cross-backend sync `CORE-COMPILER-TRAINING-SERIES-2026-07-23` adds shared
 Graph-native stable BCE-with-logits, class-index/label-smoothed cross entropy,
 KL/JS, explicit Momentum/Nesterov state, and explicit Adam/AdamW moment-state
 adjoints. Dynamic shared Linalg contracts are live for BCE, Momentum/Nesterov,
-and Adam/AdamW. NVIDIA is **follow-up required** for CUDA/PTX backward
-materializers and exact-device evidence; the gfx1151 and AVX-512 loss and
-optimizer ABIs do not transfer. No NVIDIA selector or support claim changes.
+and Adam/AdamW. The NVIDIA CUDA/PTX materializers and exact-device evidence
+land in the continuation below, including KL/JS and FP16/BF16 storage. The
+gfx1151 and AVX-512 loss and optimizer ABIs did not transfer.
 
 Cross-backend sync `CORE-COMPILER-TRAINING-FUSION-2026-07-23` adds shared
 single-use loss-backward to SGD/AdamW fusion carriers and one-loop dynamic
-Linalg lowering for MSE, MAE, Huber, SmoothL1, and BCE-with-logits. NVIDIA
-parity is validated only at the shared Graph/Linalg contract. NVIDIA remains
-**follow-up required** for an architecture-owned CUDA/PTX fused training
-materializer and exact-device evidence; gfx1151 HIP and AVX-512 ABIs, cache
-identities, timings, and selector decisions do not transfer.
+Linalg lowering for MSE, MAE, Huber, SmoothL1, and BCE-with-logits. This sync
+validated only the shared Graph/Linalg contract; the architecture-owned
+CUDA/PTX fused materializer and exact-device evidence land below. gfx1151 HIP
+and AVX-512 ABIs, cache identities, timings, and selector decisions did not
+transfer.
 
 Cross-backend sync `CORE-COMPILER-MEMORY-LAYOUT-CLOSEOUT-2026-07-23` replaces
 the shared static address-space-3 alloca with a workgroup global and supports
-dominance-scoped dynamic arena cohorts. NVPTX is expected to lower this form to
-shared memory, but exact CUDA assembly, resource, occupancy, and performance
-evidence remain follow-up required and are not inferred from gfx1151. The
-measured rematerialization corpus has gfx1151 and AVX-512 rows only; no NVIDIA
-selector or default policy changes.
+dominance-scoped dynamic arena cohorts. At that point exact CUDA assembly,
+resource, occupancy, and performance evidence were open and not inferred from
+gfx1151; the NVIDIA-owned static/dynamic closeouts below now provide them.
+No NVIDIA selector or default policy changes.
 
 Cross-backend sync `CORE-COMPILER-HONEST-BOUNDARIES-2026-07-23` broadens the
 shared measured-rematerialization schema to exact consumer chains and
-64/128/192 matmul shapes with ReLU/GELU/SiLU. NVIDIA remains **follow-up
-required** for CUDA measurements and policy selection. ROCm dynamic
+64/128/192 matmul shapes with ReLU/GELU/SiLU. The later NVIDIA packets provide
+CUDA measurements; native-Linux policy selection remains deferred. ROCm dynamic
 normalization epilogues, HIP launch-sized LDS materialization, and packed IU4
 WMMA are architecture-owned and transfer no PTX ABI, shared-memory allocation,
 packed consumer, performance, or selector claim. The existing NVIDIA
@@ -1334,25 +1336,86 @@ architecture-owned layout consumer remains unchanged.
 
 Cross-backend sync `CORE-COMPILER-HONEST-BOUNDARIES-2-2026-07-24` extends the
 shared rematerialization corpus schema with softmax, RMSNorm, and MSE producer
-families plus measured workload-budget decisions. NVIDIA remains **follow-up
-required** for CUDA measurements and policy selection. ROCm's packed
+families plus measured workload-budget decisions. The later NVIDIA packets
+provide CUDA measurements; native-Linux policy selection remains deferred.
+ROCm's packed
 multi-arena LDS ABI, GELU normalization epilogue, and terminal-pack
 dequant-GEMM consumer are architecture-owned; no PTX shared-memory ABI, packed
-consumer, timing, selector, or support claim transfers. CUDA path-max launch
-expressions and exact physical packed-consumer evidence remain open.
+consumer, timing, selector, or support claim transfers. CUDA path-max and
+general serialized launch expressions are closed below; physical packed
+consumers remain governed by their own dtype rows.
 
 Cross-backend sync `CORE-COMPILER-HONEST-BOUNDARIES-3-2026-07-24` extends the
 shared rematerialization evidence schema to a measured four-layer workload with
-softmax, RMSNorm, MSE, Huber, SmoothL1, and BCE instances. NVIDIA remains
-**follow-up required** for CUDA measurements and policy selection. ROCm's
+softmax, RMSNorm, MSE, Huber, SmoothL1, and BCE instances. CUDA measurements
+now land in the NVIDIA continuation below; controlled native-Linux policy
+selection remains deferred. ROCm's
 branch-path dynamic-LDS expression, binary normalization epilogues, and packed
 elementwise/sparse/cache ABIs are architecture-owned; no PTX shared-memory
 expression, packed ABI, timing, selector, or support claim transfers.
 
 Cross-backend sync `CORE-COMPILER-CFG-MEMORY-BUDGETS-2026-07-24` adds a shared
 model/device-derived rematerialization budget contract with explicit override
-precedence and bounded dynamic parameters. NVIDIA is **follow-up required** to
-inject exact device capacity/reserve policy and validate model-level selection
-with CUDA measurements. ROCm's alias-aware nested/loop LDS slots and 40,208-byte
+precedence and bounded dynamic parameters. The exact CUDA-context capacity,
+free-memory cap, reserve policy, parameter bounds, and measured packet now land
+in the NVIDIA continuation below. ROCm's alias-aware nested/loop LDS slots and 40,208-byte
 gfx1151 packet are architecture-owned; no PTX shared-memory expression,
 occupancy, execution, or selector claim transfers.
+
+NVIDIA-owned closeout `E2E-SPINE3-SM120-MEMORY-2026-07-24` completes the
+static NVPTX boundary named by `CORE-COMPILER-MEMORY-LAYOUT-CLOSEOUT`.
+Tile lowering turns three logical 512-byte allocations with disjoint lifetimes
+into one 1,024-byte address-space-3 arena at offsets `[0, 512, 0]`, reducing
+the unreused 1,536-byte plan. LLVM 23 emits an exact 1,024-byte NVPTX shared
+declaration; `ptxas` reports the declaration and the retained executable route
+has matching tool-reported shared-resource accounting. Exact SM120 execution
+compares that retained route with a register-rematerialized expression:
+both return 42, have complete no-spill resource records and 100% theoretical
+occupancy, and pass the 4% two-run gate in device-event and end-to-end domains.
+The evidence is intentionally selector-ineligible. Dynamic/path-expression
+arenas and model-level CUDA rematerialization policy remain separate follow-ups.
+
+NVIDIA-owned continuation `CUDA-TRAINING-MEMORY-FOUNDATION-2026-07-24`
+closes the named SM120 execution gaps for dynamic-affine RMSNorm/LayerNorm
+backward; MSE, MAE, Huber, SmoothL1, stable BCE-with-logits, KL/JS, and
+class-index/label-smoothed cross-entropy backward; deterministic general
+broadcast-gradient reduction; SGD, Momentum/Nesterov, Adam, and AdamW updates;
+and fused loss-backward plus SGD/AdamW. FP32, FP16, and BF16 storage preserve
+their physical dtype while every arithmetic/reduction path accumulates in FP32. The
+architecture-owned path generates CUDA, compiles an immutable PTX image,
+binds a launch descriptor, and executes through the shipped CUDA-driver
+bridge. Public runtime artifacts and `@jit(...).native_backward()` use the
+same descriptor seam. Exact SM120 tests cover dynamic/ragged extents,
+transition boundaries, extreme logits, none/sum/mean cotangents, optimizer
+state, fused-versus-composed numerics, invalid labels, cache identity, and
+live resources.
+
+The same continuation completes CFG-forwarded and locally computed dynamic
+shared-memory sizing. A post-LLVM NVIDIA pass replaces runtime-sized
+address-space-3 byte arenas with slices of an external NVPTX shared symbol,
+colors mutually exclusive lifetimes into one slot, keeps simultaneously live
+arenas in distinct aligned slots, and serializes checked constant, argument,
+add, multiply, cast, select, and path-max launch expressions. The v2 CUDA
+launch ABI evaluates the descriptor expression and passes the resolved byte
+count to `cuLaunchKernel`. Exact SM120 execution proves the original
+12,289/32,001-byte branch paths and a CFG-forwarded
+`max(4096*4+17, 12289)` expression with a 16,416-byte allocation, rejects
+undersized descriptors, and retains driver-JIT register/static/local-memory/
+occupancy evidence.
+
+The native bridge also reports total/free bytes from the same retained CUDA
+context. The compiler policy caps usable capacity by current free memory,
+marks static or explicitly bounded dynamic Graph IR model parameters, and
+stamps reserve, gradient-copy, optimizer-state, and persistent-state inputs
+consumed by the shared activation-rematerialization pass.
+
+The checked-in 26-row repeated-median packet discards the first/JIT launch,
+uses 1,000 device-event repetitions and 20 end-to-end iterations, and retains
+cold/warm image identity plus artifact and resource fingerprints. Fourteen
+rows meet the 4% two-run gate in both timing domains on this WSL2 host; twelve
+retain explicit unstable dispositions, with the two tiny dynamic-shared probes
+remaining especially host-noisy. Fused MSE+SGD and MSE+AdamW are stable and
+beat their composed references in both timing domains, but their references
+are not stable and WSL is not the controlled native-Linux promotion host.
+Therefore no production selector changes. Rerunning this exact packet on
+controlled native Linux is the remaining performance/selector boundary.

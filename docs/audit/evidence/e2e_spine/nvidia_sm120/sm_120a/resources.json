@@ -30,6 +30,96 @@
       },
       "resource_fingerprint": "f53db8d5e47dce18fb1d578d0b197621914b69ff40853d9b87084ff2872a2313",
       "selected_route": "serial"
+    },
+    {
+      "entry": "tessera_tile_matmul_direct_tf32",
+      "family": "matmul",
+      "record": {
+        "metrics": {
+          "registers_per_thread": 38,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "provenance": "ptxas --arch=sm_120a -v"
+      },
+      "resource_fingerprint": "ffe204dc1ed3a41aa8ad27c14496f00b48d3e6a31d845b127a258e84d76c0150",
+      "selected_route": "direct"
+    },
+    {
+      "entry": "tessera_tile_matmul_fused_f16_relu_b1_r1",
+      "family": "epilogue",
+      "record": {
+        "metrics": {
+          "registers_per_thread": 42,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 2048
+        },
+        "provenance": "ptxas --arch=sm_120a -v"
+      },
+      "resource_fingerprint": "a91a63a74086fb237109928a5aefbba71c87cb3a72d82efea525a532c6b95b51",
+      "selected_route": "shared"
+    },
+    {
+      "entry": "tessera_tile_attention_f32_full_7bdd95ac12",
+      "family": "attention",
+      "record": {
+        "metrics": {
+          "registers_per_thread": 40,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "provenance": "ptxas --arch=sm_120a -v"
+      },
+      "resource_fingerprint": "dc35ff9cc0caa36b60d094160caac8debf88e23528bfe9fd862a537382fdced9",
+      "selected_route": "thread_per_output_128"
+    },
+    {
+      "entry": "tessera_tile_paged_kv_read_f32_direct",
+      "family": "paged_kv",
+      "record": {
+        "metrics": {
+          "registers_per_thread": 26,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "provenance": "ptxas --arch=sm_120a -v"
+      },
+      "resource_fingerprint": "eacde3a6cd9e8326aad72ec05d123c8b5e657e04904016654a95b531a31b3a51",
+      "selected_route": "direct"
+    },
+    {
+      "entry": "tessera_tile_replay_ssm_decode_f32",
+      "family": "replay_ssm",
+      "record": {
+        "metrics": {
+          "registers_per_thread": 40,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "provenance": "ptxas --arch=sm_120a -v"
+      },
+      "resource_fingerprint": "7fef45fd1010e0caad029076f81fec279d40356d2e1591a757c35fae67136665",
+      "selected_route": "output_only"
+    },
+    {
+      "entry": "tessera_tile_moe_dispatch_f32",
+      "family": "moe",
+      "record": {
+        "metrics": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "provenance": "ptxas --arch=sm_120a -v"
+      },
+      "resource_fingerprint": "79ee6edabd97cce2f78adc9191ec1f969992e7fa60422c98597567c6d886e91c",
+      "selected_route": "dispatch"
     }
   ],
   "schema": "tessera.e2e-sm120-resource-record.v1"

@@ -828,6 +828,9 @@ class JitFn:
         if target_kind == "rocm":
             return self._native_rocm_backward(
                 args, kwargs, out_cotangents=out_cotangents)
+        if target_kind == "nvidia_sm120":
+            return self._native_nvidia_backward(
+                args, kwargs, out_cotangents=out_cotangents)
         if target_kind == "x86":
             graph_ops = [op for fn in self.graph_ir.functions for op in fn.body]
             if (
@@ -875,8 +878,8 @@ class JitFn:
                 "x86", args, kwargs, out_cotangents=out_cotangents)
         if target_kind != "cpu":
             raise TesseraJitError(
-                "native_backward currently supports target='cpu'/'x86' or "
-                "verified ROCm lanes")
+                "native_backward currently supports target='cpu'/'x86', "
+                "verified ROCm lanes, or verified NVIDIA SM120 lanes")
 
         import numpy as np
         import re
@@ -974,13 +977,24 @@ class JitFn:
         family = "layer_norm" if bare == "layer_norm" else "rmsnorm"
         operand_names = list(self.arg_names)
         gradient_names = [f"d_{name}" for name in operand_names]
-        path = f"{target}_{family}_bwd_compiled"
+        nvidia = target == "nvidia_sm120"
+        gpu = target in {"rocm", "nvidia_sm120"}
+        path = (
+            "nvidia_norm_bwd_compiled"
+            if nvidia
+            else f"{target}_{family}_bwd_compiled"
+        )
+        execution_mode = (
+            "cuda_driver" if nvidia
+            else "hip_runtime" if target == "rocm"
+            else "cpu_avx512"
+        )
         artifact = RuntimeArtifact(metadata={
             "target": target,
             "compiler_path": path,
             "executable": True,
-            "execution_kind": "native_gpu" if target == "rocm" else "native_cpu",
-            "execution_mode": "hip_runtime" if target == "rocm" else "cpu_avx512",
+            "execution_kind": "native_gpu" if gpu else "native_cpu",
+            "execution_mode": execution_mode,
             "autodiff_phase": "backward",
             "out_cotangent": "dy",
             "arg_names": operand_names + ["dy"],
@@ -993,16 +1007,20 @@ class JitFn:
             }],
         })
         result = launch(artifact, tuple([*inputs, dy]))
-        expected_mode = "hip_runtime" if target == "rocm" else "cpu_avx512"
+        expected_mode = execution_mode
         if not result.get("ok") or result.get("execution_mode") != expected_mode:
             raise TesseraJitError(
                 f"verified {target} normalization backward launch failed: "
                 + str(result.get("reason"))
             )
-        evidence_target = "rocm_gfx1151" if target == "rocm" else "x86_avx512"
+        evidence_target = (
+            "nvidia_sm120" if nvidia
+            else "rocm_gfx1151" if target == "rocm"
+            else "x86_avx512"
+        )
         self.last_backward_execution = {
             "compiler_path": path,
-            "execution_kind": "native_gpu" if target == "rocm" else "native_cpu",
+            "execution_kind": "native_gpu" if gpu else "native_cpu",
             "execution_mode": expected_mode,
             "evidence_target": evidence_target,
             "implementation": "dedicated",
@@ -1218,13 +1236,24 @@ class JitFn:
                 f"no {target} regression-loss backward candidate for {bare!r}"
             )
         operand_names = list(self.arg_names)
-        path = f"{target}_regression_loss_bwd_compiled"
+        nvidia = target == "nvidia_sm120"
+        gpu = target in {"rocm", "nvidia_sm120"}
+        path = (
+            "nvidia_regression_loss_bwd_compiled"
+            if nvidia
+            else f"{target}_regression_loss_bwd_compiled"
+        )
+        execution_mode = (
+            "cuda_driver" if nvidia
+            else "hip_runtime" if target == "rocm"
+            else "cpu_avx512"
+        )
         artifact = RuntimeArtifact(metadata={
             "target": target,
             "compiler_path": path,
             "executable": True,
-            "execution_kind": "native_gpu" if target == "rocm" else "native_cpu",
-            "execution_mode": "hip_runtime" if target == "rocm" else "cpu_avx512",
+            "execution_kind": "native_gpu" if gpu else "native_cpu",
+            "execution_mode": execution_mode,
             "autodiff_phase": "backward",
             "out_cotangent": "dy",
             "arg_names": operand_names + ["dy"],
@@ -1237,16 +1266,20 @@ class JitFn:
             }],
         })
         launched = launch(artifact, tuple([*inputs, dy]))
-        expected_mode = "hip_runtime" if target == "rocm" else "cpu_avx512"
+        expected_mode = execution_mode
         if not launched.get("ok") or launched.get("execution_mode") != expected_mode:
             raise TesseraJitError(
                 f"verified {target} {family} backward launch failed: "
                 + str(launched.get("reason"))
             )
-        evidence_target = "rocm_gfx1151" if target == "rocm" else "x86_avx512"
+        evidence_target = (
+            "nvidia_sm120" if nvidia
+            else "rocm_gfx1151" if target == "rocm"
+            else "x86_avx512"
+        )
         self.last_backward_execution = {
             "compiler_path": path,
-            "execution_kind": "native_gpu" if target == "rocm" else "native_cpu",
+            "execution_kind": "native_gpu" if gpu else "native_cpu",
             "execution_mode": expected_mode,
             "evidence_target": evidence_target,
             "implementation": "dedicated",
@@ -1294,13 +1327,23 @@ class JitFn:
             )
         source_op = graph_ops[0]
         operand_names = list(self.arg_names)
-        path = f"{target}_binary_loss_bwd_compiled"
-        expected = "hip_runtime" if target == "rocm" else "cpu_avx512"
+        nvidia = target == "nvidia_sm120"
+        gpu = target in {"rocm", "nvidia_sm120"}
+        path = (
+            "nvidia_binary_loss_bwd_compiled"
+            if nvidia
+            else f"{target}_binary_loss_bwd_compiled"
+        )
+        expected = (
+            "cuda_driver" if nvidia
+            else "hip_runtime" if target == "rocm"
+            else "cpu_avx512"
+        )
         artifact = RuntimeArtifact(metadata={
             "target": target,
             "compiler_path": path,
             "executable": True,
-            "execution_kind": "native_gpu" if target == "rocm" else "native_cpu",
+            "execution_kind": "native_gpu" if gpu else "native_cpu",
             "execution_mode": expected,
             "autodiff_phase": "backward",
             "out_cotangent": "dy",
@@ -1321,10 +1364,12 @@ class JitFn:
             )
         self.last_backward_execution = {
             "compiler_path": path,
-            "execution_kind": "native_gpu" if target == "rocm" else "native_cpu",
+            "execution_kind": "native_gpu" if gpu else "native_cpu",
             "execution_mode": expected,
             "evidence_target": (
-                "rocm_gfx1151" if target == "rocm" else "x86_avx512"
+                "nvidia_sm120" if nvidia
+                else "rocm_gfx1151" if target == "rocm"
+                else "x86_avx512"
             ),
             "implementation": "dedicated",
             "residual_policy": "save_inputs",
@@ -1372,11 +1417,21 @@ class JitFn:
         source_kwargs = dict(source_op.kwargs)
         if "smoothing" in source_kwargs:
             source_kwargs["label_smoothing"] = source_kwargs.pop("smoothing")
-        path = f"{target}_class_loss_bwd_compiled"
-        expected = "hip_runtime" if target == "rocm" else "cpu_avx512"
+        nvidia = target == "nvidia_sm120"
+        gpu = target in {"rocm", "nvidia_sm120"}
+        path = (
+            "nvidia_class_loss_bwd_compiled"
+            if nvidia
+            else f"{target}_class_loss_bwd_compiled"
+        )
+        expected = (
+            "cuda_driver" if nvidia
+            else "hip_runtime" if target == "rocm"
+            else "cpu_avx512"
+        )
         artifact = RuntimeArtifact(metadata={
             "target": target, "compiler_path": path, "executable": True,
-            "execution_kind": "native_gpu" if target == "rocm" else "native_cpu",
+            "execution_kind": "native_gpu" if gpu else "native_cpu",
             "execution_mode": expected, "autodiff_phase": "backward",
             "out_cotangent": "dy",
             "arg_names": list(self.arg_names) + ["dy"],
@@ -1397,15 +1452,68 @@ class JitFn:
                 + str(launched.get("reason")))
         self.last_backward_execution = {
             "compiler_path": path,
-            "execution_kind": "native_gpu" if target == "rocm" else "native_cpu",
+            "execution_kind": "native_gpu" if gpu else "native_cpu",
             "execution_mode": expected,
             "evidence_target": (
-                "rocm_gfx1151" if target == "rocm" else "x86_avx512"),
+                "nvidia_sm120" if nvidia
+                else "rocm_gfx1151" if target == "rocm"
+                else "x86_avx512"),
             "implementation": "dedicated",
             "residual_policy": "save_inputs",
             "op_family": "cross_entropy_loss",
         }
         return (launched["output"],)
+
+    def _native_nvidia_backward(
+        self,
+        args: Tuple[Any, ...],
+        kwargs: Dict[str, Any],
+        *,
+        out_cotangents: Any,
+    ) -> tuple[Any, ...]:
+        """Bind shared paired adjoints to the verified SM120 PTX packages."""
+        graph_ops = [op for fn in self.graph_ir.functions for op in fn.body]
+        ops = {op.op_name.removeprefix("tessera.") for op in graph_ops}
+        if len(graph_ops) != 1:
+            raise TesseraJitError(
+                "SM120 native training backward currently requires one Graph op"
+            )
+        if ops <= {"rmsnorm", "rmsnorm_safe", "layer_norm"}:
+            return self._native_norm_backward(
+                "nvidia_sm120", args, kwargs, out_cotangents=out_cotangents
+            )
+        if ops <= {
+            "loss.mse", "mse_loss", "loss.mae", "mae_loss",
+            "loss.huber", "huber_loss", "loss.smooth_l1", "smooth_l1_loss",
+        }:
+            return self._native_regression_loss_backward(
+                "nvidia_sm120", args, kwargs, out_cotangents=out_cotangents
+            )
+        if ops <= {
+            "loss.binary_cross_entropy", "binary_cross_entropy_loss",
+        }:
+            return self._native_binary_loss_backward(
+                "nvidia_sm120", args, kwargs, out_cotangents=out_cotangents
+            )
+        if ops <= {
+            "loss.kl_divergence",
+            "kl_divergence",
+            "loss.js_divergence",
+            "js_divergence",
+        }:
+            return self._native_regression_loss_backward(
+                "nvidia_sm120", args, kwargs, out_cotangents=out_cotangents
+            )
+        if ops <= {
+            "loss.cross_entropy", "cross_entropy_loss",
+            "label_smoothed_cross_entropy",
+        }:
+            return self._native_class_loss_backward(
+                "nvidia_sm120", args, kwargs, out_cotangents=out_cotangents
+            )
+        raise TesseraJitError(
+            f"no verified SM120 paired training candidate for ops {sorted(ops)}"
+        )
 
     def _native_rocm_backward(
         self,

@@ -1494,3 +1494,27 @@ and reports one active block/CU. The shared rematerialization pass now derives
 activation budgets from a device/model envelope when no explicit override is
 present. This changes no ROCm selector and transfers no LDS evidence to another
 AMD architecture.
+
+Cross-backend sync `E2E-SPINE3-SM120-MEMORY-2026-07-24` extends the shared
+fleet fixture corpus with bounded epilogue, attention, and ReplaySSM identities
+and seals the six formerly pending NVIDIA SM120 family rows. ROCm can reuse
+only fixture identity and proof-schema structure. CUDA image descriptors,
+NVPTX address-space-3 materialization, ptxas accounting, SM120 resources,
+timings, and release readiness do not transfer to AMDGPU. The existing
+gfx1151 packet and architecture-owned LDS/rematerialization evidence remain
+unchanged.
+
+Cross-backend sync `CUDA-TRAINING-MEMORY-FOUNDATION-2026-07-24` is
+NVIDIA-owned. It changes no shared Graph/Linalg mathematics and no ROCm
+execution row, selector, HIP ABI, or LDS policy. The CUDA PTX image/descriptor,
+CUDA-driver launch-v2 entry points, NVPTX external shared symbol, ptxas/driver
+resources, and SM120 timings do not transfer to gfx1151. ROCm's existing
+training kernels and `aligned_sum_of_slot_maxima` LDS proof remain the
+architecture-owned sibling implementation.
+
+Cross-backend sync `CUDA-TRAINING-MEMORY-BREADTH-2026-07-24` adds only the
+portable Graph IR carriers for model-parameter marking and bounded dynamic
+parameter storage. NVIDIA owns the CUDA-context capacity/free-memory query,
+FP16/BF16 PTX training ABIs, serialized dynamic-shared launch expressions, and
+SM120 measurements. None transfers to HIP/AMDGPU or changes ROCm execution,
+LDS sizing, rematerialization policy, selectors, or exact-device claims.

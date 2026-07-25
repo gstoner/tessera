@@ -1,11 +1,13 @@
 add_mlir_library(TesseraNVIDIAConversion
   NVIDIALowering.cpp
+  NVIDIADynamicShared.cpp
 
   LINK_LIBS PUBLIC
     TesseraIR
     TesseraNVIDIAIR
     TesseraPasses
     MLIRArithDialect
+    MLIRAnalysis
     MLIRFuncDialect
     MLIRGPUDialect
     MLIRIR

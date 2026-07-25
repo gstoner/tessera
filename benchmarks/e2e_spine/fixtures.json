@@ -35,6 +35,35 @@
       "tolerance": {"atol": 1e-6, "rtol": 1e-6, "equal_nan": false}
     },
     {
+      "fixture_id": "epilogue-f16-bias-relu-residual-2x2-v1",
+      "family": "epilogue",
+      "dtype": "fp16",
+      "shape": [2, 2, 2],
+      "semantic_contract": "C=relu(A@B+bias)+residual; fp16 inputs; fp32 accumulation and output",
+      "inputs": {
+        "a": [[1.0, -2.0], [3.0, 4.0]],
+        "b": [[2.0, 1.0], [-1.0, 0.5]],
+        "bias": [0.5, -1.0],
+        "residual": [[0.25, 0.5], [-0.5, 1.0]]
+      },
+      "oracle": [[4.75, 0.5], [2.0, 5.0]],
+      "tolerance": {"atol": 2e-3, "rtol": 2e-3, "equal_nan": false}
+    },
+    {
+      "fixture_id": "attention-f32-uniform-1x1x2x2-v1",
+      "family": "attention",
+      "dtype": "fp32",
+      "shape": [1, 1, 2, 2],
+      "semantic_contract": "non-causal scaled dot-product attention; f32 storage and accumulation",
+      "inputs": {
+        "q": [[[[0.0, 0.0], [0.0, 0.0]]]],
+        "k": [[[[0.0, 0.0], [0.0, 0.0]]]],
+        "v": [[[[1.0, 2.0], [3.0, 4.0]]]]
+      },
+      "oracle": [[[[2.0, 3.0], [2.0, 3.0]]]],
+      "tolerance": {"atol": 2e-6, "rtol": 2e-6, "equal_nan": false}
+    },
+    {
       "fixture_id": "paged-kv-f32-permuted-2x2-v1",
       "family": "paged_kv",
       "dtype": "fp32",
@@ -48,6 +77,23 @@
       },
       "oracle": [[[7.0, 8.0]], [[1.0, 2.0]]],
       "tolerance": {"atol": 0.0, "rtol": 0.0, "equal_nan": false}
+    },
+    {
+      "fixture_id": "replay-ssm-f32-decode-1x1x1x1-v1",
+      "family": "replay_ssm",
+      "dtype": "fp32",
+      "shape": [1, 1, 1, 1],
+      "semantic_contract": "output-only ReplaySSM decode; fixed-order state projection and replay",
+      "inputs": {
+        "delta": [[[0.0]]],
+        "x": [[[1.0]]],
+        "bcoef": [[[1.0]]],
+        "s0": [[[2.0]]],
+        "c": [[3.0]],
+        "a": [0.0]
+      },
+      "oracle": [[[6.0]]],
+      "tolerance": {"atol": 2e-5, "rtol": 2e-5, "equal_nan": false}
     },
     {
       "fixture_id": "moe-dispatch-f32-permuted-3x2-v1",

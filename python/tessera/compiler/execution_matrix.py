@@ -1057,6 +1057,23 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "fused int4/int8 per-group dequantization inside grouped GEMM",
     "nvidia_optimizer_compiled": "NVIDIA GPU (consumer Blackwell sm_120) fused "
                             "f32 SGD, momentum, Nesterov, Adam, AdamW, and Lion updates",
+    "nvidia_norm_bwd_compiled": "NVIDIA GPU (consumer Blackwell sm_120) "
+                            "compiler-owned CUDA/PTX dynamic affine RMSNorm and "
+                            "LayerNorm backward",
+    "nvidia_regression_loss_bwd_compiled": "NVIDIA GPU (consumer Blackwell "
+                            "sm_120) compiler-owned CUDA/PTX MSE, MAE, Huber, "
+                            "and SmoothL1 backward",
+    "nvidia_binary_loss_bwd_compiled": "NVIDIA GPU (consumer Blackwell sm_120) "
+                            "compiler-owned stable BCE-with-logits backward",
+    "nvidia_class_loss_bwd_compiled": "NVIDIA GPU (consumer Blackwell sm_120) "
+                            "compiler-owned class-index and label-smoothed "
+                            "cross-entropy backward",
+    "nvidia_training_loss_sgd_compiled": "NVIDIA GPU (consumer Blackwell "
+                            "sm_120) compiler-owned one-launch loss backward "
+                            "plus SGD update",
+    "nvidia_training_loss_adamw_compiled": "NVIDIA GPU (consumer Blackwell "
+                            "sm_120) compiler-owned one-launch loss backward "
+                            "plus AdamW state update",
     "nvidia_local_collective_compiled": "NVIDIA GPU (consumer Blackwell sm_120) "
                             "one-device identity execution for collective-facing ops",
     "nvidia_fpquant_compiled": "NVIDIA GPU (consumer Blackwell sm_120) native "
@@ -3368,12 +3385,102 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         target="nvidia_sm120", compiler_path="nvidia_optimizer_compiled",
         execution_kind="native_gpu", executable=True,
         executor_id="nvidia_optimizer_compiled", runtime_status="success",
-        reason="NVIDIA sm_120 fused f32 SGD, momentum, Nesterov, Adam, AdamW, "
-               "and Lion parameter/state updates.",
+        reason="NVIDIA sm_120 fused SGD, momentum, Nesterov, Adam, and AdamW "
+               "updates preserve f32/f16/bf16 parameter storage with f32 "
+               "accumulation/state; the established Lion route remains f32.",
         execution_mode="cuda_runtime", direction="forward", op_family="optimizer",
         device_proof="device_verified_jit", evidence_target="nvidia_sm120",
         numerical_fixture="tests/device/nvidia/test_optimizer.py",
         proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_norm_bwd_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_norm_bwd_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_norm_bwd_compiled", runtime_status="success",
+        reason="SM120 compiler-owned PTX dynamic affine RMSNorm/LayerNorm VJP "
+               "for f32/f16/bf16 storage with deterministic f32 accumulation.",
+        execution_mode="cuda_driver", direction="backward", op_family="norm",
+        device_proof="device_verified_jit", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/device/nvidia/test_training_autodiff_native.py",
+        proof_build="cuda13.3+llvm23+sm120",
+        backward_aliases=("rmsnorm", "rmsnorm_safe", "layer_norm"),
+        residual_policy="save_inputs",
+        residual_tradeoff="Recomputes row statistics from saved input and affine weight."),
+    ("nvidia_sm120", "nvidia_regression_loss_bwd_compiled"): ExecutionRow(
+        target="nvidia_sm120",
+        compiler_path="nvidia_regression_loss_bwd_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_regression_loss_bwd_compiled",
+        runtime_status="success",
+        reason="SM120 compiler-owned PTX MSE/MAE/Huber/SmoothL1/KL/JS paired "
+               "VJP for f32/f16/bf16 storage with f32 accumulation and "
+               "deterministic broadcast-gradient reduction.",
+        execution_mode="cuda_driver", direction="backward",
+        op_family="regression_loss",
+        device_proof="device_verified_jit", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/device/nvidia/test_training_autodiff_native.py",
+        proof_build="cuda13.3+llvm23+sm120",
+        backward_aliases=(
+            "mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss",
+            "kl_divergence", "js_divergence",
+        ),
+        residual_policy="save_inputs",
+        residual_tradeoff="Saves prediction and target; emits both input gradients."),
+    ("nvidia_sm120", "nvidia_binary_loss_bwd_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_binary_loss_bwd_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_binary_loss_bwd_compiled",
+        runtime_status="success",
+        reason="SM120 compiler-owned overflow-stable BCE-with-logits paired "
+               "VJP for f32/f16/bf16 storage with f32 accumulation.",
+        execution_mode="cuda_driver", direction="backward",
+        op_family="binary_loss",
+        device_proof="device_verified_jit", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/device/nvidia/test_training_autodiff_native.py",
+        proof_build="cuda13.3+llvm23+sm120",
+        backward_aliases=("binary_cross_entropy_loss",),
+        residual_policy="save_inputs",
+        residual_tradeoff="Saves logits and target; emits both input gradients."),
+    ("nvidia_sm120", "nvidia_class_loss_bwd_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_class_loss_bwd_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_class_loss_bwd_compiled",
+        runtime_status="success",
+        reason="SM120 compiler-owned stable class-index/label-smoothed "
+               "cross-entropy logits VJP for f32/f16/bf16 storage with f32 "
+               "accumulation.",
+        execution_mode="cuda_driver", direction="backward",
+        op_family="class_loss",
+        device_proof="device_verified_jit", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/device/nvidia/test_training_autodiff_native.py",
+        proof_build="cuda13.3+llvm23+sm120",
+        backward_aliases=("cross_entropy_loss", "label_smoothed_cross_entropy"),
+        residual_policy="save_inputs",
+        residual_tradeoff="Saves logits and integer labels; labels are nondifferentiable."),
+    ("nvidia_sm120", "nvidia_training_loss_sgd_compiled"): ExecutionRow(
+        target="nvidia_sm120",
+        compiler_path="nvidia_training_loss_sgd_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_training_loss_sgd_compiled",
+        runtime_status="success",
+        reason="SM120 compiler-owned single-kernel loss VJP plus SGD update.",
+        execution_mode="cuda_driver", direction="forward",
+        op_family="training.loss_sgd",
+        device_proof="device_verified_jit", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/device/nvidia/test_training_autodiff_native.py",
+        proof_build="cuda13.3+llvm23+sm120"),
+    ("nvidia_sm120", "nvidia_training_loss_adamw_compiled"): ExecutionRow(
+        target="nvidia_sm120",
+        compiler_path="nvidia_training_loss_adamw_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_training_loss_adamw_compiled",
+        runtime_status="success",
+        reason="SM120 compiler-owned single-kernel loss VJP plus AdamW "
+               "parameter/moment update.",
+        execution_mode="cuda_driver", direction="forward",
+        op_family="training.loss_adamw",
+        device_proof="device_verified_jit", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/device/nvidia/test_training_autodiff_native.py",
+        proof_build="cuda13.3+llvm23+sm120"),
     ("nvidia_sm120", "nvidia_local_collective_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_local_collective_compiled",
         execution_kind="native_gpu", executable=True,

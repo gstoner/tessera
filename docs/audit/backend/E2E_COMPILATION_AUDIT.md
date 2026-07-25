@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-20
+last_updated: 2026-07-24
 audit_role: plan
 plan_state: landing
 owner: shared compiler and backend owners
@@ -279,13 +279,35 @@ AVX512 symbol. The hash-sealed WSL packet now binds its shared numerical
 fixtures, prepackaged image/descriptor replay, resource fingerprints, and
 repeated-median `kernel_wall` plus end-to-end rows to landed source commit
 `9f3757ef2dda2dd61ff94f1aefe0244f1b80f064`; every row passes the 4% gate and
-disassembly contains no YMM/ZMM use. The independent SM120 packet binds the
-same shared softmax/reduction fixtures, cold/warm compiler-cache identity,
-ptxas resource fingerprints, and repeated-median device-event plus end-to-end
-rows to that commit on the RTX 5070 Ti. All four SM120 timing rows pass the
-unchanged 4% gate. The generated dashboard marks only these four bounded
-families release-ready; broader SM120, AVX512, gfx1151, and Apple packet scope
-remains pending.
+disassembly contains no YMM/ZMM use. The independent SM120 packet now binds
+matmul, softmax, reduction, fused epilogue, attention, paged-KV, ReplaySSM, and
+MoE fixtures, cold/warm compiler-cache identity, ptxas resource fingerprints,
+and repeated-median device-event plus end-to-end rows to source commit
+`9da32b78c37fc3bebf3f69d575e7b1eb4013a399` on the RTX 5070 Ti. All 16 SM120
+timing rows pass the unchanged 4% gate, so all eight bounded families are
+release-ready without a selector change. AVX512, gfx1151, and Apple packet
+scope remains independently architecture- and host-owned.
+
+The NVIDIA static-memory closeout adds a four-layer proof for the shared arena
+planner without making its physical allocation portable. A lit fixture proves
+three 512-byte logical Tile buffers become one 1,024-byte address-space-3
+object with reuse offsets `[0, 512, 0]`; LLVM 23 preserves the exact NVPTX
+shared declaration and `ptxas`/cubin inspection retains registers, shared
+memory, occupancy, stack, local bytes, and spills. On the exact SM120 host,
+retained-shared and register-rematerialized kernels are numerically equal and
+stable below 4% in both timing domains. The record is evidence-only and cannot
+promote a selector.
+
+The NVIDIA training/dynamic-memory continuation extends that spine through
+compiler-owned FP32/FP16/BF16 backward and optimizer descriptors with FP32
+accumulation, KL/JS and deterministic broadcast-gradient reductions, and
+CFG-forwarded/local-arithmetic dynamic shared-memory expressions. The native
+bridge supplies the exact CUDA context's total/free memory to a conservative
+Graph IR model/state envelope consumed by the shared activation
+rematerialization pass. The 26-row SM120 packet retains both timing domains,
+resources, cold/warm identity, and cache fingerprints; 14 rows pass the 4%
+two-run gate on WSL2. It is evidence-only until the identical packet is stable
+on controlled native Linux, so no selector changes.
 
 ## 6. Backend engineering notes
 

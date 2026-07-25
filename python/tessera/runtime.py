@@ -2323,6 +2323,15 @@ def _load_nvidia_ptx_launch() -> ctypes.CDLL | None:
         ctypes.c_size_t,
     ]
     lib.tessera_nvidia_ptx_invoke.restype = ctypes.c_int
+    lib.tessera_nvidia_ptx_invoke_v2.argtypes = [
+        ctypes.c_char_p,
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_int64),
+        ctypes.c_size_t,
+        ctypes.c_size_t,
+    ]
+    lib.tessera_nvidia_ptx_invoke_v2.restype = ctypes.c_int
     lib.tessera_nvidia_ptx_benchmark.argtypes = [
         ctypes.c_char_p,
         ctypes.POINTER(ctypes.c_void_p),
@@ -2334,6 +2343,33 @@ def _load_nvidia_ptx_launch() -> ctypes.CDLL | None:
         ctypes.POINTER(ctypes.c_float),
     ]
     lib.tessera_nvidia_ptx_benchmark.restype = ctypes.c_int
+    lib.tessera_nvidia_ptx_benchmark_v2.argtypes = [
+        ctypes.c_char_p,
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_int64),
+        ctypes.c_size_t,
+        ctypes.c_size_t,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.POINTER(ctypes.c_float),
+    ]
+    lib.tessera_nvidia_ptx_benchmark_v2.restype = ctypes.c_int
+    lib.tessera_nvidia_ptx_resources.argtypes = [
+        ctypes.c_char_p,
+        ctypes.c_int,
+        ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_int),
+    ]
+    lib.tessera_nvidia_ptx_resources.restype = ctypes.c_int
+    lib.tessera_nvidia_ptx_device_memory.argtypes = [
+        ctypes.POINTER(ctypes.c_size_t),
+        ctypes.POINTER(ctypes.c_size_t),
+    ]
+    lib.tessera_nvidia_ptx_device_memory.restype = ctypes.c_int
     _nvidia_ptx_launch_lib = lib
     return lib
 
@@ -2379,6 +2415,23 @@ def _submit_nvidia_sm120_native(
         SM120_SOFTMAX_F16_ABI,
         SM120_SOFTMAX_F32_ABI,
     )
+    from tessera.compiler.nvidia_training import (
+        SM120_ADAM_ABIS,
+        SM120_BROADCAST_REDUCE_ABIS,
+        SM120_CLASS_BWD_ABIS,
+        SM120_FUSED_LOSS_ADAMW_ABIS,
+        SM120_FUSED_LOSS_SGD_ABIS,
+        SM120_LOSS_BWD_ABIS,
+        SM120_MOMENTUM_ABIS,
+        SM120_NORM_BWD_ABIS,
+        SM120_SGD_ABIS,
+        SM120_TRAINING_ABIS,
+    )
+    from tessera.compiler.nvidia_dynamic_smem import (
+        SM120_DYNAMIC_EXPR_SMEM_ABI,
+        SM120_DYNAMIC_SMEM_ABI,
+        evaluate_launch_expression,
+    )
 
     if descriptor.abi_id not in {
         SM120_ATTN_F16_ABI,
@@ -2409,7 +2462,7 @@ def _submit_nvidia_sm120_native(
         SM120_MOE_DISPATCH_F32_ABI,
         SM120_MOE_COMBINE_F32_ABI,
         SM120_GROUPED_GEMM_F32_ABI,
-        } | set(SM120_EPILOGUE_ABIS) | set(SM120_MOE_ABIS):
+        } | set(SM120_EPILOGUE_ABIS) | set(SM120_MOE_ABIS) | set(SM120_TRAINING_ABIS) | {SM120_DYNAMIC_SMEM_ABI, SM120_DYNAMIC_EXPR_SMEM_ABI}:
         raise RuntimeError(f"unsupported SM120 descriptor ABI {descriptor.abi_id!r}")
     lib = _load_nvidia_ptx_launch()
     if lib is None:
@@ -2444,7 +2497,162 @@ def _submit_nvidia_sm120_native(
     }
     unary_abis = softmax_abis | reduction_abis
     moe_abis = set(SM120_MOE_ABIS)
-    if descriptor.abi_id in attention_backward_abis:
+    training_abis = set(SM120_TRAINING_ABIS)
+    if descriptor.abi_id == SM120_DYNAMIC_EXPR_SMEM_ABI:
+        names = ("Base", "Factor", "Bias", "Fallback", "Branch")
+        dimensions = tuple(
+            int(cast(int, scalars[name])) for name in names
+        )
+        base, factor, expression_bias, fallback, branch = dimensions
+        (output,) = raw
+        expression = descriptor.provenance.get("launch_expression")
+        if not isinstance(expression, dict):
+            raise RuntimeError(
+                "SM120 dynamic shared-memory descriptor lacks expression"
+            )
+        expected_bytes = (
+            evaluate_launch_expression(
+                expression,
+                dict(zip(names, dimensions, strict=True)),
+            )
+            + 15
+        ) & -16
+        if (
+            tuple(output.shape) != (2,)
+            or min(base, factor, expression_bias) < 0
+            or fallback < 2
+            or branch not in {0, 1}
+            or descriptor.dynamic_local_memory_bytes != expected_bytes
+        ):
+            raise RuntimeError(
+                "SM120 dynamic shared-memory invocation disagrees with "
+                "the serialized expression descriptor"
+            )
+    elif descriptor.abi_id == SM120_DYNAMIC_SMEM_ABI:
+        dimensions = tuple(
+            int(cast(int, scalars[name]))
+            for name in ("ThenBytes", "ElseBytes", "Branch")
+        )
+        then_bytes, else_bytes, branch = dimensions
+        (output,) = raw
+        expected_bytes = (max(then_bytes, else_bytes) + 15) & -16
+        if (
+            tuple(output.shape) != (2,)
+            or then_bytes < 2
+            or else_bytes < 2
+            or branch not in {0, 1}
+            or descriptor.dynamic_local_memory_bytes != expected_bytes
+        ):
+            raise RuntimeError(
+                "SM120 dynamic shared-memory invocation disagrees with "
+                "the path-max descriptor"
+            )
+    elif descriptor.abi_id in SM120_NORM_BWD_ABIS.values():
+        dimensions = tuple(
+            int(cast(int, scalars[name])) for name in ("Rows", "Columns")
+        )
+        rows, columns = dimensions
+        x, gamma, dy, dx, dgamma, dbeta = raw
+        if (
+            tuple(x.shape) != (rows, columns)
+            or tuple(gamma.shape) != (columns,)
+            or tuple(dy.shape) != tuple(x.shape)
+            or tuple(dx.shape) != tuple(x.shape)
+            or tuple(dgamma.shape) != (columns,)
+            or tuple(dbeta.shape) != (columns,)
+        ):
+            raise RuntimeError(
+                "SM120 norm-backward shapes disagree with descriptor scalars"
+            )
+        output = (dx, dgamma, dbeta)
+    elif descriptor.abi_id in SM120_LOSS_BWD_ABIS.values():
+        dimensions = (int(cast(int, scalars["N"])),)
+        n = dimensions[0]
+        prediction, target, dy, dprediction, dtarget = raw
+        reduction = str(descriptor.provenance.get("reduction", "none"))
+        expected_dy = (n,) if reduction == "none" else (1,)
+        if (
+            tuple(prediction.shape) != (n,)
+            or tuple(target.shape) != (n,)
+            or tuple(dy.shape) != expected_dy
+            or tuple(dprediction.shape) != (n,)
+            or tuple(dtarget.shape) != (n,)
+        ):
+            raise RuntimeError(
+                "SM120 loss-backward shapes disagree with descriptor scalars"
+            )
+        output = (dprediction, dtarget)
+    elif descriptor.abi_id in SM120_CLASS_BWD_ABIS.values():
+        dimensions = tuple(
+            int(cast(int, scalars[name])) for name in ("Rows", "Classes")
+        )
+        rows, classes = dimensions
+        logits, labels, dy, dlogits = raw
+        reduction = str(descriptor.provenance.get("reduction", "none"))
+        expected_dy = (rows,) if reduction == "none" else (1,)
+        if (
+            tuple(logits.shape) != (rows, classes)
+            or tuple(labels.shape) != (rows,)
+            or tuple(dy.shape) != expected_dy
+            or tuple(dlogits.shape) != tuple(logits.shape)
+        ):
+            raise RuntimeError(
+                "SM120 class-loss backward shapes disagree with descriptor scalars"
+            )
+        if rows and (int(labels.min()) < 0 or int(labels.max()) >= classes):
+            raise RuntimeError("SM120 class labels are outside the class extent")
+        output = dlogits
+    elif descriptor.abi_id in SM120_BROADCAST_REDUCE_ABIS.values():
+        dimensions = tuple(
+            int(cast(int, scalars[name])) for name in ("InputN", "OutputN")
+        )
+        input_n, output_n = dimensions
+        input_value, output_value = raw
+        if (
+            tuple(input_value.shape) != (input_n,)
+            or tuple(output_value.shape) != (output_n,)
+        ):
+            raise RuntimeError(
+                "SM120 broadcast-gradient shapes disagree with descriptor scalars"
+            )
+        output = output_value
+    elif descriptor.abi_id in {
+        *SM120_SGD_ABIS.values(),
+        *SM120_MOMENTUM_ABIS.values(),
+        *SM120_ADAM_ABIS.values(),
+    }:
+        dimensions = (int(cast(int, scalars["N"])),)
+        n = dimensions[0]
+        if any(tuple(value.shape) != (n,) for value in raw):
+            raise RuntimeError(
+                "SM120 optimizer shapes disagree with descriptor scalar N"
+            )
+        if descriptor.abi_id in SM120_SGD_ABIS.values():
+            output = raw[2]
+        elif descriptor.abi_id in SM120_MOMENTUM_ABIS.values():
+            output = tuple(raw[3:5])
+        else:
+            output = tuple(raw[4:7])
+    elif descriptor.abi_id in {
+        *SM120_FUSED_LOSS_SGD_ABIS.values(),
+        *SM120_FUSED_LOSS_ADAMW_ABIS.values(),
+    }:
+        dimensions = (int(cast(int, scalars["N"])),)
+        n = dimensions[0]
+        reduction = str(descriptor.provenance.get("reduction", "none"))
+        expected_dy = (n,) if reduction == "none" else (1,)
+        for index, value in enumerate(raw):
+            expected = expected_dy if index == 2 else (n,)
+            if tuple(value.shape) != expected:
+                raise RuntimeError(
+                    "SM120 fused training shapes disagree with descriptor scalar N"
+                )
+        output = (
+            tuple(raw[4:6])
+            if descriptor.abi_id in SM120_FUSED_LOSS_SGD_ABIS.values()
+            else tuple(raw[6:10])
+        )
+    elif descriptor.abi_id in attention_backward_abis:
         dimensions = tuple(int(cast(int, scalars[name])) for name in ("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv"))
         b, hq, hkv, sq, sk, d, dv = dimensions
         has_bias = descriptor.abi_id in {
@@ -2640,19 +2848,34 @@ def _submit_nvidia_sm120_native(
             raise RuntimeError("SM120 MX packed/scale shapes disagree with M/N/K scalars")
     c_buffers = (ctypes.c_void_p * len(addresses))(*addresses)
     dims = (ctypes.c_int64 * len(dimensions))(*dimensions)
-    rc = lib.tessera_nvidia_ptx_invoke(
-        entry.encode(),
-        c_buffers,
-        len(addresses),
-        dims,
-        len(dimensions),
-    )
+    if descriptor.dynamic_local_memory_bytes:
+        rc = lib.tessera_nvidia_ptx_invoke_v2(
+            entry.encode(),
+            c_buffers,
+            len(addresses),
+            dims,
+            len(dimensions),
+            descriptor.dynamic_local_memory_bytes,
+        )
+    else:
+        rc = lib.tessera_nvidia_ptx_invoke(
+            entry.encode(),
+            c_buffers,
+            len(addresses),
+            dims,
+            len(dimensions),
+        )
     if rc:
         raise RuntimeError(f"SM120 descriptor invoke returned rc={rc}")
     return (
         output
-        if descriptor.abi_id in unary_abis | attention_abis | attention_backward_abis | moe_abis
-        or descriptor.abi_id in {SM120_PAGED_KV_F32_ABI, SM120_PAGED_ATTN_F32_ABI}
+        if descriptor.abi_id in unary_abis | attention_abis | attention_backward_abis | moe_abis | training_abis
+        or descriptor.abi_id in {
+            SM120_PAGED_KV_F32_ABI,
+            SM120_PAGED_ATTN_F32_ABI,
+            SM120_DYNAMIC_SMEM_ABI,
+            SM120_DYNAMIC_EXPR_SMEM_ABI,
+        }
         else d
     )
 
@@ -3517,6 +3740,11 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         SM120_SOFTMAX_F16_ABI,
         SM120_SOFTMAX_F32_ABI,
     )
+    from tessera.compiler.nvidia_training import SM120_TRAINING_ABIS
+    from tessera.compiler.nvidia_dynamic_smem import (
+        SM120_DYNAMIC_EXPR_SMEM_ABI,
+        SM120_DYNAMIC_SMEM_ABI,
+    )
 
     if (
         target == "nvidia_sm120"
@@ -3554,6 +3782,8 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
             }
             | set(SM120_EPILOGUE_ABIS)
             | set(SM120_MOE_ABIS)
+            | set(SM120_TRAINING_ABIS)
+            | {SM120_DYNAMIC_SMEM_ABI, SM120_DYNAMIC_EXPR_SMEM_ABI}
         )
         and target not in _native_launchers
     ):
@@ -4240,13 +4470,75 @@ def _nvidia_native_descriptor_device_latency(
     dimensions = tuple(int(cast(int, scalars[item.name])) for item in ordered_scalars)
     dims = (ctypes.c_int64 * len(dimensions))(*dimensions)
     latency = ctypes.c_float()
-    rc = lib.tessera_nvidia_ptx_benchmark(
-        entry.encode(), addresses, len(raw), dims, len(dimensions),
-        int(warmup), int(reps), ctypes.byref(latency),
-    )
+    if descriptor.dynamic_local_memory_bytes:
+        rc = lib.tessera_nvidia_ptx_benchmark_v2(
+            entry.encode(), addresses, len(raw), dims, len(dimensions),
+            descriptor.dynamic_local_memory_bytes, int(warmup), int(reps),
+            ctypes.byref(latency),
+        )
+    else:
+        rc = lib.tessera_nvidia_ptx_benchmark(
+            entry.encode(), addresses, len(raw), dims, len(dimensions),
+            int(warmup), int(reps), ctypes.byref(latency),
+        )
     if rc:
         raise RuntimeError(f"canonical NVIDIA descriptor benchmark rc={rc}")
     return float(latency.value)
+
+
+def _nvidia_native_descriptor_resources(
+    image: Any,
+    descriptor: Any,
+    *,
+    block_size: int,
+) -> dict[str, int]:
+    """Live CUDA-driver/JIT resources for one compiler-owned descriptor."""
+    lib = _load_nvidia_ptx_launch()
+    if lib is None:
+        raise RuntimeError("libtessera_nvidia_ptx_launch.so not loadable")
+    entry = descriptor.entry_symbol
+    ptx = image.payload.decode("ascii")
+    if lib.tessera_nvidia_ptx_register(entry.encode(), ptx.encode()) != 0:
+        raise RuntimeError(f"PTX register failed for {entry}")
+    registers = ctypes.c_int()
+    static_shared = ctypes.c_int()
+    local = ctypes.c_int()
+    active_blocks = ctypes.c_int()
+    rc = lib.tessera_nvidia_ptx_resources(
+        entry.encode(),
+        int(block_size),
+        int(descriptor.dynamic_local_memory_bytes),
+        ctypes.byref(registers),
+        ctypes.byref(static_shared),
+        ctypes.byref(local),
+        ctypes.byref(active_blocks),
+    )
+    if rc:
+        raise RuntimeError(f"canonical NVIDIA descriptor resource query rc={rc}")
+    return {
+        "registers_per_thread": registers.value,
+        "static_shared_memory_bytes": static_shared.value,
+        "dynamic_shared_memory_bytes": int(
+            descriptor.dynamic_local_memory_bytes
+        ),
+        "local_memory_bytes": local.value,
+        "active_blocks_per_sm": active_blocks.value,
+    }
+
+
+def _nvidia_device_memory_envelope() -> dict[str, int]:
+    """Return total/free bytes for the exact CUDA context used by native PTX."""
+    lib = _load_nvidia_ptx_launch()
+    if lib is None:
+        raise RuntimeError("libtessera_nvidia_ptx_launch.so not loadable")
+    total = ctypes.c_size_t()
+    free = ctypes.c_size_t()
+    rc = lib.tessera_nvidia_ptx_device_memory(
+        ctypes.byref(total), ctypes.byref(free)
+    )
+    if rc:
+        raise RuntimeError(f"CUDA device-memory query failed rc={rc}")
+    return {"capacity_bytes": int(total.value), "free_bytes": int(free.value)}
 
 
 _nvidia_device_name_probe: Any = False  # False = unprobed; None/str after
@@ -7010,6 +7302,21 @@ def _execute_nvidia_dequant_gemm(artifact: RuntimeArtifact, args: Any) -> Any:
     raise ValueError("nvidia_dequant_gemm_compiled handles dequant_matmul or dequant_grouped_gemm")
 
 
+def _nvidia_training_storage(value: Any, np: Any) -> tuple[str, Any]:
+    array = _as_numpy(value)
+    if array.dtype == np.float32:
+        return "f32", np.float32
+    if array.dtype == np.float16:
+        return "f16", np.float16
+    bf16 = _bfloat16_dtype()
+    if bf16 is not None and array.dtype == bf16:
+        return "bf16", bf16
+    raise ValueError(
+        "NVIDIA training supports f32, f16, or bf16 storage; "
+        f"got {array.dtype}"
+    )
+
+
 def _execute_nvidia_optimizer(artifact: RuntimeArtifact, args: Any) -> Any:
     import numpy as np
 
@@ -7021,9 +7328,406 @@ def _execute_nvidia_optimizer(artifact: RuntimeArtifact, args: Any) -> Any:
         raise ValueError(f"nvidia_optimizer_compiled handles {tuple(_OPTIMIZER_OPS)}")
     values = _bind_launch_args(args, list(metadata.get("arg_names") or []))
     p, g, m, v = _optimizer_bind(op, values)
+    kind = _OPTIMIZER_OPS[name][0]
+    if kind != "lion":
+        from .compiler.nvidia_training import package_optimizer
+
+        kwargs = op.get("kwargs") or {}
+        storage, store = _nvidia_training_storage(p, np)
+        pc = np.ascontiguousarray(p, store)
+        gc = np.ascontiguousarray(g, store)
+        if pc.shape != gc.shape:
+            raise ValueError("NVIDIA optimizer parameter and gradient shapes differ")
+        shape = pc.shape
+        param = pc.reshape(-1)
+        grad = gc.reshape(-1)
+        package = package_optimizer(
+            kind=kind,
+            lr=float(kwargs.get("lr", 1.0e-3)),
+            momentum=float(kwargs.get("momentum", kwargs.get("beta1", 0.9))),
+            beta1=float(kwargs.get("beta1", 0.9)),
+            beta2=float(kwargs.get("beta2", 0.999)),
+            epsilon=float(kwargs.get("eps", kwargs.get("epsilon", 1.0e-8))),
+            weight_decay=float(kwargs.get("weight_decay", 0.0)),
+            step=int(kwargs.get("step", 1)),
+            storage=storage,
+        )
+        arrays: dict[str, Any] = {
+            "param": param,
+            "grad": grad,
+            "output": np.empty_like(param),
+        }
+        if kind in {"momentum", "nesterov"}:
+            if v is None:
+                raise ValueError(f"NVIDIA {kind} requires explicit velocity state")
+            velocity = np.ascontiguousarray(v, np.float32).reshape(-1)
+            if velocity.size != param.size:
+                raise ValueError("NVIDIA optimizer velocity shape differs")
+            arrays.update(
+                velocity=velocity,
+                velocity_output=np.empty_like(velocity),
+            )
+        elif kind in {"adam", "adamw"}:
+            if m is None or v is None:
+                raise ValueError(f"NVIDIA {kind} requires explicit moment state")
+            moment1 = np.ascontiguousarray(m, np.float32).reshape(-1)
+            moment2 = np.ascontiguousarray(v, np.float32).reshape(-1)
+            if moment1.size != param.size or moment2.size != param.size:
+                raise ValueError("NVIDIA optimizer moment shape differs")
+            arrays.update(
+                moment1=moment1,
+                moment2=moment2,
+                moment1_output=np.empty_like(moment1),
+                moment2_output=np.empty_like(moment2),
+            )
+        result = _submit_nvidia_sm120_native(
+            package.image,
+            package.descriptor,
+            arrays,
+            {"N": param.size},
+            None,
+        )
+        if not isinstance(result, tuple):
+            return result.reshape(shape)
+        return tuple(value.reshape(shape) for value in result)
     from .compiler.emit.nvidia_cuda import run_optimizer_f32
 
     return _optimizer_compute(name, p, g, m, v, op.get("kwargs") or {}, run_optimizer_f32, np)
+
+
+def _execute_nvidia_training_norm_backward(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    op = ops[0] if len(ops) == 1 else {}
+    bare = str(op.get("op_name", "")).removeprefix("tessera.")
+    if bare not in {"rmsnorm", "rmsnorm_safe", "layer_norm"}:
+        raise ValueError("nvidia_norm_bwd_compiled requires one normalization op")
+    names = [str(name) for name in op.get("operands", [])]
+    values = _bind_launch_args(args, list(metadata.get("arg_names") or []))
+    if not names or len(names) > (3 if bare == "layer_norm" else 2):
+        raise ValueError("NVIDIA normalization backward affine operands are invalid")
+    storage, store = _nvidia_training_storage(values[names[0]], np)
+    x = np.ascontiguousarray(_as_numpy(values[names[0]]), store)
+    if x.ndim < 1 or x.size == 0:
+        raise ValueError("NVIDIA normalization backward requires non-empty rank")
+    columns = int(x.shape[-1])
+    rows = int(x.size // columns)
+    gamma = (
+        np.ascontiguousarray(_as_numpy(values[names[1]]), store)
+        if len(names) >= 2
+        else np.ones(columns, store)
+    )
+    if gamma.shape != (columns,):
+        raise ValueError("NVIDIA normalization gamma must match the last dimension")
+    dy = np.ascontiguousarray(
+        _as_numpy(values[str(metadata.get("out_cotangent", "dy"))]),
+        store,
+    )
+    if dy.shape != x.shape:
+        raise ValueError("NVIDIA normalization cotangent must match the input")
+    from .compiler.nvidia_training import package_norm_backward
+
+    package = package_norm_backward(
+        kind="layernorm" if bare == "layer_norm" else "rmsnorm",
+        epsilon=float((op.get("kwargs") or {}).get("eps", 1.0e-5)),
+        storage=storage,
+    )
+    dx = np.empty_like(x)
+    dgamma = np.empty(columns, np.float32)
+    dbeta = np.empty(columns, np.float32)
+    result = _submit_nvidia_sm120_native(
+        package.image,
+        package.descriptor,
+        {
+            "x": x.reshape(rows, columns),
+            "gamma": gamma,
+            "dy": dy.reshape(rows, columns),
+            "dx": dx.reshape(rows, columns),
+            "dgamma": dgamma,
+            "dbeta": dbeta,
+        },
+        {"Rows": rows, "Columns": columns},
+        None,
+    )
+    gradients = [result[0].reshape(x.shape)]
+    if len(names) >= 2:
+        gradients.append(result[1])
+    if len(names) == 3:
+        gradients.append(result[2])
+    return tuple(gradients)
+
+
+_NVIDIA_TRAINING_LOSSES = {
+    "loss.mse": ("mse", None),
+    "mse_loss": ("mse", None),
+    "loss.mae": ("mae", None),
+    "mae_loss": ("mae", None),
+    "loss.huber": ("huber", "delta"),
+    "huber_loss": ("huber", "delta"),
+    "loss.smooth_l1": ("smooth_l1", "beta"),
+    "smooth_l1_loss": ("smooth_l1", "beta"),
+    "loss.kl_divergence": ("kl", None),
+    "kl_divergence": ("kl", None),
+    "loss.js_divergence": ("js", None),
+    "js_divergence": ("js", None),
+}
+
+
+def _execute_nvidia_training_loss_backward(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    op = ops[0] if len(ops) == 1 else {}
+    bare = str(op.get("op_name", "")).removeprefix("tessera.")
+    binary = bare in {
+        "loss.binary_cross_entropy", "binary_cross_entropy_loss"
+    }
+    if binary:
+        kind, parameter_name = "bce", None
+    elif bare in _NVIDIA_TRAINING_LOSSES:
+        kind, parameter_name = _NVIDIA_TRAINING_LOSSES[bare]
+    else:
+        raise ValueError("NVIDIA loss backward received an unsupported operation")
+    names = [str(name) for name in op.get("operands", [])]
+    if len(names) != 2:
+        raise ValueError("NVIDIA loss backward requires prediction and target")
+    values = _bind_launch_args(args, list(metadata.get("arg_names") or []))
+    storage, store = _nvidia_training_storage(values[names[0]], np)
+    prediction = np.ascontiguousarray(_as_numpy(values[names[0]]), store)
+    target = np.ascontiguousarray(_as_numpy(values[names[1]]), store)
+    try:
+        output_shape = np.broadcast_shapes(prediction.shape, target.shape)
+    except ValueError as exc:
+        raise ValueError("NVIDIA loss inputs are not broadcast-compatible") from exc
+    if not output_shape or any(extent < 1 for extent in output_shape):
+        raise ValueError("NVIDIA loss backward requires non-empty shapes")
+    prediction_expanded = np.ascontiguousarray(
+        np.broadcast_to(prediction, output_shape), store
+    )
+    target_expanded = np.ascontiguousarray(
+        np.broadcast_to(target, output_shape), store
+    )
+    kwargs = op.get("kwargs") or {}
+    reduction = str(kwargs.get("reduction", "mean"))
+    dy = np.ascontiguousarray(
+        _as_numpy(values[str(metadata.get("out_cotangent", "dy"))]),
+        store,
+    )
+    expected_dy = (
+        output_shape[:-1]
+        if reduction == "none" and kind in {"kl", "js"}
+        else output_shape
+        if reduction == "none"
+        else ()
+    )
+    if reduction == "none":
+        if dy.shape != expected_dy:
+            raise ValueError("unreduced NVIDIA loss cotangent shape mismatch")
+        if kind in {"kl", "js"}:
+            dy = np.ascontiguousarray(
+                np.broadcast_to(dy[..., None], output_shape), store
+            )
+    elif dy.size != 1:
+        raise ValueError("reduced NVIDIA loss cotangent must be scalar")
+    from .compiler.nvidia_training import package_loss_backward
+
+    package = package_loss_backward(
+        kind=kind,
+        parameter=float(kwargs.get(parameter_name, 1.0))
+        if parameter_name
+        else 1.0,
+        reduction=reduction,
+        storage=storage,
+        mean_denominator=(
+            max(int(np.prod(output_shape[:-1])), 1)
+            if kind in {"kl", "js"} and reduction == "mean"
+            else None
+        ),
+    )
+    n = int(np.prod(output_shape))
+    dprediction = np.empty(n, store)
+    dtarget = np.empty(n, store)
+    result = _submit_nvidia_sm120_native(
+        package.image,
+        package.descriptor,
+        {
+            "prediction": prediction_expanded.reshape(-1),
+            "target": target_expanded.reshape(-1),
+            "dy": dy.reshape(-1),
+            "dprediction": dprediction,
+            "dtarget": dtarget,
+        },
+        {"N": n},
+        None,
+    )
+    from .compiler.nvidia_training import package_broadcast_gradient
+
+    def reduce_to_shape(expanded: Any, shape: tuple[int, ...]) -> Any:
+        if shape == output_shape:
+            return expanded.reshape(shape)
+        reduction_package = package_broadcast_gradient(
+            input_shape=tuple(output_shape),
+            output_shape=tuple(shape),
+            storage=storage,
+        )
+        reduced = np.empty(int(np.prod(shape)), store)
+        return _submit_nvidia_sm120_native(
+            reduction_package.image,
+            reduction_package.descriptor,
+            {"input": expanded.reshape(-1), "output": reduced},
+            {"InputN": n, "OutputN": reduced.size},
+            None,
+        ).reshape(shape)
+
+    return (
+        reduce_to_shape(result[0], tuple(prediction.shape)),
+        reduce_to_shape(result[1], tuple(target.shape)),
+    )
+
+
+def _execute_nvidia_training_class_backward(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    op = ops[0] if len(ops) == 1 else {}
+    bare = str(op.get("op_name", "")).removeprefix("tessera.")
+    if bare not in {
+        "loss.cross_entropy",
+        "cross_entropy_loss",
+        "label_smoothed_cross_entropy",
+    }:
+        raise ValueError("nvidia_class_loss_bwd_compiled requires cross entropy")
+    names = [str(name) for name in op.get("operands", [])]
+    values = _bind_launch_args(args, list(metadata.get("arg_names") or []))
+    storage, store = _nvidia_training_storage(values[names[0]], np)
+    logits = np.ascontiguousarray(_as_numpy(values[names[0]]), store)
+    labels = np.ascontiguousarray(_as_numpy(values[names[1]]), np.int64)
+    if logits.ndim != 2 or labels.shape != (logits.shape[0],):
+        raise ValueError("NVIDIA cross-entropy ABI requires [rows, classes] logits")
+    kwargs = op.get("kwargs") or {}
+    reduction = str(kwargs.get("reduction", "mean"))
+    dy = np.ascontiguousarray(
+        _as_numpy(values[str(metadata.get("out_cotangent", "dy"))]),
+        store,
+    )
+    if reduction == "none":
+        if dy.shape != (logits.shape[0],):
+            raise ValueError("unreduced cross-entropy cotangent must have one row value")
+    elif dy.size != 1:
+        raise ValueError("reduced cross-entropy cotangent must be scalar")
+    from .compiler.nvidia_training import package_class_backward
+
+    package = package_class_backward(
+        label_smoothing=float(
+            kwargs.get("label_smoothing", kwargs.get("smoothing", 0.0))
+        ),
+        reduction=reduction,
+        storage=storage,
+    )
+    output = np.empty_like(logits)
+    return _submit_nvidia_sm120_native(
+        package.image,
+        package.descriptor,
+        {"logits": logits, "labels": labels, "dy": dy.reshape(-1), "dlogits": output},
+        {"Rows": logits.shape[0], "Classes": logits.shape[1]},
+        None,
+    )
+
+
+def _execute_nvidia_training_fused(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    op = ops[0] if len(ops) == 1 else {}
+    op_name = str(op.get("op_name", ""))
+    optimizer = {
+        "tessera.training.loss_sgd": "sgd",
+        "tessera.training.loss_adamw": "adamw",
+    }.get(op_name)
+    if optimizer is None:
+        raise ValueError(
+            "NVIDIA fused training requires loss_sgd or loss_adamw"
+        )
+    operands = [str(name) for name in op.get("operands", [])]
+    expected = 4 if optimizer == "sgd" else 6
+    if len(operands) != expected:
+        raise ValueError(
+            f"NVIDIA fused {optimizer} training expects {expected} operands"
+        )
+    values = _bind_launch_args(args, list(metadata.get("arg_names") or []))
+    storage, store = _nvidia_training_storage(values[operands[0]], np)
+    arrays_in = [
+        np.ascontiguousarray(
+            _as_numpy(values[name]),
+            store if index < 4 else np.float32,
+        )
+        for index, name in enumerate(operands)
+    ]
+    prediction, target, dy, parameter = arrays_in[:4]
+    shape = prediction.shape
+    tensors = [prediction, target, parameter, *arrays_in[4:]]
+    if any(value.shape != shape for value in tensors) or prediction.size == 0:
+        raise ValueError("NVIDIA fused training tensor shapes must match")
+    kwargs = op.get("kwargs") or {}
+    kind = str(kwargs.get("kind", ""))
+    if kind not in _TRAINING_LOSS_KIND:
+        raise ValueError(f"unsupported NVIDIA fused loss kind {kind!r}")
+    reduction = str(kwargs.get("reduction", "mean"))
+    if reduction == "none":
+        if dy.shape != shape:
+            raise ValueError("unreduced fused training cotangent must match")
+    elif reduction not in {"sum", "mean"} or dy.size != 1:
+        raise ValueError("reduced fused training cotangent must be scalar")
+    from .compiler.nvidia_training import package_fused_loss_optimizer
+
+    package = package_fused_loss_optimizer(
+        loss_kind=kind,
+        optimizer=optimizer,
+        parameter=float(kwargs.get("parameter", 1.0)),
+        reduction=reduction,
+        lr=float(kwargs.get("lr", 1.0e-3)),
+        momentum=float(kwargs.get("momentum", 0.9)),
+        beta1=float(kwargs.get("beta1", 0.9)),
+        beta2=float(kwargs.get("beta2", 0.999)),
+        epsilon=float(kwargs.get("eps", kwargs.get("epsilon", 1.0e-8))),
+        weight_decay=float(kwargs.get("weight_decay", 0.0)),
+        step=int(kwargs.get("step", 1)),
+        storage=storage,
+    )
+    n = int(prediction.size)
+    flat = [value.reshape(-1) for value in arrays_in]
+    launch_arrays: dict[str, Any] = {
+        "prediction": flat[0],
+        "target": flat[1],
+        "dy": flat[2],
+        "param": flat[3],
+        "output": np.empty(n, store),
+        "dtarget": np.empty(n, store),
+    }
+    if optimizer == "adamw":
+        launch_arrays.update(
+            moment1=flat[4],
+            moment2=flat[5],
+            moment1_output=np.empty(n, np.float32),
+            moment2_output=np.empty(n, np.float32),
+        )
+    result = _submit_nvidia_sm120_native(
+        package.image, package.descriptor, launch_arrays, {"N": n}, None
+    )
+    return tuple(value.reshape(shape) for value in result)
 
 
 def _execute_nvidia_local_collective(artifact: RuntimeArtifact, args: Any) -> Any:
@@ -23445,6 +24149,17 @@ def _executor_table():
         "nvidia_moe_transport_compiled": _execute_nvidia_moe_transport,
         "nvidia_dequant_gemm_compiled": _execute_nvidia_dequant_gemm,
         "nvidia_optimizer_compiled": _execute_nvidia_optimizer,
+        "nvidia_norm_bwd_compiled": _execute_nvidia_training_norm_backward,
+        "nvidia_regression_loss_bwd_compiled":
+            _execute_nvidia_training_loss_backward,
+        "nvidia_binary_loss_bwd_compiled":
+            _execute_nvidia_training_loss_backward,
+        "nvidia_class_loss_bwd_compiled":
+            _execute_nvidia_training_class_backward,
+        "nvidia_training_loss_sgd_compiled":
+            _execute_nvidia_training_fused,
+        "nvidia_training_loss_adamw_compiled":
+            _execute_nvidia_training_fused,
         "nvidia_local_collective_compiled": _execute_nvidia_local_collective,
         "nvidia_fpquant_compiled": _execute_nvidia_fpquant,
         "nvidia_flash_attn_compiled": _execute_nvidia_flash_attn_compiled,

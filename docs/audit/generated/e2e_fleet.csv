@@ -14,14 +14,14 @@ tessera.e2e-release-packet.v1,x86,x86_64_avx512,x86,softmax,packet_pending,,,AVX
 tessera.e2e-release-packet.v1,x86,x86_64_avx512,x86,reduction,packet_pending,,,AVX512 x86 scope awaits a Strix Halo host packet.
 tessera.e2e-release-packet.v1,x86,x86_64_avx512,x86,attention,packet_pending,,,AVX512 x86 scope awaits a Strix Halo host packet.
 tessera.e2e-release-packet.v1,x86,x86_64_avx512,x86,linalg,packet_pending,,,AVX512 x86 scope awaits a Strix Halo host packet.
-tessera.e2e-release-packet.v1,nvidia_sm120,sm_120a,nvidia,matmul,packet_pending,,,Family absent from active packet.
-tessera.e2e-release-packet.v1,nvidia_sm120,sm_120a,nvidia,softmax,release_ready,docs/audit/evidence/e2e_spine/nvidia_sm120/sm_120a,9f3757ef2dda2dd61ff94f1aefe0244f1b80f064,Validated hash-sealed packet.
-tessera.e2e-release-packet.v1,nvidia_sm120,sm_120a,nvidia,reduction,release_ready,docs/audit/evidence/e2e_spine/nvidia_sm120/sm_120a,9f3757ef2dda2dd61ff94f1aefe0244f1b80f064,Validated hash-sealed packet.
-tessera.e2e-release-packet.v1,nvidia_sm120,sm_120a,nvidia,epilogue,packet_pending,,,Family absent from active packet.
-tessera.e2e-release-packet.v1,nvidia_sm120,sm_120a,nvidia,attention,packet_pending,,,Family absent from active packet.
-tessera.e2e-release-packet.v1,nvidia_sm120,sm_120a,nvidia,paged_kv,packet_pending,,,Family absent from active packet.
-tessera.e2e-release-packet.v1,nvidia_sm120,sm_120a,nvidia,replay_ssm,packet_pending,,,Family absent from active packet.
-tessera.e2e-release-packet.v1,nvidia_sm120,sm_120a,nvidia,moe,packet_pending,,,Family absent from active packet.
+tessera.e2e-release-packet.v1,nvidia_sm120,sm_120a,nvidia,matmul,release_ready,docs/audit/evidence/e2e_spine/nvidia_sm120/sm_120a,9da32b78c37fc3bebf3f69d575e7b1eb4013a399,Validated hash-sealed packet.
+tessera.e2e-release-packet.v1,nvidia_sm120,sm_120a,nvidia,softmax,release_ready,docs/audit/evidence/e2e_spine/nvidia_sm120/sm_120a,9da32b78c37fc3bebf3f69d575e7b1eb4013a399,Validated hash-sealed packet.
+tessera.e2e-release-packet.v1,nvidia_sm120,sm_120a,nvidia,reduction,release_ready,docs/audit/evidence/e2e_spine/nvidia_sm120/sm_120a,9da32b78c37fc3bebf3f69d575e7b1eb4013a399,Validated hash-sealed packet.
+tessera.e2e-release-packet.v1,nvidia_sm120,sm_120a,nvidia,epilogue,release_ready,docs/audit/evidence/e2e_spine/nvidia_sm120/sm_120a,9da32b78c37fc3bebf3f69d575e7b1eb4013a399,Validated hash-sealed packet.
+tessera.e2e-release-packet.v1,nvidia_sm120,sm_120a,nvidia,attention,release_ready,docs/audit/evidence/e2e_spine/nvidia_sm120/sm_120a,9da32b78c37fc3bebf3f69d575e7b1eb4013a399,Validated hash-sealed packet.
+tessera.e2e-release-packet.v1,nvidia_sm120,sm_120a,nvidia,paged_kv,release_ready,docs/audit/evidence/e2e_spine/nvidia_sm120/sm_120a,9da32b78c37fc3bebf3f69d575e7b1eb4013a399,Validated hash-sealed packet.
+tessera.e2e-release-packet.v1,nvidia_sm120,sm_120a,nvidia,replay_ssm,release_ready,docs/audit/evidence/e2e_spine/nvidia_sm120/sm_120a,9da32b78c37fc3bebf3f69d575e7b1eb4013a399,Validated hash-sealed packet.
+tessera.e2e-release-packet.v1,nvidia_sm120,sm_120a,nvidia,moe,release_ready,docs/audit/evidence/e2e_spine/nvidia_sm120/sm_120a,9da32b78c37fc3bebf3f69d575e7b1eb4013a399,Validated hash-sealed packet.
 tessera.e2e-release-packet.v1,nvidia_sm90,sm_90a,nvidia,-,hardware_deferred,,,Exact Hopper device unavailable; SM120 evidence does not transfer.
 tessera.e2e-release-packet.v1,nvidia_sm100,sm_100a,nvidia,-,hardware_deferred,,,Exact datacenter Blackwell device unavailable; SM120 evidence does not transfer.
 tessera.e2e-release-packet.v1,rocm_gfx1151,gfx1151,rocm,softmax,release_ready,docs/audit/evidence/e2e_spine/rocm_gfx1151/gfx1151,a5243d14a4039a3fa6ddcdb0276eb803ff567d19,Validated hash-sealed packet.

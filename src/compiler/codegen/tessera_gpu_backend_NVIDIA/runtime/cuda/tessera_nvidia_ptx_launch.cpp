@@ -16,6 +16,7 @@
 
 #include "tessera_nvidia_ptx_launch.h"
 
+#include <climits>
 #include <cstring>
 #include <initializer_list>
 #include <map>
@@ -77,6 +78,9 @@ constexpr const char* kTilePagedAttentionPrefix = "tessera_tile_paged_attention_
 constexpr const char* kTileMoEDispatch = "tessera_tile_moe_dispatch_";
 constexpr const char* kTileMoECombine = "tessera_tile_moe_combine_";
 constexpr const char* kTileGroupedGemm = "tessera_tile_grouped_gemm_";
+constexpr const char* kTrainingPrefix = "tessera_cuda_training_";
+constexpr const char* kDynamicSharedPrefix =
+    "tessera_cuda_dynamic_smem_";
 
 std::mutex g_mu;
 std::map<std::string, std::string> g_ptx;           // kernel name -> PTX text
@@ -1149,9 +1153,349 @@ int benchmarkMoe(CUfunction fn, const char* name, void** buffers, size_t nbuf,
     return rc;
 }
 
+struct TrainingLayout {
+    size_t sizes[10] = {};
+    bool outputs[10] = {};
+    unsigned grid = 0;
+};
+
+bool checkedBytes(long long count, size_t elementBytes, size_t& result) {
+    if (count <= 0 || static_cast<unsigned long long>(count) >
+                          SIZE_MAX / elementBytes)
+        return false;
+    result = static_cast<size_t>(count) * elementBytes;
+    return true;
+}
+
+size_t trainingStorageBytes(const char* name) {
+    if (std::strstr(name, "_bf16") || std::strstr(name, "_f16"))
+        return sizeof(unsigned short);
+    return sizeof(float);
+}
+
+bool trainingLayout(const char* name, size_t nbuf, const int64_t* dims,
+                    size_t ndim, TrainingLayout& layout) {
+    if (std::strncmp(name, kTrainingPrefix, std::strlen(kTrainingPrefix)) != 0)
+        return false;
+    long long work = 0;
+    if (std::strncmp(name, "tessera_cuda_training_norm_", 27) == 0) {
+        if (nbuf != 6 || ndim != 2 || dims[0] <= 0 || dims[1] <= 0 ||
+            dims[0] > LLONG_MAX / dims[1])
+            return false;
+        const long long rows = dims[0], columns = dims[1];
+        size_t matrixBytes = 0, vectorBytes = 0;
+        const size_t storageBytes = trainingStorageBytes(name);
+        if (!checkedBytes(rows * columns, storageBytes, matrixBytes) ||
+            !checkedBytes(columns, storageBytes, vectorBytes))
+            return false;
+        layout.sizes[0] = matrixBytes;
+        layout.sizes[1] = vectorBytes;
+        layout.sizes[2] = matrixBytes;
+        layout.sizes[3] = matrixBytes;
+        if (!checkedBytes(columns, sizeof(float), layout.sizes[4]) ||
+            !checkedBytes(columns, sizeof(float), layout.sizes[5]))
+            return false;
+        layout.outputs[3] = layout.outputs[4] = layout.outputs[5] = true;
+        work = rows > columns ? rows : columns;
+    } else if (std::strncmp(name, "tessera_cuda_training_loss_", 27) == 0) {
+        if (nbuf != 5 || ndim != 1) return false;
+        size_t bytes = 0;
+        if (!checkedBytes(dims[0], trainingStorageBytes(name), bytes))
+            return false;
+        for (size_t i = 0; i < nbuf; ++i) layout.sizes[i] = bytes;
+        if (std::strstr(name, "_sum") || std::strstr(name, "_mean"))
+            layout.sizes[2] = trainingStorageBytes(name);
+        layout.outputs[3] = layout.outputs[4] = true;
+        work = dims[0];
+    } else if (std::strncmp(name, "tessera_cuda_training_class_", 28) == 0) {
+        if (nbuf != 4 || ndim != 2 || dims[0] <= 0 || dims[1] <= 0 ||
+            dims[0] > LLONG_MAX / dims[1])
+            return false;
+        size_t matrixBytes = 0, rowBytes = 0, labelBytes = 0;
+        const size_t storageBytes = trainingStorageBytes(name);
+        if (!checkedBytes(dims[0] * dims[1], storageBytes, matrixBytes) ||
+            !checkedBytes(dims[0], storageBytes, rowBytes) ||
+            !checkedBytes(dims[0], sizeof(int64_t), labelBytes))
+            return false;
+        layout.sizes[0] = matrixBytes;
+        layout.sizes[1] = labelBytes;
+        layout.sizes[2] = rowBytes;
+        if (std::strstr(name, "_sum_") || std::strstr(name, "_mean_"))
+            layout.sizes[2] = storageBytes;
+        layout.sizes[3] = matrixBytes;
+        layout.outputs[3] = true;
+        work = dims[0];
+    } else if (std::strncmp(
+                   name, "tessera_cuda_training_broadcast_reduce_", 39) == 0) {
+        if (nbuf != 2 || ndim != 2) return false;
+        if (!checkedBytes(
+                dims[0], trainingStorageBytes(name), layout.sizes[0]) ||
+            !checkedBytes(
+                dims[1], trainingStorageBytes(name), layout.sizes[1]))
+            return false;
+        layout.outputs[1] = true;
+        work = dims[1];
+    } else if (std::strncmp(name, "tessera_cuda_training_optimizer_sgd_", 36) == 0) {
+        if (nbuf != 3 || ndim != 1) return false;
+        size_t bytes = 0;
+        if (!checkedBytes(dims[0], trainingStorageBytes(name), bytes))
+            return false;
+        for (size_t i = 0; i < nbuf; ++i) layout.sizes[i] = bytes;
+        layout.outputs[2] = true;
+        work = dims[0];
+    } else if (std::strncmp(name, "tessera_cuda_training_optimizer_momentum_", 41) == 0 ||
+               std::strncmp(name, "tessera_cuda_training_optimizer_nesterov_", 41) == 0) {
+        if (nbuf != 5 || ndim != 1) return false;
+        size_t storage = 0, state = 0;
+        if (!checkedBytes(dims[0], trainingStorageBytes(name), storage) ||
+            !checkedBytes(dims[0], sizeof(float), state))
+            return false;
+        layout.sizes[0] = layout.sizes[1] = layout.sizes[3] = storage;
+        layout.sizes[2] = layout.sizes[4] = state;
+        layout.outputs[3] = layout.outputs[4] = true;
+        work = dims[0];
+    } else if (std::strncmp(name, "tessera_cuda_training_optimizer_adam_", 37) == 0 ||
+               std::strncmp(name, "tessera_cuda_training_optimizer_adamw_", 38) == 0) {
+        if (nbuf != 7 || ndim != 1) return false;
+        size_t storage = 0, state = 0;
+        if (!checkedBytes(dims[0], trainingStorageBytes(name), storage) ||
+            !checkedBytes(dims[0], sizeof(float), state))
+            return false;
+        layout.sizes[0] = layout.sizes[1] = layout.sizes[4] = storage;
+        layout.sizes[2] = layout.sizes[3] =
+            layout.sizes[5] = layout.sizes[6] = state;
+        layout.outputs[4] = layout.outputs[5] = layout.outputs[6] = true;
+        work = dims[0];
+    } else if (std::strncmp(name, "tessera_cuda_training_fused_", 28) == 0) {
+        if (ndim != 1 || (nbuf != 6 && nbuf != 10)) return false;
+        size_t storage = 0, state = 0;
+        if (!checkedBytes(dims[0], trainingStorageBytes(name), storage) ||
+            !checkedBytes(dims[0], sizeof(float), state))
+            return false;
+        for (size_t i = 0; i < nbuf; ++i) layout.sizes[i] = storage;
+        if (std::strstr(name, "_sum_") || std::strstr(name, "_mean_"))
+            layout.sizes[2] = trainingStorageBytes(name);
+        if (nbuf == 6) {
+            layout.outputs[4] = layout.outputs[5] = true;
+        } else {
+            layout.sizes[4] = layout.sizes[5] =
+                layout.sizes[7] = layout.sizes[8] = state;
+            layout.outputs[6] = layout.outputs[7] =
+                layout.outputs[8] = layout.outputs[9] = true;
+        }
+        work = dims[0];
+    } else {
+        return false;
+    }
+    const unsigned long long blocks =
+        (static_cast<unsigned long long>(work) + 127ULL) / 128ULL;
+    if (blocks == 0 || blocks > UINT_MAX) return false;
+    layout.grid = static_cast<unsigned>(blocks);
+    return true;
+}
+
+int runTraining(CUfunction fn, const char* name, void** buffers, size_t nbuf,
+                const int64_t* dims, size_t ndim, int warmup,
+                int repetitions, float* latencyMs) {
+    if (!buffers || !dims || nbuf > 10 || ndim > 2 || warmup < 0 ||
+        repetitions <= 0)
+        return 5;
+    TrainingLayout layout;
+    if (!trainingLayout(name, nbuf, dims, ndim, layout)) return 5;
+    CUdeviceptr device[10] = {};
+    CUevent start = nullptr, stop = nullptr;
+    int rc = 0;
+    for (size_t i = 0; i < nbuf; ++i) {
+        if (!buffers[i] ||
+            cuMemAlloc(&device[i], layout.sizes[i]) != CUDA_SUCCESS) {
+            rc = 3;
+            break;
+        }
+    }
+    for (size_t i = 0; !rc && i < nbuf; ++i) {
+        if (!layout.outputs[i] &&
+            cuMemcpyHtoD(device[i], buffers[i], layout.sizes[i]) != CUDA_SUCCESS)
+            rc = 3;
+    }
+    long long args64[2] = {};
+    void* args[12] = {};
+    size_t arg = 0;
+    for (size_t i = 0; i < nbuf; ++i) args[arg++] = &device[i];
+    for (size_t i = 0; i < ndim; ++i) {
+        args64[i] = dims[i];
+        args[arg++] = &args64[i];
+    }
+    auto launch = [&]() {
+        return cuLaunchKernel(fn, layout.grid, 1, 1, 128, 1, 1, 0, 0, args, 0);
+    };
+    for (int i = 0; !rc && i < warmup; ++i)
+        if (launch() != CUDA_SUCCESS) rc = 3;
+    if (!rc && cuCtxSynchronize() != CUDA_SUCCESS) rc = 3;
+    if (!rc && latencyMs &&
+        (cuEventCreate(&start, CU_EVENT_DEFAULT) != CUDA_SUCCESS ||
+         cuEventCreate(&stop, CU_EVENT_DEFAULT) != CUDA_SUCCESS ||
+         cuEventRecord(start, 0) != CUDA_SUCCESS))
+        rc = 3;
+    for (int i = 0; !rc && i < repetitions; ++i)
+        if (launch() != CUDA_SUCCESS) rc = 3;
+    if (!rc && latencyMs &&
+        (cuEventRecord(stop, 0) != CUDA_SUCCESS ||
+         cuEventSynchronize(stop) != CUDA_SUCCESS))
+        rc = 3;
+    if (!rc && !latencyMs && cuCtxSynchronize() != CUDA_SUCCESS) rc = 3;
+    if (!rc && latencyMs) {
+        float totalMs = 0.0f;
+        if (cuEventElapsedTime(&totalMs, start, stop) != CUDA_SUCCESS)
+            rc = 3;
+        else
+            *latencyMs = totalMs / static_cast<float>(repetitions);
+    }
+    for (size_t i = 0; !rc && i < nbuf; ++i) {
+        if (layout.outputs[i] &&
+            cuMemcpyDtoH(buffers[i], device[i], layout.sizes[i]) != CUDA_SUCCESS)
+            rc = 3;
+    }
+    if (start) cuEventDestroy(start);
+    if (stop) cuEventDestroy(stop);
+    for (CUdeviceptr ptr : device)
+        if (ptr) cuMemFree(ptr);
+    return rc;
+}
+
+size_t align16(size_t value) {
+    return (value + 15u) & ~size_t(15u);
+}
+
+int runDynamicSharedProbe(CUfunction fn, void** buffers, size_t nbuf,
+                          const int64_t* dims, size_t ndim,
+                          size_t dynamicSharedBytes, int warmup,
+                          int repetitions, float* latencyMs) {
+    if (!buffers || !buffers[0] || !dims || nbuf != 1 || ndim != 3 ||
+        dims[0] <= 0 || dims[1] <= 0 || (dims[2] != 0 && dims[2] != 1) ||
+        dynamicSharedBytes > UINT_MAX || warmup < 0 || repetitions <= 0)
+        return 5;
+    const auto thenBytes = static_cast<unsigned long long>(dims[0]);
+    const auto elseBytes = static_cast<unsigned long long>(dims[1]);
+    if (thenBytes > SIZE_MAX - 15u || elseBytes > SIZE_MAX - 15u)
+        return 5;
+    const size_t required = align16(static_cast<size_t>(
+        thenBytes > elseBytes ? thenBytes : elseBytes));
+    if (dynamicSharedBytes != required) return 5;
+    CUdeviceptr output = 0;
+    CUevent start = nullptr, stop = nullptr;
+    int rc = cuMemAlloc(&output, 2 * sizeof(float)) == CUDA_SUCCESS ? 0 : 3;
+    long long args64[3] = {dims[0], dims[1], dims[2]};
+    void* args[] = {&output, &args64[0], &args64[1], &args64[2]};
+    auto launch = [&]() {
+        return cuLaunchKernel(fn, 1, 1, 1, 1, 1, 1,
+                              static_cast<unsigned>(dynamicSharedBytes),
+                              0, args, 0);
+    };
+    for (int i = 0; !rc && i < warmup; ++i)
+        if (launch() != CUDA_SUCCESS) rc = 3;
+    if (!rc && cuCtxSynchronize() != CUDA_SUCCESS) rc = 3;
+    if (!rc && latencyMs &&
+        (cuEventCreate(&start, CU_EVENT_DEFAULT) != CUDA_SUCCESS ||
+         cuEventCreate(&stop, CU_EVENT_DEFAULT) != CUDA_SUCCESS ||
+         cuEventRecord(start, 0) != CUDA_SUCCESS))
+        rc = 3;
+    for (int i = 0; !rc && i < repetitions; ++i)
+        if (launch() != CUDA_SUCCESS) rc = 3;
+    if (!rc && latencyMs &&
+        (cuEventRecord(stop, 0) != CUDA_SUCCESS ||
+         cuEventSynchronize(stop) != CUDA_SUCCESS))
+        rc = 3;
+    if (!rc && !latencyMs && cuCtxSynchronize() != CUDA_SUCCESS) rc = 3;
+    if (!rc && latencyMs) {
+        float total = 0.0f;
+        if (cuEventElapsedTime(&total, start, stop) != CUDA_SUCCESS)
+            rc = 3;
+        else
+            *latencyMs = total / static_cast<float>(repetitions);
+    }
+    if (!rc && cuMemcpyDtoH(buffers[0], output, 2 * sizeof(float)) != CUDA_SUCCESS)
+        rc = 3;
+    if (start) cuEventDestroy(start);
+    if (stop) cuEventDestroy(stop);
+    if (output) cuMemFree(output);
+    return rc;
+}
+
+int runDynamicSharedExpressionProbe(
+    CUfunction fn, void** buffers, size_t nbuf, const int64_t* dims,
+    size_t ndim, size_t dynamicSharedBytes, int warmup, int repetitions,
+    float* latencyMs) {
+    if (!buffers || !buffers[0] || !dims || nbuf != 1 || ndim != 5 ||
+        dims[0] < 0 || dims[1] < 0 || dims[2] < 0 || dims[3] <= 0 ||
+        (dims[4] != 0 && dims[4] != 1) ||
+        dynamicSharedBytes > UINT_MAX || warmup < 0 || repetitions <= 0)
+        return 5;
+    const auto base = static_cast<unsigned long long>(dims[0]);
+    const auto factor = static_cast<unsigned long long>(dims[1]);
+    const auto bias = static_cast<unsigned long long>(dims[2]);
+    const auto fallback = static_cast<unsigned long long>(dims[3]);
+    if (base > SIZE_MAX || factor > SIZE_MAX || bias > SIZE_MAX ||
+        fallback > SIZE_MAX - 15u)
+        return 5;
+    if (factor && base > (SIZE_MAX - bias) / factor)
+        return 5;
+    const size_t computed =
+        static_cast<size_t>(base * factor + bias);
+    if (computed < 2 || computed > SIZE_MAX - 15u)
+        return 5;
+    const size_t required = align16(
+        computed > fallback ? computed : static_cast<size_t>(fallback));
+    if (dynamicSharedBytes != required)
+        return 5;
+
+    CUdeviceptr output = 0;
+    CUevent start = nullptr, stop = nullptr;
+    int rc = cuMemAlloc(&output, 2 * sizeof(float)) == CUDA_SUCCESS ? 0 : 3;
+    long long args64[5] = {
+        dims[0], dims[1], dims[2], dims[3], dims[4]};
+    void* args[] = {
+        &output, &args64[0], &args64[1], &args64[2], &args64[3],
+        &args64[4]};
+    auto launch = [&]() {
+        return cuLaunchKernel(
+            fn, 1, 1, 1, 1, 1, 1,
+            static_cast<unsigned>(dynamicSharedBytes), 0, args, 0);
+    };
+    for (int i = 0; !rc && i < warmup; ++i)
+        if (launch() != CUDA_SUCCESS) rc = 3;
+    if (!rc && cuCtxSynchronize() != CUDA_SUCCESS) rc = 3;
+    if (!rc && latencyMs &&
+        (cuEventCreate(&start, CU_EVENT_DEFAULT) != CUDA_SUCCESS ||
+         cuEventCreate(&stop, CU_EVENT_DEFAULT) != CUDA_SUCCESS ||
+         cuEventRecord(start, 0) != CUDA_SUCCESS))
+        rc = 3;
+    for (int i = 0; !rc && i < repetitions; ++i)
+        if (launch() != CUDA_SUCCESS) rc = 3;
+    if (!rc && latencyMs &&
+        (cuEventRecord(stop, 0) != CUDA_SUCCESS ||
+         cuEventSynchronize(stop) != CUDA_SUCCESS))
+        rc = 3;
+    if (!rc && !latencyMs && cuCtxSynchronize() != CUDA_SUCCESS) rc = 3;
+    if (!rc && latencyMs) {
+        float total = 0.0f;
+        if (cuEventElapsedTime(&total, start, stop) != CUDA_SUCCESS)
+            rc = 3;
+        else
+            *latencyMs = total / static_cast<float>(repetitions);
+    }
+    if (!rc &&
+        cuMemcpyDtoH(buffers[0], output, 2 * sizeof(float)) != CUDA_SUCCESS)
+        rc = 3;
+    if (start) cuEventDestroy(start);
+    if (stop) cuEventDestroy(stop);
+    if (output) cuMemFree(output);
+    return rc;
+}
+
 // Shared launch body behind both the direct C-ABI and the tsrGpuLauncherFn.
 int invokeImpl(const char* kernel_name, void** buffers, size_t nbuf,
-               const int64_t* dims, size_t ndim) {
+               const int64_t* dims, size_t ndim,
+               size_t dynamicSharedBytes = 0) {
     if (!kernel_name || !buffers || !dims) return 5;
     if (!ensureContext()) return 2;
     std::lock_guard<std::mutex> lock(g_mu);
@@ -1218,6 +1562,19 @@ int invokeImpl(const char* kernel_name, void** buffers, size_t nbuf,
         std::strncmp(kernel_name,kTileMoECombine,std::strlen(kTileMoECombine)) == 0 ||
         std::strncmp(kernel_name,kTileGroupedGemm,std::strlen(kTileGroupedGemm)) == 0)
         return invokeMoe(fn, kernel_name, buffers, nbuf, dims, ndim);
+    if (std::strncmp(kernel_name, kTrainingPrefix,
+                     std::strlen(kTrainingPrefix)) == 0)
+        return runTraining(fn, kernel_name, buffers, nbuf, dims, ndim,
+                           0, 1, nullptr);
+    if (std::strncmp(kernel_name, kDynamicSharedPrefix,
+                     std::strlen(kDynamicSharedPrefix)) == 0) {
+        if (std::strstr(kernel_name, "_local_expr_"))
+            return runDynamicSharedExpressionProbe(
+                fn, buffers, nbuf, dims, ndim, dynamicSharedBytes,
+                0, 1, nullptr);
+        return runDynamicSharedProbe(fn, buffers, nbuf, dims, ndim,
+                                     dynamicSharedBytes, 0, 1, nullptr);
+    }
     return 5;                                        // unknown kernel ABI
 }
 
@@ -1269,6 +1626,14 @@ int tessera_nvidia_ptx_invoke(const char* kernel_name, void** buffers,
     return invokeImpl(kernel_name, buffers, num_buffers, dims, num_dims);
 }
 
+int tessera_nvidia_ptx_invoke_v2(const char* kernel_name, void** buffers,
+                                 size_t num_buffers, const int64_t* dims,
+                                 size_t num_dims,
+                                 size_t dynamic_shared_bytes) {
+    return invokeImpl(kernel_name, buffers, num_buffers, dims, num_dims,
+                      dynamic_shared_bytes);
+}
+
 int tessera_nvidia_ptx_benchmark(const char* kernel_name, void** buffers,
                                  size_t num_buffers, const int64_t* dims,
                                  size_t num_dims, int warmup, int repetitions,
@@ -1278,6 +1643,9 @@ int tessera_nvidia_ptx_benchmark(const char* kernel_name, void** buffers,
     std::lock_guard<std::mutex> lock(g_mu);
     CUfunction fn = getFunctionLocked(kernel_name);
     if (!fn) return g_ptx.count(kernel_name) ? 3 : 4;
+    if (std::strncmp(kernel_name, kDynamicSharedPrefix,
+                     std::strlen(kDynamicSharedPrefix)) == 0)
+        return 5;  // dynamic kernels require benchmark_v2.
     if (std::strcmp(kernel_name, kTileMxE2m3) == 0 ||
         std::strcmp(kernel_name, kTileMxE3m2) == 0 ||
         std::strcmp(kernel_name, kTileMxFp4) == 0)
@@ -1303,8 +1671,73 @@ int tessera_nvidia_ptx_benchmark(const char* kernel_name, void** buffers,
         std::strncmp(kernel_name,kTileGroupedGemm,std::strlen(kTileGroupedGemm)) == 0)
         return benchmarkMoe(fn, kernel_name, buffers, num_buffers, dims,
                             num_dims, warmup, repetitions, latency_ms);
+    if (std::strncmp(kernel_name, kTrainingPrefix,
+                     std::strlen(kTrainingPrefix)) == 0)
+        return runTraining(fn, kernel_name, buffers, num_buffers, dims,
+                           num_dims, warmup, repetitions, latency_ms);
     return benchmarkTileGemm16(fn, kernel_name, buffers, num_buffers, dims,
                                num_dims, warmup, repetitions, latency_ms);
+}
+
+int tessera_nvidia_ptx_benchmark_v2(const char* kernel_name, void** buffers,
+                                    size_t num_buffers, const int64_t* dims,
+                                    size_t num_dims,
+                                    size_t dynamic_shared_bytes, int warmup,
+                                    int repetitions, float* latency_ms) {
+    if (!kernel_name || !buffers || !dims || !latency_ms) return 5;
+    if (!ensureContext()) return 2;
+    std::lock_guard<std::mutex> lock(g_mu);
+    CUfunction fn = getFunctionLocked(kernel_name);
+    if (!fn) return g_ptx.count(kernel_name) ? 3 : 4;
+    if (std::strncmp(kernel_name, kDynamicSharedPrefix,
+                     std::strlen(kDynamicSharedPrefix)) != 0)
+        return 5;
+    if (std::strstr(kernel_name, "_local_expr_"))
+        return runDynamicSharedExpressionProbe(
+            fn, buffers, num_buffers, dims, num_dims, dynamic_shared_bytes,
+            warmup, repetitions, latency_ms);
+    return runDynamicSharedProbe(
+        fn, buffers, num_buffers, dims, num_dims, dynamic_shared_bytes,
+        warmup, repetitions, latency_ms);
+}
+
+int tessera_nvidia_ptx_resources(const char* kernel_name, int block_size,
+                                 size_t dynamic_shared_bytes,
+                                 int* registers_per_thread,
+                                 int* static_shared_bytes,
+                                 int* local_bytes,
+                                 int* active_blocks_per_sm) {
+    if (!kernel_name || block_size <= 0 || dynamic_shared_bytes > UINT_MAX ||
+        !registers_per_thread || !static_shared_bytes || !local_bytes ||
+        !active_blocks_per_sm)
+        return 5;
+    if (!ensureContext()) return 2;
+    std::lock_guard<std::mutex> lock(g_mu);
+    CUfunction fn = getFunctionLocked(kernel_name);
+    if (!fn) return g_ptx.count(kernel_name) ? 3 : 4;
+    if (cuFuncGetAttribute(registers_per_thread, CU_FUNC_ATTRIBUTE_NUM_REGS,
+                           fn) != CUDA_SUCCESS ||
+        cuFuncGetAttribute(static_shared_bytes,
+                           CU_FUNC_ATTRIBUTE_SHARED_SIZE_BYTES,
+                           fn) != CUDA_SUCCESS ||
+        cuFuncGetAttribute(local_bytes, CU_FUNC_ATTRIBUTE_LOCAL_SIZE_BYTES,
+                           fn) != CUDA_SUCCESS ||
+        cuOccupancyMaxActiveBlocksPerMultiprocessor(
+            active_blocks_per_sm, fn, block_size,
+            dynamic_shared_bytes) != CUDA_SUCCESS)
+        return 3;
+    return 0;
+}
+
+int tessera_nvidia_ptx_device_memory(size_t* total_bytes, size_t* free_bytes) {
+    if (!total_bytes || !free_bytes) return 5;
+    if (!ensureContext()) return 2;
+    size_t total = 0;
+    size_t free = 0;
+    if (cuMemGetInfo(&free, &total) != CUDA_SUCCESS) return 3;
+    *total_bytes = total;
+    *free_bytes = free;
+    return 0;
 }
 
 int tessera_nvidia_register_ptx_launcher(void) {

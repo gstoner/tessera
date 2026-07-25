@@ -267,6 +267,163 @@ static FailureOr<Value> sm120ReductionScratch(Operation *anchor,
 // packed E2M1 A/B, logical UE4M3 scale-A/scale-B views, D, and runtime M/N/K.
 // One warp owns each 16x8 output tile and accumulates K64 fragments.  Ragged
 // matrix/scale reads zero-fill and output stores are masked.
+static LogicalResult requireStoragePackDescriptor(
+    Operation *op, StringRef logical, int64_t factor,
+    StringRef signedness = "format_defined") {
+  auto packed = op->getAttrOfType<BoolAttr>("tessera.storage_packed");
+  auto container = op->getAttrOfType<StringAttr>("tessera.storage_container");
+  auto descriptor =
+      op->getAttrOfType<DictionaryAttr>("tessera.storage_pack");
+  if (!packed || !packed.getValue() || !container ||
+      container.getValue() != "int8" || !descriptor) {
+    op->emitError("NVIDIA packed matmul requires terminal storage legalization "
+                  "with an int8 tessera.storage_pack descriptor");
+    return failure();
+  }
+  auto logicalAttr = descriptor.getAs<StringAttr>("logical");
+  auto containerAttr = descriptor.getAs<StringAttr>("container");
+  auto factorAttr = descriptor.getAs<IntegerAttr>("factor");
+  auto signednessAttr = descriptor.getAs<StringAttr>("signedness");
+  if (!logicalAttr || logicalAttr.getValue() != logical || !containerAttr ||
+      containerAttr.getValue() != "int8" || !factorAttr ||
+      factorAttr.getInt() != factor || !signednessAttr ||
+      signednessAttr.getValue() != signedness) {
+    op->emitError("NVIDIA packed matmul storage descriptor disagrees with the "
+                  "selected physical fragment ABI");
+    return failure();
+  }
+  return success();
+}
+
+// Canonical signed-int4 storage consumer. A is row-major with K packed along
+// each row; B is column-major with K packed down each column. Two two's-
+// complement nibbles occupy every int8 container byte, low logical index in
+// the low nibble. This correctness schedule deliberately owns only the
+// load/decode/accumulate/store ABI; selector promotion to an s4 MMA or dp4a
+// schedule requires separate comparative evidence.
+static LogicalResult materializeSm120Int4MatmulKernel(
+    tessera::tile::MatmulKernelOp kernel, OpBuilder &builder) {
+  Operation *op = kernel.getOperation();
+  auto desc = op->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma");
+  auto epilogue = op->getAttrOfType<tessera::tile::TileEpilogueAttr>("epilogue");
+  if (!desc || (desc.getAType() != "int4" && desc.getAType() != "s4") ||
+      desc.getBType() != desc.getAType() ||
+      (desc.getAccType() != "int32" && desc.getAccType() != "s32") ||
+      !epilogue || epilogue.getOutputType() != "i32" ||
+      epilogue.getBias() || epilogue.getActivation() != "none" ||
+      kernel.getInputs().size() != 6) {
+    op->emitError("sm_120 INT4 matmul requires packed A/B, i32 D, M/N/K, "
+                  "signed i32 accumulation, and no scale or fused epilogue");
+    return failure();
+  }
+  if (failed(requireStoragePackDescriptor(
+          op, "int4", 2, "signed_twos_complement")))
+    return failure();
+  if (auto attr = op->getAttrOfType<StringAttr>("staging");
+      !attr || attr.getValue() != "global") {
+    op->emitError("sm_120 INT4 packed consumer requires direct global staging");
+    return failure();
+  }
+
+  ValueRange inputs = kernel.getInputs();
+  Value aBase = inputs[0], bBase = inputs[1], dBase = inputs[2];
+  Value m = inputs[3], n = inputs[4], k = inputs[5];
+  Location loc = op->getLoc();
+  Type i8 = builder.getI8Type();
+  Type i32 = builder.getI32Type();
+  Value one = i64Constant(builder, loc, 1);
+  Value two = i64Constant(builder, loc, 2);
+  Value packedK = arith::DivUIOp::create(
+      builder, loc, addI64(builder, loc, k, one), two);
+  Value tidX = arith::ExtUIOp::create(
+      builder, loc, builder.getI64Type(),
+      NVVM::ThreadIdXOp::create(builder, loc, i32));
+  Value tidY = arith::ExtUIOp::create(
+      builder, loc, builder.getI64Type(),
+      NVVM::ThreadIdYOp::create(builder, loc, i32));
+  Value blockX = arith::ExtUIOp::create(
+      builder, loc, builder.getI64Type(),
+      NVVM::BlockIdXOp::create(builder, loc, i32));
+  Value blockY = arith::ExtUIOp::create(
+      builder, loc, builder.getI64Type(),
+      NVVM::BlockIdYOp::create(builder, loc, i32));
+  Value row = addI64(
+      builder, loc, mulI64(builder, loc, blockY,
+                           i64Constant(builder, loc, 8)), tidY);
+  Value col = addI64(
+      builder, loc, mulI64(builder, loc, blockX,
+                           i64Constant(builder, loc, 32)), tidX);
+  Value valid = arith::AndIOp::create(
+      builder, loc, lessI64(builder, loc, row, m),
+      lessI64(builder, loc, col, n));
+  auto guarded = scf::IfOp::create(builder, loc, valid, false);
+  {
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToStart(&guarded.getThenRegion().front());
+    Value zero64 = i64Constant(builder, loc, 0);
+    Value zero32 = arith::ConstantIntOp::create(builder, loc, 0, 32);
+    auto loop = scf::ForOp::create(
+        builder, loc, zero64, k, one, ValueRange{zero32});
+    {
+      OpBuilder::InsertionGuard loopGuard(builder);
+      builder.setInsertionPointToStart(loop.getBody());
+      Value logicalK = loop.getInductionVar();
+      Value byteK = arith::DivUIOp::create(builder, loc, logicalK, two);
+      Value aLinear = addI64(
+          builder, loc, mulI64(builder, loc, row, packedK), byteK);
+      Value bLinear = addI64(
+          builder, loc, mulI64(builder, loc, byteK, n), col);
+      Value aByte = LLVM::LoadOp::create(
+          builder, loc, i8,
+          LLVM::GEPOp::create(builder, loc, aBase.getType(), i8, aBase,
+                              ValueRange{aLinear}),
+          1);
+      Value bByte = LLVM::LoadOp::create(
+          builder, loc, i8,
+          LLVM::GEPOp::create(builder, loc, bBase.getType(), i8, bBase,
+                              ValueRange{bLinear}),
+          1);
+      Value parity64 = arith::RemUIOp::create(builder, loc, logicalK, two);
+      Value shift64 = mulI64(builder, loc, parity64,
+                             i64Constant(builder, loc, 4));
+      Value shift = arith::TruncIOp::create(builder, loc, i32, shift64);
+      auto decode = [&](Value byte) {
+        Value wide = arith::ExtUIOp::create(builder, loc, i32, byte);
+        Value nibble = arith::AndIOp::create(
+            builder, loc,
+            arith::ShRUIOp::create(builder, loc, wide, shift),
+            arith::ConstantIntOp::create(builder, loc, 15, 32));
+        Value signBit = arith::AndIOp::create(
+            builder, loc, nibble,
+            arith::ConstantIntOp::create(builder, loc, 8, 32));
+        Value negative = arith::CmpIOp::create(
+            builder, loc, arith::CmpIPredicate::ne, signBit, zero32);
+        return Value(arith::SelectOp::create(
+            builder, loc, negative,
+            arith::SubIOp::create(
+                builder, loc, nibble,
+                arith::ConstantIntOp::create(builder, loc, 16, 32)),
+            nibble));
+      };
+      Value product = arith::MulIOp::create(
+          builder, loc, decode(aByte), decode(bByte));
+      scf::YieldOp::create(
+          builder, loc,
+          ValueRange{arith::AddIOp::create(
+              builder, loc, loop.getRegionIterArgs()[0], product)});
+    }
+    builder.setInsertionPointAfter(loop);
+    Value linear = addI64(builder, loc, mulI64(builder, loc, row, n), col);
+    LLVM::StoreOp::create(
+        builder, loc, loop.getResult(0),
+        LLVM::GEPOp::create(builder, loc, dBase.getType(), i32, dBase,
+                            ValueRange{linear}),
+        4);
+  }
+  op->erase();
+  return success();
+}
+
 static LogicalResult materializeSm120Nvfp4MatmulKernel(
     tessera::tile::MatmulKernelOp kernel, OpBuilder &builder) {
   Operation *op = kernel.getOperation();
@@ -280,6 +437,8 @@ static LogicalResult materializeSm120Nvfp4MatmulKernel(
                   "D, M/N/K, f32 output, and no fused epilogue");
     return failure();
   }
+  if (failed(requireStoragePackDescriptor(op, "nvfp4", 2)))
+    return failure();
   ValueRange inputs = kernel.getInputs();
   Value aBase = inputs[0], bBase = inputs[1];
   Value scaleABase = inputs[2], scaleBBase = inputs[3];
@@ -486,6 +645,11 @@ static LogicalResult materializeSm120MxMatmulKernel(
                   "UE8M0 scale A/B, D, M/N/K, and f32 output");
     return failure();
   }
+  StringRef logical =
+      isMXFP4 ? "fp4_e2m1"
+              : desc.getAType() == "e2m3" ? "fp6_e2m3" : "fp6_e3m2";
+  if (failed(requireStoragePackDescriptor(op, logical, isMXFP4 ? 2 : 1)))
+    return failure();
   if (auto attr = op->getAttrOfType<StringAttr>("staging");
       !attr || attr.getValue() != "global") {
     op->emitError("sm_120 FP6/MXFP4 materializer requires direct global staging");
@@ -1000,6 +1164,8 @@ static LogicalResult materializeSm120MatmulKernel(
   Operation *op = kernel.getOperation();
   auto desc = op->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma");
   auto epilogue = op->getAttrOfType<tessera::tile::TileEpilogueAttr>("epilogue");
+  if (desc && (desc.getAType() == "int4" || desc.getAType() == "s4"))
+    return materializeSm120Int4MatmulKernel(kernel, builder);
   std::optional<Sm120FragmentDescriptor> physical = selectSm120Fragment(desc);
   if (physical && desc.getAType() == "nvfp4")
     return materializeSm120Nvfp4MatmulKernel(kernel, builder);
@@ -1367,12 +1533,15 @@ static LogicalResult materializeSm120SoftmaxKernel(
   auto expMode = op->getAttrOfType<StringAttr>("exp_mode");
   auto ftz = op->getAttrOfType<BoolAttr>("ftz");
   bool f16Storage = storage && storage.getValue() == "f16";
-  if (!storage || (!f16Storage && storage.getValue() != "f32") || !accum ||
+  bool bf16Storage = storage && storage.getValue() == "bf16";
+  if (!storage ||
+      (!f16Storage && !bf16Storage && storage.getValue() != "f32") || !accum ||
       accum.getValue() != "f32" || !axis || axis.getInt() != -1 ||
       !expMode || expMode.getValue() != "approx_exp2" || !ftz ||
       ftz.getValue()) {
-    op->emitError("sm_120 softmax_kernel requires f16/f32 storage, f32 accum, "
-                  "axis=-1, exp_mode=approx_exp2, and ftz=false");
+    op->emitError(
+        "sm_120 softmax_kernel requires f16/bf16/f32 storage, f32 accum, "
+        "axis=-1, exp_mode=approx_exp2, and ftz=false");
     return failure();
   }
 
@@ -1382,8 +1551,10 @@ static LogicalResult materializeSm120SoftmaxKernel(
   Type i32 = builder.getI32Type();
   Type i64 = builder.getI64Type();
   auto f32 = builder.getF32Type();
-  Type storageType = f16Storage ? Type(builder.getF16Type()) : Type(f32);
-  unsigned storageAlignment = f16Storage ? 2 : 4;
+  Type storageType = f16Storage
+                         ? Type(builder.getF16Type())
+                         : bf16Storage ? Type(builder.getBF16Type()) : Type(f32);
+  unsigned storageAlignment = (f16Storage || bf16Storage) ? 2 : 4;
   Value block = arith::ExtUIOp::create(
       builder, loc, i64, NVVM::BlockIdXOp::create(builder, loc, i32));
   Value thread = arith::ExtUIOp::create(
@@ -1404,12 +1575,12 @@ static LogicalResult materializeSm120SoftmaxKernel(
         ValueRange{linear});
     Value value = LLVM::LoadOp::create(
         builder, loc, storageType, ptr, storageAlignment);
-    return f16Storage
+    return (f16Storage || bf16Storage)
         ? Value(LLVM::FPExtOp::create(builder, loc, f32, value))
         : value;
   };
   auto storeF32 = [&](Value linear, Value value) {
-    Value stored = f16Storage
+    Value stored = (f16Storage || bf16Storage)
         ? Value(LLVM::FPTruncOp::create(builder, loc, storageType, value))
         : value;
     Value ptr = LLVM::GEPOp::create(
@@ -1493,25 +1664,30 @@ static LogicalResult materializeSm120ReduceKernel(
   auto schedule = op->getAttrOfType<StringAttr>("schedule");
   auto nanMode = op->getAttrOfType<StringAttr>("nan_mode");
   bool f16Storage = storage && storage.getValue() == "f16";
+  bool bf16Storage = storage && storage.getValue() == "bf16";
   if (inputs.size() != 5 || !storage ||
-      (!f16Storage && storage.getValue() != "f32") || !accum ||
+      (!f16Storage && !bf16Storage && storage.getValue() != "f32") || !accum ||
       accum.getValue() != "f32" || !kind ||
       (kind.getValue() != "sum" && kind.getValue() != "mean" &&
-       kind.getValue() != "max") || !axis || axis.getInt() < 0 || !keepdims ||
+       kind.getValue() != "max" && kind.getValue() != "min") ||
+      !axis || axis.getInt() < 0 || !keepdims ||
       !schedule || (schedule.getValue() != "serial" &&
                     schedule.getValue() != "cooperative_128") ||
       !nanMode || nanMode.getValue() != "propagate") {
-    op->emitError("sm_120 reduce_kernel requires f16/f32 storage, f32 accum, "
-                  "normalized axis, keepdims, serial|cooperative_128 schedule, "
-                  "and nan_mode=propagate");
+    op->emitError(
+        "sm_120 reduce_kernel requires f16/bf16/f32 storage, f32 accum, "
+        "normalized axis, keepdims, serial|cooperative_128 schedule, and "
+        "nan_mode=propagate");
     return failure();
   }
   Location loc = op->getLoc();
   Type i32 = builder.getI32Type();
   Type i64 = builder.getI64Type();
   auto f32 = builder.getF32Type();
-  Type storageType = f16Storage ? Type(builder.getF16Type()) : f32;
-  unsigned alignment = f16Storage ? 2 : 4;
+  Type storageType = f16Storage
+                         ? Type(builder.getF16Type())
+                         : bf16Storage ? Type(builder.getBF16Type()) : Type(f32);
+  unsigned alignment = (f16Storage || bf16Storage) ? 2 : 4;
   Value block = arith::ExtUIOp::create(
       builder, loc, i64, NVVM::BlockIdXOp::create(builder, loc, i32));
   Value thread = arith::ExtUIOp::create(
@@ -1527,10 +1703,11 @@ static LogicalResult materializeSm120ReduceKernel(
   {
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointToStart(guarded.thenBlock());
-    Value initial = kind.getValue() == "max"
+    Value initial = (kind.getValue() == "max" || kind.getValue() == "min")
         ? Value(arith::ConstantFloatOp::create(
               builder, loc, f32,
-              APFloat::getInf(APFloat::IEEEsingle(), /*negative=*/true)))
+              APFloat::getInf(APFloat::IEEEsingle(),
+                              /*negative=*/kind.getValue() == "max")))
         : Value(arith::ConstantFloatOp::create(
               builder, loc, f32, APFloat(0.0f)));
     Value outerIndex = arith::DivUIOp::create(builder, loc, output, inner);
@@ -1550,14 +1727,18 @@ static LogicalResult materializeSm120ReduceKernel(
           ValueRange{linear});
       Value loaded = LLVM::LoadOp::create(
           builder, loc, storageType, ptr, alignment);
-      Value value = f16Storage
+      Value value = (f16Storage || bf16Storage)
           ? Value(LLVM::FPExtOp::create(builder, loc, f32, loaded))
           : loaded;
-      Value next = kind.getValue() == "max"
-          ? Value(arith::MaximumFOp::create(
-                builder, loc, loop.getRegionIterArgs()[0], value))
-          : Value(arith::AddFOp::create(
-                builder, loc, loop.getRegionIterArgs()[0], value));
+      Value next =
+          kind.getValue() == "max"
+              ? Value(arith::MaximumFOp::create(
+                    builder, loc, loop.getRegionIterArgs()[0], value))
+          : kind.getValue() == "min"
+              ? Value(arith::MinimumFOp::create(
+                    builder, loc, loop.getRegionIterArgs()[0], value))
+              : Value(arith::AddFOp::create(
+                    builder, loc, loop.getRegionIterArgs()[0], value));
       scf::YieldOp::create(builder, loc, ValueRange{next});
     }
     builder.setInsertionPointAfter(loop);
@@ -1588,9 +1769,12 @@ static LogicalResult materializeSm120ReduceKernel(
                                 i64Constant(builder, loc, stride))});
           Value lhs = LLVM::LoadOp::create(builder, loc, f32, lhsPtr, 4);
           Value rhs = LLVM::LoadOp::create(builder, loc, f32, rhsPtr, 4);
-          Value combined = kind.getValue() == "max"
-              ? Value(arith::MaximumFOp::create(builder, loc, lhs, rhs))
-              : Value(arith::AddFOp::create(builder, loc, lhs, rhs));
+          Value combined =
+              kind.getValue() == "max"
+                  ? Value(arith::MaximumFOp::create(builder, loc, lhs, rhs))
+              : kind.getValue() == "min"
+                  ? Value(arith::MinimumFOp::create(builder, loc, lhs, rhs))
+                  : Value(arith::AddFOp::create(builder, loc, lhs, rhs));
           LLVM::StoreOp::create(builder, loc, combined, lhsPtr, 4);
         }
         builder.setInsertionPointAfter(combine);
@@ -1632,6 +1816,146 @@ static LogicalResult materializeSm120ReduceKernel(
   return success();
 }
 
+// Compiler-owned row normalization. One thread owns one flattened row and
+// performs every reduction in f32 before rounding the normalized value back to
+// the declared storage type. Epsilon is embedded in the immutable PTX image,
+// leaving the launch ABI as X/O/Rows/Columns.
+static LogicalResult materializeSm120NormKernel(
+    tessera::tile::NormKernelOp kernel, OpBuilder &builder) {
+  Operation *op = kernel.getOperation();
+  ValueRange inputs = kernel.getInputs();
+  auto storage = op->getAttrOfType<StringAttr>("storage");
+  auto accum = op->getAttrOfType<StringAttr>("accum");
+  auto kind = op->getAttrOfType<StringAttr>("kind");
+  auto axis = op->getAttrOfType<IntegerAttr>("axis");
+  auto affine = op->getAttrOfType<BoolAttr>("affine");
+  bool f16Storage = storage && storage.getValue() == "f16";
+  bool bf16Storage = storage && storage.getValue() == "bf16";
+  bool layer = kind && kind.getValue() == "layernorm";
+  if (inputs.size() != 5 || !storage ||
+      (!f16Storage && !bf16Storage && storage.getValue() != "f32") ||
+      !accum || accum.getValue() != "f32" || !kind ||
+      (!layer && kind.getValue() != "rmsnorm") || !axis ||
+      axis.getInt() != -1 || !affine || affine.getValue() ||
+      !inputs[4].getType().isF32()) {
+    op->emitError(
+        "sm_120 norm_kernel requires f16/bf16/f32 storage, f32 accumulation, "
+        "rmsnorm|layernorm, axis=-1, affine=false, and f32 epsilon");
+    return failure();
+  }
+  Location loc = op->getLoc();
+  Type i32 = builder.getI32Type();
+  Type i64 = builder.getI64Type();
+  auto f32 = builder.getF32Type();
+  Type storageType = f16Storage
+                         ? Type(builder.getF16Type())
+                         : bf16Storage ? Type(builder.getBF16Type()) : Type(f32);
+  unsigned alignment = (f16Storage || bf16Storage) ? 2 : 4;
+  Value xBase = inputs[0], outBase = inputs[1];
+  Value rows = inputs[2], columns = inputs[3], epsilon = inputs[4];
+  Value block = arith::ExtUIOp::create(
+      builder, loc, i64, NVVM::BlockIdXOp::create(builder, loc, i32));
+  Value thread = arith::ExtUIOp::create(
+      builder, loc, i64, NVVM::ThreadIdXOp::create(builder, loc, i32));
+  Value row = addI64(
+      builder, loc, mulI64(builder, loc, block, i64Constant(builder, loc, 128)),
+      thread);
+  Value active = lessI64(builder, loc, row, rows);
+  auto loadF32 = [&](Value linear) -> Value {
+    Value ptr = LLVM::GEPOp::create(
+        builder, loc, xBase.getType(), storageType, xBase,
+        ValueRange{linear});
+    Value value =
+        LLVM::LoadOp::create(builder, loc, storageType, ptr, alignment);
+    return (f16Storage || bf16Storage)
+               ? Value(LLVM::FPExtOp::create(builder, loc, f32, value))
+               : value;
+  };
+  auto storeF32 = [&](Value linear, Value value) {
+    Value stored = (f16Storage || bf16Storage)
+                       ? Value(LLVM::FPTruncOp::create(
+                             builder, loc, storageType, value))
+                       : value;
+    Value ptr = LLVM::GEPOp::create(
+        builder, loc, outBase.getType(), storageType, outBase,
+        ValueRange{linear});
+    LLVM::StoreOp::create(builder, loc, stored, ptr, alignment);
+  };
+  auto guarded =
+      scf::IfOp::create(builder, loc, active, /*withElseRegion=*/false);
+  {
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToStart(guarded.thenBlock());
+    Value zero = i64Constant(builder, loc, 0);
+    Value one = i64Constant(builder, loc, 1);
+    Value rowBase = mulI64(builder, loc, row, columns);
+    Value zeroF32 = arith::ConstantFloatOp::create(
+        builder, loc, f32, APFloat(0.0f));
+    auto sumLoop = scf::ForOp::create(
+        builder, loc, zero, columns, one, ValueRange{zeroF32});
+    {
+      OpBuilder::InsertionGuard loopGuard(builder);
+      builder.setInsertionPointToStart(sumLoop.getBody());
+      Value linear =
+          addI64(builder, loc, rowBase, sumLoop.getInductionVar());
+      Value value = loadF32(linear);
+      Value contribution =
+          layer ? value : Value(arith::MulFOp::create(builder, loc, value, value));
+      Value next = arith::AddFOp::create(
+          builder, loc, sumLoop.getRegionIterArgs()[0], contribution);
+      scf::YieldOp::create(builder, loc, ValueRange{next});
+    }
+    builder.setInsertionPointAfter(sumLoop);
+    Value columnsF32 =
+        arith::UIToFPOp::create(builder, loc, f32, columns);
+    Value mean = layer
+                     ? Value(arith::DivFOp::create(
+                           builder, loc, sumLoop.getResult(0), columnsF32))
+                     : zeroF32;
+    Value varianceSum = sumLoop.getResult(0);
+    if (layer) {
+      auto varianceLoop = scf::ForOp::create(
+          builder, loc, zero, columns, one, ValueRange{zeroF32});
+      {
+        OpBuilder::InsertionGuard loopGuard(builder);
+        builder.setInsertionPointToStart(varianceLoop.getBody());
+        Value linear =
+            addI64(builder, loc, rowBase, varianceLoop.getInductionVar());
+        Value centered =
+            arith::SubFOp::create(builder, loc, loadF32(linear), mean);
+        Value squared =
+            arith::MulFOp::create(builder, loc, centered, centered);
+        Value next = arith::AddFOp::create(
+            builder, loc, varianceLoop.getRegionIterArgs()[0], squared);
+        scf::YieldOp::create(builder, loc, ValueRange{next});
+      }
+      builder.setInsertionPointAfter(varianceLoop);
+      varianceSum = varianceLoop.getResult(0);
+    }
+    Value variance =
+        arith::DivFOp::create(builder, loc, varianceSum, columnsF32);
+    Value adjusted = arith::AddFOp::create(builder, loc, variance, epsilon);
+    Value inverse = NVVM::RsqrtOp::create(
+        builder, loc, f32, adjusted, /*ftz=*/false);
+    auto outputLoop =
+        scf::ForOp::create(builder, loc, zero, columns, one);
+    {
+      OpBuilder::InsertionGuard loopGuard(builder);
+      builder.setInsertionPointToStart(outputLoop.getBody());
+      Value linear =
+          addI64(builder, loc, rowBase, outputLoop.getInductionVar());
+      Value value = loadF32(linear);
+      if (layer)
+        value = arith::SubFOp::create(builder, loc, value, mean);
+      storeF32(
+          linear, arith::MulFOp::create(builder, loc, value, inverse));
+    }
+  }
+  builder.setInsertionPointAfter(guarded);
+  op->erase();
+  return success();
+}
+
 // Correctness-first SDPA materializer. One thread owns one O[b,hq,q,dv]
 // element and recomputes the score row. This deliberately favors a small,
 // auditable ABI/semantic proof over the existing optimized CUDA-C candidate.
@@ -1653,12 +1977,13 @@ static LogicalResult materializeSm120AttentionKernel(
   unsigned outputIndex = 3 + unsigned(hasBias);
   unsigned dimStart = outputIndex + 1;
   bool f16Storage = storage && storage.getValue() == "f16";
+  bool bf16Storage = storage && storage.getValue() == "bf16";
   if (in.size() != 11 + unsigned(hasBias) || !storage ||
-      (!f16Storage && storage.getValue() != "f32") || !accum ||
+      (!f16Storage && !bf16Storage && storage.getValue() != "f32") || !accum ||
       accum.getValue() != "f32" || !scaleAttr || !causalAttr || !biasAttr ||
       !windowLeftAttr || !windowRightAttr || !softcapAttr || !dropoutAttr ||
       !dropoutSeedAttr) {
-    op->emitError("sm_120 attention_kernel requires f16/f32 storage, f32 "
+    op->emitError("sm_120 attention_kernel requires f16/bf16/f32 storage, f32 "
                   "accum, complete mask/dropout attrs, and the canonical ABI");
     return failure();
   }
@@ -1666,8 +1991,10 @@ static LogicalResult materializeSm120AttentionKernel(
   Type i32 = builder.getI32Type();
   Type i64 = builder.getI64Type();
   auto f32 = builder.getF32Type();
-  Type storageType = f16Storage ? Type(builder.getF16Type()) : Type(f32);
-  unsigned alignment = f16Storage ? 2 : 4;
+  Type storageType = f16Storage
+                         ? Type(builder.getF16Type())
+                         : bf16Storage ? Type(builder.getBF16Type()) : Type(f32);
+  unsigned alignment = (f16Storage || bf16Storage) ? 2 : 4;
   Value B = in[dimStart], Hq = in[dimStart + 1], Hkv = in[dimStart + 2];
   Value Sq = in[dimStart + 3], Sk = in[dimStart + 4];
   Value D = in[dimStart + 5], Dv = in[dimStart + 6];
@@ -1703,8 +2030,9 @@ static LogicalResult materializeSm120AttentionKernel(
       Value ptr = LLVM::GEPOp::create(builder, loc, base.getType(), storageType,
                                       base, ValueRange{index});
       Value value = LLVM::LoadOp::create(builder, loc, storageType, ptr, alignment);
-      return f16Storage ? Value(LLVM::FPExtOp::create(builder, loc, f32, value))
-                        : value;
+      return (f16Storage || bf16Storage)
+                 ? Value(LLVM::FPExtOp::create(builder, loc, f32, value))
+                 : value;
     };
     auto score = [&](Value key) -> Value {
       Value qBase = mulI64(builder, loc,
@@ -1867,15 +2195,18 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
   auto workspace = op->getAttrOfType<IntegerAttr>("workspace_bytes");
   const bool hasBias = biasAttr && biasAttr.getValue();
   const bool f16Storage = storage && storage.getValue() == "f16";
+  const bool bf16Storage = storage && storage.getValue() == "bf16";
   if (in.size() != 14 + unsigned(hasBias) || !storage ||
-      (!f16Storage && storage.getValue() != "f32") || !accum || accum.getValue() != "f32" ||
+      (!f16Storage && !bf16Storage && storage.getValue() != "f32") ||
+      !accum || accum.getValue() != "f32" ||
       !scaleAttr || !causalAttr || !windowLeftAttr || !windowRightAttr ||
       !softcapAttr || !dropoutAttr || !dropoutSeedAttr || !route ||
       route.getValue() != "deterministic_direct" ||
       !deterministic || !deterministic.getValue() || !workspace ||
       workspace.getInt() != 0) {
     op->emitError("sm_120 attention_backward_kernel requires the canonical "
-                  "deterministic-direct f16/f32 ABI with dropout replay attrs");
+                  "deterministic-direct f16/bf16/f32 ABI with dropout replay "
+                  "attrs");
     return failure();
   }
 
@@ -1883,8 +2214,10 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
   Type i32 = builder.getI32Type();
   Type i64 = builder.getI64Type();
   auto f32 = builder.getF32Type();
-  Type storageType = f16Storage ? Type(builder.getF16Type()) : Type(f32);
-  unsigned storageAlignment = f16Storage ? 2 : 4;
+  Type storageType = f16Storage
+                         ? Type(builder.getF16Type())
+                         : bf16Storage ? Type(builder.getBF16Type()) : Type(f32);
+  unsigned storageAlignment = (f16Storage || bf16Storage) ? 2 : 4;
   const unsigned biasIndex = 4;
   const unsigned dqIndex = 4 + unsigned(hasBias);
   const unsigned dkIndex = dqIndex + 1;
@@ -1908,12 +2241,12 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
     Value ptr = LLVM::GEPOp::create(builder, loc, in[pointer].getType(), type,
                                     in[pointer], ValueRange{index});
     Value loaded = LLVM::LoadOp::create(builder, loc, type, ptr, alignment);
-    return !biasPointer && f16Storage
+    return !biasPointer && (f16Storage || bf16Storage)
         ? Value(LLVM::FPExtOp::create(builder, loc, f32, loaded))
         : loaded;
   };
   auto store = [&](unsigned pointer, Value index, Value value) {
-    Value stored = f16Storage
+    Value stored = (f16Storage || bf16Storage)
         ? Value(LLVM::FPTruncOp::create(builder, loc, storageType, value))
         : value;
     Value ptr = LLVM::GEPOp::create(builder, loc, in[pointer].getType(),
@@ -3001,6 +3334,118 @@ static LogicalResult materializeSm120AccumulatorStore(
   return success();
 }
 
+static LogicalResult materializeSm120CudaIntrinsicKernel(
+    tessera::tile::CudaIntrinsicKernelOp kernel, OpBuilder &builder) {
+  Operation *op = kernel.getOperation();
+  auto kindAttr = op->getAttrOfType<StringAttr>("kind");
+  if (!kindAttr || kernel.getInputs().size() != 5) {
+    op->emitError("SM120 CUDA intrinsic kernel requires a verified typed ABI");
+    return failure();
+  }
+  StringRef kind = kindAttr.getValue();
+  ValueRange inputs = kernel.getInputs();
+  Value aBase = inputs[0], bBase = inputs[1], cBase = inputs[2];
+  Value outBase = inputs[3], n = inputs[4];
+  Location loc = op->getLoc();
+  Type i32 = builder.getI32Type();
+  Type f32 = builder.getF32Type();
+  Value tid = arith::ExtUIOp::create(
+      builder, loc, builder.getI64Type(),
+      NVVM::ThreadIdXOp::create(builder, loc, i32));
+  Value block = arith::ExtUIOp::create(
+      builder, loc, builder.getI64Type(),
+      NVVM::BlockIdXOp::create(builder, loc, i32));
+  Value index = addI64(
+      builder, loc,
+      mulI64(builder, loc, block, i64Constant(builder, loc, 128)), tid);
+  auto guarded = scf::IfOp::create(
+      builder, loc, lessI64(builder, loc, index, n), false);
+  {
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToStart(&guarded.getThenRegion().front());
+    auto loadI32 = [&](Value base) {
+      return Value(LLVM::LoadOp::create(
+          builder, loc, i32,
+          LLVM::GEPOp::create(builder, loc, base.getType(), i32, base,
+                              ValueRange{index}),
+          4));
+    };
+    Value a;
+    bool cast = kind.starts_with("cvt_f32_i32_");
+    if (cast)
+      a = LLVM::LoadOp::create(
+          builder, loc, f32,
+          LLVM::GEPOp::create(builder, loc, aBase.getType(), f32, aBase,
+                              ValueRange{index}),
+          4);
+    else
+      a = loadI32(aBase);
+    Value b = loadI32(bBase);
+    Value c = loadI32(cBase);
+    Value result;
+    std::string assembly;
+    SmallVector<Value> asmInputs;
+    if (kind == "bitcast_i32") {
+      result = a;
+    } else {
+      if (kind == "abs_i32") assembly = "abs.s32 $0, $1;";
+      else if (kind == "min_i32") assembly = "min.s32 $0, $1, $2;";
+      else if (kind == "max_i32") assembly = "max.s32 $0, $1, $2;";
+      else if (kind == "brev_u32") assembly = "brev.b32 $0, $1;";
+      else if (kind == "byte_perm_u32")
+        assembly = "prmt.b32 $0, $1, $2, 0x5410;";
+      else if (kind == "clz_u32") assembly = "clz.b32 $0, $1;";
+      else if (kind == "popc_u32") assembly = "popc.b32 $0, $1;";
+      else if (kind == "funnelshift_l_wrap_u32")
+        assembly = "shf.l.wrap.b32 $0, $1, $2, $3;";
+      else if (kind == "dp2a_lo_s32")
+        assembly = "dp2a.lo.s32.s32 $0, $1, $2, $3;";
+      else if (kind == "dp4a_s32")
+        assembly = "dp4a.s32.s32 $0, $1, $2, $3;";
+      else if (kind == "vadd2_u16x2")
+        assembly = "add.u16x2 $0, $1, $2;";
+      else if (kind == "vabsdiff4_u8x4")
+        assembly = "vabsdiff4.u32.u32.u32 $0, $1, $2, $3;";
+      else if (cast) {
+        StringRef mode = kind.drop_front(StringRef("cvt_f32_i32_").size());
+        StringRef suffix =
+            mode == "rn" ? "rni" : mode == "rd" ? "rmi" :
+            mode == "ru" ? "rpi" : "rzi";
+        assembly = ("cvt." + suffix + ".s32.f32 $0, $1;").str();
+      } else {
+        op->emitError("unsupported SM120 CUDA intrinsic lowering kind ") << kind;
+        return failure();
+      }
+      asmInputs.push_back(a);
+      bool binary = kind == "min_i32" || kind == "max_i32" ||
+                    kind == "byte_perm_u32" ||
+                    kind == "funnelshift_l_wrap_u32" ||
+                    kind == "dp2a_lo_s32" || kind == "dp4a_s32" ||
+                    kind == "vadd2_u16x2" || kind == "vabsdiff4_u8x4";
+      bool ternary = kind == "funnelshift_l_wrap_u32" ||
+                     kind == "dp2a_lo_s32" || kind == "dp4a_s32" ||
+                     kind == "vabsdiff4_u8x4";
+      if (binary) asmInputs.push_back(b);
+      if (ternary) asmInputs.push_back(c);
+      std::string constraints = "=r";
+      for (Value value : asmInputs)
+        constraints += value.getType().isF32() ? ",f" : ",r";
+      result = LLVM::InlineAsmOp::create(
+          builder, loc, i32, ValueRange(asmInputs), assembly, constraints,
+          /*has_side_effects=*/false, /*is_align_stack=*/false,
+          LLVM::tailcallkind::TailCallKind::None,
+          /*asm_dialect=*/nullptr, /*operand_attrs=*/nullptr).getResult(0);
+    }
+    LLVM::StoreOp::create(
+        builder, loc, result,
+        LLVM::GEPOp::create(builder, loc, outBase.getType(), i32, outBase,
+                            ValueRange{index}),
+        4);
+  }
+  op->erase();
+  return success();
+}
+
 struct LowerTileToNVIDIAPass
     : PassWrapper<LowerTileToNVIDIAPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LowerTileToNVIDIAPass)
@@ -3043,7 +3488,9 @@ struct LowerTileToNVIDIAPass
       StringRef name = op->getName().getStringRef();
       if (name == "tile.mma" || name == "tile.async_copy" ||
           name == "tile.matmul_kernel" || name == "tile.softmax_kernel" ||
-          name == "tile.reduce_kernel" || name == "tile.attention_kernel" ||
+          name == "tile.reduce_kernel" || name == "tile.norm_kernel" ||
+          name == "tile.cuda_intrinsic_kernel" ||
+          name == "tile.attention_kernel" ||
           name == "tile.attention_backward_kernel" ||
           name == "tile.paged_kv_read_kernel" ||
           name == "tile.paged_attention_kernel" ||
@@ -3101,12 +3548,36 @@ struct LowerTileToNVIDIAPass
         continue;
       }
 
+      if (isTileOp(op, "tile.cuda_intrinsic_kernel")) {
+        if (smVersion < kConsumerBlackwellSM ||
+            failed(materializeSm120CudaIntrinsicKernel(
+                cast<tessera::tile::CudaIntrinsicKernelOp>(op), builder))) {
+          if (smVersion < kConsumerBlackwellSM)
+            op->emitError("tile.cuda_intrinsic_kernel currently requires sm_120");
+          signalPassFailure();
+          return;
+        }
+        continue;
+      }
+
       if (isTileOp(op, "tile.reduce_kernel")) {
         if (smVersion < kConsumerBlackwellSM ||
             failed(materializeSm120ReduceKernel(
                 cast<tessera::tile::ReduceKernelOp>(op), builder))) {
           if (smVersion < kConsumerBlackwellSM)
             op->emitError("tile.reduce_kernel currently requires sm_120");
+          signalPassFailure();
+          return;
+        }
+        continue;
+      }
+
+      if (isTileOp(op, "tile.norm_kernel")) {
+        if (smVersion < kConsumerBlackwellSM ||
+            failed(materializeSm120NormKernel(
+                cast<tessera::tile::NormKernelOp>(op), builder))) {
+          if (smVersion < kConsumerBlackwellSM)
+            op->emitError("tile.norm_kernel currently requires sm_120");
           signalPassFailure();
           return;
         }

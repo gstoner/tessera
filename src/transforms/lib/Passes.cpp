@@ -27,9 +27,10 @@ struct TesseraLoweringPipelineOptions
                      "(default on for x86, opt-in for GPU targets)."),
       llvm::cl::init(false)};
   // Legacy force-on switch retained for command-line compatibility. The normal
-  // path now uses per-target defaults: x86/NVIDIA enable compute legalization;
-  // terminal packing remains off there because neither generic pipeline owns a
-  // packed-storage consumer. ROCm defaults both stages on in its backend
+  // path now uses per-target defaults: x86/NVIDIA enable compute legalization.
+  // NVIDIA's scale-bearing launch kernels consume terminal pack descriptors,
+  // but the generic value-level Tile path has no scale ABI, so terminal
+  // packing remains opt-in there. ROCm defaults both stages on in its backend
   // pipeline, immediately followed by StoragePackConsume.
   Option<bool> legalizeDtypes{
       *this, "legalize-dtypes",
@@ -121,8 +122,11 @@ static void addCUDA13PipelineForSM(
   pm.addPass(createWarpSpecLegalityPass());
   if (sm == 90)
     pm.addPass(createNVFlashAttnKernelEmitterPass(sm));
-  if (storageLegalizationEnabled(opts, target))
+  if (storageLegalizationEnabled(opts, target)) {
     pm.addPass(createStorageLegalizePass());
+    if (target.starts_with("nvidia_"))
+      pm.addPass(createStoragePackConsumePass());
+  }
 }
 
 void registerTesseraPasses() {
@@ -420,8 +424,10 @@ void registerTesseraPasses() {
         pm.addPass(createWarpSpecLegalityPass());
         pm.addPass(createNVFlashAttnKernelEmitterPass());
         // C4 terminal storage-legalize (gated).
-        if (storageLegalizationEnabled(opts, "nvidia_sm90"))
+        if (storageLegalizationEnabled(opts, "nvidia_sm90")) {
           pm.addPass(createStorageLegalizePass());
+          pm.addPass(createStoragePackConsumePass());
+        }
       });
 
   // ── Sprint G-5 (2026-05-11) — NVIDIATargetPipeline ─────────────────────

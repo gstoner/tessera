@@ -2385,13 +2385,17 @@ def _submit_nvidia_sm120_native(
     del stream  # The current bridge uses the CUDA primary-context default stream.
     from tessera.compiler.nvidia_native import (
         SM120_ATTN_F16_ABI,
+        SM120_ATTN_BF16_ABI,
         SM120_ATTN_F32_ABI,
         SM120_ATTN_BIAS_F16_ABI,
+        SM120_ATTN_BIAS_BF16_ABI,
         SM120_ATTN_BIAS_F32_ABI,
         SM120_ATTN_BWD_F32_ABI,
         SM120_ATTN_BWD_BIAS_F32_ABI,
         SM120_ATTN_BWD_F16_ABI,
         SM120_ATTN_BWD_BIAS_F16_ABI,
+        SM120_ATTN_BWD_BF16_ABI,
+        SM120_ATTN_BWD_BIAS_BF16_ABI,
         SM120_BF16_ABI,
         SM120_EPILOGUE_ABIS,
         SM120_F16_ABI,
@@ -2401,6 +2405,8 @@ def _submit_nvidia_sm120_native(
         SM120_FP6_E2M3_ABI,
         SM120_FP6_E3M2_ABI,
         SM120_INT8_ABI,
+        SM120_INT4_ABI,
+        SM120_CUDA_INTRINSIC_ABI,
         SM120_MXFP4_ABI,
         SM120_MOE_DISPATCH_F32_ABI,
         SM120_MOE_COMBINE_F32_ABI,
@@ -2410,9 +2416,14 @@ def _submit_nvidia_sm120_native(
         SM120_PAGED_KV_F32_ABI,
         SM120_NVFP4_ABI,
         SM120_REDUCE_F16_ABI,
+        SM120_REDUCE_BF16_ABI,
         SM120_REDUCE_F32_ABI,
+        SM120_NORM_F16_ABI,
+        SM120_NORM_BF16_ABI,
+        SM120_NORM_F32_ABI,
         SM120_TF32_ABI,
         SM120_SOFTMAX_F16_ABI,
+        SM120_SOFTMAX_BF16_ABI,
         SM120_SOFTMAX_F32_ABI,
     )
     from tessera.compiler.nvidia_training import (
@@ -2435,13 +2446,17 @@ def _submit_nvidia_sm120_native(
 
     if descriptor.abi_id not in {
         SM120_ATTN_F16_ABI,
+        SM120_ATTN_BF16_ABI,
         SM120_ATTN_F32_ABI,
         SM120_ATTN_BIAS_F16_ABI,
+        SM120_ATTN_BIAS_BF16_ABI,
         SM120_ATTN_BIAS_F32_ABI,
             SM120_ATTN_BWD_F32_ABI,
             SM120_ATTN_BWD_BIAS_F32_ABI,
             SM120_ATTN_BWD_F16_ABI,
             SM120_ATTN_BWD_BIAS_F16_ABI,
+            SM120_ATTN_BWD_BF16_ABI,
+            SM120_ATTN_BWD_BIAS_BF16_ABI,
         SM120_BF16_ABI,
         SM120_F16_ABI,
         SM120_NVFP4_ABI,
@@ -2452,12 +2467,19 @@ def _submit_nvidia_sm120_native(
         SM120_FP6_E2M3_ABI,
         SM120_FP6_E3M2_ABI,
         SM120_INT8_ABI,
+        SM120_INT4_ABI,
+        SM120_CUDA_INTRINSIC_ABI,
         SM120_MXFP4_ABI,
             SM120_PAGED_KV_F32_ABI,
             SM120_PAGED_ATTN_F32_ABI,
         SM120_REDUCE_F16_ABI,
+        SM120_REDUCE_BF16_ABI,
         SM120_REDUCE_F32_ABI,
+        SM120_NORM_F16_ABI,
+        SM120_NORM_BF16_ABI,
+        SM120_NORM_F32_ABI,
         SM120_SOFTMAX_F16_ABI,
+        SM120_SOFTMAX_BF16_ABI,
         SM120_SOFTMAX_F32_ABI,
         SM120_MOE_DISPATCH_F32_ABI,
         SM120_MOE_COMBINE_F32_ABI,
@@ -2481,12 +2503,27 @@ def _submit_nvidia_sm120_native(
         addresses = [int(value.ctypes.data) for value in raw]
     except (AttributeError, TypeError, ValueError) as exc:
         raise RuntimeError("SM120 bridge requires host arrays with ctypes storage") from exc
-    softmax_abis = {SM120_SOFTMAX_F16_ABI, SM120_SOFTMAX_F32_ABI}
-    reduction_abis = {SM120_REDUCE_F16_ABI, SM120_REDUCE_F32_ABI}
+    softmax_abis = {
+        SM120_SOFTMAX_F16_ABI,
+        SM120_SOFTMAX_BF16_ABI,
+        SM120_SOFTMAX_F32_ABI,
+    }
+    reduction_abis = {
+        SM120_REDUCE_F16_ABI,
+        SM120_REDUCE_BF16_ABI,
+        SM120_REDUCE_F32_ABI,
+    }
+    norm_abis = {
+        SM120_NORM_F16_ABI,
+        SM120_NORM_BF16_ABI,
+        SM120_NORM_F32_ABI,
+    }
     attention_abis = {
         SM120_ATTN_F16_ABI,
+        SM120_ATTN_BF16_ABI,
         SM120_ATTN_F32_ABI,
         SM120_ATTN_BIAS_F16_ABI,
+        SM120_ATTN_BIAS_BF16_ABI,
         SM120_ATTN_BIAS_F32_ABI,
     }
     attention_backward_abis = {
@@ -2494,8 +2531,10 @@ def _submit_nvidia_sm120_native(
         SM120_ATTN_BWD_BIAS_F32_ABI,
         SM120_ATTN_BWD_F16_ABI,
         SM120_ATTN_BWD_BIAS_F16_ABI,
+        SM120_ATTN_BWD_BF16_ABI,
+        SM120_ATTN_BWD_BIAS_BF16_ABI,
     }
-    unary_abis = softmax_abis | reduction_abis
+    unary_abis = softmax_abis | reduction_abis | norm_abis
     moe_abis = set(SM120_MOE_ABIS)
     training_abis = set(SM120_TRAINING_ABIS)
     if descriptor.abi_id == SM120_DYNAMIC_EXPR_SMEM_ABI:
@@ -2656,7 +2695,9 @@ def _submit_nvidia_sm120_native(
         dimensions = tuple(int(cast(int, scalars[name])) for name in ("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv"))
         b, hq, hkv, sq, sk, d, dv = dimensions
         has_bias = descriptor.abi_id in {
-            SM120_ATTN_BWD_BIAS_F32_ABI, SM120_ATTN_BWD_BIAS_F16_ABI
+            SM120_ATTN_BWD_BIAS_F32_ABI,
+            SM120_ATTN_BWD_BIAS_F16_ABI,
+            SM120_ATTN_BWD_BIAS_BF16_ABI,
         }
         do, q, key, value = raw[:4]
         bias = raw[4] if has_bias else None
@@ -2716,7 +2757,11 @@ def _submit_nvidia_sm120_native(
     elif descriptor.abi_id in attention_abis:
         dimensions = tuple(int(cast(int, scalars[name])) for name in ("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv"))
         b, hq, hkv, sq, sk, d, dv = dimensions
-        has_bias = descriptor.abi_id in {SM120_ATTN_BIAS_F16_ABI, SM120_ATTN_BIAS_F32_ABI}
+        has_bias = descriptor.abi_id in {
+            SM120_ATTN_BIAS_F16_ABI,
+            SM120_ATTN_BIAS_BF16_ABI,
+            SM120_ATTN_BIAS_F32_ABI,
+        }
         q, key, value = raw[:3]
         bias = raw[3] if has_bias else None
         output = raw[4] if has_bias else raw[3]
@@ -2766,6 +2811,14 @@ def _submit_nvidia_sm120_native(
             raise RuntimeError("SM120 grouped GEMM shapes disagree with descriptor scalars")
         if int(offsets[0]) != 0 or int(offsets[-1]) != tokens or bool((offsets[1:] < offsets[:-1]).any()):
             raise RuntimeError("SM120 grouped GEMM offsets do not partition grouped tokens")
+    elif descriptor.abi_id == SM120_CUDA_INTRINSIC_ABI:
+        count = int(cast(int, scalars["N"]))
+        dimensions = (count,)
+        if len(raw) != 4 or any(tuple(array.shape) != (count,) for array in raw):
+            raise RuntimeError(
+                "SM120 CUDA intrinsic buffers disagree with descriptor N"
+            )
+        output = raw[3]
     elif descriptor.abi_id in unary_abis:
         x, output = raw
         if descriptor.abi_id in softmax_abis:
@@ -2774,6 +2827,18 @@ def _submit_nvidia_sm120_native(
             if x.size != rows * k or tuple(output.shape) != expected_output:
                 raise RuntimeError("SM120 softmax X/O shapes disagree with Rows/K scalars")
             dimensions = (rows, k)
+        elif descriptor.abi_id in norm_abis:
+            rows, columns = (
+                int(cast(int, scalars[name])) for name in ("Rows", "Columns")
+            )
+            if (
+                x.size != rows * columns
+                or tuple(output.shape) != tuple(x.shape)
+            ):
+                raise RuntimeError(
+                    "SM120 norm X/O shapes disagree with Rows/Columns scalars"
+                )
+            dimensions = (rows, columns)
         else:
             outer, axis_extent, inner = (int(cast(int, scalars[name])) for name in ("Outer", "AxisExtent", "Inner"))
             axis = int(cast(Any, descriptor.provenance["axis"]))
@@ -2797,6 +2862,19 @@ def _submit_nvidia_sm120_native(
         a, b, d = raw
         if tuple(a.shape) != (m, k) or tuple(b.shape) != (k, n) or tuple(d.shape) != (m, n):
             raise RuntimeError("SM120 A/B/D shapes disagree with M/N/K descriptor scalars")
+    elif descriptor.abi_id == SM120_INT4_ABI:
+        a, b, d = raw
+        packed_k = (k + 1) // 2
+        if (
+            tuple(a.shape) != (m, packed_k)
+            or tuple(b.shape) != (packed_k, n)
+            or tuple(d.shape) != (m, n)
+        ):
+            raise RuntimeError(
+                "SM120 packed INT4 A/B/D shapes disagree with M/N/K scalars"
+            )
+    elif descriptor.abi_id == SM120_CUDA_INTRINSIC_ABI:
+        pass  # Rank-one A/B/C/O validation is performed above.
     elif descriptor.abi_id in SM120_EPILOGUE_ABIS:
         a, b, *optional, d = raw
         epilogue_value = descriptor.provenance.get("epilogue", {})
@@ -2875,6 +2953,7 @@ def _submit_nvidia_sm120_native(
             SM120_PAGED_ATTN_F32_ABI,
             SM120_DYNAMIC_SMEM_ABI,
             SM120_DYNAMIC_EXPR_SMEM_ABI,
+            SM120_CUDA_INTRINSIC_ABI,
         }
         else d
     )
@@ -3710,13 +3789,17 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
 
     from tessera.compiler.nvidia_native import (
         SM120_ATTN_F16_ABI,
+        SM120_ATTN_BF16_ABI,
         SM120_ATTN_F32_ABI,
         SM120_ATTN_BIAS_F16_ABI,
+        SM120_ATTN_BIAS_BF16_ABI,
         SM120_ATTN_BIAS_F32_ABI,
         SM120_ATTN_BWD_F32_ABI,
         SM120_ATTN_BWD_BIAS_F32_ABI,
         SM120_ATTN_BWD_F16_ABI,
         SM120_ATTN_BWD_BIAS_F16_ABI,
+        SM120_ATTN_BWD_BF16_ABI,
+        SM120_ATTN_BWD_BIAS_BF16_ABI,
         SM120_BF16_ABI,
         SM120_EPILOGUE_ABIS,
         SM120_F16_ABI,
@@ -3726,6 +3809,8 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         SM120_FP6_E2M3_ABI,
         SM120_FP6_E3M2_ABI,
         SM120_INT8_ABI,
+        SM120_INT4_ABI,
+        SM120_CUDA_INTRINSIC_ABI,
         SM120_MXFP4_ABI,
         SM120_MOE_DISPATCH_F32_ABI,
         SM120_MOE_COMBINE_F32_ABI,
@@ -3735,9 +3820,14 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         SM120_PAGED_KV_F32_ABI,
         SM120_NVFP4_ABI,
         SM120_REDUCE_F16_ABI,
+        SM120_REDUCE_BF16_ABI,
         SM120_REDUCE_F32_ABI,
+        SM120_NORM_F16_ABI,
+        SM120_NORM_BF16_ABI,
+        SM120_NORM_F32_ABI,
         SM120_TF32_ABI,
         SM120_SOFTMAX_F16_ABI,
+        SM120_SOFTMAX_BF16_ABI,
         SM120_SOFTMAX_F32_ABI,
     )
     from tessera.compiler.nvidia_training import SM120_TRAINING_ABIS
@@ -3752,13 +3842,17 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         in (
             {
                 SM120_ATTN_F16_ABI,
+                SM120_ATTN_BF16_ABI,
                 SM120_ATTN_F32_ABI,
                 SM120_ATTN_BIAS_F16_ABI,
+                SM120_ATTN_BIAS_BF16_ABI,
                 SM120_ATTN_BIAS_F32_ABI,
                 SM120_ATTN_BWD_F32_ABI,
                 SM120_ATTN_BWD_BIAS_F32_ABI,
                 SM120_ATTN_BWD_F16_ABI,
                 SM120_ATTN_BWD_BIAS_F16_ABI,
+                SM120_ATTN_BWD_BF16_ABI,
+                SM120_ATTN_BWD_BIAS_BF16_ABI,
                 SM120_BF16_ABI,
                 SM120_F16_ABI,
                 SM120_NVFP4_ABI,
@@ -3769,12 +3863,19 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
                 SM120_FP6_E2M3_ABI,
                 SM120_FP6_E3M2_ABI,
                 SM120_INT8_ABI,
+                SM120_INT4_ABI,
+                SM120_CUDA_INTRINSIC_ABI,
                 SM120_MXFP4_ABI,
                 SM120_PAGED_KV_F32_ABI,
                 SM120_PAGED_ATTN_F32_ABI,
                 SM120_REDUCE_F16_ABI,
+                SM120_REDUCE_BF16_ABI,
                 SM120_REDUCE_F32_ABI,
+                SM120_NORM_F16_ABI,
+                SM120_NORM_BF16_ABI,
+                SM120_NORM_F32_ABI,
                 SM120_SOFTMAX_F16_ABI,
+                SM120_SOFTMAX_BF16_ABI,
                 SM120_SOFTMAX_F32_ABI,
                 SM120_MOE_DISPATCH_F32_ABI,
                 SM120_MOE_COMBINE_F32_ABI,

@@ -1011,12 +1011,12 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "guarded direct NHWC/HWIO f32 convolution with "
                             "stride, padding, dilation, and optional bias",
     "nvidia_flash_attn_compiled": "NVIDIA GPU (consumer Blackwell sm_120) "
-                            "compiler-emitted Flash Attention forward; f32/fp16 storage, "
+                            "compiler-emitted Flash Attention forward; f32/fp16/bf16 storage, "
                             "f32 accumulation, MHA/GQA/MQA "
                             "with online softmax, causal/sliding-window masks, dense "
                             "additive bias and logit soft-cap, launched through runtime.launch()",
     "nvidia_flash_attn_bwd_compiled": "NVIDIA GPU (consumer Blackwell sm_120) "
-                            "compiler-emitted Flash Attention VJP; f32/fp16 storage and "
+                            "compiler-emitted Flash Attention VJP; f32/fp16/bf16 storage and "
                             "f32 dQ/dK/dV accumulation with "
                             "GQA/MQA accumulation, mask/bias/soft-cap derivatives, "
                             "launched through runtime.launch()",
@@ -1033,13 +1033,14 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "dedicated fused MLA decode: latent projections and online-softmax attention in one CUDA kernel",
     "nvidia_softmax_compiled": "NVIDIA GPU (consumer Blackwell sm_120) stable "
                             "row-softmax emitted as CUDA, nvcc-compiled and launched "
-                            "through runtime.launch(); f32 storage and f32 reduction",
+                            "through runtime.launch(); f32/f16/bf16 storage and f32 reduction",
     "nvidia_norm_compiled": "NVIDIA GPU (consumer Blackwell sm_120) RMSNorm "
-                            "and LayerNorm emitted as CUDA row-reduction kernels; "
-                            "f32/f16 storage with f32 accumulation, launched through "
-                            "runtime.launch()",
+                            "and LayerNorm emitted through compiler-owned PTX "
+                            "image/descriptor kernels; f32/f16/bf16 storage with "
+                            "f32 statistics and accumulation",
     "nvidia_reduce_compiled": "NVIDIA GPU (consumer Blackwell sm_120) "
-                            "sum/mean/max/min row reductions emitted as CUDA; f32/f16 "
+                            "sum/mean/max/min reductions emitted as compiler-owned PTX; "
+                            "f32/f16/bf16 "
                             "storage with f32 accumulation, launched through runtime.launch()",
     "nvidia_control_flow_compiled": "NVIDIA GPU (consumer Blackwell sm_120) "
                             "bounded for/cond/while/scan emitted as single-launch "
@@ -3212,7 +3213,8 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         target="nvidia_sm120", compiler_path="nvidia_softmax_compiled",
         execution_kind="native_gpu", executable=True,
         executor_id="nvidia_softmax_compiled", runtime_status="success",
-        reason="NVIDIA sm_120 stable row-softmax emitted as CUDA (f32/f16 storage, "
+        reason="NVIDIA sm_120 stable row-softmax emitted as compiler-owned PTX "
+               "(f32/f16/bf16 storage, "
                "f32 max/sum reduction; one block per flattened row), nvcc-compiled and launched "
                "through runtime.launch().",
         execution_mode="cuda_runtime", direction="forward", op_family="softmax",
@@ -3223,7 +3225,8 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         target="nvidia_sm120", compiler_path="nvidia_flash_attn_compiled",
         execution_kind="native_gpu", executable=True,
         executor_id="nvidia_flash_attn_compiled", runtime_status="success",
-        reason="NVIDIA sm_120 compiler-emitted Flash Attention forward: f32/fp16 storage, "
+        reason="NVIDIA sm_120 compiler-emitted Flash Attention forward: "
+               "f32/fp16/bf16 storage, "
                "f32 accumulation, MHA/GQA/MQA "
                "KV-head mapping, online softmax, causal/window masks, dense additive bias "
                "and logit soft-cap; one CUDA launch over all B*Hq*Sq query rows.",
@@ -3235,7 +3238,8 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         target="nvidia_sm120", compiler_path="nvidia_flash_attn_bwd_compiled",
         execution_kind="native_gpu", executable=True,
         executor_id="nvidia_flash_attn_bwd_compiled", runtime_status="success",
-        reason="NVIDIA sm_120 compiler-emitted Flash Attention backward: f32/fp16 storage, "
+        reason="NVIDIA sm_120 compiler-emitted Flash Attention backward: "
+               "f32/fp16/bf16 storage, "
                "f32 dQ/dK/dV accumulation "
                "recomputes online-softmax statistics, atomically accumulates shared GQA/MQA "
                "dK/dV, and differentiates causal/window masks, dense additive bias, and "
@@ -3300,13 +3304,13 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         target="nvidia_sm120", compiler_path="nvidia_norm_compiled",
         execution_kind="native_gpu", executable=True,
         executor_id="nvidia_norm_compiled", runtime_status="success",
-        reason="NVIDIA sm_120 RMSNorm/LayerNorm emitted as CUDA (f32/f16 storage, "
-               "f32 accumulation; one block per flattened row; stable two-pass variance for LayerNorm), "
-               "nvcc-compiled and launched through runtime.launch().",
-        execution_mode="cuda_runtime", direction="forward", op_family="norm",
+        reason="NVIDIA sm_120 compiler-owned PTX RMSNorm/LayerNorm with "
+               "f32/f16/bf16 storage, f32 statistics/accumulation, immutable "
+               "epsilon, and stable two-pass variance for LayerNorm.",
+        execution_mode="cuda_driver", direction="forward", op_family="norm",
         device_proof="device_verified_jit", evidence_target="nvidia_sm120",
-        numerical_fixture="tests/device/nvidia/test_norm.py",
-        proof_build="cuda13.3+sm120"),
+        numerical_fixture="tests/device/nvidia/test_e2e_spine_native.py",
+        proof_build="cuda13.3+llvm23+sm120"),
     ("nvidia_sm120", "nvidia_reduce_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_reduce_compiled",
         execution_kind="native_gpu", executable=True,

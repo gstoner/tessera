@@ -43,23 +43,42 @@ SM120_TF32_ABI = "tessera.nvidia.matmul.a_b_d_m_n_k.f32_tf32.v1"
 SM120_FP8_E4M3_ABI = "tessera.nvidia.matmul.a_b_d_m_n_k.fp8_e4m3.v1"
 SM120_FP8_E5M2_ABI = "tessera.nvidia.matmul.a_b_d_m_n_k.fp8_e5m2.v1"
 SM120_INT8_ABI = "tessera.nvidia.matmul.a_b_d_m_n_k.int8_i32.v1"
+SM120_INT4_ABI = "tessera.nvidia.matmul.a_b_d_m_n_k.int4_i32.v1"
+SM120_CUDA_INTRINSIC_ABI = "tessera.nvidia.cuda_intrinsic.a_b_c_o_n.v1"
+PROMOTED_SM120_CUDA_INTRINSICS = frozenset({
+    "abs_i32", "min_i32", "max_i32",
+    "funnelshift_l_wrap_u32",
+    "dp2a_lo_s32", "dp4a_s32",
+    "cvt_f32_i32_rn", "cvt_f32_i32_rd",
+    "cvt_f32_i32_ru", "cvt_f32_i32_rz",
+    "vadd2_u16x2",
+})
 SM120_FP64_ABI = "tessera.nvidia.matmul.a_b_d_m_n_k.fp64.v1"
 SM120_NVFP4_ABI = "tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k.v1"
 SM120_FP6_E2M3_ABI = "tessera.nvidia.mxfp6_e2m3.a_b_scale_a_scale_b_d_m_n_k.v1"
 SM120_FP6_E3M2_ABI = "tessera.nvidia.mxfp6_e3m2.a_b_scale_a_scale_b_d_m_n_k.v1"
 SM120_MXFP4_ABI = "tessera.nvidia.mxfp4.a_b_scale_a_scale_b_d_m_n_k.v1"
 SM120_SOFTMAX_F16_ABI = "tessera.nvidia.softmax.x_o_rows_k.f16.v1"
+SM120_SOFTMAX_BF16_ABI = "tessera.nvidia.softmax.x_o_rows_k.bf16_f32acc.v2"
 SM120_SOFTMAX_F32_ABI = "tessera.nvidia.softmax.x_o_rows_k.f32.v1"
 SM120_REDUCE_F16_ABI = "tessera.nvidia.reduce.x_o_outer_axis_inner.f16_f32acc.v2"
+SM120_REDUCE_BF16_ABI = "tessera.nvidia.reduce.x_o_outer_axis_inner.bf16_f32acc.v3"
 SM120_REDUCE_F32_ABI = "tessera.nvidia.reduce.x_o_outer_axis_inner.f32_f32acc.v2"
+SM120_NORM_F16_ABI = "tessera.nvidia.norm.x_o_rows_columns.f16_f32acc.v1"
+SM120_NORM_BF16_ABI = "tessera.nvidia.norm.x_o_rows_columns.bf16_f32acc.v1"
+SM120_NORM_F32_ABI = "tessera.nvidia.norm.x_o_rows_columns.f32_f32acc.v1"
 SM120_ATTN_F16_ABI = "tessera.nvidia.attention.q_k_v_o_dims.f16_f32acc.v1"
+SM120_ATTN_BF16_ABI = "tessera.nvidia.attention.q_k_v_o_dims.bf16_f32acc.v2"
 SM120_ATTN_F32_ABI = "tessera.nvidia.attention.q_k_v_o_dims.f32_f32acc.v1"
 SM120_ATTN_BIAS_F16_ABI = "tessera.nvidia.attention.q_k_v_bias_o_dims.f16_f32acc.v1"
+SM120_ATTN_BIAS_BF16_ABI = "tessera.nvidia.attention.q_k_v_bias_o_dims.bf16_f32acc.v2"
 SM120_ATTN_BIAS_F32_ABI = "tessera.nvidia.attention.q_k_v_bias_o_dims.f32_f32acc.v1"
 SM120_ATTN_BWD_F32_ABI = "tessera.nvidia.attention_backward.do_q_k_v_dq_dk_dv_dims.f32.v1"
 SM120_ATTN_BWD_BIAS_F32_ABI = "tessera.nvidia.attention_backward.do_q_k_v_bias_dq_dk_dv_dims.f32.v1"
 SM120_ATTN_BWD_F16_ABI = "tessera.nvidia.attention_backward.do_q_k_v_dq_dk_dv_dims.f16_f32acc.v2"
 SM120_ATTN_BWD_BIAS_F16_ABI = "tessera.nvidia.attention_backward.do_q_k_v_bias_dq_dk_dv_dims.f16_f32acc.v2"
+SM120_ATTN_BWD_BF16_ABI = "tessera.nvidia.attention_backward.do_q_k_v_dq_dk_dv_dims.bf16_f32acc.v3"
+SM120_ATTN_BWD_BIAS_BF16_ABI = "tessera.nvidia.attention_backward.do_q_k_v_bias_dq_dk_dv_dims.bf16_f32acc.v3"
 SM120_PAGED_KV_F32_ABI = "tessera.nvidia.paged_kv.pages_table_o_dims.f32_i32.v1"
 SM120_PAGED_ATTN_F32_ABI = "tessera.nvidia.paged_attention.q_kp_vp_table_indices_o_dims.f32_i32_i64.v1"
 SM120_REPLAY_DECODE_F32_ABI = "tessera.nvidia.replay_ssm.delta_x_b_s0_c_a_y_dims.f32.v1"
@@ -295,7 +314,10 @@ def emit_nvfp4_matmul_tile_ir(*, entry: str) -> str:
     tile.matmul_kernel %a, %b, %scale_a, %scale_b, %d, %m, %n, %k {{
       mma = #tile.mma_desc<family = "mma_sync", m = 16, n = 8, k = 64, a = "nvfp4", b = "nvfp4", acc = "f32", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>,
       epilogue = #tile.epilogue<bias = false, activation = "none", output = "f32">,
-      warps = 1 : i64, staging = "global"
+      warps = 1 : i64, staging = "global",
+      tessera.storage_packed = true,
+      tessera.storage_container = "int8",
+      tessera.storage_pack = {{logical = "nvfp4", container = "int8", factor = 2 : i64, signedness = "format_defined"}}
     }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64
     llvm.return
   }}
@@ -303,9 +325,115 @@ def emit_nvfp4_matmul_tile_ir(*, entry: str) -> str:
 """
 
 
+def emit_int4_matmul_tile_ir(*, entry: str) -> str:
+    """Emit the canonical signed-int4 packed-storage launch kernel."""
+    return f"""module {{
+  llvm.func @{entry}(%a: !llvm.ptr, %b: !llvm.ptr, %d: !llvm.ptr,
+                     %m: i64, %n: i64, %k: i64) attributes {{nvvm.kernel}} {{
+    tile.matmul_kernel %a, %b, %d, %m, %n, %k {{
+      mma = #tile.mma_desc<family = "mma_sync", m = 16, n = 8, k = 32, a = "int4", b = "int4", acc = "int32", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>,
+      epilogue = #tile.epilogue<bias = false, activation = "none", output = "i32">,
+      warps = 1 : i64, staging = "global",
+      tessera.storage_packed = true,
+      tessera.storage_container = "int8",
+      tessera.storage_pack = {{logical = "int4", container = "int8", factor = 2 : i64, signedness = "signed_twos_complement"}}
+    }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64
+    llvm.return
+  }}
+}}
+"""
+
+
+def emit_cuda_intrinsic_tile_ir(*, entry: str, kind: str) -> str:
+    """Emit one typed CUDA integer/cast/packed intrinsic kernel."""
+    cast = kind.startswith("cvt_f32_i32_")
+    rounding = kind.rsplit("_", 1)[-1] if cast else "none"
+    saturation = kind == "vaddss4_s8x4"
+    input_storage = "f32" if cast else "i32"
+    return f'''module {{
+  llvm.func @{entry}(%a: !llvm.ptr, %b: !llvm.ptr, %c: !llvm.ptr,
+                     %o: !llvm.ptr, %n: i64) attributes {{nvvm.kernel}} {{
+    tile.cuda_intrinsic_kernel %a, %b, %c, %o, %n {{
+      kind = "{kind}", input_storage = "{input_storage}",
+      output_storage = "i32", rounding = "{rounding}",
+      saturation = {str(saturation).lower()}
+    }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64
+    llvm.return
+  }}
+}}
+'''
+
+
+def package_cuda_intrinsic(
+    *,
+    kind: str,
+    count: int,
+    pipeline_name: str = "tessera-lower-to-nvidia-sm120",
+) -> NVIDIANativePackage:
+    if count <= 0:
+        raise ValueError("CUDA intrinsic package requires count > 0")
+    if kind not in PROMOTED_SM120_CUDA_INTRINSICS:
+        raise ValueError(
+            f"CUDA intrinsic {kind!r} is not in the exact-device promoted subset"
+        )
+    saturation = kind == "vaddss4_s8x4"
+    entry = f"tessera_tile_cuda_intrinsic_{kind}"
+    tile_ir = emit_cuda_intrinsic_tile_ir(entry=entry, kind=kind)
+    (lowered, ptx, metrics, compiler_fp, toolchain_fp,
+     device_libraries, compile_state) = _compile_tile_ir(tile_ir, entry)
+    image = NativeImageArtifact(
+        target="nvidia_sm120",
+        architecture="sm_120a",
+        pipeline_name=pipeline_name,
+        compiler_fingerprint=compiler_fp,
+        toolchain_fingerprint=toolchain_fp,
+        target_ir_digest=hashlib.sha256(lowered.encode()).hexdigest(),
+        binary_format="ptx",
+        payload=ptx.encode("ascii"),
+        entry_points=(NativeEntryPoint(entry, SM120_CUDA_INTRINSIC_ABI),),
+        compile_state=compile_state,
+        device_libraries=device_libraries,
+        resource_record=ResourceRecord(
+            provenance="ptxas --arch=sm_120a -v", metrics=metrics,
+        ),
+    )
+    input_dtype = "fp32" if kind.startswith("cvt_f32_i32_") else "int32"
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest,
+        entry_symbol=entry,
+        abi_id=SM120_CUDA_INTRINSIC_ABI,
+        buffers=(
+            BufferBinding(0, "a", "input", input_dtype, 1, "row_major", 4),
+            BufferBinding(1, "b", "input", "int32", 1, "row_major", 4),
+            BufferBinding(2, "c", "input", "int32", 1, "row_major", 4),
+            BufferBinding(3, "o", "output", "int32", 1, "row_major", 4),
+        ),
+        scalars=(ScalarArgument(4, "N", "int64"),),
+        shape_guards=tuple(
+            ShapeGuard(name, 0, "eq", count) for name in ("a", "b", "c", "o")
+        ),
+        geometry=LaunchGeometry(policy="sm120_cuda_intrinsic_128"),
+        ordering=OrderingSemantics(
+            ordered_submission=True,
+            residency="none",
+            synchronization=("completion",),
+        ),
+        provenance={
+            "work_item": "NVIDIA-CUDA-MATH-EXECUTION",
+            "sync_key": "NVIDIA-PACKED-MATH-2026-07-25",
+            "kind": kind,
+            "rounding": kind.rsplit("_", 1)[-1]
+            if kind.startswith("cvt_f32_i32_") else "none",
+            "saturation": saturation,
+            "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
+        },
+    )
+    return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
+
+
 def emit_softmax_tile_ir(*, entry: str, storage: str) -> str:
     """Emit the typed stable row-softmax launch envelope."""
-    if storage not in {"f16", "f32"}:
+    if storage not in {"f16", "bf16", "f32"}:
         raise ValueError(f"unsupported SM120 softmax storage {storage!r}")
     return f'''module {{
   llvm.func @{entry}(%x: !llvm.ptr, %o: !llvm.ptr,
@@ -325,6 +453,8 @@ def emit_mx_matmul_tile_ir(*, entry: str, storage: str) -> str:
     if storage not in {"e2m3", "e3m2", "fp4_e2m1"}:
         raise ValueError(f"unsupported SM120 MX matmul storage {storage!r}")
     fragment_k = 64 if storage == "fp4_e2m1" else 32
+    logical_storage = storage if storage == "fp4_e2m1" else f"fp6_{storage}"
+    factor = 2 if storage == "fp4_e2m1" else 1
     return f'''module {{
   llvm.func @{entry}(%a: !llvm.ptr, %b: !llvm.ptr,
                      %scale_a: !llvm.ptr, %scale_b: !llvm.ptr,
@@ -333,7 +463,10 @@ def emit_mx_matmul_tile_ir(*, entry: str, storage: str) -> str:
     tile.matmul_kernel %a, %b, %scale_a, %scale_b, %d, %m, %n, %k {{
       mma = #tile.mma_desc<family = "mma_sync", m = 16, n = 8, k = {fragment_k}, a = "{storage}", b = "{storage}", acc = "f32", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>,
       epilogue = #tile.epilogue<bias = false, activation = "none", output = "f32">,
-      warps = 1 : i64, staging = "global"
+      warps = 1 : i64, staging = "global",
+      tessera.storage_packed = true,
+      tessera.storage_container = "int8",
+      tessera.storage_pack = {{logical = "{logical_storage}", container = "int8", factor = {factor} : i64, signedness = "format_defined"}}
     }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64
     llvm.return
   }}
@@ -344,9 +477,9 @@ def emit_mx_matmul_tile_ir(*, entry: str, storage: str) -> str:
 def emit_reduce_tile_ir(*, entry: str, storage: str, kind: str, axis: int = 0,
                         keepdims: bool = False, schedule: str = "serial") -> str:
     """Emit a typed arbitrary-axis reduction with explicit shape semantics."""
-    if storage not in {"f16", "f32"}:
+    if storage not in {"f16", "bf16", "f32"}:
         raise ValueError(f"unsupported SM120 reduction storage {storage!r}")
-    if kind not in {"sum", "mean", "max"}:
+    if kind not in {"sum", "mean", "max", "min"}:
         raise ValueError(f"unsupported SM120 reduction kind {kind!r}")
     if axis < 0 or schedule not in {"serial", "cooperative_128"}:
         raise ValueError("SM120 reduction requires normalized axis and a proven schedule")
@@ -358,6 +491,35 @@ def emit_reduce_tile_ir(*, entry: str, storage: str, kind: str, axis: int = 0,
       axis = {axis} : i64, keepdims = {str(keepdims).lower()},
       schedule = "{schedule}", nan_mode = "propagate"
     }} : !llvm.ptr, !llvm.ptr, i64, i64, i64
+    llvm.return
+  }}
+}}
+'''
+
+
+def emit_norm_tile_ir(
+    *,
+    entry: str,
+    storage: str,
+    kind: str,
+    epsilon: float,
+) -> str:
+    """Emit a typed immutable-epsilon row normalization envelope."""
+    if storage not in {"f16", "bf16", "f32"}:
+        raise ValueError(f"unsupported SM120 norm storage {storage!r}")
+    if kind not in {"rmsnorm", "layernorm"}:
+        raise ValueError(f"unsupported SM120 norm kind {kind!r}")
+    if not math.isfinite(epsilon) or epsilon < 0.0:
+        raise ValueError("SM120 norm epsilon must be finite and nonnegative")
+    return f'''module {{
+  llvm.func @{entry}(%x: !llvm.ptr, %o: !llvm.ptr,
+                     %rows: i64, %columns: i64)
+      attributes {{nvvm.kernel}} {{
+    %epsilon = arith.constant {epsilon:.17g} : f32
+    tile.norm_kernel %x, %o, %rows, %columns, %epsilon {{
+      storage = "{storage}", accum = "f32", kind = "{kind}",
+      axis = -1 : i64, affine = false
+    }} : !llvm.ptr, !llvm.ptr, i64, i64, f32
     llvm.return
   }}
 }}
@@ -378,7 +540,7 @@ def emit_attention_tile_ir(
     dropout_seed: int = 0,
 ) -> str:
     """Emit the correctness-first typed SDPA launch envelope."""
-    if storage not in {"f16", "f32"}:
+    if storage not in {"f16", "bf16", "f32"}:
         raise ValueError(f"unsupported SM120 attention storage {storage!r}")
     if not math.isfinite(scale) or scale <= 0.0:
         raise ValueError("SM120 attention scale must be finite and positive")
@@ -511,8 +673,8 @@ def emit_attention_backward_tile_ir(
     window_left: int = -1, window_right: int = -1, softcap: float = 0.0,
     dropout_p: float = 0.0, dropout_seed: int = 0,
 ) -> str:
-    """Emit the deterministic f16/f32 reference VJP through canonical Tile IR."""
-    if storage not in {"f16", "f32"}:
+    """Emit the deterministic f16/bf16/f32 reference VJP through Tile IR."""
+    if storage not in {"f16", "bf16", "f32"}:
         raise ValueError(f"unsupported SM120 attention backward storage {storage!r}")
     if not math.isfinite(scale) or scale <= 0.0:
         raise ValueError("SM120 attention backward scale must be finite and positive")
@@ -588,6 +750,18 @@ def requests_reduction(module: GraphIRModule) -> bool:
         "tessera.mean",
         "tessera.max",
         "tessera.amax",
+        "tessera.min",
+        "tessera.amin",
+    }
+
+
+def requests_norm(module: GraphIRModule) -> bool:
+    if len(module.functions) != 1 or len(module.functions[0].body) != 1:
+        return False
+    return module.functions[0].body[0].op_name in {
+        "tessera.rmsnorm",
+        "tessera.rmsnorm_safe",
+        "tessera.layer_norm",
     }
 
 
@@ -681,12 +855,12 @@ def _attention_contract(
     if any(name not in args for name in names):
         return None
     storages = {args[name].ir_type.dtype for name in names}
-    if len(storages) != 1 or storages.isdisjoint({"fp16", "fp32"}):
+    if len(storages) != 1 or storages.isdisjoint({"fp16", "bf16", "fp32"}):
         return None
     storage = storages.pop()
     if storage is None:
         return None
-    if storage not in {"fp16", "fp32"}:
+    if storage not in {"fp16", "bf16", "fp32"}:
         return None
     shapes = tuple(_shape(module, name) for name in names)
     if any(shape is None or len(shape) != 4 for shape in shapes):
@@ -759,7 +933,7 @@ def _attention_backward_contract(
     if any(name not in args for name in names):
         return None
     storages = {args[name].ir_type.dtype for name in names}
-    if len(storages) != 1 or not storages <= {"fp16", "fp32"}:
+    if len(storages) != 1 or not storages <= {"fp16", "bf16", "fp32"}:
         return None
     storage = storages.pop()
     if storage is None:
@@ -838,7 +1012,7 @@ def _reduction_contract(module: GraphIRModule) -> tuple[str, str, int, bool] | N
     input_name = op.operands[0].removeprefix("%")
     arg = next((item for item in fn.args if item.name == input_name), None)
     shape = _shape(module, input_name)
-    if arg is None or arg.ir_type.dtype not in {"fp16", "fp32"} or shape is None or len(shape) < 1:
+    if arg is None or arg.ir_type.dtype not in {"fp16", "bf16", "fp32"} or shape is None or len(shape) < 1:
         return None
     raw_axis = op.kwargs.get("axis", -1)
     if not isinstance(raw_axis, int) or isinstance(raw_axis, bool):
@@ -857,6 +1031,8 @@ def _reduction_contract(module: GraphIRModule) -> tuple[str, str, int, bool] | N
     kind = (
         "max"
         if op.op_name in {"tessera.max", "tessera.amax"}
+        else "min"
+        if op.op_name in {"tessera.min", "tessera.amin"}
         else "sum"
         if op.op_name in {"tessera.reduce", "tessera.sum"}
         else "mean"
@@ -868,6 +1044,62 @@ def supports_reduction(module: GraphIRModule) -> bool:
     return _reduction_contract(module) is not None
 
 
+def _norm_contract(
+    module: GraphIRModule,
+) -> tuple[str, str, float, tuple[int, ...]] | None:
+    if not requests_norm(module):
+        return None
+    fn = module.functions[0]
+    op = fn.body[0]
+    if len(op.operands) != 1 or len(fn.result_types) != 1:
+        return None
+    input_name = op.operands[0].removeprefix("%")
+    arg = next((item for item in fn.args if item.name == input_name), None)
+    shape = _shape(module, input_name)
+    if (
+        arg is None
+        or arg.ir_type.dtype not in {"fp16", "bf16", "fp32"}
+        or shape is None
+        or len(shape) < 1
+        or fn.result_types[0].dtype != arg.ir_type.dtype
+    ):
+        return None
+    try:
+        result_shape = tuple(int(dim) for dim in fn.result_types[0].shape)
+    except (TypeError, ValueError):
+        return None
+    if result_shape != shape:
+        return None
+    axis = op.kwargs.get("axis", -1)
+    if axis not in {-1, len(shape) - 1}:
+        return None
+    if any(
+        op.kwargs.get(name) not in {None, False}
+        for name in ("weight", "gamma", "bias", "beta")
+    ):
+        return None
+    raw_epsilon = op.kwargs.get(
+        "eps",
+        op.kwargs.get(
+            "epsilon",
+            1e-6 if op.op_name == "tessera.rmsnorm_safe" else 1e-5,
+        ),
+    )
+    if (
+        not isinstance(raw_epsilon, (int, float))
+        or isinstance(raw_epsilon, bool)
+        or not math.isfinite(float(raw_epsilon))
+        or float(raw_epsilon) < 0.0
+    ):
+        return None
+    kind = "layernorm" if op.op_name == "tessera.layer_norm" else "rmsnorm"
+    return arg.ir_type.dtype, kind, float(raw_epsilon), shape
+
+
+def supports_norm(module: GraphIRModule) -> bool:
+    return _norm_contract(module) is not None
+
+
 def _softmax_storage(module: GraphIRModule) -> str | None:
     if not requests_softmax(module):
         return None
@@ -877,7 +1109,7 @@ def _softmax_storage(module: GraphIRModule) -> str | None:
         return None
     name = op.operands[0].removeprefix("%")
     args = {arg.name: arg for arg in fn.args}
-    if name not in args or args[name].ir_type.dtype not in {"fp16", "fp32"}:
+    if name not in args or args[name].ir_type.dtype not in {"fp16", "bf16", "fp32"}:
         return None
     storage = args[name].ir_type.dtype
     if fn.result_types and fn.result_types[0].dtype != storage:
@@ -891,6 +1123,10 @@ def supports_f32_softmax(module: GraphIRModule) -> bool:
 
 def supports_f16_softmax(module: GraphIRModule) -> bool:
     return _softmax_storage(module) == "fp16"
+
+
+def supports_bf16_softmax(module: GraphIRModule) -> bool:
+    return _softmax_storage(module) == "bf16"
 
 
 def _matmul_storage(module: GraphIRModule) -> str | None:
@@ -991,6 +1227,34 @@ def requests_nvfp4_matmul(module: GraphIRModule) -> bool:
     args = {arg.name: arg for arg in fn.args}
     names = tuple(value.removeprefix("%") for value in op.operands)
     return all(name in args and args[name].ir_type.dtype == "nvfp4" for name in names)
+
+
+def requests_int4_matmul(module: GraphIRModule) -> bool:
+    if len(module.functions) != 1 or len(module.functions[0].body) != 1:
+        return False
+    fn = module.functions[0]
+    op = fn.body[0]
+    if op.op_name not in {"tessera.matmul", "tessera.gemm"} or len(op.operands) != 2:
+        return False
+    args = {arg.name: arg for arg in fn.args}
+    names = tuple(value.removeprefix("%") for value in op.operands)
+    return all(name in args and args[name].ir_type.dtype == "int4" for name in names)
+
+
+def supports_int4_matmul(module: GraphIRModule) -> bool:
+    if not requests_int4_matmul(module):
+        return False
+    fn = module.functions[0]
+    op = fn.body[0]
+    if fn.result_types[0].dtype != "int32":
+        return False
+    if any(op.kwargs.get(key) not in {None, False} for key in ("scale_a", "scale_b", "bias", "residual")):
+        return False
+    if op.kwargs.get("activation", "none") != "none":
+        return False
+    names = tuple(value.removeprefix("%") for value in op.operands)
+    a_shape, b_shape = (_static_shape(module, name) for name in names)
+    return bool(a_shape and b_shape and a_shape[1] == b_shape[0])
 
 
 def requests_mx_matmul(module: GraphIRModule) -> bool:
@@ -1508,6 +1772,99 @@ def package_nvfp4_matmul(
             "schedule": "warp_m16n8_k64",
             "shape": [m, n, k],
             "scale_vector_size": 16,
+            "storage_pack": {
+                "logical": "nvfp4",
+                "container": "int8",
+                "factor": 2,
+                "signedness": "format_defined",
+            },
+            "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
+        },
+    )
+    return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
+
+
+def package_int4_matmul(
+    module: GraphIRModule,
+    *,
+    pipeline_name: str,
+) -> NVIDIANativePackage:
+    """Compile a static signed-int4 matmul with packed int8 containers."""
+    if not supports_int4_matmul(module):
+        raise ValueError(
+            "SM120 INT4 packaging requires one static rank-2 signed INT4 "
+            "matmul, i32 output, and no scale or fused epilogue"
+        )
+    entry = "tessera_tile_matmul_int4"
+    tile_ir = emit_int4_matmul_tile_ir(entry=entry)
+    (lowered, ptx, metrics, compiler_fp, toolchain_fp,
+     device_libraries, compile_state) = _compile_tile_ir(tile_ir, entry)
+    image = NativeImageArtifact(
+        target="nvidia_sm120",
+        architecture="sm_120a",
+        pipeline_name=pipeline_name,
+        compiler_fingerprint=compiler_fp,
+        toolchain_fingerprint=toolchain_fp,
+        target_ir_digest=hashlib.sha256(lowered.encode()).hexdigest(),
+        binary_format="ptx",
+        payload=ptx.encode("ascii"),
+        entry_points=(NativeEntryPoint(entry, SM120_INT4_ABI),),
+        compile_state=compile_state,
+        device_libraries=device_libraries,
+        resource_record=ResourceRecord(
+            provenance="ptxas --arch=sm_120a -v", metrics=metrics,
+        ),
+    )
+    fn = module.functions[0]
+    op = fn.body[0]
+    a_name, b_name = (value.removeprefix("%") for value in op.operands)
+    a_shape = _static_shape(module, a_name)
+    b_shape = _static_shape(module, b_name)
+    assert a_shape is not None and b_shape is not None
+    m, k = a_shape
+    n = b_shape[1]
+    packed_k = (k + 1) // 2
+    output_name = op.result or "output"
+    storage_pack = {
+        "logical": "int4",
+        "container": "int8",
+        "factor": 2,
+        "signedness": "signed_twos_complement",
+    }
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest,
+        entry_symbol=entry,
+        abi_id=SM120_INT4_ABI,
+        buffers=(
+            BufferBinding(0, a_name, "input", "uint8", 2, "row_major", 1),
+            BufferBinding(1, b_name, "input", "uint8", 2, "row_major", 1),
+            BufferBinding(2, output_name, "output", "int32", 2, "row_major", 4),
+        ),
+        scalars=(
+            ScalarArgument(3, "M", "int64"),
+            ScalarArgument(4, "N", "int64"),
+            ScalarArgument(5, "K", "int64"),
+        ),
+        shape_guards=(
+            ShapeGuard(a_name, 0, "eq", m),
+            ShapeGuard(a_name, 1, "eq", packed_k),
+            ShapeGuard(b_name, 0, "eq", packed_k),
+            ShapeGuard(b_name, 1, "eq", n),
+            ShapeGuard(output_name, 0, "eq", m),
+            ShapeGuard(output_name, 1, "eq", n),
+        ),
+        geometry=LaunchGeometry(policy="sm120_int4_packed_scalar"),
+        ordering=OrderingSemantics(
+            ordered_submission=True,
+            residency="none",
+            synchronization=("completion",),
+        ),
+        provenance={
+            "work_item": "NVIDIA-PACKED-STORAGE-CONSUMER",
+            "sync_key": "NVIDIA-PACKED-MATH-2026-07-25",
+            "schedule": "packed_scalar_correctness",
+            "shape": [m, n, k],
+            "storage_pack": storage_pack,
             "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
         },
     )
@@ -1616,6 +1973,12 @@ def package_mx_matmul(
             "storage": storage,
             "scale_dtype": "ue8m0",
             "scale_vector_size": 32,
+            "storage_pack": {
+                "logical": storage,
+                "container": "int8",
+                "factor": 2 if storage == "fp4_e2m1" else 1,
+                "signedness": "format_defined",
+            },
             "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
         },
     )
@@ -1631,15 +1994,19 @@ def package_reduction(
     contract = _reduction_contract(module)
     if contract is None:
         raise ValueError(
-            "SM120 reduction packaging requires static f16/f32 input, f32 output, "
-            "one normalized axis and sum/mean/max semantics"
+            "SM120 reduction packaging requires static f16/bf16/f32 input, f32 output, "
+            "one normalized axis and sum/mean/max/min semantics"
         )
     storage, kind, axis, keepdims = contract
     if schedule not in {"serial", "cooperative_128"}:
         raise ValueError("SM120 reduction schedule must be serial or cooperative_128")
-    storage_ir = "f16" if storage == "fp16" else "f32"
+    storage_ir = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[storage]
     entry = f"tessera_tile_reduce_{kind}_{storage_ir}_{schedule}"
-    abi_id = SM120_REDUCE_F16_ABI if storage == "fp16" else SM120_REDUCE_F32_ABI
+    abi_id = {
+        "fp16": SM120_REDUCE_F16_ABI,
+        "bf16": SM120_REDUCE_BF16_ABI,
+        "fp32": SM120_REDUCE_F32_ABI,
+    }[storage]
     tile_ir = emit_reduce_tile_ir(
         entry=entry, storage=storage_ir, kind=kind, axis=axis,
         keepdims=keepdims, schedule=schedule,
@@ -1676,7 +2043,7 @@ def package_reduction(
         entry_symbol=entry,
         abi_id=abi_id,
         buffers=(
-            BufferBinding(0, input_name, "input", storage, len(shape), "row_major", 2 if storage == "fp16" else 4),
+            BufferBinding(0, input_name, "input", storage, len(shape), "row_major", 2 if storage in {"fp16", "bf16"} else 4),
             BufferBinding(1, output_name, "output", "fp32", len(output_shape), "row_major", 4),
         ),
         scalars=(ScalarArgument(2, "Outer", "int64"),
@@ -1708,6 +2075,113 @@ def package_reduction(
     return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
 
 
+def package_norm(
+    module: GraphIRModule,
+    *,
+    pipeline_name: str,
+) -> NVIDIANativePackage:
+    contract = _norm_contract(module)
+    if contract is None:
+        raise ValueError(
+            "SM120 norm packaging requires static f16/bf16/f32 input and "
+            "same-storage output, last-axis unweighted RMSNorm/LayerNorm, and "
+            "finite nonnegative epsilon"
+        )
+    storage, kind, epsilon, shape = contract
+    storage_ir = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[storage]
+    epsilon_key = hashlib.sha256(f"{epsilon:.17g}".encode()).hexdigest()[:10]
+    entry = f"tessera_tile_norm_{kind}_{storage_ir}_{epsilon_key}"
+    abi_id = {
+        "fp16": SM120_NORM_F16_ABI,
+        "bf16": SM120_NORM_BF16_ABI,
+        "fp32": SM120_NORM_F32_ABI,
+    }[storage]
+    tile_ir = emit_norm_tile_ir(
+        entry=entry,
+        storage=storage_ir,
+        kind=kind,
+        epsilon=epsilon,
+    )
+    (
+        lowered,
+        ptx,
+        metrics,
+        compiler_fp,
+        toolchain_fp,
+        device_libraries,
+        compile_state,
+    ) = _compile_tile_ir(tile_ir, entry)
+    image = NativeImageArtifact(
+        target="nvidia_sm120",
+        architecture="sm_120a",
+        pipeline_name=pipeline_name,
+        compiler_fingerprint=compiler_fp,
+        toolchain_fingerprint=toolchain_fp,
+        target_ir_digest=hashlib.sha256(lowered.encode()).hexdigest(),
+        binary_format="ptx",
+        payload=ptx.encode("ascii"),
+        entry_points=(NativeEntryPoint(entry, abi_id),),
+        compile_state=compile_state,
+        device_libraries=device_libraries,
+        resource_record=ResourceRecord(
+            provenance="ptxas --arch=sm_120a -v", metrics=metrics
+        ),
+    )
+    fn = module.functions[0]
+    op = fn.body[0]
+    input_name = op.operands[0].removeprefix("%")
+    output_name = op.result or "output"
+    rows = math.prod(shape[:-1]) if len(shape) > 1 else 1
+    columns = shape[-1]
+    alignment = 2 if storage in {"fp16", "bf16"} else 4
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest,
+        entry_symbol=entry,
+        abi_id=abi_id,
+        buffers=(
+            BufferBinding(
+                0, input_name, "input", storage, len(shape), "row_major", alignment
+            ),
+            BufferBinding(
+                1,
+                output_name,
+                "output",
+                storage,
+                len(shape),
+                "row_major",
+                alignment,
+            ),
+        ),
+        scalars=(
+            ScalarArgument(2, "Rows", "int64"),
+            ScalarArgument(3, "Columns", "int64"),
+        ),
+        shape_guards=tuple(
+            [ShapeGuard(input_name, axis, "eq", extent) for axis, extent in enumerate(shape)]
+            + [ShapeGuard(output_name, axis, "eq", extent) for axis, extent in enumerate(shape)]
+        ),
+        geometry=LaunchGeometry(policy="sm120_norm_serial_rows"),
+        ordering=OrderingSemantics(
+            ordered_submission=True,
+            residency="none",
+            synchronization=("completion",),
+        ),
+        provenance={
+            "work_item": "NVIDIA-BF16-CANONICAL-BREADTH",
+            "schedule": "serial_rows",
+            "shape": list(shape),
+            "storage": storage_ir,
+            "accum": "f32",
+            "kind": kind,
+            "epsilon": epsilon,
+            "rows": rows,
+            "columns": columns,
+            "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
+        },
+    )
+    return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
+
+
 def package_attention(
     module: GraphIRModule,
     *,
@@ -1716,7 +2190,7 @@ def package_attention(
     contract = _attention_contract(module)
     if contract is None:
         raise ValueError(
-            "SM120 attention packaging requires static rank-4 f16/f32 Q/K/V, "
+            "SM120 attention packaging requires static rank-4 f16/bf16/f32 Q/K/V, "
             "f32 output, MHA/GQA-compatible heads, and scale/causal semantics; "
             "bias, window, softcap, and dropout remain planned"
         )
@@ -1724,17 +2198,21 @@ def package_attention(
         storage, dims, scale, causal, bias_name, window_left, window_right,
         softcap, dropout_p, dropout_seed,
     ) = contract
-    storage_ir = "f16" if storage == "fp16" else "f32"
+    storage_ir = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[storage]
     semantic_key = hashlib.sha256(
         f"{scale:.17g}:{causal}:{bool(bias_name)}:{window_left}:{window_right}:"
         f"{softcap:.17g}:{dropout_p:.17g}:{dropout_seed}".encode()
     ).hexdigest()[:10]
     entry = f"tessera_tile_attention_{storage_ir}_{'causal' if causal else 'full'}_{semantic_key}"
-    abi_id = (
-        SM120_ATTN_BIAS_F16_ABI if storage == "fp16" else SM120_ATTN_BIAS_F32_ABI
-    ) if bias_name else (
-        SM120_ATTN_F16_ABI if storage == "fp16" else SM120_ATTN_F32_ABI
-    )
+    abi_id = ({
+        "fp16": SM120_ATTN_BIAS_F16_ABI,
+        "bf16": SM120_ATTN_BIAS_BF16_ABI,
+        "fp32": SM120_ATTN_BIAS_F32_ABI,
+    } if bias_name else {
+        "fp16": SM120_ATTN_F16_ABI,
+        "bf16": SM120_ATTN_BF16_ABI,
+        "fp32": SM120_ATTN_F32_ABI,
+    })[storage]
     tile_ir = emit_attention_tile_ir(
         entry=entry, storage=storage_ir, scale=scale, causal=causal,
         bias=bias_name is not None, window_left=window_left,
@@ -1765,7 +2243,7 @@ def package_attention(
     q_name, k_name, v_name = (value.removeprefix("%") for value in op.operands[:3])
     output_name = op.result or "output"
     b, hq, hkv, sq, sk, d, dv = dims
-    alignment = 2 if storage == "fp16" else 4
+    alignment = 2 if storage in {"fp16", "bf16"} else 4
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest,
         entry_symbol=entry,
@@ -1827,13 +2305,13 @@ def package_attention_backward(
     contract = _attention_backward_contract(module)
     if contract is None:
         raise ValueError(
-            "SM120 canonical attention backward requires static rank-4 matching f16/f32 "
+            "SM120 canonical attention backward requires static rank-4 matching f16/bf16/f32 "
             "dO/Q/K/V and gradients, deterministic_direct, valid dropout, and a "
             "nonnegative workspace limit"
         )
     (storage, names, dims, scale, causal, bias_name, window_left, window_right,
      softcap, dropout_p, dropout_seed) = contract
-    storage_ir = "f16" if storage == "fp16" else "f32"
+    storage_ir = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[storage]
     do_name, q_name, k_name, v_name = names
     b, hq, hkv, sq, sk, d, dv = dims
     semantic_key = hashlib.sha256(
@@ -1843,6 +2321,8 @@ def package_attention_backward(
     entry = f"tessera_tile_attention_backward_{storage_ir}_deterministic_{semantic_key}"
     if storage == "fp16":
         abi_id = SM120_ATTN_BWD_BIAS_F16_ABI if bias_name else SM120_ATTN_BWD_F16_ABI
+    elif storage == "bf16":
+        abi_id = SM120_ATTN_BWD_BIAS_BF16_ABI if bias_name else SM120_ATTN_BWD_BF16_ABI
     else:
         abi_id = SM120_ATTN_BWD_BIAS_F32_ABI if bias_name else SM120_ATTN_BWD_F32_ABI
     tile_ir = emit_attention_backward_tile_ir(
@@ -1867,10 +2347,10 @@ def package_attention_backward(
         raise ValueError("SM120 attention backward needs dQ,dK,dV SSA result names")
     dq_name, dk_name, dv_name = result_names
     input_bindings = [
-        BufferBinding(0, do_name, "input", storage, 4, "row_major", 2 if storage == "fp16" else 4),
-        BufferBinding(1, q_name, "input", storage, 4, "row_major", 2 if storage == "fp16" else 4),
-        BufferBinding(2, k_name, "input", storage, 4, "row_major", 2 if storage == "fp16" else 4),
-        BufferBinding(3, v_name, "input", storage, 4, "row_major", 2 if storage == "fp16" else 4),
+        BufferBinding(0, do_name, "input", storage, 4, "row_major", 2 if storage in {"fp16", "bf16"} else 4),
+        BufferBinding(1, q_name, "input", storage, 4, "row_major", 2 if storage in {"fp16", "bf16"} else 4),
+        BufferBinding(2, k_name, "input", storage, 4, "row_major", 2 if storage in {"fp16", "bf16"} else 4),
+        BufferBinding(3, v_name, "input", storage, 4, "row_major", 2 if storage in {"fp16", "bf16"} else 4),
     ]
     if bias_name:
         input_bindings.append(
@@ -1878,9 +2358,9 @@ def package_attention_backward(
         )
     output_base = 4 + int(bias_name is not None)
     buffers = tuple(input_bindings + [
-        BufferBinding(output_base, dq_name, "output", storage, 4, "row_major", 2 if storage == "fp16" else 4),
-        BufferBinding(output_base + 1, dk_name, "output", storage, 4, "row_major", 2 if storage == "fp16" else 4),
-        BufferBinding(output_base + 2, dv_name, "output", storage, 4, "row_major", 2 if storage == "fp16" else 4),
+        BufferBinding(output_base, dq_name, "output", storage, 4, "row_major", 2 if storage in {"fp16", "bf16"} else 4),
+        BufferBinding(output_base + 1, dk_name, "output", storage, 4, "row_major", 2 if storage in {"fp16", "bf16"} else 4),
+        BufferBinding(output_base + 2, dv_name, "output", storage, 4, "row_major", 2 if storage in {"fp16", "bf16"} else 4),
     ])
     scalar_base = output_base + 3
     guards = [
@@ -2219,14 +2699,18 @@ def package_softmax(
     *,
     pipeline_name: str,
 ) -> NVIDIANativePackage:
-    """Compile and package one static f16/f32 last-axis softmax request."""
+    """Compile and package one static f16/bf16/f32 last-axis softmax request."""
     storage = _softmax_storage(module)
     if storage is None:
-        raise ValueError("SM120 native softmax packaging requires one static f16/f32 last-axis softmax")
-    storage_ir = "f16" if storage == "fp16" else "f32"
+        raise ValueError("SM120 native softmax packaging requires one static f16/bf16/f32 last-axis softmax")
+    storage_ir = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[storage]
     entry = f"tessera_tile_softmax_{storage_ir}"
-    abi_id = SM120_SOFTMAX_F16_ABI if storage == "fp16" else SM120_SOFTMAX_F32_ABI
-    alignment = 2 if storage == "fp16" else 4
+    abi_id = {
+        "fp16": SM120_SOFTMAX_F16_ABI,
+        "bf16": SM120_SOFTMAX_BF16_ABI,
+        "fp32": SM120_SOFTMAX_F32_ABI,
+    }[storage]
+    alignment = 2 if storage in {"fp16", "bf16"} else 4
     tile_ir = emit_softmax_tile_ir(entry=entry, storage=storage_ir)
     (lowered, ptx, metrics, compiler_fp, toolchain_fp, device_libraries, compile_state) = _compile_tile_ir(
         tile_ir, entry
@@ -2312,16 +2796,30 @@ def package_f16_softmax(
     return package_softmax(module, pipeline_name=pipeline_name)
 
 
+def package_bf16_softmax(
+    module: GraphIRModule,
+    *,
+    pipeline_name: str,
+) -> NVIDIANativePackage:
+    if not supports_bf16_softmax(module):
+        raise ValueError("SM120 bf16 softmax packaging requires bf16 storage")
+    return package_softmax(module, pipeline_name=pipeline_name)
+
+
 __all__ = [
     "NVIDIANativePackage",
     "SM120_ATTN_F16_ABI",
+    "SM120_ATTN_BF16_ABI",
     "SM120_ATTN_F32_ABI",
     "SM120_ATTN_BIAS_F16_ABI",
+    "SM120_ATTN_BIAS_BF16_ABI",
     "SM120_ATTN_BIAS_F32_ABI",
     "SM120_ATTN_BWD_F32_ABI",
     "SM120_ATTN_BWD_BIAS_F32_ABI",
     "SM120_ATTN_BWD_F16_ABI",
     "SM120_ATTN_BWD_BIAS_F16_ABI",
+    "SM120_ATTN_BWD_BF16_ABI",
+    "SM120_ATTN_BWD_BIAS_BF16_ABI",
     "SM120_BF16_ABI",
     "SM120_EPILOGUE_ABIS",
     "SM120_F16_ABI",
@@ -2341,10 +2839,18 @@ __all__ = [
     "SM120_GROUPED_GEMM_F32_ABI",
     "SM120_MOE_ABIS",
     "SM120_REDUCE_F16_ABI",
+    "SM120_REDUCE_BF16_ABI",
     "SM120_REDUCE_F32_ABI",
+    "SM120_NORM_F16_ABI",
+    "SM120_NORM_BF16_ABI",
+    "SM120_NORM_F32_ABI",
     "SM120_INT8_ABI",
+    "SM120_INT4_ABI",
+    "SM120_CUDA_INTRINSIC_ABI",
+    "PROMOTED_SM120_CUDA_INTRINSICS",
     "SM120_TF32_ABI",
     "SM120_SOFTMAX_F16_ABI",
+    "SM120_SOFTMAX_BF16_ABI",
     "SM120_SOFTMAX_F32_ABI",
     "emit_f16_matmul_tile_ir",
     "emit_attention_tile_ir",
@@ -2353,14 +2859,18 @@ __all__ = [
     "emit_matmul_tile_ir",
     "emit_mx_matmul_tile_ir",
     "emit_reduce_tile_ir",
+    "emit_norm_tile_ir",
     "emit_f32_softmax_tile_ir",
     "emit_nvfp4_matmul_tile_ir",
+    "emit_int4_matmul_tile_ir",
+    "emit_cuda_intrinsic_tile_ir",
     "emit_paged_kv_read_tile_ir",
     "emit_paged_attention_tile_ir",
     "emit_replay_ssm_tile_ir",
     "emit_moe_tile_ir",
     "emit_softmax_tile_ir",
     "package_bf16_matmul",
+    "package_bf16_softmax",
     "package_attention",
     "package_attention_backward",
     "package_f16_matmul",
@@ -2368,8 +2878,11 @@ __all__ = [
     "package_matmul",
     "package_mx_matmul",
     "package_reduction",
+    "package_norm",
     "package_f32_softmax",
     "package_nvfp4_matmul",
+    "package_int4_matmul",
+    "package_cuda_intrinsic",
     "package_paged_kv_read",
     "package_paged_attention",
     "package_replay_ssm_kernels",
@@ -2379,9 +2892,12 @@ __all__ = [
     "requests_attention",
     "requests_attention_backward",
     "requests_mx_matmul",
+    "requests_int4_matmul",
     "requests_reduction",
+    "requests_norm",
     "requests_paged_kv_read",
     "supports_bf16_matmul",
+    "supports_bf16_softmax",
     "supports_attention",
     "supports_attention_backward",
     "supports_f16_matmul",
@@ -2391,8 +2907,10 @@ __all__ = [
     "supports_matmul",
     "supports_mx_matmul",
     "supports_reduction",
+    "supports_norm",
     "supports_paged_kv_read",
     "supports_int8_matmul",
+    "supports_int4_matmul",
     "supports_tf32_matmul",
     "supports_f32_softmax",
     "supports_nvfp4_matmul",

@@ -698,8 +698,11 @@ LogicalResult SoftmaxKernelOp::verify() {
     return emitOpError("rows and columns must be i64");
   auto storage = getOperation()->getAttrOfType<StringAttr>("storage");
   auto accum = getOperation()->getAttrOfType<StringAttr>("accum");
-  if (!storage || (storage.getValue() != "f16" && storage.getValue() != "f32"))
-    return emitOpError("requires storage=\"f16\" or storage=\"f32\"");
+  if (!storage || (storage.getValue() != "f16" &&
+                   storage.getValue() != "bf16" &&
+                   storage.getValue() != "f32"))
+    return emitOpError(
+        "requires storage=\"f16\", storage=\"bf16\", or storage=\"f32\"");
   if (!accum || accum.getValue() != "f32")
     return emitOpError("requires accum=\"f32\"");
   auto axis = getOperation()->getAttrOfType<IntegerAttr>("axis");
@@ -737,8 +740,8 @@ LogicalResult ReduceKernelOp::verify() {
   if (!accum || accum.getValue() != "f32")
     return emitOpError("requires accum=\"f32\"");
   if (!kind || (kind.getValue() != "sum" && kind.getValue() != "mean" &&
-                kind.getValue() != "max"))
-    return emitOpError("requires kind in {sum, mean, max}");
+                kind.getValue() != "max" && kind.getValue() != "min"))
+    return emitOpError("requires kind in {sum, mean, max, min}");
   if (!axis || axis.getInt() < 0)
     return emitOpError("requires a normalized nonnegative axis");
   if (!keepdims)
@@ -862,6 +865,50 @@ LogicalResult ElementwiseKernelOp::verify() {
   return success();
 }
 
+LogicalResult CudaIntrinsicKernelOp::verify() {
+  if (getInputs().size() != 5)
+    return emitOpError("expects A, B, C, destination, and N operands");
+  for (Value pointer : getInputs().take_front(4))
+    if (!isa<LLVM::LLVMPointerType>(pointer.getType()))
+      return emitOpError("A/B/C/destination operands must be !llvm.ptr");
+  if (!getInputs().back().getType().isInteger(64))
+    return emitOpError("N must be i64");
+  auto kind = getOperation()->getAttrOfType<StringAttr>("kind");
+  auto input = getOperation()->getAttrOfType<StringAttr>("input_storage");
+  auto output = getOperation()->getAttrOfType<StringAttr>("output_storage");
+  auto rounding = getOperation()->getAttrOfType<StringAttr>("rounding");
+  auto saturation = getOperation()->getAttrOfType<BoolAttr>("saturation");
+  if (!kind || !input || !output || !rounding || !saturation)
+    return emitOpError(
+        "requires kind, input_storage, output_storage, rounding, and saturation");
+  StringRef value = kind.getValue();
+  bool cast = value.starts_with("cvt_f32_i32_");
+  bool supported =
+      value == "abs_i32" || value == "min_i32" || value == "max_i32" ||
+      value == "brev_u32" || value == "byte_perm_u32" ||
+      value == "clz_u32" || value == "popc_u32" ||
+      value == "funnelshift_l_wrap_u32" ||
+      value == "dp2a_lo_s32" || value == "dp4a_s32" ||
+      value == "bitcast_i32" || value == "vadd2_u16x2" ||
+      value == "vabsdiff4_u8x4" || cast;
+  if (!supported)
+    return emitOpError("unsupported CUDA intrinsic kind");
+  if (cast) {
+    StringRef mode = value.drop_front(StringRef("cvt_f32_i32_").size());
+    if (input.getValue() != "f32" || output.getValue() != "i32" ||
+        (mode != "rn" && mode != "rd" && mode != "ru" && mode != "rz") ||
+        rounding.getValue() != mode)
+      return emitOpError("numeric casts require f32->i32 and matching RN/RD/RU/RZ");
+  } else if (input.getValue() != "i32" || output.getValue() != "i32" ||
+             rounding.getValue() != "none") {
+    return emitOpError("integer/packed intrinsics require i32 bit containers and rounding=none");
+  }
+  if (saturation.getValue())
+    return emitOpError(
+        "saturation is unsupported by the promoted CUDA intrinsic subset");
+  return success();
+}
+
 static LogicalResult verifyPointerAndI64Tail(Operation *op, ValueRange inputs,
                                              unsigned pointerCount,
                                              unsigned i64Count) {
@@ -926,9 +973,11 @@ LogicalResult NormKernelOp::verify() {
   auto affine = getOperation()->getAttrOfType<BoolAttr>("affine");
   if (!kind || (kind.getValue() != "rmsnorm" && kind.getValue() != "layernorm"))
     return emitOpError("requires kind=rmsnorm|layernorm");
-  if (!storage || storage.getValue() != "f32" || !accum ||
-      accum.getValue() != "f32")
-    return emitOpError("requires f32 storage and accumulation");
+  if (!storage ||
+      (storage.getValue() != "f16" && storage.getValue() != "bf16" &&
+       storage.getValue() != "f32") ||
+      !accum || accum.getValue() != "f32")
+    return emitOpError("requires f16, bf16, or f32 storage and f32 accumulation");
   if (!axis || axis.getInt() != -1 || !affine || affine.getValue())
     return emitOpError("requires axis=-1 and affine=false");
   return success();
@@ -1016,8 +1065,11 @@ LogicalResult AttentionKernelOp::verify() {
   auto softcap = getOperation()->getAttrOfType<FloatAttr>("softcap");
   auto dropout = getOperation()->getAttrOfType<FloatAttr>("dropout_p");
   auto dropoutSeed = getOperation()->getAttrOfType<IntegerAttr>("dropout_seed");
-  if (!storage || (storage.getValue() != "f16" && storage.getValue() != "f32"))
-    return emitOpError("requires storage=\"f16\" or storage=\"f32\"");
+  if (!storage || (storage.getValue() != "f16" &&
+                   storage.getValue() != "bf16" &&
+                   storage.getValue() != "f32"))
+    return emitOpError(
+        "requires storage=\"f16\", storage=\"bf16\", or storage=\"f32\"");
   if (!accum || accum.getValue() != "f32")
     return emitOpError("requires accum=\"f32\"");
   if (!scale || !scale.getValue().isFinite() || scale.getValueAsDouble() <= 0.0)
@@ -1066,8 +1118,12 @@ LogicalResult AttentionBackwardKernelOp::verify() {
   auto route = getOperation()->getAttrOfType<StringAttr>("route");
   auto deterministic = getOperation()->getAttrOfType<BoolAttr>("deterministic");
   auto workspace = getOperation()->getAttrOfType<IntegerAttr>("workspace_bytes");
-  if (!storage || (storage.getValue() != "f16" && storage.getValue() != "f32"))
-    return emitOpError("deterministic reference route requires storage=\"f16\" or storage=\"f32\"");
+  if (!storage || (storage.getValue() != "f16" &&
+                   storage.getValue() != "bf16" &&
+                   storage.getValue() != "f32"))
+    return emitOpError(
+        "deterministic reference route requires storage=\"f16\", "
+        "storage=\"bf16\", or storage=\"f32\"");
   if (!accum || accum.getValue() != "f32")
     return emitOpError("requires accum=\"f32\"");
   if (!scale || !scale.getValue().isFinite() || scale.getValueAsDouble() <= 0.0)

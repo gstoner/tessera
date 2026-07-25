@@ -281,10 +281,12 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
         targets=("nvidia_sm120",),
         lit_fixtures=(
             "src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia/sm120_nvfp4_matmul_kernel.mlir",
+            "src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia/sm120_int4_storage_pack_kernel.mlir",
+            "src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia/sm120_cuda_intrinsic_kernel.mlir",
         ),
         phase="target",
         status="lit_verified",
-        sprint="NVIDIA-E2E-2",
+        sprint="NVIDIA-E2E-2 + NVIDIA-PACKED-MATH",
     ),
     PipelineSpec(
         name="tessera-lower-to-nvidia-sm90",

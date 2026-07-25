@@ -437,29 +437,45 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
                 dtypes=(
                     "fp64", "fp32", "f32", "bf16", "fp16",
                     "fp8_e4m3", "fp8_e5m2", "fp6_e2m3", "fp6_e3m2",
-                    "fp4_e2m1", "int8", "nvfp4",
+                    "fp4_e2m1", "int8", "int4", "nvfp4",
                 ),
                 reason="SM120 matmul has f32 artifacts and compiler-owned "
                        "TF32-math/bf16/fp16/FP8/FP6/MXFP4/NVFP4 native "
-                       "descriptor paths",
+                       "descriptor paths plus a correctness-first signed-int4 "
+                       "packed-storage descriptor consumer",
             ),
             canonical_op("tessera.flash_attn"): OpCapability(
                 canonical_op("tessera.flash_attn"),
                 "artifact_only",
-                dtypes=("fp32", "f32", "fp16", "f16"),
-                reason="SM120 attention has a compiler-owned f16/f32 canonical "
-                       "descriptor path with f32 accumulation/output; optimized "
-                       "CUDA candidates remain separately selector-gated",
+                dtypes=("fp32", "f32", "fp16", "f16", "bf16"),
+                reason="SM120 attention has a compiler-owned f16/bf16/f32 "
+                       "canonical descriptor path with f32 accumulation/output; "
+                       "optimized CUDA candidates remain separately selector-gated",
             ),
             **{
                 canonical_op(op): OpCapability(
                     canonical_op(op),
                     "artifact_only",
-                    dtypes=("fp32", "f32", "fp16", "f16"),
-                    reason="SM120 softmax has compiler-owned f16/f32 storage "
-                           "paths with f32 accumulation",
+                    dtypes=("fp32", "f32", "fp16", "f16", "bf16"),
+                    reason="SM120 softmax has compiler-owned f16/bf16/f32 "
+                           "storage paths with f32 accumulation",
                 )
                 for op in ("tessera.softmax", "tessera.softmax_safe")
+            },
+            **{
+                canonical_op(op): OpCapability(
+                    canonical_op(op),
+                    "artifact_only",
+                    dtypes=("fp32", "f32", "fp16", "f16", "bf16"),
+                    reason="SM120 row normalization has compiler-owned "
+                           "f16/bf16/f32 storage paths with f32 statistics "
+                           "and accumulation",
+                )
+                for op in (
+                    "tessera.rmsnorm",
+                    "tessera.rmsnorm_safe",
+                    "tessera.layer_norm",
+                )
             },
             **{
                 canonical_op(op): OpCapability(

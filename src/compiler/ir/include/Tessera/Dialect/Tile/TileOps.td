@@ -380,6 +380,18 @@ def Tile_ElementwiseKernelOp : Tile_Op<"elementwise_kernel"> {
   let hasVerifier = 1;
 }
 
+// NVIDIA/CUDA integer, cast, packed-dot, and packed-SIMD carrier. Inputs are
+// A, B, C/accumulator, destination, and flattened N. Unused sources remain in
+// the stable ABI; explicit kind/storage/rounding attributes prevent C++ API
+// overload resolution from leaking into portable Tile semantics.
+def Tile_CudaIntrinsicKernelOp : Tile_Op<"cuda_intrinsic_kernel"> {
+  let summary = "Launch-level typed CUDA integer/cast/packed intrinsic";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
 // Launch-level index reduction. Inputs are source, i32 destination, flattened
 // row count, and reduction width. The first-occurrence tie policy is explicit.
 def Tile_ArgReduceKernelOp : Tile_Op<"argreduce_kernel"> {

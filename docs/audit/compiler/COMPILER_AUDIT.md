@@ -922,10 +922,9 @@ row "Tile IR (FA-4)") can pull from it. Cross-refs noted; reference memory
   1), with `signed_twos_complement` for int4 and `format_defined` for floating
   formats — the form a backend's packed load/store reads; bad widths emit
   `DTYPE_PACK_BAD_WIDTHS`. HF Target-IR step (Decision #19). Lit:
-  `storage_pack_consume.mlir`. **The real consumer ships on AMD today, not a
-  future NVIDIA emitter** — `GenerateWMMAGemmKernel` decodes physically packed
-  signed int4 memory into `vector<2xi32>` (IU4 ABI) and bitcasts int8 to
-  `vector<4xi32>` (IU8).
+  `storage_pack_consume.mlir`. AMD's `GenerateWMMAGemmKernel` decodes
+  physically packed signed int4 memory into `vector<2xi32>` (IU4 ABI) and
+  bitcasts int8 to `vector<4xi32>` (IU8).
   **Reconciliation LANDED (2026-06-23).** `GenerateWMMAGemmKernel` now *consumes*
   `tessera.storage_pack`: the descriptor's `logical` selects the WMMA dtype and
   its `factor` and signedness are checked against the WMMA integer pack mode
@@ -939,12 +938,23 @@ row "Tile IR (FA-4)") can pull from it. Cross-refs noted; reference memory
   needed): ROCm lit 13/13 incl. `wmma_gemm_storage_pack.mlir` (descriptor drives
   signed int4 → packed-memory `vector<2xi32>` IU4 ABI; factor/signedness
   mismatches caught). **Per-target defaults landed (CORE-COMPILER-2,
-  2026-07-22):** x86 and NVIDIA named pipelines run compute legalization by
-  default, while terminal storage legalization remains opt-in because neither
-  generic route owns a packed-storage consumer. The ROCm backend pipeline runs
-  the complete compute → storage → consume chain by default before its WMMA
-  generator. The legacy `legalize-dtypes` option remains as an explicit force-on
-  compatibility switch; a NVIDIA sub-byte consumer is still follow-up work.
+  2026-07-22; NVIDIA consumer follow-up 2026-07-25):** x86 and NVIDIA named
+  pipelines run compute legalization by default. NVIDIA's scale-bearing
+  NVFP4/MXFP4/FP6 launch materializers and the signed-INT4 correctness
+  materializer now require and consume
+  `tessera.storage_pack`, validating logical dtype, int8 container, factor,
+  and format-specific signedness before physical byte/nibble loads. The INT4
+  consumer additionally rejects scale/fused operands and owns the
+  two's-complement low-nibble-first contract. Opt-in
+  terminal legalization in the NVIDIA named pipeline schedules
+  `StoragePackConsume` immediately after `StorageLegalize`. It remains opt-in
+  for the generic value-level Tile route because that route does not carry the
+  scale operands required by block-scaled formats; the proven INT4 launch
+  envelope does not make that generic block-scale ABI universal. The ROCm
+  backend pipeline runs the complete compute →
+  storage → consume chain by default before its WMMA generator. The legacy
+  `legalize-dtypes` option remains as an explicit force-on compatibility
+  switch.
 
 - **C5 — Independent per-stream pipeline depths (HF plan / HG perf).** FA-4 runs
   three *independent* rings (Q depth 2, KV depth 3, TMEM depth 2), not one global

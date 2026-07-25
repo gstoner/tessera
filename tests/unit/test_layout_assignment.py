@@ -163,7 +163,7 @@ func.func @f(%x: tensor<4x16xf32>) -> tensor<4xf32> {
   %packed = "tessera.cast"(%x) {
     tessera.layout = "packed",
     tessera.storage_container = "int8",
-    tessera.storage_pack = {container = "int8", factor = 2 : i64, logical = "int4", signedness = "signed_twos_complement"},
+    tessera.storage_pack = #tile.packed_format<logical = "int4", container = "int8", logical_bits = 4, elements_per_container = 2, signedness = "signed_twos_complement", encoding = "twos_complement", lane_order = "low_to_high">,
     tessera.storage_packed = true
   } : (tensor<4x16xf32>) -> tensor<4x16xf32>
   %gelu = "tessera.gelu"(%packed) : (tensor<4x16xf32>) -> tensor<4x16xf32>

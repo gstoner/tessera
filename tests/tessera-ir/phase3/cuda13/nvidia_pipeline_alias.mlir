@@ -29,17 +29,17 @@ module {
 
 // PIPE: tessera.effect
 // SM90: tessera.effect
-// SM90: "tile.mbarrier.wait"
+// SM90: tile.mbarrier.wait
 // SM90-SAME: !tile.async_token
 // SM90: call @tessera_nvidia_wgmma_mma_async_bf16_m64n64k16
 // SM100: tessera.effect
-// SM100: "tile.mbarrier.wait"
+// SM100: tile.mbarrier.wait
 // SM100-SAME: !tile.async_token
 // SM100: tile.mma
 // SM100-SAME: sm = 100
 // SM100-SAME: !tile.async_token
 // SM120: tessera.effect
-// SM120: "tile.mbarrier.wait"
+// SM120: tile.mbarrier.wait
 // SM120-SAME: !tile.async_token
 // SM120: tile.mma
 // SM120-SAME: sm = 120

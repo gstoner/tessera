@@ -6,7 +6,8 @@ module {
       attributes {nvvm.kernel} {
     tile.cuda_intrinsic_kernel %a, %b, %c, %o, %n {
       kind = "cvt_f32_i32_rn", input_storage = "f32", output_storage = "i32",
-      rounding = "rz", saturation = false
+      rounding = "rz", saturation = false, lane_width = 0 : i64,
+      signedness = "scalar", predicate_form = "none"
     } : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64
     llvm.return
   }

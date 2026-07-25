@@ -336,7 +336,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "C4 (TIRx): terminal packing — stamps `tessera.storage_packed` + "
             "`tessera.storage_container` on sub-byte / block-scaled storage "
             "(fp4 / nvfp4 / fp6 / int4). Default-on only where a target owns a "
-            "real packed-storage consumer (currently ROCm); runs last."
+            "matching operation+descriptor physical consumer; runs last."
         ),
         input_dialects=("tessera",),
         output_dialects=("tessera",),
@@ -350,9 +350,9 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         summary=(
             "C4 part 1 (TIRx): the first real consumer of the packing markers — "
             "reads tessera.storage_packed / storage_container + "
-            "numeric_policy.storage and emits tessera.storage_pack = {logical, "
-            "container, factor, signedness} (factor = container_bits / storage_bits) for a "
-            "backend's packed load/store."
+            "numeric_policy.storage and emits the structured "
+            "#tile.packed_format logical/container/bits/factor/signedness/"
+            "encoding/lane-order contract for a backend's packed load/store."
         ),
         input_dialects=("tessera",),
         output_dialects=("tessera",),
@@ -406,13 +406,13 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         summary=(
             "C2 (TIRx): barriers as a layout-reuse correctness property — two "
             "writes to overlapping storage-axis (m/tlane/tcol) footprints of one "
-            "tile.buffer with no intervening barrier are a race. Runs after "
-            "WarpSpecialization (which emits the #tile.layout + tile.buffer/"
-            "tile.access markers) in the GPU / nvidia pipelines."
+            "!tile.buffer SSA allocation root with no intervening barrier are "
+            "a race. Legacy #tile.buffer_ref names remain a compatibility "
+            "fallback while WarpSpecialization migrates."
         ),
         input_dialects=("tessera", "tile", "func"),
         output_dialects=("tessera", "tile", "func"),
-        required_attrs=("tile.buf", "tile.layout"),
+        required_attrs=("tile.layout",),
         diagnostic_codes=("TILE_BARRIER_REUSE_MISSING_BARRIER",),
         pass_kind="verifier",
         sprint="C2 (TIRx)",

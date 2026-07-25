@@ -19,9 +19,11 @@ from tessera.compiler.nvidia_native import (
     emit_matmul_tile_ir,
     emit_moe_tile_ir,
     emit_mx_matmul_tile_ir,
+    emit_packed_decode_tile_ir,
     emit_paged_attention_tile_ir,
     emit_paged_kv_read_tile_ir,
     package_nvfp4_matmul,
+    package_packed_decode,
     requests_mx_matmul,
     requests_attention,
     requests_attention_backward,
@@ -57,6 +59,51 @@ def test_cuda_device_library_linking_is_demand_driven_and_fail_closed() -> None:
     )
     assert linked == passthrough
     assert libraries == ()
+
+
+def test_generic_packed_decode_emits_structured_physical_view() -> None:
+    text = emit_packed_decode_tile_ir(
+        entry="packed_nvfp4",
+        logical="nvfp4",
+        rows=3,
+        columns=5,
+        packing_axis=1,
+        strides=(7, 1),
+        offset=2,
+        alignment=1,
+        scale_dtype="ue4m3",
+        scale_block_size=4,
+        scale_axis=1,
+        scale_layout="row_major",
+        scale_stride=4,
+        scale_offset=1,
+        scale_alignment=1,
+    )
+    assert "tile.packed_load %src, %scale" in text
+    assert 'logical = "nvfp4"' in text
+    assert "packing_axis = 1" in text
+    assert "strides = [7, 1]" in text
+    assert 'dtype = "ue4m3"' in text
+    assert "tile.store %tile, %o, %zero, %zero" in text
+    assert "%source_bytes: i64, %scale_bytes: i64" in text
+
+
+@pytest.mark.parametrize(
+    "kwargs, message",
+    [
+        ({"logical": "fp6_e2m3", "rows": 2, "columns": 3, "source_bytes": 8,
+          "scale_block_size": 4}, "cannot carry scale metadata"),
+        ({"logical": "nvfp4", "rows": 2, "columns": 3, "source_bytes": 8,
+          "scale_dtype": "ue4m3"}, "complete scale layout"),
+        ({"logical": "int4", "rows": 2, "columns": 3, "source_bytes": 8,
+          "packing_axis": 2}, "packing_axis"),
+    ],
+)
+def test_generic_packed_decode_rejects_incomplete_physical_contract(
+    kwargs: dict[str, object], message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        package_packed_decode(**kwargs)  # type: ignore[arg-type]
 
     unresolved = b"declare float @__nv_expf(float)\n"
     with pytest.raises(RuntimeError, match="requires CUDA libdevice"):
@@ -519,7 +566,8 @@ def test_sm120_nvfp4_native_packager_owns_scales_and_k64_contract() -> None:
     assert 'warps = 1 : i64, staging = "global"' in source
     assert "tessera.storage_packed = true" in source
     assert 'logical = "nvfp4"' in source
-    assert 'container = "int8", factor = 2 : i64' in source
+    assert 'container = "int8", logical_bits = 4' in source
+    assert "elements_per_container = 2" in source
 
 
 def _mx_matmul_module(dtype: str, *, scale_k: int = 2) -> GraphIRModule:
@@ -581,8 +629,10 @@ def test_sm120_mx_packager_contract_is_distinct_from_nvfp4(
     assert f'k = {fragment_k}, a = "{physical}", b = "{physical}"' in source
     assert "scale_a" in source and "scale_b" in source
     factor = 2 if dtype == "fp4_e2m1" else 1
+    logical_bits = 4 if dtype == "fp4_e2m1" else 6
     assert f'logical = "{dtype}"' in source
-    assert f'container = "int8", factor = {factor} : i64' in source
+    assert f'container = "int8", logical_bits = {logical_bits}' in source
+    assert f"elements_per_container = {factor}" in source
     assert not requests_nvfp4_matmul(module)
     assert not supports_mx_matmul(_mx_matmul_module(dtype, scale_k=3))
 

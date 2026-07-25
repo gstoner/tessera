@@ -102,7 +102,7 @@ struct WmmaGemmRequest {
   std::string output;
   bool bias = false;
   bool portableABI = false;
-  DictionaryAttr storagePack;
+  tessera::tile::TilePackedFormatAttr storagePack;
 };
 
 // Emit the problem-size-generic, register-blocked (mt x nt) WMMA GEMM body into
@@ -620,7 +620,8 @@ struct GenerateWMMAGemmKernelPass
       if (auto a = op->getAttrOfType<StringAttr>("output"))
         request.output = a.getValue().str();
       request.storagePack =
-          op->getAttrOfType<DictionaryAttr>("tessera.storage_pack");
+          op->getAttrOfType<tessera::tile::TilePackedFormatAttr>(
+              "tessera.storage_pack");
       requests.push_back(std::move(request));
     }
 
@@ -699,14 +700,13 @@ struct GenerateWMMAGemmKernelPass
       StringRef dt = request.dtype;
       bool portableContract = request.portableABI;
       // C4 reconciliation (2026-06-23): if the directive carries the
-      // backend-neutral `tessera.storage_pack = {logical, container, factor}`
+      // backend-neutral structured `#tile.packed_format`
       // descriptor (from StoragePackConsume), its `logical` selects the dtype —
       // one packing contract feeds both AMD (here) and NVIDIA. Fall back to the
       // legacy `dtype` attr when no descriptor is present (non-breaking).
-      DictionaryAttr packDesc = request.storagePack;
+      tessera::tile::TilePackedFormatAttr packDesc = request.storagePack;
       if (packDesc) {
-        if (auto logical = packDesc.getAs<StringAttr>("logical"))
-          dt = logical.getValue();
+        dt = packDesc.getLogicalType();
       }
       auto v8i32 = VectorType::get({8}, i32Ty);
       auto v8f32 = VectorType::get({8}, f32Ty);
@@ -740,19 +740,16 @@ struct GenerateWMMAGemmKernelPass
       // `pack`, the codegen ABI mode: today int8/int4 happen to share the value,
       // but a new int ABI mode at the same logical factor must still pass.)
       if (packDesc && T.isInt) {
-        if (auto fAttr = packDesc.getAs<IntegerAttr>("factor")) {
-          int64_t factor = fAttr.getInt();
-          if (factor != T.packFactor) {
-            op->emitError("DTYPE_PACK_FACTOR_MISMATCH: tessera.storage_pack "
-                          "factor ")
-                << factor << " disagrees with the dtype packing factor "
-                << T.packFactor << " for dtype '" << dt << "'.";
-            return signalPassFailure();
-          }
+        int64_t factor = packDesc.getElementsPerContainer();
+        if (factor != T.packFactor) {
+          op->emitError("DTYPE_PACK_FACTOR_MISMATCH: tessera.storage_pack "
+                        "factor ")
+              << factor << " disagrees with the dtype packing factor "
+              << T.packFactor << " for dtype '" << dt << "'.";
+          return signalPassFailure();
         }
         if (dt == "int4") {
-          auto signedness = packDesc.getAs<StringAttr>("signedness");
-          if (!signedness || signedness.getValue() != "signed_twos_complement") {
+          if (packDesc.getSignedness() != "signed_twos_complement") {
             op->emitError("DTYPE_PACK_SIGNEDNESS_MISMATCH: gfx1151 int4 WMMA "
                           "requires signed_twos_complement packed storage");
             return signalPassFailure();

@@ -46,8 +46,10 @@ struct TargetDtypeLegalizationDefaults {
 
 static TargetDtypeLegalizationDefaults
 dtypeLegalizationDefaults(llvm::StringRef target) {
-  if (target == "x86" || target.starts_with("nvidia_"))
+  if (target == "x86")
     return {/*compute=*/true, /*storage=*/false};
+  if (target.starts_with("nvidia_"))
+    return {/*compute=*/true, /*storage=*/true};
   return {/*compute=*/false, /*storage=*/false};
 }
 
@@ -123,7 +125,7 @@ static void addCUDA13PipelineForSM(
   if (sm == 90)
     pm.addPass(createNVFlashAttnKernelEmitterPass(sm));
   if (storageLegalizationEnabled(opts, target)) {
-    pm.addPass(createStorageLegalizePass());
+    pm.addPass(createStorageLegalizePass(target));
     if (target.starts_with("nvidia_"))
       pm.addPass(createStoragePackConsumePass());
   }
@@ -213,7 +215,7 @@ void registerTesseraPasses() {
         pm.addPass(createTileToX86Pass());
         // C4 terminal storage-legalize — pack sub-byte storage last (gated).
         if (storageLegalizationEnabled(opts, "x86"))
-          pm.addPass(createStorageLegalizePass());
+          pm.addPass(createStorageLegalizePass("x86"));
       });
 
   // ── Phase 3 passes ────────────────────────────────────────────────────────
@@ -425,7 +427,7 @@ void registerTesseraPasses() {
         pm.addPass(createNVFlashAttnKernelEmitterPass());
         // C4 terminal storage-legalize (gated).
         if (storageLegalizationEnabled(opts, "nvidia_sm90")) {
-          pm.addPass(createStorageLegalizePass());
+          pm.addPass(createStorageLegalizePass("nvidia_sm90"));
           pm.addPass(createStoragePackConsumePass());
         }
       });

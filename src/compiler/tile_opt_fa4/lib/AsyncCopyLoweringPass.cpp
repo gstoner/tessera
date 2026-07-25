@@ -45,21 +45,26 @@ namespace {
 // ─────────────────────────────────────────────────────────────────────────────
 static Operation *emitTMADescriptor(OpBuilder &b, Location loc, Value src,
                                      int64_t tileRows, int64_t tileCols) {
-  OperationState st(loc, "tile.tma.descriptor");
+  OperationState st(loc, tessera::tile::TMADescriptorOp::getOperationName());
   st.addOperands({src});
   st.addAttribute("tile_rows", b.getI64IntegerAttr(tileRows));
   st.addAttribute("tile_cols", b.getI64IntegerAttr(tileCols));
-  // Result: opaque descriptor handle (i64 pointer in the final PTX).
-  st.addTypes(b.getIntegerType(64));
+  st.addTypes(tessera::tile::TMADescriptorType::get(b.getContext()));
   return b.create(st);
 }
 
 static Operation *emitTMACopyAsync(OpBuilder &b, Location loc,
                                     Value descriptor, int64_t mbarrierSlot,
-                                    Type resultType, Type tokenType = Type()) {
-  OperationState st(loc, "tile.tma.copy_async");
+                                    Type resultType, Type tokenType,
+                                    ValueRange dependencies) {
+  OperationState st(loc, tessera::tile::TMACopyAsyncOp::getOperationName());
   st.addOperands({descriptor});
+  st.addOperands(dependencies);
   st.addAttribute("mbarrier_slot", b.getI64IntegerAttr(mbarrierSlot));
+  st.addAttribute(
+      "operandSegmentSizes",
+      b.getDenseI32ArrayAttr(
+          {1, 0, static_cast<int32_t>(dependencies.size())}));
   // Produce the loaded tile so it can replace the original tile.async_copy
   // result 1:1 (the copy lands the tile in shared memory).  Without a result
   // the replaceOp below would be a result-count mismatch that corrupts the IR.
@@ -109,8 +114,11 @@ struct LowerAsyncCopyTMA : public RewritePattern {
     Location loc = op->getLoc();
 
     int64_t tileRows = 64, tileCols = 64;
-    if (auto a = op->getAttrOfType<IntegerAttr>("tile_rows"))
-      tileRows = a.getInt();
+    if (auto a = op->getAttrOfType<IntegerAttr>("tile_rows")) {
+      int64_t value = a.getInt();
+      if (value > 0)
+        tileRows = value;
+    }
     if (auto a = op->getAttrOfType<IntegerAttr>("tile_cols")) {
       int64_t v = a.getInt();
       if (v > 0) tileCols = v;
@@ -139,7 +147,8 @@ struct LowerAsyncCopyTMA : public RewritePattern {
       else if (!hasToken && numResults >= 1)
         tileTy = op->getResult(0).getType();
       Operation *copyOp = emitTMACopyAsync(rewriter, loc, desc->getResult(0),
-                                           /*slot=*/0, tileTy, tokenTy);
+                                           /*slot=*/0, tileTy, tokenTy,
+                                           op->getOperands().drop_front());
       if (op->getNumResults())
         rewriter.replaceOp(op, copyOp->getResults());
       else
@@ -180,9 +189,13 @@ struct LowerWaitAsync : public RewritePattern {
                                 PatternRewriter &rewriter) const override {
     Location loc = op->getLoc();
     if (smVersion >= 90) {
-      OperationState st(loc, "tile.mbarrier.wait");
+      OperationState st(loc, tessera::tile::MBarrierWaitOp::getOperationName());
       st.addOperands(op->getOperands());
       st.addAttribute("slot", rewriter.getI64IntegerAttr(0));
+      st.addAttribute(
+          "operandSegmentSizes",
+          rewriter.getDenseI32ArrayAttr(
+              {0, static_cast<int32_t>(op->getNumOperands())}));
       rewriter.create(st);
     } else {
       OperationState st(loc, "tile.cp_async.wait_all");
@@ -220,6 +233,7 @@ struct AsyncCopyLoweringPass
   void getDependentDialects(DialectRegistry &registry) const override {
     registry.insert<arith::ArithDialect>();
     registry.insert<func::FuncDialect>();
+    registry.insert<tessera::tile::TesseraTileDialect>();
   }
 
   void runOnOperation() override {

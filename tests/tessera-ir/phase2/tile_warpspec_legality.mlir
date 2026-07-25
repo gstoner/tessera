@@ -71,12 +71,14 @@ func.func @missing_fence() {
 
 // One barrier id whose arrive count (4096) disagrees with its init count
 // (8192) — the wait would never release. Fed in real lowering by
-// NVTMADescriptorPass's typed #tile.barrier emission on setup + copy_async.
-func.func @arrival_count_mismatch() {
+// NVTMADescriptorPass's typed #tile.barrier emission on descriptor +
+// copy_async. This fixture uses the registered operations so the legality
+// proof cannot silently depend on a stale string-only carrier.
+func.func @arrival_count_mismatch(%src: tensor<64x64xf16>) {
   // expected-note @+1 {{barrier "mbar.0" init count here}}
-  "tile.tma.setup_descriptor"() {tile.barrier_id = "mbar.0", tile.barrier = #tile.barrier<kind = "tma", expect = 8192>} : () -> ()
+  %desc = "tile.tma.descriptor"(%src) {tile_rows = 64 : i64, tile_cols = 64 : i64, tile.barrier_id = "mbar.0", tile.barrier = #tile.barrier<kind = "tma", expect = 8192>} : (tensor<64x64xf16>) -> !tile.tma_descriptor
   // expected-error @+1 {{WARPSPEC_ARRIVAL_COUNT_MISMATCH}}
-  "tile.tma.copy_async"() {tile.barrier_id = "mbar.0", tile.barrier = #tile.barrier<kind = "tma", expect = 4096>} : () -> ()
+  "tile.tma.copy_async"(%desc) {operandSegmentSizes = array<i32: 1, 0, 0>, mbarrier_slot = 0 : i64, tile.barrier_id = "mbar.0", tile.barrier = #tile.barrier<kind = "tma", expect = 4096>} : (!tile.tma_descriptor) -> ()
   return
 }
 

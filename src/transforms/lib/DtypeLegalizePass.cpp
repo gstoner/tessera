@@ -20,13 +20,16 @@
 //     live in. This is the late packing step, run after all compute rewrites.
 //
 // Both are idempotent and additive. Target defaults are capability-driven:
-// x86/NVIDIA run compute legalization, while ROCm runs compute + storage +
-// descriptor consumption because its WMMA generator consumes that descriptor.
+// storage legalization runs only when target + operation + physical format
+// names a registered consumer. NVIDIA SM120 and ROCm therefore enable only
+// their proven operation/format intersections; unsupported values remain
+// logical rather than inheriting support from a launch-envelope fragment.
 // Decision: never silently skip — an op with a reduced-precision storage
 // and no recognizable policy is left untouched for IRContractLegalityPass to
 // flag, not quietly "legalized".
 
 #include "Tessera/Transforms/Passes.h"
+#include "Tessera/Dialect/Tile/TileDialect.h"
 
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -34,6 +37,8 @@
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSet.h"
+
+#include <string>
 
 using namespace mlir;
 
@@ -61,6 +66,23 @@ static StringRef packedContainerFor(StringRef storage) {
 
 static DictionaryAttr policyOf(Operation *op) {
   return op->getAttrOfType<DictionaryAttr>("numeric_policy");
+}
+
+static bool hasTerminalPackedConsumer(Operation *op, StringRef target,
+                                      StringRef storage) {
+  if (target.empty())
+    return true; // Standalone pass: expose the transformation for inspection.
+  StringRef name = op->getName().getStringRef();
+  if (target == "nvidia_sm120")
+    return name == "tile.matmul_kernel" &&
+           (storage == "int4" || storage == "nvfp4" ||
+            storage == "fp4_e2m1" || storage == "fp6_e2m3" ||
+            storage == "fp6_e3m2");
+  if (target.starts_with("rocm_"))
+    return storage == "int4" &&
+           (name == "tile.matmul_kernel" ||
+            name == "tessera_rocm.wmma_gemm");
+  return false;
 }
 
 // Storage-element bit widths, for computing the pack factor.
@@ -125,6 +147,13 @@ struct StorageLegalize
     : public PassWrapper<StorageLegalize, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(StorageLegalize)
 
+  StorageLegalize() = default;
+  explicit StorageLegalize(StringRef target) : target(target.str()) {}
+  StorageLegalize(const StorageLegalize &other)
+      : PassWrapper(other), target(other.target) {}
+
+  std::string target;
+
   StringRef getArgument() const override { return "tessera-storage-legalize"; }
   StringRef getDescription() const override {
     return "C4 storage-legalize — sub-byte / block-scaled storage "
@@ -146,6 +175,8 @@ struct StorageLegalize
       StringRef container = packedContainerFor(storageAttr.getValue());
       if (container.empty())
         return;
+      if (!hasTerminalPackedConsumer(op, target, storageAttr.getValue()))
+        return;
       if (op->hasAttr("tessera.storage_packed"))
         return; // idempotent.
       op->setAttr("tessera.storage_packed", BoolAttr::get(ctx, true));
@@ -163,12 +194,11 @@ struct StorageLegalize
 // Target-IR step (Decision #19: HF Target IR before hardware lowering): it reads
 // the logical sub-byte storage + the byte container, computes how many logical
 // elements pack into one container element (factor = container_bits /
-// storage_bits), and emits `tessera.storage_pack = {logical, container, factor,
-// signedness}`
-// — the concrete descriptor a backend's packed load/store reads. Once a backend
-// consumes this, storage legalization may be a target default. ROCm is the first
-// such target; targets without a packed-memory consumer keep this terminal step
-// opt-in.
+// storage_bits), and emits a structured `#tile.packed_format` carrying logical
+// bits, container, factor, signedness, encoding, and lane order
+// — the structured format portion a backend's packed load/store reads. Concrete
+// buffers bind it into #tile.packed_view with axis/stride/alignment/offset and
+// explicit scale metadata.
 struct StoragePackConsume
     : public PassWrapper<StoragePackConsume, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(StoragePackConsume)
@@ -179,7 +209,11 @@ struct StoragePackConsume
   StringRef getDescription() const override {
     return "C4 storage-pack consumer — turn tessera.storage_packed/"
            "storage_container into a concrete tessera.storage_pack descriptor "
-           "{logical, container, factor, signedness} for a backend's packed load/store.";
+           "#tile.packed_format for a backend's packed load/store.";
+  }
+
+  void getDependentDialects(DialectRegistry &registry) const override {
+    registry.insert<tessera::tile::TesseraTileDialect>();
   }
 
   void runOnOperation() override {
@@ -212,13 +246,20 @@ struct StoragePackConsume
         return;
       }
       int factor = cb / sb;
-      NamedAttrList pack;
-      pack.set("logical", storageAttr);
-      pack.set("container", container);
-      pack.set("factor", IntegerAttr::get(IntegerType::get(ctx, 64), factor));
-      pack.set("signedness", StringAttr::get(
-          ctx, storage == "int4" ? "signed_twos_complement" : "format_defined"));
-      op->setAttr("tessera.storage_pack", DictionaryAttr::get(ctx, pack));
+      StringRef signedness =
+          storage == "int4" ? "signed_twos_complement" : "format_defined";
+      StringRef encoding =
+          storage == "int4"       ? "twos_complement"
+          : storage == "nvfp4"    ? "nv_e2m1"
+          : storage == "fp4_e2m1" ? "e2m1"
+          : storage == "fp6_e2m3" ? "e2m3"
+                                   : "e3m2";
+      StringRef laneOrder = factor > 1 ? "low_to_high" : "scalar_lsb";
+      op->setAttr(
+          "tessera.storage_pack",
+          tessera::tile::TilePackedFormatAttr::get(
+              ctx, storage, container.getValue(), sb, factor, signedness,
+              encoding, laneOrder));
     });
     if (anyError)
       signalPassFailure();
@@ -231,8 +272,8 @@ namespace tessera {
 std::unique_ptr<Pass> createComputeLegalizePass() {
   return std::make_unique<ComputeLegalize>();
 }
-std::unique_ptr<Pass> createStorageLegalizePass() {
-  return std::make_unique<StorageLegalize>();
+std::unique_ptr<Pass> createStorageLegalizePass(StringRef target) {
+  return std::make_unique<StorageLegalize>(target);
 }
 std::unique_ptr<Pass> createStoragePackConsumePass() {
   return std::make_unique<StoragePackConsume>();

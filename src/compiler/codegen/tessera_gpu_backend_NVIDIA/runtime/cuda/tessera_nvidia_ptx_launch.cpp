@@ -59,6 +59,7 @@ constexpr const char* kTileDirectE5m2 = "tessera_tile_matmul_direct_e5m2";
 constexpr const char* kTileDirectS8 = "tessera_tile_matmul_direct_s8";
 constexpr const char* kTileInt4 = "tessera_tile_matmul_int4";
 constexpr const char* kTileCudaIntrinsic = "tessera_tile_cuda_intrinsic_";
+constexpr const char* kTilePackedDecode = "tessera_tile_packed_decode_";
 constexpr const char* kTileDirectF64 = "tessera_tile_matmul_direct_f64";
 constexpr const char* kTileNvfp4 = "tessera_tile_matmul_nvfp4";
 constexpr const char* kTileMxE2m3 = "tessera_tile_matmul_mx_e2m3";
@@ -342,6 +343,122 @@ int invokeCudaIntrinsic(CUfunction fn, void** buffers, size_t nbuf,
             cuMemcpyDtoH(buffers[3], device[3], bytes) != CUDA_SUCCESS)
             rc = 3;
     }
+    for (CUdeviceptr ptr : device)
+        if (ptr) cuMemFree(ptr);
+    return rc;
+}
+
+int invokePackedDecode(CUfunction fn, void** buffers, size_t nbuf,
+                       const int64_t* dims, size_t ndim) {
+    if (nbuf != 3 || ndim != 6) return 5;
+    const long long row = dims[0], col = dims[1];
+    const long long rows = dims[2], columns = dims[3];
+    const long long sourceBytes = dims[4], scaleBytes = dims[5];
+    if (row < 0 || col < 0 || rows <= 0 || columns <= 0 ||
+        sourceBytes <= 0 || scaleBytes <= 0 ||
+        (size_t)rows > SIZE_MAX / (size_t)columns ||
+        (size_t)rows * (size_t)columns > SIZE_MAX / sizeof(float))
+        return 5;
+    const size_t outputBytes =
+        (size_t)rows * (size_t)columns * sizeof(float);
+    CUdeviceptr device[3] = {};
+    const size_t sizes[] = {
+        (size_t)sourceBytes, (size_t)scaleBytes, outputBytes,
+    };
+    int rc = 0;
+    for (int i = 0; i < 3; ++i)
+        if (cuMemAlloc(&device[i], sizes[i]) != CUDA_SUCCESS) {
+            rc = 3; break;
+        }
+    if (!rc &&
+        (cuMemcpyHtoD(device[0], buffers[0], sizes[0]) != CUDA_SUCCESS ||
+         cuMemcpyHtoD(device[1], buffers[1], sizes[1]) != CUDA_SUCCESS))
+        rc = 3;
+    if (!rc) {
+        long long rowArg = row, colArg = col;
+        long long rowsArg = rows, columnsArg = columns;
+        long long sourceBytesArg = sourceBytes, scaleBytesArg = scaleBytes;
+        void* args[] = {
+            &device[0], &device[1], &device[2],
+            &rowArg, &colArg, &rowsArg, &columnsArg,
+            &sourceBytesArg, &scaleBytesArg,
+        };
+        const unsigned grid =
+            (unsigned)(((size_t)rows * (size_t)columns + 127) / 128);
+        if (cuLaunchKernel(fn, grid, 1, 1, 128, 1, 1, 0, 0, args, 0) !=
+                CUDA_SUCCESS ||
+            cuCtxSynchronize() != CUDA_SUCCESS ||
+            cuMemcpyDtoH(buffers[2], device[2], outputBytes) != CUDA_SUCCESS)
+            rc = 3;
+    }
+    for (CUdeviceptr ptr : device)
+        if (ptr) cuMemFree(ptr);
+    return rc;
+}
+
+int benchmarkPackedDecode(CUfunction fn, void** buffers, size_t nbuf,
+                          const int64_t* dims, size_t ndim, int warmup,
+                          int repetitions, float* latencyMs) {
+    if (nbuf != 3 || ndim != 6 || !latencyMs || warmup < 0 ||
+        repetitions <= 0)
+        return 5;
+    const long long row = dims[0], col = dims[1];
+    const long long rows = dims[2], columns = dims[3];
+    const long long sourceBytes = dims[4], scaleBytes = dims[5];
+    if (row < 0 || col < 0 || rows <= 0 || columns <= 0 ||
+        sourceBytes <= 0 || scaleBytes <= 0 ||
+        (size_t)rows > SIZE_MAX / (size_t)columns ||
+        (size_t)rows * (size_t)columns > SIZE_MAX / sizeof(float))
+        return 5;
+    const size_t outputBytes =
+        (size_t)rows * (size_t)columns * sizeof(float);
+    const size_t sizes[] = {
+        (size_t)sourceBytes, (size_t)scaleBytes, outputBytes,
+    };
+    CUdeviceptr device[3] = {};
+    CUevent start = nullptr, stop = nullptr;
+    int rc = 0;
+    for (int i = 0; i < 3; ++i)
+        if (cuMemAlloc(&device[i], sizes[i]) != CUDA_SUCCESS) {
+            rc = 3; break;
+        }
+    if (!rc &&
+        (cuMemcpyHtoD(device[0], buffers[0], sizes[0]) != CUDA_SUCCESS ||
+         cuMemcpyHtoD(device[1], buffers[1], sizes[1]) != CUDA_SUCCESS))
+        rc = 3;
+    if (!rc) {
+        long long rowArg = row, colArg = col;
+        long long rowsArg = rows, columnsArg = columns;
+        long long sourceBytesArg = sourceBytes, scaleBytesArg = scaleBytes;
+        void* args[] = {
+            &device[0], &device[1], &device[2],
+            &rowArg, &colArg, &rowsArg, &columnsArg,
+            &sourceBytesArg, &scaleBytesArg,
+        };
+        const unsigned grid =
+            (unsigned)(((size_t)rows * (size_t)columns + 127) / 128);
+        auto launch = [&]() {
+            return cuLaunchKernel(fn, grid, 1, 1, 128, 1, 1, 0, 0, args, 0);
+        };
+        for (int i = 0; i < warmup; ++i)
+            if (launch() != CUDA_SUCCESS) { rc = 3; break; }
+        if (!rc && (cuCtxSynchronize() != CUDA_SUCCESS ||
+                    cuEventCreate(&start, CU_EVENT_DEFAULT) != CUDA_SUCCESS ||
+                    cuEventCreate(&stop, CU_EVENT_DEFAULT) != CUDA_SUCCESS))
+            rc = 3;
+        if (!rc && cuEventRecord(start, 0) != CUDA_SUCCESS) rc = 3;
+        for (int i = 0; !rc && i < repetitions; ++i)
+            if (launch() != CUDA_SUCCESS) rc = 3;
+        if (!rc && (cuEventRecord(stop, 0) != CUDA_SUCCESS ||
+                    cuEventSynchronize(stop) != CUDA_SUCCESS))
+            rc = 3;
+        float totalMs = 0.0f;
+        if (!rc && cuEventElapsedTime(&totalMs, start, stop) != CUDA_SUCCESS)
+            rc = 3;
+        if (!rc) *latencyMs = totalMs / (float)repetitions;
+    }
+    if (start) cuEventDestroy(start);
+    if (stop) cuEventDestroy(stop);
     for (CUdeviceptr ptr : device)
         if (ptr) cuMemFree(ptr);
     return rc;
@@ -1623,6 +1740,9 @@ int invokeImpl(const char* kernel_name, void** buffers, size_t nbuf,
     if (std::strncmp(kernel_name, kTileCudaIntrinsic,
                      std::strlen(kTileCudaIntrinsic)) == 0)
         return invokeCudaIntrinsic(fn, buffers, nbuf, dims, ndim);
+    if (std::strncmp(kernel_name, kTilePackedDecode,
+                     std::strlen(kTilePackedDecode)) == 0)
+        return invokePackedDecode(fn, buffers, nbuf, dims, ndim);
     if (std::strcmp(kernel_name, kTileMxE2m3) == 0 ||
         std::strcmp(kernel_name, kTileMxE3m2) == 0)
         return invokeMx(fn, buffers, nbuf, dims, ndim, false);
@@ -1778,6 +1898,11 @@ int tessera_nvidia_ptx_benchmark(const char* kernel_name, void** buffers,
                      std::strlen(kTrainingPrefix)) == 0)
         return runTraining(fn, kernel_name, buffers, num_buffers, dims,
                            num_dims, warmup, repetitions, latency_ms);
+    if (std::strncmp(kernel_name, kTilePackedDecode,
+                     std::strlen(kTilePackedDecode)) == 0)
+        return benchmarkPackedDecode(
+            fn, buffers, num_buffers, dims, num_dims, warmup, repetitions,
+            latency_ms);
     return benchmarkTileGemm16(fn, kernel_name, buffers, num_buffers, dims,
                                num_dims, warmup, repetitions, latency_ms);
 }

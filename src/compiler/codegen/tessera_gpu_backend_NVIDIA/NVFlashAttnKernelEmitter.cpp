@@ -23,6 +23,8 @@
 //     --warps       warps per CTA (default 4)
 //===----------------------------------------------------------------------===//
 
+#include "Tessera/Dialect/Tile/TileDialect.h"
+
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
@@ -98,21 +100,28 @@ static void attachLaunchBounds(func::FuncOp funcOp, int warpsPerCTA, int sm) {
 // Helper: emit mbarrier arrive-expect-tx + try-wait sequence
 // ─────────────────────────────────────────────────────────────────────────────
 static void emitMbarrierArriveWait(OpBuilder &b, Location loc,
-                                    int64_t slot, int64_t expectTx,
-                                    bool isTMA) {
+                                    Value barrier, int64_t slot,
+                                    int64_t expectTx, bool isTMA) {
   // arrive.expect_tx signals the mbarrier that `expectTx` bytes will arrive.
+  Value token;
   {
-    OperationState st(loc, "tile.mbarrier.arrive.expect_tx");
+    OperationState st(
+        loc, tile::MBarrierArriveExpectTxOp::getOperationName());
+    st.addOperands(barrier);
     st.addAttribute("slot",      b.getI64IntegerAttr(slot));
-    st.addAttribute("expect_tx", b.getI64IntegerAttr(expectTx));
+    st.addAttribute("bytes", b.getI64IntegerAttr(expectTx));
     st.addAttribute("is_tma",    b.getBoolAttr(isTMA));
-    b.create(st);
+    st.addTypes(tile::MBarrierTokenType::get(b.getContext()));
+    token = b.create(st)->getResult(0);
   }
-  // try_wait.parity blocks until the mbarrier is satisfied.
+  // The typed try-wait consumes the arrival token rather than rediscovering
+  // the relationship from slot/parity strings.
   {
-    OperationState st(loc, "tile.mbarrier.try_wait.parity");
+    OperationState st(loc, tile::MBarrierTryWaitOp::getOperationName());
+    st.addOperands({barrier, token});
     st.addAttribute("slot",    b.getI64IntegerAttr(slot));
     st.addAttribute("parity",  b.getI64IntegerAttr(0)); // phase 0 → phase 1
+    st.addTypes(b.getI1Type());
     b.create(st);
   }
 }
@@ -183,21 +192,23 @@ struct NVFlashAttnKernelEmitterPass
         attachLaunchBounds(funcOp, warpsPerCTA, smVersion);
 
       // Step 3: insert mbarrier arrive/wait around TMA copy ops.
-      // For each tile.tma.setup_descriptor, emit arrive-expect-tx
+      // For each canonical tile.tma.descriptor, emit arrive-expect-tx
       // immediately after the descriptor setup and try-wait before consumer.
-      int64_t slotIdx = 0;
-      funcOp.walk([&](Operation *op) {
-        if (op->getName().getStringRef() != "tile.tma.setup_descriptor")
-          return;
-        int64_t expectTx = tileQ * tileKV * 2; // BF16 = 2 bytes
-        if (auto a = op->getAttrOfType<IntegerAttr>("expect_tx"))
-          expectTx = a.getInt();
-
-        b.setInsertionPointAfter(op);
-        Location loc = op->getLoc();
-        emitMbarrierArriveWait(b, loc, slotIdx, expectTx, /*isTMA=*/true);
-        slotIdx++;
+      tile::MBarrierInitOp barrierInit;
+      funcOp.walk([&](tile::MBarrierInitOp op) {
+        if (!barrierInit)
+          barrierInit = op;
       });
+      if (barrierInit) {
+        funcOp.walk([&](tile::TMADescriptorOp op) {
+          if (!op.getSlot() || !op.getExpectTx())
+            return;
+          b.setInsertionPointAfter(op);
+          emitMbarrierArriveWait(
+              b, op.getLoc(), barrierInit.getBarrier(),
+              *op.getSlot(), *op.getExpectTx(), /*isTMA=*/true);
+        });
+      }
 
       // Step 4: attach shared memory size annotation for CUDARuntime.
       // SMEM = 2 * (tile_q + tile_kv) * d_k * sizeof(bf16) rounded to 128B.

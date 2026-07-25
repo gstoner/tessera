@@ -25,7 +25,7 @@ void buildTesseraROCMBackendPipeline(OpPassManager &pm) {
   // concrete storage-pack descriptor, so the full compute -> storage -> consume
   // chain is executable and cannot leave an inert packed marker behind.
   pm.addPass(::tessera::createComputeLegalizePass());
-  pm.addPass(::tessera::createStorageLegalizePass());
+  pm.addPass(::tessera::createStorageLegalizePass("rocm_gfx11"));
   pm.addPass(::tessera::createStoragePackConsumePass());
   // Consume launch-level tile.matmul_kernel contracts before the lower-level
   // Tile pass materializes individual typed fragments. The generator is a no-op

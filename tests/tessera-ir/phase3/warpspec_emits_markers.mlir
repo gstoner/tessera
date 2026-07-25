@@ -9,14 +9,10 @@
 // RUN: tessera-opt --tessera-warp-specialization --tessera-tile-pipeline-legality --tessera-warpspec-legality --allow-unregistered-dialect %s | FileCheck %s --check-prefix=GATED
 
 // The markers print on the schedule.warp region's closing-brace attr line.
-// CHECK: role = "producer"
-// CHECK-SAME: tile.pipeline = "warpspec.0"
-// CHECK-SAME: tile.pipeline_state = #tile.pipeline_state<depth = 2, stage = 0, phase = 1, role = "producer">
-// CHECK-SAME: tile.warp_role = "producer"
-// CHECK: role = "consumer"
-// CHECK-SAME: tile.pipeline = "warpspec.0"
-// CHECK-SAME: tile.pipeline_state = #tile.pipeline_state<depth = 2, stage = 0, phase = 0, role = "consumer">
-// CHECK-SAME: tile.warp_role = "consumer"
+// Anchor the checks on that line so the SSA pipeline_init role attribute cannot
+// be mistaken for the region contract.
+// CHECK: }) {role = "producer", tile.pipeline = "warpspec.0", tile.pipeline_state = #tile.pipeline_state<depth = 2, stage = 0, phase = 1, role = "producer">, tile.warp_role = "producer"}
+// CHECK: }) {role = "consumer", tile.pipeline = "warpspec.0", tile.pipeline_state = #tile.pipeline_state<depth = 2, stage = 0, phase = 0, role = "consumer">, tile.warp_role = "consumer"}
 
 // The legality gates pass → the IR is still emitted (func survives).
 // GATED: @gemm_kernel

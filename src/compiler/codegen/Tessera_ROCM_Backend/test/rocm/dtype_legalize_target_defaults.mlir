@@ -22,7 +22,7 @@ module {
 // CHECK: "test.dtype_request"
 // CHECK-SAME: numeric_policy = {accum = "int32", storage = "int4"}
 // CHECK-SAME: tessera.storage_container = "int8"
-// CHECK-SAME: tessera.storage_pack = {container = "int8", factor = 2 : i64, logical = "int4", signedness = "signed_twos_complement"}
+// CHECK-SAME: tessera.storage_pack = #tile.packed_format<logical = "int4", container = "int8", logical_bits = 4, elements_per_container = 2, signedness = "signed_twos_complement", encoding = "twos_complement", lane_order = "low_to_high">
 // CHECK-SAME: tessera.storage_packed = true
 // CHECK: gpu.module @default_int4_wmma_mod
 // CHECK: gpu.func @default_int4_wmma

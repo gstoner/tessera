@@ -437,11 +437,14 @@ def _manifest_from_index(index_path: Path) -> SafetensorsManifest:
 
 
 def _read_safetensors_header(path: Path) -> dict[str, TensorSpec]:
-    data = path.read_bytes()
-    if len(data) < 8:
+    file_size = path.stat().st_size
+    if file_size < 8:
         raise MiniMaxM3ImportError(f"{path} is too small to be safetensors")
-    (header_len,) = struct.unpack("<Q", data[:8])
-    header = json.loads(data[8:8 + header_len])
+    with path.open("rb") as handle:
+        (header_len,) = struct.unpack("<Q", handle.read(8))
+        if header_len > file_size - 8:
+            raise MiniMaxM3ImportError(f"{path} has a truncated safetensors header")
+        header = json.loads(handle.read(header_len))
     out: dict[str, TensorSpec] = {}
     for name, meta in header.items():
         if name == "__metadata__":
@@ -463,9 +466,14 @@ def _read_safetensors_header(path: Path) -> dict[str, TensorSpec]:
 
 
 def _load_safetensors_from_file(path: Path, names: Sequence[str]) -> dict[str, np.ndarray]:
-    data = path.read_bytes()
-    (header_len,) = struct.unpack("<Q", data[:8])
-    header = json.loads(data[8:8 + header_len])
+    file_size = path.stat().st_size
+    if file_size < 8:
+        raise MiniMaxM3ImportError(f"{path} is too small to be safetensors")
+    with path.open("rb") as handle:
+        (header_len,) = struct.unpack("<Q", handle.read(8))
+        if header_len > file_size - 8:
+            raise MiniMaxM3ImportError(f"{path} has a truncated safetensors header")
+        header = json.loads(handle.read(header_len))
     base = 8 + header_len
     out: dict[str, np.ndarray] = {}
     for name in names:
@@ -478,7 +486,13 @@ def _load_safetensors_from_file(path: Path, names: Sequence[str]) -> dict[str, n
             raise MiniMaxM3ImportError(f"unsupported safetensors dtype {dtype_name!r} for {name!r}")
         start, end = (int(v) for v in meta["data_offsets"])
         shape = tuple(int(v) for v in meta["shape"])
-        out[name] = np.frombuffer(data[base + start:base + end], dtype=dtype).reshape(shape).copy()
+        if start < 0 or end < start or base + end > file_size:
+            raise MiniMaxM3ImportError(f"{name!r} data offsets are out of bounds in {path}")
+        # Map just this tensor then copy it into independent owned storage. This
+        # avoids retaining an entire checkpoint shard for each selected tensor.
+        mapped = np.memmap(path, mode="r", dtype=dtype, offset=base + start, shape=shape)
+        out[name] = np.asarray(mapped).copy()
+        del mapped
     return out
 
 

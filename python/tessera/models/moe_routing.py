@@ -51,13 +51,14 @@ class RoutingPlan:
         return bool(np.array_equal(self.sort_perm[self.inverse_perm], idx))
 
 
-def route_top_k(router_logits, top_k: int, *, normalize: bool = True):
+def route_top_k(router_logits, top_k: int, *, normalize: bool = True,
+                compute_dtype=np.float32):
     """Exact top-k expert routing. Returns ``(expert_ids (T,k), weights (T,k))``.
 
     Stable selection: ties broken by lowest expert index (deterministic). When
     ``normalize`` the per-token weights are a softmax over the selected logits.
     """
-    logits = _arr(router_logits).astype(np.float64)
+    logits = _arr(router_logits).astype(compute_dtype)
     if logits.ndim != 2:
         raise ValueError("router_logits must be (T, num_experts)")
     T, E = logits.shape
@@ -119,27 +120,22 @@ def _swiglu(x, w_gate, w_up, w_down) -> np.ndarray:
     return h @ w_down
 
 
-def moe_forward(
+def _moe_forward(
     x, w_router, w_gate, w_up, w_down,
     w_shared_gate, w_shared_up, w_shared_down,
-    *, top_k: int, normalize: bool = True, swiglu_fn=None,
+    *, top_k: int, normalize: bool, swiglu_fn, compute_dtype,
 ):
-    """Full MoE layer forward via the pack/grouped/scatter pipeline.
-
-    Returns ``(y (T,H), plan)``. Uses ``tessera.ops.moe_swiglu_block`` for the
-    grouped expert compute (the contiguous-grouped kernel surface). ``swiglu_fn``
-    overrides that grouped-expert kernel — e.g. an Apple GPU dispatch — with the
-    same ``(x, w_gate, w_up, w_down, group_sizes, *, kind)`` signature.
-    """
+    """Shared packed MoE implementation for an explicit accumulation dtype."""
     from tessera import ops as _ops
     _swiglu_block = swiglu_fn if swiglu_fn is not None else _ops.moe_swiglu_block
 
-    xa = _arr(x).astype(np.float64)
-    wr = _arr(w_router).astype(np.float64)
+    xa = _arr(x).astype(compute_dtype)
+    wr = _arr(w_router).astype(compute_dtype)
     E = wr.shape[1]
 
     # 1. route + 2. plan packing
-    expert_ids, weights = route_top_k(xa @ wr, top_k, normalize=normalize)
+    expert_ids, weights = route_top_k(
+        xa @ wr, top_k, normalize=normalize, compute_dtype=compute_dtype)
     plan = plan_packing(expert_ids, E)
     plan = RoutingPlan(  # attach the weights computed above
         expert_ids=plan.expert_ids, weights=weights, sort_perm=plan.sort_perm,
@@ -149,17 +145,45 @@ def moe_forward(
     # 3. pack → 4. grouped SwiGLU (per-expert contiguous groups)
     x_packed = pack_tokens(xa, plan)
     y_packed = np.asarray(_swiglu_block(
-        x_packed, _arr(w_gate).astype(np.float64), _arr(w_up).astype(np.float64),
-        _arr(w_down).astype(np.float64), plan.group_sizes, kind="contiguous"))
+        x_packed, _arr(w_gate).astype(compute_dtype), _arr(w_up).astype(compute_dtype),
+        _arr(w_down).astype(compute_dtype), plan.group_sizes, kind="contiguous"))
 
     # 5. scatter back + weighted combine → routed output
     y_routed = unpack_combine(y_packed, plan, weights)
 
     # 6. shared-expert path + combine
-    y_shared = _swiglu(xa, _arr(w_shared_gate).astype(np.float64),
-                       _arr(w_shared_up).astype(np.float64),
-                       _arr(w_shared_down).astype(np.float64))
+    y_shared = _swiglu(xa, _arr(w_shared_gate).astype(compute_dtype),
+                       _arr(w_shared_up).astype(compute_dtype),
+                       _arr(w_shared_down).astype(compute_dtype))
     return (y_routed + y_shared), plan
+
+
+def moe_forward(
+    x, w_router, w_gate, w_up, w_down,
+    w_shared_gate, w_shared_up, w_shared_down,
+    *, top_k: int, normalize: bool = True, swiglu_fn=None,
+):
+    """Production-facing packed MoE path: low-precision storage, F32 compute.
+
+    Inputs may be F16 or BF16 storage. They are promoted to F32 for routing,
+    expert matmuls, and output accumulation; the returned tensor is F32.
+    """
+    return _moe_forward(
+        x, w_router, w_gate, w_up, w_down, w_shared_gate, w_shared_up,
+        w_shared_down, top_k=top_k, normalize=normalize, swiglu_fn=swiglu_fn,
+        compute_dtype=np.float32)
+
+
+def moe_forward_reference(
+    x, w_router, w_gate, w_up, w_down,
+    w_shared_gate, w_shared_up, w_shared_down,
+    *, top_k: int, normalize: bool = True,
+):
+    """F64 packed oracle for compact algorithmic parity tests only."""
+    return _moe_forward(
+        x, w_router, w_gate, w_up, w_down, w_shared_gate, w_shared_up,
+        w_shared_down, top_k=top_k, normalize=normalize, swiglu_fn=None,
+        compute_dtype=np.float64)
 
 
 def moe_forward_naive(
@@ -171,7 +195,8 @@ def moe_forward_naive(
     xa = _arr(x).astype(np.float64)
     wr = _arr(w_router).astype(np.float64)
     wg, wu, wd = (_arr(w).astype(np.float64) for w in (w_gate, w_up, w_down))
-    expert_ids, weights = route_top_k(xa @ wr, top_k, normalize=normalize)
+    expert_ids, weights = route_top_k(
+        xa @ wr, top_k, normalize=normalize, compute_dtype=np.float64)
     T, H = xa.shape
     y = np.zeros((T, H), dtype=np.float64)
     for t in range(T):
@@ -184,21 +209,20 @@ def moe_forward_naive(
     return y
 
 
-def synthetic_moe_weights(config, *, seed: int = 0) -> dict:
-    """Synthetic BF16-scale (stored fp32) weights for a DiffusionGemma MoE layer
-    at the config's production dims. For tests/benchmarks only."""
+def synthetic_moe_weights(config, *, seed: int = 0, dtype=np.float32) -> dict:
+    """Synthetic weights for tests/benchmarks, in the requested storage dtype."""
     rng = np.random.default_rng(seed)
     H, E = config.hidden_size, config.num_experts
     F, Fs = config.moe_intermediate_size, config.shared_expert_intermediate_size
     s = 1.0 / np.sqrt(H)
     return {
-        "w_router": (rng.standard_normal((H, E)) * s).astype(np.float32),
-        "w_gate": (rng.standard_normal((E, H, F)) * s).astype(np.float32),
-        "w_up": (rng.standard_normal((E, H, F)) * s).astype(np.float32),
-        "w_down": (rng.standard_normal((E, F, H)) / np.sqrt(F)).astype(np.float32),
-        "w_shared_gate": (rng.standard_normal((H, Fs)) * s).astype(np.float32),
-        "w_shared_up": (rng.standard_normal((H, Fs)) * s).astype(np.float32),
-        "w_shared_down": (rng.standard_normal((Fs, H)) / np.sqrt(Fs)).astype(np.float32),
+        "w_router": (rng.standard_normal((H, E)) * s).astype(dtype),
+        "w_gate": (rng.standard_normal((E, H, F)) * s).astype(dtype),
+        "w_up": (rng.standard_normal((E, H, F)) * s).astype(dtype),
+        "w_down": (rng.standard_normal((E, F, H)) / np.sqrt(F)).astype(dtype),
+        "w_shared_gate": (rng.standard_normal((H, Fs)) * s).astype(dtype),
+        "w_shared_up": (rng.standard_normal((H, Fs)) * s).astype(dtype),
+        "w_shared_down": (rng.standard_normal((Fs, H)) / np.sqrt(Fs)).astype(dtype),
     }
 
 
@@ -209,6 +233,7 @@ __all__ = [
     "pack_tokens",
     "unpack_combine",
     "moe_forward",
+    "moe_forward_reference",
     "moe_forward_naive",
     "synthetic_moe_weights",
 ]

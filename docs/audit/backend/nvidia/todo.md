@@ -15,7 +15,9 @@ correctness consumer for `tile.attention_backward_kernel`. NVIDIA parity at the
 shared semantic carrier remains validated by its existing SM120 forward and
 backward packages. ROCm's wave32 WMMA descriptor, LDS allocation, HIP ABI,
 resource counts, timings, selector boundary, and direct scalar recurrence do
-not transfer to CUDA. No NVIDIA plan state or exact-device claim changes.
+not transfer to CUDA. The ROCm v2 benchmark's operation-total and resident
+synchronized HIP host-wall domains do not replace CUDA-event or CUDA
+end-to-end evidence. No NVIDIA plan state or exact-device claim changes.
 
 Cross-backend sync `ROCM-SSA-LDS-PIPELINE-2026-07-26` lands the AMD consumer of
 the already-shared `!tile.buffer`, `!tile.async_token`, and

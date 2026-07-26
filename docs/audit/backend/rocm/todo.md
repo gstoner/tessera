@@ -20,11 +20,18 @@ native packaging and the launch descriptor now join that forward carrier to an
 HSACO and HIP submission. Exact gfx1151 evidence for B=1, Hq/Hkv=4/2,
 Sq/Sk=17/19, D=64 records a 20,440-byte image, 8.44e-05 maximum absolute error,
 and a seven-sample 2.21 ms host-wall operation-total median after warmup. The
-cold operation-total sample is 163.72 ms and compiler packaging is 478.76 ms.
-The full ROCm lit lane is 47/47 and focused package/audit gates are 67 passed,
-19 skipped. Backward native multi-entry packaging, nonzero-dropout optimized
-WMMA, and an LDS-pipelined streaming recurrence remain open; the scalar
-backward carrier is a correctness baseline, not a performance claim.
+v2 resident benchmark now loads the HSACO and allocates/copies Q/K/V/O once,
+warms up five launches, then measures 21 individual
+`hipModuleLaunchKernel` + `hipDeviceSynchronize` intervals with
+`perf_counter_ns`. It records a 0.097763 ms kernel-wall median separately from
+the 2.312196 ms operation-total median; the cold operation-total sample is
+164.79 ms and compiler packaging is 566.60 ms in that run. Both are host-wall
+domains under WSL, and the resident domain explicitly excludes module load,
+allocation, transfers, and cleanup. Neither is selector-eligible device-event
+evidence. The full ROCm lit lane is 47/47 and focused package/audit gates are
+67 passed, 19 skipped. Backward native multi-entry packaging, nonzero-dropout
+optimized WMMA, and an LDS-pipelined streaming recurrence remain open; the
+scalar backward carrier is a correctness baseline, not a performance claim.
 
 Cross-backend sync `ROCM-SSA-LDS-PIPELINE-2026-07-26` is **landing** under the
 ROCm follow-up to `NVIDIA-PACKED-SSA-FOUNDATION-2026-07-25`. The

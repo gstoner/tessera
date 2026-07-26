@@ -13,8 +13,11 @@ physical consumer and exact gfx1151 evidence landing for the already-shared
 forward/backward attention carriers. Apple requires follow-up for any carrier
 variant not already covered by its Metal execution contract; AMD wave32 WMMA,
 LDS ownership, HIP descriptors, scalar recurrence, resources, timings, and
-selector state are not applicable to Metal and do not transfer. No Apple
-readiness or exact-device row changes.
+selector state are not applicable to Metal and do not transfer. The ROCm v2
+benchmark's separate operation-total and resident
+`hipModuleLaunchKernel`/`hipDeviceSynchronize` host-wall domains are likewise
+not applicable to Metal timing or selector policy. No Apple readiness or
+exact-device row changes.
 
 Cross-backend sync `ROCM-SSA-LDS-PIPELINE-2026-07-26` lands an AMD-owned
 consumer of the existing shared `!tile.buffer`, `!tile.async_token`, and

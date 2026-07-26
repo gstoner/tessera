@@ -1,4 +1,8 @@
-from benchmarks.rocm.benchmark_rocm_attention_carrier import _timing_domains
+from benchmarks.rocm.benchmark_rocm_attention_carrier import (
+    KERNEL_WALL_BASELINE_MS,
+    KERNEL_WALL_MAX_REGRESSION,
+    _timing_domains,
+)
 
 
 def test_attention_carrier_benchmark_keeps_timing_domains_separate():
@@ -19,3 +23,8 @@ def test_attention_carrier_benchmark_keeps_timing_domains_separate():
     assert timing["kernel_wall"]["selector_eligible"] is False
     assert "device_allocation" in timing["operation_total"]["includes"]
     assert "device_allocation" not in timing["kernel_wall"]["includes"]
+
+
+def test_attention_carrier_wall_ratchet_is_tied_to_gfx1151_baseline():
+    assert KERNEL_WALL_BASELINE_MS == 0.097763
+    assert KERNEL_WALL_MAX_REGRESSION == 0.10

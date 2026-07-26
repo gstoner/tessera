@@ -5685,7 +5685,9 @@ def _execute_rocm_compiled_matmul_family(artifact: RuntimeArtifact, args: Any) -
 # dtype) — the kernel is (B,H,Sq,Sk)-generic — cached.
 # ─────────────────────────────────────────────────────────────────────────────
 #: hsaco bytes keyed by schedule and semantic variant.
-_rocm_fa_hsaco_cache: dict[tuple[int, str, str, bool, bool, bool, bool, bool], bytes] = {}
+_rocm_fa_hsaco_cache: dict[
+    tuple[int, str, str, bool, bool, bool, bool, bool, bool], bytes
+] = {}
 
 
 def _build_compiled_flash_attn_hsaco(
@@ -5695,6 +5697,7 @@ def _build_compiled_flash_attn_hsaco(
     sliding_window: bool = False,
     logit_softcap: bool = False,
     attn_bias: bool = False,
+    dropout: bool = False,
     two_wave: bool = False,
 ) -> bytes:
     """Generate + serialize the compiler's WMMA FA-2 forward kernel to hsaco,
@@ -5707,7 +5710,17 @@ def _build_compiled_flash_attn_hsaco(
     attn_bias=True emits the additive-bias variant (a trailing f32 `[bh,Sq,Sk]`
     memref arg, `softmax(scale·Q@K^T + bias)·V`)."""
     chip = _rocm_chip()
-    key = (head_dim, chip, dtype, gqa, sliding_window, logit_softcap, attn_bias, two_wave)
+    key = (
+        head_dim,
+        chip,
+        dtype,
+        gqa,
+        sliding_window,
+        logit_softcap,
+        attn_bias,
+        dropout,
+        two_wave,
+    )
     cached = _rocm_fa_hsaco_cache.get(key)
     if cached is not None:
         return cached
@@ -5718,12 +5731,13 @@ def _build_compiled_flash_attn_hsaco(
     win_attr = ", sliding_window = true" if sliding_window else ""
     cap_attr = ", logit_softcap = true" if logit_softcap else ""
     bias_attr = ", attn_bias = true" if attn_bias else ""
+    dropout_attr = ", dropout = true" if dropout else ""
     wave_attr = ", two_wave = true" if two_wave else ""
     directive = (
         "module {\n"
         '  "tessera_rocm.flash_attn"() {name = "fa", '
         f'head_dim = {head_dim} : i64, dtype = "{dtype}"'
-        f"{gqa_attr}{win_attr}{cap_attr}{bias_attr}{wave_attr}}} "
+        f"{gqa_attr}{win_attr}{cap_attr}{bias_attr}{dropout_attr}{wave_attr}}} "
         ": () -> ()\n"
         "}\n"
     )
@@ -5856,6 +5870,15 @@ def _execute_rocm_compiled_flash_attn(
     if softcap < 0:
         raise ValueError(f"rocm flash_attn logit_softcap must be non-negative; got {softcap}")
     has_softcap = softcap > 0
+    dropout_p = float(
+        kwargs.get("dropout_p", kwargs.get("dropout", 0.0)) or 0.0
+    )
+    if not 0.0 <= dropout_p < 1.0:
+        raise ValueError(
+            f"rocm flash_attn dropout probability must be in [0, 1); got {dropout_p}"
+        )
+    has_dropout = dropout_p > 0.0
+    dropout_seed = int(kwargs.get("dropout_seed", kwargs.get("seed", 0)) or 0)
 
     # Additive bias → host-broadcast to the folded-batch leading dim + (Sq,Sk),
     # i.e. Q.lead + (Sq,Sk), flattened to [bh,Sq,Sk] f32 (the kernel indexes
@@ -5876,7 +5899,9 @@ def _execute_rocm_compiled_flash_attn(
     # Nine interleaved gfx1151 trials show 2.04–2.10x paired kernel speedup,
     # eliminate 82 VGPR spills, and match within 8.4e-6.  Advanced semantic
     # variants stay one-wave until their own correctness/performance matrix.
-    two_wave = head_dim == 128 and not (gqa or sliding or has_softcap or has_bias)
+    two_wave = head_dim == 128 and not (
+        gqa or sliding or has_softcap or has_bias or has_dropout
+    )
     hsaco = _build_compiled_flash_attn_hsaco(
         head_dim,
         dtype_tag,
@@ -5884,6 +5909,7 @@ def _execute_rocm_compiled_flash_attn(
         sliding_window=sliding,
         logit_softcap=has_softcap,
         attn_bias=has_bias,
+        dropout=has_dropout,
         two_wave=two_wave,
     )
     hip = _load_hip_for_launch()
@@ -5943,6 +5969,11 @@ def _execute_rocm_compiled_flash_attn(
         launch_args += [ctypes.c_int64(window)]
     if has_softcap:  # soft-cap kernel's trailing f32 cap arg
         launch_args += [ctypes.c_float(softcap)]
+    if has_dropout:
+        launch_args += [
+            ctypes.c_float(dropout_p),
+            ctypes.c_int64(dropout_seed),
+        ]
     if has_bias:  # additive-bias kernel's trailing [bh,Sq,Sk] f32 memref (last)
         launch_args += _mr(dbias, bh * sq * sk)
     dev_bufs = (dq, dk, dv, do, dbias) if has_bias else (dq, dk, dv, do)

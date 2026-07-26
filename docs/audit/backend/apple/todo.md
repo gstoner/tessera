@@ -8,6 +8,15 @@ last_updated: 2026-07-26
 
 # Apple compiler, exact-device, and performance plan
 
+The ROCm optimized-attention feature follow-up under
+`ROCM-E2E-ATTENTION-CARRIERS-2026-07-26` adds AMD-only deterministic dropout
+replay and combined bias+softcap consumption to the gfx1151 WMMA schedule,
+plus a host-wall resident performance ratchet. The semantic combinations are
+already represented by the shared carrier; no shared ABI or Apple capability
+changed. Apple parity therefore remains unchanged and its Metal lowering,
+counter implementation, numerical proof, and timing evidence do not inherit
+from this ROCm result.
+
 Cross-backend sync `ROCM-E2E-ATTENTION-CARRIERS-2026-07-26` is a ROCm-owned
 physical consumer and exact gfx1151 evidence landing for the already-shared
 forward/backward attention carriers. Apple requires follow-up for any carrier

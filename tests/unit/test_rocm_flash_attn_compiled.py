@@ -30,6 +30,9 @@ import pytest
 
 np = pytest.importorskip("numpy")
 
+from tessera import runtime as tessera_runtime
+from tessera.runtime import RuntimeArtifact
+
 REPO = Path(__file__).resolve().parents[2]
 TESSERA_OPT = REPO / "build" / "tools" / "tessera-opt" / "tessera-opt"
 CHIP = os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
@@ -185,3 +188,74 @@ def test_compiled_flash_attn_matches_numpy(D, B, H, Sq, Sk, causal):
     maxerr = float(np.max(np.abs(O - ref)))
     assert maxerr < 2e-2, f"compiled flash_attn maxerr={maxerr} at " \
         f"D={D} {B}x{H}x{Sq}x{Sk} causal={causal}"
+
+
+def test_optimized_gqa_bias_softcap_window_dropout_matches_counter_oracle():
+    """The optimized route composes every forward semantic feature and replays
+    the scalar carrier's exact deterministic dropout counter."""
+    B, Hq, Hkv, Sq, Sk, D = 1, 4, 2, 17, 19, 64
+    scale, cap, window, dropout_p, seed = 0.125, 4.0, 8, 0.125, 17
+    rng = np.random.default_rng(20260726)
+    q = (rng.standard_normal((B, Hq, Sq, D)) * 0.2).astype(np.float16)
+    k = (rng.standard_normal((B, Hkv, Sk, D)) * 0.2).astype(np.float16)
+    v = (rng.standard_normal((B, Hkv, Sk, D)) * 0.2).astype(np.float16)
+    bias = (rng.standard_normal((B, Hq, Sq, Sk)) * 0.05).astype(np.float32)
+
+    artifact = RuntimeArtifact(
+        metadata={
+            "target": "rocm",
+            "compiler_path": "rocm_flash_attn_compiled",
+            "executable": True,
+            "execution_kind": "native_gpu",
+            "arg_names": ["q", "k", "v", "bias"],
+            "output_name": "o",
+            "ops": [
+                {
+                    "op_name": "tessera.flash_attn",
+                    "result": "o",
+                    "operands": ["q", "k", "v", "bias"],
+                    "kwargs": {
+                        "scale": scale,
+                        "causal": True,
+                        "window": window,
+                        "logit_softcap": cap,
+                        "dropout_p": dropout_p,
+                        "dropout_seed": seed,
+                    },
+                }
+            ],
+        }
+    )
+    try:
+        actual = tessera_runtime._execute_rocm_compiled_flash_attn(
+            artifact, (q, k, v, bias)
+        )
+    except tessera_runtime._RocmCompiledUnavailable as exc:
+        pytest.skip(str(exc))
+
+    kq = np.repeat(k.astype(np.float32), Hq // Hkv, axis=1)
+    vq = np.repeat(v.astype(np.float32), Hq // Hkv, axis=1)
+    scores = scale * np.einsum(
+        "bhqd,bhkd->bhqk", q.astype(np.float32), kq
+    )
+    scores = cap * np.tanh(scores / cap) + bias
+    qpos = np.arange(Sq)[:, None]
+    kpos = np.arange(Sk)[None, :]
+    masked = (kpos > qpos) | ((qpos - kpos) >= window)
+    scores = np.where(masked[None, None], -1e30, scores)
+    probs = np.exp(scores - scores.max(axis=-1, keepdims=True))
+    probs /= probs.sum(axis=-1, keepdims=True)
+    bh = np.arange(B * Hq, dtype=np.uint64)[:, None, None]
+    qindex = np.arange(Sq, dtype=np.uint64)[None, :, None]
+    kindex = np.arange(Sk, dtype=np.uint64)[None, None, :]
+    counter = (bh * Sq + qindex) * Sk + kindex
+    hashed = (
+        counter * np.uint64(1664525)
+        + np.uint64(seed + 1013904223)
+    ) & np.uint64(0xFFFFFFFF)
+    keep = hashed >= np.uint64(int(dropout_p * 4294967296.0))
+    replay = keep.reshape(B, Hq, Sq, Sk).astype(np.float32)
+    replay *= np.float32(1.0 / (1.0 - dropout_p))
+    expected = np.einsum("bhqk,bhkd->bhqd", probs * replay, vq)
+    maxerr = float(np.max(np.abs(actual - expected)))
+    assert maxerr < 2e-2, f"optimized feature combination maxerr={maxerr}"

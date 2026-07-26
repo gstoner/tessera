@@ -296,6 +296,8 @@ def emit_attention_tile_ir(
     window_left: int,
     window_right: int,
     softcap: float,
+    dropout_p: float = 0.0,
+    dropout_seed: int = 0,
 ) -> str:
     """Emit the canonical attention carrier plus gfx1151 schedule buckets.
 
@@ -309,6 +311,7 @@ def emit_attention_tile_ir(
     optional_operand = ", %bias" if bias else ""
     scale_literal = _mlir_float(scale)
     softcap_literal = _mlir_float(softcap)
+    dropout_literal = _mlir_float(dropout_p)
     return f'''module {{
   llvm.func @{entry}(%q: !llvm.ptr, %key: !llvm.ptr, %v: !llvm.ptr{optional_arg},
                      %o: !llvm.ptr, %b: i64, %hq: i64, %hkv: i64,
@@ -318,8 +321,9 @@ def emit_attention_tile_ir(
       storage = "{storage}", accum = "f32", scale = {scale_literal} : f32,
       causal = {str(causal).lower()}, bias = {str(bias).lower()},
       window_left = {window_left} : i64, window_right = {window_right} : i64,
-      softcap = {softcap_literal} : f32, dropout_p = 0.0 : f32,
-      dropout_seed = 0 : i64, head_dim = {head_dim} : i64,
+      softcap = {softcap_literal} : f32,
+      dropout_p = {dropout_literal} : f32,
+      dropout_seed = {dropout_seed} : i64, head_dim = {head_dim} : i64,
       value_dim = {value_dim} : i64, gqa = {str(hq != hkv).lower()}
     }} : !llvm.ptr, !llvm.ptr, !llvm.ptr{", !llvm.ptr" if bias else ""},
         !llvm.ptr, i64, i64, i64, i64, i64, i64, i64
@@ -564,6 +568,8 @@ def _attention_contract(
     int,
     int,
     float,
+    float,
+    int,
 ] | None:
     if not requests_attention(module):
         return None
@@ -629,12 +635,12 @@ def _attention_contract(
         return None
     softcap = float(op.kwargs.get("softcap", op.kwargs.get("logit_softcap", 0.0)) or 0.0)
     dropout = float(op.kwargs.get("dropout_p", op.kwargs.get("dropout", 0.0)) or 0.0)
+    dropout_seed = int(op.kwargs.get("dropout_seed", op.kwargs.get("seed", 0)) or 0)
     scale = float(op.kwargs.get("scale", 1.0 / math.sqrt(float(d))))
     if (
         not math.isfinite(scale) or scale <= 0.0
         or not math.isfinite(softcap) or softcap < 0.0
-        or dropout != 0.0
-        or (bias_name is not None and softcap > 0.0)
+        or not math.isfinite(dropout) or not 0.0 <= dropout < 1.0
     ):
         return None
     return (
@@ -647,6 +653,8 @@ def _attention_contract(
         window_left,
         window_right,
         softcap,
+        dropout,
+        dropout_seed,
     )
 
 
@@ -1023,7 +1031,8 @@ def package_attention(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativ
         raise ValueError(
             "gfx1151 attention packaging requires static rank-4 f16/bf16 Q/K/V, "
             "f32 output, equal head/value dimensions divisible by 16, compatible "
-            "MHA/GQA heads, zero dropout, and a supported causal/window policy"
+            "MHA/GQA heads, deterministic dropout metadata, and a supported "
+            "causal/window policy"
         )
     (
         names,
@@ -1035,12 +1044,15 @@ def package_attention(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativ
         window_left,
         window_right,
         softcap,
+        dropout_p,
+        dropout_seed,
     ) = contract
     q_name, k_name, v_name = names
     storage = {"fp16": "f16", "bf16": "bf16"}[dtype]
     semantic_key = hashlib.sha256(
         f"{scale:.17g}:{causal}:{bool(bias_name)}:{window_left}:"
-        f"{window_right}:{softcap:.17g}".encode()
+        f"{window_right}:{softcap:.17g}:{dropout_p:.17g}:"
+        f"{dropout_seed}".encode()
     ).hexdigest()[:10]
     entry = (
         f"tessera_tile_attention_{storage}_"
@@ -1061,6 +1073,8 @@ def package_attention(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativ
         window_left=window_left,
         window_right=window_right,
         softcap=softcap,
+        dropout_p=dropout_p,
+        dropout_seed=dropout_seed,
     )
     (
         target_ir,
@@ -1133,6 +1147,20 @@ def package_attention(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativ
                 "float32",
             )
         )
+    if dropout_p > 0.0:
+        dropout_base = (
+            8
+            + int(bias_name is not None)
+            + 2 * int(hq != hkv)
+            + int(window_left >= 0)
+            + int(softcap > 0.0)
+        )
+        scalars.extend(
+            (
+                ScalarArgument(dropout_base, "DropoutP", "float32"),
+                ScalarArgument(dropout_base + 1, "DropoutSeed", "int64"),
+            )
+        )
     guards = [
         ShapeGuard(q_name, 0, "eq", b), ShapeGuard(q_name, 1, "eq", hq),
         ShapeGuard(q_name, 2, "eq", sq), ShapeGuard(q_name, 3, "eq", d),
@@ -1181,7 +1209,8 @@ def package_attention(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativ
             "window_left": window_left,
             "window_right": window_right,
             "softcap": softcap,
-            "dropout_p": 0.0,
+            "dropout_p": dropout_p,
+            "dropout_seed": dropout_seed,
             "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
         },
     )

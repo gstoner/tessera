@@ -36,6 +36,9 @@ from tessera.runtime import (  # noqa: E402
     _submit_rocm_gfx1151_native,
 )
 
+KERNEL_WALL_BASELINE_MS = 0.097763
+KERNEL_WALL_MAX_REGRESSION = 0.10
+
 
 def _module(b: int, hq: int, hkv: int, sq: int, sk: int, d: int) -> GraphIRModule:
     q = IRType(f"tensor<{b}x{hq}x{sq}x{d}xf16>", tuple(map(str, (b, hq, sq, d))), "fp16")
@@ -347,6 +350,10 @@ def main() -> int:
         kernel_wall_samples_ms=kernel_wall_samples,
         warmup=args.warmup,
     )
+    kernel_wall_median_ms = statistics.median(kernel_wall_samples)
+    kernel_wall_limit_ms = (
+        KERNEL_WALL_BASELINE_MS * (1.0 + KERNEL_WALL_MAX_REGRESSION)
+    )
     record = {
         "schema": "tessera.rocm.attention_carrier.benchmark.v2",
         "device": os.environ.get("TESSERA_ROCM_CHIP", "gfx1151"),
@@ -364,12 +371,21 @@ def main() -> int:
         "cold_operation_total_ms": cold_operation_total_ms,
         "operation_total_median_ms": statistics.median(samples),
         "operation_total_samples_ms": samples,
-        "kernel_wall_median_ms": statistics.median(kernel_wall_samples),
+        "kernel_wall_median_ms": kernel_wall_median_ms,
         "kernel_wall_samples_ms": kernel_wall_samples,
+        "kernel_wall_ratchet": {
+            "baseline_ms": KERNEL_WALL_BASELINE_MS,
+            "max_regression_fraction": KERNEL_WALL_MAX_REGRESSION,
+            "limit_ms": kernel_wall_limit_ms,
+            "observed_ratio": kernel_wall_median_ms / KERNEL_WALL_BASELINE_MS,
+            "passed": kernel_wall_median_ms <= kernel_wall_limit_ms,
+        },
         "timing_domains": timing_domains,
         "max_abs_error": error,
         "tolerance": 0.035,
-        "passed": error <= 0.035,
+        "passed": (
+            error <= 0.035 and kernel_wall_median_ms <= kernel_wall_limit_ms
+        ),
         "hsaco_bytes": len(package.image.payload),
         "image_digest": package.image.image_digest,
     }

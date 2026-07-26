@@ -543,9 +543,17 @@ def compile_graph_module(
         is_reduction = rocm_native.requests_reduction(module)
         is_paged_kv = rocm_native.requests_paged_kv_read(module)
         is_moe_dispatch = rocm_native.requests_moe_dispatch(module)
-        if not (is_softmax or is_reduction or is_paged_kv or is_moe_dispatch):
+        is_attention = rocm_native.requests_attention(module)
+        if not (
+            is_softmax
+            or is_reduction
+            or is_paged_kv
+            or is_moe_dispatch
+            or is_attention
+        ):
             raise ValueError(
-                "ROCM native packaging currently supports one softmax, reduction, paged-KV read, or MoE dispatch request"
+                "ROCM native packaging currently supports one softmax, "
+                "reduction, attention, paged-KV read, or MoE dispatch request"
             )
         resolution = target_pipeline_lookup(target_kind)
         producer = (
@@ -558,6 +566,8 @@ def compile_graph_module(
             rocm_package = rocm_native.package_reduction(module, pipeline_name=producer)
         elif is_paged_kv:
             rocm_package = rocm_native.package_paged_kv_read(module, pipeline_name=producer)
+        elif is_attention:
+            rocm_package = rocm_native.package_attention(module, pipeline_name=producer)
         else:
             rocm_package = rocm_native.package_moe_dispatch(module, pipeline_name=producer)
         tile = LoweringArtifact("tile", rocm_package.tile_ir)

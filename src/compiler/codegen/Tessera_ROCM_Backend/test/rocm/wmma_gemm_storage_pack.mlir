@@ -20,7 +20,7 @@
 
 // A descriptor whose factor (1) disagrees with the int4 WMMA pack mode (2) is
 // caught — the dtype contract and the WMMA ABI have drifted.
-// expected-error @+1 {{TILE_PACKED_FORMAT_INVALID}}
+// expected-error @+3 {{TILE_PACKED_FORMAT_INVALID}}
 "tessera_rocm.wmma_gemm"() {name = "g", m = 16 : i64, n = 16 : i64, k = 16 : i64,
   mt = 16 : i64, nt = 16 : i64,
   tessera.storage_pack = #tile.packed_format<logical = "int4", container = "int8", logical_bits = 4, elements_per_container = 1, signedness = "signed_twos_complement", encoding = "twos_complement", lane_order = "scalar_lsb">} : () -> ()
@@ -28,7 +28,7 @@
 // -----
 
 // Unsigned IU4 is a distinct unregistered policy and cannot alias signed int4.
-// expected-error @+1 {{TILE_PACKED_FORMAT_INVALID}}
+// expected-error @+3 {{TILE_PACKED_FORMAT_INVALID}}
 "tessera_rocm.wmma_gemm"() {name = "g", m = 16 : i64, n = 16 : i64, k = 16 : i64,
   mt = 16 : i64, nt = 16 : i64,
   tessera.storage_pack = #tile.packed_format<logical = "int4", container = "int8", logical_bits = 4, elements_per_container = 2, signedness = "unsigned", encoding = "twos_complement", lane_order = "low_to_high">} : () -> ()

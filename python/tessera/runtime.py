@@ -3013,6 +3013,8 @@ def _submit_rocm_gfx1151_native(
     import numpy as np
 
     from tessera.compiler.rocm_native import (
+        GFX1151_ATTN_BF16_ABI,
+        GFX1151_ATTN_F16_ABI,
         GFX1151_MOE_DISPATCH_F32_ABI,
         GFX1151_PAGED_KV_F32_ABI,
         GFX1151_REDUCE_BF16_ABI,
@@ -3030,12 +3032,23 @@ def _submit_rocm_gfx1151_native(
         GFX1151_REDUCE_F32_ABI,
         GFX1151_PAGED_KV_F32_ABI,
         GFX1151_MOE_DISPATCH_F32_ABI,
+        GFX1151_ATTN_F16_ABI,
+        GFX1151_ATTN_BF16_ABI,
     }:
         raise RuntimeError(f"unsupported gfx1151 descriptor ABI {descriptor.abi_id!r}")
     ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
     paged_kv = descriptor.abi_id == GFX1151_PAGED_KV_F32_ABI
     moe_dispatch = descriptor.abi_id == GFX1151_MOE_DISPATCH_F32_ABI
-    expected_buffers = 3 if paged_kv or moe_dispatch else 2
+    attention = descriptor.abi_id in {
+        GFX1151_ATTN_F16_ABI,
+        GFX1151_ATTN_BF16_ABI,
+    }
+    attention_bias = attention and bool(descriptor.provenance["bias"])
+    expected_buffers = (
+        5 if attention_bias else 4 if attention
+        else 3 if paged_kv or moe_dispatch
+        else 2
+    )
     if len(ordered) != expected_buffers:
         raise RuntimeError(f"gfx1151 descriptor requires {expected_buffers} buffers")
     reduction_abis = {
@@ -3046,7 +3059,47 @@ def _submit_rocm_gfx1151_native(
     reduction = descriptor.abi_id in reduction_abis
     dimensions: tuple[int, ...] = ()
     expected_dtype: Any = None
-    if paged_kv:
+    if attention:
+        q, key, value = (buffers[item.name] for item in ordered[:3])
+        bias = buffers[ordered[3].name] if attention_bias else None
+        output = buffers[ordered[-1].name]
+        b, hq, hkv, sq, sk, d, dv = (
+            int(value) for value in cast(list[int], descriptor.provenance["shape"])
+        )
+        expected_storage = (
+            np.float16
+            if descriptor.abi_id == GFX1151_ATTN_F16_ABI
+            else _bfloat16_dtype()
+        )
+        if expected_storage is None:
+            raise RuntimeError("gfx1151 bf16 attention requires ml_dtypes")
+        if (
+            tuple(q.shape) != (b, hq, sq, d)
+            or tuple(key.shape) != (b, hkv, sk, d)
+            or tuple(value.shape) != (b, hkv, sk, dv)
+            or tuple(output.shape) != (b, hq, sq, dv)
+            or q.dtype != expected_storage
+            or key.dtype != expected_storage
+            or value.dtype != expected_storage
+            or output.dtype != np.float32
+        ):
+            raise RuntimeError("gfx1151 attention arrays disagree with descriptor shape/dtype")
+        if attention_bias and (
+            bias is None
+            or tuple(bias.shape) != (b, hq, sq, sk)
+            or bias.dtype != np.float32
+        ):
+            raise RuntimeError("gfx1151 attention bias disagrees with descriptor")
+        input_arrays = [
+            np.ascontiguousarray(q),
+            np.ascontiguousarray(key),
+            np.ascontiguousarray(value),
+        ]
+        if bias is not None:
+            input_arrays.append(np.ascontiguousarray(bias))
+        grid_x = (sq + 15) // 16
+        grid_y = b * hq
+    elif paged_kv:
         pages = buffers[ordered[0].name]
         table = buffers[ordered[1].name]
         output = buffers[ordered[2].name]
@@ -3123,7 +3176,7 @@ def _submit_rocm_gfx1151_native(
                 raise RuntimeError("gfx1151 bf16 reduction requires ml_dtypes")
         else:
             expected_dtype = np.float32
-    elif not paged_kv and not moe_dispatch:
+    elif not attention and not paged_kv and not moe_dispatch:
         rows = int(cast(int, scalars["Rows"]))
         columns = int(cast(int, scalars["K"]))
         if x.size != rows * columns or tuple(output.shape) != tuple(x.shape):
@@ -3131,7 +3184,7 @@ def _submit_rocm_gfx1151_native(
         dimensions = (rows, columns)
         grid_x = rows
         expected_dtype = np.float16 if descriptor.abi_id == GFX1151_SOFTMAX_F16_ABI else np.float32
-    if not paged_kv and not moe_dispatch:
+    if not attention and not paged_kv and not moe_dispatch:
         expected_output_dtype = np.float32 if reduction else expected_dtype
         if x.dtype != expected_dtype or output.dtype != expected_output_dtype:
             raise RuntimeError("gfx1151 native array dtype disagrees with descriptor ABI")
@@ -3173,19 +3226,64 @@ def _submit_rocm_gfx1151_native(
             ]
 
         arguments = []
-        for device, array in zip(device_inputs, input_arrays, strict=True):
-            arguments.extend(memref_args(device, int(array.size)))
-        arguments.extend(memref_args(device_o, int(output.size)))
-        arguments.extend(ctypes.c_int64(value) for value in dimensions)
+        if attention:
+            for device, array in zip(device_inputs[:3], input_arrays[:3], strict=True):
+                arguments.extend(memref_args(device, int(array.size)))
+            arguments.extend(memref_args(device_o, int(output.size)))
+            arguments.extend(
+                (
+                    ctypes.c_int64(sq),
+                    ctypes.c_int64(sk),
+                    ctypes.c_float(
+                        float(cast(float, descriptor.provenance["scale"]))
+                    ),
+                    ctypes.c_int64(int(bool(descriptor.provenance["causal"]))),
+                )
+            )
+            if bool(descriptor.provenance["gqa"]):
+                arguments.extend(
+                    (
+                        ctypes.c_int64(hq),
+                        ctypes.c_int64(
+                            int(cast(int, descriptor.provenance["kv_ratio"]))
+                        ),
+                    )
+                )
+            window_left = int(
+                cast(int, descriptor.provenance["window_left"])
+            )
+            if window_left >= 0:
+                arguments.append(
+                    # The canonical carrier stores an inclusive left offset
+                    # (key >= q-left). The physical WMMA kernel accepts a band
+                    # width W and masks age >= W, hence W=left+1.
+                    ctypes.c_int64(window_left + 1)
+                )
+            softcap = float(
+                cast(float, descriptor.provenance["softcap"])
+            )
+            if softcap > 0.0:
+                arguments.append(
+                    ctypes.c_float(softcap)
+                )
+            if attention_bias:
+                arguments.extend(
+                    memref_args(device_inputs[3], int(input_arrays[3].size))
+                )
+        else:
+            for device, array in zip(device_inputs, input_arrays, strict=True):
+                arguments.extend(memref_args(device, int(array.size)))
+            arguments.extend(memref_args(device_o, int(output.size)))
+            arguments.extend(ctypes.c_int64(value) for value in dimensions)
         argument_array = (ctypes.c_void_p * len(arguments))()
         for index, value in enumerate(arguments):
             argument_array[index] = ctypes.cast(ctypes.byref(value), ctypes.c_void_p)
         rc = hip.hipModuleLaunchKernel(
             function,
             grid_x,
+            grid_y if attention else 1,
             1,
-            1,
-            _SOFTMAX_BLOCKDIM,
+            32 if attention else _SOFTMAX_BLOCKDIM,
             1,
             1,
             0,

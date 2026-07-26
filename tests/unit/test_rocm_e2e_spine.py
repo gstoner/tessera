@@ -16,6 +16,7 @@ from tessera.compiler.native_artifact import (
     DeviceLibraryRecord,
 )
 from tessera.compiler.rocm_native import (
+    GFX1151_ATTN_F16_ABI,
     GFX1151_MOE_DISPATCH_F32_ABI,
     GFX1151_PAGED_KV_F32_ABI,
     GFX1151_REDUCE_BF16_ABI,
@@ -24,22 +25,77 @@ from tessera.compiler.rocm_native import (
     GFX1151_SOFTMAX_F32_ABI,
     _driver_selected_device_libraries,
     emit_moe_dispatch_tile_ir,
+    emit_attention_tile_ir,
     emit_reduce_tile_ir,
     emit_paged_kv_read_tile_ir,
     emit_softmax_tile_ir,
     package_moe_dispatch,
+    package_attention,
     package_reduction,
     package_paged_kv_read,
     package_softmax,
     requests_moe_dispatch,
+    requests_attention,
     requests_reduction,
     requests_paged_kv_read,
     requests_softmax,
     supports_moe_dispatch,
+    supports_attention,
     supports_reduction,
     supports_paged_kv_read,
     supports_softmax,
 )
+
+
+def _attention_module(
+    *,
+    dtype: str = "fp16",
+    hq: int = 4,
+    hkv: int = 2,
+    causal: bool = True,
+    bias: bool = False,
+    dropout_p: float = 0.0,
+    softcap: float = 8.0,
+) -> GraphIRModule:
+    element = {"fp16": "f16", "bf16": "bf16"}[dtype]
+    q = IRType(f"tensor<1x{hq}x17x64x{element}>", ("1", str(hq), "17", "64"), dtype)
+    key = IRType(f"tensor<1x{hkv}x19x64x{element}>", ("1", str(hkv), "19", "64"), dtype)
+    value = IRType(f"tensor<1x{hkv}x19x64x{element}>", ("1", str(hkv), "19", "64"), dtype)
+    output = IRType(f"tensor<1x{hq}x17x64xf32>", ("1", str(hq), "17", "64"), "fp32")
+    bias_type = IRType(f"tensor<1x{hq}x17x19xf32>", ("1", str(hq), "17", "19"), "fp32")
+    args = [IRArg("q", q), IRArg("key", key), IRArg("v", value)]
+    operands = ["%q", "%key", "%v"]
+    operand_types = [str(q), str(key), str(value)]
+    if bias:
+        args.append(IRArg("bias", bias_type))
+        operands.append("%bias")
+        operand_types.append(str(bias_type))
+    return GraphIRModule(
+        functions=[
+            GraphIRFunction(
+                name="gfx1151_attention",
+                args=args,
+                result_types=[output],
+                body=[
+                    IROp(
+                        result="o",
+                        op_name="tessera.flash_attn",
+                        operands=operands,
+                        operand_types=operand_types,
+                        result_type=str(output),
+                        kwargs={
+                            "scale": 0.125,
+                            "causal": causal,
+                            "window": (64, 0) if causal else None,
+                            "softcap": softcap,
+                            "dropout_p": dropout_p,
+                        },
+                    )
+                ],
+                return_values=["%o"],
+            )
+        ]
+    )
 
 
 def _moe_dispatch_module(*, tokens: int = 7, slots: int = 9, hidden: int = 13) -> GraphIRModule:
@@ -224,6 +280,68 @@ def _fake_compile(tile_ir: str):
         libraries,
         "cold",
     )
+
+
+def _fake_attention_compile(tile_ir: str):
+    assert "tile.attention_kernel" in tile_ir
+    assert "head_dim = 64" in tile_ir
+    libraries = (
+        DeviceLibraryRecord("rocm.ocml", "1" * 64, "compiler_driver"),
+        DeviceLibraryRecord("rocm.ockl", "2" * 64, "compiler_driver"),
+        DeviceLibraryRecord("rocm.oclc_isa_version_1151", "3" * 64, "compiler_driver"),
+    )
+    return (
+        'module { "tessera_rocm.flash_attn"() : () -> () }',
+        "gpu.binary @binary",
+        b"\x7fELFattention",
+        "compiler",
+        "toolchain",
+        libraries,
+        "cold",
+    )
+
+
+def test_rocm_attention_carrier_selects_wmma_and_owns_native_package(monkeypatch) -> None:
+    module = _attention_module(bias=True, softcap=0.0)
+    assert requests_attention(module)
+    assert supports_attention(module)
+    source = emit_attention_tile_ir(
+        entry="attention",
+        storage="f16",
+        dims=(1, 4, 2, 17, 19, 64, 64),
+        scale=0.125,
+        causal=True,
+        bias=True,
+        window_left=64,
+        window_right=0,
+        softcap=0.0,
+    )
+    assert "tile.attention_kernel" in source
+    assert "head_dim = 64" in source
+    assert "value_dim = 64" in source
+    assert "gqa = true" in source
+    monkeypatch.setattr(
+        "tessera.compiler.rocm_native._compile_attention_tile_ir",
+        _fake_attention_compile,
+    )
+    package = package_attention(module, pipeline_name="tessera-lower-to-rocm")
+    assert package.descriptor.abi_id == GFX1151_ATTN_F16_ABI
+    assert [item.name for item in package.descriptor.buffers] == [
+        "q", "key", "v", "bias", "o"
+    ]
+    assert [item.name for item in package.descriptor.scalars] == [
+        "Sq", "Sk", "Scale", "Causal", "Hq", "KvRatio", "Window"
+    ]
+    assert package.descriptor.provenance["schedule"] == "gfx1151_wmma_streaming"
+    assert package.descriptor.provenance["sync_key"] == (
+        "ROCM-E2E-ATTENTION-CARRIERS-2026-07-26"
+    )
+
+
+def test_rocm_attention_native_route_rejects_unimplemented_semantics() -> None:
+    assert not supports_attention(_attention_module(dropout_p=0.25))
+    assert not supports_attention(_attention_module(hq=3, hkv=2))
+    assert not supports_attention(_attention_module(bias=True, softcap=8.0))
 
 
 def test_rocm_softmax_emitter_uses_shared_typed_envelope() -> None:

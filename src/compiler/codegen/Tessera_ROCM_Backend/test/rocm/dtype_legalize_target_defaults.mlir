@@ -1,8 +1,8 @@
 // RUN: %trop --allow-unregistered-dialect --pass-pipeline='builtin.module(tessera-lower-to-rocm)' %s | FileCheck %s
 
-// ROCm's descriptor-aware WMMA generator consumes the default-produced INT4
-// storage pack. This fixture is backend-owned because the pipeline is absent
-// from the core LLVM/Apple build by design.
+// Generic target legalization keeps an orphan dtype request logical: parser or
+// host-conversion evidence is not a physical consumer. The architecture-owned
+// ROCm WMMA generator still consumes its registered signed-INT4 contract.
 
 module {
   func.func @target_dtype_defaults() {
@@ -21,9 +21,9 @@ module {
 
 // CHECK: "test.dtype_request"
 // CHECK-SAME: numeric_policy = {accum = "int32", storage = "int4"}
-// CHECK-SAME: tessera.storage_container = "int8"
-// CHECK-SAME: tessera.storage_pack = #tile.packed_format<logical = "int4", container = "int8", logical_bits = 4, elements_per_container = 2, signedness = "signed_twos_complement", encoding = "twos_complement", lane_order = "low_to_high">
-// CHECK-SAME: tessera.storage_packed = true
+// CHECK-NOT: tessera.storage_container
+// CHECK-NOT: tessera.storage_pack
+// CHECK-NOT: tessera.storage_packed
 // CHECK: gpu.module @default_int4_wmma_mod
 // CHECK: gpu.func @default_int4_wmma
 // CHECK: vector<2xi32>

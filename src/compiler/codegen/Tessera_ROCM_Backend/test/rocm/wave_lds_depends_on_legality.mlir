@@ -67,9 +67,12 @@ func.func @s_barrier_drains(%x: tensor<16x16xf16>) {
 
 // NVIDIA-only name-based ops are rejected on the ROCm path (no #tile.barrier to
 // discriminate on) — they no longer slip through a name.contains("barrier") sniff.
-func.func @nv_only(%d: memref<64xf16>, %s: memref<64xf16>, %b: index) {
+func.func @nv_only(%d: memref<64xf16>, %s: memref<64xf16>, %b: index,
+                   %barrier: !tile.mbarrier,
+                   %arrival: !tile.mbarrier_token) {
   "tile.async_copy"(%d, %s, %b) {tile.barrier_id = "b0"} : (memref<64xf16>, memref<64xf16>, index) -> i32
   // expected-error @+1 {{ROCM_WAVE_LDS_UNSUPPORTED_NV_CONSTRUCT}}
-  "tile.mbarrier.try_wait"() : () -> ()
+  %ready = "tile.mbarrier.try_wait"(%barrier, %arrival) {slot = 0 : i64}
+      : (!tile.mbarrier, !tile.mbarrier_token) -> i1
   return
 }

@@ -8,6 +8,24 @@ last_updated: 2026-07-26
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `ROCM-E2E-ATTENTION-CARRIERS-2026-07-26` lands an
+AMD-owned consumer, native HSACO package, descriptor, and exact gfx1151 proof
+for the already-shared `tile.attention_kernel` contract, plus a direct
+correctness consumer for `tile.attention_backward_kernel`. NVIDIA parity at the
+shared semantic carrier remains validated by its existing SM120 forward and
+backward packages. ROCm's wave32 WMMA descriptor, LDS allocation, HIP ABI,
+resource counts, timings, selector boundary, and direct scalar recurrence do
+not transfer to CUDA. No NVIDIA plan state or exact-device claim changes.
+
+Cross-backend sync `ROCM-SSA-LDS-PIPELINE-2026-07-26` lands the AMD consumer of
+the already-shared `!tile.buffer`, `!tile.async_token`, and
+`!tile.pipeline_state` ownership vocabulary. It changes no shared operation,
+type, verifier, ABI, or NVIDIA lowering. NVIDIA parity is therefore validated
+at the existing SSA contract: WarpSpecialization continues to own SMEM/TMEM,
+TMA/mbarrier, and architecture-specific pipeline mechanics. AMD LDS layouts,
+waitcnt/s_barrier semantics, gfx1151 evidence, compiler timings, and selectors
+do not transfer to CUDA or SM120; no NVIDIA follow-up is required.
+
 Cross-backend sync `PACKED-LEGALIZE-CAPABILITY-2026-07-26` expands terminal
 storage legalization without making sub-byte storage global. For `nvidia_sm120`,
 the pass now proves the complete operation-specific consumer before stamping a

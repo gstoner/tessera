@@ -8,6 +8,23 @@ last_updated: 2026-07-26
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `ROCM-E2E-ATTENTION-CARRIERS-2026-07-26` is a ROCm-owned
+physical consumer and exact gfx1151 evidence landing for the already-shared
+forward/backward attention carriers. Apple requires follow-up for any carrier
+variant not already covered by its Metal execution contract; AMD wave32 WMMA,
+LDS ownership, HIP descriptors, scalar recurrence, resources, timings, and
+selector state are not applicable to Metal and do not transfer. No Apple
+readiness or exact-device row changes.
+
+Cross-backend sync `ROCM-SSA-LDS-PIPELINE-2026-07-26` lands an AMD-owned
+consumer of the existing shared `!tile.buffer`, `!tile.async_token`, and
+`!tile.pipeline_state` vocabulary without changing those shared definitions.
+Apple parity is validated at the portable IR boundary only. AMD LDS layouts,
+waitcnt/s_barrier sequencing, gfx1151 structural evidence, compiler timings,
+and selectors are not applicable to Metal and do not transfer. Apple retains
+its separately recorded follow-up for architecture-owned threadgroup
+allocation and pipeline-state lowering.
+
 Cross-backend sync `PACKED-LEGALIZE-CAPABILITY-2026-07-26` makes terminal
 sub-byte storage a target + operation + physical-descriptor + complete
 def-use-consumer decision. The newly admitted packed load/unpack, supported

@@ -39,6 +39,11 @@ void buildTesseraROCMBackendPipeline(OpPassManager &pm) {
   pm.addPass(createROCMWaveLdsPipelinePass());
   pm.addPass(createROCMWaveLdsLegalityPass());
   pm.addPass(createLowerTileToROCMPass());
+  // Static head/value buckets from the canonical attention carrier select the
+  // physical gfx1151 WMMA schedule here. Runtime sequence dimensions remain
+  // launch operands; unsupported semantic combinations retain the direct
+  // recurrence emitted by lower-tile-to-rocm.
+  pm.addPass(createGenerateWMMAFlashAttnKernelPass());
   // ROCM-E2E-1/-2 wire only families with typed producers and descriptor
   // consumers. Unrelated standalone generators remain outside this pipeline.
   pm.addPass(createGenerateROCMSoftmaxKernelPass());

@@ -1,4 +1,5 @@
 #include "TesseraROCM/Passes.h"
+#include "ROCMDirectAttention.h"
 #include "ROCMFragmentLayout.h"
 
 #include "Tessera/Dialect/Tile/TileDialect.h"
@@ -7,15 +8,19 @@
 #include "TesseraROCMTypes.h.inc"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Pass/Pass.h"
-#include "llvm/Support/CommandLine.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/Support/CommandLine.h"
 
 using namespace mlir;
 
@@ -296,6 +301,44 @@ static bool layoutHasLdsAxis(tessera::tile::TileLayoutAttr layout) {
   return false;
 }
 
+static bool isTileControlType(Type type) {
+  return isa<tessera::tile::AsyncTokenType, tessera::tile::BufferType,
+             tessera::tile::PipelineStateType,
+             mlir::tessera_rocm::TokenType>(type);
+}
+
+static SmallVector<Value> dataOperands(Operation *op) {
+  SmallVector<Value> values;
+  for (Value operand : op->getOperands())
+    if (!isTileControlType(operand.getType()))
+      values.push_back(operand);
+  return values;
+}
+
+static Value tileBufferRoot(Operation *op) {
+  Value buffer;
+  for (Value operand : op->getOperands())
+    if (isa<tessera::tile::BufferType>(operand.getType())) {
+      buffer = operand;
+      break;
+    }
+  while (buffer) {
+    Operation *def = buffer.getDefiningOp();
+    if (!def)
+      break;
+    Value parent;
+    for (Value operand : def->getOperands())
+      if (isa<tessera::tile::BufferType>(operand.getType())) {
+        parent = operand;
+        break;
+      }
+    if (!parent)
+      break;
+    buffer = parent;
+  }
+  return buffer;
+}
+
 struct LowerTileToROCMPass
     : PassWrapper<LowerTileToROCMPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LowerTileToROCMPass)
@@ -313,6 +356,7 @@ struct LowerTileToROCMPass
   }
   void getDependentDialects(DialectRegistry &registry) const override {
     registry.insert<arith::ArithDialect, gpu::GPUDialect,
+                    LLVM::LLVMDialect, math::MathDialect, scf::SCFDialect,
                     memref::MemRefDialect, vector::VectorDialect,
                     tessera::tile::TesseraTileDialect,
                     mlir::tessera_rocm::TesseraROCMDialect>();
@@ -332,6 +376,8 @@ struct LowerTileToROCMPass
       StringRef name = op->getName().getStringRef();
       if (name == "tile.mma" || name == "tile.matmul_kernel" ||
           name == "tile.softmax_kernel" || name == "tile.reduce_kernel" ||
+          name == "tile.attention_kernel" ||
+          name == "tile.attention_backward_kernel" ||
           name == "tile.paged_kv_read_kernel" ||
           name == "tile.moe_dispatch_kernel" ||
           name == "tile.async_copy" ||
@@ -349,6 +395,25 @@ struct LowerTileToROCMPass
     for (Operation *op : worklist) {
       OpBuilder builder(op);
       StringRef name = op->getName().getStringRef();
+
+      if (name == "tile.attention_kernel") {
+        if (failed(tessera_rocm::materializeROCMDirectAttention(
+                cast<tessera::tile::AttentionKernelOp>(op), builder))) {
+          signalPassFailure();
+          return;
+        }
+        continue;
+      }
+
+      if (name == "tile.attention_backward_kernel") {
+        if (failed(tessera_rocm::materializeROCMDirectAttentionBackward(
+                cast<tessera::tile::AttentionBackwardKernelOp>(op),
+                builder))) {
+          signalPassFailure();
+          return;
+        }
+        continue;
+      }
 
       if (name == "tile.softmax_kernel") {
         auto storage = op->getAttrOfType<StringAttr>("storage");
@@ -548,12 +613,13 @@ struct LowerTileToROCMPass
       }
 
       if (name == "tile.mma") {
+        SmallVector<Value> mmaData = dataOperands(op);
         bool typedFragmentForm =
-            llvm::any_of(op->getOperandTypes(), [](Type type) {
-              return isa<tessera::tile::FragmentType>(type);
+            llvm::any_of(mmaData, [](Value value) {
+              return isa<tessera::tile::FragmentType>(value.getType());
             });
         if (typedFragmentForm) {
-          if (op->getNumOperands() != 3 || op->getNumResults() != 1) {
+          if (mmaData.size() != 3 || op->getNumResults() != 1) {
             op->emitError("typed ROCm tile.mma requires exactly A, B, "
                           "accumulator -> one fragment");
             signalPassFailure();
@@ -571,11 +637,11 @@ struct LowerTileToROCMPass
               hasOutputStore = static_cast<bool>(store);
             }
           }
-          auto aPack = op->getOperand(0)
+          auto aPack = mmaData[0]
                            .getDefiningOp<tessera::tile::FragmentPackOp>();
-          auto bPack = op->getOperand(1)
+          auto bPack = mmaData[1]
                            .getDefiningOp<tessera::tile::FragmentPackOp>();
-          auto cZero = op->getOperand(2)
+          auto cZero = mmaData[2]
                            .getDefiningOp<tessera::tile::FragmentZeroOp>();
           auto desc =
               op->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma");
@@ -697,7 +763,7 @@ struct LowerTileToROCMPass
           signalPassFailure();
           return;
         }
-        if (op->getNumOperands() < 2 || op->getNumResults() != 1) {
+        if (mmaData.size() < 2 || op->getNumResults() != 1) {
           op->emitError("ROCm lowering requires tile.mma(lhs, rhs) -> result");
           signalPassFailure();
           return;
@@ -707,7 +773,7 @@ struct LowerTileToROCMPass
         // matmul on an arch with no FP8 matrix path is a hard, named error
         // (Decision #21) — never a silent flavor guess.
         std::string fp8Flavor;
-        if (isFP8Element(op->getOperand(0).getType())) {
+        if (isFP8Element(mmaData[0].getType())) {
           llvm::StringRef sem = fp8SemanticsForArch(arch);
           if (sem == "none") {
             op->emitError("ROCm lowering: FP8 matmul requested on arch '")
@@ -717,7 +783,7 @@ struct LowerTileToROCMPass
             signalPassFailure();
             return;
           }
-          std::string base = fp8Base(op->getOperand(0).getType());
+          std::string base = fp8Base(mmaData[0].getType());
           fp8Flavor = (sem == "fnuz") ? base + "fnuz" : base;
         }
 
@@ -732,9 +798,8 @@ struct LowerTileToROCMPass
         // tessera_rocm.wmma is bit-identical to the direct generator's. The
         // legacy 2-operand artifact form has no accumulator SSA yet, so it falls
         // back to lhs as a typed placeholder (IR-contract lowering, not run).
-        Value acc = op->getNumOperands() >= 3 ? op->getOperand(2)
-                                              : op->getOperand(0);
-        state.addOperands({op->getOperand(0), op->getOperand(1), acc});
+        Value acc = mmaData.size() >= 3 ? mmaData[2] : mmaData[0];
+        state.addOperands({mmaData[0], mmaData[1], acc});
         state.addTypes(op->getResultTypes());
         state.addAttribute("arch", builder.getStringAttr(arch));
         state.addAttribute("shape", builder.getStringAttr("m16n16k16"));
@@ -785,8 +850,28 @@ struct LowerTileToROCMPass
         state.addAttribute("src_space", builder.getStringAttr("global"));
         state.addAttribute("dst_space", builder.getStringAttr("lds"));
         state.addAttribute("arch", builder.getStringAttr(arch));
-        if (auto buf = op->getAttrOfType<tessera::tile::TileBufferRefAttr>(
-                "tile.buf")) {
+        Value buffer = tileBufferRoot(op);
+        if (buffer) {
+          auto alloc = buffer.getDefiningOp<tessera::tile::AllocOp>();
+          if (!alloc || alloc.getSpace() != "smem") {
+            op->emitOpError(
+                "ROCm async copy requires its !tile.buffer root to be a "
+                "tile.alloc in shared-memory space");
+            signalPassFailure();
+            return;
+          }
+          state.addAttribute("buffer_identity",
+                             builder.getStringAttr("ssa_allocation"));
+          state.addAttribute(
+              "buffer_bytes",
+              builder.getI64IntegerAttr(static_cast<int64_t>(alloc.getBytes())));
+          state.addAttribute("buffer_space", builder.getStringAttr("lds"));
+          state.addAttribute("buffer_layout", alloc.getLayout());
+        } else if (auto buf =
+                       op->getAttrOfType<tessera::tile::TileBufferRefAttr>(
+                           "tile.buf")) {
+          // Migration-only input. The ROCm planner normally consumes this
+          // attribute and emits !tile.buffer before target lowering.
           if (buf.getSpace() != "lds") {
             op->emitOpError(
                 "ROCM_LOWERING_NON_LDS_BUFFER: tile.async_copy expected "
@@ -803,6 +888,14 @@ struct LowerTileToROCMPass
             return;
           }
           state.addAttribute("buffer", builder.getStringAttr(buf.getName()));
+          state.addAttribute("buffer_identity",
+                             builder.getStringAttr("legacy_name"));
+        } else {
+          // Unshaped pointer copies carry a dynamic byte count and externally
+          // owned LDS destination. Keep that distinct from compiler-owned
+          // tile.alloc identity instead of fabricating a static allocation.
+          state.addAttribute("buffer_identity",
+                             builder.getStringAttr("external_pointer"));
         }
         if (auto layout =
                 op->getAttrOfType<tessera::tile::TileLayoutAttr>(
@@ -826,9 +919,11 @@ struct LowerTileToROCMPass
         // SSA token (the rocm result). A wait retires it by SSA value when its
         // operand names the token, else by id/order.
         std::string id;
-        if (auto a = op->getAttrOfType<tessera::tile::TileBufferRefAttr>(
-                "tile.buf"))
-          id = a.getName().str();
+        if (!buffer) {
+          if (auto a = op->getAttrOfType<tessera::tile::TileBufferRefAttr>(
+                  "tile.buf"))
+            id = a.getName().str();
+        }
         if (auto a = op->getAttrOfType<StringAttr>("tile.barrier_id"))
           id = a.getValue().str();
         outstanding.push_back({id, rocmOp->getResult(0)});
@@ -914,6 +1009,47 @@ struct LowerTileToROCMPass
         signalPassFailure();
         return;
       }
+    }
+
+    // The portable SSA state/allocation ops are compile-time ownership proof.
+    // Once every ROCm target op has consumed their token, buffer, and phase
+    // dependencies, remove dead proof chains at this target boundary. Keep any
+    // still-live chain intact so a later pass cannot silently lose ownership.
+    SmallVector<Operation *> advances;
+    SmallVector<Operation *> inits;
+    SmallVector<tessera::tile::AllocOp> allocs;
+    getOperation().walk([&](Operation *op) {
+      StringRef name = op->getName().getStringRef();
+      if (name == "tile.pipeline_advance")
+        advances.push_back(op);
+      else if (name == "tile.pipeline_init")
+        inits.push_back(op);
+      else if (auto alloc = dyn_cast<tessera::tile::AllocOp>(op))
+        allocs.push_back(alloc);
+    });
+    for (Operation *advance : llvm::reverse(advances))
+      if (llvm::all_of(advance->getResults(),
+                       [](Value result) { return result.use_empty(); }))
+        advance->erase();
+    for (Operation *init : llvm::reverse(inits))
+      if (llvm::all_of(init->getResults(),
+                       [](Value result) { return result.use_empty(); }))
+        init->erase();
+    for (tessera::tile::AllocOp alloc : allocs) {
+      SmallVector<Operation *> deallocs;
+      bool onlyDeallocUsers = true;
+      for (Operation *user : alloc.getBuffer().getUsers()) {
+        if (isa<tessera::tile::DeallocOp>(user))
+          deallocs.push_back(user);
+        else
+          onlyDeallocUsers = false;
+      }
+      if (!onlyDeallocUsers)
+        continue;
+      for (Operation *dealloc : deallocs)
+        dealloc->erase();
+      if (alloc.getBuffer().use_empty())
+        alloc->erase();
     }
   }
 };

@@ -3234,7 +3234,9 @@ def _submit_rocm_gfx1151_native(
                 (
                     ctypes.c_int64(sq),
                     ctypes.c_int64(sk),
-                    ctypes.c_float(float(descriptor.provenance["scale"])),
+                    ctypes.c_float(
+                        float(cast(float, descriptor.provenance["scale"]))
+                    ),
                     ctypes.c_int64(int(bool(descriptor.provenance["causal"]))),
                 )
             )
@@ -3242,21 +3244,27 @@ def _submit_rocm_gfx1151_native(
                 arguments.extend(
                     (
                         ctypes.c_int64(hq),
-                        ctypes.c_int64(int(descriptor.provenance["kv_ratio"])),
+                        ctypes.c_int64(
+                            int(cast(int, descriptor.provenance["kv_ratio"]))
+                        ),
                     )
                 )
-            if int(descriptor.provenance["window_left"]) >= 0:
+            window_left = int(
+                cast(int, descriptor.provenance["window_left"])
+            )
+            if window_left >= 0:
                 arguments.append(
                     # The canonical carrier stores an inclusive left offset
                     # (key >= q-left). The physical WMMA kernel accepts a band
                     # width W and masks age >= W, hence W=left+1.
-                    ctypes.c_int64(
-                        int(descriptor.provenance["window_left"]) + 1
-                    )
+                    ctypes.c_int64(window_left + 1)
                 )
-            if float(descriptor.provenance["softcap"]) > 0.0:
+            softcap = float(
+                cast(float, descriptor.provenance["softcap"])
+            )
+            if softcap > 0.0:
                 arguments.append(
-                    ctypes.c_float(float(descriptor.provenance["softcap"]))
+                    ctypes.c_float(softcap)
                 )
             if attention_bias:
                 arguments.extend(

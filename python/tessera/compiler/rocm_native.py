@@ -16,6 +16,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from .graph_ir import GraphIRModule
 from .native_artifact import (
@@ -579,7 +580,9 @@ def _attention_contract(
     dtypes = {args[name].ir_type.dtype for name in (q_name, k_name, v_name)}
     if len(dtypes) != 1 or not dtypes <= {"fp16", "bf16"}:
         return None
-    dtype = dtypes.pop()
+    # The set-membership guard above excludes the optional/unknown dtype
+    # state carried by Graph IR. Preserve that proof for static consumers.
+    dtype = cast(str, dtypes.pop())
     q_shape = _shape(module, q_name)
     k_shape = _shape(module, k_name)
     v_shape = _shape(module, v_name)

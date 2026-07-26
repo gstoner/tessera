@@ -1,8 +1,9 @@
-"""Exact-device ROCm attention-carrier correctness and operation-total timing.
+"""Exact-device canonical streaming-attention correctness and timing.
 
-This benchmark enters through ``tile.attention_kernel`` and the native package
-path, not through a handwritten directive. It intentionally uses host-wall
-operation-total timing because WSL HIP events may report zero-duration samples.
+The default case enters through rank-4 ``tessera.flash_attn``, lowers through
+the shared KV-block recurrence, and reaches ROCm without rebuilding semantics
+in ``tile.attention_kernel``. It intentionally uses host-wall operation-total
+timing because WSL HIP events may report zero-duration samples.
 """
 
 from __future__ import annotations
@@ -62,7 +63,7 @@ def _module(b: int, hq: int, hkv: int, sq: int, sk: int, d: int) -> GraphIRModul
                             "scale": d**-0.5,
                             "causal": True,
                             "window": (8, 0),
-                            "softcap": 8.0,
+                            "softcap": 0.0,
                             "dropout_p": 0.0,
                         },
                     )
@@ -82,7 +83,6 @@ def _reference(q: np.ndarray, k: np.ndarray, v: np.ndarray) -> np.ndarray:
         for head in range(hq):
             kv_head = head // (hq // hkv)
             scores = (q[batch, head].astype(np.float32) @ k[batch, kv_head].astype(np.float32).T) * scale
-            scores = 8.0 * np.tanh(scores / 8.0)
             qpos = np.arange(sq)[:, None]
             kpos = np.arange(sk)[None, :]
             valid = (kpos <= qpos) & ((qpos - kpos) <= 8)
@@ -323,7 +323,6 @@ def main() -> int:
         "Hq": shape[1],
         "KvRatio": shape[1] // shape[2],
         "Window": 8,
-        "Softcap": 8.0,
     }
     started = time.perf_counter()
     _submit_rocm_gfx1151_native(package.image, package.descriptor, buffers, scalars, None)
@@ -355,7 +354,7 @@ def main() -> int:
         KERNEL_WALL_BASELINE_MS * (1.0 + KERNEL_WALL_MAX_REGRESSION)
     )
     record = {
-        "schema": "tessera.rocm.attention_carrier.benchmark.v2",
+        "schema": "tessera.rocm.canonical_streaming_attention.benchmark.v1",
         "device": os.environ.get("TESSERA_ROCM_CHIP", "gfx1151"),
         "shape": {
             "B": shape[0],
@@ -365,7 +364,7 @@ def main() -> int:
             "Sk": shape[4],
             "D": shape[5],
         },
-        "carrier": "tile.attention_kernel",
+        "semantic_route": package.descriptor.provenance["semantic_route"],
         "schedule": package.descriptor.provenance["schedule"],
         "compile_ms": compile_ms,
         "cold_operation_total_ms": cold_operation_total_ms,

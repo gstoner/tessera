@@ -1380,21 +1380,23 @@ foundation rather than lowering attention as one whole-tensor sequence:
    values. It neither emits `#tile.buffer_ref` names nor annotation-only
    `#tile.pipeline_state`; the pipeline legality pass rejects the latter.
    NVIDIA's Schedule→Tile path consumes structured per-operand layouts directly.
-4. The deterministic SM120 backward launch contract explicitly assigns
-   zero-workspace ownership to each output element. A canonical shared
-   split-workspace backward loop, rank-4 batch/head distribution, and a direct
-   target/runtime consumer of the shared forward loop remain open.
+4. Static rank-4 attention now distributes through explicit batch/query-head
+   loops, maps GQA heads before rank reduction, and reuses the one canonical
+   KV-block recurrence. ROCm consumes this loop directly through gfx1151
+   Target IR/runtime with SSA-owned LDS planning and exact-device proof. A
+   canonical shared split-workspace backward loop and direct Apple/NVIDIA
+   consumers remain open.
 5. Exact-device evidence is not transferable. NVIDIA SM120, Apple, and ROCm
    must each lower the shared contract into architecture-owned schedules and
    retain numerical, resource, cache, device-event, and end-to-end proof before
    changing selectors.
 
-ROCm now directly consumes the shared carrier's combined dropout, bias,
-softcap, ragged GQA/MQA, and causal/window semantics through its gfx1151 WMMA
-route, with the scalar recurrence retained as the reference. This closes the
-ROCm forward feature-combination sub-gate only; direct consumption of the
-canonical KV-block loop, rank-4 shared distribution, and canonical
-split-workspace backward remain open.
+ROCm consumes the canonical rank-4 KV-block loop directly for bias-free,
+non-softcap MHA/GQA, causal left-window, ragged, and deterministic-dropout
+forms. The combined bias+softcap path remains on the launch carrier until
+those modifiers gain shared recurrence semantics. Exact gfx1151 numerical and
+resident host-wall proof passed; canonical split-workspace backward IR remains
+open.
 
 Cross-backend sync `ROCM-E2E-ATTENTION-BACKWARD-2026-07-26` additionally maps
 the canonical launch-level backward carrier to one gfx1151 five-entry HSACO and

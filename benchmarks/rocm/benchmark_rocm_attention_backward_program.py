@@ -29,6 +29,9 @@ from tessera.compiler.graph_ir import (  # noqa: E402
     IROp,
     IRType,
 )
+from tessera.compiler.attention_contract import (  # noqa: E402
+    reference_attention_backward_split_reduced,
+)
 from tessera.compiler.rocm_native import package_attention_backward  # noqa: E402
 from tessera.runtime import (  # noqa: E402
     _submit_rocm_gfx1151_attention_backward_program,
@@ -105,38 +108,19 @@ def _reference(
     value: np.ndarray,
     bias: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    b, hq, sq, d = q.shape
-    hkv, sk = key.shape[1:3]
-    scale = d**-0.5
-    dq = np.zeros(q.shape, dtype=np.float32)
-    dk = np.zeros(key.shape, dtype=np.float32)
-    dv = np.zeros(value.shape, dtype=np.float32)
-    for batch in range(b):
-        for head in range(hq):
-            kv_head = head // (hq // hkv)
-            qf = q[batch, head].astype(np.float32)
-            kf = key[batch, kv_head].astype(np.float32)
-            vf = value[batch, kv_head].astype(np.float32)
-            dof = do[batch, head].astype(np.float32)
-            raw = scale * (qf @ kf.T) + bias[batch, head]
-            tanh = np.tanh(raw / 8.0)
-            scores = 8.0 * tanh
-            qpos = np.arange(sq)[:, None]
-            kpos = np.arange(sk)[None, :]
-            valid = (kpos <= qpos) & ((qpos - kpos) <= 8)
-            scores = np.where(valid, scores, -np.inf)
-            row_max = np.max(scores, axis=1, keepdims=True)
-            weights = np.exp(scores - row_max)
-            weights = np.where(valid, weights, 0.0)
-            weights /= np.sum(weights, axis=1, keepdims=True)
-            output = weights @ vf
-            dp = dof @ vf.T
-            delta = np.sum(output * dof, axis=1, keepdims=True)
-            ds = weights * (dp - delta) * (1.0 - tanh * tanh)
-            dq[batch, head] = scale * (ds @ kf)
-            dk[batch, kv_head] += scale * (ds.T @ qf)
-            dv[batch, kv_head] += weights.T @ dof
-    return dq, dk, dv
+    return reference_attention_backward_split_reduced(
+        do,
+        q,
+        key,
+        value,
+        split_count=2,
+        scale=q.shape[-1] ** -0.5,
+        bias=bias,
+        causal=True,
+        window_left=8,
+        window_right=0,
+        softcap=8.0,
+    )
 
 
 def _record(

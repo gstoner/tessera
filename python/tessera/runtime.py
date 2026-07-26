@@ -3018,6 +3018,358 @@ def _submit_nvidia_sm120_native(
     )
 
 
+def _submit_rocm_gfx1151_attention_backward_program(
+    program: Any,
+    buffers: Mapping[str, Any],
+    *,
+    warmup: int = 0,
+    iterations: int = 1,
+) -> dict[str, Any]:
+    """Run one resident compiler-owned gfx1151 attention-backward program.
+
+    The HSACO, user buffers, and one launch-owned workspace allocation stay
+    resident across forward recompute, prepass, split dK/dV, reduction, and dQ.
+    Timings are synchronized host-wall samples for the whole ordered program.
+    """
+    import numpy as np
+
+    from tessera.compiler.rocm_native import (
+        GFX1151_ATTN_BWD_DKDV_ABI,
+        GFX1151_ATTN_BWD_DQ_ABI,
+        GFX1151_ATTN_BWD_PRE_ABI,
+        GFX1151_ATTN_BWD_REDUCE_ABI,
+        GFX1151_ATTN_BF16_ABI,
+        GFX1151_ATTN_F16_ABI,
+        ROCMNativeProgram,
+    )
+
+    if not isinstance(program, ROCMNativeProgram):
+        raise TypeError("gfx1151 attention backward requires ROCMNativeProgram")
+    if warmup < 0 or iterations <= 0:
+        raise ValueError("warmup must be nonnegative and iterations positive")
+    expected_abis = (
+        GFX1151_ATTN_F16_ABI
+        if program.image.entry_points[0].abi_id == GFX1151_ATTN_F16_ABI
+        else GFX1151_ATTN_BF16_ABI,
+        GFX1151_ATTN_BWD_PRE_ABI,
+        GFX1151_ATTN_BWD_DKDV_ABI,
+        GFX1151_ATTN_BWD_REDUCE_ABI,
+        GFX1151_ATTN_BWD_DQ_ABI,
+    )
+    if tuple(item.abi_id for item in program.descriptors) != expected_abis:
+        raise RuntimeError("gfx1151 attention backward launch stages are not canonical")
+    provenance = program.descriptors[0].provenance
+    b, hq, hkv, sq, sk, d, dv = (
+        int(value) for value in cast(list[int], provenance["shape"])
+    )
+    if d != dv:
+        raise RuntimeError("gfx1151 attention backward program requires D == Dv")
+    names = {
+        item.name
+        for descriptor in program.descriptors
+        for item in descriptor.buffers
+        if item.layout != "program_workspace"
+    }
+    missing = names - buffers.keys()
+    if missing:
+        raise RuntimeError(
+            "gfx1151 attention backward is missing buffers "
+            + ", ".join(sorted(missing))
+        )
+    forward_inputs = [
+        item.name
+        for item in program.descriptors[0].buffers
+        if item.direction == "input" and item.layout != "program_workspace"
+    ]
+    q_name, k_name, v_name = forward_inputs[:3]
+    bias_name = forward_inputs[3] if len(forward_inputs) == 4 else None
+    pre_inputs = [
+        item.name
+        for item in program.descriptors[1].buffers
+        if item.layout != "program_workspace"
+    ]
+    do_name = next(name for name in pre_inputs if name not in {q_name, k_name, bias_name})
+    dq_name = next(
+        item.name
+        for item in program.descriptors[-1].buffers
+        if item.direction == "output" and item.layout != "program_workspace"
+    )
+    kv_outputs = tuple(
+        item.name
+        for item in program.descriptors[2].buffers
+        if item.direction == "inout" and item.layout != "program_workspace"
+    )
+    if len(kv_outputs) != 2 or kv_outputs[0] == kv_outputs[1]:
+        raise RuntimeError("gfx1151 attention backward requires distinct dK and dV outputs")
+    dk_name, dv_name = kv_outputs
+    q, key, value, do = (buffers[name] for name in (q_name, k_name, v_name, do_name))
+    dq, dk, dv_out = (buffers[name] for name in (dq_name, dk_name, dv_name))
+    expected_storage = (
+        np.float16
+        if expected_abis[0] == GFX1151_ATTN_F16_ABI
+        else _bfloat16_dtype()
+    )
+    if expected_storage is None:
+        raise RuntimeError("gfx1151 bf16 attention backward requires ml_dtypes")
+    if (
+        tuple(q.shape) != (b, hq, sq, d)
+        or tuple(key.shape) != (b, hkv, sk, d)
+        or tuple(value.shape) != (b, hkv, sk, d)
+        or tuple(do.shape) != (b, hq, sq, d)
+        or any(array.dtype != expected_storage for array in (q, key, value, do))
+        or tuple(dq.shape) != (b, hq, sq, d)
+        or tuple(dk.shape) != (b, hkv, sk, d)
+        or tuple(dv_out.shape) != (b, hkv, sk, d)
+        or any(array.dtype != np.float32 for array in (dq, dk, dv_out))
+    ):
+        raise RuntimeError(
+            "gfx1151 attention backward arrays disagree with program shape/dtype"
+        )
+    bias = buffers[bias_name] if bias_name is not None else None
+    if bias is not None and (
+        tuple(bias.shape) != (b, hq, sq, sk) or bias.dtype != np.float32
+    ):
+        raise RuntimeError("gfx1151 attention backward bias disagrees with program")
+    if any(
+        not array.flags.c_contiguous
+        for array in (q, key, value, do, dq, dk, dv_out)
+    ):
+        raise RuntimeError("gfx1151 attention backward buffers must be contiguous")
+
+    hip = _load_hip_for_launch()
+    if hip is None or hip.hipInit(0) != 0:
+        raise RuntimeError("libamdhip64.so or a usable gfx1151 device is unavailable")
+    module = ctypes.c_void_p()
+    image_storage = ctypes.create_string_buffer(program.image.payload)
+    if (
+        hip.hipModuleLoadData(
+            ctypes.byref(module), ctypes.cast(image_storage, ctypes.c_void_p)
+        )
+        != 0
+    ):
+        raise RuntimeError("gfx1151 attention backward HSACO module load failed")
+    allocations: list[ctypes.c_void_p] = []
+    try:
+        functions: list[ctypes.c_void_p] = []
+        for descriptor in program.descriptors:
+            function = ctypes.c_void_p()
+            if (
+                hip.hipModuleGetFunction(
+                    ctypes.byref(function),
+                    module,
+                    descriptor.entry_symbol.encode(),
+                )
+                != 0
+            ):
+                raise RuntimeError(
+                    f"gfx1151 attention backward symbol "
+                    f"{descriptor.entry_symbol!r} not found"
+                )
+            functions.append(function)
+
+        host_inputs = {
+            q_name: np.ascontiguousarray(q),
+            k_name: np.ascontiguousarray(key),
+            v_name: np.ascontiguousarray(value),
+            do_name: np.ascontiguousarray(do),
+        }
+        if bias_name is not None:
+            assert bias is not None
+            host_inputs[bias_name] = np.ascontiguousarray(bias)
+        device: dict[str, ctypes.c_void_p] = {}
+        for name, array in (
+            *host_inputs.items(),
+            (dq_name, dq),
+            (dk_name, dk),
+            (dv_name, dv_out),
+        ):
+            pointer = ctypes.c_void_p()
+            if hip.hipMalloc(ctypes.byref(pointer), max(int(array.nbytes), 4)) != 0:
+                raise RuntimeError("gfx1151 attention backward hipMalloc failed")
+            allocations.append(pointer)
+            device[name] = pointer
+        workspace_pointer = ctypes.c_void_p()
+        if (
+            hip.hipMalloc(
+                ctypes.byref(workspace_pointer), max(program.workspace.bytes, 4)
+            )
+            != 0
+        ):
+            raise RuntimeError("gfx1151 attention backward workspace allocation failed")
+        allocations.append(workspace_pointer)
+        workspace_address = workspace_pointer.value
+        if workspace_address is None:
+            raise RuntimeError(
+                "gfx1151 attention backward workspace allocation returned null"
+            )
+        slices = {
+            item.name: ctypes.c_void_p(workspace_address + item.offset)
+            for item in program.workspace_slices
+        }
+        for name, array in host_inputs.items():
+            if (
+                hip.hipMemcpy(
+                    device[name],
+                    array.ctypes.data_as(ctypes.c_void_p),
+                    int(array.nbytes),
+                    1,
+                )
+                != 0
+            ):
+                raise RuntimeError(
+                    "gfx1151 attention backward host-to-device copy failed"
+                )
+
+        nq = b * hq * sq * d
+        nkv = b * hkv * sk * d
+        nl = b * hq * sq
+
+        def memref(pointer: ctypes.c_void_p, size: int) -> list[Any]:
+            return [
+                ctypes.c_void_p(pointer.value),
+                ctypes.c_void_p(pointer.value),
+                ctypes.c_int64(0),
+                ctypes.c_int64(size),
+                ctypes.c_int64(1),
+            ]
+
+        tail: list[Any] = []
+        if hq != hkv:
+            tail.extend((ctypes.c_int64(hq), ctypes.c_int64(hq // hkv)))
+        window_left = int(cast(int, provenance["window_left"]))
+        if window_left >= 0:
+            tail.append(ctypes.c_int64(window_left + 1))
+        softcap = float(cast(float, provenance["softcap"]))
+        if softcap > 0.0:
+            tail.append(ctypes.c_float(softcap))
+        bias_tail = (
+            memref(device[bias_name], b * hq * sq * sk)
+            if bias_name is not None
+            else []
+        )
+        sq_arg = ctypes.c_int64(sq)
+        sk_arg = ctypes.c_int64(sk)
+        scale_arg = ctypes.c_float(float(cast(float, provenance["scale"])))
+        causal_arg = ctypes.c_int64(int(bool(provenance["causal"])))
+        common_tail = [sq_arg, sk_arg, scale_arg, causal_arg] + tail + bias_tail
+        argument_sets = (
+            memref(device[q_name], nq)
+            + memref(device[k_name], nkv)
+            + memref(device[v_name], nkv)
+            + memref(slices["forward_o"], nq)
+            + common_tail,
+            memref(device[q_name], nq)
+            + memref(device[k_name], nkv)
+            + memref(device[do_name], nq)
+            + memref(slices["forward_o"], nq)
+            + memref(slices["row_lse"], nl)
+            + memref(slices["row_delta"], nl)
+            + common_tail,
+            memref(device[q_name], nq)
+            + memref(device[k_name], nkv)
+            + memref(device[v_name], nkv)
+            + memref(device[do_name], nq)
+            + memref(slices["row_lse"], nl)
+            + memref(slices["row_delta"], nl)
+            + memref(device[dk_name], nkv)
+            + memref(device[dv_name], nkv)
+            + memref(slices["partial_dk"], nkv)
+            + memref(slices["partial_dv"], nkv)
+            + common_tail,
+            memref(device[dk_name], nkv)
+            + memref(device[dv_name], nkv)
+            + memref(slices["partial_dk"], nkv)
+            + memref(slices["partial_dv"], nkv)
+            + [ctypes.c_int64(nkv)],
+            memref(device[q_name], nq)
+            + memref(device[k_name], nkv)
+            + memref(device[v_name], nkv)
+            + memref(device[do_name], nq)
+            + memref(slices["row_lse"], nl)
+            + memref(slices["row_delta"], nl)
+            + memref(device[dq_name], nq)
+            + common_tail,
+        )
+        grids = (
+            ((sq + 15) // 16, b * hq, 32),
+            ((sq + 15) // 16, b * hq, 32),
+            (((sk + 15) // 16) * 2, b * hq, 32),
+            ((nkv + 255) // 256, 1, 256),
+            ((sq + 15) // 16, b * hq, 32),
+        )
+
+        def launch(function: ctypes.c_void_p, arguments: list[Any], grid: tuple[int, int, int]) -> None:
+            array = (ctypes.c_void_p * len(arguments))()
+            for index, value_arg in enumerate(arguments):
+                array[index] = ctypes.cast(ctypes.byref(value_arg), ctypes.c_void_p)
+            rc = hip.hipModuleLaunchKernel(
+                function,
+                grid[0],
+                grid[1],
+                1,
+                grid[2],
+                1,
+                1,
+                0,
+                None,
+                array,
+                None,
+            )
+            if rc != 0:
+                raise RuntimeError(
+                    f"gfx1151 attention backward kernel launch failed rc={rc}"
+                )
+
+        def run_program() -> None:
+            for name in (dk_name, dv_name):
+                hip.hipMemset(device[name], 0, nkv * 4)
+            for name in ("partial_dk", "partial_dv"):
+                hip.hipMemset(slices[name], 0, nkv * 4)
+            for function, arguments, grid in zip(
+                functions, argument_sets, grids, strict=True
+            ):
+                launch(function, arguments, grid)
+            if hip.hipDeviceSynchronize() != 0:
+                raise RuntimeError(
+                    "gfx1151 attention backward synchronization failed"
+                )
+
+        for _ in range(warmup):
+            run_program()
+        samples: list[float] = []
+        for _ in range(iterations):
+            started_ns = time.perf_counter_ns()
+            run_program()
+            samples.append((time.perf_counter_ns() - started_ns) / 1_000_000.0)
+        for name, output in ((dq_name, dq), (dk_name, dk), (dv_name, dv_out)):
+            if (
+                hip.hipMemcpy(
+                    output.ctypes.data_as(ctypes.c_void_p),
+                    device[name],
+                    int(output.nbytes),
+                    2,
+                )
+                != 0
+            ):
+                raise RuntimeError(
+                    "gfx1151 attention backward device-to-host copy failed"
+                )
+        return {
+            "outputs": (dq, dk, dv_out),
+            "kernel_wall_samples_ms": samples,
+            "workspace_bytes": program.workspace.bytes,
+            "entry_symbols": tuple(
+                descriptor.entry_symbol for descriptor in program.descriptors
+            ),
+        }
+    finally:
+        for pointer in reversed(allocations):
+            hip.hipFree(pointer)
+        unload = getattr(hip, "hipModuleUnload", None)
+        if unload is not None and module.value:
+            unload(module)
+
+
 def _submit_rocm_gfx1151_native(
     image: NativeImageArtifact,
     descriptor: LaunchDescriptor,

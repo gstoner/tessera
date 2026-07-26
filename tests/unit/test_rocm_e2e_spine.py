@@ -16,6 +16,10 @@ from tessera.compiler.native_artifact import (
     DeviceLibraryRecord,
 )
 from tessera.compiler.rocm_native import (
+    GFX1151_ATTN_BWD_DKDV_ABI,
+    GFX1151_ATTN_BWD_DQ_ABI,
+    GFX1151_ATTN_BWD_PRE_ABI,
+    GFX1151_ATTN_BWD_REDUCE_ABI,
     GFX1151_ATTN_F16_ABI,
     GFX1151_MOE_DISPATCH_F32_ABI,
     GFX1151_PAGED_KV_F32_ABI,
@@ -24,21 +28,25 @@ from tessera.compiler.rocm_native import (
     GFX1151_REDUCE_F32_ABI,
     GFX1151_SOFTMAX_F32_ABI,
     _driver_selected_device_libraries,
+    emit_attention_backward_tile_ir,
     emit_moe_dispatch_tile_ir,
     emit_attention_tile_ir,
     emit_reduce_tile_ir,
     emit_paged_kv_read_tile_ir,
     emit_softmax_tile_ir,
+    package_attention_backward,
     package_moe_dispatch,
     package_attention,
     package_reduction,
     package_paged_kv_read,
     package_softmax,
+    requests_attention_backward,
     requests_moe_dispatch,
     requests_attention,
     requests_reduction,
     requests_paged_kv_read,
     requests_softmax,
+    supports_attention_backward,
     supports_moe_dispatch,
     supports_attention,
     supports_reduction,
@@ -93,6 +101,66 @@ def _attention_module(
                     )
                 ],
                 return_values=["%o"],
+            )
+        ]
+    )
+
+
+def _attention_backward_module(
+    *,
+    dtype: str = "fp16",
+    hq: int = 4,
+    hkv: int = 2,
+    causal: bool = True,
+    bias: bool = True,
+    dropout_p: float = 0.0,
+) -> GraphIRModule:
+    element = {"fp16": "f16", "bf16": "bf16"}[dtype]
+    q = IRType(f"tensor<1x{hq}x17x64x{element}>", ("1", str(hq), "17", "64"), dtype)
+    key = IRType(f"tensor<1x{hkv}x19x64x{element}>", ("1", str(hkv), "19", "64"), dtype)
+    value = IRType(f"tensor<1x{hkv}x19x64x{element}>", ("1", str(hkv), "19", "64"), dtype)
+    do = IRType(f"tensor<1x{hq}x17x64x{element}>", ("1", str(hq), "17", "64"), dtype)
+    dq = IRType(f"tensor<1x{hq}x17x64xf32>", ("1", str(hq), "17", "64"), "fp32")
+    dk = IRType(f"tensor<1x{hkv}x19x64xf32>", ("1", str(hkv), "19", "64"), "fp32")
+    dv = IRType(f"tensor<1x{hkv}x19x64xf32>", ("1", str(hkv), "19", "64"), "fp32")
+    bias_type = IRType(f"tensor<1x{hq}x17x19xf32>", ("1", str(hq), "17", "19"), "fp32")
+    args = [
+        IRArg("do", do),
+        IRArg("q", q),
+        IRArg("key", key),
+        IRArg("v", value),
+    ]
+    operands = ["%do", "%q", "%key", "%v"]
+    operand_types = [str(do), str(q), str(key), str(value)]
+    if bias:
+        args.append(IRArg("bias", bias_type))
+        operands.append("%bias")
+        operand_types.append(str(bias_type))
+    return GraphIRModule(
+        functions=[
+            GraphIRFunction(
+                name="gfx1151_attention_backward",
+                args=args,
+                result_types=[dq, dk, dv],
+                body=[
+                    IROp(
+                        result="dq,dk,dv",
+                        op_name="tessera.flash_attn_bwd",
+                        operands=operands,
+                        operand_types=operand_types,
+                        result_type=None,
+                        kwargs={
+                            "scale": 0.125,
+                            "causal": causal,
+                            "window": (64, 0) if causal else None,
+                            "softcap": 8.0,
+                            "dropout_p": dropout_p,
+                            "route": "deterministic_direct",
+                            "deterministic": True,
+                        },
+                    )
+                ],
+                return_values=["%dq", "%dk", "%dv"],
             )
         ]
     )
@@ -301,6 +369,29 @@ def _fake_attention_compile(tile_ir: str):
     )
 
 
+def _fake_attention_backward_compile(tile_ir: str):
+    assert "tile.attention_kernel" in tile_ir
+    assert "tile.attention_backward_kernel" in tile_ir
+    assert 'route = "deterministic_direct"' in tile_ir
+    libraries = (
+        DeviceLibraryRecord("rocm.ocml", "1" * 64, "compiler_driver"),
+        DeviceLibraryRecord("rocm.ockl", "2" * 64, "compiler_driver"),
+        DeviceLibraryRecord("rocm.oclc_isa_version_1151", "3" * 64, "compiler_driver"),
+    )
+    return (
+        (
+            'module { "tessera_rocm.flash_attn"() : () -> () '
+            '"tessera_rocm.flash_attn_bwd"() : () -> () }'
+        ),
+        "gpu.binary @binary",
+        b"\x7fELFattention-backward",
+        "compiler",
+        "toolchain",
+        libraries,
+        "cold",
+    )
+
+
 def test_rocm_attention_carrier_selects_wmma_and_owns_native_package(monkeypatch) -> None:
     module = _attention_module(bias=True, softcap=0.0)
     assert requests_attention(module)
@@ -367,6 +458,69 @@ def test_rocm_attention_package_owns_dropout_replay_and_combined_features(
     ]
     assert package.descriptor.provenance["dropout_p"] == 0.25
     assert package.descriptor.provenance["dropout_seed"] == 37
+
+
+def test_rocm_attention_backward_package_owns_ordered_multi_entry_workspace(
+    monkeypatch,
+) -> None:
+    module = _attention_backward_module()
+    assert requests_attention_backward(module)
+    assert supports_attention_backward(module)
+    source = emit_attention_backward_tile_ir(
+        forward_entry="attention_forward",
+        backward_entry="attention_backward",
+        storage="f16",
+        dims=(1, 4, 2, 17, 19, 64, 64),
+        scale=0.125,
+        causal=True,
+        bias=True,
+        window_left=64,
+        window_right=0,
+        softcap=8.0,
+    )
+    assert "tile.attention_kernel" in source
+    assert "tile.attention_backward_kernel" in source
+    monkeypatch.setattr(
+        "tessera.compiler.rocm_native._compile_attention_backward_tile_ir",
+        _fake_attention_backward_compile,
+    )
+    program = package_attention_backward(
+        module, pipeline_name="tessera-lower-to-rocm"
+    )
+    assert [item.abi_id for item in program.descriptors] == [
+        GFX1151_ATTN_F16_ABI,
+        GFX1151_ATTN_BWD_PRE_ABI,
+        GFX1151_ATTN_BWD_DKDV_ABI,
+        GFX1151_ATTN_BWD_REDUCE_ABI,
+        GFX1151_ATTN_BWD_DQ_ABI,
+    ]
+    assert [item.provenance["stage"] for item in program.descriptors] == [
+        "forward_recompute",
+        "pre",
+        "dkdv_split",
+        "dkdv_reduce",
+        "dq",
+    ]
+    assert [item.name for item in program.workspace_slices] == [
+        "forward_o",
+        "row_lse",
+        "row_delta",
+        "partial_dk",
+        "partial_dv",
+    ]
+    assert program.workspace.bytes % 256 == 0
+    assert all(
+        item.workspace.bytes == program.workspace.bytes
+        for item in program.descriptors
+    )
+    assert program.descriptors[2].provenance["workspace_owner"] == "program_launch"
+    assert program.descriptors[2].provenance["deterministic"] is True
+
+
+def test_rocm_attention_backward_optimized_contract_keeps_dropout_on_reference() -> None:
+    assert not supports_attention_backward(
+        _attention_backward_module(dropout_p=0.25)
+    )
 
 
 def test_rocm_softmax_emitter_uses_shared_typed_envelope() -> None:

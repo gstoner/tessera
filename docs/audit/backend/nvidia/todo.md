@@ -8,6 +8,12 @@ last_updated: 2026-07-26
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `ROCM-E2E-ATTENTION-BACKWARD-2026-07-26` is not applicable
+to NVIDIA physical execution. It adds a ROCm-owned five-entry HSACO and
+gfx1151 split/reduced launch workspace without changing the shared launch
+descriptor schema or canonical backward loop. AMD WMMA kernels, workspace
+topology, exact-device gradients, timings, and selector state do not transfer.
+
 The ROCm optimized-attention feature follow-up under
 `ROCM-E2E-ATTENTION-CARRIERS-2026-07-26` adds AMD-only deterministic dropout
 replay and combined bias+softcap consumption to the gfx1151 WMMA schedule,

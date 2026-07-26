@@ -1242,6 +1242,8 @@ LogicalResult AttentionBackwardKernelOp::verify() {
   auto route = getOperation()->getAttrOfType<StringAttr>("route");
   auto deterministic = getOperation()->getAttrOfType<BoolAttr>("deterministic");
   auto workspace = getOperation()->getAttrOfType<IntegerAttr>("workspace_bytes");
+  auto workspaceOwner =
+      getOperation()->getAttrOfType<StringAttr>("workspace_owner");
   if (!storage || (storage.getValue() != "f16" &&
                    storage.getValue() != "bf16" &&
                    storage.getValue() != "f32"))
@@ -1271,6 +1273,9 @@ LogicalResult AttentionBackwardKernelOp::verify() {
     return emitOpError("deterministic_direct requires deterministic=true");
   if (!workspace || workspace.getInt() != 0)
     return emitOpError("deterministic_direct requires workspace_bytes=0");
+  if (!workspaceOwner || workspaceOwner.getValue() != "output_element")
+    return emitOpError(
+        "deterministic_direct requires workspace_owner=\"output_element\"");
   return success();
 }
 
@@ -1438,6 +1443,13 @@ LogicalResult TMADescriptorOp::verify() {
     return emitOpError("requires expect_tx > 0 when assigned");
   if (static_cast<bool>(slot) != static_cast<bool>(expect))
     return emitOpError("requires slot and expect_tx to be assigned together");
+  if (auto shape =
+          getOperation()->getAttrOfType<DenseI64ArrayAttr>("source_shape")) {
+    if (shape.empty() ||
+        llvm::any_of(shape.asArrayRef(),
+                     [](int64_t extent) { return extent <= 0; }))
+      return emitOpError("source_shape must contain positive logical extents");
+  }
   return success();
 }
 
@@ -1451,6 +1463,18 @@ LogicalResult TMACopyAsyncOp::verify() {
   if (getBarrier() && !expect)
     return emitOpError(
         "an SSA mbarrier binding requires explicit expect_tx bytes");
+  int64_t coordinateCount = 0;
+  if (auto count =
+          getOperation()->getAttrOfType<IntegerAttr>("coordinate_count"))
+    coordinateCount = count.getInt();
+  if (coordinateCount < 0 ||
+      static_cast<size_t>(coordinateCount) > getDependencies().size())
+    return emitOpError(
+        "coordinate_count must describe a prefix of dependency operands");
+  for (Value coordinate :
+       getDependencies().take_front(static_cast<size_t>(coordinateCount)))
+    if (!coordinate.getType().isIndex())
+      return emitOpError("TMA coordinates must be index-typed SSA operands");
   return success();
 }
 

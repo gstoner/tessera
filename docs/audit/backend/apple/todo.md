@@ -3,10 +3,35 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-07-25
+last_updated: 2026-07-26
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+Cross-backend sync `PACKED-LEGALIZE-CAPABILITY-2026-07-26` makes terminal
+sub-byte storage a target + operation + physical-descriptor + complete
+def-use-consumer decision. The newly admitted packed load/unpack, supported
+round trip, packed matmul, and explicit conversion paths are NVIDIA SM120
+consumers only. Apple remains disabled for generic terminal FP4/FP6
+legalization until architecture-owned Metal physical consumers and exact
+device proof land; no CUDA schedule or evidence transfers. The shared
+`#tile.buffer_ref` compatibility reader is intentionally retained for Apple
+migration fixtures during that work. Apple capabilities, execution rows, and
+selectors are unchanged.
+
+Cross-backend sync `CORE-STREAMING-ATTN-2026-07-26` replaces the shared
+rank-2 FlashAttention whole-KV lowering with an explicit KV-block `scf.for`
+carrying the FP32 output accumulator, running maximum, normalization sum,
+producer/consumer `!tile.pipeline_state` values, and absolute boundary offset.
+The shared TMA-shaped seam now retains typed block coordinates and logical
+source extents for ragged zero fill; NVIDIA WarpSpecialization no longer emits
+name-based `#tile.buffer_ref` or annotation-only `#tile.pipeline_state`
+metadata. Apple is **follow-up required** to map the same recurrence onto an
+architecture-owned Metal/MPS attention schedule and threadgroup allocation
+identity. CUDA TMA descriptors, mbarriers, SM120 execution, resources, timings,
+and selectors do not transfer. Rank-4 batch/head distribution and deterministic
+backward workspace materialization remain open shared work; no Apple capability
+or selector changes in this synchronization slice.
 
 Cross-backend sync `CORE-GEMM-KLOOP-2026-07-25` changes the shared
 Graph/Schedule→Tile GEMM contract to explicit M/N/K `scf.for`, FP32/INT32

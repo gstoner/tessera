@@ -174,6 +174,9 @@ struct NVTMADescriptorPass
         st.addOperands({src});
         st.addAttribute("tile_rows", b.getI64IntegerAttr(tileRows));
         st.addAttribute("tile_cols", b.getI64IntegerAttr(tileCols));
+        if (auto shape =
+                desc->getAttrOfType<DenseI64ArrayAttr>("source_shape"))
+          st.addAttribute("source_shape", shape);
         st.addAttribute("slot", b.getI64IntegerAttr(nextSlot));
         int64_t expectTx = tileRows * tileCols * 2;
         st.addAttribute("expect_tx", b.getI64IntegerAttr(expectTx));

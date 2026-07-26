@@ -7,7 +7,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **482** ops in `primitive_coverage` registry.
-- **4532** total Python-test references, **1118** total lit-fixture references.
+- **4532** total Python-test references, **1128** total lit-fixture references.
 - **83** ops have **zero** references in either test surface.
 - **119** ops have ≤1 reference ("thinly tested").
 - **153** ops have ≥10 references ("well tested").
@@ -17,9 +17,9 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 | Op | py refs | lit refs | total | neg | dtypes |
 |----|--------:|---------:|------:|----:|--------|
-| `matmul` |  445 |  240 |  685 |  19 | `bf16`, `f16`, `f32`, `f64` … |
+| `matmul` |  445 |  242 |  687 |  19 | `bf16`, `f16`, `f32`, `f64` … |
 | `softmax` |  140 |   44 |  184 |  31 | `bf16`, `f16`, `f32`, `f64` … |
-| `flash_attn` |  112 |   60 |  172 |   9 | `bf16`, `f16`, `f32`, `f64` … |
+| `flash_attn` |  112 |   64 |  176 |   9 | `bf16`, `f16`, `f32`, `f64` … |
 | `add` |  118 |   32 |  150 |  10 | `bf16`, `f16`, `f32`, `f64` … |
 | `relu` |  111 |   36 |  147 |   9 | `bf16`, `f16`, `f32`, `f64` … |
 | `rmsnorm` |   99 |   18 |  117 |   6 | `bf16`, `f16`, `f32`, `f64` … |
@@ -28,9 +28,9 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 | `silu` |   86 |    8 |   94 |   5 | `bf16`, `f16`, `f32`, `f64` … |
 | `gemm` |   83 |    2 |   85 |   8 | `bf16`, `f16`, `f32`, `fp16` … |
 | `selective_ssm` |   71 |   10 |   81 |   3 | `bf16`, `f16`, `fp16`, `fp32` |
+| `cast` |   20 |   56 |   76 |   1 | `fp16`, `fp32`, `int8` |
 | `gelu` |   53 |   22 |   75 |   0 | `bf16`, `f16`, `f32`, `f64` … |
 | `layer_norm` |   59 |   16 |   75 |   3 | `bf16`, `f16`, `f32`, `fp16` … |
-| `cast` |   20 |   52 |   72 |   1 | `fp16`, `fp32`, `int8` |
 | `transpose` |   30 |   37 |   67 |   0 | `bf16`, `f16`, `f32`, `fp16` … |
 | `attn_local_window_2d` |   36 |   25 |   61 |   1 | `fp16`, `fp32` |
 | `msa_sparse_attention` |   47 |   11 |   58 |   1 |  |

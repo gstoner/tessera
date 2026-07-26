@@ -2201,6 +2201,7 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
   auto route = op->getAttrOfType<StringAttr>("route");
   auto deterministic = op->getAttrOfType<BoolAttr>("deterministic");
   auto workspace = op->getAttrOfType<IntegerAttr>("workspace_bytes");
+  auto workspaceOwner = op->getAttrOfType<StringAttr>("workspace_owner");
   const bool hasBias = biasAttr && biasAttr.getValue();
   const bool f16Storage = storage && storage.getValue() == "f16";
   const bool bf16Storage = storage && storage.getValue() == "bf16";
@@ -2211,7 +2212,8 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
       !softcapAttr || !dropoutAttr || !dropoutSeedAttr || !route ||
       route.getValue() != "deterministic_direct" ||
       !deterministic || !deterministic.getValue() || !workspace ||
-      workspace.getInt() != 0) {
+      workspace.getInt() != 0 || !workspaceOwner ||
+      workspaceOwner.getValue() != "output_element") {
     op->emitError("sm_120 attention_backward_kernel requires the canonical "
                   "deterministic-direct f16/bf16/f32 ABI with dropout replay "
                   "attrs");

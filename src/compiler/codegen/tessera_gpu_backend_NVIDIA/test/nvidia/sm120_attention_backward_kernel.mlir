@@ -13,7 +13,7 @@ module {
       window_right = 1 : i64, softcap = 1.7 : f32,
       dropout_p = 0.0 : f32, dropout_seed = 0 : i64,
       route = "deterministic_direct", deterministic = true,
-      workspace_bytes = 0 : i64
+      workspace_bytes = 0 : i64, workspace_owner = "output_element"
     } : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr,
         !llvm.ptr, i64, i64, i64, i64, i64, i64, i64
     llvm.return
@@ -31,7 +31,7 @@ module {
       window_right = -1 : i64, softcap = 0.0 : f32,
       dropout_p = 0.0 : f32, dropout_seed = 0 : i64,
       route = "deterministic_direct", deterministic = true,
-      workspace_bytes = 0 : i64
+      workspace_bytes = 0 : i64, workspace_owner = "output_element"
     } : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr,
         !llvm.ptr, i64, i64, i64, i64, i64, i64, i64
     llvm.return

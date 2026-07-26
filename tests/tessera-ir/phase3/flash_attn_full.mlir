@@ -47,16 +47,14 @@
 // CHECK:          tile.tma.descriptor
 // CHECK:          tile.mbarrier.arrive_expect_tx
 // CHECK:          tile.mbarrier.try_wait
-// CHECK:          schedule.warp
+// CHECK:          scf.for
+// CHECK-SAME:     iter_args
 // CHECK:          tile.tma.copy_async
-// CHECK:          role = "producer"
-// CHECK:          schedule.warp
 // CHECK:          tessera_attn.scaled_dot_product
-// CHECK:          tessera_attn.causal_mask
-// CHECK:          tessera_attn.online_softmax
+// CHECK:          tessera_attn.boundary_mask
+// CHECK:          tessera_attn.streaming_update
 // CHECK:          tessera_attn.lse_accumulate
 // CHECK:          tessera_attn.lse.save
-// CHECK:          role = "consumer"
 // CHECK-NOT:      tessera.flash_attn
 // CHECK-NOT:      tile.mma
 
@@ -73,9 +71,9 @@ module attributes {tessera.ir.version = "1.0",
       %Q: tensor<64x64xbf16>
             {tessera.effect = "read",
              tessera.shard  = {axes = ["tp"], dims = [0], sizes = [1]}},
-      %K: tensor<64x64xbf16>
+      %K: tensor<130x64xbf16>
             {tessera.effect = "read"},
-      %V: tensor<64x64xbf16>
+      %V: tensor<130x64xbf16>
             {tessera.effect = "read"}
   ) -> tensor<64x64xf32> {
     %out = "tessera.flash_attn"(%Q, %K, %V) <{operandSegmentSizes = array<i32: 1, 1, 1, 0>}> {
@@ -83,7 +81,7 @@ module attributes {tessera.ir.version = "1.0",
       head_dim         = 64 : i64,
       tessera.tile_q   = 64 : i32,
       tessera.tile_kv  = 64 : i32
-    } : (tensor<64x64xbf16>, tensor<64x64xbf16>, tensor<64x64xbf16>)
+    } : (tensor<64x64xbf16>, tensor<130x64xbf16>, tensor<130x64xbf16>)
           -> tensor<64x64xf32>
     return %out : tensor<64x64xf32>
   }

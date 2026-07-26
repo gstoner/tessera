@@ -3,10 +3,43 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-07-25
+last_updated: 2026-07-26
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+Cross-backend sync `PACKED-LEGALIZE-CAPABILITY-2026-07-26` expands terminal
+storage legalization without making sub-byte storage global. For `nvidia_sm120`,
+the pass now proves the complete operation-specific consumer before stamping a
+physical pack: packed load to ordinary store (explicit unpack/format
+conversion), matching unscaled packed-load/store round trips, and packed
+matmul whose A/B MMA descriptor agrees with the logical storage format.
+Orphan or mixed-use packed loads, descriptor disagreement, arbitrary
+operations, and the public shape-preserving Graph quantize/dequantize ABI stay
+logical. The standalone empty-target transform remains available for explicit
+IR inspection; named pipelines use the capability decision. Apple and ROCm
+retain their compatibility readers and architecture-owned migration queues;
+their physical schedules or evidence are not inferred from SM120. In
+particular, the shared `#tile.buffer_ref` reader remains temporarily available
+for their migration fixtures even though NVIDIA no longer emits or consumes
+it. No selector or timing disposition changes.
+
+Cross-backend sync `CORE-STREAMING-ATTN-2026-07-26` replaces the shared
+rank-2 FlashAttention whole-KV lowering with an explicit KV-block `scf.for`.
+The loop carries the FP32 output accumulator, running maximum, normalization
+sum, producer and consumer `!tile.pipeline_state` values, and an absolute
+boundary offset. Each block consumes K and V through typed async tokens; the
+online update now takes V explicitly, while causal/window/ragged masking and
+counter-based dropout consume the loop offset rather than replaying block zero.
+NVIDIA TMA descriptor hoisting traces each block slice to its kernel argument
+and retains typed coordinates plus logical source extents, enabling
+out-of-bounds zero fill for the ragged tail. WarpSpecialization no longer emits
+name-based `#tile.buffer_ref` or annotation-only `#tile.pipeline_state`
+metadata, and Schedule→Tile consumes structured per-operand `#tile.layout`
+directly. The SM90 structural pipeline is lit-green. This is **landing**, not
+exact SM120 closure: rank-4 batch/head distribution and a direct NVIDIA
+Target-IR/runtime consumer of the shared loop remain open. Existing
+launch-level attention images and selectors are unchanged.
 
 Cross-backend sync `CORE-GEMM-KLOOP-2026-07-25` is **landing**, owned by
 NVIDIA under the `NVIDIA-E2E-2` continuation. The shared compiler now forms a
@@ -1503,9 +1536,10 @@ scale-bearing fragment ABI before generating packed byte/nibble loads.
 Descriptor drift rejects in compiler lit, while exact general-shape/ragged
 SM120 tests traverse the descriptor-driven loaders. Opt-in terminal storage
 legalization now runs `StoragePackConsume` in the NVIDIA named pipeline.
-Generic value-level sub-byte lowering stays opt-in because it lacks the scale
-ABI; this does not make terminal packing the default beyond the proven launch
-envelopes.
+The later capability expansion admits only the proven value-level decode,
+unscaled round-trip, and matching packed-matmul def-use paths. It does not make
+terminal packing the default for arbitrary FP4/FP6 values or for Graph-level
+quantize/dequantize operations.
 
 NVIDIA-owned continuation `NVIDIA-PACKED-MATH-2026-07-25` adds the missing
 canonical signed-INT4 consumer. Its compiler-owned Tile image and typed CUDA
@@ -1576,7 +1610,10 @@ after CTA synchronization. AsyncCopy lowering emits registered TMA descriptor
 and copy operations; descriptor deduplication assigns slots, creates one SSA
 mbarrier, binds it to every copy, and threads copy completion tokens into the
 typed wait. FlashAttention emits typed arrive/try-wait token chains.
-Barrier-reuse legality passes on this real WarpSpec output. Name-based
-`#tile.buffer_ref` remains migration metadata pending removal. TCGen05/TMEM has
-host-free structural and SM120 fail-closed proof only; exact execution remains
-SM100-owned and cannot be inferred from consumer Blackwell.
+Barrier-reuse legality passes on this real WarpSpec output. NVIDIA no longer
+emits or consumes name-based `#tile.buffer_ref`; the shared reader remains only
+for Apple/ROCm migration fixtures. Annotation-only `#tile.pipeline_state`
+compatibility metadata is rejected, and the structured Schedule→Tile layout is
+consumed directly. TCGen05/TMEM has host-free structural and SM120 fail-closed
+proof only; exact execution remains SM100-owned and cannot be inferred from
+consumer Blackwell.

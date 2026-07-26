@@ -1396,6 +1396,13 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         spec="docs/audit/compiler/COMPILER_AUDIT.md §C3", sprint="C3 (TIRx)",
     ),
     DiagnosticCode(
+        code="TILE_PIPELINE_LEGACY_METADATA", pass_origin="TilePipelineLegality",
+        severity="error",
+        summary="Annotation-only #tile.pipeline_state metadata remains after the SSA pipeline migration.",
+        fix_hint="Thread !tile.pipeline_state values from tile.pipeline_init through tile.pipeline_advance.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §C3", sprint="C3 (TIRx)",
+    ),
+    DiagnosticCode(
         code="TILE_PIPELINE_BARRIER_KIND_MISMATCH", pass_origin="TilePipelineLegality",
         severity="error",
         summary="One tile.barrier_id is used with two different #tile.barrier kinds.",

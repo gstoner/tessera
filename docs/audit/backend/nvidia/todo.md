@@ -78,10 +78,12 @@ and retains typed coordinates plus logical source extents, enabling
 out-of-bounds zero fill for the ragged tail. WarpSpecialization no longer emits
 name-based `#tile.buffer_ref` or annotation-only `#tile.pipeline_state`
 metadata, and Schedule→Tile consumes structured per-operand `#tile.layout`
-directly. The SM90 structural pipeline is lit-green. This is **landing**, not
-exact SM120 closure: rank-4 batch/head distribution and a direct NVIDIA
-Target-IR/runtime consumer of the shared loop remain open. Existing
-launch-level attention images and selectors are unchanged.
+directly. The SM90 structural pipeline is lit-green. Follow-up sync
+`CORE-STREAMING-ATTN-RANK4-ROCM-2026-07-26` adds shared rank-4 batch/head
+distribution and proves a direct ROCm consumer. A direct NVIDIA
+Target-IR/runtime consumer of the shared loop remains open; gfx1151 LDS/WMMA
+schedules, resources, wall timing, and selector evidence do not transfer.
+Existing launch-level attention images and selectors are unchanged.
 
 Cross-backend sync `CORE-GEMM-KLOOP-2026-07-25` is **landing**, owned by
 NVIDIA under the `NVIDIA-E2E-2` continuation. The shared compiler now forms a

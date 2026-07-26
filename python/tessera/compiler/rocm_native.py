@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
+from .attention_contract import plan_attention_backward_workspace
 from .graph_ir import GraphIRModule
 from .native_artifact import (
     BufferBinding,
@@ -381,6 +382,65 @@ def emit_attention_tile_ir(
     }} : !llvm.ptr, !llvm.ptr, !llvm.ptr{", !llvm.ptr" if bias else ""},
         !llvm.ptr, i64, i64, i64, i64, i64, i64, i64
     llvm.return
+  }}
+}}
+'''
+
+
+def emit_attention_graph_ir(
+    *,
+    entry: str,
+    storage: str,
+    dims: tuple[int, int, int, int, int, int, int],
+    scale: float,
+    causal: bool,
+    window_left: int,
+    window_right: int,
+    dropout_p: float = 0.0,
+    dropout_seed: int = 0,
+    tile_kv: int = 16,
+) -> str:
+    """Emit canonical rank-4 attention for direct shared-to-target lowering.
+
+    This is the semantic entry path: the shared Tile IR lowering owns
+    batch/head distribution, GQA mapping, the KV-block recurrence, ragged
+    zero-fill, and pipeline SSA. ROCm lowering owns only its physical schedule.
+    Bias and softcap intentionally remain on the compatibility carrier until
+    those modifiers have a target-neutral representation in the recurrence.
+    """
+    if storage not in {"f16", "bf16"}:
+        raise ValueError(f"unsupported gfx1151 attention storage {storage!r}")
+    b, hq, hkv, sq, sk, head_dim, value_dim = dims
+    if tile_kv <= 0:
+        raise ValueError("canonical attention tile_kv must be positive")
+    scale_literal = _mlir_float(scale)
+    dropout_literal = _mlir_float(dropout_p)
+    return f'''module attributes {{
+  tessera.ir.version = "1.0",
+  tessera.target = {{sm = 90 : i32, warps = 1 : i32,
+                    smem = 65536 : i64, pipeline_stages = 2 : i32}}
+}} {{
+  func.func @{entry}(
+      %q: tensor<{b}x{hq}x{sq}x{head_dim}x{storage}>,
+      %key: tensor<{b}x{hkv}x{sk}x{head_dim}x{storage}>,
+      %v: tensor<{b}x{hkv}x{sk}x{value_dim}x{storage}>
+  ) -> tensor<{b}x{hq}x{sq}x{value_dim}xf32> {{
+    %o = "tessera.flash_attn"(%q, %key, %v)
+        <{{operandSegmentSizes = array<i32: 1, 1, 1, 0>}}> {{
+      causal = {str(causal).lower()},
+      dropout_p = {dropout_literal} : f64,
+      dropout_seed = {dropout_seed} : i64,
+      head_dim = {head_dim} : i64,
+      scale = {scale_literal} : f32,
+      tessera.tile_q = {sq} : i32,
+      tessera.tile_kv = {tile_kv} : i32,
+      window_left = {window_left} : i64,
+      window_right = {window_right} : i64
+    }} : (tensor<{b}x{hq}x{sq}x{head_dim}x{storage}>,
+          tensor<{b}x{hkv}x{sk}x{head_dim}x{storage}>,
+          tensor<{b}x{hkv}x{sk}x{value_dim}x{storage}>)
+          -> tensor<{b}x{hq}x{sq}x{value_dim}xf32>
+    return %o : tensor<{b}x{hq}x{sq}x{value_dim}xf32>
   }}
 }}
 '''
@@ -927,6 +987,7 @@ def _compile_native_tile_ir(
     *,
     directive: str,
     generator: str,
+    semantic_pipeline: str = "",
 ) -> tuple[
     str,
     str,
@@ -943,7 +1004,12 @@ def _compile_native_tile_ir(
     library_identity = "|".join(
         f"{item.logical_name}:{item.content_digest}:{item.link_mode}" for item in device_libraries
     )
-    key = hashlib.sha256(f"{tile_ir}|{library_identity}".encode()).hexdigest()
+    key = hashlib.sha256(
+        (
+            f"{tile_ir}|{directive}|{generator}|{semantic_pipeline}|"
+            f"{library_identity}"
+        ).encode()
+    ).hexdigest()
     cached = _cache.get(key)
     if cached is not None:
         target_ir, backend_ir, payload, compiler_fp, toolchain_fp, libraries = cached
@@ -957,9 +1023,15 @@ def _compile_native_tile_ir(
             "warm_cache",
         )
 
-    target_pipeline = "builtin.module(rocm-wave-lds-pipeline,rocm-wave-lds-legality,lower-tile-to-rocm{arch=gfx1151})"
+    semantic_prefix = f"{semantic_pipeline}," if semantic_pipeline else ""
+    target_pipeline = (
+        "builtin.module("
+        f"{semantic_prefix}rocm-wave-lds-pipeline,rocm-wave-lds-legality,"
+        "lower-tile-to-rocm{arch=gfx1151})"
+    )
     native_pipeline = (
-        "builtin.module(rocm-wave-lds-pipeline,rocm-wave-lds-legality,"
+        f"builtin.module({semantic_prefix}"
+        "rocm-wave-lds-pipeline,rocm-wave-lds-legality,"
         f"lower-tile-to-rocm{{arch=gfx1151}},{generator},"
         "lower-tessera-target-to-rocdl,"
         "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
@@ -1033,6 +1105,19 @@ def _compile_attention_tile_ir(tile_ir: str):
         tile_ir,
         directive="tessera_rocm.flash_attn",
         generator="generate-wmma-flash-attn-kernel",
+    )
+
+
+def _compile_attention_graph_ir(tile_ir: str, *, tile_q: int, tile_kv: int):
+    return _compile_native_tile_ir(
+        tile_ir,
+        directive="tessera_rocm.flash_attn",
+        generator="generate-wmma-flash-attn-kernel",
+        semantic_pipeline=(
+            "tessera-tile-ir-lowering{"
+            f"tile-q={tile_q} tile-kv={tile_kv} sm=90"
+            "}"
+        ),
     )
 
 
@@ -1334,19 +1419,46 @@ def package_attention(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativ
         if dtype == "fp16"
         else GFX1151_ATTN_BF16_ABI
     )
-    tile_ir = emit_attention_tile_ir(
-        entry=entry,
-        storage=storage,
-        dims=dims,
-        scale=scale,
-        causal=causal,
-        bias=bias_name is not None,
-        window_left=window_left,
-        window_right=window_right,
-        softcap=softcap,
-        dropout_p=dropout_p,
-        dropout_seed=dropout_seed,
+    canonical_route = (
+        bias_name is None
+        and softcap <= 0.0
+        and (
+            (window_left < 0 and window_right < 0)
+            or (causal and window_left >= 0 and window_right == 0)
+        )
     )
+    if canonical_route:
+        tile_kv = 16
+        tile_ir = emit_attention_graph_ir(
+            entry=entry,
+            storage=storage,
+            dims=dims,
+            scale=scale,
+            causal=causal,
+            window_left=window_left,
+            window_right=window_right,
+            dropout_p=dropout_p,
+            dropout_seed=dropout_seed,
+            tile_kv=tile_kv,
+        )
+        compiled = _compile_attention_graph_ir(
+            tile_ir, tile_q=dims[3], tile_kv=tile_kv
+        )
+    else:
+        tile_ir = emit_attention_tile_ir(
+            entry=entry,
+            storage=storage,
+            dims=dims,
+            scale=scale,
+            causal=causal,
+            bias=bias_name is not None,
+            window_left=window_left,
+            window_right=window_right,
+            softcap=softcap,
+            dropout_p=dropout_p,
+            dropout_seed=dropout_seed,
+        )
+        compiled = _compile_attention_tile_ir(tile_ir)
     (
         target_ir,
         backend_ir,
@@ -1355,7 +1467,7 @@ def package_attention(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativ
         toolchain_fp,
         device_libraries,
         compile_state,
-    ) = _compile_attention_tile_ir(tile_ir)
+    ) = compiled
     image = NativeImageArtifact(
         target="rocm_gfx1151",
         architecture="gfx1151",
@@ -1466,8 +1578,21 @@ def package_attention(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativ
         ),
         provenance={
             "work_item": "ROCM-E2E-2",
-            "sync_key": "ROCM-E2E-ATTENTION-CARRIERS-2026-07-26",
-            "schedule": "gfx1151_wmma_streaming",
+            "sync_key": (
+                "CORE-STREAMING-ATTN-RANK4-ROCM-2026-07-26"
+                if canonical_route
+                else "ROCM-E2E-ATTENTION-CARRIERS-2026-07-26"
+            ),
+            "schedule": (
+                "gfx1151_wmma_canonical_streaming"
+                if canonical_route
+                else "gfx1151_wmma_streaming"
+            ),
+            "semantic_route": (
+                "canonical_rank4_kv_scf_for"
+                if canonical_route
+                else "tile.attention_kernel_compatibility"
+            ),
             "shape": list(dims),
             "storage": storage,
             "accum": "f32",
@@ -1582,31 +1707,25 @@ def package_attention_backward(
         device_libraries=device_libraries,
     )
 
-    nq = b * hq * sq * d
-    nkv = b * hkv * sk * d
-    nl = b * hq * sq
-
-    def align(value: int, alignment: int = 256) -> int:
-        return (value + alignment - 1) // alignment * alignment
-
-    workspace_specs = (
-        ("forward_o", nq * 4, "undefined"),
-        ("row_lse", nl * 4, "undefined"),
-        ("row_delta", nl * 4, "undefined"),
-        ("partial_dk", nkv * 4, "zero"),
-        ("partial_dv", nkv * 4, "zero"),
+    shared_workspace = plan_attention_backward_workspace(
+        batch=b,
+        query_heads=hq,
+        kv_heads=hkv,
+        query_rows=sq,
+        key_rows=sk,
+        head_dim=d,
+        value_dim=dv,
+        split_count=2,
     )
-    slices: list[ROCMWorkspaceSlice] = []
-    offset = 0
-    for name, byte_count, initialization in workspace_specs:
-        offset = align(offset)
-        slices.append(
-            ROCMWorkspaceSlice(name, offset, byte_count, initialization)
+    slices = [
+        ROCMWorkspaceSlice(
+            item.name, item.offset, item.bytes, item.initialization
         )
-        offset += byte_count
+        for item in shared_workspace.slices
+    ]
     workspace = WorkspaceRequirement(
-        bytes=align(offset),
-        alignment=256,
+        bytes=shared_workspace.bytes,
+        alignment=shared_workspace.alignment,
         lifetime="launch",
         initialization="undefined",
     )
@@ -1784,14 +1903,21 @@ def package_attention_backward(
         "dropout_p": 0.0,
         "workspace_owner": "program_launch",
         "workspace_bytes": workspace.bytes,
+        "workspace_contract": "canonical_attention_backward_split_v1",
+        "split_count": shared_workspace.split_count,
+        "reduction_order": list(shared_workspace.reduction_order),
         "workspace_slices": [
             {
                 "name": item.name,
                 "offset": item.offset,
                 "bytes": item.bytes,
                 "initialization": item.initialization,
+                "producer": shared.producer,
+                "consumers": list(shared.consumers),
             }
-            for item in slices
+            for item, shared in zip(
+                slices, shared_workspace.slices, strict=True
+            )
         ],
         "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
     }

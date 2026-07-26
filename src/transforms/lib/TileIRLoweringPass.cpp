@@ -26,6 +26,7 @@
 
 #include "Tessera/Transforms/Passes.h"
 #include "Tessera/Dialect/Tile/TileDialect.h"
+#include "tessera/Dialect/Attn/AttnDialect.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
@@ -118,6 +119,160 @@ static Operation *emitAttnOp(OpBuilder &b, Location loc,
 // ─────────────────────────────────────────────────────────────────────────────
 // FlashAttn lowering pattern
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Distribute a static rank-4 [B,H,S,D] attention operation into explicit
+// batch/query-head loops whose body is the canonical rank-2 streaming
+// operation.  The rank-2 rewrite below remains the single owner of online
+// softmax, boundary/dropout counters, ragged zero-fill, async tokens, and
+// pipeline state.  Backends therefore see distribution wrapped around the
+// same recurrence instead of a second rank-4 attention implementation.
+struct DistributeRank4FlashAttn : public RewritePattern {
+  DistributeRank4FlashAttn(MLIRContext *ctx)
+      : RewritePattern("tessera.flash_attn", /*benefit=*/3, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 3 || op->getNumResults() != 1)
+      return failure();
+
+    Value q = op->getOperand(0);
+    Value k = op->getOperand(1);
+    Value v = op->getOperand(2);
+    auto qType = dyn_cast<RankedTensorType>(q.getType());
+    auto kType = dyn_cast<RankedTensorType>(k.getType());
+    auto vType = dyn_cast<RankedTensorType>(v.getType());
+    auto outType = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!qType || !kType || !vType || !outType ||
+        !qType.hasStaticShape() || !kType.hasStaticShape() ||
+        !vType.hasStaticShape() || !outType.hasStaticShape() ||
+        qType.getRank() != 4 || kType.getRank() != 4 ||
+        vType.getRank() != 4 || outType.getRank() != 4)
+      return failure();
+
+    int64_t batch = qType.getDimSize(0);
+    int64_t queryHeads = qType.getDimSize(1);
+    int64_t kvHeads = kType.getDimSize(1);
+    int64_t queryRows = qType.getDimSize(2);
+    int64_t keyRows = kType.getDimSize(2);
+    int64_t headDim = qType.getDimSize(3);
+    int64_t valueDim = vType.getDimSize(3);
+    if (batch <= 0 || queryHeads <= 0 || kvHeads <= 0 || queryRows <= 0 ||
+        keyRows <= 0 || headDim <= 0 || valueDim <= 0 ||
+        queryHeads % kvHeads != 0 ||
+        kType.getDimSize(0) != batch || vType.getDimSize(0) != batch ||
+        vType.getDimSize(1) != kvHeads ||
+        kType.getDimSize(3) != headDim ||
+        vType.getDimSize(2) != keyRows ||
+        outType.getDimSize(0) != batch ||
+        outType.getDimSize(1) != queryHeads ||
+        outType.getDimSize(2) != queryRows ||
+        outType.getDimSize(3) != valueDim ||
+        !outType.getElementType().isF32())
+      return failure();
+
+    Location loc = op->getLoc();
+    Value outputInit = arith::ConstantOp::create(
+        rewriter, loc, outType, rewriter.getZeroAttr(outType));
+    Value zero = arith::ConstantIndexOp::create(rewriter, loc, 0);
+    Value one = arith::ConstantIndexOp::create(rewriter, loc, 1);
+    Value batchUpper =
+        arith::ConstantIndexOp::create(rewriter, loc, batch);
+    Value headUpper =
+        arith::ConstantIndexOp::create(rewriter, loc, queryHeads);
+    Value groupSize = arith::ConstantIndexOp::create(
+        rewriter, loc, queryHeads / kvHeads);
+
+    auto batchLoop = scf::ForOp::create(
+        rewriter, loc, zero, batchUpper, one, ValueRange{outputInit});
+    batchLoop->setAttr("tessera.attention_distribution",
+                       rewriter.getStringAttr("batch"));
+    batchLoop->setAttr("tessera.batch_count",
+                       rewriter.getI64IntegerAttr(batch));
+    {
+      OpBuilder::InsertionGuard batchGuard(rewriter);
+      rewriter.setInsertionPointToStart(batchLoop.getBody());
+      Value batchIndex = batchLoop.getInductionVar();
+      Value batchOutput = batchLoop.getRegionIterArg(0);
+      auto headLoop = scf::ForOp::create(
+          rewriter, loc, zero, headUpper, one, ValueRange{batchOutput});
+      headLoop->setAttr("tessera.attention_distribution",
+                        rewriter.getStringAttr("query_head"));
+      headLoop->setAttr("tessera.query_head_count",
+                        rewriter.getI64IntegerAttr(queryHeads));
+      headLoop->setAttr("tessera.kv_head_count",
+                        rewriter.getI64IntegerAttr(kvHeads));
+      headLoop->setAttr("tessera.gqa_group_size",
+                        rewriter.getI64IntegerAttr(queryHeads / kvHeads));
+      {
+        OpBuilder::InsertionGuard headGuard(rewriter);
+        rewriter.setInsertionPointToStart(headLoop.getBody());
+        Value queryHead = headLoop.getInductionVar();
+        Value headOutput = headLoop.getRegionIterArg(0);
+        Value kvHead =
+            arith::DivUIOp::create(rewriter, loc, queryHead, groupSize);
+
+        auto qTileType = RankedTensorType::get(
+            {queryRows, headDim}, qType.getElementType());
+        auto kTileType = RankedTensorType::get(
+            {keyRows, headDim}, kType.getElementType());
+        auto vTileType = RankedTensorType::get(
+            {keyRows, valueDim}, vType.getElementType());
+        auto outTileType = RankedTensorType::get(
+            {queryRows, valueDim}, outType.getElementType());
+        SmallVector<OpFoldResult> strides(4, rewriter.getIndexAttr(1));
+        SmallVector<OpFoldResult> qOffsets{
+            batchIndex, queryHead, rewriter.getIndexAttr(0),
+            rewriter.getIndexAttr(0)};
+        SmallVector<OpFoldResult> kvOffsets{
+            batchIndex, kvHead, rewriter.getIndexAttr(0),
+            rewriter.getIndexAttr(0)};
+        SmallVector<OpFoldResult> qSizes{
+            rewriter.getIndexAttr(1), rewriter.getIndexAttr(1),
+            rewriter.getIndexAttr(queryRows),
+            rewriter.getIndexAttr(headDim)};
+        SmallVector<OpFoldResult> kSizes{
+            rewriter.getIndexAttr(1), rewriter.getIndexAttr(1),
+            rewriter.getIndexAttr(keyRows),
+            rewriter.getIndexAttr(headDim)};
+        SmallVector<OpFoldResult> vSizes{
+            rewriter.getIndexAttr(1), rewriter.getIndexAttr(1),
+            rewriter.getIndexAttr(keyRows),
+            rewriter.getIndexAttr(valueDim)};
+        Value qTile = tensor::ExtractSliceOp::create(
+            rewriter, loc, qTileType, q, qOffsets, qSizes, strides);
+        Value kTile = tensor::ExtractSliceOp::create(
+            rewriter, loc, kTileType, k, kvOffsets, kSizes, strides);
+        Value vTile = tensor::ExtractSliceOp::create(
+            rewriter, loc, vTileType, v, kvOffsets, vSizes, strides);
+
+        OperationState rank2State(loc, "tessera.flash_attn");
+        rank2State.addOperands({qTile, kTile, vTile});
+        rank2State.addTypes(outTileType);
+        rank2State.addAttributes(op->getAttrs());
+        rank2State.addAttribute("tessera.rank4_distributed",
+                                rewriter.getUnitAttr());
+        rank2State.addAttribute(
+            "tessera.gqa_group_size",
+            rewriter.getI64IntegerAttr(queryHeads / kvHeads));
+        Operation *rank2 = rewriter.create(rank2State);
+
+        Value inserted = tensor::InsertSliceOp::create(
+            rewriter, loc, rank2->getResult(0), headOutput, qOffsets,
+            SmallVector<OpFoldResult>{
+                rewriter.getIndexAttr(1), rewriter.getIndexAttr(1),
+                rewriter.getIndexAttr(queryRows),
+                rewriter.getIndexAttr(valueDim)},
+            strides);
+        scf::YieldOp::create(rewriter, loc, inserted);
+      }
+      rewriter.setInsertionPointAfter(headLoop);
+      scf::YieldOp::create(rewriter, loc, headLoop.getResult(0));
+    }
+
+    rewriter.replaceOp(op, batchLoop.getResult(0));
+    return success();
+  }
+};
 
 struct LowerFlashAttnToTileIR : public RewritePattern {
   int64_t tileQ;
@@ -307,11 +462,14 @@ struct LowerFlashAttnToTileIR : public RewritePattern {
 
       auto scoresType =
           RankedTensorType::get({qRows, tkv}, rewriter.getF32Type());
+      float scale = -1.0f;
+      if (auto scaleAttr = op->getAttrOfType<FloatAttr>("scale"))
+        scale = static_cast<float>(scaleAttr.getValueAsDouble());
       Operation *sdp = emitAttnOp(
           rewriter, loc, "tessera_attn.scaled_dot_product",
           {cpQ->getResult(0), cpK->getResult(0)}, {scoresType},
           {rewriter.getNamedAttr("scale",
-                                 rewriter.getF32FloatAttr(-1.0f))});
+                                 rewriter.getF32FloatAttr(scale))});
       Value scores = sdp->getResult(0);
 
       if (causal || windowLeft >= 0 || windowRight >= 0 || paddedSk != sk) {
@@ -572,11 +730,13 @@ struct TileIRLoweringPass
     registry.insert<tensor::TensorDialect>();
     registry.insert<func::FuncDialect>();
     registry.insert<tessera::tile::TesseraTileDialect>();
+    registry.insert<tessera::attn::TesseraAttnDialect>();
   }
 
   void runOnOperation() override {
     MLIRContext *ctx = &getContext();
     RewritePatternSet patterns(ctx);
+    patterns.add<DistributeRank4FlashAttn>(ctx);
     patterns.add<LowerFlashAttnToTileIR>(ctx, tileQ, tileKV, smVersion);
     patterns.add<LowerKReductionAddToTileMMA>(ctx, smVersion);
     patterns.add<LowerMatmulToTileMMA>(ctx, tileQ, tileKV, smVersion);

@@ -7,6 +7,7 @@
 #define GET_TYPEDEF_CLASSES
 #include "TesseraROCMTypes.h.inc"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/Math/IR/Math.h"
@@ -19,6 +20,7 @@
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/CommandLine.h"
 
@@ -339,6 +341,247 @@ static Value tileBufferRoot(Operation *op) {
   return buffer;
 }
 
+// Validate and consume the shared rank-4 batch/head distribution plus its
+// canonical KV-block recurrence as one gfx1151 launch directive.  The shared
+// loop owns attention semantics and SSA dependencies; this adapter selects only
+// the AMD physical schedule, packaging, and launch ABI.
+static LogicalResult materializeCanonicalStreamingAttention(
+    ModuleOp module, func::FuncOp function, StringRef arch) {
+  if (arch != "gfx1151") {
+    function.emitError(
+        "ROCm canonical streaming-attention consumption is currently "
+        "exact-device gated to gfx1151");
+    return failure();
+  }
+
+  SmallVector<scf::ForOp> streamingLoops;
+  function.walk([&](scf::ForOp loop) {
+    if (loop->hasAttr("tessera.streaming_attention"))
+      streamingLoops.push_back(loop);
+  });
+  if (streamingLoops.size() != 1) {
+    function.emitError(
+        "ROCm canonical attention requires exactly one KV-block scf.for per "
+        "rank-4 launch function");
+    return failure();
+  }
+  scf::ForOp kvLoop = streamingLoops.front();
+  auto headLoop = kvLoop->getParentOfType<scf::ForOp>();
+  auto batchLoop =
+      headLoop ? headLoop->getParentOfType<scf::ForOp>() : scf::ForOp();
+  auto headDistribution =
+      headLoop ? headLoop->getAttrOfType<StringAttr>(
+                     "tessera.attention_distribution")
+               : StringAttr();
+  auto batchDistribution =
+      batchLoop ? batchLoop->getAttrOfType<StringAttr>(
+                      "tessera.attention_distribution")
+                : StringAttr();
+  if (!headDistribution || headDistribution.getValue() != "query_head" ||
+      !batchDistribution || batchDistribution.getValue() != "batch") {
+    kvLoop.emitError(
+        "ROCm canonical attention requires explicit rank-4 batch and "
+        "query-head scf.for distribution");
+    return failure();
+  }
+
+  if (function.getNumArguments() != 3 || function.getNumResults() != 1) {
+    function.emitError(
+        "ROCm canonical streaming attention requires Q, K, V and one output");
+    return failure();
+  }
+  auto qType = dyn_cast<RankedTensorType>(function.getArgument(0).getType());
+  auto kType = dyn_cast<RankedTensorType>(function.getArgument(1).getType());
+  auto vType = dyn_cast<RankedTensorType>(function.getArgument(2).getType());
+  auto outType = dyn_cast<RankedTensorType>(function.getResultTypes().front());
+  if (!qType || !kType || !vType || !outType || !qType.hasStaticShape() ||
+      !kType.hasStaticShape() || !vType.hasStaticShape() ||
+      !outType.hasStaticShape() || qType.getRank() != 4 ||
+      kType.getRank() != 4 || vType.getRank() != 4 ||
+      outType.getRank() != 4) {
+    function.emitError(
+        "ROCm canonical streaming attention currently requires static rank-4 "
+        "Q/K/V/output tensors");
+    return failure();
+  }
+
+  int64_t batch = qType.getDimSize(0);
+  int64_t queryHeads = qType.getDimSize(1);
+  int64_t kvHeads = kType.getDimSize(1);
+  int64_t queryRows = qType.getDimSize(2);
+  int64_t keyRows = kType.getDimSize(2);
+  int64_t headDim = qType.getDimSize(3);
+  int64_t valueDim = vType.getDimSize(3);
+  if (batch <= 0 || queryHeads <= 0 || kvHeads <= 0 ||
+      queryHeads % kvHeads != 0 || headDim <= 0 || headDim % 16 != 0 ||
+      headDim != valueDim || kType.getDimSize(0) != batch ||
+      vType.getDimSize(0) != batch || vType.getDimSize(1) != kvHeads ||
+      kType.getDimSize(2) != keyRows || vType.getDimSize(2) != keyRows ||
+      kType.getDimSize(3) != headDim ||
+      outType.getDimSize(0) != batch ||
+      outType.getDimSize(1) != queryHeads ||
+      outType.getDimSize(2) != queryRows ||
+      outType.getDimSize(3) != valueDim ||
+      !outType.getElementType().isF32()) {
+    function.emitError(
+        "ROCm canonical streaming attention requires valid static GQA shapes, "
+        "f32 output, and equal WMMA-compatible head/value dimensions");
+    return failure();
+  }
+
+  StringRef storage;
+  if (qType.getElementType().isF16())
+    storage = "f16";
+  else if (qType.getElementType().isBF16())
+    storage = "bf16";
+  else {
+    function.emitError(
+        "gfx1151 canonical streaming attention requires f16 or bf16 storage");
+    return failure();
+  }
+  if (kType.getElementType() != qType.getElementType() ||
+      vType.getElementType() != qType.getElementType()) {
+    function.emitError("ROCm canonical attention Q/K/V storage must match");
+    return failure();
+  }
+
+  if (kvLoop.getNumRegionIterArgs() != 6 ||
+      !isa<tessera::tile::PipelineStateType>(
+          kvLoop.getRegionIterArg(3).getType()) ||
+      !isa<tessera::tile::PipelineStateType>(
+          kvLoop.getRegionIterArg(4).getType()) ||
+      !kvLoop.getRegionIterArg(5).getType().isIndex()) {
+    kvLoop.emitError(
+        "ROCm canonical attention requires producer/consumer "
+        "!tile.pipeline_state and an absolute boundary offset");
+    return failure();
+  }
+
+  unsigned asyncCopies = 0;
+  unsigned tokenCopies = 0;
+  unsigned waits = 0;
+  unsigned semanticAdvances = 0;
+  bool hasScaledDotProduct = false;
+  bool hasStreamingUpdate = false;
+  Operation *boundaryMask = nullptr;
+  Operation *blockDropout = nullptr;
+  kvLoop.walk([&](Operation *nested) {
+    StringRef name = nested->getName().getStringRef();
+    if (name == "tile.async_copy") {
+      ++asyncCopies;
+      if (llvm::any_of(nested->getResults(), [](Value value) {
+            return isa<tessera::tile::AsyncTokenType>(value.getType());
+          }))
+        ++tokenCopies;
+    } else if (name == "tile.wait_async") {
+      ++waits;
+    } else if (name == "tile.pipeline_advance") {
+      // The shared recurrence owns exactly one producer and one consumer
+      // advance. ROCMWaveLdsPipeline may insert additional target-stamped
+      // physical advances while threading allocated buffers through async
+      // copies; those refine rather than replace the semantic state machine.
+      if (!nested->hasAttr("target"))
+        ++semanticAdvances;
+    } else if (name == "tessera_attn.scaled_dot_product") {
+      hasScaledDotProduct = true;
+    } else if (name == "tessera_attn.streaming_update") {
+      hasStreamingUpdate = true;
+    } else if (name == "tessera_attn.boundary_mask") {
+      boundaryMask = nested;
+    } else if (name == "tessera_attn.block_dropout") {
+      blockDropout = nested;
+    }
+  });
+  if (asyncCopies != 2 || tokenCopies != 2 || waits != 1 ||
+      semanticAdvances != 2 || !hasScaledDotProduct ||
+      !hasStreamingUpdate) {
+    kvLoop.emitError(
+        "ROCm canonical attention requires two token-producing K/V copies, "
+        "one wait, two pipeline advances, scaled-dot-product, and streaming "
+        "update");
+    return failure();
+  }
+
+  auto kvBlock = kvLoop->getAttrOfType<IntegerAttr>("tessera.kv_block");
+  auto logicalSk = kvLoop->getAttrOfType<IntegerAttr>("tessera.logical_sk");
+  if (!kvBlock || kvBlock.getInt() <= 0 || !logicalSk ||
+      logicalSk.getInt() != keyRows) {
+    kvLoop.emitError(
+        "ROCm canonical attention requires explicit KV block and logical Sk");
+    return failure();
+  }
+
+  bool causal = false;
+  int64_t windowLeft = -1;
+  int64_t windowRight = -1;
+  if (boundaryMask) {
+    auto causalAttr = boundaryMask->getAttrOfType<BoolAttr>("causal");
+    auto leftAttr = boundaryMask->getAttrOfType<IntegerAttr>("window_left");
+    auto rightAttr = boundaryMask->getAttrOfType<IntegerAttr>("window_right");
+    if (!causalAttr || !leftAttr || !rightAttr) {
+      boundaryMask->emitError(
+          "ROCm canonical attention boundary mask is missing policy fields");
+      return failure();
+    }
+    causal = causalAttr.getValue();
+    windowLeft = leftAttr.getInt();
+    windowRight = rightAttr.getInt();
+  }
+  bool slidingWindow = windowLeft >= 0 || windowRight >= 0;
+  if (slidingWindow &&
+      (!causal || windowLeft < 0 || windowRight != 0)) {
+    kvLoop.emitError(
+        "gfx1151 WMMA streaming attention currently supports only causal "
+        "left-window schedules");
+    return failure();
+  }
+
+  bool hasCall = false;
+  module.walk([&](func::CallOp call) {
+    if (call.getCallee() == function.getSymName())
+      hasCall = true;
+  });
+  if (hasCall) {
+    function.emitError(
+        "ROCm canonical streaming launch function must not have internal "
+        "callers before Target-IR packaging");
+    return failure();
+  }
+
+  OpBuilder builder(function);
+  OperationState state(function.getLoc(), "tessera_rocm.flash_attn");
+  state.addAttribute("name", builder.getStringAttr(function.getSymName()));
+  state.addAttribute("head_dim", builder.getI64IntegerAttr(headDim));
+  state.addAttribute("dtype", builder.getStringAttr(storage));
+  state.addAttribute("gqa", builder.getBoolAttr(queryHeads != kvHeads));
+  state.addAttribute("sliding_window",
+                     builder.getBoolAttr(slidingWindow));
+  state.addAttribute("logit_softcap", builder.getBoolAttr(false));
+  state.addAttribute("attn_bias", builder.getBoolAttr(false));
+  state.addAttribute("dropout", builder.getBoolAttr(blockDropout != nullptr));
+  state.addAttribute("causal", builder.getBoolAttr(causal));
+  state.addAttribute("arch", builder.getStringAttr(arch));
+  state.addAttribute("source",
+                     builder.getStringAttr("canonical_rank4_kv_scf_for"));
+  state.addAttribute(
+      "schedule",
+      builder.getStringAttr("gfx1151_wmma_streaming_attention"));
+  state.addAttribute("canonical_kv_loop", builder.getBoolAttr(true));
+  state.addAttribute("rank4_distribution", builder.getBoolAttr(true));
+  state.addAttribute("ssa_pipeline", builder.getBoolAttr(true));
+  state.addAttribute("kv_block", kvBlock);
+  state.addAttribute("logical_sk", logicalSk);
+  state.addAttribute("batch", builder.getI64IntegerAttr(batch));
+  state.addAttribute("query_heads",
+                     builder.getI64IntegerAttr(queryHeads));
+  state.addAttribute("kv_heads", builder.getI64IntegerAttr(kvHeads));
+  state.addAttribute("query_rows", builder.getI64IntegerAttr(queryRows));
+  state.addAttribute("key_rows", builder.getI64IntegerAttr(keyRows));
+  builder.create(state);
+  function.erase();
+  return success();
+}
+
 struct LowerTileToROCMPass
     : PassWrapper<LowerTileToROCMPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LowerTileToROCMPass)
@@ -371,6 +614,24 @@ struct LowerTileToROCMPass
       llvm::cl::init("gfx90a")};
 
   void runOnOperation() override {
+    StringRef arch = archOpt;
+    SmallVector<func::FuncOp> canonicalAttentionFunctions;
+    llvm::SmallPtrSet<Operation *, 4> seenFunctions;
+    getOperation().walk([&](scf::ForOp loop) {
+      if (!loop->hasAttr("tessera.streaming_attention"))
+        return;
+      auto function = loop->getParentOfType<func::FuncOp>();
+      if (function && seenFunctions.insert(function).second)
+        canonicalAttentionFunctions.push_back(function);
+    });
+    for (func::FuncOp function : canonicalAttentionFunctions) {
+      if (failed(materializeCanonicalStreamingAttention(
+              getOperation(), function, arch))) {
+        signalPassFailure();
+        return;
+      }
+    }
+
     SmallVector<Operation *> worklist;
     getOperation().walk([&](Operation *op) {
       StringRef name = op->getName().getStringRef();
@@ -386,7 +647,6 @@ struct LowerTileToROCMPass
         worklist.push_back(op);
     });
 
-    StringRef arch = archOpt;
     // FIFO of outstanding async copies (oldest first), keyed by the stamped
     // tile.barrier_id from rocm-wave-lds-pipeline. A wait retires the id it
     // names (or the oldest if idless) — NOT "the last token", so each wait

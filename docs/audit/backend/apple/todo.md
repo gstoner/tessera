@@ -75,10 +75,13 @@ source extents for ragged zero fill; NVIDIA WarpSpecialization no longer emits
 name-based `#tile.buffer_ref` or annotation-only `#tile.pipeline_state`
 metadata. Apple is **follow-up required** to map the same recurrence onto an
 architecture-owned Metal/MPS attention schedule and threadgroup allocation
-identity. CUDA TMA descriptors, mbarriers, SM120 execution, resources, timings,
-and selectors do not transfer. Rank-4 batch/head distribution and deterministic
-backward workspace materialization remain open shared work; no Apple capability
-or selector changes in this synchronization slice.
+identity. Follow-up sync
+`CORE-STREAMING-ATTN-RANK4-ROCM-2026-07-26` adds shared rank-4 batch/head
+distribution and a direct ROCm consumer. Apple remains **follow-up required**
+for its architecture-owned Metal/MPS consumer; the gfx1151 schedule, HSACO,
+resources, wall timing, and selector evidence do not transfer. Deterministic
+backward workspace materialization remains open shared work; no Apple
+capability or selector changes in this synchronization slice.
 
 Cross-backend sync `CORE-GEMM-KLOOP-2026-07-25` changes the shared
 Graph/Schedule→Tile GEMM contract to explicit M/N/K `scf.for`, FP32/INT32

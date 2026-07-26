@@ -29,6 +29,7 @@ from tessera.compiler.rocm_native import (
     GFX1151_SOFTMAX_F32_ABI,
     _driver_selected_device_libraries,
     emit_attention_backward_tile_ir,
+    emit_attention_graph_ir,
     emit_moe_dispatch_tile_ir,
     emit_attention_tile_ir,
     emit_reduce_tile_ir,
@@ -369,6 +370,30 @@ def _fake_attention_compile(tile_ir: str):
     )
 
 
+def _fake_attention_graph_compile(tile_ir: str, *, tile_q: int, tile_kv: int):
+    assert "tessera.flash_attn" in tile_ir
+    assert "tile.attention_kernel" not in tile_ir
+    assert tile_q == 17
+    assert tile_kv == 16
+    libraries = (
+        DeviceLibraryRecord("rocm.ocml", "1" * 64, "compiler_driver"),
+        DeviceLibraryRecord("rocm.ockl", "2" * 64, "compiler_driver"),
+        DeviceLibraryRecord("rocm.oclc_isa_version_1151", "3" * 64, "compiler_driver"),
+    )
+    return (
+        (
+            'module { "tessera_rocm.flash_attn"() {'
+            'source = "canonical_rank4_kv_scf_for"} : () -> () }'
+        ),
+        "gpu.binary @binary",
+        b"\x7fELFcanonical-attention",
+        "compiler",
+        "toolchain",
+        libraries,
+        "cold",
+    )
+
+
 def _fake_attention_backward_compile(tile_ir: str):
     assert "tile.attention_kernel" in tile_ir
     assert "tile.attention_backward_kernel" in tile_ir
@@ -435,6 +460,44 @@ def test_rocm_attention_native_route_rejects_unimplemented_semantics() -> None:
     assert supports_attention(_attention_module(bias=True, softcap=8.0))
 
 
+def test_rocm_attention_package_consumes_canonical_rank4_streaming_ir(
+    monkeypatch,
+) -> None:
+    module = _attention_module(bias=False, softcap=0.0, dropout_p=0.25)
+    module.functions[0].body[0].kwargs["dropout_seed"] = 37
+    source = emit_attention_graph_ir(
+        entry="attention",
+        storage="f16",
+        dims=(1, 4, 2, 17, 19, 64, 64),
+        scale=0.125,
+        causal=True,
+        window_left=64,
+        window_right=0,
+        dropout_p=0.25,
+        dropout_seed=37,
+    )
+    assert "tessera.flash_attn" in source
+    assert "tensor<1x4x17x64xf16>" in source
+    assert "tensor<1x2x19x64xf16>" in source
+    assert "dropout_p = 0.25 : f64" in source
+    assert "tile.attention_kernel" not in source
+    monkeypatch.setattr(
+        "tessera.compiler.rocm_native._compile_attention_graph_ir",
+        _fake_attention_graph_compile,
+    )
+    package = package_attention(module, pipeline_name="tessera-lower-to-rocm")
+    assert package.descriptor.provenance["semantic_route"] == (
+        "canonical_rank4_kv_scf_for"
+    )
+    assert package.descriptor.provenance["schedule"] == (
+        "gfx1151_wmma_canonical_streaming"
+    )
+    assert package.descriptor.provenance["sync_key"] == (
+        "CORE-STREAMING-ATTN-RANK4-ROCM-2026-07-26"
+    )
+    assert package.descriptor.provenance["dropout_seed"] == 37
+
+
 def test_rocm_attention_package_owns_dropout_replay_and_combined_features(
     monkeypatch,
 ) -> None:
@@ -458,6 +521,9 @@ def test_rocm_attention_package_owns_dropout_replay_and_combined_features(
     ]
     assert package.descriptor.provenance["dropout_p"] == 0.25
     assert package.descriptor.provenance["dropout_seed"] == 37
+    assert package.descriptor.provenance["semantic_route"] == (
+        "tile.attention_kernel_compatibility"
+    )
 
 
 def test_rocm_attention_backward_package_owns_ordered_multi_entry_workspace(

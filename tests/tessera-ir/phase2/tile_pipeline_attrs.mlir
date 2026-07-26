@@ -31,6 +31,20 @@ func.func @pipeline_state() {
   return
 }
 
+// CHECK-LABEL: func.func @pipeline_state_ssa
+func.func @pipeline_state_ssa() {
+  // CHECK: %[[STATE:.*]] = tile.pipeline_init
+  // CHECK-SAME: depth = 3
+  // CHECK-SAME: phase = 1
+  // CHECK: tile.pipeline_advance %[[STATE]]
+  %state = tile.pipeline_init {
+    depth = 3 : i64, stage = 0 : i64, phase = 1 : i64, role = "producer"
+  } : !tile.pipeline_state
+  %next = tile.pipeline_advance %state
+      : (!tile.pipeline_state) -> !tile.pipeline_state
+  return
+}
+
 // C5 scaffold — independent per-ring depths (Q=2, KV=3, TMEM=2 book defaults).
 // CHECK-LABEL: func.func @pipeline_depths
 func.func @pipeline_depths() {
@@ -78,6 +92,15 @@ func.func @bad_pipeline_phase() {
 func.func @bad_pipeline_role() {
   // expected-error @+1 {{TILE_PIPELINE_BAD_ROLE}}
   "test.ps"() {p = #tile.pipeline_state<depth = 2, stage = 0, phase = 0, role = "bogus">} : () -> ()
+  return
+}
+
+// -----
+func.func @bad_pipeline_ssa_phase() {
+  // expected-error @+1 {{initial producer phase must be 1 and consumer phase must be 0}}
+  %state = tile.pipeline_init {
+    depth = 2 : i64, stage = 0 : i64, phase = 0 : i64, role = "producer"
+  } : !tile.pipeline_state
   return
 }
 

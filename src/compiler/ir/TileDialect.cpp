@@ -5,6 +5,7 @@
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -237,6 +238,167 @@ LogicalResult TileBufferRefAttr::verify(
   if (!kAccess.contains(access))
     return emitError() << "TILE_BUFFER_REF_BAD_ACCESS: access \"" << access
                        << "\" is not one of {read, write, free}";
+  return success();
+}
+
+LogicalResult TileScaleLayoutAttr::verify(
+    llvm::function_ref<InFlightDiagnostic()> emitError, StringRef dtype,
+    int64_t blockSize, int64_t axis, StringRef layout, int64_t stride,
+    int64_t alignment, int64_t offset) {
+  bool absent = dtype == "none";
+  if (absent) {
+    if (blockSize != 0 || axis != -1 || layout != "none" || stride != 0 ||
+        alignment != 1 || offset != 0)
+      return emitError()
+             << "TILE_SCALE_LAYOUT_INVALID: dtype=none requires "
+                "block_size=0, axis=-1, layout=none, stride=0, alignment=1, "
+                "and offset=0";
+    return success();
+  }
+  static const llvm::StringSet<> kDtypes = {"ue4m3", "ue8m0", "f16", "bf16",
+                                            "f32"};
+  if (!kDtypes.contains(dtype))
+    return emitError() << "TILE_SCALE_LAYOUT_INVALID: unsupported scale dtype "
+                       << dtype;
+  static const llvm::StringSet<> kLayouts = {"linear", "row_major",
+                                             "col_major"};
+  if (!kLayouts.contains(layout))
+    return emitError() << "TILE_SCALE_LAYOUT_INVALID: layout must be "
+                          "linear, row_major, or col_major";
+  if (blockSize < 1 || axis < 0 || stride < 1)
+    return emitError() << "TILE_SCALE_LAYOUT_INVALID: scaled storage "
+                          "requires block_size>=1, axis>=0, and stride>=1";
+  if (alignment < 1 || (alignment & (alignment - 1)) != 0)
+    return emitError() << "TILE_SCALE_LAYOUT_INVALID: alignment must be "
+                          "a positive power of two";
+  if (offset < 0)
+    return emitError()
+           << "TILE_SCALE_LAYOUT_INVALID: offset must be >= 0";
+  return success();
+}
+
+LogicalResult TilePackedFormatAttr::verify(
+    llvm::function_ref<InFlightDiagnostic()> emitError, StringRef logicalType,
+    StringRef containerType, int64_t logicalBits,
+    int64_t elementsPerContainer, StringRef signedness, StringRef encoding,
+    StringRef laneOrder) {
+  static const llvm::StringMap<int64_t> kContainerBits = {
+      {"int8", 8}, {"uint8", 8}, {"int16", 16}, {"uint16", 16},
+      {"int32", 32}, {"uint32", 32}};
+  auto container = kContainerBits.find(containerType);
+  if (container == kContainerBits.end())
+    return emitError()
+           << "TILE_PACKED_FORMAT_INVALID: container must be an explicitly "
+              "sized integer storage type";
+  if (logicalBits < 1 || logicalBits > container->second ||
+      elementsPerContainer < 1 ||
+      logicalBits * elementsPerContainer > container->second)
+    return emitError()
+           << "TILE_PACKED_FORMAT_INVALID: logical_bits and "
+              "elements_per_container do not fit the physical container";
+
+  static const llvm::StringSet<> kLogical = {
+      "int4", "uint4", "fp4_e2m1", "nvfp4", "fp6_e2m3", "fp6_e3m2"};
+  if (!kLogical.contains(logicalType))
+    return emitError()
+           << "TILE_PACKED_FORMAT_INVALID: unsupported packed logical dtype "
+           << logicalType;
+  static const llvm::StringSet<> kSignedness = {
+      "signed_twos_complement", "unsigned", "format_defined"};
+  if (!kSignedness.contains(signedness))
+    return emitError()
+           << "TILE_PACKED_FORMAT_INVALID: unsupported signedness "
+           << signedness;
+  static const llvm::StringSet<> kEncoding = {
+      "twos_complement", "unsigned_integer", "e2m1", "nv_e2m1", "e2m3",
+      "e3m2"};
+  if (!kEncoding.contains(encoding))
+    return emitError()
+           << "TILE_PACKED_FORMAT_INVALID: unsupported packed encoding "
+           << encoding;
+  static const llvm::StringSet<> kLaneOrder = {
+      "low_to_high", "high_to_low", "scalar_lsb"};
+  if (!kLaneOrder.contains(laneOrder))
+    return emitError()
+           << "TILE_PACKED_FORMAT_INVALID: unsupported lane order "
+           << laneOrder;
+
+  if (logicalBits != (logicalType.starts_with("fp6_") ? 6 : 4))
+    return emitError()
+           << "TILE_PACKED_FORMAT_INVALID: logical_bits disagrees "
+              "with the logical dtype";
+  if (logicalType.starts_with("fp6_") && elementsPerContainer != 1)
+    return emitError()
+           << "TILE_PACKED_FORMAT_INVALID: FP6 byte-container "
+              "storage requires elements_per_container=1 while retaining "
+              "logical_bits=6";
+  if (!logicalType.starts_with("fp6_") && containerType == "int8" &&
+      elementsPerContainer != 2)
+    return emitError()
+           << "TILE_PACKED_FORMAT_INVALID: four-bit storage requires exactly "
+              "two logical values per int8 container";
+  if (logicalType == "int4" &&
+      (signedness != "signed_twos_complement" ||
+       encoding != "twos_complement"))
+    return emitError()
+           << "TILE_PACKED_FORMAT_INVALID: int4 requires signed "
+              "two's-complement encoding";
+  if (logicalType == "uint4" &&
+      (signedness != "unsigned" || encoding != "unsigned_integer"))
+    return emitError()
+           << "TILE_PACKED_FORMAT_INVALID: uint4 requires unsigned "
+              "integer encoding";
+  return success();
+}
+
+LogicalResult TilePackedPhysicalViewAttr::verify(
+    llvm::function_ref<InFlightDiagnostic()> emitError,
+    TilePackedFormatAttr format, int64_t packingAxis,
+    ArrayRef<int64_t> strides, int64_t alignment, int64_t offset,
+    TileScaleLayoutAttr scale) {
+  if (!format)
+    return emitError()
+           << "TILE_PACKED_VIEW_INVALID: a packed-format descriptor is "
+              "required";
+  if (packingAxis < 0)
+    return emitError()
+           << "TILE_PACKED_VIEW_INVALID: packing_axis must be >= 0";
+  if (strides.empty() || llvm::any_of(strides, [](int64_t value) {
+        return value < 1;
+      }))
+    return emitError()
+           << "TILE_PACKED_VIEW_INVALID: container strides must be "
+              "non-empty and positive";
+  if (packingAxis >= static_cast<int64_t>(strides.size()))
+    return emitError()
+           << "TILE_PACKED_VIEW_INVALID: packing_axis must index the stride "
+              "rank";
+  if (alignment < 1 || (alignment & (alignment - 1)) != 0)
+    return emitError()
+           << "TILE_PACKED_VIEW_INVALID: alignment must be a positive "
+              "power of two";
+  if (offset < 0)
+    return emitError()
+           << "TILE_PACKED_VIEW_INVALID: offset must be >= 0";
+  if (!scale)
+    return emitError()
+           << "TILE_PACKED_VIEW_INVALID: a scale-layout "
+              "descriptor is required, using dtype=none for unscaled storage";
+
+  bool isInt = format.getLogicalType() == "int4" ||
+               format.getLogicalType() == "uint4";
+  if (isInt && scale.getDtype() != "none")
+    return emitError()
+           << "TILE_PACKED_VIEW_INVALID: integer packing does not accept "
+              "a block-scale operand";
+  if (!isInt && scale.getDtype() == "none")
+    return emitError()
+           << "TILE_PACKED_VIEW_INVALID: FP4/FP6 physical views "
+              "require explicit scale metadata";
+  if (!isInt && scale.getAxis() != packingAxis)
+    return emitError()
+           << "TILE_PACKED_VIEW_INVALID: block scales must index "
+              "the packed logical axis";
   return success();
 }
 

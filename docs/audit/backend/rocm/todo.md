@@ -1550,3 +1550,20 @@ descriptor semantics are parity validated, but NVIDIA's packed A/B layout,
 PTX instructions, CUDA launch ABI, resources, cache proof, and SM120 execution
 do not transfer to HIP/AMDGPU. ROCm's independent WMMA INT4 consumer remains
 authoritative; no ROCm pipeline, capability, schedule, or selector changes.
+
+Cross-backend sync `NVIDIA-PACKED-SSA-FOUNDATION-2026-07-25` migrates the
+existing ROCm WMMA pack reader to the structured shared
+`#tile.packed_format` contract and introduces portable
+`#tile.packed_view`/`#tile.scale_layout`, generic packed load/store, and SSA
+buffer/pipeline vocabulary. ROCm's signed INT4 WMMA physical consumer remains
+authoritative. Generic HIP FP4/FP6 scale consumers and WarpSpec/LDS SSA
+threading are **follow-up required** if selected; CUDA lane order, PTX Math
+operations, SM120 resources, and exact-device evidence do not transfer.
+
+The synchronization point now also registers shared SSA TMA descriptor,
+mbarrier, mbarrier-token, TMEM, and TCGen05 vocabulary and makes the NVIDIA
+WarpSpec path consume shared allocation/pipeline identity. TMA/TMEM/TCGen05 are
+**not applicable** to AMDGPU with an architecture-specific reason; ROCm must
+map its own LDS allocations, async-copy/waitcnt/s_barrier dependencies, and
+WMMA/MFMA consumers onto the shared buffer/pipeline model. That remains
+**follow-up required** and no NVIDIA structural or device evidence closes it.

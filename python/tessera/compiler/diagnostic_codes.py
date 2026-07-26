@@ -1200,6 +1200,30 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         fix_hint="Use `swizzle = #tile.swizzle<per_element=…, len=…, atom=…>`.",
         spec="docs/audit/compiler/COMPILER_AUDIT.md §C1", sprint="C1 (TIRx)",
     ),
+    DiagnosticCode(
+        code="TILE_PACKED_FORMAT_INVALID", pass_origin="TilePackedFormatAttr",
+        severity="error",
+        summary="A packed logical dtype, integer container, encoding, or lane-order contract is inconsistent.",
+        fix_hint="Use the canonical logical bit width, container factor, signedness, encoding, and lane order for the packed dtype.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §C4",
+        sprint="NVIDIA-PACKED-SSA-FOUNDATION",
+    ),
+    DiagnosticCode(
+        code="TILE_PACKED_VIEW_INVALID", pass_origin="TilePackedPhysicalViewAttr",
+        severity="error",
+        summary="A concrete packed buffer view has invalid axes, strides, alignment, offset, or scale binding metadata.",
+        fix_hint="Bind a valid packed format to an explicit packing axis and positive container strides, with compatible scale metadata.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §C4",
+        sprint="NVIDIA-PACKED-SSA-FOUNDATION",
+    ),
+    DiagnosticCode(
+        code="TILE_SCALE_LAYOUT_INVALID", pass_origin="TileScaleLayoutAttr",
+        severity="error",
+        summary="A block-scale dtype, block size, axis, layout, stride, alignment, or offset is inconsistent.",
+        fix_hint="Use the canonical scale dtype and positive block/stride contract, or the exact dtype=none sentinel for unscaled storage.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §C4",
+        sprint="NVIDIA-PACKED-SSA-FOUNDATION",
+    ),
     # C3 — #tile.barrier / #tile.pipeline_state attribute verifiers.
     DiagnosticCode(
         code="TILE_BARRIER_UNKNOWN_KIND", pass_origin="TileBarrierAttr",

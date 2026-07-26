@@ -119,11 +119,9 @@ struct NVTMADescriptorPass
     OpBuilder b(ctx);
 
     // Collect all tile.tma.descriptor ops in program order.
-    SmallVector<Operation *> descOps;
-    funcOp.walk([&](Operation *op) {
-      if (op->getName().getStringRef() == "tile.tma.descriptor")
-        descOps.push_back(op);
-    });
+    SmallVector<tile::TMADescriptorOp> descOps;
+    funcOp.walk(
+        [&](tile::TMADescriptorOp op) { descOps.push_back(op); });
 
     if (descOps.empty())
       return;
@@ -140,54 +138,59 @@ struct NVTMADescriptorPass
 
     // Emit mbarrier.init once for all unique descriptors.
     // (Actual slot count filled in after dedup.)
-    Operation *mbarrierInitPlaceholder = nullptr;
+    tile::MBarrierInitOp mbarrierInitPlaceholder;
     {
-      OperationState st(funcOp.getLoc(), "tile.mbarrier.init");
-      st.addAttribute("slots", b.getI64IntegerAttr(0)); // placeholder
+      OperationState st(funcOp.getLoc(),
+                        tile::MBarrierInitOp::getOperationName());
+      st.addAttribute("slots", b.getI64IntegerAttr(1)); // valid placeholder
       st.addAttribute("phase_bits", b.getI64IntegerAttr(2));
-      mbarrierInitPlaceholder = b.create(st);
+      st.addTypes(tile::MBarrierType::get(ctx));
+      mbarrierInitPlaceholder =
+          cast<tile::MBarrierInitOp>(b.create(st));
     }
 
     // Process each descriptor op.
-    for (Operation *desc : descOps) {
-      if (desc->getNumOperands() < 1)
-        continue;
-      Value src = desc->getOperand(0);
-      int64_t tileRows = 64, tileCols = 64;
-      if (auto a = desc->getAttrOfType<IntegerAttr>("tile_rows"))
-        tileRows = a.getInt();
-      if (auto a = desc->getAttrOfType<IntegerAttr>("tile_cols"))
-        tileCols = a.getInt();
+    Operation *lastPreamble = mbarrierInitPlaceholder;
+    for (tile::TMADescriptorOp desc : descOps) {
+      Value src = desc.getSource();
+      int64_t tileRows = desc.getTileRows();
+      int64_t tileCols = desc.getTileCols();
+      if (auto blockArg = dyn_cast<BlockArgument>(src);
+          !blockArg || blockArg.getOwner() != &entryBlock) {
+        desc.emitError(
+            "TMA descriptor hoisting requires a kernel entry-block argument "
+            "source; computed descriptors must be materialized before this pass");
+        signalPassFailure();
+        return;
+      }
 
       DescriptorKey key{src, tileRows, tileCols};
       auto it = canonMap.find(key);
       if (it == canonMap.end()) {
-        // Hoist a new descriptor setup to preamble.
-        b.setInsertionPoint(mbarrierInitPlaceholder);
-        OperationState st(desc->getLoc(), "tile.tma.setup_descriptor");
+        // Hoist one canonical typed descriptor to the preamble.
+        b.setInsertionPointAfter(lastPreamble);
+        OperationState st(desc.getLoc(),
+                          tile::TMADescriptorOp::getOperationName());
         st.addOperands({src});
         st.addAttribute("tile_rows", b.getI64IntegerAttr(tileRows));
         st.addAttribute("tile_cols", b.getI64IntegerAttr(tileCols));
-        st.addAttribute("mbarrier_slot", b.getI64IntegerAttr(nextSlot));
-        // expect_tx = tile_rows * tile_cols * sizeof(bf16)
+        st.addAttribute("slot", b.getI64IntegerAttr(nextSlot));
         int64_t expectTx = tileRows * tileCols * 2;
         st.addAttribute("expect_tx", b.getI64IntegerAttr(expectTx));
-        st.addTypes(b.getIntegerType(64));
-        Operation *setup = b.create(st);
-        // C6: the per-slot setup is this barrier's init site (declares the
-        // expected transaction count).
-        if (tileRows > 0 && tileCols > 0)
-          stampTmaBarrier(b, setup, nextSlot, expectTx);
-        canonMap[key] = setup->getResult(0);
+        st.addTypes(tile::TMADescriptorType::get(ctx));
+        auto setup = cast<tile::TMADescriptorOp>(b.create(st));
+        lastPreamble = setup;
+        stampTmaBarrier(b, setup, nextSlot, expectTx);
+        canonMap[key] = setup.getDescriptor();
         slotMap[key] = nextSlot++;
-        descriptorSlotMap[setup->getResult(0)] = slotMap[key];
+        descriptorSlotMap[setup.getDescriptor()] = slotMap[key];
         desc->replaceAllUsesWith(setup->getResults());
-        desc->erase();
+        desc.erase();
       } else {
         // Replace duplicate with the canonical value.
         descriptorSlotMap[it->second] = slotMap[key];
         desc->replaceAllUsesWith(ValueRange{it->second});
-        desc->erase();
+        desc.erase();
       }
     }
 
@@ -197,27 +200,82 @@ struct NVTMADescriptorPass
           "slots", b.getI64IntegerAttr(nextSlot));
     }
 
-    // Update all tile.tma.copy_async ops with their correct mbarrier slot.
-    // (Slot 0 is the default; the setup ops assigned sequential slots above.)
-    funcOp.walk([&](Operation *op) {
-      if (op->getName().getStringRef() == "tile.tma.copy_async") {
-        if (op->getNumOperands() == 0)
-          return;
-        Value descriptor = op->getOperand(0);
-        auto slotIt = descriptorSlotMap.find(descriptor);
-        if (slotIt == descriptorSlotMap.end())
-          return;
-        op->setAttr("mbarrier_slot", b.getI64IntegerAttr(slotIt->second));
-        if (auto setup = descriptor.getDefiningOp()) {
-          if (auto expectTx = setup->getAttrOfType<IntegerAttr>("expect_tx")) {
-            op->setAttr("expect_tx", expectTx);
-            // C6: the copy_async is this barrier's arrive site — same (kind,
-            // expect, id) as the init, so arrival-count == init-count.
-            stampTmaBarrier(b, op, slotIt->second, expectTx.getInt());
-          }
-        }
+    // Rebuild copies with an explicit SSA mbarrier operand. The descriptor,
+    // barrier, async token, and staged value now form one def-use chain.
+    SmallVector<tile::TMACopyAsyncOp> copies;
+    funcOp.walk([&](tile::TMACopyAsyncOp op) { copies.push_back(op); });
+    SmallVector<Value> completionTokens;
+    for (tile::TMACopyAsyncOp copy : copies) {
+      Value descriptor = copy.getDescriptor();
+      auto slotIt = descriptorSlotMap.find(descriptor);
+      if (slotIt == descriptorSlotMap.end()) {
+        copy.emitError("references a descriptor not owned by this kernel");
+        signalPassFailure();
+        return;
       }
-    });
+      auto setup = descriptor.getDefiningOp<tile::TMADescriptorOp>();
+      int64_t expectTx = setup.getExpectTx().value_or(0);
+      SmallVector<Value> operands = {
+          descriptor, mbarrierInitPlaceholder.getBarrier()};
+      operands.append(copy.getDependencies().begin(),
+                      copy.getDependencies().end());
+      SmallVector<NamedAttribute> attrs;
+      for (NamedAttribute attr : copy->getAttrs())
+        if (attr.getName() != "operandSegmentSizes" &&
+            attr.getName() != "mbarrier_slot" &&
+            attr.getName() != "expect_tx")
+          attrs.push_back(attr);
+      attrs.push_back(
+          b.getNamedAttr("mbarrier_slot",
+                         b.getI64IntegerAttr(slotIt->second)));
+      attrs.push_back(
+          b.getNamedAttr("expect_tx", b.getI64IntegerAttr(expectTx)));
+      attrs.push_back(b.getNamedAttr(
+          "operandSegmentSizes",
+          b.getDenseI32ArrayAttr(
+              {1, 1, static_cast<int32_t>(copy.getDependencies().size())})));
+      b.setInsertionPoint(copy);
+      OperationState st(copy.getLoc(),
+                        tile::TMACopyAsyncOp::getOperationName());
+      st.addOperands(operands);
+      st.addTypes(copy->getResultTypes());
+      st.addAttributes(attrs);
+      Operation *replacement = b.create(st);
+      stampTmaBarrier(b, replacement, slotIt->second, expectTx);
+      for (Value result : replacement->getResults())
+        if (isa<tile::AsyncTokenType>(result.getType()))
+          completionTokens.push_back(result);
+      copy->replaceAllUsesWith(replacement->getResults());
+      copy.erase();
+    }
+
+    SmallVector<tile::MBarrierWaitOp> waits;
+    funcOp.walk([&](tile::MBarrierWaitOp op) { waits.push_back(op); });
+    for (tile::MBarrierWaitOp wait : waits) {
+      if (wait.getBarrier())
+        continue;
+      SmallVector<Value> operands = {mbarrierInitPlaceholder.getBarrier()};
+      SmallVector<Value> dependencies(wait.getDependencies().begin(),
+                                      wait.getDependencies().end());
+      if (dependencies.empty())
+        dependencies.append(completionTokens.begin(), completionTokens.end());
+      operands.append(dependencies);
+      SmallVector<NamedAttribute> attrs;
+      for (NamedAttribute attr : wait->getAttrs())
+        if (attr.getName() != "operandSegmentSizes")
+          attrs.push_back(attr);
+      attrs.push_back(b.getNamedAttr(
+          "operandSegmentSizes",
+          b.getDenseI32ArrayAttr(
+              {1, static_cast<int32_t>(dependencies.size())})));
+      b.setInsertionPoint(wait);
+      OperationState st(wait.getLoc(),
+                        tile::MBarrierWaitOp::getOperationName());
+      st.addOperands(operands);
+      st.addAttributes(attrs);
+      b.create(st);
+      wait.erase();
+    }
   }
 };
 

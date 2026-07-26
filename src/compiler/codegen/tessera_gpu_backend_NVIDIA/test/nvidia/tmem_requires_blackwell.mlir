@@ -1,9 +1,10 @@
-// RUN: not %tnv --allow-unregistered-dialect --lower-tile-to-nvidia='sm=90' %s 2>&1 | FileCheck %s
-// RUN: not %tnv --allow-unregistered-dialect --lower-tile-to-nvidia='sm=120' %s 2>&1 | FileCheck %s --check-prefix=CONSUMER
+// RUN: not %tnv --lower-tile-to-nvidia='sm=90' %s 2>&1 | FileCheck %s
+// RUN: not %tnv --lower-tile-to-nvidia='sm=120' %s 2>&1 | FileCheck %s --check-prefix=CONSUMER
 
 module {
   func.func @kernel() {
-    "tile.tmem.load"() : () -> ()
+    %tmem = tile.tmem.allocate {bytes = 4096 : i64, alignment = 128 : i64}
+        : !tile.tmem
     return
   }
 }

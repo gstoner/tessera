@@ -2407,6 +2407,7 @@ def _submit_nvidia_sm120_native(
         SM120_INT8_ABI,
         SM120_INT4_ABI,
         SM120_CUDA_INTRINSIC_ABI,
+        SM120_PACKED_DECODE_ABI,
         SM120_MXFP4_ABI,
         SM120_MOE_DISPATCH_F32_ABI,
         SM120_MOE_COMBINE_F32_ABI,
@@ -2469,6 +2470,7 @@ def _submit_nvidia_sm120_native(
         SM120_INT8_ABI,
         SM120_INT4_ABI,
         SM120_CUDA_INTRINSIC_ABI,
+        SM120_PACKED_DECODE_ABI,
         SM120_MXFP4_ABI,
             SM120_PAGED_KV_F32_ABI,
             SM120_PAGED_ATTN_F32_ABI,
@@ -2819,6 +2821,43 @@ def _submit_nvidia_sm120_native(
                 "SM120 CUDA intrinsic buffers disagree with descriptor N"
             )
         output = raw[3]
+    elif descriptor.abi_id == SM120_PACKED_DECODE_ABI:
+        dimensions = tuple(
+            int(cast(int, scalars[name]))
+            for name in (
+                "RowOrigin",
+                "ColumnOrigin",
+                "Rows",
+                "Columns",
+                "SourceBytes",
+                "ScaleBytes",
+            )
+        )
+        row, column, rows, columns, source_bytes, scale_bytes = dimensions
+        source, scale, output = raw
+        if (
+            row < 0
+            or column < 0
+            or rows <= 0
+            or columns <= 0
+            or source_bytes <= 0
+            or scale_bytes <= 0
+            or tuple(source.shape) != (source_bytes,)
+            or tuple(scale.shape) != (scale_bytes,)
+            or tuple(output.shape) != (rows, columns)
+        ):
+            raise RuntimeError(
+                "SM120 packed decode buffers disagree with descriptor scalars"
+            )
+        if (
+            int(cast(int, descriptor.provenance.get("source_bytes", -1)))
+            != source_bytes
+            or int(cast(int, descriptor.provenance.get("scale_bytes", -1)))
+            != scale_bytes
+        ):
+            raise RuntimeError(
+                "SM120 packed decode byte extents disagree with physical view"
+            )
     elif descriptor.abi_id in unary_abis:
         x, output = raw
         if descriptor.abi_id in softmax_abis:
@@ -2875,6 +2914,8 @@ def _submit_nvidia_sm120_native(
             )
     elif descriptor.abi_id == SM120_CUDA_INTRINSIC_ABI:
         pass  # Rank-one A/B/C/O validation is performed above.
+    elif descriptor.abi_id == SM120_PACKED_DECODE_ABI:
+        pass  # Physical-view validation and output selection are performed above.
     elif descriptor.abi_id in SM120_EPILOGUE_ABIS:
         a, b, *optional, d = raw
         epilogue_value = descriptor.provenance.get("epilogue", {})
@@ -2954,6 +2995,7 @@ def _submit_nvidia_sm120_native(
             SM120_DYNAMIC_SMEM_ABI,
             SM120_DYNAMIC_EXPR_SMEM_ABI,
             SM120_CUDA_INTRINSIC_ABI,
+            SM120_PACKED_DECODE_ABI,
         }
         else d
     )
@@ -3811,6 +3853,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         SM120_INT8_ABI,
         SM120_INT4_ABI,
         SM120_CUDA_INTRINSIC_ABI,
+        SM120_PACKED_DECODE_ABI,
         SM120_MXFP4_ABI,
         SM120_MOE_DISPATCH_F32_ABI,
         SM120_MOE_COMBINE_F32_ABI,
@@ -3865,6 +3908,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
                 SM120_INT8_ABI,
                 SM120_INT4_ABI,
                 SM120_CUDA_INTRINSIC_ABI,
+                SM120_PACKED_DECODE_ABI,
                 SM120_MXFP4_ABI,
                 SM120_PAGED_KV_F32_ABI,
                 SM120_PAGED_ATTN_F32_ABI,
@@ -4875,8 +4919,11 @@ def _build_compiled_gemm_hsaco(
     storage_pack = ""
     if dtype in ("int4", "i4"):
         storage_pack = (
-            ', tessera.storage_pack = {logical = "int4", container = "int8", '
-            'factor = 2 : i64, signedness = "signed_twos_complement"}'
+            ', tessera.storage_pack = #tile.packed_format<logical = "int4", '
+            'container = "int8", logical_bits = 4, '
+            'elements_per_container = 2, '
+            'signedness = "signed_twos_complement", '
+            'encoding = "twos_complement", lane_order = "low_to_high">'
         )
     directive = (
         "module {\n"

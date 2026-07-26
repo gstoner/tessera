@@ -1,0 +1,267 @@
+{
+  "schema": "tessera.nvidia.packed-storage-foundation.v1",
+  "device": "sm_120",
+  "arch": "sm_120a",
+  "timing_policy": {
+    "discard_first_end_to_end": true,
+    "amortized_launches": 10,
+    "device_observations": 7,
+    "aggregate": "median"
+  },
+  "selector_policy": "WSL evidence is selector-ineligible",
+  "rows": [
+    {
+      "candidate": "generic_packed_decode_int4",
+      "logical_dtype": "int4",
+      "selected_route": "compiler_owned_tile_packed_load",
+      "device_event_ms": 0.12441279739141464,
+      "device_event_samples_ms": [
+        0.12341760098934174,
+        0.1239967942237854,
+        0.12471679598093033,
+        0.1247807964682579,
+        0.12441279739141464,
+        0.1418047994375229,
+        0.12390079349279404
+      ],
+      "end_to_end_ms": 10.791431,
+      "end_to_end_samples_ms": [
+        10.405376,
+        11.107957,
+        10.737101,
+        10.950407,
+        10.798301,
+        11.437992,
+        10.784561,
+        10.77472,
+        10.450783,
+        11.076391
+      ],
+      "discarded_first_end_to_end_ms": 11.324807,
+      "amortized_launches_per_device_observation": 10,
+      "resources": {
+        "registers_per_thread": 18,
+        "static_shared_memory_bytes": 0,
+        "dynamic_shared_memory_bytes": 0,
+        "local_memory_bytes": 0,
+        "active_blocks_per_sm": 12
+      },
+      "compile_state": "cold",
+      "image_digest": "1ed87200b3d17beb206b18b42fc67b514346bc8127c39604646c429293f228d5",
+      "descriptor_digest": "13200c379f4f32340ccb692edfb48c9052df123be3d0e48e9e170c01319b8609",
+      "cache_fingerprint": "c2b5676f984d2c63abc59c97b8be63c48100379292a7036a2af6cbc96c6d4d6e",
+      "selector_eligible": false,
+      "selector_disposition": "retain",
+      "host_policy": "wsl_evidence_only",
+      "cross_run": {
+        "reference_medians_ms": {
+          "device_event": 0.12364159524440765,
+          "end_to_end": 10.76206
+        },
+        "stability_pct": {
+          "device_event": 0.6198736489950566,
+          "end_to_end": 0.2721696501603853
+        },
+        "stable_both_domains": true,
+        "resource_identity": true,
+        "image_identity": true,
+        "descriptor_identity": true,
+        "cache_identity": true,
+        "reference_compile_state": "cold"
+      },
+      "evidence_fingerprint": "sha256:63faed60282d7910db5fc5951076cd9fc313a2eed1a22935fc60242b4050362b"
+    },
+    {
+      "candidate": "generic_packed_decode_nvfp4",
+      "logical_dtype": "nvfp4",
+      "selected_route": "compiler_owned_tile_packed_load",
+      "device_event_ms": 0.13371840119361877,
+      "device_event_samples_ms": [
+        0.1346655935049057,
+        0.1340160071849823,
+        0.1336832046508789,
+        0.13365760445594788,
+        0.13371840119361877,
+        0.13378240168094635,
+        0.13367359340190887
+      ],
+      "end_to_end_ms": 11.349731,
+      "end_to_end_samples_ms": [
+        11.444148,
+        11.255314,
+        11.826982,
+        10.965149,
+        12.328494,
+        11.947352,
+        11.126624,
+        12.819213,
+        10.639443,
+        10.698012
+      ],
+      "discarded_first_end_to_end_ms": 13.358611,
+      "amortized_launches_per_device_observation": 10,
+      "resources": {
+        "registers_per_thread": 18,
+        "static_shared_memory_bytes": 0,
+        "dynamic_shared_memory_bytes": 0,
+        "local_memory_bytes": 0,
+        "active_blocks_per_sm": 12
+      },
+      "compile_state": "cold",
+      "image_digest": "e542e3ceabcba90ce7e30e1b727836101f0c3a5b1f684cadc2cc4783c2550805",
+      "descriptor_digest": "8231b5d0e20e644c42e1b4ba46a8fc2422220b432baf09b7452f49f19930454f",
+      "cache_fingerprint": "af74b4cb1748f317cc2b7b7e9895f9f5f7829215169c5431b5442597c4c25309",
+      "selector_eligible": false,
+      "selector_disposition": "retain",
+      "host_policy": "wsl_evidence_only",
+      "cross_run": {
+        "reference_medians_ms": {
+          "device_event": 0.13447999954223633,
+          "end_to_end": 11.339701
+        },
+        "stability_pct": {
+          "device_event": 0.5663283396861981,
+          "end_to_end": 0.08837213851148039
+        },
+        "stable_both_domains": true,
+        "resource_identity": true,
+        "image_identity": true,
+        "descriptor_identity": true,
+        "cache_identity": true,
+        "reference_compile_state": "cold"
+      },
+      "evidence_fingerprint": "sha256:bf6afcd04eed6b652cb20a168f4bd3ee88ff62a0a044dde10aa5c1fe7a8b4345"
+    },
+    {
+      "candidate": "generic_packed_decode_fp6_e2m3",
+      "logical_dtype": "fp6_e2m3",
+      "selected_route": "compiler_owned_tile_packed_load",
+      "device_event_ms": 0.1384063959121704,
+      "device_event_samples_ms": [
+        0.14016319811344147,
+        0.13769599795341492,
+        0.13808000087738037,
+        0.15626560151576996,
+        0.1384063959121704,
+        0.13900159299373627,
+        0.13802561163902283
+      ],
+      "end_to_end_ms": 13.6524045,
+      "end_to_end_samples_ms": [
+        13.540054,
+        15.089595,
+        14.025943,
+        13.554858,
+        13.609148,
+        13.615596,
+        13.689213,
+        13.788006,
+        13.541582,
+        13.697662
+      ],
+      "discarded_first_end_to_end_ms": 14.660052,
+      "amortized_launches_per_device_observation": 10,
+      "resources": {
+        "registers_per_thread": 18,
+        "static_shared_memory_bytes": 0,
+        "dynamic_shared_memory_bytes": 0,
+        "local_memory_bytes": 0,
+        "active_blocks_per_sm": 12
+      },
+      "compile_state": "cold",
+      "image_digest": "cf8e16ee44e24702ac821b06ff678c9dca6f0303c9092a0e9cfb0bfe7c287bdb",
+      "descriptor_digest": "aa6b166f6897db3bf29627ecad316310849b4f29c539604a9abf4de4c5889954",
+      "cache_fingerprint": "23ec588d869294cc3e3ebf3205ce2e379d72250c6930c92a07ae515ca54470bc",
+      "selector_eligible": false,
+      "selector_disposition": "retain",
+      "host_policy": "wsl_evidence_only",
+      "cross_run": {
+        "reference_medians_ms": {
+          "device_event": 0.13796480000019073,
+          "end_to_end": 14.141665
+        },
+        "stability_pct": {
+          "device_event": 0.3190574460589973,
+          "end_to_end": 3.4597093057995667
+        },
+        "stable_both_domains": true,
+        "resource_identity": true,
+        "image_identity": true,
+        "descriptor_identity": true,
+        "cache_identity": true,
+        "reference_compile_state": "cold"
+      },
+      "evidence_fingerprint": "sha256:158b85529f9b0050b3b6d62aec3eebd05c48e7dbaf30bf0d4c9fb7e633cb0cd5"
+    },
+    {
+      "candidate": "generic_packed_decode_fp6_e3m2",
+      "logical_dtype": "fp6_e3m2",
+      "selected_route": "compiler_owned_tile_packed_load",
+      "device_event_ms": 0.13797441124916077,
+      "device_event_samples_ms": [
+        0.13797441124916077,
+        0.1390880048274994,
+        0.137772798538208,
+        0.1379232108592987,
+        0.137910395860672,
+        0.138617604970932,
+        0.1389055997133255
+      ],
+      "end_to_end_ms": 13.2615395,
+      "end_to_end_samples_ms": [
+        13.128994,
+        12.945919,
+        13.179025,
+        13.300872,
+        13.079571,
+        13.562142,
+        13.645821,
+        13.222207,
+        13.471562,
+        13.320852
+      ],
+      "discarded_first_end_to_end_ms": 14.144583,
+      "amortized_launches_per_device_observation": 10,
+      "resources": {
+        "registers_per_thread": 18,
+        "static_shared_memory_bytes": 0,
+        "dynamic_shared_memory_bytes": 0,
+        "local_memory_bytes": 0,
+        "active_blocks_per_sm": 12
+      },
+      "compile_state": "cold",
+      "image_digest": "caedcbfb53c0ddffc51ed68147a38b7ada7440286e8f5116f966d0c9103cfe54",
+      "descriptor_digest": "54cc49be9ce4a6f3a8370ad2d2cd68990071b329a58b94fd40a05f3c59830cd9",
+      "cache_fingerprint": "8ce665d4423829e5221da8f1c56db082dd1b2685a10fab60db14e04858ec9fbd",
+      "selector_eligible": false,
+      "selector_disposition": "retain",
+      "host_policy": "wsl_evidence_only",
+      "cross_run": {
+        "reference_medians_ms": {
+          "device_event": 0.1378656029701233,
+          "end_to_end": 13.273420000000002
+        },
+        "stability_pct": {
+          "device_event": 0.07886120190865277,
+          "end_to_end": 0.0895059449637091
+        },
+        "stable_both_domains": true,
+        "resource_identity": true,
+        "image_identity": true,
+        "descriptor_identity": true,
+        "cache_identity": true,
+        "reference_compile_state": "cold"
+      },
+      "evidence_fingerprint": "sha256:ac62cf0ddd4713f107b3f0dce64765f70fed2663b4a378fa300489dfe8564d3f"
+    }
+  ],
+  "stability_policy": {
+    "limit_pct": 4.0,
+    "required_domains": [
+      "device_event",
+      "end_to_end"
+    ],
+    "stable_rows": 4,
+    "total_rows": 4
+  }
+}

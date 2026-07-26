@@ -64,10 +64,10 @@ func.func @transpose_packed_epilogue_reduce(
   %seed = "tessera.cast"(%a) {
     tessera.layout = "row_major",
     tessera.storage_container = "int8",
-    tessera.storage_pack = {
-      container = "int8", factor = 2 : i64, logical = "int4",
-      signedness = "signed_twos_complement"
-    },
+    tessera.storage_pack = #tile.packed_format<
+      logical = "int4", container = "int8", logical_bits = 4,
+      elements_per_container = 2, signedness = "signed_twos_complement",
+      encoding = "twos_complement", lane_order = "low_to_high">,
     tessera.storage_packed = true
   } : (tensor<8x4xf32>) -> tensor<8x4xf32>
   %transpose = "tessera.transpose"(%seed) {

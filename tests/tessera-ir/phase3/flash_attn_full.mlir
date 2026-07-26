@@ -23,6 +23,7 @@
 //     (alongside tile.async_copy / tile.mma), so they round-trip as opaque ops.
 //
 // RUN: tessera-opt \
+// RUN:   --allow-unregistered-dialect \
 // RUN:   --tessera-distribution-lowering='mesh-axes=tp mesh-sizes=1' \
 // RUN:   --tessera-effect-annotation \
 // RUN:   --tessera-tile-ir-lowering='tile-q=64 tile-kv=64 sm=90' \
@@ -34,7 +35,7 @@
 // RUN:   %s | FileCheck %s
 //
 // Alternatively, use the named pipeline:
-// RUN: tessera-opt -tessera-lower-to-gpu %s \
+// RUN: tessera-opt --allow-unregistered-dialect -tessera-lower-to-gpu %s \
 // RUN:   | FileCheck %s --check-prefix=PIPE
 
 // The func.func prints pretty (nvvm.kernel is a func attr); the unregistered
@@ -42,10 +43,10 @@
 // op sequence in emitted order.
 // CHECK:          func.func @flash_attn_fwd
 // CHECK-SAME:     nvvm.kernel
-// CHECK:          tile.tma.setup_descriptor
-// CHECK:          tile.mbarrier.arrive.expect_tx
-// CHECK:          tile.mbarrier.try_wait.parity
 // CHECK:          tile.mbarrier.init
+// CHECK:          tile.tma.descriptor
+// CHECK:          tile.mbarrier.arrive_expect_tx
+// CHECK:          tile.mbarrier.try_wait
 // CHECK:          schedule.warp
 // CHECK:          tile.tma.copy_async
 // CHECK:          role = "producer"

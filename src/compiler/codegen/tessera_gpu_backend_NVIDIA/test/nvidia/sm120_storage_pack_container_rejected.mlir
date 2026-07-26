@@ -10,7 +10,7 @@ module {
       warps = 1 : i64, staging = "global",
       tessera.storage_packed = true,
       tessera.storage_container = "int16",
-      tessera.storage_pack = {logical = "int4", container = "int16", factor = 4 : i64, signedness = "signed_twos_complement"}
+      tessera.storage_pack = #tile.packed_format<logical = "int4", container = "int16", logical_bits = 4, elements_per_container = 4, signedness = "signed_twos_complement", encoding = "twos_complement", lane_order = "low_to_high">
     } : !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64
     llvm.return
   }

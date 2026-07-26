@@ -1,6 +1,7 @@
 
 #pragma once
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/StringRef.h"
 
 namespace tessera {
 
@@ -373,10 +374,13 @@ std::unique_ptr<mlir::Pass> createTilePipelineLegalityPass();
 // block-scaled storage gets tessera.storage_packed + tessera.storage_container.
 // Registered as --tessera-compute-legalize / --tessera-storage-legalize.
 std::unique_ptr<mlir::Pass> createComputeLegalizePass();
-std::unique_ptr<mlir::Pass> createStorageLegalizePass();
+// `target` enables capability-gated terminal legalization in named pipelines.
+// An empty target retains the standalone analysis/fixture behavior.
+std::unique_ptr<mlir::Pass>
+createStorageLegalizePass(llvm::StringRef target = {});
 // 2026-06-23: the first real *consumer* of the C4 packing markers — reads
 // tessera.storage_packed/storage_container + numeric_policy.storage and emits a
-// concrete tessera.storage_pack = {logical, container, factor} descriptor for a
+// concrete structured #tile.packed_format descriptor for a
 // backend's packed load/store (HF Target IR; the packed codegen + the
 // legalize-dtypes default-flip are the hardware-gated tail).
 // --tessera-storage-pack-consume; emits DTYPE_PACK_BAD_WIDTHS.

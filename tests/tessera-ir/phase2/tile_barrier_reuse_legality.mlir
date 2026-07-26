@@ -74,3 +74,51 @@ func.func @lds_alias_race() {
     tile.layout = #tile.layout<shard = [256] : [1] on ["lds"], replica = [] : [] on [], offset = 0>} : () -> ()
   return
 }
+
+// -----
+
+// New canonical form: physical identity comes from the tile.alloc SSA result,
+// not a buffer name. Two unregistered write-envelope ops deliberately carry no
+// tile.buf attribute; the legality pass follows the common allocation root.
+func.func @ssa_allocation_alias_race() {
+  %buffer = tile.alloc {
+    bytes = 256 : i64, space = "smem",
+    layout = #tile.layout<shard = [256] : [1] on ["m"],
+                          replica = [] : [] on [], offset = 0>
+  } : !tile.buffer
+  // expected-note @+1 {{previous write to the same allocation root here}}
+  "tile.smem_write"(%buffer) {
+    tile.layout = #tile.layout<shard = [128] : [1] on ["m"],
+                               replica = [] : [] on [], offset = 0>
+  } : (!tile.buffer) -> ()
+  // expected-error @+1 {{TILE_BARRIER_REUSE_MISSING_BARRIER: buffer SSA allocation}}
+  "tile.smem_write"(%buffer) {
+    tile.layout = #tile.layout<shard = [128] : [1] on ["m"],
+                               replica = [] : [] on [], offset = 0>
+  } : (!tile.buffer) -> ()
+  tile.dealloc %buffer : !tile.buffer
+  return
+}
+
+// -----
+
+// A typed barrier still clears hazards for the SSA allocation form.
+// CHECK-LABEL: func.func @ssa_allocation_barriered
+func.func @ssa_allocation_barriered() {
+  %buffer = tile.alloc {
+    bytes = 256 : i64, space = "smem",
+    layout = #tile.layout<shard = [256] : [1] on ["m"],
+                          replica = [] : [] on [], offset = 0>
+  } : !tile.buffer
+  "tile.smem_write"(%buffer) {
+    tile.layout = #tile.layout<shard = [128] : [1] on ["m"],
+                               replica = [] : [] on [], offset = 0>
+  } : (!tile.buffer) -> ()
+  "tile.mbarrier_wait"() : () -> ()
+  "tile.smem_write"(%buffer) {
+    tile.layout = #tile.layout<shard = [128] : [1] on ["m"],
+                               replica = [] : [] on [], offset = 0>
+  } : (!tile.buffer) -> ()
+  tile.dealloc %buffer : !tile.buffer
+  return
+}

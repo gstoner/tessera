@@ -544,6 +544,46 @@ LogicalResult ViewOp::verify() {
   return success();
 }
 
+static LogicalResult verifyPackedAddressing(Operation *op, ValueRange inputs,
+                                            bool store) {
+  auto packed =
+      op->getAttrOfType<TilePackedPhysicalViewAttr>("tile.packed_view");
+  if (!packed)
+    return op->emitOpError("requires a #tile.packed_view attribute");
+  if (!op->getAttrOfType<TileLayoutAttr>("tile.layout"))
+    return op->emitOpError("requires a #tile.layout attribute");
+  if (!op->getAttrOfType<TileMemoryLayoutAttr>("tile.memory"))
+    return op->emitOpError("requires a #tile.memory_layout attribute");
+
+  bool scaled = packed.getScale().getDtype() != "none";
+  unsigned prefix = store ? 2 : (scaled ? 2 : 1);
+  unsigned expected = prefix + 4;
+  if (inputs.size() != expected)
+    return op->emitOpError()
+           << (store ? "packed store" : scaled ? "scaled packed load"
+                                               : "unscaled packed load")
+           << " expects " << expected << " operands";
+  if (store && !isa<TileValueType>(inputs.front().getType()))
+    return op->emitOpError("packed store requires a leading !tile.tile value");
+  if (store && scaled)
+    return op->emitOpError(
+        "scale-bearing packed stores require an explicit scale-production "
+        "contract and are not supported");
+  for (Value coordinate : inputs.drop_front(prefix))
+    if (!coordinate.getType().isInteger(64))
+      return op->emitOpError(
+          "row/column origins and logical extents must be i64");
+  return success();
+}
+
+LogicalResult PackedLoadOp::verify() {
+  return verifyPackedAddressing(getOperation(), getInputs(), /*store=*/false);
+}
+
+LogicalResult PackedStoreOp::verify() {
+  return verifyPackedAddressing(getOperation(), getInputs(), /*store=*/true);
+}
+
 LogicalResult FragmentPackOp::verify() {
   if (getInputs().size() != 1 || !isa<TileValueType>(getInputs().front().getType()))
     return emitOpError("expects exactly one !tile.tile input");
@@ -878,19 +918,29 @@ LogicalResult CudaIntrinsicKernelOp::verify() {
   auto output = getOperation()->getAttrOfType<StringAttr>("output_storage");
   auto rounding = getOperation()->getAttrOfType<StringAttr>("rounding");
   auto saturation = getOperation()->getAttrOfType<BoolAttr>("saturation");
-  if (!kind || !input || !output || !rounding || !saturation)
+  auto laneWidth = getOperation()->getAttrOfType<IntegerAttr>("lane_width");
+  auto signedness = getOperation()->getAttrOfType<StringAttr>("signedness");
+  auto predicate = getOperation()->getAttrOfType<StringAttr>("predicate_form");
+  if (!kind || !input || !output || !rounding || !saturation || !laneWidth ||
+      !signedness || !predicate)
     return emitOpError(
-        "requires kind, input_storage, output_storage, rounding, and saturation");
+        "requires kind, input/output storage, rounding, saturation, "
+        "lane_width, signedness, and predicate_form");
   StringRef value = kind.getValue();
   bool cast = value.starts_with("cvt_f32_i32_");
   bool supported =
       value == "abs_i32" || value == "min_i32" || value == "max_i32" ||
       value == "brev_u32" || value == "byte_perm_u32" ||
-      value == "clz_u32" || value == "popc_u32" ||
+      value == "clz_u32" || value == "ffs_u32" || value == "popc_u32" ||
       value == "funnelshift_l_wrap_u32" ||
       value == "dp2a_lo_s32" || value == "dp4a_s32" ||
-      value == "bitcast_i32" || value == "vadd2_u16x2" ||
-      value == "vabsdiff4_u8x4" || cast;
+      value == "bitcast_f32_i32" || value == "bitcast_i32_f32" ||
+      value == "vadd2_u16x2" || value == "vadd4_u8x4" ||
+      value == "vadd4_s8x4" || value == "vaddss4_s8x4" ||
+      value == "vsub4_u8x4" || value == "vsub4_s8x4" ||
+      value == "vsubss4_s8x4" || value == "vabsdiff4_u8x4" ||
+      value == "vcmpeq4_u8x4_mask" || value == "vcmpeq4_u8x4_pred" ||
+      cast;
   if (!supported)
     return emitOpError("unsupported CUDA intrinsic kind");
   if (cast) {
@@ -899,13 +949,66 @@ LogicalResult CudaIntrinsicKernelOp::verify() {
         (mode != "rn" && mode != "rd" && mode != "ru" && mode != "rz") ||
         rounding.getValue() != mode)
       return emitOpError("numeric casts require f32->i32 and matching RN/RD/RU/RZ");
+  } else if (value == "bitcast_f32_i32") {
+    if (input.getValue() != "f32" || output.getValue() != "i32")
+      return emitOpError("float_as_int requires f32->i32 storage");
+  } else if (value == "bitcast_i32_f32") {
+    if (input.getValue() != "i32" || output.getValue() != "f32")
+      return emitOpError("int_as_float requires i32->f32 storage");
   } else if (input.getValue() != "i32" || output.getValue() != "i32" ||
              rounding.getValue() != "none") {
     return emitOpError("integer/packed intrinsics require i32 bit containers and rounding=none");
   }
-  if (saturation.getValue())
+  bool packed = value.starts_with("v");
+  if (!packed &&
+      (laneWidth.getInt() != 0 || signedness.getValue() != "scalar" ||
+       predicate.getValue() != "none" || saturation.getValue()))
+    return emitOpError("scalar CUDA Math attributes must use lane_width=0, "
+                       "signedness=scalar, predicate_form=none, and no saturation");
+  return success();
+}
+
+LogicalResult AllocOp::verify() {
+  if (getSpace() != "smem" && getSpace() != "tmem" &&
+      getSpace() != "gmem")
+    return emitOpError("space must be smem|tmem|gmem");
+  if (getBytes() == 0)
+    return emitOpError("bytes must be positive");
+  if (!isa<TileLayoutAttr>(getLayout()))
+    return emitOpError("layout must be a structured #tile.layout attribute");
+  if (getSpace() == "tmem" &&
+      getOperation()->getAttrOfType<StringAttr>("target") &&
+      getOperation()->getAttrOfType<StringAttr>("target").getValue() ==
+          "nvidia_sm120")
+    return emitOpError("SM120 has no TMEM physical allocation");
+  return success();
+}
+
+LogicalResult DeallocOp::verify() {
+  if (!getBuffer().getDefiningOp<AllocOp>())
+    return emitOpError("buffer must be the SSA result of tile.alloc");
+  return success();
+}
+
+LogicalResult PipelineInitOp::verify() {
+  if (getDepth() == 0 || getStage() >= getDepth())
+    return emitOpError("requires depth > 0 and stage < depth");
+  if (getPhase() > 1)
+    return emitOpError("phase must be 0 or 1");
+  if (getRole() != "producer" && getRole() != "consumer")
+    return emitOpError("role must be producer|consumer");
+  uint64_t expected = getRole() == "producer" ? 1 : 0;
+  if (getPhase() != expected)
     return emitOpError(
-        "saturation is unsupported by the promoted CUDA intrinsic subset");
+        "initial producer phase must be 1 and consumer phase must be 0");
+  return success();
+}
+
+LogicalResult PipelineAdvanceOp::verify() {
+  if (getInputs().empty() ||
+      !isa<PipelineStateType>(getInputs().front().getType()))
+    return emitOpError(
+        "first operand must be the prior !tile.pipeline_state");
   return success();
 }
 
@@ -1298,6 +1401,101 @@ LogicalResult GroupedGemmKernelOp::verify() {
                    storage.getValue() != "f32") || !accum || accum.getValue() != "f32" ||
       !index || index.getValue() != "i32")
     return emitOpError("requires f16/bf16/f32 storage, f32 accumulation, and index_storage=\"i32\"");
+  return success();
+}
+
+LogicalResult TMADescriptorOp::verify() {
+  auto rows = getOperation()->getAttrOfType<IntegerAttr>("tile_rows");
+  auto columns = getOperation()->getAttrOfType<IntegerAttr>("tile_cols");
+  auto slot = getOperation()->getAttrOfType<IntegerAttr>("slot");
+  auto expect = getOperation()->getAttrOfType<IntegerAttr>("expect_tx");
+  if (!rows || !columns || rows.getInt() <= 0 || columns.getInt() <= 0)
+    return emitOpError("requires positive tile_rows and tile_cols");
+  if (slot && slot.getInt() < 0)
+    return emitOpError("requires slot >= 0 when assigned");
+  if (expect && expect.getInt() <= 0)
+    return emitOpError("requires expect_tx > 0 when assigned");
+  if (static_cast<bool>(slot) != static_cast<bool>(expect))
+    return emitOpError("requires slot and expect_tx to be assigned together");
+  return success();
+}
+
+LogicalResult TMACopyAsyncOp::verify() {
+  auto slot = getOperation()->getAttrOfType<IntegerAttr>("mbarrier_slot");
+  auto expect = getOperation()->getAttrOfType<IntegerAttr>("expect_tx");
+  if (!slot || slot.getInt() < 0)
+    return emitOpError("requires mbarrier_slot >= 0");
+  if (expect && expect.getInt() <= 0)
+    return emitOpError("requires expect_tx > 0 when assigned");
+  if (getBarrier() && !expect)
+    return emitOpError(
+        "an SSA mbarrier binding requires explicit expect_tx bytes");
+  return success();
+}
+
+LogicalResult MBarrierInitOp::verify() {
+  auto slots = getOperation()->getAttrOfType<IntegerAttr>("slots");
+  auto phaseBits = getOperation()->getAttrOfType<IntegerAttr>("phase_bits");
+  if (!slots || slots.getInt() <= 0)
+    return emitOpError("requires slots > 0");
+  if (!phaseBits || phaseBits.getInt() < 1 || phaseBits.getInt() > 32)
+    return emitOpError("requires phase_bits in [1, 32]");
+  return success();
+}
+
+LogicalResult MBarrierArriveExpectTxOp::verify() {
+  auto slot = getOperation()->getAttrOfType<IntegerAttr>("slot");
+  auto bytes = getOperation()->getAttrOfType<IntegerAttr>("bytes");
+  if (!slot || slot.getInt() < 0)
+    return emitOpError("requires slot >= 0");
+  if (!bytes || bytes.getInt() <= 0)
+    return emitOpError("requires bytes > 0");
+  return success();
+}
+
+LogicalResult MBarrierWaitOp::verify() {
+  auto slot = getOperation()->getAttrOfType<IntegerAttr>("slot");
+  if (!slot || slot.getInt() < 0)
+    return emitOpError("requires slot >= 0");
+  if (getBarrier() && getDependencies().empty())
+    return emitOpError("requires an explicit asynchronous dependency");
+  return success();
+}
+
+LogicalResult MBarrierTryWaitOp::verify() {
+  auto slot = getOperation()->getAttrOfType<IntegerAttr>("slot");
+  if (!slot || slot.getInt() < 0)
+    return emitOpError("requires slot >= 0");
+  return success();
+}
+
+LogicalResult TMEMAllocOp::verify() {
+  auto bytes = getOperation()->getAttrOfType<IntegerAttr>("bytes");
+  auto alignment = getOperation()->getAttrOfType<IntegerAttr>("alignment");
+  if (!bytes || bytes.getInt() <= 0)
+    return emitOpError("requires bytes > 0");
+  if (!alignment || alignment.getInt() <= 0 ||
+      (alignment.getInt() & (alignment.getInt() - 1)) != 0)
+    return emitOpError("requires power-of-two alignment");
+  return success();
+}
+
+LogicalResult TMEMLoadOp::verify() {
+  return success();
+}
+
+LogicalResult TMEMStoreOp::verify() {
+  return success();
+}
+
+LogicalResult TCGen05MMAOp::verify() {
+  auto group = getOperation()->getAttrOfType<IntegerAttr>("cta_group");
+  auto descriptor =
+      getOperation()->getAttrOfType<TileMmaDescAttr>("mma");
+  if (!group || group.getInt() < 1 || group.getInt() > 4)
+    return emitOpError("requires cta_group in [1, 4]");
+  if (!descriptor || descriptor.getFamily() != "tcgen05")
+    return emitOpError("requires a #tile.mma_desc with family=\"tcgen05\"");
   return success();
 }
 

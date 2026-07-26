@@ -42,6 +42,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
 
+#include <algorithm>
 #include <string>
 
 using namespace mlir;
@@ -49,18 +50,6 @@ using namespace mlir;
 namespace tessera {
 
 namespace {
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helper: create a schedule.warp region op with a given role attr.
-// ─────────────────────────────────────────────────────────────────────────────
-static Operation *createWarpRegion(OpBuilder &b, Location loc,
-                                    StringRef role) {
-  OperationState st(loc, "schedule.warp");
-  st.addAttribute("role", b.getStringAttr(role));
-  // Single-block region; caller fills it with ops.
-  st.addRegion();
-  return b.create(st);
-}
 
 // Give a producer async copy a !tile.async_token result — the SSA completion
 // edge a consumer mma reads. Idempotent (returns an existing token result).
@@ -117,6 +106,26 @@ static void stampPipelineMarkers(OpBuilder &b, Operation *warpOp,
                                                    /*stage=*/0, phase, role));
 }
 
+static Value createPipelineState(OpBuilder &b, Location loc, StringRef role,
+                                 int64_t phase) {
+  OperationState state(loc, "tile.pipeline_init");
+  state.addTypes(tile::PipelineStateType::get(b.getContext()));
+  state.addAttribute("depth", b.getI64IntegerAttr(2));
+  state.addAttribute("stage", b.getI64IntegerAttr(0));
+  state.addAttribute("phase", b.getI64IntegerAttr(phase));
+  state.addAttribute("role", b.getStringAttr(role));
+  return b.create(state)->getResult(0);
+}
+
+static Value advancePipelineState(OpBuilder &b, Location loc, Value state,
+                                  ValueRange dependencies) {
+  OperationState advance(loc, "tile.pipeline_advance");
+  advance.addOperands(state);
+  advance.addOperands(dependencies);
+  advance.addTypes(tile::PipelineStateType::get(b.getContext()));
+  return b.create(advance)->getResult(0);
+}
+
 // The staged-tile extents — from the op's tile_rows/tile_cols attrs (async_copy)
 // or its rank-2 static result shape (mma accumulator). Empty if unknown.
 static SmallVector<int64_t> tileExtents(Operation *op) {
@@ -135,6 +144,30 @@ static SmallVector<int64_t> tileExtents(Operation *op) {
 // row-major #tile.layout on the given storage axes) so TileBarrierReuseLegality
 // (C2) runs on real lowering output and C1's layout vocabulary appears on the
 // staged shared-memory / TMEM tiles. axisNames must match the tile rank (2).
+static tile::TileLayoutAttr
+layoutForExtents(OpBuilder &b, ArrayRef<int64_t> extents,
+                 ArrayRef<StringRef> axisNames) {
+  if (extents.empty() || extents.size() != axisNames.size() ||
+      llvm::any_of(extents, [](int64_t extent) { return extent <= 0; })) {
+    SmallVector<StringAttr> fallbackAxes = {b.getStringAttr("m")};
+    return tile::TileLayoutAttr::get(
+        b.getContext(), ArrayRef<int64_t>{1}, ArrayRef<int64_t>{1},
+        fallbackAxes, /*replicaCounts=*/{}, /*replicaStrides=*/{},
+        /*replicaAxes=*/{}, /*offset=*/0,
+        /*swizzle=*/tile::TileSwizzleAttr());
+  }
+  SmallVector<int64_t> strides(extents.size(), 1);
+  for (int i = static_cast<int>(extents.size()) - 2; i >= 0; --i)
+    strides[i] = strides[i + 1] * extents[i + 1];
+  SmallVector<StringAttr> axes;
+  for (StringRef axis : axisNames)
+    axes.push_back(b.getStringAttr(axis));
+  return tile::TileLayoutAttr::get(
+      b.getContext(), extents, strides, axes, /*replicaCounts=*/{},
+      /*replicaStrides=*/{}, /*replicaAxes=*/{}, /*offset=*/0,
+      /*swizzle=*/tile::TileSwizzleAttr());
+}
+
 static void stampBufferWrite(OpBuilder &b, Operation *op, const Twine &buffer,
                              StringRef space, ArrayRef<int64_t> extents,
                              ArrayRef<StringRef> axisNames) {
@@ -142,25 +175,24 @@ static void stampBufferWrite(OpBuilder &b, Operation *op, const Twine &buffer,
   // tile.buffer/tile.access string pair.
   op->setAttr("tile.buf", tile::TileBufferRefAttr::get(
                               b.getContext(), buffer.str(), space, "write"));
-  if (extents.empty() || extents.size() != axisNames.size())
-    return; // buffer stamped; no layout when the shape is unknown.
-  // Dynamic / placeholder dims (kDynamic, -1) can't form a legal layout — stamp
-  // buffer identity only rather than crash the #tile.layout verifier.
-  for (int64_t e : extents)
-    if (e <= 0)
-      return;
-  SmallVector<int64_t> strides(extents.size(), 1);
-  for (int i = static_cast<int>(extents.size()) - 2; i >= 0; --i)
-    strides[i] = strides[i + 1] * extents[i + 1]; // row-major
-  SmallVector<StringAttr> axes;
-  for (StringRef a : axisNames)
-    axes.push_back(b.getStringAttr(a));
-  op->setAttr("tile.layout",
-              tile::TileLayoutAttr::get(b.getContext(), extents, strides, axes,
-                                        /*replicaCounts=*/{},
-                                        /*replicaStrides=*/{},
-                                        /*replicaAxes=*/{}, /*offset=*/0,
-                                        /*swizzle=*/tile::TileSwizzleAttr()));
+  op->setAttr("tile.layout", layoutForExtents(b, extents, axisNames));
+}
+
+static Value createBufferAllocation(OpBuilder &b, Location loc,
+                                    StringRef space,
+                                    ArrayRef<int64_t> extents,
+                                    ArrayRef<StringRef> axisNames,
+                                    int64_t elementBytes) {
+  int64_t bytes = elementBytes;
+  for (int64_t extent : extents)
+    if (extent > 0)
+      bytes *= extent;
+  OperationState alloc(loc, tile::AllocOp::getOperationName());
+  alloc.addAttribute("space", b.getStringAttr(space));
+  alloc.addAttribute("bytes", b.getI64IntegerAttr(std::max<int64_t>(bytes, 1)));
+  alloc.addAttribute("layout", layoutForExtents(b, extents, axisNames));
+  alloc.addTypes(tile::BufferType::get(b.getContext()));
+  return b.create(alloc)->getResult(0);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -312,11 +344,35 @@ struct WarpSpecializationPass
           o->moveBefore(prodWarp);
       }
 
-      // Buffers allocated this region (name, space) — freed in the epilogue.
-      SmallVector<std::pair<std::string, std::string>> regionBuffers;
+      // Allocate physical buffers in the parent region so their SSA handles
+      // dominate both warp regions and the post-sync deallocation epilogue.
+      SmallVector<Value> regionBuffers;
+      b.setInsertionPoint(prodWarp);
+      for (Operation *producer : producerOps) {
+        if (producer->getName().getStringRef() != "tile.async_copy")
+          continue;
+        SmallVector<int64_t> extents = tileExtents(producer);
+        Value buffer = createBufferAllocation(
+            b, producer->getLoc(), "smem", extents,
+            {StringRef("m"), StringRef("m")}, /*elementBytes=*/2);
+        producer->insertOperands(producer->getNumOperands(), buffer);
+        regionBuffers.push_back(buffer);
+      }
+      for (Operation *consumer : consumerOps) {
+        if (consumer->getName().getStringRef() != "tile.mma")
+          continue;
+        SmallVector<int64_t> extents = tileExtents(consumer);
+        Value buffer = createBufferAllocation(
+            b, consumer->getLoc(), "tmem", extents,
+            {StringRef("tlane"), StringRef("tcol")}, /*elementBytes=*/4);
+        consumer->insertOperands(consumer->getNumOperands(), buffer);
+        regionBuffers.push_back(buffer);
+      }
 
       Block *prodBody = b.createBlock(&prodWarp->getRegion(0));
       b.setInsertionPointToEnd(prodBody);
+      Value producerState =
+          createPipelineState(b, loc, "producer", /*phase=*/1);
       // Each tile.async_copy stages into its own shared-memory tile (linear `m`
       // axis); distinct buffers, so C2 sees no aliasing on well-formed lowering.
       unsigned smemIdx = 0;
@@ -325,9 +381,10 @@ struct WarpSpecializationPass
           std::string name = (pipelineId + ".smem." + Twine(smemIdx++)).str();
           stampBufferWrite(b, p, name, "smem", tileExtents(p),
                            {StringRef("m"), StringRef("m")});
-          regionBuffers.push_back({name, "smem"});
         }
         p->moveBefore(prodBody, prodBody->end());
+        producerState = advancePipelineState(
+            b, p->getLoc(), producerState, p->getResults());
       }
       OperationState prodYield(loc, "schedule.yield");
       prodYield.addOperands(prodCross);
@@ -351,6 +408,8 @@ struct WarpSpecializationPass
 
       Block *consBody = b.createBlock(&consWarp->getRegion(0));
       b.setInsertionPointToEnd(consBody);
+      Value consumerState =
+          createPipelineState(b, loc, "consumer", /*phase=*/0);
       // Each tile.mma writes its accumulator to a TMEM tile (tlane/tcol axes).
       unsigned accIdx = 0;
       for (Operation *c : consumerOps) {
@@ -359,9 +418,10 @@ struct WarpSpecializationPass
               (pipelineId + ".tmem.acc." + Twine(accIdx++)).str();
           stampBufferWrite(b, c, name, "tmem", tileExtents(c),
                            {StringRef("tlane"), StringRef("tcol")});
-          regionBuffers.push_back({name, "tmem"});
         }
         c->moveBefore(consBody, consBody->end());
+        consumerState = advancePipelineState(
+            b, c->getLoc(), consumerState, c->getResults());
       }
       OperationState consYield(loc, "schedule.yield");
       consYield.addOperands(consCross);
@@ -382,11 +442,9 @@ struct WarpSpecializationPass
       if (Operation *term = entryBlock.getTerminator()) {
         b.setInsertionPoint(term);
         b.create(OperationState(loc, "tile.cta_sync"));
-        for (const auto &[name, space] : regionBuffers) {
-          OperationState freeSt(loc, "tile.buffer_free");
-          freeSt.addAttribute("tile.buf", tile::TileBufferRefAttr::get(
-                                              b.getContext(), name, space,
-                                              "free"));
+        for (Value buffer : regionBuffers) {
+          OperationState freeSt(loc, tile::DeallocOp::getOperationName());
+          freeSt.addOperands(buffer);
           b.create(freeSt);
         }
       }

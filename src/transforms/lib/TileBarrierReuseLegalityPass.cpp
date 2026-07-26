@@ -139,8 +139,10 @@ struct TileBarrierReuseLegality
     bool anyError = false;
 
     module.walk([&](func::FuncOp func) {
-      // buffer name → most-recent unbarried write. Pre-order walk visits ops in
-      // program order (parent before children, siblings in order).
+      // SSA allocation root → most-recent unbarried write. The name map is a
+      // migration fallback for old fixtures; new IR never derives identity
+      // from #tile.buffer_ref text.
+      llvm::DenseMap<Value, PendingWrite> pendingSSA;
       llvm::DenseMap<StringRef, PendingWrite> pending;
 
       func.walk<WalkOrder::PreOrder>([&](Operation *op) {
@@ -149,41 +151,78 @@ struct TileBarrierReuseLegality
 
         // A barrier clears every pending hazard (conservative v1 scope).
         if (isBarrierOp(op)) {
+          pendingSSA.clear();
           pending.clear();
           return;
         }
 
-        // Typed buffer reference: a write to a named buffer in a memory space.
+        Value bufferRoot;
+        for (Value operand : op->getOperands()) {
+          if (!isa<tessera::tile::BufferType>(operand.getType()))
+            continue;
+          bufferRoot = operand;
+          while (Operation *def = bufferRoot.getDefiningOp()) {
+            Value next;
+            for (Value candidate : def->getOperands())
+              if (isa<tessera::tile::BufferType>(candidate.getType())) {
+                next = candidate;
+                break;
+              }
+            if (!next)
+              break;
+            bufferRoot = next;
+          }
+          break;
+        }
         auto bufRef =
             op->getAttrOfType<tessera::tile::TileBufferRefAttr>("tile.buf");
-        if (!bufRef || bufRef.getAccess() != "write")
+        bool legacyWrite = bufRef && bufRef.getAccess() == "write";
+        if (!bufferRoot && !legacyWrite)
           return;
         auto layout =
             op->getAttrOfType<tessera::tile::TileLayoutAttr>("tile.layout");
         if (!layout)
           return;
 
-        StringRef buf = bufRef.getName();
         std::optional<std::pair<int64_t, int64_t>> fp = storageFootprint(layout);
-
-        auto it = pending.find(buf);
-        if (fp && it != pending.end()) {
+        PendingWrite *previous = nullptr;
+        if (bufferRoot) {
+          auto it = pendingSSA.find(bufferRoot);
+          if (it != pendingSSA.end())
+            previous = &it->second;
+        } else {
+          auto it = pending.find(bufRef.getName());
+          if (it != pending.end())
+            previous = &it->second;
+        }
+        if (fp && previous) {
           std::optional<std::pair<int64_t, int64_t>> prevFp =
-              storageFootprint(it->second.layout);
+              storageFootprint(previous->layout);
           if (prevFp && overlaps(*prevFp, *fp)) {
             InFlightDiagnostic diag = op->emitOpError(
-                "TILE_BARRIER_REUSE_MISSING_BARRIER: buffer \"");
-            diag << buf
-                 << "\" is written over a storage region that overlaps a prior "
+                "TILE_BARRIER_REUSE_MISSING_BARRIER: buffer ");
+            if (bufferRoot)
+              diag << "SSA allocation";
+            else
+              diag << "\"" << bufRef.getName() << "\"";
+            diag << " is written over a storage region that overlaps a prior "
                     "write, with no intervening barrier (mbarrier / wait_async). "
                     "A reused layout region needs a barrier to be race-free.";
-            diag.attachNote(it->second.op->getLoc())
-                << "previous write to buffer \"" << buf << "\" here";
+            if (bufferRoot)
+              diag.attachNote(previous->op->getLoc())
+                  << "previous write to the same allocation root here";
+            else
+              diag.attachNote(previous->op->getLoc())
+                  << "previous write to buffer \"" << bufRef.getName()
+                  << "\" here";
             anyError = true;
           }
         }
         // Record this write as the buffer's current pending writer.
-        pending[buf] = PendingWrite{op, layout};
+        if (bufferRoot)
+          pendingSSA[bufferRoot] = PendingWrite{op, layout};
+        else
+          pending[bufRef.getName()] = PendingWrite{op, layout};
       });
     });
 

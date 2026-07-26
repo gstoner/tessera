@@ -1497,3 +1497,21 @@ unchanged. NVIDIA's nibble layout, PTX instructions, CUDA launch ABI,
 resources, cache evidence, and SM120 numerics do not transfer to Metal or
 Apple CPU. Apple retains its own packed INT4 and math execution contracts; no
 Apple capability, storage-legalization default, schedule, or selector changes.
+
+Cross-backend sync `NVIDIA-PACKED-SSA-FOUNDATION-2026-07-25` changes the shared
+pack descriptor from an unstructured dictionary to portable
+`#tile.packed_format`/`#tile.packed_view`/`#tile.scale_layout` attributes and
+adds generic packed load/store plus SSA buffer/pipeline vocabulary. Apple is
+**follow-up required** for architecture-owned Metal packed physical consumers
+and threadgroup allocation/pipeline threading. NVIDIA scale indexing, PTX,
+CUDA Math target operations, SM120 resources, and device evidence do not
+transfer; no Apple support or selector state changes.
+
+The same synchronization point now adds shared SSA TMA descriptor, mbarrier,
+mbarrier-token, TMEM, and TCGen05 vocabulary and makes NVIDIA WarpSpec consume
+the shared allocation/pipeline identity. These operation definitions are
+portable compiler structure, not Apple execution support: Metal has no TMA,
+TMEM, or TCGen05 consumer, so those operations are **not applicable** to Apple
+with that architecture-specific reason. Apple threadgroup allocation and
+pipeline-state threading remain **follow-up required** on its own lowering;
+no NVIDIA resource, runtime, or exact-device claim transfers.

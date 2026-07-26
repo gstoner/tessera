@@ -21,6 +21,8 @@
 #include <optional>
 
 #include "TesseraNVIDIADialect.h.inc"
+#define GET_OP_CLASSES
+#include "TesseraNVIDIAOps.h.inc"
 
 using namespace mlir;
 
@@ -273,21 +275,20 @@ static LogicalResult requireStoragePackDescriptor(
   auto packed = op->getAttrOfType<BoolAttr>("tessera.storage_packed");
   auto container = op->getAttrOfType<StringAttr>("tessera.storage_container");
   auto descriptor =
-      op->getAttrOfType<DictionaryAttr>("tessera.storage_pack");
+      op->getAttrOfType<tessera::tile::TilePackedFormatAttr>(
+          "tessera.storage_pack");
   if (!packed || !packed.getValue() || !container ||
       container.getValue() != "int8" || !descriptor) {
     op->emitError("NVIDIA packed matmul requires terminal storage legalization "
                   "with an int8 tessera.storage_pack descriptor");
     return failure();
   }
-  auto logicalAttr = descriptor.getAs<StringAttr>("logical");
-  auto containerAttr = descriptor.getAs<StringAttr>("container");
-  auto factorAttr = descriptor.getAs<IntegerAttr>("factor");
-  auto signednessAttr = descriptor.getAs<StringAttr>("signedness");
-  if (!logicalAttr || logicalAttr.getValue() != logical || !containerAttr ||
-      containerAttr.getValue() != "int8" || !factorAttr ||
-      factorAttr.getInt() != factor || !signednessAttr ||
-      signednessAttr.getValue() != signedness) {
+  int64_t expectedBits = logical.starts_with("fp6_") ? 6 : 4;
+  if (descriptor.getLogicalType() != logical ||
+      descriptor.getContainerType() != "int8" ||
+      descriptor.getLogicalBits() != expectedBits ||
+      descriptor.getElementsPerContainer() != factor ||
+      descriptor.getSignedness() != signedness) {
     op->emitError("NVIDIA packed matmul storage descriptor disagrees with the "
                   "selected physical fragment ABI");
     return failure();
@@ -2763,7 +2764,7 @@ static Value sm120LinearThread(OpBuilder &builder, Location loc,
 
 static Value sm120LoadF32(OpBuilder &builder, Location loc, Value base,
                           Value index) {
-  Type f32 = builder.getF32Type();
+  FloatType f32 = builder.getF32Type();
   Value ptr = LLVM::GEPOp::create(builder, loc, base.getType(), f32, base,
                                   ValueRange{index});
   return LLVM::LoadOp::create(builder, loc, f32, ptr, 4);
@@ -3335,7 +3336,7 @@ static LogicalResult materializeSm120AccumulatorStore(
 }
 
 static LogicalResult materializeSm120CudaIntrinsicKernel(
-    tessera::tile::CudaIntrinsicKernelOp kernel, OpBuilder &builder) {
+    tessera::nvidia::CudaMathKernelOp kernel, OpBuilder &builder) {
   Operation *op = kernel.getOperation();
   auto kindAttr = op->getAttrOfType<StringAttr>("kind");
   if (!kindAttr || kernel.getInputs().size() != 5) {
@@ -3372,7 +3373,9 @@ static LogicalResult materializeSm120CudaIntrinsicKernel(
     };
     Value a;
     bool cast = kind.starts_with("cvt_f32_i32_");
-    if (cast)
+    bool bitcastF32I32 = kind == "bitcast_f32_i32";
+    bool bitcastI32F32 = kind == "bitcast_i32_f32";
+    if (cast || bitcastF32I32)
       a = LLVM::LoadOp::create(
           builder, loc, f32,
           LLVM::GEPOp::create(builder, loc, aBase.getType(), f32, aBase,
@@ -3385,8 +3388,85 @@ static LogicalResult materializeSm120CudaIntrinsicKernel(
     Value result;
     std::string assembly;
     SmallVector<Value> asmInputs;
-    if (kind == "bitcast_i32") {
-      result = a;
+    auto packedByteLane = [&](Value packed, unsigned lane, bool signedLane) {
+      Value shift = arith::ConstantIntOp::create(builder, loc, lane * 8, 32);
+      Value byte = arith::AndIOp::create(
+          builder, loc,
+          arith::ShRUIOp::create(builder, loc, packed, shift),
+          arith::ConstantIntOp::create(builder, loc, 0xff, 32));
+      if (!signedLane)
+        return byte;
+      Value left = arith::ShLIOp::create(
+          builder, loc, byte,
+          arith::ConstantIntOp::create(builder, loc, 24, 32));
+      return Value(arith::ShRSIOp::create(
+          builder, loc, left,
+          arith::ConstantIntOp::create(builder, loc, 24, 32)));
+    };
+    auto clampSignedByte = [&](Value value) {
+      Value lo = arith::ConstantIntOp::create(builder, loc, -128, 32);
+      Value hi = arith::ConstantIntOp::create(builder, loc, 127, 32);
+      Value below = arith::CmpIOp::create(
+          builder, loc, arith::CmpIPredicate::slt, value, lo);
+      value = arith::SelectOp::create(builder, loc, below, lo, value);
+      Value above = arith::CmpIOp::create(
+          builder, loc, arith::CmpIPredicate::sgt, value, hi);
+      return Value(arith::SelectOp::create(builder, loc, above, hi, value));
+    };
+    auto lowerPackedFourByte = [&]() -> Value {
+      bool signedLane = kind.contains("_s8x4");
+      bool compare = kind.starts_with("vcmpeq4_");
+      bool predicateBits = kind.ends_with("_pred");
+      Value packed = arith::ConstantIntOp::create(builder, loc, 0, 32);
+      for (unsigned lane = 0; lane < 4; ++lane) {
+        Value lhs = packedByteLane(a, lane, signedLane);
+        Value rhs = packedByteLane(b, lane, signedLane);
+        Value laneValue;
+        if (compare) {
+          Value equal = arith::CmpIOp::create(
+              builder, loc, arith::CmpIPredicate::eq, lhs, rhs);
+          int64_t trueValue = predicateBits ? 1 : 0xff;
+          laneValue = arith::SelectOp::create(
+              builder, loc, equal,
+              arith::ConstantIntOp::create(builder, loc, trueValue, 32),
+              arith::ConstantIntOp::create(builder, loc, 0, 32));
+        } else if (kind == "vabsdiff4_u8x4") {
+          Value lhsGreater = arith::CmpIOp::create(
+              builder, loc, arith::CmpIPredicate::ugt, lhs, rhs);
+          laneValue = arith::SelectOp::create(
+              builder, loc, lhsGreater,
+              arith::SubIOp::create(builder, loc, lhs, rhs),
+              arith::SubIOp::create(builder, loc, rhs, lhs));
+        } else {
+          bool subtract = kind.starts_with("vsub");
+          laneValue = subtract
+              ? Value(arith::SubIOp::create(builder, loc, lhs, rhs))
+              : Value(arith::AddIOp::create(builder, loc, lhs, rhs));
+          if (kind.contains("ss4"))
+            laneValue = clampSignedByte(laneValue);
+        }
+        laneValue = arith::AndIOp::create(
+            builder, loc, laneValue,
+            arith::ConstantIntOp::create(builder, loc, 0xff, 32));
+        unsigned shiftAmount = predicateBits ? lane : lane * 8;
+        Value shifted = arith::ShLIOp::create(
+            builder, loc, laneValue,
+            arith::ConstantIntOp::create(builder, loc, shiftAmount, 32));
+        packed = arith::OrIOp::create(builder, loc, packed, shifted);
+      }
+      return packed;
+    };
+    if (bitcastF32I32) {
+      result = LLVM::BitcastOp::create(builder, loc, i32, a);
+    } else if (bitcastI32F32) {
+      result = LLVM::BitcastOp::create(builder, loc, f32, a);
+    } else if (kind.starts_with("vadd4_") ||
+               kind.starts_with("vaddss4_") ||
+               kind.starts_with("vsub4_") ||
+               kind.starts_with("vsubss4_") ||
+               kind == "vabsdiff4_u8x4" ||
+               kind.starts_with("vcmpeq4_")) {
+      result = lowerPackedFourByte();
     } else {
       if (kind == "abs_i32") assembly = "abs.s32 $0, $1;";
       else if (kind == "min_i32") assembly = "min.s32 $0, $1, $2;";
@@ -3395,6 +3475,11 @@ static LogicalResult materializeSm120CudaIntrinsicKernel(
       else if (kind == "byte_perm_u32")
         assembly = "prmt.b32 $0, $1, $2, 0x5410;";
       else if (kind == "clz_u32") assembly = "clz.b32 $0, $1;";
+      else if (kind == "ffs_u32")
+        assembly =
+            "{ .reg .u32 r; .reg .pred p; brev.b32 r, $1; "
+            "bfind.u32 r, r; sub.u32 r, 32, r; "
+            "setp.eq.u32 p, $1, 0; selp.u32 $0, 0, r, p; }";
       else if (kind == "popc_u32") assembly = "popc.b32 $0, $1;";
       else if (kind == "funnelshift_l_wrap_u32")
         assembly = "shf.l.wrap.b32 $0, $1, $2, $3;";
@@ -3404,8 +3489,6 @@ static LogicalResult materializeSm120CudaIntrinsicKernel(
         assembly = "dp4a.s32.s32 $0, $1, $2, $3;";
       else if (kind == "vadd2_u16x2")
         assembly = "add.u16x2 $0, $1, $2;";
-      else if (kind == "vabsdiff4_u8x4")
-        assembly = "vabsdiff4.u32.u32.u32 $0, $1, $2, $3;";
       else if (cast) {
         StringRef mode = kind.drop_front(StringRef("cvt_f32_i32_").size());
         StringRef suffix =
@@ -3421,10 +3504,9 @@ static LogicalResult materializeSm120CudaIntrinsicKernel(
                     kind == "byte_perm_u32" ||
                     kind == "funnelshift_l_wrap_u32" ||
                     kind == "dp2a_lo_s32" || kind == "dp4a_s32" ||
-                    kind == "vadd2_u16x2" || kind == "vabsdiff4_u8x4";
+                    kind == "vadd2_u16x2";
       bool ternary = kind == "funnelshift_l_wrap_u32" ||
-                     kind == "dp2a_lo_s32" || kind == "dp4a_s32" ||
-                     kind == "vabsdiff4_u8x4";
+                     kind == "dp2a_lo_s32" || kind == "dp4a_s32";
       if (binary) asmInputs.push_back(b);
       if (ternary) asmInputs.push_back(c);
       std::string constraints = "=r";
@@ -3436,13 +3518,489 @@ static LogicalResult materializeSm120CudaIntrinsicKernel(
           LLVM::tailcallkind::TailCallKind::None,
           /*asm_dialect=*/nullptr, /*operand_attrs=*/nullptr).getResult(0);
     }
+    Type outputType = bitcastI32F32 ? Type(f32) : Type(i32);
     LLVM::StoreOp::create(
         builder, loc, result,
-        LLVM::GEPOp::create(builder, loc, outBase.getType(), i32, outBase,
+        LLVM::GEPOp::create(builder, loc, outBase.getType(), outputType, outBase,
                             ValueRange{index}),
         4);
   }
   op->erase();
+  return success();
+}
+
+static Value loadPackedContainerByte(OpBuilder &builder, Location loc,
+                                     Value base, Value row, Value col,
+                                     ArrayRef<int64_t> strides,
+                                     int64_t offset, int64_t alignment) {
+  Value linear = addI64(
+      builder, loc,
+      addI64(builder, loc,
+             mulI64(builder, loc, row,
+                    i64Constant(builder, loc, strides[0])),
+             mulI64(builder, loc, col,
+                    i64Constant(builder, loc, strides[1]))),
+      i64Constant(builder, loc, offset));
+  Type i8 = builder.getI8Type();
+  return LLVM::LoadOp::create(
+      builder, loc, i8,
+      LLVM::GEPOp::create(builder, loc, base.getType(), i8, base,
+                          ValueRange{linear}),
+      alignment);
+}
+
+static Value decodeE2M1(OpBuilder &builder, Location loc, Value code) {
+  FloatType f32 = builder.getF32Type();
+  Value magnitude = arith::AndIOp::create(
+      builder, loc, code, arith::ConstantIntOp::create(builder, loc, 7, 32));
+  static constexpr float kMagnitude[8] = {0.0f, 0.5f, 1.0f, 1.5f,
+                                          2.0f, 3.0f, 4.0f, 6.0f};
+  Value decoded =
+      arith::ConstantFloatOp::create(builder, loc, f32,
+                                     APFloat(kMagnitude[0]));
+  for (int index = 1; index < 8; ++index) {
+    Value match = arith::CmpIOp::create(
+        builder, loc, arith::CmpIPredicate::eq, magnitude,
+        arith::ConstantIntOp::create(builder, loc, index, 32));
+    decoded = arith::SelectOp::create(
+        builder, loc, match,
+        arith::ConstantFloatOp::create(builder, loc, f32,
+                                       APFloat(kMagnitude[index])),
+        decoded);
+  }
+  Value negative = arith::CmpIOp::create(
+      builder, loc, arith::CmpIPredicate::ne,
+      arith::AndIOp::create(
+          builder, loc, code,
+          arith::ConstantIntOp::create(builder, loc, 8, 32)),
+      arith::ConstantIntOp::create(builder, loc, 0, 32));
+  Value negated = arith::NegFOp::create(builder, loc, decoded);
+  return arith::SelectOp::create(builder, loc, negative, negated, decoded);
+}
+
+static Value decodeFP6(OpBuilder &builder, Location loc, Value code,
+                       bool e2m3) {
+  Type i32 = builder.getI32Type();
+  FloatType f32 = builder.getF32Type();
+  int exponentBits = e2m3 ? 2 : 3;
+  int mantissaBits = e2m3 ? 3 : 2;
+  int bias = e2m3 ? 1 : 3;
+  int mantissaMask = (1 << mantissaBits) - 1;
+  int exponentMask = (1 << exponentBits) - 1;
+  Value mantissa = arith::AndIOp::create(
+      builder, loc, code,
+      arith::ConstantIntOp::create(builder, loc, mantissaMask, 32));
+  Value exponent = arith::AndIOp::create(
+      builder, loc,
+      arith::ShRUIOp::create(
+          builder, loc, code,
+          arith::ConstantIntOp::create(builder, loc, mantissaBits, 32)),
+      arith::ConstantIntOp::create(builder, loc, exponentMask, 32));
+  Value mantissaF = arith::UIToFPOp::create(builder, loc, f32, mantissa);
+  Value fraction = arith::DivFOp::create(
+      builder, loc, mantissaF,
+      arith::ConstantFloatOp::create(
+          builder, loc, f32,
+          APFloat(static_cast<float>(1 << mantissaBits))));
+  Value isSubnormal = arith::CmpIOp::create(
+      builder, loc, arith::CmpIPredicate::eq, exponent,
+      arith::ConstantIntOp::create(builder, loc, 0, 32));
+  Value significand = arith::SelectOp::create(
+      builder, loc, isSubnormal, fraction,
+      arith::AddFOp::create(
+          builder, loc,
+          arith::ConstantFloatOp::create(builder, loc, f32, APFloat(1.0f)),
+          fraction));
+  Value normalExponent = arith::SubIOp::create(
+      builder, loc, exponent,
+      arith::ConstantIntOp::create(builder, loc, bias, 32));
+  Value subnormalExponent =
+      arith::ConstantIntOp::create(builder, loc, 1 - bias, 32);
+  Value unbiased = arith::SelectOp::create(
+      builder, loc, isSubnormal, subnormalExponent, normalExponent);
+  Value power = math::Exp2Op::create(
+      builder, loc,
+      arith::SIToFPOp::create(builder, loc, f32, unbiased));
+  Value decoded = arith::MulFOp::create(builder, loc, significand, power);
+  Value negative = arith::CmpIOp::create(
+      builder, loc, arith::CmpIPredicate::ne,
+      arith::AndIOp::create(
+          builder, loc, code,
+          arith::ConstantIntOp::create(builder, loc, 32, 32)),
+      arith::ConstantIntOp::create(builder, loc, 0, 32));
+  Value negated = arith::NegFOp::create(builder, loc, decoded);
+  (void)i32;
+  return arith::SelectOp::create(builder, loc, negative, negated, decoded);
+}
+
+static Value decodeScale(OpBuilder &builder, Location loc, Value code,
+                         StringRef dtype) {
+  FloatType f32 = builder.getF32Type();
+  Value exponent;
+  Value mantissa;
+  int bias;
+  int mantissaBits;
+  if (dtype == "ue8m0") {
+    exponent = code;
+    mantissa = arith::ConstantIntOp::create(builder, loc, 0, 32);
+    bias = 127;
+    mantissaBits = 0;
+  } else {
+    exponent = arith::ShRUIOp::create(
+        builder, loc, code,
+        arith::ConstantIntOp::create(builder, loc, 3, 32));
+    mantissa = arith::AndIOp::create(
+        builder, loc, code,
+        arith::ConstantIntOp::create(builder, loc, 7, 32));
+    bias = 7;
+    mantissaBits = 3;
+  }
+  Value unbiased = arith::SubIOp::create(
+      builder, loc, exponent,
+      arith::ConstantIntOp::create(builder, loc, bias, 32));
+  Value power = math::Exp2Op::create(
+      builder, loc,
+      arith::SIToFPOp::create(builder, loc, f32, unbiased));
+  if (dtype == "ue8m0")
+    return power;
+  Value fraction = arith::DivFOp::create(
+      builder, loc, arith::UIToFPOp::create(builder, loc, f32, mantissa),
+      arith::ConstantFloatOp::create(
+          builder, loc, f32,
+          APFloat(static_cast<float>(1 << mantissaBits))));
+  Value isSubnormal = arith::CmpIOp::create(
+      builder, loc, arith::CmpIPredicate::eq, exponent,
+      arith::ConstantIntOp::create(builder, loc, 0, 32));
+  Value normal = arith::MulFOp::create(
+      builder, loc,
+      arith::AddFOp::create(
+          builder, loc,
+          arith::ConstantFloatOp::create(builder, loc, f32, APFloat(1.0f)),
+          fraction),
+      power);
+  Value subnormal = arith::MulFOp::create(
+      builder, loc, fraction,
+      arith::ConstantFloatOp::create(builder, loc, f32,
+                                     APFloat(1.0f / 64.0f)));
+  return arith::SelectOp::create(builder, loc, isSubnormal, subnormal, normal);
+}
+
+static FailureOr<Value> decodePackedLogicalValue(
+    tessera::tile::PackedLoadOp load, OpBuilder &builder, Value logicalRow,
+    Value logicalCol) {
+  Operation *op = load.getOperation();
+  auto view = op->getAttrOfType<tessera::tile::TilePackedPhysicalViewAttr>(
+      "tile.packed_view");
+  auto format = view.getFormat();
+  ArrayRef<int64_t> strides = view.getStrides();
+  if (strides.size() != 2) {
+    op->emitError("SM120 generic packed loads currently require rank-2 "
+                  "container strides");
+    return failure();
+  }
+  int64_t factor = format.getElementsPerContainer();
+  Value factorValue = i64Constant(builder, op->getLoc(), factor);
+  Value containerRow = logicalRow;
+  Value containerCol = logicalCol;
+  Value lane;
+  if (view.getPackingAxis() == 0) {
+    containerRow =
+        arith::DivUIOp::create(builder, op->getLoc(), logicalRow, factorValue);
+    lane = arith::RemUIOp::create(builder, op->getLoc(), logicalRow, factorValue);
+  } else if (view.getPackingAxis() == 1) {
+    containerCol =
+        arith::DivUIOp::create(builder, op->getLoc(), logicalCol, factorValue);
+    lane = arith::RemUIOp::create(builder, op->getLoc(), logicalCol, factorValue);
+  } else {
+    op->emitError("SM120 generic packed loads require packing_axis 0 or 1");
+    return failure();
+  }
+  Value byte = loadPackedContainerByte(
+      builder, op->getLoc(), load.getInputs()[0], containerRow, containerCol,
+      strides, view.getOffset(), view.getAlignment());
+  Value code = arith::ExtUIOp::create(
+      builder, op->getLoc(), builder.getI32Type(), byte);
+  if (factor > 1) {
+    Value shift64 = mulI64(
+        builder, op->getLoc(), lane,
+        i64Constant(builder, op->getLoc(), format.getLogicalBits()));
+    Value shift = arith::TruncIOp::create(
+        builder, op->getLoc(), builder.getI32Type(), shift64);
+    if (format.getLaneOrder() == "high_to_low")
+      shift = arith::SubIOp::create(
+          builder, op->getLoc(),
+          arith::ConstantIntOp::create(
+              builder, op->getLoc(),
+              (factor - 1) * format.getLogicalBits(), 32),
+          shift);
+    code = arith::AndIOp::create(
+        builder, op->getLoc(),
+        arith::ShRUIOp::create(builder, op->getLoc(), code, shift),
+        arith::ConstantIntOp::create(
+            builder, op->getLoc(),
+            (1 << format.getLogicalBits()) - 1, 32));
+  } else if (format.getLogicalBits() < 8) {
+    code = arith::AndIOp::create(
+        builder, op->getLoc(), code,
+        arith::ConstantIntOp::create(
+            builder, op->getLoc(),
+            (1 << format.getLogicalBits()) - 1, 32));
+  }
+
+  Value decoded;
+  StringRef logical = format.getLogicalType();
+  if (logical == "int4") {
+    Value negative = arith::CmpIOp::create(
+        builder, op->getLoc(), arith::CmpIPredicate::ne,
+        arith::AndIOp::create(
+            builder, op->getLoc(), code,
+            arith::ConstantIntOp::create(builder, op->getLoc(), 8, 32)),
+        arith::ConstantIntOp::create(builder, op->getLoc(), 0, 32));
+    Value signedValue = arith::SelectOp::create(
+        builder, op->getLoc(), negative,
+        arith::SubIOp::create(
+            builder, op->getLoc(), code,
+            arith::ConstantIntOp::create(builder, op->getLoc(), 16, 32)),
+        code);
+    decoded = arith::SIToFPOp::create(
+        builder, op->getLoc(), builder.getF32Type(), signedValue);
+  } else if (logical == "uint4") {
+    decoded = arith::UIToFPOp::create(
+        builder, op->getLoc(), builder.getF32Type(), code);
+  } else if (logical == "fp4_e2m1" || logical == "nvfp4") {
+    decoded = decodeE2M1(builder, op->getLoc(), code);
+  } else if (logical == "fp6_e2m3" || logical == "fp6_e3m2") {
+    decoded = decodeFP6(builder, op->getLoc(), code,
+                        logical == "fp6_e2m3");
+  } else {
+    op->emitError("unsupported SM120 generic packed logical dtype ") << logical;
+    return failure();
+  }
+
+  auto scale = view.getScale();
+  if (scale.getDtype() != "none") {
+    Value scaleBase = load.getInputs()[1];
+    Value block = i64Constant(builder, op->getLoc(), scale.getBlockSize());
+    Value scaleRow = logicalRow;
+    Value scaleCol = logicalCol;
+    if (scale.getAxis() == 0)
+      scaleRow =
+          arith::DivUIOp::create(builder, op->getLoc(), logicalRow, block);
+    else
+      scaleCol =
+          arith::DivUIOp::create(builder, op->getLoc(), logicalCol, block);
+    Value scaleLinear;
+    if (scale.getLayout() == "row_major")
+      scaleLinear = addI64(
+          builder, op->getLoc(),
+          mulI64(builder, op->getLoc(), scaleRow,
+                 i64Constant(builder, op->getLoc(), scale.getStride())),
+          scaleCol);
+    else if (scale.getLayout() == "col_major")
+      scaleLinear = addI64(
+          builder, op->getLoc(),
+          mulI64(builder, op->getLoc(), scaleCol,
+                 i64Constant(builder, op->getLoc(), scale.getStride())),
+          scaleRow);
+    else
+      scaleLinear = mulI64(
+          builder, op->getLoc(),
+          scale.getAxis() == 0 ? scaleRow : scaleCol,
+          i64Constant(builder, op->getLoc(), scale.getStride()));
+    scaleLinear = addI64(
+        builder, op->getLoc(), scaleLinear,
+        i64Constant(builder, op->getLoc(), scale.getOffset()));
+    Value scaleByte = LLVM::LoadOp::create(
+        builder, op->getLoc(), builder.getI8Type(),
+        LLVM::GEPOp::create(builder, op->getLoc(), scaleBase.getType(),
+                            builder.getI8Type(), scaleBase,
+                            ValueRange{scaleLinear}),
+        scale.getAlignment());
+    Value scaleCode = arith::ExtUIOp::create(
+        builder, op->getLoc(), builder.getI32Type(), scaleByte);
+    decoded = arith::MulFOp::create(
+        builder, op->getLoc(), decoded,
+        decodeScale(builder, op->getLoc(), scaleCode, scale.getDtype()));
+  }
+  return decoded;
+}
+
+static LogicalResult materializeSm120PackedDecodeStore(
+    tessera::tile::PackedLoadOp load, tessera::tile::StoreOp store,
+    OpBuilder &builder) {
+  Operation *op = load.getOperation();
+  auto view = op->getAttrOfType<tessera::tile::TilePackedPhysicalViewAttr>(
+      "tile.packed_view");
+  auto outputMemory =
+      store->getAttrOfType<tessera::tile::TileMemoryLayoutAttr>("tile.memory");
+  bool scaled = view.getScale().getDtype() != "none";
+  unsigned prefix = scaled ? 2 : 1;
+  ValueRange inputs = load.getInputs();
+  Value rowOrigin = inputs[prefix];
+  Value colOrigin = inputs[prefix + 1];
+  Value rows = inputs[prefix + 2];
+  Value cols = inputs[prefix + 3];
+  Value outputBase = store.getInputs()[1];
+  if (!isa<LLVM::LLVMPointerType>(inputs[0].getType()) ||
+      (scaled && !isa<LLVM::LLVMPointerType>(inputs[1].getType())) ||
+      !isa<LLVM::LLVMPointerType>(outputBase.getType()) ||
+      !outputMemory || outputMemory.getSpace() != "gmem") {
+    op->emitError("SM120 generic packed decode requires LLVM global pointers "
+                  "and a global-memory f32 tile.store");
+    return failure();
+  }
+  Location loc = op->getLoc();
+  Value tid = arith::ExtUIOp::create(
+      builder, loc, builder.getI64Type(),
+      NVVM::ThreadIdXOp::create(builder, loc, builder.getI32Type()));
+  Value block = arith::ExtUIOp::create(
+      builder, loc, builder.getI64Type(),
+      NVVM::BlockIdXOp::create(builder, loc, builder.getI32Type()));
+  Value index = addI64(
+      builder, loc,
+      mulI64(builder, loc, block, i64Constant(builder, loc, 128)), tid);
+  Value count = mulI64(builder, loc, rows, cols);
+  auto guarded =
+      scf::IfOp::create(builder, loc, lessI64(builder, loc, index, count), false);
+  {
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToStart(&guarded.getThenRegion().front());
+    Value row = arith::DivUIOp::create(builder, loc, index, cols);
+    Value col = arith::RemUIOp::create(builder, loc, index, cols);
+    Value logicalRow = addI64(builder, loc, rowOrigin, row);
+    Value logicalCol = addI64(builder, loc, colOrigin, col);
+    FailureOr<Value> decoded =
+        decodePackedLogicalValue(load, builder, logicalRow, logicalCol);
+    if (failed(decoded))
+      return failure();
+    Value outputRow = addI64(builder, loc, store.getInputs()[2], row);
+    Value outputCol = addI64(builder, loc, store.getInputs()[3], col);
+    Value leading =
+        i64Constant(builder, loc, outputMemory.getLeadingDim());
+    Value outputLinear = outputMemory.getOrder() == "row_major"
+        ? addI64(builder, loc, mulI64(builder, loc, outputRow, leading),
+                 outputCol)
+        : addI64(builder, loc, mulI64(builder, loc, outputCol, leading),
+                 outputRow);
+    LLVM::StoreOp::create(
+        builder, loc, *decoded,
+        LLVM::GEPOp::create(builder, loc, outputBase.getType(),
+                            builder.getF32Type(), outputBase,
+                            ValueRange{outputLinear}),
+        4);
+  }
+  store.erase();
+  load.erase();
+  return success();
+}
+
+static LogicalResult materializeSm120PackedRoundTrip(
+    tessera::tile::PackedLoadOp load, tessera::tile::PackedStoreOp store,
+    OpBuilder &builder) {
+  Operation *op = load.getOperation();
+  auto sourceView =
+      op->getAttrOfType<tessera::tile::TilePackedPhysicalViewAttr>(
+          "tile.packed_view");
+  auto destinationView =
+      store->getAttrOfType<tessera::tile::TilePackedPhysicalViewAttr>(
+          "tile.packed_view");
+  if (sourceView.getScale().getDtype() != "none" ||
+      sourceView.getFormat() != destinationView.getFormat() ||
+      sourceView.getPackingAxis() != destinationView.getPackingAxis() ||
+      sourceView.getStrides().size() != 2 ||
+      destinationView.getStrides().size() != 2 ||
+      load.getInputs().drop_front(1) != store.getInputs().drop_front(2) ||
+      !isa<LLVM::LLVMPointerType>(load.getInputs()[0].getType()) ||
+      !isa<LLVM::LLVMPointerType>(store.getInputs()[1].getType())) {
+    op->emitError("SM120 packed round-trip requires matching unscaled rank-2 "
+                  "views, origins/extents, and LLVM pointers");
+    return failure();
+  }
+  Location loc = op->getLoc();
+  Value rowOrigin = load.getInputs()[1];
+  Value colOrigin = load.getInputs()[2];
+  Value rows = load.getInputs()[3];
+  Value cols = load.getInputs()[4];
+  int64_t factor = sourceView.getFormat().getElementsPerContainer();
+  Value factorValue = i64Constant(builder, loc, factor);
+  Value containersPerLine;
+  Value lines;
+  if (sourceView.getPackingAxis() == 1) {
+    Value leadingPartial =
+        arith::RemUIOp::create(builder, loc, colOrigin, factorValue);
+    containersPerLine = arith::DivUIOp::create(
+        builder, loc,
+        addI64(builder, loc,
+               addI64(builder, loc, leadingPartial, cols),
+               i64Constant(builder, loc, factor - 1)),
+        factorValue);
+    lines = rows;
+  } else {
+    Value leadingPartial =
+        arith::RemUIOp::create(builder, loc, rowOrigin, factorValue);
+    containersPerLine = arith::DivUIOp::create(
+        builder, loc,
+        addI64(builder, loc,
+               addI64(builder, loc, leadingPartial, rows),
+               i64Constant(builder, loc, factor - 1)),
+        factorValue);
+    lines = cols;
+  }
+  Value tid = arith::ExtUIOp::create(
+      builder, loc, builder.getI64Type(),
+      NVVM::ThreadIdXOp::create(builder, loc, builder.getI32Type()));
+  Value block = arith::ExtUIOp::create(
+      builder, loc, builder.getI64Type(),
+      NVVM::BlockIdXOp::create(builder, loc, builder.getI32Type()));
+  Value index = addI64(
+      builder, loc,
+      mulI64(builder, loc, block, i64Constant(builder, loc, 128)), tid);
+  Value count = mulI64(builder, loc, lines, containersPerLine);
+  auto guarded =
+      scf::IfOp::create(builder, loc, lessI64(builder, loc, index, count), false);
+  {
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToStart(&guarded.getThenRegion().front());
+    Value line = arith::DivUIOp::create(builder, loc, index, containersPerLine);
+    Value containerInLine =
+        arith::RemUIOp::create(builder, loc, index, containersPerLine);
+    Value sourceRow;
+    Value sourceCol;
+    if (sourceView.getPackingAxis() == 1) {
+      sourceRow = addI64(builder, loc, rowOrigin, line);
+      sourceCol = addI64(
+          builder, loc,
+          arith::DivUIOp::create(builder, loc, colOrigin, factorValue),
+          containerInLine);
+    } else {
+      sourceRow = addI64(
+          builder, loc,
+          arith::DivUIOp::create(builder, loc, rowOrigin, factorValue),
+          containerInLine);
+      sourceCol = addI64(builder, loc, colOrigin, line);
+    }
+    Value byte = loadPackedContainerByte(
+        builder, loc, load.getInputs()[0], sourceRow, sourceCol,
+        sourceView.getStrides(), sourceView.getOffset(),
+        sourceView.getAlignment());
+    ArrayRef<int64_t> destinationStrides = destinationView.getStrides();
+    Value destinationLinear = addI64(
+        builder, loc,
+        addI64(builder, loc,
+               mulI64(builder, loc, sourceRow,
+                      i64Constant(builder, loc, destinationStrides[0])),
+               mulI64(builder, loc, sourceCol,
+                      i64Constant(builder, loc, destinationStrides[1]))),
+        i64Constant(builder, loc, destinationView.getOffset()));
+    LLVM::StoreOp::create(
+        builder, loc, byte,
+        LLVM::GEPOp::create(builder, loc, store.getInputs()[1].getType(),
+                            builder.getI8Type(), store.getInputs()[1],
+                            ValueRange{destinationLinear}),
+        destinationView.getAlignment());
+  }
+  store.erase();
+  load.erase();
   return success();
 }
 
@@ -3490,6 +4048,10 @@ struct LowerTileToNVIDIAPass
           name == "tile.matmul_kernel" || name == "tile.softmax_kernel" ||
           name == "tile.reduce_kernel" || name == "tile.norm_kernel" ||
           name == "tile.cuda_intrinsic_kernel" ||
+          name == "tile.packed_store" ||
+          (name == "tile.store" && op->getNumOperands() > 0 &&
+           op->getOperand(0).getDefiningOp<
+               tessera::tile::PackedLoadOp>()) ||
           name == "tile.attention_kernel" ||
           name == "tile.attention_backward_kernel" ||
           name == "tile.paged_kv_read_kernel" ||
@@ -3524,6 +4086,43 @@ struct LowerTileToNVIDIAPass
         return;
       }
 
+      if (isTileOp(op, "tile.packed_store")) {
+        auto store = cast<tessera::tile::PackedStoreOp>(op);
+        auto load =
+            store.getInputs().front().getDefiningOp<
+                tessera::tile::PackedLoadOp>();
+        if (smVersion < kConsumerBlackwellSM || !load ||
+            failed(materializeSm120PackedRoundTrip(load, store, builder))) {
+          if (smVersion < kConsumerBlackwellSM)
+            op->emitError("generic packed value lowering currently requires "
+                          "sm_120");
+          else if (!load)
+            op->emitError("tile.packed_store requires a tile.packed_load "
+                          "producer on SM120");
+          signalPassFailure();
+          return;
+        }
+        continue;
+      }
+
+      if (isTileOp(op, "tile.store")) {
+        auto store = cast<tessera::tile::StoreOp>(op);
+        auto load =
+            store.getInputs().front().getDefiningOp<
+                tessera::tile::PackedLoadOp>();
+        if (smVersion < kConsumerBlackwellSM || !load ||
+            failed(materializeSm120PackedDecodeStore(load, store, builder))) {
+          if (smVersion < kConsumerBlackwellSM)
+            op->emitError("generic packed decode currently requires sm_120");
+          else if (!load)
+            op->emitError("generic packed tile.store requires a "
+                          "tile.packed_load producer");
+          signalPassFailure();
+          return;
+        }
+        continue;
+      }
+
       if (isTileOp(op, "tile.matmul_kernel")) {
         if (smVersion < kConsumerBlackwellSM ||
             failed(materializeSm120MatmulKernel(
@@ -3549,14 +4148,21 @@ struct LowerTileToNVIDIAPass
       }
 
       if (isTileOp(op, "tile.cuda_intrinsic_kernel")) {
-        if (smVersion < kConsumerBlackwellSM ||
-            failed(materializeSm120CudaIntrinsicKernel(
-                cast<tessera::tile::CudaIntrinsicKernelOp>(op), builder))) {
-          if (smVersion < kConsumerBlackwellSM)
-            op->emitError("tile.cuda_intrinsic_kernel currently requires sm_120");
+        if (smVersion < kConsumerBlackwellSM) {
+          op->emitError("tile.cuda_intrinsic_kernel currently requires sm_120");
           signalPassFailure();
           return;
         }
+        auto kernel = cast<tessera::tile::CudaIntrinsicKernelOp>(op);
+        SmallVector<NamedAttribute> mathAttrs;
+        for (StringRef key :
+             {"kind", "input_storage", "output_storage", "rounding",
+              "saturation", "lane_width", "signedness", "predicate_form"})
+          mathAttrs.push_back(
+              builder.getNamedAttr(key, op->getAttr(key)));
+        createContractOp(builder, loc, "tessera_nvidia.cuda_math_kernel",
+                         kernel.getInputs(), TypeRange{}, mathAttrs);
+        op->erase();
         continue;
       }
 
@@ -4064,7 +4670,7 @@ struct LowerTileToNVIDIAPass
 
       if (name.starts_with("tile.tmem.")) {
         StringRef contractName = "tessera_nvidia.tmem_store";
-        if (name == "tile.tmem.alloc")
+        if (name == "tile.tmem.alloc" || name == "tile.tmem.allocate")
           contractName = "tessera_nvidia.tmem_alloc";
         else if (name == "tile.tmem.load")
           contractName = "tessera_nvidia.tmem_load";
@@ -4372,7 +4978,8 @@ struct LowerNVIDIAToNVVMPass
   }
 
   void getDependentDialects(DialectRegistry &registry) const final {
-    registry.insert<LLVM::LLVMDialect, NVVM::NVVMDialect>();
+    registry.insert<arith::ArithDialect, LLVM::LLVMDialect, math::MathDialect,
+                    NVVM::NVVMDialect, scf::SCFDialect>();
   }
 
   void runOnOperation() final {
@@ -4386,6 +4993,14 @@ struct LowerNVIDIAToNVVMPass
 
     for (Operation *op : targetOps) {
       OpBuilder builder(op);
+      if (auto cudaMath =
+              dyn_cast<tessera::nvidia::CudaMathKernelOp>(op)) {
+        if (failed(materializeSm120CudaIntrinsicKernel(cudaMath, builder))) {
+          signalPassFailure();
+          return;
+        }
+        continue;
+      }
       // Real NVVM emission for the fragment-typed mma_sync contract; the abstract
       // marker form falls through to the void-marker path below.
       if (tryLowerMmaSyncToNVVM(op, builder))
@@ -4396,6 +5011,17 @@ struct LowerNVIDIAToNVVMPass
       if (!op->use_empty())
         op->dropAllUses();
       op->erase();
+    }
+
+    bool unconsumedPackedLoad = false;
+    module.walk([&](tessera::tile::PackedLoadOp load) {
+      load.emitError("SM120 packed load must feed tile.store, "
+                     "tile.packed_store, or a supported fragment consumer");
+      unconsumedPackedLoad = true;
+    });
+    if (unconsumedPackedLoad) {
+      signalPassFailure();
+      return;
     }
   }
 };

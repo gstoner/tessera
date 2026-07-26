@@ -855,10 +855,13 @@ row "Tile IR (FA-4)") can pull from it. Cross-refs noted; reference memory
   slots a function of buffer-reuse decisions. Targets `WarpSpecializationPass` +
   the Queue dialect (currently "WarpSpec emits no queues/mbarriers" per the
   scorecard).
-  **v1 LANDED (2026-06-23) as a legality pass.** `TileBarrierReuseLegalityPass`
+  **v1 LANDED (2026-06-23), SSA identity continuation 2026-07-25.**
+  `TileBarrierReuseLegalityPass`
   (`--tessera-tile-barrier-reuse-legality`, `src/transforms/lib/`, sibling to
-  `LayoutLegalityPass`): for a buffer (keyed by `tile.buffer`), two `tile.access
-  = "write"` ops whose `#tile.layout` storage-axis (`m/tlane/tcol`) footprints
+  `LayoutLegalityPass`): for a buffer (canonically keyed by the root
+  `!tile.buffer` result of `tile.alloc`; legacy `#tile.buffer_ref` names remain
+  a migration fallback), two write ops whose `#tile.layout` storage-axis
+  (`m/tlane/tcol`) footprints
   *overlap* with no intervening barrier op (name contains `mbarrier`/`wait_async`
   /`barrier`, or a `tile.barrier` attr) emit `TILE_BARRIER_REUSE_MISSING_BARRIER`
   + a note at the prior write. Footprint = `[offset, offset + Σ(extent-1)|stride|]`
@@ -868,9 +871,12 @@ row "Tile IR (FA-4)") can pull from it. Cross-refs noted; reference memory
   barrier between (clean), disjoint double-buffer offsets (clean), and a
   register-only fragment (clean). This is the **acceptance gate** for C3: once
   WarpSpec emits real typed barriers + buffer reuse, this pass going green on the
-  FA-4 fixture is the correctness check. *Still open:* it consumes a convention
-  today (`tile.buffer`/`tile.access`); wiring it to real `alloc_shared`/`tmem.alloc`
-  SSA buffers + WarpSpec output is the C2↔C3 join.
+  FA-4 fixture is the correctness check. `tile.alloc`/`tile.dealloc` now provide
+  typed def-use lifetime identity and the legality pass follows SSA alias roots.
+  WarpSpecialization allocates parent-region SMEM/TMEM handles, threads them
+  into staged copies and consumers, and deallocates them only after CTA sync;
+  the real WarpSpec→TMA output passes this legality gate. *Still open:* remove
+  the name-based compatibility fallback after sibling backend migrations.
 
 - **C3 — Typed barrier domains + a `PipelineState` SSA value (HF→HG).** Three
   barrier primitives with distinct completion semantics — `TMABar`
@@ -891,8 +897,18 @@ row "Tile IR (FA-4)") can pull from it. Cross-refs noted; reference memory
   `kind` (`TILE_PIPELINE_BARRIER_KIND_MISMATCH` + note). Lit:
   `tile_pipeline_attrs.mlir` (round-trip + 6 verifier negatives),
   `tile_pipeline_legality.mlir` (well-formed pipeline clean; producer-phase-0 and
-  mixed-kind flagged). *Still open:* `PipelineState` as a threaded SSA value (not
-  just an annotation) and WarpSpec emitting these — the C3↔C6 join.
+  mixed-kind flagged). The `!tile.pipeline_state`, `tile.pipeline_init`, and
+  `tile.pipeline_advance` SSA vocabulary is now registered with initial
+  producer-phase=1 / consumer-phase=0 verification. WarpSpecialization creates
+  the two initial states and threads `tile.pipeline_advance` through
+  producer/consumer operation results. The 2026-07-25 continuation registers
+  `!tile.tma_descriptor`, `!tile.mbarrier`, `!tile.mbarrier_token`, and
+  `!tile.tmem` plus typed TMA copy, mbarrier arrive/wait, TMEM load/store, and
+  TCGen05 operations. AsyncCopy formation, descriptor deduplication, and the
+  FlashAttention barrier sequence now build SSA descriptor/barrier/token
+  chains rather than unregistered strings. *Still open:* retire annotation-only
+  compatibility metadata and obtain exact SM100 TCGen05/TMEM execution; SM120
+  supplies structural rejection proof, not substitute device evidence.
 
 - **C4 — Separate *compute*-legalize from *storage*-legalize (HF).** TIRx runs
   `BF16/FP8 ComputeLegalize` (rewrite math to f32-upcast form) early and
@@ -917,10 +933,13 @@ row "Tile IR (FA-4)") can pull from it. Cross-refs noted; reference memory
   (`--tessera-storage-pack-consume`) is the first real consumer of the packing
   markers (previously inert): it reads `tessera.storage_packed` /
   `storage_container` + `numeric_policy.storage` and emits a concrete
-  `tessera.storage_pack = {logical, container, factor, signedness}` descriptor —
-  `factor = container_bits / storage_bits` (fp4/nvfp4/int4 → 2 per int8, fp6 →
-  1), with `signed_twos_complement` for int4 and `format_defined` for floating
-  formats — the form a backend's packed load/store reads; bad widths emit
+  structured `#tile.packed_format<logical, container, logical_bits,
+  elements_per_container, signedness, encoding, lane_order>` descriptor.
+  Concrete `#tile.packed_view` binds that format to a packing axis, physical
+  strides, alignment/offset, and explicit `#tile.scale_layout`; fp6 retains
+  logical_bits=6 even though its int8 factor is one. Generic
+  `tile.packed_load`/`tile.packed_store` operations carry the value-level
+  contract; scale-bearing stores fail closed. Bad widths emit
   `DTYPE_PACK_BAD_WIDTHS`. HF Target-IR step (Decision #19). Lit:
   `storage_pack_consume.mlir`. AMD's `GenerateWMMAGemmKernel` decodes
   physically packed signed int4 memory into `vector<2xi32>` (IU4 ABI) and
@@ -945,12 +964,12 @@ row "Tile IR (FA-4)") can pull from it. Cross-refs noted; reference memory
   `tessera.storage_pack`, validating logical dtype, int8 container, factor,
   and format-specific signedness before physical byte/nibble loads. The INT4
   consumer additionally rejects scale/fused operands and owns the
-  two's-complement low-nibble-first contract. Opt-in
-  terminal legalization in the NVIDIA named pipeline schedules
-  `StoragePackConsume` immediately after `StorageLegalize`. It remains opt-in
-  for the generic value-level Tile route because that route does not carry the
-  scale operands required by block-scaled formats; the proven INT4 launch
-  envelope does not make that generic block-scale ABI universal. The ROCm
+  two's-complement low-nibble-first contract. Terminal legalization is now
+  capability-filtered by target + operation + descriptor + available consumer.
+  SM120 generic packed loads consume explicit scale operands and origin-aware
+  block indexing for NVFP4/FP4/FP6 plus signed INT4 decode and unscaled round
+  trips. This does not imply that arbitrary FP4/FP6 Tile operations have a
+  physical consumer. The ROCm
   backend pipeline runs the complete compute →
   storage → consume chain by default before its WMMA generator. The legacy
   `legalize-dtypes` option remains as an explicit force-on compatibility

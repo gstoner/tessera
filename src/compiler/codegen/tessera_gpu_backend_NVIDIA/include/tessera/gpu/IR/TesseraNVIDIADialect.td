@@ -113,6 +113,28 @@ def NVIDIA_TmemStoreOp : TesseraNVIDIA_Op<"tmem_store"> {
 def NVIDIA_CudaKernelOp : TesseraNVIDIA_Op<"cuda_kernel"> {
   let summary = "Generic CUDA kernel artifact contract";
 }
+
+// Typed CUDA Math API execution contract. Portable casts/bitcasts are
+// normalized before this boundary where possible; CUDA-only funnel, packed
+// dot, byte-lane SIMD, saturation, and predicate-result semantics remain
+// explicit here. The verifier owns a closed kind/type/rounding/saturation/
+// lane/predicate matrix rather than accepting an open string dispatch.
+def NVIDIA_CudaMathKernelOp : Op<TesseraNVIDIADialect, "cuda_math_kernel"> {
+  let summary = "Typed NVIDIA CUDA integer, bitcast, and packed-SIMD kernel";
+  let arguments = (ins
+      Variadic<AnyType>:$inputs,
+      StrAttr:$kind,
+      StrAttr:$input_storage,
+      StrAttr:$output_storage,
+      StrAttr:$rounding,
+      BoolAttr:$saturation,
+      I64Attr:$lane_width,
+      StrAttr:$signedness,
+      StrAttr:$predicate_form);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
 def NVIDIA_ControlForOp : TesseraNVIDIA_Op<"control_for"> {
   let summary = "Single-launch bounded for-loop CUDA contract";
 }

@@ -8,9 +8,14 @@ from tessera.compiler.driver import compile_graph_module
 from tessera.compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IROp, IRType
 from tessera.compiler.primitive_coverage import NumericPolicy
 from tessera.runtime import RuntimeArtifact, launch
-from tessera.runtime import _submit_nvidia_sm120_native
+from tessera.runtime import (
+    _nvidia_native_descriptor_device_latency,
+    _nvidia_native_descriptor_resources,
+    _submit_nvidia_sm120_native,
+)
 from tessera.compiler.nvidia_native import (
     package_cuda_intrinsic,
+    package_packed_decode,
     package_paged_attention,
 )
 from tests._support.nvidia import nvidia_cuda_host_ready
@@ -1107,6 +1112,11 @@ def test_canonical_sm120_int4_storage_pack_consumer(shape) -> None:
         "abs_i32",
         "min_i32",
         "max_i32",
+        "brev_u32",
+        "byte_perm_u32",
+        "clz_u32",
+        "ffs_u32",
+        "popc_u32",
         "funnelshift_l_wrap_u32",
         "dp2a_lo_s32",
         "dp4a_s32",
@@ -1114,7 +1124,18 @@ def test_canonical_sm120_int4_storage_pack_consumer(shape) -> None:
         "cvt_f32_i32_rd",
         "cvt_f32_i32_ru",
         "cvt_f32_i32_rz",
+        "bitcast_f32_i32",
+        "bitcast_i32_f32",
         "vadd2_u16x2",
+        "vadd4_u8x4",
+        "vadd4_s8x4",
+        "vaddss4_s8x4",
+        "vsub4_u8x4",
+        "vsub4_s8x4",
+        "vsubss4_s8x4",
+        "vabsdiff4_u8x4",
+        "vcmpeq4_u8x4_mask",
+        "vcmpeq4_u8x4_pred",
     ],
 )
 def test_canonical_sm120_cuda_math_intrinsic_execution(kind) -> None:
@@ -1134,6 +1155,12 @@ def test_canonical_sm120_cuda_math_intrinsic_execution(kind) -> None:
             "ru": np.ceil,
             "rz": np.trunc,
         }[mode](a_input).astype(np.int32)
+    elif kind == "bitcast_f32_i32":
+        a_input = np.linspace(-23.75, 31.5, count, dtype=np.float32)
+        expected = a_input.view(np.int32)
+    elif kind == "bitcast_i32_f32":
+        a_input = a
+        expected = a.view(np.float32)
     else:
         a_input = a
         if kind == "abs_i32":
@@ -1142,6 +1169,33 @@ def test_canonical_sm120_cuda_math_intrinsic_execution(kind) -> None:
             expected = np.minimum(a, b)
         elif kind == "max_i32":
             expected = np.maximum(a, b)
+        elif kind == "brev_u32":
+            values = a.astype(np.uint32)
+            reversed_values = np.zeros(count, dtype=np.uint32)
+            for bit in range(32):
+                reversed_values |= ((values >> bit) & 1) << (31 - bit)
+            expected = reversed_values.view(np.int32)
+        elif kind == "byte_perm_u32":
+            au = a.astype(np.uint32)
+            bu = b.astype(np.uint32)
+            expected = ((au & 0xFFFF) | ((bu & 0xFFFF) << 16)).view(np.int32)
+        elif kind == "clz_u32":
+            expected = np.array(
+                [32 if int(x) == 0 else 32 - int(x).bit_length()
+                 for x in a.astype(np.uint32)],
+                dtype=np.int32,
+            )
+        elif kind == "ffs_u32":
+            expected = np.array(
+                [0 if int(x) == 0 else (int(x) & -int(x)).bit_length()
+                 for x in a.astype(np.uint32)],
+                dtype=np.int32,
+            )
+        elif kind == "popc_u32":
+            expected = np.array(
+                [int(x).bit_count() for x in a.astype(np.uint32)],
+                dtype=np.int32,
+            )
         elif kind == "funnelshift_l_wrap_u32":
             shift = c.astype(np.uint32) & np.uint32(31)
             au = a.astype(np.uint32)
@@ -1160,13 +1214,49 @@ def test_canonical_sm120_cuda_math_intrinsic_execution(kind) -> None:
             a_bytes = a.view(np.int8).reshape(count, 4).astype(np.int32)
             b_bytes = b.view(np.int8).reshape(count, 4).astype(np.int32)
             expected = (np.sum(a_bytes * b_bytes, axis=1) + c).astype(np.int32)
-        else:
+        elif kind == "vadd2_u16x2":
             au = a.astype(np.uint32)
             bu = b.astype(np.uint32)
             lo = ((au & 0xFFFF) + (bu & 0xFFFF)) & 0xFFFF
             hi = (((au >> 16) + (bu >> 16)) & 0xFFFF) << 16
             expected = (lo | hi).astype(np.int32)
-    output = np.zeros(count, np.int32)
+        else:
+            a_lanes = a.view(np.uint8).reshape(count, 4)
+            b_lanes = b.view(np.uint8).reshape(count, 4)
+            if "_s8x4" in kind:
+                lhs = a_lanes.view(np.int8).astype(np.int16)
+                rhs = b_lanes.view(np.int8).astype(np.int16)
+            else:
+                lhs = a_lanes.astype(np.int16)
+                rhs = b_lanes.astype(np.int16)
+            if kind.startswith("vadd"):
+                lanes = lhs + rhs
+            elif kind.startswith("vsub"):
+                lanes = lhs - rhs
+            elif kind == "vabsdiff4_u8x4":
+                lanes = np.abs(lhs - rhs)
+            else:
+                equal = lhs == rhs
+                if kind.endswith("_pred"):
+                    expected = np.sum(
+                        equal.astype(np.uint32)
+                        << np.arange(4, dtype=np.uint32),
+                        axis=1,
+                        dtype=np.uint32,
+                    ).view(np.int32)
+                    lanes = None
+                else:
+                    lanes = equal.astype(np.uint8) * np.uint8(0xFF)
+            if lanes is not None:
+                if "ss4" in kind:
+                    lanes = np.clip(lanes, -128, 127)
+                expected = (
+                    lanes.astype(np.uint8).reshape(count, 4).copy().view(np.int32)
+                    .reshape(count)
+                )
+    output = np.zeros(
+        count, np.float32 if kind == "bitcast_i32_f32" else np.int32
+    )
     package = package_cuda_intrinsic(kind=kind, count=count)
     assert package.image.resource_record is not None
     assert package.image.resource_record.metrics["spill_load_bytes"] == 0
@@ -1187,7 +1277,226 @@ def test_canonical_sm120_cuda_math_intrinsic_execution(kind) -> None:
         {"a": a_input, "b": b, "c": c, "o": output, "N": count},
     )
     assert result["ok"] is True, result.get("reason")
+    if kind == "bitcast_i32_f32":
+        np.testing.assert_array_equal(output.view(np.int32), expected.view(np.int32))
+    else:
+        np.testing.assert_array_equal(output, expected)
+
+
+@pytest.mark.hardware_nvidia
+def test_sm120_generic_packed_nvfp4_non_origin_ragged_decode() -> None:
+    if not nvidia_cuda_host_ready():
+        pytest.skip("host WSL CUDA device/toolchain unavailable")
+    full_rows, full_columns = 5, 10
+    row_origin, column_origin = 1, 3
+    rows, columns = 3, 5
+    stride, offset = 6, 2
+    source = np.zeros(offset + full_rows * stride, dtype=np.uint8)
+    codes = (
+        np.arange(full_rows * full_columns, dtype=np.uint8)
+        .reshape(full_rows, full_columns)
+        % np.uint8(16)
+    )
+    for row in range(full_rows):
+        for column in range(full_columns):
+            address = offset + row * stride + column // 2
+            shift = 4 * (column % 2)
+            source[address] |= np.uint8(int(codes[row, column]) << shift)
+
+    scale_stride, scale_offset = 4, 1
+    scale = np.full(
+        scale_offset + full_rows * scale_stride,
+        np.uint8(7 << 3),
+        dtype=np.uint8,
+    )
+    output = np.zeros((rows, columns), dtype=np.float32)
+    package = package_packed_decode(
+        logical="nvfp4",
+        rows=rows,
+        columns=columns,
+        source_bytes=source.size,
+        strides=(stride, 1),
+        offset=offset,
+        scale_dtype="ue4m3",
+        scale_bytes=scale.size,
+        scale_block_size=4,
+        scale_axis=1,
+        scale_layout="row_major",
+        scale_stride=scale_stride,
+        scale_offset=scale_offset,
+    )
+    assert package.image.resource_record is not None
+    assert package.image.resource_record.metrics["spill_load_bytes"] == 0
+    assert package.image.resource_record.metrics["spill_store_bytes"] == 0
+    warm = package_packed_decode(
+        logical="nvfp4",
+        rows=rows,
+        columns=columns,
+        source_bytes=source.size,
+        strides=(stride, 1),
+        offset=offset,
+        scale_dtype="ue4m3",
+        scale_bytes=scale.size,
+        scale_block_size=4,
+        scale_axis=1,
+        scale_layout="row_major",
+        scale_stride=scale_stride,
+        scale_offset=scale_offset,
+    )
+    assert warm.image.compile_state == "warm_cache"
+    assert warm.image.image_digest == package.image.image_digest
+    assert warm.descriptor == package.descriptor
+    artifact = RuntimeArtifact(
+        tile_ir=package.tile_ir,
+        target_ir=package.target_ir,
+        metadata={"target": "nvidia_sm120"},
+        native_image=package.image,
+        launch_descriptor=package.descriptor,
+    )
+    result = launch(
+        artifact,
+        {
+            "source": source,
+            "scale": scale,
+            "output": output,
+            "RowOrigin": row_origin,
+            "ColumnOrigin": column_origin,
+            "Rows": rows,
+            "Columns": columns,
+            "SourceBytes": source.size,
+            "ScaleBytes": scale.size,
+        },
+    )
+    assert result["ok"] is True, result.get("reason")
+    latency_ms = _nvidia_native_descriptor_device_latency(
+        package.image,
+        package.descriptor,
+        {
+            "source": source,
+            "scale": scale,
+            "output": output,
+            "RowOrigin": row_origin,
+            "ColumnOrigin": column_origin,
+            "Rows": rows,
+            "Columns": columns,
+            "SourceBytes": source.size,
+            "ScaleBytes": scale.size,
+        },
+        warmup=10,
+        reps=50,
+    )
+    assert latency_ms > 0.0
+    resources = _nvidia_native_descriptor_resources(
+        package.image, package.descriptor, block_size=128,
+    )
+    assert resources["registers_per_thread"] > 0
+    assert resources["local_memory_bytes"] == 0
+    selected = codes[
+        row_origin : row_origin + rows,
+        column_origin : column_origin + columns,
+    ]
+    magnitude = np.array(
+        [0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0],
+        dtype=np.float32,
+    )
+    expected = magnitude[selected & np.uint8(7)]
+    expected = np.where((selected & np.uint8(8)) != 0, -expected, expected)
     np.testing.assert_array_equal(output, expected)
+
+
+@pytest.mark.hardware_nvidia
+@pytest.mark.parametrize("logical", ["int4", "fp6_e2m3", "fp6_e3m2"])
+def test_sm120_generic_packed_unscaled_non_origin_decode(logical: str) -> None:
+    if not nvidia_cuda_host_ready():
+        pytest.skip("host WSL CUDA device/toolchain unavailable")
+    full_rows, full_columns = 4, 9
+    row_origin, column_origin = 1, 2
+    rows, columns = 2, 5
+    factor = 2 if logical == "int4" else 1
+    stride, offset = (full_columns + factor - 1) // factor + 1, 2
+    source = np.zeros(offset + full_rows * stride, dtype=np.uint8)
+    codes = (
+        np.arange(full_rows * full_columns, dtype=np.uint8)
+        .reshape(full_rows, full_columns)
+        % np.uint8(16 if logical == "int4" else 64)
+    )
+    for row in range(full_rows):
+        for column in range(full_columns):
+            address = offset + row * stride + column // factor
+            shift = 4 * (column % factor) if factor == 2 else 0
+            source[address] |= np.uint8(int(codes[row, column]) << shift)
+    scaled = logical.startswith("fp6_")
+    scale_stride, scale_offset = 4, 1
+    scale = (
+        np.full(
+            scale_offset + full_rows * scale_stride,
+            np.uint8(127),
+            dtype=np.uint8,
+        )
+        if scaled
+        else np.zeros(1, dtype=np.uint8)
+    )
+    output = np.zeros((rows, columns), dtype=np.float32)
+    package = package_packed_decode(
+        logical=logical,
+        rows=rows,
+        columns=columns,
+        source_bytes=source.size,
+        strides=(stride, 1),
+        offset=offset,
+        scale_dtype="ue8m0" if scaled else "none",
+        scale_bytes=scale.size,
+        scale_block_size=4 if scaled else 0,
+        scale_axis=1 if scaled else -1,
+        scale_layout="row_major" if scaled else "none",
+        scale_stride=scale_stride if scaled else 0,
+        scale_offset=scale_offset if scaled else 0,
+    )
+    assert package.image.resource_record is not None
+    assert package.image.resource_record.metrics["spill_load_bytes"] == 0
+    assert package.image.resource_record.metrics["spill_store_bytes"] == 0
+    artifact = RuntimeArtifact(
+        tile_ir=package.tile_ir,
+        target_ir=package.target_ir,
+        metadata={"target": "nvidia_sm120"},
+        native_image=package.image,
+        launch_descriptor=package.descriptor,
+    )
+    result = launch(
+        artifact,
+        {
+            "source": source,
+            "scale": scale,
+            "output": output,
+            "RowOrigin": row_origin,
+            "ColumnOrigin": column_origin,
+            "Rows": rows,
+            "Columns": columns,
+            "SourceBytes": source.size,
+            "ScaleBytes": scale.size,
+        },
+    )
+    assert result["ok"] is True, result.get("reason")
+    selected = codes[
+        row_origin : row_origin + rows,
+        column_origin : column_origin + columns,
+    ]
+    if logical == "int4":
+        expected = np.where(selected >= 8, selected.astype(np.int16) - 16, selected)
+    else:
+        mantissa_bits = 3 if logical == "fp6_e2m3" else 2
+        exponent_bits = 2 if logical == "fp6_e2m3" else 3
+        bias = 1 if logical == "fp6_e2m3" else 3
+        mantissa = selected & np.uint8((1 << mantissa_bits) - 1)
+        exponent = (
+            selected >> np.uint8(mantissa_bits)
+        ) & np.uint8((1 << exponent_bits) - 1)
+        fraction = mantissa.astype(np.float32) / float(1 << mantissa_bits)
+        significand = np.where(exponent == 0, fraction, 1.0 + fraction)
+        unbiased = np.where(exponent == 0, 1 - bias, exponent.astype(np.int16) - bias)
+        expected = significand * np.exp2(unbiased.astype(np.float32))
+        expected = np.where((selected & np.uint8(32)) != 0, -expected, expected)
+    np.testing.assert_array_equal(output, expected.astype(np.float32))
 
 
 @pytest.mark.hardware_nvidia

@@ -31,16 +31,15 @@ def test_cuda_compile_proof_does_not_imply_tessera_selection() -> None:
         "funnel_shift_l_wrap",
         "integer_packed_dot",
         "numeric_cast_rn_rd_ru_rz",
-        "packed_simd_add_u16x2",
-    }
-    assert {
-        row.key
-        for row in SM120_INTRINSIC_CONTRACTS
-        if row.target_ir_state == row.runtime_state == "planned"
-    } == {
         "integer_bit_ops",
         "bit_reinterpret_cast",
         "packed_simd_2x16_4x8",
+        "packed_simd_add_u16x2",
+    }
+    assert not {
+        row.key
+        for row in SM120_INTRINSIC_CONTRACTS
+        if row.target_ir_state == row.runtime_state == "planned"
     }
     assert all(row.ptx_operand_storage for row in SM120_INTRINSIC_CONTRACTS)
 
@@ -67,6 +66,11 @@ def test_runtime_packager_fails_closed_outside_promoted_subset() -> None:
         "abs_i32",
         "min_i32",
         "max_i32",
+        "brev_u32",
+        "byte_perm_u32",
+        "clz_u32",
+        "ffs_u32",
+        "popc_u32",
         "funnelshift_l_wrap_u32",
         "dp2a_lo_s32",
         "dp4a_s32",
@@ -74,7 +78,18 @@ def test_runtime_packager_fails_closed_outside_promoted_subset() -> None:
         "cvt_f32_i32_rd",
         "cvt_f32_i32_ru",
         "cvt_f32_i32_rz",
+        "bitcast_f32_i32",
+        "bitcast_i32_f32",
         "vadd2_u16x2",
+        "vadd4_u8x4",
+        "vadd4_s8x4",
+        "vaddss4_s8x4",
+        "vsub4_u8x4",
+        "vsub4_s8x4",
+        "vsubss4_s8x4",
+        "vabsdiff4_u8x4",
+        "vcmpeq4_u8x4_mask",
+        "vcmpeq4_u8x4_pred",
     }
     with pytest.raises(ValueError, match="not in the exact-device promoted subset"):
-        package_cuda_intrinsic(kind="vaddss4_s8x4", count=16)
+        package_cuda_intrinsic(kind="vavgu4_unmodeled", count=16)

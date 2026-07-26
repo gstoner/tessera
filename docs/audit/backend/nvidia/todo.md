@@ -989,9 +989,9 @@ The CUDA Math API scalar/integer follow-on records representative integer math,
 bit, packed-dot, numeric/bit-cast, and 2x16/4x8 packed-SIMD families. A CUDA
 13.3 `nvcc -arch=sm_120a` fixture proves the documented symbols compile, while
 this original synchronization point kept every Tessera Target-IR/runtime state
-`planned`. `NVIDIA-PACKED-MATH-2026-07-25` later supersedes that blanket state
-for the exact-device subset recorded in the closeout below; unexecuted
-bit/bit-cast and broader packed-SIMD families remain planned.
+`planned`. `NVIDIA-PACKED-MATH-2026-07-25` first promoted a bounded subset; the
+structured continuation recorded below now closes the listed bit, bit-cast,
+and packed-SIMD families through typed Target IR and 27 exact-device cases.
 The shared rounding vocabulary now represents CUDA's four conversion suffixes
 RN/RD/RU/RZ exactly; nearest-away and stochastic modes cannot silently map to a
 CUDA cast. Undefined signed-min absolute value, out-of-range float-to-integer
@@ -1499,19 +1499,63 @@ image and descriptor identity. NVFP4/MXFP4/FP6 keep their distinct
 scale-bearing fragment semantics; no physical schedule is transferred between
 those formats or from ROCm.
 
-The same continuation promotes a deliberately bounded CUDA Math API subset
-through the typed `tile.cuda_intrinsic_kernel` carrier, immutable PTX image,
-five-operand launch descriptor, CUDA-driver bridge, and exact SM120 execution:
-signed i32 abs/min/max, wrapping left funnel shift, signed `dp2a.lo` and
-`dp4a`, f32-to-i32 RN/RD/RU/RZ conversions, and unsigned wrapping `vadd2`.
-Eleven exact-device cases retain numerical/bit-exact oracles, ptxas no-spill
-records, and warm-cache image/descriptor identity. Broader bit operations,
-bit-reinterpret directions, and packed byte-lane saturation/compare families
-remain `planned` and fail closed at the runtime packager. This is an internal
-Tile/Target-IR execution surface, not a new public Graph operation.
+The 2026-07-25 continuation replaces the dictionary-only pack record with
+portable `#tile.packed_format`, `#tile.scale_layout`, and
+`#tile.packed_view` attributes plus generic `tile.packed_load`/
+`tile.packed_store`. The contract records logical bit width independently of
+the int8 container (notably FP6 factor one), signedness/encoding/lane order,
+packing axis/strides, alignment/offset, and an explicit scale operand/layout.
+SM120 lowering decodes signed INT4, FP4/NVFP4, and both FP6 encodings, applies
+origin-aware scale indexing for non-origin views, guards ragged bounds, and
+supports unscaled packed round trips. Descriptor, axis, scale, alignment, and
+store disagreement fail closed. Terminal marking is capability-filtered by
+target + operation + format + available consumer; unsupported operations stay
+logical rather than inheriting launch-envelope support.
 
-Terminal storage legalization remains opt-in after this slice. The canonical
-launch envelopes now consume FP4/NVFP4/FP6/INT4 descriptors, but the generic
-value-level CUDA route still has no universal scale-operand ABI for
-block-scaled formats. Enabling the default before that ABI exists would turn a
-legalization setting into an unsupported execution claim.
+The generic value-level consumer now also owns a CUDA runtime ABI rather than
+ending at compiler lit. Exact RTX 5070 Ti execution covers non-origin/ragged
+NVFP4 with explicit UE4M3 scale binding, signed INT4, and FP6-E2M3/FP6-E3M2
+with explicit UE8M0 scale binding. All four cases match their format oracles,
+retain zero ptxas spill bytes, and reproduce cold/warm image plus launch
+descriptor identity. Source/scale byte extents are launch scalars checked
+against the serialized physical view; the bridge rejects negative origins,
+nonpositive extents, overflow, or buffer/descriptor disagreement. Generic
+packed stores retain host-free compiler round-trip proof; no unsupported
+format is default-enabled by this runtime addition.
+
+The checked-in SM120 packed-storage packet measures the production-sized
+`4097x4099` ragged view for signed INT4, NVFP4, FP6-E2M3, and FP6-E3M2. Each
+device observation amortizes ten resident launches, each cohort retains seven
+device-event observations and ten end-to-end submissions, and the first
+allocation/copy/JIT-inclusive submission is discarded. Every row reproduces
+its compiler image, launch descriptor, cache fingerprint, and 18-register,
+zero-local-memory resource record. On this WSL host all four rows meet the 4%
+two-run gate in both timing domains: the device-event deltas are 0.62%, 0.57%,
+0.32%, and 0.08%, while the end-to-end deltas are 0.27%, 0.09%, 3.46%, and
+0.09%. WSL evidence remains selector-ineligible, so every row records an
+explicit retain disposition. No selector or terminal-legalization default
+changes from these timings.
+
+CUDA Math now crosses a registered `tessera_nvidia.cuda_math_kernel` seam
+instead of extending an open five-pointer string dispatcher. Its closed
+verifier covers scalar `brev`, `prmt`, `clz`, `ffs`, `popc`, numeric and
+bit-preserving f32/i32 casts, packed 2x16 and 4x8 signed/unsigned wrapping or
+saturating arithmetic, byte absolute difference, and both lane-mask and
+predicate-bit comparisons. All 27 exact RTX 5070 Ti cases launch, match
+bit-exact/numerical oracles, retain zero spills, and reproduce warm image and
+descriptor identity. No production selector changes.
+
+The structural continuation registers `!tile.buffer`, `tile.alloc`,
+`tile.dealloc`, `!tile.pipeline_state`, `tile.pipeline_init`, and
+`tile.pipeline_advance`. It now also registers SSA TMA descriptor, mbarrier,
+mbarrier-token, TMEM, and TCGen05 types/operations. WarpSpecialization allocates
+SMEM/TMEM handles in the parent region, threads them into staged copies and
+consumers, threads producer/consumer pipeline states, and deallocates only
+after CTA synchronization. AsyncCopy lowering emits registered TMA descriptor
+and copy operations; descriptor deduplication assigns slots, creates one SSA
+mbarrier, binds it to every copy, and threads copy completion tokens into the
+typed wait. FlashAttention emits typed arrive/try-wait token chains.
+Barrier-reuse legality passes on this real WarpSpec output. Name-based
+`#tile.buffer_ref` remains migration metadata pending removal. TCGen05/TMEM has
+host-free structural and SM120 fail-closed proof only; exact execution remains
+SM100-owned and cannot be inferred from consumer Blackwell.

@@ -45,14 +45,49 @@ SM120_FP8_E5M2_ABI = "tessera.nvidia.matmul.a_b_d_m_n_k.fp8_e5m2.v1"
 SM120_INT8_ABI = "tessera.nvidia.matmul.a_b_d_m_n_k.int8_i32.v1"
 SM120_INT4_ABI = "tessera.nvidia.matmul.a_b_d_m_n_k.int4_i32.v1"
 SM120_CUDA_INTRINSIC_ABI = "tessera.nvidia.cuda_intrinsic.a_b_c_o_n.v1"
+SM120_PACKED_DECODE_ABI = (
+    "tessera.nvidia.packed_decode.src_scale_o_origin_extent_bytes.v1"
+)
 PROMOTED_SM120_CUDA_INTRINSICS = frozenset({
     "abs_i32", "min_i32", "max_i32",
+    "brev_u32", "byte_perm_u32", "clz_u32", "ffs_u32", "popc_u32",
     "funnelshift_l_wrap_u32",
     "dp2a_lo_s32", "dp4a_s32",
     "cvt_f32_i32_rn", "cvt_f32_i32_rd",
     "cvt_f32_i32_ru", "cvt_f32_i32_rz",
+    "bitcast_f32_i32", "bitcast_i32_f32",
     "vadd2_u16x2",
+    "vadd4_u8x4", "vadd4_s8x4", "vaddss4_s8x4",
+    "vsub4_u8x4", "vsub4_s8x4", "vsubss4_s8x4",
+    "vabsdiff4_u8x4", "vcmpeq4_u8x4_mask", "vcmpeq4_u8x4_pred",
 })
+
+
+def _packed_format_attr(logical: str) -> str:
+    """Canonical textual #tile.packed_format for launch-level compatibility.
+
+    Per-buffer axes and scales belong to #tile.packed_view on tile.packed_load;
+    the launch envelope retains only the format portion common to A and B.
+    """
+    rows = {
+        "nvfp4": (4, 2, "format_defined", "nv_e2m1", "low_to_high"),
+        "fp4_e2m1": (4, 2, "format_defined", "e2m1", "low_to_high"),
+        "fp6_e2m3": (6, 1, "format_defined", "e2m3", "scalar_lsb"),
+        "fp6_e3m2": (6, 1, "format_defined", "e3m2", "scalar_lsb"),
+        "int4": (
+            4, 2, "signed_twos_complement", "twos_complement", "low_to_high"
+        ),
+    }
+    try:
+        bits, factor, signedness, encoding, lane_order = rows[logical]
+    except KeyError as exc:
+        raise ValueError(f"unsupported packed logical format {logical!r}") from exc
+    return (
+        f'#tile.packed_format<logical = "{logical}", container = "int8", '
+        f"logical_bits = {bits}, elements_per_container = {factor}, "
+        f'signedness = "{signedness}", encoding = "{encoding}", '
+        f'lane_order = "{lane_order}">'
+    )
 SM120_FP64_ABI = "tessera.nvidia.matmul.a_b_d_m_n_k.fp64.v1"
 SM120_NVFP4_ABI = "tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k.v1"
 SM120_FP6_E2M3_ABI = "tessera.nvidia.mxfp6_e2m3.a_b_scale_a_scale_b_d_m_n_k.v1"
@@ -306,6 +341,7 @@ def emit_f16_matmul_tile_ir(*, entry: str, schedule: str = "shared") -> str:
 
 def emit_nvfp4_matmul_tile_ir(*, entry: str) -> str:
     """Emit the typed general-shape NVFP4 launch kernel."""
+    packed_format = _packed_format_attr("nvfp4")
     return f"""module {{
   llvm.func @{entry}(%a: !llvm.ptr, %b: !llvm.ptr,
                      %scale_a: !llvm.ptr, %scale_b: !llvm.ptr,
@@ -317,7 +353,7 @@ def emit_nvfp4_matmul_tile_ir(*, entry: str) -> str:
       warps = 1 : i64, staging = "global",
       tessera.storage_packed = true,
       tessera.storage_container = "int8",
-      tessera.storage_pack = {{logical = "nvfp4", container = "int8", factor = 2 : i64, signedness = "format_defined"}}
+      tessera.storage_pack = {packed_format}
     }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64
     llvm.return
   }}
@@ -327,6 +363,7 @@ def emit_nvfp4_matmul_tile_ir(*, entry: str) -> str:
 
 def emit_int4_matmul_tile_ir(*, entry: str) -> str:
     """Emit the canonical signed-int4 packed-storage launch kernel."""
+    packed_format = _packed_format_attr("int4")
     return f"""module {{
   llvm.func @{entry}(%a: !llvm.ptr, %b: !llvm.ptr, %d: !llvm.ptr,
                      %m: i64, %n: i64, %k: i64) attributes {{nvvm.kernel}} {{
@@ -336,7 +373,7 @@ def emit_int4_matmul_tile_ir(*, entry: str) -> str:
       warps = 1 : i64, staging = "global",
       tessera.storage_packed = true,
       tessera.storage_container = "int8",
-      tessera.storage_pack = {{logical = "int4", container = "int8", factor = 2 : i64, signedness = "signed_twos_complement"}}
+      tessera.storage_pack = {packed_format}
     }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64
     llvm.return
   }}
@@ -347,16 +384,31 @@ def emit_int4_matmul_tile_ir(*, entry: str) -> str:
 def emit_cuda_intrinsic_tile_ir(*, entry: str, kind: str) -> str:
     """Emit one typed CUDA integer/cast/packed intrinsic kernel."""
     cast = kind.startswith("cvt_f32_i32_")
+    bitcast_f32_i32 = kind == "bitcast_f32_i32"
+    bitcast_i32_f32 = kind == "bitcast_i32_f32"
     rounding = kind.rsplit("_", 1)[-1] if cast else "none"
-    saturation = kind == "vaddss4_s8x4"
-    input_storage = "f32" if cast else "i32"
+    saturation = kind in {"vaddss4_s8x4", "vsubss4_s8x4"}
+    input_storage = "f32" if cast or bitcast_f32_i32 else "i32"
+    output_storage = "f32" if bitcast_i32_f32 else "i32"
+    packed = kind.startswith("v")
+    lane_width = 16 if packed and "2_" in kind else 8 if packed else 0
+    signedness = (
+        "signed" if "_s8x4" in kind else "unsigned" if packed else "scalar"
+    )
+    predicate_form = (
+        "lane_mask" if kind.endswith("_mask")
+        else "bitset" if kind.endswith("_pred")
+        else "none"
+    )
     return f'''module {{
   llvm.func @{entry}(%a: !llvm.ptr, %b: !llvm.ptr, %c: !llvm.ptr,
                      %o: !llvm.ptr, %n: i64) attributes {{nvvm.kernel}} {{
     tile.cuda_intrinsic_kernel %a, %b, %c, %o, %n {{
       kind = "{kind}", input_storage = "{input_storage}",
-      output_storage = "i32", rounding = "{rounding}",
-      saturation = {str(saturation).lower()}
+      output_storage = "{output_storage}", rounding = "{rounding}",
+      saturation = {str(saturation).lower()},
+      lane_width = {lane_width} : i64, signedness = "{signedness}",
+      predicate_form = "{predicate_form}"
     }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64
     llvm.return
   }}
@@ -376,7 +428,7 @@ def package_cuda_intrinsic(
         raise ValueError(
             f"CUDA intrinsic {kind!r} is not in the exact-device promoted subset"
         )
-    saturation = kind == "vaddss4_s8x4"
+    saturation = kind in {"vaddss4_s8x4", "vsubss4_s8x4"}
     entry = f"tessera_tile_cuda_intrinsic_{kind}"
     tile_ir = emit_cuda_intrinsic_tile_ir(entry=entry, kind=kind)
     (lowered, ptx, metrics, compiler_fp, toolchain_fp,
@@ -397,7 +449,12 @@ def package_cuda_intrinsic(
             provenance="ptxas --arch=sm_120a -v", metrics=metrics,
         ),
     )
-    input_dtype = "fp32" if kind.startswith("cvt_f32_i32_") else "int32"
+    input_dtype = (
+        "fp32"
+        if kind.startswith("cvt_f32_i32_") or kind == "bitcast_f32_i32"
+        else "int32"
+    )
+    output_dtype = "fp32" if kind == "bitcast_i32_f32" else "int32"
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest,
         entry_symbol=entry,
@@ -406,7 +463,7 @@ def package_cuda_intrinsic(
             BufferBinding(0, "a", "input", input_dtype, 1, "row_major", 4),
             BufferBinding(1, "b", "input", "int32", 1, "row_major", 4),
             BufferBinding(2, "c", "input", "int32", 1, "row_major", 4),
-            BufferBinding(3, "o", "output", "int32", 1, "row_major", 4),
+            BufferBinding(3, "o", "output", output_dtype, 1, "row_major", 4),
         ),
         scalars=(ScalarArgument(4, "N", "int64"),),
         shape_guards=tuple(
@@ -425,6 +482,221 @@ def package_cuda_intrinsic(
             "rounding": kind.rsplit("_", 1)[-1]
             if kind.startswith("cvt_f32_i32_") else "none",
             "saturation": saturation,
+            "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
+        },
+    )
+    return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
+
+
+def emit_packed_decode_tile_ir(
+    *,
+    entry: str,
+    logical: str,
+    rows: int,
+    columns: int,
+    packing_axis: int,
+    strides: tuple[int, int],
+    offset: int,
+    alignment: int,
+    scale_dtype: str,
+    scale_block_size: int,
+    scale_axis: int,
+    scale_layout: str,
+    scale_stride: int,
+    scale_offset: int,
+    scale_alignment: int,
+) -> str:
+    """Emit a generic packed-view decode, independent of matmul scheduling."""
+    packed_format = _packed_format_attr(logical)
+    scale = (
+        f'#tile.scale_layout<dtype = "{scale_dtype}", '
+        f"block_size = {scale_block_size}, axis = {scale_axis}, "
+        f'layout = "{scale_layout}", stride = {scale_stride}, '
+        f"alignment = {scale_alignment}, offset = {scale_offset}>"
+    )
+    load_operands = (
+        "%src, %row, %col, %rows, %columns"
+        if scale_dtype == "none"
+        else "%src, %scale, %row, %col, %rows, %columns"
+    )
+    load_types = (
+        "!llvm.ptr, i64, i64, i64, i64"
+        if scale_dtype == "none"
+        else "!llvm.ptr, !llvm.ptr, i64, i64, i64, i64"
+    )
+    return f'''module {{
+  llvm.func @{entry}(
+      %src: !llvm.ptr, %scale: !llvm.ptr, %o: !llvm.ptr,
+      %row: i64, %col: i64, %rows: i64, %columns: i64,
+      %source_bytes: i64, %scale_bytes: i64) attributes {{nvvm.kernel}} {{
+    %zero = llvm.mlir.constant(0 : i64) : i64
+    %tile = tile.packed_load {load_operands} {{
+      tile.layout = #tile.layout<shard = [8, 8] : [8, 1] on ["laneid", "reg"], replica = [] : [] on [], offset = 0>,
+      tile.memory = #tile.memory_layout<space = "gmem", order = "row_major", leading_dim = {strides[0]}>,
+      tile.packed_view = #tile.packed_view<
+        format = {packed_format}, packing_axis = {packing_axis},
+        strides = [{strides[0]}, {strides[1]}],
+        alignment = {alignment}, offset = {offset}, scale = {scale}>
+    }} : ({load_types}) -> !tile.tile
+    tile.store %tile, %o, %zero, %zero {{
+      tile.layout = #tile.layout<shard = [8, 8] : [8, 1] on ["laneid", "reg"], replica = [] : [] on [], offset = 0>,
+      tile.memory = #tile.memory_layout<space = "gmem", order = "row_major", leading_dim = {columns}>
+    }} : !tile.tile, !llvm.ptr, i64, i64
+    llvm.return
+  }}
+}}
+'''
+
+
+def package_packed_decode(
+    *,
+    logical: str,
+    rows: int,
+    columns: int,
+    source_bytes: int,
+    packing_axis: int = 1,
+    strides: tuple[int, int] | None = None,
+    offset: int = 0,
+    alignment: int = 1,
+    scale_dtype: str = "none",
+    scale_bytes: int = 1,
+    scale_block_size: int = 0,
+    scale_axis: int = -1,
+    scale_layout: str = "none",
+    scale_stride: int = 0,
+    scale_offset: int = 0,
+    scale_alignment: int = 1,
+    pipeline_name: str = "tessera-lower-to-nvidia-sm120",
+) -> NVIDIANativePackage:
+    """Compile one generic packed physical-view decode for exact SM120 use."""
+    if logical not in {"int4", "nvfp4", "fp4_e2m1", "fp6_e2m3", "fp6_e3m2"}:
+        raise ValueError(f"unsupported SM120 packed logical dtype {logical!r}")
+    if rows <= 0 or columns <= 0 or source_bytes <= 0:
+        raise ValueError("packed decode extents and source_bytes must be positive")
+    if packing_axis not in {0, 1}:
+        raise ValueError("packed decode packing_axis must be zero or one")
+    if alignment <= 0 or alignment & (alignment - 1):
+        raise ValueError("packed decode alignment must be a positive power of two")
+    if scale_alignment <= 0 or scale_alignment & (scale_alignment - 1):
+        raise ValueError("packed scale alignment must be a positive power of two")
+    scaled = scale_dtype != "none"
+    if scaled:
+        if (
+            scale_dtype not in {"ue4m3", "ue8m0"}
+            or scale_bytes <= 0
+            or scale_block_size <= 0
+            or scale_axis not in {0, 1}
+            or scale_layout not in {"row_major", "col_major", "linear"}
+            or scale_stride <= 0
+        ):
+            raise ValueError("scaled packed decode requires a complete scale layout")
+    elif (
+        scale_block_size != 0
+        or scale_axis != -1
+        or scale_layout != "none"
+        or scale_stride != 0
+        or scale_offset != 0
+    ):
+        raise ValueError("unscaled packed decode cannot carry scale metadata")
+    factor = 1 if logical.startswith("fp6_") else 2
+    if strides is None:
+        strides = (
+            (columns + factor - 1) // factor,
+            1,
+        ) if packing_axis == 1 else (1, rows)
+    if len(strides) != 2 or any(value <= 0 for value in strides):
+        raise ValueError("packed decode requires two positive container strides")
+
+    entry = f"tessera_tile_packed_decode_{logical}"
+    tile_ir = emit_packed_decode_tile_ir(
+        entry=entry,
+        logical=logical,
+        rows=rows,
+        columns=columns,
+        packing_axis=packing_axis,
+        strides=strides,
+        offset=offset,
+        alignment=alignment,
+        scale_dtype=scale_dtype,
+        scale_block_size=scale_block_size,
+        scale_axis=scale_axis,
+        scale_layout=scale_layout,
+        scale_stride=scale_stride,
+        scale_offset=scale_offset,
+        scale_alignment=scale_alignment,
+    )
+    (lowered, ptx, metrics, compiler_fp, toolchain_fp,
+     device_libraries, compile_state) = _compile_tile_ir(tile_ir, entry)
+    image = NativeImageArtifact(
+        target="nvidia_sm120",
+        architecture="sm_120a",
+        pipeline_name=pipeline_name,
+        compiler_fingerprint=compiler_fp,
+        toolchain_fingerprint=toolchain_fp,
+        target_ir_digest=hashlib.sha256(lowered.encode()).hexdigest(),
+        binary_format="ptx",
+        payload=ptx.encode("ascii"),
+        entry_points=(NativeEntryPoint(entry, SM120_PACKED_DECODE_ABI),),
+        compile_state=compile_state,
+        device_libraries=device_libraries,
+        resource_record=ResourceRecord(
+            provenance="ptxas --arch=sm_120a -v", metrics=metrics,
+        ),
+    )
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest,
+        entry_symbol=entry,
+        abi_id=SM120_PACKED_DECODE_ABI,
+        buffers=(
+            BufferBinding(
+                0, "source", "input", "uint8", 1, "row_major", alignment,
+            ),
+            BufferBinding(
+                1, "scale", "input", "uint8", 1, "row_major",
+                scale_alignment,
+            ),
+            BufferBinding(2, "output", "output", "fp32", 2, "row_major", 4),
+        ),
+        scalars=(
+            ScalarArgument(3, "RowOrigin", "int64"),
+            ScalarArgument(4, "ColumnOrigin", "int64"),
+            ScalarArgument(5, "Rows", "int64"),
+            ScalarArgument(6, "Columns", "int64"),
+            ScalarArgument(7, "SourceBytes", "int64"),
+            ScalarArgument(8, "ScaleBytes", "int64"),
+        ),
+        shape_guards=(
+            ShapeGuard("source", 0, "eq", source_bytes),
+            ShapeGuard("scale", 0, "eq", scale_bytes),
+            ShapeGuard("output", 0, "eq", rows),
+            ShapeGuard("output", 1, "eq", columns),
+        ),
+        geometry=LaunchGeometry(policy="sm120_packed_decode_128"),
+        ordering=OrderingSemantics(
+            ordered_submission=True,
+            residency="none",
+            synchronization=("completion",),
+        ),
+        provenance={
+            "work_item": "NVIDIA-PACKED-STORAGE-CONSUMER",
+            "sync_key": "NVIDIA-PACKED-SSA-FOUNDATION-2026-07-25",
+            "logical": logical,
+            "logical_bits": 6 if factor == 1 else 4,
+            "elements_per_container": factor,
+            "container": "int8",
+            "packing_axis": packing_axis,
+            "strides": list(strides),
+            "offset": offset,
+            "alignment": alignment,
+            "scale_dtype": scale_dtype,
+            "scale_block_size": scale_block_size,
+            "scale_axis": scale_axis,
+            "scale_layout": scale_layout,
+            "scale_stride": scale_stride,
+            "scale_offset": scale_offset,
+            "scale_alignment": scale_alignment,
+            "source_bytes": source_bytes,
+            "scale_bytes": scale_bytes,
             "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
         },
     )
@@ -454,7 +726,7 @@ def emit_mx_matmul_tile_ir(*, entry: str, storage: str) -> str:
         raise ValueError(f"unsupported SM120 MX matmul storage {storage!r}")
     fragment_k = 64 if storage == "fp4_e2m1" else 32
     logical_storage = storage if storage == "fp4_e2m1" else f"fp6_{storage}"
-    factor = 2 if storage == "fp4_e2m1" else 1
+    packed_format = _packed_format_attr(logical_storage)
     return f'''module {{
   llvm.func @{entry}(%a: !llvm.ptr, %b: !llvm.ptr,
                      %scale_a: !llvm.ptr, %scale_b: !llvm.ptr,
@@ -466,7 +738,7 @@ def emit_mx_matmul_tile_ir(*, entry: str, storage: str) -> str:
       warps = 1 : i64, staging = "global",
       tessera.storage_packed = true,
       tessera.storage_container = "int8",
-      tessera.storage_pack = {{logical = "{logical_storage}", container = "int8", factor = {factor} : i64, signedness = "format_defined"}}
+      tessera.storage_pack = {packed_format}
     }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64
     llvm.return
   }}
@@ -1388,7 +1660,10 @@ def _compile_tile_ir(
     libdevice = _cuda_libdevice()
     libdevice_fp = _library_record(libdevice).content_digest if libdevice is not None else "unavailable"
     toolchain_fp += f";cuda.libdevice={libdevice_fp}"
-    codegen_contract = "tessera.nvidia.native.llc-sm_120a.v1;" + CUDA_MATH_CONTRACT_VERSION
+    codegen_contract = (
+        "tessera.nvidia.native.llc-sm_120a.math-llvm.v2;"
+        + CUDA_MATH_CONTRACT_VERSION
+    )
     cache_key = hashlib.sha256(f"{compiler_fp}\n{toolchain_fp}\n{codegen_contract}\n{tile_ir}".encode()).hexdigest()
     cached = _cache.get(cache_key)
     compile_state = "warm_cache" if cached is not None else "cold"
@@ -1404,6 +1679,7 @@ def _compile_tile_ir(
             [
                 str(paths["mlir-opt"]),
                 "--convert-scf-to-cf",
+                "--convert-math-to-llvm",
                 "--convert-arith-to-llvm",
                 "--convert-cf-to-llvm",
                 "--reconcile-unrealized-casts",
@@ -2847,6 +3123,7 @@ __all__ = [
     "SM120_INT8_ABI",
     "SM120_INT4_ABI",
     "SM120_CUDA_INTRINSIC_ABI",
+    "SM120_PACKED_DECODE_ABI",
     "PROMOTED_SM120_CUDA_INTRINSICS",
     "SM120_TF32_ABI",
     "SM120_SOFTMAX_F16_ABI",
@@ -2883,6 +3160,7 @@ __all__ = [
     "package_nvfp4_matmul",
     "package_int4_matmul",
     "package_cuda_intrinsic",
+    "package_packed_decode",
     "package_paged_kv_read",
     "package_paged_attention",
     "package_replay_ssm_kernels",

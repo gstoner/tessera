@@ -79,6 +79,181 @@ def Tile_FragmentType : Tile_Type<"Fragment", "fragment"> {
   let summary = "Opaque cooperative-matrix fragment";
 }
 
+// SSA handle for a physical allocation. The handle carries identity through
+// def-use rather than through the legacy #tile.buffer_ref name convention.
+// Its address space and byte extent remain properties of tile.alloc.
+def Tile_BufferType : Tile_Type<"Buffer", "buffer"> {
+  let summary = "Opaque SSA handle for a physical Tile allocation";
+}
+
+// SSA state threaded through a staged producer/consumer ring. Unlike the
+// legacy #tile.pipeline_state annotation, this value establishes ordering and
+// state ownership through ordinary SSA def-use.
+def Tile_PipelineStateType : Tile_Type<"PipelineState", "pipeline_state"> {
+  let summary = "SSA state for a staged producer/consumer pipeline";
+}
+
+def Tile_TMADescriptorType : Tile_Type<"TMADescriptor", "tma_descriptor"> {
+  let summary = "Portable SSA handle for one tensor-memory-access descriptor";
+}
+
+def Tile_MBarrierType : Tile_Type<"MBarrier", "mbarrier"> {
+  let summary = "SSA handle for a transaction barrier with one or more slots";
+}
+
+def Tile_MBarrierTokenType : Tile_Type<"MBarrierToken", "mbarrier_token"> {
+  let summary = "SSA token returned by an mbarrier arrival";
+}
+
+def Tile_TMEMType : Tile_Type<"TMEM", "tmem"> {
+  let summary = "Opaque SSA handle for datacenter-Blackwell tensor memory";
+}
+
+// Physical storage and staged-pipeline ownership. These operations are the
+// canonical def-use identity; #tile.buffer_ref and #tile.pipeline_state remain
+// readable only as migration metadata.
+def Tile_AllocOp : Tile_Op<"alloc"> {
+  let summary = "Allocate a physical Tile buffer and return its SSA handle";
+  let arguments = (ins StrAttr:$space, I64Attr:$bytes, AnyAttr:$layout);
+  let results = (outs Tile_BufferType:$buffer);
+  let assemblyFormat = "attr-dict `:` type($buffer)";
+  let hasVerifier = 1;
+}
+
+def Tile_DeallocOp : Tile_Op<"dealloc"> {
+  let summary = "End the lifetime of a physical Tile buffer";
+  let arguments = (ins Tile_BufferType:$buffer);
+  let results = (outs);
+  let assemblyFormat = "$buffer attr-dict `:` type($buffer)";
+  let hasVerifier = 1;
+}
+
+def Tile_PipelineInitOp : Tile_Op<"pipeline_init"> {
+  let summary = "Create an SSA-owned producer or consumer pipeline state";
+  let arguments = (ins I64Attr:$depth, I64Attr:$stage, I64Attr:$phase,
+                        StrAttr:$role);
+  let results = (outs Tile_PipelineStateType:$state);
+  let assemblyFormat = "attr-dict `:` type($state)";
+  let hasVerifier = 1;
+}
+
+def Tile_PipelineAdvanceOp : Tile_Op<"pipeline_advance"> {
+  let summary = "Advance staged pipeline state after explicit dependencies";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs Tile_PipelineStateType:$next);
+  let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $next)";
+  let hasVerifier = 1;
+}
+
+// Target-neutral SSA vocabulary for asynchronous tensor movement. Availability
+// and physical lowering remain target owned: NVIDIA maps these to TMA and
+// mbarrier on supporting architectures, while other backends may reject or
+// select an architecture-specific implementation.
+def Tile_TMADescriptorOp : Tile_Op<"tma.descriptor"> {
+  let summary = "Create an SSA tensor-memory-access descriptor";
+  let arguments = (ins AnyType:$source, I64Attr:$tile_rows,
+                        I64Attr:$tile_cols, OptionalAttr<I64Attr>:$slot,
+                        OptionalAttr<I64Attr>:$expect_tx);
+  let results = (outs Tile_TMADescriptorType:$descriptor);
+  let assemblyFormat =
+      "$source attr-dict `:` type($source) `->` type($descriptor)";
+  let hasVerifier = 1;
+}
+
+def Tile_TMACopyAsyncOp
+    : Tile_Op<"tma.copy_async", [AttrSizedOperandSegments]> {
+  let summary = "Start a descriptor-driven asynchronous tile copy";
+  let arguments = (ins Tile_TMADescriptorType:$descriptor,
+                        Optional<Tile_MBarrierType>:$barrier,
+                        Variadic<AnyType>:$dependencies,
+                        I64Attr:$mbarrier_slot,
+                        OptionalAttr<I64Attr>:$expect_tx);
+  let results = (outs Variadic<AnyType>:$outputs);
+  let assemblyFormat =
+      "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tile_MBarrierInitOp : Tile_Op<"mbarrier.init"> {
+  let summary = "Create an SSA transaction-barrier array";
+  let arguments = (ins I64Attr:$slots, I64Attr:$phase_bits);
+  let results = (outs Tile_MBarrierType:$barrier);
+  let assemblyFormat = "attr-dict `:` type($barrier)";
+  let hasVerifier = 1;
+}
+
+def Tile_MBarrierArriveExpectTxOp
+    : Tile_Op<"mbarrier.arrive_expect_tx"> {
+  let summary = "Arrive and bind the expected transaction byte count";
+  let arguments = (ins Tile_MBarrierType:$barrier, I64Attr:$slot,
+                        I64Attr:$bytes);
+  let results = (outs Tile_MBarrierTokenType:$token);
+  let assemblyFormat =
+      "$barrier attr-dict `:` type($barrier) `->` type($token)";
+  let hasVerifier = 1;
+}
+
+def Tile_MBarrierWaitOp
+    : Tile_Op<"mbarrier.wait", [AttrSizedOperandSegments]> {
+  let summary = "Wait for one transaction-barrier slot and dependency token";
+  let arguments = (ins Optional<Tile_MBarrierType>:$barrier,
+                        Variadic<AnyType>:$dependencies, I64Attr:$slot);
+  let results = (outs);
+  let assemblyFormat = "operands attr-dict `:` type(operands)";
+  let hasVerifier = 1;
+}
+
+def Tile_MBarrierTryWaitOp : Tile_Op<"mbarrier.try_wait"> {
+  let summary = "Test whether an mbarrier arrival token has completed";
+  let arguments = (ins Tile_MBarrierType:$barrier,
+                        Tile_MBarrierTokenType:$token, I64Attr:$slot);
+  let results = (outs I1:$ready);
+  let assemblyFormat =
+      "$barrier `,` $token attr-dict `:` type($barrier) `,` type($token)";
+  let hasVerifier = 1;
+}
+
+// SM100-only physical vocabulary. These are registered in shared Tile IR so
+// WarpSpec can express and thread the contract, but exact execution remains an
+// NVIDIA target decision and SM120 must reject it.
+def Tile_TMEMAllocOp : Tile_Op<"tmem.allocate"> {
+  let summary = "Allocate a typed tensor-memory region";
+  let arguments = (ins I64Attr:$bytes, I64Attr:$alignment);
+  let results = (outs Tile_TMEMType:$handle);
+  let assemblyFormat = "attr-dict `:` type($handle)";
+  let hasVerifier = 1;
+}
+
+def Tile_TMEMLoadOp : Tile_Op<"tmem.load"> {
+  let summary = "Load a logical value from tensor memory";
+  let arguments = (ins Tile_TMEMType:$handle, Variadic<AnyType>:$indices);
+  let results = (outs AnyType:$value);
+  let assemblyFormat =
+      "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tile_TMEMStoreOp : Tile_Op<"tmem.store"> {
+  let summary = "Store a logical value into tensor memory";
+  let arguments = (ins AnyType:$value, Tile_TMEMType:$handle,
+                        Variadic<AnyType>:$indices);
+  let results = (outs);
+  let assemblyFormat =
+      "$value `,` $handle (`[` $indices^ `]`)? attr-dict `:` type(operands)";
+  let hasVerifier = 1;
+}
+
+def Tile_TCGen05MMAOp : Tile_Op<"tcgen05.mma"> {
+  let summary = "Typed datacenter-Blackwell TCGen05 MMA contract";
+  let arguments = (ins AnyType:$lhs, AnyType:$rhs, Tile_TMEMType:$accumulator,
+                        I64Attr:$cta_group, AnyAttr:$mma);
+  let results = (outs Tile_TMEMType:$result);
+  let assemblyFormat =
+      "$lhs `,` $rhs `,` $accumulator attr-dict `:` "
+      "type($lhs) `,` type($rhs) `,` type($accumulator) `->` type($result)";
+  let hasVerifier = 1;
+}
+
 // Rank-2 dense matmul: C = A @ B (non-transposed value envelope).
 def Tile_MatmulOp : Tile_Op<"matmul", [Pure]> {
   let summary = "Rank-2 tile-level matmul (value lane)";
@@ -285,6 +460,33 @@ def Tile_ViewOp : Tile_Op<"view", [Pure]> {
   let arguments = (ins Variadic<AnyType>:$inputs);
   let results = (outs Tile_TileValueType:$result);
   let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $result)";
+  let hasVerifier = 1;
+}
+
+// Decode a packed physical buffer into a logical tile. Inputs are:
+//   unscaled: base, row-origin, column-origin, logical-rows, logical-columns
+//   scaled:   base, scale-base, row-origin, column-origin,
+//             logical-rows, logical-columns
+// `tile.packed_view` owns the logical/container/scale contract and
+// `tile.memory` owns the physical row/column addressing. The result stays
+// target-neutral; a following tile.fragment_pack may select a target fragment.
+def Tile_PackedLoadOp : Tile_Op<"packed_load"> {
+  let summary = "Decode a packed physical buffer into a logical tile";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs Tile_TileValueType:$result);
+  let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $result)";
+  let hasVerifier = 1;
+}
+
+// Encode a logical tile into packed physical storage. Inputs are:
+//   tile, base, row-origin, column-origin, logical-rows, logical-columns.
+// Scale-bearing stores are deliberately rejected until a portable scale
+// production/rounding contract exists; scale-bearing formats are load-only.
+def Tile_PackedStoreOp : Tile_Op<"packed_store"> {
+  let summary = "Encode a logical tile into a packed physical buffer";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
   let hasVerifier = 1;
 }
 
@@ -697,6 +899,68 @@ def Tile_BufferRefAttr : Tile_Attr<"TileBufferRef", "buffer_ref"> {
                         StringRefParameter<"">:$access);
   let assemblyFormat =
       "`<` `name` `=` $name `,` `space` `=` $space `,` `access` `=` $access `>`";
+  let genVerifyDecl = 1;
+}
+
+// Portable block-scale addressing contract. This does not encode an NVIDIA
+// scale-selector register or an AMD instruction form. `block_size` is measured
+// in logical values and `stride` in scale elements. `axis=-1`, dtype/layout
+// "none", and block_size=0 describe a format with no scale operand.
+def Tile_ScaleLayoutAttr : Tile_Attr<"TileScaleLayout", "scale_layout"> {
+  let summary = "Portable block-scale storage and indexing contract";
+  let parameters = (ins StringRefParameter<"">:$dtype,
+                        "int64_t":$blockSize,
+                        "int64_t":$axis,
+                        StringRefParameter<"">:$layout,
+                        "int64_t":$stride,
+                        "int64_t":$alignment,
+                        "int64_t":$offset);
+  let assemblyFormat =
+      "`<` `dtype` `=` $dtype `,` `block_size` `=` $blockSize `,` "
+      "`axis` `=` $axis `,` `layout` `=` $layout `,` `stride` `=` $stride `,` "
+      "`alignment` `=` $alignment `,` `offset` `=` $offset `>`";
+  let genVerifyDecl = 1;
+}
+
+// Target-neutral packed-format contract. Terminal dtype legalization can know
+// this portion without inventing an A/B-specific axis or scale layout.
+// `logical_bits` is independent of `elements_per_container`: FP6 in an i8
+// container therefore remains a six-bit format even though its pack factor is
+// one.
+def Tile_PackedFormatAttr : Tile_Attr<"TilePackedFormat", "packed_format"> {
+  let summary = "Structured logical dtype and physical container format";
+  let parameters = (ins StringRefParameter<"">:$logicalType,
+                        StringRefParameter<"">:$containerType,
+                        "int64_t":$logicalBits,
+                        "int64_t":$elementsPerContainer,
+                        StringRefParameter<"">:$signedness,
+                        StringRefParameter<"">:$encoding,
+                        StringRefParameter<"">:$laneOrder);
+  let assemblyFormat =
+      "`<` `logical` `=` $logicalType `,` `container` `=` $containerType `,` "
+      "`logical_bits` `=` $logicalBits `,` "
+      "`elements_per_container` `=` $elementsPerContainer `,` "
+      "`signedness` `=` $signedness `,` `encoding` `=` $encoding `,` "
+      "`lane_order` `=` $laneOrder `>`";
+  let genVerifyDecl = 1;
+}
+
+// Target-neutral physical view for one concrete packed buffer. Axes, strides,
+// offsets, and scale layout are per-view rather than incorrectly shared by A
+// and B at a launch-level matmul operation.
+def Tile_PackedPhysicalViewAttr
+    : Tile_Attr<"TilePackedPhysicalView", "packed_view"> {
+  let summary = "Structured logical-to-packed physical storage descriptor";
+  let parameters = (ins "::tessera::tile::TilePackedFormatAttr":$format,
+                        "int64_t":$packingAxis,
+                        ArrayRefParameter<"int64_t">:$strides,
+                        "int64_t":$alignment,
+                        "int64_t":$offset,
+                        "::tessera::tile::TileScaleLayoutAttr":$scale);
+  let assemblyFormat =
+      "`<` `format` `=` $format `,` `packing_axis` `=` $packingAxis `,` "
+      "`strides` `=` `[` $strides `]` `,` `alignment` `=` $alignment `,` "
+      "`offset` `=` $offset `,` `scale` `=` $scale `>`";
   let genVerifyDecl = 1;
 }
 

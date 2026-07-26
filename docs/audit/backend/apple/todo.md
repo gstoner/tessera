@@ -8,6 +8,16 @@ last_updated: 2026-07-25
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `CORE-GEMM-KLOOP-2026-07-25` changes the shared
+Graph/Schedule→Tile GEMM contract to explicit M/N/K `scf.for`, FP32/INT32
+loop-carried accumulation, zero-pad ragged guards, structured layouts, and SSA
+pipeline dependencies. Apple is **follow-up required** for an
+architecture-owned Metal/AMX/SIMD consumer where that loop is preferable to
+Accelerate; the existing value-mode Accelerate GEMM remains intentionally
+unexpanded. NVIDIA Tensor Core fragments, PTX, SM120 resource/cache/timing
+evidence, and selectors do not transfer to Apple CPU or GPU. No Apple
+capability, execution state, schedule, or selector changes in this slice.
+
 Cross-backend sync `COMPILER-LIT-BACKEND-GATING-2026-07-24`: shared lit feature
 hygiene now rejects undefined requirements and obsolete global GPU target
 flags. The retired fixtures and decoupled CUDA/HIP instruction probes were

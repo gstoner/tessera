@@ -1,32 +1,41 @@
 
 // TilingPass.cpp
 //
-// Tiles tessera.matmul ops into scf.for loop nests over the M and N output
+// Tiles tessera.matmul ops into scf.for loop nests over the M, N, and K
 // dimensions, using tensor.extract_slice / tensor.insert_slice to carve and
-// re-assemble tiles.
+// re-assemble tiles.  K is a real reduction loop with a loop-carried FP32 or
+// INT32 accumulator; it is not left for a target backend to rediscover.
 //
 // Only ops with statically-shaped ranked tensor operands are tiled; any op
 // whose shape is dynamic or unranked is left unchanged.
 //
 // Transformation for C = A @ B  (A: MxK, B: KxN → C: MxN):
 //
-//   %init = tensor.empty() : tensor<MxNxeT>
-//   %C = scf.for %i = 0 to M step tile_m
+//   %init = arith.constant dense<0> : tensor<MpadxNpadxaccT>
+//   %Cpad = scf.for %i = 0 to Mpad step tile_m
 //            iter_args(%acc0 = %init) -> tensor<MxNxeT> {
-//     %C1 = scf.for %j = 0 to N step tile_n
+//     %C1 = scf.for %j = 0 to Npad step tile_n
 //               iter_args(%acc1 = %acc0) -> tensor<MxNxeT> {
-//       %a_sl = tensor.extract_slice %A[%i, 0][tile_m, K][1, 1]
-//       %b_sl = tensor.extract_slice %B[0, %j][K, tile_n][1, 1]
-//       %c_sl = tessera.matmul %a_sl, %b_sl : (...) -> tensor<tile_mxtile_nxeT>
-//       %acc2 = tensor.insert_slice %c_sl into %acc1[%i, %j][tile_m, tile_n][1,1]
-//       scf.yield %acc2
+//       %C2 = scf.for %k = 0 to Kpad step tile_k
+//                 iter_args(%acc2 = %acc1) -> tensor<MpadxNpadxaccT> {
+//         %a_sl = tensor.extract_slice %Apad[%i, %k][tile_m, tile_k][1, 1]
+//         %b_sl = tensor.extract_slice %Bpad[%k, %j][tile_k, tile_n][1, 1]
+//         %partial = tessera.matmul %a_sl, %b_sl
+//         %old = tensor.extract_slice %acc2[%i, %j][tile_m, tile_n][1, 1]
+//         %next = tessera.add %old, %partial
+//         %acc3 = tensor.insert_slice %next into %acc2[...]
+//         scf.yield %acc3
+//       }
+//       scf.yield %C2
 //     }
 //     scf.yield %C1
 //   }
+//   %C = tensor.extract_slice %Cpad[0, 0][M, N][1, 1]
 //
 // Pass options
 //   --tile-m  M-dimension tile size (default 16)
 //   --tile-n  N-dimension tile size (default 16)
+//   --tile-k  K-reduction tile size (default 16)
 
 #include "Tessera/Transforms/Passes.h"
 #include "Tessera/Dialect/Tile/TileDialect.h"
@@ -51,6 +60,31 @@ namespace {
 // Helper: create an arith.constant of index type.
 static Value idx(OpBuilder &b, Location loc, int64_t v) {
   return arith::ConstantIndexOp::create(b, loc, v);
+}
+
+static int64_t alignUp(int64_t value, int64_t alignment) {
+  return ((value + alignment - 1) / alignment) * alignment;
+}
+
+static Value zeroTensor(OpBuilder &b, Location loc, ArrayRef<int64_t> shape,
+                        Type elementType) {
+  auto type = RankedTensorType::get(shape, elementType);
+  return arith::ConstantOp::create(b, loc, type, b.getZeroAttr(type));
+}
+
+static Value padStaticTensor(OpBuilder &b, Location loc, Value source,
+                             RankedTensorType sourceType,
+                             ArrayRef<int64_t> paddedShape) {
+  if (sourceType.getShape() == paddedShape)
+    return source;
+  Value padded = zeroTensor(b, loc, paddedShape, sourceType.getElementType());
+  SmallVector<OpFoldResult> offsets(sourceType.getRank(), b.getIndexAttr(0));
+  SmallVector<OpFoldResult> sizes;
+  SmallVector<OpFoldResult> strides(sourceType.getRank(), b.getIndexAttr(1));
+  for (int64_t dim : sourceType.getShape())
+    sizes.push_back(b.getIndexAttr(dim));
+  return tensor::InsertSliceOp::create(b, loc, source, padded, offsets, sizes,
+                                       strides);
 }
 
 static bool hasOperandSegment(Operation *op, unsigned index) {
@@ -124,13 +158,23 @@ static Operation *createPreservedTileOp(PatternRewriter &rewriter,
 // ─────────────────────────────────────────────────────────────────────────────
 
 struct TileMatmul : public RewritePattern {
-  TileMatmul(MLIRContext *ctx, int64_t tileM, int64_t tileN)
+  TileMatmul(MLIRContext *ctx, int64_t tileM, int64_t tileN, int64_t tileK)
       : RewritePattern("tessera.matmul", /*benefit=*/1, ctx),
-        tileM_(tileM), tileN_(tileN) {}
+        tileM_(tileM), tileN_(tileN), tileK_(tileK) {}
 
   LogicalResult matchAndRewrite(Operation *op,
                                 PatternRewriter &rewriter) const override {
     if (op->getNumOperands() < 2 || op->getNumResults() != 1)
+      return failure();
+    if (op->hasAttr("tessera.canonical_k_step"))
+      return failure();
+    if (tileM_ <= 0 || tileN_ <= 0 || tileK_ <= 0)
+      return failure();
+    if (auto transpose = op->getAttrOfType<BoolAttr>("transposeA");
+        transpose && transpose.getValue())
+      return failure();
+    if (auto transpose = op->getAttrOfType<BoolAttr>("transposeB");
+        transpose && transpose.getValue())
       return failure();
 
     auto lhs = op->getOperand(0);
@@ -148,9 +192,11 @@ struct TileMatmul : public RewritePattern {
     int64_t M = lhsTy.getDimSize(0);
     int64_t K = lhsTy.getDimSize(1);
     int64_t N = rhsTy.getDimSize(1);
+    if (M <= 0 || N <= 0 || K <= 0)
+      return failure();
 
-    // Skip if the matmul is already tile-sized (avoid infinite loop).
-    if (M <= tileM_ && N <= tileN_) return failure();
+    // A marked inner step is the recursion stop.  Unmarked tile-sized matmuls
+    // still acquire the canonical K-loop contract (one trip when K <= tileK).
 
     // Check that K matches.
     if (rhsTy.getDimSize(0) != K) return failure();
@@ -159,11 +205,20 @@ struct TileMatmul : public RewritePattern {
     if (!resultTy) return failure();
 
     Location loc = op->getLoc();
-    Type elemTy  = resultTy.getElementType();
+    Type accumTy = resultTy.getElementType();
+    if (!accumTy.isF32() && !accumTy.isInteger(32))
+      return failure();
 
-    // Clamp tile sizes to actual dims.
+    // Clamp tile sizes for small matrices, then pad each logical dimension to
+    // a complete physical tile.  Zero padding is the explicit ragged guard:
+    // no final extract_slice can address outside its source, and padded K
+    // lanes are algebraically neutral in the reduction.
     int64_t tm = std::min(tileM_, M);
     int64_t tn = std::min(tileN_, N);
+    int64_t tk = std::min(tileK_, K);
+    int64_t paddedM = alignUp(M, tm);
+    int64_t paddedN = alignUp(N, tn);
+    int64_t paddedK = alignUp(K, tk);
 
     // Carry forward transposeA / transposeB attributes.
     SmallVector<NamedAttribute> innerAttrs;
@@ -172,17 +227,21 @@ struct TileMatmul : public RewritePattern {
 
     // ── Emit the tiled loop nest ───────────────────────────────────────────
 
-    // Accumulator init: zero-filled tensor<MxNxelemTy>
-    Value initTensor =
-        tensor::EmptyOp::create(rewriter, loc, ArrayRef<int64_t>{M, N}, elemTy);
+    // Accumulator init: zero-filled tensor<MpadxNpadxaccumTy>.
+    Value paddedLhs = padStaticTensor(
+        rewriter, loc, lhs, lhsTy, ArrayRef<int64_t>{paddedM, paddedK});
+    Value paddedRhs = padStaticTensor(
+        rewriter, loc, rhs, rhsTy, ArrayRef<int64_t>{paddedK, paddedN});
+    Value initTensor = zeroTensor(
+        rewriter, loc, ArrayRef<int64_t>{paddedM, paddedN}, accumTy);
 
     Value zero = idx(rewriter, loc, 0);
-    Value one  = idx(rewriter, loc, 1);
-    Value Mval = idx(rewriter, loc, M);
-    Value Nval = idx(rewriter, loc, N);
+    Value Mval = idx(rewriter, loc, paddedM);
+    Value Nval = idx(rewriter, loc, paddedN);
+    Value Kval = idx(rewriter, loc, paddedK);
     Value tmVal = idx(rewriter, loc, tm);
     Value tnVal = idx(rewriter, loc, tn);
-    Value Kval = idx(rewriter, loc, K);
+    Value tkVal = idx(rewriter, loc, tk);
 
     // Outer loop over M tiles.
     auto outerFor = scf::ForOp::create(
@@ -209,65 +268,129 @@ struct TileMatmul : public RewritePattern {
         // makes ExtractSliceOp infer a fully-dynamic tensor<?x?> result that
         // mismatches the static tile result type (MLIR-23 verifier).  Only the
         // tile offsets (the loop induction vars) are dynamic.
-        OpFoldResult zeroOfr = rewriter.getIndexAttr(0);
         OpFoldResult oneOfr  = rewriter.getIndexAttr(1);
 
-        // Extract A tile: A[i:i+tm, 0:K]
-        auto aTileType =
-            RankedTensorType::get({tm, K}, lhsTy.getElementType());
-        Value aSlice = tensor::ExtractSliceOp::create(
-            rewriter,
-            loc, aTileType, lhs,
-            SmallVector<OpFoldResult>{i, zeroOfr},                       // offsets
-            SmallVector<OpFoldResult>{rewriter.getIndexAttr(tm),
-                                      rewriter.getIndexAttr(K)},          // sizes
-            SmallVector<OpFoldResult>{oneOfr, oneOfr});                  // strides
+        OperationState pipelineInitState(loc, "tile.pipeline_init");
+        pipelineInitState.addAttribute("depth",
+                                       rewriter.getI64IntegerAttr(2));
+        pipelineInitState.addAttribute("stage",
+                                       rewriter.getI64IntegerAttr(0));
+        pipelineInitState.addAttribute("phase",
+                                       rewriter.getI64IntegerAttr(1));
+        pipelineInitState.addAttribute("role",
+                                       rewriter.getStringAttr("producer"));
+        pipelineInitState.addTypes(
+            ::tessera::tile::PipelineStateType::get(rewriter.getContext()));
+        Operation *pipelineInit = rewriter.create(pipelineInitState);
 
-        // Extract B tile: B[0:K, j:j+tn]
-        auto bTileType =
-            RankedTensorType::get({K, tn}, rhsTy.getElementType());
-        Value bSlice = tensor::ExtractSliceOp::create(
-            rewriter,
-            loc, bTileType, rhs,
-            SmallVector<OpFoldResult>{zeroOfr, j},
-            SmallVector<OpFoldResult>{rewriter.getIndexAttr(K),
-                                      rewriter.getIndexAttr(tn)},
-            SmallVector<OpFoldResult>{oneOfr, oneOfr});
+        auto reductionFor = scf::ForOp::create(
+            rewriter, loc, zero, Kval, tkVal,
+            ValueRange{acc1, pipelineInit->getResult(0)});
+        {
+          OpBuilder::InsertionGuard g3(rewriter);
+          rewriter.setInsertionPointToStart(reductionFor.getBody());
+          Value k = reductionFor.getInductionVar();
+          Value acc2 = reductionFor.getRegionIterArg(0);
+          Value pipelineState = reductionFor.getRegionIterArg(1);
 
-        // Inner tessera.matmul on the tile.
-        auto cTileType = RankedTensorType::get({tm, tn}, elemTy);
-        OperationState innerSt(loc, "tessera.matmul");
-        innerSt.addOperands({aSlice, bSlice});
-        innerSt.addTypes(cTileType);
-        // Carry attributes (tile_k, transposeA, transposeB …)
-        for (auto &na : innerAttrs)
-          innerSt.addAttribute(na.getName(), na.getValue());
-        Operation *innerMM = rewriter.create(innerSt);
-        Value cTile = innerMM->getResult(0);
+          auto aTileType =
+              RankedTensorType::get({tm, tk}, lhsTy.getElementType());
+          Value aSlice = tensor::ExtractSliceOp::create(
+              rewriter, loc, aTileType, paddedLhs,
+              SmallVector<OpFoldResult>{i, k},
+              SmallVector<OpFoldResult>{rewriter.getIndexAttr(tm),
+                                        rewriter.getIndexAttr(tk)},
+              SmallVector<OpFoldResult>{oneOfr, oneOfr});
 
-        // Insert tile result back into accumulator (static sizes/strides).
-        Value acc2 = tensor::InsertSliceOp::create(
-            rewriter,
-            loc, cTile, acc1,
-            SmallVector<OpFoldResult>{i, j},                            // offsets
-            SmallVector<OpFoldResult>{rewriter.getIndexAttr(tm),
-                                      rewriter.getIndexAttr(tn)},        // sizes
-            SmallVector<OpFoldResult>{oneOfr, oneOfr});                 // strides
+          auto bTileType =
+              RankedTensorType::get({tk, tn}, rhsTy.getElementType());
+          Value bSlice = tensor::ExtractSliceOp::create(
+              rewriter, loc, bTileType, paddedRhs,
+              SmallVector<OpFoldResult>{k, j},
+              SmallVector<OpFoldResult>{rewriter.getIndexAttr(tk),
+                                        rewriter.getIndexAttr(tn)},
+              SmallVector<OpFoldResult>{oneOfr, oneOfr});
 
-        scf::YieldOp::create(rewriter, loc, ValueRange{acc2});
+          auto cTileType = RankedTensorType::get({tm, tn}, accumTy);
+          OperationState innerSt(loc, "tessera.matmul");
+          innerSt.addOperands({aSlice, bSlice});
+          innerSt.addTypes(cTileType);
+          for (auto &na : innerAttrs) {
+            StringRef name = na.getName().strref();
+            if (name == "tile_k" || name == "tessera.tile_m" ||
+                name == "tessera.tile_n" || name == "tessera.tile_k")
+              continue;
+            innerSt.addAttribute(na.getName(), na.getValue());
+          }
+          innerSt.addAttribute("tile_k", rewriter.getI64IntegerAttr(tk));
+          innerSt.addAttribute("tessera.tile_m",
+                               rewriter.getI64IntegerAttr(tm));
+          innerSt.addAttribute("tessera.tile_n",
+                               rewriter.getI64IntegerAttr(tn));
+          innerSt.addAttribute("tessera.tile_k",
+                               rewriter.getI64IntegerAttr(tk));
+          innerSt.addAttribute("tessera.canonical_k_step",
+                               rewriter.getUnitAttr());
+          innerSt.addAttribute("tessera.ragged_zero_pad",
+                               rewriter.getUnitAttr());
+          Operation *innerMM = rewriter.create(innerSt);
+
+          Value oldTile = tensor::ExtractSliceOp::create(
+              rewriter, loc, cTileType, acc2,
+              SmallVector<OpFoldResult>{i, j},
+              SmallVector<OpFoldResult>{rewriter.getIndexAttr(tm),
+                                        rewriter.getIndexAttr(tn)},
+              SmallVector<OpFoldResult>{oneOfr, oneOfr});
+          OperationState addSt(loc, "tessera.add");
+          addSt.addOperands({oldTile, innerMM->getResult(0)});
+          addSt.addTypes(cTileType);
+          addSt.addAttribute("tessera.k_reduction_accumulate",
+                             rewriter.getUnitAttr());
+          Operation *add = rewriter.create(addSt);
+
+          Value acc3 = tensor::InsertSliceOp::create(
+              rewriter, loc, add->getResult(0), acc2,
+              SmallVector<OpFoldResult>{i, j},
+              SmallVector<OpFoldResult>{rewriter.getIndexAttr(tm),
+                                        rewriter.getIndexAttr(tn)},
+              SmallVector<OpFoldResult>{oneOfr, oneOfr});
+
+          OperationState advanceState(loc, "tile.pipeline_advance");
+          advanceState.addOperands({pipelineState, add->getResult(0)});
+          advanceState.addTypes(
+              ::tessera::tile::PipelineStateType::get(rewriter.getContext()));
+          Operation *advance = rewriter.create(advanceState);
+          scf::YieldOp::create(
+              rewriter, loc,
+              ValueRange{acc3, advance->getResult(0)});
+        }
+
+        scf::YieldOp::create(rewriter, loc, reductionFor.getResult(0));
       }
 
       // Outer yield with inner result.
       scf::YieldOp::create(rewriter, loc, innerFor.getResults());
     }
 
-    rewriter.replaceOp(op, outerFor.getResults());
+    Value logicalResult = outerFor.getResult(0);
+    if (paddedM != M || paddedN != N) {
+      logicalResult = tensor::ExtractSliceOp::create(
+          rewriter, loc, resultTy, logicalResult,
+          SmallVector<OpFoldResult>{rewriter.getIndexAttr(0),
+                                    rewriter.getIndexAttr(0)},
+          SmallVector<OpFoldResult>{rewriter.getIndexAttr(M),
+                                    rewriter.getIndexAttr(N)},
+          SmallVector<OpFoldResult>{rewriter.getIndexAttr(1),
+                                    rewriter.getIndexAttr(1)});
+    }
+    rewriter.replaceOp(op, logicalResult);
     return success();
   }
 
 private:
   int64_t tileM_;
   int64_t tileN_;
+  int64_t tileK_;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -797,6 +920,9 @@ struct TilingPassImpl
                        llvm::cl::desc("M-dimension tile size"), llvm::cl::init(16)};
   Option<int> tileNOpt{*this, "tile-n",
                        llvm::cl::desc("N-dimension tile size"), llvm::cl::init(16)};
+  Option<int> tileKOpt{*this, "tile-k",
+                       llvm::cl::desc("K-reduction tile size"),
+                       llvm::cl::init(16)};
   Option<bool> valueModeOpt{
       *this, "value-mode",
       llvm::cl::desc("Preserve strict value-executable envelopes as registered "
@@ -805,7 +931,8 @@ struct TilingPassImpl
 
   StringRef getArgument()    const override { return "tessera-tiling"; }
   StringRef getDescription() const override {
-    return "Tile tessera.matmul into scf.for M×N loop nests; lower the linalg "
+    return "Tile tessera.matmul into scf.for M×N×K loop nests with a "
+           "loop-carried FP32/INT32 accumulator; lower the linalg "
            "family (cholesky/tri_solve/cholesky_solve/lu/qr/svd) to opaque "
            "tile.<op> Tile-IR ops";
   }
@@ -871,7 +998,8 @@ struct TilingPassImpl
     } else {
       patterns.add<TileMatmul>(&getContext(),
                                static_cast<int64_t>(tileMOpt),
-                               static_cast<int64_t>(tileNOpt));
+                               static_cast<int64_t>(tileNOpt),
+                               static_cast<int64_t>(tileKOpt));
     }
     for (llvm::StringRef opName : kLinalgGraphOps)
       patterns.add<TileLinalg>(&getContext(), opName);

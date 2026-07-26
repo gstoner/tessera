@@ -17,7 +17,7 @@ The concepts below — arithmetic intensity, tile sizing, warp specialization, p
 
 | Tuning concept | Tessera mechanism |
 |---------------|-------------------|
-| Tile shape selection | `FlashAttnLoweringConfig(tile_q, tile_kv)` and `TilingPass --tile-m / --tile-n` |
+| Tile shape selection | `FlashAttnLoweringConfig(tile_q, tile_kv)` and `TilingPass --tile-m / --tile-n / --tile-k` |
 | Pipeline stages / double buffering | `schedule.pipeline {double_buffer = true, depth = N}` |
 | Warp specialization (producer/consumer) | `WarpSpecializationPass` — assigns `tessera.schedule.warp {role = "producer/consumer"}` |
 | Async copies to shared memory | `tile.async_copy` → `tessera.tma.async_load` (SM_90+) or `cp.async` |

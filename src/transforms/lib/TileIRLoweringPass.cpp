@@ -58,6 +58,20 @@ static Operation *emitAsyncCopy(OpBuilder &b, Location loc, Value src,
   if (!nvidiaLayout.empty())
     st.addAttribute("tessera.nvidia.layout",
                     b.getStringAttr(nvidiaLayout));
+  if (auto tensorTy = dyn_cast<RankedTensorType>(src.getType());
+      tensorTy && tensorTy.hasStaticShape() && tensorTy.getRank() == 2) {
+    SmallVector<int64_t> extents(tensorTy.getShape());
+    SmallVector<int64_t> strides{extents[1], 1};
+    SmallVector<StringAttr> axes{b.getStringAttr("laneid"),
+                                 b.getStringAttr("reg")};
+    st.addAttribute(
+        "tile.layout",
+        tile::TileLayoutAttr::get(
+            b.getContext(), extents, strides, axes,
+            /*replicaCounts=*/{}, /*replicaStrides=*/{},
+            /*replicaAxes=*/{}, /*offset=*/0,
+            /*swizzle=*/tile::TileSwizzleAttr()));
+  }
   // The staged tile and its completion token are one contract.  Emitting the
   // token here (rather than waiting for warp specialization) keeps straight-
   // line Graph -> Tile lowering legal too: the wait retires this exact copy
@@ -254,6 +268,72 @@ struct LowerMatmulToTileMMA : public RewritePattern {
   }
 };
 
+// Fuse the canonical K-step's explicit tensor accumulation into the Tile MMA.
+// The surrounding scf.for continues to own the reduction and pipeline state;
+// this rewrite only maps one target-neutral step onto the Tile async/MMA
+// dependency contract.
+struct LowerKReductionAddToTileMMA : public RewritePattern {
+  int smVersion;
+
+  LowerKReductionAddToTileMMA(MLIRContext *ctx, int sm)
+      : RewritePattern("tessera.add", /*benefit=*/3, ctx), smVersion(sm) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (!op->hasAttr("tessera.k_reduction_accumulate") ||
+        op->getNumOperands() != 2 || op->getNumResults() != 1)
+      return failure();
+
+    Operation *matmul = nullptr;
+    Value accumulator;
+    for (unsigned index = 0; index < 2; ++index) {
+      Operation *candidate = op->getOperand(index).getDefiningOp();
+      if (candidate &&
+          candidate->getName().getStringRef() == "tessera.matmul" &&
+          candidate->hasAttr("tessera.canonical_k_step")) {
+        matmul = candidate;
+        accumulator = op->getOperand(1 - index);
+        break;
+      }
+    }
+    if (!matmul || !matmul->hasOneUse() || matmul->getNumOperands() < 2)
+      return failure();
+
+    Location loc = op->getLoc();
+    int64_t tm = 16, tn = 16, tk = 16;
+    if (auto attr = matmul->getAttrOfType<IntegerAttr>("tessera.tile_m"))
+      tm = attr.getInt();
+    if (auto attr = matmul->getAttrOfType<IntegerAttr>("tessera.tile_n"))
+      tn = attr.getInt();
+    if (auto attr = matmul->getAttrOfType<IntegerAttr>("tessera.tile_k"))
+      tk = attr.getInt();
+
+    Operation *cpA = emitAsyncCopy(rewriter, loc, matmul->getOperand(0), tm, tk,
+                                   nvidiaOperandLayout(matmul, 0));
+    Operation *cpB = emitAsyncCopy(rewriter, loc, matmul->getOperand(1), tk, tn,
+                                   nvidiaOperandLayout(matmul, 1));
+    emitWaitAsync(rewriter, loc, {cpA->getResult(1), cpB->getResult(1)});
+
+    OperationState mmaState(loc, "tile.mma");
+    mmaState.addOperands({cpA->getResult(0), cpB->getResult(0), accumulator,
+                          cpA->getResult(1), cpB->getResult(1)});
+    mmaState.addTypes(op->getResult(0).getType());
+    mmaState.addAttribute("sm", rewriter.getI32IntegerAttr(smVersion));
+    mmaState.addAttribute("tessera.canonical_k_step",
+                          rewriter.getUnitAttr());
+    mmaState.addAttribute("tessera.tile_m", rewriter.getI64IntegerAttr(tm));
+    mmaState.addAttribute("tessera.tile_n", rewriter.getI64IntegerAttr(tn));
+    mmaState.addAttribute("tessera.tile_k", rewriter.getI64IntegerAttr(tk));
+    if (auto policy = matmul->getAttr("numeric_policy"))
+      mmaState.addAttribute("numeric_policy", policy);
+    Operation *mma = rewriter.create(mmaState);
+
+    rewriter.replaceOp(op, mma->getResult(0));
+    rewriter.eraseOp(matmul);
+    return success();
+  }
+};
+
 struct LowerSchedulePrefetchToTileCopy : public RewritePattern {
   LowerSchedulePrefetchToTileCopy(MLIRContext *ctx)
       : RewritePattern("schedule.prefetch", /*benefit=*/1, ctx) {}
@@ -335,6 +415,7 @@ struct TileIRLoweringPass
     MLIRContext *ctx = &getContext();
     RewritePatternSet patterns(ctx);
     patterns.add<LowerFlashAttnToTileIR>(ctx, tileQ, tileKV, smVersion);
+    patterns.add<LowerKReductionAddToTileMMA>(ctx, smVersion);
     patterns.add<LowerMatmulToTileMMA>(ctx, tileQ, tileKV, smVersion);
     patterns.add<LowerSchedulePrefetchToTileCopy>(ctx);
     patterns.add<LowerControlToTileIR>(

@@ -320,13 +320,21 @@ def emit_matmul_tile_ir(
     optional_args = ("%bias: !llvm.ptr, " if bias else "") + ("%residual: !llvm.ptr, " if residual else "")
     optional_operands = ("%bias, " if bias else "") + ("%residual, " if residual else "")
     residual_attrs = ', residual = true, epilogue_order = "matmul_bias_activation_residual"' if residual else ""
+    canonical_k_loop_attrs = (
+        ",\n      tessera.canonical_k_loop = true,"
+        f"\n      tessera.tile_m = {fragment_m} : i64,"
+        "\n      tessera.tile_n = 8 : i64,"
+        f"\n      tessera.tile_k = {fragment_k} : i64"
+        if storage in {"f16", "bf16", "tf32"}
+        else ""
+    )
     return f'''module {{
   llvm.func @{entry}(%a: !llvm.ptr, %b: !llvm.ptr, {optional_args}%d: !llvm.ptr,
                      %m: i64, %n: i64, %k: i64) attributes {{nvvm.kernel}} {{
     tile.matmul_kernel %a, %b, {optional_operands}%d, %m, %n, %k {{
       mma = #tile.mma_desc<family = "mma_sync", m = {fragment_m}, n = 8, k = {fragment_k}, a = "{storage}", b = "{storage}", acc = "{accum}", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>,
       epilogue = #tile.epilogue<bias = {str(bias).lower()}, activation = "{activation}", output = "{output}">,
-      warps = {warps} : i64, staging = "{staging}"{residual_attrs}
+      warps = {warps} : i64, staging = "{staging}"{canonical_k_loop_attrs}{residual_attrs}
     }} : !llvm.ptr, !llvm.ptr, {"!llvm.ptr, " * (1 + int(bias) + int(residual))}i64, i64, i64
     llvm.return
   }}

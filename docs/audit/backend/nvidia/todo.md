@@ -8,6 +8,27 @@ last_updated: 2026-07-25
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `CORE-GEMM-KLOOP-2026-07-25` is **landing**, owned by
+NVIDIA under the `NVIDIA-E2E-2` continuation. The shared compiler now forms a
+target-neutral M/N/K `scf.for` nest with FP32/INT32 loop-carried accumulation,
+zero-pad ragged guards, structured copy layouts, asynchronous SSA
+dependencies, and threaded `!tile.pipeline_state`. The SM120 launch-level
+FP16/BF16/TF32 images serialize the same `tile_m/tile_n/tile_k` contract and
+reject descriptor disagreement before NVIDIA materialization. Two exact RTX
+5070 Ti SM120 runs each pass all 12 FP16/BF16/TF32 square, rectangular,
+ragged-K, and fully fragment-misaligned rows with FP32 accumulation,
+matmul→bias→activation→residual ordering retained by the shared epilogue
+contract, warm image/descriptor identity, and numerical comparison. The
+checked-in 12-row repeated-median packet discards the first complete call,
+amortizes 1,000 resident launches and 50 complete calls, and retains 31
+interleaved observations per cohort in both timing domains. Every row meets the
+4% two-run WSL gate (maximum device-event delta 1.39%, maximum end-to-end delta
+3.47%); shared FP16/BF16 uses 42 registers and 10 active blocks/SM, direct TF32
+uses 38 registers and 24 active blocks/SM, and all rows retain zero local
+memory and zero spills. INT8 and packed formats remain follow-on after the
+ordinary loop is stable. WSL timing is selector-ineligible and no selector
+changes in this slice.
+
 Cross-backend sync `COMPILER-LIT-BACKEND-GATING-2026-07-24`: retired eleven
 never-runnable CUDA13 pseudo-IR fixtures whose undefined `tessera_opt_built`
 feature masked stale CLI options and unregistered operations. Core named

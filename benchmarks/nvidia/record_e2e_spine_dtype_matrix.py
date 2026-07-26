@@ -175,6 +175,9 @@ def record(
     device_reps: int,
     e2e_reps: int,
     warmup: int,
+    storages: tuple[str, ...] = STORAGES,
+    shapes: tuple[tuple[int, int, int], ...] = SHAPES,
+    work_item: str = "NVIDIA-E2E-2",
 ) -> dict[str, Any]:
     from benchmarks.nvidia._clock_conditioning import condition_sm120
     from tessera.compiler.canonical_compile import compile_result_from_bundle
@@ -193,8 +196,8 @@ def record(
     if lib is None:
         raise RuntimeError("libtessera_nvidia_ptx_launch.so is unavailable")
 
-    for storage in STORAGES:
-        for shape in SHAPES:
+    for storage in storages:
+        for shape in shapes:
             module = _module(storage, shape)
             nvidia_native._cache.clear()
             cold_start = time.perf_counter()
@@ -218,6 +221,12 @@ def record(
             assert bundle.native_image and bundle.launch_descriptor
             assert warm.native_image and warm.launch_descriptor
             assert bundle.native_image.image_digest == warm.native_image.image_digest
+            canonical_k_loop = storage in {"fp16", "bf16", "tf32"}
+            if canonical_k_loop:
+                expected_k = 8 if storage == "tf32" else 16
+                assert "tessera.canonical_k_loop = true" in bundle.tile.text
+                assert f"tessera.tile_k = {expected_k} : i64" in bundle.tile.text
+                assert "scf.for" in bundle.target_ir.text
             artifact = compile_result_from_bundle(
                 bundle,
                 module=module,
@@ -285,6 +294,12 @@ def record(
                 for run in disjoint
             ]
             resources = bundle.native_image.resource_record
+            block_size = 128 if storage in {"fp16", "bf16"} else 32
+            live_resources = rt._nvidia_native_descriptor_resources(
+                bundle.native_image,
+                bundle.launch_descriptor,
+                block_size=block_size,
+            )
             rows.append(
                 {
                     "storage": storage,
@@ -292,6 +307,20 @@ def record(
                     "entry": bundle.launch_descriptor.entry_symbol,
                     "abi_id": bundle.launch_descriptor.abi_id,
                     "image_digest": bundle.native_image.image_digest,
+                    "canonical_k_loop": {
+                        "enabled": canonical_k_loop,
+                        "tile_m": 16 if canonical_k_loop else None,
+                        "tile_n": 8 if canonical_k_loop else None,
+                        "tile_k": (
+                            8 if storage == "tf32" else 16
+                            if storage in {"fp16", "bf16"}
+                            else None
+                        ),
+                        "accumulator": "fp32" if canonical_k_loop else None,
+                        "ragged_policy": (
+                            "masked_zero_fill" if canonical_k_loop else None
+                        ),
+                    },
                     "compile": {
                         "cold_ms": cold_ms,
                         "warm_ms": warm_ms,
@@ -299,6 +328,11 @@ def record(
                         "warm_state": warm.native_image.compile_state,
                     },
                     "resources": resources.to_dict() if resources else None,
+                    "live_resources": live_resources,
+                    "candidate": bundle.launch_descriptor.provenance.get(
+                        "schedule"
+                    ),
+                    "selected_route": bundle.launch_descriptor.entry_symbol,
                     "runs": runs,
                     "stability": {
                         "device_fraction": _median_delta(
@@ -316,7 +350,7 @@ def record(
             )
     return {
         "schema": "tessera.nvidia.e2e-spine-dtype-matrix.v1",
-        "work_item": "NVIDIA-E2E-2",
+        "work_item": work_item,
         "device": device,
         "method": {
             "runs": 2,

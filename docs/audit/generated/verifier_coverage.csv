@@ -193,6 +193,8 @@ src/compiler/ir/TesseraOps.td,UnsqueezeOp,1,1,real
 src/compiler/ir/TesseraOps.td,VarlenSdpaOp,1,1,real
 src/compiler/ir/TesseraOps.td,ViewOp,1,1,real
 src/compiler/ir/TesseraOps.td,WriteRowOp,1,1,real
+src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td,BlockDropoutOp,1,1,real
+src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td,BoundaryMaskOp,1,1,real
 src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td,CausalMaskOp,1,1,real
 src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td,DropoutMaskOp,1,1,real
 src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td,LseAccumulateOp,1,1,real
@@ -200,6 +202,7 @@ src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td,LseLoadOp,1,1,rea
 src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td,LseSaveOp,1,1,real
 src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td,OnlineSoftmaxOp,1,1,real
 src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td,ScaledDotProductOp,1,1,real
+src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td,StreamingUpdateOp,1,1,real
 src/compiler/tile_opt_fa4/include/tessera/Dialect/Queue/Queue.td,CreateOp,1,1,real
 src/compiler/tile_opt_fa4/include/tessera/Dialect/Queue/Queue.td,PopOp,1,1,real
 src/compiler/tile_opt_fa4/include/tessera/Dialect/Queue/Queue.td,PushOp,1,1,real

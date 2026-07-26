@@ -42,8 +42,9 @@ func.func @rank1_stats_element_type_mismatch(%acc: tensor<64x64xf32>, %m: tensor
 
 // -----
 
-// Valid: all statistics are scalar f32 — this is exactly what TileIRLoweringPass
-// emits in the reduced-loop form, and must verify clean.
+// Valid compatibility form: all statistics are scalar f32. The canonical
+// streaming loop emits rank-1 per-query statistics, but LSE finalization keeps
+// accepting scalar statistics for older single-query producers.
 func.func @all_scalar_stats_ok(%acc: tensor<64x64xf32>, %m: f32, %l: f32)
     -> (tensor<64x64xf32>, f32) {
   %out, %lse = "tessera_attn.lse_accumulate"(%acc, %m, %l)

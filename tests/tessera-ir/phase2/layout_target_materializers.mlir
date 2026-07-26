@@ -7,7 +7,8 @@
 
 // Architecture-owned Graph-cast consumers replace the same-type marker with
 // its tensor value and leave an operand-indexed physical binding contract on
-// the target consumer. Source-layout provenance survives the boundary.
+// the target consumer. NVIDIA materializes the physical contract directly as
+// structured #tile.layout; Apple/x86 retain their architecture-owned strings.
 
 // APPLE-LABEL: func.func @matmul_layout
 // APPLE-NOT: "tessera.cast"
@@ -17,8 +18,7 @@
 // NVIDIA-LABEL: func.func @matmul_layout
 // NVIDIA-NOT: "tessera.cast"
 // NVIDIA: tessera.matmul %arg0, %arg1
-// NVIDIA-SAME: tessera.nvidia.operand_layout_0 = "row_major"
-// NVIDIA-SAME: tessera.nvidia.source_layout_0 = "tile"
+// NVIDIA-SAME: tile.operand_layout_0 = #tile.layout<shard = [4, 8] : [8, 1] on ["m", "m"]
 // X86-LABEL: func.func @matmul_layout
 // X86-NOT: "tessera.cast"
 // X86: tessera.matmul %arg0, %arg1
@@ -26,7 +26,7 @@
 // X86-SAME: tessera.x86.source_layout_0 = "tile"
 // NVIDIA-TILE-LABEL: func.func @matmul_layout
 // NVIDIA-TILE: tile.async_copy %arg0
-// NVIDIA-TILE-SAME: tessera.nvidia.layout = "row_major"
+// NVIDIA-TILE-SAME: tile.layout = #tile.layout<shard = [4, 8] : [8, 1] on ["m", "m"]
 func.func @matmul_layout(%arg0: tensor<4x8xf32>,
                          %arg1: tensor<8x6xf32>) -> tensor<4x6xf32> {
   %a = "tessera.cast"(%arg0) {
@@ -44,18 +44,18 @@ func.func @matmul_layout(%arg0: tensor<4x8xf32>,
 // NVIDIA-LABEL: func.func @attention_layout
 // NVIDIA-NOT: "tessera.cast"
 // NVIDIA: tessera.flash_attn %arg0, %arg1, %arg2
-// NVIDIA-SAME: tessera.nvidia.operand_layout_0 = "bhsd"
+// NVIDIA-SAME: tile.operand_layout_0 = #tile.layout<shard = [8, 4] : [4, 1] on ["m", "m"]
 // NVIDIA-TILE-LABEL: func.func @attention_layout
 // NVIDIA-TILE: tile.async_copy %arg0
-// NVIDIA-TILE-SAME: tessera.nvidia.layout = "bhsd"
+// NVIDIA-TILE-SAME: tile.layout = #tile.layout<shard = [8, 4] : [4, 1] on ["m", "m"]
 func.func @attention_layout(
-    %arg0: tensor<1x2x8x4xf32>, %arg1: tensor<1x2x8x4xf32>,
-    %arg2: tensor<1x2x8x4xf32>) -> tensor<1x2x8x4xf32> {
+    %arg0: tensor<8x4xf32>, %arg1: tensor<8x4xf32>,
+    %arg2: tensor<8x4xf32>) -> tensor<8x4xf32> {
   %q = "tessera.cast"(%arg0) {tessera.layout = "bhsd"} :
-      (tensor<1x2x8x4xf32>) -> tensor<1x2x8x4xf32>
+      (tensor<8x4xf32>) -> tensor<8x4xf32>
   %0 = "tessera.flash_attn"(%q, %arg1, %arg2)
       <{operandSegmentSizes = array<i32: 1, 1, 1, 0>, head_dim = 4 : i64}> :
-      (tensor<1x2x8x4xf32>, tensor<1x2x8x4xf32>, tensor<1x2x8x4xf32>) ->
-      tensor<1x2x8x4xf32>
-  return %0 : tensor<1x2x8x4xf32>
+      (tensor<8x4xf32>, tensor<8x4xf32>, tensor<8x4xf32>) ->
+      tensor<8x4xf32>
+  return %0 : tensor<8x4xf32>
 }

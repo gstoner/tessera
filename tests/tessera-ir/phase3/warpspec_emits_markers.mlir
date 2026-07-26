@@ -1,6 +1,6 @@
 // The WarpSpec-emits-the-markers join (2026-06-23): WarpSpecializationPass now
-// stamps the C1/C3 markers (tile.warp_role + typed #tile.pipeline_state, with
-// producer phase=1 / consumer phase=0) on the schedule.warp ops it creates, so
+// stamps warp-role/pipeline scheduling markers and creates real
+// !tile.pipeline_state SSA values (producer phase=1 / consumer phase=0), so
 // the C3/C6 legality passes verify *real lowering output* instead of a
 // convention. The second RUN proves WarpSpec output flows clean through the
 // TilePipelineLegality (C3) + WarpSpecLegality (C6) gates.
@@ -11,8 +11,15 @@
 // The markers print on the schedule.warp region's closing-brace attr line.
 // Anchor the checks on that line so the SSA pipeline_init role attribute cannot
 // be mistaken for the region contract.
-// CHECK: }) {role = "producer", tile.pipeline = "warpspec.0", tile.pipeline_state = #tile.pipeline_state<depth = 2, stage = 0, phase = 1, role = "producer">, tile.warp_role = "producer"}
-// CHECK: }) {role = "consumer", tile.pipeline = "warpspec.0", tile.pipeline_state = #tile.pipeline_state<depth = 2, stage = 0, phase = 0, role = "consumer">, tile.warp_role = "consumer"}
+// CHECK: tile.pipeline_init
+// CHECK-SAME: phase = 1
+// CHECK-SAME: role = "producer"
+// CHECK: }) {role = "producer", tile.pipeline = "warpspec.0", tile.warp_role = "producer"}
+// CHECK: tile.pipeline_init
+// CHECK-SAME: phase = 0
+// CHECK-SAME: role = "consumer"
+// CHECK: }) {role = "consumer", tile.pipeline = "warpspec.0", tile.warp_role = "consumer"}
+// CHECK-NOT: tile.pipeline_state = #tile.pipeline_state
 
 // The legality gates pass → the IR is still emitted (func survives).
 // GATED: @gemm_kernel

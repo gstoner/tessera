@@ -27,6 +27,7 @@
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/PatternMatch.h"
@@ -44,11 +45,14 @@ namespace {
 // Helper: emit a TMA descriptor op (SM_90 path)
 // ─────────────────────────────────────────────────────────────────────────────
 static Operation *emitTMADescriptor(OpBuilder &b, Location loc, Value src,
-                                     int64_t tileRows, int64_t tileCols) {
+                                     int64_t tileRows, int64_t tileCols,
+                                     ArrayRef<int64_t> sourceShape) {
   OperationState st(loc, tessera::tile::TMADescriptorOp::getOperationName());
   st.addOperands({src});
   st.addAttribute("tile_rows", b.getI64IntegerAttr(tileRows));
   st.addAttribute("tile_cols", b.getI64IntegerAttr(tileCols));
+  if (!sourceShape.empty())
+    st.addAttribute("source_shape", b.getDenseI64ArrayAttr(sourceShape));
   st.addTypes(tessera::tile::TMADescriptorType::get(b.getContext()));
   return b.create(st);
 }
@@ -56,15 +60,20 @@ static Operation *emitTMADescriptor(OpBuilder &b, Location loc, Value src,
 static Operation *emitTMACopyAsync(OpBuilder &b, Location loc,
                                     Value descriptor, int64_t mbarrierSlot,
                                     Type resultType, Type tokenType,
+                                    ValueRange coordinates,
                                     ValueRange dependencies) {
   OperationState st(loc, tessera::tile::TMACopyAsyncOp::getOperationName());
   st.addOperands({descriptor});
+  st.addOperands(coordinates);
   st.addOperands(dependencies);
   st.addAttribute("mbarrier_slot", b.getI64IntegerAttr(mbarrierSlot));
   st.addAttribute(
       "operandSegmentSizes",
       b.getDenseI32ArrayAttr(
-          {1, 0, static_cast<int32_t>(dependencies.size())}));
+          {1, 0, static_cast<int32_t>(coordinates.size() +
+                                     dependencies.size())}));
+  st.addAttribute("coordinate_count",
+                  b.getI64IntegerAttr(coordinates.size()));
   // Produce the loaded tile so it can replace the original tile.async_copy
   // result 1:1 (the copy lands the tile in shared memory).  Without a result
   // the replaceOp below would be a result-count mismatch that corrupts the IR.
@@ -77,6 +86,33 @@ static Operation *emitTMACopyAsync(OpBuilder &b, Location loc,
   if (tokenType)
     st.addTypes(tokenType);
   return b.create(st);
+}
+
+// Recover the physical tensor-map base and block coordinates from value-level
+// extract/pad operations. A tensor.insert_slice used only for zero padding does
+// not become a device allocation; TMA uses the original logical source extents
+// and its defined out-of-bounds zero fill for the ragged tail.
+static Value traceTMABaseAndCoordinates(OpBuilder &builder, Location loc,
+                                        Value source,
+                                        SmallVectorImpl<Value> &coordinates,
+                                        SmallVectorImpl<int64_t> &sourceShape) {
+  Value cursor = source;
+  if (auto extract = cursor.getDefiningOp<tensor::ExtractSliceOp>()) {
+    for (OpFoldResult offset : extract.getMixedOffsets()) {
+      if (auto value = dyn_cast<Value>(offset))
+        coordinates.push_back(value);
+      else
+        coordinates.push_back(arith::ConstantIndexOp::create(
+            builder, loc, cast<IntegerAttr>(cast<Attribute>(offset)).getInt()));
+    }
+    cursor = extract.getSource();
+  }
+  if (auto insert = cursor.getDefiningOp<tensor::InsertSliceOp>())
+    cursor = insert.getSource();
+  if (auto type = dyn_cast<RankedTensorType>(cursor.getType());
+      type && type.hasStaticShape())
+    sourceShape.assign(type.getShape().begin(), type.getShape().end());
+  return cursor;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -136,7 +172,12 @@ struct LowerAsyncCopyTMA : public RewritePattern {
 
     if (smVersion >= 90) {
       // SM_90+ → TMA path
-      Operation *desc = emitTMADescriptor(rewriter, loc, src, tileRows, tileCols);
+      SmallVector<Value> coordinates;
+      SmallVector<int64_t> sourceShape;
+      Value descriptorSource = traceTMABaseAndCoordinates(
+          rewriter, loc, src, coordinates, sourceShape);
+      Operation *desc = emitTMADescriptor(
+          rewriter, loc, descriptorSource, tileRows, tileCols, sourceShape);
       // mbarrier_slot is 0 for the first async copy; NVTMADescriptorPass
       // will hoist the descriptor and assign unique slot indices.  The copy
       // carries the original tile result type so the replacement is 1:1.
@@ -148,6 +189,7 @@ struct LowerAsyncCopyTMA : public RewritePattern {
         tileTy = op->getResult(0).getType();
       Operation *copyOp = emitTMACopyAsync(rewriter, loc, desc->getResult(0),
                                            /*slot=*/0, tileTy, tokenTy,
+                                           coordinates,
                                            op->getOperands().drop_front());
       if (op->getNumResults())
         rewriter.replaceOp(op, copyOp->getResults());

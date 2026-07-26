@@ -68,20 +68,96 @@ static DictionaryAttr policyOf(Operation *op) {
   return op->getAttrOfType<DictionaryAttr>("numeric_policy");
 }
 
+static bool isNvidiaSm120PackedFormat(StringRef storage) {
+  return storage == "int4" || storage == "nvfp4" ||
+         storage == "fp4_e2m1" || storage == "fp6_e2m3" ||
+         storage == "fp6_e3m2";
+}
+
+static bool packedViewMatches(Operation *op, StringRef storage,
+                              bool requireUnscaled = false) {
+  auto view =
+      op->getAttrOfType<tessera::tile::TilePackedPhysicalViewAttr>(
+          "tile.packed_view");
+  if (!view || view.getFormat().getLogicalType() != storage)
+    return false;
+  return !requireUnscaled || view.getScale().getDtype() == "none";
+}
+
+// The SM120 value consumer is def-use specific:
+//   packed_load -> tile.store        : explicit packed-to-f32 conversion
+//   packed_load -> packed_store      : byte-preserving unscaled round trip
+//   tile.matmul_kernel               : packed contraction envelope
+// Merely naming a low-precision dtype is insufficient. In particular, the
+// public quantize/dequantize Graph ops currently carry a shape-preserving f32
+// grid-snap ABI, not physical packed storage, and must not pass this gate.
+static bool hasNvidiaSm120ValueConsumer(Operation *op, StringRef storage) {
+  if (!isNvidiaSm120PackedFormat(storage))
+    return false;
+  StringRef name = op->getName().getStringRef();
+  if (name == "tile.matmul_kernel") {
+    auto mma = op->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma");
+    if (!mma || mma.getAType() != mma.getBType())
+      return false;
+    StringRef physical = mma.getAType();
+    if (storage == "int4")
+      return physical == "int4" || physical == "s4";
+    if (storage == "fp6_e2m3")
+      return physical == "e2m3";
+    if (storage == "fp6_e3m2")
+      return physical == "e3m2";
+    return physical == storage;
+  }
+
+  if (name == "tile.packed_load") {
+    if (!packedViewMatches(op, storage))
+      return false;
+    for (Operation *user : op->getUsers()) {
+      StringRef userName = user->getName().getStringRef();
+      if (userName == "tile.store")
+        continue;
+      if (userName == "tile.packed_store" &&
+          packedViewMatches(op, storage, /*requireUnscaled=*/true) &&
+          packedViewMatches(user, storage, /*requireUnscaled=*/true))
+        continue;
+      return false;
+    }
+    return !op->use_empty();
+  }
+
+  if (name == "tile.packed_store") {
+    if (!packedViewMatches(op, storage, /*requireUnscaled=*/true) ||
+        op->getNumOperands() == 0)
+      return false;
+    Operation *producer = op->getOperand(0).getDefiningOp();
+    return producer &&
+           producer->getName().getStringRef() == "tile.packed_load" &&
+           packedViewMatches(producer, storage, /*requireUnscaled=*/true) &&
+           hasNvidiaSm120ValueConsumer(producer, storage);
+  }
+
+  if (name == "tile.store") {
+    if (op->getNumOperands() == 0)
+      return false;
+    Operation *producer = op->getOperand(0).getDefiningOp();
+    return producer &&
+           producer->getName().getStringRef() == "tile.packed_load" &&
+           packedViewMatches(producer, storage) &&
+           hasNvidiaSm120ValueConsumer(producer, storage);
+  }
+  return false;
+}
+
 static bool hasTerminalPackedConsumer(Operation *op, StringRef target,
                                       StringRef storage) {
   if (target.empty())
     return true; // Standalone pass: expose the transformation for inspection.
-  StringRef name = op->getName().getStringRef();
   if (target == "nvidia_sm120")
-    return name == "tile.matmul_kernel" &&
-           (storage == "int4" || storage == "nvfp4" ||
-            storage == "fp4_e2m1" || storage == "fp6_e2m3" ||
-            storage == "fp6_e3m2");
+    return hasNvidiaSm120ValueConsumer(op, storage);
   if (target.starts_with("rocm_"))
     return storage == "int4" &&
-           (name == "tile.matmul_kernel" ||
-            name == "tessera_rocm.wmma_gemm");
+           (op->getName().getStringRef() == "tile.matmul_kernel" ||
+            op->getName().getStringRef() == "tessera_rocm.wmma_gemm");
   return false;
 }
 
@@ -148,18 +224,26 @@ struct StorageLegalize
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(StorageLegalize)
 
   StorageLegalize() = default;
-  explicit StorageLegalize(StringRef target) : target(target.str()) {}
-  StorageLegalize(const StorageLegalize &other)
-      : PassWrapper(other), target(other.target) {}
+  explicit StorageLegalize(StringRef selectedTarget) {
+    target = selectedTarget.str();
+  }
+  StorageLegalize(const StorageLegalize &other) : PassWrapper(other) {
+    target = other.target;
+  }
 
-  std::string target;
+  Option<std::string> target{
+      *this, "target",
+      llvm::cl::desc("Capability target for terminal packed-storage "
+                     "legalization; empty exposes the standalone inspection "
+                     "transform"),
+      llvm::cl::init("")};
 
   StringRef getArgument() const override { return "tessera-storage-legalize"; }
   StringRef getDescription() const override {
     return "C4 storage-legalize — sub-byte / block-scaled storage "
            "(fp4/nvfp4/fp6/int4) gets tessera.storage_packed + "
-           "tessera.storage_container. Run terminally, after all compute "
-           "rewrites.";
+           "tessera.storage_container only for the selected target's proven "
+           "physical consumer. Run terminally, after all compute rewrites.";
   }
 
   void runOnOperation() override {

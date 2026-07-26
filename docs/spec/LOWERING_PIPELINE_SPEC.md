@@ -435,7 +435,9 @@ target-specific gate.
   %C = tensor.extract_slice %Cpad[0, 0][M, N][1, 1]
   ```
 - `tessera.matmul` ops with dynamic shapes are left unchanged.
-- Ops other than `tessera.matmul` (e.g. `tessera.flash_attn`, `tessera.fused_epilogue`) are untouched.
+- Ops other than `tessera.matmul` (for example `tessera.flash_attn` and
+  `tessera.fused_epilogue`) are untouched by the canonical GEMM expansion.
+  `TileIRLoweringPass` owns the separate FlashAttention KV-loop expansion.
 
 #### Invariants
 
@@ -526,30 +528,51 @@ Lowers `schedule.mesh.region` bodies containing `tessera.flash_attn` into FA-4 T
 
 #### Output IR contract
 
-For `tessera.flash_attn(Q, K, V)`:
+For a statically shaped rank-2 `tessera.flash_attn(Q, K, V)`:
 
 ```mlir
-// Async copy of Q and K tiles
-%q_tile = tile.async_copy %Q {tile_rows = 64, tile_cols = 64}
-%k_tile = tile.async_copy %K {tile_rows = 64, tile_cols = 64}
-tile.wait_async
+%q_tile, %q_token = tile.async_copy %Q ... {layout = #tile.layout<...>}
+%q_ready = tile.wait_async %q_token
+%producer = tile.pipeline_init {role = "producer", phase = 1}
+%consumer = tile.pipeline_init {role = "consumer", phase = 0}
+%acc0 = arith.constant dense<0.0> : tensor<QxDvxf32>
+%m0 = arith.constant dense<0xFF800000> : tensor<Qxf32>
+%l0 = arith.constant dense<0.0> : tensor<Qxf32>
 
-// Scaled dot product
-%scores = tessera_attn.scaled_dot_product %q_tile, %k_tile scale = 0.125 : ...
+%acc, %m, %l, %producer_final, %consumer_final, %boundary_final =
+  scf.for %kv = %c0 to %padded_sk step %tile_kv
+      iter_args(%acc_i = %acc0, %m_i = %m0, %l_i = %l0,
+                %p_i = %producer, %c_i = %consumer,
+                %boundary_i = %c0) {
+    %k_slice = tensor.extract_slice %K[%kv, 0] ...
+    %v_slice = tensor.extract_slice %V[%kv, 0] ...
+    %k_tile, %kt = tile.async_copy %k_slice, %kv, %c0 ...
+        {coordinate_count = 2, layout = #tile.layout<...>}
+    %v_tile, %vt = tile.async_copy %v_slice, %kv, %c0 ...
+        {coordinate_count = 2, layout = #tile.layout<...>}
+    %deps = tile.wait_async %kt, %vt
+    %p_next = tile.pipeline_advance %p_i, %deps
+    %scores = tessera_attn.scaled_dot_product %q_tile, %k_tile ...
+    %bounded = tessera_attn.boundary_mask %scores, %c0, %boundary_i
+        {causal = true, window_left = -1, window_right = -1}
+    %acc_next, %m_next, %l_next =
+        tessera_attn.streaming_update %bounded, %v_tile,
+            %m_i, %l_i, %acc_i
+    %c_next = tile.pipeline_advance %c_i, %acc_next
+    %next_boundary = arith.addi %boundary_i, %tile_kv
+    scf.yield %acc_next, %m_next, %l_next,
+              %p_next, %c_next, %next_boundary
+  }
 
-// Optional causal mask (when causal=true)
-%masked = tessera_attn.causal_mask %scores q_off = %q_offset kv_off = %kv_offset : ...
-
-// Online softmax (FA-2 algorithm)
-%new_acc, %new_m, %new_l = tessera_attn.online_softmax %masked, %running_m, %running_l, %acc_out
-
-// V tile async copy + wait
-%v_tile = tile.async_copy %V {tile_rows = 64, tile_cols = 64}
-tile.wait_async
-
-// LSE accumulation (final step, outside inner loop)
-%output, %lse = tessera_attn.lse_accumulate %acc, %final_m, %final_l
+%output, %lse = tessera_attn.lse_accumulate %acc, %m, %l
 ```
+
+The copy descriptor retains the unpadded logical K/V source extent. Dynamic
+slice coordinates are explicit index operands, so the target copy consumer can
+zero-fill the final ragged KV block without inventing a computed base pointer.
+`boundary_mask` carries causal and sliding-window policy with absolute Q/KV
+offsets. Non-zero dropout uses `block_dropout`, keyed by the absolute KV offset,
+and requires an explicit seed.
 
 For `tessera.matmul` inside a mesh region:
 ```mlir
@@ -561,7 +584,16 @@ tile.wait_async
 
 #### Invariants
 
-- `tessera.flash_attn` ops inside `schedule.mesh.region` are fully replaced by the FA-4 op sequence.
+- Supported static rank-2 `tessera.flash_attn` ops inside
+  `schedule.mesh.region` are fully replaced by a KV-block `scf.for` carrying
+  output accumulation, running maximum, running normalization sum,
+  producer/consumer pipeline state, and boundary offset.
+- Rank-4 distributed batch/head attention and dynamic shapes are retained
+  fail-closed for a later distribution-owned lowering; they are not silently
+  represented by the rank-2 contract.
+- Deterministic NVIDIA backward launch descriptors must declare
+  `workspace_owner = "output_element"`; split-workspace ownership remains an
+  architecture-owned runtime contract.
 - `tessera.matmul` ops inside `schedule.mesh.region` are fully replaced by `tile.async_copy` + `tile.mma`.
 - `tessera.flash_attn` ops outside `schedule.mesh.region` are left unchanged (handled differently — should not exist after `DistributionLoweringPass`).
 

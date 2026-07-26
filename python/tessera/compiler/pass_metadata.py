@@ -335,8 +335,11 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         summary=(
             "C4 (TIRx): terminal packing — stamps `tessera.storage_packed` + "
             "`tessera.storage_container` on sub-byte / block-scaled storage "
-            "(fp4 / nvfp4 / fp6 / int4). Default-on only where a target owns a "
-            "matching operation+descriptor physical consumer; runs last."
+            "(fp4 / nvfp4 / fp6 / int4). Named targets gate this on the actual "
+            "operation, structured physical descriptor, and complete def-use "
+            "consumer (packed load/unpack, supported load/store round trip, "
+            "packed matmul, or explicit conversion); runs last. An empty "
+            "target remains an explicit inspection transform."
         ),
         input_dialects=("tessera",),
         output_dialects=("tessera",),
@@ -407,8 +410,9 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "C2 (TIRx): barriers as a layout-reuse correctness property — two "
             "writes to overlapping storage-axis (m/tlane/tcol) footprints of one "
             "!tile.buffer SSA allocation root with no intervening barrier are "
-            "a race. Legacy #tile.buffer_ref names remain a compatibility "
-            "fallback while WarpSpecialization migrates."
+            "a race. NVIDIA WarpSpecialization is SSA-only; legacy "
+            "#tile.buffer_ref names remain readable for sibling migration "
+            "fixtures."
         ),
         input_dialects=("tessera", "tile", "func"),
         output_dialects=("tessera", "tile", "func"),
@@ -421,17 +425,17 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         name="tessera-tile-pipeline-legality",
         cpp_class="TilePipelineLegality",
         summary=(
-            "C3 (TIRx): cross-op pipeline legality — initial producer phase=1 / "
-            "consumer phase=0 asymmetry (the off-by-one ring-deadlock fix) and "
-            "per-tile.barrier_id #tile.barrier kind consistency. Runs after "
-            "WarpSpecialization and again after NVTMADescriptor (typed barriers)."
+            "C3 (TIRx): SSA pipeline legality — tile.pipeline_init producer "
+            "phase=1 / consumer phase=0 asymmetry, rejection of annotation-only "
+            "#tile.pipeline_state metadata, and per-tile.barrier_id barrier-kind "
+            "consistency."
         ),
         input_dialects=("tessera", "tile", "func"),
         output_dialects=("tessera", "tile", "func"),
-        required_attrs=("tile.pipeline", "tile.pipeline_state",
-                        "tile.barrier", "tile.barrier_id"),
+        required_attrs=("tile.barrier", "tile.barrier_id"),
         diagnostic_codes=(
             "TILE_PIPELINE_PHASE_ASYMMETRY",
+            "TILE_PIPELINE_LEGACY_METADATA",
             "TILE_PIPELINE_BARRIER_KIND_MISMATCH",
         ),
         pass_kind="verifier",

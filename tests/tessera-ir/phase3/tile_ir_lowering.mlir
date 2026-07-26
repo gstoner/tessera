@@ -18,9 +18,16 @@
 // CHECK:       func.func @flash_attn_step
 // CHECK:       tile.async_copy
 // CHECK:       tile.wait_async
+// CHECK:       tile.pipeline_init
+// CHECK:       scf.for
+// CHECK-SAME:  iter_args
+// CHECK-SAME:  tensor<64xf32>, tensor<64xf32>
 // CHECK:       tessera_attn.scaled_dot_product
-// CHECK:       tessera_attn.causal_mask
-// CHECK:       tessera_attn.online_softmax
+// CHECK:       tessera_attn.boundary_mask
+// CHECK:       tessera_attn.streaming_update
+// CHECK-SAME:  tensor<64xf32>, tensor<64xf32>, tensor<64x64xf32>
+// CHECK-SAME:  tensor<64xf32>, tensor<64xf32>
+// CHECK:       tile.pipeline_advance
 // CHECK:       tessera_attn.lse_accumulate
 // CHECK-NOT:   tessera.flash_attn
 
@@ -37,9 +44,9 @@ module attributes {tessera.ir.version = "1.0",
   func.func @flash_attn_step(
       %Q: tensor<64x64xbf16>
             {tessera.effect = "read"},
-      %K: tensor<64x64xbf16>
+      %K: tensor<130x64xbf16>
             {tessera.effect = "read"},
-      %V: tensor<64x64xbf16>
+      %V: tensor<130x64xbf16>
             {tessera.effect = "read"}
   ) -> tensor<64x64xf32> {
     %out = "tessera.flash_attn"(%Q, %K, %V) <{operandSegmentSizes = array<i32: 1, 1, 1, 0>}> {
@@ -47,7 +54,7 @@ module attributes {tessera.ir.version = "1.0",
       head_dim = 64 : i64,
       tessera.tile_q  = 64 : i32,
       tessera.tile_kv = 64 : i32
-    } : (tensor<64x64xbf16>, tensor<64x64xbf16>, tensor<64x64xbf16>)
+    } : (tensor<64x64xbf16>, tensor<130x64xbf16>, tensor<130x64xbf16>)
           -> tensor<64x64xf32>
     return %out : tensor<64x64xf32>
   }

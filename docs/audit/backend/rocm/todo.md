@@ -1,11 +1,37 @@
 ---
-last_updated: 2026-07-25
+last_updated: 2026-07-26
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+Cross-backend sync `PACKED-LEGALIZE-CAPABILITY-2026-07-26` makes the shared
+terminal storage pass inspect an operation's structured physical descriptor
+and complete def-use consumer rather than treating a low-precision dtype as
+execution evidence. NVIDIA SM120 now enables only its proven packed
+load/unpack, unscaled load/store round trip, matching packed matmul, and
+explicit conversion paths. ROCm's existing architecture-owned signed-INT4
+WMMA gate and legacy fallback remain unchanged; scale-bearing FP4/FP6 generic
+HIP consumers are still follow-up required on the ROCm box. The shared
+`#tile.buffer_ref` compatibility reader also remains temporarily available
+until the ROCm SSA/LDS migration lands. CUDA descriptors, schedules, SM120
+evidence, and selector state do not transfer.
+
+Cross-backend sync `CORE-STREAMING-ATTN-2026-07-26` replaces the shared
+rank-2 FlashAttention whole-KV lowering with an explicit KV-block `scf.for`
+carrying the FP32 output accumulator, running maximum, normalization sum,
+producer/consumer `!tile.pipeline_state` values, and absolute boundary offset.
+The shared async seam now carries typed block coordinates and logical source
+extents for ragged zero fill. NVIDIA WarpSpecialization also retires its
+name-based `#tile.buffer_ref` and annotation-only `#tile.pipeline_state`
+emission. ROCm is **follow-up required** to map the recurrence to its existing
+gfx1151 LDS/waitcnt/barrier and flash-attention schedule using AMD-owned SSA
+allocation identity. CUDA TMA/mbarrier mechanics, SM120 evidence, resources,
+timings, and selectors do not transfer. Rank-4 batch/head distribution and
+deterministic backward workspace materialization remain open shared work; no
+ROCm capability or selector changes in this synchronization slice.
 
 Cross-backend sync `CORE-GEMM-KLOOP-2026-07-25` changes the shared
 Graph/Schedule→Tile GEMM contract to explicit M/N/K `scf.for`, FP32/INT32

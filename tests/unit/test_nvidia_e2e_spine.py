@@ -409,6 +409,7 @@ def test_sm120_attention_backward_owns_determinism_and_workspace_contract() -> N
     assert 'route = "deterministic_direct"' in source
     assert "deterministic = true" in source
     assert "workspace_bytes = 0 : i64" in source
+    assert 'workspace_owner = "output_element"' in source
     bad = _attention_backward_module()
     bad.functions[0].body[0].kwargs["route"] = "atomic"
     assert not supports_attention_backward(bad)

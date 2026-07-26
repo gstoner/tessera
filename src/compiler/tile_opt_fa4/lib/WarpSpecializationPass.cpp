@@ -32,6 +32,7 @@
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/OpDefinition.h"
@@ -91,19 +92,13 @@ static bool isConsumerOp(Operation *op) {
   return name.starts_with("tessera_attn.") || name == "tile.mma";
 }
 
-// C3 join (2026-06-23): stamp the typed PipelineState + warp-role markers that
-// TilePipelineLegalityPass (C3) and WarpSpecLegalityPass (C6) verify. The
-// producer ring starts at phase 1, the consumer at phase 0 — the asymmetry that
-// makes the first wait fall through (the off-by-one ring-deadlock fix). depth=2
-// is the default double-buffer; stage 0 is the initial ring slot.
+// Warp-role and logical pipeline identity remain scheduling attributes. Pipeline
+// state itself is exclusively SSA: tile.pipeline_init/advance carry ownership
+// and ordering, so no annotation-only #tile.pipeline_state is emitted.
 static void stampPipelineMarkers(OpBuilder &b, Operation *warpOp,
-                                 StringRef pipelineId, StringRef role,
-                                 int64_t phase) {
+                                 StringRef pipelineId, StringRef role) {
   warpOp->setAttr("tile.warp_role", b.getStringAttr(role));
   warpOp->setAttr("tile.pipeline", b.getStringAttr(pipelineId));
-  warpOp->setAttr("tile.pipeline_state",
-                  tile::TilePipelineStateAttr::get(b.getContext(), /*depth=*/2,
-                                                   /*stage=*/0, phase, role));
 }
 
 static Value createPipelineState(OpBuilder &b, Location loc, StringRef role,
@@ -168,13 +163,9 @@ layoutForExtents(OpBuilder &b, ArrayRef<int64_t> extents,
       /*swizzle=*/tile::TileSwizzleAttr());
 }
 
-static void stampBufferWrite(OpBuilder &b, Operation *op, const Twine &buffer,
-                             StringRef space, ArrayRef<int64_t> extents,
-                             ArrayRef<StringRef> axisNames) {
-  // Typed buffer reference (name + space + access) replaces the old
-  // tile.buffer/tile.access string pair.
-  op->setAttr("tile.buf", tile::TileBufferRefAttr::get(
-                              b.getContext(), buffer.str(), space, "write"));
+static void attachWriteLayout(OpBuilder &b, Operation *op,
+                              ArrayRef<int64_t> extents,
+                              ArrayRef<StringRef> axisNames) {
   op->setAttr("tile.layout", layoutForExtents(b, extents, axisNames));
 }
 
@@ -209,8 +200,8 @@ struct WarpSpecializationPass
   StringRef getDescription() const override {
     return "Assign producer/consumer warp roles; insert tessera.queue barriers";
   }
-  // C3 join: the pass now constructs #tile.pipeline_state, so the Tile dialect
-  // must be loaded.
+  // C3 join: the pass constructs typed buffer and !tile.pipeline_state SSA
+  // values, so the Tile dialect must be loaded.
   void getDependentDialects(DialectRegistry &registry) const override {
     registry.insert<tessera::tile::TesseraTileDialect>();
   }
@@ -232,6 +223,18 @@ struct WarpSpecializationPass
         continue;
       Block &entryBlock = body.front();
       Location loc = regionOp->getLoc();
+
+      // Canonical streaming attention already carries producer/consumer
+      // !tile.pipeline_state values through its KV scf.for. Splitting only the
+      // entry block would strand the loop body across warp regions, so leave
+      // this explicitly stateful loop intact for target lowering.
+      bool hasStreamingAttention = false;
+      regionOp->walk([&](scf::ForOp loop) {
+        if (loop->hasAttr("tessera.streaming_attention"))
+          hasStreamingAttention = true;
+      });
+      if (hasStreamingAttention)
+        continue;
 
       SmallVector<Operation *> producerOps, consumerOps, otherOps;
       for (Operation &op : entryBlock) {
@@ -330,7 +333,7 @@ struct WarpSpecializationPass
       for (Value v : prodCross)
         prodSt.addTypes(v.getType());
       Operation *prodWarp = b.create(prodSt);
-      stampPipelineMarkers(b, prodWarp, pipelineId, "producer", /*phase=*/1);
+      stampPipelineMarkers(b, prodWarp, pipelineId, "producer");
 
       // Hoist the consumer-needed "other" ops (e.g. constants) above the warp
       // regions so they dominate both — they only depend on region-external
@@ -375,12 +378,10 @@ struct WarpSpecializationPass
           createPipelineState(b, loc, "producer", /*phase=*/1);
       // Each tile.async_copy stages into its own shared-memory tile (linear `m`
       // axis); distinct buffers, so C2 sees no aliasing on well-formed lowering.
-      unsigned smemIdx = 0;
       for (Operation *p : producerOps) {
         if (p->getName().getStringRef() == "tile.async_copy") {
-          std::string name = (pipelineId + ".smem." + Twine(smemIdx++)).str();
-          stampBufferWrite(b, p, name, "smem", tileExtents(p),
-                           {StringRef("m"), StringRef("m")});
+          attachWriteLayout(b, p, tileExtents(p),
+                            {StringRef("m"), StringRef("m")});
         }
         p->moveBefore(prodBody, prodBody->end());
         producerState = advancePipelineState(
@@ -404,20 +405,17 @@ struct WarpSpecializationPass
       for (Value v : consCross)
         consSt.addTypes(v.getType());
       Operation *consWarp = b.create(consSt);
-      stampPipelineMarkers(b, consWarp, pipelineId, "consumer", /*phase=*/0);
+      stampPipelineMarkers(b, consWarp, pipelineId, "consumer");
 
       Block *consBody = b.createBlock(&consWarp->getRegion(0));
       b.setInsertionPointToEnd(consBody);
       Value consumerState =
           createPipelineState(b, loc, "consumer", /*phase=*/0);
       // Each tile.mma writes its accumulator to a TMEM tile (tlane/tcol axes).
-      unsigned accIdx = 0;
       for (Operation *c : consumerOps) {
         if (c->getName().getStringRef() == "tile.mma") {
-          std::string name =
-              (pipelineId + ".tmem.acc." + Twine(accIdx++)).str();
-          stampBufferWrite(b, c, name, "tmem", tileExtents(c),
-                           {StringRef("tlane"), StringRef("tcol")});
+          attachWriteLayout(b, c, tileExtents(c),
+                            {StringRef("tlane"), StringRef("tcol")});
         }
         c->moveBefore(consBody, consBody->end());
         consumerState = advancePipelineState(

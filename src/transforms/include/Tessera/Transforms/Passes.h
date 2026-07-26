@@ -361,9 +361,10 @@ std::unique_ptr<mlir::Pass> createMaterializeControlPayloadPass();
 std::unique_ptr<mlir::Pass> createTileBarrierReuseLegalityPass();
 
 // ── 2026-06-23 — TilePipelineLegalityPass (C3, TIRx review) ──────────────
-// Cross-op companion to the #tile.pipeline_state / #tile.barrier verifiers:
-// producer phase=1 / consumer phase=0 asymmetry (TILE_PIPELINE_PHASE_ASYMMETRY)
-// + per-barrier-id kind consistency (TILE_PIPELINE_BARRIER_KIND_MISMATCH).
+// Cross-op companion to !tile.pipeline_state SSA and #tile.barrier:
+// producer phase=1 / consumer phase=0 asymmetry (TILE_PIPELINE_PHASE_ASYMMETRY),
+// annotation-only metadata rejection (TILE_PIPELINE_LEGACY_METADATA), and
+// per-barrier-id kind consistency (TILE_PIPELINE_BARRIER_KIND_MISMATCH).
 // Registered standalone as `--tessera-tile-pipeline-legality`.
 std::unique_ptr<mlir::Pass> createTilePipelineLegalityPass();
 
@@ -371,11 +372,15 @@ std::unique_ptr<mlir::Pass> createTilePipelineLegalityPass();
 // Operationalizes Decision #15a as pass ordering. compute-legalize (early):
 // reduced-precision storage without an accumulator gets numeric_policy.accum
 // (fp32, or int32 for int4/int8). storage-legalize (terminal): sub-byte /
-// block-scaled storage gets tessera.storage_packed + tessera.storage_container.
+// block-scaled storage gets tessera.storage_packed + tessera.storage_container
+// only when the selected target owns the operation's physical descriptor and
+// complete def-use consumer (packed load/unpack, supported load/store
+// round-trip, packed matmul, or explicit conversion).
 // Registered as --tessera-compute-legalize / --tessera-storage-legalize.
 std::unique_ptr<mlir::Pass> createComputeLegalizePass();
-// `target` enables capability-gated terminal legalization in named pipelines.
-// An empty target retains the standalone analysis/fixture behavior.
+// `target` enables capability-gated terminal legalization in named pipelines
+// and is also exposed as the standalone pass's `target` option. An empty target
+// retains the explicit inspection/fixture behavior.
 std::unique_ptr<mlir::Pass>
 createStorageLegalizePass(llvm::StringRef target = {});
 // 2026-06-23: the first real *consumer* of the C4 packing markers — reads

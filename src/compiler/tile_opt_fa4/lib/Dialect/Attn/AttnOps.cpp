@@ -204,6 +204,65 @@ mlir::LogicalResult OnlineSoftmaxOp::verify() {
   return mlir::success();
 }
 
+mlir::LogicalResult StreamingUpdateOp::verify() {
+  auto scoresType =
+      mlir::dyn_cast<mlir::RankedTensorType>(getScores().getType());
+  auto valueType =
+      mlir::dyn_cast<mlir::RankedTensorType>(getValue().getType());
+  auto accType =
+      mlir::dyn_cast<mlir::RankedTensorType>(getAccOut().getType());
+  auto newAccType =
+      mlir::dyn_cast<mlir::RankedTensorType>(getNewAcc().getType());
+  auto runningMType =
+      mlir::dyn_cast<mlir::RankedTensorType>(getRunningM().getType());
+  auto runningLType =
+      mlir::dyn_cast<mlir::RankedTensorType>(getRunningL().getType());
+  auto newMType =
+      mlir::dyn_cast<mlir::RankedTensorType>(getNewM().getType());
+  auto newLType =
+      mlir::dyn_cast<mlir::RankedTensorType>(getNewL().getType());
+  if (!scoresType || !valueType || !accType || !newAccType)
+    return emitOpError(
+        "scores, value, accumulator, and new accumulator must be ranked tensors");
+  if (scoresType.getRank() != 2 || valueType.getRank() != 2 ||
+      accType.getRank() != 2 || newAccType.getRank() != 2)
+    return emitOpError(
+        "expects scores[Q,KV], value[KV,Dv], and accumulators[Q,Dv]");
+  if (!scoresType.isDynamicDim(1) && !valueType.isDynamicDim(0) &&
+      scoresType.getDimSize(1) != valueType.getDimSize(0))
+    return emitOpError("score KV width must match value KV rows");
+  if (!scoresType.isDynamicDim(0) && !accType.isDynamicDim(0) &&
+      scoresType.getDimSize(0) != accType.getDimSize(0))
+    return emitOpError("score query rows must match accumulator rows");
+  if (!valueType.isDynamicDim(1) && !accType.isDynamicDim(1) &&
+      valueType.getDimSize(1) != accType.getDimSize(1))
+    return emitOpError("value width must match accumulator width");
+  if (failed(verifySameRankedTensor(getOperation(), accType, newAccType,
+                                    "acc/new_acc")))
+    return mlir::failure();
+  if (!runningMType || !runningLType || !newMType || !newLType ||
+      runningMType.getRank() != 1 || runningLType.getRank() != 1 ||
+      newMType.getRank() != 1 || newLType.getRank() != 1)
+    return emitOpError(
+        "running and updated max/sum must be rank-1 per-query tensors");
+  const std::pair<mlir::RankedTensorType, llvm::StringRef> statistics[] = {
+      {runningMType, "running_m"},
+      {runningLType, "running_l"},
+      {newMType, "new_m"},
+      {newLType, "new_l"}};
+  for (auto [type, label] : statistics) {
+    if (!type.getElementType().isF32())
+      return emitOpError() << label << " must use FP32 accumulation";
+    if (!scoresType.isDynamicDim(0) && !type.isDynamicDim(0) &&
+        scoresType.getDimSize(0) != type.getDimSize(0))
+      return emitOpError() << label << " length must match score query rows";
+  }
+  if (!scoresType.getElementType().isF32() ||
+      !accType.getElementType().isF32())
+    return emitOpError("scores and output accumulator must use FP32");
+  return mlir::success();
+}
+
 mlir::LogicalResult LseLoadOp::verify() {
   return verifyFloatScalarOrRankedTensor(getOperation(), getLse().getType(),
                                          "lse", /*maxRank=*/1);
@@ -296,6 +355,38 @@ mlir::LogicalResult CausalMaskOp::verify() {
     return emitOpError("scores must be a 2-D attention tile");
   return verifySameRankedTensor(getOperation(), scoresType, maskedType,
                                 "causal scores/masked_scores");
+}
+
+mlir::LogicalResult BoundaryMaskOp::verify() {
+  if (static_cast<int64_t>(getWindowLeft()) < -1 ||
+      static_cast<int64_t>(getWindowRight()) < -1)
+    return emitOpError("window_left and window_right must be >= -1");
+  if (getLogicalSk() <= 0)
+    return emitOpError("logical_sk must be positive");
+  auto scoresType =
+      mlir::dyn_cast<mlir::RankedTensorType>(getScores().getType());
+  auto maskedType =
+      mlir::dyn_cast<mlir::RankedTensorType>(getMaskedScores().getType());
+  if (!scoresType || !maskedType || scoresType.getRank() != 2)
+    return emitOpError("scores and masked_scores must be rank-2 tensors");
+  return verifySameRankedTensor(getOperation(), scoresType, maskedType,
+                                "boundary scores/masked_scores");
+}
+
+mlir::LogicalResult BlockDropoutOp::verify() {
+  double p = getDropoutP().convertToDouble();
+  if (!(p >= 0.0) || !(p < 1.0))
+    return emitOpError("dropout_p must satisfy 0.0 <= p < 1.0");
+  if (getSeed() < 0)
+    return emitOpError("seed must be non-negative");
+  auto scoresType =
+      mlir::dyn_cast<mlir::RankedTensorType>(getScores().getType());
+  auto maskedType =
+      mlir::dyn_cast<mlir::RankedTensorType>(getMaskedScores().getType());
+  if (!scoresType || !maskedType || scoresType.getRank() != 2)
+    return emitOpError("scores and masked_scores must be rank-2 tensors");
+  return verifySameRankedTensor(getOperation(), scoresType, maskedType,
+                                "dropout scores/masked_scores");
 }
 
 void TesseraAttnDialect::initialize() {

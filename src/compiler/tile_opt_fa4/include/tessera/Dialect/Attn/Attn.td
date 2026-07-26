@@ -63,6 +63,27 @@ def OnlineSoftmaxOp : Op<Tessera_Attn_Dialect, "online_softmax", []> {
   let hasVerifier = 1;
 }
 
+// Canonical streaming update. Unlike the original compatibility op above, the
+// value tile is explicit: this operation represents the complete online
+// softmax/PV recurrence for one KV block, not merely the score statistics.
+def StreamingUpdateOp : Op<Tessera_Attn_Dialect, "streaming_update", []> {
+  let summary = "Online-softmax and PV update for one KV block";
+  let arguments = (ins
+    AnyType:$scores,    // current score tile [tile_q × tile_kv]
+    AnyType:$value,     // current value tile [tile_kv × d_v]
+    AnyType:$running_m, // per-row running max [tile_q]
+    AnyType:$running_l, // per-row running sum [tile_q]
+    AnyType:$acc_out    // accumulated output [tile_q × d_v]
+  );
+  let results = (outs
+    AnyType:$new_acc,
+    AnyType:$new_m,
+    AnyType:$new_l
+  );
+  let assemblyFormat = "$scores `,` $value `,` $running_m `,` $running_l `,` $acc_out attr-dict `:` type($scores) `,` type($value) `,` type($running_m) `,` type($running_l) `,` type($acc_out) `->` type($new_acc) `,` type($new_m) `,` type($new_l)";
+  let hasVerifier = 1;
+}
+
 // LseAccumulateOp — finalises the FA-2 two-pass algorithm.
 // Divides the accumulated output by the final running sum and computes
 // log(l) + m (the true LSE value saved for the backward pass).
@@ -110,5 +131,39 @@ def CausalMaskOp : Op<Tessera_Attn_Dialect, "causal_mask", [Pure]> {
   );
   let results = (outs AnyType:$masked_scores);
   let assemblyFormat = "$scores `q_off` `=` $q_offset `kv_off` `=` $kv_offset attr-dict `:` type($scores) `->` type($masked_scores)";
+  let hasVerifier = 1;
+}
+
+// Canonical block-boundary mask. Offsets are SSA values so a real KV scf.for
+// can carry and advance them. The window bounds remain compile-time scheduling
+// policy; -1 means unbounded.
+def BoundaryMaskOp : Op<Tessera_Attn_Dialect, "boundary_mask", [Pure]> {
+  let summary = "Apply causal/sliding-window bounds for one KV block";
+  let arguments = (ins
+    AnyType:$scores,
+    Index:$q_offset,
+    Index:$kv_offset,
+    BoolAttr:$causal,
+    I64Attr:$window_left,
+    I64Attr:$window_right,
+    I64Attr:$logical_sk
+  );
+  let results = (outs AnyType:$masked_scores);
+  let assemblyFormat = "$scores `q_off` `=` $q_offset `kv_off` `=` $kv_offset attr-dict `:` type($scores) `->` type($masked_scores)";
+  let hasVerifier = 1;
+}
+
+// Counter-based dropout for one score block. The absolute KV offset is an SSA
+// operand, preventing every loop iteration from replaying the first mask tile.
+def BlockDropoutOp : Op<Tessera_Attn_Dialect, "block_dropout", []> {
+  let summary = "Apply deterministic counter-based dropout to one score block";
+  let arguments = (ins
+    AnyType:$scores,
+    Index:$kv_offset,
+    F32Attr:$dropout_p,
+    I64Attr:$seed
+  );
+  let results = (outs AnyType:$masked_scores);
+  let assemblyFormat = "$scores `kv_off` `=` $kv_offset `p` `=` $dropout_p `seed` `=` $seed attr-dict `:` type($scores) `->` type($masked_scores)";
   let hasVerifier = 1;
 }

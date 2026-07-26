@@ -980,7 +980,8 @@ def emit_attention_backward_tile_ir(
       softcap = {float(softcap)!r} : f32,
       dropout_p = {float(dropout_p)!r} : f32, dropout_seed = {dropout_seed} : i64,
       route = "deterministic_direct",
-      deterministic = true, workspace_bytes = 0 : i64
+      deterministic = true, workspace_bytes = 0 : i64,
+      workspace_owner = "output_element"
     }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, {"!llvm.ptr, " * (3 + int(bias))}i64, i64, i64, i64, i64, i64, i64
     llvm.return
   }}

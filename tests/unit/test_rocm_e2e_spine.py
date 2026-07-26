@@ -397,7 +397,9 @@ def _fake_attention_graph_compile(tile_ir: str, *, tile_q: int, tile_kv: int):
 def _fake_attention_backward_compile(tile_ir: str):
     assert "tile.attention_kernel" in tile_ir
     assert "tile.attention_backward_kernel" in tile_ir
-    assert 'route = "deterministic_direct"' in tile_ir
+    assert 'route = "deterministic_split_reduced"' in tile_ir
+    assert 'workspace_owner = "program_launch"' in tile_ir
+    assert "reduction_order = array<i64: 0, 1>" in tile_ir
     libraries = (
         DeviceLibraryRecord("rocm.ocml", "1" * 64, "compiler_driver"),
         DeviceLibraryRecord("rocm.ockl", "2" * 64, "compiler_driver"),
@@ -583,10 +585,70 @@ def test_rocm_attention_backward_package_owns_ordered_multi_entry_workspace(
     assert program.descriptors[2].provenance["deterministic"] is True
 
 
-def test_rocm_attention_backward_optimized_contract_keeps_dropout_on_reference() -> None:
-    assert not supports_attention_backward(
-        _attention_backward_module(dropout_p=0.25)
+def test_rocm_attention_backward_optimized_contract_replays_dropout() -> None:
+    assert supports_attention_backward(_attention_backward_module(dropout_p=0.25))
+
+
+@pytest.mark.skipif(
+    os.environ.get("TESSERA_ROCM_E2E_DEVICE_TEST") != "1",
+    reason="set TESSERA_ROCM_E2E_DEVICE_TEST=1 on the exact gfx1151 host",
+)
+def test_exact_gfx1151_backward_replays_dropout_with_bias_softcap() -> None:
+    from tessera import runtime as tessera_runtime
+    from tessera.compiler.attention_contract import (
+        reference_attention_backward_split_reduced,
     )
+
+    module = _attention_backward_module(dropout_p=0.25)
+    module.functions[0].body[0].kwargs["dropout_seed"] = 37
+    program = package_attention_backward(
+        module, pipeline_name="tessera-lower-to-rocm"
+    )
+    rng = np.random.default_rng(20260727)
+    q = (rng.standard_normal((1, 4, 17, 64)) * 0.2).astype(np.float16)
+    key = (rng.standard_normal((1, 2, 19, 64)) * 0.2).astype(np.float16)
+    value = (rng.standard_normal((1, 2, 19, 64)) * 0.2).astype(np.float16)
+    do = (rng.standard_normal((1, 4, 17, 64)) * 0.2).astype(np.float16)
+    bias = (rng.standard_normal((1, 4, 17, 19)) * 0.05).astype(np.float32)
+    outputs = (
+        np.zeros((1, 4, 17, 64), dtype=np.float32),
+        np.zeros((1, 2, 19, 64), dtype=np.float32),
+        np.zeros((1, 2, 19, 64), dtype=np.float32),
+    )
+    result = tessera_runtime._submit_rocm_gfx1151_attention_backward_program(
+        program,
+        {
+            "do": do,
+            "q": q,
+            "key": key,
+            "v": value,
+            "bias": bias,
+            "dq": outputs[0],
+            "dk": outputs[1],
+            "dv": outputs[2],
+        },
+        warmup=2,
+        iterations=5,
+    )
+    expected = reference_attention_backward_split_reduced(
+        do,
+        q,
+        key,
+        value,
+        split_count=2,
+        scale=0.125,
+        bias=bias,
+        causal=True,
+        window_left=64,
+        window_right=0,
+        softcap=8.0,
+        dropout_p=0.25,
+        dropout_seed=37,
+    )
+    for actual, reference in zip(result["outputs"], expected, strict=True):
+        np.testing.assert_allclose(actual, reference, rtol=3e-2, atol=3e-2)
+    assert len(result["kernel_wall_samples_ms"]) == 5
+    assert all(sample > 0.0 for sample in result["kernel_wall_samples_ms"])
 
 
 def test_rocm_softmax_emitter_uses_shared_typed_envelope() -> None:

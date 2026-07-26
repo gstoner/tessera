@@ -3242,6 +3242,14 @@ def _submit_rocm_gfx1151_attention_backward_program(
         softcap = float(cast(float, provenance["softcap"]))
         if softcap > 0.0:
             tail.append(ctypes.c_float(softcap))
+        dropout_p = float(cast(float, provenance["dropout_p"]))
+        if dropout_p > 0.0:
+            tail.extend(
+                (
+                    ctypes.c_float(dropout_p),
+                    ctypes.c_int64(int(cast(int, provenance["dropout_seed"]))),
+                )
+            )
         bias_tail = (
             memref(device[bias_name], b * hq * sq * sk)
             if bias_name is not None

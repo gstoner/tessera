@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from tessera.compiler.attention_contract import (
+    attention_dropout_replay,
     plan_attention_backward_workspace,
     reference_attention_backward_split_reduced,
     reference_streaming_attention,
@@ -18,8 +19,16 @@ def _fixture():
     return do, q, key, value, bias
 
 
-def _dense_forward(q, key, value, bias):
+def _dense_forward(q, key, value, bias, *, dropout_p=0.0, dropout_seed=0):
     output = np.zeros((*q.shape[:3], value.shape[-1]), dtype=np.float32)
+    replay = attention_dropout_replay(
+        batch=q.shape[0],
+        query_heads=q.shape[1],
+        query_rows=q.shape[2],
+        key_rows=key.shape[2],
+        dropout_p=dropout_p,
+        seed=dropout_seed,
+    )
     for batch in range(q.shape[0]):
         for head in range(q.shape[1]):
             kv_head = head // (q.shape[1] // key.shape[1])
@@ -33,14 +42,26 @@ def _dense_forward(q, key, value, bias):
             weights = np.exp(scores - np.max(scores, axis=1, keepdims=True))
             weights = np.where(valid, weights, 0.0)
             weights /= np.sum(weights, axis=1, keepdims=True)
-            output[batch, head] = weights @ value[batch, kv_head]
+            output[batch, head] = (
+                weights * replay[batch, head]
+            ) @ value[batch, kv_head]
     return output
 
 
-def _dense_backward(do, q, key, value, bias):
+def _dense_backward(
+    do, q, key, value, bias, *, dropout_p=0.0, dropout_seed=0
+):
     dq = np.zeros_like(q)
     dk = np.zeros_like(key)
     dv = np.zeros_like(value)
+    replay = attention_dropout_replay(
+        batch=q.shape[0],
+        query_heads=q.shape[1],
+        query_rows=q.shape[2],
+        key_rows=key.shape[2],
+        dropout_p=dropout_p,
+        seed=dropout_seed,
+    )
     for batch in range(q.shape[0]):
         for head in range(q.shape[1]):
             kv_head = head // (q.shape[1] // key.shape[1])
@@ -55,13 +76,16 @@ def _dense_backward(do, q, key, value, bias):
             weights = np.exp(scores - np.max(scores, axis=1, keepdims=True))
             weights = np.where(valid, weights, 0.0)
             weights /= np.sum(weights, axis=1, keepdims=True)
-            output = weights @ value[batch, kv_head]
-            dp = do[batch, head] @ value[batch, kv_head].T
+            output_weights = weights * replay[batch, head]
+            output = output_weights @ value[batch, kv_head]
+            dp = (
+                do[batch, head] @ value[batch, kv_head].T
+            ) * replay[batch, head]
             delta = np.sum(output * do[batch, head], axis=1, keepdims=True)
             ds = weights * (dp - delta) * (1.0 - tanh * tanh)
             dq[batch, head] = 0.5 * (ds @ key[batch, kv_head])
             dk[batch, kv_head] += 0.5 * (ds.T @ q[batch, head])
-            dv[batch, kv_head] += weights.T @ do[batch, head]
+            dv[batch, kv_head] += output_weights.T @ do[batch, head]
     return dq, dk, dv
 
 
@@ -103,6 +127,73 @@ def test_split_reduced_backward_matches_dense_fixed_order_fixture(
     expected = _dense_backward(do, q, key, value, bias)
     for result, reference in zip(actual, expected, strict=True):
         np.testing.assert_allclose(result, reference, atol=2e-6)
+
+
+def test_forward_and_backward_replay_identical_dropout_with_combined_modifiers() -> None:
+    do, q, key, value, bias = _fixture()
+    kwargs = {
+        "scale": 0.5,
+        "bias": bias,
+        "causal": True,
+        "window_left": 3,
+        "window_right": 0,
+        "softcap": 2.0,
+        "dropout_p": 0.25,
+        "dropout_seed": 37,
+    }
+    actual_forward = reference_streaming_attention(
+        q, key, value, block_size=3, **kwargs
+    )
+    expected_forward = _dense_forward(
+        q,
+        key,
+        value,
+        bias,
+        dropout_p=0.25,
+        dropout_seed=37,
+    )
+    np.testing.assert_allclose(actual_forward, expected_forward, atol=2e-6)
+
+    actual_backward = reference_attention_backward_split_reduced(
+        do, q, key, value, split_count=3, **kwargs
+    )
+    expected_backward = _dense_backward(
+        do,
+        q,
+        key,
+        value,
+        bias,
+        dropout_p=0.25,
+        dropout_seed=37,
+    )
+    for result, reference in zip(
+        actual_backward, expected_backward, strict=True
+    ):
+        np.testing.assert_allclose(result, reference, atol=2e-6)
+
+
+def test_dropout_replay_is_tile_and_split_independent() -> None:
+    full = attention_dropout_replay(
+        batch=2,
+        query_heads=4,
+        query_rows=5,
+        key_rows=7,
+        dropout_p=0.25,
+        seed=37,
+    )
+    assert full.shape == (2, 4, 5, 7)
+    assert set(np.unique(full)) <= {0.0, np.float32(4.0 / 3.0)}
+    np.testing.assert_array_equal(
+        full,
+        attention_dropout_replay(
+            batch=2,
+            query_heads=4,
+            query_rows=5,
+            key_rows=7,
+            dropout_p=0.25,
+            seed=37,
+        ),
+    )
 
 
 def test_backward_workspace_owns_slices_and_fixed_reduction_order() -> None:

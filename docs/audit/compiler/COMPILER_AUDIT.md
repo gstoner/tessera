@@ -1384,8 +1384,9 @@ foundation rather than lowering attention as one whole-tensor sequence:
    loops, maps GQA heads before rank reduction, and reuses the one canonical
    KV-block recurrence. ROCm consumes this loop directly through gfx1151
    Target IR/runtime with SSA-owned LDS planning and exact-device proof. A
-   canonical shared split-workspace backward loop and direct Apple/NVIDIA
-   consumers remain open.
+   The launch carrier now verifies split-workspace ownership, block-loop
+   metadata, and ascending reduction order; tensor-valued shared backward
+   `scf.for` materialization and direct Apple/NVIDIA consumers remain open.
 5. Exact-device evidence is not transferable. NVIDIA SM120, Apple, and ROCm
    must each lower the shared contract into architecture-owned schedules and
    retain numerical, resource, cache, device-event, and end-to-end proof before
@@ -1393,18 +1394,19 @@ foundation rather than lowering attention as one whole-tensor sequence:
 
 ROCm consumes the canonical rank-4 KV-block loop directly for bias-free,
 non-softcap MHA/GQA, causal left-window, ragged, and deterministic-dropout
-forms. The combined bias+softcap path remains on the launch carrier until
-those modifiers gain shared recurrence semantics. Exact gfx1151 numerical and
-resident host-wall proof passed; canonical split-workspace backward IR remains
-open.
+forms. The shared oracle and ROCm WMMA paths now agree on
+`softcap(scale*QK^T + bias)` and its derivative. Backward replays the same
+logical counter in dP and dV, and exact gfx1151 combined-feature gradients plus
+resident wall timing pass. Direct shared-forward modifier ops and tensor-valued
+backward loop materialization remain open.
 
 Cross-backend sync `ROCM-E2E-ATTENTION-BACKWARD-2026-07-26` additionally maps
 the canonical launch-level backward carrier to one gfx1151 five-entry HSACO and
-a ROCm-owned deterministic split/reduced program workspace. This is direct
-Target-IR/runtime consumption of the carrier, with exact-device gradient and
-resident host-wall evidence. It does not implement the still-open shared
-canonical split-workspace backward loop, and no AMD workspace topology,
-schedule, timing, or selector state transfers to Apple or NVIDIA.
+a ROCm-owned deterministic split/reduced program workspace. The carrier now
+states launch ownership, split count, block-loop order, and fixed reduction
+order instead of claiming zero workspace. Exact-device dropout replay with
+combined bias+softcap gradients passes. Tensor-valued shared backward
+`scf.for` bodies remain open, and no AMD schedule or evidence transfers.
 
 > **Open items: #4 (fixture-backed numerical proof before conformance cells go
 > complete) and #5 (point specs at dashboards/this audit, not old root audits).**

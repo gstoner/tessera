@@ -8,6 +8,13 @@ last_updated: 2026-07-26
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `CORE-ATTENTION-BACKWARD-CONTRACT-2026-07-26` adds verified
+split count, launch-owned workspace, block-loop metadata, ascending reduction
+order, and canonical `softcap(scale*QK^T + bias)` semantics to the shared
+carrier/oracle. NVIDIA is **follow-up required** to consume this form through
+its SM120 schedule and validate dropout replay; AMD code and evidence do not
+transfer.
+
 Cross-backend sync `ROCM-E2E-ATTENTION-BACKWARD-2026-07-26` is not applicable
 to NVIDIA physical execution. It adds a ROCm-owned five-entry HSACO and
 gfx1151 split/reduced launch workspace without changing the shared launch

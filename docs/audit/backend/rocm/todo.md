@@ -72,9 +72,13 @@ compiler packaging is 961.303488 ms. The resident value is now the WSL
 host-wall regression baseline with a 10% cap, not selector-eligible
 device-event evidence. A fresh 21-sample ratchet run records 0.391975 ms,
 below the 0.405023 ms cap, with the same gradient errors. Direct LDS-pipelined
-canonical forward consumption lands in the follow-up below; optimized backward
-dropout replay remains open, with the scalar backward carrier as its semantic
-reference.
+canonical forward consumption lands in the follow-up below. Backward now
+replays the forward `lcg32_counter_v1` mask in dP and dV without storing it.
+Exact ragged-GQA bias+softcap+window+dropout errors are 2.48e-05, 3.52e-05,
+and 3.30e-04 for dQ/dK/dV. A 5-warmup/21-sample resident run records
+0.377553 ms against the 0.368203 ms baseline and 0.405023 ms cap; its
+86,232-byte HSACO retains the 37,888-byte workspace. WSL host-wall timing
+remains selector-ineligible.
 
 Cross-backend sync `CORE-STREAMING-ATTN-RANK4-ROCM-2026-07-26` is **landing**
 under `CORE-STREAMING-ATTN-2026-07-26`. Shared lowering now distributes static
@@ -96,8 +100,11 @@ resident `hipModuleLaunchKernel` + `hipDeviceSynchronize` wall samples record a
 is 167.533902 ms, and packaging is 328.384463 ms. These WSL host-wall values
 remain non-selector evidence. The checked-in packet is
 `benchmarks/baselines/rocm_gfx1151_canonical_streaming_attention.json`.
-Canonical split-workspace backward IR and shared bias/softcap recurrence
-semantics remain open.
+The backward carrier now verifies launch-owned workspace, split count,
+16-row query/KV blocks, and ascending reduction order. Shared numerical
+semantics and ROCm WMMA forward/LSE/gradient recomputation agree on
+`softcap(scale*QK^T + bias)`. Tensor-valued shared backward `scf.for`
+materialization and direct shared-forward bias/softcap ops remain open.
 
 Cross-backend sync `ROCM-SSA-LDS-PIPELINE-2026-07-26` is **complete** under the
 ROCm follow-up to `NVIDIA-PACKED-SSA-FOUNDATION-2026-07-25`. The
@@ -306,7 +313,7 @@ evidence and not evidence for any sibling architecture.
 | ROCM-TEST-1 | complete | The ROCm-only LLVM/MLIR 23 build owns a 27-node host-free compiler lane; 27/27 pass with Apple/NVIDIA/CPU ownership excluded and foreign pipeline absence retained in the report. |
 | ROCM-DTYPE-1 | complete on gfx1151 | FP64 and integer widths have per-operation Target-IR/runtime assessments; unsigned LLVM probes pass without inventing unsigned storage ABIs; signed int4 is canonical and physically packed; gfx1151 FP8/BF8 is rejected by name. |
 | ROCM-SSA-LDS | complete | AMD async-copy, waitcnt, and matrix consumers use shared SSA allocation, token, and pipeline-state identity; compatibility readers are retired, shared/ROCm fixtures are SSA-only, host structural and compiler-benchmark gates pass, while exact-device performance remains intentionally unclaimed. |
-| ROCM-E2E-ATTENTION | landing | Forward canonical attention owns exact gfx1151 WMMA packaging/launch/oracle/timing, including direct rank-4 KV-loop consumption for the shared bias-free/non-softcap recurrence and compatibility-carrier coverage for deterministic dropout plus combined bias+softcap on ragged GQA/window cases. Backward owns one compiler-generated five-entry HSACO, deterministic split/reduced workspace, exact gradients, and a resident program-wall ratchet. Canonical backward IR, shared bias/softcap recurrence semantics, and backward dropout replay remain open. |
+| ROCM-E2E-ATTENTION | landing | Forward owns exact gfx1151 WMMA packaging/launch/oracle/timing. Backward exposes launch-owned split/reduced loop metadata, shares bias-before-softcap semantics, replays deterministic dropout in dP/dV, and passes an exact combined-feature oracle plus resident ratchet. Tensor-valued shared backward loops and direct shared-forward bias/softcap ops remain open. |
 
 ## Recommended open-work order
 
@@ -316,7 +323,7 @@ named exact device can satisfy an execution gate.
 
 | Order | ID | Work | Access state | Completion gate |
 |---:|---|---|---|---|
-| 0 | ROCM-E2E-ATTENTION | Complete the canonical attention family | local WSL compiler and gfx1151 available | Add the canonical split-workspace backward IR loop, shared bias/softcap recurrence semantics, and deterministic backward dropout replay while retaining the exact-device forward/backward numerical and performance ratchets. |
+| 0 | ROCM-E2E-ATTENTION | Complete the canonical attention family | local WSL compiler and gfx1151 available | Lower verified split/workspace metadata into tensor-valued shared backward `scf.for` bodies and move bias/softcap into the direct shared forward recurrence while retaining exact-device ratchets. |
 | 1 | ROCM-2 | Run the common P0 packet on Radeon AI PRO R9700 `gfx1201` | owner and reservation required | RDNA 4 WMMA-v2 f16/bf16 plus enabled FP8/integer forms assemble, launch, match aligned/ragged oracles, and record resources and timing. |
 | 2 | ROCM-1 | Run the common P0 packet on MI350-series `gfx950` | owner and reservation required | CDNA 4 matmul, flash attention, softmax, and GELU launch and compare; low-precision breadth advances only with physical-layout proof. |
 | 3 | ROCM-3 | Run the common P0 packet on MI455X `gfx1250` | owner and reservation required | The upstream-LLVM artifact joins to a launch/numerical proof; WMMA-v2 properties and fragment layout match the device. |

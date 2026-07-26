@@ -282,16 +282,11 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
       Value qi = add(ci(2 * e), half);
       Value gk = add(k0, l15);
       Value v0 = b.create<arith::MulFOp>(loc, csv, scale);
-      // Gemma-2 logit soft-cap: cap * tanh(v0 / cap), before masking.
-      if (softcap) {
-        Value scaled = b.create<arith::DivFOp>(loc, v0, cap);
-        Value t = b.create<math::TanhOp>(loc, scaled);
-        v0 = b.create<arith::MulFOp>(loc, cap, t);
-      }
       Value gkOOB = b.create<arith::CmpIOp>(loc, sge, gk, Sk);
       Value qpos = add(q0, qi);
-      // Additive bias: bias[(bh*Sq + qpos)*Sk + gk] on the scaled score (after
-      // soft-cap, before masking). Guarded on the query bound so masked lanes
+      // Additive bias is part of the raw logit. The shared recurrence is
+      // softcap(scale*QK^T + bias), so combined bias+softcap has one derivative
+      // contract on every backend. Guarded on the query bound so masked lanes
       // never read past the [bh,Sq,Sk] buffer; the value is discarded by the
       // -inf select below anyway.
       if (bias) {
@@ -301,6 +296,12 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
         Value bidx = add(mul(add(mul(bh, Sq), qSafe), Sk), kSafe);
         Value bval = b.create<memref::LoadOp>(loc, biasBuf, ValueRange{bidx});
         v0 = b.create<arith::AddFOp>(loc, v0, bval);
+      }
+      // Gemma-2 logit soft-cap: cap * tanh((scale*QK^T + bias) / cap).
+      if (softcap) {
+        Value scaled = b.create<arith::DivFOp>(loc, v0, cap);
+        Value t = b.create<math::TanhOp>(loc, scaled);
+        v0 = b.create<arith::MulFOp>(loc, cap, t);
       }
       // Causal (future-key) mask — active when causal or windowed.
       Value cmask = b.create<arith::AndIOp>(

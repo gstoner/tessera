@@ -42,7 +42,15 @@ PROGRAM_WALL_MAX_REGRESSION = 0.10
 
 
 def _module(
-    b: int, hq: int, hkv: int, sq: int, sk: int, d: int
+    b: int,
+    hq: int,
+    hkv: int,
+    sq: int,
+    sk: int,
+    d: int,
+    *,
+    dropout_p: float,
+    dropout_seed: int,
 ) -> GraphIRModule:
     def tensor(shape: tuple[int, ...], dtype: str) -> IRType:
         element = {"fp16": "f16", "fp32": "f32"}[dtype]
@@ -89,7 +97,8 @@ def _module(
                             "causal": True,
                             "window": (8, 0),
                             "softcap": 8.0,
-                            "dropout_p": 0.0,
+                            "dropout_p": dropout_p,
+                            "dropout_seed": dropout_seed,
                             "route": "deterministic_direct",
                             "deterministic": True,
                         },
@@ -107,6 +116,9 @@ def _reference(
     key: np.ndarray,
     value: np.ndarray,
     bias: np.ndarray,
+    *,
+    dropout_p: float,
+    dropout_seed: int,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     return reference_attention_backward_split_reduced(
         do,
@@ -120,6 +132,8 @@ def _reference(
         window_left=8,
         window_right=0,
         softcap=8.0,
+        dropout_p=dropout_p,
+        dropout_seed=dropout_seed,
     )
 
 
@@ -130,6 +144,8 @@ def _record(
     result: dict[str, Any],
     max_abs_error: dict[str, float],
     image_bytes: int,
+    dropout_p: float,
+    dropout_seed: int,
 ) -> dict[str, Any]:
     samples = list(result["kernel_wall_samples_ms"])
     median_ms = statistics.median(samples)
@@ -140,6 +156,12 @@ def _record(
         "image_bytes": image_bytes,
         "entry_symbols": list(result["entry_symbols"]),
         "workspace_bytes": int(result["workspace_bytes"]),
+        "dropout": {
+            "probability": dropout_p,
+            "seed": dropout_seed,
+            "counter": "lcg32_counter_v1",
+            "replay": "forward_backward_identical",
+        },
         "max_abs_error": max_abs_error,
         "timing": {
             "compiler_package_ms": package_ms,
@@ -167,11 +189,15 @@ def main() -> int:
     parser.add_argument("--iterations", type=int, default=21)
     parser.add_argument("--warmup", type=int, default=5)
     parser.add_argument("--output")
+    parser.add_argument("--dropout-p", type=float, default=0.0)
+    parser.add_argument("--dropout-seed", type=int, default=37)
     args = parser.parse_args()
     if args.iterations <= 0:
         parser.error("--iterations must be positive")
     if args.warmup < 0:
         parser.error("--warmup must be nonnegative")
+    if not 0.0 <= args.dropout_p < 1.0:
+        parser.error("--dropout-p must satisfy 0 <= p < 1")
 
     shape = (1, 4, 2, 17, 19, 64)
     rng = np.random.default_rng(20260726)
@@ -186,7 +212,12 @@ def main() -> int:
 
     started = time.perf_counter()
     program = package_attention_backward(
-        _module(*shape), pipeline_name="tessera-lower-to-rocm"
+        _module(
+            *shape,
+            dropout_p=args.dropout_p,
+            dropout_seed=args.dropout_seed,
+        ),
+        pipeline_name="tessera-lower-to-rocm",
     )
     package_ms = (time.perf_counter() - started) * 1_000.0
     started = time.perf_counter()
@@ -206,7 +237,15 @@ def main() -> int:
         iterations=args.iterations,
     )
     operation_total_ms = (time.perf_counter() - started) * 1_000.0
-    reference = _reference(do, q, key, value, bias)
+    reference = _reference(
+        do,
+        q,
+        key,
+        value,
+        bias,
+        dropout_p=args.dropout_p,
+        dropout_seed=args.dropout_seed,
+    )
     errors = {
         name: float(np.max(np.abs(actual - expected)))
         for name, actual, expected in zip(
@@ -219,6 +258,8 @@ def main() -> int:
         result=result,
         max_abs_error=errors,
         image_bytes=len(program.image.payload),
+        dropout_p=args.dropout_p,
+        dropout_seed=args.dropout_seed,
     )
     text = json.dumps(record, indent=2, sort_keys=True)
     if args.output:

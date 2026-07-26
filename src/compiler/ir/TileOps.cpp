@@ -1267,15 +1267,53 @@ LogicalResult AttentionBackwardKernelOp::verify() {
     return emitOpError("requires finite dropout_p in [0, 1)");
   if (!dropoutSeed)
     return emitOpError("requires an explicit dropout_seed");
-  if (!route || route.getValue() != "deterministic_direct")
-    return emitOpError("canonical materializer requires route=\"deterministic_direct\"");
+  if (!route)
+    return emitOpError("requires an explicit backward route");
   if (!deterministic || !deterministic.getValue())
-    return emitOpError("deterministic_direct requires deterministic=true");
-  if (!workspace || workspace.getInt() != 0)
-    return emitOpError("deterministic_direct requires workspace_bytes=0");
-  if (!workspaceOwner || workspaceOwner.getValue() != "output_element")
+    return emitOpError("attention backward requires deterministic=true");
+  if (!workspace || !workspaceOwner)
+    return emitOpError("requires explicit workspace_bytes/workspace_owner");
+  if (route.getValue() == "deterministic_direct") {
+    if (workspace.getInt() != 0)
+      return emitOpError("deterministic_direct requires workspace_bytes=0");
+    if (workspaceOwner.getValue() != "output_element")
+      return emitOpError(
+          "deterministic_direct requires workspace_owner=\"output_element\"");
+    return success();
+  }
+  if (route.getValue() != "deterministic_split_reduced")
     return emitOpError(
-        "deterministic_direct requires workspace_owner=\"output_element\"");
+        "route must be \"deterministic_direct\" or "
+        "\"deterministic_split_reduced\"");
+  if (workspace.getInt() <= 0 ||
+      workspaceOwner.getValue() != "program_launch")
+    return emitOpError(
+        "deterministic_split_reduced requires positive launch-owned workspace");
+  auto splitCount =
+      getOperation()->getAttrOfType<IntegerAttr>("split_count");
+  auto reductionOrder =
+      getOperation()->getAttrOfType<DenseI64ArrayAttr>("reduction_order");
+  auto queryBlock =
+      getOperation()->getAttrOfType<IntegerAttr>("query_block");
+  auto keyBlock =
+      getOperation()->getAttrOfType<IntegerAttr>("key_block");
+  auto loopOrder = getOperation()->getAttrOfType<ArrayAttr>("loop_order");
+  if (!splitCount || splitCount.getInt() < 2)
+    return emitOpError("split/reduced route requires split_count >= 2");
+  if (!reductionOrder ||
+      reductionOrder.size() != splitCount.getInt())
+    return emitOpError(
+        "split/reduced route requires one reduction_order entry per split");
+  for (auto [index, value] : llvm::enumerate(reductionOrder.asArrayRef()))
+    if (value != static_cast<int64_t>(index))
+      return emitOpError(
+          "split/reduced partials must reduce in ascending split order");
+  if (!queryBlock || queryBlock.getInt() <= 0 ||
+      !keyBlock || keyBlock.getInt() <= 0)
+    return emitOpError("split/reduced route requires positive block sizes");
+  if (!loopOrder || loopOrder.size() != 5)
+    return emitOpError(
+        "split/reduced route requires five-level canonical loop_order");
   return success();
 }
 

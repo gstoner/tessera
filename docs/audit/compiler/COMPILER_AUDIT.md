@@ -1396,6 +1396,14 @@ ROCm forward feature-combination sub-gate only; direct consumption of the
 canonical KV-block loop, rank-4 shared distribution, and canonical
 split-workspace backward remain open.
 
+Cross-backend sync `ROCM-E2E-ATTENTION-BACKWARD-2026-07-26` additionally maps
+the canonical launch-level backward carrier to one gfx1151 five-entry HSACO and
+a ROCm-owned deterministic split/reduced program workspace. This is direct
+Target-IR/runtime consumption of the carrier, with exact-device gradient and
+resident host-wall evidence. It does not implement the still-open shared
+canonical split-workspace backward loop, and no AMD workspace topology,
+schedule, timing, or selector state transfers to Apple or NVIDIA.
+
 > **Open items: #4 (fixture-backed numerical proof before conformance cells go
 > complete) and #5 (point specs at dashboards/this audit, not old root audits).**
 > Items #1, #2, #3, and #6 have **landed** — they are kept below (struck through)

@@ -872,7 +872,22 @@ struct GenerateWMMAFlashAttnBwdKernelPass
         }
       }
 
-      auto gpuMod = b.create<gpu::GPUModuleOp>(loc, kname + "_mod");
+      // A self-contained attention program runs the forward generator first.
+      // Reuse its GPU module so gpu-module-to-binary serializes one HSACO with
+      // every forward/backward entry. Standalone backward compilation still
+      // creates its own module.
+      gpu::GPUModuleOp gpuMod;
+      for (gpu::GPUModuleOp candidate : module.getOps<gpu::GPUModuleOp>()) {
+        if (gpuMod) {
+          op->emitError(
+              "generate-wmma-flash-attn-bwd-kernel requires at most one "
+              "existing gpu.module for multi-entry packaging");
+          return signalPassFailure();
+        }
+        gpuMod = candidate;
+      }
+      if (!gpuMod)
+        gpuMod = b.create<gpu::GPUModuleOp>(loc, kname + "_mod");
       b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
       Type f32 = b.getF32Type();
       Type idxTy = b.getIndexType();

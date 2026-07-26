@@ -724,6 +724,27 @@ LogicalResult MatmulKernelOp::verify() {
     return emitOpError("staging must be global or shared");
   if (staging == "shared" && warps != 4)
     return emitOpError("shared staging currently requires four warps");
+  if (auto canonical =
+          getOperation()->getAttrOfType<BoolAttr>("tessera.canonical_k_loop");
+      canonical && canonical.getValue()) {
+    auto tileM = getOperation()->getAttrOfType<IntegerAttr>("tessera.tile_m");
+    auto tileN = getOperation()->getAttrOfType<IntegerAttr>("tessera.tile_n");
+    auto tileK = getOperation()->getAttrOfType<IntegerAttr>("tessera.tile_k");
+    if (!tileM || !tileN || !tileK)
+      return emitOpError(
+          "canonical K-loop requires tessera.tile_m, tessera.tile_n, and "
+          "tessera.tile_k");
+    if (tileM.getInt() <= 0 || tileN.getInt() <= 0 || tileK.getInt() <= 0)
+      return emitOpError("canonical K-loop tile sizes must be positive");
+    if (tileM.getInt() != desc.getM() || tileN.getInt() != desc.getN() ||
+        tileK.getInt() != desc.getK())
+      return emitOpError(
+          "canonical K-loop tile sizes must match the physical MMA descriptor");
+    if (desc.getAccType() != "f32" && desc.getAccType() != "s32" &&
+        desc.getAccType() != "int32" && desc.getAccType() != "f64")
+      return emitOpError(
+          "canonical K-loop requires FP32, INT32, or FP64 accumulation");
+  }
   return success();
 }
 

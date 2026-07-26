@@ -297,7 +297,7 @@ Target IR spec: `docs/spec/TARGET_IR_SPEC.md §6`.
 EffectAnnotationPass
 → CanonicalizeTesseraIRPass
 → DistributionLoweringPass
-→ TilingPass        (--tile-m, --tile-n)
+→ TilingPass        (--tile-m, --tile-n, --tile-k)
 → TileToX86Pass     (--prefer-amx)
 ```
 

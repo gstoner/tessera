@@ -383,12 +383,17 @@ func.func @step(%a: tensor<128x256xbf16>) attributes {tessera.effect = "memory"}
 
 **File:** `src/transforms/lib/TilingPass.cpp`  
 **CLI flag:** `--tessera-tiling`  
-**Pass options:** `--tile-m=<int>`, `--tile-n=<int>`  
+**Pass options:** `--tile-m=<int>`, `--tile-n=<int>`, `--tile-k=<int>`
 **Pipeline position:** 4 (x86 pipeline only)
 
 #### Purpose
 
-Tiles `tessera.matmul` ops into `scf.for` loop nests over the M and N output dimensions. Prepares matmul ops for x86 backend lowering by `TileToX86Pass`. Only ops with statically-shaped ranked tensor operands are tiled; dynamic or unranked ops are left unchanged.
+Tiles `tessera.matmul` ops into `scf.for` loop nests over M, N, and the K
+reduction. The K loop carries an FP32 or INT32 accumulator and an SSA pipeline
+state. Static logical shapes are zero-padded to physical tile multiples, making
+ragged M/N/K tails explicit and every physical slice in-bounds. Dynamic,
+transposed, or unsupported accumulator forms are left unchanged for a later
+target-specific gate.
 
 #### Pass options
 
@@ -396,27 +401,38 @@ Tiles `tessera.matmul` ops into `scf.for` loop nests over the M and N output dim
 |--------|------|---------|-------------|
 | `--tile-m` | `int` | `16` | M-dimension tile size (rows per outer loop step). |
 | `--tile-n` | `int` | `16` | N-dimension tile size (cols per outer loop step). |
+| `--tile-k` | `int` | `16` | K-reduction tile size (lanes per reduction step). |
 
 #### Input IR contract
 
 - `tessera.matmul` ops in function bodies (inside or outside `schedule.mesh.region`).
-- Operands must be statically-shaped ranked tensors to be tiled.
+- Operands must be non-transposed, statically-shaped rank-2 tensors.
+- The result element type must be FP32 or INT32.
 
 #### Output IR contract
 
 - Each `tessera.matmul %A, %B : tensor<MxKxeT>, tensor<KxNxeT> -> tensor<MxNxeT>` replaced by:
   ```mlir
-  %init = tensor.empty() : tensor<MxNxeT>
-  %C = scf.for %i = 0 to M step tile_m iter_args(%acc0 = %init) {
-    %C1 = scf.for %j = 0 to N step tile_n iter_args(%acc1 = %acc0) {
-      %a_sl = tensor.extract_slice %A[%i, 0][tile_m, K][1, 1]
-      %b_sl = tensor.extract_slice %B[0, %j][K, tile_n][1, 1]
-      %c_sl = tessera.matmul %a_sl, %b_sl
-      %acc2 = tensor.insert_slice %c_sl into %acc1[%i, %j][tile_m, tile_n][1,1]
-      scf.yield %acc2
+  %init = arith.constant dense<0> : tensor<MpadxNpadxaccT>
+  %Cpad = scf.for %i = 0 to Mpad step tile_m iter_args(%acc0 = %init) {
+    %C1 = scf.for %j = 0 to Npad step tile_n iter_args(%acc1 = %acc0) {
+      %state = tile.pipeline_init {...} : !tile.pipeline_state
+      %C2, %next_state = scf.for %k = 0 to Kpad step tile_k
+          iter_args(%acc2 = %acc1, %s = %state)
+          -> (tensor<MpadxNpadxaccT>, !tile.pipeline_state) {
+        %a_sl = tensor.extract_slice %Apad[%i, %k][tile_m, tile_k][1, 1]
+        %b_sl = tensor.extract_slice %Bpad[%k, %j][tile_k, tile_n][1, 1]
+        %partial = tessera.matmul %a_sl, %b_sl
+        %next = tessera.add %old, %partial
+        %acc3 = tensor.insert_slice %next into %acc2[...]
+        %s2 = tile.pipeline_advance %s, %next
+        scf.yield %acc3, %s2
+      }
+      scf.yield %C2
     }
     scf.yield %C1
   }
+  %C = tensor.extract_slice %Cpad[0, 0][M, N][1, 1]
   ```
 - `tessera.matmul` ops with dynamic shapes are left unchanged.
 - Ops other than `tessera.matmul` (e.g. `tessera.flash_attn`, `tessera.fused_epilogue`) are untouched.
@@ -424,7 +440,10 @@ Tiles `tessera.matmul` ops into `scf.for` loop nests over the M and N output dim
 #### Invariants
 
 - All statically-shaped `tessera.matmul` ops have been expanded into tiled loops.
-- Tile sizes are always divisors of the static dimensions (if not, the last tile may be smaller — boundary handling is implicit in `tensor.extract_slice`).
+- Physical tile sizes divide padded dimensions; zero padding is the explicit
+  boundary policy for ragged M/N/K.
+- Inner matmul steps carry `tessera.tile_m/n/k`,
+  `tessera.canonical_k_step`, and `tessera.ragged_zero_pad`.
 
 ---
 

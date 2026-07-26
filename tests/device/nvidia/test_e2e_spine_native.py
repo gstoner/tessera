@@ -455,6 +455,9 @@ def test_canonical_sm120_request_packages_registers_launches_and_compares(shape)
     assert "static_shared_memory_bytes" in bundle.native_image.resource_record.metrics
     assert bundle.launch_descriptor is not None
     assert "tile.matmul_kernel" in bundle.tile.text
+    assert "tessera.canonical_k_loop = true" in bundle.tile.text
+    assert "tessera.tile_k = 16 : i64" in bundle.tile.text
+    assert "scf.for" in bundle.target_ir.text
     assert "nvvm.mma.sync" in bundle.target_ir.text
     assert ".visible .entry tessera_tile_matmul_shared_f16" in bundle.backend.text
 
@@ -517,6 +520,9 @@ def test_canonical_sm120_bf16_packages_launches_and_compares(shape) -> None:
     assert bundle.launch_descriptor.buffers[0].dtype == "bf16"
     assert bundle.launch_descriptor.provenance["storage"] == "bf16"
     assert "tile.matmul_kernel" in bundle.tile.text
+    assert "tessera.canonical_k_loop = true" in bundle.tile.text
+    assert "tessera.tile_k = 16 : i64" in bundle.tile.text
+    assert "scf.for" in bundle.target_ir.text
     assert "__tessera_sm120_ab_stage_bf16" in bundle.target_ir.text
     assert "nvvm.mma.sync" in bundle.target_ir.text
     assert ".visible .entry tessera_tile_matmul_shared_bf16" in bundle.backend.text
@@ -540,6 +546,92 @@ def test_canonical_sm120_bf16_packages_launches_and_compares(shape) -> None:
     assert result["ok"] is True, result.get("reason")
     reference = a.astype(np.float32) @ b.astype(np.float32)
     np.testing.assert_allclose(c, reference, atol=4e-2, rtol=3e-3)
+
+
+@pytest.mark.hardware_nvidia
+@pytest.mark.parametrize(
+    "shape",
+    [
+        (256, 256, 256),  # square
+        (128, 384, 256),  # rectangular
+        (128, 192, 263),  # ragged K
+        (131, 197, 269),  # M/N/K fragment-misaligned
+    ],
+)
+@pytest.mark.parametrize("storage", ["fp16", "bf16", "tf32"])
+def test_canonical_sm120_k_loop_shape_matrix(storage, shape) -> None:
+    if not nvidia_cuda_host_ready():
+        pytest.skip("host WSL CUDA device/toolchain unavailable")
+    ml_dtypes = pytest.importorskip("ml_dtypes")
+    m, n, k = shape
+    module = _module(m, n, k, storage=storage)
+    options = {"package_native": True}
+    if storage in {"fp16", "bf16"}:
+        options["nvidia_schedule"] = "shared"
+    bundle = compile_graph_module(
+        module,
+        source_origin="CORE-GEMM-KLOOP-2026-07-25",
+        target="nvidia_sm120",
+        options=options,
+        enable_tool_validation=False,
+    )
+    assert bundle.native_image is not None
+    assert bundle.native_image.resource_record is not None
+    assert bundle.launch_descriptor is not None
+    expected_k = 8 if storage == "tf32" else 16
+    assert "tessera.canonical_k_loop = true" in bundle.tile.text
+    assert "a = " in bundle.tile.text and 'acc = "f32"' in bundle.tile.text
+    assert f"tessera.tile_k = {expected_k} : i64" in bundle.tile.text
+    assert 'epilogue = #tile.epilogue<bias = false, activation = "none", output = "f32">' in bundle.tile.text
+    assert "scf.for" in bundle.target_ir.text
+    metrics = bundle.native_image.resource_record.metrics
+    assert metrics["spill_store_bytes"] == 0
+    assert metrics["spill_load_bytes"] == 0
+    assert "registers_per_thread" in metrics
+    live_resources = _nvidia_native_descriptor_resources(
+        bundle.native_image,
+        bundle.launch_descriptor,
+        block_size=32 if storage == "tf32" else 128,
+    )
+    assert live_resources["active_blocks_per_sm"] > 0
+    assert live_resources["local_memory_bytes"] == 0
+
+    warm = compile_graph_module(
+        module,
+        source_origin="CORE-GEMM-KLOOP-2026-07-25",
+        target="nvidia_sm120",
+        options=options,
+        enable_tool_validation=False,
+    )
+    assert warm.native_image is not None
+    assert warm.native_image.compile_state == "warm_cache"
+    assert warm.native_image.image_digest == bundle.native_image.image_digest
+    assert warm.launch_descriptor == bundle.launch_descriptor
+
+    numpy_dtype = {
+        "fp16": np.float16,
+        "bf16": ml_dtypes.bfloat16,
+        "tf32": np.float32,
+    }[storage]
+    rng = np.random.default_rng(120_725 + m + n + k)
+    # Offset the base allocation by one logical element for the fully
+    # fragment-misaligned row while retaining a valid contiguous ABI.
+    a_backing = np.empty(m * k + 1, dtype=numpy_dtype)
+    a = a_backing[1:].reshape(m, k)
+    a[...] = (rng.standard_normal((m, k)) * 0.125).astype(numpy_dtype)
+    b_backing = np.empty(k * n + 1, dtype=numpy_dtype)
+    b = b_backing[1:].reshape((k, n), order="F")
+    b[...] = (rng.standard_normal((k, n)) * 0.125).astype(numpy_dtype)
+    c = np.zeros((m, n), dtype=np.float32)
+    artifact = compile_result_from_bundle(bundle, module=module).to_runtime_artifact()
+    result = launch(
+        artifact,
+        {"a": a, "b": b, "c": c, "M": m, "N": n, "K": k},
+    )
+    assert result["ok"] is True, result.get("reason")
+    reference = a.astype(np.float32) @ b.astype(np.float32)
+    atol = {"fp16": 3e-2, "bf16": 6e-2, "tf32": 3e-2}[storage]
+    np.testing.assert_allclose(c, reference, atol=atol, rtol=4e-3)
 
 
 @pytest.mark.hardware_nvidia
@@ -579,6 +671,10 @@ def test_canonical_sm120_tf32_fp8_packages_launches_and_compares(
     }[storage]
     assert bundle.launch_descriptor.provenance["storage"] == physical
     assert bundle.launch_descriptor.provenance["schedule"] == "direct"
+    if storage == "tf32":
+        assert "tessera.canonical_k_loop = true" in bundle.tile.text
+        assert "tessera.tile_k = 8 : i64" in bundle.tile.text
+        assert "scf.for" in bundle.target_ir.text
     assert f"tessera_tile_matmul_direct_{physical}" in bundle.backend.text
 
     rng = np.random.default_rng(120_032 + k)

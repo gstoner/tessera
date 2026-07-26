@@ -7,6 +7,16 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `CORE-GEMM-KLOOP-2026-07-25` changes the shared
+Graph/Schedule→Tile GEMM contract to explicit M/N/K `scf.for`, FP32/INT32
+loop-carried accumulation, zero-pad ragged guards, structured layouts, and SSA
+pipeline dependencies. ROCm is **follow-up required** to consume that loop
+through its architecture-owned WMMA/MFMA and LDS/waitcnt/barrier lowering.
+NVIDIA MMA fragment sizes, PTX, SM120 resources, CUDA cache identity, timings,
+and selector evidence do not transfer to gfx1151 or another AMD target. No ROCm
+capability, execution state, schedule, or selector changes in this
+synchronization slice.
+
 Cross-backend sync `COMPILER-LIT-BACKEND-GATING-2026-07-24`: retired seven
 never-runnable ROCm 7.2 pseudo-IR fixtures whose undefined
 `tessera_opt_built` feature masked a nonexistent global target flag,

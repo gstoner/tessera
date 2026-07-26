@@ -1266,12 +1266,19 @@ static LogicalResult materializeSm120MatmulKernel(
 
   Value zeroI64 = i64Constant(builder, loc, 0);
   Value sixteen = i64Constant(builder, loc, 16);
+  int64_t canonicalTileK = 16;
+  if (auto canonical =
+          op->getAttrOfType<BoolAttr>("tessera.canonical_k_loop");
+      canonical && canonical.getValue())
+    canonicalTileK =
+        op->getAttrOfType<IntegerAttr>("tessera.tile_k").getInt();
+  Value kStep = i64Constant(builder, loc, canonicalTileK);
   Value zeroF32 = arith::ConstantFloatOp::create(
       builder, loc, builder.getF32Type(), APFloat(0.0f));
   // A shared-staged warp computes two adjacent m16n8 fragments so each pair of
   // CTA barriers is amortized over eight MMA instructions rather than four.
   SmallVector<Value> init(sharedStaging ? 8 : 4, zeroF32);
-  auto loop = scf::ForOp::create(builder, loc, zeroI64, k, sixteen, init);
+  auto loop = scf::ForOp::create(builder, loc, zeroI64, k, kStep, init);
   {
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointToStart(loop.getBody());

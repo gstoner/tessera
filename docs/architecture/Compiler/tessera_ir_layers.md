@@ -148,7 +148,7 @@ schedule.pipeline.region {schedule = "gpipe", micro_batches = 1} {
 
 | Pass | Role |
 |------|------|
-| `TilingPass` | `tessera.matmul` → `scf.for` M×N loops over `tensor.extract_slice` |
+| `TilingPass` | `tessera.matmul` → M×N×K `scf.for` with FP32/INT32 accumulator, ragged zero padding, and SSA pipeline state |
 | `TileToX86Pass` | Tiled matmul → `func.call @tessera_x86_amx_gemm_bf16(...)` |
 
 **Normative reference:** [`docs/spec/LOWERING_PIPELINE_SPEC.md`](../../spec/LOWERING_PIPELINE_SPEC.md)

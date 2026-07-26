@@ -171,6 +171,10 @@ def test_sm120_f16_native_packager_owns_typed_tile_kernel() -> None:
     assert "tile.matmul_kernel" in source
     assert 'a = "f16", b = "f16", acc = "f32"' in source
     assert 'warps = 4 : i64, staging = "shared"' in source
+    assert "tessera.canonical_k_loop = true" in source
+    assert "tessera.tile_m = 16 : i64" in source
+    assert "tessera.tile_n = 8 : i64" in source
+    assert "tessera.tile_k = 16 : i64" in source
     assert "llvm.func @tessera_tile_matmul_shared_f16" in source
 
 
@@ -185,6 +189,8 @@ def test_sm120_bf16_uses_same_canonical_seam_with_distinct_abi_storage() -> None
     )
     assert 'a = "bf16", b = "bf16", acc = "f32"' in source
     assert 'warps = 4 : i64, staging = "shared"' in source
+    assert "tessera.canonical_k_loop = true" in source
+    assert "tessera.tile_k = 16 : i64" in source
     with pytest.raises(ValueError, match="canonical matmul storage"):
         emit_matmul_tile_ir(entry="bad", storage="fp6")
 
@@ -199,6 +205,8 @@ def test_sm120_tf32_and_fp8_use_explicit_physical_storage_contracts() -> None:
         schedule="direct",
     )
     assert 'k = 8, a = "tf32", b = "tf32", acc = "f32"' in tf32_tile
+    assert "tessera.canonical_k_loop = true" in tf32_tile
+    assert "tessera.tile_k = 8 : i64" in tf32_tile
     for dtype, physical in (("fp8_e4m3", "e4m3"), ("fp8_e5m2", "e5m2")):
         assert supports_fp8_matmul(_matmul_module(dtype))
         source = emit_matmul_tile_ir(
@@ -207,6 +215,7 @@ def test_sm120_tf32_and_fp8_use_explicit_physical_storage_contracts() -> None:
             schedule="direct",
         )
         assert f'k = 32, a = "{physical}", b = "{physical}"' in source
+        assert "tessera.canonical_k_loop" not in source
     with pytest.raises(ValueError, match="requires direct schedule"):
         emit_matmul_tile_ir(entry="bad", storage="e4m3", schedule="shared")
 
@@ -218,6 +227,7 @@ def test_sm120_tf32_and_fp8_use_explicit_physical_storage_contracts() -> None:
     )
     assert 'k = 32, a = "s8", b = "s8", acc = "s32"' in int8_tile
     assert 'output = "i32"' in int8_tile
+    assert "tessera.canonical_k_loop" not in int8_tile
 
     assert supports_fp64_matmul(_matmul_module("fp64"))
     fp64_tile = emit_matmul_tile_ir(
@@ -227,6 +237,7 @@ def test_sm120_tf32_and_fp8_use_explicit_physical_storage_contracts() -> None:
     )
     assert 'm = 8, n = 8, k = 4, a = "f64", b = "f64", acc = "f64"' in fp64_tile
     assert 'output = "f64"' in fp64_tile
+    assert "tessera.canonical_k_loop" not in fp64_tile
 
 
 def _softmax_module(

@@ -8,6 +8,14 @@ last_updated: 2026-07-26
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+The ROCm optimized-attention feature follow-up under
+`ROCM-E2E-ATTENTION-CARRIERS-2026-07-26` adds AMD-only deterministic dropout
+replay and combined bias+softcap consumption to the gfx1151 WMMA schedule,
+plus a host-wall resident performance ratchet. It changes no shared carrier,
+ABI, NVIDIA Target IR, CUDA schedule, capability, or selector. NVIDIA parity
+at the semantic carrier remains validated independently; AMD counter code,
+HSACO evidence, and WSL timing do not transfer.
+
 Cross-backend sync `ROCM-E2E-ATTENTION-CARRIERS-2026-07-26` lands an
 AMD-owned consumer, native HSACO package, descriptor, and exact gfx1151 proof
 for the already-shared `tile.attention_kernel` contract, plus a direct

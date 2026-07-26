@@ -14,8 +14,11 @@ survivor. A dynamic correctness-first FP32 recurrence covers runtime
 B/Hq/Hkv/Sq/Sk/D/Dv, GQA, causal/window masks, additive bias, softcap, dropout
 replay, ragged tails, and deterministic output-element-owned backward
 reductions. Static equal head/value buckets divisible by 16, f16/bf16 storage,
-zero dropout, and the supported causal-window envelope select the existing
-gfx1151 WMMA physical schedule; Sq/Sk remain runtime values. Compiler-owned
+and the supported causal-window envelope select the existing gfx1151 WMMA
+physical schedule; Sq/Sk remain runtime values. The optimized schedule now
+composes nonzero dropout with deterministic counter replay and combined
+additive bias plus softcap; ragged GQA/MQA and causal/window masks remain on
+that path. Compiler-owned
 native packaging and the launch descriptor now join that forward carrier to an
 HSACO and HIP submission. Exact gfx1151 evidence for B=1, Hq/Hkv=4/2,
 Sq/Sk=17/19, D=64 records a 20,440-byte image, 8.44e-05 maximum absolute error,
@@ -29,9 +32,14 @@ the 2.312196 ms operation-total median; the cold operation-total sample is
 domains under WSL, and the resident domain explicitly excludes module load,
 allocation, transfers, and cleanup. Neither is selector-eligible device-event
 evidence. The full ROCm lit lane is 47/47 and focused package/audit gates are
-67 passed, 19 skipped. Backward native multi-entry packaging, nonzero-dropout
-optimized WMMA, and an LDS-pipelined streaming recurrence remain open; the
-scalar backward carrier is a correctness baseline, not a performance claim.
+67 passed, 19 skipped. The optimized feature slice adds exact-device coverage
+for ragged GQA with bias, softcap, windowing, and dropout together; all six
+compiled forward cases pass. The resident performance ratchet is now encoded
+against the 0.097763 ms baseline with a 10% regression limit. A 21-sample run
+after five warmups measured 0.095341 ms (0.9752x baseline), 8.44e-05 maximum
+absolute error, and passed the ratchet. Backward native multi-entry packaging
+and an LDS-pipelined canonical streaming recurrence remain open; the scalar
+backward carrier is a correctness baseline, not a performance claim.
 
 Cross-backend sync `ROCM-SSA-LDS-PIPELINE-2026-07-26` is **landing** under the
 ROCm follow-up to `NVIDIA-PACKED-SSA-FOUNDATION-2026-07-25`. The
@@ -239,7 +247,7 @@ evidence and not evidence for any sibling architecture.
 | ROCM-TEST-1 | complete | The ROCm-only LLVM/MLIR 23 build owns a 27-node host-free compiler lane; 27/27 pass with Apple/NVIDIA/CPU ownership excluded and foreign pipeline absence retained in the report. |
 | ROCM-DTYPE-1 | complete on gfx1151 | FP64 and integer widths have per-operation Target-IR/runtime assessments; unsigned LLVM probes pass without inventing unsigned storage ABIs; signed int4 is canonical and physically packed; gfx1151 FP8/BF8 is rejected by name. |
 | ROCM-SSA-LDS | landing | AMD async-copy, waitcnt, and matrix consumers use shared SSA allocation, token, and pipeline-state identity; host structural and compiler-benchmark gates are landing, while exact-device performance is intentionally unclaimed. |
-| ROCM-E2E-ATTENTION | landing | Forward canonical attention carrier owns an exact gfx1151 WMMA HSACO/launch/oracle/timing join; dynamic direct forward/backward materializers land as correctness baselines. Backward native packaging and streaming LDS/WMMA performance work remain open. |
+| ROCM-E2E-ATTENTION | landing | Forward canonical attention carrier owns an exact gfx1151 WMMA HSACO/launch/oracle/timing join, including deterministic dropout and combined bias+softcap on ragged GQA/window cases; dynamic direct forward/backward materializers remain correctness baselines. Backward native packaging and streaming LDS/WMMA performance work remain open. |
 
 ## Recommended open-work order
 

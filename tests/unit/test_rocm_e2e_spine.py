@@ -339,9 +339,34 @@ def test_rocm_attention_carrier_selects_wmma_and_owns_native_package(monkeypatch
 
 
 def test_rocm_attention_native_route_rejects_unimplemented_semantics() -> None:
-    assert not supports_attention(_attention_module(dropout_p=0.25))
+    assert supports_attention(_attention_module(dropout_p=0.25))
     assert not supports_attention(_attention_module(hq=3, hkv=2))
-    assert not supports_attention(_attention_module(bias=True, softcap=8.0))
+    assert supports_attention(_attention_module(bias=True, softcap=8.0))
+
+
+def test_rocm_attention_package_owns_dropout_replay_and_combined_features(
+    monkeypatch,
+) -> None:
+    module = _attention_module(
+        bias=True,
+        softcap=8.0,
+        dropout_p=0.25,
+    )
+    module.functions[0].body[0].kwargs["dropout_seed"] = 37
+    monkeypatch.setattr(
+        "tessera.compiler.rocm_native._compile_attention_tile_ir",
+        _fake_attention_compile,
+    )
+    package = package_attention(module, pipeline_name="tessera-lower-to-rocm")
+    assert "dropout_p = 0.25 : f32" in package.tile_ir
+    assert "dropout_seed = 37 : i64" in package.tile_ir
+    assert [item.name for item in package.descriptor.scalars][-3:] == [
+        "Softcap",
+        "DropoutP",
+        "DropoutSeed",
+    ]
+    assert package.descriptor.provenance["dropout_p"] == 0.25
+    assert package.descriptor.provenance["dropout_seed"] == 37
 
 
 def test_rocm_softmax_emitter_uses_shared_typed_envelope() -> None:

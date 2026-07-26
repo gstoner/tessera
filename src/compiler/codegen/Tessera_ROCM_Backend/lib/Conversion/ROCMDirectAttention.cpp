@@ -421,8 +421,8 @@ materializeROCMDirectAttention(tessera::tile::AttentionKernelOp kernel,
       headDim.getInt() == valueDim.getInt() && headDim.getInt() > 0 &&
       headDim.getInt() % 16 == 0 &&
       (storage.getValue() == "f16" || storage.getValue() == "bf16") &&
-      dropout.getValueAsDouble() == 0.0 && windowCompatible &&
-      !(hasBias && softcap.getValueAsDouble() > 0.0);
+      dropout.getValueAsDouble() >= 0.0 &&
+      dropout.getValueAsDouble() < 1.0 && windowCompatible;
   if (optimized) {
     Operation *symbolOwner = op->getParentOp();
     while (symbolOwner &&
@@ -454,6 +454,9 @@ materializeROCMDirectAttention(tessera::tile::AttentionKernelOp kernel,
                        builder.getBoolAttr(
                            softcap.getValueAsDouble() > 0.0));
     state.addAttribute("attn_bias", builder.getBoolAttr(hasBias));
+    state.addAttribute(
+        "dropout",
+        builder.getBoolAttr(dropout.getValueAsDouble() > 0.0));
     state.addAttribute("source",
                        builder.getStringAttr("tile.attention_kernel"));
     state.addAttribute("schedule",

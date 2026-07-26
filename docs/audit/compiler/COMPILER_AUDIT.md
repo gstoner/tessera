@@ -1380,6 +1380,13 @@ foundation rather than lowering attention as one whole-tensor sequence:
    retain numerical, resource, cache, device-event, and end-to-end proof before
    changing selectors.
 
+ROCm now directly consumes the shared carrier's combined dropout, bias,
+softcap, ragged GQA/MQA, and causal/window semantics through its gfx1151 WMMA
+route, with the scalar recurrence retained as the reference. This closes the
+ROCm forward feature-combination sub-gate only; direct consumption of the
+canonical KV-block loop, rank-4 shared distribution, and canonical
+split-workspace backward remain open.
+
 > **Open items: #4 (fixture-backed numerical proof before conformance cells go
 > complete) and #5 (point specs at dashboards/this audit, not old root audits).**
 > Items #1, #2, #3, and #6 have **landed** — they are kept below (struck through)

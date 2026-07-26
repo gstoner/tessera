@@ -7,6 +7,28 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `SSA-STATEFUL-TRANSPORT-2026-07-26` completes
+`ROCM-SSA-LDS`: every active structured LDS copy reaches target lowering with
+`!tile.buffer` allocation identity, a `!tile.async_token`, and threaded
+`!tile.pipeline_state`. ROCm planning, legality, and target lowering no longer
+read `#tile.buffer_ref`; shared barrier/WarpSpec and ROCm overlap fixtures are
+SSA-owned, and direct structured lowering fails closed when any ownership edge
+is missing. The deprecated attribute remains parser-visible only for migration
+diagnostics and archived IR. Host WSL passes 49/49 ROCm lit and 223/223
+supported shared IR lit tests. Exact gfx1151 ReplaySSM/MoE validation passes
+14/14. Seven-run compiler medians are 14.19–14.34 ms for planning and
+15.35–15.74 ms for full lowering across one, two, four, and eight stages, with
+zero legacy references in every result.
+
+The same sync maps the proven gfx1151 ReplaySSM handle to the shared
+session-persistent workspace and target-keyed lifecycle descriptor. It records
+exclusive ring leases through wait/release, flush-to-checkpoint and ring-clear,
+cursor rollback/tail invalidation, ordered submission, and drain-before-release
+teardown. ROCm MoE dispatch/combine now validate the canonical launch-owned
+metadata descriptor, grouped GEMM consumes its canonical int32 partition, and
+the descriptor can bind an RCCL rank/device topology fingerprint without
+claiming unmeasured multi-rank execution.
+
 Cross-backend sync `ROCM-E2E-ATTENTION-CARRIERS-2026-07-26` is **landing**
 under ROCM-E2E-2. ROCm now consumes canonical `tile.attention_kernel` and
 `tile.attention_backward_kernel` launch carriers instead of rejecting every
@@ -31,8 +53,8 @@ the 2.312196 ms operation-total median; the cold operation-total sample is
 164.79 ms and compiler packaging is 566.60 ms in that run. Both are host-wall
 domains under WSL, and the resident domain explicitly excludes module load,
 allocation, transfers, and cleanup. Neither is selector-eligible device-event
-evidence. The full ROCm lit lane is 47/47 and focused package/audit gates are
-67 passed, 19 skipped. The optimized feature slice adds exact-device coverage
+evidence. The combined ROCm lit lane is 49/49 and the focused package/audit
+gates remain green. The optimized feature slice adds exact-device coverage
 for ragged GQA with bias, softcap, windowing, and dropout together; all six
 compiled forward cases pass. The resident performance ratchet is now encoded
 against the 0.097763 ms baseline with a 10% regression limit. A 21-sample run
@@ -41,21 +63,21 @@ absolute error, and passed the ratchet. Backward native multi-entry packaging
 and an LDS-pipelined canonical streaming recurrence remain open; the scalar
 backward carrier is a correctness baseline, not a performance claim.
 
-Cross-backend sync `ROCM-SSA-LDS-PIPELINE-2026-07-26` is **landing** under the
+Cross-backend sync `ROCM-SSA-LDS-PIPELINE-2026-07-26` is **complete** under the
 ROCm follow-up to `NVIDIA-PACKED-SSA-FOUNDATION-2026-07-25`. The
 `rocm-wave-lds-pipeline` planner now makes `!tile.buffer` allocation roots,
 `!tile.async_token` completion, and producer/consumer
 `!tile.pipeline_state` def-use chains the physical ownership proof for AMD
-global-to-LDS copies, waitcnt retirement, and WMMA/MFMA consumers. Legacy
-`#tile.buffer_ref` remains readable only as a grouping migration input and is
-removed from planner output. The gfx1151 target lowering consumes the proof,
+global-to-LDS copies, waitcnt retirement, and WMMA/MFMA consumers. The
+gfx1151 target lowering consumes the proof,
 records SSA allocation identity and LDS bytes/layout on the target copy, and
 removes dead portable lifetime operations at the target boundary. Structural
 lit coverage, SSA overlap rejection, branch-local dominance, and a
-repeated-median host-compiler benchmark are included. Host WSL validation is
-45/45 ROCm lit and 200/200 focused unit/exact-device tests, including runnable
+repeated-median host-compiler benchmark are included. Post-rebase host WSL
+validation is 49/49 ROCm lit and 257 passed with 19 intentionally skipped
+focused unit/exact-device checks, including runnable
 global-to-LDS and LDS-staged WMMA execute/compare on visible gfx1151. Seven-run
-compiler medians span 13.32–14.28 ms for planning and 13.97–14.42 ms for full
+compiler medians span 14.19–14.34 ms for planning and 15.35–15.74 ms for full
 ROCm lowering across one, two, four, and eight independent stages. Those are
 compiler timings, not device-kernel latency or selector evidence.
 Apple/NVIDIA schedules and evidence do not transfer.
@@ -67,10 +89,10 @@ execution evidence. NVIDIA SM120 now enables only its proven packed
 load/unpack, unscaled load/store round trip, matching packed matmul, and
 explicit conversion paths. ROCm's existing architecture-owned signed-INT4
 WMMA gate and legacy fallback remain unchanged; scale-bearing FP4/FP6 generic
-HIP consumers are still follow-up required on the ROCm box. The shared
-`#tile.buffer_ref` compatibility reader also remains temporarily available
-until the ROCm SSA/LDS migration lands. CUDA descriptors, schedules, SM120
-evidence, and selector state do not transfer.
+HIP consumers are still follow-up required on the ROCm box. The deprecated
+`#tile.buffer_ref` attribute remains parser-only for archived IR; active ROCm
+passes do not consume it. CUDA descriptors, schedules, SM120 evidence, and
+selector state do not transfer.
 
 Cross-backend sync `CORE-STREAMING-ATTN-2026-07-26` replaces the shared
 rank-2 FlashAttention whole-KV lowering with an explicit KV-block `scf.for`
@@ -246,7 +268,7 @@ evidence and not evidence for any sibling architecture.
 | E2E-SPINE-3 | complete on gfx1151 | The hash-sealed four-family release packet records exact-device Level-C results, cold/warm identity, resources, and stable kernel-wall/end-to-end timing for softmax, reduction, paged-KV, and MoE. All four fleet rows are `release_ready`; no production selector changed. |
 | ROCM-TEST-1 | complete | The ROCm-only LLVM/MLIR 23 build owns a 27-node host-free compiler lane; 27/27 pass with Apple/NVIDIA/CPU ownership excluded and foreign pipeline absence retained in the report. |
 | ROCM-DTYPE-1 | complete on gfx1151 | FP64 and integer widths have per-operation Target-IR/runtime assessments; unsigned LLVM probes pass without inventing unsigned storage ABIs; signed int4 is canonical and physically packed; gfx1151 FP8/BF8 is rejected by name. |
-| ROCM-SSA-LDS | landing | AMD async-copy, waitcnt, and matrix consumers use shared SSA allocation, token, and pipeline-state identity; host structural and compiler-benchmark gates are landing, while exact-device performance is intentionally unclaimed. |
+| ROCM-SSA-LDS | complete | AMD async-copy, waitcnt, and matrix consumers use shared SSA allocation, token, and pipeline-state identity; compatibility readers are retired, shared/ROCm fixtures are SSA-only, host structural and compiler-benchmark gates pass, while exact-device performance remains intentionally unclaimed. |
 | ROCM-E2E-ATTENTION | landing | Forward canonical attention carrier owns an exact gfx1151 WMMA HSACO/launch/oracle/timing join, including deterministic dropout and combined bias+softcap on ragged GQA/window cases; dynamic direct forward/backward materializers remain correctness baselines. Backward native packaging and streaming LDS/WMMA performance work remain open. |
 
 ## Recommended open-work order
@@ -257,14 +279,13 @@ named exact device can satisfy an execution gate.
 
 | Order | ID | Work | Access state | Completion gate |
 |---:|---|---|---|---|
-| 0 | ROCM-SSA-LDS | Land the shared SSA LDS ownership consumer on gfx1151 | local WSL compiler and gfx1151 available | Planner/lowering lit, registry/audit drift gates, repeated-median compiler benchmark, and targeted gfx1151 execution non-regression pass without restoring name-based ownership. |
-| 1 | ROCM-E2E-ATTENTION | Complete the canonical attention carrier family | local WSL compiler and gfx1151 available | Package/launch deterministic backward, map the canonical streaming recurrence onto SSA-owned LDS/WMMA pipeline values, and add exact-device forward/backward numerical and performance ratchets. |
-| 2 | ROCM-2 | Run the common P0 packet on Radeon AI PRO R9700 `gfx1201` | owner and reservation required | RDNA 4 WMMA-v2 f16/bf16 plus enabled FP8/integer forms assemble, launch, match aligned/ragged oracles, and record resources and timing. |
-| 3 | ROCM-1 | Run the common P0 packet on MI350-series `gfx950` | owner and reservation required | CDNA 4 matmul, flash attention, softmax, and GELU launch and compare; low-precision breadth advances only with physical-layout proof. |
-| 4 | ROCM-3 | Run the common P0 packet on MI455X `gfx1250` | owner and reservation required | The upstream-LLVM artifact joins to a launch/numerical proof; WMMA-v2 properties and fragment layout match the device. |
-| 5 | ROCM-6 | Revalidate G6-A/B/C with valid paired device timing | bare-metal gfx1151 or repaired event timing required | Original correctness, resource, aligned/ragged, dtype, device-time, and E2E gates are rerun under LLVM/MLIR 23 + ROCm 7.14 before reaffirming or changing production. |
-| 6 | ROCM-8 | Measure copy versus mapped-host memory on bare-metal `gfx1151` | bare-metal owner and reservation required | Repeated kernel-only and end-to-end measurements establish a stable crossover without using WSL evidence. |
-| 7 | ROCM-4b | Retain compatibility proof on MI300X/MI325X `gfx942` | owner and reservation required | f16/bf16 MFMA plus retained matmul/attention/softmax/GELU paths launch and compare. |
+| 0 | ROCM-E2E-ATTENTION | Complete the canonical attention carrier family | local WSL compiler and gfx1151 available | Package/launch deterministic backward, map the canonical streaming recurrence onto SSA-owned LDS/WMMA pipeline values, and add exact-device forward/backward numerical and performance ratchets. |
+| 1 | ROCM-2 | Run the common P0 packet on Radeon AI PRO R9700 `gfx1201` | owner and reservation required | RDNA 4 WMMA-v2 f16/bf16 plus enabled FP8/integer forms assemble, launch, match aligned/ragged oracles, and record resources and timing. |
+| 2 | ROCM-1 | Run the common P0 packet on MI350-series `gfx950` | owner and reservation required | CDNA 4 matmul, flash attention, softmax, and GELU launch and compare; low-precision breadth advances only with physical-layout proof. |
+| 3 | ROCM-3 | Run the common P0 packet on MI455X `gfx1250` | owner and reservation required | The upstream-LLVM artifact joins to a launch/numerical proof; WMMA-v2 properties and fragment layout match the device. |
+| 4 | ROCM-6 | Revalidate G6-A/B/C with valid paired device timing | bare-metal gfx1151 or repaired event timing required | Original correctness, resource, aligned/ragged, dtype, device-time, and E2E gates are rerun under LLVM/MLIR 23 + ROCm 7.14 before reaffirming or changing production. |
+| 5 | ROCM-8 | Measure copy versus mapped-host memory on bare-metal `gfx1151` | bare-metal owner and reservation required | Repeated kernel-only and end-to-end measurements establish a stable crossover without using WSL evidence. |
+| 6 | ROCM-4b | Retain compatibility proof on MI300X/MI325X `gfx942` | owner and reservation required | f16/bf16 MFMA plus retained matmul/attention/softmax/GELU paths launch and compare. |
 | 8 | ROCM-4a | Add Radeon RX 9000 `gfx1200` exact-device proof | owner and reservation required | Matmul launches and compares; unsupported forms reject stably. |
 | 9 | ROCM-5 | Close the architecture-owned fragment umbrella | depends on ROCM-1 through ROCM-4b | Every enabled family/dtype has exact-device packing, numerical, resource, and timing evidence, or an explicit unsupported/deferred state. |
 

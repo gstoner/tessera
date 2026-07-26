@@ -16,6 +16,16 @@ ABI, NVIDIA Target IR, CUDA schedule, capability, or selector. NVIDIA parity
 at the semantic carrier remains validated independently; AMD counter code,
 HSACO evidence, and WSL timing do not transfer.
 
+Cross-backend sync `SSA-STATEFUL-TRANSPORT-2026-07-26` removes the last active
+shared and ROCm `#tile.buffer_ref` compatibility readers after their fixtures
+migrate to `!tile.buffer`; the deprecated attribute is parser-only. NVIDIA was
+already SSA-only, so its SMEM/TMEM schedule and evidence are unchanged. The
+shared ReplaySSM lifecycle schema now keys Apple and ROCm resident ABIs while
+preserving session-private ring ownership, flush/rollback, ordered submission,
+and drain-before-release. MoE metadata now owns launch-lifetime workspace and
+can bind a canonical NCCL/RCCL rank/device fingerprint. NVIDIA consumes the
+same local descriptor as before; no CUDA schedule, selector, or timing changes.
+
 Cross-backend sync `ROCM-E2E-ATTENTION-CARRIERS-2026-07-26` lands an
 AMD-owned consumer, native HSACO package, descriptor, and exact gfx1151 proof
 for the already-shared `tile.attention_kernel` contract, plus a direct
@@ -46,11 +56,9 @@ Orphan or mixed-use packed loads, descriptor disagreement, arbitrary
 operations, and the public shape-preserving Graph quantize/dequantize ABI stay
 logical. The standalone empty-target transform remains available for explicit
 IR inspection; named pipelines use the capability decision. Apple and ROCm
-retain their compatibility readers and architecture-owned migration queues;
-their physical schedules or evidence are not inferred from SM120. In
-particular, the shared `#tile.buffer_ref` reader remains temporarily available
-for their migration fixtures even though NVIDIA no longer emits or consumes
-it. No selector or timing disposition changes.
+retain architecture-owned physical schedules; their evidence is not inferred
+from SM120. The deprecated `#tile.buffer_ref` attribute is parser-only and no
+active pass consumes it. No selector or timing disposition changes.
 
 Cross-backend sync `CORE-STREAMING-ATTN-2026-07-26` replaces the shared
 rank-2 FlashAttention whole-KV lowering with an explicit KV-block `scf.for`.

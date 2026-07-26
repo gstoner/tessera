@@ -17,9 +17,9 @@
 // once WarpSpecialization emits real barriers, "does this pass go green on the
 // FA-4 fixture?" becomes the correctness check.
 //
-// Op conventions (kept attribute-driven so it works on the value lane and on
+// Op conventions (kept envelope-driven so it works on the value lane and on
 // unregistered husks alike):
-//   write op   : `tile.buf = #tile.buffer_ref<name, space, access="write">`,
+//   write op   : a `!tile.buffer` operand rooted at `tile.alloc`, plus
 //                `tile.layout = #tile.layout<...>`
 //   barrier op : a typed `#tile.barrier` of a completion kind (s_barrier /
 //                mbarrier / tma / tcgen05 — not the "waitcnt" counter marker on
@@ -139,11 +139,8 @@ struct TileBarrierReuseLegality
     bool anyError = false;
 
     module.walk([&](func::FuncOp func) {
-      // SSA allocation root → most-recent unbarried write. The name map is a
-      // migration fallback for old fixtures; new IR never derives identity
-      // from #tile.buffer_ref text.
+      // SSA allocation root → most-recent unbarried write.
       llvm::DenseMap<Value, PendingWrite> pendingSSA;
-      llvm::DenseMap<StringRef, PendingWrite> pending;
 
       func.walk<WalkOrder::PreOrder>([&](Operation *op) {
         if (op == func.getOperation())
@@ -152,7 +149,6 @@ struct TileBarrierReuseLegality
         // A barrier clears every pending hazard (conservative v1 scope).
         if (isBarrierOp(op)) {
           pendingSSA.clear();
-          pending.clear();
           return;
         }
 
@@ -174,10 +170,7 @@ struct TileBarrierReuseLegality
           }
           break;
         }
-        auto bufRef =
-            op->getAttrOfType<tessera::tile::TileBufferRefAttr>("tile.buf");
-        bool legacyWrite = bufRef && bufRef.getAccess() == "write";
-        if (!bufferRoot && !legacyWrite)
+        if (!bufferRoot)
           return;
         auto layout =
             op->getAttrOfType<tessera::tile::TileLayoutAttr>("tile.layout");
@@ -186,43 +179,26 @@ struct TileBarrierReuseLegality
 
         std::optional<std::pair<int64_t, int64_t>> fp = storageFootprint(layout);
         PendingWrite *previous = nullptr;
-        if (bufferRoot) {
-          auto it = pendingSSA.find(bufferRoot);
-          if (it != pendingSSA.end())
-            previous = &it->second;
-        } else {
-          auto it = pending.find(bufRef.getName());
-          if (it != pending.end())
-            previous = &it->second;
-        }
+        auto it = pendingSSA.find(bufferRoot);
+        if (it != pendingSSA.end())
+          previous = &it->second;
         if (fp && previous) {
           std::optional<std::pair<int64_t, int64_t>> prevFp =
               storageFootprint(previous->layout);
           if (prevFp && overlaps(*prevFp, *fp)) {
             InFlightDiagnostic diag = op->emitOpError(
                 "TILE_BARRIER_REUSE_MISSING_BARRIER: buffer ");
-            if (bufferRoot)
-              diag << "SSA allocation";
-            else
-              diag << "\"" << bufRef.getName() << "\"";
+            diag << "SSA allocation";
             diag << " is written over a storage region that overlaps a prior "
                     "write, with no intervening barrier (mbarrier / wait_async). "
                     "A reused layout region needs a barrier to be race-free.";
-            if (bufferRoot)
-              diag.attachNote(previous->op->getLoc())
-                  << "previous write to the same allocation root here";
-            else
-              diag.attachNote(previous->op->getLoc())
-                  << "previous write to buffer \"" << bufRef.getName()
-                  << "\" here";
+            diag.attachNote(previous->op->getLoc())
+                << "previous write to the same allocation root here";
             anyError = true;
           }
         }
         // Record this write as the buffer's current pending writer.
-        if (bufferRoot)
-          pendingSSA[bufferRoot] = PendingWrite{op, layout};
-        else
-          pending[bufRef.getName()] = PendingWrite{op, layout};
+        pendingSSA[bufferRoot] = PendingWrite{op, layout};
       });
     });
 

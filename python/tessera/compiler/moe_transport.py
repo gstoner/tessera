@@ -14,7 +14,7 @@ from typing import Any
 
 import numpy as np
 
-from .native_artifact import OrderingSemantics
+from .native_artifact import OrderingSemantics, WorkspaceRequirement
 
 
 @dataclass(frozen=True)
@@ -51,6 +51,10 @@ class GroupedExpertMetadata:
             "group_offsets": self.group_offsets.tolist(),
             "ragged": self.ragged,
             "index_dtype": "int32",
+            "ownership": {
+                "group_offsets": "launch_owned",
+                "grouped_inputs": "borrowed_until_grouped_gemm_completion",
+            },
         }
 
 
@@ -80,7 +84,13 @@ class MoETransportDescriptor:
     group_sizes: np.ndarray
     group_offsets: np.ndarray
     ordering: OrderingSemantics
+    workspace: WorkspaceRequirement
     collective_scope: str = "local_device"
+    topology_fingerprint: str | None = None
+    topology_backend: str | None = None
+    world_size: int = 1
+    rank_order: tuple[int, ...] = ()
+    device_ordinals: tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
         if self.num_tokens < 0 or self.top_k <= 0 or self.num_experts <= 0:
@@ -115,8 +125,30 @@ class MoETransportDescriptor:
             raise ValueError("MoE slots must be stably grouped by expert")
         if self.capacity is not None and np.any(groups > self.capacity):
             raise ValueError("MoE expert group exceeds declared capacity")
-        if self.collective_scope != "local_device":
-            raise ValueError("canonical MoE transport v1 supports local_device scope only")
+        if self.workspace.lifetime != "launch":
+            raise ValueError("MoE transport metadata must have launch lifetime")
+        if self.workspace.initialization != "undefined":
+            raise ValueError("MoE transport workspace must be producer initialized")
+        if self.collective_scope == "local_device":
+            if (
+                self.topology_fingerprint is not None
+                or self.topology_backend is not None
+                or self.world_size != 1
+                or self.rank_order
+                or self.device_ordinals
+            ):
+                raise ValueError("local MoE transport cannot carry a multi-rank topology")
+        elif self.collective_scope == "rank_partitioned":
+            if (
+                not self.topology_fingerprint
+                or self.topology_backend not in {"nccl", "rccl"}
+                or self.world_size < 2
+                or self.rank_order != tuple(range(self.world_size))
+                or len(self.device_ordinals) != self.world_size
+            ):
+                raise ValueError("rank-partitioned MoE requires a canonical collective topology")
+        else:
+            raise ValueError("unknown MoE collective scope")
 
     @property
     def num_kept(self) -> int:
@@ -140,11 +172,28 @@ class MoETransportDescriptor:
             "index_dtype": "int32",
             "weight_dtype": "fp32",
             "collective_scope": self.collective_scope,
+            "topology": {
+                "fingerprint": self.topology_fingerprint,
+                "backend": self.topology_backend,
+                "world_size": self.world_size,
+                "rank_order": list(self.rank_order),
+                "device_ordinals": list(self.device_ordinals),
+            },
+            "workspace": self.workspace.to_dict(),
+            "ownership": {
+                "dispatch_metadata": "launch_owned",
+                "dispatched_slots": "produced_by_dispatch",
+                "grouped_gemm_inputs": "borrowed_until_expert_compute_completion",
+                "combine_inputs": "borrowed_until_combine_completion",
+                "release": "after_combine_completion",
+            },
             "ordering": self.ordering.to_dict(),
         }
 
 
-def descriptor_from_dispatch_plan(plan: Any) -> MoETransportDescriptor:
+def descriptor_from_dispatch_plan(
+    plan: Any, *, topology: Any | None = None,
+) -> MoETransportDescriptor:
     """Validate and lower one stdlib ``DispatchPlan`` to the canonical ABI."""
     expert_ids = np.asarray(plan.expert_ids)
     weights = np.asarray(plan.weights)
@@ -173,6 +222,23 @@ def descriptor_from_dispatch_plan(plan: Any) -> MoETransportDescriptor:
     combine_weights = flat_weights[perm64].astype(np.float32, copy=False)
     groups = groups64.astype(np.int32)
     offsets = np.concatenate((np.array([0], np.int64), np.cumsum(groups64))).astype(np.int32)
+    topology_fingerprint = None
+    topology_backend = None
+    world_size = 1
+    rank_order: tuple[int, ...] = ()
+    device_ordinals: tuple[int, ...] = ()
+    collective_scope = "local_device"
+    if topology is not None:
+        topology_fingerprint = str(topology.fingerprint)
+        topology_backend = str(topology.backend)
+        world_size = int(topology.world_size)
+        rank_order = tuple(int(rank) for rank in topology.rank_order)
+        device_ordinals = tuple(int(device) for device in topology.device_ordinals)
+        collective_scope = "rank_partitioned"
+    metadata_bytes = int(
+        token.nbytes + expert.nbytes + combine_weights.nbytes
+        + groups.nbytes + offsets.nbytes
+    )
     return MoETransportDescriptor(
         num_tokens=int(plan.num_tokens),
         top_k=int(plan.top_k),
@@ -192,6 +258,18 @@ def descriptor_from_dispatch_plan(plan: Any) -> MoETransportDescriptor:
                 "combine_completion",
             ),
         ),
+        workspace=WorkspaceRequirement(
+            bytes=metadata_bytes,
+            alignment=64,
+            lifetime="launch",
+            initialization="undefined",
+        ),
+        collective_scope=collective_scope,
+        topology_fingerprint=topology_fingerprint,
+        topology_backend=topology_backend,
+        world_size=world_size,
+        rank_order=rank_order,
+        device_ordinals=device_ordinals,
     )
 
 

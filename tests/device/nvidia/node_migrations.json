@@ -12,6 +12,7 @@
     "tests/device/nvidia/test_moe_transport.py::test_moe_device_timing_retains_resident_batches",
     "tests/unit/test_nvidia_moe_transport_contract.py::test_canonical_grouped_expert_metadata_rejects_bad_partition",
     "tests/unit/test_nvidia_moe_transport_contract.py::test_canonical_grouped_expert_metadata_retains_empty_and_ragged_groups",
+    "tests/unit/test_nvidia_moe_transport_contract.py::test_canonical_moe_metadata_binds_rank_device_topology",
     "tests/unit/test_nvidia_moe_transport_contract.py::test_canonical_moe_metadata_is_grouped_ragged_and_ordered",
     "tests/unit/test_nvidia_moe_transport_contract.py::test_canonical_moe_metadata_rejects_duplicate_and_missing_kept_slots",
     "tests/device/nvidia/test_mma_runtime_symbol.py::test_python_nvfp4_dispatch_rejects_malformed_scale_views_before_launch",

@@ -907,7 +907,7 @@ def _attention_backward_contract(
         storage,
         (do_name, q_name, k_name, v_name),
         bias_name,
-        cast(tuple[str, str, str], result_names),
+        result_names,
         (b, hq, hkv, sq, sk, d, dv),
         scale,
         causal,

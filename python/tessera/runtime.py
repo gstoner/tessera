@@ -3197,8 +3197,13 @@ def _submit_rocm_gfx1151_attention_backward_program(
         ):
             raise RuntimeError("gfx1151 attention backward workspace allocation failed")
         allocations.append(workspace_pointer)
+        workspace_address = workspace_pointer.value
+        if workspace_address is None:
+            raise RuntimeError(
+                "gfx1151 attention backward workspace allocation returned null"
+            )
         slices = {
-            item.name: ctypes.c_void_p(workspace_pointer.value + item.offset)
+            item.name: ctypes.c_void_p(workspace_address + item.offset)
             for item in program.workspace_slices
         }
         for name, array in host_inputs.items():

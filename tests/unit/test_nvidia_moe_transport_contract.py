@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 
 from tessera.compiler.moe_transport import descriptor_from_dispatch_plan, grouped_expert_metadata
+from tessera.collectives import collective_topology
 from tessera.stdlib import moe
 
 
@@ -37,6 +38,32 @@ def test_canonical_moe_metadata_is_grouped_ragged_and_ordered():
         "expert_compute_before_combine",
         "combine_completion",
     )
+    assert descriptor.workspace.lifetime == "launch"
+    assert descriptor.workspace.bytes == (
+        descriptor.token_of_slot.nbytes
+        + descriptor.expert_of_slot.nbytes
+        + descriptor.combine_weights.nbytes
+        + descriptor.group_sizes.nbytes
+        + descriptor.group_offsets.nbytes
+    )
+    assert descriptor.as_metadata_dict()["ownership"]["release"] == \
+        "after_combine_completion"
+
+
+def test_canonical_moe_metadata_binds_rank_device_topology() -> None:
+    topology = collective_topology(
+        backend="rccl", world_size=2, device_ordinals=(1, 3)
+    )
+    descriptor = descriptor_from_dispatch_plan(_plan(), topology=topology)
+    metadata = descriptor.as_metadata_dict()
+    assert descriptor.collective_scope == "rank_partitioned"
+    assert metadata["topology"] == {
+        "fingerprint": topology.fingerprint,
+        "backend": "rccl",
+        "world_size": 2,
+        "rank_order": [0, 1],
+        "device_ordinals": [1, 3],
+    }
 
 
 def test_canonical_moe_metadata_rejects_duplicate_and_missing_kept_slots():

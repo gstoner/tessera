@@ -43,7 +43,8 @@ def choose_python(
 ) -> str:
     """Choose the Python used by validation without running expensive checks."""
 
-    env = env or os.environ
+    if env is None:
+        env = os.environ
     if env.get("PYTHON"):
         return env["PYTHON"]
     home = home or Path.home()

@@ -851,6 +851,20 @@ struct LowerTileToROCMPass
         state.addAttribute("dst_space", builder.getStringAttr("lds"));
         state.addAttribute("arch", builder.getStringAttr(arch));
         Value buffer = tileBufferRoot(op);
+        auto layout =
+            op->getAttrOfType<tessera::tile::TileLayoutAttr>("tile.layout");
+        bool hasPipelineState = llvm::any_of(
+            op->getOperands(), [](Value value) {
+              return isa<tessera::tile::PipelineStateType>(value.getType());
+            });
+        if (layout && (!buffer || !hasTileToken || !hasPipelineState)) {
+          op->emitOpError(
+              "structured ROCm LDS copies require !tile.buffer allocation "
+              "identity, a !tile.async_token result, and a "
+              "!tile.pipeline_state operand; run rocm-wave-lds-pipeline");
+          signalPassFailure();
+          return;
+        }
         if (buffer) {
           auto alloc = buffer.getDefiningOp<tessera::tile::AllocOp>();
           if (!alloc || alloc.getSpace() != "smem") {
@@ -867,29 +881,6 @@ struct LowerTileToROCMPass
               builder.getI64IntegerAttr(static_cast<int64_t>(alloc.getBytes())));
           state.addAttribute("buffer_space", builder.getStringAttr("lds"));
           state.addAttribute("buffer_layout", alloc.getLayout());
-        } else if (auto buf =
-                       op->getAttrOfType<tessera::tile::TileBufferRefAttr>(
-                           "tile.buf")) {
-          // Migration-only input. The ROCm planner normally consumes this
-          // attribute and emits !tile.buffer before target lowering.
-          if (buf.getSpace() != "lds") {
-            op->emitOpError(
-                "ROCM_LOWERING_NON_LDS_BUFFER: tile.async_copy expected "
-                "#tile.buffer_ref<space = \"lds\"> for ROCm global-to-LDS "
-                "movement.");
-            signalPassFailure();
-            return;
-          }
-          if (buf.getAccess() != "write") {
-            op->emitOpError(
-                "ROCM_LOWERING_NON_WRITE_BUFFER: tile.async_copy expected "
-                "#tile.buffer_ref access = \"write\" for the LDS destination.");
-            signalPassFailure();
-            return;
-          }
-          state.addAttribute("buffer", builder.getStringAttr(buf.getName()));
-          state.addAttribute("buffer_identity",
-                             builder.getStringAttr("legacy_name"));
         } else {
           // Unshaped pointer copies carry a dynamic byte count and externally
           // owned LDS destination. Keep that distinct from compiler-owned
@@ -897,9 +888,7 @@ struct LowerTileToROCMPass
           state.addAttribute("buffer_identity",
                              builder.getStringAttr("external_pointer"));
         }
-        if (auto layout =
-                op->getAttrOfType<tessera::tile::TileLayoutAttr>(
-                    "tile.layout")) {
+        if (layout) {
           if (!layoutHasLdsAxis(layout)) {
             op->emitOpError(
                 "ROCM_LOWERING_LAYOUT_NOT_LDS: ROCm async copy can only "
@@ -919,11 +908,6 @@ struct LowerTileToROCMPass
         // SSA token (the rocm result). A wait retires it by SSA value when its
         // operand names the token, else by id/order.
         std::string id;
-        if (!buffer) {
-          if (auto a = op->getAttrOfType<tessera::tile::TileBufferRefAttr>(
-                  "tile.buf"))
-            id = a.getName().str();
-        }
         if (auto a = op->getAttrOfType<StringAttr>("tile.barrier_id"))
           id = a.getValue().str();
         outstanding.push_back({id, rocmOp->getResult(0)});

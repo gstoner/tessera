@@ -1,15 +1,19 @@
-// RUN: not %trop --allow-unregistered-dialect --pass-pipeline='builtin.module(rocm-wave-lds-legality)' %s 2>&1 | FileCheck %s
+// RUN: not %trop --allow-unregistered-dialect --pass-pipeline='builtin.module(rocm-wave-lds-pipeline,rocm-wave-lds-legality)' %s 2>&1 | FileCheck %s
 
 module {
-  func.func @overlapping_lds_writes(%dst: !llvm.ptr, %src: !llvm.ptr, %bytes: i64) {
-    %tok0 = "tile.async_copy"(%dst, %src, %bytes) {
-      tile.buf = #tile.buffer_ref<name = "stage.lds.0", space = "lds", access = "write">,
+  func.func @overlapping_shared_ssa_lds_writes(%dst: !llvm.ptr, %src: !llvm.ptr, %bytes: i64) {
+    %buffer = tile.alloc {
+      bytes = 4096 : i64,
+      layout = #tile.layout<shard = [64, 32] : [32, 1] on ["lds", "waveid"], replica = [] : [] on [], offset = 0>,
+      space = "smem"
+    } : !tile.buffer
+    %tok0 = "tile.async_copy"(%dst, %src, %bytes, %buffer) {
       tile.layout = #tile.layout<shard = [64, 32] : [32, 1] on ["lds", "waveid"], replica = [] : [] on [], offset = 0>
-    } : (!llvm.ptr, !llvm.ptr, i64) -> !tessera_rocm.token
-    %tok1 = "tile.async_copy"(%dst, %src, %bytes) {
-      tile.buf = #tile.buffer_ref<name = "stage.lds.0", space = "lds", access = "write">,
+    } : (!llvm.ptr, !llvm.ptr, i64, !tile.buffer) -> !tessera_rocm.token
+    %tok1 = "tile.async_copy"(%dst, %src, %bytes, %buffer) {
       tile.layout = #tile.layout<shard = [64, 32] : [32, 1] on ["lds", "waveid"], replica = [] : [] on [], offset = 0>
-    } : (!llvm.ptr, !llvm.ptr, i64) -> !tessera_rocm.token
+    } : (!llvm.ptr, !llvm.ptr, i64, !tile.buffer) -> !tessera_rocm.token
+    tile.dealloc %buffer : !tile.buffer
     return
   }
 

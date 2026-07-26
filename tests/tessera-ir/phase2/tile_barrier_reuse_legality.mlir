@@ -11,12 +11,15 @@
 // (No CHECK-LABEL — this chunk fails legality, so no IR is printed for it; the
 // expected-error/note below are what verify this case.)
 func.func @tmem_alias_race() {
-  // expected-note @+1 {{previous write to buffer "tmem0" here}}
-  "tile.tmem_write"() {tile.buf = #tile.buffer_ref<name = "tmem0", space = "tmem", access = "write">,
-    tile.layout = #tile.layout<shard = [128] : [1] on ["tlane"], replica = [] : [] on [], offset = 0>} : () -> ()
-  // expected-error @+1 {{TILE_BARRIER_REUSE_MISSING_BARRIER: buffer "tmem0"}}
-  "tile.tmem_write"() {tile.buf = #tile.buffer_ref<name = "tmem0", space = "tmem", access = "write">,
-    tile.layout = #tile.layout<shard = [256] : [1] on ["tlane"], replica = [] : [] on [], offset = 0>} : () -> ()
+  %buffer = tile.alloc {bytes = 1024 : i64, space = "tmem",
+    layout = #tile.layout<shard = [256] : [1] on ["tlane"], replica = [] : [] on [], offset = 0>} : !tile.buffer
+  // expected-note @+1 {{previous write to the same allocation root here}}
+  "tile.tmem_write"(%buffer) {
+    tile.layout = #tile.layout<shard = [128] : [1] on ["tlane"], replica = [] : [] on [], offset = 0>} : (!tile.buffer) -> ()
+  // expected-error @+1 {{TILE_BARRIER_REUSE_MISSING_BARRIER: buffer SSA allocation}}
+  "tile.tmem_write"(%buffer) {
+    tile.layout = #tile.layout<shard = [256] : [1] on ["tlane"], replica = [] : [] on [], offset = 0>} : (!tile.buffer) -> ()
+  tile.dealloc %buffer : !tile.buffer
   return
 }
 
@@ -26,12 +29,15 @@ func.func @tmem_alias_race() {
 // the reuse hazard, so the layout reuse is legal.
 // CHECK-LABEL: func.func @tmem_alias_barriered
 func.func @tmem_alias_barriered() {
-  "tile.tmem_write"() {tile.buf = #tile.buffer_ref<name = "tmem0", space = "tmem", access = "write">,
-    tile.layout = #tile.layout<shard = [128] : [1] on ["tlane"], replica = [] : [] on [], offset = 0>} : () -> ()
+  %buffer = tile.alloc {bytes = 1024 : i64, space = "tmem",
+    layout = #tile.layout<shard = [256] : [1] on ["tlane"], replica = [] : [] on [], offset = 0>} : !tile.buffer
+  "tile.tmem_write"(%buffer) {
+    tile.layout = #tile.layout<shard = [128] : [1] on ["tlane"], replica = [] : [] on [], offset = 0>} : (!tile.buffer) -> ()
   // CHECK: tile.mbarrier_wait
   "tile.mbarrier_wait"() : () -> ()
-  "tile.tmem_write"() {tile.buf = #tile.buffer_ref<name = "tmem0", space = "tmem", access = "write">,
-    tile.layout = #tile.layout<shard = [256] : [1] on ["tlane"], replica = [] : [] on [], offset = 0>} : () -> ()
+  "tile.tmem_write"(%buffer) {
+    tile.layout = #tile.layout<shard = [256] : [1] on ["tlane"], replica = [] : [] on [], offset = 0>} : (!tile.buffer) -> ()
+  tile.dealloc %buffer : !tile.buffer
   return
 }
 
@@ -41,23 +47,29 @@ func.func @tmem_alias_barriered() {
 // (stages 0 and 1) — footprints do not overlap, so no barrier is required.
 // CHECK-LABEL: func.func @double_buffer_disjoint
 func.func @double_buffer_disjoint() {
-  "tile.smem_write"() {tile.buf = #tile.buffer_ref<name = "smem0", space = "smem", access = "write">,
-    tile.layout = #tile.layout<shard = [128] : [1] on ["m"], replica = [] : [] on [], offset = 0>} : () -> ()
-  "tile.smem_write"() {tile.buf = #tile.buffer_ref<name = "smem0", space = "smem", access = "write">,
-    tile.layout = #tile.layout<shard = [128] : [1] on ["m"], replica = [] : [] on [], offset = 128>} : () -> ()
+  %buffer = tile.alloc {bytes = 1024 : i64, space = "smem",
+    layout = #tile.layout<shard = [256] : [1] on ["m"], replica = [] : [] on [], offset = 0>} : !tile.buffer
+  "tile.smem_write"(%buffer) {
+    tile.layout = #tile.layout<shard = [128] : [1] on ["m"], replica = [] : [] on [], offset = 0>} : (!tile.buffer) -> ()
+  "tile.smem_write"(%buffer) {
+    tile.layout = #tile.layout<shard = [128] : [1] on ["m"], replica = [] : [] on [], offset = 128>} : (!tile.buffer) -> ()
+  tile.dealloc %buffer : !tile.buffer
   return
 }
 
 // -----
 
 // A pure register/lane fragment (no storage axis) touches no shared storage, so
-// two writes to the "same" buffer name carry no aliasing hazard.
+// two writes to the same allocation carry no aliasing hazard.
 // CHECK-LABEL: func.func @register_fragment_no_hazard
 func.func @register_fragment_no_hazard() {
-  "tile.reg_write"() {tile.buf = #tile.buffer_ref<name = "frag", space = "reg", access = "write">,
-    tile.layout = #tile.layout<shard = [8, 4] : [4, 1] on ["laneid", "reg"], replica = [] : [] on [], offset = 0>} : () -> ()
-  "tile.reg_write"() {tile.buf = #tile.buffer_ref<name = "frag", space = "reg", access = "write">,
-    tile.layout = #tile.layout<shard = [8, 4] : [4, 1] on ["laneid", "reg"], replica = [] : [] on [], offset = 0>} : () -> ()
+  %buffer = tile.alloc {bytes = 128 : i64, space = "gmem",
+    layout = #tile.layout<shard = [8, 4] : [4, 1] on ["laneid", "reg"], replica = [] : [] on [], offset = 0>} : !tile.buffer
+  "tile.reg_write"(%buffer) {
+    tile.layout = #tile.layout<shard = [8, 4] : [4, 1] on ["laneid", "reg"], replica = [] : [] on [], offset = 0>} : (!tile.buffer) -> ()
+  "tile.reg_write"(%buffer) {
+    tile.layout = #tile.layout<shard = [8, 4] : [4, 1] on ["laneid", "reg"], replica = [] : [] on [], offset = 0>} : (!tile.buffer) -> ()
+  tile.dealloc %buffer : !tile.buffer
   return
 }
 
@@ -66,12 +78,15 @@ func.func @register_fragment_no_hazard() {
 // ROCm is first-class: reuse of an AMD LDS buffer (the `lds` storage axis)
 // without a barrier is the same race as the NVIDIA SMEM/TMEM cases above.
 func.func @lds_alias_race() {
-  // expected-note @+1 {{previous write to buffer "lds0" here}}
-  "tile.lds_write"() {tile.buf = #tile.buffer_ref<name = "lds0", space = "lds", access = "write">,
-    tile.layout = #tile.layout<shard = [128] : [1] on ["lds"], replica = [] : [] on [], offset = 0>} : () -> ()
-  // expected-error @+1 {{TILE_BARRIER_REUSE_MISSING_BARRIER: buffer "lds0"}}
-  "tile.lds_write"() {tile.buf = #tile.buffer_ref<name = "lds0", space = "lds", access = "write">,
-    tile.layout = #tile.layout<shard = [256] : [1] on ["lds"], replica = [] : [] on [], offset = 0>} : () -> ()
+  %buffer = tile.alloc {bytes = 1024 : i64, space = "smem",
+    layout = #tile.layout<shard = [256] : [1] on ["lds"], replica = [] : [] on [], offset = 0>} : !tile.buffer
+  // expected-note @+1 {{previous write to the same allocation root here}}
+  "tile.lds_write"(%buffer) {
+    tile.layout = #tile.layout<shard = [128] : [1] on ["lds"], replica = [] : [] on [], offset = 0>} : (!tile.buffer) -> ()
+  // expected-error @+1 {{TILE_BARRIER_REUSE_MISSING_BARRIER: buffer SSA allocation}}
+  "tile.lds_write"(%buffer) {
+    tile.layout = #tile.layout<shard = [256] : [1] on ["lds"], replica = [] : [] on [], offset = 0>} : (!tile.buffer) -> ()
+  tile.dealloc %buffer : !tile.buffer
   return
 }
 

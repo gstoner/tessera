@@ -1662,6 +1662,10 @@ def _execute_rocm_moe_transport(artifact: RuntimeArtifact, args: Any) -> Any:
     Per-op ``execution_kind`` via the ``(output, kind)`` launch override."""
     import numpy as np
     from .stdlib import moe
+    from .compiler.moe_transport import (
+        descriptor_from_dispatch_plan,
+        grouped_expert_metadata,
+    )
 
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or ["x", "plan"])
@@ -1674,6 +1678,7 @@ def _execute_rocm_moe_transport(artifact: RuntimeArtifact, args: Any) -> Any:
             x, plan = values["x"], values["plan"]
         except KeyError as exc:
             raise ValueError(f"missing moe_dispatch argument {exc.args[0]!r}") from exc
+        descriptor_from_dispatch_plan(plan)
         try:
             return (_moe_dispatch_native(x, plan, np), "native_gpu")
         except _RocmCompiledUnavailable:
@@ -1683,6 +1688,7 @@ def _execute_rocm_moe_transport(artifact: RuntimeArtifact, args: Any) -> Any:
             partials, plan = values["partials"], values["plan"]
         except KeyError as exc:
             raise ValueError(f"missing moe_combine argument {exc.args[0]!r}") from exc
+        descriptor_from_dispatch_plan(plan)
         try:
             return (_moe_combine_native(partials, plan, np), "native_gpu")
         except _RocmCompiledUnavailable:
@@ -1692,12 +1698,23 @@ def _execute_rocm_moe_transport(artifact: RuntimeArtifact, args: Any) -> Any:
             x, weights, group_sizes = (values["x"], values["weights"], values["group_sizes"])
         except KeyError as exc:
             raise ValueError(f"missing grouped_gemm argument {exc.args[0]!r}") from exc
+        grouped = grouped_expert_metadata(
+            group_sizes, num_tokens=int(np.shape(x)[0])
+        )
         try:
-            return (_rocm_grouped_gemm_native(x, weights, group_sizes, np), "native_gpu")
+            return (
+                _rocm_grouped_gemm_native(
+                    x, weights, grouped.group_sizes, np
+                ),
+                "native_gpu",
+            )
         except _RocmCompiledUnavailable:
             from .compiler.grouped_layout import reference_grouped_gemm
 
-            return (reference_grouped_gemm(x, weights, group_sizes), "reference_cpu")
+            return (
+                reference_grouped_gemm(x, weights, grouped.group_sizes),
+                "reference_cpu",
+            )
     if op_name == "tessera.grouped_swiglu":
         try:
             gvals = (values["x_packed"], values["w_gate"], values["w_up"], values["w_down"], values["group_sizes"])
@@ -29776,17 +29793,41 @@ def rocm_ssm_replay_state_handle(
     """
     from .cache import SSMStateHandle
     from .compiler.emit.rocm_hip import RocmReplayDeviceState
+    from .compiler.ssm_replay import replay_lifecycle_descriptor
+
+    lifecycle_descriptor = replay_lifecycle_descriptor(
+        target="rocm_gfx1151",
+        batch=batch,
+        channels=num_channels,
+        state_dim=state_dim,
+        capacity=capacity,
+        async_slots=async_slots,
+        dtype=dtype,
+    )
 
     class _Handle(SSMStateHandle):
         _device: Any = None
+        _lifecycle_descriptor = lifecycle_descriptor
 
         def __post_init__(self) -> None:
             super().__post_init__()
+            self._closed = False
             if self._scalar_a:
                 try:
                     self._device = RocmReplayDeviceState(self._s0, self._a1d, self.capacity, async_slots)
                 except (FileNotFoundError, OSError, RuntimeError, subprocess.CalledProcessError):
                     self._device = None
+
+        def _require_open(self) -> None:
+            if self._closed:
+                raise RuntimeError("ReplaySSM handle is closed")
+
+        def _require_idle(self, action: str) -> None:
+            if self._device is not None and self._device.pending_leases:
+                raise RuntimeError(
+                    f"cannot {action} with {self._device.pending_leases} "
+                    "pending ReplaySSM submissions"
+                )
 
         def _drop_device(self) -> None:
             if self._device is not None:
@@ -29805,6 +29846,7 @@ def rocm_ssm_replay_state_handle(
                 self._drop_device()
 
         def append(self, delta_t: Any, x_t: Any, b_t: Any, *, auto_flush: bool = True) -> Any:
+            self._require_open()
             super().append(delta_t, x_t, b_t, auto_flush=auto_flush)
             if self._device is not None:
                 try:
@@ -29814,6 +29856,7 @@ def rocm_ssm_replay_state_handle(
             return self
 
         def read_output(self, c_t: Any, *, gate_t: Any = None) -> Any:
+            self._require_open()
             if self._device is not None and self._count:
                 import numpy as np
 
@@ -29828,6 +29871,8 @@ def rocm_ssm_replay_state_handle(
             return super().read_output(c_t, gate_t=gate_t)
 
         def flush(self) -> Any:
+            self._require_open()
+            self._require_idle("flush")
             if self._device is not None and self._count:
                 try:
                     self._device.flush(self._count)
@@ -29836,6 +29881,8 @@ def rocm_ssm_replay_state_handle(
             return super().flush()
 
         def reset(self) -> Any:
+            self._require_open()
+            self._require_idle("reset")
             super().reset()
             if self._device is not None:
                 self._rebuild_device()
@@ -29845,6 +29892,8 @@ def rocm_ssm_replay_state_handle(
             """Independent host/device fork for speculative branch state."""
             import numpy as np
 
+            self._require_open()
+            self._require_idle("clone")
             a_value = self._a1d if self._scalar_a else self._a2d
             other = _Handle(
                 batch=self.batch,
@@ -29867,6 +29916,7 @@ def rocm_ssm_replay_state_handle(
         def step_block(self, deltas: Any, xs: Any, bs: Any, cs: Any) -> Any:
             import numpy as np
 
+            self._require_open()
             ds, xx, bb, cc = (np.asarray(v) for v in (deltas, xs, bs, cs))
             tokens = int(ds.shape[0])
             if self._device is None or tokens < 1 or self.should_flush(tokens):
@@ -29887,6 +29937,7 @@ def rocm_ssm_replay_state_handle(
         def submit_block_async(self, deltas: Any, xs: Any, bs: Any, cs: Any) -> Any:
             import numpy as np
 
+            self._require_open()
             ds, xx, bb, cc = (np.asarray(v) for v in (deltas, xs, bs, cs))
             tokens = int(ds.shape[0])
             if self._device is None or tokens < 1 or self.should_flush(tokens):
@@ -29899,6 +29950,36 @@ def rocm_ssm_replay_state_handle(
             for i in range(tokens):
                 SSMStateHandle.append(self, ds[i], xx[i], bb[i], auto_flush=False)
             return future
+
+        def rollback(self, n: int) -> Any:
+            self._require_open()
+            self._require_idle("rollback")
+            return super().rollback(n)
+
+        def lifecycle_telemetry(self) -> dict[str, Any]:
+            pending = self._device.pending_leases if self._device is not None else 0
+            return {
+                "resident_inputs": self._device is not None and not self._closed,
+                "capacity": self.capacity,
+                "count": self._count,
+                "ring_slots": async_slots,
+                "leased_slots": pending,
+                "pending_submissions": pending,
+                "closed": self._closed,
+                "lifecycle_descriptor": self._lifecycle_descriptor.as_metadata_dict(),
+            }
+
+        def close(self) -> None:
+            if self._closed:
+                return
+            self._drop_device()
+            self._closed = True
+
+        def __del__(self) -> None:
+            try:
+                self.close()
+            except Exception:
+                pass
 
     return _Handle(
         batch=batch,

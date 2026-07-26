@@ -88,7 +88,12 @@ func.func @arrival_count_mismatch(%src: tensor<64x64xf16>) {
 // reading it. Emitted in real lowering by WarpSpecialization's dealloc epilogue
 // (which DOES precede the frees with a cta_sync, so correct lowering is clean).
 func.func @use_after_free() {
+  %buffer = tile.alloc {
+    bytes = 256 : i64, space = "smem",
+    layout = #tile.layout<shard = [256] : [1] on ["m"],
+                          replica = [] : [] on [], offset = 0>
+  } : !tile.buffer
   // expected-error @+1 {{WARPSPEC_USE_AFTER_FREE}}
-  "tile.buffer_free"() {tile.buf = #tile.buffer_ref<name = "warpspec.0.smem.0", space = "smem", access = "free">} : () -> ()
+  tile.dealloc %buffer : !tile.buffer
   return
 }

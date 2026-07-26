@@ -879,6 +879,7 @@ def _attention_backward_contract(
     int,
     int,
     float,
+    float,
     int,
 ] | None:
     if not requests_attention_backward(module):

@@ -39,6 +39,9 @@ add_library(TesseraApple STATIC
   lib/Target/Apple/Passes.cpp
   lib/Target/Apple/Lowering/TileToApple.cpp
   lib/Target/Apple/Lowering/GraphLayoutToApple.cpp
+  lib/Target/Apple/Lowering/ThreadgroupPipelineToApple.cpp
+  lib/Target/Apple/Lowering/CanonicalGemmToAppleGPU.cpp
+  lib/Target/Apple/Lowering/StreamingAttentionToAppleGPU.cpp
   lib/Target/Apple/Lowering/ControlForToAppleGPU.cpp
   lib/Target/Apple/Lowering/ControlIfToAppleGPU.cpp
   lib/Target/Apple/Lowering/ControlWhileToAppleGPU.cpp

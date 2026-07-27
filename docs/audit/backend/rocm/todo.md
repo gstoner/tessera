@@ -7,6 +7,27 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+<<<<<<< HEAD
+Cross-backend sync `LSE-CHECKPOINT-CONTRACT-2026-07-26`: the shared
+`tessera_attn.lse.save` / `lse.load` pair is a declared-but-unimplemented
+FlashAttention-2 checkpoint. `lse.save` takes no destination, `lse.load` takes
+no operands, nothing links a load to a save, the single emission site discards
+the result and types it scalar `f32`, and no backend consumes it — all three
+with an attention backward recompute `L` instead. Apple hit this when
+re-forming the shared streaming recurrence. Marking `LseSaveOp` `Pure` was
+tried and **backed out**: it changes emitted IR on every backend
+(`phase3/flash_attn_full.mlir` asserts the op's presence) and would trap
+whoever implements the real store, which must be non-`Pure` with `MemWrite`.
+Apple instead erases only a dead `lse.save` inside its own lowering, so **no
+shared op, verifier, or emitted lowering changed**. The contract, the FA-2
+save-versus-recompute trade, and the preferred source-level fix are documented
+in
+[`../../compiler/LSE_CHECKPOINT_CONTRACT.md`](../../compiler/LSE_CHECKPOINT_CONTRACT.md).
+This backend owns the measurement, because the save-versus-recompute choice is
+an HBM-bandwidth question and this is a lead performance target (Decision #28).
+No IR, ABI, schedule, evidence, or selector changed in the synchronization
+slice itself.
+=======
 Cross-backend sync
 `ROCM-ATTENTION-SHARED-BACKWARD-CONSUMER-2026-07-26` closes the remaining
 gfx1151 direct-consumption action under `ROCM-E2E-ATTENTION`. The native
@@ -75,6 +96,7 @@ teardown. ROCm MoE dispatch/combine now validate the canonical launch-owned
 metadata descriptor, grouped GEMM consumes its canonical int32 partition, and
 the descriptor can bind an RCCL rank/device topology fingerprint without
 claiming unmeasured multi-rank execution.
+>>>>>>> origin/main
 
 Cross-backend sync `ROCM-E2E-ATTENTION-CARRIERS-2026-07-26` is **landing**
 under ROCM-E2E-2. ROCm now consumes canonical `tile.attention_kernel` and
@@ -378,6 +400,7 @@ named exact device can satisfy an execution gate.
 | 6 | ROCM-4b | Retain compatibility proof on MI300X/MI325X `gfx942` | owner and reservation required | f16/bf16 MFMA plus retained matmul/attention/softmax/GELU paths launch and compare. |
 | 8 | ROCM-4a | Add Radeon RX 9000 `gfx1200` exact-device proof | owner and reservation required | Matmul launches and compares; unsupported forms reject stably. |
 | 9 | ROCM-5 | Close the architecture-owned fragment umbrella | depends on ROCM-1 through ROCM-4b | Every enabled family/dtype has exact-device packing, numerical, resource, and timing evidence, or an explicit unsupported/deferred state. |
+| 10 | ROCM-LSE-1 | Evaluate saving versus recomputing the FlashAttention LSE | local WSL compiler and gfx1151 available; CDNA and long-context parts owner-gated | Measure where a stored `[B*H*Sq]` fp32 LSE beats the `_pre` kernel that currently recomputes `L[q] = logsumexp_k(scale*QK^T)` — whose header states the backward "needs nothing saved from the forward" — across sequence length, head count, dtype, and architecture (gfx1151 now; gfx950 MI350-series and gfx1250 MI455X where HBM bandwidth and long context make the trade decidable). Price in the no-stored-attention-matrix property the saved path gives up. Then take one of three outcomes jointly with NVIDIA: implement the real contract, retire the vocabulary, or — available immediately and independent of the measurement — **fix it at the source: stop `TileIRLoweringPass` emitting a destination-less `lse.save` at all.** The op already declares the effects a real store needs; what is wrong is emitting one with nowhere to write. The source-level fix is the preferred landing; it also drops a dead op from ROCm forwards and removes the one place a backend steps around a shared effectful op. Paired two-run medians in a named timing domain, retained resource evidence, an explicit workspace statement, and a recorded joint decision. If the source-level fix lands, the dormant `test_lse_checkpoint_contract.py` tripwire retires with it. |
 
 ## ROCM-TEST-1: host-free compiler ownership
 

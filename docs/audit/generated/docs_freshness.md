@@ -6,9 +6,9 @@ Reference date for staleness: **2026-07-26**.
 
 ## Headline
 
-- **121** docs catalogued across the canonical doc tree.
-- **120** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **72** updated within the last 30 days.
+- **122** docs catalogued across the canonical doc tree.
+- **121** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **73** updated within the last 30 days.
 - **1** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -158,6 +158,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/COMPILER_REFACTOR_PLAN.md` | - | 2026-07-22 | 4 | ✓ |
 | `compiler/COMPILER_THEORY_OF_OPERATION.md` | - | 2026-07-02 | 24 | ✓ |
 | `compiler/EVALUATOR_PLAN.md` | - | 2026-07-22 | 4 | ✓ |
+| `compiler/LSE_CHECKPOINT_CONTRACT.md` | - | 2026-07-26 | 0 | ✓ |
 | `compiler/OPTIMIZING_COMPILER_PLAN.md` | - | 2026-07-14 | 12 | ✓ |
 | `compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md` | - | 2026-07-17 | 9 | ✓ |
 | `compiler/SEQUENCE_MIXER_THEORY.md` | - | 2026-07-17 | 9 | ✓ |

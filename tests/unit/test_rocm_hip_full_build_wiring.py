@@ -39,6 +39,22 @@ def test_real_hip_build_keeps_neighbors_solvers_and_tpp() -> None:
     assert "TESSERA_HAVE_TPP" in opt
 
 
+def test_lean_rocm_driver_excludes_ambient_fa4_targets() -> None:
+    """Default-source FA4 targets must not make backend-only lean builds
+    self-conflicting, while full HIP builds continue to link them."""
+    opt = (ROOT / "tools/tessera-opt/CMakeLists.txt").read_text()
+    assert (
+        "if(TARGET TesseraAttnDialect AND NOT "
+        "TESSERA_OPT_LEAN_ARTIFACT_DRIVER)"
+    ) in opt
+    assert (
+        "if(TARGET TesseraQueueDialect AND NOT "
+        "TESSERA_OPT_LEAN_ARTIFACT_DRIVER)"
+    ) in opt
+    assert "tessera_opt_feature(fa4-attn TESSERA_HAVE_FA4_ATTN)" in opt
+    assert "tessera_opt_feature(fa4-queue TESSERA_HAVE_FA4_QUEUE)" in opt
+
+
 def test_nvidia_lit_site_loads_tests_and_llvm_tools() -> None:
     test_root = ROOT / "src/compiler/codegen/tessera_gpu_backend_NVIDIA/test"
     site = (test_root / "lit.site.cfg.py.in").read_text()

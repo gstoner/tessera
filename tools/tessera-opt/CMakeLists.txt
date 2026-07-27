@@ -76,8 +76,10 @@ endfunction()
 # together with the Apple backend left TesseraApple linked and
 # TESSERA_HAVE_APPLE_BACKEND defined while its registration block — living in
 # the non-lean arm — was compiled out, with no diagnostic. Same for Solvers,
-# Neighbors, TPP, scaling-resilience, and both FA-4 dialects. The validation at
-# the bottom of this file now makes that combination a configure error.
+# Neighbors, TPP, and scaling-resilience. Explicitly requested incompatible
+# features remain a configure error. Ambient default-source targets such as
+# the two FA-4 dialects are excluded from the lean driver's link/feature ledger
+# instead of making the legitimate backend-only configuration impossible.
 if((TESSERA_BUILD_ROCM_BACKEND AND NOT TESSERA_ENABLE_CUDA AND NOT TESSERA_ENABLE_HIP) OR
    (TESSERA_BUILD_NVIDIA_BACKEND AND NOT TESSERA_ENABLE_CUDA))
   set(TESSERA_OPT_LEAN_ARTIFACT_DRIVER ON)
@@ -95,7 +97,13 @@ endif()
 # tessera-opt so `tessera_attn.scaled_dot_product` and friends are
 # recognized at parse time.  The library is exported by
 # src/compiler/tile_opt_fa4/CMakeLists.txt as TesseraAttnDialect.
-if(TARGET TesseraAttnDialect)
+# The FA-4 targets are part of the default source build, but they are not part
+# of the hardware-free NVIDIA/ROCm artifact driver.  Treating their mere target
+# existence as driver intent made the documented lean backend configuration
+# self-conflicting: fa4-attn/fa4-queue were linked and then (correctly) rejected
+# as registrations the lean arm cannot install.  Full drivers still own both
+# dialects; lean drivers exclude them before feature accounting/linking.
+if(TARGET TesseraAttnDialect AND NOT TESSERA_OPT_LEAN_ARTIFACT_DRIVER)
   tessera_opt_feature(fa4-attn TESSERA_HAVE_FA4_ATTN)
   target_include_directories(tessera-opt PRIVATE
     ${CMAKE_SOURCE_DIR}/src/compiler/tile_opt_fa4/include
@@ -108,7 +116,7 @@ endif()
 # tessera-opt so `tessera.queue.create / push / pop` ops + the
 # `!tessera.queue.tile_queue` / `!tessera.queue.token` types are
 # recognized at parse time.  Mirrors the V7 Attn pattern above.
-if(TARGET TesseraQueueDialect)
+if(TARGET TesseraQueueDialect AND NOT TESSERA_OPT_LEAN_ARTIFACT_DRIVER)
   tessera_opt_feature(fa4-queue TESSERA_HAVE_FA4_QUEUE)
   target_include_directories(tessera-opt PRIVATE
     ${CMAKE_SOURCE_DIR}/src/compiler/tile_opt_fa4/include

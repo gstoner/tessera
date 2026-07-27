@@ -8,6 +8,16 @@ last_updated: 2026-07-27
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `TESSERA-OPT-BUILD-CAPABILITY-2026-07-27` is **closed**.
+The shared lit resolver now accepts `TESSERA_OPT_BIN`, `TESSERA_OPT_PATH`, and
+`TESSERA_OPT_CPP` after the canonical `TESSERA_OPT` override, and the validation
+script forwards its selected binary through that contract. Exact gfx1151
+verification proves the full ROCm driver, legitimate lean ROCm artifact
+driver, conflict rejection, both named streaming-attention fixtures, the
+seven-fixture filter, and the complete 50-test ROCm backend lit suite. This is
+shared test/build infrastructure only; no Metal registration, schedule,
+runtime ABI, device evidence, or selector changes.
+
 Cross-backend sync
 `ROCM-ATTENTION-SHARED-BACKWARD-CONSUMER-2026-07-26` makes ROCm gfx1151 the
 first direct physical consumer of the shared tensor-valued attention backward

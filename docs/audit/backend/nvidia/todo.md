@@ -3,12 +3,21 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-07-26
+last_updated: 2026-07-27
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
-<<<<<<< HEAD
+Cross-backend sync `TESSERA-OPT-BUILD-CAPABILITY-2026-07-27` is **closed**.
+The shared lit resolver now accepts `TESSERA_OPT_BIN`, `TESSERA_OPT_PATH`, and
+`TESSERA_OPT_CPP` after the canonical `TESSERA_OPT` override, and the validation
+script forwards its selected binary through that contract. Exact gfx1151
+verification proves the full ROCm driver, legitimate lean ROCm artifact
+driver, conflict rejection, both named streaming-attention fixtures, the
+seven-fixture filter, and the complete 50-test ROCm backend lit suite. This is
+shared test/build infrastructure only; no CUDA registration, PTX schedule,
+runtime ABI, device evidence, or selector changes.
+
 Cross-backend sync `LSE-CHECKPOINT-CONTRACT-2026-07-26`: the shared
 `tessera_attn.lse.save` / `lse.load` pair is a declared-but-unimplemented
 FlashAttention-2 checkpoint. `lse.save` takes no destination, `lse.load` takes
@@ -28,7 +37,7 @@ This backend owns the measurement, because the save-versus-recompute choice is
 an HBM-bandwidth question and this is a lead performance target (Decision #28).
 No IR, ABI, schedule, evidence, or selector changed in the synchronization
 slice itself.
-=======
+
 Cross-backend sync
 `ROCM-ATTENTION-SHARED-BACKWARD-CONSUMER-2026-07-26` makes ROCm gfx1151 the
 first direct physical consumer of the shared tensor-valued attention backward
@@ -78,7 +87,6 @@ preserving session-private ring ownership, flush/rollback, ordered submission,
 and drain-before-release. MoE metadata now owns launch-lifetime workspace and
 can bind a canonical NCCL/RCCL rank/device fingerprint. NVIDIA consumes the
 same local descriptor as before; no CUDA schedule, selector, or timing changes.
->>>>>>> origin/main
 
 Cross-backend sync `ROCM-E2E-ATTENTION-CARRIERS-2026-07-26` lands an
 AMD-owned consumer, native HSACO package, descriptor, and exact gfx1151 proof

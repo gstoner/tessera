@@ -1,7 +1,7 @@
 ---
 last_updated: 2026-07-27
 audit_role: plan
-plan_state: open
+plan_state: closed
 scope: ROCm-host verification of the tessera-opt build-capability change
 sync_key: TESSERA-OPT-BUILD-CAPABILITY-2026-07-27
 owner: ROCm backend owner (Strix Halo gfx1151 host)

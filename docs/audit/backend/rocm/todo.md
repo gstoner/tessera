@@ -7,7 +7,6 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
-<<<<<<< HEAD
 Cross-backend sync `LSE-CHECKPOINT-CONTRACT-2026-07-26`: the shared
 `tessera_attn.lse.save` / `lse.load` pair is a declared-but-unimplemented
 FlashAttention-2 checkpoint. `lse.save` takes no destination, `lse.load` takes
@@ -27,7 +26,7 @@ This backend owns the measurement, because the save-versus-recompute choice is
 an HBM-bandwidth question and this is a lead performance target (Decision #28).
 No IR, ABI, schedule, evidence, or selector changed in the synchronization
 slice itself.
-=======
+
 Cross-backend sync
 `ROCM-ATTENTION-SHARED-BACKWARD-CONSUMER-2026-07-26` closes the remaining
 gfx1151 direct-consumption action under `ROCM-E2E-ATTENTION`. The native
@@ -96,7 +95,6 @@ teardown. ROCm MoE dispatch/combine now validate the canonical launch-owned
 metadata descriptor, grouped GEMM consumes its canonical int32 partition, and
 the descriptor can bind an RCCL rank/device topology fingerprint without
 claiming unmeasured multi-rank execution.
->>>>>>> origin/main
 
 Cross-backend sync `ROCM-E2E-ATTENTION-CARRIERS-2026-07-26` is **landing**
 under ROCM-E2E-2. ROCm now consumes canonical `tile.attention_kernel` and
@@ -401,7 +399,13 @@ named exact device can satisfy an execution gate.
 | 8 | ROCM-4a | Add Radeon RX 9000 `gfx1200` exact-device proof | owner and reservation required | Matmul launches and compares; unsupported forms reject stably. |
 | 9 | ROCM-5 | Close the architecture-owned fragment umbrella | depends on ROCM-1 through ROCM-4b | Every enabled family/dtype has exact-device packing, numerical, resource, and timing evidence, or an explicit unsupported/deferred state. |
 | 10 | ROCM-LSE-1 | Evaluate saving versus recomputing the FlashAttention LSE | local WSL compiler and gfx1151 available; CDNA and long-context parts owner-gated | Measure where a stored `[B*H*Sq]` fp32 LSE beats the `_pre` kernel that currently recomputes `L[q] = logsumexp_k(scale*QK^T)` — whose header states the backward "needs nothing saved from the forward" — across sequence length, head count, dtype, and architecture (gfx1151 now; gfx950 MI350-series and gfx1250 MI455X where HBM bandwidth and long context make the trade decidable). Price in the no-stored-attention-matrix property the saved path gives up. Then take one of three outcomes jointly with NVIDIA: implement the real contract, retire the vocabulary, or — available immediately and independent of the measurement — **fix it at the source: stop `TileIRLoweringPass` emitting a destination-less `lse.save` at all.** The op already declares the effects a real store needs; what is wrong is emitting one with nowhere to write. The source-level fix is the preferred landing; it also drops a dead op from ROCm forwards and removes the one place a backend steps around a shared effectful op. Paired two-run medians in a named timing domain, retained resource evidence, an explicit workspace statement, and a recorded joint decision. If the source-level fix lands, the dormant `test_lse_checkpoint_contract.py` tripwire retires with it. |
-| 11 | ROCM-VERIFY-TESSERA-OPT-1 | Verify the tessera-opt build-capability change on a real ROCm host | Strix Halo gfx1151 box, after PR #469 merges | Step-by-step request in [`ROCM_VERIFICATION_REQUEST_2026-07-27.md`](ROCM_VERIFICATION_REQUEST_2026-07-27.md) (sync key `TESSERA-OPT-BUILD-CAPABILITY-2026-07-27`). Three claims are unverifiable on the Apple host: (a) the new lean-driver **configure error** — leanness moved from a C++ re-derivation to one CMake intent, and mixing it with any other linked feature now fails configuration, which only the real lean/full ROCm branches exercise; (b) 171 of the 178 remaining local test failures are ROCm tests that cannot run without a ROCm build (they fail `Unknown command line argument '--generate-rocm-*'`) and should pass on your host; (c) the two streaming-attention lit fixtures (`streaming_attention_modifiers_rocm.mlir`, `streaming_attention_rank4.mlir`) plus three siblings that have never had a hardware run, since CI's lit lane is opt-in. Also re-checks the `tessera-emit-rocdl` alias, which now fails through the pass registry's error handler rather than installing a silently empty pipeline. No code change is expected — a disagreement with any stated expectation is a finding to record here, not to work around. |
+| 11 | ROCM-VERIFY-TESSERA-OPT-1 | Verify the tessera-opt build-capability change on a real ROCm host | **complete on Strix Halo `gfx1151` (2026-07-27)** | The full and lean ROCm drivers, explicit conflict rejection, capability-aware helper, documented `TESSERA_OPT_BIN` lit invocation, streaming-attention fixtures, complete ROCm backend lit suite, ROCDL/HSACO lane, sealed packet, and generated docs pass. The completed request is archived at [`archive/ROCM_VERIFICATION_REQUEST_2026-07-27.md`](archive/ROCM_VERIFICATION_REQUEST_2026-07-27.md). |
+
+### `TESSERA-OPT-BUILD-CAPABILITY-2026-07-27` verification result
+
+| Sync key | ROCm host and build identity | Lean guard | Unit result versus Apple baseline | Streaming-attention lit | Remaining gates and disposition |
+|---|---|---|---|---|---|
+| `TESSERA-OPT-BUILD-CAPABILITY-2026-07-27` | **Strix Halo WSL `gfx1151`**, HIP **7.14.60850**, LLVM/Clang **23.0.0**. The full build configured and built cleanly. `--tessera-build-info` reported `build profile: full` and `features: core-tessera-ir fa4-attn fa4-queue neighbors rocm-backend scaling-resilience solvers tpp`. | **2a passed:** lean ROCm + Apple failed configuration nonzero and named only `apple-backend`, with both resolutions. **2b passed after repair:** the legitimate lean ROCm driver builds and reports `build profile: lean-artifact-driver`, `features: rocm-backend`; ambient default FA4 targets no longer masquerade as explicitly requested driver features. | Repository-venv run: **59 failed, 13,485 passed, 2,037 skipped, 857 deselected**, versus the Apple **178 failed / 12,761 passed** baseline. None of the 35 enumerated ROCm pass-registration files failed and no `Unknown command line argument '--generate-rocm-*'` survived. The nine migrated helper files passed **610/610** with no “does not register” skip. The remaining broad-suite failures were foreign/backend-local or host-state failures, not ROCm pass-registration failures. | The documented `TESSERA_OPT_BIN` invocation now selects `build-rocm` directly: the two named fixtures pass **2/2**, the complete `streaming_attention` filter passes **7/7**, and the rebuilt separate `tessera-rocm-opt` backend suite passes **50/50** through `test_rocm_lit_suite.py`. | `tessera-emit-rocdl` was listed; bogus options emitted `error: this pipeline takes no options` and exited nonzero; MLIR→HSACO passed **3/3**. The sealed gfx1151 packet validated (4 families, 4 Level-C fixtures, max absolute error 0.0), and **24 generated docs** were in sync. The verification item is complete. |
 
 ## ROCM-TEST-1: host-free compiler ownership
 

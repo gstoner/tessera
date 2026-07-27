@@ -8,13 +8,15 @@ substitution prefers an absolute path so the suite runs cleanly
 without the caller needing to export ``PATH`` first.  Probe order:
 
   1. ``$TESSERA_OPT`` environment variable (caller override),
-  2. ``<repo>/build/tools/tessera-opt/tessera-opt`` (the canonical
+  2. compatibility aliases ``$TESSERA_OPT_BIN``, ``$TESSERA_OPT_PATH``,
+     and ``$TESSERA_OPT_CPP`` in that order,
+  3. ``<repo>/build/tools/tessera-opt/tessera-opt`` (the canonical
      local build location used by
      ``cmake --build build --target tessera-opt``),
-  3. plain ``tessera-opt`` resolved against the caller's PATH,
-  4. common LLVM 23 bin directories such as Homebrew, TheRock, and
+  4. plain ``tessera-opt`` resolved against the caller's PATH,
+  5. common LLVM 23 bin directories such as Homebrew, TheRock, and
      ``/usr/lib/llvm-23/bin``,
-  5. plain ``tessera-opt`` as the literal substitution (leaves any
+  6. plain ``tessera-opt`` as the literal substitution (leaves any
      resolution failure to the test process).
 
 ``FileCheck`` follows the same probe order so the lit RUN lines
@@ -38,13 +40,23 @@ _LLVM_BIN_HINTS = (
 )
 
 
-def _resolve(env_var: str, repo_relative: str, fallback: str) -> str:
+def _resolve(
+    env_var: str,
+    repo_relative: str,
+    fallback: str,
+    *,
+    env_aliases: tuple[str, ...] = (),
+) -> str:
     """Pick the first available location for a build binary."""
     repo_root = os.path.abspath(
         os.path.join(os.path.dirname(__file__), "..", "..")
     )
-    if env_var in os.environ:
-        override = os.environ[env_var]
+    selected_env = next(
+        (name for name in (env_var, *env_aliases) if name in os.environ),
+        None,
+    )
+    if selected_env is not None:
+        override = os.environ[selected_env]
         # Caller-provided overrides must absolutize against the repo
         # root.  Lit runs each fixture from its ``Output/`` subdir, so
         # a relative path like ``build/tools/tessera-opt/tessera-opt``
@@ -76,7 +88,10 @@ config.suffixes = ['.mlir']
 config.environment['PATH'] = os.environ.get('PATH', '')
 
 _TESSERA_OPT = _resolve(
-    "TESSERA_OPT", "build/tools/tessera-opt/tessera-opt", "tessera-opt",
+    "TESSERA_OPT",
+    "build/tools/tessera-opt/tessera-opt",
+    "tessera-opt",
+    env_aliases=("TESSERA_OPT_BIN", "TESSERA_OPT_PATH", "TESSERA_OPT_CPP"),
 )
 _FILECHECK = _resolve("FILECHECK", "", "FileCheck")
 

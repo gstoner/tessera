@@ -1,4 +1,4 @@
-"""Regression: lit ``TESSERA_OPT`` / ``FILECHECK`` env overrides
+"""Regression: lit ``TESSERA_OPT`` aliases / ``FILECHECK`` env overrides
 absolutize against the repo root.
 
 Findings audit (2026-05-19) flagged that a relative env var like
@@ -15,6 +15,10 @@ The fix lives in ``_resolve()`` inside the two lit configs:
 Both files now expand ``~``, accept absolute paths verbatim, and
 join relative env-var values against the lit-config-anchored repo
 root before substituting them into the test command line.
+
+The top-level Tessera IR suite additionally accepts the repository's historical
+``TESSERA_OPT_BIN``, ``TESSERA_OPT_PATH``, and ``TESSERA_OPT_CPP`` selectors.
+``TESSERA_OPT`` remains authoritative when more than one is present.
 """
 
 from __future__ import annotations
@@ -98,6 +102,29 @@ def test_absolute_tessera_opt_override_still_honored() -> None:
     )
     assert proc.returncode == 0, (
         f"absolute TESSERA_OPT override broke lit (rc={proc.returncode}):\n"
+        f"stdout:\n{proc.stdout}\n\nstderr:\n{proc.stderr}"
+    )
+
+
+@pytest.mark.skipif(
+    not _have_tessera_opt() or _have_lit() is None,
+    reason="tessera-opt or lit not available",
+)
+def test_tessera_opt_bin_compatibility_override_is_honored() -> None:
+    """The validation scripts and ROCm verification packet use
+    ``TESSERA_OPT_BIN``; direct lit invocation must select it too."""
+    lit = _have_lit()
+    assert lit is not None
+    env = dict(os.environ)
+    env.pop("TESSERA_OPT", None)
+    env["TESSERA_OPT_BIN"] = str(TESSERA_OPT_ABS)
+    proc = subprocess.run(
+        [lit, str(FIXTURE), "-v"],
+        capture_output=True, text=True, timeout=60,
+        env=env, cwd=str(REPO_ROOT),
+    )
+    assert proc.returncode == 0, (
+        f"TESSERA_OPT_BIN override broke lit (rc={proc.returncode}):\n"
         f"stdout:\n{proc.stdout}\n\nstderr:\n{proc.stderr}"
     )
 

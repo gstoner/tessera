@@ -7,6 +7,30 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync
+`ROCM-ATTENTION-SHARED-BACKWARD-CONSUMER-2026-07-26` closes the remaining
+gfx1151 direct-consumption action under `ROCM-E2E-ATTENTION`. The native
+packager now emits one shared tensor program containing the canonical rank-4
+forward recompute and `tessera_attn.backward`; shared lowering materializes
+the dQ, split dK/dV, and ascending-reduction `scf.for` bodies before ROCm
+selects a physical schedule. The gfx1151 adapter fails closed unless all three
+phase bodies have the verified nesting, common dO/Q/K/V/bias SSA values,
+launch-owned two-split workspace, explicit `[2,B,Hkv,Sk,D]` FP32 partials, and
+ascending reduction order. Only then does it produce the compiler-owned
+five-entry HSACO contract. The runtime descriptor requires semantic route
+`canonical_tensor_backward_scf_for`, so the legacy
+`tile.attention_backward_kernel` carrier can no longer silently source this
+optimized package.
+
+Host compiler fixtures cover bias-bearing, canonical zero-bias, and incomplete
+phase rejection. Exact gfx1151 combined bias+softcap+window+dropout gradients
+remain within maximum absolute errors dQ `0.000024833`, dK `0.000035211`, and
+dV `0.000329971`. With the HSACO, workspace, and user buffers resident, five
+warmups plus 21 synchronized five-launch samples measure a `0.367367 ms`
+median versus the `0.368203 ms` baseline and `0.405023 ms` 10% cap. The image
+is 86,232 bytes and launch workspace remains 37,888 bytes. This WSL host-wall
+timing is a regression gate, not selector-eligible device-event evidence.
+
 Cross-backend sync `CORE-ATTENTION-TENSOR-LOOPS-MODIFIERS-2026-07-26`
 materializes the verified deterministic backward contract as tensor-valued
 shared `scf.for` bodies. dQ carries one FP32 result tensor through explicit
@@ -22,9 +46,10 @@ bias+softcap+dropout execution matches the shared oracle at max error
 `hipDeviceSynchronize` median is `0.098631 ms` versus the `0.097763 ms`
 base-feature baseline and passes the 10% ratchet. The test also repaired the
 HIP launch ABI to pass dropout probability and seed before the trailing bias
-memref. Direct ROCm consumption of the new backward phase operations into the
-five-entry package remains follow-up; the launch carrier is still that physical
-packaging boundary. That retained carrier package revalidates combined
+memref. At this synchronization point, direct ROCm consumption of the new
+backward phase operations remained follow-up and the launch carrier was still
+the physical packaging boundary; the 2026-07-27 sync above supersedes that
+temporary boundary. That retained carrier package revalidates combined
 dropout replay at max errors dQ `0.000024833`, dK `0.000035211`, and dV
 `0.000329971`; its five-launch resident median is `0.364209 ms` versus the
 `0.368203 ms` baseline and passes the 10% ratchet.
@@ -335,7 +360,7 @@ evidence and not evidence for any sibling architecture.
 | ROCM-TEST-1 | complete | The ROCm-only LLVM/MLIR 23 build owns a 27-node host-free compiler lane; 27/27 pass with Apple/NVIDIA/CPU ownership excluded and foreign pipeline absence retained in the report. |
 | ROCM-DTYPE-1 | complete on gfx1151 | FP64 and integer widths have per-operation Target-IR/runtime assessments; unsigned LLVM probes pass without inventing unsigned storage ABIs; signed int4 is canonical and physically packed; gfx1151 FP8/BF8 is rejected by name. |
 | ROCM-SSA-LDS | complete | AMD async-copy, waitcnt, and matrix consumers use shared SSA allocation, token, and pipeline-state identity; compatibility readers are retired, shared/ROCm fixtures are SSA-only, host structural and compiler-benchmark gates pass, while exact-device performance remains intentionally unclaimed. |
-| ROCM-E2E-ATTENTION | landing | Forward owns exact gfx1151 WMMA packaging/launch/oracle/timing and now consumes shared per-head bias plus softcap directly; combined bias+softcap+dropout measures 0.098631 ms resident with 0.000271678 max error. Backward exposes launch-owned split/reduced metadata and now has tensor-valued shared dQ/partial/reduction loops. Direct ROCm consumption of those backward phase ops into the five-entry package remains open. |
+| ROCM-E2E-ATTENTION | complete on gfx1151 | Forward consumes the canonical rank-4 recurrence with per-head bias, softcap, dropout, GQA/window/ragged policy, and exact numerical/timing proof. Backward consumes the tensor-valued shared dQ/split-partial/ascending-reduction loops directly into the compiler-owned five-entry package; exact combined gradients and the resident program-wall ratchet pass. |
 
 ## Recommended open-work order
 
@@ -345,7 +370,6 @@ named exact device can satisfy an execution gate.
 
 | Order | ID | Work | Access state | Completion gate |
 |---:|---|---|---|---|
-| 0 | ROCM-E2E-ATTENTION | Complete the canonical attention family | local WSL compiler and gfx1151 available | Consume the tensor-valued shared backward phase loops directly into the five-entry gfx1151 package, retaining fixed workspace/reduction ownership and exact-device gradient plus resident timing ratchets. |
 | 1 | ROCM-2 | Run the common P0 packet on Radeon AI PRO R9700 `gfx1201` | owner and reservation required | RDNA 4 WMMA-v2 f16/bf16 plus enabled FP8/integer forms assemble, launch, match aligned/ragged oracles, and record resources and timing. |
 | 2 | ROCM-1 | Run the common P0 packet on MI350-series `gfx950` | owner and reservation required | CDNA 4 matmul, flash attention, softmax, and GELU launch and compare; low-precision breadth advances only with physical-layout proof. |
 | 3 | ROCM-3 | Run the common P0 packet on MI455X `gfx1250` | owner and reservation required | The upstream-LLVM artifact joins to a launch/numerical proof; WMMA-v2 properties and fragment layout match the device. |

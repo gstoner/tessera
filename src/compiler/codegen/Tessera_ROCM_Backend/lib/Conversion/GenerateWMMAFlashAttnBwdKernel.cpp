@@ -1,8 +1,8 @@
 //===- GenerateWMMAFlashAttnBwdKernel.cpp - compiler-generated FA-2 bwd ---===//
 //
-// Expands a `tessera_rocm.flash_attn_bwd` directive into THREE real, fragment-
-// materialized RDNA WMMA kernels implementing the textbook FA-2 backward (no
-// stored attention matrix — S / P are recomputed per tile):
+// Expands a `tessera_rocm.flash_attn_bwd` directive into a real fragment-
+// materialized RDNA WMMA kernel program implementing the textbook FA-2
+// backward (no stored attention matrix — S / P are recomputed per tile):
 //
 //   <name>_pre  : one wave / (16-query tile, b*h). Scalar pass computing
 //                 D[q] = sum_d O[q,d]*dO[q,d] and L[q] = logsumexp_k(scale*QK^T)
@@ -13,6 +13,8 @@
 //                 (WMMA), dS=P*(dP-D); accumulate dV += P^T@dO and
 //                 dK += scale*dS^T@Q (WMMA, contraction over queries — P / dS
 //                 are staged in LDS and reread transposed: the layout bridge).
+//   <name>_dkdv_reduce : fixed ascending-split reduction into final dK/dV
+//                 outputs (present for the canonical split-reduced route).
 //   <name>_dq   : one wave / (16-query tile, b*h). Loops key tiles: same
 //                 S/P/dP/dS, accumulate dQ += scale*dS@K (WMMA, contraction
 //                 over keys; dS reread from LDS in natural layout).
@@ -44,7 +46,7 @@ using namespace mlir;
 
 namespace {
 
-// Small builder helpers shared by the three kernels.
+// Small builder helpers shared by the backward kernel program.
 struct Emit {
   OpBuilder &b;
   Location loc;
@@ -877,9 +879,9 @@ struct GenerateWMMAFlashAttnBwdKernelPass
     return "generate-wmma-flash-attn-bwd-kernel";
   }
   StringRef getDescription() const final {
-    return "Expand a tessera_rocm.flash_attn_bwd directive into the three "
-           "fragment-materialized RDNA WMMA FA-2 backward gpu kernels "
-           "(_pre/_dkdv/_dq; compiler-generated)";
+    return "Expand a tessera_rocm.flash_attn_bwd directive into the "
+           "fragment-materialized RDNA WMMA FA-2 backward GPU program "
+           "(_pre/_dkdv/optional _dkdv_reduce/_dq; compiler-generated)";
   }
   void getDependentDialects(DialectRegistry &registry) const final {
     registry.insert<gpu::GPUDialect, scf::SCFDialect, vector::VectorDialect,

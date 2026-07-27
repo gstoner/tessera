@@ -627,6 +627,374 @@ static LogicalResult materializeCanonicalStreamingAttention(
   return success();
 }
 
+static StringRef attentionBackwardPhase(scf::ForOp loop) {
+  auto attr =
+      loop->getAttrOfType<StringAttr>("tessera.attention_backward_phase");
+  return attr ? attr.getValue() : StringRef();
+}
+
+static bool hasAttentionBackwardParentPhases(
+    Operation *op, ArrayRef<StringRef> expected) {
+  Operation *parent = op->getParentOp();
+  for (StringRef phase : expected) {
+    auto loop = dyn_cast_or_null<scf::ForOp>(parent);
+    if (!loop || attentionBackwardPhase(loop) != phase)
+      return false;
+    parent = parent->getParentOp();
+  }
+  return true;
+}
+
+// Consume the target-neutral tensor-valued VJP loops as one gfx1151 backward
+// directive. The phase ops own the mathematical recurrence and scf.for owns
+// distribution/workspace/reduction ordering; this adapter validates those
+// invariants before selecting the AMD five-entry physical program.
+static LogicalResult materializeCanonicalAttentionBackward(
+    ModuleOp module, func::FuncOp function, StringRef arch) {
+  if (arch != "gfx1151") {
+    function.emitError(
+        "ROCm canonical attention-backward consumption is currently "
+        "exact-device gated to gfx1151");
+    return failure();
+  }
+  if ((function.getNumArguments() != 4 &&
+       function.getNumArguments() != 5) ||
+      function.getNumResults() != 3) {
+    function.emitError(
+        "ROCm canonical attention backward requires dO, Q, K, V, optional "
+        "bias, and dQ/dK/dV results");
+    return failure();
+  }
+
+  SmallVector<Operation *> dqBlocks;
+  SmallVector<Operation *> dkdvBlocks;
+  SmallVector<Operation *> reduceBlocks;
+  function.walk([&](Operation *op) {
+    StringRef name = op->getName().getStringRef();
+    if (name == "tessera_attn.backward_dq_block")
+      dqBlocks.push_back(op);
+    else if (name == "tessera_attn.backward_dkdv_block")
+      dkdvBlocks.push_back(op);
+    else if (name == "tessera_attn.backward_reduce_split")
+      reduceBlocks.push_back(op);
+  });
+  if (dqBlocks.size() != 1 || dkdvBlocks.size() != 1 ||
+      reduceBlocks.size() != 1) {
+    function.emitError(
+        "ROCm canonical attention backward requires exactly one dQ block, "
+        "one split dK/dV block, and one fixed-order reduction body");
+    return failure();
+  }
+  Operation *dqBlock = dqBlocks.front();
+  Operation *dkdvBlock = dkdvBlocks.front();
+  Operation *reduceBlock = reduceBlocks.front();
+  if (!hasAttentionBackwardParentPhases(
+          dqBlock, {"dq.key_block", "dq.query_block", "dq.query_head",
+                    "dq.batch"}) ||
+      !hasAttentionBackwardParentPhases(
+          dkdvBlock,
+          {"dkdv.key_block", "dkdv.query_block", "dkdv.split",
+           "dkdv.kv_head", "dkdv.batch"}) ||
+      !hasAttentionBackwardParentPhases(
+          reduceBlock,
+          {"reduce.fixed_order_split", "reduce.kv_head", "reduce.batch"})) {
+    function.emitError(
+        "ROCm canonical attention backward phase ops are not nested in the "
+        "verified shared loop order");
+    return failure();
+  }
+
+  auto splitLoop = dkdvBlock->getParentOfType<scf::ForOp>();
+  splitLoop = splitLoop ? splitLoop->getParentOfType<scf::ForOp>()
+                        : scf::ForOp();
+  splitLoop = splitLoop ? splitLoop->getParentOfType<scf::ForOp>()
+                        : scf::ForOp();
+  auto reduceLoop = reduceBlock->getParentOfType<scf::ForOp>();
+  auto workspaceOwner =
+      splitLoop
+          ? splitLoop->getAttrOfType<StringAttr>("tessera.workspace_owner")
+          : StringAttr();
+  auto reductionOrder =
+      reduceLoop
+          ? reduceLoop->getAttrOfType<StringAttr>("tessera.reduction_order")
+          : StringAttr();
+  if (!workspaceOwner || workspaceOwner.getValue() != "program_launch" ||
+      !reductionOrder ||
+      reductionOrder.getValue() != "ascending_split") {
+    function.emitError(
+        "ROCm canonical attention backward requires launch-owned split "
+        "workspace and ascending split reduction");
+    return failure();
+  }
+  if (dqBlock->getNumOperands() != 10 ||
+      dkdvBlock->getNumOperands() != 12 ||
+      reduceBlock->getNumOperands() != 7 ||
+      dqBlock->getNumResults() != 1 ||
+      dkdvBlock->getNumResults() != 2 ||
+      reduceBlock->getNumResults() != 2) {
+    function.emitError(
+        "ROCm canonical attention backward phase signatures disagree with "
+        "the shared tensor contract");
+    return failure();
+  }
+  for (unsigned i = 0; i < 5; ++i) {
+    if (dqBlock->getOperand(i) != dkdvBlock->getOperand(i)) {
+      function.emitError(
+          "ROCm canonical attention backward phase bodies must share the "
+          "same dO/Q/K/V/bias SSA values");
+      return failure();
+    }
+  }
+  if (dqBlock->getAttrDictionary() != dkdvBlock->getAttrDictionary() ||
+      dqBlock->getAttrDictionary() != reduceBlock->getAttrDictionary()) {
+    function.emitError(
+        "ROCm canonical attention backward phase bodies must carry one "
+        "identical shared semantic policy");
+    return failure();
+  }
+  auto partialOwner =
+      reduceBlock->getOperand(0).getDefiningOp<scf::ForOp>();
+  if (!partialOwner ||
+      reduceBlock->getOperand(1).getDefiningOp() !=
+          partialOwner.getOperation() ||
+      attentionBackwardPhase(partialOwner) != "dkdv.batch" ||
+      !partialOwner->isProperAncestor(dkdvBlock)) {
+    function.emitError(
+        "ROCm canonical attention backward reduction must consume the "
+        "SSA results of the split dK/dV batch loop");
+    return failure();
+  }
+  auto returnOp =
+      dyn_cast<func::ReturnOp>(function.getBody().front().getTerminator());
+  auto dqOwner =
+      returnOp && returnOp.getNumOperands() == 3
+          ? returnOp.getOperand(0).getDefiningOp<scf::ForOp>()
+          : scf::ForOp();
+  auto reduceOwner =
+      returnOp && returnOp.getNumOperands() == 3
+          ? returnOp.getOperand(1).getDefiningOp<scf::ForOp>()
+          : scf::ForOp();
+  if (!dqOwner || attentionBackwardPhase(dqOwner) != "dq.batch" ||
+      !reduceOwner ||
+      attentionBackwardPhase(reduceOwner) != "reduce.batch" ||
+      returnOp.getOperand(2).getDefiningOp() != reduceOwner.getOperation()) {
+    function.emitError(
+        "ROCm canonical attention backward function results must be the "
+        "shared dQ and fixed-reduction loop results");
+    return failure();
+  }
+
+  auto dOutType =
+      dyn_cast<RankedTensorType>(function.getArgument(0).getType());
+  auto qType = dyn_cast<RankedTensorType>(function.getArgument(1).getType());
+  auto kType = dyn_cast<RankedTensorType>(function.getArgument(2).getType());
+  auto vType = dyn_cast<RankedTensorType>(function.getArgument(3).getType());
+  auto dQType = dyn_cast<RankedTensorType>(function.getResultTypes()[0]);
+  auto dKType = dyn_cast<RankedTensorType>(function.getResultTypes()[1]);
+  auto dVType = dyn_cast<RankedTensorType>(function.getResultTypes()[2]);
+  auto validStaticRank4 = [](RankedTensorType type) {
+    return type && type.hasStaticShape() && type.getRank() == 4;
+  };
+  if (!validStaticRank4(dOutType) || !validStaticRank4(qType) ||
+      !validStaticRank4(kType) || !validStaticRank4(vType) ||
+      !validStaticRank4(dQType) || !validStaticRank4(dKType) ||
+      !validStaticRank4(dVType)) {
+    function.emitError(
+        "ROCm canonical attention backward currently requires static rank-4 "
+        "dO/Q/K/V/dQ/dK/dV tensors");
+    return failure();
+  }
+
+  int64_t batch = qType.getDimSize(0);
+  int64_t queryHeads = qType.getDimSize(1);
+  int64_t queryRows = qType.getDimSize(2);
+  int64_t headDim = qType.getDimSize(3);
+  int64_t kvHeads = kType.getDimSize(1);
+  int64_t keyRows = kType.getDimSize(2);
+  int64_t valueDim = vType.getDimSize(3);
+  SmallVector<int64_t> expectedDOut{
+      batch, queryHeads, queryRows, valueDim};
+  if (batch <= 0 || queryHeads <= 0 || kvHeads <= 0 ||
+      queryHeads % kvHeads != 0 || queryRows <= 0 || keyRows <= 0 ||
+      headDim <= 0 || headDim % 16 != 0 || headDim != valueDim ||
+      kType.getDimSize(0) != batch || vType.getDimSize(0) != batch ||
+      vType.getDimSize(1) != kvHeads ||
+      kType.getDimSize(2) != keyRows ||
+      vType.getDimSize(2) != keyRows ||
+      kType.getDimSize(3) != headDim ||
+      dOutType.getShape() != ArrayRef<int64_t>(expectedDOut) ||
+      dQType.getShape() != qType.getShape() ||
+      dKType.getShape() != kType.getShape() ||
+      dVType.getShape() != vType.getShape() ||
+      !dQType.getElementType().isF32() ||
+      !dKType.getElementType().isF32() ||
+      !dVType.getElementType().isF32()) {
+    function.emitError(
+        "ROCm canonical attention backward requires valid static GQA shapes, "
+        "f32 gradients, and equal WMMA-compatible head/value dimensions");
+    return failure();
+  }
+  StringRef storage;
+  if (qType.getElementType().isF16())
+    storage = "f16";
+  else if (qType.getElementType().isBF16())
+    storage = "bf16";
+  else {
+    function.emitError(
+        "gfx1151 canonical attention backward requires f16 or bf16 storage");
+    return failure();
+  }
+  if (dOutType.getElementType() != qType.getElementType() ||
+      kType.getElementType() != qType.getElementType() ||
+      vType.getElementType() != qType.getElementType()) {
+    function.emitError(
+        "ROCm canonical attention backward dO/Q/K/V storage must match");
+    return failure();
+  }
+
+  Value biasValue = dqBlock->getOperand(4);
+  bool hasBias = function.getNumArguments() == 5;
+  auto biasType = dyn_cast<RankedTensorType>(biasValue.getType());
+  if (!biasType || !biasType.hasStaticShape() ||
+      (biasType.getRank() != 3 && biasType.getRank() != 4) ||
+      !biasType.getElementType().isF32()) {
+    function.emitError(
+        "ROCm canonical attention backward bias must be a static rank-3/4 "
+        "f32 tensor");
+    return failure();
+  }
+  int64_t biasSequenceDim = biasType.getRank() - 2;
+  if ((biasType.getDimSize(0) != 1 &&
+       biasType.getDimSize(0) != batch) ||
+      (biasType.getRank() == 4 && biasType.getDimSize(1) != 1 &&
+       biasType.getDimSize(1) != queryHeads) ||
+      biasType.getDimSize(biasSequenceDim) != queryRows ||
+      biasType.getDimSize(biasSequenceDim + 1) != keyRows) {
+    function.emitError(
+        "ROCm canonical attention backward bias must be "
+        "[B|1,Sq,Sk] or [B|1,Hq|1,Sq,Sk]");
+    return failure();
+  }
+  if (hasBias) {
+    if (biasValue != function.getArgument(4)) {
+      function.emitError(
+          "ROCm canonical attention backward bias phase operand must be the "
+          "launch bias argument");
+      return failure();
+    }
+  } else {
+    auto constant = biasValue.getDefiningOp<arith::ConstantOp>();
+    auto values =
+        constant ? dyn_cast<DenseElementsAttr>(constant.getValue())
+                 : DenseElementsAttr();
+    if (!values || !values.isSplat() ||
+        !values.getSplatValue<APFloat>().isZero()) {
+      function.emitError(
+          "ROCm bias-free canonical attention backward requires the shared "
+          "zero-bias tensor operand");
+      return failure();
+    }
+  }
+
+  auto splitCount = dqBlock->getAttrOfType<IntegerAttr>("split_count");
+  auto queryBlock = dqBlock->getAttrOfType<IntegerAttr>("query_block");
+  auto keyBlock = dqBlock->getAttrOfType<IntegerAttr>("key_block");
+  auto scale = dqBlock->getAttrOfType<FloatAttr>("scale");
+  auto causal = dqBlock->getAttrOfType<BoolAttr>("causal");
+  auto windowLeft = dqBlock->getAttrOfType<IntegerAttr>("window_left");
+  auto windowRight = dqBlock->getAttrOfType<IntegerAttr>("window_right");
+  auto softcap = dqBlock->getAttrOfType<FloatAttr>("softcap");
+  auto dropout = dqBlock->getAttrOfType<FloatAttr>("dropout_p");
+  auto dropoutSeed =
+      dqBlock->getAttrOfType<IntegerAttr>("dropout_seed");
+  bool windowCompatible =
+      windowLeft && windowRight &&
+      ((windowLeft.getInt() == -1 && windowRight.getInt() == -1) ||
+       (causal && causal.getValue() && windowLeft.getInt() >= 0 &&
+        windowRight.getInt() == 0));
+  if (!splitCount || splitCount.getInt() != 2 || !queryBlock ||
+      queryBlock.getInt() != 16 || !keyBlock || keyBlock.getInt() != 16 ||
+      !scale || !scale.getValue().isFinite() ||
+      scale.getValueAsDouble() <= 0.0 || !causal || !softcap ||
+      !softcap.getValue().isFinite() || softcap.getValueAsDouble() < 0.0 ||
+      !dropout || !dropout.getValue().isFinite() ||
+      dropout.getValueAsDouble() < 0.0 ||
+      dropout.getValueAsDouble() >= 1.0 || !dropoutSeed ||
+      dropoutSeed.getInt() < 0 || !windowCompatible) {
+    function.emitError(
+        "ROCm canonical attention backward requires the verified two-split "
+        "16x16 block contract and supported scale/mask/dropout policy");
+    return failure();
+  }
+
+  auto partialK =
+      dyn_cast<RankedTensorType>(dkdvBlock->getResult(0).getType());
+  auto partialV =
+      dyn_cast<RankedTensorType>(dkdvBlock->getResult(1).getType());
+  SmallVector<int64_t> expectedPartialK{2, batch, kvHeads, keyRows, headDim};
+  SmallVector<int64_t> expectedPartialV{2, batch, kvHeads, keyRows, valueDim};
+  if (!partialK || !partialV ||
+      partialK.getShape() != ArrayRef<int64_t>(expectedPartialK) ||
+      partialV.getShape() != ArrayRef<int64_t>(expectedPartialV) ||
+      !partialK.getElementType().isF32() ||
+      !partialV.getElementType().isF32()) {
+    function.emitError(
+        "ROCm canonical attention backward split partials must be explicit "
+        "[2,B,Hkv,Sk,D] f32 tensors");
+    return failure();
+  }
+
+  bool hasCall = false;
+  module.walk([&](func::CallOp call) {
+    if (call.getCallee() == function.getSymName())
+      hasCall = true;
+  });
+  if (hasCall) {
+    function.emitError(
+        "ROCm canonical attention-backward launch function must not have "
+        "internal callers before Target-IR packaging");
+    return failure();
+  }
+
+  OpBuilder builder(function);
+  OperationState state(function.getLoc(), "tessera_rocm.flash_attn_bwd");
+  state.addAttribute("name", builder.getStringAttr(function.getSymName()));
+  state.addAttribute("head_dim", builder.getI64IntegerAttr(headDim));
+  state.addAttribute("dtype", builder.getStringAttr(storage));
+  state.addAttribute("gqa", builder.getBoolAttr(queryHeads != kvHeads));
+  state.addAttribute("sliding_window",
+                     builder.getBoolAttr(windowLeft.getInt() >= 0));
+  state.addAttribute("logit_softcap",
+                     builder.getBoolAttr(softcap.getValueAsDouble() > 0.0));
+  state.addAttribute("dropout",
+                     builder.getBoolAttr(dropout.getValueAsDouble() > 0.0));
+  state.addAttribute("attn_bias", builder.getBoolAttr(hasBias));
+  state.addAttribute("split_reduced", builder.getBoolAttr(true));
+  state.addAttribute("arch", builder.getStringAttr(arch));
+  state.addAttribute(
+      "source", builder.getStringAttr("canonical_tensor_backward_scf_for"));
+  state.addAttribute(
+      "schedule",
+      builder.getStringAttr("gfx1151_wmma_backward_split_reduced"));
+  state.addAttribute("canonical_phase_loops", builder.getBoolAttr(true));
+  state.addAttribute("workspace_owner",
+                     builder.getStringAttr("program_launch"));
+  state.addAttribute("reduction_order",
+                     builder.getStringAttr("ascending_split"));
+  state.addAttribute("split_count", splitCount);
+  state.addAttribute("query_block", queryBlock);
+  state.addAttribute("key_block", keyBlock);
+  state.addAttribute("batch", builder.getI64IntegerAttr(batch));
+  state.addAttribute("query_heads",
+                     builder.getI64IntegerAttr(queryHeads));
+  state.addAttribute("kv_heads", builder.getI64IntegerAttr(kvHeads));
+  state.addAttribute("query_rows", builder.getI64IntegerAttr(queryRows));
+  state.addAttribute("key_rows", builder.getI64IntegerAttr(keyRows));
+  builder.create(state);
+  function.erase();
+  return success();
+}
+
 struct LowerTileToROCMPass
     : PassWrapper<LowerTileToROCMPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LowerTileToROCMPass)
@@ -671,6 +1039,26 @@ struct LowerTileToROCMPass
     });
     for (func::FuncOp function : canonicalAttentionFunctions) {
       if (failed(materializeCanonicalStreamingAttention(
+              getOperation(), function, arch))) {
+        signalPassFailure();
+        return;
+      }
+    }
+
+    SmallVector<func::FuncOp> canonicalBackwardFunctions;
+    llvm::SmallPtrSet<Operation *, 4> seenBackwardFunctions;
+    getOperation().walk([&](Operation *op) {
+      StringRef name = op->getName().getStringRef();
+      if (name != "tessera_attn.backward_dq_block" &&
+          name != "tessera_attn.backward_dkdv_block" &&
+          name != "tessera_attn.backward_reduce_split")
+        return;
+      auto function = op->getParentOfType<func::FuncOp>();
+      if (function && seenBackwardFunctions.insert(function).second)
+        canonicalBackwardFunctions.push_back(function);
+    });
+    for (func::FuncOp function : canonicalBackwardFunctions) {
+      if (failed(materializeCanonicalAttentionBackward(
               getOperation(), function, arch))) {
         signalPassFailure();
         return;

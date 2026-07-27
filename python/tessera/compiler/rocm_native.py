@@ -537,6 +537,133 @@ def emit_attention_backward_tile_ir(
 '''
 
 
+def emit_attention_backward_graph_ir(
+    *,
+    forward_entry: str,
+    backward_entry: str,
+    storage: str,
+    dims: tuple[int, int, int, int, int, int, int],
+    scale: float,
+    causal: bool,
+    bias: bool,
+    window_left: int,
+    window_right: int,
+    softcap: float,
+    dropout_p: float = 0.0,
+    dropout_seed: int = 0,
+    query_block: int = 16,
+    key_block: int = 16,
+    split_count: int = 2,
+) -> str:
+    """Emit the shared tensor-valued forward-recompute and backward program.
+
+    This is the canonical source for optimized gfx1151 backward packaging.
+    Target lowering consumes the resulting ``scf.for`` phase bodies and owns
+    only the AMD schedule and five-entry launch ABI.  The launch-level Tile
+    emitter above remains a compatibility/reference seam.
+    """
+    if storage not in {"f16", "bf16"}:
+        raise ValueError(
+            f"unsupported gfx1151 attention backward storage {storage!r}"
+        )
+    if not math.isfinite(scale) or scale <= 0.0:
+        raise ValueError("gfx1151 attention backward scale must be finite and positive")
+    if not math.isfinite(softcap) or softcap < 0.0:
+        raise ValueError("gfx1151 attention backward softcap must be finite and nonnegative")
+    if not math.isfinite(dropout_p) or not 0.0 <= dropout_p < 1.0:
+        raise ValueError("gfx1151 attention backward dropout must satisfy 0 <= p < 1")
+    if dropout_seed < 0:
+        raise ValueError("gfx1151 attention backward dropout seed must be nonnegative")
+    if query_block <= 0 or key_block <= 0 or split_count < 2:
+        raise ValueError(
+            "gfx1151 attention backward needs positive blocks and at least two splits"
+        )
+    b, hq, hkv, sq, sk, head_dim, value_dim = dims
+    if head_dim != value_dim:
+        raise ValueError("gfx1151 optimized attention backward requires D == Dv")
+
+    scale_literal = _mlir_float(scale)
+    softcap_literal = _mlir_float(softcap)
+    dropout_literal = _mlir_float(dropout_p)
+    bias_argument = (
+        f",\n      %bias: tensor<{b}x{hq}x{sq}x{sk}xf32>" if bias else ""
+    )
+    forward_bias_operand = ", %bias" if bias else ""
+    forward_bias_segment = 1 if bias else 0
+    forward_bias_type = f", tensor<{b}x{hq}x{sq}x{sk}xf32>" if bias else ""
+    if bias:
+        backward_bias_value = "%bias"
+        backward_bias_setup = ""
+        backward_bias_type = f"tensor<{b}x{hq}x{sq}x{sk}xf32>"
+    else:
+        backward_bias_value = "%zero_bias"
+        backward_bias_type = f"tensor<1x{sq}x{sk}xf32>"
+        backward_bias_setup = (
+            f"    %zero_bias = arith.constant dense<0.000000e+00> "
+            f": {backward_bias_type}\n"
+        )
+
+    return f'''module {{
+  func.func @{forward_entry}(
+      %q: tensor<{b}x{hq}x{sq}x{head_dim}x{storage}>,
+      %key: tensor<{b}x{hkv}x{sk}x{head_dim}x{storage}>,
+      %v: tensor<{b}x{hkv}x{sk}x{value_dim}x{storage}>{bias_argument}
+  ) -> tensor<{b}x{hq}x{sq}x{value_dim}xf32> {{
+    %o = "tessera.flash_attn"(%q, %key, %v{forward_bias_operand})
+        <{{operandSegmentSizes = array<i32: 1, 1, 1, {forward_bias_segment}>}}> {{
+      causal = {str(causal).lower()},
+      dropout_p = {dropout_literal} : f64,
+      dropout_seed = {dropout_seed} : i64,
+      head_dim = {head_dim} : i64,
+      scale = {scale_literal} : f32,
+      softcap = {softcap_literal} : f32,
+      tessera.tile_q = {sq} : i32,
+      tessera.tile_kv = {key_block} : i32,
+      window_left = {window_left} : i64,
+      window_right = {window_right} : i64
+    }} : (tensor<{b}x{hq}x{sq}x{head_dim}x{storage}>,
+          tensor<{b}x{hkv}x{sk}x{head_dim}x{storage}>,
+          tensor<{b}x{hkv}x{sk}x{value_dim}x{storage}>{forward_bias_type})
+          -> tensor<{b}x{hq}x{sq}x{value_dim}xf32>
+    return %o : tensor<{b}x{hq}x{sq}x{value_dim}xf32>
+  }}
+
+  func.func @{backward_entry}(
+      %do: tensor<{b}x{hq}x{sq}x{value_dim}x{storage}>,
+      %q: tensor<{b}x{hq}x{sq}x{head_dim}x{storage}>,
+      %key: tensor<{b}x{hkv}x{sk}x{head_dim}x{storage}>,
+      %v: tensor<{b}x{hkv}x{sk}x{value_dim}x{storage}>{bias_argument}
+  ) -> (tensor<{b}x{hq}x{sq}x{head_dim}xf32>,
+        tensor<{b}x{hkv}x{sk}x{head_dim}xf32>,
+        tensor<{b}x{hkv}x{sk}x{value_dim}xf32>) {{
+{backward_bias_setup}    %dq, %dk, %dv_out = "tessera_attn.backward"(
+        %do, %q, %key, %v, {backward_bias_value}) {{
+      causal = {str(causal).lower()},
+      dropout_p = {dropout_literal} : f32,
+      dropout_seed = {dropout_seed} : i64,
+      key_block = {key_block} : i64,
+      query_block = {query_block} : i64,
+      scale = {scale_literal} : f32,
+      softcap = {softcap_literal} : f32,
+      split_count = {split_count} : i64,
+      window_left = {window_left} : i64,
+      window_right = {window_right} : i64
+    }} : (tensor<{b}x{hq}x{sq}x{value_dim}x{storage}>,
+          tensor<{b}x{hq}x{sq}x{head_dim}x{storage}>,
+          tensor<{b}x{hkv}x{sk}x{head_dim}x{storage}>,
+          tensor<{b}x{hkv}x{sk}x{value_dim}x{storage}>,
+          {backward_bias_type})
+          -> (tensor<{b}x{hq}x{sq}x{head_dim}xf32>,
+              tensor<{b}x{hkv}x{sk}x{head_dim}xf32>,
+              tensor<{b}x{hkv}x{sk}x{value_dim}xf32>)
+    return %dq, %dk, %dv_out : tensor<{b}x{hq}x{sq}x{head_dim}xf32>,
+                                tensor<{b}x{hkv}x{sk}x{head_dim}xf32>,
+                                tensor<{b}x{hkv}x{sk}x{value_dim}xf32>
+  }}
+}}
+'''
+
+
 def requests_softmax(module: GraphIRModule) -> bool:
     return (
         len(module.functions) == 1
@@ -1157,6 +1284,24 @@ def _compile_attention_backward_tile_ir(tile_ir: str):
     )
 
 
+def _compile_attention_backward_graph_ir(
+    graph_ir: str, *, tile_q: int, tile_kv: int
+):
+    return _compile_native_tile_ir(
+        graph_ir,
+        directive="tessera_rocm.flash_attn_bwd",
+        generator=(
+            "generate-wmma-flash-attn-kernel,"
+            "generate-wmma-flash-attn-bwd-kernel"
+        ),
+        semantic_pipeline=(
+            "tessera-tile-ir-lowering{"
+            f"tile-q={tile_q} tile-kv={tile_kv} sm=90"
+            "}"
+        ),
+    )
+
+
 def package_softmax(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativePackage:
     contract = _softmax_contract(module)
     if contract is None:
@@ -1693,7 +1838,7 @@ def package_attention_backward(
         GFX1151_ATTN_BWD_REDUCE_ABI,
         GFX1151_ATTN_BWD_DQ_ABI,
     )
-    tile_ir = emit_attention_backward_tile_ir(
+    tile_ir = emit_attention_backward_graph_ir(
         forward_entry=forward_entry,
         backward_entry=backward_entry,
         storage=storage,
@@ -1715,7 +1860,18 @@ def package_attention_backward(
         toolchain_fp,
         device_libraries,
         compile_state,
-    ) = _compile_attention_backward_tile_ir(tile_ir)
+    ) = _compile_attention_backward_graph_ir(
+        tile_ir, tile_q=sq, tile_kv=16
+    )
+    if (
+        'source = "canonical_rank4_kv_scf_for"' not in target_ir
+        or 'source = "canonical_tensor_backward_scf_for"' not in target_ir
+        or "canonical_phase_loops = true" not in target_ir
+    ):
+        raise RuntimeError(
+            "gfx1151 attention backward packaging requires direct shared "
+            "forward and tensor-valued backward Target-IR consumers"
+        )
     image = NativeImageArtifact(
         target="rocm_gfx1151",
         architecture="gfx1151",
@@ -1910,8 +2066,9 @@ def package_attention_backward(
     stage_names = ("forward_recompute", "pre", "dkdv_split", "dkdv_reduce", "dq")
     base_provenance = {
         "work_item": "ROCM-E2E-ATTENTION",
-        "sync_key": "ROCM-E2E-ATTENTION-BACKWARD-2026-07-26",
+        "sync_key": "ROCM-ATTENTION-SHARED-BACKWARD-CONSUMER-2026-07-26",
         "schedule": "gfx1151_wmma_backward_split_reduced",
+        "semantic_route": "canonical_tensor_backward_scf_for",
         "route": "deterministic_split_reduced",
         "deterministic": True,
         "shape": list(dims),
@@ -1931,6 +2088,7 @@ def package_attention_backward(
         "workspace_owner": "program_launch",
         "workspace_bytes": workspace.bytes,
         "workspace_contract": "canonical_attention_backward_split_v1",
+        "source_ir_kind": "canonical_attention_tensor_program",
         "split_count": shared_workspace.split_count,
         "reduction_order": list(shared_workspace.reduction_order),
         "workspace_slices": [
@@ -1946,6 +2104,9 @@ def package_attention_backward(
                 slices, shared_workspace.slices, strict=True
             )
         ],
+        "shared_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
+        # Compatibility key retained for artifact-schema readers that have not
+        # yet generalized the historical Tile-only source field.
         "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
     }
     descriptors = tuple(
@@ -2081,6 +2242,7 @@ __all__ = [
     "ROCMNativeProgram",
     "ROCMWorkspaceSlice",
     "emit_attention_backward_tile_ir",
+    "emit_attention_backward_graph_ir",
     "emit_attention_tile_ir",
     "emit_moe_dispatch_tile_ir",
     "emit_reduce_tile_ir",

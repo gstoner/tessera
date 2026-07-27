@@ -49,8 +49,8 @@ def _module(
     sk: int,
     d: int,
     *,
-    dropout_p: float,
-    dropout_seed: int,
+    dropout_p: float = 0.0,
+    dropout_seed: int = 37,
 ) -> GraphIRModule:
     def tensor(shape: tuple[int, ...], dtype: str) -> IRType:
         element = {"fp16": "f16", "fp32": "f32"}[dtype]
@@ -117,8 +117,8 @@ def _reference(
     value: np.ndarray,
     bias: np.ndarray,
     *,
-    dropout_p: float,
-    dropout_seed: int,
+    dropout_p: float = 0.0,
+    dropout_seed: int = 37,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     return reference_attention_backward_split_reduced(
         do,

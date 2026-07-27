@@ -23,6 +23,27 @@ std::unique_ptr<::mlir::Pass> createLowerDeclarativeFusionsToAppleGPUPass();
 /// Consume legal Graph layout casts as Apple runtime binding contracts.
 std::unique_ptr<::mlir::Pass> createMaterializeGraphLayoutToApplePass();
 
+/// APPLE-PIPE-1: Apple consumption of the shared Tile physical-allocation and
+/// staged-pipeline SSA contract. Places `!tile.buffer` allocations into one
+/// per-function Metal threadgroup arena (16-byte aligned, capacity bounded)
+/// and claims `!tile.pipeline_state` rings as ping-pong threadgroup staging.
+/// Rejects NVIDIA-only TMA/mbarrier/TMEM vocabulary and name-based
+/// `#tile.buffer_ref` identity with stable diagnostics (Decision #21).
+std::unique_ptr<::mlir::Pass> createAppleThreadgroupPipelinePass();
+
+/// APPLE-TILE-2: recognize the shared canonical M/N/K GEMM reduction
+/// (`CORE-GEMM-KLOOP-2026-07-25`) and re-form it as one Apple
+/// `simdgroup_matrix` dispatch. Recognizing the loop does not change route
+/// selection: value-mode Accelerate/MPS stays the incumbent until a two-run
+/// paired corpus shows the simdgroup route winning.
+std::unique_ptr<::mlir::Pass> createCanonicalGemmToAppleGPUPass();
+
+/// APPLE-ATTN-STREAM-1: recognize the shared KV-block streaming-attention
+/// recurrence (`CORE-STREAMING-ATTN-2026-07-26`) and re-form it as one Apple
+/// flash-attention dispatch, carrying causal / sliding-window / logical-length
+/// semantics read off `tessera_attn.boundary_mask` instead of re-deriving them.
+std::unique_ptr<::mlir::Pass> createStreamingAttentionToAppleGPUPass();
+
 /// Tile IR → Apple CPU Target IR. `valueMode = false` (default) emits the
 /// attribute-only artifact/inspection ops; `valueMode = true` emits
 /// value-producing `tessera_apple.cpu.call` ops (the `-full` pipeline).

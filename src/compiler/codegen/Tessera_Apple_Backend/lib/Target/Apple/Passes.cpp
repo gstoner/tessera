@@ -51,6 +51,10 @@ PassPipelineRegistration<> gAppleGPUPipeline(
     "tessera-lower-to-apple_gpu",
     "Lower Tessera Tile IR to Apple Silicon GPU Target IR (Metal)",
     [](OpPassManager &pm) {
+      // APPLE-PIPE-1: claim the shared Tile physical-allocation / staged
+      // pipeline SSA contract as Metal threadgroup memory before anything
+      // consumes the tile ops, so placement and rejection are decided once.
+      pm.addPass(createAppleThreadgroupPipelinePass());
       // Phase-G G-B / close-out C: control flow → tessera_apple.gpu.control_loop
       // / control_if (before the generic Tile→Apple artifact lowering).
       pm.addPass(createLowerControlForToAppleGPUPass());
@@ -120,6 +124,9 @@ PassPipelineRegistration<> gAppleGPURuntimePipeline(
 
 void registerTesseraAppleBackendPipelines() {
   registerPass([]() { return createMaterializeGraphLayoutToApplePass(); });
+  registerPass([]() { return createAppleThreadgroupPipelinePass(); });
+  registerPass([]() { return createCanonicalGemmToAppleGPUPass(); });
+  registerPass([]() { return createStreamingAttentionToAppleGPUPass(); });
   // Touch the static registration objects so the linker keeps them.
   (void)&gAppleCPUPipeline;
   (void)&gAppleGPUPipeline;

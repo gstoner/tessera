@@ -85,6 +85,27 @@ class MslGemmShape:
         return all(d > 0 and d % f == 0 for d in (self.m, self.n, self.k))
 
 
+def apple_block_for_canonical_tile(tile_m: int, tile_n: int, tile_k: int) -> MslGemmShape:
+    """Round a shared canonical-loop tile up to an Apple threadgroup block.
+
+    APPLE-TILE-2. The canonical M/N/K contract's ``tessera.tile_*`` values are
+    *logical* loop steps: the shared tiler clamps them to the extent, so a
+    13x16x11 GEMM yields steps of 13/11/16. An Apple threadgroup block is a
+    different quantity — it must be a positive multiple of the 8x8x8
+    ``simdgroup_matrix`` fragment.
+
+    Rounding up is the correct reconciliation, not a workaround: the emitted
+    steel kernel zero-pads its cooperative loads and does an edge-masked store,
+    which is exactly the ``tessera.ragged_zero_pad`` guarantee the canonical
+    contract attaches to the loop. Rounding *down* would drop real elements.
+    """
+    if min(tile_m, tile_n, tile_k) <= 0:
+        raise ValueError(
+            f"canonical tile ({tile_m},{tile_n},{tile_k}) must be positive")
+    f = SIMDGROUP_FRAG
+    return MslGemmShape(*(((d + f - 1) // f) * f for d in (tile_m, tile_n, tile_k)))
+
+
 @dataclass(frozen=True)
 class AppleTileMslArtifact:
     """A target-selected Tile fragment and its materialized MSL source.
@@ -695,6 +716,7 @@ def metal_compile(msl: str, *, dtype: str = "bf16") -> MetalCompileResult:
 
 
 __all__ = [
+    "apple_block_for_canonical_tile",
     "SIMDGROUP_FRAG",
     "MslGemmShape",
     "AppleTileMslArtifact",

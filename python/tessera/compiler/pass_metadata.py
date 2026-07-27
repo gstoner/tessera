@@ -175,6 +175,35 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         sprint="CORE-COMPILER-CFG-MEMORY-BUDGETS-2026-07-24",
     ),
     PassMetadata(
+        name="tessera-apple-canonical-gemm",
+        cpp_class="CanonicalGemmToAppleGPUPass",
+        summary=(
+            "APPLE-TILE-2: recognizes the shared canonical M/N/K GEMM "
+            "reduction (three-deep scf.for with an fp32 accumulator and staged "
+            "!tile.pipeline_state) and re-forms it as one "
+            "`tessera_apple.gpu.kernel_call` simdgroup_matrix dispatch, "
+            "carrying the loop's own tile decision and ragged-zero-pad "
+            "guarantee. Recognition is not promotion: value-mode "
+            "Accelerate/MPS remains the incumbent route."
+        ),
+        input_dialects=("tessera", "scf", "tensor", "func"),
+        output_dialects=("tessera_apple", "func"),
+        required_attrs=("tessera.canonical_k_step",),
+        preserved_attrs=(
+            "tessera_apple.canonical_k_loop",
+            "tessera_apple.accumulate",
+            "tessera_apple.ragged_zero_pad",
+        ),
+        diagnostic_codes=(
+            "APPLE_CANONICAL_GEMM_UNRECOGNIZED",
+            "APPLE_CANONICAL_GEMM_SHAPE_UNSUPPORTED",
+            "APPLE_CANONICAL_GEMM_DTYPE_UNSUPPORTED",
+            "APPLE_CANONICAL_GEMM_ACCUM_UNSUPPORTED",
+        ),
+        pass_kind="lowering",
+        sprint="APPLE-TILE-2",
+    ),
+    PassMetadata(
         name="tessera-apple-materialize-layout-casts",
         cpp_class="MaterializeGraphLayoutToApplePass",
         summary=(
@@ -189,6 +218,76 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         diagnostic_codes=(),
         pass_kind="lowering",
         sprint="CORE-COMPILER-FOLLOWON",
+    ),
+    PassMetadata(
+        name="tessera-apple-streaming-attention",
+        cpp_class="StreamingAttentionToAppleGPUPass",
+        summary=(
+            "APPLE-ATTN-STREAM-1: recognizes the shared KV-block "
+            "streaming-attention recurrence and re-forms it as one Apple "
+            "flash-attention dispatch, carrying causal/window/logical-length "
+            "semantics read off tessera_attn.boundary_mask. Currently refuses "
+            "every program because the shared lowering always retains the "
+            "backward LSE checkpoint the Apple fused ABI cannot return; it is "
+            "therefore not wired into the production pipeline."
+        ),
+        # The tessera_attn.* ops are matched generically by name, so the
+        # FA-4 Attn dialect need not be loaded for this pass to run.
+        input_dialects=("tile", "scf", "tensor", "func"),
+        output_dialects=("tessera_apple", "func"),
+        required_attrs=("tessera.streaming_attention",),
+        preserved_attrs=(
+            "tessera_apple.streaming_recurrence",
+            "tessera_apple.causal",
+            "tessera_apple.logical_sk",
+            "tessera_apple.kv_block",
+        ),
+        diagnostic_codes=(
+            "APPLE_STREAMING_ATTN_UNRECOGNIZED",
+            "APPLE_STREAMING_ATTN_LSE_UNSUPPORTED",
+            "APPLE_STREAMING_ATTN_DROPOUT_UNSUPPORTED",
+            "APPLE_STREAMING_ATTN_SHAPE_UNSUPPORTED",
+            "APPLE_STREAMING_ATTN_HEAD_DIM_UNSUPPORTED",
+            "APPLE_STREAMING_ATTN_DTYPE_UNSUPPORTED",
+        ),
+        pass_kind="lowering",
+        sprint="APPLE-ATTN-STREAM-1",
+    ),
+    PassMetadata(
+        name="tessera-apple-threadgroup-pipeline",
+        cpp_class="AppleThreadgroupPipelinePass",
+        summary=(
+            "APPLE-PIPE-1: Apple consumption of the shared Tile "
+            "physical-allocation / staged-pipeline SSA contract. Places "
+            "`!tile.buffer` allocations into one 16-byte-aligned, "
+            "capacity-bounded Metal threadgroup arena and claims "
+            "`!tile.pipeline_state` rings as ping-pong staging. Rejects "
+            "NVIDIA-only TMA/mbarrier/TMEM vocabulary and name-based "
+            "`#tile.buffer_ref` identity."
+        ),
+        input_dialects=("tile", "func"),
+        output_dialects=("tile", "func"),
+        required_attrs=("space", "bytes"),
+        preserved_attrs=(
+            "tessera_apple.address_space",
+            "tessera_apple.threadgroup_offset",
+            "tessera_apple.threadgroup_arena_bytes",
+            "tessera_apple.stage_buffering",
+        ),
+        diagnostic_codes=(
+            "APPLE_THREADGROUP_SPACE_UNSUPPORTED",
+            "APPLE_THREADGROUP_MEMORY_EXCEEDED",
+            "APPLE_THREADGROUP_MALFORMED_ALLOC",
+            "APPLE_THREADGROUP_LEGACY_METADATA",
+            "APPLE_THREADGROUP_INVALID_OPTION",
+            "APPLE_STAGE_DEPTH_UNSUPPORTED",
+            "APPLE_STAGE_MALFORMED_INIT",
+            "APPLE_STAGE_UNROOTED_ADVANCE",
+            "APPLE_TILE_UNSUPPORTED_VOCABULARY",
+            "APPLE_MMA_STORAGE_UNSUPPORTED",
+        ),
+        pass_kind="lowering",
+        sprint="APPLE-PIPE-1",
     ),
     PassMetadata(
         name="tessera-compute-legalize",

@@ -20,6 +20,7 @@ from tessera.compiler.rocm_native import (
     GFX1151_ATTN_BWD_DQ_ABI,
     GFX1151_ATTN_BWD_PRE_ABI,
     GFX1151_ATTN_BWD_REDUCE_ABI,
+    GFX1151_ATTN_BF16_ABI,
     GFX1151_ATTN_F16_ABI,
     GFX1151_MOE_DISPATCH_F32_ABI,
     GFX1151_PAGED_KV_F32_ABI,
@@ -165,6 +166,12 @@ def _attention_backward_module(
             )
         ]
     )
+
+
+def _attention_numpy_dtype(dtype: str):
+    if dtype == "fp16":
+        return np.float16
+    return pytest.importorskip("ml_dtypes").bfloat16
 
 
 def _moe_dispatch_module(*, tokens: int = 7, slots: int = 9, hidden: int = 13) -> GraphIRModule:
@@ -381,10 +388,7 @@ def _fake_attention_graph_compile(tile_ir: str, *, tile_q: int, tile_kv: int):
         DeviceLibraryRecord("rocm.oclc_isa_version_1151", "3" * 64, "compiler_driver"),
     )
     return (
-        (
-            'module { "tessera_rocm.flash_attn"() {'
-            'source = "canonical_rank4_kv_scf_for"} : () -> () }'
-        ),
+        ('module { "tessera_rocm.flash_attn"() {source = "canonical_rank4_kv_scf_for"} : () -> () }'),
         "gpu.binary @binary",
         b"\x7fELFcanonical-attention",
         "compiler",
@@ -394,9 +398,7 @@ def _fake_attention_graph_compile(tile_ir: str, *, tile_q: int, tile_kv: int):
     )
 
 
-def _fake_attention_backward_compile(
-    graph_ir: str, *, tile_q: int, tile_kv: int
-):
+def _fake_attention_backward_compile(graph_ir: str, *, tile_q: int, tile_kv: int):
     assert "tessera.flash_attn" in graph_ir
     assert "tessera_attn.backward" in graph_ir
     assert "tile.attention_kernel" not in graph_ir
@@ -428,13 +430,22 @@ def _fake_attention_backward_compile(
     )
 
 
-def test_rocm_attention_carrier_selects_wmma_and_owns_native_package(monkeypatch) -> None:
-    module = _attention_module(bias=True, softcap=0.0)
+@pytest.mark.parametrize(
+    ("dtype", "storage", "abi_id"),
+    [
+        ("fp16", "f16", GFX1151_ATTN_F16_ABI),
+        ("bf16", "bf16", GFX1151_ATTN_BF16_ABI),
+    ],
+)
+def test_rocm_attention_carrier_selects_wmma_and_owns_native_package(
+    monkeypatch, dtype: str, storage: str, abi_id: str
+) -> None:
+    module = _attention_module(dtype=dtype, bias=True, softcap=0.0)
     assert requests_attention(module)
     assert supports_attention(module)
     source = emit_attention_tile_ir(
         entry="attention",
-        storage="f16",
+        storage=storage,
         dims=(1, 4, 2, 17, 19, 64, 64),
         scale=0.125,
         causal=True,
@@ -452,19 +463,20 @@ def test_rocm_attention_carrier_selects_wmma_and_owns_native_package(monkeypatch
         _fake_attention_graph_compile,
     )
     package = package_attention(module, pipeline_name="tessera-lower-to-rocm")
-    assert package.descriptor.abi_id == GFX1151_ATTN_F16_ABI
-    assert [item.name for item in package.descriptor.buffers] == [
-        "q", "key", "v", "bias", "o"
-    ]
+    assert package.descriptor.abi_id == abi_id
+    assert package.descriptor.provenance["storage"] == storage
+    assert [item.name for item in package.descriptor.buffers] == ["q", "key", "v", "bias", "o"]
     assert [item.name for item in package.descriptor.scalars] == [
-        "Sq", "Sk", "Scale", "Causal", "Hq", "KvRatio", "Window"
+        "Sq",
+        "Sk",
+        "Scale",
+        "Causal",
+        "Hq",
+        "KvRatio",
+        "Window",
     ]
-    assert package.descriptor.provenance["schedule"] == (
-        "gfx1151_wmma_canonical_streaming"
-    )
-    assert package.descriptor.provenance["sync_key"] == (
-        "CORE-STREAMING-ATTN-RANK4-ROCM-2026-07-26"
-    )
+    assert package.descriptor.provenance["schedule"] == ("gfx1151_wmma_canonical_streaming")
+    assert package.descriptor.provenance["sync_key"] == ("CORE-STREAMING-ATTN-RANK4-ROCM-2026-07-26")
 
 
 def test_rocm_attention_native_route_rejects_unimplemented_semantics() -> None:
@@ -499,15 +511,9 @@ def test_rocm_attention_package_consumes_canonical_rank4_streaming_ir(
         _fake_attention_graph_compile,
     )
     package = package_attention(module, pipeline_name="tessera-lower-to-rocm")
-    assert package.descriptor.provenance["semantic_route"] == (
-        "canonical_rank4_kv_scf_for"
-    )
-    assert package.descriptor.provenance["schedule"] == (
-        "gfx1151_wmma_canonical_streaming"
-    )
-    assert package.descriptor.provenance["sync_key"] == (
-        "CORE-STREAMING-ATTN-RANK4-ROCM-2026-07-26"
-    )
+    assert package.descriptor.provenance["semantic_route"] == ("canonical_rank4_kv_scf_for")
+    assert package.descriptor.provenance["schedule"] == ("gfx1151_wmma_canonical_streaming")
+    assert package.descriptor.provenance["sync_key"] == ("CORE-STREAMING-ATTN-RANK4-ROCM-2026-07-26")
     assert package.descriptor.provenance["dropout_seed"] == 37
 
 
@@ -536,21 +542,26 @@ def test_rocm_attention_package_owns_dropout_replay_and_combined_features(
     ]
     assert package.descriptor.provenance["dropout_p"] == 0.25
     assert package.descriptor.provenance["dropout_seed"] == 37
-    assert package.descriptor.provenance["semantic_route"] == (
-        "canonical_rank4_kv_scf_for"
-    )
+    assert package.descriptor.provenance["semantic_route"] == ("canonical_rank4_kv_scf_for")
 
 
+@pytest.mark.parametrize(
+    ("dtype", "storage", "forward_abi"),
+    [
+        ("fp16", "f16", GFX1151_ATTN_F16_ABI),
+        ("bf16", "bf16", GFX1151_ATTN_BF16_ABI),
+    ],
+)
 def test_rocm_attention_backward_package_owns_ordered_multi_entry_workspace(
-    monkeypatch,
+    monkeypatch, dtype: str, storage: str, forward_abi: str
 ) -> None:
-    module = _attention_backward_module()
+    module = _attention_backward_module(dtype=dtype)
     assert requests_attention_backward(module)
     assert supports_attention_backward(module)
     source = emit_attention_backward_graph_ir(
         forward_entry="attention_forward",
         backward_entry="attention_backward",
-        storage="f16",
+        storage=storage,
         dims=(1, 4, 2, 17, 19, 64, 64),
         scale=0.125,
         causal=True,
@@ -567,11 +578,9 @@ def test_rocm_attention_backward_package_owns_ordered_multi_entry_workspace(
         "tessera.compiler.rocm_native._compile_attention_backward_graph_ir",
         _fake_attention_backward_compile,
     )
-    program = package_attention_backward(
-        module, pipeline_name="tessera-lower-to-rocm"
-    )
+    program = package_attention_backward(module, pipeline_name="tessera-lower-to-rocm")
     assert [item.abi_id for item in program.descriptors] == [
-        GFX1151_ATTN_F16_ABI,
+        forward_abi,
         GFX1151_ATTN_BWD_PRE_ABI,
         GFX1151_ATTN_BWD_DKDV_ABI,
         GFX1151_ATTN_BWD_REDUCE_ABI,
@@ -592,22 +601,14 @@ def test_rocm_attention_backward_package_owns_ordered_multi_entry_workspace(
         "partial_dv",
     ]
     assert program.workspace.bytes % 256 == 0
-    assert all(
-        item.workspace.bytes == program.workspace.bytes
-        for item in program.descriptors
-    )
+    assert all(item.workspace.bytes == program.workspace.bytes for item in program.descriptors)
     assert program.descriptors[2].provenance["workspace_owner"] == "program_launch"
     assert program.descriptors[2].provenance["deterministic"] is True
-    assert program.descriptors[2].provenance["semantic_route"] == (
-        "canonical_tensor_backward_scf_for"
-    )
-    assert program.descriptors[2].provenance["source_ir_kind"] == (
-        "canonical_attention_tensor_program"
-    )
-    assert program.descriptors[2].provenance["sync_key"] == (
-        "ROCM-ATTENTION-SHARED-BACKWARD-CONSUMER-2026-07-26"
-    )
+    assert program.descriptors[2].provenance["semantic_route"] == ("canonical_tensor_backward_scf_for")
+    assert program.descriptors[2].provenance["source_ir_kind"] == ("canonical_attention_tensor_program")
+    assert program.descriptors[2].provenance["sync_key"] == ("ROCM-ATTENTION-SHARED-BACKWARD-CONSUMER-2026-07-26")
     assert len(program.descriptors[2].provenance["shared_ir_digest"]) == 64
+    assert all(item.provenance["storage"] == storage for item in program.descriptors)
 
 
 def test_rocm_attention_backward_optimized_contract_replays_dropout() -> None:
@@ -618,20 +619,20 @@ def test_rocm_attention_backward_optimized_contract_replays_dropout() -> None:
     os.environ.get("TESSERA_ROCM_E2E_DEVICE_TEST") != "1",
     reason="set TESSERA_ROCM_E2E_DEVICE_TEST=1 on the exact gfx1151 host",
 )
-def test_exact_gfx1151_forward_shared_bias_softcap_dropout() -> None:
+@pytest.mark.parametrize("dtype", ["fp16", "bf16"])
+def test_exact_gfx1151_forward_shared_bias_softcap_dropout(dtype: str) -> None:
     from tessera import runtime as tessera_runtime
     from tessera.compiler.attention_contract import reference_streaming_attention
 
-    module = _attention_module(bias=True, softcap=8.0, dropout_p=0.25)
+    module = _attention_module(dtype=dtype, bias=True, softcap=8.0, dropout_p=0.25)
     module.functions[0].body[0].kwargs["dropout_seed"] = 37
     package = package_attention(module, pipeline_name="tessera-lower-to-rocm")
-    assert package.descriptor.provenance["semantic_route"] == (
-        "canonical_rank4_kv_scf_for"
-    )
+    assert package.descriptor.provenance["semantic_route"] == ("canonical_rank4_kv_scf_for")
     rng = np.random.default_rng(20260728)
-    q = (rng.standard_normal((1, 4, 17, 64)) * 0.2).astype(np.float16)
-    key = (rng.standard_normal((1, 2, 19, 64)) * 0.2).astype(np.float16)
-    value = (rng.standard_normal((1, 2, 19, 64)) * 0.2).astype(np.float16)
+    storage_dtype = _attention_numpy_dtype(dtype)
+    q = (rng.standard_normal((1, 4, 17, 64)) * 0.2).astype(storage_dtype)
+    key = (rng.standard_normal((1, 2, 19, 64)) * 0.2).astype(storage_dtype)
+    value = (rng.standard_normal((1, 2, 19, 64)) * 0.2).astype(storage_dtype)
     bias = (rng.standard_normal((1, 4, 17, 19)) * 0.05).astype(np.float32)
     output = np.zeros((1, 4, 17, 64), dtype=np.float32)
     tessera_runtime._submit_rocm_gfx1151_native(
@@ -673,22 +674,24 @@ def test_exact_gfx1151_forward_shared_bias_softcap_dropout() -> None:
     os.environ.get("TESSERA_ROCM_E2E_DEVICE_TEST") != "1",
     reason="set TESSERA_ROCM_E2E_DEVICE_TEST=1 on the exact gfx1151 host",
 )
-def test_exact_gfx1151_backward_replays_dropout_with_bias_softcap() -> None:
+@pytest.mark.parametrize("dtype", ["fp16", "bf16"])
+def test_exact_gfx1151_backward_replays_dropout_with_bias_softcap(
+    dtype: str,
+) -> None:
     from tessera import runtime as tessera_runtime
     from tessera.compiler.attention_contract import (
         reference_attention_backward_split_reduced,
     )
 
-    module = _attention_backward_module(dropout_p=0.25)
+    module = _attention_backward_module(dtype=dtype, dropout_p=0.25)
     module.functions[0].body[0].kwargs["dropout_seed"] = 37
-    program = package_attention_backward(
-        module, pipeline_name="tessera-lower-to-rocm"
-    )
+    program = package_attention_backward(module, pipeline_name="tessera-lower-to-rocm")
     rng = np.random.default_rng(20260727)
-    q = (rng.standard_normal((1, 4, 17, 64)) * 0.2).astype(np.float16)
-    key = (rng.standard_normal((1, 2, 19, 64)) * 0.2).astype(np.float16)
-    value = (rng.standard_normal((1, 2, 19, 64)) * 0.2).astype(np.float16)
-    do = (rng.standard_normal((1, 4, 17, 64)) * 0.2).astype(np.float16)
+    storage_dtype = _attention_numpy_dtype(dtype)
+    q = (rng.standard_normal((1, 4, 17, 64)) * 0.2).astype(storage_dtype)
+    key = (rng.standard_normal((1, 2, 19, 64)) * 0.2).astype(storage_dtype)
+    value = (rng.standard_normal((1, 2, 19, 64)) * 0.2).astype(storage_dtype)
+    do = (rng.standard_normal((1, 4, 17, 64)) * 0.2).astype(storage_dtype)
     bias = (rng.standard_normal((1, 4, 17, 19)) * 0.05).astype(np.float32)
     outputs = (
         np.zeros((1, 4, 17, 64), dtype=np.float32),
@@ -957,9 +960,7 @@ def test_rocm_paged_kv_contract_rejects_bounds_dtype_and_output_drift() -> None:
     assert not supports_paged_kv_read(table_dtype)
 
     result_shape = _paged_kv_module()
-    result_shape.functions[0].result_types[0] = IRType(
-        "tensor<7x3x9xf32", ("7", "3", "9"), "fp32"
-    )
+    result_shape.functions[0].result_types[0] = IRType("tensor<7x3x9xf32", ("7", "3", "9"), "fp32")
     assert not supports_paged_kv_read(result_shape)
 
 

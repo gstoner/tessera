@@ -1,0 +1,69 @@
+{
+  "schema": "tessera.rocm.attention_backward_program.benchmark.v1",
+  "recorded_at": "2026-07-27",
+  "device": "gfx1151",
+  "storage": "bf16",
+  "toolchain": {
+    "rocm_hip": "7.14.60850",
+    "compiler": "AMD clang 23"
+  },
+  "shape": {
+    "B": 1,
+    "Hq": 4,
+    "Hkv": 2,
+    "Sq": 17,
+    "Sk": 19,
+    "D": 64
+  },
+  "feature_set": "bias_softcap_dropout_replay",
+  "entry_count": 5,
+  "workspace_bytes": 37888,
+  "timing": {
+    "clock": "time.perf_counter_ns",
+    "launch_api": "hipModuleLaunchKernel",
+    "completion_api": "hipDeviceSynchronize",
+    "resident_module": true,
+    "resident_buffers": true,
+    "warmup_iterations": 5,
+    "sample_count": 21,
+    "launch_count_per_sample": 5,
+    "program_wall_median_ms": 0.366238,
+    "operation_total_ms": 158.12887699576095,
+    "compiler_package_ms": 992.3903279996011,
+    "selector_eligible": false
+  },
+  "ratchet": {
+    "baseline_ms": 0.362481,
+    "max_regression_fraction": 0.1,
+    "limit_ms": 0.3987291,
+    "observed_ratio": 1.0103649005889937,
+    "passed": true
+  },
+  "dropout": {
+    "probability": 0.25,
+    "seed": 37,
+    "counter": "lcg32_counter_v1",
+    "replay": "forward_backward_identical"
+  },
+  "numerics": {
+    "max_abs_error": {
+      "dq": 0.00019893620628863573,
+      "dk": 0.0002809688448905945,
+      "dv": 0.0027238130569458008
+    },
+    "tolerance": 0.02,
+    "passed": true
+  },
+  "artifact": {
+    "binary_format": "hsaco",
+    "hsaco_bytes": 87528,
+    "entry_symbols": [
+      "tessera_tile_attention_bwd_recompute_bf16_5015dcb386",
+      "tessera_tile_attention_backward_bf16_5015dcb386_pre",
+      "tessera_tile_attention_backward_bf16_5015dcb386_dkdv",
+      "tessera_tile_attention_backward_bf16_5015dcb386_dkdv_reduce",
+      "tessera_tile_attention_backward_bf16_5015dcb386_dq"
+    ]
+  },
+  "passed": true
+}

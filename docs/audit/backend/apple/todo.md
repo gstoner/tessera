@@ -8,6 +8,15 @@ last_updated: 2026-07-27
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `ROCM-BF16-ATTENTION-2026-07-27` adds no Apple capability
+claim. It proves exact optimized BF16 forward and deterministic five-entry
+backward attention on gfx1151 for the shared ragged-GQA,
+bias+softcap+causal-window+dropout contracts. AMD BF16 WMMA, LDS scheduling,
+HSACO packaging, HIP launch workspace, numerical results, and resident
+host-wall timing are architecture-owned and do not transfer to Metal. Apple
+retains its separately owned storage policy, package, exact-device, and timing
+gates while shared semantic parity remains unchanged.
+
 Cross-backend sync `TESSERA-OPT-BUILD-CAPABILITY-2026-07-27` is **closed**.
 The shared lit resolver now accepts `TESSERA_OPT_BIN`, `TESSERA_OPT_PATH`, and
 `TESSERA_OPT_CPP` after the canonical `TESSERA_OPT` override, and the validation

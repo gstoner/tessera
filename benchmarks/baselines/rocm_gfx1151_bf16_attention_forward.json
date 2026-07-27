@@ -1,0 +1,53 @@
+{
+  "schema": "tessera.rocm.canonical_streaming_attention.benchmark.v1",
+  "recorded_at": "2026-07-27",
+  "device": "gfx1151",
+  "storage": "bf16",
+  "toolchain": {
+    "rocm_hip": "7.14.60850",
+    "compiler": "AMD clang 23"
+  },
+  "shape": {
+    "B": 1,
+    "Hq": 4,
+    "Hkv": 2,
+    "Sq": 17,
+    "Sk": 19,
+    "D": 64
+  },
+  "feature_set": "bias_softcap_dropout",
+  "semantic_route": "canonical_rank4_kv_scf_for",
+  "schedule": "gfx1151_wmma_canonical_streaming",
+  "timing": {
+    "clock": "time.perf_counter_ns",
+    "launch_api": "hipModuleLaunchKernel",
+    "completion_api": "hipDeviceSynchronize",
+    "resident_module": true,
+    "resident_buffers": true,
+    "warmup_iterations": 5,
+    "sample_count": 21,
+    "kernel_wall_median_ms": 0.09954,
+    "operation_total_median_ms": 2.7398960082791746,
+    "cold_operation_total_ms": 142.77870900696144,
+    "compile_ms": 366.1884159955662,
+    "selector_eligible": false
+  },
+  "ratchet": {
+    "baseline_ms": 0.097814,
+    "max_regression_fraction": 0.1,
+    "limit_ms": 0.1075954,
+    "observed_ratio": 1.0176457357842437,
+    "passed": true
+  },
+  "numerics": {
+    "max_abs_error": 0.0021768808364868164,
+    "tolerance": 0.035,
+    "passed": true
+  },
+  "artifact": {
+    "binary_format": "hsaco",
+    "hsaco_bytes": 22872,
+    "image_digest": "595afe3505af7ae11939888e223ee8a38bd8daa27f1ae6fc5aef8f81a75bbeca"
+  },
+  "passed": true
+}

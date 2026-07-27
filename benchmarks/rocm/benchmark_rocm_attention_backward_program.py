@@ -38,6 +38,10 @@ from tessera.runtime import (  # noqa: E402
 )
 
 PROGRAM_WALL_BASELINE_MS = 0.368203
+PROGRAM_WALL_BASELINE_MS_BY_DTYPE = {
+    "fp16": PROGRAM_WALL_BASELINE_MS,
+    "bf16": 0.362481,
+}
 PROGRAM_WALL_MAX_REGRESSION = 0.10
 
 
@@ -49,21 +53,22 @@ def _module(
     sk: int,
     d: int,
     *,
+    dtype: str = "fp16",
     dropout_p: float = 0.0,
     dropout_seed: int = 37,
 ) -> GraphIRModule:
     def tensor(shape: tuple[int, ...], dtype: str) -> IRType:
-        element = {"fp16": "f16", "fp32": "f32"}[dtype]
+        element = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[dtype]
         return IRType(
             f"tensor<{'x'.join(map(str, shape))}x{element}>",
             tuple(map(str, shape)),
             dtype,
         )
 
-    q = tensor((b, hq, sq, d), "fp16")
-    key = tensor((b, hkv, sk, d), "fp16")
-    value = tensor((b, hkv, sk, d), "fp16")
-    do = tensor((b, hq, sq, d), "fp16")
+    q = tensor((b, hq, sq, d), dtype)
+    key = tensor((b, hkv, sk, d), dtype)
+    value = tensor((b, hkv, sk, d), dtype)
+    do = tensor((b, hq, sq, d), dtype)
     bias = tensor((b, hq, sq, sk), "fp32")
     dq = tensor((b, hq, sq, d), "fp32")
     dk = tensor((b, hkv, sk, d), "fp32")
@@ -144,15 +149,18 @@ def _record(
     result: dict[str, Any],
     max_abs_error: dict[str, float],
     image_bytes: int,
+    dtype: str,
     dropout_p: float,
     dropout_seed: int,
 ) -> dict[str, Any]:
     samples = list(result["kernel_wall_samples_ms"])
     median_ms = statistics.median(samples)
-    limit_ms = PROGRAM_WALL_BASELINE_MS * (1.0 + PROGRAM_WALL_MAX_REGRESSION)
+    baseline_ms = PROGRAM_WALL_BASELINE_MS_BY_DTYPE[dtype]
+    limit_ms = baseline_ms * (1.0 + PROGRAM_WALL_MAX_REGRESSION)
     return {
         "schema": "tessera.rocm.attention_backward_program.benchmark.v1",
         "device": os.environ.get("TESSERA_ROCM_CHIP", "gfx1151"),
+        "storage": dtype,
         "image_bytes": image_bytes,
         "entry_symbols": list(result["entry_symbols"]),
         "workspace_bytes": int(result["workspace_bytes"]),
@@ -175,7 +183,7 @@ def _record(
                 "launch_count_per_sample": 5,
                 "completion_api": "hipDeviceSynchronize",
                 "selector_eligible": False,
-                "baseline_ms": PROGRAM_WALL_BASELINE_MS,
+                "baseline_ms": baseline_ms,
                 "max_regression": PROGRAM_WALL_MAX_REGRESSION,
                 "limit_ms": limit_ms,
                 "passes_ratchet": median_ms <= limit_ms,
@@ -188,6 +196,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--iterations", type=int, default=21)
     parser.add_argument("--warmup", type=int, default=5)
+    parser.add_argument("--dtype", choices=("fp16", "bf16"), default="fp16")
     parser.add_argument("--output")
     parser.add_argument("--dropout-p", type=float, default=0.0)
     parser.add_argument("--dropout-seed", type=int, default=37)
@@ -201,10 +210,16 @@ def main() -> int:
 
     shape = (1, 4, 2, 17, 19, 64)
     rng = np.random.default_rng(20260726)
-    q = rng.normal(0.0, 0.25, (shape[0], shape[1], shape[3], shape[5])).astype(np.float16)
-    key = rng.normal(0.0, 0.25, (shape[0], shape[2], shape[4], shape[5])).astype(np.float16)
-    value = rng.normal(0.0, 0.25, key.shape).astype(np.float16)
-    do = rng.normal(0.0, 0.25, q.shape).astype(np.float16)
+    if args.dtype == "bf16":
+        import ml_dtypes
+
+        storage_dtype = ml_dtypes.bfloat16
+    else:
+        storage_dtype = np.float16
+    q = rng.normal(0.0, 0.25, (shape[0], shape[1], shape[3], shape[5])).astype(storage_dtype)
+    key = rng.normal(0.0, 0.25, (shape[0], shape[2], shape[4], shape[5])).astype(storage_dtype)
+    value = rng.normal(0.0, 0.25, key.shape).astype(storage_dtype)
+    do = rng.normal(0.0, 0.25, q.shape).astype(storage_dtype)
     bias = rng.normal(0.0, 0.1, (shape[0], shape[1], shape[3], shape[4])).astype(np.float32)
     dq = np.empty(q.shape, dtype=np.float32)
     dk = np.empty(key.shape, dtype=np.float32)
@@ -214,6 +229,7 @@ def main() -> int:
     program = package_attention_backward(
         _module(
             *shape,
+            dtype=args.dtype,
             dropout_p=args.dropout_p,
             dropout_seed=args.dropout_seed,
         ),
@@ -248,9 +264,7 @@ def main() -> int:
     )
     errors = {
         name: float(np.max(np.abs(actual - expected)))
-        for name, actual, expected in zip(
-            ("dq", "dk", "dv"), result["outputs"], reference, strict=True
-        )
+        for name, actual, expected in zip(("dq", "dk", "dv"), result["outputs"], reference, strict=True)
     }
     record = _record(
         package_ms=package_ms,
@@ -258,6 +272,7 @@ def main() -> int:
         result=result,
         max_abs_error=errors,
         image_bytes=len(program.image.payload),
+        dtype=args.dtype,
         dropout_p=args.dropout_p,
         dropout_seed=args.dropout_seed,
     )

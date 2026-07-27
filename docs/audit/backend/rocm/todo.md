@@ -7,6 +7,26 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `ROCM-BF16-ATTENTION-2026-07-27` closes the remaining
+gfx1151 storage-parity evidence for optimized attention. The canonical rank-4
+forward recurrence and tensor-valued deterministic backward loops now have
+host-free package tests that select the BF16 ABI and prove BF16 provenance
+through every stage of the compiler-owned five-entry HSACO. Exact Strix Halo
+`gfx1151` execution covers ragged GQA (`Hq/Hkv=4/2`, `Sq/Sk=17/19`),
+per-head bias, softcap, causal/window masks, and deterministic 25% dropout
+replay. Forward matches the shared oracle at `0.002176881` maximum absolute
+error; its 21-sample resident wall median is `0.099540 ms` versus the dedicated
+`0.097814 ms` BF16 baseline and passes the 10% ratchet. Backward maximum
+absolute errors are dQ `0.000198936`, dK `0.000280969`, and dV `0.002723813`;
+the resident five-launch program median is `0.366238 ms` versus its dedicated
+`0.362481 ms` BF16 baseline and passes the 10% ratchet. Both packets use HIP
+7.14.60850, AMD clang 23, `hipModuleLaunchKernel`, `hipDeviceSynchronize`, and
+separate host-wall timing domains; neither is selector-eligible device-event
+evidence. The retained packets are
+[`../../../../benchmarks/baselines/rocm_gfx1151_bf16_attention_forward.json`](../../../../benchmarks/baselines/rocm_gfx1151_bf16_attention_forward.json)
+and
+[`../../../../benchmarks/baselines/rocm_gfx1151_bf16_attention_backward.json`](../../../../benchmarks/baselines/rocm_gfx1151_bf16_attention_backward.json).
+
 Cross-backend sync `LSE-CHECKPOINT-CONTRACT-2026-07-26`: the shared
 `tessera_attn.lse.save` / `lse.load` pair is a declared-but-unimplemented
 FlashAttention-2 checkpoint. `lse.save` takes no destination, `lse.load` takes
@@ -380,7 +400,7 @@ evidence and not evidence for any sibling architecture.
 | ROCM-TEST-1 | complete | The ROCm-only LLVM/MLIR 23 build owns a 27-node host-free compiler lane; 27/27 pass with Apple/NVIDIA/CPU ownership excluded and foreign pipeline absence retained in the report. |
 | ROCM-DTYPE-1 | complete on gfx1151 | FP64 and integer widths have per-operation Target-IR/runtime assessments; unsigned LLVM probes pass without inventing unsigned storage ABIs; signed int4 is canonical and physically packed; gfx1151 FP8/BF8 is rejected by name. |
 | ROCM-SSA-LDS | complete | AMD async-copy, waitcnt, and matrix consumers use shared SSA allocation, token, and pipeline-state identity; compatibility readers are retired, shared/ROCm fixtures are SSA-only, host structural and compiler-benchmark gates pass, while exact-device performance remains intentionally unclaimed. |
-| ROCM-E2E-ATTENTION | complete on gfx1151 | Forward consumes the canonical rank-4 recurrence with per-head bias, softcap, dropout, GQA/window/ragged policy, and exact numerical/timing proof. Backward consumes the tensor-valued shared dQ/split-partial/ascending-reduction loops directly into the compiler-owned five-entry package; exact combined gradients and the resident program-wall ratchet pass. |
+| ROCM-E2E-ATTENTION | complete on gfx1151 | FP16 and BF16 forward consume the canonical rank-4 recurrence with per-head bias, softcap, dropout, GQA/window/ragged policy, and exact numerical/timing proof. FP16 and BF16 backward consume the tensor-valued shared dQ/split-partial/ascending-reduction loops directly into the compiler-owned five-entry package; exact combined gradients and dtype-specific resident program-wall ratchets pass. |
 
 ## Recommended open-work order
 

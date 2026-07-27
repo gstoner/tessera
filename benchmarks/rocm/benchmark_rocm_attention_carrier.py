@@ -41,16 +41,28 @@ from tessera.runtime import (  # noqa: E402
 )
 
 KERNEL_WALL_BASELINE_MS = 0.097763
+KERNEL_WALL_BASELINE_MS_BY_DTYPE = {
+    "fp16": KERNEL_WALL_BASELINE_MS,
+    "bf16": 0.097814,
+}
 KERNEL_WALL_MAX_REGRESSION = 0.10
 
 
 def _module(
-    b: int, hq: int, hkv: int, sq: int, sk: int, d: int, *,
+    b: int,
+    hq: int,
+    hkv: int,
+    sq: int,
+    sk: int,
+    d: int,
+    *,
+    dtype: str = "fp16",
     combined_features: bool = False,
 ) -> GraphIRModule:
-    q = IRType(f"tensor<{b}x{hq}x{sq}x{d}xf16>", tuple(map(str, (b, hq, sq, d))), "fp16")
-    k = IRType(f"tensor<{b}x{hkv}x{sk}x{d}xf16>", tuple(map(str, (b, hkv, sk, d))), "fp16")
-    v = IRType(f"tensor<{b}x{hkv}x{sk}x{d}xf16>", tuple(map(str, (b, hkv, sk, d))), "fp16")
+    element = {"fp16": "f16", "bf16": "bf16"}[dtype]
+    q = IRType(f"tensor<{b}x{hq}x{sq}x{d}x{element}>", tuple(map(str, (b, hq, sq, d))), dtype)
+    k = IRType(f"tensor<{b}x{hkv}x{sk}x{d}x{element}>", tuple(map(str, (b, hkv, sk, d))), dtype)
+    v = IRType(f"tensor<{b}x{hkv}x{sk}x{d}x{element}>", tuple(map(str, (b, hkv, sk, d))), dtype)
     o = IRType(f"tensor<{b}x{hq}x{sq}x{d}xf32>", tuple(map(str, (b, hq, sq, d))), "fp32")
     bias = IRType(
         f"tensor<{b}x{hq}x{sq}x{sk}xf32>",
@@ -185,15 +197,16 @@ def _resident_attention_launch(
             ):
                 raise RuntimeError("gfx1151 resident attention host-to-device copy failed")
         if bias is not None and device_bias is not None:
-            if hip.hipMemcpy(
-                device_bias,
-                bias.ctypes.data_as(ctypes.c_void_p),
-                int(bias.nbytes),
-                1,
-            ) != 0:
-                raise RuntimeError(
-                    "gfx1151 resident attention bias host-to-device copy failed"
+            if (
+                hip.hipMemcpy(
+                    device_bias,
+                    bias.ctypes.data_as(ctypes.c_void_p),
+                    int(bias.nbytes),
+                    1,
                 )
+                != 0
+            ):
+                raise RuntimeError("gfx1151 resident attention bias host-to-device copy failed")
 
         b, hq, hkv, sq, sk, _d, _dv = (int(value) for value in package.descriptor.provenance["shape"])
         arguments: list[Any] = []
@@ -226,9 +239,7 @@ def _resident_attention_launch(
             arguments.extend(
                 (
                     ctypes.c_float(dropout_p),
-                    ctypes.c_int64(
-                        int(package.descriptor.provenance["dropout_seed"])
-                    ),
+                    ctypes.c_int64(int(package.descriptor.provenance["dropout_seed"])),
                 )
             )
         if bias is not None and device_bias is not None:
@@ -292,9 +303,7 @@ def _kernel_wall_samples(
     iterations: int,
 ) -> list[float]:
     samples: list[float] = []
-    with _resident_attention_launch(
-        package, q, k, v, output, bias
-    ) as (launch_and_synchronize, _hip):
+    with _resident_attention_launch(package, q, k, v, output, bias) as (launch_and_synchronize, _hip):
         for _ in range(warmup):
             launch_and_synchronize()
         for _ in range(iterations):
@@ -350,6 +359,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--iterations", type=int, default=7)
     parser.add_argument("--warmup", type=int, default=5)
+    parser.add_argument("--dtype", choices=("fp16", "bf16"), default="fp16")
     parser.add_argument("--combined-features", action="store_true")
     parser.add_argument("--output")
     args = parser.parse_args()
@@ -359,13 +369,17 @@ def main() -> int:
         parser.error("--warmup must be non-negative")
     shape = (1, 4, 2, 17, 19, 64)
     rng = np.random.default_rng(20260726)
-    q = rng.normal(0.0, 0.25, (shape[0], shape[1], shape[3], shape[5])).astype(np.float16)
-    k = rng.normal(0.0, 0.25, (shape[0], shape[2], shape[4], shape[5])).astype(np.float16)
-    v = rng.normal(0.0, 0.25, (shape[0], shape[2], shape[4], shape[5])).astype(np.float16)
+    if args.dtype == "bf16":
+        import ml_dtypes
+
+        storage_dtype = ml_dtypes.bfloat16
+    else:
+        storage_dtype = np.float16
+    q = rng.normal(0.0, 0.25, (shape[0], shape[1], shape[3], shape[5])).astype(storage_dtype)
+    k = rng.normal(0.0, 0.25, (shape[0], shape[2], shape[4], shape[5])).astype(storage_dtype)
+    v = rng.normal(0.0, 0.25, (shape[0], shape[2], shape[4], shape[5])).astype(storage_dtype)
     bias = (
-        rng.normal(0.0, 0.05, (shape[0], shape[1], shape[3], shape[4])).astype(
-            np.float32
-        )
+        rng.normal(0.0, 0.05, (shape[0], shape[1], shape[3], shape[4])).astype(np.float32)
         if args.combined_features
         else None
     )
@@ -373,7 +387,7 @@ def main() -> int:
 
     started = time.perf_counter()
     package = package_attention(
-        _module(*shape, combined_features=args.combined_features),
+        _module(*shape, dtype=args.dtype, combined_features=args.combined_features),
         pipeline_name="tessera-lower-to-rocm",
     )
     compile_ms = (time.perf_counter() - started) * 1000.0
@@ -390,9 +404,7 @@ def main() -> int:
         "Window": 8,
     }
     if bias is not None:
-        scalars.update(
-            {"Softcap": 8.0, "DropoutP": 0.25, "DropoutSeed": 37}
-        )
+        scalars.update({"Softcap": 8.0, "DropoutP": 0.25, "DropoutSeed": 37})
     started = time.perf_counter()
     _submit_rocm_gfx1151_native(package.image, package.descriptor, buffers, scalars, None)
     cold_operation_total_ms = (time.perf_counter() - started) * 1000.0
@@ -420,12 +432,12 @@ def main() -> int:
         warmup=args.warmup,
     )
     kernel_wall_median_ms = statistics.median(kernel_wall_samples)
-    kernel_wall_limit_ms = (
-        KERNEL_WALL_BASELINE_MS * (1.0 + KERNEL_WALL_MAX_REGRESSION)
-    )
+    kernel_wall_baseline_ms = KERNEL_WALL_BASELINE_MS_BY_DTYPE[args.dtype]
+    kernel_wall_limit_ms = kernel_wall_baseline_ms * (1.0 + KERNEL_WALL_MAX_REGRESSION)
     record = {
         "schema": "tessera.rocm.canonical_streaming_attention.benchmark.v1",
         "device": os.environ.get("TESSERA_ROCM_CHIP", "gfx1151"),
+        "storage": args.dtype,
         "shape": {
             "B": shape[0],
             "Hq": shape[1],
@@ -435,9 +447,7 @@ def main() -> int:
             "D": shape[5],
         },
         "semantic_route": package.descriptor.provenance["semantic_route"],
-        "feature_set": (
-            "bias_softcap_dropout" if bias is not None else "base"
-        ),
+        "feature_set": ("bias_softcap_dropout" if bias is not None else "base"),
         "schedule": package.descriptor.provenance["schedule"],
         "compile_ms": compile_ms,
         "cold_operation_total_ms": cold_operation_total_ms,
@@ -446,18 +456,16 @@ def main() -> int:
         "kernel_wall_median_ms": kernel_wall_median_ms,
         "kernel_wall_samples_ms": kernel_wall_samples,
         "kernel_wall_ratchet": {
-            "baseline_ms": KERNEL_WALL_BASELINE_MS,
+            "baseline_ms": kernel_wall_baseline_ms,
             "max_regression_fraction": KERNEL_WALL_MAX_REGRESSION,
             "limit_ms": kernel_wall_limit_ms,
-            "observed_ratio": kernel_wall_median_ms / KERNEL_WALL_BASELINE_MS,
+            "observed_ratio": kernel_wall_median_ms / kernel_wall_baseline_ms,
             "passed": kernel_wall_median_ms <= kernel_wall_limit_ms,
         },
         "timing_domains": timing_domains,
         "max_abs_error": error,
         "tolerance": 0.035,
-        "passed": (
-            error <= 0.035 and kernel_wall_median_ms <= kernel_wall_limit_ms
-        ),
+        "passed": (error <= 0.035 and kernel_wall_median_ms <= kernel_wall_limit_ms),
         "hsaco_bytes": len(package.image.payload),
         "image_digest": package.image.image_digest,
     }

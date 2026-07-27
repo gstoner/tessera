@@ -3,6 +3,7 @@ from pathlib import Path
 
 from benchmarks.rocm.benchmark_rocm_attention_carrier import (
     KERNEL_WALL_BASELINE_MS,
+    KERNEL_WALL_BASELINE_MS_BY_DTYPE,
     KERNEL_WALL_MAX_REGRESSION,
     _timing_domains,
 )
@@ -30,22 +31,30 @@ def test_attention_carrier_benchmark_keeps_timing_domains_separate():
 
 def test_attention_carrier_wall_ratchet_is_tied_to_gfx1151_baseline():
     assert KERNEL_WALL_BASELINE_MS == 0.097763
+    assert KERNEL_WALL_BASELINE_MS_BY_DTYPE["bf16"] == 0.097814
     assert KERNEL_WALL_MAX_REGRESSION == 0.10
 
 
 def test_canonical_streaming_attention_exact_device_packet_is_passing():
     root = Path(__file__).resolve().parents[2]
-    packet = json.loads(
-        (
-            root
-            / "benchmarks/baselines/rocm_gfx1151_canonical_streaming_attention.json"
-        ).read_text()
-    )
+    packet = json.loads((root / "benchmarks/baselines/rocm_gfx1151_canonical_streaming_attention.json").read_text())
     assert packet["semantic_route"] == "canonical_rank4_kv_scf_for"
     assert packet["schedule"] == "gfx1151_wmma_canonical_streaming"
     assert packet["timing"]["sample_count"] == 21
     assert packet["timing"]["kernel_wall_median_ms"] == 0.095145
     assert packet["timing"]["selector_eligible"] is False
+    assert packet["ratchet"]["passed"] is True
+    assert packet["numerics"]["passed"] is True
+    assert packet["passed"] is True
+
+
+def test_bf16_streaming_attention_exact_device_packet_is_passing():
+    root = Path(__file__).resolve().parents[2]
+    packet = json.loads((root / "benchmarks/baselines/rocm_gfx1151_bf16_attention_forward.json").read_text())
+    assert packet["storage"] == "bf16"
+    assert packet["feature_set"] == "bias_softcap_dropout"
+    assert packet["semantic_route"] == "canonical_rank4_kv_scf_for"
+    assert packet["timing"]["sample_count"] == 21
     assert packet["ratchet"]["passed"] is True
     assert packet["numerics"]["passed"] is True
     assert packet["passed"] is True

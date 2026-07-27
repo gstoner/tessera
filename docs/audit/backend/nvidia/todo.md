@@ -8,6 +8,16 @@ last_updated: 2026-07-27
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `ROCM-BF16-ATTENTION-2026-07-27` validates that the shared
+BF16 attention carrier and canonical forward/backward loop contracts can be
+consumed by a second physical backend. ROCm now has exact ragged-GQA
+bias+softcap+causal-window+dropout forward proof and deterministic five-entry
+backward proof on gfx1151, with dedicated resident BF16 timing ratchets. This
+is parity validation at the shared semantic boundary only. AMD BF16 WMMA,
+LDS scheduling, HSACO packaging, HIP workspace and launch ABI, numerical
+evidence, and timing do not transfer to CUDA; NVIDIA retains its own SM120
+BF16 package and exact-device evidence requirements.
+
 Cross-backend sync `TESSERA-OPT-BUILD-CAPABILITY-2026-07-27` is **closed**.
 The shared lit resolver now accepts `TESSERA_OPT_BIN`, `TESSERA_OPT_PATH`, and
 `TESSERA_OPT_CPP` after the canonical `TESSERA_OPT` override, and the validation

@@ -8,6 +8,23 @@ last_updated: 2026-07-26
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `CORE-ATTENTION-TENSOR-LOOPS-MODIFIERS-2026-07-26`
+materializes the deterministic split/reduced backward contract as tensor-valued
+shared `scf.for` bodies: dQ is query-head/block owned, dK/dV partials are
+launch-owned `[split,B,Hkv,Sk,D]` tensors, and reduction is fixed ascending
+split order. The shared forward KV recurrence now carries registered additive
+bias and softcap operations in canonical
+`softcap(scale*QK^T + bias)` order, including rank-4 per-head bias. Apple is
+**follow-up required** to lower these shared phase operations into its Metal
+backward package and direct forward schedule. The gfx1151 ABI repair, HSACO,
+numerical result, and resident timing do not transfer.
+
+Cross-backend sync `CORE-ATTENTION-BACKWARD-CONTRACT-2026-07-26` adds verified
+split count, launch-owned workspace, block-loop metadata, ascending reduction
+order, and canonical `softcap(scale*QK^T + bias)` semantics to the shared
+carrier/oracle. Apple is **follow-up required** to map this form to Metal and
+validate dropout replay; gfx1151 code, evidence, and timing do not transfer.
+
 Cross-backend sync `ROCM-E2E-ATTENTION-BACKWARD-2026-07-26` is not applicable
 to Apple physical execution. It adds a ROCm-owned five-entry HSACO and
 gfx1151 split/reduced launch workspace without changing the shared launch

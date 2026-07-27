@@ -8,6 +8,23 @@ last_updated: 2026-07-26
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `CORE-ATTENTION-TENSOR-LOOPS-MODIFIERS-2026-07-26`
+materializes the deterministic split/reduced backward contract as tensor-valued
+shared `scf.for` bodies with explicit dQ ownership, split dK/dV workspace
+tensors, and ascending reduction. Registered shared score-bias and softcap
+operations now preserve `softcap(scale*QK^T + bias)` inside the forward
+KV-block recurrence, including rank-4 per-head bias. NVIDIA is **follow-up
+required** to consume these phase operations through its SM120 package and
+direct forward schedule. AMD HIP ABI code, HSACO, exact-device gradients, and
+resident timing do not transfer.
+
+Cross-backend sync `CORE-ATTENTION-BACKWARD-CONTRACT-2026-07-26` adds verified
+split count, launch-owned workspace, block-loop metadata, ascending reduction
+order, and canonical `softcap(scale*QK^T + bias)` semantics to the shared
+carrier/oracle. NVIDIA is **follow-up required** to consume this form through
+its SM120 schedule and validate dropout replay; AMD code and evidence do not
+transfer.
+
 Cross-backend sync `ROCM-E2E-ATTENTION-BACKWARD-2026-07-26` is not applicable
 to NVIDIA physical execution. It adds a ROCm-owned five-entry HSACO and
 gfx1151 split/reduced launch workspace without changing the shared launch

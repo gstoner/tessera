@@ -385,14 +385,21 @@ static LogicalResult materializeCanonicalStreamingAttention(
     return failure();
   }
 
-  if (function.getNumArguments() != 3 || function.getNumResults() != 1) {
+  if ((function.getNumArguments() != 3 &&
+       function.getNumArguments() != 4) ||
+      function.getNumResults() != 1) {
     function.emitError(
-        "ROCm canonical streaming attention requires Q, K, V and one output");
+        "ROCm canonical streaming attention requires Q, K, V, optional bias, "
+        "and one output");
     return failure();
   }
   auto qType = dyn_cast<RankedTensorType>(function.getArgument(0).getType());
   auto kType = dyn_cast<RankedTensorType>(function.getArgument(1).getType());
   auto vType = dyn_cast<RankedTensorType>(function.getArgument(2).getType());
+  auto biasType =
+      function.getNumArguments() == 4
+          ? dyn_cast<RankedTensorType>(function.getArgument(3).getType())
+          : RankedTensorType();
   auto outType = dyn_cast<RankedTensorType>(function.getResultTypes().front());
   if (!qType || !kType || !vType || !outType || !qType.hasStaticShape() ||
       !kType.hasStaticShape() || !vType.hasStaticShape() ||
@@ -444,6 +451,21 @@ static LogicalResult materializeCanonicalStreamingAttention(
     function.emitError("ROCm canonical attention Q/K/V storage must match");
     return failure();
   }
+  if (biasType &&
+      (!biasType.hasStaticShape() ||
+       (biasType.getRank() != 3 && biasType.getRank() != 4) ||
+       !biasType.getElementType().isF32() ||
+       (biasType.getDimSize(0) != 1 &&
+        biasType.getDimSize(0) != batch) ||
+       (biasType.getRank() == 4 && biasType.getDimSize(1) != 1 &&
+        biasType.getDimSize(1) != queryHeads) ||
+       biasType.getDimSize(biasType.getRank() - 2) != queryRows ||
+       biasType.getDimSize(biasType.getRank() - 1) != keyRows)) {
+    function.emitError(
+        "ROCm canonical attention bias must be f32 [B|1,Sq,Sk] or "
+        "[B|1,Hq|1,Sq,Sk]");
+    return failure();
+  }
 
   if (kvLoop.getNumRegionIterArgs() != 6 ||
       !isa<tessera::tile::PipelineStateType>(
@@ -465,6 +487,8 @@ static LogicalResult materializeCanonicalStreamingAttention(
   bool hasStreamingUpdate = false;
   Operation *boundaryMask = nullptr;
   Operation *blockDropout = nullptr;
+  Operation *scoreBias = nullptr;
+  Operation *softcap = nullptr;
   kvLoop.walk([&](Operation *nested) {
     StringRef name = nested->getName().getStringRef();
     if (name == "tile.async_copy") {
@@ -490,6 +514,10 @@ static LogicalResult materializeCanonicalStreamingAttention(
       boundaryMask = nested;
     } else if (name == "tessera_attn.block_dropout") {
       blockDropout = nested;
+    } else if (name == "tessera_attn.score_bias") {
+      scoreBias = nested;
+    } else if (name == "tessera_attn.softcap") {
+      softcap = nested;
     }
   });
   if (asyncCopies != 2 || tokenCopies != 2 || waits != 1 ||
@@ -500,6 +528,21 @@ static LogicalResult materializeCanonicalStreamingAttention(
         "one wait, two pipeline advances, scaled-dot-product, and streaming "
         "update");
     return failure();
+  }
+  if ((biasType && !scoreBias) || (!biasType && scoreBias)) {
+    kvLoop.emitError(
+        "ROCm canonical attention bias argument and score_bias recurrence "
+        "must be present together");
+    return failure();
+  }
+  if (softcap) {
+    auto cap = softcap->getAttrOfType<FloatAttr>("cap");
+    if (!cap || !cap.getValue().isFinite() ||
+        cap.getValueAsDouble() <= 0.0) {
+      softcap->emitError(
+          "ROCm canonical attention softcap requires a finite positive cap");
+      return failure();
+    }
   }
 
   auto kvBlock = kvLoop->getAttrOfType<IntegerAttr>("tessera.kv_block");
@@ -556,8 +599,10 @@ static LogicalResult materializeCanonicalStreamingAttention(
   state.addAttribute("gqa", builder.getBoolAttr(queryHeads != kvHeads));
   state.addAttribute("sliding_window",
                      builder.getBoolAttr(slidingWindow));
-  state.addAttribute("logit_softcap", builder.getBoolAttr(false));
-  state.addAttribute("attn_bias", builder.getBoolAttr(false));
+  state.addAttribute("logit_softcap",
+                     builder.getBoolAttr(softcap != nullptr));
+  state.addAttribute("attn_bias",
+                     builder.getBoolAttr(scoreBias != nullptr));
   state.addAttribute("dropout", builder.getBoolAttr(blockDropout != nullptr));
   state.addAttribute("causal", builder.getBoolAttr(causal));
   state.addAttribute("arch", builder.getStringAttr(arch));

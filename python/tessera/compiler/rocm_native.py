@@ -396,6 +396,8 @@ def emit_attention_graph_ir(
     causal: bool,
     window_left: int,
     window_right: int,
+    bias: bool = False,
+    softcap: float = 0.0,
     dropout_p: float = 0.0,
     dropout_seed: int = 0,
     tile_kv: int = 16,
@@ -405,8 +407,8 @@ def emit_attention_graph_ir(
     This is the semantic entry path: the shared Tile IR lowering owns
     batch/head distribution, GQA mapping, the KV-block recurrence, ragged
     zero-fill, and pipeline SSA. ROCm lowering owns only its physical schedule.
-    Bias and softcap intentionally remain on the compatibility carrier until
-    those modifiers have a target-neutral representation in the recurrence.
+    Additive bias and softcap are direct shared score-recurrence operations;
+    target lowering observes them but does not reconstruct their ordering.
     """
     if storage not in {"f16", "bf16"}:
         raise ValueError(f"unsupported gfx1151 attention storage {storage!r}")
@@ -414,7 +416,13 @@ def emit_attention_graph_ir(
     if tile_kv <= 0:
         raise ValueError("canonical attention tile_kv must be positive")
     scale_literal = _mlir_float(scale)
+    softcap_literal = _mlir_float(softcap)
     dropout_literal = _mlir_float(dropout_p)
+    bias_arg = (
+        f",\n      %bias: tensor<{b}x{hq}x{sq}x{sk}xf32>" if bias else ""
+    )
+    bias_operand = ", %bias" if bias else ""
+    bias_type = f",\n          tensor<{b}x{hq}x{sq}x{sk}xf32>" if bias else ""
     return f'''module attributes {{
   tessera.ir.version = "1.0",
   tessera.target = {{sm = 90 : i32, warps = 1 : i32,
@@ -423,22 +431,23 @@ def emit_attention_graph_ir(
   func.func @{entry}(
       %q: tensor<{b}x{hq}x{sq}x{head_dim}x{storage}>,
       %key: tensor<{b}x{hkv}x{sk}x{head_dim}x{storage}>,
-      %v: tensor<{b}x{hkv}x{sk}x{value_dim}x{storage}>
+      %v: tensor<{b}x{hkv}x{sk}x{value_dim}x{storage}>{bias_arg}
   ) -> tensor<{b}x{hq}x{sq}x{value_dim}xf32> {{
-    %o = "tessera.flash_attn"(%q, %key, %v)
-        <{{operandSegmentSizes = array<i32: 1, 1, 1, 0>}}> {{
+    %o = "tessera.flash_attn"(%q, %key, %v{bias_operand})
+        <{{operandSegmentSizes = array<i32: 1, 1, 1, {int(bias)}>}}> {{
       causal = {str(causal).lower()},
       dropout_p = {dropout_literal} : f64,
       dropout_seed = {dropout_seed} : i64,
       head_dim = {head_dim} : i64,
       scale = {scale_literal} : f32,
+      softcap = {softcap_literal} : f32,
       tessera.tile_q = {sq} : i32,
       tessera.tile_kv = {tile_kv} : i32,
       window_left = {window_left} : i64,
       window_right = {window_right} : i64
     }} : (tensor<{b}x{hq}x{sq}x{head_dim}x{storage}>,
           tensor<{b}x{hkv}x{sk}x{head_dim}x{storage}>,
-          tensor<{b}x{hkv}x{sk}x{value_dim}x{storage}>)
+          tensor<{b}x{hkv}x{sk}x{value_dim}x{storage}>{bias_type})
           -> tensor<{b}x{hq}x{sq}x{value_dim}xf32>
     return %o : tensor<{b}x{hq}x{sq}x{value_dim}xf32>
   }}
@@ -463,17 +472,14 @@ def emit_attention_backward_tile_ir(
 ) -> str:
     """Emit a self-contained forward-recompute plus deterministic VJP program.
 
-    The portable backward carrier retains zero-workspace output ownership.
-    ROCm target selection maps the static WMMA bucket to a split/reduced
-    physical schedule whose launch-owned workspace is described separately by
-    :class:`ROCMNativeProgram`.
+    The portable backward carrier records the same launch-owned workspace,
+    split count, block-loop structure, and reduction order consumed by the
+    multi-entry :class:`ROCMNativeProgram`.
     """
     if storage not in {"f16", "bf16"}:
         raise ValueError(f"unsupported gfx1151 attention backward storage {storage!r}")
-    if dropout_p != 0.0:
-        raise ValueError(
-            "gfx1151 optimized attention backward does not yet implement dropout replay"
-        )
+    if not math.isfinite(dropout_p) or not 0.0 <= dropout_p < 1.0:
+        raise ValueError("gfx1151 attention backward dropout must satisfy 0 <= p < 1")
     _, hq, hkv, _, _, head_dim, value_dim = dims
     if head_dim != value_dim:
         raise ValueError("gfx1151 optimized attention backward requires D == Dv")
@@ -482,6 +488,16 @@ def emit_attention_backward_tile_ir(
     scale_literal = _mlir_float(scale)
     softcap_literal = _mlir_float(softcap)
     dropout_literal = _mlir_float(dropout_p)
+    workspace = plan_attention_backward_workspace(
+        batch=dims[0],
+        query_heads=dims[1],
+        kv_heads=dims[2],
+        query_rows=dims[3],
+        key_rows=dims[4],
+        head_dim=dims[5],
+        value_dim=dims[6],
+        split_count=2,
+    )
     common_attrs = f'''
       storage = "{storage}", accum = "f32", scale = {scale_literal} : f32,
       causal = {str(causal).lower()}, bias = {str(bias).lower()},
@@ -506,8 +522,13 @@ def emit_attention_backward_tile_ir(
                      %hkv: i64, %sq: i64, %sk: i64, %d: i64, %dv: i64) {{
     tile.attention_backward_kernel %do, %q, %key, %v{optional_operand},
         %dq, %dk, %dv_out, %b, %hq, %hkv, %sq, %sk, %d, %dv {{{common_attrs},
-      route = "deterministic_direct", deterministic = true,
-      workspace_bytes = 0 : i64, workspace_owner = "output_element"
+      route = "deterministic_split_reduced", deterministic = true,
+      workspace_bytes = {workspace.bytes} : i64,
+      workspace_owner = "program_launch", split_count = 2 : i64,
+      reduction_order = array<i64: 0, 1>, query_block = 16 : i64,
+      key_block = 16 : i64,
+      loop_order = ["batch_kv_head", "split", "query_block",
+                    "key_block", "fixed_order_reduce"]
     }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr{", !llvm.ptr" if bias else ""},
         !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64, i64, i64, i64, i64
     llvm.return
@@ -867,6 +888,7 @@ def _attention_backward_contract(
     int,
     int,
     float,
+    float,
     int,
 ] | None:
     if not requests_attention_backward(module):
@@ -957,7 +979,9 @@ def _attention_backward_contract(
         or scale <= 0.0
         or not math.isfinite(softcap)
         or softcap < 0.0
-        or dropout != 0.0
+        or not math.isfinite(dropout)
+        or dropout < 0.0
+        or dropout >= 1.0
         or str(op.kwargs.get("route", "deterministic_direct"))
         != "deterministic_direct"
         or not bool(op.kwargs.get("deterministic", True))
@@ -974,6 +998,7 @@ def _attention_backward_contract(
         window_left,
         window_right,
         softcap,
+        dropout,
         dropout_seed,
     )
 
@@ -1420,12 +1445,8 @@ def package_attention(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativ
         else GFX1151_ATTN_BF16_ABI
     )
     canonical_route = (
-        bias_name is None
-        and softcap <= 0.0
-        and (
-            (window_left < 0 and window_right < 0)
-            or (causal and window_left >= 0 and window_right == 0)
-        )
+        (window_left < 0 and window_right < 0)
+        or (causal and window_left >= 0 and window_right == 0)
     )
     if canonical_route:
         tile_kv = 16
@@ -1437,6 +1458,8 @@ def package_attention(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativ
             causal=causal,
             window_left=window_left,
             window_right=window_right,
+            bias=bias_name is not None,
+            softcap=softcap,
             dropout_p=dropout_p,
             dropout_seed=dropout_seed,
             tile_kv=tile_kv,
@@ -1622,7 +1645,7 @@ def package_attention_backward(
         raise ValueError(
             "gfx1151 optimized attention backward requires static rank-4 "
             "f16/bf16 dO/Q/K/V, fp32 dQ/dK/dV, D == Dv divisible by 16, "
-            "compatible MHA/GQA heads, deterministic_direct, zero dropout, "
+            "compatible MHA/GQA heads, deterministic dropout replay, "
             "and a supported causal/window policy"
         )
     (
@@ -1636,6 +1659,7 @@ def package_attention_backward(
         window_left,
         window_right,
         softcap,
+        dropout_p,
         dropout_seed,
     ) = contract
     do_name, q_name, k_name, v_name = names
@@ -1646,7 +1670,8 @@ def package_attention_backward(
     b, hq, hkv, sq, sk, d, dv = dims
     semantic_key = hashlib.sha256(
         f"{scale:.17g}:{causal}:{bool(bias_name)}:{window_left}:"
-        f"{window_right}:{softcap:.17g}:split_reduced".encode()
+        f"{window_right}:{softcap:.17g}:{dropout_p:.17g}:"
+        f"{dropout_seed}:split_reduced".encode()
     ).hexdigest()[:10]
     forward_entry = (
         f"tessera_tile_attention_bwd_recompute_{storage}_{semantic_key}"
@@ -1679,6 +1704,7 @@ def package_attention_backward(
         window_left=window_left,
         window_right=window_right,
         softcap=softcap,
+        dropout_p=dropout_p,
         dropout_seed=dropout_seed,
     )
     (
@@ -1900,7 +1926,8 @@ def package_attention_backward(
         "window_left": window_left,
         "window_right": window_right,
         "softcap": softcap,
-        "dropout_p": 0.0,
+        "dropout_p": dropout_p,
+        "dropout_seed": dropout_seed,
         "workspace_owner": "program_launch",
         "workspace_bytes": workspace.bytes,
         "workspace_contract": "canonical_attention_backward_split_v1",

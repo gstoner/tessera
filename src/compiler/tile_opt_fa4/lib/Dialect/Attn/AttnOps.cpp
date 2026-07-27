@@ -191,6 +191,41 @@ mlir::LogicalResult ScaledDotProductOp::verify() {
   return mlir::success();
 }
 
+mlir::LogicalResult ScoreBiasOp::verify() {
+  auto scoresType =
+      mlir::dyn_cast<mlir::RankedTensorType>(getScores().getType());
+  auto biasType = mlir::dyn_cast<mlir::RankedTensorType>(getBias().getType());
+  auto resultType =
+      mlir::dyn_cast<mlir::RankedTensorType>(getBiasedScores().getType());
+  if (!scoresType || !biasType || !resultType || scoresType.getRank() != 2 ||
+      biasType.getRank() != 2)
+    return emitOpError("scores, bias, and result must be rank-2 tensors");
+  if (!scoresType.getElementType().isF32() ||
+      !biasType.getElementType().isF32())
+    return emitOpError("scores and bias must use f32");
+  if (failed(verifySameRankedTensor(getOperation(), scoresType, biasType,
+                                    "scores/bias")) ||
+      failed(verifySameRankedTensor(getOperation(), scoresType, resultType,
+                                    "scores/result")))
+    return mlir::failure();
+  return mlir::success();
+}
+
+mlir::LogicalResult SoftcapOp::verify() {
+  auto scoresType =
+      mlir::dyn_cast<mlir::RankedTensorType>(getScores().getType());
+  auto resultType =
+      mlir::dyn_cast<mlir::RankedTensorType>(getCappedScores().getType());
+  if (!scoresType || !resultType || scoresType.getRank() != 2)
+    return emitOpError("scores and result must be rank-2 tensors");
+  if (!scoresType.getElementType().isF32())
+    return emitOpError("scores must use f32");
+  if (!getCap().isFinite() || getCap().convertToDouble() <= 0.0)
+    return emitOpError("cap must be finite and positive");
+  return verifySameRankedTensor(getOperation(), scoresType, resultType,
+                                "scores/result");
+}
+
 // ── OnlineSoftmaxOp verifier ──────────────────────────────────────────────
 // Verifies the FA-2 loop-invariant shapes are consistent.
 mlir::LogicalResult OnlineSoftmaxOp::verify() {
@@ -387,6 +422,142 @@ mlir::LogicalResult BlockDropoutOp::verify() {
     return emitOpError("scores and masked_scores must be rank-2 tensors");
   return verifySameRankedTensor(getOperation(), scoresType, maskedType,
                                 "dropout scores/masked_scores");
+}
+
+mlir::LogicalResult BackwardOp::verify() {
+  auto ranked4 = [&](mlir::Type type, llvm::StringRef label)
+      -> mlir::FailureOr<mlir::RankedTensorType> {
+    auto ranked = mlir::dyn_cast<mlir::RankedTensorType>(type);
+    if (!ranked || ranked.getRank() != 4) {
+      emitOpError() << label << " must be a rank-4 [B,H,S,D] tensor";
+      return mlir::failure();
+    }
+    return ranked;
+  };
+  auto dOut = ranked4(getDOutput().getType(), "d_output");
+  auto query = ranked4(getQuery().getType(), "query");
+  auto key = ranked4(getKey().getType(), "key");
+  auto value = ranked4(getValue().getType(), "value");
+  auto dQuery = ranked4(getDQuery().getType(), "d_query");
+  auto dKey = ranked4(getDKey().getType(), "d_key");
+  auto dValue = ranked4(getDValue().getType(), "d_value");
+  auto bias = mlir::dyn_cast<mlir::RankedTensorType>(getBias().getType());
+  if (mlir::failed(dOut) || mlir::failed(query) || mlir::failed(key) ||
+      mlir::failed(value) || mlir::failed(dQuery) || mlir::failed(dKey) ||
+      mlir::failed(dValue))
+    return mlir::failure();
+  if (!bias || (bias.getRank() != 3 && bias.getRank() != 4) ||
+      !bias.getElementType().isF32())
+    return emitOpError(
+        "bias must be an f32 tensor [B|1,Sq,Sk] or [B|1,Hq|1,Sq,Sk]");
+  auto q = *query;
+  auto k = *key;
+  auto v = *value;
+  auto go = *dOut;
+  if (!attnDimsAgree(q.getDimSize(0), k.getDimSize(0)) ||
+      !attnDimsAgree(q.getDimSize(0), v.getDimSize(0)) ||
+      !attnDimsAgree(q.getDimSize(1), go.getDimSize(1)) ||
+      !attnDimsAgree(q.getDimSize(2), go.getDimSize(2)) ||
+      !attnDimsAgree(k.getDimSize(1), v.getDimSize(1)) ||
+      !attnDimsAgree(k.getDimSize(2), v.getDimSize(2)) ||
+      !attnDimsAgree(q.getDimSize(3), k.getDimSize(3)) ||
+      !attnDimsAgree(v.getDimSize(3), go.getDimSize(3)))
+    return emitOpError("Q/K/V/dO batch, head, sequence, or feature dimensions disagree");
+  int64_t biasSequenceDim = bias.getRank() - 2;
+  if ((!bias.isDynamicDim(0) && bias.getDimSize(0) != 1 &&
+       !attnDimsAgree(bias.getDimSize(0), q.getDimSize(0))) ||
+      (bias.getRank() == 4 && !bias.isDynamicDim(1) &&
+       bias.getDimSize(1) != 1 &&
+       !attnDimsAgree(bias.getDimSize(1), q.getDimSize(1))) ||
+      !attnDimsAgree(bias.getDimSize(biasSequenceDim), q.getDimSize(2)) ||
+      !attnDimsAgree(bias.getDimSize(biasSequenceDim + 1), k.getDimSize(2)))
+    return emitOpError(
+        "bias must have shape [B|1,Sq,Sk] or [B|1,Hq|1,Sq,Sk]");
+  if (!q.isDynamicDim(1) && !k.isDynamicDim(1) &&
+      (q.getDimSize(1) % k.getDimSize(1)) != 0)
+    return emitOpError("query head count must be divisible by KV head count");
+  auto sameShape = [](mlir::RankedTensorType lhs,
+                      mlir::RankedTensorType rhs) {
+    for (int64_t i = 0; i < lhs.getRank(); ++i)
+      if (!attnDimsAgree(lhs.getDimSize(i), rhs.getDimSize(i)))
+        return false;
+    return true;
+  };
+  if (!sameShape(q, *dQuery) || !sameShape(k, *dKey) ||
+      !sameShape(v, *dValue))
+    return emitOpError("dQ/dK/dV shapes must match Q/K/V respectively");
+  if (!dQuery->getElementType().isF32() || !dKey->getElementType().isF32() ||
+      !dValue->getElementType().isF32())
+    return emitOpError("dQ/dK/dV must use f32 accumulation");
+  if (!getScale().isFinite() || getScale().convertToDouble() <= 0.0)
+    return emitOpError("scale must be finite and positive");
+  if (static_cast<int64_t>(getWindowLeft()) < -1 ||
+      static_cast<int64_t>(getWindowRight()) < -1)
+    return emitOpError("window bounds must be >= -1");
+  if (!getSoftcap().isFinite() || getSoftcap().convertToDouble() < 0.0)
+    return emitOpError("softcap must be finite and nonnegative");
+  double dropout = getDropoutP().convertToDouble();
+  if (!getDropoutP().isFinite() || dropout < 0.0 || dropout >= 1.0)
+    return emitOpError("dropout_p must satisfy 0 <= p < 1");
+  if (getDropoutSeed() < 0)
+    return emitOpError("dropout_seed must be nonnegative");
+  if (getSplitCount() < 2 || getQueryBlock() <= 0 || getKeyBlock() <= 0)
+    return emitOpError("split_count >= 2 and positive block sizes are required");
+  return mlir::success();
+}
+
+mlir::LogicalResult BackwardDQBlockOp::verify() {
+  if (getInputs().size() != 10)
+    return emitOpError("expects dO,Q,K,V,bias,batch,q_head,q_offset,kv_offset,dQ");
+  for (mlir::Value index : getInputs().slice(5, 4))
+    if (!index.getType().isIndex())
+      return emitOpError("batch/head/block coordinates must be index values");
+  if (getInputs()[9].getType() != getDQuery().getType())
+    return emitOpError("dQ result must preserve the loop-carried dQ tensor type");
+  auto dQuery =
+      mlir::dyn_cast<mlir::RankedTensorType>(getDQuery().getType());
+  if (!dQuery || dQuery.getRank() != 4 ||
+      !dQuery.getElementType().isF32())
+    return emitOpError("loop-carried dQ must be a rank-4 f32 tensor");
+  return mlir::success();
+}
+
+mlir::LogicalResult BackwardDKDVBlockOp::verify() {
+  if (getInputs().size() != 12)
+    return emitOpError(
+        "expects dO,Q,K,V,bias,batch,kv_head,split,q_offset,kv_offset,partial_dK,partial_dV");
+  for (mlir::Value index : getInputs().slice(5, 5))
+    if (!index.getType().isIndex())
+      return emitOpError("batch/head/split/block coordinates must be index values");
+  if (getInputs()[10].getType() != getPartialDKey().getType() ||
+      getInputs()[11].getType() != getPartialDValue().getType())
+    return emitOpError("partial results must preserve loop-carried workspace tensor types");
+  for (mlir::Type type :
+       {getPartialDKey().getType(), getPartialDValue().getType()}) {
+    auto partial = mlir::dyn_cast<mlir::RankedTensorType>(type);
+    if (!partial || partial.getRank() != 5 ||
+        !partial.getElementType().isF32())
+      return emitOpError("split partials must be rank-5 f32 tensors");
+  }
+  return mlir::success();
+}
+
+mlir::LogicalResult BackwardReduceSplitOp::verify() {
+  if (getInputs().size() != 7)
+    return emitOpError("expects partial_dK,partial_dV,batch,kv_head,split,dK,dV");
+  for (mlir::Value index : getInputs().slice(2, 3))
+    if (!index.getType().isIndex())
+      return emitOpError("batch/head/split coordinates must be index values");
+  if (getInputs()[5].getType() != getDKey().getType() ||
+      getInputs()[6].getType() != getDValue().getType())
+    return emitOpError("reduction results must preserve loop-carried dK/dV types");
+  for (mlir::Type type : {getDKey().getType(), getDValue().getType()}) {
+    auto gradient = mlir::dyn_cast<mlir::RankedTensorType>(type);
+    if (!gradient || gradient.getRank() != 4 ||
+        !gradient.getElementType().isF32())
+      return emitOpError("reduced gradients must be rank-4 f32 tensors");
+  }
+  return mlir::success();
 }
 
 void TesseraAttnDialect::initialize() {

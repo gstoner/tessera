@@ -557,23 +557,27 @@ LogicalResult materializeROCMDirectAttentionBackward(
   auto workspace = op->getAttrOfType<IntegerAttr>("workspace_bytes");
   auto workspaceOwner =
       op->getAttrOfType<StringAttr>("workspace_owner");
+  bool directReference =
+      route && route.getValue() == "deterministic_direct" && workspace &&
+      workspace.getInt() == 0 && workspaceOwner &&
+      workspaceOwner.getValue() == "output_element";
+  auto splitCount = op->getAttrOfType<IntegerAttr>("split_count");
+  bool splitReduced =
+      route && route.getValue() == "deterministic_split_reduced" && workspace &&
+      workspace.getInt() > 0 && workspaceOwner &&
+      workspaceOwner.getValue() == "program_launch" && splitCount &&
+      splitCount.getInt() == 2;
   if (!biasAttr ||
-      kernel.getInputs().size() != 14 + unsigned(hasBias) || !route ||
-      route.getValue() != "deterministic_direct" || !deterministic ||
-      !deterministic.getValue() || !workspace || workspace.getInt() != 0 ||
-      !workspaceOwner ||
-      workspaceOwner.getValue() != "output_element") {
+      kernel.getInputs().size() != 14 + unsigned(hasBias) || !deterministic ||
+      !deterministic.getValue() || (!directReference && !splitReduced)) {
     op->emitError(
         "ROCm attention_backward_kernel requires the canonical deterministic "
-        "direct ABI with output-element workspace ownership");
+        "direct reference or two-split launch-workspace ABI");
     return failure();
   }
 
-  // Keep the canonical carrier's deterministic-direct route as the semantic
-  // reference, but select the compiler-generated split/reduced physical
-  // schedule when the static bucket is representable by gfx1151 WMMA.  The
-  // native package owns the launch workspace; no workspace pointer is added to
-  // the portable carrier ABI.
+  // The split/reduced carrier owns the loop/workspace contract. The direct
+  // route remains accepted as a compatibility semantic reference.
   auto headDim = op->getAttrOfType<IntegerAttr>("head_dim");
   auto valueDim = op->getAttrOfType<IntegerAttr>("value_dim");
   auto storage = op->getAttrOfType<StringAttr>("storage");
@@ -592,7 +596,8 @@ LogicalResult materializeROCMDirectAttentionBackward(
       headDim.getInt() == valueDim.getInt() && headDim.getInt() > 0 &&
       headDim.getInt() % 16 == 0 &&
       (storage.getValue() == "f16" || storage.getValue() == "bf16") &&
-      dropout.getValueAsDouble() == 0.0 && windowCompatible;
+      dropout.getValueAsDouble() >= 0.0 &&
+      dropout.getValueAsDouble() < 1.0 && windowCompatible;
   if (optimized) {
     Operation *symbolOwner = op->getParentOp();
     while (symbolOwner &&
@@ -622,6 +627,9 @@ LogicalResult materializeROCMDirectAttentionBackward(
     state.addAttribute(
         "logit_softcap",
         builder.getBoolAttr(softcap.getValueAsDouble() > 0.0));
+    state.addAttribute(
+        "dropout",
+        builder.getBoolAttr(dropout.getValueAsDouble() > 0.0));
     state.addAttribute("attn_bias", builder.getBoolAttr(hasBias));
     state.addAttribute("split_reduced", builder.getBoolAttr(true));
     state.addAttribute(

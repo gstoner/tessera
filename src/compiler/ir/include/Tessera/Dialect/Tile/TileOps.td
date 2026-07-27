@@ -670,8 +670,11 @@ def Tile_AttentionKernelOp : Tile_Op<"attention_kernel"> {
 
 // Launch-level scaled dot-product attention VJP envelope. Inputs are dO, Q,
 // K, V, optional dense f32 bias, dQ, dK, dV, followed by B, Hq, Hkv, Sq, Sk,
-// D, and Dv.  The deterministic-direct reference route assigns one output
-// gradient element to one thread and therefore requires no atomics/workspace.
+// D, and Dv. The deterministic-direct compatibility route assigns one output
+// gradient element to one thread. The canonical split/reduced route instead
+// makes launch-owned workspace, query/KV block loops, split count, and fixed
+// reduction order explicit as attributes; physical backends schedule those
+// loops but do not redefine their ownership or ordering.
 def Tile_AttentionBackwardKernelOp : Tile_Op<"attention_backward_kernel"> {
   let summary = "Launch-level deterministic scaled dot-product attention VJP";
   let arguments = (ins Variadic<AnyType>:$inputs);

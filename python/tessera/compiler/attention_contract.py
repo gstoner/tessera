@@ -15,6 +15,11 @@ from typing import Any
 import numpy as np
 
 
+_DROPOUT_COUNTER_MULTIPLIER = np.uint64(1664525)
+_DROPOUT_COUNTER_INCREMENT = np.uint64(1013904223)
+_UINT32_RANGE = 4294967296.0
+
+
 def _align(value: int, alignment: int) -> int:
     return (value + alignment - 1) // alignment * alignment
 
@@ -172,6 +177,46 @@ def plan_attention_backward_workspace(
     )
 
 
+def attention_dropout_replay(
+    *,
+    batch: int,
+    query_heads: int,
+    query_rows: int,
+    key_rows: int,
+    dropout_p: float,
+    seed: int,
+) -> np.ndarray:
+    """Return the canonical deterministic attention-dropout replay scale.
+
+    The element counter is the row-major logical probability identity
+    ``(((batch * Hq + head) * Sq + query) * Sk + key)``.  It is independent of
+    tile shape, split count, and physical scheduling, so forward and every
+    backward stage replay the same mask without storing it.
+    """
+
+    dimensions = (batch, query_heads, query_rows, key_rows)
+    if any(dimension <= 0 for dimension in dimensions):
+        raise ValueError("attention dropout dimensions must be positive")
+    probability = float(dropout_p)
+    if not np.isfinite(probability) or probability < 0.0 or probability >= 1.0:
+        raise ValueError("attention dropout probability must satisfy 0 <= p < 1")
+    if probability == 0.0:
+        return np.ones(dimensions, dtype=np.float32)
+
+    bh = np.arange(batch * query_heads, dtype=np.uint64)[:, None, None]
+    query = np.arange(query_rows, dtype=np.uint64)[None, :, None]
+    key = np.arange(key_rows, dtype=np.uint64)[None, None, :]
+    counter = (bh * np.uint64(query_rows) + query) * np.uint64(key_rows) + key
+    hashed = (
+        counter * _DROPOUT_COUNTER_MULTIPLIER
+        + np.uint64(seed) + _DROPOUT_COUNTER_INCREMENT
+    ) & np.uint64(0xFFFFFFFF)
+    threshold = np.uint64(int(probability * _UINT32_RANGE))
+    replay = (hashed >= threshold).reshape(dimensions).astype(np.float32)
+    replay *= np.float32(1.0 / (1.0 - probability))
+    return replay
+
+
 def _masked_scores(
     q: np.ndarray,
     key: np.ndarray,
@@ -218,6 +263,8 @@ def reference_streaming_attention(
     window_left: int = -1,
     window_right: int = -1,
     softcap: float = 0.0,
+    dropout_p: float = 0.0,
+    dropout_seed: int = 0,
 ) -> np.ndarray:
     """Execute the canonical rank-4 KV-block online-softmax recurrence."""
 
@@ -247,6 +294,14 @@ def reference_streaming_attention(
         key_rows,
     ):
         raise ValueError("attention bias must have shape [B,Hq,Sq,Sk]")
+    dropout_replay = attention_dropout_replay(
+        batch=batch,
+        query_heads=query_heads,
+        query_rows=query_rows,
+        key_rows=key_rows,
+        dropout_p=dropout_p,
+        seed=dropout_seed,
+    )
 
     output = np.zeros(
         (batch, query_heads, query_rows, value_dim), dtype=np.float32
@@ -282,9 +337,12 @@ def reference_streaming_attention(
                 old_scale = np.where(np.isfinite(running_max), old_scale, 0.0)
                 weights = np.exp(scores - new_max[:, None])
                 weights = np.where(valid, weights, 0.0)
+                output_weights = weights * dropout_replay[
+                    batch_index, query_head, :, start:stop
+                ]
                 accumulator = (
                     accumulator * old_scale[:, None]
-                    + weights @ vf[batch_index, kv_head, start:stop]
+                    + output_weights @ vf[batch_index, kv_head, start:stop]
                 )
                 running_sum = running_sum * old_scale + np.sum(weights, axis=1)
                 running_max = new_max
@@ -307,6 +365,8 @@ def reference_attention_backward_split_reduced(
     window_left: int = -1,
     window_right: int = -1,
     softcap: float = 0.0,
+    dropout_p: float = 0.0,
+    dropout_seed: int = 0,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Reference the canonical dQ plus split/fixed-order dK/dV algorithm."""
 
@@ -327,6 +387,21 @@ def reference_attention_backward_split_reduced(
         raise ValueError("invalid attention backward shape or split count")
     scale_value = head_dim**-0.5 if scale is None else float(scale)
     bias_array = None if bias is None else np.asarray(bias, dtype=np.float32)
+    if bias_array is not None and bias_array.shape != (
+        batch,
+        query_heads,
+        query_rows,
+        key_rows,
+    ):
+        raise ValueError("attention bias must have shape [B,Hq,Sq,Sk]")
+    dropout_replay = attention_dropout_replay(
+        batch=batch,
+        query_heads=query_heads,
+        query_rows=query_rows,
+        key_rows=key_rows,
+        dropout_p=dropout_p,
+        seed=dropout_seed,
+    )
     dq = np.zeros_like(qf, dtype=np.float32)
     partial_dk = np.zeros((split_count, *kf.shape), dtype=np.float32)
     partial_dv = np.zeros((split_count, *vf.shape), dtype=np.float32)
@@ -351,8 +426,12 @@ def reference_attention_backward_split_reduced(
             weights = np.exp(scores - row_max)
             weights = np.where(valid, weights, 0.0)
             weights /= np.sum(weights, axis=1, keepdims=True)
-            output = weights @ vf[batch_index, kv_head]
-            dp = dof[batch_index, query_head] @ vf[batch_index, kv_head].T
+            replay = dropout_replay[batch_index, query_head]
+            output_weights = weights * replay
+            output = output_weights @ vf[batch_index, kv_head]
+            dp = (
+                dof[batch_index, query_head] @ vf[batch_index, kv_head].T
+            ) * replay
             delta = np.sum(
                 output * dof[batch_index, query_head], axis=1, keepdims=True
             )
@@ -368,7 +447,8 @@ def reference_attention_backward_split_reduced(
                     ds[rows].T @ qf[batch_index, query_head, rows]
                 )
                 partial_dv[split, batch_index, kv_head] += (
-                    weights[rows].T @ dof[batch_index, query_head, rows]
+                    output_weights[rows].T
+                    @ dof[batch_index, query_head, rows]
                 )
     dk = np.zeros_like(kf, dtype=np.float32)
     dv = np.zeros_like(vf, dtype=np.float32)
@@ -381,6 +461,7 @@ def reference_attention_backward_split_reduced(
 __all__ = [
     "AttentionBackwardWorkspacePlan",
     "AttentionWorkspaceSlice",
+    "attention_dropout_replay",
     "plan_attention_backward_workspace",
     "reference_attention_backward_split_reduced",
     "reference_streaming_attention",

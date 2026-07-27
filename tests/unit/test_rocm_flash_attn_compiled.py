@@ -238,7 +238,7 @@ def test_optimized_gqa_bias_softcap_window_dropout_matches_counter_oracle():
     scores = scale * np.einsum(
         "bhqd,bhkd->bhqk", q.astype(np.float32), kq
     )
-    scores = cap * np.tanh(scores / cap) + bias
+    scores = cap * np.tanh((scores + bias) / cap)
     qpos = np.arange(Sq)[:, None]
     kpos = np.arange(Sk)[None, :]
     masked = (kpos > qpos) | ((qpos - kpos) >= window)

@@ -3059,6 +3059,11 @@ def _submit_rocm_gfx1151_attention_backward_program(
     if tuple(item.abi_id for item in program.descriptors) != expected_abis:
         raise RuntimeError("gfx1151 attention backward launch stages are not canonical")
     provenance = program.descriptors[0].provenance
+    if provenance.get("semantic_route") != "canonical_tensor_backward_scf_for":
+        raise RuntimeError(
+            "gfx1151 attention backward requires direct consumption of the "
+            "shared tensor-valued phase loops"
+        )
     b, hq, hkv, sq, sk, d, dv = (
         int(value) for value in cast(list[int], provenance["shape"])
     )

@@ -1384,10 +1384,11 @@ foundation rather than lowering attention as one whole-tensor sequence:
    loops, maps GQA heads before rank reduction, and reuses the one canonical
    KV-block recurrence. ROCm consumes this loop directly through gfx1151
    Target IR/runtime with SSA-owned LDS planning and exact-device proof. A
-   The launch carrier now verifies split-workspace ownership, block-loop
+   launch carrier verifies split-workspace ownership, block-loop
    metadata, and ascending reduction order. Tensor-valued shared backward
    `scf.for` bodies now carry dQ, split dK/dV partials, and fixed-order
-   reduction; direct physical consumers remain open.
+   reduction. ROCm directly consumes them on gfx1151; Apple and NVIDIA remain
+   architecture-owned follow-ups.
 5. Exact-device evidence is not transferable. NVIDIA SM120, Apple, and ROCm
    must each lower the shared contract into architecture-owned schedules and
    retain numerical, resource, cache, device-event, and end-to-end proof before
@@ -1402,9 +1403,11 @@ the verified backward contract to tensor-valued dQ, split dK/dV partial, and
 ascending-reduction `scf.for` bodies. Exact gfx1151 combined
 bias+softcap+dropout forward execution has max error `0.000271678` and resident
 median `0.098631 ms` against the `0.097763 ms` baseline. Direct physical
-consumption of the shared backward phase operations remains open on every
-backend; ROCm's five-entry carrier package remains the proven packaging
-boundary meanwhile.
+consumption now lands on gfx1151 under sync
+`ROCM-ATTENTION-SHARED-BACKWARD-CONSUMER-2026-07-26`: ROCm validates the
+tensor-valued phase topology and emits the compiler-owned five-entry package
+without rebuilding semantics from the launch carrier. Apple and NVIDIA remain
+architecture-owned follow-ups.
 
 Cross-backend sync `ROCM-E2E-ATTENTION-BACKWARD-2026-07-26` additionally maps
 the canonical launch-level backward carrier to one gfx1151 five-entry HSACO and
@@ -1412,8 +1415,19 @@ a ROCm-owned deterministic split/reduced program workspace. The carrier now
 states launch ownership, split count, block-loop order, and fixed reduction
 order instead of claiming zero workspace. Exact-device dropout replay with
 combined bias+softcap gradients passes. Tensor-valued shared backward
-`scf.for` bodies have landed; direct target consumption of their phase
-operations remains open, and no AMD schedule or evidence transfers.
+`scf.for` bodies had landed while direct target consumption of their phase
+operations remained open at that synchronization point; the follow-up below
+closes ROCm only, and no AMD schedule or evidence transfers.
+
+Follow-up sync `ROCM-ATTENTION-SHARED-BACKWARD-CONSUMER-2026-07-26` closes
+that gfx1151 gap. The native package source is the shared rank-4 forward plus
+`tessera_attn.backward` program; lowering exposes dQ, launch-owned two-split
+dK/dV partial, and ascending-reduction loops, and ROCm fails closed on any
+incomplete or reordered phase topology. Exact combined-feature gradients pass
+at maximum absolute errors dQ `0.000024833`, dK `0.000035211`, and dV
+`0.000329971`; the resident five-launch median is `0.367367 ms` versus the
+`0.368203 ms` baseline and `0.405023 ms` cap. Apple/NVIDIA physical
+consumption remains open and inherits no AMD artifact or timing evidence.
 
 > **Open items: #4 (fixture-backed numerical proof before conformance cells go
 > complete) and #5 (point specs at dashboards/this audit, not old root audits).**

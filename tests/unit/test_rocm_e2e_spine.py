@@ -28,7 +28,7 @@ from tessera.compiler.rocm_native import (
     GFX1151_REDUCE_F32_ABI,
     GFX1151_SOFTMAX_F32_ABI,
     _driver_selected_device_libraries,
-    emit_attention_backward_tile_ir,
+    emit_attention_backward_graph_ir,
     emit_attention_graph_ir,
     emit_moe_dispatch_tile_ir,
     emit_attention_tile_ir,
@@ -394,12 +394,18 @@ def _fake_attention_graph_compile(tile_ir: str, *, tile_q: int, tile_kv: int):
     )
 
 
-def _fake_attention_backward_compile(tile_ir: str):
-    assert "tile.attention_kernel" in tile_ir
-    assert "tile.attention_backward_kernel" in tile_ir
-    assert 'route = "deterministic_split_reduced"' in tile_ir
-    assert 'workspace_owner = "program_launch"' in tile_ir
-    assert "reduction_order = array<i64: 0, 1>" in tile_ir
+def _fake_attention_backward_compile(
+    graph_ir: str, *, tile_q: int, tile_kv: int
+):
+    assert "tessera.flash_attn" in graph_ir
+    assert "tessera_attn.backward" in graph_ir
+    assert "tile.attention_kernel" not in graph_ir
+    assert "tile.attention_backward_kernel" not in graph_ir
+    assert "split_count = 2 : i64" in graph_ir
+    assert "query_block = 16 : i64" in graph_ir
+    assert "key_block = 16 : i64" in graph_ir
+    assert tile_q == 17
+    assert tile_kv == 16
     libraries = (
         DeviceLibraryRecord("rocm.ocml", "1" * 64, "compiler_driver"),
         DeviceLibraryRecord("rocm.ockl", "2" * 64, "compiler_driver"),
@@ -407,8 +413,11 @@ def _fake_attention_backward_compile(tile_ir: str):
     )
     return (
         (
-            'module { "tessera_rocm.flash_attn"() : () -> () '
-            '"tessera_rocm.flash_attn_bwd"() : () -> () }'
+            'module { "tessera_rocm.flash_attn"() {'
+            'source = "canonical_rank4_kv_scf_for"} : () -> () '
+            '"tessera_rocm.flash_attn_bwd"() {'
+            "canonical_phase_loops = true, "
+            'source = "canonical_tensor_backward_scf_for"} : () -> () }'
         ),
         "gpu.binary @binary",
         b"\x7fELFattention-backward",
@@ -538,7 +547,7 @@ def test_rocm_attention_backward_package_owns_ordered_multi_entry_workspace(
     module = _attention_backward_module()
     assert requests_attention_backward(module)
     assert supports_attention_backward(module)
-    source = emit_attention_backward_tile_ir(
+    source = emit_attention_backward_graph_ir(
         forward_entry="attention_forward",
         backward_entry="attention_backward",
         storage="f16",
@@ -550,10 +559,12 @@ def test_rocm_attention_backward_package_owns_ordered_multi_entry_workspace(
         window_right=0,
         softcap=8.0,
     )
-    assert "tile.attention_kernel" in source
-    assert "tile.attention_backward_kernel" in source
+    assert "tessera.flash_attn" in source
+    assert "tessera_attn.backward" in source
+    assert "tile.attention_kernel" not in source
+    assert "tile.attention_backward_kernel" not in source
     monkeypatch.setattr(
-        "tessera.compiler.rocm_native._compile_attention_backward_tile_ir",
+        "tessera.compiler.rocm_native._compile_attention_backward_graph_ir",
         _fake_attention_backward_compile,
     )
     program = package_attention_backward(
@@ -587,6 +598,16 @@ def test_rocm_attention_backward_package_owns_ordered_multi_entry_workspace(
     )
     assert program.descriptors[2].provenance["workspace_owner"] == "program_launch"
     assert program.descriptors[2].provenance["deterministic"] is True
+    assert program.descriptors[2].provenance["semantic_route"] == (
+        "canonical_tensor_backward_scf_for"
+    )
+    assert program.descriptors[2].provenance["source_ir_kind"] == (
+        "canonical_attention_tensor_program"
+    )
+    assert program.descriptors[2].provenance["sync_key"] == (
+        "ROCM-ATTENTION-SHARED-BACKWARD-CONSUMER-2026-07-26"
+    )
+    assert len(program.descriptors[2].provenance["shared_ir_digest"]) == 64
 
 
 def test_rocm_attention_backward_optimized_contract_replays_dropout() -> None:

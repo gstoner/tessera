@@ -8,6 +8,15 @@ last_updated: 2026-07-26
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync
+`ROCM-ATTENTION-SHARED-BACKWARD-CONSUMER-2026-07-26` makes ROCm gfx1151 the
+first direct physical consumer of the shared tensor-valued attention backward
+phase loops. NVIDIA remains **follow-up required** to validate the same
+dQ/split-dK/dV/fixed-reduction contract and map it to a CUDA-owned package.
+The AMD WMMA schedule, five-entry HSACO, HIP launch workspace, gradient
+evidence, and host-wall timing do not transfer. No shared IR or NVIDIA
+capability state changed in this ROCm-owned closure.
+
 Cross-backend sync `CORE-ATTENTION-TENSOR-LOOPS-MODIFIERS-2026-07-26`
 materializes the deterministic split/reduced backward contract as tensor-valued
 shared `scf.for` bodies with explicit dQ ownership, split dK/dV workspace

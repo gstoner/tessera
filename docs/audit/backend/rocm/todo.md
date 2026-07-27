@@ -249,6 +249,22 @@ and selector evidence do not transfer to gfx1151 or another AMD target. No ROCm
 capability, execution state, schedule, or selector changes in this
 synchronization slice.
 
+Cross-backend sync `ROCM-CORE-GEMM-KLOOP-2026-07-27` closes that gfx1151
+follow-up. The direct consumer now accepts the canonical loop only after shared
+Tile lowering and the ROCm planner have placed real `!tile.buffer`,
+`!tile.async_token`, and `!tile.pipeline_state` edges on the matrix consumer;
+malformed or proof-free marked loops fail closed. The compiler owns both the
+register incumbent and an explicit address-space-3 LDS comparison schedule
+with cooperative ragged zero fill, K-loop-carried FP32/INT32 accumulation,
+barriers, and gfx1151 WMMA. Exact aligned/ragged FP16, BF16, and INT8 rows all
+execute and compare. The six register medians are 0.086620–0.115159 ms and pass
+their 10% wall-clock ratchets with zero spills. The LDS lane uses 512–1024
+bytes, 39–43 VGPRs, 31 SGPRs, and zero spills, but is 1.0684–1.55094x slower,
+so it is retained as a correctness/comparison route and the register schedule
+remains selected. The durable packet is
+[`../../../../benchmarks/baselines/rocm_gfx1151_canonical_gemm_kloop.json`](../../../../benchmarks/baselines/rocm_gfx1151_canonical_gemm_kloop.json).
+Apple simdgroup and NVIDIA Tensor Core schedules/evidence do not transfer.
+
 Cross-backend sync `COMPILER-LIT-BACKEND-GATING-2026-07-24`: retired seven
 never-runnable ROCm 7.2 pseudo-IR fixtures whose undefined
 `tessera_opt_built` feature masked a nonexistent global target flag,
@@ -401,6 +417,7 @@ evidence and not evidence for any sibling architecture.
 | ROCM-DTYPE-1 | complete on gfx1151 | FP64 and integer widths have per-operation Target-IR/runtime assessments; unsigned LLVM probes pass without inventing unsigned storage ABIs; signed int4 is canonical and physically packed; gfx1151 FP8/BF8 is rejected by name. |
 | ROCM-SSA-LDS | complete | AMD async-copy, waitcnt, and matrix consumers use shared SSA allocation, token, and pipeline-state identity; compatibility readers are retired, shared/ROCm fixtures are SSA-only, host structural and compiler-benchmark gates pass, while exact-device performance remains intentionally unclaimed. |
 | ROCM-E2E-ATTENTION | complete on gfx1151 | FP16 and BF16 forward consume the canonical rank-4 recurrence with per-head bias, softcap, dropout, GQA/window/ragged policy, and exact numerical/timing proof. FP16 and BF16 backward consume the tensor-valued shared dQ/split-partial/ascending-reduction loops directly into the compiler-owned five-entry package; exact combined gradients and dtype-specific resident program-wall ratchets pass. |
+| ROCM-CORE-GEMM-KLOOP | complete on gfx1151 | Canonical M/N/K loops reach the compiler-owned register and LDS WMMA schedules only through SSA allocation/token/pipeline proof. Six aligned/ragged FP16/BF16/INT8 rows pass; measured LDS staging is retained but not selected because it loses all six wall-clock comparisons. |
 
 ## Recommended open-work order
 

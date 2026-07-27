@@ -995,6 +995,9 @@ struct LowerKReductionAddToTileMMA : public RewritePattern {
     mmaState.addAttribute("tessera.tile_m", rewriter.getI64IntegerAttr(tm));
     mmaState.addAttribute("tessera.tile_n", rewriter.getI64IntegerAttr(tn));
     mmaState.addAttribute("tessera.tile_k", rewriter.getI64IntegerAttr(tk));
+    if (matmul->hasAttr("tessera.ragged_zero_pad"))
+      mmaState.addAttribute("tessera.ragged_zero_pad",
+                            rewriter.getUnitAttr());
     if (auto policy = matmul->getAttr("numeric_policy"))
       mmaState.addAttribute("numeric_policy", policy);
     Operation *mma = rewriter.create(mmaState);

@@ -161,6 +161,14 @@ zero-pad guarantee, with exact-device execute-and-compare on Apple7. The
 incumbent rule stands: recognition is not promotion, and value-mode
 Accelerate/MPS remains the production route.
 
+Cross-backend sync `ROCM-CORE-GEMM-KLOOP-2026-07-27` is **parity validated**
+for Apple. The shared Tile change is limited to preserving the canonical
+ragged-zero-fill guarantee across `tessera.matmul` → `tile.mma`; APPLE-TILE-2
+already consumes the same loop and guarantee. ROCm's address-space-3 LDS
+schedule, barriers, gfx1151 WMMA, HSACO resources, and host-wall results do not
+transfer to Metal. No Apple route, capability, execution state, or selector
+changes in this slice.
+
 Cross-backend sync `COMPILER-LIT-BACKEND-GATING-2026-07-24`: shared lit feature
 hygiene now rejects undefined requirements and obsolete global GPU target
 flags. The retired fixtures and decoupled CUDA/HIP instruction probes were

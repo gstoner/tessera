@@ -172,6 +172,13 @@ memory and zero spills. INT8 and packed formats remain follow-on after the
 ordinary loop is stable. WSL timing is selector-ineligible and no selector
 changes in this slice.
 
+Cross-backend sync `ROCM-CORE-GEMM-KLOOP-2026-07-27` is **parity validated**
+for NVIDIA. The only shared edit preserves the existing canonical
+ragged-zero-fill guarantee across `tessera.matmul` → `tile.mma`; NVIDIA's
+already-proven SM120 consumer and twelve-row packet are unchanged. AMD LDS,
+wait/barrier, WMMA, HSACO resource, and gfx1151 wall-clock evidence do not
+transfer. No NVIDIA route, capability, execution state, or selector changes.
+
 Cross-backend sync `COMPILER-LIT-BACKEND-GATING-2026-07-24`: retired eleven
 never-runnable CUDA13 pseudo-IR fixtures whose undefined `tessera_opt_built`
 feature masked stale CLI options and unregistered operations. Core named

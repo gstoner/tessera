@@ -39,22 +39,29 @@ np = pytest.importorskip("numpy")
 
 REPO = Path(__file__).resolve().parents[2]
 TESSERA_OPT = REPO / "build" / "tools" / "tessera-opt" / "tessera-opt"
-ORACLE_LIB = (REPO / "build" / "src" / "compiler" / "codegen"
-              / "Tessera_ROCM_Backend" / "runtime" / "hip"
-              / "libtessera_rocm_gemm.so")
+ORACLE_LIB = (
+    REPO
+    / "build"
+    / "src"
+    / "compiler"
+    / "codegen"
+    / "Tessera_ROCM_Backend"
+    / "runtime"
+    / "hip"
+    / "libtessera_rocm_gemm.so"
+)
 CHIP = os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
 TYPED_FRAGMENT_FIXTURE = (
-    REPO / "src/compiler/codegen/Tessera_ROCM_Backend/test/rocm"
-    / "gfx1151_tile_fragment_store.mlir"
+    REPO / "src/compiler/codegen/Tessera_ROCM_Backend/test/rocm" / "gfx1151_tile_fragment_store.mlir"
 )
 
-_DIRECTIVE = '''
+_DIRECTIVE = """
 module {
   "tessera_rocm.wmma_gemm"() {name = "gemm", m = 16 : i64, n = 16 : i64, k = 16 : i64} : () -> ()
 }
-'''
+"""
 
-_PORTABLE_TILE_KERNEL = '''
+_PORTABLE_TILE_KERNEL = """
 module {
   func.func @gemm(%a: !llvm.ptr, %b: !llvm.ptr, %d: !llvm.ptr,
                   %m: i64, %n: i64, %k: i64) {
@@ -66,9 +73,9 @@ module {
     return
   }
 }
-'''
+"""
 
-_PORTABLE_TILE_EPILOGUE = '''
+_PORTABLE_TILE_EPILOGUE = """
 module {
   func.func @gemm_epilogue(%a: !llvm.ptr, %b: !llvm.ptr, %bias: !llvm.ptr,
                            %d: !llvm.ptr, %m: i64, %n: i64, %k: i64) {
@@ -80,7 +87,22 @@ module {
     return
   }
 }
-'''
+"""
+
+
+def _canonical_gemm_module(m: int, k: int, n: int, storage: str, accum: str) -> str:
+    return f"""
+module {{
+  func.func @canonical_gemm(
+      %a: tensor<{m}x{k}x{storage}>, %b: tensor<{k}x{n}x{storage}>)
+      -> tensor<{m}x{n}x{accum}> {{
+    %0 = "tessera.matmul"(%a, %b)
+        : (tensor<{m}x{k}x{storage}>, tensor<{k}x{n}x{storage}>)
+        -> tensor<{m}x{n}x{accum}>
+    return %0 : tensor<{m}x{n}x{accum}>
+  }}
+}}
+"""
 
 
 def _find_mlir_opt():
@@ -118,12 +140,17 @@ def _extract_hsaco(text: str) -> bytes:
         if c == '"':
             break
         if c == "\\":
-            nx = text[j + 1:j + 3]
+            nx = text[j + 1 : j + 3]
             if len(nx) == 2 and nx[0] in hexd and nx[1] in hexd:
-                out.append(int(nx, 16)); j += 3; continue
+                out.append(int(nx, 16))
+                j += 3
+                continue
             if text[j + 1] in simple:
-                out.append(simple[text[j + 1]]); j += 2; continue
-        out.append(ord(c)); j += 1
+                out.append(simple[text[j + 1]])
+                j += 2
+                continue
+        out.append(ord(c))
+        j += 1
     return bytes(out)
 
 
@@ -142,8 +169,9 @@ def test_generate_pass_emits_fragment_materialized_kernel():
     (M,N,K) signature, an scf.for K-loop, masked fragment loads + tessera_rocm.
     wmma + masked stores."""
     _need_tools()
-    r = subprocess.run([str(TESSERA_OPT), "-", "--generate-wmma-gemm-kernel"],
-                       input=_DIRECTIVE, capture_output=True, text=True)
+    r = subprocess.run(
+        [str(TESSERA_OPT), "-", "--generate-wmma-gemm-kernel"], input=_DIRECTIVE, capture_output=True, text=True
+    )
     assert r.returncode == 0, r.stderr
     out = r.stdout
     # Problem-size-generic ABI: dynamic memrefs + runtime M,N,K index args.
@@ -158,20 +186,24 @@ def test_generate_pass_emits_fragment_materialized_kernel():
     #   - edge — ragged M/N: coalesced loads at clamped row/col + a vector
     #            arith.select to zero OOB fragments; masked stores
     #   - tail — ragged K (K%16!=0): per-element clamp-and-select, run once
-    assert "vector.load" in out                 # coalesced A fragment (fast+edge)
-    assert "arith.select" in out                 # edge zeroing + tail/clamp masks
-    assert out.count("scf.for") == 2            # fast-main + edge-main K-loops
+    assert "vector.load" in out  # coalesced A fragment (fast+edge)
+    assert "arith.select" in out  # edge zeroing + tail/clamp masks
+    assert out.count("scf.for") == 2  # fast-main + edge-main K-loops
     assert out.count("tessera_rocm.wmma") == 4  # 2 paths x (main + tail panel)
-    assert "scf.if" in out                       # tileFull dispatch + ragged-K tail
-    assert '"tessera_rocm.wmma_gemm"' not in out   # directive consumed
+    assert "scf.if" in out  # tileFull dispatch + ragged-K tail
+    assert '"tessera_rocm.wmma_gemm"' not in out  # directive consumed
 
 
 def test_portable_tile_kernel_reuses_fragment_materialized_generator():
     """The launch-level portable contract reaches the identical production
     gfx1151 generator rather than a second backend-specific kernel body."""
     _need_tools()
-    r = subprocess.run([str(TESSERA_OPT), "-", "--generate-wmma-gemm-kernel"],
-                       input=_PORTABLE_TILE_KERNEL, capture_output=True, text=True)
+    r = subprocess.run(
+        [str(TESSERA_OPT), "-", "--generate-wmma-gemm-kernel"],
+        input=_PORTABLE_TILE_KERNEL,
+        capture_output=True,
+        text=True,
+    )
     assert r.returncode == 0, r.stderr
     assert "tile.matmul_kernel" not in r.stdout
     assert "gpu.func @gemm" in r.stdout
@@ -180,25 +212,124 @@ def test_portable_tile_kernel_reuses_fragment_materialized_generator():
     assert "memref.store" in r.stdout
 
 
+@pytest.mark.parametrize(
+    ("storage", "accum", "wmma"),
+    [
+        ("f16", "f32", "tessera_rocm.wmma"),
+        ("bf16", "f32", "tessera_rocm.wmma"),
+        ("i8", "i32", "tessera_rocm.wmma"),
+    ],
+)
+def test_shared_canonical_k_loop_reuses_rocm_wmma_generator(storage: str, accum: str, wmma: str) -> None:
+    """ROCm consumes the planned shared loop and its SSA ownership proof."""
+    _need_tools()
+    result = subprocess.run(
+        [
+            str(TESSERA_OPT),
+            "-",
+            "--tessera-tiling",
+            "--tessera-tile-ir-lowering",
+            "--rocm-wave-lds-pipeline",
+            "--rocm-wave-lds-legality",
+            "--generate-wmma-gemm-kernel",
+        ],
+        input=_canonical_gemm_module(31, 23, 47, storage, accum),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "tessera.canonical_k_step" not in result.stdout
+    assert "gpu.func @canonical_gemm" in result.stdout
+    assert wmma in result.stdout
+    assert 'tessera.rocm.source = "canonical_mnk_scf_for"' in result.stdout
+    assert "tessera.rocm.canonical_k_loop = true" in result.stdout
+    assert "tessera.rocm.ssa_ownership_proof = true" in result.stdout
+    assert "tessera.rocm.ragged_zero_pad = true" in result.stdout
+    assert f'tessera.rocm.accumulate = "{accum}"' in result.stdout
+    assert "tessera.rocm.tile_k = 16" in result.stdout
+
+
+def test_malformed_canonical_k_step_fails_closed() -> None:
+    """A marker without the verified loop/pipeline contract is not consumed."""
+    _need_tools()
+    source = """
+module {
+  func.func @not_canonical(%a: tensor<16x16xf16>,
+                           %b: tensor<16x16xf16>)
+      -> tensor<16x16xf32> {
+    %0 = "tessera.matmul"(%a, %b) {
+      tessera.canonical_k_step,
+      tessera.ragged_zero_pad,
+      tessera.tile_m = 16 : i64,
+      tessera.tile_n = 16 : i64,
+      tessera.tile_k = 16 : i64
+    } : (tensor<16x16xf16>, tensor<16x16xf16>) -> tensor<16x16xf32>
+    return %0 : tensor<16x16xf32>
+  }
+}
+"""
+    result = subprocess.run(
+        [str(TESSERA_OPT), "-", "--generate-wmma-gemm-kernel"],
+        input=source,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "verified three-level M/N/K scf.for contract" in result.stderr
+
+
+def test_canonical_k_loop_has_explicit_compiler_owned_lds_strategy() -> None:
+    """The comparison lane is real address-space-3 staging, not an attribute."""
+    _need_tools()
+    result = subprocess.run(
+        [
+            str(TESSERA_OPT),
+            "-",
+            "--tessera-tiling",
+            "--tessera-tile-ir-lowering",
+            "--rocm-wave-lds-pipeline",
+            "--rocm-wave-lds-legality",
+            "--generate-wmma-gemm-kernel=canonical-staging=lds",
+        ],
+        input=_canonical_gemm_module(31, 47, 23, "bf16", "f32"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    out = result.stdout
+    assert 'tessera.rocm.physical_staging = "lds"' in out
+    assert "tessera.rocm.ssa_ownership_proof = true" in out
+    assert out.count("#gpu.address_space<workgroup>") >= 2
+    assert out.count("gpu.barrier") == 2
+    assert "vector.load" in out
+    assert "tessera_rocm.wmma" in out
+
+
 def test_portable_tile_epilogue_preserves_abi_and_output_conversion():
     """Bias remains the third portable operand, while SiLU and f16 conversion
     are fused on the register accumulator before the final store."""
     _need_tools()
-    r = subprocess.run([str(TESSERA_OPT), "-", "--generate-wmma-gemm-kernel"],
-                       input=_PORTABLE_TILE_EPILOGUE,
-                       capture_output=True, text=True)
+    r = subprocess.run(
+        [str(TESSERA_OPT), "-", "--generate-wmma-gemm-kernel"],
+        input=_PORTABLE_TILE_EPILOGUE,
+        capture_output=True,
+        text=True,
+    )
     assert r.returncode == 0, r.stderr
     out = r.stdout
-    assert ("gpu.func @gemm_epilogue(%arg0: memref<?xf16>, "
-            "%arg1: memref<?xf16>, %arg2: memref<?xf32>, "
-            "%arg3: memref<?xf16>") in out
-    assert "arith.addf" in out       # bias
+    assert (
+        "gpu.func @gemm_epilogue(%arg0: memref<?xf16>, %arg1: memref<?xf16>, %arg2: memref<?xf32>, %arg3: memref<?xf16>"
+    ) in out
+    assert "arith.addf" in out  # bias
     # SiLU uses the shared bounded-tanh arithmetic form, avoiding a target
     # device-math libcall while preserving the portable epilogue contract.
     assert "arith.maximumf" in out
     assert "arith.minimumf" in out
     assert "arith.divf" in out
-    assert "arith.truncf" in out     # f32 accumulator -> f16 output
+    assert "arith.truncf" in out  # f32 accumulator -> f16 output
     # One hoisted bias load in each mutually exclusive fast/edge branch. Before
     # the cleanup this was emitted once per accumulator element (16 total).
     assert out.count("memref.load %arg2") == 2
@@ -221,19 +352,23 @@ def test_typed_tile_fragment_fixture_executes_and_matches_numpy(dtype):
     elif dtype in ("int8", "int4"):
         fixture = fixture.replace("memref<256xf16>", "memref<256xi8>")
         fixture = fixture.replace("memref<256xf32>", "memref<256xi32>")
-        fixture = fixture.replace(
-            'a = "f16", b = "f16", acc = "f32"',
-            f'a = "{dtype}", b = "{dtype}", acc = "i32"')
+        fixture = fixture.replace('a = "f16", b = "f16", acc = "f32"', f'a = "{dtype}", b = "{dtype}", acc = "i32"')
         storage_dtype = np.int8
     lowered = subprocess.run(
-        [str(TESSERA_OPT), "-", "--allow-unregistered-dialect",
-         "--pass-pipeline=builtin.module(lower-tile-to-rocm{arch=gfx1151},"
-         "lower-tessera-target-to-rocdl)"],
-        input=fixture, capture_output=True, text=True)
+        [
+            str(TESSERA_OPT),
+            "-",
+            "--allow-unregistered-dialect",
+            "--pass-pipeline=builtin.module(lower-tile-to-rocm{arch=gfx1151},lower-tessera-target-to-rocdl)",
+        ],
+        input=fixture,
+        capture_output=True,
+        text=True,
+    )
     assert lowered.returncode == 0, lowered.stderr
-    intrinsic = (f"rocdl.wmma.f32.16x16x16.{dtype}"
-                 if dtype in ("f16", "bf16")
-                 else f"rocdl.wmma.i32.16x16x16.iu{dtype[-1]}")
+    intrinsic = (
+        f"rocdl.wmma.f32.16x16x16.{dtype}" if dtype in ("f16", "bf16") else f"rocdl.wmma.i32.16x16x16.iu{dtype[-1]}"
+    )
     assert intrinsic in lowered.stdout
     pipeline = (
         "builtin.module(gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
@@ -241,8 +376,8 @@ def test_typed_tile_fragment_fixture_executes_and_matches_numpy(dtype):
         "gpu-module-to-binary)"
     )
     serialized = subprocess.run(
-        [mlir_opt, f"--pass-pipeline={pipeline}"], input=lowered.stdout,
-        capture_output=True, text=True)
+        [mlir_opt, f"--pass-pipeline={pipeline}"], input=lowered.stdout, capture_output=True, text=True
+    )
     assert serialized.returncode == 0, serialized.stderr
     hsaco = _extract_hsaco(serialized.stdout)
 
@@ -250,20 +385,17 @@ def test_typed_tile_fragment_fixture_executes_and_matches_numpy(dtype):
     if dtype in ("int8", "int4"):
         low, high = (-8, 8) if dtype == "int4" else (-16, 17)
         a = rng.integers(low, high, size=(16, 16), dtype=np.int8)
-        b = np.asfortranarray(
-            rng.integers(low, high, size=(16, 16), dtype=np.int8))
+        b = np.asfortranarray(rng.integers(low, high, size=(16, 16), dtype=np.int8))
     else:
         a = (rng.standard_normal((16, 16)) * 0.4).astype(storage_dtype)
-        b = np.asfortranarray(
-            (rng.standard_normal((16, 16)) * 0.4).astype(storage_dtype))
+        b = np.asfortranarray((rng.standard_normal((16, 16)) * 0.4).astype(storage_dtype))
     if hip.hipInit(0) != 0:
         pytest.skip("hipInit failed")
     module = ctypes.c_void_p()
     if hip.hipModuleLoadData(ctypes.byref(module), hsaco) != 0:
         pytest.skip("no usable gfx1151 device (module load failed)")
     function = ctypes.c_void_p()
-    assert hip.hipModuleGetFunction(
-        ctypes.byref(function), module, b"fragment_store") == 0
+    assert hip.hipModuleGetFunction(ctypes.byref(function), module, b"fragment_store") == 0
     da, db, dd = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
     for ptr, nbytes in ((da, a.nbytes), (db, b.nbytes), (dd, 16 * 16 * 4)):
         assert hip.hipMalloc(ctypes.byref(ptr), nbytes) == 0
@@ -271,17 +403,22 @@ def test_typed_tile_fragment_fixture_executes_and_matches_numpy(dtype):
     hip.hipMemcpy(db, b.ctypes.data_as(ctypes.c_void_p), b.nbytes, 1)
 
     def descriptor(ptr, size):
-        return [ctypes.c_void_p(ptr.value), ctypes.c_void_p(ptr.value),
-                ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
+        return [
+            ctypes.c_void_p(ptr.value),
+            ctypes.c_void_p(ptr.value),
+            ctypes.c_int64(0),
+            ctypes.c_int64(size),
+            ctypes.c_int64(1),
+        ]
 
     args = descriptor(da, 256) + descriptor(db, 256) + descriptor(dd, 256)
     argv = (ctypes.c_void_p * len(args))()
     for i, arg in enumerate(args):
         argv[i] = ctypes.cast(ctypes.byref(arg), ctypes.c_void_p)
     launch = hip.hipModuleLaunchKernel
-    launch.argtypes = ([ctypes.c_void_p] + [ctypes.c_uint] * 6
-                       + [ctypes.c_uint, ctypes.c_void_p, ctypes.c_void_p,
-                          ctypes.c_void_p])
+    launch.argtypes = (
+        [ctypes.c_void_p] + [ctypes.c_uint] * 6 + [ctypes.c_uint, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+    )
     assert launch(function, 1, 1, 1, 32, 1, 1, 0, None, argv, None) == 0
     assert hip.hipDeviceSynchronize() == 0
     output_dtype = np.int32 if dtype in ("int8", "int4") else np.float32
@@ -290,21 +427,18 @@ def test_typed_tile_fragment_fixture_executes_and_matches_numpy(dtype):
     for ptr in (da, db, dd):
         hip.hipFree(ptr)
     if dtype in ("int8", "int4"):
-        np.testing.assert_array_equal(
-            out, a.astype(np.int32) @ b.astype(np.int32))
+        np.testing.assert_array_equal(out, a.astype(np.int32) @ b.astype(np.int32))
     else:
         tolerance = 2e-3 if dtype == "f16" else 2e-2
-        np.testing.assert_allclose(
-            out, a.astype(np.float32) @ b.astype(np.float32),
-            rtol=tolerance, atol=tolerance)
+        np.testing.assert_allclose(out, a.astype(np.float32) @ b.astype(np.float32), rtol=tolerance, atol=tolerance)
 
 
 @pytest.mark.parametrize(
-    "source", [_DIRECTIVE, _PORTABLE_TILE_KERNEL],
+    "source",
+    [_DIRECTIVE, _PORTABLE_TILE_KERNEL],
     ids=["target-directive", "portable-tile-kernel"],
 )
-@pytest.mark.parametrize("shape", [(16, 16, 16), (33, 17, 31)],
-                         ids=["aligned", "ragged"])
+@pytest.mark.parametrize("shape", [(16, 16, 16), (33, 17, 31)], ids=["aligned", "ragged"])
 def test_compiler_generated_gemm_matches_numpy_and_oracle(source, shape):
     mlir_opt = _need_tools()
     hip = _hip()
@@ -313,9 +447,11 @@ def test_compiler_generated_gemm_matches_numpy_and_oracle(source, shape):
 
     # directive -> generate kernel -> Stage J (real rocdl.wmma)
     gen = subprocess.run(
-        [str(TESSERA_OPT), "-", "--generate-wmma-gemm-kernel",
-         "--lower-tessera-target-to-rocdl"],
-        input=source, capture_output=True, text=True)
+        [str(TESSERA_OPT), "-", "--generate-wmma-gemm-kernel", "--lower-tessera-target-to-rocdl"],
+        input=source,
+        capture_output=True,
+        text=True,
+    )
     assert gen.returncode == 0, gen.stderr
     assert "rocdl.wmma.f32.16x16x16.f16" in gen.stdout
     # Stage I: finish-lower + attach + serialize
@@ -324,8 +460,7 @@ def test_compiler_generated_gemm_matches_numpy_and_oracle(source, shape):
         f"reconcile-unrealized-casts),rocdl-attach-target{{chip={CHIP}}},"
         "gpu-module-to-binary)"
     )
-    ser = subprocess.run([mlir_opt, f"--pass-pipeline={pipeline}"],
-                         input=gen.stdout, capture_output=True, text=True)
+    ser = subprocess.run([mlir_opt, f"--pass-pipeline={pipeline}"], input=gen.stdout, capture_output=True, text=True)
     assert ser.returncode == 0, ser.stderr
     assert "bin = " in ser.stdout
     hsaco = _extract_hsaco(ser.stdout)
@@ -344,8 +479,7 @@ def test_compiler_generated_gemm_matches_numpy_and_oracle(source, shape):
     fn = ctypes.c_void_p()
     assert hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"gemm") == 0
     da, db, dd = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
-    for d, nbytes in ((da, A.nbytes), (db, B.nbytes),
-                      (dd, M * N * np.dtype(np.float32).itemsize)):
+    for d, nbytes in ((da, A.nbytes), (db, B.nbytes), (dd, M * N * np.dtype(np.float32).itemsize)):
         if hip.hipMalloc(ctypes.byref(d), nbytes) != 0:
             pytest.skip("hipMalloc failed")
     hip.hipMemcpy(da, A.ctypes.data_as(ctypes.c_void_p), A.nbytes, 1)
@@ -355,18 +489,22 @@ def test_compiler_generated_gemm_matches_numpy_and_oracle(source, shape):
     # alloc, aligned, offset, size, stride) + runtime M,N,K as i64. The grid
     # is one wave per 16x16 output tile; M=N=K=16 -> grid (1,1,1).
     def mr(p, size):
-        return [ctypes.c_void_p(p.value), ctypes.c_void_p(p.value),
-                ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
+        return [
+            ctypes.c_void_p(p.value),
+            ctypes.c_void_p(p.value),
+            ctypes.c_int64(0),
+            ctypes.c_int64(size),
+            ctypes.c_int64(1),
+        ]
 
-    args = (mr(da, M * Kd) + mr(db, Kd * N) + mr(dd, M * N)
-            + [ctypes.c_int64(M), ctypes.c_int64(N), ctypes.c_int64(Kd)])
+    args = mr(da, M * Kd) + mr(db, Kd * N) + mr(dd, M * N) + [ctypes.c_int64(M), ctypes.c_int64(N), ctypes.c_int64(Kd)]
     arr = (ctypes.c_void_p * len(args))()
     for i, a in enumerate(args):
         arr[i] = ctypes.cast(ctypes.byref(a), ctypes.c_void_p)
     launch = hip.hipModuleLaunchKernel
-    launch.argtypes = ([ctypes.c_void_p] + [ctypes.c_uint] * 6
-                       + [ctypes.c_uint, ctypes.c_void_p, ctypes.c_void_p,
-                          ctypes.c_void_p])
+    launch.argtypes = (
+        [ctypes.c_void_p] + [ctypes.c_uint] * 6 + [ctypes.c_uint, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+    )
     gx, gy = (N + 15) // 16, (M + 15) // 16
     assert launch(fn, gx, gy, 1, 32, 1, 1, 0, None, arr, None) == 0
     assert hip.hipDeviceSynchronize() == 0
@@ -384,14 +522,19 @@ def test_compiler_generated_gemm_matches_numpy_and_oracle(source, shape):
     ofn.argtypes = [ctypes.c_void_p] * 3 + [ctypes.c_int] * 3
     ofn.restype = ctypes.c_int
     Do = np.zeros((M, N), dtype=np.float32)
-    orc = ofn(A.ctypes.data_as(ctypes.c_void_p), B.ctypes.data_as(ctypes.c_void_p),
-              Do.ctypes.data_as(ctypes.c_void_p), M, N, Kd)
+    orc = ofn(
+        A.ctypes.data_as(ctypes.c_void_p),
+        B.ctypes.data_as(ctypes.c_void_p),
+        Do.ctypes.data_as(ctypes.c_void_p),
+        M,
+        N,
+        Kd,
+    )
     if orc == 2:
         pytest.skip("oracle: no usable AMD GPU")
     assert orc == 0
     # The compiler-GENERATED GEMM matches the hand-written oracle bit-for-bit.
-    assert float(np.max(np.abs(D - Do))) == 0.0, \
-        "compiler-generated GEMM != hand-written oracle"
+    assert float(np.max(np.abs(D - Do))) == 0.0, "compiler-generated GEMM != hand-written oracle"
 
 
 def test_generate_pass_rejects_non_16_tile():
@@ -399,7 +542,8 @@ def test_generate_pass_rejects_non_16_tile():
     named error, not a silent wrong kernel."""
     _need_tools()
     bad = _DIRECTIVE.replace("k = 16", "k = 32")
-    r = subprocess.run([str(TESSERA_OPT), "-", "--generate-wmma-gemm-kernel"],
-                       input=bad, capture_output=True, text=True)
+    r = subprocess.run(
+        [str(TESSERA_OPT), "-", "--generate-wmma-gemm-kernel"], input=bad, capture_output=True, text=True
+    )
     assert r.returncode != 0
     assert "16x16x16" in r.stderr

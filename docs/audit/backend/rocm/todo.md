@@ -27,25 +27,20 @@ evidence. The retained packets are
 and
 [`../../../../benchmarks/baselines/rocm_gfx1151_bf16_attention_backward.json`](../../../../benchmarks/baselines/rocm_gfx1151_bf16_attention_backward.json).
 
-Cross-backend sync `LSE-CHECKPOINT-CONTRACT-2026-07-26`: the shared
-`tessera_attn.lse.save` / `lse.load` pair is a declared-but-unimplemented
-FlashAttention-2 checkpoint. `lse.save` takes no destination, `lse.load` takes
-no operands, nothing links a load to a save, the single emission site discards
-the result and types it scalar `f32`, and no backend consumes it — all three
-with an attention backward recompute `L` instead. Apple hit this when
-re-forming the shared streaming recurrence. Marking `LseSaveOp` `Pure` was
-tried and **backed out**: it changes emitted IR on every backend
-(`phase3/flash_attn_full.mlir` asserts the op's presence) and would trap
-whoever implements the real store, which must be non-`Pure` with `MemWrite`.
-Apple instead erases only a dead `lse.save` inside its own lowering, so **no
-shared op, verifier, or emitted lowering changed**. The contract, the FA-2
-save-versus-recompute trade, and the preferred source-level fix are documented
-in
+Cross-backend sync `LSE-CHECKPOINT-CONTRACT-2026-07-27` replaces the
+destination-less LSE markers with explicit memref source/destination, SSA row
+offset, identity, memory-space, lifetime-scope, cache-policy, and
+`MemWrite`/`MemRead` effects. Default shared forward lowering no longer emits
+a store to nowhere. The gfx1151 five-entry training package now supports
+explicit saved and recompute modes; saved forward writes finalized
+`m + log(l)` into launch-owned `row_lse`, while its `_pre` is D-only. An exact
+FP16/BF16 17/64/128/256 sequence sweep shows mixed short-length results but a
+cross-dtype saved wins at 128 and 256, so `auto` saves at
+`max(Sq,Sk) >= 128` and recomputes below it. Gradient errors are
+identical between modes. This is gfx1151 host-wall evidence only; sibling
+physical schedules and thresholds do not transfer. Contract and retained
+packet:
 [`../../compiler/LSE_CHECKPOINT_CONTRACT.md`](../../compiler/LSE_CHECKPOINT_CONTRACT.md).
-This backend owns the measurement, because the save-versus-recompute choice is
-an HBM-bandwidth question and this is a lead performance target (Decision #28).
-No IR, ABI, schedule, evidence, or selector changed in the synchronization
-slice itself.
 
 Cross-backend sync
 `ROCM-ATTENTION-SHARED-BACKWARD-CONSUMER-2026-07-26` closes the remaining
@@ -435,7 +430,7 @@ named exact device can satisfy an execution gate.
 | 6 | ROCM-4b | Retain compatibility proof on MI300X/MI325X `gfx942` | owner and reservation required | f16/bf16 MFMA plus retained matmul/attention/softmax/GELU paths launch and compare. |
 | 8 | ROCM-4a | Add Radeon RX 9000 `gfx1200` exact-device proof | owner and reservation required | Matmul launches and compares; unsupported forms reject stably. |
 | 9 | ROCM-5 | Close the architecture-owned fragment umbrella | depends on ROCM-1 through ROCM-4b | Every enabled family/dtype has exact-device packing, numerical, resource, and timing evidence, or an explicit unsupported/deferred state. |
-| 10 | ROCM-LSE-1 | Evaluate saving versus recomputing the FlashAttention LSE | local WSL compiler and gfx1151 available; CDNA and long-context parts owner-gated | Measure where a stored `[B*H*Sq]` fp32 LSE beats the `_pre` kernel that currently recomputes `L[q] = logsumexp_k(scale*QK^T)` — whose header states the backward "needs nothing saved from the forward" — across sequence length, head count, dtype, and architecture (gfx1151 now; gfx950 MI350-series and gfx1250 MI455X where HBM bandwidth and long context make the trade decidable). Price in the no-stored-attention-matrix property the saved path gives up. Then take one of three outcomes jointly with NVIDIA: implement the real contract, retire the vocabulary, or — available immediately and independent of the measurement — **fix it at the source: stop `TileIRLoweringPass` emitting a destination-less `lse.save` at all.** The op already declares the effects a real store needs; what is wrong is emitting one with nowhere to write. The source-level fix is the preferred landing; it also drops a dead op from ROCm forwards and removes the one place a backend steps around a shared effectful op. Paired two-run medians in a named timing domain, retained resource evidence, an explicit workspace statement, and a recorded joint decision. If the source-level fix lands, the dormant `test_lse_checkpoint_contract.py` tripwire retires with it. |
+| 10 | ROCM-LSE-1 | Extend the landed gfx1151 LSE selector beyond WSL | **gfx1151 implementation and initial decision complete; bare-metal/CDNA follow-up gated** | The real shared checkpoint contract, selectable physical save/recompute paths, exact FP16/BF16 17/64/128/256 correctness sweep, retained host-wall evidence, and 128+ saved selector are landed. Revalidate on bare-metal gfx1151 and measure architecture-owned thresholds on gfx950/gfx1250; do not transfer the WSL threshold. |
 | 11 | ROCM-VERIFY-TESSERA-OPT-1 | Verify the tessera-opt build-capability change on a real ROCm host | **complete on Strix Halo `gfx1151` (2026-07-27)** | The full and lean ROCm drivers, explicit conflict rejection, capability-aware helper, documented `TESSERA_OPT_BIN` lit invocation, streaming-attention fixtures, complete ROCm backend lit suite, ROCDL/HSACO lane, sealed packet, and generated docs pass. The completed request is archived at [`archive/ROCM_VERIFICATION_REQUEST_2026-07-27.md`](archive/ROCM_VERIFICATION_REQUEST_2026-07-27.md). |
 
 ### `TESSERA-OPT-BUILD-CAPABILITY-2026-07-27` verification result

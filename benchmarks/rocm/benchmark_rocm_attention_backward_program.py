@@ -56,6 +56,7 @@ def _module(
     dtype: str = "fp16",
     dropout_p: float = 0.0,
     dropout_seed: int = 37,
+    lse_checkpoint: str = "auto",
 ) -> GraphIRModule:
     def tensor(shape: tuple[int, ...], dtype: str) -> IRType:
         element = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[dtype]
@@ -104,6 +105,7 @@ def _module(
                             "softcap": 8.0,
                             "dropout_p": dropout_p,
                             "dropout_seed": dropout_seed,
+                            "lse_checkpoint": lse_checkpoint,
                             "route": "deterministic_direct",
                             "deterministic": True,
                         },
@@ -152,6 +154,7 @@ def _record(
     dtype: str,
     dropout_p: float,
     dropout_seed: int,
+    lse_checkpoint: str = "auto",
 ) -> dict[str, Any]:
     samples = list(result["kernel_wall_samples_ms"])
     median_ms = statistics.median(samples)
@@ -164,6 +167,7 @@ def _record(
         "image_bytes": image_bytes,
         "entry_symbols": list(result["entry_symbols"]),
         "workspace_bytes": int(result["workspace_bytes"]),
+        "lse_checkpoint": lse_checkpoint,
         "dropout": {
             "probability": dropout_p,
             "seed": dropout_seed,
@@ -200,6 +204,11 @@ def main() -> int:
     parser.add_argument("--output")
     parser.add_argument("--dropout-p", type=float, default=0.0)
     parser.add_argument("--dropout-seed", type=int, default=37)
+    parser.add_argument(
+        "--lse-checkpoint",
+        choices=("auto", "saved", "recompute"),
+        default="auto",
+    )
     args = parser.parse_args()
     if args.iterations <= 0:
         parser.error("--iterations must be positive")
@@ -232,6 +241,7 @@ def main() -> int:
             dtype=args.dtype,
             dropout_p=args.dropout_p,
             dropout_seed=args.dropout_seed,
+            lse_checkpoint=args.lse_checkpoint,
         ),
         pipeline_name="tessera-lower-to-rocm",
     )
@@ -275,6 +285,7 @@ def main() -> int:
         dtype=args.dtype,
         dropout_p=args.dropout_p,
         dropout_seed=args.dropout_seed,
+        lse_checkpoint=args.lse_checkpoint,
     )
     text = json.dumps(record, indent=2, sort_keys=True)
     if args.output:

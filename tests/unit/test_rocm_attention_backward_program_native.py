@@ -18,6 +18,26 @@ from tessera.runtime import (
 
 
 @pytest.mark.compiler_rocm
+def test_gfx1151_lse_checkpoint_auto_selector_tracks_measured_threshold() -> None:
+    if not tools_available():
+        pytest.skip("tessera-opt is unavailable")
+    short = package_attention_backward(
+        _module(1, 4, 2, 17, 19, 64, lse_checkpoint="auto"),
+        pipeline_name="tessera-lower-to-rocm",
+    )
+    long = package_attention_backward(
+        _module(1, 4, 2, 256, 256, 64, lse_checkpoint="auto"),
+        pipeline_name="tessera-lower-to-rocm",
+    )
+    assert short.descriptors[0].provenance["lse_checkpoint"] == "recompute"
+    assert long.descriptors[0].provenance["lse_checkpoint"] == "saved"
+    assert short.descriptors[0].provenance["lse_checkpoint_policy"] == "auto"
+    assert long.descriptors[0].provenance["lse_checkpoint_policy"] == "auto"
+    assert all(binding.name != "row_lse" for binding in short.descriptors[0].buffers)
+    assert any(binding.name == "row_lse" for binding in long.descriptors[0].buffers)
+
+
+@pytest.mark.compiler_rocm
 @pytest.mark.hardware_rocm
 @pytest.mark.performance
 def test_gfx1151_compiler_owned_backward_program_executes_and_times() -> None:
@@ -37,9 +57,7 @@ def test_gfx1151_compiler_owned_backward_program_executes_and_times() -> None:
         np.empty(key.shape, dtype=np.float32),
         np.empty(value.shape, dtype=np.float32),
     )
-    program = package_attention_backward(
-        _module(*shape), pipeline_name="tessera-lower-to-rocm"
-    )
+    program = package_attention_backward(_module(*shape), pipeline_name="tessera-lower-to-rocm")
     result = _submit_rocm_gfx1151_attention_backward_program(
         program,
         {

@@ -628,10 +628,6 @@ struct LowerFlashAttnToTileIR : public RewritePattern {
         {kvLoop.getResult(0), kvLoop.getResult(1), kvLoop.getResult(2)},
         {outType, statsType});
 
-    // Store LSE for backward pass.
-    emitAttnOp(rewriter, loc, "tessera_attn.lse.save",
-               {lseAcc->getResult(1)}, {rewriter.getF32Type()});
-
     // Replace flash_attn result with normalised output.
     if (!op->getResults().empty())
       rewriter.replaceOp(op, lseAcc->getResult(0));

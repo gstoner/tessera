@@ -48,24 +48,44 @@
 namespace tessera {
 namespace attn {
 
-// ── LseSaveOp verifier ────────────────────────────────────────────────────
-// The input is the log-sum-exp, a PER-ROW quantity — not a [rows, cols] score
-// tile.  In the FA-2 tile lowering it is the running reduction over a Q-tile:
-// either a per-row vector [tile_q] (rank-1 ranked tensor) or, when the tile is
-// collapsed to a single running value, a scalar float.  It must therefore have
-// rank <= 1; a rank >= 2 input would mean a score tile was mis-routed here.
+static mlir::LogicalResult verifyFloatScalarOrRankedTensor(
+    mlir::Operation *op, mlir::Type type, llvm::StringRef label,
+    int64_t maxRank);
+
+static mlir::LogicalResult verifyLseCheckpoint(
+    mlir::Operation *op, mlir::MemRefType checkpoint, llvm::StringRef identity,
+    llvm::StringRef memorySpace, llvm::StringRef scope,
+    mlir::StringAttr cachePolicy) {
+  if ((checkpoint.getRank() != 1 && checkpoint.getRank() != 2) ||
+      !checkpoint.getElementType().isF32())
+    return op->emitOpError(
+        "checkpoint must be a rank-1/2 f32 memref with flattened or "
+        "batch/head-row layout");
+  if (identity.empty())
+    return op->emitOpError("checkpoint identity must be non-empty");
+  if (memorySpace != "global")
+    return op->emitOpError(
+        "persistent cross-entry LSE currently requires memory_space = "
+        "\"global\"");
+  if (scope != "program_launch" && scope != "session")
+    return op->emitOpError(
+        "checkpoint scope must be \"program_launch\" or \"session\"");
+  if (cachePolicy && cachePolicy.getValue() != "default" &&
+      cachePolicy.getValue() != "streaming" &&
+      cachePolicy.getValue() != "cache")
+    return op->emitOpError(
+        "cache_policy must be \"default\", \"streaming\", or \"cache\"");
+  return mlir::success();
+}
+
 mlir::LogicalResult LseSaveOp::verify() {
-  mlir::Type t = getScores().getType();
-  if (mlir::isa<mlir::FloatType>(t))
-    return mlir::success(); // scalar per-tile LSE
-  if (auto rt = mlir::dyn_cast<mlir::RankedTensorType>(t)) {
-    if (rt.getRank() > 1)
-      return emitOpError(
-                 "lse must be a per-row value (scalar or rank-1 tensor); got rank ")
-             << rt.getRank();
-    return mlir::success(); // per-row LSE vector [tile_q] (or rank-0 tensor)
-  }
-  return emitOpError("lse must be a scalar float or a rank-1 ranked tensor");
+  if (failed(verifyFloatScalarOrRankedTensor(
+          getOperation(), getLse().getType(), "lse", /*maxRank=*/1)))
+    return mlir::failure();
+  return verifyLseCheckpoint(
+      getOperation(), mlir::cast<mlir::MemRefType>(getDestination().getType()),
+      getIdentity(),
+      getMemorySpace(), getScope(), getCachePolicyAttr());
 }
 
 static bool attnDimsAgree(int64_t a, int64_t b) {
@@ -299,8 +319,12 @@ mlir::LogicalResult StreamingUpdateOp::verify() {
 }
 
 mlir::LogicalResult LseLoadOp::verify() {
-  return verifyFloatScalarOrRankedTensor(getOperation(), getLse().getType(),
-                                         "lse", /*maxRank=*/1);
+  if (failed(verifyFloatScalarOrRankedTensor(
+          getOperation(), getLse().getType(), "lse", /*maxRank=*/1)))
+    return mlir::failure();
+  return verifyLseCheckpoint(
+      getOperation(), mlir::cast<mlir::MemRefType>(getSource().getType()),
+      getIdentity(), getMemorySpace(), getScope(), getCachePolicyAttr());
 }
 
 mlir::LogicalResult LseAccumulateOp::verify() {

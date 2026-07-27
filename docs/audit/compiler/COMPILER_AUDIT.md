@@ -8,6 +8,19 @@ audit_role: theme
 This document consolidates the compiler audit material that previously lived in
 multiple root audit documents and compiler archive files.
 
+## Persistent attention LSE checkpoint (2026-07-27)
+
+Cross-backend sync `LSE-CHECKPOINT-CONTRACT-2026-07-27` closes the broken
+destination-less `lse.save/load` model. The ops now carry explicit memref
+source/destination, SSA row offset, identity, global-memory space, lifetime
+scope, optional cache policy, and `MemRead`/`MemWrite`; inference lowering
+emits neither op without a real destination. ROCm consumes the contract through
+selectable saved/recompute five-entry packages. Exact gfx1151 FP16/BF16
+host-wall sweeps select saved LSE at 128+ rows, where both tested long shapes
+win cross-dtype; shorter results are mixed and retain recompute. NVIDIA and Apple
+remain architecture-owned follow-ups. Full contract and evidence:
+[`LSE_CHECKPOINT_CONTRACT.md`](LSE_CHECKPOINT_CONTRACT.md).
+
 > **Reconciliation note (updated 2026-07-25).** The per-IR scorecard and phased plan below
 > are a 2026-06-15 point-in-time snapshot; several of their "dispatcher / stub"
 > cells have since moved. Two in particular are now stale and are superseded by the

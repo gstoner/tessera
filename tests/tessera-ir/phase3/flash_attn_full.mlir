@@ -16,8 +16,9 @@
 //
 // VERIFIER-CLEAN (2026-06): the chain now runs under --allow-unregistered-dialect
 // ALONE — no --verify-each=false.  Two follow-on fixes made it verify:
-//   * LseSaveOp::verify required rank>=2 (a score-tile contract) but the LSE is
-//     a per-row quantity (scalar / rank-1 [tile_q]); the verifier now matches.
+//   * The LSE verifier was corrected to treat LSE as a scalar/rank-1 per-row
+//     quantity. Persistent save/load now use an explicit checkpoint memref;
+//     inference-only lowering below intentionally emits neither operation.
 //   * the TMA / mbarrier / cp_async marker ops moved off the *registered*
 //     tessera.* prefix to the unregistered tile.* Tile-IR placeholder namespace
 //     (alongside tile.async_copy / tile.mma), so they round-trip as opaque ops.
@@ -54,7 +55,7 @@
 // CHECK:          tessera_attn.boundary_mask
 // CHECK:          tessera_attn.streaming_update
 // CHECK:          tessera_attn.lse_accumulate
-// CHECK:          tessera_attn.lse.save
+// CHECK-NOT:      tessera_attn.lse.save
 // CHECK-NOT:      tessera.flash_attn
 // CHECK-NOT:      tile.mma
 

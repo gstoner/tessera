@@ -1,0 +1,39 @@
+{
+  "schema": "tessera.rocm.lse_checkpoint.decision.v1",
+  "date": "2026-07-27",
+  "device": "gfx1151",
+  "environment": {
+    "runtime": "HIP 7.14.60850",
+    "compiler": "AMD clang 23",
+    "host": "WSL"
+  },
+  "timing": {
+    "clock": "time.perf_counter_ns",
+    "completion_api": "hipDeviceSynchronize",
+    "warmup": 5,
+    "samples_per_mode": 21,
+    "resident_module": true,
+    "resident_buffers": true,
+    "selector_eligible": false
+  },
+  "cases": [
+    {"storage": "fp16", "sq": 17, "sk": 19, "recompute_ms": 0.369831, "saved_ms": 0.366916, "saved_delta_percent": -0.7882},
+    {"storage": "fp16", "sq": 64, "sk": 64, "recompute_ms": 0.365743, "saved_ms": 0.400795, "saved_delta_percent": 9.5838},
+    {"storage": "fp16", "sq": 128, "sk": 128, "recompute_ms": 0.441218, "saved_ms": 0.394483, "saved_delta_percent": -10.5923},
+    {"storage": "fp16", "sq": 256, "sk": 256, "recompute_ms": 0.511511, "saved_ms": 0.453940, "saved_delta_percent": -11.2551},
+    {"storage": "bf16", "sq": 17, "sk": 19, "recompute_ms": 0.367185, "saved_ms": 0.386067, "saved_delta_percent": 5.1424},
+    {"storage": "bf16", "sq": 64, "sk": 64, "recompute_ms": 0.379003, "saved_ms": 0.371612, "saved_delta_percent": -1.9501},
+    {"storage": "bf16", "sq": 128, "sk": 128, "recompute_ms": 0.438503, "saved_ms": 0.377953, "saved_delta_percent": -13.8083},
+    {"storage": "bf16", "sq": 256, "sk": 256, "recompute_ms": 0.480716, "saved_ms": 0.449874, "saved_delta_percent": -6.4158}
+  ],
+  "selector": {
+    "policy": "auto",
+    "saved_when": "max(Sq, Sk) >= 128",
+    "reason": "both fp16 and bf16 saved paths win at 128 and 256; shorter WSL results are mixed"
+  },
+  "correctness": {
+    "saved_and_recompute_errors_identical": true,
+    "worst_dq_dk_max_abs_error": 0.000100138,
+    "worst_dv_max_abs_error": 0.002105475
+  }
+}

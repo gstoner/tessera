@@ -3163,12 +3163,17 @@ def _submit_rocm_gfx1151_attention_backward_program(
         scale_arg = ctypes.c_float(float(cast(float, provenance["scale"])))
         causal_arg = ctypes.c_int64(int(bool(provenance["causal"])))
         common_tail = [sq_arg, sk_arg, scale_arg, causal_arg] + tail + bias_tail
-        argument_sets = (
+        forward_arguments = (
             memref(device[q_name], nq)
             + memref(device[k_name], nkv)
             + memref(device[v_name], nkv)
             + memref(slices["forward_o"], nq)
-            + common_tail,
+            + common_tail
+        )
+        if provenance.get("lse_checkpoint") == "saved":
+            forward_arguments += memref(slices["row_lse"], nl)
+        argument_sets = (
+            forward_arguments,
             memref(device[q_name], nq)
             + memref(device[k_name], nkv)
             + memref(device[do_name], nq)

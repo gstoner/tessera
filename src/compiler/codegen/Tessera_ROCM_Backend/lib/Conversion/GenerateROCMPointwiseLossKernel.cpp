@@ -313,6 +313,130 @@ void emitLossBackwardBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f,
   b.create<gpu::ReturnOp>(loc);
 }
 
+void emitDistributionBackwardBody(OpBuilder &b, Location loc,
+                                  gpu::GPUFuncOp function, StringRef kind,
+                                  bool tensorCotangent) {
+  b.setInsertionPointToStart(&function.getBody().front());
+  Value lhs = function.getArgument(0), rhs = function.getArgument(1);
+  Value cotangent = function.getArgument(2);
+  Value lhsGrad = function.getArgument(3), rhsGrad = function.getArgument(4);
+  Value n = function.getArgument(5), classExtent = function.getArgument(6);
+  Value inner = function.getArgument(7), scale = function.getArgument(8);
+  Value epsilon = function.getArgument(9);
+  Value bid = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
+  Value tid = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
+  Value block = b.create<arith::ConstantIndexOp>(loc, BD);
+  Value gid = b.create<arith::AddIOp>(
+      loc, b.create<arith::MulIOp>(loc, bid, block), tid);
+  Value inBounds =
+      b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt, gid, n);
+  auto guard = b.create<scf::IfOp>(loc, inBounds, /*withElse=*/false);
+  b.setInsertionPointToStart(guard.thenBlock());
+
+  Type f32 = b.getF32Type();
+  auto constant = [&](float value) {
+    return b.create<arith::ConstantOp>(loc, f32, b.getF32FloatAttr(value))
+        .getResult();
+  };
+  auto load = [&](Value buffer, Value index) {
+    return b.create<memref::LoadOp>(loc, buffer, ValueRange{index}).getResult();
+  };
+  Value zero = constant(0.0f), one = constant(1.0f);
+  Value classStride =
+      b.create<arith::MulIOp>(loc, classExtent, inner);
+  Value outerIndex = b.create<arith::DivUIOp>(loc, gid, classStride);
+  Value innerIndex = b.create<arith::RemUIOp>(loc, gid, inner);
+  Value cotangentIndex = tensorCotangent
+                             ? b.create<arith::AddIOp>(
+                                   loc,
+                                   b.create<arith::MulIOp>(
+                                       loc, outerIndex, inner),
+                                   innerIndex)
+                                   .getResult()
+                             : b.create<arith::ConstantIndexOp>(loc, 0)
+                                   .getResult();
+  Value dy = load(cotangent, cotangentIndex);
+  Value factor = b.create<arith::MulFOp>(loc, dy, scale);
+  Value a = load(lhs, gid), q = load(rhs, gid);
+  Value da, dq;
+  if (kind == "kl") {
+    Value p = b.create<math::ExpOp>(loc, a);
+    Value qActive = b.create<arith::CmpFOp>(
+        loc, arith::CmpFPredicate::OGT, q, epsilon);
+    Value qClamped =
+        b.create<arith::SelectOp>(loc, qActive, q, epsilon);
+    Value logQ = b.create<math::LogOp>(loc, qClamped);
+    da = b.create<arith::MulFOp>(
+        loc, p,
+        b.create<arith::AddFOp>(
+            loc, b.create<arith::SubFOp>(loc, a, logQ), one));
+    dq = b.create<arith::SelectOp>(
+        loc, qActive,
+        b.create<arith::NegFOp>(
+            loc, b.create<arith::DivFOp>(loc, p, qClamped)),
+        zero);
+  } else {
+    Value half = constant(0.5f);
+    Value midpoint = b.create<arith::MulFOp>(
+        loc, half, b.create<arith::AddFOp>(loc, a, q));
+    Value aActive = b.create<arith::CmpFOp>(
+        loc, arith::CmpFPredicate::OGT, a, epsilon);
+    Value qActive = b.create<arith::CmpFOp>(
+        loc, arith::CmpFPredicate::OGT, q, epsilon);
+    Value midpointActive = b.create<arith::CmpFOp>(
+        loc, arith::CmpFPredicate::OGT, midpoint, epsilon);
+    Value aClamped =
+        b.create<arith::SelectOp>(loc, aActive, a, epsilon);
+    Value qClamped =
+        b.create<arith::SelectOp>(loc, qActive, q, epsilon);
+    Value midpointClamped = b.create<arith::SelectOp>(
+        loc, midpointActive, midpoint, epsilon);
+    Value common = b.create<arith::MulFOp>(
+        loc, midpoint,
+        b.create<arith::SelectOp>(
+            loc, midpointActive,
+            b.create<arith::DivFOp>(loc, one, midpointClamped), zero));
+    da = b.create<arith::MulFOp>(
+        loc, half,
+        b.create<arith::AddFOp>(
+            loc,
+            b.create<arith::SubFOp>(
+                loc, b.create<math::LogOp>(loc, aClamped),
+                b.create<math::LogOp>(loc, midpointClamped)),
+            b.create<arith::SubFOp>(
+                loc,
+                b.create<arith::MulFOp>(
+                    loc, a,
+                    b.create<arith::SelectOp>(
+                        loc, aActive,
+                        b.create<arith::DivFOp>(loc, one, aClamped), zero)),
+                common)));
+    dq = b.create<arith::MulFOp>(
+        loc, half,
+        b.create<arith::AddFOp>(
+            loc,
+            b.create<arith::SubFOp>(
+                loc, b.create<math::LogOp>(loc, qClamped),
+                b.create<math::LogOp>(loc, midpointClamped)),
+            b.create<arith::SubFOp>(
+                loc,
+                b.create<arith::MulFOp>(
+                    loc, q,
+                    b.create<arith::SelectOp>(
+                        loc, qActive,
+                        b.create<arith::DivFOp>(loc, one, qClamped), zero)),
+                common)));
+  }
+  b.create<memref::StoreOp>(
+      loc, b.create<arith::MulFOp>(loc, da, factor), lhsGrad,
+      ValueRange{gid});
+  b.create<memref::StoreOp>(
+      loc, b.create<arith::MulFOp>(loc, dq, factor), rhsGrad,
+      ValueRange{gid});
+  b.setInsertionPointToEnd(&function.getBody().front());
+  b.create<gpu::ReturnOp>(loc);
+}
+
 struct GenerateROCMPointwiseLossKernelPass
     : PassWrapper<GenerateROCMPointwiseLossKernelPass,
                   OperationPass<ModuleOp>> {
@@ -369,6 +493,20 @@ struct GenerateROCMPointwiseLossKernelPass
         return signalPassFailure();
       }
       backward = backward || trainingSGD || trainingAdamW;
+      StringRef distribution;
+      if (auto attr = op->getAttrOfType<StringAttr>("distribution"))
+        distribution = attr.getValue();
+      if (!distribution.empty() && distribution != "kl" &&
+          distribution != "js") {
+        op->emitError("generate-rocm-pointwise-loss-kernel: distribution must "
+                      "be kl or js");
+        return signalPassFailure();
+      }
+      if (!distribution.empty() && !backward) {
+        op->emitError("generate-rocm-pointwise-loss-kernel: distribution "
+                      "kernels are backward-only");
+        return signalPassFailure();
+      }
       StringRef reduction = "mean";
       if (auto attr = op->getAttrOfType<StringAttr>("reduction"))
         reduction = attr.getValue();
@@ -378,7 +516,8 @@ struct GenerateROCMPointwiseLossKernelPass
                       "must be none, sum, or mean");
         return signalPassFailure();
       }
-      if (backward && kind > 3 && !trainingSGD && !trainingAdamW) {
+      if (backward && distribution.empty() && kind > 3 && !trainingSGD &&
+          !trainingAdamW) {
         op->emitError("generate-rocm-pointwise-loss-kernel: compiled backward "
                       "supports MSE/MAE/Huber/Smooth-L1 kinds 0..3");
         return signalPassFailure();
@@ -406,7 +545,10 @@ struct GenerateROCMPointwiseLossKernelPass
       Type idxTy = b.getIndexType();
       auto memTy = MemRefType::get({ShapedType::kDynamic}, storeTy);
       SmallVector<Type> inputs;
-      if (trainingAdamW)
+      if (!distribution.empty())
+        inputs = {memTy, memTy, memTy, memTy, memTy, idxTy, idxTy, idxTy,
+                  b.getF32Type(), b.getF32Type()};
+      else if (trainingAdamW)
         inputs = {memTy, memTy, memTy, memTy, memTy, memTy, memTy, memTy,
                   memTy, memTy, idxTy, b.getF32Type(), b.getF32Type(),
                   b.getF32Type(), b.getF32Type(), b.getF32Type(),
@@ -423,7 +565,10 @@ struct GenerateROCMPointwiseLossKernelPass
       gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
                        b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
-      if (backward)
+      if (!distribution.empty())
+        emitDistributionBackwardBody(body, loc, gpuFunc, distribution,
+                                     reduction == "none");
+      else if (backward)
         emitLossBackwardBody(body, loc, gpuFunc, storeTy, kind, param,
                              reduction == "none", trainingSGD, trainingAdamW);
       else

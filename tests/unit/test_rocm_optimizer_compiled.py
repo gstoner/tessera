@@ -181,3 +181,61 @@ def test_sgd_backward_codegen_lowers():
     )
     assert lowered.returncode == 0, lowered.stderr
     assert "llvm." in lowered.stdout
+
+
+@pytest.mark.parametrize("kind", ["adam", "adamw"])
+def test_adam_backward_codegen_lowers(kind):
+    import subprocess
+    from pathlib import Path
+
+    opt = Path(
+        os.environ.get(
+            "TESSERA_OPT",
+            Path(__file__).resolve().parents[2]
+            / "build/tools/tessera-opt/tessera-opt",
+        )
+    )
+    if not opt.is_file():
+        pytest.skip("build tessera-opt")
+    directive = (
+        'module {\n  "tessera_rocm.optimizer"() {name = "adam_bwd", '
+        f'kind = "{kind}", backward = true}} : () -> ()\n}}\n'
+    )
+    generated = subprocess.run(
+        [str(opt), "-", "--generate-rocm-optimizer-kernel"],
+        input=directive,
+        capture_output=True,
+        text=True,
+    )
+    assert generated.returncode == 0, generated.stderr
+    assert "gpu.func @adam_bwd" in generated.stdout
+    assert generated.stdout.count("memref.store") == 4
+
+
+def test_lion_backward_codegen_lowers_stop_sign_vjp():
+    import subprocess
+    from pathlib import Path
+
+    opt = Path(
+        os.environ.get(
+            "TESSERA_OPT",
+            Path(__file__).resolve().parents[2]
+            / "build/tools/tessera-opt/tessera-opt",
+        )
+    )
+    if not opt.is_file():
+        pytest.skip("build tessera-opt")
+    directive = (
+        'module {\n  "tessera_rocm.optimizer"() {name = "lion_bwd", '
+        'kind = "lion", backward = true} : () -> ()\n}\n'
+    )
+    generated = subprocess.run(
+        [str(opt), "-", "--generate-rocm-optimizer-kernel"],
+        input=directive,
+        capture_output=True,
+        text=True,
+    )
+    assert generated.returncode == 0, generated.stderr
+    assert "gpu.func @lion_bwd" in generated.stdout
+    assert generated.stdout.count("memref.store") == 3
+    assert "math." not in generated.stdout

@@ -145,13 +145,16 @@ static Value groupedKvBase(Emit &e, OpBuilder &b, Location loc, Value bh,
 void emitPre(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
              Type storeTy, bool gqa = false, bool bias = false,
              bool window = false, bool softcap = false,
-             bool dropout = false) {
+             bool dropout = false, bool savedLse = false) {
   MLIRContext *ctx = b.getContext();
   Type f32 = b.getF32Type();
-  Value sQ = f.addWorkgroupAttribution(ldsT(ctx, 16 * D, storeTy), loc);
-  Value sS = f.addWorkgroupAttribution(ldsT(ctx, 16 * 16, f32), loc);
-  Value sm = f.addWorkgroupAttribution(ldsT(ctx, 16, f32), loc);
-  Value sl = f.addWorkgroupAttribution(ldsT(ctx, 16, f32), loc);
+  Value sQ, sS, sm, sl;
+  if (!savedLse) {
+    sQ = f.addWorkgroupAttribution(ldsT(ctx, 16 * D, storeTy), loc);
+    sS = f.addWorkgroupAttribution(ldsT(ctx, 16 * 16, f32), loc);
+    sm = f.addWorkgroupAttribution(ldsT(ctx, 16, f32), loc);
+    sl = f.addWorkgroupAttribution(ldsT(ctx, 16, f32), loc);
+  }
 
   b.setInsertionPointToStart(&f.getBody().front());
   Emit e(b, loc, storeTy, D);
@@ -191,7 +194,7 @@ void emitPre(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   Value useCausal = window ? trueI1 : isCausal;
 
   // Stage Q into sQ (all 32 lanes cooperatively): for i = tid; i < 16*D; i+=32.
-  {
+  if (!savedLse) {
     auto lp = b.create<scf::ForOp>(loc, tid, c16D, c32);
     OpBuilder::InsertionGuard g(b);
     b.setInsertionPointToStart(lp.getBody());
@@ -212,8 +215,10 @@ void emitPre(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
     auto ifo = b.create<scf::IfOp>(loc, lt16, /*withElse=*/false);
     OpBuilder::InsertionGuard g(b);
     b.setInsertionPointToStart(ifo.thenBlock());
-    b.create<memref::StoreOp>(loc, e.negInf, sm, ValueRange{tid});
-    b.create<memref::StoreOp>(loc, e.zerof, sl, ValueRange{tid});
+    if (!savedLse) {
+      b.create<memref::StoreOp>(loc, e.negInf, sm, ValueRange{tid});
+      b.create<memref::StoreOp>(loc, e.zerof, sl, ValueRange{tid});
+    }
     Value gq = e.add(q0, tid);
     Value inb = e.lt(gq, Sq);
     Value rowBase = e.add(qbase, e.mul(e.sel(inb, gq, c0), cD));
@@ -233,9 +238,13 @@ void emitPre(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
     b.create<memref::StoreOp>(loc, dloop.getResult(0), Dd,
                               ValueRange{e.add(e.mul(bh, Sq), gq)});
   }
-  b.create<gpu::BarrierOp>(loc);
+  if (!savedLse)
+    b.create<gpu::BarrierOp>(loc);
 
-  // KV-tile bounds (causal: only tiles up to the query tile's diagonal).
+  // A saved-LSE package keeps the stable prepass ABI, but forward has already
+  // populated L. Skip the full QK/online-softmax recurrence and retain D only.
+  if (!savedLse) {
+    // KV-tile bounds (causal: only tiles up to the query tile's diagonal).
   Value nKV = b.create<arith::DivUIOp>(loc, e.add(Sk, c15), c16);
   Value nKVm1 = b.create<arith::SubIOp>(loc, nKV, c1);
   Value ckt = b.create<arith::DivUIOp>(loc, e.add(q0, c15), c16);
@@ -338,6 +347,7 @@ void emitPre(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
     Value Lq = e.addf(e.f32load(sm, tid),
                       b.create<math::LogOp>(loc, e.f32load(sl, tid)));
     b.create<memref::StoreOp>(loc, Lq, L, ValueRange{e.add(e.mul(bh, Sq), gq)});
+  }
   }
   b.setInsertionPointToEnd(&f.getBody().front());
   b.create<gpu::ReturnOp>(loc);
@@ -975,6 +985,7 @@ struct GenerateWMMAFlashAttnBwdKernelPass
       bool dropout = flag("dropout");
       bool bias = flag("attn_bias");
       bool splitReduced = flag("split_reduced");
+      bool savedLse = flag("saved_lse");
 
       auto mk = [&](StringRef suffix, ArrayRef<Type> args,
                     function_ref<void(OpBuilder &, Location, gpu::GPUFuncOp)> body) {
@@ -1001,7 +1012,7 @@ struct GenerateWMMAFlashAttnBwdKernelPass
       mk("_pre", withGqa({sv, sv, sv, fv, fv, fv, idxTy, idxTy, f32, idxTy}),
          [&](OpBuilder &bb, Location l, gpu::GPUFuncOp fn) {
            emitPre(bb, l, fn, D, storeTy, gqa, bias, window, softcap,
-                   dropout);
+                   dropout, savedLse);
          });
       // _dkdv : (Q,K,V,dO:store, L,Dd:f32, dK,dV:f32, Sq,Sk:idx, scale, causal [+opts])
       SmallVector<Type> dkdvBase{sv, sv, sv, sv, fv, fv, fv, fv};

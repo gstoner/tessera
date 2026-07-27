@@ -34,6 +34,8 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 
+#include <cmath>
+
 using namespace mlir;
 
 namespace {
@@ -43,7 +45,8 @@ static constexpr int64_t SG = 32;           // shuffle subgroup width
 static constexpr int64_t NGROUPS = BD / SG; // per-subgroup partials (= 8)
 
 void emitNormBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
-                  bool isLayerNorm, StringRef epilogue) {
+                  bool isLayerNorm, StringRef epilogue,
+                  double epilogueParam) {
   MLIRContext *ctx = b.getContext();
   Type f32 = b.getF32Type();
   bool isF32 = storeTy.isF32();
@@ -225,6 +228,13 @@ void emitNormBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
           loc, one, b.create<math::TanhOp>(loc, inner));
       v = b.create<arith::MulFOp>(
           loc, half, b.create<arith::MulFOp>(loc, v, gate));
+    } else if (epilogue == "softcap") {
+      // Canonical shared recurrence: cap * tanh(value / cap).
+      Value cap = b.create<arith::ConstantOp>(
+          loc, f32, b.getF32FloatAttr(epilogueParam));
+      Value scaled = b.create<arith::DivFOp>(loc, v, cap);
+      v = b.create<arith::MulFOp>(
+          loc, cap, b.create<math::TanhOp>(loc, scaled));
     } else if (epilogue == "add" || epilogue == "multiply") {
       Value rhs = b.create<memref::LoadOp>(loc, consumer, ValueRange{idx});
       if (!isF32)
@@ -538,11 +548,22 @@ struct GenerateROCMNormKernelPass
       if (auto a = op->getAttrOfType<StringAttr>("epilogue"))
         epilogue = a.getValue();
       if (epilogue != "none" && epilogue != "relu" && epilogue != "silu" &&
-          epilogue != "gelu" && epilogue != "add" &&
+          epilogue != "gelu" && epilogue != "softcap" &&
+          epilogue != "add" &&
           epilogue != "multiply") {
         op->emitError("generate-rocm-norm-kernel: epilogue must be none, relu, "
-                      "silu, gelu, add, or multiply (got '")
+                      "silu, gelu, softcap, add, or multiply (got '")
             << epilogue << "')";
+        return signalPassFailure();
+      }
+      double epilogueParam = 1.0;
+      if (auto a = op->getAttrOfType<FloatAttr>("epilogue_param"))
+        epilogueParam = a.getValueAsDouble();
+      if (epilogue == "softcap" &&
+          (!std::isfinite(epilogueParam) || epilogueParam <= 0.0)) {
+        op->emitError(
+            "generate-rocm-norm-kernel: softcap epilogue_param must be "
+            "finite and positive");
         return signalPassFailure();
       }
       if (backward && epilogue != "none") {
@@ -600,7 +621,7 @@ struct GenerateROCMNormKernelPass
                              kind == "layer_norm");
       else
         emitNormBody(body, loc, gpuFunc, storeTy, kind == "layer_norm",
-                     epilogue);
+                     epilogue, epilogueParam);
       if (backward) {
         auto accumTy = MemRefType::get({ShapedType::kDynamic}, f32);
         auto finalizeTy = b.getFunctionType(

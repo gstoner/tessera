@@ -48,7 +48,7 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
                        Type storeTy, bool viaTile = false, bool gqa = false,
                        bool window = false, bool softcap = false,
                        bool dropout = false, bool bias = false,
-                       bool twoWave = false) {
+                       bool twoWave = false, bool saveLse = false) {
   MLIRContext *ctx = b.getContext();
   int64_t DC = D / 16;
   Type f32 = b.getF32Type();
@@ -492,6 +492,27 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
     Value gidx = add(add(qbase, mul(gq, cD)), c);
     b.create<memref::StoreOp>(loc, res, O, ValueRange{gidx});
   }
+  // A training package may bind a launch-owned f32 [B*H,Sq] checkpoint as the
+  // final argument. Store the finalized online-softmax statistic once per row.
+  if (saveLse) {
+    Value checkpoint = f.getArgument(f.getNumArguments() - 1);
+    Value lt16 = b.create<arith::CmpIOp>(loc, slt, tid, c16);
+    auto ifo = b.create<scf::IfOp>(loc, lt16, /*withElse=*/false);
+    OpBuilder::InsertionGuard g(b);
+    b.setInsertionPointToStart(ifo.thenBlock());
+    Value gq = add(q0, tid);
+    auto inBounds = b.create<scf::IfOp>(
+        loc, b.create<arith::CmpIOp>(loc, slt, gq, Sq),
+        /*withElse=*/false);
+    OpBuilder::InsertionGuard g2(b);
+    b.setInsertionPointToStart(inBounds.thenBlock());
+    Value lse = b.create<arith::AddFOp>(
+        loc, b.create<memref::LoadOp>(loc, sm, ValueRange{tid}),
+        b.create<math::LogOp>(
+            loc, b.create<memref::LoadOp>(loc, sl, ValueRange{tid})));
+    b.create<memref::StoreOp>(
+        loc, lse, checkpoint, ValueRange{add(mul(bh, Sq), gq)});
+  }
   b.setInsertionPointToEnd(&f.getBody().front());
   b.create<gpu::ReturnOp>(loc);
 }
@@ -594,6 +615,9 @@ struct GenerateWMMAFlashAttnKernelPass
         op->emitError("two_wave flash attention currently requires head_dim=128");
         return signalPassFailure();
       }
+      bool saveLse = false;
+      if (auto a = op->getAttrOfType<BoolAttr>("save_lse"))
+        saveLse = a.getValue();
 
       auto gpuMod = b.create<gpu::GPUModuleOp>(loc, kname + "_mod");
       b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
@@ -619,13 +643,15 @@ struct GenerateWMMAFlashAttnKernelPass
       }
       if (bias)
         argTys.push_back(of);     // attn_bias [bh,Sq,Sk] f32 (LAST)
+      if (saveLse)
+        argTys.push_back(of);     // finalized LSE checkpoint [bh,Sq]
       auto fnTy = b.getFunctionType(argTys, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
       gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
                        b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
       emitFlashAttnBody(body, loc, gpuFunc, D, storeTy, viaTile, gqa, window,
-                        softcap, dropout, bias, twoWave);
+                        softcap, dropout, bias, twoWave, saveLse);
       op->erase();
     }
   }

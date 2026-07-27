@@ -1,0 +1,96 @@
+{
+  "schema": "tessera.rocm.canonical_gemm_kloop.v1",
+  "recorded_at": "2026-07-27",
+  "device": "gfx1151",
+  "toolchain": {
+    "rocm_hip": "7.14.60850",
+    "compiler": "AMD clang 23"
+  },
+  "semantic_route": {
+    "source": "canonical_mnk_scf_for",
+    "ownership_proof": [
+      "!tile.buffer",
+      "!tile.async_token",
+      "!tile.pipeline_state"
+    ],
+    "ragged_policy": "zero_fill"
+  },
+  "method": {
+    "clock": "time.perf_counter_ns",
+    "launch_api": "hipModuleLaunchKernel",
+    "completion_api": "hipDeviceSynchronize",
+    "resident_module": true,
+    "resident_buffers": true,
+    "warmup_iterations": 5,
+    "sample_count": 21,
+    "timing_domain": "kernel_wall",
+    "production_max_regression_fraction": 0.1
+  },
+  "rows": [
+    {
+      "case": "canonical_aligned:256x256x256:f16:none",
+      "register_median_ms": 0.088846,
+      "lds_median_ms": 0.133208,
+      "lds_over_register": 1.49931,
+      "max_abs_error": 1.5795230865478516e-06,
+      "register_resources": {"vgpr": 48, "sgpr": 59, "lds_bytes": 0, "scratch_bytes": 0, "spill_count": 0},
+      "lds_resources": {"vgpr": 43, "sgpr": 31, "lds_bytes": 1024, "scratch_bytes": 0, "spill_count": 0}
+    },
+    {
+      "case": "canonical_ragged:131x127x65:f16:none",
+      "register_median_ms": 0.115159,
+      "lds_median_ms": 0.123036,
+      "lds_over_register": 1.0684,
+      "max_abs_error": 2.384185791015625e-07,
+      "register_resources": {"vgpr": 48, "sgpr": 59, "lds_bytes": 0, "scratch_bytes": 0, "spill_count": 0},
+      "lds_resources": {"vgpr": 43, "sgpr": 31, "lds_bytes": 1024, "scratch_bytes": 0, "spill_count": 0}
+    },
+    {
+      "case": "canonical_aligned:256x256x256:bf16:none",
+      "register_median_ms": 0.090585,
+      "lds_median_ms": 0.133608,
+      "lds_over_register": 1.47494,
+      "max_abs_error": 5.364418029785156e-07,
+      "register_resources": {"vgpr": 48, "sgpr": 59, "lds_bytes": 0, "scratch_bytes": 0, "spill_count": 0},
+      "lds_resources": {"vgpr": 43, "sgpr": 31, "lds_bytes": 1024, "scratch_bytes": 0, "spill_count": 0}
+    },
+    {
+      "case": "canonical_ragged:131x127x65:bf16:none",
+      "register_median_ms": 0.088771,
+      "lds_median_ms": 0.135443,
+      "lds_over_register": 1.52575,
+      "max_abs_error": 1.1920928955078125e-07,
+      "register_resources": {"vgpr": 48, "sgpr": 59, "lds_bytes": 0, "scratch_bytes": 0, "spill_count": 0},
+      "lds_resources": {"vgpr": 43, "sgpr": 31, "lds_bytes": 1024, "scratch_bytes": 0, "spill_count": 0}
+    },
+    {
+      "case": "canonical_aligned:256x256x256:int8:none",
+      "register_median_ms": 0.08662,
+      "lds_median_ms": 0.134342,
+      "lds_over_register": 1.55094,
+      "mismatch_count": 0,
+      "register_resources": {"vgpr": 50, "sgpr": 57, "lds_bytes": 0, "scratch_bytes": 0, "spill_count": 0},
+      "lds_resources": {"vgpr": 39, "sgpr": 31, "lds_bytes": 512, "scratch_bytes": 0, "spill_count": 0}
+    },
+    {
+      "case": "canonical_ragged:131x127x65:int8:none",
+      "register_median_ms": 0.091817,
+      "lds_median_ms": 0.114958,
+      "lds_over_register": 1.25204,
+      "mismatch_count": 0,
+      "register_resources": {"vgpr": 50, "sgpr": 57, "lds_bytes": 0, "scratch_bytes": 0, "spill_count": 0},
+      "lds_resources": {"vgpr": 39, "sgpr": 31, "lds_bytes": 512, "scratch_bytes": 0, "spill_count": 0}
+    }
+  ],
+  "decision": {
+    "selected": "register",
+    "reason": "The compiler-owned LDS comparison lane is correct and spill-free but is slower in all six measured gfx1151 rows.",
+    "lds_selector_eligible": false,
+    "all_correct": true,
+    "all_register_ratchets_pass": true
+  },
+  "reproduce": {
+    "register": "python benchmarks/rocm/benchmark_rocm_canonical_gemm_kloop.py --staging register --warmup 5 --iterations 21 --output <path>",
+    "lds": "python benchmarks/rocm/benchmark_rocm_canonical_gemm_kloop.py --staging lds --warmup 5 --iterations 21 --output <path>"
+  }
+}

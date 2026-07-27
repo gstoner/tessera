@@ -3,32 +3,44 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-07-26
+last_updated: 2026-07-27
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
-<<<<<<< HEAD
-Cross-backend sync `LSE-CHECKPOINT-CONTRACT-2026-07-26`: the shared
-`tessera_attn.lse.save` / `lse.load` pair is a declared-but-unimplemented
-FlashAttention-2 checkpoint. `lse.save` takes no destination, `lse.load` takes
-no operands, nothing links a load to a save, the single emission site discards
-the result and types it scalar `f32`, and no backend consumes it — all three
-with an attention backward recompute `L` instead. Apple hit this when
-re-forming the shared streaming recurrence. Marking `LseSaveOp` `Pure` was
-tried and **backed out**: it changes emitted IR on every backend
-(`phase3/flash_attn_full.mlir` asserts the op's presence) and would trap
-whoever implements the real store, which must be non-`Pure` with `MemWrite`.
-Apple instead erases only a dead `lse.save` inside its own lowering, so **no
-shared op, verifier, or emitted lowering changed**. The contract, the FA-2
-save-versus-recompute trade, and the preferred source-level fix are documented
-in
-[`../../compiler/LSE_CHECKPOINT_CONTRACT.md`](../../compiler/LSE_CHECKPOINT_CONTRACT.md).
-This backend owns the measurement, because the save-versus-recompute choice is
-an HBM-bandwidth question and this is a lead performance target (Decision #28).
-No IR, ABI, schedule, evidence, or selector changed in the synchronization
-slice itself.
-=======
+Cross-backend sync `ROCM-BF16-ATTENTION-2026-07-27` validates that the shared
+BF16 attention carrier and canonical forward/backward loop contracts can be
+consumed by a second physical backend. ROCm now has exact ragged-GQA
+bias+softcap+causal-window+dropout forward proof and deterministic five-entry
+backward proof on gfx1151, with dedicated resident BF16 timing ratchets. This
+is parity validation at the shared semantic boundary only. AMD BF16 WMMA,
+LDS scheduling, HSACO packaging, HIP workspace and launch ABI, numerical
+evidence, and timing do not transfer to CUDA; NVIDIA retains its own SM120
+BF16 package and exact-device evidence requirements.
+
+Cross-backend sync `TESSERA-OPT-BUILD-CAPABILITY-2026-07-27` is **closed**.
+The shared lit resolver now accepts `TESSERA_OPT_BIN`, `TESSERA_OPT_PATH`, and
+`TESSERA_OPT_CPP` after the canonical `TESSERA_OPT` override, and the validation
+script forwards its selected binary through that contract. Exact gfx1151
+verification proves the full ROCm driver, legitimate lean ROCm artifact
+driver, conflict rejection, both named streaming-attention fixtures, the
+seven-fixture filter, and the complete 50-test ROCm backend lit suite. This is
+shared test/build infrastructure only; no CUDA registration, PTX schedule,
+runtime ABI, device evidence, or selector changes.
+
+Cross-backend sync `LSE-CHECKPOINT-CONTRACT-2026-07-27` lands the real shared
+checkpoint vocabulary: explicit memref source/destination, SSA row offset,
+identity, memory space, lifetime scope, cache policy, and read/write effects.
+Default forward lowering no longer emits a destination-less save. ROCm
+validates saved versus recompute on gfx1151 and retains the provisional
+128+ policy, but the newer dual-clock packet is explicitly fail-closed on WSL:
+HIP events are positive yet non-transferable, and FP16 at 256 is not a stable
+saved winner. Bare-metal gfx1151 confirmation remains required. NVIDIA is
+**follow-up required**: consume the same shared contract, measure its own CUDA
+forward-store/backward-load package, and retain or replace its zero-workspace
+policy using exact SM120 evidence. AMD WMMA, HSACO size, threshold, and WSL
+host-wall results do not transfer.
+
 Cross-backend sync
 `ROCM-ATTENTION-SHARED-BACKWARD-CONSUMER-2026-07-26` makes ROCm gfx1151 the
 first direct physical consumer of the shared tensor-valued attention backward
@@ -78,7 +90,6 @@ preserving session-private ring ownership, flush/rollback, ordered submission,
 and drain-before-release. MoE metadata now owns launch-lifetime workspace and
 can bind a canonical NCCL/RCCL rank/device fingerprint. NVIDIA consumes the
 same local descriptor as before; no CUDA schedule, selector, or timing changes.
->>>>>>> origin/main
 
 Cross-backend sync `ROCM-E2E-ATTENTION-CARRIERS-2026-07-26` lands an
 AMD-owned consumer, native HSACO package, descriptor, and exact gfx1151 proof
@@ -153,6 +164,13 @@ uses 38 registers and 24 active blocks/SM, and all rows retain zero local
 memory and zero spills. INT8 and packed formats remain follow-on after the
 ordinary loop is stable. WSL timing is selector-ineligible and no selector
 changes in this slice.
+
+Cross-backend sync `ROCM-CORE-GEMM-KLOOP-2026-07-27` is **parity validated**
+for NVIDIA. The only shared edit preserves the existing canonical
+ragged-zero-fill guarantee across `tessera.matmul` → `tile.mma`; NVIDIA's
+already-proven SM120 consumer and twelve-row packet are unchanged. AMD LDS,
+wait/barrier, WMMA, HSACO resource, and gfx1151 wall-clock evidence do not
+transfer. No NVIDIA route, capability, execution state, or selector changes.
 
 Cross-backend sync `COMPILER-LIT-BACKEND-GATING-2026-07-24`: retired eleven
 never-runnable CUDA13 pseudo-IR fixtures whose undefined `tessera_opt_built`
@@ -494,7 +512,7 @@ host. No CUDA execution status was inferred or promoted from the ROCm run.
 | 5 | NVIDIA-TEST-5 | Measured performance | Run `hardware_nvidia and performance` serially. Warm up compilation and caches; use repeated medians; measure kernel-only and end-to-end separately; record registers, shared memory, occupancy, spills, and selected route. | Stable baselines cover square/rectangular/ragged GEMM, fused epilogues, attention, paged KV, ReplaySSM, reductions, and transport. Each ratchet identifies the selected implementation. |
 | 6 | NVIDIA-TEST-6 | Refactor and deduplicate | Move mature families toward `tests/compiler/`, `tests/device/nvidia/`, `tests/integration/`, and `tests/performance/nvidia/`. Consolidate repeated CUDA availability, compilation, launch, oracle, and cleanup code. | No central filename allowlist; no duplicated private CUDA probe/loader; process trees and device allocations clean up on failure. |
 | 7 | NVIDIA-TEST-7 | Local release ownership | Own the NVIDIA-box release gate locally in WSL with a host concurrency lock and retained artifacts; GitHub runners are intentionally not used. Keep two-run device correctness required for NVIDIA promotion and performance serial. | A clean branch run reports NVIDIA host-free/shared registries, compiler artifact, device correctness, and performance independently and retains the fail-closed evidence bundle. |
-| 8 | NVIDIA-LSE-1 | Evaluate saving versus recomputing the FlashAttention LSE | Measure, do not implement first. Find where storing and reloading a `[B*H*Sq]` fp32 LSE vector beats recomputing `L` with an extra pass over K in the backward, across sequence length, head count, dtype, and architecture — sm_120 now, Hopper sm_90 and datacenter sm_100 when available, since HBM bandwidth and long context are what make the trade decidable. Price in what the saved path gives up: the current backward declares `workspace_bytes = 0, workspace_owner = "output_element"`, and a saved LSE reintroduces exactly that workspace. Then take one of three outcomes with ROCm: implement the real contract (SSA/symbol identity, a destination, `[tile_q]` typing, non-`Pure` with `MemWrite`, conditional emission), retire the vocabulary, or — available immediately and independent of the measurement — **fix it at the source: stop `TileIRLoweringPass` emitting a destination-less `lse.save` at all.** The op already declares the effects a real store needs; what is wrong is emitting one with nowhere to write, on every forward, on every target. The source-level fix is the preferred landing: it removes the defect rather than tolerating it, drops a dead op from NVIDIA forwards too, removes the one place a backend steps around a shared effectful op, and keeps both other outcomes open. | Paired two-run medians in a named timing domain over a long-context sweep, with retained resource evidence and an explicit workspace/determinism statement; and a recorded joint decision with ROCm. If the source-level fix lands, the dormant `test_lse_checkpoint_contract.py` tripwire retires with it. |
+| 8 | NVIDIA-LSE-1 | Consume and measure the real shared LSE checkpoint on CUDA | The shared source/destination/identity/effects contract is landed and ROCm supplies non-transferable gfx1151 evidence. Add compiler-owned CUDA save/load packaging, price the current zero-workspace policy, and measure SM120/Hopper/datacenter thresholds with paired resident timing. | Exact-device numerical, resource, workspace, and timing evidence; architecture-owned selector or retained recompute decision. |
 | 8 | NVIDIA-E2E-1 | Canonical SM120 compiler spine | Under sync `E2E-SPINE-2026-07-18`, compose Graph/Schedule/Tile lowering with `LowerTileToNVIDIA(sm=120)`, NVVM/PTX/native-image packaging, and the existing register/invoke launch bridge. Prove f16 and NVFP4 first, including non-origin scale tiles and general-shape dispatch. | One canonical driver request returns a typed image artifact plus launch descriptor, registers and launches on `sm_120`, compares numerically, and retains compiler/ABI/device/resource evidence without a selector change. |
 | 9 | NVIDIA-E2E-2 | Per-SM and operation breadth | Replace shared-alias/hardcoded target behavior with architecture-specific pipelines, then move supported CUDA families through the same typed image/launch seam. | Every enabled SM/family has the four-layer proof on its exact device or an explicit unsupported/planned terminal state; `sm_90` and `sm_100` are never inferred from `sm_120`. |
 
@@ -1710,3 +1728,25 @@ compatibility metadata is rejected, and the structured Schedule→Tile layout is
 consumed directly. TCGen05/TMEM has host-free structural and SM120 fail-closed
 proof only; exact execution remains SM100-owned and cannot be inferred from
 consumer Blackwell.
+
+Cross-backend sync `ROCM-TRAINING-MEMORY-FUSION-2026-07-27` adds ROCm-owned
+Adam/AdamW and KL/JS physical backward execution plus a ROCm normalization
+softcap epilogue; none of those HIP kernels, gfx1151 timings, or selector
+evidence transfers to CUDA. The shared change is the target-neutral,
+serializable dynamic-local-memory expression field on `LaunchDescriptor`.
+NVIDIA's existing SM120 add/multiply/path-max/alignment probe now consumes
+that field and retains its CUDA-owned PTX, launch-v2, resource, and exact-device
+evidence. No NVIDIA execution row or selector changes.
+
+Cross-backend sync `ROCM-LION-BACKWARD-2026-07-27` adds only the ROCm-owned
+physical consumer of the already-shared Lion stop-sign VJP policy and extends
+the gfx1151 operation-total benchmark packet. HIP code objects, AMD launch ABI,
+and WSL timings do not transfer to CUDA. NVIDIA remains follow-up required for
+an architecture-owned compiled Lion backward materializer; no SM120
+capability, execution row, PTX schedule, or selector changes.
+
+Cross-backend sync `CORE-SCHEDULE-1F1B-MATERIALIZE-2026-07-27` emits a shared
+unique-clock warmup/steady/cooldown dependency order after pipeline legality.
+CUDA runtime consumption and collective overlap remain NVIDIA-owned follow-up;
+the structural carrier changes no SM120 capability, PTX schedule, selector, or
+exact-device claim.

@@ -188,7 +188,7 @@ fi
 # needing `PATH=build/tools/tessera-opt:$PATH` exported by the caller.
 if [ "${TESSERA_VALIDATE_LIT:-0}" != "0" ]; then
   echo "==> MLIR lit smoke"
-  TESSERA_OPT_BIN="$ROOT/build/tools/tessera-opt/tessera-opt"
+  TESSERA_OPT_BIN="${TESSERA_OPT_BIN:-$ROOT/build/tools/tessera-opt/tessera-opt}"
   LIT_BIN="$(command -v lit || true)"
   if [ -z "$LIT_BIN" ] && [ -n "${PYTHON_BIN_DIR:-}" ]; then
     LIT_BIN="$PYTHON_BIN_DIR/lit"
@@ -204,7 +204,7 @@ if [ "${TESSERA_VALIDATE_LIT:-0}" != "0" ]; then
   elif [ -z "$LIT_BIN" ] || [ ! -x "$LIT_BIN" ]; then
     echo "warning: lit binary not found (try 'pip install lit') — skipping lit smoke" >&2
   else
-    "$LIT_BIN" tests/tessera-ir -v
+    TESSERA_OPT="$TESSERA_OPT_BIN" "$LIT_BIN" tests/tessera-ir -v
   fi
 fi
 

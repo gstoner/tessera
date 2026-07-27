@@ -392,9 +392,10 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         name="tessera-pipeline-schedule-legality",
         cpp_class="PipelineScheduleLegalityPass",
         summary=(
-            "The 1F1B schedule proof — micro-batch fill (Decision #17), no empty "
-            "stage, forward-adjacent send/recv pairing, and value-rewrite "
-            "completeness (no direct cross-stage SSA edge)."
+            "Proves 1F1B micro-batch fill, stage occupancy, send/recv pairing, "
+            "and value-rewrite completeness, then materializes an explicit "
+            "warmup/steady/cooldown dependency order in "
+            "tessera.pipeline_steps."
         ),
         input_dialects=("tessera", "func"),
         output_dialects=("tessera", "func"),
@@ -407,7 +408,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "PP_SEND_WITHOUT_RECV",
             "PP_UNROUTED_CROSS_STAGE_VALUE",
         ),
-        pass_kind="verifier",
+        pass_kind="transform",
         sprint="Pipeline-PP",
     ),
     PassMetadata(

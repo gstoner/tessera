@@ -612,6 +612,12 @@ static LogicalResult materializeCanonicalStreamingAttention(
       "schedule",
       builder.getStringAttr("gfx1151_wmma_streaming_attention"));
   state.addAttribute("canonical_kv_loop", builder.getBoolAttr(true));
+  // A training package explicitly selects saved-LSE or recompute. Inference
+  // forward has no checkpoint attribute and retains the existing ABI.
+  auto lseCheckpoint =
+      function->getAttrOfType<StringAttr>("tessera.lse_checkpoint");
+  bool saveLse = lseCheckpoint && lseCheckpoint.getValue() == "saved";
+  state.addAttribute("save_lse", builder.getBoolAttr(saveLse));
   state.addAttribute("rank4_distribution", builder.getBoolAttr(true));
   state.addAttribute("ssa_pipeline", builder.getBoolAttr(true));
   state.addAttribute("kv_block", kvBlock);
@@ -977,6 +983,12 @@ static LogicalResult materializeCanonicalAttentionBackward(
       "schedule",
       builder.getStringAttr("gfx1151_wmma_backward_split_reduced"));
   state.addAttribute("canonical_phase_loops", builder.getBoolAttr(true));
+  auto lseCheckpoint =
+      function->getAttrOfType<StringAttr>("tessera.lse_checkpoint");
+  state.addAttribute(
+      "saved_lse",
+      builder.getBoolAttr(lseCheckpoint &&
+                          lseCheckpoint.getValue() == "saved"));
   state.addAttribute("workspace_owner",
                      builder.getStringAttr("program_launch"));
   state.addAttribute("reduction_order",

@@ -33,7 +33,14 @@ def _norm_or_skip():
 
 
 def _artifact(
-    rt, op_name, eps=None, *, affine=False, epilogue=None, binary=False
+    rt,
+    op_name,
+    eps=None,
+    *,
+    affine=False,
+    epilogue=None,
+    binary=False,
+    epilogue_kwargs=None,
 ):
     kwargs = {} if eps is None else {"eps": float(eps)}
     operands = ["x"]
@@ -46,7 +53,8 @@ def _artifact(
     if epilogue is not None:
         consumer_operands = ["norm", "residual"] if binary else ["norm"]
         ops.append({"op_name": f"tessera.{epilogue}", "result": "o",
-                    "operands": consumer_operands, "kwargs": {}})
+                    "operands": consumer_operands,
+                    "kwargs": dict(epilogue_kwargs or {})})
         if binary:
             operands.append("residual")
     return rt.RuntimeArtifact(metadata={
@@ -171,6 +179,46 @@ def test_norm_activation_cache_identity_keeps_shapes_dynamic():
         x = rng.standard_normal(shape).astype(np.float32)
         rt.launch(_artifact(rt, "tessera.rmsnorm", epilogue="relu"), (x,))
     assert len(rt._rocm_norm_hsaco_cache) == 1
+
+
+@pytest.mark.parametrize("op_name", ["tessera.rmsnorm", "tessera.layer_norm"])
+@pytest.mark.parametrize("shape", [(3, 17), (2, 5, 64), (7, 300)])
+def test_dynamic_norm_softcap_consumer_is_one_compiled_launch(op_name, shape):
+    rt = _norm_or_skip()
+    rng = np.random.default_rng(187 + shape[-1])
+    x = rng.standard_normal(shape).astype(np.float32)
+    cap = 1.75
+    result = rt.launch(
+        _artifact(
+            rt,
+            op_name,
+            epilogue="softcap",
+            epilogue_kwargs={"cap": cap},
+        ),
+        (x,),
+    )
+    reference = _ref(x, op_name, 1e-5)
+    reference = cap * np.tanh(reference / cap)
+    assert result["execution_kind"] == "native_gpu"
+    np.testing.assert_allclose(
+        result["output"], reference, atol=4e-4, rtol=0
+    )
+
+
+def test_norm_softcap_rejects_invalid_cap_before_launch():
+    from tessera import runtime as rt
+
+    x = np.zeros((4, 8), np.float32)
+    with pytest.raises(ValueError, match="finite and positive"):
+        rt._execute_rocm_compiled_norm(
+            _artifact(
+                rt,
+                "tessera.rmsnorm",
+                epilogue="softcap",
+                epilogue_kwargs={"cap": 0.0},
+            ),
+            (x,),
+        )
 
 
 @pytest.mark.parametrize("op_name", ["tessera.rmsnorm", "tessera.layer_norm"])

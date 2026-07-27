@@ -37,9 +37,12 @@
 
 #include "Tessera/Transforms/Passes.h"
 
+#include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseSet.h"
+
+#include <algorithm>
 
 using namespace mlir;
 
@@ -64,6 +67,52 @@ static int64_t opStage(Operation *op) {
   return -1;
 }
 
+static void materializeSchedule(ModuleOp module, int64_t numStages,
+                                int64_t microBatches) {
+  // Materialize a conservative dependency order rather than merely proving
+  // that a schedule could exist.  One action owns each logical clock, so no
+  // rank can be asked to execute forward and backward simultaneously.  A
+  // later target/runtime planner may overlap independent actions while
+  // preserving this order.
+  Builder b(module.getContext());
+  SmallVector<Attribute> steps;
+  int64_t clock = 0;
+  auto append = [&](StringRef region, StringRef phase, int64_t microBatch,
+                    int64_t stage) {
+    steps.push_back(b.getDictionaryAttr({
+        b.getNamedAttr("clock", b.getI64IntegerAttr(clock++)),
+        b.getNamedAttr("micro_batch", b.getI64IntegerAttr(microBatch)),
+        b.getNamedAttr("phase", b.getStringAttr(phase)),
+        b.getNamedAttr("region", b.getStringAttr(region)),
+        b.getNamedAttr("stage", b.getI64IntegerAttr(stage)),
+    }));
+  };
+  auto forwardSweep = [&](StringRef region, int64_t microBatch) {
+    for (int64_t stage = 0; stage < numStages; ++stage)
+      append(region, "forward", microBatch, stage);
+  };
+  auto backwardSweep = [&](StringRef region, int64_t microBatch) {
+    for (int64_t stage = numStages; stage-- > 0;)
+      append(region, "backward", microBatch, stage);
+  };
+
+  int64_t warmupBatches = std::min(numStages - 1, microBatches);
+  for (int64_t mb = 0; mb < warmupBatches; ++mb)
+    forwardSweep("warmup", mb);
+  int64_t steadyBatches = microBatches - warmupBatches;
+  for (int64_t mb = 0; mb < steadyBatches; ++mb) {
+    forwardSweep("steady", mb + warmupBatches);
+    backwardSweep("steady", mb);
+  }
+  for (int64_t mb = steadyBatches; mb < microBatches; ++mb)
+    backwardSweep("cooldown", mb);
+
+  module->setAttr("tessera.pipeline_steps", b.getArrayAttr(steps));
+  module->setAttr(
+      "tessera.pipeline_schedule_kind",
+      b.getStringAttr("1f1b.serialized_dependency_order.v1"));
+}
+
 struct PipelineScheduleLegalityPass
     : public PassWrapper<PipelineScheduleLegalityPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PipelineScheduleLegalityPass)
@@ -72,8 +121,8 @@ struct PipelineScheduleLegalityPass
     return "tessera-pipeline-schedule-legality";
   }
   StringRef getDescription() const override {
-    return "1F1B schedule legality — micro-batch fill (Decision #17), no empty "
-           "stage, and forward-adjacent send/recv pairing.";
+    return "Prove 1F1B legality and materialize explicit "
+           "warmup/steady/cooldown dependency steps.";
   }
 
   void runOnOperation() override {
@@ -159,8 +208,11 @@ struct PipelineScheduleLegalityPass
         }
     });
 
-    if (anyError)
+    if (anyError) {
       signalPassFailure();
+      return;
+    }
+    materializeSchedule(module, numStages, microBatches);
   }
 };
 

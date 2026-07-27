@@ -628,10 +628,6 @@ struct LowerFlashAttnToTileIR : public RewritePattern {
         {kvLoop.getResult(0), kvLoop.getResult(1), kvLoop.getResult(2)},
         {outType, statsType});
 
-    // Store LSE for backward pass.
-    emitAttnOp(rewriter, loc, "tessera_attn.lse.save",
-               {lseAcc->getResult(1)}, {rewriter.getF32Type()});
-
     // Replace flash_attn result with normalised output.
     if (!op->getResults().empty())
       rewriter.replaceOp(op, lseAcc->getResult(0));
@@ -995,6 +991,9 @@ struct LowerKReductionAddToTileMMA : public RewritePattern {
     mmaState.addAttribute("tessera.tile_m", rewriter.getI64IntegerAttr(tm));
     mmaState.addAttribute("tessera.tile_n", rewriter.getI64IntegerAttr(tn));
     mmaState.addAttribute("tessera.tile_k", rewriter.getI64IntegerAttr(tk));
+    if (matmul->hasAttr("tessera.ragged_zero_pad"))
+      mmaState.addAttribute("tessera.ragged_zero_pad",
+                            rewriter.getUnitAttr());
     if (auto policy = matmul->getAttr("numeric_policy"))
       mmaState.addAttribute("numeric_policy", policy);
     Operation *mma = rewriter.create(mmaState);

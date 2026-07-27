@@ -1191,6 +1191,214 @@ class JitFn:
         }
         return tuple(by_name[name] for name in request.wrt)
 
+    def _native_rocm_adam_backward(
+        self,
+        args: Tuple[Any, ...],
+        kwargs: Dict[str, Any],
+        *,
+        out_cotangents: Any,
+    ) -> tuple[Any, ...]:
+        """Launch one gfx1151 VJP for explicit Adam/AdamW moment state."""
+        import numpy as np
+        from tessera.runtime import RuntimeArtifact, launch
+
+        ordered = self._ordered_inputs(args, kwargs)
+        if ordered is None or len(ordered) != 4:
+            raise TesseraJitError(
+                "ROCm Adam backward requires param, grad, moment1, moment2"
+            )
+        cotangents = (
+            out_cotangents
+            if isinstance(out_cotangents, (tuple, list))
+            else (out_cotangents,)
+        )
+        if len(cotangents) != 3:
+            raise TesseraJitError(
+                "Adam backward requires parameter, moment1, and moment2 "
+                "output cotangents"
+            )
+        graph_ops = [op for fn in self.graph_ir.functions for op in fn.body]
+        if len(graph_ops) != 1:
+            raise TesseraJitError(
+                "compiled Adam backward requires a single-op graph"
+            )
+        source = graph_ops[0]
+        op_name = source.op_name
+        if op_name.removeprefix("tessera.") not in {"adam", "adamw"}:
+            raise TesseraJitError("expected Adam or AdamW Graph op")
+        cotangent_names = [
+            "dparam_out",
+            "dmoment1_out",
+            "dmoment2_out",
+        ]
+        path = "rocm_adam_bwd_compiled"
+        artifact = RuntimeArtifact(
+            metadata={
+                "target": "rocm",
+                "compiler_path": path,
+                "executable": True,
+                "execution_kind": "native_gpu",
+                "execution_mode": "hip_runtime",
+                "autodiff_phase": "backward",
+                "out_cotangents": cotangent_names,
+                "arg_names": list(self.arg_names) + cotangent_names,
+                "output_names": [f"d_{name}" for name in self.arg_names],
+                "ops": [
+                    {
+                        "op_name": op_name,
+                        "result": source.result,
+                        "operands": list(self.arg_names),
+                        "kwargs": dict(source.kwargs),
+                    }
+                ],
+            }
+        )
+        result = launch(
+            artifact,
+            tuple(
+                [
+                    *(
+                        np.ascontiguousarray(
+                            np.asarray(value), dtype=np.float32
+                        )
+                        for value in ordered
+                    ),
+                    *(
+                        np.ascontiguousarray(
+                            np.asarray(value), dtype=np.float32
+                        )
+                        for value in cotangents
+                    ),
+                ]
+            ),
+        )
+        if (
+            not result.get("ok")
+            or result.get("execution_mode") != "hip_runtime"
+        ):
+            raise TesseraJitError(
+                "verified ROCm Adam backward launch failed: "
+                + str(result.get("reason"))
+            )
+        gradients = tuple(result["output"])
+        by_name = dict(zip(self.arg_names, gradients))
+        request = self.differentiation_request
+        if request is None:
+            raise TesseraJitError(
+                "native backward requires differentiation request"
+            )
+        self.last_backward_execution = {
+            "compiler_path": path,
+            "execution_kind": "native_gpu",
+            "execution_mode": "hip_runtime",
+            "evidence_target": "rocm_gfx1151",
+            "implementation": "dedicated",
+            "residual_policy": "save_inputs_and_state",
+            "op_family": op_name.removeprefix("tessera."),
+        }
+        return tuple(by_name[name] for name in request.wrt)
+
+    def _native_rocm_lion_backward(
+        self,
+        args: Tuple[Any, ...],
+        kwargs: Dict[str, Any],
+        *,
+        out_cotangents: Any,
+    ) -> tuple[Any, ...]:
+        """Launch the gfx1151 Lion VJP using the shared stop-sign policy."""
+        import numpy as np
+        from tessera.runtime import RuntimeArtifact, launch
+
+        ordered = self._ordered_inputs(args, kwargs)
+        if ordered is None or len(ordered) != 3:
+            raise TesseraJitError(
+                "ROCm Lion backward requires param, grad, and moment"
+            )
+        cotangents = (
+            out_cotangents
+            if isinstance(out_cotangents, (tuple, list))
+            else (out_cotangents,)
+        )
+        if len(cotangents) != 2:
+            raise TesseraJitError(
+                "Lion backward requires parameter and moment output cotangents"
+            )
+        graph_ops = [op for fn in self.graph_ir.functions for op in fn.body]
+        if len(graph_ops) != 1 or (
+            graph_ops[0].op_name.removeprefix("tessera.") != "lion"
+        ):
+            raise TesseraJitError(
+                "compiled Lion backward requires a single Lion Graph op"
+            )
+        source = graph_ops[0]
+        cotangent_names = ["dparam_out", "dmoment_out"]
+        path = "rocm_lion_bwd_compiled"
+        artifact = RuntimeArtifact(
+            metadata={
+                "target": "rocm",
+                "compiler_path": path,
+                "executable": True,
+                "execution_kind": "native_gpu",
+                "execution_mode": "hip_runtime",
+                "autodiff_phase": "backward",
+                "out_cotangents": cotangent_names,
+                "arg_names": list(self.arg_names) + cotangent_names,
+                "output_names": [f"d_{name}" for name in self.arg_names],
+                "ops": [
+                    {
+                        "op_name": source.op_name,
+                        "result": source.result,
+                        "operands": list(self.arg_names),
+                        "kwargs": dict(source.kwargs),
+                    }
+                ],
+            }
+        )
+        result = launch(
+            artifact,
+            tuple(
+                [
+                    *(
+                        np.ascontiguousarray(
+                            np.asarray(value), dtype=np.float32
+                        )
+                        for value in ordered
+                    ),
+                    *(
+                        np.ascontiguousarray(
+                            np.asarray(value), dtype=np.float32
+                        )
+                        for value in cotangents
+                    ),
+                ]
+            ),
+        )
+        if (
+            not result.get("ok")
+            or result.get("execution_mode") != "hip_runtime"
+        ):
+            raise TesseraJitError(
+                "verified ROCm Lion backward launch failed: "
+                + str(result.get("reason"))
+            )
+        gradients = tuple(result["output"])
+        by_name = dict(zip(self.arg_names, gradients))
+        request = self.differentiation_request
+        if request is None:
+            raise TesseraJitError(
+                "native backward requires differentiation request"
+            )
+        self.last_backward_execution = {
+            "compiler_path": path,
+            "execution_kind": "native_gpu",
+            "execution_mode": "hip_runtime",
+            "evidence_target": "rocm_gfx1151",
+            "implementation": "dedicated",
+            "residual_policy": "none",
+            "op_family": "lion",
+        }
+        return tuple(by_name[name] for name in request.wrt)
+
     def _native_regression_loss_backward(
         self,
         target: str,
@@ -1292,6 +1500,109 @@ class JitFn:
         request = self.differentiation_request
         if request is None:
             raise TesseraJitError("native backward requires autodiff request")
+        return tuple(by_name[name] for name in request.wrt)
+
+    def _native_rocm_distribution_loss_backward(
+        self,
+        args: Tuple[Any, ...],
+        kwargs: Dict[str, Any],
+        *,
+        out_cotangents: Any,
+    ) -> tuple[Any, ...]:
+        """Launch the paired KL/JS carrier through one gfx1151 kernel."""
+        import numpy as np
+        from tessera.runtime import RuntimeArtifact, launch
+
+        ordered = self._ordered_inputs(args, kwargs)
+        if ordered is None or len(ordered) != 2:
+            raise TesseraJitError(
+                "ROCm distribution backward requires two operands"
+            )
+        cotangents = (
+            out_cotangents
+            if isinstance(out_cotangents, (tuple, list))
+            else (out_cotangents,)
+        )
+        if len(cotangents) != 1:
+            raise TesseraJitError(
+                "ROCm distribution backward requires one output cotangent"
+            )
+        graph_ops = [op for fn in self.graph_ir.functions for op in fn.body]
+        if len(graph_ops) != 1:
+            raise TesseraJitError(
+                "compiled distribution backward requires a single-op graph"
+            )
+        source = graph_ops[0]
+        bare = source.op_name.removeprefix("tessera.")
+        if bare not in {
+            "loss.kl_divergence",
+            "kl_divergence",
+            "loss.js_divergence",
+            "js_divergence",
+        }:
+            raise TesseraJitError("expected KL or JS distribution loss")
+        path = "rocm_distribution_loss_bwd_compiled"
+        artifact = RuntimeArtifact(
+            metadata={
+                "target": "rocm",
+                "compiler_path": path,
+                "executable": True,
+                "execution_kind": "native_gpu",
+                "execution_mode": "hip_runtime",
+                "autodiff_phase": "backward",
+                "out_cotangent": "dy",
+                "arg_names": list(self.arg_names) + ["dy"],
+                "output_names": [f"d_{name}" for name in self.arg_names],
+                "ops": [
+                    {
+                        "op_name": source.op_name,
+                        "result": source.result,
+                        "operands": list(self.arg_names),
+                        "kwargs": dict(source.kwargs),
+                    }
+                ],
+            }
+        )
+        result = launch(
+            artifact,
+            tuple(
+                [
+                    *(
+                        np.ascontiguousarray(
+                            np.asarray(value), dtype=np.float32
+                        )
+                        for value in ordered
+                    ),
+                    np.ascontiguousarray(
+                        np.asarray(cotangents[0]), dtype=np.float32
+                    ),
+                ]
+            ),
+        )
+        if (
+            not result.get("ok")
+            or result.get("execution_mode") != "hip_runtime"
+        ):
+            raise TesseraJitError(
+                "verified ROCm distribution backward launch failed: "
+                + str(result.get("reason"))
+            )
+        gradients = tuple(result["output"])
+        by_name = dict(zip(self.arg_names, gradients))
+        request = self.differentiation_request
+        if request is None:
+            raise TesseraJitError(
+                "native backward requires differentiation request"
+            )
+        self.last_backward_execution = {
+            "compiler_path": path,
+            "execution_kind": "native_gpu",
+            "execution_mode": "hip_runtime",
+            "evidence_target": "rocm_gfx1151",
+            "implementation": "dedicated",
+            "residual_policy": "save_inputs",
+            "op_family": bare,
+        }
         return tuple(by_name[name] for name in request.wrt)
 
     def _native_binary_loss_backward(
@@ -1546,6 +1857,12 @@ class JitFn:
         if len(graph_ops) == 1 and ops <= {"momentum", "nesterov"}:
             return self._native_momentum_backward(
                 "rocm", args, kwargs, out_cotangents=out_cotangents)
+        if len(graph_ops) == 1 and ops <= {"adam", "adamw"}:
+            return self._native_rocm_adam_backward(
+                args, kwargs, out_cotangents=out_cotangents)
+        if len(graph_ops) == 1 and ops == {"lion"}:
+            return self._native_rocm_lion_backward(
+                args, kwargs, out_cotangents=out_cotangents)
 
         regression_losses = {
             "loss.mse", "mse_loss", "loss.mae", "mae_loss",
@@ -1567,6 +1884,14 @@ class JitFn:
         }:
             return self._native_class_loss_backward(
                 "rocm", args, kwargs, out_cotangents=out_cotangents)
+        if len(graph_ops) == 1 and ops <= {
+            "loss.kl_divergence",
+            "kl_divergence",
+            "loss.js_divergence",
+            "js_divergence",
+        }:
+            return self._native_rocm_distribution_loss_backward(
+                args, kwargs, out_cotangents=out_cotangents)
 
         if ops == {"matmul"} and len(inputs) == 2 and len(cotangents) == 1:
             # Matmul has no standalone backward kernel. Its paired ABI is the

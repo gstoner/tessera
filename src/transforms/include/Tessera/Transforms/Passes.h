@@ -404,8 +404,8 @@ std::unique_ptr<mlir::Pass> createWarpSpecLegalityPass();
 // PipelineStagePartition: cost-balanced, program-order-monotonic partition of
 // each function into num_stages (emits tessera.pp_stage) — the "true stage
 // partitioning" the insertion pass previously required an external tagger for.
-// PipelineScheduleLegality: the 1F1B schedule proof — micro-batch fill
-// (Decision #17), no empty stage, forward-adjacent send/recv pairing
+// PipelineScheduleLegality: prove the 1F1B contract, then materialize explicit
+// warmup/steady/cooldown dependency steps in tessera.pipeline_steps
 // (PP_MICRO_BATCHES_TOO_FEW / PP_EMPTY_STAGE / PP_SEND_WITHOUT_RECV /
 // PP_RECV_WITHOUT_SEND). Registered standalone; chained in the `tessera-pipeline`
 // pipeline (partition → stage-insertion → schedule-legality).

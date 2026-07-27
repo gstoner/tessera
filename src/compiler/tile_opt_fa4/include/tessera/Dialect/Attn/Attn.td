@@ -9,33 +9,40 @@ def Tessera_Attn_Dialect : Dialect {
   let cppNamespace = "::tessera::attn";
 }
 
-// ─── Original ops (v1.3) ─────────────────────────────────────────────────────
+// ─── Persistent training checkpoints ─────────────────────────────────────────
 
-// NOT `Pure`, deliberately (2026-07-26). This op is degenerate today — it owns
-// no destination, `LseLoadOp` declares no arguments at all, nothing links a
-// load to a save, and the single emission site discards the result — so marking
-// it `Pure` is tempting and was tried. It was rejected for two reasons:
-// removing a dead op changes emitted IR on every backend (it breaks
-// `tests/tessera-ir/phase3/flash_attn_full.mlir`, which asserts its presence),
-// and a real FlashAttention-2 checkpoint store must be non-`Pure` with
-// `MemWrite`, so the trait would be a trap for whoever implements it.
-//
-// The degenerate state is a defect to fix at the source — stop emitting a
-// destination-less save — not to paper over with a trait. See
-// docs/audit/compiler/LSE_CHECKPOINT_CONTRACT.md; the save-versus-recompute
-// measurement is owned by NVIDIA-LSE-1 and ROCM-LSE-1.
-def LseSaveOp : Op<Tessera_Attn_Dialect, "lse.save", []> {
-  let summary = "Save per-row log-sum-exp (LSE) from forward attention";
-  let arguments = (ins AnyType:$scores);
-  let results = (outs AnyType:$lse);
-  let assemblyFormat = "$scores attr-dict `:` type($scores) `->` type($lse)";
+// LSE is an explicit memory carrier, not a value-returning marker. The memref
+// owns memory-space semantics; identity and scope bind a forward save to the
+// corresponding backward load across compiler-owned entry points.
+def LseSaveOp : Op<Tessera_Attn_Dialect, "lse.save",
+                   [MemoryEffects<[MemWrite]>]> {
+  let summary = "Store finalized per-row LSE into a persistent checkpoint";
+  let arguments = (ins
+    AnyType:$lse,
+    AnyMemRef:$destination,
+    Index:$row_offset,
+    StrAttr:$identity,
+    StrAttr:$memory_space,
+    StrAttr:$scope,
+    OptionalAttr<StrAttr>:$cache_policy
+  );
+  let assemblyFormat = "$lse `into` $destination `at` $row_offset attr-dict `:` type($lse) `,` type($destination)";
   let hasVerifier = 1;
 }
 
-def LseLoadOp : Op<Tessera_Attn_Dialect, "lse.load", [Pure]> {
-  let summary = "Load LSE tensor for backward";
+def LseLoadOp : Op<Tessera_Attn_Dialect, "lse.load",
+                   [MemoryEffects<[MemRead]>]> {
+  let summary = "Load per-row LSE from a persistent checkpoint";
+  let arguments = (ins
+    AnyMemRef:$source,
+    Index:$row_offset,
+    StrAttr:$identity,
+    StrAttr:$memory_space,
+    StrAttr:$scope,
+    OptionalAttr<StrAttr>:$cache_policy
+  );
   let results = (outs AnyType:$lse);
-  let assemblyFormat = "attr-dict `:` type($lse)";
+  let assemblyFormat = "$source `at` $row_offset attr-dict `:` type($source) `->` type($lse)";
   let hasVerifier = 1;
 }
 

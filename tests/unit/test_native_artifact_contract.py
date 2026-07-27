@@ -107,6 +107,43 @@ def test_native_image_round_trip_is_content_addressed_and_deterministic() -> Non
     assert json.loads(image.to_json())["payload_b64"]
 
 
+def test_launch_descriptor_round_trips_host_visible_dynamic_memory_expression() -> None:
+    image = _image()
+    expression = {
+        "kind": "align_up",
+        "alignment": 16,
+        "operands": [
+            {
+                "kind": "multiply",
+                "operands": [
+                    {"kind": "argument", "name": "Rows"},
+                    {"kind": "constant", "value": 34},
+                ],
+            }
+        ],
+    }
+    descriptor = _descriptor(
+        image,
+        scalars=(ScalarArgument(3, "Rows", "int64"),),
+        dynamic_local_memory_bytes=0,
+        dynamic_local_memory_expression=expression,
+    )
+    restored = LaunchDescriptor.from_json(descriptor.to_json())
+    assert restored.dynamic_local_memory_expression == expression
+    assert restored.resolve_dynamic_local_memory_bytes({"Rows": 7}) == 240
+
+
+def test_launch_descriptor_rejects_unknown_dynamic_memory_argument() -> None:
+    with pytest.raises(ArtifactContractError, match="unknown scalar"):
+        _descriptor(
+            _image(),
+            dynamic_local_memory_expression={
+                "kind": "argument",
+                "name": "Missing",
+            },
+        )
+
+
 def test_frozen_native_identity_digests_are_cached_after_first_use() -> None:
     image = _image()
     descriptor = _descriptor(image)

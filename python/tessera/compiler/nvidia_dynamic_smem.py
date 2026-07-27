@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
-import math
 from pathlib import Path
 import re
 import shutil
@@ -22,6 +21,7 @@ from .native_artifact import (
     ScalarArgument,
     ShapeGuard,
 )
+from .dynamic_local_memory import align_up, evaluate_launch_expression
 
 
 SM120_DYNAMIC_SMEM_ABI = (
@@ -43,14 +43,6 @@ class NVIDIADynamicSharedPackage:
     descriptor: LaunchDescriptor
 
 
-def align_up(value: int, alignment: int = 16) -> int:
-    if value < 0:
-        raise ValueError("dynamic shared-memory byte counts must be non-negative")
-    if alignment <= 0 or alignment & (alignment - 1):
-        raise ValueError("dynamic shared-memory alignment must be a power of two")
-    return (value + alignment - 1) & -alignment
-
-
 def path_max_launch_bytes(paths: tuple[tuple[int, ...], ...]) -> int:
     if not paths:
         return 0
@@ -58,52 +50,6 @@ def path_max_launch_bytes(paths: tuple[tuple[int, ...], ...]) -> int:
         align_up(sum(align_up(size) for size in path))
         for path in paths
     )
-
-
-def evaluate_launch_expression(
-    expression: dict[str, object], arguments: dict[str, int]
-) -> int:
-    def integer_field(name: str, default: int) -> int:
-        raw = expression.get(name, default)
-        if not isinstance(raw, int):
-            raise ValueError(f"dynamic shared expression {name} must be integer")
-        return raw
-
-    kind = str(expression.get("kind", ""))
-    if kind == "argument":
-        name = str(expression.get("name", ""))
-        if name not in arguments:
-            raise ValueError(f"dynamic shared expression lacks argument {name!r}")
-        value = int(arguments[name])
-    elif kind == "constant":
-        value = integer_field("value", -1)
-    else:
-        raw_operands = expression.get("operands")
-        if not isinstance(raw_operands, list) or not raw_operands:
-            raise ValueError("dynamic shared expression requires operands")
-        operands = [
-            evaluate_launch_expression(operand, arguments)
-            for operand in raw_operands
-            if isinstance(operand, dict)
-        ]
-        if len(operands) != len(raw_operands):
-            raise ValueError("dynamic shared expression operands must be mappings")
-        if kind == "add":
-            value = sum(operands)
-        elif kind == "multiply":
-            value = math.prod(operands)
-        elif kind == "path_max":
-            value = max(operands)
-        elif kind == "align_up":
-            if len(operands) != 1:
-                raise ValueError("align_up requires one operand")
-            alignment = integer_field("alignment", 16)
-            value = align_up(operands[0], alignment)
-        else:
-            raise ValueError(f"unsupported dynamic shared expression {kind!r}")
-    if value < 0 or value > (1 << 63) - 1:
-        raise ValueError("dynamic shared expression is outside signed-i64")
-    return value
 
 
 def _tool(name: str) -> Path:
@@ -305,7 +251,12 @@ def package_local_expression_probe(
         "Bias": bias,
         "Fallback": fallback,
     }
-    dynamic_bytes = align_up(evaluate_launch_expression(expression, arguments))
+    launch_expression: dict[str, object] = {
+        "kind": "align_up",
+        "alignment": 16,
+        "operands": [expression],
+    }
+    dynamic_bytes = evaluate_launch_expression(launch_expression, arguments)
     selected = base * factor + bias if branch else fallback
     if selected < 2:
         raise ValueError("selected local expression path requires at least two bytes")
@@ -361,6 +312,7 @@ extern "C" __global__ void {entry}(
         shape_guards=(ShapeGuard("output", 0, "min", 2),),
         geometry=LaunchGeometry(policy="sm120_dynamic_shared_probe_thread_1"),
         dynamic_local_memory_bytes=dynamic_bytes,
+        dynamic_local_memory_expression=launch_expression,
         ordering=OrderingSemantics(
             ordered_submission=True,
             residency="none",
@@ -368,7 +320,7 @@ extern "C" __global__ void {entry}(
         ),
         provenance={
             "work_item": "E2E-SPINE3-SM120-DYNAMIC-MEMORY",
-            "launch_expression": expression,
+            "launch_expression": launch_expression,
             "launch_reduction": "serialized_path_max_expression",
             "alignment": 16,
             "branch": branch,

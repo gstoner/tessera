@@ -836,6 +836,17 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "rocm_momentum_bwd_compiled": "AMD GPU compiler-generated paired "
                             "Momentum/Nesterov backward; one runtime-sized HIP "
                             "launch writes all three input gradients",
+    "rocm_adam_bwd_compiled": "AMD GPU compiler-generated paired Adam/AdamW "
+                            "backward; one runtime-sized HIP launch writes "
+                            "parameter, gradient, and both moment-state VJPs",
+    "rocm_lion_bwd_compiled": "AMD GPU compiler-generated paired Lion "
+                            "backward; one runtime-sized HIP launch writes "
+                            "parameter, gradient, and moment-state VJPs under "
+                            "the shared stop-gradient sign policy",
+    "rocm_distribution_loss_bwd_compiled": "AMD GPU compiler-generated paired "
+                            "KL/JS backward; one runtime-sized HIP launch "
+                            "writes both operand gradients with arbitrary "
+                            "class-axis cotangent addressing",
     "rocm_lamb_compiled": "AMD GPU RDNA LAMB — COMPILER-GENERATED gfx1151 adam "
                             "kernel (lr=1/wd=0) + host per-tensor trust ratio "
                             "‖p‖/‖update‖. f32",
@@ -2713,6 +2724,58 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         proof_build="LLVM/MLIR 23; ROCm 7.14; gfx1151",
         residual_policy="none",
         residual_tradeoff="The affine VJP requires no forward residuals."),
+    ("rocm", "rocm_adam_bwd_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_adam_bwd_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_adam_bwd_compiled", runtime_status="success",
+        reason="One compiler-generated runtime-sized HIP launch writes "
+               "parameter, gradient, first-moment, and second-moment VJPs for "
+               "Adam/AdamW with explicit bias-correction state.",
+        execution_mode="hip_runtime", direction="backward",
+        op_family="adam_adamw", device_proof="device_verified_jit",
+        evidence_target="rocm_gfx1151",
+        numerical_fixture=(
+            "tests/unit/test_autodiff_training_series_target_binding.py"),
+        proof_build="LLVM/MLIR 23; ROCm 7.14; gfx1151",
+        residual_policy="save_inputs_and_state",
+        residual_tradeoff=(
+            "The exact VJP reads gradient and both incoming moment tensors; "
+            "parameter remains in the stable explicit-state ABI.")),
+    ("rocm", "rocm_lion_bwd_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_lion_bwd_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_lion_bwd_compiled", runtime_status="success",
+        reason="One compiler-generated runtime-sized HIP launch writes "
+               "parameter, gradient, and moment-state VJPs for Lion using "
+               "the shared stop-gradient-through-sign derivative policy.",
+        execution_mode="hip_runtime", direction="backward",
+        op_family="lion", device_proof="device_verified_jit",
+        evidence_target="rocm_gfx1151",
+        numerical_fixture=(
+            "tests/unit/test_autodiff_training_series_target_binding.py"),
+        proof_build="LLVM/MLIR 23; ROCm 7.14; gfx1151",
+        residual_policy="none",
+        residual_tradeoff=(
+            "The VJP is affine after stopping sign; no forward values or "
+            "optimizer-state residuals are required.")),
+    ("rocm", "rocm_distribution_loss_bwd_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_distribution_loss_bwd_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_distribution_loss_bwd_compiled",
+        runtime_status="success",
+        reason="One compiler-generated runtime-sized HIP launch writes both "
+               "operand VJPs for KL or Jensen-Shannon divergence, including "
+               "arbitrary class-axis and scalar/tensor cotangent addressing.",
+        execution_mode="hip_runtime", direction="backward",
+        op_family="distribution_loss", device_proof="device_verified_jit",
+        evidence_target="rocm_gfx1151",
+        numerical_fixture=(
+            "tests/unit/test_autodiff_training_series_target_binding.py"),
+        proof_build="LLVM/MLIR 23; ROCm 7.14; gfx1151",
+        residual_policy="save_inputs",
+        residual_tradeoff=(
+            "The KL/JS VJPs require both forward operands but do not require "
+            "a saved forward output.")),
     ("rocm", "rocm_lamb_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_lamb_compiled",
         execution_kind="native_gpu", executable=True,

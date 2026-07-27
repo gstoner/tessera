@@ -8,6 +8,25 @@ last_updated: 2026-07-27
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `ROCM-BF16-ATTENTION-2026-07-27` adds no Apple capability
+claim. It proves exact optimized BF16 forward and deterministic five-entry
+backward attention on gfx1151 for the shared ragged-GQA,
+bias+softcap+causal-window+dropout contracts. AMD BF16 WMMA, LDS scheduling,
+HSACO packaging, HIP launch workspace, numerical results, and resident
+host-wall timing are architecture-owned and do not transfer to Metal. Apple
+retains its separately owned storage policy, package, exact-device, and timing
+gates while shared semantic parity remains unchanged.
+
+Cross-backend sync `TESSERA-OPT-BUILD-CAPABILITY-2026-07-27` is **closed**.
+The shared lit resolver now accepts `TESSERA_OPT_BIN`, `TESSERA_OPT_PATH`, and
+`TESSERA_OPT_CPP` after the canonical `TESSERA_OPT` override, and the validation
+script forwards its selected binary through that contract. Exact gfx1151
+verification proves the full ROCm driver, legitimate lean ROCm artifact
+driver, conflict rejection, both named streaming-attention fixtures, the
+seven-fixture filter, and the complete 50-test ROCm backend lit suite. This is
+shared test/build infrastructure only; no Metal registration, schedule,
+runtime ABI, device evidence, or selector changes.
+
 Cross-backend sync
 `ROCM-ATTENTION-SHARED-BACKWARD-CONSUMER-2026-07-26` makes ROCm gfx1151 the
 first direct physical consumer of the shared tensor-valued attention backward
@@ -141,6 +160,14 @@ dispatch carrying the loop's tile decision, fp32 accumulation, and the ragged
 zero-pad guarantee, with exact-device execute-and-compare on Apple7. The
 incumbent rule stands: recognition is not promotion, and value-mode
 Accelerate/MPS remains the production route.
+
+Cross-backend sync `ROCM-CORE-GEMM-KLOOP-2026-07-27` is **parity validated**
+for Apple. The shared Tile change is limited to preserving the canonical
+ragged-zero-fill guarantee across `tessera.matmul` → `tile.mma`; APPLE-TILE-2
+already consumes the same loop and guarantee. ROCm's address-space-3 LDS
+schedule, barriers, gfx1151 WMMA, HSACO resources, and host-wall results do not
+transfer to Metal. No Apple route, capability, execution state, or selector
+changes in this slice.
 
 Cross-backend sync `COMPILER-LIT-BACKEND-GATING-2026-07-24`: shared lit feature
 hygiene now rejects undefined requirements and obsolete global GPU target
@@ -1153,7 +1180,20 @@ consequence is that the strict ledger currently admits **no** decisions on this
 host, so APPLE-RETUNE-1's selector evidence is inert until the corpus is
 re-recorded and re-sealed against the current runtime source.
 
-### APPLE-ATTN-STREAM-1: the LSE blocker, and why it was a defect (2026-07-26)
+### APPLE-ATTN-STREAM-1: LSE checkpoint migration (updated 2026-07-27)
+
+The 2026-07-26 investigation below is retained as historical diagnosis and is
+**superseded**. Cross-backend sync
+`LSE-CHECKPOINT-CONTRACT-2026-07-27` removed destination-less emission and
+replaced the declarations with explicit memref source/destination, SSA row
+offset, identity, global-memory space, lifetime scope, cache policy, and
+`MemWrite`/`MemRead` effects. The Apple pass no longer erases `lse.save`; any
+live LSE remains a real unsupported ABI request and is rejected. Inference-only
+forward sees no save. ROCm measured and selected its own gfx1151 128+ policy;
+that threshold and AMD schedule do not transfer. Apple follow-up is required
+only if a Metal training package elects to persist LSE.
+
+#### Historical diagnosis (superseded)
 
 This item first landed **blocked**, and the investigation is worth keeping
 because the blocker turned out to be a bug in the shared contract rather than a
@@ -1273,7 +1313,7 @@ capability-rejection or consumer proof, not undeclared divergence.
 | 23 | APPLE-COUNTER-1 | **landing** | `compiler/apple_counter_evidence.py` maps Metal telemetry onto the shared autotune-evidence fields with an explicit four-state reason on every field: `measured`, `not_measured` (device can, this run did not), `unsupported_by_device` (this GPU family cannot), `no_public_api` (Metal exposes no query — register count, scratch bytes, spill count, achieved occupancy). Supplying a value the capability bits do not support raises rather than silently downgrading, so a corpus cannot claim evidence the device cannot produce. Bit positions are drift-gated against the runtime's own documented matrix. **Narrower follow-up:** the benchmark writers do not yet emit these fields into a committed corpus, so this is the vocabulary and its guards, not a recorded two-run corpus. |
 | 24 | APPLE-ATTN-STREAM-2 | **active** | Rank-4 batch/head streaming attention. `CORE-STREAMING-ATTN-RANK4-ROCM-2026-07-26` added shared rank-4 distribution and a direct ROCm consumer; APPLE-ATTN-STREAM-1 re-forms rank-2 only and its `APPLE_STREAMING_ATTN_SHAPE_UNSUPPORTED` diagnostic refuses anything else. Extend the consumer to the rank-4 form, or record rank-4 as an explicit Apple non-goal with the reason. Gate: the same parity bar as rank-2 — boundary semantics read off the shared ops, plus an exact-device oracle row. |
 | 25 | APPLE-ATTN-BWD-2 | **active** | Consume the shared tensor-valued attention **backward** phase loops. `ROCM-ATTENTION-SHARED-BACKWARD-CONSUMER-2026-07-26` made gfx1151 the first direct physical consumer; Apple must validate the same dQ / split-dK/dV / fixed-reduction contract and map it to a Metal-owned package. APPLE-ATTN-BWD-1 already owns proven serial / atomic / split-reduce Metal routes, so this is contract adoption, not new kernels — the question is whether the shared phase loops describe the schedules Apple already runs. The AMD WMMA schedule, five-entry HSACO, HIP workspace, and host-wall timing do not transfer. |
-| 26 | APPLE-ATTN-BWD-3 | **active** | `CORE-ATTENTION-BACKWARD-CONTRACT-2026-07-26` adds verified shared backward contracts; confirm Apple's backward satisfies them or record the divergence. Note the standing asymmetry documented in [`../../compiler/LSE_CHECKPOINT_CONTRACT.md`](../../compiler/LSE_CHECKPOINT_CONTRACT.md): Apple's backward recomputes `m`/`l` per query and reads no saved LSE, matching NVIDIA and ROCm. |
+| 26 | APPLE-ATTN-BWD-3 | **active** | `CORE-ATTENTION-BACKWARD-CONTRACT-2026-07-26` adds verified shared backward contracts; confirm Apple's backward satisfies them or record the divergence. The shared LSE checkpoint contract is now real and conditional; Apple retains recompute until an exact Metal package and benchmark justify a saved checkpoint. |
 | 27 | APPLE-ATTN-MODIFIERS-1 | **active** | `CORE-ATTENTION-TENSOR-LOOPS-MODIFIERS-2026-07-26` lands shared tensor-valued attention loop modifiers. Apple owns validating that its causal / sliding-window / softcap / bias / GQA-MQA envelope still expresses every admitted modifier after the shared change, and rejecting the rest by name rather than silently narrowing. |
 | 28 | APPLE-STATEFUL-TRANSPORT-1 | **active** | `SSA-STATEFUL-TRANSPORT-2026-07-26` retired the `#tile.buffer_ref` compatibility reader and generalized the proven Apple ReplaySSM lifecycle schema to target-keyed resident ABIs, adding MoE launch-workspace ownership and optional rank/device topology binding. Apple keeps its session-private ring, flush/rollback, ordered submission, and drain-before-release semantics; the open item is Metal threadgroup scheduling against the generalized schema. APPLE-PIPE-1 already rejects name-based `#tile.buffer_ref` identity, so Apple is aligned with the retirement. |
 | 29 | APPLE-DEVICE-EVENT-1 | **open — scoped to the MPSGraph route** | *Corrected 2026-07-27: the first diagnosis of this row was wrong.* The device timer is **not** broken on the descriptor lane. `tessera_apple_gpu_last_dispatch_device_time_ns()` reads `-1` only because dispatch telemetry is **opt-in and off by default**; after `tessera_apple_gpu_dispatch_telemetry_set_enabled(1)` the MSL softmax route reports a real `device_time_ns` with `timing_source=1` and a full threadgroup/execution-width resource record. The genuine gap is narrower: the **matmul route runs through MPSGraph**, which populates neither the command-buffer device timer nor the MSL dispatch record. Because `required_timing_domains` is report-wide and every family in scope must supply both domains, one family without a device timer forces the whole `apple_gpu` packet onto `kernel_wall`. Closing this means giving the MPSGraph route a device timer (or moving matmul to an MSL/`simdgroup_matrix` route that already has one), then re-recording with `required_timing_domains = ["device_event", "end_to_end"]`. Independent of `CAP_DISPATCH_BOUNDARY_SAMPLING` (bit 4), which this M1 Max does not report — the command-buffer interval needs no counter sampling. |
@@ -1933,3 +1973,25 @@ TMEM, or TCGen05 consumer, so those operations are **not applicable** to Apple
 with that architecture-specific reason. Apple threadgroup allocation and
 pipeline-state threading remain **follow-up required** on its own lowering;
 no NVIDIA resource, runtime, or exact-device claim transfers.
+
+Cross-backend sync `ROCM-TRAINING-MEMORY-FUSION-2026-07-27` adds ROCm-owned
+Adam/AdamW and KL/JS physical backward execution plus a ROCm normalization
+softcap epilogue; no HIP kernel, gfx1151 timing, or selector evidence
+transfers to Metal/MPS. Apple remains follow-up required for its
+architecture-owned training backward materializers. The shared change is the
+target-neutral, serializable dynamic-local-memory expression field on
+`LaunchDescriptor`; Apple has no threadgroup-memory consumer of that field in
+this change and retains its separately owned threadgroup materialization gap.
+
+Cross-backend sync `ROCM-LION-BACKWARD-2026-07-27` adds only the ROCm-owned
+physical consumer of the already-shared Lion stop-sign VJP policy and extends
+the ROCm operation-total benchmark packet. HIP code objects, gfx1151 numerics,
+and WSL timings do not transfer to Metal. Apple remains follow-up required for
+an architecture-owned compiled Lion backward materializer; no Apple
+capability, execution row, selector, or threadgroup-memory contract changes.
+
+Cross-backend sync `CORE-SCHEDULE-1F1B-MATERIALIZE-2026-07-27` emits a shared
+unique-clock warmup/steady/cooldown dependency order after pipeline legality.
+Metal/runtime consumption and collective overlap remain Apple-owned follow-up;
+the structural carrier changes no Apple capability, selector, or exact-device
+claim.

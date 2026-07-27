@@ -24,10 +24,24 @@ REPO = Path(__file__).resolve().parents[2]
 TESSERA_OPT = REPO / "build" / "tools" / "tessera-opt" / "tessera-opt"
 
 
-def _directive(kind="rmsnorm", dtype="f32", *, backward=False):
+def _directive(
+    kind="rmsnorm",
+    dtype="f32",
+    *,
+    backward=False,
+    epilogue=None,
+    epilogue_param=1.0,
+):
     backward_attr = ", backward = true" if backward else ""
+    epilogue_attr = (
+        f', epilogue = "{epilogue}", '
+        f"epilogue_param = {epilogue_param} : f32"
+        if epilogue is not None
+        else ""
+    )
     return ('module {\n  "tessera_rocm.norm"() {name = "nm", '
-            f'kind = "{kind}", dtype = "{dtype}"{backward_attr}}} : () -> ()\n}}\n')
+            f'kind = "{kind}", dtype = "{dtype}"{backward_attr}'
+            f"{epilogue_attr}}} : () -> ()\n}}\n")
 
 
 def _opt(directive, *passes):
@@ -65,6 +79,17 @@ def test_unknown_kind_is_named_error():
     r = _opt(_directive("groupnorm"), "--generate-rocm-norm-kernel")
     assert r.returncode != 0
     assert "kind must be rmsnorm or layer_norm" in r.stderr
+
+
+def test_softcap_epilogue_is_canonical_tanh_and_validated():
+    ir = _gen(_directive(epilogue="softcap", epilogue_param=1.75))
+    assert "math.tanh" in ir
+    result = _opt(
+        _directive(epilogue="softcap", epilogue_param=0.0),
+        "--generate-rocm-norm-kernel",
+    )
+    assert result.returncode != 0
+    assert "finite and positive" in result.stderr
 
 
 @pytest.mark.parametrize("kind", ["rmsnorm", "layer_norm"])

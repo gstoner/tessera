@@ -21,10 +21,10 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 - `ir_adjoint = placeholder` (Python round-trip, not native): **3** (log_softmax, sin, softplus)
 - `ir_adjoint = mixed` (kind-aware native + placeholder): **0**
 - backward IR **oracle-verified on CPU** (interpreted): **23** (add, amax, amin, broadcast, gelu, huber_loss, layer_norm, mae_loss, matmul, max, mean, min, mse_loss, mul, relu, rmsnorm, sgd, sigmoid, silu, smooth_l1_loss, softmax, sum, tanh)
-- backward `target_lowered` on any exact target: **24**
-- backward `runtime_bound` (native) on any target: **24**
-- backward `oracle_proven` (native) on any target: **24**
-- backward `device_verified_jit` on any exact target: **24**
+- backward `target_lowered` on any exact target: **25**
+- backward `runtime_bound` (native) on any target: **25**
+- backward `oracle_proven` (native) on any target: **25**
+- backward `device_verified_jit` on any exact target: **25**
 - backward `device_verified_abi` on any exact target: **11**
 
 > **Headline:** the Python reference/oracle is broad, a handful of ops have a native IR adjoint, several more only *look* differentiable in IR but actually call back into Python. The `matmul`/`tanh`/`sigmoid` backward **IR is oracle-verified on CPU** (Phase 3). **Phase 4 A1–A4 have landed native backward proof, alias/composition identity, and per-target residual policy**. The leaders listed below are derived from the exact-target proof columns; no family or architecture is hard-coded into this headline. Remaining families are Phase 4/5 work.
@@ -42,6 +42,7 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 - `layer_norm` — device_verified_jit: nvidia_sm120; device_verified_abi: rocm_gfx1151,x86_avx512
 - `lightning_attention` — device_verified_jit: nvidia_sm120
 - `linear_attn` — device_verified_jit: nvidia_sm120
+- `lion` — device_verified_jit: rocm_gfx1151
 - `mae_loss` — device_verified_jit: nvidia_sm120,rocm_gfx1151; device_verified_abi: x86_avx512
 - `matmul` — device_verified_jit: cpu_x86_64,rocm_gfx1151
 - `mqa_attention` — device_verified_jit: nvidia_sm120,rocm_gfx1151
@@ -207,7 +208,7 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 | `linear_attn` | attention | yes | none | — | nvidia_sm120 | nvidia_sm120 | nvidia_sm120 | nvidia_sm120 | — | nvidia_sm120=recompute_all | nvidia_sm120=dedicated | python_reference=python-unit-registry; device[nvidia_sm120=cuda13.3+sm120] | native backward executes on nvidia_sm120 (Phase 4) |
 | `linear_attn_state` | attention | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `linear_general` | model_layer | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
-| `lion` | functional_optimizer_step | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
+| `lion` | functional_optimizer_step | yes | none | — | rocm_gfx1151 | rocm_gfx1151 | rocm_gfx1151 | rocm_gfx1151 | — | rocm_gfx1151=none | rocm_gfx1151=dedicated | python_reference=python-unit-registry; device[rocm_gfx1151=LLVM/MLIR 23; ROCm 7.14; gfx1151] | native backward executes on rocm_gfx1151 (Phase 4) |
 | `load_balance_loss` | loss | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `log` | elementwise | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `log1p` | elementwise | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |

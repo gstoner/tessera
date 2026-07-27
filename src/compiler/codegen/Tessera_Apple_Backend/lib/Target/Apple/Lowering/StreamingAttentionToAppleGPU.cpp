@@ -224,38 +224,11 @@ struct StreamingAttentionToAppleGPUPass
       // leave the whole recurrence alive to recompute the LSE, and the program
       // would do the attention twice.
       //
-      // A `tessera_attn.lse.save` whose own result is unused is not such a
-      // consumer, and this pass erases it deliberately.
-      //
-      // That deserves justification, because the op is declared effectful and a
-      // backend erasing another layer's declared effect is exactly the
-      // divergence this work exists to stop. The narrow claim: `lse.save` owns
-      // no memref, symbol, or handle, `lse.load` declares no arguments at all,
-      // and the single emission site discards the result while typing it scalar
-      // f32 rather than the per-row [tile_q] LSE. There is no destination to
-      // write and no identity linking any load back to it, so no observable
-      // behavior depends on it *as currently declared*.
-      //
-      // Marking the op `Pure` was tried and rejected: it removes the op from
-      // every backend's emitted IR (breaking `phase3/flash_attn_full.mlir`,
-      // which asserts its presence) and leaves a trap for whoever implements
-      // the real FlashAttention-2 checkpoint, since a store must be non-Pure.
-      // Erasing it here keeps the shared declaration and every sibling lowering
-      // untouched. See docs/audit/compiler/LSE_CHECKPOINT_CONTRACT.md and the
-      // owning evaluation rows NVIDIA-LSE-1 / ROCM-LSE-1.
-      //
-      // Anything else reading the LSE is a real consumer and still refuses.
-      SmallVector<Operation *> deadSaves;
+      // Any LSE use is now real: lse.save has an explicit destination,
+      // identity, scope, and MemWrite effect. Apple must reject a package that
+      // requests it until the Metal ABI grows a checkpoint output.
       if (consumer) {
-        bool liveLse = false;
-        for (Operation *user : consumer->getResult(1).getUsers()) {
-          if (user->getName().getStringRef() == "tessera_attn.lse.save" &&
-              user->use_empty()) {
-            deadSaves.push_back(user);
-            continue;
-          }
-          liveLse = true;
-        }
+        bool liveLse = !consumer->getResult(1).use_empty();
         if (liveLse) {
           loop->emitOpError(
               "APPLE_STREAMING_ATTN_LSE_UNSUPPORTED: the Apple fused route "
@@ -304,8 +277,6 @@ struct StreamingAttentionToAppleGPUPass
       // The recurrence is now dead: erase it rather than leaving a second,
       // unreachable computation of the same attention in the module. Order
       // matters — the dead saves read the accumulator, so they go first.
-      for (Operation *save : deadSaves)
-        save->erase();
       if (consumer)
         consumer->erase();
       Block *block = loop->getBlock();

@@ -203,6 +203,147 @@ void emitMomentumBackwardBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f,
   b.create<gpu::ReturnOp>(loc);
 }
 
+void emitLionBackwardBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f) {
+  // Lion treats sign(beta1*m + (1-beta1)*g) as stop-gradient.  Consequently
+  // the parameter output contributes only through decoupled weight decay,
+  // while the carried moment output contributes the affine beta2 update.
+  b.setInsertionPointToStart(&f.getBody().front());
+  Value dParamOut = f.getArgument(0), dMomentOut = f.getArgument(1);
+  Value dParam = f.getArgument(2), dGrad = f.getArgument(3);
+  Value dMoment = f.getArgument(4), n = f.getArgument(5);
+  Value lr = f.getArgument(6), beta2 = f.getArgument(7);
+  Value weightDecay = f.getArgument(8);
+  Value bid = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
+  Value tid = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
+  Value block = b.create<arith::ConstantIndexOp>(loc, BD);
+  Value gid = b.create<arith::AddIOp>(
+      loc, b.create<arith::MulIOp>(loc, bid, block), tid);
+  Value inBounds =
+      b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt, gid, n);
+  auto guard = b.create<scf::IfOp>(loc, inBounds, /*withElse=*/false);
+  b.setInsertionPointToStart(guard.thenBlock());
+  Type f32 = b.getF32Type();
+  Value one = b.create<arith::ConstantOp>(
+      loc, f32, b.getF32FloatAttr(1.0f));
+  Value dpOut =
+      b.create<memref::LoadOp>(loc, dParamOut, ValueRange{gid});
+  Value dmOut =
+      b.create<memref::LoadOp>(loc, dMomentOut, ValueRange{gid});
+  Value parameterFactor = b.create<arith::SubFOp>(
+      loc, one, b.create<arith::MulFOp>(loc, lr, weightDecay));
+  Value gradientFactor = b.create<arith::SubFOp>(loc, one, beta2);
+  b.create<memref::StoreOp>(
+      loc, b.create<arith::MulFOp>(loc, parameterFactor, dpOut), dParam,
+      ValueRange{gid});
+  b.create<memref::StoreOp>(
+      loc, b.create<arith::MulFOp>(loc, gradientFactor, dmOut), dGrad,
+      ValueRange{gid});
+  b.create<memref::StoreOp>(
+      loc, b.create<arith::MulFOp>(loc, beta2, dmOut), dMoment,
+      ValueRange{gid});
+  b.setInsertionPointToEnd(&f.getBody().front());
+  b.create<gpu::ReturnOp>(loc);
+}
+
+void emitAdamBackwardBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f,
+                          bool adamw) {
+  b.setInsertionPointToStart(&f.getBody().front());
+  Value grad = f.getArgument(1), moment1 = f.getArgument(2);
+  Value moment2 = f.getArgument(3), dParamOut = f.getArgument(4);
+  Value dMoment1Out = f.getArgument(5), dMoment2Out = f.getArgument(6);
+  Value dParam = f.getArgument(7), dGrad = f.getArgument(8);
+  Value dMoment1 = f.getArgument(9), dMoment2 = f.getArgument(10);
+  Value n = f.getArgument(11), lr = f.getArgument(12);
+  Value beta1 = f.getArgument(13), beta2 = f.getArgument(14);
+  Value eps = f.getArgument(15), weightDecay = f.getArgument(16);
+  Value beta1Correction = f.getArgument(17);
+  Value beta2Correction = f.getArgument(18);
+
+  Value bid = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
+  Value tid = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
+  Value block = b.create<arith::ConstantIndexOp>(loc, BD);
+  Value gid = b.create<arith::AddIOp>(
+      loc, b.create<arith::MulIOp>(loc, bid, block), tid);
+  Value inBounds =
+      b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt, gid, n);
+  auto guard = b.create<scf::IfOp>(loc, inBounds, /*withElse=*/false);
+  b.setInsertionPointToStart(guard.thenBlock());
+
+  Type f32 = b.getF32Type();
+  auto constant = [&](float value) {
+    return b.create<arith::ConstantOp>(loc, f32, b.getF32FloatAttr(value))
+        .getResult();
+  };
+  auto load = [&](Value buffer) {
+    return b.create<memref::LoadOp>(loc, buffer, ValueRange{gid}).getResult();
+  };
+  auto store = [&](Value value, Value buffer) {
+    b.create<memref::StoreOp>(loc, value, buffer, ValueRange{gid});
+  };
+  Value zero = constant(0.0f), one = constant(1.0f);
+  Value g = load(grad), m = load(moment1), v = load(moment2);
+  Value dpOut = load(dParamOut), dmOut = load(dMoment1Out);
+  Value dvOut = load(dMoment2Out);
+  Value oneMinusBeta1 = b.create<arith::SubFOp>(loc, one, beta1);
+  Value oneMinusBeta2 = b.create<arith::SubFOp>(loc, one, beta2);
+  Value mNew = b.create<arith::AddFOp>(
+      loc, b.create<arith::MulFOp>(loc, beta1, m),
+      b.create<arith::MulFOp>(loc, oneMinusBeta1, g));
+  Value vNew = b.create<arith::AddFOp>(
+      loc, b.create<arith::MulFOp>(loc, beta2, v),
+      b.create<arith::MulFOp>(
+          loc, oneMinusBeta2, b.create<arith::MulFOp>(loc, g, g)));
+  Value normalizedV =
+      b.create<arith::DivFOp>(loc, vNew, beta2Correction);
+  Value root = b.create<math::SqrtOp>(loc, normalizedV);
+  Value denom = b.create<arith::AddFOp>(loc, root, eps);
+  Value negativeLr =
+      b.create<arith::SubFOp>(loc, zero, lr);
+  Value dMFromParam = b.create<arith::DivFOp>(
+      loc,
+      b.create<arith::MulFOp>(
+          loc, dpOut,
+          b.create<arith::DivFOp>(loc, negativeLr, beta1Correction)),
+      denom);
+  Value dMNew = b.create<arith::AddFOp>(loc, dmOut, dMFromParam);
+  Value numerator =
+      b.create<arith::DivFOp>(loc, mNew, beta1Correction);
+  Value positive = b.create<arith::CmpFOp>(
+      loc, arith::CmpFPredicate::OGT, normalizedV, zero);
+  Value dRoot = b.create<arith::SelectOp>(
+      loc, positive,
+      b.create<arith::DivFOp>(
+          loc, constant(0.5f),
+          b.create<arith::MulFOp>(loc, beta2Correction, root)),
+      zero);
+  Value denomSquared = b.create<arith::MulFOp>(loc, denom, denom);
+  Value dVFromParam = b.create<arith::MulFOp>(
+      loc, dpOut,
+      b.create<arith::MulFOp>(
+          loc, lr,
+          b.create<arith::DivFOp>(
+              loc, b.create<arith::MulFOp>(loc, numerator, dRoot),
+              denomSquared)));
+  Value dVNew = b.create<arith::AddFOp>(loc, dvOut, dVFromParam);
+  Value paramFactor = one;
+  if (adamw)
+    paramFactor = b.create<arith::SubFOp>(
+        loc, one, b.create<arith::MulFOp>(loc, lr, weightDecay));
+  Value gradFromMoment1 =
+      b.create<arith::MulFOp>(loc, oneMinusBeta1, dMNew);
+  Value gradFromMoment2 = b.create<arith::MulFOp>(
+      loc, constant(2.0f),
+      b.create<arith::MulFOp>(
+          loc, oneMinusBeta2, b.create<arith::MulFOp>(loc, g, dVNew)));
+  store(b.create<arith::MulFOp>(loc, dpOut, paramFactor), dParam);
+  store(b.create<arith::AddFOp>(loc, gradFromMoment1, gradFromMoment2),
+        dGrad);
+  store(b.create<arith::MulFOp>(loc, beta1, dMNew), dMoment1);
+  store(b.create<arith::MulFOp>(loc, beta2, dVNew), dMoment2);
+  b.setInsertionPointToEnd(&f.getBody().front());
+  b.create<gpu::ReturnOp>(loc);
+}
+
 struct GenerateROCMOptimizerKernelPass
     : PassWrapper<GenerateROCMOptimizerKernelPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(GenerateROCMOptimizerKernelPass)
@@ -244,8 +385,24 @@ struct GenerateROCMOptimizerKernelPass
       bool momentumBackward =
           backward && (kindAttr.getValue() == "momentum" ||
                        kindAttr.getValue() == "nesterov");
+      bool adamBackward =
+          backward && (kindAttr.getValue() == "adam" ||
+                       kindAttr.getValue() == "adamw");
+      bool lionBackward = backward && kindAttr.getValue() == "lion";
       auto fnTy = backward
-                      ? (momentumBackward
+                      ? (adamBackward
+                             ? b.getFunctionType(
+                                   {memF32, memF32, memF32, memF32, memF32,
+                                    memF32, memF32, memF32, memF32, memF32,
+                                    memF32, idxTy, f32, f32, f32, f32, f32,
+                                   f32, f32},
+                                   {})
+                             : lionBackward
+                             ? b.getFunctionType(
+                                   {memF32, memF32, memF32, memF32, memF32,
+                                    idxTy, f32, f32, f32},
+                                   {})
+                             : momentumBackward
                              ? b.getFunctionType(
                                    {memF32, memF32, memF32, memF32, memF32,
                                     idxTy, f32, f32},
@@ -263,13 +420,20 @@ struct GenerateROCMOptimizerKernelPass
       gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(), b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
       if (backward) {
-        if (momentumBackward)
+        if (adamBackward)
+          emitAdamBackwardBody(body, loc, gpuFunc,
+                               kindAttr.getValue() == "adamw");
+        else if (lionBackward)
+          emitLionBackwardBody(body, loc, gpuFunc);
+        else if (momentumBackward)
           emitMomentumBackwardBody(body, loc, gpuFunc,
                                    kindAttr.getValue() == "nesterov");
         else if (kindAttr.getValue() == "sgd")
           emitSgdBackwardBody(body, loc, gpuFunc);
         else {
-          op->emitError("optimizer backward supports sgd, momentum, nesterov");
+          op->emitError(
+              "optimizer backward supports sgd, momentum, nesterov, adam, "
+              "adamw, lion");
           return signalPassFailure();
         }
       } else {

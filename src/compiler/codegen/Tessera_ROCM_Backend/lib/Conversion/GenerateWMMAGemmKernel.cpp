@@ -102,8 +102,150 @@ struct WmmaGemmRequest {
   std::string output;
   bool bias = false;
   bool portableABI = false;
+  bool canonicalKLoop = false;
+  bool ssaOwnershipProof = false;
+  bool raggedZeroPad = false;
+  int64_t logicalTileM = 0, logicalTileN = 0, logicalTileK = 0;
+  std::string accumulate;
   tessera::tile::TilePackedFormatAttr storagePack;
 };
+
+static bool isForOp(Operation *op) {
+  return op && op->getName().getStringRef() == "scf.for";
+}
+
+/// Recognize the shared CORE-GEMM-KLOOP semantic contract. This deliberately
+/// validates the loop instead of merely looking for the inner marker: the K
+/// loop must carry real pipeline state, the contraction must slice two values
+/// defined outside the nest, and the outer result must be the function result.
+/// ROCm then re-forms the semantic loop into its existing problem-size-generic
+/// WMMA schedule; it does not build a second GEMM implementation.
+static FailureOr<WmmaGemmRequest>
+matchCanonicalGemmLoop(Operation *matmul) {
+  StringRef opName = matmul->getName().getStringRef();
+  bool sharedMatmul = opName == "tessera.matmul";
+  bool loweredTileMma = opName == "tile.mma";
+  if (!matmul->hasAttr("tessera.canonical_k_step") ||
+      (!sharedMatmul && !loweredTileMma) || matmul->getNumResults() != 1 ||
+      (sharedMatmul && matmul->getNumOperands() != 2) ||
+      (loweredTileMma && matmul->getNumOperands() < 3))
+    return failure();
+
+  Operation *kLoop = matmul->getParentOp();
+  Operation *nLoop = kLoop ? kLoop->getParentOp() : nullptr;
+  Operation *mLoop = nLoop ? nLoop->getParentOp() : nullptr;
+  if (!isForOp(kLoop) || !isForOp(nLoop) || !isForOp(mLoop))
+    return failure();
+  if (!llvm::any_of(kLoop->getResultTypes(), [](Type type) {
+        return llvm::isa<tessera::tile::PipelineStateType>(type);
+      }) ||
+      mLoop->getNumResults() != 1)
+    return failure();
+
+  bool hasAsyncToken = false;
+  bool hasBuffer = false;
+  bool hasPipelineState = false;
+  for (Value operand : matmul->getOperands()) {
+    hasAsyncToken |=
+        llvm::isa<tessera::tile::AsyncTokenType>(operand.getType());
+    hasBuffer |= llvm::isa<tessera::tile::BufferType>(operand.getType());
+    hasPipelineState |=
+        llvm::isa<tessera::tile::PipelineStateType>(operand.getType());
+  }
+  if (loweredTileMma &&
+      (!hasAsyncToken || !hasBuffer || !hasPipelineState))
+    return failure();
+
+  SmallVector<Value, 2> sources;
+  for (Value operand : matmul->getOperands().take_front(2)) {
+    if (loweredTileMma) {
+      Operation *copy = operand.getDefiningOp();
+      if (!copy || copy->getName().getStringRef() != "tile.async_copy" ||
+          copy->getNumOperands() == 0 ||
+          !llvm::any_of(copy->getOperands(), [](Value value) {
+            return llvm::isa<tessera::tile::BufferType>(value.getType());
+          }) ||
+          !llvm::any_of(copy->getOperands(), [](Value value) {
+            return llvm::isa<tessera::tile::PipelineStateType>(
+                value.getType());
+          }) ||
+          !llvm::any_of(copy->getResults(), [](Value value) {
+            return llvm::isa<tessera::tile::AsyncTokenType>(value.getType());
+          }))
+        return failure();
+      operand = copy->getOperand(0);
+    }
+    Operation *slice = operand.getDefiningOp();
+    if (!slice || slice->getName().getStringRef() != "tensor.extract_slice")
+      return failure();
+    Value source = slice->getOperand(0);
+    Operation *sourceDef = source.getDefiningOp();
+    if (sourceDef && mLoop->isProperAncestor(sourceDef))
+      return failure();
+    sources.push_back(source);
+  }
+
+  auto parent = matmul->getParentOfType<func::FuncOp>();
+  if (!parent || parent.getNumArguments() != 2 ||
+      parent.getFunctionType().getNumResults() != 1)
+    return failure();
+  Operation *terminator = parent.getBody().front().getTerminator();
+  if (!terminator || terminator->getNumOperands() != 1)
+    return failure();
+  Value returned = terminator->getOperand(0);
+  if (Operation *slice = returned.getDefiningOp();
+      slice && slice->getName().getStringRef() == "tensor.extract_slice")
+    returned = slice->getOperand(0);
+  if (returned != mLoop->getResult(0))
+    return failure();
+
+  auto aType = llvm::dyn_cast<RankedTensorType>(sources[0].getType());
+  auto bType = llvm::dyn_cast<RankedTensorType>(sources[1].getType());
+  auto resultType = llvm::dyn_cast<RankedTensorType>(mLoop->getResult(0).getType());
+  if (!aType || !bType || !resultType || aType.getRank() != 2 ||
+      bType.getRank() != 2 || resultType.getRank() != 2 ||
+      !aType.hasStaticShape() || !bType.hasStaticShape() ||
+      !resultType.hasStaticShape() ||
+      aType.getElementType() != bType.getElementType())
+    return failure();
+
+  WmmaGemmRequest request;
+  request.anchor = matmul;
+  request.eraseOwner = parent;
+  request.name = parent.getSymName().str();
+  request.portableABI = true;
+  request.canonicalKLoop = true;
+  request.ssaOwnershipProof = loweredTileMma;
+  request.raggedZeroPad = matmul->hasAttr("tessera.ragged_zero_pad");
+  auto tileM = matmul->getAttrOfType<IntegerAttr>("tessera.tile_m");
+  auto tileN = matmul->getAttrOfType<IntegerAttr>("tessera.tile_n");
+  auto tileK = matmul->getAttrOfType<IntegerAttr>("tessera.tile_k");
+  if (!tileM || !tileN || !tileK || tileM.getInt() <= 0 ||
+      tileN.getInt() <= 0 || tileK.getInt() <= 0 ||
+      !request.raggedZeroPad)
+    return failure();
+  request.logicalTileM = tileM.getInt();
+  request.logicalTileN = tileN.getInt();
+  request.logicalTileK = tileK.getInt();
+  Type storage = aType.getElementType();
+  Type accum = resultType.getElementType();
+  if (storage.isF16() && accum.isF32()) {
+    request.dtype = "f16";
+    request.output = "f32";
+    request.accumulate = "f32";
+  } else if (storage.isBF16() && accum.isF32()) {
+    request.dtype = "bf16";
+    request.output = "f32";
+    request.accumulate = "f32";
+  } else if (storage.isInteger(8) && accum.isInteger(32)) {
+    request.dtype = "int8";
+    request.output = "i32";
+    request.accumulate = "i32";
+  } else {
+    return failure();
+  }
+  return request;
+}
 
 // Emit the problem-size-generic, register-blocked (mt x nt) WMMA GEMM body into
 // `gpuFunc` (args: A, B, D : memref<?>, M, N, K : index), for the dtype in `T`.
@@ -484,6 +626,176 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   b.create<gpu::ReturnOp>(loc);
 }
 
+// Materialize the canonical K loop as a one-wave LDS-staged schedule. The
+// shared Tile loop has already proven allocation, completion, and phase
+// ownership before it reaches this re-former; this body is the AMD physical
+// answer: cooperative global loads, address-space-3 storage, s_barrier on both
+// sides of the WMMA consumer, ragged zero fill, and a loop-carried accumulator.
+//
+// The measured gfx1151 incumbent remains the register schedule. Keeping this
+// strategy explicit lets benchmarks compare it without silently promoting an
+// LDS schedule that is slower on unified-memory Strix Halo.
+void emitCanonicalLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
+                          const WmmaTypes &T, Type outputType) {
+  MLIRContext *ctx = b.getContext();
+  auto ws = gpu::AddressSpaceAttr::get(ctx, gpu::AddressSpace::Workgroup);
+  auto ldsTy =
+      MemRefType::get({256}, T.store, MemRefLayoutAttrInterface(), ws);
+  Value ldsA = gpuFunc.addWorkgroupAttribution(ldsTy, loc);
+  Value ldsB = gpuFunc.addWorkgroupAttribution(ldsTy, loc);
+
+  b.setInsertionPointToStart(&gpuFunc.getBody().front());
+  Value A = gpuFunc.getArgument(0);
+  Value B = gpuFunc.getArgument(1);
+  Value D = gpuFunc.getArgument(2);
+  Value M = gpuFunc.getArgument(3);
+  Value N = gpuFunc.getArgument(4);
+  Value K = gpuFunc.getArgument(5);
+  auto ci = [&](int64_t value) {
+    return b.create<arith::ConstantIndexOp>(loc, value);
+  };
+  Value c0 = ci(0), c4 = ci(4), c15 = ci(15), c16 = ci(16);
+  Value c32 = ci(32), c256 = ci(256);
+  Value tx = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
+  Value lane = b.create<arith::AndIOp>(loc, tx, c15);
+  Value lhi = b.create<arith::ShRUIOp>(loc, tx, c4);
+  Value baseRow = b.create<arith::MulIOp>(
+      loc, b.create<gpu::BlockIdOp>(loc, gpu::Dimension::y), c16);
+  Value baseCol = b.create<arith::MulIOp>(
+      loc, b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x), c16);
+
+  Value scalarZero;
+  Value fragmentZero;
+  Value accumulatorZero;
+  if (T.isInt) {
+    scalarZero = b.create<arith::ConstantOp>(
+        loc, T.store, b.getIntegerAttr(T.store, 0));
+    fragmentZero = b.create<arith::ConstantOp>(
+        loc, T.load,
+        DenseElementsAttr::get(cast<ShapedType>(T.load), APInt(8, 0)));
+    accumulatorZero = b.create<arith::ConstantOp>(
+        loc, T.acc,
+        DenseElementsAttr::get(cast<ShapedType>(T.acc), APInt(32, 0)));
+  } else {
+    scalarZero =
+        b.create<arith::ConstantOp>(loc, T.store, b.getFloatAttr(T.store, 0.0));
+    APFloat zero =
+        cast<FloatAttr>(b.getFloatAttr(T.store, 0.0)).getValue();
+    fragmentZero = b.create<arith::ConstantOp>(
+        loc, T.load,
+        DenseElementsAttr::get(cast<ShapedType>(T.load), zero));
+    accumulatorZero = b.create<arith::ConstantOp>(
+        loc, T.acc,
+        DenseElementsAttr::get(cast<ShapedType>(T.acc), APFloat(0.0f)));
+  }
+
+  auto loadSafe = [&](OpBuilder &ib, Value memref, Value logical,
+                      Value inBounds) {
+    Value safe = ib.create<arith::SelectOp>(loc, inBounds, logical, c0);
+    Value loaded = ib.create<memref::LoadOp>(loc, memref, ValueRange{safe});
+    return Value(
+        ib.create<arith::SelectOp>(loc, inBounds, loaded, scalarZero));
+  };
+
+  auto kLoop = b.create<scf::ForOp>(
+      loc, c0, K, c16, ValueRange{accumulatorZero},
+      [&](OpBuilder &kb, Location kloc, Value k0, ValueRange iter) {
+        auto copyA = kb.create<scf::ForOp>(kloc, tx, c256, c32);
+        {
+          OpBuilder::InsertionGuard guard(kb);
+          kb.setInsertionPointToStart(copyA.getBody());
+          Value e = copyA.getInductionVar();
+          Value row = kb.create<arith::DivUIOp>(kloc, e, c16);
+          Value kk = kb.create<arith::RemUIOp>(kloc, e, c16);
+          Value gr = kb.create<arith::AddIOp>(kloc, baseRow, row);
+          Value gk = kb.create<arith::AddIOp>(kloc, k0, kk);
+          Value rowIn = kb.create<arith::CmpIOp>(
+              kloc, arith::CmpIPredicate::slt, gr, M);
+          Value kIn = kb.create<arith::CmpIOp>(
+              kloc, arith::CmpIPredicate::slt, gk, K);
+          Value in = kb.create<arith::AndIOp>(kloc, rowIn, kIn);
+          Value logical = kb.create<arith::AddIOp>(
+              kloc, kb.create<arith::MulIOp>(kloc, gr, K), gk);
+          kb.create<memref::StoreOp>(kloc, loadSafe(kb, A, logical, in), ldsA,
+                                    ValueRange{e});
+        }
+        auto copyB = kb.create<scf::ForOp>(kloc, tx, c256, c32);
+        {
+          OpBuilder::InsertionGuard guard(kb);
+          kb.setInsertionPointToStart(copyB.getBody());
+          Value e = copyB.getInductionVar();
+          Value kk = kb.create<arith::DivUIOp>(kloc, e, c16);
+          Value col = kb.create<arith::RemUIOp>(kloc, e, c16);
+          Value gk = kb.create<arith::AddIOp>(kloc, k0, kk);
+          Value gc = kb.create<arith::AddIOp>(kloc, baseCol, col);
+          Value kIn = kb.create<arith::CmpIOp>(
+              kloc, arith::CmpIPredicate::slt, gk, K);
+          Value colIn = kb.create<arith::CmpIOp>(
+              kloc, arith::CmpIPredicate::slt, gc, N);
+          Value in = kb.create<arith::AndIOp>(kloc, kIn, colIn);
+          Value logical = kb.create<arith::AddIOp>(
+              kloc, kb.create<arith::MulIOp>(kloc, gk, N), gc);
+          kb.create<memref::StoreOp>(kloc, loadSafe(kb, B, logical, in), ldsB,
+                                    ValueRange{e});
+        }
+        kb.create<gpu::BarrierOp>(kloc);
+
+        Value aBase = kb.create<arith::MulIOp>(kloc, lane, c16);
+        Value aFragment =
+            kb.create<vector::LoadOp>(kloc, T.load, ldsA, ValueRange{aBase});
+        Value bFragment = fragmentZero;
+        for (int64_t i = 0; i < 16; ++i) {
+          Value index = kb.create<arith::AddIOp>(
+              kloc,
+              kb.create<arith::MulIOp>(
+                  kloc, kb.create<arith::ConstantIndexOp>(kloc, i), c16),
+              lane);
+          Value element =
+              kb.create<memref::LoadOp>(kloc, ldsB, ValueRange{index});
+          bFragment = kb.create<vector::InsertOp>(
+              kloc, element, bFragment, ArrayRef<int64_t>{i});
+        }
+        Value aOperand = aFragment;
+        Value bOperand = bFragment;
+        if (T.pack == 1) {
+          aOperand = kb.create<vector::BitCastOp>(kloc, T.frag, aFragment);
+          bOperand = kb.create<vector::BitCastOp>(kloc, T.frag, bFragment);
+        }
+        OperationState wmma(kloc, "tessera_rocm.wmma");
+        wmma.addOperands({aOperand, bOperand, iter.front()});
+        wmma.addTypes(T.acc);
+        Value next = kb.create(wmma)->getResult(0);
+        kb.create<gpu::BarrierOp>(kloc);
+        kb.create<scf::YieldOp>(kloc, next);
+      });
+
+  Value acc = kLoop.getResult(0);
+  for (int64_t e = 0; e < 8; ++e) {
+    Value row = b.create<arith::AddIOp>(
+        loc, baseRow,
+        b.create<arith::AddIOp>(loc, ci(2 * e), lhi));
+    Value col = b.create<arith::AddIOp>(loc, baseCol, lane);
+    Value rowIn =
+        b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt, row, M);
+    Value colIn =
+        b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt, col, N);
+    auto storeIf = b.create<scf::IfOp>(
+        loc, b.create<arith::AndIOp>(loc, rowIn, colIn),
+        /*withElseRegion=*/false);
+    OpBuilder::InsertionGuard guard(b);
+    b.setInsertionPointToStart(storeIf.thenBlock());
+    Value value =
+        b.create<vector::ExtractOp>(loc, acc, ArrayRef<int64_t>{e});
+    if (value.getType() != outputType)
+      value = b.create<arith::TruncFOp>(loc, outputType, value);
+    Value index = b.create<arith::AddIOp>(
+        loc, b.create<arith::MulIOp>(loc, row, N), col);
+    b.create<memref::StoreOp>(loc, value, D, ValueRange{index});
+  }
+  b.setInsertionPointToEnd(&gpuFunc.getBody().front());
+  b.create<gpu::ReturnOp>(loc);
+}
+
 struct GenerateWMMAGemmKernelPass
     : PassWrapper<GenerateWMMAGemmKernelPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(GenerateWMMAGemmKernelPass)
@@ -509,6 +821,11 @@ struct GenerateWMMAGemmKernelPass
                        llvm::cl::desc("emit tile.mma (route through the wave/LDS "
                                       "pipeline) instead of tessera_rocm.wmma"),
                        llvm::cl::init(false)};
+  Option<std::string> canonicalStaging{
+      *this, "canonical-staging",
+      llvm::cl::desc("physical schedule for a canonical M/N/K loop: "
+                     "register (gfx1151 incumbent) or lds (comparison lane)"),
+      llvm::cl::init("register")};
 
   void getDependentDialects(DialectRegistry &registry) const final {
     registry.insert<gpu::GPUDialect, scf::SCFDialect, vector::VectorDialect,
@@ -520,8 +837,38 @@ struct GenerateWMMAGemmKernelPass
 
   void runOnOperation() override {
     ModuleOp module = getOperation();
+    if (canonicalStaging != "register" && canonicalStaging != "lds") {
+      getOperation()->emitError(
+          "generate-wmma-gemm-kernel: canonical-staging must be register or "
+          "lds");
+      return signalPassFailure();
+    }
 
     SmallVector<WmmaGemmRequest> requests;
+
+    // Direct shared-contract adapter. Prefer the Tile form after the shared
+    // async seam and ROCm ownership planner have materialized !tile.buffer,
+    // !tile.async_token, and !tile.pipeline_state edges. The pre-Tile form is
+    // retained for narrow structural compatibility tests.
+    SmallVector<Operation *> canonicalSteps;
+    module.walk([&](Operation *op) {
+      StringRef name = op->getName().getStringRef();
+      if ((name == "tessera.matmul" || name == "tile.mma") &&
+          op->hasAttr("tessera.canonical_k_step"))
+        canonicalSteps.push_back(op);
+    });
+    for (Operation *step : canonicalSteps) {
+      FailureOr<WmmaGemmRequest> request = matchCanonicalGemmLoop(step);
+      if (failed(request)) {
+        step->emitError(
+            "ROCm canonical GEMM requires the verified three-level M/N/K "
+            "scf.for contract with loop-carried pipeline state, external "
+            "rank-2 slices, ragged zero-fill, and f16/bf16->f32 or i8->i32 "
+            "accumulation");
+        return signalPassFailure();
+      }
+      requests.push_back(std::move(*request));
+    }
 
     // Portable launch-level adapter. It validates the target-neutral contract
     // and directly populates the in-memory request consumed by the production
@@ -812,11 +1159,47 @@ struct GenerateWMMAGemmKernelPass
                                  "schedule_vgpr_estimate", "schedule_source"})
         if (Attribute attr = op->getAttr(attrName))
           gpuFunc->setAttr((Twine("tessera.rocm.") + attrName).str(), attr);
+      if (request.canonicalKLoop) {
+        gpuFunc->setAttr("tessera.rocm.source",
+                         b.getStringAttr("canonical_mnk_scf_for"));
+        gpuFunc->setAttr("tessera.rocm.canonical_k_loop",
+                         b.getBoolAttr(true));
+        gpuFunc->setAttr("tessera.rocm.ssa_ownership_proof",
+                         b.getBoolAttr(request.ssaOwnershipProof));
+        gpuFunc->setAttr("tessera.rocm.ragged_zero_pad",
+                         b.getBoolAttr(request.raggedZeroPad));
+        gpuFunc->setAttr("tessera.rocm.accumulate",
+                         b.getStringAttr(request.accumulate));
+        gpuFunc->setAttr("tessera.rocm.tile_m",
+                         b.getI64IntegerAttr(request.logicalTileM));
+        gpuFunc->setAttr("tessera.rocm.tile_n",
+                         b.getI64IntegerAttr(request.logicalTileN));
+        gpuFunc->setAttr("tessera.rocm.tile_k",
+                         b.getI64IntegerAttr(request.logicalTileK));
+        gpuFunc->setAttr("tessera.rocm.physical_staging",
+                         b.getStringAttr(canonicalStaging));
+      }
 
       OpBuilder bodyB(gpuFunc.getContext());
-      emitGeneralBody(bodyB, loc, gpuFunc, mt, nt, T, outputTy,
-                      portableContract, viaTile, hasBias, activation,
-                      packDesc && dt == "int4");
+      if (request.canonicalKLoop && canonicalStaging == "lds") {
+        if (hasBias || activation != "none" || T.pack == 2 || mt != 1 ||
+            nt != 1) {
+          op->emitError("generate-wmma-gemm-kernel: canonical LDS comparison "
+                        "supports one-wave f16/bf16/int8 GEMM without a fused "
+                        "epilogue");
+          return signalPassFailure();
+        }
+        gpuFunc->setAttr("tessera.rocm.lds_bytes",
+                         b.getI64IntegerAttr(
+                             512 * T.store.getIntOrFloatBitWidth() / 8));
+        gpuFunc->setAttr("tessera.rocm.pipeline_stages",
+                         b.getI64IntegerAttr(1));
+        emitCanonicalLdsBody(bodyB, loc, gpuFunc, T, outputTy);
+      } else {
+        emitGeneralBody(bodyB, loc, gpuFunc, mt, nt, T, outputTy,
+                        portableContract, viaTile, hasBias, activation,
+                        packDesc && dt == "int4");
+      }
 
       if (!llvm::is_contained(generatedOwners, request.eraseOwner))
         generatedOwners.push_back(request.eraseOwner);

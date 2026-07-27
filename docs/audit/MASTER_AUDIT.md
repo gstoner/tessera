@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-22
+last_updated: 2026-07-27
 audit_role: root
 ---
 
@@ -85,7 +85,7 @@ benchmark, or ABI work.
 | Runtime execution | Checked-in executable rows are explicit and drift-gated | Add rows only after a real launch path exists | [`generated/runtime_execution_matrix.md`](generated/runtime_execution_matrix.md) |
 | Verifiers | All 174 registered operations now have real verifier coverage; no trivial stubs or uncovered rows remain | Keep new operation constraints declarative where possible and preserve the totality drift gate | [`generated/verifier_coverage.md`](generated/verifier_coverage.md) |
 | Test evidence | No `needs_direct_test` debt | Convert high-value structural-only evidence to direct or differential proof | [`generated/test_coverage.md`](generated/test_coverage.md) |
-| Apple | Curated CPU/GPU conformance closed; Apple GPU proof is provenance-gated | Performance, precision, and the small target-map tail | [`backend/apple/APPLE_AUDIT.md`](backend/apple/APPLE_AUDIT.md) |
+| Apple | Curated CPU/GPU conformance closed; Apple GPU proof is provenance-gated; the shared Tile GEMM/attention/allocation contracts now have Apple consumers | Performance and precision; the small target-map tail; the attention-backward and stateful-transport contract wave (Apple rows 24-28); and the missing Apple E2E-SPINE-3 fleet packet, which is evidence work on the existing M1 Max rather than a hardware gate | [`backend/apple/APPLE_AUDIT.md`](backend/apple/APPLE_AUDIT.md) |
 | ROCm | Curated conformance closed on the exact gfx1151 RDNA lane | Prioritize gfx950 MI350-series, gfx1201 Radeon AI PRO R9700, and gfx1250 MI455X exact-target proof; retain gfx942 as compatibility | [`generated/rocm_target_map.md`](generated/rocm_target_map.md) |
 | NVIDIA | The runtime matrix records 24 live `sm_120` rows; sealed softmax/reduction packets are release-ready while other SMs remain compile-only or deferred | Promote remaining `sm_120` families and other exact architectures only through matching compile/link/launch/numerical proof | [`backend/nvidia/NVIDIA_AUDIT.md`](backend/nvidia/NVIDIA_AUDIT.md) |
 | Distributed | Single-device and mock-collective development paths exist | Real multi-rank NCCL/RCCL or equivalent execution | [`backend/BACKEND_AUDIT.md`](backend/BACKEND_AUDIT.md) |

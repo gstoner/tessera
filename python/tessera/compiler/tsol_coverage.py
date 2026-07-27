@@ -7,15 +7,16 @@ the canonical names and categories; the normative catalog embedded in
 coverage dashboard are projections of this inventory.
 
 The primitive coverage registry at ``primitive_coverage.py`` tracks
-432 entries × 12 contract axes for *every* Tessera primitive — TSOL
-canonical names plus the long tail of internal / family-variant
-primitives that aren't in the spec.
+every Tessera primitive across 12 contract axes — TSOL canonical names
+plus the long tail of internal / family-variant primitives that aren't
+in the spec.  Its size is deliberately not quoted here: counts belong in
+the generated dashboards, which derive them (Decision #26).
 
 This module is the **TSOL filter**: it takes the full coverage
 registry, narrows to the canonical TSOL names, and emits a focused
 dashboard at ``docs/audit/generated/tsol_coverage.md`` so a reader
 can answer "how complete is the TSOL surface today?" without
-wading through the full 432-entry registry.
+wading through the full registry.
 
 Drift gates at ``tests/unit/test_tsol_coverage.py``:
 
@@ -235,10 +236,17 @@ def coverage_summary() -> dict[str, dict[str, int]]:
         "vjp", "jvp",
         "sharding_rule", "backend_kernel", "lowering_rule",
     )
+    from .primitive_coverage import all_primitive_coverages
+
     out: dict[str, dict[str, int]] = {a: {} for a in axes}
     out["__totals__"] = {
         "rows": len(rows),
         "has_registry_entry": sum(1 for r in rows if r.has_registry_entry),
+        # Derived, never quoted: the dashboard renders this rather than
+        # carrying a literal that no drift gate can catch (Decision #26).
+        # The gate compares the dashboard against this renderer, so a constant
+        # hardcoded here would be self-consistent and still wrong.
+        "primitive_registry_rows": len(all_primitive_coverages()),
     }
     for row in rows:
         for axis in axes:
@@ -294,11 +302,10 @@ def render_dashboard() -> str:
     lines.append(
         "Generated from `python/tessera/compiler/tsol_coverage.py`.  "
         "Don't edit by hand — regenerate via "
-        "`python -c \"from tessera.compiler.tsol_coverage import "
-        "render_dashboard; "
-        "open('docs/audit/generated/tsol_coverage.md', 'w').write("
-        "render_dashboard())\"`.  Drift gated by "
-        "`tests/unit/test_tsol_coverage.py`."
+        "`python -m tessera.compiler.generated_docs --write tsol_coverage`, "
+        "which writes this file *and* its CSV companion.  Drift gated by "
+        "`tests/unit/test_tsol_coverage.py` and "
+        "`scripts/check_generated_docs.sh`."
     )
     lines.append("")
     lines.append(
@@ -310,6 +317,7 @@ def render_dashboard() -> str:
 
     # ── Headline summary ───────────────────────────────────────────────
     totals = summary["__totals__"]
+    registry_size = totals["primitive_registry_rows"]
     lines.append("## Headline")
     lines.append("")
     lines.append(
@@ -331,8 +339,8 @@ def render_dashboard() -> str:
     lines.append("## Per-axis status counts (TSOL slice only)")
     lines.append("")
     lines.append(
-        "Counts below are restricted to the TSOL canonical names.  "
-        "The full 432-primitive registry is summarised in "
+        f"Counts below are restricted to the {totals['rows']} TSOL canonical "
+        f"names.  The full {registry_size}-primitive registry is summarised in "
         "`docs/audit/standalone_primitive_coverage.md`."
     )
     lines.append("")
@@ -445,14 +453,20 @@ def render_dashboard() -> str:
     # ── Honest baseline about backend_kernel ──────────────────────────
     lines.append("## Backend kernel honest baseline")
     lines.append("")
+    complete_backends = summary["backend_kernel"].get("complete", 0)
+    claim = (
+        "**zero**" if complete_backends == 0
+        else f"**{complete_backends}**"
+    )
     lines.append(
-        "Per the registry's gating rule "
-        "(`primitive_coverage.py` line 351-352), `backend_kernel = "
-        "complete` requires every declared target to ship a real "
-        "hardware kernel with numerical proof.  Today **zero** TSOL "
-        "entries can claim that all-target aggregate.  Per-target "
-        "native proof is reported separately and may exist even while "
-        "this aggregate remains incomplete.  See "
+        "Per the registry's `backend_kernel` gating rule (see the "
+        "\"backend_kernel stays partial until each backend ships a real\" "
+        "note in `primitive_coverage.py`), `backend_kernel = complete` "
+        "requires every declared target to ship a real hardware kernel with "
+        f"numerical proof.  Today {claim} of the {totals['rows']} TSOL "
+        "entries can claim that all-target aggregate.  Per-target native "
+        "proof is reported separately and may exist even while this "
+        "aggregate remains incomplete.  See "
         "`docs/audit/backend/BACKEND_AUDIT.md` and its target maps for "
         "the exact-target evidence and remaining punch list."
     )
@@ -466,7 +480,7 @@ def write_dashboard(path: Path | None = None) -> Path:
     canonical location at ``docs/audit/generated/tsol_coverage.md``."""
     target = path or _DASHBOARD_PATH
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(render_dashboard())
+    target.write_text(render_dashboard(), encoding="utf-8")
     return target
 
 

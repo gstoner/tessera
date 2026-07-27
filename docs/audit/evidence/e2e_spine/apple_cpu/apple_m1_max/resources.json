@@ -24,6 +24,14 @@
         ]
       ],
       "image_digest": "0aae8b08ea933140c621e537f1231cc665b432aeeac74909bae2235937b743df",
+      "placement": {
+        "fixture": {
+          "lane": "apple_cpu_accelerate"
+        },
+        "timing": {
+          "lane": "apple_cpu_accelerate"
+        }
+      },
       "resource_fingerprint": "db37a8c1f68cbf0c1cc47e42a41dcd0da0c96e259071eda011da6b8654f09cd1",
       "route": "apple_cpu_accelerate_gemm_f32",
       "timing_shape": [

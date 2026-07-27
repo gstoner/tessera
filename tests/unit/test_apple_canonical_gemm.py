@@ -54,7 +54,7 @@ def _lower(
     toolchain: CompilerToolchain, module: str
 ) -> subprocess.CompletedProcess[str]:
     """Tile through the *shared* canonical contract, then let Apple claim it."""
-    tessera_opt = toolchain.require_tessera_opt()
+    tessera_opt = toolchain.require_tessera_opt("tessera-tiling", "tessera-apple-canonical-gemm")
     return subprocess.run(
         [str(tessera_opt), "-", "--tessera-tiling",
          "--tessera-apple-canonical-gemm", "--allow-unregistered-dialect"],
@@ -124,7 +124,7 @@ def test_ordinary_loop_nest_is_not_misclaimed(
     A user-written loop containing a matmul carries no `canonical_k_step`
     marker and no staged pipeline state, so it must pass through untouched.
     """
-    tessera_opt = compiler_toolchain.require_tessera_opt()
+    tessera_opt = compiler_toolchain.require_tessera_opt("tessera-apple-canonical-gemm")
     module = """module {
   func.func @loop(%a: tensor<16x16xf16>, %b: tensor<16x16xf16>,
                   %init: tensor<16x16xf32>) -> tensor<16x16xf32> {
@@ -224,7 +224,7 @@ def _attn_module(sq: int, sk: int, d: int, storage: str, causal: str) -> str:
 def _lower_attn(
     toolchain: CompilerToolchain, module: str
 ) -> subprocess.CompletedProcess[str]:
-    tessera_opt = toolchain.require_tessera_opt()
+    tessera_opt = toolchain.require_tessera_opt("tessera-tile-ir-lowering", "tessera-apple-streaming-attention")
     return subprocess.run(
         [str(tessera_opt), "-", "--allow-unregistered-dialect",
          "--tessera-tile-ir-lowering=tile-q=64 tile-kv=64 sm=90",

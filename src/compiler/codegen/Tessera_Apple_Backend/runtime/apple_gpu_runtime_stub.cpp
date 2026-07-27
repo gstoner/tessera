@@ -816,6 +816,17 @@ extern "C" void tessera_apple_gpu_softmax_f32(const float* X, float* Out,
   reference_softmax_f32(X, Out, M, K);
 }
 
+// Status twin. There is no Metal on this platform, so the honest answer is
+// always 0: the result is correct, and it was computed on the host. A caller
+// recording placement evidence (E2E-SPINE-3 packets, benchmark rows) must see
+// 0 here and refuse to seal the run as GPU execution.
+extern "C" int32_t tessera_apple_gpu_softmax_f32_status(const float* X,
+                                                        float* Out, int32_t M,
+                                                        int32_t K) {
+  reference_softmax_f32(X, Out, M, K);
+  return 0;
+}
+
 extern "C" void tessera_apple_gpu_gelu_f32(const float* X, float* Out,
                                            int32_t N) {
   reference_gelu_f32(X, Out, N);
@@ -2620,6 +2631,17 @@ extern "C" void tessera_apple_gpu_bmm_f32(const float* A, const float* B,
         o[static_cast<std::size_t>(m) * N + n] = s;
       }
   }
+}
+
+// Status twin — see `tessera_apple_gpu_softmax_f32_status` above. Always 0 on
+// a platform with no Metal.
+extern "C" int32_t tessera_apple_gpu_bmm_f32_status(const float* A,
+                                                    const float* B, float* O,
+                                                    int32_t batch, int32_t M,
+                                                    int32_t N, int32_t K,
+                                                    int32_t b_broadcast) {
+  tessera_apple_gpu_bmm_f32(A, B, O, batch, M, N, K, b_broadcast);
+  return 0;
 }
 
 // Thrust #3a — fused ragged grouped-GEMM (non-Darwin reference parity).

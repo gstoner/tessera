@@ -228,6 +228,14 @@ def _host_identity() -> tuple[str, str]:
 
 
 def _require_apple_silicon_host(lane: Lane) -> tuple[str, str]:
+    """Refuse to record unless this host *is* the lane's exact identity.
+
+    Both lanes are exact-host identities, but they are pinned by different
+    facts: `apple_cpu`/`apple_m1_max` by the CPU brand, `apple_gpu`/`apple7` by
+    the live Metal GPU family. Checking only the CPU would let an M3/M4 host
+    (Apple8/Apple9) seal a packet labelled `apple7`, because every Apple Silicon
+    Mac passes the arm64/Darwin test.
+    """
     if platform.system() != "Darwin" or platform.machine() != "arm64":
         raise RuntimeError(
             f"{lane.target} packets must be recorded on an Apple Silicon macOS host; "
@@ -238,7 +246,129 @@ def _require_apple_silicon_host(lane: Lane) -> tuple[str, str]:
         raise RuntimeError(
             f"apple_cpu/apple_m1_max is an exact-host identity; this host reports {brand!r}"
         )
+    if lane.target == "apple_gpu":
+        from tessera.compiler.apple_route_selector import live_apple_device_tag
+
+        tag = live_apple_device_tag()
+        if tag != lane.architecture:
+            raise RuntimeError(
+                f"{lane.target}/{lane.architecture} is an exact-device identity, but the "
+                f"live Metal GPU family probes as {tag!r}. Exact-device evidence never "
+                f"transfers across GPU families — record this packet on an "
+                f"{lane.architecture} host."
+            )
     return model, brand
+
+
+def _prove_gpu_placement(plan: FamilyPlan, bindings: dict) -> dict[str, Any]:
+    """Prove the op actually ran on Metal, not on the CPU reference.
+
+    Both `tessera_apple_gpu_softmax_f32` and `tessera_apple_gpu_bmm_f32` are
+    `void` ABIs that fall through to a numerically-identical CPU reference when
+    Metal is unavailable or a pipeline/allocation/command fails. `rt.launch`
+    still returns ok, the oracle still matches, and the capability probe still
+    succeeds — so *nothing* in the numerical proof distinguishes GPU execution
+    from host execution. Sealing that as Level-C GPU evidence would be false.
+
+    The status-bearing twins return 1 only on a real dispatch. The BMM case is
+    the one that forces this design: it runs through MPSGraph, which leaves the
+    MSL dispatch telemetry empty, so an absent threadgroup record cannot be read
+    as "did not run on the GPU".
+    """
+    from tessera import runtime as rt
+
+    runtime = rt._load_apple_gpu_runtime()
+    symbol = ("tessera_apple_gpu_softmax_f32_status" if plan.op_name == "tessera.softmax"
+              else "tessera_apple_gpu_bmm_f32_status")
+    probe = getattr(runtime, symbol, None)
+    if probe is None:
+        raise RuntimeError(
+            f"the loaded Apple GPU runtime exports no {symbol}; rebuild "
+            "TesseraAppleRuntime — placement cannot be proven through the void "
+            "ABI, and an unproven fixture must not be sealed"
+        )
+    # Dispatch telemetry is opt-in and off by default; without it the MSL
+    # resource record stays empty even on a real dispatch.
+    enable = getattr(runtime, "tessera_apple_gpu_dispatch_telemetry_set_enabled", None)
+    clear = getattr(runtime, "tessera_apple_gpu_dispatch_telemetry_clear", None)
+    if enable is not None:
+        enable(ctypes.c_int32(1))
+    if clear is not None:
+        clear()
+    pointer = ctypes.POINTER(ctypes.c_float)
+    probe.restype = ctypes.c_int32
+
+    def flat(name: str, rank: int) -> np.ndarray:
+        """C-contiguous f32 view of one binding, with its rank checked.
+
+        These pointers go straight into a C ABI. A non-contiguous or
+        wrong-rank array would be read as if it were neither, silently
+        producing garbage or reading out of bounds — so both are enforced
+        rather than assumed.
+        """
+        array = np.ascontiguousarray(bindings[name], dtype=np.float32)
+        if array.ndim != rank:
+            raise RuntimeError(
+                f"{plan.family}: placement probe expected a rank-{rank} "
+                f"{name!r}, got rank {array.ndim}"
+            )
+        return array
+
+    # Results go to a scratch buffer: the fixture's own output was already
+    # produced and checked by the descriptor launch above, and must not be
+    # overwritten by this probe.
+    if plan.op_name == "tessera.softmax":
+        x = flat("x", 2)
+        out = np.zeros_like(x)
+        probe.argtypes = [pointer, pointer, ctypes.c_int32, ctypes.c_int32]
+        status = probe(x.ctypes.data_as(pointer), out.ctypes.data_as(pointer),
+                       ctypes.c_int32(x.shape[0]), ctypes.c_int32(x.shape[1]))
+    elif plan.batched:
+        a, b = flat("a", 3), flat("b", 3)
+        batch, m, k = a.shape
+        n = b.shape[2]
+        out = np.zeros((batch, m, n), dtype=np.float32)
+        probe.argtypes = [pointer, pointer, pointer] + [ctypes.c_int32] * 5
+        status = probe(a.ctypes.data_as(pointer), b.ctypes.data_as(pointer),
+                       out.ctypes.data_as(pointer), ctypes.c_int32(batch),
+                       ctypes.c_int32(m), ctypes.c_int32(n), ctypes.c_int32(k),
+                       ctypes.c_int32(0))
+    else:
+        # Refuse rather than fall into the batched branch: a new family
+        # reaching here would be called through the wrong ABI signature.
+        raise RuntimeError(
+            f"no GPU placement probe is defined for {plan.family} "
+            f"({plan.op_name}); add its status-bearing ABI before recording it"
+        )
+    if int(status) != 1:
+        raise RuntimeError(
+            f"{plan.family}: {symbol} reported CPU-reference execution "
+            f"(status={status}). Metal is unavailable or the dispatch failed on "
+            "this host; the numerical result would still match the oracle, which "
+            "is exactly why this packet refuses to seal it as GPU evidence."
+        )
+    # Read the MSL dispatch record if this route populates it. MPSGraph routes
+    # legitimately do not — absence here is not evidence of host execution, so
+    # it is reported as such rather than treated as a failure.
+    record = getattr(runtime, "tessera_apple_gpu_last_dispatch_resource_record", None)
+    dispatch: dict[str, Any] = {"msl_dispatch_record": False}
+    if record is not None:
+        tpg = [ctypes.c_int32() for _ in range(3)]
+        width, threads = ctypes.c_int32(), ctypes.c_int32()
+        memory = ctypes.c_int64()
+        record.restype = ctypes.c_int32
+        record.argtypes = [ctypes.POINTER(ctypes.c_int32)] * 5 + [
+            ctypes.POINTER(ctypes.c_int64)]
+        if int(record(*(ctypes.byref(v) for v in (*tpg, width, threads)),
+                      ctypes.byref(memory))) == 1:
+            dispatch = {
+                "msl_dispatch_record": True,
+                "threadgroups": [v.value for v in tpg],
+                "execution_width": width.value,
+                "max_threads_per_threadgroup": threads.value,
+                "static_threadgroup_memory_bytes": memory.value,
+            }
+    return {"status_symbol": symbol, "gpu_placement_proven": True, **dispatch}
 
 
 def _native_submit(package: Any, bindings: dict) -> Callable[[], object]:
@@ -264,11 +394,25 @@ def _native_submit(package: Any, bindings: dict) -> Callable[[], object]:
     )
 
 
-def _gpu_resource_evidence(source_sha256: str) -> dict[str, Any]:
-    """Metal-native resource evidence, with absent fields carrying their reason."""
+def _gpu_resource_evidence() -> dict[str, Any]:
+    """Metal-native resource evidence, with absent fields carrying their reason.
+
+    `source_fingerprint` must be the *kernel source* hash, not the toolchain
+    digest: the two answer different questions, and only the former lets a
+    reader tell which revision of `apple_gpu_runtime.mm` produced the MSL that
+    ran. Reuses the route selector's helper so both surfaces agree.
+    """
     from tessera.compiler.apple_counter_evidence import (
         apple_autotune_evidence, probe_apple_profiling_capabilities,
     )
+    from tessera.compiler.apple_route_selector import _runtime_source_fingerprint
+
+    source_sha256 = _runtime_source_fingerprint()
+    if source_sha256 == "unavailable":
+        raise RuntimeError(
+            "cannot read apple_gpu_runtime.mm to fingerprint the kernel source; "
+            "a sealed packet must record which runtime source produced its MSL"
+        )
 
     capabilities = probe_apple_profiling_capabilities()
     if capabilities is None:
@@ -293,10 +437,14 @@ def _gpu_resource_evidence(source_sha256: str) -> dict[str, Any]:
         "evidence": evidence,
         "device_event_available": False,
         "device_event_reason": (
-            "the value-descriptor C ABI lane does not feed "
-            "tessera_apple_gpu_last_dispatch_device_time_ns (it reads -1 and the "
-            "timing source reads 0 after a descriptor launch); only the "
-            "tile/dispatch lane populates it"
+            "the Metal command-buffer device timer works for MSL-dispatched ops "
+            "once tessera_apple_gpu_dispatch_telemetry_set_enabled(1) is set "
+            "(softmax reports a real device_time_ns and timing_source=1), but the "
+            "matmul route runs through MPSGraph, which populates neither the "
+            "device timer nor the MSL dispatch record. required_timing_domains is "
+            "report-wide and every family must supply both domains, so this packet "
+            "uses kernel_wall. Closing APPLE-DEVICE-EVENT-1 means giving the "
+            "MPSGraph route a device timer, not fixing the descriptor lane."
         ),
     }
 
@@ -369,6 +517,13 @@ def record(
             output.reshape(oracle.shape), oracle,
             rtol=float(tolerance["rtol"]), atol=float(tolerance["atol"]),
         )
+        # Matching the oracle proves the math, not the placement. On the GPU
+        # lane, prove separately that Metal ran it — at both the fixture shape
+        # and the (much larger) timing shape, since a dispatch can succeed at
+        # one and fail at the other.
+        placement: dict[str, Any] = {"lane": "apple_cpu_accelerate"}
+        if lane.target == "apple_gpu":
+            placement = _prove_gpu_placement(plan, bindings)
 
         timing_package = package_native(
             _module_for(plan, plan.timing_shape), pipeline_name=lane.pipeline,
@@ -380,6 +535,9 @@ def record(
             launch_descriptor=timing_package.descriptor,
             tile_ir=timing_package.tile_ir, target_ir=timing_package.target_ir,
         )
+        timing_placement: dict[str, Any] = dict(placement)
+        if lane.target == "apple_gpu":
+            timing_placement = _prove_gpu_placement(plan, timing_bindings)
         submit = _native_submit(timing_package, timing_bindings)
         run_medians = {
             "kernel_wall": _two_run_medians_ns(
@@ -433,6 +591,7 @@ def record(
             "fixture_operand_shapes": [list(s) for s in operand_shapes]
             if isinstance(operand_shapes[0], tuple) else [list(operand_shapes)],
             "timing_shape": list(plan.timing_shape),
+            "placement": {"fixture": placement, "timing": timing_placement},
         })
 
     toolchain = hashlib.sha256("\n".join(sorted(toolchains)).encode()).hexdigest()
@@ -463,7 +622,7 @@ def record(
         "rows": resource_rows,
     }
     if lane.target == "apple_gpu":
-        resources["metal"] = _gpu_resource_evidence(toolchain)
+        resources["metal"] = _gpu_resource_evidence()
     else:
         resources["metal"] = {
             "applicable": False,

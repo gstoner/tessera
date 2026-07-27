@@ -24,6 +24,9 @@ from tessera.compiler.e2e_fleet import (
 )
 
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
 def _digest(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
@@ -309,3 +312,73 @@ def test_apple_packets_only_claim_families_their_registration_declares() -> None
         assert not undeclared, (
             f"{identity[0]} packet claims undeclared families: "
             f"{', '.join(sorted(undeclared))}")
+
+
+def test_apple_gpu_packet_proves_metal_placement_not_just_numerics() -> None:
+    """A matching oracle does not prove *where* the work ran.
+
+    `tessera_apple_gpu_softmax_f32` and `tessera_apple_gpu_bmm_f32` are void
+    ABIs that fall through to a numerically-identical CPU reference. Every
+    numerical check in the packet would still pass on that path, so the packet
+    must carry separate positive placement evidence from the status-bearing
+    twins — at the fixture shape *and* at the larger timing shape.
+    """
+    packets = discover_packets()
+    packet_dir, _ = packets[("apple_gpu", "apple7")]
+    resources = json.loads(
+        (packet_dir / "resources.json").read_text(encoding="utf-8"))
+    rows = resources["rows"]
+    assert rows, "apple_gpu packet records no resource rows"
+    for row in rows:
+        placement = row["placement"]
+        for shape in ("fixture", "timing"):
+            assert placement[shape]["gpu_placement_proven"] is True, (
+                f"{row['family']} has no proven Metal placement at the {shape} "
+                "shape; it may have run on the CPU reference")
+            assert placement[shape]["status_symbol"].endswith("_status"), (
+                "placement must come from a status-bearing ABI, not the void one")
+    # The MSL dispatch record is route-dependent: the MSL softmax populates it,
+    # the MPSGraph matmul does not. Absence is reported, never inferred as CPU.
+    by_family = {row["family"]: row["placement"]["timing"] for row in rows}
+    assert by_family["softmax"]["msl_dispatch_record"] is True
+    assert by_family["softmax"]["execution_width"] > 0
+    assert by_family["matmul"]["msl_dispatch_record"] is False
+
+
+def test_apple_gpu_packet_fingerprints_kernel_source_not_the_toolchain() -> None:
+    """`source_fingerprint` must identify the runtime source that produced the MSL.
+
+    Recording the aggregate toolchain digest here would make the field useless
+    for telling which revision of `apple_gpu_runtime.mm` ran.
+    """
+    packets = discover_packets()
+    packet_dir, _ = packets[("apple_gpu", "apple7")]
+    resources = json.loads(
+        (packet_dir / "resources.json").read_text(encoding="utf-8"))
+    report = json.loads((packet_dir / "report.json").read_text(encoding="utf-8"))
+    fingerprint = resources["metal"]["evidence"]["source_fingerprint"]["value"]
+    assert fingerprint.startswith("sha256:")
+    assert fingerprint != f"sha256:{report['toolchain_fingerprint']}"
+    assert fingerprint.removeprefix("sha256:") != report["toolchain_fingerprint"]
+
+    runtime_source = (
+        REPO_ROOT
+        / "src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm"
+    )
+    expected = hashlib.sha256(runtime_source.read_bytes()).hexdigest()
+    assert fingerprint == f"sha256:{expected}", (
+        "the sealed source fingerprint no longer matches apple_gpu_runtime.mm; "
+        "re-record the packet after changing the runtime source")
+
+
+def test_status_bearing_abis_exist_for_every_sealed_apple_gpu_route() -> None:
+    """The void ABIs cannot prove placement, so their status twins must exist."""
+    runtime_source = (
+        REPO_ROOT
+        / "src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm"
+    ).read_text(encoding="utf-8", errors="replace")
+    for symbol in ("tessera_apple_gpu_softmax_f32_status",
+                   "tessera_apple_gpu_bmm_f32_status"):
+        assert f'extern "C" int32_t {symbol}(' in runtime_source, (
+            f"{symbol} was removed; the apple_gpu packet cannot prove Metal "
+            "placement without it")

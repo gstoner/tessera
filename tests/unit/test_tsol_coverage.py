@@ -14,6 +14,8 @@ Pins:
 
 from __future__ import annotations
 
+import re
+
 from pathlib import Path
 
 import pytest
@@ -213,3 +215,80 @@ def test_dashboard_pins_canonical_phrases() -> None:
         assert phrase in text, (
             f"TSOL dashboard missing canonical phrase {phrase!r}"
         )
+
+
+# ── Structural gates ──────────────────────────────────────────────────────
+#
+# The dashboard drift gate compares the generated file against
+# `render_dashboard()`. That makes it blind by construction to any *constant*
+# baked into the renderer: both sides carry the same wrong literal and agree.
+# Three stale claims survived that way (a 432-entry registry that had grown to
+# 482, a `primitive_coverage.py line 351-352` reference pointing at an
+# unrelated table, and a hardcoded "zero"). These gates cover the class.
+
+
+def test_dashboard_quotes_no_hardcoded_registry_size() -> None:
+    """Any registry-size claim must be derived, so it cannot go stale.
+
+    Catches the reintroduction of a literal like "the full 432-primitive
+    registry" — self-consistent with the renderer, and wrong.
+    """
+    from tessera.compiler.primitive_coverage import all_primitive_coverages
+
+    live = len(all_primitive_coverages())
+    text = DASHBOARD.read_text(encoding="utf-8")
+    assert f"{live}-primitive registry" in text, (
+        "the dashboard no longer reports the live registry size; it must be "
+        "derived from all_primitive_coverages(), never written as a literal")
+    for stale in re.findall(r"(\d+)-primitive registry", text):
+        assert int(stale) == live, (
+            f"dashboard claims a {stale}-primitive registry but the live "
+            f"registry has {live}; render this from the registry, not a literal")
+
+
+def test_dashboard_cites_no_source_line_numbers() -> None:
+    """Line-number citations rot on the next edit above them."""
+    text = DASHBOARD.read_text(encoding="utf-8")
+    offenders = re.findall(r"`?[\w/]+\.py`?\s+line[s]?\s+[\d-]+", text)
+    assert not offenders, (
+        f"dashboard cites source line numbers {offenders}; name the rule, "
+        "function, or constant instead — line numbers go stale silently")
+
+
+def test_backend_kernel_aggregate_claim_is_derived_not_asserted() -> None:
+    """The "zero complete" sentence must track the registry.
+
+    It is true today, which is exactly why it is dangerous: a literal stays
+    "zero" on the day the first entry legitimately completes.
+    """
+    summary = coverage_summary()
+    complete = summary["backend_kernel"].get("complete", 0)
+    text = DASHBOARD.read_text(encoding="utf-8")
+    expected = "**zero**" if complete == 0 else f"**{complete}**"
+    assert f"Today {expected} of the" in text, (
+        f"dashboard's backend_kernel aggregate disagrees with the registry "
+        f"({complete} complete); it must be rendered from coverage_summary()")
+
+
+def test_regeneration_instruction_names_the_owning_generator() -> None:
+    """Following the dashboard's own instructions must not leave the CSV stale.
+
+    `generated_docs` owns both the .md and the .csv, so a `python -c` snippet
+    that writes only the .md leaves `check_generated_docs.sh` failing with no
+    hint about why.
+    """
+    text = DASHBOARD.read_text(encoding="utf-8")
+    assert "python -m tessera.compiler.generated_docs --write tsol_coverage" in text
+    assert "python -c" not in text, (
+        "the dashboard tells readers to regenerate with a python -c one-liner; "
+        "that writes only the Markdown and leaves the CSV stale")
+
+
+def test_dashboard_writer_pins_utf8() -> None:
+    """The dashboard contains ✅ / ◐ / ◯; the platform locale must not decide."""
+    source = (
+        REPO_ROOT / "python/tessera/compiler/tsol_coverage.py"
+    ).read_text(encoding="utf-8")
+    assert 'target.write_text(render_dashboard(), encoding="utf-8")' in source, (
+        "write_dashboard must pass encoding='utf-8' explicitly — the rendered "
+        "glyphs are non-ASCII and would raise under a non-UTF-8 locale")

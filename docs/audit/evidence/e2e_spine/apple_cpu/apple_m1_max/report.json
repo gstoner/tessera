@@ -4,13 +4,13 @@
     {
       "discard_first": true,
       "family": "matmul",
-      "median_ns": 198053.33000000002,
+      "median_ns": 198287.09,
       "repetitions": 750,
       "resource_fingerprint": "db37a8c1f68cbf0c1cc47e42a41dcd0da0c96e259071eda011da6b8654f09cd1",
       "route": "apple_cpu_accelerate_gemm_f32",
       "run_medians_ns": [
-        200571.66,
-        195535.0
+        196058.34,
+        200515.84
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -21,13 +21,13 @@
     {
       "discard_first": true,
       "family": "matmul",
-      "median_ns": 245492.51,
+      "median_ns": 244865.83000000002,
       "repetitions": 750,
       "resource_fingerprint": "db37a8c1f68cbf0c1cc47e42a41dcd0da0c96e259071eda011da6b8654f09cd1",
       "route": "apple_cpu_accelerate_gemm_f32",
       "run_medians_ns": [
-        245971.68,
-        245013.34
+        245336.66,
+        244395.0
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -87,7 +87,7 @@
   "scope": [
     "matmul"
   ],
-  "source_commit": "41cac7d038742614d5d0f37c5c01b0042cade246",
+  "source_commit": "88911c75e58835452a3641269b18f8a1bcc661a8",
   "target": "apple_cpu",
   "toolchain_fingerprint": "14a34b7c9a6da835d08ff270365e3a08eaaa00cf1aaa4b5ca0a0512ee36d686e"
 }

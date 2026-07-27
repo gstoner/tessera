@@ -7571,6 +7571,22 @@ extern "C" void tessera_apple_gpu_softmax_f32(const float* X, float* Out,
   reference_softmax_f32(X, Out, M, K);
 }
 
+// Status-bearing twin of the void ABI above, following the TILE-1 pattern at
+// `tessera_apple_gpu_mps_matmul_f16_status`. The void ABI cannot distinguish a
+// Metal dispatch from the CPU reference, so a caller recording *placement*
+// evidence (an E2E-SPINE-3 release packet, a benchmark row) must use this one:
+// a fallback returns 0 and can therefore never be sealed as GPU execution.
+// Numerics are identical either way — that is exactly why the numerical oracle
+// alone cannot prove where the work ran.
+extern "C" int32_t tessera_apple_gpu_softmax_f32_status(const float* X,
+                                                        float* Out, int32_t M,
+                                                        int32_t K) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_softmax_msl(ctx, X, Out, M, K)) return 1;
+  reference_softmax_f32(X, Out, M, K);
+  return 0;
+}
+
 //===---------------------------------------------------------------------===//
 // Phase 8.4.4.1 — fp16 + bf16 softmax variants.
 // fp16: native MSL `half` kernel; per-row reduction in `float` for numerical
@@ -22359,6 +22375,25 @@ extern "C" void tessera_apple_gpu_bmm_f32(const float *A, const float *B,
                              MPSDataTypeFloat32, 4))
     return;
   reference_bmm_f32(A, B, O, batch, M, N, K, b_broadcast);
+}
+
+// Status-bearing twin of the void BMM ABI, same contract as
+// `tessera_apple_gpu_softmax_f32_status`. This one matters more: the BMM runs
+// through MPSGraph, which does not populate the MSL dispatch telemetry
+// (`tessera_apple_gpu_last_dispatch_resource_record`), so an absent threadgroup
+// record is ambiguous between "MPSGraph ran it on the GPU" and "the CPU
+// reference ran it". This return value is the only way to tell them apart.
+extern "C" int32_t tessera_apple_gpu_bmm_f32_status(const float *A,
+                                                    const float *B, float *O,
+                                                    int32_t batch, int32_t M,
+                                                    int32_t N, int32_t K,
+                                                    int32_t b_broadcast) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_bmm(ctx, A, B, O, batch, M, N, K, b_broadcast != 0,
+                             MPSDataTypeFloat32, 4))
+    return 1;
+  reference_bmm_f32(A, B, O, batch, M, N, K, b_broadcast);
+  return 0;
 }
 
 //===---------------------------------------------------------------------===//

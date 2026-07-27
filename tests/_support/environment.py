@@ -5,6 +5,9 @@ from __future__ import annotations
 import os
 import platform
 import shutil
+import re
+import subprocess
+from functools import lru_cache
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
@@ -97,12 +100,61 @@ class CompilerToolchain:
             ),
         )
 
-    def require_tessera_opt(self) -> Path:
+    def require_tessera_opt(self, *passes: str) -> Path:
+        """Return tessera-opt, skipping unless it registers every named pass.
+
+        `tessera-opt` is a *variable* binary: which passes it registers depends
+        on how it was configured, and a repo commonly has more than one build
+        directory. Without this check a test that needs an Apple pass will pick
+        up whichever binary is found first — a lean artifact driver, or simply
+        a stale build predating the pass — and fail with
+        `Unknown command line argument '--tessera-...'`, which reads like a
+        broken test rather than a build-selection problem.
+
+        Pass the pass names (without the leading `--`) that the test drives.
+        """
         if self.tessera_opt is None:
             pytest.skip(
                 "compiler-tool test requires tessera-opt; build it or set TESSERA_OPT"
             )
+        missing = [name for name in passes
+                   if name not in self._registered_passes(self.tessera_opt)]
+        if missing:
+            pytest.skip(
+                f"{self.tessera_opt} does not register {', '.join(missing)} "
+                f"(build profile: {self._build_profile(self.tessera_opt)}). "
+                "Point TESSERA_OPT at a build configured with the owning "
+                "backend, or rebuild this one."
+            )
         return self.tessera_opt
+
+    @staticmethod
+    @lru_cache(maxsize=8)
+    def _registered_passes(tool: Path) -> frozenset[str]:
+        """Pass names this binary registers, read once per tool path."""
+        try:
+            help_text = subprocess.run(
+                [str(tool), "--help"], capture_output=True, text=True,
+                check=False, timeout=60,
+            ).stdout
+        except (OSError, subprocess.SubprocessError):
+            return frozenset()
+        return frozenset(re.findall(r"--([A-Za-z0-9][\w-]*)", help_text))
+
+    @staticmethod
+    @lru_cache(maxsize=8)
+    def _build_profile(tool: Path) -> str:
+        """`--tessera-build-info` summary, or a note that the build predates it."""
+        try:
+            result = subprocess.run(
+                [str(tool), "--tessera-build-info"], capture_output=True,
+                text=True, check=False, timeout=60,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return "unknown"
+        if result.returncode != 0 or not result.stdout.strip():
+            return "unknown (binary predates --tessera-build-info)"
+        return " ".join(result.stdout.split())
 
     def require_mlir_opt(self) -> Path:
         if self.mlir_opt is None:

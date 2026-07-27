@@ -3,16 +3,16 @@
   "files": {
     "report.json": {
       "bytes": 2716,
-      "sha256": "634efeda31690a64540cc7be404281eb33a1921c3e06a956e285a3df034bb853"
+      "sha256": "5fdb6458a290e0a36c9f8d9c327abdfcba08af31dc712b73b07bb9852913fb7e"
     },
     "resources.json": {
-      "bytes": 1189,
-      "sha256": "6e41c5817a1f8a05f2abc20a72e3cb1248f470e51dbab00b2f30935a0dd121dd"
+      "bytes": 1363,
+      "sha256": "aa24583215271c2acebd5aeadbe8806c4d6a5e97e09fb52f95390f3a20784a1b"
     }
   },
   "schema": "tessera.e2e-release-packet.v1",
   "target": "apple_cpu",
-  "tested_commit": "41cac7d038742614d5d0f37c5c01b0042cade246",
+  "tested_commit": "88911c75e58835452a3641269b18f8a1bcc661a8",
   "validation": {
     "architecture": "apple_m1_max",
     "benchmark_rows": 2,
@@ -21,7 +21,7 @@
     "fixtures": 1,
     "level_c_fixtures": 1,
     "maximum_absolute_error": 0.0,
-    "source_commit": "41cac7d038742614d5d0f37c5c01b0042cade246",
+    "source_commit": "88911c75e58835452a3641269b18f8a1bcc661a8",
     "target": "apple_cpu"
   }
 }

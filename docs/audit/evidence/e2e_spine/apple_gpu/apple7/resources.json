@@ -8,7 +8,7 @@
   "metal": {
     "capability_matrix": 99,
     "device_event_available": false,
-    "device_event_reason": "the value-descriptor C ABI lane does not feed tessera_apple_gpu_last_dispatch_device_time_ns (it reads -1 and the timing source reads 0 after a descriptor launch); only the tile/dispatch lane populates it",
+    "device_event_reason": "the Metal command-buffer device timer works for MSL-dispatched ops once tessera_apple_gpu_dispatch_telemetry_set_enabled(1) is set (softmax reports a real device_time_ns and timing_source=1), but the matmul route runs through MPSGraph, which populates neither the device timer nor the MSL dispatch record. required_timing_domains is report-wide and every family must supply both domains, so this packet uses kernel_wall. Closing APPLE-DEVICE-EVENT-1 means giving the MPSGraph route a device timer, not fixing the descriptor lane.",
     "evidence": {
       "achieved_occupancy": {
         "state": "no_public_api",
@@ -48,7 +48,7 @@
       },
       "source_fingerprint": {
         "state": "measured",
-        "value": "32541529ce7c7896990515097b0d42a8ba973b78594068ab8cddda3271de7ba0"
+        "value": "sha256:bb0b55f0de4c96a7af8a0a0d7410f17150469c199788b5d723dd406d18cbb352"
       },
       "spill_count": {
         "state": "no_public_api",
@@ -76,8 +76,20 @@
           2
         ]
       ],
-      "image_digest": "dda074b930022425041a44f405f78dd2c4d161b0fd893b2c045214e0a8adc0b7",
-      "resource_fingerprint": "1611f69b8429ea725f240a8fdcf7cbaab1a97194b583ddb28bb6c6ed7bb0bf3d",
+      "image_digest": "713794441fb189a449fe8f5de0e7ef7dbe8960b21de757f7a7a05b3b499c34a7",
+      "placement": {
+        "fixture": {
+          "gpu_placement_proven": true,
+          "msl_dispatch_record": false,
+          "status_symbol": "tessera_apple_gpu_bmm_f32_status"
+        },
+        "timing": {
+          "gpu_placement_proven": true,
+          "msl_dispatch_record": false,
+          "status_symbol": "tessera_apple_gpu_bmm_f32_status"
+        }
+      },
+      "resource_fingerprint": "83578c48a39670c0537cbf0a3b0a17dc088070094a50bdfea18e63b9020a3437",
       "route": "apple_gpu_bmm_f32_batch1",
       "timing_shape": [
         1,
@@ -95,8 +107,36 @@
           2
         ]
       ],
-      "image_digest": "4082a6df1c24399838905dfc5d595be29d63bc4defdb83594e7d76c09d991c75",
-      "resource_fingerprint": "acf47aa2675863ce92188120f027d704aa6eb29aa7d312588509af20bf07ed34",
+      "image_digest": "ea533d82893bf18b7eefd6a66c8db62f3d749abdcbcd0355062a3f3642398b03",
+      "placement": {
+        "fixture": {
+          "execution_width": 32,
+          "gpu_placement_proven": true,
+          "max_threads_per_threadgroup": 1024,
+          "msl_dispatch_record": true,
+          "static_threadgroup_memory_bytes": 0,
+          "status_symbol": "tessera_apple_gpu_softmax_f32_status",
+          "threadgroups": [
+            2,
+            1,
+            1
+          ]
+        },
+        "timing": {
+          "execution_width": 32,
+          "gpu_placement_proven": true,
+          "max_threads_per_threadgroup": 1024,
+          "msl_dispatch_record": true,
+          "static_threadgroup_memory_bytes": 0,
+          "status_symbol": "tessera_apple_gpu_softmax_f32_status",
+          "threadgroups": [
+            64,
+            1,
+            1
+          ]
+        }
+      },
+      "resource_fingerprint": "755b9c8eb0c089fb8ca3b442037f17f313e94f244b8329c707fd764c23e4456f",
       "route": "apple_gpu_msl_softmax_f32",
       "timing_shape": [
         64,

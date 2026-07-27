@@ -1,0 +1,41 @@
+{
+  "device": {
+    "cpu_brand": "Apple M1 Max",
+    "model": "MacBookPro18,2",
+    "os": "26.5.2"
+  },
+  "lane": "apple_cpu",
+  "metal": {
+    "applicable": false,
+    "reason": "apple_cpu executes through Accelerate on the CPU; the Metal profiling capability matrix describes the GPU lane and does not apply here"
+  },
+  "rows": [
+    {
+      "entry": "tessera_apple_cpu_gemm_f32",
+      "family": "matmul",
+      "fixture_operand_shapes": [
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          2
+        ]
+      ],
+      "image_digest": "0aae8b08ea933140c621e537f1231cc665b432aeeac74909bae2235937b743df",
+      "resource_fingerprint": "db37a8c1f68cbf0c1cc47e42a41dcd0da0c96e259071eda011da6b8654f09cd1",
+      "route": "apple_cpu_accelerate_gemm_f32",
+      "timing_shape": [
+        256,
+        256,
+        256
+      ]
+    }
+  ],
+  "schema": "tessera.e2e-apple-resource-record.v1",
+  "timing_domains": {
+    "end_to_end": "tessera.runtime.launch, including all of the above",
+    "kernel_wall": "descriptor-consuming native submit; argument splitting, contract validation, launcher resolution, and result packaging are hoisted out of the timed region"
+  }
+}

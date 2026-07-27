@@ -1,0 +1,93 @@
+{
+  "architecture": "apple_m1_max",
+  "benchmarks": [
+    {
+      "discard_first": true,
+      "family": "matmul",
+      "median_ns": 198053.33000000002,
+      "repetitions": 750,
+      "resource_fingerprint": "db37a8c1f68cbf0c1cc47e42a41dcd0da0c96e259071eda011da6b8654f09cd1",
+      "route": "apple_cpu_accelerate_gemm_f32",
+      "run_medians_ns": [
+        200571.66,
+        195535.0
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "kernel_wall",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "matmul",
+      "median_ns": 245492.51,
+      "repetitions": 750,
+      "resource_fingerprint": "db37a8c1f68cbf0c1cc47e42a41dcd0da0c96e259071eda011da6b8654f09cd1",
+      "route": "apple_cpu_accelerate_gemm_f32",
+      "run_medians_ns": [
+        245971.68,
+        245013.34
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "end_to_end",
+      "warmups": 1
+    }
+  ],
+  "cache_proofs": [
+    {
+      "cold": {
+        "cache_key": "e33c24b3016db791684769bd37541fde122522ae1cf0624ea23307640dcf6091",
+        "compile_state": "prepackaged",
+        "descriptor_digest": "e762ac1360430f3b4191d4d1d8c8daa7a97fa8febf41bccdfd1509b7c1e4855f",
+        "image_digest": "0aae8b08ea933140c621e537f1231cc665b432aeeac74909bae2235937b743df"
+      },
+      "fixture_id": "matmul-f32-2x3x2-v1",
+      "warm": {
+        "cache_key": "e33c24b3016db791684769bd37541fde122522ae1cf0624ea23307640dcf6091",
+        "compile_state": "prepackaged",
+        "descriptor_digest": "e762ac1360430f3b4191d4d1d8c8daa7a97fa8febf41bccdfd1509b7c1e4855f",
+        "image_digest": "0aae8b08ea933140c621e537f1231cc665b432aeeac74909bae2235937b743df"
+      }
+    }
+  ],
+  "device": {
+    "exact": true,
+    "identity": "Gregorys-MacBook-Pro.local | MacBookPro18,2 | Apple M1 Max"
+  },
+  "fixtures": [
+    {
+      "actual": [
+        [
+          5.5,
+          -11.0
+        ],
+        [
+          7.0,
+          7.5
+        ]
+      ],
+      "descriptor_digest": "e762ac1360430f3b4191d4d1d8c8daa7a97fa8febf41bccdfd1509b7c1e4855f",
+      "fixture_id": "matmul-f32-2x3x2-v1",
+      "image_digest": "0aae8b08ea933140c621e537f1231cc665b432aeeac74909bae2235937b743df",
+      "levels": {
+        "a": "proven",
+        "b": "proven",
+        "c": "proven"
+      }
+    }
+  ],
+  "required_timing_domains": [
+    "kernel_wall",
+    "end_to_end"
+  ],
+  "schema": "tessera.e2e-backend-report.v1",
+  "scope": [
+    "matmul"
+  ],
+  "source_commit": "41cac7d038742614d5d0f37c5c01b0042cade246",
+  "target": "apple_cpu",
+  "toolchain_fingerprint": "14a34b7c9a6da835d08ff270365e3a08eaaa00cf1aaa4b5ca0a0512ee36d686e"
+}

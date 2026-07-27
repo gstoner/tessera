@@ -1,0 +1,27 @@
+{
+  "architecture": "apple_m1_max",
+  "files": {
+    "report.json": {
+      "bytes": 2716,
+      "sha256": "634efeda31690a64540cc7be404281eb33a1921c3e06a956e285a3df034bb853"
+    },
+    "resources.json": {
+      "bytes": 1189,
+      "sha256": "6e41c5817a1f8a05f2abc20a72e3cb1248f470e51dbab00b2f30935a0dd121dd"
+    }
+  },
+  "schema": "tessera.e2e-release-packet.v1",
+  "target": "apple_cpu",
+  "tested_commit": "41cac7d038742614d5d0f37c5c01b0042cade246",
+  "validation": {
+    "architecture": "apple_m1_max",
+    "benchmark_rows": 2,
+    "cache_proofs": 1,
+    "families": 1,
+    "fixtures": 1,
+    "level_c_fixtures": 1,
+    "maximum_absolute_error": 0.0,
+    "source_commit": "41cac7d038742614d5d0f37c5c01b0042cade246",
+    "target": "apple_cpu"
+  }
+}

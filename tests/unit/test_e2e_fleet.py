@@ -9,10 +9,12 @@ import pytest
 
 from tessera.compiler.e2e_fleet import (
     FIXTURE_SCHEMA,
+    FLEET_REGISTRATIONS,
     MANIFEST_SCHEMA,
     REPORT_SCHEMA,
     FleetEvidenceError,
     compare_backend_reports,
+    discover_packets,
     fleet_dashboard_rows,
     load_fixture_corpus,
     render_fleet_csv,
@@ -244,3 +246,66 @@ def test_dashboard_keeps_missing_packets_and_hardware_terminals_explicit(
     csv_text = render_fleet_csv(rows)
     assert csv_text.startswith("schema,target,architecture,backend,family,state")
     assert "tessera.e2e-release-packet.v1,nvidia_sm90,sm_90a" in csv_text
+
+
+def test_every_checked_in_packet_still_validates_without_its_device() -> None:
+    """A sealed packet is portable evidence: no device, no rebuild, no network.
+
+    This is the property that makes fleet truth reviewable off-host. It runs
+    on any machine, including one with no Apple, NVIDIA, or AMD hardware — the
+    seal is over bytes, not over the ability to re-execute them.
+    """
+    packets = discover_packets()
+    assert packets, "no sealed fleet packets are checked in"
+    for (target, architecture), (packet_dir, summary) in packets.items():
+        assert summary["target"] == target
+        assert summary["architecture"] == architecture
+        # An oracle-matching packet is the point; a packet that merely parses
+        # is not evidence.
+        assert summary["level_c_fixtures"] >= 1, f"{target} proves no Level-C fixture"
+        manifest = json.loads((packet_dir / "manifest.json").read_text(encoding="utf-8"))
+        assert "report.json" in manifest["files"]
+
+
+def test_both_apple_identities_are_sealed_independently() -> None:
+    """Apple GPU and Apple CPU are separate registrations, not one Apple lane.
+
+    Recording one must never appear to close the other, so this asserts two
+    distinct packets, two distinct directories, and two distinct device
+    identities rather than a single shared "Apple" row.
+    """
+    packets = discover_packets()
+    gpu = packets.get(("apple_gpu", "apple7"))
+    cpu = packets.get(("apple_cpu", "apple_m1_max"))
+    assert gpu is not None, "apple_gpu/apple7 has no sealed packet"
+    assert cpu is not None, "apple_cpu/apple_m1_max has no sealed packet"
+    assert gpu[0] != cpu[0], "the two Apple identities share a packet directory"
+
+    reports = {}
+    for name, (packet_dir, _) in (("gpu", gpu), ("cpu", cpu)):
+        reports[name] = json.loads(
+            (packet_dir / "report.json").read_text(encoding="utf-8"))
+    # Each report speaks only for its own identity.
+    assert reports["gpu"]["target"] == "apple_gpu"
+    assert reports["cpu"]["target"] == "apple_cpu"
+    # Neither lane can report device_event today: the value-descriptor ABI does
+    # not feed the Metal command-buffer timer. If a future packet claims it,
+    # that claim must come with a real device timer, not a host clock.
+    for report in reports.values():
+        assert set(report["required_timing_domains"]) == {"kernel_wall", "end_to_end"}
+
+
+def test_apple_packets_only_claim_families_their_registration_declares() -> None:
+    """The dashboard rejects undeclared families; catch it here with a clearer message."""
+    registrations = {
+        (row.target, row.architecture): row.families
+        for row in FLEET_REGISTRATIONS
+    }
+    packets = discover_packets()
+    for identity in (("apple_gpu", "apple7"), ("apple_cpu", "apple_m1_max")):
+        packet_dir, _ = packets[identity]
+        report = json.loads((packet_dir / "report.json").read_text(encoding="utf-8"))
+        undeclared = set(report["scope"]) - set(registrations[identity])
+        assert not undeclared, (
+            f"{identity[0]} packet claims undeclared families: "
+            f"{', '.join(sorted(undeclared))}")

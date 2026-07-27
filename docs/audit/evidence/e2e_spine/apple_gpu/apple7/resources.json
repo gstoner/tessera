@@ -1,0 +1,112 @@
+{
+  "device": {
+    "cpu_brand": "Apple M1 Max",
+    "model": "MacBookPro18,2",
+    "os": "26.5.2"
+  },
+  "lane": "apple_gpu",
+  "metal": {
+    "capability_matrix": 99,
+    "device_event_available": false,
+    "device_event_reason": "the value-descriptor C ABI lane does not feed tessera_apple_gpu_last_dispatch_device_time_ns (it reads -1 and the timing source reads 0 after a descriptor launch); only the tile/dispatch lane populates it",
+    "evidence": {
+      "achieved_occupancy": {
+        "state": "no_public_api",
+        "value": null
+      },
+      "cold_compile": {
+        "state": "measured",
+        "value": false
+      },
+      "counter_timestamp_delta": {
+        "state": "unsupported_by_device",
+        "value": null
+      },
+      "device_time_ns": {
+        "state": "not_measured",
+        "value": null
+      },
+      "execution_width": {
+        "state": "not_measured",
+        "value": null
+      },
+      "max_threads_per_threadgroup": {
+        "state": "not_measured",
+        "value": null
+      },
+      "pipeline_cache_size": {
+        "state": "measured",
+        "value": 1
+      },
+      "register_count": {
+        "state": "no_public_api",
+        "value": null
+      },
+      "scratch_bytes": {
+        "state": "no_public_api",
+        "value": null
+      },
+      "source_fingerprint": {
+        "state": "measured",
+        "value": "32541529ce7c7896990515097b0d42a8ba973b78594068ab8cddda3271de7ba0"
+      },
+      "spill_count": {
+        "state": "no_public_api",
+        "value": null
+      },
+      "static_threadgroup_memory_bytes": {
+        "state": "not_measured",
+        "value": null
+      }
+    }
+  },
+  "rows": [
+    {
+      "entry": "tessera_apple_gpu_bmm_f32",
+      "family": "matmul",
+      "fixture_operand_shapes": [
+        [
+          1,
+          2,
+          3
+        ],
+        [
+          1,
+          3,
+          2
+        ]
+      ],
+      "image_digest": "dda074b930022425041a44f405f78dd2c4d161b0fd893b2c045214e0a8adc0b7",
+      "resource_fingerprint": "1611f69b8429ea725f240a8fdcf7cbaab1a97194b583ddb28bb6c6ed7bb0bf3d",
+      "route": "apple_gpu_bmm_f32_batch1",
+      "timing_shape": [
+        1,
+        256,
+        256,
+        256
+      ]
+    },
+    {
+      "entry": "tessera_apple_gpu_softmax_f32",
+      "family": "softmax",
+      "fixture_operand_shapes": [
+        [
+          2,
+          2
+        ]
+      ],
+      "image_digest": "4082a6df1c24399838905dfc5d595be29d63bc4defdb83594e7d76c09d991c75",
+      "resource_fingerprint": "acf47aa2675863ce92188120f027d704aa6eb29aa7d312588509af20bf07ed34",
+      "route": "apple_gpu_msl_softmax_f32",
+      "timing_shape": [
+        64,
+        256
+      ]
+    }
+  ],
+  "schema": "tessera.e2e-apple-resource-record.v1",
+  "timing_domains": {
+    "end_to_end": "tessera.runtime.launch, including all of the above",
+    "kernel_wall": "descriptor-consuming native submit; argument splitting, contract validation, launcher resolution, and result packaging are hoisted out of the timed region"
+  }
+}

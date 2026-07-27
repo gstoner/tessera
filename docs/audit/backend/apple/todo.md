@@ -1152,21 +1152,24 @@ their determinism contracts exist to eliminate:
 | Apple Apple7 | `flash_attn_bwd_*` | `bwd_query_stats` recomputes m/l per query; ABI takes no LSE buffer |
 | x86 AVX-512 | none (forward only) | n/a |
 
-**Resolution.** `LseSaveOp` is now `Pure`, matching its own signature: one
-operand in, one value out, no memref, symbol, or effect interface. The missing
-trait was the only thing making a dead value-producer unremovable. Nothing
-emitted changes on any target — it only permits removing an op that already
-does nothing. Blast radius measured before the change: one emitter, **zero**
-passes scanning for it, and no test edits (the `lse_save` assertion in
-`tests/unit/test_tile_ir.py` is on the separate Python `lower_schedule_to_tile_ir`
-lane).
+**Resolution — and a rejected first attempt.** Marking `LseSaveOp` `Pure` was
+tried first and **backed out**. Testing showed it changes emitted IR on every
+backend (`tests/tessera-ir/phase3/flash_attn_full.mlir` asserts the op's
+presence), and it would leave a trap for whoever implements the real FA-2
+checkpoint, since a store must be non-`Pure` with `MemWrite`. An earlier claim
+here that the trait "changes nothing emitted on any target" was wrong.
 
-A `retain_lse` flag was considered and rejected: it would gate an op that cannot
-perform its stated function. The vocabulary is deliberately **kept** — if
-long-context measurement ever shows recomputing logsumexp costs more than
-reloading a `[tile_q]` vector, the pair should be redesigned with real identity
-(SSA handle or symbol), exactly as `buffer_ref` became `!tile.buffer`. That is
-when conditional emission becomes meaningful.
+What landed instead touches no shared declaration: the Apple pass erases only a
+`lse.save` whose own result is unused, as part of re-forming the recurrence it
+is already rewriting. Both the Apple fixture and `flash_attn_full.mlir` pass
+with the shared op unchanged. A `retain_lse` flag was also considered and
+rejected — it would gate an op that cannot perform its stated function.
+
+The vocabulary is deliberately **kept**, and the save-versus-recompute question
+is now owned by the backends with the memory systems to settle it:
+[`NVIDIA-LSE-1`](../nvidia/todo.md) and [`ROCM-LSE-1`](../rocm/todo.md), with
+the contract, the FA-2 design, and the preferred source-level fix documented in
+[`../../compiler/LSE_CHECKPOINT_CONTRACT.md`](../../compiler/LSE_CHECKPOINT_CONTRACT.md).
 
 The Apple consumer erases only a `lse.save` whose own result is unused; anything
 genuinely reading the LSE still refuses with
@@ -1174,9 +1177,10 @@ genuinely reading the LSE still refuses with
 (Q copy, ring init/advance), because a leftover depth-3 `tile.pipeline_init`
 would otherwise fail APPLE-PIPE-1 for a schedule the program no longer has.
 
-NVIDIA and ROCm review note: the `Pure` correction touches shared ground
-(`Attn.td`), removes a dead side-effecting op from their forward lowerings too,
-and changes no emitted code on either target.
+NVIDIA and ROCm review note: nothing in this slice changes a shared op,
+verifier, or emitted lowering. The one shared-ground item is the *documented*
+source-level fix — stop emitting a destination-less save — which is filed in
+both queues rather than landed from here.
 
 ### Shared-Tile-contract consumer rows (opened 2026-07-26)
 
@@ -1208,7 +1212,7 @@ capability-rejection or consumer proof, not undeclared divergence.
 |---:|---|---|---|
 | 19 | APPLE-PIPE-1 | **landing** | The `tessera-apple-threadgroup-pipeline` pass is a real consumer of the shared SSA vocabulary and runs first in `tessera-lower-to-apple_gpu`: `!tile.buffer` allocations are placed 16-byte-aligned into one capacity-bounded per-function threadgroup arena, and `!tile.pipeline_state` rings are claimed as `ping_pong` / `single` Metal staging. Nine registered diagnostics own the capability boundary. Evidence below. **Narrower follow-up:** the emitted steel MSL still computes its own staged bytes — the two owners are proven *equal*, not yet *sourced from one place* — and this rung is host-free by design, so it carries no exact-device execution proof. |
 | 20 | APPLE-TILE-2 | **landing** | `tessera-apple-canonical-gemm` recognizes the shared three-deep M/N/K nest and re-forms it as one `simdgroup_matrix` dispatch carrying the loop's tile decision, `accumulate = "fp32"`, and the `ragged_zero_pad` guarantee. Exact-device execute-and-compare passes on Apple7 Metal for aligned and ragged rows, driven by the compiler-produced descriptor. The **incumbent rule is recorded in the pass itself**: recognition is not promotion. **Narrower follow-up:** no strict-v2 paired route-ledger row yet, so no timing-domain comparison exists and value-mode Accelerate/MPS remains the production route by default rather than by measurement. |
-| 21 | APPLE-ATTN-STREAM-1 | **landing** | `tessera-apple-streaming-attention` recognizes the shared KV-block recurrence and re-forms it as one Apple flash-attention dispatch, carrying `causal` / `logical_sk` / `window_left/right` / `kv_block` **read off `tessera_attn.boundary_mask`** instead of re-derived — the ownership fix this row exists for. It runs first in `tessera-lower-to-apple_gpu`, ahead of APPLE-PIPE-1, because the shared depth-3 KV ring must be re-formed before the threadgroup pass judges a schedule the program is about to stop having. Unblocked by marking `LseSaveOp` `Pure` (see below). **Narrower follow-up:** the descriptor targets the same ABI family as the incumbent, so numerical parity is proven structurally plus an on-device oracle check — not yet a full APPLE-ATTN-FWD-1 corpus re-run, and no selector changed. |
+| 21 | APPLE-ATTN-STREAM-1 | **landing** | `tessera-apple-streaming-attention` recognizes the shared KV-block recurrence and re-forms it as one Apple flash-attention dispatch, carrying `causal` / `logical_sk` / `window_left/right` / `kv_block` **read off `tessera_attn.boundary_mask`** instead of re-derived — the ownership fix this row exists for. It runs first in `tessera-lower-to-apple_gpu`, ahead of APPLE-PIPE-1, because the shared depth-3 KV ring must be re-formed before the threadgroup pass judges a schedule the program is about to stop having. Unblocked without changing the shared `LseSaveOp` declaration (see below). **Narrower follow-up:** the descriptor targets the same ABI family as the incumbent, so numerical parity is proven structurally plus an on-device oracle check — not yet a full APPLE-ATTN-FWD-1 corpus re-run, and no selector changed. |
 | 22 | APPLE-DTYPE-1-REJECT | **closed** | The macOS-27 SDK gate is enforced, not incidental. `tests/tessera-ir/phase8/apple_lowprecision_capability_gate.mlir` runs the same module through `--tessera-storage-legalize` twice: the `apple_gpu` target stamps no `tessera.storage_packed`/`_container` on either a block-scaled NVFP4 decode or a packed int4 contraction, while the `nvidia_sm120` contrast run stamps both — so the negative cannot pass merely because the pass did nothing. A block-scaled or otherwise unrouted cooperative-matrix descriptor is separately rejected with `APPLE_MMA_STORAGE_UNSUPPORTED`, and `tests/unit/test_apple_threadgroup_pipeline.py` binds that gate to `select_apple_simdgroup_fragment`: fp16/bf16 accepted by both owners, nvfp4/fp4/fp6/fp8/int4 refused by both. APPLE-DTYPE-1 itself stays **blocked — SDK**; this row proves the block, it does not lift it. |
 | 23 | APPLE-COUNTER-1 | **landing** | `compiler/apple_counter_evidence.py` maps Metal telemetry onto the shared autotune-evidence fields with an explicit four-state reason on every field: `measured`, `not_measured` (device can, this run did not), `unsupported_by_device` (this GPU family cannot), `no_public_api` (Metal exposes no query — register count, scratch bytes, spill count, achieved occupancy). Supplying a value the capability bits do not support raises rather than silently downgrading, so a corpus cannot claim evidence the device cannot produce. Bit positions are drift-gated against the runtime's own documented matrix. **Narrower follow-up:** the benchmark writers do not yet emit these fields into a committed corpus, so this is the vocabulary and its guards, not a recorded two-run corpus. |
 

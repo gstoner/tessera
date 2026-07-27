@@ -225,11 +225,26 @@ struct StreamingAttentionToAppleGPUPass
       // would do the attention twice.
       //
       // A `tessera_attn.lse.save` whose own result is unused is not such a
-      // consumer. The shared lowering emits one unconditionally and discards
-      // its result; the op is `Pure` and owns no memref, symbol, or handle, and
-      // `lse.load` takes no operands, so nothing links a load back to it. It is
-      // dead code, and erasing it changes no observable behavior. Anything else
-      // reading the LSE is a real consumer and still refuses.
+      // consumer, and this pass erases it deliberately.
+      //
+      // That deserves justification, because the op is declared effectful and a
+      // backend erasing another layer's declared effect is exactly the
+      // divergence this work exists to stop. The narrow claim: `lse.save` owns
+      // no memref, symbol, or handle, `lse.load` declares no arguments at all,
+      // and the single emission site discards the result while typing it scalar
+      // f32 rather than the per-row [tile_q] LSE. There is no destination to
+      // write and no identity linking any load back to it, so no observable
+      // behavior depends on it *as currently declared*.
+      //
+      // Marking the op `Pure` was tried and rejected: it removes the op from
+      // every backend's emitted IR (breaking `phase3/flash_attn_full.mlir`,
+      // which asserts its presence) and leaves a trap for whoever implements
+      // the real FlashAttention-2 checkpoint, since a store must be non-Pure.
+      // Erasing it here keeps the shared declaration and every sibling lowering
+      // untouched. See docs/audit/compiler/LSE_CHECKPOINT_CONTRACT.md and the
+      // owning evaluation rows NVIDIA-LSE-1 / ROCM-LSE-1.
+      //
+      // Anything else reading the LSE is a real consumer and still refuses.
       SmallVector<Operation *> deadSaves;
       if (consumer) {
         bool liveLse = false;

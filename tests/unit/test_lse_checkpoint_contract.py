@@ -1,19 +1,19 @@
 """Guard the `tessera_attn.lse.save` trait against the FA-2 implementation.
 
-`LseSaveOp` is `Pure` only because it is currently degenerate: it takes no
-destination, `lse.load` takes no operands, nothing links a load to a save, and
-its single emission site discards the result. Marking it Pure stopped a no-op
-from behaving like a side effect and unblocked APPLE-ATTN-STREAM-1.
+`LseSaveOp` is degenerate today: it takes no destination, `lse.load` declares no
+arguments at all, nothing links a load to a save, and its single emission site
+discards the result. Marking it `Pure` to reflect that was tried and backed out
+— it changes emitted IR on every backend, and a real FlashAttention-2 store must
+be non-`Pure` with `MemWrite`.
 
-That marking is a trap for whoever implements the real FlashAttention-2
-checkpoint. A store must be non-`Pure` and carry `MemWrite`. If a destination
-operand is added while `Pure` remains, DCE deletes the store and the backward
-reads uninitialized LSE — wrong gradients, no diagnostic, no crash.
+This is the tripwire for the version of that mistake nobody would notice. If a
+destination operand is ever added while `Pure` is present, DCE deletes the store
+and the backward reads uninitialized LSE — wrong gradients, no diagnostic, no
+crash.
 
-So this fails the build the moment the op starts to look like a real store
-while still claiming purity. It is deliberately a *tripwire*, not a design
-constraint: the correct response is to drop `Pure`, not to work around this
-test. See `docs/audit/compiler/LSE_CHECKPOINT_CONTRACT.md`, and the owning
+It passes trivially today because the trait is absent. It is deliberately a
+*tripwire*, not a design constraint: if it fires, the correct response is to
+drop `Pure`, not to work around this test. See `docs/audit/compiler/LSE_CHECKPOINT_CONTRACT.md`, and the owning
 evaluation rows NVIDIA-LSE-1 / ROCM-LSE-1.
 """
 
@@ -102,7 +102,7 @@ def test_emission_site_is_still_the_single_destination_less_save() -> None:
     """One emitter, and it still discards the result.
 
     If the source-level fix lands (stop emitting a destination-less save), this
-    test should be deleted along with the Pure marking — not adjusted.
+    whole file retires with it — it should not be adjusted to keep passing.
     """
     source = LOWERING.read_text(encoding="utf-8")
     assert source.count('"tessera_attn.lse.save"') == 1, (

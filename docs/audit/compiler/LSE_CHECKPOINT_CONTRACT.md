@@ -55,7 +55,7 @@ per-block one.
 `src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td`:
 
 ```tablegen
-def LseSaveOp : Op<Tessera_Attn_Dialect, "lse.save", [Pure]> {
+def LseSaveOp : Op<Tessera_Attn_Dialect, "lse.save", []> {
   let arguments = (ins AnyType:$scores);
   let results   = (outs AnyType:$lse);
 }
@@ -68,8 +68,7 @@ def LseLoadOp : Op<Tessera_Attn_Dialect, "lse.load", [Pure]> {
 These do not implement the contract above. Specifically:
 
 - **No destination.** `lse.save` takes no pointer, memref, or workspace
-  operand, so there is nothing for it to store *to*. A real store would carry
-  `MemWrite` on a destination; this carries neither.
+  operand, so there is nothing for it to store *to*.
 - **No source.** `lse.load` declares no `let arguments` block at all — not
   merely an empty one — so it materializes a value from nothing. Nothing links
   a load to the save whose value it should read.
@@ -110,23 +109,32 @@ eliminate.
 That is a defensible point on the curve. It is not obviously the right one at
 long context, which is what the open evaluation below is for.
 
-## Current trait state, and the hazard it creates
+## `Pure` was tried and rejected
 
-`LseSaveOp` was marked `Pure` on 2026-07-26 so that a value-producing op whose
-result is discarded stops behaving like a side effect. That unblocked Apple's
-streaming-attention consumer, and it changes nothing emitted on any target: it
-only permits removing an op that already does nothing.
+Marking `LseSaveOp` `Pure` is the obvious way to stop a dead value-producer
+behaving like a side effect, and it was tried first. It is **not** in the tree,
+for two reasons found by testing it:
 
-**It is correct only for the degenerate implementation, and it is a trap for
-whoever implements the real one.** A store must be non-`Pure` and carry
-`MemWrite`. If a future change adds a destination operand while leaving `Pure`
-in place, DCE will silently delete the store and the backward will read
-uninitialized LSE — wrong gradients, no diagnostic.
+1. **It changes emitted IR on every backend.** Removing a dead op is a change,
+   and `tests/tessera-ir/phase3/flash_attn_full.mlir` asserts the op's presence
+   in the shared lowering output. A claim that the trait "changes nothing
+   emitted" was wrong.
+2. **It is a trap for whoever implements the real contract.** A store must be
+   non-`Pure` with `MemWrite`. A future change adding a destination while the
+   trait remains would let DCE silently delete the store, and the backward
+   would read uninitialized LSE — wrong gradients, no diagnostic.
 
-`tests/unit/test_lse_checkpoint_contract.py` guards this: it fails the build if
-`LseSaveOp` acquires a destination-shaped operand, a memref/pointer type, or a
-memory-effect interface while still declaring `Pure`. Implementing the real
-semantics must therefore *start* by dropping the trait.
+The Apple consumer does not need it. `tessera-apple-streaming-attention` erases
+only a `lse.save` whose own result is unused, as part of re-forming the
+recurrence it is already rewriting, and both the Apple fixture and
+`flash_attn_full.mlir` pass with the trait absent. That keeps the shared
+declaration and every sibling lowering untouched, which is the right trade for
+one backend's lowering.
+
+`tests/unit/test_lse_checkpoint_contract.py` stays as a dormant tripwire: if the
+op ever acquires a destination-shaped operand, pointer/memref type, or
+memory-effect interface *while* declaring `Pure`, the build fails. Today it
+passes trivially because the trait is absent.
 
 ## Open evaluation — owned by NVIDIA and ROCm
 
@@ -166,10 +174,9 @@ This is strictly better than the `Pure` correction currently in the tree:
 - **It removes the cause rather than tolerating the symptom.** The problem is
   not that a side-effecting op is unremovable; it is that the lowering emits a
   store to nowhere on every forward, on every target.
-- **It takes the trap out of shared ground.** With emission fixed, `Pure` is no
-  longer needed to unblock anything, so the op can carry the effects a real
-  store must have. Whoever implements the FA-2 semantics then inherits a
-  correct declaration instead of a trait they must remember to remove.
+- **It removes the Apple-side erasure too.** With emission fixed there is no
+  dead save for any backend to step around, so the one place a backend touches
+  a shared effectful op goes away.
 - **It benefits every backend, not just Apple.** NVIDIA and ROCm forwards stop
   carrying a dead op too.
 - **It leaves the measurement genuinely open.** Retiring the vocabulary or

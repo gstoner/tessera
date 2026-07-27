@@ -11,28 +11,20 @@ def Tessera_Attn_Dialect : Dialect {
 
 // ─── Original ops (v1.3) ─────────────────────────────────────────────────────
 
-// `Pure` matches this op's actual signature (2026-07-26). Despite the name and
-// the "save" framing, nothing here writes: the op takes one operand, returns
-// one value, and owns no memref, symbol, or side-effect interface. `LseLoadOp`
-// likewise takes no operands, so no SSA edge, symbol, or handle links a load to
-// a save — a backward lowering could not express *which* save its load reads.
+// NOT `Pure`, deliberately (2026-07-26). This op is degenerate today — it owns
+// no destination, `LseLoadOp` declares no arguments at all, nothing links a
+// load to a save, and the single emission site discards the result — so marking
+// it `Pure` is tempting and was tried. It was rejected for two reasons:
+// removing a dead op changes emitted IR on every backend (it breaks
+// `tests/tessera-ir/phase3/flash_attn_full.mlir`, which asserts its presence),
+// and a real FlashAttention-2 checkpoint store must be non-`Pure` with
+// `MemWrite`, so the trait would be a trap for whoever implements it.
 //
-// The missing trait was the only thing making a dead value-producer
-// unremovable, which blocked backends from re-forming the streaming-attention
-// recurrence (APPLE-ATTN-STREAM-1). No backend consumes the saved LSE: ROCm's
-// `_pre` kernel recomputes `L[q] = logsumexp_k(scale*QK^T)` and states the
-// backward "needs nothing saved from the forward"; NVIDIA sm_120 declares
-// `workspace_bytes = 0, workspace_owner = "output_element"`; Apple's
-// `bwd_query_stats` recomputes m/l per query. All three chose recompute for the
-// same reason — a saved LSE reintroduces the workspace their zero-workspace
-// determinism contracts exist to eliminate.
-//
-// This does NOT retire the save/load vocabulary. If long-context measurement
-// ever shows recomputing logsumexp costs more than reloading a [tile_q] vector,
-// the pair should be redesigned with real identity (an SSA handle or symbol),
-// exactly as `#tile.buffer_ref` became `!tile.buffer`. Marking it Pure only
-// stops a no-op from behaving like a side effect until then.
-def LseSaveOp : Op<Tessera_Attn_Dialect, "lse.save", [Pure]> {
+// The degenerate state is a defect to fix at the source — stop emitting a
+// destination-less save — not to paper over with a trait. See
+// docs/audit/compiler/LSE_CHECKPOINT_CONTRACT.md; the save-versus-recompute
+// measurement is owned by NVIDIA-LSE-1 and ROCM-LSE-1.
+def LseSaveOp : Op<Tessera_Attn_Dialect, "lse.save", []> {
   let summary = "Save per-row log-sum-exp (LSE) from forward attention";
   let arguments = (ins AnyType:$scores);
   let results = (outs AnyType:$lse);

@@ -8,6 +8,22 @@ last_updated: 2026-07-26
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `LSE-CHECKPOINT-CONTRACT-2026-07-26`: the shared
+`tessera_attn.lse.save` / `lse.load` pair is a declared-but-unimplemented
+FlashAttention-2 checkpoint. `lse.save` takes no destination, `lse.load` takes
+no operands, nothing links a load to a save, the single emission site discards
+the result and types it scalar `f32`, and no backend consumes it — all three
+with an attention backward recompute `L` instead. Apple hit this when
+re-forming the shared streaming recurrence and unblocked it by marking
+`LseSaveOp` `Pure`, which is correct only for the degenerate form and is a trap
+for whoever implements the real one. The contract, the FA-2 save-versus-
+recompute trade, and the preferred source-level fix are documented in
+[`../../compiler/LSE_CHECKPOINT_CONTRACT.md`](../../compiler/LSE_CHECKPOINT_CONTRACT.md).
+This backend owns the measurement, because the save-versus-recompute choice is
+an HBM-bandwidth question and this is a lead performance target (Decision #28).
+No IR, ABI, schedule, evidence, or selector changed in the synchronization
+slice itself.
+
 Cross-backend sync `ROCM-E2E-ATTENTION-CARRIERS-2026-07-26` lands an
 AMD-owned consumer, native HSACO package, descriptor, and exact gfx1151 proof
 for the already-shared `tile.attention_kernel` contract, plus a direct
@@ -422,6 +438,7 @@ host. No CUDA execution status was inferred or promoted from the ROCm run.
 | 5 | NVIDIA-TEST-5 | Measured performance | Run `hardware_nvidia and performance` serially. Warm up compilation and caches; use repeated medians; measure kernel-only and end-to-end separately; record registers, shared memory, occupancy, spills, and selected route. | Stable baselines cover square/rectangular/ragged GEMM, fused epilogues, attention, paged KV, ReplaySSM, reductions, and transport. Each ratchet identifies the selected implementation. |
 | 6 | NVIDIA-TEST-6 | Refactor and deduplicate | Move mature families toward `tests/compiler/`, `tests/device/nvidia/`, `tests/integration/`, and `tests/performance/nvidia/`. Consolidate repeated CUDA availability, compilation, launch, oracle, and cleanup code. | No central filename allowlist; no duplicated private CUDA probe/loader; process trees and device allocations clean up on failure. |
 | 7 | NVIDIA-TEST-7 | Local release ownership | Own the NVIDIA-box release gate locally in WSL with a host concurrency lock and retained artifacts; GitHub runners are intentionally not used. Keep two-run device correctness required for NVIDIA promotion and performance serial. | A clean branch run reports NVIDIA host-free/shared registries, compiler artifact, device correctness, and performance independently and retains the fail-closed evidence bundle. |
+| 8 | NVIDIA-LSE-1 | Evaluate saving versus recomputing the FlashAttention LSE | Measure, do not implement first. Find where storing and reloading a `[B*H*Sq]` fp32 LSE vector beats recomputing `L` with an extra pass over K in the backward, across sequence length, head count, dtype, and architecture — sm_120 now, Hopper sm_90 and datacenter sm_100 when available, since HBM bandwidth and long context are what make the trade decidable. Price in what the saved path gives up: the current backward declares `workspace_bytes = 0, workspace_owner = "output_element"`, and a saved LSE reintroduces exactly that workspace. Then take one of three outcomes with ROCm: implement the real contract (SSA/symbol identity, a destination, `[tile_q]` typing, non-`Pure` with `MemWrite`, conditional emission), retire the vocabulary, or — available immediately and independent of the measurement — **fix it at the source: stop `TileIRLoweringPass` emitting a destination-less `lse.save` and revert `LseSaveOp` to non-`Pure`, leaving the op honestly side-effecting and ready for a real implementation.** The source-level fix is the preferred landing: it removes the defect rather than tolerating it, drops a dead op from NVIDIA forwards too, takes the `Pure` trap out of shared ground, and keeps both other outcomes open. | Paired two-run medians in a named timing domain over a long-context sweep, with retained resource evidence and an explicit workspace/determinism statement; a recorded joint decision with ROCm; and if the source-level fix lands, the `Pure` marking plus its guard test removed in the same change. |
 | 8 | NVIDIA-E2E-1 | Canonical SM120 compiler spine | Under sync `E2E-SPINE-2026-07-18`, compose Graph/Schedule/Tile lowering with `LowerTileToNVIDIA(sm=120)`, NVVM/PTX/native-image packaging, and the existing register/invoke launch bridge. Prove f16 and NVFP4 first, including non-origin scale tiles and general-shape dispatch. | One canonical driver request returns a typed image artifact plus launch descriptor, registers and launches on `sm_120`, compares numerically, and retains compiler/ABI/device/resource evidence without a selector change. |
 | 9 | NVIDIA-E2E-2 | Per-SM and operation breadth | Replace shared-alias/hardcoded target behavior with architecture-specific pipelines, then move supported CUDA families through the same typed image/launch seam. | Every enabled SM/family has the four-layer proof on its exact device or an explicit unsupported/planned terminal state; `sm_90` and `sm_100` are never inferred from `sm_120`. |
 

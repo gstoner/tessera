@@ -7,7 +7,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **482** ops in `primitive_coverage` registry.
-- **4545** total Python-test references, **1138** total lit-fixture references.
+- **4553** total Python-test references, **1140** total lit-fixture references.
 - **83** ops have **zero** references in either test surface.
 - **119** ops have ≤1 reference ("thinly tested").
 - **153** ops have ≥10 references ("well tested").
@@ -17,20 +17,20 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 | Op | py refs | lit refs | total | neg | dtypes |
 |----|--------:|---------:|------:|----:|--------|
-| `matmul` |  450 |  244 |  694 |  19 | `bf16`, `f16`, `f32`, `f64` … |
+| `matmul` |  450 |  246 |  696 |  19 | `bf16`, `f16`, `f32`, `f64` … |
 | `flash_attn` |  120 |   72 |  192 |   9 | `bf16`, `f16`, `f32`, `f64` … |
 | `softmax` |  140 |   44 |  184 |  31 | `bf16`, `f16`, `f32`, `f64` … |
 | `add` |  118 |   32 |  150 |  10 | `bf16`, `f16`, `f32`, `f64` … |
 | `relu` |  111 |   36 |  147 |   9 | `bf16`, `f16`, `f32`, `f64` … |
-| `rmsnorm` |   99 |   18 |  117 |   6 | `bf16`, `f16`, `f32`, `f64` … |
+| `rmsnorm` |  101 |   18 |  119 |   6 | `bf16`, `f16`, `f32`, `f64` … |
 | `reduce` |   94 |   15 |  109 |   7 | `bf16`, `f16`, `f32`, `f64` … |
 | `mul` |   90 |   15 |  105 |   7 | `bf16`, `f16`, `f32`, `f64` … |
 | `silu` |   86 |    8 |   94 |   5 | `bf16`, `f16`, `f32`, `f64` … |
 | `gemm` |   83 |    2 |   85 |   8 | `bf16`, `f16`, `f32`, `fp16` … |
 | `selective_ssm` |   71 |   10 |   81 |   3 | `bf16`, `f16`, `fp16`, `fp32` |
 | `cast` |   20 |   56 |   76 |   1 | `fp16`, `fp32`, `int8` |
+| `layer_norm` |   60 |   16 |   76 |   3 | `bf16`, `f16`, `f32`, `fp16` … |
 | `gelu` |   53 |   22 |   75 |   0 | `bf16`, `f16`, `f32`, `f64` … |
-| `layer_norm` |   59 |   16 |   75 |   3 | `bf16`, `f16`, `f32`, `fp16` … |
 | `transpose` |   30 |   37 |   67 |   0 | `bf16`, `f16`, `f32`, `fp16` … |
 | `attn_local_window_2d` |   36 |   25 |   61 |   1 | `fp16`, `fp32` |
 | `msa_sparse_attention` |   47 |   11 |   58 |   1 |  |

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import platform
 import statistics
 import sys
 from pathlib import Path
@@ -19,6 +20,12 @@ from tessera.compiler.rocm_native import package_attention_backward  # noqa: E40
 from tessera.runtime import (  # noqa: E402
     _submit_rocm_gfx1151_attention_backward_program,
 )
+
+
+def _is_wsl() -> bool:
+    release = platform.release().lower()
+    version = platform.version().lower()
+    return "microsoft" in release or "microsoft" in version or "wsl" in release
 
 
 def _run_case(
@@ -73,6 +80,18 @@ def _run_case(
         modes[checkpoint] = {
             "median_ms": statistics.median(result["kernel_wall_samples_ms"]),
             "samples_ms": result["kernel_wall_samples_ms"],
+            "device_event": {
+                "available": bool(result["device_event_available"]),
+                "selector_eligible": bool(
+                    result["device_event_selector_eligible"]
+                ),
+                "median_ms": (
+                    statistics.median(result["device_event_samples_ms"])
+                    if result["device_event_samples_ms"]
+                    else None
+                ),
+                "samples_ms": result["device_event_samples_ms"],
+            },
             "image_bytes": len(program.image.payload),
             "workspace_bytes": result["workspace_bytes"],
             "max_abs_error": {
@@ -96,7 +115,9 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--iterations", type=int, default=21)
     parser.add_argument("--warmup", type=int, default=5)
-    parser.add_argument("--dtype", choices=("fp16", "bf16"), default="fp16")
+    parser.add_argument(
+        "--dtype", choices=("fp16", "bf16", "both"), default="both"
+    )
     parser.add_argument("--lengths", type=int, nargs="+", default=(17, 64, 128, 256))
     parser.add_argument("--output")
     args = parser.parse_args()
@@ -105,24 +126,53 @@ def main() -> int:
     if any(length <= 0 for length in args.lengths):
         parser.error("all lengths must be positive")
 
+    dtypes = ("fp16", "bf16") if args.dtype == "both" else (args.dtype,)
     cases = [
         _run_case(
             sq=length,
             sk=length + 2 if length == 17 else length,
-            dtype=args.dtype,
+            dtype=dtype,
             warmup=args.warmup,
             iterations=args.iterations,
         )
+        for dtype in dtypes
         for length in args.lengths
     ]
     record = {
-        "schema": "tessera.rocm.lse_checkpoint.benchmark.v1",
+        "schema": "tessera.rocm.lse_checkpoint.benchmark.v2",
         "device": "gfx1151",
-        "clock": "time.perf_counter_ns",
+        "clocks": {
+            "kernel_wall": "time.perf_counter_ns",
+            "device_event": "hipEventElapsedTime",
+        },
         "completion_api": "hipDeviceSynchronize",
         "resident_module": True,
         "resident_buffers": True,
         "cases": cases,
+    }
+    positive_events = all(
+        mode["device_event"]["selector_eligible"]
+        for case in cases
+        for mode in case["modes"].values()
+    )
+    wsl = _is_wsl()
+    event_eligible = positive_events and not wsl
+    record["host_environment"] = {
+        "kernel_release": platform.release(),
+        "wsl": wsl,
+    }
+    record["selector_evidence"] = {
+        "eligible": event_eligible,
+        "required_domain": "device_event",
+        "disposition": (
+            "bare_metal_device_event_complete"
+            if event_eligible
+            else (
+                "blocked_wsl_device_event_not_transferable"
+                if wsl
+                else "blocked_zero_or_unavailable_device_event"
+            )
+        ),
     }
     text = json.dumps(record, indent=2, sort_keys=True)
     if args.output:

@@ -2396,6 +2396,9 @@ def _submit_nvidia_sm120_native(
 ) -> Any:
     """Submit a compiler-owned SM120 PTX image through the shipped bridge."""
     del stream  # The current bridge uses the CUDA primary-context default stream.
+    dynamic_local_memory_bytes = (
+        descriptor.resolve_dynamic_local_memory_bytes(scalars)
+    )
     from tessera.compiler.nvidia_native import (
         SM120_ATTN_F16_ABI,
         SM120_ATTN_BF16_ABI,
@@ -2560,22 +2563,19 @@ def _submit_nvidia_sm120_native(
         dimensions = tuple(int(cast(int, scalars[name])) for name in names)
         base, factor, expression_bias, fallback, branch = dimensions
         (output,) = raw
-        expression = descriptor.provenance.get("launch_expression")
-        if not isinstance(expression, dict):
+        expression = descriptor.dynamic_local_memory_expression
+        if expression is None:
             raise RuntimeError("SM120 dynamic shared-memory descriptor lacks expression")
-        expected_bytes = (
-            evaluate_launch_expression(
-                expression,
-                dict(zip(names, dimensions, strict=True)),
-            )
-            + 15
-        ) & -16
+        expected_bytes = evaluate_launch_expression(
+            expression,
+            dict(zip(names, dimensions, strict=True)),
+        )
         if (
             tuple(output.shape) != (2,)
             or min(base, factor, expression_bias) < 0
             or fallback < 2
             or branch not in {0, 1}
-            or descriptor.dynamic_local_memory_bytes != expected_bytes
+            or dynamic_local_memory_bytes != expected_bytes
         ):
             raise RuntimeError(
                 "SM120 dynamic shared-memory invocation disagrees with the serialized expression descriptor"
@@ -2590,7 +2590,7 @@ def _submit_nvidia_sm120_native(
             or then_bytes < 2
             or else_bytes < 2
             or branch not in {0, 1}
-            or descriptor.dynamic_local_memory_bytes != expected_bytes
+            or dynamic_local_memory_bytes != expected_bytes
         ):
             raise RuntimeError("SM120 dynamic shared-memory invocation disagrees with the path-max descriptor")
     elif descriptor.abi_id in SM120_NORM_BWD_ABIS.values():
@@ -2928,14 +2928,14 @@ def _submit_nvidia_sm120_native(
             raise RuntimeError("SM120 MX packed/scale shapes disagree with M/N/K scalars")
     c_buffers = (ctypes.c_void_p * len(addresses))(*addresses)
     dims = (ctypes.c_int64 * len(dimensions))(*dimensions)
-    if descriptor.dynamic_local_memory_bytes:
+    if dynamic_local_memory_bytes:
         rc = lib.tessera_nvidia_ptx_invoke_v2(
             entry.encode(),
             c_buffers,
             len(addresses),
             dims,
             len(dimensions),
-            descriptor.dynamic_local_memory_bytes,
+            dynamic_local_memory_bytes,
         )
     else:
         rc = lib.tessera_nvidia_ptx_invoke(
@@ -2974,7 +2974,10 @@ def _submit_rocm_gfx1151_attention_backward_program(
 
     The HSACO, user buffers, and one launch-owned workspace allocation stay
     resident across forward recompute, prepass, split dK/dV, reduction, and dQ.
-    Timings are synchronized host-wall samples for the whole ordered program.
+    Timings include synchronized host-wall and HIP-event samples for the whole
+    ordered program. HIP events are retained even when a host (notably WSL)
+    reports zero durations, but such samples are explicitly ineligible for
+    selector decisions.
     """
     import numpy as np
 
@@ -3234,23 +3237,65 @@ def _submit_rocm_gfx1151_attention_backward_program(
             if rc != 0:
                 raise RuntimeError(f"gfx1151 attention backward kernel launch failed rc={rc}")
 
-        def run_program() -> None:
+        def enqueue_program() -> None:
             for name in (dk_name, dv_name):
                 hip.hipMemset(device[name], 0, nkv * 4)
             for name in ("partial_dk", "partial_dv"):
                 hip.hipMemset(slices[name], 0, nkv * 4)
             for function, arguments, grid in zip(functions, argument_sets, grids, strict=True):
                 launch(function, arguments, grid)
+
+        def run_program() -> None:
+            enqueue_program()
             if hip.hipDeviceSynchronize() != 0:
                 raise RuntimeError("gfx1151 attention backward synchronization failed")
 
         for _ in range(warmup):
             run_program()
-        samples: list[float] = []
-        for _ in range(iterations):
-            started_ns = time.perf_counter_ns()
-            run_program()
-            samples.append((time.perf_counter_ns() - started_ns) / 1_000_000.0)
+        wall_samples: list[float] = []
+        event_samples: list[float] = []
+        event_start = ctypes.c_void_p()
+        event_stop = ctypes.c_void_p()
+        events_ready = (
+            hip.hipEventCreate(ctypes.byref(event_start)) == 0
+            and hip.hipEventCreate(ctypes.byref(event_stop)) == 0
+        )
+        try:
+            for _ in range(iterations):
+                if events_ready and hip.hipEventRecord(event_start, None) != 0:
+                    raise RuntimeError(
+                        "gfx1151 attention backward start-event record failed"
+                    )
+                started_ns = time.perf_counter_ns()
+                enqueue_program()
+                if events_ready and hip.hipEventRecord(event_stop, None) != 0:
+                    raise RuntimeError(
+                        "gfx1151 attention backward stop-event record failed"
+                    )
+                if hip.hipDeviceSynchronize() != 0:
+                    raise RuntimeError(
+                        "gfx1151 attention backward synchronization failed"
+                    )
+                wall_samples.append(
+                    (time.perf_counter_ns() - started_ns) / 1_000_000.0
+                )
+                if events_ready:
+                    elapsed = ctypes.c_float()
+                    if (
+                        hip.hipEventElapsedTime(
+                            ctypes.byref(elapsed), event_start, event_stop
+                        )
+                        != 0
+                    ):
+                        raise RuntimeError(
+                            "gfx1151 attention backward event timing failed"
+                        )
+                    event_samples.append(float(elapsed.value))
+        finally:
+            if event_start.value:
+                hip.hipEventDestroy(event_start)
+            if event_stop.value:
+                hip.hipEventDestroy(event_stop)
         for name, output in ((dq_name, dq), (dk_name, dk), (dv_name, dv_out)):
             if (
                 hip.hipMemcpy(
@@ -3264,7 +3309,14 @@ def _submit_rocm_gfx1151_attention_backward_program(
                 raise RuntimeError("gfx1151 attention backward device-to-host copy failed")
         return {
             "outputs": (dq, dk, dv_out),
-            "kernel_wall_samples_ms": samples,
+            "kernel_wall_samples_ms": wall_samples,
+            "device_event_samples_ms": event_samples,
+            "device_event_available": events_ready,
+            "device_event_selector_eligible": (
+                events_ready
+                and len(event_samples) == iterations
+                and all(sample > 0.0 for sample in event_samples)
+            ),
             "workspace_bytes": program.workspace.bytes,
             "entry_symbols": tuple(descriptor.entry_symbol for descriptor in program.descriptors),
         }
@@ -5231,6 +5283,9 @@ def _nvidia_native_descriptor_device_latency(
     """CUDA-event latency for a benchmark-enabled compiler-owned descriptor."""
     values, contracts, scalars = _split_native_arguments(descriptor, args)
     descriptor.validate_invocation(image, contracts, scalars)
+    dynamic_local_memory_bytes = (
+        descriptor.resolve_dynamic_local_memory_bytes(scalars)
+    )
     lib = _load_nvidia_ptx_launch()
     if lib is None:
         raise RuntimeError("libtessera_nvidia_ptx_launch.so not loadable")
@@ -5245,14 +5300,14 @@ def _nvidia_native_descriptor_device_latency(
     dimensions = tuple(int(cast(int, scalars[item.name])) for item in ordered_scalars)
     dims = (ctypes.c_int64 * len(dimensions))(*dimensions)
     latency = ctypes.c_float()
-    if descriptor.dynamic_local_memory_bytes:
+    if dynamic_local_memory_bytes:
         rc = lib.tessera_nvidia_ptx_benchmark_v2(
             entry.encode(),
             addresses,
             len(raw),
             dims,
             len(dimensions),
-            descriptor.dynamic_local_memory_bytes,
+            dynamic_local_memory_bytes,
             int(warmup),
             int(reps),
             ctypes.byref(latency),
@@ -9123,20 +9178,33 @@ def _execute_rocm_compiled_softmax(artifact: RuntimeArtifact, args: Any) -> Any:
 # ─────────────────────────────────────────────────────────────────────────────
 _NORM_BLOCKDIM = 256  # must match BD in GenerateROCMNormKernel.cpp
 #: hsaco bytes keyed by (chip, kind, dtype, fused write epilogue).
-_rocm_norm_hsaco_cache: dict[tuple[str, str, str, str], bytes] = {}
+_rocm_norm_hsaco_cache: dict[
+    tuple[str, str, str, str, float], bytes
+] = {}
 #: Backward hsaco bytes keyed by (chip, kind, dtype). Kept separate from the
 #: forward cache because the stable buffer ABI differs.
 _rocm_norm_bwd_hsaco_cache: dict[tuple[str, str, str], bytes] = {}
 
 
-def _build_compiled_norm_hsaco(kind: str, dtype: str = "f32", epilogue: str = "none") -> bytes:
+def _build_compiled_norm_hsaco(
+    kind: str,
+    dtype: str = "f32",
+    epilogue: str = "none",
+    epilogue_param: float = 1.0,
+) -> bytes:
     """Generate + serialize the compiler's row-reduction norm kernel to hsaco,
     in-process via tessera-opt. Cached per (chip, kind, dtype). No WMMA → plain
     gpu→ROCDL pipeline."""
     chip = _rocm_chip()
-    if epilogue not in ("none", "relu", "silu", "gelu", "add", "multiply"):
+    if epilogue not in (
+        "none", "relu", "silu", "gelu", "softcap", "add", "multiply"
+    ):
         raise ValueError(f"unsupported ROCm norm epilogue {epilogue!r}")
-    key = (chip, kind, dtype, epilogue)
+    if epilogue == "softcap" and (
+        not math.isfinite(epilogue_param) or epilogue_param <= 0.0
+    ):
+        raise ValueError("ROCm norm softcap must be finite and positive")
+    key = (chip, kind, dtype, epilogue, float(epilogue_param))
     cached = _rocm_norm_hsaco_cache.get(key)
     if cached is not None:
         return cached
@@ -9145,7 +9213,8 @@ def _build_compiled_norm_hsaco(kind: str, dtype: str = "f32", epilogue: str = "n
         raise _RocmCompiledUnavailable("tessera-opt not built — no compiled ROCm norm lane")
     directive = (
         f'module {{\n  "tessera_rocm.norm"() {{name = "nm", kind = "{kind}", '
-        f'dtype = "{dtype}", epilogue = "{epilogue}"}} : () -> ()\n}}\n'
+        f'dtype = "{dtype}", epilogue = "{epilogue}", '
+        f"epilogue_param = {float(epilogue_param):e} : f32}} : () -> ()\n}}\n"
     )
     pipeline = (
         "builtin.module("
@@ -9240,7 +9309,7 @@ def _execute_rocm_compiled_norm(artifact: RuntimeArtifact, args: Any) -> Any:
     if not 1 <= len(ops) <= 2 or op_name not in _ROCM_NORM_OPS:
         raise ValueError(
             "rocm_norm_compiled executor handles one normalization, optionally "
-            "followed by relu/silu/gelu/add/multiply; normalization must be one of "
+            "followed by relu/silu/gelu/softcap/add/multiply; normalization must be one of "
             f"{tuple(_ROCM_NORM_OPS)}; got {[o.get('op_name') for o in ops]!r}"
         )
     epilogue = "none"
@@ -9251,13 +9320,14 @@ def _execute_rocm_compiled_norm(artifact: RuntimeArtifact, args: Any) -> Any:
             "tessera.relu": "relu",
             "tessera.silu": "silu",
             "tessera.gelu": "gelu",
+            "tessera.softcap": "softcap",
             "tessera.add": "add",
             "tessera.multiply": "multiply",
         }
         epilogue = epilogue_by_op.get(consumer_name, "")
         producer_result = str(ops[0].get("result", ""))
         consumer_operands = [str(n) for n in consumer.get("operands", [])]
-        unary = epilogue in ("relu", "silu", "gelu")
+        unary = epilogue in ("relu", "silu", "gelu", "softcap")
         valid_unary = unary and consumer_operands == [producer_result]
         valid_binary = (
             epilogue in ("add", "multiply")
@@ -9267,10 +9337,15 @@ def _execute_rocm_compiled_norm(artifact: RuntimeArtifact, args: Any) -> Any:
         )
         if epilogue == "" or not (valid_unary or valid_binary):
             raise ValueError(
-                "rocm_norm_compiled fused consumer must be unary relu/silu/gelu "
+                "rocm_norm_compiled fused consumer must be unary relu/silu/gelu/softcap "
                 "or binary add/multiply with exactly one normalization result"
             )
     kind, eps_default = _ROCM_NORM_OPS[op_name]
+    epilogue_param = 1.0
+    if epilogue == "softcap":
+        epilogue_param = float((ops[1].get("kwargs") or {}).get("cap", 1.0))
+        if not np.isfinite(epilogue_param) or epilogue_param <= 0.0:
+            raise ValueError("norm softcap cap must be finite and positive")
     op = ops[0]
     operand_names = [str(n) for n in op.get("operands", [])]
     if len(operand_names) < 1:
@@ -9321,7 +9396,9 @@ def _execute_rocm_compiled_norm(artifact: RuntimeArtifact, args: Any) -> Any:
         else:
             raise ValueError(f"rocm norm lane handles f32/f16/bf16 storage; got {x.dtype}")
 
-    hsaco = _build_compiled_norm_hsaco(kind, dtype_tag, epilogue)
+    hsaco = _build_compiled_norm_hsaco(
+        kind, dtype_tag, epilogue, epilogue_param
+    )
     hip = _load_hip_for_launch()
     if hip is None:
         raise _RocmCompiledUnavailable("libamdhip64.so not loadable — no ROCm execution lane on this host")
@@ -19808,6 +19885,9 @@ _ROCM_POINTWISE_LOSS_OPS = {
 }
 _rocm_pointwise_loss_hsaco_cache: dict[tuple[str, str, int], bytes] = {}
 _rocm_mse_backward_hsaco_cache: dict[tuple[str, str, str], bytes] = {}
+_rocm_distribution_backward_hsaco_cache: dict[
+    tuple[str, str, str], bytes
+] = {}
 _rocm_training_loss_sgd_hsaco_cache: dict[tuple[str, str, str], bytes] = {}
 _rocm_training_loss_adamw_hsaco_cache: dict[tuple[str, str, str], bytes] = {}
 _rocm_loss_module_cache: dict[tuple[str, ...], tuple[ctypes.c_void_p, ctypes.c_void_p]] = {}
@@ -20193,6 +20273,168 @@ def _execute_rocm_compiled_regression_loss_backward(artifact: RuntimeArtifact, a
 def _execute_rocm_compiled_mse_backward(artifact: RuntimeArtifact, args: Any) -> Any:
     """Compatibility entrypoint retained for the original execution row."""
     return _execute_rocm_compiled_regression_loss_backward(artifact, args)
+
+
+def _execute_rocm_compiled_distribution_loss_backward(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """One compiler-generated gfx1151 KL/JS paired-gradient launch."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    if len(ops) != 1:
+        raise ValueError("ROCm distribution backward requires one loss op")
+    op = ops[0]
+    bare = str(op.get("op_name", "")).removeprefix("tessera.")
+    aliases = {
+        "loss.kl_divergence": "kl",
+        "kl_divergence": "kl",
+        "loss.js_divergence": "js",
+        "js_divergence": "js",
+    }
+    kind = aliases.get(bare)
+    if kind is None:
+        raise ValueError("ROCm distribution backward requires KL or JS")
+    operand_names = [str(name) for name in op.get("operands", ())]
+    if len(operand_names) != 2:
+        raise ValueError("ROCm distribution backward requires two operands")
+    values = _bind_launch_args(args, names)
+    lhs = np.ascontiguousarray(
+        _as_numpy(values[operand_names[0]]), np.float32
+    )
+    rhs = np.ascontiguousarray(
+        _as_numpy(values[operand_names[1]]), np.float32
+    )
+    if lhs.shape != rhs.shape or lhs.ndim < 1:
+        raise ValueError(
+            "ROCm distribution backward operands must have matching rank >= 1"
+        )
+    kwargs = op.get("kwargs") or {}
+    axis = int(kwargs.get("axis", -1))
+    if axis < 0:
+        axis += lhs.ndim
+    if axis < 0 or axis >= lhs.ndim:
+        raise ValueError("ROCm distribution backward axis is out of range")
+    reduction = str(kwargs.get("reduction", "mean"))
+    if reduction not in {"none", "sum", "mean"}:
+        raise ValueError(
+            "ROCm distribution backward reduction must be none, sum, or mean"
+        )
+    epsilon = float(kwargs.get("epsilon", 1.0e-12))
+    if not np.isfinite(epsilon) or epsilon <= 0.0:
+        raise ValueError(
+            "ROCm distribution backward epsilon must be finite and positive"
+        )
+    cotangent_name = str(metadata.get("out_cotangent", "dy"))
+    cotangent = np.ascontiguousarray(
+        _as_numpy(values[cotangent_name]), np.float32
+    )
+    reduced_shape = lhs.shape[:axis] + lhs.shape[axis + 1 :]
+    cotangent_shape_matches = (
+        cotangent.shape == reduced_shape
+        if reduction == "none"
+        else cotangent.size == 1
+    )
+    if not cotangent_shape_matches:
+        raise ValueError(
+            "ROCm distribution backward cotangent shape disagrees with reduction"
+        )
+    class_extent = int(lhs.shape[axis])
+    inner = int(np.prod(lhs.shape[axis + 1 :], dtype=np.int64))
+    reduced_elements = max(int(lhs.size // class_extent), 1)
+    scale = 1.0 / reduced_elements if reduction == "mean" else 1.0
+    n = int(lhs.size)
+    chip = _rocm_chip()
+    directive = (
+        'module {\n  "tessera_rocm.pointwise_loss"() '
+        f'{{name = "distribution_bwd", kind = 0 : i64, backward = true, '
+        f'distribution = "{kind}", reduction = "{reduction}"}} : () -> ()\n}}\n'
+    )
+    hsaco = _build_rocm_elementwise_hsaco(
+        "generate-rocm-pointwise-loss-kernel",
+        directive,
+        _rocm_distribution_backward_hsaco_cache,
+        (chip, kind, reduction),
+    )
+    hip = _load_hip_for_launch()
+    if hip is None or hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable(
+            "ROCm distribution backward runtime unavailable"
+        )
+    _, function = _rocm_loss_cached_function(
+        hip,
+        hsaco,
+        b"distribution_bwd",
+        ("distribution_backward", chip, kind, reduction),
+    )
+    outputs = [np.empty_like(lhs), np.empty_like(rhs)]
+    hosts = [lhs, rhs, cotangent.reshape(-1), *outputs]
+    devices = [
+        _rocm_dev_in(hip, host.reshape(-1), max(int(host.nbytes), 4))
+        for host in hosts
+    ]
+
+    def memref(device: ctypes.c_void_p, size: int) -> list[Any]:
+        return [
+            ctypes.c_void_p(device.value),
+            ctypes.c_void_p(device.value),
+            ctypes.c_int64(0),
+            ctypes.c_int64(size),
+            ctypes.c_int64(1),
+        ]
+
+    launch_args: list[Any] = []
+    for index, device in enumerate(devices):
+        size = int(hosts[index].size)
+        launch_args += memref(device, size)
+    launch_args += [
+        ctypes.c_int64(n),
+        ctypes.c_int64(class_extent),
+        ctypes.c_int64(inner),
+        ctypes.c_float(scale),
+        ctypes.c_float(epsilon),
+    ]
+    packed = (ctypes.c_void_p * len(launch_args))()
+    for index, value in enumerate(launch_args):
+        packed[index] = ctypes.cast(ctypes.byref(value), ctypes.c_void_p)
+    try:
+        rc = hip.hipModuleLaunchKernel(
+            function,
+            (n + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM,
+            1,
+            1,
+            _GRID_BLOCKDIM,
+            1,
+            1,
+            0,
+            None,
+            packed,
+            None,
+        )
+        if rc != 0:
+            raise RuntimeError(
+                f"ROCm distribution backward launch failed rc={rc}"
+            )
+        if hip.hipDeviceSynchronize() != 0:
+            raise RuntimeError(
+                "ROCm distribution backward synchronization failed"
+            )
+        for host, device in zip(outputs, devices[3:], strict=True):
+            if (
+                hip.hipMemcpy(
+                    host.ctypes.data_as(ctypes.c_void_p), device, 4 * n, 2
+                )
+                != 0
+            ):
+                raise RuntimeError(
+                    "ROCm distribution backward result copy failed"
+                )
+    finally:
+        for device in devices:
+            hip.hipFree(device)
+    return tuple(outputs)
 
 
 def _execute_rocm_compiled_training_loss_sgd(artifact: RuntimeArtifact, args: Any) -> Any:
@@ -23311,6 +23553,8 @@ def _execute_rocm_compiled_moe(artifact: RuntimeArtifact, args: Any) -> Any:
 _rocm_opt_hsaco_cache: dict[tuple[str, str], bytes] = {}
 _rocm_sgd_bwd_hsaco_cache: dict[tuple[str], bytes] = {}
 _rocm_momentum_bwd_hsaco_cache: dict[tuple[str, str], bytes] = {}
+_rocm_adam_bwd_hsaco_cache: dict[tuple[str, str], bytes] = {}
+_rocm_lion_bwd_hsaco_cache: dict[tuple[str], bytes] = {}
 _OPTIMIZER_KIND_STR = {0: "sgd", 1: "momentum", 2: "adam", 3: "adamw", 4: "lion", 5: "nesterov"}
 
 
@@ -23555,6 +23799,243 @@ def _execute_rocm_compiled_momentum_backward(artifact: RuntimeArtifact, args: An
         hip.hipDeviceSynchronize()
         for host, device in zip(outputs, devices[2:]):
             hip.hipMemcpy(host.ctypes.data_as(ctypes.c_void_p), device, 4 * n, 2)
+    finally:
+        for device in devices:
+            hip.hipFree(device)
+    return tuple(outputs)
+
+
+def _execute_rocm_compiled_adam_backward(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """One compiler-generated gfx1151 Adam/AdamW VJP launch."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if op_name not in {"tessera.adam", "tessera.adamw"}:
+        raise ValueError("ROCm Adam backward requires adam or adamw")
+    values = _bind_launch_args(args, names)
+    operand_names = [str(name) for name in ops[0].get("operands", ())]
+    if len(operand_names) != 4:
+        raise ValueError("ROCm Adam backward requires parameter, gradient, m, v")
+    inputs = [
+        np.ascontiguousarray(_as_numpy(values[name]), np.float32)
+        for name in operand_names
+    ]
+    cotangent_names = list(
+        metadata.get("out_cotangents")
+        or ["dparam_out", "dmoment1_out", "dmoment2_out"]
+    )
+    if len(cotangent_names) != 3:
+        raise ValueError("ROCm Adam backward requires three output cotangents")
+    cotangents = [
+        np.ascontiguousarray(_as_numpy(values[name]), np.float32)
+        for name in cotangent_names
+    ]
+    shape = inputs[0].shape
+    if any(value.shape != shape for value in (*inputs, *cotangents)):
+        raise ValueError("ROCm Adam backward tensors must have matching shapes")
+    n = int(inputs[0].size)
+    kwargs = ops[0].get("kwargs") or {}
+    kind = "adamw" if op_name == "tessera.adamw" else "adam"
+    lr = float(kwargs.get("lr", 1.0e-3))
+    beta1 = float(kwargs.get("beta1", 0.9))
+    beta2 = float(kwargs.get("beta2", 0.999))
+    eps = float(kwargs.get("eps", 1.0e-8))
+    weight_decay = float(kwargs.get("weight_decay", 0.0))
+    step = int(kwargs.get("step", 1))
+    if step < 1:
+        raise ValueError("ROCm Adam backward step must be positive")
+    beta1_correction = 1.0 - beta1**step
+    beta2_correction = 1.0 - beta2**step
+    chip = _rocm_chip()
+    directive = (
+        'module {\n  "tessera_rocm.optimizer"() {name = "adam_bwd", '
+        f'kind = "{kind}", backward = true}} : () -> ()\n}}\n'
+    )
+    hsaco = _build_rocm_elementwise_hsaco(
+        "generate-rocm-optimizer-kernel",
+        directive,
+        _rocm_adam_bwd_hsaco_cache,
+        (chip, kind),
+    )
+    hip = _load_hip_for_launch()
+    if hip is None or hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("ROCm Adam backward runtime unavailable")
+    _, function = _rocm_loss_cached_function(
+        hip, hsaco, b"adam_bwd", ("adam_backward", chip, kind)
+    )
+    outputs = [np.empty(shape, dtype=np.float32) for _ in range(4)]
+    hosts = [*inputs, *cotangents, *outputs]
+    devices = [
+        _rocm_dev_in(hip, host.reshape(-1), 4 * n) for host in hosts
+    ]
+
+    def memref(device: ctypes.c_void_p) -> list[Any]:
+        return [
+            ctypes.c_void_p(device.value),
+            ctypes.c_void_p(device.value),
+            ctypes.c_int64(0),
+            ctypes.c_int64(n),
+            ctypes.c_int64(1),
+        ]
+
+    launch_args: list[Any] = []
+    for device in devices:
+        launch_args += memref(device)
+    launch_args += [
+        ctypes.c_int64(n),
+        ctypes.c_float(lr),
+        ctypes.c_float(beta1),
+        ctypes.c_float(beta2),
+        ctypes.c_float(eps),
+        ctypes.c_float(weight_decay),
+        ctypes.c_float(beta1_correction),
+        ctypes.c_float(beta2_correction),
+    ]
+    packed = (ctypes.c_void_p * len(launch_args))()
+    for index, value in enumerate(launch_args):
+        packed[index] = ctypes.cast(ctypes.byref(value), ctypes.c_void_p)
+    try:
+        rc = hip.hipModuleLaunchKernel(
+            function,
+            (n + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM,
+            1,
+            1,
+            _GRID_BLOCKDIM,
+            1,
+            1,
+            0,
+            None,
+            packed,
+            None,
+        )
+        if rc != 0:
+            raise RuntimeError(f"ROCm Adam backward launch failed rc={rc}")
+        if hip.hipDeviceSynchronize() != 0:
+            raise RuntimeError("ROCm Adam backward synchronization failed")
+        for host, device in zip(outputs, devices[7:], strict=True):
+            if (
+                hip.hipMemcpy(
+                    host.ctypes.data_as(ctypes.c_void_p), device, 4 * n, 2
+                )
+                != 0
+            ):
+                raise RuntimeError("ROCm Adam backward result copy failed")
+    finally:
+        for device in devices:
+            hip.hipFree(device)
+    return tuple(outputs)
+
+
+def _execute_rocm_compiled_lion_backward(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """One compiler-generated gfx1151 Lion VJP launch.
+
+    The shared Lion derivative policy stops gradients through ``sign``.  The
+    paired kernel therefore needs only the parameter and moment cotangents plus
+    the scalar decay/update coefficients; no forward residual buffers are
+    required.
+    """
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    if len(ops) != 1 or str(ops[0].get("op_name", "")) != "tessera.lion":
+        raise ValueError("ROCm Lion backward requires one tessera.lion op")
+    values = _bind_launch_args(args, names)
+    cotangent_names = list(
+        metadata.get("out_cotangents") or ["dparam_out", "dmoment_out"]
+    )
+    if len(cotangent_names) != 2:
+        raise ValueError("ROCm Lion backward requires two output cotangents")
+    cotangents = [
+        np.ascontiguousarray(_as_numpy(values[name]), np.float32)
+        for name in cotangent_names
+    ]
+    if cotangents[0].shape != cotangents[1].shape:
+        raise ValueError("ROCm Lion output cotangents must have matching shapes")
+    shape = cotangents[0].shape
+    n = int(cotangents[0].size)
+    kwargs = ops[0].get("kwargs") or {}
+    lr = float(kwargs.get("lr", 1.0e-4))
+    beta2 = float(kwargs.get("beta2", 0.99))
+    weight_decay = float(kwargs.get("weight_decay", 0.0))
+    chip = _rocm_chip()
+    directive = (
+        'module {\n  "tessera_rocm.optimizer"() {name = "lion_bwd", '
+        'kind = "lion", backward = true} : () -> ()\n}\n'
+    )
+    hsaco = _build_rocm_elementwise_hsaco(
+        "generate-rocm-optimizer-kernel",
+        directive,
+        _rocm_lion_bwd_hsaco_cache,
+        (chip,),
+    )
+    hip = _load_hip_for_launch()
+    if hip is None or hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("ROCm Lion backward runtime unavailable")
+    _, function = _rocm_loss_cached_function(
+        hip, hsaco, b"lion_bwd", ("lion_backward", chip)
+    )
+    outputs = [np.empty(shape, dtype=np.float32) for _ in range(3)]
+    hosts = [*cotangents, *outputs]
+    devices = [
+        _rocm_dev_in(hip, host.reshape(-1), 4 * n) for host in hosts
+    ]
+
+    def memref(device: ctypes.c_void_p) -> list[Any]:
+        return [
+            ctypes.c_void_p(device.value),
+            ctypes.c_void_p(device.value),
+            ctypes.c_int64(0),
+            ctypes.c_int64(n),
+            ctypes.c_int64(1),
+        ]
+
+    launch_args: list[Any] = []
+    for device in devices:
+        launch_args += memref(device)
+    launch_args += [
+        ctypes.c_int64(n),
+        ctypes.c_float(lr),
+        ctypes.c_float(beta2),
+        ctypes.c_float(weight_decay),
+    ]
+    packed = (ctypes.c_void_p * len(launch_args))()
+    for index, value in enumerate(launch_args):
+        packed[index] = ctypes.cast(ctypes.byref(value), ctypes.c_void_p)
+    try:
+        rc = hip.hipModuleLaunchKernel(
+            function,
+            (n + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM,
+            1,
+            1,
+            _GRID_BLOCKDIM,
+            1,
+            1,
+            0,
+            None,
+            packed,
+            None,
+        )
+        if rc != 0:
+            raise RuntimeError(f"ROCm Lion backward launch failed rc={rc}")
+        if hip.hipDeviceSynchronize() != 0:
+            raise RuntimeError("ROCm Lion backward synchronization failed")
+        for host, device in zip(outputs, devices[2:], strict=True):
+            if (
+                hip.hipMemcpy(
+                    host.ctypes.data_as(ctypes.c_void_p), device, 4 * n, 2
+                )
+                != 0
+            ):
+                raise RuntimeError("ROCm Lion backward result copy failed")
     finally:
         for device in devices:
             hip.hipFree(device)
@@ -25039,6 +25520,7 @@ def _executor_table():
         "rocm_loss_compiled": _execute_rocm_compiled_pointwise_loss,
         "rocm_mse_bwd_compiled": _execute_rocm_compiled_mse_backward,
         "rocm_regression_loss_bwd_compiled": _execute_rocm_compiled_regression_loss_backward,
+        "rocm_distribution_loss_bwd_compiled": _execute_rocm_compiled_distribution_loss_backward,
         "rocm_training_loss_sgd_compiled": _execute_rocm_compiled_training_loss_sgd,
         "rocm_training_loss_adamw_compiled": _execute_rocm_compiled_training_loss_adamw,
         "rocm_binary_loss_compiled": _execute_rocm_compiled_binary_loss,
@@ -25068,6 +25550,8 @@ def _executor_table():
         "rocm_optimizer_compiled": _execute_rocm_compiled_optimizer,
         "rocm_sgd_bwd_compiled": _execute_rocm_compiled_sgd_backward,
         "rocm_momentum_bwd_compiled": _execute_rocm_compiled_momentum_backward,
+        "rocm_adam_bwd_compiled": _execute_rocm_compiled_adam_backward,
+        "rocm_lion_bwd_compiled": _execute_rocm_compiled_lion_backward,
         "rocm_complex_compiled": _execute_rocm_compiled_complex,
         "rocm_conformal_compiled": _execute_rocm_compiled_conformal,
         "rocm_rng_compiled": _execute_rocm_compiled_rng,

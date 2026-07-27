@@ -20,6 +20,11 @@ from typing import Mapping, Sequence
 from tessera.dtype import TesseraDtypeError, canonicalize_dtype
 
 from .capabilities import normalize_target
+from .dynamic_local_memory import (
+    EXPRESSION_SCHEMA,
+    evaluate_launch_expression,
+    referenced_arguments,
+)
 from .pipeline_registry import pipeline_lookup
 
 
@@ -747,6 +752,7 @@ class LaunchDescriptor:
     shape_guards: tuple[ShapeGuard, ...] = ()
     geometry: LaunchGeometry = field(default_factory=lambda: LaunchGeometry(policy="runtime_default"))
     dynamic_local_memory_bytes: int = 0
+    dynamic_local_memory_expression: Mapping[str, object] | None = None
     workspace: WorkspaceRequirement = field(default_factory=WorkspaceRequirement)
     ordering: OrderingSemantics = field(default_factory=OrderingSemantics)
     provenance: Mapping[str, object] = field(default_factory=dict)
@@ -799,11 +805,42 @@ class LaunchDescriptor:
                 or isinstance(self.dynamic_local_memory_bytes, bool)
                 or self.dynamic_local_memory_bytes < 0):
             raise _error("E_LAUNCH_DESCRIPTOR_SCHEMA", "dynamic local memory must be non-negative")
+        if self.dynamic_local_memory_expression is not None:
+            if not isinstance(self.dynamic_local_memory_expression, Mapping):
+                raise _error(
+                    "E_LAUNCH_DESCRIPTOR_SCHEMA",
+                    "dynamic local-memory expression must be an object",
+                )
+            expression = _json_value(
+                self.dynamic_local_memory_expression,
+                "dynamic local-memory expression",
+                "E_LAUNCH_DESCRIPTOR_SCHEMA",
+            )
+            if not isinstance(expression, Mapping):
+                raise _error(
+                    "E_LAUNCH_DESCRIPTOR_SCHEMA",
+                    "dynamic local-memory expression must be an object",
+                )
+            try:
+                references = referenced_arguments(expression)
+            except ValueError as exc:
+                raise _error(
+                    "E_LAUNCH_DESCRIPTOR_SCHEMA", str(exc)
+                ) from exc
+            scalar_names = {scalar.name for scalar in self.scalars}
+            unknown = references - scalar_names
+            if unknown:
+                raise _error(
+                    "E_LAUNCH_DESCRIPTOR_SCHEMA",
+                    "dynamic local-memory expression references unknown scalar "
+                    + repr(sorted(unknown)),
+                )
+            object.__setattr__(self, "dynamic_local_memory_expression", expression)
         clean = _json_value(self.provenance, "launch provenance", "E_LAUNCH_DESCRIPTOR_SCHEMA")
         object.__setattr__(self, "provenance", clean)
 
     def _content_dict(self) -> dict[str, object]:
-        return {
+        content: dict[str, object] = {
             "schema_version": self.schema_version,
             "image_digest": self.image_digest,
             "entry_symbol": self.entry_symbol,
@@ -817,6 +854,11 @@ class LaunchDescriptor:
             "ordering": self.ordering.to_dict(),
             "provenance": dict(self.provenance),
         }
+        if self.dynamic_local_memory_expression is not None:
+            content["dynamic_local_memory_expression"] = dict(
+                self.dynamic_local_memory_expression
+            )
+        return content
 
     @cached_property
     def descriptor_digest(self) -> str:
@@ -882,6 +924,15 @@ class LaunchDescriptor:
                     data, "dynamic_local_memory_bytes",
                     "E_LAUNCH_DESCRIPTOR_SCHEMA", default=0,
                 ),
+                dynamic_local_memory_expression=(
+                    _object_field(
+                        data,
+                        "dynamic_local_memory_expression",
+                        "E_LAUNCH_DESCRIPTOR_SCHEMA",
+                    )
+                    if data.get("dynamic_local_memory_expression") is not None
+                    else None
+                ),
                 workspace=WorkspaceRequirement.from_dict(workspace_raw),
                 ordering=OrderingSemantics.from_dict(ordering_raw),
                 provenance=provenance,
@@ -921,6 +972,27 @@ class LaunchDescriptor:
             raise _error("E_LAUNCH_STALE_IMAGE", f"entry symbol {self.entry_symbol!r} is absent from native image")
         if entry.abi_id != self.abi_id:
             raise _error("E_LAUNCH_STALE_IMAGE", "launch ABI identifier does not match native-image entry point")
+
+    def resolve_dynamic_local_memory_bytes(
+        self, scalars: Mapping[str, object]
+    ) -> int:
+        """Return the concrete launch byte count for one invocation."""
+        if self.dynamic_local_memory_expression is None:
+            return self.dynamic_local_memory_bytes
+        try:
+            values = {
+                name: value
+                for name, value in scalars.items()
+                if isinstance(value, int) and not isinstance(value, bool)
+            }
+            return evaluate_launch_expression(
+                self.dynamic_local_memory_expression, values
+            )
+        except ValueError as exc:
+            raise _error(
+                "E_LAUNCH_BINDING_MISMATCH",
+                f"{EXPRESSION_SCHEMA}: {exc}",
+            ) from exc
 
     def validate_invocation(
         self,
@@ -962,6 +1034,7 @@ class LaunchDescriptor:
                 raise _error("E_LAUNCH_BINDING_MISMATCH", f"scalar {scalar.name!r} requires a number")
             if scalar.dtype == "bool" and not isinstance(value, bool):
                 raise _error("E_LAUNCH_BINDING_MISMATCH", f"scalar {scalar.name!r} requires bool")
+        self.resolve_dynamic_local_memory_bytes(scalars)
         for guard in self.shape_guards:
             dim = buffers[guard.binding].shape[guard.dimension]
             passes = {

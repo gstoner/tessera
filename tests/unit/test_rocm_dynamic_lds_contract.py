@@ -2,6 +2,7 @@ import pytest
 
 from tessera.compiler.rocm_dynamic_lds import (
     align_up,
+    evaluate_launch_expression,
     interference_slot_launch_bytes,
     interference_slot_layout,
     packed_path_layout,
@@ -29,3 +30,49 @@ def test_interference_slots_reuse_nested_and_loop_local_storage():
     assert offsets == (0, 32_016)
     assert launch_bytes == 40_208
     assert interference_slot_launch_bytes(((16_384, 32_768),)) == 32_768
+
+
+def test_serialized_expression_handles_runtime_arithmetic_and_sequential_arenas():
+    expression = {
+        "kind": "align_up",
+        "alignment": 16,
+        "operands": [
+            {
+                "kind": "add",
+                "operands": [
+                    {
+                        "kind": "multiply",
+                        "operands": [
+                            {"kind": "argument", "name": "Rows"},
+                            {"kind": "argument", "name": "Stride"},
+                        ],
+                    },
+                    {
+                        "kind": "max",
+                        "operands": [
+                            {"kind": "argument", "name": "ThenBytes"},
+                            {"kind": "argument", "name": "ElseBytes"},
+                        ],
+                    },
+                ],
+            }
+        ],
+    }
+    assert evaluate_launch_expression(
+        expression,
+        {"Rows": 7, "Stride": 130, "ThenBytes": 4097, "ElseBytes": 8192},
+    ) == 9_104
+
+
+def test_serialized_expression_rejects_overflow_and_missing_arguments():
+    expression = {
+        "kind": "multiply",
+        "operands": [
+            {"kind": "argument", "name": "Rows"},
+            {"kind": "constant", "value": 1 << 62},
+        ],
+    }
+    with pytest.raises(ValueError, match="signed-i64"):
+        evaluate_launch_expression(expression, {"Rows": 4})
+    with pytest.raises(ValueError, match="lacks argument"):
+        evaluate_launch_expression(expression, {})

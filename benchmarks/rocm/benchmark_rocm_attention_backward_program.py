@@ -157,6 +157,7 @@ def _record(
     lse_checkpoint: str = "auto",
 ) -> dict[str, Any]:
     samples = list(result["kernel_wall_samples_ms"])
+    event_samples = list(result.get("device_event_samples_ms", ()))
     median_ms = statistics.median(samples)
     baseline_ms = PROGRAM_WALL_BASELINE_MS_BY_DTYPE[dtype]
     limit_ms = baseline_ms * (1.0 + PROGRAM_WALL_MAX_REGRESSION)
@@ -191,6 +192,20 @@ def _record(
                 "max_regression": PROGRAM_WALL_MAX_REGRESSION,
                 "limit_ms": limit_ms,
                 "passes_ratchet": median_ms <= limit_ms,
+            },
+            "device_event": {
+                "clock": "hipEventElapsedTime",
+                "median_ms": (
+                    statistics.median(event_samples) if event_samples else None
+                ),
+                "samples_ms": event_samples,
+                "resident_module": True,
+                "resident_buffers": True,
+                "launch_count_per_sample": 5,
+                "completion_api": "hipDeviceSynchronize",
+                "selector_eligible": bool(
+                    result.get("device_event_selector_eligible", False)
+                ),
             },
         },
     }

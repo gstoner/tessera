@@ -13,6 +13,10 @@ ROCM_BACKWARD = (
     REPO_ROOT / "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAFlashAttnBwdKernel.cpp"
 )
 ROCM_NATIVE = REPO_ROOT / "python/tessera/compiler/rocm_native.py"
+ROCM_RUNTIME = REPO_ROOT / "python/tessera/runtime.py"
+ROCM_LSE_BENCHMARK = (
+    REPO_ROOT / "benchmarks/rocm/benchmark_rocm_lse_checkpoint.py"
+)
 
 
 def _op_body(source: str, op: str) -> str:
@@ -64,3 +68,16 @@ def test_rocm_training_package_selects_saved_or_recomputed_lse() -> None:
     assert '"lse_checkpoint", "auto"' in native
     assert '{"auto", "saved", "recompute"}' in native
     assert "max(sq, sk) >= 128" in native
+
+
+def test_rocm_lse_revalidation_uses_dual_clocks_and_fails_closed() -> None:
+    runtime = ROCM_RUNTIME.read_text(encoding="utf-8")
+    benchmark = ROCM_LSE_BENCHMARK.read_text(encoding="utf-8")
+    assert '"device_event_samples_ms"' in runtime
+    assert "all(sample > 0.0 for sample in event_samples)" in runtime
+    assert "hip.hipEventDestroy(event_start)" in runtime
+    assert "hip.hipEventDestroy(event_stop)" in runtime
+    assert '"schema": "tessera.rocm.lse_checkpoint.benchmark.v2"' in benchmark
+    assert '"device_event": "hipEventElapsedTime"' in benchmark
+    assert '"blocked_wsl_device_event_not_transferable"' in benchmark
+    assert '"blocked_zero_or_unavailable_device_event"' in benchmark

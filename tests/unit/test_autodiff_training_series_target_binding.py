@@ -46,6 +46,76 @@ def _rocm_nesterov(param, grad, velocity):
         param, grad, velocity, lr=0.04, momentum=0.7)
 
 
+@ts.jit(
+    target="rocm",
+    autodiff="reverse",
+    wrt=("param", "grad", "moment1", "moment2"),
+)
+def _rocm_adamw(param, grad, moment1, moment2):
+    return ts.ops.adamw(
+        param,
+        grad,
+        moment1,
+        moment2,
+        lr=0.003,
+        beta1=0.8,
+        beta2=0.95,
+        eps=1.0e-6,
+        weight_decay=0.02,
+        step=3,
+    )
+
+
+@ts.jit(
+    target="rocm",
+    autodiff="reverse",
+    wrt=("param", "grad", "moment1", "moment2"),
+)
+def _rocm_adam(param, grad, moment1, moment2):
+    return ts.ops.adam(
+        param,
+        grad,
+        moment1,
+        moment2,
+        lr=0.003,
+        beta1=0.8,
+        beta2=0.95,
+        eps=1.0e-6,
+        step=3,
+    )
+
+
+@ts.jit(
+    target="rocm",
+    autodiff="reverse",
+    wrt=("param", "grad", "moment"),
+)
+def _rocm_lion(param, grad, moment):
+    return ts.ops.lion(
+        param,
+        grad,
+        moment,
+        lr=0.004,
+        beta1=0.8,
+        beta2=0.93,
+        weight_decay=0.025,
+    )
+
+
+@ts.jit(target="rocm", autodiff="reverse", wrt=("log_p", "q"))
+def _rocm_kl(log_p, q):
+    return ts.ops.kl_divergence(
+        log_p, q, reduction="none", axis=1, epsilon=1.0e-6
+    )
+
+
+@ts.jit(target="rocm", autodiff="reverse", wrt=("p", "q"))
+def _rocm_js(p, q):
+    return ts.ops.js_divergence(
+        p, q, reduction="mean", axis=-1, epsilon=1.0e-6
+    )
+
+
 def _stable_sigmoid(x):
     out = np.empty_like(x, dtype=np.float32)
     nonnegative = x >= 0.0
@@ -187,3 +257,210 @@ def test_rocm_nesterov_backward_runs_one_gfx1151_launch():
     expected = _momentum_vjp(dp, dv, 0.04, 0.7, True)
     for got, want in zip(actual, expected):
         np.testing.assert_allclose(got, want, atol=2e-6, rtol=2e-6)
+
+
+def _adam_vjp(
+    grad,
+    moment1,
+    moment2,
+    dparam_out,
+    dmoment1_out,
+    dmoment2_out,
+    *,
+    lr,
+    beta1,
+    beta2,
+    eps,
+    weight_decay,
+    step,
+):
+    beta1_correction = 1.0 - beta1**step
+    beta2_correction = 1.0 - beta2**step
+    moment1_new = beta1 * moment1 + (1.0 - beta1) * grad
+    moment2_new = beta2 * moment2 + (1.0 - beta2) * grad * grad
+    normalized_v = moment2_new / beta2_correction
+    root = np.sqrt(normalized_v)
+    denom = root + eps
+    dmoment1_new = (
+        dmoment1_out
+        + dparam_out * (-lr / beta1_correction) / denom
+    )
+    droot = np.where(
+        normalized_v > 0.0,
+        0.5 / (beta2_correction * root),
+        0.0,
+    )
+    dmoment2_new = (
+        dmoment2_out
+        + dparam_out
+        * lr
+        * (moment1_new / beta1_correction)
+        * droot
+        / (denom * denom)
+    )
+    return (
+        dparam_out * (1.0 - lr * weight_decay),
+        (1.0 - beta1) * dmoment1_new
+        + 2.0 * (1.0 - beta2) * grad * dmoment2_new,
+        beta1 * dmoment1_new,
+        beta2 * dmoment2_new,
+    )
+
+
+def test_rocm_adamw_backward_runs_one_gfx1151_launch():
+    from tessera import runtime as rt
+
+    if rt._tessera_opt_path() is None or not rt._rocm_wmma_runtime_available():
+        pytest.skip("ROCm compiler/GPU unavailable")
+    rng = np.random.default_rng(23)
+    param = rng.normal(size=(7, 13)).astype(np.float32)
+    grad = rng.normal(scale=0.2, size=param.shape).astype(np.float32)
+    moment1 = rng.normal(scale=0.1, size=param.shape).astype(np.float32)
+    moment2 = rng.uniform(0.05, 0.25, size=param.shape).astype(np.float32)
+    cotangents = tuple(
+        rng.normal(scale=0.3, size=param.shape).astype(np.float32)
+        for _ in range(3)
+    )
+    actual = _rocm_adamw.native_backward(
+        param,
+        grad,
+        moment1,
+        moment2,
+        out_cotangents=cotangents,
+    )
+    expected = _adam_vjp(
+        grad,
+        moment1,
+        moment2,
+        *cotangents,
+        lr=0.003,
+        beta1=0.8,
+        beta2=0.95,
+        eps=1.0e-6,
+        weight_decay=0.02,
+        step=3,
+    )
+    for got, want in zip(actual, expected):
+        np.testing.assert_allclose(got, want, atol=2e-5, rtol=2e-5)
+    assert _rocm_adamw.last_backward_execution["compiler_path"] == (
+        "rocm_adam_bwd_compiled"
+    )
+
+
+def test_rocm_adam_backward_shares_exact_explicit_state_abi():
+    from tessera import runtime as rt
+
+    if rt._tessera_opt_path() is None or not rt._rocm_wmma_runtime_available():
+        pytest.skip("ROCm compiler/GPU unavailable")
+    rng = np.random.default_rng(24)
+    shape = (5, 17)
+    param = rng.normal(size=shape).astype(np.float32)
+    grad = rng.normal(scale=0.2, size=shape).astype(np.float32)
+    moment1 = rng.normal(scale=0.1, size=shape).astype(np.float32)
+    moment2 = rng.uniform(0.05, 0.25, size=shape).astype(np.float32)
+    cotangents = tuple(
+        rng.normal(scale=0.3, size=shape).astype(np.float32)
+        for _ in range(3)
+    )
+    actual = _rocm_adam.native_backward(
+        param,
+        grad,
+        moment1,
+        moment2,
+        out_cotangents=cotangents,
+    )
+    expected = _adam_vjp(
+        grad,
+        moment1,
+        moment2,
+        *cotangents,
+        lr=0.003,
+        beta1=0.8,
+        beta2=0.95,
+        eps=1.0e-6,
+        weight_decay=0.0,
+        step=3,
+    )
+    for got, want in zip(actual, expected):
+        np.testing.assert_allclose(got, want, atol=2e-5, rtol=2e-5)
+    assert _rocm_adam.last_backward_execution["compiler_path"] == (
+        "rocm_adam_bwd_compiled"
+    )
+
+
+def test_rocm_lion_backward_runs_shared_stop_sign_policy_on_gfx1151():
+    from tessera import runtime as rt
+
+    if rt._tessera_opt_path() is None or not rt._rocm_wmma_runtime_available():
+        pytest.skip("ROCm compiler/GPU unavailable")
+    rng = np.random.default_rng(25)
+    shape = (5, 19)
+    param = rng.normal(size=shape).astype(np.float32)
+    grad = rng.normal(size=shape).astype(np.float32)
+    moment = rng.normal(size=shape).astype(np.float32)
+    dparam_out = rng.normal(size=shape).astype(np.float32)
+    dmoment_out = rng.normal(size=shape).astype(np.float32)
+    actual = _rocm_lion.native_backward(
+        param,
+        grad,
+        moment,
+        out_cotangents=(dparam_out, dmoment_out),
+    )
+    expected = (
+        dparam_out * (1.0 - 0.004 * 0.025),
+        dmoment_out * (1.0 - 0.93),
+        dmoment_out * 0.93,
+    )
+    for got, want in zip(actual, expected, strict=True):
+        np.testing.assert_allclose(got, want, atol=2e-6, rtol=2e-6)
+    assert _rocm_lion.last_backward_execution["compiler_path"] == (
+        "rocm_lion_bwd_compiled"
+    )
+    assert _rocm_lion.last_backward_execution["residual_policy"] == "none"
+
+
+def test_rocm_kl_backward_handles_nonfinal_axis_and_tensor_cotangent():
+    from tessera import runtime as rt
+
+    if rt._tessera_opt_path() is None or not rt._rocm_wmma_runtime_available():
+        pytest.skip("ROCm compiler/GPU unavailable")
+    rng = np.random.default_rng(29)
+    probabilities = rng.uniform(0.05, 0.95, size=(3, 5, 7)).astype(
+        np.float32
+    )
+    log_p = np.log(probabilities).astype(np.float32)
+    q = rng.uniform(0.05, 0.95, size=probabilities.shape).astype(np.float32)
+    cotangent = rng.normal(size=(3, 7)).astype(np.float32)
+    dlog_p, dq = _rocm_kl.native_backward(
+        log_p, q, out_cotangents=cotangent
+    )
+    expanded = cotangent[:, None, :]
+    expected_log_p = (
+        probabilities * (log_p - np.log(q) + 1.0) * expanded
+    )
+    expected_q = -(probabilities / q) * expanded
+    np.testing.assert_allclose(
+        dlog_p, expected_log_p, atol=3e-6, rtol=3e-6
+    )
+    np.testing.assert_allclose(dq, expected_q, atol=3e-6, rtol=3e-6)
+    assert _rocm_kl.last_backward_execution["compiler_path"] == (
+        "rocm_distribution_loss_bwd_compiled"
+    )
+
+
+def test_rocm_js_backward_mean_reduction():
+    from tessera import runtime as rt
+
+    if rt._tessera_opt_path() is None or not rt._rocm_wmma_runtime_available():
+        pytest.skip("ROCm compiler/GPU unavailable")
+    rng = np.random.default_rng(31)
+    p = rng.uniform(0.05, 0.95, size=(7, 13)).astype(np.float32)
+    q = rng.uniform(0.05, 0.95, size=p.shape).astype(np.float32)
+    cotangent = np.asarray(1.25, dtype=np.float32)
+    dp, dq = _rocm_js.native_backward(p, q, out_cotangents=cotangent)
+    midpoint = 0.5 * (p + q)
+    scale = float(cotangent) / p.shape[0]
+    expected_p = 0.5 * np.log(p / midpoint) * scale
+    expected_q = 0.5 * np.log(q / midpoint) * scale
+    np.testing.assert_allclose(dp, expected_p, atol=3e-6, rtol=3e-6)
+    np.testing.assert_allclose(dq, expected_q, atol=3e-6, rtol=3e-6)

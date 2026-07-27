@@ -34,12 +34,13 @@ offset, identity, memory-space, lifetime-scope, cache-policy, and
 a store to nowhere. The gfx1151 five-entry training package now supports
 explicit saved and recompute modes; saved forward writes finalized
 `m + log(l)` into launch-owned `row_lse`, while its `_pre` is D-only. An exact
-FP16/BF16 17/64/128/256 sequence sweep shows mixed short-length results but a
-cross-dtype saved wins at 128 and 256, so `auto` saves at
-`max(Sq,Sk) >= 128` and recomputes below it. Gradient errors are
-identical between modes. This is gfx1151 host-wall evidence only; sibling
-physical schedules and thresholds do not transfer. Contract and retained
-packet:
+FP16/BF16 17/64/128/256 sequence sweep originally motivated the provisional
+`auto` policy that saves at `max(Sq,Sk) >= 128`. The newer resident dual-clock
+packet records positive HIP events but is fail-closed on WSL, and FP16 at 256
+does not reproduce a stable saved win. Gradient errors remain identical
+between modes. Bare-metal gfx1151 timing must therefore confirm or replace the
+threshold before it is production selector evidence; sibling physical
+schedules and thresholds do not transfer. Contract and retained packet:
 [`../../compiler/LSE_CHECKPOINT_CONTRACT.md`](../../compiler/LSE_CHECKPOINT_CONTRACT.md).
 
 Cross-backend sync
@@ -174,7 +175,10 @@ causal left windows, ragged zero fill, and deterministic dropout metadata;
 bias and softcap remain explicitly on the compatibility carrier until their
 shared recurrence semantics land.
 
-Exact gfx1151 execution for B=1, Hq/Hkv=4/2, Sq/Sk=17/19, D=64 produced a
+Historical landing state, superseded by
+`CORE-ATTENTION-TENSOR-LOOPS-MODIFIERS-2026-07-26` and
+`ROCM-ATTENTION-SHARED-BACKWARD-CONSUMER-2026-07-26`: exact gfx1151 execution
+for B=1, Hq/Hkv=4/2, Sq/Sk=17/19, D=64 produced a
 17,624-byte HSACO and 8.47e-05 maximum absolute error. After five warmups, 21
 resident `hipModuleLaunchKernel` + `hipDeviceSynchronize` wall samples record a
 0.095145 ms median, 0.9732x the existing 0.097763 ms baseline and below its
@@ -182,11 +186,12 @@ resident `hipModuleLaunchKernel` + `hipDeviceSynchronize` wall samples record a
 is 167.533902 ms, and packaging is 328.384463 ms. These WSL host-wall values
 remain non-selector evidence. The checked-in packet is
 `benchmarks/baselines/rocm_gfx1151_canonical_streaming_attention.json`.
-The backward carrier now verifies launch-owned workspace, split count,
-16-row query/KV blocks, and ascending reduction order. Shared numerical
-semantics and ROCm WMMA forward/LSE/gradient recomputation agree on
-`softcap(scale*QK^T + bias)`. Tensor-valued shared backward `scf.for`
-materialization and direct shared-forward bias/softcap ops remain open.
+The backward carrier verified launch-owned workspace, split count, 16-row
+query/KV blocks, and ascending reduction order. Shared numerical semantics and
+ROCm WMMA forward/LSE/gradient recomputation agreed on
+`softcap(scale*QK^T + bias)`. The later synchronization points materialize the
+tensor-valued shared backward `scf.for` bodies and consume shared forward
+bias/softcap directly; those are closed and must not re-enter the active queue.
 
 Cross-backend sync `ROCM-SSA-LDS-PIPELINE-2026-07-26` is **complete** under the
 ROCm follow-up to `NVIDIA-PACKED-SSA-FOUNDATION-2026-07-25`. The
@@ -1654,11 +1659,12 @@ BCE-with-logits and class-index/label-smoothed cross-entropy paired Graph
 contracts plus exact one-launch gfx1151 backward execution. It also registers
 KL/JS paired carriers and upgrades Momentum/Nesterov and Adam/AdamW from
 opaque state to explicit tensor-state adjoints. Momentum/Nesterov have exact
-single-launch gfx1151 VJPs and no-residual cache identities; Adam/AdamW have
-dynamic shared Linalg VJPs but their ROCm compiled backward ABI remains
-**follow-up required**. KL/JS compiled backward, Lion/Adafactor state
-contracts, training-step fusion, selector decisions, and operation-total
-closeout evidence remain open.
+single-launch gfx1151 VJPs and no-residual cache identities. The
+`ROCM-TRAINING-MEMORY-FUSION-2026-07-27` continuation below closes the
+architecture-owned Adam/AdamW and KL/JS physical backward gaps. Lion already
+has explicit moment state and exact forward execution; Adafactor factored
+state/execution, additional training-step fusion, and selector closeout remain
+open.
 
 Cross-backend sync `CORE-COMPILER-TRAINING-FUSION-2026-07-23` closes the first
 training-step fusion envelope for MSE, MAE, Huber, SmoothL1, and stable
@@ -1831,3 +1837,56 @@ WarpSpec path consume shared allocation/pipeline identity. TMA/TMEM/TCGen05 are
 map its own LDS allocations, async-copy/waitcnt/s_barrier dependencies, and
 WMMA/MFMA consumers onto the shared buffer/pipeline model. That remains
 **follow-up required** and no NVIDIA structural or device evidence closes it.
+
+ROCm-owned continuation `ROCM-TRAINING-MEMORY-FUSION-2026-07-27` adds a
+compiler-generated one-launch paired Adam/AdamW VJP over explicit parameter,
+gradient, first-moment, and second-moment state. Exact ragged gfx1151 tests
+cover both weight-decay variants. KL and Jensen-Shannon divergence now lower
+to one paired-gradient HIP kernel with arbitrary class-axis addressing,
+scalar/tensor cotangents, strict epsilon-clamp derivatives, and exact rank-3
+and mean-reduction proof. A warmed 30-sample operation-total packet records
+4.059 ms AdamW at 257x255, 1.169 ms KL at 17x31x13, and 1.135 ms JS at
+527x13; allocation, copies, cache lookup, launch, synchronization, and result
+copies are included, so these are not kernel-only selector evidence.
+
+Continuation `ROCM-LION-BACKWARD-2026-07-27` closes the remaining elementwise
+Lion adjoint on gfx1151. The compiler now emits one paired HIP kernel for
+parameter, gradient, and carried-moment VJPs under the canonical
+stop-gradient-through-sign policy; the affine VJP requires no saved forward
+residuals. Exact ragged `5x19` device proof covers nonzero decay and both
+output cotangents. The refreshed 30-sample operation-total packet records
+2.908 ms AdamW, 1.383 ms Lion, 1.186 ms KL, and 1.116 ms JS medians; these
+include allocation, copies, cache lookup, launch, synchronization, and result
+copies and remain selector-ineligible. Adafactor's factored row/column state
+topology remains the next optimizer execution gap.
+
+The same continuation lifts dynamic local-memory arithmetic into the shared
+`LaunchDescriptor`: serialized argument, constant, add, multiply, max,
+path-max, and alignment expressions are validated, signed-i64 checked,
+content-addressed, and resolved from launch scalars. Legacy descriptors retain
+their digest when no expression is present, and NVIDIA's existing serialized
+dynamic-shared probe now consumes the shared field rather than backend
+provenance. ROCm interference-slot allocation already handles sequential,
+nested, looping, forwarded-alias, and conservative escaping lifetimes;
+compiler emission of arbitrary local arithmetic into the new descriptor and
+production device-capacity injection remain open.
+
+Dynamic RMSNorm and LayerNorm gain a canonical one-launch softcap consumer,
+`cap * tanh(value / cap)`, alongside ReLU, SiLU, GELU, add, and multiply.
+Positive finite cap validation, ragged/rank-3 exact gfx1151 tests, and
+host-free ROCDL structural checks land without changing a production selector.
+Adafactor's factored row/column state and broader loss-to-optimizer fusion
+remain the next training/fusion work.
+
+`ROCM-LSE-1` revalidation now records 21-sample resident FP16 and BF16
+wall-clock plus HIP-event distributions at 17/64/128/256. HIP 7.14 returns
+positive events under this WSL host, but the packet is fail-closed as
+`blocked_wsl_device_event_not_transferable`; the 128+ saved-LSE policy still
+awaits bare-metal gfx1151 confirmation.
+
+Cross-backend sync `CORE-SCHEDULE-1F1B-MATERIALIZE-2026-07-27` makes the shared
+pipeline legality pass emit an explicit, unique-clock warmup/steady/cooldown
+dependency order after proving stage and transport legality. This changes no
+AMDGPU schedule or HIP execution row yet: ROCm runtime consumption and
+collective overlap are follow-up required, and no CUDA/Apple physical evidence
+transfers.

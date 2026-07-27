@@ -1973,3 +1973,25 @@ TMEM, or TCGen05 consumer, so those operations are **not applicable** to Apple
 with that architecture-specific reason. Apple threadgroup allocation and
 pipeline-state threading remain **follow-up required** on its own lowering;
 no NVIDIA resource, runtime, or exact-device claim transfers.
+
+Cross-backend sync `ROCM-TRAINING-MEMORY-FUSION-2026-07-27` adds ROCm-owned
+Adam/AdamW and KL/JS physical backward execution plus a ROCm normalization
+softcap epilogue; no HIP kernel, gfx1151 timing, or selector evidence
+transfers to Metal/MPS. Apple remains follow-up required for its
+architecture-owned training backward materializers. The shared change is the
+target-neutral, serializable dynamic-local-memory expression field on
+`LaunchDescriptor`; Apple has no threadgroup-memory consumer of that field in
+this change and retains its separately owned threadgroup materialization gap.
+
+Cross-backend sync `ROCM-LION-BACKWARD-2026-07-27` adds only the ROCm-owned
+physical consumer of the already-shared Lion stop-sign VJP policy and extends
+the ROCm operation-total benchmark packet. HIP code objects, gfx1151 numerics,
+and WSL timings do not transfer to Metal. Apple remains follow-up required for
+an architecture-owned compiled Lion backward materializer; no Apple
+capability, execution row, selector, or threadgroup-memory contract changes.
+
+Cross-backend sync `CORE-SCHEDULE-1F1B-MATERIALIZE-2026-07-27` emits a shared
+unique-clock warmup/steady/cooldown dependency order after pipeline legality.
+Metal/runtime consumption and collective overlap remain Apple-owned follow-up;
+the structural carrier changes no Apple capability, selector, or exact-device
+claim.

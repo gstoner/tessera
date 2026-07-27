@@ -32,9 +32,11 @@ Cross-backend sync `LSE-CHECKPOINT-CONTRACT-2026-07-27` lands the real shared
 checkpoint vocabulary: explicit memref source/destination, SSA row offset,
 identity, memory space, lifetime scope, cache policy, and read/write effects.
 Default forward lowering no longer emits a destination-less save. ROCm
-validates saved versus recompute on gfx1151 and selects saved at 128+ rows,
-where both FP16 and BF16 win at 128 and 256. NVIDIA is **follow-up
-required**: consume the same shared contract, measure its own CUDA
+validates saved versus recompute on gfx1151 and retains the provisional
+128+ policy, but the newer dual-clock packet is explicitly fail-closed on WSL:
+HIP events are positive yet non-transferable, and FP16 at 256 is not a stable
+saved winner. Bare-metal gfx1151 confirmation remains required. NVIDIA is
+**follow-up required**: consume the same shared contract, measure its own CUDA
 forward-store/backward-load package, and retain or replace its zero-workspace
 policy using exact SM120 evidence. AMD WMMA, HSACO size, threshold, and WSL
 host-wall results do not transfer.
@@ -1726,3 +1728,25 @@ compatibility metadata is rejected, and the structured Schedule→Tile layout is
 consumed directly. TCGen05/TMEM has host-free structural and SM120 fail-closed
 proof only; exact execution remains SM100-owned and cannot be inferred from
 consumer Blackwell.
+
+Cross-backend sync `ROCM-TRAINING-MEMORY-FUSION-2026-07-27` adds ROCm-owned
+Adam/AdamW and KL/JS physical backward execution plus a ROCm normalization
+softcap epilogue; none of those HIP kernels, gfx1151 timings, or selector
+evidence transfers to CUDA. The shared change is the target-neutral,
+serializable dynamic-local-memory expression field on `LaunchDescriptor`.
+NVIDIA's existing SM120 add/multiply/path-max/alignment probe now consumes
+that field and retains its CUDA-owned PTX, launch-v2, resource, and exact-device
+evidence. No NVIDIA execution row or selector changes.
+
+Cross-backend sync `ROCM-LION-BACKWARD-2026-07-27` adds only the ROCm-owned
+physical consumer of the already-shared Lion stop-sign VJP policy and extends
+the gfx1151 operation-total benchmark packet. HIP code objects, AMD launch ABI,
+and WSL timings do not transfer to CUDA. NVIDIA remains follow-up required for
+an architecture-owned compiled Lion backward materializer; no SM120
+capability, execution row, PTX schedule, or selector changes.
+
+Cross-backend sync `CORE-SCHEDULE-1F1B-MATERIALIZE-2026-07-27` emits a shared
+unique-clock warmup/steady/cooldown dependency order after pipeline legality.
+CUDA runtime consumption and collective overlap remain NVIDIA-owned follow-up;
+the structural carrier changes no SM120 capability, PTX schedule, selector, or
+exact-device claim.

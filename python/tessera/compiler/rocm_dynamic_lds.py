@@ -10,13 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-
-def align_up(value: int, alignment: int = 16) -> int:
-    if value < 0:
-        raise ValueError("dynamic LDS byte counts must be non-negative")
-    if alignment <= 0 or alignment & (alignment - 1):
-        raise ValueError("dynamic LDS alignment must be a positive power of two")
-    return (value + alignment - 1) & -alignment
+from .dynamic_local_memory import align_up, evaluate_launch_expression
 
 
 def packed_path_layout(
@@ -68,6 +62,7 @@ def interference_slot_launch_bytes(
 
 __all__ = [
     "align_up",
+    "evaluate_launch_expression",
     "interference_slot_launch_bytes",
     "interference_slot_layout",
     "packed_path_layout",

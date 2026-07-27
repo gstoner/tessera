@@ -132,21 +132,39 @@ struct DistributeRank4FlashAttn : public RewritePattern {
 
   LogicalResult matchAndRewrite(Operation *op,
                                 PatternRewriter &rewriter) const override {
-    if (op->getNumOperands() != 3 || op->getNumResults() != 1)
+    if ((op->getNumOperands() != 3 && op->getNumOperands() != 4) ||
+        op->getNumResults() != 1)
       return failure();
 
     Value q = op->getOperand(0);
     Value k = op->getOperand(1);
     Value v = op->getOperand(2);
+    Value bias = op->getNumOperands() == 4 ? op->getOperand(3) : Value();
     auto qType = dyn_cast<RankedTensorType>(q.getType());
     auto kType = dyn_cast<RankedTensorType>(k.getType());
     auto vType = dyn_cast<RankedTensorType>(v.getType());
     auto outType = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    auto biasType =
+        bias ? dyn_cast<RankedTensorType>(bias.getType()) : RankedTensorType();
     if (!qType || !kType || !vType || !outType ||
         !qType.hasStaticShape() || !kType.hasStaticShape() ||
         !vType.hasStaticShape() || !outType.hasStaticShape() ||
         qType.getRank() != 4 || kType.getRank() != 4 ||
         vType.getRank() != 4 || outType.getRank() != 4)
+      return failure();
+    if (bias &&
+        (!biasType || !biasType.hasStaticShape() ||
+         (biasType.getRank() != 3 && biasType.getRank() != 4) ||
+         (biasType.getDimSize(0) != 1 &&
+          biasType.getDimSize(0) != qType.getDimSize(0)) ||
+         (biasType.getRank() == 4 &&
+          biasType.getDimSize(1) != 1 &&
+          biasType.getDimSize(1) != qType.getDimSize(1)) ||
+         biasType.getDimSize(biasType.getRank() - 2) !=
+             qType.getDimSize(2) ||
+         biasType.getDimSize(biasType.getRank() - 1) !=
+             kType.getDimSize(2) ||
+         !biasType.getElementType().isF32()))
       return failure();
 
     int64_t batch = qType.getDimSize(0);
@@ -244,9 +262,44 @@ struct DistributeRank4FlashAttn : public RewritePattern {
             rewriter, loc, kTileType, k, kvOffsets, kSizes, strides);
         Value vTile = tensor::ExtractSliceOp::create(
             rewriter, loc, vTileType, v, kvOffsets, vSizes, strides);
+        Value biasTile;
+        if (bias) {
+          auto biasTileType = RankedTensorType::get(
+              {queryRows, keyRows}, biasType.getElementType());
+          OpFoldResult biasBatch =
+              biasType.getDimSize(0) == 1 ? OpFoldResult(rewriter.getIndexAttr(0))
+                                          : OpFoldResult(batchIndex);
+          if (biasType.getRank() == 4) {
+            OpFoldResult biasHead =
+                biasType.getDimSize(1) == 1
+                    ? OpFoldResult(rewriter.getIndexAttr(0))
+                    : OpFoldResult(queryHead);
+            biasTile = tensor::ExtractSliceOp::create(
+                rewriter, loc, biasTileType, bias,
+                SmallVector<OpFoldResult>{
+                    biasBatch, biasHead, rewriter.getIndexAttr(0),
+                    rewriter.getIndexAttr(0)},
+                SmallVector<OpFoldResult>{
+                    rewriter.getIndexAttr(1), rewriter.getIndexAttr(1),
+                    rewriter.getIndexAttr(queryRows),
+                    rewriter.getIndexAttr(keyRows)},
+                SmallVector<OpFoldResult>(4, rewriter.getIndexAttr(1)));
+          } else {
+            biasTile = tensor::ExtractSliceOp::create(
+                rewriter, loc, biasTileType, bias,
+                SmallVector<OpFoldResult>{biasBatch, rewriter.getIndexAttr(0),
+                                          rewriter.getIndexAttr(0)},
+                SmallVector<OpFoldResult>{
+                    rewriter.getIndexAttr(1), rewriter.getIndexAttr(queryRows),
+                    rewriter.getIndexAttr(keyRows)},
+                SmallVector<OpFoldResult>(3, rewriter.getIndexAttr(1)));
+          }
+        }
 
         OperationState rank2State(loc, "tessera.flash_attn");
         rank2State.addOperands({qTile, kTile, vTile});
+        if (biasTile)
+          rank2State.addOperands(biasTile);
         rank2State.addTypes(outTileType);
         rank2State.addAttributes(op->getAttrs());
         rank2State.addAttribute("tessera.rank4_distributed",
@@ -288,22 +341,32 @@ struct LowerFlashAttnToTileIR : public RewritePattern {
     // The canonical streaming slice owns static rank-2 Q/K/V. Higher-rank
     // batch/head distribution and KV-cache handles remain explicit residuals
     // instead of being silently treated as whole tensors.
-    if (op->getNumOperands() != 3 || op->getNumResults() != 1)
+    if ((op->getNumOperands() != 3 && op->getNumOperands() != 4) ||
+        op->getNumResults() != 1)
       return failure();
 
     Value Q = op->getOperand(0);
     Value K = op->getOperand(1);
     Value V = op->getOperand(2);
+    Value bias = op->getNumOperands() == 4 ? op->getOperand(3) : Value();
     Location loc = op->getLoc();
     auto qType = dyn_cast<RankedTensorType>(Q.getType());
     auto kType = dyn_cast<RankedTensorType>(K.getType());
     auto vType = dyn_cast<RankedTensorType>(V.getType());
     auto outType = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    auto biasType =
+        bias ? dyn_cast<RankedTensorType>(bias.getType()) : RankedTensorType();
     if (!qType || !kType || !vType || !outType ||
         !qType.hasStaticShape() || !kType.hasStaticShape() ||
         !vType.hasStaticShape() || !outType.hasStaticShape() ||
         qType.getRank() != 2 || kType.getRank() != 2 ||
         vType.getRank() != 2 || outType.getRank() != 2)
+      return failure();
+    if (bias &&
+        (!biasType || !biasType.hasStaticShape() || biasType.getRank() != 2 ||
+         biasType.getDimSize(0) != qType.getDimSize(0) ||
+         biasType.getDimSize(1) != kType.getDimSize(0) ||
+         !biasType.getElementType().isF32()))
       return failure();
     int64_t qRows = qType.getDimSize(0);
     int64_t sk = kType.getDimSize(0);
@@ -349,6 +412,7 @@ struct LowerFlashAttnToTileIR : public RewritePattern {
     // lanes are never admitted as valid attention positions.
     Value paddedK = K;
     Value paddedV = V;
+    Value paddedBias = bias;
     if (paddedSk != sk) {
       auto paddedKType =
           RankedTensorType::get({paddedSk, d}, kType.getElementType());
@@ -372,6 +436,18 @@ struct LowerFlashAttnToTileIR : public RewritePattern {
           SmallVector<OpFoldResult>{rewriter.getIndexAttr(sk),
                                     rewriter.getIndexAttr(dv)},
           strides);
+      if (bias) {
+        auto paddedBiasType =
+            RankedTensorType::get({qRows, paddedSk}, biasType.getElementType());
+        Value biasZero = arith::ConstantOp::create(
+            rewriter, loc, paddedBiasType,
+            rewriter.getZeroAttr(paddedBiasType));
+        paddedBias = tensor::InsertSliceOp::create(
+            rewriter, loc, bias, biasZero, offsets,
+            SmallVector<OpFoldResult>{rewriter.getIndexAttr(qRows),
+                                      rewriter.getIndexAttr(sk)},
+            strides);
+      }
     }
 
     // Q is invariant across the KV loop and is staged once.
@@ -472,6 +548,30 @@ struct LowerFlashAttnToTileIR : public RewritePattern {
                                  rewriter.getF32FloatAttr(scale))});
       Value scores = sdp->getResult(0);
 
+      if (bias) {
+        auto biasBlockType =
+            RankedTensorType::get({qRows, tkv}, biasType.getElementType());
+        Value biasSlice = tensor::ExtractSliceOp::create(
+            rewriter, loc, biasBlockType, paddedBias,
+            SmallVector<OpFoldResult>{rewriter.getIndexAttr(0), kv},
+            SmallVector<OpFoldResult>{rewriter.getIndexAttr(qRows),
+                                      rewriter.getIndexAttr(tkv)},
+            strides);
+        Operation *addBias = emitAttnOp(
+            rewriter, loc, "tessera_attn.score_bias", {scores, biasSlice},
+            {scoresType});
+        scores = addBias->getResult(0);
+      }
+      if (auto softcap = op->getAttrOfType<FloatAttr>("softcap");
+          softcap && softcap.getValueAsDouble() > 0.0) {
+        Operation *cap = emitAttnOp(
+            rewriter, loc, "tessera_attn.softcap", {scores}, {scoresType},
+            {rewriter.getNamedAttr(
+                "cap", rewriter.getF32FloatAttr(
+                           static_cast<float>(softcap.getValueAsDouble())))});
+        scores = cap->getResult(0);
+      }
+
       if (causal || windowLeft >= 0 || windowRight >= 0 || paddedSk != sk) {
         SmallVector<NamedAttribute> boundaryAttrs = {
             rewriter.getNamedAttr("causal", rewriter.getBoolAttr(causal)),
@@ -538,6 +638,256 @@ struct LowerFlashAttnToTileIR : public RewritePattern {
     else
       rewriter.eraseOp(op);
 
+    return success();
+  }
+};
+
+// Materialize the target-neutral attention VJP contract as tensor-valued loop
+// bodies.  The phase operations own the mathematical block update; scf.for
+// owns distribution, split workspace, and deterministic reduction order.
+struct LowerAttentionBackwardToLoops : public RewritePattern {
+  LowerAttentionBackwardToLoops(MLIRContext *ctx)
+      : RewritePattern("tessera_attn.backward", /*benefit=*/4, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 5 || op->getNumResults() != 3)
+      return failure();
+    auto qType = dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+    auto kType = dyn_cast<RankedTensorType>(op->getOperand(2).getType());
+    auto dQType = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    auto dKType = dyn_cast<RankedTensorType>(op->getResult(1).getType());
+    auto dVType = dyn_cast<RankedTensorType>(op->getResult(2).getType());
+    auto splitAttr = op->getAttrOfType<IntegerAttr>("split_count");
+    auto queryBlockAttr = op->getAttrOfType<IntegerAttr>("query_block");
+    auto keyBlockAttr = op->getAttrOfType<IntegerAttr>("key_block");
+    if (!qType || !kType || !dQType || !dKType || !dVType ||
+        !qType.hasStaticShape() || !kType.hasStaticShape() ||
+        !dQType.hasStaticShape() || !dKType.hasStaticShape() ||
+        !dVType.hasStaticShape() || !splitAttr || !queryBlockAttr ||
+        !keyBlockAttr)
+      return failure();
+
+    int64_t batch = qType.getDimSize(0);
+    int64_t queryHeads = qType.getDimSize(1);
+    int64_t queryRows = qType.getDimSize(2);
+    int64_t kvHeads = kType.getDimSize(1);
+    int64_t keyRows = kType.getDimSize(2);
+    int64_t splitCount = splitAttr.getInt();
+    int64_t queryBlock = queryBlockAttr.getInt();
+    int64_t keyBlock = keyBlockAttr.getInt();
+    if (batch <= 0 || queryHeads <= 0 || queryRows <= 0 || kvHeads <= 0 ||
+        keyRows <= 0 || splitCount < 2 || queryBlock <= 0 || keyBlock <= 0)
+      return failure();
+
+    Location loc = op->getLoc();
+    auto zeroTensor = [&](RankedTensorType type) {
+      return arith::ConstantOp::create(rewriter, loc, type,
+                                       rewriter.getZeroAttr(type))
+          .getResult();
+    };
+    Value zero = arith::ConstantIndexOp::create(rewriter, loc, 0);
+    Value one = arith::ConstantIndexOp::create(rewriter, loc, 1);
+    Value batchUpper =
+        arith::ConstantIndexOp::create(rewriter, loc, batch);
+    Value queryHeadUpper =
+        arith::ConstantIndexOp::create(rewriter, loc, queryHeads);
+    Value kvHeadUpper =
+        arith::ConstantIndexOp::create(rewriter, loc, kvHeads);
+    Value queryUpper =
+        arith::ConstantIndexOp::create(rewriter, loc, queryRows);
+    Value keyUpper =
+        arith::ConstantIndexOp::create(rewriter, loc, keyRows);
+    Value splitUpper =
+        arith::ConstantIndexOp::create(rewriter, loc, splitCount);
+    Value queryStep =
+        arith::ConstantIndexOp::create(rewriter, loc, queryBlock);
+    Value keyStep =
+        arith::ConstantIndexOp::create(rewriter, loc, keyBlock);
+
+    auto tagLoop = [&](scf::ForOp loop, StringRef phase) {
+      loop->setAttr("tessera.attention_backward_phase",
+                    rewriter.getStringAttr(phase));
+      loop->setAttr("tessera.tensor_iter_args", rewriter.getUnitAttr());
+    };
+
+    // dQ is query-head owned. Each [query_block,key_block] update carries the
+    // full tensor in SSA, leaving physical subview/register allocation to the
+    // target schedule.
+    Value dQInit = zeroTensor(dQType);
+    auto dqBatch = scf::ForOp::create(
+        rewriter, loc, zero, batchUpper, one, ValueRange{dQInit});
+    tagLoop(dqBatch, "dq.batch");
+    {
+      OpBuilder::InsertionGuard g0(rewriter);
+      rewriter.setInsertionPointToStart(dqBatch.getBody());
+      auto dqHead = scf::ForOp::create(
+          rewriter, loc, zero, queryHeadUpper, one,
+          ValueRange{dqBatch.getRegionIterArg(0)});
+      tagLoop(dqHead, "dq.query_head");
+      {
+        OpBuilder::InsertionGuard g1(rewriter);
+        rewriter.setInsertionPointToStart(dqHead.getBody());
+        auto dqQuery = scf::ForOp::create(
+            rewriter, loc, zero, queryUpper, queryStep,
+            ValueRange{dqHead.getRegionIterArg(0)});
+        tagLoop(dqQuery, "dq.query_block");
+        {
+          OpBuilder::InsertionGuard g2(rewriter);
+          rewriter.setInsertionPointToStart(dqQuery.getBody());
+          auto dqKey = scf::ForOp::create(
+              rewriter, loc, zero, keyUpper, keyStep,
+              ValueRange{dqQuery.getRegionIterArg(0)});
+          tagLoop(dqKey, "dq.key_block");
+          {
+            OpBuilder::InsertionGuard g3(rewriter);
+            rewriter.setInsertionPointToStart(dqKey.getBody());
+            Operation *update = emitAttnOp(
+                rewriter, loc, "tessera_attn.backward_dq_block",
+                {op->getOperand(0), op->getOperand(1), op->getOperand(2),
+                 op->getOperand(3), op->getOperand(4),
+                 dqBatch.getInductionVar(), dqHead.getInductionVar(),
+                 dqQuery.getInductionVar(), dqKey.getInductionVar(),
+                 dqKey.getRegionIterArg(0)},
+                {dQType}, op->getAttrs());
+            scf::YieldOp::create(rewriter, loc, update->getResult(0));
+          }
+          rewriter.setInsertionPointAfter(dqKey);
+          scf::YieldOp::create(rewriter, loc, dqKey.getResult(0));
+        }
+        rewriter.setInsertionPointAfter(dqQuery);
+        scf::YieldOp::create(rewriter, loc, dqQuery.getResult(0));
+      }
+      rewriter.setInsertionPointAfter(dqHead);
+      scf::YieldOp::create(rewriter, loc, dqHead.getResult(0));
+    }
+
+    SmallVector<int64_t> partialKShape{splitCount};
+    partialKShape.append(dKType.getShape().begin(), dKType.getShape().end());
+    SmallVector<int64_t> partialVShape{splitCount};
+    partialVShape.append(dVType.getShape().begin(), dVType.getShape().end());
+    auto partialKType =
+        RankedTensorType::get(partialKShape, rewriter.getF32Type());
+    auto partialVType =
+        RankedTensorType::get(partialVShape, rewriter.getF32Type());
+    Value partialKInit = zeroTensor(partialKType);
+    Value partialVInit = zeroTensor(partialVType);
+
+    // The canonical ownership loop is B/Hkv/split/Q-block/KV-block. No phase
+    // can alias another split's partial, and both partial tensors are explicit
+    // iter_args at every level.
+    auto partialBatch = scf::ForOp::create(
+        rewriter, loc, zero, batchUpper, one,
+        ValueRange{partialKInit, partialVInit});
+    tagLoop(partialBatch, "dkdv.batch");
+    {
+      OpBuilder::InsertionGuard g0(rewriter);
+      rewriter.setInsertionPointToStart(partialBatch.getBody());
+      auto partialHead = scf::ForOp::create(
+          rewriter, loc, zero, kvHeadUpper, one,
+          partialBatch.getRegionIterArgs());
+      tagLoop(partialHead, "dkdv.kv_head");
+      {
+        OpBuilder::InsertionGuard g1(rewriter);
+        rewriter.setInsertionPointToStart(partialHead.getBody());
+        auto partialSplit = scf::ForOp::create(
+            rewriter, loc, zero, splitUpper, one,
+            partialHead.getRegionIterArgs());
+        tagLoop(partialSplit, "dkdv.split");
+        partialSplit->setAttr("tessera.workspace_owner",
+                              rewriter.getStringAttr("program_launch"));
+        {
+          OpBuilder::InsertionGuard g2(rewriter);
+          rewriter.setInsertionPointToStart(partialSplit.getBody());
+          auto partialQuery = scf::ForOp::create(
+              rewriter, loc, zero, queryUpper, queryStep,
+              partialSplit.getRegionIterArgs());
+          tagLoop(partialQuery, "dkdv.query_block");
+          {
+            OpBuilder::InsertionGuard g3(rewriter);
+            rewriter.setInsertionPointToStart(partialQuery.getBody());
+            auto partialKey = scf::ForOp::create(
+                rewriter, loc, zero, keyUpper, keyStep,
+                partialQuery.getRegionIterArgs());
+            tagLoop(partialKey, "dkdv.key_block");
+            {
+              OpBuilder::InsertionGuard g4(rewriter);
+              rewriter.setInsertionPointToStart(partialKey.getBody());
+              Operation *update = emitAttnOp(
+                  rewriter, loc, "tessera_attn.backward_dkdv_block",
+                  {op->getOperand(0), op->getOperand(1), op->getOperand(2),
+                   op->getOperand(3), op->getOperand(4),
+                   partialBatch.getInductionVar(),
+                   partialHead.getInductionVar(),
+                   partialSplit.getInductionVar(),
+                   partialQuery.getInductionVar(),
+                   partialKey.getInductionVar(),
+                   partialKey.getRegionIterArg(0),
+                   partialKey.getRegionIterArg(1)},
+                  {partialKType, partialVType}, op->getAttrs());
+              scf::YieldOp::create(
+                  rewriter, loc,
+                  ValueRange{update->getResult(0), update->getResult(1)});
+            }
+            rewriter.setInsertionPointAfter(partialKey);
+            scf::YieldOp::create(rewriter, loc, partialKey.getResults());
+          }
+          rewriter.setInsertionPointAfter(partialQuery);
+          scf::YieldOp::create(rewriter, loc, partialQuery.getResults());
+        }
+        rewriter.setInsertionPointAfter(partialSplit);
+        scf::YieldOp::create(rewriter, loc, partialSplit.getResults());
+      }
+      rewriter.setInsertionPointAfter(partialHead);
+      scf::YieldOp::create(rewriter, loc, partialHead.getResults());
+    }
+
+    Value dKInit = zeroTensor(dKType);
+    Value dVInit = zeroTensor(dVType);
+    auto reduceBatch = scf::ForOp::create(
+        rewriter, loc, zero, batchUpper, one, ValueRange{dKInit, dVInit});
+    tagLoop(reduceBatch, "reduce.batch");
+    {
+      OpBuilder::InsertionGuard g0(rewriter);
+      rewriter.setInsertionPointToStart(reduceBatch.getBody());
+      auto reduceHead = scf::ForOp::create(
+          rewriter, loc, zero, kvHeadUpper, one,
+          reduceBatch.getRegionIterArgs());
+      tagLoop(reduceHead, "reduce.kv_head");
+      {
+        OpBuilder::InsertionGuard g1(rewriter);
+        rewriter.setInsertionPointToStart(reduceHead.getBody());
+        auto reduceSplit = scf::ForOp::create(
+            rewriter, loc, zero, splitUpper, one,
+            reduceHead.getRegionIterArgs());
+        tagLoop(reduceSplit, "reduce.fixed_order_split");
+        reduceSplit->setAttr("tessera.reduction_order",
+                             rewriter.getStringAttr("ascending_split"));
+        {
+          OpBuilder::InsertionGuard g2(rewriter);
+          rewriter.setInsertionPointToStart(reduceSplit.getBody());
+          Operation *reduce = emitAttnOp(
+              rewriter, loc, "tessera_attn.backward_reduce_split",
+              {partialBatch.getResult(0), partialBatch.getResult(1),
+               reduceBatch.getInductionVar(), reduceHead.getInductionVar(),
+               reduceSplit.getInductionVar(),
+               reduceSplit.getRegionIterArg(0),
+               reduceSplit.getRegionIterArg(1)},
+              {dKType, dVType}, op->getAttrs());
+          scf::YieldOp::create(
+              rewriter, loc,
+              ValueRange{reduce->getResult(0), reduce->getResult(1)});
+        }
+        rewriter.setInsertionPointAfter(reduceSplit);
+        scf::YieldOp::create(rewriter, loc, reduceSplit.getResults());
+      }
+      rewriter.setInsertionPointAfter(reduceHead);
+      scf::YieldOp::create(rewriter, loc, reduceHead.getResults());
+    }
+
+    rewriter.replaceOp(op, ValueRange{dqBatch.getResult(0),
+                                      reduceBatch.getResult(0),
+                                      reduceBatch.getResult(1)});
     return success();
   }
 };
@@ -736,6 +1086,7 @@ struct TileIRLoweringPass
   void runOnOperation() override {
     MLIRContext *ctx = &getContext();
     RewritePatternSet patterns(ctx);
+    patterns.add<LowerAttentionBackwardToLoops>(ctx);
     patterns.add<DistributeRank4FlashAttn>(ctx);
     patterns.add<LowerFlashAttnToTileIR>(ctx, tileQ, tileKV, smVersion);
     patterns.add<LowerKReductionAddToTileMMA>(ctx, smVersion);

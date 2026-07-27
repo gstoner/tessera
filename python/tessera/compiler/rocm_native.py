@@ -396,6 +396,8 @@ def emit_attention_graph_ir(
     causal: bool,
     window_left: int,
     window_right: int,
+    bias: bool = False,
+    softcap: float = 0.0,
     dropout_p: float = 0.0,
     dropout_seed: int = 0,
     tile_kv: int = 16,
@@ -405,8 +407,8 @@ def emit_attention_graph_ir(
     This is the semantic entry path: the shared Tile IR lowering owns
     batch/head distribution, GQA mapping, the KV-block recurrence, ragged
     zero-fill, and pipeline SSA. ROCm lowering owns only its physical schedule.
-    Bias and softcap intentionally remain on the compatibility carrier until
-    those modifiers have a target-neutral representation in the recurrence.
+    Additive bias and softcap are direct shared score-recurrence operations;
+    target lowering observes them but does not reconstruct their ordering.
     """
     if storage not in {"f16", "bf16"}:
         raise ValueError(f"unsupported gfx1151 attention storage {storage!r}")
@@ -414,7 +416,13 @@ def emit_attention_graph_ir(
     if tile_kv <= 0:
         raise ValueError("canonical attention tile_kv must be positive")
     scale_literal = _mlir_float(scale)
+    softcap_literal = _mlir_float(softcap)
     dropout_literal = _mlir_float(dropout_p)
+    bias_arg = (
+        f",\n      %bias: tensor<{b}x{hq}x{sq}x{sk}xf32>" if bias else ""
+    )
+    bias_operand = ", %bias" if bias else ""
+    bias_type = f",\n          tensor<{b}x{hq}x{sq}x{sk}xf32>" if bias else ""
     return f'''module attributes {{
   tessera.ir.version = "1.0",
   tessera.target = {{sm = 90 : i32, warps = 1 : i32,
@@ -423,22 +431,23 @@ def emit_attention_graph_ir(
   func.func @{entry}(
       %q: tensor<{b}x{hq}x{sq}x{head_dim}x{storage}>,
       %key: tensor<{b}x{hkv}x{sk}x{head_dim}x{storage}>,
-      %v: tensor<{b}x{hkv}x{sk}x{value_dim}x{storage}>
+      %v: tensor<{b}x{hkv}x{sk}x{value_dim}x{storage}>{bias_arg}
   ) -> tensor<{b}x{hq}x{sq}x{value_dim}xf32> {{
-    %o = "tessera.flash_attn"(%q, %key, %v)
-        <{{operandSegmentSizes = array<i32: 1, 1, 1, 0>}}> {{
+    %o = "tessera.flash_attn"(%q, %key, %v{bias_operand})
+        <{{operandSegmentSizes = array<i32: 1, 1, 1, {int(bias)}>}}> {{
       causal = {str(causal).lower()},
       dropout_p = {dropout_literal} : f64,
       dropout_seed = {dropout_seed} : i64,
       head_dim = {head_dim} : i64,
       scale = {scale_literal} : f32,
+      softcap = {softcap_literal} : f32,
       tessera.tile_q = {sq} : i32,
       tessera.tile_kv = {tile_kv} : i32,
       window_left = {window_left} : i64,
       window_right = {window_right} : i64
     }} : (tensor<{b}x{hq}x{sq}x{head_dim}x{storage}>,
           tensor<{b}x{hkv}x{sk}x{head_dim}x{storage}>,
-          tensor<{b}x{hkv}x{sk}x{value_dim}x{storage}>)
+          tensor<{b}x{hkv}x{sk}x{value_dim}x{storage}>{bias_type})
           -> tensor<{b}x{hq}x{sq}x{value_dim}xf32>
     return %o : tensor<{b}x{hq}x{sq}x{value_dim}xf32>
   }}
@@ -1436,12 +1445,8 @@ def package_attention(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativ
         else GFX1151_ATTN_BF16_ABI
     )
     canonical_route = (
-        bias_name is None
-        and softcap <= 0.0
-        and (
-            (window_left < 0 and window_right < 0)
-            or (causal and window_left >= 0 and window_right == 0)
-        )
+        (window_left < 0 and window_right < 0)
+        or (causal and window_left >= 0 and window_right == 0)
     )
     if canonical_route:
         tile_kv = 16
@@ -1453,6 +1458,8 @@ def package_attention(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativ
             causal=causal,
             window_left=window_left,
             window_right=window_right,
+            bias=bias_name is not None,
+            softcap=softcap,
             dropout_p=dropout_p,
             dropout_seed=dropout_seed,
             tile_kv=tile_kv,

@@ -439,8 +439,8 @@ def test_rocm_attention_carrier_selects_wmma_and_owns_native_package(monkeypatch
     assert "value_dim = 64" in source
     assert "gqa = true" in source
     monkeypatch.setattr(
-        "tessera.compiler.rocm_native._compile_attention_tile_ir",
-        _fake_attention_compile,
+        "tessera.compiler.rocm_native._compile_attention_graph_ir",
+        _fake_attention_graph_compile,
     )
     package = package_attention(module, pipeline_name="tessera-lower-to-rocm")
     assert package.descriptor.abi_id == GFX1151_ATTN_F16_ABI
@@ -450,9 +450,11 @@ def test_rocm_attention_carrier_selects_wmma_and_owns_native_package(monkeypatch
     assert [item.name for item in package.descriptor.scalars] == [
         "Sq", "Sk", "Scale", "Causal", "Hq", "KvRatio", "Window"
     ]
-    assert package.descriptor.provenance["schedule"] == "gfx1151_wmma_streaming"
+    assert package.descriptor.provenance["schedule"] == (
+        "gfx1151_wmma_canonical_streaming"
+    )
     assert package.descriptor.provenance["sync_key"] == (
-        "ROCM-E2E-ATTENTION-CARRIERS-2026-07-26"
+        "CORE-STREAMING-ATTN-RANK4-ROCM-2026-07-26"
     )
 
 
@@ -510,11 +512,13 @@ def test_rocm_attention_package_owns_dropout_replay_and_combined_features(
     )
     module.functions[0].body[0].kwargs["dropout_seed"] = 37
     monkeypatch.setattr(
-        "tessera.compiler.rocm_native._compile_attention_tile_ir",
-        _fake_attention_compile,
+        "tessera.compiler.rocm_native._compile_attention_graph_ir",
+        _fake_attention_graph_compile,
     )
     package = package_attention(module, pipeline_name="tessera-lower-to-rocm")
-    assert "dropout_p = 0.25 : f32" in package.tile_ir
+    assert "tensor<1x4x17x19xf32>" in package.tile_ir
+    assert "softcap = 8.0 : f32" in package.tile_ir
+    assert "dropout_p = 0.25 : f64" in package.tile_ir
     assert "dropout_seed = 37 : i64" in package.tile_ir
     assert [item.name for item in package.descriptor.scalars][-3:] == [
         "Softcap",
@@ -524,7 +528,7 @@ def test_rocm_attention_package_owns_dropout_replay_and_combined_features(
     assert package.descriptor.provenance["dropout_p"] == 0.25
     assert package.descriptor.provenance["dropout_seed"] == 37
     assert package.descriptor.provenance["semantic_route"] == (
-        "tile.attention_kernel_compatibility"
+        "canonical_rank4_kv_scf_for"
     )
 
 
@@ -587,6 +591,61 @@ def test_rocm_attention_backward_package_owns_ordered_multi_entry_workspace(
 
 def test_rocm_attention_backward_optimized_contract_replays_dropout() -> None:
     assert supports_attention_backward(_attention_backward_module(dropout_p=0.25))
+
+
+@pytest.mark.skipif(
+    os.environ.get("TESSERA_ROCM_E2E_DEVICE_TEST") != "1",
+    reason="set TESSERA_ROCM_E2E_DEVICE_TEST=1 on the exact gfx1151 host",
+)
+def test_exact_gfx1151_forward_shared_bias_softcap_dropout() -> None:
+    from tessera import runtime as tessera_runtime
+    from tessera.compiler.attention_contract import reference_streaming_attention
+
+    module = _attention_module(bias=True, softcap=8.0, dropout_p=0.25)
+    module.functions[0].body[0].kwargs["dropout_seed"] = 37
+    package = package_attention(module, pipeline_name="tessera-lower-to-rocm")
+    assert package.descriptor.provenance["semantic_route"] == (
+        "canonical_rank4_kv_scf_for"
+    )
+    rng = np.random.default_rng(20260728)
+    q = (rng.standard_normal((1, 4, 17, 64)) * 0.2).astype(np.float16)
+    key = (rng.standard_normal((1, 2, 19, 64)) * 0.2).astype(np.float16)
+    value = (rng.standard_normal((1, 2, 19, 64)) * 0.2).astype(np.float16)
+    bias = (rng.standard_normal((1, 4, 17, 19)) * 0.05).astype(np.float32)
+    output = np.zeros((1, 4, 17, 64), dtype=np.float32)
+    tessera_runtime._submit_rocm_gfx1151_native(
+        package.image,
+        package.descriptor,
+        {"q": q, "key": key, "v": value, "bias": bias, "o": output},
+        {
+            "Sq": 17,
+            "Sk": 19,
+            "Scale": 0.125,
+            "Causal": 1,
+            "Hq": 4,
+            "KvRatio": 2,
+            "Window": 64,
+            "Softcap": 8.0,
+            "DropoutP": 0.25,
+            "DropoutSeed": 37,
+        },
+        None,
+    )
+    expected = reference_streaming_attention(
+        q,
+        key,
+        value,
+        block_size=16,
+        scale=0.125,
+        bias=bias,
+        causal=True,
+        window_left=64,
+        window_right=0,
+        softcap=8.0,
+        dropout_p=0.25,
+        dropout_seed=37,
+    )
+    np.testing.assert_allclose(output, expected, rtol=3e-2, atol=3e-2)
 
 
 @pytest.mark.skipif(

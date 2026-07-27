@@ -1954,17 +1954,31 @@ LogicalResult FlashAttnOp::verify() {
   if (Value bias = getAttnBias()) {
     auto qT = dyn_cast<RankedTensorType>(getQ().getType());
     auto bT = dyn_cast<RankedTensorType>(bias.getType());
-    if (bT && bT.getRank() != 3)
-      return emitOpError("attn_bias must be rank-3 (B, Sq, Sk)");
+    if (bT && bT.getRank() != 3 && bT.getRank() != 4)
+      return emitOpError(
+          "attn_bias must be rank-3 (B, Sq, Sk) or rank-4 (B, Hq, Sq, Sk)");
     if (qT && bT && qT.hasStaticShape() && bT.hasStaticShape()) {
-      if (bT.getDimSize(1) != qT.getDimSize(1))
-        return emitOpError("attn_bias dim 1 (Sq=")
-               << bT.getDimSize(1) << ") must match q seqlen ("
-               << qT.getDimSize(1) << ")";
+      // Rank-3 Q is [B,Sq,D]; canonical distributed attention uses rank-4
+      // [B,Hq,Sq,D]. The additive bias is head-broadcast in both cases.
+      if (qT.getRank() != 3 && qT.getRank() != 4)
+        return emitOpError(
+            "attn_bias requires rank-3 [B,Sq,D] or rank-4 [B,Hq,Sq,D] q");
+      int64_t qSequenceDim = qT.getRank() == 4 ? 2 : 1;
+      int64_t biasSequenceDim = bT.getRank() == 4 ? 2 : 1;
+      if (bT.getDimSize(biasSequenceDim) != qT.getDimSize(qSequenceDim))
+        return emitOpError("attn_bias Sq dimension (")
+               << bT.getDimSize(biasSequenceDim) << ") must match q seqlen ("
+               << qT.getDimSize(qSequenceDim) << ")";
       if (bT.getDimSize(0) != 1 && bT.getDimSize(0) != qT.getDimSize(0))
         return emitOpError("attn_bias batch dim (")
                << bT.getDimSize(0) << ") must be 1 or match q batch ("
                << qT.getDimSize(0) << ")";
+      if (bT.getRank() == 4 &&
+          (qT.getRank() != 4 ||
+           (bT.getDimSize(1) != 1 &&
+            bT.getDimSize(1) != qT.getDimSize(1))))
+        return emitOpError(
+            "rank-4 attn_bias head dim must be 1 or match q heads");
     }
   }
   return success();

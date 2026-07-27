@@ -3643,6 +3643,18 @@ def _submit_rocm_gfx1151_native(
                 arguments.append(
                     ctypes.c_float(softcap)
                 )
+            dropout_p = float(
+                cast(float, descriptor.provenance["dropout_p"])
+            )
+            if dropout_p > 0.0:
+                arguments.extend(
+                    (
+                        ctypes.c_float(dropout_p),
+                        ctypes.c_int64(
+                            int(cast(int, descriptor.provenance["dropout_seed"]))
+                        ),
+                    )
+                )
             if attention_bias:
                 arguments.extend(
                     memref_args(device_inputs[3], int(input_arrays[3].size))

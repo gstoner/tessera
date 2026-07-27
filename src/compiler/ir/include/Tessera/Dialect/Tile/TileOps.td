@@ -110,8 +110,8 @@ def Tile_TMEMType : Tile_Type<"TMEM", "tmem"> {
 }
 
 // Physical storage and staged-pipeline ownership. These operations are the
-// canonical def-use identity; #tile.buffer_ref and #tile.pipeline_state remain
-// readable only as migration metadata.
+// canonical def-use identity. #tile.buffer_ref remains parser-visible only for
+// migration diagnostics and archived IR; active passes do not consume it.
 def Tile_AllocOp : Tile_Op<"alloc"> {
   let summary = "Allocate a physical Tile buffer and return its SSA handle";
   let arguments = (ins StrAttr:$space, I64Attr:$bytes, AnyAttr:$layout);
@@ -670,8 +670,11 @@ def Tile_AttentionKernelOp : Tile_Op<"attention_kernel"> {
 
 // Launch-level scaled dot-product attention VJP envelope. Inputs are dO, Q,
 // K, V, optional dense f32 bias, dQ, dK, dV, followed by B, Hq, Hkv, Sq, Sk,
-// D, and Dv.  The deterministic-direct reference route assigns one output
-// gradient element to one thread and therefore requires no atomics/workspace.
+// D, and Dv. The deterministic-direct compatibility route assigns one output
+// gradient element to one thread. The canonical split/reduced route instead
+// makes launch-owned workspace, query/KV block loops, split count, and fixed
+// reduction order explicit as attributes; physical backends schedule those
+// loops but do not redefine their ownership or ordering.
 def Tile_AttentionBackwardKernelOp : Tile_Op<"attention_backward_kernel"> {
   let summary = "Launch-level deterministic scaled dot-product attention VJP";
   let arguments = (ins Variadic<AnyType>:$inputs);
@@ -892,7 +895,8 @@ def Tile_BufferRefAttr : Tile_Attr<"TileBufferRef", "buffer_ref"> {
     Replaces the bare `tile.buffer="…"` + `tile.access="…"` string markers. The
     `space` (smem / tmem / gmem) and `access` (read / write / free) are typed,
     closed sets enforced by the verifier — a stronger contract than two free
-    strings. Carried as `tile.buf = #tile.buffer_ref<…>` on staged writes/frees.
+    strings. Deprecated migration syntax: active lowering and legality passes
+    require `!tile.buffer` def-use identity.
   }];
   let parameters = (ins StringRefParameter<"">:$name,
                         StringRefParameter<"">:$space,

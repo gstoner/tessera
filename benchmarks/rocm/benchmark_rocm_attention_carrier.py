@@ -1,8 +1,9 @@
-"""Exact-device ROCm attention-carrier correctness and operation-total timing.
+"""Exact-device canonical streaming-attention correctness and timing.
 
-This benchmark enters through ``tile.attention_kernel`` and the native package
-path, not through a handwritten directive. It intentionally uses host-wall
-operation-total timing because WSL HIP events may report zero-duration samples.
+The default case enters through rank-4 ``tessera.flash_attn``, lowers through
+the shared KV-block recurrence, and reaches ROCm without rebuilding semantics
+in ``tile.attention_kernel``. It intentionally uses host-wall operation-total
+timing because WSL HIP events may report zero-duration samples.
 """
 
 from __future__ import annotations
@@ -31,36 +32,58 @@ from tessera.compiler.graph_ir import (  # noqa: E402
     IRType,
 )
 from tessera.compiler.rocm_native import package_attention  # noqa: E402
+from tessera.compiler.attention_contract import (  # noqa: E402
+    reference_streaming_attention,
+)
 from tessera.runtime import (  # noqa: E402
     _load_hip_for_launch,
     _submit_rocm_gfx1151_native,
 )
 
+KERNEL_WALL_BASELINE_MS = 0.097763
+KERNEL_WALL_MAX_REGRESSION = 0.10
 
-def _module(b: int, hq: int, hkv: int, sq: int, sk: int, d: int) -> GraphIRModule:
+
+def _module(
+    b: int, hq: int, hkv: int, sq: int, sk: int, d: int, *,
+    combined_features: bool = False,
+) -> GraphIRModule:
     q = IRType(f"tensor<{b}x{hq}x{sq}x{d}xf16>", tuple(map(str, (b, hq, sq, d))), "fp16")
     k = IRType(f"tensor<{b}x{hkv}x{sk}x{d}xf16>", tuple(map(str, (b, hkv, sk, d))), "fp16")
     v = IRType(f"tensor<{b}x{hkv}x{sk}x{d}xf16>", tuple(map(str, (b, hkv, sk, d))), "fp16")
     o = IRType(f"tensor<{b}x{hq}x{sq}x{d}xf32>", tuple(map(str, (b, hq, sq, d))), "fp32")
+    bias = IRType(
+        f"tensor<{b}x{hq}x{sq}x{sk}xf32>",
+        tuple(map(str, (b, hq, sq, sk))),
+        "fp32",
+    )
+    args = [IRArg("q", q), IRArg("k", k), IRArg("v", v)]
+    operands = ["%q", "%k", "%v"]
+    operand_types = [str(q), str(k), str(v)]
+    if combined_features:
+        args.append(IRArg("bias", bias))
+        operands.append("%bias")
+        operand_types.append(str(bias))
     return GraphIRModule(
         functions=[
             GraphIRFunction(
                 name="gfx1151_attention_carrier",
-                args=[IRArg("q", q), IRArg("k", k), IRArg("v", v)],
+                args=args,
                 result_types=[o],
                 body=[
                     IROp(
                         result="o",
                         op_name="tessera.flash_attn",
-                        operands=["%q", "%k", "%v"],
-                        operand_types=[str(q), str(k), str(v)],
+                        operands=operands,
+                        operand_types=operand_types,
                         result_type=str(o),
                         kwargs={
                             "scale": d**-0.5,
                             "causal": True,
                             "window": (8, 0),
-                            "softcap": 8.0,
-                            "dropout_p": 0.0,
+                            "softcap": 8.0 if combined_features else 0.0,
+                            "dropout_p": 0.25 if combined_features else 0.0,
+                            "dropout_seed": 37,
                         },
                     )
                 ],
@@ -70,26 +93,27 @@ def _module(b: int, hq: int, hkv: int, sq: int, sk: int, d: int) -> GraphIRModul
     )
 
 
-def _reference(q: np.ndarray, k: np.ndarray, v: np.ndarray) -> np.ndarray:
-    b, hq, sq, d = q.shape
-    hkv, sk = k.shape[1:3]
-    result = np.empty((b, hq, sq, d), dtype=np.float32)
-    scale = d**-0.5
-    for batch in range(b):
-        for head in range(hq):
-            kv_head = head // (hq // hkv)
-            scores = (q[batch, head].astype(np.float32) @ k[batch, kv_head].astype(np.float32).T) * scale
-            scores = 8.0 * np.tanh(scores / 8.0)
-            qpos = np.arange(sq)[:, None]
-            kpos = np.arange(sk)[None, :]
-            valid = (kpos <= qpos) & ((qpos - kpos) <= 8)
-            scores = np.where(valid, scores, -np.inf)
-            row_max = np.max(scores, axis=1, keepdims=True)
-            weights = np.exp(scores - row_max)
-            weights = np.where(valid, weights, 0.0)
-            weights /= np.sum(weights, axis=1, keepdims=True)
-            result[batch, head] = weights @ v[batch, kv_head].astype(np.float32)
-    return result
+def _reference(
+    q: np.ndarray,
+    k: np.ndarray,
+    v: np.ndarray,
+    *,
+    bias: np.ndarray | None = None,
+) -> np.ndarray:
+    return reference_streaming_attention(
+        q,
+        k,
+        v,
+        block_size=16,
+        scale=q.shape[-1] ** -0.5,
+        bias=bias,
+        causal=True,
+        window_left=8,
+        window_right=0,
+        softcap=8.0 if bias is not None else 0.0,
+        dropout_p=0.25 if bias is not None else 0.0,
+        dropout_seed=37,
+    )
 
 
 def _memref_arguments(pointer: ctypes.c_void_p, size: int) -> list[Any]:
@@ -109,6 +133,7 @@ def _resident_attention_launch(
     k: np.ndarray,
     v: np.ndarray,
     output: np.ndarray,
+    bias: np.ndarray | None = None,
 ) -> Iterator[tuple[Any, ctypes.CDLL]]:
     """Keep the module and buffers resident around synchronized launch timing."""
     hip = _load_hip_for_launch()
@@ -134,9 +159,14 @@ def _resident_attention_launch(
             raise RuntimeError(f"gfx1151 attention symbol {package.descriptor.entry_symbol!r} not found")
 
         device_q, device_k, device_v, device_o = (ctypes.c_void_p() for _ in range(4))
-        arrays = (q, k, v, output)
+        device_bias = ctypes.c_void_p() if bias is not None else None
+        devices = [device_q, device_k, device_v, device_o]
+        arrays = [q, k, v, output]
+        if bias is not None and device_bias is not None:
+            devices.append(device_bias)
+            arrays.append(bias)
         for device, array in zip(
-            (device_q, device_k, device_v, device_o),
+            devices,
             arrays,
             strict=True,
         ):
@@ -154,6 +184,16 @@ def _resident_attention_launch(
                 != 0
             ):
                 raise RuntimeError("gfx1151 resident attention host-to-device copy failed")
+        if bias is not None and device_bias is not None:
+            if hip.hipMemcpy(
+                device_bias,
+                bias.ctypes.data_as(ctypes.c_void_p),
+                int(bias.nbytes),
+                1,
+            ) != 0:
+                raise RuntimeError(
+                    "gfx1151 resident attention bias host-to-device copy failed"
+                )
 
         b, hq, hkv, sq, sk, _d, _dv = (int(value) for value in package.descriptor.provenance["shape"])
         arguments: list[Any] = []
@@ -181,6 +221,18 @@ def _resident_attention_launch(
         softcap = float(package.descriptor.provenance["softcap"])
         if softcap > 0.0:
             arguments.append(ctypes.c_float(softcap))
+        dropout_p = float(package.descriptor.provenance["dropout_p"])
+        if dropout_p > 0.0:
+            arguments.extend(
+                (
+                    ctypes.c_float(dropout_p),
+                    ctypes.c_int64(
+                        int(package.descriptor.provenance["dropout_seed"])
+                    ),
+                )
+            )
+        if bias is not None and device_bias is not None:
+            arguments.extend(_memref_arguments(device_bias, int(bias.size)))
 
         argument_array = (ctypes.c_void_p * len(arguments))()
         for index, value in enumerate(arguments):
@@ -234,12 +286,15 @@ def _kernel_wall_samples(
     k: np.ndarray,
     v: np.ndarray,
     output: np.ndarray,
+    bias: np.ndarray | None = None,
     *,
     warmup: int,
     iterations: int,
 ) -> list[float]:
     samples: list[float] = []
-    with _resident_attention_launch(package, q, k, v, output) as (launch_and_synchronize, _hip):
+    with _resident_attention_launch(
+        package, q, k, v, output, bias
+    ) as (launch_and_synchronize, _hip):
         for _ in range(warmup):
             launch_and_synchronize()
         for _ in range(iterations):
@@ -295,6 +350,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--iterations", type=int, default=7)
     parser.add_argument("--warmup", type=int, default=5)
+    parser.add_argument("--combined-features", action="store_true")
     parser.add_argument("--output")
     args = parser.parse_args()
     if args.iterations <= 0:
@@ -306,12 +362,24 @@ def main() -> int:
     q = rng.normal(0.0, 0.25, (shape[0], shape[1], shape[3], shape[5])).astype(np.float16)
     k = rng.normal(0.0, 0.25, (shape[0], shape[2], shape[4], shape[5])).astype(np.float16)
     v = rng.normal(0.0, 0.25, (shape[0], shape[2], shape[4], shape[5])).astype(np.float16)
+    bias = (
+        rng.normal(0.0, 0.05, (shape[0], shape[1], shape[3], shape[4])).astype(
+            np.float32
+        )
+        if args.combined_features
+        else None
+    )
     output = np.empty((shape[0], shape[1], shape[3], shape[5]), dtype=np.float32)
 
     started = time.perf_counter()
-    package = package_attention(_module(*shape), pipeline_name="tessera-lower-to-rocm")
+    package = package_attention(
+        _module(*shape, combined_features=args.combined_features),
+        pipeline_name="tessera-lower-to-rocm",
+    )
     compile_ms = (time.perf_counter() - started) * 1000.0
     buffers = {"q": q, "k": k, "v": v, "o": output}
+    if bias is not None:
+        buffers["bias"] = bias
     scalars = {
         "Sq": shape[3],
         "Sk": shape[4],
@@ -320,8 +388,11 @@ def main() -> int:
         "Hq": shape[1],
         "KvRatio": shape[1] // shape[2],
         "Window": 8,
-        "Softcap": 8.0,
     }
+    if bias is not None:
+        scalars.update(
+            {"Softcap": 8.0, "DropoutP": 0.25, "DropoutSeed": 37}
+        )
     started = time.perf_counter()
     _submit_rocm_gfx1151_native(package.image, package.descriptor, buffers, scalars, None)
     cold_operation_total_ms = (time.perf_counter() - started) * 1000.0
@@ -336,10 +407,11 @@ def main() -> int:
         k,
         v,
         output,
+        bias,
         warmup=args.warmup,
         iterations=args.iterations,
     )
-    reference = _reference(q, k, v)
+    reference = _reference(q, k, v, bias=bias)
     error = float(np.max(np.abs(output - reference)))
     timing_domains = _timing_domains(
         cold_operation_total_ms=cold_operation_total_ms,
@@ -347,8 +419,12 @@ def main() -> int:
         kernel_wall_samples_ms=kernel_wall_samples,
         warmup=args.warmup,
     )
+    kernel_wall_median_ms = statistics.median(kernel_wall_samples)
+    kernel_wall_limit_ms = (
+        KERNEL_WALL_BASELINE_MS * (1.0 + KERNEL_WALL_MAX_REGRESSION)
+    )
     record = {
-        "schema": "tessera.rocm.attention_carrier.benchmark.v2",
+        "schema": "tessera.rocm.canonical_streaming_attention.benchmark.v1",
         "device": os.environ.get("TESSERA_ROCM_CHIP", "gfx1151"),
         "shape": {
             "B": shape[0],
@@ -358,18 +434,30 @@ def main() -> int:
             "Sk": shape[4],
             "D": shape[5],
         },
-        "carrier": "tile.attention_kernel",
+        "semantic_route": package.descriptor.provenance["semantic_route"],
+        "feature_set": (
+            "bias_softcap_dropout" if bias is not None else "base"
+        ),
         "schedule": package.descriptor.provenance["schedule"],
         "compile_ms": compile_ms,
         "cold_operation_total_ms": cold_operation_total_ms,
         "operation_total_median_ms": statistics.median(samples),
         "operation_total_samples_ms": samples,
-        "kernel_wall_median_ms": statistics.median(kernel_wall_samples),
+        "kernel_wall_median_ms": kernel_wall_median_ms,
         "kernel_wall_samples_ms": kernel_wall_samples,
+        "kernel_wall_ratchet": {
+            "baseline_ms": KERNEL_WALL_BASELINE_MS,
+            "max_regression_fraction": KERNEL_WALL_MAX_REGRESSION,
+            "limit_ms": kernel_wall_limit_ms,
+            "observed_ratio": kernel_wall_median_ms / KERNEL_WALL_BASELINE_MS,
+            "passed": kernel_wall_median_ms <= kernel_wall_limit_ms,
+        },
         "timing_domains": timing_domains,
         "max_abs_error": error,
         "tolerance": 0.035,
-        "passed": error <= 0.035,
+        "passed": (
+            error <= 0.035 and kernel_wall_median_ms <= kernel_wall_limit_ms
+        ),
         "hsaco_bytes": len(package.image.payload),
         "image_digest": package.image.image_digest,
     }

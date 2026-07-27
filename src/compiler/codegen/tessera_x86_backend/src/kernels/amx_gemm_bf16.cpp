@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstring>
 #include "tessera/x86/amx_runtime.h"
+#include "tessera/x86/target.h"
 
 // T0: accumulator (16x64), T1: A (16x64), T2: B (64x16)
 extern "C" void tessera_x86_amx_gemm_bf16(const uint16_t* A, const uint16_t* B, float* C,

@@ -1,8 +1,8 @@
 //===- GenerateWMMAFlashAttnBwdKernel.cpp - compiler-generated FA-2 bwd ---===//
 //
-// Expands a `tessera_rocm.flash_attn_bwd` directive into THREE real, fragment-
-// materialized RDNA WMMA kernels implementing the textbook FA-2 backward (no
-// stored attention matrix — S / P are recomputed per tile):
+// Expands a `tessera_rocm.flash_attn_bwd` directive into a real fragment-
+// materialized RDNA WMMA kernel program implementing the textbook FA-2
+// backward (no stored attention matrix — S / P are recomputed per tile):
 //
 //   <name>_pre  : one wave / (16-query tile, b*h). Scalar pass computing
 //                 D[q] = sum_d O[q,d]*dO[q,d] and L[q] = logsumexp_k(scale*QK^T)
@@ -13,6 +13,8 @@
 //                 (WMMA), dS=P*(dP-D); accumulate dV += P^T@dO and
 //                 dK += scale*dS^T@Q (WMMA, contraction over queries — P / dS
 //                 are staged in LDS and reread transposed: the layout bridge).
+//   <name>_dkdv_reduce : fixed ascending-split reduction into final dK/dV
+//                 outputs (present for the canonical split-reduced route).
 //   <name>_dq   : one wave / (16-query tile, b*h). Loops key tiles: same
 //                 S/P/dP/dS, accumulate dQ += scale*dS@K (WMMA, contraction
 //                 over keys; dS reread from LDS in natural layout).
@@ -44,7 +46,7 @@ using namespace mlir;
 
 namespace {
 
-// Small builder helpers shared by the three kernels.
+// Small builder helpers shared by the backward kernel program.
 struct Emit {
   OpBuilder &b;
   Location loc;
@@ -142,7 +144,8 @@ static Value groupedKvBase(Emit &e, OpBuilder &b, Location loc, Value bh,
 //===----------------------------------------------------------------------===//
 void emitPre(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
              Type storeTy, bool gqa = false, bool bias = false,
-             bool window = false, bool softcap = false) {
+             bool window = false, bool softcap = false,
+             bool dropout = false) {
   MLIRContext *ctx = b.getContext();
   Type f32 = b.getF32Type();
   Value sQ = f.addWorkgroupAttribution(ldsT(ctx, 16 * D, storeTy), loc);
@@ -174,12 +177,14 @@ void emitPre(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   Value isCausal = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ne,
                                            causal, c0);
   // Trailing runtime args, in order: gqa(heads,kv_ratio) | window(W) |
-  // softcap(cap) | bias([bh,Sq,Sk], LAST). Base arg count for _pre is 10.
+  // softcap(cap) | dropout(p,seed) | bias([bh,Sq,Sk], LAST).
+  // Dropout does not affect L, but the uniform option ABI carries its values.
   int64_t p = 10 + (gqa ? 2 : 0);
   Value W = window ? f.getArgument(p) : Value();
   if (window) ++p;
   Value cap = softcap ? f.getArgument(p) : Value();
   if (softcap) ++p;
+  if (dropout) p += 2;
   Value biasBuf = bias ? f.getArgument(p) : Value();
   // A windowed kernel is implicitly causal (for the L logsumexp bound + mask).
   Value trueI1 = b.create<arith::ConstantIntOp>(loc, 1, /*width=*/1);
@@ -265,21 +270,20 @@ void emitPre(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
     for (int64_t el = 0; el < 8; ++el) {
       Value qi = e.add(e.ci(2 * el), half);
       Value v0 = e.mulf(e.ext(cs, el), scale);
-      // Soft-cap (before bias): v0 = cap*tanh(v0/cap). L must see the same
-      // capped score the recompute uses, so P = exp(S_capped - L) is consistent.
-      if (softcap) {
-        Value t = b.create<math::TanhOp>(loc, b.create<arith::DivFOp>(
-                                                  loc, v0, cap));
-        v0 = e.mulf(cap, t);
-      }
-      // Additive bias — same S the recompute uses, so L (logsumexp) matches
-      // P/dS. Bounds-guarded against the [bh,Sq,Sk] buffer.
+      // The shared modifier order is scale -> additive bias -> soft-cap.
+      // Bounds-guard the bias read against the [bh,Sq,Sk] buffer.
       Value gqe = e.add(q0, qi);
       if (bias) {
         Value gqSafe = e.sel(e.lt(gqe, Sq), gqe, c0);
         Value gkSafe = e.sel(e.ge(gk, Sk), c0, gk);
         Value bidx = e.add(e.mul(e.add(e.mul(bh, Sq), gqSafe), Sk), gkSafe);
         v0 = e.addf(v0, e.f32load(biasBuf, bidx));
+      }
+      // L must see the same combined score used by forward and recompute.
+      if (softcap) {
+        Value t = b.create<math::TanhOp>(loc, b.create<arith::DivFOp>(
+                                                  loc, v0, cap));
+        v0 = e.mulf(cap, t);
       }
       Value cmask = b.create<arith::AndIOp>(loc, useCausal, e.lt(gqe, gk));
       Value masked = b.create<arith::OrIOp>(loc, e.ge(gk, Sk), cmask);
@@ -359,9 +363,12 @@ struct ScoreCtx {
   // causal and keys older than W (q - k >= W) are masked out.
   Value W;
   // Gemma-2 logit soft-cap value (f32) or null. When set the pre-softmax score
-  // is S = cap*tanh(scale*Q@K^T / cap); the backward multiplies dS by the
-  // soft-cap derivative 1 - tanh^2(raw/cap).
+  // is S = cap*tanh((scale*Q@K^T+bias) / cap); backward multiplies dS by
+  // the soft-cap derivative 1 - tanh^2(combined/cap).
   Value cap;
+  // Counter-based probability dropout. The forward denominator remains
+  // undropped; dP and the dV probability operand replay this scale exactly.
+  Value dropoutP, dropoutSeed;
 };
 
 void recomputeScoreTile(Emit &e, OpBuilder &b, Location loc, const ScoreCtx &x,
@@ -409,26 +416,26 @@ void recomputeScoreTile(Emit &e, OpBuilder &b, Location loc, const ScoreCtx &x,
     Value Lidx = e.add(e.mul(x.bh, x.Sq), gqSafe);
     Value Lq = e.f32load(x.L, Lidx);
     Value Dq = e.f32load(x.Dd, Lidx);
-    Value sRaw = e.mulf(e.ext(cs, el), x.scale);
-    // Gemma-2 logit soft-cap: S = cap*tanh(sRaw/cap). Backward multiplies dS by
-    // the soft-cap derivative 1 - tanh^2(sRaw/cap) (chain rule through the cap).
-    Value s = sRaw, capDeriv;
-    if (x.cap) {
-      Value t = b.create<math::TanhOp>(loc, b.create<arith::DivFOp>(
-                                                loc, sRaw, x.cap));
-      s = e.mulf(x.cap, t);
-      Value one = b.create<arith::ConstantOp>(loc, e.f32,
-                                              b.getF32FloatAttr(1.0f));
-      capDeriv = e.subf(one, e.mulf(t, t));
-    }
-    // Additive bias: S += bias[(bh*Sq + q)*Sk + k] (after soft-cap). Guarded on
+    Value sCombined = e.mulf(e.ext(cs, el), x.scale);
+    // Additive bias participates in soft-capping. Guarded on
     // the query/key bounds so masked lanes never read past the [bh,Sq,Sk] buffer
     // (their P is zeroed by `masked` below anyway).
     if (x.biasBuf) {
       Value gkSafe = e.sel(e.ge(gk, x.Sk), c0, gk);
       Value bidx = e.add(
           e.mul(e.add(e.mul(x.bh, x.Sq), gqSafe), x.Sk), gkSafe);
-      s = e.addf(s, e.f32load(x.biasBuf, bidx));
+      sCombined = e.addf(sCombined, e.f32load(x.biasBuf, bidx));
+    }
+    // S = cap*tanh((scale*QK^T+bias)/cap). The derivative is with respect to
+    // the combined raw logit, then scale is applied by dQ/dK accumulation.
+    Value s = sCombined, capDeriv;
+    if (x.cap) {
+      Value t = b.create<math::TanhOp>(loc, b.create<arith::DivFOp>(
+                                                loc, sCombined, x.cap));
+      s = e.mulf(x.cap, t);
+      Value one = b.create<arith::ConstantOp>(loc, e.f32,
+                                              b.getF32FloatAttr(1.0f));
+      capDeriv = e.subf(one, e.mulf(t, t));
     }
     Value P = b.create<math::ExpOp>(loc, e.subf(s, Lq));
     // mask: query OOB, key OOB, causal (key > query), or (windowed) too-old key
@@ -445,13 +452,48 @@ void recomputeScoreTile(Emit &e, OpBuilder &b, Location loc, const ScoreCtx &x,
       masked = b.create<arith::OrIOp>(loc, masked, e.ge(age, x.W));
     }
     P = e.sel(masked, e.zerof, P);
-    Value dS = e.mulf(P, e.subf(e.ext(cp, el), Dq));
+    Value replay = b.create<arith::ConstantOp>(
+        loc, e.f32, b.getF32FloatAttr(1.0f));
+    if (x.dropoutP) {
+      Value counter = e.add(
+          e.mul(e.add(e.mul(x.bh, x.Sq), gqi), x.Sk), gk);
+      Value counter64 =
+          b.create<arith::IndexCastOp>(loc, b.getI64Type(), counter);
+      Value hash = b.create<arith::AddIOp>(
+          loc,
+          b.create<arith::MulIOp>(
+              loc, counter64,
+              b.create<arith::ConstantIntOp>(loc, 1664525, 64)),
+          b.create<arith::AddIOp>(
+              loc, x.dropoutSeed,
+              b.create<arith::ConstantIntOp>(loc, 1013904223, 64)));
+      hash = b.create<arith::AndIOp>(
+          loc, hash,
+          b.create<arith::ConstantIntOp>(loc, 0xffffffffULL, 64));
+      Value hash32 = b.create<arith::TruncIOp>(loc, b.getI32Type(), hash);
+      Value thresholdF = b.create<arith::MulFOp>(
+          loc, x.dropoutP,
+          b.create<arith::ConstantOp>(
+              loc, e.f32, b.getF32FloatAttr(4294967296.0)));
+      Value threshold =
+          b.create<arith::FPToUIOp>(loc, b.getI32Type(), thresholdF);
+      Value keep = b.create<arith::CmpIOp>(
+          loc, arith::CmpIPredicate::uge, hash32, threshold);
+      Value one = b.create<arith::ConstantOp>(
+          loc, e.f32, b.getF32FloatAttr(1.0f));
+      Value invKeep = b.create<arith::DivFOp>(
+          loc, one, b.create<arith::SubFOp>(loc, one, x.dropoutP));
+      replay = b.create<arith::SelectOp>(loc, keep, invKeep, e.zerof);
+    }
+    Value dP = e.mulf(e.ext(cp, el), replay);
+    Value dS = e.mulf(P, e.subf(dP, Dq));
     if (x.cap)
       dS = e.mulf(dS, capDeriv);                  // dS_raw = dS_capped * cap'
     dS = e.sel(masked, e.zerof, dS);
     Value sIdx = e.add(e.mul(qi, c16), x.l15);
     if (wantP)
-      b.create<memref::StoreOp>(loc, e.toStore(P), sP, ValueRange{sIdx});
+      b.create<memref::StoreOp>(
+          loc, e.toStore(e.mulf(P, replay)), sP, ValueRange{sIdx});
     b.create<memref::StoreOp>(loc, e.toStore(dS), sDS, ValueRange{sIdx});
   }
 }
@@ -464,6 +506,7 @@ void recomputeScoreTile(Emit &e, OpBuilder &b, Location loc, const ScoreCtx &x,
 void emitDkDv(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
               Type storeTy, bool gqa = false, bool bias = false,
               bool window = false, bool softcap = false,
+              bool dropout = false,
               bool splitReduced = false) {
   MLIRContext *ctx = b.getContext();
   Value sP = f.addWorkgroupAttribution(ldsT(ctx, 16 * 16, storeTy), loc);
@@ -506,12 +549,16 @@ void emitDkDv(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
                     : e.mul(e.mul(bh, Sk), cD);
   Value isCausal = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ne,
                                            causal, c0);
-  // Trailing args: gqa | window(W) | softcap(cap) | bias (LAST). Base = 12.
+  // Trailing args: gqa | window(W) | softcap(cap) | dropout(p,seed) |
+  // bias (LAST).
   int64_t p = optionBase + (gqa ? 2 : 0);
   Value W = window ? f.getArgument(p) : Value();
   if (window) ++p;
   Value cap = softcap ? f.getArgument(p) : Value();
   if (softcap) ++p;
+  Value dropoutP = dropout ? f.getArgument(p) : Value();
+  Value dropoutSeed = dropout ? f.getArgument(p + 1) : Value();
+  if (dropout) p += 2;
   Value biasBuf = bias ? f.getArgument(p) : Value();
   Value trueI1 = b.create<arith::ConstantIntOp>(loc, 1, /*width=*/1);
   Value useCausal = window ? trueI1 : isCausal;
@@ -549,6 +596,8 @@ void emitDkDv(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
     x.biasBuf = biasBuf;
     x.W = W;
     x.cap = cap;
+    x.dropoutP = dropoutP;
+    x.dropoutSeed = dropoutSeed;
     recomputeScoreTile(e, b, loc, x, sP, sDS, /*wantP=*/true);
     b.create<gpu::BarrierOp>(loc);
 
@@ -694,7 +743,8 @@ void emitDkDvReduce(OpBuilder &b, Location loc, gpu::GPUFuncOp f) {
 //===----------------------------------------------------------------------===//
 void emitDq(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
             Type storeTy, bool gqa = false, bool bias = false,
-            bool window = false, bool softcap = false) {
+            bool window = false, bool softcap = false,
+            bool dropout = false) {
   MLIRContext *ctx = b.getContext();
   Value sDS = f.addWorkgroupAttribution(ldsT(ctx, 16 * 16, storeTy), loc);
   Value dQacc = f.addWorkgroupAttribution(ldsT(ctx, 16 * D, b.getF32Type()), loc);
@@ -722,12 +772,16 @@ void emitDq(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
                     : e.mul(e.mul(bh, Sk), cD);
   Value isCausal = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ne,
                                            causal, c0);
-  // Trailing args: gqa | window(W) | softcap(cap) | bias (LAST). Base = 11.
+  // Trailing args: gqa | window(W) | softcap(cap) | dropout(p,seed) |
+  // bias (LAST).
   int64_t p = 11 + (gqa ? 2 : 0);
   Value W = window ? f.getArgument(p) : Value();
   if (window) ++p;
   Value cap = softcap ? f.getArgument(p) : Value();
   if (softcap) ++p;
+  Value dropoutP = dropout ? f.getArgument(p) : Value();
+  Value dropoutSeed = dropout ? f.getArgument(p + 1) : Value();
+  if (dropout) p += 2;
   Value biasBuf = bias ? f.getArgument(p) : Value();
   Value trueI1 = b.create<arith::ConstantIntOp>(loc, 1, /*width=*/1);
   Value useCausal = window ? trueI1 : isCausal;
@@ -762,6 +816,8 @@ void emitDq(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
     x.biasBuf = biasBuf;
     x.W = W;
     x.cap = cap;
+    x.dropoutP = dropoutP;
+    x.dropoutSeed = dropoutSeed;
     recomputeScoreTile(e, b, loc, x, /*sP=*/Value(), sDS, /*wantP=*/false);
     b.create<gpu::BarrierOp>(loc);
 
@@ -823,9 +879,9 @@ struct GenerateWMMAFlashAttnBwdKernelPass
     return "generate-wmma-flash-attn-bwd-kernel";
   }
   StringRef getDescription() const final {
-    return "Expand a tessera_rocm.flash_attn_bwd directive into the three "
-           "fragment-materialized RDNA WMMA FA-2 backward gpu kernels "
-           "(_pre/_dkdv/_dq; compiler-generated)";
+    return "Expand a tessera_rocm.flash_attn_bwd directive into the "
+           "fragment-materialized RDNA WMMA FA-2 backward GPU program "
+           "(_pre/_dkdv/optional _dkdv_reduce/_dq; compiler-generated)";
   }
   void getDependentDialects(DialectRegistry &registry) const final {
     registry.insert<gpu::GPUDialect, scf::SCFDialect, vector::VectorDialect,
@@ -872,7 +928,22 @@ struct GenerateWMMAFlashAttnBwdKernelPass
         }
       }
 
-      auto gpuMod = b.create<gpu::GPUModuleOp>(loc, kname + "_mod");
+      // A self-contained attention program runs the forward generator first.
+      // Reuse its GPU module so gpu-module-to-binary serializes one HSACO with
+      // every forward/backward entry. Standalone backward compilation still
+      // creates its own module.
+      gpu::GPUModuleOp gpuMod;
+      for (gpu::GPUModuleOp candidate : module.getOps<gpu::GPUModuleOp>()) {
+        if (gpuMod) {
+          op->emitError(
+              "generate-wmma-flash-attn-bwd-kernel requires at most one "
+              "existing gpu.module for multi-entry packaging");
+          return signalPassFailure();
+        }
+        gpuMod = candidate;
+      }
+      if (!gpuMod)
+        gpuMod = b.create<gpu::GPUModuleOp>(loc, kname + "_mod");
       b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
       Type f32 = b.getF32Type();
       Type idxTy = b.getIndexType();
@@ -891,7 +962,8 @@ struct GenerateWMMAFlashAttnBwdKernelPass
 
       // Optional variants — trailing args appended in a FIXED order after the
       // base signature: gqa(heads,kv_ratio) | window(W:index) | softcap(cap:f32)
-      // | attn_bias([bh,Sq,Sk] f32, LAST). Sliding-window is implicitly causal
+      // | dropout(p:f32,seed:i64) | attn_bias([bh,Sq,Sk] f32, LAST).
+      // Sliding-window is implicitly causal
       // and masks keys older than W; soft-cap forms S=cap*tanh(scale*QK/cap)
       // before the softmax (backward scales dS by 1-tanh^2); bias is additive.
       auto flag = [&](StringRef n) {
@@ -900,6 +972,7 @@ struct GenerateWMMAFlashAttnBwdKernelPass
       };
       bool window = flag("sliding_window");
       bool softcap = flag("logit_softcap");
+      bool dropout = flag("dropout");
       bool bias = flag("attn_bias");
       bool splitReduced = flag("split_reduced");
 
@@ -916,6 +989,10 @@ struct GenerateWMMAFlashAttnBwdKernelPass
         a.append(gqaExtra.begin(), gqaExtra.end());
         if (window) a.push_back(idxTy);  // W (window width)
         if (softcap) a.push_back(f32);    // cap
+        if (dropout) {
+          a.push_back(f32);              // dropout probability
+          a.push_back(b.getI64Type());   // counter seed
+        }
         if (bias) a.push_back(fv);        // bias [bh,Sq,Sk] f32, LAST
         return a;
       };
@@ -923,7 +1000,8 @@ struct GenerateWMMAFlashAttnBwdKernelPass
       // _pre : (Q,K,dO:store, O,L,Dd:f32, Sq,Sk:idx, scale:f32, causal:idx [+opts])
       mk("_pre", withGqa({sv, sv, sv, fv, fv, fv, idxTy, idxTy, f32, idxTy}),
          [&](OpBuilder &bb, Location l, gpu::GPUFuncOp fn) {
-           emitPre(bb, l, fn, D, storeTy, gqa, bias, window, softcap);
+           emitPre(bb, l, fn, D, storeTy, gqa, bias, window, softcap,
+                   dropout);
          });
       // _dkdv : (Q,K,V,dO:store, L,Dd:f32, dK,dV:f32, Sq,Sk:idx, scale, causal [+opts])
       SmallVector<Type> dkdvBase{sv, sv, sv, sv, fv, fv, fv, fv};
@@ -935,7 +1013,7 @@ struct GenerateWMMAFlashAttnBwdKernelPass
       mk("_dkdv", withGqa(dkdvBase),
          [&](OpBuilder &bb, Location l, gpu::GPUFuncOp fn) {
            emitDkDv(bb, l, fn, D, storeTy, gqa, bias, window, softcap,
-                    splitReduced);
+                    dropout, splitReduced);
          });
       if (splitReduced) {
         mk("_dkdv_reduce", {fv, fv, fv, fv, idxTy},
@@ -946,7 +1024,8 @@ struct GenerateWMMAFlashAttnBwdKernelPass
       // _dq : (Q,K,V,dO:store, L,Dd:f32, dQ:f32, Sq,Sk:idx, scale, causal [+opts])
       mk("_dq", withGqa({sv, sv, sv, sv, fv, fv, fv, idxTy, idxTy, f32, idxTy}),
          [&](OpBuilder &bb, Location l, gpu::GPUFuncOp fn) {
-           emitDq(bb, l, fn, D, storeTy, gqa, bias, window, softcap);
+           emitDq(bb, l, fn, D, storeTy, gqa, bias, window, softcap,
+                  dropout);
          });
       op->erase();
     }

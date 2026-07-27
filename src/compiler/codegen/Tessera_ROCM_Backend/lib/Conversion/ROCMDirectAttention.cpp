@@ -421,8 +421,8 @@ materializeROCMDirectAttention(tessera::tile::AttentionKernelOp kernel,
       headDim.getInt() == valueDim.getInt() && headDim.getInt() > 0 &&
       headDim.getInt() % 16 == 0 &&
       (storage.getValue() == "f16" || storage.getValue() == "bf16") &&
-      dropout.getValueAsDouble() == 0.0 && windowCompatible &&
-      !(hasBias && softcap.getValueAsDouble() > 0.0);
+      dropout.getValueAsDouble() >= 0.0 &&
+      dropout.getValueAsDouble() < 1.0 && windowCompatible;
   if (optimized) {
     Operation *symbolOwner = op->getParentOp();
     while (symbolOwner &&
@@ -454,6 +454,9 @@ materializeROCMDirectAttention(tessera::tile::AttentionKernelOp kernel,
                        builder.getBoolAttr(
                            softcap.getValueAsDouble() > 0.0));
     state.addAttribute("attn_bias", builder.getBoolAttr(hasBias));
+    state.addAttribute(
+        "dropout",
+        builder.getBoolAttr(dropout.getValueAsDouble() > 0.0));
     state.addAttribute("source",
                        builder.getStringAttr("tile.attention_kernel"));
     state.addAttribute("schedule",
@@ -554,17 +557,91 @@ LogicalResult materializeROCMDirectAttentionBackward(
   auto workspace = op->getAttrOfType<IntegerAttr>("workspace_bytes");
   auto workspaceOwner =
       op->getAttrOfType<StringAttr>("workspace_owner");
+  bool directReference =
+      route && route.getValue() == "deterministic_direct" && workspace &&
+      workspace.getInt() == 0 && workspaceOwner &&
+      workspaceOwner.getValue() == "output_element";
+  auto splitCount = op->getAttrOfType<IntegerAttr>("split_count");
+  bool splitReduced =
+      route && route.getValue() == "deterministic_split_reduced" && workspace &&
+      workspace.getInt() > 0 && workspaceOwner &&
+      workspaceOwner.getValue() == "program_launch" && splitCount &&
+      splitCount.getInt() == 2;
   if (!biasAttr ||
-      kernel.getInputs().size() != 14 + unsigned(hasBias) || !route ||
-      route.getValue() != "deterministic_direct" || !deterministic ||
-      !deterministic.getValue() || !workspace || workspace.getInt() != 0 ||
-      !workspaceOwner ||
-      workspaceOwner.getValue() != "output_element") {
+      kernel.getInputs().size() != 14 + unsigned(hasBias) || !deterministic ||
+      !deterministic.getValue() || (!directReference && !splitReduced)) {
     op->emitError(
         "ROCm attention_backward_kernel requires the canonical deterministic "
-        "direct ABI with output-element workspace ownership");
+        "direct reference or two-split launch-workspace ABI");
     return failure();
   }
+
+  // The split/reduced carrier owns the loop/workspace contract. The direct
+  // route remains accepted as a compatibility semantic reference.
+  auto headDim = op->getAttrOfType<IntegerAttr>("head_dim");
+  auto valueDim = op->getAttrOfType<IntegerAttr>("value_dim");
+  auto storage = op->getAttrOfType<StringAttr>("storage");
+  auto dropout = op->getAttrOfType<FloatAttr>("dropout_p");
+  auto causal = op->getAttrOfType<BoolAttr>("causal");
+  auto windowLeft = op->getAttrOfType<IntegerAttr>("window_left");
+  auto windowRight = op->getAttrOfType<IntegerAttr>("window_right");
+  auto softcap = op->getAttrOfType<FloatAttr>("softcap");
+  bool windowCompatible =
+      windowLeft && windowRight &&
+      ((windowLeft.getInt() == -1 && windowRight.getInt() == -1) ||
+       (causal && causal.getValue() && windowLeft.getInt() >= 0 &&
+        windowRight.getInt() == 0));
+  bool optimized =
+      headDim && valueDim && storage && dropout && causal && softcap &&
+      headDim.getInt() == valueDim.getInt() && headDim.getInt() > 0 &&
+      headDim.getInt() % 16 == 0 &&
+      (storage.getValue() == "f16" || storage.getValue() == "bf16") &&
+      dropout.getValueAsDouble() >= 0.0 &&
+      dropout.getValueAsDouble() < 1.0 && windowCompatible;
+  if (optimized) {
+    Operation *symbolOwner = op->getParentOp();
+    while (symbolOwner &&
+           !symbolOwner->hasAttr(SymbolTable::getSymbolAttrName()))
+      symbolOwner = symbolOwner->getParentOp();
+    auto symbol =
+        symbolOwner
+            ? symbolOwner->getAttrOfType<StringAttr>(
+                  SymbolTable::getSymbolAttrName())
+            : StringAttr();
+    if (!symbol) {
+      op->emitError("ROCm optimized attention backward requires a "
+                    "symbol-owned launch envelope");
+      return failure();
+    }
+    OperationState state(op->getLoc(), "tessera_rocm.flash_attn_bwd");
+    state.addAttribute("name", symbol);
+    state.addAttribute("head_dim", headDim);
+    state.addAttribute("dtype", storage);
+    state.addAttribute(
+        "gqa", builder.getBoolAttr(
+                   op->getAttrOfType<BoolAttr>("gqa")
+                       ? op->getAttrOfType<BoolAttr>("gqa").getValue()
+                       : false));
+    state.addAttribute("sliding_window",
+                       builder.getBoolAttr(windowLeft.getInt() >= 0));
+    state.addAttribute(
+        "logit_softcap",
+        builder.getBoolAttr(softcap.getValueAsDouble() > 0.0));
+    state.addAttribute(
+        "dropout",
+        builder.getBoolAttr(dropout.getValueAsDouble() > 0.0));
+    state.addAttribute("attn_bias", builder.getBoolAttr(hasBias));
+    state.addAttribute("split_reduced", builder.getBoolAttr(true));
+    state.addAttribute(
+        "source", builder.getStringAttr("tile.attention_backward_kernel"));
+    state.addAttribute(
+        "schedule",
+        builder.getStringAttr("gfx1151_wmma_backward_split_reduced"));
+    builder.create(state);
+    op->erase();
+    return success();
+  }
+
   FailureOr<AttentionContract> parsed =
       parseContract(op, builder, dimStart, hasBias);
   if (failed(parsed))

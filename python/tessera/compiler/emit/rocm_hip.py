@@ -369,6 +369,7 @@ class RocmReplayDeviceState:
         a = np.ascontiguousarray(a, np.float32)
         self.B, self.D, self.N = (int(v) for v in s0.shape)
         self.capacity, self.async_slots = int(capacity), int(async_slots)
+        self._leases: set[RocmReplayAsyncResult] = set()
         if async_slots < 2:
             raise ValueError("ReplaySSM async ring requires at least two slots")
         if _ssm_replay_device_artifact is None:
@@ -447,12 +448,24 @@ class RocmReplayDeviceState:
             raise RuntimeError("ReplaySSM ROCm async ring is full")
         if rc != 1:
             raise RuntimeError("ReplaySSM ROCm async submit failed")
-        return RocmReplayAsyncResult(self, tokens, int(slot.value))
+        result = RocmReplayAsyncResult(self, tokens, int(slot.value))
+        self._leases.add(result)
+        return result
+
+    @property
+    def pending_leases(self) -> int:
+        return len(self._leases)
+
+    def _release_lease(self, result: "RocmReplayAsyncResult") -> None:
+        self._leases.discard(result)
 
     def close(self) -> None:
         if getattr(self, "ctx", None) is not None and self.ctx.value:
             self.lib.dl(self.ctx)
             self.ctx = ctypes.c_void_p()
+        for result in tuple(self._leases):
+            result._done = True
+        self._leases.clear()
 
     def __del__(self) -> None:
         try:
@@ -517,6 +530,7 @@ class RocmReplayAsyncResult:
         if fn(self._state.ctx, self._slot, _ptr(out), self._tokens) != 1:
             raise RuntimeError("ReplaySSM ROCm async wait failed")
         self._done = True
+        self._state._release_lease(self)
         return out
 
     def _wait_event(self) -> None:
@@ -548,6 +562,7 @@ class RocmReplayAsyncResult:
               ctypes.c_void_p(stream or 0)) != 1:
             raise RuntimeError("ReplaySSM ROCm result release failed")
         self._done = True
+        self._state._release_lease(self)
 
     def _device_pointer(self) -> int:
         self._guard(); fn = self._state.lib.dp; fn.restype = ctypes.c_void_p

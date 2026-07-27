@@ -2,11 +2,9 @@
 //
 // This is the AMD-native sibling of the NVIDIA warp-specialized path. Physical
 // allocation and pipeline ownership are canonical SSA (`!tile.buffer` and
-// `!tile.pipeline_state`). The legacy #tile.buffer_ref attribute remains a
-// migration input only: the planner consumes it, creates/reuses an SSA
-// allocation, and removes the name-based metadata from its output. Physical
-// synchronization remains ROCm-owned: waitcnt counters and LDS/wave intent,
-// never TMA/mbarrier semantics.
+// `!tile.pipeline_state`). Allocation identity is exclusively SSA-owned.
+// Physical synchronization remains ROCm-owned: waitcnt counters and LDS/wave
+// intent, never TMA/mbarrier semantics.
 
 #include "Tessera/Dialect/Tile/TileDialect.h"
 #include "TesseraROCM/Passes.h"
@@ -469,56 +467,25 @@ struct ROCMWaveLdsPipelinePass
       });
 
       // Materialize physical allocation identity before the async-token edges.
-      // A pre-existing !tile.buffer wins. Otherwise, consume a legacy
-      // #tile.buffer_ref name as a grouping key and replace it with one shared
-      // SSA allocation. Attribute-free copies receive distinct allocations.
-      // The compatibility attribute is always removed from planner output.
-      llvm::StringMap<Value> buffersByLegacyName;
+      // A pre-existing !tile.buffer wins. Otherwise each structured copy owns
+      // a distinct allocation; sharing must be expressed by SSA def-use.
       llvm::StringMap<Value> bufferById;
       SmallVector<Value> createdBuffers;
       for (auto &entry : copies) {
         Operation *copy = entry.second;
         Value buffer = findBufferOperand(copy);
-        auto legacy =
-            copy->getAttrOfType<tessera::tile::TileBufferRefAttr>("tile.buf");
-        if (legacy &&
-            (legacy.getSpace() != "lds" || legacy.getAccess() != "write")) {
-          copy->emitOpError(
-              "ROCm SSA buffer migration requires legacy tile.buf metadata to "
-              "describe an LDS write");
-          anyError = true;
-          continue;
-        }
         if (!buffer) {
-          if (legacy) {
-            auto it = buffersByLegacyName.find(legacy.getName());
-            if (it != buffersByLegacyName.end())
-              buffer = it->second;
-          }
+          buffer = createLdsAllocation(builder, func, copy);
           if (!buffer) {
-            buffer = createLdsAllocation(builder, func, copy);
-            if (!buffer) {
-              // An unshaped pointer copy names externally owned storage and
-              // carries its byte count dynamically. The static tile.alloc
-              // contract cannot represent that lifetime without inventing a
-              // false size, so retain the pointer itself as the target-owned
-              // identity. Legacy name-based ownership, however, must migrate
-              // to a real sized allocation and therefore remains an error.
-              if (legacy) {
-                copy->emitOpError(
-                    "ROCm SSA buffer migration requires a structured static "
-                    "tile.layout to size the LDS allocation");
-                anyError = true;
-              }
-              continue;
-            }
-            createdBuffers.push_back(buffer);
-            if (legacy)
-              buffersByLegacyName[legacy.getName()] = buffer;
+            // An unshaped pointer copy names externally owned storage and
+            // carries its byte count dynamically. The static tile.alloc
+            // contract cannot represent that lifetime without inventing a
+            // false size.
+            continue;
           }
+          createdBuffers.push_back(buffer);
           copy->insertOperands(copy->getNumOperands(), {buffer});
         }
-        copy->removeAttr("tile.buf");
         bufferById[entry.first] = allocationRoot(buffer);
       }
 
@@ -666,14 +633,6 @@ struct ROCMWaveLdsLegalityPass
         anyError = true;
       }
 
-      auto buf =
-          op->getAttrOfType<tessera::tile::TileBufferRefAttr>("tile.buf");
-      if (buf && buf.getSpace() == "tmem") {
-        op->emitOpError(
-            "ROCM_WAVE_LDS_UNSUPPORTED_TMEM: #tile.buffer_ref space=tmem is "
-            "NVIDIA-only for this ROCm path.");
-        anyError = true;
-      }
       if (Value buffer = findBufferOperand(op)) {
         Value root = allocationRoot(buffer);
         if (auto alloc = root.getDefiningOp<tessera::tile::AllocOp>();
@@ -683,6 +642,42 @@ struct ROCMWaveLdsLegalityPass
               "shared-memory allocation identity, which lowers to LDS");
           anyError = true;
         }
+      }
+
+      bool structuredLds = false;
+      if (auto layout =
+              op->getAttrOfType<tessera::tile::TileLayoutAttr>("tile.layout"))
+        structuredLds = hasLdsAxis(layout);
+      if (Value buffer = allocationRoot(findBufferOperand(op)))
+        if (auto alloc = buffer.getDefiningOp<tessera::tile::AllocOp>())
+          structuredLds = structuredLds || alloc.getSpace() == "smem";
+      if (!structuredLds)
+        return;
+
+      bool hasBuffer = static_cast<bool>(findBufferOperand(op));
+      bool hasTokenOperand = llvm::any_of(op->getOperands(), [](Value value) {
+        return isa<tessera::tile::AsyncTokenType>(value.getType());
+      });
+      bool hasTokenResult = llvm::any_of(op->getResults(), [](Value value) {
+        return isa<tessera::tile::AsyncTokenType>(value.getType());
+      });
+      bool hasPipelineState =
+          llvm::any_of(op->getOperands(), [](Value value) {
+            return isa<tessera::tile::PipelineStateType>(value.getType());
+          });
+      if (name == "tile.async_copy" &&
+          (!hasBuffer || !hasTokenResult || !hasPipelineState)) {
+        op->emitOpError(
+            "structured ROCm LDS copy must own !tile.buffer, "
+            "!tile.async_token, and !tile.pipeline_state SSA edges");
+        anyError = true;
+      }
+      if ((name == "tile.wait_async" || name == "tile.mma") &&
+          (!hasBuffer || !hasTokenOperand || !hasPipelineState)) {
+        op->emitOpError(
+            "structured ROCm LDS consumer must carry !tile.buffer, "
+            "!tile.async_token, and !tile.pipeline_state SSA edges");
+        anyError = true;
       }
     });
 
@@ -724,7 +719,6 @@ struct ROCMWaveLdsLegalityPass
       bool sawAnyWait = false;
       unsigned synth = 0;
       llvm::DenseMap<Value, PendingWrite> pendingSsaLdsWrites;
-      llvm::DenseMap<StringRef, PendingWrite> pendingLegacyLdsWrites;
 
       auto isToken = [](Value v) {
         return isa<tessera::tile::AsyncTokenType>(v.getType());
@@ -756,14 +750,13 @@ struct ROCMWaveLdsLegalityPass
             outstanding.erase(outstanding.begin());
           }
           // Retire only the allocation named by the SSA wait edge. A token-less
-          // compatibility wait has no precise allocation identity, so it keeps
-          // the old conservative "drain all" behavior.
+          // wait has no precise allocation identity, so it keeps the
+          // conservative "drain all" behavior.
           if (Value waitedBuffer =
                   allocationRoot(findBufferOperand(op)))
             pendingSsaLdsWrites.erase(waitedBuffer);
           else
             pendingSsaLdsWrites.clear();
-          pendingLegacyLdsWrites.clear();
           return;
         }
         if (isSBarrier(op)) {
@@ -772,7 +765,6 @@ struct ROCMWaveLdsLegalityPass
           outstandingTokens.clear();
           outstanding.clear();
           pendingSsaLdsWrites.clear();
-          pendingLegacyLdsWrites.clear();
           return;
         }
 
@@ -844,32 +836,19 @@ struct ROCMWaveLdsLegalityPass
           return;
         auto fp = storageFootprint(layout);
         Value buffer = allocationRoot(findBufferOperand(op));
-        auto legacy =
-            op->getAttrOfType<tessera::tile::TileBufferRefAttr>("tile.buf");
-        if (!buffer &&
-            (!legacy || legacy.getSpace() != "lds" ||
-             legacy.getAccess() != "write"))
+        if (!buffer)
           return;
 
         PendingWrite *previous = nullptr;
-        if (buffer) {
-          auto it = pendingSsaLdsWrites.find(buffer);
-          if (it != pendingSsaLdsWrites.end())
-            previous = &it->second;
-        } else {
-          auto it = pendingLegacyLdsWrites.find(legacy.getName());
-          if (it != pendingLegacyLdsWrites.end())
-            previous = &it->second;
-        }
+        auto it = pendingSsaLdsWrites.find(buffer);
+        if (it != pendingSsaLdsWrites.end())
+          previous = &it->second;
         if (fp && previous) {
           auto prev = storageFootprint(previous->layout);
           if (prev && overlaps(*prev, *fp)) {
             InFlightDiagnostic diag =
                 op->emitOpError("ROCM_WAVE_LDS_OVERLAPPING_WRITE: LDS ");
-            if (buffer)
-              diag << "SSA allocation";
-            else
-              diag << "buffer \"" << legacy.getName() << "\"";
+            diag << "SSA allocation";
             diag << " is written over an overlapping layout region with no "
                     "intervening waitcnt/barrier.";
             diag.attachNote(previous->op->getLoc())
@@ -877,11 +856,7 @@ struct ROCMWaveLdsLegalityPass
             anyError = true;
           }
         }
-        if (buffer)
-          pendingSsaLdsWrites[buffer] = PendingWrite{op, layout};
-        else
-          pendingLegacyLdsWrites[legacy.getName()] =
-              PendingWrite{op, layout};
+        pendingSsaLdsWrites[buffer] = PendingWrite{op, layout};
       });
     });
 

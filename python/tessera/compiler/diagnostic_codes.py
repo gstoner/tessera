@@ -1747,20 +1747,6 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         spec="docs/audit/compiler/COMPILER_AUDIT.md §ROCm Tile-IR convergence", sprint="ROCm Tile-IR convergence",
     ),
     DiagnosticCode(
-        code="ROCM_LOWERING_NON_LDS_BUFFER", pass_origin="LowerTileToROCMPass",
-        severity="error",
-        summary="ROCm lowering saw tile.async_copy with a #tile.buffer_ref that is not space=lds.",
-        fix_hint="Use #tile.buffer_ref<space = \"lds\", access = \"write\"> for ROCm async global-to-LDS staging.",
-        spec="docs/audit/compiler/COMPILER_AUDIT.md §ROCm Tile-IR convergence", sprint="ROCm Tile-IR convergence",
-    ),
-    DiagnosticCode(
-        code="ROCM_LOWERING_NON_WRITE_BUFFER", pass_origin="LowerTileToROCMPass",
-        severity="error",
-        summary="ROCm lowering saw tile.async_copy with an LDS buffer_ref whose access is not write.",
-        fix_hint="Mark the destination staging reference access = \"write\".",
-        spec="docs/audit/compiler/COMPILER_AUDIT.md §ROCm Tile-IR convergence", sprint="ROCm Tile-IR convergence",
-    ),
-    DiagnosticCode(
         code="ROCM_LOWERING_UNCONSUMED_STORAGE_PACK", pass_origin="LowerTileToROCMPass",
         severity="error",
         summary="Packed low-precision storage reached ROCm lowering without a backend storage-pack consumer descriptor.",
@@ -1793,13 +1779,6 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         severity="error",
         summary="ROCm Tile-IR legality saw NVIDIA-only TMA/TCGen05/mbarrier completion semantics.",
         fix_hint="Use AMD waitcnt for counter waits or s_barrier for true workgroup synchronization.",
-        spec="docs/audit/compiler/COMPILER_AUDIT.md §ROCm Tile-IR convergence", sprint="ROCm Tile-IR convergence",
-    ),
-    DiagnosticCode(
-        code="ROCM_WAVE_LDS_UNSUPPORTED_TMEM", pass_origin="ROCMWaveLdsLegalityPass",
-        severity="error",
-        summary="ROCm Tile-IR legality saw TMEM-only operations or buffer spaces.",
-        fix_hint="Use ROCm LDS/register contracts; TMEM is not available on the ROCm path.",
         spec="docs/audit/compiler/COMPILER_AUDIT.md §ROCm Tile-IR convergence", sprint="ROCm Tile-IR convergence",
     ),
     DiagnosticCode(

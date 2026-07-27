@@ -138,6 +138,13 @@ def test_rocm_replay_async_order_backpressure_and_device_lease():
         futures.append(gpu.submit_block_async(delta, x, b, c))
         expected.append(np.stack([
             ref.step(delta[i], x[i], b[i], c[i]) for i in range(tokens)]))
+    lifecycle = gpu.lifecycle_telemetry()
+    assert lifecycle["pending_submissions"] == 2
+    assert lifecycle["leased_slots"] == 2
+    with pytest.raises(RuntimeError, match="cannot flush with 2 pending"):
+        gpu.flush()
+    with pytest.raises(RuntimeError, match="cannot rollback with 2 pending"):
+        gpu.rollback(1)
     delta, x, b, c = _inputs(1303, 1, B, D, N)
     with pytest.raises(RuntimeError, match="ring is full"):
         gpu.submit_block_async(delta, x, b, c)
@@ -168,3 +175,6 @@ def test_rocm_replay_async_order_backpressure_and_device_lease():
     assert hip.hipStreamDestroy(stream) == 0
     with pytest.raises(RuntimeError, match="already consumed"):
         _ = leased.device_buffer.__hip_array_interface__
+    assert gpu.lifecycle_telemetry()["pending_submissions"] == 0
+    gpu.close()
+    assert gpu.lifecycle_telemetry()["closed"] is True

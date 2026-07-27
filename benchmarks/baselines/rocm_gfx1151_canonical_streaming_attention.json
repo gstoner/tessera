@@ -1,0 +1,51 @@
+{
+  "schema": "tessera.rocm.canonical_streaming_attention.benchmark.v1",
+  "recorded_at": "2026-07-26",
+  "device": "gfx1151",
+  "toolchain": {
+    "rocm_hip": "7.14.60850",
+    "compiler": "AMD clang 23"
+  },
+  "shape": {
+    "B": 1,
+    "Hq": 4,
+    "Hkv": 2,
+    "Sq": 17,
+    "Sk": 19,
+    "D": 64
+  },
+  "semantic_route": "canonical_rank4_kv_scf_for",
+  "schedule": "gfx1151_wmma_canonical_streaming",
+  "timing": {
+    "clock": "time.perf_counter_ns",
+    "launch_api": "hipModuleLaunchKernel",
+    "completion_api": "hipDeviceSynchronize",
+    "resident_module": true,
+    "resident_buffers": true,
+    "warmup_iterations": 5,
+    "sample_count": 21,
+    "kernel_wall_median_ms": 0.095145,
+    "operation_total_median_ms": 2.322676999028772,
+    "cold_operation_total_ms": 167.53390200028662,
+    "compile_ms": 328.3844629986561,
+    "selector_eligible": false
+  },
+  "ratchet": {
+    "baseline_ms": 0.097763,
+    "max_regression_fraction": 0.1,
+    "limit_ms": 0.1075393,
+    "observed_ratio": 0.9732209527121711,
+    "passed": true
+  },
+  "numerics": {
+    "max_abs_error": 8.469820022583008e-05,
+    "tolerance": 0.035,
+    "passed": true
+  },
+  "artifact": {
+    "binary_format": "hsaco",
+    "hsaco_bytes": 17624,
+    "image_digest": "0ea978d0d19eb8faf58474550c341411ee94f19951b0c38b087d9bdef22ee213"
+  },
+  "passed": true
+}

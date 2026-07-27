@@ -64,6 +64,22 @@ def ScaledDotProductOp : Op<Tessera_Attn_Dialect, "scaled_dot_product", [Pure]> 
   let hasVerifier = 1;
 }
 
+def ScoreBiasOp : Op<Tessera_Attn_Dialect, "score_bias", [Pure]> {
+  let summary = "Add a broadcast-resolved bias block to attention scores";
+  let arguments = (ins AnyType:$scores, AnyType:$bias);
+  let results = (outs AnyType:$biased_scores);
+  let assemblyFormat = "$scores `,` $bias attr-dict `:` type($scores) `,` type($bias) `->` type($biased_scores)";
+  let hasVerifier = 1;
+}
+
+def SoftcapOp : Op<Tessera_Attn_Dialect, "softcap", [Pure]> {
+  let summary = "Apply cap*tanh(score/cap) after scale and additive bias";
+  let arguments = (ins AnyType:$scores, F32Attr:$cap);
+  let results = (outs AnyType:$capped_scores);
+  let assemblyFormat = "$scores `cap` `=` $cap attr-dict `:` type($scores) `->` type($capped_scores)";
+  let hasVerifier = 1;
+}
+
 // OnlineSoftmaxOp — FA-2 online softmax on a score tile.
 // Maintains running max (m) and running sum (l) for the correction step.
 // Output: updated output accumulator, new running_m, new running_l.
@@ -186,5 +202,58 @@ def BlockDropoutOp : Op<Tessera_Attn_Dialect, "block_dropout", []> {
   );
   let results = (outs AnyType:$masked_scores);
   let assemblyFormat = "$scores `kv_off` `=` $kv_offset `p` `=` $dropout_p `seed` `=` $seed attr-dict `:` type($scores) `->` type($masked_scores)";
+  let hasVerifier = 1;
+}
+
+// Target-neutral tensor contract for deterministic attention backward.  Bias is
+// always an operand; callers without bias pass a zero tensor.  The lowering
+// materializes launch-owned split partials and fixed-order reductions as
+// tensor-valued scf.for iter_args before any backend chooses a physical
+// schedule.
+def BackwardOp : Op<Tessera_Attn_Dialect, "backward", []> {
+  let summary = "Deterministic split/reduced attention VJP tensor contract";
+  let arguments = (ins
+    AnyType:$d_output,
+    AnyType:$query,
+    AnyType:$key,
+    AnyType:$value,
+    AnyType:$bias,
+    F32Attr:$scale,
+    BoolAttr:$causal,
+    I64Attr:$window_left,
+    I64Attr:$window_right,
+    F32Attr:$softcap,
+    F32Attr:$dropout_p,
+    I64Attr:$dropout_seed,
+    I64Attr:$split_count,
+    I64Attr:$query_block,
+    I64Attr:$key_block
+  );
+  let results = (outs AnyType:$d_query, AnyType:$d_key, AnyType:$d_value);
+  let assemblyFormat = "$d_output `,` $query `,` $key `,` $value `,` $bias attr-dict `:` type($d_output) `,` type($query) `,` type($key) `,` type($value) `,` type($bias) `->` type($d_query) `,` type($d_key) `,` type($d_value)";
+  let hasVerifier = 1;
+}
+
+def BackwardDQBlockOp : Op<Tessera_Attn_Dialect, "backward_dq_block", [Pure]> {
+  let summary = "Update one deterministic dQ query/KV block";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs AnyType:$d_query);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs) `->` type($d_query)";
+  let hasVerifier = 1;
+}
+
+def BackwardDKDVBlockOp : Op<Tessera_Attn_Dialect, "backward_dkdv_block", [Pure]> {
+  let summary = "Accumulate one split-owned dK/dV query/KV block";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs AnyType:$partial_d_key, AnyType:$partial_d_value);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs) `->` type($partial_d_key) `,` type($partial_d_value)";
+  let hasVerifier = 1;
+}
+
+def BackwardReduceSplitOp : Op<Tessera_Attn_Dialect, "backward_reduce_split", [Pure]> {
+  let summary = "Reduce one split into dK/dV in ascending split order";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs AnyType:$d_key, AnyType:$d_value);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs) `->` type($d_key) `,` type($d_value)";
   let hasVerifier = 1;
 }

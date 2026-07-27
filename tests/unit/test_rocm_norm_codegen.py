@@ -4,8 +4,8 @@ Complements ``test_rocm_norm_compiled.py`` (which executes on a real gfx1151):
 here we only run ``generate-rocm-norm-kernel`` (+ ROCDL lowering) via tessera-opt
 and check structure, so CI without a GPU still gates the codegen:
 
-  * the kernel signature carries X/gamma/beta/O plus runtime M/K/eps and
-    uniform affine-presence flags;
+  * the kernel signature carries X/gamma/beta/consumer/O plus runtime M/K/eps
+    and uniform affine-presence flags;
   * both kinds emit math.sqrt (the denominator) over the reduced stat;
   * layer_norm subtracts the row mean (arith.subf), rmsnorm does not;
   * an unknown kind is a named error;
@@ -48,7 +48,7 @@ def test_signature_and_sqrt():
     m = re.search(r"gpu\.func @nm\(([^)]*)\)", ir)
     assert m, "no gpu.func @nm signature"
     args = [a.strip() for a in m.group(1).split(",") if a.strip()]
-    assert len(args) == 9, f"expected affine runtime ABI, got {args}"
+    assert len(args) == 10, f"expected affine/consumer runtime ABI, got {args}"
     assert args[-3].endswith("f32"), "eps must precede the affine flags"
     assert args[-2].endswith("i1") and args[-1].endswith("i1")
     assert "math.sqrt" in ir

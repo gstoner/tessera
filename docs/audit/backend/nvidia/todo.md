@@ -8,6 +8,7 @@ last_updated: 2026-07-26
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+<<<<<<< HEAD
 Cross-backend sync `LSE-CHECKPOINT-CONTRACT-2026-07-26`: the shared
 `tessera_attn.lse.save` / `lse.load` pair is a declared-but-unimplemented
 FlashAttention-2 checkpoint. `lse.save` takes no destination, `lse.load` takes
@@ -23,6 +24,57 @@ This backend owns the measurement, because the save-versus-recompute choice is
 an HBM-bandwidth question and this is a lead performance target (Decision #28).
 No IR, ABI, schedule, evidence, or selector changed in the synchronization
 slice itself.
+=======
+Cross-backend sync
+`ROCM-ATTENTION-SHARED-BACKWARD-CONSUMER-2026-07-26` makes ROCm gfx1151 the
+first direct physical consumer of the shared tensor-valued attention backward
+phase loops. NVIDIA remains **follow-up required** to validate the same
+dQ/split-dK/dV/fixed-reduction contract and map it to a CUDA-owned package.
+The AMD WMMA schedule, five-entry HSACO, HIP launch workspace, gradient
+evidence, and host-wall timing do not transfer. No shared IR or NVIDIA
+capability state changed in this ROCm-owned closure.
+
+Cross-backend sync `CORE-ATTENTION-TENSOR-LOOPS-MODIFIERS-2026-07-26`
+materializes the deterministic split/reduced backward contract as tensor-valued
+shared `scf.for` bodies with explicit dQ ownership, split dK/dV workspace
+tensors, and ascending reduction. Registered shared score-bias and softcap
+operations now preserve `softcap(scale*QK^T + bias)` inside the forward
+KV-block recurrence, including rank-4 per-head bias. NVIDIA is **follow-up
+required** to consume these phase operations through its SM120 package and
+direct forward schedule. AMD HIP ABI code, HSACO, exact-device gradients, and
+resident timing do not transfer.
+
+Cross-backend sync `CORE-ATTENTION-BACKWARD-CONTRACT-2026-07-26` adds verified
+split count, launch-owned workspace, block-loop metadata, ascending reduction
+order, and canonical `softcap(scale*QK^T + bias)` semantics to the shared
+carrier/oracle. NVIDIA is **follow-up required** to consume this form through
+its SM120 schedule and validate dropout replay; AMD code and evidence do not
+transfer.
+
+Cross-backend sync `ROCM-E2E-ATTENTION-BACKWARD-2026-07-26` is not applicable
+to NVIDIA physical execution. It adds a ROCm-owned five-entry HSACO and
+gfx1151 split/reduced launch workspace without changing the shared launch
+descriptor schema or canonical backward loop. AMD WMMA kernels, workspace
+topology, exact-device gradients, timings, and selector state do not transfer.
+
+The ROCm optimized-attention feature follow-up under
+`ROCM-E2E-ATTENTION-CARRIERS-2026-07-26` adds AMD-only deterministic dropout
+replay and combined bias+softcap consumption to the gfx1151 WMMA schedule,
+plus a host-wall resident performance ratchet. It changes no shared carrier,
+ABI, NVIDIA Target IR, CUDA schedule, capability, or selector. NVIDIA parity
+at the semantic carrier remains validated independently; AMD counter code,
+HSACO evidence, and WSL timing do not transfer.
+
+Cross-backend sync `SSA-STATEFUL-TRANSPORT-2026-07-26` removes the last active
+shared and ROCm `#tile.buffer_ref` compatibility readers after their fixtures
+migrate to `!tile.buffer`; the deprecated attribute is parser-only. NVIDIA was
+already SSA-only, so its SMEM/TMEM schedule and evidence are unchanged. The
+shared ReplaySSM lifecycle schema now keys Apple and ROCm resident ABIs while
+preserving session-private ring ownership, flush/rollback, ordered submission,
+and drain-before-release. MoE metadata now owns launch-lifetime workspace and
+can bind a canonical NCCL/RCCL rank/device fingerprint. NVIDIA consumes the
+same local descriptor as before; no CUDA schedule, selector, or timing changes.
+>>>>>>> origin/main
 
 Cross-backend sync `ROCM-E2E-ATTENTION-CARRIERS-2026-07-26` lands an
 AMD-owned consumer, native HSACO package, descriptor, and exact gfx1151 proof
@@ -54,11 +106,9 @@ Orphan or mixed-use packed loads, descriptor disagreement, arbitrary
 operations, and the public shape-preserving Graph quantize/dequantize ABI stay
 logical. The standalone empty-target transform remains available for explicit
 IR inspection; named pipelines use the capability decision. Apple and ROCm
-retain their compatibility readers and architecture-owned migration queues;
-their physical schedules or evidence are not inferred from SM120. In
-particular, the shared `#tile.buffer_ref` reader remains temporarily available
-for their migration fixtures even though NVIDIA no longer emits or consumes
-it. No selector or timing disposition changes.
+retain architecture-owned physical schedules; their evidence is not inferred
+from SM120. The deprecated `#tile.buffer_ref` attribute is parser-only and no
+active pass consumes it. No selector or timing disposition changes.
 
 Cross-backend sync `CORE-STREAMING-ATTN-2026-07-26` replaces the shared
 rank-2 FlashAttention whole-KV lowering with an explicit KV-block `scf.for`.
@@ -72,10 +122,12 @@ and retains typed coordinates plus logical source extents, enabling
 out-of-bounds zero fill for the ragged tail. WarpSpecialization no longer emits
 name-based `#tile.buffer_ref` or annotation-only `#tile.pipeline_state`
 metadata, and Schedule→Tile consumes structured per-operand `#tile.layout`
-directly. The SM90 structural pipeline is lit-green. This is **landing**, not
-exact SM120 closure: rank-4 batch/head distribution and a direct NVIDIA
-Target-IR/runtime consumer of the shared loop remain open. Existing
-launch-level attention images and selectors are unchanged.
+directly. The SM90 structural pipeline is lit-green. Follow-up sync
+`CORE-STREAMING-ATTN-RANK4-ROCM-2026-07-26` adds shared rank-4 batch/head
+distribution and proves a direct ROCm consumer. A direct NVIDIA
+Target-IR/runtime consumer of the shared loop remains open; gfx1151 LDS/WMMA
+schedules, resources, wall timing, and selector evidence do not transfer.
+Existing launch-level attention images and selectors are unchanged.
 
 Cross-backend sync `CORE-GEMM-KLOOP-2026-07-25` is **landing**, owned by
 NVIDIA under the `NVIDIA-E2E-2` continuation. The shared compiler now forms a

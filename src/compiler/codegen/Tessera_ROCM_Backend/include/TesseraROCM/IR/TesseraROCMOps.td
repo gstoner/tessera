@@ -145,12 +145,14 @@ def ROCM_FlashAttnOp : TesseraROCM_Op<"flash_attn"> {
 }
 
 def ROCM_FlashAttnBwdOp : TesseraROCM_Op<"flash_attn_bwd"> {
-  let summary = "An FA-2 backward pass to realize as three WMMA kernels";
+  let summary = "An FA-2 backward pass to realize as a WMMA kernel program";
   let description = [{
     The backward analog of `tessera_rocm.flash_attn`: the directive the
-    `generate-wmma-flash-attn-bwd-kernel` pass expands into THREE real,
+    `generate-wmma-flash-attn-bwd-kernel` pass expands into real,
     fragment-materialized RDNA WMMA kernels — the textbook FA-2 backward
-    structure (no stored attention matrix; recompute S/P per tile):
+    structure (no stored attention matrix; recompute S/P per tile). The
+    canonical deterministic route adds `<name>_dkdv_reduce` to the three
+    compute entries:
 
       * `<name>_pre`  — one wave per (16-query tile, b*h). Scalar pass:
         `D[q] = sum_d O[q,d]*dO[q,d]` and `L[q] = logsumexp_k(scale*Q@K^T)`
@@ -162,6 +164,8 @@ def ROCM_FlashAttnBwdOp : TesseraROCM_Op<"flash_attn_bwd"> {
         `dS=P*(dP-D)`; accumulates `dV += P^T@dO` and `dK += scale*dS^T@Q`
         (WMMA, contraction over queries — P / dS are staged in LDS and reread
         transposed, the layout bridge).
+      * `<name>_dkdv_reduce` — fixed ascending-split reduction into final
+        launch-owned dK/dV outputs (present for `split_reduced`).
       * `<name>_dq`   — one wave per (16-query tile, b*h). Loops key tiles:
         same `S`/`P`/`dP`/`dS`, accumulates `dQ += scale*dS@K` (WMMA,
         contraction over keys; dS reread from LDS in natural layout).

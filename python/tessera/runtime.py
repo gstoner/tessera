@@ -1662,6 +1662,10 @@ def _execute_rocm_moe_transport(artifact: RuntimeArtifact, args: Any) -> Any:
     Per-op ``execution_kind`` via the ``(output, kind)`` launch override."""
     import numpy as np
     from .stdlib import moe
+    from .compiler.moe_transport import (
+        descriptor_from_dispatch_plan,
+        grouped_expert_metadata,
+    )
 
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or ["x", "plan"])
@@ -1674,6 +1678,7 @@ def _execute_rocm_moe_transport(artifact: RuntimeArtifact, args: Any) -> Any:
             x, plan = values["x"], values["plan"]
         except KeyError as exc:
             raise ValueError(f"missing moe_dispatch argument {exc.args[0]!r}") from exc
+        descriptor_from_dispatch_plan(plan)
         try:
             return (_moe_dispatch_native(x, plan, np), "native_gpu")
         except _RocmCompiledUnavailable:
@@ -1683,6 +1688,7 @@ def _execute_rocm_moe_transport(artifact: RuntimeArtifact, args: Any) -> Any:
             partials, plan = values["partials"], values["plan"]
         except KeyError as exc:
             raise ValueError(f"missing moe_combine argument {exc.args[0]!r}") from exc
+        descriptor_from_dispatch_plan(plan)
         try:
             return (_moe_combine_native(partials, plan, np), "native_gpu")
         except _RocmCompiledUnavailable:
@@ -1692,12 +1698,23 @@ def _execute_rocm_moe_transport(artifact: RuntimeArtifact, args: Any) -> Any:
             x, weights, group_sizes = (values["x"], values["weights"], values["group_sizes"])
         except KeyError as exc:
             raise ValueError(f"missing grouped_gemm argument {exc.args[0]!r}") from exc
+        grouped = grouped_expert_metadata(
+            group_sizes, num_tokens=int(np.shape(x)[0])
+        )
         try:
-            return (_rocm_grouped_gemm_native(x, weights, group_sizes, np), "native_gpu")
+            return (
+                _rocm_grouped_gemm_native(
+                    x, weights, grouped.group_sizes, np
+                ),
+                "native_gpu",
+            )
         except _RocmCompiledUnavailable:
             from .compiler.grouped_layout import reference_grouped_gemm
 
-            return (reference_grouped_gemm(x, weights, group_sizes), "reference_cpu")
+            return (
+                reference_grouped_gemm(x, weights, grouped.group_sizes),
+                "reference_cpu",
+            )
     if op_name == "tessera.grouped_swiglu":
         try:
             gvals = (values["x_packed"], values["w_gate"], values["w_up"], values["w_down"], values["group_sizes"])
@@ -3001,6 +3018,371 @@ def _submit_nvidia_sm120_native(
     )
 
 
+def _submit_rocm_gfx1151_attention_backward_program(
+    program: Any,
+    buffers: Mapping[str, Any],
+    *,
+    warmup: int = 0,
+    iterations: int = 1,
+) -> dict[str, Any]:
+    """Run one resident compiler-owned gfx1151 attention-backward program.
+
+    The HSACO, user buffers, and one launch-owned workspace allocation stay
+    resident across forward recompute, prepass, split dK/dV, reduction, and dQ.
+    Timings are synchronized host-wall samples for the whole ordered program.
+    """
+    import numpy as np
+
+    from tessera.compiler.rocm_native import (
+        GFX1151_ATTN_BWD_DKDV_ABI,
+        GFX1151_ATTN_BWD_DQ_ABI,
+        GFX1151_ATTN_BWD_PRE_ABI,
+        GFX1151_ATTN_BWD_REDUCE_ABI,
+        GFX1151_ATTN_BF16_ABI,
+        GFX1151_ATTN_F16_ABI,
+        ROCMNativeProgram,
+    )
+
+    if not isinstance(program, ROCMNativeProgram):
+        raise TypeError("gfx1151 attention backward requires ROCMNativeProgram")
+    if warmup < 0 or iterations <= 0:
+        raise ValueError("warmup must be nonnegative and iterations positive")
+    expected_abis = (
+        GFX1151_ATTN_F16_ABI
+        if program.image.entry_points[0].abi_id == GFX1151_ATTN_F16_ABI
+        else GFX1151_ATTN_BF16_ABI,
+        GFX1151_ATTN_BWD_PRE_ABI,
+        GFX1151_ATTN_BWD_DKDV_ABI,
+        GFX1151_ATTN_BWD_REDUCE_ABI,
+        GFX1151_ATTN_BWD_DQ_ABI,
+    )
+    if tuple(item.abi_id for item in program.descriptors) != expected_abis:
+        raise RuntimeError("gfx1151 attention backward launch stages are not canonical")
+    provenance = program.descriptors[0].provenance
+    if provenance.get("semantic_route") != "canonical_tensor_backward_scf_for":
+        raise RuntimeError(
+            "gfx1151 attention backward requires direct consumption of the "
+            "shared tensor-valued phase loops"
+        )
+    b, hq, hkv, sq, sk, d, dv = (
+        int(value) for value in cast(list[int], provenance["shape"])
+    )
+    if d != dv:
+        raise RuntimeError("gfx1151 attention backward program requires D == Dv")
+    names = {
+        item.name
+        for descriptor in program.descriptors
+        for item in descriptor.buffers
+        if item.layout != "program_workspace"
+    }
+    missing = names - buffers.keys()
+    if missing:
+        raise RuntimeError(
+            "gfx1151 attention backward is missing buffers "
+            + ", ".join(sorted(missing))
+        )
+    forward_inputs = [
+        item.name
+        for item in program.descriptors[0].buffers
+        if item.direction == "input" and item.layout != "program_workspace"
+    ]
+    q_name, k_name, v_name = forward_inputs[:3]
+    bias_name = forward_inputs[3] if len(forward_inputs) == 4 else None
+    pre_inputs = [
+        item.name
+        for item in program.descriptors[1].buffers
+        if item.layout != "program_workspace"
+    ]
+    do_name = next(name for name in pre_inputs if name not in {q_name, k_name, bias_name})
+    dq_name = next(
+        item.name
+        for item in program.descriptors[-1].buffers
+        if item.direction == "output" and item.layout != "program_workspace"
+    )
+    kv_outputs = tuple(
+        item.name
+        for item in program.descriptors[2].buffers
+        if item.direction == "inout" and item.layout != "program_workspace"
+    )
+    if len(kv_outputs) != 2 or kv_outputs[0] == kv_outputs[1]:
+        raise RuntimeError("gfx1151 attention backward requires distinct dK and dV outputs")
+    dk_name, dv_name = kv_outputs
+    q, key, value, do = (buffers[name] for name in (q_name, k_name, v_name, do_name))
+    dq, dk, dv_out = (buffers[name] for name in (dq_name, dk_name, dv_name))
+    expected_storage = (
+        np.float16
+        if expected_abis[0] == GFX1151_ATTN_F16_ABI
+        else _bfloat16_dtype()
+    )
+    if expected_storage is None:
+        raise RuntimeError("gfx1151 bf16 attention backward requires ml_dtypes")
+    if (
+        tuple(q.shape) != (b, hq, sq, d)
+        or tuple(key.shape) != (b, hkv, sk, d)
+        or tuple(value.shape) != (b, hkv, sk, d)
+        or tuple(do.shape) != (b, hq, sq, d)
+        or any(array.dtype != expected_storage for array in (q, key, value, do))
+        or tuple(dq.shape) != (b, hq, sq, d)
+        or tuple(dk.shape) != (b, hkv, sk, d)
+        or tuple(dv_out.shape) != (b, hkv, sk, d)
+        or any(array.dtype != np.float32 for array in (dq, dk, dv_out))
+    ):
+        raise RuntimeError(
+            "gfx1151 attention backward arrays disagree with program shape/dtype"
+        )
+    bias = buffers[bias_name] if bias_name is not None else None
+    if bias is not None and (
+        tuple(bias.shape) != (b, hq, sq, sk) or bias.dtype != np.float32
+    ):
+        raise RuntimeError("gfx1151 attention backward bias disagrees with program")
+    if any(
+        not array.flags.c_contiguous
+        for array in (q, key, value, do, dq, dk, dv_out)
+    ):
+        raise RuntimeError("gfx1151 attention backward buffers must be contiguous")
+
+    hip = _load_hip_for_launch()
+    if hip is None or hip.hipInit(0) != 0:
+        raise RuntimeError("libamdhip64.so or a usable gfx1151 device is unavailable")
+    module = ctypes.c_void_p()
+    image_storage = ctypes.create_string_buffer(program.image.payload)
+    if (
+        hip.hipModuleLoadData(
+            ctypes.byref(module), ctypes.cast(image_storage, ctypes.c_void_p)
+        )
+        != 0
+    ):
+        raise RuntimeError("gfx1151 attention backward HSACO module load failed")
+    allocations: list[ctypes.c_void_p] = []
+    try:
+        functions: list[ctypes.c_void_p] = []
+        for descriptor in program.descriptors:
+            function = ctypes.c_void_p()
+            if (
+                hip.hipModuleGetFunction(
+                    ctypes.byref(function),
+                    module,
+                    descriptor.entry_symbol.encode(),
+                )
+                != 0
+            ):
+                raise RuntimeError(
+                    f"gfx1151 attention backward symbol "
+                    f"{descriptor.entry_symbol!r} not found"
+                )
+            functions.append(function)
+
+        host_inputs = {
+            q_name: np.ascontiguousarray(q),
+            k_name: np.ascontiguousarray(key),
+            v_name: np.ascontiguousarray(value),
+            do_name: np.ascontiguousarray(do),
+        }
+        if bias_name is not None:
+            assert bias is not None
+            host_inputs[bias_name] = np.ascontiguousarray(bias)
+        device: dict[str, ctypes.c_void_p] = {}
+        for name, array in (
+            *host_inputs.items(),
+            (dq_name, dq),
+            (dk_name, dk),
+            (dv_name, dv_out),
+        ):
+            pointer = ctypes.c_void_p()
+            if hip.hipMalloc(ctypes.byref(pointer), max(int(array.nbytes), 4)) != 0:
+                raise RuntimeError("gfx1151 attention backward hipMalloc failed")
+            allocations.append(pointer)
+            device[name] = pointer
+        workspace_pointer = ctypes.c_void_p()
+        if (
+            hip.hipMalloc(
+                ctypes.byref(workspace_pointer), max(program.workspace.bytes, 4)
+            )
+            != 0
+        ):
+            raise RuntimeError("gfx1151 attention backward workspace allocation failed")
+        allocations.append(workspace_pointer)
+        workspace_address = workspace_pointer.value
+        if workspace_address is None:
+            raise RuntimeError(
+                "gfx1151 attention backward workspace allocation returned null"
+            )
+        slices = {
+            item.name: ctypes.c_void_p(workspace_address + item.offset)
+            for item in program.workspace_slices
+        }
+        for name, array in host_inputs.items():
+            if (
+                hip.hipMemcpy(
+                    device[name],
+                    array.ctypes.data_as(ctypes.c_void_p),
+                    int(array.nbytes),
+                    1,
+                )
+                != 0
+            ):
+                raise RuntimeError(
+                    "gfx1151 attention backward host-to-device copy failed"
+                )
+
+        nq = b * hq * sq * d
+        nkv = b * hkv * sk * d
+        nl = b * hq * sq
+
+        def memref(pointer: ctypes.c_void_p, size: int) -> list[Any]:
+            return [
+                ctypes.c_void_p(pointer.value),
+                ctypes.c_void_p(pointer.value),
+                ctypes.c_int64(0),
+                ctypes.c_int64(size),
+                ctypes.c_int64(1),
+            ]
+
+        tail: list[Any] = []
+        if hq != hkv:
+            tail.extend((ctypes.c_int64(hq), ctypes.c_int64(hq // hkv)))
+        window_left = int(cast(int, provenance["window_left"]))
+        if window_left >= 0:
+            tail.append(ctypes.c_int64(window_left + 1))
+        softcap = float(cast(float, provenance["softcap"]))
+        if softcap > 0.0:
+            tail.append(ctypes.c_float(softcap))
+        dropout_p = float(cast(float, provenance["dropout_p"]))
+        if dropout_p > 0.0:
+            tail.extend(
+                (
+                    ctypes.c_float(dropout_p),
+                    ctypes.c_int64(int(cast(int, provenance["dropout_seed"]))),
+                )
+            )
+        bias_tail = (
+            memref(device[bias_name], b * hq * sq * sk)
+            if bias_name is not None
+            else []
+        )
+        sq_arg = ctypes.c_int64(sq)
+        sk_arg = ctypes.c_int64(sk)
+        scale_arg = ctypes.c_float(float(cast(float, provenance["scale"])))
+        causal_arg = ctypes.c_int64(int(bool(provenance["causal"])))
+        common_tail = [sq_arg, sk_arg, scale_arg, causal_arg] + tail + bias_tail
+        argument_sets = (
+            memref(device[q_name], nq)
+            + memref(device[k_name], nkv)
+            + memref(device[v_name], nkv)
+            + memref(slices["forward_o"], nq)
+            + common_tail,
+            memref(device[q_name], nq)
+            + memref(device[k_name], nkv)
+            + memref(device[do_name], nq)
+            + memref(slices["forward_o"], nq)
+            + memref(slices["row_lse"], nl)
+            + memref(slices["row_delta"], nl)
+            + common_tail,
+            memref(device[q_name], nq)
+            + memref(device[k_name], nkv)
+            + memref(device[v_name], nkv)
+            + memref(device[do_name], nq)
+            + memref(slices["row_lse"], nl)
+            + memref(slices["row_delta"], nl)
+            + memref(device[dk_name], nkv)
+            + memref(device[dv_name], nkv)
+            + memref(slices["partial_dk"], nkv)
+            + memref(slices["partial_dv"], nkv)
+            + common_tail,
+            memref(device[dk_name], nkv)
+            + memref(device[dv_name], nkv)
+            + memref(slices["partial_dk"], nkv)
+            + memref(slices["partial_dv"], nkv)
+            + [ctypes.c_int64(nkv)],
+            memref(device[q_name], nq)
+            + memref(device[k_name], nkv)
+            + memref(device[v_name], nkv)
+            + memref(device[do_name], nq)
+            + memref(slices["row_lse"], nl)
+            + memref(slices["row_delta"], nl)
+            + memref(device[dq_name], nq)
+            + common_tail,
+        )
+        grids = (
+            ((sq + 15) // 16, b * hq, 32),
+            ((sq + 15) // 16, b * hq, 32),
+            (((sk + 15) // 16) * 2, b * hq, 32),
+            ((nkv + 255) // 256, 1, 256),
+            ((sq + 15) // 16, b * hq, 32),
+        )
+
+        def launch(function: ctypes.c_void_p, arguments: list[Any], grid: tuple[int, int, int]) -> None:
+            array = (ctypes.c_void_p * len(arguments))()
+            for index, value_arg in enumerate(arguments):
+                array[index] = ctypes.cast(ctypes.byref(value_arg), ctypes.c_void_p)
+            rc = hip.hipModuleLaunchKernel(
+                function,
+                grid[0],
+                grid[1],
+                1,
+                grid[2],
+                1,
+                1,
+                0,
+                None,
+                array,
+                None,
+            )
+            if rc != 0:
+                raise RuntimeError(
+                    f"gfx1151 attention backward kernel launch failed rc={rc}"
+                )
+
+        def run_program() -> None:
+            for name in (dk_name, dv_name):
+                hip.hipMemset(device[name], 0, nkv * 4)
+            for name in ("partial_dk", "partial_dv"):
+                hip.hipMemset(slices[name], 0, nkv * 4)
+            for function, arguments, grid in zip(
+                functions, argument_sets, grids, strict=True
+            ):
+                launch(function, arguments, grid)
+            if hip.hipDeviceSynchronize() != 0:
+                raise RuntimeError(
+                    "gfx1151 attention backward synchronization failed"
+                )
+
+        for _ in range(warmup):
+            run_program()
+        samples: list[float] = []
+        for _ in range(iterations):
+            started_ns = time.perf_counter_ns()
+            run_program()
+            samples.append((time.perf_counter_ns() - started_ns) / 1_000_000.0)
+        for name, output in ((dq_name, dq), (dk_name, dk), (dv_name, dv_out)):
+            if (
+                hip.hipMemcpy(
+                    output.ctypes.data_as(ctypes.c_void_p),
+                    device[name],
+                    int(output.nbytes),
+                    2,
+                )
+                != 0
+            ):
+                raise RuntimeError(
+                    "gfx1151 attention backward device-to-host copy failed"
+                )
+        return {
+            "outputs": (dq, dk, dv_out),
+            "kernel_wall_samples_ms": samples,
+            "workspace_bytes": program.workspace.bytes,
+            "entry_symbols": tuple(
+                descriptor.entry_symbol for descriptor in program.descriptors
+            ),
+        }
+    finally:
+        for pointer in reversed(allocations):
+            hip.hipFree(pointer)
+        unload = getattr(hip, "hipModuleUnload", None)
+        if unload is not None and module.value:
+            unload(module)
+
+
 def _submit_rocm_gfx1151_native(
     image: NativeImageArtifact,
     descriptor: LaunchDescriptor,
@@ -3265,6 +3647,18 @@ def _submit_rocm_gfx1151_native(
             if softcap > 0.0:
                 arguments.append(
                     ctypes.c_float(softcap)
+                )
+            dropout_p = float(
+                cast(float, descriptor.provenance["dropout_p"])
+            )
+            if dropout_p > 0.0:
+                arguments.extend(
+                    (
+                        ctypes.c_float(dropout_p),
+                        ctypes.c_int64(
+                            int(cast(int, descriptor.provenance["dropout_seed"]))
+                        ),
+                    )
                 )
             if attention_bias:
                 arguments.extend(
@@ -5685,7 +6079,9 @@ def _execute_rocm_compiled_matmul_family(artifact: RuntimeArtifact, args: Any) -
 # dtype) — the kernel is (B,H,Sq,Sk)-generic — cached.
 # ─────────────────────────────────────────────────────────────────────────────
 #: hsaco bytes keyed by schedule and semantic variant.
-_rocm_fa_hsaco_cache: dict[tuple[int, str, str, bool, bool, bool, bool, bool], bytes] = {}
+_rocm_fa_hsaco_cache: dict[
+    tuple[int, str, str, bool, bool, bool, bool, bool, bool], bytes
+] = {}
 
 
 def _build_compiled_flash_attn_hsaco(
@@ -5695,6 +6091,7 @@ def _build_compiled_flash_attn_hsaco(
     sliding_window: bool = False,
     logit_softcap: bool = False,
     attn_bias: bool = False,
+    dropout: bool = False,
     two_wave: bool = False,
 ) -> bytes:
     """Generate + serialize the compiler's WMMA FA-2 forward kernel to hsaco,
@@ -5707,7 +6104,17 @@ def _build_compiled_flash_attn_hsaco(
     attn_bias=True emits the additive-bias variant (a trailing f32 `[bh,Sq,Sk]`
     memref arg, `softmax(scale·Q@K^T + bias)·V`)."""
     chip = _rocm_chip()
-    key = (head_dim, chip, dtype, gqa, sliding_window, logit_softcap, attn_bias, two_wave)
+    key = (
+        head_dim,
+        chip,
+        dtype,
+        gqa,
+        sliding_window,
+        logit_softcap,
+        attn_bias,
+        dropout,
+        two_wave,
+    )
     cached = _rocm_fa_hsaco_cache.get(key)
     if cached is not None:
         return cached
@@ -5718,12 +6125,13 @@ def _build_compiled_flash_attn_hsaco(
     win_attr = ", sliding_window = true" if sliding_window else ""
     cap_attr = ", logit_softcap = true" if logit_softcap else ""
     bias_attr = ", attn_bias = true" if attn_bias else ""
+    dropout_attr = ", dropout = true" if dropout else ""
     wave_attr = ", two_wave = true" if two_wave else ""
     directive = (
         "module {\n"
         '  "tessera_rocm.flash_attn"() {name = "fa", '
         f'head_dim = {head_dim} : i64, dtype = "{dtype}"'
-        f"{gqa_attr}{win_attr}{cap_attr}{bias_attr}{wave_attr}}} "
+        f"{gqa_attr}{win_attr}{cap_attr}{bias_attr}{dropout_attr}{wave_attr}}} "
         ": () -> ()\n"
         "}\n"
     )
@@ -5856,6 +6264,15 @@ def _execute_rocm_compiled_flash_attn(
     if softcap < 0:
         raise ValueError(f"rocm flash_attn logit_softcap must be non-negative; got {softcap}")
     has_softcap = softcap > 0
+    dropout_p = float(
+        kwargs.get("dropout_p", kwargs.get("dropout", 0.0)) or 0.0
+    )
+    if not 0.0 <= dropout_p < 1.0:
+        raise ValueError(
+            f"rocm flash_attn dropout probability must be in [0, 1); got {dropout_p}"
+        )
+    has_dropout = dropout_p > 0.0
+    dropout_seed = int(kwargs.get("dropout_seed", kwargs.get("seed", 0)) or 0)
 
     # Additive bias → host-broadcast to the folded-batch leading dim + (Sq,Sk),
     # i.e. Q.lead + (Sq,Sk), flattened to [bh,Sq,Sk] f32 (the kernel indexes
@@ -5876,7 +6293,9 @@ def _execute_rocm_compiled_flash_attn(
     # Nine interleaved gfx1151 trials show 2.04–2.10x paired kernel speedup,
     # eliminate 82 VGPR spills, and match within 8.4e-6.  Advanced semantic
     # variants stay one-wave until their own correctness/performance matrix.
-    two_wave = head_dim == 128 and not (gqa or sliding or has_softcap or has_bias)
+    two_wave = head_dim == 128 and not (
+        gqa or sliding or has_softcap or has_bias or has_dropout
+    )
     hsaco = _build_compiled_flash_attn_hsaco(
         head_dim,
         dtype_tag,
@@ -5884,6 +6303,7 @@ def _execute_rocm_compiled_flash_attn(
         sliding_window=sliding,
         logit_softcap=has_softcap,
         attn_bias=has_bias,
+        dropout=has_dropout,
         two_wave=two_wave,
     )
     hip = _load_hip_for_launch()
@@ -5943,6 +6363,11 @@ def _execute_rocm_compiled_flash_attn(
         launch_args += [ctypes.c_int64(window)]
     if has_softcap:  # soft-cap kernel's trailing f32 cap arg
         launch_args += [ctypes.c_float(softcap)]
+    if has_dropout:
+        launch_args += [
+            ctypes.c_float(dropout_p),
+            ctypes.c_int64(dropout_seed),
+        ]
     if has_bias:  # additive-bias kernel's trailing [bh,Sq,Sk] f32 memref (last)
         launch_args += _mr(dbias, bh * sq * sk)
     dev_bufs = (dq, dk, dv, do, dbias) if has_bias else (dq, dk, dv, do)
@@ -29745,17 +30170,41 @@ def rocm_ssm_replay_state_handle(
     """
     from .cache import SSMStateHandle
     from .compiler.emit.rocm_hip import RocmReplayDeviceState
+    from .compiler.ssm_replay import replay_lifecycle_descriptor
+
+    lifecycle_descriptor = replay_lifecycle_descriptor(
+        target="rocm_gfx1151",
+        batch=batch,
+        channels=num_channels,
+        state_dim=state_dim,
+        capacity=capacity,
+        async_slots=async_slots,
+        dtype=dtype,
+    )
 
     class _Handle(SSMStateHandle):
         _device: Any = None
+        _lifecycle_descriptor = lifecycle_descriptor
 
         def __post_init__(self) -> None:
             super().__post_init__()
+            self._closed = False
             if self._scalar_a:
                 try:
                     self._device = RocmReplayDeviceState(self._s0, self._a1d, self.capacity, async_slots)
                 except (FileNotFoundError, OSError, RuntimeError, subprocess.CalledProcessError):
                     self._device = None
+
+        def _require_open(self) -> None:
+            if self._closed:
+                raise RuntimeError("ReplaySSM handle is closed")
+
+        def _require_idle(self, action: str) -> None:
+            if self._device is not None and self._device.pending_leases:
+                raise RuntimeError(
+                    f"cannot {action} with {self._device.pending_leases} "
+                    "pending ReplaySSM submissions"
+                )
 
         def _drop_device(self) -> None:
             if self._device is not None:
@@ -29774,6 +30223,7 @@ def rocm_ssm_replay_state_handle(
                 self._drop_device()
 
         def append(self, delta_t: Any, x_t: Any, b_t: Any, *, auto_flush: bool = True) -> Any:
+            self._require_open()
             super().append(delta_t, x_t, b_t, auto_flush=auto_flush)
             if self._device is not None:
                 try:
@@ -29783,6 +30233,7 @@ def rocm_ssm_replay_state_handle(
             return self
 
         def read_output(self, c_t: Any, *, gate_t: Any = None) -> Any:
+            self._require_open()
             if self._device is not None and self._count:
                 import numpy as np
 
@@ -29797,6 +30248,8 @@ def rocm_ssm_replay_state_handle(
             return super().read_output(c_t, gate_t=gate_t)
 
         def flush(self) -> Any:
+            self._require_open()
+            self._require_idle("flush")
             if self._device is not None and self._count:
                 try:
                     self._device.flush(self._count)
@@ -29805,6 +30258,8 @@ def rocm_ssm_replay_state_handle(
             return super().flush()
 
         def reset(self) -> Any:
+            self._require_open()
+            self._require_idle("reset")
             super().reset()
             if self._device is not None:
                 self._rebuild_device()
@@ -29814,6 +30269,8 @@ def rocm_ssm_replay_state_handle(
             """Independent host/device fork for speculative branch state."""
             import numpy as np
 
+            self._require_open()
+            self._require_idle("clone")
             a_value = self._a1d if self._scalar_a else self._a2d
             other = _Handle(
                 batch=self.batch,
@@ -29836,6 +30293,7 @@ def rocm_ssm_replay_state_handle(
         def step_block(self, deltas: Any, xs: Any, bs: Any, cs: Any) -> Any:
             import numpy as np
 
+            self._require_open()
             ds, xx, bb, cc = (np.asarray(v) for v in (deltas, xs, bs, cs))
             tokens = int(ds.shape[0])
             if self._device is None or tokens < 1 or self.should_flush(tokens):
@@ -29856,6 +30314,7 @@ def rocm_ssm_replay_state_handle(
         def submit_block_async(self, deltas: Any, xs: Any, bs: Any, cs: Any) -> Any:
             import numpy as np
 
+            self._require_open()
             ds, xx, bb, cc = (np.asarray(v) for v in (deltas, xs, bs, cs))
             tokens = int(ds.shape[0])
             if self._device is None or tokens < 1 or self.should_flush(tokens):
@@ -29868,6 +30327,36 @@ def rocm_ssm_replay_state_handle(
             for i in range(tokens):
                 SSMStateHandle.append(self, ds[i], xx[i], bb[i], auto_flush=False)
             return future
+
+        def rollback(self, n: int) -> Any:
+            self._require_open()
+            self._require_idle("rollback")
+            return super().rollback(n)
+
+        def lifecycle_telemetry(self) -> dict[str, Any]:
+            pending = self._device.pending_leases if self._device is not None else 0
+            return {
+                "resident_inputs": self._device is not None and not self._closed,
+                "capacity": self.capacity,
+                "count": self._count,
+                "ring_slots": async_slots,
+                "leased_slots": pending,
+                "pending_submissions": pending,
+                "closed": self._closed,
+                "lifecycle_descriptor": self._lifecycle_descriptor.as_metadata_dict(),
+            }
+
+        def close(self) -> None:
+            if self._closed:
+                return
+            self._drop_device()
+            self._closed = True
+
+        def __del__(self) -> None:
+            try:
+                self.close()
+            except Exception:
+                pass
 
     return _Handle(
         batch=batch,

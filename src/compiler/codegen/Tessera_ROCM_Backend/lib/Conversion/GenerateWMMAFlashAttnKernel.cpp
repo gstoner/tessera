@@ -47,7 +47,8 @@ namespace {
 void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
                        Type storeTy, bool viaTile = false, bool gqa = false,
                        bool window = false, bool softcap = false,
-                       bool bias = false, bool twoWave = false) {
+                       bool dropout = false, bool bias = false,
+                       bool twoWave = false) {
   MLIRContext *ctx = b.getContext();
   int64_t DC = D / 16;
   Type f32 = b.getF32Type();
@@ -168,6 +169,17 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   if (softcap)
     cap = f.getArgument(8 + (gqa ? 2 : 0) + (window ? 1 : 0));
 
+  // Deterministic dropout is applied to P only on the P@V path. The online
+  // softmax denominator keeps the undropped probability, matching the scalar
+  // semantic reference and allowing backward to replay the same counter.
+  Value dropoutP, dropoutSeed;
+  if (dropout) {
+    int64_t p = 8 + (gqa ? 2 : 0) + (window ? 1 : 0) +
+                (softcap ? 1 : 0);
+    dropoutP = f.getArgument(p);
+    dropoutSeed = f.getArgument(p + 1);
+  }
+
   // Additive attention bias: O = softmax(scale*Q@K^T + attn_bias)*V. The bias
   // memref is the LAST runtime arg (after gqa/window/softcap), f32, host-
   // broadcast to [bh, Sq, Sk] so the kernel indexes bias[(bh*Sq + qpos)*Sk + gk]
@@ -175,7 +187,7 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   Value biasBuf;
   if (bias)
     biasBuf = f.getArgument(8 + (gqa ? 2 : 0) + (window ? 1 : 0) +
-                            (softcap ? 1 : 0));
+                            (softcap ? 1 : 0) + (dropout ? 2 : 0));
 
   // nKV = (Sk+15)/16 ; lastKt = min(causal ? (q0+15)/16 : nKV-1, nKV-1)
   Value nKV = b.create<arith::DivUIOp>(loc, add(Sk, c15), c16);
@@ -270,16 +282,11 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
       Value qi = add(ci(2 * e), half);
       Value gk = add(k0, l15);
       Value v0 = b.create<arith::MulFOp>(loc, csv, scale);
-      // Gemma-2 logit soft-cap: cap * tanh(v0 / cap), before masking.
-      if (softcap) {
-        Value scaled = b.create<arith::DivFOp>(loc, v0, cap);
-        Value t = b.create<math::TanhOp>(loc, scaled);
-        v0 = b.create<arith::MulFOp>(loc, cap, t);
-      }
       Value gkOOB = b.create<arith::CmpIOp>(loc, sge, gk, Sk);
       Value qpos = add(q0, qi);
-      // Additive bias: bias[(bh*Sq + qpos)*Sk + gk] on the scaled score (after
-      // soft-cap, before masking). Guarded on the query bound so masked lanes
+      // Additive bias is part of the raw logit. The shared recurrence is
+      // softcap(scale*QK^T + bias), so combined bias+softcap has one derivative
+      // contract on every backend. Guarded on the query bound so masked lanes
       // never read past the [bh,Sq,Sk] buffer; the value is discarded by the
       // -inf select below anyway.
       if (bias) {
@@ -289,6 +296,12 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
         Value bidx = add(mul(add(mul(bh, Sq), qSafe), Sk), kSafe);
         Value bval = b.create<memref::LoadOp>(loc, biasBuf, ValueRange{bidx});
         v0 = b.create<arith::AddFOp>(loc, v0, bval);
+      }
+      // Gemma-2 logit soft-cap: cap * tanh((scale*QK^T + bias) / cap).
+      if (softcap) {
+        Value scaled = b.create<arith::DivFOp>(loc, v0, cap);
+        Value t = b.create<math::TanhOp>(loc, scaled);
+        v0 = b.create<arith::MulFOp>(loc, cap, t);
       }
       // Causal (future-key) mask — active when causal or windowed.
       Value cmask = b.create<arith::AndIOp>(
@@ -363,8 +376,43 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
         Value s = b.create<memref::LoadOp>(loc, sS, ValueRange{idx});
         Value p = b.create<math::ExpOp>(loc,
                                         b.create<arith::SubFOp>(loc, s, mnew));
-        b.create<memref::StoreOp>(loc, p, sS, ValueRange{idx});
         rsum = b.create<arith::AddFOp>(loc, rsum, p);
+        Value outputP = p;
+        if (dropout) {
+          Value qpos = add(q0, qi);
+          Value gk = add(k0, ci(ki));
+          Value counter = add(mul(add(mul(bh, Sq), qpos), Sk), gk);
+          Value counter64 =
+              b.create<arith::IndexCastOp>(loc, b.getI64Type(), counter);
+          Value hash = b.create<arith::AddIOp>(
+              loc,
+              b.create<arith::MulIOp>(
+                  loc, counter64,
+                  b.create<arith::ConstantIntOp>(loc, 1664525, 64)),
+              b.create<arith::AddIOp>(
+                  loc, dropoutSeed,
+                  b.create<arith::ConstantIntOp>(loc, 1013904223, 64)));
+          hash = b.create<arith::AndIOp>(
+              loc, hash,
+              b.create<arith::ConstantIntOp>(loc, 0xffffffffULL, 64));
+          Value hash32 =
+              b.create<arith::TruncIOp>(loc, b.getI32Type(), hash);
+          Value thresholdF = b.create<arith::MulFOp>(
+              loc, dropoutP,
+              b.create<arith::ConstantOp>(
+                  loc, f32, b.getF32FloatAttr(4294967296.0)));
+          Value threshold =
+              b.create<arith::FPToUIOp>(loc, b.getI32Type(), thresholdF);
+          Value keep = b.create<arith::CmpIOp>(
+              loc, arith::CmpIPredicate::uge, hash32, threshold);
+          Value one =
+              b.create<arith::ConstantOp>(loc, f32, b.getF32FloatAttr(1.0));
+          Value invKeep = b.create<arith::DivFOp>(
+              loc, one, b.create<arith::SubFOp>(loc, one, dropoutP));
+          outputP = b.create<arith::SelectOp>(
+              loc, keep, b.create<arith::MulFOp>(loc, p, invKeep), zerof);
+        }
+        b.create<memref::StoreOp>(loc, outputP, sS, ValueRange{idx});
       }
       Value oldl = b.create<memref::LoadOp>(loc, sl, ValueRange{qi});
       Value newl =
@@ -531,6 +579,9 @@ struct GenerateWMMAFlashAttnKernelPass
       bool softcap = false;
       if (auto a = op->getAttrOfType<BoolAttr>("logit_softcap"))
         softcap = a.getValue();
+      bool dropout = false;
+      if (auto a = op->getAttrOfType<BoolAttr>("dropout"))
+        dropout = a.getValue();
       // Additive attention bias: a trailing f32 `[bh,Sq,Sk]` memref runtime arg
       // (LAST). O = softmax(scale*Q@K^T + attn_bias)*V.
       bool bias = false;
@@ -562,6 +613,10 @@ struct GenerateWMMAFlashAttnKernelPass
         argTys.push_back(idxTy);  // W (sliding-window width)
       if (softcap)
         argTys.push_back(f32);    // cap (Gemma-2 logit soft-cap)
+      if (dropout) {
+        argTys.push_back(f32);    // dropout probability
+        argTys.push_back(b.getI64Type()); // deterministic counter seed
+      }
       if (bias)
         argTys.push_back(of);     // attn_bias [bh,Sq,Sk] f32 (LAST)
       auto fnTy = b.getFunctionType(argTys, {});
@@ -570,7 +625,7 @@ struct GenerateWMMAFlashAttnKernelPass
                        b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
       emitFlashAttnBody(body, loc, gpuFunc, D, storeTy, viaTile, gqa, window,
-                        softcap, bias, twoWave);
+                        softcap, dropout, bias, twoWave);
       op->erase();
     }
   }

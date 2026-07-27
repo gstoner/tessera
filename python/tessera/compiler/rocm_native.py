@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
+from .attention_contract import plan_attention_backward_workspace
 from .graph_ir import GraphIRModule
 from .native_artifact import (
     BufferBinding,
@@ -29,6 +30,7 @@ from .native_artifact import (
     OrderingSemantics,
     ScalarArgument,
     ShapeGuard,
+    WorkspaceRequirement,
 )
 
 
@@ -41,6 +43,10 @@ GFX1151_PAGED_KV_F32_ABI = "tessera.rocm.paged_kv.pages_table_o_dims.f32_i32.v1"
 GFX1151_MOE_DISPATCH_F32_ABI = "tessera.rocm.moe_dispatch.x_token_o_t_s_h.f32_i32.v1"
 GFX1151_ATTN_F16_ABI = "tessera.rocm.attention.q_k_v_o_dims.f16_f32out.v1"
 GFX1151_ATTN_BF16_ABI = "tessera.rocm.attention.q_k_v_o_dims.bf16_f32out.v1"
+GFX1151_ATTN_BWD_PRE_ABI = "tessera.rocm.attention_backward.pre.v1"
+GFX1151_ATTN_BWD_DKDV_ABI = "tessera.rocm.attention_backward.dkdv_split.v1"
+GFX1151_ATTN_BWD_REDUCE_ABI = "tessera.rocm.attention_backward.dkdv_reduce.v1"
+GFX1151_ATTN_BWD_DQ_ABI = "tessera.rocm.attention_backward.dq.v1"
 
 
 @dataclass(frozen=True)
@@ -50,6 +56,54 @@ class ROCMNativePackage:
     backend_ir: str
     image: NativeImageArtifact
     descriptor: LaunchDescriptor
+
+
+@dataclass(frozen=True)
+class ROCMWorkspaceSlice:
+    name: str
+    offset: int
+    bytes: int
+    initialization: str
+
+    def __post_init__(self) -> None:
+        if not self.name or self.offset < 0 or self.bytes <= 0:
+            raise ValueError("ROCm workspace slices require a name and positive extent")
+        if self.initialization not in {"undefined", "zero"}:
+            raise ValueError("ROCm workspace slice initialization must be undefined or zero")
+
+
+@dataclass(frozen=True)
+class ROCMNativeProgram:
+    """One compiler-owned image plus an ordered multi-kernel launch plan."""
+
+    tile_ir: str
+    target_ir: str
+    backend_ir: str
+    image: NativeImageArtifact
+    descriptors: tuple[LaunchDescriptor, ...]
+    workspace: WorkspaceRequirement
+    workspace_slices: tuple[ROCMWorkspaceSlice, ...]
+
+    def __post_init__(self) -> None:
+        symbols = {entry.symbol for entry in self.image.entry_points}
+        planned = tuple(descriptor.entry_symbol for descriptor in self.descriptors)
+        if not planned or any(symbol not in symbols for symbol in planned):
+            raise ValueError("ROCm native program descriptors must name image entry points")
+        if any(
+            descriptor.image_digest != self.image.image_digest
+            for descriptor in self.descriptors
+        ):
+            raise ValueError("ROCm native program descriptor/image identity mismatch")
+        ordered = sorted(self.workspace_slices, key=lambda item: item.offset)
+        if tuple(ordered) != self.workspace_slices:
+            raise ValueError("ROCm native program workspace slices must be offset ordered")
+        end = 0
+        for item in ordered:
+            if item.offset < end:
+                raise ValueError("ROCm native program workspace slices overlap")
+            end = item.offset + item.bytes
+        if end > self.workspace.bytes:
+            raise ValueError("ROCm native program workspace slices exceed allocation")
 
 
 _cache: dict[
@@ -296,6 +350,8 @@ def emit_attention_tile_ir(
     window_left: int,
     window_right: int,
     softcap: float,
+    dropout_p: float = 0.0,
+    dropout_seed: int = 0,
 ) -> str:
     """Emit the canonical attention carrier plus gfx1151 schedule buckets.
 
@@ -309,6 +365,7 @@ def emit_attention_tile_ir(
     optional_operand = ", %bias" if bias else ""
     scale_literal = _mlir_float(scale)
     softcap_literal = _mlir_float(softcap)
+    dropout_literal = _mlir_float(dropout_p)
     return f'''module {{
   llvm.func @{entry}(%q: !llvm.ptr, %key: !llvm.ptr, %v: !llvm.ptr{optional_arg},
                      %o: !llvm.ptr, %b: i64, %hq: i64, %hkv: i64,
@@ -318,12 +375,290 @@ def emit_attention_tile_ir(
       storage = "{storage}", accum = "f32", scale = {scale_literal} : f32,
       causal = {str(causal).lower()}, bias = {str(bias).lower()},
       window_left = {window_left} : i64, window_right = {window_right} : i64,
-      softcap = {softcap_literal} : f32, dropout_p = 0.0 : f32,
-      dropout_seed = 0 : i64, head_dim = {head_dim} : i64,
+      softcap = {softcap_literal} : f32,
+      dropout_p = {dropout_literal} : f32,
+      dropout_seed = {dropout_seed} : i64, head_dim = {head_dim} : i64,
       value_dim = {value_dim} : i64, gqa = {str(hq != hkv).lower()}
     }} : !llvm.ptr, !llvm.ptr, !llvm.ptr{", !llvm.ptr" if bias else ""},
         !llvm.ptr, i64, i64, i64, i64, i64, i64, i64
     llvm.return
+  }}
+}}
+'''
+
+
+def emit_attention_graph_ir(
+    *,
+    entry: str,
+    storage: str,
+    dims: tuple[int, int, int, int, int, int, int],
+    scale: float,
+    causal: bool,
+    window_left: int,
+    window_right: int,
+    bias: bool = False,
+    softcap: float = 0.0,
+    dropout_p: float = 0.0,
+    dropout_seed: int = 0,
+    tile_kv: int = 16,
+) -> str:
+    """Emit canonical rank-4 attention for direct shared-to-target lowering.
+
+    This is the semantic entry path: the shared Tile IR lowering owns
+    batch/head distribution, GQA mapping, the KV-block recurrence, ragged
+    zero-fill, and pipeline SSA. ROCm lowering owns only its physical schedule.
+    Additive bias and softcap are direct shared score-recurrence operations;
+    target lowering observes them but does not reconstruct their ordering.
+    """
+    if storage not in {"f16", "bf16"}:
+        raise ValueError(f"unsupported gfx1151 attention storage {storage!r}")
+    b, hq, hkv, sq, sk, head_dim, value_dim = dims
+    if tile_kv <= 0:
+        raise ValueError("canonical attention tile_kv must be positive")
+    scale_literal = _mlir_float(scale)
+    softcap_literal = _mlir_float(softcap)
+    dropout_literal = _mlir_float(dropout_p)
+    bias_arg = (
+        f",\n      %bias: tensor<{b}x{hq}x{sq}x{sk}xf32>" if bias else ""
+    )
+    bias_operand = ", %bias" if bias else ""
+    bias_type = f",\n          tensor<{b}x{hq}x{sq}x{sk}xf32>" if bias else ""
+    return f'''module attributes {{
+  tessera.ir.version = "1.0",
+  tessera.target = {{sm = 90 : i32, warps = 1 : i32,
+                    smem = 65536 : i64, pipeline_stages = 2 : i32}}
+}} {{
+  func.func @{entry}(
+      %q: tensor<{b}x{hq}x{sq}x{head_dim}x{storage}>,
+      %key: tensor<{b}x{hkv}x{sk}x{head_dim}x{storage}>,
+      %v: tensor<{b}x{hkv}x{sk}x{value_dim}x{storage}>{bias_arg}
+  ) -> tensor<{b}x{hq}x{sq}x{value_dim}xf32> {{
+    %o = "tessera.flash_attn"(%q, %key, %v{bias_operand})
+        <{{operandSegmentSizes = array<i32: 1, 1, 1, {int(bias)}>}}> {{
+      causal = {str(causal).lower()},
+      dropout_p = {dropout_literal} : f64,
+      dropout_seed = {dropout_seed} : i64,
+      head_dim = {head_dim} : i64,
+      scale = {scale_literal} : f32,
+      softcap = {softcap_literal} : f32,
+      tessera.tile_q = {sq} : i32,
+      tessera.tile_kv = {tile_kv} : i32,
+      window_left = {window_left} : i64,
+      window_right = {window_right} : i64
+    }} : (tensor<{b}x{hq}x{sq}x{head_dim}x{storage}>,
+          tensor<{b}x{hkv}x{sk}x{head_dim}x{storage}>,
+          tensor<{b}x{hkv}x{sk}x{value_dim}x{storage}>{bias_type})
+          -> tensor<{b}x{hq}x{sq}x{value_dim}xf32>
+    return %o : tensor<{b}x{hq}x{sq}x{value_dim}xf32>
+  }}
+}}
+'''
+
+
+def emit_attention_backward_tile_ir(
+    *,
+    forward_entry: str,
+    backward_entry: str,
+    storage: str,
+    dims: tuple[int, int, int, int, int, int, int],
+    scale: float,
+    causal: bool,
+    bias: bool,
+    window_left: int,
+    window_right: int,
+    softcap: float,
+    dropout_p: float = 0.0,
+    dropout_seed: int = 0,
+) -> str:
+    """Emit a self-contained forward-recompute plus deterministic VJP program.
+
+    The portable backward carrier records the same launch-owned workspace,
+    split count, block-loop structure, and reduction order consumed by the
+    multi-entry :class:`ROCMNativeProgram`.
+    """
+    if storage not in {"f16", "bf16"}:
+        raise ValueError(f"unsupported gfx1151 attention backward storage {storage!r}")
+    if not math.isfinite(dropout_p) or not 0.0 <= dropout_p < 1.0:
+        raise ValueError("gfx1151 attention backward dropout must satisfy 0 <= p < 1")
+    _, hq, hkv, _, _, head_dim, value_dim = dims
+    if head_dim != value_dim:
+        raise ValueError("gfx1151 optimized attention backward requires D == Dv")
+    optional_arg = ", %bias: !llvm.ptr" if bias else ""
+    optional_operand = ", %bias" if bias else ""
+    scale_literal = _mlir_float(scale)
+    softcap_literal = _mlir_float(softcap)
+    dropout_literal = _mlir_float(dropout_p)
+    workspace = plan_attention_backward_workspace(
+        batch=dims[0],
+        query_heads=dims[1],
+        kv_heads=dims[2],
+        query_rows=dims[3],
+        key_rows=dims[4],
+        head_dim=dims[5],
+        value_dim=dims[6],
+        split_count=2,
+    )
+    common_attrs = f'''
+      storage = "{storage}", accum = "f32", scale = {scale_literal} : f32,
+      causal = {str(causal).lower()}, bias = {str(bias).lower()},
+      window_left = {window_left} : i64, window_right = {window_right} : i64,
+      softcap = {softcap_literal} : f32,
+      dropout_p = {dropout_literal} : f32,
+      dropout_seed = {dropout_seed} : i64, head_dim = {head_dim} : i64,
+      value_dim = {value_dim} : i64, gqa = {str(hq != hkv).lower()}'''
+    return f'''module {{
+  llvm.func @{forward_entry}(%q: !llvm.ptr, %key: !llvm.ptr, %v: !llvm.ptr{optional_arg},
+                     %o: !llvm.ptr, %b: i64, %hq: i64, %hkv: i64,
+                     %sq: i64, %sk: i64, %d: i64, %dv: i64) {{
+    tile.attention_kernel %q, %key, %v{optional_operand}, %o, %b, %hq, %hkv,
+        %sq, %sk, %d, %dv {{{common_attrs}
+    }} : !llvm.ptr, !llvm.ptr, !llvm.ptr{", !llvm.ptr" if bias else ""},
+        !llvm.ptr, i64, i64, i64, i64, i64, i64, i64
+    llvm.return
+  }}
+  llvm.func @{backward_entry}(%do: !llvm.ptr, %q: !llvm.ptr, %key: !llvm.ptr,
+                     %v: !llvm.ptr{optional_arg}, %dq: !llvm.ptr,
+                     %dk: !llvm.ptr, %dv_out: !llvm.ptr, %b: i64, %hq: i64,
+                     %hkv: i64, %sq: i64, %sk: i64, %d: i64, %dv: i64) {{
+    tile.attention_backward_kernel %do, %q, %key, %v{optional_operand},
+        %dq, %dk, %dv_out, %b, %hq, %hkv, %sq, %sk, %d, %dv {{{common_attrs},
+      route = "deterministic_split_reduced", deterministic = true,
+      workspace_bytes = {workspace.bytes} : i64,
+      workspace_owner = "program_launch", split_count = 2 : i64,
+      reduction_order = array<i64: 0, 1>, query_block = 16 : i64,
+      key_block = 16 : i64,
+      loop_order = ["batch_kv_head", "split", "query_block",
+                    "key_block", "fixed_order_reduce"]
+    }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr{", !llvm.ptr" if bias else ""},
+        !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64, i64, i64, i64, i64
+    llvm.return
+  }}
+}}
+'''
+
+
+def emit_attention_backward_graph_ir(
+    *,
+    forward_entry: str,
+    backward_entry: str,
+    storage: str,
+    dims: tuple[int, int, int, int, int, int, int],
+    scale: float,
+    causal: bool,
+    bias: bool,
+    window_left: int,
+    window_right: int,
+    softcap: float,
+    dropout_p: float = 0.0,
+    dropout_seed: int = 0,
+    query_block: int = 16,
+    key_block: int = 16,
+    split_count: int = 2,
+) -> str:
+    """Emit the shared tensor-valued forward-recompute and backward program.
+
+    This is the canonical source for optimized gfx1151 backward packaging.
+    Target lowering consumes the resulting ``scf.for`` phase bodies and owns
+    only the AMD schedule and five-entry launch ABI.  The launch-level Tile
+    emitter above remains a compatibility/reference seam.
+    """
+    if storage not in {"f16", "bf16"}:
+        raise ValueError(
+            f"unsupported gfx1151 attention backward storage {storage!r}"
+        )
+    if not math.isfinite(scale) or scale <= 0.0:
+        raise ValueError("gfx1151 attention backward scale must be finite and positive")
+    if not math.isfinite(softcap) or softcap < 0.0:
+        raise ValueError("gfx1151 attention backward softcap must be finite and nonnegative")
+    if not math.isfinite(dropout_p) or not 0.0 <= dropout_p < 1.0:
+        raise ValueError("gfx1151 attention backward dropout must satisfy 0 <= p < 1")
+    if dropout_seed < 0:
+        raise ValueError("gfx1151 attention backward dropout seed must be nonnegative")
+    if query_block <= 0 or key_block <= 0 or split_count < 2:
+        raise ValueError(
+            "gfx1151 attention backward needs positive blocks and at least two splits"
+        )
+    b, hq, hkv, sq, sk, head_dim, value_dim = dims
+    if head_dim != value_dim:
+        raise ValueError("gfx1151 optimized attention backward requires D == Dv")
+
+    scale_literal = _mlir_float(scale)
+    softcap_literal = _mlir_float(softcap)
+    dropout_literal = _mlir_float(dropout_p)
+    bias_argument = (
+        f",\n      %bias: tensor<{b}x{hq}x{sq}x{sk}xf32>" if bias else ""
+    )
+    forward_bias_operand = ", %bias" if bias else ""
+    forward_bias_segment = 1 if bias else 0
+    forward_bias_type = f", tensor<{b}x{hq}x{sq}x{sk}xf32>" if bias else ""
+    if bias:
+        backward_bias_value = "%bias"
+        backward_bias_setup = ""
+        backward_bias_type = f"tensor<{b}x{hq}x{sq}x{sk}xf32>"
+    else:
+        backward_bias_value = "%zero_bias"
+        backward_bias_type = f"tensor<1x{sq}x{sk}xf32>"
+        backward_bias_setup = (
+            f"    %zero_bias = arith.constant dense<0.000000e+00> "
+            f": {backward_bias_type}\n"
+        )
+
+    return f'''module {{
+  func.func @{forward_entry}(
+      %q: tensor<{b}x{hq}x{sq}x{head_dim}x{storage}>,
+      %key: tensor<{b}x{hkv}x{sk}x{head_dim}x{storage}>,
+      %v: tensor<{b}x{hkv}x{sk}x{value_dim}x{storage}>{bias_argument}
+  ) -> tensor<{b}x{hq}x{sq}x{value_dim}xf32> {{
+    %o = "tessera.flash_attn"(%q, %key, %v{forward_bias_operand})
+        <{{operandSegmentSizes = array<i32: 1, 1, 1, {forward_bias_segment}>}}> {{
+      causal = {str(causal).lower()},
+      dropout_p = {dropout_literal} : f64,
+      dropout_seed = {dropout_seed} : i64,
+      head_dim = {head_dim} : i64,
+      scale = {scale_literal} : f32,
+      softcap = {softcap_literal} : f32,
+      tessera.tile_q = {sq} : i32,
+      tessera.tile_kv = {key_block} : i32,
+      window_left = {window_left} : i64,
+      window_right = {window_right} : i64
+    }} : (tensor<{b}x{hq}x{sq}x{head_dim}x{storage}>,
+          tensor<{b}x{hkv}x{sk}x{head_dim}x{storage}>,
+          tensor<{b}x{hkv}x{sk}x{value_dim}x{storage}>{forward_bias_type})
+          -> tensor<{b}x{hq}x{sq}x{value_dim}xf32>
+    return %o : tensor<{b}x{hq}x{sq}x{value_dim}xf32>
+  }}
+
+  func.func @{backward_entry}(
+      %do: tensor<{b}x{hq}x{sq}x{value_dim}x{storage}>,
+      %q: tensor<{b}x{hq}x{sq}x{head_dim}x{storage}>,
+      %key: tensor<{b}x{hkv}x{sk}x{head_dim}x{storage}>,
+      %v: tensor<{b}x{hkv}x{sk}x{value_dim}x{storage}>{bias_argument}
+  ) -> (tensor<{b}x{hq}x{sq}x{head_dim}xf32>,
+        tensor<{b}x{hkv}x{sk}x{head_dim}xf32>,
+        tensor<{b}x{hkv}x{sk}x{value_dim}xf32>) {{
+{backward_bias_setup}    %dq, %dk, %dv_out = "tessera_attn.backward"(
+        %do, %q, %key, %v, {backward_bias_value}) {{
+      causal = {str(causal).lower()},
+      dropout_p = {dropout_literal} : f32,
+      dropout_seed = {dropout_seed} : i64,
+      key_block = {key_block} : i64,
+      query_block = {query_block} : i64,
+      scale = {scale_literal} : f32,
+      softcap = {softcap_literal} : f32,
+      split_count = {split_count} : i64,
+      window_left = {window_left} : i64,
+      window_right = {window_right} : i64
+    }} : (tensor<{b}x{hq}x{sq}x{value_dim}x{storage}>,
+          tensor<{b}x{hq}x{sq}x{head_dim}x{storage}>,
+          tensor<{b}x{hkv}x{sk}x{head_dim}x{storage}>,
+          tensor<{b}x{hkv}x{sk}x{value_dim}x{storage}>,
+          {backward_bias_type})
+          -> (tensor<{b}x{hq}x{sq}x{head_dim}xf32>,
+              tensor<{b}x{hkv}x{sk}x{head_dim}xf32>,
+              tensor<{b}x{hkv}x{sk}x{value_dim}xf32>)
+    return %dq, %dk, %dv_out : tensor<{b}x{hq}x{sq}x{head_dim}xf32>,
+                                tensor<{b}x{hkv}x{sk}x{head_dim}xf32>,
+                                tensor<{b}x{hkv}x{sk}x{value_dim}xf32>
   }}
 }}
 '''
@@ -367,6 +702,15 @@ def requests_attention(module: GraphIRModule) -> bool:
         len(module.functions) == 1
         and len(module.functions[0].body) == 1
         and module.functions[0].body[0].op_name == "tessera.flash_attn"
+    )
+
+
+def requests_attention_backward(module: GraphIRModule) -> bool:
+    return (
+        len(module.functions) == 1
+        and len(module.functions[0].body) == 1
+        and module.functions[0].body[0].op_name
+        in {"tessera.flash_attn_bwd", "tessera.flash_attn_vjp"}
     )
 
 
@@ -564,6 +908,8 @@ def _attention_contract(
     int,
     int,
     float,
+    float,
+    int,
 ] | None:
     if not requests_attention(module):
         return None
@@ -629,12 +975,12 @@ def _attention_contract(
         return None
     softcap = float(op.kwargs.get("softcap", op.kwargs.get("logit_softcap", 0.0)) or 0.0)
     dropout = float(op.kwargs.get("dropout_p", op.kwargs.get("dropout", 0.0)) or 0.0)
+    dropout_seed = int(op.kwargs.get("dropout_seed", op.kwargs.get("seed", 0)) or 0)
     scale = float(op.kwargs.get("scale", 1.0 / math.sqrt(float(d))))
     if (
         not math.isfinite(scale) or scale <= 0.0
         or not math.isfinite(softcap) or softcap < 0.0
-        or dropout != 0.0
-        or (bias_name is not None and softcap > 0.0)
+        or not math.isfinite(dropout) or not 0.0 <= dropout < 1.0
     ):
         return None
     return (
@@ -647,6 +993,8 @@ def _attention_contract(
         window_left,
         window_right,
         softcap,
+        dropout,
+        dropout_seed,
     )
 
 
@@ -654,11 +1002,144 @@ def supports_attention(module: GraphIRModule) -> bool:
     return _attention_contract(module) is not None
 
 
+def _attention_backward_contract(
+    module: GraphIRModule,
+) -> tuple[
+    str,
+    tuple[str, str, str, str],
+    str | None,
+    tuple[str, str, str],
+    tuple[int, int, int, int, int, int, int],
+    float,
+    bool,
+    int,
+    int,
+    float,
+    float,
+    int,
+] | None:
+    if not requests_attention_backward(module):
+        return None
+    fn = module.functions[0]
+    op = fn.body[0]
+    if len(op.operands) not in {4, 5} or len(fn.result_types) != 3:
+        return None
+    names = tuple(value.removeprefix("%") for value in op.operands[:4])
+    if len(names) != 4:
+        return None
+    do_name, q_name, k_name, v_name = names
+    args = {arg.name: arg for arg in fn.args}
+    if any(name not in args for name in names):
+        return None
+    storages = {args[name].ir_type.dtype for name in names}
+    if len(storages) != 1 or not storages <= {"fp16", "bf16"}:
+        return None
+    storage = cast(str, storages.pop())
+    shapes = tuple(_shape(module, name) for name in names)
+    if any(shape is None or len(shape) != 4 for shape in shapes):
+        return None
+    do_shape, q_shape, k_shape, v_shape = shapes
+    assert do_shape is not None and q_shape is not None
+    assert k_shape is not None and v_shape is not None
+    b, hq, sq, d = q_shape
+    bk, hkv, sk, dk = k_shape
+    bv, hv, sv, dv = v_shape
+    if (
+        b != bk
+        or b != bv
+        or hkv != hv
+        or sk != sv
+        or d != dk
+        or d != dv
+        or d <= 0
+        or d % 16
+        or hq % hkv
+        or do_shape != (b, hq, sq, dv)
+    ):
+        return None
+    expected_results = (q_shape, k_shape, v_shape)
+    for result, expected in zip(fn.result_types, expected_results, strict=True):
+        try:
+            result_shape = tuple(int(dim) for dim in result.shape)
+        except (TypeError, ValueError):
+            return None
+        if result.dtype != "fp32" or result_shape != expected:
+            return None
+    result_names = tuple(op.result_names)
+    if len(result_names) != 3 or any(not name for name in result_names):
+        return None
+    bias_name = op.operands[4].removeprefix("%") if len(op.operands) == 5 else None
+    if bias_name is not None:
+        bias_arg = args.get(bias_name)
+        if (
+            bias_arg is None
+            or bias_arg.ir_type.dtype != "fp32"
+            or _shape(module, bias_name) != (b, hq, sq, sk)
+        ):
+            return None
+    window = op.kwargs.get("window")
+    if window is None:
+        window_left = int(op.kwargs.get("window_left", -1))
+        window_right = int(op.kwargs.get("window_right", -1))
+    elif isinstance(window, (tuple, list)) and len(window) == 2:
+        window_left, window_right = (int(value) for value in window)
+    else:
+        window_left = window_right = int(window)
+    causal = bool(op.kwargs.get("causal", False))
+    if not (
+        (window_left == -1 and window_right == -1)
+        or (causal and window_left >= 0 and window_right == 0)
+    ):
+        return None
+    softcap = float(
+        op.kwargs.get("softcap", op.kwargs.get("logit_softcap", 0.0)) or 0.0
+    )
+    scale = float(op.kwargs.get("scale", 1.0 / math.sqrt(float(d))))
+    dropout = float(
+        op.kwargs.get("dropout_p", op.kwargs.get("dropout", 0.0)) or 0.0
+    )
+    dropout_seed = int(
+        op.kwargs.get("dropout_seed", op.kwargs.get("seed", 0)) or 0
+    )
+    if (
+        not math.isfinite(scale)
+        or scale <= 0.0
+        or not math.isfinite(softcap)
+        or softcap < 0.0
+        or not math.isfinite(dropout)
+        or dropout < 0.0
+        or dropout >= 1.0
+        or str(op.kwargs.get("route", "deterministic_direct"))
+        != "deterministic_direct"
+        or not bool(op.kwargs.get("deterministic", True))
+    ):
+        return None
+    return (
+        storage,
+        (do_name, q_name, k_name, v_name),
+        bias_name,
+        result_names,
+        (b, hq, hkv, sq, sk, d, dv),
+        scale,
+        causal,
+        window_left,
+        window_right,
+        softcap,
+        dropout,
+        dropout_seed,
+    )
+
+
+def supports_attention_backward(module: GraphIRModule) -> bool:
+    return _attention_backward_contract(module) is not None
+
+
 def _compile_native_tile_ir(
     tile_ir: str,
     *,
     directive: str,
     generator: str,
+    semantic_pipeline: str = "",
 ) -> tuple[
     str,
     str,
@@ -675,7 +1156,12 @@ def _compile_native_tile_ir(
     library_identity = "|".join(
         f"{item.logical_name}:{item.content_digest}:{item.link_mode}" for item in device_libraries
     )
-    key = hashlib.sha256(f"{tile_ir}|{library_identity}".encode()).hexdigest()
+    key = hashlib.sha256(
+        (
+            f"{tile_ir}|{directive}|{generator}|{semantic_pipeline}|"
+            f"{library_identity}"
+        ).encode()
+    ).hexdigest()
     cached = _cache.get(key)
     if cached is not None:
         target_ir, backend_ir, payload, compiler_fp, toolchain_fp, libraries = cached
@@ -689,9 +1175,15 @@ def _compile_native_tile_ir(
             "warm_cache",
         )
 
-    target_pipeline = "builtin.module(rocm-wave-lds-pipeline,rocm-wave-lds-legality,lower-tile-to-rocm{arch=gfx1151})"
+    semantic_prefix = f"{semantic_pipeline}," if semantic_pipeline else ""
+    target_pipeline = (
+        "builtin.module("
+        f"{semantic_prefix}rocm-wave-lds-pipeline,rocm-wave-lds-legality,"
+        "lower-tile-to-rocm{arch=gfx1151})"
+    )
     native_pipeline = (
-        "builtin.module(rocm-wave-lds-pipeline,rocm-wave-lds-legality,"
+        f"builtin.module({semantic_prefix}"
+        "rocm-wave-lds-pipeline,rocm-wave-lds-legality,"
         f"lower-tile-to-rocm{{arch=gfx1151}},{generator},"
         "lower-tessera-target-to-rocdl,"
         "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
@@ -765,6 +1257,48 @@ def _compile_attention_tile_ir(tile_ir: str):
         tile_ir,
         directive="tessera_rocm.flash_attn",
         generator="generate-wmma-flash-attn-kernel",
+    )
+
+
+def _compile_attention_graph_ir(tile_ir: str, *, tile_q: int, tile_kv: int):
+    return _compile_native_tile_ir(
+        tile_ir,
+        directive="tessera_rocm.flash_attn",
+        generator="generate-wmma-flash-attn-kernel",
+        semantic_pipeline=(
+            "tessera-tile-ir-lowering{"
+            f"tile-q={tile_q} tile-kv={tile_kv} sm=90"
+            "}"
+        ),
+    )
+
+
+def _compile_attention_backward_tile_ir(tile_ir: str):
+    return _compile_native_tile_ir(
+        tile_ir,
+        directive="tessera_rocm.flash_attn_bwd",
+        generator=(
+            "generate-wmma-flash-attn-kernel,"
+            "generate-wmma-flash-attn-bwd-kernel"
+        ),
+    )
+
+
+def _compile_attention_backward_graph_ir(
+    graph_ir: str, *, tile_q: int, tile_kv: int
+):
+    return _compile_native_tile_ir(
+        graph_ir,
+        directive="tessera_rocm.flash_attn_bwd",
+        generator=(
+            "generate-wmma-flash-attn-kernel,"
+            "generate-wmma-flash-attn-bwd-kernel"
+        ),
+        semantic_pipeline=(
+            "tessera-tile-ir-lowering{"
+            f"tile-q={tile_q} tile-kv={tile_kv} sm=90"
+            "}"
+        ),
     )
 
 
@@ -1023,7 +1557,8 @@ def package_attention(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativ
         raise ValueError(
             "gfx1151 attention packaging requires static rank-4 f16/bf16 Q/K/V, "
             "f32 output, equal head/value dimensions divisible by 16, compatible "
-            "MHA/GQA heads, zero dropout, and a supported causal/window policy"
+            "MHA/GQA heads, deterministic dropout metadata, and a supported "
+            "causal/window policy"
         )
     (
         names,
@@ -1035,12 +1570,15 @@ def package_attention(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativ
         window_left,
         window_right,
         softcap,
+        dropout_p,
+        dropout_seed,
     ) = contract
     q_name, k_name, v_name = names
     storage = {"fp16": "f16", "bf16": "bf16"}[dtype]
     semantic_key = hashlib.sha256(
         f"{scale:.17g}:{causal}:{bool(bias_name)}:{window_left}:"
-        f"{window_right}:{softcap:.17g}".encode()
+        f"{window_right}:{softcap:.17g}:{dropout_p:.17g}:"
+        f"{dropout_seed}".encode()
     ).hexdigest()[:10]
     entry = (
         f"tessera_tile_attention_{storage}_"
@@ -1051,17 +1589,44 @@ def package_attention(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativ
         if dtype == "fp16"
         else GFX1151_ATTN_BF16_ABI
     )
-    tile_ir = emit_attention_tile_ir(
-        entry=entry,
-        storage=storage,
-        dims=dims,
-        scale=scale,
-        causal=causal,
-        bias=bias_name is not None,
-        window_left=window_left,
-        window_right=window_right,
-        softcap=softcap,
+    canonical_route = (
+        (window_left < 0 and window_right < 0)
+        or (causal and window_left >= 0 and window_right == 0)
     )
+    if canonical_route:
+        tile_kv = 16
+        tile_ir = emit_attention_graph_ir(
+            entry=entry,
+            storage=storage,
+            dims=dims,
+            scale=scale,
+            causal=causal,
+            window_left=window_left,
+            window_right=window_right,
+            bias=bias_name is not None,
+            softcap=softcap,
+            dropout_p=dropout_p,
+            dropout_seed=dropout_seed,
+            tile_kv=tile_kv,
+        )
+        compiled = _compile_attention_graph_ir(
+            tile_ir, tile_q=dims[3], tile_kv=tile_kv
+        )
+    else:
+        tile_ir = emit_attention_tile_ir(
+            entry=entry,
+            storage=storage,
+            dims=dims,
+            scale=scale,
+            causal=causal,
+            bias=bias_name is not None,
+            window_left=window_left,
+            window_right=window_right,
+            softcap=softcap,
+            dropout_p=dropout_p,
+            dropout_seed=dropout_seed,
+        )
+        compiled = _compile_attention_tile_ir(tile_ir)
     (
         target_ir,
         backend_ir,
@@ -1070,7 +1635,7 @@ def package_attention(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativ
         toolchain_fp,
         device_libraries,
         compile_state,
-    ) = _compile_attention_tile_ir(tile_ir)
+    ) = compiled
     image = NativeImageArtifact(
         target="rocm_gfx1151",
         architecture="gfx1151",
@@ -1133,6 +1698,20 @@ def package_attention(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativ
                 "float32",
             )
         )
+    if dropout_p > 0.0:
+        dropout_base = (
+            8
+            + int(bias_name is not None)
+            + 2 * int(hq != hkv)
+            + int(window_left >= 0)
+            + int(softcap > 0.0)
+        )
+        scalars.extend(
+            (
+                ScalarArgument(dropout_base, "DropoutP", "float32"),
+                ScalarArgument(dropout_base + 1, "DropoutSeed", "int64"),
+            )
+        )
     guards = [
         ShapeGuard(q_name, 0, "eq", b), ShapeGuard(q_name, 1, "eq", hq),
         ShapeGuard(q_name, 2, "eq", sq), ShapeGuard(q_name, 3, "eq", d),
@@ -1167,8 +1746,21 @@ def package_attention(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativ
         ),
         provenance={
             "work_item": "ROCM-E2E-2",
-            "sync_key": "ROCM-E2E-ATTENTION-CARRIERS-2026-07-26",
-            "schedule": "gfx1151_wmma_streaming",
+            "sync_key": (
+                "CORE-STREAMING-ATTN-RANK4-ROCM-2026-07-26"
+                if canonical_route
+                else "ROCM-E2E-ATTENTION-CARRIERS-2026-07-26"
+            ),
+            "schedule": (
+                "gfx1151_wmma_canonical_streaming"
+                if canonical_route
+                else "gfx1151_wmma_streaming"
+            ),
+            "semantic_route": (
+                "canonical_rank4_kv_scf_for"
+                if canonical_route
+                else "tile.attention_kernel_compatibility"
+            ),
             "shape": list(dims),
             "storage": storage,
             "accum": "f32",
@@ -1181,11 +1773,383 @@ def package_attention(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativ
             "window_left": window_left,
             "window_right": window_right,
             "softcap": softcap,
-            "dropout_p": 0.0,
+            "dropout_p": dropout_p,
+            "dropout_seed": dropout_seed,
             "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
         },
     )
     return ROCMNativePackage(tile_ir, target_ir, backend_ir, image, descriptor)
+
+
+def package_attention_backward(
+    module: GraphIRModule, *, pipeline_name: str
+) -> ROCMNativeProgram:
+    """Package the gfx1151 forward-recompute + split/reduced VJP program."""
+    contract = _attention_backward_contract(module)
+    if contract is None:
+        raise ValueError(
+            "gfx1151 optimized attention backward requires static rank-4 "
+            "f16/bf16 dO/Q/K/V, fp32 dQ/dK/dV, D == Dv divisible by 16, "
+            "compatible MHA/GQA heads, deterministic dropout replay, "
+            "and a supported causal/window policy"
+        )
+    (
+        dtype,
+        names,
+        bias_name,
+        result_names,
+        dims,
+        scale,
+        causal,
+        window_left,
+        window_right,
+        softcap,
+        dropout_p,
+        dropout_seed,
+    ) = contract
+    do_name, q_name, k_name, v_name = names
+    dq_name, dk_name, dv_name = (
+        name.removeprefix("%") for name in result_names
+    )
+    storage = {"fp16": "f16", "bf16": "bf16"}[dtype]
+    b, hq, hkv, sq, sk, d, dv = dims
+    semantic_key = hashlib.sha256(
+        f"{scale:.17g}:{causal}:{bool(bias_name)}:{window_left}:"
+        f"{window_right}:{softcap:.17g}:{dropout_p:.17g}:"
+        f"{dropout_seed}:split_reduced".encode()
+    ).hexdigest()[:10]
+    forward_entry = (
+        f"tessera_tile_attention_bwd_recompute_{storage}_{semantic_key}"
+    )
+    backward_entry = (
+        f"tessera_tile_attention_backward_{storage}_{semantic_key}"
+    )
+    stage_symbols = (
+        forward_entry,
+        f"{backward_entry}_pre",
+        f"{backward_entry}_dkdv",
+        f"{backward_entry}_dkdv_reduce",
+        f"{backward_entry}_dq",
+    )
+    stage_abis = (
+        GFX1151_ATTN_F16_ABI if dtype == "fp16" else GFX1151_ATTN_BF16_ABI,
+        GFX1151_ATTN_BWD_PRE_ABI,
+        GFX1151_ATTN_BWD_DKDV_ABI,
+        GFX1151_ATTN_BWD_REDUCE_ABI,
+        GFX1151_ATTN_BWD_DQ_ABI,
+    )
+    tile_ir = emit_attention_backward_graph_ir(
+        forward_entry=forward_entry,
+        backward_entry=backward_entry,
+        storage=storage,
+        dims=dims,
+        scale=scale,
+        causal=causal,
+        bias=bias_name is not None,
+        window_left=window_left,
+        window_right=window_right,
+        softcap=softcap,
+        dropout_p=dropout_p,
+        dropout_seed=dropout_seed,
+    )
+    (
+        target_ir,
+        backend_ir,
+        payload,
+        compiler_fp,
+        toolchain_fp,
+        device_libraries,
+        compile_state,
+    ) = _compile_attention_backward_graph_ir(
+        tile_ir, tile_q=sq, tile_kv=16
+    )
+    if (
+        'source = "canonical_rank4_kv_scf_for"' not in target_ir
+        or 'source = "canonical_tensor_backward_scf_for"' not in target_ir
+        or "canonical_phase_loops = true" not in target_ir
+    ):
+        raise RuntimeError(
+            "gfx1151 attention backward packaging requires direct shared "
+            "forward and tensor-valued backward Target-IR consumers"
+        )
+    image = NativeImageArtifact(
+        target="rocm_gfx1151",
+        architecture="gfx1151",
+        pipeline_name=pipeline_name,
+        compiler_fingerprint=compiler_fp,
+        toolchain_fingerprint=toolchain_fp,
+        target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(),
+        binary_format="hsaco",
+        payload=payload,
+        entry_points=tuple(
+            NativeEntryPoint(symbol, abi)
+            for symbol, abi in zip(stage_symbols, stage_abis, strict=True)
+        ),
+        compile_state=compile_state,
+        device_libraries=device_libraries,
+    )
+
+    shared_workspace = plan_attention_backward_workspace(
+        batch=b,
+        query_heads=hq,
+        kv_heads=hkv,
+        query_rows=sq,
+        key_rows=sk,
+        head_dim=d,
+        value_dim=dv,
+        split_count=2,
+    )
+    slices = [
+        ROCMWorkspaceSlice(
+            item.name, item.offset, item.bytes, item.initialization
+        )
+        for item in shared_workspace.slices
+    ]
+    workspace = WorkspaceRequirement(
+        bytes=shared_workspace.bytes,
+        alignment=shared_workspace.alignment,
+        lifetime="launch",
+        initialization="undefined",
+    )
+
+    alignment = 2
+    common_guards = (
+        ShapeGuard(do_name, 0, "eq", b),
+        ShapeGuard(do_name, 1, "eq", hq),
+        ShapeGuard(do_name, 2, "eq", sq),
+        ShapeGuard(do_name, 3, "eq", dv),
+        ShapeGuard(q_name, 0, "eq", b),
+        ShapeGuard(q_name, 1, "eq", hq),
+        ShapeGuard(q_name, 2, "eq", sq),
+        ShapeGuard(q_name, 3, "eq", d),
+        ShapeGuard(k_name, 0, "eq", b),
+        ShapeGuard(k_name, 1, "eq", hkv),
+        ShapeGuard(k_name, 2, "eq", sk),
+        ShapeGuard(k_name, 3, "eq", d),
+        ShapeGuard(v_name, 0, "eq", b),
+        ShapeGuard(v_name, 1, "eq", hkv),
+        ShapeGuard(v_name, 2, "eq", sk),
+        ShapeGuard(v_name, 3, "eq", dv),
+        ShapeGuard(dq_name, 0, "eq", b),
+        ShapeGuard(dq_name, 1, "eq", hq),
+        ShapeGuard(dq_name, 2, "eq", sq),
+        ShapeGuard(dq_name, 3, "eq", d),
+        ShapeGuard(dk_name, 0, "eq", b),
+        ShapeGuard(dk_name, 1, "eq", hkv),
+        ShapeGuard(dk_name, 2, "eq", sk),
+        ShapeGuard(dk_name, 3, "eq", d),
+        ShapeGuard(dv_name, 0, "eq", b),
+        ShapeGuard(dv_name, 1, "eq", hkv),
+        ShapeGuard(dv_name, 2, "eq", sk),
+        ShapeGuard(dv_name, 3, "eq", dv),
+    )
+    bias_guard = (
+        (
+            ShapeGuard(bias_name, 0, "eq", b),
+            ShapeGuard(bias_name, 1, "eq", hq),
+            ShapeGuard(bias_name, 2, "eq", sq),
+            ShapeGuard(bias_name, 3, "eq", sk),
+        )
+        if bias_name is not None
+        else ()
+    )
+    guards = common_guards + bias_guard
+    user_buffers = {
+        do_name: BufferBinding(0, do_name, "input", dtype, 4, "row_major", alignment),
+        q_name: BufferBinding(0, q_name, "input", dtype, 4, "row_major", alignment),
+        k_name: BufferBinding(0, k_name, "input", dtype, 4, "row_major", alignment),
+        v_name: BufferBinding(0, v_name, "input", dtype, 4, "row_major", alignment),
+        dq_name: BufferBinding(0, dq_name, "output", "fp32", 4, "row_major", 4),
+        dk_name: BufferBinding(0, dk_name, "output", "fp32", 4, "row_major", 4),
+        dv_name: BufferBinding(0, dv_name, "output", "fp32", 4, "row_major", 4),
+    }
+    if bias_name is not None:
+        user_buffers[bias_name] = BufferBinding(
+            0, bias_name, "input", "fp32", 4, "row_major", 4
+        )
+
+    def bindings(*names_and_directions: tuple[str, str, str, int]) -> tuple[BufferBinding, ...]:
+        result: list[BufferBinding] = []
+        for ordinal, (name, direction, dtype_name, rank) in enumerate(
+            names_and_directions
+        ):
+            if name in user_buffers:
+                base = user_buffers[name]
+                result.append(
+                    BufferBinding(
+                        ordinal,
+                        name,
+                        direction,
+                        base.dtype,
+                        base.rank,
+                        base.layout,
+                        base.alignment,
+                    )
+                )
+            else:
+                result.append(
+                    BufferBinding(
+                        ordinal,
+                        name,
+                        direction,
+                        dtype_name,
+                        rank,
+                        "program_workspace",
+                        4,
+                    )
+                )
+        return tuple(result)
+
+    def guards_for(
+        names_and_directions: tuple[tuple[str, str, str, int], ...],
+    ) -> tuple[ShapeGuard, ...]:
+        stage_names = {item[0] for item in names_and_directions}
+        return tuple(guard for guard in guards if guard.binding in stage_names)
+
+    option_buffers = (
+        ((bias_name, "input", "fp32", 4),) if bias_name is not None else ()
+    )
+    stage_buffer_specs = (
+        (
+            (q_name, "input", dtype, 4),
+            (k_name, "input", dtype, 4),
+            (v_name, "input", dtype, 4),
+            *option_buffers,
+            ("forward_o", "output", "fp32", 3),
+        ),
+        (
+            (q_name, "input", dtype, 4),
+            (k_name, "input", dtype, 4),
+            (do_name, "input", dtype, 4),
+            ("forward_o", "input", "fp32", 3),
+            ("row_lse", "output", "fp32", 2),
+            ("row_delta", "output", "fp32", 2),
+            *option_buffers,
+        ),
+        (
+            (q_name, "input", dtype, 4),
+            (k_name, "input", dtype, 4),
+            (v_name, "input", dtype, 4),
+            (do_name, "input", dtype, 4),
+            ("row_lse", "input", "fp32", 2),
+            ("row_delta", "input", "fp32", 2),
+            (dk_name, "inout", "fp32", 4),
+            (dv_name, "inout", "fp32", 4),
+            ("partial_dk", "output", "fp32", 3),
+            ("partial_dv", "output", "fp32", 3),
+            *option_buffers,
+        ),
+        (
+            (dk_name, "inout", "fp32", 4),
+            (dv_name, "inout", "fp32", 4),
+            ("partial_dk", "input", "fp32", 3),
+            ("partial_dv", "input", "fp32", 3),
+        ),
+        (
+            (q_name, "input", dtype, 4),
+            (k_name, "input", dtype, 4),
+            (v_name, "input", dtype, 4),
+            (do_name, "input", dtype, 4),
+            ("row_lse", "input", "fp32", 2),
+            ("row_delta", "input", "fp32", 2),
+            (dq_name, "output", "fp32", 4),
+            *option_buffers,
+        ),
+    )
+    stage_policies = (
+        "gfx1151_attention_bwd_forward_recompute_wave32",
+        "gfx1151_attention_bwd_pre_query_tile_wave32",
+        "gfx1151_attention_bwd_dkdv_two_split_wave32",
+        "gfx1151_attention_bwd_reduce_256",
+        "gfx1151_attention_bwd_dq_query_tile_wave32",
+    )
+    stage_names = ("forward_recompute", "pre", "dkdv_split", "dkdv_reduce", "dq")
+    base_provenance = {
+        "work_item": "ROCM-E2E-ATTENTION",
+        "sync_key": "ROCM-ATTENTION-SHARED-BACKWARD-CONSUMER-2026-07-26",
+        "schedule": "gfx1151_wmma_backward_split_reduced",
+        "semantic_route": "canonical_tensor_backward_scf_for",
+        "route": "deterministic_split_reduced",
+        "deterministic": True,
+        "shape": list(dims),
+        "storage": storage,
+        "accum": "f32",
+        "gradient_storage": "f32",
+        "scale": scale,
+        "causal": causal,
+        "gqa": hq != hkv,
+        "kv_ratio": hq // hkv,
+        "bias": bias_name is not None,
+        "window_left": window_left,
+        "window_right": window_right,
+        "softcap": softcap,
+        "dropout_p": dropout_p,
+        "dropout_seed": dropout_seed,
+        "workspace_owner": "program_launch",
+        "workspace_bytes": workspace.bytes,
+        "workspace_contract": "canonical_attention_backward_split_v1",
+        "source_ir_kind": "canonical_attention_tensor_program",
+        "split_count": shared_workspace.split_count,
+        "reduction_order": list(shared_workspace.reduction_order),
+        "workspace_slices": [
+            {
+                "name": item.name,
+                "offset": item.offset,
+                "bytes": item.bytes,
+                "initialization": item.initialization,
+                "producer": shared.producer,
+                "consumers": list(shared.consumers),
+            }
+            for item, shared in zip(
+                slices, shared_workspace.slices, strict=True
+            )
+        ],
+        "shared_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
+        # Compatibility key retained for artifact-schema readers that have not
+        # yet generalized the historical Tile-only source field.
+        "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
+    }
+    descriptors = tuple(
+        LaunchDescriptor(
+            image_digest=image.image_digest,
+            entry_symbol=symbol,
+            abi_id=abi,
+            buffers=bindings(*buffer_specs),
+            scalars=(),
+            shape_guards=guards_for(buffer_specs),
+            geometry=LaunchGeometry(policy=policy),
+            workspace=workspace,
+            ordering=OrderingSemantics(
+                ordered_submission=True,
+                residency="all",
+                synchronization=("program_order", "completion"),
+            ),
+            provenance={
+                **base_provenance,
+                "stage": stage_name,
+                "stage_index": stage_index,
+            },
+        )
+        for stage_index, (symbol, abi, buffer_specs, policy, stage_name) in enumerate(
+            zip(
+                stage_symbols,
+                stage_abis,
+                stage_buffer_specs,
+                stage_policies,
+                stage_names,
+                strict=True,
+            )
+        )
+    )
+    return ROCMNativeProgram(
+        tile_ir,
+        target_ir,
+        backend_ir,
+        image,
+        descriptors,
+        workspace,
+        tuple(slices),
+    )
 
 
 def package_moe_dispatch(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativePackage:
@@ -1262,6 +2226,10 @@ def package_moe_dispatch(module: GraphIRModule, *, pipeline_name: str) -> ROCMNa
 
 __all__ = [
     "GFX1151_ATTN_BF16_ABI",
+    "GFX1151_ATTN_BWD_DKDV_ABI",
+    "GFX1151_ATTN_BWD_DQ_ABI",
+    "GFX1151_ATTN_BWD_PRE_ABI",
+    "GFX1151_ATTN_BWD_REDUCE_ABI",
     "GFX1151_ATTN_F16_ABI",
     "GFX1151_MOE_DISPATCH_F32_ABI",
     "GFX1151_PAGED_KV_F32_ABI",
@@ -1271,6 +2239,10 @@ __all__ = [
     "GFX1151_SOFTMAX_F16_ABI",
     "GFX1151_SOFTMAX_F32_ABI",
     "ROCMNativePackage",
+    "ROCMNativeProgram",
+    "ROCMWorkspaceSlice",
+    "emit_attention_backward_tile_ir",
+    "emit_attention_backward_graph_ir",
     "emit_attention_tile_ir",
     "emit_moe_dispatch_tile_ir",
     "emit_reduce_tile_ir",
@@ -1278,16 +2250,19 @@ __all__ = [
     "emit_softmax_tile_ir",
     "package_moe_dispatch",
     "package_attention",
+    "package_attention_backward",
     "package_reduction",
     "package_paged_kv_read",
     "package_softmax",
     "requests_moe_dispatch",
     "requests_attention",
+    "requests_attention_backward",
     "requests_reduction",
     "requests_paged_kv_read",
     "requests_softmax",
     "supports_moe_dispatch",
     "supports_attention",
+    "supports_attention_backward",
     "supports_reduction",
     "supports_paged_kv_read",
     "supports_softmax",

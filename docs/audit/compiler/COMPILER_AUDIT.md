@@ -102,7 +102,7 @@ Two facts make the transition cheaper than it looks:
 | **Python `@jit`** | Decoration-time constraint + effect analysis; honest fallback gating (won't let eager Python masquerade as compiled). | Effect/constraint analysis is single-function, AST-only. A general IR-optimization step (folders/effects) between emission and execution is still thin. | Component-aware multi-op metadata **landed** (carried to the `@jit` artifact); fusion dispatch is **authoritative** (Phase 0 seam closed). Remaining: effect interfaces + broader folding. |
 | **Graph IR** | 132 ops, 107 real verifiers; 5 canon patterns; real fusion passes (SwiGLU/MLA/NSA). 101/109 ops are `[Pure]` (CSE/DCE-eligible *today*). | **Folders/canonicalizers landed (2026-06-22):** `add`/`sub`/`mul`/`div`/`cast`/`reshape` folders + `matmul`/`transpose`/`reshape` canonicalizers (8 ops — `reshape` carries an identity fold + a `reshape(reshape(x))` chain-collapse, both guarding the optional `dim_names` symbolic-dim annotations), wired into the `tessera_jit` CPU `canonicalize→cse` pipeline (`graph_ir_folders.mlir`); `LayoutAssignmentPass` landed (seed→propagate→insert `cast{layout}`, `test_layout_assignment.py`). **Per-op effect interfaces landed (2026-06-22):** all 23 non-pure ops carry an explicit `MemoryEffectsOpInterface` — deterministic value ops (`adam`/`adamw`/`momentum`/`adafactor`/`lion`, `arch.ste_one_hot`/`weighted_sum`/`switch`/`mixed`) are `[Pure]`; random (`dropout`/`arch.gumbel_softmax`/`arch.hard_concrete`), stateful (`kv_cache.*`/`ring.create`/`arch.parameter`), collective (`all_reduce`/`reduce_scatter`/`all_gather`) and MoE-transport ops carry `MemWrite`/`MemRead`, so generic CSE/DCE is sound and precise across them (`graph_ir_op_effects.mlir`). `LayoutAssignmentPass` is **wired into the named x86/GPU/CUDA-13 pipelines behind the opt-in `assign-layouts` option**. CORE-COMPILER-2 makes the generic x86 binding layout executable and recognizes ROCm's independent structured `#tile.layout` consumer, but Graph `cast{layout}` materializers are not yet complete across targets, so assignment stays opt-in. **Phase 1 closed (2026-06-22)** — effect interfaces, opt-in LayoutAssignment wiring, and reshape folder coverage all landed. ~5 passes are attribute-stamp-only. | Add folders opportunistically as new algebraic identities surface; ~5 attribute-stamp-only passes could gain real bodies. |
 | **Schedule IR** | DistributionLowering (real structural wiring + escaping-value fix); collective *insertion*. **Real pipeline partitioning + 1F1B proof landed (2026-06-23)** — `PipelineStagePartition` does a cost-balanced, program-order-monotonic partition (emits `tessera.pp_stage`, no longer external-tag-only), the insertion pass does the genuine send/recv SSA rewire, and `PipelineScheduleLegality` proves the 1F1B schedule (`PP_MICRO_BATCHES_TOO_FEW` per Decision #17, `PP_EMPTY_STAGE`, send/recv pairing, and `PP_UNROUTED_CROSS_STAGE_VALUE` = value-rewrite completeness). Chained as `tessera-pipeline` (partition → insert → legality); lit `tests/tessera-ir/phase4/pipeline_{partition,schedule_legality}.mlir`. | Still annotation-level: the explicit warmup/steady/cooldown *step order* isn't emitted (the proof verifies the structural 1F1B contract, not an emitted step sequence); OptimizerShard is pure attrs; no collective overlap (`ChunkPlanner`/`CollectiveScheduler` never invoked). | Emit the explicit 1F1B step schedule; wire the collective planners. |
-| **Tile IR (FA-4)** | `#tile.layout` is attached to real views/copies/fragments; SSA buffer, pipeline, TMA, mbarrier, TMEM, and TCGen05 vocabulary is registered. Canonical GEMM has explicit M/N/K loops, and rank-2 FlashAttention now has a KV `scf.for` carrying `(acc,m,l,producer,consumer,boundary)` with typed slice coordinates and ragged extents. NVIDIA WarpSpec is free of name-based buffer identity and annotation-only pipeline-state emission. | Rank-4 batch/head distribution and the direct NVIDIA execution consumer of the shared attention loop remain open. Legacy `#tile.buffer_ref` is still readable for sibling migration fixtures. SM100 TCGen05/TMEM has structural proof only. | Finish distributed attention + deterministic backward workspace lowering; migrate sibling SSA consumers; exact SM100 TCGen05/TMEM. |
+| **Tile IR (FA-4)** | `#tile.layout` is attached to real views/copies/fragments; SSA buffer, pipeline, TMA, mbarrier, TMEM, and TCGen05 vocabulary is registered. Canonical GEMM has explicit M/N/K loops, and rank-2 FlashAttention now has a KV `scf.for` carrying `(acc,m,l,producer,consumer,boundary)` with typed slice coordinates and ragged extents. NVIDIA, shared legality fixtures, and ROCm LDS consumers are free of name-based buffer identity; structured ROCm LDS lowering requires buffer, token, and pipeline-state SSA edges. | Rank-4 batch/head distribution and the direct NVIDIA execution consumer of the shared attention loop remain open. Deprecated `#tile.buffer_ref` is parser-visible only for migration diagnostics and archived IR. SM100 TCGen05/TMEM has structural proof only. | Finish distributed attention + deterministic backward workspace lowering; exact SM100 TCGen05/TMEM. |
 | **Autotuner** | `BayesianAutotuner` tunes `{tile_m/n/k, num_warps, num_stages}`. | Scores via `_mock_latency` (roofline); `on_device` returns "unmeasured". **Output reaches no lowering pass** (read path exists at `TileIRLoweringPass.cpp` ~`:111`; write path absent). `flywheel` measurement lane not in compile path. | Write-path (stamp tile attrs); measured-latency scoring on Apple/CPU. |
 | **Target IR / runtime** | x86 AMX/AVX-512, Apple GPU, NVIDIA `sm_120`, and ROCm `gfx1151` all have checked-in native execution rows. The generated runtime matrix currently records 24 NVIDIA and 69 ROCm rows; the E2E fleet additionally seals release packets for NVIDIA softmax/reduction and ROCm softmax/reduction/paged-KV/MoE. `fusion.py` remains real runtime MSL codegen for matmul-epilogue regions, and `tessera_jit` is a real MLIR→LLVM CPU JIT. | Native breadth is architecture-specific, not backend-wide: NVIDIA `sm_80`/`sm_90`/`sm_100` and the ROCm target-map tail remain artifact-only or exact-device gated. Apple still has a name→lane→ctypes dispatcher seam, and reference execution remains explicit for unsupported rows. | Close the dispatcher seam and promote the remaining target-map tails only with exact-device execute-and-compare evidence. |
 
@@ -877,9 +877,8 @@ row "Tile IR (FA-4)") can pull from it. Cross-refs noted; reference memory
   **v1 LANDED (2026-06-23), SSA identity continuation 2026-07-25.**
   `TileBarrierReuseLegalityPass`
   (`--tessera-tile-barrier-reuse-legality`, `src/transforms/lib/`, sibling to
-  `LayoutLegalityPass`): for a buffer (canonically keyed by the root
-  `!tile.buffer` result of `tile.alloc`; legacy `#tile.buffer_ref` names remain
-  a migration fallback), two write ops whose `#tile.layout` storage-axis
+  `LayoutLegalityPass`): for a buffer (keyed exclusively by the root
+  `!tile.buffer` result of `tile.alloc`), two write ops whose `#tile.layout` storage-axis
   (`m/tlane/tcol`) footprints
   *overlap* with no intervening barrier op (name contains `mbarrier`/`wait_async`
   /`barrier`, or a `tile.barrier` attr) emit `TILE_BARRIER_REUSE_MISSING_BARRIER`
@@ -894,9 +893,19 @@ row "Tile IR (FA-4)") can pull from it. Cross-refs noted; reference memory
   typed def-use lifetime identity and the legality pass follows SSA alias roots.
   WarpSpecialization allocates parent-region SMEM/TMEM handles, threads them
   into staged copies and consumers, and deallocates them only after CTA sync;
-  the real WarpSpec→TMA output passes this legality gate. NVIDIA no longer emits
-  `#tile.buffer_ref`; the name-based reader remains only for sibling migration
-  fixtures. *Still open:* remove that reader after ROCm/Apple SSA migration.
+  the real WarpSpec→TMA output passes this legality gate. NVIDIA, the
+  Apple/shared fixture surface, and ROCm no longer emit or consume
+  `#tile.buffer_ref`; compatibility readers were retired on 2026-07-26.
+
+  **Compatibility classification (2026-07-26).** Active readers: **zero**.
+  `TileBufferRefAttr` remains defined and verifier-checked only so archived IR
+  fails with stable migration diagnostics rather than an unknown-attribute
+  parser error; `tile_layout_attr.mlir` is its dedicated parser/diagnostic
+  fixture. Mentions in architecture/audit prose are historical records.
+  `CHECK-NOT` assertions and the ROCm compiler benchmark are negative ratchets,
+  not producers. `test_ssa_buffer_ref_retirement.py` scans active shared/ROCm
+  C++ and ROCm MLIR fixtures and fails if a compatibility reader or producer is
+  restored.
 
 - **C3 — Typed barrier domains + a `PipelineState` SSA value (HF→HG).** Three
   barrier primitives with distinct completion semantics — `TMABar`
@@ -1371,14 +1380,54 @@ foundation rather than lowering attention as one whole-tensor sequence:
    values. It neither emits `#tile.buffer_ref` names nor annotation-only
    `#tile.pipeline_state`; the pipeline legality pass rejects the latter.
    NVIDIA's Schedule→Tile path consumes structured per-operand layouts directly.
-4. The deterministic SM120 backward launch contract explicitly assigns
-   zero-workspace ownership to each output element. A canonical shared
-   split-workspace backward loop, rank-4 batch/head distribution, and a direct
-   target/runtime consumer of the shared forward loop remain open.
+4. Static rank-4 attention now distributes through explicit batch/query-head
+   loops, maps GQA heads before rank reduction, and reuses the one canonical
+   KV-block recurrence. ROCm consumes this loop directly through gfx1151
+   Target IR/runtime with SSA-owned LDS planning and exact-device proof. A
+   launch carrier verifies split-workspace ownership, block-loop
+   metadata, and ascending reduction order. Tensor-valued shared backward
+   `scf.for` bodies now carry dQ, split dK/dV partials, and fixed-order
+   reduction. ROCm directly consumes them on gfx1151; Apple and NVIDIA remain
+   architecture-owned follow-ups.
 5. Exact-device evidence is not transferable. NVIDIA SM120, Apple, and ROCm
    must each lower the shared contract into architecture-owned schedules and
    retain numerical, resource, cache, device-event, and end-to-end proof before
    changing selectors.
+
+ROCm consumes the canonical rank-4 KV-block loop directly for MHA/GQA, causal
+left-window, ragged, and deterministic-dropout forms. Sync
+`CORE-ATTENTION-TENSOR-LOOPS-MODIFIERS-2026-07-26` adds registered score-bias
+and softcap operations directly to that recurrence, including per-head rank-4
+bias, and the gfx1151 adapter consumes the combined form. The same sync lowers
+the verified backward contract to tensor-valued dQ, split dK/dV partial, and
+ascending-reduction `scf.for` bodies. Exact gfx1151 combined
+bias+softcap+dropout forward execution has max error `0.000271678` and resident
+median `0.098631 ms` against the `0.097763 ms` baseline. Direct physical
+consumption now lands on gfx1151 under sync
+`ROCM-ATTENTION-SHARED-BACKWARD-CONSUMER-2026-07-26`: ROCm validates the
+tensor-valued phase topology and emits the compiler-owned five-entry package
+without rebuilding semantics from the launch carrier. Apple and NVIDIA remain
+architecture-owned follow-ups.
+
+Cross-backend sync `ROCM-E2E-ATTENTION-BACKWARD-2026-07-26` additionally maps
+the canonical launch-level backward carrier to one gfx1151 five-entry HSACO and
+a ROCm-owned deterministic split/reduced program workspace. The carrier now
+states launch ownership, split count, block-loop order, and fixed reduction
+order instead of claiming zero workspace. Exact-device dropout replay with
+combined bias+softcap gradients passes. Tensor-valued shared backward
+`scf.for` bodies had landed while direct target consumption of their phase
+operations remained open at that synchronization point; the follow-up below
+closes ROCm only, and no AMD schedule or evidence transfers.
+
+Follow-up sync `ROCM-ATTENTION-SHARED-BACKWARD-CONSUMER-2026-07-26` closes
+that gfx1151 gap. The native package source is the shared rank-4 forward plus
+`tessera_attn.backward` program; lowering exposes dQ, launch-owned two-split
+dK/dV partial, and ascending-reduction loops, and ROCm fails closed on any
+incomplete or reordered phase topology. Exact combined-feature gradients pass
+at maximum absolute errors dQ `0.000024833`, dK `0.000035211`, and dV
+`0.000329971`; the resident five-launch median is `0.367367 ms` versus the
+`0.368203 ms` baseline and `0.405023 ms` cap. Apple/NVIDIA physical
+consumption remains open and inherits no AMD artifact or timing evidence.
 
 > **Open items: #4 (fixture-backed numerical proof before conformance cells go
 > complete) and #5 (point specs at dashboards/this audit, not old root audits).**

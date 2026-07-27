@@ -119,12 +119,11 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         ),
         input_dialects=("tile", "tessera_rocm", "func"),
         output_dialects=("tile", "tessera_rocm", "func"),
-        required_attrs=("tile.buf", "tile.layout", "tile.barrier"),
+        required_attrs=("tile.layout", "tile.barrier"),
         diagnostic_codes=(
             "ROCM_WAVE_LDS_MISSING_WAITCNT",
             "ROCM_WAVE_LDS_OVERLAPPING_WRITE",
             "ROCM_WAVE_LDS_UNSUPPORTED_BARRIER_KIND",
-            "ROCM_WAVE_LDS_UNSUPPORTED_TMEM",
         ),
         must_run_after=("rocm-wave-lds-pipeline",),
         pass_kind="verifier",
@@ -509,9 +508,8 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "C2 (TIRx): barriers as a layout-reuse correctness property — two "
             "writes to overlapping storage-axis (m/tlane/tcol) footprints of one "
             "!tile.buffer SSA allocation root with no intervening barrier are "
-            "a race. NVIDIA WarpSpecialization is SSA-only; legacy "
-            "#tile.buffer_ref names remain readable for sibling migration "
-            "fixtures."
+            "a race. Allocation identity is exclusively SSA-owned across "
+            "NVIDIA, Apple/shared fixtures, and ROCm."
         ),
         input_dialects=("tessera", "tile", "func"),
         output_dialects=("tessera", "tile", "func"),

@@ -982,8 +982,9 @@ def Tessera_FlashAttnOp : Op<
   let summary = "FlashAttention fused op";
   let description = [{
     Fused scaled-dot-product attention. When the optional `attn_bias` operand is
-    present it is an additive score bias of shape `(B, Sq, Sk)` (broadcastable
-    from `(1, Sq, Sk)`), applied as `softmax(scale * Q*K^T + attn_bias) * V` —
+    present it is an additive score bias of shape `(B, Sq, Sk)` (head
+    broadcast) or `(B, Hq, Sq, Sk)`, with either batch form broadcastable from
+    one, applied as `softmax(scale * Q*K^T + attn_bias) * V` —
     matching SDPA's additive-mask convention. This is the general substrate for
     structured masks (e.g. DFlash sliding-layer block masks); the bias-free path
     is unchanged. `AttrSizedOperandSegments` separates the `v` variadic from the

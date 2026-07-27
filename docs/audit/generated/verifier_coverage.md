@@ -6,11 +6,11 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 
 | Status | Count | Meaning |
 |--------|-------|---------|
-| `real` | 207 | `hasVerifier = 1;` + substantive `verify()` body. |
+| `real` | 213 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` | 0 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent` | 0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
 | `no_verifier` | 0 | No verifier declared.  TD constraints suffice — fine for many ops. |
-| **Total** | 207 | |
+| **Total** | 213 | |
 
 ## Per-dialect details
 
@@ -217,6 +217,10 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 
 | Op | Status |
 |----|--------|
+| `BackwardDKDVBlockOp` | `real` |
+| `BackwardDQBlockOp` | `real` |
+| `BackwardOp` | `real` |
+| `BackwardReduceSplitOp` | `real` |
 | `BlockDropoutOp` | `real` |
 | `BoundaryMaskOp` | `real` |
 | `CausalMaskOp` | `real` |
@@ -226,6 +230,8 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `LseSaveOp` | `real` |
 | `OnlineSoftmaxOp` | `real` |
 | `ScaledDotProductOp` | `real` |
+| `ScoreBiasOp` | `real` |
+| `SoftcapOp` | `real` |
 | `StreamingUpdateOp` | `real` |
 
 ### `src/compiler/tile_opt_fa4/include/tessera/Dialect/Queue/Queue.td`

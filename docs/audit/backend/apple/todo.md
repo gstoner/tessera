@@ -8,6 +8,59 @@ last_updated: 2026-07-26
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync
+`ROCM-ATTENTION-SHARED-BACKWARD-CONSUMER-2026-07-26` makes ROCm gfx1151 the
+first direct physical consumer of the shared tensor-valued attention backward
+phase loops. Apple remains **follow-up required** to validate the same
+dQ/split-dK/dV/fixed-reduction contract and map it to a Metal-owned package.
+The AMD WMMA schedule, five-entry HSACO, HIP launch workspace, gradient
+evidence, and host-wall timing do not transfer. No shared IR or Apple
+capability state changed in this ROCm-owned closure.
+
+Cross-backend sync `CORE-ATTENTION-TENSOR-LOOPS-MODIFIERS-2026-07-26`
+materializes the deterministic split/reduced backward contract as tensor-valued
+shared `scf.for` bodies: dQ is query-head/block owned, dK/dV partials are
+launch-owned `[split,B,Hkv,Sk,D]` tensors, and reduction is fixed ascending
+split order. The shared forward KV recurrence now carries registered additive
+bias and softcap operations in canonical
+`softcap(scale*QK^T + bias)` order, including rank-4 per-head bias. Apple is
+**follow-up required** to lower these shared phase operations into its Metal
+backward package and direct forward schedule. The gfx1151 ABI repair, HSACO,
+numerical result, and resident timing do not transfer.
+
+Cross-backend sync `CORE-ATTENTION-BACKWARD-CONTRACT-2026-07-26` adds verified
+split count, launch-owned workspace, block-loop metadata, ascending reduction
+order, and canonical `softcap(scale*QK^T + bias)` semantics to the shared
+carrier/oracle. Apple is **follow-up required** to map this form to Metal and
+validate dropout replay; gfx1151 code, evidence, and timing do not transfer.
+
+Cross-backend sync `ROCM-E2E-ATTENTION-BACKWARD-2026-07-26` is not applicable
+to Apple physical execution. It adds a ROCm-owned five-entry HSACO and
+gfx1151 split/reduced launch workspace without changing the shared launch
+descriptor schema or canonical backward loop. AMD WMMA kernels, workspace
+topology, exact-device gradients, timings, and selector state do not transfer.
+
+The ROCm optimized-attention feature follow-up under
+`ROCM-E2E-ATTENTION-CARRIERS-2026-07-26` adds AMD-only deterministic dropout
+replay and combined bias+softcap consumption to the gfx1151 WMMA schedule,
+plus a host-wall resident performance ratchet. The semantic combinations are
+already represented by the shared carrier; no shared ABI or Apple capability
+changed. Apple parity therefore remains unchanged and its Metal lowering,
+counter implementation, numerical proof, and timing evidence do not inherit
+from this ROCm result.
+
+Cross-backend sync `SSA-STATEFUL-TRANSPORT-2026-07-26` retires every active
+`#tile.buffer_ref` compatibility reader after migrating the shared
+barrier-reuse and WarpSpec lifetime fixtures plus the ROCm LDS fixture to
+`!tile.buffer` def-use. The deprecated attribute remains parser-visible only
+for migration diagnostics and archived IR. Apple/shared IR therefore no longer
+depends on name-based allocation identity; Metal threadgroup scheduling remains
+Apple-owned follow-up. The same sync generalizes the proven Apple ReplaySSM
+lifecycle schema to target-keyed resident ABIs and adds explicit MoE launch
+workspace ownership plus optional rank/device topology binding. Apple retains
+its existing session-private ring, flush/rollback, ordered submission, and
+drain-before-release semantics; ROCm execution and evidence do not transfer.
+
 Cross-backend sync `ROCM-E2E-ATTENTION-CARRIERS-2026-07-26` is a ROCm-owned
 physical consumer and exact gfx1151 evidence landing for the already-shared
 forward/backward attention carriers. Apple requires follow-up for any carrier
@@ -34,10 +87,10 @@ def-use-consumer decision. The newly admitted packed load/unpack, supported
 round trip, packed matmul, and explicit conversion paths are NVIDIA SM120
 consumers only. Apple remains disabled for generic terminal FP4/FP6
 legalization until architecture-owned Metal physical consumers and exact
-device proof land; no CUDA schedule or evidence transfers. The shared
-`#tile.buffer_ref` compatibility reader is intentionally retained for Apple
-migration fixtures during that work. Apple capabilities, execution rows, and
-selectors are unchanged.
+device proof land; no CUDA schedule or evidence transfers. The deprecated
+`#tile.buffer_ref` attribute remains parser-only for archived IR; no
+Apple/shared fixture or active pass consumes it. Apple capabilities, execution
+rows, and selectors are unchanged.
 
 Cross-backend sync `CORE-STREAMING-ATTN-2026-07-26` replaces the shared
 rank-2 FlashAttention whole-KV lowering with an explicit KV-block `scf.for`
@@ -48,10 +101,13 @@ source extents for ragged zero fill; NVIDIA WarpSpecialization no longer emits
 name-based `#tile.buffer_ref` or annotation-only `#tile.pipeline_state`
 metadata. Apple is **follow-up required** to map the same recurrence onto an
 architecture-owned Metal/MPS attention schedule and threadgroup allocation
-identity. CUDA TMA descriptors, mbarriers, SM120 execution, resources, timings,
-and selectors do not transfer. Rank-4 batch/head distribution and deterministic
-backward workspace materialization remain open shared work; no Apple capability
-or selector changes in this synchronization slice.
+identity. Follow-up sync
+`CORE-STREAMING-ATTN-RANK4-ROCM-2026-07-26` adds shared rank-4 batch/head
+distribution and a direct ROCm consumer. Apple remains **follow-up required**
+for its architecture-owned Metal/MPS consumer; the gfx1151 schedule, HSACO,
+resources, wall timing, and selector evidence do not transfer. Deterministic
+backward workspace materialization remains open shared work; no Apple
+capability or selector changes in this synchronization slice.
 
 Cross-backend sync `CORE-GEMM-KLOOP-2026-07-25` changes the shared
 Graph/Schedule→Tile GEMM contract to explicit M/N/K `scf.for`, FP32/INT32

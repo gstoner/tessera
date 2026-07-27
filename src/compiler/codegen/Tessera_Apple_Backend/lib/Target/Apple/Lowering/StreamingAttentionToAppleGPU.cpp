@@ -76,6 +76,38 @@ Value traceToSource(Value value, Operation *root) {
   return Value();
 }
 
+// The staging the shared lowering hoists ahead of the KV loop — the Q copy and
+// the producer/consumer ring initialisation. None of it is `Pure`, so once the
+// recurrence is re-formed these ops linger as debris that no DCE will collect.
+//
+// Leaving them is not merely untidy: the ring the shared attention path builds
+// is depth 3, which APPLE-PIPE-1 rejects because Metal stages through a
+// ping-pong pair. A dead depth-3 `tile.pipeline_init` left in the function
+// would fail `APPLE_STAGE_DEPTH_UNSUPPORTED` the moment both passes run in one
+// pipeline — a rejection describing a schedule the program no longer has.
+bool isStagingOp(StringRef name) {
+  return name == "tile.async_copy" || name == "tile.wait_async" ||
+         name == "tile.pipeline_init" || name == "tile.pipeline_advance";
+}
+
+void eraseDeadStaging(Block *block) {
+  // Consumers before producers (wait_async reads the copy's token), so iterate
+  // to a fixpoint rather than assuming one reverse sweep suffices.
+  bool changed = true;
+  unsigned guard = 0;
+  while (changed && guard++ < 8) {
+    changed = false;
+    for (Operation &op : llvm::make_early_inc_range(llvm::reverse(*block))) {
+      if (!isStagingOp(op.getName().getStringRef()))
+        continue;
+      if (!op.use_empty())
+        continue;
+      op.erase();
+      changed = true;
+    }
+  }
+}
+
 struct StreamingAttentionToAppleGPUPass
     : public PassWrapper<StreamingAttentionToAppleGPUPass,
                          OperationPass<ModuleOp>> {
@@ -187,19 +219,37 @@ struct StreamingAttentionToAppleGPUPass
       for (Operation *user : loop->getResult(0).getUsers())
         if (user->getName().getStringRef() == "tessera_attn.lse_accumulate")
           consumer = user;
-      // Apple's fused flash-attention ABI returns the output only. If the LSE
-      // is still live we cannot re-form: replacing just the output would leave
-      // the whole recurrence alive to recompute the LSE, so the program would
-      // do the attention twice and the "fused" dispatch would be pure overhead.
-      // Refusing is the honest answer, not silently emitting both.
-      if (consumer && !consumer->getResult(1).use_empty()) {
-        loop->emitOpError(
-            "APPLE_STREAMING_ATTN_LSE_UNSUPPORTED: the Apple fused route "
-            "returns the attention output only, but this program also consumes "
-            "the per-row log-sum-exp; re-forming would recompute the whole "
-            "recurrence");
-        signalPassFailure();
-        return;
+      // Apple's fused flash-attention ABI returns the output only, so a live
+      // per-row LSE means we cannot re-form: replacing just the output would
+      // leave the whole recurrence alive to recompute the LSE, and the program
+      // would do the attention twice.
+      //
+      // A `tessera_attn.lse.save` whose own result is unused is not such a
+      // consumer. The shared lowering emits one unconditionally and discards
+      // its result; the op is `Pure` and owns no memref, symbol, or handle, and
+      // `lse.load` takes no operands, so nothing links a load back to it. It is
+      // dead code, and erasing it changes no observable behavior. Anything else
+      // reading the LSE is a real consumer and still refuses.
+      SmallVector<Operation *> deadSaves;
+      if (consumer) {
+        bool liveLse = false;
+        for (Operation *user : consumer->getResult(1).getUsers()) {
+          if (user->getName().getStringRef() == "tessera_attn.lse.save" &&
+              user->use_empty()) {
+            deadSaves.push_back(user);
+            continue;
+          }
+          liveLse = true;
+        }
+        if (liveLse) {
+          loop->emitOpError(
+              "APPLE_STREAMING_ATTN_LSE_UNSUPPORTED: the Apple fused route "
+              "returns the attention output only, but this program also "
+              "consumes the per-row log-sum-exp; re-forming would recompute "
+              "the whole recurrence");
+          signalPassFailure();
+          return;
+        }
       }
       Value replaced = consumer ? consumer->getResult(0) : loop->getResult(0);
 
@@ -237,10 +287,15 @@ struct StreamingAttentionToAppleGPUPass
       Operation *call = builder.create(state);
       replaced.replaceAllUsesWith(call->getResult(0));
       // The recurrence is now dead: erase it rather than leaving a second,
-      // unreachable computation of the same attention in the module.
+      // unreachable computation of the same attention in the module. Order
+      // matters — the dead saves read the accumulator, so they go first.
+      for (Operation *save : deadSaves)
+        save->erase();
       if (consumer)
         consumer->erase();
+      Block *block = loop->getBlock();
       loop->erase();
+      eraseDeadStaging(block);
     }
   }
 };

@@ -51,6 +51,15 @@ PassPipelineRegistration<> gAppleGPUPipeline(
     "tessera-lower-to-apple_gpu",
     "Lower Tessera Tile IR to Apple Silicon GPU Target IR (Metal)",
     [](OpPassManager &pm) {
+      // APPLE-ATTN-STREAM-1 runs first, and the order is load-bearing. The
+      // shared streaming-attention lowering builds a depth-3 KV ring, which
+      // APPLE-PIPE-1 rejects because Metal stages through a ping-pong pair.
+      // Re-forming the recurrence removes that ring along with the rest of the
+      // staging, so this pass must claim the loop before the threadgroup pass
+      // judges a schedule the program is about to stop having.
+      pm.addPass(createStreamingAttentionToAppleGPUPass());
+      // APPLE-TILE-2: same shape for the canonical M/N/K GEMM reduction.
+      pm.addPass(createCanonicalGemmToAppleGPUPass());
       // APPLE-PIPE-1: claim the shared Tile physical-allocation / staged
       // pipeline SSA contract as Metal threadgroup memory before anything
       // consumes the tile ops, so placement and rejection are decided once.

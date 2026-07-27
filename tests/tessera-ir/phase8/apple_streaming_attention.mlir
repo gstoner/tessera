@@ -1,34 +1,56 @@
 // REQUIRES: tessera-apple-backend
 //
-// RUN: not tessera-opt %s --allow-unregistered-dialect \
+// The input is a plain Graph-IR flash_attn: the *shared* TileIRLowering builds
+// the streaming recurrence, and only then does Apple claim it. Driving both in
+// one run proves Apple consumes the real shared form.
+//
+// RUN: tessera-opt %s --allow-unregistered-dialect \
 // RUN:   --tessera-tile-ir-lowering='tile-q=64 tile-kv=64 sm=90' \
-// RUN:   --tessera-apple-streaming-attention 2>&1 | FileCheck %s
+// RUN:   --tessera-apple-streaming-attention | FileCheck %s
+//
+// The same claim must hold through the real target pipeline, where this pass
+// runs ahead of APPLE-PIPE-1 (see the ordering note in Passes.cpp). Piped as
+// two invocations because a named pipeline cannot be combined with standalone
+// pass flags in one command.
+// RUN: tessera-opt %s --allow-unregistered-dialect \
+// RUN:   --tessera-tile-ir-lowering='tile-q=64 tile-kv=64 sm=90' \
+// RUN:   | tessera-opt --allow-unregistered-dialect \
+// RUN:       --pass-pipeline='builtin.module(tessera-lower-to-apple_gpu)' \
+// RUN:   | FileCheck %s
 
-// APPLE-ATTN-STREAM-1 (2026-07-26) — the blocking finding, pinned.
+// APPLE-ATTN-STREAM-1 (2026-07-26). `CORE-STREAMING-ATTN-2026-07-26` states
+// rank-2 FlashAttention as a KV-block `scf.for` carrying the FP32 accumulator,
+// running max/sum, producer/consumer `!tile.pipeline_state`, and an absolute
+// boundary offset. Apple re-forms that recurrence as one fused dispatch: the
+// loop is a semantic contract, and Metal — which stages through a ping-pong
+// pair and has no async copy engine — cannot realize the depth-3 ring as
+// written.
 //
-// `tessera-apple-streaming-attention` recognizes the shared KV-block
-// recurrence (`CORE-STREAMING-ATTN-2026-07-26`) and can re-form it as one Apple
-// flash-attention dispatch, carrying causal / sliding-window / logical-length
-// semantics read off `tessera_attn.boundary_mask` rather than re-deriving them.
-//
-// It cannot yet do so for any real program, and this fixture records exactly
-// why. The shared lowering always terminates the recurrence with
-// `tessera_attn.lse_accumulate` -> `tessera_attn.lse.save`, the forward-side
-// half of the LSE checkpoint that `tessera_attn.lse.load` reads during
-// backward. `LseSaveOp` carries no `Pure` trait, so it is a real side effect,
-// not dead code. Apple's fused flash-attention ABI
-// (`tessera_apple_gpu_flash_attn_*`) returns the attention output only.
-//
-// Re-forming anyway would leave the entire recurrence alive to recompute the
-// LSE — the program would do attention twice and the "fused" dispatch would be
-// pure overhead — or would silently drop a checkpoint backward depends on. The
-// pass refuses instead, and the refusal is the honest current state.
-//
-// Unblocking needs one of: an Apple fused ABI that also returns per-row LSE, or
-// a shared lowering that elides `lse.save` when the LSE is provably dead.
+// The decisive property is that causal / sliding-window / logical-length
+// semantics are READ OFF `tessera_attn.boundary_mask` rather than re-derived.
+// Before this pass, `FlashAttnToAppleGPU` rewrote `tessera.flash_attn` straight
+// from Graph IR and re-implemented those boundary rules independently.
 
-// CHECK: APPLE_STREAMING_ATTN_LSE_UNSUPPORTED
-// CHECK-SAME: returns the attention output only
+// The recurrence and all of its staging are consumed, not left beside the
+// dispatch: a leftover depth-3 ring would fail APPLE-PIPE-1 for a schedule the
+// program no longer has.
+// CHECK-LABEL: func.func @attn
+// CHECK-NOT: scf.for
+// CHECK-NOT: tile.pipeline_init
+// CHECK-NOT: tile.async_copy
+// CHECK-NOT: tessera_attn.
+// CHECK: tessera_apple.gpu.kernel_call
+// CHECK-SAME: op_kind = "flash_attn"
+// CHECK-SAME: symbol = "tessera_apple_gpu_flash_attn_bf16"
+// Boundary semantics carried from the shared ops, not re-derived.
+// CHECK-SAME: tessera_apple.causal = true
+// CHECK-SAME: tessera_apple.head_dim = 64
+// CHECK-SAME: tessera_apple.kv_block = 64
+// CHECK-SAME: tessera_apple.logical_sk = 130
+// CHECK-SAME: tessera_apple.streaming_recurrence = true
+// CHECK-SAME: tessera_apple.window_left = -1
+// CHECK-SAME: tessera_apple.window_right = -1
+// CHECK-NOT: scf.for
 
 module attributes {tessera.ir.version = "1.0",
                    tessera.target = {sm = 90 : i32, warps = 4 : i32,

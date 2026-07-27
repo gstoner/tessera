@@ -979,9 +979,27 @@ compiler:
   (**6 passed, 46 foreign-compiler skips**); diagnostic-registry and
   pass-metadata drift gates green; `mypy` clean.
 
-NVIDIA and ROCm are not applicable: this adds an Apple-private pass, Apple-only
-attributes, and Apple-owned diagnostics. No shared Tile op, type, verifier,
-sibling ABI, or schedule changed.
+**PR #467 review fixes (2026-07-26).** Three real defects were found in review
+and are now regression-locked in `tests/unit/test_apple_threadgroup_pipeline.py`:
+
+1. **Loop-carried state was reported unrooted.** A ring threaded by `scf.for`
+   reaches its advance as a *region iter_arg*, not the `pipeline_init` result —
+   which is exactly how the canonical GEMM and streaming attention emit it. The
+   membership test rejected that with `APPLE_STAGE_UNROOTED_ADVANCE`, so the
+   pass refused the very shared contract it exists to consume. Block arguments
+   are now resolved back to the matching loop init operand.
+2. **The MMA gate could be bypassed.** It read only `numeric_policy.storage`,
+   but the op verifier requires only `mma`, so an int4/FP8 descriptor with no
+   policy — or with a laundering fp16 one — passed. The descriptor's declared
+   A/B/accumulator types are now authoritative, and an unreadable descriptor is
+   treated as "cannot prove a route exists" rather than as permission.
+3. **Advances contradicted their own ring.** Every advance was stamped
+   `ping_pong`, so a depth-1 pipeline handed the emitter two different physical
+   schedules. Advances now carry the rooted initializer's mode.
+
+NVIDIA and ROCm are not applicable to the Apple pass, attributes, or
+diagnostics. The one shared-ground change is the `LseSaveOp` `Pure` correction
+recorded below.
 
 ### APPLE-TILE-2 landing evidence (2026-07-26)
 
@@ -1038,51 +1056,71 @@ consequence is that the strict ledger currently admits **no** decisions on this
 host, so APPLE-RETUNE-1's selector evidence is inert until the corpus is
 re-recorded and re-sealed against the current runtime source.
 
-### APPLE-ATTN-STREAM-1 blocking finding (2026-07-26)
+### APPLE-ATTN-STREAM-1: the LSE blocker, and why it was a defect (2026-07-26)
 
-This item did **not** close, and the reason is a real contract mismatch worth
-recording rather than working around.
+This item first landed **blocked**, and the investigation is worth keeping
+because the blocker turned out to be a bug in the shared contract rather than a
+capability gap.
 
-`StreamingAttentionToAppleGPU.cpp` recognizes the shared KV-block recurrence
-(`tessera.streaming_attention`), traces Q/K/V back through the staging copies
-and the ragged zero-fill slice pair, and re-forms the loop as one
-`tessera_apple.gpu.kernel_call{op_kind = "flash_attn"}` carrying `causal`,
-`logical_sk`, `window_left/right`, and `kv_block` **read off the shared ops**.
-That is the ownership fix the item exists for: today `FlashAttnToAppleGPU`
-re-derives those boundary rules independently from Graph IR.
+**The apparent blocker.** The shared lowering always terminates the recurrence
+with `tessera_attn.lse_accumulate` -> `tessera_attn.lse.save`. `LseSaveOp`
+carried no `Pure` trait, so MLIR had to treat it as side-effecting, while
+Apple's fused ABI (`tessera_apple_gpu_flash_attn_*`) returns the attention
+output only. Re-forming would either leave the whole recurrence alive to
+recompute the LSE — attention computed twice — or silently drop a checkpoint
+backward appeared to depend on. The pass refused.
 
-**Why it cannot be enabled.** The shared lowering always terminates the
-recurrence with `tessera_attn.lse_accumulate` → `tessera_attn.lse.save` — the
-forward half of the LSE checkpoint that `tessera_attn.lse.load` consumes during
-backward. `LseSaveOp` carries no `Pure` trait, so it is a real side effect, not
-dead code. Apple's fused ABI family `tessera_apple_gpu_flash_attn_{f32,f16,bf16}`
-returns the attention output only. Re-forming anyway has two outcomes and both
-are wrong:
+**What the code actually shows.** There is no checkpoint to protect:
 
-- replace only the output → the whole recurrence stays live to recompute the
-  LSE, so the program does attention **twice** and the "fused" dispatch is pure
-  overhead;
-- erase the recurrence → a checkpoint the backward pass depends on is silently
-  dropped.
+- the emission site (`TileIRLoweringPass.cpp:374`) **discards the result**;
+- the result type is scalar `f32`, not the per-row `[tile_q]` LSE it names;
+- `LseLoadOp` takes **no operands**, so no SSA edge, symbol, or handle links a
+  load to a save — a backward lowering could not express *which* save its load
+  reads, even if one wanted to;
+- the only `lse.load` in the tree is a v1.3 example fixture.
 
-So the pass refuses with `APPLE_STREAMING_ATTN_LSE_UNSUPPORTED`, and the refusal
-is pinned by `tests/tessera-ir/phase8/apple_streaming_attention.mlir`. Five more
-registered diagnostics bound the rest of the envelope (unrecognized loop shape,
-offset-keyed block dropout, dynamic/non-rank-2 Q, `head_dim` past the Apple
-fused-chain score cap, and unsupported storage).
+This is the same name-free global-state modeling the 2026-07-26 wave already
+ruled against twice: `#tile.buffer_ref` became `!tile.buffer`, annotation-only
+`#tile.pipeline_state` became threaded SSA, and `TilePipelineLegality` now
+*rejects* the annotation-only form. The LSE pair is the next unmigrated
+instance, not an unlucky edge case.
 
-**Two ways to unblock, both out of this slice's scope:**
+**No backend consumes it, and all three that have an attention backward chose
+recompute** — for the same reason, since a saved LSE reintroduces the workspace
+their determinism contracts exist to eliminate:
 
-1. Extend the Apple fused flash-attention ABI to return per-row LSE alongside
-   the output, matching what the shared contract retains. This is the direct
-   fix and also what an Apple-native attention backward will eventually need.
-2. Have the shared lowering elide `lse.save` when the saved LSE has no
-   consumer, so inference-only programs stop carrying a backward checkpoint.
-   This is a shared-contract change and needs NVIDIA/ROCm agreement.
+| Backend | Attention backward | LSE source |
+|---|---|---|
+| ROCm gfx1151 | `GenerateWMMAFlashAttnBwdKernel.cpp` | recomputes `L[q] = logsumexp_k(scale*QK^T)` in a `_pre` pass; header states the backward "needs nothing saved from the forward" |
+| NVIDIA sm_120 | `sm120_attention_backward_kernel.mlir` | `workspace_bytes = 0`, `workspace_owner = "output_element"` |
+| Apple Apple7 | `flash_attn_bwd_*` | `bwd_query_stats` recomputes m/l per query; ABI takes no LSE buffer |
+| x86 AVX-512 | none (forward only) | n/a |
 
-Until one lands, Apple attention stays on the incumbent Graph-IR-direct route
-and the boundary semantics remain duplicated — the gap this row exists to close
-is **identified and implemented against, but still open**.
+**Resolution.** `LseSaveOp` is now `Pure`, matching its own signature: one
+operand in, one value out, no memref, symbol, or effect interface. The missing
+trait was the only thing making a dead value-producer unremovable. Nothing
+emitted changes on any target — it only permits removing an op that already
+does nothing. Blast radius measured before the change: one emitter, **zero**
+passes scanning for it, and no test edits (the `lse_save` assertion in
+`tests/unit/test_tile_ir.py` is on the separate Python `lower_schedule_to_tile_ir`
+lane).
+
+A `retain_lse` flag was considered and rejected: it would gate an op that cannot
+perform its stated function. The vocabulary is deliberately **kept** — if
+long-context measurement ever shows recomputing logsumexp costs more than
+reloading a `[tile_q]` vector, the pair should be redesigned with real identity
+(SSA handle or symbol), exactly as `buffer_ref` became `!tile.buffer`. That is
+when conditional emission becomes meaningful.
+
+The Apple consumer erases only a `lse.save` whose own result is unused; anything
+genuinely reading the LSE still refuses with
+`APPLE_STREAMING_ATTN_LSE_UNSUPPORTED`. It also erases the now-dead staging
+(Q copy, ring init/advance), because a leftover depth-3 `tile.pipeline_init`
+would otherwise fail APPLE-PIPE-1 for a schedule the program no longer has.
+
+NVIDIA and ROCm review note: the `Pure` correction touches shared ground
+(`Attn.td`), removes a dead side-effecting op from their forward lowerings too,
+and changes no emitted code on either target.
 
 ### Shared-Tile-contract consumer rows (opened 2026-07-26)
 
@@ -1114,7 +1152,7 @@ capability-rejection or consumer proof, not undeclared divergence.
 |---:|---|---|---|
 | 19 | APPLE-PIPE-1 | **landing** | The `tessera-apple-threadgroup-pipeline` pass is a real consumer of the shared SSA vocabulary and runs first in `tessera-lower-to-apple_gpu`: `!tile.buffer` allocations are placed 16-byte-aligned into one capacity-bounded per-function threadgroup arena, and `!tile.pipeline_state` rings are claimed as `ping_pong` / `single` Metal staging. Nine registered diagnostics own the capability boundary. Evidence below. **Narrower follow-up:** the emitted steel MSL still computes its own staged bytes — the two owners are proven *equal*, not yet *sourced from one place* — and this rung is host-free by design, so it carries no exact-device execution proof. |
 | 20 | APPLE-TILE-2 | **landing** | `tessera-apple-canonical-gemm` recognizes the shared three-deep M/N/K nest and re-forms it as one `simdgroup_matrix` dispatch carrying the loop's tile decision, `accumulate = "fp32"`, and the `ragged_zero_pad` guarantee. Exact-device execute-and-compare passes on Apple7 Metal for aligned and ragged rows, driven by the compiler-produced descriptor. The **incumbent rule is recorded in the pass itself**: recognition is not promotion. **Narrower follow-up:** no strict-v2 paired route-ledger row yet, so no timing-domain comparison exists and value-mode Accelerate/MPS remains the production route by default rather than by measurement. |
-| 21 | APPLE-ATTN-STREAM-1 | **blocked — LSE return contract** | `tessera-apple-streaming-attention` is implemented and recognizes the shared recurrence correctly, extracting Q/K/V through the staging/zero-fill chain and reading causal / `logical_sk` / window / `kv_block` off `tessera_attn.boundary_mask` and the loop. It **refuses every current program**, for a real reason (below), so it is deliberately **not wired into the production pipeline** and Apple attention still runs the incumbent Graph-IR-direct ABI route. Unblock by extending the Apple fused ABI to return per-row LSE, or by eliding `lse.save` in the shared lowering when the LSE is provably dead. |
+| 21 | APPLE-ATTN-STREAM-1 | **landing** | `tessera-apple-streaming-attention` recognizes the shared KV-block recurrence and re-forms it as one Apple flash-attention dispatch, carrying `causal` / `logical_sk` / `window_left/right` / `kv_block` **read off `tessera_attn.boundary_mask`** instead of re-derived — the ownership fix this row exists for. It runs first in `tessera-lower-to-apple_gpu`, ahead of APPLE-PIPE-1, because the shared depth-3 KV ring must be re-formed before the threadgroup pass judges a schedule the program is about to stop having. Unblocked by marking `LseSaveOp` `Pure` (see below). **Narrower follow-up:** the descriptor targets the same ABI family as the incumbent, so numerical parity is proven structurally plus an on-device oracle check — not yet a full APPLE-ATTN-FWD-1 corpus re-run, and no selector changed. |
 | 22 | APPLE-DTYPE-1-REJECT | **closed** | The macOS-27 SDK gate is enforced, not incidental. `tests/tessera-ir/phase8/apple_lowprecision_capability_gate.mlir` runs the same module through `--tessera-storage-legalize` twice: the `apple_gpu` target stamps no `tessera.storage_packed`/`_container` on either a block-scaled NVFP4 decode or a packed int4 contraction, while the `nvidia_sm120` contrast run stamps both — so the negative cannot pass merely because the pass did nothing. A block-scaled or otherwise unrouted cooperative-matrix descriptor is separately rejected with `APPLE_MMA_STORAGE_UNSUPPORTED`, and `tests/unit/test_apple_threadgroup_pipeline.py` binds that gate to `select_apple_simdgroup_fragment`: fp16/bf16 accepted by both owners, nvfp4/fp4/fp6/fp8/int4 refused by both. APPLE-DTYPE-1 itself stays **blocked — SDK**; this row proves the block, it does not lift it. |
 | 23 | APPLE-COUNTER-1 | **landing** | `compiler/apple_counter_evidence.py` maps Metal telemetry onto the shared autotune-evidence fields with an explicit four-state reason on every field: `measured`, `not_measured` (device can, this run did not), `unsupported_by_device` (this GPU family cannot), `no_public_api` (Metal exposes no query — register count, scratch bytes, spill count, achieved occupancy). Supplying a value the capability bits do not support raises rather than silently downgrading, so a corpus cannot claim evidence the device cannot produce. Bit positions are drift-gated against the runtime's own documented matrix. **Narrower follow-up:** the benchmark writers do not yet emit these fields into a committed corpus, so this is the vocabulary and its guards, not a recorded two-run corpus. |
 

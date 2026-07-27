@@ -33,9 +33,12 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Interfaces/FunctionInterfaces.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+
+#include <string>
 
 using namespace mlir;
 
@@ -61,6 +64,34 @@ constexpr int64_t kAppleThreadgroupAlignment = 16;
 // hardware), so no NVFP4/FP8/FP6 cooperative-matrix route exists here today.
 bool isAppleMmaStorage(StringRef storage) {
   return storage == "fp16" || storage == "f16" || storage == "bf16";
+}
+
+// Read the A / B / accumulator types a `#tile.mma_desc` declares.
+//
+// The Apple backend deliberately does not link the Tile dialect (every other
+// lowering here matches ops generically by name), so `TileMmaDescAttr`'s typed
+// accessors are unavailable and the printed form is inspected instead. Narrowly
+// scoped on purpose: it reads only the three `key = "value"` fields it needs,
+// and returns empty when it cannot find them, which callers must treat as
+// "cannot prove a route exists" rather than as permission.
+SmallVector<std::string> mmaDescriptorTypes(Attribute mma) {
+  std::string printed;
+  llvm::raw_string_ostream stream(printed);
+  mma.print(stream);
+  StringRef text = stream.str();
+
+  SmallVector<std::string> found;
+  for (StringRef key : {"a = \"", "b = \"", "acc = \""}) {
+    size_t at = text.find(key);
+    if (at == StringRef::npos)
+      return {};
+    StringRef rest = text.drop_front(at + key.size());
+    size_t end = rest.find('"');
+    if (end == StringRef::npos)
+      return {};
+    found.push_back(rest.take_front(end).str());
+  }
+  return found;
 }
 
 bool isNvidiaOnlyTileOp(StringRef name) {
@@ -126,10 +157,40 @@ struct AppleThreadgroupPipelinePass
             "tile.alloc so placement follows SSA identity");
         ok = false;
       }
-      // A cooperative-matrix descriptor is a capability claim. Apple answers
-      // it from its own fragment contract rather than inheriting whichever
-      // dtype the shared descriptor happens to permit.
-      if (op->hasAttr("mma")) {
+      // A cooperative-matrix descriptor is a capability claim. Apple answers it
+      // from its own fragment contract rather than inheriting whichever dtype
+      // the shared descriptor happens to permit.
+      //
+      // The descriptor is authoritative, not `numeric_policy`. Only `mma` is
+      // required by the op verifier, so a policy can be absent entirely, or can
+      // disagree with the descriptor it accompanies — an int4 or FP8
+      // `#tile.mma_desc` carrying an fp16 policy would otherwise launder itself
+      // straight past this gate. Both the declared A/B/accumulator types and
+      // the policy must name storage Apple can actually route.
+      if (Attribute mma = op->getAttr("mma")) {
+        SmallVector<std::string> claimed = mmaDescriptorTypes(mma);
+        if (claimed.empty()) {
+          op->emitOpError("APPLE_MMA_STORAGE_UNSUPPORTED: apple_gpu cannot "
+                          "read the operand types of this cooperative-matrix "
+                          "descriptor, so it cannot prove a simdgroup_matrix "
+                          "route exists");
+          ok = false;
+          return;
+        }
+        for (const std::string &type : claimed) {
+          // The accumulator is fp32 by the simdgroup_matrix contract; operands
+          // must be fp16/bf16.
+          if (isAppleMmaStorage(type) || type == "f32" || type == "fp32")
+            continue;
+          op->emitOpError("APPLE_MMA_STORAGE_UNSUPPORTED: apple_gpu has no "
+                          "cooperative-matrix route for '")
+              << type
+              << "'; simdgroup_matrix accepts fp16/bf16 operands with fp32 "
+                 "accumulation, and the FP8/FP4/MX MTLTensor dtypes are "
+                 "macOS-27 SDK-gated";
+          ok = false;
+          return;
+        }
         auto policy = op->getAttrOfType<DictionaryAttr>("numeric_policy");
         auto storage =
             policy ? policy.getAs<StringAttr>("storage") : StringAttr();
@@ -201,9 +262,49 @@ struct AppleThreadgroupPipelinePass
 
   // Claim the staged producer/consumer ring as Metal ping-pong staging, and
   // require every advance to carry real SSA pipeline state.
+  // Resolve a value to the staged state it ultimately came from, following
+  // loop-carried threading.
+  //
+  // A ring carried by `scf.for` reaches its advance as a *region iter_arg*, not
+  // as the `tile.pipeline_init` result: the canonical GEMM and streaming
+  // attention both emit `tile.pipeline_advance %arg8` where `%arg8` is the K
+  // loop's block argument. Membership-testing the raw operand would report
+  // APPLE_STAGE_UNROOTED_ADVANCE for state that is legitimately threaded — and
+  // would reject the very shared contracts this pass exists to consume.
+  //
+  // So a block argument is mapped back to the matching init operand of its
+  // owning loop, following chains through nested loops.
+  static Value resolveThroughIterArgs(Value value) {
+    unsigned guard = 0;
+    while (guard++ < 16) {
+      auto arg = llvm::dyn_cast<BlockArgument>(value);
+      if (!arg)
+        return value;
+      Block *block = arg.getOwner();
+      Operation *parent = block->getParentOp();
+      if (!parent || parent->getNumRegions() == 0)
+        return value;
+      // Region-carried loops (scf.for and friends) put induction variables
+      // first, then one init operand per carried value. Line the argument up
+      // with the operand that seeded it.
+      unsigned carried = block->getNumArguments();
+      unsigned operands = parent->getNumOperands();
+      if (carried > operands)
+        return value;
+      unsigned lead = operands - carried; // lb/ub/step ahead of the iter_args
+      unsigned index = arg.getArgNumber() + lead;
+      if (index >= operands)
+        return value;
+      value = parent->getOperand(index);
+    }
+    return value;
+  }
+
   bool claimStagedPipelines(FunctionOpInterface func) {
     bool ok = true;
-    llvm::DenseSet<Value> stageStates;
+    // Value -> buffering mode of the init that roots it, so an advance reports
+    // the schedule its own ring actually has.
+    llvm::DenseMap<Value, StringAttr> stageStates;
 
     func.walk([&](Operation *op) {
       StringRef name = op->getName().getStringRef();
@@ -226,31 +327,37 @@ struct AppleThreadgroupPipelinePass
           return;
         }
         OpBuilder b(op);
+        StringAttr mode =
+            b.getStringAttr(depth.getInt() == 2 ? "ping_pong" : "single");
         op->setAttr("tessera_apple.stage_role", role);
         op->setAttr("tessera_apple.stage_depth", depth);
-        op->setAttr("tessera_apple.stage_buffering",
-                    b.getStringAttr(depth.getInt() == 2 ? "ping_pong"
-                                                        : "single"));
+        op->setAttr("tessera_apple.stage_buffering", mode);
         for (Value result : op->getResults())
-          stageStates.insert(result);
+          stageStates[result] = mode;
         return;
       }
       if (name == "tile.pipeline_advance") {
-        bool rooted = llvm::any_of(op->getOperands(), [&](Value operand) {
-          return stageStates.contains(operand);
-        });
-        if (!rooted) {
+        // Carry the rooted init's mode rather than assuming ping-pong: a
+        // depth-1 ring whose advances claimed ping_pong would hand the emitter
+        // two contradictory physical schedules for one pipeline.
+        StringAttr mode;
+        for (Value operand : op->getOperands()) {
+          auto it = stageStates.find(resolveThroughIterArgs(operand));
+          if (it != stageStates.end()) {
+            mode = it->second;
+            break;
+          }
+        }
+        if (!mode) {
           op->emitOpError("APPLE_STAGE_UNROOTED_ADVANCE: tile.pipeline_advance "
                           "has no !tile.pipeline_state operand traced to an "
                           "Apple-claimed tile.pipeline_init");
           ok = false;
           return;
         }
-        OpBuilder b(op);
-        op->setAttr("tessera_apple.stage_buffering",
-                    b.getStringAttr("ping_pong"));
+        op->setAttr("tessera_apple.stage_buffering", mode);
         for (Value result : op->getResults())
-          stageStates.insert(result);
+          stageStates[result] = mode;
       }
     });
     return ok;

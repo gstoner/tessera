@@ -193,3 +193,88 @@ def test_canonical_loop_dispatch_executes_and_matches_the_oracle(
     assert record.device_time_ns is not None and record.device_time_ns > 0
     np.testing.assert_allclose(
         out, a.astype(np.float32) @ b.astype(np.float32), rtol=1e-5, atol=1e-5)
+
+
+# ── APPLE-ATTN-STREAM-1 ──────────────────────────────────────────────────────
+#
+# The streaming-attention consumer re-forms the shared KV-block recurrence into
+# a dispatch on `tessera_apple_gpu_flash_attn_*` — the same ABI family the
+# incumbent Graph-IR-direct route already uses. So parity has two halves:
+# the compiler must carry the shared boundary semantics onto the descriptor,
+# and that ABI must compute them correctly on the device.
+
+
+def _attn_module(sq: int, sk: int, d: int, storage: str, causal: str) -> str:
+    return f"""module attributes {{tessera.ir.version = "1.0",
+    tessera.target = {{sm = 90 : i32, warps = 4 : i32, smem = 233472 : i64,
+                      pipeline_stages = 2 : i32}}}} {{
+  func.func @attn(%Q: tensor<{sq}x{d}x{storage}>, %K: tensor<{sk}x{d}x{storage}>,
+                  %V: tensor<{sk}x{d}x{storage}>) -> tensor<{sq}x{d}xf32> {{
+    %o = "tessera.flash_attn"(%Q, %K, %V)
+        <{{operandSegmentSizes = array<i32: 1, 1, 1, 0>}}> {{
+      causal = {causal}, head_dim = {d} : i64,
+      tessera.tile_q = 64 : i32, tessera.tile_kv = 64 : i32
+    }} : (tensor<{sq}x{d}x{storage}>, tensor<{sk}x{d}x{storage}>,
+          tensor<{sk}x{d}x{storage}>) -> tensor<{sq}x{d}xf32>
+    return %o : tensor<{sq}x{d}xf32>
+  }}
+}}"""
+
+
+def _lower_attn(
+    toolchain: CompilerToolchain, module: str
+) -> subprocess.CompletedProcess[str]:
+    tessera_opt = toolchain.require_tessera_opt()
+    return subprocess.run(
+        [str(tessera_opt), "-", "--allow-unregistered-dialect",
+         "--tessera-tile-ir-lowering=tile-q=64 tile-kv=64 sm=90",
+         "--tessera-apple-streaming-attention"],
+        input=module, capture_output=True, text=True, check=False, timeout=60)
+
+
+@pytest.mark.parametrize("causal", ["true", "false"])
+def test_streaming_attention_carries_the_shared_boundary_semantics(
+    compiler_toolchain: CompilerToolchain, causal: str,
+) -> None:
+    """Causal state reaches the dispatch from `boundary_mask`, not re-derived."""
+    proc = _lower_attn(compiler_toolchain, _attn_module(64, 130, 64, "bf16", causal))
+    assert proc.returncode == 0, proc.stderr
+    descriptor = _descriptor(proc.stdout)
+    assert descriptor["op_kind"] == "flash_attn"
+    assert descriptor["tessera_apple.streaming_recurrence"] == "true"
+    assert descriptor["tessera_apple.causal"] == causal
+    # The logical KV length survives the ragged zero-fill the shared lowering
+    # inserts (130 padded to 192), so masking cannot read the padding.
+    assert descriptor["tessera_apple.logical_sk"] == "130"
+    assert descriptor["tessera_apple.head_dim"] == "64"
+    # The recurrence and its depth-3 staging are gone.
+    assert "scf.for" not in proc.stdout
+    assert "tile.pipeline_init" not in proc.stdout
+
+
+@pytest.mark.hardware_apple_gpu
+def test_streaming_attention_target_abi_matches_the_oracle_on_metal() -> None:
+    """The ABI the re-formed dispatch targets computes attention correctly.
+
+    This proves the second half of parity: the compiler-selected symbol family
+    is numerically right on this device. The first half — that the descriptor
+    carries the shared boundary semantics — is the host-free test above.
+    """
+    import numpy as np
+    import tessera as ts
+    from tests._support.apple import require_apple_metal
+
+    require_apple_metal()
+
+    @ts.jit(target="apple_gpu")
+    def attention(q, k, v):
+        return ts.ops.flash_attn(q, k, v)
+
+    rng = np.random.default_rng(19)
+    q = rng.standard_normal((1, 2, 8, 16), dtype=np.float32)
+    k = rng.standard_normal((1, 2, 12, 16), dtype=np.float32)
+    v = rng.standard_normal((1, 2, 12, 16), dtype=np.float32)
+    scores = np.matmul(q, np.swapaxes(k, -1, -2)) / np.sqrt(16.0)
+    exp = np.exp(scores - scores.max(axis=-1, keepdims=True))
+    expected = np.matmul(exp / exp.sum(axis=-1, keepdims=True), v)
+    np.testing.assert_allclose(attention(q, k, v), expected, rtol=1e-4, atol=1e-4)

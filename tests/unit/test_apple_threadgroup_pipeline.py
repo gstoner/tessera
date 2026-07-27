@@ -230,6 +230,98 @@ def test_capability_gate_covers_llvm_func_bodies(
     assert "APPLE_MMA_STORAGE_UNSUPPORTED" in proc.stderr
 
 
+def test_loop_carried_pipeline_state_is_rooted_through_iter_args(
+    compiler_toolchain: CompilerToolchain,
+) -> None:
+    """A ring threaded by scf.for must not be called unrooted (PR #467 review).
+
+    The canonical GEMM emits `tile.pipeline_advance %arg8` where `%arg8` is the
+    K loop's region iter_arg, not the `pipeline_init` result. Membership-testing
+    the raw operand reported APPLE_STAGE_UNROOTED_ADVANCE and rejected the very
+    shared contract this pass exists to consume.
+    """
+    tessera_opt = compiler_toolchain.require_tessera_opt()
+    gemm = """module {
+  func.func @gemm(%a: tensor<64x32xf16>, %b: tensor<32x48xf16>) -> tensor<64x48xf32> {
+    %0 = "tessera.matmul"(%a, %b)
+        : (tensor<64x32xf16>, tensor<32x48xf16>) -> tensor<64x48xf32>
+    return %0 : tensor<64x48xf32>
+  }
+}"""
+    proc = subprocess.run(
+        [str(tessera_opt), "-", "--tessera-tiling",
+         "--tessera-apple-threadgroup-pipeline", "--allow-unregistered-dialect"],
+        input=gemm, capture_output=True, text=True, check=False, timeout=60)
+    assert proc.returncode == 0, proc.stderr
+    assert "APPLE_STAGE_UNROOTED_ADVANCE" not in proc.stderr
+    # The advance reports its rooted ring's mode, not a default.
+    assert 'tile.pipeline_advance' in proc.stdout
+    assert 'tessera_apple.stage_buffering = "ping_pong"' in proc.stdout
+
+
+def test_advance_carries_the_rooted_rings_buffering_mode(
+    compiler_toolchain: CompilerToolchain,
+) -> None:
+    """A depth-1 ring's advances say `single`, not an assumed `ping_pong`.
+
+    Stamping every advance ping_pong hands the emitter two contradictory
+    physical schedules for one pipeline (PR #467 review).
+    """
+    proc = _place(
+        compiler_toolchain,
+        'module {\n func.func @ring() {\n'
+        '  %s = tile.pipeline_init {depth = 1 : i64, stage = 0 : i64, '
+        'phase = 1 : i64, role = "producer"} : !tile.pipeline_state\n'
+        '  %t = tile.pipeline_advance %s '
+        ': (!tile.pipeline_state) -> !tile.pipeline_state\n'
+        "  return\n }\n}")
+    assert proc.returncode == 0, proc.stderr
+    advance = [ln for ln in proc.stdout.splitlines() if "pipeline_advance" in ln]
+    assert advance and 'tessera_apple.stage_buffering = "single"' in advance[0]
+
+
+def _mma_descriptor_module(a: str, acc: str, policy: str | None) -> str:
+    policy_attr = f'numeric_policy = {{storage = "{policy}", accum = "fp32"}}, ' if policy else ""
+    out = "f32" if acc in {"f32", "fp32"} else "i32"
+    return f"""module {{
+ llvm.func @m(%a: !llvm.ptr, %b: !llvm.ptr, %d: !llvm.ptr,
+              %m: i64, %n: i64, %k: i64) {{
+  tile.matmul_kernel %a, %b, %d, %m, %n, %k {{
+    {policy_attr}mma = #tile.mma_desc<family = "mma_sync", m = 16, n = 8, k = 32,
+      a = "{a}", b = "{a}", acc = "{acc}",
+      a_layout = "row_major", b_layout = "col_major", k_blocks = 1>,
+    epilogue = #tile.epilogue<bias = false, activation = "none", output = "{out}">,
+    warps = 1 : i64, staging = "global"
+  }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64
+  llvm.return
+ }}
+}}"""
+
+
+@pytest.mark.parametrize("policy", [None, "fp16"])
+def test_mma_descriptor_is_authoritative_over_numeric_policy(
+    compiler_toolchain: CompilerToolchain, policy: str | None,
+) -> None:
+    """An unrouted descriptor cannot pass by omitting or misstating its policy.
+
+    Only `mma` is required by the op verifier, so an int4 descriptor with no
+    numeric_policy — or with a laundering fp16 one — previously slipped through
+    the Apple capability gate (PR #467 review).
+    """
+    proc = _place(compiler_toolchain, _mma_descriptor_module("int4", "int32", policy))
+    assert proc.returncode != 0, "an int4 cooperative-matrix claim must be refused"
+    assert "APPLE_MMA_STORAGE_UNSUPPORTED" in proc.stderr
+
+
+def test_mma_descriptor_gate_admits_the_real_simdgroup_contract(
+    compiler_toolchain: CompilerToolchain,
+) -> None:
+    """fp16 operands with fp32 accumulation are exactly the Apple route."""
+    proc = _place(compiler_toolchain, _mma_descriptor_module("f16", "f32", "fp16"))
+    assert proc.returncode == 0, proc.stderr
+    assert "APPLE_MMA_STORAGE_UNSUPPORTED" not in proc.stderr
+
+
 def test_single_buffered_emitter_maps_to_depth_one(
     compiler_toolchain: CompilerToolchain,
 ) -> None:

@@ -646,6 +646,23 @@ own regeneration instruction now names `generated_docs` (which writes both the
 `.md` and the `.csv`) instead of a `python -c` snippet that left the CSV stale,
 and `write_dashboard` pins UTF-8 for its ✅/◐/◯ glyphs.
 
+**Test architecture — build-capability selection.** A full local sweep surfaced
+**249 pre-existing failures** that say nothing about the code under test: 52 test
+files resolve `build/tools/tessera-opt/tessera-opt` themselves and skip only when
+the binary is *missing*. When it exists but was configured without the backend
+under test — `TESSERA_BUILD_ROCM_BACKEND=OFF`, the default on this Mac — they
+fail with `Unknown command line argument '--generate-rocm-…'`, which reads as a
+broken test rather than a build-selection problem. (Confirmed pre-existing: that
+`build/` tree is configured ROCm/NVIDIA `OFF`, registers zero `generate-rocm`
+passes, and its binary predates this work.)
+
+`tests/_support/compiler_tool.py` is now the shared capability-aware resolver —
+it honours `TESSERA_OPT`, reads the binary's registered passes once, and skips
+naming both the missing pass and the build profile. Nine files with an identical
+helper body are migrated (32 failures → 0). The remaining ~43 have variant
+bodies and need individual attention; tracked separately. `CompilerToolchain`
+should ultimately delegate to this module so the tree has one resolver.
+
 **Test architecture.** `CompilerToolchain.require_tessera_opt()` now takes the
 pass names a test drives and skips with the binary's build profile when they are
 absent. Previously a test needing an Apple pass picked up whichever binary was

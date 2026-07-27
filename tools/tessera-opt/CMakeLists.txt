@@ -44,21 +44,47 @@ if(APPLE)
     "LINKER:-no_warn_duplicate_libraries")
 endif()
 
-# Link core Tessera IR + passes (the `tessera` dialect, `tessera-to-linalg`, the
-# Phase-1 folders/canonicalizers, and the `--tessera-emit-{nvvm,rocdl}` MLIR-graph
-# route) UNLESS this is a hardware-free *target-artifact* build — a backend built
-# with no real toolchain present, kept lean to avoid pulling every upstream MLIR
-# component into the artifact driver. A backend built against a real toolchain
-# (CUDA or HIP) IS a full build and gets the core dialect + the emit route.
+# ---------------------------------------------------------------------------
+# Feature ledger.
 #
-# The CUDA carve-out (`AND NOT TESSERA_ENABLE_CUDA`) already gave real NVIDIA
-# builds the full route; HIP was simply missing the symmetric carve-out, which
-# silently stripped the `tessera` dialect + `tessera-to-linalg` from tessera-opt
-# on a real ROCm box and left `--tessera-emit-rocdl` unable to parse a tessera
-# kernel (so the ROCDL emitter rode the direct rocdl_emit.py LLVM-IR path).
-if(NOT ((TESSERA_BUILD_ROCM_BACKEND AND NOT TESSERA_ENABLE_CUDA AND NOT TESSERA_ENABLE_HIP) OR
-        (TESSERA_BUILD_NVIDIA_BACKEND AND NOT TESSERA_ENABLE_CUDA)))
-  target_compile_definitions(tessera-opt PRIVATE TESSERA_HAVE_CORE_TESSERA_IR)
+# Every optional capability compiled into tessera-opt registers itself here, so
+# that (a) the leanness contract below can be validated instead of assumed, and
+# (b) the binary can report what it is at runtime (`--tessera-build-info`).
+# Record a feature with `tessera_opt_feature(<label> <TESSERA_HAVE_MACRO>)`
+# rather than calling target_compile_definitions directly — a feature that is
+# defined but not recorded is invisible to both of those.
+# ---------------------------------------------------------------------------
+set(TESSERA_OPT_FEATURES "")
+function(tessera_opt_feature label macro)
+  target_compile_definitions(tessera-opt PRIVATE ${macro})
+  set(TESSERA_OPT_FEATURES "${TESSERA_OPT_FEATURES};${label}" PARENT_SCOPE)
+endfunction()
+
+# ---------------------------------------------------------------------------
+# Leanness contract.
+#
+# A hardware-free *target-artifact* build — a NVIDIA/ROCm backend configured
+# with no real toolchain present — deliberately stays lean, registering only
+# what the target contract spine needs instead of pulling in every upstream
+# MLIR component. A backend built against a real toolchain (CUDA or HIP) IS a
+# full build and gets the core dialect plus the `--tessera-emit-*` route.
+#
+# This is an intent about the *driver*, so it is named once, here, as
+# TESSERA_OPT_LEAN_ARTIFACT_DRIVER. It used to be re-derived inside
+# tessera-opt.cpp from `(ROCM || NVIDIA) && !CORE_TESSERA_IR`, which made the
+# lean path swallow every unrelated feature: configuring NVIDIA (no CUDA)
+# together with the Apple backend left TesseraApple linked and
+# TESSERA_HAVE_APPLE_BACKEND defined while its registration block — living in
+# the non-lean arm — was compiled out, with no diagnostic. Same for Solvers,
+# Neighbors, TPP, scaling-resilience, and both FA-4 dialects. The validation at
+# the bottom of this file now makes that combination a configure error.
+if((TESSERA_BUILD_ROCM_BACKEND AND NOT TESSERA_ENABLE_CUDA AND NOT TESSERA_ENABLE_HIP) OR
+   (TESSERA_BUILD_NVIDIA_BACKEND AND NOT TESSERA_ENABLE_CUDA))
+  set(TESSERA_OPT_LEAN_ARTIFACT_DRIVER ON)
+  target_compile_definitions(tessera-opt PRIVATE TESSERA_OPT_LEAN_ARTIFACT_DRIVER)
+else()
+  set(TESSERA_OPT_LEAN_ARTIFACT_DRIVER OFF)
+  tessera_opt_feature(core-tessera-ir TESSERA_HAVE_CORE_TESSERA_IR)
   target_link_libraries(tessera-opt PRIVATE
     TesseraIR
     TesseraPasses
@@ -70,7 +96,7 @@ endif()
 # recognized at parse time.  The library is exported by
 # src/compiler/tile_opt_fa4/CMakeLists.txt as TesseraAttnDialect.
 if(TARGET TesseraAttnDialect)
-  target_compile_definitions(tessera-opt PRIVATE TESSERA_HAVE_FA4_ATTN)
+  tessera_opt_feature(fa4-attn TESSERA_HAVE_FA4_ATTN)
   target_include_directories(tessera-opt PRIVATE
     ${CMAKE_SOURCE_DIR}/src/compiler/tile_opt_fa4/include
     ${CMAKE_BINARY_DIR}/src/compiler/tile_opt_fa4
@@ -83,7 +109,7 @@ endif()
 # `!tessera.queue.tile_queue` / `!tessera.queue.token` types are
 # recognized at parse time.  Mirrors the V7 Attn pattern above.
 if(TARGET TesseraQueueDialect)
-  target_compile_definitions(tessera-opt PRIVATE TESSERA_HAVE_FA4_QUEUE)
+  tessera_opt_feature(fa4-queue TESSERA_HAVE_FA4_QUEUE)
   target_include_directories(tessera-opt PRIVATE
     ${CMAKE_SOURCE_DIR}/src/compiler/tile_opt_fa4/include
     ${CMAKE_BINARY_DIR}/src/compiler/tile_opt_fa4
@@ -92,7 +118,7 @@ if(TARGET TesseraQueueDialect)
 endif()
 
 if(TARGET tessera_solvers_passes AND TARGET tessera_linalg_solver_passes)
-  target_compile_definitions(tessera-opt PRIVATE TESSERA_HAVE_SOLVERS)
+  tessera_opt_feature(solvers TESSERA_HAVE_SOLVERS)
   target_include_directories(tessera-opt PRIVATE
     ${CMAKE_SOURCE_DIR}/src/solvers/core/passes
     ${CMAKE_SOURCE_DIR}/src/solvers/linalg/include
@@ -105,7 +131,7 @@ if(TARGET tessera_solvers_passes AND TARGET tessera_linalg_solver_passes)
 endif()
 
 if(TARGET TesseraSR)
-  target_compile_definitions(tessera-opt PRIVATE TESSERA_HAVE_SCALING_RESILIENCE)
+  tessera_opt_feature(scaling-resilience TESSERA_HAVE_SCALING_RESILIENCE)
   target_include_directories(tessera-opt PRIVATE
     ${CMAKE_SOURCE_DIR}/src/solvers/scaling_resilience/include
   )
@@ -113,7 +139,7 @@ if(TARGET TesseraSR)
 endif()
 
 if(TARGET TesseraNeighbors)
-  target_compile_definitions(tessera-opt PRIVATE TESSERA_HAVE_NEIGHBORS)
+  tessera_opt_feature(neighbors TESSERA_HAVE_NEIGHBORS)
   target_include_directories(tessera-opt PRIVATE
     ${CMAKE_SOURCE_DIR}/src/compiler/tessera_neighbors/include
   )
@@ -122,7 +148,7 @@ endif()
 
 # TPP solver dialect + passes + `-tpp-space-time` alias.
 if(TARGET TesseraTPPInit)
-  target_compile_definitions(tessera-opt PRIVATE TESSERA_HAVE_TPP)
+  tessera_opt_feature(tpp TESSERA_HAVE_TPP)
   target_include_directories(tessera-opt PRIVATE
     ${CMAKE_SOURCE_DIR}/src/solvers/tpp/include
     ${CMAKE_BINARY_DIR}/src/solvers/tpp/include/tpp/Dialect/TPP
@@ -137,13 +163,13 @@ endif()
 # Phase 8: Apple Silicon backend (TESSERA_BUILD_APPLE_BACKEND).
 # Only linked when the backend subdirectory has been added by src/CMakeLists.txt.
 if(TARGET TesseraApple)
-  target_compile_definitions(tessera-opt PRIVATE TESSERA_HAVE_APPLE_BACKEND)
+  tessera_opt_feature(apple-backend TESSERA_HAVE_APPLE_BACKEND)
   target_link_libraries(tessera-opt PRIVATE TesseraApple)
 endif()
 
 # ROCm backend: hardware-free Target IR / ROCDL artifact pipeline.
 if(TARGET TesseraROCMConversion)
-  target_compile_definitions(tessera-opt PRIVATE TESSERA_HAVE_ROCM_BACKEND)
+  tessera_opt_feature(rocm-backend TESSERA_HAVE_ROCM_BACKEND)
   target_include_directories(tessera-opt PRIVATE
     ${CMAKE_SOURCE_DIR}/src/compiler/codegen/Tessera_ROCM_Backend/include
     ${CMAKE_BINARY_DIR}/src/compiler/codegen/Tessera_ROCM_Backend/lib/IR
@@ -179,7 +205,7 @@ endif()
 
 # NVIDIA backend: hardware-free Hopper/Blackwell Target IR / NVVM artifact pipeline.
 if(TARGET TesseraNVIDIAConversion)
-  target_compile_definitions(tessera-opt PRIVATE TESSERA_HAVE_NVIDIA_BACKEND)
+  tessera_opt_feature(nvidia-backend TESSERA_HAVE_NVIDIA_BACKEND)
   target_include_directories(tessera-opt PRIVATE
     ${CMAKE_SOURCE_DIR}/src/compiler/codegen/tessera_gpu_backend_NVIDIA/include
     ${CMAKE_BINARY_DIR}/src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/IR
@@ -190,3 +216,56 @@ if(TARGET TesseraNVIDIAConversion)
     MLIRNVVMDialect
   )
 endif()
+
+# ---------------------------------------------------------------------------
+# Validate the leanness contract, and stamp the build identity.
+#
+# The lean artifact driver registers only the NVIDIA/ROCm target-contract
+# spine. Any *other* feature that got linked in would have its registration
+# silently compiled out, producing a binary that claims a capability it does
+# not have. That must be a configure error, not a runtime surprise.
+# ---------------------------------------------------------------------------
+set(_tessera_opt_lean_permitted core-tessera-ir nvidia-backend rocm-backend)
+set(_tessera_opt_conflicts "")
+if(TESSERA_OPT_LEAN_ARTIFACT_DRIVER)
+  foreach(_feature IN LISTS TESSERA_OPT_FEATURES)
+    if(_feature AND NOT _feature IN_LIST _tessera_opt_lean_permitted)
+      list(APPEND _tessera_opt_conflicts ${_feature})
+    endif()
+  endforeach()
+endif()
+if(_tessera_opt_conflicts)
+  string(REPLACE ";" ", " _tessera_opt_conflict_text "${_tessera_opt_conflicts}")
+  message(FATAL_ERROR
+    "tessera-opt is configured as a lean hardware-free artifact driver "
+    "(TESSERA_OPT_LEAN_ARTIFACT_DRIVER), which registers only the NVIDIA/ROCm "
+    "target-contract spine — but these features are also linked in and would "
+    "be silently unregistered: ${_tessera_opt_conflict_text}.\n"
+    "Pick one:\n"
+    "  * full driver — enable the matching real toolchain "
+    "(-DTESSERA_ENABLE_CUDA=ON or -DTESSERA_ENABLE_HIP=ON), or configure "
+    "without -DTESSERA_BUILD_{NVIDIA,ROCM}_BACKEND=ON;\n"
+    "  * lean driver — drop the extra backends/dialects from this build "
+    "(for example -DTESSERA_BUILD_APPLE_BACKEND=OFF).\n"
+    "Building both in one tessera-opt is not supported: the lean registration "
+    "path has no arm for them.")
+endif()
+
+# Runtime build identity. Without this the only way to tell two tessera-opt
+# binaries apart is to diff `--help`, which is how a stale build directory can
+# masquerade as a current one.
+list(REMOVE_ITEM TESSERA_OPT_FEATURES "")
+list(SORT TESSERA_OPT_FEATURES)
+string(REPLACE ";" " " _tessera_opt_feature_text "${TESSERA_OPT_FEATURES}")
+if(NOT _tessera_opt_feature_text)
+  set(_tessera_opt_feature_text "none")
+endif()
+if(TESSERA_OPT_LEAN_ARTIFACT_DRIVER)
+  set(_tessera_opt_profile "lean-artifact-driver")
+else()
+  set(_tessera_opt_profile "full")
+endif()
+target_compile_definitions(tessera-opt PRIVATE
+  TESSERA_OPT_BUILD_PROFILE="${_tessera_opt_profile}"
+  TESSERA_OPT_BUILD_FEATURES="${_tessera_opt_feature_text}"
+)

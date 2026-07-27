@@ -1,0 +1,152 @@
+{
+  "device": {
+    "cpu_brand": "Apple M1 Max",
+    "model": "MacBookPro18,2",
+    "os": "26.5.2"
+  },
+  "lane": "apple_gpu",
+  "metal": {
+    "capability_matrix": 99,
+    "device_event_available": false,
+    "device_event_reason": "the Metal command-buffer device timer works for MSL-dispatched ops once tessera_apple_gpu_dispatch_telemetry_set_enabled(1) is set (softmax reports a real device_time_ns and timing_source=1), but the matmul route runs through MPSGraph, which populates neither the device timer nor the MSL dispatch record. required_timing_domains is report-wide and every family must supply both domains, so this packet uses kernel_wall. Closing APPLE-DEVICE-EVENT-1 means giving the MPSGraph route a device timer, not fixing the descriptor lane.",
+    "evidence": {
+      "achieved_occupancy": {
+        "state": "no_public_api",
+        "value": null
+      },
+      "cold_compile": {
+        "state": "measured",
+        "value": false
+      },
+      "counter_timestamp_delta": {
+        "state": "unsupported_by_device",
+        "value": null
+      },
+      "device_time_ns": {
+        "state": "not_measured",
+        "value": null
+      },
+      "execution_width": {
+        "state": "not_measured",
+        "value": null
+      },
+      "max_threads_per_threadgroup": {
+        "state": "not_measured",
+        "value": null
+      },
+      "pipeline_cache_size": {
+        "state": "measured",
+        "value": 1
+      },
+      "register_count": {
+        "state": "no_public_api",
+        "value": null
+      },
+      "scratch_bytes": {
+        "state": "no_public_api",
+        "value": null
+      },
+      "source_fingerprint": {
+        "state": "measured",
+        "value": "sha256:bb0b55f0de4c96a7af8a0a0d7410f17150469c199788b5d723dd406d18cbb352"
+      },
+      "spill_count": {
+        "state": "no_public_api",
+        "value": null
+      },
+      "static_threadgroup_memory_bytes": {
+        "state": "not_measured",
+        "value": null
+      }
+    }
+  },
+  "rows": [
+    {
+      "entry": "tessera_apple_gpu_bmm_f32",
+      "family": "matmul",
+      "fixture_operand_shapes": [
+        [
+          1,
+          2,
+          3
+        ],
+        [
+          1,
+          3,
+          2
+        ]
+      ],
+      "image_digest": "713794441fb189a449fe8f5de0e7ef7dbe8960b21de757f7a7a05b3b499c34a7",
+      "placement": {
+        "fixture": {
+          "gpu_placement_proven": true,
+          "msl_dispatch_record": false,
+          "status_symbol": "tessera_apple_gpu_bmm_f32_status"
+        },
+        "timing": {
+          "gpu_placement_proven": true,
+          "msl_dispatch_record": false,
+          "status_symbol": "tessera_apple_gpu_bmm_f32_status"
+        }
+      },
+      "resource_fingerprint": "83578c48a39670c0537cbf0a3b0a17dc088070094a50bdfea18e63b9020a3437",
+      "route": "apple_gpu_bmm_f32_batch1",
+      "timing_shape": [
+        1,
+        256,
+        256,
+        256
+      ]
+    },
+    {
+      "entry": "tessera_apple_gpu_softmax_f32",
+      "family": "softmax",
+      "fixture_operand_shapes": [
+        [
+          2,
+          2
+        ]
+      ],
+      "image_digest": "ea533d82893bf18b7eefd6a66c8db62f3d749abdcbcd0355062a3f3642398b03",
+      "placement": {
+        "fixture": {
+          "execution_width": 32,
+          "gpu_placement_proven": true,
+          "max_threads_per_threadgroup": 1024,
+          "msl_dispatch_record": true,
+          "static_threadgroup_memory_bytes": 0,
+          "status_symbol": "tessera_apple_gpu_softmax_f32_status",
+          "threadgroups": [
+            2,
+            1,
+            1
+          ]
+        },
+        "timing": {
+          "execution_width": 32,
+          "gpu_placement_proven": true,
+          "max_threads_per_threadgroup": 1024,
+          "msl_dispatch_record": true,
+          "static_threadgroup_memory_bytes": 0,
+          "status_symbol": "tessera_apple_gpu_softmax_f32_status",
+          "threadgroups": [
+            64,
+            1,
+            1
+          ]
+        }
+      },
+      "resource_fingerprint": "755b9c8eb0c089fb8ca3b442037f17f313e94f244b8329c707fd764c23e4456f",
+      "route": "apple_gpu_msl_softmax_f32",
+      "timing_shape": [
+        64,
+        256
+      ]
+    }
+  ],
+  "schema": "tessera.e2e-apple-resource-record.v1",
+  "timing_domains": {
+    "end_to_end": "tessera.runtime.launch, including all of the above",
+    "kernel_wall": "descriptor-consuming native submit; argument splitting, contract validation, launcher resolution, and result packaging are hoisted out of the timed region"
+  }
+}

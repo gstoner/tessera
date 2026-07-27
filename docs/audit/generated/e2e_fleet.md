@@ -6,13 +6,13 @@
 
 | Target | Architecture | Backend | Family | State | Tested commit | Packet |
 |---|---|---|---|---|---|---|
-| `apple_gpu` | `apple7` | `apple` | `matmul` | `packet_pending` | - | - |
-| `apple_gpu` | `apple7` | `apple` | `softmax` | `packet_pending` | - | - |
+| `apple_gpu` | `apple7` | `apple` | `matmul` | `release_ready` | `88911c75e588` | `docs/audit/evidence/e2e_spine/apple_gpu/apple7` |
+| `apple_gpu` | `apple7` | `apple` | `softmax` | `release_ready` | `88911c75e588` | `docs/audit/evidence/e2e_spine/apple_gpu/apple7` |
 | `apple_gpu` | `apple7` | `apple` | `linalg` | `packet_pending` | - | - |
 | `apple_gpu` | `apple7` | `apple` | `ppo` | `packet_pending` | - | - |
 | `apple_gpu` | `apple7` | `apple` | `ebm` | `packet_pending` | - | - |
 | `apple_gpu` | `apple7` | `apple` | `clifford` | `packet_pending` | - | - |
-| `apple_cpu` | `apple_m1_max` | `apple` | `matmul` | `packet_pending` | - | - |
+| `apple_cpu` | `apple_m1_max` | `apple` | `matmul` | `release_ready` | `88911c75e588` | `docs/audit/evidence/e2e_spine/apple_cpu/apple_m1_max` |
 | `apple_cpu` | `apple_m1_max` | `apple` | `linalg` | `packet_pending` | - | - |
 | `x86` | `x86_64_base` | `x86` | `softmax` | `release_ready` | `9f3757ef2dda` | `docs/audit/evidence/e2e_spine/x86/x86_64_base` |
 | `x86` | `x86_64_base` | `x86` | `reduction` | `release_ready` | `9f3757ef2dda` | `docs/audit/evidence/e2e_spine/x86/x86_64_base` |

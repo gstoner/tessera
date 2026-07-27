@@ -97,10 +97,28 @@ class CompilerToolchain:
             ),
         )
 
-    def require_tessera_opt(self) -> Path:
+    def require_tessera_opt(self, *passes: str) -> Path:
+        """Return tessera-opt, skipping unless it registers every named pass.
+
+        Delegates the capability check to `tests._support.compiler_tool`, which
+        is the single resolver for the tree — the tool's registered pass set
+        depends on how it was configured, and duplicating that knowledge is how
+        two call sites end up disagreeing about what a binary can do.
+        """
+        from tests._support import compiler_tool
+
         if self.tessera_opt is None:
             pytest.skip(
                 "compiler-tool test requires tessera-opt; build it or set TESSERA_OPT"
+            )
+        missing = [name for name in passes
+                   if name not in compiler_tool.registered_passes(self.tessera_opt)]
+        if missing:
+            pytest.skip(
+                f"{self.tessera_opt} does not register {', '.join(missing)} "
+                f"(build profile: {compiler_tool.build_profile(self.tessera_opt)}). "
+                "Point TESSERA_OPT at a build configured with the owning "
+                "backend, or rebuild this one."
             )
         return self.tessera_opt
 

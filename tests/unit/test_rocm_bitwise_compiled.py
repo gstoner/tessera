@@ -15,6 +15,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from tests._support.compiler_tool import run_tessera_opt
+
 
 def _bitwise_or_skip():
     from tessera import runtime as rt
@@ -95,10 +97,8 @@ _KINDS = ["and", "or", "xor", "not"]
 
 
 def _opt(directive, *passes):
-    if not _OPT.is_file():
-        pytest.skip("build tessera-opt: ninja -C build tessera-opt")
-    return subprocess.run([str(_OPT), "-", *passes], input=directive,
-                          capture_output=True, text=True)
+    """Skips when this build lacks a requested pass (see _support.compiler_tool)."""
+    return run_tessera_opt(directive, *passes)
 
 
 @pytest.mark.parametrize("kind", _KINDS)

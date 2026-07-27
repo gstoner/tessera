@@ -31,7 +31,8 @@
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
 #include "mlir/Transforms/Passes.h"  // canonicalize / cse (per-op folders)
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Support/ErrorHandling.h"  // report_fatal_error (tessera-emit-nvvm)
+#include "llvm/Support/raw_ostream.h"  // --tessera-build-info
+#include <string>
 
 #ifdef TESSERA_HAVE_CORE_TESSERA_IR
 #include "Tessera/IR/Dialects.h"
@@ -161,37 +162,15 @@ public:
         failed = true;
         return;
       }
-      if (!isAllowedValueTileOp(name)) {
+      if (!tessera::apple::isValueLaneTileOp(name)) {
         op->emitError("apple value Tile IR op '")
-            << name
-            << "' is outside the value allowlist (linalg family, "
-               "rank-2 matmul/gemm, rank-3 batched_gemm, PPO policy loss, "
-               "EBM value kernels, GA/Clifford value seam)";
+            << name << "' is outside the value allowlist ("
+            << tessera::apple::valueLaneTileOpEnvelopeDescription() << ")";
         failed = true;
       }
     });
     if (failed)
       signalPassFailure();
-  }
-
-private:
-  static bool isAllowedValueTileOp(llvm::StringRef name) {
-    return name == "tile.matmul" || name == "tile.gemm" ||
-           name == "tile.batched_gemm" || name == "tile.ppo_policy_loss" ||
-           name == "tile.ebm_energy_quadratic" ||
-           name == "tile.ebm_langevin_step" ||
-           name == "tile.ebm_refinement" ||
-           name == "tile.ebm_partition_exact" ||
-           name == "tile.clifford_geometric_product" ||
-           name == "tile.clifford_outer_product" ||
-           name == "tile.clifford_inner_product" ||
-           name == "tile.clifford_reverse" ||
-           name == "tile.clifford_grade_project" ||
-           name == "tile.clifford_norm" ||
-           name == "tile.clifford_rotor_sandwich" ||
-           name == "tile.cholesky" ||
-           name == "tile.tri_solve" || name == "tile.cholesky_solve" ||
-           name == "tile.lu" || name == "tile.qr" || name == "tile.svd";
   }
 };
 
@@ -246,46 +225,113 @@ mlir::PassPipelineRegistration<> gAppleGPUFullPipeline(
 } // namespace
 #endif
 
-// Phase 4 GPU emission (2026-06-17): convenience alias for the linalg→gpu→NVVM
-// emission spine — tessera kernel → linalg → scf.parallel → gpu.launch → NVVM IR
-// text. EMISSION ONLY: the NVVM kernel is produced for inspection/codegen; GPU
-// launch (cuLaunchKernel/hipLaunchKernel) stays hardware-gated. Composed via
-// parsePassPipeline so it reuses the upstream passes registered in main().
-static mlir::PassPipelineRegistration<> gEmitNVVM(
-    "tessera-emit-nvvm",
-    "Phase 4 GPU emission: lower a tessera kernel through linalg -> scf.parallel "
-    "-> gpu -> NVVM (emission only; GPU launch is hardware-gated).",
-    [](mlir::OpPassManager &pm) {
-      if (failed(mlir::parsePassPipeline(
-              "func.func(tessera-to-linalg),empty-tensor-to-alloc-tensor,"
-              "one-shot-bufferize{bufferize-function-boundaries=true},"
-              "func.func(convert-linalg-to-parallel-loops),"
-              "func.func(gpu-map-parallel-loops),"
-              "func.func(convert-parallel-loops-to-gpu),gpu-kernel-outlining,"
-              "gpu.module(lower-affine,convert-gpu-to-nvvm)",
-              pm)))
-        llvm::report_fatal_error("tessera-emit-nvvm: failed to build pipeline");
-    });
+// Phase 4 GPU emission (2026-06-17): convenience aliases for the linalg→gpu→
+// {NVVM,ROCDL} emission spine — tessera kernel → linalg → scf.parallel →
+// gpu.launch → target IR text. EMISSION ONLY: the kernel is produced for
+// inspection/codegen; GPU launch (cuLaunchKernel/hipLaunchKernel) stays
+// hardware-gated. Composed via parsePassPipeline so it reuses the upstream
+// passes registered in main().
+//
+// The two lanes are the same eight stages and differ only in the final
+// gpu-to-<target> conversion, so the spine is written once. Divergence between
+// them used to be a copy-paste edit away.
+namespace {
+constexpr llvm::StringLiteral kEmitSpinePrefix =
+    "func.func(tessera-to-linalg),empty-tensor-to-alloc-tensor,"
+    "one-shot-bufferize{bufferize-function-boundaries=true},"
+    "func.func(convert-linalg-to-parallel-loops),"
+    "func.func(gpu-map-parallel-loops),"
+    "func.func(convert-parallel-loops-to-gpu),gpu-kernel-outlining,"
+    "gpu.module(lower-affine,";
 
-// ROCDL twin of tessera-emit-nvvm — identical spine, AMD GPU backend
-// (convert-gpu-to-rocdl). Emission only; HIP launch is hardware-gated.
-static mlir::PassPipelineRegistration<> gEmitROCDL(
-    "tessera-emit-rocdl",
-    "Phase 4 GPU emission: lower a tessera kernel through linalg -> scf.parallel "
-    "-> gpu -> ROCDL (emission only; GPU launch is hardware-gated).",
-    [](mlir::OpPassManager &pm) {
-      if (failed(mlir::parsePassPipeline(
-              "func.func(tessera-to-linalg),empty-tensor-to-alloc-tensor,"
-              "one-shot-bufferize{bufferize-function-boundaries=true},"
-              "func.func(convert-linalg-to-parallel-loops),"
-              "func.func(gpu-map-parallel-loops),"
-              "func.func(convert-parallel-loops-to-gpu),gpu-kernel-outlining,"
-              "gpu.module(lower-affine,convert-gpu-to-rocdl)",
-              pm)))
-        llvm::report_fatal_error("tessera-emit-rocdl: failed to build pipeline");
-    });
+// Register the two emission aliases.
+//
+// Uses `registerPassPipeline` rather than the `PassPipelineRegistration<>`
+// convenience wrapper because that wrapper's builder returns `void`: a failed
+// `parsePassPipeline` would leave the pass manager empty and the driver would
+// run a silent no-op pipeline, reporting success for a translation it never
+// performed (Decision #21). The registry's error handler turns the same failure
+// into a real driver diagnostic naming the alias.
+//
+// Only registered when the core Tessera IR is linked in — the spine opens with
+// `tessera-to-linalg`, so advertising these aliases in a lean artifact driver
+// would offer a pipeline that cannot be built.
+// Builder for one emission alias. Shared, so the eight-stage spine cannot
+// drift between the NVVM and ROCDL lanes; the `registerPassPipeline` calls
+// below stay separate and literal so a source-scanning drift gate
+// (tests/unit/test_pipeline_registry.py) can still see both names.
+mlir::PassRegistryFunction emitPipelineBuilder(llvm::StringRef gpuConversionPass) {
+  return [pass = gpuConversionPass.str()](
+             mlir::OpPassManager &pm, llvm::StringRef options,
+             llvm::function_ref<mlir::LogicalResult(const llvm::Twine &)>
+                 errorHandler) {
+    if (!options.empty())
+      return errorHandler("this pipeline takes no options");
+    std::string pipeline = (kEmitSpinePrefix + pass + ")").str();
+    if (failed(mlir::parsePassPipeline(pipeline, pm)))
+      return errorHandler(
+          "failed to build '" + pipeline +
+          "'; the required upstream passes are not registered in this "
+          "tessera-opt build (see --tessera-build-info)");
+    return mlir::success();
+  };
+}
+
+void noEmitPipelineOptions(
+    llvm::function_ref<void(const mlir::detail::PassOptions &)>) {}
+
+void registerEmitPipelines() {
+  mlir::registerPassPipeline(
+      "tessera-emit-nvvm",
+      "Phase 4 GPU emission: lower a tessera kernel through linalg -> "
+      "scf.parallel -> gpu -> NVVM (emission only; GPU launch is "
+      "hardware-gated).",
+      emitPipelineBuilder("convert-gpu-to-nvvm"), noEmitPipelineOptions);
+  mlir::registerPassPipeline(
+      "tessera-emit-rocdl",
+      "Phase 4 GPU emission: lower a tessera kernel through linalg -> "
+      "scf.parallel -> gpu -> ROCDL (emission only; HIP launch is "
+      "hardware-gated).",
+      emitPipelineBuilder("convert-gpu-to-rocdl"), noEmitPipelineOptions);
+}
+} // namespace
+
+// Build identity. `TESSERA_OPT_BUILD_{PROFILE,FEATURES}` come from the feature
+// ledger in CMakeLists.txt, so this cannot drift from what was actually linked.
+// Reported through the tool banner (`--help`) and via `--tessera-build-info`,
+// because "which tessera-opt is this?" is otherwise only answerable by diffing
+// the registered pass list — the failure mode when a stale build directory is
+// picked up ahead of a current one.
+#ifndef TESSERA_OPT_BUILD_PROFILE
+#define TESSERA_OPT_BUILD_PROFILE "unknown"
+#endif
+#ifndef TESSERA_OPT_BUILD_FEATURES
+#define TESSERA_OPT_BUILD_FEATURES "unknown"
+#endif
+
+namespace {
+const char *tesseraOptBuildInfo() {
+  static const std::string info =
+      std::string("tessera-opt\n  build profile: ") + TESSERA_OPT_BUILD_PROFILE +
+      "\n  features: " + TESSERA_OPT_BUILD_FEATURES + "\n";
+  return info.c_str();
+}
+
+// Detected (not consumed) before MlirOptMain so `--tessera-build-info` works
+// with no input file and without registering a real CLI option.
+bool hasBuildInfoFlag(int argc, char **argv) {
+  for (int i = 1; i < argc; ++i)
+    if (llvm::StringRef(argv[i]) == "--tessera-build-info")
+      return true;
+  return false;
+}
+} // namespace
 
 int main(int argc, char **argv) {
+  if (hasBuildInfoFlag(argc, argv)) {
+    llvm::outs() << tesseraOptBuildInfo();
+    return 0;
+  }
 #if defined(TESSERA_HAVE_ROCM_BACKEND) && defined(TESSERA_HAVE_CORE_TESSERA_IR)
   // Stage L3: register the LLVM AMDGPU target (codegen + asm printer) so the
   // gpu-module-to-binary pass can emit + ld.lld-link the hsaco entirely
@@ -297,10 +343,16 @@ int main(int argc, char **argv) {
   llvm::InitializeAllAsmParsers();
   llvm::InitializeAllAsmPrinters();
 #endif
-#if (defined(TESSERA_HAVE_ROCM_BACKEND) || defined(TESSERA_HAVE_NVIDIA_BACKEND)) && !defined(TESSERA_HAVE_CORE_TESSERA_IR)
+#ifdef TESSERA_OPT_LEAN_ARTIFACT_DRIVER
   // Hardware-free target artifact builds intentionally keep tessera-opt lean:
   // only the dialects and passes needed by the target contract spine are
   // registered, avoiding a dependency on every upstream MLIR component.
+  //
+  // This arm is selected by an explicit CMake intent, not re-derived from
+  // backend macros. CMakeLists.txt fails configuration if any feature outside
+  // {core-tessera-ir, nvidia-backend, rocm-backend} is linked into a lean
+  // build, so reaching here with an unregistered Apple/Solvers/TPP/Neighbors
+  // library is no longer possible.
 #ifdef TESSERA_HAVE_NVIDIA_BACKEND
   tessera::registerTesseraNVIDIABackendPasses();
   tessera::registerTesseraNVIDIALegacyBackendPasses();
@@ -320,7 +372,7 @@ int main(int argc, char **argv) {
   mlir::tessera_rocm::registerTesseraROCMBackendDialects(registry);
 #endif
 
-  return failed(mlir::MlirOptMain(argc, argv, "tessera-opt\n", registry));
+  return failed(mlir::MlirOptMain(argc, argv, tesseraOptBuildInfo(), registry));
 #else
 #ifdef TESSERA_HAVE_CORE_TESSERA_IR
   tessera::registerTesseraPasses();
@@ -329,6 +381,8 @@ int main(int argc, char **argv) {
   mlir::registerTransformsPasses();
   tessera::diagnostics::registerShapeInferencePass();
   tessera::diagnostics::registerErrorReporterPass();
+  // Needs `tessera-to-linalg`, so it belongs with the core IR registration.
+  registerEmitPipelines();
 #endif
 
 #ifdef TESSERA_HAVE_SOLVERS
@@ -492,6 +546,6 @@ int main(int argc, char **argv) {
   tessera::registerTesseraNVIDIABackendDialects(registry);
 #endif
 
-  return failed(mlir::MlirOptMain(argc, argv, "tessera-opt\n", registry));
+  return failed(mlir::MlirOptMain(argc, argv, tesseraOptBuildInfo(), registry));
 #endif
 }

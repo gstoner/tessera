@@ -1,6 +1,6 @@
 # TSOL Coverage Dashboard
 
-Generated from `python/tessera/compiler/tsol_coverage.py`.  Don't edit by hand — regenerate via `python -c "from tessera.compiler.tsol_coverage import render_dashboard; open('docs/audit/generated/tsol_coverage.md', 'w').write(render_dashboard())"`.  Drift gated by `tests/unit/test_tsol_coverage.py`.
+Generated from `python/tessera/compiler/tsol_coverage.py`.  Don't edit by hand — regenerate via `python -m tessera.compiler.generated_docs --write tsol_coverage`, which writes this file *and* its CSV companion.  Drift gated by `tests/unit/test_tsol_coverage.py` and `scripts/check_generated_docs.sh`.
 
 Spec: `docs/operations/Tessera_Standard_Operations.md`.  Full primitive registry: `docs/audit/standalone_primitive_coverage.md`.
 
@@ -11,7 +11,7 @@ Spec: `docs/operations/Tessera_Standard_Operations.md`.  Full primitive registry
 
 ## Per-axis status counts (TSOL slice only)
 
-Counts below are restricted to the TSOL canonical names.  The full 432-primitive registry is summarised in `docs/audit/standalone_primitive_coverage.md`.
+Counts below are restricted to the 47 TSOL canonical names.  The full 482-primitive registry is summarised in `docs/audit/standalone_primitive_coverage.md`.
 
 | Axis | complete | partial | planned | by-design | other |
 |------|----------|---------|---------|-----|-------|
@@ -116,4 +116,4 @@ _None today — every TSOL canonical op has a registry entry and an explicit VJP
 
 ## Backend kernel honest baseline
 
-Per the registry's gating rule (`primitive_coverage.py` line 351-352), `backend_kernel = complete` requires every declared target to ship a real hardware kernel with numerical proof.  Today **zero** TSOL entries can claim that all-target aggregate.  Per-target native proof is reported separately and may exist even while this aggregate remains incomplete.  See `docs/audit/backend/BACKEND_AUDIT.md` and its target maps for the exact-target evidence and remaining punch list.
+Per the registry's `backend_kernel` gating rule (see the "backend_kernel stays partial until each backend ships a real" note in `primitive_coverage.py`), `backend_kernel = complete` requires every declared target to ship a real hardware kernel with numerical proof.  Today **zero** of the 47 TSOL entries can claim that all-target aggregate.  Per-target native proof is reported separately and may exist even while this aggregate remains incomplete.  See `docs/audit/backend/BACKEND_AUDIT.md` and its target maps for the exact-target evidence and remaining punch list.

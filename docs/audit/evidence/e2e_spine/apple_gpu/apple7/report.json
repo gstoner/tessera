@@ -1,0 +1,165 @@
+{
+  "architecture": "apple7",
+  "benchmarks": [
+    {
+      "discard_first": true,
+      "family": "matmul",
+      "median_ns": 1170962.51,
+      "repetitions": 750,
+      "resource_fingerprint": "83578c48a39670c0537cbf0a3b0a17dc088070094a50bdfea18e63b9020a3437",
+      "route": "apple_gpu_bmm_f32_batch1",
+      "run_medians_ns": [
+        1167534.18,
+        1174390.84
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "kernel_wall",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "matmul",
+      "median_ns": 1222470.4100000001,
+      "repetitions": 750,
+      "resource_fingerprint": "83578c48a39670c0537cbf0a3b0a17dc088070094a50bdfea18e63b9020a3437",
+      "route": "apple_gpu_bmm_f32_batch1",
+      "run_medians_ns": [
+        1221440.82,
+        1223500.0
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "end_to_end",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "softmax",
+      "median_ns": 1193813.75,
+      "repetitions": 750,
+      "resource_fingerprint": "755b9c8eb0c089fb8ca3b442037f17f313e94f244b8329c707fd764c23e4456f",
+      "route": "apple_gpu_msl_softmax_f32",
+      "run_medians_ns": [
+        1196950.0,
+        1190677.5
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "kernel_wall",
+      "warmups": 1
+    },
+    {
+      "discard_first": true,
+      "family": "softmax",
+      "median_ns": 1250029.59,
+      "repetitions": 750,
+      "resource_fingerprint": "755b9c8eb0c089fb8ca3b442037f17f313e94f244b8329c707fd764c23e4456f",
+      "route": "apple_gpu_msl_softmax_f32",
+      "run_medians_ns": [
+        1255853.34,
+        1244205.84
+      ],
+      "selected": true,
+      "stability_limit_pct": 4.0,
+      "stable": true,
+      "timing_domain": "end_to_end",
+      "warmups": 1
+    }
+  ],
+  "cache_proofs": [
+    {
+      "cold": {
+        "cache_key": "39c2cae616b2af04f12ffef26f47633e235fc7902c718e482a6c9726fa9b47de",
+        "compile_state": "prepackaged",
+        "descriptor_digest": "e9faec58d23663b3489ea87d51ecd2ecb1a431e934f21e51f414d846ed956f92",
+        "image_digest": "713794441fb189a449fe8f5de0e7ef7dbe8960b21de757f7a7a05b3b499c34a7"
+      },
+      "fixture_id": "matmul-f32-2x3x2-v1",
+      "warm": {
+        "cache_key": "39c2cae616b2af04f12ffef26f47633e235fc7902c718e482a6c9726fa9b47de",
+        "compile_state": "prepackaged",
+        "descriptor_digest": "e9faec58d23663b3489ea87d51ecd2ecb1a431e934f21e51f414d846ed956f92",
+        "image_digest": "713794441fb189a449fe8f5de0e7ef7dbe8960b21de757f7a7a05b3b499c34a7"
+      }
+    },
+    {
+      "cold": {
+        "cache_key": "6aeb7fc06c99a2e57adecca173f789a1903a7153fba583119161f27ce20aec51",
+        "compile_state": "prepackaged",
+        "descriptor_digest": "d72a91634bb6ca2b49ebd934c80ae20025f150f923ca13cd878325385fee4682",
+        "image_digest": "ea533d82893bf18b7eefd6a66c8db62f3d749abdcbcd0355062a3f3642398b03"
+      },
+      "fixture_id": "softmax-f32-2x2-extreme-v1",
+      "warm": {
+        "cache_key": "6aeb7fc06c99a2e57adecca173f789a1903a7153fba583119161f27ce20aec51",
+        "compile_state": "prepackaged",
+        "descriptor_digest": "d72a91634bb6ca2b49ebd934c80ae20025f150f923ca13cd878325385fee4682",
+        "image_digest": "ea533d82893bf18b7eefd6a66c8db62f3d749abdcbcd0355062a3f3642398b03"
+      }
+    }
+  ],
+  "device": {
+    "exact": true,
+    "identity": "Gregorys-MacBook-Pro.local | MacBookPro18,2 | Apple M1 Max"
+  },
+  "fixtures": [
+    {
+      "actual": [
+        [
+          [
+            5.5,
+            -11.0
+          ],
+          [
+            7.0,
+            7.5
+          ]
+        ]
+      ],
+      "descriptor_digest": "e9faec58d23663b3489ea87d51ecd2ecb1a431e934f21e51f414d846ed956f92",
+      "fixture_id": "matmul-f32-2x3x2-v1",
+      "image_digest": "713794441fb189a449fe8f5de0e7ef7dbe8960b21de757f7a7a05b3b499c34a7",
+      "levels": {
+        "a": "proven",
+        "b": "proven",
+        "c": "proven"
+      }
+    },
+    {
+      "actual": [
+        [
+          0.5,
+          0.5
+        ],
+        [
+          0.5,
+          0.5
+        ]
+      ],
+      "descriptor_digest": "d72a91634bb6ca2b49ebd934c80ae20025f150f923ca13cd878325385fee4682",
+      "fixture_id": "softmax-f32-2x2-extreme-v1",
+      "image_digest": "ea533d82893bf18b7eefd6a66c8db62f3d749abdcbcd0355062a3f3642398b03",
+      "levels": {
+        "a": "proven",
+        "b": "proven",
+        "c": "proven"
+      }
+    }
+  ],
+  "required_timing_domains": [
+    "kernel_wall",
+    "end_to_end"
+  ],
+  "schema": "tessera.e2e-backend-report.v1",
+  "scope": [
+    "matmul",
+    "softmax"
+  ],
+  "source_commit": "88911c75e58835452a3641269b18f8a1bcc661a8",
+  "target": "apple_gpu",
+  "toolchain_fingerprint": "65f9cb136f086aa37678c398d9acc1562334601511255b1aeab4e6b2a557b907"
+}

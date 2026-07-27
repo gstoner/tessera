@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-25
+last_updated: 2026-07-27
 audit_role: theme
 ---
 
@@ -599,6 +599,78 @@ part). Exposed as `TracedHardMoELM.logits(ids, dispatch="sparse")`. Guards in
 `tests/unit/test_train_hard_moe.py` (parity, grad-flow, end-to-end training).
 
 ## Finished
+
+### Driver + audit-generator hardening (2026-07-27)
+
+A code review of `tools/tessera-opt/` and the TSOL coverage generator found two
+classes of defect where a *build or generator* silently produced something that
+looked correct. Both are now structurally prevented, not just patched.
+
+**tessera-opt — the lean artifact driver could silently swallow whole backends.**
+`tessera-opt.cpp` selected its stripped registration path by re-deriving intent
+from `(ROCM || NVIDIA) && !CORE_TESSERA_IR`. CMake clears
+`TESSERA_HAVE_CORE_TESSERA_IR` for any NVIDIA build without CUDA, so configuring
+NVIDIA together with the Apple backend produced a binary that linked
+`TesseraApple`, defined `TESSERA_HAVE_APPLE_BACKEND`, and compiled out every one
+of its registration blocks — with no diagnostic. Same for Solvers, Neighbors,
+TPP, scaling-resilience, and both FA-4 dialects.
+
+- Leanness is now one named CMake intent (`TESSERA_OPT_LEAN_ARTIFACT_DRIVER`),
+  and every optional capability registers itself in a feature ledger. Combining
+  a lean driver with any feature outside
+  `{core-tessera-ir, nvidia-backend, rocm-backend}` is a **configure error**
+  naming the conflict and both ways to resolve it.
+- `--tessera-build-info` (and the tool banner) report the build profile and
+  feature list, so "which tessera-opt is this?" no longer requires diffing
+  `--help` — the failure mode when a stale build directory shadows a current one.
+- The Apple value-lane Tile IR envelope moved out of the driver into
+  `tessera::apple::isValueLaneTileOp`, beside the lowering that consumes it. The
+  driver had its own 21-name copy, so adding a value op to the backend meant
+  editing the tool, and the rejection pointed at the wrong file.
+- The `tessera-emit-{nvvm,rocdl}` aliases share one spine string, register only
+  when the core IR is linked, and report a build failure through the registry's
+  error handler instead of `report_fatal_error`. The convenience
+  `PassPipelineRegistration<>` wrapper takes a `void` builder, which would have
+  installed a silently **empty** pipeline on failure — a worse outcome than the
+  abort it replaced (Decision #21).
+
+**TSOL coverage — three stale claims the drift gate could not see.** The gate
+compares the generated dashboard against `render_dashboard()`, so any constant
+baked into the renderer is self-consistent and invisible to it. A "432-entry
+registry" (actually 482), a `primitive_coverage.py line 351-352` citation
+pointing at an unrelated table, and a hardcoded "zero" all survived that way.
+All three are now derived from the registry, and `tests/unit/test_tsol_coverage.py`
+gates the *class*: no hardcoded registry size, no source line-number citations,
+and the backend-kernel aggregate must match `coverage_summary()`. The dashboard's
+own regeneration instruction now names `generated_docs` (which writes both the
+`.md` and the `.csv`) instead of a `python -c` snippet that left the CSV stale,
+and `write_dashboard` pins UTF-8 for its ✅/◐/◯ glyphs.
+
+**Test architecture — build-capability selection.** A full local sweep surfaced
+**249 pre-existing failures** that say nothing about the code under test: 52 test
+files resolve `build/tools/tessera-opt/tessera-opt` themselves and skip only when
+the binary is *missing*. When it exists but was configured without the backend
+under test — `TESSERA_BUILD_ROCM_BACKEND=OFF`, the default on this Mac — they
+fail with `Unknown command line argument '--generate-rocm-…'`, which reads as a
+broken test rather than a build-selection problem. (Confirmed pre-existing: that
+`build/` tree is configured ROCm/NVIDIA `OFF`, registers zero `generate-rocm`
+passes, and its binary predates this work.)
+
+`tests/_support/compiler_tool.py` is now the shared capability-aware resolver —
+it honours `TESSERA_OPT`, reads the binary's registered passes once, and skips
+naming both the missing pass and the build profile. Nine files with an identical
+helper body are migrated (32 failures → 0). The remaining ~43 have variant
+bodies and need individual attention; tracked separately. `CompilerToolchain`
+should ultimately delegate to this module so the tree has one resolver.
+
+**Test architecture.** `CompilerToolchain.require_tessera_opt()` now takes the
+pass names a test drives and skips with the binary's build profile when they are
+absent. Previously a test needing an Apple pass picked up whichever binary was
+found first and failed with `Unknown command line argument`, which reads as a
+broken test rather than a build-selection problem. The pipeline drift gate also
+learned the `registerPassPipeline` spelling; recognizing only the wrapper made it
+report a live pipeline as stale.
+
 
 ### Middle-end / arbiter wave (2026-07-08, PRs #307–#314)
 

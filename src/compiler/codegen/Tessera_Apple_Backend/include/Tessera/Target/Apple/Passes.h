@@ -9,6 +9,8 @@
 
 #include <memory>
 
+#include "llvm/ADT/StringRef.h"
+
 namespace mlir {
 class DialectRegistry;
 class Pass;
@@ -173,6 +175,19 @@ void registerTesseraAppleBackendDialects(::mlir::DialectRegistry &registry);
 /// Register the Apple Silicon passes (and dialects) for use in tessera-opt.
 /// This is the entry point tessera-opt should call.
 void registerTesseraAppleBackendPasses(::mlir::DialectRegistry &registry);
+
+/// The Apple value-lane Tile IR envelope: the `tile.*` operations that an
+/// Apple value pipeline is allowed to carry into Tile->Apple lowering.
+///
+/// This is the single source of truth for the envelope. It lives in the
+/// backend rather than in tessera-opt because the backend is what decides
+/// which ops it can lower — a driver-local copy silently rots the moment a
+/// value op is added here, and the resulting failure (a legal op rejected by
+/// the verifier) points at the wrong file.
+bool isValueLaneTileOp(::llvm::StringRef name);
+
+/// Human-readable summary of `isValueLaneTileOp`, for diagnostics.
+::llvm::StringRef valueLaneTileOpEnvelopeDescription();
 
 /// Force-link the canonical pipelines:
 ///   - tessera-lower-to-apple_cpu

@@ -141,17 +141,28 @@ def test_required_dialects_are_registered() -> None:
 
 
 def _scan_cpp_pipelines() -> set[str]:
-    """Return the set of ``tessera-*`` pipeline names found in
-    ``PassPipelineRegistration<>(...)`` calls across all known
-    registration files.
+    """Return the set of ``tessera-*`` pipeline names registered from C++.
 
-    Note: the regex captures the FIRST ``"tessera-..."`` string after
-    the ``PassPipelineRegistration<>`` token, which is the canonical
-    pipeline name argument.  The description string that often follows
-    is ignored.
+    Both registration spellings count, because both produce a pipeline the
+    driver will accept:
+
+    * ``PassPipelineRegistration<>(...)`` — the convenience wrapper, whose
+      builder returns ``void``;
+    * ``registerPassPipeline(...)`` — the underlying registry call, used where
+      the builder must be able to *fail* (a pipeline that cannot be built has
+      to raise a diagnostic rather than silently install an empty pass
+      manager).
+
+    Recognizing only the wrapper made this gate report a live pipeline as
+    "stale", which points at the wrong problem entirely.
+
+    Note: each regex captures the FIRST ``"tessera-..."`` string after its
+    token, which is the canonical pipeline-name argument. The description
+    string that often follows is ignored.
     """
     pattern = re.compile(
-        r'PassPipelineRegistration\b[^"]*?"(tessera-[A-Za-z0-9_\-]+)"',
+        r'(?:PassPipelineRegistration\b|registerPassPipeline\s*\()'
+        r'[^"]*?"(tessera-[A-Za-z0-9_\-]+)"',
         re.DOTALL,
     )
     out: set[str] = set()

@@ -56,7 +56,7 @@ def _module_with_allocs(byte_sizes: list[int]) -> str:
 def _place(
     toolchain: CompilerToolchain, module: str
 ) -> subprocess.CompletedProcess[str]:
-    tessera_opt = toolchain.require_tessera_opt()
+    tessera_opt = toolchain.require_tessera_opt("tessera-apple-threadgroup-pipeline")
     return subprocess.run(
         [str(tessera_opt), "-",
          "--pass-pipeline=builtin.module(tessera-apple-threadgroup-pipeline)"],
@@ -240,7 +240,7 @@ def test_loop_carried_pipeline_state_is_rooted_through_iter_args(
     the raw operand reported APPLE_STAGE_UNROOTED_ADVANCE and rejected the very
     shared contract this pass exists to consume.
     """
-    tessera_opt = compiler_toolchain.require_tessera_opt()
+    tessera_opt = compiler_toolchain.require_tessera_opt("tessera-apple-threadgroup-pipeline")
     gemm = """module {
   func.func @gemm(%a: tensor<64x32xf16>, %b: tensor<32x48xf16>) -> tensor<64x48xf32> {
     %0 = "tessera.matmul"(%a, %b)

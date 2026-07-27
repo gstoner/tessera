@@ -1249,6 +1249,42 @@ struct LowerTileToAppleGPUPass
 // Factory functions (declared in Passes.h)
 //===----------------------------------------------------------------------===//
 
+// The Apple value-lane Tile IR envelope. Declared in Passes.h; defined here,
+// beside the lowering that actually consumes these ops, so that adding a value
+// op to the backend and admitting it to the envelope are the same edit.
+//
+// tessera-opt's `tessera-verify-apple-value-tile-ir` pass calls this rather
+// than keeping its own copy: a driver-local duplicate would reject an op the
+// backend can lower, and point the user at the wrong file.
+bool isValueLaneTileOp(llvm::StringRef name) {
+  // Deliberately spelled out in `tile.*` form rather than delegating to the
+  // recognizers above (isPPOPolicyLoss, isEBMLangevinStep, ...): those accept
+  // the `tessera.*` Graph-IR spelling as well, which would make a function
+  // named "...TileOp" answer true for a Graph-IR op. Today's only caller
+  // pre-filters on the `tile.` prefix so the difference is invisible, but the
+  // next caller would inherit a silently wider envelope.
+  return name == "tile.matmul" || name == "tile.gemm" ||
+         name == "tile.batched_gemm" || name == "tile.ppo_policy_loss" ||
+         name == "tile.ebm_energy_quadratic" ||
+         name == "tile.ebm_langevin_step" || name == "tile.ebm_refinement" ||
+         name == "tile.ebm_partition_exact" ||
+         name == "tile.clifford_geometric_product" ||
+         name == "tile.clifford_outer_product" ||
+         name == "tile.clifford_inner_product" ||
+         name == "tile.clifford_reverse" ||
+         name == "tile.clifford_grade_project" ||
+         name == "tile.clifford_norm" ||
+         name == "tile.clifford_rotor_sandwich" || name == "tile.cholesky" ||
+         name == "tile.tri_solve" || name == "tile.cholesky_solve" ||
+         name == "tile.lu" || name == "tile.qr" || name == "tile.svd";
+}
+
+llvm::StringRef valueLaneTileOpEnvelopeDescription() {
+  return "linalg family (cholesky, tri_solve, cholesky_solve, lu, qr, svd), "
+         "rank-2 matmul/gemm, rank-3 batched_gemm, PPO policy loss, "
+         "EBM value kernels, GA/Clifford value seam";
+}
+
 std::unique_ptr<Pass> createLowerTileToAppleCPUPass(bool valueMode) {
   return std::make_unique<LowerTileToAppleCPUPass>(valueMode);
 }

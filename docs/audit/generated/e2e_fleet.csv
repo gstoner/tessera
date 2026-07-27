@@ -1,12 +1,12 @@
 schema,target,architecture,backend,family,state,packet,source_commit,reason
-tessera.e2e-release-packet.v1,apple_gpu,apple7,apple,matmul,packet_pending,,,Bounded Apple GPU Level-C scope awaits a v1 fleet packet.
-tessera.e2e-release-packet.v1,apple_gpu,apple7,apple,softmax,packet_pending,,,Bounded Apple GPU Level-C scope awaits a v1 fleet packet.
-tessera.e2e-release-packet.v1,apple_gpu,apple7,apple,linalg,packet_pending,,,Bounded Apple GPU Level-C scope awaits a v1 fleet packet.
-tessera.e2e-release-packet.v1,apple_gpu,apple7,apple,ppo,packet_pending,,,Bounded Apple GPU Level-C scope awaits a v1 fleet packet.
-tessera.e2e-release-packet.v1,apple_gpu,apple7,apple,ebm,packet_pending,,,Bounded Apple GPU Level-C scope awaits a v1 fleet packet.
-tessera.e2e-release-packet.v1,apple_gpu,apple7,apple,clifford,packet_pending,,,Bounded Apple GPU Level-C scope awaits a v1 fleet packet.
-tessera.e2e-release-packet.v1,apple_cpu,apple_m1_max,apple,matmul,packet_pending,,,Bounded Apple CPU Level-C scope awaits exact-host release evidence.
-tessera.e2e-release-packet.v1,apple_cpu,apple_m1_max,apple,linalg,packet_pending,,,Bounded Apple CPU Level-C scope awaits exact-host release evidence.
+tessera.e2e-release-packet.v1,apple_gpu,apple7,apple,matmul,release_ready,docs/audit/evidence/e2e_spine/apple_gpu/apple7,88911c75e58835452a3641269b18f8a1bcc661a8,Validated hash-sealed packet.
+tessera.e2e-release-packet.v1,apple_gpu,apple7,apple,softmax,release_ready,docs/audit/evidence/e2e_spine/apple_gpu/apple7,88911c75e58835452a3641269b18f8a1bcc661a8,Validated hash-sealed packet.
+tessera.e2e-release-packet.v1,apple_gpu,apple7,apple,linalg,packet_pending,,,Family absent from active packet.
+tessera.e2e-release-packet.v1,apple_gpu,apple7,apple,ppo,packet_pending,,,Family absent from active packet.
+tessera.e2e-release-packet.v1,apple_gpu,apple7,apple,ebm,packet_pending,,,Family absent from active packet.
+tessera.e2e-release-packet.v1,apple_gpu,apple7,apple,clifford,packet_pending,,,Family absent from active packet.
+tessera.e2e-release-packet.v1,apple_cpu,apple_m1_max,apple,matmul,release_ready,docs/audit/evidence/e2e_spine/apple_cpu/apple_m1_max,88911c75e58835452a3641269b18f8a1bcc661a8,Validated hash-sealed packet.
+tessera.e2e-release-packet.v1,apple_cpu,apple_m1_max,apple,linalg,packet_pending,,,Family absent from active packet.
 tessera.e2e-release-packet.v1,x86,x86_64_base,x86,softmax,release_ready,docs/audit/evidence/e2e_spine/x86/x86_64_base,9f3757ef2dda2dd61ff94f1aefe0244f1b80f064,Validated hash-sealed packet.
 tessera.e2e-release-packet.v1,x86,x86_64_base,x86,reduction,release_ready,docs/audit/evidence/e2e_spine/x86/x86_64_base,9f3757ef2dda2dd61ff94f1aefe0244f1b80f064,Validated hash-sealed packet.
 tessera.e2e-release-packet.v1,x86,x86_64_avx512,x86,matmul,packet_pending,,,AVX512 x86 scope awaits a Strix Halo host packet.

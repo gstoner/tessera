@@ -8,6 +8,110 @@ last_updated: 2026-07-27
 
 # Apple compiler, exact-device, and performance plan
 
+## APPLE-AOT-2: close out the `apple_gpu_air` lane
+
+**Status: open, plan of record 2026-07-28.** APPLE-AOT-1 proved the lane works
+and is worth ~14.5 ms per cold kernel. This is what it takes to make it a lane
+the compiler can actually *use* rather than a demonstrated capability.
+
+### Where it stands, measured not assumed
+
+| | emitter | compiler (`compile_fn`) | runner | dispatch symbols |
+|---|---|---|---|---|
+| `apple_gpu` | ✅ | deferred (`None`) | ✅ registered | 17 |
+| `apple_gpu_air` | ✅ (delegates) | ✅ real `.metallib` | ❌ **none** | **1** |
+| `nvidia` / `rocm` / `x86` | ✅ | ✅ real `.so` | ✅ registered | n/a |
+
+Two gaps carry everything else. `apple_gpu_air` is the **only registered target
+without a `KernelRunner`**, so it is invisible to `build()`'s execute half, to
+the F4 oracle, and to any future arbiter — the ad-hoc
+`apple_air.run_fused_region_aot` is the only way in. And the runtime has **1 of
+17** dispatch entry points in an AOT form, so the lane can only run a coopmat
+matmul-epilogue.
+
+### A1 — register an `AppleAIRRunner` *(small, unblocks everything else)*
+
+Implement the four `KernelRunner` methods over the metallib path and
+`register_runner(...)`. Set `accuracy_atol` (ROCm sets `0.005` for its f16
+budget; Apple's f16 coopmat measured 1.2e-4 against the f32 reference, so the
+f32 default is probably right — confirm, do not inherit by omission).
+
+Until this exists, nothing generic can select the AOT lane, which makes A3 and
+C untestable.
+
+### A2 — make the `artifact` / `deferred` contract safe
+
+Nothing outside `apple_air.py` and its tests currently reads
+`CompiledKernel.artifact` or `.deferred`. The moment an arbiter iterates targets
+and assumes `artifact` is a loadable path, it breaks on `apple_gpu` as a `None`
+surprise — and the three `.so`-returning backends make that assumption easy.
+Add an accessor that forces both cases to be handled, plus a guard test that
+every registered target either returns a path or sets `deferred`.
+
+### B — coverage: 1 → 17, without 17 copies
+
+The expensive way is a hand-written AOT twin per symbol. Do not do that. The
+pattern already used for coopmat is the cheap one: extract the dispatch body
+(`dispatch_matmul_epilogue_coopmat`) so the JIT and AOT entries differ *only* in
+how they obtain the pipeline, via `compile_msl_kernel` or `load_metallib_kernel`.
+Applying it to the remaining families makes the JIT entries thinner too, so
+total runtime code goes down rather than up.
+
+Families, in the order their value lands:
+
+1. `matmul_epilogue` scalar / tiled (f16, f32) — completes the region the lane
+   already serves.
+2. `pointwise` + `pointwise_reduce` (f16, f32) — the largest op population.
+3. `norm_chain` (f16, f32).
+4. `attention` (f16, f32) — the one where cold-compile cost is felt most, since
+   attention kernels are the biggest source the synthesizer emits.
+5. `gated_matmul` (f16, f32).
+6. `tile_simdgroup_gemm` (f16, bf16).
+
+Each new C ABI symbol needs its non-Darwin stub; the ratchet in
+`test_apple_runtime_stub_parity.py` fails the build if one is missed.
+
+### C — the arbiter *(the actual payoff, and fleet-wide)*
+
+Selection between `apple_gpu` and `apple_gpu_air` per
+`(op, shape-bucket, dtype, target)` on measured evidence — Decision #28's
+measured, accuracy-budgeted arbiter, for which this is the first backend with
+two genuinely comparable candidates. It needs a persisted decision record, and
+it must treat the offline build cost as amortised (~5 cold launches) rather than
+per-launch.
+
+This is where the Apple work stops being Apple-specific: the arbiter is shared
+infrastructure, and ROCm/CUDA will feed it candidates too.
+
+### D — cache maturity
+
+Artifacts live in `$TMPDIR/tessera-apple-air` with no eviction and no sharing.
+Before this is load-bearing: a durable location, an eviction policy, and a
+decision on whether artifacts are fleet-shareable (they are host-ISA-specific,
+so probably per-machine — but the `kernel_cache` key does *not* include host
+identity today, which is the same latent collision X86-1 flags for `-march=native`).
+
+### What this does *not* need: ROCm or CUDA parity work
+
+The gap to ROCm/CUDA is not what it looks like. Their `compile_fn` already
+returns a real `.so` (nvcc / hipcc) — they have been AOT-only from the start and
+have **no JIT lane at all** (no NVRTC/HIPRTC path). So there is nothing for them
+to catch up on here; if anything, Apple is the one that just gained a second
+strategy they lack.
+
+What transfers to them is the **method, not the lane**: when SM120 or gfx1151
+performance work raises an AOT-vs-JIT or artifact-caching question, reuse
+`benchmarks/apple_gpu/benchmark_aot_vs_jit.py` *and its cache control*. Both
+vendors keep their own code caches, and an uncontrolled first-launch timing
+measures the vendor cache rather than the compile strategy — the error that made
+the first Apple number 13x too good.
+
+### Sequencing
+
+A1 → A2 → B1-B2 → C, with D before C ships. A1 is hours and unblocks the rest;
+B is mechanical but the bulk of the work; C is the only part that needs design
+discussion, and it should be designed fleet-wide rather than for Apple alone.
+
 ## APPLE-AOT-1: `.metallib` pipeline creation measured against the JIT lane
 
 **Status: measured 2026-07-28 on the owning host (Apple M1 Max / apple7,

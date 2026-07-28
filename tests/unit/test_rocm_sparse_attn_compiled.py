@@ -5,6 +5,7 @@ import pytest
 
 from tessera import runtime as rt
 from tessera.stdlib import attention
+from tests._support.compiler_tool import run_tessera_opt
 
 
 def _artifact(op_name, arg_names, kwargs):
@@ -236,66 +237,45 @@ def test_rocm_deepseek_sparse_attention_native_gpu_matches_reference_on_hardware
 @pytest.mark.compiler_tool
 @pytest.mark.compiler_rocm
 def test_rocm_block_sparse_attention_codegen_lowers():
-    import subprocess
-    from pathlib import Path
-
-    opt = Path(__file__).resolve().parents[2] / "build/tools/tessera-opt/tessera-opt"
-    if not opt.is_file():
-        pytest.skip("build tessera-opt")
     directive = (
         'module {\n'
         '  "tessera_rocm.block_sparse_attention"() {name = "bsa"} : () -> ()\n'
         '}\n')
-    low = subprocess.run(
-        [str(opt), "-",
-         "--pass-pipeline=builtin.module(generate-rocm-block-sparse-attn-kernel,"
-         "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
-         "reconcile-unrealized-casts))"],
-        input=directive, capture_output=True, text=True)
+    low = run_tessera_opt(
+        directive,
+        "--pass-pipeline=builtin.module(generate-rocm-block-sparse-attn-kernel,"
+        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+        "reconcile-unrealized-casts))")
     assert low.returncode == 0 and "llvm." in low.stdout
 
 
 @pytest.mark.compiler_tool
 @pytest.mark.compiler_rocm
 def test_rocm_block_sparse_attention_tiled_codegen_lowers():
-    import subprocess
-    from pathlib import Path
-
-    opt = Path(__file__).resolve().parents[2] / "build/tools/tessera-opt/tessera-opt"
-    if not opt.is_file():
-        pytest.skip("build tessera-opt")
     directive = (
         'module {\n'
         '  "tessera_rocm.block_sparse_attention_tiled"() {name = "bsat"} : () -> ()\n'
         '}\n')
-    low = subprocess.run(
-        [str(opt), "-",
-         "--pass-pipeline=builtin.module(generate-rocm-block-sparse-attn-kernel,"
-         "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
-         "reconcile-unrealized-casts))"],
-        input=directive, capture_output=True, text=True)
+    low = run_tessera_opt(
+        directive,
+        "--pass-pipeline=builtin.module(generate-rocm-block-sparse-attn-kernel,"
+        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+        "reconcile-unrealized-casts))")
     assert low.returncode == 0 and "llvm." in low.stdout
 
 
 @pytest.mark.compiler_tool
 @pytest.mark.compiler_rocm
 def test_rocm_block_sparse_topk_codegen_lowers():
-    import subprocess
-    from pathlib import Path
-
-    opt = Path(__file__).resolve().parents[2] / "build/tools/tessera-opt/tessera-opt"
-    if not opt.is_file():
-        pytest.skip("build tessera-opt")
     directive = (
         'module {\n'
         '  "tessera_rocm.block_sparse_topk_select"() {name = "btopk"} : () -> ()\n'
         '}\n')
-    low = subprocess.run(
-        [str(opt), "-",
-         "--pass-pipeline=builtin.module(generate-rocm-block-sparse-topk-kernel,"
-         "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
-         "reconcile-unrealized-casts))"],
-        input=directive, capture_output=True, text=True)
+    low = run_tessera_opt(
+        directive,
+        "--pass-pipeline=builtin.module(generate-rocm-block-sparse-topk-kernel,"
+        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+        "reconcile-unrealized-casts))")
     assert low.returncode == 0 and "llvm." in low.stdout
 
 

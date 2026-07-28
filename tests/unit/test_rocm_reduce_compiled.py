@@ -106,10 +106,6 @@ def test_dynamic_last_axis_shapes_share_reduce_hsaco_identity():
 
 
 # ── GPU-free codegen gate (needs only tessera-opt, not a GPU) ────────────────
-import subprocess  # noqa: E402
-from pathlib import Path  # noqa: E402
-
-_OPT = Path(__file__).resolve().parents[2] / "build/tools/tessera-opt/tessera-opt"
 
 
 def _opt(directive, *passes):

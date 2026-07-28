@@ -10,6 +10,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from tests._support.compiler_tool import run_tessera_opt
+
 
 def _rocm_or_skip():
     from tessera import runtime as rt
@@ -56,17 +58,10 @@ def test_abs():
 
 @pytest.mark.parametrize("kind", ["add", "mul", "mod", "floor_div"])
 def test_binary_codegen_lowers(kind):
-    import subprocess
-    from pathlib import Path
-    opt = Path(__file__).resolve().parents[2] / "build/tools/tessera-opt/tessera-opt"
-    if not opt.is_file():
-        pytest.skip("build tessera-opt")
     d = (f'module {{\n  "tessera_rocm.binary"() {{name = "b", kind = "{kind}", '
          'dtype = "f32"} : () -> ()\n}\n')
-    low = subprocess.run(
-        [str(opt), "-",
-         "--pass-pipeline=builtin.module(generate-rocm-binary-kernel,"
-         "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
-         "reconcile-unrealized-casts))"],
-        input=d, capture_output=True, text=True)
+    low = run_tessera_opt(
+        d, "--pass-pipeline=builtin.module(generate-rocm-binary-kernel,"
+        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+        "reconcile-unrealized-casts))")
     assert low.returncode == 0 and "llvm." in low.stdout

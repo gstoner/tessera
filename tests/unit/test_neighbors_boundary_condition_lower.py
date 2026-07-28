@@ -13,12 +13,9 @@ when the binary is not on PATH.
 
 from __future__ import annotations
 
-import os
-import shutil
-import subprocess
 from pathlib import Path
 
-import pytest
+from tests._support.compiler_tool import run_tessera_opt_file
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NEIGHBORS_ROOT = REPO_ROOT / "src" / "compiler" / "tessera_neighbors"
@@ -102,47 +99,18 @@ def test_lit_fixture_exists_and_runs_pipeline() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def _find_tessera_opt() -> str | None:
-    for candidate in (
-        os.environ.get("TESSERA_OPT"),
-        shutil.which("tessera-opt"),
-        str(REPO_ROOT / "build" / "tools" / "tessera-opt" / "tessera-opt"),
-        str(REPO_ROOT / "build" / "bin" / "tessera-opt"),
-    ):
-        if candidate and Path(candidate).exists():
-            return candidate
-    return None
-
-
 def test_bc_pass_runs_against_lit_fixture() -> None:
-    binary = _find_tessera_opt()
-    if binary is None:
-        pytest.skip("tessera-opt not built — skipping behavioral contract test")
-
-    result = subprocess.run(
-        [
-            binary,
-            "-tessera-stencil-lower",
-            "-tessera-boundary-condition-lower",
-            str(LIT_FIXTURE),
-        ],
-        capture_output=True,
-        text=True,
+    # A binary that predates BoundaryConditionLowerPass does not register it,
+    # so this skips rather than failing (see _support.compiler_tool), matching
+    # the test_neighbors_dialect.py convention.  CI rebuilds on every change in
+    # src/compiler/tessera_neighbors/ and exercises the fresh binary against
+    # this same fixture under the lit lane.
+    result = run_tessera_opt_file(
+        LIT_FIXTURE,
+        "-tessera-stencil-lower",
+        "-tessera-boundary-condition-lower",
         timeout=30,
     )
-    # Built binary may predate this pass — skip rather than fail, matching
-    # the test_neighbors_dialect.py convention.  CI rebuilds on every
-    # change in src/compiler/tessera_neighbors/ and exercises the fresh
-    # binary against this same fixture under the lit lane.
-    if (
-        result.returncode != 0
-        and "Unknown command line argument" in result.stderr
-        and "tessera-boundary-condition-lower" in result.stderr
-    ):
-        pytest.skip(
-            "tessera-opt binary predates BoundaryConditionLowerPass — "
-            "rebuild build/tools/tessera-opt to exercise this contract"
-        )
     assert result.returncode == 0, (
         f"tessera-opt failed running boundary-condition-lower pass:\n"
         f"stderr:\n{result.stderr}"

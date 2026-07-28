@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from tests._support import compiler_tool
 from tests._support import environment as test_environment
 from tests._support.environment import (
     CompilerToolchain,
@@ -138,6 +139,66 @@ def test_live_nvidia_tests_declare_the_cuda_hardware_state():
         "live CUDA tests require @pytest.mark.hardware_nvidia: "
         + ", ".join(violations)
     )
+
+
+def _fake_tessera_opt(path: Path, *registered: str) -> Path:
+    """A stub driver whose `--help` advertises exactly `registered`."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    advertised = "".join(f'echo "  --{name}  - stub"\n' for name in registered)
+    path.write_text(
+        '#!/bin/sh\nif [ "$1" = "--help" ]; then\n'
+        f"{advertised}exit 0\nfi\necho {path.name}-ran\n"
+    )
+    path.chmod(0o755)
+    compiler_tool.registered_passes.cache_clear()
+    compiler_tool.build_profile.cache_clear()
+    return path
+
+
+def test_capable_driver_outranks_a_preferred_build_that_lacks_the_pass(
+    tmp_path, monkeypatch
+):
+    """Preference orders the candidates; capability decides which one runs.
+
+    A developer can hold a lean in-repo build and a fuller binary on PATH at
+    once. Taking the preferred one unconditionally would skip a test the host
+    can actually run, which is the failure this resolver exists to avoid.
+    """
+    lean = _fake_tessera_opt(tmp_path / "in-repo" / "tessera-opt", "canonicalize")
+    full = _fake_tessera_opt(
+        tmp_path / "on-path" / "tessera-opt", "canonicalize", "generate-rocm-x-kernel"
+    )
+    monkeypatch.delenv("TESSERA_OPT", raising=False)
+    monkeypatch.delenv("TESSERA_OPT_BIN", raising=False)
+    monkeypatch.setattr(compiler_tool, "_DEFAULT_CANDIDATES", (lean,))
+    monkeypatch.setattr(compiler_tool.shutil, "which", lambda _: str(full))
+
+    assert compiler_tool.tessera_opt_path() == lean, "in-repo build stays preferred"
+    assert compiler_tool.require_tessera_opt("--canonicalize") == lean
+    assert compiler_tool.require_tessera_opt("--generate-rocm-x-kernel") == full
+
+
+def test_pipeline_inner_passes_are_capability_checked(tmp_path, monkeypatch):
+    """`--pass-pipeline` names passes in its value, where the gap really is."""
+    lean = _fake_tessera_opt(
+        tmp_path / "lean" / "tessera-opt", "pass-pipeline", "canonicalize"
+    )
+    monkeypatch.delenv("TESSERA_OPT", raising=False)
+    monkeypatch.delenv("TESSERA_OPT_BIN", raising=False)
+    monkeypatch.setattr(compiler_tool, "_DEFAULT_CANDIDATES", (lean,))
+    monkeypatch.setattr(compiler_tool.shutil, "which", lambda _: None)
+
+    assert compiler_tool.missing_passes(
+        lean, "--pass-pipeline=builtin.module(canonicalize)"
+    ) == []
+    # The anchor is not a pass; the pass nested inside it is the missing one.
+    assert compiler_tool.missing_passes(
+        lean, "--pass-pipeline=builtin.module(generate-rocm-x-kernel{chip=gfx1151})"
+    ) == ["generate-rocm-x-kernel"]
+    with pytest.raises(pytest.skip.Exception, match="generate-rocm-x-kernel"):
+        compiler_tool.require_tessera_opt(
+            "--pass-pipeline=builtin.module(generate-rocm-x-kernel)"
+        )
 
 
 def test_compiler_toolchain_missing_state_is_a_canonical_skip():

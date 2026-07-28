@@ -5,6 +5,7 @@ import pytest
 
 from tessera import runtime as rt
 from tessera.stdlib import quant
+from tests._support.compiler_tool import run_tessera_opt
 
 
 def _artifact(op_name, arg_names):
@@ -124,20 +125,13 @@ def test_rocm_dequant_gemm_native_gpu_matches_reference_on_hardware():
 @pytest.mark.compiler_tool
 @pytest.mark.compiler_rocm
 def test_rocm_dequant_gemm_codegen_lowers():
-    import subprocess
-    from pathlib import Path
-
-    opt = Path(__file__).resolve().parents[2] / "build/tools/tessera-opt/tessera-opt"
-    if not opt.is_file():
-        pytest.skip("build tessera-opt")
     directive = (
         'module {\n'
         '  "tessera_rocm.dequant_gemm"() {name = "dq"} : () -> ()\n'
         '}\n')
-    low = subprocess.run(
-        [str(opt), "-",
-         "--pass-pipeline=builtin.module(generate-rocm-dequant-gemm-kernel,"
-         "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
-         "reconcile-unrealized-casts))"],
-        input=directive, capture_output=True, text=True)
+    low = run_tessera_opt(
+        directive,
+        "--pass-pipeline=builtin.module(generate-rocm-dequant-gemm-kernel,"
+        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+        "reconcile-unrealized-casts))")
     assert low.returncode == 0 and "llvm." in low.stdout

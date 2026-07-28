@@ -12,12 +12,9 @@ binary predates the pass).
 
 from __future__ import annotations
 
-import os
-import shutil
-import subprocess
 from pathlib import Path
 
-import pytest
+from tests._support.compiler_tool import run_tessera_opt_file
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NEIGHBORS_ROOT = REPO_ROOT / "src" / "compiler" / "tessera_neighbors"
@@ -154,41 +151,16 @@ def test_lit_fixture_chains_three_passes() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def _find_tessera_opt() -> str | None:
-    for candidate in (
-        os.environ.get("TESSERA_OPT"),
-        shutil.which("tessera-opt"),
-        str(REPO_ROOT / "build" / "tools" / "tessera-opt" / "tessera-opt"),
-        str(REPO_ROOT / "build" / "bin" / "tessera-opt"),
-    ):
-        if candidate and Path(candidate).exists():
-            return candidate
-    return None
-
-
 def test_materialize_pass_runs_against_lit_fixture() -> None:
-    binary = _find_tessera_opt()
-    if binary is None:
-        pytest.skip("tessera-opt not built — skipping behavioral contract test")
-    result = subprocess.run(
-        [
-            binary,
-            "-tessera-stencil-lower",
-            "-tessera-boundary-condition-lower",
-            "-tessera-stencil-loop-materialize",
-            str(LIT_FIXTURE),
-        ],
-        capture_output=True, text=True, timeout=30,
+    # A binary that predates StencilLoopMaterializePass simply does not
+    # register it, so this skips rather than failing (see _support.compiler_tool).
+    result = run_tessera_opt_file(
+        LIT_FIXTURE,
+        "-tessera-stencil-lower",
+        "-tessera-boundary-condition-lower",
+        "-tessera-stencil-loop-materialize",
+        timeout=30,
     )
-    if (
-        result.returncode != 0
-        and "Unknown command line argument" in result.stderr
-        and "tessera-stencil-loop-materialize" in result.stderr
-    ):
-        pytest.skip(
-            "tessera-opt binary predates StencilLoopMaterializePass — "
-            "rebuild build/tools/tessera-opt to exercise this contract"
-        )
     assert result.returncode == 0, (
         f"materialize pass failed: {result.stderr}"
     )

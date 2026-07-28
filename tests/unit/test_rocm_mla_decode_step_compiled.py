@@ -6,6 +6,7 @@ import pytest
 from tessera import runtime as rt
 from tessera.cache import LatentKVCacheHandle
 from tessera.stdlib import attention
+from tests._support.compiler_tool import run_tessera_opt
 
 
 def _weights(seed=41):
@@ -134,20 +135,13 @@ def test_rocm_mla_decode_step_native_gpu_matches_reference_on_hardware():
 @pytest.mark.compiler_tool
 @pytest.mark.compiler_rocm
 def test_rocm_mla_absorb_decode_codegen_lowers():
-    import subprocess
-    from pathlib import Path
-
-    opt = Path(__file__).resolve().parents[2] / "build/tools/tessera-opt/tessera-opt"
-    if not opt.is_file():
-        pytest.skip("build tessera-opt")
     directive = (
         'module {\n'
         '  "tessera_rocm.mla_absorb_decode"() {name = "mla"} : () -> ()\n'
         '}\n')
-    low = subprocess.run(
-        [str(opt), "-",
-         "--pass-pipeline=builtin.module(generate-rocm-mla-absorb-decode-kernel,"
-         "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
-         "reconcile-unrealized-casts))"],
-        input=directive, capture_output=True, text=True)
+    low = run_tessera_opt(
+        directive,
+        "--pass-pipeline=builtin.module(generate-rocm-mla-absorb-decode-kernel,"
+        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+        "reconcile-unrealized-casts))")
     assert low.returncode == 0 and "llvm." in low.stdout

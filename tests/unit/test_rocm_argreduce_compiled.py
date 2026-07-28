@@ -84,10 +84,6 @@ def test_argreduce_unknown_op_rejected():
 
 
 # ── GPU-free codegen gate ────────────────────────────────────────────────────
-import subprocess  # noqa: E402
-from pathlib import Path  # noqa: E402
-
-_OPT = Path(__file__).resolve().parents[2] / "build/tools/tessera-opt/tessera-opt"
 
 
 def _opt(directive, *passes):

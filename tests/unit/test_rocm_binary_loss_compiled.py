@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 
 from tessera import losses
+from tests._support.compiler_tool import run_tessera_opt
 
 
 def _rocm_or_skip():
@@ -67,25 +68,20 @@ def test_asymmetric_bce_matches_reference(pw, nw):
 
 
 # ── GPU-free codegen gate ────────────────────────────────────────────────────
-import subprocess  # noqa: E402
-from pathlib import Path  # noqa: E402
 
-_OPT = Path(__file__).resolve().parents[2] / "build/tools/tessera-opt/tessera-opt"
+
+def _opt(directive, *passes):
+    """Skips when this build lacks a requested pass (see _support.compiler_tool)."""
+    return run_tessera_opt(directive, *passes)
 
 
 @pytest.mark.parametrize("kind", [0, 1])
 def test_binary_loss_codegen_and_lowers(kind):
-    if not _OPT.is_file():
-        pytest.skip("build tessera-opt")
     d = ('module {\n  "tessera_rocm.binary_loss"() {name = "bl", dtype = "f32", '
          f'kind = {kind} : i64}} : () -> ()\n}}\n')
-    ir = subprocess.run([str(_OPT), "-", "--generate-rocm-binary-loss-kernel"],
-                        input=d, capture_output=True, text=True)
+    ir = _opt(d, "--generate-rocm-binary-loss-kernel")
     assert ir.returncode == 0 and "gpu.func @bl" in ir.stdout, ir.stderr
-    low = subprocess.run(
-        [str(_OPT), "-",
-         "--pass-pipeline=builtin.module(generate-rocm-binary-loss-kernel,"
-         "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
-         "reconcile-unrealized-casts))"],
-        input=d, capture_output=True, text=True)
+    low = _opt(d, "--pass-pipeline=builtin.module(generate-rocm-binary-loss-kernel,"
+               "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+               "reconcile-unrealized-casts))")
     assert low.returncode == 0 and "llvm." in low.stdout

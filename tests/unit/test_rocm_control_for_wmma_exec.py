@@ -15,16 +15,13 @@ from __future__ import annotations
 
 import ctypes
 import os
-import subprocess
-from pathlib import Path
 
 import pytest
 
+from tests._support.compiler_tool import require_tessera_opt, run_tessera_opt
+
 np = pytest.importorskip("numpy")
 
-ROOT = Path(__file__).resolve().parents[2]
-TESSERA_OPT = Path(
-    os.environ.get("TESSERA_OPT_BIN", ROOT / "build/tools/tessera-opt/tessera-opt"))
 CHIP = os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
 N = 16          # WMMA tile
 WAVE = 32       # one wave
@@ -80,17 +77,15 @@ func.func @f(%init: tensor<16x16xf16>, %w: tensor<16x16xf16>) -> tensor<16x16xf1
 
 
 def _compile_to_hsaco(it: int) -> bytes:
-    gen = subprocess.run(
-        [str(TESSERA_OPT), "-", "--generate-rocm-control-for-wmma-kernel",
-         "--allow-unregistered-dialect"],
-        input=_src(it), capture_output=True, text=True)
+    gen = run_tessera_opt(
+        _src(it), "--generate-rocm-control-for-wmma-kernel",
+        "--allow-unregistered-dialect")
     assert gen.returncode == 0, f"kernel-gen failed: {gen.stderr}"
     pipe = ("builtin.module(convert-scf-to-cf,gpu.module(convert-gpu-to-rocdl),"
             f"rocdl-attach-target{{chip={CHIP}}},gpu-module-to-binary)")
-    ser = subprocess.run(
-        [str(TESSERA_OPT), "-", f"--pass-pipeline={pipe}",
-         "--allow-unregistered-dialect"],
-        input=gen.stdout, capture_output=True, text=True)
+    ser = run_tessera_opt(
+        gen.stdout, f"--pass-pipeline={pipe}",
+        "--allow-unregistered-dialect")
     assert ser.returncode == 0, f"serialize failed: {ser.stderr}"
     hsaco = _extract_hsaco(ser.stdout)
     assert hsaco[:4] == b"\x7fELF", f"not an ELF hsaco: {hsaco[:4]!r}"
@@ -147,8 +142,7 @@ def _launch(hip, hsaco, carry, W):
 
 @pytest.mark.parametrize("it", [1, 2, 3])
 def test_control_for_wmma_executes_on_gfx1151(it):
-    if not TESSERA_OPT.is_file():
-        pytest.skip("build tessera-opt: ninja -C build tessera-opt")
+    require_tessera_opt()
     hip = _load_hip()
     if hip is None:
         pytest.skip("libamdhip64.so not loadable — no ROCm host")

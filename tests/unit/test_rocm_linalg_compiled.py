@@ -10,6 +10,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from tests._support.compiler_tool import run_tessera_opt
+
 
 def _rocm_or_skip():
     from tessera import runtime as rt
@@ -96,17 +98,10 @@ def test_cholesky_solve():
                                      ("tri-solve", ", lower = true"),
                                      ("tri-solve", ", lower = false")])
 def test_linalg_codegen_lowers(op, attr):
-    import subprocess
-    from pathlib import Path
-    opt = Path(__file__).resolve().parents[2] / "build/tools/tessera-opt/tessera-opt"
-    if not opt.is_file():
-        pytest.skip("build tessera-opt")
     od = op.replace("-", "_")
     d = f'module {{\n  "tessera_rocm.{od}"() {{name = "k"{attr}}} : () -> ()\n}}\n'
-    low = subprocess.run(
-        [str(opt), "-",
-         f"--pass-pipeline=builtin.module(generate-rocm-{op}-kernel,"
-         "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
-         "reconcile-unrealized-casts))"],
-        input=d, capture_output=True, text=True)
+    low = run_tessera_opt(
+        d, f"--pass-pipeline=builtin.module(generate-rocm-{op}-kernel,"
+        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+        "reconcile-unrealized-casts))")
     assert low.returncode == 0 and "llvm." in low.stdout

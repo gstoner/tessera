@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 
 from tessera import ops
+from tests._support.compiler_tool import run_tessera_opt
 
 
 def _rocm_or_skip():
@@ -89,18 +90,11 @@ def test_nvfp4_matches_reference(shape):
 
 
 def test_fpquant_codegen_lowers():
-    import subprocess
-    from pathlib import Path
-    opt = Path(__file__).resolve().parents[2] / "build/tools/tessera-opt/tessera-opt"
-    if not opt.is_file():
-        pytest.skip("build tessera-opt")
     d = ('module {\n  "tessera_rocm.fpquant"() {name = "fq", dtype = "f32", '
          'max_normal = 448.0 : f32, mantissa_bits = 3 : i64, '
          'min_exp = -6 : i64} : () -> ()\n}\n')
-    low = subprocess.run(
-        [str(opt), "-",
-         "--pass-pipeline=builtin.module(generate-rocm-fpquant-kernel,"
-         "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
-         "reconcile-unrealized-casts))"],
-        input=d, capture_output=True, text=True)
+    low = run_tessera_opt(
+        d, "--pass-pipeline=builtin.module(generate-rocm-fpquant-kernel,"
+        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+        "reconcile-unrealized-casts))")
     assert low.returncode == 0 and "llvm." in low.stdout

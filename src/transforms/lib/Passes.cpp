@@ -15,16 +15,15 @@ namespace tessera {
 // `tessera.cast{layout}` markers) immediately before LayoutLegalityPass, so the
 // two-sided layout contract (assign + verify) executes inside the pipeline.
 //
-// Layout assignment defaults on for x86, whose Graph materializer connects
-// row-major/BHSD/NHWC markers to the generic emitter's executable C-order
-// binding ABI. NVIDIA remains opt-in; structured #tile.layout is independently
-// consumed by the ROCm backend.
+// Layout assignment defaults on where a named pipeline has an immediate
+// physical cast consumer: x86 and NVIDIA. ROCm consumes structured
+// #tile.layout in its backend pipeline; Apple owns its Graph-layout boundary.
 struct TesseraLoweringPipelineOptions
     : public PassPipelineOptions<TesseraLoweringPipelineOptions> {
   Option<bool> assignLayouts{
       *this, "assign-layouts",
       llvm::cl::desc("Run LayoutAssignmentPass before layout legality "
-                     "(default on for x86, opt-in for GPU targets)."),
+                     "(default on for x86/NVIDIA physical consumers)."),
       llvm::cl::init(false)};
   // Legacy force-on switch retained for command-line compatibility. The normal
   // path now uses per-target defaults: x86/NVIDIA enable compute legalization.
@@ -65,7 +64,7 @@ static bool storageLegalizationEnabled(
 
 static bool layoutAssignmentEnabled(
     const TesseraLoweringPipelineOptions &opts, llvm::StringRef target) {
-  return opts.assignLayouts || target == "x86";
+  return opts.assignLayouts || target == "x86" || target.starts_with("nvidia_");
 }
 
 // Shared Graph IR pre-lowering stage (audit 2026-06-10). Previously this
@@ -101,10 +100,10 @@ static void addCUDA13PipelineForSM(
   addGraphIRPreLoweringPasses(pm);
   pm.addPass(createLowerControlFlowToSCFPass());
   pm.addPass(createDistributionLoweringPass());
-  if (opts.assignLayouts)
+  if (layoutAssignmentEnabled(opts, target))
     pm.addPass(createLayoutAssignmentPass());
   pm.addPass(createLayoutLegalityPass());
-  if (opts.assignLayouts)
+  if (layoutAssignmentEnabled(opts, target))
     pm.addPass(createNVIDIAGraphLayoutMaterializationPass());
   if (computeLegalizationEnabled(opts, target))
     pm.addPass(createComputeLegalizePass());
@@ -393,11 +392,11 @@ void registerTesseraPasses() {
         pm.addPass(createLowerControlFlowToSCFPass());
         pm.addPass(createDistributionLoweringPass());
         // 2026-06-22: optional layout assignment (see lowerToX86 / opts).
-        if (opts.assignLayouts)
+        if (layoutAssignmentEnabled(opts, "nvidia_sm90"))
           pm.addPass(createLayoutAssignmentPass());
         // 2026-06-17: layout legality in the named pipeline (see lowerToX86).
         pm.addPass(createLayoutLegalityPass());
-        if (opts.assignLayouts)
+        if (layoutAssignmentEnabled(opts, "nvidia_sm90"))
           pm.addPass(createNVIDIAGraphLayoutMaterializationPass());
         // C4 (2026-06-23): compute-legalize before the contract check (gated).
         if (computeLegalizationEnabled(opts, "nvidia_sm90"))

@@ -331,11 +331,21 @@ def build_cpu_plan(
     *,
     tile: tuple[int, int, int] = (128, 128, 64),
     target_kind: str = "cpu",
+    measured_schedule: Mapping[str, Any] | None = None,
 ) -> Optional[CPUPlan]:
-    """Build a hardware-free lowering artifact plan for supported straight-line dataflow."""
+    """Build a lowering plan, applying a verified measured schedule if supplied."""
 
     _validate_tile(tile)
     target_kind = normalize_target_kind(target_kind)
+    schedule_config = _validated_measured_schedule(
+        measured_schedule, target_kind=target_kind
+    )
+    if schedule_config is not None:
+        tile = (
+            _measured_int(schedule_config, "tile_m"),
+            _measured_int(schedule_config, "tile_n"),
+            _measured_int(schedule_config, "tile_k"),
+        )
     if len(module.functions) != 1:
         return None
     fn = module.functions[0]
@@ -384,10 +394,41 @@ def build_cpu_plan(
 
     graph_text = module.to_mlir(target=target_kind)
     ops = tuple(fn.body)
-    selected_schedule = _select_schedule(fn, ops, tile=tile, target_kind=target_kind)
-    schedule = _render_schedule_ir(module, fn, ops, tile=tile, target_kind=target_kind)
-    tile_ir = _render_tile_ir(module, fn, ops, tile=tile, target_kind=target_kind)
-    target = _render_target_ir(module, fn, ops, tile=tile, target_kind=target_kind)
+    selected_schedule = (
+        {
+            "op_name": "tessera.matmul",
+            "target": target_kind,
+            "config": dict(schedule_config),
+            "method": "measured",
+            "latency_ms": float(measured_schedule["latency_ms"]),
+        }
+        if schedule_config is not None and measured_schedule is not None
+        else _select_schedule(fn, ops, tile=tile, target_kind=target_kind)
+    )
+    schedule = _render_schedule_ir(
+        module,
+        fn,
+        ops,
+        tile=tile,
+        target_kind=target_kind,
+        schedule_config=schedule_config,
+    )
+    tile_ir = _render_tile_ir(
+        module,
+        fn,
+        ops,
+        tile=tile,
+        target_kind=target_kind,
+        schedule_config=schedule_config,
+    )
+    target = _render_target_ir(
+        module,
+        fn,
+        ops,
+        tile=tile,
+        target_kind=target_kind,
+        schedule_config=schedule_config,
+    )
     return CPUPlan(
         function_name=fn.name,
         ops=ops,
@@ -519,8 +560,14 @@ def _render_schedule_ir(
     *,
     tile: tuple[int, int, int],
     target_kind: str,
+    schedule_config: dict[str, object] | None = None,
 ) -> str:
-    return lower_graph_to_schedule_ir(module, tile=tile, target_kind=target_kind).to_mlir()
+    return lower_graph_to_schedule_ir(
+        module,
+        tile=tile,
+        target_kind=target_kind,
+        schedule_config=schedule_config,
+    ).to_mlir()
 
 
 def _render_tile_ir(
@@ -530,8 +577,14 @@ def _render_tile_ir(
     *,
     tile: tuple[int, int, int],
     target_kind: str,
+    schedule_config: dict[str, object] | None = None,
 ) -> str:
-    schedule = lower_graph_to_schedule_ir(module, tile=tile, target_kind=target_kind)
+    schedule = lower_graph_to_schedule_ir(
+        module,
+        tile=tile,
+        target_kind=target_kind,
+        schedule_config=schedule_config,
+    )
     return lower_schedule_to_tile_ir(schedule, target_kind=target_kind).to_mlir()
 
 
@@ -542,9 +595,15 @@ def _render_target_ir(
     *,
     tile: tuple[int, int, int],
     target_kind: str,
+    schedule_config: dict[str, object] | None = None,
 ) -> str:
     if target_kind in {"cpu", "x86", "rocm", "apple_cpu", "apple_gpu"} or target_kind.startswith("nvidia"):
-        return _render_object_target_ir(module, tile=tile, target_kind=target_kind)
+        return _render_object_target_ir(
+            module,
+            tile=tile,
+            target_kind=target_kind,
+            schedule_config=schedule_config,
+        )
     lines = [
         'module attributes {tessera.ir.level = "target", target = "cpu"} {',
         '  "tessera.cpu.func"() ({',
@@ -566,8 +625,14 @@ def _render_object_target_ir(
     *,
     tile: tuple[int, int, int],
     target_kind: str,
+    schedule_config: dict[str, object] | None = None,
 ) -> str:
-    schedule = lower_graph_to_schedule_ir(module, tile=tile, target_kind=target_kind)
+    schedule = lower_graph_to_schedule_ir(
+        module,
+        tile=tile,
+        target_kind=target_kind,
+        schedule_config=schedule_config,
+    )
     tile_module = lower_schedule_to_tile_ir(schedule, target_kind=target_kind)
     return lower_tile_to_target_ir(tile_module, target_kind=target_kind).to_mlir()
 
@@ -777,6 +842,61 @@ def _validate_tile(tile: tuple[int, int, int]) -> None:
         raise ValueError("CPU matmul tile must be a positive (tile_m, tile_n, tile_k) tuple")
 
 
+def _validated_measured_schedule(
+    schedule: Mapping[str, Any] | None, *, target_kind: str
+) -> dict[str, object] | None:
+    if schedule is None:
+        return None
+    if str(schedule.get("method", "")) != "measured":
+        raise ValueError("schedule application requires method='measured'")
+    if str(schedule.get("target", "")) != target_kind:
+        raise ValueError(
+            f"measured schedule target {schedule.get('target')!r} does not "
+            f"match compilation target {target_kind!r}"
+        )
+    latency = float(schedule.get("latency_ms", 0.0))
+    if not np.isfinite(latency) or latency <= 0.0:
+        raise ValueError("measured schedule requires a positive finite latency_ms")
+    raw = schedule.get("config")
+    if not isinstance(raw, Mapping):
+        raise ValueError("measured schedule requires a config mapping")
+    config: dict[str, object] = {}
+    for name in ("tile_m", "tile_n", "tile_k", "num_warps", "num_stages"):
+        if name not in raw:
+            continue
+        value = raw[name]
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError(f"measured schedule {name} must be an integer")
+        config[name] = value
+    missing = {
+        "tile_m", "tile_n", "tile_k", "num_warps", "num_stages"
+    } - set(config)
+    if missing:
+        raise ValueError(
+            "measured schedule config is missing " + ", ".join(sorted(missing))
+        )
+    _validate_tile(
+        (
+            _measured_int(config, "tile_m"),
+            _measured_int(config, "tile_n"),
+            _measured_int(config, "tile_k"),
+        )
+    )
+    if _measured_int(config, "num_warps") not in {1, 2, 4, 8}:
+        raise ValueError("measured num_warps must be one of 1, 2, 4, 8")
+    if _measured_int(config, "num_stages") < 1:
+        raise ValueError("measured num_stages must be positive")
+    config["evidence"] = "measured"
+    return config
+
+
+def _measured_int(config: Mapping[str, object], name: str) -> int:
+    value = config[name]
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"measured schedule {name} must be an integer")
+    return value
+
+
 def _valid_arity(op: IROp) -> bool:
     spec = GRAPH_OP_TO_SPEC.get(_canonical_op_name(op.op_name))
     return spec.valid_arity(len(op.operands)) if spec is not None else False
@@ -826,7 +946,9 @@ def _execute_op(op_name: str, operands: Sequence[np.ndarray], kwargs: Mapping[st
         axis = kwargs.get("axis", None)
         if axis is not None:
             axis = int(axis)
-        return np.sum(operands[0], axis=axis, keepdims=bool(kwargs.get("keepdims", False)))
+        if bool(kwargs.get("keepdims", False)):
+            return np.sum(operands[0], axis=axis, keepdims=True)
+        return np.sum(operands[0], axis=axis, keepdims=False)
     if op_name in {"tessera.rmsnorm", "tessera.rmsnorm_safe"}:
         x = np.asarray(operands[0])
         eps = float(kwargs.get("eps", 1e-5 if op_name == "tessera.rmsnorm" else 1e-6))

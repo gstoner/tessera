@@ -274,6 +274,7 @@ def lower_graph_to_schedule_ir(
     *,
     tile: tuple[int, int, int] = (128, 128, 64),
     target_kind: str = "cpu",
+    schedule_config: dict[str, object] | None = None,
 ) -> ScheduleIRModule:
     graph_result = graph_module.verify(target=target_kind)
     if not graph_result.ok:
@@ -293,7 +294,9 @@ def lower_graph_to_schedule_ir(
             for mesh in graph_module.meshes
         ]
         body.extend(mesh_ops)
-        scheduled_ops = _lower_graph_ops(graph_fn.body, tile=tile)
+        scheduled_ops = _lower_graph_ops(
+            graph_fn.body, tile=tile, schedule_config=schedule_config
+        )
         if graph_module.meshes:
             mesh = graph_module.meshes[0]
             for axis in mesh.axes:
@@ -310,15 +313,28 @@ def lower_graph_to_schedule_ir(
             "arch": target_kind,
             "shape_key": _shape_key(graph_fn.body),
             "tile": {"m": tile[0], "n": tile[1], "k": tile[2]},
-            "movement": {"prefetch": "auto", "overlap": "compute", "stages": 2},
+            "movement": {
+                "prefetch": "auto",
+                "overlap": "compute",
+                "stages": _schedule_int(schedule_config, "num_stages", 2),
+            },
             "numeric_policy": "f32@accum(f32)",
-            "cost_model": "roofline",
+            "cost_model": (
+                "measured"
+                if (schedule_config or {}).get("evidence") == "measured"
+                else "roofline"
+            ),
         }))
         schedule_module.functions.append(ScheduleFunction(graph_fn.name, body=body, target=target_kind))
     return schedule_module
 
 
-def _lower_graph_ops(ops: list[IROp], *, tile: tuple[int, int, int]) -> list[ScheduleOp]:
+def _lower_graph_ops(
+    ops: list[IROp],
+    *,
+    tile: tuple[int, int, int],
+    schedule_config: dict[str, object] | None = None,
+) -> list[ScheduleOp]:
     scheduled: list[ScheduleOp] = []
     tile_m, tile_n, tile_k = tile
     for idx, op in enumerate(ops):
@@ -351,9 +367,17 @@ def _lower_graph_ops(ops: list[IROp], *, tile: tuple[int, int, int]) -> list[Sch
                     "tile_m": tile_m,
                     "tile_n": tile_n,
                     "tile_k": tile_k,
-                    "num_warps": 4,
-                    "num_stages": 2,
-                    "cost_model": "roofline",
+                    "num_warps": _schedule_int(
+                        schedule_config, "num_warps", 4
+                    ),
+                    "num_stages": _schedule_int(
+                        schedule_config, "num_stages", 2
+                    ),
+                    "cost_model": (
+                        "measured"
+                        if (schedule_config or {}).get("evidence") == "measured"
+                        else "roofline"
+                    ),
                     "flops": _matmul_flops(op),
                     "bytes_moved": _matmul_bytes(op),
                 },
@@ -367,6 +391,12 @@ def _lower_graph_ops(ops: list[IROp], *, tile: tuple[int, int, int]) -> list[Sch
             scheduled.append(_flash_attention_pipeline(op, idx))
         elif op_name == "tessera.msa_sparse_attention":
             scheduled.append(_msa_kv_outer_sparse(op, idx))
+        elif op_name in {
+            "tessera.gated_deltanet",
+            "tessera.kimi_delta_attention",
+            "tessera.modified_delta_attention",
+        }:
+            scheduled.append(_sequence_mixer_pipeline(op, idx))
         elif op_name in MEDIA_OPS:
             scheduled.append(_media_op(op, idx))
         elif op_name in JEPA_OPS:
@@ -396,6 +426,17 @@ def _lower_graph_ops(ops: list[IROp], *, tile: tuple[int, int, int]) -> list[Sch
         if op_name.startswith("tessera.kv_cache."):
             scheduled.append(ScheduleOp("schedule.prefetch", {**_base_attrs(op, idx), "into": "shared", "overlap": "compute"}))
     return scheduled
+
+
+def _schedule_int(
+    config: dict[str, object] | None, name: str, default: int
+) -> int:
+    if config is None or name not in config:
+        return default
+    value = config[name]
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"schedule {name} must be an integer")
+    return value
 
 
 def _lower_schedule_directive(op: IROp, ordinal: int) -> list[ScheduleOp]:
@@ -434,6 +475,49 @@ def _flash_attention_pipeline(op: IROp, ordinal: int) -> ScheduleOp:
                     ScheduleOp("schedule.prefetch", {**_base_attrs(op, ordinal), "into": "shared", "overlap": "compute", "tile_q": 64, "tile_kv": 64}),
                     ScheduleOp("schedule.yield"),
                 ],
+            ),
+            ScheduleOp("schedule.yield"),
+        ],
+    )
+
+
+def _sequence_mixer_pipeline(op: IROp, ordinal: int) -> ScheduleOp:
+    attrs = {**_base_attrs(op, ordinal), **dict(op.kwargs)}
+    chunk = int(attrs.get("chunk_size", 64))
+    if chunk < 1:
+        raise ValueError("sequence-mixer chunk_size must be positive")
+    return ScheduleOp(
+        "schedule.pipeline.region",
+        {
+            **attrs,
+            "schedule": "linear_recurrence",
+            "micro_batches": 1,
+            "carried_state": "B,H,Dk,Dv@fp32",
+            "forward_form": "chunked_ut_or_recurrent",
+            "backward_form": "reverse_recurrence",
+            "chunk_size": chunk,
+            "reduction_order": "reverse_token_order",
+        },
+        body=[
+            ScheduleOp(
+                "schedule.stage",
+                {
+                    "devices": [0],
+                    "phase": "forward",
+                    "state_access": "read_write",
+                    "chunk_size": chunk,
+                },
+                body=[ScheduleOp("schedule.yield")],
+            ),
+            ScheduleOp(
+                "schedule.stage",
+                {
+                    "devices": [0],
+                    "phase": "backward",
+                    "state_access": "reverse_read",
+                    "chunk_size": chunk,
+                },
+                body=[ScheduleOp("schedule.yield")],
             ),
             ScheduleOp("schedule.yield"),
         ],

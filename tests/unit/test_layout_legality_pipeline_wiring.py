@@ -59,15 +59,16 @@ def test_layout_legality_runs_before_symbolic_dim_equality():
             body.index("createSymbolicDimEqualityPass()")
 
 
-def test_layout_assignment_defaults_on_for_x86_and_runs_before_legality():
+def test_layout_assignment_defaults_on_for_physical_consumers():
     """LayoutAssignmentPass (2026-06-22) is wired into the same three builders
-    behind the `assign-layouts` option for GPU targets and by default on x86,
-    where its architecture-owned materializer runs after legality."""
+    and defaults on for x86/NVIDIA, whose architecture-owned materializers run
+    immediately after legality."""
     src = _PASSES.read_text(encoding="utf-8")
-    # The explicit force-on option remains for GPU targets.
+    # The explicit force-on option remains for inspection/custom pipelines.
     assert "struct TesseraLoweringPipelineOptions" in src
     assert 'assign-layouts' in src
     assert 'target == "x86"' in src
+    assert 'target.starts_with("nvidia_")' in src
     for anchor in ('"tessera-lower-to-x86"', '"tessera-lower-to-gpu"',
                    "addCUDA13PipelineForSM("):
         body = _pipeline_body(src, anchor)
@@ -79,3 +80,8 @@ def test_layout_assignment_defaults_on_for_x86_and_runs_before_legality():
     assert "createX86GraphLayoutMaterializationPass()" in x86
     assert x86.index("createLayoutLegalityPass()") < \
         x86.index("createX86GraphLayoutMaterializationPass()")
+    for anchor in ('"tessera-lower-to-gpu"', "addCUDA13PipelineForSM("):
+        body = _pipeline_body(src, anchor)
+        assert "createNVIDIAGraphLayoutMaterializationPass()" in body
+        assert body.index("createLayoutLegalityPass()") < \
+            body.index("createNVIDIAGraphLayoutMaterializationPass()")

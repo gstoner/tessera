@@ -5379,6 +5379,31 @@ def _nvidia_device_memory_envelope() -> dict[str, int]:
     return {"capacity_bytes": int(total.value), "free_bytes": int(free.value)}
 
 
+def execute_emitted_pipeline(
+    metadata: dict[str, Any],
+    *,
+    run_stage: Any,
+    run_collective: Any = None,
+    collective_after: Any = None,
+    transport_workers: int = 1,
+    collective_runtime: Any = None,
+) -> Any:
+    """Consume ``tessera.pipeline_steps`` with optional transport overlap."""
+    from .compiler.pipeline_runtime import execute_pipeline_steps
+
+    rows = metadata.get("tessera.pipeline_steps", metadata.get("pipeline_steps"))
+    if rows is None:
+        raise ValueError("runtime metadata has no tessera.pipeline_steps")
+    return execute_pipeline_steps(
+        rows,
+        run_stage=run_stage,
+        run_collective=run_collective,
+        collective_after=collective_after,
+        transport_workers=transport_workers,
+        collective_runtime=collective_runtime,
+    )
+
+
 _nvidia_device_name_probe: Any = False  # False = unprobed; None/str after
 
 
@@ -5791,8 +5816,25 @@ def _load_hip_for_launch() -> ctypes.CDLL | None:
     hip.hipEventSynchronize.argtypes = [ctypes.c_void_p]
     hip.hipEventElapsedTime.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.c_void_p, ctypes.c_void_p]
     hip.hipEventDestroy.argtypes = [ctypes.c_void_p]
+    hip.hipMemGetInfo.argtypes = [
+        ctypes.POINTER(ctypes.c_size_t),
+        ctypes.POINTER(ctypes.c_size_t),
+    ]
     _rocm_hip_launch_lib = hip
     return hip
+
+
+def _rocm_device_memory_envelope() -> dict[str, int]:
+    """Return free/total bytes from the retained HIP device context."""
+    hip = _load_hip_for_launch()
+    if hip is None or hip.hipInit(0) != 0:
+        raise RuntimeError("HIP device-memory query requires a usable ROCm context")
+    free = ctypes.c_size_t()
+    total = ctypes.c_size_t()
+    rc = hip.hipMemGetInfo(ctypes.byref(free), ctypes.byref(total))
+    if rc != 0:
+        raise RuntimeError(f"HIP device-memory query failed rc={rc}")
+    return {"capacity_bytes": int(total.value), "free_bytes": int(free.value)}
 
 
 def _execute_rocm_compiled_gemm(artifact: RuntimeArtifact, args: Any) -> Any:
@@ -23551,6 +23593,10 @@ def _execute_rocm_compiled_moe(artifact: RuntimeArtifact, args: Any) -> Any:
 
 
 _rocm_opt_hsaco_cache: dict[tuple[str, str], bytes] = {}
+_rocm_adafactor_hsaco_cache: dict[tuple[str], bytes] = {}
+_rocm_adafactor_module_cache: dict[
+    tuple[str], tuple[ctypes.c_void_p, tuple[ctypes.c_void_p, ...]]
+] = {}
 _rocm_sgd_bwd_hsaco_cache: dict[tuple[str], bytes] = {}
 _rocm_momentum_bwd_hsaco_cache: dict[tuple[str, str], bytes] = {}
 _rocm_adam_bwd_hsaco_cache: dict[tuple[str, str], bytes] = {}
@@ -23657,6 +23703,758 @@ def _execute_rocm_compiled_optimizer(artifact: RuntimeArtifact, args: Any) -> An
     values = _bind_launch_args(args, arg_names)
     p, g, m, v = _optimizer_bind(ops[0], values)
     return _optimizer_compute(op_name, p, g, m, v, ops[0].get("kwargs") or {}, _rocm_optimizer_kernel, np)
+
+
+def _rocm_adafactor_functions(
+    hip: Any, hsaco: bytes, chip: str
+) -> tuple[ctypes.c_void_p, ...]:
+    cached = _rocm_adafactor_module_cache.get((chip,))
+    if cached is not None:
+        return cached[1]
+    module = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(module), hsaco) != 0:
+        raise _RocmCompiledUnavailable("ROCm Adafactor HSACO load failed")
+    functions: list[ctypes.c_void_p] = []
+    for symbol in (
+        b"adafactor_row",
+        b"adafactor_col",
+        b"adafactor_mean",
+        b"adafactor_update",
+        b"adafactor_full",
+        b"adafactor_bwd_mean",
+        b"adafactor_bwd_row",
+        b"adafactor_bwd_col",
+        b"adafactor_bwd_finalize",
+        b"adafactor_full_bwd",
+    ):
+        function = ctypes.c_void_p()
+        if hip.hipModuleGetFunction(
+            ctypes.byref(function), module, symbol
+        ) != 0:
+            unload = getattr(hip, "hipModuleUnload", None)
+            if unload is not None:
+                unload(module)
+            raise RuntimeError(
+                f"ROCm Adafactor kernel symbol {symbol.decode()!r} not found"
+            )
+        functions.append(function)
+    result = tuple(functions)
+    _rocm_adafactor_module_cache[(chip,)] = (module, result)
+    return result
+
+
+def _rocm_adafactor_matrix(
+    parameter: Any,
+    gradient: Any,
+    row_moment: Any,
+    col_moment: Any,
+    *,
+    lr: float,
+    beta2: float,
+    eps: float,
+) -> tuple[Any, Any, Any]:
+    """Execute one factored Adafactor update as an ordered four-kernel program.
+
+    The row/column reductions have one deterministic owner per output element;
+    the scalar row mean has one owner for a stable reduction order.  All four
+    entries live in one cached compiler-owned HSACO.
+    """
+    import numpy as np
+
+    p = np.ascontiguousarray(parameter, np.float32)
+    g = np.ascontiguousarray(gradient, np.float32)
+    if p.shape != g.shape or p.ndim < 2:
+        raise ValueError(
+            "ROCm Adafactor factored execution requires matching rank-2+ "
+            f"parameter/gradient tensors; got {p.shape} and {g.shape}"
+        )
+    m = int(np.prod(p.shape[:-1]))
+    n = int(p.shape[-1])
+    row = np.ascontiguousarray(row_moment, np.float32).reshape(-1)
+    col = np.ascontiguousarray(col_moment, np.float32).reshape(-1)
+    if row.size != m or col.size != n:
+        raise ValueError(
+            "ROCm Adafactor state shape mismatch: expected row "
+            f"{p.shape[:-1]} ({m}) and col ({n},), got {row_moment.shape} "
+            f"and {col_moment.shape}"
+        )
+    chip = _rocm_chip()
+    directive = (
+        'module {\n  "tessera_rocm.optimizer"() '
+        '{name = "adafactor", kind = "adafactor"} : () -> ()\n}\n'
+    )
+    hsaco = _build_rocm_elementwise_hsaco(
+        "generate-rocm-optimizer-kernel",
+        directive,
+        _rocm_adafactor_hsaco_cache,
+        (chip,),
+    )
+    hip = _load_hip_for_launch()
+    if hip is None or hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("ROCm Adafactor HIP runtime unavailable")
+    functions = _rocm_adafactor_functions(hip, hsaco, chip)
+
+    p_flat = p.reshape(-1)
+    g_flat = g.reshape(-1)
+    row_out = np.empty(m, np.float32)
+    col_out = np.empty(n, np.float32)
+    mean_out = np.zeros(1, np.float32)
+    p_out = np.empty(p_flat.size, np.float32)
+    hosts = (p_flat, g_flat, row, col, row_out, col_out, mean_out, p_out)
+    devices = [
+        _rocm_dev_in(hip, host, 4 * int(host.size)) for host in hosts
+    ]
+
+    def memref(pointer: ctypes.c_void_p, count: int) -> list[Any]:
+        return [
+            ctypes.c_void_p(pointer.value),
+            ctypes.c_void_p(pointer.value),
+            ctypes.c_int64(0),
+            ctypes.c_int64(count),
+            ctypes.c_int64(1),
+        ]
+
+    def launch(
+        function: ctypes.c_void_p, grid: int, values: list[Any]
+    ) -> None:
+        packed = (ctypes.c_void_p * len(values))()
+        for index, value in enumerate(values):
+            packed[index] = ctypes.cast(
+                ctypes.byref(value), ctypes.c_void_p
+            )
+        rc = hip.hipModuleLaunchKernel(
+            function,
+            grid,
+            1,
+            1,
+            _GRID_BLOCKDIM,
+            1,
+            1,
+            0,
+            None,
+            packed,
+            None,
+        )
+        if rc != 0:
+            raise RuntimeError(f"ROCm Adafactor launch failed rc={rc}")
+
+    d_p, d_g, d_row, d_col, d_row_out, d_col_out, d_mean, d_p_out = devices
+    try:
+        launch(
+            functions[0],
+            (m + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM,
+            memref(d_g, p_flat.size)
+            + memref(d_row, m)
+            + memref(d_row_out, m)
+            + [
+                ctypes.c_int64(m),
+                ctypes.c_int64(n),
+                ctypes.c_float(beta2),
+            ],
+        )
+        launch(
+            functions[1],
+            (n + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM,
+            memref(d_g, p_flat.size)
+            + memref(d_col, n)
+            + memref(d_col_out, n)
+            + [
+                ctypes.c_int64(m),
+                ctypes.c_int64(n),
+                ctypes.c_float(beta2),
+            ],
+        )
+        launch(
+            functions[2],
+            1,
+            memref(d_row_out, m)
+            + memref(d_mean, 1)
+            + [ctypes.c_int64(m)],
+        )
+        launch(
+            functions[3],
+            (p_flat.size + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM,
+            memref(d_p, p_flat.size)
+            + memref(d_g, p_flat.size)
+            + memref(d_row_out, m)
+            + memref(d_col_out, n)
+            + memref(d_mean, 1)
+            + memref(d_p_out, p_flat.size)
+            + [
+                ctypes.c_int64(m),
+                ctypes.c_int64(n),
+                ctypes.c_float(lr),
+                ctypes.c_float(eps),
+            ],
+        )
+        if hip.hipDeviceSynchronize() != 0:
+            raise RuntimeError("ROCm Adafactor synchronization failed")
+        for host, device in (
+            (p_out, d_p_out),
+            (row_out, d_row_out),
+            (col_out, d_col_out),
+        ):
+            hip.hipMemcpy(
+                host.ctypes.data_as(ctypes.c_void_p),
+                device,
+                4 * int(host.size),
+                2,
+            )
+    finally:
+        for device in devices:
+            hip.hipFree(device)
+    return (
+        p_out.reshape(p.shape),
+        row_out.reshape(p.shape[:-1]),
+        col_out,
+    )
+
+
+def _rocm_adafactor_full(
+    parameter: Any,
+    gradient: Any,
+    moment: Any,
+    *,
+    lr: float,
+    beta2: float,
+    eps: float,
+) -> tuple[Any, Any]:
+    """Execute the lower-rank full-second-moment Adafactor fallback."""
+    import numpy as np
+
+    p = np.ascontiguousarray(parameter, np.float32)
+    g = np.ascontiguousarray(gradient, np.float32)
+    old = np.ascontiguousarray(moment, np.float32)
+    if p.shape != g.shape or p.shape != old.shape or p.ndim >= 2:
+        raise ValueError(
+            "ROCm Adafactor full-state execution requires matching rank-0/1 "
+            f"parameter, gradient, and moment tensors; got {p.shape}, "
+            f"{g.shape}, and {old.shape}"
+        )
+    count = int(p.size)
+    chip = _rocm_chip()
+    directive = (
+        'module {\n  "tessera_rocm.optimizer"() '
+        '{name = "adafactor", kind = "adafactor"} : () -> ()\n}\n'
+    )
+    hsaco = _build_rocm_elementwise_hsaco(
+        "generate-rocm-optimizer-kernel",
+        directive,
+        _rocm_adafactor_hsaco_cache,
+        (chip,),
+    )
+    hip = _load_hip_for_launch()
+    if hip is None or hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("ROCm Adafactor HIP runtime unavailable")
+    function = _rocm_adafactor_functions(hip, hsaco, chip)[4]
+    p_out = np.empty(count, np.float32)
+    moment_out = np.empty(count, np.float32)
+    hosts = (
+        p.reshape(-1),
+        g.reshape(-1),
+        old.reshape(-1),
+        p_out,
+        moment_out,
+    )
+    devices = [
+        _rocm_dev_in(hip, host, 4 * int(host.size)) for host in hosts
+    ]
+
+    def memref(pointer: ctypes.c_void_p) -> list[Any]:
+        return [
+            ctypes.c_void_p(pointer.value),
+            ctypes.c_void_p(pointer.value),
+            ctypes.c_int64(0),
+            ctypes.c_int64(count),
+            ctypes.c_int64(1),
+        ]
+
+    values: list[Any] = []
+    for device in devices:
+        values.extend(memref(device))
+    values.extend([
+        ctypes.c_int64(count),
+        ctypes.c_float(lr),
+        ctypes.c_float(beta2),
+        ctypes.c_float(eps),
+    ])
+    packed = (ctypes.c_void_p * len(values))()
+    for index, value in enumerate(values):
+        packed[index] = ctypes.cast(ctypes.byref(value), ctypes.c_void_p)
+    try:
+        rc = hip.hipModuleLaunchKernel(
+            function,
+            (count + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM,
+            1,
+            1,
+            _GRID_BLOCKDIM,
+            1,
+            1,
+            0,
+            None,
+            packed,
+            None,
+        )
+        if rc != 0 or hip.hipDeviceSynchronize() != 0:
+            raise RuntimeError(f"ROCm Adafactor full-state launch failed rc={rc}")
+        for host, device in (
+            (p_out, devices[3]),
+            (moment_out, devices[4]),
+        ):
+            hip.hipMemcpy(
+                host.ctypes.data_as(ctypes.c_void_p),
+                device,
+                4 * int(host.size),
+                2,
+            )
+    finally:
+        for device in devices:
+            hip.hipFree(device)
+    return p_out.reshape(p.shape), moment_out.reshape(p.shape)
+
+
+def _execute_rocm_compiled_adafactor(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """Execute the explicit factored-state Adafactor ABI on gfx1151."""
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    if len(ops) != 1 or str(ops[0].get("op_name", "")) != "tessera.adafactor":
+        raise ValueError(
+            "rocm_adafactor_compiled requires one tessera.adafactor op"
+        )
+    names = [str(name) for name in ops[0].get("operands", [])]
+    if len(names) not in {3, 4}:
+        raise ValueError(
+            "ROCm Adafactor physical ABI is [parameter, gradient, moment] or "
+            "[parameter, gradient, row, col]"
+        )
+    values = _bind_launch_args(args, arg_names)
+    kwargs = ops[0].get("kwargs") or {}
+    parameters = dict(
+        lr=float(kwargs.get("lr", 1e-3)),
+        beta2=float(kwargs.get("beta2", 0.999)),
+        eps=float(kwargs.get("eps", 1e-30)),
+    )
+    if len(names) == 3:
+        return _rocm_adafactor_full(
+            values[names[0]],
+            values[names[1]],
+            values[names[2]],
+            **parameters,
+        )
+    return _rocm_adafactor_matrix(
+        values[names[0]],
+        values[names[1]],
+        values[names[2]],
+        values[names[3]],
+        **parameters,
+    )
+
+
+def _rocm_adafactor_factored_backward(
+    parameter: Any,
+    gradient: Any,
+    row_moment: Any,
+    col_moment: Any,
+    cotangent: Any,
+    *,
+    lr: float,
+    beta2: float,
+    eps: float,
+) -> tuple[Any, Any, Any, Any]:
+    """Execute the deterministic factored Adafactor VJP on gfx1151.
+
+    The compiler-owned module first recomputes the forward row/column moments
+    and ordered row mean, then runs mean, row, column, and elementwise adjoint
+    phases.  Reductions have unique owners and therefore require no atomics.
+    """
+    import numpy as np
+
+    p = np.ascontiguousarray(parameter, np.float32)
+    g = np.ascontiguousarray(gradient, np.float32)
+    dy = np.ascontiguousarray(cotangent, np.float32)
+    if p.shape != g.shape or p.shape != dy.shape or p.ndim < 2:
+        raise ValueError(
+            "ROCm Adafactor factored backward requires matching rank-2+ "
+            "parameter, gradient, and cotangent tensors"
+        )
+    m = int(np.prod(p.shape[:-1]))
+    n = int(p.shape[-1])
+    count = int(p.size)
+    old_row = np.ascontiguousarray(row_moment, np.float32).reshape(-1)
+    old_col = np.ascontiguousarray(col_moment, np.float32).reshape(-1)
+    if old_row.size != m or old_col.size != n:
+        raise ValueError("ROCm Adafactor backward state shape mismatch")
+    chip = _rocm_chip()
+    directive = (
+        'module {\n  "tessera_rocm.optimizer"() '
+        '{name = "adafactor", kind = "adafactor", backward = true} '
+        ': () -> ()\n}\n'
+    )
+    hsaco = _build_rocm_elementwise_hsaco(
+        "generate-rocm-optimizer-kernel",
+        directive,
+        _rocm_adafactor_hsaco_cache,
+        (chip,),
+    )
+    hip = _load_hip_for_launch()
+    if hip is None or hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable(
+            "ROCm Adafactor backward HIP runtime unavailable"
+        )
+    functions = _rocm_adafactor_functions(hip, hsaco, chip)
+    hosts = (
+        g.reshape(-1),
+        dy.reshape(-1),
+        old_row,
+        old_col,
+        np.empty(m, np.float32),
+        np.empty(n, np.float32),
+        np.zeros(1, np.float32),
+        np.zeros(1, np.float32),
+        np.empty(m, np.float32),
+        np.empty(n, np.float32),
+        np.empty(count, np.float32),
+        np.empty(count, np.float32),
+        np.empty(m, np.float32),
+        np.empty(n, np.float32),
+    )
+    devices = [
+        _rocm_dev_in(hip, host, 4 * int(host.size)) for host in hosts
+    ]
+
+    def memref(pointer: ctypes.c_void_p, extent: int) -> list[Any]:
+        return [
+            ctypes.c_void_p(pointer.value),
+            ctypes.c_void_p(pointer.value),
+            ctypes.c_int64(0),
+            ctypes.c_int64(extent),
+            ctypes.c_int64(1),
+        ]
+
+    def launch(
+        function: ctypes.c_void_p, work_items: int, values: list[Any]
+    ) -> None:
+        packed = (ctypes.c_void_p * len(values))()
+        for index, value in enumerate(values):
+            packed[index] = ctypes.cast(
+                ctypes.byref(value), ctypes.c_void_p
+            )
+        grid = max(1, (work_items + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM)
+        rc = hip.hipModuleLaunchKernel(
+            function,
+            grid,
+            1,
+            1,
+            _GRID_BLOCKDIM,
+            1,
+            1,
+            0,
+            None,
+            packed,
+            None,
+        )
+        if rc != 0:
+            raise RuntimeError(
+                f"ROCm Adafactor backward launch failed rc={rc}"
+            )
+
+    (
+        d_g,
+        d_dy,
+        d_old_row,
+        d_old_col,
+        d_row,
+        d_col,
+        d_mean,
+        d_dmean,
+        d_drow,
+        d_dcol,
+        d_dp,
+        d_dg,
+        d_dold_row,
+        d_dold_col,
+    ) = devices
+    try:
+        common_forward = [
+            ctypes.c_int64(m),
+            ctypes.c_int64(n),
+            ctypes.c_float(beta2),
+        ]
+        launch(
+            functions[0],
+            m,
+            memref(d_g, count)
+            + memref(d_old_row, m)
+            + memref(d_row, m)
+            + common_forward,
+        )
+        launch(
+            functions[1],
+            n,
+            memref(d_g, count)
+            + memref(d_old_col, n)
+            + memref(d_col, n)
+            + common_forward,
+        )
+        launch(
+            functions[2],
+            1,
+            memref(d_row, m)
+            + memref(d_mean, 1)
+            + [ctypes.c_int64(m)],
+        )
+        backward_common = (
+            memref(d_g, count)
+            + memref(d_dy, count)
+            + memref(d_row, m)
+            + memref(d_col, n)
+            + memref(d_mean, 1)
+        )
+        launch(
+            functions[5],
+            1,
+            backward_common
+            + memref(d_dmean, 1)
+            + [
+                ctypes.c_int64(m),
+                ctypes.c_int64(n),
+                ctypes.c_float(lr),
+                ctypes.c_float(eps),
+            ],
+        )
+        launch(
+            functions[6],
+            m,
+            backward_common
+            + memref(d_dmean, 1)
+            + memref(d_drow, m)
+            + memref(d_dold_row, m)
+            + [
+                ctypes.c_int64(m),
+                ctypes.c_int64(n),
+                ctypes.c_float(lr),
+                ctypes.c_float(beta2),
+                ctypes.c_float(eps),
+            ],
+        )
+        launch(
+            functions[7],
+            n,
+            backward_common
+            + memref(d_dmean, 1)
+            + memref(d_dcol, n)
+            + memref(d_dold_col, n)
+            + [
+                ctypes.c_int64(m),
+                ctypes.c_int64(n),
+                ctypes.c_float(lr),
+                ctypes.c_float(beta2),
+                ctypes.c_float(eps),
+            ],
+        )
+        launch(
+            functions[8],
+            count,
+            backward_common
+            + memref(d_drow, m)
+            + memref(d_dcol, n)
+            + memref(d_dp, count)
+            + memref(d_dg, count)
+            + [
+                ctypes.c_int64(m),
+                ctypes.c_int64(n),
+                ctypes.c_float(lr),
+                ctypes.c_float(beta2),
+                ctypes.c_float(eps),
+            ],
+        )
+        if hip.hipDeviceSynchronize() != 0:
+            raise RuntimeError("ROCm Adafactor backward synchronization failed")
+        outputs = (
+            (hosts[10], d_dp),
+            (hosts[11], d_dg),
+            (hosts[12], d_dold_row),
+            (hosts[13], d_dold_col),
+        )
+        for host, device in outputs:
+            hip.hipMemcpy(
+                host.ctypes.data_as(ctypes.c_void_p),
+                device,
+                4 * int(host.size),
+                2,
+            )
+    finally:
+        for device in devices:
+            hip.hipFree(device)
+    return (
+        hosts[10].reshape(p.shape),
+        hosts[11].reshape(p.shape),
+        hosts[12].reshape(p.shape[:-1]),
+        hosts[13],
+    )
+
+
+def _rocm_adafactor_full_backward(
+    parameter: Any,
+    gradient: Any,
+    moment: Any,
+    cotangent: Any,
+    *,
+    lr: float,
+    beta2: float,
+    eps: float,
+) -> tuple[Any, Any, Any]:
+    """Execute lower-rank Adafactor's full-moment VJP in one HIP launch."""
+    import numpy as np
+
+    p = np.ascontiguousarray(parameter, np.float32)
+    g = np.ascontiguousarray(gradient, np.float32)
+    old = np.ascontiguousarray(moment, np.float32)
+    dy = np.ascontiguousarray(cotangent, np.float32)
+    if (
+        p.shape != g.shape
+        or p.shape != old.shape
+        or p.shape != dy.shape
+        or p.ndim >= 2
+    ):
+        raise ValueError(
+            "ROCm Adafactor full backward requires matching rank-0/1 tensors"
+        )
+    count = int(p.size)
+    chip = _rocm_chip()
+    directive = (
+        'module {\n  "tessera_rocm.optimizer"() '
+        '{name = "adafactor", kind = "adafactor", backward = true} '
+        ': () -> ()\n}\n'
+    )
+    hsaco = _build_rocm_elementwise_hsaco(
+        "generate-rocm-optimizer-kernel",
+        directive,
+        _rocm_adafactor_hsaco_cache,
+        (chip,),
+    )
+    hip = _load_hip_for_launch()
+    if hip is None or hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable(
+            "ROCm Adafactor full backward HIP runtime unavailable"
+        )
+    function = _rocm_adafactor_functions(hip, hsaco, chip)[9]
+    hosts = (
+        g.reshape(-1),
+        old.reshape(-1),
+        dy.reshape(-1),
+        np.empty(count, np.float32),
+        np.empty(count, np.float32),
+        np.empty(count, np.float32),
+    )
+    devices = [
+        _rocm_dev_in(hip, host, 4 * int(host.size)) for host in hosts
+    ]
+
+    def memref(device: ctypes.c_void_p) -> list[Any]:
+        return [
+            ctypes.c_void_p(device.value),
+            ctypes.c_void_p(device.value),
+            ctypes.c_int64(0),
+            ctypes.c_int64(count),
+            ctypes.c_int64(1),
+        ]
+
+    values: list[Any] = []
+    for device in devices:
+        values.extend(memref(device))
+    values.extend([
+        ctypes.c_int64(count),
+        ctypes.c_float(lr),
+        ctypes.c_float(beta2),
+        ctypes.c_float(eps),
+    ])
+    packed = (ctypes.c_void_p * len(values))()
+    for index, value in enumerate(values):
+        packed[index] = ctypes.cast(ctypes.byref(value), ctypes.c_void_p)
+    try:
+        rc = hip.hipModuleLaunchKernel(
+            function,
+            max(1, (count + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM),
+            1,
+            1,
+            _GRID_BLOCKDIM,
+            1,
+            1,
+            0,
+            None,
+            packed,
+            None,
+        )
+        if rc != 0 or hip.hipDeviceSynchronize() != 0:
+            raise RuntimeError(
+                f"ROCm Adafactor full backward launch failed rc={rc}"
+            )
+        for host, device in zip(hosts[3:], devices[3:]):
+            hip.hipMemcpy(
+                host.ctypes.data_as(ctypes.c_void_p),
+                device,
+                4 * int(host.size),
+                2,
+            )
+    finally:
+        for device in devices:
+            hip.hipFree(device)
+    return (
+        hosts[3].reshape(p.shape),
+        hosts[4].reshape(p.shape),
+        hosts[5].reshape(p.shape),
+    )
+
+
+def _execute_rocm_compiled_adafactor_backward(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """Run the compiler-owned Adafactor adjoint package on gfx1151."""
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    if len(ops) != 1 or str(ops[0].get("op_name", "")) != "tessera.adafactor":
+        raise ValueError(
+            "rocm_adafactor_bwd_compiled requires one tessera.adafactor op"
+        )
+    names = [str(name) for name in ops[0].get("operands", [])]
+    if len(names) not in {3, 4}:
+        raise ValueError(
+            "ROCm Adafactor backward ABI is [parameter, gradient, moment] or "
+            "[parameter, gradient, row, col]"
+        )
+    values = _bind_launch_args(args, arg_names)
+    cotangent_name = str(metadata.get("out_cotangent", "dy"))
+    if cotangent_name not in values:
+        raise ValueError(
+            f"ROCm Adafactor backward is missing cotangent {cotangent_name!r}"
+        )
+    kwargs = ops[0].get("kwargs") or {}
+    parameters = dict(
+        lr=float(kwargs.get("lr", 1e-3)),
+        beta2=float(kwargs.get("beta2", 0.999)),
+        eps=float(kwargs.get("eps", 1e-30)),
+    )
+    if len(names) == 3:
+        return _rocm_adafactor_full_backward(
+            values[names[0]],
+            values[names[1]],
+            values[names[2]],
+            values[cotangent_name],
+            **parameters,
+        )
+    return _rocm_adafactor_factored_backward(
+        values[names[0]],
+        values[names[1]],
+        values[names[2]],
+        values[names[3]],
+        values[cotangent_name],
+        **parameters,
+    )
 
 
 def _execute_rocm_compiled_sgd_backward(artifact: RuntimeArtifact, args: Any) -> Any:
@@ -24889,6 +25687,7 @@ def _execute_rocm_compiled_exotic_attention(artifact: RuntimeArtifact, args: Any
 # (chip, d_qk, d_v, flags, dtype), cached.
 # ─────────────────────────────────────────────────────────────────────────────
 _rocm_deltanet_hsaco_cache: dict[tuple, bytes] = {}
+_rocm_deltanet_bwd_hsaco_cache: dict[tuple, bytes] = {}
 
 
 def _build_compiled_deltanet_hsaco(
@@ -24915,6 +25714,43 @@ def _build_compiled_deltanet_hsaco(
     )
     key = (chip, d_qk, d_v, erase, modified, has_gate, has_beta, has_decay, dtype)
     return _build_rocm_elementwise_hsaco("generate-rocm-deltanet-kernel", directive, _rocm_deltanet_hsaco_cache, key)
+
+
+def _build_compiled_deltanet_bwd_hsaco(
+    d_qk: int,
+    d_v: int,
+    erase: bool,
+    modified: bool,
+    has_gate: bool,
+    has_beta: bool,
+    has_decay: bool,
+    chunk_size: int,
+) -> bytes:
+    chip = _rocm_chip()
+
+    def _b(value: bool) -> str:
+        return "true" if value else "false"
+
+    directive = (
+        "module {\n"
+        f'  "tessera_rocm.deltanet"() {{name = "dn_bwd", '
+        f"d_qk = {d_qk} : i64, d_v = {d_v} : i64, backward = true, "
+        f"erase = {_b(erase)}, modified = {_b(modified)}, "
+        f"has_gate = {_b(has_gate)}, "
+        f"has_beta = {_b(has_beta)}, has_decay = {_b(has_decay)}, "
+        f'chunk_size = {chunk_size} : i64, dtype = "f32"}} : () -> ()\n'
+        "}\n"
+    )
+    key = (
+        chip, d_qk, d_v, erase, modified, has_gate, has_beta, has_decay,
+        chunk_size,
+    )
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-deltanet-kernel",
+        directive,
+        _rocm_deltanet_bwd_hsaco_cache,
+        key,
+    )
 
 
 #: op_name -> modified flag (only modified_delta_attention bounds the delta).
@@ -25063,6 +25899,232 @@ def _execute_rocm_compiled_deltanet(artifact: RuntimeArtifact, args: Any) -> Any
     for dev in devs:
         hip.hipFree(dev)
     return o.reshape(B, H, S, d_v)
+
+
+def _execute_rocm_compiled_deltanet_backward(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """Run the compiler-owned checkpoint + reverse-chunk DeltaNet program."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op = ops[0] if len(ops) == 1 else {}
+    op_name = str(op.get("op_name", ""))
+    if op_name not in {
+        "tessera.gated_deltanet",
+        "tessera.kimi_delta_attention",
+        "tessera.modified_delta_attention",
+    }:
+        raise ValueError(
+            "rocm_deltanet_bwd_compiled handles gated_deltanet, "
+            "kimi_delta_attention, and modified_delta_attention"
+        )
+    kwargs = op.get("kwargs") or {}
+    if not bool(kwargs.get("causal", True)):
+        raise ValueError("rocm DeltaNet backward is causal-only")
+    modified = op_name == "tessera.modified_delta_attention"
+    erase = bool(kwargs.get("erase", False))
+    has_gate = bool(kwargs.get("has_gate", False))
+    has_beta = bool(kwargs.get("has_beta", False))
+    has_decay = bool(kwargs.get("has_decay", False))
+    chunk_size = int(kwargs.get("chunk_size", 64))
+    parallel_chunks = bool(kwargs.get("parallel_chunks", True))
+    if chunk_size < 1:
+        raise ValueError("DeltaNet backward chunk_size must be positive")
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[str(name)]) for name in op.get("operands", [])]
+    need = 4 + has_gate + has_beta + has_decay
+    if len(operands) != need:
+        raise ValueError(
+            f"DeltaNet backward expects {need} operands including output "
+            f"cotangent; got {len(operands)}"
+        )
+    q, k, v = (np.ascontiguousarray(value, np.float32) for value in operands[:3])
+    cursor = 3
+    gate = (
+        np.ascontiguousarray(operands[cursor], np.float32)
+        if has_gate
+        else np.zeros(1, np.float32)
+    )
+    cursor += int(has_gate)
+    beta = (
+        np.ascontiguousarray(operands[cursor], np.float32)
+        if has_beta
+        else np.ones(1, np.float32)
+    )
+    cursor += int(has_beta)
+    decay = (
+        np.ascontiguousarray(operands[cursor], np.float32)
+        if has_decay
+        else np.ones(1, np.float32)
+    )
+    cursor += int(has_decay)
+    dy = np.ascontiguousarray(operands[cursor], np.float32)
+    if q.ndim != 4 or k.shape != q.shape or v.shape[:3] != q.shape[:3]:
+        raise ValueError("DeltaNet backward requires compatible rank-4 Q/K/V")
+    if dy.shape != v.shape:
+        raise ValueError("DeltaNet output cotangent must match V/output shape")
+    B, H, S, d_qk = (int(value) for value in q.shape)
+    d_v = int(v.shape[-1])
+    if has_gate and gate.shape != v.shape:
+        raise ValueError(
+            "physical DeltaNet backward gate must have the full output shape"
+        )
+    scalar_shape = (B, H, S)
+    if has_beta and beta.shape != scalar_shape:
+        raise ValueError(
+            "physical DeltaNet backward beta must have shape (B,H,S)"
+        )
+    if has_decay and decay.shape != scalar_shape:
+        raise ValueError(
+            "physical DeltaNet backward decay must have shape (B,H,S)"
+        )
+    bh, n_qk, n_v, n_sc = B * H, q.size, v.size, B * H * S
+    chunks = (S + chunk_size - 1) // chunk_size
+    hsaco = _build_compiled_deltanet_bwd_hsaco(
+        d_qk, d_v, erase, modified, has_gate, has_beta, has_decay, chunk_size
+    )
+    hip = _load_hip_for_launch()
+    if hip is None or hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("ROCm DeltaNet backward needs HIP")
+    module = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(module), hsaco) != 0:
+        raise _RocmCompiledUnavailable("ROCm DeltaNet backward HSACO load failed")
+    functions: dict[str, ctypes.c_void_p] = {}
+    for name in (
+        "dn_bwd_checkpoint",
+        "dn_bwd_chunk_summary",
+        "dn_bwd_chunk_prefix",
+        "dn_bwd_chunk_fill",
+        "dn_bwd_reverse",
+    ):
+        function = ctypes.c_void_p()
+        if hip.hipModuleGetFunction(
+            ctypes.byref(function), module, name.encode()
+        ) != 0:
+            raise RuntimeError(f"ROCm DeltaNet backward symbol {name!r} missing")
+        functions[name] = function
+
+    host = {
+        "q": q.reshape(-1), "k": k.reshape(-1), "v": v.reshape(-1),
+        "gate": gate.reshape(-1), "beta": beta.reshape(-1),
+        "decay": decay.reshape(-1), "dy": dy.reshape(-1),
+        "hist": np.zeros(bh * (S + 1) * d_qk * d_v, np.float32),
+        "ds": np.zeros(bh * d_qk * d_v, np.float32),
+        "dn": np.zeros(bh * d_qk * d_v, np.float32),
+        "du": np.zeros(bh * d_qk * d_v, np.float32),
+        "chunk_scale": np.zeros(bh * chunks, np.float32),
+        "chunk_update": np.zeros(
+            bh * chunks * d_qk * d_v, np.float32
+        ),
+        "dq": np.zeros(n_qk, np.float32), "dk": np.zeros(n_qk, np.float32),
+        "dv": np.zeros(n_v, np.float32), "dg": np.zeros(n_v, np.float32),
+        "db": np.zeros(n_sc, np.float32), "da": np.zeros(n_sc, np.float32),
+    }
+    device = {name: ctypes.c_void_p() for name in host}
+    try:
+        for name, array in host.items():
+            if hip.hipMalloc(ctypes.byref(device[name]), array.nbytes) != 0:
+                raise RuntimeError(f"ROCm DeltaNet backward allocation {name} failed")
+            hip.hipMemset(device[name], 0, array.nbytes)
+        for name in ("q", "k", "v", "gate", "beta", "decay", "dy"):
+            array = host[name]
+            hip.hipMemcpy(
+                device[name],
+                array.ctypes.data_as(ctypes.c_void_p),
+                array.nbytes,
+                1,
+            )
+
+        def _mr(name: str) -> list[Any]:
+            pointer = device[name]
+            return [
+                ctypes.c_void_p(pointer.value),
+                ctypes.c_void_p(pointer.value),
+                ctypes.c_int64(0),
+                ctypes.c_int64(host[name].size),
+                ctypes.c_int64(1),
+            ]
+
+        def _launch(
+            function: ctypes.c_void_p,
+            names: list[str],
+            *,
+            dimensions: tuple[int, ...] = (S,),
+            grid_x: int = bh,
+        ) -> None:
+            launch_args: list[Any] = []
+            for name in names:
+                launch_args.extend(_mr(name))
+            launch_args.extend(
+                ctypes.c_int64(value) for value in dimensions
+            )
+            pointers = (ctypes.c_void_p * len(launch_args))()
+            for index, value in enumerate(launch_args):
+                pointers[index] = ctypes.cast(ctypes.byref(value), ctypes.c_void_p)
+            rc = hip.hipModuleLaunchKernel(
+                function, grid_x, 1, 1, 1, 1, 1, 0, None, pointers, None
+            )
+            if rc:
+                raise RuntimeError(f"ROCm DeltaNet backward launch failed rc={rc}")
+
+        if parallel_chunks and not erase and chunks > 1:
+            _launch(
+                functions["dn_bwd_chunk_summary"],
+                ["k", "v", "beta", "decay", "chunk_scale", "chunk_update"],
+                dimensions=(S, chunks),
+                grid_x=bh * chunks,
+            )
+            _launch(
+                functions["dn_bwd_chunk_prefix"],
+                ["chunk_scale", "chunk_update", "hist"],
+                dimensions=(S, chunks),
+            )
+            _launch(
+                functions["dn_bwd_chunk_fill"],
+                ["k", "v", "beta", "decay", "hist", "chunk_update"],
+                dimensions=(S, chunks),
+                grid_x=bh * chunks,
+            )
+        else:
+            _launch(
+                functions["dn_bwd_checkpoint"],
+                ["k", "v", "beta", "decay", "hist"],
+            )
+        _launch(
+            functions["dn_bwd_reverse"],
+            [
+                "q", "k", "v", "gate", "beta", "decay", "dy", "hist",
+                "ds", "dn", "du", "dq", "dk", "dv", "dg", "db", "da",
+            ],
+        )
+        hip.hipDeviceSynchronize()
+        for name in ("dq", "dk", "dv", "dg", "db", "da"):
+            array = host[name]
+            hip.hipMemcpy(
+                array.ctypes.data_as(ctypes.c_void_p),
+                device[name],
+                array.nbytes,
+                2,
+            )
+    finally:
+        for pointer in device.values():
+            if pointer.value:
+                hip.hipFree(pointer)
+    gradients: list[Any] = [
+        host["dq"].reshape(q.shape),
+        host["dk"].reshape(k.shape),
+        host["dv"].reshape(v.shape),
+    ]
+    if has_gate:
+        gradients.append(host["dg"].reshape(gate.shape))
+    if has_beta:
+        gradients.append(host["db"].reshape(beta.shape))
+    if has_decay:
+        gradients.append(host["da"].reshape(decay.shape))
+    return tuple(gradients)
 
 
 #: op_name -> modified flag (mirrors _ROCM_DELTANET_OPS).
@@ -25234,6 +26296,151 @@ def _execute_nvidia_matmul_relu_compiled(artifact: RuntimeArtifact, args: Any) -
 
     out, _latency_ms = run_matmul_epilogue_resident(aa, bb, bias, dtype_key, "relu")
     return out
+
+
+def _execute_x86_compiled_deltanet_backward(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """Run the resident-workspace AVX-512 DeltaNet reverse program."""
+    import numpy as np
+
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable(
+            "libtessera_x86_elementwise.so not loadable"
+        )
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op = ops[0] if len(ops) == 1 else {}
+    op_name = str(op.get("op_name", ""))
+    if op_name not in _X86_DELTANET_OPS:
+        raise ValueError("x86 DeltaNet backward requires a DeltaNet-family op")
+    kwargs = op.get("kwargs") or {}
+    if not bool(kwargs.get("causal", True)):
+        raise ValueError("x86 DeltaNet backward is causal-only")
+    erase = bool(kwargs.get("erase", False))
+    modified = _X86_DELTANET_OPS[op_name]
+    has_gate = bool(kwargs.get("has_gate", False))
+    has_beta = bool(kwargs.get("has_beta", False))
+    has_decay = bool(kwargs.get("has_decay", False))
+    chunk_size = int(kwargs.get("chunk_size", 64))
+    workers = int(kwargs.get("workers", os.cpu_count() or 1))
+    if chunk_size < 1 or workers < 1:
+        raise ValueError("chunk_size and workers must be positive")
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[str(name)]) for name in op.get("operands", [])]
+    need = 4 + has_gate + has_beta + has_decay
+    if len(operands) != need:
+        raise ValueError(
+            f"x86 DeltaNet backward expects {need} operands including dO"
+        )
+    q, k, v = (
+        np.ascontiguousarray(value, np.float32) for value in operands[:3]
+    )
+    cursor = 3
+    gate_source = (
+        operands[cursor] if has_gate else np.zeros(1, dtype=np.float32)
+    )
+    cursor += int(has_gate)
+    beta_source = (
+        operands[cursor] if has_beta else np.ones(1, dtype=np.float32)
+    )
+    cursor += int(has_beta)
+    decay_source = (
+        operands[cursor] if has_decay else np.ones(1, dtype=np.float32)
+    )
+    cursor += int(has_decay)
+    dy = np.ascontiguousarray(operands[cursor], np.float32)
+    if q.ndim != 4 or k.shape != q.shape or v.shape[:3] != q.shape[:3]:
+        raise ValueError("x86 DeltaNet backward requires rank-4 Q/K/V")
+    if dy.shape != v.shape:
+        raise ValueError("x86 DeltaNet output cotangent must match output")
+    B, H, S, d_qk = (int(value) for value in q.shape)
+    d_v = int(v.shape[-1])
+    scalar_shape = (B, H, S)
+    gate_input = np.asarray(gate_source)
+    if gate_input.shape == scalar_shape:
+        gate_input = gate_input[..., None]
+    gate = (
+        np.ascontiguousarray(np.broadcast_to(gate_input, v.shape), np.float32)
+        if has_gate
+        else np.zeros(1, np.float32)
+    )
+    beta = (
+        np.ascontiguousarray(
+            np.broadcast_to(beta_source, scalar_shape), np.float32
+        )
+        if has_beta
+        else np.ones(1, np.float32)
+    )
+    decay = (
+        np.ascontiguousarray(
+            np.broadcast_to(decay_source, scalar_shape), np.float32
+        )
+        if has_decay
+        else np.ones(1, np.float32)
+    )
+    bh, state_size = B * H, d_qk * d_v
+    chunks = (S + chunk_size - 1) // chunk_size
+    arrays = {
+        "dq": np.zeros_like(q), "dk": np.zeros_like(k),
+        "dv": np.zeros_like(v), "dg": np.zeros_like(v),
+        "db": np.zeros(scalar_shape, np.float32),
+        "da": np.zeros(scalar_shape, np.float32),
+        "hist": np.zeros(bh * (S + 1) * state_size, np.float32),
+        "ds": np.zeros(bh * state_size, np.float32),
+        "dn": np.zeros(bh * state_size, np.float32),
+        "du": np.zeros(bh * state_size, np.float32),
+        "chunk_scale": np.zeros(bh * chunks, np.float32),
+        "chunk_update": np.zeros(bh * chunks * state_size, np.float32),
+    }
+    cf = ctypes.POINTER(ctypes.c_float)
+
+    def pointer(array: Any) -> Any:
+        return array.ctypes.data_as(cf)
+
+    function = lib.tessera_x86_deltanet_bwd_f32
+    function.restype = None
+    function.argtypes = (
+        [cf] * 19
+        + [ctypes.c_int64] * 5
+        + [ctypes.c_int32] * 5
+        + [ctypes.c_int64, ctypes.c_int32]
+    )
+    function(
+        pointer(q), pointer(k), pointer(v), pointer(gate), pointer(beta),
+        pointer(decay), pointer(dy), pointer(arrays["dq"]),
+        pointer(arrays["dk"]), pointer(arrays["dv"]), pointer(arrays["dg"]),
+        pointer(arrays["db"]), pointer(arrays["da"]), pointer(arrays["hist"]),
+        pointer(arrays["ds"]), pointer(arrays["dn"]), pointer(arrays["du"]),
+        pointer(arrays["chunk_scale"]), pointer(arrays["chunk_update"]),
+        B, H, S, d_qk, d_v, int(erase), int(modified), int(has_gate),
+        int(has_beta), int(has_decay), chunk_size, workers,
+    )
+
+    def reduce_to_shape(array: Any, shape: tuple[int, ...]) -> Any:
+        result = array
+        while result.ndim > len(shape):
+            result = result.sum(axis=0)
+        for axis, extent in enumerate(shape):
+            if extent == 1 and result.shape[axis] != 1:
+                result = result.sum(axis=axis, keepdims=True)
+        return result.reshape(shape)
+
+    gradients: list[Any] = [arrays["dq"], arrays["dk"], arrays["dv"]]
+    if has_gate:
+        gate_gradient = (
+            arrays["dg"].sum(axis=-1)
+            if gate_source.shape == scalar_shape
+            else reduce_to_shape(arrays["dg"], gate_source.shape)
+        )
+        gradients.append(gate_gradient)
+    if has_beta:
+        gradients.append(reduce_to_shape(arrays["db"], beta_source.shape))
+    if has_decay:
+        gradients.append(reduce_to_shape(arrays["da"], decay_source.shape))
+    return tuple(gradients)
 
 
 def _execute_nvidia_matmul_softmax_compiled(artifact: RuntimeArtifact, args: Any) -> Any:
@@ -25548,6 +26755,8 @@ def _executor_table():
         "rocm_moe_compiled": _execute_rocm_compiled_moe,
         "rocm_moe_transport_compiled": _execute_rocm_moe_transport,
         "rocm_optimizer_compiled": _execute_rocm_compiled_optimizer,
+        "rocm_adafactor_compiled": _execute_rocm_compiled_adafactor,
+        "rocm_adafactor_bwd_compiled": _execute_rocm_compiled_adafactor_backward,
         "rocm_sgd_bwd_compiled": _execute_rocm_compiled_sgd_backward,
         "rocm_momentum_bwd_compiled": _execute_rocm_compiled_momentum_backward,
         "rocm_adam_bwd_compiled": _execute_rocm_compiled_adam_backward,
@@ -25572,7 +26781,9 @@ def _executor_table():
         "rocm_conv_compiled": _execute_rocm_compiled_conv,
         "rocm_exotic_attn_compiled": _execute_rocm_compiled_exotic_attention,
         "rocm_deltanet_compiled": _execute_rocm_compiled_deltanet,
+        "rocm_deltanet_bwd_compiled": _execute_rocm_compiled_deltanet_backward,
         "x86_deltanet_compiled": _execute_x86_compiled_deltanet,
+        "x86_deltanet_bwd_compiled": _execute_x86_compiled_deltanet_backward,
         "rocm_rope_compiled": _execute_rocm_compiled_rope,
         "nvidia_mma": _execute_nvidia_mma_artifact,
     }

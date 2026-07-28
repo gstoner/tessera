@@ -1593,22 +1593,185 @@ def vjp_lookahead_sparse_attention(dout, Q, K, V, **kwargs):
     return _numeric_attention_family_vjp("lookahead_sparse_attention", dout, (Q, K, V), kwargs)
 
 
+def _analytic_delta_attention_vjp(
+    dout, args, kwargs, *, modified: bool
+):
+    """Reverse the carried-state DeltaNet recurrence in O(S) memory/time."""
+    kwargs = {k: v for k, v in kwargs.items() if k != "_output_index"}
+    if len(args) < 3 or not bool(kwargs.get("causal", True)):
+        name = "modified_delta_attention" if modified else "gated_deltanet"
+        return _numeric_attention_family_vjp(name, dout, args, kwargs)
+    if bool(kwargs.get("return_state", False)):
+        name = "modified_delta_attention" if modified else "gated_deltanet"
+        return _numeric_attention_family_vjp(name, dout, args, kwargs)
+
+    q0, k0, v0 = (np.asarray(value) for value in args[:3])
+    q = q0.astype(np.float64)
+    k = k0.astype(np.float64)
+    v = v0.astype(np.float64)
+    if q.ndim != 4 or k.shape != q.shape or v.shape[:3] != q.shape[:3]:
+        raise ValueError("DeltaNet VJP requires rank-4 compatible Q/K/V")
+    bsz, heads, length, dk = q.shape
+    dv = v.shape[-1]
+    optional = list(args[3:]) + [None] * 4
+    gate0 = optional[0] if len(args) > 3 else kwargs.get("gate")
+    beta0 = optional[1] if len(args) > 4 else kwargs.get("beta")
+    decay0 = optional[2] if len(args) > 5 else kwargs.get("decay")
+    state0 = optional[3] if len(args) > 6 else kwargs.get("state")
+    gate = (
+        np.broadcast_to(np.asarray(gate0, dtype=np.float64), v.shape)
+        if gate0 is not None
+        else None
+    )
+    beta = (
+        np.broadcast_to(
+            np.asarray(beta0, dtype=np.float64), (bsz, heads, length)
+        )
+        if beta0 is not None
+        else np.ones((bsz, heads, length), dtype=np.float64)
+    )
+    decay = (
+        np.broadcast_to(
+            np.asarray(decay0, dtype=np.float64), (bsz, heads, length)
+        )
+        if decay0 is not None
+        else np.ones((bsz, heads, length), dtype=np.float64)
+    )
+    erase = bool(kwargs.get("erase", False))
+    initial = (
+        np.zeros((bsz, heads, dk, dv), dtype=np.float64)
+        if state0 is None
+        else np.asarray(state0, dtype=np.float64)
+    )
+    states = [initial]
+    deltas: list[np.ndarray] = []
+    targets: list[np.ndarray] = []
+    raw_output = np.empty((bsz, heads, length, dv), dtype=np.float64)
+    for token in range(length):
+        old = states[-1]
+        kt = k[:, :, token]
+        target = v[:, :, token]
+        a = decay[:, :, token]
+        if erase:
+            vhat = np.einsum("bhd,bhde->bhe", kt, old)
+            target = target - a[:, :, None] * vhat
+        update = np.einsum("bhd,bhe->bhde", kt, target)
+        if modified:
+            norm = np.linalg.norm(update, axis=(-2, -1), keepdims=True)
+            delta = update / (1.0 + norm)
+        else:
+            delta = update
+        new = (
+            a[:, :, None, None] * old
+            + beta[:, :, token, None, None] * delta
+        )
+        states.append(new)
+        deltas.append(delta)
+        targets.append(target)
+        raw_output[:, :, token] = np.einsum(
+            "bhd,bhde->bhe", q[:, :, token], new
+        )
+
+    dy = np.asarray(dout, dtype=np.float64)
+    dgate_full = None
+    if gate is not None:
+        sigmoid = 1.0 / (1.0 + np.exp(-gate))
+        dgate_full = dy * raw_output * sigmoid * (1.0 - sigmoid)
+        dy = dy * sigmoid
+
+    dq = np.zeros_like(q)
+    dk_out = np.zeros_like(k)
+    dv_out = np.zeros_like(v)
+    dbeta = np.zeros_like(beta)
+    ddecay = np.zeros_like(decay)
+    dstate = np.zeros_like(initial)
+    for token in range(length - 1, -1, -1):
+        old, new = states[token], states[token + 1]
+        qt, kt = q[:, :, token], k[:, :, token]
+        dyt = dy[:, :, token]
+        dnew = dstate + np.einsum("bhd,bhe->bhde", qt, dyt)
+        dq[:, :, token] = np.einsum("bhde,bhe->bhd", new, dyt)
+        dbeta[:, :, token] = np.sum(
+            dnew * deltas[token], axis=(-2, -1)
+        )
+        ddelta = beta[:, :, token, None, None] * dnew
+        target = targets[token]
+        update = np.einsum("bhd,bhe->bhde", kt, target)
+        if modified:
+            norm = np.linalg.norm(update, axis=(-2, -1), keepdims=True)
+            denom = 1.0 + norm
+            projection = np.sum(ddelta * update, axis=(-2, -1), keepdims=True)
+            dupdate = ddelta / denom
+            safe_norm = np.maximum(norm, 1.0)
+            norm_term = update * projection / (safe_norm * denom * denom)
+            dupdate -= np.where(norm > 0.0, norm_term, 0.0)
+        else:
+            dupdate = ddelta
+        dkt = np.einsum("bhde,bhe->bhd", dupdate, target)
+        dtarget = np.einsum("bhde,bhd->bhe", dupdate, kt)
+        a = decay[:, :, token]
+        ddecay[:, :, token] = np.sum(dnew * old, axis=(-2, -1))
+        dstate = a[:, :, None, None] * dnew
+        if erase:
+            vhat = np.einsum("bhd,bhde->bhe", kt, old)
+            ddecay[:, :, token] -= np.sum(dtarget * vhat, axis=-1)
+            dvhat = -a[:, :, None] * dtarget
+            dkt += np.einsum("bhde,bhe->bhd", old, dvhat)
+            dstate += np.einsum("bhd,bhe->bhde", kt, dvhat)
+        dk_out[:, :, token] = dkt
+        dv_out[:, :, token] = dtarget
+
+    gradients: list[object] = [
+        dq.astype(q0.dtype, copy=False),
+        dk_out.astype(k0.dtype, copy=False),
+        dv_out.astype(v0.dtype, copy=False),
+    ]
+    if len(args) > 3:
+        gradients.append(
+            _sum_to_shape(dgate_full, np.asarray(gate0).shape)
+            if gate0 is not None and dgate_full is not None
+            else None
+        )
+    if len(args) > 4:
+        gradients.append(
+            _sum_to_shape(dbeta, np.asarray(beta0).shape)
+            if beta0 is not None
+            else None
+        )
+    if len(args) > 5:
+        gradients.append(
+            _sum_to_shape(ddecay, np.asarray(decay0).shape)
+            if decay0 is not None
+            else None
+        )
+    if len(args) > 6:
+        gradients.append(
+            _sum_to_shape(dstate, np.asarray(state0).shape)
+            if state0 is not None
+            else None
+        )
+    return tuple(gradients)
+
+
 @_vjp("gated_deltanet")
 def vjp_gated_deltanet(dout, *args, **kwargs):
-    kwargs = {k: v for k, v in kwargs.items() if k != "_output_index"}
-    return _numeric_attention_family_vjp("gated_deltanet", dout, args, kwargs)
+    return _analytic_delta_attention_vjp(
+        dout, args, kwargs, modified=False
+    )
 
 
 @_vjp("kimi_delta_attention")
 def vjp_kimi_delta_attention(dout, *args, **kwargs):
-    kwargs = {k: v for k, v in kwargs.items() if k != "_output_index"}
-    return _numeric_attention_family_vjp("kimi_delta_attention", dout, args, kwargs)
+    return _analytic_delta_attention_vjp(
+        dout, args, kwargs, modified=False
+    )
 
 
 @_vjp("modified_delta_attention")
 def vjp_modified_delta_attention(dout, *args, **kwargs):
-    kwargs = {k: v for k, v in kwargs.items() if k != "_output_index"}
-    return _numeric_attention_family_vjp("modified_delta_attention", dout, args, kwargs)
+    return _analytic_delta_attention_vjp(
+        dout, args, kwargs, modified=True
+    )
 
 
 @_vjp("hybrid_attention")
@@ -4195,23 +4358,119 @@ def vjp_lion(dout, params, grads, state=None, *,
 @_vjp("adafactor")
 def vjp_adafactor(dout, params, grads, state=None, *,
                   lr=1e-3, beta2=0.999, eps=1e-30, **kwargs):
-    from tessera import optim as ts_optim
+    """Analytic VJP through full or row/column-factored Adafactor state."""
+    del kwargs
+    if isinstance(params, (dict, list, tuple)):
+        from tessera import optim as ts_optim
 
-    def forward(p, g, s):
-        return ts_optim.adafactor(
-            p,
-            g,
-            s,
-            lr=lr,
-            beta2=beta2,
-            eps=eps,
-            **kwargs,
-        )[0]
+        def forward(p, g, s):
+            return ts_optim.adafactor(
+                p, g, s, lr=lr, beta2=beta2, eps=eps
+            )[0]
 
-    d_params = _numeric_vjp_arg(lambda p: forward(p, grads, state), dout, params)
-    d_grads = _numeric_vjp_arg(lambda g: forward(params, g, state), dout, grads)
-    d_state = _tree_numeric_vjp(lambda s: forward(params, grads, s), dout, state) if state is not None else None
-    return d_params, d_grads, d_state
+        d_params = _numeric_vjp_arg(
+            lambda p: forward(p, grads, state), dout, params
+        )
+        d_grads = _numeric_vjp_arg(
+            lambda g: forward(params, g, state), dout, grads
+        )
+        d_state = (
+            _tree_numeric_vjp(
+                lambda s: forward(params, grads, s), dout, state
+            )
+            if state is not None
+            else None
+        )
+        return d_params, d_grads, d_state
+
+    p = np.asarray(params)
+    g = np.asarray(grads, dtype=np.float64)
+    do = np.asarray(dout, dtype=np.float64)
+    b2 = float(beta2)
+    epsilon = float(eps)
+    dparam = do
+    if state is None:
+        slot = (
+            {
+                "row": np.zeros(g.shape[:-1], dtype=np.float64),
+                "col": np.zeros(g.shape[-1], dtype=np.float64),
+                "factored": True,
+            }
+            if g.ndim >= 2
+            else {
+                "v": np.zeros_like(g),
+                "factored": False,
+            }
+        )
+    else:
+        slot = state["v"]
+
+    if bool(slot["factored"]):
+        old_row = np.asarray(slot["row"], dtype=np.float64)
+        old_col = np.asarray(slot["col"], dtype=np.float64)
+        row = b2 * old_row + (1.0 - b2) * np.mean(g * g, axis=-1)
+        col = b2 * old_col + (1.0 - b2) * np.mean(
+            g * g, axis=tuple(range(g.ndim - 1))
+        )
+        safe_row = np.maximum(row, epsilon)
+        safe_col = np.maximum(col, epsilon)
+        row_mean = float(np.mean(row))
+        safe_mean = max(row_mean, epsilon)
+        scale = safe_row[..., None] * safe_col / safe_mean
+        root = np.sqrt(scale)
+        denominator = root + epsilon
+        dgrad = -float(lr) * do / denominator
+        dscale = (
+            float(lr)
+            * do
+            * g
+            / (2.0 * np.maximum(root, 1e-30) * denominator * denominator)
+        )
+        drow = np.sum(
+            dscale * safe_col / safe_mean, axis=-1
+        ) * (row > epsilon)
+        dcol = np.sum(
+            dscale * safe_row[..., None] / safe_mean,
+            axis=tuple(range(g.ndim - 1)),
+        ) * (col > epsilon)
+        dmean = -float(
+            np.sum(
+                dscale * safe_row[..., None] * safe_col
+                / (safe_mean * safe_mean)
+            )
+        )
+        if row_mean > epsilon:
+            drow += dmean / row.size
+        leading = int(np.prod(g.shape[:-1]))
+        dgrad += 2.0 * (1.0 - b2) * g * (
+            drow[..., None] / g.shape[-1] + dcol / leading
+        )
+        dslot = {
+            "row": b2 * drow,
+            "col": b2 * dcol,
+            "factored": None,
+        }
+    else:
+        old_v = np.asarray(slot["v"], dtype=np.float64)
+        moment = b2 * old_v + (1.0 - b2) * g * g
+        safe = np.maximum(moment, epsilon)
+        root = np.sqrt(safe)
+        denominator = root + epsilon
+        dgrad = -float(lr) * do / denominator
+        dmoment = (
+            float(lr)
+            * do
+            * g
+            / (2.0 * np.maximum(root, 1e-30) * denominator * denominator)
+        ) * (moment > epsilon)
+        dgrad += 2.0 * (1.0 - b2) * g * dmoment
+        dslot = {"v": b2 * dmoment, "factored": None}
+    dstate = None if state is None else {"v": dslot, "step": None}
+    return (
+        dparam.astype(p.dtype, copy=False),
+        dgrad.astype(np.asarray(grads).dtype, copy=False),
+        dstate,
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

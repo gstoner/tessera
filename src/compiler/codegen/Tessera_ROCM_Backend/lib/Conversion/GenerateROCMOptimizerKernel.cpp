@@ -34,6 +34,478 @@ namespace {
 
 static constexpr int64_t BD = 256;
 
+static Value flatGid(OpBuilder &b, Location loc) {
+  Value bid = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
+  Value tid = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
+  Value block = b.create<arith::ConstantIndexOp>(loc, BD);
+  return b.create<arith::AddIOp>(
+      loc, b.create<arith::MulIOp>(loc, bid, block), tid);
+}
+
+static void emitAdafactorMomentBody(OpBuilder &b, Location loc,
+                                    gpu::GPUFuncOp f, bool rows) {
+  b.setInsertionPointToStart(&f.getBody().front());
+  Value gradient = f.getArgument(0), oldMoment = f.getArgument(1);
+  Value newMoment = f.getArgument(2), m = f.getArgument(3);
+  Value n = f.getArgument(4), beta2 = f.getArgument(5);
+  Value gid = flatGid(b, loc);
+  Value extent = rows ? m : n;
+  Value inBounds = b.create<arith::CmpIOp>(
+      loc, arith::CmpIPredicate::slt, gid, extent);
+  auto guard = b.create<scf::IfOp>(loc, inBounds, false);
+  b.setInsertionPointToStart(guard.thenBlock());
+  Type f32 = b.getF32Type();
+  Value zero = b.create<arith::ConstantOp>(
+      loc, f32, b.getF32FloatAttr(0.0f));
+  Value one = b.create<arith::ConstantOp>(
+      loc, f32, b.getF32FloatAttr(1.0f));
+  Value lower = b.create<arith::ConstantIndexOp>(loc, 0);
+  Value step = b.create<arith::ConstantIndexOp>(loc, 1);
+  Value reductionExtent = rows ? n : m;
+  auto loop = b.create<scf::ForOp>(loc, lower, reductionExtent, step,
+                                   ValueRange{zero});
+  b.setInsertionPointToStart(loop.getBody());
+  Value k = loop.getInductionVar();
+  Value linear = rows
+                     ? b.create<arith::AddIOp>(
+                           loc, b.create<arith::MulIOp>(loc, gid, n), k)
+                     : b.create<arith::AddIOp>(
+                           loc, b.create<arith::MulIOp>(loc, k, n), gid);
+  Value g = b.create<memref::LoadOp>(
+      loc, gradient, ValueRange{linear});
+  Value square = b.create<arith::MulFOp>(loc, g, g);
+  Value next = b.create<arith::AddFOp>(
+      loc, loop.getRegionIterArg(0), square);
+  b.create<scf::YieldOp>(loc, next);
+  b.setInsertionPointAfter(loop);
+  Value divisorInt = b.create<arith::IndexCastUIOp>(
+      loc, b.getI64Type(), reductionExtent);
+  Value divisor =
+      b.create<arith::UIToFPOp>(loc, f32, divisorInt);
+  Value average =
+      b.create<arith::DivFOp>(loc, loop.getResult(0), divisor);
+  Value old = b.create<memref::LoadOp>(
+      loc, oldMoment, ValueRange{gid});
+  Value updated = b.create<arith::AddFOp>(
+      loc, b.create<arith::MulFOp>(loc, beta2, old),
+      b.create<arith::MulFOp>(
+          loc, b.create<arith::SubFOp>(loc, one, beta2), average));
+  b.create<memref::StoreOp>(
+      loc, updated, newMoment, ValueRange{gid});
+  b.setInsertionPointToEnd(&f.getBody().front());
+  b.create<gpu::ReturnOp>(loc);
+}
+
+static void emitAdafactorMeanBody(OpBuilder &b, Location loc,
+                                  gpu::GPUFuncOp f) {
+  b.setInsertionPointToStart(&f.getBody().front());
+  Value row = f.getArgument(0), mean = f.getArgument(1);
+  Value m = f.getArgument(2);
+  Value gid = flatGid(b, loc);
+  Value zeroIndex = b.create<arith::ConstantIndexOp>(loc, 0);
+  Value isOwner = b.create<arith::CmpIOp>(
+      loc, arith::CmpIPredicate::eq, gid, zeroIndex);
+  auto guard = b.create<scf::IfOp>(loc, isOwner, false);
+  b.setInsertionPointToStart(guard.thenBlock());
+  Type f32 = b.getF32Type();
+  Value zero = b.create<arith::ConstantOp>(
+      loc, f32, b.getF32FloatAttr(0.0f));
+  Value oneIndex = b.create<arith::ConstantIndexOp>(loc, 1);
+  auto loop =
+      b.create<scf::ForOp>(loc, zeroIndex, m, oneIndex, ValueRange{zero});
+  b.setInsertionPointToStart(loop.getBody());
+  Value value = b.create<memref::LoadOp>(
+      loc, row, ValueRange{loop.getInductionVar()});
+  Value next =
+      b.create<arith::AddFOp>(loc, loop.getRegionIterArg(0), value);
+  b.create<scf::YieldOp>(loc, ValueRange{next});
+  b.setInsertionPointAfter(loop);
+  Value divisorInt =
+      b.create<arith::IndexCastUIOp>(loc, b.getI64Type(), m);
+  Value divisor =
+      b.create<arith::UIToFPOp>(loc, f32, divisorInt);
+  Value average =
+      b.create<arith::DivFOp>(loc, loop.getResult(0), divisor);
+  b.create<memref::StoreOp>(
+      loc, average, mean, ValueRange{zeroIndex});
+  b.setInsertionPointToEnd(&f.getBody().front());
+  b.create<gpu::ReturnOp>(loc);
+}
+
+static void emitAdafactorUpdateBody(OpBuilder &b, Location loc,
+                                    gpu::GPUFuncOp f) {
+  b.setInsertionPointToStart(&f.getBody().front());
+  Value parameter = f.getArgument(0), gradient = f.getArgument(1);
+  Value row = f.getArgument(2), col = f.getArgument(3);
+  Value mean = f.getArgument(4), output = f.getArgument(5);
+  Value m = f.getArgument(6), n = f.getArgument(7);
+  Value lr = f.getArgument(8), eps = f.getArgument(9);
+  Value gid = flatGid(b, loc);
+  Value count = b.create<arith::MulIOp>(loc, m, n);
+  Value inBounds = b.create<arith::CmpIOp>(
+      loc, arith::CmpIPredicate::slt, gid, count);
+  auto guard = b.create<scf::IfOp>(loc, inBounds, false);
+  b.setInsertionPointToStart(guard.thenBlock());
+  Value rowIndex = b.create<arith::DivUIOp>(loc, gid, n);
+  Value colIndex = b.create<arith::RemUIOp>(loc, gid, n);
+  Value rowValue =
+      b.create<memref::LoadOp>(loc, row, ValueRange{rowIndex});
+  Value colValue =
+      b.create<memref::LoadOp>(loc, col, ValueRange{colIndex});
+  Value zeroIndex = b.create<arith::ConstantIndexOp>(loc, 0);
+  Value meanValue =
+      b.create<memref::LoadOp>(loc, mean, ValueRange{zeroIndex});
+  Value safeRow = b.create<arith::MaxNumFOp>(loc, rowValue, eps);
+  Value safeCol = b.create<arith::MaxNumFOp>(loc, colValue, eps);
+  Value safeMean = b.create<arith::MaxNumFOp>(loc, meanValue, eps);
+  Value scale = b.create<arith::DivFOp>(
+      loc, b.create<arith::MulFOp>(loc, safeRow, safeCol), safeMean);
+  Value denominator = b.create<arith::AddFOp>(
+      loc, b.create<math::SqrtOp>(loc, scale), eps);
+  Value p =
+      b.create<memref::LoadOp>(loc, parameter, ValueRange{gid});
+  Value g =
+      b.create<memref::LoadOp>(loc, gradient, ValueRange{gid});
+  Value update = b.create<arith::DivFOp>(loc, g, denominator);
+  b.create<memref::StoreOp>(
+      loc,
+      b.create<arith::SubFOp>(
+          loc, p, b.create<arith::MulFOp>(loc, lr, update)),
+      output, ValueRange{gid});
+  b.setInsertionPointToEnd(&f.getBody().front());
+  b.create<gpu::ReturnOp>(loc);
+}
+
+static void emitAdafactorFullBody(OpBuilder &b, Location loc,
+                                  gpu::GPUFuncOp f) {
+  b.setInsertionPointToStart(&f.getBody().front());
+  Value parameter = f.getArgument(0), gradient = f.getArgument(1);
+  Value oldMoment = f.getArgument(2), output = f.getArgument(3);
+  Value newMoment = f.getArgument(4), count = f.getArgument(5);
+  Value lr = f.getArgument(6), beta2 = f.getArgument(7);
+  Value eps = f.getArgument(8);
+  Value gid = flatGid(b, loc);
+  Value inBounds = b.create<arith::CmpIOp>(
+      loc, arith::CmpIPredicate::slt, gid, count);
+  auto guard = b.create<scf::IfOp>(loc, inBounds, false);
+  b.setInsertionPointToStart(guard.thenBlock());
+  Type f32 = b.getF32Type();
+  Value one = b.create<arith::ConstantOp>(
+      loc, f32, b.getF32FloatAttr(1.0f));
+  Value p = b.create<memref::LoadOp>(
+      loc, parameter, ValueRange{gid});
+  Value g = b.create<memref::LoadOp>(
+      loc, gradient, ValueRange{gid});
+  Value old = b.create<memref::LoadOp>(
+      loc, oldMoment, ValueRange{gid});
+  Value moment = b.create<arith::AddFOp>(
+      loc, b.create<arith::MulFOp>(loc, beta2, old),
+      b.create<arith::MulFOp>(
+          loc, b.create<arith::SubFOp>(loc, one, beta2),
+          b.create<arith::MulFOp>(loc, g, g)));
+  Value safeMoment = b.create<arith::MaxNumFOp>(loc, moment, eps);
+  Value denominator = b.create<arith::AddFOp>(
+      loc, b.create<math::SqrtOp>(loc, safeMoment), eps);
+  Value updated = b.create<arith::SubFOp>(
+      loc, p,
+      b.create<arith::MulFOp>(
+          loc, lr, b.create<arith::DivFOp>(loc, g, denominator)));
+  b.create<memref::StoreOp>(
+      loc, updated, output, ValueRange{gid});
+  b.create<memref::StoreOp>(
+      loc, moment, newMoment, ValueRange{gid});
+  b.setInsertionPointToEnd(&f.getBody().front());
+  b.create<gpu::ReturnOp>(loc);
+}
+
+static Value emitAdafactorDScale(OpBuilder &b, Location loc, Value gradient,
+                                 Value cotangent, Value row, Value col,
+                                 Value mean, Value lr, Value eps) {
+  Type f32 = b.getF32Type();
+  Value tiny = b.create<arith::ConstantOp>(
+      loc, f32, b.getF32FloatAttr(1.0e-30f));
+  Value two = b.create<arith::ConstantOp>(
+      loc, f32, b.getF32FloatAttr(2.0f));
+  Value safeRow = b.create<arith::MaxNumFOp>(loc, row, eps);
+  Value safeCol = b.create<arith::MaxNumFOp>(loc, col, eps);
+  Value safeMean = b.create<arith::MaxNumFOp>(loc, mean, eps);
+  Value scale = b.create<arith::DivFOp>(
+      loc, b.create<arith::MulFOp>(loc, safeRow, safeCol), safeMean);
+  Value root = b.create<math::SqrtOp>(loc, scale);
+  Value safeRoot = b.create<arith::MaxNumFOp>(loc, root, tiny);
+  Value denominator = b.create<arith::AddFOp>(loc, root, eps);
+  Value denominatorSquared =
+      b.create<arith::MulFOp>(loc, denominator, denominator);
+  Value divisor = b.create<arith::MulFOp>(
+      loc, two,
+      b.create<arith::MulFOp>(loc, safeRoot, denominatorSquared));
+  return b.create<arith::DivFOp>(
+      loc,
+      b.create<arith::MulFOp>(
+          loc, lr,
+          b.create<arith::MulFOp>(loc, cotangent, gradient)),
+      divisor);
+}
+
+static void emitAdafactorBackwardMeanBody(OpBuilder &b, Location loc,
+                                          gpu::GPUFuncOp f) {
+  b.setInsertionPointToStart(&f.getBody().front());
+  Value gradient = f.getArgument(0), cotangent = f.getArgument(1);
+  Value row = f.getArgument(2), col = f.getArgument(3);
+  Value mean = f.getArgument(4), dmean = f.getArgument(5);
+  Value m = f.getArgument(6), n = f.getArgument(7);
+  Value lr = f.getArgument(8), eps = f.getArgument(9);
+  Value gid = flatGid(b, loc);
+  Value zeroIndex = b.create<arith::ConstantIndexOp>(loc, 0);
+  Value isOwner = b.create<arith::CmpIOp>(
+      loc, arith::CmpIPredicate::eq, gid, zeroIndex);
+  auto guard = b.create<scf::IfOp>(loc, isOwner, false);
+  b.setInsertionPointToStart(guard.thenBlock());
+  Type f32 = b.getF32Type();
+  Value zero = b.create<arith::ConstantOp>(
+      loc, f32, b.getF32FloatAttr(0.0f));
+  Value oneIndex = b.create<arith::ConstantIndexOp>(loc, 1);
+  Value count = b.create<arith::MulIOp>(loc, m, n);
+  auto loop =
+      b.create<scf::ForOp>(loc, zeroIndex, count, oneIndex, ValueRange{zero});
+  b.setInsertionPointToStart(loop.getBody());
+  Value linear = loop.getInductionVar();
+  Value rowIndex = b.create<arith::DivUIOp>(loc, linear, n);
+  Value colIndex = b.create<arith::RemUIOp>(loc, linear, n);
+  Value g = b.create<memref::LoadOp>(loc, gradient, ValueRange{linear});
+  Value dy = b.create<memref::LoadOp>(loc, cotangent, ValueRange{linear});
+  Value rv = b.create<memref::LoadOp>(loc, row, ValueRange{rowIndex});
+  Value cv = b.create<memref::LoadOp>(loc, col, ValueRange{colIndex});
+  Value mv = b.create<memref::LoadOp>(loc, mean, ValueRange{zeroIndex});
+  Value ds = emitAdafactorDScale(b, loc, g, dy, rv, cv, mv, lr, eps);
+  Value safeRow = b.create<arith::MaxNumFOp>(loc, rv, eps);
+  Value safeCol = b.create<arith::MaxNumFOp>(loc, cv, eps);
+  Value safeMean = b.create<arith::MaxNumFOp>(loc, mv, eps);
+  Value numerator = b.create<arith::MulFOp>(
+      loc, ds, b.create<arith::MulFOp>(loc, safeRow, safeCol));
+  Value contribution = b.create<arith::DivFOp>(
+      loc, numerator,
+      b.create<arith::MulFOp>(loc, safeMean, safeMean));
+  Value next = b.create<arith::AddFOp>(
+      loc, loop.getRegionIterArg(0), contribution);
+  b.create<scf::YieldOp>(loc, ValueRange{next});
+  b.setInsertionPointAfter(loop);
+  b.create<memref::StoreOp>(
+      loc, b.create<arith::SubFOp>(loc, zero, loop.getResult(0)), dmean,
+      ValueRange{zeroIndex});
+  b.setInsertionPointToEnd(&f.getBody().front());
+  b.create<gpu::ReturnOp>(loc);
+}
+
+static void emitAdafactorBackwardMomentBody(OpBuilder &b, Location loc,
+                                            gpu::GPUFuncOp f, bool rows) {
+  b.setInsertionPointToStart(&f.getBody().front());
+  Value gradient = f.getArgument(0), cotangent = f.getArgument(1);
+  Value row = f.getArgument(2), col = f.getArgument(3);
+  Value mean = f.getArgument(4), dmean = f.getArgument(5);
+  Value raw = f.getArgument(6), oldStateGrad = f.getArgument(7);
+  Value m = f.getArgument(8), n = f.getArgument(9);
+  Value lr = f.getArgument(10), beta2 = f.getArgument(11);
+  Value eps = f.getArgument(12);
+  Value gid = flatGid(b, loc);
+  Value extent = rows ? m : n;
+  Value inBounds = b.create<arith::CmpIOp>(
+      loc, arith::CmpIPredicate::slt, gid, extent);
+  auto guard = b.create<scf::IfOp>(loc, inBounds, false);
+  b.setInsertionPointToStart(guard.thenBlock());
+  Type f32 = b.getF32Type();
+  Value zero = b.create<arith::ConstantOp>(
+      loc, f32, b.getF32FloatAttr(0.0f));
+  Value one = b.create<arith::ConstantOp>(
+      loc, f32, b.getF32FloatAttr(1.0f));
+  Value zeroIndex = b.create<arith::ConstantIndexOp>(loc, 0);
+  Value oneIndex = b.create<arith::ConstantIndexOp>(loc, 1);
+  Value reductionExtent = rows ? n : m;
+  auto loop = b.create<scf::ForOp>(
+      loc, zeroIndex, reductionExtent, oneIndex, ValueRange{zero});
+  b.setInsertionPointToStart(loop.getBody());
+  Value k = loop.getInductionVar();
+  Value linear = rows
+                     ? b.create<arith::AddIOp>(
+                           loc, b.create<arith::MulIOp>(loc, gid, n), k)
+                     : b.create<arith::AddIOp>(
+                           loc, b.create<arith::MulIOp>(loc, k, n), gid);
+  Value rowIndex = rows ? gid : k;
+  Value colIndex = rows ? k : gid;
+  Value g = b.create<memref::LoadOp>(loc, gradient, ValueRange{linear});
+  Value dy = b.create<memref::LoadOp>(loc, cotangent, ValueRange{linear});
+  Value rv = b.create<memref::LoadOp>(loc, row, ValueRange{rowIndex});
+  Value cv = b.create<memref::LoadOp>(loc, col, ValueRange{colIndex});
+  Value mv = b.create<memref::LoadOp>(loc, mean, ValueRange{zeroIndex});
+  Value ds = emitAdafactorDScale(b, loc, g, dy, rv, cv, mv, lr, eps);
+  Value safeOther = b.create<arith::MaxNumFOp>(
+      loc, rows ? cv : rv, eps);
+  Value safeMean = b.create<arith::MaxNumFOp>(loc, mv, eps);
+  Value contribution = b.create<arith::DivFOp>(
+      loc, b.create<arith::MulFOp>(loc, ds, safeOther), safeMean);
+  Value next = b.create<arith::AddFOp>(
+      loc, loop.getRegionIterArg(0), contribution);
+  b.create<scf::YieldOp>(loc, ValueRange{next});
+  b.setInsertionPointAfter(loop);
+  Value current =
+      b.create<memref::LoadOp>(loc, rows ? row : col, ValueRange{gid});
+  Value active = b.create<arith::CmpFOp>(
+      loc, arith::CmpFPredicate::OGT, current, eps);
+  Value value = b.create<arith::SelectOp>(
+      loc, active, loop.getResult(0), zero);
+  if (rows) {
+    Value mv = b.create<memref::LoadOp>(loc, mean, ValueRange{zeroIndex});
+    Value meanActive = b.create<arith::CmpFOp>(
+        loc, arith::CmpFPredicate::OGT, mv, eps);
+    Value dmv = b.create<memref::LoadOp>(loc, dmean, ValueRange{zeroIndex});
+    Value divisorInt =
+        b.create<arith::IndexCastUIOp>(loc, b.getI64Type(), m);
+    Value divisor =
+        b.create<arith::UIToFPOp>(loc, f32, divisorInt);
+    Value adjustment = b.create<arith::SelectOp>(
+        loc, meanActive, b.create<arith::DivFOp>(loc, dmv, divisor), zero);
+    value = b.create<arith::AddFOp>(loc, value, adjustment);
+  }
+  b.create<memref::StoreOp>(loc, value, raw, ValueRange{gid});
+  b.create<memref::StoreOp>(
+      loc, b.create<arith::MulFOp>(loc, beta2, value), oldStateGrad,
+      ValueRange{gid});
+  b.setInsertionPointToEnd(&f.getBody().front());
+  b.create<gpu::ReturnOp>(loc);
+}
+
+static void emitAdafactorBackwardFinalizeBody(OpBuilder &b, Location loc,
+                                              gpu::GPUFuncOp f) {
+  b.setInsertionPointToStart(&f.getBody().front());
+  Value gradient = f.getArgument(0), cotangent = f.getArgument(1);
+  Value row = f.getArgument(2), col = f.getArgument(3);
+  Value mean = f.getArgument(4), drow = f.getArgument(5);
+  Value dcol = f.getArgument(6), dparam = f.getArgument(7);
+  Value dgrad = f.getArgument(8), m = f.getArgument(9);
+  Value n = f.getArgument(10), lr = f.getArgument(11);
+  Value beta2 = f.getArgument(12), eps = f.getArgument(13);
+  Value gid = flatGid(b, loc);
+  Value count = b.create<arith::MulIOp>(loc, m, n);
+  Value inBounds = b.create<arith::CmpIOp>(
+      loc, arith::CmpIPredicate::slt, gid, count);
+  auto guard = b.create<scf::IfOp>(loc, inBounds, false);
+  b.setInsertionPointToStart(guard.thenBlock());
+  Type f32 = b.getF32Type();
+  Value one = b.create<arith::ConstantOp>(
+      loc, f32, b.getF32FloatAttr(1.0f));
+  Value zero = b.create<arith::ConstantOp>(
+      loc, f32, b.getF32FloatAttr(0.0f));
+  Value rowIndex = b.create<arith::DivUIOp>(loc, gid, n);
+  Value colIndex = b.create<arith::RemUIOp>(loc, gid, n);
+  Value g = b.create<memref::LoadOp>(loc, gradient, ValueRange{gid});
+  Value dy = b.create<memref::LoadOp>(loc, cotangent, ValueRange{gid});
+  Value rv = b.create<memref::LoadOp>(loc, row, ValueRange{rowIndex});
+  Value cv = b.create<memref::LoadOp>(loc, col, ValueRange{colIndex});
+  Value zeroIndex = b.create<arith::ConstantIndexOp>(loc, 0);
+  Value mv = b.create<memref::LoadOp>(loc, mean, ValueRange{zeroIndex});
+  Value safeRow = b.create<arith::MaxNumFOp>(loc, rv, eps);
+  Value safeCol = b.create<arith::MaxNumFOp>(loc, cv, eps);
+  Value safeMean = b.create<arith::MaxNumFOp>(loc, mv, eps);
+  Value root = b.create<math::SqrtOp>(
+      loc, b.create<arith::DivFOp>(
+               loc, b.create<arith::MulFOp>(loc, safeRow, safeCol), safeMean));
+  Value denominator = b.create<arith::AddFOp>(loc, root, eps);
+  Value direct = b.create<arith::DivFOp>(
+      loc, b.create<arith::MulFOp>(
+               loc, b.create<arith::SubFOp>(loc, zero, lr), dy),
+      denominator);
+  Value dr = b.create<memref::LoadOp>(loc, drow, ValueRange{rowIndex});
+  Value dc = b.create<memref::LoadOp>(loc, dcol, ValueRange{colIndex});
+  Value mInt = b.create<arith::IndexCastUIOp>(loc, b.getI64Type(), m);
+  Value nInt = b.create<arith::IndexCastUIOp>(loc, b.getI64Type(), n);
+  Value mf = b.create<arith::UIToFPOp>(loc, f32, mInt);
+  Value nf = b.create<arith::UIToFPOp>(loc, f32, nInt);
+  Value stateContribution = b.create<arith::AddFOp>(
+      loc, b.create<arith::DivFOp>(loc, dr, nf),
+      b.create<arith::DivFOp>(loc, dc, mf));
+  Value momentContribution = b.create<arith::MulFOp>(
+      loc,
+      b.create<arith::MulFOp>(
+          loc, b.create<arith::ConstantOp>(
+                   loc, f32, b.getF32FloatAttr(2.0f)),
+          b.create<arith::SubFOp>(loc, one, beta2)),
+      b.create<arith::MulFOp>(loc, g, stateContribution));
+  b.create<memref::StoreOp>(loc, dy, dparam, ValueRange{gid});
+  b.create<memref::StoreOp>(
+      loc, b.create<arith::AddFOp>(loc, direct, momentContribution), dgrad,
+      ValueRange{gid});
+  b.setInsertionPointToEnd(&f.getBody().front());
+  b.create<gpu::ReturnOp>(loc);
+}
+
+static void emitAdafactorFullBackwardBody(OpBuilder &b, Location loc,
+                                          gpu::GPUFuncOp f) {
+  b.setInsertionPointToStart(&f.getBody().front());
+  Value gradient = f.getArgument(0), oldMoment = f.getArgument(1);
+  Value cotangent = f.getArgument(2), dparam = f.getArgument(3);
+  Value dgrad = f.getArgument(4), dmoment = f.getArgument(5);
+  Value count = f.getArgument(6), lr = f.getArgument(7);
+  Value beta2 = f.getArgument(8), eps = f.getArgument(9);
+  Value gid = flatGid(b, loc);
+  Value inBounds = b.create<arith::CmpIOp>(
+      loc, arith::CmpIPredicate::slt, gid, count);
+  auto guard = b.create<scf::IfOp>(loc, inBounds, false);
+  b.setInsertionPointToStart(guard.thenBlock());
+  Type f32 = b.getF32Type();
+  Value one = b.create<arith::ConstantOp>(
+      loc, f32, b.getF32FloatAttr(1.0f));
+  Value zero = b.create<arith::ConstantOp>(
+      loc, f32, b.getF32FloatAttr(0.0f));
+  Value tiny = b.create<arith::ConstantOp>(
+      loc, f32, b.getF32FloatAttr(1.0e-30f));
+  Value g = b.create<memref::LoadOp>(loc, gradient, ValueRange{gid});
+  Value old = b.create<memref::LoadOp>(loc, oldMoment, ValueRange{gid});
+  Value dy = b.create<memref::LoadOp>(loc, cotangent, ValueRange{gid});
+  Value moment = b.create<arith::AddFOp>(
+      loc, b.create<arith::MulFOp>(loc, beta2, old),
+      b.create<arith::MulFOp>(
+          loc, b.create<arith::SubFOp>(loc, one, beta2),
+          b.create<arith::MulFOp>(loc, g, g)));
+  Value safeMoment = b.create<arith::MaxNumFOp>(loc, moment, eps);
+  Value root = b.create<math::SqrtOp>(loc, safeMoment);
+  Value denominator = b.create<arith::AddFOp>(loc, root, eps);
+  Value direct = b.create<arith::DivFOp>(
+      loc, b.create<arith::MulFOp>(
+               loc, b.create<arith::SubFOp>(loc, zero, lr), dy),
+      denominator);
+  Value active = b.create<arith::CmpFOp>(
+      loc, arith::CmpFPredicate::OGT, moment, eps);
+  Value denominatorSquared =
+      b.create<arith::MulFOp>(loc, denominator, denominator);
+  Value derivative = b.create<arith::DivFOp>(
+      loc,
+      b.create<arith::MulFOp>(
+          loc, lr, b.create<arith::MulFOp>(loc, dy, g)),
+      b.create<arith::MulFOp>(
+          loc, b.create<arith::ConstantOp>(
+                   loc, f32, b.getF32FloatAttr(2.0f)),
+          b.create<arith::MulFOp>(
+              loc, b.create<arith::MaxNumFOp>(loc, root, tiny),
+              denominatorSquared)));
+  Value dm = b.create<arith::SelectOp>(loc, active, derivative, zero);
+  Value dg = b.create<arith::AddFOp>(
+      loc, direct,
+      b.create<arith::MulFOp>(
+          loc,
+          b.create<arith::MulFOp>(
+              loc, b.create<arith::ConstantOp>(
+                       loc, f32, b.getF32FloatAttr(2.0f)),
+              b.create<arith::SubFOp>(loc, one, beta2)),
+          b.create<arith::MulFOp>(loc, g, dm)));
+  b.create<memref::StoreOp>(loc, dy, dparam, ValueRange{gid});
+  b.create<memref::StoreOp>(loc, dg, dgrad, ValueRange{gid});
+  b.create<memref::StoreOp>(
+      loc, b.create<arith::MulFOp>(loc, beta2, dm), dmoment,
+      ValueRange{gid});
+  b.setInsertionPointToEnd(&f.getBody().front());
+  b.create<gpu::ReturnOp>(loc);
+}
+
 // Emit the per-element update for `kind`. gid indexes the flat parameter array;
 // p/g/m/v are loaded, the new param/state stored.
 void emitOptBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, StringRef kind) {
@@ -379,6 +851,69 @@ struct GenerateROCMOptimizerKernelPass
       Type f32 = b.getF32Type();
       Type idxTy = b.getIndexType();
       auto memF32 = MemRefType::get({ShapedType::kDynamic}, f32);
+      if (kindAttr.getValue() == "adafactor") {
+        auto gpuMod = b.create<gpu::GPUModuleOp>(loc, kname + "_mod");
+        b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
+        auto momentTy = b.getFunctionType(
+            {memF32, memF32, memF32, idxTy, idxTy, f32}, {});
+        auto meanTy =
+            b.getFunctionType({memF32, memF32, idxTy}, {});
+        auto updateTy = b.getFunctionType(
+            {memF32, memF32, memF32, memF32, memF32, memF32,
+             idxTy, idxTy, f32, f32},
+            {});
+        auto fullTy = b.getFunctionType(
+            {memF32, memF32, memF32, memF32, memF32, idxTy,
+             f32, f32, f32},
+            {});
+        auto backwardMeanTy = b.getFunctionType(
+            {memF32, memF32, memF32, memF32, memF32, memF32,
+             idxTy, idxTy, f32, f32},
+            {});
+        auto backwardMomentTy = b.getFunctionType(
+            {memF32, memF32, memF32, memF32, memF32, memF32, memF32,
+             memF32, idxTy, idxTy, f32, f32, f32},
+            {});
+        auto backwardFinalizeTy = b.getFunctionType(
+            {memF32, memF32, memF32, memF32, memF32, memF32, memF32,
+             memF32, memF32, idxTy, idxTy, f32, f32, f32},
+            {});
+        auto fullBackwardTy = b.getFunctionType(
+            {memF32, memF32, memF32, memF32, memF32, memF32, idxTy,
+             f32, f32, f32},
+            {});
+        auto makeKernel = [&](StringRef suffix, FunctionType type) {
+          auto fn =
+              b.create<gpu::GPUFuncOp>(loc, kname + suffix.str(), type);
+          fn->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
+                      b.getUnitAttr());
+          return fn;
+        };
+        auto row = makeKernel("_row", momentTy);
+        auto col = makeKernel("_col", momentTy);
+        auto mean = makeKernel("_mean", meanTy);
+        auto update = makeKernel("_update", updateTy);
+        auto full = makeKernel("_full", fullTy);
+        auto backwardMean = makeKernel("_bwd_mean", backwardMeanTy);
+        auto backwardRow = makeKernel("_bwd_row", backwardMomentTy);
+        auto backwardCol = makeKernel("_bwd_col", backwardMomentTy);
+        auto backwardFinalize =
+            makeKernel("_bwd_finalize", backwardFinalizeTy);
+        auto fullBackward = makeKernel("_full_bwd", fullBackwardTy);
+        OpBuilder body(module.getContext());
+        emitAdafactorMomentBody(body, loc, row, true);
+        emitAdafactorMomentBody(body, loc, col, false);
+        emitAdafactorMeanBody(body, loc, mean);
+        emitAdafactorUpdateBody(body, loc, update);
+        emitAdafactorFullBody(body, loc, full);
+        emitAdafactorBackwardMeanBody(body, loc, backwardMean);
+        emitAdafactorBackwardMomentBody(body, loc, backwardRow, true);
+        emitAdafactorBackwardMomentBody(body, loc, backwardCol, false);
+        emitAdafactorBackwardFinalizeBody(body, loc, backwardFinalize);
+        emitAdafactorFullBackwardBody(body, loc, fullBackward);
+        op->erase();
+        continue;
+      }
       bool backward = false;
       if (auto attr = op->getAttrOfType<BoolAttr>("backward"))
         backward = attr.getValue();

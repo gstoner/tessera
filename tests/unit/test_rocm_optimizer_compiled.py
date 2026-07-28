@@ -1,7 +1,10 @@
 """Compiler-generated fused optimizer steps on gfx1151 (P3 of
 S_SERIES_GAP_CLOSURE_PLAN) — sgd / momentum / adam / adamw / lion. The Tessera
 compiler GENERATES the kernel (generate-rocm-optimizer-kernel, kind StrAttr →
-ROCDL → hsaco), then HIP launches it. Reachable via
+ROCDL → hsaco), then HIP launches it. Adafactor uses one compiler-owned
+five-entry module (row moment, column moment, ordered row mean, factored
+update, lower-rank full-moment update).
+Reachable via
 `compiler_path="rocm_optimizer_compiled"`. Validated vs tessera.optim on
 gfx1151. Skip-clean: tessera-opt not built / no GPU.
 """
@@ -13,6 +16,7 @@ import numpy as np
 import pytest
 
 from tessera import optim
+from tessera.autodiff.vjp import get_vjp
 
 
 def _rocm_or_skip():
@@ -131,6 +135,220 @@ def test_adam_and_lion():
                               weight_decay=0.01)[0]), atol=1e-5)
 
 
+def test_adafactor_factored_multistep():
+    rt = _rocm_or_skip()
+    rng = np.random.default_rng(12)
+    p = rng.standard_normal(SHAPE).astype(np.float32)
+    row = np.zeros(SHAPE[:-1], np.float32)
+    col = np.zeros(SHAPE[-1], np.float32)
+    state = None
+    for _ in range(3):
+        g = rng.standard_normal(SHAPE).astype(np.float32)
+        artifact = rt.RuntimeArtifact(metadata={
+            "target": "rocm",
+            "compiler_path": "rocm_adafactor_compiled",
+            "executable": True,
+            "execution_kind": "native_gpu",
+            "arg_names": ["p", "g", "row", "col"],
+            "output_name": "o",
+            "ops": [{
+                "op_name": "tessera.adafactor",
+                "result": "o",
+                "operands": ["p", "g", "row", "col"],
+                "kwargs": {"lr": 1e-2, "beta2": 0.9, "eps": 1e-6},
+            }],
+        })
+        result = rt.launch(artifact, (p, g, row, col))
+        assert result["ok"] is True, result.get("reason")
+        assert result["compiler_path"] == "rocm_adafactor_compiled"
+        p_new, row, col = (np.asarray(value) for value in result["output"])
+        p_ref, state = optim.adafactor(
+            p, g, state, lr=1e-2, beta2=0.9, eps=1e-6
+        )
+        np.testing.assert_allclose(p_new, np.asarray(p_ref), atol=2e-5)
+        np.testing.assert_allclose(row, np.asarray(state["v"]["row"]), atol=1e-6)
+        np.testing.assert_allclose(col, np.asarray(state["v"]["col"]), atol=1e-6)
+        p = p_new
+
+
+def test_adafactor_full_moment_vector_multistep():
+    rt = _rocm_or_skip()
+    rng = np.random.default_rng(13)
+    p = rng.standard_normal(19).astype(np.float32)
+    moment = np.zeros_like(p)
+    state = None
+    for _ in range(3):
+        g = rng.standard_normal(p.shape).astype(np.float32)
+        artifact = rt.RuntimeArtifact(metadata={
+            "target": "rocm",
+            "compiler_path": "rocm_adafactor_compiled",
+            "executable": True,
+            "execution_kind": "native_gpu",
+            "arg_names": ["p", "g", "moment"],
+            "output_name": "o",
+            "ops": [{
+                "op_name": "tessera.adafactor",
+                "result": "o",
+                "operands": ["p", "g", "moment"],
+                "kwargs": {"lr": 1e-2, "beta2": 0.9, "eps": 1e-6},
+            }],
+        })
+        result = rt.launch(artifact, (p, g, moment))
+        assert result["ok"] is True, result.get("reason")
+        p_new, moment = (np.asarray(value) for value in result["output"])
+        p_ref, state = optim.adafactor(
+            p, g, state, lr=1e-2, beta2=0.9, eps=1e-6
+        )
+        np.testing.assert_allclose(p_new, np.asarray(p_ref), atol=2e-5)
+        np.testing.assert_allclose(
+            moment, np.asarray(state["v"]["v"]), atol=1e-6
+        )
+        p = p_new
+
+
+def test_adafactor_factored_analytic_vjp_matches_directional_difference():
+    rng = np.random.default_rng(17)
+    p = rng.normal(size=SHAPE).astype(np.float64)
+    g = rng.normal(scale=0.2, size=SHAPE).astype(np.float64)
+    state = {
+        "v": {
+            "row": rng.uniform(0.1, 0.3, size=SHAPE[:-1]),
+            "col": rng.uniform(0.1, 0.3, size=SHAPE[-1]),
+            "factored": True,
+        },
+        "step": 2,
+    }
+    dout = rng.normal(size=SHAPE)
+    dp, dg, ds = get_vjp("adafactor")(
+        dout, p, g, state, lr=1e-2, beta2=0.9, eps=1e-6,
+        compute_dtype="fp64", state_dtype="fp64",
+    )
+    np.testing.assert_allclose(dp, dout)
+    entries = [
+        (g, dg, lambda value: (p, value, state)),
+        (
+            state["v"]["row"],
+            ds["v"]["row"],
+            lambda value: (
+                p,
+                g,
+                {"v": {**state["v"], "row": value}, "step": 2},
+            ),
+        ),
+        (
+            state["v"]["col"],
+            ds["v"]["col"],
+            lambda value: (
+                p,
+                g,
+                {"v": {**state["v"], "col": value}, "step": 2},
+            ),
+        ),
+    ]
+    for value, gradient, bind in entries:
+        direction = rng.normal(size=value.shape)
+
+        def objective(candidate):
+            pp, gg, ss = bind(candidate)
+            out, _ = optim.adafactor(
+                pp, gg, ss, lr=1e-2, beta2=0.9, eps=1e-6,
+                compute_dtype="fp64", state_dtype="fp64",
+            )
+            return float(np.sum(np.asarray(out) * dout))
+
+        epsilon = 1e-5
+        numeric = (
+            objective(value + epsilon * direction)
+            - objective(value - epsilon * direction)
+        ) / (2 * epsilon)
+        analytic = float(np.sum(np.asarray(gradient) * direction))
+        np.testing.assert_allclose(analytic, numeric, rtol=2e-4, atol=2e-5)
+
+
+def test_adafactor_factored_backward_executes_on_gfx1151():
+    rt = _rocm_or_skip()
+    rng = np.random.default_rng(18)
+    p = rng.normal(size=SHAPE).astype(np.float32)
+    g = rng.normal(scale=0.2, size=SHAPE).astype(np.float32)
+    row = rng.uniform(0.1, 0.3, size=SHAPE[:-1]).astype(np.float32)
+    col = rng.uniform(0.1, 0.3, size=SHAPE[-1]).astype(np.float32)
+    dy = rng.normal(size=SHAPE).astype(np.float32)
+    artifact = rt.RuntimeArtifact(metadata={
+        "target": "rocm",
+        "compiler_path": "rocm_adafactor_bwd_compiled",
+        "executable": True,
+        "execution_kind": "native_gpu",
+        "arg_names": ["p", "g", "row", "col", "dy"],
+        "out_cotangent": "dy",
+        "ops": [{
+            "op_name": "tessera.adafactor",
+            "result": "o",
+            "operands": ["p", "g", "row", "col"],
+            "kwargs": {"lr": 1e-2, "beta2": 0.9, "eps": 1e-6},
+        }],
+    })
+    result = rt.launch(artifact, (p, g, row, col, dy))
+    assert result["ok"] is True, result.get("reason")
+    dp, dg, drow, dcol = (np.asarray(value) for value in result["output"])
+    expected = get_vjp("adafactor")(
+        dy,
+        p,
+        g,
+        {"v": {"row": row, "col": col, "factored": True}, "step": 1},
+        lr=1e-2,
+        beta2=0.9,
+        eps=1e-6,
+    )
+    np.testing.assert_allclose(dp, expected[0], rtol=2e-5, atol=2e-5)
+    np.testing.assert_allclose(dg, expected[1], rtol=3e-4, atol=3e-5)
+    np.testing.assert_allclose(
+        drow, expected[2]["v"]["row"], rtol=3e-4, atol=3e-5
+    )
+    np.testing.assert_allclose(
+        dcol, expected[2]["v"]["col"], rtol=3e-4, atol=3e-5
+    )
+
+
+def test_adafactor_full_backward_executes_on_gfx1151():
+    rt = _rocm_or_skip()
+    rng = np.random.default_rng(19)
+    p = rng.normal(size=31).astype(np.float32)
+    g = rng.normal(scale=0.2, size=p.shape).astype(np.float32)
+    moment = rng.uniform(0.1, 0.3, size=p.shape).astype(np.float32)
+    dy = rng.normal(size=p.shape).astype(np.float32)
+    artifact = rt.RuntimeArtifact(metadata={
+        "target": "rocm",
+        "compiler_path": "rocm_adafactor_bwd_compiled",
+        "executable": True,
+        "execution_kind": "native_gpu",
+        "arg_names": ["p", "g", "moment", "dy"],
+        "out_cotangent": "dy",
+        "ops": [{
+            "op_name": "tessera.adafactor",
+            "result": "o",
+            "operands": ["p", "g", "moment"],
+            "kwargs": {"lr": 1e-2, "beta2": 0.9, "eps": 1e-6},
+        }],
+    })
+    result = rt.launch(artifact, (p, g, moment, dy))
+    assert result["ok"] is True, result.get("reason")
+    dp, dg, dmoment = (np.asarray(value) for value in result["output"])
+    expected = get_vjp("adafactor")(
+        dy,
+        p,
+        g,
+        {"v": {"v": moment, "factored": False}, "step": 1},
+        lr=1e-2,
+        beta2=0.9,
+        eps=1e-6,
+    )
+    np.testing.assert_allclose(dp, expected[0], rtol=2e-5, atol=2e-5)
+    np.testing.assert_allclose(dg, expected[1], rtol=3e-4, atol=3e-5)
+    np.testing.assert_allclose(
+        dmoment, expected[2]["v"]["v"], rtol=3e-4, atol=3e-5
+    )
+
+
 @pytest.mark.parametrize("kind", ["sgd", "momentum", "adam", "adamw", "lion"])
 def test_optimizer_codegen_lowers(kind):
     import subprocess
@@ -239,3 +457,59 @@ def test_lion_backward_codegen_lowers_stop_sign_vjp():
     assert "gpu.func @lion_bwd" in generated.stdout
     assert generated.stdout.count("memref.store") == 3
     assert "math." not in generated.stdout
+
+
+@pytest.mark.parametrize("backward", [False, True])
+def test_adafactor_codegen_lowers_factored_program(backward):
+    import subprocess
+    from pathlib import Path
+
+    opt = Path(
+        os.environ.get(
+            "TESSERA_OPT",
+            Path(__file__).resolve().parents[2]
+            / "build/tools/tessera-opt/tessera-opt",
+        )
+    )
+    if not opt.is_file():
+        pytest.skip("build tessera-opt")
+    directive = (
+        'module {\n  "tessera_rocm.optimizer"() {name = "ada", '
+        f'kind = "adafactor", backward = {str(backward).lower()}}} '
+        ': () -> ()\n}\n'
+    )
+    generated = subprocess.run(
+        [str(opt), "-", "--generate-rocm-optimizer-kernel"],
+        input=directive,
+        capture_output=True,
+        text=True,
+    )
+    assert generated.returncode == 0, generated.stderr
+    for suffix in (
+        "row",
+        "col",
+        "mean",
+        "update",
+        "full",
+        "bwd_mean",
+        "bwd_row",
+        "bwd_col",
+        "bwd_finalize",
+        "full_bwd",
+    ):
+        assert f"gpu.func @ada_{suffix}" in generated.stdout
+    assert generated.stdout.count("memref.store") == 16
+    lowered = subprocess.run(
+        [
+            str(opt),
+            "-",
+            "--pass-pipeline=builtin.module(generate-rocm-optimizer-kernel,"
+            "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+            "reconcile-unrealized-casts))",
+        ],
+        input=directive,
+        capture_output=True,
+        text=True,
+    )
+    assert lowered.returncode == 0, lowered.stderr
+    assert lowered.stdout.count("llvm.func @ada_") == 10

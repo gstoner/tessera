@@ -1,4 +1,8 @@
-"""NVIDIA retained-context adapter for shared memory-capacity policy."""
+"""ROCm device/model capacity injection for shared rematerialization.
+
+The arithmetic and Graph-IR attribute contract are target-independent; this
+module contributes only the exact retained-HIP-context capacity query.
+"""
 
 from __future__ import annotations
 
@@ -6,26 +10,13 @@ from typing import Mapping, Optional, Set
 
 from .graph_ir import GraphIRModule
 from .memory_capacity import (
-    RematerializationCapacityPolicy as NVIDIARematerializationPolicy,
+    RematerializationCapacityPolicy as ROCmRematerializationPolicy,
     apply_rematerialization_capacity_policy,
     resolve_rematerialization_capacity_policy,
 )
 
 
-def _nvidia_envelope(
-    capacity_bytes: Optional[int], free_bytes: Optional[int]
-) -> tuple[int, Optional[int]]:
-    if capacity_bytes is None:
-        from tessera.runtime import _nvidia_device_memory_envelope
-
-        envelope = _nvidia_device_memory_envelope()
-        capacity_bytes = envelope["capacity_bytes"]
-        if free_bytes is None:
-            free_bytes = envelope["free_bytes"]
-    return capacity_bytes, free_bytes
-
-
-def resolve_nvidia_rematerialization_policy(
+def resolve_rocm_rematerialization_policy(
     *,
     model_parameter_bytes: int,
     capacity_bytes: Optional[int] = None,
@@ -34,10 +25,14 @@ def resolve_nvidia_rematerialization_policy(
     gradient_copies: int = 1,
     optimizer_state_copies: int = 2,
     persistent_bytes: int = 0,
-) -> NVIDIARematerializationPolicy:
-    capacity_bytes, free_bytes = _nvidia_envelope(
-        capacity_bytes, free_bytes
-    )
+) -> ROCmRematerializationPolicy:
+    if capacity_bytes is None:
+        from tessera.runtime import _rocm_device_memory_envelope
+
+        envelope = _rocm_device_memory_envelope()
+        capacity_bytes = envelope["capacity_bytes"]
+        if free_bytes is None:
+            free_bytes = envelope["free_bytes"]
     return resolve_rematerialization_capacity_policy(
         model_parameter_bytes=model_parameter_bytes,
         capacity_bytes=capacity_bytes,
@@ -49,7 +44,7 @@ def resolve_nvidia_rematerialization_policy(
     )
 
 
-def apply_nvidia_rematerialization_policy(
+def apply_rocm_rematerialization_policy(
     module: GraphIRModule,
     *,
     parameter_names: Set[str],
@@ -60,10 +55,15 @@ def apply_nvidia_rematerialization_policy(
     gradient_copies: int = 1,
     optimizer_state_copies: int = 2,
     persistent_bytes: int = 0,
-) -> dict[str, NVIDIARematerializationPolicy]:
-    capacity_bytes, free_bytes = _nvidia_envelope(
-        capacity_bytes, free_bytes
-    )
+) -> dict[str, ROCmRematerializationPolicy]:
+    """Stamp model validation and the exact HIP capacity envelope on Graph IR."""
+    if capacity_bytes is None:
+        from tessera.runtime import _rocm_device_memory_envelope
+
+        envelope = _rocm_device_memory_envelope()
+        capacity_bytes = envelope["capacity_bytes"]
+        if free_bytes is None:
+            free_bytes = envelope["free_bytes"]
     return apply_rematerialization_capacity_policy(
         module,
         parameter_names=parameter_names,
@@ -78,7 +78,7 @@ def apply_nvidia_rematerialization_policy(
 
 
 __all__ = [
-    "NVIDIARematerializationPolicy",
-    "apply_nvidia_rematerialization_policy",
-    "resolve_nvidia_rematerialization_policy",
+    "ROCmRematerializationPolicy",
+    "apply_rocm_rematerialization_policy",
+    "resolve_rocm_rematerialization_policy",
 ]

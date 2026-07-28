@@ -41,10 +41,12 @@ from typing import Any
 from tessera.compiler.emit.kernel_cache import CompileError, register_compiler
 from tessera.compiler.emit.kernel_emitter import (
     KernelEmitter,
+    KernelRunner,
     KernelSource,
     SpecPolicy,
     get_emitter,
     register_emitter,
+    register_runner,
 )
 
 #: Target id. Deliberately distinct from ``apple_gpu`` so the arbiter can hold
@@ -244,6 +246,58 @@ def run_fused_region_aot(region: Any, A: Any, B: Any, bias: Any = None, *,
                                  None if bias is None else np.asarray(bias, np.float32),
                                  None)
     return np.asarray(reference, dtype), "reference"
+
+
+class AppleAIRRunner(KernelRunner):
+    """Execute half of the AOT lane — the seam `apple_gpu_air` was missing.
+
+    Without a registered runner this target was invisible to `build()`'s execute
+    side, to the F4 oracles in `fusion_core` (which resolve a runner through the
+    registry), and to any arbiter — every other registered target had one.
+
+    Only `run_fused_region` has an AOT dispatch today: the runtime ships one
+    metallib entry point for the coopmat GEMM shape. The other three report a
+    tag in `REFERENCE_EXECUTIONS`, which is the protocol's way of saying "no
+    device kernel ran" — the F4 oracle then trusts the reference by construction
+    instead of comparing a numpy result against itself. They must not claim a
+    device tag, and must not raise: raising would make the oracle unable to gate
+    regions this backend simply has not wired yet.
+    """
+
+    target = AIR_TARGET
+
+    #: Left at the oracle default deliberately. The f16 coopmat kernel measured
+    #: 1.2e-4 against the f32 reference — inside the oracle's 1e-3 — so a looser
+    #: budget would only hide miscompiles. ROCm sets 0.005 because its f16 WMMA
+    #: lane genuinely needs it; inheriting that number here would be cargo cult.
+    accuracy_atol = None
+
+    def run_fused_region(self, region: Any, *args: Any, **kwargs: Any):
+        return run_fused_region_aot(region, *args, **kwargs)
+
+    def _decline(self, region: Any, reference: Any) -> tuple[Any, str]:
+        return reference, "reference"
+
+    def run_fused_attention(self, region: Any, *args: Any, **kwargs: Any):
+        from tessera.compiler.emit import apple_msl
+        out, _ = apple_msl.run_fused_attention(region, *args, **kwargs)
+        return self._decline(region, out)
+
+    def run_gated_matmul_region(self, region: Any, *args: Any, **kwargs: Any):
+        from tessera.compiler.emit import apple_msl
+        out, _ = apple_msl.run_gated_matmul_region(region, *args, **kwargs)
+        return self._decline(region, out)
+
+    def run_pointwise_graph(self, region: Any, *args: Any, **kwargs: Any):
+        from tessera.compiler.emit import apple_msl
+        out, _ = apple_msl.run_pointwise_graph(region, *args, **kwargs)
+        return self._decline(region, out)
+
+
+# Not the process default: registering with `default=True` would silently move
+# every existing F4 verification onto the AOT lane. The arbiter selects it
+# explicitly; until then `apple_gpu` stays the active runner.
+register_runner(AppleAIRRunner(), default=False)
 
 
 def _apple_air_compile_fn(source: KernelSource) -> str:

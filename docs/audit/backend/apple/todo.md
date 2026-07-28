@@ -8,6 +8,63 @@ last_updated: 2026-07-27
 
 # Apple compiler, exact-device, and performance plan
 
+## APPLE-AOT-3: S0 result — a GPU executes hand-written AIR IR
+
+**Status: PASSED 2026-07-28 on the owning host (Apple M1 Max / apple7, Metal
+toolchain 32023.883). Host-verified numerics, not a perf claim.**
+
+The four things APPLE-AOT-2 listed as unverified are now settled, three by
+experiment and one against me:
+
+| question | result |
+|---|---|
+| does a GPU *run* hand-written AIR IR? | **yes** — `o[i] = a[i]*3.0f` written directly as LLVM IR, no MSL front end, dispatched via `newLibraryWithURL:`; output bit-exact vs `x*3` over 1024 elements |
+| is `.ll` input to `metal` supported? | **no** — it works (`-x ir` too), but Apple documents MSL as the only supported input and deliberately does not document AIR |
+| is a `.metallib` portable across GPU families? | **not family-tagged** — `metal-lipo -info` reports `architecture: air64_v28`; the tag is the *AIR version*, which tracks deployment target (`-mmacos-version-min=14.0` → `air64_v26`, `15.0` → `v27`). GPU-specific compilation happens later, at pipeline creation — which is also why ~15.2 ms remains in the AOT lane. Cross-family *execution* untested: one machine. |
+| does the shared-dispatch refactor shrink runtime code? | **no — my prediction was wrong.** Measured: 58 lines before, 84 after (48 shared + 18 + 18) for two lanes. Duplication would have been 116, so the *marginal* cost per lane drops 58 → 18 lines (3.2×). It grows in absolute terms; it is cheaper than duplicating. |
+
+### What S0 changes
+
+The AIR path needs **no reverse engineering**. The stalled LLVM `air64` RFC was
+blocked because it reimplemented Apple's bitcode writer and container; emitting
+IR *into* `xcrun metal` requires neither. The metadata contract is declarative
+and legible — `!air.kernel` naming the function, one `!air.buffer` per argument
+(location index, access, address space, element size/align/type/name), the
+builtin descriptor for `thread_position_in_grid`, `addrspace(1)` device
+pointers. The fixture is `tests/data/apple/handwritten_air.ll`, exercised by
+`test_gpu_executes_hand_written_air_ir`.
+
+The shape is also ordinary rather than exotic: NVIDIA is MLIR → NVVM → PTX →
+**ptxas** → cubin. Apple would be MLIR → AIR IR → **metal/metallib** →
+metallib. A vendor assembler in the chain is normal.
+
+### The risk that decides it
+
+`.ll` input is **unsupported**. It is not in any Apple documentation, there is
+no man page, and AIR is undocumented by deliberate choice. So an MLIR → AIR
+emitter would rest on an input path Apple can change or remove in any toolchain
+update, with no contract and no deprecation warning. The MSL lane has no such
+exposure — MSL is the documented, supported input, and `apple_gpu_air` already
+captures the whole front-end saving through it.
+
+That is the trade to decide, and it is now a clean one: **structure (compiler-
+produced code, parity with ROCm's tessera-opt-emitted hsaco) against supported-
+ness.** Not, as Decision #26a assumed, feasibility — feasibility is settled.
+
+### C1 landed alongside
+
+`AppleAIRRunner` is registered, closing the gap that made `apple_gpu_air` the
+only registered target without a runner. It registers with `default=False` so it
+cannot become the process default by import side effect — that would silently
+move every F4 verification onto the AOT lane. Only `run_fused_region` has an AOT
+dispatch; the other three return a `REFERENCE_EXECUTIONS` tag so the oracle
+trusts the reference rather than comparing numpy against itself.
+
+New C ABI: `tessera_apple_gpu_metallib_elementwise_f32` — a generic 1-in/1-out
+metallib dispatch. Written for S0, but it is the shape most synthesized
+pointwise kernels take, so it is the first of the APPLE-AOT-2 phase-B entries
+rather than scaffolding.
+
 ## APPLE-AOT-2: close out the `apple_gpu_air` lane
 
 **Status: open, plan of record 2026-07-28.** APPLE-AOT-1 proved the lane works

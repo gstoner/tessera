@@ -9925,6 +9925,60 @@ static int32_t dispatch_matmul_epilogue_coopmat(
   }
 }
 
+// Generic 1-in / 1-out elementwise dispatch from a prebuilt `.metallib`.
+//
+// Deliberately the simplest possible kernel contract — buffer(0) in,
+// buffer(1) out, one thread per element via thread_position_in_grid — because
+// its first job is to answer a question the compile step cannot: does a GPU
+// actually *run* code whose LLVM IR we wrote ourselves, rather than code Apple's
+// MSL front end produced? `xcrun metal` accepting hand-written AIR IR proves it
+// compiles and `metal-objdump` proves the symbol is there; neither proves the
+// numbers come out right.
+//
+// It is also the shape most synthesized pointwise kernels take, so it is not
+// throwaway scaffolding.
+extern "C" int32_t tessera_apple_gpu_metallib_elementwise_f32(
+    const char* metallib_path, const char* entry, const float* in, float* out,
+    int32_t n) {
+  if (!metallib_path || !entry || !in || !out || n <= 0) return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;
+  @autoreleasepool {
+    NSString *path = [NSString stringWithUTF8String:metallib_path];
+    NSString *ep = [NSString stringWithUTF8String:entry];
+    id<MTLComputePipelineState> pso = load_metallib_kernel(ctx, path, ep);
+    if (!pso) return 0;
+
+    NSUInteger bytes = sizeof(float) * (NSUInteger)n;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufIn, ctx, in, bytes);
+    TS_METAL_BUF_ACQUIRE(bufOut, ctx, bytes);
+    if (!bufIn || !bufOut) return 0;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    cb.label = @"tessera.metallib.elementwise";
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufIn offset:0 atIndex:0];
+    [enc setBuffer:bufOut offset:0 atIndex:1];
+    NSUInteger width = pso.threadExecutionWidth;
+    NSUInteger tgSize = width > 0 ? width : 32;
+    if (tgSize > pso.maxTotalThreadsPerThreadgroup)
+      tgSize = pso.maxTotalThreadsPerThreadgroup;
+    MTLSize grid = MTLSizeMake((NSUInteger)n, 1, 1);
+    MTLSize tg = MTLSizeMake(tgSize, 1, 1);
+    // dispatchThreads (not threadgroups) so a non-multiple `n` does not run
+    // past the end of the buffers — the hand-written probe kernel has no
+    // bounds guard, and a guard would hide an out-of-range dispatch bug.
+    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "metallib_elementwise"))
+      return 0;
+    ts_record_pipeline_resources(pso, tg);
+    std::memcpy(out, [bufOut contents], bytes);
+    return 1;
+  }
+}
+
 // JIT lane: compile the MSL at launch, then dispatch.
 extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_coopmat(
     const char* msl_source, const char* entry, const void* A, const void* B,

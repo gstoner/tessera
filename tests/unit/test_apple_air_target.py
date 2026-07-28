@@ -197,6 +197,102 @@ def test_nonce_control_defeats_metals_shader_cache(tmp_path) -> None:
         "being optimized away and the benchmark's cache control is broken")
 
 
+def test_air_runner_is_registered_without_stealing_the_default() -> None:
+    """C1: the AOT lane was the only registered target with no runner.
+
+    It must register, and must NOT become the process default — that would move
+    every existing F4 verification onto the AOT lane as an import side effect.
+    Checked in both import orders because `register_runner` makes the *first*
+    registrant the default unless it opts out.
+    """
+    from tessera.compiler.emit import apple_msl  # noqa: F401 — registers apple_gpu
+    from tessera.compiler.emit.kernel_emitter import active_runner, get_runner
+
+    runner = get_runner(AIR_TARGET)
+    assert runner.target == AIR_TARGET
+    assert active_runner().target == "apple_gpu", (
+        "the AOT runner must not be the default; the arbiter selects it")
+
+
+@requires_toolchain
+@pytest.mark.hardware_apple_gpu
+def test_air_runner_reports_the_device_tag_only_when_it_dispatched() -> None:
+    """The unimplemented methods must decline, not claim a device tag.
+
+    Only `run_fused_region` has an AOT dispatch symbol today. The other three
+    have to return a REFERENCE_EXECUTIONS tag so the F4 oracle trusts the
+    reference by construction instead of comparing numpy against itself — and
+    must not raise, which would stop the oracle gating those regions at all.
+    """
+    import numpy as np
+
+    from tessera.compiler.emit.kernel_emitter import (
+        REFERENCE_EXECUTIONS, get_runner,
+    )
+
+    runner = get_runner(AIR_TARGET)
+    rng = np.random.default_rng(0)
+    a = (rng.standard_normal((64, 64)) * 0.1).astype(np.float16)
+    b = (rng.standard_normal((64, 64)) * 0.1).astype(np.float16)
+
+    _, tag = runner.run_fused_region(F.FusedRegion(epilogue=("gelu",)), a, b)
+    assert tag == "metal_metallib" or tag in REFERENCE_EXECUTIONS
+
+    # rank-2 (M, D) — the MSL attention lane unpacks `M, D = Q.shape`.
+    q = k = v = (rng.standard_normal((16, 16)) * 0.1).astype(np.float32)
+    _, attn_tag = runner.run_fused_attention(F.AttentionRegion(), q, k, v)
+    assert attn_tag in REFERENCE_EXECUTIONS, (
+        "no AOT attention dispatch exists; claiming a device tag would tell the "
+        "F4 oracle to trust a kernel that never ran")
+
+
+@requires_toolchain
+@pytest.mark.hardware_apple_gpu
+def test_gpu_executes_hand_written_air_ir(tmp_path) -> None:
+    """S0: the GPU runs LLVM IR we wrote, with no MSL front end in the chain.
+
+    Everything else about the AIR path is compile-time evidence — `xcrun metal`
+    accepting the IR, `metal-objdump` finding the symbol. Neither shows the
+    numbers come out right, and that is the whole question for whether an
+    MLIR → AIR emitter is a real direction or a dead end.
+    """
+    import ctypes
+    import subprocess
+
+    import numpy as np
+
+    from tessera.runtime import _load_apple_gpu_runtime
+
+    ir = Path(__file__).resolve().parents[2] / "tests/data/apple/handwritten_air.ll"
+    if not ir.is_file():
+        pytest.skip(f"hand-written AIR fixture missing: {ir}")
+
+    air, lib = tmp_path / "hw.air", tmp_path / "hw.metallib"
+    for command in (["xcrun", "metal", "-c", str(ir), "-o", str(air)],
+                    ["xcrun", "metallib", str(air), "-o", str(lib)]):
+        done = subprocess.run(command, capture_output=True, text=True)
+        assert done.returncode == 0, f"{command[1]} failed:\n{done.stderr}"
+
+    symbol = getattr(_load_apple_gpu_runtime(),
+                     "tessera_apple_gpu_metallib_elementwise_f32", None)
+    if symbol is None:
+        pytest.skip("runtime lacks the generic metallib dispatch (rebuild dylib)")
+    symbol.argtypes = [ctypes.c_char_p, ctypes.c_char_p,
+                       ctypes.POINTER(ctypes.c_float),
+                       ctypes.POINTER(ctypes.c_float), ctypes.c_int32]
+    symbol.restype = ctypes.c_int32
+
+    n = 1024
+    x = np.linspace(-3, 3, n).astype(np.float32)
+    out = np.zeros(n, np.float32)
+    pointer = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+    ok = symbol(str(lib).encode("utf-8"), b"tessera_handwritten",
+                pointer(x), pointer(out), n)
+    assert ok, "dispatch of the hand-written AIR kernel declined"
+    # The kernel body is `fmul float %v, 3.0` — exact in f32, so demand exact.
+    np.testing.assert_array_equal(out, x * 3.0)
+
+
 def test_missing_toolchain_declines_instead_of_falling_back(monkeypatch, tmp_path):
     """Never silently produce a JIT result under the AOT target's name."""
     monkeypatch.setattr(apple_air.metal_toolchain_available, "__wrapped__",

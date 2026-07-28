@@ -8,19 +8,22 @@ last_updated: 2026-07-27
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
-Cross-backend sync `APPLE-AOT-METALLIB-2026-07-28` — **not applicable**. Apple
-added `apple_gpu_air`, a precompiled-artifact lane behind the shared
-`register_compiler(target, compile_fn)` seam, and measured it against its
-compile-on-launch lane (cold pipeline creation 29.7 ms → 15.2 ms, ~1.95x,
-offline build repaying after ~5 cold launches; host-wall timing on Apple M1
-Max, not device-event evidence). CUDA needs nothing here:
-`_nvidia_cuda_compile_fn` already returns a real `.so` from nvcc, so the NVIDIA
-synthesizer lane has always been precompiled — Apple was the lone compile-on-
-launch outlier. What does transfer is the *method*: when SM120 AOT-vs-JIT or
-cubin-caching questions arise, reuse
-`benchmarks/apple_gpu/benchmark_aot_vs_jit.py` and its cache control (a never-
-before-compiled kernel per sample), or the number will be the driver's cache
-rather than the compile strategy. No shared IR, ABI, dtype/op registration, or
+Cross-backend sync `APPLE-AOT-METALLIB-2026-07-28` — **follow-up required**.
+Apple added `apple_gpu_air`, a precompiled-artifact lane behind the shared
+`register_compiler(target, compile_fn)` seam, measured against its compile-on-
+launch lane (cold pipeline creation 29.7 ms -> 15.2 ms, ~1.95x; host-wall
+timing on Apple M1 Max, not device-event evidence). NVIDIA is the backend
+closest to Apple's position, not a distant one: its device code is NVRTC-
+compiled at load (`nvrtc_jit.cpp`; runtime.py describes the mma.sync lane as
+NVRTC-compiled for the device arch) and `runtime.py` has no cubin/fatbin
+precompiled lane. So the AOT-vs-JIT question is genuinely open here. An earlier
+version of this note said CUDA had 'nothing to catch up on' because
+`emit/nvidia_cuda.py` contains no nvrtc reference — that was inferred from
+absence of evidence in one file and is withdrawn. Follow-up: decide whether
+SM120 wants a precompiled artifact lane, and if it is measured, reuse
+benchmarks/apple_gpu/benchmark_aot_vs_jit.py *with its cache control* (a never-
+before-compiled kernel per sample) — the driver's own cache is what made the
+first Apple number 13x too good. No shared IR, ABI, dtype/op registration, or
 numerical contract changed.
 
 Cross-backend sync `TESSERA-OPT-CAPABILITY-SKIP-2026-07-27` moves the last 43

@@ -91,20 +91,45 @@ decision on whether artifacts are fleet-shareable (they are host-ISA-specific,
 so probably per-machine — but the `kernel_cache` key does *not* include host
 identity today, which is the same latent collision X86-1 flags for `-march=native`).
 
-### What this does *not* need: ROCm or CUDA parity work
+### The real gap to ROCm and CUDA (corrected 2026-07-28)
 
-The gap to ROCm/CUDA is not what it looks like. Their `compile_fn` already
-returns a real `.so` (nvcc / hipcc) — they have been AOT-only from the start and
-have **no JIT lane at all** (no NVRTC/HIPRTC path). So there is nothing for them
-to catch up on here; if anything, Apple is the one that just gained a second
-strategy they lack.
+An earlier draft of this plan claimed ROCm and CUDA "have no JIT lane at all"
+and so had "nothing to catch up on". **That was wrong**, and wrong from
+absence-of-evidence: it was inferred from `nvrtc`/`hiprtc` not appearing in
+`emit/nvidia_cuda.py` and `emit/rocm_hip.py`. Those two files indeed have none —
+but the shipping runtime lanes do. `runtime.py` documents the ROCm WMMA lane as
+"HIPRTC-compiled for the device arch (gfx1151/gfx1100) **at load**" and the
+NVIDIA lane as "NVRTC-compiled warp-level mma.sync". There is a dedicated
+`nvrtc_jit.cpp` in the NVIDIA backend. Both vendors JIT.
 
-What transfers to them is the **method, not the lane**: when SM120 or gfx1151
-performance work raises an AOT-vs-JIT or artifact-caching question, reuse
-`benchmarks/apple_gpu/benchmark_aot_vs_jit.py` *and its cache control*. Both
-vendors keep their own code caches, and an uncontrolled first-launch timing
-measures the vendor cache rather than the compile strategy — the error that made
-the first Apple number 13x too good.
+What each backend actually does, counted rather than assumed:
+
+| backend | AOT artifact | produced by | JIT path | weight |
+|---|---|---|---|---|
+| ROCm | **hsaco** | **`tessera-opt`** — `convert-gpu-to-rocdl` → `rocdl-attach-target` → `gpu-module-to-binary` | HIPRTC at load (WMMA lane) | hsaco dominant: 601 references |
+| NVIDIA | prebuilt `.so`, kernel NVRTC'd inside at load | cmake + NVRTC | NVRTC at load | JIT-dominant; no cubin/fatbin path in `runtime.py` |
+| Apple | `.metallib` | **`xcrun metal` shell-out from Python** | `newLibraryWithSource:` at launch | JIT-dominant; AOT at 1 of 17 |
+
+Three corrections follow, and they change the plan's framing:
+
+1. **Apple is behind ROCm on AOT, not ahead of it.** ROCm's precompiled lane is
+   the dominant one and has been for a long time; Apple's is one kernel old.
+2. **The gap to ROCm is architectural, not coverage.** ROCm's AOT artifact comes
+   *out of the MLIR pipeline* — the compiler produces the binary. Apple's comes
+   out of a Python subprocess calling a vendor CLI. Closing B gets Apple to
+   ROCm's *coverage*; it does not get Apple to ROCm's *structure*.
+3. **NVIDIA is the backend closest to Apple's position**, not the distant one —
+   its device code is NVRTC-compiled at load and it has no precompiled lane in
+   `runtime.py`. The AOT-vs-JIT question is genuinely open there, and the
+   measurement method (with its cache control) transfers directly.
+
+This also reframes the AIR deferral recorded in Decision #26a. That deferral
+rests on AIR saving no more than the ~15 ms `apple_gpu_air` already captures,
+which stands. But the *architectural* case is stronger than that framing
+suggested: an MLIR → AIR path would put Apple's AOT artifact where ROCm's
+already is — produced by the compiler rather than post-processed by a shell-out.
+Revisit on that basis, which is exactly the "architecture, not performance"
+condition #26a names.
 
 ### Sequencing
 

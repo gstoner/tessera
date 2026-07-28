@@ -7,17 +7,21 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
-Cross-backend sync `APPLE-AOT-METALLIB-2026-07-28` — **not applicable**. Apple
-added `apple_gpu_air`, a precompiled-artifact lane behind the shared
-`register_compiler(target, compile_fn)` seam, and measured it against its
-compile-on-launch lane (cold pipeline creation 29.7 ms → 15.2 ms, ~1.95x,
-offline build repaying after ~5 cold launches; host-wall timing on Apple M1
-Max, not device-event evidence). ROCm needs nothing here:
-`_rocm_hip_compile_fn` already returns a real `.so` from hipcc, so this lane
-has always been precompiled. The method transfers — reuse the harness and its
-cache control when gfx1151 AOT-vs-JIT or HSACO-caching questions arise; AMD
-keeps its own code object cache and an uncontrolled first-launch timing would
-measure that. No shared IR, ABI, dtype/op registration, or numerical contract
+Cross-backend sync `APPLE-AOT-METALLIB-2026-07-28` — **parity validated — ROCm
+is ahead**. Apple added `apple_gpu_air`, a precompiled-artifact lane behind the
+shared `register_compiler(target, compile_fn)` seam, measured against its
+compile-on-launch lane (cold pipeline creation 29.7 ms -> 15.2 ms, ~1.95x;
+host-wall timing on Apple M1 Max, not device-event evidence). ROCm already has
+the mature precompiled lane Apple just started: hsaco built by `tessera-opt`
+itself (convert-gpu-to-rocdl -> rocdl-attach-target -> gpu-module-to-binary)
+and loaded with hipModuleLoadData, ~601 references in runtime.py, alongside a
+smaller HIPRTC-at-load WMMA lane. Apple's equivalent is one kernel old and is
+produced by a Python shell-out to `xcrun` rather than by the compiler, so on
+this axis Apple is behind ROCm and ROCm is the model to copy. An earlier
+version of this note said ROCm 'has always been precompiled' with nothing to do
+— the precompiled half was right, the claim that ROCm has no JIT lane was not,
+and is withdrawn. No ROCm work is implied; recorded so the fleet picture is
+accurate. No shared IR, ABI, dtype/op registration, or numerical contract
 changed.
 
 Cross-backend sync `TESSERA-OPT-CAPABILITY-SKIP-2026-07-27` completes the

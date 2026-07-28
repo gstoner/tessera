@@ -251,15 +251,23 @@ Per-phase deliverables and the open-work priority queue live in
     CUDA/ROCm/x86), not performance; revisit on that basis, not on speed.
 
     This is the fast-path pattern the whole fleet converges on — a precompiled
-    artifact behind the `register_compiler(target, compile_fn)` seam plus the
-    content-addressed cache. NVIDIA, ROCm, and x86 already return real
-    artifacts (`.so` via nvcc / hipcc / clang); Apple was the lone `deferred`
-    (compile-on-launch) outlier until `apple_gpu_air`, and now matches. Expect
-    the same AOT-vs-JIT question to surface on ROCm and CUDA as their
-    performance work ramps — the harness in
-    `benchmarks/apple_gpu/benchmark_aot_vs_jit.py` generalizes, **including its
-    cache control**: measure a never-before-compiled kernel per sample, or you
-    will measure the vendor's shader cache instead of your compile strategy.
+    artifact plus a content-addressed cache — but **do not read Apple as the
+    leader here.** Counted 2026-07-28: ROCm's dominant lane is already
+    precompiled hsaco built by `tessera-opt` itself (`convert-gpu-to-rocdl` →
+    `rocdl-attach-target` → `gpu-module-to-binary`, ~601 references in
+    `runtime.py`), with a smaller HIPRTC-at-load WMMA lane; NVIDIA's device code
+    is NVRTC-compiled at load with no cubin lane in `runtime.py`. So ROCm is
+    *ahead* of Apple on AOT, NVIDIA is closest to Apple's JIT-dominant position,
+    and Apple's `.metallib` is one kernel old **and shelled out to `xcrun` from
+    Python rather than produced by the compiler** — which is the real
+    architectural gap, and the strongest remaining argument for an MLIR → AIR
+    path. Every backend has both a JIT and a precompiled capability; an earlier
+    claim here that NVIDIA/ROCm "have no JIT lane" was inferred from
+    `nvrtc`/`hiprtc` being absent from two Python files and is withdrawn.
+    When ROCm or CUDA reach the same AOT-vs-JIT question, reuse
+    `benchmarks/apple_gpu/benchmark_aot_vs_jit.py` **including its cache
+    control**: measure a never-before-compiled kernel per sample, or you will
+    measure the vendor's shader cache instead of your compile strategy.
 
 27. **Ground every Metal / Apple GPU API claim in a real source before declaring it possible or "blocked."** Authoritative sources, in reliability order: **(1) on-machine SDK headers** — `xcrun --show-sdk-path` → `…/System/Library/Frameworks/{Metal,MetalPerformanceShaders,MetalPerformanceShadersGraph,MetalPerformancePrimitives}.framework/Headers/`; **(2) user-provided doc dumps**; **(3) the `apple-metal-docs-urls` memory file**. **WebFetch caveat:** developer.apple.com is a JS-rendered SPA — `WebFetch` returns only the page title, not the API body — so it is NOT a reliable Metal-doc source. Anti-pattern: writing a "blocked / no API path" conclusion from absence of evidence in one source.
 

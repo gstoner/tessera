@@ -62,3 +62,35 @@ def test_mpsgraph_reduce_and_mse_forced_miss_is_reference_cpu(monkeypatch):
     result = _run(x, {"axis": -1})
     np.testing.assert_allclose(result["output"], x.sum(axis=-1))
     assert_reference_cpu(result)
+
+
+@pytest.mark.hardware_apple_gpu
+@pytest.mark.parametrize("x, why", [
+    (np.arange(12, dtype=np.int32).reshape(3, 4), "non-float dtype"),
+    (np.float32(3.5), "0-d input"),
+])
+def test_inputs_the_dispatch_computes_in_numpy_report_reference_cpu(x, why):
+    """Placement must follow what ran, not whether a device was present.
+
+    The dispatch falls back to numpy per input, so a bare `is_metal()` probe
+    reported `native_gpu` for these — work no GPU touched.
+    """
+    result = _run(x, {})
+    np.testing.assert_allclose(np.asarray(result["output"]), np.asarray(x).sum(),
+                               atol=1e-4, rtol=1e-5)
+    assert_reference_cpu(result), why
+
+
+def test_device_predicate_agrees_with_the_dispatch_fallback(monkeypatch):
+    """The label predicate and the dispatch guard are one function.
+
+    They were two, and drifted: the guard rejected non-float and 0-d input
+    while the label only asked whether Metal existed.
+    """
+    f32 = np.arange(12, dtype=np.float32).reshape(3, 4)
+    assert not rt._apple_gpu_reduce_runs_on_device("tessera.reduce",
+                                                   f32.astype(np.int32), {}, np)
+    assert not rt._apple_gpu_reduce_runs_on_device("tessera.reduce",
+                                                   np.float32(1.0), {}, np)
+    monkeypatch.setattr(rt, "_apple_gpu_mpsgraph_reduce_f32", lambda: None)
+    assert not rt._apple_gpu_reduce_runs_on_device("tessera.reduce", f32, {}, np)

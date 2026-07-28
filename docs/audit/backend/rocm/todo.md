@@ -7,6 +7,26 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `TESSERA-OPT-CAPABILITY-SKIP-2026-07-27` completes the
+migration `TESSERA-OPT-BUILD-CAPABILITY-2026-07-27` began. The remaining 43
+test files that resolved `build/tools/tessera-opt/tessera-opt` themselves now
+route through `tests/_support/compiler_tool.py`, joining the nine already
+there, so a driver built without `TESSERA_BUILD_ROCM_BACKEND` produces a named
+skip instead of `Unknown command line argument '--generate-rocm-*'`. The shared
+check now also reads the passes named *inside* a `--pass-pipeline=` value,
+where the equivalent gap surfaces as `does not refer to a registered pass or
+pass pipeline`; that spelling is what most of these ROCm codegen gates actually
+hit. Resolution prefers an in-repo build but takes the first candidate that
+registers the requested passes, so a lean local build cannot mask a capable
+one. ROCm is **parity validated** at the host-free boundary: against a
+non-ROCm driver the migrated files move from 25 failures to 0 failures /
+936 skips, and the full `-m "not slow"` unit sweep carries no
+`Unknown command line argument` line. This is shared test infrastructure only —
+no ROCm pass body, HSACO packaging, HIP launch ABI, selector, or numerical
+contract changed, and **no exact-device evidence is claimed or required**; the
+gfx1151 packets retained under `TESSERA-OPT-BUILD-CAPABILITY-2026-07-27` remain
+the standing device proof.
+
 Cross-backend sync `ROCM-BF16-ATTENTION-2026-07-27` closes the remaining
 gfx1151 storage-parity evidence for optimized attention. The canonical rank-4
 forward recurrence and tensor-valued deterministic backward loops now have

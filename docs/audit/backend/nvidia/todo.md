@@ -8,6 +8,21 @@ last_updated: 2026-07-27
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `TESSERA-OPT-CAPABILITY-SKIP-2026-07-27` moves the last 43
+self-resolving test files onto the shared `tests/_support/compiler_tool.py`
+driver contract, adds `--pass-pipeline=` inner-pass capability checking, and
+folds `CompilerToolchain` onto one resolver and one capability check. NVIDIA is
+**not applicable** for an architecture-specific reason: the NVIDIA lit and
+compiler lanes drive the *separate* `tessera-nvidia-opt` binary through
+`TESSERA_NVIDIA_OPT` / `CompilerToolchain.require_nvidia_opt` (the `%tnv`
+substitution), which this resolver does not govern and which this change leaves
+byte-for-byte untouched — `require_nvidia_opt` keeps its own `_tool_path`
+lookup and its own skip. No CUDA registration, PTX or SM120 schedule, runtime
+ABI, selector, or device evidence changed, and **no exact-device evidence is
+claimed or required**. Should the NVIDIA lane later want the same
+build-capability skip behaviour for `tessera-nvidia-opt`, that is a separate
+follow-up owned by this plan, not a debt created here.
+
 Cross-backend sync `ROCM-BF16-ATTENTION-2026-07-27` validates that the shared
 BF16 attention carrier and canonical forward/backward loop contracts can be
 consumed by a second physical backend. ROCm now has exact ragged-GQA

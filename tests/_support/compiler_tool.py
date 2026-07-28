@@ -59,24 +59,41 @@ _DEFAULT_CANDIDATES = (
 )
 
 
-def tessera_opt_path() -> Path | None:
-    """Resolve the driver, honouring the env selectors, or return None.
+def tessera_opt_candidates() -> tuple[Path, ...]:
+    """Every discoverable driver, most-preferred first.
 
     An exported selector is final: if it names something that is not a file we
-    return None rather than quietly falling back, because silently running a
+    return nothing rather than quietly falling back, because silently running a
     different binary than the one the developer asked for is how a "passing"
     run ends up proving nothing.
+
+    Otherwise an in-repo build outranks a `tessera-opt` on PATH — you are
+    testing the tree you are standing in, and a globally installed binary
+    shadowing your local build would be a surprising default. This matches
+    `tests/tessera-ir/lit.cfg.py`, which resolves env → in-repo → PATH. The
+    ordering is only a *preference*: `require_tessera_opt` walks this list and
+    takes the first entry that can actually run the requested passes, so a
+    capable PATH binary still wins over a local build that lacks the backend.
     """
     for selector in _ENV_SELECTORS:
         configured = os.environ.get(selector)
         if configured:
             path = Path(configured).expanduser()
-            return path if path.is_file() else None
-    in_repo = next((path for path in _DEFAULT_CANDIDATES if path.is_file()), None)
-    if in_repo is not None:
-        return in_repo
+            return (path,) if path.is_file() else ()
+    found = [path for path in _DEFAULT_CANDIDATES if path.is_file()]
     on_path = shutil.which("tessera-opt")
-    return Path(on_path) if on_path else None
+    if on_path:
+        found.append(Path(on_path))
+    unique: dict[Path, Path] = {}
+    for path in found:  # `build/bin/tessera-opt` is often a link to the real one
+        unique.setdefault(path.resolve(), path)
+    return tuple(unique.values())
+
+
+def tessera_opt_path() -> Path | None:
+    """The preferred driver, ignoring capability, or None if there is none."""
+    candidates = tessera_opt_candidates()
+    return candidates[0] if candidates else None
 
 
 @lru_cache(maxsize=8)
@@ -166,6 +183,15 @@ def missing_passes(tool: Path, *passes: str) -> list[str]:
                    if name not in available})
 
 
+def _missing_pass_reason(tool: Path, missing: list[str]) -> str:
+    """The skip text naming what `tool` lacks and which build to reach for."""
+    return (
+        f"{tool} does not register {', '.join(missing)} "
+        f"(build profile: {build_profile(tool)}). Configure a build with "
+        "the owning backend, or point TESSERA_OPT at one."
+    )
+
+
 def capability_skip_reason(tool: Path, *passes: str) -> str | None:
     """Why `tool` cannot run `passes`, or None when it can.
 
@@ -174,26 +200,28 @@ def capability_skip_reason(tool: Path, *passes: str) -> str | None:
     sites can never disagree about what a binary can do.
     """
     missing = missing_passes(tool, *passes)
-    if not missing:
-        return None
-    return (
-        f"{tool} does not register {', '.join(missing)} "
-        f"(build profile: {build_profile(tool)}). Configure a build with "
-        "the owning backend, or point TESSERA_OPT at one."
-    )
+    return _missing_pass_reason(tool, missing) if missing else None
 
 
 def require_tessera_opt(*passes: str) -> Path:
-    """Return the driver, skipping unless it registers every named pass."""
-    tool = tessera_opt_path()
-    if tool is None:
+    """Return a driver that registers every named pass, else skip.
+
+    Preference order picks the binary, but capability decides: with several
+    builds discoverable we take the first that can run `passes` rather than
+    the first that exists, so a lean local build does not mask a capable one.
+    """
+    candidates = tessera_opt_candidates()
+    if not candidates:
         pytest.skip(
             "tessera-opt not built (ninja -C build tessera-opt) and TESSERA_OPT unset"
         )
-    reason = capability_skip_reason(tool, *passes)
-    if reason is not None:
-        pytest.skip(reason)
-    return tool
+    for tool in candidates:
+        if not missing_passes(tool, *passes):
+            return tool
+    # Report against the preferred candidate; naming all of them would bury the
+    # actionable line when a developer has several stale build directories.
+    preferred = candidates[0]
+    pytest.skip(_missing_pass_reason(preferred, missing_passes(preferred, *passes)))
 
 
 def _pass_arguments(arguments: Iterable[str]) -> tuple[str, ...]:

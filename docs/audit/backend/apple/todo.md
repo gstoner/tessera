@@ -8,6 +8,23 @@ last_updated: 2026-07-27
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `TESSERA-OPT-CAPABILITY-SKIP-2026-07-27` moves the last 43
+self-resolving test files onto the shared `tests/_support/compiler_tool.py`
+driver contract and folds `CompilerToolchain` onto the same resolver and
+capability check, leaving one of each in the tree. Apple is **parity
+validated**, not merely unaffected: the Apple compiler-tool fixtures
+(`test_apple_canonical_gemm.py`, `test_apple_threadgroup_pipeline.py`) reach
+the driver through `CompilerToolchain.require_tessera_opt`, whose bare-pass-name
+spelling is preserved, and which now also discovers
+`build-apple/tools/tessera-opt/tessera-opt` — a candidate the old
+`CompilerToolchain` search order did not carry, so a `build-apple`-only tree
+that previously skipped as "not built" now resolves. Selection prefers an
+in-repo build but takes the first candidate registering the requested passes.
+No Metal registration, MSL/MPS schedule, runtime ABI, selector, storage policy,
+device evidence, or timing gate changed, and **no exact-device evidence is
+claimed or required** for this host-free infrastructure change. Apple's
+separately owned package and exact-device gates are untouched.
+
 Cross-backend sync `ROCM-BF16-ATTENTION-2026-07-27` adds no Apple capability
 claim. It proves exact optimized BF16 forward and deterministic five-entry
 backward attention on gfx1151 for the shared ragged-GQA,

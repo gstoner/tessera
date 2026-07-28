@@ -8,6 +8,7 @@ from benchmarks.rocm.benchmark_rocm_attention_backward_program import (
     _reference,
 )
 from tessera.compiler.rocm_native import (
+    native_packaging_available,
     package_attention_backward,
     tools_available,
 )
@@ -19,8 +20,10 @@ from tessera.runtime import (
 
 @pytest.mark.compiler_rocm
 def test_gfx1151_lse_checkpoint_auto_selector_tracks_measured_threshold() -> None:
-    if not tools_available():
-        pytest.skip("tessera-opt is unavailable")
+    if not native_packaging_available():
+        # Packaging fingerprints the driver-selected device bitcode, so it needs
+        # AMD clang as well as tessera-opt.
+        pytest.skip("ROCm native packaging toolchain is unavailable")
     short = package_attention_backward(
         _module(1, 4, 2, 17, 19, 64, lse_checkpoint="auto"),
         pipeline_name="tessera-lower-to-rocm",

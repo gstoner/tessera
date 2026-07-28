@@ -16,14 +16,12 @@ parity is covered by benchmarks/rocm/benchmark_rocm_gemm_pipeline_vs_direct.py.
 from __future__ import annotations
 
 import re
-import subprocess
 from collections import Counter
 from pathlib import Path
 
-import pytest
+from tests._support.compiler_tool import run_tessera_opt
 
 REPO = Path(__file__).resolve().parents[2]
-TESSERA_OPT = REPO / "build" / "tools" / "tessera-opt" / "tessera-opt"
 
 _DIRECTIVE = (
     'module {\n  "tessera_rocm.wmma_gemm"() {name = "gemm", m = 16 : i64, '
@@ -39,10 +37,7 @@ _FORK_A = ["--generate-wmma-gemm-kernel=via-tile=true",
 
 
 def _opt(*passes: str) -> str:
-    if not TESSERA_OPT.is_file():
-        pytest.skip("build tessera-opt: ninja -C build tessera-opt")
-    r = subprocess.run([str(TESSERA_OPT), "-", *passes],
-                       input=_DIRECTIVE, capture_output=True, text=True)
+    r = run_tessera_opt(_DIRECTIVE, *passes)
     assert r.returncode == 0, r.stderr
     return r.stdout
 

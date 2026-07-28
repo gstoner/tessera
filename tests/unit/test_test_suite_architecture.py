@@ -228,7 +228,10 @@ def test_migrated_compiler_fixture_has_no_private_tool_probe():
     )
     assert "pytest.mark.compiler_tool" in text
     assert 'REPO / "build/tools/tessera-opt/tessera-opt"' not in text
-    assert "compiler_toolchain.require_tessera_opt()" in text
+    # Open paren, not `()` — the fixture should be *told which passes* it needs,
+    # so a build without them skips instead of failing inside MLIR. Requiring
+    # the empty-argument form would forbid exactly that.
+    assert "compiler_toolchain.require_tessera_opt(" in text
 
 
 @pytest.mark.parametrize(

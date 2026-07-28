@@ -341,10 +341,27 @@ def test_unsupported_op_falls_back_without_jit():
 
 
 # ── opt-in linalg→vector GEMM lane (TESSERA_JIT_VECTORIZE) ────────────────────
-_RUNNER_UTILS = os.environ.get(
-    "TESSERA_MLIR_C_RUNNER_UTILS",
-    "/opt/homebrew/opt/llvm@23/lib/libmlir_c_runner_utils.dylib",
-)
+def _runner_utils_path() -> str:
+    """Locate `libmlir_c_runner_utils`, honouring the env override first.
+
+    The single hardcoded `/opt/homebrew/opt/llvm@23/` is wrong on a host whose
+    LLVM 23 is a manual install (there is no `llvm@23` Homebrew formula), so the
+    lane reported "unavailable" with the dylib sitting right there. Probe the
+    known LLVM 23 roots instead of asserting one."""
+    if configured := os.environ.get("TESSERA_MLIR_C_RUNNER_UTILS"):
+        return configured
+    for root in ("/opt/homebrew/llvm-23.1.0-rc1", "/opt/homebrew/opt/llvm@23",
+                 "/usr/lib/llvm-23"):
+        candidate = f"{root}/lib/libmlir_c_runner_utils.dylib"
+        if os.path.exists(candidate):
+            return candidate
+        candidate = f"{root}/lib/libmlir_c_runner_utils.so"
+        if os.path.exists(candidate):
+            return candidate
+    return "/opt/homebrew/llvm-23.1.0-rc1/lib/libmlir_c_runner_utils.dylib"
+
+
+_RUNNER_UTILS = _runner_utils_path()
 
 
 @pytest.mark.integration

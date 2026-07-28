@@ -1048,6 +1048,9 @@ def _find_llc() -> str | None:
     # Canonical LLVM 23 locations only. A different AMDGPU backend would
     # invalidate the repository's single-major build and proof contract.
     fixed = (
+        # A manual LLVM 23 install is the norm on macOS — there is no `llvm@23`
+        # Homebrew formula, so listing only the keg path finds nothing there.
+        "/opt/homebrew/llvm-23.1.0-rc1/bin/llc",
         "/opt/homebrew/opt/llvm@23/bin/llc",
         "/usr/lib/llvm-23/bin/llc",
     )

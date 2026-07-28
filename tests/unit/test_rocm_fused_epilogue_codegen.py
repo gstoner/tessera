@@ -15,13 +15,13 @@ epilogue codegen. We assert that:
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
 import pytest
 
+from tests._support.compiler_tool import run_tessera_opt
+
 REPO = Path(__file__).resolve().parents[2]
-TESSERA_OPT = REPO / "build" / "tools" / "tessera-opt" / "tessera-opt"
 
 
 def _directive(dtype="f16", bias=False, activation="none"):
@@ -37,10 +37,7 @@ def _directive(dtype="f16", bias=False, activation="none"):
 
 
 def _opt(directive, *passes):
-    if not TESSERA_OPT.is_file():
-        pytest.skip("build tessera-opt: ninja -C build tessera-opt")
-    return subprocess.run([str(TESSERA_OPT), "-", *passes],
-                          input=directive, capture_output=True, text=True)
+    return run_tessera_opt(directive, *passes)
 
 
 def _gen(directive):

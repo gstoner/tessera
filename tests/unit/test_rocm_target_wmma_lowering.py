@@ -28,9 +28,9 @@ from pathlib import Path
 import pytest
 
 from tessera.compiler import rocdl_emit
+from tests._support.compiler_tool import require_tessera_opt, run_tessera_opt
 
 REPO = Path(__file__).resolve().parents[2]
-TESSERA_OPT = REPO / "build" / "tools" / "tessera-opt" / "tessera-opt"
 
 
 def _find(tool: str, *cands: str):
@@ -48,8 +48,8 @@ def _mlir_translate():
 
 
 def _need_opt():
-    if not TESSERA_OPT.is_file():
-        pytest.skip("build tessera-opt: ninja -C build tessera-opt")
+    """Resolve the driver, skipping when it lacks the ROCm target lowering."""
+    require_tessera_opt("--lower-tessera-target-to-rocdl")
 
 
 def _run(cmd, src):
@@ -57,7 +57,7 @@ def _run(cmd, src):
 
 
 def _lower(src: str) -> str:
-    r = _run([str(TESSERA_OPT), "-", "--lower-tessera-target-to-rocdl"], src)
+    r = run_tessera_opt(src, "--lower-tessera-target-to-rocdl")
     assert r.returncode == 0, f"lowering failed: {r.stderr}"
     return r.stdout
 

@@ -140,6 +140,18 @@ def tools_available() -> bool:
     return _tessera_opt() is not None
 
 
+def native_packaging_available() -> bool:
+    """Whether a ROCm native package can actually be built on this host.
+
+    `tools_available` answers only "is there a tessera-opt", but packaging also
+    needs AMD clang to fingerprint the OCML/OCKL/OCLC bitcode the driver
+    selects. A caller that checks the first and not the second gets a
+    `RuntimeError` out of `_driver_selected_device_libraries` — correct, but it
+    reads as a broken test on any host without ROCm rather than an absent
+    toolchain."""
+    return tools_available() and _rocm_clang(_rocm_path()) is not None
+
+
 def _rocm_path() -> Path:
     configured = Path(os.environ.get("ROCM_PATH", "/opt/rocm")).expanduser()
     for candidate in (configured, configured / "core"):
@@ -2194,5 +2206,6 @@ __all__ = [
     "supports_reduction",
     "supports_paged_kv_read",
     "supports_softmax",
+    "native_packaging_available",
     "tools_available",
 ]

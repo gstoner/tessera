@@ -26,7 +26,22 @@ from tessera.compiler.emit.kernel_emitter import (
     EmitError, SpecPolicy, get_emitter, get_runner,
 )
 
-_HAVE_CC = x86._cc() is not None and __import__("shutil").which(x86._cc()) is not None
+import platform
+import shutil
+
+#: Every gate below guards an `execution == "x86_native"` assertion, so it needs
+#: an x86 *host*, not merely a compiler. `_x86_compile_fn` builds with
+#: `-march=native`; on arm64 that targets ARM, the runner correctly declines,
+#: and the lane reports "reference". Gating on the compiler alone made those
+#: read as backend failures on an Apple Silicon box. See
+#: docs/audit/backend/x86/todo.md (X86-1) — the fix is proving the lane on x86,
+#: not relaxing the assertion.
+_IS_X86_HOST = platform.machine().lower() in {"x86_64", "amd64", "i386", "i686"}
+_HAVE_CC = (
+    _IS_X86_HOST
+    and x86._cc() is not None
+    and shutil.which(x86._cc()) is not None
+)
 
 
 # ── 1. Registration + emit (host-free) ────────────────────────────────────────
@@ -126,7 +141,7 @@ _CHAINS = [
 ]
 
 
-@pytest.mark.skipif(not _HAVE_CC, reason="no C compiler (clang/cc/gcc) on host")
+@pytest.mark.skipif(not _HAVE_CC, reason="needs an x86 host with a C compiler (see backend/x86/todo.md X86-1)")
 @pytest.mark.parametrize("region", _CHAINS, ids=lambda r: f"{r.epilogue}/{r.reduction}/{r.prologue}")
 def test_x86_kernel_runs_and_matches_numpy(region):
     runner = get_runner("x86")
@@ -181,7 +196,7 @@ def test_x86_missing_required_buffer_declines_not_segfault(
     assert "ok" in p.stdout
 
 
-@pytest.mark.skipif(not _HAVE_CC, reason="no C compiler (clang/cc/gcc) on host")
+@pytest.mark.skipif(not _HAVE_CC, reason="needs an x86 host with a C compiler (see backend/x86/todo.md X86-1)")
 def test_x86_residual_path_matches_numpy():
     region = F.FusedRegion(epilogue=("gelu",), residual=True)
     rng = np.random.default_rng(1)
@@ -193,7 +208,7 @@ def test_x86_residual_path_matches_numpy():
     assert np.allclose(out, region.reference(A, B, None, R), atol=1e-3)
 
 
-@pytest.mark.skipif(not _HAVE_CC, reason="no C compiler (clang/cc/gcc) on host")
+@pytest.mark.skipif(not _HAVE_CC, reason="needs an x86 host with a C compiler (see backend/x86/todo.md X86-1)")
 def test_x86_dynamic_route_materializes_strided_layout_and_records_guards():
     runner = x86.X86CRunner()
     region = F.FusedRegion(epilogue=("relu",))
@@ -215,7 +230,7 @@ def test_x86_dynamic_route_materializes_strided_layout_and_records_guards():
     }
 
 
-@pytest.mark.skipif(not _HAVE_CC, reason="no C compiler (clang/cc/gcc) on host")
+@pytest.mark.skipif(not _HAVE_CC, reason="needs an x86 host with a C compiler (see backend/x86/todo.md X86-1)")
 @pytest.mark.parametrize(
     ("a_layout", "b_layout"),
     [
@@ -298,7 +313,7 @@ def test_force_aocl_dlp_raises_when_unavailable():
                   OP_FUSED_REGION, "x86", force="x86_aocl_dlp")
 
 
-@pytest.mark.skipif(not _HAVE_CC, reason="no C compiler (clang/cc/gcc) on host")
+@pytest.mark.skipif(not _HAVE_CC, reason="needs an x86 host with a C compiler (see backend/x86/todo.md X86-1)")
 def test_x86_arbiter_falls_to_generic_when_aocl_absent():
     # With AOCL-DLP unavailable, the arbiter runs the generic C lane on Zen — the
     # crown-jewel slot is empty, the floor still executes and F4-gates.

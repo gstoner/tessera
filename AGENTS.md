@@ -73,8 +73,9 @@ The active architecture queues are:
 - `docs/audit/backend/apple/todo.md`
 - `docs/audit/backend/nvidia/todo.md`
 - `docs/audit/backend/rocm/todo.md`
+- `docs/audit/backend/x86/todo.md`
 
-Before starting backend compiler or runtime work, read all three plans and
+Before starting backend compiler or runtime work, read all four plans and
 identify the owning work-item ID.
 
 When a change affects shared IR, ABI, dtype/op registration, diagnostics,

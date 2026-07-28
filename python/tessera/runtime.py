@@ -24403,7 +24403,11 @@ def _rocm_adafactor_full_backward(
     finally:
         for device in devices:
             hip.hipFree(device)
-    return tuple(host.reshape(p.shape) for host in hosts[3:])
+    return (
+        hosts[3].reshape(p.shape),
+        hosts[4].reshape(p.shape),
+        hosts[5].reshape(p.shape),
+    )
 
 
 def _execute_rocm_compiled_adafactor_backward(
@@ -26335,11 +26339,17 @@ def _execute_x86_compiled_deltanet_backward(
         np.ascontiguousarray(value, np.float32) for value in operands[:3]
     )
     cursor = 3
-    gate_source = operands[cursor] if has_gate else None
+    gate_source = (
+        operands[cursor] if has_gate else np.zeros(1, dtype=np.float32)
+    )
     cursor += int(has_gate)
-    beta_source = operands[cursor] if has_beta else None
+    beta_source = (
+        operands[cursor] if has_beta else np.ones(1, dtype=np.float32)
+    )
     cursor += int(has_beta)
-    decay_source = operands[cursor] if has_decay else None
+    decay_source = (
+        operands[cursor] if has_decay else np.ones(1, dtype=np.float32)
+    )
     cursor += int(has_decay)
     dy = np.ascontiguousarray(operands[cursor], np.float32)
     if q.ndim != 4 or k.shape != q.shape or v.shape[:3] != q.shape[:3]:
@@ -26349,8 +26359,8 @@ def _execute_x86_compiled_deltanet_backward(
     B, H, S, d_qk = (int(value) for value in q.shape)
     d_v = int(v.shape[-1])
     scalar_shape = (B, H, S)
-    gate_input = np.asarray(gate_source) if has_gate else None
-    if gate_input is not None and gate_input.shape == scalar_shape:
+    gate_input = np.asarray(gate_source)
+    if gate_input.shape == scalar_shape:
         gate_input = gate_input[..., None]
     gate = (
         np.ascontiguousarray(np.broadcast_to(gate_input, v.shape), np.float32)
